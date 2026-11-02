@@ -14,10 +14,15 @@ static bool source_throw(SourceContext *ctx,AstNode *node) {
     XrXirStatus status=xr_xir_compile_type_markers_prove(&ctx->compile,&context,value.type,XR_XIR_CONSTRAINT_ERROR);
     if (status!=XR_XIR_OK) return source_fail(ctx,node,status,"throw requires a proved enum error value");
     if (!source_local_error(ctx,node,source_local_thrown_type(ctx,value),false)) return false;
+    uint32_t instruction=UINT32_MAX;
     if (ctx->bodies[ctx->function].error_context) {
         XrHirConversion conversion;
         if (!source_conversion_plan(ctx,node,value.type,(SourceExpectedType){true,XR_XIR_ERROR,false,false},&conversion) ||
-            !source_conversion_emit(ctx,&conversion,&value) || !source_error_edge(ctx,value)) return false;
+            !source_conversion_emit(ctx,&conversion,&value)) return false;
+        instruction=ctx->bodies[ctx->function].count;
+        if(!source_error_edge(ctx,value))return false;
+        if(!ctx->bodies[ctx->function].error_context->asserted&&ctx->bodies[ctx->function].error_context->edges)
+            instruction=ctx->bodies[ctx->function].error_context->edges->producer;
     } else {
         ctx->returned=true;
         if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{value.id,0},{0,0},0,{0}},NULL)) return false;
@@ -26,8 +31,9 @@ static bool source_throw(SourceContext *ctx,AstNode *node) {
     if (!body->count || body->throw_count==UINT32_MAX)
         return source_fail(ctx,node,XR_XIR_BUDGET,"source throw observation exhausted");
     SourceThrowRecipe *site=source_alloc(ctx,1,sizeof(*site));if (!site) return false;
-    *site=(SourceThrowRecipe){body->throw_recipes,body->count-1,value.id};
+    if(instruction==UINT32_MAX)instruction=body->count-1;
+    *site=(SourceThrowRecipe){body->throw_recipes,instruction,value.id};
     body->throw_recipes=site;++body->throw_count;
-    if (!source_handler_site(ctx,body->count-1,value.id)) return false;
+    if (!source_handler_site(ctx,instruction,value.id)) return false;
     ctx->returned=true;return true;
 }

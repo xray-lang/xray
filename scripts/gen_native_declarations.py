@@ -680,12 +680,24 @@ def render_task_identity(root):
         'class Task<T: Sendable, E: Error & Sendable = Never> {', 'ref cancel()',
         'ref poll() -> TaskResult<T, E>?', 'ref awaitResult() -> TaskResult<T, E>', '}',
     ]
+    expected[-1:-1] = [
+        'private static __allBegin(tasks: Array<Task<T, E>>) -> Task<Array<T>, E>',
+        'private static __firstBegin(tasks: Array<Task<T, E>>) -> Task<T, E>',
+        'static all(tasks: Array<Task<T, E>>) throws(E | Cancelled) -> Array<T>',
+        'static first(tasks: Array<Task<T, E>>) throws(E | Cancelled) -> T',
+    ]
     if [raw.strip() for _, raw in rows] != expected:
         raise ValueError('Task source differs from its complete governed declaration')
     output = []
     facts = []
     for index, (number, raw) in enumerate(rows[7:-1]):
         text = raw.strip()
+        private = text.startswith('private static ')
+        if private:
+            text = text[len('private static '):]
+        static = private or text.startswith('static ')
+        if not private and static:
+            text = text[len('static '):]
         receiver = 'REF' if text.startswith('ref ') else 'READ'
         if receiver == 'REF':
             text = text[4:]
@@ -694,6 +706,11 @@ def render_task_identity(root):
         parser = TypeParser(signature)
         method = parser.peek() == '('
         parameters = parser.parameters() if method else []
+        if parser.peek() == 'throws':
+            parser.take('throws')
+            parser.take('(')
+            parser.type()
+            parser.take(')')
         result_text = '()'
         if not method:
             parser.take(':')
@@ -709,22 +726,25 @@ def render_task_identity(root):
             output.append(f'static const XrNativeParameter xr_native_task_parameters_{index}[] = {{')
             for pname, _, spelling, optional, variadic in parameters:
                 output.append('    {' + ', '.join([c_string(pname), c_string(spelling),
-                    'XR_NATIVE_TERM_UNADMITTED', str(optional).lower(), str(variadic).lower()]) + '},')
+                    'XR_NATIVE_TERM_ARRAY_TASK' if static else 'XR_NATIVE_TERM_UNADMITTED',
+                    str(optional).lower(), str(variadic).lower()]) + '},')
             output.append('};')
-        facts.append((index, number, raw, name, signature, receiver, method, parameters, result_text))
+        facts.append((index, number, raw, name, signature, receiver, method, parameters, result_text, private, static))
     output.append('static const XrNativeMemberDeclaration xr_native_task_members[] = {')
-    for index, number, raw, name, signature, receiver, method, parameters, result_text in facts:
+    for index, number, raw, name, signature, receiver, method, parameters, result_text, private, static in facts:
         params = f'xr_native_task_parameters_{index}' if parameters else 'NULL'
         output.append('    {' + ', '.join([str(index + 1), c_string(name), c_string(signature),
             c_string(result_text), str(number), str(len(raw[:raw.index(name)].encode('utf-8')) + 1),
-            'XR_NATIVE_RECEIVER_' + receiver, 'false', str(method).lower(),
-            'true', 'true',
-            'XR_NATIVE_OPERATION_'+{'cancel':'TASK_CANCEL', 'poll':'TASK_POLL', 'awaitResult':'TASK_AWAIT_RESULT'}[name],
+            'XR_NATIVE_RECEIVER_' + receiver, str(static).lower(), str(method).lower(),
+            str(not private).lower(), str(not private).lower(),
+            'XR_NATIVE_OPERATION_'+{'cancel':'TASK_CANCEL', 'poll':'TASK_POLL', 'awaitResult':'TASK_AWAIT_RESULT',
+                'all':'TASK_ALL','first':'TASK_FIRST'}.get(name,'NONE'),
             'XR_NATIVE_ALLOCATION_NO_HEAP' if name == 'cancel' else 'XR_NATIVE_ALLOCATION_MAY_HEAP',
-            '"Never"' if name == 'cancel' else '"allocation,retain,limit"',
+            '"Never"' if name == 'cancel' else '"allocation,retain,limit,unsupported"' if private else '"allocation,retain,limit"',
             'XR_NATIVE_RESULT_OWNERSHIP_UNIT' if name == 'cancel' else 'XR_NATIVE_RESULT_OWNERSHIP_OWNED',
             params, str(len(parameters)),
-            'XR_NATIVE_TERM_'+{'cancel':'UNIT', 'poll':'NULLABLE_TASK_RESULT', 'awaitResult':'TASK_RESULT'}[name]]) + '},')
+            'XR_NATIVE_TERM_'+{'cancel':'UNIT', 'poll':'NULLABLE_TASK_RESULT', 'awaitResult':'TASK_RESULT',
+                '__allBegin':'TASK_ARRAY','__firstBegin':'TASK_ELEMENT','all':'ARRAY_ELEMENT','first':'ELEMENT'}[name]]) + '},')
     number, raw = rows[6]
     digest = hashlib.sha256(source.encode('utf-8')).digest()
     output += ['};', 'static const char *const xr_native_task_type_parameters[] = {"T", "E"};',
@@ -732,7 +752,7 @@ def render_task_identity(root):
         '    5, XR_NATIVE_DECLARATION_IDENTITY, "Task", xr_native_task_type_parameters, 2,',
         '    "stdlib/types/coroutine.xr", "xray-native:prelude/Task", {{' +
         ', '.join(str(byte) for byte in digest) + '}},',
-        f'    {number}, {len(raw[:raw.index("Task")].encode("utf-8")) + 1}, xr_native_task_members, 3', '};']
+        f'    {number}, {len(raw[:raw.index("Task")].encode("utf-8")) + 1}, xr_native_task_members, 7', '};']
     return output
 
 
@@ -1117,6 +1137,8 @@ def render_unicode_callable(root, decoder):
         '    "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_unicode_has_property_parameters, 2, XR_NATIVE_TERM_BOOL', '};',
         'static const XrNativeCallableDeclaration xr_native_callables[] = {',
         '    {XR_NATIVE_CALLABLE_STRING_FROM_UTF8, &xr_native_string, &xr_native_string_members[' + str(decoder) + '], &xr_native_utf8_error, false, NULL, NULL, {{0}}},',
+        '    {XR_NATIVE_CALLABLE_TASK_ALL_BEGIN, &xr_native_task, &xr_native_task_members[3], NULL, false, NULL, NULL, {{0}}},',
+        '    {XR_NATIVE_CALLABLE_TASK_FIRST_BEGIN, &xr_native_task, &xr_native_task_members[4], NULL, false, NULL, NULL, {{0}}},',
         '    {XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID, NULL, &xr_native_unicode_property, NULL, true, "regex", "stdlib/defs/core.def", ' + fingerprint + '},',
         '    {XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY, NULL, &xr_native_unicode_has_property, NULL, true, "regex", "stdlib/defs/core.def", ' + fingerprint + '},'] + [row.replace('FINGERPRINT', fingerprint) + (',' if i + 1 < len(buffer_rows) else '') for i, row in enumerate(buffer_rows)] + ['};']
 

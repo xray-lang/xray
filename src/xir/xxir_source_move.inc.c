@@ -46,8 +46,17 @@ static bool source_move(SourceContext *ctx,AstNode *node,SourceValue *output) {
         return source_fail(ctx,node,XR_XIR_UNSUPPORTED,"Unit move has no executable local value yet");
     if(xr_xir_type_is_owned(&ctx->types,binding->type)) {
         SourceExpressionPlan *parent=ctx->active_expression->parent;
-        while(parent&&parent->syntax->type==AST_GROUPING)parent=parent->parent;
-        if(parent&&parent->syntax->type!=AST_CALL_EXPR&&parent->syntax->type!=AST_ASSIGNMENT)
+        AstNode *argument=node;
+        while(parent&&parent->syntax->type==AST_GROUPING){argument=parent->syntax;parent=parent->parent;}
+        bool spawn_argument=false;
+        if(parent&&parent->syntax->type==AST_GO_EXPR) {
+            AstNode *call=parent->syntax->as.go_expr.expr;
+            if(call&&call->type==AST_CALL_EXPR)for(int a=0;a<call->as.call_expr.arg_count;++a) {
+                if(!(a&63)&&!source_request_poll(ctx,node))return false;
+                if(call->as.call_expr.arguments[a]==argument){spawn_argument=true;break;}
+            }
+        }
+        if(parent&&parent->syntax->type!=AST_CALL_EXPR&&parent->syntax->type!=AST_ASSIGNMENT&&!spawn_argument)
             return source_fail(ctx,node,XR_XIR_UNSUPPORTED,"move destination has no owned transfer recipe");
         SourceExpectedType expected=ctx->active_expression->expected;
         if(expected.present&&expected.type!=binding->type)

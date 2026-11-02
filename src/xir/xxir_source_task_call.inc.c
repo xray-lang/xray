@@ -31,9 +31,93 @@ static bool source_go_target(SourceContext *ctx, AstNode *node, SourceName **bin
         if (*binding && (*binding)->kind == SOURCE_MODULE)
             *target = imported_declaration(ctx, *binding, callee->as.member_access.name);
     }
-    if (!*target || (*target)->kind != SOURCE_FUNCTION)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "go requires an accessible ordinary function declaration");
+    if (*target && (*target)->kind != SOURCE_FUNCTION) *target = NULL;
     return true;
+}
+/* Resolve the evaluated value, never a callable type or a declaration name.
+ * Copy its physical environment before argument evaluation grows recipe pools. */
+static bool source_go_value_arguments(SourceContext *ctx, AstNode *call, uint32_t *target,
+    SourceDirectArguments *output) {
+    SourceValue callee;
+    if (call->as.call_expr.type_arg_count || !expression(ctx,call->as.call_expr.callee,&callee))
+        return source_fail(ctx,call,XR_XIR_BAD_TYPE,"go value requires an instantiated function reference");
+    uint32_t id=callee.id;
+    const SourceFunction *body=&ctx->bodies[ctx->function];
+    uint32_t parameters=ctx->functions[ctx->function].parameter_count;
+    XrXirInstruction producer={0};
+    for (uint32_t depth=0;;++depth) {
+        if (!(depth%64u) && !source_request_poll(ctx,call)) return false;
+        if (id<parameters || id-parameters>=body->count)
+            return source_fail(ctx,call,XR_XIR_BAD_TYPE,"go value has no statically owned function reference");
+        producer=body->recipes[id-parameters].instruction;
+        if (producer.op!=XR_XIR_COPY && producer.op!=XR_XIR_OWNED_RETAIN && producer.op!=XR_XIR_FUNCTION_WEAKEN) break;
+        if (producer.args[0]>=id)
+            return source_fail(ctx,call,XR_XIR_BAD_STRUCTURE,"go reference alias is not an earlier value");
+        id=producer.args[0];
+    }
+    if (producer.op!=XR_XIR_FUNCTION_REF || producer.immediate<0 || (uint64_t)producer.immediate>=ctx->function_count)
+        return source_fail(ctx,call,XR_XIR_BAD_TYPE,"go value requires its actual function reference producer");
+    *target=(uint32_t)producer.immediate;
+    XrXirFunction function=ctx->functions[*target];
+    const XrXirTypeNode *found=xr_xir_callable_signature(&ctx->types,callee.type);
+    if (!found) return source_fail(ctx,call,XR_XIR_BAD_TYPE,"go reference requires a callable signature");
+    XrXirTypeNode signature=*found;
+    uint32_t captures=producer.args[1],count=function.parameter_count;
+    XrXirGeneric generic=ctx->generics[ctx->function];
+    if (captures>count || signature.parameter_count!=count-captures ||
+        producer.args[0]>body->operand_count || captures>body->operand_count-producer.args[0] ||
+        producer.type_arguments[0]>generic.argument_count ||
+        producer.type_arguments[1]>generic.argument_count-producer.type_arguments[0] ||
+        producer.type_arguments[1]!=ctx->generics[*target].parameter_count)
+        return source_fail(ctx,call,XR_XIR_BAD_STRUCTURE,"go reference environment disagrees with its declaration");
+    if (signature.flags&XR_XIR_CALLABLE_REST)
+        return source_fail(ctx,call,XR_XIR_UNSUPPORTED,"go rest function values are not yet admitted");
+    SourceCallStorage storage={0};
+    if (!source_call_storage(ctx,producer.type_arguments[1],count,&storage)) return false;
+    SourceSubstitution substitution={storage.types,producer.type_arguments[1]};
+    if (substitution.count && !source_copy_bytes(ctx,call,storage.types,generic.arguments+producer.type_arguments[0],
+        substitution.count*sizeof(*storage.types))) return false;
+    for (uint32_t p=0;p<count;++p) {
+        if (!(p%64u) && !source_request_poll(ctx,call)) return false;
+        XrXirType type;
+        if (!source_substitute(ctx,&substitution,function.parameters[p],0,&type)) return false;
+        if (p<captures) {
+            uint32_t capture=body->operands[producer.args[0]+p];
+            if (capture>=parameters && capture-parameters>=body->count)
+                return source_fail(ctx,call,XR_XIR_BAD_STRUCTURE,"go capture has no actual producer");
+            XrXirType actual=capture<parameters ? ctx->functions[ctx->function].parameters[capture] :
+                body->recipes[capture-parameters].instruction.type;
+            if (actual!=type) return source_fail(ctx,call,XR_XIR_BAD_TYPE,"go capture type disagrees with its declaration");
+            storage.values[p]=(SourceValue){.id=capture,.type=actual};
+        }
+        else {
+            uint32_t mode=xr_xir_declared_parameter_mode(&ctx->types,type,function.consume_parameters,
+                function.consume_parameter_count,p);
+            if(mode==XR_PARAM_REF || signature.parameters[p-captures].type!=type ||
+                signature.parameters[p-captures].mode!=mode)
+                return source_fail(ctx,call,XR_XIR_BAD_TYPE,"go callable tail disagrees with its physical declaration");
+        }
+    }
+    XrXirType result,error;
+    if (!source_substitute(ctx,&substitution,function.result,0,&result) ||
+        !source_substitute(ctx,&substitution,function.error_type,0,&error)) return false;
+    if (result!=signature.result || error!=signature.element)
+        return source_fail(ctx,call,XR_XIR_BAD_TYPE,"go callable result disagrees with its declaration");
+    SourceCallSyntax syntax;
+    SourceCallPlan plan={.family=SOURCE_CALL_FUNCTION,.prefix=substitution,.substitution=substitution,
+        .function_parameters=function.parameters,.result=function.result,.values=storage.values,
+        .parameter_offset=captures};
+    plan.declaration.function=*target;plan.declaration.callable=callee.type;plan.declaration.callee_value=callee.id;
+    if (!source_hir_call_prepare(ctx,call,&plan,count)) return false;
+    plan.value_offset=captures;
+    if (!source_call_syntax(ctx,call,&syntax) || !source_call_expand(ctx,call,&syntax,&plan,count-captures)) return false;
+    if ((uint32_t)syntax.arg_count!=count-captures)
+        return source_fail(ctx,call,XR_XIR_BAD_TYPE,"go value requires its exact exposed arguments");
+    if (!source_call_plan_arguments(ctx,call,&plan,&syntax,NULL) ||
+        !source_instantiation_prove(ctx,call,(XrXirDeclarationContext){XR_XIR_CONTEXT_FUNCTION,*target,0},substitution)) return false;
+    SourceCallConversions conversions={SOURCE_CALL_FUNCTION,substitution,function.parameters,NULL,storage.values,count,0};
+    if (!source_call_conversions(ctx,call,&conversions) || !source_hir_call_commit(ctx,call,&plan,storage.values,count,count)) return false;
+    *output=(SourceDirectArguments){substitution,storage.values,count,result,0,plan.signature};return true;
 }
 static bool source_go_call(SourceContext *ctx, AstNode *node, SourceExpectedType context, SourceValue *value) {
     SourceName *binding, *target;
@@ -43,7 +127,7 @@ static bool source_go_call(SourceContext *ctx, AstNode *node, SourceExpectedType
     if (!source_call_syntax(ctx, call, &syntax)) return false;
     for (int a = 0; a < syntax.arg_count; ++a) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        if (syntax.arg_accesses && syntax.arg_accesses[a] != XR_CALL_ARG_PLAIN)
+        if (syntax.arg_accesses && syntax.arg_accesses[a]!=XR_CALL_ARG_PLAIN && syntax.arg_accesses[a]!=XR_CALL_ARG_MOVE)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "go argument access mode is not admitted");
     }
     SourceExpectedType child = ctx->active_expression->task_element_context;
@@ -56,21 +140,37 @@ static bool source_go_call(SourceContext *ctx, AstNode *node, SourceExpectedType
     const XrXirTypeNode *task_context = context.present ? xr_xir_type_node(&ctx->types, expected) : NULL;
     if (task_context && task_context->kind == XR_XIR_TYPE_TASK)
         child = (SourceExpectedType) {true, task_context->element, context.infer_result, false};
-    SourceDirectRequest direct = {target->index, {0}, NULL, child};
     SourceDirectArguments prepared = {0};
-    if (!source_direct_arguments(ctx, call, &direct, &prepared)) return false;
+    uint32_t function=target ? target->index : UINT32_MAX;
+    if (target) {
+        SourceDirectRequest direct = {function, {0}, NULL, child};
+        if (!source_direct_arguments(ctx, call, &direct, &prepared)) return false;
+    } else if (!source_go_value_arguments(ctx,call,&function,&prepared)) return false;
     XrXirType error;
-    if (!source_substitute(ctx,&prepared.substitution,ctx->functions[target->index].error_type,0,&error)) return false;
+    if (!source_substitute(ctx,&prepared.substitution,ctx->functions[function].error_type,0,&error)) return false;
     XrXirDeclarations declarations;XrXirModule module=source_module_view(ctx,&declarations);
-    XrXirProofContext proof={&module,{XR_XIR_CONTEXT_FUNCTION,target->index,0}};
+    XrXirProofContext proof={&module,{XR_XIR_CONTEXT_FUNCTION,function,0}};
     XrXirStatus status=xr_xir_compile_type_markers_prove(&ctx->compile,&proof,
-        ctx->functions[target->index].error_type,XR_XIR_CONSTRAINT_SENDABLE);
+        ctx->functions[function].error_type,XR_XIR_CONSTRAINT_SENDABLE);
     if (status!=XR_XIR_OK)
         return source_fail(ctx,call,status,"Task worker declared error type must satisfy Sendable");
-    XrXirInstruction op = {XR_XIR_GO, XR_XIR_UNIT, {0}, {0}, target->index, {0}};
+    XrXirInstruction op = {XR_XIR_GO, XR_XIR_UNIT, {0}, {0}, function, {0}};
+    if(ctx->task_scope&&ctx->task_scope->function==ctx->function) {
+        SourceTaskScope *scope=ctx->task_scope;
+        if(error!=XR_XIR_NEVER&&scope->mode==XR_SOURCE_SCOPE_ISOLATED)
+            return source_fail(ctx,node,XR_XIR_UNSUPPORTED,"isolated scope child error aggregation is not yet admitted");
+        XrXirCallableParameter errors[2]={{scope->child_error,XR_PARAM_READ},{error,XR_PARAM_READ}};
+        if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,
+            .parameters=errors,.parameter_count=2},&scope->child_error))return false;
+        if(prepared.count==UINT32_MAX)return source_fail(ctx,node,XR_XIR_OVERFLOW,"scoped argument count overflow");
+        SourceValue *arguments=source_alloc(ctx,(size_t)prepared.count+1,sizeof(*arguments));if(!arguments)return false;
+        arguments[0]=ctx->task_scope->group;
+        if(!source_copy_bytes(ctx,node,arguments+1,prepared.values,(size_t)prepared.count*sizeof(*arguments)))return false;
+        prepared.values=arguments;op.op=XR_XIR_SCOPED_GO;
+    }
     return source_task_type(ctx, call, prepared.result, error, &op.type) &&
         source_type_arguments(ctx, call, prepared.substitution.types, prepared.substitution.count, &op) &&
-        source_query_reference(ctx, call->as.call_expr.callee, binding, target, XR_XIR_SOURCE_CALL) &&
+        (!target || source_query_reference(ctx, call->as.call_expr.callee, binding, target, XR_XIR_SOURCE_CALL)) &&
         source_hir_call_group(ctx,prepared.signature,op,prepared.values,value);
 }
 static bool source_task_result_hint(SourceContext *ctx, SourceExpressionPlan *plan,
@@ -96,14 +196,7 @@ static bool source_task_expression(SourceContext *ctx, AstNode *node, SourceExpe
     SourceExpressionPlan *plan = source_plan_collect(ctx, node, expected);
     return plan && source_task_result_hint(ctx, plan, task_context, 0) && source_plan_complete(ctx, plan, value);
 }
-static bool source_task_await(SourceContext *ctx, AstNode *node, SourceExpectedType context, SourceValue *value) {
-    AwaitExprNode *await = &node->as.await_expr;
-    if (!await->expr || await->timeout || await->into || await->is_any || await->is_all || await->is_any_success)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "await requires one Task without aggregation or timeout");
-    SourceValue task;
-    /* Context is evidence for an ordinary generic call, never a conversion
-     * of an existing invariant Task handle to a different element type. */
-    if (!source_task_expression(ctx, await->expr, (SourceExpectedType){0}, context, &task)) return false;
+static bool source_task_await_value(SourceContext *ctx, AstNode *node, SourceValue task, SourceValue *value) {
     const XrXirTypeNode *type = xr_xir_type_node(&ctx->types, task.type);
     if (!type || type->kind != XR_XIR_TYPE_TASK)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "await requires an admitted Task value");
@@ -128,10 +221,20 @@ static bool source_task_await(SourceContext *ctx, AstNode *node, SourceExpectedT
         if (!source_error_edge(ctx, caught) || !source_handler_site(ctx,origin,caught.id)) return false;
     } else if (!source_recipe_append(ctx, (XrXirInstruction) {XR_XIR_THROW, XR_XIR_UNIT, {caught.id, 0}, {0}, 0, {0}}, NULL))
         return false;
+    body->recipes[origin].instruction.targets[0]=body->block_count;
     if (!begin_block(ctx)) return false;
     if (element == XR_XIR_UNIT) { *value = (SourceValue){.id=UINT32_MAX, .type=XR_XIR_UNIT,.place={0}}; return true; }
     return source_recipe_append(ctx,
         (XrXirInstruction) {XR_XIR_INVOKE_RESULT, element, {0}, {0}, origin, {0}}, value);
+}
+static bool source_task_await(SourceContext *ctx, AstNode *node, SourceExpectedType context, SourceValue *value) {
+    AwaitExprNode *await = &node->as.await_expr;
+    if (!await->expr || await->timeout || await->into || await->is_any || await->is_all || await->is_any_success)
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "await requires one Task without aggregation or timeout");
+    SourceValue task;
+    /* Context guides a generic call, never an invariant Task conversion. */
+    return source_task_expression(ctx, await->expr, (SourceExpectedType){0}, context, &task) &&
+        source_task_await_value(ctx,node,task,value);
 }
 
 static bool source_task_result_type(SourceContext *ctx,XrXirType element,XrXirType error,XrXirType *type) {

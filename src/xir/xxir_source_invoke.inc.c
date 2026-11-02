@@ -24,11 +24,31 @@ static bool source_error_edge(SourceContext *ctx, SourceValue value) {
     SourceErrorEdge *edge = source_alloc(ctx,1,sizeof(*edge));
     if (!edge || !handler || handler->count >= UINT32_MAX/2)
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"error continuation budget exhausted");
-    *edge = (SourceErrorEdge){handler->edges,body->current_block.identity,body->count,value,UINT32_MAX};
-    handler->edges = edge; ++handler->count;
     bool leaving = body->frontier != handler->frontier;
-    return source_recipe_append(ctx,(XrXirInstruction){leaving ? XR_XIR_CLEANUP_ERROR : XR_XIR_JUMP,
-        XR_XIR_UNIT,{leaving ? value.id : 0},{0},leaving ? handler->frontier : 0,{0}},NULL);
+    uint32_t anchor=body->blocks[body->current_block.identity].panic_scope;
+    for(SourceTaskScope *scope=ctx->task_scope;scope;scope=scope->parent)
+        if(scope->function==ctx->function && scope->frontier>handler->frontier &&
+            scope->frontier<=body->frontier)anchor=scope->block+1;
+    if(leaving&&anchor) {
+        if(!source_recipe_append(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},
+            {body->block_count},0,{0}},NULL)||!begin_block(ctx))return false;
+        body->blocks[body->current_block.identity].panic_scope=anchor;
+    }
+    uint32_t producer=body->count;
+    if(!source_recipe_append(ctx,(XrXirInstruction){leaving ? XR_XIR_CLEANUP_ERROR : XR_XIR_JUMP,
+        XR_XIR_UNIT,{leaving ? value.id : 0},{0},leaving ? handler->frontier : 0,{0}},NULL))return false;
+    uint32_t source=value.id;
+    if(leaving&&anchor) {
+        body->recipes[producer].instruction.targets[0]=body->block_count;
+        uint32_t frontier=body->frontier;body->frontier=handler->frontier;
+        bool ok=begin_block(ctx);body->frontier=frontier;if(!ok)return false;
+        body->blocks[body->current_block.identity].panic_scope=anchor;
+        if(!source_recipe_append(ctx,(XrXirInstruction){XR_XIR_INVOKE_ERROR,
+            XR_XIR_ERROR,{0},{0},producer,{0}},&value))return false;
+        if(!source_recipe_append(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{0},0,{0}},NULL))return false;
+    }
+    *edge=(SourceErrorEdge){handler->edges,body->current_block.identity,body->count-1,value,UINT32_MAX,source,producer};
+    handler->edges=edge;++handler->count;return true;
 }
 static bool source_recipe_record(SourceContext *ctx, XrXirInstruction op, SourceValue *result) {
     if (!source_local_call(ctx,&op) || !source_call_borrows(ctx,&op)) return false;
@@ -61,7 +81,9 @@ static bool source_recipe_record(SourceContext *ctx, XrXirInstruction op, Source
     if (!source_recipe_append(ctx,op,NULL) || !begin_block(ctx)) return false;
     SourceValue caught;
     if (!source_recipe_append(ctx,(XrXirInstruction){XR_XIR_INVOKE_ERROR,XR_XIR_ERROR,{0},{0},origin,{0}},&caught) ||
-        !source_error_edge(ctx,caught) || !source_handler_site(ctx,origin,caught.id) || !begin_block(ctx)) return false;
+        !source_error_edge(ctx,caught) || !source_handler_site(ctx,origin,caught.id)) return false;
+    body->recipes[origin].instruction.targets[0]=body->block_count;
+    if(!begin_block(ctx))return false;
     if (op.type == XR_XIR_UNIT) {
         if (result) *result = (SourceValue){.id=0,.type=XR_XIR_UNIT,.place={0}};
         return true;

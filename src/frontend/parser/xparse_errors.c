@@ -49,7 +49,15 @@ XR_FUNC AstNode *xr_parse_try_expression(Parser *parser) {
         parser->optional_try_operand = true;
         parser->optional_try_bracket_depth = parser->bracket_depth;
     }
-    AstNode *operand = xr_parse_precedence(parser, PREC_TERNARY);
+    AstNode *operand = NULL;
+    if (xr_parser_match(parser, TK_SCOPE)) {
+        if (mode != XR_TRY_PROPAGATE) {
+            xr_parser_error(parser, "scope propagation is written try scope");
+            return NULL;
+        }
+        /* This operand marks exit propagation only, not a try-body region. */
+        operand = xr_parse_scope_block(parser);
+    } else operand = xr_parse_precedence(parser, PREC_TERNARY);
     parser->optional_try_operand = outer_optional;
     parser->optional_try_bracket_depth = outer_depth;
     if (!xr_parser_healthy(parser) || !operand) return NULL;

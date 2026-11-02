@@ -247,7 +247,7 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
                 call=body->recipes[(uint32_t)call.immediate].instruction;
             projection.call=call;projection.has_call=call.op==XR_XIR_CALL||call.op==XR_XIR_INVOKE||
                 call.op==XR_XIR_CALL_INDIRECT||call.op==XR_XIR_INVOKE_INDIRECT||call.op==XR_XIR_CALL_REQUIREMENT||
-                call.op==XR_XIR_GO||call.op==XR_XIR_GENERATOR_NEW;
+                call.op==XR_XIR_GO||call.op==XR_XIR_SCOPED_GO||call.op==XR_XIR_GENERATOR_NEW;
             if(xr_xir_op_uses_operand_table(raw_recipe.op)) {
                 if(raw_recipe.args[0]>body->operand_count||raw_recipe.args[1]>body->operand_count-raw_recipe.args[0])goto invalid;
                 projection.source_arguments=raw_recipe.args[1]?body->operands+raw_recipe.args[0]:NULL;projection.source_argument_count=raw_recipe.args[1];

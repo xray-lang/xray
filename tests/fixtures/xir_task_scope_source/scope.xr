@@ -1,0 +1,280 @@
+const total = Atomic(0)
+const initTotal = Atomic(0)
+scope { go fn() { initTotal.add(42) }() }
+assert(initTotal.load() == 42)
+fn worker(value: i64) { total.add(value) }
+fn failed() { assert(false) }
+enum WorkError { Failed }
+enum PayloadError { Failed { values: Array<i64> } }
+fn businessError() throws(WorkError) { throw WorkError.Failed }
+fn payloadError() throws(PayloadError) { throw PayloadError.Failed { values: [40, 2] } }
+fn consume(values: move Array<i64>) {
+    assert(values[0] == 41)
+    values[0] = 42
+    assert(values[0] == 42)
+}
+export fn moveStandalone() -> i64 {
+    var independent = [41]
+    const independentSnapshot = independent
+    const task = go consume(move independent)
+    try! await task
+    assert(independentSnapshot[0] == 41)
+    return 42
+}
+export fn moveScoped() -> i64 {
+    var scoped = [41]
+    const scopedSnapshot = scoped
+    scope { go consume(move scoped) }
+    assert(scopedSnapshot[0] == 41)
+    return 42
+}
+fn ownershipTransfers() {
+    assert(moveStandalone() == 42 && moveScoped() == 42)
+    var referenced = [41]
+    const referencedSnapshot = referenced
+    const callback = consume
+    scope { go callback(move referenced) }
+    assert(referencedSnapshot[0] == 41)
+}
+fn borrowedAcross() -> i64 {
+    var values = [42]
+    const view: Slice<i64> = values[:]
+    scope { go worker(0) }
+    return view[0]
+}
+fn borrowedPanic() -> i64 {
+    var values = [42]
+    const view: Slice<i64> = values[:]
+    try { scope { go worker(0); assert(false) } } catch panic {}
+    return view[0]
+}
+fn borrowedBeforeJoin() {
+    var values = [42]
+    scope { go worker(0); const view: Slice<i64> = values[:]; assert(view[0] == 42) }
+}
+fn handledBody() {
+    scope { go worker(0); try { try businessError() } catch (error: WorkError) {} }
+}
+fn propagatedBody() throws(WorkError) {
+    try scope { go worker(0); try businessError() }
+}
+fn protectedBody() {
+    var caught = false
+    try { scope { go worker(0); try businessError() } } catch (error: WorkError) { caught = true }
+    assert(caught)
+    caught = false
+    try { try propagatedBody() } catch (error: WorkError) { caught = true }
+    assert(caught)
+}
+fn propagatedChildren() throws(WorkError) {
+    try scope { go businessError(); go worker(0) }
+}
+fn childErrors() {
+    var caught = false
+    try { try propagatedChildren() } catch (error: WorkError) { caught = true }
+    assert(caught)
+    caught = false
+    try {
+        try scope { go payloadError(); go worker(0) }
+    } catch (error: PayloadError) {
+        match (error) {
+            PayloadError.Failed { values: items } -> { assert(len(items) == 2 && items[0] + items[1] == 42) }
+        }
+        caught = true
+    }
+    assert(caught)
+    caught = false
+    try {
+        try scope { go businessError(); go payloadError(); go worker(0) }
+    } catch (error: WorkError) { caught = true }
+      catch (error: PayloadError) { caught = true }
+    assert(caught)
+}
+export fn returnBoundary() -> i64 {
+    try {
+        try scope {
+            const task = go payloadError()
+            try { try await task } catch (error) {}
+            return 1
+        }
+    } catch (error: PayloadError) { return 42 }
+}
+export fn breakBoundary() -> i64 {
+    var caught = false
+    for (var i = 0; i < 1; i++) {
+        try {
+            try scope {
+                const task = go payloadError()
+                try { try await task } catch (error) {}
+                break
+            }
+        } catch (error: PayloadError) { caught = true }
+    }
+    return caught ? 42 : 0
+}
+fn deferredWorker(ready: Channel<i64>, waiting: Channel<i64>) throws(SendResult) {
+    defer { assert(waiting.isClosed) }
+    try ready.send(1)
+    waiting.recv()
+}
+export fn exitOrder() throws(SendResult) -> i64 {
+    const ready = Channel<i64>(1)
+    const waiting = Channel<i64>(1)
+    var value = 1
+    try scope {
+        go deferredWorker(ready, waiting)
+        match (ready.recv()) {
+            Recv.Value { value: signal } -> { assert(signal == 1) }
+            _ -> { assert(false) }
+        }
+        defer { value = 42; waiting.close() }
+        return value
+    }
+}
+export fn panicBoundary() -> i64 {
+    try {
+        scope {
+            const task = go failed()
+            try {
+                try { try! await task } catch panic {}
+                return 1
+            } catch panic { return 2 }
+        }
+    } catch panic { return 42 }
+}
+export fn childFirstFailure() -> i64 {
+    var caught = 0
+    try {
+        try scope {
+            const task = go payloadError()
+            try { try await task } catch (error) {}
+            throw WorkError.Failed
+        }
+    } catch (error: PayloadError) { caught = 42 }
+      catch (error: WorkError) { caught = 1 }
+    return caught
+}
+fn blockedError(waiting: Channel<i64>) throws(WorkError) {
+    try { try waiting.recv() } catch (error) {}
+    throw WorkError.Failed
+}
+fn bodyFirstFailure() -> i64 {
+    const waiting = Channel<i64>(1)
+    var caught = 0
+    try {
+        try scope {
+            go blockedError(waiting)
+            throw PayloadError.Failed { values: [40, 2] }
+        }
+    } catch (error: PayloadError) {
+        match (error) {
+            PayloadError.Failed { values: items } -> { caught = items[0] + items[1] }
+        }
+    } catch (error: WorkError) { caught = 1 }
+    return caught
+}
+fn assertedBody() {
+    var caught = false
+    try { scope { go worker(0); try! businessError() } } catch panic { caught = true }
+    assert(caught)
+}
+const selectOrder = Atomic(0)
+fn selectedDelay() -> i64 {
+    assert(selectOrder.load() == 0)
+    selectOrder.add(1)
+    return 0
+}
+fn selectedChannel(channel: Channel<i64>) -> Channel<i64> {
+    assert(selectOrder.load() == 1)
+    selectOrder.add(1)
+    return channel
+}
+fn selections() {
+    const words = Channel<string>(1)
+    const numbers = Channel<i64>(1)
+    try! words.send("selected")
+    var chosen = 0
+    select {
+        word from words -> { assert(word == "selected"); chosen = 1 }
+        number from numbers -> { assert(false) }
+        _ -> { assert(false) }
+    }
+    assert(chosen == 1)
+    select {
+        number from numbers -> { assert(false) }
+        _ -> { chosen = 2 }
+    }
+    assert(chosen == 2)
+    select {
+        after selectedDelay() -> { chosen = 3 }
+        number from selectedChannel(numbers) -> { assert(false) }
+    }
+    assert(chosen == 3 && selectOrder.load() == 2)
+    scope {
+        go fn() { try! numbers.send(42) }()
+        select { number from numbers -> { assert(number == 42); chosen = 4 } }
+    }
+    assert(chosen == 4)
+    const maybe = Channel<i64?>(1)
+    try! maybe.send(null)
+    select {
+        value from maybe -> { assert(value == null); chosen = 5 }
+        _ -> { assert(false) }
+    }
+    assert(chosen == 5)
+}
+fn returning() -> Array<i64> {
+    var value = [42]
+    scope { go worker(1); return move value }
+}
+fn leaving() {
+    var i = 0
+    while (i < 3) {
+        i++
+        scope { go worker(1); if (i == 1) { continue }; break }
+    }
+}
+fn aggregateValue(value: i64) -> i64 { return value }
+fn aggregateText() -> string { return "aggregate" }
+fn aggregates() {
+    const a = go aggregateValue(40)
+    const b = go aggregateValue(2)
+    const values = try! Task.all([a, b, a])
+    assert(len(values) == 3 && values[0] == 40 && values[1] == 2 && values[2] == 40)
+    const x = go aggregateText()
+    const y = go aggregateText()
+    const first = try! Task.first([x, y])
+    assert(first == "aggregate")
+}
+export fn main() -> i64 {
+    aggregates()
+    selections()
+    assert(bodyFirstFailure() == 42)
+    ownershipTransfers()
+    assert(borrowedAcross() == 42 && borrowedPanic() == 42)
+    borrowedBeforeJoin()
+    handledBody()
+    protectedBody()
+    childErrors()
+    assertedBody()
+    scope { go worker(20); go fn() { total.add(22) }() }
+    assert(total.load() == 42)
+    scope(isolated) { go worker(1); go worker(2) }
+    assert(total.load() == 45)
+    scope { scope { go worker(1) }; go worker(2) }
+    assert(total.load() == 48)
+    const callback = fn() { total.add(2) }
+    scope { go callback() }
+    assert(total.load() == 50)
+    scope { for (var i = 0; i < 3; i++) { go worker(1) } }
+    assert(total.load() == 53)
+    scope { try { assert(false) } catch panic {}; go worker(1) }
+    assert(total.load() == 54)
+    var caught = false
+    try { scope { go failed() } } catch panic { caught = true }
+    assert(caught)
+    const result = returning()
+    assert(len(result) == 1 && result[0] == 42)
+    leaving()
+    return 42
+}

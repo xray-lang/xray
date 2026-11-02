@@ -2921,7 +2921,7 @@ AstNode *xr_ast_defer_stmt(XrCompilerSession *session, AstNode *body, int line) 
 }
 
 // Create scope block node
-// scope { ... } or linked scope { ... }
+// scope { ... } or scope(isolated) { ... }
 AstNode *xr_ast_scope_block(XrCompilerSession *session, AstNode *body, uint8_t scope_mode,
                             int line) {
     if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;

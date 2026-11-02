@@ -167,7 +167,7 @@ typedef struct SourceInstructionRecipe {
     SourceRootValue root;
     XrXirSourceDebugPoint debug;
 } SourceInstructionRecipe;
-typedef struct SourceBlockRecipe { XrXirBlock block; uint32_t owner, identity, runtime; } SourceBlockRecipe;
+typedef struct SourceBlockRecipe { XrXirBlock block; uint32_t owner, identity, runtime, panic_scope; } SourceBlockRecipe;
 typedef struct SourceRecipeStorage { struct SourceRecipeStorage *next; } SourceRecipeStorage;
 typedef struct SourceThrowRecipe {
     struct SourceThrowRecipe *next;
@@ -253,11 +253,19 @@ typedef struct SourceFunction {
 } SourceFunction;
 typedef struct SourcePatch { struct SourcePatch *next; uint32_t instruction; } SourcePatch;
 typedef struct SourceLoop { struct SourceLoop *parent; SourcePatch *breaks, *continues; uint32_t frontier; } SourceLoop;
+typedef struct SourceTaskScope {
+    struct SourceTaskScope *parent; uint32_t function; SourceValue group; SourceLocalHandler *handler;
+    XrXirType body_error;
+    XrXirType child_error;
+    uint32_t begin,mode;
+    uint32_t block,frontier;
+    SourceErrorContext *error_context;
+} SourceTaskScope;
 struct SourceErrorEdge {
     struct SourceErrorEdge *next;
     uint32_t block, jump;
     SourceValue value;
-    uint32_t input;
+    uint32_t input, source, producer;
 };
 struct SourceErrorContext {
     SourceErrorEdge *edges;
@@ -859,7 +867,7 @@ static bool begin_block(SourceContext *ctx) {
         if (!source_copy_bytes(ctx, NULL, blocks, body->blocks, body->block_count * sizeof(*blocks))) return false;
         body->blocks = blocks; body->block_capacity = capacity;
     }
-    body->blocks[body->block_count] = (SourceBlockRecipe){{body->count,0,0,body->frontier},ctx->function,body->block_count,body->block_count};
+    body->blocks[body->block_count] = (SourceBlockRecipe){{body->count,0,0,body->frontier},ctx->function,body->block_count,body->block_count,0};
     body->current_block=(SourceBlockReference){ctx->function,body->block_count};
     ++body->block_count;
     --ctx->remaining_blocks; ctx->returned = false; return true;
@@ -1329,6 +1337,7 @@ static bool source_function_call(SourceContext *ctx,AstNode *node,SourceName *bi
 #include "xxir_source_task_call.inc.c"
 #include "xxir_source_iterator_call.inc.c"
 #include "xxir_source_from_utf8.inc.c"
+#include "xxir_source_task_aggregate.inc.c"
 static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType result_context, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
     if (call->arg_count < 0 || call->arg_count > 65536 || call->type_arg_count < 0 ||
@@ -1393,6 +1402,8 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
         if (source_pointer_namespace(ctx,member->object)) return source_pointer_null_call(ctx,node,value);
         if (source_from_utf8_receiver(ctx,callee))
             return source_from_utf8_call(ctx,node,value);
+        if (source_task_aggregate_receiver(ctx,callee))
+            return source_task_aggregate_call(ctx,node,value);
         if (source_decimal_static_receiver(ctx, member->object))
             return source_decimal_static_call(ctx, node, value);
         if (source_array_static_receiver(ctx, member->object))
@@ -1844,6 +1855,9 @@ static bool source_explicit_reference(SourceContext *ctx, AstNode *node, SourceE
 static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceExpectedType expected,SourceValue *value);
 static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value);
 static bool source_defer(SourceContext *ctx, AstNode *node);
+static bool source_task_scope(SourceContext *ctx,AstNode *node,bool marked);
+static bool source_task_scope_transfer(SourceContext *ctx,AstNode *node,uint32_t frontier);
+static bool source_select(SourceContext *ctx,AstNode *node);
 static bool source_block_functions(SourceContext *ctx,AstNode *block);
 #include "xxir_source_view.inc.c"
 #include "xxir_source_copy.inc.c"
@@ -2227,11 +2241,12 @@ static bool source_loop_exit(SourceContext *ctx, AstNode *node) {
     if (!ctx->loop || label) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE,
         ctx->identities[ctx->function].cleanup_owner ? "E0395: defer cannot exit an enclosing loop outside its body" :
         "loop exit requires an unlabelled enclosing loop");
+    uint32_t target = ctx->loop->frontier;
+    if(!source_task_scope_transfer(ctx,node,target))return false;
     SourcePatch **head = stop ? &ctx->loop->breaks : &ctx->loop->continues;
     SourcePatch *patch = source_alloc(ctx, 1, sizeof(*patch)); if (!patch) return false;
     *patch = (SourcePatch) {*head, ctx->bodies[ctx->function].count}; *head = patch;
     ctx->returned = true;
-    uint32_t target = ctx->loop->frontier;
     bool leaving = ctx->bodies[ctx->function].frontier != target;
     return source_recipe_record(ctx, (XrXirInstruction) {leaving ? XR_XIR_CLEANUP_LEAVE : XR_XIR_JUMP,
         XR_XIR_UNIT, {0}, {0}, leaving ? target : 0, {0}}, NULL);
@@ -3090,6 +3105,8 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
 #include "xxir_source_core_panics.inc.c"
 #include "xxir_source_core_throws.inc.c"
 #include "xxir_source_comptime_expression.inc.c"
+#include "xxir_source_task_scope.inc.c"
+#include "xxir_source_select.inc.c"
 #include "xxir_source_materialization_finish.inc.c"
 #include "xxir_source_instance_writer.inc.c"
 /* Preparing another generated body is a synchronous scope switch. Shared tables
