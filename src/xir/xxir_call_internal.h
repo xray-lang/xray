@@ -74,9 +74,13 @@ XR_FUNC const XirEffectInvocationSelection *xr_xir_call_invocation(const XrXirCa
 typedef struct XrXirCallFrontier {
     uint32_t instruction,target,producer;
 } XrXirCallFrontier;
-/* A staged frontier retains only identity. Actual inputs still require a fresh
- * Final selection before acceptance and another check after loan preparation. */
+/* A staged frontier retains only identity. Instance admission rechecks the
+ * owned equation or constructor relation before preparing the callee frame. */
 XR_FUNC bool xr_xir_call_invocation_pending(const XrXirCallView *view,XrXirCallFrontier *frontier);
+/* Ordinary root field calls retain only coordinates until Instance rechecks
+ * the owned constructor relation. They carry no invocation equation owner. */
+XR_FUNC XrXirCallStatus xir_call_root_fields_stage(XrXirCallView *view,
+    uint32_t instruction,uint32_t target);
 XR_FUNC XrXirCallStatus xr_xir_call_invocation_stage(XrXirCallView *view,
     const XirEffectInvocationSelection *selection);
 XR_FUNC XrXirCallStatus xr_xir_call_invocation_accept(XrXirCallView *view,
