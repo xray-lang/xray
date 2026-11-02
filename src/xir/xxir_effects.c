@@ -18,6 +18,7 @@
 #include "xxir_internal.h"
 #include "xxir_source_replay_internal.h"
 #include "xxir_types.h"
+#include "xxir_class_hierarchy_internal.h"
 #include "xxir_interface.h"
 #include "xxir_constraint_proof.h"
 #include "xxir_operand_roles.h"

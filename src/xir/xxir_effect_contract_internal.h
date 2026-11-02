@@ -216,6 +216,11 @@ typedef struct XirEffectProducerView {
 XR_FUNC XrXirStatus xir_effects_producer(const XrXirCompileContext *context,
     const struct XrXirEffects *effects, uint32_t function, uint32_t instruction,
     XirEffectProducerView *output);
+/* A dynamic class producer must match one exact independently sealed candidate.
+ * Its runtime consumer separately proves the actual receiver's selected target. */
+XR_FUNC XrXirStatus xir_effects_producer_target(const XrXirCompileContext *context,
+    const struct XrXirEffects *effects,uint32_t function,uint32_t instruction,
+    uint32_t target,XirEffectProducerView *output);
 
 /* Runtime matching reads only existing completed equations. The callback
  * consumes the live runtime ledger, never the retired compile context. */

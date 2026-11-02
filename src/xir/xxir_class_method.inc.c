@@ -102,18 +102,25 @@ XR_FUNC XrXirStatus xir_compile_class_method_candidates(const XrXirModule *modul
     XrXirStatus status=xir_receive_poll(control);if(status!=XR_XIR_OK)return status;
     status=class_method_entry(module,slot);if(status!=XR_XIR_OK)return status;
     if(!xr_xir_class_is_subtype(module->types,static_receiver,module->functions[slot].parameters[0]))return XR_XIR_BAD_TYPE;
-    uint32_t steps=0;bool found=false;
-    for(uint32_t t=0;t<module->types->count;++t) {
+    XirClassMethodTarget initial={0};
+    status=class_method_selected(module,static_receiver,slot,&initial,control);
+    if(status==XR_XIR_OK)status=visit(owner,&initial);
+    if(status!=XR_XIR_OK)return status;
+    uint32_t steps=0;
+    for(uint32_t f=0;f<module->function_count;++f) {
         status=xir_receive_step(control,&steps);if(status!=XR_XIR_OK)return status;
-        XrXirType type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+t);
-        if(!xr_xir_class_is_subtype(module->types,type,static_receiver))continue;
+        const XrXirFunctionIdentity *identity=&module->declarations->functions[f];
+        const XrXirFunction *function=&module->functions[f];
+        if(f==initial.function || identity->method_kind!=XR_XIR_READ_METHOD ||
+            !class_method_name(function,&module->functions[slot]) || !function->parameter_count ||
+            !function->parameters || !xr_xir_class_is_subtype(module->types,function->parameters[0],static_receiver))continue;
         XirClassMethodTarget target={0};
-        status=class_method_selected(module,type,slot,&target,control);
-        if(status==XR_XIR_OK)status=visit(owner,&target);
+        status=class_method_selected(module,function->parameters[0],slot,&target,control);
         if(status!=XR_XIR_OK)return status;
-        found=true;
+        if(target.function!=f)return XR_XIR_BAD_STRUCTURE;
+        status=visit(owner,&target);if(status!=XR_XIR_OK)return status;
     }
-    return found?XR_XIR_OK:XR_XIR_BAD_TYPE;
+    return XR_XIR_OK;
 }
 XR_FUNC XrXirStatus xir_compile_class_method_site(const XrXirModule *module,
     uint32_t caller,uint32_t instruction,XrXirType actual_receiver,
