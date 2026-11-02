@@ -27,7 +27,7 @@ static XrXirStatus declaration_callable_root_read(void *data,XirEffectContextSco
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
 
             const XrXirInstruction *op = &function->instructions[i];
-            if (op->op != XR_XIR_FUNCTION_REF) continue;
+            if (op->op != XR_XIR_FUNCTION_REF && op->op!=XR_XIR_CLASS_METHOD_REF) continue;
             const XrXirTypeNode *signature = xr_xir_callable_signature(module->types, op->type);
             uint32_t mask=0;
             if (!signature) return XR_XIR_BAD_STRUCTURE;
