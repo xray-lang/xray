@@ -503,7 +503,7 @@ def main():
         assert b'XrayNativeRuntime requires' in result.stdout + result.stderr or b'XrayNativeRuntime does not distribute' in result.stdout + result.stderr
         assert not (target/'f64_public_c.exe').exists()
         negative.append(label)
-    assert len(negative)==54 and len(conversion_rejections)==8
+    assert len(negative)==72 and len(conversion_rejections)==8
     for relative, facts in source_inputs.items():
         assert hashlib.sha256((args.source/relative).read_bytes()).hexdigest() == facts['rawSHA256']
     summary = dict(state='PASS', sourceCommit=manifest['sourceCommit'], component='XrayNativeRuntime',
@@ -514,8 +514,9 @@ def main():
         conversion=dict(integerRows=49,fractionRows=37,validFractionRows=21,rangeRows=16,
             publicImages=conversion_public,rangeExecutions=conversion_range_executions,
             sourceRejections=conversion_rejections,pureUnboundImage='f64_conversion_pure',
-            boundary='Original50 images and54 installation negatives remain. Source rejections are separate; two public images each execute1 normal+16 standalone range processes.'),
-        negative=negative, arithmeticRows=3216, comparisonPairs=676,
+            boundary='Original50 images and54 baseline installation negatives remain;18 system-library negatives bring the total to72. Source rejections are separate; two public images each execute1 normal+16 standalone range processes.'),
+        negative=negative, negativeCounts=dict(baseline=54,systemLibraries=18,total=72),
+        arithmeticRows=3216, comparisonPairs=676,
         roundingModes=4, ftzDazStates=4, textRows=290, textSourceBytes=138, textOracleBytes=24,
         hello='NOT_RUN_IN_THIS_INSTALLED_MATRIX')
     (work/'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
