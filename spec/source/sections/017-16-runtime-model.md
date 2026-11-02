@@ -123,13 +123,10 @@ Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `X
 
 ### 16.4 协程调度
 
-- M:N 调度（M OS 线程 × N 协程）。
-- **work-stealing**：空闲 worker 从其他 worker 队列偷任务。
-- **协作式抢占**：协程在 safepoint 让出（非强制抢占）。
-- **公平性**：单一 runnable 队列配合本地 run-next、全局注入队列和 work-stealing；调度顺序不暴露用户级优先级。
-- **栈管理**：VM 的 register/frame stack 在需要时扩容，扩容可能搬迁底层存储；运行时以 slot offset 重建指针。
-
-详见 `src/coro/` 与 `src/vm/xvm_coro_backend.c`。
+- **并行**：协程可能在多个 OS 线程上并行运行，并可能在两个挂起点之间换到另一个线程；§16.9 的边 12 保证迁移前后的顺序。
+- **协作式**：只在挂起点切换，不强制抢占；不含挂起点的循环会一直占用当前线程，也不响应取消（§10.1、§10.4）。
+- **公平性**：调度顺序不暴露用户级优先级；程序不得依赖任务的启动顺序或完成顺序。
+- **栈**：只有可能挂起的函数保存跨挂起点的状态；不挂起的调用使用普通调用栈，深递归受普通栈容量限制。
 
 ### 16.5 进程级全局访问
 
@@ -204,8 +201,6 @@ class PanicInfo {
 
 ### 16.9 并发内存模型
 
-> 真值源：`src/coro/xchannel.c`、`src/coro/xtask.c`、`src/coro/xtask_await.c`、`xisa/xi/ops.def` 的 `:sync` 列。
-
 本节定义两个执行体对同一内存位置的访问何时是**有序的**。§10.9 的 `Ordering` 枚举只描述单个原子操作，不足以推导程序行为；能推导的是本节。
 
 #### 16.9.1 基本定义
@@ -233,7 +228,7 @@ class PanicInfo {
 | 3 | Channel close | `close()` 之前发生的一切，happens-before 任何观测到 `Recv.Closed` 或 `isClosed == true` 之后发生的一切 |
 | 4 | `go` 启动 | `go expr` 处对实参、capture plan 与 `move` 转移的求值，happens-before 协程体的第一条语句 |
 | 5 | Task 完成 → 终态观察 | 任务体的最后一个动作，happens-before 等待者通过 `await t`、`awaitResult()` 或 `poll()` 成功观察到该终态后的操作；`poll()` 返回 `null` 不建立这条完成边，也不驱动子任务 |
-| 6 | scope 退出 | scope 内全部子任务的完成，happens-before scope 块之后的语句。`await all` / `any` / `anySuccess` 按其各自的完成条件建立同样的边 |
+| 6 | scope 退出 | scope 内全部子任务的完成，happens-before scope 块之后的语句。`Task.all` / `Task.first` / `Task.firstSuccess` 对它们实际观察到的每个终态建立第 5 条边；返回时仍在运行的余任务不建立边 |
 | 7 | `const` publish / seal | 顶层 `const` 的初始化与 seal，happens-before 任何执行体对该 const 根的首次读取 |
 | 8 | Atomic release / acquire | `store(v, Release)` synchronizes-with 读到 v 的 `load(Acquire)`；RMW 构成 release sequence；`SeqCst` 操作另外参与一个单一全序。`AcquireRelease` 同时具备两侧 |
 | 9 | 协程域锁 | `sync.Mutex` / `sync.RwLock`：一次 unlock synchronizes-with 后续成功的 lock |
@@ -246,7 +241,7 @@ class PanicInfo {
 
 以下行为**不**建立 happens-before，不得用于同步：
 
-- `Coro.yield()`：它是调度让出点，不是同步点。
+- `Task.yieldNow()`：它是调度让出点，不是同步点。
 - `codegen.compilerFence()`：只阻止有内存效果的操作跨越该编译器调度点，不是 CPU 屏障，不建立 happens-before，不能修复数据竞争（见 §12）。
 - `Ordering.Relaxed` 的原子操作：保证该位置的访问不撕裂，不建立与其他位置的顺序关系。
 - 对象回收 / RC 归零：回收点虽然精确（§16.8），但不建立跨执行体的顺序关系，因此不能用来承载同步语义。
@@ -410,13 +405,10 @@ See `src/runtime/mem/` and `src/shared/xr_obj_header.h` for details.
 
 ### 16.4 Coroutine Scheduling
 
-- M:N scheduling (M OS threads × N coroutines).
-- **work-stealing**: idle workers steal tasks from other workers' queues.
-- **Cooperative preemption**: coroutines yield at safepoints (no forced preemption).
-- **Fairness**: a single runnable queue works with local run-next, global injection, and work-stealing; scheduling order does not expose user-level priorities.
-- **Stack management**: VM register/frame stacks grow on demand and may relocate their backing storage; the runtime re-derives pointers from slot offsets.
-
-See `src/coro/` and `src/vm/xvm_coro_backend.c` for details.
+- **Parallelism**: coroutines may run in parallel on several OS threads and may move to another thread between two suspension points; edge 12 of §16.9 orders everything across such a move.
+- **Cooperative**: switches happen only at suspension points and nothing is preempted; a loop without a suspension point keeps its thread and does not observe cancellation (§10.1, §10.4).
+- **Fairness**: scheduling order exposes no user-level priorities; programs must not rely on the order in which tasks start or finish.
+- **Stack**: only functions that may suspend keep state across a suspension point; non-suspending calls use the ordinary call stack, so deep recursion is bounded by ordinary stack capacity.
 
 ### 16.5 Process-Level Global Access
 
@@ -491,8 +483,6 @@ For this guarantee to be **total**, a defer body must **not reach a scheduler su
 
 ### 16.9 Concurrency Memory Model
 
-> Source of truth: `src/coro/xchannel.c`, `src/coro/xtask.c`, `src/coro/xtask_await.c`, the `:sync` column of `xisa/xi/ops.def`.
-
 This section defines when accesses by two execution agents to the same memory location are **ordered**. The `Ordering` enum in §10.9 describes one atomic operation; it is not enough to derive program behaviour. This section is.
 
 #### 16.9.1 Basic definitions
@@ -520,7 +510,7 @@ Reference-count updates are themselves memory accesses: concurrent retain/releas
 | 3 | Channel close | Everything before `close()` happens-before everything after any observation of `Recv.Closed` or `isClosed == true` |
 | 4 | `go` spawn | Evaluation of the arguments, capture plan and `move` transfers at the `go expr` happens-before the first statement of the coroutine body |
 | 5 | Task completion → terminal observation | The task body's last action happens-before operations after a waiter successfully observes that terminal outcome through `await t`, `awaitResult()`, or `poll()`; a `null` poll establishes no completion edge and does not drive the child |
-| 6 | scope exit | Completion of every child task in a scope happens-before the statements after the scope block. `await all` / `any` / `anySuccess` establish the same edge under their respective completion conditions |
+| 6 | scope exit | Completion of every child task in a scope happens-before the statements after the scope block. `Task.all` / `Task.first` / `Task.firstSuccess` establish edge 5 for every terminal outcome they actually observe; remaining tasks still running when they return establish no edge |
 | 7 | `const` publish / seal | Initialisation and sealing of a top-level `const` happens-before any agent's first read of that const root |
 | 8 | Atomic release / acquire | `store(v, Release)` synchronizes-with the `load(Acquire)` that reads v; RMWs form a release sequence; `SeqCst` operations additionally participate in one single total order. `AcquireRelease` carries both sides |
 | 9 | Coroutine-domain locks | `sync.Mutex` / `sync.RwLock`: an unlock synchronizes-with a later successful lock |
@@ -533,7 +523,7 @@ Reference-count updates are themselves memory accesses: concurrent retain/releas
 
 The following establish **no** happens-before and must not be used to synchronise:
 
-- `Coro.yield()`: a scheduling yield point, not a synchronisation point.
+- `Task.yieldNow()`: a scheduling yield point, not a synchronisation point.
 - `codegen.compilerFence()`: it only prevents memory-effecting operations from moving across that compiler scheduling point. It is not a CPU fence, establishes no happens-before, and cannot repair a data race (see §12).
 - Atomic operations with `Ordering.Relaxed`: they keep that location's accesses from tearing; they order nothing with respect to other locations.
 - Object reclamation, an RC reaching zero, or a cycle-collector run: reclamation timing is not observable semantics (§16.8), so it cannot carry an ordering relation.

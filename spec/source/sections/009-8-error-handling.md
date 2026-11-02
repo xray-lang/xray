@@ -194,7 +194,7 @@ ADT enum 可让 `match` 在编译期检查错因穷举性。
 
 `go f(...)` 把 `f` 的返回类型与声明错误类型保存在 `Task<T, E>` 中；省略错误参数时 `E = Never`。启动本身不向调用方传播子任务的业务错误，独立子任务失败也不自动取消父任务。
 
-- `try await t` 等待结果，成功时返回 `T`，业务错误按 `E | Cancelled` 传播；子任务 panic 仍走 panic 通道。
+- `await t` 等待结果，成功时返回 `T`，业务错误按 `E` 传播（`E = Never` 时不写 `try`）；子任务 panic 仍走 panic 通道，子任务被取消时等待方进入取消展开（§10.3）。
 - `t.awaitResult()` 将终态作为四变体 `TaskResult<T, E>` 返回，业务错误不会从该方法重抛；等待者自身的取消仍按取消展开处理。
 - 默认 scope 在子任务失败时取消兄弟；isolated 保留兄弟执行，仅把子任务业务错误汇总为 `TaskFailures<E>`。两者都等待全部成员结束后退出，panic 始终走独立通道，不进入汇总。主体错误集合 B 与直接子任务错误集合 E 分别组成 `B | E` 和 `B | TaskFailures<E>`；B、E 都为 `Never` 时，两种 scope 均免除传播标记。`try scope` 只标记退出处传播，不免除主体内调用的标记。详见 §10.7。
 
@@ -204,7 +204,7 @@ var value = try await task
 var outcome = task.awaitResult()
 ```
 
-等待取消的子任务得到类型化的 `Cancelled`；当前任务自身被取消时执行 `defer` 后展开，不能被任何 catch 捕获，也不写入当前函数签名（§10.4）。
+等待一个以 `Cancelled` 结束的子任务时，等待方自身进入取消展开；当前任务自身被取消时同样如此。两种情况都执行 `defer` 后展开，不能被任何 catch 捕获，也不写入当前函数签名（§10.3、§10.4）。只有 `awaitResult()` / `poll()` 把取消作为 `TaskResult.Cancelled` 值返回。
 
 #### 8.1.6 `try` 表达式与局部错误检查
 
@@ -870,7 +870,7 @@ ADT enums allow `match` to check exhaustiveness at compile time.
 
 `go f(...)` records the return and declared error types of `f` in `Task<T, E>`; the default error argument is `Never`. Spawning does not propagate the child's business errors to the caller, and an independent child failure does not automatically cancel its parent.
 
-- `try await t` waits for `T` and propagates business errors as `E | Cancelled`; child panic stays on the panic channel.
+- `await t` waits for `T` and propagates business errors as `E` (no `try` when `E = Never`); child panic stays on the panic channel, and a cancelled child makes the waiter enter cancellation unwinding (§10.3).
 - `t.awaitResult()` returns the four-variant `TaskResult<T, E>` without rethrowing business errors. Cancellation of the waiter itself still unwinds that waiter.
 - Default scope cancels siblings on child failure; isolated scope lets siblings continue and aggregates only child business errors as `TaskFailures<E>`. Both drain all members before exit. Panic always uses its independent channel and never enters the aggregate. Body errors B and direct-child errors E form `B | E` and `B | TaskFailures<E>` respectively; both forms need no propagation marker when B and E are `Never`. `try scope` marks exit propagation without marking calls in its body. See §10.7.
 
@@ -880,7 +880,7 @@ var value = try await task
 var outcome = task.awaitResult()
 ```
 
-Waiting on a cancelled child produces typed `Cancelled`. Cancellation of the current task runs its defers and unwinds; no catch can intercept it and it is not part of that function's error signature (§10.4).
+Waiting on a child that ended `Cancelled` makes the waiter itself enter cancellation unwinding, exactly as cancellation of the current task does. Either way the task runs its defers and unwinds; no catch can intercept it and it is not part of that function's error signature (§10.3, §10.4). Only `awaitResult()` / `poll()` return cancellation as the value `TaskResult.Cancelled`.
 
 #### 8.1.6 `try` expressions and local error checking
 

@@ -60,7 +60,7 @@ Xray 是一个**轻量级静态类型脚本语言，原生支持并发**。设�
 | 维度 | 取舍 |
 |--|--|
 | **类型** | 静态类型 + 类型推断；变量声明几乎不需要写类型标注，但类型系统在编译期完全可见 |
-| **并发** | 内置 M:N 协程（go / await / Channel / scope / select），并发安全在编译期由"显式共享"规则保证 |
+| **并发** | 内置无着色协程（go / await / Channel / scope / select），普通函数不需要 async 标注，可在多个线程上并行；并发安全在编译期由"显式共享"规则保证 |
 | **运行模式** | 字节码 VM 与 `xray build --native` AOT 两条路径；当前没有 JIT，跨后端语义由差分测试守门 |
 | **错误处理** | 值返回错误通道（throw / try / catch + enum 错误）+ panic 边界（catch panic）+ 可空类型（T?）+ defer 资源管理 |
 | **元编程** | 注解（`@test` / `@deprecated` / `@derive`）+ 编译期元数据 + 泛型单态化 |
@@ -194,7 +194,7 @@ IdentCont  ::= IdentStart | '0'..'9'
 
 输入先经过严格 UTF-8 校验；随后 scanner 把非 ASCII UTF-8 字节序列作为标识符的一部分。因此 `中文`、`café` 都是合法标识符。当前 scanner 不做 Unicode XID 分类或 NFC 规范化，视觉等价但编码不同的名字仍是不同标识符。
 
-**保留约束**：标识符不能与保留关键字相同（见 §1.5）；可与**上下文敏感关键字**相同（如 `from`、`to`、`default`、`ref`、`move`、`linked`、`after` 可作为普通标识符）。
+**保留约束**：标识符不能与保留关键字相同（见 §1.5）；可与**上下文敏感关键字**相同（如 `from`、`to`、`default`、`ref`、`move`、`isolated`、`after` 可作为普通标识符）。
 
 字符 `_` 是**专用通配符 token**，不是普通标识符：
 
@@ -290,10 +290,9 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 | `from` | `select` 的接收分支 (`x from ch`)；也用于命名 import / re-export (`import { x } from "module"`) |
 | `to` | `select` 的发送分支 (`value to ch`) |
 | `default` | 保留，当前未启用 |
-| `cancelled` | `cancelled()` 协程取消检查（实际上是 builtin 函数）|
 | `ref` | 参数模式与调用授权 (`fn f(p: ref T)` / `f(ref p)`) |
 | `move` | 所有权转移 (`move x`) |
-| `linked` | `linked go` / `linked scope` 修饰符 |
+| `isolated` | `scope(isolated)` 选项（§10.7） |
 | `after` | `select` 的超时分支 (`after 1000 -> ...`) |
 | `panic` | `catch panic (p)` 的 panic 通道边界 |
 | `throws` | 函数、方法、构造器、fn lambda 与函数类型的参数列表之后，声明错误类型 |
@@ -745,7 +744,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 `throws(E)` 中的 `E` 只能是错误枚举、受 `Error` 约束的泛型参数、擦除后的 `Error`、`Never` 或这些错误类型组成的 union；泛型参数可以参与 `E | IoErr` 这样的 union。裸 `throws` 等价于 `throws(Error)`。错误类型随函数签名跨模块传递，不从被调用函数的实现体重新推导。
 
-`go f(...)` 的类型是 `Task<T, E>`，其中 `T` 是返回类型，`E` 来自 `f` 的错误签名；第二个类型参数默认为 `Never`，因此 `Task<T>` 等价于 `Task<T, Never>`。Task 的结果仍须满足可复制与 Sendable 约束。`try await task` 传播 `E | Cancelled`；即使 `E = Never`，等待仍可能观察到取消。取消展开本身不进入被取消函数的错误签名。`TaskResult<T, E>` 有 `Success(T)`、`Error(E)`、`Panic(PanicInfo)`、`Cancelled` 四种结果；`poll()` 的未完成状态用 `TaskResult<T, E>?` 的 `null` 表示（§10.3）。上面的自动生成登记表反映现有实现登记，不能覆盖本节的语言类型合同。
+`go f(...)` 的类型是 `Task<T, E>`，其中 `T` 是返回类型，`E` 来自 `f` 的错误签名；第二个类型参数默认为 `Never`，因此 `Task<T>` 等价于 `Task<T, Never>`。Task 的结果仍须满足可复制与 Sendable 约束。`await task` 只传播 `E`，`E = Never` 时不写 `try`；被等待的任务以取消结束时，等待方自身进入取消展开（§10.3）。取消展开不进入任何函数的错误签名。`TaskResult<T, E>` 有 `Success(T)`、`Error(E)`、`Panic(PanicInfo)`、`Cancelled` 四种结果；`poll()` 的未完成状态用 `TaskResult<T, E>?` 的 `null` 表示（§10.3）。上面的自动生成登记表反映现有实现登记，不能覆盖本节的语言类型合同。
 
 ### 2.3 基本类型
 
@@ -1815,8 +1814,8 @@ mk("receiver").hits += t("delta", 1)                   // receiver, delta
 ```ebnf
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
             | 'move' UnaryExpr
-            | 'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
-            | 'go' (Block | PostfixExpr)
+            | 'await' UnaryExpr
+            | 'go' GoOptions? CallExpr
             | 'unsafe' Block
             | 'comptime' (Expression | Block)
             | PostfixExpr
@@ -2416,11 +2415,11 @@ yield expr                  // 生成器产出一个值并挂起
 
 `yield expr` 只能出现在声明返回 `Iterator<T>` 的生成器函数体内。第一次调用生成器函数不会立即执行函数体，而是返回一个惰性 `Iterator<T>`（协议见 §5.3.6）；`for-in` 通过 `hasNext()` / `next()` 拉取，每次 `yield expr` 产出一个 `T` 并暂停到下一次拉取。
 
-协作让出 CPU 使用 `Coro.yield()`（见 §10.10）；裸 `yield` 不是表达式。
+协作让出 CPU 使用 `Task.yieldNow()`（见 §10.10）；裸 `yield` 不是表达式。
 
 #### 3.16.1 产值与调度挂起
 
-yield expr交付一个拥有式元素并停驻producer；yield ()也交付一个真实Unit元素，不表示结束。Coro.yield()没有元素，只把当前activation交回执行器队列。两者都不会在宿主C栈上保留待恢复调用。
+yield expr交付一个拥有式元素并停驻producer；yield ()也交付一个真实Unit元素，不表示结束。Task.yieldNow()没有元素，只把当前任务交回调度器队列。两者都不会在宿主C栈上保留待恢复调用。
 
 hasNext()可以推进producer直到下一个产值、终态或真实外部等待；重复hasNext()保留缓存而不重复推进。next()转移一个元素的所有权，耗尽按§5.3.6报告E0432。消费可能沿producer遇到挂起，因此定义处不能承诺no_suspend；创建惰性Iterator本身不立即执行producer，也不立即继承其throw。
 
@@ -4694,7 +4693,7 @@ ADT enum 可让 `match` 在编译期检查错因穷举性。
 
 `go f(...)` 把 `f` 的返回类型与声明错误类型保存在 `Task<T, E>` 中；省略错误参数时 `E = Never`。启动本身不向调用方传播子任务的业务错误，独立子任务失败也不自动取消父任务。
 
-- `try await t` 等待结果，成功时返回 `T`，业务错误按 `E | Cancelled` 传播；子任务 panic 仍走 panic 通道。
+- `await t` 等待结果，成功时返回 `T`，业务错误按 `E` 传播（`E = Never` 时不写 `try`）；子任务 panic 仍走 panic 通道，子任务被取消时等待方进入取消展开（§10.3）。
 - `t.awaitResult()` 将终态作为四变体 `TaskResult<T, E>` 返回，业务错误不会从该方法重抛；等待者自身的取消仍按取消展开处理。
 - 默认 scope 在子任务失败时取消兄弟；isolated 保留兄弟执行，仅把子任务业务错误汇总为 `TaskFailures<E>`。两者都等待全部成员结束后退出，panic 始终走独立通道，不进入汇总。主体错误集合 B 与直接子任务错误集合 E 分别组成 `B | E` 和 `B | TaskFailures<E>`；B、E 都为 `Never` 时，两种 scope 均免除传播标记。`try scope` 只标记退出处传播，不免除主体内调用的标记。详见 §10.7。
 
@@ -4704,7 +4703,7 @@ var value = try await task
 var outcome = task.awaitResult()
 ```
 
-等待取消的子任务得到类型化的 `Cancelled`；当前任务自身被取消时执行 `defer` 后展开，不能被任何 catch 捕获，也不写入当前函数签名（§10.4）。
+等待一个以 `Cancelled` 结束的子任务时，等待方自身进入取消展开；当前任务自身被取消时同样如此。两种情况都执行 `defer` 后展开，不能被任何 catch 捕获，也不写入当前函数签名（§10.3、§10.4）。只有 `awaitResult()` / `poll()` 把取消作为 `TaskResult.Cancelled` 值返回。
 
 #### 8.1.6 `try` 表达式与局部错误检查
 
@@ -5502,21 +5501,18 @@ print(typeName(c))             // "Container<i64>" when type names are enabled
 
 ## 10. 并发与协程 (Concurrency)
 
-> 真值源：`src/coro/xcoro*.c`、`src/coro/xtask*.c`、`src/coro/xchannel.c`、`src/coro/xscope*.c`、`src/frontend/analyzer/xanalyzer_escape.c` 与 `docs/rules/design-principles.md`。
-
 xray 的并发是**协程 (goroutine 风格) + Channel + 强静态约束**。设计目标：让 `go worker(args)` 与普通调用具有同一套显式参数和所有权边界，同时在语言的安全子集内**编译期保证不发生数据竞争**——这条保证的精确形式、它的边界，以及本节各构造建立的同步边，定义在 §16.9。
 
 ### 10.1 协程模型
 
-| 维度 | 选择 |
+| 维度 | 语言保证 |
 |--|--|
-| 调度模型 | M:N（用户态协程 + 多 OS 线程） |
-| 调度策略 | 协作式（Channel、`await`、`Task.yieldNow()` 等挂起点；后向跳转不是取消检查点）+ work-stealing |
-| 栈模型 | Stackless（每协程独立 VM 值栈 + 帧数组，按需增长，无原生 C 栈） |
-| 创建开销 | ~微秒级（初始 VM 值栈约 64 槽 + 4 帧，非原生栈） |
-| 上下文切换 | VM 上下文切换（保存/恢复 VM 帧），无原生栈切换、无 syscall |
+| 函数着色 | 无。普通函数不写 `async` / `suspend`；编译器推导每个函数是否可能挂起。普通调用的合法性不依赖这个推导，只有显式要求不挂起的位置（`nosuspend fn` 类型的函数字面量、`defer` 体等）才检查它 |
+| 调度 | 协作式：只在挂起点（`await`、Channel、`select`、`Task.yieldNow()`、sleep、IO）切换；不保证抢占，循环后向跳转既不是让出点也不是取消检查点 |
+| 并行 | 协程可能在多个 OS 线程上并行运行（M:N），也可能在两个挂起点之间换到另一个线程；程序不得依赖单线程执行顺序 |
+| 栈模型 | 无栈：只有可能挂起的函数保存跨挂起点存活的状态，其余函数按普通调用执行；不能跨 C 回调挂起，`CFn` 回调必须是 `nosuspend`（§2.8） |
 
-协程默认分布在多个 worker 线程上；运行时根据 CPU 核数自动设置 GOMAXPROCS 风格的并行度。
+未加 `nosuspend` 前缀的函数类型默认可能挂起（§2.8）。不含挂起点的长循环不会把 CPU 让给同一线程上的其他协程，也不响应取消；需要时调用 `Task.yieldNow()` 或检查 `Task.isCancelled()`（§10.4、§10.10）。worker 线程数、帧布局和创建开销属于实现，本规范不作承诺。
 
 ### 10.2 `go` — 启动协程
 
@@ -5566,7 +5562,7 @@ var task = go fn(x: i64) -> i64 {
 
 **语义**：
 - 每个 `go` 表达式都返回一个 `Task<T, E>`，其中 `T` 是被调函数的返回类型，`E` 是其声明的错误类型，默认 `Never`。返回 Unit 的任务仍保留 Unit 成功值，不把它映射成 `null`。
-- 协程在闲置 worker 线程中调度（M:N）。
+- 协程由运行时调度，可能与启动它的代码并行运行（§10.1）。
 - `go(name: ...)` 只设置调试名称，不影响调度顺序。
 - 协程内**未捕获**异常存在 `Task` 中，由 `await` 时重抛。
 - 参数、拥有式捕获和结果均按真实类型检查 Sendable；普通泛型在定义处按约束检查，Checked 特化后复验。可复制值按声明保留逻辑副本，复制在 class 与同步身份边界停止；Array 的资格由全部元素决定，const、COW、引用计数或单 worker 不额外授予 Sendable。借用 ref、Slice/MutSlice、Cell 与非 Sendable 值不能跨此边界。不可复制且 Sendable 的资源仅可按消费参数转移，不进入普通可复制捕获或 Task 结果。
@@ -5578,32 +5574,38 @@ var task = go fn(x: i64) -> i64 {
 AwaitExpr ::= 'await' UnaryExpr
 ```
 
-`await` 只作用于 `Task<T, E>`，成功时得到 `T`。等待是可能挂起的操作，不阻塞 OS 线程。传播标记顺序固定为 `try await t`；在 `try { }` 区域内可直接写 `await t`。
+`await` 只作用于 `Task<T, E>`，成功时得到 `T`。等待是可能挂起的操作，不阻塞 OS 线程。`E = Never` 时 `await t` 不抛业务错误，不写 `try`；否则传播标记顺序固定为 `try await t`，在 `try { }` 区域内可直接写 `await t`。
 
 ```xray @fragment
-var task = go fetch(url)
+var job = go compute(1)            // Task<i64, Never>
+var n = await job                  // 不抛业务错误，不写 try
+
+var task = go fetch(url)           // fetch 声明了 throws(FetchErr)
 var result = try await task
 
-var tasks = [go compute(2), go compute(3), go compute(4)]
+var tasks = [go fetch(a), go fetch(b), go fetch(c)]
 var results = try Task.all(tasks)
 var first = try Task.first(tasks)
 var firstOk = try Task.firstSuccess(tasks)
 var bounded = try Task.timeout(task, 1000)
 ```
 
-- 等待的业务错误类型由 Task 的 `E` 决定，再并上 `Cancelled`；即使 `E = Never`，显式等待也仍可能遇到子任务取消。无需从任务创建点或函数体反推错误集合。
+- 等待的业务错误类型就是 Task 的 `E`，无需从任务创建点或函数体反推错误集合。取消不是业务错误，不进入这个类型。
 - 子任务的 enum 错误沿值错误通道传播，panic 沿 panic 通道传播。成功的 `null` 是真实 Optional 结果，不表示任务取消或失败。
 - Task 结果必须可复制且 Sendable；重复等待产生独立的逻辑值副本，class 与同步身份保持其身份。某次结果复制失败不消费或修改任务的终态。
-- 当前等待者自身被取消与等待一个已经取消的子任务不同；前者按 §10.4 的取消展开处理。
+- **等待已取消的任务**：被等待的任务以 `Cancelled` 结束时，等待方自身在这个 `await` 处进入取消展开（§10.4）：执行 `defer`，不能被 `catch (e)` 或 `catch panic` 捕获，自身也以 `Cancelled` 结束，并按同一规则继续影响等待它的任务。取消因此沿等待链向上传播，不进入任何函数的错误签名。等待方自身已被请求取消时，同样在这个挂起点按 §10.4 展开。
+- 需要观察取消而不传播时，使用 `t.awaitResult()` 或 `t.poll()`，它们以 `TaskResult.Cancelled` 值报告（§10.4）。
 
 多个任务的等待使用挂起库函数，前面不再写 `await`：
 
 | 函数 | 返回 | 业务错误类型 | 其余任务 |
 |--|--|--|--|
-| `Task.all(ts)` | `Array<T>`，与输入顺序一致 | `E \| Cancelled` | 失败时先请求取消其余，再传播；不等待清理 |
-| `Task.first(ts)` | 最先结束任务的值，或传播它的失败 | `E \| Cancelled` | 先请求取消其余，再返回或传播；不等待清理 |
-| `Task.firstSuccess(ts)` | 第一个成功值 | 全部失败时 `TaskFailures<E>`，另有 `Cancelled` | 先请求取消其余，再返回或传播；不等待清理 |
-| `Task.timeout(t, ms)` | `T` | `E \| Cancelled \| Timeout` | 超时后取消 `t` |
+| `Task.all(ts)` | `Array<T>`，与输入顺序一致 | `E` | 失败时先请求取消其余，再传播；不等待清理 |
+| `Task.first(ts)` | 最先结束任务的值，或传播它的失败 | `E` | 先请求取消其余，再返回或传播；不等待清理 |
+| `Task.firstSuccess(ts)` | 第一个成功值 | 全部失败时 `TaskFailures<E>` | 先请求取消其余，再返回或传播；不等待清理 |
+| `Task.timeout(t, ms)` | `T` | `E \| Timeout` | 超时后取消 `t` |
+
+输入任务以 `Cancelled` 结束、且这次取消不是该聚合调用自己请求的，按上面的等待规则使调用方进入取消展开：`Task.all` 在任一输入被取消时如此，`Task.first` 在最先结束的输入是取消时如此，`Task.timeout` 在 `t` 于超时前被取消时如此。被取消的输入如何参与 `Task.firstSuccess` 的结果，随下述混合结果仲裁一并冻结。
 
 `Task.first`、`Task.firstSuccess` 及 `Task.all` 的失败分支，按各自规则选定结果后，先向其余尚未结束的输入任务发出取消请求，再返回或传播所选结果；余任务终结及其 `defer` 完成不是返回的前置条件。`Task.all` 的成功分支仍等全部输入任务成功，按输入顺序返回结果。
 
@@ -5633,7 +5635,7 @@ var outcome = t.awaitResult()
 
 跨 Task 发布和重复观察要求 T、E 可复制且 Sendable，PanicInfo 的完整可达图也必须拥有式、可复制且 Sendable；仅把绑定设为只读不满足这个要求。任务保留其终态，每个观察者取得独立逻辑快照；值复制与身份引用各遵守其拥有规则，不能借用已退出的执行器帧。
 
-**取消语义**：只在挂起点检查，包括 `await`、Channel、`select`、`Task.yieldNow()`、sleep 和 IO。被取消的任务执行 `defer` 并展开，`catch (e)` 与 `catch panic` 均不能捕获，也不把这种取消写进任务函数的错误签名。等待它的一方看到类型化的 `Cancelled`。
+**取消语义**：只在挂起点检查，包括 `await`、Channel、`select`、`Task.yieldNow()`、sleep 和 IO。被取消的任务执行 `defer` 并展开，`catch (e)` 与 `catch panic` 均不能捕获，也不把这种取消写进任务函数的错误签名。用 `await` 或聚合函数等待它的一方按 §10.3 同样进入取消展开；`awaitResult()` 与 `poll()` 以 `TaskResult.Cancelled` 报告而不传播。取消展开到达逻辑根任务时程序结束：独立程序在 stderr 打印 `[Uncaught Cancellation]` 诊断并以退出码 1 退出（与 §8 的未捕获错误、panic 一致），嵌入宿主只结束本次执行。
 
 循环后向跳转不是取消检查点。长循环可以通过 `Task.isCancelled()` 主动检查并收尾，或插入 `Task.yieldNow()` 提供调度与取消机会。运行时心跳或看门狗的观测不改变这些语言级检查点；取消请求也不保证能抢占不挂起的 native/FFI 调用。
 
@@ -5649,14 +5651,16 @@ Channel 以稳定的 `const` 绑定命名；其类型来自受审计的同步能
 ```xray
 const ch  = Channel<i64>(10)    // 有缓冲，capacity = 10
 const ch0 = Channel<i64>(0)     // 无缓冲（同步握手）
-const cha = Channel(3)          // 元素类型从首次 send 推断
+const cha: Channel<i64> = Channel(3)   // 元素类型由类型上下文给出
 ```
+
+构造时必须能确定元素类型：写 `Channel<T>(n)`，或由类型上下文给出；不从后续 `send` 推断。
 
 **API**（注意全部为 **camelCase**）：
 
 | 方法 | 签名 | 行为 |
 |--|--|--|
-| `send(v)` | `(T) -> ()` | 阻塞发送；满则等待消费者；channel 已关闭时抛异常 |
+| `send(v)` | `(T) -> ()` | 阻塞发送；满则等待消费者；channel 已关闭时 panic（`E0702`） |
 | `recv()` | `() -> Recv<T>` | 阻塞接收；关闭且缓冲为空时返回 `Recv.Closed` |
 | `recvOr(default)` | `(T) -> T` | 阻塞接收；收到值时直接返回 `T`，关闭且缓冲为空时返回 `default`，不分配 `Recv<T>` 包装 |
 | `trySend(v)` | `(T) -> SendResult` | 非阻塞发送；返回 `Sent` / `Full` / `Closed` |
@@ -5708,7 +5712,7 @@ fn producer(ch: Channel<i64>) {
 - **MPMC**（多生产者多消费者）。
 - 有缓冲 ch：满则发送方挂起，空则接收方挂起。
 - 无缓冲 ch：发送/接收必须同时握手（rendezvous）。
-- 关闭后：`send` 抛异常；`recv` 返回剩余 buffered value 的 `Recv.Value { value: v }`，取完后返回 `Recv.Closed`；`recvOr(default)` 返回剩余 buffered value，取完后返回 `default`；`tryRecv` 在空且未关闭时返回 `Recv.Empty`。
+- 关闭后：`send` 产生 `E0702` panic——向已关闭的 channel 发送是编程错误，与 Go 一致；需要把关闭当作正常结果处理时用 `trySend` 或 `sendTimeout`，它们返回 `SendResult.Closed`。`recv` 返回剩余 buffered value 的 `Recv.Value { value: v }`，取完后返回 `Recv.Closed`；`recvOr(default)` 返回剩余 buffered value，取完后返回 `default`；`tryRecv` 在空且未关闭时返回 `Recv.Empty`。
 - `for (msg in ch)` 等价于阻塞接收直到 channel 关闭且 drained；循环变量类型为 `T`。Channel 不支持 key-value 迭代。
 
 ### 10.6 `select`
@@ -5738,7 +5742,7 @@ select {
 
 **语义**：
 - 接收分支 `name from ch -> body`：在 ch 有数据时被选中，并把 `Recv.Value { value: name }` 的 payload 绑定到 `name`。
-- 发送分支 `value to ch -> body`：等价于 `ch.send(value)`，但仅在 ch 有空间时被选中；`value` 与 `ch.send` 遵守同一 transfer plan——execution-local heap 值必须显式写成 `copy(v)` 或 `move v`。
+- 发送分支 `value to ch -> body`：等价于 `ch.send(value)`，但仅在 ch 有空间时被选中；向已关闭 channel 的发送分支被选中时与 `send` 相同，产生 `E0702` panic；`value` 与 `ch.send` 遵守同一 transfer plan——execution-local heap 值必须显式写成 `copy(v)` 或 `move v`。
 - 默认分支 `_ -> body`：当前无任何分支就绪时立即执行；**省略默认分支**会让 select 阻塞直到某个分支就绪。
 - 多个分支同时就绪时**随机**选择一个（与 Go 一致）。
 
@@ -5758,7 +5762,7 @@ TryScopeStmt ::= 'try' ScopeStmt
 | 默认 `scope` | 取消其余兄弟任务 | 有 panic 时传播首个成功发布的 panic；否则传播首个成功发布的主体或子任务业务错误 |
 | `scope(isolated)` | 兄弟继续执行 | 有 panic 时沿 panic 通道传播；否则优先直接传播主体业务错误，没有主体业务错误时才以 `TaskFailures<E>` 汇总子业务错误 |
 
-设 B 为主体经过局部 catch 后仍会逃逸的业务错误集合（包括 handler 自己抛出的错误），E 为直接 go 子任务声明错误类型的 union。默认 scope 的完整业务错误类型为 `B | E`；isolated 为 `B | TaskFailures<E>`，其中 E=Never 时不产生子业务汇总通道。B、E 都为 Never 时，两种 scope 均免除 scope 传播标记；可能 panic 不改变该规则。这个空通道规则不为所有类型位置定义 `TaskFailures<Never> = Never`。主体的 `try await` 仍可能把 Cancelled 加入 B，不能只看子 E；`try?` / `try!` 可以消去相应业务逃逸，不能捕获 panic。最终完整逃逸集合仍须属于所在函数声明，写 try 不扩大签名。
+设 B 为主体经过局部 catch 后仍会逃逸的业务错误集合（包括 handler 自己抛出的错误），E 为直接 go 子任务声明错误类型的 union。默认 scope 的完整业务错误类型为 `B | E`；isolated 为 `B | TaskFailures<E>`，其中 E=Never 时不产生子业务汇总通道。B、E 都为 Never 时，两种 scope 均免除 scope 传播标记；可能 panic 不改变该规则。这个空通道规则不为所有类型位置定义 `TaskFailures<Never> = Never`。`try?` / `try!` 可以消去相应业务逃逸，不能捕获 panic。最终完整逃逸集合仍须属于所在函数声明，写 try 不扩大签名。
 
 正常块末仅 join 成员；主体 Error、Panic 或向外 return/break/continue 时，两种 scope 都取消并 drain 已接管成员。isolated 的子失败本身不取消兄弟。待履行的正常控制转移必须拥有其值并保活主体帧和有效借用；只有 drain 后没有更高优先级失败才履行，不能用 return 吞掉子 panic。多个 panic 选择首个成功发布者，不承诺墙钟顺序；其余失败保留原始载荷用于次级诊断并按唯一拥有责任释放。isolated 主体错误直接传播时，子业务错误仅作次级诊断，不隐式包装主体错误。
 
@@ -5791,7 +5795,7 @@ fn main() throws(TaskFailures<WorkerErr>) {
 try main()
 ```
 
-scope 自身引起的子任务取消不算失败，独立取消的成员也不被包装成业务错误或汇总项。父任务已在合法挂起检查点进入取消展开时，scope 取消并等待子任务，然后继续不可捕获的父取消；成员失败仅作次级诊断。单纯取消请求不直接改变帧、恢复位置或终态。scope 隐式等待不额外引入 `Cancelled`，但主体显式等待产生的 B 仍按上述规则检查。cleanup 逃逸 panic 始终遵守 §8.2.5 的终止规则。需要结果时保留句柄逐个等待或使用 §10.3 的库函数。scope 外的 `go` 是独立任务。这些目标语义尚待类型检查、调度器接口布局和共同执行测试接通，不能当作现有实现资格。
+scope 自身引起的子任务取消不算失败，独立取消的成员也不被包装成业务错误或汇总项。父任务已在合法挂起检查点进入取消展开时，scope 取消并等待子任务，然后继续不可捕获的父取消；成员失败仅作次级诊断。单纯取消请求不直接改变帧、恢复位置或终态。默认 scope 因成员失败而取消其余成员后，主体若在等待其中某个成员时进入取消展开（§10.3），展开止于 scope 边界：scope 照常取消并 drain 其余成员，再按上表传播首个失败；这次取消不越过 scope 向外传播。scope 的隐式等待不引入取消展开。cleanup 逃逸 panic 始终遵守 §8.2.5 的终止规则。需要结果时保留句柄逐个等待或使用 §10.3 的库函数。scope 外的 `go` 是独立任务。
 
 ### 10.8 `move` — 跨协程所有权转移
 
@@ -5881,7 +5885,7 @@ enum Ordering {
 
 `Ordering` 枚举由编译器自动注入（prelude），无需 import；底层 intrinsic 读取声明顺序 tag，不依赖用户可见 backing value。
 
-**完整族合同（2026-10-05 冻结，当前固定 i64 子集不等于完整实现）**：`Atomic<T>` 使用 §9.2 的闭合 AtomicValue/Number/Boolean 证明；复制句柄共享同一个同步身份，构造器每次产生独立对象，各 Instance 的模块初始化不能共享静态对象。构造和拥有式结果可能分配；值原子操作承诺无锁，不承诺 wait-free，也不以互斥锁后备。provider 必须用真实对齐 cell 鲜编/运行 `atomic_is_lock_free` 并核布局/ABI；不支持者明确拒绝，不只检查 `ATOMIC_*_LOCK_FREE == 2`。
+复制 `Atomic` 句柄共享同一个原子对象；每次构造产生一个独立对象，同一程序的不同实例不共享模块初始化产生的对象。值原子操作保证无锁（lock-free），不保证 wait-free，也不以互斥锁实现。
 
 | 操作 | 合法内存序 |
 |---|---|
@@ -5889,9 +5893,7 @@ enum Ordering {
 | store | Relaxed / Release / SeqCst |
 | add/sub/fetchAdd/fetchSub/swap/toggle/compareExchange | 五种 Ordering |
 
-省略 ordering 或合法 None 使用 SeqCst。必须是精确 prelude Ordering 声明/variant 身份，不按名字、整数或用户 backing value 准入。静态已知非法 load/store 序在 Checked 拒绝；动态非法序在 receiver 和所有实参按原顺序各一次求值后、任何原子读写前，结束为 CALL_BAD_ARGUMENT，fault detail 全零、不发布结果、不修改原子状态。此终态不属于普通 Error 或 panic，不被保护 panic handler 消费；初始化失败粘滞和清理沿既有合同。伪造 variant 在值准入先拒绝；不能降级为其他序、接受未知 tag 或将非法 C11 order 传给 provider。结构错误原 RUN_BAD_ARGUMENT→CALL_BAD_STATE 规则不变，Atomic 无效序使用独立 reason 精确接线。
-
-Ordering 的声明 module 由实际身份 factory 使用 STDLIB authority、namespace_id="prelude"、logical="prelude/builtin_symbols.def" 生成，physical root 不进入身份；Source 仍需真实同源 generated module、Unit initializer 与正常依赖/权限检查，不造可导入 prelude.xr 或按 query URI 授权。Ordering 的名义 Declaration/Identity 持久拥有 native id 与32字节同源治理 fingerprint；本族的 Ordering id 为4，普通用户名义声明的该记录必须全零。Checked/特化复验完整检查 governed VALUE 登记与 ENUM shape：零类型参数/约束/字段、exported、flags为零、五个精确有序无载荷 variant，以及 canonical prelude 声明 module、合法 initializer/dependency。clone、wire、投影、TypeArena 和 Program 对应检查保留这一事实。词法/hoisted/import 解析优先于 prelude；同名用户 enum 仍是不同名义身份，不获得内建资格。原可见性、构造和模块依赖检查不得被 id/flags/query 指针绕过。fingerprint 是公开同源治理事实而非不可复制认证签名；完整合法公共 builtin descriptor 可经普通 Checked 复验接受，但不授予任何用户私有权限或外部包真实性。
+省略 ordering 时使用 `SeqCst`。只接受 prelude 的 `Ordering` 值，同名的用户 enum 是不同类型，不能作为内存序。编译期已知的非法内存序（例如 `load(Ordering.Release)`）是编译错误；运行时传入的非法内存序在接收者和全部实参按原顺序求值后、任何原子读写之前终止本次执行，不修改原子状态，`catch` 与 `catch panic` 都不能捕获。
 
 compareExchange 是 strong CAS，公开结果 `(T, bool)` 是真正 Tuple，不可见虚假失败。单个 ordering 决定成功/失败序：
 
@@ -5903,15 +5905,11 @@ compareExchange 是 strong CAS，公开结果 `(T, bool)` 是真正 Tuple，不�
 | AcquireRelease | AcquireRelease | Acquire |
 | SeqCst | SeqCst | SeqCst |
 
-失败返回实际观察到的 old 且不写状态；成功返回线性化前 old。CAS 前以唯一真实 Tuple 表示私有预备精确 `(T,bool)` 的合法 scalar 字段和全部可失败 carrier/domain/arena retain、admission/work/预算、空结果槽及发布许可，最后检查取消/执行许可；预备值无别名、borrow 或公开 setter。准备失败不读写 cell、不发布结果，释放部分 owner。CAS 后只能不可失败地填 observed 和 success 两个 scalar payload 并转移已许可结果，不能再分配/retain/copy/admit或运行可能失败的验证。CAS 成功之后的父帧失败、预算失败或取消不能回滚已发生的操作；失败 CAS 仍返回实际 observed，不能返回原 expected 的副本。
+失败时返回实际观察到的旧值且不写入；成功时返回写入前的旧值。CAS 成功之后才发生的失败或取消不回滚这次写入。
 
-i64 加减沿 §2.3.1 的模 2^64 环绕；MIN delta 的 sub 不执行宿主有符号取负。f64 构造/load/store/swap/CAS 保完整 binary64 位型，CAS 按 bits 比较：正负零不同，同 payload NaN 可匹配，不同 payload 不匹配；不改变普通浮点相等规则。f64 RMW 每次用当前软件浮点核的 ADD/SUBTRACT 计算候选，再对 u64 bits CAS；失败须按最新 observed 重新计算，沿 §2.3.2 的 ties-even、次正规数与 canonical 算术 NaN，不用宿主 FPU/fenv、不融合或用加负数替代减法。每次实际尝试收费并检查取消/限额；成功后不把限额失败当作原子回滚。toString 取一次 SeqCst 快照，之后按既有 bool/i64/软件 f64 格式化产生独立拥有式 string。
+i64 的加减按 §2.3.1 模 2^64 环绕。f64 的构造、load、store、swap 和 compareExchange 保留完整 binary64 位型；compareExchange 按位比较：正零与负零不同，载荷相同的 NaN 可以匹配，载荷不同的不匹配。这不改变普通浮点 `==` 的规则。f64 的加减按 §2.3.2 的舍入规则计算，与其他写入竞争时按最新值重算直到成功。`toString()` 读取一次 `SeqCst` 快照。
 
-f64 add/sub/fetchAdd/fetchSub 每次 resume 至多尝试一次值 cell CAS。失败保存最新 observed 与已一次求值的实参，返回 canonical Unit CONTINUE；活动帧和 pc 保持 READY，下一 resume 重算软件候选。CONTINUE 不产生 SUSPEND、wake、language yield 或第二执行管线；poll/frame/work 真实收费、取消和释放沿同一个 Call driver，不能把无界内部重试藏在单次 resume。停止在成功之前不改 cell，成功后的取消不回滚；无竞争下的首次 load 仍只用合法读序。
-
-此处保留的 Atomic 执行约束包含逐尝试的执行许可、额度与取消检查。它与 §10.4 的 Task 取消只在挂起点展开之间的边界，须在 Task329/Task331 执行接入时由 lead/c 对齐；不能把不产生 SUSPEND 的 CONTINUE 当成新增的语言挂起点。
-
-不支持目标使用唯一显式 UNSUPPORTED 路线。Checked、查询、特化复验及普通 Lower 的合法性不由宿主无锁能力决定；provider/SDK/Target 须以准确目标、flags、真实 cell/ref 布局及运行探针核能力，未运行或坏形结果不授准入。含 constructed Atomic 的闭合 Program 在版本/shape/完整 proof 后、发布及任何 initializer 前由所链接共同 runtime 核实际能力；不足不发布 Program、不转移原 Lowered owner。构造的未发布真实对齐 cell 再作防御性 lock-free 检查；false 不执行值 load/store/CAS/RMW、不发布值并释放所有临时 owner。atomic_init 仅为未发布准备，不承诺零写或零分配；引用 cell 能力先核查。运行时 UNSUPPORTED 是 canonical Unit、wake零、panic空的非panic终态，handler不可消费；原非法对象、OOM、预算和引用饱和保各自first failure，初始化失败粘滞/释放沿原非panic失败路线。无 mutex/libatomic 非无锁后备，也不把未知或未验证 target 伪装为已有能力。
+目标平台不能为所需宽度提供无锁原子操作时，含 `Atomic` 的程序在构建或加载时被明确拒绝，不退化为加锁实现。
 
 > `Ordering` 只描述**单个原子操作**的内存序，不足以推导程序行为。这些值与 Channel、`go`、`await`、`scope`、`const` 发布等语言级同步边如何共同构成 happens-before，定义在 §16.9；不写 `Ordering` 的普通并发代码同样受 §16.9 约束。
 
@@ -5937,9 +5935,9 @@ for (i in 0..1000) {
 
 `Task.yieldNow()` 是协作式调度让出点，等价于显式 safepoint，让调度器有机会运行其他协程并响应取消。`yield expr` 已专用于生成器产值；裸 `yield` 被拒绝。
 
-此调用不接收值参数或类型实参，结果为 unit；普通函数不需要 async 标注。词法绑定若遮蔽 `Task`，仍按该绑定解析，不能偷偷调用调度原语。该名称按目标 API 定义；已有调度原语的执行结果不能证明新名字已被解析和登记。
+此调用不接收值参数或类型实参，结果为 unit；普通函数不需要 async 标注。词法绑定若遮蔽 `Task`，仍按该绑定解析，不能偷偷调用调度原语。
 
-两者共用词根但不是同一种挂起：`Task.yieldNow()` 让出给调度器（可换 OS 线程、是取消点、沿调用边向调用方传播），`yield expr` 对称转移回驱动方（以上三条都不成立）。逐条对照见 §3.16.1。生成器的挂起与关闭规则见 §3.16.2–§3.16.3；旧分析器 E0385 不定义新的 Task 调度规则。
+两者共用词根但不是同一种挂起：`Task.yieldNow()` 让出给调度器（可换 OS 线程、是取消点、沿调用边向调用方传播），`yield expr` 对称转移回驱动方（以上三条都不成立）。逐条对照见 §3.16.1。生成器的挂起与关闭规则见 §3.16.2–§3.16.3。
 
 ### 10.11 并发安全模型
 
@@ -5973,19 +5971,14 @@ xray 用类型系统在编译期消除数据竞争。准确的表述是 §16.9.5
 
 ### 10.12 逻辑根任务与可达运行时能力
 
-以下保留既有执行路径的实现记录；旧错误推导与旧等待写法不是本章 §10.2–§10.7 的目标语言规则，也不证明新 Task API 已实现。
+程序只有一个逻辑根任务，即入口模块的顶层代码。不可挂起的函数始终按普通调用执行，不隐式增加协程上下文、帧、安全点或当前任务查询。
 
-程序语义只有一个逻辑 root task；物理实现由编译器从最终产物的可达 root 集合推导：纯同步入口使用 **ELIDED**，只启动子任务但自身不挂起时使用 **DESCRIPTOR**，入口或其可达调用发生挂起时使用 **RESUMABLE_FRAME**。普通不可挂起函数始终保留普通 ABI，不隐式增加 coroutine context、frame、safepoint 或 current-task 查询。
-
-普通非 root 父任务的正文完成不隐式等待普通 go 子任务；scope 的结构化等待另按其合同。丢弃最后一个公开 Task 句柄不取消、不执行也不阻塞任务；执行器持运行 lease 到真实终态。逻辑 root 正文完成先保存其拥有式结果，host 在有限累计预算内驱动同一执行器已接管的任务到终态，再交付外部完成；普通子任务失败不隐式改写 root 结果。额度耗尽或显式停止时，先停止接收、撤销等待、执行有限清理及释放，再报告准确 LIMIT/取消/清理失败；无 ready 且无真实外部唤醒来源的闭合依赖必须有界拒绝，不自旋或 detach。
-
-首个新 XIR go/Task/await 片段合同为 direct go 调用、Task<i64>/Task<string> 与 plain await；单 FIFO 每 dispatch 至多一次 canonical Call transition，等待真实退 C 栈。参数及结果先拥有式准备，失败不入队或发布句柄。worker 及其可达 direct 调用不得读取普通可变模块槽或写/初始化任何模块槽；const 槽仍需 Sendable、既有读取权限及初始化状态。未知间接调用、借用、Cell 捕获及未接通类型明确未准入，不能把此实现边界变成未来完整语言的限制。此合同冻结不代表 Source/VM/native 已实现：正式身份仍 25/65/21/26/29，完整 M:N、Channel、generator、scope、Task<null>/Unit 与公开状态方法仍须分别取得资格。
-
-跨 Task 边界的完整终态必须满足拥有式与 Sendable 规则，不能只检查成功值 T。worker 及可达调用的逃逸值错误由现有效应摘要证明：真实 Error 枚举的全部变体载荷均须 Sendable，不能只看实际 throw 的变体或名义类型标记；泛型错误须在定义处具有 Error 与 Sendable 约束。首片对未知或无真实身份的逃逸错误明确未准入。未逃逸的局部非 Sendable 值及普通同步 throw 不因本边界改变。运行时在发布 Task 终态前按真实封闭类型与字段权限准入 native 的 THROWN 载荷；异常载荷、OOM、LIMIT 和宿主故障保各自准确状态并完成清理，不伪装成 PanicInfo。当前 panic 载体仅包含标量 fault detail 与拥有式字符串；未来扩展须重新证明完整载荷的 Sendable 与生命周期。
-
-当前新 XIR 执行核的 Error 载荷能力包含 Array、嵌套 Array、Nullable、Tuple、enum、struct、Atomic 和 Task 字段，包括直接 Task 与 Array<Task>。编译证明仍检查真实 Error 枚举全部变体的完整 Sendable 性质。运行时按真实 worker entry 的同一 Program 证书检查实际 enum 类型和变体；先在实际 arena、Domain 上执行有界完整值图准入，再从同一不可变 Effects 取得扫描上界并预付到同一累计 runtime work，才查询成员资格。没有第二份错误集合，也不以查询消耗编译期账本。未知/无身份错误、错误变体或外域 arena 明确拒绝；值图 OOM/LIMIT 保准确状态并清理，不发布半终态。公开 Task 句柄在 Instance 与最后代码 lease 退休后仍持有完整 Error，重复副本不消费粘滞结果。此能力不授予未闭合类型、Cell/callable 或未验证 class 载荷的执行资格，不改变普通 root 故障与 Task 值错误的区分；完整参数族、生成器和调度能力仍分别验收。
-
-当前可执行 Task 结果族包含 Unit、bool、rune、既有全部整数/浮点类型及 string，以及封闭的 Array、Nullable、Tuple、enum、struct、显式 Sendable class、Atomic 和 Task。除不属于普通实参域的 Unit 外，这些可复制载体也准入 Task 参数；struct 按完整字段参加同一有界 Sendable 图证明，不能借结构壳绕过非 Sendable class、callable 或未闭合类型；仍须通过同一 Checked 的完整 Sendable 图证明和真实 worker 的 root 效果检查。Call 在发布子 Task 前准备参数的完整拥有式图；父方随后修改 Array 或嵌套 Array 不改变子方逻辑副本，Atomic 和 Task 参数保留同步身份。私有 spawn 同样必须匹配真实 worker 认证入口，参数类型不以描述符种类取得额外权限。await 与粘滞终态副本保留准确类型及规范标量位表示；值语义副本的修改不污染后续 await，同步句柄与 Task 在复制时保留身份。非标量成功值在发布前按真实 arena、Domain 和有界值图准入；直接嵌套的终态 Task 验证沿不可变类型池严格下降，以迭代方式避免 C 栈随嵌套深度增长。终态 Task 在 Instance 和执行代码租约释放后仍持有拥有式结果。复制失败保全空输出和粘滞终态，沿同一累计预算收费，不退款。显式 `implements Sendable` 的 class 使用唯一名义元数据标记，全部字段在真实声明环境中证明 Sendable，构造后字段不可重绑；普通 class 不自动推导，Sendable 不能由普通同名接口伪造。class 及其 Atomic 字段复制保留身份，取出的 Array 字段按值复制。当前 class 片段覆盖无继承声明及有界泛型；同一有界图允许通过已验证只读 class 身份边闭合递归类型，仍检查全部其余字段。纯值类型循环以及只有循环外 class 的非法值循环均拒绝。真实有限链式 class 的参数、结果和 Error 在代码退休后继续拥有完整值图；继承、其它未接通载荷、完整参数资源/FI和产品安全资格仍分别验收。
+- 普通（非根）函数结束时不等待它用 `go` 启动的任务；`scope` 的结构化等待按 §10.7。
+- 丢弃最后一个 `Task` 句柄不取消、不阻塞该任务，任务照常运行到终态。
+- 根任务的正文结束后，程序先把所有已经启动的任务运行到终态，再对外报告完成；普通子任务的失败不改写根任务的结果。
+- 剩余任务全部在等待、且没有任何外部事件能唤醒它们时，程序以错误结束，不会无限挂起。
+- 跨 Task 边界发布的完整终态都必须满足拥有式与 Sendable 规则，不只检查成功值 `T`：业务错误按其 enum 全部变体的载荷检查，而不是只看实际抛出的变体；泛型错误类型须在定义处同时约束为 `Error` 与 `Sendable`；`PanicInfo` 的完整可达图同样须可复制且 Sendable。
+- `class` 默认不是 Sendable。显式写 `implements Sendable` 的 class，其全部字段都须是 Sendable，构造后字段不可重新绑定；复制这样的对象保留其身份。普通的同名接口不能冒充 Sendable。
 
 runtime capability 只从 executable entry、manifest C export 等最终 artifact roots 传播。不可达的 `go` / `await` / Channel helper 不会迫使产物链接 scheduler、timer、netpoll 或 hosted runtime。
 
@@ -6235,7 +6228,7 @@ xray 把断言函数作为**全局内置**（不需 `import test`）。完整签
 
 ### 12.4 异步测试
 
-`@test` 函数体内可使用 `go` / `await` / `await all` / `await any`：
+`@test` 函数体内可使用 `go`、`await` 及 `Task.all` / `Task.first` 等聚合等待（§10.3）：
 
 ```xray
 @test
@@ -6368,7 +6361,7 @@ print(x is i64)                 // true
 
 ### 13.4 协程
 
-协程启动和等待是语法而不是全局函数：`go`、`await`、`await all`、`await any`、`await anySuccess`。休眠使用 `time.sleep(ms)`。
+协程启动和单任务等待是语法而不是全局函数：`go`、`await`。等待多个任务使用 `Task.all`、`Task.first`、`Task.firstSuccess`、`Task.timeout` 库函数，让出与取消检查使用 `Task.yieldNow()`、`Task.isCancelled()`（§10.3、§10.4、§10.10）。休眠使用 `time.sleep(ms)`。
 
 ### 13.5 断言（测试用）
 
@@ -6667,7 +6660,7 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 
 | 成员 | 类型/说明 |
 |--|--|
-| `send(v)` | 阻塞发送；channel 已关闭时抛异常 |
+| `send(v)` | 阻塞发送；channel 已关闭时 panic（`E0702`） |
 | `recv()` | 阻塞接收，返回 `Recv<T>`；关闭且缓冲为空时为 `Recv.Closed` |
 | `recvOr(default)` | 接收 payload；没有值时返回给定默认值 |
 | `trySend(v)` | 非阻塞发送，返回 `SendResult` |
@@ -6791,7 +6784,7 @@ print(len(empty))           // 0
 
 `TaskResult<T, E>` 的四种终态为 `Success(T)`、`Error(E)`、`Panic(PanicInfo)`、`Cancelled`，括号表示载荷类型。逻辑类型参数 T、E 保持真实声明边界；Error 变体的规范执行载体是 `Error`，擦除不扩大 E 的上界，E 为 `Never` 时不能构造该变体，错误 union 也不因此取得普通值布局。`TaskResult.Panic(info)` 即便在本地构造，完整 PanicInfo 图（包括 cause 与 replacedError）也须拥有式、可复制且 Sendable；此规则不赋予一般 PanicInfo 无条件的 Sendable 资格。
 
-`try await task` 成功时返回 T，并按声明传播 `E | Cancelled`；panic 保持独立通道。Task 保留完整拥有式终态，重复观察取得独立逻辑快照，值复制在 class 与同步身份边界停止，不使用 `await (move task)`，也不依引用计数选择单次 take。enum 值提供冷路径属性 `name`、`ordinal` 与方法 `toString()`。
+`await task` 成功时返回 T，并按声明传播 `E`（`E = Never` 时不写 `try`）；被等待的任务以 `Cancelled` 结束时，等待方自身进入取消展开（§10.3）；panic 保持独立通道。Task 保留完整拥有式终态，重复观察取得独立逻辑快照，值复制在 class 与同步身份边界停止，不使用 `await (move task)`，也不依引用计数选择单次 take。enum 值提供冷路径属性 `name`、`ordinal` 与方法 `toString()`。
 
 ### 14.18 线程与同步 handle
 
@@ -7071,13 +7064,10 @@ Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `X
 
 ### 16.4 协程调度
 
-- M:N 调度（M OS 线程 × N 协程）。
-- **work-stealing**：空闲 worker 从其他 worker 队列偷任务。
-- **协作式抢占**：协程在 safepoint 让出（非强制抢占）。
-- **公平性**：单一 runnable 队列配合本地 run-next、全局注入队列和 work-stealing；调度顺序不暴露用户级优先级。
-- **栈管理**：VM 的 register/frame stack 在需要时扩容，扩容可能搬迁底层存储；运行时以 slot offset 重建指针。
-
-详见 `src/coro/` 与 `src/vm/xvm_coro_backend.c`。
+- **并行**：协程可能在多个 OS 线程上并行运行，并可能在两个挂起点之间换到另一个线程；§16.9 的边 12 保证迁移前后的顺序。
+- **协作式**：只在挂起点切换，不强制抢占；不含挂起点的循环会一直占用当前线程，也不响应取消（§10.1、§10.4）。
+- **公平性**：调度顺序不暴露用户级优先级；程序不得依赖任务的启动顺序或完成顺序。
+- **栈**：只有可能挂起的函数保存跨挂起点的状态；不挂起的调用使用普通调用栈，深递归受普通栈容量限制。
 
 ### 16.5 进程级全局访问
 
@@ -7152,8 +7142,6 @@ class PanicInfo {
 
 ### 16.9 并发内存模型
 
-> 真值源：`src/coro/xchannel.c`、`src/coro/xtask.c`、`src/coro/xtask_await.c`、`xisa/xi/ops.def` 的 `:sync` 列。
-
 本节定义两个执行体对同一内存位置的访问何时是**有序的**。§10.9 的 `Ordering` 枚举只描述单个原子操作，不足以推导程序行为；能推导的是本节。
 
 #### 16.9.1 基本定义
@@ -7181,7 +7169,7 @@ class PanicInfo {
 | 3 | Channel close | `close()` 之前发生的一切，happens-before 任何观测到 `Recv.Closed` 或 `isClosed == true` 之后发生的一切 |
 | 4 | `go` 启动 | `go expr` 处对实参、capture plan 与 `move` 转移的求值，happens-before 协程体的第一条语句 |
 | 5 | Task 完成 → 终态观察 | 任务体的最后一个动作，happens-before 等待者通过 `await t`、`awaitResult()` 或 `poll()` 成功观察到该终态后的操作；`poll()` 返回 `null` 不建立这条完成边，也不驱动子任务 |
-| 6 | scope 退出 | scope 内全部子任务的完成，happens-before scope 块之后的语句。`await all` / `any` / `anySuccess` 按其各自的完成条件建立同样的边 |
+| 6 | scope 退出 | scope 内全部子任务的完成，happens-before scope 块之后的语句。`Task.all` / `Task.first` / `Task.firstSuccess` 对它们实际观察到的每个终态建立第 5 条边；返回时仍在运行的余任务不建立边 |
 | 7 | `const` publish / seal | 顶层 `const` 的初始化与 seal，happens-before 任何执行体对该 const 根的首次读取 |
 | 8 | Atomic release / acquire | `store(v, Release)` synchronizes-with 读到 v 的 `load(Acquire)`；RMW 构成 release sequence；`SeqCst` 操作另外参与一个单一全序。`AcquireRelease` 同时具备两侧 |
 | 9 | 协程域锁 | `sync.Mutex` / `sync.RwLock`：一次 unlock synchronizes-with 后续成功的 lock |
@@ -7194,7 +7182,7 @@ class PanicInfo {
 
 以下行为**不**建立 happens-before，不得用于同步：
 
-- `Coro.yield()`：它是调度让出点，不是同步点。
+- `Task.yieldNow()`：它是调度让出点，不是同步点。
 - `codegen.compilerFence()`：只阻止有内存效果的操作跨越该编译器调度点，不是 CPU 屏障，不建立 happens-before，不能修复数据竞争（见 §12）。
 - `Ordering.Relaxed` 的原子操作：保证该位置的访问不撕裂，不建立与其他位置的顺序关系。
 - 对象回收 / RC 归零：回收点虽然精确（§16.8），但不建立跨执行体的顺序关系，因此不能用来承载同步语义。
@@ -8970,7 +8958,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 ## 附录 B. 关键字索引
 
-以下 **63 个**关键字来自 `src/frontend/lexer/xkeywords.def` 的 51 个通用关键字与 `src/shared/xr_exact_scalar_registry.def` 的 12 个 exact 标量类型名，并按 ASCII 字典序排列。`init`、`move`、`ref`、`out`、`linked`、`from`、`to`、`after`、`panic`、`nosuspend` 是上下文词，不在本表；`parallel` 是标准库模块名。
+以下 **63 个**关键字来自 `src/frontend/lexer/xkeywords.def` 的 51 个通用关键字与 `src/shared/xr_exact_scalar_registry.def` 的 12 个 exact 标量类型名，并按 ASCII 字典序排列。`init`、`move`、`ref`、`out`、`isolated`、`from`、`to`、`after`、`panic`、`nosuspend` 是上下文词，不在本表；`parallel` 是标准库模块名。
 
 | 关键字 | 节 |
 |--|--|
@@ -9116,7 +9104,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | 类型系统 | 简单 + interface 隐式 | 较丰富 + 显式 `implements` |
 | 错误处理 | 多返回值 + `err != nil` | 值返回错误通道（`throw` / `catch`）+ `T?` |
 | 协程 | `go func() {}`（语句） | `go expr`（表达式，返回 `Task<T>`） |
-| 等待结果 | 无直接等价（通过 channel/WaitGroup） | `await t`、`await all [...]`、`await any [...]` |
+| 等待结果 | 无直接等价（通过 channel/WaitGroup） | `await t`、`Task.all([...])`、`Task.first([...])` |
 | Channel | 内置 `chan T`，`<-` 操作符 | `Channel<T>` 类，方法 `send`/`recv`/`trySend`/`tryRecv` |
 | select 分支 | `case x := <-ch:` / `case ch <- v:` / `default:` | `x from ch ->` / `v to ch ->` / `after ms ->` / `_ ->` |
 | 内存管理 | 三色并发 tracing GC | execution-local 引用计数，无环收集器；环由静态证明/`weak`/物理协程回收域封顶三层处理。已发布 const 根与同步句柄使用 verified shared domain |
@@ -9154,7 +9142,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | 错误处理 | `try?` 折叠为 nil；`try!` abort | `throw` / `catch` 值返回通道；`T?` + `??` |
 | struct vs class | 值/引用 | 值/引用 |
 | 协议 | 有强 | `interface` 较弱 |
-| 并发 | actor + async/await | 协程 + Channel + `go`/`await all`/`scope` |
+| 并发 | actor + async/await | 协程 + Channel + `go`/`await`/`scope` |
 
 ---
 

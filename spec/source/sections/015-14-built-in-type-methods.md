@@ -255,7 +255,7 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 
 | 成员 | 类型/说明 |
 |--|--|
-| `send(v)` | 阻塞发送；channel 已关闭时抛异常 |
+| `send(v)` | 阻塞发送；channel 已关闭时 panic（`E0702`） |
 | `recv()` | 阻塞接收，返回 `Recv<T>`；关闭且缓冲为空时为 `Recv.Closed` |
 | `recvOr(default)` | 接收 payload；没有值时返回给定默认值 |
 | `trySend(v)` | 非阻塞发送，返回 `SendResult` |
@@ -379,7 +379,7 @@ print(len(empty))           // 0
 
 `TaskResult<T, E>` 的四种终态为 `Success(T)`、`Error(E)`、`Panic(PanicInfo)`、`Cancelled`，括号表示载荷类型。逻辑类型参数 T、E 保持真实声明边界；Error 变体的规范执行载体是 `Error`，擦除不扩大 E 的上界，E 为 `Never` 时不能构造该变体，错误 union 也不因此取得普通值布局。`TaskResult.Panic(info)` 即便在本地构造，完整 PanicInfo 图（包括 cause 与 replacedError）也须拥有式、可复制且 Sendable；此规则不赋予一般 PanicInfo 无条件的 Sendable 资格。
 
-`try await task` 成功时返回 T，并按声明传播 `E | Cancelled`；panic 保持独立通道。Task 保留完整拥有式终态，重复观察取得独立逻辑快照，值复制在 class 与同步身份边界停止，不使用 `await (move task)`，也不依引用计数选择单次 take。enum 值提供冷路径属性 `name`、`ordinal` 与方法 `toString()`。
+`await task` 成功时返回 T，并按声明传播 `E`（`E = Never` 时不写 `try`）；被等待的任务以 `Cancelled` 结束时，等待方自身进入取消展开（§10.3）；panic 保持独立通道。Task 保留完整拥有式终态，重复观察取得独立逻辑快照，值复制在 class 与同步身份边界停止，不使用 `await (move task)`，也不依引用计数选择单次 take。enum 值提供冷路径属性 `name`、`ordinal` 与方法 `toString()`。
 
 ### 14.18 线程与同步 handle
 
@@ -656,7 +656,7 @@ The key position of a subscript is typed and checked against `K`, symmetrically 
 
 | Member | Type / Description |
 |--|--|
-| `send(v)` | blocking send; throws if the channel is closed |
+| `send(v)` | blocking send; panics (`E0702`) if the channel is closed |
 | `recv()` | blocking receive, returns `Recv<T>`; closed and drained is `Recv.Closed` |
 | `recvOr(default)` | receives a payload, or returns the supplied default when none is available |
 | `trySend(v)` | non-blocking send, returns `SendResult` |
@@ -780,7 +780,7 @@ The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `
 
 The four terminal outcomes of `TaskResult<T, E>` are `Success(T)`, `Error(E)`, `Panic(PanicInfo)`, and `Cancelled`; parentheses denote payload types. Logical type arguments T and E retain their actual declaration bounds. The Error variant uses the canonical `Error` execution carrier; erasure does not widen E, `Never` cannot construct that variant, and an error union gains no ordinary value layout. Even a local `TaskResult.Panic(info)` construction requires the entire owned PanicInfo graph, including cause and replacedError, to be copyable and Sendable. This rule does not make general PanicInfo unconditionally Sendable.
 
-`try await task` returns T on success and propagates the declared `E | Cancelled`; panic keeps its independent channel. A Task retains its complete owned terminal outcome and repeated observations obtain independent logical snapshots, with value copies stopping at class and synchronization identities. There is no `await (move task)` form or reference-count-selected single take. Enum values provide the cold-path `name`, `ordinal`, and `toString()` surface.
+`await task` returns T on success and propagates the declared `E` (no `try` when `E = Never`); when the awaited task ends `Cancelled`, the waiter itself enters cancellation unwinding (§10.3); panic keeps its independent channel. A Task retains its complete owned terminal outcome and repeated observations obtain independent logical snapshots, with value copies stopping at class and synchronization identities. There is no `await (move task)` form or reference-count-selected single take. Enum values provide the cold-path `name`, `ordinal`, and `toString()` surface.
 
 ### 14.18 Thread and Synchronization Handles
 
