@@ -163,6 +163,10 @@ static bool source_implementations_bind(SourceContext *ctx) {
     /* Only the declared prefix exists here. Closure and entry producers fill
      * their reserved rows before the common checker admits the full module. */
     module.function_count = ctx->first_closure;
+    XrXirDiagnostic class_location={.function=UINT32_MAX,.block=UINT32_MAX,.instruction=UINT32_MAX};
+    status=xir_compile_class_declarations_verify(&module,&class_location,ctx->request);
+    if(status!=XR_XIR_OK)return source_fail(ctx,class_location.function<module.function_count?
+        ctx->bodies[class_location.function].node:NULL,status,"class inheritance declaration contract is not admitted");
     status = xr_xir_compile_declaration_value_constraints_verify(&ctx->compile, &module);
     if (status != XR_XIR_OK) return source_fail(ctx,NULL,status,"declaration type obligations failed");
     ctx->implementations_ready = true; return true;

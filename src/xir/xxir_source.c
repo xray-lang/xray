@@ -39,6 +39,7 @@
 #include "xxir_generic.h"
 #include "xxir_types.h"
 #include "xxir_class_hierarchy_internal.h"
+#include "xxir_class_method_internal.h"
 #include "xxir_pointer.h"
 #include "xxir_task_result.h"
 #include "xxir_nominal.h"

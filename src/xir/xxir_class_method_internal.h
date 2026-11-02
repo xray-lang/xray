@@ -29,4 +29,7 @@ XR_FUNC XrXirStatus xir_compile_class_method_candidates(const XrXirModule *modul
     XrXirType static_receiver,uint32_t slot,XirClassMethodVisitor visit,
     void *owner,XrCompileRequestControl *control);
 
+XR_FUNC XrXirStatus xir_compile_class_declarations_verify(const XrXirModule *module,
+    XrXirDiagnostic *location,XrCompileRequestControl *control);
+
 #endif // XXIR_CLASS_METHOD_INTERNAL_H

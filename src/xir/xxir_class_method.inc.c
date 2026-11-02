@@ -165,3 +165,117 @@ XR_FUNC XrXirStatus xir_compile_class_method_site(const XrXirModule *module,
         !xr_xir_module_imports(scope,from->module,target->module))return XR_XIR_BAD_TYPE;
     return xir_compile_class_method_select_read(&input,slot,actual_receiver,output,control);
 }
+
+static uint32_t class_declaration_module(const XrXirModule *module,uint32_t declaration) {
+    const XrXirNominalTable *table=module->types->nominals;
+    XrXirLiteral name=table->declarations?table->declarations[declaration].module:table->identities[declaration].module;
+    for(uint32_t m=0;m<module->declarations->module_count;++m)
+        if(name.length==module->declarations->modules[m].name_length &&
+            !memcmp(name.bytes,module->declarations->modules[m].name,name.length))return m;
+    return UINT32_MAX;
+}
+static XrXirStatus class_declaration_parent(const XrXirModule *module,uint32_t d) {
+    const XrXirNominalTable *table=module->types->nominals;uint32_t parent=class_method_parent(table,d);
+    if(!parent)return XR_XIR_OK;
+    if(parent>table->count)return XR_XIR_BAD_STRUCTURE;
+    uint32_t from=class_declaration_module(module,d),to=class_declaration_module(module,parent-1);
+    if(from==UINT32_MAX || to==UINT32_MAX)return XR_XIR_BAD_STRUCTURE;
+    uint32_t exported=table->declarations?table->declarations[parent-1].exported:table->identities[parent-1].exported;
+    return xr_xir_module_imports(module->declarations,from,to) &&
+        (exported || xr_xir_module_same_scope(module->declarations,from,to))?XR_XIR_OK:XR_XIR_BAD_TYPE;
+}
+static XrXirStatus class_declaration_method(const XirClassMethodRead *input,uint32_t entry,
+    XrCompileRequestControl *control) {
+    XirClassMethodSignature method={0};XrXirStatus status=class_method_header(input,entry,&method);
+    if(status!=XR_XIR_OK)return status;
+    const XirMetadataDomain *domain=input->domain;const XrXirNominalTable *table=domain->types->nominals;
+    const XrXirFunctionIdentity *identity=domain->declarations->functions;uint32_t child=identity[entry].nominal_owner-1;
+    uint32_t parent=class_method_parent(table,child),steps=0;
+    for(uint32_t depth=0;parent && depth<table->count;++depth) {
+        uint32_t found=UINT32_MAX;
+        for(uint32_t f=0;f<domain->function_count;++f) {
+            status=xir_receive_step(control,&steps);if(status!=XR_XIR_OK)return status;
+            if(identity[f].nominal_owner!=parent ||
+                (identity[f].method_kind!=XR_XIR_READ_METHOD && identity[f].method_kind!=XR_XIR_STATIC_METHOD))continue;
+            XirClassMethodSignature candidate={0};status=class_method_header(input,f,&candidate);if(status!=XR_XIR_OK)return status;
+            if(!class_method_name(&method,&candidate))continue;
+            if(found!=UINT32_MAX)return XR_XIR_BAD_STRUCTURE;
+            found=f;
+        }
+        if(found!=UINT32_MAX) {
+            if(!(identity[entry].promises&XR_XIR_FUNCTION_OVERRIDE))return XR_XIR_BAD_TYPE;
+            return class_method_override(input,entry,found);
+        }
+        parent=class_method_parent(table,parent-1);
+    }
+    return identity[entry].promises&XR_XIR_FUNCTION_OVERRIDE?XR_XIR_BAD_TYPE:XR_XIR_OK;
+}
+static XrXirStatus class_declaration_fields(const XirClassMethodRead *input,uint32_t d,
+    XrCompileRequestControl *control) {
+    const XirMetadataDomain *domain=input->domain;const XrXirNominalTable *table=domain->types->nominals;
+    uint32_t parent=class_method_parent(table,d),steps=0;
+    if(!parent)return XR_XIR_OK;
+    uint32_t first=table->declarations?table->declarations[parent-1].field_count:table->identities[parent-1].field_count;
+    uint32_t count=table->declarations?table->declarations[d].field_count:table->identities[d].field_count;
+    if(first==count)return XR_XIR_OK;
+    for(uint32_t depth=0;parent && depth<table->count;++depth) {
+        for(uint32_t f=0;f<domain->function_count;++f) {
+            XrXirStatus status=xir_receive_step(control,&steps);if(status!=XR_XIR_OK)return status;
+            const XrXirFunctionIdentity *identity=&domain->declarations->functions[f];
+            if(identity->nominal_owner!=parent ||
+                (identity->method_kind!=XR_XIR_READ_METHOD && identity->method_kind!=XR_XIR_STATIC_METHOD))continue;
+            XirClassMethodSignature method={0};status=class_method_header(input,f,&method);if(status!=XR_XIR_OK)return status;
+            for(uint32_t field=first;field<count;++field) {
+                status=xir_receive_step(control,&steps);if(status!=XR_XIR_OK)return status;
+                XrXirLiteral name=table->declarations?table->declarations[d].fields[field].name:table->identities[d].fields[field].name;
+                if(name.length==method.name_length && !memcmp(name.bytes,method.name,name.length))return XR_XIR_BAD_TYPE;
+            }
+        }
+        parent=class_method_parent(table,parent-1);
+    }
+    return XR_XIR_OK;
+}
+XR_FUNC XrXirStatus xir_compile_class_declarations_verify(const XrXirModule *module,
+    XrXirDiagnostic *location,XrCompileRequestControl *control) {
+    if(location)*location=(XrXirDiagnostic){.function=UINT32_MAX,.block=UINT32_MAX,.instruction=UINT32_MAX};
+    XrXirStatus status=xir_receive_poll(control);if(status!=XR_XIR_OK)return status;
+    if(!module || !module->functions)return XR_XIR_BAD_STRUCTURE;
+    const XrXirNominalTable *table=module->types?module->types->nominals:NULL;
+    if(!table)return XR_XIR_OK;
+    if(!module->declarations) {
+        for(uint32_t d=0;d<table->count;++d)if(class_method_parent(table,d))return XR_XIR_BAD_STRUCTURE;
+        return XR_XIR_OK;
+    }
+    XirMetadataDomain domain=xir_metadata_domain_from_module(module);
+    XirClassMethodRead input={&domain,module,class_method_module_header};uint32_t steps=0;
+    for(uint32_t d=0;d<table->count;++d) {
+        status=xir_receive_step(control,&steps);if(status!=XR_XIR_OK)return status;
+        status=class_declaration_parent(module,d);
+        if(status==XR_XIR_OK)status=class_declaration_fields(&input,d,control);
+        if(status!=XR_XIR_OK)return status;
+    }
+    for(uint32_t f=0;f<module->function_count;++f) {
+        status=xir_receive_step(control,&steps);if(status!=XR_XIR_OK)return status;
+        const XrXirFunctionIdentity *identity=&module->declarations->functions[f];
+        if(!identity->nominal_owner || identity->nominal_owner>table->count) {
+            if(identity->promises&XR_XIR_FUNCTION_OVERRIDE)return XR_XIR_BAD_TYPE;
+            continue;
+        }
+        uint32_t d=identity->nominal_owner-1;
+        if(!(identity->promises&XR_XIR_FUNCTION_OVERRIDE) &&
+            (!class_method_parent(table,d) || (identity->method_kind!=XR_XIR_READ_METHOD && identity->method_kind!=XR_XIR_STATIC_METHOD)))continue;
+        if(location)location->function=f;
+        uint32_t kind=table->declarations?table->declarations[d].kind:table->identities[d].kind;
+        if(kind!=XR_XIR_NOMINAL_CLASS || (identity->method_kind!=XR_XIR_READ_METHOD && identity->method_kind!=XR_XIR_STATIC_METHOD))
+            return XR_XIR_BAD_TYPE;
+        XirClassMethodSignature method={0};status=class_method_header(&input,f,&method);if(status!=XR_XIR_OK)return status;
+        uint32_t fields=table->declarations?table->declarations[d].field_count:table->identities[d].field_count;
+        for(uint32_t field=0;field<fields;++field) {
+            XrXirLiteral name=table->declarations?table->declarations[d].fields[field].name:table->identities[d].fields[field].name;
+            if(name.length==method.name_length && !memcmp(name.bytes,method.name,name.length))return XR_XIR_BAD_TYPE;
+        }
+        status=class_declaration_method(&input,f,control);if(status!=XR_XIR_OK)return status;
+    }
+    if(location)*location=(XrXirDiagnostic){.function=UINT32_MAX,.block=UINT32_MAX,.instruction=UINT32_MAX};
+    return XR_XIR_OK;
+}
