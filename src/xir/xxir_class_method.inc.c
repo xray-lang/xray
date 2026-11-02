@@ -67,7 +67,7 @@ static XrXirStatus class_method_selected(const XrXirModule *module,XrXirType act
     uint32_t owner=xr_xir_type_node(module->types,actual)->nominal.declaration;
     const XrXirNominalTable *table=module->types->nominals;
     const XrXirFunctionIdentity *identities=module->declarations->functions;
-    uint32_t selected=UINT32_MAX,steps=0;
+    uint32_t selected=UINT32_MAX,previous=UINT32_MAX,steps=0;
     for(uint32_t depth=0;depth<table->count;++depth) {
         uint32_t found=UINT32_MAX;
         for(uint32_t f=0;f<module->function_count;++f) {
@@ -79,7 +79,12 @@ static XrXirStatus class_method_selected(const XrXirModule *module,XrXirType act
             if(f!=slot && !(identities[f].promises&XR_XIR_FUNCTION_OVERRIDE))return XR_XIR_BAD_TYPE;
             found=f;
         }
-        if(found!=UINT32_MAX && selected==UINT32_MAX)selected=found;
+        if(found!=UINT32_MAX) {
+            if(previous!=UINT32_MAX) {
+                status=class_method_override(module,previous,found);if(status!=XR_XIR_OK)return status;
+            }
+            previous=found;if(selected==UINT32_MAX)selected=found;
+        }
         if(owner+1==identities[slot].nominal_owner) {
             if(found!=slot || selected==UINT32_MAX)return XR_XIR_BAD_STRUCTURE;
             *output=(XirClassMethodTarget){selected,module->functions[selected].parameters[0]};return XR_XIR_OK;

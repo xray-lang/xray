@@ -32,6 +32,9 @@ static bool source_call_syntax(SourceContext *ctx,AstNode *node,SourceCallSyntax
     } else if (node->type==AST_NEW_EXPR && !node->as.new_expr.is_type_namespace) {
         const NewExprNode *call=&node->as.new_expr;
         *output=(SourceCallSyntax){call->arguments,call->arg_accesses,call->arg_count,call->type_args,call->type_arg_count,NULL};
+    } else if(node->type==AST_SUPER_CALL && !node->as.super_call.method_name) {
+        const SuperCallNode *call=&node->as.super_call;
+        *output=(SourceCallSyntax){call->arguments,call->arg_accesses,call->arg_count,NULL,0,NULL};
     } else return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"direct call requires its authentic syntax");
     if (output->arg_count<0 || output->arg_count>65536 || output->type_arg_count<0 ||
         output->type_arg_count>65536 || (output->arg_count && !output->arguments) ||

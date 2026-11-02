@@ -9,6 +9,10 @@
  * KEY CONCEPT:
  *   A complete nominal value is assembled only from initialized field places.
  */
+static bool source_class_stage_result(SourceContext *,AstNode *,SourceValue *);
+static bool source_class_stage_wrapper(SourceContext *);
+static bool source_class_field_defaults(SourceContext *,uint32_t);
+
 typedef struct SourceConstructorScan {
     SourceContext *ctx;
     uint32_t depth;
@@ -83,8 +87,9 @@ static bool source_constructor_return(SourceContext *ctx, AstNode *node) {
         if (!begin_block(ctx)) return false;
     }
     SourceValue value;
-    if (!source_constructor_value(ctx, &value) ||
-        !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {value.id, 0}, {0}, 0, {0}}, NULL)) return false;
+    if (!(ctx->identities[ctx->function].method_kind==XR_XIR_CONSTRUCTOR_FIELDS ?
+            source_class_stage_result(ctx,node,&value) : source_constructor_value(ctx, &value)) ||
+        !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {value.type==XR_XIR_UNIT?0:value.id, 0}, {0}, 0, {0}}, NULL)) return false;
     ctx->returned = true; return true;
 }
 static bool source_constructor_store(SourceContext *ctx, uint32_t field, SourceValue value) {
@@ -289,18 +294,9 @@ static bool source_constructor_new(SourceContext *ctx, AstNode *node, SourceExpe
         (uint32_t)syntax->arg_count, binding, target, type,context};
     return source_constructor_invoke(ctx, node, &call, value);
 }
-static bool source_constructor_body(SourceContext *ctx) {
-    SourceFunction *body = &ctx->bodies[ctx->function];
-    MethodDeclNode *method = &body->node->as.method_decl;
-    SourceConstructorScan scan = {ctx, 0, false, false};
-    if (!source_constructor_scan(method->body, &scan)) return false;
-    if (scan.shared && xr_xir_type_is_class(&ctx->types,ctx->functions[ctx->function].result))
-        return source_fail(ctx,body->node,XR_XIR_BAD_TYPE,"class constructor cleanup cannot capture unpublished this");
-    body->constructor_shared = scan.shared;
-    uint32_t owner = ctx->identities[ctx->function].nominal_owner - 1;
-    const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[owner];
-    body->constructor_places = decl->field_count ? source_alloc(ctx, decl->field_count, sizeof(*body->constructor_places)) : NULL;
-    if (decl->field_count && !body->constructor_places) return false;
+static bool source_constructor_parameters(SourceContext *ctx) {
+    SourceFunction *body=&ctx->bodies[ctx->function];
+    MethodDeclNode *method=&body->node->as.method_decl;
     for (uint32_t p = 0; p < (uint32_t)method->param_count; ++p) {
         SourceName *symbol = source_parameter_name(ctx,body->node,method->params[p],body->parameter_scope);
         if (!symbol) return false;
@@ -315,9 +311,26 @@ static bool source_constructor_body(SourceContext *ctx) {
         if(!source_hir_parameter_declared(ctx,symbol))return false;
         source_query_binding_type(ctx, symbol);
     }
+    return true;
+}
+static bool source_constructor_body(SourceContext *ctx) {
+    SourceFunction *body = &ctx->bodies[ctx->function];
+    MethodDeclNode *method = &body->node->as.method_decl;
+    if(body->constructor_stage)return source_class_stage_wrapper(ctx);
+    SourceConstructorScan scan = {ctx, 0, false, false};
+    if (!source_constructor_scan(method->body, &scan)) return false;
+    if (scan.shared && xr_xir_type_is_class(&ctx->types,ctx->nominal_sources[ctx->identities[ctx->function].nominal_owner-1]->type))
+        return source_fail(ctx,body->node,XR_XIR_BAD_TYPE,"class constructor cleanup cannot capture unpublished this");
+    body->constructor_shared = scan.shared;
+    uint32_t owner = ctx->identities[ctx->function].nominal_owner - 1;
+    XrXirNominalDeclaration declaration=ctx->nominals.declarations[owner];
+    const XrXirNominalDeclaration *decl=&declaration;
+    body->constructor_places = decl->field_count ? source_alloc(ctx, decl->field_count, sizeof(*body->constructor_places)) : NULL;
+    if (decl->field_count && !body->constructor_places) return false;
+    if(!source_constructor_parameters(ctx))return false;
     SourceName *self = add_name(ctx, &ctx->locals, "this", body->node);
     if (!self) return false;
-    self->kind = SOURCE_LOCAL; self->type = ctx->functions[ctx->function].result; self->construction = true;
+    self->kind = SOURCE_LOCAL; self->type = ctx->nominal_sources[owner]->type; self->construction = true;
     if (!source_query_declare(ctx, self, XR_XIR_SOURCE_BINDING, body->declaration, source_query_range(ctx, body->node, NULL)) ||
         !source_query_syntax_role(ctx, self->declaration, XR_XIR_SOURCE_SYNTAX_RECEIVER, 0)) return false;
     XrHirBodyBinding self_binding={0};if(!source_hir_binding_register(ctx,self,&self_binding))return false;
@@ -328,13 +341,10 @@ static bool source_constructor_body(SourceContext *ctx) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_LOCAL_UNINIT,
             storage, {0}, {0}, (decl->fields[f].flags & XR_XIR_FIELD_MUTABLE) ? 0 : 1, {0}}, &place)) return false;
         body->constructor_places[f] = place.id;
-        uint32_t initializer = source_hir_nominal_defaults(ctx,owner).fields[f];
-        if (initializer) {
-            SourceValue value;
-            if(!source_hir_nominal_helper(ctx,body->node,self->type,f,&value,NULL)||
-                !source_recipe_record(ctx,(XrXirInstruction){xr_xir_type_is_cell(&ctx->types,storage)?XR_XIR_CELL_LOCAL_WRITE:XR_XIR_LOCAL_WRITE,
-                    XR_XIR_UNIT,{place.id,value.id},{0},0,{0}},NULL))return false;
-        }
+
     }
+    if(!decl->parent && !source_class_field_defaults(ctx,0))return false;
     return statement(ctx, method->body, false) && (ctx->returned || source_constructor_return(ctx, NULL));
 }
+
+#include "xxir_source_class_stages.inc.c"
