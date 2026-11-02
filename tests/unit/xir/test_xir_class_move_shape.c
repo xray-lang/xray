@@ -245,18 +245,25 @@ static void class_move_retain_refusal(const ClassMoveFixture *fixture,XrXirArtif
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     XrXirType base=class_move_class(module,"Base"),dog=class_move_class(module,"Dog");
     const XrXirTarget *target=xr_xir_compile_artifact_target(lowered);
-    XrXirLayout base_layout={0},dog_layout={0};
+    XrXirLayout base_layout={0},dog_layout={0},base_result={0},dog_result={0};
     CHECK(xr_xir_compile_layout(fixture->context,module->types,base,target,
         XR_XIR_LAYOUT_FRAME,&base_layout)==XR_XIR_OK);
     CHECK(xr_xir_compile_layout(fixture->context,module->types,dog,target,
         XR_XIR_LAYOUT_FRAME,&dog_layout)==XR_XIR_OK);
     CHECK(base_layout.size==8 && dog_layout.size==8 && base_layout.alignment==dog_layout.alignment);
+    CHECK(xr_xir_compile_layout(fixture->context,module->types,base,target,
+        XR_XIR_LAYOUT_RESULT,&base_result)==XR_XIR_OK);
+    CHECK(xr_xir_compile_layout(fixture->context,module->types,dog,target,
+        XR_XIR_LAYOUT_RESULT,&dog_result)==XR_XIR_OK);
+    CHECK(base_result.size==sizeof(XrXirValue) && base_result.size==dog_result.size &&
+        base_result.alignment==dog_result.alignment);
     XrXirFunction *function=(XrXirFunction *)(uintptr_t)(module->functions+function_id);
     CHECK(instruction<function->instruction_count && function->result==dog);
     XrXirInstruction *retain=(XrXirInstruction *)(uintptr_t)(function->instructions+instruction);
     CHECK(retain->op==XR_XIR_OWNED_RETAIN && retain->type==dog);
     const XrXirFunctionLayout *layout=xr_xir_compile_artifact_layout(lowered,function_id);
-    CHECK(layout && layout->result.size==8 && layout->result.alignment==dog_layout.alignment);
+    CHECK(layout && layout->result.size==dog_result.size &&
+        layout->result.alignment==dog_result.alignment);
     CHECK(function->parameter_count+instruction<layout->slot_count);
     CHECK(layout->offsets[function->parameter_count+instruction]<=layout->frame_bytes &&
         layout->frame_bytes-layout->offsets[function->parameter_count+instruction]>=8);
