@@ -217,8 +217,20 @@ static void stage_transition(StageFixture *f) {
     XrCompileResourceLimits limits=XR_RESOURCE_DEFAULT_COMPILER_LIMITS;XrXirCompileContext context={0};
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);context.limits=xr_xir_compile_default_limits();
     XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
+    XrXirNominalDeclaration declarations[2]={0};XrXirNominalField fields[2][3]={0};
+    for(uint32_t n=0;n<2;++n) {
+        const XrXirNominalIdentity *identity=f->identities+n;
+        declarations[n]=(XrXirNominalDeclaration){.module=identity->module,.name=identity->name,
+            .exported=identity->exported,.fields=fields[n],.field_count=identity->field_count,
+            .kind=identity->kind,.flags=identity->flags,.native=identity->native,.parent=identity->parent};
+        for(uint32_t field=0;field<identity->field_count;++field)
+            fields[n][field]=(XrXirNominalField){identity->fields[field].name,
+                f->nodes[n].nominal.fields[field],identity->fields[field].flags};
+    }
+    XrXirNominalTable definitions={.declarations=declarations,.count=2};
+    XrXirTypes types=f->types;types.nominals=&definitions;XrXirModule built=f->module;built.types=&types;
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;XrXirDiagnostic diagnostic={0};
-    CHECK(xir_fixture_check(&context,&f->module,&checked,&diagnostic)==XR_XIR_OK);
+    CHECK(xir_fixture_check(&context,&built,&checked,&diagnostic)==XR_XIR_OK);
     CHECK(xir_compile_class_stage_verify(xr_xir_compile_artifact_module(checked),NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
