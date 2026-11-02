@@ -126,7 +126,7 @@ static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
         }
     }
     XrXirNominalIdentity native_identity = {d->module,d->name,d->exported,d->parameter_count,
-        NULL,d->field_count,d->kind,d->variants,d->variant_count,d->flags,d->native};
+        NULL,d->field_count,d->kind,d->variants,d->variant_count,d->flags,d->native,d->parent};
     status = nominal_native_verify( &native_identity);
     if (status != XR_XIR_OK) return status;
     if (d->native.native_id==XR_NATIVE_DECLARATION_RECV) {
@@ -225,6 +225,10 @@ XR_FUNC XrXirStatus xr_xir_compile_nominal_structure_verify(const XrXirCompileCo
     XrXirStatus status = xr_xir_compile_types_structure_verify(&remaining, types);
     if (status == XR_XIR_OK && (!types || table != types->nominals))
         status = nominal_table_verify(table, types, &remaining);
+    if (status==XR_XIR_OK && table) {
+        XrXirTypes view=types?*types:(XrXirTypes){0};view.nominals=table;
+        status=xir_compile_class_hierarchy_verify(&remaining,&view,NULL);
+    }
     if (status == XR_XIR_OK) *budget = remaining;
     return status;
 }
@@ -274,7 +278,7 @@ static bool nominal_copy_declaration(const XrXirCompileContext *compile_context,
     d->exported = source->exported; d->kind = source->kind;
     d->variant_count = source->variant_count; d->flags = source->flags;
 
-    d->native = source->native;
+    d->native = source->native;d->parent=source->parent;
     if (!nominal_variants_copy(compile_context, source->variants, source->variant_count, &d->variants, allocation_status,control)) return false;
     if (!nominal_copy_name(compile_context, source->module, &d->module, allocation_status,control) ||
         !nominal_copy_name(compile_context, source->name, &d->name, allocation_status,control)) return false;

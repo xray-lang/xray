@@ -24,6 +24,7 @@
 #include "xxir_defaults_internal.h"
 #include "xxir_generic.h"
 #include "xxir_types.h"
+#include "xxir_class_hierarchy_internal.h"
 #include "xxir_pointer.h"
 #include "xxir_task_result.h"
 #include "xxir_native_callable.h"
@@ -1432,6 +1433,14 @@ static XrXirStatus structure_verify_ordinary(VerifyContext *context,const XrXirC
         status = XR_XIR_BUDGET;
     if (status == XR_XIR_OK) {
         status = xr_xir_compile_types_structure_verify(&context->remaining, module->types);
+        if(status==XR_XIR_OK)status=xir_compile_class_hierarchy_verify(&context->remaining,module->types,context->control);
+        if(status==XR_XIR_OK && module->types && module->types->nominals) {
+            const XrXirNominalTable *table=module->types->nominals;
+            for(uint32_t d=0;d<table->count;++d)
+                if(table->declarations?table->declarations[d].parent:table->identities[d].parent) {
+                    status=XR_XIR_BAD_STAGE;break;
+                }
+        }
         if (status == XR_XIR_OK && module->types && module->types->nominals) {
             bool identities = module->types->nominals->identities != NULL;
             if (identities != (module->stage == XR_XIR_LOWERED)) status = XR_XIR_BAD_STAGE;

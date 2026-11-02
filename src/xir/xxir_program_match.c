@@ -73,7 +73,7 @@ static XrXirStatus match_types(const XrXirTypes *a, const XrXirTypes *b) {
         TRY(match_literal(u->name, v->name));
         MATCH(u->exported, v->exported); MATCH(u->arity, v->arity);
         MATCH(u->kind, v->kind); MATCH(u->flags, v->flags); MATCH(u->variant_count, v->variant_count);
-        MATCH(u->native.native_id, v->native.native_id);
+        MATCH(u->parent,v->parent);MATCH(u->native.native_id, v->native.native_id);
         if (u->variant_count && (!u->variants || !v->variants)) return XR_XIR_BAD_STRUCTURE;
         TRY(match_bytes(u->native.source_fingerprint, v->native.source_fingerprint,
             sizeof(u->native.source_fingerprint)));

@@ -17,6 +17,8 @@
 #include "xxir_view_types_internal.h"
 #include "xxir_compile_memory.h"
 #include "xxir_type_copy_control.h"
+#include "xxir_class_hierarchy_internal.h"
+#include "xxir_receive_control.h"
 
 XR_FUNC XrXirCompileLimits xr_xir_compile_default_limits(void) {
     return (XrXirCompileLimits){1024, 65536, 4096, 1048576, UINT64_C(16) * 1024 * 1024};
@@ -574,4 +576,5 @@ XrXirType xr_xir_operand_type(const XrXirFunction *function, uint32_t value) {
 #include "xxir_nominal.inc.c"
 #include "xxir_type_description.inc.c"
 #include "xxir_nominal_identity.inc.c"
+#include "xxir_class_hierarchy.inc.c"
 #include "xxir_nominal_layout.inc.c"

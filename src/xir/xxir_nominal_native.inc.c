@@ -23,6 +23,7 @@ static XrXirStatus nominal_native_name(
 static XrXirStatus nominal_native_verify(
     const XrXirNominalIdentity *identity) {
     const XrXirNominalNativeRecord *record = &identity->native;
+    if (record->native_id && identity->parent) return XR_XIR_BAD_STRUCTURE;
 
     if (!record->native_id) {
         for (unsigned i = 0; i < sizeof(record->source_fingerprint); ++i) {

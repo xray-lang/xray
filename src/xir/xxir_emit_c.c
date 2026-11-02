@@ -1876,7 +1876,7 @@ static void emit_nominal_identities(CBuffer *buffer, const XrXirNominalTable *ta
         append(buffer, ", %uu, %uu, {%uu, {", d->variant_count, d->flags, d->native.native_id);
         for (uint32_t b = 0; b < 32 && ((buffer)->status == XR_XIR_OK); ++b)
             append(buffer, "%s%uu", b ? "," : "", d->native.source_fingerprint[b]);
-        EMIT_LITERAL(buffer, "}}},\n");
+        append(buffer, "}}, %uu},\n",d->parent);
     }
     EMIT_FORMAT(buffer, et_42880b48a87c4a21, "};\nstatic const XrXirNominalTable %s_nominals = {NULL, %uu, %s_nominal_identities};\n",
         prefix, table->count, prefix);

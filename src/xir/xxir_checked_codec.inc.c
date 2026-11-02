@@ -373,6 +373,7 @@ static void checked_nominals(CheckedCursor *c, XrXirTypes *types, uint32_t count
         d.exported = checked_u32(c, d.exported);
         d.kind = checked_u32(c, d.kind);
         d.flags = checked_u32(c, d.flags);
+        d.parent = checked_u32(c,d.parent);
         d.native.native_id = checked_u32(c, d.native.native_id);
         for (unsigned n = 0; n < sizeof(d.native.source_fingerprint); ++n)
             d.native.source_fingerprint[n] = (uint8_t)checked_integer(c, d.native.source_fingerprint[n], 1);

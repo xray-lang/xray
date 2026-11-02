@@ -173,17 +173,19 @@ static bool source_sendable_marker(SourceContext *ctx,const XrTypeRef *ref) {
 }
 static bool source_class_declare(SourceContext *ctx, AstNode *node) {
     ClassDeclNode *decl = &node->as.class_decl;
-    if (decl->super_name || decl->super_module || decl->is_packed ||
+    if ((!decl->super_name && decl->super_module) || decl->is_packed ||
         decl->explicit_align || decl->attr_count || decl->type_param_count < 0 ||
         decl->type_param_count > 65536 || decl->field_count < 0 || decl->interface_count<0 ||
         (decl->interface_count && !decl->interfaces))
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class execution currently requires a root declaration without inheritance");
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class declaration contract is not admitted");
     uint32_t constructors=0;
     for (int i=0;i<decl->method_count;++i) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (decl->methods[i]->type == AST_METHOD_DECL && decl->methods[i]->as.method_decl.is_constructor) ++constructors;
     }
     if (constructors>1) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"a class has at most one constructor");
+    if(decl->super_name && !constructors)
+        return source_fail(ctx,node,XR_XIR_UNSUPPORTED,"a derived class requires an explicit constructor");
     if (!source_nominal_declare(ctx,node,decl->name,decl->type_params,
         (uint32_t)decl->type_param_count,XR_XIR_NOMINAL_CLASS)) return false;
     uint32_t flags=decl->explicit_final?XR_XIR_NOMINAL_FINAL:0;
@@ -198,47 +200,18 @@ static bool source_class_declare(SourceContext *ctx, AstNode *node) {
     ((XrXirNominalDeclaration *)ctx->nominals.declarations)[ctx->nominals.count-1].flags=flags;
     return true;
 }
+#include "xxir_source_class_fields.inc.c"
 static bool source_struct_fields(SourceContext *ctx) {
-    for (uint32_t m = 0; m < (uint32_t) ctx->graph->spec_count; ++m) {
-        ctx->module = m; ctx->function = m;
-        for (SourceName *symbol = ctx->names[m]; symbol; symbol = symbol->next) {
-            if (symbol->kind != SOURCE_NOMINAL || symbol->checked_library || (symbol->node->type != AST_STRUCT_DECL && symbol->node->type != AST_CLASS_DECL)) continue;
-            ClassDeclNode *decl = symbol->node->type == AST_CLASS_DECL ? &symbol->node->as.class_decl : &symbol->node->as.struct_decl;
-            ctx->type_scope = (SourceTypeScope){true,symbol->node,decl->type_params,
-                (uint32_t)decl->type_param_count,decl->type_param_count ? symbol->declaration : 0,0};
-            uint32_t count = (uint32_t) decl->field_count;
-            XrXirNominalField *fields = count ? source_alloc(ctx, count, sizeof(*fields)) : NULL;
-            XrXirType *types = count ? source_alloc(ctx, count, sizeof(*types)) : NULL;
-            uint32_t *members = count ? source_alloc(ctx, count, sizeof(*members)) : NULL;
-            if (count && (!fields || !types || !members)) return false;
-            ctx->nominal_members[symbol->index] = members;
-            XrXirNominalDeclaration *record = (XrXirNominalDeclaration *) &ctx->nominals.declarations[symbol->index];
-            record->fields = fields; record->field_count = count;
-            for (uint32_t f = 0; f < count; ++f) {
-                AstNode *node = decl->fields[f];
-                if (!((ctx)->diagnostic.status == XR_XIR_OK) || node->type != AST_FIELD_DECL) return false;
-                FieldDeclNode *field = &node->as.field_decl;
-                if (!field->field_type || field->is_static || field->is_final || field->is_flexible || field->is_weak)
-                    return source_fail(ctx, node, XR_XIR_BAD_TYPE, "stored field contract is not admitted");
-                if (!source_type(ctx, field->field_type, &types[f]) || types[f] == XR_XIR_UNIT)
-                    return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field requires an admitted value type");
-                fields[f] = (XrXirNominalField) {{field->name, (uint32_t) source_text_size(ctx, field->name)}, types[f],
-                    (field->is_private ? XR_XIR_FIELD_PRIVATE : 0) | (field->is_protected ? XR_XIR_FIELD_PROTECTED : 0) |
-                    (field->is_const || (record->kind == XR_XIR_NOMINAL_CLASS &&
-                     (record->flags & XR_XIR_NOMINAL_SENDABLE)) ? 0 : XR_XIR_FIELD_MUTABLE)};
-                SourceName member = {0}; member.name = source_owned_text(ctx, field->name); member.node = node;
-                if (!member.name) return false;
-                member.type = types[f]; member.mutable = (fields[f].flags & XR_XIR_FIELD_MUTABLE)!=0;
-                if (!source_query_declare(ctx, &member, XR_XIR_SOURCE_MEMBER, symbol->declaration,
-                    source_query_range(ctx, node, field->name))) return false;
-                source_query_binding_type(ctx, &member);
-                members[f] = member.declaration;
-            }
-            XrXirTypeNode *type = (XrXirTypeNode *) &ctx->types.nodes[(uint32_t) symbol->type - XR_XIR_CONSTRUCTED_TYPE_BASE];
-            type->nominal.fields = types; type->nominal.field_count = count;
-            ctx->type_scope = (SourceTypeScope){0};
+    uint32_t count=ctx->nominals.count;
+    uint8_t *state=count?source_alloc(ctx,count,sizeof(*state)):NULL;
+    SourceFieldFrame *stack=count?source_alloc(ctx,count,sizeof(*stack)):NULL;
+    if(count&&(!state||!stack))return false;
+    for(uint32_t m=0;m<(uint32_t)ctx->graph->spec_count;++m)
+        for(SourceName *symbol=ctx->names[m];symbol;symbol=symbol->next) {
+            if(symbol->kind!=SOURCE_NOMINAL || symbol->checked_library || !symbol->node ||
+                (symbol->node->type!=AST_STRUCT_DECL && symbol->node->type!=AST_CLASS_DECL))continue;
+            if(!source_nominal_fields(ctx,symbol,state,stack,count))return false;
         }
-    }
     return true;
 }
 static bool source_nominal_function_scope(SourceContext *ctx, uint32_t index, SourceName *symbol) {
@@ -261,8 +234,9 @@ static bool source_struct_default_functions(SourceContext *ctx, uint32_t *next) 
             if (symbol->kind != SOURCE_NOMINAL || symbol->checked_library || (symbol->node->type != AST_STRUCT_DECL && symbol->node->type != AST_CLASS_DECL)) continue;
             ClassDeclNode *decl = symbol->node->type == AST_CLASS_DECL ? &symbol->node->as.class_decl : &symbol->node->as.struct_decl;
             const XrXirNominalDeclaration *nominal = &ctx->nominals.declarations[symbol->index];
-            for (uint32_t f = 0; f < nominal->field_count; ++f) {
-                AstNode *node = decl->fields[f];
+            uint32_t prefix=nominal->parent?ctx->nominals.declarations[nominal->parent-1].field_count:0;
+            for (uint32_t own = 0; own < (uint32_t)decl->field_count; ++own) {
+                uint32_t f=prefix+own;AstNode *node = decl->fields[own];
                 if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
                 if (!node->as.field_decl.initializer) continue;
                 if (*next >= ctx->first_closure)

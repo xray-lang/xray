@@ -20,9 +20,8 @@ typedef struct XrXirNominalField {
     XrXirType type;
     uint32_t flags;
 } XrXirNominalField;
-/* CLASS FINAL is a declaration fact, not inferred from carrier kind. A class
- * without it is an open root: no declaration may name it as a parent yet, so it
- * executes exactly like a final one and carries no dispatch state. */
+/* CLASS FINAL is a declaration fact, not inferred from carrier kind. A parent
+ * edge belongs to the same complete owned declaration table as its child. */
 #define XR_XIR_NOMINAL_FINAL 1u
 /* An explicit struct initializer limits field literals to its declaring module.
  * Calls retain their own constructor permissions; this flag grants none. */
@@ -60,6 +59,8 @@ typedef struct XrXirNominalDeclaration {
     uint32_t variant_count;
     uint32_t flags;
     XrXirNominalNativeRecord native;
+    /* Zero is a root; otherwise one plus the actual parent declaration. */
+    uint32_t parent;
 } XrXirNominalDeclaration;
 typedef struct XrXirNominalFieldIdentity {
     XrXirLiteral name;
@@ -75,6 +76,7 @@ typedef struct XrXirNominalIdentity {
     uint32_t variant_count;
     uint32_t flags;
     XrXirNominalNativeRecord native;
+    uint32_t parent;
 } XrXirNominalIdentity;
 typedef struct XrXirNominalTable {
     const XrXirNominalDeclaration *declarations;

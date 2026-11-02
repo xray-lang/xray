@@ -12,7 +12,7 @@
 static XrXirNominalIdentity nominal_identity_header(const XrXirNominalTable *table, uint32_t i) {
     if (table->identities) return table->identities[i];
     const XrXirNominalDeclaration *d = &table->declarations[i];
-    return (XrXirNominalIdentity) {d->module, d->name, d->exported, d->parameter_count, NULL, d->field_count, d->kind, d->variants, d->variant_count, d->flags, d->native};
+    return (XrXirNominalIdentity) {d->module, d->name, d->exported, d->parameter_count, NULL, d->field_count, d->kind, d->variants, d->variant_count, d->flags, d->native,d->parent};
 }
 XR_FUNC XrXirType xr_xir_cancelled_error_type(const XrXirTypes *types) {
     if (!types || types->count>XR_XIR_CONSTRUCTED_TYPE_LIMIT-XR_XIR_CONSTRUCTED_TYPE_BASE ||
@@ -126,7 +126,7 @@ static XrXirStatus nominal_copy_identities(const XrXirCompileContext *compile_co
         to->exported = from.exported; to->arity = from.arity; to->kind = from.kind;
         to->variant_count = from.variant_count; to->flags = from.flags;
 
-        to->native = from.native;
+        to->native = from.native;to->parent=from.parent;
         if (!nominal_variants_copy(compile_context, from.variants, from.variant_count, &to->variants, &allocation_status,control)) goto fail;
         if (!nominal_copy_name(compile_context, from.module, &to->module, &allocation_status,control) || !nominal_copy_name(compile_context, from.name, &to->name, &allocation_status,control)) goto fail;
         XrXirNominalFieldIdentity *fields = from.field_count ? xir_type_copy_zero(compile_context, from.field_count, sizeof(*fields), &allocation_status,control) : NULL;

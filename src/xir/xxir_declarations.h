@@ -41,7 +41,8 @@ typedef enum XrXirMemberAccess {
 } XrXirMemberAccess;
 typedef enum XrXirMethodKind {
     XR_XIR_NON_MEMBER, XR_XIR_READ_METHOD, XR_XIR_STATIC_METHOD,
-    XR_XIR_CONSTRUCTOR, XR_XIR_MEMBER_HELPER, XR_XIR_MATERIALIZER
+    XR_XIR_CONSTRUCTOR, XR_XIR_MEMBER_HELPER, XR_XIR_MATERIALIZER,
+    XR_XIR_CONSTRUCTOR_FIELDS
 } XrXirMethodKind;
 typedef enum XrXirTestRole {
     XR_XIR_TEST_ROLE_NONE, XR_XIR_TEST_ROLE_TEST, XR_XIR_TEST_ROLE_SKIP,
@@ -64,6 +65,7 @@ typedef struct XrXirFunctionIdentity {
 #define XR_XIR_FUNCTION_NO_SUSPEND 1u
 #define XR_XIR_FUNCTION_GENERATOR 2u
 #define XR_XIR_FUNCTION_REST 4u
+#define XR_XIR_FUNCTION_OVERRIDE 8u
 typedef struct XrXirSlot {
     uint32_t module;
     XrXirType type;

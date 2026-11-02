@@ -14,9 +14,12 @@ static bool source_hir_nominal_declarations(SourceContext *ctx) {
             ClassDeclNode *source=symbol->node->type==AST_CLASS_DECL?&symbol->node->as.class_decl:&symbol->node->as.struct_decl;
             uint32_t count=ctx->nominals.declarations[d].field_count;
             uint32_t *initializers=count?source_alloc(ctx,count,sizeof(*initializers)):NULL;if(count&&!initializers)return false;
-            for(uint32_t f=0;f<count;++f) {
-                if(!source_request_poll(ctx,source->fields[f]))return false;
-                if(source->fields[f]->as.field_decl.initializer)initializers[f]=ctx->nominal_members[d][f];
+            uint32_t parent=ctx->nominals.declarations[d].parent;
+            uint32_t prefix=parent?ctx->nominals.declarations[parent-1].field_count:0;
+            for(uint32_t own=0;own<(uint32_t)source->field_count;++own) {
+                uint32_t f=prefix+own;
+                if(!source_request_poll(ctx,source->fields[own]))return false;
+                if(source->fields[own]->as.field_decl.initializer)initializers[f]=ctx->nominal_members[d][f];
             }
             input.field_initializers=initializers;
             for(int m=0;m<source->method_count;++m) {

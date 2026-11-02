@@ -60,7 +60,7 @@ static XrXirStatus effect_lowered_snapshot_identity(
     const XrXirNominalIdentity *left, const XrXirNominalIdentity *right) {
 
     if (left->exported != right->exported || left->arity != right->arity ||
-        left->kind != right->kind || left->flags != right->flags ||
+        left->kind != right->kind || left->flags != right->flags || left->parent!=right->parent ||
         left->field_count != right->field_count || left->variant_count != right->variant_count ||
         left->native.native_id != right->native.native_id ||
         memcmp(left->native.source_fingerprint, right->native.source_fingerprint, 32) ||
