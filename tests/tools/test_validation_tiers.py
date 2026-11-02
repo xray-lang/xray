@@ -66,8 +66,9 @@ class TierTests(unittest.TestCase):
         expected = {test for name in ("public-values", "source-sdk", "checked-sdk")
                     for test in catalog["groups"][name]["tests"]}
         expected.update(catalog["l2"]["requiredOn"]["owner"]["tests"])
-        self.assertEqual(set(plan["tests"]), expected | {"hir_body"})
-        self.assertEqual(len(plan["tests"]), len(expected) + 1)
+        self.assertEqual(set(plan["tests"]), expected | {"hir_body", "runtime_sdk_recipe_incremental"})
+        self.assertEqual(len(plan["tests"]), len(expected) + 2)
+        self.assertEqual(plan["tests"].count("runtime_sdk_recipe_incremental"), 1)
         self.assertEqual(plan["tests"].count("hir_body"), 1)
         self.assertEqual(plan["targets"].count("test_hir_body"), 1)
         self.assertNotIn("frontend", plan["groups"])
