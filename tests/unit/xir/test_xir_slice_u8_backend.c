@@ -421,7 +421,7 @@ static void string_bytes_rejections(const XrXirCompileContext *context) {
         fprintf(stderr,"bytes refusal%u status=%u: %s\n",i,status,diagnostic.message);
         CHECK(status==(i==3 ? XR_XIR_BAD_VALUE : XR_XIR_BAD_TYPE) && diagnostic.status==status && !source.checked && !source.snapshot);
         CHECK(strstr(diagnostic.message,i==0 ? "bytes requires its exact lowered readonly String declaration" :
-            i==1 ? "expression cannot satisfy its declared type" : i==2 ? "value mutation requires a mutable named root" : "view lifetime normalization"));
+            i==1 ? "expression cannot satisfy its declared type" : i==2 ? "indexed view assignment requires an admitted MutSlice" : "view lifetime normalization"));
         xr_xir_compile_source_result_free(&source);
     }
 }
@@ -458,7 +458,7 @@ static void local_storage_execution(const XrXirCompileContext *context) {
 static void scalar_slot_ordinary_guards(const XrXirCompileContext *context,const XrXirSourceResult *source) {
     const XrXirModule *module=xr_xir_compile_artifact_module(source->checked);
     const XrXirConstruction *construction=xr_xir_compile_artifact_construction(source->checked);
-    XrXirDiagnostic diagnostic={0};CHECK(xir_compile_view_prepare_ordinary(context,module,construction,&diagnostic)==XR_XIR_OK);
+    XrXirDiagnostic diagnostic={0};CHECK(xir_compile_view_prepare_ordinary(context,(XirEffectInput){module,construction,NULL},&diagnostic)==XR_XIR_OK);
     uint32_t init=module->declarations->modules[0].initializer,other=named(module,"other_initializer"),site=UINT32_MAX;
     const XrXirFunction *body=module->functions+init;
     for(uint32_t i=0;i<body->instruction_count;++i) if(body->instructions[i].op==XR_XIR_SLOT_INIT)site=i;
@@ -467,10 +467,10 @@ static void scalar_slot_ordinary_guards(const XrXirCompileContext *context,const
     XrXirSlot slot=module->declarations->slots[0];XrXirDeclarations declarations=*module->declarations;
     XrXirModule changed=*module;changed.declarations=&declarations;declarations.modules=modules;declarations.slots=&slot;
     slot.mutable=0;
-    CHECK(xir_compile_view_prepare_ordinary(context,&changed,construction,&diagnostic)==XR_XIR_BAD_TYPE);
+    CHECK(xir_compile_view_prepare_ordinary(context,(XirEffectInput){&changed,construction,NULL},&diagnostic)==XR_XIR_BAD_TYPE);
     slot=module->declarations->slots[0];
     modules[0].initializer=other;
-    XrXirStatus status=xir_compile_view_prepare_ordinary(context,&changed,construction,&diagnostic);
+    XrXirStatus status=xir_compile_view_prepare_ordinary(context,(XirEffectInput){&changed,construction,NULL},&diagnostic);
     fprintf(stderr,"scalar slot nonowning initializer status=%u at %u/%u/%u\n",status,diagnostic.function,diagnostic.block,diagnostic.instruction);
     CHECK(status==XR_XIR_BAD_STRUCTURE && diagnostic.function==init && diagnostic.instruction==site);
     modules[0]=module->declarations->modules[0];
@@ -479,9 +479,9 @@ static void scalar_slot_ordinary_guards(const XrXirCompileContext *context,const
     memcpy(identities,module->declarations->functions,(size_t)module->function_count*sizeof(*identities));declarations.functions=identities;
     modules[1].name="scalar-other";modules[1].name_length=12;modules[1].initializer=other;modules[1].dependencies=NULL;modules[1].dependency_count=0;
     declarations.module_count=2;identities[other].module=1;
-    CHECK(xir_compile_view_prepare_ordinary(context,&changed,construction,&diagnostic)==XR_XIR_OK);
+    CHECK(xir_compile_view_prepare_ordinary(context,(XirEffectInput){&changed,construction,NULL},&diagnostic)==XR_XIR_OK);
     slot.module=1;
-    status=xir_compile_view_prepare_ordinary(context,&changed,construction,&diagnostic);
+    status=xir_compile_view_prepare_ordinary(context,(XirEffectInput){&changed,construction,NULL},&diagnostic);
     fprintf(stderr,"scalar slot cross module status=%u at %u/%u/%u\n",status,diagnostic.function,diagnostic.block,diagnostic.instruction);
     if(xr_xir_type_is_class(module->types,xr_xir_cell_element(module->types,slot.type))) {
         CHECK(status==XR_XIR_BAD_TYPE && diagnostic.function==UINT32_MAX && diagnostic.instruction==UINT32_MAX);
@@ -494,7 +494,7 @@ static void scalar_slot_ordinary_guards(const XrXirCompileContext *context,const
     uint32_t primitive=UINT32_MAX;
     for(uint32_t i=0;i<site;++i)if(ops[i].type!=XR_XIR_UNIT && ops[i].type!=slot.type)primitive=body->parameter_count+i;
     CHECK(primitive!=UINT32_MAX);ops[site].args[0]=primitive;
-    status=xir_compile_view_prepare_ordinary(context,&changed,construction,&diagnostic);
+    status=xir_compile_view_prepare_ordinary(context,(XirEffectInput){&changed,construction,NULL},&diagnostic);
     fprintf(stderr,"scalar slot wrong payload status=%u at %u/%u/%u\n",status,diagnostic.function,diagnostic.block,diagnostic.instruction);
     CHECK(status==XR_XIR_BAD_TYPE && diagnostic.function==init && diagnostic.instruction==site);
     xr_compile_resources_free(ops);xr_compile_resources_free(functions);xr_compile_resources_free(identities);

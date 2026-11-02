@@ -141,8 +141,14 @@ static void check_declaration_packet(const XrXirCompileContext *work,XrXirType e
     for (uint32_t i=0;i<4;++i) old[12+i]=(uint8_t)((XR_XIR_CHECKED_CONTRACT-1)>>(8*i));
     CHECK(xr_xir_compile_checked_read(work,old,packet.length,&received,NULL)==XR_XIR_BAD_STRUCTURE);
     CHECK(!received);
-    size_t error_at=64+12+4+function.name_length+4+4;
+    size_t error_at=64+12+4+function.name_length+4+(size_t)function.parameter_count*4+
+        4+(size_t)function.consume_parameter_count*4+4;
     CHECK(error_at+4<=packet.length);
+    for (uint32_t i=0;i<4;++i) {
+        CHECK(packet.bytes[8+i]==(uint8_t)((uint32_t)XR_XIR_CHECKED_SCHEMA>>(8*i)));
+        CHECK(packet.bytes[12+i]==(uint8_t)((uint32_t)XR_XIR_CHECKED_CONTRACT>>(8*i)));
+        CHECK(packet.bytes[error_at+i]==(uint8_t)((uint32_t)error_type>>(8*i)));
+    }
     const XrXirType invalid_errors[]={XR_XIR_UNIT,XR_XIR_I64};
     for (uint32_t e=0;e<2;++e) {
         memcpy(old,packet.bytes,packet.length);
@@ -518,14 +524,14 @@ static void check_source_bounds(const XrXirArtifact *artifact,bool consumer) {
 /* An external producer may declare a wider Error even for a literal body.
  * A receiving Source must preserve that declaration instead of shrinking it. */
 static void source_packet_widen_raw(XrXirCheckedPacket *packet) {
-    uint8_t pattern[19]={3,0,0,0,'r','a','w'};
+    uint8_t pattern[23]={3,0,0,0,'r','a','w'};
     for (unsigned i=0;i<4;++i) {
-        pattern[11+i]=(uint8_t)((uint32_t)XR_XIR_I64>>(8*i));
-        pattern[15+i]=(uint8_t)((uint32_t)XR_XIR_NEVER>>(8*i));
+        pattern[15+i]=(uint8_t)((uint32_t)XR_XIR_I64>>(8*i));
+        pattern[19+i]=(uint8_t)((uint32_t)XR_XIR_NEVER>>(8*i));
     }
     size_t found=0,offset=0;
     for (size_t at=64;at+sizeof(pattern)<=packet->length;++at)
-        if (!memcmp(packet->bytes+at,pattern,sizeof(pattern))) {++found;offset=at+15;}
+        if (!memcmp(packet->bytes+at,pattern,sizeof(pattern))) {++found;offset=at+19;}
     CHECK(found==1);
     for (unsigned i=0;i<4;++i) packet->bytes[offset+i]=(uint8_t)((uint32_t)XR_XIR_ERROR>>(8*i));
     XrSHA256Context digest;xr_sha256_init(&digest);

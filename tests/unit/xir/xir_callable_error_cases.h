@@ -417,7 +417,7 @@ static void callable_error_library(const XrXirCompileContext *work,bool nested) 
     CHECK(xir_fixture_verify(work,&f->module,NULL)==XR_XIR_BAD_TYPE);
     f->error_bound.markers=XR_XIR_CONSTRAINT_ERROR;
     XrXirConstruction *facts=NULL;CHECK(xir_fixture_construction(work,&f->types,&facts)==XR_XIR_OK);
-    XrXirStatus ordinary=xir_compile_view_prepare_ordinary(work,&f->module,facts,&initial);
+    XrXirStatus ordinary=xir_compile_view_prepare_ordinary(work,(XirEffectInput){&f->module,facts,NULL},&initial);
     if (ordinary!=XR_XIR_OK) fprintf(stderr,"Callable library ordinary %u f%u b%u i%u\n",ordinary,initial.function,initial.block,initial.instruction);
     CHECK(ordinary==XR_XIR_OK);
     XrXirEffects *effects=NULL;
