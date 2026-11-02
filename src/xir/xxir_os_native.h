@@ -28,7 +28,7 @@ static inline bool xir_os_native_signature(uint32_t id,const XrXirTypes *types,c
         strcmp(native->namespace_id,"os") || !native->source_path ||
         strcmp(native->source_path,"stdlib/defs/core.def") || !native->member) return false;
     const XrNativeMemberDeclaration *member=native->member;
-    bool environment=id==XR_NATIVE_CALLABLE_OS_GETENV || id==XR_NATIVE_CALLABLE_OS_SETENV;
+    bool environment=id==XR_NATIVE_CALLABLE_OS_GETENV,setter=id==XR_NATIVE_CALLABLE_OS_SETENV;
     const char *name=setter?"__setenv":environment?"__getenv":id==XR_NATIVE_CALLABLE_OS_PLATFORM?"__platform":"__arch";
     if(!member->name || strcmp(member->name,name) || !member->signature ||
         strcmp(member->signature,setter?"(name: string, value: string): bool":environment?"(name: string): string?":"(): string") ||
