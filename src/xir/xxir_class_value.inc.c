@@ -9,6 +9,16 @@
  * KEY CONCEPT:
  *   Identity handles pin their field storage, type arena and physical accounting domain.
  */
+XR_FUNC XrXirValueStatus xir_class_actual_type(const XrXirValue *value,
+    const XrXirTypeArena *arena,XrXirType *output) {
+    if (!output || !xr_xir_value_valid(value) || !owned_carrier_type((XrXirType)value->type))
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    XirObject *object=object_pointer(value);
+    if (object->arena!=arena || !class_body_layout(object) ||
+        (class_origin_state((const XirClassObject *)object)&(XIR_CLASS_ORIGIN_PREPARED|XIR_CLASS_ORIGIN_BORROWED)) ||
+        ((const XirClassObject *)object)->borrow_top) return XR_XIR_VALUE_BAD_ARGUMENT;
+    *output=object->type;return XR_XIR_VALUE_OK;
+}
 static XrXirValueStatus class_receiver_admit(const XrXirValue *receiver,
     XrXirValueAdmission *admission) {
     if (!receiver || !admission ||
@@ -87,9 +97,12 @@ static XrXirValueStatus xr_xir_class_get_graph_operation(const XrXirValue *recei
         !owned_carrier_type((XrXirType)receiver->type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XirObject *object=object_pointer(receiver);
     const XrXirStorageLayout *layout=class_body_layout(object);
+    const XrXirTypeNode *view=xr_xir_type_node(xr_xir_compile_type_arena_types(object->arena),
+        (XrXirType)receiver->type);
     if (!layout || (class_origin_state((const XirClassObject *)object) &
             (XIR_CLASS_ORIGIN_PREPARED | XIR_CLASS_ORIGIN_BORROWED)) ||
         ((const XirClassObject *)object)->borrow_top ||
+        !view || field >= view->nominal.field_count ||
         field >= layout->field_count || admission->arena != object->arena)
         return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!admission_is_compile(admission) && (!admission->work)) return XR_XIR_VALUE_LIMIT;
@@ -117,9 +130,11 @@ static XrXirValueStatus xr_xir_class_set_graph_operation(const XrXirValue *recei
     XirObject *object=object_pointer(receiver);
     const XrXirTypes *types=xr_xir_compile_type_arena_types(object->arena);
     const XrXirTypeNode *node=xr_xir_type_node(types,object->type);
+    const XrXirTypeNode *view=xr_xir_type_node(types,(XrXirType)receiver->type);
     if ((class_origin_state((const XirClassObject *)object) &
             (XIR_CLASS_ORIGIN_PREPARED | XIR_CLASS_ORIGIN_BORROWED)) ||
-        ((const XirClassObject *)object)->borrow_top || field >= node->nominal.field_count ||
+        ((const XirClassObject *)object)->borrow_top || !view || field >= view->nominal.field_count ||
+        field >= node->nominal.field_count ||
         !(types->nominals->identities[node->nominal.declaration].fields[field].flags & XR_XIR_FIELD_MUTABLE))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     status=xr_xir_value_admit(replacement,node->nominal.fields[field],admission);

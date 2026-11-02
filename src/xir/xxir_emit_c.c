@@ -474,6 +474,9 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
             (uint32_t)xr_xir_operand_type(function, op->args[0]), layout->offsets[op->args[0]]);
         EMIT_FORMAT(buffer, et_ab313a8fcb7dfd19, " status = xr_xir_instance_weaken_function(view, (XrXirType)%u, &input, &value);\n", (uint32_t)op->type);
         break;
+    case XR_XIR_CLASS_METHOD_REF:
+        append(buffer," status = xr_xir_instance_class_method_at(view,%uu,state->frame,&value);\n",
+            (uint32_t)(op-function->instructions));break;
     case XR_XIR_FUNCTION_REF:
         for (uint32_t p = 0; p < op->args[1] && ((buffer)->status == XR_XIR_OK); ++p) {
             uint32_t id = function->operands[op->args[0] + p];
@@ -1286,7 +1289,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         emit_array_step(buffer, function, op, layout, destination, index);
         return;
     }
-    if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_SLOT_STORE) || op->op == XR_XIR_SLOT_GROUP_INIT || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_FUNCTION_WEAKEN ||
+    if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_SLOT_STORE) || op->op == XR_XIR_SLOT_GROUP_INIT || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_CLASS_METHOD_REF || op->op == XR_XIR_FUNCTION_WEAKEN ||
         op->op == XR_XIR_TO_STRING || op->op==XR_XIR_STRING_COPY_BYTES || op->op==XR_XIR_STRING_REPLACE ||
         (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE) || op->op == XR_XIR_CELL_LOCAL_WRITE ||
         op->op == XR_XIR_CELL_STRING_APPEND || (op->op>=XR_XIR_PTR_NULL && op->op<=XR_XIR_PTR_EQ)) {
