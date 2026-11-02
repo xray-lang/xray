@@ -48,6 +48,14 @@ fail the differential check. Missing output or a failed companion fails the
 other side too. The runner never sorts lines, normalizes output, or learns a
 golden trace from execution.
 
+The channels example uses a source-bound `stdout_channels` catalog instead of
+enumerating fanout assignments. It checks all nine fixed prefix lines, all
+nine jobs exactly once, worker IDs 1–3 and the complete two-line suffix. Each
+worker's jobs increase; FIFO reachability is replayed with at most one received
+but unprinted job per worker. This rejects impossible assignments that merely
+contain each job once. The two saved engine outputs must still match byte for
+byte; this predicate never rewrites their order or newline bytes.
+
 The native companions build through the trusted-host direct-C
 CLI path and execute against their original, complete VM output oracles.
 Provider and explicit input identities, private workspace/output ownership,

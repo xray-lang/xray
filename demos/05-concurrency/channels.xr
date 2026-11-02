@@ -4,7 +4,7 @@
 // Run: xray demos/05-concurrency/channels.xr
 
 // === Basic channel ===
-// Channels MUST be `shared` so multiple coroutines can capture them safely.
+// Channel identity is shared across tasks; every element must be Sendable.
 const ch = Channel<i64>(3)
 
 // Send values (buffered, non-blocking up to capacity)

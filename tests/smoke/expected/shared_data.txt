@@ -1,0 +1,8 @@
+worker-1: host=localhost, port=8080
+worker-2: host=localhost, port=8080
+worker-3: host=localhost, port=8080
+received via channel: 42
+child sees: [1, 2, 3, 999]
+parent still has: [1, 2, 3]
+
+All concurrency rules demonstrated safely!

@@ -1,12 +1,12 @@
 // Demo: Concurrency Safety Rules
-// shared, Channel, parameter passing — the three ways to share data
+// const, Channel, parameter passing — the three ways to share data
 //
 // Run: xray demos/05-concurrency/shared_data.xr
 //
 // GOLDEN RULE: If it compiles, it's concurrency-safe.
 // No locks needed. The compiler enforces safety.
 
-// === Rule 1: shared (immutable cross-coroutine sharing) ===
+// === Rule 1: const (immutable cross-coroutine sharing) ===
 // Zero-copy reads from any coroutine
 const CONFIG = {
     host: "localhost",
@@ -26,11 +26,11 @@ scope {
 }
 
 // === Rule 2: Channel (inter-coroutine communication) ===
-// Channels are declared `shared` and deep-copy pointer values on send.
+// Channels share identity and carry Sendable values by value.
 const ch = Channel<i64>(1)
 
-fn sender(ch: Channel<i64>) {
-    ch.send(42)
+fn sender(ch: Channel<i64>) throws(SendResult) {
+    try ch.send(42)
 }
 
 go sender(ch)
@@ -42,7 +42,7 @@ print("received via channel: ${val}")
 ch.close()
 
 // === Rule 3: Explicit copy or move ===
-// Crossing a go boundary requires copy(...), move of an owned source, or shared identity.
+// Crossing a go boundary uses copy x, move of an owned source, or shared identity.
 fn processData(data: move Array<i64>) {
     // This is a separate copy — mutations don't affect the original
     data.push(999)
@@ -50,8 +50,8 @@ fn processData(data: move Array<i64>) {
 }
 
 var myData = [1, 2, 3]
-var t = go processData(copy(myData))
-await t
+var t = go processData(copy myData)
+try await t
 print("parent still has: ${myData}")
 
 // === What you CANNOT do (compiler errors): ===
@@ -60,9 +60,9 @@ print("parent still has: ${myData}")
 // var x = [1, 2, 3]
 // go fn() { print(x) }()              // ERROR: cannot capture 'x' in go closure
 //
-// var ch2 = Channel<int>(1)            // ERROR: Channel must be `shared`
+// const ch2 = Channel<MutSlice<i64>>(1) // ERROR: borrowed payload is not Sendable
 //
-// shared data = [1,2,3]
-// go fn() { data.push(4) }()           // ERROR: cannot capture `shared`
+// var data = [1,2,3]
+// go fn() { data.push(4) }()           // ERROR: cannot capture mutable local data
 
 print("\nAll concurrency rules demonstrated safely!")

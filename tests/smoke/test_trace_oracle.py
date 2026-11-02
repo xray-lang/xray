@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 import run_smoke as smoke
+from trace_oracle import CHANNELS, ChannelTrace
 
 
 class TraceOracleTests(unittest.TestCase):
@@ -113,3 +114,94 @@ class TraceOracleTests(unittest.TestCase):
         rows[1].update(status="fail", reason="native build failed")
         self.assertEqual(len(smoke.verify_pairs([self.case, self.native], rows)), 1)
         self.assertEqual(rows[1]["reason"], "native build failed")
+
+
+class ChannelOracleTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        source = self.root / CHANNELS
+        source.parent.mkdir(parents=True)
+        source.write_bytes(b"original channel protocol unit input\n")
+        self.prefix = ["recv: 10", "recv: 20", "recv: 30"] + [f"consumed: {i*i}" for i in range(6)]
+        self.suffix = ["tryRecv: value=42", "tryRecv empty: empty"]
+        self.catalog = {"schema": 1, "source": CHANNELS,
+                        "sourceCanonicalSha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+                        "prefix": self.prefix, "suffix": self.suffix,
+                        "workers": {"lines": 9, "workerIds": [1, 2, 3], "eachJobExactlyOnce": list(range(9)),
+                                    "perWorkerIncreasing": True, "fifoReachable": True}}
+        self.oracle = ChannelTrace(tuple(x.encode() for x in self.prefix), tuple(x.encode() for x in self.suffix))
+        self.case = {"id": CHANNELS, "path": CHANNELS, "mode": "run", "expect": "pass", "exit_code": 0,
+                     "stdout": "expected.txt", "stdout_channels": "channels.json"}
+        self.native = dict(self.case, id="native:" + CHANNELS, mode="build-run")
+        (self.root / "expected.txt").write_bytes(self.output([(1, i) for i in range(9)]))
+        self.write_catalog()
+
+    def write_catalog(self):
+        (self.root / "channels.json").write_text(json.dumps(self.catalog), encoding="utf-8")
+
+    def output(self, jobs):
+        return ("\n".join(self.prefix + [f"worker-{w}: processed job {j}" for w, j in jobs] + self.suffix) + "\n").encode()
+
+    def load(self):
+        (self.root / "cases.json").write_text(json.dumps({"schema": 1, "cases": [self.case, self.native]}))
+        return smoke.load_cases(self.root / "cases.json", self.root, {CHANNELS: smoke.Source(CHANNELS, "demos", "run")})
+
+    def test_accepts_one_worker_and_reachable_cross_worker_reordering(self):
+        self.assertIn(self.output([(1, i) for i in range(9)]), self.oracle)
+        jobs = [(3, 2), (3, 3), (3, 4), (3, 5), (3, 6), (3, 7), (3, 8), (1, 0), (2, 1)]
+        self.assertIn(self.output(jobs), self.oracle)
+        self.assertEqual(len(self.load()), 2)
+
+    def test_each_once_and_increasing_alone_do_not_prove_fifo_reachability(self):
+        impossible = [(1, 8)] + [(2, i) for i in range(8)]
+        self.assertNotIn(self.output(impossible), self.oracle)
+        descending = [(1, 1), (1, 0)] + [(2, i) for i in range(2, 9)]
+        self.assertNotIn(self.output(descending), self.oracle)
+
+    def test_rejects_missing_duplicate_foreign_and_incomplete_output(self):
+        jobs = [(1, i) for i in range(9)]
+        for changed in (jobs[:-1], jobs + [(2, 8)], jobs[:-1] + [(2, 7)],
+                        jobs[:-1] + [(4, 8)], jobs[:-1] + [(1, 9)]):
+            self.assertNotIn(self.output(changed), self.oracle)
+        raw = self.output(jobs)
+        for changed in (raw[:-1], raw + b"\n", raw.replace(b"\n", b"\r\n"),
+                        raw.replace(b"recv: 10", b"recv: 11"), raw.replace(b"tryRecv: value=42", b"tryRecv: empty")):
+            self.assertNotIn(changed, self.oracle)
+
+    def test_schema_cannot_weaken_job_worker_or_fifo_requirements(self):
+        original = deepcopy(self.catalog)
+        for key, value in (("lines", True), ("workerIds", [True, 2, 3]),
+                           ("eachJobExactlyOnce", list(range(8))), ("perWorkerIncreasing", False),
+                           ("fifoReachable", 1)):
+            self.catalog = deepcopy(original)
+            self.catalog["workers"][key] = value
+            self.write_catalog()
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                self.load()
+
+    def test_source_binding_and_companion_catalog_are_required(self):
+        self.native["stdout_channels"] = "other.json"
+        (self.root / "other.json").write_bytes((self.root / "channels.json").read_bytes())
+        with self.assertRaisesRegex(ValueError, "same complete channel oracle|share the complete channel oracle"):
+            self.load()
+        self.native["stdout_channels"] = "channels.json"
+        (self.root / CHANNELS).write_bytes(b"a changed program\n")
+        with self.assertRaisesRegex(ValueError, "source identity"):
+            self.load()
+
+    def test_execute_uses_channel_oracle_and_pair_still_requires_raw_equality(self):
+        actual = self.output([(2, i) for i in range(9)])
+        result = smoke.proc.ProcResult(("unit protocol stub",), 0, actual, b"", False)
+        with patch.object(smoke.proc, "run", return_value=result):
+            row = smoke.execute(self.case, smoke.Source(CHANNELS, "demos", "run"), self.root / "xray",
+                                self.root, self.root, self.root, 1)
+        self.assertEqual(row["status"], "pass")
+        rows = []
+        for i, (case, output) in enumerate(zip([self.case, self.native], [actual, self.output([(1, j) for j in range(9)])])):
+            logs = self.root / str(i)
+            logs.mkdir()
+            (logs / "run.stdout").write_bytes(output)
+            rows.append({"id": case["id"], "status": "pass", "log_directory": str(logs)})
+        self.assertEqual(len(smoke.verify_pairs([self.case, self.native], rows)), 2)
