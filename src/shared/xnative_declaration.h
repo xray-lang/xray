@@ -223,7 +223,9 @@ typedef enum XrNativeCallableId {
     XR_NATIVE_CALLABLE_MEM_MOVE = 21,
     XR_NATIVE_CALLABLE_MEM_VOLATILE_LOAD = 22,
     XR_NATIVE_CALLABLE_MEM_VOLATILE_STORE = 23,
-    XR_NATIVE_CALLABLE_BUFFER_SLICE_MUT_BEGIN = 24
+    XR_NATIVE_CALLABLE_BUFFER_SLICE_MUT_BEGIN = 24,
+    XR_NATIVE_CALLABLE_TASK_ALL_BEGIN = 25,
+    XR_NATIVE_CALLABLE_TASK_FIRST_BEGIN = 26
 } XrNativeCallableId;
 
 /* Callable IDs authenticate ordinary function bodies, independently of inline intrinsics. */
