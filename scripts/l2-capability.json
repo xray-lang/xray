@@ -48,7 +48,10 @@
         "src/xir/*",
         "include/xray_xir*",
         "src/runtime/*",
-        "tests/unit/xir/*sdk*"
+        "tests/unit/xir/*sdk*",
+        "tests/unit/xir/test_xir_rune_whitespace.c",
+        "tests/unit/xir/rune_text_output.cmake",
+        "tests/fixtures/xir_rune_whitespace/previous*-read-ref.chk"
       ],
       "reason": "Installed Checked-to-C runtime SDK and previous-contract/cleanup ABI rejection.",
       "tests": [
