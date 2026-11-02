@@ -748,7 +748,8 @@ static void sdk_missing_advapi32_known_bytes(XrCompileResources *resources,
     CHECK(!memcmp(missing_advapi32_sdk_kat_file_digest,current_sdk_kat_file_digest,32));
     size_t libraries=sizeof(missing_advapi32_sdk_kat_preimage)-(4+4+8+4+6);
     CHECK(!memcmp(missing_advapi32_sdk_kat_preimage,current_sdk_kat_preimage,libraries));
-    CHECK(sizeof(current_sdk_kat_preimage)==sizeof(missing_advapi32_sdk_kat_preimage)+12);
+    _Static_assert(sizeof(current_sdk_kat_preimage)==sizeof(missing_advapi32_sdk_kat_preimage)+12,
+        "the required Advapi32 library adds its exact framed name");
     XrXirSdkManifest same_common=*current;
     memcpy(same_common.digest,missing_advapi32_sdk_kat_digest,32);
     XrXirSdkManifest preserved=same_common;size_t attempts=runtime_attempts;
