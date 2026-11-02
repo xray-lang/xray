@@ -1,5 +1,6 @@
 """Verify source-backed native value declarations before compiler admission."""
 from pathlib import Path
+from dataclasses import replace
 import os
 import subprocess
 import sys
@@ -508,6 +509,61 @@ class StringBuilder {
             target.write_text(self.prelude + '\nXR_BUILTIN_ENUM("Recv", 1, RECV,)\n', encoding='utf-8')
             with self.assertRaises(ValueError):
                 schema.channel_result_rows(root)
+
+
+class MathCallableDeclarations(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / 'tools/stdlibgen'))
+        from stdlibgen import parse_defs
+        cls.declarations = parse_defs(ROOT)
+
+    def test_typed_private_shapes_and_random_ctfe_boundary(self):
+        lines, rows = schema.render_math_callables(self.declarations)
+        self.assertEqual(len(rows), 28)
+        self.assertEqual(sum(', true, "math",' in row for row in rows), 26)
+        for identity in (44, 45):
+            self.assertTrue(any(row.startswith('    {' + str(identity) + ',') and
+                                ', false, "math",' in row for row in rows))
+        text = '\n'.join(lines)
+        self.assertEqual(text.count('XR_NATIVE_ALLOCATION_UNKNOWN'), 28)
+        self.assertNotIn('XR_NATIVE_ALLOCATION_NO_HEAP', text)
+        self.assertIn('"__floor", "(x: f64): i64", "i64"', text)
+        self.assertIn('"__sqrt", "(x: f64): f64", "f64"', text)
+        self.assertIn('"__randomInt", "(min: i64, max: i64): i64"', text)
+        header = (ROOT / 'src/shared/xnative_declaration.h').read_text(encoding='utf-8')
+        import re
+        ids = [int(value) for value in re.findall(r'XR_NATIVE_CALLABLE_MATH_[A-Z0-9_]+ = (\d+)', header)]
+        self.assertEqual(ids, list(range(27, 55)))
+
+    def test_changed_shape_or_authority_is_rejected(self):
+        row = next(row for row in self.declarations if row.module == 'math' and row.name == '__sqrt')
+        for field, value in (('signature', '(x: i64): f64'), ('argc', '2'),
+                             ('visibility', 'public'), ('effect', 'may-error'),
+                             ('allocation', 'may_heap'), ('return_ownership', 'borrowed_param:0'),
+                             ('layer', 'system'), ('vm', 'math_pow'), ('aot', 'other_provider'),
+                             ('suspension_kind', 'suspend')):
+            with self.subTest(field=field):
+                changed = [replace(item, **{field: value}) if item is row else item
+                           for item in self.declarations]
+                with self.assertRaises(ValueError):
+                    schema.render_math_callables(changed)
+
+    def test_missing_duplicate_and_random_provider_changes_are_rejected(self):
+        row = next(row for row in self.declarations if row.module == 'math' and row.name == '__randomInt')
+        missing = [item for item in self.declarations if item is not row]
+        with self.assertRaises(ValueError):
+            schema.render_math_callables(missing)
+        with self.assertRaises(ValueError):
+            schema.render_math_callables(self.declarations + [row])
+        for field, value in (('module', 'other'), ('signature', '(min: f64, max: f64): i64'),
+                             ('layer', 'core'), ('vm', 'math_random_int'),
+                             ('aot_kind', 'builtin'), ('link_object', '')):
+            with self.subTest(field=field):
+                changed = [replace(item, **{field: value}) if item is row else item
+                           for item in self.declarations]
+                with self.assertRaises(ValueError):
+                    schema.render_math_callables(changed)
 
 
 if __name__ == '__main__':

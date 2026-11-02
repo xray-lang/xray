@@ -1012,6 +1012,72 @@ def render_intrinsics(root):
     return lines + ['};', '']
 
 
+MATH_CALLABLE_CONTRACTS = (
+    (27, '__abs', '(x: f64): f64'),
+    (28, '__floor', '(x: f64): i64'),
+    (29, '__ceil', '(x: f64): i64'),
+    (30, '__round', '(x: f64): i64'),
+    (31, '__sqrt', '(x: f64): f64'),
+    (32, '__pow', '(base: f64, exp: f64): f64'),
+    (33, '__sin', '(x: f64): f64'),
+    (34, '__cos', '(x: f64): f64'),
+    (35, '__tan', '(x: f64): f64'),
+    (36, '__asin', '(x: f64): f64'),
+    (37, '__acos', '(x: f64): f64'),
+    (38, '__atan', '(x: f64): f64'),
+    (39, '__atan2', '(y: f64, x: f64): f64'),
+    (40, '__log', '(x: f64): f64'),
+    (41, '__log10', '(x: f64): f64'),
+    (42, '__log2', '(x: f64): f64'),
+    (43, '__exp', '(x: f64): f64'),
+    (44, '__random', '(): f64'),
+    (45, '__randomInt', '(min: i64, max: i64): i64'),
+    (46, '__sinh', '(x: f64): f64'),
+    (47, '__cosh', '(x: f64): f64'),
+    (48, '__tanh', '(x: f64): f64'),
+    (49, '__hypot', '(x: f64, y: f64): f64'),
+    (50, '__cbrt', '(x: f64): f64'),
+    (51, '__trunc', '(x: f64): i64'),
+    (52, '__fmod', '(x: f64, y: f64): f64'),
+    (53, '__log1p', '(x: f64): f64'),
+    (54, '__expm1', '(x: f64): f64'),
+)
+
+
+def render_math_callables(declarations):
+    lines, rows = [], []
+    for ordinal, (identity, name, signature) in enumerate(MATH_CALLABLE_CONTRACTS):
+        candidates = [row for row in declarations if row.module == 'math' and row.name == name]
+        if len(candidates) != 1:
+            raise ValueError('Math callable requires its sole governed declaration: ' + name)
+        row = candidates[0]
+        arguments, result = signature.rsplit(': ', 1)
+        params = [part.split(': ', 1) for part in arguments[1:-1].split(', ')] if arguments != '()' else []
+        pure = name not in ('__random', '__randomInt')
+        implementation = 'math_' + name[2:]
+        expected_aot = 'builtin' if pure else 'xrt_math_random_int' if name == '__randomInt' else 'xrt_math_random'
+        if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+                row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
+                row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
+                row.ret, row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
+                signature, str(len(params)), 'vv' if name == '__randomInt' else '',
+                'internal', 'nothrow', '', '', 'core' if pure else 'system', implementation,
+                expected_aot, True, 'builtin' if pure else 'method', '' if pure else 'math.' + name,
+                'normal', '', '', 'value', False, None, (), ''):
+            raise ValueError('Math callable differs from its complete source contract: ' + name)
+        symbol = 'xr_native_math_' + str(ordinal)
+        if params:
+            lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {']
+            lines += ['    {' + c_string(n) + ', ' + c_string(t) + ', XR_NATIVE_TERM_' + t.upper() + ', false, false},' for n, t in params]
+            lines += ['};']
+        lines += ['static const XrNativeMemberDeclaration ' + symbol + ' = {',
+            '    ' + str(ordinal + 1) + ', ' + c_string(name) + ', ' + c_string(signature) + ', ' + c_string(result) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
+            '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
+            '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + (symbol + '_parameters' if params else 'NULL') + ', ' + str(len(params)) + ', XR_NATIVE_TERM_' + result.upper(), '};']
+        rows += ['    {' + str(identity) + ', NULL, &' + symbol + ', NULL, ' + str(pure).lower() + ', "math", "stdlib/defs/core.def", FINGERPRINT}']
+    return lines, rows
+
+
 def render_unicode_callable(root, decoder):
     import sys
     sys.path.insert(0, str(root / 'tools' / 'stdlibgen'))
@@ -1119,6 +1185,9 @@ def render_unicode_callable(root, decoder):
             '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_' + ('UNKNOWN' if ordinal == 0 else 'NO_HEAP') + ',',
             '    "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + symbol + '_parameters, ' + count + ', XR_NATIVE_TERM_' + ('UNIT' if ordinal == 0 else 'BOOL'), '};']
         buffer_rows.append('    {' + str(ordinal + 8) + ', NULL, &' + symbol + ', NULL, false, "crypto", "stdlib/defs/core.def", FINGERPRINT}')
+    math_lines, math_rows = render_math_callables(declarations)
+    buffer_lines += math_lines
+    buffer_rows += math_rows
     digest = hashlib.sha256((root / 'stdlib/defs/core.def').read_text(encoding='utf-8').encode('utf-8')).digest()
     fingerprint = '{{' + ','.join(str(byte) for byte in digest) + '}}'
     return buffer_lines + [
