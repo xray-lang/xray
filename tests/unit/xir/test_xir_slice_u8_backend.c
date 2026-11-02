@@ -706,10 +706,11 @@ static void default_class_invoke_execution(const XrXirCompileContext *context) {
         if(status!=XR_XIR_OK)fprintf(stderr,"default invoke Source%u status=%u: %s\n",k,status,diagnostic.message);
         CHECK(status==XR_XIR_OK && source.checked && source.snapshot);
         XrXirCheckedPacket packet={0};XrXirArtifact *checked=NULL,*closed=NULL;
-        XrXirArtifact *isolated=NULL;
+        XrXirArtifact *isolated=NULL;uint32_t source_helper=UINT32_MAX,source_constructor=UINT32_MAX;
+        XrXirInstruction default_site={0};uint32_t default_instruction=UINT32_MAX;
         if(!k) {
-            /* A fresh canonical producer gives the default its actual constructor
-             * body. Complete checking owns the copy before the Source retires. */
+            /* A constructor wrapper cannot transfer its private field-helper
+             * authority to an unrelated default function by copying its body. */
             const XrXirModule *original=xr_xir_compile_artifact_module(source.checked);
             CHECK(original->defaults && original->defaults->count==1);
             uint32_t helper=original->defaults->records[0].function,constructor=UINT32_MAX;
@@ -717,6 +718,13 @@ static void default_class_invoke_execution(const XrXirCompileContext *context) {
             for(uint32_t i=0;i<before->instruction_count;++i)if(before->instructions[i].op==XR_XIR_CALL &&
                 xr_xir_type_is_class(original->types,before->instructions[i].type))constructor=(uint32_t)before->instructions[i].immediate;
             CHECK(constructor<original->function_count && !before->parameter_count);
+            source_helper=helper;source_constructor=constructor;
+            const XrXirFunction *caller=original->functions+named(original,"storage_receiver");
+            for(uint32_t i=0;i<caller->instruction_count;++i)if(caller->instructions[i].op==XR_XIR_INVOKE_DEFAULT &&
+                xr_xir_type_is_class(original->types,caller->instructions[i].type)) {
+                CHECK(default_instruction==UINT32_MAX);default_instruction=i;default_site=caller->instructions[i];
+            }
+            CHECK(default_instruction!=UINT32_MAX);
             const XrXirFunction *body=original->functions+constructor;
             CHECK(!body->parameter_count && body->result==before->result);
             XrXirFunction *functions=NULL;
@@ -724,13 +732,12 @@ static void default_class_invoke_execution(const XrXirCompileContext *context) {
             memcpy(functions,original->functions,(size_t)original->function_count*sizeof(*functions));
             functions[helper]=*body;functions[helper].name=before->name;functions[helper].name_length=before->name_length;
             XrXirModule raw=*original;raw.stage=XR_XIR_BUILT;raw.provenance=NULL;raw.functions=functions;
-            XrXirDiagnostic admitted={0};
+            XrXirDiagnostic admitted={0};uint64_t baseline=held(context->resources);
             status=xr_xir_compile_check_v2(context,&raw,xr_xir_compile_artifact_construction(source.checked),&isolated,&admitted);
-            if(status!=XR_XIR_OK)fprintf(stderr,"isolated default body status=%u at %u/%u/%u\n",status,admitted.function,admitted.block,admitted.instruction);
-            xr_compile_resources_free(functions);CHECK(status==XR_XIR_OK && isolated);
+            CHECK(status==XR_XIR_BAD_TYPE&&!isolated&&admitted.function==helper&&admitted.block==0&&admitted.instruction==0);
+            CHECK(held(context->resources)==baseline);xr_compile_resources_free(functions);
         }
-        CHECK(xr_xir_compile_checked_write(isolated?isolated:source.checked,&packet,NULL)==XR_XIR_OK);
-        xr_xir_compile_artifact_free(isolated);
+        CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);
         xr_xir_compile_source_result_free(&source);
         CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
         memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
@@ -739,9 +746,9 @@ static void default_class_invoke_execution(const XrXirCompileContext *context) {
         CHECK(status==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
         const XrXirModule *module=xr_xir_compile_artifact_module(closed);
         CHECK(!module->defaults || !module->defaults->count);
-        for(uint32_t f=0;!k && f<module->function_count;++f)for(uint32_t i=0;i<module->functions[f].instruction_count;++i) {
-            const XrXirInstruction *op=module->functions[f].instructions+i;
-            CHECK(op->op!=XR_XIR_CALL || !xr_xir_type_is_class(module->types,op->type));
+        for(uint32_t f=0;f<module->function_count;++f)for(uint32_t i=0;i<module->functions[f].instruction_count;++i) {
+            XrXirOp op=module->functions[f].instructions[i].op;
+            CHECK(op!=XR_XIR_CALL_DEFAULT&&op!=XR_XIR_INVOKE_DEFAULT);
         }
         ClassScopeProbe probe=class_scope_target(closed);
         const XrXirInstruction *call=module->functions[probe.caller].instructions+probe.instruction;
@@ -754,6 +761,31 @@ static void default_class_invoke_execution(const XrXirCompileContext *context) {
         bool authorized=false;
         CHECK(xir_compile_default_call_origin(context,module,probe.caller,probe.instruction,(uint32_t)call->immediate,&authorized)==XR_XIR_OK);
         CHECK(authorized==!k);
+        if(!k) {
+            CHECK(probe.instruction==default_instruction&&call->targets[0]==default_site.targets[0]&&call->targets[1]==default_site.targets[1]);
+            uint32_t helper=(uint32_t)call->immediate,constructor=UINT32_MAX;const XrXirProvenance *origins=module->provenance;
+            CHECK(origins&&origins->count==module->function_count&&origins->origins[helper].function==source_helper);
+            const XrXirFunction *actual=module->functions+helper;
+            for(uint32_t i=0;i<actual->instruction_count;++i) {
+                const XrXirInstruction *op=actual->instructions+i;
+                if(op->op==XR_XIR_CALL||op->op==XR_XIR_INVOKE) {
+                    CHECK(op->immediate>=0&&(uint64_t)op->immediate<module->function_count);
+                    CHECK(module->declarations->functions[op->immediate].method_kind!=XR_XIR_CONSTRUCTOR_FIELDS);
+                }
+                if(op->op==XR_XIR_CALL&&xr_xir_type_is_class(module->types,op->type)) {
+                    CHECK(constructor==UINT32_MAX&&op->immediate>=0&&(uint64_t)op->immediate<module->function_count);
+                    constructor=(uint32_t)op->immediate;
+                }
+            }
+            CHECK(constructor<module->function_count&&origins->origins[constructor].function==source_constructor);
+            const XrXirFunctionIdentity *owner=module->declarations->functions+constructor;
+            CHECK(owner->method_kind==XR_XIR_CONSTRUCTOR&&owner->nominal_owner);
+            actual=module->functions+constructor;CHECK(actual->instruction_count&&actual->instructions[0].op==XR_XIR_CALL);
+            int64_t fields=actual->instructions[0].immediate;CHECK(fields>=0&&(uint64_t)fields<module->function_count);
+            const XrXirFunctionIdentity *field_owner=module->declarations->functions+fields;
+            CHECK(field_owner->method_kind==XR_XIR_CONSTRUCTOR_FIELDS&&field_owner->nominal_owner==owner->nominal_owner&&
+                field_owner->module==owner->module&&field_owner->member_access==XR_XIR_MEMBER_PRIVATE);
+        }
         fprintf(stderr,"Class invoke fixture%u: defaults absent, genuine Source default origin=%u\n",k,authorized);
         probe.mode=k?7:0;
         CHECK(xir_effects_default_access_operation_input(context,(XirEffectInput){module,probe.construction,NULL},

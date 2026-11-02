@@ -6,7 +6,50 @@
 #include "base/xmalloc.h"
 typedef struct ScopeCancel {unsigned calls,stop;} ScopeCancel;
 static bool scope_cancel_later(const void *pointer) {
-    ScopeCancel *state=(ScopeCancel *)pointer;return ++state->calls>=state->stop;
+    ScopeCancel *state=(ScopeCancel *)pointer;CHECK(state->calls<UINT32_MAX);
+    ++state->calls;return state->stop&&state->calls>=state->stop;
+}
+typedef enum ScopeCheckKind {SCOPE_PREPARE,SCOPE_STRUCTURE,SCOPE_OWNED_EFFECTS,SCOPE_SOURCE_EFFECTS} ScopeCheckKind;
+typedef struct ScopeCheck {
+    const XrXirCompileContext *context;
+    XirEffectInput input;
+    const XrXirEffects *effects;
+    ScopeCheckKind kind;
+} ScopeCheck;
+static XrXirStatus scope_check_control(const ScopeCheck *check,XrCompileRequestControl *control,XrXirDiagnostic *issue) {
+    CHECK(!check->input.control);XirEffectInput input=check->input;input.control=control;
+    if(check->kind==SCOPE_PREPARE)return xir_compile_view_prepare_ordinary(check->context,input,issue);
+    if(check->kind==SCOPE_STRUCTURE)return xir_compile_structure_verify_input(check->context,input,issue);
+    if(check->kind==SCOPE_SOURCE_EFFECTS)
+        return xir_compile_verify_source_effects_input(check->context,input,check->effects,issue);
+    CHECK(check->kind==SCOPE_OWNED_EFFECTS);XrXirEffects *effects=NULL;
+    XrXirStatus status=xir_compile_verify_owned_effects_input(check->context,input,&effects,issue);
+    CHECK((status==XR_XIR_OK)==(effects!=NULL));xr_xir_compile_effects_free(effects);return status;
+}
+static void scope_cancel_body(const ScopeCheck *check,uint32_t function,uint32_t instruction) {
+    const XrXirModule *module=check->input.module;uint64_t baseline=held(check->context->resources);
+    ScopeCancel state={0,0};XrCompileRequestOptions options={scope_cancel_later,&state,XR_COMPILE_DEADLINE_NONE,0};
+    XrCompileRequestControl control={0};XrXirDiagnostic issue={0};
+    CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+    CHECK(scope_check_control(check,&control,&issue)==XR_XIR_OK&&held(check->context->resources)==baseline);
+    unsigned polls=state.calls;CHECK(polls&&polls<UINT32_MAX);bool found=false;
+    /* Poll ordinals include module metadata. Locate the requested body contact
+     * from its actual diagnostic instead of assigning metadata a body position. */
+    for(unsigned stop=1;stop<=polls&&!found;++stop) {
+        state=(ScopeCancel){0,stop};control=(XrCompileRequestControl){0};issue=(XrXirDiagnostic){0};
+        CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+        CHECK(scope_check_control(check,&control,&issue)==XR_XIR_CANCELLED&&state.calls==stop);
+        CHECK(held(check->context->resources)==baseline);
+        if(issue.function>=module->function_count)continue;
+        const XrXirFunction *body=module->functions+issue.function;
+        if(issue.block>=body->block_count||issue.instruction>=body->instruction_count)continue;
+        const XrXirBlock *block=body->blocks+issue.block;
+        CHECK(issue.instruction>=block->first&&issue.instruction-block->first<block->count);
+        found=(function==UINT32_MAX||issue.function==function)&&
+            (instruction==UINT32_MAX||issue.instruction==instruction);
+    }
+    CHECK(found);
+    CHECK(scope_check_control(check,NULL,&issue)==XR_XIR_OK&&held(check->context->resources)==baseline);
 }
 static void scope_normalized_controls(const XrXirCompileContext *context,const XrXirArtifact *artifact) {
     const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
@@ -20,10 +63,13 @@ static void scope_normalized_controls(const XrXirCompileContext *context,const X
     XrCompileRequestControl control={0};CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
     XrXirDiagnostic issue={0};
     CHECK(xir_compile_view_prepare_ordinary(context,(XirEffectInput){module,construction,&control},&issue)==XR_XIR_CANCELLED);
-    CHECK(issue.function<module->function_count&&issue.instruction<module->functions[issue.function].instruction_count);
+    CHECK(issue.function==UINT32_MAX&&issue.block==UINT32_MAX&&issue.instruction==UINT32_MAX&&
+        issue.reason==XR_XIR_DIAGNOSTIC_NONE&&state.calls==2);
     CHECK(held(context->resources)==baseline);
     CHECK(xir_compile_view_prepare_ordinary(context,(XirEffectInput){module,construction,NULL},&issue)==XR_XIR_OK);
     CHECK(held(context->resources)==baseline);
+    ScopeCheck probe={context,{module,construction,NULL},NULL,SCOPE_PREPARE};
+    scope_cancel_body(&probe,UINT32_MAX,UINT32_MAX);
 }
 static void scope_raw_controls(const XrXirCompileContext *context) {
     XrXirSourceResult source={0};
@@ -67,19 +113,17 @@ static void scope_raw_controls(const XrXirCompileContext *context) {
         uint64_t baseline=held(context->resources);XrXirArtifact *output=NULL;XrXirDiagnostic issue={0};
         CHECK(xr_xir_compile_check_v2(context,&built,construction,&output,&issue)==XR_XIR_OK&&output);
         xr_xir_compile_artifact_free(output);output=NULL;CHECK(held(context->resources)==baseline);
-        ScopeCancel state={0,2};XrCompileRequestOptions options={scope_cancel_later,&state,XR_COMPILE_DEADLINE_NONE,0};
-        XrCompileRequestControl control={0};CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
-        XrXirStatus status=xir_compile_structure_verify_input(context,(XirEffectInput){&built,construction,&control},&issue);
+        ScopeCheck probe={context,{&built,construction,NULL},NULL,SCOPE_STRUCTURE};
         if(aliases) {
-            CHECK(status==XR_XIR_CANCELLED&&state.calls==state.stop&&issue.function==run&&issue.instruction==spawn);
-            CHECK(held(context->resources)==baseline&&!output);
-            CHECK(xir_compile_structure_verify_input(context,(XirEffectInput){&built,construction,NULL},&issue)==XR_XIR_OK);
-            state.calls=0;control=(XrCompileRequestControl){0};
-            CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
-            CHECK(xir_compile_view_prepare_ordinary(context,(XirEffectInput){&built,construction,&control},&issue)==XR_XIR_CANCELLED);
-            CHECK(issue.function==run&&issue.instruction==spawn&&held(context->resources)==baseline);
-            CHECK(xir_compile_view_prepare_ordinary(context,(XirEffectInput){&built,construction,NULL},&issue)==XR_XIR_OK);
-        } else CHECK(status==XR_XIR_OK&&state.calls<state.stop);
+            CHECK(ops[spawn].op==XR_XIR_SCOPED_GO&&operands[0]==last&&last==97);
+            scope_cancel_body(&probe,run,spawn);
+            probe.kind=SCOPE_PREPARE;scope_cancel_body(&probe,run,spawn);
+        } else {
+            ScopeCancel state={0,0};XrCompileRequestOptions options={scope_cancel_later,&state,XR_COMPILE_DEADLINE_NONE,0};
+            XrCompileRequestControl control={0};CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+            CHECK(scope_check_control(&probe,&control,&issue)==XR_XIR_OK&&state.calls);
+            CHECK(scope_check_control(&probe,NULL,&issue)==XR_XIR_OK&&!output);
+        }
         CHECK(held(context->resources)==baseline);
         identities[run].promises|=XR_XIR_FUNCTION_NO_SUSPEND;
         CHECK(xr_xir_compile_check_v2(context,&built,construction,&output,&issue)==XR_XIR_BAD_TYPE&&!output&&issue.reason==XR_XIR_DIAGNOSTIC_NO_SUSPEND);
@@ -230,24 +274,21 @@ static void scope_receiving_controls(const XrXirCompileContext *context) {
     for(uint32_t f=0;f<module->function_count;++f)
         if(module->functions[f].name_length==5&&!memcmp(module->functions[f].name,"large",5))large=f;
     CHECK(large!=UINT32_MAX);uint64_t baseline=held(context->resources);
-    ScopeCancel state={0,2};XrCompileRequestOptions options={scope_cancel_later,&state,XR_COMPILE_DEADLINE_NONE,0};
-    XrCompileRequestControl control={0};CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
     XrXirEffects *effects=NULL;XrXirDiagnostic issue={0};
-    CHECK(xir_compile_verify_owned_effects_input(context,(XirEffectInput){module,construction,&control},&effects,&issue)==XR_XIR_CANCELLED);
-    CHECK(!effects&&issue.function==large&&issue.instruction<module->functions[large].instruction_count&&held(context->resources)==baseline);
+    ScopeCheck probe={context,{module,construction,NULL},NULL,SCOPE_OWNED_EFFECTS};
+    scope_cancel_body(&probe,large,UINT32_MAX);CHECK(!effects&&held(context->resources)==baseline);
     CHECK(xir_compile_verify_owned_effects_input(context,(XirEffectInput){module,construction,NULL},&effects,&issue)==XR_XIR_OK&&effects);
     xr_xir_compile_effects_free(effects);CHECK(held(context->resources)==baseline);
     XirSourceFacts *facts=NULL;CHECK(xir_source_facts_acquire(source.checked,&facts,&issue,NULL)==XR_XIR_OK&&facts);
-    state.calls=0;control=(XrCompileRequestControl){0};
-    CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
-    CHECK(xir_compile_verify_source_effects_input(context,(XirEffectInput){module,construction,&control},xir_source_facts_effects(facts),&issue)==XR_XIR_CANCELLED);
-    CHECK(issue.function==large&&issue.instruction<module->functions[large].instruction_count);
+    probe.kind=SCOPE_SOURCE_EFFECTS;probe.effects=xir_source_facts_effects(facts);
+    scope_cancel_body(&probe,large,UINT32_MAX);
     CHECK(xir_compile_verify_source_effects_input(context,(XirEffectInput){module,construction,NULL},xir_source_facts_effects(facts),&issue)==XR_XIR_OK);
     xir_source_facts_release(facts);CHECK(held(context->resources)==baseline);
     XrXirArtifact *closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_specialize(source.checked,&closed,&issue,NULL)==XR_XIR_OK&&closed);
-    baseline=held(context->resources);state.calls=0;control=(XrCompileRequestControl){0};
-    CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+    baseline=held(context->resources);
+    ScopeCancel state={0,2};XrCompileRequestOptions options={scope_cancel_later,&state,XR_COMPILE_DEADLINE_NONE,0};
+    XrCompileRequestControl control={0};CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
     XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target,&control,&lowered,&issue)==XR_XIR_CANCELLED&&!lowered);
     CHECK(held(context->resources)==baseline);
