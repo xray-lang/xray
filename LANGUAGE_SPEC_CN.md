@@ -4521,7 +4521,7 @@ Xray 的错误处理分为两个严格分离的通道：
 - **错误是值**：错误载荷是 enum 值；传播不把它转换为 `PanicInfo`。
 - **签名决定错误类型**：省略 `throws` 表示 `Never`，即保证不抛业务错误；`throws(E)` 声明允许逃逸的错误类型，裸 `throws` 等价于 `throws(Error)`。签名和函数类型规则见 §2.2、§5.2。
 - **检查是局部的**：每个函数按自身正文和被调用签名检查错误子集，不分析被调函数体、不做全程序错误推导。没有错误子句的具名函数不会自动获得抛错签名；闭包规则见 §5.2。
-- **传播点可见**：可能抛错的调用必须在 `try`、`try?`、`try!` 表达式或 `try { }` 的保护区域内（§8.1.6）。
+- **传播点可见**：可能抛错的调用必须在 `try`、`try?`、`try!` 表达式或 `try { }` 的保护区域内（§8.1.6）；反过来，没有任何可能抛错位置的 `try` 也是编译错误（`E0336`）。
 - **panic 不进入签名**：不抛业务错误的函数仍可能 panic；`try?` 不会吞掉 panic。
 - **`defer` 替代 `finally`**：清理绑定最近的真实 `{}` 块，清理体必须静态证明没有逃逸的业务错误（`E0387`，§8.3.1）。
 
@@ -4709,7 +4709,7 @@ var outcome = task.awaitResult()
 
 `try expr` 传播表达式的业务错误；`try? expr` 将业务错误转成 `null`；`try! expr` 在业务错误出现时触发携带该错误值的 panic。后三者都不建立 catch 块。
 
-一个标记覆盖右侧整个非赋值表达式中的调用；括号、参数分隔符和语句结束限定范围。`try?` 与 `??` 连用必须写 `(try? expr) ?? fallback`。等待顺序固定为 `try await t`。
+一个标记覆盖右侧整个非赋值表达式中的调用；括号、参数分隔符和语句结束限定范围。`try?` 与 `??` 连用必须写 `(try? expr) ?? fallback`。等待可能失败的任务时写作 `try await t`。
 
 ```xray @run
 enum ParseErr { Empty }
@@ -4748,6 +4748,19 @@ fn fail() throws(Failure) { throw Failure.Bad }
 fn caller() { try fail() } // error: undeclared escaping error
 fn main() { caller() }
 try main()
+```
+
+标记只写在可能抛错的位置。`try`、`try?`、`try!` 的作用范围内没有任何可能抛出业务错误的调用、`await` 或 `scope`，或者 `try { }` 的保护区域内没有这样的位置时，报 `E0336`。判断依据是定义处的声明签名：错误类型为 `Never` 的调用不算；错误类型含未替换类型参数的调用算可能抛错，因此泛型体不会因为某次实例化把错误类型变成 `Never` 而报错。等待 `Task<T, Never>` 直接写 `await t`，向 channel 发送直接写 `ch.send(v)`。
+
+```xray @error=E0336
+fn add(a: i64, b: i64) -> i64 { return a + b }
+fn worker() -> i64 { return 1 }
+fn main() {
+    print(try add(1, 2))   // error: redundant try
+    var t = go worker()
+    print(try await t)     // error: redundant try, the task cannot fail
+}
+main()
 ```
 
 ### 8.2 Panic 通道
@@ -5513,6 +5526,8 @@ xray 的并发是**协程 (goroutine 风格) + Channel + 强静态约束**。设
 | 栈模型 | 无栈：只有可能挂起的函数保存跨挂起点存活的状态，其余函数按普通调用执行；不能跨 C 回调挂起，`CFn` 回调必须是 `nosuspend`（§2.8） |
 
 未加 `nosuspend` 前缀的函数类型默认可能挂起（§2.8）。不含挂起点的长循环不会把 CPU 让给同一线程上的其他协程，也不响应取消；需要时调用 `Task.yieldNow()` 或检查 `Task.isCancelled()`（§10.4、§10.10）。worker 线程数、帧布局和创建开销属于实现，本规范不作承诺。
+
+经接口值或可被覆写的方法发生的调用，按程序中全部可能的实现推导是否挂起：任一实现可能挂起，该调用就可能挂起。因此新增一个会挂起的实现，可能让远处原本合法的 `nosuspend` 上下文报错，诊断会指出是哪个实现。接口要求或类方法带有包级 `no_suspend` 声明承诺（§5.2.11）时，每个实现都必须在自己的定义处证明不挂起，经该要求的调用不会挂起。实现集合不闭合的情形（动态库导出的接口、可替换入口、外部实现）一律按可能挂起处理。
 
 ### 10.2 `go` — 启动协程
 
@@ -7066,6 +7081,8 @@ Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `X
 
 - **并行**：协程可能在多个 OS 线程上并行运行，并可能在两个挂起点之间换到另一个线程；§16.9 的边 12 保证迁移前后的顺序。
 - **协作式**：只在挂起点切换，不强制抢占；不含挂起点的循环会一直占用当前线程，也不响应取消（§10.1、§10.4）。
+- **让出**：运行时可以在任何挂起点让出，包括本可立即完成的 Channel、I/O 与计时器操作；一个任务连续执行大量这类操作时，会暂时让给其它任务。
+- **阻塞调用**：在 hosted 目标上，调用会阻塞 OS 线程的外部 C 函数或阻塞式系统调用时，同一线程上排队的其它协程转到别的线程继续运行。阻塞调用本身不是挂起点，期间不响应取消。freestanding 目标不提供这项保证。
 - **公平性**：调度顺序不暴露用户级优先级；程序不得依赖任务的启动顺序或完成顺序。
 - **栈**：只有可能挂起的函数保存跨挂起点的状态；不挂起的调用使用普通调用栈，深递归受普通栈容量限制。
 
@@ -8464,6 +8481,7 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 | `E0333` | `XR_ERR_ANALYZE_ERASED_THROWS` | freestanding 或 `@strict(alloc)` 中使用擦除错误类型，包括裸 `throws` 与 `throws(Error)` |
 | `E0334` | `XR_ERR_ANALYZE_CATCH_TYPE_NAME` | catch 头部单个大写开头标识符，提示使用 `catch (e: T)` |
 | `E0335` | `XR_ERR_ANALYZE_IMPORTED_TOP_LEVEL` | 被导入模块包含独立的表达式语句或控制流语句；移到入口文件，模块只保留声明及状态初始化 |
+| `E0336` | `XR_ERR_ANALYZE_REDUNDANT_TRY` | `try`、`try?`、`try!` 或 `try { }` 的作用范围内没有可能抛错的调用、`await` 或 `scope`；删去该 `try` |
 
 #### Analyzer
 

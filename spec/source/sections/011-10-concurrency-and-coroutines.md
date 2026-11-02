@@ -21,6 +21,8 @@ xray 的并发是**协程 (goroutine 风格) + Channel + 强静态约束**。设
 
 未加 `nosuspend` 前缀的函数类型默认可能挂起（§2.8）。不含挂起点的长循环不会把 CPU 让给同一线程上的其他协程，也不响应取消；需要时调用 `Task.yieldNow()` 或检查 `Task.isCancelled()`（§10.4、§10.10）。worker 线程数、帧布局和创建开销属于实现，本规范不作承诺。
 
+经接口值或可被覆写的方法发生的调用，按程序中全部可能的实现推导是否挂起：任一实现可能挂起，该调用就可能挂起。因此新增一个会挂起的实现，可能让远处原本合法的 `nosuspend` 上下文报错，诊断会指出是哪个实现。接口要求或类方法带有包级 `no_suspend` 声明承诺（§5.2.11）时，每个实现都必须在自己的定义处证明不挂起，经该要求的调用不会挂起。实现集合不闭合的情形（动态库导出的接口、可替换入口、外部实现）一律按可能挂起处理。
+
 ### 10.2 `go` — 启动协程
 
 ```ebnf
@@ -509,6 +511,8 @@ xray's concurrency model is **goroutine-style coroutines + channels + strong sta
 | Stack model | Stackless: only functions that may suspend keep state that lives across a suspension point; every other function runs as an ordinary call. Suspension cannot cross a C callback, so `CFn` callbacks must be `nosuspend` (§2.8) |
 
 A function type without the `nosuspend` prefix may suspend (§2.8). A long loop without a suspension point neither yields the CPU to other coroutines on the same thread nor observes cancellation; call `Task.yieldNow()` or check `Task.isCancelled()` where needed (§10.4, §10.10). Worker thread counts, frame layout and creation cost are implementation properties that this specification does not promise.
+
+A call through an interface value or an overridable method may suspend if any implementation the program can reach there may suspend. Adding one suspending implementation can therefore make a distant, previously valid `nosuspend` context fail, and the diagnostic names that implementation. When an interface requirement or class method carries a package-level `no_suspend` declaration promise (§5.2.11), every implementation must prove at its own definition that it does not suspend, and calls through that requirement never suspend. Where the set of implementations is open (interfaces exported from dynamic libraries, replaceable entries, external implementations), the call is treated as possibly suspending.
 
 ### 10.2 `go` — start a coroutine
 

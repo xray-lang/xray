@@ -4540,7 +4540,7 @@ Xray separates two channels:
 - **Errors are values**: error payloads are enum values; propagation does not turn them into `PanicInfo`.
 - **Signatures determine error types**: omitting `throws` means `Never`, a guarantee of no business errors. `throws(E)` declares the permitted escaping error type; bare `throws` means `throws(Error)`. See §2.2 and §5.2 for signatures and callable types.
 - **Checking is local**: each function is checked using its body and callee signatures, without inspecting callee bodies or whole-program error inference. A named function without a clause never acquires an inferred throwing signature; see §5.2 for closures.
-- **Propagation is visible**: potentially throwing calls must occur within a `try`, `try?`, or `try!` expression or the protected region of `try { }` (§8.1.6).
+- **Propagation is visible**: potentially throwing calls must occur within a `try`, `try?`, or `try!` expression or the protected region of `try { }` (§8.1.6); conversely, a `try` that covers nothing able to throw is a compile error (`E0336`).
 - **Panic stays outside signatures**: a non-throwing function may still panic; `try?` never absorbs panic.
 - **`defer` replaces `finally`**: cleanup belongs to the nearest real `{}` block and must statically have no escaping business errors (`E0387`, §8.3.1).
 
@@ -4728,7 +4728,7 @@ Waiting on a child that ended `Cancelled` makes the waiter itself enter cancella
 
 `try expr` propagates business errors; `try? expr` converts them to `null`; `try! expr` turns a business error into a panic carrying that error value. None of these expressions creates a catch block.
 
-One marker covers calls in the entire following non-assignment expression. Parentheses, argument separators and statement endings bound its extent. Combine `try?` with `??` as `(try? expr) ?? fallback`. Marked waits always use `try await t`.
+One marker covers calls in the entire following non-assignment expression. Parentheses, argument separators and statement endings bound its extent. Combine `try?` with `??` as `(try? expr) ?? fallback`. A wait that can fail is marked as `try await t`.
 
 ```xray @run
 enum ParseErr { Empty }
@@ -4767,6 +4767,19 @@ fn fail() throws(Failure) { throw Failure.Bad }
 fn caller() { try fail() } // error: undeclared escaping error
 fn main() { caller() }
 try main()
+```
+
+Markers appear only where errors can occur. A `try`, `try?` or `try!` whose extent contains no call, `await` or `scope` able to throw a business error, and a `try { }` whose protected region contains none, is rejected with `E0336`. The check uses the declared signatures at the definition site: a call whose error type is `Never` does not count, and a call whose error type mentions an unsubstituted type parameter counts as throwing, so a generic body is never rejected because one instantiation makes its error type `Never`. Waiting on a `Task<T, Never>` is written `await t`, and sending on a channel is written `ch.send(v)`.
+
+```xray @error=E0336
+fn add(a: i64, b: i64) -> i64 { return a + b }
+fn worker() -> i64 { return 1 }
+fn main() {
+    print(try add(1, 2))   // error: redundant try
+    var t = go worker()
+    print(try await t)     // error: redundant try, the task cannot fail
+}
+main()
 ```
 
 ### 8.2 Panic channel
@@ -5556,6 +5569,8 @@ xray's concurrency model is **goroutine-style coroutines + channels + strong sta
 | Stack model | Stackless: only functions that may suspend keep state that lives across a suspension point; every other function runs as an ordinary call. Suspension cannot cross a C callback, so `CFn` callbacks must be `nosuspend` (§2.8) |
 
 A function type without the `nosuspend` prefix may suspend (§2.8). A long loop without a suspension point neither yields the CPU to other coroutines on the same thread nor observes cancellation; call `Task.yieldNow()` or check `Task.isCancelled()` where needed (§10.4, §10.10). Worker thread counts, frame layout and creation cost are implementation properties that this specification does not promise.
+
+A call through an interface value or an overridable method may suspend if any implementation the program can reach there may suspend. Adding one suspending implementation can therefore make a distant, previously valid `nosuspend` context fail, and the diagnostic names that implementation. When an interface requirement or class method carries a package-level `no_suspend` declaration promise (§5.2.11), every implementation must prove at its own definition that it does not suspend, and calls through that requirement never suspend. Where the set of implementations is open (interfaces exported from dynamic libraries, replaceable entries, external implementations), the call is treated as possibly suspending.
 
 ### 10.2 `go` — start a coroutine
 
@@ -7117,6 +7132,8 @@ See `src/runtime/mem/` and `src/shared/xr_obj_header.h` for details.
 
 - **Parallelism**: coroutines may run in parallel on several OS threads and may move to another thread between two suspension points; edge 12 of §16.9 orders everything across such a move.
 - **Cooperative**: switches happen only at suspension points and nothing is preempted; a loop without a suspension point keeps its thread and does not observe cancellation (§10.1, §10.4).
+- **Yielding**: the runtime may yield at any suspension point, including Channel, I/O and timer operations that could complete immediately; a task that performs many such operations in a row is temporarily set aside for other tasks.
+- **Blocking calls**: on hosted targets, while an external C function or blocking system call blocks an OS thread, the other coroutines queued on that thread continue on another thread. The blocking call itself is not a suspension point and does not observe cancellation meanwhile. Freestanding targets do not provide this guarantee.
 - **Fairness**: scheduling order exposes no user-level priorities; programs must not rely on the order in which tasks start or finish.
 - **Stack**: only functions that may suspend keep state across a suspension point; non-suspending calls use the ordinary call stack, so deep recursion is bounded by ordinary stack capacity.
 
@@ -8685,6 +8702,7 @@ These numbers follow the Task329 §2.9 decision. Header definitions and position
 | `E0333` | `XR_ERR_ANALYZE_ERASED_THROWS` | Erased errors in freestanding or @strict(alloc), including bare throws and throws(Error) |
 | `E0334` | `XR_ERR_ANALYZE_CATCH_TYPE_NAME` | Single uppercase-leading catch identifier; suggest catch (e: T) |
 | `E0335` | `XR_ERR_ANALYZE_IMPORTED_TOP_LEVEL` | Imported module contains a standalone expression or control-flow statement; move it to the entry file and retain only declarations and state initialization |
+| `E0336` | `XR_ERR_ANALYZE_REDUNDANT_TRY` | `try`, `try?`, `try!` or `try { }` covers no call, `await` or `scope` that can throw; remove the `try` |
 
 #### Analyzer
 

@@ -125,6 +125,8 @@ Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `X
 
 - **并行**：协程可能在多个 OS 线程上并行运行，并可能在两个挂起点之间换到另一个线程；§16.9 的边 12 保证迁移前后的顺序。
 - **协作式**：只在挂起点切换，不强制抢占；不含挂起点的循环会一直占用当前线程，也不响应取消（§10.1、§10.4）。
+- **让出**：运行时可以在任何挂起点让出，包括本可立即完成的 Channel、I/O 与计时器操作；一个任务连续执行大量这类操作时，会暂时让给其它任务。
+- **阻塞调用**：在 hosted 目标上，调用会阻塞 OS 线程的外部 C 函数或阻塞式系统调用时，同一线程上排队的其它协程转到别的线程继续运行。阻塞调用本身不是挂起点，期间不响应取消。freestanding 目标不提供这项保证。
 - **公平性**：调度顺序不暴露用户级优先级；程序不得依赖任务的启动顺序或完成顺序。
 - **栈**：只有可能挂起的函数保存跨挂起点的状态；不挂起的调用使用普通调用栈，深递归受普通栈容量限制。
 
@@ -407,6 +409,8 @@ See `src/runtime/mem/` and `src/shared/xr_obj_header.h` for details.
 
 - **Parallelism**: coroutines may run in parallel on several OS threads and may move to another thread between two suspension points; edge 12 of §16.9 orders everything across such a move.
 - **Cooperative**: switches happen only at suspension points and nothing is preempted; a loop without a suspension point keeps its thread and does not observe cancellation (§10.1, §10.4).
+- **Yielding**: the runtime may yield at any suspension point, including Channel, I/O and timer operations that could complete immediately; a task that performs many such operations in a row is temporarily set aside for other tasks.
+- **Blocking calls**: on hosted targets, while an external C function or blocking system call blocks an OS thread, the other coroutines queued on that thread continue on another thread. The blocking call itself is not a suspension point and does not observe cancellation meanwhile. Freestanding targets do not provide this guarantee.
 - **Fairness**: scheduling order exposes no user-level priorities; programs must not rely on the order in which tasks start or finish.
 - **Stack**: only functions that may suspend keep state across a suspension point; non-suspending calls use the ordinary call stack, so deep recursion is bounded by ordinary stack capacity.
 

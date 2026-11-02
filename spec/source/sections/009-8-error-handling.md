@@ -22,7 +22,7 @@ Xray 的错误处理分为两个严格分离的通道：
 - **错误是值**：错误载荷是 enum 值；传播不把它转换为 `PanicInfo`。
 - **签名决定错误类型**：省略 `throws` 表示 `Never`，即保证不抛业务错误；`throws(E)` 声明允许逃逸的错误类型，裸 `throws` 等价于 `throws(Error)`。签名和函数类型规则见 §2.2、§5.2。
 - **检查是局部的**：每个函数按自身正文和被调用签名检查错误子集，不分析被调函数体、不做全程序错误推导。没有错误子句的具名函数不会自动获得抛错签名；闭包规则见 §5.2。
-- **传播点可见**：可能抛错的调用必须在 `try`、`try?`、`try!` 表达式或 `try { }` 的保护区域内（§8.1.6）。
+- **传播点可见**：可能抛错的调用必须在 `try`、`try?`、`try!` 表达式或 `try { }` 的保护区域内（§8.1.6）；反过来，没有任何可能抛错位置的 `try` 也是编译错误（`E0336`）。
 - **panic 不进入签名**：不抛业务错误的函数仍可能 panic；`try?` 不会吞掉 panic。
 - **`defer` 替代 `finally`**：清理绑定最近的真实 `{}` 块，清理体必须静态证明没有逃逸的业务错误（`E0387`，§8.3.1）。
 
@@ -210,7 +210,7 @@ var outcome = task.awaitResult()
 
 `try expr` 传播表达式的业务错误；`try? expr` 将业务错误转成 `null`；`try! expr` 在业务错误出现时触发携带该错误值的 panic。后三者都不建立 catch 块。
 
-一个标记覆盖右侧整个非赋值表达式中的调用；括号、参数分隔符和语句结束限定范围。`try?` 与 `??` 连用必须写 `(try? expr) ?? fallback`。等待顺序固定为 `try await t`。
+一个标记覆盖右侧整个非赋值表达式中的调用；括号、参数分隔符和语句结束限定范围。`try?` 与 `??` 连用必须写 `(try? expr) ?? fallback`。等待可能失败的任务时写作 `try await t`。
 
 ```xray @run
 enum ParseErr { Empty }
@@ -249,6 +249,19 @@ fn fail() throws(Failure) { throw Failure.Bad }
 fn caller() { try fail() } // error: undeclared escaping error
 fn main() { caller() }
 try main()
+```
+
+标记只写在可能抛错的位置。`try`、`try?`、`try!` 的作用范围内没有任何可能抛出业务错误的调用、`await` 或 `scope`，或者 `try { }` 的保护区域内没有这样的位置时，报 `E0336`。判断依据是定义处的声明签名：错误类型为 `Never` 的调用不算；错误类型含未替换类型参数的调用算可能抛错，因此泛型体不会因为某次实例化把错误类型变成 `Never` 而报错。等待 `Task<T, Never>` 直接写 `await t`，向 channel 发送直接写 `ch.send(v)`。
+
+```xray @error=E0336
+fn add(a: i64, b: i64) -> i64 { return a + b }
+fn worker() -> i64 { return 1 }
+fn main() {
+    print(try add(1, 2))   // error: redundant try
+    var t = go worker()
+    print(try await t)     // error: redundant try, the task cannot fail
+}
+main()
 ```
 
 ### 8.2 Panic 通道
@@ -698,7 +711,7 @@ Xray separates two channels:
 - **Errors are values**: error payloads are enum values; propagation does not turn them into `PanicInfo`.
 - **Signatures determine error types**: omitting `throws` means `Never`, a guarantee of no business errors. `throws(E)` declares the permitted escaping error type; bare `throws` means `throws(Error)`. See §2.2 and §5.2 for signatures and callable types.
 - **Checking is local**: each function is checked using its body and callee signatures, without inspecting callee bodies or whole-program error inference. A named function without a clause never acquires an inferred throwing signature; see §5.2 for closures.
-- **Propagation is visible**: potentially throwing calls must occur within a `try`, `try?`, or `try!` expression or the protected region of `try { }` (§8.1.6).
+- **Propagation is visible**: potentially throwing calls must occur within a `try`, `try?`, or `try!` expression or the protected region of `try { }` (§8.1.6); conversely, a `try` that covers nothing able to throw is a compile error (`E0336`).
 - **Panic stays outside signatures**: a non-throwing function may still panic; `try?` never absorbs panic.
 - **`defer` replaces `finally`**: cleanup belongs to the nearest real `{}` block and must statically have no escaping business errors (`E0387`, §8.3.1).
 
@@ -886,7 +899,7 @@ Waiting on a child that ended `Cancelled` makes the waiter itself enter cancella
 
 `try expr` propagates business errors; `try? expr` converts them to `null`; `try! expr` turns a business error into a panic carrying that error value. None of these expressions creates a catch block.
 
-One marker covers calls in the entire following non-assignment expression. Parentheses, argument separators and statement endings bound its extent. Combine `try?` with `??` as `(try? expr) ?? fallback`. Marked waits always use `try await t`.
+One marker covers calls in the entire following non-assignment expression. Parentheses, argument separators and statement endings bound its extent. Combine `try?` with `??` as `(try? expr) ?? fallback`. A wait that can fail is marked as `try await t`.
 
 ```xray @run
 enum ParseErr { Empty }
@@ -925,6 +938,19 @@ fn fail() throws(Failure) { throw Failure.Bad }
 fn caller() { try fail() } // error: undeclared escaping error
 fn main() { caller() }
 try main()
+```
+
+Markers appear only where errors can occur. A `try`, `try?` or `try!` whose extent contains no call, `await` or `scope` able to throw a business error, and a `try { }` whose protected region contains none, is rejected with `E0336`. The check uses the declared signatures at the definition site: a call whose error type is `Never` does not count, and a call whose error type mentions an unsubstituted type parameter counts as throwing, so a generic body is never rejected because one instantiation makes its error type `Never`. Waiting on a `Task<T, Never>` is written `await t`, and sending on a channel is written `ch.send(v)`.
+
+```xray @error=E0336
+fn add(a: i64, b: i64) -> i64 { return a + b }
+fn worker() -> i64 { return 1 }
+fn main() {
+    print(try add(1, 2))   // error: redundant try
+    var t = go worker()
+    print(try await t)     // error: redundant try, the task cannot fail
+}
+main()
 ```
 
 ### 8.2 Panic channel
