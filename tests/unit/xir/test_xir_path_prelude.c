@@ -18,6 +18,7 @@
 #include "xir/xxir_library_catalog.h"
 #include "base/xsha256.h"
 #include "xir/xxir_nominal.h"
+#include "xir/xxir_types.h"
 #include "xir/xxir_path_prelude.h"
 #include "toolchain/xcompiler_session.h"
 #include "base/xresource_limits.h"
@@ -101,6 +102,21 @@ static uint32_t path_main(const XrXirModule *module) {
         if(module->functions[f].name_length==4&&!memcmp(module->functions[f].name,"main",4))return f;
     CHECK(false);return 0;
 }
+static const char path_container_main[]=
+    "fn pathCount(values:Array<Path?>)->i64{return values.len()}\n"
+    "export fn main()->i64{const paths:Array<Path?>=[null];assert(paths[0]==null);return pathCount(paths)+41}";
+static void path_container_identity(const XrXirModule *module) {
+    bool found=false;
+    for(uint32_t i=0;i<module->types->count;++i) {
+        const XrXirTypeNode *array=&module->types->nodes[i];if(array->kind!=XR_XIR_TYPE_ARRAY)continue;
+        const XrXirTypeNode *nullable=xr_xir_type_node(module->types,array->element);
+        if(!nullable||nullable->kind!=XR_XIR_TYPE_NULLABLE)continue;
+        const XrXirTypeNode *nominal=xr_xir_type_node(module->types,nullable->element);
+        if(nominal&&nominal->kind==XR_XIR_TYPE_NOMINAL&&
+            xir_path_prelude_type(module->declarations,module->types->nominals,nominal->nominal.declaration))found=true;
+    }
+    CHECK(found);
+}
 static XrXirLibraryCatalog *path_catalog(const XrXirCompileContext *context) {
     XrOsIoPolicy policy=xr_compile_io_policy(context->resources);char *root=NULL;
     CHECK(xr_realpath_owned(&policy,XR_PATH_FIXTURES "/cold-stdlib",&root)==XR_OS_IO_OK);
@@ -142,7 +158,7 @@ static XrXirArtifact *path_source_controls(const XrXirCompileContext *context) {
         }
     CHECK(matches==1);xr_xir_compile_source_result_free(&before);
     XrXirLibraryCatalog *catalog=path_catalog(context);XrXirSourceResult cold={0};
-    CHECK(path_checked(context,"fn keep(value:Path)->Path{return value}\nexport fn main()->i64{return 42}",
+    CHECK(path_checked(context,path_container_main,
         XR_PATH_FIXTURES "/cold-stdlib",catalog,&cold)==XR_XIR_OK);
     xr_xir_compile_library_catalog_free(catalog);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(cold.checked,&packet,NULL)==XR_XIR_OK);xr_xir_compile_source_result_free(&cold);
@@ -177,9 +193,9 @@ static XrXirArtifact *path_product(const XrXirCompileContext *context,bool expli
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_PROJECT,"path-client",XR_PATH_FIXTURES};
     XrXirSourceRequest request={session,XR_PATH_FIXTURES "/client.xr",&authority,context,XR_PATH_FIXTURES "/stdlib",NULL,XR_XIR_PROGRAM,NULL};
-    char text[768];snprintf(text,sizeof(text),"%s\nexport fn main()->i64{return 42}",explicit_import?
+    char text[768];snprintf(text,sizeof(text),"%s\n%s",explicit_import?
         "import {Path} from path\nconst value=Path(\"actual\")\nassert(value.raw==\"actual\")":
-        "fn keep(value:Path)->Path{return value}");
+        "fn keep(value:Path)->Path{return value}",path_container_main);
     XrXirSourceText input={"client.xr",text,strlen(text)};XrXirSourceResult result={0};XrXirSourceDiagnostic issue={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,&issue,NULL);
     if(status)fprintf(stderr,"Path product%u %d:%d %s\n",status,issue.line,issue.column,issue.message);
@@ -223,7 +239,8 @@ int main(int argc,char **argv) {
     }
     CHECK(argc==1||argc==4);access_controls(&context);XrXirArtifact *catalog_code=path_source_controls(&context);path_finite_controls(&context);
     for(unsigned mode=0;mode<3;++mode) {
-        XrXirArtifact *code=mode==2?catalog_code:path_product(&context,mode!=0);uint32_t entry=path_main(xr_xir_compile_artifact_module(code));
+        XrXirArtifact *code=mode==2?catalog_code:path_product(&context,mode!=0);
+        path_container_identity(xr_xir_compile_artifact_module(code));uint32_t entry=path_main(xr_xir_compile_artifact_module(code));
         if(argc==4) {
             char prefix[32];snprintf(prefix,sizeof(prefix),"path_%u",mode);XrXirCSource generated={0};
             CHECK(xr_xir_compile_emit_c(code,prefix,16777216,&generated)==XR_XIR_OK);
