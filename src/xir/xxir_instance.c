@@ -2440,7 +2440,14 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
         if(evaluated!=XR_XIR_RUN_OK)return xr_xir_call_fault(evaluated);
     } else if(xir_os_native_id(id)) {
         if(!xir_os_native_scope(program->declarations,index,program->entry_count))goto failed;
-        if(id==XR_NATIVE_CALLABLE_OS_SYSTEM_USERNAME) {
+        if(id==XR_NATIVE_CALLABLE_OS_SYSTEM_HOMEDIR) {
+#if defined(XR_OS_WINDOWS)
+            status=instance_system_homedir(view,instance,entry->result,value);
+#else
+            status=XR_XIR_CALL_UNSUPPORTED;
+#endif
+            if(status!=XR_XIR_CALL_READY)goto failed;
+        } else if(id==XR_NATIVE_CALLABLE_OS_SYSTEM_USERNAME) {
 #if defined(XR_OS_WINDOWS)
             status=instance_system_username(view,instance,entry->result,value);
 #else

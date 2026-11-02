@@ -9,6 +9,7 @@
 #include "../os_proc.h"
 #include "../../shared/xr_win_utf.h"
 #include "../../base/xwindows_utf8.h"
+#include <userenv.h>
 
 /* Both runtime and owned queries read the executable through this one call.
  * The fixed-buffer runtime query does not acquire a compiler resource domain. */
@@ -115,6 +116,40 @@ XR_FUNC XrOsIoStatus xr_os_io_system_username(const XrOsIoPolicy *policy,char **
         else io_free(&io,text);
         return io.status;
     }
+}
+
+XR_FUNC XrOsIoStatus xr_os_io_system_homedir(const XrOsIoPolicy *policy,char **output) {
+    if(!io_policy_valid(policy) || !output || *output)return XR_OS_IO_BAD_ARGUMENT;
+#if defined(_WIN32_WINNT) && _WIN32_WINNT >= _WIN32_WINNT_WIN8
+    HANDLE token=GetCurrentThreadEffectiveToken();DWORD capacity=0;
+    BOOL sized=GetUserProfileDirectoryW(token,NULL,&capacity);
+    DWORD error=sized?ERROR_SUCCESS:GetLastError();
+    if(sized)return XR_OS_IO_IO;
+    if(error!=ERROR_INSUFFICIENT_BUFFER)return proc_username_error(error);
+    if(capacity<=1)return XR_OS_IO_IO;
+    XrIoContext io={policy,XR_OS_IO_OK};
+    for(;;) {
+        if((uint64_t)capacity>SIZE_MAX/sizeof(wchar_t))return XR_OS_IO_OVERFLOW;
+        wchar_t *wide=io_alloc(&io,(size_t)capacity*sizeof(*wide));
+        if(!wide)return io.status;
+        DWORD used=capacity;
+        BOOL read=GetUserProfileDirectoryW(token,wide,&used);error=read?ERROR_SUCCESS:GetLastError();
+        if(!read && error==ERROR_INSUFFICIENT_BUFFER && used>capacity) {
+            io_free(&io,wide);capacity=used;continue;
+        }
+        if(!read)io_status(&io,proc_username_error(error));
+        else if(used<=1 || used>capacity || wide[used-1] || wmemchr(wide,0,used-1))
+            io_status(&io,XR_OS_IO_BAD_ARGUMENT);
+        char *text=NULL;
+        if(io.status==XR_OS_IO_OK)io_status(&io,xr_win_utf16_text_owned(policy,wide,&text));
+        io_free(&io,wide);
+        if(io.status==XR_OS_IO_OK)*output=text;
+        else io_free(&io,text);
+        return io.status;
+    }
+#else
+    return XR_OS_IO_UNSUPPORTED;
+#endif
 }
 
 XR_FUNC XrOsIoStatus xr_os_io_environment_get(const XrOsIoPolicy *policy,

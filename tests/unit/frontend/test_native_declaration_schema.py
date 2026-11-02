@@ -589,13 +589,13 @@ class OsHostFactDeclarations(unittest.TestCase):
 
     def test_private_system_strings_keep_owned_and_runtime_contract(self):
         lines, rows = schema.render_os_callables(self.declarations)
-        self.assertEqual(len(rows), 11)
-        for name in ('platform', 'arch', 'getenv', 'setenv', 'unsetenv', 'environBlock', 'exit', 'getpid', 'getcwd', 'hostname', 'systemUsername'):
-            self.assertTrue(any('XR_NATIVE_CALLABLE_OS_' + ('SYSTEM_USERNAME' if name == 'systemUsername' else 'ENVIRON_BLOCK' if name == 'environBlock' else name.upper()) + ', NULL,' in row and
+        self.assertEqual(len(rows), 12)
+        for name in ('platform', 'arch', 'getenv', 'setenv', 'unsetenv', 'environBlock', 'exit', 'getpid', 'getcwd', 'hostname', 'systemUsername', 'systemHomedir'):
+            self.assertTrue(any('XR_NATIVE_CALLABLE_OS_' + ('SYSTEM_HOMEDIR' if name == 'systemHomedir' else 'SYSTEM_USERNAME' if name == 'systemUsername' else 'ENVIRON_BLOCK' if name == 'environBlock' else name.upper()) + ', NULL,' in row and
                                 'NULL, false, "os", "stdlib/defs/core.def", FINGERPRINT' in row for row in rows))
-            self.assertIn('"__' + name + '", ' + ('"(): string?", "string?"' if name == 'systemUsername' else '"(): i64", "i64"' if name == 'getpid' else '"(code: i64): ()", "()"' if name == 'exit' else '"(): Array<string>", "Array<string>"' if name == 'environBlock' else '"(name: string): bool", "bool"' if name == 'unsetenv' else '"(name: string, value: string): bool", "bool"' if name == 'setenv' else '"(name: string): string?", "string?"' if name == 'getenv' else '"(): string", "string"'), '\n'.join(lines))
+            self.assertIn('"__' + name + '", ' + ('"(): string?", "string?"' if name in ('systemUsername', 'systemHomedir') else '"(): i64", "i64"' if name == 'getpid' else '"(code: i64): ()", "()"' if name == 'exit' else '"(): Array<string>", "Array<string>"' if name == 'environBlock' else '"(name: string): bool", "bool"' if name == 'unsetenv' else '"(name: string, value: string): bool", "bool"' if name == 'setenv' else '"(name: string): string?", "string?"' if name == 'getenv' else '"(): string", "string"'), '\n'.join(lines))
         self.assertEqual('\n'.join(lines).count('NULL, 0, XR_NATIVE_TERM_STRING'), 4)
-        self.assertEqual('\n'.join(lines).count('XR_NATIVE_ALLOCATION_UNKNOWN'), 10)
+        self.assertEqual('\n'.join(lines).count('XR_NATIVE_ALLOCATION_UNKNOWN'), 11)
         self.assertIn('NULL, 0, XR_NATIVE_TERM_NULLABLE_STRING', '\n'.join(lines))
         self.assertIn('xr_native_os_exit_parameters, 1, XR_NATIVE_TERM_UNIT', '\n'.join(lines))
         self.assertIn('NULL, 0, XR_NATIVE_TERM_ARRAY_STRING', '\n'.join(lines))
@@ -605,7 +605,7 @@ class OsHostFactDeclarations(unittest.TestCase):
         self.assertEqual('\n'.join(lines).count('XR_NATIVE_ALLOCATION_NO_HEAP'), 1)
 
     def test_missing_duplicate_and_changed_contracts_are_rejected(self):
-        for name in ('__platform', '__arch', '__getenv', '__setenv', '__unsetenv', '__environBlock', '__exit', '__getpid', '__getcwd', '__hostname', '__systemUsername'):
+        for name in ('__platform', '__arch', '__getenv', '__setenv', '__unsetenv', '__environBlock', '__exit', '__getpid', '__getcwd', '__hostname', '__systemUsername', '__systemHomedir'):
             row = next(row for row in self.declarations if row.module == 'os' and row.name == name)
             for changed in [[item for item in self.declarations if item is not row], self.declarations + [row]]:
                 with self.subTest(name=name), self.assertRaises(ValueError):
