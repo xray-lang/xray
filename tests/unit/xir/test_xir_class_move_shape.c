@@ -192,11 +192,11 @@ static void class_move_case_init(const ClassMoveFixture *fixture,ClassMoveKind k
     ClassMoveCase *output) {
     memset(output,0,sizeof(*output));
     output->module=*xr_xir_compile_artifact_module(fixture->source);
-    CHECK(output->module.function_count<=SIZE_MAX/sizeof(*output->functions));
-    output->functions=xr_malloc((size_t)output->module.function_count*sizeof(*output->functions));
+    size_t function_count=output->module.function_count;
+    CHECK(function_count<=SIZE_MAX/sizeof(*output->functions));
+    output->functions=xr_malloc(function_count*sizeof(*output->functions));
     CHECK(output->functions);
-    memcpy(output->functions,output->module.functions,
-        (size_t)output->module.function_count*sizeof(*output->functions));
+    memcpy(output->functions,output->module.functions,function_count*sizeof(*output->functions));
     output->module.functions=output->functions;
     output->module.stage=XR_XIR_BUILT;output->module.provenance=NULL;
     output->function=fixture->probes[kind];
