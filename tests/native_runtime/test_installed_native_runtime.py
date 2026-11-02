@@ -59,6 +59,9 @@ def main():
     assert json.loads(recipe_path.read_text())['systemLibraries'] == ['advapi32']
     project = work/'clients';project.mkdir()
     shutil.copyfile(Path(__file__).with_name('installed')/'CMakeLists.txt', project/'CMakeLists.txt')
+    with (project/'CMakeLists.txt').open('a', encoding='utf-8') as consumer_cmake:
+        consumer_cmake.write('\nget_target_property(_tested_native_links Xray::NativeRuntime INTERFACE_LINK_LIBRARIES)\n'
+                             'file(WRITE "${CMAKE_BINARY_DIR}/native-runtime-link-interface.txt" "${_tested_native_links}\\n")\n')
 
     def add(name, sources, stdout=b'', exit=0, stderr=b''):
         clients.append(name)
@@ -290,6 +293,8 @@ def main():
         return result
 
     configure('consumer-configure', moved)
+    interface = (external/'native-runtime-link-interface.txt').read_text().strip().split(';')
+    assert interface == [(runtime/path).as_posix() for path in manifest['archives']] + ['advapi32']
     link_lines = [line for line in (external/'build.ninja').read_text().splitlines()
                   if line.strip().startswith('LINK_LIBRARIES =')]
     assert len(link_lines) == len(clients)
