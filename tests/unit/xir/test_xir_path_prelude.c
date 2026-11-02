@@ -103,7 +103,7 @@ static uint32_t path_main(const XrXirModule *module) {
     CHECK(false);return 0;
 }
 static const char path_container_main[]=
-    "fn pathCount(values:Array<Path?>)->i64{return values.len()}\n"
+    "fn pathCount(values:Array<Path?>)->i64{return len(values)}\n"
     "export fn main()->i64{const paths:Array<Path?>=[null];assert(paths[0]==null);return pathCount(paths)+41}";
 static void path_container_identity(const XrXirModule *module) {
     bool found=false;
