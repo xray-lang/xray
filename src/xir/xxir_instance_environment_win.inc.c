@@ -11,6 +11,7 @@
  *   None; provider refusal, cancellation and allocation failure publish nothing.
  */
 #include "../os/os_proc.h"
+#include "xxir_array.h"
 
 typedef struct XirEnvironmentQuery {
     XrXirCallView *view;
@@ -113,4 +114,85 @@ static XrXirCallStatus instance_environment_set(XrXirCallView *view,XrXirInstanc
     XrXirCallStatus status=instance_environment_status(called);
     if(status==XR_XIR_CALL_READY)*output=(XrXirValue){XR_XIR_BOOL,0,changed};
     return status;
+}
+
+/* Failed OS closes belong to the root, which outlives every child generation.
+ * The node never retains a callback view or its synchronous policy context. */
+struct XirEnvironmentSnapshotOwner {
+    XrOsEnvironmentSnapshot snapshot;
+    XirEnvironmentSnapshotOwner *next;
+};
+typedef struct XirEnvironmentSnapshotQuery {
+    XirEnvironmentQuery query;
+    XrXirValue *values;
+    size_t count,capacity;
+} XirEnvironmentSnapshotQuery;
+
+static bool instance_environment_snapshot_close(XrXirInstance *root,XirEnvironmentSnapshotOwner *owner) {
+    if(xr_os_io_environment_snapshot_close(&owner->snapshot)!=XR_OS_IO_OK)return false;
+    XirEnvironmentSnapshotOwner **link=&root->environment_snapshots;
+    while(*link && *link!=owner)link=&(*link)->next;
+    XR_CHECK(*link==owner,"snapshot close requires its root-owned node");
+    *link=owner->next;xr_xir_domain_metadata_deallocate(root->domain,owner,sizeof(*owner));return true;
+}
+static bool instance_environment_snapshots_close(XrXirInstance *instance) {
+    XR_CHECK(instance==instance_root(instance),"only the root discharges retained environment snapshots");
+    bool complete=true;
+    for(XirEnvironmentSnapshotOwner *owner=instance->environment_snapshots;owner;) {
+        XirEnvironmentSnapshotOwner *next=owner->next;
+        if(!instance_environment_snapshot_close(instance,owner))complete=false;
+        owner=next;
+    }
+    return complete;
+}
+static bool instance_environment_snapshot_current(void *context,size_t work) {
+    XirEnvironmentSnapshotQuery *query=context;
+    if(!instance_environment_current(&query->query))return false;
+    if(!xr_xir_domain_work(query->query.domain,work))query->query.status=XR_XIR_CALL_LIMIT;
+    return query->query.status==XR_XIR_CALL_READY;
+}
+static XrOsIoStatus instance_environment_snapshot_entry(void *context,const char *text,size_t length) {
+    XirEnvironmentSnapshotQuery *query=context;XirEnvironmentQuery *work=&query->query;
+    if(!instance_environment_current(work))return XR_OS_IO_CANCELLED;
+    if(query->count==query->capacity) {
+        if(query->capacity>SIZE_MAX/2 || (query->capacity?query->capacity*2:8)>SIZE_MAX/sizeof(*query->values)) {
+            work->status=XR_XIR_CALL_LIMIT;return XR_OS_IO_OVERFLOW;
+        }
+        size_t capacity=query->capacity?query->capacity*2:8;void *memory=NULL;
+        XrOsIoStatus status=instance_environment_allocate(work,capacity*sizeof(*query->values),&memory);
+        if(status!=XR_OS_IO_OK)return status;
+        if(query->count)memcpy(memory,query->values,query->count*sizeof(*query->values));
+        instance_environment_free(work,query->values);query->values=memory;query->capacity=capacity;
+    }
+    XrXirValueStatus status=xr_xir_string_new(work->domain,text,length,query->values+query->count);
+    if(status!=XR_XIR_VALUE_OK) {
+        work->status=status==XR_XIR_VALUE_BAD_UTF8?XR_XIR_CALL_HOST_ERROR:value_call_status(status);
+        return status==XR_XIR_VALUE_OOM?XR_OS_IO_OUT_OF_MEMORY:XR_OS_IO_IO;
+    }
+    ++query->count;return XR_OS_IO_OK;
+}
+static XrXirCallStatus instance_environment_snapshot(XrXirCallView *view,XrXirInstance *instance,
+    XrXirType type,XrXirValue *output) {
+    XirEnvironmentSnapshotQuery query={.query={view,instance->domain,XR_XIR_CALL_READY}};
+    if(!instance_environment_current(&query.query))return query.query.status;
+    XrXirInstance *root=instance_root(instance);XrXirCallStatus status=XR_XIR_CALL_READY;
+    if(!xr_xir_domain_work(root->domain,sizeof(XirEnvironmentSnapshotOwner)))return XR_XIR_CALL_LIMIT;
+    XirEnvironmentSnapshotOwner *owner=instance_metadata_allocate(root->domain,sizeof(*owner),&status);
+    if(!owner)return status;
+    owner->next=root->environment_snapshots;root->environment_snapshots=owner;
+    XrOsIoPolicy policy={&query,instance_environment_allocate,instance_environment_free};
+    XrOsIoStatus observed=xr_os_io_environment_snapshot_open(&owner->snapshot);
+    if(observed==XR_OS_IO_OK)observed=xr_os_io_environment_snapshot_each(&policy,&owner->snapshot,
+        instance_environment_snapshot_current,instance_environment_snapshot_entry);
+    status=query.query.status;XrXirValue result={0};
+    if(status==XR_XIR_CALL_READY)status=xr_xir_call_execution_status(view);
+    if(status==XR_XIR_CALL_READY)status=instance_environment_status(observed);
+    if(status==XR_XIR_CALL_READY)
+        status=value_call_status(xr_xir_array_new(type,query.values,query.count,xr_xir_call_admission(view),&result));
+    for(size_t i=0;i<query.count;++i)xr_xir_value_drop(query.values+i);
+    instance_environment_free(&query.query,query.values);
+    if(!instance_environment_snapshot_close(root,owner) && status==XR_XIR_CALL_READY)status=XR_XIR_CALL_HOST_ERROR;
+    if(status==XR_XIR_CALL_READY)status=xr_xir_call_execution_status(view);
+    if(status==XR_XIR_CALL_READY) { *output=result;result=(XrXirValue){0}; }
+    xr_xir_value_drop(&result);return status;
 }
