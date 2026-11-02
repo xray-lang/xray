@@ -81,16 +81,17 @@ static const char class_inheritance_base[]=
     "export class Animal {\n"
     " name:string\n number:i64\n"
     " init(name:string,number:i64){this.name=name;this.number=number}\n"
-    " speak()->i64{return this.number}\n}\n";
+    " speak()->i64{return this.number}\n}\n"
+    "export fn bind(value:Animal)->fn()->i64{return value.speak}\n";
 static const char class_inheritance_consumer[]=
-    "import {Animal} from \"./base\"\n"
+    "import {Animal,bind} from \"./base\"\n"
     "class Dog extends Animal {\n"
     " tail:Array<string>\n"
     " init(name:string,number:i64){super(name,number);this.tail=[\"derived-owned-tail-one\",\"derived-owned-tail-two\"]}\n"
     " override speak()->i64{return this.number+len(this.tail)}\n}\n"
     "fn retained()->fn()->i64{\n"
     " var receiver:Animal=Dog(\"Rex-owned-name\",40)\n"
-    " const bound=receiver.speak\n"
+    " const bound=bind(receiver)\n"
     " receiver=Animal(\"Other-owned-name\",0)\n"
     " return bound\n}\n"
     "export fn answer()->i64{const held=retained();assert(held()==42);print(\"cold receiver passed\");return 42}\n";
