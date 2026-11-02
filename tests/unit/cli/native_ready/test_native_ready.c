@@ -114,9 +114,11 @@ static void trial(const char *self,unsigned mode) {
     ready_free(modified);xtc_process_free(snapshot);xr_compile_resources_release(snapshot_resources);
     if(mode==0) {
         for(unsigned k=0;k<4;++k)CHECK(values[k]&&!strcmp(values[k],expected[k]));
-        CHECK(local_paths(owner,values,NULL));CHECK(owner->view.library_count==7);
+        CHECK(local_paths(owner,values,NULL));CHECK(owner->view.library_count==8);
         CHECK(owner->view.libraries[6].kind==XR_XIR_INVOCATION_SYSTEM &&
             ready_system_path(owner->view.libraries[6].path,"advapi32.lib"));
+        CHECK(owner->view.libraries[7].kind==XR_XIR_INVOCATION_SYSTEM &&
+            ready_system_path(owner->view.libraries[7].path,"userenv.lib"));
     }
     xr_compile_resources_free(filler);xtc_xir_local_toolchain_free(owner);
     XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK&&after.held_bytes==frame.held_bytes);
@@ -138,7 +140,7 @@ static void opened(int argc,char **argv) {
     if(status==XTC_XIR_LOCAL_CHILD_FAILED)CHECK(diagnostic.domain==XTC_XIR_LOCAL_PROCESS&&diagnostic.child_exit==1&&diagnostic.os_error==0);
     if(!strcmp(argv[4],"copy"))CHECK(copy_fired);
     xr_compile_resources_release(resources);
-    if(status==XTC_XIR_LOCAL_OK){CHECK(owner);const XtcXirLocalToolchainView *v=xtc_xir_local_toolchain_view(owner);CHECK(v&&v->library_count==7);CHECK(v->libraries[6].kind==XR_XIR_INVOCATION_SYSTEM&&ready_system_path(v->libraries[6].path,"advapi32.lib"));printf("compiler=%s\nlinker=%s\nsdk=%s\n",v->compiler,v->linker,xr_xir_runtime_sdk_root(xtc_xir_local_toolchain_sdk(owner)));}
+    if(status==XTC_XIR_LOCAL_OK){CHECK(owner);const XtcXirLocalToolchainView *v=xtc_xir_local_toolchain_view(owner);CHECK(v&&v->library_count==8);CHECK(v->libraries[6].kind==XR_XIR_INVOCATION_SYSTEM&&ready_system_path(v->libraries[6].path,"advapi32.lib"));CHECK(v->libraries[7].kind==XR_XIR_INVOCATION_SYSTEM&&ready_system_path(v->libraries[7].path,"userenv.lib"));printf("compiler=%s\nlinker=%s\nsdk=%s\n",v->compiler,v->linker,xr_xir_runtime_sdk_root(xtc_xir_local_toolchain_sdk(owner)));}
     else CHECK(!owner);
     xtc_xir_local_toolchain_free(owner);CHECK(!blocks&&!physical_bytes);
     printf("status=%u vswhere=%u activation=%u physical0 PASS\n",(unsigned)status,vswhere_calls,activation_calls);

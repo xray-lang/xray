@@ -88,7 +88,7 @@ def main():
     before = recipe.read_bytes();initial_time = recipe.stat().st_mtime_ns
     initial = json.loads(before)
     assert initial['archive_source_groups']['xray_xir_scalar'] == ['src/xir/scalar.c', 'src/xir/random.c']
-    assert initial['system_libraries'] == ['kernel32', 'bcrypt', 'advapi32']
+    assert initial['system_libraries'] == ['kernel32', 'bcrypt', 'advapi32', 'userenv']
     base.write_text('int payload(void){return 2;}\n')
     log = make('body-only', 1)
     assert 'base.c' in log and recipe.read_bytes() == before and recipe.stat().st_mtime_ns == initial_time

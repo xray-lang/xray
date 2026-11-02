@@ -281,9 +281,17 @@ def main():
     for suffix,data in zip(('preimage','file_digest','digest'),missing_advapi32):
         match=re.search(r'static const uint8_t missing_advapi32_sdk_kat_'+suffix+r'\[\] = \{(.*?)\};',missing_text,re.S)
         assert match and bytes(int(v,16) for v in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete missing-Advapi32 SDK KAT changed'
-    image,file_digest,digest=current_preimage(active_rows,126,31,38,42,37,('kernel32','bcrypt','advapi32'))
-    assert image[:-38]==missing_advapi32[0][:-26] and len(image)==len(missing_advapi32[0])+12
-    assert digest!=missing_advapi32[2]
+    missing_userenv=current_preimage(active_rows,126,31,38,42,37,('kernel32','bcrypt','advapi32'))
+    missing_text=Path(__file__).with_name('sdk_missing_userenv_identity_golden.h').read_text(encoding='utf-8')
+    assert len(missing_userenv[0])==3400
+    assert missing_userenv[2].hex()=='cd037bb91628d270866d38e2bd66958edbf22b5b1921cf46d47894aec51cb072'
+    for suffix,data in zip(('preimage','file_digest','digest'),missing_userenv):
+        match=re.search(r'static const uint8_t missing_userenv_sdk_kat_'+suffix+r'\[\] = \{(.*?)\};',missing_text,re.S)
+        assert match and bytes(int(v,16) for v in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete missing-Userenv SDK KAT changed'
+    image,file_digest,digest=current_preimage(active_rows,126,31,38,42,37,('kernel32','bcrypt','advapi32','userenv'))
+    assert image[:-49]==missing_advapi32[0][:-26] and len(image)==len(missing_advapi32[0])+23
+    assert image[:-49]==missing_userenv[0][:-38] and len(image)==len(missing_userenv[0])+11
+    assert digest!=missing_advapi32[2] and digest!=missing_userenv[2]
     prior_resources_image,prior_resources_file,prior_resources_digest=current_preimage(frozen_rows,98,30,35,37,36)
     assert len(prior_resources_image)==3338
     assert prior_resources_digest.hex()=='8fd650c91daccdcad55f6bf8c40b5f4e2f9ed9611d721eff0c26321e84adeca1'
@@ -293,7 +301,7 @@ def main():
     assert old_current_image[identity_offset+20:]==previous_image[identity_offset+20:]
     assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(42,126,31,38,37)
     assert struct.unpack('<5I',previous_image[identity_offset:identity_offset+20])==(27,72,22,28,29)
-    assert len(image)==3400 and len(historical_image)==3330 and len(previous_image)==len(value23_image)==3098
+    assert len(image)==3411 and len(historical_image)==3330 and len(previous_image)==len(value23_image)==3098
     assert file_digest==previous_file_digest and digest!=previous_digest
     output='/* Independent current SDK framing and natural Windows C layout facts. */\n'
     for name,data in (('current_sdk_kat_preimage',image),('current_sdk_kat_file_digest',file_digest),('current_sdk_kat_digest',digest),
