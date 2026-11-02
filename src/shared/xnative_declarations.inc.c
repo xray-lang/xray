@@ -406,18 +406,26 @@ static const XrNativeParameter xr_native_task_parameters_3[] = {
 static const XrNativeParameter xr_native_task_parameters_4[] = {
     {"tasks", "Array < Task < T , E > >", XR_NATIVE_TERM_ARRAY_TASK, false, false},
 };
+static const XrNativeParameter xr_native_task_parameters_5[] = {
+    {"tasks", "Array < Task < T , E > >", XR_NATIVE_TERM_ARRAY_TASK, false, false},
+};
+static const XrNativeParameter xr_native_task_parameters_6[] = {
+    {"tasks", "Array < Task < T , E > >", XR_NATIVE_TERM_ARRAY_TASK, false, false},
+};
 static const XrNativeMemberDeclaration xr_native_task_members[] = {
     {1, "cancel", "()", "()", 10, 9, XR_NATIVE_RECEIVER_REF, false, true, true, true, XR_NATIVE_OPERATION_TASK_CANCEL, XR_NATIVE_ALLOCATION_NO_HEAP, "Never", XR_NATIVE_RESULT_OWNERSHIP_UNIT, NULL, 0, XR_NATIVE_TERM_UNIT},
     {2, "poll", "() -> TaskResult<T, E>?", "TaskResult<T, E>?", 11, 9, XR_NATIVE_RECEIVER_REF, false, true, true, true, XR_NATIVE_OPERATION_TASK_POLL, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_NULLABLE_TASK_RESULT},
     {3, "awaitResult", "() -> TaskResult<T, E>", "TaskResult<T, E>", 12, 9, XR_NATIVE_RECEIVER_REF, false, true, true, true, XR_NATIVE_OPERATION_TASK_AWAIT_RESULT, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_TASK_RESULT},
     {4, "__allBegin", "(tasks: Array<Task<T, E>>) -> Task<Array<T>, E>", "Task<Array<T>, E>", 13, 20, XR_NATIVE_RECEIVER_READ, true, true, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,unsupported", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_task_parameters_3, 1, XR_NATIVE_TERM_TASK_ARRAY},
     {5, "__firstBegin", "(tasks: Array<Task<T, E>>) -> Task<T, E>", "Task<T, E>", 14, 20, XR_NATIVE_RECEIVER_READ, true, true, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,unsupported", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_task_parameters_4, 1, XR_NATIVE_TERM_TASK_ELEMENT},
+    {6, "all", "(tasks: Array<Task<T, E>>) throws(E | Cancelled) -> Array<T>", "Array<T>", 15, 12, XR_NATIVE_RECEIVER_READ, true, true, true, true, XR_NATIVE_OPERATION_TASK_ALL, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_task_parameters_5, 1, XR_NATIVE_TERM_ARRAY_ELEMENT},
+    {7, "first", "(tasks: Array<Task<T, E>>) throws(E | Cancelled) -> T", "T", 16, 12, XR_NATIVE_RECEIVER_READ, true, true, true, true, XR_NATIVE_OPERATION_TASK_FIRST, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_task_parameters_6, 1, XR_NATIVE_TERM_ELEMENT},
 };
 static const char *const xr_native_task_type_parameters[] = {"T", "E"};
 static const XrNativeTypeDeclaration xr_native_task = {
     5, XR_NATIVE_DECLARATION_IDENTITY, "Task", xr_native_task_type_parameters, 2,
-    "stdlib/types/coroutine.xr", "xray-native:prelude/Task", {{148, 30, 254, 13, 180, 208, 34, 55, 198, 77, 91, 125, 210, 31, 222, 47, 161, 250, 182, 55, 7, 47, 128, 28, 215, 114, 162, 208, 167, 38, 253, 25}},
-    9, 7, xr_native_task_members, 5
+    "stdlib/types/coroutine.xr", "xray-native:prelude/Task", {{56, 120, 133, 92, 7, 71, 88, 194, 252, 167, 204, 197, 148, 171, 56, 109, 214, 142, 228, 89, 130, 109, 49, 183, 205, 194, 251, 110, 150, 2, 179, 82}},
+    9, 7, xr_native_task_members, 7
 };
 static const XrNativeParameter xr_native_channel_parameters_2[] = {
     {"value", "T", XR_NATIVE_TERM_ELEMENT, false, false},

@@ -12,4 +12,6 @@ class Task<T: Sendable, E: Error & Sendable = Never> {
     ref awaitResult() -> TaskResult<T, E>
     private static __allBegin(tasks: Array<Task<T, E>>) -> Task<Array<T>, E>
     private static __firstBegin(tasks: Array<Task<T, E>>) -> Task<T, E>
+    static all(tasks: Array<Task<T, E>>) throws(E | Cancelled) -> Array<T>
+    static first(tasks: Array<Task<T, E>>) throws(E | Cancelled) -> T
 }
