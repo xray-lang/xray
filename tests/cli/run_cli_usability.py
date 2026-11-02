@@ -118,26 +118,26 @@ def main() -> int:
         (0, f'Generated: {fixed_c}\n'.encode(), b''))
     assert fixed_c.is_file() and fixed_c.stat().st_size > 0
 
-    # Shared Source refusals name the feature and its actual source position.
+    # Shared Source refusals preserve the reason and actual source position.
     # None of the three public commands may publish output before admission.
-    unsupported = (
-        ('empty-bytes', 'var value = b""\n', 13, 'this fixed byte length'),
-        ('scope', '    scope {}\n', 5, 'scope statement syntax'),
-        ('fixed-array', 'var value:[i64;2]=[1,2]\n', 11, 'this fixed array element'),
-        ('unit-parameter', 'fn consume(value:())->i64{return 41}\n', 4, 'this parameter declaration syntax'),
-        ('target-scalar', 'var value:usize=0\n', 5, 'usize type'),
-        ('target-array', 'var value=Array<usize>()\n', 5, 'usize type'),
+    refusals = (
+        ('empty-bytes', 'var value = b""\n', 13, 'this fixed byte length is not yet supported by the compiler'),
+        ('scope', '    scope {}\n', 5, 'scope has no direct go member; use an ordinary block'),
+        ('fixed-array', 'var value:[i64;2]=[1,2]\n', 11, 'this fixed array element is not yet supported by the compiler'),
+        ('unit-parameter', 'fn consume(value:())->i64{return 41}\n', 4, 'this parameter declaration syntax is not yet supported by the compiler'),
+        ('target-scalar', 'var value:usize=0\n', 5, 'usize type is not yet supported by the compiler'),
+        ('target-array', 'var value=Array<usize>()\n', 5, 'usize type is not yet supported by the compiler'),
     )
-    for name, text, column, feature in unsupported:
+    for name, text, column, message in refusals:
         source = work / (name + '.xr')
         source.write_bytes(('print(1)\n' + text).encode())
-        expected_error = (f'{source}:2:{column}: error: {feature} is not yet supported by the compiler\n').encode()
+        expected_error = (f'{source}:2:{column}: error: {message}\n').encode()
         for mode in ('check', 'run', 'build'):
             published = work / (name + '-' + mode + '.c')
             command = [binary, mode, source]
             if mode == 'build':
                 command += ['-c', '-o', published]
-            run('unsupported-' + name + '-' + mode, command, work, stdlib_env, (1, b'', expected_error))
+            run('refusal-' + name + '-' + mode, command, work, stdlib_env, (1, b'', expected_error))
             assert not published.exists()
 
     print(f'CLI usability: {passed} commands, stdlib discovery, BOM, rest values and located feature refusals PASS')

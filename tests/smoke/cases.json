@@ -209,8 +209,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F02",
-        "first_diagnostic": "stdlib/http/http.xr:685:7: error: name does not resolve to an admitted nominal type"
+        "feature": "F19",
+        "first_diagnostic": "stdlib/http/http.xr:1046:9: error: linked concurrency syntax was removed; use scope or scope(isolated)"
       }
     },
     {
@@ -389,8 +389,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F02",
-        "first_diagnostic": "stdlib/http/http.xr:685:7: error: name does not resolve to an admitted nominal type"
+        "feature": "F19",
+        "first_diagnostic": "stdlib/http/http.xr:1046:9: error: linked concurrency syntax was removed; use scope or scope(isolated)"
       }
     },
     {
@@ -625,8 +625,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F02",
-        "first_diagnostic": "stdlib/net/net.xr:258:20: error: name does not resolve to an admitted nominal type"
+        "feature": "F19",
+        "first_diagnostic": "stdlib/ws/ws.xr:1232:5: error: linked concurrency syntax was removed; use scope or scope(isolated)"
       }
     },
     {
