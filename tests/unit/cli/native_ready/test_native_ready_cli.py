@@ -49,7 +49,7 @@ def observe():
       row['strictRecipe']=argv[1:14]==fixed and len(argv) in [26,27] and argv[21]=='/c' and argv[24]=='/sourceDependencies' and all(x.startswith('/I') for x in argv[14:21])
      else:
       destination=next((x[5:] for x in argv if x.startswith('/out:')),None)
-      row['strictRecipe']=argv[1:5]==['/nologo','/incremental:no','/NODEFAULTLIB','/verbose:lib'] and len(argv)==20
+      row['strictRecipe']=argv[1:5]==['/nologo','/incremental:no','/NODEFAULTLIB','/verbose:lib'] and len(argv)==21
      expected=Path(destination).parent if destination else Path('X:/invalid')
      system=next(v for k,v in env.items() if k.upper()=='SYSTEMROOT')
      row['exactValues']=row['onlyExplicitThree'] and canonical(values['SYSTEMROOT'])==canonical(system) and canonical(values['TEMP'])==canonical(str(expected)) and canonical(values['TMP'])==canonical(str(expected))
