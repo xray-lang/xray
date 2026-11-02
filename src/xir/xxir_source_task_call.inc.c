@@ -196,14 +196,7 @@ static bool source_task_expression(SourceContext *ctx, AstNode *node, SourceExpe
     SourceExpressionPlan *plan = source_plan_collect(ctx, node, expected);
     return plan && source_task_result_hint(ctx, plan, task_context, 0) && source_plan_complete(ctx, plan, value);
 }
-static bool source_task_await(SourceContext *ctx, AstNode *node, SourceExpectedType context, SourceValue *value) {
-    AwaitExprNode *await = &node->as.await_expr;
-    if (!await->expr || await->timeout || await->into || await->is_any || await->is_all || await->is_any_success)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "await requires one Task without aggregation or timeout");
-    SourceValue task;
-    /* Context is evidence for an ordinary generic call, never a conversion
-     * of an existing invariant Task handle to a different element type. */
-    if (!source_task_expression(ctx, await->expr, (SourceExpectedType){0}, context, &task)) return false;
+static bool source_task_await_value(SourceContext *ctx, AstNode *node, SourceValue task, SourceValue *value) {
     const XrXirTypeNode *type = xr_xir_type_node(&ctx->types, task.type);
     if (!type || type->kind != XR_XIR_TYPE_TASK)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "await requires an admitted Task value");
@@ -233,6 +226,15 @@ static bool source_task_await(SourceContext *ctx, AstNode *node, SourceExpectedT
     if (element == XR_XIR_UNIT) { *value = (SourceValue){.id=UINT32_MAX, .type=XR_XIR_UNIT,.place={0}}; return true; }
     return source_recipe_append(ctx,
         (XrXirInstruction) {XR_XIR_INVOKE_RESULT, element, {0}, {0}, origin, {0}}, value);
+}
+static bool source_task_await(SourceContext *ctx, AstNode *node, SourceExpectedType context, SourceValue *value) {
+    AwaitExprNode *await = &node->as.await_expr;
+    if (!await->expr || await->timeout || await->into || await->is_any || await->is_all || await->is_any_success)
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "await requires one Task without aggregation or timeout");
+    SourceValue task;
+    /* Context guides a generic call, never an invariant Task conversion. */
+    return source_task_expression(ctx, await->expr, (SourceExpectedType){0}, context, &task) &&
+        source_task_await_value(ctx,node,task,value);
 }
 
 static bool source_task_result_type(SourceContext *ctx,XrXirType element,XrXirType error,XrXirType *type) {

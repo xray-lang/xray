@@ -234,7 +234,20 @@ fn leaving() {
         scope { go worker(1); if (i == 1) { continue }; break }
     }
 }
+fn aggregateValue(value: i64) -> i64 { return value }
+fn aggregateText() -> string { return "aggregate" }
+fn aggregates() {
+    const a = go aggregateValue(40)
+    const b = go aggregateValue(2)
+    const values = try! Task.all([a, b, a])
+    assert(len(values) == 3 && values[0] == 40 && values[1] == 2 && values[2] == 40)
+    const x = go aggregateText()
+    const y = go aggregateText()
+    const first = try! Task.first([x, y])
+    assert(first == "aggregate")
+}
 export fn main() -> i64 {
+    aggregates()
     selections()
     assert(bodyFirstFailure() == 42)
     ownershipTransfers()
