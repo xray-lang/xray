@@ -174,13 +174,16 @@ static void stage_owned_fixture(StageFixture *f) {
     stage_fixture(f);f->parameter=XR_XIR_STRING;
     static const XrXirLiteral literal={"field",5};f->scope.literals=&literal;f->scope.literal_count=1;
     for(uint32_t i=0;i<3;++i) {f->field_types[i]=XR_XIR_STRING;f->tuple[i].type=XR_XIR_STRING;}
-    f->functions[STAGE_ENTRY].result=XR_XIR_STRING;
     for(uint32_t fn=0;fn<f->module.function_count;++fn)
         for(uint32_t i=0;i<f->functions[fn].instruction_count;++i) {
             XrXirInstruction *op=&f->instructions[fn][i];
             if(op->type==XR_XIR_I64)op->type=XR_XIR_STRING;
             if(op->op==XR_XIR_CONST_INT) {op->op=XR_XIR_CONST_STRING;op->immediate=0;}
         }
+    /* Program entry keeps its integer result while the fields own Strings. */
+    f->instructions[STAGE_ENTRY][3]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=42};
+    f->instructions[STAGE_ENTRY][4]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={3}};
+    f->functions[STAGE_ENTRY].instruction_count=f->blocks[STAGE_ENTRY].count=5;
 }
 static void stage_empty_and_root(void) {
     StageFixture f;stage_fixture(&f);f.module.linkage_kind=XR_XIR_LIBRARY;
