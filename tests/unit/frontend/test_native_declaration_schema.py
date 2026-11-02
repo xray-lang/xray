@@ -589,25 +589,26 @@ class OsHostFactDeclarations(unittest.TestCase):
 
     def test_private_system_strings_keep_owned_and_runtime_contract(self):
         lines, rows = schema.render_os_callables(self.declarations)
-        self.assertEqual(len(rows), 3)
-        for name in ('platform', 'arch', 'getenv'):
+        self.assertEqual(len(rows), 4)
+        for name in ('platform', 'arch', 'getenv', 'setenv'):
             self.assertTrue(any('XR_NATIVE_CALLABLE_OS_' + name.upper() + ', NULL,' in row and
                                 'NULL, false, "os", "stdlib/defs/core.def", FINGERPRINT' in row for row in rows))
-            self.assertIn('"__' + name + '", ' + ('"(name: string): string?", "string?"' if name == 'getenv' else '"(): string", "string"'), '\n'.join(lines))
+            self.assertIn('"__' + name + '", ' + ('"(name: string, value: string): bool", "bool"' if name == 'setenv' else '"(name: string): string?", "string?"' if name == 'getenv' else '"(): string", "string"'), '\n'.join(lines))
         self.assertEqual('\n'.join(lines).count('NULL, 0, XR_NATIVE_TERM_STRING'), 2)
-        self.assertEqual('\n'.join(lines).count('XR_NATIVE_ALLOCATION_UNKNOWN'), 3)
+        self.assertEqual('\n'.join(lines).count('XR_NATIVE_ALLOCATION_UNKNOWN'), 4)
+        self.assertIn('xr_native_os_setenv_parameters, 2, XR_NATIVE_TERM_BOOL', '\n'.join(lines))
         self.assertIn('xr_native_os_getenv_parameters, 1, XR_NATIVE_TERM_NULLABLE_STRING', '\n'.join(lines))
         self.assertNotIn('XR_NATIVE_ALLOCATION_NO_HEAP', '\n'.join(lines))
 
     def test_missing_duplicate_and_changed_contracts_are_rejected(self):
-        for name in ('__platform', '__arch', '__getenv'):
+        for name in ('__platform', '__arch', '__getenv', '__setenv'):
             row = next(row for row in self.declarations if row.module == 'os' and row.name == name)
             for changed in [[item for item in self.declarations if item is not row], self.declarations + [row]]:
                 with self.subTest(name=name), self.assertRaises(ValueError):
                     schema.render_os_callables(changed)
-            for field, value in [('signature', '(): i64'), ('argc', '2'), ('arg_spec', 'v'),
+            for field, value in [('signature', '(): i64'), ('argc', '9'), ('arg_spec', 'v'),
                                  ('module', 'other'), ('visibility', 'public'), ('effect', 'nothrow'),
-                                 ('allocation', 'no_heap'), ('return_ownership', ''), ('layer', 'pure'),
+                                 ('allocation', 'no_heap'), ('return_ownership', 'borrowed_param:0'), ('layer', 'pure'),
                                  ('vm', 'os_other_fact'), ('aot', 'other_provider'), ('aot_direct', False),
                                  ('aot_kind', 'builtin'), ('link_object', 'other_provider'), ('vm_binding', 'yieldable'),
                                  ('vm_ifdef', 'OTHER'), ('define', 'OTHER'), ('ret', 'i64'),
