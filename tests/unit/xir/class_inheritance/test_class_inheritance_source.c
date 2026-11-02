@@ -293,8 +293,10 @@ static void class_inheritance_move_refusals(const XrXirCompileContext *context) 
         if(kind<2)CHECK(status==XR_XIR_OK);
         else {
             CHECK(status==XR_XIR_UNSUPPORTED && diagnostic.status==status);
+            const char *expected=kind>=4?"move destination has no owned transfer recipe":
+                "move conversion has no owned transfer recipe";
             CHECK(diagnostic.line==3 && diagnostic.column>0 &&
-                !strcmp(diagnostic.message,"move conversion has no owned transfer recipe"));
+                !strcmp(diagnostic.message,expected));
             CHECK(!source.checked && !source.snapshot);
         }
         xr_xir_compile_source_result_free(&source);CHECK(class_inheritance_held(context)==before);
