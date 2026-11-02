@@ -14,6 +14,10 @@
  * EXEC|WRITE is legal on POSIX and is not policed here.
  */
 
+/* Strict POSIX mode hides MAP_ANONYMOUS and MAP_ANON on Darwin; other hosts ignore this macro. */
+#ifndef _DARWIN_C_SOURCE
+#define _DARWIN_C_SOURCE
+#endif
 #include "../os_mem.h"
 
 #include <sys/mman.h>
