@@ -85,6 +85,15 @@ class TierTests(unittest.TestCase):
         self.assertNotIn("native_runtime_installed", plan["tests"])
         self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
 
+    def test_installed_source_sdk_scripts_select_their_installation_family(self):
+        for script in ("source_sdk_install.py", "source_sdk_owned.py"):
+            with self.subTest(script=script):
+                plan = xray_l1.tier_plan(ROOT, "L2", changed=["tests/unit/xir/" + script])
+                self.assertIn("source-sdk", plan["groups"])
+                self.assertIn("source_sdk_installed", plan["tests"])
+                self.assertIn("source_sdk_owned_installed", plan["tests"])
+                self.assertNotIn("native-runtime", plan["groups"])
+
     def test_recursive_fixture_selection_matches_actual_ctest_report(self):
         catalog = {"groups": {"family": {"tier": "L2", "tests": ["leaf"], "targets": []}},
                    "l2": {"interfaceMatches": {}, "requiredOn": {}, "prerequisites": {

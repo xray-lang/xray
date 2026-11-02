@@ -11,7 +11,9 @@
         "src/xir/xxir_source*",
         "include/xray_source*",
         "stdlib/*",
-        "tests/unit/hir/*"
+        "tests/unit/hir/*",
+        "tests/unit/xir/source_sdk_install.py",
+        "tests/unit/xir/source_sdk_owned.py"
       ],
       "reason": "Official installed/moved Source SDK and complete public Source body consumers.",
       "tests": [
