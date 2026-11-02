@@ -189,7 +189,7 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
     if (!source_include_corpus(&ctx, input, &error)) goto done;
     if (input.prelude_factory) ctx.prelude_module=(uint32_t)ctx.graph->entry_index+1;
     if (!source_manifests_load(&ctx) || !source_history_input(&ctx)) goto done;
-    if (!input.prelude_factory && !source_prelude_discover(&ctx)) goto done;
+    if (!input.prelude_factory && (!source_path_discover(&ctx)||!source_prelude_discover(&ctx))) goto done;
     module_status = xr_compile_module_graph_topological_sort(ctx.graph);
     if (module_status != XR_MODULE_OK) {
         source_module_fail(&ctx, NULL, module_status, "module graph ordering failed"); goto done;

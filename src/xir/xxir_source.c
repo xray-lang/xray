@@ -367,6 +367,7 @@ static bool source_fail_syntax(SourceContext *ctx, AstNode *node, const char *fa
 }
 static XrXirSourceRange source_query_range(SourceContext *,AstNode *,const char *);
 static XrXirType source_symbol_type(SourceContext *,const SourceName *);
+static bool source_path_prelude_type(SourceContext *,XrXirType *);
 static bool source_hir_binding_receive(SourceContext *,const SourceName *,XrHirBodyBinding *);
 static bool source_hir_binding_register(SourceContext *,SourceName *,XrHirBodyBinding *);
 static bool source_recipe_record(SourceContext *,XrXirInstruction,SourceValue *);
@@ -808,6 +809,8 @@ static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type)
         }
         if (source_text_same(ctx,NULL,ref->name,"__BufferStorage") && source_mem_module(ctx,ctx->module) &&
             !source_native_type_shadowed(ctx,ref->name)) {*type=XR_XIR_BUFFER_STORAGE;return true;}
+        if(source_text_same(ctx,NULL,ref->name,"Path")&&!source_native_type_shadowed(ctx,ref->name))
+            return source_path_prelude_type(ctx,type);
         return source_nominal_type(ctx, ref->name, type);
     }
     case XR_TREF_SCALAR:
@@ -1233,6 +1236,7 @@ static bool source_constructor_receiver(SourceContext *ctx, AstNode *node);
 static bool source_constructor_field(SourceContext *ctx, AstNode *node, const char *name, SourceValue *value, AstNode *incoming);
 #include "xxir_source_nominal_contract.inc.c"
 #include "xxir_source_struct.inc.c"
+#include "xxir_source_path_prelude.inc.c"
 #include "xxir_source_record.inc.c"
 #include "xxir_source_path.inc.c"
 static bool source_literal_append(SourceContext *ctx, AstNode *node, const char *bytes,

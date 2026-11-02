@@ -4788,3 +4788,4 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/task_aggregate.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/call_select.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/math_source.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/path_prelude.cmake")

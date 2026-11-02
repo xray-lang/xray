@@ -1,0 +1,13 @@
+// A controlled complete Path declaration owner with observable initialization.
+fn marker()->i64 { print("Path initializer"); return 1 }
+const initialized=marker()
+export class Path {
+    raw: string
+    init(raw: string) { this.raw=raw }
+    toString()->string { return this.raw }
+}
+export class PathInfo {
+    private raw:string
+    init(raw:string) { this.raw=raw }
+}
+const privatePathSlot=91

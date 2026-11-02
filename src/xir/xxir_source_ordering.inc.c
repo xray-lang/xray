@@ -13,9 +13,10 @@
 #include "xxir_library_prelude.inc.c"
 static const XrXirModule *source_library_module(SourceContext *ctx,uint32_t module);
 static const XrXirModule *source_owned_module_view(SourceContext *ctx,uint32_t module);
-typedef struct SourcePreludeScan { SourceContext *ctx; uint32_t depth; bool needed; } SourcePreludeScan;
+typedef struct SourcePreludeScan { SourceContext *ctx; uint32_t depth; bool needed,path_only; } SourcePreludeScan;
 static bool source_prelude_word(SourcePreludeScan *scan,const char *name) {
     if (!name) return true;
+    if(scan->path_only){scan->needed=source_text_same(scan->ctx,NULL,name,"Path");return scan->ctx->diagnostic.status==XR_XIR_OK;}
     if (source_text_same(scan->ctx,NULL,name,"Atomic") || source_text_same(scan->ctx,NULL,name,"Channel") ||
         source_text_same(scan->ctx,NULL,name,"Range") || source_text_same(scan->ctx,NULL,name,"Stringable") ||
         source_text_same(scan->ctx,NULL,name,"Task"))
@@ -93,7 +94,7 @@ static bool source_prelude_signature(SourcePreludeScan *scan,AstNode *node) {
     case AST_CALL_EXPR:return source_prelude_refs(scan,node->as.call_expr.type_args,node->as.call_expr.type_arg_count);
     case AST_FUNCTION_REF:return source_prelude_refs(scan,node->as.function_ref.type_args,node->as.function_ref.type_arg_count);
     case AST_NEW_EXPR:
-        return source_prelude_word(scan,node->as.new_expr.class_name) &&
+        return (scan->path_only || source_prelude_word(scan,node->as.new_expr.class_name)) &&
             source_prelude_refs(scan,node->as.new_expr.type_args,node->as.new_expr.type_arg_count);
     case AST_IS_EXPR:return source_prelude_ref(scan,node->as.is_expr.type);
     case AST_AS_EXPR:return source_prelude_ref(scan,node->as.as_expr.type);
@@ -121,10 +122,10 @@ static bool source_prelude_scan(AstNode *node,void *pointer) {
     if (!node || scan->needed) return true;
     if (!((scan->ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (scan->depth==128) return source_fail(scan->ctx,node,XR_XIR_BUDGET,"native source discovery depth exhausted");
-    if (node->type==AST_VARIABLE && !source_prelude_word(scan,node->as.variable.name)) return false;
+    if (!scan->path_only && node->type==AST_VARIABLE && !source_prelude_word(scan,node->as.variable.name)) return false;
     if (!source_prelude_signature(scan,node)) return false;
-    if (node->type==AST_RANGE || node->type==AST_AWAIT_EXPR) scan->needed=true;
-    if (node->type==AST_MEMBER_ACCESS &&
+    if (!scan->path_only && (node->type==AST_RANGE || node->type==AST_AWAIT_EXPR)) scan->needed=true;
+    if (!scan->path_only && node->type==AST_MEMBER_ACCESS &&
         (source_text_same(scan->ctx,node,node->as.member_access.name,"fromUtf8") ||
          source_text_same(scan->ctx,node,node->as.member_access.name,"split")))
         scan->needed=true;
@@ -145,7 +146,7 @@ static bool source_prelude_discover(SourceContext *ctx) {
     if (original && !needed) return false;
     bool any=false;
     for (uint32_t m=0;m<original;++m) {
-        ctx->module=m; SourcePreludeScan scan={ctx,0,false};
+        ctx->module=m; SourcePreludeScan scan={ctx,0,false,false};
         if (!source_prelude_scan(ctx->graph->specs[m].ast,&scan)) return false;
         needed[m]=scan.needed; any|=scan.needed;
     }

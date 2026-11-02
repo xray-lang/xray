@@ -1,0 +1,11 @@
+// A complete ordinary Path owner for catalog relocation controls.
+export class Path {
+    raw: string
+    init(raw: string) { this.raw=raw }
+    toString()->string { return this.raw }
+}
+export class PathInfo {
+    private raw:string
+    init(raw:string) { this.raw=raw }
+}
+const privatePathSlot=91

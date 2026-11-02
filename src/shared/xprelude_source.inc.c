@@ -27,3 +27,13 @@ static const XirPreludeSource xir_prelude_source = {
     xir_prelude_enums, 10,
     {178, 94, 58, 93, 253, 8, 4, 13, 43, 199, 82, 237, 235, 210, 46, 15, 21, 28, 227, 138, 229, 243, 51, 137, 121, 94, 3, 59, 139, 216, 154, 215}
 };
+static inline const char *xir_prelude_declaration_module(const char *name) {
+    if (!name) return NULL;
+    if (!strcmp(name,"OsBarrier")) return "sys";
+    if (!strcmp(name,"OsCondvar")) return "sys";
+    if (!strcmp(name,"OsMutex")) return "sys";
+    if (!strcmp(name,"OsOnce")) return "sys";
+    if (!strcmp(name,"OsRwLock")) return "sys";
+    if (!strcmp(name,"Path")) return "path";
+    return NULL;
+}

@@ -1,0 +1,1 @@
+export class Path{value:i64 init(value:i64){this.value=value}}

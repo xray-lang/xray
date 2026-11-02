@@ -8,6 +8,7 @@
 #ifndef XXIR_PRELUDE_SOURCE_INTERNAL_H
 #define XXIR_PRELUDE_SOURCE_INTERNAL_H
 #include <stdint.h>
+#include <string.h>
 #include "xxir_prelude_identity.h"
 typedef struct XirPreludeEnum {
     const char *name;

@@ -6,6 +6,7 @@
  *
  * xxir_nominal_access.inc.c - Declaration-bound field and construction authority
  */
+#include "xxir_path_prelude.h"
 XR_FUNC XrXirStatus xr_xir_compile_nominal_access(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t function, XrXirType type, uint32_t field, XrXirNominalAccess access) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
 
@@ -36,7 +37,8 @@ XR_FUNC XrXirStatus xr_xir_compile_nominal_access(const XrXirCompileContext *com
     if (!(identity.flags & XR_XIR_NOMINAL_RECORD) && declaring_module != caller->module) {
         if (!identity.exported && !xr_xir_module_same_scope(scope, caller->module, declaring_module)) return XR_XIR_BAD_TYPE;
 
-        if (!xr_xir_module_imports(scope, caller->module, declaring_module)) return XR_XIR_BAD_TYPE;
+        if (!xr_xir_module_imports(scope, caller->module, declaring_module) &&
+            !(access==XR_XIR_NOMINAL_TYPE&&xir_path_prelude_type(scope,table,declaration))) return XR_XIR_BAD_TYPE;
     }
     if (access == XR_XIR_NOMINAL_TYPE) return XR_XIR_OK;
     if (access == XR_XIR_NOMINAL_CONSTRUCT && identity.kind == XR_XIR_NOMINAL_STRUCT &&

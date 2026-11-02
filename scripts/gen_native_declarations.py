@@ -952,6 +952,17 @@ def render_channel_result_identities(root):
     return lines
 
 
+def prelude_declaration_rows(root):
+    text = (root/'stdlib/prelude/builtin_symbols.def').read_text(encoding='utf-8')
+    rows = re.findall(r'XR_BUILTIN_PRELUDE_DECLARATION\(\s*"([A-Za-z_][A-Za-z_0-9]*)"\s*,\s*"([A-Za-z_][A-Za-z_0-9]*)"\s*\)', text)
+    names = [name for name, _ in rows]
+    if len(names) != len(set(names)):
+        raise ValueError('duplicate builtin prelude declaration')
+    if names.count('Path') != 1:
+        raise ValueError('Path requires one builtin prelude declaration route')
+    return rows
+
+
 def render_prelude_source(root):
     """Project complete governed enum definitions through ordinary Source checking."""
     prelude,rows=channel_result_rows(root);digest=hashlib.sha256(prelude.encode('utf-8')).digest()
@@ -976,6 +987,11 @@ def render_prelude_source(root):
     lines += ['};','static const XirPreludeSource xir_prelude_source = {','    '+c_string(text)+',',
               '    {'+', '.join(str(byte) for byte in digest)+'},','    xir_prelude_enums, '+str(len(rows))+',',
               '    {'+', '.join(str(byte) for byte in range_digest)+'}', '};']
+    lines.append('static inline const char *xir_prelude_declaration_module(const char *name) {')
+    lines.append('    if (!name) return NULL;')
+    for name, module in prelude_declaration_rows(root):
+        lines.append('    if (!strcmp(name,'+c_string(name)+')) return '+c_string(module)+';')
+    lines += ['    return NULL;', '}']
     return '\n'.join(lines)+'\n'
 
 
