@@ -234,7 +234,10 @@ static void stage_transition(StageFixture *f) {
         if(!functions[fn].operand_count)functions[fn].operands=NULL;
     built.functions=functions;
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;XrXirDiagnostic diagnostic={0};
-    CHECK(xir_fixture_check(&context,&built,&checked,&diagnostic)==XR_XIR_OK);
+    XrXirStatus status=xir_fixture_check(&context,&built,&checked,&diagnostic);
+    if(status!=XR_XIR_OK)fprintf(stderr,"complete class fixture status%u at %u/%u/%u\n",
+        (unsigned)status,diagnostic.function,diagnostic.block,diagnostic.instruction);
+    CHECK(status==XR_XIR_OK);
     CHECK(xir_compile_class_stage_verify(xr_xir_compile_artifact_module(checked),NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
