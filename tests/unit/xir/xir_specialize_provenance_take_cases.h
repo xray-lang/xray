@@ -209,7 +209,7 @@ static void provenance_source_fields(const XrXirCompileContext *context,
     operations[row]=original->instructions[row];
     XrXirBlock blocks[16];memcpy(blocks,original->blocks,original->block_count*sizeof(*blocks));
     functions[body].blocks=blocks;blocks[0].count^=1;
-    CHECK(xir_effects_source_body_match(context,&changed,effects)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xir_effects_source_body_match_input(context,(XirEffectInput){&changed,source->construction,NULL},effects)==XR_XIR_BAD_STRUCTURE);
     blocks[0]=original->blocks[0];
     CHECK(xr_xir_compile_verify_source_effects_v2(context,&changed,source->construction,effects,NULL)==XR_XIR_OK);
 }
@@ -236,8 +236,8 @@ static void provenance_source_requests(const XrXirCompileContext *context,
     const XrXirArtifact *source=donor->module.provenance->source;
     XrCompileResourceStats entry=library_compile_stats(context),other=library_compile_stats(foreign);
     size_t attempts=source_program_compile_attempts;
-    CHECK(xir_effects_source_body_match(foreign,&source->module,effects)==XR_XIR_BAD_STRUCTURE);
-    CHECK(xir_effects_source_body_match(context,&source->module,NULL)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xir_effects_source_body_match_input(foreign,(XirEffectInput){&source->module,source->construction,NULL},effects)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xir_effects_source_body_match_input(context,(XirEffectInput){&source->module,source->construction,NULL},NULL)==XR_XIR_BAD_STRUCTURE);
     XrXirProvenance *owned=(XrXirProvenance *)donor->module.provenance;
     XrXirArtifact *output=NULL;
     CHECK(xr_xir_compile_recheck_provenance_take(context,&donor->module,
@@ -308,17 +308,17 @@ static void provenance_source_mismatched(void) {
 /* Matching a cloned pool is a fresh field comparison, with no temporary
  * substitution allocation. Failed views retain their complete input owner. */
 static void provenance_source_type_status(const XrXirCompileContext *context,
-    const XrXirModule *source,const XrXirEffects *effects,XrXirStatus expected) {
+    XirEffectInput source,const XrXirEffects *effects,XrXirStatus expected) {
     XrCompileResourceStats before=library_compile_stats(context);
     size_t attempts=source_program_compile_attempts;
-    CHECK(xir_effects_source_body_match(context,source,effects)==expected);
+    CHECK(xir_effects_source_body_match_input(context,source,effects)==expected);
     XrCompileResourceStats after=library_compile_stats(context);
     CHECK(source_program_compile_attempts==attempts && after.held_bytes==before.held_bytes &&
         after.allocated_bytes==before.allocated_bytes);
 }
 
 static void provenance_source_node_fields(const XrXirCompileContext *context,
-    XrXirModule *source,const XrXirEffects *effects,XrXirTypes *types) {
+    XirEffectInput source,const XrXirEffects *effects,XrXirTypes *types) {
     uint32_t callable=UINT32_MAX,nominal=UINT32_MAX;
     XrXirTypeNode *nodes=(XrXirTypeNode *)types->nodes;
     for(uint32_t t=0;t<types->count;++t) {
@@ -355,7 +355,7 @@ static void provenance_source_node_fields(const XrXirCompileContext *context,
 }
 
 static void provenance_source_table_fields(const XrXirCompileContext *context,
-    XrXirModule *source,const XrXirEffects *effects,XrXirTypes *types) {
+    XirEffectInput source,const XrXirEffects *effects,XrXirTypes *types) {
     CHECK(types->nominals && types->interfaces);
     XrXirNominalTable *nominals=(XrXirNominalTable *)types->nominals;
     XrXirInterfaceTable *interfaces=(XrXirInterfaceTable *)types->interfaces;
@@ -425,13 +425,13 @@ static void provenance_source_types_controls(void) {
     XrXirTypes *types=NULL;CHECK(xr_xir_compile_types_clone(&owner.context,result.checked->module.types, NULL,&types)==XR_XIR_OK && types);
     XrXirModule changed=result.checked->module;changed.types=types;
     CHECK(xr_xir_compile_structure_verify_v2(&owner.context,&changed,result.checked->construction,NULL)==XR_XIR_OK);
-    provenance_source_type_status(&owner.context,&changed,effects,XR_XIR_OK);
-    provenance_source_node_fields(&owner.context,&changed,effects,types);
-    provenance_source_table_fields(&owner.context,&changed,effects,types);
+    provenance_source_type_status(&owner.context,(XirEffectInput){&changed,result.checked->construction,NULL},effects,XR_XIR_OK);
+    provenance_source_node_fields(&owner.context,(XirEffectInput){&changed,result.checked->construction,NULL},effects,types);
+    provenance_source_table_fields(&owner.context,(XirEffectInput){&changed,result.checked->construction,NULL},effects,types);
     CHECK(xr_xir_compile_verify_source_effects_v2(&owner.context,&changed,result.checked->construction,effects,NULL)==XR_XIR_OK);
     size_t attempts=source_program_compile_attempts;
     source_program_compile_fail_at=attempts;source_program_compile_injected=false;
-    provenance_source_type_status(&owner.context,&changed,effects,XR_XIR_OK);
+    provenance_source_type_status(&owner.context,(XirEffectInput){&changed,result.checked->construction,NULL},effects,XR_XIR_OK);
     source_program_compile_fail_at=SIZE_MAX;CHECK(!source_program_compile_injected);
     xr_xir_compile_types_free(types);
     CHECK(library_compile_stats(&owner.context).held_bytes==baseline.held_bytes);
