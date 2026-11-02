@@ -1154,7 +1154,7 @@ def render_os_getpid(declarations):
 
 def render_os_callables(declarations):
     lines, rows = [], []
-    for ordinal, name in enumerate(('platform', 'arch', 'getenv', 'setenv', 'unsetenv', 'environBlock', 'exit', 'getpid', 'getcwd', 'hostname')):
+    for ordinal, name in enumerate(('platform', 'arch', 'getenv', 'setenv', 'unsetenv', 'environBlock', 'exit', 'getpid', 'getcwd', 'hostname', 'systemUsername')):
         if name == 'getpid':
             pid_lines, pid_rows = render_os_getpid(declarations)
             lines += pid_lines
@@ -1165,10 +1165,10 @@ def render_os_callables(declarations):
             raise ValueError('OS host fact requires its sole governed declaration: ' + name)
         row = candidates[0]
         environment, setter, remove = name == 'getenv', name == 'setenv', name == 'unsetenv'
-        snapshot, terminate = name == 'environBlock', name == 'exit'
-        provider = 'environ_block' if snapshot else name
-        signature = '(code: i64): ()' if terminate else '(): Array<string>' if snapshot else '(name: string): bool' if remove else '(name: string, value: string): bool' if setter else '(name: string): string?' if environment else '(): string'
-        result = '()' if terminate else 'Array<string>' if snapshot else 'bool' if setter or remove else 'string?' if environment else 'string'
+        snapshot, terminate, username = name == 'environBlock', name == 'exit', name == 'systemUsername'
+        provider = 'environ_block' if snapshot else 'system_username' if username else name
+        signature = '(code: i64): ()' if terminate else '(): Array<string>' if snapshot else '(name: string): bool' if remove else '(name: string, value: string): bool' if setter else '(name: string): string?' if environment else '(): string?' if username else '(): string'
+        result = '()' if terminate else 'Array<string>' if snapshot else 'bool' if setter or remove else 'string?' if environment or username else 'string'
         if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
                 row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
                 row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
@@ -1190,7 +1190,7 @@ def render_os_callables(declarations):
             '    ' + str(ordinal + 1) + ', "__' + name + '", ' + c_string(signature) + ', ' + c_string(result) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
             '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
             '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + (symbol + '_parameters, 1, XR_NATIVE_TERM_UNIT' if terminate else symbol + '_parameters, 1, XR_NATIVE_TERM_BOOL' if remove else symbol + '_parameters, 2, XR_NATIVE_TERM_BOOL' if setter else symbol + '_parameters, 1, XR_NATIVE_TERM_NULLABLE_STRING' if environment else
-                'NULL, 0, XR_NATIVE_TERM_ARRAY_STRING' if snapshot else 'NULL, 0, XR_NATIVE_TERM_STRING'), '};']
+                'NULL, 0, XR_NATIVE_TERM_ARRAY_STRING' if snapshot else 'NULL, 0, XR_NATIVE_TERM_NULLABLE_STRING' if username else 'NULL, 0, XR_NATIVE_TERM_STRING'), '};']
         rows += ['    {XR_NATIVE_CALLABLE_OS_' + provider.upper() + ', NULL, &' + symbol + ', NULL, false, "os", "stdlib/defs/core.def", FINGERPRINT}']
     return lines, rows
 

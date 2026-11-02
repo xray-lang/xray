@@ -200,6 +200,9 @@ XR_FUNC XrOsIoStatus xr_os_io_self_exe_path(const XrOsIoPolicy *policy, char **o
 /* Windows observes the logical DNS hostname, including the OS cluster name.
  * The successful UTF-8 result is policy-owned; unavailable names are failures. */
 XR_FUNC XrOsIoStatus xr_os_io_hostname(const XrOsIoPolicy *policy, char **output);
+/* The current thread's user name is policy-owned UTF-8. Query failures do not
+ * establish absence, including when the thread is impersonating a client. */
+XR_FUNC XrOsIoStatus xr_os_io_system_username(const XrOsIoPolicy *policy, char **output);
 XR_FUNC XrOsIoStatus xr_os_io_environment_get(const XrOsIoPolicy *policy,
     const char *name, char **output);
 /* NULL value deletes; a nonNULL empty value sets an empty string.
