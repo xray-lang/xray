@@ -40,8 +40,8 @@ static uint64_t class_inheritance_held(const XrXirCompileContext *context) {
     XrCompileResourceStats stats={0};
     CHECK(xr_compile_resources_stats(context->resources,&stats)==XR_COMPILE_RESOURCE_OK);return stats.held_bytes;
 }
-static XrXirStatus class_inheritance_check(const XrXirCompileContext *context,
-    const ClassInheritanceSource *fixture,XrXirSourceResult *result) {
+static XrXirStatus class_inheritance_check_diagnostic(const XrXirCompileContext *context,
+    const ClassInheritanceSource *fixture,XrXirSourceResult *result,XrXirSourceDiagnostic *diagnostic) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     if(fixture->control)CHECK(xr_compile_session_bind_request(session,fixture->control)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={fixture->root?XR_MODULE_IDENTITY_SCRIPT:XR_MODULE_IDENTITY_MEMORY,
@@ -53,16 +53,21 @@ static XrXirStatus class_inheritance_check(const XrXirCompileContext *context,
     }
     XrXirSourceRequest request={session,entry,&authority,context,XR_CLASS_INHERITANCE_ROOT "/stdlib",
         NULL,fixture->kind,fixture->catalog};
-    XrXirSourceDiagnostic diagnostic={0};XrXirStatus status;
+    *diagnostic=(XrXirSourceDiagnostic){0};XrXirStatus status;
     if(fixture->text) {
         XrXirSourceText input={fixture->root?fixture->logical:NULL,fixture->text,strlen(fixture->text)};
-        status=xr_xir_compile_source_check_text(&request,&input,result,&diagnostic,NULL);
-    } else status=xr_xir_compile_source_check(&request,result,&diagnostic,NULL);
+        status=xr_xir_compile_source_check_text(&request,&input,result,diagnostic,NULL);
+    } else status=xr_xir_compile_source_check(&request,result,diagnostic,NULL);
     fprintf(stderr,"inheritance Source %s status%u %d:%d %s\n",fixture->logical,
-        status,diagnostic.line,diagnostic.column,diagnostic.message);
+        status,diagnostic->line,diagnostic->column,diagnostic->message);
     xr_compile_session_free(session);
     if(status!=XR_XIR_OK)CHECK(!result->checked && !result->snapshot);
     return status;
+}
+static XrXirStatus class_inheritance_check(const XrXirCompileContext *context,
+    const ClassInheritanceSource *fixture,XrXirSourceResult *result) {
+    XrXirSourceDiagnostic diagnostic={0};
+    return class_inheritance_check_diagnostic(context,fixture,result,&diagnostic);
 }
 static XrXirArtifact *class_inheritance_receive(const XrXirCompileContext *context,XrXirSourceResult *source) {
     XrXirCheckedPacket packet={0};
@@ -268,6 +273,33 @@ static void class_inheritance_refusals(const XrXirCompileContext *context) {
         xr_xir_compile_source_result_free(&source);CHECK(class_inheritance_held(context)==before);
     }
 }
+static void class_inheritance_move_refusals(const XrXirCompileContext *context) {
+    static const char prefix[]=
+        "class Animal{value:i64 init(value:i64){this.value=value}}\n"
+        "class Dog extends Animal{init(value:i64){super(value)}}\n";
+    static const char *const bodies[]={
+        "var b:Animal=dog;var a:Array<Animal>=[dog];assert(b.value==42);assert(a[0].value==42)",
+        "var b:Animal=(dog);var a:Array<Animal>=[(dog)];assert(b.value==42);assert(a[0].value==42)",
+        "var b:Animal=move dog",
+        "var b:Animal=(move dog)",
+        "var a:Array<Animal>=[move dog]",
+        "var a:Array<Animal>=[(move dog)]"};
+    for(unsigned kind=0;kind<sizeof(bodies)/sizeof(*bodies);++kind) {
+        char text[1024];int length=snprintf(text,sizeof(text),"%sfn f(){var dog=Dog(42);%s}\n",prefix,bodies[kind]);
+        CHECK(length>0 && (size_t)length<sizeof(text));uint64_t before=class_inheritance_held(context);
+        ClassInheritanceSource fixture={text,"move-conversion",NULL,XR_XIR_PROGRAM,NULL,NULL};
+        XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
+        XrXirStatus status=class_inheritance_check_diagnostic(context,&fixture,&source,&diagnostic);
+        if(kind<2)CHECK(status==XR_XIR_OK);
+        else {
+            CHECK(status==XR_XIR_UNSUPPORTED && diagnostic.status==status);
+            CHECK(diagnostic.line==3 && diagnostic.column>0 &&
+                !strcmp(diagnostic.message,"move conversion has no owned transfer recipe"));
+            CHECK(!source.checked && !source.snapshot);
+        }
+        xr_xir_compile_source_result_free(&source);CHECK(class_inheritance_held(context)==before);
+    }
+}
 typedef struct ClassInheritanceCancel {uint32_t polls,stop;} ClassInheritanceCancel;
 static bool class_inheritance_cancel(const void *opaque) {
     ClassInheritanceCancel *state=(ClassInheritanceCancel *)opaque;return ++state->polls==state->stop;
@@ -305,7 +337,8 @@ int main(int argc,char **argv) {
     CHECK(argc==1 || (argc==5 && !strcmp(argv[1],"--emit")));class_inheritance_golden();
     XrCompileResourceLimits limits=XR_RESOURCE_DEFAULT_COMPILER_LIMITS;XrXirCompileContext context={0};
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);context.limits=xr_xir_compile_default_limits();
-    uint64_t before=class_inheritance_held(&context);class_inheritance_refusals(&context);class_inheritance_long_chain(&context);
+    uint64_t before=class_inheritance_held(&context);class_inheritance_refusals(&context);
+    class_inheritance_move_refusals(&context);class_inheritance_long_chain(&context);
     for(unsigned mode=0;mode<3;++mode) {
         ClassInheritancePlan plan={0};XrXirArtifact *code=class_inheritance_product(&context,mode,&plan);
         if(argc==5){class_inheritance_emit(code,&plan,mode,argv[2+mode]);xr_xir_compile_artifact_free(code);}
