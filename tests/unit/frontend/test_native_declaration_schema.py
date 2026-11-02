@@ -80,7 +80,15 @@ class NativeDeclarations(unittest.TestCase):
             if member.operation != 'NONE':
                 self.assertNotEqual(schema.simple_term(member.result, 'T'), 'UNADMITTED')
                 for parameter in member.parameters:
-                    self.assertNotEqual(schema.simple_term(parameter[1], 'T'), 'UNADMITTED')
+                    if member.operation == 'ARRAY_SORT':
+                        self.assertEqual((member.receiver, member.signature, member.allocation,
+                                          member.failures, member.ownership),
+                                         ('REF', '(compareFn?: fn(a: T, b: T) -> i64) -> Array<T>',
+                                          'may_heap', 'allocation,retain,limit', 'owned'))
+                        self.assertEqual(parameter, ('compareFn', schema.TypeParser('fn(a: T, b: T) -> i64').type(),
+                                                     'fn ( a : T , b : T ) -> i64', True, False))
+                    else:
+                        self.assertNotEqual(schema.simple_term(parameter[1], 'T'), 'UNADMITTED')
         reduce = next(member for member in members if member.name == 'reduce')
         self.assertEqual(schema.simple_term(reduce.parameters[1][1], 'T'), 'RESULT_VARIABLE')
         reverse = next(member for member in members if member.name == 'reverse')
@@ -103,7 +111,7 @@ class NativeDeclarations(unittest.TestCase):
         clear = next(member for member in members if member.name == 'clear')
         self.assertEqual((clear.receiver, clear.ownership, clear.result), ('REF', 'unit', ('tuple', ())))
         self.assertEqual({m.name for m in members if m.operation == 'NONE'},
-                         {'ptr', 'mutPtr', 'sort', 'toString',
+                         {'ptr', 'mutPtr', 'toString',
                           'iterator', 'entriesIterator'})
 
     def test_binary64_owned_text_conversion_contract(self):
@@ -165,6 +173,9 @@ class NativeDeclarations(unittest.TestCase):
             ('ref shift() -> T?', 'ref shift() -> Unknown?'),
             ('ref clear()', 'clear()'),
             ('ref clear()', 'ref clear(value: T)'),
+            ('ref sort(compareFn?: fn(a: T, b: T) -> i64)', 'sort(compareFn?: fn(a: T, b: T) -> i64)'),
+            ('sort(compareFn?: fn(a: T, b: T) -> i64)', 'sort(compareFn: fn(a: T, b: T) -> i64)'),
+            ('sort(compareFn?: fn(a: T, b: T) -> i64)', 'sort(compareFn?: fn(a: T, b: T) -> bool)'),
             ('ref reverse() -> Array<T>', 'reverse() -> Array<T>'),
             ('ref reverse() -> Array<T>', 'ref reverse() -> T'),
             ('ref reverse() -> Array<T>', 'ref reverse() -> Array<Unknown>'),
@@ -224,11 +235,13 @@ class NativeDeclarations(unittest.TestCase):
         for member in members:
             self.assertTrue(rows[member.line - 1][member.column - 1:].startswith(member.name))
         admitted = [m for m in members if m.operation != 'NONE']
-        self.assertEqual({m.name for m in admitted}, {'contains', 'startsWith', 'endsWith', 'indexOf', 'lastIndexOf', 'toString', 'repeat', 'copyBytes', 'replace', 'replaceAll', 'slice'})
+        self.assertEqual({m.name for m in admitted}, {'contains', 'startsWith', 'endsWith', 'indexOf', 'lastIndexOf', 'toString', 'repeat', 'copyBytes', 'replace', 'replaceAll', 'slice', 'fromUtf8', 'split', 'runes'})
         for member in admitted:
-            self.assertEqual(schema.simple_term(member.result, ''), 'I64' if member.name in {'indexOf', 'lastIndexOf'} else 'ARRAY_U8' if member.name=='copyBytes' else 'STRING' if member.name in {'toString','repeat','replace','replaceAll','slice'} else 'BOOL')
-            self.assertEqual(member.allocation, 'may_heap' if member.name in {'repeat','copyBytes','replace','replaceAll','slice'} else 'no_heap')
-            self.assertEqual(member.failures, {'indexOf':'bounds,limit','lastIndexOf':'limit','toString':'retain','repeat':'allocation,retain,limit','copyBytes':'allocation,retain,limit','replace':'allocation,retain,limit','replaceAll':'allocation,retain,limit','slice':'bounds,allocation,retain,limit'}.get(member.name,'none'))
+            self.assertEqual(schema.simple_term(member.result, ''), 'I64' if member.name in {'indexOf', 'lastIndexOf'} else 'ARRAY_U8' if member.name=='copyBytes' else 'ARRAY_STRING' if member.name=='split' else 'ITERATOR_RUNE' if member.name=='runes' else 'STRING' if member.name in {'toString','repeat','replace','replaceAll','slice','fromUtf8'} else 'BOOL')
+            self.assertEqual(member.allocation, 'may_heap' if member.name in {'repeat','copyBytes','replace','replaceAll','slice','fromUtf8','split','runes'} else 'no_heap')
+            self.assertEqual(member.failures, {'indexOf':'bounds,limit','lastIndexOf':'limit','toString':'retain','repeat':'allocation,retain,limit','copyBytes':'allocation,retain,limit','replace':'allocation,retain,limit','replaceAll':'allocation,retain,limit','slice':'bounds,allocation,retain,limit','fromUtf8':'utf8,allocation,retain,limit','split':'allocation,retain,limit','runes':'allocation,retain,limit'}.get(member.name,'none'))
+            self.assertEqual(member.static, member.name == 'fromUtf8')
+            self.assertEqual(member.error, {'fromUtf8':'Utf8Error','split':'StringPatternError'}.get(member.name,'Never'))
         self.assertNotIn('xr_native_def_string[]', embed.render(ROOT / 'stdlib/types'))
         for before, after in [('struct string', 'class string'), ('id=2', 'id=1'),
                               ('struct string {', 'struct string<T> {'),
@@ -249,7 +262,13 @@ class NativeDeclarations(unittest.TestCase):
                               ('slice(start: i64, end?: i64)', 'slice(start: i64, end: i64)'),
                               ('STRING_SLICE allocation=may_heap', 'STRING_SLICE allocation=no_heap'),
                               ('STRING_SLICE allocation=may_heap failures=bounds,allocation,retain,limit',
-                               'STRING_SLICE allocation=may_heap failures=allocation,retain,limit')]:
+                               'STRING_SLICE allocation=may_heap failures=allocation,retain,limit'),
+                              ('static fromUtf8', 'fromUtf8'),
+                              ('fromUtf8(bytes: Slice<u8>)', 'fromUtf8(bytes: Slice<i64>)'),
+                              ('throws(Utf8Error)', 'throws(StringPatternError)'),
+                              ('runes() -> Iterator<rune>', 'runes() -> Iterator<i64>'),
+                              ('split(separator: string)', 'split(separator: i64)'),
+                              ('throws(StringPatternError)', 'throws(Utf8Error)')]:
             with self.subTest(before=before), self.assertRaises(ValueError):
                 schema.parse_source(source.replace(before, after), self.prelude)
 
@@ -376,7 +395,12 @@ class StringBuilder {
                              'stdlib/types/coroutine.xr', 'stdlib/types/channel.xr', 'stdlib/types/iterator.xr',
                              'stdlib/types/i64.xr', 'stdlib/types/f64.xr', 'stdlib/types/bool.xr',
                              'stdlib/types/rune.xr', 'stdlib/types/map.xr', 'stdlib/types/set.xr',
-                             'stdlib/prelude/range.xr', 'stdlib/prelude/builtin_symbols.def']:
+                             'stdlib/prelude/range.xr', 'stdlib/prelude/stringable.xr',
+                             'stdlib/prelude/builtin_symbols.def',
+                             'stdlib/defs/core.def', 'stdlib/mem/mem.xr', 'stdlib/net/net.xr',
+                             'tools/stdlibgen/stdlibgen.py',
+                             'tools/stdlibgen/provider_codegen.py', 'tools/stdlibgen/provider_declarations.py',
+                             'tools/stdlibgen/provider_types.py']:
                 target = root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes((ROOT / relative).read_bytes())
@@ -418,7 +442,7 @@ class StringBuilder {
                     self.assertNotEqual(target.stat().st_mtime_ns, expected[relative][1], relative)
 
     def test_scalar_complete_contracts_and_fail_closed_mutations(self):
-        for stem, identity, total, admitted in [('f64',13,12,8),('bool',14,1,1),('rune',15,6,2)]:
+        for stem, identity, total, admitted in [('f64',13,12,8),('bool',14,1,1),('rune',15,6,3)]:
             source = (ROOT / 'stdlib/types' / (stem+'.xr')).read_text(encoding='utf-8')
             header, members = schema.parse_source(source, self.prelude)
             self.assertEqual((identity,stem,()),header[:3])
@@ -433,6 +457,8 @@ class StringBuilder {
             ('bool','toString() -> string','toString() -> bool'),
             ('rune','toUInt32() -> u32','toUInt32() -> i64'),
             ('rune','toString() -> string','ref toString() -> string'),
+            ('rune','isWhitespace() -> bool','isWhitespace() -> i64'),
+            ('rune','RUNE_IS_WHITESPACE allocation=no_heap','RUNE_IS_WHITESPACE allocation=may_heap'),
         ]
         for stem, before, after in bad:
             source=(ROOT / 'stdlib/types' / (stem+'.xr')).read_text(encoding='utf-8')
@@ -489,17 +515,25 @@ class StringBuilder {
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(self.prelude, encoding='utf-8')
             _, rows = schema.channel_result_rows(root)
-            self.assertEqual(rows[-2:], [
+            self.assertEqual(rows[4:], [
                 ('Recv', 'RECV', [('Value', 'TYPE_PARAM_0'), ('Empty', 'NONE'),
                                   ('Timeout', 'NONE'), ('Closed', 'NONE')], 7, 1),
                 ('SendResult', 'SEND_RESULT', [('Sent', 'NONE'), ('Full', 'NONE'),
-                                              ('Timeout', 'NONE'), ('Closed', 'NONE')], 8, 0)])
+                                              ('Timeout', 'NONE'), ('Closed', 'NONE')], 8, 0),
+                ('Endian', 'ENDIAN', [('Native', 'NONE'), ('LE', 'NONE'), ('BE', 'NONE')], 0, 0),
+                ('Cancelled', 'CANCELLED', [('Cancelled', 'NONE')], 18, 0),
+                ('TaskResult', 'TASK_RESULT', [('Success', 'TYPE_PARAM_0'), ('Error', 'ERROR'),
+                                            ('Panic', 'PANIC_INFO'), ('Cancelled', 'NONE')], 19, 2)])
             for before, after in [('"Recv", 1, RECV', '"Recv", 0, RECV'),
                                   ('"Recv", 1, RECV', '"Recv", 1, SEND_RESULT'),
                                   ('"Value", TYPE_PARAM_0', '"Value", NONE'),
                                   ('"Value", TYPE_PARAM_0', '"Other", TYPE_PARAM_0'),
                                   ('"Sent", NONE', '"Sent", TYPE_PARAM_0'),
-                                  ('"SendResult", 0, SEND_RESULT', '"SendResult", 1, SEND_RESULT')]:
+                                  ('"SendResult", 0, SEND_RESULT', '"SendResult", 1, SEND_RESULT'),
+                                  ('"Cancelled", 0, CANCELLED', '"Cancelled", 1, CANCELLED'),
+                                  ('"TaskResult", 2, TASK_RESULT', '"TaskResult", 1, TASK_RESULT'),
+                                  ('"Error", ERROR', '"Error", NONE'),
+                                  ('"Panic", PANIC_INFO', '"Panic", NONE')]:
                 with self.subTest(before=before):
                     mutated = self.prelude.replace(before, after)
                     self.assertNotEqual(mutated, self.prelude)
