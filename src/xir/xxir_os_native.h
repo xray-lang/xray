@@ -19,7 +19,7 @@
 #include <string.h>
 
 static inline bool xir_os_native_id(uint32_t id) {
-    return id==XR_NATIVE_CALLABLE_OS_PLATFORM || id==XR_NATIVE_CALLABLE_OS_ARCH || id==XR_NATIVE_CALLABLE_OS_GETENV || id==XR_NATIVE_CALLABLE_OS_SETENV;
+    return id==XR_NATIVE_CALLABLE_OS_PLATFORM || id==XR_NATIVE_CALLABLE_OS_ARCH || id==XR_NATIVE_CALLABLE_OS_GETENV || id==XR_NATIVE_CALLABLE_OS_SETENV || id==XR_NATIVE_CALLABLE_OS_UNSETENV;
 }
 static inline bool xir_os_native_signature(uint32_t id,const XrXirTypes *types,const XrXirType *parameters,
     uint32_t count,XrXirType result,XrXirType error) {
@@ -28,10 +28,11 @@ static inline bool xir_os_native_signature(uint32_t id,const XrXirTypes *types,c
         strcmp(native->namespace_id,"os") || !native->source_path ||
         strcmp(native->source_path,"stdlib/defs/core.def") || !native->member) return false;
     const XrNativeMemberDeclaration *member=native->member;
-    bool environment=id==XR_NATIVE_CALLABLE_OS_GETENV,setter=id==XR_NATIVE_CALLABLE_OS_SETENV;
-    const char *name=setter?"__setenv":environment?"__getenv":id==XR_NATIVE_CALLABLE_OS_PLATFORM?"__platform":"__arch";
+    bool environment=id==XR_NATIVE_CALLABLE_OS_GETENV,remove=id==XR_NATIVE_CALLABLE_OS_UNSETENV;
+    bool setter=id==XR_NATIVE_CALLABLE_OS_SETENV || remove;
+    const char *name=remove?"__unsetenv":setter?"__setenv":environment?"__getenv":id==XR_NATIVE_CALLABLE_OS_PLATFORM?"__platform":"__arch";
     if(!member->name || strcmp(member->name,name) || !member->signature ||
-        strcmp(member->signature,setter?"(name: string, value: string): bool":environment?"(name: string): string?":"(): string") ||
+        strcmp(member->signature,remove?"(name: string): bool":setter?"(name: string, value: string): bool":environment?"(name: string): string?":"(): string") ||
         !member->result_text || strcmp(member->result_text,setter?"bool":environment?"string?":"string") ||
         member->is_public || member->is_method || member->is_static ||
         member->receiver!=XR_NATIVE_RECEIVER_READ || member->operation!=XR_NATIVE_OPERATION_NONE ||
@@ -39,7 +40,7 @@ static inline bool xir_os_native_signature(uint32_t id,const XrXirTypes *types,c
         member->ownership!=XR_NATIVE_RESULT_OWNERSHIP_OWNED || error!=XR_XIR_NEVER) return false;
     if(!environment && !setter)return !member->parameters && !member->parameter_count &&
         member->result==XR_NATIVE_TERM_STRING && !parameters && !count && result==XR_XIR_STRING;
-    uint32_t expected=setter?2u:1u;
+    uint32_t expected=setter&&!remove?2u:1u;
     if(count!=expected || !parameters || member->parameter_count!=expected || !member->parameters)return false;
     for(uint32_t p=0;p<expected;++p) {
         const XrNativeParameter *parameter=member->parameters+p;

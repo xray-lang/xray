@@ -1083,6 +1083,14 @@ static const XrNativeMemberDeclaration xr_native_os_setenv = {
     false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
     "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_os_setenv_parameters, 2, XR_NATIVE_TERM_BOOL
 };
+static const XrNativeParameter xr_native_os_unsetenv_parameters[] = {
+    {"name", "string", XR_NATIVE_TERM_STRING, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_os_unsetenv = {
+    5, "__unsetenv", "(name: string): bool", "bool", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_os_unsetenv_parameters, 1, XR_NATIVE_TERM_BOOL
+};
 static const XrNativeParameter xr_native_unicode_property_parameters[] = {
     {"name", "string", XR_NATIVE_TERM_STRING, false, false},
 };
@@ -1159,5 +1167,6 @@ static const XrNativeCallableDeclaration xr_native_callables[] = {
     {XR_NATIVE_CALLABLE_OS_PLATFORM, NULL, &xr_native_os_platform, NULL, false, "os", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
     {XR_NATIVE_CALLABLE_OS_ARCH, NULL, &xr_native_os_arch, NULL, false, "os", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
     {XR_NATIVE_CALLABLE_OS_GETENV, NULL, &xr_native_os_getenv, NULL, false, "os", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
-    {XR_NATIVE_CALLABLE_OS_SETENV, NULL, &xr_native_os_setenv, NULL, false, "os", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}}
+    {XR_NATIVE_CALLABLE_OS_SETENV, NULL, &xr_native_os_setenv, NULL, false, "os", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {XR_NATIVE_CALLABLE_OS_UNSETENV, NULL, &xr_native_os_unsetenv, NULL, false, "os", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}}
 };

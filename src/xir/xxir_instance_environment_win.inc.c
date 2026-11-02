@@ -90,20 +90,20 @@ static XrXirCallStatus instance_environment_get(XrXirCallView *view,XrXirInstanc
 }
 
 static XrXirCallStatus instance_environment_set(XrXirCallView *view,XrXirInstance *instance,
-    const XrXirValue *arguments,XrXirValue *output) {
+    const XrXirValue *arguments,bool remove,XrXirValue *output) {
     XirEnvironmentQuery query={view,instance->domain,XR_XIR_CALL_READY};
     if(!instance_environment_current(&query))return query.status;
     const char *bytes[2]={NULL,NULL};size_t lengths[2]={0,0};
-    for(uint32_t p=0;p<2;++p) {
+    for(uint32_t p=0;p<(remove?1u:2u);++p) {
         if(!xr_xir_string_view(arguments+p,&bytes[p],&lengths[p]))return XR_XIR_CALL_BAD_ARGUMENT;
         if(lengths[p]==SIZE_MAX || !xr_xir_domain_work(instance->domain,lengths[p]+1))return XR_XIR_CALL_LIMIT;
     }
-    if(!lengths[0] || memchr(bytes[0],'=',lengths[0]) || memchr(bytes[0],0,lengths[0]) || memchr(bytes[1],0,lengths[1])) {
+    if(!lengths[0] || memchr(bytes[0],'=',lengths[0]) || memchr(bytes[0],0,lengths[0]) || (!remove && memchr(bytes[1],0,lengths[1]))) {
         *output=(XrXirValue){XR_XIR_BOOL,0,false};return XR_XIR_CALL_READY;
     }
     XrOsIoPolicy policy={&query,instance_environment_allocate,instance_environment_free};
     void *owned[2]={NULL,NULL};XrOsIoStatus called=XR_OS_IO_OK;bool changed=false;
-    for(uint32_t p=0;p<2 && called==XR_OS_IO_OK;++p) {
+    for(uint32_t p=0;p<(remove?1u:2u) && called==XR_OS_IO_OK;++p) {
         called=instance_environment_allocate(&query,lengths[p]+1,&owned[p]);
         if(called==XR_OS_IO_OK) {memcpy(owned[p],bytes[p],lengths[p]);((char *)owned[p])[lengths[p]]=0;}
     }
