@@ -75,6 +75,11 @@ XR_FUNC XrOsIoStatus xr_os_io_self_exe_path(const XrOsIoPolicy *policy, char **o
     return io.status;
 }
 
+XR_FUNC XrOsIoStatus xr_os_io_hostname(const XrOsIoPolicy *policy,char **output) {
+    if(!io_policy_valid(policy) || !output || *output)return XR_OS_IO_BAD_ARGUMENT;
+    return XR_OS_IO_UNSUPPORTED;
+}
+
 XR_FUNC XrOsIoStatus xr_os_io_environment_get(const XrOsIoPolicy *policy,
     const char *name, char **output) {
     if (!io_policy_valid(policy) || !name || !output || *output) return XR_OS_IO_BAD_ARGUMENT;

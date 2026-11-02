@@ -48,6 +48,38 @@ XR_FUNC XrOsIoStatus xr_os_io_self_exe_path(const XrOsIoPolicy *policy, char **o
     return io.status;
 }
 
+XR_FUNC XrOsIoStatus xr_os_io_hostname(const XrOsIoPolicy *policy,char **output) {
+    if(!io_policy_valid(policy) || !output || *output)return XR_OS_IO_BAD_ARGUMENT;
+    DWORD capacity=0;
+    BOOL sized=GetComputerNameExW(ComputerNameDnsHostname,NULL,&capacity);
+    DWORD sizing_error=sized?ERROR_SUCCESS:GetLastError();
+    if(sized)return XR_OS_IO_IO;
+    if(sizing_error!=ERROR_MORE_DATA)return io_windows_status(sizing_error);
+    if(!capacity)return XR_OS_IO_IO;
+    XrIoContext io={policy,XR_OS_IO_OK};
+    for(;;) {
+        if((uint64_t)capacity>SIZE_MAX/sizeof(wchar_t))return XR_OS_IO_OVERFLOW;
+        wchar_t *wide=io_alloc(&io,(size_t)capacity*sizeof(*wide));
+        if(!wide)return io.status;
+        DWORD used=capacity;
+        BOOL read=GetComputerNameExW(ComputerNameDnsHostname,wide,&used);
+        DWORD error=read?ERROR_SUCCESS:GetLastError();
+        if(!read && error==ERROR_MORE_DATA && used>capacity) {
+            io_free(&io,wide);
+            DWORD doubled=capacity>UINT32_MAX/2?UINT32_MAX:capacity*2;
+            capacity=used>doubled?used:doubled;continue;
+        }
+        if(!read)io_status(&io,io_windows_status(error));
+        else if(!used || used>=capacity || !wide[0] || wide[used])io_status(&io,XR_OS_IO_BAD_ARGUMENT);
+        char *text=NULL;
+        if(io.status==XR_OS_IO_OK)io_status(&io,xr_win_utf16_text_owned(policy,wide,&text));
+        io_free(&io,wide);
+        if(io.status==XR_OS_IO_OK)*output=text;
+        else io_free(&io,text);
+        return io.status;
+    }
+}
+
 XR_FUNC XrOsIoStatus xr_os_io_environment_get(const XrOsIoPolicy *policy,
     const char *name, char **output) {
     if (!io_policy_valid(policy) || !name || !output || *output) return XR_OS_IO_BAD_ARGUMENT;

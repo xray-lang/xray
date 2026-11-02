@@ -24,7 +24,7 @@ static bool source_os_declare(SourceContext *ctx) {
         if(!source_request_poll(ctx,NULL))return false;
         if(!source_os_module(ctx,m) || source_owned_checked(&ctx->graph->specs[m]))continue;
         ctx->module=m;
-        for(uint32_t id=XR_NATIVE_CALLABLE_OS_PLATFORM;id<=XR_NATIVE_CALLABLE_OS_GETCWD;++id) {
+        for(uint32_t id=XR_NATIVE_CALLABLE_OS_PLATFORM;id<=XR_NATIVE_CALLABLE_OS_HOSTNAME;++id) {
             const XrNativeCallableDeclaration *native=xr_native_callable_by_id(id);
             if(!native || !native->member || !native->member->name)
                 return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"os callable declaration is missing");
