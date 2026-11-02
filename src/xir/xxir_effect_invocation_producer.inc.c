@@ -42,6 +42,9 @@ static XrXirStatus effect_producer_class(const XrXirCompileContext *context,
     if(op.op!=XR_XIR_CLASS_METHOD_REF || op.immediate<0 || (uint64_t)op.immediate>=effect_body_count(material) ||
         op.args[0]>=(uint64_t)body->parameter_count+instruction || op.args[1] || op.targets[0] || op.targets[1] ||
         op.type_arguments[0] || op.type_arguments[1])return XR_XIR_BAD_STRUCTURE;
+    XirClassMethodTarget selected={0};
+    status=effect_class_method_target(context,material,function,instruction,selected_target,&selected);
+    if(status!=XR_XIR_OK)return status;
     const EffectBodyFunction *target=&material->functions[selected_target],*anchor=&material->functions[op.immediate];
     const XrXirFunctionIdentity *identity=&material->declarations->functions[selected_target];
     const XrXirTypes *types=material->domain.types;
@@ -67,16 +70,16 @@ static XrXirStatus effect_producer_class(const XrXirCompileContext *context,
             signature->parameters[p].type!=target->parameters[p+1] ||
             signature->parameters[p].mode!=xr_xir_declared_parameter_mode(types,target->parameters[p+1],
                 target->consume_parameters,target->consume_parameter_count,p+1))return XR_XIR_BAD_STRUCTURE;
-    uint32_t selected=UINT32_MAX;
+    uint32_t selected_site=UINT32_MAX;
     for(uint32_t s=0;s<certificate->final->site_count;++s) {
         const EffectInvocationSite *site=&certificate->final->sites[s];
         if(site->function!=function || site->instruction!=instruction || site->target!=selected_target)continue;
-        if(selected!=UINT32_MAX || site->captures!=1 || site->binding>=certificate->final->binding_count)
+        if(selected_site!=UINT32_MAX || site->captures!=1 || site->binding>=certificate->final->binding_count)
             return XR_XIR_BAD_STRUCTURE;
-        selected=s;
+        selected_site=s;
     }
-    if(selected==UINT32_MAX)return XR_XIR_BAD_STRUCTURE;
-    *output=(XirEffectProducerView){selected,function,instruction,selected_target,1,op.type};return XR_XIR_OK;
+    if(selected_site==UINT32_MAX)return XR_XIR_BAD_STRUCTURE;
+    *output=(XirEffectProducerView){selected_site,function,instruction,selected_target,1,op.type};return XR_XIR_OK;
 }
 static XrXirStatus effect_producer_query(const XrXirCompileContext *context,
     const XrXirEffects *effects,uint32_t function,uint32_t instruction,

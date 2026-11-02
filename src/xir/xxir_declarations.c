@@ -14,6 +14,7 @@
 #include "xxir_types.h"
 #include "xxir_class_hierarchy_internal.h"
 #include "xxir_class_method_internal.h"
+#include "xxir_class_method_read_internal.h"
 #include "xxir_class_stage_internal.h"
 #include "xxir_receive_control.h"
 #include "xxir_native_callable.h"

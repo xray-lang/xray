@@ -312,6 +312,7 @@ static bool source_constructor_parameters(SourceContext *ctx) {
         } else symbol=source_parameter_name(ctx,body->node,parameter,body->parameter_scope);
         if(!symbol)return false;
         symbol->kind=SOURCE_LOCAL;symbol->index=p;symbol->type=body->parameters[p];
+        symbol->module=body->module;symbol->binding_function=ctx->function;symbol->is_parameter=true;
         if(!stage) {
             XrXirSourceRange range={ctx->module,parameter->line,parameter->column,parameter->line,0};
             if(parameter->column>0 && source_text_size(ctx,symbol->name)<=(size_t)(INT_MAX-parameter->column))
