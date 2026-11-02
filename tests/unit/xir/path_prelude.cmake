@@ -14,7 +14,10 @@ set(path_type_c "${CMAKE_CURRENT_BINARY_DIR}/generated/path_type_only.c")
 set(path_import_c "${CMAKE_CURRENT_BINARY_DIR}/generated/path_explicit.c")
 add_custom_command(OUTPUT "${path_type_c}" "${path_import_c}" "${path_type_c}.catalog.c"
     COMMAND $<TARGET_FILE:test_xir_path_prelude> --emit "${path_type_c}" "${path_import_c}"
-    DEPENDS test_xir_path_prelude "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_path_prelude/stdlib/path/path.xr" VERBATIM)
+    DEPENDS test_xir_path_prelude
+        "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_path_prelude/stdlib/path/path.xr"
+        "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_path_prelude/cold-stdlib/path/path.xr"
+        "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_path_prelude/custom.xr" VERBATIM)
 add_executable(test_xir_path_prelude_native xir/test_xir_path_prelude_native.c "${path_type_c}" "${path_import_c}" "${path_type_c}.catalog.c")
 target_link_libraries(test_xir_path_prelude_native PRIVATE xray_xir_scalar)
 target_include_directories(test_xir_path_prelude_native PRIVATE "${PROJECT_SOURCE_DIR}/src")
@@ -28,3 +31,6 @@ add_test(NAME xir_path_prelude_native COMMAND test_xir_path_prelude_native)
 set_tests_properties(xir_path_prelude_native PROPERTIES TIMEOUT 120 LABELS "unit;xir;source;ownership")
 add_test(NAME xir_path_previous123 COMMAND test_xir_path_prelude --previous123 "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_path_prelude/previous123-read-ref.xir")
 set_tests_properties(xir_path_previous123 PROPERTIES TIMEOUT 30 LABELS "unit;xir;checked;ownership")
+add_test(NAME xir_path_prelude_projection COMMAND ${XRAY_PYTHON}
+    "${PROJECT_SOURCE_DIR}/tests/unit/test_path_prelude_projection.py")
+set_tests_properties(xir_path_prelude_projection PROPERTIES TIMEOUT 30 LABELS "unit;xir;metadata")

@@ -282,6 +282,12 @@
         "src/xir/xxir_*math*",
         "tests/fixtures/xir_math/*",
         "tests/unit/xir/*math_source*",
+        "src/xir/xxir_path_prelude.h",
+        "src/xir/xxir_prelude_source_internal.h",
+        "src/shared/xprelude_source.inc.c",
+        "tests/fixtures/xir_path_prelude/*",
+        "tests/unit/xir/*path_prelude*",
+        "tests/unit/test_path_prelude_projection.py",
         "tests/unit/frontend/test_native_declaration_schema.py"
       ],
       "reason": "HIR and complete Source language-family consumers.",
@@ -358,6 +364,10 @@
         "xir_math_source",
         "xir_math_source_native",
         "xir_math_previous122",
+        "xir_path_prelude",
+        "xir_path_prelude_native",
+        "xir_path_previous123",
+        "xir_path_prelude_projection",
         "test_native_declaration_schema"
       ],
       "targets": [
@@ -413,7 +423,9 @@
         "test_xir_move_source",
         "test_xir_move_native",
         "test_xir_math_source",
-        "test_xir_math_source_native"
+        "test_xir_math_source_native",
+        "test_xir_path_prelude",
+        "test_xir_path_prelude_native"
       ]
     },
     "errors-cleanup": {
