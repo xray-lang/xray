@@ -463,7 +463,7 @@ static XrXirStatus effect_invocation_capture_site(EffectInvocationFlow *flow,
     uint32_t binding_words=flow->basis.origin_words+flow->basis.cell_words;
     for (uint32_t p=0;p<site->captures && status==XR_XIR_OK;++p) {
 
-        uint32_t value=effect_reference_value(flow->function,op,p);
+        uint32_t value=effect_reference_value(flow->function->operands,op,p);
         if (value>=flow->values) return XR_XIR_BAD_VALUE;
         uint64_t *binding=descriptor+flow->basis.origin_words+
             (size_t)(site->binding+p)*binding_words;

@@ -465,14 +465,14 @@ static XrXirStatus effect_invocation_latent_input(EffectInvocationFlow *flow,
         uint64_t *row=input+(size_t)p*flow->basis.row_words;
         if (xr_xir_type_is_class(flow->body.domain.types,target->parameters[p])) {
             if(p<site.captures) {
-                uint32_t actual=effect_reference_value(flow->function,op,p);
+                uint32_t actual=effect_reference_value(flow->function->operands,op,p);
                 status=effect_invocation_class_word(flow,actual,row+flow->basis.fn_words);
             } else status=effect_invocation_class_encode(flow,EFFECT_CLASS_KNOWN|EFFECT_CLASS_UNKNOWN,
                 row+flow->basis.fn_words);
             continue;
         }
         if (p<site.captures) {
-            uint32_t actual=effect_reference_value(flow->function,op,p);
+            uint32_t actual=effect_reference_value(flow->function->operands,op,p);
             if (actual>=flow->values) { status=XR_XIR_BAD_VALUE;break; }
             if (xr_xir_type_is_cell(flow->body.domain.types,target->parameters[p]))
                 status=effect_invocation_cell(flow,actual,row+flow->basis.fn_words,NULL);

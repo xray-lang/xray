@@ -54,7 +54,7 @@ static XrXirStatus effect_capture_reference_seed(const EffectCaptureRead *read,
     if(status!=XR_XIR_OK) return status;
     for(uint32_t p=0;p<reference->captures;++p) {
 
-        XrXirType actual=0;status=effect_body_request_type(&read->body,reference->function,effect_reference_value(&source,op,p),&actual);
+        XrXirType actual=0;status=effect_body_request_type(&read->body,reference->function,effect_reference_value(source.operands,op,p),&actual);
         if(status!=XR_XIR_OK) return status;
         if(xr_xir_type_span(read->body.domain.types,target.parameters[p]) || xr_xir_type_span(read->body.domain.types,actual))
             return XR_XIR_OK;

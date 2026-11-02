@@ -203,7 +203,7 @@ static XrXirStatus effect_capture_reference_site(EffectCaptureRead *read,const E
     if(op->op!=XR_XIR_CLASS_METHOD_REF && (op->args[0]>node->head.operand_count || reference->captures>node->head.operand_count-op->args[0])) return XR_XIR_BAD_STRUCTURE;
     for(uint32_t p=0;p<reference->captures;++p) {
 
-        uint32_t source=effect_reference_value(&node->head,op,p),kind=0;
+        uint32_t source=effect_reference_value(node->head.operands,op,p),kind=0;
         status=effect_capture_kind(read,node,source,&kind,NULL);if(status!=XR_XIR_OK) return status;
         uint64_t binding=node->basis.origin_words+((uint64_t)reference->binding+p)*
             (node->basis.origin_words+(uint64_t)node->basis.cell_words);

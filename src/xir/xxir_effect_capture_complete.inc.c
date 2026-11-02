@@ -245,7 +245,7 @@ static XrXirStatus effect_capture_complete_reference(const EffectCaptureRead *re
         for(uint32_t p=0;p<site->captures;++p) {
 
             if(!effect_physical_origin(read->body.domain.types,target.parameters[p])) continue;
-            uint32_t source=effect_reference_value(&node->head,op,p);
+            uint32_t source=effect_reference_value(node->head.operands,op,p);
             if(column-1==site->binding+p) {
                 status=effect_capture_complete_source(read,node->node,source,0,result);
                 if(status!=XR_XIR_OK || !result->complete) return status;
