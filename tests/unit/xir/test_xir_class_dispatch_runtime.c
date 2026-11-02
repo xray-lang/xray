@@ -205,13 +205,16 @@ static void class_test_publication(XrXirTypeArena *arena,XrXirDomain *domain) {
     CHECK(runtime_calls==calls && xr_xir_domain_stats(domain).live_bytes==baseline);
     printf("class Array ancestor publication: rollback/OOM%zu, exact unrelated/downcast/header refusals, actual Derived drop\n",sites);
 }
+#include "test_xir_class_root_fields_controls.h"
 int main(int argc,char **argv) {
-    CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--publication")));
+    CHECK(argc==1 || (argc==2 && (!strcmp(argv[1],"--publication") || !strcmp(argv[1],"--root-fields"))));
     XrCompileResourceLimits limits={0};XrXirCompileContext compiler={0};
     compiler.limits=xr_xir_compile_default_limits();
     CHECK(xr_compile_resources_new(&limits,&compiler.resources)==XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats before={0},after={0};
     CHECK(xr_compile_resources_stats(compiler.resources,&before)==XR_COMPILE_RESOURCE_OK);
+    if(argc==1 || !strcmp(argv[1],"--root-fields"))class_test_root_fields(&compiler);
+    if(argc==2 && !strcmp(argv[1],"--root-fields")){xr_compile_resources_release(compiler.resources);return 0;}
     XrXirTypeArena *arena=class_test_arena(&compiler),*foreign=class_test_arena(&compiler);XrXirDomain *domain=NULL;
     CHECK(xr_xir_domain_new(1048576,&domain)==XR_XIR_VALUE_OK);
     if(argc==1) {
