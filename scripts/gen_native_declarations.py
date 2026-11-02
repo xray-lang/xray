@@ -1154,7 +1154,12 @@ def render_os_getpid(declarations):
 
 def render_os_callables(declarations):
     lines, rows = [], []
-    for ordinal, name in enumerate(('platform', 'arch', 'getenv', 'setenv', 'unsetenv', 'environBlock', 'exit')):
+    for ordinal, name in enumerate(('platform', 'arch', 'getenv', 'setenv', 'unsetenv', 'environBlock', 'exit', 'getpid', 'getcwd')):
+        if name == 'getpid':
+            pid_lines, pid_rows = render_os_getpid(declarations)
+            lines += pid_lines
+            rows += pid_rows
+            continue
         candidates = [row for row in declarations if row.module == 'os' and row.name == '__' + name]
         if len(candidates) != 1:
             raise ValueError('OS host fact requires its sole governed declaration: ' + name)
@@ -1187,8 +1192,7 @@ def render_os_callables(declarations):
             '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + (symbol + '_parameters, 1, XR_NATIVE_TERM_UNIT' if terminate else symbol + '_parameters, 1, XR_NATIVE_TERM_BOOL' if remove else symbol + '_parameters, 2, XR_NATIVE_TERM_BOOL' if setter else symbol + '_parameters, 1, XR_NATIVE_TERM_NULLABLE_STRING' if environment else
                 'NULL, 0, XR_NATIVE_TERM_ARRAY_STRING' if snapshot else 'NULL, 0, XR_NATIVE_TERM_STRING'), '};']
         rows += ['    {XR_NATIVE_CALLABLE_OS_' + provider.upper() + ', NULL, &' + symbol + ', NULL, false, "os", "stdlib/defs/core.def", FINGERPRINT}']
-    pid_lines, pid_rows = render_os_getpid(declarations)
-    return lines + pid_lines, rows + pid_rows
+    return lines, rows
 
 
 
