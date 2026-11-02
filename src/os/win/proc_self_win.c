@@ -92,6 +92,69 @@ XR_FUNC XrOsIoStatus xr_os_io_environment_get(const XrOsIoPolicy *policy,
     return io.status;
 }
 
+XR_FUNC XrOsIoStatus xr_os_io_environment_set(const XrOsIoPolicy *policy,
+    const char *name,const char *value,bool (*current)(void *context),bool *output) {
+    if(!io_policy_valid(policy) || !name || !current || !output)return XR_OS_IO_BAD_ARGUMENT;
+    if(!*name || strchr(name,'=')) { *output=false;return XR_OS_IO_OK; }
+    XrIoContext io={policy,XR_OS_IO_OK};wchar_t *key=NULL,*text=NULL;
+    const char *inputs[2]={name,value};
+    for(uint32_t i=0;i<(value?2u:1u);++i) {
+        size_t length=0;if(!io_length(&io,inputs[i],&length))return io.status;
+        if(length>INT_MAX)return XR_OS_IO_OVERFLOW;
+        SetLastError(ERROR_SUCCESS);
+        int required=xr_win_utf8_to_utf16_required(inputs[i],length);
+        if(!required)return GetLastError()==ERROR_NO_UNICODE_TRANSLATION?XR_OS_IO_BAD_ARGUMENT:
+            length==INT_MAX?XR_OS_IO_OVERFLOW:XR_OS_IO_BAD_ARGUMENT;
+        /* The count includes NUL. Platform text limits are normal refusals;
+         * allocation and arithmetic overflow keep their resource status. */
+        if(required>32768) {
+            if(!current(policy->context))return XR_OS_IO_CANCELLED;
+            *output=false;return XR_OS_IO_OK;
+        }
+    }
+    io_status(&io,xr_win_utf8_text_owned(policy,name,&key));
+    if(io.status==XR_OS_IO_OK && value)io_status(&io,xr_win_utf8_text_owned(policy,value,&text));
+    if(io.status==XR_OS_IO_OK && !current(policy->context))io_status(&io,XR_OS_IO_CANCELLED);
+    if(io.status==XR_OS_IO_OK)*output=SetEnvironmentVariableW(key,text)!=0;
+    io_free(&io,text);io_free(&io,key);return io.status;
+}
+
+XR_FUNC XrOsIoStatus xr_os_io_environment_snapshot_open(XrOsEnvironmentSnapshot *snapshot) {
+    if(!snapshot || snapshot->block)return XR_OS_IO_BAD_ARGUMENT;
+    snapshot->block=GetEnvironmentStringsW();
+    return snapshot->block?XR_OS_IO_OK:io_windows_status(GetLastError());
+}
+XR_FUNC XrOsIoStatus xr_os_io_environment_snapshot_each(const XrOsIoPolicy *policy,
+    const XrOsEnvironmentSnapshot *snapshot,bool (*current)(void *context,size_t work),
+    XrOsIoStatus (*visitor)(void *context,const char *text,size_t length)) {
+    if(!io_policy_valid(policy) || !snapshot || !snapshot->block || !current || !visitor)
+        return XR_OS_IO_BAD_ARGUMENT;
+    for(const wchar_t *entry=snapshot->block;*entry;) {
+        size_t length=0;
+        for(;;) {
+            if(!(length%256) && !current(policy->context,256))return XR_OS_IO_CANCELLED;
+            if(!entry[length])break;
+            if(length==INT_MAX)return XR_OS_IO_OVERFLOW;
+            ++length;
+        }
+        if(length>(SIZE_MAX-1)/8)return XR_OS_IO_OVERFLOW;
+        if(!current(policy->context,8*length+1))return XR_OS_IO_CANCELLED;
+        char *text=NULL;
+        XrOsIoStatus status=xr_win_utf16_text_owned(policy,entry,&text);
+        if(status==XR_OS_IO_OK)status=visitor(policy->context,text,strlen(text));
+        if(text)policy->free(policy->context,text);
+        if(status!=XR_OS_IO_OK)return status;
+        entry+=length+1;
+    }
+    return current(policy->context,1)?XR_OS_IO_OK:XR_OS_IO_CANCELLED;
+}
+XR_FUNC XrOsIoStatus xr_os_io_environment_snapshot_close(XrOsEnvironmentSnapshot *snapshot) {
+    if(!snapshot)return XR_OS_IO_BAD_ARGUMENT;
+    if(!snapshot->block)return XR_OS_IO_OK;
+    if(!FreeEnvironmentStringsW(snapshot->block))return XR_OS_IO_IO;
+    snapshot->block=NULL;return XR_OS_IO_OK;
+}
+
 int64_t xr_proc_self_pid(void) {
     return (int64_t) GetCurrentProcessId();
 }

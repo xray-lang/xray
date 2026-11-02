@@ -199,6 +199,21 @@ XR_FUNC int xr_proc_self_exe_path(char *buf, size_t size);
 XR_FUNC XrOsIoStatus xr_os_io_self_exe_path(const XrOsIoPolicy *policy, char **output);
 XR_FUNC XrOsIoStatus xr_os_io_environment_get(const XrOsIoPolicy *policy,
     const char *name, char **output);
+/* NULL value deletes; a nonNULL empty value sets an empty string.
+ * A normal OS refusal publishes false; allocation and control failure preserve
+ * output. The synchronous check borrows policy.context only until this returns. */
+XR_FUNC XrOsIoStatus xr_os_io_environment_set(const XrOsIoPolicy *policy,
+    const char *name, const char *value, bool (*current)(void *context), bool *output);
+/* A snapshot retains its OS allocation until close succeeds. Iteration borrows
+ * policy/context only synchronously and passes each owned UTF-8 temporary to
+ * the visitor. Work checks include the bounded scans and conversion passes. */
+typedef struct XrOsEnvironmentSnapshot { void *block; } XrOsEnvironmentSnapshot;
+XR_FUNC XrOsIoStatus xr_os_io_environment_snapshot_open(XrOsEnvironmentSnapshot *snapshot);
+XR_FUNC XrOsIoStatus xr_os_io_environment_snapshot_each(const XrOsIoPolicy *policy,
+    const XrOsEnvironmentSnapshot *snapshot, bool (*current)(void *context, size_t work),
+    XrOsIoStatus (*visitor)(void *context, const char *text, size_t length));
+/* Failure preserves the handle, allowing its real owner to retry explicitly. */
+XR_FUNC XrOsIoStatus xr_os_io_environment_snapshot_close(XrOsEnvironmentSnapshot *snapshot);
 
 // Returns true if a debugger (lldb / gdb / Visual Studio) is
 // attached to the current process at the time of the call. Best
