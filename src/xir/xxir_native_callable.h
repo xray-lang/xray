@@ -36,7 +36,7 @@ static inline bool xir_native_callable_types(uint32_t id,const XrXirTypes *types
     const XrXirType *parameters,uint32_t count,XrXirType result,XrXirType error) {
     const XrNativeCallableDeclaration *canonical=xr_native_callable_by_id(id);
     if(id==XR_NATIVE_CALLABLE_SYS_THREAD_YIELD)return xir_sys_thread_yield_signature(parameters,count,result,error);
-    if(xir_os_native_id(id))return xir_os_native_signature(id,parameters,count,result,error);
+    if(xir_os_native_id(id))return xir_os_native_signature(id,types,parameters,count,result,error);
     if(xir_math_native_id(id))return xir_math_native_signature(id,parameters,count,result,error);
     if(xir_task_aggregate_native(id))return xir_task_aggregate_signature(id,types,parameters,count,result,error);
     if (xir_mem_native_id(id)) return xir_mem_native_signature(id,types,parameters,count,result,error);

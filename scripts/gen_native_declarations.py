@@ -1118,23 +1118,30 @@ def render_sys_thread_yield(declarations):
 
 def render_os_callables(declarations):
     lines, rows = [], []
-    for ordinal, name in enumerate(('platform', 'arch')):
+    for ordinal, name in enumerate(('platform', 'arch', 'getenv')):
         candidates = [row for row in declarations if row.module == 'os' and row.name == '__' + name]
         if len(candidates) != 1:
             raise ValueError('OS host fact requires its sole governed declaration: ' + name)
         row = candidates[0]
+        environment = name == 'getenv'
+        signature = '(name: string): string?' if environment else '(): string'
+        result = 'string?' if environment else 'string'
         if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
                 row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
                 row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
                 row.ret, row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
-                '(): string', '0', '', 'internal', '', '', 'fresh', 'system', 'os_' + name,
+                signature, '1' if environment else '0', 's' if environment else '', 'internal', '', '', 'fresh', 'system', 'os_' + name,
                 'xrt_os_' + name, True, 'method', '', 'normal', '', '', 'value', False, None, (), ''):
             raise ValueError('OS host fact differs from its complete source contract: ' + name)
         symbol = 'xr_native_os_' + name
+        if environment:
+            lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {',
+                '    {"name", "string", XR_NATIVE_TERM_STRING, false, false},', '};']
         lines += ['static const XrNativeMemberDeclaration ' + symbol + ' = {',
-            '    ' + str(ordinal + 1) + ', "__' + name + '", "(): string", "string", 0, 0, XR_NATIVE_RECEIVER_READ,',
+            '    ' + str(ordinal + 1) + ', "__' + name + '", ' + c_string(signature) + ', ' + c_string(result) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
             '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
-            '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_STRING', '};']
+            '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + (symbol + '_parameters, 1, XR_NATIVE_TERM_NULLABLE_STRING' if environment else
+                'NULL, 0, XR_NATIVE_TERM_STRING'), '};']
         rows += ['    {XR_NATIVE_CALLABLE_OS_' + name.upper() + ', NULL, &' + symbol + ', NULL, false, "os", "stdlib/defs/core.def", FINGERPRINT}']
     return lines, rows
 

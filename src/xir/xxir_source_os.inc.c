@@ -5,11 +5,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_source_os.inc.c - Owned host-name declarations in the standard os module
+ * xxir_source_os.inc.c - Owned host-query declarations in the standard os module
  *
  * KEY CONCEPT:
  *   Source lexical declarations win; only the real standard module receives
- *   the governed zero-argument host-name leaves.
+ *   the governed host-query leaves.
  */
 #include "xxir_os_native.h"
 static bool source_os_module(SourceContext *ctx,uint32_t module) {
@@ -20,29 +20,36 @@ static bool source_os_module(SourceContext *ctx,uint32_t module) {
 }
 static bool source_os_declare(SourceContext *ctx) {
     uint32_t saved_module=ctx->module,saved_function=ctx->function;
-    for(uint32_t id=XR_NATIVE_CALLABLE_OS_PLATFORM;id<=XR_NATIVE_CALLABLE_OS_ARCH;++id)
-        if(!xir_os_native_signature(id,NULL,0,XR_XIR_STRING,XR_XIR_NEVER))
-            return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"os callable differs from its governed signature");
     for(uint32_t m=0;m<ctx->module_count;++m) {
         if(!source_request_poll(ctx,NULL))return false;
         if(!source_os_module(ctx,m) || source_owned_checked(&ctx->graph->specs[m]))continue;
         ctx->module=m;
-        for(uint32_t id=XR_NATIVE_CALLABLE_OS_PLATFORM;id<=XR_NATIVE_CALLABLE_OS_ARCH;++id) {
+        for(uint32_t id=XR_NATIVE_CALLABLE_OS_PLATFORM;id<=XR_NATIVE_CALLABLE_OS_GETENV;++id) {
             const XrNativeCallableDeclaration *native=xr_native_callable_by_id(id);
+            if(!native || !native->member || !native->member->name)
+                return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"os callable declaration is missing");
             if(find_name(ctx,ctx->names[m],native->member->name))continue;
             if(ctx->function_count>=ctx->function_capacity)
                 return source_fail(ctx,NULL,XR_XIR_BUDGET,"os native callable inventory exhausted");
             const char *name=source_owned_text(ctx,native->member->name);
             const char *signature=source_owned_text(ctx,native->member->signature);
-            if(!name || !signature)return false;
+            uint32_t count=id==XR_NATIVE_CALLABLE_OS_GETENV?1u:0u;
+            XrXirType *parameters=count?source_alloc(ctx,count,sizeof(*parameters)):NULL,result=XR_XIR_STRING;
+            if(!name || !signature || (count && !parameters))return false;
+            if(count) {
+                parameters[0]=XR_XIR_STRING;
+                if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=XR_XIR_STRING},&result))return false;
+            }
+            if(!xir_os_native_signature(id,&ctx->types,parameters,count,result,XR_XIR_NEVER))
+                return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"os callable differs from its governed signature");
             SourceName *symbol=add_name(ctx,&ctx->names[m],name,NULL);if(!symbol)return false;
             uint32_t index=ctx->function_count++;
             symbol->kind=SOURCE_FUNCTION;symbol->index=index;symbol->module=m;
             ctx->functions[index]=(XrXirFunction){.name=name,.name_length=(uint32_t)strlen(name),
-                .result=XR_XIR_STRING,.error_type=XR_XIR_NEVER};
+                .parameters=parameters,.parameter_count=count,.result=result,.error_type=XR_XIR_NEVER};
             ctx->identities[index]=(XrXirFunctionIdentity){.module=m,
                 .promises=XR_XIR_FUNCTION_NO_SUSPEND,.native_callable=id};
-            ctx->bodies[index].module=m;
+            ctx->bodies[index].module=m;ctx->bodies[index].parameters=parameters;
             if(!source_query_declare(ctx,symbol,XR_XIR_SOURCE_FUNCTION,0,(XrXirSourceRange){m,0,0,0,0}))return false;
             ((XrXirSourceDeclaration *)ctx->query.declarations)[symbol->declaration-1].signature=signature;
             ctx->bodies[index].declaration=symbol->declaration;ctx->function=index;
