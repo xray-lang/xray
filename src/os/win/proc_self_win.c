@@ -92,6 +92,18 @@ XR_FUNC XrOsIoStatus xr_os_io_environment_get(const XrOsIoPolicy *policy,
     return io.status;
 }
 
+XR_FUNC XrOsIoStatus xr_os_io_environment_set(const XrOsIoPolicy *policy,
+    const char *name,const char *value,bool (*current)(void *context),bool *output) {
+    if(!io_policy_valid(policy) || !name || !value || !current || !output)return XR_OS_IO_BAD_ARGUMENT;
+    if(!*name || strchr(name,'=')) { *output=false;return XR_OS_IO_OK; }
+    XrIoContext io={policy,XR_OS_IO_OK};wchar_t *key=NULL,*text=NULL;
+    io_status(&io,xr_win_utf8_text_owned(policy,name,&key));
+    if(io.status==XR_OS_IO_OK)io_status(&io,xr_win_utf8_text_owned(policy,value,&text));
+    if(io.status==XR_OS_IO_OK && !current(policy->context))io_status(&io,XR_OS_IO_CANCELLED);
+    if(io.status==XR_OS_IO_OK)*output=SetEnvironmentVariableW(key,text)!=0;
+    io_free(&io,text);io_free(&io,key);return io.status;
+}
+
 int64_t xr_proc_self_pid(void) {
     return (int64_t) GetCurrentProcessId();
 }
