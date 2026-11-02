@@ -40,6 +40,7 @@ static bool source_class_stage_eligible(SourceContext *ctx,AstNode *node) {
     if(!node || node->type!=AST_CLASS_DECL)return false;
     ClassDeclNode *type=&node->as.class_decl;
     if(type->type_param_count || type->explicit_final)return false;
+    for(int i=0;i<type->interface_count;++i)if(source_sendable_marker(ctx,type->interfaces[i]))return false;
     for(int f=0;f<type->field_count;++f)
         if(type->fields[f]->type!=AST_FIELD_DECL || type->fields[f]->as.field_decl.is_private ||
             type->fields[f]->as.field_decl.is_protected)return false;

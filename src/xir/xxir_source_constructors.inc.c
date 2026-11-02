@@ -295,28 +295,43 @@ static bool source_constructor_new(SourceContext *ctx, AstNode *node, SourceExpe
     return source_constructor_invoke(ctx, node, &call, value);
 }
 static bool source_constructor_parameters(SourceContext *ctx) {
-    SourceFunction *body=&ctx->bodies[ctx->function];
-    MethodDeclNode *method=&body->node->as.method_decl;
-    for (uint32_t p = 0; p < (uint32_t)method->param_count; ++p) {
-        /* Only the source constructor claims the original parameter item.
-         * Its private field helper projects that already checked signature. */
-        SourceName *symbol = ctx->identities[ctx->function].method_kind==XR_XIR_CONSTRUCTOR_FIELDS ?
-            add_name(ctx,&ctx->locals,method->params[p]->name,body->node) :
-            source_parameter_name(ctx,body->node,method->params[p],body->parameter_scope);
-        if (!symbol) return false;
-        symbol->kind = SOURCE_LOCAL; symbol->index = p; symbol->type = body->parameters[p];
-        XrParamNode *parameter = method->params[p];
-        XrXirSourceRange range = {ctx->module, parameter->line, parameter->column, parameter->line, 0};
-        if (parameter->column > 0 && source_text_size(ctx, symbol->name) <= (size_t)(INT_MAX - parameter->column))
-            range.end_column = parameter->column + (int)source_text_size(ctx, symbol->name);
-        if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_PARAMETER, body->declaration, range)) return false;
+    SourceFunction *body=&ctx->bodies[ctx->function];MethodDeclNode *method=&body->node->as.method_decl;
+    bool stage=ctx->identities[ctx->function].method_kind==XR_XIR_CONSTRUCTOR_FIELDS;
+    for(uint32_t p=0;p<(uint32_t)method->param_count;++p) {
+        const XrParamNode *parameter=method->params[p];SourceName *symbol=NULL;
+        if(stage) {
+            uint32_t item=0;
+            if(!xr_hir_items_find(ctx->items,ctx->module,body->parameter_scope,parameter->name,&item))
+                return source_fail(ctx,body->node,XR_XIR_BAD_STRUCTURE,"field helper has no constructor parameter declaration");
+            const SourceName *declared=xr_hir_items_binding(ctx->items,item);
+            if(!declared || !declared->declaration || declared->node!=body->node ||
+                declared->type!=body->parameters[p] || declared->index!=p)
+                return source_fail(ctx,body->node,XR_XIR_BAD_STRUCTURE,"field helper parameter changed its constructor owner");
+            symbol=add_name(ctx,&ctx->locals,parameter->name,body->node);
+            if(symbol)symbol->declaration=declared->declaration;
+        } else symbol=source_parameter_name(ctx,body->node,parameter,body->parameter_scope);
+        if(!symbol)return false;
+        symbol->kind=SOURCE_LOCAL;symbol->index=p;symbol->type=body->parameters[p];
+        if(!stage) {
+            XrXirSourceRange range={ctx->module,parameter->line,parameter->column,parameter->line,0};
+            if(parameter->column>0 && source_text_size(ctx,symbol->name)<=(size_t)(INT_MAX-parameter->column))
+                range.end_column=parameter->column+(int)source_text_size(ctx,symbol->name);
+            if(!source_query_declare(ctx,symbol,XR_XIR_SOURCE_PARAMETER,body->declaration,range))return false;
+        }
         symbol->declared_mode=parameter->passing_mode;
         if(symbol->declared_mode==XR_PARAM_MOVE)symbol->mutable=true;
-        if(!source_hir_parameter_declared(ctx,symbol))return false;
-        source_query_binding_type(ctx, symbol);
+        if(body->constructor_stage) {
+            /* A wrapper forwards the incoming word. Only the real AST body
+             * materializes a mutable Cell for a consuming formal. */
+            ((XrXirSourceDeclaration *)ctx->query.declarations)[symbol->declaration-1].type=source_query_type(ctx,symbol->type);
+        } else {
+            if(!source_hir_parameter_declared(ctx,symbol))return false;
+            source_query_binding_type(ctx,symbol);
+        }
     }
     return true;
 }
+
 static bool source_constructor_body(SourceContext *ctx) {
     SourceFunction *body = &ctx->bodies[ctx->function];
     MethodDeclNode *method = &body->node->as.method_decl;
