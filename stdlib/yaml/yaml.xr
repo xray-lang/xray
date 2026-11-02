@@ -502,7 +502,7 @@ fn _codepointString(cp: i64) -> string {
     if (cp <= 0 || cp > 0x10FFFF) { return "" }
     var out = Array<u8>(_utf8Len(cp))
     _putUtf8(ref out, 0, cp)
-    return string.fromUtf8(out[:])!
+    return (try? string.fromUtf8(out[:]))!
 }
 
 fn _decodeDoubleQuotedBody(body: string) -> string {
