@@ -580,6 +580,38 @@ class SysThreadYieldDeclaration(unittest.TestCase):
                                               for item in self.declarations])
 
 
+class OsPlatformDeclaration(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / 'tools' / 'stdlibgen'))
+        from stdlibgen import parse_defs
+        cls.declarations = parse_defs(ROOT)
+
+    def test_platform_is_one_private_system_leaf(self):
+        lines, rows = schema.render_os_platform(self.declarations)
+        self.assertEqual(len(rows), 1)
+        self.assertIn('XR_NATIVE_CALLABLE_OS_PLATFORM, NULL,', rows[0])
+        self.assertIn('NULL, false, "os", "stdlib/defs/core.def", FINGERPRINT', rows[0])
+        self.assertIn('"__platform", "(): string", "string"', '\n'.join(lines))
+        self.assertIn('NULL, 0, XR_NATIVE_TERM_STRING', '\n'.join(lines))
+
+    def test_platform_rejects_missing_duplicate_and_changed_contracts(self):
+        row = next(row for row in self.declarations if row.module == 'os' and row.name == '__platform')
+        for changed in [[item for item in self.declarations if item is not row], self.declarations + [row]]:
+            with self.assertRaises(ValueError):
+                schema.render_os_platform(changed)
+        for field, value in [('signature', '(): i64'), ('argc', '1'), ('arg_spec', 'v'),
+                             ('visibility', 'public'), ('effect', 'nothrow'), ('allocation', 'no_heap'),
+                             ('return_ownership', ''), ('layer', 'pure'), ('vm', 'os_other_platform'),
+                             ('aot', 'other_provider'), ('aot_direct', False), ('aot_kind', 'builtin'),
+                             ('link_object', 'other_provider'), ('vm_binding', 'yieldable'),
+                             ('vm_ifdef', 'OTHER'), ('define', 'OTHER'), ('ret', 'i64'),
+                             ('semantic_intrinsic', True), ('caps', ('task',)), ('suspension_kind', 'task')]:
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                schema.render_os_platform([replace(item, **{field: value}) if item is row else item
+                                              for item in self.declarations])
+
+
 class MathCallableDeclarations(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

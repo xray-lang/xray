@@ -1116,6 +1116,27 @@ def render_sys_thread_yield(declarations):
         '    {XR_NATIVE_CALLABLE_SYS_THREAD_YIELD, NULL, &xr_native_sys_thread_yield, NULL, false, "sys", "stdlib/defs/core.def", FINGERPRINT}']
 
 
+def render_os_platform(declarations):
+    candidates = [row for row in declarations if row.module == 'os' and row.name == '__platform']
+    if len(candidates) != 1:
+        raise ValueError('OS platform requires its sole governed declaration')
+    row = candidates[0]
+    if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+            row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
+            row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
+            row.ret, row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
+            '(): string', '0', '', 'internal', '', '', 'fresh', 'system', 'os_platform',
+            'xrt_os_platform', True, 'method', '', 'normal', '', '', 'value', False, None, (), ''):
+        raise ValueError('OS platform differs from its complete source contract')
+    return [
+        'static const XrNativeMemberDeclaration xr_native_os_platform = {',
+        '    1, "__platform", "(): string", "string", 0, 0, XR_NATIVE_RECEIVER_READ,',
+        '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
+        '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_STRING',
+        '};'], [
+        '    {XR_NATIVE_CALLABLE_OS_PLATFORM, NULL, &xr_native_os_platform, NULL, false, "os", "stdlib/defs/core.def", FINGERPRINT}']
+
+
 def render_unicode_callable(root, decoder):
     import sys
     sys.path.insert(0, str(root / 'tools' / 'stdlibgen'))
@@ -1229,6 +1250,9 @@ def render_unicode_callable(root, decoder):
     sys_lines, sys_rows = render_sys_thread_yield(declarations)
     buffer_lines += sys_lines
     buffer_rows += sys_rows
+    os_lines, os_rows = render_os_platform(declarations)
+    buffer_lines += os_lines
+    buffer_rows += os_rows
     digest = hashlib.sha256((root / 'stdlib/defs/core.def').read_text(encoding='utf-8').encode('utf-8')).digest()
     fingerprint = '{{' + ','.join(str(byte) for byte in digest) + '}}'
     return buffer_lines + [
