@@ -18,6 +18,7 @@
 #include "xxir_cell_provenance_internal.h"
 #include "xxir_effect_contract_internal.h"
 #include "xxir_effect_runtime_internal.h"
+#include "xxir_class_method_internal.h"
 #include "../base/xsha256.h"
 
 #define MATCH(a, b) do { \
@@ -263,6 +264,42 @@ static XrXirStatus program_permission_current(const XrXirCompileContext *context
     return xir_effects_program_body_match_input(context,(XirEffectInput){module,construction,NULL},effects);
 }
 
+typedef struct ProgramMethodReferences {
+    const XrXirCompileContext *context;
+    const XrXirModule *module;
+    XrXirEffects *effects;
+    XrXirProgramPermissions *permissions;
+    uint64_t count;
+    uint32_t caller,instruction;
+} ProgramMethodReferences;
+static XrXirStatus program_method_reference(void *owner,const XirClassMethodTarget *target) {
+    ProgramMethodReferences *read=owner;
+    if (!target || target->function>=read->module->function_count) return XR_XIR_BAD_STRUCTURE;
+    if (read->count>=UINT32_MAX) return XR_XIR_BUDGET;
+    if (!read->permissions) { ++read->count;return XR_XIR_OK; }
+    XirEffectProducerView real={0};
+    XrXirStatus status=xir_effects_producer_target(read->context,read->effects,read->caller,
+        read->instruction,target->function,&real);
+    if (status!=XR_XIR_OK) return status;
+    const XrXirInstruction *op=&read->module->functions[read->caller].instructions[read->instruction];
+    if (read->count>=read->permissions->reference_count || real.function!=read->caller ||
+        real.instruction!=read->instruction || real.target!=target->function ||
+        real.capture_count!=1 || real.type!=op->type) return XR_XIR_BAD_STRUCTURE;
+    read->permissions->references[read->count++]=(XrXirProgramFunctionRef){
+        real.target,real.capture_count,real.instruction,real.site,real.type};
+    ++read->permissions->entries[read->caller].reference_count;return XR_XIR_OK;
+}
+static XrXirStatus program_method_references(ProgramMethodReferences *read,
+    uint32_t caller,uint32_t instruction) {
+    const XrXirFunction *function=&read->module->functions[caller];
+    const XrXirInstruction *op=&function->instructions[instruction];
+    if (op->op!=XR_XIR_CLASS_METHOD_REF || op->immediate<0 ||
+        (uint64_t)op->immediate>=read->module->function_count ||
+        op->args[0]>=(uint64_t)function->parameter_count+instruction) return XR_XIR_BAD_STRUCTURE;
+    read->caller=caller;read->instruction=instruction;
+    return xir_compile_class_method_candidates(read->module,xr_xir_operand_type(function,op->args[0]),
+        (uint32_t)op->immediate,program_method_reference,read,NULL);
+}
 static XrXirStatus program_permissions(const XrXirCompileContext *context,
     const XrXirArtifact *lowered, XrXirEffects *effects, XrXirProgramPermissions **output) {
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
@@ -278,6 +315,11 @@ static XrXirStatus program_permissions(const XrXirCompileContext *context,
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
             if (function->instructions[i].op == XR_XIR_FUNCTION_REF) ++references;
             if (function->instructions[i].op == XR_XIR_GENERATOR_NEW) ++generators;
+            if (function->instructions[i].op == XR_XIR_CLASS_METHOD_REF) {
+                ProgramMethodReferences read={context,module,effects,NULL,references,0,0};
+                status=program_method_references(&read,f,i);references=read.count;
+                if (status!=XR_XIR_OK) break;
+            }
         }
     }
     if (references > UINT32_MAX || generators > UINT32_MAX)
@@ -319,6 +361,11 @@ static XrXirStatus program_permissions(const XrXirCompileContext *context,
 
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
             const XrXirInstruction *op = &function->instructions[i];
+            if (op->op==XR_XIR_CLASS_METHOD_REF) {
+                ProgramMethodReferences read={context,module,effects,permissions,reference_at,0,0};
+                status=program_method_references(&read,f,i);reference_at=(uint32_t)read.count;
+                if (status!=XR_XIR_OK) break;
+            }
             if(op->op==XR_XIR_GENERATOR_NEW) {
                 XirEffectProducerView real={0};
                 status=xir_effects_producer(context,effects,f,i,&real);

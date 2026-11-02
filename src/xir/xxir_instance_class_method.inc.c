@@ -106,8 +106,10 @@ XR_FUNC XrXirCallStatus xr_xir_instance_class_method_at(XrXirCallView *view,uint
     if (!xr_xir_value_from_payload(view->arena,xr_xir_operand_type(body,op->args[0]),payload,&receiver))
         return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirValueAdmission *admission=xr_xir_call_admission(view);
+    XrXirCallStatus status=xr_xir_call_execution_status(view);
+    if (status!=XR_XIR_CALL_READY) return status;
     XirClassMethodTarget target={0};
-    XrXirCallStatus status=instance_method_select(instance,admission,caller,instruction,&receiver,&target);
+    status=instance_method_select(instance,admission,caller,instruction,&receiver,&target);
     if (status!=XR_XIR_CALL_READY) return status;
     const XrXirProgramFunctionRef *site=NULL;
     status=instance_producer_site(instance,admission,caller,instruction,target.function,&site);

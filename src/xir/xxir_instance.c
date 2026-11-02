@@ -1754,6 +1754,8 @@ XR_FUNC XrXirCallStatus xr_xir_instance_call_at(XrXirCallView *view,uint32_t ins
     if (!view_is_child(instance,view) && (entry>=instance->program->entry_count ||
         instance->program->declarations->functions[entry].method_kind!=XR_XIR_CONSTRUCTOR_FIELDS))
         return XR_XIR_CALL_READY;
+    if (!instance->program->permissions || !instance->program->permissions->input ||
+        !instance->program->permissions->input->artifact) return XR_XIR_CALL_BAD_STATE;
     XirEffectInvocationSelection selected={0};
     XrXirCallStatus status=instance_invocation_direct(view,instruction,entry,arguments,count,&selected);
     return status==XR_XIR_CALL_READY?xr_xir_call_invocation_stage(view,&selected):status;
@@ -1922,12 +1924,16 @@ static XrXirCallStatus prepare_function_gate(XrXirInstance *instance) {
 static XrXirCallStatus instance_private_reference(XrXirInstance *instance,
     uint32_t caller, uint32_t entry, XrXirType type, uint32_t captures) {
     const XrXirProgramPermissions *permissions = instance->program->permissions;
-    if (!permissions || caller >= permissions->function_count) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (!permissions || !permissions->input || !permissions->input->artifact ||
+        caller >= permissions->function_count ||
+        caller >= permissions->input->artifact->module.function_count) return XR_XIR_CALL_BAD_ARGUMENT;
+    const XrXirFunction *body=&permissions->input->artifact->module.functions[caller];
     const XrXirProgramPermission *owner = &permissions->entries[caller];
     if (!xr_xir_domain_work(instance->domain, owner->reference_count)) return XR_XIR_CALL_LIMIT;
     for (uint32_t i = 0; i < owner->reference_count; ++i) {
         const XrXirProgramFunctionRef *edge = &permissions->references[owner->reference_begin + i];
-        if (edge->entry == entry && edge->type == type && edge->captures == captures)
+        if (edge->entry == entry && edge->type == type && edge->captures == captures &&
+            edge->instruction<body->instruction_count && body->instructions[edge->instruction].op==XR_XIR_FUNCTION_REF)
             return XR_XIR_CALL_READY;
     }
     return XR_XIR_CALL_BAD_ARGUMENT;
