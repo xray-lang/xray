@@ -133,6 +133,9 @@ static void rejections(const XrXirCompileContext *context) {
         ,{"fn worker()->i64{return 42}\nfn run(){var tasks=[go worker()];const result=try! Task.all(ref tasks)}",XR_XIR_BAD_TYPE}
         ,{"fn run(){const result=try! Task.first([42])}",XR_XIR_BAD_TYPE}
         ,{"fn worker()->i64{return 42}\nfn run(){const tasks=[go worker()];const result=Task.all(tasks)}",XR_XIR_BAD_TYPE}
+        ,{"fn worker(){}\nfn run(){try! Task.all([go worker()])}",XR_XIR_UNSUPPORTED}
+        ,{"fn run<T:Sendable>(tasks:Array<Task<T>>) throws(Cancelled){const result=try Task.all(tasks)}",XR_XIR_UNSUPPORTED}
+        ,{"fn run(tasks:Array<Task<i64>>){defer{try! Task.first(tasks)}}",XR_XIR_BAD_TYPE}
     };
     for(size_t c=0;c<sizeof(cases)/sizeof(*cases);++c) {
         uint64_t before=held(context->resources);XrXirSourceResult result={0};

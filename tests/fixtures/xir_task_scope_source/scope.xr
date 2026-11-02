@@ -236,6 +236,10 @@ fn leaving() {
 }
 fn aggregateValue(value: i64) -> i64 { return value }
 fn aggregateText() -> string { return "aggregate" }
+fn aggregateUnit() {}
+fn aggregateFailure() throws(PayloadError) -> i64 {
+    throw PayloadError.Failed { values: [40, 2] }
+}
 fn aggregates() {
     const a = go aggregateValue(40)
     const b = go aggregateValue(2)
@@ -245,6 +249,21 @@ fn aggregates() {
     const y = go aggregateText()
     const first = try! Task.first([x, y])
     assert(first == "aggregate")
+    try! Task.first([go aggregateUnit()])
+    for (kind in 0..2) {
+        var caught = false
+        const task = go aggregateFailure()
+        try {
+            if (kind == 0) { const result = try Task.all([task]) }
+            else { const result = try Task.first([task]) }
+        } catch (error: PayloadError) {
+            match (error) {
+                PayloadError.Failed { values: items } -> { assert(items[0] + items[1] == 42) }
+            }
+            caught = true
+        } catch (error: Cancelled) { assert(false) }
+        assert(caught)
+    }
 }
 export fn main() -> i64 {
     aggregates()
