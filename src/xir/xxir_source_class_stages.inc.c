@@ -62,8 +62,8 @@ static bool source_class_stage_declarations(SourceContext *ctx,uint32_t *next) {
         uint32_t index=(*next)++;ctx->function=index;ctx->module=owner->module;
         XrXirFunction function=ctx->functions[constructor];
         XrXirType result;uint32_t count=ctx->nominals.declarations[d].field_count;
-        XrXirType *fields=count?source_alloc(ctx,count,sizeof(*fields)):NULL;if(count&&!fields)return false;
-        for(uint32_t f=0;f<count;++f)fields[f]=ctx->nominals.declarations[d].fields[f].type;
+        XrXirCallableParameter *fields=count?source_alloc(ctx,count,sizeof(*fields)):NULL;if(count&&!fields)return false;
+        for(uint32_t f=0;f<count;++f)fields[f]=(XrXirCallableParameter){ctx->nominals.declarations[d].fields[f].type,XR_PARAM_READ};
         if(!source_hir_tuple_type(ctx,fields,count,&result))return false;
         function.name="$class_fields";function.name_length=13;function.result=result;
         ctx->functions[index]=function;
