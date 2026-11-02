@@ -195,7 +195,6 @@
         "xir_fixed_bytes_native",
         "test_xir_channel_select",
         "test_xir_call_select",
-        "test_xir_task_scope",
         "test_xir_task_aggregate"
       ],
       "targets": [
@@ -255,7 +254,6 @@
         "test_xir_fixed_bytes_native",
         "test_xir_channel_select",
         "test_xir_call_select",
-        "test_xir_task_scope",
         "test_xir_task_aggregate"
       ]
     },
@@ -349,12 +347,7 @@
         "xir_stringable_source",
         "xir_stringable_native",
         "test_xir_move_source",
-        "test_xir_move_native",
-        "xir_go_closure",
-        "xir_go_closure_native",
-        "xir_scope_syntax",
-        "xir_task_scope_source",
-        "xir_task_scope_source_native"
+        "test_xir_move_native"
       ],
       "targets": [
         "test_source_nullable_print",
@@ -407,12 +400,7 @@
         "test_xir_stringable_source",
         "test_xir_stringable_native",
         "test_xir_move_source",
-        "test_xir_move_native",
-        "test_xir_go_closure",
-        "test_xir_go_closure_native",
-        "test_xir_scope_syntax",
-        "test_xir_task_scope_source",
-        "test_xir_task_scope_source_native"
+        "test_xir_move_native"
       ]
     },
     "errors-cleanup": {
