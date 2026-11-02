@@ -150,7 +150,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F18",
-        "first_diagnostic": "demos/03-oop/structs_and_interfaces.xr:52:28: error: expression cannot satisfy its declared type"
+        "first_diagnostic": "demos/03-oop/structs_and_interfaces.xr:52:28: error: Array class elements require one complete common ancestor"
       }
     },
     {
