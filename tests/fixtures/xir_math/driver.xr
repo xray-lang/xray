@@ -53,3 +53,16 @@ export fn badRound()->i64{return math.round(9223372036854775808.0)}
 export fn badTrunc()->i64{return math.trunc(-9223372036854777856.0)}
 export fn compileRandom()->f64{return math.random()}
 export fn compilePure()->f64{return math.sqrt(81.0)+math.pow(2.0,3.0)}
+export fn caughtMathRange()->i64 {
+    var completed=0
+    try {
+        defer {completed=completed+1}
+        const ignored=math.floor(1.0/0.0)
+    } catch panic(p) {
+        assert(p.code==422)
+        assert(p.message=="numeric conversion is out of range")
+        assert(p.replacedError==null)
+        return completed==1?42:-1
+    }
+    return -2
+}

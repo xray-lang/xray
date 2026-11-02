@@ -68,11 +68,11 @@ static inline XrXirRunStatus xir_math_native_evaluate(uint32_t id,const XrXirVal
         int64_t input,integer=0;memcpy(&input,&bits,sizeof(input));
         XrXirRunStatus status=xr_xir_number_convert(XR_XIR_F64,XR_XIR_I64,input,&integer);
         if(status!=XR_XIR_RUN_OK)return status;
-        *output=(XrXirValue){XR_XIR_I64,0,(uint64_t)integer};
+        *output=(XrXirValue){XR_XIR_I64,0,integer};
     } else {
         uint64_t canonical=0;
         if(xr_xir_float_convert(64,64,bits,&canonical)!=XR_XIR_NUMERIC_OK)return XR_XIR_RUN_BAD_ARTIFACT;
-        *output=(XrXirValue){XR_XIR_F64,0,canonical};
+        *output=(XrXirValue){XR_XIR_F64,0,0};memcpy(&output->payload,&canonical,sizeof(canonical));
     }
     return XR_XIR_RUN_OK;
 }

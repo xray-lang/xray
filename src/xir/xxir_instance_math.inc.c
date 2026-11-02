@@ -19,10 +19,11 @@ static XrXirRunStatus instance_math_call(uint32_t id,const XrXirValue *arguments
     if(id==XR_NATIVE_CALLABLE_MATH_RANDOM_INT) {
         int64_t lo,hi;memcpy(&lo,&arguments[0].payload,sizeof(lo));memcpy(&hi,&arguments[1].payload,sizeof(hi));
         int64_t result=xr_math_core_random_i64(xr_random_bytes_callback,NULL,lo,hi);
-        *output=(XrXirValue){XR_XIR_I64,0,(uint64_t)result};
+        *output=(XrXirValue){XR_XIR_I64,0,result};
     } else {
         double result=xr_math_core_random_f64(xr_random_bytes_callback,NULL);uint64_t bits;
-        memcpy(&bits,&result,sizeof(bits));*output=(XrXirValue){XR_XIR_F64,0,bits};
+        memcpy(&bits,&result,sizeof(bits));*output=(XrXirValue){XR_XIR_F64,0,0};
+        memcpy(&output->payload,&bits,sizeof(bits));
     }
     return XR_XIR_RUN_OK;
 }

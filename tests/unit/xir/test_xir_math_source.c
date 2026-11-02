@@ -24,6 +24,9 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"math Source %d: %s\n",__LINE__,#c);exit(1);}}while(0)
+#if !defined(XR_MATH_NATIVE)
+#include "math_source_memory.h"
+#endif
 static XrXirOutputStatus output(void *unused,const XrXirOutputGroup *group) {
     (void)unused;
     if(!group || group->stream!=XR_XIR_STDOUT || group->count!=1 || !group->line)return XR_XIR_OUTPUT_BAD_ARGUMENT;
@@ -31,20 +34,20 @@ static XrXirOutputStatus output(void *unused,const XrXirOutputGroup *group) {
     if(!xr_xir_string_view(group->values,&bytes,&length))return XR_XIR_OUTPUT_BAD_ARGUMENT;
     return fwrite(bytes,1,length,stdout)==length && fputc('\n',stdout)!=EOF?XR_XIR_OUTPUT_OK:XR_XIR_OUTPUT_ERROR;
 }
-static void execute(XrXirProgram *program,const uint32_t ids[7]) {
+static void execute(XrXirProgram *program,const uint32_t ids[8]) {
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     config.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,output,NULL};
     XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
-    for(uint32_t n=0;n<7;++n) {
+    for(uint32_t n=0;n<8;++n) {
         CHECK(xr_xir_instance_start(instance,ids[n],NULL,0)==XR_XIR_CALL_READY);
         XrXirCallStatus status=XR_XIR_CALL_READY;
         for(uint32_t step=0;status==XR_XIR_CALL_READY;++step) {
             CHECK(step<500000);status=xr_xir_instance_poll_bounded(instance,16).outcome.status;
         }
-        if(status!=(n>=3?XR_XIR_CALL_NUMERIC_RANGE:XR_XIR_CALL_RETURNED))
+        if(status!=((n>=3&&n<7)?XR_XIR_CALL_NUMERIC_RANGE:XR_XIR_CALL_RETURNED))
             fprintf(stderr,"math entry%u actual%u\n",n,status);
-        CHECK(status==(n>=3?XR_XIR_CALL_NUMERIC_RANGE:XR_XIR_CALL_RETURNED));
-        if(n<3) {
+        CHECK(status==((n>=3&&n<7)?XR_XIR_CALL_NUMERIC_RANGE:XR_XIR_CALL_RETURNED));
+        if(n<3||n==7) {
             XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
             CHECK(value.type==(uint32_t)(n==2?XR_XIR_F64:XR_XIR_I64));
             CHECK((uint64_t)value.payload==(n==2?UINT64_C(0x8000000000000000):n?42u:0u));xr_xir_value_drop(&value);
@@ -54,7 +57,7 @@ static void execute(XrXirProgram *program,const uint32_t ids[7]) {
 }
 #if defined(XR_MATH_NATIVE)
 XR_DATA const XrXirProgramSpec math_source_program;
-XR_DATA const uint32_t math_source_ids[7];
+XR_DATA const uint32_t math_source_ids[8];
 #else
 static uint32_t named(const XrXirModule *module,const char *name) {
     for(uint32_t f=0;f<module->function_count;++f)
@@ -75,6 +78,35 @@ static size_t append_file(char *text,size_t used,size_t capacity,const char *pat
     FILE *file=fopen(path,"rb");CHECK(file);size_t length=fread(text+used,1,capacity-used-1,file);
     CHECK(length&&feof(file)&&!ferror(file)&&!fclose(file));text[used+length]=0;return used+length;
 }
+#include "math_source_cold.h"
+static bool math_cancel(const void *unused) {(void)unused;return true;}
+static void math_source_resources(const XrXirCompileContext *context,const char *text) {
+    XrCompileResourceStats before={0},after={0};
+    CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
+    for(unsigned mode=0;mode<2;++mode) {
+        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
+        XrCompileRequestControl control={0};XrCompileRequestOptions options={.cancel_poll=math_cancel};
+        if(mode) {
+            CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+            CHECK(xr_compile_session_bind_request(session,&control)==XR_COMPILE_RESOURCE_OK);
+        } else math_fail_next=true;
+        XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_PROJECT,"math-source",XR_MATH_ROOT};
+        XrXirSourceRequest request={session,XR_MATH_ROOT "/tests/fixtures/xir_math/driver.xr",&authority,
+            context,XR_MATH_ROOT "/stdlib",NULL,XR_XIR_PROGRAM,NULL};
+        XrXirSourceText input={"tests/fixtures/xir_math/driver.xr",text,strlen(text)};XrXirSourceResult result={0};
+        XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,NULL,NULL);
+        CHECK(status==(mode?XR_XIR_CANCELLED:XR_XIR_OUT_OF_MEMORY)&&!result.checked&&!result.snapshot);
+        CHECK(!math_fail_next&&math_allocation_failures==1);
+        xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
+        CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK);
+        CHECK(before.held_bytes==after.held_bytes);
+    }
+    XrXirSourceResult restored={0};CHECK(check(context,text,&restored)==XR_XIR_OK);
+    xr_xir_compile_source_result_free(&restored);
+    CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK);
+    CHECK(before.held_bytes==after.held_bytes);
+}
+
 static void controls(const XrXirCompileContext *context,const XrXirArtifact *code) {
     const XrXirModule *module=xr_xir_compile_artifact_module(code);uint32_t found=0;
     for(uint32_t f=0;f<module->function_count;++f) {
@@ -130,15 +162,17 @@ static void controls(const XrXirCompileContext *context,const XrXirArtifact *cod
     module=xr_xir_compile_artifact_module(shadow.checked);
     CHECK(!module->declarations->functions[named(module,"__sqrt")].native_callable);xr_xir_compile_source_result_free(&shadow);
     const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};module=xr_xir_compile_artifact_module(code);
-    for(uint32_t n=0;n<2;++n) {
-        XrXirCtfeCallRequest request={.evaluation={.artifact=code,.function=named(module,n?"compileRandom":"compilePure"),
+    for(uint32_t n=0;n<3;++n) {
+        XrXirCtfeCallRequest request={.evaluation={.artifact=code,.function=named(module,n==2?"caughtMathRange":n?"compileRandom":"compilePure"),
             .target=target,.limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES}},
             .call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
         memcpy(request.evaluation.checked_identity,code->checked_identity,32);XrXirValue result={0};
         XrXirCtfeStatus status=xr_xir_compile_ctfe_calls(&request,&result);
-        if(status!=(n?XR_XIR_CTFE_NOT_SUPPORTED:XR_XIR_CTFE_OK))fprintf(stderr,"math CTFE%u status%u\n",n,status);
-        CHECK(status==(n?XR_XIR_CTFE_NOT_SUPPORTED:XR_XIR_CTFE_OK));
-        if(!n)CHECK(result.type==XR_XIR_F64&&result.payload==UINT64_C(0x4031000000000000));else CHECK(!result.type&&!result.reserved&&!result.payload);
+        if(status!=(n==1?XR_XIR_CTFE_NOT_SUPPORTED:XR_XIR_CTFE_OK))fprintf(stderr,"math CTFE%u status%u\n",n,status);
+        CHECK(status==(n==1?XR_XIR_CTFE_NOT_SUPPORTED:XR_XIR_CTFE_OK));
+        if(!n)CHECK(result.type==XR_XIR_F64&&result.payload==UINT64_C(0x4031000000000000));
+        else if(n==2)CHECK(result.type==XR_XIR_I64&&result.payload==42);
+        else CHECK(!result.type&&!result.reserved&&!result.payload);
         xr_xir_value_drop(&result);
     }
 }
@@ -164,7 +198,9 @@ int main(int argc,char **argv) {
     CHECK(argc==1||(argc==3&&!strcmp(argv[1],"--emit")));char text[32768]={0};
     size_t length=append_file(text,0,sizeof(text),XR_MATH_ROOT "/tests/stdlib/contracts/math/probes/current.xr");
     length=append_file(text,length,sizeof(text),XR_MATH_ROOT "/tests/fixtures/xir_math/driver.xr");CHECK(length);
-    XrXirSourceResult source={0};CHECK(check(&context,text,&source)==XR_XIR_OK);memset(text,'!',sizeof(text));
+    math_source_resources(&context,text);
+    XrXirSourceResult warm={0};CHECK(check(&context,text,&warm)==XR_XIR_OK);xr_xir_compile_source_result_free(&warm);
+    XrXirSourceResult source=math_cold_source(&context,text);memset(text,'!',sizeof(text));
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&source);XrXirArtifact *cold=NULL,*closed=NULL,*code=NULL;
     CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&cold,NULL)==XR_XIR_OK);
@@ -172,13 +208,13 @@ int main(int argc,char **argv) {
     CHECK(xr_xir_compile_specialize(cold,&closed,NULL,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(cold);
     CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},NULL,&code,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);const XrXirModule *module=xr_xir_compile_artifact_module(code);
-    uint32_t ids[7]={module->declarations->entry_function,named(module,"main"),named(module,"negativeZero"),
-        named(module,"badFloor"),named(module,"badCeil"),named(module,"badRound"),named(module,"badTrunc")};
+    uint32_t ids[8]={module->declarations->entry_function,named(module,"main"),named(module,"negativeZero"),
+        named(module,"badFloor"),named(module,"badCeil"),named(module,"badRound"),named(module,"badTrunc"),named(module,"caughtMathRange")};
     if(argc==3) {
         XrXirCSource generated={0};CHECK(xr_xir_compile_emit_c(code,"math_source",16777216,&generated)==XR_XIR_OK);
         FILE *file=fopen(argv[2],"wb");CHECK(file&&fwrite(generated.text,1,generated.length,file)==generated.length);
-        CHECK(fprintf(file,"\nconst uint32_t math_source_ids[7]={%u,%u,%u,%u,%u,%u,%u};\n",
-            ids[0],ids[1],ids[2],ids[3],ids[4],ids[5],ids[6])>0&&!fclose(file));
+        CHECK(fprintf(file,"\nconst uint32_t math_source_ids[8]={%u,%u,%u,%u,%u,%u,%u,%u};\n",
+            ids[0],ids[1],ids[2],ids[3],ids[4],ids[5],ids[6],ids[7])>0&&!fclose(file));
         xr_xir_compile_c_source_free(&generated);xr_xir_compile_artifact_free(code);
     } else {
         controls(&context,code);CHECK(xr_xir_compile_vm_program_take(&code,&program)==XR_XIR_OK&&!code);
