@@ -78,8 +78,13 @@ static bool source_class_virtual_method(SourceContext *ctx,SourceName *method) {
     if(identity->method_kind!=XR_XIR_READ_METHOD || identity->member_access || !identity->nominal_owner ||
         (identity->promises&XR_XIR_FUNCTION_GENERATOR))return false;
     const XrXirNominalDeclaration *owner=&ctx->nominals.declarations[identity->nominal_owner-1];
-    return owner->kind==XR_XIR_NOMINAL_CLASS && !owner->native.native_id && !owner->parameter_count &&
-        !ctx->generics[method->index].parameter_count;
+    if(owner->kind!=XR_XIR_NOMINAL_CLASS || owner->native.native_id || owner->parameter_count ||
+        ctx->generics[method->index].parameter_count)return false;
+    if(owner->parent)return true;
+    if(owner->flags&(XR_XIR_NOMINAL_FINAL|XR_XIR_NOMINAL_SENDABLE))return false;
+    for(uint32_t f=0;f<owner->field_count;++f)
+        if(owner->fields[f].flags&(XR_XIR_FIELD_PRIVATE|XR_XIR_FIELD_PROTECTED))return false;
+    return true;
 }
 static bool source_class_method_reference(SourceContext *ctx,AstNode *node,SourceValue receiver,
     SourceName *method,SourceValue *value) {

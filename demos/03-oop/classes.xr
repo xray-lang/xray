@@ -53,7 +53,7 @@ class Counter {
 
     init() { this.count = 0 }
 
-    ref increment() { this.count = this.count + 1 }
+    increment() { this.count = this.count + 1 }
     getCount() -> i64 { return this.count }
 
     static create() -> Counter {
