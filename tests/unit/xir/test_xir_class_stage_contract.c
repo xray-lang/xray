@@ -229,6 +229,10 @@ static void stage_transition(StageFixture *f) {
     }
     XrXirNominalTable definitions={.declarations=declarations,.count=2};
     XrXirTypes types=f->types;types.nominals=&definitions;XrXirModule built=f->module;built.types=&types;
+    XrXirFunction functions[9];memcpy(functions,f->functions,sizeof(functions));
+    for(uint32_t fn=0;fn<built.function_count;++fn)
+        if(!functions[fn].operand_count)functions[fn].operands=NULL;
+    built.functions=functions;
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;XrXirDiagnostic diagnostic={0};
     CHECK(xir_fixture_check(&context,&built,&checked,&diagnostic)==XR_XIR_OK);
     CHECK(xir_compile_class_stage_verify(xr_xir_compile_artifact_module(checked),NULL)==XR_XIR_OK);
