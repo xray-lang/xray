@@ -1095,6 +1095,27 @@ def render_math_callables(declarations):
     return lines, rows
 
 
+def render_sys_thread_yield(declarations):
+    candidates = [row for row in declarations if row.module == 'sys' and row.name == '__threadYield']
+    if len(candidates) != 1:
+        raise ValueError('Thread yield requires its sole governed declaration')
+    row = candidates[0]
+    if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+            row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
+            row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
+            row.ret, row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
+            '(): ()', '0', '', 'internal', '', '', '', 'system', 'sys_thread_yield',
+            'xrt_sys_thread_yield', True, 'method', '', 'normal', '', '', 'value', False, None, (), ''):
+        raise ValueError('Thread yield differs from its complete source contract')
+    return [
+        'static const XrNativeMemberDeclaration xr_native_sys_thread_yield = {',
+        '    1, "__threadYield", "(): ()", "()", 0, 0, XR_NATIVE_RECEIVER_READ,',
+        '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
+        '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_UNIT',
+        '};'], [
+        '    {XR_NATIVE_CALLABLE_SYS_THREAD_YIELD, NULL, &xr_native_sys_thread_yield, NULL, false, "sys", "stdlib/defs/core.def", FINGERPRINT}']
+
+
 def render_unicode_callable(root, decoder):
     import sys
     sys.path.insert(0, str(root / 'tools' / 'stdlibgen'))
@@ -1205,6 +1226,9 @@ def render_unicode_callable(root, decoder):
     math_lines, math_rows = render_math_callables(declarations)
     buffer_lines += math_lines
     buffer_rows += math_rows
+    sys_lines, sys_rows = render_sys_thread_yield(declarations)
+    buffer_lines += sys_lines
+    buffer_rows += sys_rows
     digest = hashlib.sha256((root / 'stdlib/defs/core.def').read_text(encoding='utf-8').encode('utf-8')).digest()
     fingerprint = '{{' + ','.join(str(byte) for byte in digest) + '}}'
     return buffer_lines + [

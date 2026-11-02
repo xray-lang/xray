@@ -256,7 +256,8 @@ typedef enum XrNativeCallableId {
     XR_NATIVE_CALLABLE_MATH_TRUNC = 51,
     XR_NATIVE_CALLABLE_MATH_FMOD = 52,
     XR_NATIVE_CALLABLE_MATH_LOG1P = 53,
-    XR_NATIVE_CALLABLE_MATH_EXPM1 = 54
+    XR_NATIVE_CALLABLE_MATH_EXPM1 = 54,
+    XR_NATIVE_CALLABLE_SYS_THREAD_YIELD = 55
 } XrNativeCallableId;
 
 /* Callable IDs authenticate ordinary function bodies, independently of inline intrinsics. */

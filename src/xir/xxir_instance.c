@@ -21,6 +21,7 @@
 #include "xxir_instance_value.h"
 #include "xxir_format.h"
 #include "xxir_native_callable.h"
+#include "../os/os_thread.h"
 #include "xxir_from_utf8_internal.h"
 #include "xxir_unicode_internal.h"
 #include "xxir_call_view_internal.h"
@@ -2415,7 +2416,11 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
     value=state;
     status=xr_xir_call_execution_status(view);if (status!=XR_XIR_CALL_READY) goto failed;
     XrXirViewAccess access={0};XrXirValueStatus converted=XR_XIR_VALUE_OK;
-    if(xir_math_native_id(id)) {
+    if(id==XR_NATIVE_CALLABLE_SYS_THREAD_YIELD) {
+        if(!xir_sys_thread_yield_scope(program->declarations,index,program->entry_count))goto failed;
+        xr_thread_yield();
+        *value=(XrXirValue){XR_XIR_UNIT,0,0};
+    } else if(xir_math_native_id(id)) {
         if(!xir_math_native_scope(program->declarations,index,program->entry_count))goto failed;
         XrXirRunStatus evaluated=instance_math_call(id,view->arguments,view->argument_count,value);
         if(evaluated!=XR_XIR_RUN_OK)return xr_xir_call_fault(evaluated);
