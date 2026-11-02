@@ -45,6 +45,8 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 内置登记表是实现投影，不是新 XIR 声明族的准入清单。`TaskResult<T, E>` 已按 native19 登记为下表四种终态。§2.2.2 的 `Never`、`Task<T, E>` 在本表中的完整投影仍待同步；下表中的既有 Task 参数不能覆盖这些语言规则。§2.4.2 规定的 `MutSlice` 尚未列入该表；完整视图注册与准入仍待对应声明族实现，不能把规范中的类型说明计作当前实现覆盖。
 
+标准库声明的预声明类型名（例如 `Path`、`OsMutex`）只在类型位置免导入，并绑定到声明模块中那个真实导出的普通 class。同名用户声明仍按词法规则优先。构造、字段、方法及模块值的访问仍须具备对应模块权限；例如 `import path` 后通过 `path.Path(...)` 构造。只在签名或容器类型中使用 `Path` 不会导入或初始化 `path` 模块。登记名字不代表该声明族在当前执行载体上已完整实现，具体实现范围见 §17。
+
 <!-- xr-builtin-registry:begin -->
 
 #### 2.2.1 内置符号登记表
@@ -1164,6 +1166,8 @@ Xray is statically typed; every expression has a determined type at compile time
 | Type alias | `type Name = SomeType`, `type Name<T> = SomeType` |
 
 The built-in registry is an implementation projection, not the new XIR declaration-family admission list. `TaskResult<T, E>` is registered through native19 with the four terminal variants below. The complete registry projections of `Never` and `Task<T, E>` from §2.2.2 remain pending; the existing Task arguments in the table do not override those language rules. The `MutSlice` contract in §2.4.2 is not yet represented in this registry. Full view registration and admission remain implementation work for that declaration family; describing the type does not count as current implementation coverage.
+
+Predeclared type names whose ordinary declarations live in a standard-library module, such as `Path` and `OsMutex`, require no import in type position and bind to the actual exported class in that module. Lexically visible user declarations still take precedence. Construction, fields, methods, and module values retain their module-access requirements; for example, import `path` and construct through `path.Path(...)`. Using `Path` only in a signature or container type neither imports nor initializes the `path` module. A registry entry does not establish complete implementation of that declaration family on the current execution carrier; see §17 for implementation scope.
 
 <!-- xr-builtin-registry:begin -->
 

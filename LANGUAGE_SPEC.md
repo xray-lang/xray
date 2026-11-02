@@ -641,6 +641,8 @@ Xray is statically typed; every expression has a determined type at compile time
 
 The built-in registry is an implementation projection, not the new XIR declaration-family admission list. `TaskResult<T, E>` is registered through native19 with the four terminal variants below. The complete registry projections of `Never` and `Task<T, E>` from §2.2.2 remain pending; the existing Task arguments in the table do not override those language rules. The `MutSlice` contract in §2.4.2 is not yet represented in this registry. Full view registration and admission remain implementation work for that declaration family; describing the type does not count as current implementation coverage.
 
+Predeclared type names whose ordinary declarations live in a standard-library module, such as `Path` and `OsMutex`, require no import in type position and bind to the actual exported class in that module. Lexically visible user declarations still take precedence. Construction, fields, methods, and module values retain their module-access requirements; for example, import `path` and construct through `path.Path(...)`. Using `Path` only in a signature or container type neither imports nor initializes the `path` module. A registry entry does not establish complete implementation of that declaration family on the current execution carrier; see §17 for implementation scope.
+
 <!-- xr-builtin-registry:begin -->
 
 #### 2.2.1 Built-in symbol registry
