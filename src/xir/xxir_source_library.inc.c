@@ -448,6 +448,7 @@ static bool source_library_function(SourceContext *ctx, const XrXirModule *libra
     if (ctx->identities[target].nominal_owner &&
         (ctx->identities[target].method_kind==XR_XIR_CONSTRUCTOR ||
          ctx->identities[target].method_kind==XR_XIR_MATERIALIZER ||
+         ctx->identities[target].method_kind==XR_XIR_CONSTRUCTOR_FIELDS ||
          ctx->identities[target].method_kind==XR_XIR_MEMBER_HELPER)) {
         uint32_t owner=ctx->identities[target].nominal_owner-1;
         ctx->bodies[target].declaration=ctx->nominal_sources[owner]->declaration;
