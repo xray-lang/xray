@@ -2442,7 +2442,9 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
         if(evaluated!=XR_XIR_RUN_OK)return xr_xir_call_fault(evaluated);
     } else if(xir_os_native_id(id)) {
         if(!xir_os_native_scope(program->declarations,index,program->entry_count))goto failed;
-        if(id==XR_NATIVE_CALLABLE_OS_EXIT) {
+        if(id==XR_NATIVE_CALLABLE_OS_GETPID) {
+            *value=(XrXirValue){XR_XIR_I64,0,xr_os_core_getpid()};
+        } else if(id==XR_NATIVE_CALLABLE_OS_EXIT) {
             status=xr_xir_call_execution_status(view);
             if(status!=XR_XIR_CALL_READY)goto failed;
             xr_proc_self_exit(view->arguments[0].payload);
