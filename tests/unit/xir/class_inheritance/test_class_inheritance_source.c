@@ -147,6 +147,7 @@ static XrXirLibraryCatalog *class_inheritance_hidden_catalog(const XrXirCompileC
         " var receiver=value\n const bound=receiver.speak\n"
         " receiver=Animal(\"Other-owned-name\",0)\n return bound\n}\n";
     static const char facade[]=
+        "import {Animal} from \"./base\"\n"
         "import {make} from \"./dog\"\nimport {retained} from \"./client\"\n"
         "export fn callHidden()->i64{const bound=retained(make());return bound()}\n";
     const char *names[]={"dog.xr","client.xr","facade.xr"},*texts[]={dog,client,facade};
