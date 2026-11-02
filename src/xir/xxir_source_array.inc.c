@@ -146,6 +146,39 @@ static bool source_array_receiver(SourceContext *ctx, AstNode *node, AstNode *in
 }
 static bool source_array_spread_literal(SourceContext *ctx, AstNode *node,
     SourceExpectedType expected, SourceValue *value);
+/* The complete element type is chosen before any element is evaluated.
+ * Calls still pass their ordinary argument, visibility and ownership checks. */
+static bool source_array_class_context(SourceContext *ctx,ArrayLiteralNode *literal,SourceExpectedType *output) {
+    XrXirType common=XR_XIR_UNIT;
+    for(int i=0;i<literal->count;++i) {
+        AstNode *node=literal->elements[i];
+        if(!source_request_poll(ctx,node))return false;
+        while(node && node->type==AST_GROUPING)node=node->as.grouping;
+        SourceExpectedType type={0};
+        if(!source_ground_type(ctx,node,0,&type))return false;
+        if(!type.present && node && node->type==AST_CALL_EXPR) {
+            AstNode *callee=node->as.call_expr.callee;SourceName *symbol=NULL;
+            if(callee && callee->type==AST_VARIABLE)symbol=visible_name(ctx,callee->as.variable.name);
+            else if(callee && callee->type==AST_MEMBER_ACCESS && callee->as.member_access.object->type==AST_VARIABLE) {
+                SourceName *module=visible_name(ctx,callee->as.member_access.object->as.variable.name);
+                if(module && module->kind==SOURCE_MODULE)symbol=imported_declaration(ctx,module,callee->as.member_access.name);
+            }
+            if(symbol && symbol->kind==SOURCE_IMPORT)symbol=imported_declaration(ctx,symbol,symbol->imported);
+            if(symbol && symbol->kind==SOURCE_NOMINAL && !ctx->nominals.declarations[symbol->index].parameter_count)
+                type=(SourceExpectedType){true,symbol->type,false,true};
+            else if(symbol && symbol->kind==SOURCE_FUNCTION && !ctx->generics[symbol->index].parameter_count)
+                type=(SourceExpectedType){true,ctx->functions[symbol->index].result,false,true};
+        }
+        if(!type.present || !xr_xir_type_is_class(&ctx->types,type.type))return true;
+        if(!i)common=type.type;
+        else {
+            XrXirStatus status=xir_compile_class_common_base(&ctx->types,common,type.type,&common,ctx->request);
+            if(status!=XR_XIR_OK)return source_fail(ctx,node,status,"Array class elements require one complete common ancestor");
+        }
+    }
+    if(literal->count)*output=(SourceExpectedType){true,common,false,true};
+    return true;
+}
 static bool source_array_literal(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value) {
     ArrayLiteralNode *literal = &node->as.array_literal;
     if (literal->is_repeat || literal->count < 0 ||
@@ -160,6 +193,7 @@ static bool source_array_literal(SourceContext *ctx, AstNode *node, SourceExpect
     }
     SourceExpectedType element = {expected.present,XR_XIR_UNIT, false, expected.inferred};
     if (expected.present) element.type = xr_xir_array_element(&ctx->types,expected.type);
+    else if(!source_array_class_context(ctx,literal,&element))return false;
     if (!literal->count && !element.present)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "empty Array literal needs an element context");
     SourceValue *elements = literal->count ? source_alloc(ctx, (size_t) literal->count, sizeof(*elements)) : NULL;

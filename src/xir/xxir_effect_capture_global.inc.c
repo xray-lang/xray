@@ -471,7 +471,7 @@ static bool effect_capture_operand_read(const XrXirTypes *types,uint32_t opcode,
     return effect_capture_type_kind(types,type)!=EFFECT_CAPTURE_SCALAR ||
         (effect_physical_opcode((XrXirOp)opcode)&EFFECT_PHYSICAL_BARRIER) ||
         opcode==XR_XIR_LOCAL_WRITE || opcode==XR_XIR_SCALAR_LOCAL_WRITE || opcode==XR_XIR_OWNED_LOCAL_WRITE ||
-        opcode==XR_XIR_FUNCTION_REF || opcode==XR_XIR_GENERATOR_NEW || opcode==XR_XIR_RETURN;
+        opcode==XR_XIR_FUNCTION_REF || opcode==XR_XIR_CLASS_METHOD_REF || opcode==XR_XIR_GENERATOR_NEW || opcode==XR_XIR_RETURN;
 }
 /* A missing result means this current scalar row has no capture transfer.
  * Its full record was framed before projection. No allocation occurs here. */

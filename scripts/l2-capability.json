@@ -64,7 +64,8 @@
         "xir_checked_previous120",
         "xir_checked_previous121",
         "xir_checked_previous122",
-        "xir_checked_previous123"
+        "xir_checked_previous123",
+        "xir_checked_previous124"
       ],
       "targets": [
         "test_xir_cleanup_replaced_sdk_reader",
@@ -686,6 +687,46 @@
         "test_xir_rest_values",
         "test_xir_rest_values_native",
         "test_xir_rest_values_cold_native"
+      ]
+    },
+    "class-inheritance": {
+      "tier": "L2",
+      "match": [
+        "src/xir/xxir_class*",
+        "src/xir/xxir_nominal*",
+        "src/xir/xxir_source*",
+        "src/xir/xxir_effect*",
+        "src/xir/xxir_instance*",
+        "src/xir/xxir_call*",
+        "src/xir/xxir_value*",
+        "src/xir/xxir_program*",
+        "src/xir/xxir_type_arena*",
+        "src/xir/xxir_checked*",
+        "src/xir/xxir.h",
+        "tests/unit/xir/class_inheritance*",
+        "tests/unit/xir/test_xir_class_*",
+        "tests/unit/xir/class_*contract.cmake",
+        "tests/unit/xir/class_move_shape.cmake",
+        "tests/unit/xir/class_dispatch_runtime.cmake",
+        "tests/fixtures/xir_class_inheritance/*",
+        "demos/03-oop/classes.xr"
+      ],
+      "reason": "Declaration-owned class construction, exact ancestor views and dispatch, default ownership, cold producer retirement, and VM/native agreement.",
+      "tests": [
+        "test_xir_class_dispatch_runtime",
+        "test_xir_class_hierarchy_contract",
+        "test_xir_class_stage_contract",
+        "test_xir_class_move_shape",
+        "class_inheritance_source",
+        "class_inheritance_native"
+      ],
+      "targets": [
+        "test_xir_class_dispatch_runtime",
+        "test_xir_class_hierarchy_contract",
+        "test_xir_class_stage_contract",
+        "test_xir_class_move_shape",
+        "class_inheritance_source",
+        "class_inheritance_native"
       ]
     }
   },

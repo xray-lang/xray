@@ -67,15 +67,11 @@ static XrXirValueStatus type_receiving_literal(XrXirLiteral a,XrXirLiteral b) {
 
     return !a.length || !memcmp(a.bytes,b.bytes,a.length) ? XR_XIR_VALUE_OK : XR_XIR_VALUE_BAD_ARGUMENT;
 }
-static bool type_receiving_nominal_header(void *owner,const XrXirTypes *source,
-    const XrXirTypeNode *a,const XrXirTypes *target,const XrXirTypeNode *b) {
-    (void)owner;
-    const XrXirNominalIdentity *from=&source->nominals->identities[a->nominal.declaration];
-    const XrXirNominalIdentity *to=&target->nominals->identities[b->nominal.declaration];
-
+static bool type_receiving_nominal_identity(const XrXirNominalIdentity *from,
+    const XrXirNominalIdentity *to) {
     if (from->exported!=to->exported || from->arity!=to->arity || from->field_count!=to->field_count ||
         from->kind!=to->kind || from->variant_count!=to->variant_count || from->flags!=to->flags ||
-        a->nominal.argument_count!=b->nominal.argument_count || a->nominal.field_count!=b->nominal.field_count)
+        !!from->parent!=!!to->parent)
         return false;
     if (from->native.native_id!=to->native.native_id ||
         memcmp(from->native.source_fingerprint,to->native.source_fingerprint,sizeof(from->native.source_fingerprint)))
@@ -94,6 +90,22 @@ static bool type_receiving_nominal_header(void *owner,const XrXirTypes *source,
         status=type_receiving_literal(from->variants[i].name,to->variants[i].name);
     }
     return status==XR_XIR_VALUE_OK;
+}
+static bool type_receiving_nominal_header(void *owner,const XrXirTypes *source,
+    const XrXirTypeNode *a,const XrXirTypes *target,const XrXirTypeNode *b) {
+    (void)owner;
+    if(a->nominal.argument_count!=b->nominal.argument_count ||
+        a->nominal.field_count!=b->nominal.field_count)return false;
+    uint32_t from=a->nominal.declaration,to=b->nominal.declaration;
+    for(uint32_t depth=0;depth<source->nominals->count;++depth) {
+        if(from>=source->nominals->count || to>=target->nominals->count)return false;
+        const XrXirNominalIdentity *left=&source->nominals->identities[from];
+        const XrXirNominalIdentity *right=&target->nominals->identities[to];
+        if(!type_receiving_nominal_identity(left,right))return false;
+        if(!left->parent)return true;
+        from=left->parent-1;to=right->parent-1;
+    }
+    return false;
 }
 static XrXirValueStatus type_receiving_nominal(TypeReceiving *r,const XrXirTypeNode *a,const XrXirTypeNode *b) {
     if (!type_receiving_nominal_header(r,&r->source->types,a,&r->target->types,b)) return XR_XIR_VALUE_BAD_ARGUMENT;

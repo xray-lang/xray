@@ -24,6 +24,8 @@
 #include "xxir_view_transfer_internal.h"
 #include "xxir_view_adoption_internal.h"
 #include "xxir_class_origin_internal.h"
+#include "xxir_class_view_internal.h"
+#include "xxir_class_hierarchy_internal.h"
 #include "xxir_type_arena.h"
 #include "xxir_type_arena_internal.h"
 #include "xxir_types.h"
@@ -335,6 +337,20 @@ static bool value_object_kind_known(uint32_t kind) {
         kind == XR_XIR_TYPE_TUPLE || kind == XR_XIR_TYPE_ATOMIC || kind == XR_XIR_TYPE_TASK || kind == XR_XIR_TYPE_ITERATOR || kind == XR_XIR_TYPE_CHANNEL ||
         kind == XR_XIR_TYPE_MAP || kind == XR_XIR_TYPE_SET || kind==XR_XIR_TYPE_SLICE || kind==XR_XIR_TYPE_MUT_SLICE;
 }
+static bool class_view_type(const XirObject *object,const XrXirTypeArena *arena,
+    XrXirType expected,XrXirType *local) {
+    if (!object || object->kind!=XIR_OBJECT_CLASS || !object->arena || !arena) return false;
+    if (object->arena==arena) *local=expected;
+    else if (!xir_type_arena_local_type(object->arena,arena,expected,local)) return false;
+    return xr_xir_class_is_subtype(xr_xir_compile_type_arena_types(object->arena),object->type,*local);
+}
+static bool value_type_argument(const XrXirValue *value,const XrXirTypeArena *arena,XrXirType type) {
+    XirObject *object=object_pointer(value);
+    if (xir_type_arena_same_type(object->arena,(XrXirType)value->type,arena,type)) return true;
+    XrXirType local=XR_XIR_UNIT;
+    return class_view_type(object,arena,type,&local) &&
+        xr_xir_class_is_subtype(xr_xir_compile_type_arena_types(object->arena),(XrXirType)value->type,local);
+}
 static bool value_header_valid(const XrXirValue *value) {
     if (!value || value->reserved) return false;
     XrXirType type = (XrXirType) value->type;
@@ -347,7 +363,9 @@ static bool value_header_valid(const XrXirValue *value) {
     XirObject *object = object_pointer(value);
     if (!object || !value_object_kind_known(object->kind)) return false;
     if (object->domain && !xr_xir_domain_current(object->domain)) return false;
-    if ((type != XR_XIR_ERROR && object->type != type) ||
+    XrXirType local=XR_XIR_UNIT;
+    if ((type != XR_XIR_ERROR && object->type != type &&
+            !class_view_type(object,object->arena,type,&local)) ||
         !atomic_load_explicit(&object->references, memory_order_relaxed)) return false;
     if (!object->domain) {
         if (object->kind != XR_XIR_TYPE_NOMINAL || object->release_next) return false;
@@ -384,7 +402,7 @@ static bool value_header_argument(const XrXirValue *value,const XrXirTypeArena *
     if (!value_header_valid(value)) return false;
     if (type==XR_XIR_ERROR || (uint32_t)type>=XR_XIR_CONSTRUCTED_TYPE_BASE)
         return arena && owned_carrier_type((XrXirType)value->type) &&
-            xir_type_arena_same_type(object_pointer(value)->arena,(XrXirType)value->type,arena,type);
+            value_type_argument(value,arena,type);
     return value->type==(uint32_t)type;
 }
 static bool task_result_error_header(const XrXirTypeArena *arena,XrXirType bound,
@@ -537,7 +555,7 @@ XR_FUNC bool xr_xir_value_argument(const XrXirValue *value, const XrXirTypeArena
     if (!value || !xr_xir_value_valid(value)) return false;
     if (type == XR_XIR_ERROR || (uint32_t) type >= XR_XIR_CONSTRUCTED_TYPE_BASE)
         return arena && owned_carrier_type((XrXirType)value->type) &&
-            xir_type_arena_same_type(object_pointer(value)->arena,(XrXirType)value->type,arena,type);
+            value_type_argument(value,arena,type);
     return type != XR_XIR_UNIT && value->type==(uint32_t)type;
 }
 XR_FUNC bool xr_xir_value_from_payload(const XrXirTypeArena *arena,XrXirType expected,
@@ -546,8 +564,12 @@ XR_FUNC bool xr_xir_value_from_payload(const XrXirTypeArena *arena,XrXirType exp
     XrXirValue value={(uint32_t)expected,0,payload};
     if (owned_carrier_type(expected)) {
         if (!payload) return false;
-        /* Error is an existing erased view; its object keeps the concrete enum. */
-        if (expected!=XR_XIR_ERROR) value.type=(uint32_t)object_pointer(&value)->type;
+        XirObject *object=object_pointer(&value);
+        if (object->kind==XIR_OBJECT_CLASS) {
+            XrXirType local=XR_XIR_UNIT;
+            if (!class_view_type(object,arena,expected,&local)) return false;
+            value.type=(uint32_t)local;
+        } else if (expected!=XR_XIR_ERROR) value.type=(uint32_t)object->type;
     }
     if (!xr_xir_value_argument(&value,arena,expected)) return false;
     *output=value;return true;

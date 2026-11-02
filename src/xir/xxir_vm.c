@@ -135,6 +135,8 @@ static XrXirRunStatus instance_step(ScalarRun *run, VmState *state, const XrXirI
         XrXirValue input = vm_value_operand(run,op->args[0]);
         status = xr_xir_instance_weaken_function(run->view, op->type, &input, &value); break;
     }
+    case XR_XIR_CLASS_METHOD_REF:
+        status=xr_xir_instance_class_method_at(run->view,ordinal,run->frame,&value);break;
     case XR_XIR_FUNCTION_REF:
         for (uint32_t i = 0; i < op->args[1]; ++i) {
             uint32_t id = run->function->operands[op->args[0] + i];
@@ -758,7 +760,7 @@ static XrXirRunStatus vm_step_dispatch(ScalarRun *run,VmState *state,const XrXir
         state->instruction = next;
         return vm_array_step(run, state, op, run->layout->offsets[result_id], action);
     }
-    if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_SLOT_STORE) || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_FUNCTION_WEAKEN ||
+    if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_SLOT_STORE) || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_CLASS_METHOD_REF || op->op == XR_XIR_FUNCTION_WEAKEN ||
         op->op == XR_XIR_TO_STRING || op->op==XR_XIR_STRING_COPY_BYTES || op->op==XR_XIR_STRING_REPLACE ||
         (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE) || op->op == XR_XIR_CELL_LOCAL_WRITE ||
         op->op == XR_XIR_CELL_STRING_APPEND || (op->op>=XR_XIR_PTR_NULL && op->op<=XR_XIR_PTR_EQ)) {

@@ -229,3 +229,5 @@ XR_XIR_OP(FIXED_ARRAY_GET,7,VALUE,2,0,0)
 XR_XIR_OP(FIXED_ARRAY_LEN,7,I64,1,0,0)
 /* Admission waits for the complete typed selection and owned wait bridge. */
 XR_XIR_OP(CHANNEL_SELECT,7,OWNED,0,0,0)
+/* Class method selection requires the complete owned inheritance proof. */
+XR_XIR_OP(CLASS_METHOD_REF,7,VALUE,1,0,0)

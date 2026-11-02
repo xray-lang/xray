@@ -464,7 +464,7 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
             } else if (a->op == XR_XIR_CALL_REQUIREMENT) {
                 XrXirStatus status = provenance_requirement_match(c,origin,a,b,to);
                 if (status != XR_XIR_OK) return status;
-            } else if (xr_xir_op_references_function(a->op)) {
+            } else if (xr_xir_op_references_function(a->op) || a->op==XR_XIR_CLASS_METHOD_REF) {
                 XrXirStatus status = provenance_call_match(c, origin, a, b,i);
                 if (status != XR_XIR_OK) return status;
             } else if (a->op == XR_XIR_ERROR_IS) {
@@ -571,7 +571,7 @@ static XrXirStatus provenance_lowered_nominals(ProvenanceMatch *c,
     for (uint32_t d = 0; d < source->count; ++d) {
         const XrXirNominalDeclaration *a = &source->declarations[d];
         const XrXirNominalIdentity *b = &output->identities[d];
-        if (a->flags != b->flags) return XR_XIR_BAD_TYPE;
+        if (a->flags != b->flags || a->parent!=b->parent) return XR_XIR_BAD_TYPE;
 
         if (a->native.native_id != b->native.native_id || memcmp(a->native.source_fingerprint,
             b->native.source_fingerprint, sizeof(a->native.source_fingerprint))) return XR_XIR_BAD_TYPE;
@@ -608,7 +608,7 @@ static XrXirStatus provenance_nominals(ProvenanceMatch *c) {
 
     for (uint32_t d = 0; d < a->count; ++d) {
         const XrXirNominalDeclaration *from = &a->declarations[d], *to = &b->declarations[d];
-        if (from->flags != to->flags) return XR_XIR_BAD_TYPE;
+        if (from->flags != to->flags || from->parent!=to->parent) return XR_XIR_BAD_TYPE;
 
         if (from->native.native_id != to->native.native_id || memcmp(from->native.source_fingerprint,
             to->native.source_fingerprint, sizeof(from->native.source_fingerprint))) return XR_XIR_BAD_TYPE;
@@ -801,7 +801,7 @@ static XrXirStatus provenance_reachable(ProvenanceMatch *c) {
 
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
             const XrXirInstruction *op = &function->instructions[i];
-            if (!xr_xir_op_references_function(op->op)) continue;
+            if (!xr_xir_op_references_function(op->op) && op->op!=XR_XIR_CLASS_METHOD_REF) continue;
             if (op->immediate < 0 || (uint64_t)op->immediate >= c->count) {
                 status = XR_XIR_BAD_STRUCTURE; goto done;
             }

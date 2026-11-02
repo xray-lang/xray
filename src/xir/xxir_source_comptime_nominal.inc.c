@@ -15,7 +15,7 @@
 static XrXirNominalIdentity source_comptime_nominal_identity(const XrXirNominalTable *table,uint32_t index) {
     if (!table->declarations) return table->identities[index];
     const XrXirNominalDeclaration *d=&table->declarations[index];
-    return (XrXirNominalIdentity){d->module,d->name,d->exported,d->parameter_count,NULL,d->field_count,d->kind,d->variants,d->variant_count,d->flags,d->native};
+    return (XrXirNominalIdentity){d->module,d->name,d->exported,d->parameter_count,NULL,d->field_count,d->kind,d->variants,d->variant_count,d->flags,d->native,d->parent};
 }
 static bool source_comptime_name_same(SourceContext *ctx,XrXirLiteral a,XrXirLiteral b) {
     return a.length==b.length&&source_span_same(ctx,NULL,a.bytes,b.bytes,a.length);
@@ -26,7 +26,7 @@ static bool source_comptime_nominal_identities(SourceContext *ctx,const XrXirTyp
     for (uint32_t i=0;i<a->count;++i) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         XrXirNominalIdentity x=source_comptime_nominal_identity(a,i),y=source_comptime_nominal_identity(b,i);
-        if (x.kind!=y.kind || x.arity!=y.arity || x.exported!=y.exported || x.flags!=y.flags ||
+        if (x.kind!=y.kind || x.arity!=y.arity || x.exported!=y.exported || x.flags!=y.flags || x.parent!=y.parent ||
             x.field_count!=y.field_count || x.variant_count!=y.variant_count || x.native.native_id!=y.native.native_id ||
             memcmp(x.native.source_fingerprint,y.native.source_fingerprint,sizeof(x.native.source_fingerprint)) ||
             !source_comptime_name_same(ctx,x.module,y.module) || !source_comptime_name_same(ctx,x.name,y.name)) return false;

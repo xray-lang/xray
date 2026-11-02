@@ -308,6 +308,7 @@ XR_FUNC XrXirStatus xr_hir_body_call_scope(XrHirBody *body,XrHirBodySignature si
     XrXirStatus status=body_poll(control);if(status!=XR_XIR_OK)return status;
     ((HirBodySignature *)body->signatures.items)[signature.index].group=group;return XR_XIR_OK;
 }
+#include "xhir_body_class_call.inc.c"
 XR_FUNC XrXirStatus xr_hir_body_call_finish(XrHirBody *body,XrHirBodySignature signature,
     const XrXirInstruction *instruction,XrCompileRequestControl *control,XrHirBodyUse *use,XrHirBodyAction *output) {
     if(!body||body->ended||signature.owner!=body||signature.index>=body->signatures.count||!instruction||!use||!output)
@@ -319,9 +320,10 @@ XR_FUNC XrXirStatus xr_hir_body_call_finish(XrHirBody *body,XrHirBodySignature s
         (native&&row.declaration.family!=XR_HIR_CALL_VARIADIC_READ&&row.argument_count>expected))return XR_XIR_BAD_STRUCTURE;
     XrXirOp operation=instruction->op;
     bool scoped=row.group.type!=XR_XIR_UNIT;
+    bool method=body_class_call_bound(&row);
     if((operation==XR_XIR_SCOPED_GO)!=scoped||
         (row.declaration.family==XR_HIR_CALL_FUNCTION&&row.declaration.callable!=XR_XIR_UNIT&&
-         operation!=XR_XIR_GO&&operation!=XR_XIR_SCOPED_GO))
+         !method&&operation!=XR_XIR_GO&&operation!=XR_XIR_SCOPED_GO))
         return XR_XIR_BAD_STRUCTURE;
     if(native) {
         if(operation!=XR_XIR_INVALID)return XR_XIR_BAD_STRUCTURE;
@@ -329,7 +331,7 @@ XR_FUNC XrXirStatus xr_hir_body_call_finish(XrHirBody *body,XrHirBodySignature s
         ((HirBodySignature *)body->signatures.items)[signature.index].finished=true;
         *use=(XrHirBodyUse){0};*output=(XrHirBodyAction){.target=instruction->type};return XR_XIR_OK;
     }
-    if(row.declaration.family==XR_HIR_CALL_INDIRECT) {
+    if(row.declaration.family==XR_HIR_CALL_INDIRECT||method) {
         if(operation!=XR_XIR_CALL_INDIRECT||instruction->immediate!=row.declaration.callee_value)return XR_XIR_BAD_STRUCTURE;
     } else if(row.declaration.family==XR_HIR_CALL_REQUIREMENT) {
         if(operation!=XR_XIR_CALL_REQUIREMENT||instruction->targets[0]!=row.declaration.interface_declaration||
@@ -342,7 +344,7 @@ XR_FUNC XrXirStatus xr_hir_body_call_finish(XrHirBody *body,XrHirBodySignature s
     XrXirStatus status=xr_hir_body_check(body,body->types,&input,control,use,NULL);if(status!=XR_XIR_OK)return status;
     HirBodyUse *record=&body->uses[use->index];record->action.operation=operation;
     record->required_instruction=true;record->is_call=true;record->signature=signature;
-    record->action.argument_count=row.argument_count+(scoped?1u:0u);
+    record->action.argument_count=row.argument_count+(scoped?1u:0u)-(method?1u:0u);
     ((HirBodySignature *)body->signatures.items)[signature.index].finished=true;
     *output=record->action;return XR_XIR_OK;
 }

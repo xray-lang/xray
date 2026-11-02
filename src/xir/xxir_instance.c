@@ -39,6 +39,9 @@
 #include "xxir_cell_owner_internal.h"
 #include "xxir_class_origin_internal.h"
 #include "xxir_class.h"
+#include "xxir_class_view_internal.h"
+#include "xxir_class_method_internal.h"
+#include "xxir_class_stage_internal.h"
 #include "xxir_cell_provenance_internal.h"
 #include "xxir_effect_runtime_internal.h"
 #include "xxir_task_internal.h"
@@ -206,6 +209,7 @@ static bool function_shape_admitted(const XrXirProgram *program,uint32_t entry,
     const XrXirTypeNode *signature) {
     const XrXirProgramPermissions *permissions=program->permissions;
     return signature && permissions && entry<program->entry_count &&
+        program->declarations->functions[entry].method_kind!=XR_XIR_CONSTRUCTOR_FIELDS &&
         !(program->entries[entry].flags&XR_XIR_ENTRY_GENERATOR) &&
         permissions->function_count==program->entry_count &&
         permissions->slot_count==program->declarations->slot_count &&
@@ -742,7 +746,8 @@ static XrXirCallStatus instance_start(XrXirInstance *instance, uint32_t entry,
             entry == d->modules[d->root_module].initializer || requested->parameter_count ||
             requested->result != XR_XIR_UNIT) return XR_XIR_CALL_BAD_ARGUMENT;
     }
-    if (requested->cleanup_owner) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (requested->cleanup_owner || d->functions[entry].method_kind==XR_XIR_CONSTRUCTOR_FIELDS)
+        return XR_XIR_CALL_BAD_ARGUMENT;
     uint32_t captures = binding ? binding->capture_count : 0;
     if (captures > requested->parameter_count || count != requested->parameter_count - captures ||
         (count && !arguments)) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -1127,6 +1132,55 @@ static XrXirCallStatus instance_function_producer_value(XrXirInstance *instance,
     XrXirValueAdmission *admission,const XrXirValue *function,XirEffectProducerView *output);
 #include "xxir_instance_invocation.inc.c"
 
+/* A root constructor may hold Class parameters without a worker equation.
+ * The retained instruction and complete constructor transaction still prove
+ * the private helper use, independently at staging and callee admission. */
+static XrXirCallStatus instance_root_fields_call(XrXirCallView *view,uint32_t instruction,
+    uint32_t target,const XrXirValue *arguments,uint32_t count) {
+    XrXirInstance *instance=view_instance(view);
+    const XrXirProgram *program=instance?instance->program:NULL;
+    const XrXirProgramPermissions *permissions=program?program->permissions:NULL;
+    if (!instance || view_is_child(instance,view) || view->phase!=XR_XIR_CALL_NORMAL ||
+        !permissions || !permissions->input || !permissions->input->artifact)
+        return XR_XIR_CALL_BAD_STATE;
+    const XrXirModule *module=&permissions->input->artifact->module;
+    uint32_t caller=xr_xir_call_current_entry(view->activation);
+    if (module->stage!=XR_XIR_LOWERED || module->function_count!=program->entry_count ||
+        !module->functions || !module->declarations || !module->declarations->functions ||
+        !module->declarations->modules ||
+        caller>=module->function_count || target>=module->function_count ||
+        module->declarations->functions[target].method_kind!=XR_XIR_CONSTRUCTOR_FIELDS)
+        return XR_XIR_CALL_BAD_STATE;
+    const XrXirFunction *body=module->functions+caller;
+    if (instruction>=body->instruction_count || !body->instructions) return XR_XIR_CALL_BAD_STATE;
+    const XrXirInstruction *op=body->instructions+instruction;
+    if ((op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE) || op->immediate!=(int64_t)target ||
+        op->args[1]!=count || count!=program->entries[target].parameter_count || (count && !arguments))
+        return XR_XIR_CALL_BAD_ARGUMENT;
+    const XrXirDeclarations *declared=module->declarations;
+    uint32_t from=declared->functions[caller].module,to=declared->functions[target].module;
+    if (from>=declared->module_count || to>=declared->module_count) return XR_XIR_CALL_BAD_STATE;
+    XrXirValueAdmission *admission=xr_xir_call_admission(view);
+    if (!admission || admission->arena!=program->arena || admission->domain!=instance->domain)
+        return XR_XIR_CALL_BAD_STATE;
+    XrXirCallStatus status=xr_xir_call_execution_status(view);
+    if (status!=XR_XIR_CALL_READY) return status;
+    /* Prepay both signature scans and the wrapper/prefix instruction walks. */
+    uint64_t work=64+8*((uint64_t)module->function_count+body->instruction_count+
+        body->parameter_count+body->consume_parameter_count+count)+
+        4*((uint64_t)declared->modules[from].name_length+declared->modules[to].name_length);
+    if (work>admission->work || !xr_xir_domain_work(instance->domain,work)) return XR_XIR_CALL_LIMIT;
+    admission->work-=work;
+    XrXirStatus checked=xir_compile_class_stage_call(module,caller,instruction,NULL);
+    if (checked!=XR_XIR_OK) return checked==XR_XIR_BUDGET?XR_XIR_CALL_LIMIT:
+        checked==XR_XIR_OUT_OF_MEMORY?XR_XIR_CALL_OOM:XR_XIR_CALL_BAD_STATE;
+    for (uint32_t p=0;p<count;++p) {
+        status=admit_instance_value(admission,arguments+p,program->entries[target].parameters[p]);
+        if (status!=XR_XIR_CALL_READY) return status;
+    }
+    return xr_xir_call_execution_status(view);
+}
+
 /* The private admission owner distinguishes an Instance from an opaque host
  * context. Conditional Cell-root inspection charges the current Domain before
  * the Call owner prepares any callee loans. */
@@ -1204,12 +1258,17 @@ static XrXirCallStatus instance_call_entry_check(XrXirCallView *view, uint32_t e
         XrXirCallStatus cleanup=target==instance?instance_cleanup_entry(view,instance,caller,entry):XR_XIR_CALL_BAD_STATE;
         if (cleanup!=XR_XIR_CALL_READY) return cleanup;
     }
-    if (!child) return XR_XIR_CALL_READY;
+    bool fields=d->functions[entry].method_kind==XR_XIR_CONSTRUCTOR_FIELDS;
+    if (!child && !fields) return XR_XIR_CALL_READY;
     if (!function) return XR_XIR_CALL_BAD_STATE;
     XrXirCallFrontier frontier={0};
     if (xr_xir_call_invocation_pending(view,&frontier)) {
         if (entry!=frontier.target ||
             (function->type!=XR_XIR_UNIT)!=(frontier.producer!=UINT32_MAX)) return XR_XIR_CALL_BAD_STATE;
+        if (!child && fields) {
+            if (frontier.producer!=UINT32_MAX || (prepared && prepared->owner)) return XR_XIR_CALL_BAD_STATE;
+            return instance_root_fields_call(view,frontier.instruction,entry,arguments,count);
+        }
         XirEffectInvocationSelection selection={0};
         XrXirCallStatus selected=function->type!=XR_XIR_UNIT ?
             instance_invocation_select(view,frontier.instruction,function,arguments,count,&selection) :
@@ -1227,6 +1286,7 @@ static XrXirCallStatus instance_call_entry_check(XrXirCallView *view, uint32_t e
         return xr_xir_call_invocation_accept(view,&selection);
     }
     if (prepared && prepared->owner) return XR_XIR_CALL_BAD_STATE;
+    if (fields) return XR_XIR_CALL_BAD_STATE;
     uint32_t actual_root = 0;
     XrXirCallStatus root_status = instance_entry_cell_root(view, program, entry,
         function, arguments, count, &actual_root);
@@ -1745,7 +1805,15 @@ XR_FUNC XrXirCallStatus xr_xir_instance_call_at(XrXirCallView *view,uint32_t ins
     if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirInstance *instance=view_instance(view);
     if (!instance) return XR_XIR_CALL_BAD_STATE;
-    if (!view_is_child(instance,view)) return XR_XIR_CALL_READY;
+    if (!view_is_child(instance,view) && (entry>=instance->program->entry_count ||
+        instance->program->declarations->functions[entry].method_kind!=XR_XIR_CONSTRUCTOR_FIELDS))
+        return XR_XIR_CALL_READY;
+    if (!instance->program->permissions || !instance->program->permissions->input ||
+        !instance->program->permissions->input->artifact) return XR_XIR_CALL_BAD_STATE;
+    if (!view_is_child(instance,view)) {
+        XrXirCallStatus status=instance_root_fields_call(view,instruction,entry,arguments,count);
+        return status==XR_XIR_CALL_READY?xir_call_root_fields_stage(view,instruction,entry):status;
+    }
     XirEffectInvocationSelection selected={0};
     XrXirCallStatus status=instance_invocation_direct(view,instruction,entry,arguments,count,&selected);
     return status==XR_XIR_CALL_READY?xr_xir_call_invocation_stage(view,&selected):status;
@@ -1914,12 +1982,16 @@ static XrXirCallStatus prepare_function_gate(XrXirInstance *instance) {
 static XrXirCallStatus instance_private_reference(XrXirInstance *instance,
     uint32_t caller, uint32_t entry, XrXirType type, uint32_t captures) {
     const XrXirProgramPermissions *permissions = instance->program->permissions;
-    if (!permissions || caller >= permissions->function_count) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (!permissions || !permissions->input || !permissions->input->artifact ||
+        caller >= permissions->function_count ||
+        caller >= permissions->input->artifact->module.function_count) return XR_XIR_CALL_BAD_ARGUMENT;
+    const XrXirFunction *body=&permissions->input->artifact->module.functions[caller];
     const XrXirProgramPermission *owner = &permissions->entries[caller];
     if (!xr_xir_domain_work(instance->domain, owner->reference_count)) return XR_XIR_CALL_LIMIT;
     for (uint32_t i = 0; i < owner->reference_count; ++i) {
         const XrXirProgramFunctionRef *edge = &permissions->references[owner->reference_begin + i];
-        if (edge->entry == entry && edge->type == type && edge->captures == captures)
+        if (edge->entry == entry && edge->type == type && edge->captures == captures &&
+            edge->instruction<body->instruction_count && body->instructions[edge->instruction].op==XR_XIR_FUNCTION_REF)
             return XR_XIR_CALL_READY;
     }
     return XR_XIR_CALL_BAD_ARGUMENT;
@@ -1929,6 +2001,8 @@ typedef struct InstanceFunctionRequest {
     const XrXirValue *captures;uint32_t count;
     const XirFunctionProducer *producer;
 } InstanceFunctionRequest;
+static XrXirCallStatus instance_method_binding(XrXirInstance *instance,XrXirValueAdmission *admission,
+    const InstanceFunctionRequest *request,uint32_t caller,bool *output);
 static XrXirCallStatus instance_function_create(XrXirCallView *view,
     const InstanceFunctionRequest *request,XrXirValue *output) {
     if (!request) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -1941,19 +2015,25 @@ static XrXirCallStatus instance_function_create(XrXirCallView *view,
     const XrXirCallEntry *target = &instance->program->entries[entry];
     const XrXirDeclarations *d = instance->program->declarations;
     uint32_t caller = xr_xir_call_current_entry(view->activation);
+    XrXirValueAdmission *admission = xr_xir_call_admission(view);
+    bool method=false;
+    if (request->producer) {
+        XrXirCallStatus status=instance_method_binding(instance,admission,request,caller,&method);
+        if (status!=XR_XIR_CALL_READY) return status;
+    }
     uint32_t from = d->functions[caller].module, to = d->functions[entry].module;
     if (!instance->program->active_modules[from] || !instance->program->active_modules[to])
         return XR_XIR_CALL_BAD_ARGUMENT;
     if (!(request->producer?function_shape_admitted(instance->program,entry,signature):
         function_bound_admitted(instance->program,entry,signature))) return XR_XIR_CALL_BAD_ARGUMENT;
-    if (target->cleanup_owner || entry == d->modules[to].initializer || !xr_xir_module_imports(d, from, to) ||
+    if (target->cleanup_owner || entry == d->modules[to].initializer ||
+        (!method && !xr_xir_module_imports(d, from, to)) ||
         count > target->parameter_count || target->parameter_count - count != signature->parameter_count ||
         target->result != signature->result) return XR_XIR_CALL_BAD_ARGUMENT;
-    if (!xr_xir_module_same_scope(d, from, to) && !d->functions[entry].exported) {
+    if (!method && !xr_xir_module_same_scope(d, from, to) && !d->functions[entry].exported) {
         XrXirCallStatus visible = instance_private_reference(instance, caller, entry, type, count);
         if (visible != XR_XIR_CALL_READY) return visible;
     }
-    XrXirValueAdmission *admission = xr_xir_call_admission(view);
     for (uint32_t p = 0; p < count; ++p) {
         XrXirCallStatus admitted = admit_instance_value(admission, &captures[p], target->parameters[p]);
         if (admitted != XR_XIR_CALL_READY) return admitted;
@@ -1978,6 +2058,7 @@ XrXirCallStatus xr_xir_instance_function(XrXirCallView *view,XrXirType type,uint
     const InstanceFunctionRequest request={type,entry,captures,count,NULL};
     return instance_function_create(view,&request,output);
 }
+#include "xxir_instance_class_method.inc.c"
 #include "xxir_instance_function_producer.inc.c"
 #include "xxir_instance_generator.inc.c"
 #include "xxir_instance_task_result.inc.c"

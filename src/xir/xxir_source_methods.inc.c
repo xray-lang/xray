@@ -14,8 +14,16 @@ static bool source_generator_declaration(SourceContext *ctx,AstNode *node,uint32
     XrXirFunctionIdentity *identity,uint32_t captures);
 static SourceName *source_method_find(SourceContext *ctx, XrXirType type, const char *name) {
     const XrXirTypeNode *node = xr_xir_type_node(&ctx->types, type);
-    return node && node->kind == XR_XIR_TYPE_NOMINAL ?
-        find_name(ctx, ctx->nominal_methods[node->nominal.declaration], name) : NULL;
+    if(!node || node->kind!=XR_XIR_TYPE_NOMINAL)return NULL;
+    uint32_t declaration=node->nominal.declaration;
+    for(uint32_t depth=0;depth<ctx->nominals.count;++depth) {
+        SourceName *method=find_name(ctx,ctx->nominal_methods[declaration],name);
+        if(method)return method;
+        uint32_t parent=ctx->nominals.declarations[declaration].parent;
+        if(!parent || parent>ctx->nominals.count)return NULL;
+        declaration=parent-1;
+    }
+    return NULL;
 }
 #include "xxir_source_method_generics.inc.c"
 typedef struct SourceStaticMethod {
@@ -65,12 +73,58 @@ static bool source_static_value(SourceContext *ctx, AstNode *node, SourceStaticM
         source_query_target_token_reference(ctx,node,
             selected->method->declaration, XR_XIR_SOURCE_FUNCTION_VALUE) && source_recipe_record(ctx, op, value);
 }
+static bool source_class_virtual_method(SourceContext *ctx,SourceName *method) {
+    const XrXirFunctionIdentity *identity=&ctx->identities[method->index];
+    if(identity->method_kind!=XR_XIR_READ_METHOD || identity->member_access || !identity->nominal_owner ||
+        (identity->promises&XR_XIR_FUNCTION_GENERATOR))return false;
+    const XrXirNominalDeclaration *owner=&ctx->nominals.declarations[identity->nominal_owner-1];
+    if(owner->kind!=XR_XIR_NOMINAL_CLASS || owner->native.native_id || owner->parameter_count ||
+        ctx->generics[method->index].parameter_count)return false;
+    if(owner->parent)return true;
+    if(owner->flags&(XR_XIR_NOMINAL_FINAL|XR_XIR_NOMINAL_SENDABLE))return false;
+    for(uint32_t f=0;f<owner->field_count;++f)
+        if(owner->fields[f].flags&(XR_XIR_FIELD_PRIVATE|XR_XIR_FIELD_PROTECTED))return false;
+    return true;
+}
+static bool source_class_method_reference(SourceContext *ctx,AstNode *node,SourceValue receiver,
+    SourceName *method,SourceValue *value) {
+    XrXirFunction function=ctx->functions[method->index];uint32_t count=function.parameter_count-1;
+    XrXirCallableParameter *parameters=count?source_alloc(ctx,count,sizeof(*parameters)):NULL;
+    if(count&&!parameters)return false;
+    for(uint32_t p=0;p<count;++p)parameters[p]=(XrXirCallableParameter){function.parameters[p+1],
+        xr_xir_declared_parameter_mode(&ctx->types,function.parameters[p+1],function.consume_parameters,function.consume_parameter_count,p+1)};
+    XrXirType signature;
+    if(!source_signature(ctx,parameters,count,function.result,function.error_type,&signature))return false;
+    if(ctx->identities[method->index].promises&XR_XIR_FUNCTION_NO_SUSPEND) {
+        XrXirTypeNode declared=*xr_xir_type_node(&ctx->types,signature);declared.flags|=XR_XIR_CALLABLE_NO_SUSPEND;
+        if(!source_intern_type(ctx,declared,&signature))return false;
+    }
+    return source_query_target_token_reference(ctx,node,method->declaration,XR_XIR_SOURCE_FUNCTION_VALUE) &&
+        source_recipe_record(ctx,(XrXirInstruction){.op=XR_XIR_CLASS_METHOD_REF,.type=signature,
+            .args={receiver.id},.immediate=method->index},value);
+}
 static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue receiver,
     SourceName *method, SourceExpectedType result_context, SourceValue *value) {
     const XrXirFunctionIdentity *identity = source_method_identity(ctx,node,method);
     if (!identity) return false;
     if (identity->method_kind == XR_XIR_STATIC_METHOD)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "static method requires type-qualified access");
+    if(source_class_virtual_method(ctx,method)) {
+        if(node->as.call_expr.type_arg_count)return source_fail(ctx,node,XR_XIR_BAD_TYPE,"virtual class method requires a closed declaration");
+        if(identity->member_access && ctx->identities[ctx->function].nominal_owner!=identity->nominal_owner)
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"method requires its declaration owner");
+        SourceDirectRequest direct={method->index,{0},&receiver,result_context};
+        SourceDirectArguments prepared={0};SourceValue bound;
+        if(!source_direct_arguments(ctx,node,&direct,&prepared)||prepared.receiver_count!=1||!prepared.count||
+            !source_class_method_reference(ctx,node->as.call_expr.callee,prepared.values[0],method,&bound))return false;
+        XrXirStatus status=xr_hir_body_call_method(ctx->typed_body,prepared.signature,bound.type,bound.id,ctx->request);
+        if(status!=XR_XIR_OK)return source_fail(ctx,node,status,"method dispatch lost its declared argument owner");
+        uint32_t reference_before=ctx->query.reference_count;
+        return source_query_target_token_reference(ctx,node->as.call_expr.callee,method->declaration,XR_XIR_SOURCE_CALL)&&
+            source_direct_call_signature(ctx,node,method->index,&prepared,reference_before)&&
+            source_hir_call_group(ctx,prepared.signature,(XrXirInstruction){.op=XR_XIR_CALL_INDIRECT,
+                .type=prepared.result,.immediate=bound.id},prepared.values+1,value);
+    }
     CallExprNode *call = &node->as.call_expr;
     const XrXirTypeNode *returned=xr_xir_type_node(&ctx->types,ctx->functions[method->index].result);
     if (identity->nominal_owner && source_mem_buffer(ctx,identity->nominal_owner-1u) &&
@@ -182,6 +236,10 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "static method value requires type-qualified access");
     if (identity->member_access && ctx->identities[ctx->function].nominal_owner != identity->nominal_owner)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method value requires its declaration owner");
+    if(source_class_virtual_method(ctx,method)) {
+        if(type_arguments->count)return source_fail(ctx,node,XR_XIR_BAD_TYPE,"virtual class method requires a closed declaration");
+        return source_class_method_reference(ctx,node,receiver,method,value);
+    }
     const XrXirFunction *function = &ctx->functions[method->index];
     const XrXirTypeNode *type = xr_xir_type_node(&ctx->types, receiver.type);
     if (!source_method_instantiation(ctx, node, method->index,
@@ -244,7 +302,8 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
             bool by_reference = method->receiver_mode == XR_PARAM_REF && !method->is_static &&
                 owner->node->type != AST_CLASS_DECL;
             if ((method->is_private && method->is_protected) ||
-                method->is_override || method->is_getter || method->is_setter || method->is_static_constructor ||
+                (method->is_override && (owner->node->type!=AST_CLASS_DECL || method->is_static || method->type_param_count ||
+                    !ctx->nominals.declarations[d].parent)) || method->is_getter || method->is_setter || method->is_static_constructor ||
                 method->is_variadic || (method->is_operator && !source_mem_method_contract(ctx,owner,method)) ||
                 (method->receiver_mode != XR_PARAM_READ && !by_reference) || method->attr_count ||
                 ((method->borrow_origin_count || method->borrow_origin_syntax) && !source_mem_method_contract(ctx,owner,method)) ||
@@ -268,7 +327,8 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
             uint32_t access = method->is_private ? XR_XIR_MEMBER_PRIVATE :
                 method->is_protected ? XR_XIR_MEMBER_PROTECTED : XR_XIR_MEMBER_PUBLIC;
             ctx->identities[index] = (XrXirFunctionIdentity) {owner->module,
-                access ? 0 : ctx->nominals.declarations[d].exported, d + 1, access, 0, 0, method->is_static ? XR_XIR_STATIC_METHOD : XR_XIR_READ_METHOD, 0, 0, 0};
+                access ? 0 : ctx->nominals.declarations[d].exported, d + 1, access, 0,
+                method->is_override?XR_XIR_FUNCTION_OVERRIDE:0, method->is_static ? XR_XIR_STATIC_METHOD : XR_XIR_READ_METHOD, 0, 0, 0};
             symbol->kind = SOURCE_FUNCTION; symbol->index = index; symbol->module = owner->module;
             SourceFunction *body = &ctx->bodies[index]; body->node = node; body->module = owner->module;
             if(!source_method_parameter_scope(ctx,node,&body->parameter_scope))return false;

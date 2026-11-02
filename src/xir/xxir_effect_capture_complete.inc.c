@@ -229,22 +229,23 @@ static XrXirStatus effect_capture_complete_selected(const EffectCaptureRead *rea
 
 static XrXirStatus effect_capture_complete_reference(const EffectCaptureRead *read,
     const EffectCaptureNode *node,uint32_t instruction,uint32_t column,EffectCaptureComplete *result) {
-    result->complete=false;
+    result->complete=true;uint32_t count=0;
     for(uint32_t s=0;s<read->final->site_count;++s) {
 
         const EffectInvocationSite *site=&read->final->sites[s];
         if(site->function!=read->final->nodes[node->node].body || site->instruction!=instruction) continue;
-        XrXirStatus status=effect_capture_reference_seed(read,s,&result->complete);
-        if(status!=XR_XIR_OK || !result->complete || !column) return status;
+        ++count;XrXirStatus status=effect_capture_reference_seed(read,s,&result->complete);
+        if(status!=XR_XIR_OK || !result->complete)return status;
+        if(!column)continue;
         EffectBodyFunctionSignature target={0};XrXirInstruction storage;const XrXirInstruction *op=NULL;
         status=effect_body_request_signature(&read->body,site->target,&target);
         if(status==XR_XIR_OK) status=effect_body_request_instruction(&read->body,site->function,instruction,&storage,&op);
         if(status!=XR_XIR_OK) return status;
-        if(op->args[0]>node->head.operand_count || site->captures>node->head.operand_count-op->args[0]) return XR_XIR_BAD_STRUCTURE;
+        if(op->op!=XR_XIR_CLASS_METHOD_REF && (op->args[0]>node->head.operand_count || site->captures>node->head.operand_count-op->args[0])) return XR_XIR_BAD_STRUCTURE;
         for(uint32_t p=0;p<site->captures;++p) {
 
             if(!effect_physical_origin(read->body.domain.types,target.parameters[p])) continue;
-            uint32_t source=node->head.operands[op->args[0]+p];
+            uint32_t source=effect_reference_value(node->head.operands,op,p);
             if(column-1==site->binding+p) {
                 status=effect_capture_complete_source(read,node->node,source,0,result);
                 if(status!=XR_XIR_OK || !result->complete) return status;
@@ -252,9 +253,8 @@ static XrXirStatus effect_capture_complete_reference(const EffectCaptureRead *re
             status=effect_capture_complete_source(read,node->node,source,column,result);
             if(status!=XR_XIR_OK || !result->complete) return status;
         }
-        return XR_XIR_OK;
     }
-    return XR_XIR_BAD_STRUCTURE;
+    return count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
 }
 
 static XrXirStatus effect_capture_complete_value(const EffectCaptureRead *read,
@@ -272,7 +272,7 @@ static XrXirStatus effect_capture_complete_value(const EffectCaptureRead *read,
         status=effect_body_request_instruction(&read->body,read->final->nodes[node->node].body,i,&storage,&op);
         if(status!=XR_XIR_OK) return status;
         switch(op->op) {
-        case XR_XIR_FUNCTION_REF:case XR_XIR_GENERATOR_NEW:status=effect_capture_complete_reference(read,node,i,column,result);break;
+        case XR_XIR_FUNCTION_REF:case XR_XIR_CLASS_METHOD_REF:case XR_XIR_GENERATOR_NEW:status=effect_capture_complete_reference(read,node,i,column,result);break;
         case XR_XIR_COPY:case XR_XIR_SCALAR_COPY:case XR_XIR_OWNED_RETAIN:
         case XR_XIR_LOCAL_NEW:case XR_XIR_SCALAR_LOCAL_NEW:case XR_XIR_OWNED_LOCAL_NEW:
         case XR_XIR_LOCAL_READ:case XR_XIR_SCALAR_LOCAL_READ:case XR_XIR_OWNED_LOCAL_READ:

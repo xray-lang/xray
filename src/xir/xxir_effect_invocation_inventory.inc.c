@@ -21,32 +21,21 @@ static XrXirStatus effect_final_inventory_sites(const XrXirCompileContext *work,
     const EffectBodyMaterial *material,const EffectInvocationFinal *final) {
     XrXirStatus status=effect_role_range(work,final->sites,final->site_count,sizeof(*final->sites));
     if(status!=XR_XIR_OK || !!final->sites!=!!final->site_count) return status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:status;
-    EffectBodyRequest body=effect_body_owned_request(work,material);uint32_t at=0,bindings=0;
+    EffectBodyRequest body=effect_body_owned_request(work,material);
+    EffectInvocationSiteRows rows={.rows=final->sites,.capacity=final->site_count,.compare=true};
     for(uint32_t f=0;f<effect_body_count(material);++f) {
-        EffectBodyFunctionDimensions head={0};status=effect_body_request_dimensions(&body,f,&head);
-        EffectFinalInputSelect cursor;
-        if(status==XR_XIR_OK) status=effect_final_input_select_begin(&body,EFFECT_FINAL_SELECT_REFERENCE,&cursor);
-        if(status!=XR_XIR_OK) return status;
+        EffectFinalInputSelect cursor;status=effect_final_input_select_begin(&body,EFFECT_FINAL_SELECT_REFERENCE,&cursor);
+        if(status!=XR_XIR_OK)return status;
         for(;;) {
-            XrXirInstruction storage;const XrXirInstruction *op=&storage;uint32_t i=0;bool found=false;
-            status=effect_final_input_select_next(&body,f,&cursor,&i,&storage,&found);
-            if(status!=XR_XIR_OK) return status;
-            if(!found) break;
-
-            if(at>=final->site_count || op->immediate<0 || (uint64_t)op->immediate>=effect_body_count(material))
-                return XR_XIR_BAD_STRUCTURE;
-            EffectBodyFunctionDimensions target={0};status=effect_body_request_dimensions(&body,(uint32_t)op->immediate,&target);
-            if(status!=XR_XIR_OK) return status;
-
-            const EffectInvocationSite *site=&final->sites[at++];
-            if(site->function!=f || site->instruction!=i || site->target!=(uint32_t)op->immediate ||
-                site->captures!=op->args[1] || site->binding!=bindings || site->captures>target.parameter_count ||
-                site->captures>UINT32_MAX-bindings) return XR_XIR_BAD_STRUCTURE;
-            bindings+=site->captures;
+            XrXirInstruction op;uint32_t i=0;bool found=false;
+            status=effect_final_input_select_next(&body,f,&cursor,&i,&op,&found);
+            if(status!=XR_XIR_OK)return status;
+            if(!found)break;
+            rows.function=f;rows.instruction=i;
+            status=effect_invocation_site_rows(work,material,&op,&rows);if(status!=XR_XIR_OK)return status;
         }
-
     }
-    return at==final->site_count && bindings==final->binding_count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+    return rows.at==final->site_count && rows.binding==final->binding_count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
 }
 static XrXirStatus effect_final_inventory_tracked(const XrXirCompileContext *work,
     const EffectBodyMaterial *material,XrXirType type,bool *output) {

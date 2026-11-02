@@ -10,7 +10,7 @@
  *   Actual captures still pass complete admission; site identity grants no execution permission.
  */
 static XrXirCallStatus instance_producer_site(XrXirInstance *instance,XrXirValueAdmission *admission,
-    uint32_t caller,uint32_t instruction,const XrXirProgramFunctionRef **output) {
+    uint32_t caller,uint32_t instruction,uint32_t target,const XrXirProgramFunctionRef **output) {
     const XrXirProgramPermissions *permissions=instance->program->permissions;
     if (!permissions || !permissions->effects || caller>=permissions->function_count ||
         permissions->function_count!=instance->program->entry_count) return XR_XIR_CALL_BAD_STATE;
@@ -25,7 +25,7 @@ static XrXirCallStatus instance_producer_site(XrXirInstance *instance,XrXirValue
     const XrXirProgramFunctionRef *selected=NULL;
     for (uint32_t r=0;r<owner->reference_count;++r) {
         const XrXirProgramFunctionRef *site=&permissions->references[owner->reference_begin+r];
-        if (site->instruction!=instruction) continue;
+        if (site->instruction!=instruction || (target!=UINT32_MAX && site->entry!=target)) continue;
         if (selected) return XR_XIR_CALL_BAD_STATE;
         selected=site;
     }
@@ -40,8 +40,13 @@ XR_FUNC XrXirCallStatus xr_xir_instance_function_at(XrXirCallView *view,uint32_t
     if (!instance) return XR_XIR_CALL_BAD_STATE;
     if (!output || !value_unit(*output) || (count && !captures)) return XR_XIR_CALL_BAD_ARGUMENT;
     uint32_t caller=xr_xir_call_current_entry(view->activation);
+    const XrXirModule *module=instance_method_module(instance);
+    if (!module || caller>=module->function_count ||
+        instruction>=module->functions[caller].instruction_count ||
+        module->functions[caller].instructions[instruction].op!=XR_XIR_FUNCTION_REF)
+        return XR_XIR_CALL_BAD_ARGUMENT;
     const XrXirProgramFunctionRef *selected=NULL;
-    XrXirCallStatus status=instance_producer_site(instance,xr_xir_call_admission(view),caller,instruction,&selected);
+    XrXirCallStatus status=instance_producer_site(instance,xr_xir_call_admission(view),caller,instruction,UINT32_MAX,&selected);
     if (status!=XR_XIR_CALL_READY) return status;
     if (selected->captures!=count) return XR_XIR_CALL_BAD_ARGUMENT;
     const XrXirProgramPermissions *permissions=instance->program->permissions;
@@ -66,8 +71,24 @@ static XrXirCallStatus instance_function_producer_value(XrXirInstance *instance,
     const XrXirProgramPermissions *permissions=instance->program->permissions;
     if (!producer || !permissions || producer->owner!=permissions->effects || !binding)
         return XR_XIR_CALL_BAD_ARGUMENT;
+    const XrXirModule *module=instance_method_module(instance);
+    if (!module || producer->function>=module->function_count ||
+        producer->instruction>=module->functions[producer->function].instruction_count)
+        return XR_XIR_CALL_BAD_ARGUMENT;
+    const XrXirInstruction *op=&module->functions[producer->function].instructions[producer->instruction];
+    bool method=op->op==XR_XIR_CLASS_METHOD_REF;
+    if (method) {
+        if (binding->capture_count!=1 || !binding->captures) return XR_XIR_CALL_BAD_ARGUMENT;
+        XirClassMethodTarget target={0};
+        XrXirCallStatus status=instance_method_select(instance,admission,producer->function,
+            producer->instruction,&binding->captures[0],&target);
+        if (status!=XR_XIR_CALL_READY) return status;
+        if (binding->entry!=target.function || binding->captures[0].type!=(uint32_t)target.receiver_type)
+            return XR_XIR_CALL_BAD_ARGUMENT;
+    } else if (op->op!=XR_XIR_FUNCTION_REF) return XR_XIR_CALL_BAD_ARGUMENT;
     const XrXirProgramFunctionRef *site=NULL;
-    XrXirCallStatus status=instance_producer_site(instance,admission,producer->function,producer->instruction,&site);
+    XrXirCallStatus status=instance_producer_site(instance,admission,producer->function,producer->instruction,
+        method?binding->entry:UINT32_MAX,&site);
     if (status!=XR_XIR_CALL_READY) return status;
     if (producer->site!=site->site || binding->entry!=site->entry ||
         binding->capture_count!=site->captures)

@@ -38,7 +38,7 @@ static inline bool xir_path_prelude_type(const XrXirDeclarations *scope,
     if(table->declarations) {
         const XrXirNominalDeclaration *d=table->declarations+ordinal;
         identity=(XrXirNominalIdentity){d->module,d->name,d->exported,d->parameter_count,NULL,
-            d->field_count,d->kind,d->variants,d->variant_count,d->flags,d->native};
+            d->field_count,d->kind,d->variants,d->variant_count,d->flags,d->native,d->parent};
         if((d->field_count&&!d->fields)||(d->parameter_count&&!d->constraints))return false;
     } else {
         if(!table->identities)return false;identity=table->identities[ordinal];

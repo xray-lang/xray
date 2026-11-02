@@ -16,6 +16,7 @@
 #include "xxir_compile_memory.h"
 #include "xxir_type_arena_internal.h"
 #include "xxir_constraint_proof_internal.h"
+#include "xxir_class_hierarchy_internal.h"
 
 typedef struct XirTypeIdentity { const XrXirTypeArena *owner; XrXirType type; } XirTypeIdentity;
 #include "xxir_view_types_internal.h"
@@ -99,6 +100,7 @@ XR_FUNC XrXirValueStatus xr_xir_compile_type_arena_new(const XrXirCompileContext
     if (types && (types->interfaces || (types->nominals && types->nominals->declarations)))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirStatus status = xr_xir_compile_types_structure_verify(context, types);
+    if(status==XR_XIR_OK)status=xir_compile_class_hierarchy_verify(context,types,NULL);
     if (status != XR_XIR_OK) return arena_status(status);
     size_t bytes = 0;
     XrXirValueStatus value_status = arena_pool_walk( types, NULL, SIZE_MAX, &bytes);

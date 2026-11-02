@@ -28,6 +28,20 @@ XR_FUNC bool xr_xir_call_invocation_pending(const XrXirCallView *view,XrXirCallF
     *frontier=(XrXirCallFrontier){frame->effect_instruction,
         frame->pending_invocation.target,frame->pending_invocation.producer};return true;
 }
+XR_FUNC XrXirCallStatus xir_call_root_fields_stage(XrXirCallView *view,
+    uint32_t instruction,uint32_t target) {
+    if (!(!view || call_owner_current(view->activation))) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (!xr_xir_call_admission(view) || view->phase!=XR_XIR_CALL_NORMAL ||
+        instruction==UINT32_MAX || target>=view->activation->top->metadata->entry_count)
+        return XR_XIR_CALL_BAD_STATE;
+    CallFrame *frame=view->activation->top;
+    if (frame->effect_pending || frame->pending_invocation.owner) return XR_XIR_CALL_BAD_STATE;
+    XrXirCallStatus status=xr_xir_call_execution_status(view);
+    if (status!=XR_XIR_CALL_READY) return status;
+    if (!call_invocation_work(view,sizeof(XrXirCallFrontier)+2)) return XR_XIR_CALL_LIMIT;
+    frame->pending_invocation=(XirEffectInvocationSelection){.target=target,.producer=UINT32_MAX};
+    frame->effect_instruction=instruction;frame->effect_pending=true;return XR_XIR_CALL_READY;
+}
 XR_FUNC XrXirCallStatus xr_xir_call_invocation_stage(XrXirCallView *view,
     const XirEffectInvocationSelection *selection) {
     if (!(!view || call_owner_current(view->activation))) return XR_XIR_CALL_BAD_ARGUMENT;

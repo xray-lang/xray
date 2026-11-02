@@ -44,7 +44,9 @@ static bool graph_storage_edges(StorageCursor *cursor, GraphEdgeVisitor visit, v
         if (value.payload) {
             const XirObject *owner=object_pointer(&value);
             if (leaf.type!=XR_XIR_ERROR) value.type=(uint32_t)owner->type;
-            if (!xir_type_arena_same_type(owner->arena,(XrXirType)value.type,cursor->arena,leaf.type)) {
+            /* Class storage may expose a verified ancestor while its owner
+             * keeps the complete derived type. Other carriers remain exact. */
+            if (!value_type_argument(&value,cursor->arena,leaf.type)) {
                 if (budget) budget->status=XR_XIR_VALUE_BAD_ARGUMENT;
                 return false;
             }

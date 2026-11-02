@@ -12,6 +12,11 @@
  */
 
 #include "xxir_types.h"
+#include "xxir_class_hierarchy_internal.h"
+#include "xxir_class_method_internal.h"
+#include "xxir_class_method_read_internal.h"
+#include "xxir_class_stage_internal.h"
+#include "xxir_receive_control.h"
 #include "xxir_native_callable.h"
 #include "xxir_effect_contract_internal.h"
 #include "xxir_compile_memory.h"
@@ -36,7 +41,7 @@ XrXirStatus xr_xir_compile_method_signature_verify(const XrXirCompileContext *co
     if (!module->declarations->functions) return XR_XIR_BAD_STRUCTURE;
     const XrXirFunctionIdentity *identity = &module->declarations->functions[index];
 
-    if (identity->method_kind > XR_XIR_MATERIALIZER ||
+    if (identity->method_kind > XR_XIR_CONSTRUCTOR_FIELDS ||
         (!!identity->nominal_owner != (identity->method_kind != XR_XIR_NON_MEMBER)))
         return XR_XIR_BAD_STRUCTURE;
     if (!identity->nominal_owner) return identity->native_callable?xir_native_callable_verify(module,index):XR_XIR_OK;
@@ -47,6 +52,7 @@ XrXirStatus xr_xir_compile_method_signature_verify(const XrXirCompileContext *co
     uint32_t flags=table->declarations?table->declarations[owner].flags:table->identities[owner].flags;
     if (flags & XR_XIR_NOMINAL_RECORD) return XR_XIR_BAD_TYPE;
     if (identity->native_callable) return xir_native_callable_verify(module,index);
+    if(identity->method_kind==XR_XIR_CONSTRUCTOR_FIELDS)return xir_compile_class_stage_signature(module,index,NULL);
     if (identity->method_kind == XR_XIR_MEMBER_HELPER || identity->method_kind==XR_XIR_MATERIALIZER) return XR_XIR_OK;
     uint32_t count = table->declarations ? table->declarations[owner].parameter_count : table->identities[owner].arity;
     if (!xir_effect_evidence_is_closed(module) && count > (module->generics ? module->generics[index].parameter_count : 0))
@@ -209,14 +215,14 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
         (d->slot_count && !d->slots) || (d->literal_count && !d->literals)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i = 0; i < functions; ++i)
         if (d->functions[i].module >= d->module_count || d->functions[i].exported > 1 ||
-            d->functions[i].method_kind > XR_XIR_MATERIALIZER ||
+            d->functions[i].method_kind > XR_XIR_CONSTRUCTOR_FIELDS ||
             (d->functions[i].native_callable && !xr_native_callable_by_id(d->functions[i].native_callable)) ||
             d->functions[i].test_role > XR_XIR_TEST_ROLE_AFTER_EACH ||
             (d->functions[i].test_role != XR_XIR_TEST_ROLE_TEST && d->functions[i].test_timeout_seconds) ||
             d->functions[i].test_timeout_seconds > INT_MAX ||
             (d->functions[i].test_role && (d->functions[i].nominal_owner || d->functions[i].cleanup_owner)) ||
             (!!d->functions[i].nominal_owner != (d->functions[i].method_kind != XR_XIR_NON_MEMBER)) ||
-            (d->functions[i].promises & ~(XR_XIR_FUNCTION_NO_SUSPEND | XR_XIR_FUNCTION_GENERATOR | XR_XIR_FUNCTION_REST)) ||
+            (d->functions[i].promises & ~(XR_XIR_FUNCTION_NO_SUSPEND | XR_XIR_FUNCTION_GENERATOR | XR_XIR_FUNCTION_REST | XR_XIR_FUNCTION_OVERRIDE)) ||
             ((d->functions[i].promises & XR_XIR_FUNCTION_REST) &&
              ((d->functions[i].method_kind != XR_XIR_NON_MEMBER && d->functions[i].method_kind != XR_XIR_MEMBER_HELPER) ||
               d->functions[i].cleanup_owner || d->functions[i].native_callable ||
@@ -365,3 +371,7 @@ XrXirStatus xr_xir_compile_declarations_clone(const XrXirCompileContext *compile
     xr_xir_compile_declarations_free(copy);
     return allocation_status;
 }
+
+#include "xxir_class_method.inc.c"
+
+#include "xxir_class_stage.inc.c"

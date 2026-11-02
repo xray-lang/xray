@@ -48,7 +48,7 @@ static XrXirStatus effect_terms_nominal_head(
 
     if (a->exported!=b->exported || a->parameter_count!=b->parameter_count ||
         a->field_count!=b->field_count || a->kind!=b->kind ||
-        a->variant_count!=b->variant_count || a->flags!=b->flags ||
+        a->variant_count!=b->variant_count || a->flags!=b->flags || a->parent!=b->parent ||
         a->native.native_id!=b->native.native_id ||
         memcmp(a->native.source_fingerprint,b->native.source_fingerprint,32)) return XR_XIR_BAD_TYPE;
     XrXirStatus status=effect_terms_literal_same(a->module,b->module);
@@ -190,7 +190,7 @@ static XrXirStatus effect_terms_projected_domain(EffectTerms *pool, const XrXirT
 
             if (original->exported!=identity->exported || original->parameter_count!=identity->arity ||
                 original->field_count!=identity->field_count || original->kind!=identity->kind ||
-                original->variant_count!=identity->variant_count || original->flags!=identity->flags ||
+                original->variant_count!=identity->variant_count || original->flags!=identity->flags || original->parent!=identity->parent ||
                 original->native.native_id!=identity->native.native_id ||
                 memcmp(original->native.source_fingerprint,identity->native.source_fingerprint,32))
                 return XR_XIR_BAD_TYPE;

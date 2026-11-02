@@ -33,7 +33,7 @@ static XrXirStatus effect_invocation_arguments_match(EffectInvocationFlow *flow,
         *matched=true;return XR_XIR_OK;
     }
     const uint64_t *closure=NULL;
-    if (edge.producer!=UINT32_MAX && op->op!=XR_XIR_FUNCTION_REF) {
+    if (edge.producer!=UINT32_MAX && op->op!=XR_XIR_FUNCTION_REF && op->op!=XR_XIR_CLASS_METHOD_REF) {
         uint64_t value=effect_invocation_iterator_operation(op->op)?op->args[0]:(uint64_t)op->immediate;
         if (value>=flow->values || (supplied &&
             (!effect_invocation_iterator_operation(op->op) || supplied->value!=value))) return XR_XIR_BAD_STRUCTURE;
@@ -41,7 +41,7 @@ static XrXirStatus effect_invocation_arguments_match(EffectInvocationFlow *flow,
         if (!closure) return XR_XIR_BAD_STRUCTURE;
     }
     uint64_t *input=NULL;flow->instruction=edge.instruction;
-    if (op->op==XR_XIR_FUNCTION_REF)
+    if (op->op==XR_XIR_FUNCTION_REF || op->op==XR_XIR_CLASS_METHOD_REF)
         status=effect_invocation_latent_input(flow,edge.instruction,edge.producer,op,&input);
     else status=effect_invocation_arguments(flow,op,target->body,edge.producer,closure,&input);
     uint64_t words=(uint64_t)target->parameter_count*flow->basis.row_words;

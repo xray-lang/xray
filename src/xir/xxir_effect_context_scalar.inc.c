@@ -216,6 +216,23 @@ static XrXirStatus effect_scalar_capture(EffectScalarFlow *flow, uint32_t instru
     return effect_scalar_assign(flow,destination,actual);
 }
 
+static XrXirStatus effect_scalar_class_capture(EffectScalarFlow *flow,uint32_t instruction) {
+    if(!flow->contexts || !flow->function)return XR_XIR_BAD_STRUCTURE;
+    uint32_t function=(uint32_t)(flow->function-flow->contexts->functions);
+    uint32_t destination=flow->function->parameter_count+instruction,mask=0;
+    XrXirStatus status=effect_class_reference_mask(flow->terms->remaining,&flow->contexts->uses,function,instruction,&mask);
+    if(status!=XR_XIR_OK)return status;
+    const XrXirTypeNode *signature=xr_xir_callable_signature(&flow->terms->types,flow->declared[destination]);
+    if(!signature)return XR_XIR_BAD_TYPE;
+    if((flow->fixed[destination]&EFFECT_SCALAR_STORAGE_PIN) &&
+        !xr_xir_callable_root_accepts(!!(mask&XR_XIR_CALLABLE_ROOT_REQUIRED),!!(mask&XR_XIR_CALLABLE_ROOT_UNRESOLVED),signature->flags))
+        return XR_XIR_BAD_TYPE;
+    XrXirTypeNode bound=*signature;
+    bound.flags=(bound.flags&(XR_XIR_CALLABLE_NO_SUSPEND|XR_XIR_CALLABLE_REST))|(mask?mask:XR_XIR_CALLABLE_ROOT_NONE);
+    XrXirType actual=effect_term_intern(flow->terms,bound);
+    return flow->terms->status==XR_XIR_OK?effect_scalar_assign(flow,destination,actual):flow->terms->status;
+}
+
 static XrXirStatus effect_scalar_escape(EffectScalarFlow *flow, uint32_t instruction) {
     XrXirInstruction op=flow->function->instructions[instruction];
     uint32_t destination=flow->function->parameter_count+instruction;
@@ -284,6 +301,8 @@ static XrXirStatus effect_scalar_instruction(EffectScalarFlow *flow, uint32_t in
         return effect_scalar_transfer(flow,op.args[0],op.args[1]);
     case XR_XIR_PHI:
         return effect_scalar_phi(flow,instruction);
+    case XR_XIR_CLASS_METHOD_REF:
+        return effect_scalar_class_capture(flow,instruction);
     case XR_XIR_FUNCTION_REF:
         return effect_scalar_capture(flow,instruction);
     case XR_XIR_CELL_PROJECT:
@@ -319,7 +338,7 @@ static XrXirStatus effect_scalar_flow(EffectScalarFlow *flow) {
         XrXirOp op=flow->function->instructions[i].op;
         flow->fixed[flow->function->parameter_count+i]=0;
         if (op==XR_XIR_COPY || op==XR_XIR_LOCAL_NEW || op==XR_XIR_LOCAL_READ ||
-            op==XR_XIR_PHI || op==XR_XIR_FUNCTION_REF)
+            op==XR_XIR_PHI || op==XR_XIR_FUNCTION_REF || op==XR_XIR_CLASS_METHOD_REF)
             flow->values[flow->function->parameter_count+i]=XR_XIR_UNIT;
     }
     status=effect_scalar_storage_prepare(flow);

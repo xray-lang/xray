@@ -227,7 +227,7 @@ static XrXirStatus effect_contract_values(
         const XrXirInstruction *op = &definition->instructions[value->instruction];
         if (!xr_xir_callable_signature(module->types, op->type)) return XR_XIR_BAD_TYPE;
         if ((value->mode == XR_XIR_EFFECT_VALUE_FIXED && op->op != XR_XIR_FUNCTION_WEAKEN) ||
-            (value->mode == XR_XIR_EFFECT_VALUE_AUTHENTIC_REF && op->op != XR_XIR_FUNCTION_REF) ||
+            (value->mode == XR_XIR_EFFECT_VALUE_AUTHENTIC_REF && op->op != XR_XIR_FUNCTION_REF && op->op!=XR_XIR_CLASS_METHOD_REF) ||
             (value->mode == XR_XIR_EFFECT_VALUE_CALL_BIND && op->op != XR_XIR_COPY) ||
             (value->mode == XR_XIR_EFFECT_VALUE_PROPAGATE && op->op == XR_XIR_FUNCTION_WEAKEN))
             return XR_XIR_BAD_STRUCTURE;

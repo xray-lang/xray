@@ -39,7 +39,7 @@ static bool source_effect_argument_bound(SourceContext *ctx, SourceValue value,
 static uint32_t source_effect_value_mode(const XrXirInstruction *op,
     const SourceRootValue *root) {
     if (op->op == XR_XIR_FUNCTION_WEAKEN) return XR_XIR_EFFECT_VALUE_FIXED;
-    if (op->op == XR_XIR_FUNCTION_REF) return XR_XIR_EFFECT_VALUE_AUTHENTIC_REF;
+    if (op->op == XR_XIR_FUNCTION_REF || op->op==XR_XIR_CLASS_METHOD_REF) return XR_XIR_EFFECT_VALUE_AUTHENTIC_REF;
     if (op->op == XR_XIR_COPY && root && root->kind == 5) return XR_XIR_EFFECT_VALUE_CALL_BIND;
     switch (op->op) {
     case XR_XIR_COPY: case XR_XIR_PHI: case XR_XIR_LOCAL_NEW: case XR_XIR_LOCAL_READ:

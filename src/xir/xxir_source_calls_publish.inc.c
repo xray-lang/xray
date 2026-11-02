@@ -15,6 +15,8 @@ static XrXirStatus source_calls_publish(SourceContext *ctx,XrXirSourceSnapshot *
         const SourceFunction *body=&ctx->bodies[i];
         const AstNode *node=body->node;
         if(!source_query_callable(ctx,body->declaration)||!node)continue;
+        /* A generated body's AST borrow is not a second source declaration. */
+        if(ctx->syntax.declarations[body->declaration-1].role==XR_XIR_SOURCE_SYNTAX_NONE)continue;
         if(node->type!=AST_FUNCTION_DECL&&node->type!=AST_FUNCTION_EXPR&&node->type!=AST_METHOD_DECL)continue;
         XrXirSourceRange range={body->module,node->line,node->column,node->end_line,node->end_column};
         /* Missing parser bounds remain unknown; no synthetic whole-file range. */

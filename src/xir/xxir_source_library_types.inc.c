@@ -261,6 +261,8 @@ static bool source_library_declaration_constraints(SourceContext *ctx,SourceLibr
         uint32_t target=unit->nominals[n];
         XrXirNominalDeclaration *to=(XrXirNominalDeclaration *)&ctx->nominals.declarations[target];
         const XrXirNominalDeclaration *from=&nominals->declarations[n];
+        if(from->parent>nominals->count)return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library parent declaration is outside its owned table");
+        to->parent=from->parent?unit->nominals[from->parent-1]+1:0;
         if (!source_library_constraints(ctx,unit,from->constraints,from->parameter_count,&to->constraints)) return false;
         XrXirSourceDeclaration *query=(XrXirSourceDeclaration *)&ctx->query.declarations[ctx->nominal_sources[target]->declaration-1];
         query->generic_parameter_count=to->parameter_count;query->generic_constraints=to->constraints;

@@ -46,8 +46,12 @@ static bool source_move(SourceContext *ctx,AstNode *node,SourceValue *output) {
         return source_fail(ctx,node,XR_XIR_UNSUPPORTED,"Unit move has no executable local value yet");
     if(xr_xir_type_is_owned(&ctx->types,binding->type)) {
         SourceExpressionPlan *parent=ctx->active_expression->parent;
+        SourceExpectedType expected=ctx->active_expression->expected;
         AstNode *argument=node;
-        while(parent&&parent->syntax->type==AST_GROUPING){argument=parent->syntax;parent=parent->parent;}
+        while(parent&&parent->syntax->type==AST_GROUPING) {
+            if(parent->expected.present)expected=parent->expected;
+            argument=parent->syntax;parent=parent->parent;
+        }
         bool spawn_argument=false;
         if(parent&&parent->syntax->type==AST_GO_EXPR) {
             AstNode *call=parent->syntax->as.go_expr.expr;
@@ -58,7 +62,6 @@ static bool source_move(SourceContext *ctx,AstNode *node,SourceValue *output) {
         }
         if(parent&&parent->syntax->type!=AST_CALL_EXPR&&parent->syntax->type!=AST_ASSIGNMENT&&!spawn_argument)
             return source_fail(ctx,node,XR_XIR_UNSUPPORTED,"move destination has no owned transfer recipe");
-        SourceExpectedType expected=ctx->active_expression->expected;
         if(expected.present&&expected.type!=binding->type)
             return source_fail(ctx,node,XR_XIR_UNSUPPORTED,"move conversion has no owned transfer recipe");
     }

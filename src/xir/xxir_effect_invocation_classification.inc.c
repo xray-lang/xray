@@ -81,7 +81,7 @@ static bool effect_physical_error_empty_opcode(XrXirOp op) {
     case XR_XIR_SUB_INT: case XR_XIR_MUL_INT: case XR_XIR_DIV_INT: case XR_XIR_REM_INT:
     case XR_XIR_NE_INT: case XR_XIR_LE_INT: case XR_XIR_GT_INT: case XR_XIR_GE_INT:
     case XR_XIR_AND_INT: case XR_XIR_OR_INT: case XR_XIR_XOR_INT: case XR_XIR_SHL_INT:
-    case XR_XIR_SHR_INT: case XR_XIR_PHI: case XR_XIR_FUNCTION_REF: case XR_XIR_CELL_NEW:
+    case XR_XIR_SHR_INT: case XR_XIR_PHI: case XR_XIR_FUNCTION_REF: case XR_XIR_CLASS_METHOD_REF: case XR_XIR_CELL_NEW:
     case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: case XR_XIR_CELL_STRING_APPEND: case XR_XIR_CELL_PROJECT:
     case XR_XIR_CONVERT_NUMBER: case XR_XIR_CONST_FLOAT:
     case XR_XIR_NEG_FLOAT: case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT: case XR_XIR_LT_FLOAT:
@@ -120,7 +120,7 @@ static bool effect_physical_error_empty_opcode(XrXirOp op) {
  * A missing callable row is storage absence, never an effect fact. */
 static uint32_t effect_physical_opcode(XrXirOp op) {
     uint32_t mask=0;
-    if (op==XR_XIR_FUNCTION_REF) mask|=EFFECT_PHYSICAL_REFERENCE;
+    if (op==XR_XIR_FUNCTION_REF || op==XR_XIR_CLASS_METHOD_REF) mask|=EFFECT_PHYSICAL_REFERENCE;
     if (op==XR_XIR_GENERATOR_NEW) mask|=EFFECT_PHYSICAL_GENERATOR;
     if (effect_invocation_iterator_operation(op)) mask|=EFFECT_PHYSICAL_ITERATOR_ADVANCE;
     if (op==XR_XIR_RETURN) mask|=EFFECT_PHYSICAL_RETURN;
@@ -156,7 +156,7 @@ static uint32_t effect_physical_opcode(XrXirOp op) {
     }
     switch (op) {
     case XR_XIR_CALL: case XR_XIR_CALL_DEFAULT: case XR_XIR_CALL_INDIRECT:
-    case XR_XIR_INVOKE_RESULT: case XR_XIR_FUNCTION_REF: case XR_XIR_GENERATOR_NEW: case XR_XIR_CELL_READ:
+    case XR_XIR_INVOKE_RESULT: case XR_XIR_FUNCTION_REF: case XR_XIR_CLASS_METHOD_REF: case XR_XIR_GENERATOR_NEW: case XR_XIR_CELL_READ:
     case XR_XIR_COPY: case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN:
     case XR_XIR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_OWNED_LOCAL_NEW:
     case XR_XIR_LOCAL_READ: case XR_XIR_SCALAR_LOCAL_READ: case XR_XIR_OWNED_LOCAL_READ:
@@ -169,7 +169,7 @@ static uint32_t effect_physical_opcode(XrXirOp op) {
     case XR_XIR_CALL: case XR_XIR_INVOKE: case XR_XIR_CLEANUP_REGISTER:
     case XR_XIR_CALL_DEFAULT: case XR_XIR_INVOKE_DEFAULT: case XR_XIR_CALL_REQUIREMENT:
     case XR_XIR_GO: case XR_XIR_SCOPED_GO: case XR_XIR_GENERATOR_NEW: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT:
-    case XR_XIR_FUNCTION_REF: case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH:
+    case XR_XIR_FUNCTION_REF: case XR_XIR_CLASS_METHOD_REF: case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH:
     case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: case XR_XIR_CELL_STRING_APPEND:
     case XR_XIR_CELL_LOCAL_WRITE: case XR_XIR_PLACE_READ: case XR_XIR_PLACE_WRITE:
     case XR_XIR_CELL_PROJECT:

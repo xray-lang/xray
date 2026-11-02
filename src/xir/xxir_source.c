@@ -38,6 +38,8 @@
 #include "xxir_source_query_internal.h"
 #include "xxir_generic.h"
 #include "xxir_types.h"
+#include "xxir_class_hierarchy_internal.h"
+#include "xxir_class_method_internal.h"
 #include "xxir_pointer.h"
 #include "xxir_task_result.h"
 #include "xxir_nominal.h"
@@ -241,6 +243,8 @@ typedef struct SourceFunction {
     uint32_t expression_count;
     uint32_t declaration, generic_owner, parameter_scope;
     uint32_t *constructor_places;
+    uint32_t constructor_stage;
+    bool constructor_super;
     AstNode *default_expression;
     SourceErrorContext *error_context;
     SourceLocalHandler *local_handler;
@@ -1430,7 +1434,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             binding = base; target = imported_declaration(ctx, base, member->name);
         }
         else if (source_constructor_receiver(ctx, member->object) &&
-            !source_method_find(ctx, ctx->functions[ctx->function].result, member->name)) {
+            !source_method_find(ctx, visible_name(ctx,"this")->type, member->name)) {
             if (!expression(ctx, callee, &indirect)) return false;
             indirect_ready = true;
         } else {
@@ -1937,6 +1941,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
     case AST_COPY_EXPR: return source_copy(ctx,node,context,value);
     case AST_MOVE_EXPR: return source_move(ctx,node,value);
     case AST_CALL_EXPR: return source_call(ctx, node, context, value);
+    case AST_SUPER_CALL: return source_class_super(ctx,node,value);
     case AST_GO_EXPR: return source_go_call(ctx, node, context, value);
     case AST_AWAIT_EXPR: return source_task_await(ctx, node, context, value);
     case AST_FUNCTION_REF: return source_explicit_reference(ctx, node, context, value);
@@ -2447,6 +2452,10 @@ static bool collect_declarations(SourceContext *ctx) {
                     (uint32_t)declaration.method_count > ctx->compile.limits.functions - functions)
                     return source_fail(ctx,node,XR_XIR_BUDGET,"method function budget exhausted");
                 functions += (uint32_t)declaration.method_count;
+                if(node->type==AST_CLASS_DECL && source_class_stage_eligible(ctx,node)) {
+                    if(functions>=ctx->compile.limits.functions)return source_fail(ctx,node,XR_XIR_BUDGET,"class field helper capacity exhausted");
+                    ++functions;
+                }
             }
             if (node->type == AST_STRUCT_DECL || node->type == AST_CLASS_DECL) {
                 ClassDeclNode *decl = node->type == AST_CLASS_DECL ? &node->as.class_decl : &node->as.struct_decl;
@@ -2606,7 +2615,7 @@ static bool collect_declarations(SourceContext *ctx) {
         }
     }
     if (slot!=ctx->slot_count) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"module slot inventory mismatch");
-    if (!source_nominal_methods(ctx, &function) || !source_struct_default_functions(ctx, &function) || !source_struct_constructors(ctx, &function) || !source_argument_functions(ctx, &function) || function != ctx->first_closure)
+    if (!source_nominal_methods(ctx, &function) || !source_class_stage_declarations(ctx,&function) || !source_struct_default_functions(ctx, &function) || !source_struct_constructors(ctx, &function) || !source_argument_functions(ctx, &function) || function != ctx->first_closure)
         return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "field initializer function inventory mismatch");
     ctx->closure_limit = ctx->function_count - (ctx->linkage_kind == XR_XIR_PROGRAM);
     ctx->entry_function = ctx->linkage_kind == XR_XIR_PROGRAM ? ctx->function_count - 1 : UINT32_MAX;

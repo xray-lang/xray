@@ -119,3 +119,7 @@ set_tests_properties(xir_checked_previous122 PROPERTIES TIMEOUT 60 LABELS "unit;
 add_test(NAME xir_checked_previous123 COMMAND test_xir_rune_whitespace --previous123
     ${PROJECT_SOURCE_DIR}/tests/fixtures/xir_rune_whitespace/previous123-read-ref.chk)
 set_tests_properties(xir_checked_previous123 PROPERTIES TIMEOUT 60 LABELS "unit;xir;checked;identity;sdk")
+
+add_test(NAME xir_checked_previous124 COMMAND test_xir_rune_whitespace --previous124
+    ${PROJECT_SOURCE_DIR}/tests/fixtures/xir_rune_whitespace/previous124-read-ref.chk)
+set_tests_properties(xir_checked_previous124 PROPERTIES TIMEOUT 60 LABELS "unit;xir;checked;identity;sdk")

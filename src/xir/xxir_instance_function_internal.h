@@ -15,6 +15,9 @@
 #include "xxir_effect_contract_internal.h"
 XR_FUNC XrXirCallStatus xr_xir_instance_function_at(XrXirCallView *view,uint32_t instruction,
     const XrXirValue *captures,uint32_t count,XrXirValue *output);
+/* The compiler adapter borrows its actual frame; the sealed SSA selects its word. */
+XR_FUNC XrXirCallStatus xr_xir_instance_class_method_at(XrXirCallView *view,uint32_t instruction,
+    const void *frame,XrXirValue *output);
 /* This proves a real producer identity; it does not close its capture environment. */
 XR_FUNC XrXirCallStatus xr_xir_instance_function_producer(XrXirCallView *view,
     const XrXirValue *function,XirEffectProducerView *output);

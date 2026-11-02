@@ -112,3 +112,6 @@ src/xir/xxir_emit_literal_tables.inc.c text eol=lf
 
 # The original quoted literal oracle binds exact LF bytes.
 tests/smoke/expected/quoted_literals.txt text eol=lf
+
+# Class output is compared with the independent six-line byte oracle.
+tests/fixtures/xir_class_inheritance/classes.expected.txt text eol=lf

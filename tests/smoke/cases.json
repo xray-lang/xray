@@ -129,13 +129,17 @@
       "id": "demos/03-oop/classes.xr",
       "path": "demos/03-oop/classes.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F03",
-        "first_diagnostic": "demos/03-oop/classes.xr:29:7: error: class execution currently requires a root declaration without inheritance"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/fixtures/xir_class_inheritance/classes.expected.txt"
+    },
+    {
+      "id": "native:demos/03-oop/classes.xr",
+      "path": "demos/03-oop/classes.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/fixtures/xir_class_inheritance/classes.expected.txt"
     },
     {
       "id": "demos/03-oop/structs_and_interfaces.xr",
@@ -146,7 +150,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F18",
-        "first_diagnostic": "demos/03-oop/structs_and_interfaces.xr:52:28: error: expression cannot satisfy its declared type"
+        "first_diagnostic": "demos/03-oop/structs_and_interfaces.xr:52:28: error: Array class elements require one complete common ancestor"
       }
     },
     {

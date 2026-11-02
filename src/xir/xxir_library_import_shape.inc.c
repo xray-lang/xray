@@ -306,6 +306,7 @@ static XrXirStatus library_catalog_shape(const XrXirModule *m,
             (d->functions[f].nominal_owner && d->functions[f].method_kind!=XR_XIR_CONSTRUCTOR &&
              d->functions[f].method_kind!=XR_XIR_MEMBER_HELPER &&
              d->functions[f].method_kind!=XR_XIR_MATERIALIZER &&
+             d->functions[f].method_kind!=XR_XIR_CONSTRUCTOR_FIELDS &&
              d->functions[f].method_kind!=XR_XIR_READ_METHOD &&
              d->functions[f].method_kind!=XR_XIR_STATIC_METHOD))
             return XR_XIR_BAD_STAGE;
@@ -354,7 +355,7 @@ static XrXirStatus library_catalog_shape(const XrXirModule *m,
             }
             if (!library_catalog_local_instruction(op->op) &&
                 op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE && op->op!=XR_XIR_GO &&
-                op->op!=XR_XIR_FUNCTION_REF && op->op!=XR_XIR_GENERATOR_NEW &&
+                op->op!=XR_XIR_FUNCTION_REF && op->op!=XR_XIR_CLASS_METHOD_REF && op->op!=XR_XIR_GENERATOR_NEW &&
                 op->op!=XR_XIR_CALL_REQUIREMENT && op->op!=XR_XIR_CALL_DEFAULT &&
                 op->op!=XR_XIR_CONST_STRING && op->op!=XR_XIR_SLOT_LOAD &&
                 op->op!=XR_XIR_SLOT_INIT && op->op!=XR_XIR_SLOT_STORE &&

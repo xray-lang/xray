@@ -36,7 +36,7 @@ static XrXirStatus effect_body_nominal_compare(
         return XR_XIR_BAD_STRUCTURE;
     if (a->exported!=b->exported || a->parameter_count!=b->parameter_count ||
         a->field_count!=b->field_count || a->kind!=b->kind || a->variant_count!=b->variant_count ||
-        a->flags!=b->flags || a->native.native_id!=b->native.native_id ||
+        a->flags!=b->flags || a->parent!=b->parent || a->native.native_id!=b->native.native_id ||
         memcmp(a->native.source_fingerprint,b->native.source_fingerprint,32)) return effect_body_difference(same);
     XrXirStatus status=effect_body_literal_compare(a->module,b->module,same);
     if (status==XR_XIR_OK) status=effect_body_literal_compare(a->name,b->name,same);
