@@ -12,6 +12,9 @@
  */
 
 #include "xxir_types.h"
+#include "xxir_class_hierarchy_internal.h"
+#include "xxir_class_method_internal.h"
+#include "xxir_receive_control.h"
 #include "xxir_native_callable.h"
 #include "xxir_effect_contract_internal.h"
 #include "xxir_compile_memory.h"
@@ -365,3 +368,5 @@ XrXirStatus xr_xir_compile_declarations_clone(const XrXirCompileContext *compile
     xr_xir_compile_declarations_free(copy);
     return allocation_status;
 }
+
+#include "xxir_class_method.inc.c"
