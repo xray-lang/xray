@@ -400,16 +400,32 @@ static const XrNativeTypeDeclaration xr_native_ordering = {
     "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Ordering", {{94, 88, 205, 167, 32, 169, 164, 90, 179, 150, 180, 203, 194, 113, 76, 171, 222, 192, 176, 206, 114, 173, 51, 174, 225, 45, 70, 171, 241, 55, 106, 233}},
     179, 18, xr_native_ordering_members, 5
 };
+static const XrNativeParameter xr_native_task_parameters_3[] = {
+    {"tasks", "Array < Task < T , E > >", XR_NATIVE_TERM_ARRAY_TASK, false, false},
+};
+static const XrNativeParameter xr_native_task_parameters_4[] = {
+    {"tasks", "Array < Task < T , E > >", XR_NATIVE_TERM_ARRAY_TASK, false, false},
+};
+static const XrNativeParameter xr_native_task_parameters_5[] = {
+    {"tasks", "Array < Task < T , E > >", XR_NATIVE_TERM_ARRAY_TASK, false, false},
+};
+static const XrNativeParameter xr_native_task_parameters_6[] = {
+    {"tasks", "Array < Task < T , E > >", XR_NATIVE_TERM_ARRAY_TASK, false, false},
+};
 static const XrNativeMemberDeclaration xr_native_task_members[] = {
     {1, "cancel", "()", "()", 10, 9, XR_NATIVE_RECEIVER_REF, false, true, true, true, XR_NATIVE_OPERATION_TASK_CANCEL, XR_NATIVE_ALLOCATION_NO_HEAP, "Never", XR_NATIVE_RESULT_OWNERSHIP_UNIT, NULL, 0, XR_NATIVE_TERM_UNIT},
     {2, "poll", "() -> TaskResult<T, E>?", "TaskResult<T, E>?", 11, 9, XR_NATIVE_RECEIVER_REF, false, true, true, true, XR_NATIVE_OPERATION_TASK_POLL, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_NULLABLE_TASK_RESULT},
     {3, "awaitResult", "() -> TaskResult<T, E>", "TaskResult<T, E>", 12, 9, XR_NATIVE_RECEIVER_REF, false, true, true, true, XR_NATIVE_OPERATION_TASK_AWAIT_RESULT, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_TASK_RESULT},
+    {4, "__allBegin", "(tasks: Array<Task<T, E>>) -> Task<Array<T>, E>", "Task<Array<T>, E>", 13, 20, XR_NATIVE_RECEIVER_READ, true, true, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,unsupported", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_task_parameters_3, 1, XR_NATIVE_TERM_TASK_ARRAY},
+    {5, "__firstBegin", "(tasks: Array<Task<T, E>>) -> Task<T, E>", "Task<T, E>", 14, 20, XR_NATIVE_RECEIVER_READ, true, true, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,unsupported", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_task_parameters_4, 1, XR_NATIVE_TERM_TASK_ELEMENT},
+    {6, "all", "(tasks: Array<Task<T, E>>) throws(E | Cancelled) -> Array<T>", "Array<T>", 15, 12, XR_NATIVE_RECEIVER_READ, true, true, true, true, XR_NATIVE_OPERATION_TASK_ALL, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_task_parameters_5, 1, XR_NATIVE_TERM_ARRAY_ELEMENT},
+    {7, "first", "(tasks: Array<Task<T, E>>) throws(E | Cancelled) -> T", "T", 16, 12, XR_NATIVE_RECEIVER_READ, true, true, true, true, XR_NATIVE_OPERATION_TASK_FIRST, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_task_parameters_6, 1, XR_NATIVE_TERM_ELEMENT},
 };
 static const char *const xr_native_task_type_parameters[] = {"T", "E"};
 static const XrNativeTypeDeclaration xr_native_task = {
     5, XR_NATIVE_DECLARATION_IDENTITY, "Task", xr_native_task_type_parameters, 2,
-    "stdlib/types/coroutine.xr", "xray-native:prelude/Task", {{205, 151, 13, 79, 215, 1, 166, 223, 89, 107, 97, 247, 135, 76, 14, 24, 104, 230, 218, 157, 232, 241, 126, 202, 26, 161, 187, 33, 119, 208, 82, 230}},
-    9, 7, xr_native_task_members, 3
+    "stdlib/types/coroutine.xr", "xray-native:prelude/Task", {{56, 120, 133, 92, 7, 71, 88, 194, 252, 167, 204, 197, 148, 171, 56, 109, 214, 142, 228, 89, 130, 109, 49, 183, 205, 194, 251, 110, 150, 2, 179, 82}},
+    9, 7, xr_native_task_members, 7
 };
 static const XrNativeParameter xr_native_channel_parameters_2[] = {
     {"value", "T", XR_NATIVE_TERM_ELEMENT, false, false},
@@ -828,6 +844,8 @@ static const XrNativeMemberDeclaration xr_native_unicode_has_property = {
 };
 static const XrNativeCallableDeclaration xr_native_callables[] = {
     {XR_NATIVE_CALLABLE_STRING_FROM_UTF8, &xr_native_string, &xr_native_string_members[0], &xr_native_utf8_error, false, NULL, NULL, {{0}}},
+    {XR_NATIVE_CALLABLE_TASK_ALL_BEGIN, &xr_native_task, &xr_native_task_members[3], NULL, false, NULL, NULL, {{0}}},
+    {XR_NATIVE_CALLABLE_TASK_FIRST_BEGIN, &xr_native_task, &xr_native_task_members[4], NULL, false, NULL, NULL, {{0}}},
     {XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID, NULL, &xr_native_unicode_property, NULL, true, "regex", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
     {XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY, NULL, &xr_native_unicode_has_property, NULL, true, "regex", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
     {4, NULL, &xr_native_buffer_0, NULL, false, "mem", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},

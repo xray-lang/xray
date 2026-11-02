@@ -15,6 +15,7 @@
 #include "xxir_program_internal.h"
 #include "../base/xresource_limits.h"
 #include "xxir_effects.h"
+#include "xxir_operand_roles.h"
 #include "xxir_instance_debug_internal.h"
 #include "xxir_instance_activation.h"
 #include "xxir_instance_value.h"
@@ -32,6 +33,8 @@
 #include "xxir_call_take_internal.h"
 #include "xxir_type_arena_internal.h"
 #include "xxir_call_internal.h"
+#include "xxir_call_select_internal.h"
+#include "xxir_channel_select_shape.h"
 #include "xxir_call_move_internal.h"
 #include "xxir_cell_owner_internal.h"
 #include "xxir_class_origin_internal.h"
@@ -1255,7 +1258,9 @@ XR_FUNC XrXirCallStatus xr_xir_instance_call_entry_recheck(XrXirCallView *view, 
 static bool worker_slot_read(const XrXirInstance *instance, uint32_t slot) {
     const XrXirProgram *program = instance->program;
     const XrXirSlot *entry = &program->declarations->slots[slot];
-    return !entry->mutable && instance->ready[entry->module] && program->permissions &&
+    return !entry->mutable && instance->published[slot] &&
+        (instance->ready[entry->module] || (instance->state==XR_XIR_INSTANCE_INITIALIZING &&
+            instance->current_module==entry->module)) && program->permissions &&
         program->permissions->entries[(uint64_t)program->entry_count + slot].worker == XR_XIR_OK;
 }
 static bool value_unit(XrXirValue value) {
@@ -1776,7 +1781,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_move_arguments_at(XrXirCallView *view,
     XirCallTakeArguments take={.caller=caller,.layout=layout,.frame=frame,
         .arguments=arguments,.instruction=instruction,.count=count};
     bool needed=false;
-    if(op->op==XR_XIR_CALL||op->op==XR_XIR_INVOKE) {
+    if(op->op==XR_XIR_CALL||op->op==XR_XIR_INVOKE||op->op==XR_XIR_GO||op->op==XR_XIR_SCOPED_GO) {
         if(op->immediate<0||(uint64_t)op->immediate>=module->function_count)return XR_XIR_CALL_BAD_ARGUMENT;
         take.target=(uint32_t)op->immediate;take.callee=&module->functions[take.target];
         needed=take.callee->consume_parameter_count!=0;
@@ -1798,11 +1803,14 @@ XR_FUNC XrXirCallStatus xr_xir_instance_move_arguments_at(XrXirCallView *view,
         }
     } else return XR_XIR_CALL_BAD_ARGUMENT;
     if(!needed)return XR_XIR_CALL_READY;
-    if(count!=op->args[1]||(count&&!arguments)||!xir_call_frame_span(view,frame,layout->frame_bytes))
+    uint32_t first=0,actual_count=0;
+    if(!xr_xir_direct_argument_range(op,&first,&actual_count)||count!=actual_count||
+        first>caller->operand_count||count>caller->operand_count-first||
+        (count&&!arguments)||!xir_call_frame_span(view,frame,layout->frame_bytes))
         return XR_XIR_CALL_BAD_ARGUMENT;
     for(uint32_t p=0;p<count;++p) {
         if(!xr_xir_domain_work(instance->domain,1))return XR_XIR_CALL_LIMIT;
-        uint32_t value=caller->operands[op->args[0]+p];
+        uint32_t value=caller->operands[first+p];
         if(!xr_xir_value_argument(&arguments[p],view->arena,xr_xir_operand_type(caller,value)))
             return XR_XIR_CALL_BAD_ARGUMENT;
     }
@@ -1973,9 +1981,12 @@ XrXirCallStatus xr_xir_instance_function(XrXirCallView *view,XrXirType type,uint
 #include "xxir_instance_function_producer.inc.c"
 #include "xxir_instance_generator.inc.c"
 #include "xxir_instance_task_result.inc.c"
-XR_FUNC XrXirCallStatus xr_xir_task_go(XrXirCallView *view, XrXirType task_type, uint32_t direct_entry,
-    const XrXirValue *arguments, uint32_t count, XrXirValue *output) {
+static XrXirCallStatus instance_task_spawn(XrXirCallView *view,const XrXirScopedSpawn *spawn,
+    const XrXirValue *scope,XrXirValue *output) {
     if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
+    if(!spawn)return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirType task_type=spawn->type;uint32_t direct_entry=spawn->entry,count=spawn->count;
+    const XrXirValue *arguments=spawn->arguments;
     if (!output || !value_unit(*output) || (count && !arguments)) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirInstance *instance = view_instance(view);
     if (!instance) return XR_XIR_CALL_BAD_STATE;
@@ -2010,7 +2021,67 @@ XR_FUNC XrXirCallStatus xr_xir_task_go(XrXirCallView *view, XrXirType task_type,
     /* The executor owns one sealed worker table; a foreign metadata frame
      * cannot index it without a separate producer and invocation correspondence. */
     if (instance!=instance_current(instance)) return XR_XIR_CALL_BAD_STATE;
-    return xr_xir_task_executor_spawn_from_view(instance->executor, view, task_type, &request, output);
+    if(scope) {
+        return xir_task_spawn_scoped(instance->executor,view,scope,task_type,&request,output);
+    }
+    return xr_xir_task_executor_spawn_from_view(instance->executor,view,task_type,&request,output);
+}
+XR_FUNC XrXirCallStatus xr_xir_task_go(XrXirCallView *view,XrXirType task_type,uint32_t direct_entry,
+    const XrXirValue *arguments,uint32_t count,XrXirValue *output) {
+    const XrXirScopedSpawn spawn={task_type,direct_entry,arguments,count};
+    return instance_task_spawn(view,&spawn,NULL,output);
+}
+XR_FUNC XrXirCallStatus xr_xir_task_go_scoped(XrXirCallView *view,const XrXirValue *scope,
+    const XrXirScopedSpawn *spawn,XrXirValue *output) {
+    if(!scope)return XR_XIR_CALL_BAD_ARGUMENT;
+    return instance_task_spawn(view,spawn,scope,output);
+}
+/* VM and generated C supply their actual compact frame, not an Action mirror. */
+XR_FUNC XrXirCallStatus xr_xir_task_go_at(XrXirCallView *view,uint32_t instruction,
+    void *frame,const XrXirValue *arguments,uint32_t count,XrXirValue *output) {
+    if(!instance_view_current(view))return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirInstance *instance=view_instance(view);
+    const XrXirProgramPermissions *permissions=instance?instance->program->permissions:NULL;
+    uint32_t entry=xr_xir_call_current_entry(view->activation);
+    if(!permissions||!permissions->input||!permissions->input->artifact||!permissions->layouts||
+        entry>=permissions->input->artifact->module.function_count)return XR_XIR_CALL_BAD_STATE;
+    const XrXirFunction *caller=&permissions->input->artifact->module.functions[entry];
+    const XrXirFunctionLayout *layout=&permissions->layouts[entry];
+    if(instruction>=caller->instruction_count)return XR_XIR_CALL_BAD_ARGUMENT;
+    const XrXirInstruction *op=&caller->instructions[instruction];
+    uint32_t first=0,actual_count=0;
+    if((op->op!=XR_XIR_GO&&op->op!=XR_XIR_SCOPED_GO)||
+        !xr_xir_direct_argument_range(op,&first,&actual_count)||actual_count!=count||
+        first>caller->operand_count||count>caller->operand_count-first||
+        !xir_call_frame_span(view,frame,layout->frame_bytes))return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirValue scope={0};
+    if(op->op==XR_XIR_SCOPED_GO) {
+        uint32_t value=caller->operands[op->args[0]];
+        if(value>=caller->parameter_count+caller->instruction_count)return XR_XIR_CALL_BAD_ARGUMENT;
+        uint32_t offset=layout->offsets[value];int64_t payload=0;
+        if(offset>layout->frame_bytes||sizeof(payload)>layout->frame_bytes-offset)return XR_XIR_CALL_BAD_ARGUMENT;
+        memcpy(&payload,(unsigned char *)frame+offset,sizeof(payload));
+        scope=xr_xir_value_load(view->arena,xr_xir_operand_type(caller,value),payload);
+    }
+    XrXirCallStatus status=xr_xir_instance_move_arguments_at(view,instruction,frame,arguments,count);
+    if(status!=XR_XIR_CALL_READY)return status;
+    const XrXirScopedSpawn spawn={op->type,(uint32_t)op->immediate,arguments,count};
+    return instance_task_spawn(view,&spawn,op->op==XR_XIR_SCOPED_GO?&scope:NULL,output);
+}
+#include "xxir_instance_select.inc.c"
+XR_FUNC XrXirCallStatus xr_xir_task_scope_begin(XrXirCallView *view,XrXirType type,
+    uint32_t mode,XrXirValue *output) {
+    if(!instance_view_current(view))return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirInstance *instance=view_instance(view);
+    if(!instance||instance!=instance_current(instance)||xr_xir_call_cleanup_active(view->activation))
+        return XR_XIR_CALL_BAD_STATE;
+    return xir_task_scope_begin(instance->executor,view,type,mode,output);
+}
+XR_FUNC XrXirCallStatus xr_xir_task_scope_seal(XrXirCallView *view,const XrXirValue *scope,bool abandon) {
+    if(!instance_view_current(view))return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirInstance *instance=view_instance(view);
+    if(!instance||instance!=instance_current(instance))return XR_XIR_CALL_BAD_STATE;
+    return xir_task_scope_seal(instance->executor,view,scope,abandon);
 }
 XR_FUNC XrXirCallStatus xr_xir_task_cancel(XrXirCallView *view,const XrXirValue *task) {
     if (!view || !task || !instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -2272,6 +2343,11 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
             bool equal=false;converted=xir_crypto_timing_equal(&view->arguments[0],&view->arguments[1],xr_xir_call_admission(view),&equal);
             if(converted==XR_XIR_VALUE_OK)*value=(XrXirValue){XR_XIR_BOOL,0,equal};
         }
+    } else if (id==XR_NATIVE_CALLABLE_TASK_ALL_BEGIN || id==XR_NATIVE_CALLABLE_TASK_FIRST_BEGIN) {
+        if(instance!=instance_current(instance))goto failed;
+        status=xir_task_aggregate_begin(instance->executor,view,&view->arguments[0],entry->result,
+            id==XR_NATIVE_CALLABLE_TASK_ALL_BEGIN?XIR_TASK_AGGREGATE_ALL:XIR_TASK_AGGREGATE_FIRST,value);
+        if(status!=XR_XIR_CALL_READY)goto failed;
     } else if (xir_mem_native_id(id)) {
         if (!xir_buffer_storage_scope(program->declarations,index)) goto failed;
         converted=instance_memory_call(instance,view,id,entry->result,value);

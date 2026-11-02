@@ -23,7 +23,8 @@ static XrXirCtfeStatus ctfe_native_callable_step(CtfeCallExecution *execution,
         frame->returned.reserved || frame->returned.payload) return XR_XIR_CTFE_BAD_ARTIFACT;
     uint32_t native_id=module->declarations->functions[frame->function].native_callable;
     if (xir_mem_native_id(native_id) || native_id==XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM ||
-        native_id==XR_NATIVE_CALLABLE_CRYPTO_TIMING_EQUAL)
+        native_id==XR_NATIVE_CALLABLE_CRYPTO_TIMING_EQUAL || native_id==XR_NATIVE_CALLABLE_TASK_ALL_BEGIN ||
+        native_id==XR_NATIVE_CALLABLE_TASK_FIRST_BEGIN)
         return XR_XIR_CTFE_NOT_SUPPORTED;
     CtfeOwnedState *state=&execution->owned;
     XrXirCtfeStatus status=ctfe_control_poll(state->control);

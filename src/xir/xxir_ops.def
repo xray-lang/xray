@@ -220,10 +220,12 @@ XR_XIR_OP(CELL_TAKE,7,VALUE,1,0,0)
 XR_XIR_OP(VALUE_TAKE,7,VALUE,1,0,0)
 XR_XIR_OP(CELL_NEW_TAKE,7,OWNED,1,0,0)
 XR_XIR_OP(CELL_WRITE_TAKE,7,UNIT,2,0,0)
-/* Reserved while the owned group, boundary proof and execution consumers land. */
-XR_XIR_OP(SCOPE_BEGIN,0,OWNED,0,0,0)
-XR_XIR_OP(SCOPED_GO,0,OWNED,0,0,0)
-XR_XIR_OP(SCOPE_JOIN,0,UNIT,1,2,1)
+/* Owned lexical groups require the complete boundary and dispatch chain. */
+XR_XIR_OP(SCOPE_BEGIN,7,OWNED,0,0,0)
+XR_XIR_OP(SCOPED_GO,7,OWNED,0,0,0)
+XR_XIR_OP(SCOPE_JOIN,7,UNIT,1,2,1)
 XR_XIR_OP(FIXED_ARRAY_NEW,7,OWNED,0,0,0)
 XR_XIR_OP(FIXED_ARRAY_GET,7,VALUE,2,0,0)
 XR_XIR_OP(FIXED_ARRAY_LEN,7,I64,1,0,0)
+/* Admission waits for the complete typed selection and owned wait bridge. */
+XR_XIR_OP(CHANNEL_SELECT,7,OWNED,0,0,0)

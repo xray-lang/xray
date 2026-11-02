@@ -47,13 +47,13 @@ XR_FUNC XrXirCallStatus xr_xir_call_generator_new(const XrXirCallConfig *config,
         config->struct_size==sizeof(*config) && config->admission.domain &&
         !xr_xir_domain_current(config->admission.domain)) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirCallRequest request={entry,arguments,count,NULL,NULL};
-    return call_new(config,entry,&request,NULL,output,true);
+    return call_new(config,entry,&request,NULL,output,(CallRootPreparation){.generator=true});
 }
 XR_FUNC XrXirCallStatus xr_xir_call_generator_new_budgeted(const XrXirCallConfig *config,
     const XrXirCallRequest *request,XrXirCallBudget *budget,XrXirCall **output) {
     if (!output || *output || !request || !budget || !xr_xir_domain_current(budget->work_domain))
         return XR_XIR_CALL_BAD_ARGUMENT;
-    return call_new(config,request->entry,request,budget,output,true);
+    return call_new(config,request->entry,request,budget,output,(CallRootPreparation){.generator=true});
 }
 XR_FUNC XrXirCallStatus xr_xir_call_generator_take(XrXirCall *call,XrXirValue *output) {
     if (!call_owner_current(call) || !call || !output || !boundary_value(*output,XR_XIR_UNIT))

@@ -218,7 +218,7 @@ static XrXirStatus effect_parameter_call(EffectParameterFlow *flow,
 
 static XrXirStatus effect_parameter_group(EffectParameterFlow *flow,
     const XrXirInstruction *op, uint32_t use, bool carry) {
-    uint32_t first = op->op == XR_XIR_PHI ? 1 : 0;
+    uint32_t first = op->op == XR_XIR_PHI || op->op==XR_XIR_SCOPED_GO ? 1 : 0;
     uint32_t step = op->op == XR_XIR_PHI ? 2 : 1;
     uint32_t destination = flow->function->parameter_count +
         flow->instruction;
@@ -292,7 +292,7 @@ static XrXirStatus effect_parameter_instruction(EffectParameterFlow *flow,
     case XR_XIR_GENERATOR_YIELD:
     case XR_XIR_RETURN:
         return effect_parameter_opaque(flow, op, XR_XIR_EFFECT_USE_RETURN);
-    case XR_XIR_GO: case XR_XIR_GENERATOR_NEW:
+    case XR_XIR_GO: case XR_XIR_SCOPED_GO: case XR_XIR_GENERATOR_NEW:
         return effect_parameter_opaque(flow, op, XR_XIR_EFFECT_USE_CHILD);
     case XR_XIR_CALL_REQUIREMENT:
         for (uint32_t a = 0; a < op->args[1]; ++a) {
@@ -510,7 +510,7 @@ static inline XrXirStatus effect_formula_needs_value_flow(EffectParameterFlow *f
         case XR_XIR_INVOKE_DEFAULT: case XR_XIR_CALL_REQUIREMENT:
         case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT:
         case XR_XIR_FUNCTION_REF: case XR_XIR_FUNCTION_WEAKEN:
-        case XR_XIR_CLEANUP_REGISTER: case XR_XIR_GO:
+        case XR_XIR_CLEANUP_REGISTER: case XR_XIR_GO: case XR_XIR_SCOPED_GO:
             return XR_XIR_OK;
         default: break;
         }

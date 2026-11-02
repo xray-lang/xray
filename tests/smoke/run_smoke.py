@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 from xray_progress import fixed_metrics
 from suite_catalog import SuiteCommands, expected_catalog
 from xray_crypto_suite import CryptoCommands, expected_catalog as expected_crypto_catalog
+from trace_oracle import ChannelTrace, expected_channels, expected_traces, verify_pairs
 
 
 @dataclass(frozen=True)
@@ -105,6 +106,9 @@ def load_cases(manifest: Path, root: Path, sources: dict[str, Source]) -> list[d
             raise ValueError(f"duplicate source/mode: {source.path}")
         target[source.path] = case
         rooted_file(root, case["stdout"])
+        traces = expected_traces(case, root) or expected_channels(case, root)
+        if traces is not None and rooted_file(root, case["stdout"]).read_bytes() not in traces:
+            raise ValueError(f"{name}: stdout oracle is absent from the complete trace set")
         expected_catalog(case, root)
         expected_crypto_catalog(case, root)
         if case["expect"] == "pass":
@@ -136,6 +140,10 @@ def load_cases(manifest: Path, root: Path, sources: dict[str, Source]) -> list[d
     for path, case in native.items():
         if case["stdout"] != primary[path]["stdout"]:
             raise ValueError(f"{case['id']}: native and VM must share the same stdout oracle")
+        if case.get("stdout_traces") != primary[path].get("stdout_traces"):
+            raise ValueError(f"{case['id']}: native and VM must share the complete trace set")
+        if case.get("stdout_channels") != primary[path].get("stdout_channels"):
+            raise ValueError(f"{case['id']}: native and VM must share the complete channel oracle")
         if case.get("suite") != primary[path].get("suite"):
             raise ValueError(f"{case['id']}: native and VM must share the same suite catalog")
         if case.get("crypto_suite") != primary[path].get("crypto_suite"):
@@ -152,7 +160,8 @@ def first_diagnostic(stderr: bytes, root: Path, source: Path, label: str) -> str
     return line.replace(root.as_posix() + "/", "")
 
 
-def classify(case: dict, result: proc.ProcResult, diagnostic: str, expected: bytes,
+def classify(case: dict, result: proc.ProcResult, diagnostic: str,
+             expected: bytes | tuple[bytes, ...] | ChannelTrace,
              stage: str) -> tuple[str, str]:
     if result.timed_out:
         return "fail", f"{stage} timed out"
@@ -172,7 +181,9 @@ def classify(case: dict, result: proc.ProcResult, diagnostic: str, expected: byt
         return "fail", f"{stage} exit {result.returncode}: {diagnostic}"
     if case["mode"] == "build-run" and stage != "run":
         return "fail", "native executable was not produced"
-    if result.stdout != expected:
+    if isinstance(expected, (tuple, ChannelTrace)) and result.stdout not in expected:
+        return "fail", f"stdout is absent from the reviewed complete traces: {result.stdout!r}"
+    if isinstance(expected, bytes) and result.stdout != expected:
         return "fail", f"stdout differs: expected {expected!r}, got {result.stdout!r}"
     if result.stderr:
         return "fail", f"unexpected stderr: {diagnostic}"
@@ -215,7 +226,7 @@ def execute(case: dict, spec: Source, binary: Path, root: Path, work: Path,
         stage = case["mode"]
         result = invoke(stage, [binary, stage, source])
     diagnostic = first_diagnostic(result.stderr, root, source, spec.path)
-    expected = rooted_file(root, case["stdout"]).read_bytes()
+    expected = expected_traces(case, root) or expected_channels(case, root) or rooted_file(root, case["stdout"]).read_bytes()
     status, reason = classify(case, result, diagnostic, expected, stage)
     suite = None
     if case.get("suite") is not None and result.ok and stage in ("run",):
@@ -295,6 +306,8 @@ def main() -> int:
         results.append(row)
         row["log_directory"] = str(logs)
         print(f"{row['status'].upper()} {row['id']}: {row['reason']}", flush=True)
+    for row in verify_pairs(cases, results):
+        print(f"FAIL {row['id']}: {row['reason']}", flush=True)
     metrics = fixed_metrics(baseline, cases, results)
     line = summary(results) + (f" original {metrics['original_pass']}/60"
                               f" original-failed-demos-repaired {metrics['original_failed_demo_repaired']}/20")

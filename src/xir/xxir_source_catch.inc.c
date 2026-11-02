@@ -240,6 +240,8 @@ static bool source_panic_handler(SourceContext *ctx, XrCatchClause *clause, uint
         !source_catch_body(ctx,clause,NULL,caught,NULL,NULL) || !source_catch_join(ctx,joins,count)) return false;
     for (uint32_t b = first; b < end; ++b) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
+        uint32_t owner=body->blocks[b].panic_scope;
+        if(owner&&(owner-1<first||owner-1>=end))continue;
         if (!body->blocks[b].block.panic) body->blocks[b].block.panic = handler;
     }
     return true;

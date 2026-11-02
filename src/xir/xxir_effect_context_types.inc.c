@@ -46,7 +46,14 @@ static XrXirStatus effect_terms_seed(EffectTerms *pool, const XrXirTypes *source
             memcpy(arguments,node.nominal.arguments,(size_t)node.nominal.argument_count*sizeof(*arguments));
             node.nominal.arguments=arguments;
         }
-        node.nominal.fields=NULL;node.nominal.field_count=0;
+        /* Original projections are already checked in this coordinate space.
+         * Marker proofs need their complete fields after Source retirement. */
+        if(node.nominal.field_count) {
+            XrXirType *fields=effect_terms_alloc(pool,node.nominal.field_count,sizeof(*fields));
+            if(!fields)return pool->status;
+            memcpy(fields,node.nominal.fields,(size_t)node.nominal.field_count*sizeof(*fields));
+            node.nominal.fields=fields;
+        }
         nodes[i]=node;
     }
     pool->types=(XrXirTypes){nodes,source->count,NULL,NULL};

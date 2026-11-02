@@ -35,6 +35,8 @@ static const XrXirSdkAbiField sdk_abi_fields[] = {
 #undef XR_XIR_SDK_ABI
 #include "sdk_recipe.inc.c"
 #include "sdk_generated.h"
+_Static_assert(sizeof(sdk_recipe_files) / sizeof(sdk_recipe_files[0]) <= XR_XIR_SDK_FILE_LIMIT,
+    "the generated runtime recipe must fit its owning manifest");
 #include "xr_xir_runtime_sdk_json.inc.c"
 #include "xr_xir_runtime_sdk_identity.inc.c"
 

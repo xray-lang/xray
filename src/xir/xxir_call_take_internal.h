@@ -13,7 +13,7 @@
 #ifndef XXIR_CALL_TAKE_INTERNAL_H
 #define XXIR_CALL_TAKE_INTERNAL_H
 #include "xxir.h"
-#include "xxir_call.h"
+#include "xxir_call_internal.h"
 #include "xxir_types.h"
 #include "xxir_value_take_internal.h"
 typedef struct XirCallTakeArguments {
@@ -26,6 +26,11 @@ typedef struct XirCallTakeArguments {
 } XirCallTakeArguments;
 /* All borrowed coordinates expire with this current callback's child prepare. */
 XR_FUNC XrXirCallStatus xir_call_arguments_stage(XrXirCallView *view,const XirCallTakeArguments *take);
+/* Task metadata is prepared before this synchronous root-frame transfer.
+ * Success commits the source words; no fallible publication may follow it. */
+XR_FUNC XrXirCallStatus xir_call_task_new_budgeted(const XrXirCallConfig *config,
+    const XrXirCallRequest *request,XrXirCallBudget *budget,
+    XrXirCallView *source,const XrXirExecutorBinding *binding,XrXirCall **output);
 /* The driver already owns this logical argument independently of its caller. */
 XR_FUNC XrXirValueStatus xir_call_owned_argument_take(XrXirCallView *view,uint32_t parameter,XrXirValue *output);
 XR_FUNC XrXirValueStatus xir_call_cell_write_take_prepare(const XrXirCallView *view,

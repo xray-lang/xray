@@ -191,7 +191,7 @@ static bool spec_effect_default(SpecContext *c, const SpecInstance *instance, bo
 }
 
 static uint32_t spec_effect_family(XrXirOp op) {
-    if (op==XR_XIR_CALL || op==XR_XIR_INVOKE || op==XR_XIR_GO || op==XR_XIR_GENERATOR_NEW) return XR_XIR_EFFECT_BINDING_DIRECT;
+    if (op==XR_XIR_CALL || op==XR_XIR_INVOKE || xr_xir_op_is_spawn(op) || op==XR_XIR_GENERATOR_NEW) return XR_XIR_EFFECT_BINDING_DIRECT;
     if (op==XR_XIR_FUNCTION_REF) return XR_XIR_EFFECT_BINDING_CAPTURE;
     if (op==XR_XIR_CALL_DEFAULT || op==XR_XIR_INVOKE_DEFAULT) return XR_XIR_EFFECT_BINDING_DEFAULT;
     return op==XR_XIR_CALL_REQUIREMENT ? XR_XIR_EFFECT_BINDING_REQUIREMENT : 0;
@@ -212,9 +212,12 @@ static bool spec_effect_proofs(SpecContext *c, XrXirEffectBindingProof **output,
                 c->diagnostic.status=XR_XIR_BAD_STRUCTURE;return false;
             }
             const SpecInstance *target=&c->instances[op->immediate];
+            uint32_t first=0,argument_count=0;if(!xr_xir_direct_argument_range(op,&first,&argument_count)) {
+                c->diagnostic.status=XR_XIR_BAD_STRUCTURE;return false;
+            }
             for (uint32_t a=0;a<target->effect_count;++a) {
                 if (!spec_progress(c)) return false;
-                if (target->effects[a].parameter>=op->args[1]) continue;
+                if (target->effects[a].parameter>=argument_count) continue;
                 if (total==UINT32_MAX) { c->diagnostic.status=XR_XIR_BUDGET;return false; }
                 ++total;
             }
@@ -232,17 +235,20 @@ static bool spec_effect_proofs(SpecContext *c, XrXirEffectBindingProof **output,
                 if (spec_effect_family(original->instructions[i].op)!=family) continue;
                 const XrXirInstruction *op=&function->instructions[i];
                 const SpecInstance *target=&c->instances[op->immediate];
+                uint32_t first=0,argument_count=0;if(!xr_xir_direct_argument_range(op,&first,&argument_count)) {
+                    c->diagnostic.status=XR_XIR_BAD_STRUCTURE;return false;
+                }
                 for (uint32_t a=0;a<target->effect_count;++a) {
                     if (!spec_progress(c)) return false;
                     uint32_t physical=target->effects[a].parameter;
-                    if (physical>=op->args[1]) continue;
+                    if (physical>=argument_count) continue;
                     if (!function->operands || op->args[0]>function->operand_count ||
                         op->args[1]>function->operand_count-op->args[0] || at>=total) {
                         c->diagnostic.status=XR_XIR_BAD_STRUCTURE;return false;
                     }
                     if (!spec_progress(c)) return false;
                     proofs[at++]=(XrXirEffectBindingProof){family,f,i,(uint32_t)op->immediate,
-                        physical,function->operands[op->args[0]+physical]};
+                        physical,function->operands[first+physical]};
                 }
             }
         }

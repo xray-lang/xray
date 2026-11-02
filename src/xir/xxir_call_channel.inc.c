@@ -15,7 +15,7 @@ XR_FUNC XrXirCallStatus xr_xir_call_watch_channel(XrXirCallView *view,
     XrXirValueAdmission *admission = xr_xir_call_admission(view);
     if (!admission) return XR_XIR_CALL_BAD_STATE;
     XrXirCall *call = view->activation;
-    if (call->channel_watch || call->channel_send || call->channel_recv || call->wait.kind != XR_XIR_WAIT_NONE ||
+    if (call->channel_watch || call->channel_send || call->channel_recv || call->channel_select || call->wait.kind != XR_XIR_WAIT_NONE ||
         call->result.status != XR_XIR_CALL_READY) return XR_XIR_CALL_BAD_STATE;
     if (cleanup_active(call)) return XR_XIR_CALL_DEFER_ASYNC;
     if (call->cancel_requested) return XR_XIR_CALL_CANCELLED;
@@ -35,7 +35,7 @@ XR_FUNC XrXirCallStatus xr_xir_call_wait_channel_send(XrXirCallView *view,XrXirC
     if (!admission) return XR_XIR_CALL_BAD_STATE;
     if (!owner || !*owner || !xr_xir_channel_send_wait_owner(*owner,admission)) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirCall *call=view->activation;
-    if (call->channel_watch || call->channel_send || call->channel_recv || call->wait.kind!=XR_XIR_WAIT_NONE ||
+    if (call->channel_watch || call->channel_send || call->channel_recv || call->channel_select || call->wait.kind!=XR_XIR_WAIT_NONE ||
         call->result.status!=XR_XIR_CALL_READY) return XR_XIR_CALL_BAD_STATE;
     if (cleanup_active(call)) return XR_XIR_CALL_DEFER_ASYNC;
     if (call->cancel_requested) return XR_XIR_CALL_CANCELLED;
@@ -50,7 +50,7 @@ XR_FUNC XrXirCallStatus xr_xir_call_wait_channel_recv(XrXirCallView *view,XrXirC
     if (!admission) return XR_XIR_CALL_BAD_STATE;
     if (!owner || !*owner || !xr_xir_channel_recv_wait_owner(*owner,admission)) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirCall *call=view->activation;
-    if (call->channel_watch || call->channel_send || call->channel_recv || call->wait.kind!=XR_XIR_WAIT_NONE ||
+    if (call->channel_watch || call->channel_send || call->channel_recv || call->channel_select || call->wait.kind!=XR_XIR_WAIT_NONE ||
         call->result.status!=XR_XIR_CALL_READY) return XR_XIR_CALL_BAD_STATE;
     if (cleanup_active(call)) return XR_XIR_CALL_DEFER_ASYNC;
     if (call->cancel_requested) return XR_XIR_CALL_CANCELLED;
@@ -61,7 +61,8 @@ XR_FUNC XrXirCallStatus xr_xir_call_wait_channel_recv(XrXirCallView *view,XrXirC
     return XR_XIR_CALL_SUSPENDED;
 }
 static unsigned channel_wait_owner_count(const XrXirCall *call) {
-    return (call->channel_watch ? 1u : 0u)+(call->channel_send ? 1u : 0u)+(call->channel_recv ? 1u : 0u);
+    return (call->channel_watch ? 1u : 0u)+(call->channel_send ? 1u : 0u)+
+        (call->channel_recv ? 1u : 0u)+(call->channel_select?1u:0u);
 }
 XR_FUNC bool xr_xir_call_channel_waiting(const XrXirCall *call) {
     return call && call_owner_current(call) && call->result.status == XR_XIR_CALL_SUSPENDED &&
@@ -70,6 +71,7 @@ XR_FUNC bool xr_xir_call_channel_waiting(const XrXirCall *call) {
 }
 XR_FUNC bool xr_xir_call_channel_ready(const XrXirCall *call) {
     if (!xr_xir_call_channel_waiting(call)) return false;
+    if(call->channel_select)return call->channel_select_due||xr_xir_channel_select_notified(call->channel_select);
     if (call->channel_timing.active && call->channel_timing.expired) return true;
     if (call->channel_watch) return xr_xir_channel_watch_ready(call->channel_watch);
     if (call->channel_recv) {
@@ -98,6 +100,11 @@ static void accept_channel_wait(XrXirCall *call, const XrXirAction *action) {
 }
 static void complete_channel_wait(XrXirCall *call) {
     XR_CHECK(xr_xir_call_channel_ready(call), "only an observed queue event completes the current Channel wait");
+    if(call->channel_select) {
+        call->channel_select_pending=false;call->result=call_result(XR_XIR_CALL_READY);
+        call->wait=(XrXirWaitRequest){0};xr_xir_call_result_drop(&call->top->inbox);
+        call->top->inbox=call_result(XR_XIR_CALL_RETURNED);return;
+    }
     bool permitted = !call->budget || (!call->budget->exhausted && xr_xir_domain_work(call->budget->work_domain, 1));
     bool sending=call->channel_send!=NULL;
     bool receiving=call->channel_recv!=NULL,expired=call->channel_timing.active && call->channel_timing.expired;

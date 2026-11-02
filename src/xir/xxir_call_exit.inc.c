@@ -20,9 +20,18 @@ static void request_exit(XrXirCall *call, XrXirCallResult *result, bool scope) {
         xr_xir_call_result_drop(result);
         *result = call_result(call->abort_reason);
     }
+    uint64_t order=0;
+    if(call->executor_owner&&(result->status==XR_XIR_CALL_THROWN||xr_xir_call_panic_status(result->status))) {
+        XrXirCallStatus ordered=xir_task_scope_failure_order((XrXirTaskExecutor *)call->executor_owner,&order);
+        if(ordered!=XR_XIR_CALL_READY) {
+            xr_xir_call_result_drop(result);*result=call_result(ordered);
+            if(call->abort_reason==XR_XIR_CALL_READY)call->abort_reason=ordered;
+        }
+    }
     xr_xir_call_result_drop(&frame->pending);
     frame->return_staged = false;
     xr_xir_call_result_move(result, &frame->pending);
+    frame->scope_failure_order=order;
     frame->exiting = true;
     frame->exit_done = false;
     frame->scope_exit = scope;
@@ -81,6 +90,7 @@ static bool cleanup_escape(XrXirCall *call,XrXirCallResult *escaped) {
     }
     xr_xir_call_result_drop(&parent->pending);
     xr_xir_call_result_move(&pending,&parent->pending);
+    parent->scope_failure_order=call->top->scope_failure_order;
     return true;
 }
 static void finish_exit(XrXirCall *call) {

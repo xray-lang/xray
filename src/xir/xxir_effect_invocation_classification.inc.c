@@ -55,6 +55,7 @@ static bool effect_physical_origin(const XrXirTypes *types,XrXirType type) {
  * Call identity, ROOT or NO_SUSPEND never substitute for its answer. */
 static bool effect_physical_error_empty_opcode(XrXirOp op) {
     switch (op) {
+    case XR_XIR_SCOPE_BEGIN:return true;
     case XR_XIR_CELL_TAKE: case XR_XIR_VALUE_TAKE: case XR_XIR_CELL_NEW_TAKE: case XR_XIR_CELL_WRITE_TAKE:
         return true;
     /* View faults enter the panic protocol; none throws a language Error. */
@@ -66,7 +67,7 @@ static bool effect_physical_error_empty_opcode(XrXirOp op) {
     case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: case XR_XIR_CONST_STRING: case XR_XIR_SLOT_LOAD:
     case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_STORE: case XR_XIR_CHANNEL_TRY_SEND: case XR_XIR_CHANNEL_TRY_RECV:
     case XR_XIR_CHANNEL_SEND: case XR_XIR_CHANNEL_RECV: case XR_XIR_CHANNEL_RECV_OR:
-    case XR_XIR_CHANNEL_SEND_TIMEOUT: case XR_XIR_CHANNEL_RECV_TIMEOUT:
+    case XR_XIR_CHANNEL_SEND_TIMEOUT: case XR_XIR_CHANNEL_RECV_TIMEOUT: case XR_XIR_CHANNEL_SELECT:
     case XR_XIR_CHANNEL_NEW: case XR_XIR_CHANNEL_CAPACITY: case XR_XIR_CHANNEL_IS_CLOSED: case XR_XIR_CHANNEL_CLOSE:
     case XR_XIR_ATOMIC_NEW: case XR_XIR_ATOMIC_LOAD:
     case XR_XIR_ATOMIC_STORE: case XR_XIR_ATOMIC_ADD: case XR_XIR_ATOMIC_SUB: case XR_XIR_ATOMIC_FETCH_ADD:
@@ -125,12 +126,12 @@ static uint32_t effect_physical_opcode(XrXirOp op) {
     if (op==XR_XIR_RETURN) mask|=EFFECT_PHYSICAL_RETURN;
     if (op==XR_XIR_SLOT_PLACE) mask|=EFFECT_PHYSICAL_SLOT_PLACE;
     if (!effect_physical_error_empty_opcode(op)) mask|=EFFECT_PHYSICAL_ERROR_ESCAPE;
-    if (op==XR_XIR_GO) mask|=EFFECT_PHYSICAL_GO;
+    if (xr_xir_op_is_spawn(op)) mask|=EFFECT_PHYSICAL_GO;
     switch (op) {
     case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_SUSPEND: case XR_XIR_TIMER_AFTER_MS: case XR_XIR_TASK_AWAIT: case XR_XIR_TASK_AWAIT_RESULT: case XR_XIR_GENERATOR_YIELD:
     case XR_XIR_CHANNEL_SEND: case XR_XIR_CHANNEL_RECV: case XR_XIR_CHANNEL_RECV_OR:
-    case XR_XIR_CHANNEL_SEND_TIMEOUT: case XR_XIR_CHANNEL_RECV_TIMEOUT:
-    case XR_XIR_GO: case XR_XIR_CALL_REQUIREMENT:
+    case XR_XIR_CHANNEL_SEND_TIMEOUT: case XR_XIR_CHANNEL_RECV_TIMEOUT: case XR_XIR_CHANNEL_SELECT:
+    case XR_XIR_SCOPE_BEGIN: case XR_XIR_SCOPE_JOIN: case XR_XIR_GO: case XR_XIR_SCOPED_GO: case XR_XIR_CALL_REQUIREMENT:
     case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT:
         mask|=EFFECT_PHYSICAL_CONTROL;break;
     default:break;
@@ -167,7 +168,7 @@ static uint32_t effect_physical_opcode(XrXirOp op) {
     switch (op) {
     case XR_XIR_CALL: case XR_XIR_INVOKE: case XR_XIR_CLEANUP_REGISTER:
     case XR_XIR_CALL_DEFAULT: case XR_XIR_INVOKE_DEFAULT: case XR_XIR_CALL_REQUIREMENT:
-    case XR_XIR_GO: case XR_XIR_GENERATOR_NEW: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT:
+    case XR_XIR_GO: case XR_XIR_SCOPED_GO: case XR_XIR_GENERATOR_NEW: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT:
     case XR_XIR_FUNCTION_REF: case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH:
     case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: case XR_XIR_CELL_STRING_APPEND:
     case XR_XIR_CELL_LOCAL_WRITE: case XR_XIR_PLACE_READ: case XR_XIR_PLACE_WRITE:

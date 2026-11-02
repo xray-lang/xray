@@ -211,6 +211,7 @@ static XrXirValueReceiver vm_value_receiver(const ScalarRun *run, uint32_t id) {
 }
 #include "xxir_vm_atomic.inc.c"
 #include "xxir_vm_channel.inc.c"
+#include "xxir_vm_select.inc.c"
 #include "xxir_vm_path.inc.c"
 #include "xxir_vm_hash.inc.c"
 #include "xxir_vm_view.inc.c"
@@ -450,13 +451,15 @@ static XrXirRunStatus vm_call_step(ScalarRun *run, VmState *state, const XrXirIn
 static XrXirRunStatus vm_go_step(ScalarRun *run, VmState *state, const XrXirInstruction *op,
     XrXirAction *action, uint32_t destination) {
     const XrXirTypeNode *task_type = xr_xir_type_node(run->module->types, op->type);
+    uint32_t prefix=op->op==XR_XIR_SCOPED_GO?1u:0u;
     if (!run->view || !task_type || task_type->kind != XR_XIR_TYPE_TASK ||
-        op->args[1] > run->layout->outgoing_count) return XR_XIR_RUN_BAD_ARTIFACT;
-    for (uint32_t i = 0; i < op->args[1]; ++i)
-        state->arguments[i] = vm_value_operand(run, run->function->operands[op->args[0] + i]);
+        op->args[1]<prefix||op->args[1]-prefix>run->layout->outgoing_count) return XR_XIR_RUN_BAD_ARTIFACT;
+    uint32_t count=op->args[1]-prefix;
+    for (uint32_t i = 0; i < count; ++i)
+        state->arguments[i] = vm_value_operand(run, run->function->operands[op->args[0]+prefix+i]);
     XrXirValue task = {0};
-    XrXirCallStatus status = xr_xir_task_go(run->view, op->type, (uint32_t)op->immediate,
-        op->args[1] ? state->arguments : NULL, op->args[1], &task);
+    XrXirCallStatus status=xr_xir_task_go_at(run->view,state->instruction,run->frame,
+        count?state->arguments:NULL,count,&task);
     if (status != XR_XIR_CALL_READY) {
         *action = (XrXirAction) {XR_XIR_ACTION_FAULT,  0, NULL, 0, {XR_XIR_I64, 0, status},
                                  {{0}, {0}, {0}, {0}}, 0};
@@ -487,11 +490,19 @@ static XrXirRunStatus vm_await_step(ScalarRun *run, VmState *state, const XrXirI
     XrXirAction *action) {
     if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
     XrXirValue task = vm_value_operand(run, op->args[0]);
-    bool task_wait=op->op==XR_XIR_TASK_AWAIT || op->op==XR_XIR_TASK_AWAIT_RESULT;
+    bool scope_wait=op->op==XR_XIR_SCOPE_JOIN;
+    bool task_wait=scope_wait||op->op==XR_XIR_TASK_AWAIT || op->op==XR_XIR_TASK_AWAIT_RESULT;
     bool result_wait=op->op==XR_XIR_TASK_AWAIT_RESULT;
     const XrXirTypeNode *task_type = xr_xir_type_node(run->module->types, (XrXirType)task.type);
     if (!task_type || task_type->kind != (uint32_t)(task_wait ? XR_XIR_TYPE_TASK : XR_XIR_TYPE_ITERATOR))
         return XR_XIR_RUN_BAD_ARTIFACT;
+    if(scope_wait) {
+        XrXirCallStatus status=xr_xir_task_scope_seal(run->view,&task,op->immediate==1);
+        if(status!=XR_XIR_CALL_READY) {
+            *action=(XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,status}};
+            return XR_XIR_RUN_OK;
+        }
+    }
     XrXirType element = op->op==XR_XIR_ITERATOR_HAS_NEXT ? XR_XIR_BOOL : op->op==XR_XIR_ITERATOR_CLOSE ? XR_XIR_UNIT : task_type->element;
     if (result_wait) {
         uint32_t first=run->function->blocks[op->targets[0]].first;
@@ -723,6 +734,8 @@ static XrXirRunStatus vm_step_dispatch(ScalarRun *run,VmState *state,const XrXir
         state->instruction = next;
         return vm_class_step(run, state, op, run->layout->offsets[result_id]);
     }
+    if(op->op==XR_XIR_CHANNEL_SELECT)
+        return vm_select_step(run,state,op,run->layout->offsets[result_id],action);
     if (xr_xir_op_is_channel(op->op))
         return vm_channel_step(run,state,op,run->layout->offsets[result_id],action);
     if (xr_xir_op_is_atomic(op->op))
@@ -856,9 +869,17 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         else {xr_xir_owned_slot_move(run->frame,run->layout->offsets[result_id],&polled);state->instruction=next;}
         return XR_XIR_RUN_OK;
     }
-    case XR_XIR_GO:
+    case XR_XIR_SCOPE_BEGIN: {
+        if(!run->view)return XR_XIR_RUN_BAD_ARTIFACT;
+        XrXirValue scope={0};XrXirCallStatus status=xr_xir_task_scope_begin(run->view,op->type,
+            (uint32_t)op->immediate,&scope);
+        if(status!=XR_XIR_CALL_READY)*action=(XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,status}};
+        else {xr_xir_owned_slot_move(run->frame,run->layout->offsets[result_id],&scope);state->instruction=next;}
+        return XR_XIR_RUN_OK;
+    }
+    case XR_XIR_GO: case XR_XIR_SCOPED_GO:
         return vm_go_step(run, state, op, action, run->layout->offsets[result_id]);
-    case XR_XIR_TASK_AWAIT: case XR_XIR_TASK_AWAIT_RESULT: case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_ITERATOR_CLOSE:
+    case XR_XIR_TASK_AWAIT: case XR_XIR_TASK_AWAIT_RESULT: case XR_XIR_SCOPE_JOIN: case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_ITERATOR_CLOSE:
         return vm_await_step(run, state, op, action);
     case XR_XIR_PANIC_CODE: case XR_XIR_PANIC_MESSAGE: case XR_XIR_PANIC_REPLACED_ERROR: {
         if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;

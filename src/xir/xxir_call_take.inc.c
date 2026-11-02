@@ -18,7 +18,10 @@ static bool call_take_parameter(const XirCallTakeArguments *take,uint32_t parame
 }
 static void *call_take_word(const XirCallTakeArguments *take,uint32_t parameter) {
     const XrXirInstruction *op=&take->caller->instructions[take->instruction];
-    uint32_t value=take->caller->operands[op->args[0]+parameter];
+    uint32_t first=0,count=0;
+    XR_CHECK(xr_xir_direct_argument_range(op,&first,&count)&&parameter<count,
+        "a prepared transfer retains its exact physical argument range");
+    uint32_t value=take->caller->operands[first+parameter];
     return (unsigned char *)take->frame+take->layout->offsets[value];
 }
 XR_FUNC XrXirCallStatus xir_call_arguments_stage(XrXirCallView *view,const XirCallTakeArguments *take) {
@@ -28,15 +31,16 @@ XR_FUNC XrXirCallStatus xir_call_arguments_stage(XrXirCallView *view,const XirCa
         (take->count&&!take->arguments)||!xir_call_frame_span(view,take->frame,take->layout->frame_bytes))
         return XR_XIR_CALL_BAD_ARGUMENT;
     const XrXirInstruction *op=&take->caller->instructions[take->instruction];
-    if(op->args[1]!=take->count||op->args[0]>take->caller->operand_count||
-        take->count>take->caller->operand_count-op->args[0]||
+    uint32_t first=0,count=0;
+    if(!xr_xir_direct_argument_range(op,&first,&count)||count!=take->count||first>take->caller->operand_count||
+        take->count>take->caller->operand_count-first||
         (take->signature?take->signature->parameter_count:take->callee->parameter_count)!=take->count)
         return XR_XIR_CALL_BAD_ARGUMENT;
     bool needed=false;
     for(uint32_t a=0;a<take->count;++a) {
         if(!call_cell_work(view->activation,1))return XR_XIR_CALL_LIMIT;
         if(!call_take_parameter(take,a))continue;
-        needed=true;uint32_t value=take->caller->operands[op->args[0]+a];
+        needed=true;uint32_t value=take->caller->operands[first+a];
         if(value>=take->caller->parameter_count+take->caller->instruction_count||
             take->layout->offsets[value]>take->layout->frame_bytes||
             sizeof(int64_t)>take->layout->frame_bytes-take->layout->offsets[value])return XR_XIR_CALL_BAD_ARGUMENT;
@@ -56,10 +60,12 @@ static bool call_take_pending(const CallFrame *frame,uint32_t parameter) {
     return frame->take_source&&parameter>=frame->take_captures&&
         call_take_parameter(frame->take_source,parameter-frame->take_captures);
 }
-static XrXirCallStatus call_take_recheck(XrXirCall *call,CallFrame *frame) {
+static XrXirCallStatus call_take_recheck(XrXirCall *call,CallFrame *frame,const XrXirCallView *source) {
     const XirCallTakeArguments *take=frame->take_source;
     if(!take)return XR_XIR_CALL_READY;
-    if(!call->active_view||frame->parent!=call->top||take!=&call->top->take||
+    bool task=source!=NULL;if(!source)source=call->active_view;
+    if(!xr_xir_call_admission(source)||(task?frame->parent!=NULL:frame->parent!=call->top)||
+        take!=&source->activation->top->take||
         frame->entry!=&frame->metadata->entries[take->target]||
         frame->entry->parameter_count-frame->take_captures!=take->count)
         return XR_XIR_CALL_BAD_STATE;
@@ -69,7 +75,7 @@ static XrXirCallStatus call_take_recheck(XrXirCall *call,CallFrame *frame) {
         int64_t payload=0;memcpy(&payload,call_take_word(take,p-frame->take_captures),sizeof(payload));
         if(payload!=frame->arguments[p].payload)return XR_XIR_CALL_BAD_ARGUMENT;
     }
-    return xr_xir_call_execution_status(call->active_view);
+    return xr_xir_call_execution_status(source);
 }
 static void call_take_commit(CallFrame *frame) {
     if(!frame->take_source)return;

@@ -38,6 +38,24 @@ paths use `#xray-N` to identify the Nth Xray fence.
   output disappeared. A gap that succeeds must be reviewed, given an output
   oracle, and promoted to `pass` with its native companion in the same change.
 
+The original goroutines, shared_data and select_and_scope examples may bind
+`stdout_traces` to an independently reviewed set of complete LF traces. The
+exact schema binds the source's canonical SHA256; the ordinary stdout file
+must belong to that set, and both companions must name the same set. Each
+engine must emit one whole permitted trace. Their saved raw stdout must also
+be byte-identical in the same gate invocation: two different legal traces
+fail the differential check. Missing output or a failed companion fails the
+other side too. The runner never sorts lines, normalizes output, or learns a
+golden trace from execution.
+
+The channels example uses a source-bound `stdout_channels` catalog instead of
+enumerating fanout assignments. It checks all nine fixed prefix lines, all
+nine jobs exactly once, worker IDs 1–3 and the complete two-line suffix. Each
+worker's jobs increase; FIFO reachability is replayed with at most one received
+but unprinted job per worker. This rejects impossible assignments that merely
+contain each job once. The two saved engine outputs must still match byte for
+byte; this predicate never rewrites their order or newline bytes.
+
 The native companions build through the trusted-host direct-C
 CLI path and execute against their original, complete VM output oracles.
 Provider and explicit input identities, private workspace/output ownership,

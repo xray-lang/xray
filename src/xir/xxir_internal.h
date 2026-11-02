@@ -34,7 +34,7 @@ XR_FUNC XrXirStatus xr_xir_compile_provenance_functions_match(const XrXirCompile
  * borrow still repeats every field, type, contract and permission gate. */
 XR_FUNC XrXirStatus xr_xir_compile_provenance_verify(const XrXirCompileContext *context,
     const XrXirModule *destination, const XrXirProvenance *instance,
-    const XrXirEffects *source_effects, XrXirDiagnostic *diagnostic);
+    const XrXirEffects *source_effects,XrCompileRequestControl *control,XrXirDiagnostic *diagnostic);
 XR_FUNC void xr_xir_compile_provenance_free(XrXirProvenance *provenance);
 XR_FUNC XrXirStatus xr_xir_compile_provenance_copy(const XrXirCompileContext *compile_context,
     const XrXirProvenance *source, XrXirProvenance **output, XrCompileRequestControl *control);
@@ -164,6 +164,21 @@ typedef struct XrXirRootRefiner {
 } XrXirRootRefiner;
 XR_FUNC XrXirStatus xr_xir_compile_structure_verify_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic);
+/* Request pointers expire with these synchronous complete verifier calls. */
+XR_FUNC XrXirStatus xir_compile_structure_verify_input(const XrXirCompileContext *context,
+    XirEffectInput input,XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xir_compile_verify_effects_input(const XrXirCompileContext *context,
+    XirEffectInput input,const XrXirEffects *effects,XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xir_compile_verify_source_effects_input(const XrXirCompileContext *context,
+    XirEffectInput input,const XrXirEffects *effects,XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xir_compile_verify_raw_source_effects_input(const XrXirCompileContext *context,
+    XirEffectInput input,const XrXirEffects *effects,XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xir_compile_verify_provenance_effects_input(const XrXirCompileContext *context,
+    XirEffectInput input,const XrXirEffects *source_effects,XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xir_compile_verify_owned_effects_input(const XrXirCompileContext *context,
+    XirEffectInput input,XrXirEffects **output,XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xir_compile_verify_receiving_effects_input(const XrXirCompileContext *context,
+    XirEffectInput input,const XrXirEffects *source_effects,XrXirEffects **output,XrXirDiagnostic *diagnostic);
 /* These current readers consume genuine canonical Input and Final storage. */
 XR_FUNC XrXirStatus xir_effects_program_root_current_input(const XrXirCompileContext *context, XirEffectInput input, const XrXirEffects *effects);
 XR_FUNC XrXirStatus xir_effects_program_cells_match(const XrXirCompileContext *context,

@@ -508,11 +508,7 @@ XR_FUNC void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
 
         case AST_SCOPE_BLOCK: {
             xfmt_write_indent(ctx);
-            ScopeBlockNode *sb = &node->as.scope_block;
-            if (sb->scope_mode == XR_SCOPE_LINKED)
-                xfmt_write_str(ctx, "linked ");
-            xfmt_write_str(ctx, "scope ");
-            xfmt_emit_block(ctx, sb->body);
+            xfmt_scope(ctx, node);
             xfmt_write_newline(ctx);
             break;
         }
@@ -613,6 +609,18 @@ XR_FUNC void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
     if (node->trailing_comments) {
         xfmt_write_trailing_comment(ctx, node->trailing_comments);
     }
+}
+
+XR_FUNC void xfmt_scope(XrFmtContext *ctx, AstNode *node) {
+    if (!node || node->type != AST_SCOPE_BLOCK ||
+        (node->as.scope_block.scope_mode != XR_SOURCE_SCOPE_NORMAL &&
+         node->as.scope_block.scope_mode != XR_SOURCE_SCOPE_ISOLATED)) {
+        xfmt_fail(ctx, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+        return;
+    }
+    xfmt_write_str(ctx, node->as.scope_block.scope_mode == XR_SOURCE_SCOPE_ISOLATED ?
+        "scope(isolated) " : "scope ");
+    xfmt_emit_block(ctx, node->as.scope_block.body);
 }
 
 // ----------------------------------------------------------------------------

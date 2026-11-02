@@ -164,6 +164,9 @@ typedef struct XrHirCallUseInput {
 } XrHirCallUseInput;
 XR_FUNC XrXirStatus xr_hir_body_signature(XrHirBody *,const XrHirSignatureInput *,
     XrCompileRequestControl *,XrHirBodySignature *,const char **);
+typedef struct XrHirScopeArgument {XrXirType type;uint32_t value;} XrHirScopeArgument;
+/* One real implicit group operand; this descriptive use grants no scope authority. */
+XR_FUNC XrXirStatus xr_hir_body_call_scope(XrHirBody *,XrHirBodySignature,XrHirScopeArgument,XrCompileRequestControl *);
 XR_FUNC XrXirStatus xr_hir_body_call_finish(XrHirBody *,XrHirBodySignature,
     const XrXirInstruction *,XrCompileRequestControl *,XrHirBodyUse *,XrHirBodyAction *);
 XR_FUNC XrXirStatus xr_hir_body_call_argument(XrHirBody *,XrHirBodySignature,

@@ -167,6 +167,12 @@ static bool source_hir_call_commit(SourceContext *ctx,AstNode *node,const Source
 static bool source_hir_call_group(SourceContext *ctx,XrHirBodySignature signature,XrXirInstruction instruction,
     const SourceValue *arguments,SourceValue *value) {
     XrHirBodyUse use={0};XrHirBodyAction action;
+    if(instruction.op==XR_XIR_SCOPED_GO) {
+        if(!arguments)return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"scoped spawn lost its actual group operand");
+        XrXirStatus bound=xr_hir_body_call_scope(ctx->typed_body,signature,
+            (XrHirScopeArgument){arguments[0].type,arguments[0].id},ctx->request);
+        if(bound!=XR_XIR_OK)return source_fail(ctx,NULL,bound,"scoped spawn has no typed lexical group use");
+    }
     XrXirStatus status=xr_hir_body_call_finish(ctx->typed_body,signature,&instruction,ctx->request,&use,&action);
     if(status!=XR_XIR_OK)return source_fail(ctx,NULL,status,"call emission has no complete actual/formal owner");
     instruction.op=action.operation;instruction.type=action.target;

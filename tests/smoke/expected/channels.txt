@@ -1,0 +1,20 @@
+recv: 10
+recv: 20
+recv: 30
+consumed: 0
+consumed: 1
+consumed: 4
+consumed: 9
+consumed: 16
+consumed: 25
+worker-1: processed job 0
+worker-1: processed job 1
+worker-1: processed job 2
+worker-1: processed job 3
+worker-1: processed job 4
+worker-1: processed job 5
+worker-1: processed job 6
+worker-1: processed job 7
+worker-1: processed job 8
+tryRecv: value=42
+tryRecv empty: empty

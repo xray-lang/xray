@@ -17,7 +17,8 @@ typedef struct SourcePreludeScan { SourceContext *ctx; uint32_t depth; bool need
 static bool source_prelude_word(SourcePreludeScan *scan,const char *name) {
     if (!name) return true;
     if (source_text_same(scan->ctx,NULL,name,"Atomic") || source_text_same(scan->ctx,NULL,name,"Channel") ||
-        source_text_same(scan->ctx,NULL,name,"Range") || source_text_same(scan->ctx,NULL,name,"Stringable"))
+        source_text_same(scan->ctx,NULL,name,"Range") || source_text_same(scan->ctx,NULL,name,"Stringable") ||
+        source_text_same(scan->ctx,NULL,name,"Task"))
         scan->needed=true;
     for (uint32_t e=0;e<xir_prelude_source.enum_count && !scan->needed;++e) {
         if (!((scan->ctx)->diagnostic.status == XR_XIR_OK)) return false;

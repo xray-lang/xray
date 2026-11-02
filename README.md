@@ -150,7 +150,7 @@ Coroutine arguments and channel payloads must satisfy their ownership and Sendab
 ```xray
 const ch = Channel<i64>(2)
 go fn() {
-    ch.send(42)
+    try ch.send(42)
 }()
 select {
     value from ch -> {

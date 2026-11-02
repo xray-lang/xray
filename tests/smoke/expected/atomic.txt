@@ -1,0 +1,12 @@
+initial: 10
+after +5: 15
+after -3: 12
+fetchAdd old=12 now=112
+swap prev=112 now=0
+CAS ok=true was=42 now=99
+CAS ok=false was=99 now=99
+flag before: false
+toggle old=false now=true
+concurrent total: 10
+rate: 1.5
+ordered load: 42

@@ -375,7 +375,6 @@ XR_FUNC AstNode *xr_parse_unsafe_expr(Parser *parser);
 XR_FUNC AstNode *xr_parse_defer_statement(Parser *parser);
 XR_FUNC AstNode *xr_parse_select_statement(Parser *parser);
 XR_FUNC AstNode *xr_parse_scope_block(Parser *parser);
-XR_FUNC AstNode *xr_parse_scope_block_with_mode(Parser *parser, uint8_t scope_mode);
 
 /* ========== Misc Helpers ========== */
 
