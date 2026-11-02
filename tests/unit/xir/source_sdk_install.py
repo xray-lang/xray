@@ -48,7 +48,7 @@ def main():
         data = (source/row['path']).read_bytes()
         assert len(data) == row['length'] and hashlib.sha256(data).hexdigest() == row['sha256']
     recipe = json.loads((source/'source_sdk_recipe.json').read_text(encoding='utf-8'))
-    assert recipe['system_libraries'] == ['kernel32', 'bcrypt']
+    assert recipe['system_libraries'] == ['kernel32', 'bcrypt', 'advapi32']
     stdlib = output/'empty-stdlib'
     stdlib.mkdir()
     consumer = output/'consumer.c'
