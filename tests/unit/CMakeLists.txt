@@ -4786,3 +4786,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/rest_values/rest_values.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/task_scope.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/task_aggregate.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/call_select.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/math_source.cmake")

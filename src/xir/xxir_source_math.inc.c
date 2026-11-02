@@ -1,0 +1,58 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xxir_source_math.inc.c - Owned private math declarations for the genuine standard module
+ *
+ * KEY CONCEPT:
+ *   Lexical declarations keep their own bodies; generated scalar leaves require the full module identity.
+ */
+#include "xxir_math_native.h"
+static bool source_math_module(SourceContext *ctx,uint32_t module) {
+    const XrModuleSpec *spec=&ctx->graph->specs[module];
+    return spec->authority.kind==XR_MODULE_IDENTITY_STDLIB && spec->authority.namespace_id &&
+        source_text_same(ctx,NULL,spec->authority.namespace_id,"math") && spec->logical_path &&
+        source_text_same(ctx,NULL,spec->logical_path,"math/math.xr");
+}
+static bool source_math_declare(SourceContext *ctx) {
+    uint32_t saved_module=ctx->module,saved_function=ctx->function;
+    for(uint32_t m=0;m<ctx->module_count;++m) {
+        if(!source_request_poll(ctx,NULL))return false;
+        if(!source_math_module(ctx,m) || source_owned_checked(&ctx->graph->specs[m]))continue;
+        ctx->module=m;
+        for(uint32_t id=XR_NATIVE_CALLABLE_MATH_ABS;id<=XR_NATIVE_CALLABLE_MATH_EXPM1;++id) {
+            if(!source_request_poll(ctx,NULL))return false;
+            const XirMathNativeShape *shape=xir_math_native_shape(id);
+            const XrNativeCallableDeclaration *native=xr_native_callable_by_id(id);
+            if(!shape || !native || !native->member)
+                return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"math callable authority is inconsistent");
+            XrXirType parameters[2]={shape->integer_input?XR_XIR_I64:XR_XIR_F64,
+                shape->integer_input?XR_XIR_I64:XR_XIR_F64};
+            XrXirType result=shape->integer_result?XR_XIR_I64:XR_XIR_F64;
+            if(!xir_math_native_signature(id,shape->count?parameters:NULL,shape->count,result,XR_XIR_NEVER))
+                return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"math callable declaration differs from its governed signature");
+            if(find_name(ctx,ctx->names[m],native->member->name))continue;
+            if(ctx->function_count>=ctx->function_capacity)
+                return source_fail(ctx,NULL,XR_XIR_BUDGET,"math native callable inventory exhausted");
+            const char *name=source_owned_text(ctx,native->member->name);
+            const char *signature=source_owned_text(ctx,native->member->signature);
+            XrXirType *owned=shape->count?source_alloc(ctx,shape->count,sizeof(*owned)):NULL;
+            if(!name || !signature || (shape->count&&!owned))return false;
+            if(shape->count && !source_copy_bytes(ctx,NULL,owned,parameters,(size_t)shape->count*sizeof(*owned)))return false;
+            SourceName *symbol=add_name(ctx,&ctx->names[m],name,NULL);if(!symbol)return false;
+            uint32_t index=ctx->function_count++;
+            symbol->kind=SOURCE_FUNCTION;symbol->index=index;symbol->module=m;
+            ctx->functions[index]=(XrXirFunction){.name=name,.name_length=(uint32_t)strlen(name),
+                .parameters=owned,.parameter_count=shape->count,.result=result,.error_type=XR_XIR_NEVER};
+            ctx->identities[index]=(XrXirFunctionIdentity){.module=m,.promises=XR_XIR_FUNCTION_NO_SUSPEND,.native_callable=id};
+            ctx->bodies[index].module=m;ctx->bodies[index].parameters=owned;
+            if(!source_query_declare(ctx,symbol,XR_XIR_SOURCE_FUNCTION,0,(XrXirSourceRange){m,0,0,0,0}))return false;
+            ((XrXirSourceDeclaration *)ctx->query.declarations)[symbol->declaration-1].signature=signature;
+            ctx->bodies[index].declaration=symbol->declaration;ctx->function=index;
+            if(!source_query_parameters(ctx,symbol->declaration))return false;
+        }
+    }
+    ctx->module=saved_module;ctx->function=saved_function;return true;
+}

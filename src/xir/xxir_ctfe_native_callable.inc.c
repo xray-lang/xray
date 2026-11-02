@@ -12,6 +12,7 @@
  */
 #include "xxir_from_utf8_internal.h"
 #include "xxir_unicode_internal.h"
+#include "xxir_ctfe_math.inc.c"
 
 static XrXirCtfeStatus ctfe_native_callable_step(CtfeCallExecution *execution,
     XirScalarCoreAction *action) {
@@ -22,6 +23,7 @@ static XrXirCtfeStatus ctfe_native_callable_step(CtfeCallExecution *execution,
         frame->cleanup || frame->state.leaving || frame->returned.type ||
         frame->returned.reserved || frame->returned.payload) return XR_XIR_CTFE_BAD_ARTIFACT;
     uint32_t native_id=module->declarations->functions[frame->function].native_callable;
+    if(xir_math_native_id(native_id))return ctfe_math_native_step(execution,action,native_id);
     if (xir_mem_native_id(native_id) || native_id==XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM ||
         native_id==XR_NATIVE_CALLABLE_CRYPTO_TIMING_EQUAL || native_id==XR_NATIVE_CALLABLE_TASK_ALL_BEGIN ||
         native_id==XR_NATIVE_CALLABLE_TASK_FIRST_BEGIN)

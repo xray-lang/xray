@@ -2311,6 +2311,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_pointer(XrXirCallView *view,XrXirOp oper
     return value_call_status(status);
 }
 
+#include "xxir_instance_math.inc.c"
 XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
     XrXirInstance *instance=view_instance(view);XrXirValue *value=NULL;
     XrXirCallStatus status=XR_XIR_CALL_BAD_STATE;bool thrown=false;
@@ -2333,7 +2334,11 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
     value=state;
     status=xr_xir_call_execution_status(view);if (status!=XR_XIR_CALL_READY) goto failed;
     XrXirViewAccess access={0};XrXirValueStatus converted=XR_XIR_VALUE_OK;
-    if (id==XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM || id==XR_NATIVE_CALLABLE_CRYPTO_TIMING_EQUAL) {
+    if(xir_math_native_id(id)) {
+        if(!xir_math_native_scope(program->declarations,index,program->entry_count))goto failed;
+        XrXirRunStatus evaluated=instance_math_call(id,view->arguments,view->argument_count,value);
+        if(evaluated!=XR_XIR_RUN_OK)return xr_xir_call_fault(evaluated);
+    } else if (id==XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM || id==XR_NATIVE_CALLABLE_CRYPTO_TIMING_EQUAL) {
         if(!xir_crypto_scope(program->declarations,index)){status=XR_XIR_CALL_BAD_ARGUMENT;goto failed;}
         if(id==XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM) {
             status=instance_cell_access(view,instance,&view->arguments[0]);if(status!=XR_XIR_CALL_READY)goto failed;

@@ -1,0 +1,55 @@
+export fn pureMath()->i64 {
+    assert(math.abs(-42.0)==42.0)
+    assert(math.floor(-1.2)==-2)
+    assert(math.ceil(-1.2)==-1)
+    assert(math.round(-1.5)==-2)
+    assert(math.sqrt(81.0)==9.0)
+    assert(math.pow(2.0,3.0)==8.0)
+    assert(math.sin(0.0)==0.0)
+    assert(math.cos(0.0)==1.0)
+    assert(math.tan(0.0)==0.0)
+    assert(math.asin(0.0)==0.0)
+    assert(math.acos(1.0)==0.0)
+    assert(math.atan(0.0)==0.0)
+    assert(math.atan2(0.0,1.0)==0.0)
+    assert(math.log(1.0)==0.0)
+    assert(math.log10(1.0)==0.0)
+    assert(math.log2(1.0)==0.0)
+    assert(math.exp(0.0)==1.0)
+    assert(math.sinh(0.0)==0.0)
+    assert(math.cosh(0.0)==1.0)
+    assert(math.tanh(0.0)==0.0)
+    assert(math.hypot(3.0,4.0)==5.0)
+    assert(math.cbrt(0.0)==0.0)
+    assert(math.trunc(-1.9)==-1)
+    assert(math.fmod(5.0,2.0)==1.0)
+    assert(math.log1p(0.0)==0.0)
+    assert(math.expm1(0.0)==0.0)
+    assert(math.isNaN(math.NAN)&&math.isNaN(math.sqrt(-1.0)))
+    assert(!math.isFinite(math.INF)&&!math.isFinite(math.NAN))
+    assert(math.min()==math.min() || math.isNaN(math.min()))
+    assert(math.isNaN(math.max()))
+    assert(math.min(4.0,1.0,3.0)==1.0&&math.max(4.0,1.0,3.0)==4.0)
+    assert(math.clamp(2.0,3.0,1.0)==2.0)
+    return 42
+}
+export fn main()->i64 {
+    assert(pureMath()==42)
+    for(var i=0;i<32;i++) {
+        const value=math.random()
+        assert(value>=0.0&&value<1.0)
+        const integer=math.randomInt(-7,9)
+        assert(integer>=-7&&integer<=9)
+        const reversed=math.randomInt(9,-7)
+        assert(reversed>=-7&&reversed<=9)
+    }
+    assert(math.randomInt(42,42)==42)
+    return 42
+}
+export fn negativeZero()->f64{return math.sqrt(-0.0)}
+export fn badFloor()->i64{return math.floor(math.INF)}
+export fn badCeil()->i64{return math.ceil(math.NAN)}
+export fn badRound()->i64{return math.round(9223372036854775808.0)}
+export fn badTrunc()->i64{return math.trunc(-9223372036854777856.0)}
+export fn compileRandom()->f64{return math.random()}
+export fn compilePure()->f64{return math.sqrt(81.0)+math.pow(2.0,3.0)}
