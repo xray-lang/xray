@@ -66,7 +66,7 @@
     "--version",
     "--json"
   ],
-  "smokeStatus": "EXPECTED (candidate; Root full smoke pending): smoke: demos 4/23 stdlib 4/29 readme 2/6 native 10/10; PASS 20 GAP 48 FAIL 0 NOT_RUN 0; original-smoke 12/60 original-failed-demos-repaired 1/20",
+  "smokeStatus": "Per-candidate measurement: {build}/smoke/results.json; fixed original denominators 60 cases and 20 failed demos; no score is inferred from this manifest",
   "progressPolicy": "original-smoke-and-deletion-only-legacy",
   "validationTiers": "scripts/validation-tiers.json",
   "scope": "Integration core only; full smoke unchanged. Moved consumers remain executable via the same runner and explicit capability/nightly plans."

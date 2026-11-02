@@ -633,8 +633,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F20",
-        "first_diagnostic": "stdlib/xml/xml.xr:83:72: error: name is not an initialized value"
+        "feature": "F11",
+        "first_diagnostic": "stdlib/xml/xml.xr:969:9: error: E0331: escaping error exceeds the declared throws type; catch it or declare throws"
       }
     },
     {
@@ -645,8 +645,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F20",
-        "first_diagnostic": "stdlib/yaml/yaml.xr:178:12: error: name is not an initialized value"
+        "feature": "F13",
+        "first_diagnostic": "stdlib/yaml/yaml.xr:618:0: error: name is not an initialized value"
       }
     },
     {
