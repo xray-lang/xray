@@ -17,6 +17,11 @@ static XrXirStatus effect_capture_reference_seed(const EffectCaptureRead *read,
     if(status==XR_XIR_OK) status=effect_body_request_instruction(&read->body,reference->function,reference->instruction,&storage,&op);
     if(status!=XR_XIR_OK) return status;
     if(reference->captures>target.parameter_count) return XR_XIR_BAD_STRUCTURE;
+    if(op->op==XR_XIR_CLASS_METHOD_REF) {
+        XirClassMethodTarget selected={0};
+        status=effect_class_method_target(read->work,read->final->material,reference->function,reference->instruction,reference->target,&selected);
+        if(status!=XR_XIR_OK || reference->captures!=1)return status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:status;
+    }
     if(op->op==XR_XIR_GENERATOR_NEW) {
         const XrXirDeclarations *d=read->body.domain.declarations;
         if(!d || !d->functions || !(d->functions[reference->target].promises&XR_XIR_FUNCTION_GENERATOR) ||
@@ -49,7 +54,7 @@ static XrXirStatus effect_capture_reference_seed(const EffectCaptureRead *read,
     if(status!=XR_XIR_OK) return status;
     for(uint32_t p=0;p<reference->captures;++p) {
 
-        XrXirType actual=0;status=effect_body_request_type(&read->body,reference->function,source.operands[op->args[0]+p],&actual);
+        XrXirType actual=0;status=effect_body_request_type(&read->body,reference->function,effect_reference_value(&source,op,p),&actual);
         if(status!=XR_XIR_OK) return status;
         if(xr_xir_type_span(read->body.domain.types,target.parameters[p]) || xr_xir_type_span(read->body.domain.types,actual))
             return XR_XIR_OK;

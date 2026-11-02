@@ -304,7 +304,7 @@ static XrXirStatus effect_context_dense_function(EffectContextOwner *owner,
     XrXirInstruction *instructions=(XrXirInstruction *)dense->functions[index].instructions;
     for (uint32_t i=0;i<dense->functions[index].instruction_count;++i) {
 
-        if (instructions[i].op!=XR_XIR_FUNCTION_REF) continue;
+        if (instructions[i].op!=XR_XIR_FUNCTION_REF && instructions[i].op!=XR_XIR_CLASS_METHOD_REF) continue;
         const XrXirTypeNode *signature=xr_xir_callable_signature(&dense->terms.types,instructions[i].type);
         if (!signature) return XR_XIR_BAD_TYPE;
         XrXirTypeNode bottom=*signature;
@@ -466,7 +466,7 @@ static XrXirStatus effect_context_dense_actuals(EffectContextOwner *owner,
             before[v-function->parameter_count]=declared[v];
             XrXirOp operation=function->instructions[v-function->parameter_count].op;
             const XrXirTypeNode *signature=xr_xir_callable_signature(&dense->terms.types,declared[v]);
-            bool carrier=operation==XR_XIR_FUNCTION_REF || operation==XR_XIR_COPY ||
+            bool carrier=operation==XR_XIR_FUNCTION_REF || operation==XR_XIR_CLASS_METHOD_REF || operation==XR_XIR_COPY ||
                 operation==XR_XIR_LOCAL_NEW || operation==XR_XIR_LOCAL_READ || operation==XR_XIR_PHI;
             if (signature && carrier) {
                 XrXirTypeNode bound=*signature;

@@ -441,22 +441,20 @@ static XrXirStatus effect_invocation_site(EffectInvocationFlow *flow,
 /* A captured descriptor carries a flat, finite relation for every original
  * producer site. It does not recursively copy another descriptor's captures.
  * Equal producer sites encountered through PHI or recursion only OR rows. */
-static XrXirStatus effect_invocation_capture(EffectInvocationFlow *flow,
-    uint32_t instruction,const XrXirInstruction *op) {
+static XrXirStatus effect_invocation_capture_site(EffectInvocationFlow *flow,
+    uint32_t instruction,const XrXirInstruction *op,uint32_t selected) {
     uint32_t destination=flow->function->parameter_count+instruction;
     bool certified=false;
     XrXirStatus status=effect_invocation_flag_get(flow,destination,true,&certified);
     if (status!=XR_XIR_OK || !certified) return status;
-    uint32_t selected=UINT32_MAX;
-    status=effect_invocation_site(flow,instruction,&selected);
-    if (status!=XR_XIR_OK) return status;
     const EffectInvocationSite *site=&flow->read->final->sites[selected];
     if (!op) return XR_XIR_BAD_STRUCTURE;
     EffectBodyFunctionSignature target_head={0};
     XrXirStatus head_status=effect_body_request_signature(&flow->body,site->target,&target_head);
     if (head_status!=XR_XIR_OK) return head_status;
     const EffectBodyFunctionSignature *target=&target_head;
-    if (site->captures!=op->args[1] || site->target!=(uint32_t)op->immediate ||
+    if (site->captures!=effect_reference_captures(op) ||
+        (op->op!=XR_XIR_CLASS_METHOD_REF && site->target!=(uint32_t)op->immediate) ||
         site->binding>flow->read->final->binding_count ||
         site->captures>flow->read->final->binding_count-site->binding) return XR_XIR_BAD_STRUCTURE;
     status=effect_invocation_origin_bit(flow,destination,selected);
@@ -465,7 +463,7 @@ static XrXirStatus effect_invocation_capture(EffectInvocationFlow *flow,
     uint32_t binding_words=flow->basis.origin_words+flow->basis.cell_words;
     for (uint32_t p=0;p<site->captures && status==XR_XIR_OK;++p) {
 
-        uint32_t value=flow->function->operands[op->args[0]+p];
+        uint32_t value=effect_reference_value(flow->function,op,p);
         if (value>=flow->values) return XR_XIR_BAD_VALUE;
         uint64_t *binding=descriptor+flow->basis.origin_words+
             (size_t)(site->binding+p)*binding_words;
@@ -493,6 +491,22 @@ static XrXirStatus effect_invocation_capture(EffectInvocationFlow *flow,
         }
     }
     return status;
+}
+
+static XrXirStatus effect_invocation_capture(EffectInvocationFlow *flow,
+    uint32_t instruction,const XrXirInstruction *op) {
+    if(op->op!=XR_XIR_CLASS_METHOD_REF) {
+        uint32_t site=UINT32_MAX;XrXirStatus status=effect_invocation_site(flow,instruction,&site);
+        return status==XR_XIR_OK?effect_invocation_capture_site(flow,instruction,op,site):status;
+    }
+    uint32_t body=flow->read->final->nodes[flow->node].body,count=0;
+    for(uint32_t s=0;s<flow->read->final->site_count;++s) {
+        const EffectInvocationSite *site=&flow->read->final->sites[s];
+        if(site->function!=body || site->instruction!=instruction)continue;
+        XrXirStatus status=effect_invocation_capture_site(flow,instruction,op,s);if(status!=XR_XIR_OK)return status;
+        ++count;
+    }
+    return count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
 }
 
 static XrXirStatus effect_invocation_fixed(EffectInvocationFlow *flow,uint32_t value) {
@@ -639,7 +653,7 @@ static XrXirStatus effect_invocation_origins_decoded(EffectInvocationFlow *flow,
     switch (op->op) {
     case XR_XIR_CALL: case XR_XIR_CALL_DEFAULT: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_RESULT:
         return effect_invocation_return_origins(flow,instruction,op);
-    case XR_XIR_FUNCTION_REF: case XR_XIR_GENERATOR_NEW:
+    case XR_XIR_FUNCTION_REF: case XR_XIR_CLASS_METHOD_REF: case XR_XIR_GENERATOR_NEW:
         return effect_invocation_capture(flow,instruction,op);
     case XR_XIR_CELL_READ:
         return effect_invocation_callable_cell_origins(flow,instruction,op);
@@ -684,7 +698,7 @@ static bool effect_invocation_origins_unused(const EffectInvocationFlow *flow,
         return !flow->read->producer_enabled;
     case XR_XIR_CELL_READ:
         return !xr_xir_callable_signature(flow->body.domain.types,type);
-    case XR_XIR_FUNCTION_REF: case XR_XIR_GENERATOR_NEW:
+    case XR_XIR_FUNCTION_REF: case XR_XIR_CLASS_METHOD_REF: case XR_XIR_GENERATOR_NEW:
     case XR_XIR_COPY: case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN:
     case XR_XIR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_OWNED_LOCAL_NEW:
     case XR_XIR_LOCAL_READ: case XR_XIR_SCALAR_LOCAL_READ: case XR_XIR_OWNED_LOCAL_READ:
@@ -794,9 +808,18 @@ static XrXirStatus effect_invocation_initial_origins(EffectInvocationFlow *flow)
             XrXirInstruction storage;const XrXirInstruction *op=NULL;
             status=effect_invocation_flow_instruction(flow,i,&storage,&op);
             if (status!=XR_XIR_OK) return status;
-            if(op->op!=XR_XIR_FUNCTION_REF && op->op!=XR_XIR_GENERATOR_NEW) return XR_XIR_BAD_STRUCTURE;
+            if(op->op!=XR_XIR_FUNCTION_REF && op->op!=XR_XIR_CLASS_METHOD_REF && op->op!=XR_XIR_GENERATOR_NEW) return XR_XIR_BAD_STRUCTURE;
             bool authentic=false;
-            status=op->op==XR_XIR_GENERATOR_NEW?effect_invocation_generator_target(flow,op,&authentic):
+            if(op->op==XR_XIR_CLASS_METHOD_REF) {
+                uint32_t body=owner->final->nodes[flow->node].body;
+                for(uint32_t s=0;s<owner->final->site_count && status==XR_XIR_OK;++s) {
+                    const EffectInvocationSite *site=&owner->final->sites[s];
+                    if(site->function!=body || site->instruction!=i)continue;
+                    XirClassMethodTarget target={0};
+                    status=effect_class_method_target(owner->work,owner->final->material,body,i,site->target,&target);
+                    if(status==XR_XIR_OK)authentic=true;
+                }
+            } else status=op->op==XR_XIR_GENERATOR_NEW?effect_invocation_generator_target(flow,op,&authentic):
                 effect_invocation_ref_target(flow,op,&authentic);
             if (status==XR_XIR_OK && authentic) status=effect_invocation_flag_put(flow,destination,true,NULL);
             else if (status==XR_XIR_OK) status=effect_invocation_opaque(flow,destination,true);
@@ -804,7 +827,7 @@ static XrXirStatus effect_invocation_initial_origins(EffectInvocationFlow *flow)
             EffectBodyInstructionShape shape={0};
             status=effect_body_request_shape(&flow->body,owner->final->nodes[flow->node].body,i,&shape);
             if (status!=XR_XIR_OK) return status;
-            if (shape.op==XR_XIR_FUNCTION_REF || shape.op==XR_XIR_GENERATOR_NEW) return XR_XIR_BAD_STRUCTURE;
+            if (shape.op==XR_XIR_FUNCTION_REF || shape.op==XR_XIR_CLASS_METHOD_REF || shape.op==XR_XIR_GENERATOR_NEW) return XR_XIR_BAD_STRUCTURE;
             if(effect_physical_iterator(flow->body.domain.types,shape.type) &&
                 (shape.op==XR_XIR_CALL || shape.op==XR_XIR_CALL_DEFAULT ||
                  shape.op==XR_XIR_CALL_INDIRECT || shape.op==XR_XIR_INVOKE_RESULT)) continue;

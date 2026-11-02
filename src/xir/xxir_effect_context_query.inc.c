@@ -343,6 +343,8 @@ static XrXirStatus effect_context_reference_root(const XrXirCompileContext *cont
         instruction>=module->functions[function].instruction_count || !module->functions[function].instructions)
         return XR_XIR_BAD_STRUCTURE;
     const XrXirInstruction *op=&module->functions[function].instructions[instruction];
+    if(op->op==XR_XIR_CLASS_METHOD_REF)
+        return effect_class_reference_mask(context,effects,function,instruction,output);
     if (op->op!=XR_XIR_FUNCTION_REF || op->immediate<0 || (uint64_t)op->immediate>=effects->count)
         return XR_XIR_BAD_STRUCTURE;
 

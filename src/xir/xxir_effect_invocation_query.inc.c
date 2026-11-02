@@ -61,9 +61,11 @@ static XrXirStatus effect_invocation_edge_shape_request(const XrXirCompileContex
         site.instruction>=request->producer_instructions) return XR_XIR_BAD_STRUCTURE;
     const XrXirInstruction *reference=request->reference;
     bool iterator=effect_invocation_iterator_operation(op->op);
-    if ((reference->op!=(iterator?XR_XIR_GENERATOR_NEW:XR_XIR_FUNCTION_REF)) || reference->immediate<0 ||
-        (uint64_t)reference->immediate!=site.target || reference->args[1]!=site.captures)
-        return XR_XIR_BAD_STRUCTURE;
+    if(reference->op==XR_XIR_CLASS_METHOD_REF && !iterator) {
+        if(site.captures!=1 || reference->immediate<0 || (uint64_t)reference->immediate>=domain->function_count)
+            return XR_XIR_BAD_STRUCTURE;
+    } else if(reference->op!=(iterator?XR_XIR_GENERATOR_NEW:XR_XIR_FUNCTION_REF) || reference->immediate<0 ||
+        (uint64_t)reference->immediate!=site.target || reference->args[1]!=site.captures)return XR_XIR_BAD_STRUCTURE;
     if (iterator) {
         if (edge.latent || op->args[0]>=(uint64_t)request->parameters+request->instructions ||
             site.captures!=request->target_parameters ||
@@ -75,7 +77,7 @@ static XrXirStatus effect_invocation_edge_shape_request(const XrXirCompileContex
         xr_xir_type_match_scratch_free(&scratch);
         return status==XR_XIR_BAD_TYPE?XR_XIR_BAD_STRUCTURE:status;
     }
-    if (op->op==XR_XIR_FUNCTION_REF)
+    if (op->op==XR_XIR_FUNCTION_REF || op->op==XR_XIR_CLASS_METHOD_REF)
         return edge.latent && site.function==from->body && site.instruction==edge.instruction?
             XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
     if ((op->op!=XR_XIR_CALL_INDIRECT && op->op!=XR_XIR_INVOKE_INDIRECT) || edge.latent ||
@@ -385,7 +387,7 @@ static inline XrXirStatus effect_invocation_certificate_edge_mask(const XrXirCom
     uint32_t root=equations->nodes[parent].root;
     bool executing=op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE || op->op==XR_XIR_CLEANUP_REGISTER ||
         op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_INVOKE_DEFAULT;
-    bool transport=xr_xir_op_is_spawn(op->op) || op->op==XR_XIR_GENERATOR_NEW,reference=op->op==XR_XIR_FUNCTION_REF;
+    bool transport=xr_xir_op_is_spawn(op->op) || op->op==XR_XIR_GENERATOR_NEW,reference=op->op==XR_XIR_FUNCTION_REF || op->op==XR_XIR_CLASS_METHOD_REF;
     if (!executing && !transport && !reference) return XR_XIR_BAD_STRUCTURE;
     uint32_t mask=0;bool found=false;uint64_t walked=0;
     for (uint32_t e=equations->nodes[parent].edge_head;e!=UINT32_MAX;e=equations->edges[e].next) {
@@ -404,7 +406,7 @@ static inline XrXirStatus effect_invocation_certificate_edge_mask(const XrXirCom
             if (edge.producer>=equations->site_count) return XR_XIR_BAD_STRUCTURE;
             EffectInvocationSite site=equations->sites[edge.producer];
             if (site.function!=caller || site.instruction!=instruction || site.target!=target ||
-                site.captures!=op->args[1]) return XR_XIR_BAD_STRUCTURE;
+                site.captures!=effect_reference_captures(op)) return XR_XIR_BAD_STRUCTURE;
         }
         uint32_t actual=0;
         XrXirStatus status=effect_invocation_certificate_node_mask(work,certificate,edge.target,&actual);
@@ -436,4 +438,25 @@ XR_FUNC XrXirStatus xir_effects_class_value(const XrXirCompileContext *context,
     if (status!=XR_XIR_OK) return status;
     if (!xr_xir_type_is_class(certificate->body->domain.types,type)) return XR_XIR_BAD_STRUCTURE;
     return effect_final_class_mask(context,owner,selected,value,output);
+}
+
+typedef struct EffectClassReferenceMask {
+    const XrXirCompileContext *work;const XrXirEffects *effects;
+    uint32_t function,instruction,mask,count;
+} EffectClassReferenceMask;
+static XrXirStatus effect_class_reference_mask_target(void *owner,const XirClassMethodTarget *target) {
+    EffectClassReferenceMask *read=owner;uint32_t mask=0;
+    XrXirStatus status=effect_invocation_effect_edge_mask(read->work,read->effects,read->function,read->instruction,target->function,&mask);
+    if(status==XR_XIR_OK) {read->mask|=mask;++read->count;}return status;
+}
+static XrXirStatus effect_class_reference_mask(const XrXirCompileContext *work,
+    const XrXirEffects *effects,uint32_t function,uint32_t instruction,uint32_t *output) {
+    if(!output || !effects || effects->resources!=work->resources)return XR_XIR_BAD_STRUCTURE;
+    if(!effects->invocations) {*output=XR_XIR_CALLABLE_ROOT_UNRESOLVED;return XR_XIR_OK;}
+    const EffectInvocationCertificate *certificate=effects->invocations;
+    if(!effect_body_material_shape(certificate->body) || certificate->resources!=work->resources)return XR_XIR_BAD_STRUCTURE;
+    EffectClassReferenceMask read={work,effects,function,instruction,0,0};
+    XrXirStatus status=effect_class_method_candidates(work,certificate->body,function,instruction,effect_class_reference_mask_target,&read);
+    if(status==XR_XIR_OK && !read.count)status=XR_XIR_BAD_STRUCTURE;
+    if(status==XR_XIR_OK)*output=read.mask;return status;
 }

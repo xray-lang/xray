@@ -42,9 +42,12 @@ static XrXirStatus effect_runtime_origin_shape(const EffectRuntimeOriginRead *re
     EffectBodyRead body=(EffectBodyRead){.execution=&read->request->read};XrXirInstruction reference;
     status=effect_body_instruction_get(&body,&certificate->body->functions[site->function],site->instruction,&reference);
     if(status!=XR_XIR_OK) return status;
-    if(reference.op!=(iterator?XR_XIR_GENERATOR_NEW:XR_XIR_FUNCTION_REF) ||
-        reference.immediate!=(int64_t)site->target || reference.args[1]!=site->captures ||
-        reference.type!=(XrXirType)value->type) return XR_XIR_BAD_TYPE;
+    if(reference.type!=(XrXirType)value->type)return XR_XIR_BAD_TYPE;
+    if(reference.op==XR_XIR_CLASS_METHOD_REF && !iterator) {
+        if(site->captures!=1 || reference.immediate<0 ||
+            (uint64_t)reference.immediate>=effect_body_count(certificate->body))return XR_XIR_BAD_TYPE;
+    } else if(reference.op!=(iterator?XR_XIR_GENERATOR_NEW:XR_XIR_FUNCTION_REF) ||
+        reference.immediate!=(int64_t)site->target || reference.args[1]!=site->captures)return XR_XIR_BAD_TYPE;
     /* A retired producer has no Frame captures. Its complete static key and
      * closed node remain unchanged; this physical fact grants no body execution. */
     *captures=terminal?0:site->captures;return XR_XIR_OK;

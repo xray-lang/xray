@@ -57,9 +57,12 @@ static XrXirStatus effect_invocation_producer_site_supported_read(const EffectIn
     XrXirInstruction storage;const XrXirInstruction *op=NULL;
     status=effect_body_request_operation(request,site->function,site->instruction,&storage,&op);
     if (status!=XR_XIR_OK) return status;
-    if ((op->op!=XR_XIR_FUNCTION_REF && op->op!=XR_XIR_GENERATOR_NEW) ||
-        op->immediate!=(int64_t)site->target || op->args[1]!=site->captures)
-        return XR_XIR_BAD_STRUCTURE;
+    if(op->op==XR_XIR_CLASS_METHOD_REF) {
+        XirClassMethodTarget target_view={0};
+        status=effect_class_method_target(owner->work,owner->final->material,site->function,site->instruction,site->target,&target_view);
+        if(status!=XR_XIR_OK || site->captures!=1)return status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:status;
+    } else if((op->op!=XR_XIR_FUNCTION_REF && op->op!=XR_XIR_GENERATOR_NEW) ||
+        op->immediate!=(int64_t)site->target || op->args[1]!=site->captures)return XR_XIR_BAD_STRUCTURE;
     bool supported=true;
     for (uint32_t p=0;p<site->captures;++p) {
 
@@ -324,12 +327,11 @@ static XrXirStatus effect_invocation_producer_capture_atoms(EffectInvocationFlow
     return XR_XIR_OK;
 }
 
-static XrXirStatus effect_invocation_producer_seed(EffectInvocationFlow *flow,
-    uint32_t instruction,bool *changed,bool verify) {
+static XrXirStatus effect_invocation_producer_seed_site(EffectInvocationFlow *flow,
+    uint32_t instruction,uint32_t site,bool *changed,bool verify) {
     uint32_t destination=flow->function->parameter_count+instruction;
     bool certified=false;XrXirStatus status=effect_invocation_flag_get(flow,destination,true,&certified);
     if (status!=XR_XIR_OK || !certified) return status;
-    uint32_t site=UINT32_MAX;status=effect_invocation_site(flow,instruction,&site);
     bool supported=false;
     if (status==XR_XIR_OK) status=effect_invocation_producer_site_supported_read(flow->read,&flow->body,site,&supported);
     if (status!=XR_XIR_OK || !supported) return status;
@@ -364,6 +366,24 @@ static XrXirStatus effect_invocation_producer_seed(EffectInvocationFlow *flow,
     return status;
 }
 
+static XrXirStatus effect_invocation_producer_seed(EffectInvocationFlow *flow,
+    uint32_t instruction,bool *changed,bool verify) {
+    XrXirInstruction storage;const XrXirInstruction *op=NULL;
+    XrXirStatus status=effect_invocation_flow_instruction(flow,instruction,&storage,&op);if(status!=XR_XIR_OK)return status;
+    if(op->op!=XR_XIR_CLASS_METHOD_REF) {
+        uint32_t site=UINT32_MAX;status=effect_invocation_site(flow,instruction,&site);
+        return status==XR_XIR_OK?effect_invocation_producer_seed_site(flow,instruction,site,changed,verify):status;
+    }
+    uint32_t body=flow->read->final->nodes[flow->node].body,count=0;
+    for(uint32_t s=0;s<flow->read->final->site_count;++s) {
+        const EffectInvocationSite *site=&flow->read->final->sites[s];
+        if(site->function!=body || site->instruction!=instruction)continue;
+        status=effect_invocation_producer_seed_site(flow,instruction,s,changed,verify);if(status!=XR_XIR_OK)return status;
+        ++count;
+    }
+    return count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+}
+
 static XrXirStatus effect_invocation_producer_callable_cell(EffectInvocationFlow *flow,
     uint32_t instruction,const XrXirInstruction *read,bool *changed,bool verify) {
     uint32_t cell=UINT32_MAX;
@@ -391,7 +411,7 @@ static XrXirStatus effect_invocation_producer_instruction(EffectInvocationFlow *
     uint32_t instruction,const XrXirInstruction *op,bool *changed,bool verify) {
     uint32_t destination=flow->function->parameter_count+instruction;
     switch (op->op) {
-    case XR_XIR_FUNCTION_REF: case XR_XIR_GENERATOR_NEW:
+    case XR_XIR_FUNCTION_REF: case XR_XIR_CLASS_METHOD_REF: case XR_XIR_GENERATOR_NEW:
         return effect_invocation_producer_seed(flow,instruction,changed,verify);
     case XR_XIR_CELL_READ:
         return effect_invocation_producer_callable_cell(flow,instruction,op,changed,verify);
@@ -475,13 +495,17 @@ static XrXirStatus effect_invocation_producer_source_read(const EffectInvocation
             *output=(EffectInvocationProducerSource){(uint32_t)value,edge->producer,site->binding+parameter,parameter};
             return XR_XIR_OK;
         }
-    } else if (op->op==XR_XIR_FUNCTION_REF) {
+    } else if (op->op==XR_XIR_FUNCTION_REF || op->op==XR_XIR_CLASS_METHOD_REF) {
         if (!edge->latent || edge->producer>=owner->final->site_count ||
             owner->final->sites[edge->producer].function!=caller->body ||
             owner->final->sites[edge->producer].instruction!=edge->instruction ||
-            owner->final->sites[edge->producer].target!=target->body || op->immediate<0 ||
-            (uint64_t)op->immediate!=target->body) return XR_XIR_BAD_STRUCTURE;
-        if (parameter>=op->args[1]) return XR_XIR_OK;
+            owner->final->sites[edge->producer].target!=target->body ||
+            (op->op!=XR_XIR_CLASS_METHOD_REF && (op->immediate<0 || (uint64_t)op->immediate!=target->body))) return XR_XIR_BAD_STRUCTURE;
+        if(parameter>=effect_reference_captures(op))return XR_XIR_OK;
+        if(op->op==XR_XIR_CLASS_METHOD_REF) {
+            if(parameter || op->args[0]>=(uint64_t)function.parameter_count+function.instruction_count)return XR_XIR_BAD_STRUCTURE;
+            output->value=op->args[0];return XR_XIR_OK;
+        }
     } else if (op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE || xr_xir_op_is_spawn(op->op) || op->op==XR_XIR_GENERATOR_NEW ||
         op->op==XR_XIR_CLEANUP_REGISTER) {
         if (edge->producer!=UINT32_MAX || edge->latent!=(xr_xir_op_is_spawn(op->op) || op->op==XR_XIR_GENERATOR_NEW) ||
@@ -833,8 +857,15 @@ static XrXirStatus effect_invocation_producer_record_verify(EffectInvocationFlow
         if (flag_status!=XR_XIR_OK) return flag_status;
         uint32_t seed=UINT32_MAX;
         if (fact->instruction>=flow->function->instruction_count) return XR_XIR_BAD_STRUCTURE;
-        XrXirStatus status=effect_invocation_site(flow,fact->instruction,&seed);
-        if (status!=XR_XIR_OK) return status;
+        XrXirInstruction storage;const XrXirInstruction *op=NULL;
+        XrXirStatus status=effect_invocation_flow_instruction(flow,fact->instruction,&storage,&op);
+        if(status!=XR_XIR_OK)return status;
+        if(op->op==XR_XIR_CLASS_METHOD_REF) {
+            const EffectInvocationSite *site=&owner->final->sites[fact->site];
+            if(site->function!=owner->final->nodes[flow->node].body || site->instruction!=fact->instruction)return XR_XIR_BAD_STRUCTURE;
+            seed=fact->site;
+        } else status=effect_invocation_site(flow,fact->instruction,&seed);
+        if(status!=XR_XIR_OK)return status;
         return (fact->atom || seed==fact->site) &&
             fact->value==flow->function->parameter_count+fact->instruction && certified &&
             fact->next_node==UINT32_MAX && fact->next_value==UINT32_MAX && fact->edge==UINT32_MAX?

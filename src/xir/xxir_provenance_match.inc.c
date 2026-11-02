@@ -464,7 +464,7 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
             } else if (a->op == XR_XIR_CALL_REQUIREMENT) {
                 XrXirStatus status = provenance_requirement_match(c,origin,a,b,to);
                 if (status != XR_XIR_OK) return status;
-            } else if (xr_xir_op_references_function(a->op)) {
+            } else if (xr_xir_op_references_function(a->op) || a->op==XR_XIR_CLASS_METHOD_REF) {
                 XrXirStatus status = provenance_call_match(c, origin, a, b,i);
                 if (status != XR_XIR_OK) return status;
             } else if (a->op == XR_XIR_ERROR_IS) {
@@ -801,7 +801,7 @@ static XrXirStatus provenance_reachable(ProvenanceMatch *c) {
 
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
             const XrXirInstruction *op = &function->instructions[i];
-            if (!xr_xir_op_references_function(op->op)) continue;
+            if (!xr_xir_op_references_function(op->op) && op->op!=XR_XIR_CLASS_METHOD_REF) continue;
             if (op->immediate < 0 || (uint64_t)op->immediate >= c->count) {
                 status = XR_XIR_BAD_STRUCTURE; goto done;
             }

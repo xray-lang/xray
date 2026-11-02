@@ -25,6 +25,7 @@
 #include "xxir_generic.h"
 #include "xxir_types.h"
 #include "xxir_class_hierarchy_internal.h"
+#include "xxir_class_method_internal.h"
 #include "xxir_pointer.h"
 #include "xxir_task_result.h"
 #include "xxir_native_callable.h"
@@ -352,6 +353,13 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         !xr_xir_type_is_nullable(module->types, op->type)) return XR_XIR_BAD_TYPE;
     if (op->op == XR_XIR_F64_TRY_PARSE &&
         xr_xir_nullable_element(module->types, op->type) != XR_XIR_F64) return XR_XIR_BAD_TYPE;
+    if(op->op==XR_XIR_CLASS_METHOD_REF) {
+        if(op->args[0]>=(uint64_t)function->parameter_count+context->location.instruction)return XR_XIR_BAD_VALUE;
+        XirClassMethodTarget target={0};
+        XrXirStatus status=xir_compile_class_method_site(module,context->location.function,context->location.instruction,
+            xr_xir_operand_type(function,op->args[0]),&target,context->control);
+        if(status!=XR_XIR_OK)return status;
+    }
     if (xr_xir_op_references_function(op->op)) {
         XrXirStatus status=instruction_direct_call_shape(function,op,module,remaining,construction);
         if (status!=XR_XIR_OK) return status;
@@ -418,7 +426,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     } else if (op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR) {
         if (op->immediate < 0 || (uint64_t)op->immediate > function->instruction_count) return XR_XIR_BAD_STRUCTURE;
     } else if (op->op != XR_XIR_CONST_INT && op->op != XR_XIR_CLEANUP_REGISTER && op->op != XR_XIR_CALL && op->op != XR_XIR_CALL_INTRINSIC &&
-               op->op != XR_XIR_FUNCTION_REF && op->op != XR_XIR_GO && op->op != XR_XIR_SCOPED_GO && op->op!=XR_XIR_SCOPE_BEGIN && op->op!=XR_XIR_SCOPE_JOIN && op->op!=XR_XIR_CHANNEL_SELECT && op->op != XR_XIR_GENERATOR_NEW && op->op != XR_XIR_INVOKE && op->op != XR_XIR_INVOKE_INDIRECT &&
+               op->op != XR_XIR_FUNCTION_REF && op->op!=XR_XIR_CLASS_METHOD_REF && op->op != XR_XIR_GO && op->op != XR_XIR_SCOPED_GO && op->op!=XR_XIR_SCOPE_BEGIN && op->op!=XR_XIR_SCOPE_JOIN && op->op!=XR_XIR_CHANNEL_SELECT && op->op != XR_XIR_GENERATOR_NEW && op->op != XR_XIR_INVOKE && op->op != XR_XIR_INVOKE_INDIRECT &&
                op->op != XR_XIR_INVOKE_RESULT && op->op != XR_XIR_INVOKE_ERROR && op->op != XR_XIR_INVOKE_DISCARD && op->op != XR_XIR_CALL_INDIRECT &&
                op->op != XR_XIR_CONST_STRING && op->op != XR_XIR_SLOT_LOAD &&
                op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE && op->op != XR_XIR_SLOT_GROUP_INIT &&
@@ -1258,6 +1266,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                 return XR_XIR_BAD_TYPE;
             if (op->op == XR_XIR_CALL_REQUIREMENT)
                 operand_type = xr_xir_operand_type(function, function->operands[op->args[0] + a]);
+            if(op->op==XR_XIR_CLASS_METHOD_REF)operand_type=xr_xir_operand_type(function,op->args[0]);
             if (xr_xir_op_references_function(op->op)) {
                 uint32_t operand = function->operands[op->args[0] + a];
                 if (operand >= (uint64_t) function->parameter_count + function->instruction_count) return XR_XIR_BAD_VALUE;

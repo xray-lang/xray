@@ -113,7 +113,7 @@ static bool source_root_instruction(SourceContext *ctx, uint32_t f, uint32_t i,
     SourceRootValue *flow = &ctx->bodies[f].root_values[i];
     if (flow->kind == 3 || flow->kind == 4) return true;
     if (!source_root_type(ctx,flow->declared)) return ctx->diagnostic.status == XR_XIR_OK;
-    if (op->op == XR_XIR_FUNCTION_REF) return source_root_reference(ctx,f,i,effects,changed);
+    if (op->op == XR_XIR_FUNCTION_REF || op->op==XR_XIR_CLASS_METHOD_REF) return source_root_reference(ctx,f,i,effects,changed);
     if (flow->kind == 1) {
         if (op->op == XR_XIR_COPY || op->op == XR_XIR_FUNCTION_WEAKEN)
             return source_root_copy_bound(ctx,f,body->parameter_count + i,flow->declared,changed);
@@ -198,7 +198,7 @@ static bool source_root_value_bottom(SourceContext *ctx, uint32_t f, uint32_t i)
         return ctx->diagnostic.status == XR_XIR_OK;
     XrXirInstruction *op = (XrXirInstruction *)ctx->functions[f].instructions + i;
     switch (op->op) {
-    case XR_XIR_FUNCTION_REF: case XR_XIR_COPY: case XR_XIR_FUNCTION_WEAKEN:
+    case XR_XIR_FUNCTION_REF: case XR_XIR_CLASS_METHOD_REF: case XR_XIR_COPY: case XR_XIR_FUNCTION_WEAKEN:
     case XR_XIR_PHI: case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ: case XR_XIR_CELL_PLACE:
     case XR_XIR_NULLABLE_SOME: case XR_XIR_NULLABLE_UNWRAP:
     case XR_XIR_TUPLE_NEW: case XR_XIR_TUPLE_FIELD: case XR_XIR_ARRAY_NEW: case XR_XIR_ARRAY_GET:

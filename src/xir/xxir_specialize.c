@@ -450,6 +450,15 @@ static bool spec_calls(SpecContext *c, uint32_t index) {
         c->diagnostic.instruction = i;
         if (!spec_progress(c)) return false;
         XrXirInstruction *op = &ops[i];
+        if(op->op==XR_XIR_CLASS_METHOD_REF) {
+            if(op->immediate<0 || (uint64_t)op->immediate>=c->source->function_count ||
+                c->ordinary[op->immediate]==UINT32_MAX || op->type_arguments[0] || op->type_arguments[1]) {
+                c->diagnostic.status=XR_XIR_BAD_STRUCTURE;return false;
+            }
+            /* Every nongeneric method is already interned in the ordinary
+             * prefix. The complete closed table rederives dynamic candidates. */
+            op->immediate=c->ordinary[op->immediate];continue;
+        }
         if (!xr_xir_op_uses_type_arguments(op->op)) continue;
         uint32_t count = op->type_arguments[1];
         XrXirType *types = spec_alloc(c, count, sizeof(*types));

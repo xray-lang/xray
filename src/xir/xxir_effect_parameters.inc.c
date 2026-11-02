@@ -277,6 +277,8 @@ static XrXirStatus effect_parameter_instruction(EffectParameterFlow *flow,
         return effect_parameter_transfer(flow, op->args[0], op->args[1], XR_XIR_EFFECT_USE_COPY);
     case XR_XIR_PHI:
         return effect_parameter_group(flow, op, XR_XIR_EFFECT_USE_COPY, true);
+    case XR_XIR_CLASS_METHOD_REF:
+        return effect_parameter_transfer(flow,destination,op->args[0],XR_XIR_EFFECT_USE_CONST_CAPTURE|XR_XIR_EFFECT_USE_OTHER);
     case XR_XIR_FUNCTION_REF:
         return effect_parameter_call(flow, op, true);
     case XR_XIR_CALL: case XR_XIR_INVOKE: case XR_XIR_CLEANUP_REGISTER:
@@ -402,7 +404,7 @@ static XrXirStatus effect_parameter_rows(EffectParameterFlow *flow, EffectGraph 
             op->op == XR_XIR_SCALAR_COPY || op->op == XR_XIR_OWNED_RETAIN ||
             op->op == XR_XIR_SCALAR_LOCAL_NEW || op->op == XR_XIR_SCALAR_LOCAL_READ ||
             op->op == XR_XIR_OWNED_LOCAL_NEW || op->op == XR_XIR_OWNED_LOCAL_READ;
-        flow->masks[flow->function->parameter_count + i] = signature && !transfer && op->op != XR_XIR_FUNCTION_REF ?
+        flow->masks[flow->function->parameter_count + i] = signature && !transfer && op->op != XR_XIR_FUNCTION_REF && op->op!=XR_XIR_CLASS_METHOD_REF ?
             signature->flags & (XR_XIR_CALLABLE_ROOT_REQUIRED | XR_XIR_CALLABLE_ROOT_UNRESOLVED) : 0;
     }
     return XR_XIR_OK;
@@ -509,7 +511,7 @@ static inline XrXirStatus effect_formula_needs_value_flow(EffectParameterFlow *f
         case XR_XIR_CALL: case XR_XIR_INVOKE: case XR_XIR_CALL_DEFAULT:
         case XR_XIR_INVOKE_DEFAULT: case XR_XIR_CALL_REQUIREMENT:
         case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT:
-        case XR_XIR_FUNCTION_REF: case XR_XIR_FUNCTION_WEAKEN:
+        case XR_XIR_FUNCTION_REF: case XR_XIR_CLASS_METHOD_REF: case XR_XIR_FUNCTION_WEAKEN:
         case XR_XIR_CLEANUP_REGISTER: case XR_XIR_GO: case XR_XIR_SCOPED_GO:
             return XR_XIR_OK;
         default: break;

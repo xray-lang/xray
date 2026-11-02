@@ -219,6 +219,7 @@ static XrXirStatus effect_body_advertisements_finish(EffectBodyAdvertisementBuil
     EffectInvocationDeclaredBounds **output);
 static void effect_body_advertisements_free(EffectBodyAdvertisementBuilder *builder);
 #include "xxir_effect_snapshot_storage.inc.c"
+#include "xxir_effect_class_methods.inc.c"
 #include "xxir_local_errors.inc.c"
 
 typedef struct EffectEdge { uint32_t caller, next, instruction; bool cleanup; } EffectEdge;
@@ -327,6 +328,8 @@ static XrXirStatus effect_invocation_publish(const XrXirCompileContext *work,
     const EffectInvocationDeclaredBounds *declared,const EffectOrdinaryContexts *dense);
 static XrXirStatus effect_invocation_effect_edge_mask(const XrXirCompileContext *work,
     const XrXirEffects *effects,uint32_t caller,uint32_t instruction,uint32_t target,uint32_t *output);
+static XrXirStatus effect_class_reference_mask(const XrXirCompileContext *work,
+    const XrXirEffects *effects,uint32_t function,uint32_t instruction,uint32_t *output);
 static XrXirStatus effect_invocation_public_gate(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate);
 static XrXirStatus effect_invocation_public_trace(const XrXirCompileContext *work,
@@ -429,7 +432,7 @@ static EffectSeedProjection effect_seed_opcode(XrXirOp op,XrXirFunctionEffects *
     case XR_XIR_AND_INT: case XR_XIR_OR_INT: case XR_XIR_XOR_INT:
     case XR_XIR_SHL_INT: case XR_XIR_SHR_INT: case XR_XIR_PHI:
     case XR_XIR_FUNCTION_WEAKEN:
-    case XR_XIR_CELL_LOCAL_WRITE: case XR_XIR_FUNCTION_REF: case XR_XIR_CELL_TAKE: case XR_XIR_VALUE_TAKE: case XR_XIR_CELL_NEW_TAKE: case XR_XIR_CELL_WRITE_TAKE: case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ:
+    case XR_XIR_CELL_LOCAL_WRITE: case XR_XIR_FUNCTION_REF: case XR_XIR_CLASS_METHOD_REF: case XR_XIR_CELL_TAKE: case XR_XIR_VALUE_TAKE: case XR_XIR_CELL_NEW_TAKE: case XR_XIR_CELL_WRITE_TAKE: case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ:
     case XR_XIR_CELL_WRITE: case XR_XIR_CELL_STRING_APPEND: case XR_XIR_CELL_PROJECT:
     case XR_XIR_CONVERT_NUMBER: case XR_XIR_CONST_FLOAT:
     case XR_XIR_NEG_FLOAT: case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT:
@@ -503,6 +506,18 @@ static bool effect_seed(const XrXirModule *module,const XrXirFunction *function,
 #include "xxir_effect_control_primitive.inc.c"
 #include "xxir_effects_root.inc.c"
 
+typedef struct EffectReferenceBuild { EffectGraph *graph;uint32_t caller,at,capacity; } EffectReferenceBuild;
+static XrXirStatus effect_reference_add(void *owner,const XirClassMethodTarget *target) {
+    EffectReferenceBuild *build=owner;
+    if(build->at>=build->capacity)return XR_XIR_BAD_STRUCTURE;
+    build->graph->references[build->at]=(EffectReference){build->caller,build->graph->reference_heads[target->function]};
+    build->graph->reference_heads[target->function]=build->at++;return XR_XIR_OK;
+}
+static XrXirStatus effect_reference_count(void *owner,const XirClassMethodTarget *target) {
+    uint32_t *count=owner;(void)target;
+    if(*count==UINT32_MAX)return XR_XIR_BUDGET;
+    ++*count;return XR_XIR_OK;
+}
 static XrXirStatus effect_reference_graph(const XrXirModule *module,
     EffectGraph *graph, uint32_t count, XrXirCompileContext *work) {
     if (!count) return XR_XIR_OK;
@@ -538,8 +553,13 @@ static XrXirStatus effect_reference_graph(const XrXirModule *module,
             XrXirInstruction storage;const XrXirInstruction *op=NULL;
             read_status=effect_body_request_instruction(&request,f,i,&storage,&op);
             if (read_status!=XR_XIR_OK) return read_status;
-            if (op->op != XR_XIR_FUNCTION_REF) return XR_XIR_BAD_STRUCTURE;
-
+            if(op->op==XR_XIR_CLASS_METHOD_REF) {
+                EffectReferenceBuild build={graph,f,at,count};
+                read_status=effect_class_method_candidates(work,graph->material,f,i,effect_reference_add,&build);
+                if(read_status!=XR_XIR_OK)return read_status;
+                at=build.at;continue;
+            }
+            if(op->op!=XR_XIR_FUNCTION_REF)return XR_XIR_BAD_STRUCTURE;
             if (op->immediate < 0 || (uint64_t)op->immediate >= module->function_count || at >= count)
                 return XR_XIR_BAD_STRUCTURE;
             uint32_t callee = (uint32_t)op->immediate;
@@ -606,6 +626,11 @@ static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *re
             }
             XrXirOp op=(XrXirOp)opcode;
             if (effects && xr_xir_op_is_spawn(op)) effects->outcomes_work.task_creation[f]=XR_XIR_EFFECT_MAY;
+            if(symbolic && op==XR_XIR_CLASS_METHOD_REF) {
+                uint32_t i=record.value-function->parameter_count;
+                status=effect_class_method_candidates(remaining,graph->material,f,i,effect_reference_count,&counts->references);
+                if(status!=XR_XIR_OK)return status;
+            }
             if (symbolic && op==XR_XIR_FUNCTION_REF) {
 
                 if (counts->references==UINT32_MAX) return XR_XIR_BUDGET;
@@ -787,7 +812,7 @@ static bool effect_default_access_local(XrXirOp op) {
     case XR_XIR_LOCAL_NEW: case XR_XIR_LOCAL_READ: case XR_XIR_LOCAL_WRITE: case XR_XIR_LOCAL_UNINIT:
     case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_READ: case XR_XIR_SCALAR_LOCAL_WRITE:
     case XR_XIR_OWNED_LOCAL_NEW: case XR_XIR_OWNED_LOCAL_READ: case XR_XIR_OWNED_LOCAL_WRITE:
-    case XR_XIR_PHI: case XR_XIR_FUNCTION_REF: case XR_XIR_FUNCTION_WEAKEN:
+    case XR_XIR_PHI: case XR_XIR_FUNCTION_REF: case XR_XIR_CLASS_METHOD_REF: case XR_XIR_FUNCTION_WEAKEN:
     case XR_XIR_CELL_TAKE: case XR_XIR_VALUE_TAKE: case XR_XIR_CELL_NEW_TAKE: case XR_XIR_CELL_WRITE_TAKE: case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: case XR_XIR_CELL_LOCAL_WRITE:
     case XR_XIR_CELL_PLACE: case XR_XIR_CELL_PROJECT: case XR_XIR_OBJECT_PLACE:
     case XR_XIR_FIELD_PLACE: case XR_XIR_INDEX_PLACE: case XR_XIR_PLACE_READ: case XR_XIR_PLACE_WRITE:
@@ -844,7 +869,6 @@ static XrXirStatus effect_default_access_seed(XirEffectDefaultAccessScope *scope
 #include "xxir_effect_generation_advertisements.inc.c"
 #include "xxir_effect_context_owner.inc.c"
 #include "xxir_effect_context_query.inc.c"
-#include "xxir_effect_class_methods.inc.c"
 #include "xxir_effect_invocations.inc.c"
 #include "xxir_effect_invocation_public_trace.inc.c"
 #include "xxir_effect_invocation_publish.inc.c"

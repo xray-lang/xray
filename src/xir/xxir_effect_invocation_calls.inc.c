@@ -465,14 +465,14 @@ static XrXirStatus effect_invocation_latent_input(EffectInvocationFlow *flow,
         uint64_t *row=input+(size_t)p*flow->basis.row_words;
         if (xr_xir_type_is_class(flow->body.domain.types,target->parameters[p])) {
             if(p<site.captures) {
-                uint32_t actual=flow->function->operands[op->args[0]+p];
+                uint32_t actual=effect_reference_value(flow->function,op,p);
                 status=effect_invocation_class_word(flow,actual,row+flow->basis.fn_words);
             } else status=effect_invocation_class_encode(flow,EFFECT_CLASS_KNOWN|EFFECT_CLASS_UNKNOWN,
                 row+flow->basis.fn_words);
             continue;
         }
         if (p<site.captures) {
-            uint32_t actual=flow->function->operands[op->args[0]+p];
+            uint32_t actual=effect_reference_value(flow->function,op,p);
             if (actual>=flow->values) { status=XR_XIR_BAD_VALUE;break; }
             if (xr_xir_type_is_cell(flow->body.domain.types,target->parameters[p]))
                 status=effect_invocation_cell(flow,actual,row+flow->basis.fn_words,NULL);
@@ -506,15 +506,13 @@ static XrXirStatus effect_invocation_latent_input(EffectInvocationFlow *flow,
     *output=input;return XR_XIR_OK;
 }
 
-static XrXirStatus effect_invocation_latent(EffectInvocationFlow *flow,
-    uint32_t instruction,const XrXirInstruction *op) {
+static XrXirStatus effect_invocation_latent_site(EffectInvocationFlow *flow,
+    uint32_t instruction,const XrXirInstruction *op,uint32_t selected) {
     uint32_t value=flow->function->parameter_count+instruction;
     if (value>=flow->values) return XR_XIR_OK;
     bool certified=false;XrXirStatus status=effect_invocation_flag_get(flow,value,true,&certified);
     if (status!=XR_XIR_OK || !certified) return status;
-    const EffectInvocationRead *owner=flow->read;uint32_t selected=UINT32_MAX;
-    status=effect_invocation_site(flow,instruction,&selected);
-    if (status!=XR_XIR_OK) return status;
+    const EffectInvocationRead *owner=flow->read;
     uint64_t *input=NULL;
     status=effect_invocation_latent_input(flow,instruction,selected,op,&input);
     uint32_t node=UINT32_MAX,root=owner->final->nodes[flow->node].root;
@@ -522,6 +520,22 @@ static XrXirStatus effect_invocation_latent(EffectInvocationFlow *flow,
     xr_compile_resources_free(input);
     if (status==XR_XIR_OK) status=effect_invocation_edge(flow->owner,flow->node,node,instruction,selected,true);
     return status==XR_XIR_UNRESOLVED?XR_XIR_OK:status;
+}
+
+static XrXirStatus effect_invocation_latent(EffectInvocationFlow *flow,
+    uint32_t instruction,const XrXirInstruction *op) {
+    if(op->op!=XR_XIR_CLASS_METHOD_REF) {
+        uint32_t site=UINT32_MAX;XrXirStatus status=effect_invocation_site(flow,instruction,&site);
+        return status==XR_XIR_OK?effect_invocation_latent_site(flow,instruction,op,site):status;
+    }
+    uint32_t body=flow->read->final->nodes[flow->node].body,count=0;
+    for(uint32_t s=0;s<flow->read->final->site_count;++s) {
+        const EffectInvocationSite *site=&flow->read->final->sites[s];
+        if(site->function!=body || site->instruction!=instruction)continue;
+        XrXirStatus status=effect_invocation_latent_site(flow,instruction,op,s);if(status!=XR_XIR_OK)return status;
+        ++count;
+    }
+    return count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
 }
 
 static XrXirStatus effect_invocation_closed_arguments(EffectInvocationFlow *flow,
@@ -640,7 +654,7 @@ static XrXirStatus effect_invocation_instruction_decoded(EffectInvocationFlow *f
         return effect_invocation_iterator(flow,instruction,op,changed);
     case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT:
         return effect_invocation_indirect(flow,instruction,op,changed);
-    case XR_XIR_FUNCTION_REF:
+    case XR_XIR_FUNCTION_REF: case XR_XIR_CLASS_METHOD_REF:
         return effect_invocation_latent(flow,instruction,op);
     case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: case XR_XIR_CELL_STRING_APPEND: case XR_XIR_CELL_LOCAL_WRITE:
     case XR_XIR_PLACE_READ: case XR_XIR_PLACE_WRITE: case XR_XIR_CELL_PROJECT: {

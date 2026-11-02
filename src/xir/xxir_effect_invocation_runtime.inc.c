@@ -284,9 +284,11 @@ static XrXirStatus effect_runtime_frontier_shape(const EffectInvocationCertifica
     XrXirInstruction reference;XrXirStatus status=effect_body_instruction_get(read,
         &certificate->body->functions[site->function],site->instruction,&reference);
     if(status!=XR_XIR_OK) return status;
-    if(reference.op!=(iterator?XR_XIR_GENERATOR_NEW:XR_XIR_FUNCTION_REF) ||
-        reference.args[1]!=request->captures || reference.immediate!=(int64_t)request->target)
-        return XR_XIR_BAD_STRUCTURE;
+    if(reference.op==XR_XIR_CLASS_METHOD_REF && !iterator) {
+        if(request->captures!=1 || reference.immediate<0 ||
+            (uint64_t)reference.immediate>=effect_body_count(certificate->body))return XR_XIR_BAD_STRUCTURE;
+    } else if(reference.op!=(iterator?XR_XIR_GENERATOR_NEW:XR_XIR_FUNCTION_REF) ||
+        reference.args[1]!=request->captures || reference.immediate!=(int64_t)request->target)return XR_XIR_BAD_STRUCTURE;
     if(iterator) {
         const EffectBodyFunction *caller=&certificate->body->functions[request->caller];
         XrXirType actual_type=0;

@@ -354,7 +354,7 @@ static XrXirStatus library_catalog_shape(const XrXirModule *m,
             }
             if (!library_catalog_local_instruction(op->op) &&
                 op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE && op->op!=XR_XIR_GO &&
-                op->op!=XR_XIR_FUNCTION_REF && op->op!=XR_XIR_GENERATOR_NEW &&
+                op->op!=XR_XIR_FUNCTION_REF && op->op!=XR_XIR_CLASS_METHOD_REF && op->op!=XR_XIR_GENERATOR_NEW &&
                 op->op!=XR_XIR_CALL_REQUIREMENT && op->op!=XR_XIR_CALL_DEFAULT &&
                 op->op!=XR_XIR_CONST_STRING && op->op!=XR_XIR_SLOT_LOAD &&
                 op->op!=XR_XIR_SLOT_INIT && op->op!=XR_XIR_SLOT_STORE &&

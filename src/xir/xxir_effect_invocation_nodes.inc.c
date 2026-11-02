@@ -10,71 +10,69 @@
 /* The producer basis is fixed before any equation is expanded. Capture
  * environments are flat rows for these real sites; a repeated nested site
  * cannot manufacture another basis atom or a recursively copied path. */
+typedef struct EffectInvocationSiteRows {
+    EffectInvocationSite *rows;
+    uint32_t capacity,at,binding,function,instruction,captures;
+    bool compare;
+} EffectInvocationSiteRows;
+static XrXirStatus effect_invocation_site_row(void *owner,const XirClassMethodTarget *target) {
+    EffectInvocationSiteRows *state=owner;
+    if(state->at==UINT32_MAX || state->captures>UINT32_MAX-state->binding)return XR_XIR_BUDGET;
+    EffectInvocationSite row={state->function,state->instruction,target->function,state->captures,state->binding};
+    if(state->rows) {
+        if(state->at>=state->capacity)return XR_XIR_BAD_STRUCTURE;
+        if(state->compare) {
+            const EffectInvocationSite *old=&state->rows[state->at];
+            if(old->function!=row.function || old->instruction!=row.instruction || old->target!=row.target ||
+                old->captures!=row.captures || old->binding!=row.binding)return XR_XIR_BAD_STRUCTURE;
+        } else state->rows[state->at]=row;
+    }
+    ++state->at;state->binding+=state->captures;return XR_XIR_OK;
+}
+static XrXirStatus effect_invocation_site_rows(const XrXirCompileContext *work,
+    const EffectBodyMaterial *material,const XrXirInstruction *op,EffectInvocationSiteRows *rows) {
+    rows->captures=effect_reference_captures(op);
+    if(op->op==XR_XIR_CLASS_METHOD_REF)
+        return effect_class_method_candidates(work,material,rows->function,rows->instruction,effect_invocation_site_row,rows);
+    if((op->op!=XR_XIR_FUNCTION_REF && op->op!=XR_XIR_GENERATOR_NEW) || op->immediate<0 ||
+        (uint64_t)op->immediate>=effect_body_count(material))return XR_XIR_BAD_STRUCTURE;
+    uint32_t parameters=material->functions[op->immediate].parameter_count;
+    if(rows->captures>parameters || (op->op==XR_XIR_GENERATOR_NEW && rows->captures!=parameters))return XR_XIR_BAD_STRUCTURE;
+    XirClassMethodTarget target={(uint32_t)op->immediate,XR_XIR_UNIT};
+    return effect_invocation_site_row(rows,&target);
+}
 static XrXirStatus effect_invocation_sites(EffectInvocationWorkspace *owner) {
-    if (!owner || !effect_body_material_shape(owner->final.material) || !owner->read.work || owner->final.sites || owner->final.site_count ||
-        owner->final.binding_count || !owner->final.physical ||
-        owner->final.physical->resources!=owner->read.work->resources ||
-        owner->final.physical->count!=owner->read.body.domain.function_count ||
-        (owner->final.physical->count && !owner->final.physical->functions)) return XR_XIR_BAD_STRUCTURE;
-    uint64_t count=0,bindings=0;
-    XrXirStatus status=XR_XIR_OK;
-    for (uint32_t f=0;f<owner->read.body.domain.function_count;++f) {
-        EffectBodyFunctionDimensions head={0};status=effect_invocation_dimensions(&owner->read,f,&head);
-        if (status!=XR_XIR_OK) return status;
-        const EffectBodyFunctionDimensions *function=&head;
-        const EffectPhysicalFunction *physical=&owner->final.physical->functions[f];
-        for (uint32_t r=0;r<physical->count;++r) {
-
-            if (!(physical->records[r].mask&(EFFECT_PHYSICAL_REFERENCE|EFFECT_PHYSICAL_GENERATOR))) continue;
-            uint32_t value=physical->records[r].value;
-            if (value<function->parameter_count || value>=physical->values) return XR_XIR_BAD_STRUCTURE;
-            uint32_t i=value-function->parameter_count;
-            XrXirInstruction storage;const XrXirInstruction *op=NULL;
-            status=effect_invocation_operation(&owner->read,f,i,&storage,&op);
-            if (status!=XR_XIR_OK) return status;
-            if ((op->op!=XR_XIR_FUNCTION_REF && op->op!=XR_XIR_GENERATOR_NEW) || op->immediate<0 ||
-                (uint64_t)op->immediate>=owner->read.body.domain.function_count) return XR_XIR_BAD_STRUCTURE;
-            EffectBodyFunctionDimensions target={0};
-            status=effect_invocation_dimensions(&owner->read,(uint32_t)op->immediate,&target);
-            if (status!=XR_XIR_OK) return status;
-            if (op->args[1]>target.parameter_count ||
-                (op->op==XR_XIR_GENERATOR_NEW && op->args[1]!=target.parameter_count))
-                return XR_XIR_BAD_STRUCTURE;
-            ++count;bindings+=op->args[1];
-            if (count>UINT32_MAX || bindings>UINT32_MAX) return XR_XIR_BUDGET;
-        }
-    }
-    if (count>SIZE_MAX/sizeof(EffectInvocationSite)) return XR_XIR_BUDGET;
-    EffectInvocationSite *sites=count ? xir_compile_alloc(owner->read.work,
-        (size_t)count*sizeof(*sites),&status) : NULL;
-    if (count && !sites) return status;
-    uint32_t at=0,binding=0;
-    for (uint32_t f=0;f<owner->read.body.domain.function_count && status==XR_XIR_OK;++f) {
-        EffectBodyFunctionDimensions head={0};status=effect_invocation_dimensions(&owner->read,f,&head);
-        if (status!=XR_XIR_OK) break;
-        const EffectBodyFunctionDimensions *function=&head;
-        const EffectPhysicalFunction *physical=&owner->final.physical->functions[f];
-        for (uint32_t r=0;r<physical->count;++r) {
-
-            if (!(physical->records[r].mask&(EFFECT_PHYSICAL_REFERENCE|EFFECT_PHYSICAL_GENERATOR))) continue;
-            uint32_t value=physical->records[r].value;
-            if (value<function->parameter_count || value>=physical->values) { status=XR_XIR_BAD_STRUCTURE;break; }
-            uint32_t i=value-function->parameter_count;
-            XrXirInstruction storage;const XrXirInstruction *op=NULL;
-            status=effect_invocation_operation(&owner->read,f,i,&storage,&op);
-            if (status!=XR_XIR_OK) break;
-            if (op->op!=XR_XIR_FUNCTION_REF && op->op!=XR_XIR_GENERATOR_NEW) { status=XR_XIR_BAD_STRUCTURE;break; }
-
-            if (at>=count || binding>bindings || op->args[1]>bindings-binding) {
-                status=XR_XIR_BAD_STRUCTURE;break;
+    if(!owner || !effect_body_material_shape(owner->final.material) || !owner->read.work ||
+        owner->final.sites || owner->final.site_count || owner->final.binding_count || !owner->final.physical ||
+        owner->final.physical!=owner->final.material->physical ||
+        owner->final.physical->count!=effect_body_count(owner->final.material))return XR_XIR_BAD_STRUCTURE;
+    EffectInvocationSiteRows rows={0};XrXirStatus status=XR_XIR_OK;
+    for(uint32_t pass=0;pass<2;++pass) {
+        rows.at=0;rows.binding=0;
+        for(uint32_t f=0;f<owner->read.body.domain.function_count && status==XR_XIR_OK;++f) {
+            EffectBodyFunctionDimensions head={0};status=effect_invocation_dimensions(&owner->read,f,&head);
+            const EffectPhysicalFunction *physical=&owner->final.physical->functions[f];
+            for(uint32_t r=0;status==XR_XIR_OK && r<physical->count;++r) {
+                if(!(physical->records[r].mask&(EFFECT_PHYSICAL_REFERENCE|EFFECT_PHYSICAL_GENERATOR)))continue;
+                uint32_t value=physical->records[r].value;
+                if(value<head.parameter_count || value>=physical->values) {status=XR_XIR_BAD_STRUCTURE;break;}
+                rows.function=f;rows.instruction=value-head.parameter_count;
+                XrXirInstruction storage;const XrXirInstruction *op=NULL;
+                status=effect_invocation_operation(&owner->read,f,rows.instruction,&storage,&op);
+                if(status==XR_XIR_OK)status=effect_invocation_site_rows(owner->read.work,owner->final.material,op,&rows);
             }
-            sites[at++]=(EffectInvocationSite){f,i,(uint32_t)op->immediate,op->args[1],binding};
-            binding+=op->args[1];
+        }
+        if(status!=XR_XIR_OK)break;
+        if(!pass) {
+            rows.capacity=rows.at;
+            if((uint64_t)rows.capacity>SIZE_MAX/sizeof(*rows.rows)) {status=XR_XIR_BUDGET;break;}
+            rows.rows=rows.capacity?xir_compile_alloc(owner->read.work,(size_t)rows.capacity*sizeof(*rows.rows),&status):NULL;
+            if(rows.capacity && !rows.rows)break;
         }
     }
-    if (status==XR_XIR_OK && (at!=count || binding!=bindings)) status=XR_XIR_BAD_STRUCTURE;
-    if (status!=XR_XIR_OK) { xr_compile_resources_free(sites);return status; }
-    owner->final.sites=sites;owner->final.site_count=at;owner->final.binding_count=binding;return XR_XIR_OK;
+    if(status==XR_XIR_OK && rows.at!=rows.capacity)status=XR_XIR_BAD_STRUCTURE;
+    if(status!=XR_XIR_OK) {xr_compile_resources_free(rows.rows);return status;}
+    owner->final.sites=rows.rows;owner->final.site_count=rows.at;owner->final.binding_count=rows.binding;return XR_XIR_OK;
 }
 
 static XrXirStatus effect_invocation_basis_parameters_read(const XrXirCompileContext *work,

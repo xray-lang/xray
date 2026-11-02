@@ -38,7 +38,7 @@ static XrXirStatus effect_capture_edge_active_current(const EffectCaptureRead *r
     XrXirInstruction storage;const XrXirInstruction *op=NULL;
     status=effect_body_request_instruction(&read->body,read->final->nodes[edge->caller].body,edge->instruction,&storage,&op);
     if(status!=XR_XIR_OK) return status;
-    uint32_t value=op->op==XR_XIR_FUNCTION_REF?node->head.parameter_count+edge->instruction:
+    uint32_t value=(op->op==XR_XIR_FUNCTION_REF || op->op==XR_XIR_CLASS_METHOD_REF)?node->head.parameter_count+edge->instruction:
         effect_invocation_iterator_operation(op->op)?op->args[0]:(uint32_t)op->immediate;
     const EffectCaptureFact *fact=NULL;
     status=effect_capture_find(read,(EffectCaptureFact){edge->caller,value,edge->producer/64,edge->producer%64,0},&fact);
@@ -118,7 +118,7 @@ static XrXirStatus effect_capture_actual_current(const EffectCaptureRead *read,u
     if(status==XR_XIR_OK && source.producer!=UINT32_MAX) actual.value=UINT32_MAX;
     if(status!=XR_XIR_OK) return status;
     if(actual.value==UINT32_MAX) {
-        if(op->op==XR_XIR_FUNCTION_REF && edge->latent && parameter>=op->args[1]) actual.unbound=true;
+        if((op->op==XR_XIR_FUNCTION_REF || op->op==XR_XIR_CLASS_METHOD_REF) && edge->latent && parameter>=effect_reference_captures(op)) actual.unbound=true;
         else if((op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT ||
             effect_invocation_iterator_operation(op->op)) && !edge->latent &&
             edge->producer<read->final->site_count && parameter<read->final->sites[edge->producer].captures) {
@@ -493,7 +493,7 @@ static XrXirStatus effect_capture_frontiers(const EffectCaptureRead *read) {
             status=effect_final_input_select_next(&read->body,read->final->nodes[n].body,&cursor,&i,&op,&found);
             if(status!=XR_XIR_OK) return status;
             if(!found) break;
-            uint32_t value=UINT32_MAX;bool latent=op.op==XR_XIR_FUNCTION_REF;
+            uint32_t value=UINT32_MAX;bool latent=op.op==XR_XIR_FUNCTION_REF || op.op==XR_XIR_CLASS_METHOD_REF;
             if(latent) value=node.head.parameter_count+i;
             else if(op.op==XR_XIR_CALL_INDIRECT || op.op==XR_XIR_INVOKE_INDIRECT) {
                 if(op.immediate<0 || (uint64_t)op.immediate>=node.values) return XR_XIR_BAD_STRUCTURE;

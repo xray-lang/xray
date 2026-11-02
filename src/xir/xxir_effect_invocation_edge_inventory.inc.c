@@ -81,6 +81,12 @@ static XrXirStatus effect_final_edge_payload(const XrXirCompileContext *work,
     if(edge->producer>=final->site_count) return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationSite *site=&final->sites[edge->producer];
     if(site->target!=to->body || site->captures>target.parameter_count) return XR_XIR_BAD_STRUCTURE;
+    if(op->op==XR_XIR_CLASS_METHOD_REF) {
+        if(!edge->latent || site->function!=from->body || site->instruction!=edge->instruction ||
+            site->captures!=1 || op->args[0]>=(uint64_t)head.parameter_count+head.instruction_count)return XR_XIR_BAD_STRUCTURE;
+        XirClassMethodTarget selected={0};
+        return effect_class_method_target(work,final->material,from->body,edge->instruction,to->body,&selected);
+    }
     if(op->op==XR_XIR_FUNCTION_REF) {
         if(!edge->latent || site->function!=from->body || site->instruction!=edge->instruction) return XR_XIR_BAD_STRUCTURE;
         return effect_final_edge_operands(work,&head,op,site->captures);

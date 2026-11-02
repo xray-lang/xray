@@ -91,6 +91,8 @@ static XrXirStatus effect_role_transfer(EffectRoleCheck *check,EffectRoleIndex *
     case XR_XIR_LOCAL_WRITE: case XR_XIR_SCALAR_LOCAL_WRITE: case XR_XIR_OWNED_LOCAL_WRITE:
         return effect_role_value(check,uses,op->args[1],op->args[0],EFFECT_ROLE_ALIAS);
     case XR_XIR_PHI:return effect_role_group(check,uses,head,op,destination,EFFECT_ROLE_ALIAS);
+    case XR_XIR_CLASS_METHOD_REF:
+        return effect_role_value(check,uses,op->args[0],destination,EFFECT_ROLE_ALIAS);
     case XR_XIR_FUNCTION_REF: case XR_XIR_CALL: case XR_XIR_INVOKE: case XR_XIR_CLEANUP_REGISTER:
         return effect_role_call(check,uses,head,op,destination);
     case XR_XIR_CALL_REQUIREMENT:

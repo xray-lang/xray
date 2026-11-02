@@ -183,18 +183,8 @@ static XrXirStatus effect_capture_parameters(EffectCaptureRead *read,const Effec
     return XR_XIR_OK;
 }
 
-static XrXirStatus effect_capture_reference(EffectCaptureRead *read,const EffectCaptureNode *node,
-    uint32_t instruction,const XrXirInstruction *op) {
-    uint32_t body=read->final->nodes[node->node].body,site=UINT32_MAX;
-    for(uint32_t s=0;s<read->final->site_count;++s) {
-
-        if(read->final->sites[s].function==body && read->final->sites[s].instruction==instruction) {
-            if (site != UINT32_MAX)
-                return XR_XIR_BAD_STRUCTURE;
-            site = s;
-        }
-    }
-    if(site==UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
+static XrXirStatus effect_capture_reference_site(EffectCaptureRead *read,const EffectCaptureNode *node,
+    uint32_t instruction,const XrXirInstruction *op,uint32_t site) {
     bool genuine=false;XrXirStatus status=effect_capture_reference_seed(read,site,&genuine);
     if(status!=XR_XIR_OK) return status;
     uint32_t value=node->head.parameter_count+instruction;
@@ -210,10 +200,10 @@ static XrXirStatus effect_capture_reference(EffectCaptureRead *read,const Effect
     if(status!=XR_XIR_OK) return status;
     const EffectInvocationSite *reference=&read->final->sites[site];EffectBodyFunctionHead target={0};
     status=effect_body_request_head(&read->body,reference->target,&target);if(status!=XR_XIR_OK) return status;
-    if(op->args[0]>node->head.operand_count || reference->captures>node->head.operand_count-op->args[0]) return XR_XIR_BAD_STRUCTURE;
+    if(op->op!=XR_XIR_CLASS_METHOD_REF && (op->args[0]>node->head.operand_count || reference->captures>node->head.operand_count-op->args[0])) return XR_XIR_BAD_STRUCTURE;
     for(uint32_t p=0;p<reference->captures;++p) {
 
-        uint32_t source=node->head.operands[op->args[0]+p],kind=0;
+        uint32_t source=effect_reference_value(&node->head,op,p),kind=0;
         status=effect_capture_kind(read,node,source,&kind,NULL);if(status!=XR_XIR_OK) return status;
         uint64_t binding=node->basis.origin_words+((uint64_t)reference->binding+p)*
             (node->basis.origin_words+(uint64_t)node->basis.cell_words);
@@ -241,6 +231,19 @@ static XrXirStatus effect_capture_reference(EffectCaptureRead *read,const Effect
 }
 
 #include "xxir_effect_capture_cells.inc.c"
+
+static XrXirStatus effect_capture_reference(EffectCaptureRead *read,const EffectCaptureNode *node,
+    uint32_t instruction,const XrXirInstruction *op) {
+    uint32_t body=read->final->nodes[node->node].body,count=0;
+    for(uint32_t s=0;s<read->final->site_count;++s) {
+        const EffectInvocationSite *site=&read->final->sites[s];
+        if(site->function!=body || site->instruction!=instruction)continue;
+        if(count && op->op!=XR_XIR_CLASS_METHOD_REF)return XR_XIR_BAD_STRUCTURE;
+        XrXirStatus status=effect_capture_reference_site(read,node,instruction,op,s);if(status!=XR_XIR_OK)return status;
+        ++count;
+    }
+    return count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+}
 
 /* A known Iterator factory has actual returned origins, not a Callable
  * advertisement. Only an opaque callee supplies an opaque result alternative. */
@@ -295,7 +298,7 @@ static XrXirStatus effect_capture_instruction(EffectCaptureRead *read,const Effe
         for(uint32_t p=1;p<op->args[1];p+=2) {
             status=effect_capture_alias(read,node,node->head.operands[op->args[0]+p],value);if(status!=XR_XIR_OK) return status;
         }
-    } else if(!read->fixed_only && (op->op==XR_XIR_FUNCTION_REF || op->op==XR_XIR_GENERATOR_NEW)) {
+    } else if(!read->fixed_only && (op->op==XR_XIR_FUNCTION_REF || op->op==XR_XIR_CLASS_METHOD_REF || op->op==XR_XIR_GENERATOR_NEW)) {
         status=effect_capture_reference(read,node,instruction,op);if(status!=XR_XIR_OK) return status;
     } else if(!read->fixed_only && kind==EFFECT_CAPTURE_CALLABLE) {
         if(effect_physical_iterator(read->body.domain.types,op->type) &&

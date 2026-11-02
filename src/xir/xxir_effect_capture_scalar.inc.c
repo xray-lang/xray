@@ -17,7 +17,7 @@ static bool effect_capture_scalar_type(uint32_t type) {
 }
 static bool effect_capture_scalar_operation(XrXirOp opcode) {
     switch(opcode) {
-    case XR_XIR_FUNCTION_REF: case XR_XIR_FUNCTION_WEAKEN: case XR_XIR_GENERATOR_NEW:
+    case XR_XIR_FUNCTION_REF: case XR_XIR_CLASS_METHOD_REF: case XR_XIR_FUNCTION_WEAKEN: case XR_XIR_GENERATOR_NEW:
     case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT: case XR_XIR_CALL_REQUIREMENT:
     case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE:
     case XR_XIR_CELL_LOCAL_WRITE: case XR_XIR_CELL_STRING_APPEND: case XR_XIR_CELL_PROJECT:

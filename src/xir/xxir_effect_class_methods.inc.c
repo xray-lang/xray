@@ -50,3 +50,11 @@ static XrXirStatus effect_class_method_target(const XrXirCompileContext *work,co
     if(status==XR_XIR_OK && match.count!=1)status=XR_XIR_BAD_STRUCTURE;
     if(status==XR_XIR_OK)*output=(XirClassMethodTarget){target,match.receiver};return status;
 }
+
+static uint32_t effect_reference_captures(const XrXirInstruction *op) {
+    return op->op==XR_XIR_CLASS_METHOD_REF?1:op->args[1];
+}
+static uint32_t effect_reference_value(const EffectBodyFunctionHead *body,
+    const XrXirInstruction *op,uint32_t parameter) {
+    return op->op==XR_XIR_CLASS_METHOD_REF?op->args[0]:body->operands[op->args[0]+parameter];
+}
