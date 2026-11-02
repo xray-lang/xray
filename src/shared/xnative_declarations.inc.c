@@ -825,6 +825,232 @@ static const XrNativeMemberDeclaration xr_native_crypto_1 = {
     false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_NO_HEAP,
     "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_crypto_1_parameters, 2, XR_NATIVE_TERM_BOOL
 };
+static const XrNativeParameter xr_native_math_0_parameters[] = {
+    {"x", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_0 = {
+    1, "__abs", "(x: f64): f64", "f64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_0_parameters, 1, XR_NATIVE_TERM_F64
+};
+static const XrNativeParameter xr_native_math_1_parameters[] = {
+    {"x", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_1 = {
+    2, "__floor", "(x: f64): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_1_parameters, 1, XR_NATIVE_TERM_I64
+};
+static const XrNativeParameter xr_native_math_2_parameters[] = {
+    {"x", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_2 = {
+    3, "__ceil", "(x: f64): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_2_parameters, 1, XR_NATIVE_TERM_I64
+};
+static const XrNativeParameter xr_native_math_3_parameters[] = {
+    {"x", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_3 = {
+    4, "__round", "(x: f64): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_3_parameters, 1, XR_NATIVE_TERM_I64
+};
+static const XrNativeParameter xr_native_math_4_parameters[] = {
+    {"x", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_4 = {
+    5, "__sqrt", "(x: f64): f64", "f64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_4_parameters, 1, XR_NATIVE_TERM_F64
+};
+static const XrNativeParameter xr_native_math_5_parameters[] = {
+    {"base", "f64", XR_NATIVE_TERM_F64, false, false},
+    {"exp", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_5 = {
+    6, "__pow", "(base: f64, exp: f64): f64", "f64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_5_parameters, 2, XR_NATIVE_TERM_F64
+};
+static const XrNativeParameter xr_native_math_6_parameters[] = {
+    {"x", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_6 = {
+    7, "__sin", "(x: f64): f64", "f64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_6_parameters, 1, XR_NATIVE_TERM_F64
+};
+static const XrNativeParameter xr_native_math_7_parameters[] = {
+    {"x", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_7 = {
+    8, "__cos", "(x: f64): f64", "f64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_7_parameters, 1, XR_NATIVE_TERM_F64
+};
+static const XrNativeParameter xr_native_math_8_parameters[] = {
+    {"x", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_8 = {
+    9, "__tan", "(x: f64): f64", "f64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_8_parameters, 1, XR_NATIVE_TERM_F64
+};
+static const XrNativeParameter xr_native_math_9_parameters[] = {
+    {"x", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_9 = {
+    10, "__asin", "(x: f64): f64", "f64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_9_parameters, 1, XR_NATIVE_TERM_F64
+};
+static const XrNativeParameter xr_native_math_10_parameters[] = {
+    {"x", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_10 = {
+    11, "__acos", "(x: f64): f64", "f64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_10_parameters, 1, XR_NATIVE_TERM_F64
+};
+static const XrNativeParameter xr_native_math_11_parameters[] = {
+    {"x", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_11 = {
+    12, "__atan", "(x: f64): f64", "f64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_11_parameters, 1, XR_NATIVE_TERM_F64
+};
+static const XrNativeParameter xr_native_math_12_parameters[] = {
+    {"y", "f64", XR_NATIVE_TERM_F64, false, false},
+    {"x", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_12 = {
+    13, "__atan2", "(y: f64, x: f64): f64", "f64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_12_parameters, 2, XR_NATIVE_TERM_F64
+};
+static const XrNativeParameter xr_native_math_13_parameters[] = {
+    {"x", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_13 = {
+    14, "__log", "(x: f64): f64", "f64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_13_parameters, 1, XR_NATIVE_TERM_F64
+};
+static const XrNativeParameter xr_native_math_14_parameters[] = {
+    {"x", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_14 = {
+    15, "__log10", "(x: f64): f64", "f64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_14_parameters, 1, XR_NATIVE_TERM_F64
+};
+static const XrNativeParameter xr_native_math_15_parameters[] = {
+    {"x", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_15 = {
+    16, "__log2", "(x: f64): f64", "f64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_15_parameters, 1, XR_NATIVE_TERM_F64
+};
+static const XrNativeParameter xr_native_math_16_parameters[] = {
+    {"x", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_16 = {
+    17, "__exp", "(x: f64): f64", "f64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_16_parameters, 1, XR_NATIVE_TERM_F64
+};
+static const XrNativeMemberDeclaration xr_native_math_17 = {
+    18, "__random", "(): f64", "f64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_F64
+};
+static const XrNativeParameter xr_native_math_18_parameters[] = {
+    {"min", "i64", XR_NATIVE_TERM_I64, false, false},
+    {"max", "i64", XR_NATIVE_TERM_I64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_18 = {
+    19, "__randomInt", "(min: i64, max: i64): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_18_parameters, 2, XR_NATIVE_TERM_I64
+};
+static const XrNativeParameter xr_native_math_19_parameters[] = {
+    {"x", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_19 = {
+    20, "__sinh", "(x: f64): f64", "f64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_19_parameters, 1, XR_NATIVE_TERM_F64
+};
+static const XrNativeParameter xr_native_math_20_parameters[] = {
+    {"x", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_20 = {
+    21, "__cosh", "(x: f64): f64", "f64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_20_parameters, 1, XR_NATIVE_TERM_F64
+};
+static const XrNativeParameter xr_native_math_21_parameters[] = {
+    {"x", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_21 = {
+    22, "__tanh", "(x: f64): f64", "f64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_21_parameters, 1, XR_NATIVE_TERM_F64
+};
+static const XrNativeParameter xr_native_math_22_parameters[] = {
+    {"x", "f64", XR_NATIVE_TERM_F64, false, false},
+    {"y", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_22 = {
+    23, "__hypot", "(x: f64, y: f64): f64", "f64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_22_parameters, 2, XR_NATIVE_TERM_F64
+};
+static const XrNativeParameter xr_native_math_23_parameters[] = {
+    {"x", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_23 = {
+    24, "__cbrt", "(x: f64): f64", "f64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_23_parameters, 1, XR_NATIVE_TERM_F64
+};
+static const XrNativeParameter xr_native_math_24_parameters[] = {
+    {"x", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_24 = {
+    25, "__trunc", "(x: f64): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_24_parameters, 1, XR_NATIVE_TERM_I64
+};
+static const XrNativeParameter xr_native_math_25_parameters[] = {
+    {"x", "f64", XR_NATIVE_TERM_F64, false, false},
+    {"y", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_25 = {
+    26, "__fmod", "(x: f64, y: f64): f64", "f64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_25_parameters, 2, XR_NATIVE_TERM_F64
+};
+static const XrNativeParameter xr_native_math_26_parameters[] = {
+    {"x", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_26 = {
+    27, "__log1p", "(x: f64): f64", "f64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_26_parameters, 1, XR_NATIVE_TERM_F64
+};
+static const XrNativeParameter xr_native_math_27_parameters[] = {
+    {"x", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_math_27 = {
+    28, "__expm1", "(x: f64): f64", "f64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_27_parameters, 1, XR_NATIVE_TERM_F64
+};
 static const XrNativeParameter xr_native_unicode_property_parameters[] = {
     {"name", "string", XR_NATIVE_TERM_STRING, false, false},
 };
@@ -868,5 +1094,33 @@ static const XrNativeCallableDeclaration xr_native_callables[] = {
     {23, NULL, &xr_native_buffer_17, NULL, false, "mem", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
     {24, NULL, &xr_native_buffer_18, NULL, false, "mem", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
     {8, NULL, &xr_native_crypto_0, NULL, false, "crypto", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
-    {9, NULL, &xr_native_crypto_1, NULL, false, "crypto", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}}
+    {9, NULL, &xr_native_crypto_1, NULL, false, "crypto", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {27, NULL, &xr_native_math_0, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {28, NULL, &xr_native_math_1, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {29, NULL, &xr_native_math_2, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {30, NULL, &xr_native_math_3, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {31, NULL, &xr_native_math_4, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {32, NULL, &xr_native_math_5, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {33, NULL, &xr_native_math_6, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {34, NULL, &xr_native_math_7, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {35, NULL, &xr_native_math_8, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {36, NULL, &xr_native_math_9, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {37, NULL, &xr_native_math_10, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {38, NULL, &xr_native_math_11, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {39, NULL, &xr_native_math_12, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {40, NULL, &xr_native_math_13, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {41, NULL, &xr_native_math_14, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {42, NULL, &xr_native_math_15, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {43, NULL, &xr_native_math_16, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {44, NULL, &xr_native_math_17, NULL, false, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {45, NULL, &xr_native_math_18, NULL, false, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {46, NULL, &xr_native_math_19, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {47, NULL, &xr_native_math_20, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {48, NULL, &xr_native_math_21, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {49, NULL, &xr_native_math_22, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {50, NULL, &xr_native_math_23, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {51, NULL, &xr_native_math_24, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {52, NULL, &xr_native_math_25, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {53, NULL, &xr_native_math_26, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {54, NULL, &xr_native_math_27, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}}
 };
