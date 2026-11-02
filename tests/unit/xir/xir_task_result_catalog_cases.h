@@ -40,13 +40,16 @@ static size_t task_catalog_name(const XrXirCheckedPacket *packet,size_t offset,c
 }
 static void task_catalog_rejections(const XrXirCompileContext *context,
     XrXirCheckedPacket *packet,XrXirLibraryInput *input) {
+    CHECK(task_catalog_word(packet,8)==42);
     size_t start=SIZE_MAX;
-    for(size_t p=64;p<packet->length && packet->length-p>=30;++p) {
+    for(size_t p=64;p<packet->length && packet->length-p>=34;++p) {
         if(task_catalog_word(packet,p)!=10 || memcmp(packet->bytes+p+4,"TaskResult",10) ||
-            task_catalog_word(packet,p+26)!=XR_NATIVE_DECLARATION_TASK_RESULT)continue;
+            task_catalog_word(packet,p+30)!=XR_NATIVE_DECLARATION_TASK_RESULT)continue;
         CHECK(start==SIZE_MAX);start=p;
     }
-    CHECK(start!=SIZE_MAX);size_t cursor=start+62;
+    CHECK(start!=SIZE_MAX);CHECK(!task_catalog_word(packet,start+26));
+    CHECK(task_catalog_word(packet,start+30)==XR_NATIVE_DECLARATION_TASK_RESULT);
+    size_t cursor=start+66;
     CHECK(task_catalog_word(packet,cursor)==2);cursor+=4;
     size_t constraints[2]={0};
     for(unsigned p=0;p<2;++p) {
@@ -64,7 +67,7 @@ static void task_catalog_rejections(const XrXirCompileContext *context,
         variants[v]=cursor+4;cursor=task_catalog_name(packet,cursor,variant_names[v]);
         begins[v]=cursor;cursor+=4;counts[v]=cursor;cursor+=4;
     }
-    const size_t offsets[]={start+26,start+30,constraints[0],constraints[1],names[0],
+    const size_t offsets[]={start+30,start+34,constraints[0],constraints[1],names[0],
         types[1],types[2],flags[1],variants[1],counts[1],begins[2],counts[3]};
     const uint8_t changes[]={1,1,XR_XIR_CONSTRAINT_ERROR,XR_XIR_CONSTRAINT_ERROR,1,1,1,4,1,1,1,1};
     XrCompileResourceStats before={0};CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
