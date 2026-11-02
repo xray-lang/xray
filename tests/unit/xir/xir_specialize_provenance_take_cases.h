@@ -205,6 +205,8 @@ static void provenance_source_fields(const XrXirCompileContext *context,
     /* A different legal constant has no new permissions, but it is still a
      * different Source and must not consume the old owning derivation. */
     CHECK(xr_xir_compile_structure_verify_v2(context,&changed,source->construction,NULL)==XR_XIR_OK);
+    CHECK(xir_construction_verify(context,&changed,source->construction,NULL)==XR_XIR_OK);
+    CHECK(xir_effects_source_body_match_input(context,(XirEffectInput){&changed,source->construction,NULL},effects)==XR_XIR_BAD_STRUCTURE);
     CHECK(xr_xir_compile_verify_source_effects_v2(context,&changed,source->construction,effects,NULL)==XR_XIR_BAD_STRUCTURE);
     operations[row]=original->instructions[row];
     XrXirBlock blocks[16];memcpy(blocks,original->blocks,original->block_count*sizeof(*blocks));
@@ -374,7 +376,8 @@ static void provenance_source_table_fields(const XrXirCompileContext *context,
     declaration->native.source_fingerprint[0]^=1;
     XrXirConstraint *constraints=(XrXirConstraint *)declaration->constraints;
     constraints[0].markers^=XR_XIR_CONSTRAINT_SENDABLE;
-    provenance_source_type_status(context,source,effects,XR_XIR_BAD_STRUCTURE);
+    /* The changed nominal constraint disagrees with its real constructor. */
+    provenance_source_type_status(context,source,effects,XR_XIR_BAD_TYPE);
     constraints[0].markers^=XR_XIR_CONSTRAINT_SENDABLE;
     XrXirNominalField *fields=(XrXirNominalField *)declaration->fields;
     XrXirType field=fields[0].type;fields[0].type=field==XR_XIR_I64?XR_XIR_BOOL:XR_XIR_I64;
