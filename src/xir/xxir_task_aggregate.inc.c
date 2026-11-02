@@ -40,7 +40,10 @@ static void task_aggregate_complete(XirTaskGroup *group) {
         XR_CHECK(group->kind==XIR_TASK_AGGREGATE_ALL,"a nonempty first group selects an actual terminal member");
         result.status=XR_XIR_CALL_RETURNED;prepared=task_aggregate_array(group,&result.value);
     }
-    if(prepared!=XR_XIR_VALUE_OK){xr_xir_call_result_drop(&result);result.status=task_core_value_status(prepared);}
+    if(prepared!=XR_XIR_VALUE_OK) {
+        xr_xir_call_result_drop(&result);result.status=task_core_value_status(prepared);
+        task_core_record_shutdown(group->executor,&result);
+    }
     if(group->winner)task_group_cancel_members(group);
     task_group_publish(group,&result);
 }
