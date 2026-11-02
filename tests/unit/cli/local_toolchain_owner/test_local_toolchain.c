@@ -6,6 +6,14 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s error=%lu\n", __LINE__, #c, GetLastError()); exit(1); } } while (0)
+static bool system_library_path(const char *path,const char *name) {
+    if(!path)return false;
+    size_t length=strlen(path);const char *base=path;
+    for(const char *at=path;*at;++at)if(*at=='/'||*at=='\\')base=at+1;
+    bool absolute=(length>=3 && path[1]==':' && (path[2]=='/'||path[2]=='\\')) ||
+        (length>=2 && path[0]=='\\' && path[1]=='\\');
+    return absolute && !_stricmp(base,name);
+}
 #include "base/xmalloc.h"
 #include "base/xwindows_utf8.h"
 static void *physical_malloc(size_t n) { return xr_malloc(n); }
@@ -13,7 +21,6 @@ static void physical_free(void *p) { xr_free(p); }
 typedef struct Block { void *p; size_t size; } Block;
 static Block blocks[8192];
 static size_t attempts, fail_at = SIZE_MAX, live, total, peak;
-static uint64_t edges[8192]; static size_t edge_count; static bool record_edges;
 static void *observed_malloc(size_t n) {
     if (attempts++ == fail_at) return NULL;
     void *p = physical_malloc(n); if (!p) return NULL;
@@ -33,22 +40,12 @@ static void observed_free(void *p) {
 #undef xr_free
 #define xr_malloc observed_malloc
 #define xr_free observed_free
-#define xr_compile_resources_work local_real_work
 #include "base/xcompile_resources.c"
-#undef xr_compile_resources_work
 #undef xr_malloc
 #undef xr_free
 #define xr_malloc physical_malloc
 #define xr_free physical_free
-XR_FUNC XrCompileResourceStatus xr_compile_resources_work(XrCompileResources *r, uint64_t n) {
-    XrCompileResourceStatus status = local_real_work(r,n);
-    if (record_edges && status == XR_COMPILE_RESOURCE_OK) {
-        XrCompileResourceStats stats; CHECK(xr_compile_resources_stats(r,&stats) == XR_COMPILE_RESOURCE_OK);
-        if (!edge_count || edges[edge_count-1] != stats.work) { CHECK(edge_count < 8192); edges[edge_count++] = stats.work; }
-    }
-    return status;
-}
-static const XrCompileResourceLimits defaults = {UINT64_C(1)<<30,UINT64_C(256)<<20,UINT64_C(8)<<30};
+static const XrCompileResourceLimits defaults = {XR_COMPILE_MEMORY_ORDINARY,0,true};
 static void reset(size_t failure) { CHECK(!live); attempts=total=peak=0; fail_at=failure; }
 static DWORD handles(void) { DWORD count=0; CHECK(GetProcessHandleCount(GetCurrentProcess(),&count)); return count; }
 #ifndef LOCAL_PRODUCTION
@@ -98,22 +95,18 @@ static XtcXirLocalStatus parsed(const wchar_t *text, size_t bytes, size_t failur
             CHECK(!strcmp(values[2],"10.0.22621.0\\") && !strcmp(values[3],"C:\\Windows")); }
     }
     CHECK(xr_compile_resources_stats(resources,stats)==XR_COMPILE_RESOURCE_OK);
-    CHECK(stats->allocated_bytes==total && stats->live_bytes==live && stats->peak_bytes==peak);
+    CHECK(stats->allocated_bytes==total && stats->held_bytes==live && stats->peak_bytes==peak);
     xr_compile_resources_release(resources); xtc_xir_local_toolchain_free(owner); CHECK(!live); return status;
 }
 static void parser_tests(void) {
-    XrCompileResourceStats base={0},stats={0}; record_edges=true; edge_count=0;
+    XrCompileResourceStats base={0},stats={0};
     CHECK(parsed(environment,sizeof(environment)-2,SIZE_MAX,&defaults,&base)==XTC_XIR_LOCAL_OK);
-    record_edges=false; size_t count=attempts, cuts=edge_count;
+    size_t count=attempts;
     for(size_t i=0;i<count;++i) CHECK(parsed(environment,sizeof(environment)-2,i,&defaults,&stats)==XTC_XIR_LOCAL_OUT_OF_MEMORY);
-    for(size_t i=0;i<cuts;++i) { XrCompileResourceLimits limit=defaults; limit.work=edges[i]-1;
-        CHECK(parsed(environment,sizeof(environment)-2,SIZE_MAX,&limit,&stats)==XTC_XIR_LOCAL_BUDGET); }
-    for(unsigned axis=0;axis<3;++axis) for(unsigned minus=0;minus<2;++minus) {
+    for(unsigned minus=0;minus<2;++minus) {
         XrCompileResourceLimits limit=defaults;
-        if(axis==0)limit.allocated_bytes=base.allocated_bytes-minus;
-        if(axis==1)limit.live_bytes=base.peak_bytes-minus;
-        if(axis==2)limit.work=base.work-minus;
-        CHECK(parsed(environment,sizeof(environment)-2,SIZE_MAX,&limit,&stats)==(minus?XTC_XIR_LOCAL_BUDGET:XTC_XIR_LOCAL_OK));
+        limit.memory_mode=XR_COMPILE_MEMORY_FINITE;limit.memory_limit=base.peak_bytes-minus;
+        CHECK(parsed(environment,sizeof(environment)-2,SIZE_MAX,&limit,&stats)==(minus?XTC_XIR_LOCAL_MEMORY_LIMIT:XTC_XIR_LOCAL_OK));
     }
     static const wchar_t duplicate[]=L"SystemRoot=C:\\Windows\r\nsystemroot=C:\\other\r\n";
     CHECK(parsed(duplicate,sizeof(duplicate)-2,SIZE_MAX,&defaults,&stats)==XTC_XIR_LOCAL_INVALID);
@@ -123,7 +116,7 @@ static void parser_tests(void) {
     CHECK(parsed(bad_utf,sizeof(bad_utf),SIZE_MAX,&defaults,&stats)==XTC_XIR_LOCAL_INVALID);
     static const wchar_t nul[]={L'S',0,L'='};
     CHECK(parsed(nul,sizeof(nul),SIZE_MAX,&defaults,&stats)==XTC_XIR_LOCAL_INVALID);
-    printf("environment %zu real malloc, %zu work boundaries, three-axis exact/minus1, physical zero PASS\n",count,cuts);
+    printf("environment %zu real malloc, finite held-memory exact/minus1, physical zero PASS\n",count);
 }
 static void windows_tests(void) {
     for(unsigned api=0;api<2;++api) for(unsigned e=0;e<3;++e) {
@@ -177,21 +170,23 @@ static void real_once(char **argv) {
     printf("status=%u stage=%u domain=%u code=%d os=%u exit=%d\n",(unsigned)status,(unsigned)diagnostic.stage,
         (unsigned)diagnostic.domain,diagnostic.code,diagnostic.os_error,diagnostic.child_exit);
     XrCompileResourceStats stats; CHECK(xr_compile_resources_stats(r,&stats)==XR_COMPILE_RESOURCE_OK);
-    CHECK(stats.allocated_bytes==total && stats.live_bytes==live && stats.peak_bytes==peak);
+    CHECK(stats.allocated_bytes==total && stats.held_bytes==live && stats.peak_bytes==peak);
     xr_compile_resources_release(r);
     if(status==XTC_XIR_LOCAL_OK) {
         CHECK(owner && xtc_xir_local_toolchain_resources(owner)==r);
         const XtcXirLocalToolchainView *view=xtc_xir_local_toolchain_view(owner);
         const XrXirRuntimeSdk *sdk=xtc_xir_local_toolchain_sdk(owner);
-        CHECK(view->library_count==6 && xr_xir_runtime_sdk_resources(sdk)==r);
-        CHECK(view->libraries[4].kind==XR_XIR_INVOCATION_SYSTEM && view->libraries[5].kind==XR_XIR_INVOCATION_SYSTEM);
+        CHECK(view->library_count==7 && xr_xir_runtime_sdk_resources(sdk)==r);
+        CHECK(view->libraries[4].kind==XR_XIR_INVOCATION_SYSTEM && view->libraries[5].kind==XR_XIR_INVOCATION_SYSTEM &&
+            view->libraries[6].kind==XR_XIR_INVOCATION_SYSTEM);
+        CHECK(system_library_path(view->libraries[6].path,"advapi32.lib"));
         CHECK(xr_xir_runtime_sdk_facts(sdk)->program_abi==XR_XIR_PROGRAM_ABI_VERSION);
         printf("compiler=%s\nlinker=%s\nworkspace=%s\nsdk=%s\n",view->compiler,view->linker,view->workspace_parent,xr_xir_runtime_sdk_root(sdk));
-        for(unsigned i=0;i<6;++i) { CHECK(view->libraries[i].path); printf("library%u=%s\n",i,view->libraries[i].path); }
+        for(unsigned i=0;i<7;++i) { CHECK(view->libraries[i].path); printf("library%u=%s\n",i,view->libraries[i].path); }
     } else CHECK(!owner);
     xtc_xir_local_toolchain_free(owner); CHECK(!live);
-    printf("initial_handles=%lu final_handles=%lu allocations=%zu total=%zu peak=%zu work=%llu physical_heap=0\n",
-        initial,handles(),attempts,total,peak,(unsigned long long)stats.work);
+    printf("initial_handles=%lu final_handles=%lu allocations=%zu total=%zu peak=%zu held_before_free=%llu physical_heap=0\n",
+        initial,handles(),attempts,total,peak,(unsigned long long)stats.held_bytes);
     CHECK((int)status==atoi(argv[4]));
 }
 int wmain(int argc,wchar_t **wide) {

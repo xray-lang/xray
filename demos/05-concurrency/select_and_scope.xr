@@ -1,5 +1,5 @@
 // Demo: Select and Structured Concurrency
-// select, defer, scope, linked scope
+// select, defer, scope, cancellation and cleanup
 //
 // Run: xray demos/05-concurrency/select_and_scope.xr
 

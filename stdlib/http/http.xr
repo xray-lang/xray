@@ -1007,7 +1007,7 @@ enum _ServerControl {
     StopRequested
 }
 
-fn _serverStopWatch(running: Atomic<bool>) {
+fn _serverStopWatch(running: Atomic<bool>) throws(_ServerControl) {
     while (running.load()) {
         time.sleep(HTTP_SERVER_ACCEPT_POLL_MS)
     }
@@ -1035,7 +1035,7 @@ fn _serverListen(router: _ServerRouter, port: i64, running: Atomic<bool>) -> boo
     const snapshot: _ServerRouter = copy(router)
     var healthy = true
     try {
-        // The watcher converts an ordinary lifecycle transition into linked
+        // The watcher converts an ordinary lifecycle transition into a failing
         // scope cancellation.  Active reads are therefore cancelled and run
         // their socket defer before listen returns; completed child tasks are
         // reaped by the scope without an ever-growing task registry.
@@ -1043,7 +1043,7 @@ fn _serverListen(router: _ServerRouter, port: i64, running: Atomic<bool>) -> boo
          * boundary needs the binding itself proven shared, so bind it once as
          * a const alias of the same atomic and hand that to every task. */
         const shared_running: Atomic<bool> = running
-        linked scope {
+        try scope {
             go _serverStopWatch(shared_running)
             while (running.load()) {
                 net.setAcceptDeadline(listener!, time.monotonic() + HTTP_SERVER_ACCEPT_POLL_MS)
