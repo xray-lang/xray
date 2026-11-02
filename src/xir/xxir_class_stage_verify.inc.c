@@ -88,16 +88,63 @@ static XrXirStatus class_stage_wrapper(const XrXirModule *module,ClassStagePair 
         end->args[1] || end->immediate || !class_stage_plain(end))return XR_XIR_BAD_STRUCTURE;
     return XR_XIR_OK;
 }
+static XrXirStatus class_stage_prefix(const XrXirModule *module,ClassStagePair child,
+    ClassStagePair parent,uint32_t call,XrCompileRequestControl *control) {
+    const XrXirFunction *body=&module->functions[child.helper];
+    const XrXirTypeNode *derived=xr_xir_type_node(module->types,module->functions[child.constructor].result);
+    const XrXirTypeNode *base=xr_xir_type_node(module->types,module->functions[parent.constructor].result);
+    uint32_t fields=base->nominal.field_count,slots=0,steps=0;
+    if(!fields)return XR_XIR_OK;
+    if(fields>derived->nominal.field_count || (uint64_t)call+1+2*(uint64_t)fields>=body->instruction_count)
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirNominalTable *table=module->types->nominals;
+    uint32_t declared=table->declarations?table->declarations[child.owner].field_count:
+        table->identities[child.owner].field_count;
+    if(declared!=derived->nominal.field_count || (declared && !(table->declarations?
+        (const void *)table->declarations[child.owner].fields:(const void *)table->identities[child.owner].fields)))
+        return XR_XIR_BAD_STRUCTURE;
+    for(uint32_t i=0;i<call;++i) {
+        XrXirStatus status=xir_receive_step(control,&steps);if(status!=XR_XIR_OK)return status;
+        const XrXirInstruction *op=&body->instructions[i];
+        if(op->op!=XR_XIR_LOCAL_UNINIT)continue;
+        if(slots>=derived->nominal.field_count)return XR_XIR_UNSUPPORTED;
+        uint32_t flags=table->declarations?table->declarations[child.owner].fields[slots].flags:
+            table->identities[child.owner].fields[slots].flags;
+        if(op->type!=derived->nominal.fields[slots] || op->immediate!=((flags&XR_XIR_FIELD_MUTABLE)?0:1))
+            return XR_XIR_BAD_STRUCTURE;
+        ++slots;
+    }
+    if(slots!=derived->nominal.field_count)return XR_XIR_BAD_STRUCTURE;
+    uint32_t place=0;
+    for(uint32_t f=0;f<fields;++f) {
+        XrXirStatus status=xir_receive_step(control,&steps);if(status!=XR_XIR_OK)return status;
+        while(place<call && body->instructions[place].op!=XR_XIR_LOCAL_UNINIT) {
+            status=xir_receive_step(control,&steps);if(status!=XR_XIR_OK)return status;
+            ++place;
+        }
+        if(place>=call || base->nominal.fields[f]!=derived->nominal.fields[f])return XR_XIR_BAD_TYPE;
+        uint32_t projection=call+1+2*f;const XrXirInstruction *field=&body->instructions[projection],*write=field+1;
+        if(field->op!=XR_XIR_TUPLE_FIELD || field->type!=base->nominal.fields[f] ||
+            field->args[0]!=(uint64_t)body->parameter_count+call || field->args[1] ||
+            field->immediate!=f || !class_stage_plain(field) || write->op!=XR_XIR_LOCAL_WRITE ||
+            write->type!=XR_XIR_UNIT || write->args[0]!=(uint64_t)body->parameter_count+place ||
+            write->args[1]!=(uint64_t)body->parameter_count+projection || write->immediate ||
+            !class_stage_plain(write))return XR_XIR_BAD_STRUCTURE;
+        ++place;
+    }
+    return XR_XIR_OK;
+}
 /* A single block makes the parent call's exactly-once normal-path property
  * explicit. More involved field transactions need their own CFG proof. */
 static XrXirStatus class_stage_parent_body(const XrXirModule *module,ClassStagePair pair,
-    uint32_t parent_helper,XrCompileRequestControl *control) {
+    ClassStagePair parent,XrCompileRequestControl *control) {
     const XrXirFunction *body=&module->functions[pair.helper];
     if(body->block_count!=1 || !body->blocks || body->blocks[0].first ||
         body->blocks[0].count!=body->instruction_count || body->blocks[0].panic || body->blocks[0].frontier)
         return XR_XIR_UNSUPPORTED;
     if(!body->instruction_count || !body->instructions)return XR_XIR_BAD_STRUCTURE;
-    uint32_t calls=0,steps=0;
+    if((uint64_t)body->parameter_count+body->instruction_count>UINT32_MAX)return XR_XIR_BUDGET;
+    uint32_t calls=0,call=0,steps=0;
     for(uint32_t i=0;i<body->instruction_count;++i) {
         XrXirStatus status=xir_receive_step(control,&steps);if(status!=XR_XIR_OK)return status;
         const XrXirInstruction *op=&body->instructions[i];
@@ -106,11 +153,13 @@ static XrXirStatus class_stage_parent_body(const XrXirModule *module,ClassStageP
             op->op==XR_XIR_CLEANUP_LEAVE || op->op==XR_XIR_CLEANUP_ERROR)return XR_XIR_UNSUPPORTED;
         if(op->op==XR_XIR_RETURN && (i+1!=body->instruction_count || calls!=1))return XR_XIR_BAD_TYPE;
         if(!calls && (op->op==XR_XIR_LOCAL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE))return XR_XIR_UNSUPPORTED;
-        if(xr_xir_op_references_function(op->op) && op->immediate==parent_helper) {
+        if(xr_xir_op_references_function(op->op) && op->immediate==parent.helper) {
             if(op->op!=XR_XIR_CALL || ++calls!=1)return XR_XIR_BAD_TYPE;
+            call=i;
         }
     }
-    return calls==1 && body->instructions[body->instruction_count-1].op==XR_XIR_RETURN?XR_XIR_OK:XR_XIR_BAD_TYPE;
+    if(calls!=1 || body->instructions[body->instruction_count-1].op!=XR_XIR_RETURN)return XR_XIR_BAD_TYPE;
+    return class_stage_prefix(module,pair,parent,call,control);
 }
 static XrXirStatus class_stage_arguments(const XrXirModule *module,uint32_t caller,
     uint32_t instruction,uint32_t helper,XrCompileRequestControl *control) {
@@ -154,7 +203,7 @@ static XrXirStatus class_stage_use(const XrXirModule *module,uint32_t caller,uin
     uint32_t from=identity->module,to=d->functions[target.constructor].module;
     if(!xr_xir_module_imports(d,from,to) || (!xr_xir_module_same_scope(d,from,to) &&
         !d->functions[target.constructor].exported))return XR_XIR_BAD_TYPE;
-    return class_stage_parent_body(module,child,target.helper,control);
+    return class_stage_parent_body(module,child,target,control);
 }
 static XrXirStatus class_stage_exposed(const XrXirModule *module,uint32_t helper,
     XrCompileRequestControl *control) {
@@ -199,7 +248,7 @@ static XrXirStatus class_stage_derived(const XrXirModule *module,uint32_t owner,
     ClassStagePair pair={0},base={0};
     if(status==XR_XIR_OK)status=class_stage_pair(module,helper,&pair,control);
     if(status==XR_XIR_OK)status=class_stage_pair(module,parent_helper,&base,control);
-    if(status==XR_XIR_OK)status=class_stage_parent_body(module,pair,base.helper,control);
+    if(status==XR_XIR_OK)status=class_stage_parent_body(module,pair,base,control);
     return status;
 }
 XR_FUNC XrXirStatus xir_compile_class_stage_verify(const XrXirModule *module,
