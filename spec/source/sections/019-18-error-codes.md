@@ -66,6 +66,7 @@ order: 019
 | `E0333` | `XR_ERR_ANALYZE_ERASED_THROWS` | freestanding 或 `@strict(alloc)` 中使用擦除错误类型，包括裸 `throws` 与 `throws(Error)` |
 | `E0334` | `XR_ERR_ANALYZE_CATCH_TYPE_NAME` | catch 头部单个大写开头标识符，提示使用 `catch (e: T)` |
 | `E0335` | `XR_ERR_ANALYZE_IMPORTED_TOP_LEVEL` | 被导入模块包含独立的表达式语句或控制流语句；移到入口文件，模块只保留声明及状态初始化 |
+| `E0336` | `XR_ERR_ANALYZE_REDUNDANT_TRY` | `try`、`try?`、`try!` 或 `try { }` 的作用范围内没有可能抛错的调用、`await` 或 `scope`；删去该 `try` |
 
 #### Analyzer
 
@@ -268,6 +269,7 @@ These numbers follow the Task329 §2.9 decision. Header definitions and position
 | `E0333` | `XR_ERR_ANALYZE_ERASED_THROWS` | Erased errors in freestanding or @strict(alloc), including bare throws and throws(Error) |
 | `E0334` | `XR_ERR_ANALYZE_CATCH_TYPE_NAME` | Single uppercase-leading catch identifier; suggest catch (e: T) |
 | `E0335` | `XR_ERR_ANALYZE_IMPORTED_TOP_LEVEL` | Imported module contains a standalone expression or control-flow statement; move it to the entry file and retain only declarations and state initialization |
+| `E0336` | `XR_ERR_ANALYZE_REDUNDANT_TRY` | `try`, `try?`, `try!` or `try { }` covers no call, `await` or `scope` that can throw; remove the `try` |
 
 #### Analyzer
 

@@ -8,21 +8,20 @@ order: 011
 
 ## 10. 并发与协程 (Concurrency)
 
-> 真值源：`src/coro/xcoro*.c`、`src/coro/xtask*.c`、`src/coro/xchannel.c`、`src/coro/xscope*.c`、`src/frontend/analyzer/xanalyzer_escape.c` 与 `docs/rules/design-principles.md`。
-
 xray 的并发是**协程 (goroutine 风格) + Channel + 强静态约束**。设计目标：让 `go worker(args)` 与普通调用具有同一套显式参数和所有权边界，同时在语言的安全子集内**编译期保证不发生数据竞争**——这条保证的精确形式、它的边界，以及本节各构造建立的同步边，定义在 §16.9。
 
 ### 10.1 协程模型
 
-| 维度 | 选择 |
+| 维度 | 语言保证 |
 |--|--|
-| 调度模型 | M:N（用户态协程 + 多 OS 线程） |
-| 调度策略 | 协作式（Channel、`await`、`Task.yieldNow()` 等挂起点；后向跳转不是取消检查点）+ work-stealing |
-| 栈模型 | Stackless（每协程独立 VM 值栈 + 帧数组，按需增长，无原生 C 栈） |
-| 创建开销 | ~微秒级（初始 VM 值栈约 64 槽 + 4 帧，非原生栈） |
-| 上下文切换 | VM 上下文切换（保存/恢复 VM 帧），无原生栈切换、无 syscall |
+| 函数着色 | 无。普通函数不写 `async` / `suspend`；编译器推导每个函数是否可能挂起。普通调用的合法性不依赖这个推导，只有显式要求不挂起的位置（`nosuspend fn` 类型的函数字面量、`defer` 体等）才检查它 |
+| 调度 | 协作式：只在挂起点（`await`、Channel、`select`、`Task.yieldNow()`、sleep、IO）切换；不保证抢占，循环后向跳转既不是让出点也不是取消检查点 |
+| 并行 | 协程可能在多个 OS 线程上并行运行（M:N），也可能在两个挂起点之间换到另一个线程；程序不得依赖单线程执行顺序 |
+| 栈模型 | 无栈：只有可能挂起的函数保存跨挂起点存活的状态，其余函数按普通调用执行；不能跨 C 回调挂起，`CFn` 回调必须是 `nosuspend`（§2.8） |
 
-协程默认分布在多个 worker 线程上；运行时根据 CPU 核数自动设置 GOMAXPROCS 风格的并行度。
+未加 `nosuspend` 前缀的函数类型默认可能挂起（§2.8）。不含挂起点的长循环不会把 CPU 让给同一线程上的其他协程，也不响应取消；需要时调用 `Task.yieldNow()` 或检查 `Task.isCancelled()`（§10.4、§10.10）。worker 线程数、帧布局和创建开销属于实现，本规范不作承诺。
+
+经接口值或可被覆写的方法发生的调用，按程序中全部可能的实现推导是否挂起：任一实现可能挂起，该调用就可能挂起。因此新增一个会挂起的实现，可能让远处原本合法的 `nosuspend` 上下文报错，诊断会指出是哪个实现。接口要求或类方法带有包级 `no_suspend` 声明承诺（§5.2.11）时，每个实现都必须在自己的定义处证明不挂起，经该要求的调用不会挂起。实现集合不闭合的情形（动态库导出的接口、可替换入口、外部实现）一律按可能挂起处理。
 
 ### 10.2 `go` — 启动协程
 
@@ -72,7 +71,7 @@ var task = go fn(x: i64) -> i64 {
 
 **语义**：
 - 每个 `go` 表达式都返回一个 `Task<T, E>`，其中 `T` 是被调函数的返回类型，`E` 是其声明的错误类型，默认 `Never`。返回 Unit 的任务仍保留 Unit 成功值，不把它映射成 `null`。
-- 协程在闲置 worker 线程中调度（M:N）。
+- 协程由运行时调度，可能与启动它的代码并行运行（§10.1）。
 - `go(name: ...)` 只设置调试名称，不影响调度顺序。
 - 协程内**未捕获**异常存在 `Task` 中，由 `await` 时重抛。
 - 参数、拥有式捕获和结果均按真实类型检查 Sendable；普通泛型在定义处按约束检查，Checked 特化后复验。可复制值按声明保留逻辑副本，复制在 class 与同步身份边界停止；Array 的资格由全部元素决定，const、COW、引用计数或单 worker 不额外授予 Sendable。借用 ref、Slice/MutSlice、Cell 与非 Sendable 值不能跨此边界。不可复制且 Sendable 的资源仅可按消费参数转移，不进入普通可复制捕获或 Task 结果。
@@ -84,32 +83,38 @@ var task = go fn(x: i64) -> i64 {
 AwaitExpr ::= 'await' UnaryExpr
 ```
 
-`await` 只作用于 `Task<T, E>`，成功时得到 `T`。等待是可能挂起的操作，不阻塞 OS 线程。传播标记顺序固定为 `try await t`；在 `try { }` 区域内可直接写 `await t`。
+`await` 只作用于 `Task<T, E>`，成功时得到 `T`。等待是可能挂起的操作，不阻塞 OS 线程。`E = Never` 时 `await t` 不抛业务错误，不写 `try`；否则传播标记顺序固定为 `try await t`，在 `try { }` 区域内可直接写 `await t`。
 
 ```xray @id=coro-await-forms @fragment
-var task = go fetch(url)
+var job = go compute(1)            // Task<i64, Never>
+var n = await job                  // 不抛业务错误，不写 try
+
+var task = go fetch(url)           // fetch 声明了 throws(FetchErr)
 var result = try await task
 
-var tasks = [go compute(2), go compute(3), go compute(4)]
+var tasks = [go fetch(a), go fetch(b), go fetch(c)]
 var results = try Task.all(tasks)
 var first = try Task.first(tasks)
 var firstOk = try Task.firstSuccess(tasks)
 var bounded = try Task.timeout(task, 1000)
 ```
 
-- 等待的业务错误类型由 Task 的 `E` 决定，再并上 `Cancelled`；即使 `E = Never`，显式等待也仍可能遇到子任务取消。无需从任务创建点或函数体反推错误集合。
+- 等待的业务错误类型就是 Task 的 `E`，无需从任务创建点或函数体反推错误集合。取消不是业务错误，不进入这个类型。
 - 子任务的 enum 错误沿值错误通道传播，panic 沿 panic 通道传播。成功的 `null` 是真实 Optional 结果，不表示任务取消或失败。
 - Task 结果必须可复制且 Sendable；重复等待产生独立的逻辑值副本，class 与同步身份保持其身份。某次结果复制失败不消费或修改任务的终态。
-- 当前等待者自身被取消与等待一个已经取消的子任务不同；前者按 §10.4 的取消展开处理。
+- **等待已取消的任务**：被等待的任务以 `Cancelled` 结束时，等待方自身在这个 `await` 处进入取消展开（§10.4）：执行 `defer`，不能被 `catch (e)` 或 `catch panic` 捕获，自身也以 `Cancelled` 结束，并按同一规则继续影响等待它的任务。取消因此沿等待链向上传播，不进入任何函数的错误签名。等待方自身已被请求取消时，同样在这个挂起点按 §10.4 展开。
+- 需要观察取消而不传播时，使用 `t.awaitResult()` 或 `t.poll()`，它们以 `TaskResult.Cancelled` 值报告（§10.4）。
 
 多个任务的等待使用挂起库函数，前面不再写 `await`：
 
 | 函数 | 返回 | 业务错误类型 | 其余任务 |
 |--|--|--|--|
-| `Task.all(ts)` | `Array<T>`，与输入顺序一致 | `E \| Cancelled` | 失败时先请求取消其余，再传播；不等待清理 |
-| `Task.first(ts)` | 最先结束任务的值，或传播它的失败 | `E \| Cancelled` | 先请求取消其余，再返回或传播；不等待清理 |
-| `Task.firstSuccess(ts)` | 第一个成功值 | 全部失败时 `TaskFailures<E>`，另有 `Cancelled` | 先请求取消其余，再返回或传播；不等待清理 |
-| `Task.timeout(t, ms)` | `T` | `E \| Cancelled \| Timeout` | 超时后取消 `t` |
+| `Task.all(ts)` | `Array<T>`，与输入顺序一致 | `E` | 失败时先请求取消其余，再传播；不等待清理 |
+| `Task.first(ts)` | 最先结束任务的值，或传播它的失败 | `E` | 先请求取消其余，再返回或传播；不等待清理 |
+| `Task.firstSuccess(ts)` | 第一个成功值 | 全部失败时 `TaskFailures<E>` | 先请求取消其余，再返回或传播；不等待清理 |
+| `Task.timeout(t, ms)` | `T` | `E \| Timeout` | 超时后取消 `t` |
+
+输入任务以 `Cancelled` 结束、且这次取消不是该聚合调用自己请求的，按上面的等待规则使调用方进入取消展开：`Task.all` 在任一输入被取消时如此，`Task.first` 在最先结束的输入是取消时如此，`Task.timeout` 在 `t` 于超时前被取消时如此。被取消的输入如何参与 `Task.firstSuccess` 的结果，随下述混合结果仲裁一并冻结。
 
 `Task.first`、`Task.firstSuccess` 及 `Task.all` 的失败分支，按各自规则选定结果后，先向其余尚未结束的输入任务发出取消请求，再返回或传播所选结果；余任务终结及其 `defer` 完成不是返回的前置条件。`Task.all` 的成功分支仍等全部输入任务成功，按输入顺序返回结果。
 
@@ -139,7 +144,7 @@ var outcome = t.awaitResult()
 
 跨 Task 发布和重复观察要求 T、E 可复制且 Sendable，PanicInfo 的完整可达图也必须拥有式、可复制且 Sendable；仅把绑定设为只读不满足这个要求。任务保留其终态，每个观察者取得独立逻辑快照；值复制与身份引用各遵守其拥有规则，不能借用已退出的执行器帧。
 
-**取消语义**：只在挂起点检查，包括 `await`、Channel、`select`、`Task.yieldNow()`、sleep 和 IO。被取消的任务执行 `defer` 并展开，`catch (e)` 与 `catch panic` 均不能捕获，也不把这种取消写进任务函数的错误签名。等待它的一方看到类型化的 `Cancelled`。
+**取消语义**：只在挂起点检查，包括 `await`、Channel、`select`、`Task.yieldNow()`、sleep 和 IO。被取消的任务执行 `defer` 并展开，`catch (e)` 与 `catch panic` 均不能捕获，也不把这种取消写进任务函数的错误签名。用 `await` 或聚合函数等待它的一方按 §10.3 同样进入取消展开；`awaitResult()` 与 `poll()` 以 `TaskResult.Cancelled` 报告而不传播。取消展开到达逻辑根任务时程序结束：独立程序在 stderr 打印 `[Uncaught Cancellation]` 诊断并以退出码 1 退出（与 §8 的未捕获错误、panic 一致），嵌入宿主只结束本次执行。
 
 循环后向跳转不是取消检查点。长循环可以通过 `Task.isCancelled()` 主动检查并收尾，或插入 `Task.yieldNow()` 提供调度与取消机会。运行时心跳或看门狗的观测不改变这些语言级检查点；取消请求也不保证能抢占不挂起的 native/FFI 调用。
 
@@ -155,14 +160,16 @@ Channel 以稳定的 `const` 绑定命名；其类型来自受审计的同步能
 ```xray @id=channel-decl-variants
 const ch  = Channel<i64>(10)    // 有缓冲，capacity = 10
 const ch0 = Channel<i64>(0)     // 无缓冲（同步握手）
-const cha = Channel(3)          // 元素类型从首次 send 推断
+const cha: Channel<i64> = Channel(3)   // 元素类型由类型上下文给出
 ```
+
+构造时必须能确定元素类型：写 `Channel<T>(n)`，或由类型上下文给出；不从后续 `send` 推断。
 
 **API**（注意全部为 **camelCase**）：
 
 | 方法 | 签名 | 行为 |
 |--|--|--|
-| `send(v)` | `(T) -> ()` | 阻塞发送；满则等待消费者；channel 已关闭时抛异常 |
+| `send(v)` | `(T) -> ()` | 阻塞发送；满则等待消费者；channel 已关闭时 panic（`E0702`） |
 | `recv()` | `() -> Recv<T>` | 阻塞接收；关闭且缓冲为空时返回 `Recv.Closed` |
 | `recvOr(default)` | `(T) -> T` | 阻塞接收；收到值时直接返回 `T`，关闭且缓冲为空时返回 `default`，不分配 `Recv<T>` 包装 |
 | `trySend(v)` | `(T) -> SendResult` | 非阻塞发送；返回 `Sent` / `Full` / `Closed` |
@@ -214,7 +221,7 @@ fn producer(ch: Channel<i64>) {
 - **MPMC**（多生产者多消费者）。
 - 有缓冲 ch：满则发送方挂起，空则接收方挂起。
 - 无缓冲 ch：发送/接收必须同时握手（rendezvous）。
-- 关闭后：`send` 抛异常；`recv` 返回剩余 buffered value 的 `Recv.Value { value: v }`，取完后返回 `Recv.Closed`；`recvOr(default)` 返回剩余 buffered value，取完后返回 `default`；`tryRecv` 在空且未关闭时返回 `Recv.Empty`。
+- 关闭后：`send` 产生 `E0702` panic——向已关闭的 channel 发送是编程错误，与 Go 一致；需要把关闭当作正常结果处理时用 `trySend` 或 `sendTimeout`，它们返回 `SendResult.Closed`。`recv` 返回剩余 buffered value 的 `Recv.Value { value: v }`，取完后返回 `Recv.Closed`；`recvOr(default)` 返回剩余 buffered value，取完后返回 `default`；`tryRecv` 在空且未关闭时返回 `Recv.Empty`。
 - `for (msg in ch)` 等价于阻塞接收直到 channel 关闭且 drained；循环变量类型为 `T`。Channel 不支持 key-value 迭代。
 
 ### 10.6 `select`
@@ -244,7 +251,7 @@ select {
 
 **语义**：
 - 接收分支 `name from ch -> body`：在 ch 有数据时被选中，并把 `Recv.Value { value: name }` 的 payload 绑定到 `name`。
-- 发送分支 `value to ch -> body`：等价于 `ch.send(value)`，但仅在 ch 有空间时被选中；`value` 与 `ch.send` 遵守同一 transfer plan——execution-local heap 值必须显式写成 `copy(v)` 或 `move v`。
+- 发送分支 `value to ch -> body`：等价于 `ch.send(value)`，但仅在 ch 有空间时被选中；向已关闭 channel 的发送分支被选中时与 `send` 相同，产生 `E0702` panic；`value` 与 `ch.send` 遵守同一 transfer plan——execution-local heap 值必须显式写成 `copy(v)` 或 `move v`。
 - 默认分支 `_ -> body`：当前无任何分支就绪时立即执行；**省略默认分支**会让 select 阻塞直到某个分支就绪。
 - 多个分支同时就绪时**随机**选择一个（与 Go 一致）。
 
@@ -264,7 +271,7 @@ TryScopeStmt ::= 'try' ScopeStmt
 | 默认 `scope` | 取消其余兄弟任务 | 有 panic 时传播首个成功发布的 panic；否则传播首个成功发布的主体或子任务业务错误 |
 | `scope(isolated)` | 兄弟继续执行 | 有 panic 时沿 panic 通道传播；否则优先直接传播主体业务错误，没有主体业务错误时才以 `TaskFailures<E>` 汇总子业务错误 |
 
-设 B 为主体经过局部 catch 后仍会逃逸的业务错误集合（包括 handler 自己抛出的错误），E 为直接 go 子任务声明错误类型的 union。默认 scope 的完整业务错误类型为 `B | E`；isolated 为 `B | TaskFailures<E>`，其中 E=Never 时不产生子业务汇总通道。B、E 都为 Never 时，两种 scope 均免除 scope 传播标记；可能 panic 不改变该规则。这个空通道规则不为所有类型位置定义 `TaskFailures<Never> = Never`。主体的 `try await` 仍可能把 Cancelled 加入 B，不能只看子 E；`try?` / `try!` 可以消去相应业务逃逸，不能捕获 panic。最终完整逃逸集合仍须属于所在函数声明，写 try 不扩大签名。
+设 B 为主体经过局部 catch 后仍会逃逸的业务错误集合（包括 handler 自己抛出的错误），E 为直接 go 子任务声明错误类型的 union。默认 scope 的完整业务错误类型为 `B | E`；isolated 为 `B | TaskFailures<E>`，其中 E=Never 时不产生子业务汇总通道。B、E 都为 Never 时，两种 scope 均免除 scope 传播标记；可能 panic 不改变该规则。这个空通道规则不为所有类型位置定义 `TaskFailures<Never> = Never`。`try?` / `try!` 可以消去相应业务逃逸，不能捕获 panic。最终完整逃逸集合仍须属于所在函数声明，写 try 不扩大签名。
 
 正常块末仅 join 成员；主体 Error、Panic 或向外 return/break/continue 时，两种 scope 都取消并 drain 已接管成员。isolated 的子失败本身不取消兄弟。待履行的正常控制转移必须拥有其值并保活主体帧和有效借用；只有 drain 后没有更高优先级失败才履行，不能用 return 吞掉子 panic。多个 panic 选择首个成功发布者，不承诺墙钟顺序；其余失败保留原始载荷用于次级诊断并按唯一拥有责任释放。isolated 主体错误直接传播时，子业务错误仅作次级诊断，不隐式包装主体错误。
 
@@ -297,7 +304,7 @@ fn main() throws(TaskFailures<WorkerErr>) {
 try main()
 ```
 
-scope 自身引起的子任务取消不算失败，独立取消的成员也不被包装成业务错误或汇总项。父任务已在合法挂起检查点进入取消展开时，scope 取消并等待子任务，然后继续不可捕获的父取消；成员失败仅作次级诊断。单纯取消请求不直接改变帧、恢复位置或终态。scope 隐式等待不额外引入 `Cancelled`，但主体显式等待产生的 B 仍按上述规则检查。cleanup 逃逸 panic 始终遵守 §8.2.5 的终止规则。需要结果时保留句柄逐个等待或使用 §10.3 的库函数。scope 外的 `go` 是独立任务。这些目标语义尚待类型检查、调度器接口布局和共同执行测试接通，不能当作现有实现资格。
+scope 自身引起的子任务取消不算失败，独立取消的成员也不被包装成业务错误或汇总项。父任务已在合法挂起检查点进入取消展开时，scope 取消并等待子任务，然后继续不可捕获的父取消；成员失败仅作次级诊断。单纯取消请求不直接改变帧、恢复位置或终态。默认 scope 因成员失败而取消其余成员后，主体若在等待其中某个成员时进入取消展开（§10.3），展开止于 scope 边界：scope 照常取消并 drain 其余成员，再按上表传播首个失败；这次取消不越过 scope 向外传播。scope 的隐式等待不引入取消展开。cleanup 逃逸 panic 始终遵守 §8.2.5 的终止规则。需要结果时保留句柄逐个等待或使用 §10.3 的库函数。scope 外的 `go` 是独立任务。
 
 ### 10.8 `move` — 跨协程所有权转移
 
@@ -387,7 +394,7 @@ enum Ordering {
 
 `Ordering` 枚举由编译器自动注入（prelude），无需 import；底层 intrinsic 读取声明顺序 tag，不依赖用户可见 backing value。
 
-**完整族合同（2026-10-05 冻结，当前固定 i64 子集不等于完整实现）**：`Atomic<T>` 使用 §9.2 的闭合 AtomicValue/Number/Boolean 证明；复制句柄共享同一个同步身份，构造器每次产生独立对象，各 Instance 的模块初始化不能共享静态对象。构造和拥有式结果可能分配；值原子操作承诺无锁，不承诺 wait-free，也不以互斥锁后备。provider 必须用真实对齐 cell 鲜编/运行 `atomic_is_lock_free` 并核布局/ABI；不支持者明确拒绝，不只检查 `ATOMIC_*_LOCK_FREE == 2`。
+复制 `Atomic` 句柄共享同一个原子对象；每次构造产生一个独立对象，同一程序的不同实例不共享模块初始化产生的对象。值原子操作保证无锁（lock-free），不保证 wait-free，也不以互斥锁实现。
 
 | 操作 | 合法内存序 |
 |---|---|
@@ -395,9 +402,7 @@ enum Ordering {
 | store | Relaxed / Release / SeqCst |
 | add/sub/fetchAdd/fetchSub/swap/toggle/compareExchange | 五种 Ordering |
 
-省略 ordering 或合法 None 使用 SeqCst。必须是精确 prelude Ordering 声明/variant 身份，不按名字、整数或用户 backing value 准入。静态已知非法 load/store 序在 Checked 拒绝；动态非法序在 receiver 和所有实参按原顺序各一次求值后、任何原子读写前，结束为 CALL_BAD_ARGUMENT，fault detail 全零、不发布结果、不修改原子状态。此终态不属于普通 Error 或 panic，不被保护 panic handler 消费；初始化失败粘滞和清理沿既有合同。伪造 variant 在值准入先拒绝；不能降级为其他序、接受未知 tag 或将非法 C11 order 传给 provider。结构错误原 RUN_BAD_ARGUMENT→CALL_BAD_STATE 规则不变，Atomic 无效序使用独立 reason 精确接线。
-
-Ordering 的声明 module 由实际身份 factory 使用 STDLIB authority、namespace_id="prelude"、logical="prelude/builtin_symbols.def" 生成，physical root 不进入身份；Source 仍需真实同源 generated module、Unit initializer 与正常依赖/权限检查，不造可导入 prelude.xr 或按 query URI 授权。Ordering 的名义 Declaration/Identity 持久拥有 native id 与32字节同源治理 fingerprint；本族的 Ordering id 为4，普通用户名义声明的该记录必须全零。Checked/特化复验完整检查 governed VALUE 登记与 ENUM shape：零类型参数/约束/字段、exported、flags为零、五个精确有序无载荷 variant，以及 canonical prelude 声明 module、合法 initializer/dependency。clone、wire、投影、TypeArena 和 Program 对应检查保留这一事实。词法/hoisted/import 解析优先于 prelude；同名用户 enum 仍是不同名义身份，不获得内建资格。原可见性、构造和模块依赖检查不得被 id/flags/query 指针绕过。fingerprint 是公开同源治理事实而非不可复制认证签名；完整合法公共 builtin descriptor 可经普通 Checked 复验接受，但不授予任何用户私有权限或外部包真实性。
+省略 ordering 时使用 `SeqCst`。只接受 prelude 的 `Ordering` 值，同名的用户 enum 是不同类型，不能作为内存序。编译期已知的非法内存序（例如 `load(Ordering.Release)`）是编译错误；运行时传入的非法内存序在接收者和全部实参按原顺序求值后、任何原子读写之前终止本次执行，不修改原子状态，`catch` 与 `catch panic` 都不能捕获。
 
 compareExchange 是 strong CAS，公开结果 `(T, bool)` 是真正 Tuple，不可见虚假失败。单个 ordering 决定成功/失败序：
 
@@ -409,15 +414,11 @@ compareExchange 是 strong CAS，公开结果 `(T, bool)` 是真正 Tuple，不�
 | AcquireRelease | AcquireRelease | Acquire |
 | SeqCst | SeqCst | SeqCst |
 
-失败返回实际观察到的 old 且不写状态；成功返回线性化前 old。CAS 前以唯一真实 Tuple 表示私有预备精确 `(T,bool)` 的合法 scalar 字段和全部可失败 carrier/domain/arena retain、admission/work/预算、空结果槽及发布许可，最后检查取消/执行许可；预备值无别名、borrow 或公开 setter。准备失败不读写 cell、不发布结果，释放部分 owner。CAS 后只能不可失败地填 observed 和 success 两个 scalar payload 并转移已许可结果，不能再分配/retain/copy/admit或运行可能失败的验证。CAS 成功之后的父帧失败、预算失败或取消不能回滚已发生的操作；失败 CAS 仍返回实际 observed，不能返回原 expected 的副本。
+失败时返回实际观察到的旧值且不写入；成功时返回写入前的旧值。CAS 成功之后才发生的失败或取消不回滚这次写入。
 
-i64 加减沿 §2.3.1 的模 2^64 环绕；MIN delta 的 sub 不执行宿主有符号取负。f64 构造/load/store/swap/CAS 保完整 binary64 位型，CAS 按 bits 比较：正负零不同，同 payload NaN 可匹配，不同 payload 不匹配；不改变普通浮点相等规则。f64 RMW 每次用当前软件浮点核的 ADD/SUBTRACT 计算候选，再对 u64 bits CAS；失败须按最新 observed 重新计算，沿 §2.3.2 的 ties-even、次正规数与 canonical 算术 NaN，不用宿主 FPU/fenv、不融合或用加负数替代减法。每次实际尝试收费并检查取消/限额；成功后不把限额失败当作原子回滚。toString 取一次 SeqCst 快照，之后按既有 bool/i64/软件 f64 格式化产生独立拥有式 string。
+i64 的加减按 §2.3.1 模 2^64 环绕。f64 的构造、load、store、swap 和 compareExchange 保留完整 binary64 位型；compareExchange 按位比较：正零与负零不同，载荷相同的 NaN 可以匹配，载荷不同的不匹配。这不改变普通浮点 `==` 的规则。f64 的加减按 §2.3.2 的舍入规则计算，与其他写入竞争时按最新值重算直到成功。`toString()` 读取一次 `SeqCst` 快照。
 
-f64 add/sub/fetchAdd/fetchSub 每次 resume 至多尝试一次值 cell CAS。失败保存最新 observed 与已一次求值的实参，返回 canonical Unit CONTINUE；活动帧和 pc 保持 READY，下一 resume 重算软件候选。CONTINUE 不产生 SUSPEND、wake、language yield 或第二执行管线；poll/frame/work 真实收费、取消和释放沿同一个 Call driver，不能把无界内部重试藏在单次 resume。停止在成功之前不改 cell，成功后的取消不回滚；无竞争下的首次 load 仍只用合法读序。
-
-此处保留的 Atomic 执行约束包含逐尝试的执行许可、额度与取消检查。它与 §10.4 的 Task 取消只在挂起点展开之间的边界，须在 Task329/Task331 执行接入时由 lead/c 对齐；不能把不产生 SUSPEND 的 CONTINUE 当成新增的语言挂起点。
-
-不支持目标使用唯一显式 UNSUPPORTED 路线。Checked、查询、特化复验及普通 Lower 的合法性不由宿主无锁能力决定；provider/SDK/Target 须以准确目标、flags、真实 cell/ref 布局及运行探针核能力，未运行或坏形结果不授准入。含 constructed Atomic 的闭合 Program 在版本/shape/完整 proof 后、发布及任何 initializer 前由所链接共同 runtime 核实际能力；不足不发布 Program、不转移原 Lowered owner。构造的未发布真实对齐 cell 再作防御性 lock-free 检查；false 不执行值 load/store/CAS/RMW、不发布值并释放所有临时 owner。atomic_init 仅为未发布准备，不承诺零写或零分配；引用 cell 能力先核查。运行时 UNSUPPORTED 是 canonical Unit、wake零、panic空的非panic终态，handler不可消费；原非法对象、OOM、预算和引用饱和保各自first failure，初始化失败粘滞/释放沿原非panic失败路线。无 mutex/libatomic 非无锁后备，也不把未知或未验证 target 伪装为已有能力。
+目标平台不能为所需宽度提供无锁原子操作时，含 `Atomic` 的程序在构建或加载时被明确拒绝，不退化为加锁实现。
 
 > `Ordering` 只描述**单个原子操作**的内存序，不足以推导程序行为。这些值与 Channel、`go`、`await`、`scope`、`const` 发布等语言级同步边如何共同构成 happens-before，定义在 §16.9；不写 `Ordering` 的普通并发代码同样受 §16.9 约束。
 
@@ -443,9 +444,9 @@ for (i in 0..1000) {
 
 `Task.yieldNow()` 是协作式调度让出点，等价于显式 safepoint，让调度器有机会运行其他协程并响应取消。`yield expr` 已专用于生成器产值；裸 `yield` 被拒绝。
 
-此调用不接收值参数或类型实参，结果为 unit；普通函数不需要 async 标注。词法绑定若遮蔽 `Task`，仍按该绑定解析，不能偷偷调用调度原语。该名称按目标 API 定义；已有调度原语的执行结果不能证明新名字已被解析和登记。
+此调用不接收值参数或类型实参，结果为 unit；普通函数不需要 async 标注。词法绑定若遮蔽 `Task`，仍按该绑定解析，不能偷偷调用调度原语。
 
-两者共用词根但不是同一种挂起：`Task.yieldNow()` 让出给调度器（可换 OS 线程、是取消点、沿调用边向调用方传播），`yield expr` 对称转移回驱动方（以上三条都不成立）。逐条对照见 §3.16.1。生成器的挂起与关闭规则见 §3.16.2–§3.16.3；旧分析器 E0385 不定义新的 Task 调度规则。
+两者共用词根但不是同一种挂起：`Task.yieldNow()` 让出给调度器（可换 OS 线程、是取消点、沿调用边向调用方传播），`yield expr` 对称转移回驱动方（以上三条都不成立）。逐条对照见 §3.16.1。生成器的挂起与关闭规则见 §3.16.2–§3.16.3。
 
 ### 10.11 并发安全模型
 
@@ -479,19 +480,14 @@ xray 用类型系统在编译期消除数据竞争。准确的表述是 §16.9.5
 
 ### 10.12 逻辑根任务与可达运行时能力
 
-以下保留既有执行路径的实现记录；旧错误推导与旧等待写法不是本章 §10.2–§10.7 的目标语言规则，也不证明新 Task API 已实现。
+程序只有一个逻辑根任务，即入口模块的顶层代码。不可挂起的函数始终按普通调用执行，不隐式增加协程上下文、帧、安全点或当前任务查询。
 
-程序语义只有一个逻辑 root task；物理实现由编译器从最终产物的可达 root 集合推导：纯同步入口使用 **ELIDED**，只启动子任务但自身不挂起时使用 **DESCRIPTOR**，入口或其可达调用发生挂起时使用 **RESUMABLE_FRAME**。普通不可挂起函数始终保留普通 ABI，不隐式增加 coroutine context、frame、safepoint 或 current-task 查询。
-
-普通非 root 父任务的正文完成不隐式等待普通 go 子任务；scope 的结构化等待另按其合同。丢弃最后一个公开 Task 句柄不取消、不执行也不阻塞任务；执行器持运行 lease 到真实终态。逻辑 root 正文完成先保存其拥有式结果，host 在有限累计预算内驱动同一执行器已接管的任务到终态，再交付外部完成；普通子任务失败不隐式改写 root 结果。额度耗尽或显式停止时，先停止接收、撤销等待、执行有限清理及释放，再报告准确 LIMIT/取消/清理失败；无 ready 且无真实外部唤醒来源的闭合依赖必须有界拒绝，不自旋或 detach。
-
-首个新 XIR go/Task/await 片段合同为 direct go 调用、Task<i64>/Task<string> 与 plain await；单 FIFO 每 dispatch 至多一次 canonical Call transition，等待真实退 C 栈。参数及结果先拥有式准备，失败不入队或发布句柄。worker 及其可达 direct 调用不得读取普通可变模块槽或写/初始化任何模块槽；const 槽仍需 Sendable、既有读取权限及初始化状态。未知间接调用、借用、Cell 捕获及未接通类型明确未准入，不能把此实现边界变成未来完整语言的限制。此合同冻结不代表 Source/VM/native 已实现：正式身份仍 25/65/21/26/29，完整 M:N、Channel、generator、scope、Task<null>/Unit 与公开状态方法仍须分别取得资格。
-
-跨 Task 边界的完整终态必须满足拥有式与 Sendable 规则，不能只检查成功值 T。worker 及可达调用的逃逸值错误由现有效应摘要证明：真实 Error 枚举的全部变体载荷均须 Sendable，不能只看实际 throw 的变体或名义类型标记；泛型错误须在定义处具有 Error 与 Sendable 约束。首片对未知或无真实身份的逃逸错误明确未准入。未逃逸的局部非 Sendable 值及普通同步 throw 不因本边界改变。运行时在发布 Task 终态前按真实封闭类型与字段权限准入 native 的 THROWN 载荷；异常载荷、OOM、LIMIT 和宿主故障保各自准确状态并完成清理，不伪装成 PanicInfo。当前 panic 载体仅包含标量 fault detail 与拥有式字符串；未来扩展须重新证明完整载荷的 Sendable 与生命周期。
-
-当前新 XIR 执行核的 Error 载荷能力包含 Array、嵌套 Array、Nullable、Tuple、enum、struct、Atomic 和 Task 字段，包括直接 Task 与 Array<Task>。编译证明仍检查真实 Error 枚举全部变体的完整 Sendable 性质。运行时按真实 worker entry 的同一 Program 证书检查实际 enum 类型和变体；先在实际 arena、Domain 上执行有界完整值图准入，再从同一不可变 Effects 取得扫描上界并预付到同一累计 runtime work，才查询成员资格。没有第二份错误集合，也不以查询消耗编译期账本。未知/无身份错误、错误变体或外域 arena 明确拒绝；值图 OOM/LIMIT 保准确状态并清理，不发布半终态。公开 Task 句柄在 Instance 与最后代码 lease 退休后仍持有完整 Error，重复副本不消费粘滞结果。此能力不授予未闭合类型、Cell/callable 或未验证 class 载荷的执行资格，不改变普通 root 故障与 Task 值错误的区分；完整参数族、生成器和调度能力仍分别验收。
-
-当前可执行 Task 结果族包含 Unit、bool、rune、既有全部整数/浮点类型及 string，以及封闭的 Array、Nullable、Tuple、enum、struct、显式 Sendable class、Atomic 和 Task。除不属于普通实参域的 Unit 外，这些可复制载体也准入 Task 参数；struct 按完整字段参加同一有界 Sendable 图证明，不能借结构壳绕过非 Sendable class、callable 或未闭合类型；仍须通过同一 Checked 的完整 Sendable 图证明和真实 worker 的 root 效果检查。Call 在发布子 Task 前准备参数的完整拥有式图；父方随后修改 Array 或嵌套 Array 不改变子方逻辑副本，Atomic 和 Task 参数保留同步身份。私有 spawn 同样必须匹配真实 worker 认证入口，参数类型不以描述符种类取得额外权限。await 与粘滞终态副本保留准确类型及规范标量位表示；值语义副本的修改不污染后续 await，同步句柄与 Task 在复制时保留身份。非标量成功值在发布前按真实 arena、Domain 和有界值图准入；直接嵌套的终态 Task 验证沿不可变类型池严格下降，以迭代方式避免 C 栈随嵌套深度增长。终态 Task 在 Instance 和执行代码租约释放后仍持有拥有式结果。复制失败保全空输出和粘滞终态，沿同一累计预算收费，不退款。显式 `implements Sendable` 的 class 使用唯一名义元数据标记，全部字段在真实声明环境中证明 Sendable，构造后字段不可重绑；普通 class 不自动推导，Sendable 不能由普通同名接口伪造。class 及其 Atomic 字段复制保留身份，取出的 Array 字段按值复制。当前 class 片段覆盖无继承声明及有界泛型；同一有界图允许通过已验证只读 class 身份边闭合递归类型，仍检查全部其余字段。纯值类型循环以及只有循环外 class 的非法值循环均拒绝。真实有限链式 class 的参数、结果和 Error 在代码退休后继续拥有完整值图；继承、其它未接通载荷、完整参数资源/FI和产品安全资格仍分别验收。
+- 普通（非根）函数结束时不等待它用 `go` 启动的任务；`scope` 的结构化等待按 §10.7。
+- 丢弃最后一个 `Task` 句柄不取消、不阻塞该任务，任务照常运行到终态。
+- 根任务的正文结束后，程序先把所有已经启动的任务运行到终态，再对外报告完成；普通子任务的失败不改写根任务的结果。
+- 剩余任务全部在等待、且没有任何外部事件能唤醒它们时，程序以错误结束，不会无限挂起。
+- 跨 Task 边界发布的完整终态都必须满足拥有式与 Sendable 规则，不只检查成功值 `T`：业务错误按其 enum 全部变体的载荷检查，而不是只看实际抛出的变体；泛型错误类型须在定义处同时约束为 `Error` 与 `Sendable`；`PanicInfo` 的完整可达图同样须可复制且 Sendable。
+- `class` 默认不是 Sendable。显式写 `implements Sendable` 的 class，其全部字段都须是 Sendable，构造后字段不可重新绑定；复制这样的对象保留其身份。普通的同名接口不能冒充 Sendable。
 
 runtime capability 只从 executable entry、manifest C export 等最终 artifact roots 传播。不可达的 `go` / `await` / Channel helper 不会迫使产物链接 scheduler、timer、netpoll 或 hosted runtime。
 
@@ -503,21 +499,20 @@ Hosted target 按 verified entry plan 选择 NONE / SINGLE / MULTI scheduler。F
 
 ## 10. Concurrency and Coroutines
 
-> Source of truth: `src/coro/xcoro*.c`, `src/coro/xtask*.c`, `src/coro/xchannel.c`, `src/coro/xscope*.c`, `src/frontend/analyzer/xanalyzer_escape.c`, and `docs/rules/design-principles.md`.
-
 xray's concurrency model is **goroutine-style coroutines + channels + strong static guarantees**. The design makes `go worker(args)` use the same explicit argument and ownership boundary as an ordinary call, while the **compiler guarantees no data race** within the language's safe subset. The precise form of that guarantee, its boundary, and the synchronisation edges each construct in this section establishes are defined in §16.9.
 
 ### 10.1 Coroutine model
 
-| Dimension | Choice |
+| Dimension | Language guarantee |
 |--|--|
-| Scheduling model | M:N (user-space coroutines on multiple OS threads) |
-| Scheduling policy | Cooperative (channels, `await`, `Task.yieldNow()`, and other suspension points; loop backedges are not cancellation checkpoints) + work stealing |
-| Stack model | Stackless (per-coroutine VM value stack + frame array, grows on demand, no native C stack) |
-| Creation cost | ~microsecond (initial VM value stack ~64 slots + 4 frames, not a native stack) |
-| Context switch | VM context switch (save/restore VM frames), no native stack switch, no syscall |
+| Function colouring | None. Ordinary functions carry no `async` / `suspend` marker; the compiler infers whether each function may suspend. Ordinary calls never depend on that inference for legality; only places that explicitly require non-suspension (function literals of a `nosuspend fn` type, `defer` bodies, and so on) check it |
+| Scheduling | Cooperative: switches happen only at suspension points (`await`, channel operations, `select`, `Task.yieldNow()`, sleep, IO). Preemption is not guaranteed; a loop backedge is neither a yield point nor a cancellation checkpoint |
+| Parallelism | Coroutines may run in parallel on several OS threads (M:N) and may move to another thread between two suspension points; programs must not rely on single-threaded ordering |
+| Stack model | Stackless: only functions that may suspend keep state that lives across a suspension point; every other function runs as an ordinary call. Suspension cannot cross a C callback, so `CFn` callbacks must be `nosuspend` (§2.8) |
 
-Coroutines are distributed across multiple worker threads by default; the runtime sets a Go-style `GOMAXPROCS` parallelism level based on the CPU core count.
+A function type without the `nosuspend` prefix may suspend (§2.8). A long loop without a suspension point neither yields the CPU to other coroutines on the same thread nor observes cancellation; call `Task.yieldNow()` or check `Task.isCancelled()` where needed (§10.4, §10.10). Worker thread counts, frame layout and creation cost are implementation properties that this specification does not promise.
+
+A call through an interface value or an overridable method may suspend if any implementation the program can reach there may suspend. Adding one suspending implementation can therefore make a distant, previously valid `nosuspend` context fail, and the diagnostic names that implementation. When an interface requirement or class method carries a package-level `no_suspend` declaration promise (§5.2.11), every implementation must prove at its own definition that it does not suspend, and calls through that requirement never suspend. Where the set of implementations is open (interfaces exported from dynamic libraries, replaceable entries, external implementations), the call is treated as possibly suspending.
 
 ### 10.2 `go` — start a coroutine
 
@@ -567,7 +562,7 @@ var task = go fn(x: i64) -> i64 {
 
 **Semantics**:
 - Every `go` yields `Task<T, E>` where `T` is the return type and `E` is the declared error type, defaulting to `Never`. A Unit result stays Unit, not `null`.
-- Coroutines are scheduled on idle worker threads (M:N).
+- The runtime schedules the coroutine; it may run in parallel with the code that started it (§10.1).
 - `go(name: ...)` only sets the debugging name and does not affect scheduling order.
 - Uncaught exceptions are stored in the `Task` and rethrown when `await` is called.
 - Arguments, owned captures and results must satisfy Sendable by their actual types. Ordinary generics are checked by constraints at the definition and reverified after Checked specialization. Copyable values retain declared logical copies, stopping at class and synchronization identities. Array qualification depends on every element; const, COW, reference counts and a single worker grant no additional Sendable authority. Ref, Slice/MutSlice, Cell and non-Sendable values cannot cross this boundary. Noncopyable Sendable resources transfer only through consuming parameters and do not enter ordinary copyable captures or Task results.
@@ -579,32 +574,38 @@ var task = go fn(x: i64) -> i64 {
 AwaitExpr ::= 'await' UnaryExpr
 ```
 
-`await` accepts only `Task<T, E>` and produces `T` on success. Waiting may suspend without blocking an OS thread. The propagation marker order is `try await t`; inside a protected `try { }` region, `await t` needs no additional marker.
+`await` accepts only `Task<T, E>` and produces `T` on success. Waiting may suspend without blocking an OS thread. When `E = Never`, `await t` throws no business error and takes no `try`; otherwise the propagation marker order is `try await t`, and inside a protected `try { }` region `await t` needs no additional marker.
 
 ```xray @id=coro-await-forms @fragment
-var task = go fetch(url)
+var job = go compute(1)            // Task<i64, Never>
+var n = await job                  // no business error, no try
+
+var task = go fetch(url)           // fetch declares throws(FetchErr)
 var result = try await task
 
-var tasks = [go compute(2), go compute(3), go compute(4)]
+var tasks = [go fetch(a), go fetch(b), go fetch(c)]
 var results = try Task.all(tasks)
 var first = try Task.first(tasks)
 var firstOk = try Task.firstSuccess(tasks)
 var bounded = try Task.timeout(task, 1000)
 ```
 
-- The business error type comes from the Task's `E`, unioned with `Cancelled`. Even `E = Never` does not rule out child cancellation during an explicit wait. No inference from the spawn site or worker body is needed.
+- The business error type is exactly the Task's `E`; no inference from the spawn site or worker body is needed. Cancellation is not a business error and never enters this type.
 - Child enum errors use the value-error channel; child panic uses the panic channel. A successful `null` is a real Optional result, not cancellation or failure.
 - Task results must be copyable and Sendable. Repeated waits produce logical value copies while preserving class and synchronization identities. Failure to copy a result does not consume or modify the task's terminal outcome.
-- Cancellation of the current waiter differs from observing a cancelled child; the former uses the cancellation unwinding rules in §10.4.
+- **Waiting on a cancelled task**: when the awaited task ends `Cancelled`, the waiter itself enters cancellation unwinding at that `await` (§10.4). It runs its defers, neither `catch (e)` nor `catch panic` intercepts the unwinding, the waiter also ends `Cancelled`, and the same rule then applies to whoever waits on it. Cancellation therefore propagates up the chain of waiters and never enters any function's error signature. A waiter whose own cancellation was already requested unwinds at that suspension point under §10.4 as well.
+- To observe cancellation without propagating it, use `t.awaitResult()` or `t.poll()`, which report it as the value `TaskResult.Cancelled` (§10.4).
 
 Multiple-task waits use suspending library functions without an `await` prefix:
 
 | Function | Result | Business error type | Other tasks |
 |--|--|--|--|
-| `Task.all(ts)` | `Array<T>` in input order | `E \| Cancelled` | Request cancellation before propagating failure; do not wait for cleanup |
-| `Task.first(ts)` | Value or failure of the first task to finish | `E \| Cancelled` | Request cancellation before returning or propagating; do not wait for cleanup |
-| `Task.firstSuccess(ts)` | First successful value | `TaskFailures<E>` if all fail, plus `Cancelled` | Request cancellation before returning or propagating; do not wait for cleanup |
-| `Task.timeout(t, ms)` | `T` | `E \| Cancelled \| Timeout` | Cancel `t` on timeout |
+| `Task.all(ts)` | `Array<T>` in input order | `E` | Request cancellation before propagating failure; do not wait for cleanup |
+| `Task.first(ts)` | Value or failure of the first task to finish | `E` | Request cancellation before returning or propagating; do not wait for cleanup |
+| `Task.firstSuccess(ts)` | First successful value | `TaskFailures<E>` if all fail | Request cancellation before returning or propagating; do not wait for cleanup |
+| `Task.timeout(t, ms)` | `T` | `E \| Timeout` | Cancel `t` on timeout |
+
+When an input task ends `Cancelled` and that cancellation was not requested by the aggregate call itself, the waiting rule above makes the caller enter cancellation unwinding: `Task.all` does so when any input is cancelled, `Task.first` when the first input to finish is a cancellation, and `Task.timeout` when `t` is cancelled before the timeout. How cancelled inputs take part in the outcome of `Task.firstSuccess` is frozen together with its mixed-outcome arbitration below.
 
 After selecting an outcome under its own rules, `Task.first`, `Task.firstSuccess`, and the failure branch of `Task.all` request cancellation of the remaining unfinished input tasks before returning or propagating the selected outcome. Their return does not wait for those tasks to terminate or finish their defers. Successful `Task.all` still waits for every input to succeed and returns results in input order.
 
@@ -634,7 +635,7 @@ var outcome = t.awaitResult()
 
 Task publication and repeated observation require copyable, Sendable T and E. The entire reachable PanicInfo graph must also be owned, copyable and Sendable; a read-only binding alone is insufficient. The task retains its terminal outcome, and each observer receives an independent logical snapshot. Value copies and identity references follow their ownership rules without borrowing a retired executor frame.
 
-**Cancellation** is checked only at suspension points, including `await`, Channel operations, `select`, `Task.yieldNow()`, sleep and IO. A cancelled task runs its defers and unwinds. Neither `catch (e)` nor `catch panic` intercepts this, and it does not enter the task function's error signature. A task waiting on that child observes typed `Cancelled`.
+**Cancellation** is checked only at suspension points, including `await`, Channel operations, `select`, `Task.yieldNow()`, sleep and IO. A cancelled task runs its defers and unwinds. Neither `catch (e)` nor `catch panic` intercepts this, and it does not enter the task function's error signature. A task that waits on it with `await` or an aggregate function enters cancellation unwinding as well (§10.3); `awaitResult()` and `poll()` report `TaskResult.Cancelled` without propagating it. When cancellation unwinding reaches the logical root task the program ends: a standalone program prints an `[Uncaught Cancellation]` diagnostic to stderr and exits with code 1 (matching uncaught errors and panic in §8), while an embedding host ends only the current execution.
 
 Loop backedges are not cancellation checkpoints. Long loops may check `Task.isCancelled()` and finish cooperatively, or call `Task.yieldNow()` to allow scheduling and cancellation. Runtime heartbeat or watchdog observations do not change these language-level checkpoints; a cancellation request does not guarantee preemption of a non-suspending native/FFI call.
 
@@ -650,14 +651,16 @@ Channels use stable `const` bindings. Their audited synchronization capability p
 ```xray @id=channel-decl-variants
 const ch  = Channel<i64>(10)    // buffered, capacity = 10
 const ch0 = Channel<i64>(0)     // unbuffered (synchronous handshake)
-const cha = Channel(3)          // element type inferred from the first send
+const cha: Channel<i64> = Channel(3)   // element type from the type context
 ```
+
+The element type must be known at construction: write `Channel<T>(n)` or provide a type context. It is never inferred from a later `send`.
 
 **API** (note that all method names are **camelCase**):
 
 | Method | Signature | Behaviour |
 |--|--|--|
-| `send(v)` | `(T) -> ()` | Blocking send; waits for a consumer when full; throws if the channel is closed |
+| `send(v)` | `(T) -> ()` | Blocking send; waits for a consumer when full; panics (`E0702`) if the channel is closed |
 | `recv()` | `() -> Recv<T>` | Blocking receive; returns `Recv.Closed` when closed and drained |
 | `recvOr(default)` | `(T) -> T` | Blocking receive; returns the payload directly, or `default` when closed and drained, without allocating a `Recv<T>` wrapper |
 | `trySend(v)` | `(T) -> SendResult` | Non-blocking send; returns `Sent` / `Full` / `Closed` |
@@ -709,7 +712,7 @@ fn producer(ch: Channel<i64>) {
 - **MPMC** (multi-producer, multi-consumer).
 - Buffered channel: senders suspend when full; receivers suspend when empty.
 - Unbuffered channel: send and receive must rendezvous (synchronous handshake).
-- After close: `send` throws; `recv` returns remaining buffered values as `Recv.Value { value: v }`, then `Recv.Closed`; `recvOr(default)` returns remaining buffered values, then `default`; `tryRecv` returns `Recv.Empty` when empty and not closed.
+- After close: `send` panics with `E0702`. Sending on a closed channel is a programming error, as in Go; use `trySend` or `sendTimeout`, which return `SendResult.Closed`, when closure is an expected outcome. `recv` returns remaining buffered values as `Recv.Value { value: v }`, then `Recv.Closed`; `recvOr(default)` returns remaining buffered values, then `default`; `tryRecv` returns `Recv.Empty` when empty and not closed.
 - `for (msg in ch)` is equivalent to blocking receive until the channel is closed and drained; the loop variable has type `T`. Channels do not support key-value iteration.
 
 ### 10.6 `select`
@@ -739,7 +742,7 @@ select {
 
 **Semantics**:
 - Receive arm `name from ch -> body`: selected when ch has data, and binds the `Recv.Value { value: name }` payload to `name`.
-- Send arm `value to ch -> body`: equivalent to `ch.send(value)`, but selected only when `ch` has capacity; `value` follows the same transfer plan as `ch.send` — an execution-local heap value must be written as explicit `copy(v)` or `move v`.
+- Send arm `value to ch -> body`: equivalent to `ch.send(value)`, but selected only when `ch` has capacity; a selected send arm on a closed channel panics with `E0702`, exactly like `send`; `value` follows the same transfer plan as `ch.send` — an execution-local heap value must be written as explicit `copy(v)` or `move v`.
 - Default arm `_ -> body`: runs immediately when no arm is ready; **omitting the default arm** makes `select` block until an arm becomes ready.
 - When multiple arms are ready at the same time, one is selected **randomly** (matching Go).
 
@@ -759,7 +762,7 @@ Both forms are statements without an aggregate value and wait for all members to
 | Default `scope` | Cancel the remaining siblings | Propagate the first successfully published panic if present; otherwise the first successfully published body or child business error |
 | `scope(isolated)` | Let siblings continue | Propagate panic on its channel if present; otherwise propagate a body business error directly, or aggregate child business errors as `TaskFailures<E>` when no body business error exists |
 
-Let B be the business errors escaping the body after local catches, including errors raised by handlers, and E the union of the declared error types of direct go children. Default scope has complete business error type `B | E`; isolated scope has `B | TaskFailures<E>`, with no child business aggregate channel when E=Never. Both forms need no scope propagation marker when B and E are Never; possible panic does not change this rule. This empty-channel rule does not define `TaskFailures<Never> = Never` in every type position. An explicit `try await` in the body may add Cancelled to B, so child E alone is insufficient. `try?` / `try!` can remove business escape, but cannot catch panic. The full escaping set must still fit the enclosing function's declaration; try does not enlarge its signature.
+Let B be the business errors escaping the body after local catches, including errors raised by handlers, and E the union of the declared error types of direct go children. Default scope has complete business error type `B | E`; isolated scope has `B | TaskFailures<E>`, with no child business aggregate channel when E=Never. Both forms need no scope propagation marker when B and E are Never; possible panic does not change this rule. This empty-channel rule does not define `TaskFailures<Never> = Never` in every type position. `try?` / `try!` can remove business escape, but cannot catch panic. The full escaping set must still fit the enclosing function's declaration; try does not enlarge its signature.
 
 Normal block completion only joins members. Body Error, Panic or an outward return/break/continue cancels and drains accepted members in both forms. An isolated child failure alone does not cancel siblings. A pending normal control transfer must own its value and retain the body frame and valid loans; it is fulfilled only after draining finds no higher-priority failure, so return cannot swallow child panic. Multiple panics select the first successful publisher without promising wall-clock order. Other failures retain their original payloads for secondary diagnostics and release under unique ownership. When an isolated body error propagates directly, child business errors are secondary diagnostics; the body error is not implicitly wrapped.
 
@@ -792,7 +795,7 @@ fn main() throws(TaskFailures<WorkerErr>) {
 try main()
 ```
 
-Scope-induced child cancellation is not a failure, and independently cancelled members are not wrapped as business errors or aggregate items. Once the parent enters cancellation unwinding at a legal suspension checkpoint, scope cancels and drains members, then continues uncatchable parent cancellation; member failures are secondary diagnostics. A cancellation request alone does not mutate frames, resume positions or terminal state. Implicit scope waiting adds no `Cancelled`, while B from explicit body waits is still checked as above. Panic escaping cleanup always follows the terminal rule in §8.2.5. Keep handles for individual waits or use §10.3 library functions when values are needed. A `go` outside a scope starts an independent task. These target semantics still require type checking, scheduler interface layout and joint execution tests; they do not qualify the current implementation.
+Scope-induced child cancellation is not a failure, and independently cancelled members are not wrapped as business errors or aggregate items. Once the parent enters cancellation unwinding at a legal suspension checkpoint, scope cancels and drains members, then continues uncatchable parent cancellation; member failures are secondary diagnostics. A cancellation request alone does not mutate frames, resume positions or terminal state. After a default scope cancels its remaining members because one member failed, a body that enters cancellation unwinding while waiting on one of those members (§10.3) unwinds only to the scope boundary: the scope still cancels and drains the remaining members and then propagates the first failure under the table above; that cancellation never propagates past the scope. Implicit scope waiting starts no cancellation unwinding. Panic escaping cleanup always follows the terminal rule in §8.2.5. Keep handles for individual waits or use §10.3 library functions when values are needed. A `go` outside a scope starts an independent task.
 
 ### 10.8 `move` — cross-coroutine ownership transfer
 
@@ -882,7 +885,7 @@ enum Ordering {
 
 The `Ordering` enum is automatically injected by the compiler (prelude); no import is needed. Low-level intrinsics read the declaration-order tag and do not rely on user-visible backing values.
 
-**Complete family contract (frozen 2026-10-05; the current fixed i64 subset is not a complete implementation)**: `Atomic<T>` uses the closed AtomicValue/Number/Boolean proofs in §9.2. Handle copies share one synchronization identity. Each constructor creates an independent object, including separate module initializations of separate Instances. Construction and owned results may allocate. Value operations promise lock freedom, not wait freedom, and have no mutex fallback. A provider must freshly compile and run `atomic_is_lock_free` on an actual aligned cell and verify layout/ABI; unsupported providers reject explicitly rather than relying only on `ATOMIC_*_LOCK_FREE == 2`.
+Copies of an `Atomic` handle share one atomic object; each construction creates an independent object, and different instances of one program do not share objects created by module initialization. Value atomic operations are guaranteed lock-free, not wait-free, and are never implemented with a mutex.
 
 | Operation | Legal memory orders |
 |---|---|
@@ -890,9 +893,7 @@ The `Ordering` enum is automatically injected by the compiler (prelude); no impo
 | store | Relaxed / Release / SeqCst |
 | add/sub/fetchAdd/fetchSub/swap/toggle/compareExchange | All five Ordering variants |
 
-Omission or a valid None selects SeqCst. Admit the exact prelude Ordering declaration and variant identity, never a spelling, integer or user backing value. Reject statically known invalid load/store orders in Checked. A dynamic invalid order terminates as CALL_BAD_ARGUMENT after evaluating the receiver and all arguments once in their original order, before any atomic access: fault detail is zero, no result is published and atomic state is unchanged. This terminal state is neither ordinary Error nor panic and is not consumed by a protected panic handler; existing initializer stickiness and cleanup apply. Forged variants reject at value admission. Never weaken an order, accept an unknown tag or pass an invalid C11 order to a provider. Existing structural RUN_BAD_ARGUMENT→CALL_BAD_STATE remains unchanged; invalid Atomic ordering needs a separate reason and exact mapping.
-
-The Ordering declaring module is generated by the actual identity factory with STDLIB authority, namespace_id="prelude" and logical="prelude/builtin_symbols.def"; physical roots never enter identity. Source still needs the real source-derived generated module, Unit initializer and normal dependency/permission checks, without inventing an importable prelude.xr or authorizing a query URI. Nominal Declaration/Identity own a native id and 32-byte source-governance fingerprint persistently. Ordering uses id4 in this family; ordinary user nominal records are all zero. Checked and specialization reverification validate the governed VALUE record and complete ENUM shape: no type parameters, constraints or fields, exported with zero flags, five exact ordered payload-free variants, the canonical prelude declaring module and legal initializer/dependencies. Clone, wire, projection, TypeArena and Program correspondence preserve these facts. Lexical/hoisted/import lookup precedes prelude; a same-named user enum remains a different nominal identity without builtin qualification. Ids, flags and query pointers never bypass visibility, construction or module-dependency checks. The public fingerprint is governance data, not an uncopyable authentication signature. A complete legal public builtin descriptor may pass ordinary Checked reverification without granting user-private authority or authenticating an external package.
+Omitting the ordering selects `SeqCst`. Only prelude `Ordering` values are accepted; a user enum with the same name is a different type and cannot act as a memory order. A memory order known to be invalid at compile time (for example `load(Ordering.Release)`) is a compile error. An invalid order supplied at run time ends the current execution after the receiver and all arguments are evaluated in source order and before any atomic read or write; atomic state is unchanged, and neither `catch` nor `catch panic` intercepts it.
 
 compareExchange is strong CAS and returns a real `(T, bool)` Tuple without visible spurious failure. One ordering determines the success/failure pair:
 
@@ -904,15 +905,11 @@ compareExchange is strong CAS and returns a real `(T, bool)` Tuple without visib
 | AcquireRelease | AcquireRelease | Acquire |
 | SeqCst | SeqCst | SeqCst |
 
-Failure returns the actually observed old value without writing state; success returns the value before linearization. Before CAS, privately prepare a real exact `(T,bool)` Tuple with valid scalar fields and every fallible carrier/domain/arena-retain, admission/work/budget, empty result slot and publication permission; check cancellation/execution permission last. The prepared value has no aliases, borrows or public setter. Preparation failure neither accesses the cell nor publishes a result and releases partial owners. After CAS, infallibly fill the observed and success scalar payloads and move the already permitted result; never allocate, retain, copy, admit or perform fallible validation. Later caller-frame/budget failure or cancellation does not roll back success. Failed CAS returns the actual observed value rather than the original expected copy.
+On failure the operation returns the value actually observed and writes nothing; on success it returns the value before the write. A failure or cancellation that happens after a successful CAS does not roll the write back.
 
-i64 addition/subtraction wraps modulo 2^64 as in §2.3.1; subtracting a MIN delta does not perform host signed negation. f64 construction/load/store/swap/CAS preserve all binary64 bits; CAS compares bits, distinguishing signed zeros and different NaN payloads while matching an identical NaN payload. Ordinary float equality is unchanged. Each f64 RMW computes its candidate with the existing software ADD/SUBTRACT kernel and CAS on u64 bits, recomputing from the latest observed value after failure. Preserve §2.3.2 ties-even, subnormals and canonical arithmetic NaNs; do not use host FPU/fenv, fuse operations or replace subtraction with addition of a negated operand. Charge and check cancellation/limits for each actual attempt without treating a later limit failure as rollback of success. toString takes one SeqCst snapshot and then produces an independently owned string with the existing bool/i64/software-f64 formatter.
+i64 addition and subtraction wrap modulo 2^64 as in §2.3.1. f64 construction, load, store, swap and compareExchange preserve all binary64 bits; compareExchange compares bits, so positive and negative zero differ, NaNs with the same payload match and NaNs with different payloads do not. This does not change ordinary floating-point `==`. f64 addition and subtraction round as in §2.3.2 and, when racing other writes, recompute from the latest value until they succeed. `toString()` reads one `SeqCst` snapshot.
 
-Each resume of f64 add/sub/fetchAdd/fetchSub attempts at most one value-cell CAS. On failure preserve the latest observed value and once-evaluated arguments, return canonical Unit CONTINUE, and keep the active frame/pc READY; the next resume recomputes the software candidate. CONTINUE creates no SUSPEND, wake token, language yield or second execution pipeline. Real poll/frame/work charging, cancellation and release use the same Call driver; no unbounded retry loop hides in one resume. Stopping before success leaves the cell unchanged; cancellation after success does not roll it back. The initial load also uses a legal read order.
-
-The retained Atomic execution contract includes per-attempt execution-permission, budget and cancellation checks. Its boundary with Task cancellation unwinding only at suspension points (§10.4) needs lead/c alignment during Task329/Task331 execution integration. A CONTINUE that produces no SUSPEND is not an additional language suspension point.
-
-Unsupported targets use one explicit UNSUPPORTED route. Host lock-free capability does not determine language legality in Checked, queries, specialization reverification or ordinary Lower. Provider/SDK/Target admission requires the exact target, flags, real cell/reference layout and executed capability probe; missing execution or malformed evidence grants no admission. After version/shape/full proof checks, before publication or any initializer, a closed Program containing constructed Atomic checks the linked common runtime capability; failure publishes no Program and does not transfer the original Lowered owner. Construction defensively checks the actual aligned unpublished cell again; false performs no value load/store/CAS/RMW, publishes no value and releases temporary owners. atomic_init is unpublished preparation, not a zero-write or allocation-free promise; reference-cell capability is checked first. Runtime UNSUPPORTED is a nonpanic terminal with canonical Unit, zero wake and empty panic, never consumed by a handler. Invalid objects, OOM, budgets and reference saturation retain their own first failure, while sticky initialization failure and release follow existing nonpanic paths. There is no mutex/libatomic non-lock-free fallback, and unknown or unverified targets are not treated as already supported.
+When the target cannot provide lock-free atomics of the required width, a program that uses `Atomic` is rejected at build or load time; it never falls back to a locking implementation.
 
 > `Ordering` describes the memory order of **one atomic operation**; that alone is not enough to derive program behaviour. How these values combine with the language-level synchronisation edges of channels, `go`, `await`, `scope` and `const` publication into happens-before is defined in §16.9, which also governs ordinary concurrent code that never mentions `Ordering`.
 
@@ -938,9 +935,9 @@ for (i in 0..1000) {
 
 `Task.yieldNow()` is a cooperative scheduling point, equivalent to an explicit safepoint where the scheduler can run other coroutines and observe cancellation. `yield expr` is reserved for generator value production; bare `yield` is rejected.
 
-The call accepts no value or type arguments and returns unit; ordinary functions need no async annotation. A lexical binding shadowing `Task` is resolved normally and cannot silently invoke the scheduling primitive. This is the target API name; execution of the existing scheduling primitive does not prove that the new name is parsed and registered.
+The call accepts no value or type arguments and returns unit; ordinary functions need no async annotation. A lexical binding shadowing `Task` is resolved normally and cannot silently invoke the scheduling primitive.
 
-The two share a word root but are not the same suspension: `Task.yieldNow()` yields to the scheduler (can migrate OS threads, is a cancellation point, propagates to callers along call edges), while `yield expr` transfers symmetrically back to the driver (none of those hold). See §3.16.1 for the point-by-point comparison. Generator suspension and close follow §3.16.2–§3.16.3; the old analyzer diagnostic E0385 does not define the new Task scheduling rules.
+The two share a word root but are not the same suspension: `Task.yieldNow()` yields to the scheduler (can migrate OS threads, is a cancellation point, propagates to callers along call edges), while `yield expr` transfers symmetrically back to the driver (none of those hold). See §3.16.1 for the point-by-point comparison. Generator suspension and close follow §3.16.2–§3.16.3.
 
 ### 10.11 Concurrency safety model
 
@@ -974,19 +971,14 @@ These three are the model's **boundary**, not holes in it: each has to be writte
 
 ### 10.12 Logical root task and reachable runtime capabilities
 
-The retained paragraphs below record the existing execution path. Its old error inference and wait syntax do not define the target surface in §10.2–§10.7 or establish support for the new Task API.
+A program has one logical root task: the top-level code of its entry module. A function that cannot suspend always runs as an ordinary call and never gains a hidden coroutine context, frame, safepoint or current-task query.
 
-Program semantics expose one logical root task. Its physical representation is derived from the final artifact's reachable roots: a pure synchronous entry is **ELIDED**; an entry that only spawns children without suspending uses a **DESCRIPTOR**; an entry that suspends directly or transitively uses a **RESUMABLE_FRAME**. Ordinary non-suspendable functions keep the plain ABI, with no implicit coroutine context, frame, safepoint, or current-task lookup.
-
-An ordinary non-root parent does not implicitly join ordinary go children when its body completes; scope waits follow their separate structured contracts. Dropping the last public Task handle neither cancels, drives nor blocks the task; the executor retains a running lease until the actual terminal state. The logical root first stores its owned body outcome. Within finite cumulative limits, the host drives all work already accepted by that executor to terminal states before reporting external completion. An ordinary child failure does not implicitly replace the root outcome. Exhaustion or explicit stop closes admission, revokes waits, performs bounded cleanup and release, then reports the actual LIMIT/cancellation/cleanup failure. A closed dependency with no ready work and no real external wake source is rejected by a bounded check, without spinning or detaching.
-
-The first new XIR go/Task/await contract admits direct go calls, Task<i64>/Task<string> and plain await. One FIFO performs at most one canonical Call transition per dispatch; waits leave the C stack. All arguments and result ownership are prepared before queue publication; failure publishes neither queue entry nor handle. A worker and its reachable direct calls cannot read ordinary mutable module slots or write/initialize any module slot. Const slots still require Sendable, existing read permission and initialization state. Unknown indirect calls, loans, Cell captures and unconnected types fail as unimplemented; these implementation boundaries do not restrict the future complete language. This freeze does not claim Source/VM/native implementation: formal identities remain 25/65/21/26/29. Full M:N, Channel, generators, scope, Task<null>/Unit and public status methods require separate qualification.
-
-The complete outcome crossing a Task boundary must satisfy owned and Sendable rules; checking the successful T alone is insufficient. Existing effect summaries prove escaping value errors from the worker and reachable calls: every variant payload of the authentic Error enum must be Sendable, rather than only the thrown variant or a nominal type marker. Generic errors require both Error and Sendable constraints at the definition. The first slice rejects unknown or unauthenticated escaping errors as unimplemented. Local non-Sendable values that do not escape and ordinary synchronous throws are unaffected. Before Task terminal publication, the runtime admits native THROWN payloads using the actual closed type and field authority. Malformed payloads, OOM, LIMIT and host faults retain their accurate statuses through cleanup instead of becoming PanicInfo. The current panic carrier contains only scalar fault detail and owned strings; future extensions must prove Sendable and lifetime for the complete payload again.
-
-The new XIR runtime supports Error fields containing Arrays, nested Arrays, Nullable, Tuples, enums, structs, Atomic and Task, including direct Task fields and Arrays of Tasks. The compiler still proves complete Sendable properties for every variant of the authentic Error enum. At runtime, the actual worker entry's certificate in the same Program authorizes the concrete enum type and variant. Bounded complete value-graph admission uses the actual arena and Domain; membership then reads a scan bound from the same immutable Effects and prepays it to that runtime Domain before scanning. There is no second error set and the query never debits the compiler ledger. Unknown or unidentified errors, wrong variants and foreign arenas reject explicitly. Value-graph OOM and LIMIT keep accurate statuses and clean up without publishing partial outcomes. Public Task handles retain the complete Error after Instance and final code-lease retirement; repeated copies do not consume the sticky outcome. This capability grants no execution qualification for unclosed types, Cell/callable or unverified class payloads, and preserves the distinction between ordinary root faults and Task value errors. Full parameter, generator and scheduling families remain separately qualified.
-
-The executable Task result families include Unit, bool, rune, all existing integer and floating-point types, string, and closed Array, Nullable, Tuple, enum, struct, explicitly Sendable class, Atomic and Task types. These copyable carriers also admit Task arguments, except Unit, which is outside the ordinary argument domain. The same Checked route still proves their complete Sendable graph and the actual worker's root effects. Every struct field contributes to that bounded proof; a struct wrapper does not bypass non-Sendable class, callable or unclosed-type rejection. Call prepares complete owned argument graphs before publishing a child Task. Later parent mutation of an Array or nested Array does not change the child's logical copy; Atomic and Task arguments preserve synchronization identity. Private spawn also requires an authentic worker-certified entry: a descriptor kind confers no extra authority. Await and sticky terminal copies preserve exact types and canonical scalar bits. Mutating a value copy does not alter later awaits, while synchronization handles and Tasks preserve identity. Nonscalar successes undergo bounded admission against the actual arena and Domain before publication. Directly nested terminal Tasks descend strictly through the immutable type pool and validate iteratively, keeping C stack use independent of depth. Terminal Tasks retain owned results after Instance and executable code leases retire. Failed copies preserve empty output and the sticky outcome while charging the same cumulative budget without refunds. An explicit `implements Sendable` class uses the sole nominal metadata flag. Every field must prove Sendable in its authentic declaration environment, and fields cannot be rebound after construction. Ordinary classes do not infer the marker, and an ordinary interface with the same name cannot forge it. Class and Atomic field copies preserve identity; an extracted Array field is a value copy. The current class slice covers declarations without inheritance, including bounded generics. The same bounded graph closes recursive types only through previously verified readonly class identity edges and still visits every remaining field. Value-only cycles reject, including cycles merely wrapped in an outer class. Real finite class chains retain their complete owned argument, result and Error graphs after code retirement. Inheritance, other unsupported payloads, complete parameter resource/fault-injection and product safety qualification remain separate.
+- An ordinary (non-root) function does not wait for the tasks it started with `go` when it returns; structured waiting in `scope` follows §10.7.
+- Dropping the last `Task` handle neither cancels nor blocks the task; it runs to its terminal state.
+- After the root task's body ends, the program runs every task already started to its terminal state before it reports completion; an ordinary child failure does not replace the root outcome.
+- When every remaining task is waiting and no external event can wake any of them, the program ends with an error instead of hanging.
+- The complete terminal outcome published across a Task boundary must satisfy the owned and Sendable rules, not only the success value `T`: a business error is checked across the payloads of every variant of its enum, not only the variant actually thrown; a generic error type must be constrained to both `Error` and `Sendable` at its definition; and the entire reachable `PanicInfo` graph must be copyable and Sendable.
+- A `class` is not Sendable by default. A class that explicitly writes `implements Sendable` must have only Sendable fields, and those fields cannot be rebound after construction; copying such an object preserves its identity. An ordinary interface with the same name cannot stand in for Sendable.
 
 Runtime capabilities propagate only from final artifact roots such as the executable entry and manifest-selected C exports. An unreachable helper containing `go`, `await`, or Channel operations does not force the artifact to link a scheduler, timer, netpoll, or hosted runtime.
 

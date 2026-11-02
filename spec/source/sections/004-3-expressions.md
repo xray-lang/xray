@@ -99,8 +99,8 @@ mk("receiver").hits += t("delta", 1)                   // receiver, delta
 ```ebnf
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
             | 'move' UnaryExpr
-            | 'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
-            | 'go' (Block | PostfixExpr)
+            | 'await' UnaryExpr
+            | 'go' GoOptions? CallExpr
             | 'unsafe' Block
             | 'comptime' (Expression | Block)
             | PostfixExpr
@@ -700,11 +700,11 @@ yield expr                  // 生成器产出一个值并挂起
 
 `yield expr` 只能出现在声明返回 `Iterator<T>` 的生成器函数体内。第一次调用生成器函数不会立即执行函数体，而是返回一个惰性 `Iterator<T>`（协议见 §5.3.6）；`for-in` 通过 `hasNext()` / `next()` 拉取，每次 `yield expr` 产出一个 `T` 并暂停到下一次拉取。
 
-协作让出 CPU 使用 `Coro.yield()`（见 §10.10）；裸 `yield` 不是表达式。
+协作让出 CPU 使用 `Task.yieldNow()`（见 §10.10）；裸 `yield` 不是表达式。
 
 #### 3.16.1 产值与调度挂起
 
-yield expr交付一个拥有式元素并停驻producer；yield ()也交付一个真实Unit元素，不表示结束。Coro.yield()没有元素，只把当前activation交回执行器队列。两者都不会在宿主C栈上保留待恢复调用。
+yield expr交付一个拥有式元素并停驻producer；yield ()也交付一个真实Unit元素，不表示结束。Task.yieldNow()没有元素，只把当前任务交回调度器队列。两者都不会在宿主C栈上保留待恢复调用。
 
 hasNext()可以推进producer直到下一个产值、终态或真实外部等待；重复hasNext()保留缓存而不重复推进。next()转移一个元素的所有权，耗尽按§5.3.6报告E0432。消费可能沿producer遇到挂起，因此定义处不能承诺no_suspend；创建惰性Iterator本身不立即执行producer，也不立即继承其throw。
 
@@ -817,8 +817,8 @@ Full precedence table (highest → lowest; operators at the same level share ass
 ```ebnf
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
             | 'move' UnaryExpr
-            | 'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
-            | 'go' (Block | PostfixExpr)
+            | 'await' UnaryExpr
+            | 'go' GoOptions? CallExpr
             | 'unsafe' Block
             | 'comptime' (Expression | Block)
             | PostfixExpr
@@ -1418,11 +1418,11 @@ yield expr                  // produce one generator value and suspend
 
 `yield expr` is only valid inside a generator function declared to return `Iterator<T>`. Calling a generator function does not immediately execute its body; it returns a lazy `Iterator<T>` (protocol in §5.3.6). `for-in` pulls through `hasNext()` / `next()`, and each `yield expr` produces one `T` before suspending until the next pull.
 
-Cooperative CPU yielding uses `Coro.yield()` (see §10.10); bare `yield` is not an expression.
+Cooperative CPU yielding uses `Task.yieldNow()` (see §10.10); bare `yield` is not an expression.
 
 #### 3.16.1 Production and scheduling suspension
 
-yield expr delivers one owned element and parks the producer; yield () delivers a real Unit element rather than EOS. Coro.yield() produces no element and returns the activation to its executor queue. Neither keeps a suspended call on the host C stack.
+yield expr delivers one owned element and parks the producer; yield () delivers a real Unit element rather than EOS. Task.yieldNow() produces no element and returns the current task to the scheduler queue. Neither keeps a suspended call on the host C stack.
 
 hasNext() may advance the producer to a yield, terminal outcome or actual external wait. Repeated hasNext() preserves a cache without advancing again. next() transfers one element owner and reports E0432 on exhaustion (§5.3.6). Consumption may suspend through the producer and cannot promise no_suspend at its definition. Creating a lazy Iterator neither executes production nor immediately inherits its throw.
 

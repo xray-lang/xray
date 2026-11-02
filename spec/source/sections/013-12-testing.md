@@ -69,7 +69,7 @@ xray 把断言函数作为**全局内置**（不需 `import test`）。完整签
 
 ### 12.4 异步测试
 
-`@test` 函数体内可使用 `go` / `await` / `await all` / `await any`：
+`@test` 函数体内可使用 `go`、`await` 及 `Task.all` / `Task.first` 等聚合等待（§10.3）：
 
 ```xray @id=testing-async
 @test
@@ -207,7 +207,7 @@ errors and panics are distinct failure channels and their assertions are not int
 
 ### 12.4 Async Tests
 
-A `@test` function body may use `go` / `await` / `await all` / `await any`:
+A `@test` function body may use `go`, `await`, and aggregate waits such as `Task.all` / `Task.first` (§10.3):
 
 ```xray @id=testing-async
 @test
