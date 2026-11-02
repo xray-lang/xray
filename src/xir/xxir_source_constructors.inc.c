@@ -298,7 +298,11 @@ static bool source_constructor_parameters(SourceContext *ctx) {
     SourceFunction *body=&ctx->bodies[ctx->function];
     MethodDeclNode *method=&body->node->as.method_decl;
     for (uint32_t p = 0; p < (uint32_t)method->param_count; ++p) {
-        SourceName *symbol = source_parameter_name(ctx,body->node,method->params[p],body->parameter_scope);
+        /* Only the source constructor claims the original parameter item.
+         * Its private field helper projects that already checked signature. */
+        SourceName *symbol = ctx->identities[ctx->function].method_kind==XR_XIR_CONSTRUCTOR_FIELDS ?
+            add_name(ctx,&ctx->locals,method->params[p]->name,body->node) :
+            source_parameter_name(ctx,body->node,method->params[p],body->parameter_scope);
         if (!symbol) return false;
         symbol->kind = SOURCE_LOCAL; symbol->index = p; symbol->type = body->parameters[p];
         XrParamNode *parameter = method->params[p];
