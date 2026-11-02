@@ -80,8 +80,8 @@ export fn qualifiedName(node: XmlNode) -> XmlName? {
 // Ordered attributes of an Element (empty for other node kinds).
 export fn attributes(node: XmlNode) -> Array<XmlAttribute> {
     return match (node) {
-        XmlNode.Element { name, attributes: attrs, children: kids } -> copy(attrs),
-        _                                  -> copy(_emptyAttrs())
+        XmlNode.Element { name, attributes: attrs, children: kids } -> copy attrs,
+        _                                  -> _emptyAttrs()
     }
 }
 
@@ -111,9 +111,9 @@ export fn namespace(node: XmlNode, prefix: string) -> string? {
 // Direct children of a Document or Element (empty otherwise).
 export fn children(node: XmlNode) -> Array<XmlNode> {
     return match (node) {
-        XmlNode.Document { children: kids }             -> copy(kids),
-        XmlNode.Element { name, attributes: attrs, children: kids } -> copy(kids),
-        _                                  -> copy(_emptyNodes())
+        XmlNode.Document { children: kids }             -> copy kids,
+        XmlNode.Element { name, attributes: attrs, children: kids } -> copy kids,
+        _                                  -> _emptyNodes()
     }
 }
 

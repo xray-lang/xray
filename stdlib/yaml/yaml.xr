@@ -175,12 +175,12 @@ fn _defaultWriteOptions() -> YamlWriteOptions {
 // public API takes nullable options and falls back to the defaults here.
 fn _resolveOptions(options: YamlOptions?) -> YamlOptions {
     if (options == null) { return _defaultOptions() }
-    return copy(options!)
+    return (copy options)!
 }
 
 fn _resolveWriteOptions(options: YamlWriteOptions?) -> YamlWriteOptions {
     if (options == null) { return _defaultWriteOptions() }
-    return copy(options!)
+    return (copy options)!
 }
 
 fn _isFatalKind(kind: YamlErrorKind) -> bool {
@@ -297,10 +297,10 @@ export fn length(value: YamlValue) -> i64 {
 // Ordered keys of a Mapping (empty otherwise).
 export fn keys(value: YamlValue) -> Array<string> {
     match (value) {
-        YamlValue.Mapping { mapping: m } -> { return copy(m.keys) }
-        _                    -> { return copy(_emptyStrings()) }
+        YamlValue.Mapping { mapping: m } -> { return copy m.keys }
+        _                    -> { return _emptyStrings() }
     }
-    return copy(_emptyStrings())
+    return _emptyStrings()
 }
 
 // ===== Builders =====
