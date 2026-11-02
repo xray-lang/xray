@@ -130,7 +130,7 @@ def gather(args):
     commit = run(['git', 'rev-parse', 'HEAD'], root).decode().strip()
     inputs = json.loads(args.inputs.read_text(encoding='utf-8'))
     require(inputs['schema'] == 1, 'Unknown native runtime input schema')
-    require(inputs.get('systemLibraries') == ['advapi32'], 'Native runtime system dependency mismatch')
+    require(inputs.get('systemLibraries') == ['advapi32', 'userenv'], 'Native runtime system dependency mismatch')
     require((inputs['provider'], inputs['version'], inputs['profile']) == ('MSVC', '19.44.35219.0', 'Release'), 'Unqualified native runtime provider/profile')
     commands = json.loads((build/'compile_commands.json').read_text(encoding='utf-8'))
     cache = dict(re.findall(r'^([^#/:\n]+):[^=\n]+=(.*)$', (build/'CMakeCache.txt').read_text(encoding='utf-8'), re.M))

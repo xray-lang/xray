@@ -1154,7 +1154,7 @@ def render_os_getpid(declarations):
 
 def render_os_callables(declarations):
     lines, rows = [], []
-    for ordinal, name in enumerate(('platform', 'arch', 'getenv', 'setenv', 'unsetenv', 'environBlock', 'exit', 'getpid', 'getcwd', 'hostname', 'systemUsername')):
+    for ordinal, name in enumerate(('platform', 'arch', 'getenv', 'setenv', 'unsetenv', 'environBlock', 'exit', 'getpid', 'getcwd', 'hostname', 'systemUsername', 'systemHomedir')):
         if name == 'getpid':
             pid_lines, pid_rows = render_os_getpid(declarations)
             lines += pid_lines
@@ -1165,8 +1165,8 @@ def render_os_callables(declarations):
             raise ValueError('OS host fact requires its sole governed declaration: ' + name)
         row = candidates[0]
         environment, setter, remove = name == 'getenv', name == 'setenv', name == 'unsetenv'
-        snapshot, terminate, username = name == 'environBlock', name == 'exit', name == 'systemUsername'
-        provider = 'environ_block' if snapshot else 'system_username' if username else name
+        snapshot, terminate, username = name == 'environBlock', name == 'exit', name in ('systemUsername', 'systemHomedir')
+        provider = 'environ_block' if snapshot else 'system_username' if name == 'systemUsername' else 'system_homedir' if username else name
         signature = '(code: i64): ()' if terminate else '(): Array<string>' if snapshot else '(name: string): bool' if remove else '(name: string, value: string): bool' if setter else '(name: string): string?' if environment else '(): string?' if username else '(): string'
         result = '()' if terminate else 'Array<string>' if snapshot else 'bool' if setter or remove else 'string?' if environment or username else 'string'
         if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,

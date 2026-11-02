@@ -85,6 +85,11 @@ XR_FUNC XrOsIoStatus xr_os_io_system_username(const XrOsIoPolicy *policy,char **
     return XR_OS_IO_UNSUPPORTED;
 }
 
+XR_FUNC XrOsIoStatus xr_os_io_system_homedir(const XrOsIoPolicy *policy,char **output) {
+    if(!io_policy_valid(policy) || !output || *output)return XR_OS_IO_BAD_ARGUMENT;
+    return XR_OS_IO_UNSUPPORTED;
+}
+
 XR_FUNC XrOsIoStatus xr_os_io_environment_get(const XrOsIoPolicy *policy,
     const char *name, char **output) {
     if (!io_policy_valid(policy) || !name || !output || *output) return XR_OS_IO_BAD_ARGUMENT;
