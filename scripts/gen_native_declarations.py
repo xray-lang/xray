@@ -1118,24 +1118,27 @@ def render_sys_thread_yield(declarations):
 
 def render_os_callables(declarations):
     lines, rows = [], []
-    for ordinal, name in enumerate(('platform', 'arch', 'getenv', 'setenv', 'unsetenv', 'environBlock')):
+    for ordinal, name in enumerate(('platform', 'arch', 'getenv', 'setenv', 'unsetenv', 'environBlock', 'exit')):
         candidates = [row for row in declarations if row.module == 'os' and row.name == '__' + name]
         if len(candidates) != 1:
             raise ValueError('OS host fact requires its sole governed declaration: ' + name)
         row = candidates[0]
         environment, setter, remove = name == 'getenv', name == 'setenv', name == 'unsetenv'
-        snapshot = name == 'environBlock'
+        snapshot, terminate = name == 'environBlock', name == 'exit'
         provider = 'environ_block' if snapshot else name
-        signature = '(): Array<string>' if snapshot else '(name: string): bool' if remove else '(name: string, value: string): bool' if setter else '(name: string): string?' if environment else '(): string'
-        result = 'Array<string>' if snapshot else 'bool' if setter or remove else 'string?' if environment else 'string'
+        signature = '(code: i64): ()' if terminate else '(): Array<string>' if snapshot else '(name: string): bool' if remove else '(name: string, value: string): bool' if setter else '(name: string): string?' if environment else '(): string'
+        result = '()' if terminate else 'Array<string>' if snapshot else 'bool' if setter or remove else 'string?' if environment else 'string'
         if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
                 row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
                 row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
                 row.ret, row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
-                signature, '2' if setter else '1' if environment or remove else '0', 'ss' if setter else 's' if environment or remove else '', 'internal', '', '', '' if setter or remove else 'fresh', 'system', 'os_' + provider,
+                signature, '2' if setter else '1' if environment or remove or terminate else '0', 'ss' if setter else 's' if environment or remove else 'v' if terminate else '', 'internal', '', '', '' if setter or remove or terminate else 'fresh', 'system', 'os_' + provider,
                 'xrt_os_' + provider, True, 'method', '', 'normal', '', '', 'value', False, None, (), ''):
             raise ValueError('OS host fact differs from its complete source contract: ' + name)
         symbol = 'xr_native_os_' + provider
+        if terminate:
+            lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {',
+                '    {"code", "i64", XR_NATIVE_TERM_I64, false, false},', '};']
         if environment or setter or remove:
             lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {',
                 '    {"name", "string", XR_NATIVE_TERM_STRING, false, false},']
@@ -1145,7 +1148,7 @@ def render_os_callables(declarations):
         lines += ['static const XrNativeMemberDeclaration ' + symbol + ' = {',
             '    ' + str(ordinal + 1) + ', "__' + name + '", ' + c_string(signature) + ', ' + c_string(result) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
             '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
-            '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + (symbol + '_parameters, 1, XR_NATIVE_TERM_BOOL' if remove else symbol + '_parameters, 2, XR_NATIVE_TERM_BOOL' if setter else symbol + '_parameters, 1, XR_NATIVE_TERM_NULLABLE_STRING' if environment else
+            '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + (symbol + '_parameters, 1, XR_NATIVE_TERM_UNIT' if terminate else symbol + '_parameters, 1, XR_NATIVE_TERM_BOOL' if remove else symbol + '_parameters, 2, XR_NATIVE_TERM_BOOL' if setter else symbol + '_parameters, 1, XR_NATIVE_TERM_NULLABLE_STRING' if environment else
                 'NULL, 0, XR_NATIVE_TERM_ARRAY_STRING' if snapshot else 'NULL, 0, XR_NATIVE_TERM_STRING'), '};']
         rows += ['    {XR_NATIVE_CALLABLE_OS_' + provider.upper() + ', NULL, &' + symbol + ', NULL, false, "os", "stdlib/defs/core.def", FINGERPRINT}']
     return lines, rows

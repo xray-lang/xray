@@ -22,6 +22,7 @@
 #include "xxir_format.h"
 #include "xxir_native_callable.h"
 #include "../os/os_thread.h"
+#include "../os/os_proc.h"
 #include "../shared/xr_os_core.h"
 #include "xxir_from_utf8_internal.h"
 #include "xxir_unicode_internal.h"
@@ -2441,7 +2442,11 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
         if(evaluated!=XR_XIR_RUN_OK)return xr_xir_call_fault(evaluated);
     } else if(xir_os_native_id(id)) {
         if(!xir_os_native_scope(program->declarations,index,program->entry_count))goto failed;
-        if(id==XR_NATIVE_CALLABLE_OS_GETENV || id==XR_NATIVE_CALLABLE_OS_SETENV || id==XR_NATIVE_CALLABLE_OS_UNSETENV ||
+        if(id==XR_NATIVE_CALLABLE_OS_EXIT) {
+            status=xr_xir_call_execution_status(view);
+            if(status!=XR_XIR_CALL_READY)goto failed;
+            xr_proc_self_exit(view->arguments[0].payload);
+        } else if(id==XR_NATIVE_CALLABLE_OS_GETENV || id==XR_NATIVE_CALLABLE_OS_SETENV || id==XR_NATIVE_CALLABLE_OS_UNSETENV ||
             id==XR_NATIVE_CALLABLE_OS_ENVIRON_BLOCK) {
 #if defined(XR_OS_WINDOWS)
             status=id==XR_NATIVE_CALLABLE_OS_ENVIRON_BLOCK?instance_environment_snapshot(view,instance,entry->result,value):

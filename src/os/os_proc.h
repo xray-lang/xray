@@ -214,6 +214,9 @@ XR_FUNC XrOsIoStatus xr_os_io_environment_snapshot_each(const XrOsIoPolicy *poli
     XrOsIoStatus (*visitor)(void *context, const char *text, size_t length));
 /* Failure preserves the handle, allowing its real owner to retry explicitly. */
 XR_FUNC XrOsIoStatus xr_os_io_environment_snapshot_close(XrOsEnvironmentSnapshot *snapshot);
+/* Terminates this process using C exit cleanup. Status is the low 32 bits of
+ * code interpreted as signed; host wait/status representation stays native. */
+XR_FUNC_NORET void xr_proc_self_exit(int64_t code);
 
 // Returns true if a debugger (lldb / gdb / Visual Studio) is
 // attached to the current process at the time of the call. Best
