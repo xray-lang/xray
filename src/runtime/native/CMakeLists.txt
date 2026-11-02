@@ -29,4 +29,8 @@ endif()
 set(XRAY_NATIVE_RUNTIME_LINK_INPUTS
     $<TARGET_FILE:xray_native_runtime> $<TARGET_FILE:xray_xir_scalar>
     $<TARGET_FILE:xray_xir_admission> $<TARGET_FILE:xray_xir_declarations>
-    $<TARGET_FILE:xray_compile_resources> PARENT_SCOPE)
+    $<TARGET_FILE:xray_compile_resources>)
+if(WIN32)
+    list(APPEND XRAY_NATIVE_RUNTIME_LINK_INPUTS advapi32.lib userenv.lib)
+endif()
+set(XRAY_NATIVE_RUNTIME_LINK_INPUTS ${XRAY_NATIVE_RUNTIME_LINK_INPUTS} PARENT_SCOPE)
