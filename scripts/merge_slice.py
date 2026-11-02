@@ -211,7 +211,7 @@ def integrate(args, review: dict, log: dict, logs: Path) -> None:
             raise RuntimeError("Rebased candidate has a placeholder author or committer")
         final_committers.append(identities[1])
     log["committers"] = sorted(set(final_committers))
-    changed = git_paths(integration, "diff", "--name-only", main, candidate)
+    changed = git_paths(integration, "diff", "--no-renames", "--name-only", main, candidate)
     log["changed"] = changed
     log["reviewScope"] = review_scope(integration, main, candidate, review)
     log["legacy"] = xray_progress.legacy_deletions(integration, main, candidate)
@@ -248,11 +248,16 @@ def integrate(args, review: dict, log: dict, logs: Path) -> None:
     log["manifestSHA256"] = hashlib.sha256(content).hexdigest()
     log["smoke"] = plan.get("smokeStatus", "NOT_RUN: no smoke status supplied")
     l2 = None
-    if getattr(args, "l2_capability", []):
+    capabilities = list(getattr(args, "l2_capability", []))
+    # Standard-library inputs are embedded in the public Source SDK archives.
+    if any(path.startswith("stdlib/") and Path(path).suffix in {".xr", ".def", ".c", ".h"}
+           for path in changed):
+        capabilities.append("source-sdk")
+    if capabilities:
         sensitive = list(getattr(args, "l2_sensitive", []))
         if "multiple production owners" in log["reviewScope"]["required_by"]:
             sensitive.append("owner")
-        l2 = xray_l1.tier_plan(integration, "L2", args.l2_capability, changed, sensitive)
+        l2 = xray_l1.tier_plan(integration, "L2", capabilities, changed, sensitive)
         log["L2Plan"] = l2
     else:
         if getattr(args, "l2_sensitive", []):

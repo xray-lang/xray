@@ -253,6 +253,22 @@ class QueueTests(unittest.TestCase):
         self.assertFalse((self.root / "build").exists())
 
     def test_requested_l2_failure_never_advances_main(self):
+        self.check_failed_capability(False)
+
+    def test_embedded_stdlib_cannot_skip_failed_source_sdk_without_l2_flags(self):
+        self.check_failed_capability(True)
+
+    def test_moving_embedded_stdlib_out_cannot_skip_failed_source_sdk(self):
+        self.check_failed_capability("rename")
+
+    def check_failed_capability(self, embedded_source):
+        if embedded_source == "rename":
+            self.git("switch", "main")
+            self.write("stdlib/xml/xml.xr", "export fn parse() {}\n")
+            self.git("add", "stdlib/xml/xml.xr")
+            self.git("commit", "-m", "Add embedded source fixture")
+            self.base = self.git("rev-parse", "HEAD")
+            self.git("switch", "--detach")
         plan = json.loads((self.repo / "scripts/l1-v0.json").read_text())
         plan["validationTiers"] = "scripts/validation-tiers.json"
         baseline_commit, baseline_path = merge_slice.xray_l1.TIER_BASELINE
@@ -267,7 +283,7 @@ class QueueTests(unittest.TestCase):
         def tier(level, name, test):
             return {"schema": 1, "tier": level, "groups": {
                 name: {"tests": [test], "targets": ["xray"], "match": ["*"]}}}
-        l2 = tier("L2", "checked-sdk", "capability_actual")
+        l2 = tier("L2", "source-sdk" if embedded_source else "checked-sdk", "capability_actual")
         l2.update(requiredOn={"owner": {"tests": ["capability_actual"], "targets": ["xray"]}}, interfaceMatches={})
         night = tier("L3", "nightly", "nightly_actual")
         night["groups"]["nightly"].update(tests=baseline["tests"] + ["nightly_actual"], targets=baseline["targets"])
@@ -278,7 +294,22 @@ class QueueTests(unittest.TestCase):
             "scripts/l3-nightly.json": json.dumps(night),
             "CMakeLists.txt": CMAKE + '\nadd_test(NAME capability_actual COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/gate.py" l2 "${CMAKE_BINARY_DIR}")\n',
             "capability-fail": "yes"})
-        log = self.finish(self.start(branch, ["--l2-capability", "checked-sdk", "--l2-sensitive", "owner"]), 1)
+        if embedded_source:
+            self.git("switch", branch[0])
+            if embedded_source == "rename":
+                (self.repo / "tests/fixtures").mkdir(parents=True)
+                self.git("mv", "stdlib/xml/xml.xr", "tests/fixtures/xml.xr")
+                renamed = self.git("diff", "--find-renames", "--name-status", "--cached")
+                self.assertIn("R100\tstdlib/xml/xml.xr\ttests/fixtures/xml.xr", renamed)
+            else:
+                self.write("stdlib/xml/xml.xr", "export fn parse() {}\n")
+                self.git("add", "stdlib/xml/xml.xr")
+            self.git("commit", "-m", "Change embedded library input")
+            review = json.loads(branch[1].read_text())
+            review["sourceSHA"] = self.git("rev-parse", "HEAD")
+            branch[1].write_text(json.dumps(review))
+        arguments = [] if embedded_source else ["--l2-capability", "checked-sdk", "--l2-sensitive", "owner"]
+        log = self.finish(self.start(branch, arguments), 1)
         self.assertEqual(log["gates"]["L1"], "PASS")
         self.assertEqual(log["gates"]["L2"], "FAIL")
         self.assertEqual(self.git("rev-parse", "main"), self.base)

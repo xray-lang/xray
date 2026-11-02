@@ -76,6 +76,14 @@ class TierTests(unittest.TestCase):
         self.assertNotIn("hir_body", catalog["groups"]["source-sdk"]["tests"])
         self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
 
+    def test_embedded_stdlib_source_selects_source_sdk_without_unrelated_families(self):
+        plan = xray_l1.tier_plan(ROOT, "L2", changed=["stdlib/xml/xml.xr"])
+        self.assertEqual(plan["groups"], ["source-sdk"])
+        self.assertIn("source_sdk_installed", plan["tests"])
+        self.assertNotIn("sdk_installed_native_msvc", plan["tests"])
+        self.assertNotIn("native_runtime_installed", plan["tests"])
+        self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
+
     def test_recursive_fixture_selection_matches_actual_ctest_report(self):
         catalog = {"groups": {"family": {"tier": "L2", "tests": ["leaf"], "targets": []}},
                    "l2": {"interfaceMatches": {}, "requiredOn": {}, "prerequisites": {
