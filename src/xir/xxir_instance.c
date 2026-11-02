@@ -1083,13 +1083,13 @@ XrXirCallStatus xr_xir_instance_free(XrXirInstance *instance) {
     }
     XrXirCallStatus original=instance_drain_state(root);
     if (current==root) status=original;
+    root->driving=true;
 #if defined(XR_OS_WINDOWS)
     if(!instance_environment_snapshots_close(root)) {
         root->driving=false;return XR_XIR_CALL_CLOSE_FAILED;
     }
 #endif
     bool exhausted=root->budget.exhausted;
-    root->driving=true;
     XrXirValueStatus closed=xr_xir_domain_close(root->domain);
     if (closed!=XR_XIR_VALUE_OK) {
         root->driving=false;
