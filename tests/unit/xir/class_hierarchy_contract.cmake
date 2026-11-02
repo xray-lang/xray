@@ -1,0 +1,10 @@
+add_executable(test_xir_class_hierarchy_contract xir/test_xir_class_hierarchy_contract.c)
+target_link_libraries(test_xir_class_hierarchy_contract PRIVATE xray_xir)
+if(MSVC)
+    target_compile_options(test_xir_class_hierarchy_contract PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_xir_class_hierarchy_contract PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_class_hierarchy_contract COMMAND test_xir_class_hierarchy_contract)
+set_tests_properties(test_xir_class_hierarchy_contract PROPERTIES
+    LABELS "unit;xir;ownership;nominal" TIMEOUT 60)

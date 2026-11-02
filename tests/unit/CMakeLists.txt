@@ -719,6 +719,7 @@ target_compile_definitions(test_xir_source_mixed PRIVATE XR_SOURCE_FIXTURES="${C
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/enum_identity.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/enum_description.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/class_identity.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/class_hierarchy_contract.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/class_inline.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/library.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/library_strings.cmake)
