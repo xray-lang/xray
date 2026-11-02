@@ -97,6 +97,21 @@ XR_FUNC XrOsIoStatus xr_os_io_environment_set(const XrOsIoPolicy *policy,
     if(!io_policy_valid(policy) || !name || !value || !current || !output)return XR_OS_IO_BAD_ARGUMENT;
     if(!*name || strchr(name,'=')) { *output=false;return XR_OS_IO_OK; }
     XrIoContext io={policy,XR_OS_IO_OK};wchar_t *key=NULL,*text=NULL;
+    const char *inputs[2]={name,value};
+    for(uint32_t i=0;i<2;++i) {
+        size_t length=0;if(!io_length(&io,inputs[i],&length))return io.status;
+        if(length>INT_MAX)return XR_OS_IO_OVERFLOW;
+        SetLastError(ERROR_SUCCESS);
+        int required=xr_win_utf8_to_utf16_required(inputs[i],length);
+        if(!required)return GetLastError()==ERROR_NO_UNICODE_TRANSLATION?XR_OS_IO_BAD_ARGUMENT:
+            length==INT_MAX?XR_OS_IO_OVERFLOW:XR_OS_IO_BAD_ARGUMENT;
+        /* The count includes NUL. Platform text limits are normal refusals;
+         * allocation and arithmetic overflow keep their resource status. */
+        if(required>32768) {
+            if(!current(policy->context))return XR_OS_IO_CANCELLED;
+            *output=false;return XR_OS_IO_OK;
+        }
+    }
     io_status(&io,xr_win_utf8_text_owned(policy,name,&key));
     if(io.status==XR_OS_IO_OK)io_status(&io,xr_win_utf8_text_owned(policy,value,&text));
     if(io.status==XR_OS_IO_OK && !current(policy->context))io_status(&io,XR_OS_IO_CANCELLED);
