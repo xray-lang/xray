@@ -42,10 +42,13 @@ static void class_inheritance_defaults_execute(XrXirProgram *program,uint32_t en
     config.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,class_inheritance_output,&output};
     XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);
-    XrXirCallStatus status=XR_XIR_CALL_READY;
+    XrXirCallStatus status=XR_XIR_CALL_READY;XrXirInstanceResult observed={0};
     for(uint32_t step=0;status==XR_XIR_CALL_READY;++step) {
-        CHECK(step<100000);status=xr_xir_instance_poll_bounded(instance,64).outcome.status;
+        CHECK(step<100000);observed=xr_xir_instance_poll_bounded(instance,64);status=observed.outcome.status;
     }
+    if(status!=XR_XIR_CALL_RETURNED)fprintf(stderr,"constructor defaults entry%u status%u panic%u value%u/%llu\n",
+        entry,(unsigned)status,observed.outcome.panic.detail.code,observed.outcome.value.type,
+        (unsigned long long)observed.outcome.value.payload);
     CHECK(status==XR_XIR_CALL_RETURNED);XrXirValue value={0};
     CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
     CHECK(value.type==XR_XIR_I64 && value.payload==42);xr_xir_value_drop(&value);CHECK(!output.length);
