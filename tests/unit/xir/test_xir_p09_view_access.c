@@ -886,8 +886,8 @@ static XrXirStatus access_sequence(const XrXirCompileContext *context,uint32_t k
     XrXirConstruction *construction=NULL;XrXirDiagnostic diagnostic={0};const char *stage="construction";
     XrXirStatus status=xir_fixture_construction(context,&f.types,&construction);if (status!=XR_XIR_OK) goto done;
     stage="ordinary";
-    status=xir_compile_view_prepare_ordinary(context,&f.module,construction,&diagnostic);
-    if (status==XR_XIR_OK) {stage="return origins";status=xir_compile_view_return_origins_verified(context,(XirEffectInput){&f.module,NULL,NULL},&diagnostic);}
+    status=xir_compile_view_prepare_ordinary(context,(XirEffectInput){&f.module,construction,NULL},&diagnostic);
+    if (status==XR_XIR_OK) {stage="return origins";status=xir_compile_view_return_origins_verified(context,(XirEffectInput){&f.module,construction,NULL},&diagnostic);}
     if (f.prefix_expected && status!=XR_XIR_BUDGET && status!=XR_XIR_MEMORY_LIMIT && status!=XR_XIR_OUT_OF_MEMORY) CHECK(status==XR_XIR_OK);
     if (status==XR_XIR_OK) {stage="affine";status=xir_compile_view_affine_verified(context,&f.module,&diagnostic);}
     if (status==XR_XIR_BUDGET || status==XR_XIR_MEMORY_LIMIT || status==XR_XIR_OUT_OF_MEMORY) goto done;
@@ -899,9 +899,9 @@ static XrXirStatus access_sequence(const XrXirCompileContext *context,uint32_t k
     if (kind==44) {status=access_scoped_check(context,&f);if (status!=XR_XIR_OK) goto done;}
     XrXirCompileContext tiny=*context;tiny.limits.frame_bytes=1;size_t count=attempts;
     CHECK(xir_compile_view_access_verified(&tiny,&f.module,NULL)==XR_XIR_BUDGET && attempts==count);
-    if (kind>=112 && kind<116) CHECK(xir_compile_view_cell_access_verified(&tiny,&f.module,NULL)==XR_XIR_BUDGET && attempts==count);
+    if (kind>=112 && kind<116) CHECK(xir_compile_view_cell_access_verified_input(&tiny,(XirEffectInput){&f.module,construction,NULL},NULL)==XR_XIR_BUDGET && attempts==count);
     stage="access";
-    status=kind>=112 && kind<116?xir_compile_view_cell_access_verified(context,&f.module,&diagnostic):
+    status=kind>=112 && kind<116?xir_compile_view_cell_access_verified_input(context,(XirEffectInput){&f.module,construction,NULL},&diagnostic):
         xir_compile_view_access_verified(context,&f.module,&diagnostic);
     if (status!=XR_XIR_BUDGET && status!=XR_XIR_MEMORY_LIMIT && status!=XR_XIR_OUT_OF_MEMORY) {
         if (status!=f.expected || (status!=XR_XIR_OK && diagnostic.instruction!=f.bad))
@@ -1059,10 +1059,10 @@ static XrXirStatus slot_publication_attempt(const XrXirCompileContext *context,u
     XrXirStatus status=xr_xir_compile_types_structure_verify(context,&f.types);
     XrXirSlotFact fact={0,"fixture",7,0};const XrXirSlotFacts slots={&fact,1};
     if (status==XR_XIR_OK) {gate="construction";status=xir_construction_project(context,&f.types,&slots,&construction, NULL);}
-    if (status==XR_XIR_OK) {gate="ordinary";status=xir_compile_view_prepare_ordinary(context,&f.module,construction,&diagnostic);}
+    if (status==XR_XIR_OK) {gate="ordinary";status=xir_compile_view_prepare_ordinary(context,(XirEffectInput){&f.module,construction,NULL},&diagnostic);}
     if (status==XR_XIR_OK) {gate="affine";status=xir_compile_view_affine_verified(context,&f.module,&diagnostic);}
     if (status==XR_XIR_OK) {gate="access";status=kind==2?xir_compile_view_access_verified(context,&f.module,&diagnostic):
-        xir_compile_view_cell_access_verified(context,&f.module,&diagnostic);}
+        xir_compile_view_cell_access_verified_input(context,(XirEffectInput){&f.module,construction,NULL},&diagnostic);}
     if (status!=XR_XIR_OUT_OF_MEMORY && status!=XR_XIR_MEMORY_LIMIT && status!=XR_XIR_BUDGET)
         fprintf(stderr,"Slot publication kind=%u %s status=%u at %u/%u/%u\n",kind,gate,status,
             diagnostic.function,diagnostic.block,diagnostic.instruction);

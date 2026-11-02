@@ -178,11 +178,11 @@ static XrXirStatus da_sequence(const XrXirCompileContext *context,uint32_t kind)
     XrXirConstruction *construction=NULL;XrXirDiagnostic diagnostic={0};
     XrXirStatus status=xir_fixture_module_construction(context,&f.module,&construction);
     const char *stage="construction";
-    if (status==XR_XIR_OK) {stage="ordinary";status=xir_compile_view_prepare_ordinary(context,&f.module,construction,&diagnostic);}
-    if (status==XR_XIR_OK) {stage="origins";status=xir_compile_view_return_origins_verified(context,(XirEffectInput){&f.module,NULL,NULL},&diagnostic);}
+    if (status==XR_XIR_OK) {stage="ordinary";status=xir_compile_view_prepare_ordinary(context,(XirEffectInput){&f.module,construction,NULL},&diagnostic);}
+    if (status==XR_XIR_OK) {stage="origins";status=xir_compile_view_return_origins_verified(context,(XirEffectInput){&f.module,construction,NULL},&diagnostic);}
     if (status==XR_XIR_OK) {stage="affine";status=xir_compile_view_affine_verified(context,&f.module,&diagnostic);}
     if (status==XR_XIR_OK) {
-        stage="access";status=xir_compile_view_cell_access_verified(context,&f.module,&diagnostic);
+        stage="access";status=xir_compile_view_cell_access_verified_input(context,(XirEffectInput){&f.module,construction,NULL},&diagnostic);
         if (status==f.expected && status!=XR_XIR_OK) CHECK(diagnostic.function==0 && diagnostic.instruction==f.bad);
     }
     if (status!=f.expected && status!=XR_XIR_OUT_OF_MEMORY && status!=XR_XIR_MEMORY_LIMIT && status!=XR_XIR_BUDGET)
@@ -227,8 +227,8 @@ static XrXirStatus da_scope_visit(void *data,const XrXirCompileContext *remainin
 }
 static void da_scope_admit(const XrXirCompileContext *context,const DefaultAccessFixture *f,XrXirConstruction **construction) {
     CHECK(xir_fixture_module_construction(context,&f->module,construction)==XR_XIR_OK);
-    CHECK(xir_compile_view_prepare_ordinary(context,&f->module,*construction,NULL)==XR_XIR_OK);
-    CHECK(xir_compile_view_return_origins_verified(context,(XirEffectInput){&f->module,NULL,NULL},NULL)==XR_XIR_OK);
+    CHECK(xir_compile_view_prepare_ordinary(context,(XirEffectInput){&f->module,*construction,NULL},NULL)==XR_XIR_OK);
+    CHECK(xir_compile_view_return_origins_verified(context,(XirEffectInput){&f->module,*construction,NULL},NULL)==XR_XIR_OK);
     CHECK(xir_compile_view_affine_verified(context,&f->module,NULL)==XR_XIR_OK);
 }
 static void da_scope_cases(void) {
@@ -237,7 +237,7 @@ static void da_scope_cases(void) {
         XrXirConstruction *construction=NULL;da_scope_admit(&context,&f,&construction);
         CHECK(xir_compile_view_access_verified(&context,&f.module,NULL)==XR_XIR_UNRESOLVED);
         DefaultAccessScopeCase request={&f,&context,mode,0};
-        CHECK(xir_effects_default_access_operation(&context,&f.module,da_scope_visit,&request)==(mode?XR_XIR_BAD_STRUCTURE:XR_XIR_OK));
+        CHECK(xir_effects_default_access_operation_input(&context,(XirEffectInput){&f.module,construction,NULL},da_scope_visit,&request)==(mode?XR_XIR_BAD_STRUCTURE:XR_XIR_OK));
         CHECK(request.calls==1);f.ops[0][f.site].targets[0]=2;
         CHECK(da_sequence(&context,0)==XR_XIR_OK);
         xr_xir_compile_construction_free(construction);owner_free(&context,baseline);
