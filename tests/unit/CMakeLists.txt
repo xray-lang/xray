@@ -4785,6 +4785,13 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/xir/source_assert_throws.cmake)
 include("${CMAKE_CURRENT_LIST_DIR}/xir/rest_values/rest_values.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/task_scope.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/task_aggregate.cmake")
+foreach(engine vm native)
+    add_test(NAME test_await_cancel_surface_${engine}
+        COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/test_await_cancel_surface.py
+            --root ${PROJECT_SOURCE_DIR} --binary $<TARGET_FILE:xray> --engine ${engine})
+    set_tests_properties(test_await_cancel_surface_${engine} PROPERTIES
+        LABELS "unit;xir;language;task;cli" TIMEOUT 180)
+endforeach()
 include("${CMAKE_CURRENT_LIST_DIR}/xir/call_select.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/math_source.cmake")

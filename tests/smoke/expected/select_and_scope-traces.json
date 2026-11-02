@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "demos/05-concurrency/select_and_scope.xr",
-  "sourceCanonicalSha256": "a1b88b007c599ffa0104fe46e08c41661f9c2b639cae8d0289281d2eb1beb900",
+  "sourceCanonicalSha256": "5dfa364d450dfaa09e5898268b1126bf54b4733e8f20203fb887735a5864fa83",
   "traces": [
     "select got: from ch1\nopen file\nprocess data...\nflush buffer\nclose file\n\n--- scope demo ---\n  task A done\n  task B done\nall tasks in scope completed\n\n--- parallel pipeline ---\ngot: data-1\ngot: data-2\ngot: data-3\n",
     "select got: from ch1\nopen file\nprocess data...\nflush buffer\nclose file\n\n--- scope demo ---\n  task A done\n  task B done\nall tasks in scope completed\n\n--- parallel pipeline ---\ngot: data-1\ngot: data-3\ngot: data-2\n",

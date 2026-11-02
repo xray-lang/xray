@@ -683,8 +683,9 @@ def render_task_identity(root):
     expected[-1:-1] = [
         'private static __allBegin(tasks: Array<Task<T, E>>) -> Task<Array<T>, E>',
         'private static __firstBegin(tasks: Array<Task<T, E>>) -> Task<T, E>',
-        'static all(tasks: Array<Task<T, E>>) throws(E | Cancelled) -> Array<T>',
-        'static first(tasks: Array<Task<T, E>>) throws(E | Cancelled) -> T',
+        'static all(tasks: Array<Task<T, E>>) throws(E) -> Array<T>',
+        'static first(tasks: Array<Task<T, E>>) throws(E) -> T',
+        'static timeout(task: Task<T, E>, milliseconds: i64) throws(E | Timeout) -> T',
     ]
     if [raw.strip() for _, raw in rows] != expected:
         raise ValueError('Task source differs from its complete governed declaration')
@@ -726,7 +727,9 @@ def render_task_identity(root):
             output.append(f'static const XrNativeParameter xr_native_task_parameters_{index}[] = {{')
             for pname, _, spelling, optional, variadic in parameters:
                 output.append('    {' + ', '.join([c_string(pname), c_string(spelling),
-                    'XR_NATIVE_TERM_ARRAY_TASK' if static else 'XR_NATIVE_TERM_UNADMITTED',
+                    ('XR_NATIVE_TERM_I64' if spelling == 'i64' else
+                     'XR_NATIVE_TERM_TASK_ELEMENT' if name == 'timeout' else
+                     'XR_NATIVE_TERM_ARRAY_TASK') if static else 'XR_NATIVE_TERM_UNADMITTED',
                     str(optional).lower(), str(variadic).lower()]) + '},')
             output.append('};')
         facts.append((index, number, raw, name, signature, receiver, method, parameters, result_text, private, static))
@@ -738,13 +741,13 @@ def render_task_identity(root):
             'XR_NATIVE_RECEIVER_' + receiver, str(static).lower(), str(method).lower(),
             str(not private).lower(), str(not private).lower(),
             'XR_NATIVE_OPERATION_'+{'cancel':'TASK_CANCEL', 'poll':'TASK_POLL', 'awaitResult':'TASK_AWAIT_RESULT',
-                'all':'TASK_ALL','first':'TASK_FIRST'}.get(name,'NONE'),
+                'all':'TASK_ALL','first':'TASK_FIRST','timeout':'TASK_TIMEOUT'}.get(name,'NONE'),
             'XR_NATIVE_ALLOCATION_NO_HEAP' if name == 'cancel' else 'XR_NATIVE_ALLOCATION_MAY_HEAP',
             '"Never"' if name == 'cancel' else '"allocation,retain,limit,unsupported"' if private else '"allocation,retain,limit"',
             'XR_NATIVE_RESULT_OWNERSHIP_UNIT' if name == 'cancel' else 'XR_NATIVE_RESULT_OWNERSHIP_OWNED',
             params, str(len(parameters)),
             'XR_NATIVE_TERM_'+{'cancel':'UNIT', 'poll':'NULLABLE_TASK_RESULT', 'awaitResult':'TASK_RESULT',
-                '__allBegin':'TASK_ARRAY','__firstBegin':'TASK_ELEMENT','all':'ARRAY_ELEMENT','first':'ELEMENT'}[name]]) + '},')
+                '__allBegin':'TASK_ARRAY','__firstBegin':'TASK_ELEMENT','all':'ARRAY_ELEMENT','first':'ELEMENT','timeout':'ELEMENT'}[name]]) + '},')
     number, raw = rows[6]
     digest = hashlib.sha256(source.encode('utf-8')).digest()
     output += ['};', 'static const char *const xr_native_task_type_parameters[] = {"T", "E"};',
@@ -752,7 +755,7 @@ def render_task_identity(root):
         '    5, XR_NATIVE_DECLARATION_IDENTITY, "Task", xr_native_task_type_parameters, 2,',
         '    "stdlib/types/coroutine.xr", "xray-native:prelude/Task", {{' +
         ', '.join(str(byte) for byte in digest) + '}},',
-        f'    {number}, {len(raw[:raw.index("Task")].encode("utf-8")) + 1}, xr_native_task_members, 7', '};']
+        f'    {number}, {len(raw[:raw.index("Task")].encode("utf-8")) + 1}, xr_native_task_members, {len(facts)}', '};']
     return output
 
 
@@ -836,7 +839,7 @@ def render_channel_identity(root):
     expected = ['enum Recv<T> {', 'Value { value: T },', 'Empty,', 'Timeout,', 'Closed,', '}',
                 'enum SendResult {', 'Sent,', 'Full,', 'Timeout,', 'Closed,', '}',
                 'class Channel<T> {', 'capacity: i64', 'isClosed: bool',
-                'send(value: T) throws(SendResult)', 'recv() -> Recv<T>', 'recvOr(default: T) -> T',
+                'send(value: T)', 'recv() -> Recv<T>', 'recvOr(default: T) -> T',
                 'trySend(value: T) -> SendResult', 'tryRecv() -> Recv<T>',
                 'sendTimeout(value: T, timeout: i64) -> SendResult',
                 'recvTimeout(timeout: i64) -> Recv<T>', 'close()', '}']
@@ -901,6 +904,7 @@ def channel_result_rows(root):
             ('SendResult', 'SEND_RESULT', [('Sent','NONE'),('Full','NONE'),('Timeout','NONE'),('Closed','NONE')], 8, 0),
             ('Endian', 'ENDIAN', [('Native','NONE'),('LE','NONE'),('BE','NONE')], 0, 0),
             ('Cancelled', 'CANCELLED', [('Cancelled','NONE')], 18, 0),
+            ('Timeout', 'TASK_TIMEOUT', [('Timeout','NONE')], 0, 0),
             ('TaskResult', 'TASK_RESULT', [('Success','TYPE_PARAM_0'),('Error','ERROR'),('Panic','PANIC_INFO'),('Cancelled','NONE')], 19, 2),
             ('CompressionError', 'COMPRESSION_ERROR', [('InvalidData','NONE')], 0, 0)]
     for name, kind, variants, _, arity in rows:

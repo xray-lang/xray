@@ -1,4 +1,6 @@
-fn tryScopeCounter(n: i64) -> Iterator<i64> {
+enum ScopeError { Bad }
+fn checkedValue(n:i64) throws(ScopeError)->i64 { return n }
+fn tryScopeCounter(n: i64) -> Iterator<i64,ScopeError> {
     for (i in 0..n) {
         yield i
     }
@@ -9,7 +11,7 @@ fn test_array_for_in_variable_visible_inside_try() {
     var sum = 0
     try {
         for (x in [1, 2, 3]) {
-            sum += x
+            sum += checkedValue(x)
         }
     } catch (e) {
         assert(false, "array for-in in try should not throw")
@@ -22,7 +24,7 @@ fn test_generator_for_in_variable_visible_inside_try() {
     var sum = 0
     try {
         for (x in tryScopeCounter(4)) {
-            sum += x
+            sum += checkedValue(x)
         }
     } catch (e) {
         assert(false, "generator for-in in try should not throw")

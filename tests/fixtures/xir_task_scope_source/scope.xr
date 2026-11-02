@@ -17,7 +17,7 @@ export fn moveStandalone() -> i64 {
     var independent = [41]
     const independentSnapshot = independent
     const task = go consume(move independent)
-    try! await task
+    await task
     assert(independentSnapshot[0] == 41)
     return 42
 }
@@ -112,16 +112,16 @@ export fn breakBoundary() -> i64 {
     }
     return caught ? 42 : 0
 }
-fn deferredWorker(ready: Channel<i64>, waiting: Channel<i64>) throws(SendResult) {
+fn deferredWorker(ready: Channel<i64>, waiting: Channel<i64>) {
     defer { assert(waiting.isClosed) }
-    try ready.send(1)
+    ready.send(1)
     waiting.recv()
 }
-export fn exitOrder() throws(SendResult) -> i64 {
+export fn exitOrder() -> i64 {
     const ready = Channel<i64>(1)
     const waiting = Channel<i64>(1)
     var value = 1
-    try scope {
+    scope {
         go deferredWorker(ready, waiting)
         match (ready.recv()) {
             Recv.Value { value: signal } -> { assert(signal == 1) }
@@ -136,7 +136,7 @@ export fn panicBoundary() -> i64 {
         scope {
             const task = go failed()
             try {
-                try { try! await task } catch panic {}
+                try { await task } catch panic {}
                 return 1
             } catch panic { return 2 }
         }
@@ -155,7 +155,7 @@ export fn childFirstFailure() -> i64 {
     return caught
 }
 fn blockedError(waiting: Channel<i64>) throws(WorkError) {
-    try { try waiting.recv() } catch (error) {}
+    waiting.recv()
     throw WorkError.Failed
 }
 fn bodyFirstFailure() -> i64 {
@@ -192,7 +192,7 @@ fn selectedChannel(channel: Channel<i64>) -> Channel<i64> {
 fn selections() {
     const words = Channel<string>(1)
     const numbers = Channel<i64>(1)
-    try! words.send("selected")
+    words.send("selected")
     var chosen = 0
     select {
         word from words -> { assert(word == "selected"); chosen = 1 }
@@ -211,12 +211,12 @@ fn selections() {
     }
     assert(chosen == 3 && selectOrder.load() == 2)
     scope {
-        go fn() { try! numbers.send(42) }()
+        go fn() { numbers.send(42) }()
         select { number from numbers -> { assert(number == 42); chosen = 4 } }
     }
     assert(chosen == 4)
     const maybe = Channel<i64?>(1)
-    try! maybe.send(null)
+    maybe.send(null)
     select {
         value from maybe -> { assert(value == null); chosen = 5 }
         _ -> { assert(false) }
@@ -243,13 +243,13 @@ fn aggregateFailure() throws(PayloadError) -> i64 {
 fn aggregates() {
     const a = go aggregateValue(40)
     const b = go aggregateValue(2)
-    const values = try! Task.all([a, b, a])
+    const values = Task.all([a, b, a])
     assert(len(values) == 3 && values[0] == 40 && values[1] == 2 && values[2] == 40)
     const x = go aggregateText()
     const y = go aggregateText()
-    const first = try! Task.first([x, y])
+    const first = Task.first([x, y])
     assert(first == "aggregate")
-    try! Task.first([go aggregateUnit()])
+    Task.first([go aggregateUnit()])
     for (kind in 0..2) {
         var caught = false
         const task = go aggregateFailure()
@@ -261,7 +261,7 @@ fn aggregates() {
                 PayloadError.Failed { values: items } -> { assert(items[0] + items[1] == 42) }
             }
             caught = true
-        } catch (error: Cancelled) { assert(false) }
+        }
         assert(caught)
     }
 }

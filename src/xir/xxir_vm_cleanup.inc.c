@@ -9,12 +9,20 @@
  * KEY CONCEPT:
  *   Registration activates an immutable record; only a returned cleanup retires it.
  */
+#include "xxir_scope_cancel_shape.h"
 static XrXirAction vm_cleanup_exit(ScalarRun *run, VmState *state) {
     if (state->cleanup_waiting) {
         if ((run->view->inbox.status != XR_XIR_CALL_RETURNED &&
             !xr_xir_call_panic_status(run->view->inbox.status)) || !state->frontier)
             return xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT);
         uint32_t parent = run->function->blocks[vm_block(run->function, state->frontier - 1)].frontier;
+        if(xr_xir_call_scope_cancel_frontier(run->view)==state->frontier) {
+            uint32_t join=xr_xir_scope_cancel_join(run->function,state->frontier);
+            if(join==UINT32_MAX)return xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT);
+            state->exit_target=parent;state->leaving=false;
+            state->waiting=true;state->invoke=join+1;
+            state->panic=run->function->blocks[vm_block(run->function,join)].panic;
+        }
         if (xr_xir_call_cleanup_frontier(run->view, parent) != XR_XIR_CALL_READY)
             return xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT);
         state->frontier = parent;
@@ -73,7 +81,8 @@ static XrXirRunStatus vm_cleanup_step(ScalarRun *run, VmState *state,
     const XrXirInstruction *op, XrXirAction *action) {
     if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
     uint32_t target = op->targets[0];
-    if (op->op == XR_XIR_CLEANUP_REGISTER || state->frontier == (uint32_t)op->immediate) {
+    if (op->op == XR_XIR_CLEANUP_REGISTER ||
+        (op->op!=XR_XIR_CLEANUP_ERROR && state->frontier == (uint32_t)op->immediate)) {
         XrXirRunStatus status = scalar_edge(run, state->instruction, target);
         if (status != XR_XIR_RUN_OK) return status;
         if (op->op == XR_XIR_CLEANUP_REGISTER) {

@@ -582,7 +582,7 @@ int main(int argc,char **argv) {
     }
     if(argc==2 && !strcmp(argv[1],"nullable-unit")) {
         const LocalErrorCase unit_cases[]={
-            {"Unit Some/Never","fn value(){}\nexport fn answer()->i64{const v=try? value();const u:()=v!;return v!=null?42:0}\n",NULL,42},
+            {"Unit Some/Never","fn value(){}\nexport fn answer()->i64{const v:()?=value();const u:()=v!;return v!=null?42:0}\n",NULL,42},
             {"Unit error None","enum Failure{Bad}\nfn value() throws(Failure){throw Failure.Bad}\n"
                 "export fn answer()->i64{const v=try? value();return v==null?42:0}\n",NULL,42},
             {"Unit Some/None CTFE",local_unit_text,NULL,42},
@@ -722,19 +722,19 @@ int main(int argc,char **argv) {
         {"comptime fallible helper","enum Failure{Bad}\nfn sourceValue() throws(Failure)->i64{return 7}\n"
             "fn folded() throws(Failure)->i64{return try comptime try sourceValue()}\n"
             "export fn answer()->i64{try{return folded()}catch(e){return -1}}\n",NULL,7},
-        {"closed Channel send","fn send(ch:Channel<i64>) throws(SendResult){try ch.send(7)}\n"
-            "export fn answer()->i64{const ch=Channel<i64>(1);ch.close();try{send(ch);return 0}catch(e:SendResult){return 42}}\n",NULL,42},
+        {"closed Channel send","fn send(ch:Channel<i64>){ch.send(7)}\n"
+            "export fn answer()->i64{const ch=Channel<i64>(1);ch.close();try{send(ch);return 0}catch panic(p){return p.code==702?42:0}}\n",NULL,42},
         {"program top-level marker","const ch=Channel<i64>(1)\nch.send(7)\n"
-            "export fn answer()->i64{return 42}\n","E0330",0},
+            "export fn answer()->i64{return 42}\n",NULL,42},
         {"program top-level propagation","const ch=Channel<i64>(1)\ntry ch.send(7)\n"
-            "export fn answer()->i64{return 42}\n",NULL,42}
+            "export fn answer()->i64{return 42}\n","E0336",0}
     };
     for (size_t i=0;i<sizeof(cases)/sizeof(cases[0]);++i) local_case(&cases[i]);
     static const LocalErrorCase optional_cases[]={
         {"optional context null", "export fn answer()->i64{const value:i64?=try? null;"
-            "if(value==null){return 42};return 0}\n",NULL,42},
+            "if(value==null){return 42};return 0}\n","E0336",0},
         {"optional numeric context", "fn value()->u8?{return try? 42}\n"
-            "export fn answer()->i64{const result=value();if(result==null){return 0};return 42}\n",NULL,42},
+            "export fn answer()->i64{const result=value();if(result==null){return 0};return 42}\n","E0336",0},
         {"optional CTFE witness", "enum Failure{Bad}\nfn value() throws(Failure)->i64{throw Failure.Bad}\n"
             "export fn foldedWitness()->i64{return comptime ((try? value()) ?? 42)}\n"
             "export fn answer()->i64{return foldedWitness()}\n",NULL,42},
@@ -742,7 +742,7 @@ int main(int argc,char **argv) {
             "export fn answer()->i64{try{return (try? value()) ?? 42}catch(e:Failure){return 0}}\n",NULL,42},
         {"optional enum", "enum Failure{Bad}\nfn value() throws(Failure)->i64{throw Failure.Bad}\n"
             "export fn answer()->i64{return (try? value()) ?? 42}\n",NULL,42},
-        {"optional Never", "fn value()->i64{return 42}\nexport fn answer()->i64{return (try? value()) ?? 0}\n",NULL,42},
+        {"optional Never", "fn value()->i64{return 42}\nexport fn answer()->i64{return (try? value()) ?? 0}\n","E0336",0},
         {"optional typed pull", "enum Failure{Bad}\nfn values()->Iterator<i64,Failure>{yield 1\nthrow Failure.Bad}\n"
             "export fn answer()->i64{const it=values();const first=try? it.next();const second=try? it.next();"
             "return (first ?? 0)+(second ?? 41)}\n",NULL,42},
@@ -750,7 +750,7 @@ int main(int argc,char **argv) {
             "export fn answer()->i64{const result:i64?=try? value();return result ?? 0}\n",NULL,42},
         {"optional nested Nullable", "fn value()->i64??{const missing:i64?=null;return missing}\n"
             "export fn answer()->i64{const result:i64?" "?=try? value();if(result==null){return 0};"
-            "const inner:i64?=result!;if(inner==null){return 42};return 1}\n",NULL,42},
+            "const inner:i64?=result!;if(inner==null){return 42};return 1}\n","E0336",0},
         {"optional owning String", "enum Failure{Bad}\nfn value() throws(Failure)->string{return \"é\\0界\"}\n"
             "export fn answer()->i64{const result=try? value();if((result ?? \"missing\")==\"é\\0界\"){return 42};return 0}\n",NULL,42},
         {"optional does not mark following call", "enum Failure{Bad}\nfn value() throws(Failure)->i64{throw Failure.Bad}\n"

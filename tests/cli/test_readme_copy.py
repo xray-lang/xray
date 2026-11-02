@@ -24,7 +24,7 @@ def main():
         if expected is not None:assert stdout.read_bytes()==expected and not stderr.read_bytes(),name
     for index,name in enumerate(('README.md','README_CN.md')):
         text=readme_blocks((root/name).read_text(encoding='utf-8'))[0]
-        for required in ('go count(copy first)','go count(copy second)','try await left','try await right'):
+        for required in ('go count(copy first)','go count(copy second)','await left','await right'):
             assert text.count(required)==1,(name,required)
         source=out/f'readme-{index}.xr';source.write_text(text,encoding='utf-8',newline='\n')
         inputs.append(dict(path=name+'#xray-1',bytes=len(source.read_bytes()),sha256=hashlib.sha256(source.read_bytes()).hexdigest()))

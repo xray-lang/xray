@@ -4873,7 +4873,7 @@ fn main() {
     }
 }
 
-try main()
+main()
 ```
 ```output
 message: array index out of range: 10 (length 3)
@@ -4979,7 +4979,7 @@ fn main() {
     }
     print("body")
 }
-try main()
+main()
 ```
 ```output
 body
@@ -5014,7 +5014,7 @@ fn main() {
     print(found ?? 0)
     print((try? lookup(false)) ?? 0)
 }
-try main()
+main()
 ```
 ```output
 7
@@ -5089,7 +5089,7 @@ fn main() {
     }
 }
 
-try main()
+main()
 ```
 ```output
 closed
@@ -5169,7 +5169,7 @@ fn main() {
     }
 }
 
-try main()
+main()
 ```
 ```output
 empty input
@@ -5191,7 +5191,7 @@ fn main() {
     try { work() } catch (e) { print("caught") }
 }
 
-try main()
+main()
 ```
 ```output
 body
@@ -5214,7 +5214,7 @@ fn main() {
     }
 }
 
-try main()
+main()
 ```
 ```output
 message: array index out of range: 10 (length 3)

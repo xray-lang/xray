@@ -29,8 +29,8 @@ scope {
 // Channels share identity and carry Sendable values by value.
 const ch = Channel<i64>(1)
 
-fn sender(ch: Channel<i64>) throws(SendResult) {
-    try ch.send(42)
+fn sender(ch: Channel<i64>) {
+    ch.send(42)
 }
 
 go sender(ch)
@@ -51,7 +51,7 @@ fn processData(data: move Array<i64>) {
 
 var myData = [1, 2, 3]
 var t = go processData(copy myData)
-try await t
+await t
 print("parent still has: ${myData}")
 
 // === What you CANNOT do (compiler errors): ===

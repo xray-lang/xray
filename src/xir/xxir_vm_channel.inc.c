@@ -35,6 +35,12 @@ static XrXirRunStatus vm_channel_step(ScalarRun *run,VmState *state,
             waiting==XR_XIR_CALL_HOST_ERROR ? XR_XIR_RUN_HOST_ERROR :
             waiting==XR_XIR_CALL_NUMERIC_RANGE ? XR_XIR_RUN_NUMERIC_RANGE :
             waiting==XR_XIR_CALL_UNSUPPORTED ? XR_XIR_RUN_UNSUPPORTED : XR_XIR_RUN_BAD_ARTIFACT;
+        if (op->op==XR_XIR_CHANNEL_SEND && output.payload==XR_XIR_CHANNEL_SEND_WAIT_CLOSED) {
+            *action=(XrXirAction){.kind=XR_XIR_ACTION_FAULT,
+                .value={XR_XIR_I64,0,XR_XIR_CALL_RUNTIME_PANIC},
+                .panic={.detail={XR_XIR_PANIC_CHANNEL_CLOSED,0,0,0}}};
+            return XR_XIR_RUN_OK;
+        }
         status=XR_XIR_VALUE_OK;
     } else if (op->op==XR_XIR_CHANNEL_NEW)
         status=xr_xir_channel_new(op->type,vm_value_operand(run,op->args[0]).payload,admission,&output);

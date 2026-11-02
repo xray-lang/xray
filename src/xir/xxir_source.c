@@ -180,12 +180,19 @@ typedef struct SourceLocalHandler {
     const bool *complete;
     uint32_t count;
 } SourceLocalHandler;
+
+typedef struct SourceTryRegion {
+    struct SourceTryRegion *parent,*next;
+    AstNode *node;
+    bool throwing;
+} SourceTryRegion;
 typedef struct SourcePendingError {
     struct SourcePendingError *next;
     SourceLocalHandler *handler;
     AstNode *node;
     uint32_t target, first_argument, argument_count;
     bool marked, asserted;
+    SourceTryRegion *try_region;
 } SourcePendingError;
 typedef enum SourceInitializerState {
     SOURCE_INITIALIZER_UNPREPARED,
@@ -244,6 +251,7 @@ typedef struct SourceFunction {
     AstNode *default_expression;
     SourceErrorContext *error_context;
     SourceLocalHandler *local_handler;
+    SourceTryRegion *active_try,*try_regions;
     bool infer_errors, infer_initializer;
     uint32_t unsafe_depth;
     SourceInitializerState initializer_state;
@@ -3118,6 +3126,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
 #include "xxir_source_core_throws.inc.c"
 #include "xxir_source_comptime_expression.inc.c"
 #include "xxir_source_task_scope.inc.c"
+#include "xxir_source_task_timeout.inc.c"
 #include "xxir_source_select.inc.c"
 #include "xxir_source_materialization_finish.inc.c"
 #include "xxir_source_instance_writer.inc.c"

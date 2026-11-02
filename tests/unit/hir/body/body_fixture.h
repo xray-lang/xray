@@ -6,10 +6,11 @@ static const char body_expected[]="40097\n1021\n711\n6\n40\n15\nowned\nnext\n";
 static const char body_original_expected[]="literal!\nnamed!\nnamed\nbuilt!!\nbuilt!\nsecond/\nchain!!\nloop!\n";
 static const char body_handlers[]=
     "enum E{Bad{value:i64},Other}\n"
+    "fn possible() throws(E){}\n"
     "fn named(n:i64)->i64{var outer:i64=11;try{print(10/n)}catch panic(outer){print(outer.code)};outer=outer+1;return outer}\n"
     "fn anonymous(n:i64)->i64{var outer:i64=22;try{print(10/n)}catch panic{const outer=31;print(outer)};outer=outer+1;return outer}\n"
     "fn live()->i64{var outer:i64=4;try{throw E.Bad{value:7}}catch(E.Bad{value:outer}){print(outer)}catch(e){print(998)};outer=outer+1;return outer}\n"
-    "fn dead()->i64{var outer:i64=40;try{}catch(E.Bad{value:outer}){const checked:i64=outer;print(999)}catch(outer:E){const checked:E=outer;print(998)};outer=outer+1;return outer}\n"
+    "fn dead()->i64{var outer:i64=40;try{possible()}catch(E.Bad{value:outer}){const checked:i64=outer;print(999)}catch(outer:E){const checked:E=outer;print(998)};outer=outer+1;return outer}\n"
     "fn consumed()->i64{var outer:i64=50;try{throw E.Other}catch(outer){print(2)}catch(E.Bad{value:outer}){print(997)};outer=outer+1;return outer}\n"
     "fn quiet()->i64{var outer:i64=61;try{}catch panic{const outer=999;print(outer)};outer=outer+1;return outer}\n"
     "print(named(0));print(anonymous(0));print(named(2));print(live());print(dead());print(consumed());print(quiet())\n";

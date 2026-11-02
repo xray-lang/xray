@@ -59,17 +59,17 @@ static XrXirStatus check(const XrXirCompileContext *context,const char *text,XrX
 static bool cancelled(const void *pointer) {++*(unsigned *)pointer;return true;}
 static void rejections(const XrXirCompileContext *context) {
     const char *cases[]={
-        "fn bad(f:fn()->i64)->i64{return try! await go f()}",
-        "fn bad()->i64{var value=42;return try! await go fn()->i64{return value}()}",
-        "fn bad<T>(value:T)->T{return try! await go fn()->T{return value}()}",
-        "fn bad()->i64{return try! await go fn(value:i64)->i64{return value}()}",
-        "fn bad()->i64{return try! await go fn(value:i64)->i64{return value}(true)}",
-        "fn bad()->i64{var value=42;return try! await go fn(v:ref i64)->i64{return v}(ref value)}",
-        "class Box{value:i64=42}\nfn bad()->i64{const box=Box();return try! await go fn()->i64{return box.value}()}",
-        "fn bad()->i64{var values=[42];const view:Slice<i64>=values[:];return try! await go fn()->i64{return view[0]}()}",
-        "var state=42\nfn bad()->i64{return try! await go fn()->i64{return state}()}",
+        "fn bad(f:fn()->i64)->i64{return await go f()}",
+        "fn bad()->i64{var value=42;return await go fn()->i64{return value}()}",
+        "fn bad<T>(value:T)->T{return await go fn()->T{return value}()}",
+        "fn bad()->i64{return await go fn(value:i64)->i64{return value}()}",
+        "fn bad()->i64{return await go fn(value:i64)->i64{return value}(true)}",
+        "fn bad()->i64{var value=42;return await go fn(v:ref i64)->i64{return v}(ref value)}",
+        "class Box{value:i64=42}\nfn bad()->i64{const box=Box();return await go fn()->i64{return box.value}()}",
+        "fn bad()->i64{var values=[42];const view:Slice<i64>=values[:];return await go fn()->i64{return view[0]}()}",
+        "var state=42\nfn bad()->i64{return await go fn()->i64{return state}()}",
         "enum Failure{Bad}\nfn bad()->i64{const task=go fn() throws(Failure)->i64{throw Failure.Bad}();return await task}",
-        "import \"./producer\" as producer\nfn bad()->i64{return try! await go producer.secret()}",
+        "import \"./producer\" as producer\nfn bad()->i64{return await go producer.secret()}",
         "enum Failure{Bad}\nenum Other{Bad}\nfn bad(){const task:Task<i64,Other>=go fn() throws(Failure)->i64{throw Failure.Bad}()}"
     };
     for(size_t c=0;c<sizeof(cases)/sizeof(*cases);++c) {
