@@ -12,6 +12,7 @@
  */
 
 #include "../os_fs.h"
+#include "../xcwd_owned.h"
 #include "../../base/xwindows_utf8.h"
 #include "../../base/xfileio.h"
 
@@ -192,23 +193,13 @@ XR_FUNC XrOsIoStatus xr_os_io_touch(const XrOsIoPolicy *policy, const char *path
 }
 XR_FUNC XrOsIoStatus xr_os_io_getcwd(const XrOsIoPolicy *policy, char *out, size_t capacity) {
     if (!io_policy_valid(policy) || !out || !capacity) return XR_OS_IO_BAD_ARGUMENT;
-    XrIoContext io = {policy, XR_OS_IO_OK}; DWORD units = 0; wchar_t *wide = NULL; char *text = NULL;
-    if ((&io)->status == XR_OS_IO_OK) {
-        units = GetCurrentDirectoryW(0, NULL);
-        if (!units || units > 32768) io_status(&io, units ? XR_OS_IO_OVERFLOW : io_windows_status(GetLastError()));
+    XrIoContext io={policy,XR_OS_IO_OK};char *text=NULL;size_t length=0;
+    io_status(&io,xr_os_io_getcwd_owned(policy,&text));
+    if(io.status==XR_OS_IO_OK && io_length(&io,text,&length)) {
+        if(length>=capacity)io_status(&io,XR_OS_IO_OVERFLOW);
+        else io_copy(&io,out,text,length+1);
     }
-    if (io.status == XR_OS_IO_OK) wide = io_alloc(&io, (size_t)units * sizeof(wchar_t));
-    if (wide && ((&io)->status == XR_OS_IO_OK)) {
-        DWORD length = GetCurrentDirectoryW(units, wide);
-        if (!length || length >= units) io_status(&io, length ? XR_OS_IO_OVERFLOW : io_windows_status(GetLastError()));
-    }
-    if (io.status == XR_OS_IO_OK) io_status(&io, xr_win_utf16_text_owned(policy, wide, &text));
-    size_t length = 0;
-    if (io.status == XR_OS_IO_OK && io_length(&io, text, &length)) {
-        if (length >= capacity) io_status(&io, XR_OS_IO_OVERFLOW);
-        else io_copy(&io, out, text, length + 1);
-    }
-    io_free(&io, text); io_free(&io, wide); return io.status;
+    io_free(&io,text);return io.status;
 }
 XR_FUNC XrOsIoStatus xr_os_io_chdir(const XrOsIoPolicy *policy, const char *path) {
     if (!io_policy_valid(policy) || !path) return XR_OS_IO_BAD_ARGUMENT;

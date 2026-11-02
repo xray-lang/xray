@@ -19,7 +19,7 @@
 #include <string.h>
 
 static inline bool xir_os_native_id(uint32_t id) {
-    return id==XR_NATIVE_CALLABLE_OS_PLATFORM || id==XR_NATIVE_CALLABLE_OS_ARCH || id==XR_NATIVE_CALLABLE_OS_GETENV || id==XR_NATIVE_CALLABLE_OS_SETENV || id==XR_NATIVE_CALLABLE_OS_UNSETENV || id==XR_NATIVE_CALLABLE_OS_ENVIRON_BLOCK || id==XR_NATIVE_CALLABLE_OS_EXIT || id==XR_NATIVE_CALLABLE_OS_GETPID;
+    return id==XR_NATIVE_CALLABLE_OS_PLATFORM || id==XR_NATIVE_CALLABLE_OS_ARCH || id==XR_NATIVE_CALLABLE_OS_GETENV || id==XR_NATIVE_CALLABLE_OS_SETENV || id==XR_NATIVE_CALLABLE_OS_UNSETENV || id==XR_NATIVE_CALLABLE_OS_ENVIRON_BLOCK || id==XR_NATIVE_CALLABLE_OS_EXIT || id==XR_NATIVE_CALLABLE_OS_GETPID || id==XR_NATIVE_CALLABLE_OS_GETCWD;
 }
 static inline bool xir_os_native_signature(uint32_t id,const XrXirTypes *types,const XrXirType *parameters,
     uint32_t count,XrXirType result,XrXirType error) {
@@ -32,7 +32,7 @@ static inline bool xir_os_native_signature(uint32_t id,const XrXirTypes *types,c
     bool environment=id==XR_NATIVE_CALLABLE_OS_GETENV,remove=id==XR_NATIVE_CALLABLE_OS_UNSETENV;
     bool snapshot=id==XR_NATIVE_CALLABLE_OS_ENVIRON_BLOCK,terminate=id==XR_NATIVE_CALLABLE_OS_EXIT;
     bool setter=id==XR_NATIVE_CALLABLE_OS_SETENV || remove;
-    const char *name=pid?"__getpid":terminate?"__exit":snapshot?"__environBlock":remove?"__unsetenv":setter?"__setenv":environment?"__getenv":id==XR_NATIVE_CALLABLE_OS_PLATFORM?"__platform":"__arch";
+    const char *name=id==XR_NATIVE_CALLABLE_OS_GETCWD?"__getcwd":pid?"__getpid":terminate?"__exit":snapshot?"__environBlock":remove?"__unsetenv":setter?"__setenv":environment?"__getenv":id==XR_NATIVE_CALLABLE_OS_PLATFORM?"__platform":"__arch";
     if(!member->name || strcmp(member->name,name) || !member->signature ||
         strcmp(member->signature,pid?"(): i64":terminate?"(code: i64): ()":snapshot?"(): Array<string>":remove?"(name: string): bool":setter?"(name: string, value: string): bool":environment?"(name: string): string?":"(): string") ||
         !member->result_text || strcmp(member->result_text,pid?"i64":terminate?"()":snapshot?"Array<string>":setter?"bool":environment?"string?":"string") ||
