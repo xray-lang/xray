@@ -241,4 +241,26 @@ static XrXirCallStatus instance_hostname(XrXirCallView *view,XrXirInstance *inst
     if(status==XR_XIR_CALL_READY){*output=result;result=(XrXirValue){0};}
     xr_xir_value_drop(&result);return status;
 }
+static XrXirCallStatus instance_system_username(XrXirCallView *view,XrXirInstance *instance,
+    XrXirType type,XrXirValue *output) {
+    XirEnvironmentQuery query={view,instance->domain,XR_XIR_CALL_READY};
+    if(!instance_environment_current(&query))return query.status;
+    XrOsIoPolicy policy={&query,instance_environment_allocate,instance_environment_free};char *raw=NULL;
+    XrOsIoStatus queried=xr_os_io_system_username(&policy,&raw);XrXirValue text={0},result={0};
+    XrXirCallStatus status=query.status;
+    if(status==XR_XIR_CALL_READY)status=instance_environment_status(queried);
+    if(status==XR_XIR_CALL_READY)status=xr_xir_call_execution_status(view);
+    if(status==XR_XIR_CALL_READY && !raw)status=XR_XIR_CALL_HOST_ERROR;
+    if(status==XR_XIR_CALL_READY) {
+        XrXirValueStatus copied=xr_xir_string_new(instance->domain,raw,strlen(raw),&text);
+        status=copied==XR_XIR_VALUE_BAD_UTF8?XR_XIR_CALL_HOST_ERROR:value_call_status(copied);
+    }
+    instance_environment_free(&query,raw);
+    if(status==XR_XIR_CALL_READY)
+        status=value_call_status(xr_xir_nullable_new(type,&text,xr_xir_call_admission(view),&result));
+    xr_xir_value_drop(&text);
+    if(status==XR_XIR_CALL_READY)status=xr_xir_call_execution_status(view);
+    if(status==XR_XIR_CALL_READY){*output=result;result=(XrXirValue){0};}
+    xr_xir_value_drop(&result);return status;
+}
 #endif // XR_OS_WINDOWS

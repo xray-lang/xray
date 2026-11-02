@@ -146,14 +146,14 @@ static bool local_paths(XtcXirLocalToolchain *owner, const char *const *values, 
     if (okay) okay = local_join_path(owner, include, "ucrt", true, &owner->view.msvc.ucrt_include) &&
         local_join_path(owner, include, "shared", true, &owner->view.msvc.shared_include) &&
         local_join_path(owner, include, "um", true, &owner->view.msvc.um_include);
-    static const char *const names[6] = {"lib/x64/msvcrt.lib", "lib/x64/oldnames.lib", "lib/x64/vcruntime.lib",
-        "ucrt/x64/ucrt.lib", "um/x64/kernel32.Lib", "um/x64/bcrypt.lib"};
-    for (unsigned i = 0; okay && i < 6; ++i) {
+    static const char *const names[7] = {"lib/x64/msvcrt.lib", "lib/x64/oldnames.lib", "lib/x64/vcruntime.lib",
+        "ucrt/x64/ucrt.lib", "um/x64/kernel32.Lib", "um/x64/bcrypt.lib", "um/x64/advapi32.lib"};
+    for (unsigned i = 0; okay && i < 7; ++i) {
         okay = local_join_path(owner, i < 3 ? vc : libraries, names[i], false, &owner->view.libraries[i].path);
 
         if (okay) owner->view.libraries[i].kind = i >= 4 ? XR_XIR_INVOCATION_SYSTEM : XR_XIR_INVOCATION_CRT;
     }
-    if (okay) owner->view.library_count = 6;
+    if (okay) owner->view.library_count = 7;
     else okay = false;
     xr_compile_resources_free(version); xr_compile_resources_free(include);
     xr_compile_resources_free(libraries); xr_compile_resources_free(joined); return okay;
