@@ -23,6 +23,7 @@
 #include "xxir_call_native_source_internal.h"
 #include "xxir_atomic.h"
 #include "xxir_channel_call_internal.h"
+#include "xxir_call_select_internal.h"
 #include "xxir_map.h"
 #include "xxir_types.h"
 #include "xxir_operand_roles.h"
@@ -587,20 +588,20 @@ static void emit_resume_call(CBuffer *buffer, const XrXirFunction *function,
 }
 
 static void emit_resume_go(CBuffer *buffer, const XrXirFunction *function,
-    const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t destination) {
+    const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t index,uint32_t destination) {
+    uint32_t first=0,count=0;
+    if(!xr_xir_direct_argument_range(op,&first,&count)) {emit_reject(buffer,XR_XIR_BAD_STRUCTURE);return;}
     EMIT_STATIC(buffer, es_ff1a07ada386851d, " { XrXirValue output = {0};\n");
-    for (uint32_t p = 0; p < op->args[1] && ((buffer)->status == XR_XIR_OK); ++p) {
-        uint32_t id = function->operands[op->args[0] + p];
+    for (uint32_t p = 0; p < count && ((buffer)->status == XR_XIR_OK); ++p) {
+        uint32_t id = function->operands[first+p];
         append(buffer, " state->arguments[%u] = xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(state->frame, %uu));\n",
             p, (uint32_t) xr_xir_operand_type(function, id), layout->offsets[id]);
     }
-    EMIT_FORMAT(buffer, et_c8446c9331686535, " XrXirCallStatus status = xr_xir_task_go(view, (XrXirType) %uu, %uu, %s, %uu, &output);\n"
-        " if (status != XR_XIR_CALL_READY) return (XrXirAction) "
-        "{XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {0}, 0};\n"
-        " xr_xir_owned_slot_move(state->frame, %uu, &output); }\n"
-        " return (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0}, {0}, 0};\n",
-        (uint32_t) op->type, (uint32_t) op->immediate,
-        op->args[1] ? "state->arguments" : "NULL", op->args[1], destination);
+    append(buffer," XrXirCallStatus status=xr_xir_task_go_at(view,%uu,state->frame,%s,%uu,&output);\n"
+        " if(status!=XR_XIR_CALL_READY)return (XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,status}};\n"
+        " xr_xir_owned_slot_move(state->frame,%uu,&output); }\n"
+        " return (XrXirAction){.kind=XR_XIR_ACTION_CONTINUE};\n",
+        index,count?"state->arguments":"NULL",count,destination);
 }
 
 static void emit_resume_generator(CBuffer *buffer,const XrXirFunction *function,
@@ -618,11 +619,17 @@ static void emit_resume_generator(CBuffer *buffer,const XrXirFunction *function,
 static void emit_resume_await(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t index) {
     if (!((buffer)->status == XR_XIR_OK)) return;
-    bool task_wait=op->op==XR_XIR_TASK_AWAIT || op->op==XR_XIR_TASK_AWAIT_RESULT;
+    bool scope_wait=op->op==XR_XIR_SCOPE_JOIN;
+    bool task_wait=scope_wait||op->op==XR_XIR_TASK_AWAIT || op->op==XR_XIR_TASK_AWAIT_RESULT;
     bool result_wait=op->op==XR_XIR_TASK_AWAIT_RESULT;
     XrXirType receiver=xr_xir_operand_type(function,op->args[0]);
     XrXirType expected=task_wait ? xr_xir_task_element(buffer->types,receiver) :
         op->op==XR_XIR_ITERATOR_HAS_NEXT ? XR_XIR_BOOL : op->op==XR_XIR_ITERATOR_CLOSE ? XR_XIR_UNIT : xr_xir_iterator_element(buffer->types,receiver);
+    if(scope_wait)
+        append(buffer," { XrXirValue group=xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(state->frame,%uu));\n"
+            " XrXirCallStatus status=xr_xir_task_scope_seal(view,&group,%s);\n"
+            " if(status!=XR_XIR_CALL_READY)return (XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,status}}; }\n",
+            (uint32_t)receiver,layout->offsets[op->args[0]],op->immediate==1?"true":"false");
     if(result_wait)
         append(buffer," { XrXirValue task=xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(state->frame,%uu));\n"
             " XrXirCallStatus status=xr_xir_instance_task_await_result_at(view,%uu,&task);\n"
@@ -894,6 +901,7 @@ static void emit_nominal_step(CBuffer *buffer, const XrXirFunction *function,
 
 #include "xxir_emit_atomic.inc.c"
 #include "xxir_emit_channel.inc.c"
+#include "xxir_emit_select.inc.c"
 #include "xxir_emit_cleanup.inc.c"
 
 static void emit_io_step(CBuffer *buffer, const XrXirFunction *function,
@@ -1250,6 +1258,9 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     if (op->op == XR_XIR_CLASS_NEW || op->op == XR_XIR_CLASS_GET || op->op == XR_XIR_CLASS_SET) {
         emit_class_step(buffer,function,op,layout,destination); return;
     }
+    if(op->op==XR_XIR_CHANNEL_SELECT) {
+        emit_select_step(buffer,function,op,layout,destination,index);return;
+    }
     if (xr_xir_op_is_channel(op->op)) {
         emit_channel_step(buffer,function,op,layout,destination,index);return;
     }
@@ -1364,10 +1375,17 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
             " xr_xir_owned_slot_move(state->frame,%uu,&result); }\n",
             (uint32_t)xr_xir_operand_type(function,op->args[0]),layout->offsets[op->args[0]],index,destination);
         break;
-    case XR_XIR_GO:
-        emit_resume_go(buffer, function, op, layout, destination);
+    case XR_XIR_SCOPE_BEGIN:
+        append(buffer," { XrXirValue group={0};XrXirCallStatus status=xr_xir_task_scope_begin(view,(XrXirType)%uu,%uu,&group);\n"
+            " if(status!=XR_XIR_CALL_READY)return (XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,status}};\n"
+            " xr_xir_owned_slot_move(state->frame,%uu,&group); }\n"
+            " return (XrXirAction){.kind=XR_XIR_ACTION_CONTINUE};\n",
+            (uint32_t)op->type,(uint32_t)op->immediate,destination);
         return;
-    case XR_XIR_TASK_AWAIT: case XR_XIR_TASK_AWAIT_RESULT: case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_ITERATOR_CLOSE:
+    case XR_XIR_SCOPED_GO: case XR_XIR_GO:
+        emit_resume_go(buffer, function, op, layout, index,destination);
+        return;
+    case XR_XIR_SCOPE_JOIN: case XR_XIR_TASK_AWAIT: case XR_XIR_TASK_AWAIT_RESULT: case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_ITERATOR_CLOSE:
         emit_resume_await(buffer, function, op, layout, index);
         return;
     case XR_XIR_CALL: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE: case XR_XIR_INVOKE_INDIRECT:
@@ -1677,7 +1695,7 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
     }
     const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(artifact, index);
     if ((uint64_t) layout->frame_bytes + (uint64_t) layout->outgoing_count * sizeof(XrXirValue) +
-        (uint64_t) layout->path_count * sizeof(XrXirValuePathStep) > UINT32_MAX - 128u - sizeof(XrXirAtomicProgress) - sizeof(XrXirChannelCallState)) {
+        (uint64_t) layout->path_count * sizeof(XrXirValuePathStep) > UINT32_MAX - 128u - sizeof(XrXirAtomicProgress) - sizeof(XrXirChannelCallState) - sizeof(XrXirChannelSelectCallState)) {
         emit_reject(buffer, XR_XIR_BUDGET);
         return;
     }
@@ -1686,6 +1704,7 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
            "    bool initialized, waiting, invoking, discard;\n"
            "    XrXirAtomicProgress atomic;\n", prefix, index);
     append(buffer,"    XrXirChannelCallState channel;\n");
+    append(buffer,"    XrXirChannelSelectCallState select;\n");
     if (!((buffer)->status == XR_XIR_OK)) return;
     bool has_cleanup = emit_has_cleanup(buffer, function);
     if (!((buffer)->status == XR_XIR_OK)) return;
@@ -2066,6 +2085,7 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
            "_Static_assert(offsetof(XrXirValue, payload) == 8, \"XIR payload offset\");\n",
            XR_XIR_CALL_ABI_VERSION, XR_XIR_VALUE_ABI_VERSION);
     append(buffer,"#include \"xir/xxir_channel_call_internal.h\"\n");
+    append(buffer,"#include \"xir/xxir_call_select_internal.h\"\n");
     append(buffer,"#include \"xir/xxir_instance_hash.h\"\n");
     append(buffer,
         "_Static_assert(sizeof(XrXirFaultDetail)==24"

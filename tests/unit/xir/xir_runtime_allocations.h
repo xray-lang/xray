@@ -52,6 +52,9 @@ static void runtime_record(void *pointer, size_t bytes) {
     }
     runtime_place(pointer, bytes);
     ++runtime_live; runtime_bytes += bytes;
+#ifdef XIR_RUNTIME_AFTER_ALLOCATE
+    XIR_RUNTIME_AFTER_ALLOCATE(pointer,bytes);
+#endif
 }
 /* Backward-shift deletion keeps every probe chain contiguous without tombstones. */
 static bool runtime_forget(const void *pointer) {

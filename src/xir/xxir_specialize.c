@@ -680,7 +680,7 @@ static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
     bool templated=c.source->provenance && c.source->provenance->kind==XR_XIR_EVIDENCE_TEMPLATE;
     if(templated) c.diagnostic.status=xir_source_facts_acquire(checked,&c.source_facts,&c.diagnostic, control);
     else if(!c.source->provenance && c.source->declarations && c.source->declarations->implementations)
-        c.diagnostic.status=xir_artifact_verify_raw_source_effects(checked,&c.verification_effects,&c.diagnostic);
+        c.diagnostic.status=xir_artifact_verify_raw_source_effects(checked,&c.verification_effects,&c.diagnostic,control);
     else c.diagnostic.status=xir_artifact_verify(checked,&c.diagnostic,control);
     if (c.diagnostic.status != XR_XIR_OK) goto done;
     c.effects=xir_source_facts_effects(c.source_facts);

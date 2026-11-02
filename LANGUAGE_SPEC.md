@@ -5641,10 +5641,16 @@ Multiple-task waits use suspending library functions without an `await` prefix:
 
 | Function | Result | Business error type | Other tasks |
 |--|--|--|--|
-| `Task.all(ts)` | `Array<T>` in input order | `E \| Cancelled` | Cancel the rest on any failure |
-| `Task.first(ts)` | Value or failure of the first task to finish | `E \| Cancelled` | Cancel the rest on return |
-| `Task.firstSuccess(ts)` | First successful value | `TaskFailures<E>` if all fail, plus `Cancelled` | Cancel the rest on return |
+| `Task.all(ts)` | `Array<T>` in input order | `E \| Cancelled` | Request cancellation before propagating failure; do not wait for cleanup |
+| `Task.first(ts)` | Value or failure of the first task to finish | `E \| Cancelled` | Request cancellation before returning or propagating; do not wait for cleanup |
+| `Task.firstSuccess(ts)` | First successful value | `TaskFailures<E>` if all fail, plus `Cancelled` | Request cancellation before returning or propagating; do not wait for cleanup |
 | `Task.timeout(t, ms)` | `T` | `E \| Cancelled \| Timeout` | Cancel `t` on timeout |
+
+After selecting an outcome under its own rules, `Task.first`, `Task.firstSuccess`, and the failure branch of `Task.all` request cancellation of the remaining unfinished input tasks before returning or propagating the selected outcome. Their return does not wait for those tasks to terminate or finish their defers. Successful `Task.all` still waits for every input to succeed and returns results in input order.
+
+Remaining tasks retain their original scope and executor ownership. The executor continues to own and drive them to terminal states. An aggregate call does not detach members from their scopes; a scope still waits for all members to terminate and finish cleanup before exit. Code after the aggregate call may therefore overlap cancellation and cleanup, while scope exit remains a complete lifetime boundary. Cooperative cancellation guarantees neither preemption nor a fixed return deadline. External program completion still follows the executor shutdown rules. Cancellation unwinding of the current waiter is unchanged.
+
+Later outcomes of the remaining tasks do not retroactively replace an aggregate result already returned. Their subsequent errors, panic and cleanup failures continue through their original owners and applicable channels; early aggregate return cannot discard them. This rule specifies return and cleanup timing. It does not settle the mixed-outcome arbitration for `Task.firstSuccess` described below or change `Task.timeout`.
 
 The first three functions accept homogeneous `Array<Task<T, E>>`, without implicit erasure of heterogeneous result or error types. Use a scope and individual waits for different types. `TaskFailures<E>` records only business failures: task debug names, positions, and error values E. It contains neither `PanicInfo` nor `Cancelled`. A scope position is the actual member registration ordinal; a library aggregate position is the input position. This semantic notation does not define concrete field names. Panic always uses its independent channel. Success-versus-panic races in `Task.firstSuccess` and mixed outcomes when none succeeds require separate joint execution-interface decisions; they cannot be inferred from the business aggregate type.
 

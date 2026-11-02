@@ -6,6 +6,17 @@
  *
  * xxir_channel_verify.inc.c - Exact Channel receivers and governed message results
  */
+#include "xxir_channel_select_shape.h"
+static XrXirStatus channel_select_uses(const Graph *graph,const XrXirFunction *function,
+    VerifyContext *context,uint32_t instruction) {
+    const XrXirInstruction *op=function->instructions+instruction;
+    XrXirStatus status=xir_channel_select_shape(context->module,function,op,context->control);
+    if(status==XR_XIR_OK)status=type_use_context(context,context->location.function,op->type);
+    for(uint32_t a=0;status==XR_XIR_OK&&a<op->args[1];++a)
+        status=role_operand(function,graph,context,instruction,a,
+            xr_xir_operand_type(function,function->operands[op->args[0]+a]));
+    return status;
+}
 static XrXirStatus channel_uses(const Graph *graph,const XrXirFunction *function,
     VerifyContext *context,uint32_t instruction) {
     const XrXirInstruction *op=&function->instructions[instruction];const XrXirTypes *types=context->module->types;

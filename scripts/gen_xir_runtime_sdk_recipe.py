@@ -80,7 +80,7 @@ def recipe(root: Path, platform: str | None = None) -> dict:
             pending.append(found)
     for owner in groups:
         entries[archive_path(owner, platform)] = 5
-    if len(entries) > 512:
+    if len(entries) > 1024:
         raise ValueError('runtime recipe exceeds its file cap')
     return {'archive_source_groups': groups, 'system_libraries': SYSTEM_LIBRARIES[platform],
             'files': [{'path': name, 'kind': entries[name]} for name in sorted(entries)]}

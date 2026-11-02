@@ -72,7 +72,7 @@ static const XrXirModule *source_library_module(SourceContext *ctx,uint32_t modu
         source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"Checked library kind is required");return NULL;
     }
     const XrXirConstruction *construction=xr_xir_compile_artifact_construction(artifact);
-    XrXirStatus status=xr_xir_compile_verify_v2(&ctx->compile, library, construction, NULL);
+    XrXirStatus status=xir_compile_verify_effects_input(&ctx->compile,(XirEffectInput){library,construction,ctx->request},NULL,NULL);
     if(status!=XR_XIR_OK){source_fail(ctx,NULL,status,"Checked library verification failed");return NULL;}
     status=library_catalog_shape(library,construction);
     if(status!=XR_XIR_OK){source_fail(ctx,NULL,status,"Checked library import subset is not admitted");return NULL;}
@@ -245,7 +245,7 @@ static bool source_library_instruction(SourceContext *ctx, const SourceLibraryMa
     XrXirInstruction result = *original;
     if (!source_library_type(ctx,map->unit,original->type,&result.type)) return false;
     switch (result.op) {
-    case XR_XIR_CALL: case XR_XIR_INVOKE: case XR_XIR_GO: case XR_XIR_FUNCTION_REF: case XR_XIR_GENERATOR_NEW:
+    case XR_XIR_CALL: case XR_XIR_INVOKE: case XR_XIR_GO: case XR_XIR_SCOPED_GO: case XR_XIR_FUNCTION_REF: case XR_XIR_GENERATOR_NEW:
         if (result.immediate < 0 || (uint64_t)result.immediate >= map->function_count ||
             map->functions[(uint32_t)result.immediate] == UINT32_MAX)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library call identity is invalid");

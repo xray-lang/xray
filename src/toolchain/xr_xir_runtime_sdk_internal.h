@@ -15,7 +15,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #define XR_XIR_SDK_MANIFEST_LIMIT (2u * 1024u * 1024u)
-#define XR_XIR_SDK_FILE_LIMIT 512u
+#define XR_XIR_SDK_FILE_LIMIT 1024u
 #define XR_XIR_SDK_PATH_LIMIT 1024u
 #define XR_XIR_SDK_FILE_BYTES (UINT64_C(256) * 1024u * 1024u)
 #define XR_XIR_SDK_BUNDLE_BYTES (UINT64_C(512) * 1024u * 1024u)

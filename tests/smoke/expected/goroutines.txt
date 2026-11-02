@@ -1,0 +1,11 @@
+task-1 computed sum(0..100) = 4950
+result: 4950
+alpha computed sum(0..50) = 1225
+beta computed sum(0..75) = 2775
+gamma computed sum(0..100) = 4950
+all results: [1225, 2775, 4950]
+first finished: fast done after 10ms
+check computed sum(0..10) = 45
+task.poll: TaskResult.Success(45)
+task.result: 45
+task.awaitResult: TaskResult.Success(45)

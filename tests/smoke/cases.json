@@ -161,61 +161,45 @@
       "id": "demos/05-concurrency/atomic.xr",
       "path": "demos/05-concurrency/atomic.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F19",
-        "first_diagnostic": "demos/05-concurrency/atomic.xr:44:1: error: scope statement syntax is not yet supported by the compiler"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/atomic.txt"
     },
     {
       "id": "demos/05-concurrency/channels.xr",
       "path": "demos/05-concurrency/channels.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F19",
-        "first_diagnostic": "demos/05-concurrency/channels.xr:67:5: error: scope statement syntax is not yet supported by the compiler"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/channels.txt",
+      "stdout_channels": "tests/smoke/expected/channels-catalog.json"
     },
     {
       "id": "demos/05-concurrency/goroutines.xr",
       "path": "demos/05-concurrency/goroutines.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F19",
-        "first_diagnostic": "demos/05-concurrency/goroutines.xr:27:0: error: await requires one Task without aggregation or timeout"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/goroutines.txt",
+      "stdout_traces": "tests/smoke/expected/goroutines-traces.json"
     },
     {
       "id": "demos/05-concurrency/select_and_scope.xr",
       "path": "demos/05-concurrency/select_and_scope.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F19",
-        "first_diagnostic": "demos/05-concurrency/select_and_scope.xr:21:1: error: select statement syntax is not yet supported by the compiler"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/select_and_scope.txt",
+      "stdout_traces": "tests/smoke/expected/select_and_scope-traces.json"
     },
     {
       "id": "demos/05-concurrency/shared_data.xr",
       "path": "demos/05-concurrency/shared_data.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F19",
-        "first_diagnostic": "demos/05-concurrency/shared_data.xr:22:1: error: scope statement syntax is not yet supported by the compiler"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/shared_data.txt",
+      "stdout_traces": "tests/smoke/expected/shared_data-traces.json"
     },
     {
       "id": "demos/06-networking/http_server.xr",
@@ -225,8 +209,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F02",
-        "first_diagnostic": "stdlib/http/http.xr:685:7: error: name does not resolve to an admitted nominal type"
+        "feature": "F19",
+        "first_diagnostic": "stdlib/http/http.xr:1046:9: error: linked concurrency syntax was removed; use scope or scope(isolated)"
       }
     },
     {
@@ -297,13 +281,9 @@
       "id": "README.md#xray-3",
       "path": "README.md#xray-3",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F17",
-        "first_diagnostic": "README.md#xray-3:2:0: error: go requires an accessible ordinary function declaration"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/readme_concurrency.txt"
     },
     {
       "id": "README_CN.md#xray-1",
@@ -325,13 +305,9 @@
       "id": "README_CN.md#xray-3",
       "path": "README_CN.md#xray-3",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F17",
-        "first_diagnostic": "README_CN.md#xray-3:2:0: error: go requires an accessible ordinary function declaration"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/readme_concurrency.txt"
     },
     {
       "id": "stdlib/base64/base64.xr",
@@ -413,8 +389,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F02",
-        "first_diagnostic": "stdlib/http/http.xr:685:7: error: name does not resolve to an admitted nominal type"
+        "feature": "F19",
+        "first_diagnostic": "stdlib/http/http.xr:1046:9: error: linked concurrency syntax was removed; use scope or scope(isolated)"
       }
     },
     {
@@ -649,8 +625,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F02",
-        "first_diagnostic": "stdlib/net/net.xr:258:20: error: name does not resolve to an admitted nominal type"
+        "feature": "F19",
+        "first_diagnostic": "stdlib/ws/ws.xr:1232:5: error: linked concurrency syntax was removed; use scope or scope(isolated)"
       }
     },
     {
@@ -828,6 +804,66 @@
       "expect": "pass",
       "exit_code": 0,
       "stdout": "tests/smoke/expected/borrow_span_examples.txt"
+    },
+    {
+      "id": "native:demos/05-concurrency/atomic.xr",
+      "path": "demos/05-concurrency/atomic.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/atomic.txt"
+    },
+    {
+      "id": "native:demos/05-concurrency/channels.xr",
+      "path": "demos/05-concurrency/channels.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/channels.txt",
+      "stdout_channels": "tests/smoke/expected/channels-catalog.json"
+    },
+    {
+      "id": "native:demos/05-concurrency/goroutines.xr",
+      "path": "demos/05-concurrency/goroutines.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/goroutines.txt",
+      "stdout_traces": "tests/smoke/expected/goroutines-traces.json"
+    },
+    {
+      "id": "native:demos/05-concurrency/select_and_scope.xr",
+      "path": "demos/05-concurrency/select_and_scope.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/select_and_scope.txt",
+      "stdout_traces": "tests/smoke/expected/select_and_scope-traces.json"
+    },
+    {
+      "id": "native:demos/05-concurrency/shared_data.xr",
+      "path": "demos/05-concurrency/shared_data.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/shared_data.txt",
+      "stdout_traces": "tests/smoke/expected/shared_data-traces.json"
+    },
+    {
+      "id": "native:README.md#xray-3",
+      "path": "README.md#xray-3",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/readme_concurrency.txt"
+    },
+    {
+      "id": "native:README_CN.md#xray-3",
+      "path": "README_CN.md#xray-3",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/readme_concurrency.txt"
     }
   ]
 }

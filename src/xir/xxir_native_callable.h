@@ -14,6 +14,7 @@
 #include "xxir_buffer_storage_auth.h"
 #include "xxir_crypto_auth.h"
 #include "xxir_mem_native.h"
+#include "xxir_task_aggregate_auth.h"
 #include "../shared/xnative_declaration.h"
 
 static inline bool xir_native_error_type(const XrXirTypes *types,XrXirType type,uint32_t id) {
@@ -31,6 +32,7 @@ static inline bool xir_native_error_type(const XrXirTypes *types,XrXirType type,
 static inline bool xir_native_callable_types(uint32_t id,const XrXirTypes *types,
     const XrXirType *parameters,uint32_t count,XrXirType result,XrXirType error) {
     const XrNativeCallableDeclaration *canonical=xr_native_callable_by_id(id);
+    if(xir_task_aggregate_native(id))return xir_task_aggregate_signature(id,types,parameters,count,result,error);
     if (xir_mem_native_id(id)) return xir_mem_native_signature(id,types,parameters,count,result,error);
     if (id==XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM || id==XR_NATIVE_CALLABLE_CRYPTO_TIMING_EQUAL) {
         bool fill=id==XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM;uint32_t required=fill?1u:2u;

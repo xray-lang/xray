@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "source": "demos/05-concurrency/channels.xr",
+  "sourceCanonicalSha256": "696d3cf83baea8d0d3e31ca44ed1bb36f1f8d433d25d0d4d1024ad4c35ede67f",
+  "prefix": [
+    "recv: 10",
+    "recv: 20",
+    "recv: 30",
+    "consumed: 0",
+    "consumed: 1",
+    "consumed: 4",
+    "consumed: 9",
+    "consumed: 16",
+    "consumed: 25"
+  ],
+  "suffix": [
+    "tryRecv: value=42",
+    "tryRecv empty: empty"
+  ],
+  "workers": {
+    "lines": 9,
+    "workerIds": [
+      1,
+      2,
+      3
+    ],
+    "eachJobExactlyOnce": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "perWorkerIncreasing": true,
+    "fifoReachable": true
+  }
+}

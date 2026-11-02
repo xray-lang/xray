@@ -144,7 +144,9 @@ static XrXirStatus effect_invocation_arguments_read(EffectInvocationFlow *flow,
     } else if (closure) return XR_XIR_BAD_STRUCTURE;
     if (iterator && (!indirect || captures!=callee->parameter_count || op->args[0]>=flow->values))
         return XR_XIR_BAD_STRUCTURE;
-    if (!iterator && (captures>callee->parameter_count || op->args[1]!=callee->parameter_count-captures ||
+    uint32_t first=0,count=0;
+    if(!iterator&&!xr_xir_direct_argument_range(op,&first,&count))return XR_XIR_BAD_STRUCTURE;
+    if (!iterator && (captures>callee->parameter_count || count!=callee->parameter_count-captures ||
         op->args[0]>flow->function->operand_count ||
         op->args[1]>flow->function->operand_count-op->args[0] ||
         (op->args[1] && !flow->function->operands))) return XR_XIR_BAD_STRUCTURE;
@@ -171,7 +173,7 @@ static XrXirStatus effect_invocation_arguments_read(EffectInvocationFlow *flow,
         if (p<captures) {
             status=effect_invocation_capture_argument(flow,request,callee,p,row);continue;
         }
-        uint32_t suffix=p-captures,actual=flow->function->operands[op->args[0]+suffix];
+        uint32_t suffix=p-captures,actual=flow->function->operands[first+suffix];
         if (actual>=flow->values) { status=XR_XIR_BAD_VALUE;break; }
         XrXirType provided=0;status=effect_invocation_flow_type(flow,actual,&provided);
         if (status!=XR_XIR_OK) break;
@@ -527,13 +529,14 @@ static XrXirStatus effect_invocation_closed_arguments(EffectInvocationFlow *flow
     if (!output || !op || !callee || target>=flow->body.domain.function_count) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus head_status=effect_invocation_flow_head(flow,target,callee);
     if (head_status!=XR_XIR_OK) return head_status;
-    if (op->args[1]!=callee->parameter_count || op->args[0]>flow->function->operand_count ||
+    uint32_t first=0,count=0;if(!xr_xir_direct_argument_range(op,&first,&count))return XR_XIR_BAD_STRUCTURE;
+    if (count!=callee->parameter_count || op->args[0]>flow->function->operand_count ||
         op->args[1]>flow->function->operand_count-op->args[0] ||
         (op->args[1] && !flow->function->operands)) return XR_XIR_BAD_STRUCTURE;
     bool closed=!xr_xir_type_span(flow->body.domain.types,callee->result);
     for (uint32_t p=0;p<callee->parameter_count;++p) {
 
-        uint32_t actual=flow->function->operands[op->args[0]+p];
+        uint32_t actual=flow->function->operands[first+p];
         if (actual>=flow->values) return XR_XIR_BAD_VALUE;
         XrXirType provided=0;
         XrXirStatus type_status=effect_invocation_flow_type(flow,actual,&provided);
@@ -622,7 +625,7 @@ static XrXirStatus effect_invocation_instruction_decoded(EffectInvocationFlow *f
         return signature->flags&XR_XIR_CALLABLE_ROOT_UNRESOLVED?
             effect_invocation_defer(flow,instruction,changed):XR_XIR_OK;
     }
-    case XR_XIR_GO: case XR_XIR_GENERATOR_NEW: {
+    case XR_XIR_GO: case XR_XIR_SCOPED_GO: case XR_XIR_GENERATOR_NEW: {
         if (op->immediate<0 || (uint64_t)op->immediate>=flow->body.domain.function_count)
             return XR_XIR_BAD_STRUCTURE;
         uint32_t target=(uint32_t)op->immediate;bool closed=false;EffectBodyFunctionHead head;

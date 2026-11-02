@@ -277,9 +277,13 @@ typedef struct DeferStmtNode {
     AstNode *body;
 } DeferStmtNode;
 
+/* Value one is the retired linked mode and must never alias isolated. */
+typedef enum XrSourceScopeMode {
+    XR_SOURCE_SCOPE_NORMAL = 0, XR_SOURCE_SCOPE_ISOLATED = 2
+} XrSourceScopeMode;
 typedef struct ScopeBlockNode {
     AstNode *body;
-    uint8_t scope_mode;  // XR_SCOPE_WAIT / XR_SCOPE_LINKED
+    uint8_t scope_mode;  // XrSourceScopeMode; no execution permission is encoded here.
 } ScopeBlockNode;
 
 // move expression: move var (explicit ownership transfer)

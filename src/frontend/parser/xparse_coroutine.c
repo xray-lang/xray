@@ -732,13 +732,24 @@ AstNode *xr_parse_select_statement(Parser *parser) {
 /*
  * Parse scope block
  * scope { ... }
- * linked scope { ... }
+ * scope(isolated) { ... }
  */
 static AstNode *parse_scope_body(Parser *parser, uint8_t scope_mode) {
     if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_scope_body: NULL parser");
     int line = parser->previous.line;  // scope keyword already consumed
     int column = parser->previous.column;
+
+    if (xr_parser_match(parser, TK_LPAREN)) {
+        if (!xr_parser_check_name(parser, "isolated")) {
+            xr_parser_error_at_current(parser, "scope accepts only the isolated option");
+            return NULL;
+        }
+        xr_parser_advance(parser);
+        xr_parser_consume(parser, TK_RPAREN, "expected ')' after scope(isolated)");
+        if (!xr_parser_healthy(parser)) return NULL;
+        scope_mode = XR_SOURCE_SCOPE_ISOLATED;
+    }
 
     // Expect '{'
     if (!xr_parser_match(parser, TK_LBRACE)) {
@@ -765,12 +776,7 @@ static AstNode *parse_scope_body(Parser *parser, uint8_t scope_mode) {
 
 AstNode *xr_parse_scope_block(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
-    return parse_scope_body(parser, XR_SCOPE_WAIT);
-}
-
-AstNode *xr_parse_scope_block_with_mode(Parser *parser, uint8_t scope_mode) {
-    if (!xr_parser_healthy(parser)) return NULL;
-    return parse_scope_body(parser, scope_mode);
+    return parse_scope_body(parser, XR_SOURCE_SCOPE_NORMAL);
 }
 
 /*

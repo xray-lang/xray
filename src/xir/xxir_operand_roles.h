@@ -16,6 +16,7 @@
 #include "xxir_types.h"
 
 /* Classification is not permission or publication evidence. */
+static inline bool xr_xir_op_is_spawn(XrXirOp op) { return op==XR_XIR_GO||op==XR_XIR_SCOPED_GO; }
 static inline bool xr_xir_slot_is_unit(const XrXirSlot *slots, uint32_t count,
                                       const XrXirInstruction *op) {
     return slots && op && op->immediate >= 0 && (uint64_t)op->immediate < count &&
@@ -128,7 +129,7 @@ static inline bool xr_xir_op_uses_operand_table(XrXirOp op) {
     if (op==XR_XIR_PTR_STORE || op==XR_XIR_PTR_COPY) return true;
     if (op == XR_XIR_CALL_INTRINSIC) return true;
     return xr_xir_op_references_function(op) || op == XR_XIR_CALL_REQUIREMENT || op == XR_XIR_CALL_INDIRECT || op == XR_XIR_INVOKE_INDIRECT ||
-        op == XR_XIR_PRINT || op == XR_XIR_PHI || op == XR_XIR_FIXED_ARRAY_NEW || op == XR_XIR_ARRAY_NEW || op == XR_XIR_ARRAY_SET ||
+        op == XR_XIR_PRINT || op == XR_XIR_PHI || op == XR_XIR_CHANNEL_SELECT || op == XR_XIR_FIXED_ARRAY_NEW || op == XR_XIR_ARRAY_NEW || op == XR_XIR_ARRAY_SET ||
         op == XR_XIR_STRUCT_NEW || op == XR_XIR_ENUM_NEW || op == XR_XIR_CLASS_NEW || op == XR_XIR_STRING_INDEX_OF || op == XR_XIR_STRING_REPLACE ||
         op == XR_XIR_TUPLE_NEW || op == XR_XIR_SLOT_GROUP_INIT || op == XR_XIR_RANGE_CHECK || op==XR_XIR_CHANNEL_TRY_SEND ||
         op==XR_XIR_CHANNEL_SEND || op==XR_XIR_CHANNEL_RECV_OR ||

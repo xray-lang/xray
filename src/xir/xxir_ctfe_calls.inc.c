@@ -434,7 +434,7 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_calls(const XrXirCtfeCallRequest *re
         request->call_depth>XR_XIR_CTFE_MAX_CALL_DEPTH) return XR_XIR_CTFE_BAD_ARGUMENT;
     XrXirCtfeStatus status=ctfe_control_poll(request->evaluation.control);
     if (status!=XR_XIR_CTFE_OK) return status;
-    status=ctfe_compile_status(xr_xir_compile_artifact_verify(request->evaluation.artifact,NULL));
+    status=ctfe_compile_status(xir_artifact_verify(request->evaluation.artifact,NULL,request->evaluation.control));
     if (status!=XR_XIR_CTFE_OK) return status;
     bool owned=false;XrXirCellProvenance *cells=NULL;void *closure=NULL;
     status=ctfe_call_prepare_received(request,&owned,&cells,&closure);

@@ -187,7 +187,7 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request
     const XrXirArtifact *artifact = request->artifact;
     XrXirCtfeStatus status=ctfe_control_poll(request->control);
     if (status!=XR_XIR_CTFE_OK) return status;
-    status = ctfe_compile_status(xr_xir_compile_artifact_verify(artifact, NULL));
+    status = ctfe_compile_status(xir_artifact_verify(artifact,NULL,request->control));
     if (status != XR_XIR_CTFE_OK) return status;
     if (artifact->module.stage != XR_XIR_LOWERED || request->function >= artifact->module.function_count)
         return XR_XIR_CTFE_BAD_ARTIFACT;

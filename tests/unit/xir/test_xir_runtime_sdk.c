@@ -267,6 +267,7 @@ static BOOL sdk_test_read(HANDLE file,LPVOID bytes,DWORD length,LPDWORD actual,L
 #include "sdk_previous40_118_identity_golden.h"
 #include "sdk_previous40_119_identity_golden.h"
 #include "sdk_previous41_120_identity_golden.h"
+#include "sdk_previous41_121_identity_golden.h"
 #define current_sdk_kat_preimage previous36_96_sdk_kat_preimage
 #define current_sdk_kat_file_digest previous36_96_sdk_kat_file_digest
 #define current_sdk_kat_digest previous36_96_sdk_kat_digest
@@ -415,7 +416,7 @@ static void sdk_fixed_parent_prefixes(XrCompileResources *resources,const XrXirS
     }
 }
 static void sdk_legacy_known_bytes(void) {
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==41 && XR_XIR_CHECKED_CONTRACT==121 &&
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==41 && XR_XIR_CHECKED_CONTRACT==122 &&
         XR_XIR_VALUE_ABI_VERSION==31 && XR_XIR_CALL_ABI_VERSION==38 && XR_XIR_PROGRAM_ABI_VERSION==37,
         "SDK known bytes require the independently framed public contract");
     _Static_assert(sizeof(previous_call29_sdk_kat_preimage)==3186,"complete retired Call29 SDK preimage");
@@ -729,7 +730,7 @@ static void sdk_library_known_bytes(void) {
 /* Ordinary identity and ownership checks do not enter the pressure census. */
 static void sdk_known_bytes(void) {
     sdk_library_known_bytes();
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==41 && XR_XIR_CHECKED_CONTRACT==121 &&
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==41 && XR_XIR_CHECKED_CONTRACT==122 &&
         XR_XIR_VALUE_ABI_VERSION==31 && XR_XIR_CALL_ABI_VERSION==38 && XR_XIR_PROGRAM_ABI_VERSION==37,
         "current known bytes require their independently framed identity");
     _Static_assert(sizeof(current_sdk_kat_preimage)==3372 && sizeof(historical32_91_sdk_kat_preimage)==3330,
@@ -757,14 +758,14 @@ static void sdk_known_bytes(void) {
     CHECK(sdk_json_prefix(&json,&manifest) && json.status==XR_JSON_CURSOR_OK);
     const uint8_t *prior_images[]={previous39_100_sdk_kat_preimage,
         previous39_106_sdk_kat_preimage,previous39_107_sdk_kat_preimage,
-        previous39_108_sdk_kat_preimage,previous39_109_sdk_kat_preimage,previous39_110_sdk_kat_preimage,previous39_111_sdk_kat_preimage,previous39_112_sdk_kat_preimage,previous39_113_sdk_kat_preimage,previous39_114_sdk_kat_preimage,previous39_115_sdk_kat_preimage,previous39_116_sdk_kat_preimage,previous39_117_sdk_kat_preimage,previous40_118_sdk_kat_preimage,previous40_119_sdk_kat_preimage,previous41_120_sdk_kat_preimage};
+        previous39_108_sdk_kat_preimage,previous39_109_sdk_kat_preimage,previous39_110_sdk_kat_preimage,previous39_111_sdk_kat_preimage,previous39_112_sdk_kat_preimage,previous39_113_sdk_kat_preimage,previous39_114_sdk_kat_preimage,previous39_115_sdk_kat_preimage,previous39_116_sdk_kat_preimage,previous39_117_sdk_kat_preimage,previous40_118_sdk_kat_preimage,previous40_119_sdk_kat_preimage,previous41_120_sdk_kat_preimage,previous41_121_sdk_kat_preimage};
     const uint8_t *prior_digests[]={previous39_100_sdk_kat_digest,
         previous39_106_sdk_kat_digest,previous39_107_sdk_kat_digest,
-        previous39_108_sdk_kat_digest,previous39_109_sdk_kat_digest,previous39_110_sdk_kat_digest,previous39_111_sdk_kat_digest,previous39_112_sdk_kat_digest,previous39_113_sdk_kat_digest,previous39_114_sdk_kat_digest,previous39_115_sdk_kat_digest,previous39_116_sdk_kat_digest,previous39_117_sdk_kat_digest,previous40_118_sdk_kat_digest,previous40_119_sdk_kat_digest,previous41_120_sdk_kat_digest};
+        previous39_108_sdk_kat_digest,previous39_109_sdk_kat_digest,previous39_110_sdk_kat_digest,previous39_111_sdk_kat_digest,previous39_112_sdk_kat_digest,previous39_113_sdk_kat_digest,previous39_114_sdk_kat_digest,previous39_115_sdk_kat_digest,previous39_116_sdk_kat_digest,previous39_117_sdk_kat_digest,previous40_118_sdk_kat_digest,previous40_119_sdk_kat_digest,previous41_120_sdk_kat_digest,previous41_121_sdk_kat_digest};
     const size_t prior_lengths[]={sizeof(previous39_100_sdk_kat_preimage),
         sizeof(previous39_106_sdk_kat_preimage),sizeof(previous39_107_sdk_kat_preimage),
-        sizeof(previous39_108_sdk_kat_preimage),sizeof(previous39_109_sdk_kat_preimage),sizeof(previous39_110_sdk_kat_preimage),sizeof(previous39_111_sdk_kat_preimage),sizeof(previous39_112_sdk_kat_preimage),sizeof(previous39_113_sdk_kat_preimage),sizeof(previous39_114_sdk_kat_preimage),sizeof(previous39_115_sdk_kat_preimage),sizeof(previous39_116_sdk_kat_preimage),sizeof(previous39_117_sdk_kat_preimage),sizeof(previous40_118_sdk_kat_preimage),sizeof(previous40_119_sdk_kat_preimage),sizeof(previous41_120_sdk_kat_preimage)};
-    const uint32_t prior_semantics[]={100,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120};
+        sizeof(previous39_108_sdk_kat_preimage),sizeof(previous39_109_sdk_kat_preimage),sizeof(previous39_110_sdk_kat_preimage),sizeof(previous39_111_sdk_kat_preimage),sizeof(previous39_112_sdk_kat_preimage),sizeof(previous39_113_sdk_kat_preimage),sizeof(previous39_114_sdk_kat_preimage),sizeof(previous39_115_sdk_kat_preimage),sizeof(previous39_116_sdk_kat_preimage),sizeof(previous39_117_sdk_kat_preimage),sizeof(previous40_118_sdk_kat_preimage),sizeof(previous40_119_sdk_kat_preimage),sizeof(previous41_120_sdk_kat_preimage),sizeof(previous41_121_sdk_kat_preimage)};
+    const uint32_t prior_semantics[]={100,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121};
     for(unsigned i=0;i<sizeof(prior_semantics)/sizeof(prior_semantics[0]);++i) {
         xr_sha256(prior_images[i],prior_lengths[i],digest);
         CHECK(!memcmp(digest,prior_digests[i],32) && memcmp(digest,current_sdk_kat_digest,32));

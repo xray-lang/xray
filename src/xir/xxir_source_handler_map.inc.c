@@ -63,7 +63,7 @@ static bool source_handler_map(SourceContext *ctx,const uint32_t *map,uint32_t c
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         uint32_t instruction=0,edge=0,error=0;
         if (used==body->route_count || !recipe->handler || !recipe->handler->identity || !recipe->flow ||
-            recipe->flow->input==UINT32_MAX || recipe->flow->jump!=recipe->edge || recipe->flow->value.id!=recipe->error ||
+            recipe->flow->input==UINT32_MAX || recipe->flow->jump!=recipe->edge || recipe->flow->source!=recipe->error ||
             recipe->handler->identity>body->handler_count || !source_handler_instruction(&mapping,recipe->instruction,&instruction) ||
             !source_handler_instruction(&mapping,recipe->edge,&edge) || !source_region_id(map,count,recipe->error,&error)) goto invalid;
         uint32_t at=used;

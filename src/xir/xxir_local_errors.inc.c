@@ -132,6 +132,11 @@ static XrXirStatus local_error_call(LocalErrorCfg *cfg,const XrXirInstruction *o
         XrXirType error=xr_xir_callable_error(cfg->input->domain.types,owner->methods[op->targets[1]].signature);
         if (error==XR_XIR_UNIT) return XR_XIR_BAD_TYPE;
         return local_error_substitute(cfg,op,error,output);
+    } else if (op->op==XR_XIR_SCOPE_JOIN) {
+        if(op->args[0]>=cfg->values)return XR_XIR_BAD_STRUCTURE;
+        const XrXirTypeNode *task=xr_xir_type_node(&cfg->terms.types,cfg->types[op->args[0]]);
+        if(!task||task->kind!=XR_XIR_TYPE_TASK||task->element!=XR_XIR_UNIT||task->result==XR_XIR_UNIT)return XR_XIR_BAD_TYPE;
+        *output=task->result;return XR_XIR_OK;
     } else if (op->op==XR_XIR_TASK_AWAIT) {
         if (op->args[0]>=cfg->values) return XR_XIR_BAD_STRUCTURE;
         const XrXirTypeNode *task=xr_xir_type_node(&cfg->terms.types,cfg->types[op->args[0]]);

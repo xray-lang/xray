@@ -1,5 +1,5 @@
 // Demo: Goroutines (Coroutines)
-// go, await, await all, await any, Task API
+// go, await, Task.all, Task.first, Task API
 //
 // Run: xray demos/05-concurrency/goroutines.xr
 
@@ -23,11 +23,11 @@ var t1 = go compute("alpha", 50)
 var t2 = go compute("beta", 75)
 var t3 = go compute("gamma", 100)
 
-// await all waits for all tasks
-var results = try await all [t1, t2, t3]
+// Task.all waits for all tasks
+var results = try Task.all([t1, t2, t3])
 print("all results: ${results}")
 
-// === await any (first to finish wins) ===
+// === Task.first (first to finish wins) ===
 fn slowTask(name: string, delay: i64) -> string {
     time.sleep(delay)
     return "${name} done after ${delay}ms"
@@ -35,12 +35,24 @@ fn slowTask(name: string, delay: i64) -> string {
 
 var fast = go slowTask("fast", 10)
 var slow = go slowTask("slow", 200)
-var first = try await any [fast, slow]
+var first = try Task.first([fast, slow])
 print("first finished: ${first}")
+
+fn taskResultText(result: TaskResult<i64, Never>) -> string {
+    return match (result) {
+        TaskResult.Success { value: v } -> "TaskResult.Success(${v})",
+        TaskResult.Error { error: _ } -> "TaskResult.Error",
+        TaskResult.Panic { info: _ } -> "TaskResult.Panic",
+        TaskResult.Cancelled -> "TaskResult.Cancelled",
+    }
+}
 
 // === Task properties ===
 var task = go compute("check", 10)
 var val = try await task
-print("task.done: ${task.done}")
-print("task.status: ${task.status}")
-print("task.awaitResult: ${task.awaitResult()}")
+const polled = task.poll()
+var pollText = "Pending"
+if (polled != null) { pollText = taskResultText(polled!) }
+print("task.poll: ${pollText}")
+print("task.result: ${val}")
+print("task.awaitResult: ${taskResultText(task.awaitResult())}")

@@ -482,12 +482,12 @@ static XrXirStatus effect_invocation_producer_source_read(const EffectInvocation
             owner->final->sites[edge->producer].target!=target->body || op->immediate<0 ||
             (uint64_t)op->immediate!=target->body) return XR_XIR_BAD_STRUCTURE;
         if (parameter>=op->args[1]) return XR_XIR_OK;
-    } else if (op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE || op->op==XR_XIR_GO || op->op==XR_XIR_GENERATOR_NEW ||
+    } else if (op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE || xr_xir_op_is_spawn(op->op) || op->op==XR_XIR_GENERATOR_NEW ||
         op->op==XR_XIR_CLEANUP_REGISTER) {
-        if (edge->producer!=UINT32_MAX || edge->latent!=(op->op==XR_XIR_GO || op->op==XR_XIR_GENERATOR_NEW) ||
+        if (edge->producer!=UINT32_MAX || edge->latent!=(xr_xir_op_is_spawn(op->op) || op->op==XR_XIR_GENERATOR_NEW) ||
             op->immediate<0 || (uint64_t)op->immediate!=target->body) return XR_XIR_BAD_STRUCTURE;
     } else return XR_XIR_OK;
-    uint32_t actual=parameter-captures;
+    uint32_t actual=parameter-captures+(op->op==XR_XIR_SCOPED_GO?1u:0u);
     if (actual>=op->args[1] || !function.operands || op->args[0]>function.operand_count ||
         op->args[1]>function.operand_count-op->args[0]) return XR_XIR_BAD_STRUCTURE;
     actual=function.operands[op->args[0]+actual];

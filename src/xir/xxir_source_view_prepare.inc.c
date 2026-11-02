@@ -35,7 +35,7 @@ static bool source_view_prepare(SourceContext *ctx) {
     if (!source_construction_prepare(ctx)) return false;
     XrXirDeclarations declarations;XrXirModule module=source_module_view(ctx,&declarations);
     XrXirDiagnostic diagnostic={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
-    XrXirStatus status=xir_compile_view_prepare_ordinary(&ctx->compile,&module,ctx->construction,&diagnostic);
+    XrXirStatus status=xir_compile_view_prepare_ordinary(&ctx->compile,(XirEffectInput){&module,ctx->construction,ctx->request},&diagnostic);
     for (uint32_t f=0;status==XR_XIR_OK && f<ctx->function_count;++f) {
         if (!ctx->bodies[f].initialization_regions) continue;
         status=xr_xir_compile_initialization_check(&ctx->compile,&module,f,ctx->bodies[f].initialization_regions,&diagnostic);
