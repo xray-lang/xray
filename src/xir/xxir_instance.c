@@ -2343,6 +2343,11 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
             bool equal=false;converted=xir_crypto_timing_equal(&view->arguments[0],&view->arguments[1],xr_xir_call_admission(view),&equal);
             if(converted==XR_XIR_VALUE_OK)*value=(XrXirValue){XR_XIR_BOOL,0,equal};
         }
+    } else if (id==XR_NATIVE_CALLABLE_TASK_ALL_BEGIN || id==XR_NATIVE_CALLABLE_TASK_FIRST_BEGIN) {
+        if(instance!=instance_current(instance))goto failed;
+        status=xir_task_aggregate_begin(instance->executor,view,&view->arguments[0],entry->result,
+            id==XR_NATIVE_CALLABLE_TASK_ALL_BEGIN?XIR_TASK_AGGREGATE_ALL:XIR_TASK_AGGREGATE_FIRST,value);
+        if(status!=XR_XIR_CALL_READY)goto failed;
     } else if (xir_mem_native_id(id)) {
         if (!xir_buffer_storage_scope(program->declarations,index)) goto failed;
         converted=instance_memory_call(instance,view,id,entry->result,value);
