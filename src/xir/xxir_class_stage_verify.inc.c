@@ -56,6 +56,10 @@ static XrXirStatus class_stage_pair(const XrXirModule *module,uint32_t helper,
 static bool class_stage_plain(const XrXirInstruction *op) {
     return !op->targets[0] && !op->targets[1] && !op->type_arguments[0] && !op->type_arguments[1];
 }
+static XrXirOp class_stage_write(const XrXirModule *module,XrXirType type) {
+    if(module->stage!=XR_XIR_LOWERED)return XR_XIR_LOCAL_WRITE;
+    return xr_xir_type_is_owned(module->types,type)?XR_XIR_OWNED_LOCAL_WRITE:XR_XIR_SCALAR_LOCAL_WRITE;
+}
 static XrXirStatus class_stage_wrapper(const XrXirModule *module,ClassStagePair pair,
     XrCompileRequestControl *control) {
     const XrXirFunction *body=&module->functions[pair.constructor],*helper=&module->functions[pair.helper];
@@ -126,7 +130,7 @@ static XrXirStatus class_stage_prefix(const XrXirModule *module,ClassStagePair c
         uint32_t projection=call+1+2*f;const XrXirInstruction *field=&body->instructions[projection],*write=field+1;
         if(field->op!=XR_XIR_TUPLE_FIELD || field->type!=base->nominal.fields[f] ||
             field->args[0]!=(uint64_t)body->parameter_count+call || field->args[1] ||
-            field->immediate!=f || !class_stage_plain(field) || write->op!=XR_XIR_LOCAL_WRITE ||
+            field->immediate!=f || !class_stage_plain(field) || write->op!=class_stage_write(module,field->type) ||
             write->type!=XR_XIR_UNIT || write->args[0]!=(uint64_t)body->parameter_count+place ||
             write->args[1]!=(uint64_t)body->parameter_count+projection || write->immediate ||
             !class_stage_plain(write))return XR_XIR_BAD_STRUCTURE;
@@ -152,7 +156,8 @@ static XrXirStatus class_stage_parent_body(const XrXirModule *module,ClassStageP
             op->op==XR_XIR_INVOKE_INDIRECT || op->op==XR_XIR_CLEANUP_REGISTER ||
             op->op==XR_XIR_CLEANUP_LEAVE || op->op==XR_XIR_CLEANUP_ERROR)return XR_XIR_UNSUPPORTED;
         if(op->op==XR_XIR_RETURN && (i+1!=body->instruction_count || calls!=1))return XR_XIR_BAD_TYPE;
-        if(!calls && (op->op==XR_XIR_LOCAL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE))return XR_XIR_UNSUPPORTED;
+        if(!calls && (op->op==XR_XIR_LOCAL_WRITE || op->op==XR_XIR_SCALAR_LOCAL_WRITE ||
+            op->op==XR_XIR_OWNED_LOCAL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE))return XR_XIR_UNSUPPORTED;
         if(xr_xir_op_references_function(op->op) && op->immediate==parent.helper) {
             if(op->op!=XR_XIR_CALL || ++calls!=1)return XR_XIR_BAD_TYPE;
             call=i;
