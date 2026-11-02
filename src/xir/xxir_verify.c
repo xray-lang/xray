@@ -1455,6 +1455,11 @@ static XrXirStatus structure_verify_ordinary(VerifyContext *context,const XrXirC
     if (status == XR_XIR_OK) {
         status = xr_xir_compile_declarations_verify(&context->remaining, module->declarations, module->types, module->function_count, module->linkage_kind);
     }
+    if(status==XR_XIR_OK && module->declarations) {
+        for(uint32_t f=0;f<module->function_count;++f)
+            if(module->declarations->functions[f].method_kind==XR_XIR_CONSTRUCTOR_FIELDS ||
+                (module->declarations->functions[f].promises&XR_XIR_FUNCTION_OVERRIDE)) {status=XR_XIR_BAD_STAGE;break;}
+    }
     if (status == XR_XIR_OK) status = verify_nominal_modules(module, &context->remaining);
     if (status == XR_XIR_OK) status = xr_xir_compile_generics_structure_verify(&context->remaining, module);
     if (status == XR_XIR_OK) status = verify_metadata_parameter_count(module, &context->remaining);

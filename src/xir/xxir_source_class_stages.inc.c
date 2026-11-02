@@ -46,7 +46,7 @@ static bool source_class_stage_eligible(SourceContext *ctx,AstNode *node) {
     for(int m=0;m<type->method_count;++m) {
         if(type->methods[m]->type!=AST_METHOD_DECL || !type->methods[m]->as.method_decl.is_constructor)continue;
         MethodDeclNode *method=&type->methods[m]->as.method_decl;
-        if(method->is_private || method->is_protected)return false;
+        if(method->is_private || method->is_protected || method->throws_clause.syntax!=XR_THROWS_OMITTED)return false;
         SourceClassStageScan scan={ctx,NULL,0,true};
         return source_class_stage_scan(method->body,&scan) && scan.eligible;
     }

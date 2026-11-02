@@ -109,7 +109,7 @@ static bool source_nominal_declare(SourceContext *ctx, AstNode *node, const char
     XrXirNominalDeclaration *record = (XrXirNominalDeclaration *) &ctx->nominals.declarations[symbol->index];
     const char *module = ctx->modules[ctx->module].name;
     *record = (XrXirNominalDeclaration) {{module, (uint32_t) source_text_size(ctx, module)},
-        {name, (uint32_t) source_text_size(ctx, name)}, node->is_exported, NULL, 0, NULL, 0, kind, NULL, 0, 0, {0}};
+        {name, (uint32_t) source_text_size(ctx, name)}, node->is_exported, NULL, 0, NULL, 0, kind, NULL, 0, 0, {0}, 0};
     if (!source_prelude_bind(ctx, symbol, record)) return false;
     XrXirTypeNode type = {0}; type.kind = XR_XIR_TYPE_NOMINAL; type.nominal.declaration = symbol->index;
     XrXirConstraint *constraints = count ? source_alloc(ctx, count, sizeof(*constraints)) : NULL;
