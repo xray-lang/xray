@@ -432,26 +432,32 @@ XR_FUNC XrXirStatus xr_hir_body_project(XrHirBody *body,XrHirBodyUse handle,cons
     if(row->is_call) {
         if(row->signature.owner!=body||row->signature.index>=body->signatures.count)return XR_XIR_BAD_STRUCTURE;
         HirBodySignature call=((HirBodySignature *)body->signatures.items)[row->signature.index];
+        bool method=body_class_call_bound(&call);
         if(!projection->has_call||projection->call.op!=projection->operation)
             return body_projection_failure(reason,"typed call projection has no actual callee");
         if(call.declaration.family==XR_HIR_CALL_REQUIREMENT) {
             if(projection->call.targets[0]!=call.declaration.interface_declaration||
                 projection->call.targets[1]!=call.declaration.interface_member)return body_projection_failure(reason,"typed requirement projection changed its target");
-        } else if(projection->call.immediate!=(int64_t)(call.declaration.family==XR_HIR_CALL_INDIRECT?
+        } else if(projection->call.immediate!=(int64_t)(call.declaration.family==XR_HIR_CALL_INDIRECT||method?
             call.declaration.callee_value:call.declaration.function))return body_projection_failure(reason,"typed call projection changed its callee");
         uint32_t prefix=call.group.type!=XR_XIR_UNIT?1u:0u;
+        uint32_t captured=method?1u:0u;
         if(!call.finished||call.argument_count>UINT32_MAX-prefix||
-            call.argument_count+prefix!=projection->source_argument_count||
+            call.argument_count<captured||call.argument_count+prefix-captured!=projection->source_argument_count||
             (projection->source_argument_count&&!projection->source_arguments))return XR_XIR_BAD_STRUCTURE;
         if(prefix&&(projection->operation!=XR_XIR_SCOPED_GO||projection->source_arguments[0]!=call.group.value))
             return body_projection_failure(reason,"typed spawn changed its lexical group operand");
+        if(method) {
+            XrXirStatus status=body_class_call_project(body,&call,projection,control);
+            if(status!=XR_XIR_OK)return status;
+        }
         uint32_t argument=call.first_argument;
         for(uint32_t p=0;p<call.argument_count;++p) {
             if(!(p%64)){XrXirStatus status=body_poll(control);if(status!=XR_XIR_OK)return status;}
             if(argument>=body->count)return XR_XIR_BAD_STRUCTURE;
             HirBodyUse actual=body->uses[argument];
             if(actual.signature.owner!=body||actual.signature.index!=row->signature.index||
-                projection->source_arguments[p+prefix]!=actual.source_value)return XR_XIR_BAD_STRUCTURE;
+                (p>=captured&&projection->source_arguments[p+prefix-captured]!=actual.source_value))return XR_XIR_BAD_STRUCTURE;
             argument=actual.next_argument;
         }
         if(argument!=UINT32_MAX)return XR_XIR_BAD_STRUCTURE;

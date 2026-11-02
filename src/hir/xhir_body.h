@@ -167,6 +167,9 @@ XR_FUNC XrXirStatus xr_hir_body_signature(XrHirBody *,const XrHirSignatureInput 
 typedef struct XrHirScopeArgument {XrXirType type;uint32_t value;} XrHirScopeArgument;
 /* One real implicit group operand; this descriptive use grants no scope authority. */
 XR_FUNC XrXirStatus xr_hir_body_call_scope(XrHirBody *,XrHirBodySignature,XrHirScopeArgument,XrCompileRequestControl *);
+/* Bind an already checked declaration call to its real captured method value. */
+XR_FUNC XrXirStatus xr_hir_body_call_method(XrHirBody *,XrHirBodySignature,
+    XrXirType,uint32_t,XrCompileRequestControl *);
 XR_FUNC XrXirStatus xr_hir_body_call_finish(XrHirBody *,XrHirBodySignature,
     const XrXirInstruction *,XrCompileRequestControl *,XrHirBodyUse *,XrHirBodyAction *);
 XR_FUNC XrXirStatus xr_hir_body_call_argument(XrHirBody *,XrHirBodySignature,

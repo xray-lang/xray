@@ -113,9 +113,17 @@ static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue re
         if(node->as.call_expr.type_arg_count)return source_fail(ctx,node,XR_XIR_BAD_TYPE,"virtual class method requires a closed declaration");
         if(identity->member_access && ctx->identities[ctx->function].nominal_owner!=identity->nominal_owner)
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"method requires its declaration owner");
-        SourceValue bound;
-        return source_class_method_reference(ctx,node->as.call_expr.callee,receiver,method,&bound) &&
-            source_indirect_call(ctx,node,bound,value);
+        SourceDirectRequest direct={method->index,{0},&receiver,result_context};
+        SourceDirectArguments prepared={0};SourceValue bound;
+        if(!source_direct_arguments(ctx,node,&direct,&prepared)||prepared.receiver_count!=1||!prepared.count||
+            !source_class_method_reference(ctx,node->as.call_expr.callee,prepared.values[0],method,&bound))return false;
+        XrXirStatus status=xr_hir_body_call_method(ctx->typed_body,prepared.signature,bound.type,bound.id,ctx->request);
+        if(status!=XR_XIR_OK)return source_fail(ctx,node,status,"method dispatch lost its declared argument owner");
+        uint32_t reference_before=ctx->query.reference_count;
+        return source_query_target_token_reference(ctx,node->as.call_expr.callee,method->declaration,XR_XIR_SOURCE_CALL)&&
+            source_direct_call_signature(ctx,node,method->index,&prepared,reference_before)&&
+            source_hir_call_group(ctx,prepared.signature,(XrXirInstruction){.op=XR_XIR_CALL_INDIRECT,
+                .type=prepared.result,.immediate=bound.id},prepared.values+1,value);
     }
     CallExprNode *call = &node->as.call_expr;
     const XrXirTypeNode *returned=xr_xir_type_node(&ctx->types,ctx->functions[method->index].result);
