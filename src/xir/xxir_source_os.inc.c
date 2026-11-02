@@ -24,7 +24,7 @@ static bool source_os_declare(SourceContext *ctx) {
         if(!source_request_poll(ctx,NULL))return false;
         if(!source_os_module(ctx,m) || source_owned_checked(&ctx->graph->specs[m]))continue;
         ctx->module=m;
-        for(uint32_t id=XR_NATIVE_CALLABLE_OS_PLATFORM;id<=XR_NATIVE_CALLABLE_OS_SYSTEM_USERNAME;++id) {
+        for(uint32_t id=XR_NATIVE_CALLABLE_OS_PLATFORM;id<=XR_NATIVE_CALLABLE_OS_SYSTEM_HOMEDIR;++id) {
             const XrNativeCallableDeclaration *native=xr_native_callable_by_id(id);
             if(!native || !native->member || !native->member->name)
                 return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"os callable declaration is missing");
@@ -40,7 +40,7 @@ static bool source_os_declare(SourceContext *ctx) {
             if(id==XR_NATIVE_CALLABLE_OS_SETENV||id==XR_NATIVE_CALLABLE_OS_UNSETENV)result=XR_XIR_BOOL;
             if(id==XR_NATIVE_CALLABLE_OS_EXIT)result=XR_XIR_UNIT;
             if(id==XR_NATIVE_CALLABLE_OS_GETPID)result=XR_XIR_I64;
-            if(id==XR_NATIVE_CALLABLE_OS_GETENV||id==XR_NATIVE_CALLABLE_OS_SYSTEM_USERNAME) {
+            if(id==XR_NATIVE_CALLABLE_OS_GETENV||id==XR_NATIVE_CALLABLE_OS_SYSTEM_USERNAME||id==XR_NATIVE_CALLABLE_OS_SYSTEM_HOMEDIR) {
                 if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=XR_XIR_STRING},&result))return false;
             }
             if(id==XR_NATIVE_CALLABLE_OS_ENVIRON_BLOCK) {
