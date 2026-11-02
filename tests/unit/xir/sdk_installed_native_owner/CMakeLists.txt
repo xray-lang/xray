@@ -14,13 +14,21 @@ set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 file(READ "${XIR_SDK_BUNDLE_DIR}/sdk_manifest.json" XIR_SDK_LINK_MANIFEST)
 string(JSON XIR_SDK_LIBRARY_COUNT LENGTH "${XIR_SDK_LINK_MANIFEST}" system_libraries)
+if(NOT XIR_SDK_LIBRARY_COUNT EQUAL 4)
+    message(FATAL_ERROR "The runtime SDK requires exactly kernel32, bcrypt, advapi32, userenv")
+endif()
 string(JSON XIR_SDK_LIBRARY_FIRST GET "${XIR_SDK_LINK_MANIFEST}" system_libraries 0)
 string(JSON XIR_SDK_LIBRARY_SECOND GET "${XIR_SDK_LINK_MANIFEST}" system_libraries 1)
-if(NOT XIR_SDK_LIBRARY_COUNT EQUAL 2 OR NOT XIR_SDK_LIBRARY_FIRST STREQUAL "kernel32" OR
-   NOT XIR_SDK_LIBRARY_SECOND STREQUAL "bcrypt")
-    message(FATAL_ERROR "The runtime SDK requires exactly kernel32 and bcrypt")
+string(JSON XIR_SDK_LIBRARY_THIRD GET "${XIR_SDK_LINK_MANIFEST}" system_libraries 2)
+string(JSON XIR_SDK_LIBRARY_FOURTH GET "${XIR_SDK_LINK_MANIFEST}" system_libraries 3)
+if(NOT XIR_SDK_LIBRARY_FIRST STREQUAL "kernel32" OR
+   NOT XIR_SDK_LIBRARY_SECOND STREQUAL "bcrypt" OR
+   NOT XIR_SDK_LIBRARY_THIRD STREQUAL "advapi32" OR
+   NOT XIR_SDK_LIBRARY_FOURTH STREQUAL "userenv")
+    message(FATAL_ERROR "The runtime SDK requires exactly kernel32, bcrypt, advapi32, userenv")
 endif()
-set(XIR_SDK_SYSTEM_LIBRARIES ${XIR_SDK_LIBRARY_FIRST} ${XIR_SDK_LIBRARY_SECOND})
+set(XIR_SDK_SYSTEM_LIBRARIES ${XIR_SDK_LIBRARY_FIRST} ${XIR_SDK_LIBRARY_SECOND}
+    ${XIR_SDK_LIBRARY_THIRD} ${XIR_SDK_LIBRARY_FOURTH})
 add_executable(installed_native_owner consumer.c native-program.c)
 set_target_properties(installed_native_owner PROPERTIES MSVC_RUNTIME_LIBRARY MultiThreadedDLL)
 target_compile_definitions(installed_native_owner PRIVATE
