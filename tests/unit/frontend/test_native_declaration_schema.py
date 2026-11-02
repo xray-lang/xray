@@ -589,19 +589,20 @@ class OsHostFactDeclarations(unittest.TestCase):
 
     def test_private_system_strings_keep_owned_and_runtime_contract(self):
         lines, rows = schema.render_os_callables(self.declarations)
-        self.assertEqual(len(rows), 4)
-        for name in ('platform', 'arch', 'getenv', 'setenv'):
+        self.assertEqual(len(rows), 5)
+        for name in ('platform', 'arch', 'getenv', 'setenv', 'unsetenv'):
             self.assertTrue(any('XR_NATIVE_CALLABLE_OS_' + name.upper() + ', NULL,' in row and
                                 'NULL, false, "os", "stdlib/defs/core.def", FINGERPRINT' in row for row in rows))
-            self.assertIn('"__' + name + '", ' + ('"(name: string, value: string): bool", "bool"' if name == 'setenv' else '"(name: string): string?", "string?"' if name == 'getenv' else '"(): string", "string"'), '\n'.join(lines))
+            self.assertIn('"__' + name + '", ' + ('"(name: string): bool", "bool"' if name == 'unsetenv' else '"(name: string, value: string): bool", "bool"' if name == 'setenv' else '"(name: string): string?", "string?"' if name == 'getenv' else '"(): string", "string"'), '\n'.join(lines))
         self.assertEqual('\n'.join(lines).count('NULL, 0, XR_NATIVE_TERM_STRING'), 2)
-        self.assertEqual('\n'.join(lines).count('XR_NATIVE_ALLOCATION_UNKNOWN'), 4)
+        self.assertEqual('\n'.join(lines).count('XR_NATIVE_ALLOCATION_UNKNOWN'), 5)
+        self.assertIn('xr_native_os_unsetenv_parameters, 1, XR_NATIVE_TERM_BOOL', '\n'.join(lines))
         self.assertIn('xr_native_os_setenv_parameters, 2, XR_NATIVE_TERM_BOOL', '\n'.join(lines))
         self.assertIn('xr_native_os_getenv_parameters, 1, XR_NATIVE_TERM_NULLABLE_STRING', '\n'.join(lines))
         self.assertNotIn('XR_NATIVE_ALLOCATION_NO_HEAP', '\n'.join(lines))
 
     def test_missing_duplicate_and_changed_contracts_are_rejected(self):
-        for name in ('__platform', '__arch', '__getenv', '__setenv'):
+        for name in ('__platform', '__arch', '__getenv', '__setenv', '__unsetenv'):
             row = next(row for row in self.declarations if row.module == 'os' and row.name == name)
             for changed in [[item for item in self.declarations if item is not row], self.declarations + [row]]:
                 with self.subTest(name=name), self.assertRaises(ValueError):

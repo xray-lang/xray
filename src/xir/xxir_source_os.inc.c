@@ -24,7 +24,7 @@ static bool source_os_declare(SourceContext *ctx) {
         if(!source_request_poll(ctx,NULL))return false;
         if(!source_os_module(ctx,m) || source_owned_checked(&ctx->graph->specs[m]))continue;
         ctx->module=m;
-        for(uint32_t id=XR_NATIVE_CALLABLE_OS_PLATFORM;id<=XR_NATIVE_CALLABLE_OS_SETENV;++id) {
+        for(uint32_t id=XR_NATIVE_CALLABLE_OS_PLATFORM;id<=XR_NATIVE_CALLABLE_OS_UNSETENV;++id) {
             const XrNativeCallableDeclaration *native=xr_native_callable_by_id(id);
             if(!native || !native->member || !native->member->name)
                 return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"os callable declaration is missing");
@@ -33,11 +33,11 @@ static bool source_os_declare(SourceContext *ctx) {
                 return source_fail(ctx,NULL,XR_XIR_BUDGET,"os native callable inventory exhausted");
             const char *name=source_owned_text(ctx,native->member->name);
             const char *signature=source_owned_text(ctx,native->member->signature);
-            uint32_t count=id==XR_NATIVE_CALLABLE_OS_SETENV?2u:id==XR_NATIVE_CALLABLE_OS_GETENV?1u:0u;
+            uint32_t count=id==XR_NATIVE_CALLABLE_OS_SETENV?2u:(id==XR_NATIVE_CALLABLE_OS_GETENV||id==XR_NATIVE_CALLABLE_OS_UNSETENV)?1u:0u;
             XrXirType *parameters=count?source_alloc(ctx,count,sizeof(*parameters)):NULL,result=XR_XIR_STRING;
             if(!name || !signature || (count && !parameters))return false;
             for(uint32_t p=0;p<count;++p)parameters[p]=XR_XIR_STRING;
-            if(id==XR_NATIVE_CALLABLE_OS_SETENV)result=XR_XIR_BOOL;
+            if(id==XR_NATIVE_CALLABLE_OS_SETENV||id==XR_NATIVE_CALLABLE_OS_UNSETENV)result=XR_XIR_BOOL;
             if(id==XR_NATIVE_CALLABLE_OS_GETENV) {
                 if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=XR_XIR_STRING},&result))return false;
             }

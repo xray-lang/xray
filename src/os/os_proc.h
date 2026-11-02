@@ -199,7 +199,8 @@ XR_FUNC int xr_proc_self_exe_path(char *buf, size_t size);
 XR_FUNC XrOsIoStatus xr_os_io_self_exe_path(const XrOsIoPolicy *policy, char **output);
 XR_FUNC XrOsIoStatus xr_os_io_environment_get(const XrOsIoPolicy *policy,
     const char *name, char **output);
-/* A normal OS refusal publishes false; allocation and control failure preserve
+/* NULL value deletes; a nonNULL empty value sets an empty string.
+ * A normal OS refusal publishes false; allocation and control failure preserve
  * output. The synchronous check borrows policy.context only until this returns. */
 XR_FUNC XrOsIoStatus xr_os_io_environment_set(const XrOsIoPolicy *policy,
     const char *name, const char *value, bool (*current)(void *context), bool *output);
