@@ -1069,9 +1069,10 @@ static XrXirStatus slot_publication_attempt(const XrXirCompileContext *context,u
     CHECK(!memcmp(before,&f,sizeof(f)));xr_xir_compile_construction_free(construction);return status;
 }
 static void slot_publication_cases(void) {
+    /* Nested and string arrays preserve plain, owned module storage. */
     static const XrXirStatus expected[]={XR_XIR_OK,XR_XIR_OK,XR_XIR_UNRESOLVED,
-        XR_XIR_BAD_STRUCTURE,XR_XIR_BAD_STRUCTURE,XR_XIR_BAD_TYPE,XR_XIR_UNRESOLVED,
-        XR_XIR_UNRESOLVED,XR_XIR_BAD_VALUE,XR_XIR_BAD_VALUE,XR_XIR_OK};
+        XR_XIR_BAD_STRUCTURE,XR_XIR_BAD_STRUCTURE,XR_XIR_BAD_TYPE,XR_XIR_OK,
+        XR_XIR_OK,XR_XIR_BAD_VALUE,XR_XIR_BAD_VALUE,XR_XIR_OK};
     for (uint32_t kind=0;kind<sizeof(expected)/sizeof(expected[0]);++kind) {
         XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).held_bytes;size_t first=attempts;
         CHECK(slot_publication_attempt(&c,kind)==expected[kind]);size_t points=attempts-first;
