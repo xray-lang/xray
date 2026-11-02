@@ -61,3 +61,5 @@ XR_FUNC XrXirStatus xir_compile_class_stage_signature(const XrXirModule *module,
     }
     return XR_XIR_OK;
 }
+
+#include "xxir_class_stage_verify.inc.c"

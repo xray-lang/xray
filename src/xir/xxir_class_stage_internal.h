@@ -15,4 +15,10 @@
 #include "xxir.h"
 XR_FUNC XrXirStatus xir_compile_class_stage_signature(const XrXirModule *module,
     uint32_t helper,XrCompileRequestControl *control);
+/* These checks borrow one complete Module. They grant no host entry or
+ * standalone Program permission and do not replace ordinary body verification. */
+XR_FUNC XrXirStatus xir_compile_class_stage_verify(const XrXirModule *module,
+    XrCompileRequestControl *control);
+XR_FUNC XrXirStatus xir_compile_class_stage_call(const XrXirModule *module,
+    uint32_t caller,uint32_t instruction,XrCompileRequestControl *control);
 #endif // XXIR_CLASS_STAGE_INTERNAL_H
