@@ -25,7 +25,9 @@ static void aggregate_after_allocate(void);
 #include "xir/xxir_task_budget.c"
 #include "xir/xxir_task.c"
 #include "base/xcompile_resources.c"
-#include "xir_native_metadata_fixture.h"
+#include "xir_construction_fixture.h"
+#include "xir/xxir_generic.h"
+#include "xir_native_fixture_owner.h"
 static void aggregate_after_allocate(void) {
     if(aggregate_cancel_parent&&runtime_attempts==aggregate_cancel_at)
         CHECK(xr_xir_call_request_cancel(aggregate_cancel_parent)==XR_XIR_CALL_CANCEL_REQUESTED);
