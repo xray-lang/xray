@@ -20,6 +20,7 @@
 #include "class_inheritance_cases.h"
 XR_DATA const XrXirProgramSpec class_inheritance_0_program,class_inheritance_1_program,class_inheritance_2_program;
 XR_DATA const uint32_t class_inheritance_0_metadata[4],class_inheritance_1_metadata[4],class_inheritance_2_metadata[4];
+XR_DATA const uint32_t class_inheritance_1_default_test;
 int main(void) {
     class_inheritance_golden();XrCompileResourceLimits limits=XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
     XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};
@@ -30,6 +31,7 @@ int main(void) {
         ClassInheritancePlan plan={words[0],words[1],words[2],words[3],mode?42:0,mode!=0,mode==2};
         XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(&context,
             mode==2?&class_inheritance_2_program:mode?&class_inheritance_1_program:&class_inheritance_0_program,&program)==XR_XIR_OK);
+        if(mode==1)class_inheritance_defaults_execute(program,class_inheritance_1_default_test);
         class_inheritance_execute(program,&plan);xr_xir_compile_program_drop(program);
         CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK && before.held_bytes==after.held_bytes);
     }
