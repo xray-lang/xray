@@ -21,6 +21,9 @@
 #include "xxir_instance_value.h"
 #include "xxir_format.h"
 #include "xxir_native_callable.h"
+#include "../os/os_thread.h"
+#include "../os/os_proc.h"
+#include "../shared/xr_os_core.h"
 #include "xxir_from_utf8_internal.h"
 #include "xxir_unicode_internal.h"
 #include "xxir_call_view_internal.h"
@@ -90,6 +93,7 @@ typedef struct InstanceStorageRoute {
     XrXirInstance *owner;
     uint32_t index;
 } InstanceStorageRoute;
+typedef struct XirEnvironmentSnapshotOwner XirEnvironmentSnapshotOwner;
 struct XrXirInstance {
     XrXirProgram *program;
     XrXirInstanceConfig config;
@@ -121,7 +125,11 @@ struct XrXirInstance {
     bool close_drained;
     struct XirInstanceBindingTable *symbol_bindings;
     bool bindings_published;
+    XirEnvironmentSnapshotOwner *environment_snapshots;
 };
+#if defined(XR_OS_WINDOWS)
+static bool instance_environment_snapshots_close(XrXirInstance *instance);
+#endif
 static void instance_bindings_free(XrXirInstance *instance);
 static bool instance_bindings_ready(const XrXirInstance *instance);
 static XrXirInstance *instance_root(XrXirInstance *instance) {
@@ -517,6 +525,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_config_init_sandbox(XrXirInstanceConfig 
 }
 static void instance_dispose(XrXirInstance *instance) {
     XR_CHECK(instance && instance_owner_current(instance), "instance internal owner requires its current domain");
+    XR_CHECK(!instance->environment_snapshots,"instance disposal requires discharged environment snapshots");
     XrXirDomain *domain = instance->domain;
     XrXirProgram *program = instance->program;
     const XrXirDeclarations *d = program ? program->declarations : NULL;
@@ -1075,8 +1084,13 @@ XrXirCallStatus xr_xir_instance_free(XrXirInstance *instance) {
     }
     XrXirCallStatus original=instance_drain_state(root);
     if (current==root) status=original;
-    bool exhausted=root->budget.exhausted;
     root->driving=true;
+#if defined(XR_OS_WINDOWS)
+    if(!instance_environment_snapshots_close(root)) {
+        root->driving=false;return XR_XIR_CALL_CLOSE_FAILED;
+    }
+#endif
+    bool exhausted=root->budget.exhausted;
     XrXirValueStatus closed=xr_xir_domain_close(root->domain);
     if (closed!=XR_XIR_VALUE_OK) {
         root->driving=false;
@@ -2393,6 +2407,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_pointer(XrXirCallView *view,XrXirOp oper
 }
 
 #include "xxir_instance_math.inc.c"
+#include "xxir_instance_environment_win.inc.c"
 XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
     XrXirInstance *instance=view_instance(view);XrXirValue *value=NULL;
     XrXirCallStatus status=XR_XIR_CALL_BAD_STATE;bool thrown=false;
@@ -2415,10 +2430,60 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
     value=state;
     status=xr_xir_call_execution_status(view);if (status!=XR_XIR_CALL_READY) goto failed;
     XrXirViewAccess access={0};XrXirValueStatus converted=XR_XIR_VALUE_OK;
-    if(xir_math_native_id(id)) {
+    if(id==XR_NATIVE_CALLABLE_SYS_THREAD_YIELD) {
+        if(!xir_sys_thread_yield_scope(program->declarations,index,program->entry_count))goto failed;
+        xr_thread_yield();
+        *value=(XrXirValue){XR_XIR_UNIT,0,0};
+    } else if(xir_math_native_id(id)) {
         if(!xir_math_native_scope(program->declarations,index,program->entry_count))goto failed;
         XrXirRunStatus evaluated=instance_math_call(id,view->arguments,view->argument_count,value);
         if(evaluated!=XR_XIR_RUN_OK)return xr_xir_call_fault(evaluated);
+    } else if(xir_os_native_id(id)) {
+        if(!xir_os_native_scope(program->declarations,index,program->entry_count))goto failed;
+        if(id==XR_NATIVE_CALLABLE_OS_SYSTEM_HOMEDIR) {
+#if defined(XR_OS_WINDOWS)
+            status=instance_system_homedir(view,instance,entry->result,value);
+#else
+            status=XR_XIR_CALL_UNSUPPORTED;
+#endif
+            if(status!=XR_XIR_CALL_READY)goto failed;
+        } else if(id==XR_NATIVE_CALLABLE_OS_SYSTEM_USERNAME) {
+#if defined(XR_OS_WINDOWS)
+            status=instance_system_username(view,instance,entry->result,value);
+#else
+            status=XR_XIR_CALL_UNSUPPORTED;
+#endif
+            if(status!=XR_XIR_CALL_READY)goto failed;
+        } else if(id==XR_NATIVE_CALLABLE_OS_HOSTNAME) {
+#if defined(XR_OS_WINDOWS)
+            status=instance_hostname(view,instance,value);
+#else
+            status=XR_XIR_CALL_UNSUPPORTED;
+#endif
+            if(status!=XR_XIR_CALL_READY)goto failed;
+        } else if(id==XR_NATIVE_CALLABLE_OS_GETCWD) {
+            status=instance_current_directory(view,instance,value);
+            if(status!=XR_XIR_CALL_READY)goto failed;
+        } else if(id==XR_NATIVE_CALLABLE_OS_GETPID) {
+            *value=(XrXirValue){XR_XIR_I64,0,xr_os_core_getpid()};
+        } else if(id==XR_NATIVE_CALLABLE_OS_EXIT) {
+            status=xr_xir_call_execution_status(view);
+            if(status!=XR_XIR_CALL_READY)goto failed;
+            xr_proc_self_exit(view->arguments[0].payload);
+        } else if(id==XR_NATIVE_CALLABLE_OS_GETENV || id==XR_NATIVE_CALLABLE_OS_SETENV || id==XR_NATIVE_CALLABLE_OS_UNSETENV ||
+            id==XR_NATIVE_CALLABLE_OS_ENVIRON_BLOCK) {
+#if defined(XR_OS_WINDOWS)
+            status=id==XR_NATIVE_CALLABLE_OS_ENVIRON_BLOCK?instance_environment_snapshot(view,instance,entry->result,value):
+                id!=XR_NATIVE_CALLABLE_OS_GETENV?instance_environment_set(view,instance,view->arguments,id==XR_NATIVE_CALLABLE_OS_UNSETENV,value):
+                instance_environment_get(view,instance,&view->arguments[0],entry->result,value);
+#else
+            status=XR_XIR_CALL_UNSUPPORTED;
+#endif
+            if(status!=XR_XIR_CALL_READY)goto failed;
+        } else {
+            const char *text=id==XR_NATIVE_CALLABLE_OS_PLATFORM?xr_os_core_platform():xr_os_core_arch();
+            converted=xr_xir_string_new(instance->domain,text,strlen(text),value);
+        }
     } else if (id==XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM || id==XR_NATIVE_CALLABLE_CRYPTO_TIMING_EQUAL) {
         if(!xir_crypto_scope(program->declarations,index)){status=XR_XIR_CALL_BAD_ARGUMENT;goto failed;}
         if(id==XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM) {

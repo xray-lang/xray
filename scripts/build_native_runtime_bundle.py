@@ -130,6 +130,7 @@ def gather(args):
     commit = run(['git', 'rev-parse', 'HEAD'], root).decode().strip()
     inputs = json.loads(args.inputs.read_text(encoding='utf-8'))
     require(inputs['schema'] == 1, 'Unknown native runtime input schema')
+    require(inputs.get('systemLibraries') == ['advapi32', 'userenv'], 'Native runtime system dependency mismatch')
     require((inputs['provider'], inputs['version'], inputs['profile']) == ('MSVC', '19.44.35219.0', 'Release'), 'Unqualified native runtime provider/profile')
     commands = json.loads((build/'compile_commands.json').read_text(encoding='utf-8'))
     cache = dict(re.findall(r'^([^#/:\n]+):[^=\n]+=(.*)$', (build/'CMakeCache.txt').read_text(encoding='utf-8'), re.M))
@@ -235,7 +236,7 @@ def gather(args):
                   configuration={key: value for key,value in cache.items()
                       if key.startswith(('CMAKE_C_FLAGS', 'CMAKE_C_COMPILER', 'CMAKE_MSVC_RUNTIME_LIBRARY'))
                       and not key.endswith('-ADVANCED')},
-                  target='x86_64-windows-msvc', archives=archives,
+                  target='x86_64-windows-msvc', archives=archives, systemLibraries=inputs['systemLibraries'],
                   effectiveInputs=sorted(effective.values(), key=lambda x: x['path']))
     return recipe
 
@@ -250,7 +251,7 @@ def expected_manifest(args, recipe, recipe_path):
     return dict(schema=1, namespace='xray-native-runtime-c', abi=1, component='XrayNativeRuntime',
                 sourceCommit=recipe['sourceCommit'], sourceDirty=False, target=recipe['target'],
                 provider=recipe['provider'], version=recipe['version'], profile='Release', crt='MT', sanitizers=0,
-                archives=[row['file'] for row in recipe['archives']], files=files)
+                archives=[row['file'] for row in recipe['archives']], systemLibraries=recipe['systemLibraries'], files=files)
 
 
 def bundle_inventory(output, manifest):

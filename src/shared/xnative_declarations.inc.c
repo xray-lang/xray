@@ -1051,6 +1051,84 @@ static const XrNativeMemberDeclaration xr_native_math_27 = {
     false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
     "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_math_27_parameters, 1, XR_NATIVE_TERM_F64
 };
+static const XrNativeMemberDeclaration xr_native_sys_thread_yield = {
+    1, "__threadYield", "(): ()", "()", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_UNIT
+};
+static const XrNativeMemberDeclaration xr_native_os_platform = {
+    1, "__platform", "(): string", "string", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_STRING
+};
+static const XrNativeMemberDeclaration xr_native_os_arch = {
+    2, "__arch", "(): string", "string", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_STRING
+};
+static const XrNativeParameter xr_native_os_getenv_parameters[] = {
+    {"name", "string", XR_NATIVE_TERM_STRING, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_os_getenv = {
+    3, "__getenv", "(name: string): string?", "string?", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_os_getenv_parameters, 1, XR_NATIVE_TERM_NULLABLE_STRING
+};
+static const XrNativeParameter xr_native_os_setenv_parameters[] = {
+    {"name", "string", XR_NATIVE_TERM_STRING, false, false},
+    {"value", "string", XR_NATIVE_TERM_STRING, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_os_setenv = {
+    4, "__setenv", "(name: string, value: string): bool", "bool", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_os_setenv_parameters, 2, XR_NATIVE_TERM_BOOL
+};
+static const XrNativeParameter xr_native_os_unsetenv_parameters[] = {
+    {"name", "string", XR_NATIVE_TERM_STRING, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_os_unsetenv = {
+    5, "__unsetenv", "(name: string): bool", "bool", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_os_unsetenv_parameters, 1, XR_NATIVE_TERM_BOOL
+};
+static const XrNativeMemberDeclaration xr_native_os_environ_block = {
+    6, "__environBlock", "(): Array<string>", "Array<string>", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ARRAY_STRING
+};
+static const XrNativeParameter xr_native_os_exit_parameters[] = {
+    {"code", "i64", XR_NATIVE_TERM_I64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_os_exit = {
+    7, "__exit", "(code: i64): ()", "()", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_os_exit_parameters, 1, XR_NATIVE_TERM_UNIT
+};
+static const XrNativeMemberDeclaration xr_native_os_getpid = {
+    8, "__getpid", "(): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_NO_HEAP,
+    "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_I64
+};
+static const XrNativeMemberDeclaration xr_native_os_getcwd = {
+    9, "__getcwd", "(): string", "string", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_STRING
+};
+static const XrNativeMemberDeclaration xr_native_os_hostname = {
+    10, "__hostname", "(): string", "string", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_STRING
+};
+static const XrNativeMemberDeclaration xr_native_os_system_username = {
+    11, "__systemUsername", "(): string?", "string?", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_NULLABLE_STRING
+};
+static const XrNativeMemberDeclaration xr_native_os_system_homedir = {
+    12, "__systemHomedir", "(): string?", "string?", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_NULLABLE_STRING
+};
 static const XrNativeParameter xr_native_unicode_property_parameters[] = {
     {"name", "string", XR_NATIVE_TERM_STRING, false, false},
 };
@@ -1122,5 +1200,18 @@ static const XrNativeCallableDeclaration xr_native_callables[] = {
     {51, NULL, &xr_native_math_24, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
     {52, NULL, &xr_native_math_25, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
     {53, NULL, &xr_native_math_26, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
-    {54, NULL, &xr_native_math_27, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}}
+    {54, NULL, &xr_native_math_27, NULL, true, "math", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {XR_NATIVE_CALLABLE_SYS_THREAD_YIELD, NULL, &xr_native_sys_thread_yield, NULL, false, "sys", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {XR_NATIVE_CALLABLE_OS_PLATFORM, NULL, &xr_native_os_platform, NULL, false, "os", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {XR_NATIVE_CALLABLE_OS_ARCH, NULL, &xr_native_os_arch, NULL, false, "os", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {XR_NATIVE_CALLABLE_OS_GETENV, NULL, &xr_native_os_getenv, NULL, false, "os", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {XR_NATIVE_CALLABLE_OS_SETENV, NULL, &xr_native_os_setenv, NULL, false, "os", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {XR_NATIVE_CALLABLE_OS_UNSETENV, NULL, &xr_native_os_unsetenv, NULL, false, "os", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {XR_NATIVE_CALLABLE_OS_ENVIRON_BLOCK, NULL, &xr_native_os_environ_block, NULL, false, "os", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {XR_NATIVE_CALLABLE_OS_EXIT, NULL, &xr_native_os_exit, NULL, false, "os", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {XR_NATIVE_CALLABLE_OS_GETPID, NULL, &xr_native_os_getpid, NULL, false, "os", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {XR_NATIVE_CALLABLE_OS_GETCWD, NULL, &xr_native_os_getcwd, NULL, false, "os", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {XR_NATIVE_CALLABLE_OS_HOSTNAME, NULL, &xr_native_os_hostname, NULL, false, "os", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {XR_NATIVE_CALLABLE_OS_SYSTEM_USERNAME, NULL, &xr_native_os_system_username, NULL, false, "os", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {XR_NATIVE_CALLABLE_OS_SYSTEM_HOMEDIR, NULL, &xr_native_os_system_homedir, NULL, false, "os", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}}
 };

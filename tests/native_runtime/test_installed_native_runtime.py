@@ -54,8 +54,14 @@ def main():
     runtime = moved/'lib/xray/native-runtime/abi1/x86_64-windows-msvc/msvc-release-mt-san0'
     manifest = json.loads((runtime/'native_runtime_manifest.json').read_text())
     assert manifest['sourceDirty'] is False and manifest['sanitizers'] == 0
+    assert manifest['systemLibraries'] == ['advapi32', 'userenv']
+    recipe_path = runtime/'native_runtime_recipe.json'
+    assert json.loads(recipe_path.read_text())['systemLibraries'] == ['advapi32', 'userenv']
     project = work/'clients';project.mkdir()
     shutil.copyfile(Path(__file__).with_name('installed')/'CMakeLists.txt', project/'CMakeLists.txt')
+    with (project/'CMakeLists.txt').open('a', encoding='utf-8') as consumer_cmake:
+        consumer_cmake.write('\nget_target_property(_tested_native_links Xray::NativeRuntime INTERFACE_LINK_LIBRARIES)\n'
+                             'file(WRITE "${CMAKE_BINARY_DIR}/native-runtime-link-interface.txt" "${_tested_native_links}\\n")\n')
 
     def add(name, sources, stdout=b'', exit=0, stderr=b''):
         clients.append(name)
@@ -287,6 +293,13 @@ def main():
         return result
 
     configure('consumer-configure', moved)
+    interface = (external/'native-runtime-link-interface.txt').read_text().strip().split(';')
+    assert interface == [(runtime/path).as_posix() for path in manifest['archives']] + ['advapi32', 'userenv']
+    link_lines = [line for line in (external/'build.ninja').read_text().splitlines()
+                  if line.strip().startswith('LINK_LIBRARIES =')]
+    assert len(link_lines) == len(clients)
+    assert all(all(re.search(r'(?i)(?:^|\s|[/\\])'+name+r'\.lib(?:\s|$)', line)
+                   for name in ('advapi32','userenv')) for line in link_lines)
     run('consumer-build', ['cmake','--build',external,'-j2'])
     for name, case in cases.items():
         result = run('execute-' + name, [external/(name + '.exe')], case['exit'])
@@ -305,6 +318,7 @@ def main():
     assert (args.source/'include').as_posix() not in normalized_commands
     assert (args.source/'src').as_posix() not in normalized_commands
     producer_inputs = json.loads((args.build/'native-runtime-inputs.json').read_text())
+    assert producer_inputs['systemLibraries'] == ['advapi32', 'userenv']
     assert all(row['file'].replace('\\','/') not in normalized_commands for row in producer_inputs['archives'])
     includes = re.findall(r'(?:^|\s)[/-](?:external:)?I(?:"([^"]+)"|(\S+))', cold_commands, re.M)
     assert includes and all(Path(first or second).resolve() == (runtime/'include').resolve() for first,second in includes)
@@ -356,6 +370,43 @@ def main():
         reject_config(label)
         manifest_path.write_bytes(original_manifest);config_path.write_bytes(original_config)
         negative.append(label)
+    original_recipe = recipe_path.read_bytes()
+    system_mutations = {'missing': [], 'missing-userenv': ['advapi32'], 'missing-advapi32': ['userenv'],
+                        'unknown': ['advapi32', 'user32'], 'case': ['advapi32', 'Userenv'],
+                        'reordered': ['userenv', 'advapi32'], 'duplicate': ['advapi32', 'advapi32'],
+                        'extra': ['advapi32', 'userenv', 'user32'],
+                        'missing-key': None}
+    for document in ('manifest', 'recipe'):
+        for mutation, libraries in system_mutations.items():
+            label = document + '-system-libraries-' + mutation
+            changed = json.loads(original_manifest)
+            target = changed if document == 'manifest' else json.loads(original_recipe)
+            assert target['systemLibraries'] == ['advapi32', 'userenv']
+            if libraries is None:
+                del target['systemLibraries']
+            else:
+                assert libraries != target['systemLibraries']
+                target['systemLibraries'] = libraries
+            if document == 'recipe':
+                encoded_recipe = (json.dumps(target, indent=2) + '\n').encode()
+                recipe_path.write_bytes(encoded_recipe)
+                members = [row for row in changed['files'] if row['path'] == 'native_runtime_recipe.json']
+                assert len(members) == 1
+                members[0]['length'] = len(encoded_recipe)
+                members[0]['sha256'] = hashlib.sha256(encoded_recipe).hexdigest()
+            encoded = (json.dumps(changed, indent=2) + '\n').encode()
+            manifest_path.write_bytes(encoded)
+            config_path.write_bytes(original_config.replace(hashlib.sha256(original_manifest).hexdigest().encode(),
+                                                           hashlib.sha256(encoded).hexdigest().encode()))
+            try:
+                rejected = reject_config(label)
+                marker = b'systemLibraries' if mutation == 'missing-key' else b'system dependency'
+                assert marker in rejected.stderr, (label, rejected.stderr)
+            finally:
+                recipe_path.write_bytes(original_recipe)
+                manifest_path.write_bytes(original_manifest)
+                config_path.write_bytes(original_config)
+            negative.append(label)
     second = work/'second-prefix'
     shutil.copytree(moved, second)
     reject_config('mixed-target-prefix', extra=['-DTEST_SECOND_PREFIX=' + str(second)])

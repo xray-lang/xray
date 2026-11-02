@@ -19,7 +19,7 @@ GENERATED_RUNTIME_ROOTS = ['src/xir/xxir_equal.h', 'src/xir/xxir_panic.h', 'src/
 PLATFORMS = ('windows', 'posix')
 # Each platform links its own system library set; POSIX hosts need only libm,
 # which the C library may also provide.
-SYSTEM_LIBRARIES = {'windows': ['kernel32', 'bcrypt'], 'posix': ['m']}
+SYSTEM_LIBRARIES = {'windows': ['kernel32', 'bcrypt', 'advapi32', 'userenv'], 'posix': ['m']}
 
 
 def host_platform() -> str:

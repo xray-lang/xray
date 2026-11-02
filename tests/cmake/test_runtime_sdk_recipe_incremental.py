@@ -29,14 +29,18 @@ def main():
     base = source/'src/base/base.c'
     base.write_text('int payload(void){return 1;}\n')
     (source/'src/base/time.c').write_text('int clock_stub(void){return 0;}\n')
+    (source/'src/base/time_posix.c').write_text('int clock_stub(void){return 0;}\n')
     (source/'src/base/CMakeLists.txt').write_text('add_library(xray_compile_resources STATIC base.c)\n'
-        'if(WIN32)\n target_sources(xray_compile_resources PRIVATE time.c)\nendif()\n')
+        'if(WIN32)\n target_sources(xray_compile_resources PRIVATE time.c)\n'
+        'else()\n target_sources(xray_compile_resources PRIVATE time_posix.c)\nendif()\n')
     owner = source/'src/xir/CMakeLists.txt'
     owner.write_text('add_library(xray_xir_admission STATIC admission.c)\n'
         'add_library(xray_xir_declarations STATIC declarations.c)\n'
         'add_library(xray_xir_scalar STATIC scalar.c)\n'
-        'if(WIN32)\n target_sources(xray_xir_scalar PRIVATE random.c)\nendif()\n')
+        'if(WIN32)\n target_sources(xray_xir_scalar PRIVATE random.c)\n'
+        'else()\n target_sources(xray_xir_scalar PRIVATE random_posix.c)\nendif()\n')
     (source/'src/xir/random.c').write_text('int random_stub(void){return 0;}\n')
+    (source/'src/xir/random_posix.c').write_text('int random_stub(void){return 0;}\n')
     for name in ('admission', 'declarations', 'scalar'):
         (source/f'src/xir/{name}.c').write_text(f'int {name}(void){{return 0;}}\n')
     (source/'src/execution/xir_runtime_host.cmake').write_text('add_library(xray_xir_runtime_host STATIC host.c)\n')
@@ -84,7 +88,7 @@ def main():
     before = recipe.read_bytes();initial_time = recipe.stat().st_mtime_ns
     initial = json.loads(before)
     assert initial['archive_source_groups']['xray_xir_scalar'] == ['src/xir/scalar.c', 'src/xir/random.c']
-    assert initial['system_libraries'] == ['kernel32', 'bcrypt']
+    assert initial['system_libraries'] == ['kernel32', 'bcrypt', 'advapi32', 'userenv']
     base.write_text('int payload(void){return 2;}\n')
     log = make('body-only', 1)
     assert 'base.c' in log and recipe.read_bytes() == before and recipe.stat().st_mtime_ns == initial_time

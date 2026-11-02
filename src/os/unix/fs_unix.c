@@ -9,6 +9,7 @@
  */
 
 #include "../os_fs.h"
+#include "../xcwd_owned.h"
 #include "../../base/xfileio.h"
 #include "../../base/xio_policy.inc.h"
 #include <fcntl.h>
@@ -182,12 +183,14 @@ XR_FUNC XrOsIoStatus xr_os_io_touch(const XrOsIoPolicy *policy, const char *path
 }
 XR_FUNC XrOsIoStatus xr_os_io_getcwd(const XrOsIoPolicy *policy, char *out, size_t capacity) {
     if (!io_policy_valid(policy) || !out || !capacity) return XR_OS_IO_BAD_ARGUMENT;
-    if (capacity == SIZE_MAX) return XR_OS_IO_OVERFLOW;
-    XrIoContext io = {policy, XR_OS_IO_OK}; char *scratch = io_alloc(&io, capacity);
-    if (scratch && ((&io)->status == XR_OS_IO_OK) && !getcwd(scratch, capacity)) io_status(&io, io_errno_status(errno));
-    size_t length = 0;
-    if (io.status == XR_OS_IO_OK && io_length(&io, scratch, &length)) io_copy(&io, out, scratch, length + 1);
-    io_free(&io, scratch); return io.status;
+    if(capacity==SIZE_MAX)return XR_OS_IO_OVERFLOW;
+    XrIoContext io={policy,XR_OS_IO_OK};char *text=NULL;size_t length=0;
+    io_status(&io,xr_os_io_getcwd_owned(policy,&text));
+    if(io.status==XR_OS_IO_OK && io_length(&io,text,&length)) {
+        if(length>=capacity)io_status(&io,XR_OS_IO_OVERFLOW);
+        else io_copy(&io,out,text,length+1);
+    }
+    io_free(&io,text);return io.status;
 }
 XR_FUNC XrOsIoStatus xr_os_io_chdir(const XrOsIoPolicy *policy, const char *path) {
     if (!io_policy_valid(policy) || !path) return XR_OS_IO_BAD_ARGUMENT;

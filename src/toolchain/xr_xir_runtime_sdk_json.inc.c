@@ -109,6 +109,9 @@ static bool sdk_json_libraries(XrJsonCursor *json) {
     return xr_json_cursor_take(json, '[') && xr_json_cursor_string(json, 128, &name) &&
         xr_json_cursor_equal(json, name, "kernel32") && xr_json_cursor_take(json, ',') &&
         xr_json_cursor_string(json, 128, &name) && xr_json_cursor_equal(json, name, "bcrypt") &&
+        xr_json_cursor_take(json, ',') && xr_json_cursor_string(json, 128, &name) &&
+        xr_json_cursor_equal(json, name, "advapi32") && xr_json_cursor_take(json, ',') &&
+        xr_json_cursor_string(json, 128, &name) && xr_json_cursor_equal(json, name, "userenv") &&
         xr_json_cursor_take(json, ']');
 }
 #else

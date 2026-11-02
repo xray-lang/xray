@@ -1095,6 +1095,107 @@ def render_math_callables(declarations):
     return lines, rows
 
 
+def render_sys_thread_yield(declarations):
+    candidates = [row for row in declarations if row.module == 'sys' and row.name == '__threadYield']
+    if len(candidates) != 1:
+        raise ValueError('Thread yield requires its sole governed declaration')
+    row = candidates[0]
+    if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+            row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
+            row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
+            row.ret, row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
+            '(): ()', '0', '', 'internal', '', '', '', 'system', 'sys_thread_yield',
+            'xrt_sys_thread_yield', True, 'method', '', 'normal', '', '', 'value', False, None, (), ''):
+        raise ValueError('Thread yield differs from its complete source contract')
+    return [
+        'static const XrNativeMemberDeclaration xr_native_sys_thread_yield = {',
+        '    1, "__threadYield", "(): ()", "()", 0, 0, XR_NATIVE_RECEIVER_READ,',
+        '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
+        '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_UNIT',
+        '};'], [
+        '    {XR_NATIVE_CALLABLE_SYS_THREAD_YIELD, NULL, &xr_native_sys_thread_yield, NULL, false, "sys", "stdlib/defs/core.def", FINGERPRINT}']
+
+
+def render_os_getpid(declarations):
+    candidates = [row for row in declarations if row.module == 'os' and row.name == '__getpid']
+    if len(candidates) != 1:
+        raise ValueError('Process id requires its sole governed declaration')
+    row = candidates[0]
+    if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+            row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct, row.aot_kind,
+            row.link_object, row.vm_binding, row.vm_ifdef, row.define, row.ret,
+            row.semantic_intrinsic, row.caps, row.suspension_kind) != (
+            '(): i64', '0', '', 'internal', 'nothrow', 'no_heap', '', 'system',
+            'os_getpid', 'xrt_os_getpid', True, 'method', '', 'normal', '', '',
+            'value', False, (), ''):
+        raise ValueError('Process id differs from its complete source contract')
+    provider = row.provider_declaration
+    if not provider or (provider.contract, provider.operation,
+            tuple((p.type, p.mode, p.owner) for p in provider.logical.parameters),
+            provider.logical.result_type, provider.logical.result_owner,
+            provider.logical.error, provider.logical.panic, provider.logical.suspend,
+            provider.logical.refusal, provider.logical.resources, provider.logical.effects,
+            provider.logical.threads, provider.logical.reentry, provider.logical.callbacks,
+            provider.logical.platforms, provider.logical.profiles,
+            provider.host.adapter, provider.host.header, provider.host.symbol) != (
+            'xray.runtime.provider.v1/process', 'xray.runtime.provider-operation.v1/process/getpid',
+            (), 'i64', 'trivial', 'none', 'none', 'never', 'trap', (), ('reads-process',),
+            'any', 'allowed', 'none', ('linux', 'macos', 'windows'), ('hosted',),
+            'i64-nullary-i64', 'shared/xr_os_core.h', 'xr_os_core_getpid'):
+        raise ValueError('Process id provider differs from its typed receiver')
+    return [
+        'static const XrNativeMemberDeclaration xr_native_os_getpid = {',
+        '    8, "__getpid", "(): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,',
+        '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_NO_HEAP,',
+        '    "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_I64',
+        '};'], [
+        '    {XR_NATIVE_CALLABLE_OS_GETPID, NULL, &xr_native_os_getpid, NULL, false, "os", "stdlib/defs/core.def", FINGERPRINT}']
+
+
+def render_os_callables(declarations):
+    lines, rows = [], []
+    for ordinal, name in enumerate(('platform', 'arch', 'getenv', 'setenv', 'unsetenv', 'environBlock', 'exit', 'getpid', 'getcwd', 'hostname', 'systemUsername', 'systemHomedir')):
+        if name == 'getpid':
+            pid_lines, pid_rows = render_os_getpid(declarations)
+            lines += pid_lines
+            rows += pid_rows
+            continue
+        candidates = [row for row in declarations if row.module == 'os' and row.name == '__' + name]
+        if len(candidates) != 1:
+            raise ValueError('OS host fact requires its sole governed declaration: ' + name)
+        row = candidates[0]
+        environment, setter, remove = name == 'getenv', name == 'setenv', name == 'unsetenv'
+        snapshot, terminate, username = name == 'environBlock', name == 'exit', name in ('systemUsername', 'systemHomedir')
+        provider = 'environ_block' if snapshot else 'system_username' if name == 'systemUsername' else 'system_homedir' if username else name
+        signature = '(code: i64): ()' if terminate else '(): Array<string>' if snapshot else '(name: string): bool' if remove else '(name: string, value: string): bool' if setter else '(name: string): string?' if environment else '(): string?' if username else '(): string'
+        result = '()' if terminate else 'Array<string>' if snapshot else 'bool' if setter or remove else 'string?' if environment or username else 'string'
+        if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+                row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
+                row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
+                row.ret, row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
+                signature, '2' if setter else '1' if environment or remove or terminate else '0', 'ss' if setter else 's' if environment or remove else 'v' if terminate else '', 'internal', '', '', '' if setter or remove or terminate else 'fresh', 'system', 'os_' + provider,
+                'xrt_os_' + provider, True, 'method', '', 'normal', '', '', 'value', False, None, (), ''):
+            raise ValueError('OS host fact differs from its complete source contract: ' + name)
+        symbol = 'xr_native_os_' + provider
+        if terminate:
+            lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {',
+                '    {"code", "i64", XR_NATIVE_TERM_I64, false, false},', '};']
+        if environment or setter or remove:
+            lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {',
+                '    {"name", "string", XR_NATIVE_TERM_STRING, false, false},']
+            if setter:
+                lines += ['    {"value", "string", XR_NATIVE_TERM_STRING, false, false},']
+            lines += ['};']
+        lines += ['static const XrNativeMemberDeclaration ' + symbol + ' = {',
+            '    ' + str(ordinal + 1) + ', "__' + name + '", ' + c_string(signature) + ', ' + c_string(result) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
+            '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
+            '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + (symbol + '_parameters, 1, XR_NATIVE_TERM_UNIT' if terminate else symbol + '_parameters, 1, XR_NATIVE_TERM_BOOL' if remove else symbol + '_parameters, 2, XR_NATIVE_TERM_BOOL' if setter else symbol + '_parameters, 1, XR_NATIVE_TERM_NULLABLE_STRING' if environment else
+                'NULL, 0, XR_NATIVE_TERM_ARRAY_STRING' if snapshot else 'NULL, 0, XR_NATIVE_TERM_NULLABLE_STRING' if username else 'NULL, 0, XR_NATIVE_TERM_STRING'), '};']
+        rows += ['    {XR_NATIVE_CALLABLE_OS_' + provider.upper() + ', NULL, &' + symbol + ', NULL, false, "os", "stdlib/defs/core.def", FINGERPRINT}']
+    return lines, rows
+
+
+
 def render_unicode_callable(root, decoder):
     import sys
     sys.path.insert(0, str(root / 'tools' / 'stdlibgen'))
@@ -1205,6 +1306,12 @@ def render_unicode_callable(root, decoder):
     math_lines, math_rows = render_math_callables(declarations)
     buffer_lines += math_lines
     buffer_rows += math_rows
+    sys_lines, sys_rows = render_sys_thread_yield(declarations)
+    buffer_lines += sys_lines
+    buffer_rows += sys_rows
+    os_lines, os_rows = render_os_callables(declarations)
+    buffer_lines += os_lines
+    buffer_rows += os_rows
     digest = hashlib.sha256((root / 'stdlib/defs/core.def').read_text(encoding='utf-8').encode('utf-8')).digest()
     fingerprint = '{{' + ','.join(str(byte) for byte in digest) + '}}'
     return buffer_lines + [

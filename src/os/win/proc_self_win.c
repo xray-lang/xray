@@ -9,6 +9,7 @@
 #include "../os_proc.h"
 #include "../../shared/xr_win_utf.h"
 #include "../../base/xwindows_utf8.h"
+#include <userenv.h>
 
 /* Both runtime and owned queries read the executable through this one call.
  * The fixed-buffer runtime query does not acquire a compiler resource domain. */
@@ -46,6 +47,109 @@ XR_FUNC XrOsIoStatus xr_os_io_self_exe_path(const XrOsIoPolicy *policy, char **o
     }
     if (io.status == XR_OS_IO_OK) *output = result;
     return io.status;
+}
+
+XR_FUNC XrOsIoStatus xr_os_io_hostname(const XrOsIoPolicy *policy,char **output) {
+    if(!io_policy_valid(policy) || !output || *output)return XR_OS_IO_BAD_ARGUMENT;
+    DWORD capacity=0;
+    BOOL sized=GetComputerNameExW(ComputerNameDnsHostname,NULL,&capacity);
+    DWORD sizing_error=sized?ERROR_SUCCESS:GetLastError();
+    if(sized)return XR_OS_IO_IO;
+    if(sizing_error!=ERROR_MORE_DATA)return io_windows_status(sizing_error);
+    if(!capacity)return XR_OS_IO_IO;
+    XrIoContext io={policy,XR_OS_IO_OK};
+    for(;;) {
+        if((uint64_t)capacity>SIZE_MAX/sizeof(wchar_t))return XR_OS_IO_OVERFLOW;
+        wchar_t *wide=io_alloc(&io,(size_t)capacity*sizeof(*wide));
+        if(!wide)return io.status;
+        DWORD used=capacity;
+        BOOL read=GetComputerNameExW(ComputerNameDnsHostname,wide,&used);
+        DWORD error=read?ERROR_SUCCESS:GetLastError();
+        if(!read && error==ERROR_MORE_DATA && used>capacity) {
+            io_free(&io,wide);
+            DWORD doubled=capacity>UINT32_MAX/2?UINT32_MAX:capacity*2;
+            capacity=used>doubled?used:doubled;continue;
+        }
+        if(!read)io_status(&io,io_windows_status(error));
+        else if(!used || used>=capacity || !wide[0] || wide[used])io_status(&io,XR_OS_IO_BAD_ARGUMENT);
+        char *text=NULL;
+        if(io.status==XR_OS_IO_OK)io_status(&io,xr_win_utf16_text_owned(policy,wide,&text));
+        io_free(&io,wide);
+        if(io.status==XR_OS_IO_OK)*output=text;
+        else io_free(&io,text);
+        return io.status;
+    }
+}
+
+static XrOsIoStatus proc_username_error(DWORD error) {
+    if(error==ERROR_NOT_ENOUGH_MEMORY || error==ERROR_OUTOFMEMORY)return XR_OS_IO_OUT_OF_MEMORY;
+    return XR_OS_IO_IO;
+}
+XR_FUNC XrOsIoStatus xr_os_io_system_username(const XrOsIoPolicy *policy,char **output) {
+    if(!io_policy_valid(policy) || !output || *output)return XR_OS_IO_BAD_ARGUMENT;
+    wchar_t probe[1]={0};DWORD capacity=1;
+    BOOL read=GetUserNameW(probe,&capacity);
+    DWORD error=read?ERROR_SUCCESS:GetLastError();
+    if(read) {
+        if(capacity!=1 || probe[0])return XR_OS_IO_IO;
+        return xr_win_utf16_text_owned(policy,probe,output);
+    }
+    if(error!=ERROR_INSUFFICIENT_BUFFER)return proc_username_error(error);
+    if(capacity<=1)return XR_OS_IO_IO;
+    XrIoContext io={policy,XR_OS_IO_OK};
+    for(;;) {
+        if((uint64_t)capacity>SIZE_MAX/sizeof(wchar_t))return XR_OS_IO_OVERFLOW;
+        wchar_t *wide=io_alloc(&io,(size_t)capacity*sizeof(*wide));
+        if(!wide)return io.status;
+        DWORD used=capacity;
+        read=GetUserNameW(wide,&used);error=read?ERROR_SUCCESS:GetLastError();
+        if(!read && error==ERROR_INSUFFICIENT_BUFFER && used>capacity) {
+            io_free(&io,wide);capacity=used;continue;
+        }
+        if(!read)io_status(&io,proc_username_error(error));
+        else if(!used || used>capacity || wide[used-1] || wmemchr(wide,0,used-1))
+            io_status(&io,XR_OS_IO_BAD_ARGUMENT);
+        char *text=NULL;
+        if(io.status==XR_OS_IO_OK)io_status(&io,xr_win_utf16_text_owned(policy,wide,&text));
+        io_free(&io,wide);
+        if(io.status==XR_OS_IO_OK)*output=text;
+        else io_free(&io,text);
+        return io.status;
+    }
+}
+
+XR_FUNC XrOsIoStatus xr_os_io_system_homedir(const XrOsIoPolicy *policy,char **output) {
+    if(!io_policy_valid(policy) || !output || *output)return XR_OS_IO_BAD_ARGUMENT;
+#if defined(_WIN32_WINNT) && _WIN32_WINNT >= _WIN32_WINNT_WIN8
+    HANDLE token=GetCurrentThreadEffectiveToken();DWORD capacity=0;
+    BOOL sized=GetUserProfileDirectoryW(token,NULL,&capacity);
+    DWORD error=sized?ERROR_SUCCESS:GetLastError();
+    if(sized)return XR_OS_IO_IO;
+    if(error!=ERROR_INSUFFICIENT_BUFFER)return proc_username_error(error);
+    if(capacity<=1)return XR_OS_IO_IO;
+    XrIoContext io={policy,XR_OS_IO_OK};
+    for(;;) {
+        if((uint64_t)capacity>SIZE_MAX/sizeof(wchar_t))return XR_OS_IO_OVERFLOW;
+        wchar_t *wide=io_alloc(&io,(size_t)capacity*sizeof(*wide));
+        if(!wide)return io.status;
+        DWORD used=capacity;
+        BOOL read=GetUserProfileDirectoryW(token,wide,&used);error=read?ERROR_SUCCESS:GetLastError();
+        if(!read && error==ERROR_INSUFFICIENT_BUFFER && used>capacity) {
+            io_free(&io,wide);capacity=used;continue;
+        }
+        if(!read)io_status(&io,proc_username_error(error));
+        else if(used<=1 || used>capacity || wide[used-1] || wmemchr(wide,0,used-1))
+            io_status(&io,XR_OS_IO_BAD_ARGUMENT);
+        char *text=NULL;
+        if(io.status==XR_OS_IO_OK)io_status(&io,xr_win_utf16_text_owned(policy,wide,&text));
+        io_free(&io,wide);
+        if(io.status==XR_OS_IO_OK)*output=text;
+        else io_free(&io,text);
+        return io.status;
+    }
+#else
+    return XR_OS_IO_UNSUPPORTED;
+#endif
 }
 
 XR_FUNC XrOsIoStatus xr_os_io_environment_get(const XrOsIoPolicy *policy,
@@ -90,6 +194,69 @@ XR_FUNC XrOsIoStatus xr_os_io_environment_get(const XrOsIoPolicy *policy,
     io_free(&io, value); io_free(&io, key);
     if (io.status == XR_OS_IO_OK) *output = result;
     return io.status;
+}
+
+XR_FUNC XrOsIoStatus xr_os_io_environment_set(const XrOsIoPolicy *policy,
+    const char *name,const char *value,bool (*current)(void *context),bool *output) {
+    if(!io_policy_valid(policy) || !name || !current || !output)return XR_OS_IO_BAD_ARGUMENT;
+    if(!*name || strchr(name,'=')) { *output=false;return XR_OS_IO_OK; }
+    XrIoContext io={policy,XR_OS_IO_OK};wchar_t *key=NULL,*text=NULL;
+    const char *inputs[2]={name,value};
+    for(uint32_t i=0;i<(value?2u:1u);++i) {
+        size_t length=0;if(!io_length(&io,inputs[i],&length))return io.status;
+        if(length>INT_MAX)return XR_OS_IO_OVERFLOW;
+        SetLastError(ERROR_SUCCESS);
+        int required=xr_win_utf8_to_utf16_required(inputs[i],length);
+        if(!required)return GetLastError()==ERROR_NO_UNICODE_TRANSLATION?XR_OS_IO_BAD_ARGUMENT:
+            length==INT_MAX?XR_OS_IO_OVERFLOW:XR_OS_IO_BAD_ARGUMENT;
+        /* The count includes NUL. Platform text limits are normal refusals;
+         * allocation and arithmetic overflow keep their resource status. */
+        if(required>32768) {
+            if(!current(policy->context))return XR_OS_IO_CANCELLED;
+            *output=false;return XR_OS_IO_OK;
+        }
+    }
+    io_status(&io,xr_win_utf8_text_owned(policy,name,&key));
+    if(io.status==XR_OS_IO_OK && value)io_status(&io,xr_win_utf8_text_owned(policy,value,&text));
+    if(io.status==XR_OS_IO_OK && !current(policy->context))io_status(&io,XR_OS_IO_CANCELLED);
+    if(io.status==XR_OS_IO_OK)*output=SetEnvironmentVariableW(key,text)!=0;
+    io_free(&io,text);io_free(&io,key);return io.status;
+}
+
+XR_FUNC XrOsIoStatus xr_os_io_environment_snapshot_open(XrOsEnvironmentSnapshot *snapshot) {
+    if(!snapshot || snapshot->block)return XR_OS_IO_BAD_ARGUMENT;
+    snapshot->block=GetEnvironmentStringsW();
+    return snapshot->block?XR_OS_IO_OK:io_windows_status(GetLastError());
+}
+XR_FUNC XrOsIoStatus xr_os_io_environment_snapshot_each(const XrOsIoPolicy *policy,
+    const XrOsEnvironmentSnapshot *snapshot,bool (*current)(void *context,size_t work),
+    XrOsIoStatus (*visitor)(void *context,const char *text,size_t length)) {
+    if(!io_policy_valid(policy) || !snapshot || !snapshot->block || !current || !visitor)
+        return XR_OS_IO_BAD_ARGUMENT;
+    for(const wchar_t *entry=snapshot->block;*entry;) {
+        size_t length=0;
+        for(;;) {
+            if(!(length%256) && !current(policy->context,256))return XR_OS_IO_CANCELLED;
+            if(!entry[length])break;
+            if(length==INT_MAX)return XR_OS_IO_OVERFLOW;
+            ++length;
+        }
+        if(length>(SIZE_MAX-1)/8)return XR_OS_IO_OVERFLOW;
+        if(!current(policy->context,8*length+1))return XR_OS_IO_CANCELLED;
+        char *text=NULL;
+        XrOsIoStatus status=xr_win_utf16_text_owned(policy,entry,&text);
+        if(status==XR_OS_IO_OK)status=visitor(policy->context,text,strlen(text));
+        if(text)policy->free(policy->context,text);
+        if(status!=XR_OS_IO_OK)return status;
+        entry+=length+1;
+    }
+    return current(policy->context,1)?XR_OS_IO_OK:XR_OS_IO_CANCELLED;
+}
+XR_FUNC XrOsIoStatus xr_os_io_environment_snapshot_close(XrOsEnvironmentSnapshot *snapshot) {
+    if(!snapshot)return XR_OS_IO_BAD_ARGUMENT;
+    if(!snapshot->block)return XR_OS_IO_OK;
+    if(!FreeEnvironmentStringsW(snapshot->block))return XR_OS_IO_IO;
+    snapshot->block=NULL;return XR_OS_IO_OK;
 }
 
 int64_t xr_proc_self_pid(void) {
