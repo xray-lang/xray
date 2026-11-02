@@ -589,22 +589,23 @@ class OsHostFactDeclarations(unittest.TestCase):
 
     def test_private_system_strings_keep_owned_and_runtime_contract(self):
         lines, rows = schema.render_os_callables(self.declarations)
-        self.assertEqual(len(rows), 2)
-        for name in ('platform', 'arch'):
+        self.assertEqual(len(rows), 3)
+        for name in ('platform', 'arch', 'getenv'):
             self.assertTrue(any('XR_NATIVE_CALLABLE_OS_' + name.upper() + ', NULL,' in row and
                                 'NULL, false, "os", "stdlib/defs/core.def", FINGERPRINT' in row for row in rows))
-            self.assertIn('"__' + name + '", "(): string", "string"', '\n'.join(lines))
+            self.assertIn('"__' + name + '", ' + ('"(name: string): string?", "string?"' if name == 'getenv' else '"(): string", "string"'), '\n'.join(lines))
         self.assertEqual('\n'.join(lines).count('NULL, 0, XR_NATIVE_TERM_STRING'), 2)
-        self.assertEqual('\n'.join(lines).count('XR_NATIVE_ALLOCATION_UNKNOWN'), 2)
+        self.assertEqual('\n'.join(lines).count('XR_NATIVE_ALLOCATION_UNKNOWN'), 3)
+        self.assertIn('xr_native_os_getenv_parameters, 1, XR_NATIVE_TERM_NULLABLE_STRING', '\n'.join(lines))
         self.assertNotIn('XR_NATIVE_ALLOCATION_NO_HEAP', '\n'.join(lines))
 
     def test_missing_duplicate_and_changed_contracts_are_rejected(self):
-        for name in ('__platform', '__arch'):
+        for name in ('__platform', '__arch', '__getenv'):
             row = next(row for row in self.declarations if row.module == 'os' and row.name == name)
             for changed in [[item for item in self.declarations if item is not row], self.declarations + [row]]:
                 with self.subTest(name=name), self.assertRaises(ValueError):
                     schema.render_os_callables(changed)
-            for field, value in [('signature', '(): i64'), ('argc', '1'), ('arg_spec', 'v'),
+            for field, value in [('signature', '(): i64'), ('argc', '2'), ('arg_spec', 'v'),
                                  ('module', 'other'), ('visibility', 'public'), ('effect', 'nothrow'),
                                  ('allocation', 'no_heap'), ('return_ownership', ''), ('layer', 'pure'),
                                  ('vm', 'os_other_fact'), ('aot', 'other_provider'), ('aot_direct', False),

@@ -2395,6 +2395,9 @@ XR_FUNC XrXirCallStatus xr_xir_instance_pointer(XrXirCallView *view,XrXirOp oper
 }
 
 #include "xxir_instance_math.inc.c"
+#if defined(XR_OS_WINDOWS)
+#include "xxir_instance_environment_win.inc.c"
+#endif
 XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
     XrXirInstance *instance=view_instance(view);XrXirValue *value=NULL;
     XrXirCallStatus status=XR_XIR_CALL_BAD_STATE;bool thrown=false;
@@ -2427,8 +2430,17 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
         if(evaluated!=XR_XIR_RUN_OK)return xr_xir_call_fault(evaluated);
     } else if(xir_os_native_id(id)) {
         if(!xir_os_native_scope(program->declarations,index,program->entry_count))goto failed;
-        const char *text=id==XR_NATIVE_CALLABLE_OS_PLATFORM?xr_os_core_platform():xr_os_core_arch();
-        converted=xr_xir_string_new(instance->domain,text,strlen(text),value);
+        if(id==XR_NATIVE_CALLABLE_OS_GETENV) {
+#if defined(XR_OS_WINDOWS)
+            status=instance_environment_get(view,instance,&view->arguments[0],entry->result,value);
+#else
+            status=XR_XIR_CALL_UNSUPPORTED;
+#endif
+            if(status!=XR_XIR_CALL_READY)goto failed;
+        } else {
+            const char *text=id==XR_NATIVE_CALLABLE_OS_PLATFORM?xr_os_core_platform():xr_os_core_arch();
+            converted=xr_xir_string_new(instance->domain,text,strlen(text),value);
+        }
     } else if (id==XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM || id==XR_NATIVE_CALLABLE_CRYPTO_TIMING_EQUAL) {
         if(!xir_crypto_scope(program->declarations,index)){status=XR_XIR_CALL_BAD_ARGUMENT;goto failed;}
         if(id==XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM) {
