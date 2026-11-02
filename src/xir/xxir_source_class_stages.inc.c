@@ -73,7 +73,7 @@ static bool source_class_stage_declarations(SourceContext *ctx,uint32_t *next) {
         if(!source_method_parameter_scope(ctx,body->node,&body->parameter_scope))return false;
         SourceName symbol={0};symbol.name=function.name;symbol.node=body->node;
         if(!source_query_declare(ctx,&symbol,XR_XIR_SOURCE_FUNCTION,owner->declaration,
-            source_query_range(ctx,body->node,NULL)))return false;
+            (XrXirSourceRange){.module=ctx->module}))return false;
         body->declaration=symbol.declaration;
         ctx->identities[index]=ctx->identities[constructor];
         ctx->identities[index].exported=0;ctx->identities[index].member_access=XR_XIR_MEMBER_PRIVATE;

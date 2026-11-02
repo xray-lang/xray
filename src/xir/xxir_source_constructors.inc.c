@@ -351,7 +351,15 @@ static bool source_constructor_body(SourceContext *ctx) {
     SourceName *self = add_name(ctx, &ctx->locals, "this", body->node);
     if (!self) return false;
     self->kind = SOURCE_LOCAL; self->type = ctx->nominal_sources[owner]->type; self->construction = true;
-    if (!source_query_declare(ctx, self, XR_XIR_SOURCE_BINDING, body->declaration, source_query_range(ctx, body->node, NULL)) ||
+    uint32_t receiver_parent=body->declaration;
+    if(ctx->identities[ctx->function].method_kind==XR_XIR_CONSTRUCTOR_FIELDS) {
+        uint32_t constructor=source_hir_nominal_defaults(ctx,owner).constructor;
+        if(!constructor || constructor>=ctx->function_count ||
+            ctx->bodies[constructor].constructor_stage!=ctx->function+1)
+            return source_fail(ctx,body->node,XR_XIR_BAD_STRUCTURE,"field receiver lost its original constructor declaration");
+        receiver_parent=ctx->bodies[constructor].declaration;
+    }
+    if (!source_query_declare(ctx, self, XR_XIR_SOURCE_BINDING, receiver_parent, source_query_range(ctx, body->node, NULL)) ||
         !source_query_syntax_role(ctx, self->declaration, XR_XIR_SOURCE_SYNTAX_RECEIVER, 0)) return false;
     XrHirBodyBinding self_binding={0};if(!source_hir_binding_register(ctx,self,&self_binding))return false;
     source_query_binding_type(ctx, self);
