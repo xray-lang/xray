@@ -1154,7 +1154,7 @@ def render_os_getpid(declarations):
 
 def render_os_callables(declarations):
     lines, rows = [], []
-    for ordinal, name in enumerate(('platform', 'arch', 'getenv', 'setenv', 'unsetenv', 'environBlock', 'exit', 'getpid', 'getcwd')):
+    for ordinal, name in enumerate(('platform', 'arch', 'getenv', 'setenv', 'unsetenv', 'environBlock', 'exit', 'getpid', 'getcwd', 'hostname')):
         if name == 'getpid':
             pid_lines, pid_rows = render_os_getpid(declarations)
             lines += pid_lines

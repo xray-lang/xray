@@ -197,6 +197,9 @@ XR_FUNC int xr_proc_self_exe_path(char *buf, size_t size);
  * The OS environment is observed during this call, not retained or frozen as
  * a whole. OS/libc internal storage is outside the caller allocation domain. */
 XR_FUNC XrOsIoStatus xr_os_io_self_exe_path(const XrOsIoPolicy *policy, char **output);
+/* Windows observes the logical DNS hostname, including the OS cluster name.
+ * The successful UTF-8 result is policy-owned; unavailable names are failures. */
+XR_FUNC XrOsIoStatus xr_os_io_hostname(const XrOsIoPolicy *policy, char **output);
 XR_FUNC XrOsIoStatus xr_os_io_environment_get(const XrOsIoPolicy *policy,
     const char *name, char **output);
 /* NULL value deletes; a nonNULL empty value sets an empty string.
