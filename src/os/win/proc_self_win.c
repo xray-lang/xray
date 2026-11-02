@@ -119,6 +119,42 @@ XR_FUNC XrOsIoStatus xr_os_io_environment_set(const XrOsIoPolicy *policy,
     io_free(&io,text);io_free(&io,key);return io.status;
 }
 
+XR_FUNC XrOsIoStatus xr_os_io_environment_snapshot_open(XrOsEnvironmentSnapshot *snapshot) {
+    if(!snapshot || snapshot->block)return XR_OS_IO_BAD_ARGUMENT;
+    snapshot->block=GetEnvironmentStringsW();
+    return snapshot->block?XR_OS_IO_OK:io_windows_status(GetLastError());
+}
+XR_FUNC XrOsIoStatus xr_os_io_environment_snapshot_each(const XrOsIoPolicy *policy,
+    const XrOsEnvironmentSnapshot *snapshot,bool (*current)(void *context,size_t work),
+    XrOsIoStatus (*visitor)(void *context,const char *text,size_t length)) {
+    if(!io_policy_valid(policy) || !snapshot || !snapshot->block || !current || !visitor)
+        return XR_OS_IO_BAD_ARGUMENT;
+    for(const wchar_t *entry=snapshot->block;*entry;) {
+        size_t length=0;
+        for(;;) {
+            if(!(length%256) && !current(policy->context,256))return XR_OS_IO_CANCELLED;
+            if(!entry[length])break;
+            if(length==INT_MAX)return XR_OS_IO_OVERFLOW;
+            ++length;
+        }
+        if(length>(SIZE_MAX-1)/8)return XR_OS_IO_OVERFLOW;
+        if(!current(policy->context,8*length+1))return XR_OS_IO_CANCELLED;
+        char *text=NULL;
+        XrOsIoStatus status=xr_win_utf16_text_owned(policy,entry,&text);
+        if(status==XR_OS_IO_OK)status=visitor(policy->context,text,strlen(text));
+        if(text)policy->free(policy->context,text);
+        if(status!=XR_OS_IO_OK)return status;
+        entry+=length+1;
+    }
+    return current(policy->context,1)?XR_OS_IO_OK:XR_OS_IO_CANCELLED;
+}
+XR_FUNC XrOsIoStatus xr_os_io_environment_snapshot_close(XrOsEnvironmentSnapshot *snapshot) {
+    if(!snapshot)return XR_OS_IO_BAD_ARGUMENT;
+    if(!snapshot->block)return XR_OS_IO_OK;
+    if(!FreeEnvironmentStringsW(snapshot->block))return XR_OS_IO_IO;
+    snapshot->block=NULL;return XR_OS_IO_OK;
+}
+
 int64_t xr_proc_self_pid(void) {
     return (int64_t) GetCurrentProcessId();
 }

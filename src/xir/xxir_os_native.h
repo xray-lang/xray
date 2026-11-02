@@ -19,7 +19,7 @@
 #include <string.h>
 
 static inline bool xir_os_native_id(uint32_t id) {
-    return id==XR_NATIVE_CALLABLE_OS_PLATFORM || id==XR_NATIVE_CALLABLE_OS_ARCH || id==XR_NATIVE_CALLABLE_OS_GETENV || id==XR_NATIVE_CALLABLE_OS_SETENV || id==XR_NATIVE_CALLABLE_OS_UNSETENV;
+    return id==XR_NATIVE_CALLABLE_OS_PLATFORM || id==XR_NATIVE_CALLABLE_OS_ARCH || id==XR_NATIVE_CALLABLE_OS_GETENV || id==XR_NATIVE_CALLABLE_OS_SETENV || id==XR_NATIVE_CALLABLE_OS_UNSETENV || id==XR_NATIVE_CALLABLE_OS_ENVIRON_BLOCK;
 }
 static inline bool xir_os_native_signature(uint32_t id,const XrXirTypes *types,const XrXirType *parameters,
     uint32_t count,XrXirType result,XrXirType error) {
@@ -29,15 +29,22 @@ static inline bool xir_os_native_signature(uint32_t id,const XrXirTypes *types,c
         strcmp(native->source_path,"stdlib/defs/core.def") || !native->member) return false;
     const XrNativeMemberDeclaration *member=native->member;
     bool environment=id==XR_NATIVE_CALLABLE_OS_GETENV,remove=id==XR_NATIVE_CALLABLE_OS_UNSETENV;
+    bool snapshot=id==XR_NATIVE_CALLABLE_OS_ENVIRON_BLOCK;
     bool setter=id==XR_NATIVE_CALLABLE_OS_SETENV || remove;
-    const char *name=remove?"__unsetenv":setter?"__setenv":environment?"__getenv":id==XR_NATIVE_CALLABLE_OS_PLATFORM?"__platform":"__arch";
+    const char *name=snapshot?"__environBlock":remove?"__unsetenv":setter?"__setenv":environment?"__getenv":id==XR_NATIVE_CALLABLE_OS_PLATFORM?"__platform":"__arch";
     if(!member->name || strcmp(member->name,name) || !member->signature ||
-        strcmp(member->signature,remove?"(name: string): bool":setter?"(name: string, value: string): bool":environment?"(name: string): string?":"(): string") ||
-        !member->result_text || strcmp(member->result_text,setter?"bool":environment?"string?":"string") ||
+        strcmp(member->signature,snapshot?"(): Array<string>":remove?"(name: string): bool":setter?"(name: string, value: string): bool":environment?"(name: string): string?":"(): string") ||
+        !member->result_text || strcmp(member->result_text,snapshot?"Array<string>":setter?"bool":environment?"string?":"string") ||
         member->is_public || member->is_method || member->is_static ||
         member->receiver!=XR_NATIVE_RECEIVER_READ || member->operation!=XR_NATIVE_OPERATION_NONE ||
         member->allocation!=XR_NATIVE_ALLOCATION_UNKNOWN || !member->failures || *member->failures ||
         member->ownership!=XR_NATIVE_RESULT_OWNERSHIP_OWNED || error!=XR_XIR_NEVER) return false;
+    if(snapshot) {
+        const XrXirTypeNode *node=xr_xir_type_node(types,result);
+        return !member->parameters && !member->parameter_count && !parameters && !count &&
+            member->result==XR_NATIVE_TERM_ARRAY_STRING && node && node->kind==XR_XIR_TYPE_ARRAY &&
+            !node->parameter_span && node->element==XR_XIR_STRING;
+    }
     if(!environment && !setter)return !member->parameters && !member->parameter_count &&
         member->result==XR_NATIVE_TERM_STRING && !parameters && !count && result==XR_XIR_STRING;
     uint32_t expected=setter&&!remove?2u:1u;

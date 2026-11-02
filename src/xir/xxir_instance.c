@@ -92,6 +92,7 @@ typedef struct InstanceStorageRoute {
     XrXirInstance *owner;
     uint32_t index;
 } InstanceStorageRoute;
+typedef struct XirEnvironmentSnapshotOwner XirEnvironmentSnapshotOwner;
 struct XrXirInstance {
     XrXirProgram *program;
     XrXirInstanceConfig config;
@@ -123,7 +124,11 @@ struct XrXirInstance {
     bool close_drained;
     struct XirInstanceBindingTable *symbol_bindings;
     bool bindings_published;
+    XirEnvironmentSnapshotOwner *environment_snapshots;
 };
+#if defined(XR_OS_WINDOWS)
+static bool instance_environment_snapshots_close(XrXirInstance *instance);
+#endif
 static void instance_bindings_free(XrXirInstance *instance);
 static bool instance_bindings_ready(const XrXirInstance *instance);
 static XrXirInstance *instance_root(XrXirInstance *instance) {
@@ -519,6 +524,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_config_init_sandbox(XrXirInstanceConfig 
 }
 static void instance_dispose(XrXirInstance *instance) {
     XR_CHECK(instance && instance_owner_current(instance), "instance internal owner requires its current domain");
+    XR_CHECK(!instance->environment_snapshots,"instance disposal requires discharged environment snapshots");
     XrXirDomain *domain = instance->domain;
     XrXirProgram *program = instance->program;
     const XrXirDeclarations *d = program ? program->declarations : NULL;
@@ -1077,6 +1083,11 @@ XrXirCallStatus xr_xir_instance_free(XrXirInstance *instance) {
     }
     XrXirCallStatus original=instance_drain_state(root);
     if (current==root) status=original;
+#if defined(XR_OS_WINDOWS)
+    if(!instance_environment_snapshots_close(root)) {
+        root->driving=false;return XR_XIR_CALL_CLOSE_FAILED;
+    }
+#endif
     bool exhausted=root->budget.exhausted;
     root->driving=true;
     XrXirValueStatus closed=xr_xir_domain_close(root->domain);
@@ -2430,9 +2441,11 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
         if(evaluated!=XR_XIR_RUN_OK)return xr_xir_call_fault(evaluated);
     } else if(xir_os_native_id(id)) {
         if(!xir_os_native_scope(program->declarations,index,program->entry_count))goto failed;
-        if(id==XR_NATIVE_CALLABLE_OS_GETENV || id==XR_NATIVE_CALLABLE_OS_SETENV || id==XR_NATIVE_CALLABLE_OS_UNSETENV) {
+        if(id==XR_NATIVE_CALLABLE_OS_GETENV || id==XR_NATIVE_CALLABLE_OS_SETENV || id==XR_NATIVE_CALLABLE_OS_UNSETENV ||
+            id==XR_NATIVE_CALLABLE_OS_ENVIRON_BLOCK) {
 #if defined(XR_OS_WINDOWS)
-            status=id!=XR_NATIVE_CALLABLE_OS_GETENV?instance_environment_set(view,instance,view->arguments,id==XR_NATIVE_CALLABLE_OS_UNSETENV,value):
+            status=id==XR_NATIVE_CALLABLE_OS_ENVIRON_BLOCK?instance_environment_snapshot(view,instance,entry->result,value):
+                id!=XR_NATIVE_CALLABLE_OS_GETENV?instance_environment_set(view,instance,view->arguments,id==XR_NATIVE_CALLABLE_OS_UNSETENV,value):
                 instance_environment_get(view,instance,&view->arguments[0],entry->result,value);
 #else
             status=XR_XIR_CALL_UNSUPPORTED;

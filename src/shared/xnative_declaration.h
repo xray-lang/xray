@@ -263,7 +263,8 @@ typedef enum XrNativeCallableId {
     XR_NATIVE_CALLABLE_OS_ARCH = 57,
     XR_NATIVE_CALLABLE_OS_GETENV = 58,
     XR_NATIVE_CALLABLE_OS_SETENV = 59,
-    XR_NATIVE_CALLABLE_OS_UNSETENV = 60
+    XR_NATIVE_CALLABLE_OS_UNSETENV = 60,
+    XR_NATIVE_CALLABLE_OS_ENVIRON_BLOCK = 61
 } XrNativeCallableId;
 
 /* Callable IDs authenticate ordinary function bodies, independently of inline intrinsics. */
