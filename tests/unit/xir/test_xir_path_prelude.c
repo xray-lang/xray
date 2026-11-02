@@ -90,7 +90,7 @@ static void access_controls(const XrXirCompileContext *context) {
         if(mode==1)nominal.name=(XrXirLiteral){"PathInfo",8};
         if(mode==2)nominal.kind=XR_XIR_NOMINAL_STRUCT;
         if(mode==3)nominal.module=(XrXirLiteral){"other",5};
-        if(mode==4)modules[1].name="foreign";
+        if(mode==4){modules[1].name="foreign";modules[1].name_length=7;}
         CHECK(xr_xir_compile_nominal_access(context,&module,0,type,0,XR_XIR_NOMINAL_TYPE)==
             (mode>=3?XR_XIR_BAD_STRUCTURE:XR_XIR_BAD_TYPE));
         nominal=original;modules[1]=owner;
