@@ -824,19 +824,19 @@ static void report_control(void) {
     xray_source_diagnostic_free(report);CHECK(!runtime_live&&!runtime_bytes);
 }
 static void partial_report_lifetime(void) {
-    char source[]="go fn() {}()\n";
+    char source[]="fn worker(value:ref i64){}\nvar value=42\ngo worker(ref value)\n";
     XrSourceCompileOptions options=xray_source_compile_options_default();options.stdlib_path=XR_PUBLIC_STDLIB;
-    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"unlocated-go-error",source,sizeof(source)-1}};
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"unlocated-go-ref-error",source,sizeof(source)-1}};
     XrSourceArtifact *artifact=NULL;XrSourceDiagnostic *report=NULL;XrSourceFailure failure={0};
     CHECK(xray_source_build(&input,&options,&artifact,&failure,&report)==XR_SOURCE_REJECTED&&!artifact&&report);
-    CHECK(failure.cleanup_status==XR_SOURCE_OK);
+    CHECK(failure.status==XR_SOURCE_REJECTED&&failure.stage==XR_SOURCE_STAGE_COMPILE&&failure.cleanup_status==XR_SOURCE_OK);
     memset(source,'!',sizeof(source));
     XrSourceDiagnosticReportInfo info={0};XrSourceDiagnosticRoot root={0};
-    CHECK(xray_source_diagnostic_report(report,&info)==XR_SOURCE_OK&&info.roots==1);
+    CHECK(xray_source_diagnostic_report(report,&info)==XR_SOURCE_OK&&info.roots==1&&!info.complete);
     CHECK(xray_source_diagnostic_root(report,0,&root)==XR_SOURCE_OK&&!root.primary.path);
-    CHECK((root.primary.flags&XR_SOURCE_LOCATION_LINE)&&root.primary.line==1&&root.primary.column==0);
+    CHECK(root.primary.flags==XR_SOURCE_LOCATION_LINE&&root.primary.line==3&&root.primary.column==0);
     CHECK(!(root.primary.flags&(XR_SOURCE_LOCATION_BYTES|XR_SOURCE_LOCATION_UTF16)));
-    CHECK(!strcmp(root.message,"go requires an accessible ordinary function declaration"));
+    CHECK(!strcmp(root.message,"go argument access mode is not admitted"));
     XrCompileResources *owner=sdk_ledger(&sdk_unlimited);
     XrSourceCompileDiagnostic display={.status=XR_SOURCE_COMPILE_REJECTED,.stage=XR_SOURCE_COMPILE_PRODUCT};
     display.source.failure.report=report;report=NULL;
@@ -845,7 +845,7 @@ static void partial_report_lifetime(void) {
     xr_source_compile_diagnostic_free(&display);
     CHECK(!display.source.failure.report);
     xr_compile_resources_release(owner);owner=NULL;
-    CHECK(!strcmp(text,"line 1:0: error: go requires an accessible ordinary function declaration\n"
+    CHECK(!strcmp(text,"line 3:0: error: go argument access mode is not admitted\n"
         "source build failed (stage=4 status=source-rejected)\n"));
     xr_compile_resources_free(text);
     CHECK(!runtime_live&&!runtime_bytes);
