@@ -117,7 +117,13 @@
         "tests/unit/xir/test_xir_call_select.c",
         "tests/unit/xir/call_select.cmake",
         "tests/unit/xir/test_xir_channel_select.c",
-        "tests/unit/xir/xir_channel_select_fixture.h"
+        "tests/unit/xir/xir_channel_select_fixture.h",
+        "src/xir/xxir_task.c",
+        "src/xir/xxir_task_group.inc.c",
+        "src/xir/xxir_task_aggregate.inc.c",
+        "src/xir/xxir_task_internal.h",
+        "tests/unit/xir/test_xir_task_aggregate.c",
+        "tests/unit/xir/task_aggregate.cmake"
       ],
       "reason": "Public slots, records, JSON float and Range complete Source/Catalog/VM/native receivers.",
       "tests": [
@@ -188,7 +194,8 @@
         "xir_fixed_bytes_native",
         "test_xir_channel_select",
         "test_xir_call_select",
-        "test_xir_task_scope"
+        "test_xir_task_scope",
+        "test_xir_task_aggregate"
       ],
       "targets": [
         "test_xir_json_float",
@@ -246,7 +253,8 @@
         "test_xir_fixed_bytes_native",
         "test_xir_channel_select",
         "test_xir_call_select",
-        "test_xir_task_scope"
+        "test_xir_task_scope",
+        "test_xir_task_aggregate"
       ]
     },
     "frontend": {
