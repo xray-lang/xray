@@ -15,6 +15,7 @@
 #include "xir/xxir_instance_function_internal.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c); exit(1); } } while (0)
 static size_t runtime_calls,runtime_live,runtime_fail=SIZE_MAX;
 static void *class_test_malloc(size_t bytes) {
@@ -144,7 +145,68 @@ static void class_test_failures(XrXirTypeArena *arena,XrXirDomain *domain) {
     printf("class allocation failures=%zu; every output empty and owner baseline restored\n",sites);
     xr_xir_value_drop(&fields[0]);xr_xir_value_drop(&fields[1]);
 }
-int main(void) {
+static void class_test_publication_leaf_reject(XrXirValue *array,const XrXirValue *replacement,
+    XrXirValueAdmission *admission) {
+    XirArray *storage=(XirArray *)object_pointer(array);
+    CHECK(storage->length==1 && storage->stride==sizeof(int64_t));
+    int64_t saved=0;memcpy(&saved,storage->data,sizeof(saved));
+    memcpy(storage->data,&replacement->payload,sizeof(saved));
+    XrXirClassPublication publication={0};
+    CHECK(xr_xir_class_publication_prepare(array,1,admission,&publication)==XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(class_publication_empty(&publication));
+    memcpy(storage->data,&saved,sizeof(saved));
+}
+static void class_test_publication(XrXirTypeArena *arena,XrXirDomain *domain) {
+    uint64_t baseline=xr_xir_domain_stats(domain).live_bytes;
+    XrXirValue fields[2]={{0}},dog={0},base={0},other={0},array={0},dogs={0};
+    XrXirValueAdmission admission={arena,domain,NULL,NULL,1000000,65536};
+    CHECK(xr_xir_string_new(domain,"Rex",3,&fields[0])==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_string_new(domain,"owned derived tail",18,&fields[1])==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_class_new((XrXirType)DOG,fields,2,&admission,&dog)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_class_new((XrXirType)BASE,fields,1,&admission,&base)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_class_new((XrXirType)OTHER,fields,1,&admission,&other)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_array_new((XrXirType)BASE_ARRAY,&dog,1,&admission,&array)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_array_new((XrXirType)DOG_ARRAY,&dog,1,&admission,&dogs)==XR_XIR_VALUE_OK);
+    class_test_publication_leaf_reject(&array,&other,&admission);
+    class_test_publication_leaf_reject(&dogs,&base,&admission);
+    XrXirValue forged=other;forged.type=BASE;XrXirClassPublication publication={0};
+    CHECK(!xr_xir_value_valid(&forged));
+    CHECK(xr_xir_class_publication_prepare(&forged,1,&admission,&publication)==XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(class_publication_empty(&publication));
+    forged=dogs;forged.type=BASE_ARRAY;
+    CHECK(!xr_xir_value_valid(&forged) && !xr_xir_value_argument(&dogs,arena,(XrXirType)BASE_ARRAY));
+    CHECK(xr_xir_class_publication_prepare(&forged,1,&admission,&publication)==XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(class_publication_empty(&publication));
+    uint64_t held=xr_xir_domain_stats(domain).live_bytes;size_t live=runtime_live,sites=0;
+    for(size_t pass=0;pass<=sites;++pass) {
+        admission=(XrXirValueAdmission){arena,domain,NULL,NULL,1000000,65536};
+        size_t before=runtime_calls;runtime_fail=pass?before+pass-1:SIZE_MAX;
+        XrXirValueStatus status=xr_xir_class_publication_prepare(&array,1,&admission,&publication);
+        if(!pass) {
+            CHECK(status==XR_XIR_VALUE_OK);sites=runtime_calls-before;CHECK(sites);
+            CHECK(class_origin_state((const XirClassObject *)object_pointer(&dog))&XIR_CLASS_ORIGIN_PREPARED);
+            xr_xir_class_publication_drop(&publication);
+        } else CHECK(status==XR_XIR_VALUE_OOM && runtime_calls>runtime_fail && class_publication_empty(&publication));
+        runtime_fail=SIZE_MAX;
+        CHECK(!(class_origin_state((const XirClassObject *)object_pointer(&dog))&XIR_CLASS_ORIGIN_PREPARED));
+        CHECK(class_publication_empty(&publication) && runtime_live==live && xr_xir_domain_stats(domain).live_bytes==held);
+    }
+    admission=(XrXirValueAdmission){arena,domain,NULL,NULL,1000000,65536};
+    CHECK(xr_xir_class_publication_prepare(&array,1,&admission,&publication)==XR_XIR_VALUE_OK);
+    xr_xir_class_publication_commit(&publication);xr_xir_class_publication_drop(&publication);
+    CHECK(class_origin_state((const XirClassObject *)object_pointer(&dog))==XIR_CLASS_ORIGIN_MODULE);
+    xr_xir_value_drop(&dog);xr_xir_value_drop(&dogs);xr_xir_value_drop(&base);xr_xir_value_drop(&other);
+    xr_xir_value_drop(&fields[0]);xr_xir_value_drop(&fields[1]);
+    XrXirValue observed={0};XrXirFaultDetail fault={0};XrXirType actual=XR_XIR_UNIT;
+    CHECK(xr_xir_array_get(&array,0,&admission,&observed,&fault)==XR_XIR_VALUE_OK && observed.type==BASE);
+    CHECK(xir_class_actual_type(&observed,arena,&actual)==XR_XIR_VALUE_OK && actual==(XrXirType)DOG);
+    CHECK(object_pointer(&observed)->type==(XrXirType)DOG);
+    xr_xir_value_drop(&observed);size_t calls=runtime_calls;xr_xir_value_drop(&array);
+    CHECK(runtime_calls==calls && xr_xir_domain_stats(domain).live_bytes==baseline);
+    printf("class Array ancestor publication: rollback/OOM%zu, exact unrelated/downcast/header refusals, actual Derived drop\n",sites);
+}
+int main(int argc,char **argv) {
+    CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--publication")));
     XrCompileResourceLimits limits={0};XrXirCompileContext compiler={0};
     compiler.limits=xr_xir_compile_default_limits();
     CHECK(xr_compile_resources_new(&limits,&compiler.resources)==XR_COMPILE_RESOURCE_OK);
@@ -152,7 +214,10 @@ int main(void) {
     CHECK(xr_compile_resources_stats(compiler.resources,&before)==XR_COMPILE_RESOURCE_OK);
     XrXirTypeArena *arena=class_test_arena(&compiler),*foreign=class_test_arena(&compiler);XrXirDomain *domain=NULL;
     CHECK(xr_xir_domain_new(1048576,&domain)==XR_XIR_VALUE_OK);
-    class_test_views(arena,domain);class_test_reservations(arena,foreign,domain);class_test_failures(arena,domain);
+    if(argc==1) {
+        class_test_views(arena,domain);class_test_reservations(arena,foreign,domain);class_test_failures(arena,domain);
+    }
+    class_test_publication(arena,domain);
     XrXirValue output={0};
     CHECK(xr_xir_instance_class_method_at(NULL,0,NULL,&output)==XR_XIR_CALL_BAD_ARGUMENT && unit_value(&output));
     xr_xir_domain_drop(domain);CHECK(!runtime_live);xr_xir_compile_type_arena_drop(arena);
