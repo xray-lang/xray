@@ -11,7 +11,9 @@
         "src/xir/xxir_source*",
         "include/xray_source*",
         "stdlib/*",
-        "tests/unit/hir/*"
+        "tests/unit/hir/*",
+        "tests/unit/xir/source_sdk_install.py",
+        "tests/unit/xir/source_sdk_owned.py"
       ],
       "reason": "Official installed/moved Source SDK and complete public Source body consumers.",
       "tests": [
@@ -27,7 +29,8 @@
         "source_type_clone_sdk",
         "source_body_sdk",
         "xir_record_sdk",
-        "source_sdk_installed"
+        "source_sdk_installed",
+        "source_sdk_owned_installed"
       ],
       "targets": [
         "test_xir_range_value_sdk",
@@ -69,13 +72,19 @@
         "xir_checked_previous122",
         "xir_checked_previous123",
         "xir_checked_previous124",
-        "xir_checked_previous125"
+        "xir_checked_previous125",
+        "test_xir_runtime_sdk_combined_identity",
+        "test_xir_runtime_sdk_current_wire_vector",
+        "local_toolchain_real",
+        "local_toolchain_faults"
       ],
       "targets": [
         "test_xir_cleanup_replaced_sdk_reader",
         "sdk-installed-native-consumers",
         "test_xir_runtime_sdk",
-        "test_xir_rune_whitespace"
+        "test_xir_rune_whitespace",
+        "test_local_toolchain_production",
+        "test_local_toolchain_injected"
       ]
     },
     "native-runtime": {
@@ -742,6 +751,12 @@
       "targets": [
         "test_hir_body"
       ]
+    },
+    "test_xir_runtime_sdk_combined_identity": {
+      "tests": [
+        "runtime_sdk_recipe_incremental"
+      ],
+      "targets": []
     }
   },
   "requiredOn": {

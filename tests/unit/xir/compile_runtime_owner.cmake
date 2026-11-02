@@ -8,6 +8,7 @@ add_executable(test_xir_compile_snapshot_owner
 target_link_libraries(test_xir_compile_snapshot_owner PRIVATE compile_owner_core)
 add_library(xir_compile_owner_runtime STATIC
     "${XIR_OWNER_ROOT}/src/base/xunicode.c"
+    "${XIR_OWNER_ROOT}/src/os/xproc_exit.c"
     "${XIR_OWNER_ROOT}/src/xir/xxir_type_arena.c"
     "${XIR_OWNER_ROOT}/src/xir/xxir_value.c"
     "${XIR_OWNER_ROOT}/src/xir/xxir_scalar.c"
@@ -24,11 +25,15 @@ add_library(xir_compile_owner_runtime STATIC
     "${XIR_OWNER_ROOT}/src/xir/xxir_instance.c")
 if(WIN32)
     target_sources(xir_compile_owner_runtime PRIVATE
-        "${XIR_OWNER_ROOT}/src/os/win/random_win.c" "${XIR_OWNER_ROOT}/src/os/win/mem_win.c")
+        "${XIR_OWNER_ROOT}/src/os/win/random_win.c" "${XIR_OWNER_ROOT}/src/os/win/mem_win.c"
+        "${XIR_OWNER_ROOT}/src/os/win/thread_win.c" "${XIR_OWNER_ROOT}/src/os/win/proc_self_win.c")
+    target_link_libraries(xir_compile_owner_runtime PRIVATE advapi32 userenv)
 else()
     target_sources(xir_compile_owner_runtime PRIVATE
-        "${XIR_OWNER_ROOT}/src/os/unix/random_unix.c" "${XIR_OWNER_ROOT}/src/os/unix/mem_unix.c")
+        "${XIR_OWNER_ROOT}/src/os/unix/random_unix.c" "${XIR_OWNER_ROOT}/src/os/unix/mem_unix.c"
+        "${XIR_OWNER_ROOT}/src/os/unix/thread_unix.c")
     target_compile_definitions(xir_compile_owner_runtime PRIVATE _POSIX_C_SOURCE=200809L _GNU_SOURCE)
+    target_link_libraries(xir_compile_owner_runtime PRIVATE m pthread)
 endif()
 target_link_libraries(xir_compile_owner_runtime PRIVATE compile_owner_core)
 add_executable(test_xir_compile_runtime_owner

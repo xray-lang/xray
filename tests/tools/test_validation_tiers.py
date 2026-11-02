@@ -66,8 +66,9 @@ class TierTests(unittest.TestCase):
         expected = {test for name in ("public-values", "source-sdk", "checked-sdk")
                     for test in catalog["groups"][name]["tests"]}
         expected.update(catalog["l2"]["requiredOn"]["owner"]["tests"])
-        self.assertEqual(set(plan["tests"]), expected | {"hir_body"})
-        self.assertEqual(len(plan["tests"]), len(expected) + 1)
+        self.assertEqual(set(plan["tests"]), expected | {"hir_body", "runtime_sdk_recipe_incremental"})
+        self.assertEqual(len(plan["tests"]), len(expected) + 2)
+        self.assertEqual(plan["tests"].count("runtime_sdk_recipe_incremental"), 1)
         self.assertEqual(plan["tests"].count("hir_body"), 1)
         self.assertEqual(plan["targets"].count("test_hir_body"), 1)
         self.assertNotIn("frontend", plan["groups"])
@@ -83,6 +84,15 @@ class TierTests(unittest.TestCase):
         self.assertNotIn("sdk_installed_native_msvc", plan["tests"])
         self.assertNotIn("native_runtime_installed", plan["tests"])
         self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
+
+    def test_installed_source_sdk_scripts_select_their_installation_family(self):
+        for script in ("source_sdk_install.py", "source_sdk_owned.py"):
+            with self.subTest(script=script):
+                plan = xray_l1.tier_plan(ROOT, "L2", changed=["tests/unit/xir/" + script])
+                self.assertIn("source-sdk", plan["groups"])
+                self.assertIn("source_sdk_installed", plan["tests"])
+                self.assertIn("source_sdk_owned_installed", plan["tests"])
+                self.assertNotIn("native-runtime", plan["groups"])
 
     def test_recursive_fixture_selection_matches_actual_ctest_report(self):
         catalog = {"groups": {"family": {"tier": "L2", "tests": ["leaf"], "targets": []}},
