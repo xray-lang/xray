@@ -101,6 +101,7 @@ static XrXirStatus check(const XrXirCompileContext *context,const char *text,XrX
 static bool cancelled(const void *pointer) {++*(unsigned *)pointer;return true;}
 #include "xir_task_scope_boundary_cases.h"
 #include "xir_task_select_controls.h"
+#include "xir_task_record_seed_controls.h"
 static void rejections(const XrXirCompileContext *context) {
     const struct {const char *text;XrXirStatus status;} cases[]={
         {"scope {}",XR_XIR_BAD_STRUCTURE},
@@ -199,6 +200,7 @@ int main(int argc,char **argv) {
         xr_xir_compile_program_drop(program);program=NULL;rejections(&context);scope_raw_controls(&context);
         scope_typed_exit_controls(&context);scope_cleanup_error_controls(&context);scope_select_controls(&context);
         scope_receiving_controls(&context);
+        scope_record_seed_controls(&context);
     }
 #endif
     xr_xir_compile_program_drop(program);CHECK(held(context.resources)==before);
