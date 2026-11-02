@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_instance_environment_win.inc.c - Owned Windows environment queries
+ * xxir_instance_environment_win.inc.c - Owned OS queries and Windows environment snapshots
  *
  * KEY CONCEPT:
  *   OS buffers belong to the active call's actual Domain. Only absence creates
@@ -12,6 +12,7 @@
  */
 #include "../os/os_proc.h"
 #include "xxir_array.h"
+#include "../os/xcwd_owned.h"
 
 typedef struct XirEnvironmentQuery {
     XrXirCallView *view;
@@ -56,6 +57,7 @@ static XrXirCallStatus instance_environment_status(XrOsIoStatus status) {
     default:return XR_XIR_CALL_HOST_ERROR;
     }
 }
+#if defined(XR_OS_WINDOWS)
 static XrXirCallStatus instance_environment_get(XrXirCallView *view,XrXirInstance *instance,
     const XrXirValue *name,XrXirType type,XrXirValue *output) {
     XrXirCallStatus current=xr_xir_call_execution_status(view);
@@ -194,5 +196,27 @@ static XrXirCallStatus instance_environment_snapshot(XrXirCallView *view,XrXirIn
     if(!instance_environment_snapshot_close(root,owner) && status==XR_XIR_CALL_READY)status=XR_XIR_CALL_HOST_ERROR;
     if(status==XR_XIR_CALL_READY)status=xr_xir_call_execution_status(view);
     if(status==XR_XIR_CALL_READY) { *output=result;result=(XrXirValue){0}; }
+    xr_xir_value_drop(&result);return status;
+}
+
+#endif // XR_OS_WINDOWS
+
+static XrXirCallStatus instance_current_directory(XrXirCallView *view,XrXirInstance *instance,
+    XrXirValue *output) {
+    XirEnvironmentQuery query={view,instance->domain,XR_XIR_CALL_READY};
+    if(!instance_environment_current(&query))return query.status;
+    XrOsIoPolicy policy={&query,instance_environment_allocate,instance_environment_free};char *raw=NULL;
+    XrOsIoStatus queried=xr_os_io_getcwd_owned(&policy,&raw);XrXirValue result={0};
+    XrXirCallStatus status=query.status;
+    if(status==XR_XIR_CALL_READY)status=instance_environment_status(queried);
+    if(status==XR_XIR_CALL_READY)status=xr_xir_call_execution_status(view);
+    if(status==XR_XIR_CALL_READY && !raw)status=XR_XIR_CALL_HOST_ERROR;
+    if(status==XR_XIR_CALL_READY) {
+        XrXirValueStatus copied=xr_xir_string_new(instance->domain,raw,strlen(raw),&result);
+        status=copied==XR_XIR_VALUE_BAD_UTF8?XR_XIR_CALL_HOST_ERROR:value_call_status(copied);
+    }
+    instance_environment_free(&query,raw);
+    if(status==XR_XIR_CALL_READY)status=xr_xir_call_execution_status(view);
+    if(status==XR_XIR_CALL_READY){*output=result;result=(XrXirValue){0};}
     xr_xir_value_drop(&result);return status;
 }
