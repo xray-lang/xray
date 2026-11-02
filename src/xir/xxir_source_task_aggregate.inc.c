@@ -111,6 +111,16 @@ static bool source_task_aggregate_call(SourceContext *ctx,AstNode *node,SourceVa
     const XrNativeCallableDeclaration *leaf=xr_native_callable_by_id(id);
     if(!leaf||leaf->owner!=native||!source_native_admit(ctx,leaf->owner))
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Task aggregate canonical declaration is missing");
+    AstNode *argument=call->arguments[0];
+    for(uint32_t depth=0;argument&&argument->type==AST_GROUPING;++depth) {
+        if(depth>=128)return source_fail(ctx,node,XR_XIR_BUDGET,"Task aggregate argument nesting exhausted");
+        if(!(depth%64u)&&!source_request_poll(ctx,node))return false;
+        argument=argument->as.grouping;
+    }
+    if(!argument||argument->type==AST_MOVE_EXPR||
+        (argument->type==AST_VARIABLE&&argument->as.variable.access_marker_span.line>0)||
+        (argument->type==AST_THIS_EXPR&&argument->as.this_expr.access_marker_span.line>0))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Task aggregate takes an ordinary readonly Array argument");
     SourceValue input,task;
     return source_plan_expression(ctx,call->arguments[0],(SourceExpectedType){0},&input)&&
         source_task_aggregate_begin(ctx,node,id,input,&task)&&

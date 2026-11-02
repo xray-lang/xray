@@ -125,6 +125,13 @@ static void rejections(const XrXirCompileContext *context) {
         ,{"fn run(){const f:nosuspend fn()=fn(){const ch=Channel<i64>(1);select{v from ch->{} _->{}}};f()}",XR_XIR_BAD_TYPE}
         ,{"fn run(){const ch=Channel<i64>(1);select{1 to ch->{} _->{}}}",XR_XIR_UNSUPPORTED}
         ,{"fn run(){const ch=Channel<i64>(1);select{v from ch->{} after 0->{} _->{}}}",XR_XIR_BAD_STRUCTURE}
+        ,{"fn worker()->i64{return 42}\nfn run() throws(Cancelled){var tasks=[go worker()];"
+            "const result=try Task.all((move tasks))}",XR_XIR_BAD_TYPE}
+        ,{"fn worker()->i64{return 42}\nfn run() throws(Cancelled){var tasks=[go worker()];"
+            "const result=try Task.first((move tasks))}",XR_XIR_BAD_TYPE}
+        ,{"fn worker()->i64{return 42}\nfn run(){var tasks=[go worker()];const result=try! Task.all(ref tasks)}",XR_XIR_BAD_TYPE}
+        ,{"fn run(){const result=try! Task.first([42])}",XR_XIR_BAD_TYPE}
+        ,{"fn worker()->i64{return 42}\nfn run(){const tasks=[go worker()];const result=Task.all(tasks)}",XR_XIR_BAD_TYPE}
     };
     for(size_t c=0;c<sizeof(cases)/sizeof(*cases);++c) {
         uint64_t before=held(context->resources);XrXirSourceResult result={0};
@@ -142,6 +149,9 @@ static void rejections(const XrXirCompileContext *context) {
         xr_xir_compile_source_result_free(&result);CHECK(held(context->resources)==before);
     }
     XrXirSourceResult recovered={0};uint64_t before=held(context->resources);
+    CHECK(check(context,"fn worker()->i64{return 42}\nfn run(){const values=try! Task.all([go worker()]);"
+        "assert(values[0]==42)}",&recovered,NULL)==XR_XIR_OK);
+    xr_xir_compile_source_result_free(&recovered);CHECK(held(context->resources)==before);
     CHECK(check(context,NULL,&recovered,NULL)==XR_XIR_OK);xr_xir_compile_source_result_free(&recovered);
     CHECK(held(context->resources)==before);
 }
