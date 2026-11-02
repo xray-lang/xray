@@ -523,7 +523,8 @@ class StringBuilder {
                 ('Endian', 'ENDIAN', [('Native', 'NONE'), ('LE', 'NONE'), ('BE', 'NONE')], 0, 0),
                 ('Cancelled', 'CANCELLED', [('Cancelled', 'NONE')], 18, 0),
                 ('TaskResult', 'TASK_RESULT', [('Success', 'TYPE_PARAM_0'), ('Error', 'ERROR'),
-                                            ('Panic', 'PANIC_INFO'), ('Cancelled', 'NONE')], 19, 2)])
+                                            ('Panic', 'PANIC_INFO'), ('Cancelled', 'NONE')], 19, 2),
+                ('CompressionError', 'COMPRESSION_ERROR', [('InvalidData', 'NONE')], 0, 0)])
             for before, after in [('"Recv", 1, RECV', '"Recv", 0, RECV'),
                                   ('"Recv", 1, RECV', '"Recv", 1, SEND_RESULT'),
                                   ('"Value", TYPE_PARAM_0', '"Value", NONE'),
@@ -533,7 +534,9 @@ class StringBuilder {
                                   ('"Cancelled", 0, CANCELLED', '"Cancelled", 1, CANCELLED'),
                                   ('"TaskResult", 2, TASK_RESULT', '"TaskResult", 1, TASK_RESULT'),
                                   ('"Error", ERROR', '"Error", NONE'),
-                                  ('"Panic", PANIC_INFO', '"Panic", NONE')]:
+                                  ('"Panic", PANIC_INFO', '"Panic", NONE'),
+                                  ('"CompressionError", 0, COMPRESSION_ERROR', '"CompressionError", 1, COMPRESSION_ERROR'),
+                                  ('"InvalidData", NONE', '"InvalidData", TYPE_PARAM_0')]:
                 with self.subTest(before=before):
                     mutated = self.prelude.replace(before, after)
                     self.assertNotEqual(mutated, self.prelude)
