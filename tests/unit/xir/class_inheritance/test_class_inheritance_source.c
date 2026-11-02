@@ -90,6 +90,7 @@ static const char class_inheritance_base[]=
     "export fn bind(value:Animal)->fn()->i64{return value.speak}\n";
 static const char class_inheritance_consumer[]=
     "import {Animal,bind} from \"./base\"\n"
+    CLASS_INHERITANCE_DEFAULT_DECLARATIONS
     "class Dog extends Animal {\n"
     " tail:Array<string>\n"
     " init(name:string,number:i64){super(name,number);this.tail=[\"derived-owned-tail-one\",\"derived-owned-tail-two\"]}\n"
@@ -327,13 +328,26 @@ static void class_inheritance_long_chain(const XrXirCompileContext *context) {
     fixture.control=NULL;CHECK(class_inheritance_check(context,&fixture,&source)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&source);xr_compile_resources_free(text);CHECK(class_inheritance_held(context)==before);
 }
+static uint32_t class_inheritance_defaults_entry(const XrXirModule *module) {
+    static const char name[]="checkClassDefaults";uint32_t found=UINT32_MAX;
+    for(uint32_t f=0;f<module->function_count;++f) {
+        const XrXirFunction *body=module->functions+f;
+        if(body->name_length!=sizeof(name)-1 || memcmp(body->name,name,sizeof(name)-1))continue;
+        CHECK(found==UINT32_MAX && !body->parameter_count && body->result==XR_XIR_I64);
+        CHECK(module->declarations->functions[f].exported);found=f;
+    }
+    CHECK(found!=UINT32_MAX);return found;
+}
 static void class_inheritance_emit(const XrXirArtifact *code,const ClassInheritancePlan *plan,
     unsigned mode,const char *path) {
     char prefix[64];CHECK(snprintf(prefix,sizeof(prefix),"class_inheritance_%u",mode)>0);
     XrXirCSource generated={0};CHECK(xr_xir_compile_emit_c(code,prefix,16777216,&generated)==XR_XIR_OK);
     FILE *file=fopen(path,"wb");CHECK(file && fwrite(generated.text,1,generated.length,file)==generated.length);
     CHECK(fprintf(file,"\nconst uint32_t class_inheritance_%u_metadata[]={%u,%u,%u,%u};\n",mode,
-        plan->entry,plan->dog,plan->animal,plan->dog_type)>0 && !fclose(file));
+        plan->entry,plan->dog,plan->animal,plan->dog_type)>0);
+    if(mode==1)CHECK(fprintf(file,"const uint32_t class_inheritance_1_default_test=%u;\n",
+        class_inheritance_defaults_entry(xr_xir_compile_artifact_module(code)))>0);
+    CHECK(!fclose(file));
     xr_xir_compile_c_source_free(&generated);
 }
 int main(int argc,char **argv) {
@@ -346,7 +360,9 @@ int main(int argc,char **argv) {
         ClassInheritancePlan plan={0};XrXirArtifact *code=class_inheritance_product(&context,mode,&plan);
         if(argc==5){class_inheritance_emit(code,&plan,mode,argv[2+mode]);xr_xir_compile_artifact_free(code);}
         else {
+            uint32_t defaults=mode==1?class_inheritance_defaults_entry(xr_xir_compile_artifact_module(code)):UINT32_MAX;
             XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&code,&program)==XR_XIR_OK && !code);
+            if(mode==1)class_inheritance_defaults_execute(program,defaults);
             class_inheritance_execute(program,&plan);xr_xir_compile_program_drop(program);
         }
         CHECK(class_inheritance_held(&context)==before);

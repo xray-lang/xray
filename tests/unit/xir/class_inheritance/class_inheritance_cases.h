@@ -90,4 +90,5 @@ static void class_inheritance_execute(XrXirProgram *program,const ClassInheritan
     if(observation) {class_inheritance_observed(observation,plan);xr_xir_class_observation_drop(&observation);}
     CHECK(cell_owner_live==before_live && cell_owner_bytes==before_bytes);
 }
+#include "class_inheritance_defaults.h"
 #endif // CLASS_INHERITANCE_CASES_H
