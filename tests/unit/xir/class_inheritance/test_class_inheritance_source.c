@@ -267,7 +267,9 @@ static void class_inheritance_refusals(const XrXirCompileContext *context) {
         "class Base implements Sendable{value:i64 init(value:i64){this.value=value}}\n"
         "class Child extends Base{init(value:i64){super(value)}}\n",
         "final class Counter{private count:i64 init(){this.count=3} getCount()->i64{return this.count}}\n"
-        "fn bad(c:Counter)->i64{return c.count}\n"};
+        "fn bad(c:Counter)->i64{return c.count}\n",
+        "class Box{value:i64 init(){this.value=42} pick(a:i64,b:i64=0)->i64{return this.value+a+b}}\n"
+        "fn bad(){const bound=Box().pick;bound(1)}\n"};
     for(unsigned kind=0;kind<sizeof(texts)/sizeof(*texts);++kind) {
         uint64_t before=class_inheritance_held(context);ClassInheritanceSource fixture={texts[kind],"refusal",NULL,XR_XIR_PROGRAM,NULL,NULL};
         XrXirSourceResult source={0};XrXirStatus status=class_inheritance_check(context,&fixture,&source);

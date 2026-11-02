@@ -22,6 +22,16 @@
     " init(){super()}\n}\n" \
     "class DefaultOwnChild extends DefaultOwnedBase{\n" \
     " init(items:Array<string> = makeDefaultOwned()){super(items)}\n}\n" \
+    "var methodDefaultCalls:i64=0;var methodOverrideDefaultCalls:i64=0\n" \
+    "var methodReceiverCalls:i64=0;var methodExplicitCalls:i64=0;var methodOrder:i64=0\n" \
+    "fn methodDefault()->i64{methodDefaultCalls=methodDefaultCalls+1;methodOrder=methodOrder*10+3;return 1}\n" \
+    "fn methodOverrideDefault()->i64{methodOverrideDefaultCalls=methodOverrideDefaultCalls+1;return 2}\n" \
+    "fn methodExplicit()->i64{methodExplicitCalls=methodExplicitCalls+1;methodOrder=methodOrder*10+2;return 1}\n" \
+    "class MethodDefaultBase{value:i64\ninit(value:i64){this.value=value}\n" \
+    " pick(left:i64,right:i64 = methodDefault())->i64{return -1}\n}\n" \
+    "class MethodDefaultChild extends MethodDefaultBase{init(){super(40)}\n" \
+    " override pick(left:i64,right:i64 = methodOverrideDefault())->i64{return this.value+left+right}\n}\n" \
+    "fn methodReceiver()->MethodDefaultBase{methodReceiverCalls=methodReceiverCalls+1;methodOrder=methodOrder*10+1;return MethodDefaultChild()}\n" \
     "export fn checkClassDefaults()->i64{\n" \
     " var root=DefaultOwnedBase();assert(defaultOwnedCalls==1)\n" \
     " var inherited=DefaultViaSuper();assert(defaultOwnedCalls==2)\n" \
@@ -33,6 +43,16 @@
     " assert(root.items[0]==\"default-owned-first-long-value\")\n" \
     " assert(inherited.items[0]==\"default-owned-first-long-value\")\n" \
     " assert(len(root.items)==2 && len(inherited.items)==2 && len(own.items)==2)\n" \
+    " assert(methodReceiver().pick(methodExplicit())==42)\n" \
+    " assert(methodOrder==123 && methodReceiverCalls==1 && methodExplicitCalls==1)\n" \
+    " assert(methodDefaultCalls==1 && methodOverrideDefaultCalls==0)\n" \
+    " methodOrder=0;assert(methodReceiver().pick(methodExplicit(),methodExplicit())==42)\n" \
+    " assert(methodOrder==122 && methodReceiverCalls==2 && methodExplicitCalls==3)\n" \
+    " assert(methodDefaultCalls==1 && methodOverrideDefaultCalls==0)\n" \
+    " var derived=MethodDefaultChild();assert(derived.pick(1)==43)\n" \
+    " assert(methodDefaultCalls==1 && methodOverrideDefaultCalls==1)\n" \
+    " const bound=methodReceiver().pick;assert(bound(1,1)==42)\n" \
+    " assert(methodReceiverCalls==3 && methodDefaultCalls==1 && methodOverrideDefaultCalls==1)\n" \
     " return 42\n}\n"
 
 static void class_inheritance_defaults_execute(XrXirProgram *program,uint32_t entry) {
