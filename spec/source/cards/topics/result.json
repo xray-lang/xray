@@ -35,7 +35,7 @@
     },
     {
       "heading": "Error propagation",
-      "markdown": "`try expr` propagates business errors, `try? expr` turns them into null, and `try! expr` turns them into a panic carrying the original error value. Marked waits use try await. try? preserves an already Optional result type without adding or recursively flattening layers; write (try? expr) ?? fallback. Top-level code and main permit any error but still require markers. Callee signatures, not whole-program inference, determine escaping errors."
+      "markdown": "`try expr` propagates business errors, `try? expr` turns them into null, and `try! expr` turns them into a panic carrying the original error value. A wait that can fail is marked try await; a try, try?, try! or try { } that covers nothing able to throw is error E0336. try? preserves an already Optional result type without adding or recursively flattening layers; write (try? expr) ?? fallback. Top-level code and main permit any error but still require markers. Callee signatures, not whole-program inference, determine escaping errors."
     },
     {
       "heading": "Debugger execution-flow boundaries",

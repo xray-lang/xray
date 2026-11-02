@@ -148,7 +148,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 `throws(E)` 中的 `E` 只能是错误枚举、受 `Error` 约束的泛型参数、擦除后的 `Error`、`Never` 或这些错误类型组成的 union；泛型参数可以参与 `E | IoErr` 这样的 union。裸 `throws` 等价于 `throws(Error)`。错误类型随函数签名跨模块传递，不从被调用函数的实现体重新推导。
 
-`go f(...)` 的类型是 `Task<T, E>`，其中 `T` 是返回类型，`E` 来自 `f` 的错误签名；第二个类型参数默认为 `Never`，因此 `Task<T>` 等价于 `Task<T, Never>`。Task 的结果仍须满足可复制与 Sendable 约束。`try await task` 传播 `E | Cancelled`；即使 `E = Never`，等待仍可能观察到取消。取消展开本身不进入被取消函数的错误签名。`TaskResult<T, E>` 有 `Success(T)`、`Error(E)`、`Panic(PanicInfo)`、`Cancelled` 四种结果；`poll()` 的未完成状态用 `TaskResult<T, E>?` 的 `null` 表示（§10.3）。上面的自动生成登记表反映现有实现登记，不能覆盖本节的语言类型合同。
+`go f(...)` 的类型是 `Task<T, E>`，其中 `T` 是返回类型，`E` 来自 `f` 的错误签名；第二个类型参数默认为 `Never`，因此 `Task<T>` 等价于 `Task<T, Never>`。Task 的结果仍须满足可复制与 Sendable 约束。`await task` 只传播 `E`，`E = Never` 时不写 `try`；被等待的任务以取消结束时，等待方自身进入取消展开（§10.3）。取消展开不进入任何函数的错误签名。`TaskResult<T, E>` 有 `Success(T)`、`Error(E)`、`Panic(PanicInfo)`、`Cancelled` 四种结果；`poll()` 的未完成状态用 `TaskResult<T, E>?` 的 `null` 表示（§10.3）。上面的自动生成登记表反映现有实现登记，不能覆盖本节的语言类型合同。
 
 ### 2.3 基本类型
 
@@ -1272,7 +1272,7 @@ source registration, probes and removal after the last legacy consumer migrates.
 
 The `E` in `throws(E)` must be an error enum, a generic parameter constrained by `Error`, erased `Error`, `Never`, or a union of these error types; a generic parameter may participate in a union such as `E | IoErr`. Bare `throws` means `throws(Error)`. Error types cross module boundaries in function signatures; callers do not infer them again from callee bodies.
 
-`go f(...)` has type `Task<T, E>`, with result type `T` and error type `E` from the signature of `f`. The second argument defaults to `Never`, so `Task<T>` means `Task<T, Never>`. Task results must still be copyable and Sendable. `try await task` propagates `E | Cancelled`; even when `E = Never`, a wait may observe cancellation. Cancellation unwinding itself is not part of the cancelled function's error signature. `TaskResult<T, E>` has four outcomes: `Success(T)`, `Error(E)`, `Panic(PanicInfo)`, and `Cancelled`. An unfinished `poll()` returns `null` in `TaskResult<T, E>?` (§10.3). The generated registry above reflects existing implementation registrations and does not override this language type contract.
+`go f(...)` has type `Task<T, E>`, with result type `T` and error type `E` from the signature of `f`. The second argument defaults to `Never`, so `Task<T>` means `Task<T, Never>`. Task results must still be copyable and Sendable. `await task` propagates only `E` and takes no `try` when `E = Never`; when the awaited task ends in cancellation, the waiter itself enters cancellation unwinding (§10.3). Cancellation unwinding is never part of any function's error signature. `TaskResult<T, E>` has four outcomes: `Success(T)`, `Error(E)`, `Panic(PanicInfo)`, and `Cancelled`. An unfinished `poll()` returns `null` in `TaskResult<T, E>?` (§10.3). The generated registry above reflects existing implementation registrations and does not override this language type contract.
 
 ### 2.3 Primitive Types
 

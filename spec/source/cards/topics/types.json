@@ -24,7 +24,7 @@
     },
     {
       "heading": "Error and task types",
-      "markdown": "`Never` is the uninhabited bottom type, distinct from Unit. It satisfies Error constraints and is the error type of a non-throwing function. Task<T, E> defaults E to Never; try await propagates E | Cancelled. TaskResult<T, E> has Success(T), Error(E), Panic(PanicInfo), and Cancelled outcomes; poll() uses an outer Optional for unfinished tasks. Function types carry throws(E); their error type is covariant by subset. See spec §2.2.2 and §2.8.1."
+      "markdown": "`Never` is the uninhabited bottom type, distinct from Unit. It satisfies Error constraints and is the error type of a non-throwing function. Task<T, E> defaults E to Never; await propagates only E and needs no try when E is Never, while awaiting a cancelled task makes the waiter itself unwind as cancelled. TaskResult<T, E> has Success(T), Error(E), Panic(PanicInfo), and Cancelled outcomes; poll() uses an outer Optional for unfinished tasks. Function types carry throws(E); their error type is covariant by subset. See spec §2.2.2 and §2.8.1."
     },
     {
       "heading": "Explicit conditions",

@@ -66,7 +66,7 @@ print(x is i64)                 // true
 
 ### 13.4 协程
 
-协程启动和等待是语法而不是全局函数：`go`、`await`、`await all`、`await any`、`await anySuccess`。休眠使用 `time.sleep(ms)`。
+协程启动和单任务等待是语法而不是全局函数：`go`、`await`。等待多个任务使用 `Task.all`、`Task.first`、`Task.firstSuccess`、`Task.timeout` 库函数，让出与取消检查使用 `Task.yieldNow()`、`Task.isCancelled()`（§10.3、§10.4、§10.10）。休眠使用 `time.sleep(ms)`。
 
 ### 13.5 断言（测试用）
 
@@ -178,7 +178,7 @@ print(x is i64)                 // true
 
 ### 13.4 Coroutines
 
-Coroutine launch and waiting are syntax, not global functions: `go`, `await`, `await all`, `await any`, `await anySuccess`. For sleeping, use `time.sleep(ms)`.
+Coroutine launch and single-task waiting are syntax, not global functions: `go`, `await`. Waiting on several tasks uses the library functions `Task.all`, `Task.first`, `Task.firstSuccess` and `Task.timeout`; yielding and cancellation checks use `Task.yieldNow()` and `Task.isCancelled()` (§10.3, §10.4, §10.10). For sleeping, use `time.sleep(ms)`.
 
 ### 13.5 Assertions (for testing)
 

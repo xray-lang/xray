@@ -30,7 +30,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | 类型系统 | 简单 + interface 隐式 | 较丰富 + 显式 `implements` |
 | 错误处理 | 多返回值 + `err != nil` | 值返回错误通道（`throw` / `catch`）+ `T?` |
 | 协程 | `go func() {}`（语句） | `go expr`（表达式，返回 `Task<T>`） |
-| 等待结果 | 无直接等价（通过 channel/WaitGroup） | `await t`、`await all [...]`、`await any [...]` |
+| 等待结果 | 无直接等价（通过 channel/WaitGroup） | `await t`、`Task.all([...])`、`Task.first([...])` |
 | Channel | 内置 `chan T`，`<-` 操作符 | `Channel<T>` 类，方法 `send`/`recv`/`trySend`/`tryRecv` |
 | select 分支 | `case x := <-ch:` / `case ch <- v:` / `default:` | `x from ch ->` / `v to ch ->` / `after ms ->` / `_ ->` |
 | 内存管理 | 三色并发 tracing GC | execution-local 引用计数，无环收集器；环由静态证明/`weak`/物理协程回收域封顶三层处理。已发布 const 根与同步句柄使用 verified shared domain |
@@ -68,7 +68,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | 错误处理 | `try?` 折叠为 nil；`try!` abort | `throw` / `catch` 值返回通道；`T?` + `??` |
 | struct vs class | 值/引用 | 值/引用 |
 | 协议 | 有强 | `interface` 较弱 |
-| 并发 | actor + async/await | 协程 + Channel + `go`/`await all`/`scope` |
+| 并发 | actor + async/await | 协程 + Channel + `go`/`await`/`scope` |
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -98,7 +98,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 | Type system | simple + implicit interfaces | richer + explicit `implements` |
 | Error handling | multiple return values + `err != nil` | value-return error channel (`throw` / `catch`) + `T?` |
 | Coroutines | `go func() {}` (statement) | `go expr` (expression returning `Task<T>`) |
-| Awaiting | no direct equivalent (channels/WaitGroup) | `await t`, `await all [...]`, `await any [...]` |
+| Awaiting | no direct equivalent (channels/WaitGroup) | `await t`, `Task.all([...])`, `Task.first([...])` |
 | Channels | built-in `chan T`, `<-` operator | `Channel<T>` class with `send`/`recv`/`trySend`/`tryRecv` methods |
 | `select` arms | `case x := <-ch:` / `case ch <- v:` / `default:` | `x from ch ->` / `v to ch ->` / `after ms ->` / `_ ->` |
 | Memory management | concurrent tri-color tracing GC | coroutine-local reference counting, no cycle collector; cycles are handled by static proof, `weak`, and the coroutine-heap bound. Published const roots and synchronized handles use a verified shared domain |
@@ -136,5 +136,5 @@ Xray draws inspiration from many existing languages but has notable differences 
 | Error handling | `try?` collapses to nil; `try!` aborts | `throw` / `catch` value-return channel; `T?` + `??` |
 | struct vs class | value/reference | value/reference |
 | Protocols | strong | `interface`, weaker |
-| Concurrency | actors + async/await | coroutines + channels + `go`/`await all`/`scope` |
+| Concurrency | actors + async/await | coroutines + channels + `go`/`await`/`scope` |
 <!-- /xr-spec:en -->
