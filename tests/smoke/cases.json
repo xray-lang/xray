@@ -338,7 +338,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F11",
-        "first_diagnostic": "stdlib/compress/compress.xr:288:31: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/compress/compress.xr:288:25: error: E0331: escaping error exceeds the declared throws type; catch it or declare throws"
       }
     },
     {
@@ -433,13 +433,9 @@
       "id": "stdlib/math/math.xr",
       "path": "stdlib/math/math.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F13",
-        "first_diagnostic": "stdlib/math/math.xr:30:12: error: name is not an initialized value"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "stdlib/mem/mem.xr",
@@ -864,6 +860,14 @@
       "expect": "pass",
       "exit_code": 0,
       "stdout": "tests/smoke/expected/readme_concurrency.txt"
+    },
+    {
+      "id": "native:stdlib/math/math.xr",
+      "path": "stdlib/math/math.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     }
   ]
 }

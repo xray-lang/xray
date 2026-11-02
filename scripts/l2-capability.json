@@ -277,7 +277,11 @@
         "tests/unit/xir/task_scope_source.cmake",
         "tests/unit/xir/*go_closure*",
         "tests/unit/frontend/test_scope_syntax.c",
-        "tests/fixtures/xir_go_closure/*"
+        "tests/fixtures/xir_go_closure/*",
+        "src/xir/xxir_*math*",
+        "tests/fixtures/xir_math/*",
+        "tests/unit/xir/*math_source*",
+        "tests/unit/frontend/test_native_declaration_schema.py"
       ],
       "reason": "HIR and complete Source language-family consumers.",
       "tests": [
@@ -349,7 +353,11 @@
         "xir_stringable_source",
         "xir_stringable_native",
         "test_xir_move_source",
-        "test_xir_move_native"
+        "test_xir_move_native",
+        "xir_math_source",
+        "xir_math_source_native",
+        "xir_math_previous122",
+        "test_native_declaration_schema"
       ],
       "targets": [
         "test_source_nullable_print",
@@ -402,7 +410,9 @@
         "test_xir_stringable_source",
         "test_xir_stringable_native",
         "test_xir_move_source",
-        "test_xir_move_native"
+        "test_xir_move_native",
+        "test_xir_math_source",
+        "test_xir_math_source_native"
       ]
     },
     "errors-cleanup": {
