@@ -8,6 +8,7 @@
  */
 #include "xhir_conversion.h"
 #include "../xir/xxir_types.h"
+#include "../xir/xxir_class_hierarchy_internal.h"
 #include "../xir/xxir_pointer.h"
 #include "../xir/xxir_compile_memory.h"
 #include "../base/xchecks.h"
@@ -87,7 +88,9 @@ XR_FUNC XrXirStatus xr_hir_conversion_check(const XrHirConversionContext *contex
             }
         } else {
             node.target=expected;
-            if(xr_xir_type_is_nullable(context->types,expected) && xr_xir_nullable_element(context->types,expected)==input->actual) {
+            if(xr_xir_class_is_subtype(context->types,input->actual,expected)) {
+                node.kind=XR_HIR_CONVERSION_COPY;node.declared_bound=expected;
+            } else if(xr_xir_type_is_nullable(context->types,expected) && xr_xir_nullable_element(context->types,expected)==input->actual) {
                 node.kind=XR_HIR_CONVERSION_NULLABLE;
                 if(!input->inferred) {
                     status=conversion_contains(context->types,input->actual,context->control,0,&node.copy_nullable_element,reason);

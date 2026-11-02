@@ -1136,6 +1136,10 @@ static XrXirStatus graph_expected_type(const XrXirFunction *function,VerifyConte
         XrXirStatus status = xr_xir_compile_type_constraints(&context->remaining, context->module, context->location.function, expected, (XrXirConstraint){.markers = XR_XIR_CONSTRAINT_EQUAL});
         if (status != XR_XIR_OK) return status;
     }
+    if(op->op==XR_XIR_COPY || op->op==XR_XIR_OWNED_RETAIN) {
+        XrXirType actual=xr_xir_operand_type(function,op->args[0]);
+        if(actual!=op->type && xr_xir_class_is_subtype(context->module->types,actual,op->type))expected=actual;
+    }
     if (op->op == XR_XIR_FUNCTION_WEAKEN) {
         expected = xr_xir_operand_type(function, op->args[0]);
         XrXirStatus status = xr_xir_compile_callable_weakening(&context->remaining, context->module->types, expected, op->type);

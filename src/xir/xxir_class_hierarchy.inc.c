@@ -99,3 +99,30 @@ XR_FUNC bool xr_xir_class_is_subtype(const XrXirTypes *types,XrXirType actual,Xr
     }
     return false;
 }
+
+XR_FUNC XrXirStatus xir_compile_class_common_base(const XrXirTypes *types,XrXirType left,
+    XrXirType right,XrXirType *output,XrCompileRequestControl *control) {
+    if(!output)return XR_XIR_BAD_STRUCTURE;
+    *output=XR_XIR_UNIT;
+    XrXirStatus status=xir_receive_poll(control);if(status!=XR_XIR_OK)return status;
+    if(!xr_xir_type_is_class(types,left) || !xr_xir_type_is_class(types,right))return XR_XIR_BAD_TYPE;
+    uint32_t steps=0;XrXirType candidate=left;
+    for(uint32_t depth=0;depth<types->nominals->count;++depth) {
+        status=xir_receive_step(control,&steps);if(status!=XR_XIR_OK)return status;
+        if(xr_xir_class_is_subtype(types,right,candidate)) {*output=candidate;return XR_XIR_OK;}
+        const XrXirTypeNode *node=xr_xir_type_node(types,candidate);
+        uint32_t parent=nominal_identity_header(types->nominals,node->nominal.declaration).parent;
+        if(!parent || parent>types->nominals->count)return XR_XIR_BAD_TYPE;
+        candidate=XR_XIR_UNIT;
+        for(uint32_t t=0;t<types->count;++t) {
+            status=xir_receive_step(control,&steps);if(status!=XR_XIR_OK)return status;
+            const XrXirTypeNode *base=&types->nodes[t];
+            if(base->kind!=XR_XIR_TYPE_NOMINAL || base->nominal.declaration!=parent-1 ||
+                base->nominal.argument_count || base->parameter_span)continue;
+            if(candidate!=XR_XIR_UNIT)return XR_XIR_BAD_STRUCTURE;
+            candidate=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+t);
+        }
+        if(candidate==XR_XIR_UNIT)return XR_XIR_BAD_STRUCTURE;
+    }
+    return XR_XIR_BAD_STRUCTURE;
+}

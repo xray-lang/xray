@@ -17,4 +17,6 @@ XR_FUNC XrXirStatus xir_compile_class_hierarchy_verify(const XrXirCompileContext
     const XrXirTypes *types,XrCompileRequestControl *control);
 /* Both descriptors must belong to the same completely verified owning pool. */
 XR_FUNC bool xr_xir_class_is_subtype(const XrXirTypes *types,XrXirType actual,XrXirType expected);
+XR_FUNC XrXirStatus xir_compile_class_common_base(const XrXirTypes *types,XrXirType left,
+    XrXirType right,XrXirType *output,XrCompileRequestControl *control);
 #endif // XXIR_CLASS_HIERARCHY_INTERNAL_H
