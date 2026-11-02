@@ -95,7 +95,7 @@ static XrSourceArtifact *build_text(XrSourceTarget target,const char *text,size_
     compile_cancel.finished=compile_cancel.polls;compile_cancel.cancelled=1;return artifact;
 }
 static void identity_truncation(const XrXirCompileContext *context,const XrXirSourceProductPacketView *packet,const XrXirModule *module) {
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==41,"this prefix test describes current wire41");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==42,"this prefix test describes current wire42");
     size_t offset=64+12;
     for (uint32_t f=0;f<module->function_count;++f) {
         const XrXirFunction *body=module->functions+f;

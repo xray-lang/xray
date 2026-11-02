@@ -188,7 +188,7 @@ int main(int argc,char **argv) {
     if(argc==3&&!strcmp(argv[1],"--previous122")) {
         unsigned char packet[8192];FILE *file=fopen(argv[2],"rb");CHECK(file);
         size_t length=fread(packet,1,sizeof(packet),file);CHECK(length&&feof(file)&&!ferror(file)&&!fclose(file));
-        CHECK(packet[8]==41&&packet[12]==122&&XR_XIR_CHECKED_CONTRACT==124);
+        CHECK(packet[8]==41&&packet[12]==122&&XR_XIR_CHECKED_CONTRACT==125);
         XrXirArtifact *rejected=NULL;
         CHECK(xr_xir_compile_checked_read(&context,packet,length,&rejected,NULL)==XR_XIR_BAD_STRUCTURE&&!rejected);
         XrCompileResourceStats restored={0};CHECK(xr_compile_resources_stats(context.resources,&restored)==XR_COMPILE_RESOURCE_OK);

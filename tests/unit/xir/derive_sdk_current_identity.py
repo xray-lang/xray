@@ -34,7 +34,11 @@ def main():
         facts=Path(temporary)/'facts';prepare(facts)
         rows=json.loads((facts/'EXPECTED.json').read_text())['rows']
     active_rows=rows
-    assert len(active_rows)==384 and len({row['id'] for row in active_rows})==384
+    assert len(active_rows)==386 and len({row['id'] for row in active_rows})==386
+    parent_rows={row['id']:row for row in active_rows if row['id'] in (3014,3113)}
+    assert {key:row['value'] for key,row in parent_rows.items()}=={3014:124,3113:108}
+    prior_layout_rows=[row for row in active_rows if row['id'] not in parent_rows]
+    assert len(prior_layout_rows)==384
     # Historical derivations use their immutable complete frame, not today's layout.
     import re
     historical100=Path(__file__).with_name('sdk_previous39_100_identity_golden.h').read_text()
@@ -196,67 +200,74 @@ def main():
         assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete predecessor38/99 bytes changed'
     # Preserve the complete current108 frame before deriving its successor.
     prior108=Path(__file__).with_name('sdk_previous39_108_identity_golden.h').read_text(encoding='utf-8')
-    previous108=current_preimage(active_rows,108,30,37,39,37)
+    previous108=current_preimage(prior_layout_rows,108,30,37,39,37)
     for suffix,data in zip(('preimage','file_digest','digest'),previous108):
         match=re.search(r'static const uint8_t previous39_108_sdk_kat_'+suffix+r'\[\] = \{(.*?)\};',prior108,re.S)
         assert match and bytes(int(v,16) for v in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete common108 SDK KAT changed'
     prior110=Path(__file__).with_name('sdk_previous39_110_identity_golden.h').read_text(encoding='utf-8')
-    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(active_rows,110,30,37,39,37)):
+    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(prior_layout_rows,110,30,37,39,37)):
         match=re.search(r'static const uint8_t previous39_110_sdk_kat_'+suffix+r'\[\] = \{(.*?)\};',prior110,re.S)
         assert match and bytes(int(v,16) for v in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete common110 SDK KAT changed'
     prior111=Path(__file__).with_name('sdk_previous39_111_identity_golden.h').read_text(encoding='utf-8')
-    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(active_rows,111,30,37,39,37)):
+    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(prior_layout_rows,111,30,37,39,37)):
         match=re.search(r'static const uint8_t previous39_111_sdk_kat_'+suffix+r'\[\] = \{(.*?)\};',prior111,re.S)
         assert match and bytes(int(v,16) for v in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete common111 SDK KAT changed'
     prior112=Path(__file__).with_name('sdk_previous39_112_identity_golden.h').read_text(encoding='utf-8')
-    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(active_rows,112,30,37,39,37)):
+    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(prior_layout_rows,112,30,37,39,37)):
         match=re.search(r'static const uint8_t previous39_112_sdk_kat_'+suffix+r'\[\] = \{(.*?)\};',prior112,re.S)
         assert match and bytes(int(v,16) for v in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete common112 SDK KAT changed'
     prior113=Path(__file__).with_name('sdk_previous39_113_identity_golden.h').read_text(encoding='utf-8')
-    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(active_rows,113,30,37,39,37)):
+    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(prior_layout_rows,113,30,37,39,37)):
         match=re.search(r'static const uint8_t previous39_113_sdk_kat_'+suffix+r'\[\] = \{(.*?)\};',prior113,re.S)
         assert match and bytes(int(v,16) for v in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete common113 SDK KAT changed'
     prior114=Path(__file__).with_name('sdk_previous39_114_identity_golden.h').read_text(encoding='utf-8')
-    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(active_rows,114,30,37,39,37)):
+    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(prior_layout_rows,114,30,37,39,37)):
         match=re.search(r'static const uint8_t previous39_114_sdk_kat_'+suffix+r'\[\] = \{(.*?)\};',prior114,re.S)
         assert match and bytes(int(v,16) for v in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete common114 SDK KAT changed'
     prior115=Path(__file__).with_name('sdk_previous39_115_identity_golden.h').read_text(encoding='utf-8')
-    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(active_rows,115,30,37,39,37)):
+    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(prior_layout_rows,115,30,37,39,37)):
         match=re.search(r'static const uint8_t previous39_115_sdk_kat_'+suffix+r'\[\] = \{(.*?)\};',prior115,re.S)
         assert match and bytes(int(v,16) for v in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete common115 SDK KAT changed'
     prior116=Path(__file__).with_name('sdk_previous39_116_identity_golden.h').read_text(encoding='utf-8')
-    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(active_rows,116,30,37,39,37,('kernel32','bcrypt'))):
+    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(prior_layout_rows,116,30,37,39,37,('kernel32','bcrypt'))):
         match=re.search(r'static const uint8_t previous39_116_sdk_kat_'+suffix+r'\[\] = \{(.*?)\};',prior116,re.S)
         assert match and bytes(int(v,16) for v in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete common116 SDK KAT changed'
     prior117=Path(__file__).with_name('sdk_previous39_117_identity_golden.h').read_text(encoding='utf-8')
-    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(active_rows,117,30,37,39,37,('kernel32','bcrypt'))):
+    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(prior_layout_rows,117,30,37,39,37,('kernel32','bcrypt'))):
         match=re.search(r'static const uint8_t previous39_117_sdk_kat_'+suffix+r'\[\] = \{(.*?)\};',prior117,re.S)
         assert match and bytes(int(v,16) for v in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete common117 SDK KAT changed'
     prior118=Path(__file__).with_name('sdk_previous40_118_identity_golden.h').read_text(encoding='utf-8')
-    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(active_rows,118,31,38,40,37,('kernel32','bcrypt'))):
+    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(prior_layout_rows,118,31,38,40,37,('kernel32','bcrypt'))):
         match=re.search(r'static const uint8_t previous40_118_sdk_kat_'+suffix+r'\[\] = \{(.*?)\};',prior118,re.S)
         assert match and bytes(int(v,16) for v in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete common118 SDK KAT changed'
     prior119=Path(__file__).with_name('sdk_previous40_119_identity_golden.h').read_text(encoding='utf-8')
-    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(active_rows,119,31,38,40,37,('kernel32','bcrypt'))):
+    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(prior_layout_rows,119,31,38,40,37,('kernel32','bcrypt'))):
         match=re.search(r'static const uint8_t previous40_119_sdk_kat_'+suffix+r'\[\] = \{(.*?)\};',prior119,re.S)
         assert match and bytes(int(v,16) for v in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete common119 SDK KAT changed'
     prior120=Path(__file__).with_name('sdk_previous41_120_identity_golden.h').read_text(encoding='utf-8')
-    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(active_rows,120,31,38,41,37,('kernel32','bcrypt'))):
+    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(prior_layout_rows,120,31,38,41,37,('kernel32','bcrypt'))):
         match=re.search(r'static const uint8_t previous41_120_sdk_kat_'+suffix+r'\[\] = \{(.*?)\};',prior120,re.S)
         assert match and bytes(int(v,16) for v in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete common120 SDK KAT changed'
     prior121=Path(__file__).with_name('sdk_previous41_121_identity_golden.h').read_text(encoding='utf-8')
-    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(active_rows,121,31,38,41,37,('kernel32','bcrypt'))):
+    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(prior_layout_rows,121,31,38,41,37,('kernel32','bcrypt'))):
         match=re.search(r'static const uint8_t previous41_121_sdk_kat_'+suffix+r'\[\] = \{(.*?)\};',prior121,re.S)
         assert match and bytes(int(v,16) for v in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete common121 SDK KAT changed'
     prior122=Path(__file__).with_name('sdk_previous41_122_identity_golden.h').read_text(encoding='utf-8')
-    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(active_rows,122,31,38,41,37,('kernel32','bcrypt'))):
+    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(prior_layout_rows,122,31,38,41,37,('kernel32','bcrypt'))):
         match=re.search(r'static const uint8_t previous41_122_sdk_kat_'+suffix+r'\[\] = \{(.*?)\};',prior122,re.S)
         assert match and bytes(int(v,16) for v in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete common122 SDK KAT changed'
     prior123=Path(__file__).with_name('sdk_previous41_123_identity_golden.h').read_text(encoding='utf-8')
-    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(active_rows,123,31,38,41,37,('kernel32','bcrypt'))):
+    for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(prior_layout_rows,123,31,38,41,37,('kernel32','bcrypt'))):
         match=re.search(r'static const uint8_t previous41_123_sdk_kat_'+suffix+r'\[\] = \{(.*?)\};',prior123,re.S)
         assert match and bytes(int(v,16) for v in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete common123 SDK KAT changed'
-    image,file_digest,digest=current_preimage(active_rows,124,31,38,41,37,('kernel32','bcrypt'))
+    prior124=Path(__file__).with_name('sdk_previous41_124_identity_golden.h').read_text(encoding='utf-8')
+    previous124=current_preimage(prior_layout_rows,124,31,38,41,37,('kernel32','bcrypt'))
+    assert len(previous124[0])==3372
+    assert previous124[2].hex()=='7deba9c64a76318f2bf45e9ecc055e85d7fe81e551a247fa96ab95b72f08405c'
+    for suffix,data in zip(('preimage','file_digest','digest'),previous124):
+        match=re.search(r'static const uint8_t previous41_124_sdk_kat_'+suffix+r'\[\] = \{(.*?)\};',prior124,re.S)
+        assert match and bytes(int(v,16) for v in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete common124 SDK KAT changed'
+    image,file_digest,digest=current_preimage(active_rows,125,31,38,42,37,('kernel32','bcrypt'))
     prior_resources_image,prior_resources_file,prior_resources_digest=current_preimage(frozen_rows,98,30,35,37,36)
     assert len(prior_resources_image)==3338
     assert prior_resources_digest.hex()=='8fd650c91daccdcad55f6bf8c40b5f4e2f9ed9611d721eff0c26321e84adeca1'
@@ -264,9 +275,9 @@ def main():
     assert image[:identity_offset]==previous_image[:identity_offset]
     old_current_image,_,_=current_preimage(old_rows,75,25)
     assert old_current_image[identity_offset+20:]==previous_image[identity_offset+20:]
-    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(41,124,31,38,37)
+    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(42,125,31,38,37)
     assert struct.unpack('<5I',previous_image[identity_offset:identity_offset+20])==(27,72,22,28,29)
-    assert len(image)==3372 and len(historical_image)==3330 and len(previous_image)==len(value23_image)==3098
+    assert len(image)==3388 and len(historical_image)==3330 and len(previous_image)==len(value23_image)==3098
     assert file_digest==previous_file_digest and digest!=previous_digest
     output='/* Independent current SDK framing and natural Windows C layout facts. */\n'
     for name,data in (('current_sdk_kat_preimage',image),('current_sdk_kat_file_digest',file_digest),('current_sdk_kat_digest',digest),
@@ -280,7 +291,7 @@ def main():
         output+='};\n'
     # These predecessors share the same declared ABI layout; only semantic identity differs.
     for semantic in (106,107,109):
-        prior_image,prior_file,prior_digest=current_preimage(active_rows,semantic,30,37,39,37)
+        prior_image,prior_file,prior_digest=current_preimage(prior_layout_rows,semantic,30,37,39,37)
         for suffix,data in [('preimage',prior_image),('file_digest',prior_file),('digest',prior_digest)]:
             output+='static const uint8_t previous39_'+str(semantic)+'_sdk_kat_'+suffix+'[] = {\n'
             for at in range(0,len(data),16):output+='    '+','.join('0x'+format(x,'02x') for x in data[at:at+16])+',\n'
