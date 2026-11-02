@@ -732,10 +732,12 @@ static void default_class_invoke_execution(const XrXirCompileContext *context) {
             memcpy(functions,original->functions,(size_t)original->function_count*sizeof(*functions));
             functions[helper]=*body;functions[helper].name=before->name;functions[helper].name_length=before->name_length;
             XrXirModule raw=*original;raw.stage=XR_XIR_BUILT;raw.provenance=NULL;raw.functions=functions;
-            XrXirDiagnostic admitted={0};uint64_t baseline=held(context->resources);
+            XrXirDiagnostic admitted={0};XrCompileResourceStats baseline={0},stats={0};
+            CHECK(xr_compile_resources_stats(context->resources,&baseline)==XR_COMPILE_RESOURCE_OK);
             status=xr_xir_compile_check_v2(context,&raw,xr_xir_compile_artifact_construction(source.checked),&isolated,&admitted);
             CHECK(status==XR_XIR_BAD_TYPE&&!isolated&&admitted.function==helper&&admitted.block==0&&admitted.instruction==0);
-            CHECK(held(context->resources)==baseline);xr_compile_resources_free(functions);
+            CHECK(xr_compile_resources_stats(context->resources,&stats)==XR_COMPILE_RESOURCE_OK&&stats.held_bytes==baseline.held_bytes);
+            xr_compile_resources_free(functions);
         }
         CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);
         xr_xir_compile_source_result_free(&source);
