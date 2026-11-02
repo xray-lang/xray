@@ -1216,7 +1216,7 @@ fn _wsListen(port: i64) -> NetListener? {
 
 // Serve WebSocket connections while `running` stays true, one coroutine per
 // accepted connection (the http server shape). Setting running to false stops
-// the accept loop and the linked scope cancels in-flight handlers.
+// the accept loop; the scope waits for in-flight handlers before returning.
 export fn serve(
     port: i64,
     handler: fn(ref WsConn),
@@ -1229,7 +1229,7 @@ export fn serve(
     var live = maybeListener!
     const ctx = _WsServeCtx(handler, maxMessage)
     var healthy = true
-    linked scope {
+    scope {
         while (running.load()) {
             net.setAcceptDeadline(live, time.monotonic() + _WS_ACCEPT_POLL_MS)
             var accepted = net.accept(live)
