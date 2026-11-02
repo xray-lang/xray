@@ -413,8 +413,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F02",
-        "first_diagnostic": "stdlib/sys/sys.xr:439:23: error: name does not resolve to an admitted nominal type"
+        "feature": "F13",
+        "first_diagnostic": "stdlib/io/io.xr:333:57: error: name is not an initialized value"
       }
     },
     {
@@ -426,7 +426,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/log/log.xr:230:14: error: name does not resolve to an admitted nominal type"
+        "first_diagnostic": "stdlib/log/log.xr:77:22: error: name does not resolve to an admitted nominal type"
       }
     },
     {
@@ -465,8 +465,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F02",
-        "first_diagnostic": "stdlib/sys/sys.xr:439:23: error: name does not resolve to an admitted nominal type"
+        "feature": "F13",
+        "first_diagnostic": "stdlib/os/os.xr:69:41: error: name is not an initialized value"
       }
     },
     {
@@ -485,8 +485,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F02",
-        "first_diagnostic": "stdlib/sys/sys.xr:439:23: error: name does not resolve to an admitted nominal type"
+        "feature": "F13",
+        "first_diagnostic": "stdlib/os/os.xr:69:41: error: name is not an initialized value"
       }
     },
     {
@@ -541,8 +541,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F02",
-        "first_diagnostic": "stdlib/sys/sys.xr:439:23: error: name does not resolve to an admitted nominal type"
+        "feature": "F13",
+        "first_diagnostic": "stdlib/sys/sys.xr:21:9: error: name is not an initialized value"
       }
     },
     {
@@ -593,8 +593,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F02",
-        "first_diagnostic": "stdlib/toml/toml.xr:1034:27: error: name does not resolve to an admitted nominal type"
+        "feature": "F13",
+        "first_diagnostic": "stdlib/io/io.xr:333:57: error: name is not an initialized value"
       }
     },
     {
@@ -633,8 +633,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F02",
-        "first_diagnostic": "stdlib/xml/xml.xr:987:27: error: name does not resolve to an admitted nominal type"
+        "feature": "F20",
+        "first_diagnostic": "stdlib/xml/xml.xr:83:72: error: name is not an initialized value"
       }
     },
     {
@@ -645,8 +645,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F02",
-        "first_diagnostic": "stdlib/yaml/yaml.xr:1307:27: error: name does not resolve to an admitted nominal type"
+        "feature": "F20",
+        "first_diagnostic": "stdlib/yaml/yaml.xr:178:12: error: name is not an initialized value"
       }
     },
     {
