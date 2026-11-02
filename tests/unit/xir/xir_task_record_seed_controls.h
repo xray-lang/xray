@@ -1,6 +1,15 @@
-/* Copyright (c) 2026 Xinglei Xu. MIT License.
- * Real Source supplies the declarations. The physical effect owner is used
- * for allocation faults; projection metadata grants no worker permission. */
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xir_task_record_seed_controls.h - Owned field projections from genuine Source
+ *
+ * KEY CONCEPT:
+ *   Real Source supplies the declarations. Physical effect allocations test
+ *   failure recovery; projection metadata grants no worker permission.
+ */
 #include "xir/xxir_compile_memory.h"
 static size_t record_seed_attempts,record_seed_fail=SIZE_MAX;
 static bool record_seed_cancel,record_seed_cancel_enabled;
