@@ -59,7 +59,7 @@ def main():
         data = (sdk/row['path']).read_bytes()
         assert len(data) == row['length'] and hashlib.sha256(data).hexdigest() == row['sha256']
     recipe = json.loads((sdk/'source_sdk_recipe.json').read_text(encoding='utf-8'))
-    assert recipe['system_libraries'] == ['kernel32', 'bcrypt']
+    assert recipe['system_libraries'] == ['kernel32', 'bcrypt', 'advapi32']
     assert not (moved/'bin/xray.exe').exists() and not any(p.suffix == '.xr' for p in moved.rglob('*'))
     source = out/'consumer.c'
     source.write_bytes((root/'tests/unit/xir/source_sdk_owned_consumer.c').read_bytes())

@@ -254,6 +254,7 @@ static BOOL sdk_test_read(HANDLE file,LPVOID bytes,DWORD length,LPDWORD actual,L
 #undef current_sdk_kat_file_digest
 #undef current_sdk_kat_digest
 #include "sdk_current_identity_golden.h"
+#include "sdk_missing_advapi32_identity_golden.h"
 #include "sdk_previous39_100_identity_golden.h"
 #include "sdk_previous39_108_identity_golden.h"
 #include "sdk_previous39_110_identity_golden.h"
@@ -456,7 +457,7 @@ static void sdk_legacy_known_bytes(void) {
     _Static_assert(sizeof(previous69_sdk_kat_preimage)==3098,"complete previous69 SDK preimage");
     xr_sha256(previous69_sdk_kat_preimage,sizeof(previous69_sdk_kat_preimage),old_hash);
     CHECK(!memcmp(old_hash,previous69_sdk_kat_digest,32));
-    _Static_assert(sizeof(previous70_sdk_kat_preimage)==3098 && sizeof(current_sdk_kat_preimage)==3388,
+    _Static_assert(sizeof(previous70_sdk_kat_preimage)==3098 && sizeof(current_sdk_kat_preimage)==3400,
         "complete current and previous70 SDK preimages");
     xr_sha256(previous70_sdk_kat_preimage,sizeof(previous70_sdk_kat_preimage),old_hash);
     CHECK(!memcmp(old_hash,previous70_sdk_kat_digest,32));
@@ -720,9 +721,15 @@ static int sdk_legacy_main(int argc,char **argv) {
     puts("SDK producer destroyed, immutable same-source facts and locked actual bundle PASS");return 0;
 }
 static void sdk_library_known_bytes(void) {
-    const char *cases[] = {"[\"kernel32\",\"bcrypt\"]", "[\"kernel32\"]", "[\"bcrypt\"]",
-        "[\"bcrypt\",\"kernel32\"]", "[\"kernel32\",\"bcrypt\",\"bcrypt\"]",
-        "[\"kernel32\",\"bcrypt\",\"user32\"]", "[]", "[\"kernel32\",\"Bcrypt\"]"};
+    const char *cases[] = {"[\"kernel32\",\"bcrypt\",\"advapi32\"]",
+        "[\"kernel32\",\"bcrypt\"]", "[\"kernel32\"]", "[\"bcrypt\"]",
+        "[\"advapi32\"]", "[\"kernel32\",\"advapi32\"]", "[\"bcrypt\",\"advapi32\"]",
+        "[\"bcrypt\",\"kernel32\"]", "[\"bcrypt\",\"kernel32\",\"advapi32\"]",
+        "[\"kernel32\",\"advapi32\",\"bcrypt\"]", "[\"kernel32\",\"bcrypt\",\"bcrypt\"]",
+        "[\"kernel32\",\"bcrypt\",\"user32\"]", "[]", "[\"kernel32\",\"Bcrypt\"]",
+        "[\"kernel32\",\"bcrypt\",\"Advapi32\"]",
+        "[\"kernel32\",\"bcrypt\",\"advapi32\",\"user32\"]",
+        "[\"kernel32\",\"bcrypt\",\"advapi32\",\"advapi32\"]"};
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
         char bytes[128];size_t length = strlen(cases[i]);CHECK(length < sizeof(bytes));
         memcpy(bytes, cases[i], length + 1);
@@ -730,6 +737,34 @@ static void sdk_library_known_bytes(void) {
         CHECK(sdk_json_libraries(&json) == (i == 0));
         if (i == 0) CHECK(json.status == XR_JSON_CURSOR_OK && json.cursor == json.end);
     }
+}
+static void sdk_missing_advapi32_known_bytes(XrCompileResources *resources,
+    const XrXirSdkManifest *current) {
+    _Static_assert(sizeof(missing_advapi32_sdk_kat_preimage)==3388,
+        "missing-library identity keeps its complete original framing");
+    uint8_t digest[32];
+    xr_sha256(missing_advapi32_sdk_kat_preimage,sizeof(missing_advapi32_sdk_kat_preimage),digest);
+    CHECK(!memcmp(digest,missing_advapi32_sdk_kat_digest,32) && memcmp(digest,current_sdk_kat_digest,32));
+    CHECK(!memcmp(missing_advapi32_sdk_kat_file_digest,current_sdk_kat_file_digest,32));
+    size_t libraries=sizeof(missing_advapi32_sdk_kat_preimage)-(4+4+8+4+6);
+    CHECK(!memcmp(missing_advapi32_sdk_kat_preimage,current_sdk_kat_preimage,libraries));
+    CHECK(sizeof(current_sdk_kat_preimage)==sizeof(missing_advapi32_sdk_kat_preimage)+12);
+    XrXirSdkManifest same_common=*current;
+    memcpy(same_common.digest,missing_advapi32_sdk_kat_digest,32);
+    XrXirSdkManifest preserved=same_common;size_t attempts=runtime_attempts;
+    XrCompileResourceStats before=sdk_stats(resources);
+    XrJsonCursor json=xr_json_cursor_make(NULL,0);
+    CHECK(sdk_json_prefix(&json,&same_common) && json.status==XR_JSON_CURSOR_OK);
+    CHECK(!memcmp(&same_common,&preserved,sizeof(same_common)));
+    char absent[]="[\"kernel32\",\"bcrypt\"]";
+    json=xr_json_cursor_make(absent,sizeof(absent)-1);
+    CHECK(!sdk_json_libraries(&json) && json.status==XR_JSON_CURSOR_INVALID);
+    json=xr_json_cursor_make(NULL,0);
+    CHECK(sdk_identity(&json,&same_common) && !memcmp(same_common.digest,current_sdk_kat_digest,32));
+    CHECK(memcmp(same_common.digest,missing_advapi32_sdk_kat_digest,32) && runtime_attempts==attempts);
+    XrCompileResourceStats after=sdk_stats(resources);
+    CHECK(before.allocation_count==after.allocation_count && before.allocated_bytes==after.allocated_bytes &&
+        before.held_bytes==after.held_bytes);
 }
 /* Ordinary identity and ownership checks do not enter the pressure census. */
 static void sdk_known_bytes(void) {
@@ -740,7 +775,7 @@ static void sdk_known_bytes(void) {
     _Static_assert(XR_XIR_CHECKED_SCHEMA==42 && XR_XIR_CHECKED_CONTRACT==126 &&
         XR_XIR_VALUE_ABI_VERSION==31 && XR_XIR_CALL_ABI_VERSION==38 && XR_XIR_PROGRAM_ABI_VERSION==37,
         "current known bytes require their independently framed identity");
-    _Static_assert(sizeof(current_sdk_kat_preimage)==3388 && sizeof(previous42_125_sdk_kat_preimage)==3388 &&
+    _Static_assert(sizeof(current_sdk_kat_preimage)==3400 && sizeof(previous42_125_sdk_kat_preimage)==3388 &&
         sizeof(historical32_91_sdk_kat_preimage)==3330,
         "complete current and historical wire images");
     uint8_t digest[32];
@@ -764,6 +799,7 @@ static void sdk_known_bytes(void) {
     CHECK(sdk_identity(&json,&manifest) && !memcmp(manifest.digest,current_sdk_kat_digest,32));
     json=xr_json_cursor_make(NULL,0);
     CHECK(sdk_json_prefix(&json,&manifest) && json.status==XR_JSON_CURSOR_OK);
+    sdk_missing_advapi32_known_bytes(resources,&manifest);
     const uint8_t *prior_images[]={previous39_100_sdk_kat_preimage,
         previous39_106_sdk_kat_preimage,previous39_107_sdk_kat_preimage,
         previous39_108_sdk_kat_preimage,previous39_109_sdk_kat_preimage,previous39_110_sdk_kat_preimage,previous39_111_sdk_kat_preimage,previous39_112_sdk_kat_preimage,previous39_113_sdk_kat_preimage,previous39_114_sdk_kat_preimage,previous39_115_sdk_kat_preimage,previous39_116_sdk_kat_preimage,previous39_117_sdk_kat_preimage,previous40_118_sdk_kat_preimage,previous40_119_sdk_kat_preimage,previous41_120_sdk_kat_preimage,previous41_121_sdk_kat_preimage,previous41_122_sdk_kat_preimage,previous41_123_sdk_kat_preimage,previous41_124_sdk_kat_preimage,previous42_125_sdk_kat_preimage};

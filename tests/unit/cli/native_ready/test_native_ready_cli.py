@@ -20,13 +20,13 @@ def exact_link_libraries(argv,compiler):
  manifest=json.loads((sdk/'sdk_manifest.json').read_text(encoding='utf-8'))
  names=['xray_compile_resources','xray_xir_admission','xray_xir_declarations','xray_xir_scalar','xray_xir_runtime_host']
  if {x['path'] for x in manifest['files'] if x['kind']==5}!={'lib/'+x+'.lib' for x in names}:return False
- if manifest['system_libraries']!=['kernel32','bcrypt']:return False
+ if manifest['system_libraries']!=['kernel32','bcrypt','advapi32']:return False
  cc=compiler['argv'];vc=Path(cc[0]).parents[3];um=Path(cc[20][2:])
  if um.name.lower()!='um':return False
  kit=um.parents[2]/'Lib'/um.parent.name
  expected=[sdk/'lib'/(name+'.lib') for name in names]
  expected += [vc/'lib/x64'/name for name in ['msvcrt.lib','oldnames.lib','vcruntime.lib']]
- expected += [kit/'ucrt/x64/ucrt.lib',kit/'um/x64/kernel32.lib',kit/'um/x64/bcrypt.lib']
+ expected += [kit/'ucrt/x64/ucrt.lib',kit/'um/x64/kernel32.lib',kit/'um/x64/bcrypt.lib',kit/'um/x64/advapi32.lib']
  return len(argv)==9+len(expected) and [canonical(x) for x in argv[9:]]==[canonical(str(x)) for x in expected]
 
 def observe():
