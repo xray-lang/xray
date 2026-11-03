@@ -99,6 +99,8 @@ typedef struct XirEnvironmentSnapshotOwner XirEnvironmentSnapshotOwner;
 typedef struct XirSystemOwner XirSystemOwner;
 typedef struct XirFileMetadataOwner XirFileMetadataOwner;
 typedef struct XirRootCallback XirRootCallback;
+static bool instance_callback_entry_admitted(XrXirInstance *instance,const XrXirCallView *view,
+    uint32_t entry,const XrXirValue *function,const XrXirValue *arguments,uint32_t count);
 struct XrXirInstance {
     XrXirProgram *program;
     XrXirInstanceConfig config;
@@ -1286,7 +1288,9 @@ static XrXirCallStatus instance_call_entry_check(XrXirCallView *view, uint32_t e
             instance->state == XR_XIR_INSTANCE_INITIALIZING && instance->current_module == module ?
             XR_XIR_CALL_READY : XR_XIR_CALL_BAD_STATE;
     if (caller == instance->program->entry_count &&
-        (target!=instance || instance->state != XR_XIR_INSTANCE_READY || instance->requested != entry)) return XR_XIR_CALL_BAD_STATE;
+        (target!=instance || instance->state != XR_XIR_INSTANCE_READY ||
+         (instance->requested != entry && !instance_callback_entry_admitted(instance,view,entry,function,arguments,count))))
+        return XR_XIR_CALL_BAD_STATE;
     if (!target->ready[module] && target->current_module != module) {
         XrXirCallStatus cleanup=target==instance?instance_cleanup_entry(view,instance,caller,entry):XR_XIR_CALL_BAD_STATE;
         if (cleanup!=XR_XIR_CALL_READY) return cleanup;

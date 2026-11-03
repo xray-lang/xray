@@ -55,6 +55,19 @@ XR_FUNC bool xir_instance_callback_owns(const XrXirInstance *instance,
          (!callback->generation->function_gate->instance &&
           (root->stopping || callback->generation->stopping)));
 }
+static bool instance_callback_entry_admitted(XrXirInstance *instance,const XrXirCallView *view,
+    uint32_t entry,const XrXirValue *function,const XrXirValue *arguments,uint32_t count) {
+    XrXirInstance *root=instance_root(instance);
+    const XirRootCallback *callback=root?root->callback:NULL;
+    return callback && !root->stopping && !instance->stopping && callback->generation==instance &&
+        callback->entry==entry && callback->root==view->instance && callback->call==view->activation &&
+        callback->executor==instance->executor && view->environment==callback &&
+        view->phase==XR_XIR_CALL_NORMAL && !view->scope_exit && view->state &&
+        *(const uint32_t *)view->state==1 && !view->argument_count && !count && !arguments && function &&
+        function->type==callback->function.type && function->reserved==callback->function.reserved &&
+        function->payload==callback->function.payload &&
+        xir_instance_callback_owns(root,instance->executor,view->activation);
+}
 XR_FUNC bool xir_instance_callback_active(const XrXirInstance *instance) {
     if (!instance || !instance_owner_current(instance)) return false;
     XrXirInstance *active=instance_current((XrXirInstance *)instance);
