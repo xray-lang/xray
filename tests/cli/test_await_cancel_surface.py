@@ -415,7 +415,8 @@ def main() -> int:
                                     env=env, capture_output=True, timeout=30)
             diagnostic = REJECTION_DIAGNOSTICS.get(name,
                 b"E0330:" if name.endswith("missing_try") else b"E0336:")
-            if result.returncode != 1 or result.stdout or diagnostic not in result.stderr:
+            code_matches = name not in ("a05_mixed_without_error", "a06_inner_try_send") or b"E0336:" in result.stderr
+            if result.returncode != 1 or result.stdout or diagnostic not in result.stderr or not code_matches:
                 failures.append(f"{name}: expected {diagnostic!r}, got {result.returncode}, {result.stderr!r}")
             else:
                 print(f"PASS {args.engine} rejected_{name}")
