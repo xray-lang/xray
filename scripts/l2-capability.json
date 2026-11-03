@@ -834,6 +834,7 @@
     "host-os": {
       "tier": "L2",
       "match": [
+        "stdlib/sys/sys.xr",
         "src/os/os_fs.h",
         "src/os/os_system.h",
         "src/os/os_file_metadata.h",

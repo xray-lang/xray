@@ -137,7 +137,7 @@ class TierTests(unittest.TestCase):
                 self.assertNotIn("native-runtime", plan["groups"])
 
     def test_host_os_changes_select_paired_source_and_native_consumers(self):
-        for path in ("src/os/win/fs_mutation_win.c", "src/os/unix/fs_mutation_unix.c",
+        for path in ("stdlib/sys/sys.xr", "src/os/win/fs_mutation_win.c", "src/os/unix/fs_mutation_unix.c",
                      "src/os/os_system.h", "src/os/win/system_win.c", "src/os/unix/system_unix.c",
                      "src/os/os_signal.h", "src/os/win/signal_win.c",
                      "src/os/unix/signal_unix.c", "tests/unit/base/test_signal.c",
