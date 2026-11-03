@@ -298,7 +298,10 @@ typedef enum XrNativeCallableId {
     XR_NATIVE_CALLABLE_IO_READLINK = 88,
     XR_NATIVE_CALLABLE_IO_REALPATH = 89,
     XR_NATIVE_CALLABLE_IO_MAKE_TEMP_DIR = 90,
-    XR_NATIVE_CALLABLE_IO_MAKE_TEMP_FILE = 91
+    XR_NATIVE_CALLABLE_IO_MAKE_TEMP_FILE = 91,
+    XR_NATIVE_CALLABLE_IO_DIR_OPEN = 94,
+    XR_NATIVE_CALLABLE_IO_DIR_NEXT = 95,
+    XR_NATIVE_CALLABLE_IO_DIR_CLOSE = 96
 } XrNativeCallableId;
 
 /* Callable IDs authenticate ordinary function bodies, independently of inline intrinsics. */
