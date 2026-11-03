@@ -99,7 +99,13 @@ static XrXirCallStatus instance_signal_site(XrXirCallView *view,XrXirInstance *i
     if (admission->work<64 || !xr_xir_domain_work(instance->domain,64)) return XR_XIR_CALL_LIMIT;
     admission->work-=64;
     for (uint32_t p=0;p<2;++p) {
-        XrXirCallStatus status=admit_instance_value(admission,arguments+p,program->entries[origin->target].parameters[p]);
+        XrXirType parameter=program->entries[origin->target].parameters[p];
+        /* Staging precedes the ordinary Call's owned parameter conversion. */
+        XrXirCallStatus status=arguments[p].type!=(uint32_t)parameter &&
+            xr_xir_callable_signature(program->types,(XrXirType)arguments[p].type) &&
+            xr_xir_callable_signature(program->types,parameter)?
+            xr_xir_instance_argument_weakening_admit(view,parameter,arguments+p):
+            admit_instance_value(admission,arguments+p,parameter);
         if (status!=XR_XIR_CALL_READY) return status;
     }
     XrXirInstance *birth=NULL;
