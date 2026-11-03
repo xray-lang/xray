@@ -62,6 +62,7 @@ static bool query_current(void *context) {
 }
 
 static int verify_queries(void) {
+    XrOsSystemOwner owner = {0};
     XrOsOptionalI64 identity = {true, 123};
     CHECK(xr_os_io_uid(&identity) == XR_OS_IO_OK && !identity.present);
     identity = (XrOsOptionalI64){true, 456};
@@ -71,11 +72,11 @@ static int verify_queries(void) {
     int64_t bytes = -321;
     CHECK(xr_os_io_total_memory(&bytes) == XR_OS_IO_OK && bytes > 0 &&
         (uint64_t)bytes == memory_reference.ullTotalPhys);
-    CHECK(xr_os_io_free_memory(&bytes) == XR_OS_IO_OK && bytes >= 0 &&
+    CHECK(xr_os_io_free_memory(&owner, &bytes) == XR_OS_IO_OK && !owner.handle && bytes >= 0 &&
         (uint64_t)bytes == memory_reference.ullAvailPhys);
     bytes = -321;
     memory_failure = ERROR_NOT_ENOUGH_MEMORY;
-    CHECK(xr_os_io_free_memory(&bytes) == XR_OS_IO_OUT_OF_MEMORY && bytes == -321);
+    CHECK(xr_os_io_free_memory(&owner, &bytes) == XR_OS_IO_OUT_OF_MEMORY && !owner.handle && bytes == -321);
     memory_failure = ERROR_ACCESS_DENIED;
     CHECK(xr_os_io_total_memory(&bytes) == XR_OS_IO_IO && bytes == -321);
     memory_failure = ERROR_SUCCESS;
@@ -83,7 +84,11 @@ static int verify_queries(void) {
     CHECK(xr_os_io_total_memory(&bytes) == XR_OS_IO_OVERFLOW && bytes == -321);
     memory_overflow = false;
     CHECK(xr_os_io_total_memory(NULL) == XR_OS_IO_BAD_ARGUMENT);
-    CHECK(xr_os_io_free_memory(NULL) == XR_OS_IO_BAD_ARGUMENT);
+    CHECK(xr_os_io_free_memory(&owner, NULL) == XR_OS_IO_BAD_ARGUMENT);
+    CHECK(xr_os_io_free_memory(NULL, &bytes) == XR_OS_IO_BAD_ARGUMENT && bytes == -321);
+    owner.handle = 1;
+    CHECK(xr_os_io_free_memory(&owner, &bytes) == XR_OS_IO_BAD_ARGUMENT && owner.handle == 1 && bytes == -321);
+    owner.handle = 0;
     double before = (double)GetTickCount64() / 1000.0, seconds = -1.0;
     CHECK(xr_os_io_uptime(&seconds) == XR_OS_IO_OK && seconds >= before &&
         seconds <= (double)GetTickCount64() / 1000.0);
@@ -252,7 +257,7 @@ int main(void) {
         xr_os_io_gid(&gid) != XR_OS_IO_OK || !gid.present || gid.value != (int64_t)getgid() ||
         xr_os_io_ppid(&owner, NULL, NULL, &parent) != XR_OS_IO_OK || parent != (int64_t)getppid() ||
         xr_os_io_total_memory(&total) != XR_OS_IO_OK || total <= 0 ||
-        xr_os_io_free_memory(&available) != XR_OS_IO_OK || available < 0 || available > total ||
+        xr_os_io_free_memory(&owner, &available) != XR_OS_IO_OK || owner.handle || available < 0 || available > total ||
         xr_os_io_uptime(&uptime) != XR_OS_IO_OK || uptime < 0 ||
         xr_os_io_loadavg(&loads) != XR_OS_IO_OK || !loads.available) return 1;
     for (size_t i = 0; i < 3; ++i) if (!(loads.values[i] >= 0.0)) return 1;
