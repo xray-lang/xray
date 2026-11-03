@@ -1218,8 +1218,8 @@ def render_file_stat_identity(root):
     for index, (name, type_text) in enumerate(expected):
         term = {'i64': 'I64', 'i64?': 'NULLABLE_I64', 'bool': 'BOOL'}[type_text]
         lines += ['    {' + str(index + 1) + ', ' + c_string(name) + ', ' + c_string(': ' + type_text) + ', ' + c_string(type_text) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
-                  '        false, false, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_NO_HEAP,',
-                  '        "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_' + term + '},']
+                  '        false, false, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
+                  '        "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_' + term + '},']
     return lines + ['};', 'static const XrNativeTypeDeclaration xr_native_file_stat = {',
         '    XR_NATIVE_DECLARATION_FILE_STAT, XR_NATIVE_DECLARATION_IDENTITY, "__FileStat", NULL, 0,',
         '    "stdlib/defs/core.def", "xray.native-type.v1/io/__FileStat", ' + fingerprint + ', 0, 0,',
