@@ -102,7 +102,9 @@ typedef struct MetadataPaths {
 } MetadataPaths;
 static MetadataPaths paths;
 static int wide_join(wchar_t *output, const wchar_t *root, const wchar_t *tail) {
-    int count = swprintf(output, 32768, L"%ls\\%ls", root, tail);
+    size_t length = wcslen(root);
+    const wchar_t *separator = length && (root[length - 1] == L'\\' || root[length - 1] == L'/') ? L"" : L"\\";
+    int count = swprintf(output, 32768, L"%ls%ls%ls", root, separator, tail);
     return count > 0 && count < 32768;
 }
 static int directory_operation(const wchar_t *path, bool create) {
