@@ -285,7 +285,7 @@ static int verify_failures(void) {
         XR_OS_IO_CANCELLED && !memcmp(&output, &sentinel, sizeof(output)) && metadata_memory.attempts == 1 &&
         metadata_memory.copy_polls == 2 && !metadata_memory.live && !metadata_memory.held && !owner.handle &&
         !kernel_handles && kernel_attributes == attributes && kernel_opens == opened);
-    reset_memory(); large_span[sizeof(large_span) - 1] = (char)0xff;
+    reset_memory(); memset(large_span + sizeof(large_span) - 1, 0xff, 1);
     CHECK(xr_os_io_file_metadata(&policy, large_span, sizeof(large_span), test_current, &owner, &output) ==
         XR_OS_IO_BAD_ARGUMENT && !memcmp(&output, &sentinel, sizeof(output)) && !metadata_memory.attempts &&
         !owner.handle && kernel_attributes == attributes && kernel_opens == opened);
