@@ -148,11 +148,10 @@ static bool source_dead_catch(SourceContext *ctx, XrCatchClause *clause, SourceM
     saved.expressions=body->expressions;saved.expression_count=body->expression_count;
     if(ok)ok=source_hir_discard_to(ctx,saved.typed_projections);
     /* Discard probe instructions while keeping the current owners of grown
-     * arrays. Deferred checks still need their original type-argument spans. */
+     * arrays. Deferred checks own their spans, so live argument counts rewind. */
     saved.operands=body->operands;saved.operand_capacity=body->operand_capacity;
     saved.debug_bindings=body->debug_bindings;saved.debug_binding_capacity=body->debug_binding_capacity;
     generic.arguments=ctx->generics[ctx->function].arguments;
-    generic.argument_count=ctx->generics[ctx->function].argument_count;
     saved.type_capacity=body->type_capacity;
     saved.pending_errors=body->pending_errors;saved.try_regions=body->try_regions;
     *body = saved; ctx->generics[ctx->function] = generic; ctx->returned = returned;

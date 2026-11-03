@@ -192,7 +192,9 @@ typedef struct SourcePendingError {
     struct SourcePendingError *next;
     SourceLocalHandler *handler;
     AstNode *node;
-    uint32_t target, first_argument, argument_count;
+    uint32_t target;
+    const XrXirType *arguments;
+    uint32_t argument_count;
     bool marked, asserted;
     SourceTryRegion *try_region;
 } SourcePendingError;
