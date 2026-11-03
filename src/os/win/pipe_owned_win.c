@@ -49,10 +49,11 @@ static OwnedPipeState *owned_pipe_state(XrOsPipeOwner *owner){
 static OwnedPipeOp *owned_pipe_op(XrOsPipeOperation *owner){
     OwnedPipeOp *state=owner?owner->state:NULL;return state&&state->anchor==owner?state:NULL;
 }
-static XrOsIoStatus owned_pipe_allocate(const XrOsIoPolicy *memory,size_t bytes,void **output){
+static XrOsIoStatus owned_pipe_allocate(const XrOsIoPolicy *memory,size_t bytes,size_t alignment,void **output){
     void *allocated=NULL;XrOsIoStatus status=memory->alloc(memory->context,bytes,&allocated);
     if(status!=XR_OS_IO_OK){if(allocated)memory->free(memory->context,allocated);return status;}
     if(!allocated)return XR_OS_IO_BAD_ARGUMENT;
+    if((uintptr_t)allocated%alignment){memory->free(memory->context,allocated);return XR_OS_IO_BAD_ARGUMENT;}
     memset(allocated,0,bytes);*output=allocated;return XR_OS_IO_OK;
 }
 static DWORD WINAPI owned_pipe_worker(void *context){
@@ -97,7 +98,7 @@ XR_FUNC XrOsIoStatus xr_os_io_pipe_open(const XrOsIoPolicy *memory,const XrOsPip
     if(!memory||!memory->context||!memory->alloc||!memory->free||!owner||owner->state||owner->busy||!opened||!owned_pipe_query_valid(query))return XR_OS_IO_BAD_ARGUMENT;
     owner->busy=true;XrOsIoStatus status=XR_OS_IO_OK;
     if(!owned_pipe_current(query)){owner->busy=false;return XR_OS_IO_CANCELLED;}
-    OwnedPipeState *state=NULL;status=owned_pipe_allocate(memory,sizeof(*state),(void **)&state);
+    OwnedPipeState *state=NULL;status=owned_pipe_allocate(memory,sizeof(*state),_Alignof(OwnedPipeState),(void **)&state);
     if(status==XR_OS_IO_OK){
         state->anchor=owner;state->memory=*memory;owner->state=state;
         if(!owned_pipe_current(query))status=XR_OS_IO_CANCELLED;
@@ -118,12 +119,12 @@ XR_FUNC XrOsIoStatus xr_os_io_pipe_begin(XrOsPipeOwner *owner,const XrOsPipeRequ
     if(!pipe->ends[request->end])return XR_OS_IO_BAD_ARGUMENT;
     owner->busy=operation->busy=true;XrOsIoStatus status=XR_OS_IO_OK;OwnedPipeOp *op=NULL;
     if(!owned_pipe_current(query))status=XR_OS_IO_CANCELLED;
-    if(status==XR_OS_IO_OK)status=owned_pipe_allocate(&pipe->memory,sizeof(*op),(void **)&op);
+    if(status==XR_OS_IO_OK)status=owned_pipe_allocate(&pipe->memory,sizeof(*op),_Alignof(OwnedPipeOp),(void **)&op);
     if(status==XR_OS_IO_OK){
         op->anchor=operation;op->pipe=pipe;op->next=pipe->operations;pipe->operations=op;operation->state=op;
         op->end=request->end;op->requested=request->length>MAXDWORD?MAXDWORD:(DWORD)request->length;
         atomic_init(&op->cancelled,false);atomic_init(&op->complete,false);
-        if(op->requested)status=owned_pipe_allocate(&pipe->memory,op->requested,(void **)&op->buffer);
+        if(op->requested)status=owned_pipe_allocate(&pipe->memory,op->requested,_Alignof(uint8_t),(void **)&op->buffer);
         if(status==XR_OS_IO_OK&&op->end==XR_OS_PIPE_WRITE){
             size_t at=0;
             while(at<op->requested){
