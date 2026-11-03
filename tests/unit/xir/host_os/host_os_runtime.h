@@ -23,6 +23,7 @@
 #include "os/os_system.h"
 #include "os/os_file_metadata.h"
 #include "os/os_file_mutation.h"
+#include "os/os_thread_token.h"
 #if defined(XR_OS_WINDOWS)
 #include <windows.h>
 #ifdef interface
@@ -59,6 +60,10 @@ static unsigned int host_count(void);
 static int host_pin(unsigned int);
 static XrOsIoStatus host_chmod(const XrOsIoPolicy *,const char *,int64_t,bool(*)(void *),bool *);
 static XrOsIoStatus host_chdir(const XrOsIoPolicy *,const char *,bool(*)(void *),bool *);
+static XrOsIoStatus host_token_current(const XrOsThreadTokenQuery *,int64_t *);
+static XrOsIoStatus host_token_alive(const XrOsThreadTokenQuery *,int64_t,bool *);
+#define xr_os_io_thread_token_current host_token_current
+#define xr_os_io_thread_token_alive host_token_alive
 #define xr_os_io_path_mkdir host_io_mkdir
 #define xr_os_io_path_rmdir host_io_rmdir
 #define xr_os_io_path_remove host_io_remove
@@ -80,6 +85,8 @@ static XrOsIoStatus host_chdir(const XrOsIoPolicy *,const char *,bool(*)(void *)
 #define xr_os_io_loadavg host_system_loadavg
 #define xr_os_io_system_close host_system_close
 #include "../xir_runtime_allocations.h"
+#undef xr_os_io_thread_token_current
+#undef xr_os_io_thread_token_alive
 #undef xr_os_io_uid
 #undef xr_os_io_gid
 #undef xr_os_io_ppid
