@@ -803,6 +803,10 @@
       "tier": "L2",
       "match": [
         "src/os/os_fs.h",
+        "src/os/os_system.h",
+        "src/os/win/system_win.c",
+        "src/os/unix/system_unix.c",
+        "tests/unit/base/test_system_queries.c",
         "src/os/win/thread_win.c",
         "src/os/unix/thread_unix.c",
         "src/os/win/fs_mutation_win.c",
@@ -810,6 +814,7 @@
         "src/base/xwindows_utf8.h",
         "src/xir/xxir_io_native.h",
         "src/xir/xxir_instance_io.inc.c",
+        "src/xir/xxir_instance_system.inc.c",
         "src/xir/xxir_os_native.h",
         "src/xir/xxir_sys_native.h",
         "src/xir/xxir_source_io.inc.c",
@@ -828,11 +833,13 @@
       "reason": "Real CPU and Path host calls preserve canonical permissions, ownership, cancellation, and the scalar runtime closure.",
       "tests": [
         "host_os_source",
-        "host_os_native"
+        "host_os_native",
+        "os_system_queries"
       ],
       "targets": [
         "test_host_os_source",
-        "test_host_os_native"
+        "test_host_os_native",
+        "test_os_system_queries"
       ]
     }
   },
