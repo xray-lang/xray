@@ -255,10 +255,12 @@ static void recursive_cleanup(XrXirCallView *view, XrXirCallStatus reason) {
 }
 static void bounded_stack(void) {
     XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, types, 1, XR_XIR_I64, sizeof(RecursiveState), recursive_resume, recursive_cleanup, NULL, 0, 0};
-    for (uint32_t variant = 0; variant < 3; ++variant) {
+    for (uint32_t variant = 0; variant < 4; ++variant) {
         Witness witness = {0};
         XrXirCallAccounting accounting = {0};
-        XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = &entry; config.entry_count = 1; config.instance = &witness; config.byte_limit = 4 * 1024 * 1024; config.poll_limit = variant == 2 ? 5 : 30000; config.depth_limit = variant == 1 ? 5 : 10001; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
+        XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = &entry; config.entry_count = 1; config.instance = &witness; config.poll_limit = variant == 2 ? 5 : 30000; config.depth_limit = variant == 1 ? 5 : 10001; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
+        /* Keep finite-memory refusal separate from deep stack and poll bounds. */
+        if (variant==3) config.byte_limit=4*1024*1024;
         XrXirValue argument = {XR_XIR_I64, 0, 10000};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, &argument, 1, &call) == XR_XIR_CALL_READY);
