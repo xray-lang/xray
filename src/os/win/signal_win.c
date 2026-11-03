@@ -14,8 +14,8 @@
 #include <limits.h>
 #include <stdatomic.h>
 
-_Static_assert(ATOMIC_INT_LOCK_FREE == 2 && UINT_MAX == UINT32_MAX,
-    "signal mailbox publication requires always-lock-free 32-bit integers");
+_Static_assert(UINT_MAX == UINT32_MAX,
+    "signal mailbox publication requires 32-bit unsigned integers");
 typedef struct SignalSlot {
     _Atomic(uint32_t) word;
     XrOsSignalOwner *owner;
@@ -61,6 +61,9 @@ static void signal_commit(XrOsSignalOwner *owner, uint32_t generation) {
 
 XR_FUNC XrOsIoStatus xr_os_io_signal_open(int64_t signal, XrOsSignalOwner *owner, bool *installed) {
     if (!owner || !installed) return XR_OS_IO_BAD_ARGUMENT;
+    /* C11 permits a lock-free property selected for the actual object. Check
+     * before installing a callback; the callback itself never runs this query. */
+    if (signal == 2 && !atomic_is_lock_free(&signal_int_slot.word)) return XR_OS_IO_UNSUPPORTED;
     AcquireSRWLockExclusive(&signal_owner_lock);
     XrOsIoStatus status = XR_OS_IO_OK;
     bool opened = false;
