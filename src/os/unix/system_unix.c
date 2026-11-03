@@ -40,7 +40,16 @@ XR_FUNC XrOsIoStatus xr_os_io_gid(XrOsOptionalI64 *output) {
     return status;
 }
 XR_FUNC XrOsIoStatus xr_os_io_system_close(XrOsSystemOwner *owner) {
-    if (!owner || owner->handle) return XR_OS_IO_BAD_ARGUMENT;
+    if (!owner) return XR_OS_IO_BAD_ARGUMENT;
+    if (!owner->handle) return XR_OS_IO_OK;
+#if defined(XR_OS_MACOS)
+    if (owner->handle < 0 || (uintmax_t)owner->handle > UINT32_MAX) return XR_OS_IO_BAD_ARGUMENT;
+    kern_return_t closed = mach_port_deallocate(mach_task_self(), (mach_port_t)owner->handle);
+    if (closed != KERN_SUCCESS) return XR_OS_IO_IO;
+    owner->handle = 0;
+#else
+    return XR_OS_IO_BAD_ARGUMENT;
+#endif
     return XR_OS_IO_OK;
 }
 XR_FUNC XrOsIoStatus xr_os_io_ppid(XrOsSystemOwner *owner, void *context,
@@ -77,7 +86,8 @@ XR_FUNC XrOsIoStatus xr_os_io_kill(XrOsSystemOwner *owner, int64_t pid,
 }
 
 #if defined(XR_OS_LINUX)
-static XrOsIoStatus system_memory(bool available, int64_t *output) {
+static XrOsIoStatus system_memory(bool available, XrOsSystemOwner *owner, int64_t *output) {
+    (void)owner;
     struct sysinfo information;
     if (sysinfo(&information) != 0) return io_errno_status(errno);
     uintmax_t units = available ? information.freeram : information.totalram;
@@ -87,7 +97,7 @@ static XrOsIoStatus system_memory(bool available, int64_t *output) {
     return system_unsigned_i64(units * scale, output);
 }
 #elif defined(XR_OS_MACOS)
-static XrOsIoStatus system_memory(bool available, int64_t *output) {
+static XrOsIoStatus system_memory(bool available, XrOsSystemOwner *owner, int64_t *output) {
     if (!available) {
         uint64_t bytes = 0;
         size_t length = sizeof(bytes);
@@ -98,10 +108,14 @@ static XrOsIoStatus system_memory(bool available, int64_t *output) {
     vm_statistics64_data_t information;
     mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
     mach_port_t host = mach_host_self();
+    if (!MACH_PORT_VALID(host)) return XR_OS_IO_IO;
+    owner->handle = (intptr_t)host;
     kern_return_t queried = host_statistics64(host, HOST_VM_INFO64, (host_info64_t)&information, &count);
-    kern_return_t closed = mach_port_deallocate(mach_task_self(), host);
-    if (queried != KERN_SUCCESS || closed != KERN_SUCCESS || count != HOST_VM_INFO64_COUNT)
-        return XR_OS_IO_IO;
+    XrOsIoStatus closed = xr_os_io_system_close(owner);
+    if (queried != KERN_SUCCESS)
+        return queried == KERN_RESOURCE_SHORTAGE ? XR_OS_IO_OUT_OF_MEMORY : XR_OS_IO_IO;
+    if (closed != XR_OS_IO_OK) return closed;
+    if (count != HOST_VM_INFO64_COUNT) return XR_OS_IO_IO;
     uintmax_t free_pages = information.free_count, inactive_pages = information.inactive_count;
     if (free_pages > UINTMAX_MAX - inactive_pages) return XR_OS_IO_OVERFLOW;
     uintmax_t pages = free_pages + inactive_pages, scale = vm_page_size;
@@ -110,18 +124,18 @@ static XrOsIoStatus system_memory(bool available, int64_t *output) {
     return system_unsigned_i64(pages * scale, output);
 }
 #else
-static XrOsIoStatus system_memory(bool available, int64_t *output) {
-    (void)available; (void)output;
+static XrOsIoStatus system_memory(bool available, XrOsSystemOwner *owner, int64_t *output) {
+    (void)available; (void)owner; (void)output;
     return XR_OS_IO_UNSUPPORTED;
 }
 #endif
 XR_FUNC XrOsIoStatus xr_os_io_total_memory(int64_t *output) {
     if (!output) return XR_OS_IO_BAD_ARGUMENT;
-    return system_memory(false, output);
+    return system_memory(false, NULL, output);
 }
-XR_FUNC XrOsIoStatus xr_os_io_free_memory(int64_t *output) {
-    if (!output) return XR_OS_IO_BAD_ARGUMENT;
-    return system_memory(true, output);
+XR_FUNC XrOsIoStatus xr_os_io_free_memory(XrOsSystemOwner *owner, int64_t *output) {
+    if (!owner || owner->handle || !output) return XR_OS_IO_BAD_ARGUMENT;
+    return system_memory(true, owner, output);
 }
 XR_FUNC XrOsIoStatus xr_os_io_uptime(double *output) {
     if (!output) return XR_OS_IO_BAD_ARGUMENT;

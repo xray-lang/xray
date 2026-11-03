@@ -43,12 +43,13 @@ XR_FUNC XrOsIoStatus xr_os_io_kill(XrOsSystemOwner *owner, int64_t pid,
     int64_t signal, void *context, bool (*current)(void *context), bool *output);
 XR_FUNC XrOsIoStatus xr_os_io_system_close(XrOsSystemOwner *owner);
 
-/* Memory uses bytes and uptime uses seconds. These bounded queries retain no
- * caller state; their caller checks execution status before and after use.
+/* Memory uses bytes and uptime uses seconds. Free memory may acquire a Mach
+ * host port and uses the same close-before-publication owner protocol.
+ * Queries never retain callback state; their caller checks execution status.
  * All typed failures preserve output. Unavailable load averages never publish
  * fabricated sample values. An available result contains exactly 1/5/15 min. */
 XR_FUNC XrOsIoStatus xr_os_io_total_memory(int64_t *output);
-XR_FUNC XrOsIoStatus xr_os_io_free_memory(int64_t *output);
+XR_FUNC XrOsIoStatus xr_os_io_free_memory(XrOsSystemOwner *owner, int64_t *output);
 XR_FUNC XrOsIoStatus xr_os_io_uptime(double *output);
 XR_FUNC XrOsIoStatus xr_os_io_loadavg(XrOsLoadAverages *output);
 #endif // XR_OS_SYSTEM_H
