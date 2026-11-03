@@ -261,12 +261,25 @@ static void root_signal_isolate(const wchar_t *mode,DWORD flags) {
     HANDLE job=CreateJobObjectW(NULL,NULL);CHECK(job);
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits={0};limits.BasicLimitInformation.LimitFlags=JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
     CHECK(SetInformationJobObject(job,JobObjectExtendedLimitInformation,&limits,sizeof(limits)));
-    STARTUPINFOW startup={0};startup.cb=sizeof(startup);startup.dwFlags=STARTF_USESHOWWINDOW;startup.wShowWindow=SW_HIDE;
+    /* Borrow only these existing log handles. The new console remains private;
+     * a failed child must still report its original Source/runtime diagnostic. */
+    HANDLE streams[]={GetStdHandle(STD_INPUT_HANDLE),GetStdHandle(STD_OUTPUT_HANDLE),GetStdHandle(STD_ERROR_HANDLE)};
+    DWORD original[3]={0};bool valid[3]={false};
+    for (unsigned i=0;i<3;++i) if (streams[i] && streams[i]!=INVALID_HANDLE_VALUE && GetHandleInformation(streams[i],original+i)) {
+        valid[i]=true;CHECK(SetHandleInformation(streams[i],HANDLE_FLAG_INHERIT,HANDLE_FLAG_INHERIT));
+    }
+    STARTUPINFOW startup={0};startup.cb=sizeof(startup);startup.dwFlags=STARTF_USESHOWWINDOW|STARTF_USESTDHANDLES;
+    startup.wShowWindow=SW_HIDE;startup.hStdInput=valid[0]?streams[0]:NULL;
+    startup.hStdOutput=valid[1]?streams[1]:NULL;startup.hStdError=valid[2]?streams[2]:NULL;
     PROCESS_INFORMATION process={0};
-    CHECK(CreateProcessW(executable,command,NULL,NULL,FALSE,flags|CREATE_SUSPENDED,NULL,NULL,&startup,&process));
+    bool created=CreateProcessW(executable,command,NULL,NULL,TRUE,flags|CREATE_SUSPENDED,NULL,NULL,&startup,&process)!=0;
+    bool restored=true;
+    for(unsigned i=0;i<3;++i)if(valid[i] && !SetHandleInformation(streams[i],HANDLE_FLAG_INHERIT,original[i]&HANDLE_FLAG_INHERIT))restored=false;
+    CHECK(created);
     if (!AssignProcessToJobObject(job,process.hProcess)) {
         (void)TerminateProcess(process.hProcess,99);(void)WaitForSingleObject(process.hProcess,10000);CHECK(false);
     }
+    if(!restored) {(void)TerminateJobObject(job,99);(void)WaitForSingleObject(process.hProcess,10000);CHECK(false);}
     CHECK(ResumeThread(process.hThread)!=UINT32_MAX && CloseHandle(process.hThread));
     DWORD waited=WaitForSingleObject(process.hProcess,20000),code=UINT32_MAX;
     if (waited!=WAIT_OBJECT_0) {CHECK(TerminateJobObject(job,99));CHECK(WaitForSingleObject(process.hProcess,10000)==WAIT_OBJECT_0);}
