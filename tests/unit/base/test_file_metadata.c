@@ -15,10 +15,11 @@
 typedef union MetadataBlock { long double alignment; size_t bytes; void *pointer; } MetadataBlock;
 typedef struct MetadataMemory {
     size_t attempts, fail_at, cancel_at, live, held;
-    bool cancelled;
+    size_t polls, cancel_poll, copy_polls;
+    bool cancelled, cancel_copy;
     XrOsIoStatus failure;
 } MetadataMemory;
-static MetadataMemory memory;
+static MetadataMemory metadata_memory;
 static XrOsIoStatus test_allocate(void *context, size_t bytes, void **output) {
     MetadataMemory *state = context;
     if (!output || *output || bytes > SIZE_MAX - sizeof(MetadataBlock)) return XR_OS_IO_BAD_ARGUMENT;
@@ -38,11 +39,17 @@ static void test_free(void *context, void *data) {
     if (!state->live || state->held < block->bytes) abort();
     --state->live; state->held -= block->bytes; xr_free(block);
 }
-static bool test_current(void *context) { return !((MetadataMemory *)context)->cancelled; }
-static XrOsIoPolicy test_policy(void) { return (XrOsIoPolicy){&memory, test_allocate, test_free}; }
+static bool test_current(void *context) {
+    MetadataMemory *state = context;
+    if (++state->polls == state->cancel_poll) state->cancelled = true;
+    if (state->cancel_copy && state->live && ++state->copy_polls == 2) state->cancelled = true;
+    return !state->cancelled;
+}
+static XrOsIoPolicy test_policy(void) { return (XrOsIoPolicy){&metadata_memory, test_allocate, test_free}; }
 static void reset_memory(void) {
-    if (memory.live || memory.held) abort();
-    memory = (MetadataMemory){.fail_at = SIZE_MAX, .cancel_at = SIZE_MAX, .failure = XR_OS_IO_OUT_OF_MEMORY};
+    if (metadata_memory.live || metadata_memory.held) abort();
+    metadata_memory = (MetadataMemory){.fail_at = SIZE_MAX, .cancel_at = SIZE_MAX,
+        .cancel_poll = SIZE_MAX, .failure = XR_OS_IO_OUT_OF_MEMORY};
 }
 #define CHECK(condition) do { if (!(condition)) { \
     fprintf(stderr, "file metadata %d: %s\n", __LINE__, #condition); return 0; \
@@ -51,14 +58,14 @@ static void reset_memory(void) {
 #if defined(XR_OS_WINDOWS)
 #include "base/xwindows_utf8.h"
 #include <winioctl.h>
-static size_t kernel_handles, kernel_opens, kernel_closes, close_failures;
+static size_t kernel_handles, kernel_opens, kernel_closes, close_failures, kernel_attributes;
 static bool cancel_after_open, information_failure;
 static HANDLE WINAPI observed_create(LPCWSTR name, DWORD access, DWORD sharing,
     LPSECURITY_ATTRIBUTES security, DWORD creation, DWORD flags, HANDLE template_file) {
     HANDLE handle = CreateFileW(name, access, sharing, security, creation, flags, template_file);
     if (handle != INVALID_HANDLE_VALUE) {
         ++kernel_handles; ++kernel_opens;
-        if (cancel_after_open) memory.cancelled = true;
+        if (cancel_after_open) metadata_memory.cancelled = true;
     }
     return handle;
 }
@@ -73,10 +80,16 @@ static BOOL WINAPI observed_information(HANDLE handle, LPBY_HANDLE_FILE_INFORMAT
     if (information_failure) { SetLastError(ERROR_SUCCESS); return FALSE; }
     return GetFileInformationByHandle(handle, output);
 }
+static DWORD WINAPI observed_attributes(LPCWSTR path) {
+    ++kernel_attributes;
+    return GetFileAttributesW(path);
+}
 #define CreateFileW observed_create
 #define CloseHandle observed_close
 #define GetFileInformationByHandle observed_information
+#define GetFileAttributesW observed_attributes
 #include "os/win/file_metadata_win.c"
+#undef GetFileAttributesW
 #undef GetFileInformationByHandle
 #undef CloseHandle
 #undef CreateFileW
@@ -179,12 +192,12 @@ static int verify_fields(void) {
     CHECK(result.present && result.size == 6 && result.is_file && !result.is_dir && !result.is_symlink &&
         !result.uid.present && !result.gid.present && result.mtime == 1500000003 &&
         result.atime == 1500000002 && result.ctime == 1500000001 && result.mode == (_S_IREAD | _S_IWRITE));
-    CHECK(!memory.live && !memory.held && !kernel_handles && !owner.handle);
+    CHECK(!metadata_memory.live && !metadata_memory.held && !kernel_handles && !owner.handle);
     char span[65536]; size_t length = strlen(paths.utf8);
     CHECK(length + 1 < sizeof(span)); memcpy(span, paths.utf8, length);
     span[length] = 'X'; span[length + 1] = 0;
     CHECK(xr_os_io_file_metadata(&policy, span, length, NULL, &owner, &result) == XR_OS_IO_OK &&
-        result.present && result.size == 6 && !memory.live && !kernel_handles);
+        result.present && result.size == 6 && !metadata_memory.live && !kernel_handles);
     CHECK(SetFileAttributesW(paths.extended, FILE_ATTRIBUTE_READONLY));
     CHECK(xr_os_io_file_metadata(&policy, paths.utf8, strlen(paths.utf8), NULL, &owner, &result) == XR_OS_IO_OK &&
         result.present && result.mode == _S_IREAD && result.size == 6);
@@ -211,43 +224,43 @@ static int verify_failures(void) {
     memset(&sentinel, 0x5a, sizeof(sentinel)); memcpy(&output, &sentinel, sizeof(output));
     reset_memory();
     CHECK(xr_os_io_file_metadata(&policy, paths.utf8, strlen(paths.utf8), test_current, &owner, &output) == XR_OS_IO_OK);
-    size_t sites = memory.attempts;
-    CHECK(sites && !memory.live && !kernel_handles);
+    size_t sites = metadata_memory.attempts;
+    CHECK(sites && !metadata_memory.live && !kernel_handles);
     for (size_t point = 0; point < sites; ++point) {
-        reset_memory(); memory.fail_at = point; memcpy(&output, &sentinel, sizeof(output));
+        reset_memory(); metadata_memory.fail_at = point; memcpy(&output, &sentinel, sizeof(output));
         CHECK(xr_os_io_file_metadata(&policy, paths.utf8, strlen(paths.utf8), test_current, &owner, &output) ==
             XR_OS_IO_OUT_OF_MEMORY && !memcmp(&output, &sentinel, sizeof(output)) &&
-            !memory.live && !memory.held && !kernel_handles && !owner.handle);
+            !metadata_memory.live && !metadata_memory.held && !kernel_handles && !owner.handle);
     }
-    reset_memory(); memory.fail_at = 0; memory.failure = XR_OS_IO_MEMORY_LIMIT; memcpy(&output, &sentinel, sizeof(output));
+    reset_memory(); metadata_memory.fail_at = 0; metadata_memory.failure = XR_OS_IO_MEMORY_LIMIT; memcpy(&output, &sentinel, sizeof(output));
     CHECK(xr_os_io_file_metadata(&policy, paths.utf8, strlen(paths.utf8), NULL, &owner, &output) ==
-        XR_OS_IO_MEMORY_LIMIT && !memcmp(&output, &sentinel, sizeof(output)) && !memory.live);
+        XR_OS_IO_MEMORY_LIMIT && !memcmp(&output, &sentinel, sizeof(output)) && !metadata_memory.live);
     const XrOsIoStatus policy_errors[] = {XR_OS_IO_BAD_ARGUMENT, XR_OS_IO_OVERFLOW};
     for (size_t i = 0; i < sizeof(policy_errors) / sizeof(policy_errors[0]); ++i) {
-        reset_memory(); memory.fail_at = sites - 1; memory.failure = policy_errors[i];
+        reset_memory(); metadata_memory.fail_at = sites - 1; metadata_memory.failure = policy_errors[i];
         CHECK(xr_os_io_file_metadata(&policy, paths.utf8, strlen(paths.utf8), NULL, &owner, &output) ==
-            policy_errors[i] && !memcmp(&output, &sentinel, sizeof(output)) && !memory.live && !kernel_handles);
+            policy_errors[i] && !memcmp(&output, &sentinel, sizeof(output)) && !metadata_memory.live && !kernel_handles);
     }
-    reset_memory(); memory.fail_at = 0; memory.failure = XR_OS_IO_OK;
+    reset_memory(); metadata_memory.fail_at = 0; metadata_memory.failure = XR_OS_IO_OK;
     CHECK(xr_os_io_file_metadata(&policy, paths.utf8, strlen(paths.utf8), NULL, &owner, &output) ==
-        XR_OS_IO_BAD_ARGUMENT && !memcmp(&output, &sentinel, sizeof(output)) && !memory.live);
-    reset_memory(); memory.cancelled = true; memcpy(&output, &sentinel, sizeof(output));
+        XR_OS_IO_BAD_ARGUMENT && !memcmp(&output, &sentinel, sizeof(output)) && !metadata_memory.live);
+    reset_memory(); metadata_memory.cancelled = true; memcpy(&output, &sentinel, sizeof(output));
     CHECK(xr_os_io_file_metadata(&policy, paths.utf8, strlen(paths.utf8), test_current, &owner, &output) ==
-        XR_OS_IO_CANCELLED && !memcmp(&output, &sentinel, sizeof(output)) && !memory.attempts);
-    reset_memory(); memory.cancel_at = 0;
+        XR_OS_IO_CANCELLED && !memcmp(&output, &sentinel, sizeof(output)) && !metadata_memory.attempts);
+    reset_memory(); metadata_memory.cancel_at = 0;
     CHECK(xr_os_io_file_metadata(&policy, paths.utf8, strlen(paths.utf8), test_current, &owner, &output) ==
-        XR_OS_IO_CANCELLED && !memcmp(&output, &sentinel, sizeof(output)) && !memory.live && !kernel_handles);
+        XR_OS_IO_CANCELLED && !memcmp(&output, &sentinel, sizeof(output)) && !metadata_memory.live && !kernel_handles);
     reset_memory(); cancel_after_open = true;
     CHECK(xr_os_io_file_metadata(&policy, paths.utf8, strlen(paths.utf8), test_current, &owner, &output) ==
-        XR_OS_IO_CANCELLED && !memcmp(&output, &sentinel, sizeof(output)) && !memory.live && !kernel_handles);
+        XR_OS_IO_CANCELLED && !memcmp(&output, &sentinel, sizeof(output)) && !metadata_memory.live && !kernel_handles);
     cancel_after_open = false;
     reset_memory(); information_failure = true;
     CHECK(xr_os_io_file_metadata(&policy, paths.utf8, strlen(paths.utf8), NULL, &owner, &output) ==
-        XR_OS_IO_IO && !memcmp(&output, &sentinel, sizeof(output)) && !memory.live && !kernel_handles);
+        XR_OS_IO_IO && !memcmp(&output, &sentinel, sizeof(output)) && !metadata_memory.live && !kernel_handles);
     information_failure = false;
     reset_memory(); close_failures = 1;
     CHECK(xr_os_io_file_metadata(&policy, paths.utf8, strlen(paths.utf8), NULL, &owner, &output) ==
-        XR_OS_IO_IO && !memcmp(&output, &sentinel, sizeof(output)) && !memory.live && kernel_handles == 1 && owner.handle);
+        XR_OS_IO_IO && !memcmp(&output, &sentinel, sizeof(output)) && !metadata_memory.live && kernel_handles == 1 && owner.handle);
     intptr_t saved = owner.handle; size_t closed = kernel_closes;
     CHECK(xr_os_io_file_metadata(&policy, paths.utf8, strlen(paths.utf8), NULL, &owner, &output) ==
         XR_OS_IO_BAD_ARGUMENT && owner.handle == saved && kernel_closes == closed);
@@ -259,14 +272,31 @@ static int verify_failures(void) {
     CHECK(xr_os_io_file_metadata(&policy, nul, sizeof(nul), NULL, &owner, &output) == XR_OS_IO_BAD_ARGUMENT);
     CHECK(xr_os_io_file_metadata(&policy, "\xc0\x80", 2, NULL, &owner, &output) == XR_OS_IO_BAD_ARGUMENT);
     CHECK(xr_os_io_file_metadata(&policy, "x", (size_t)INT_MAX + 1, NULL, &owner, &output) == XR_OS_IO_OVERFLOW);
-    CHECK(!memcmp(&output, &sentinel, sizeof(output)) && !memory.attempts && !memory.live && !kernel_handles);
+    CHECK(!memcmp(&output, &sentinel, sizeof(output)) && !metadata_memory.attempts && !metadata_memory.live && !kernel_handles);
+    static char large_span[131072];
+    memset(large_span, 'p', sizeof(large_span));
+    size_t attributes = kernel_attributes, opened = kernel_opens;
+    reset_memory(); metadata_memory.cancel_poll = 3;
+    CHECK(xr_os_io_file_metadata(&policy, large_span, sizeof(large_span), test_current, &owner, &output) ==
+        XR_OS_IO_CANCELLED && !memcmp(&output, &sentinel, sizeof(output)) && !metadata_memory.attempts &&
+        !owner.handle && !kernel_handles && kernel_attributes == attributes && kernel_opens == opened);
+    reset_memory(); metadata_memory.cancel_copy = true;
+    CHECK(xr_os_io_file_metadata(&policy, large_span, sizeof(large_span), test_current, &owner, &output) ==
+        XR_OS_IO_CANCELLED && !memcmp(&output, &sentinel, sizeof(output)) && metadata_memory.attempts == 1 &&
+        metadata_memory.copy_polls == 2 && !metadata_memory.live && !metadata_memory.held && !owner.handle &&
+        !kernel_handles && kernel_attributes == attributes && kernel_opens == opened);
+    reset_memory(); large_span[sizeof(large_span) - 1] = (char)0xff;
+    CHECK(xr_os_io_file_metadata(&policy, large_span, sizeof(large_span), test_current, &owner, &output) ==
+        XR_OS_IO_BAD_ARGUMENT && !memcmp(&output, &sentinel, sizeof(output)) && !metadata_memory.attempts &&
+        !owner.handle && kernel_attributes == attributes && kernel_opens == opened);
+    reset_memory();
     CHECK(xr_os_io_file_metadata(&policy, "", 0, NULL, &owner, &output) == XR_OS_IO_OK && !output.present);
     wchar_t missing_wide[32768]; char missing[65536];
     CHECK(wide_join(missing_wide, paths.root, L"missing-entry"));
     CHECK(xr_win_utf16_to_utf8(missing_wide, wcslen(missing_wide), missing, sizeof(missing)));
     CHECK(xr_os_io_file_metadata(&policy, missing, strlen(missing), NULL, &owner, &output) ==
         XR_OS_IO_OK && !output.present);
-    CHECK(!memory.live && !memory.held && !kernel_handles);
+    CHECK(!metadata_memory.live && !metadata_memory.held && !kernel_handles);
     printf("metadata: %zu observed allocation failures, limit, cancel, protocol and retained-close cleanup\n", sites);
     return 1;
 }
@@ -283,7 +313,7 @@ int main(void) {
     reset_memory();
     int passed = setup_paths() && verify_fields() && verify_failures();
     cleanup_paths();
-    if (memory.live || memory.held || kernel_handles) return 1;
+    if (metadata_memory.live || metadata_memory.held || kernel_handles) return 1;
     return passed ? 0 : 1;
 }
 #else
@@ -309,7 +339,7 @@ int main(void) {
         output.uid.present && output.uid.value == (int64_t)reference.st_uid &&
         output.gid.present && output.gid.value == (int64_t)reference.st_gid && output.mode == 0600 &&
         output.mtime == reference.st_mtime && output.atime == reference.st_atime && output.ctime == reference.st_ctime &&
-        output.is_file && !output.is_dir && output.is_symlink && !owner.handle && !memory.live && !memory.held;
+        output.is_file && !output.is_dir && output.is_symlink && !owner.handle && !metadata_memory.live && !metadata_memory.held;
     if (unlink(link) || unlink(file) || rmdir(root)) passed = 0;
     return passed ? 0 : 1;
 }
