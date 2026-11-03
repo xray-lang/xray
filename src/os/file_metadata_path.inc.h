@@ -22,7 +22,7 @@ static XrOsIoStatus metadata_path_owned(const XrOsIoPolicy *policy,
         return XR_OS_IO_BAD_ARGUMENT;
     XrIoContext io = {policy, XR_OS_IO_OK};
     char *owned = io_alloc(&io, length + 1);
-    if (!owned) return io.status;
+    if (!owned) return io.status == XR_OS_IO_OK ? XR_OS_IO_BAD_ARGUMENT : io.status;
     memcpy(owned, path, length);
     owned[length] = 0;
     if (current && !current(policy->context)) {

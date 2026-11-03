@@ -197,21 +197,21 @@ static int verify_failures(void) {
     XrOsIoPolicy policy = test_policy();
     XrOsFileMetadataOwner owner = {0};
     XrOsFileMetadata output, sentinel;
-    memset(&sentinel, 0x5a, sizeof(sentinel)); output = sentinel;
+    memset(&sentinel, 0x5a, sizeof(sentinel)); memcpy(&output, &sentinel, sizeof(output));
     reset_memory();
     CHECK(xr_os_io_file_metadata(&policy, paths.utf8, strlen(paths.utf8), test_current, &owner, &output) == XR_OS_IO_OK);
     size_t sites = memory.attempts;
     CHECK(sites && !memory.live && !kernel_handles);
     for (size_t point = 0; point < sites; ++point) {
-        reset_memory(); memory.fail_at = point; output = sentinel;
+        reset_memory(); memory.fail_at = point; memcpy(&output, &sentinel, sizeof(output));
         CHECK(xr_os_io_file_metadata(&policy, paths.utf8, strlen(paths.utf8), test_current, &owner, &output) ==
             XR_OS_IO_OUT_OF_MEMORY && !memcmp(&output, &sentinel, sizeof(output)) &&
             !memory.live && !memory.held && !kernel_handles && !owner.handle);
     }
-    reset_memory(); memory.fail_at = 0; memory.failure = XR_OS_IO_MEMORY_LIMIT; output = sentinel;
+    reset_memory(); memory.fail_at = 0; memory.failure = XR_OS_IO_MEMORY_LIMIT; memcpy(&output, &sentinel, sizeof(output));
     CHECK(xr_os_io_file_metadata(&policy, paths.utf8, strlen(paths.utf8), NULL, &owner, &output) ==
         XR_OS_IO_MEMORY_LIMIT && !memcmp(&output, &sentinel, sizeof(output)) && !memory.live);
-    reset_memory(); memory.cancelled = true; output = sentinel;
+    reset_memory(); memory.cancelled = true; memcpy(&output, &sentinel, sizeof(output));
     CHECK(xr_os_io_file_metadata(&policy, paths.utf8, strlen(paths.utf8), test_current, &owner, &output) ==
         XR_OS_IO_CANCELLED && !memcmp(&output, &sentinel, sizeof(output)) && !memory.attempts);
     reset_memory(); memory.cancel_at = 0;
