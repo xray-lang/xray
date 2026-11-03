@@ -19,7 +19,7 @@
 #include <string.h>
 
 static inline bool xir_os_native_id(uint32_t id) {
-    return id==XR_NATIVE_CALLABLE_OS_PLATFORM || id==XR_NATIVE_CALLABLE_OS_ARCH || id==XR_NATIVE_CALLABLE_OS_GETENV || id==XR_NATIVE_CALLABLE_OS_SETENV || id==XR_NATIVE_CALLABLE_OS_UNSETENV || id==XR_NATIVE_CALLABLE_OS_ENVIRON_BLOCK || id==XR_NATIVE_CALLABLE_OS_EXIT || id==XR_NATIVE_CALLABLE_OS_GETPID || id==XR_NATIVE_CALLABLE_OS_GETCWD || id==XR_NATIVE_CALLABLE_OS_HOSTNAME || id==XR_NATIVE_CALLABLE_OS_SYSTEM_USERNAME || id==XR_NATIVE_CALLABLE_OS_SYSTEM_HOMEDIR;
+    return id==XR_NATIVE_CALLABLE_OS_PLATFORM || id==XR_NATIVE_CALLABLE_OS_ARCH || id==XR_NATIVE_CALLABLE_OS_GETENV || id==XR_NATIVE_CALLABLE_OS_SETENV || id==XR_NATIVE_CALLABLE_OS_UNSETENV || id==XR_NATIVE_CALLABLE_OS_ENVIRON_BLOCK || id==XR_NATIVE_CALLABLE_OS_EXIT || id==XR_NATIVE_CALLABLE_OS_GETPID || id==XR_NATIVE_CALLABLE_OS_GETCWD || id==XR_NATIVE_CALLABLE_OS_HOSTNAME || id==XR_NATIVE_CALLABLE_OS_SYSTEM_USERNAME || id==XR_NATIVE_CALLABLE_OS_SYSTEM_HOMEDIR || id==XR_NATIVE_CALLABLE_OS_CPU_COUNT;
 }
 static inline bool xir_os_native_signature(uint32_t id,const XrXirTypes *types,const XrXirType *parameters,
     uint32_t count,XrXirType result,XrXirType error) {
@@ -28,6 +28,13 @@ static inline bool xir_os_native_signature(uint32_t id,const XrXirTypes *types,c
         strcmp(native->namespace_id,"os") || !native->source_path ||
         strcmp(native->source_path,"stdlib/defs/core.def") || !native->member) return false;
     const XrNativeMemberDeclaration *member=native->member;
+    if(id==XR_NATIVE_CALLABLE_OS_CPU_COUNT)return member->name && !strcmp(member->name,"__cpuCount") &&
+        member->signature && !strcmp(member->signature,"(): i64") && member->result_text && !strcmp(member->result_text,"i64") &&
+        !member->is_public && !member->is_method && !member->is_static && !member->lowered &&
+        member->receiver==XR_NATIVE_RECEIVER_READ && member->operation==XR_NATIVE_OPERATION_NONE &&
+        member->allocation==XR_NATIVE_ALLOCATION_UNKNOWN && member->failures && !*member->failures &&
+        member->ownership==XR_NATIVE_RESULT_OWNERSHIP_OWNED && !member->parameters && !member->parameter_count &&
+        member->result==XR_NATIVE_TERM_I64 && !parameters && !count && result==XR_XIR_I64 && error==XR_XIR_NEVER;
     bool pid=id==XR_NATIVE_CALLABLE_OS_GETPID;
     bool username=id==XR_NATIVE_CALLABLE_OS_SYSTEM_USERNAME,homedir=id==XR_NATIVE_CALLABLE_OS_SYSTEM_HOMEDIR;
     bool environment=id==XR_NATIVE_CALLABLE_OS_GETENV,remove=id==XR_NATIVE_CALLABLE_OS_UNSETENV;
