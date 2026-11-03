@@ -136,6 +136,16 @@ class TierTests(unittest.TestCase):
                 self.assertIn("source_sdk_owned_installed", plan["tests"])
                 self.assertNotIn("native-runtime", plan["groups"])
 
+    def test_array_materialization_changes_select_both_existing_carriers(self):
+        for path in ("array_materialization_fixture.h", "array_materialization_runtime.h",
+                     "test_xir_array_materialization.c", "test_xir_array_materialization_native.c",
+                     "array_materialization.cmake"):
+            with self.subTest(path=path):
+                plan = xray_l1.tier_plan(ROOT, "L2", changed=["tests/unit/xir/" + path])
+                self.assertIn("frontend", plan["groups"])
+                self.assertTrue({"xir_array_materialization", "xir_array_materialization_native"} <= set(plan["tests"]))
+                self.assertTrue({"test_xir_array_materialization", "test_xir_array_materialization_native"} <= set(plan["targets"]))
+
     def test_host_os_changes_select_paired_source_and_native_consumers(self):
         for path in ("stdlib/sys/sys.xr", "src/os/win/fs_mutation_win.c", "src/os/unix/fs_mutation_unix.c",
                      "src/os/os_system.h", "src/os/win/system_win.c", "src/os/unix/system_unix.c",
