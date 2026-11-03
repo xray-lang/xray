@@ -734,6 +734,8 @@
         "src/app/mcp/xmcp_knowledge_generated.c",
         "scripts/gen_api_inventory.py",
         "scripts/gen_mcp_knowledge.py",
+        "scripts/gen_language_docs.py",
+        "stdlib/compress/compress.xr",
         "tests/mcp/test_knowledge_generation.py",
         "spec/source/cards/*",
         "spec/source/sections/*",

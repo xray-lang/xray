@@ -113,6 +113,7 @@ class TierTests(unittest.TestCase):
 
     def test_generated_api_knowledge_selects_its_existing_sync_gates(self):
         for path in ("src/app/mcp/xmcp_knowledge_generated.c", "stdlib/types/array.xr",
+                     "stdlib/compress/compress.xr", "scripts/gen_language_docs.py",
                      "scripts/gen_api_inventory.py", "spec/source/cards/stdlib/compress.json"):
             with self.subTest(path=path):
                 plan = xray_l1.tier_plan(ROOT, "L2", changed=[path])
