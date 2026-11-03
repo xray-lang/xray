@@ -62,11 +62,16 @@ XR_FUNC XrOsIoStatus xr_os_io_sync_directory(const XrOsIoPolicy *policy, const c
 XR_FUNC XrOsIoStatus xr_os_io_touch(const XrOsIoPolicy *policy, const char *path);
 XR_FUNC XrOsIoStatus xr_os_io_realpath(const XrOsIoPolicy *policy, const char *path, char *out, size_t out_size);
 XR_FUNC XrOsIoStatus xr_os_io_getcwd(const XrOsIoPolicy *policy, char *out, size_t out_size);
-XR_FUNC XrOsIoStatus xr_os_io_chdir(const XrOsIoPolicy *policy, const char *path);
+/* Optional current borrows policy.context synchronously at entry and directly
+ * before the OS mutation. NULL selects ordinary uncontrolled OS use. Temporary
+ * storage is freed unconditionally, including after current refuses. */
+XR_FUNC XrOsIoStatus xr_os_io_chdir(const XrOsIoPolicy *policy, const char *path,
+    bool (*current)(void *context));
 /* Mode must fit a nonnegative C int, preserving the stdlib conversion range.
  * Windows changes only the CRT read/write file attributes, never ACLs or file
  * ownership. Unsupported permission bits retain the platform's own meaning. */
-XR_FUNC XrOsIoStatus xr_os_io_chmod(const XrOsIoPolicy *policy, const char *path, int64_t mode);
+XR_FUNC XrOsIoStatus xr_os_io_chmod(const XrOsIoPolicy *policy, const char *path, int64_t mode,
+    bool (*current)(void *context));
 #ifdef __cplusplus
 }
 #endif
