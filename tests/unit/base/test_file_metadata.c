@@ -102,14 +102,18 @@ typedef struct MetadataPaths {
 } MetadataPaths;
 static MetadataPaths paths;
 static int wide_join(wchar_t *output, const wchar_t *root, const wchar_t *tail) {
-    int count = swprintf(output, 32768, L"%ls\\%ls", root, tail);
+    size_t length = wcslen(root);
+    const wchar_t *separator = length && (root[length - 1] == L'\\' || root[length - 1] == L'/') ? L"" : L"\\";
+    int count = swprintf(output, 32768, L"%ls%ls%ls", root, separator, tail);
     return count > 0 && count < 32768;
 }
 static int directory_operation(const wchar_t *path, bool create) {
     wchar_t locator[32768];
     int count = swprintf(locator, 32768, L"\\\\?\\%ls", path);
     if (count <= 0 || count >= 32768) return 0;
-    return create ? CreateDirectoryW(locator, NULL) != 0 : RemoveDirectoryW(locator) != 0;
+    bool changed = create ? CreateDirectoryW(locator, NULL) != 0 : RemoveDirectoryW(locator) != 0;
+    if (!changed) fwprintf(stderr, L"metadata directory error %lu: %ls\n", (unsigned long)GetLastError(), locator);
+    return changed;
 }
 static int write_marker(const wchar_t *path, const uint8_t *bytes, DWORD length) {
     HANDLE handle = CreateFileW(path, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
