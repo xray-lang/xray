@@ -134,6 +134,8 @@ static XrXirArtifact *program_method_lowered(const XrXirCompileContext *context,
     uint32_t method_kind) {
     ClassOwnedFixture fixture;
     class_owned_fixture(&fixture);
+    /* These actual bodies have no business-error source, including identity. */
+    for(uint32_t f=0;f<fixture.module.function_count;++f)fixture.functions[f].error_type=XR_XIR_NEVER;
     fixture.identities[2].method_kind = method_kind;
     const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *closed = NULL, *lowered = NULL;
