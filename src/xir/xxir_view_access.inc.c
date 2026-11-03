@@ -9,6 +9,8 @@
 #include "xxir_view_access_graph.inc.c"
 #include "xxir_view_access_entry.inc.c"
 #include "xxir_view_access_epoch.inc.c"
+static XrXirStatus view_access_class_fresh_input(ViewAccess *,const XrXirViewRootEvent *,
+    const XrXirViewRootEvent *,bool *);
 #include "xxir_view_access_relation.inc.c"
 #include "xxir_view_types_internal.h"
 static XrXirStatus view_access_buffer_alias(ViewAccess *a,uint32_t *value) {
@@ -429,6 +431,7 @@ static XrXirStatus view_access_plain_storage(ViewAccess *a,XrXirType type,bool *
 static bool view_access_scalar_storage(XrXirType type) {
     return type==XR_XIR_BOOL || type==XR_XIR_RUNE || xr_xir_type_is_number(type);
 }
+#include "xxir_view_access_class_candidate.inc.c"
 static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEvent *event) {
     const XrXirInstruction *op=a->body->instructions+event->instruction;
     const XrXirTypes *types=a->resolver->check.module->types;const uint8_t *flags=a->resolver->check.flags;
@@ -475,6 +478,17 @@ static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEve
         return view_access_use(a,&event->before,source,op->op==XR_XIR_VIEW_SET,true,NULL);
     }
     bool call=op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE || op->op==XR_XIR_INVOKE_INDIRECT;
+    if(op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT) {
+        uint32_t producer=UINT32_MAX;
+        XrXirStatus status=view_root_method_producer(&a->resolver->check,a->function,
+            (uint32_t)op->immediate,&producer,a->cells?a->cells->control:NULL);
+        if(status!=XR_XIR_OK)return status;
+        if(producer!=UINT32_MAX) {
+            uint32_t receiver=a->body->instructions[producer].args[0];
+            status=view_access_use(a,&event->before,receiver,true,false,NULL);
+            if(status!=XR_XIR_OK)return status;
+        }
+    }
     if(call) {
         uint32_t cell=0;bool scoped=false;XrXirStatus status=view_access_buffer_scope(a,&cell,&scoped);
         if(status!=XR_XIR_OK)return status;

@@ -87,14 +87,19 @@ static bool view_root_tracked(const ViewRootCheck *c,XrXirType type) {
     return xr_xir_type_is_cell(c->module->types,type) || xr_xir_type_is_class(c->module->types,type) ||
         view_flags_at(c->module->types,c->flags,type)!=0;
 }
-static XrXirStatus view_root_edges(ViewRootCheck *c,bool fill) {
+#include "xxir_view_root_method.inc.c"
+static XrXirStatus view_root_edges(ViewRootCheck *c,bool fill,XrCompileRequestControl *control) {
     uint32_t count=0;
     for (uint32_t f=0;f<c->module->function_count;++f) {
         const XrXirFunction *body=&c->module->functions[f];
         for (uint32_t i=0;i<body->instruction_count;++i) {
 
             const XrXirInstruction *op=&body->instructions[i];uint32_t target,prefix;
-            XrXirStatus status=view_root_target(c,f,op,&target,&prefix);if (status!=XR_XIR_OK) return status;
+            bool method=false;
+            XrXirStatus status=view_root_method_edges(c,f,i,fill,&count,&method,control);
+            if(status!=XR_XIR_OK)return status;
+            if(method)continue;
+            status=view_root_target(c,f,op,&target,&prefix);if (status!=XR_XIR_OK) return status;
             if (target==UINT32_MAX) continue;
             if (target>=c->module->function_count || prefix>c->module->functions[target].parameter_count ||
                 op->args[1]>c->module->functions[target].parameter_count-prefix) return XR_XIR_BAD_STRUCTURE;
@@ -136,7 +141,7 @@ static XrXirStatus view_root_graph(ViewRootCheck *c,XrCompileRequestControl *con
     c->offsets[functions]=offset;
     for (uint32_t p=0;p<offset;++p) {c->heads[p]=UINT32_MAX;}
     status=view_origin_candidates(c->context,c->module,c->construction,c->flags,c->captures,c->candidates,control);
-    if (status==XR_XIR_OK) status=view_root_edges(c,false);
+    if (status==XR_XIR_OK) status=view_root_edges(c,false,control);
     uint64_t edge_bytes=(uint64_t)c->edge_count*sizeof(*c->edges);
     if (status!=XR_XIR_OK) return status;
     if (edge_bytes>SIZE_MAX || edge_bytes>c->context->limits.frame_bytes-c->reserved) return XR_XIR_BUDGET;
@@ -144,7 +149,7 @@ static XrXirStatus view_root_graph(ViewRootCheck *c,XrCompileRequestControl *con
         c->edges=xir_compile_alloc(c->context,(size_t)edge_bytes,&status);if (!c->edges) return status;
         c->reserved+=edge_bytes;
     }
-    return view_root_edges(c,true);
+    return view_root_edges(c,true,control);
 }
 static XrXirStatus view_root_push(ViewRootQuery *q,uint32_t f,uint32_t value,uint32_t path,uint32_t selection) {
     ViewRootCheck *c=q->check;const XrXirFunction *body=&c->module->functions[f];uint32_t site=0,context=0,ignored=0;
