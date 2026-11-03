@@ -7,6 +7,7 @@
  * test_xir_signal_source.c - Cold Source bindings and real isolated VM delivery
  */
 #include "root_signal_runtime.h"
+#include "xir/xxir_effects.c"
 #include "xir/xxir_effects.h"
 #include "xir/xxir_ctfe.h"
 static uint32_t root_signal_named(const XrXirModule *module,const char *name) {
@@ -26,6 +27,38 @@ static XrXirStatus root_signal_check(const XrXirCompileContext *context,const ch
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&text,source,diagnostic,NULL);
     xr_compile_session_free(session);return status;
 }
+static void root_signal_canonical_owner(const XrXirCompileContext *context,const XrXirArtifact *code,XrXirEffects *effects) {
+    const XrXirModule *source=xr_xir_compile_artifact_module(code);
+    const EffectContextOwner *context_owner=effect_contexts_read(effects);
+    CHECK(context_owner && context_owner->ordinary);
+    EffectOrdinaryContexts *ordinary=context_owner->ordinary;
+    const XrXirCompileContext *saved=ordinary->terms.remaining;ordinary->terms.remaining=context;
+    EffectOrdinaryView view={0};CHECK(effect_ordinary_view(ordinary,source,&view)==XR_XIR_OK);
+    /* A real complete copy has no borrowed backbone or optional sharing prior. */
+    view.input.initial=NULL;view.input.basis=NULL;view.input.record_source=NULL;
+    EffectBodyMaterial *full=NULL;
+    CHECK(effect_body_material_generation_input(context,&view.module,NULL,&view.input,ordinary->input_facts,&full)==XR_XIR_OK);
+    ordinary->terms.remaining=saved;
+    CHECK(full && !full->backbone && full->canonical_source && effect_body_material_shape(full));
+    uint32_t selected=UINT32_MAX;
+    for(uint32_t f=0;f<effect_body_count(full);++f)
+        if(full->declarations->functions[f].native_callable==XR_NATIVE_CALLABLE_SYS_ON_SIGNAL){selected=f;break;}
+    CHECK(selected!=UINT32_MAX);bool native=false;
+    CHECK(effect_invocation_native_root(full,selected,&native)==XR_XIR_OK && native);
+    EffectBodyMaterial invalid=*full;invalid.canonical_source=NULL;native=true;
+    CHECK(effect_invocation_native_root(&invalid,selected,&native)==XR_XIR_BAD_STRUCTURE && !native);
+    EffectBodyOrdinaryIdentity identities[256];CHECK(effect_body_count(full)<256);
+    memcpy(identities,full->ordinary_identities,effect_body_count(full)*sizeof(*identities));
+    invalid=*full;invalid.ordinary_identities=identities;
+    identities[selected].declaration=source->declarations->entry_function;native=true;
+    CHECK(effect_invocation_native_root(&invalid,selected,&native)==XR_XIR_BAD_STRUCTURE && !native);
+    EffectBodyMaterial changed=*full->canonical_source;EffectBodyFunction heads[256];
+    CHECK(effect_body_count(&changed)<256);memcpy(heads,changed.functions,effect_body_count(&changed)*sizeof(*heads));
+    changed.functions=heads;heads[full->ordinary_identities[selected].declaration].parameter_count=1;
+    invalid=*full;invalid.canonical_source=&changed;native=true;
+    CHECK(effect_invocation_native_root(&invalid,selected,&native)==XR_XIR_BAD_TYPE && !native);
+    effect_body_material_free(full);
+}
 static void root_signal_contracts(const XrXirCompileContext *context,const XrXirArtifact *code,const uint32_t ids[6]) {
     const XrXirModule *module=xr_xir_compile_artifact_module(code);uint32_t native=ids[4];
     CHECK(xir_native_callable_verify(module,native)==XR_XIR_OK);
@@ -40,7 +73,8 @@ static void root_signal_contracts(const XrXirCompileContext *context,const XrXir
     uint32_t count=0;const XrXirRootCauseStep *steps=xr_xir_root_cause_trace_steps(trace,false,&count);
     CHECK(steps && count && steps[count-1].function==native && steps[count-1].cause==XR_XIR_ROOT_CAUSE_NATIVE &&
         steps[count-1].instruction==UINT32_MAX && !steps[count-1].distance);
-    xr_xir_compile_root_cause_trace_free(trace);xr_xir_compile_effects_free(effects);
+    xr_xir_compile_root_cause_trace_free(trace);
+    root_signal_canonical_owner(context,code,effects);xr_xir_compile_effects_free(effects);
     XrXirCtfeCallRequest request={.evaluation={.artifact=code,.function=root_signal_named(module,"ctfeRegister"),
         .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES}},
