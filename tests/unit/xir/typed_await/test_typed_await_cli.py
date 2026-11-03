@@ -55,10 +55,8 @@ def main():
             assert code == 0 and actual == wanted and not errors, ('CRLF', verb, code, actual, errors)
         print(f'complete CRLF Source {len(crlf)} bytes, unchanged raw stdout PASS')
         cases = [
-            ('never-bound', 'fn wait(t:Task<i64>) throws(Never)->i64{return try await t}', b'E0331'),
-            ('one-bound', 'enum A{Bad}\nfn wait(t:Task<i64,A>) throws(A)->i64{return try await t}', b'E0331'),
-            ('union-bound', 'enum A{Bad}\nenum B{Bad}\nfn wait(t:Task<i64,A|B>) throws(A|B)->i64{return try await t}', b'E0331'),
-            ('fake-identity', 'enum Cancelled{Cancelled}\nfn wait(t:Task<i64>) throws(Cancelled)->i64{return try await t}', b'E0331'),
+            ('never-bound', 'fn wait(t:Task<i64>) throws(Never)->i64{return try await t}', b'E0336'),
+            ('fake-identity', 'enum Cancelled{Cancelled}\nfn wait(t:Task<i64>) throws(Cancelled)->i64{return try await t}', b'E0336'),
             ('readonly', 'fn value()->i64{return 7}\nconst task=go value()\ntask.cancel()', b'mutable stored binding'),
             ('argument', 'fn value()->i64{return 7}\nvar task=go value()\ntask.cancel(1)', b'zero-argument recipe'),
             ('poll-argument', 'fn value()->i64{return 7}\nvar task=go value()\ntask.poll(1)', b'zero-argument recipe'),

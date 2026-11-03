@@ -6,6 +6,31 @@
  *
  * xxir_emit_cleanup.inc.c - Native static cleanup dispatch and continuations
  */
+#include "xxir_scope_cancel_shape.h"
+static void emit_scope_cancel_route(CBuffer *buffer,const XrXirFunction *function,
+    const XrXirFunctionLayout *layout) {
+    append(buffer,"            if(xr_xir_call_scope_cancel_frontier(view)==state->frontier) {\n"
+        "                switch(state->frontier) {\n");
+    for(uint32_t i=0;i<function->instruction_count&&buffer->status==XR_XIR_OK;++i) {
+        if(function->instructions[i].op!=XR_XIR_CLEANUP_REGISTER)continue;
+        uint32_t join=xr_xir_scope_cancel_join(function,i+1);
+        if(join==UINT32_MAX)continue;
+        const XrXirInstruction *op=function->instructions+join;
+        uint32_t error=function->blocks[op->targets[1]].first;
+        uint32_t panic_destination=0,panic_pc=0;
+        bool protected_call=emit_protection(buffer,function,layout,join,&panic_destination,&panic_pc);
+        append(buffer,"                case %uu:\n"
+            "                    state->exit_target=state->cleanup_parent;state->leaving=false;\n"
+            "                    state->waiting=true;state->invoking=true;state->discard=false;\n"
+            "                    state->error_pc=%uu;state->error_destination=%uu;\n"
+            "                    state->panic_pc=%uu;state->panic_destination=%uu;\n",
+            i+1,error+1,layout->offsets[function->parameter_count+error],panic_pc,panic_destination);
+        if(protected_call)append(buffer,"                    state->panic_frontier=%uu;\n",
+            function->blocks[function->blocks[emit_block(buffer,function,join)].panic].frontier);
+        append(buffer,"                    break;\n");
+    }
+    append(buffer,"                default:goto invalid;\n                }\n            }\n");
+}
 static void emit_cleanup_step(CBuffer *buffer, const XrXirFunction *function,
     const XrXirFunctionLayout *layout, uint32_t index) {
     const XrXirInstruction *op = &function->instructions[index];
@@ -13,7 +38,8 @@ static void emit_cleanup_step(CBuffer *buffer, const XrXirFunction *function,
         emit_edge(buffer, function, layout, index, op->targets[0], true);
         append(buffer, "        if (xr_xir_call_cleanup_frontier(view, %uu) != XR_XIR_CALL_READY) goto invalid;\n"
             "        state->frontier = %uu;\n", index + 1, index + 1);
-    } else if (function->blocks[emit_block(buffer, function, index)].frontier == (uint32_t)op->immediate) {
+    } else if (op->op!=XR_XIR_CLEANUP_ERROR &&
+        function->blocks[emit_block(buffer, function, index)].frontier == (uint32_t)op->immediate) {
         emit_edge(buffer, function, layout, index, op->targets[0], true);
     } else {
         append(buffer, "        state->exit_target = %uu; state->leave_instruction = %uu; state->leaving = true;\n",
@@ -39,7 +65,9 @@ static void emit_cleanup_entry(CBuffer *buffer, const XrXirFunction *function,
     }
     append(buffer, "    if (view->phase == XR_XIR_CALL_EXIT) {\n"
         "        if (state->cleanup_waiting) {\n"
-        "            if (view->inbox.status != XR_XIR_CALL_RETURNED && !xr_xir_call_panic_status(view->inbox.status)) goto invalid;\n"
+        "            if (view->inbox.status != XR_XIR_CALL_RETURNED && !xr_xir_call_panic_status(view->inbox.status)) goto invalid;\n");
+    emit_scope_cancel_route(buffer,function,layout);
+    append(buffer,
         "            if (xr_xir_call_cleanup_frontier(view, state->cleanup_parent) != XR_XIR_CALL_READY) goto invalid;\n"
         "            state->frontier = state->cleanup_parent; state->cleanup_waiting = false;\n        }\n"
         "        if (state->frontier == (view->scope_exit ? state->exit_target : 0u))\n"

@@ -292,6 +292,8 @@ static bool source_plan_complete(SourceContext *ctx, SourceExpressionPlan *plan,
     }
     SourceExpressionPlan *parent=ctx->active_expression;
     SourceFunction *body=&ctx->bodies[plan->owner];
+    SourceTryRegion *region=node->type==AST_TRY_EXPR ? source_try_region_begin(ctx,node) : NULL;
+    if (node->type==AST_TRY_EXPR && !region) return false;
     plan->entry=body->block_count ? body->current_block : (SourceBlockReference){ctx->function,0};
     plan->state=SOURCE_TERM_CHECKING;ctx->active_expression=plan;++ctx->depth;
     bool result=node->type==AST_SPREAD_EXPR && plan->call_projection ? source_call_projection_complete(ctx,plan,&plan->value) :
@@ -299,6 +301,7 @@ static bool source_plan_complete(SourceContext *ctx, SourceExpressionPlan *plan,
         (plan->integer.present ? source_integer(ctx,node,&plan->integer,context,&plan->value) : plan->decimal.node ?
         source_decimal(ctx,&plan->decimal,context,&plan->value) : expression_body(ctx,node,context,&plan->value));
     --ctx->depth;ctx->active_expression=parent;
+    if (region) body->active_try=region->parent;
     if (result && plan->conversion_ready) {
         checked_conversion=plan->conversion;
         if (context.present && context.type!=checked_conversion.target)

@@ -77,6 +77,17 @@ static bool source_local_marked(SourceContext *ctx) {
             plan->syntax->as.try_expr.mode==XR_TRY_OPTIONAL)) return true;
     return false;
 }
+static SourceTryRegion *source_try_region_begin(SourceContext *ctx,AstNode *node) {
+    SourceFunction *body=&ctx->bodies[ctx->function];
+    SourceTryRegion *region=source_alloc(ctx,1,sizeof(*region));
+    if (!region) return NULL;
+    *region=(SourceTryRegion){body->active_try,body->try_regions,node,false};
+    body->active_try=body->try_regions=region;return region;
+}
+static void source_try_region_error(SourceTryRegion *region,XrXirType error) {
+    if (error==XR_XIR_NEVER || error==XR_XIR_UNIT) return;
+    for (;region;region=region->parent) region->throwing=true;
+}
 static bool source_local_escape_until(SourceContext *ctx,AstNode *node,XrXirType error,
     SourceLocalHandler *handlers,SourceLocalHandler *stop,bool asserted,XrXirType *output) {
     if (error==XR_XIR_UNIT) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"call has no declared error type");
@@ -106,6 +117,7 @@ static bool source_local_escape(SourceContext *ctx,AstNode *node,XrXirType error
 }
 static bool source_local_accept(SourceContext *ctx, AstNode *node, XrXirType error,
     bool marked, SourceLocalHandler *handlers, bool asserted) {
+    source_try_region_error(ctx->bodies[ctx->function].active_try,error);
     if (error!=XR_XIR_NEVER && error!=XR_XIR_UNIT && !marked)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"E0330: throwing call requires try or a try body");
     for(SourceTaskScope *scope=ctx->task_scope;scope;scope=scope->parent) if(scope->function==ctx->function) {
@@ -147,21 +159,33 @@ static bool source_local_error(SourceContext *ctx, AstNode *node, XrXirType erro
         ctx->bodies[ctx->function].local_handler,
         ctx->bodies[ctx->function].error_context && ctx->bodies[ctx->function].error_context->asserted);
 }
-static bool source_local_substitute_error(SourceContext *ctx,uint32_t target,
-    uint32_t first,uint32_t count,XrXirType bound,XrXirType *output) {
-    if (target>=ctx->function_count) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"call declaration is missing");
+static bool source_local_error_arguments(SourceContext *ctx,uint32_t first,uint32_t count,
+    const XrXirType **output) {
     const XrXirGeneric *caller=&ctx->generics[ctx->function];
-    if (count!=ctx->generics[target].parameter_count || first>caller->argument_count ||
+    if (first>caller->argument_count ||
         count>caller->argument_count-first || (count && !caller->arguments) || (!count && first))
         return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"call error substitution is invalid");
-    SourceSubstitution substitution={count?caller->arguments+first:NULL,count};
+    *output=count?caller->arguments+first:NULL;return true;
+}
+static bool source_local_substitute_error(SourceContext *ctx,uint32_t target,
+    const XrXirType *arguments,uint32_t count,XrXirType bound,XrXirType *output) {
+    if (target>=ctx->function_count) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"call declaration is missing");
+    if(count!=ctx->generics[target].parameter_count || (!!count!=!!arguments))
+        return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"call error substitution is invalid");
+    SourceSubstitution substitution={arguments,count};
     if (bound==XR_XIR_UNIT) return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"call has no declared error type");
     return source_substitute(ctx,&substitution,bound,0,output);
 }
 static bool source_local_declared_error(SourceContext *ctx,uint32_t target,
-    uint32_t first,uint32_t count,XrXirType *output) {
+    const XrXirType *arguments,uint32_t count,XrXirType *output) {
     if (target>=ctx->function_count) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"call declaration is missing");
-    return source_local_substitute_error(ctx,target,first,count,ctx->functions[target].error_type,output);
+    return source_local_substitute_error(ctx,target,arguments,count,ctx->functions[target].error_type,output);
+}
+static bool source_local_call_error(SourceContext *ctx,uint32_t target,
+    uint32_t first,uint32_t count,XrXirType *output) {
+    const XrXirType *arguments=NULL;
+    return source_local_error_arguments(ctx,first,count,&arguments) &&
+        source_local_declared_error(ctx,target,arguments,count,output);
 }
 static bool source_initialization_prepare(SourceContext *ctx,uint32_t function);
 static bool source_initialization_require(SourceContext *ctx,uint32_t function);
@@ -243,14 +267,18 @@ static bool source_local_call(SourceContext *ctx,const XrXirInstruction *op) {
         if (ctx->bodies[target].infer_initializer) {
             if(ctx->task_scope&&ctx->task_scope->function==ctx->function) {
                 if(!source_initialization_require(ctx,target)||
-                    !source_local_declared_error(ctx,target,op->type_arguments[0],op->type_arguments[1],&error))return false;
+                    !source_local_call_error(ctx,target,op->type_arguments[0],op->type_arguments[1],&error))return false;
                 return source_local_error(ctx,node,error,true);
             }
             if (body->infer_errors && !body->infer_initializer) {
                 if (!source_initialization_require(ctx,target) ||
-                    !source_local_declared_error(ctx,target,op->type_arguments[0],op->type_arguments[1],&error)) return false;
+                    !source_local_call_error(ctx,target,op->type_arguments[0],op->type_arguments[1],&error)) return false;
                 return source_local_error(ctx,node,error,true);
             }
+            uint32_t count=op->type_arguments[1];const XrXirType *source=NULL;
+            if(!source_local_error_arguments(ctx,op->type_arguments[0],count,&source))return false;
+            XrXirType *arguments=count?source_alloc(ctx,count,sizeof(*arguments)):NULL;
+            if(count&&(!arguments||!source_copy_bytes(ctx,node,arguments,source,(size_t)count*sizeof(*arguments))))return false;
             SourcePendingError *site=source_alloc(ctx,1,sizeof(*site));
             if (!site) return false;
             bool generated=(body->infer_initializer && body->node &&
@@ -258,11 +286,11 @@ static bool source_local_call(SourceContext *ctx,const XrXirInstruction *op) {
                 (ctx->identities[ctx->function].method_kind==XR_XIR_CONSTRUCTOR &&
                  ctx->bodies[target].node && ctx->bodies[target].node->type==AST_FIELD_DECL);
             *site=(SourcePendingError){body->pending_errors,body->local_handler,node,target,
-                op->type_arguments[0],op->type_arguments[1],generated || source_local_marked(ctx),
-                body->error_context && body->error_context->asserted};
+                arguments,count,generated || source_local_marked(ctx),
+                body->error_context && body->error_context->asserted,body->active_try};
             body->pending_errors=site;return true;
         }
-        if (!source_local_declared_error(ctx,target,op->type_arguments[0],op->type_arguments[1],&error)) return false;
+        if (!source_local_call_error(ctx,target,op->type_arguments[0],op->type_arguments[1],&error)) return false;
     }
     return source_local_error(ctx,node,error,true);
 }
@@ -324,7 +352,7 @@ static bool source_initialization_require(SourceContext *ctx,uint32_t function) 
                 XrXirType dependency=ctx->bodies[target].infer_initializer &&
                     ctx->bodies[target].initializer_state!=SOURCE_INITIALIZER_READY ? ctx->bodies[target].initializer_bound :
                     ctx->functions[target].error_type,error=XR_XIR_UNIT;
-                if (!source_local_substitute_error(ctx,target,site->first_argument,site->argument_count,dependency,&error) ||
+                if (!source_local_substitute_error(ctx,target,site->arguments,site->argument_count,dependency,&error) ||
                     !source_local_escape(ctx,site->node,error,site->handler,site->asserted,&error)) goto done;
                 XrXirCallableParameter members[2]={{bound,0},{error,0}};
                 if (!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,
@@ -343,7 +371,7 @@ static bool source_initialization_require(SourceContext *ctx,uint32_t function) 
             XrXirType dependency=ctx->bodies[target].initializer_state==SOURCE_INITIALIZER_READY ? ctx->functions[target].error_type :
                 ctx->bodies[target].initializer_bound;
             if (!source_request_poll(ctx,site->node) ||
-                !source_local_substitute_error(ctx,target,site->first_argument,site->argument_count,dependency,&error)) goto done;
+                !source_local_substitute_error(ctx,target,site->arguments,site->argument_count,dependency,&error)) goto done;
             if (error!=XR_XIR_NEVER && !site->marked) {
                 source_fail(ctx,site->node,XR_XIR_BAD_TYPE,"E0330: throwing call requires try or a try body");goto done;
             }
@@ -361,6 +389,24 @@ static bool source_initialization_require(SourceContext *ctx,uint32_t function) 
 done:
     ctx->function=saved_function;ctx->module=saved_module;return ok;
 }
+static bool source_redundant_try(SourceContext *ctx,AstNode *node) {
+    if(node&&node->type==AST_TRY_CATCH) {
+        TryCatchNode *attempt=&node->as.try_catch;
+        for(int i=0;i<attempt->catch_count;++i) {
+            if(!(i&63)&&!source_request_poll(ctx,node))return false;
+            if(attempt->catch_clauses[i]->is_panic)
+                return source_fail(ctx,node,XR_XIR_BAD_TYPE,
+                    "E0336: try body has no business-error source; for a panic-only intent keep only the panic boundary and review ordinary handler logic before removal");
+        }
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,
+            "E0336: try body has no business-error source; remove or revise the ordinary catch boundary, preserving its handler logic");
+    }
+    if(node&&node->type==AST_SCOPE_BLOCK)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,
+            "E0336: try scope exposes no business errors; remove the marker and keep the scope");
+    return source_fail(ctx,node,XR_XIR_BAD_TYPE,
+        "E0336: try expression has no business-error source; remove the marker and preserve the expression");
+}
 static bool source_local_errors_finish(SourceContext *ctx) {
     uint32_t saved_function=ctx->function,saved_module=ctx->module;bool ok=false;
     for (uint32_t f=0;f<ctx->function_count;++f) {
@@ -368,13 +414,20 @@ static bool source_local_errors_finish(SourceContext *ctx) {
         if (!source_request_poll(ctx,ctx->bodies[f].node) || !source_initialization_require(ctx,f)) goto done;
     }
     for (uint32_t f=0;f<ctx->function_count;++f) {
-        if (ctx->bodies[f].infer_initializer) continue;
         ctx->function=f;ctx->module=ctx->bodies[f].module;
         for (SourcePendingError *site=ctx->bodies[f].pending_errors;site;site=site->next) {
             XrXirType error;
             if (!source_request_poll(ctx,site->node) ||
-                !source_local_declared_error(ctx,site->target,site->first_argument,site->argument_count,&error) ||
+                !source_local_declared_error(ctx,site->target,site->arguments,site->argument_count,&error)) goto done;
+            source_try_region_error(site->try_region,error);
+            if (!ctx->bodies[f].infer_initializer &&
                 !source_local_accept(ctx,site->node,error,site->marked,site->handler,site->asserted)) goto done;
+        }
+        for (SourceTryRegion *region=ctx->bodies[f].try_regions;region;region=region->next) {
+            if (!source_request_poll(ctx,region->node)) goto done;
+            if (!region->throwing) {
+                source_redundant_try(ctx,region->node);goto done;
+            }
         }
     }
     XrXirDeclarations declarations;XrXirModule module=source_module_view(ctx,&declarations);

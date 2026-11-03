@@ -1,10 +1,12 @@
 enum SuspendError { Raised }
 
+fn continuation() throws(SuspendError) -> i64 { return 41 }
+
 fn normal_after_suspend() -> i64 {
     var value = 0
     try {
         Coro.yield()
-        value = 41
+        value = continuation()
     } catch (e) {
         value = -1
     }

@@ -17,8 +17,8 @@ var first = [1, 2, 3]
 var second = [4, 5, 6]
 var left = go count(copy first)
 var right = go count(copy second)
-var leftTotal = try await left
-var rightTotal = try await right
+var leftTotal = await left
+var rightTotal = await right
 print(leftTotal + rightTotal)  // 21
 ```
 
@@ -150,7 +150,7 @@ Coroutine arguments and channel payloads must satisfy their ownership and Sendab
 ```xray
 const ch = Channel<i64>(2)
 go fn() {
-    try ch.send(42)
+    ch.send(42)
 }()
 select {
     value from ch -> {

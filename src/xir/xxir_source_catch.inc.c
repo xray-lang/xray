@@ -147,6 +147,13 @@ static bool source_dead_catch(SourceContext *ctx, XrCatchClause *clause, SourceM
     saved.recipe_storage=body->recipe_storage;
     saved.expressions=body->expressions;saved.expression_count=body->expression_count;
     if(ok)ok=source_hir_discard_to(ctx,saved.typed_projections);
+    /* Discard probe instructions while keeping the current owners of grown
+     * arrays. Deferred checks own their spans, so live argument counts rewind. */
+    saved.operands=body->operands;saved.operand_capacity=body->operand_capacity;
+    saved.debug_bindings=body->debug_bindings;saved.debug_binding_capacity=body->debug_binding_capacity;
+    generic.arguments=ctx->generics[ctx->function].arguments;
+    saved.type_capacity=body->type_capacity;
+    saved.pending_errors=body->pending_errors;saved.try_regions=body->try_regions;
     *body = saved; ctx->generics[ctx->function] = generic; ctx->returned = returned;
     ctx->facts=facts;ctx->epochs=epochs;
     return ok;
@@ -332,7 +339,10 @@ static bool source_try(SourceContext *ctx, AstNode *node) {
     if (!local) return false;
     *local=(SourceLocalHandler){body->local_handler,types,complete,(uint32_t)attempt->catch_count};
     body->local_handler=local;
+    SourceTryRegion *region=ordinary ? source_try_region_begin(ctx,node) : NULL;
+    if(ordinary&&!region)return false;
     bool ok = scoped_statement(ctx,attempt->try_body);
+    if(region)body->active_try=region->parent;
     body->local_handler=local->previous;
     body->error_context = outer;
     if (!ok) return false;

@@ -14,7 +14,7 @@ export fn caughtCode() -> i64 {
 }
 fn divide(n: i64) -> i64 { return 12 / n }
 export fn originalPanic() -> i64 {
-    try { return try! divide(0) }
+    try { return divide(0) }
     catch panic (p) { return p.code }
 }
 export fn foldedCode() -> i64 { return comptime caughtCode() }

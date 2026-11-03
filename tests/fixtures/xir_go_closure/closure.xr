@@ -3,7 +3,7 @@ const order = Atomic(0)
 fn argument(value: i64) -> i64 { order.store(order.load() * 10 + value); return value }
 fn generic<T: Sendable>(value: T) -> T {
     const callback = fn() -> T { return value }
-    return try! await go callback()
+    return await go callback()
 }
 enum WorkError { Failed { value: i64 } }
 fn typedError() -> i64 {
@@ -12,23 +12,22 @@ fn typedError() -> i64 {
     }()
     try { return try await task }
     catch (error: WorkError) { return match(error) { WorkError.Failed{value} -> value } }
-    catch (error: Cancelled) { return -2 }
 }
 export fn main() -> i64 {
-    assert((try! await go producer.worker(42)) == 42)
-    assert((try! await go fn(value: i64) -> i64 { return value + 1 }(41)) == 42)
+    assert((await go producer.worker(42)) == 42)
+    assert((await go fn(value: i64) -> i64 { return value + 1 }(41)) == 42)
     const base = 40
     const callback = fn(value: i64) -> i64 { return base + value }
     const alias = callback
-    assert((try! await go alias(2)) == 42)
+    assert((await go alias(2)) == 42)
     assert(generic(42) == 42)
     assert(typedError() == 42)
     var current = [40]
     const snapshot = current
     const task = go fn() -> i64 { return snapshot[0] + 2 }()
     current[0] = 99
-    assert((try! await task) == 42 && current[0] == 99)
+    assert((await task) == 42 && current[0] == 99)
     const ordered = go fn(a: i64, b: i64) -> i64 { return a + b }(argument(1), argument(2))
-    assert((try! await ordered) == 3 && order.load() == 12)
+    assert((await ordered) == 3 && order.load() == 12)
     return 42
 }

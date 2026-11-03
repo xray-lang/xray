@@ -547,6 +547,7 @@ static void task_core_finish_task(XrXirTaskExecutor *executor, XirTask *task) {
         (status != XR_XIR_CALL_THROWN && !xr_xir_call_panic_status(status))))
         task_core_record_shutdown(executor,&prepared);
     if (xr_xir_call_cleanup_incomplete(task->call)) executor->cleanup_incomplete = true;
+    if(status==XR_XIR_CALL_CANCELLED)task->cancel_scope=xir_task_scope_identity(xir_call_cancel_origin(task->call));
     XrXirCallStatus freed = xr_xir_call_free(task->call);
     if (freed != XR_XIR_CALL_READY) executor->cleanup_incomplete = true;
     if (executor->shutdown_status == XR_XIR_CALL_READY && freed != XR_XIR_CALL_READY) {

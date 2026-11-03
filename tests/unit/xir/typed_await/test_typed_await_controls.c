@@ -155,7 +155,7 @@ static void run_case(enum Scenario selected,size_t failure) {
 }
 static void cancelled_builtin_slot(void) {
     _Static_assert(XR_GLOBAL_VAR_CRYPTO_ERROR==37,"Existing global slots remain stable");
-    _Static_assert(XR_GLOBAL_VAR_CANCELLED==38 && XR_GLOBAL_VAR_STRING_PATTERN_ERROR==39 && XR_USER_GLOBALS_START==40,"Builtin errors precede user globals");
+    _Static_assert(XR_GLOBAL_VAR_CANCELLED==38 && XR_GLOBAL_VAR_STRING_PATTERN_ERROR==39 && XR_USER_GLOBALS_START==41,"Builtin errors precede user globals");
     const XrBuiltinEnumRow *cancelled=xr_builtin_enum_registry_row(XR_GLOBAL_VAR_CANCELLED);
     CHECK(cancelled && !strcmp(cancelled->enum_name,"Cancelled") && cancelled->member_count==1);
     CHECK(xr_builtin_enum_row_is_unit(cancelled) && !strcmp(cancelled->members[0].name,"Cancelled"));

@@ -418,20 +418,20 @@ static void typed_tasks(const char *stdlib) {
         "fn w_f32()->f32{return 1.5}\nfn w_f64()->f64{return 1.5}\n"
         "fn w_rune()->rune{return 'x'}\nfn w_i64()->i64{return -42}\n"
         "fn w_bool()->bool{return true}\nfn w_string()->string{return \"A\\0B\"}\nfn w_unit(){}\n"
-        "const t_i8=go w_i8();print(try await t_i8);print(try await t_i8)\n"
-        "const t_i16=go w_i16();print(try await t_i16);print(try await t_i16)\n"
-        "const t_i32=go w_i32();print(try await t_i32);print(try await t_i32)\n"
-        "const t_u8=go w_u8();print(try await t_u8);print(try await t_u8)\n"
-        "const t_u16=go w_u16();print(try await t_u16);print(try await t_u16)\n"
-        "const t_u32=go w_u32();print(try await t_u32);print(try await t_u32)\n"
-        "const t_u64=go w_u64();print(try await t_u64);print(try await t_u64)\n"
-        "const t_f32=go w_f32();print(try await t_f32);print(try await t_f32)\n"
-        "const t_f64=go w_f64();print(try await t_f64);print(try await t_f64)\n"
-        "const t_rune=go w_rune();print(try await t_rune);print(try await t_rune)\n"
-        "const t_i64=go w_i64();print(try await t_i64);print(try await t_i64)\n"
-        "const t_bool=go w_bool();print(try await t_bool);print(try await t_bool)\n"
-        "const t_string=go w_string();print(try await t_string);print(try await t_string)\n"
-        "const t_unit=go w_unit();try await t_unit;try await t_unit;print(\"unit\")\n";
+        "const t_i8=go w_i8();print(await t_i8);print(await t_i8)\n"
+        "const t_i16=go w_i16();print(await t_i16);print(await t_i16)\n"
+        "const t_i32=go w_i32();print(await t_i32);print(await t_i32)\n"
+        "const t_u8=go w_u8();print(await t_u8);print(await t_u8)\n"
+        "const t_u16=go w_u16();print(await t_u16);print(await t_u16)\n"
+        "const t_u32=go w_u32();print(await t_u32);print(await t_u32)\n"
+        "const t_u64=go w_u64();print(await t_u64);print(await t_u64)\n"
+        "const t_f32=go w_f32();print(await t_f32);print(await t_f32)\n"
+        "const t_f64=go w_f64();print(await t_f64);print(await t_f64)\n"
+        "const t_rune=go w_rune();print(await t_rune);print(await t_rune)\n"
+        "const t_i64=go w_i64();print(await t_i64);print(await t_i64)\n"
+        "const t_bool=go w_bool();print(await t_bool);print(await t_bool)\n"
+        "const t_string=go w_string();print(await t_string);print(await t_string)\n"
+        "const t_unit=go w_unit();await t_unit;await t_unit;print(\"unit\")\n";
     const char expected[] = "-128\n-128\n-32768\n-32768\n-2147483648\n-2147483648\n"
         "255\n255\n65535\n65535\n4294967295\n4294967295\n"
         "18446744073709551615\n18446744073709551615\n1.5\n1.5\n1.5\n1.5\n"
@@ -457,7 +457,7 @@ static XrSourceEvent poll_state(XrSourceCall *call) {
 static void timer_waits(const char *stdlib) {
     XrSourceCompileOptions compiler = compile_options(stdlib);
     char source[] = "import time\nfn worker()->i64{time.sleep(3);return 43}\n"
-        "fn main() throws(Error)->i64{return try await go worker()}\nprint(try main())\n";
+        "fn main()->i64{return await go worker()}\nprint(main())\n";
     XrSourceArtifact *program = compile(&compiler, source, __func__);
     Output out = {0}; XrSourceCallOptions options;
     CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
@@ -490,52 +490,52 @@ typedef struct TaskCase { const char *name, *source, *expected; size_t length; }
 static const TaskCase task_cases[] = {
     TASK_CASE("scalar-control",
         "fn worker()->string { Coro.yield(); return \"control\\0é\" }\n"
-        "fn calculate() throws(Error) { const task:Task<string> = go worker(); const first=try await task;"
-        " assert(first==\"control\\0é\"); print(try await task) }\ntry calculate()\n",
+        "fn calculate() { const task:Task<string> = go worker(); const first=await task;"
+        " assert(first==\"control\\0é\"); print(await task) }\ncalculate()\n",
         "control\0é\n"),
     TASK_CASE("array-i64",
         "fn worker()->Array<i64> { Coro.yield(); return [17,29] }\n"
-        "fn calculate() throws(Error) { const task:Task<Array<i64>> = go worker(); var first=try await task;"
-        " first[0]=101; assert(first[0]==101); const next=try await task; print(next[0]); print(next[1]) }\ntry calculate()\n",
+        "fn calculate() { const task:Task<Array<i64>> = go worker(); var first=await task;"
+        " first[0]=101; assert(first[0]==101); const next=await task; print(next[0]); print(next[1]) }\ncalculate()\n",
         "17\n29\n"),
     TASK_CASE("nested-array-string",
         "fn worker()->Array<Array<string>> { Coro.yield(); return [[\"a\\0b\",\"é😀\"],[\"tail\"]] }\n"
-        "fn calculate() throws(Error) { const task:Task<Array<Array<string>>> = go worker(); var first=try await task;"
-        " first[0][0]=\"changed\"; assert(first[0][0]==\"changed\"); const next=try await task;"
-        " print(next[0][0]); print(next[0][1]); print(next[1][0]) }\ntry calculate()\n",
+        "fn calculate() { const task:Task<Array<Array<string>>> = go worker(); var first=await task;"
+        " first[0][0]=\"changed\"; assert(first[0][0]==\"changed\"); const next=await task;"
+        " print(next[0][0]); print(next[0][1]); print(next[1][0]) }\ncalculate()\n",
         "a\0b\né😀\ntail\n"),
     TASK_CASE("nullable-i64",
         "fn worker()->i64? { Coro.yield(); return -17 }\n"
-        "fn calculate() throws(Error) { const task:Task<i64?> = go worker(); const first=try await task;"
-        " assert(first! == -17); const next=try await task; print(next!) }\ntry calculate()\n",
+        "fn calculate() { const task:Task<i64?> = go worker(); const first=await task;"
+        " assert(first! == -17); const next=await task; print(next!) }\ncalculate()\n",
         "-17\n"),
     TASK_CASE("nullable-array",
         "fn worker()->Array<i64>? { Coro.yield(); return [17,29] }\n"
-        "fn calculate() throws(Error) { const task:Task<Array<i64>?> = go worker(); const first=try await task;"
-        " assert(first![0]==17); const next=try await task; print(next![1]) }\ntry calculate()\n",
+        "fn calculate() { const task:Task<Array<i64>?> = go worker(); const first=await task;"
+        " assert(first![0]==17); const next=await task; print(next![1]) }\ncalculate()\n",
         "29\n"),
     TASK_CASE("tuple-string",
         "fn worker()->(i64,string) { Coro.yield(); return (-17,\"t\\0é\") }\n"
-        "fn calculate() throws(Error) { const task:Task<(i64,string)> = go worker(); const first=try await task;"
-        " assert(first.0 == -17); const next=try await task; print(next.0); print(next.1) }\ntry calculate()\n",
+        "fn calculate() { const task:Task<(i64,string)> = go worker(); const first=await task;"
+        " assert(first.0 == -17); const next=await task; print(next.0); print(next.1) }\ncalculate()\n",
         "-17\nt\0é\n"),
     TASK_CASE("enum-array",
         "enum Choice { Empty, Selected { values:Array<i64> } }\n"
         "fn worker()->Choice { Coro.yield(); return Choice.Selected{values:[17,29]} }\n"
-        "fn calculate() throws(Error) { const task:Task<Choice> = go worker(); const first=try await task;"
+        "fn calculate() { const task:Task<Choice> = go worker(); const first=await task;"
         " print(match(first){Choice.Empty -> 0, Choice.Selected{values} -> values[0]});"
-        " const next=try await task; print(match(next){Choice.Empty -> 0, Choice.Selected{values} -> values[1]}) }\ntry calculate()\n",
+        " const next=await task; print(match(next){Choice.Empty -> 0, Choice.Selected{values} -> values[1]}) }\ncalculate()\n",
         "17\n29\n"),
     TASK_CASE("atomic-shared",
         "fn worker()->Atomic<i64> { Coro.yield(); return Atomic<i64>(17) }\n"
-        "fn calculate() throws(Error) { const task:Task<Atomic<i64>> = go worker(); const first=try await task;"
-        " print(first.fetchAdd(5)); const next=try await task; print(next.load()) }\ntry calculate()\n",
+        "fn calculate() { const task:Task<Atomic<i64>> = go worker(); const first=await task;"
+        " print(first.fetchAdd(5)); const next=await task; print(next.load()) }\ncalculate()\n",
         "17\n22\n"),
     TASK_CASE("task-nested",
         "fn leaf()->i64 { Coro.yield(); return 29 }\n"
         "fn worker()->Task<i64> { Coro.yield(); return go leaf() }\n"
-        "fn calculate() throws(Error) { const task:Task<Task<i64>> = go worker(); const first=try await task;"
-        " const next=try await task; print(try await first); print(try await next) }\ntry calculate()\n",
+        "fn calculate() { const task:Task<Task<i64>> = go worker(); const first=await task;"
+        " const next=await task; print(await first); print(await next) }\ncalculate()\n",
         "29\n29\n"),
     TASK_CASE("try-optional",
         "enum PullFailure { Bad { detail: string } }\n"
@@ -572,14 +572,29 @@ static const TaskCase task_cases[] = {
         "const indexed = values()\n"
         "print((try\? indexed.nth(1)) \?\? -1)\n"
         "const pure = pureValues()\n"
-        "print((try\? pure.next()) \?\? -1)\n"
+        "print(pure.next())\n"
         "print(folded)\n"
         "const owned: string\? = try\? text()\n"
         "print(owned \?\? \"missing\")\n"
         "print((try\? (part(31, false) + part(32, true) + part(33, false))) \?\? -3)\n"
-        "try { const ignored = try\? divide(0); print(ignored \?\? -9) }\n"
-        "catch panic (p) { print(p.code) }\n",
-        "17\n-1\n-2\n13\n-2\n7\nfalse\n-1\n19\n41\nowned \303\251\000\347\225\214\n31\n32\n-3\n420\n"),
+        "try { const ignored = divide(0); print(ignored) }\n"
+        "catch panic (p) { print(p.code) }\n"
+        ,
+        "17\n"
+        "-1\n"
+        "-2\n"
+        "13\n"
+        "-2\n"
+        "7\n"
+        "false\n"
+        "-1\n"
+        "19\n"
+        "41\n"
+        "owned \303\251\000\347\225\214\n"
+        "31\n"
+        "32\n"
+        "-3\n"
+        "420\n"),
     TASK_CASE("typed-await",
         "enum A { Bad { text: string } }\n"
         "enum B { Bad }\n"
@@ -589,18 +604,18 @@ static const TaskCase task_cases[] = {
         "    if (first) { throw A.Bad { text: \"union \303\251\\0\347\225\214\" } }\n"
         "    throw B.Bad\n"
         "}\n"
-        "export fn awaitNever() throws(Cancelled) -> string {\n"
+        "export fn awaitNever() -> string {\n"
         "    var task: Task<string> = go value()\n"
-        "    const first = try await task\n"
+        "    const first = await task\n"
         "    task.cancel()\n"
         "    task.cancel()\n"
-        "    return try await task\n"
+        "    return await task\n"
         "}\n"
-        "export fn awaitOne() throws(A|Cancelled) -> string {\n"
+        "export fn awaitOne() throws(A) -> string {\n"
         "    const task: Task<string,A> = go failOne()\n"
         "    return try await task\n"
         "}\n"
-        "export fn awaitUnion(first: bool) throws(A|B|Cancelled) -> i64 {\n"
+        "export fn awaitUnion(first: bool) throws(A|B) -> i64 {\n"
         "    const task: Task<i64,A|B> = go failUnion(first)\n"
         "    return try await task\n"
         "}\n"
@@ -614,34 +629,44 @@ static const TaskCase task_cases[] = {
         "    task.cancel()\n"
         "    task.cancel()\n"
         "    var caught = 0\n"
-        "    try { const ignored = try await task } catch (e: Cancelled) { caught += 1 }\n"
-        "    try { const ignored = try await task } catch (e: Cancelled) { caught += 1 }\n"
+        "    try { const ignored = await task; failOne() } catch (e) { caught += 1 }\n"
+        "    try { const ignored = await task; failOne() } catch (e) { caught += 1 }\n"
         "    return caught\n"
         "}\n"
-        "export fn cancelledError() throws(Cancelled) -> i64 {\n"
+        "export fn cancelledError() -> i64 {\n"
         "    var task = go spinning()\n"
         "    task.cancel()\n"
-        "    return try await task\n"
+        "    return await task\n"
         "}\n"
         "export fn ownCancellation() -> i64 {\n"
         "    var task = go spinning()\n"
         "    defer { print(\"parent-cleanup\"); task.cancel() }\n"
-        "    try { return try await task }\n"
-        "    catch (e: Cancelled) { print(\"caught-own\"); return -1 }\n"
+        "    try { const value = await task; failOne(); return value }\n"
+        "    catch (e) { print(\"caught-own\"); return -1 }\n"
         "}\n"
         "export fn independentParent() -> i64 {\n"
         "    defer { print(\"parent-cleanup\") }\n"
         "    const task = go spinning()\n"
-        "    try { return try await task }\n"
-        "    catch (e: Cancelled) { print(\"caught-own\"); return -1 }\n"
+        "    try { const value = await task; failOne(); return value }\n"
+        "    catch (e) { print(\"caught-own\"); return -1 }\n"
         "}\n"
         "\n"
-        "print(childCancellation())\n"
-        "print(try awaitNever())\n"
+        "fn observeChild() -> i64 {\n"
+        "    var task = go childCancellation()\n"
+        "    return task.awaitResult().ordinal\n"
+        "}\n"
+        "print(observeChild())\n"
+        "print(awaitNever())\n"
         "try { print(try awaitOne()) } catch (e: A) { print(\"one-error\") }\n"
         "try { print(try awaitUnion(true)) } catch (e: A) { print(\"union-a\") } catch (e: B) { print(\"wrong-b\") }\n"
         "try { print(try awaitUnion(false)) } catch (e: A) { print(\"wrong-a\") } catch (e: B) { print(\"union-b\") }\n"
-        , "child-cleanup\n2\nowned \303\251\000\347\225\214\none-error\nunion-a\nunion-b\n"),
+        ,
+        "child-cleanup\n"
+        "3\n"
+        "owned \303\251\000\347\225\214\n"
+        "one-error\n"
+        "union-a\n"
+        "union-b\n"),
 };
 static int constructed_task_case(const TaskCase *test, const char *stdlib, size_t ordinal) {
     XrSourceCompileOptions compiler = compile_options(stdlib);

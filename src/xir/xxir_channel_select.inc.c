@@ -5,17 +5,19 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_channel_select.inc.c - Joint buffered frontiers and one receive commit
+ * xxir_channel_select.inc.c - Joint buffered frontiers and one send or receive commit
  *
  * KEY CONCEPT:
  *   Admission runs outside queue locks. Commit rechecks the complete observed
  *   set before transferring one selected value; notifications own no frame.
  */
+#include "xxir_channel_select_arm.h"
 typedef struct ChannelSelectArm {
-    XrXirValue channel;
+    XrXirValue channel,message;
     XirChannel *storage;
     XrXirChannelWatch *watch;
     uint64_t sequence;
+    bool sending;
 } ChannelSelectArm;
 enum { CHANNEL_SELECT_OPEN,CHANNEL_SELECT_DONE,CHANNEL_SELECT_CANCELLED };
 struct XrXirChannelSelect {
@@ -27,6 +29,7 @@ struct XrXirChannelSelect {
     _Atomic(uint32_t) state;
     XrXirChannelSelectKind kind;
     XrXirValue candidate,value;
+    XrXirClassPublication publication;
     ChannelSelectArm *arms;
     bool has_default,has_timeout,prepared,taken,candidate_due;
 };
@@ -42,6 +45,7 @@ static void channel_select_notifications_clear(XrXirChannelSelect *select) {
     }
 }
 static void channel_select_candidate_clear(XrXirChannelSelect *select) {
+    xr_xir_class_publication_drop(&select->publication);
     xr_xir_value_drop(&select->candidate);select->prepared=false;
 }
 static void channel_select_unlock(XrXirChannelSelect *select,uint32_t count) {
@@ -63,11 +67,20 @@ static bool channel_select_same(const XrXirChannelSelect *select) {
 static XrXirValueStatus channel_select_arm_prepare(XrXirChannelSelect *select,
     const XrXirValue *value,uint32_t index,XrXirValueAdmission *admission) {
     ChannelSelectArm *arm=&select->arms[index];
-    XrXirValueStatus status=channel_receiver(value,admission,&arm->storage);
+    const XrXirTypes *types=xr_xir_compile_type_arena_types(admission->arena);
+    if(xir_channel_select_operand_type(types,(XrXirType)value->type,&arm->sending)==XR_XIR_UNIT)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueStatus status=arm->sending ? xr_xir_tuple_get(value,0,&arm->channel) :
+        xr_xir_value_copy(value,&arm->channel);
+    if(status==XR_XIR_VALUE_OK&&arm->sending)status=xr_xir_tuple_get(value,1,&arm->message);
+    if(status==XR_XIR_VALUE_OK)status=channel_receiver(&arm->channel,admission,&arm->storage);
     if(status!=XR_XIR_VALUE_OK)return status;
-    if(!arm->storage->buffer.capacity)return XR_XIR_VALUE_UNSUPPORTED;
-    status=xr_xir_value_copy(value,&arm->channel);
-    if(status!=XR_XIR_VALUE_OK)return status;
+    if(arm->sending) {
+        status=channel_element_admit(arm->storage,&arm->message,admission);
+        if(status!=XR_XIR_VALUE_OK)return status;
+    }
+    if(!arm->storage->buffer.capacity&&
+        !(arm->sending&&atomic_load_explicit(&arm->storage->closed,memory_order_acquire)))return XR_XIR_VALUE_UNSUPPORTED;
     uint32_t *order=channel_select_order(select),at=0;
     for(;at<select->unique_count;++at) {
         if(!channel_work(admission,1))return XR_XIR_VALUE_LIMIT;
@@ -83,7 +96,9 @@ XR_FUNC void xr_xir_channel_select_drop(XrXirChannelSelect *select) {
     if(!select)return;
     xr_xir_value_graph_begin();
     channel_select_notifications_clear(select);channel_select_candidate_clear(select);xr_xir_value_drop(&select->value);
-    for(uint32_t i=0;i<select->count;++i)xr_xir_value_drop(&select->arms[i].channel);
+    for(uint32_t i=0;i<select->count;++i) {
+        xr_xir_value_drop(&select->arms[i].channel);xr_xir_value_drop(&select->arms[i].message);
+    }
     XrXirDomain *domain=select->domain;XrXirTypeArena *arena=select->arena;
     xr_xir_domain_deallocate(domain,select,select->bytes);
     xr_xir_compile_type_arena_drop(arena);xr_xir_domain_drop(domain);xr_xir_value_graph_end();
@@ -126,6 +141,10 @@ static XrXirValueStatus channel_select_clock(XrXirChannelSelect *select,uint64_t
     select->last_ns=now;*due=now-select->start_ns>=select->duration_ns;return XR_XIR_VALUE_OK;
 }
 /* Locks are deduplicated; the random candidate set retains every source arm. */
+static bool channel_select_arm_ready(const ChannelSelectArm *arm) {
+    return arm->sending ? atomic_load_explicit(&arm->storage->closed,memory_order_acquire)||
+        arm->storage->buffer.count<arm->storage->buffer.capacity : arm->storage->buffer.count!=0;
+}
 static XrXirValueStatus channel_select_snapshot(XrXirChannelSelect *select,uint64_t entropy,
     bool due,XrXirValueAdmission *admission,XrXirChannelSelectState *state,bool *empty) {
     bool locked=false;XrXirValueStatus status=channel_select_lock(select,admission,&locked);
@@ -133,7 +152,7 @@ static XrXirValueStatus channel_select_snapshot(XrXirChannelSelect *select,uint6
     uint64_t ready=0;
     for(uint32_t i=0;i<select->count;++i) {
         ChannelSelectArm *arm=&select->arms[i];arm->sequence=arm->storage->sequence;
-        if(arm->storage->buffer.count)++ready;
+        if(channel_select_arm_ready(arm))++ready;
     }
     uint64_t eligible=ready+(due?1u:0u);
     if(eligible) {
@@ -142,12 +161,19 @@ static XrXirValueStatus channel_select_snapshot(XrXirChannelSelect *select,uint6
         uint64_t choice=entropy%eligible;
         if(choice==ready) {
             select->kind=XR_XIR_CHANNEL_SELECT_TIMEOUT;select->arm=UINT32_MAX;
-        } else for(uint32_t i=0;i<select->count;++i)if(select->arms[i].storage->buffer.count) {
+        } else for(uint32_t i=0;i<select->count;++i)if(channel_select_arm_ready(select->arms+i)) {
             if(choice--)continue;
-            XirChannel *channel=select->arms[i].storage;
+            ChannelSelectArm *arm=select->arms+i;XirChannel *channel=arm->storage;
+            select->arm=i;
+            if(arm->sending) {
+                bool closed=atomic_load_explicit(&channel->closed,memory_order_acquire);
+                select->kind=closed?XR_XIR_CHANNEL_SELECT_SEND_CLOSED:XR_XIR_CHANNEL_SELECT_SEND;
+                if(!closed)status=xr_xir_value_copy(&arm->message,&select->candidate);
+                break;
+            }
             if(channel->sequence==UINT64_MAX)status=XR_XIR_VALUE_LIMIT;
             else status=xr_xir_value_copy(&channel_slots(channel)[xr_channel_buffer_slot(&channel->buffer,0)],&select->candidate);
-            select->arm=i;select->kind=XR_XIR_CHANNEL_SELECT_RECEIVE;break;
+            select->kind=XR_XIR_CHANNEL_SELECT_RECEIVE;break;
         }
     } else if(select->has_default) {
         select->kind=XR_XIR_CHANNEL_SELECT_DEFAULT;select->arm=UINT32_MAX;
@@ -156,6 +182,8 @@ static XrXirValueStatus channel_select_snapshot(XrXirChannelSelect *select,uint6
     if(status!=XR_XIR_VALUE_OK)return status;
     if(eligible&&select->kind==XR_XIR_CHANNEL_SELECT_RECEIVE)
         status=channel_element_admit(select->arms[select->arm].storage,&select->candidate,admission);
+    if(eligible&&select->kind==XR_XIR_CHANNEL_SELECT_SEND)
+        status=xr_xir_class_publication_prepare(&select->candidate,1,admission,&select->publication);
     if(status==XR_XIR_VALUE_OK&&(eligible||select->has_default)) {
         select->prepared=true;select->candidate_due=due;*state=XR_XIR_CHANNEL_SELECT_CANDIDATE;
     }
@@ -213,14 +241,19 @@ XR_FUNC XrXirValueStatus xr_xir_channel_select_commit(XrXirChannelSelect *select
     XrXirChannelSelectState outcome=XR_XIR_CHANNEL_SELECT_RETRY;
     if(status==XR_XIR_VALUE_OK&&locked) {
         bool same=channel_select_same(select);XirChannel *channel=NULL;
-        if(same&&select->kind==XR_XIR_CHANNEL_SELECT_RECEIVE) {
+        if(same&&(select->kind==XR_XIR_CHANNEL_SELECT_RECEIVE||select->kind==XR_XIR_CHANNEL_SELECT_SEND)) {
             channel=select->arms[select->arm].storage;
-            if(!channel_watch_work(channel,admission))status=XR_XIR_VALUE_LIMIT;
+            if(channel->sequence==UINT64_MAX||!channel_watch_work(channel,admission))status=XR_XIR_VALUE_LIMIT;
         }
         if(same&&status==XR_XIR_VALUE_OK) {
             uint32_t expected=CHANNEL_SELECT_OPEN;
             if(atomic_compare_exchange_strong_explicit(&select->state,&expected,CHANNEL_SELECT_DONE,memory_order_acq_rel,memory_order_acquire)) {
-                if(channel) {
+                if(channel&&select->kind==XR_XIR_CHANNEL_SELECT_SEND) {
+                    uint32_t slot=UINT32_MAX;xr_xir_class_publication_commit(&select->publication);
+                    XR_CHECK(xr_channel_buffer_push(&channel->buffer,&slot),"a selected buffered send commits only its observed free slot");
+                    XR_CHECK(unit_value(channel_slots(channel)+slot),"a selected free slot has no previous owner");
+                    channel_slots(channel)[slot]=select->candidate;select->candidate=(XrXirValue){0};channel_changed(channel);
+                } else if(channel) {
                     uint32_t slot=UINT32_MAX;
                     XR_CHECK(xr_channel_buffer_pop(&channel->buffer,&slot),"one selected frontier still owns its prepared message");
                     select->value=channel_slots(channel)[slot];channel_slots(channel)[slot]=(XrXirValue){0};channel_changed(channel);

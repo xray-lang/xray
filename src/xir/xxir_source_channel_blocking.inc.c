@@ -4,34 +4,9 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_source_channel_blocking.inc.c - Owned blocking results and explicit value errors
+ * xxir_source_channel_blocking.inc.c - Owned blocking Channel results
  */
 #include "xxir_channel_rendezvous_internal.h"
-static bool source_channel_send_closed(SourceContext *ctx,AstNode *node,SourceValue completion,SourceValue *value) {
-    XrXirType error_type=XR_XIR_UNIT;SourceValue closed={0},condition={0},error={0};
-    if (!source_channel_send_type(ctx,&error_type) ||
-        !source_recipe_record(ctx,(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=XR_XIR_CHANNEL_SEND_WAIT_CLOSED},&closed) ||
-        !source_recipe_record(ctx,(XrXirInstruction){.op=XR_XIR_EQ_INT,.type=XR_XIR_BOOL,.args={completion.id,closed.id}},&condition)) return false;
-    uint32_t owner=ctx->function,branch=ctx->bodies[owner].count,error_block=ctx->bodies[owner].block_count;
-    uint32_t frontier=ctx->bodies[owner].frontier;
-    if (!source_recipe_record(ctx,(XrXirInstruction){.op=XR_XIR_BRANCH,.type=XR_XIR_UNIT,.args={condition.id,0}},NULL) ||
-        !begin_block(ctx) || !source_hir_nominal_construct(ctx,node,&(SourceNominalEmission){.type=error_type,.variant=3},&error)) return false;
-    XrXirDeclarations declarations;XrXirModule module=source_module_view(ctx,&declarations);
-    XrXirProofContext proof={&module,{XR_XIR_CONTEXT_FUNCTION,owner,0}};
-    XrXirStatus status=xr_xir_compile_type_markers_prove(&ctx->compile,&proof,error_type,XR_XIR_CONSTRAINT_ERROR);
-    if (status!=XR_XIR_OK) return source_fail(ctx,node,status,"closed Channel send requires its authenticated enum value error");
-    if (!source_local_error(ctx,node,error_type,true)) return false;
-    if (ctx->bodies[owner].error_context) {
-        XrHirConversion conversion={0};
-        if (!source_conversion_plan(ctx,node,error.type,(SourceExpectedType){true,XR_XIR_ERROR,false,false},&conversion) ||
-            !source_conversion_emit(ctx,&conversion,&error) || !source_error_edge(ctx,error)) return false;
-    } else if (!source_recipe_record(ctx,(XrXirInstruction){.op=XR_XIR_THROW,.type=XR_XIR_UNIT,.args={error.id,0}},NULL)) return false;
-    ctx->returned=true;uint32_t success=ctx->bodies[owner].block_count;
-    ctx->bodies[owner].frontier=frontier;if (!begin_block(ctx)) return false;
-    ctx->bodies[owner].recipes[branch].instruction.targets[0]=error_block;
-    ctx->bodies[owner].recipes[branch].instruction.targets[1]=success;
-    *value=(SourceValue){.id=UINT32_MAX,.type=XR_XIR_UNIT,.place={0}};return true;
-}
 static bool source_channel_blocking_call(SourceContext *ctx,AstNode *node,SourceValue receiver,
     const XrNativeMemberDeclaration *member,SourceValue *value) {
     CallExprNode *call=&node->as.call_expr;
@@ -52,6 +27,6 @@ static bool source_channel_blocking_call(SourceContext *ctx,AstNode *node,Source
     if (receive) { op.args[0]=receiver.id;recorded=source_recipe_record(ctx,op,&completion); }
     else recorded=source_recipe_group(ctx,op,operands,element==XR_XIR_UNIT ? 1u : 2u,&completion);
     if (!recorded || !source_channel_member_reference(ctx,node,member)) return false;
-    if (send) return source_channel_send_closed(ctx,node,completion,value);
+    if (send) { *value=(SourceValue){.id=UINT32_MAX,.type=XR_XIR_UNIT};return true; }
     *value=completion;return true;
 }

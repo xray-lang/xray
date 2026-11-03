@@ -150,7 +150,7 @@ static void capture_source_check(const CaptureSourceCase *fixture,bool root,cons
         "var state:i64=0\nfn values()->Iterator<i64>{yield %s}\n"
         "fn make()->Iterator<i64>{return values()}\n"
         "fn consume(it:Iterator<i64>)->i64{return it.next()}\n"
-        "fn worker()->i64{try{%s} catch(error){return -99}}\nexport fn run() throws(Error)->i64{return try await go worker()}\nfn main(){}\n",
+        "fn worker()->i64{%s}\nexport fn run()->i64{return await go worker()}\nfn main(){}\n",
         root?"state":"17",fixture->body);
     CHECK(length>0 && (size_t)length<sizeof(text));
     SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);XrCompilerSession *session=NULL;
