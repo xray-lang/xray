@@ -140,6 +140,9 @@ class TierTests(unittest.TestCase):
         for path in ("src/os/win/fs_mutation_win.c", "src/os/unix/fs_mutation_unix.c",
                      "src/os/os_fs.h", "src/base/xwindows_utf8.h",
                      "src/xir/xxir_instance_io.inc.c", "src/xir/xxir_source_io.inc.c",
+                     "src/xir/xxir_path_prelude.h", "src/xir/xxir_native_callable.h",
+                     "src/xir/xxir_declarations.c", "src/xir/xxir_instance.c",
+                     "src/xir/xxir_ctfe_native_callable.inc.c",
                      "tests/unit/xir/host_os/host_os_path_cases.h"):
             with self.subTest(path=path):
                 plan = xray_l1.tier_plan(ROOT, "L2", changed=[path])
