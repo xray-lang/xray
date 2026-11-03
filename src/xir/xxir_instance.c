@@ -2499,6 +2499,10 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
         if(id==XR_NATIVE_CALLABLE_SYS_THREAD_YIELD) {
             xr_thread_yield();
             *value=(XrXirValue){XR_XIR_UNIT,0,0};
+        } else if(id==XR_NATIVE_CALLABLE_SYS_ON_SIGNAL) {
+            bool installed=false;status=xir_instance_signal_register(view,&installed);
+            if(status!=XR_XIR_CALL_READY)goto failed;
+            *value=(XrXirValue){XR_XIR_BOOL,0,installed?1:0};
         } else {
             int64_t cpu=view->arguments[0].payload;bool pinned=false;
             if(cpu>=0) {

@@ -692,6 +692,13 @@ static XrXirStatus effect_invocation_local_input_body(EffectInvocationLocalRead 
     *output=(EffectInvocationLocalInput){0};
     XrXirStatus typed=effect_invocation_local_type(read,head->result);
     if (typed!=XR_XIR_OK) return typed;
+    bool native_root=false;
+    typed=effect_invocation_native_root(body,f,&native_root);
+    if (typed!=XR_XIR_OK) return typed;
+    if (native_root) {
+        output->facts.requires_root=true;
+        output->witnesses[0]=(XrXirRootEffectWitness){XR_XIR_ROOT_CAUSE_NATIVE,UINT32_MAX,UINT32_MAX,UINT32_MAX,0};
+    }
     if (body->declarations) {
         const XrXirDeclarations *decls=body->declarations;
 

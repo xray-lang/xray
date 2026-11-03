@@ -10,6 +10,25 @@
  * scratch retains these proposals; neither Input nor Final retains primitive
  * ROOT seed rows.
  */
+/* A native terminal is read from the actual owned declaration and complete
+ * callable head. It is neither an initializer nor a synthetic storage access.
+ * The same reader is used by construction and independent Final replay. */
+static XrXirStatus effect_invocation_native_root(const EffectBodyMaterial *body,uint32_t function,bool *output) {
+    if (!body || !output || function>=effect_body_count(body)) return XR_XIR_BAD_STRUCTURE;
+    const XrXirDeclarations *decls=body->declarations;
+    *output=false;
+    if (!decls || !decls->functions || decls->functions[function].native_callable!=XR_NATIVE_CALLABLE_SYS_ON_SIGNAL)
+        return XR_XIR_OK;
+    const EffectBodyFunction *head=&body->functions[function];
+    if (!xir_native_callable_identity(&decls->functions[function]) ||
+        !xir_sys_native_scope(decls,function,effect_body_count(body)) ||
+        head->block_count || head->blocks || head->instruction_count || head->run_count ||
+        head->operand_count || head->operands || head->consume_parameter_count || head->consume_parameters ||
+        (body->generics && (body->generics[function].parameter_count || body->generics[function].argument_count)) ||
+        !xir_sys_native_signature(XR_NATIVE_CALLABLE_SYS_ON_SIGNAL,body->domain.types,
+            head->parameters,head->parameter_count,head->result,head->error_type)) return XR_XIR_BAD_TYPE;
+    *output=true;return XR_XIR_OK;
+}
 static XrXirStatus effect_invocation_primitive_attempt(const XrXirCompileContext *work,
     const EffectBodyMaterial *body,uint32_t function,EffectInvocationPrimitive *output,XirReadScratch *memory) {
     if (!xir_compile_context_valid(work) || !effect_body_material_shape(body) || !output ||
@@ -17,6 +36,13 @@ static XrXirStatus effect_invocation_primitive_attempt(const XrXirCompileContext
     const EffectBodyFunction *head=&body->functions[function];
     const XrXirDeclarations *decls=body->declarations;
     XrXirRootEffects facts={0};XrXirRootEffectWitness witnesses[2]={{0},{0}};
+    bool native_root=false;
+    XrXirStatus native_status=effect_invocation_native_root(body,function,&native_root);
+    if (native_status!=XR_XIR_OK) return native_status;
+    if (native_root) {
+        facts.requires_root=true;
+        witnesses[0]=(XrXirRootEffectWitness){XR_XIR_ROOT_CAUSE_NATIVE,UINT32_MAX,UINT32_MAX,UINT32_MAX,0};
+    }
     if (decls) {
 
         if (!decls->modules || !decls->functions || decls->functions[function].module>=decls->module_count)
