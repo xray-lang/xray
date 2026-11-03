@@ -33,6 +33,10 @@ XR_FUNC XrOsIoStatus xr_os_io_thread_token_current(const XrOsThreadTokenQuery *q
 XR_FUNC XrOsIoStatus xr_os_io_thread_token_alive(const XrOsThreadTokenQuery *query,
     int64_t token, bool *output);
 
+/* POSIX token retirement starts at the real pthread-key exit destructor.
+ * A terminating thread cannot register again from a later TLS destructor;
+ * such queries return BAD_ARGUMENT without replacing its old identity. */
+
 /* Private terminal service shutdown, never Root retirement. The host promises
  * no future queries and joins all other registered threads before calling.
  * A still-live other thread is BAD_ARGUMENT. Failed native cleanup retains its
