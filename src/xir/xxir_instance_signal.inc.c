@@ -57,6 +57,10 @@ static bool instance_signal_native_target(const XrXirProgram *program,uint32_t t
     if (!program || target>=program->entry_count || !program->declarations ||
         !program->declarations->functions || !xir_sys_native_scope(program->declarations,target,program->entry_count))
         return false;
+    const XrXirProgramPermissions *permissions=program->permissions;
+    if (!permissions || !permissions->input || !permissions->effects || !permissions->entries ||
+        permissions->function_count!=program->entry_count || !permissions->entries[target].requires_root ||
+        !(program->declarations->functions[target].promises&XR_XIR_FUNCTION_NO_SUSPEND)) return false;
     const XrXirCallEntry *entry=&program->entries[target];
     uint32_t id=program->declarations->functions[target].native_callable;
     if (id!=XR_NATIVE_CALLABLE_SYS_ON_SIGNAL || !xir_sys_native_id(id) || entry->resume!=xr_xir_instance_native_callable ||
