@@ -1156,6 +1156,37 @@ def render_cpu_callables(declarations):
     return lines, rows
 
 
+def render_io_callables(declarations):
+    contracts = (
+        ('__chmod', '(path: Path, mode: i64): bool', 'pv', 'io_chmod', 'xrt_io_chmod_value', 'IO_CHMOD'),
+        ('__chdir', '(path: Path): bool', 'p', 'io_chdir', 'xrt_io_chdir', 'IO_CHDIR'),
+    )
+    lines, rows = [], []
+    for ordinal, (name, signature, arguments, vm, aot, identity) in enumerate(contracts, 1):
+        candidates = [row for row in declarations if row.module == 'io' and row.name == name]
+        if len(candidates) != 1:
+            raise ValueError('Filesystem callable requires its sole governed declaration: ' + name)
+        row = candidates[0]
+        if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+                row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
+                row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
+                row.ret, row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
+                signature, str(len(arguments)), arguments, 'internal', '', '', '', 'system', vm,
+                aot, True, 'method', '', 'normal', '', '', 'value', False, None, (), ''):
+            raise ValueError('Filesystem callable differs from its complete source contract: ' + name)
+        symbol = 'xr_native_' + identity.lower()
+        lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {',
+            '    {"path", "Path", XR_NATIVE_TERM_PATH, false, false},']
+        if len(arguments) == 2:
+            lines += ['    {"mode", "i64", XR_NATIVE_TERM_I64, false, false},']
+        lines += ['};', 'static const XrNativeMemberDeclaration ' + symbol + ' = {',
+            '    ' + str(ordinal) + ', ' + c_string(name) + ', ' + c_string(signature) + ', "bool", 0, 0, XR_NATIVE_RECEIVER_READ,',
+            '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
+            '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + symbol + '_parameters, ' + str(len(arguments)) + ', XR_NATIVE_TERM_BOOL', '};']
+        rows += ['    {XR_NATIVE_CALLABLE_' + identity + ', NULL, &' + symbol + ', NULL, false, "io", "stdlib/defs/core.def", FINGERPRINT}']
+    return lines, rows
+
+
 def render_os_getpid(declarations):
     candidates = [row for row in declarations if row.module == 'os' and row.name == '__getpid']
     if len(candidates) != 1:
@@ -1355,6 +1386,9 @@ def render_unicode_callable(root, decoder):
     cpu_lines, cpu_rows = render_cpu_callables(declarations)
     buffer_lines += cpu_lines
     buffer_rows += cpu_rows
+    io_lines, io_rows = render_io_callables(declarations)
+    buffer_lines += io_lines
+    buffer_rows += io_rows
     digest = hashlib.sha256((root / 'stdlib/defs/core.def').read_text(encoding='utf-8').encode('utf-8')).digest()
     fingerprint = '{{' + ','.join(str(byte) for byte in digest) + '}}'
     return buffer_lines + [
