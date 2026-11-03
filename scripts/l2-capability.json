@@ -838,6 +838,11 @@
         "src/os/os_system.h",
         "src/os/os_file_metadata.h",
         "src/os/os_file_mutation.h",
+        "src/os/os_thread_token.h",
+        "src/os/win/thread_token_win.c",
+        "src/os/unix/thread_token_unix.c",
+        "tests/unit/base/test_thread_token.c",
+        "tests/unit/base/thread_token.cmake",
         "src/os/os_signal.h",
         "src/os/win/signal_win.c",
         "src/os/unix/signal_unix.c",
@@ -900,7 +905,8 @@
         "os_system_queries",
         "os_file_metadata",
         "os_file_mutation",
-        "os_signal"
+        "os_signal",
+        "os_thread_token"
       ],
       "targets": [
         "test_host_os_source",
@@ -908,7 +914,8 @@
         "test_os_system_queries",
         "test_os_file_metadata",
         "test_os_file_mutation",
-        "test_os_signal"
+        "test_os_signal",
+        "test_os_thread_token"
       ]
     }
   },

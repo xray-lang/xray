@@ -157,6 +157,9 @@ class TierTests(unittest.TestCase):
                      "src/xir/xxir_source_methods.inc.c",
                      "src/hir/xhir_body_nominal.inc.c",
                      "src/os/os_fs.h", "src/base/xwindows_utf8.h",
+                     "src/os/os_thread_token.h", "src/os/win/thread_token_win.c",
+                     "src/os/unix/thread_token_unix.c", "tests/unit/base/test_thread_token.c",
+                     "tests/unit/base/thread_token.cmake",
                      "src/xir/xxir_instance_io_mutation.inc.c",
                      "src/xir/xxir_call_signal_frontier.inc.c",
                      "src/xir/xxir_instance_signal_frontier.inc.c",
@@ -177,6 +180,8 @@ class TierTests(unittest.TestCase):
                 self.assertIn("test_os_file_metadata", plan["targets"])
                 self.assertIn("os_file_mutation", plan["tests"])
                 self.assertIn("test_os_file_mutation", plan["targets"])
+                self.assertIn("os_thread_token", plan["tests"])
+                self.assertIn("test_os_thread_token", plan["targets"])
                 self.assertIn("os_signal", plan["tests"])
                 self.assertIn("test_os_signal", plan["targets"])
                 self.assertNotIn("native-runtime", plan["groups"])
