@@ -831,6 +831,7 @@
         "src/xir/xxir_source_nominal_contract.inc.c",
         "src/xir/xxir_path_verify.inc.c",
         "src/xir/xxir_instance_io.inc.c",
+        "src/xir/xxir_instance_io_mutation.inc.c",
         "src/xir/xxir_instance_system.inc.c",
         "src/xir/xxir_os_native.h",
         "src/xir/xxir_sys_native.h",

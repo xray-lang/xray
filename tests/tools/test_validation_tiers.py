@@ -151,6 +151,7 @@ class TierTests(unittest.TestCase):
                      "src/xir/xxir_nominal_native.inc.c", "src/xir/xxir_nominal_access.inc.c",
                      "src/xir/xxir_source_nominal_contract.inc.c", "src/xir/xxir_path_verify.inc.c",
                      "src/os/os_fs.h", "src/base/xwindows_utf8.h",
+                     "src/xir/xxir_instance_io_mutation.inc.c",
                      "src/xir/xxir_instance_io.inc.c", "src/xir/xxir_source_io.inc.c",
                      "src/xir/xxir_path_prelude.h", "src/xir/xxir_native_callable.h",
                      "src/xir/xxir_declarations.c", "src/xir/xxir_instance.c",
