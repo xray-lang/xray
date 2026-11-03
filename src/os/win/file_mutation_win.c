@@ -29,7 +29,7 @@ static XrOsIoStatus file_mutation_locator(const XrOsIoPolicy *policy, XrOsPathSp
 static bool file_mutation_refused(DWORD error) {
     return xr_win_path_error_refused(error) || error == ERROR_ALREADY_EXISTS || error == ERROR_FILE_EXISTS ||
         error == ERROR_DIR_NOT_EMPTY || error == ERROR_NOT_SAME_DEVICE || error == ERROR_CANT_ACCESS_FILE ||
-        error == ERROR_CANNOT_DELETE || error == ERROR_DELETE_PENDING || error == ERROR_DISK_FULL ||
+        error == ERROR_DELETE_PENDING || error == ERROR_DISK_FULL ||
         error == ERROR_HANDLE_DISK_FULL;
 }
 static XrOsIoStatus file_mutation_error(DWORD error) {
@@ -94,8 +94,10 @@ static bool file_mutation_remove_handle(const XrOsIoPolicy *policy, bool (*curre
     XrOsFileMetadataOwner *owner, XrIoContext *io) {
     FILE_ATTRIBUTE_TAG_INFO tag;
     HANDLE handle = (HANDLE)owner->handle;
-    if (!GetFileInformationByHandleEx(handle, FileAttributeTagInfo, &tag, sizeof(tag)))
-        return io_status(io, io_windows_status(GetLastError())) && false;
+    if (!GetFileInformationByHandleEx(handle, FileAttributeTagInfo, &tag, sizeof(tag))) {
+        io_status(io, io_windows_status(GetLastError()));
+        return false;
+    }
     if ((tag.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) && !IsReparseTagNameSurrogate(tag.ReparseTag)) return false;
     if (tag.FileAttributes & FILE_ATTRIBUTE_READONLY) {
         FILE_BASIC_INFO basic = {0};
