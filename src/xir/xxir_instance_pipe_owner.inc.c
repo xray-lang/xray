@@ -28,7 +28,8 @@ struct XirPipeFrame {
     uint32_t entry,id;
     XirCallSignalOrigin origin;
     XrOsPipeProgress observed;
-    bool begun,terminal,opened;
+    XrXirCallStatus retirement_failure;
+    bool begun,terminal,opened,retiring;
 };
 typedef struct XirPipeBlock {size_t bytes,padding;} XirPipeBlock;
 typedef struct XirPipeQuery {
@@ -115,6 +116,39 @@ static XirPipeFrame *instance_pipe_frame_find(XrXirInstance *root,const XrXirCal
         if(frame->frame==view->state && frame->call==view->activation)return frame;
     return NULL;
 }
+XR_FUNC bool xir_instance_pipe_retirement_pending(const void *instance,const XrXirCall *call,
+    const XrXirValueAdmission *admission) {
+    if(!instance || !admission || admission->function!=admit_function_binding)return false;
+    const XrXirInstance *root=instance_root((XrXirInstance *)instance);
+    for(const XirPipeFrame *frame=root->pipe_frames;frame;frame=frame->next)
+        if(frame->call==call && frame->retiring && (frame->operation.state ||
+            (frame->pipe && !frame->pipe->published && frame->pipe->owner.state)))return true;
+    return false;
+}
+XR_FUNC bool xir_instance_pipe_retire(XrXirCallView *view,XrXirCallStatus *failure) {
+    uint32_t entry=UINT32_MAX;
+    const XrXirValueAdmission *admission=xir_call_retirement_admission(view,&entry);
+    if(!admission || admission->function!=admit_function_binding || !view->instance)return true;
+    XrXirInstance *root=instance_root(view->instance);
+    XirPipeFrame *frame=instance_pipe_frame_find(root,view);
+    if(!frame)return true;
+    XR_CHECK(entry==frame->entry && frame->generation && admission->context==frame->generation &&
+        frame->generation_id==frame->generation->generation_id &&
+        frame->generation->domain==root->domain && frame->generation->program->arena==view->arena,
+        "pipe retirement borrows its actual owned Call frame and generation");
+    frame->retiring=true;
+    bool closed=!frame->operation.state;
+    XrOsIoStatus status=closed?XR_OS_IO_OK:xr_os_io_pipe_operation_close(&frame->operation,&closed);
+    if(status==XR_OS_IO_OK && closed && frame->pipe && !frame->pipe->published) {
+        XR_CHECK(frame->pipe->references==1,"an unpublished endpoint pair belongs only to its opening frame");
+        closed=!frame->pipe->owner.state;
+        if(!closed)status=xr_os_io_pipe_dispose(&frame->pipe->owner,&closed);
+    }
+    if(status!=XR_OS_IO_OK && frame->retirement_failure==XR_XIR_CALL_READY)
+        frame->retirement_failure=instance_pipe_status(status);
+    if(status!=XR_OS_IO_OK || !closed)return false;
+    *failure=frame->retirement_failure;return true;
+}
 /* The trusted release view cannot request new admission. It can only detach
  * its exact existing coordinates before the Call frees that physical frame. */
 static void instance_pipe_frame_release(XrXirCallView *view) {
@@ -127,7 +161,7 @@ static void instance_pipe_frame_release(XrXirCallView *view) {
         frame->generation->program->arena==view->arena,"pipe release retains its actual generation metadata");
     frame->call=NULL;frame->frame=NULL;frame->generation=NULL;frame->generation_id=0;
     frame->entry=frame->id=0;frame->origin=(XirCallSignalOrigin){0};
-    if(frame->operation.state)(void)xr_os_io_pipe_cancel(&frame->operation);
+    XR_CHECK(!frame->operation.state,"a Call frame retires only after its worker has joined and closed");
     bool driving=root->driving;root->driving=true;
     (void)instance_pipe_owners_close(root,false);root->driving=driving;
 }

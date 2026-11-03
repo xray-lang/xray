@@ -668,24 +668,32 @@ static void task_core_dispatch_result(XrXirTaskExecutor *executor,XirTaskActivat
         } else generator_core_finish(executor,generator);
     }
 }
-static void task_core_close_activation(XrXirTaskExecutor *executor,XirTaskActivation *activation) {
-    if (!activation->call) return;
+static bool task_core_close_activation(XrXirTaskExecutor *executor,XirTaskActivation *activation) {
+    if (!activation->call) return true;
     XrXirExecutorBinding binding={executor,activation,executor->generation,activation->ticket};
-    (void)xir_call_close_bound(activation->call,&binding,NULL);
-    activation->queued=false;activation->ready_next=NULL;
+    return xir_call_close_bound(activation->call,&binding,NULL)!=XR_XIR_CALL_CLOSE_FAILED;
 }
 /* This closes only the original authenticated group, with no guest resumes or
  * further allocation, cancellation callbacks or runnable queue transitions. */
-static void task_core_close_group(XrXirTaskExecutor *executor) {
+static bool task_core_close_group(XrXirTaskExecutor *executor) {
     executor->stopping=true;
-    task_core_close_activation(executor,&executor->root);
-    task_core_close_activation(executor,&executor->callback);
-    if (executor->callback.call) task_core_finish_callback(executor);
+    bool closed=task_core_close_activation(executor,&executor->root);
+    if(!task_core_close_activation(executor,&executor->callback))closed=false;
     for (XirTask *task=executor->active;task;task=task->active_next)
-        task_core_close_activation(executor,&task->activation);
+        if(!task_core_close_activation(executor,&task->activation))closed=false;
     for (XirGenerator *gen=executor->generators;gen;gen=gen->active_next)
-        task_core_close_activation(executor,&gen->activation);
+        if(!task_core_close_activation(executor,&gen->activation))closed=false;
+    if(!closed)return false;
     executor->ready_head=executor->ready_tail=NULL;
+    executor->root.queued=executor->callback.queued=false;
+    executor->root.ready_next=executor->callback.ready_next=NULL;
+    for(XirTask *task=executor->active;task;task=task->active_next) {
+        task->activation.queued=false;task->activation.ready_next=NULL;
+    }
+    for(XirGenerator *gen=executor->generators;gen;gen=gen->active_next) {
+        gen->activation.queued=false;gen->activation.ready_next=NULL;
+    }
+    if (executor->callback.call) task_core_finish_callback(executor);
     executor->external=NULL;executor->external_call_wake=0;executor->channel_waiting=false;
     while (executor->active) task_core_finish_task(executor,executor->active);
     while (executor->generators) generator_core_finish(executor,executor->generators);
@@ -699,7 +707,7 @@ static void task_core_close_group(XrXirTaskExecutor *executor) {
     /* A callback failure remains outside Parent's frame stack and catch chain.
      * Closing never installs a panic as an ordinary frame completion. */
     if (executor->callback_failed && (executor->failure.status==XR_XIR_CALL_THROWN ||
-        xr_xir_call_panic_status(executor->failure.status))) return;
+        xr_xir_call_panic_status(executor->failure.status))) return true;
     XrXirCallResult terminal={0};
     if (!xr_xir_call_result_empty(&executor->failure) && executor->failure.status==executor->first_failure)
         xr_xir_call_result_move(&executor->failure,&terminal);
@@ -709,6 +717,7 @@ static void task_core_close_group(XrXirTaskExecutor *executor) {
         XR_CHECK(xir_call_close_bound(executor->root.call,&binding,&terminal)==executor->first_failure,
             "the existing root Call receives the complete first group failure");
     } else xr_xir_call_result_move(&terminal,&executor->failure);
+    return true;
 }
 XR_FUNC XrXirCallStatus xir_task_executor_visit_vm(XrXirTaskExecutor *executor,const XrXirExecutorBinding *binding,
     uint64_t frame,bool *entered) {
@@ -747,6 +756,10 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_poll(XrXirTaskExecutor *executor, u
     if (executor->driving || task_executor_observing(executor)) return XR_XIR_CALL_BUSY;
     if (executor->budget->native_hold) return XR_XIR_CALL_READY;
     executor->driving = true;
+    if(executor->fatal_closing) {
+        bool closed=task_core_close_group(executor);executor->driving=false;
+        return closed?XR_XIR_CALL_RETURNED:XR_XIR_CALL_READY;
+    }
     task_core_scan_channels(executor);
     while (quantum-- && !executor->budget->native_hold) {
         generator_core_scan(executor);
@@ -909,6 +922,16 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_stop(XrXirTaskExecutor *executor) {
         generator_core_cancel(executor,generator);
     return final;
 }
+XR_FUNC bool xir_task_executor_retirement_pending(const XrXirTaskExecutor *executor) {
+    if(!task_executor_owner_current(executor) || !executor)return false;
+    if(xir_call_retirement_pending(executor->root.call) ||
+        xir_call_retirement_pending(executor->callback.call))return true;
+    for(const XirTask *task=executor->active;task;task=task->active_next)
+        if(xir_call_retirement_pending(task->call))return true;
+    for(const XirGenerator *gen=executor->generators;gen;gen=gen->active_next)
+        if(xir_call_retirement_pending(gen->call))return true;
+    return false;
+}
 XR_FUNC XrXirCallStatus xr_xir_task_executor_drain(XrXirTaskExecutor *executor, XrXirCallStatus hard_failure) {
     if (!task_executor_owner_current(executor)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!executor) return XR_XIR_CALL_READY;
@@ -919,8 +942,9 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_drain(XrXirTaskExecutor *executor, 
         if (!xr_xir_call_result_empty(&executor->failure) && executor->failure.status==first &&
             xr_xir_task_executor_root_idle(executor)) return first;
         task_core_record_status(executor,first==XR_XIR_CALL_READY?hard_failure:first);
-        executor->driving=true;executor->fatal_closing=true;task_core_close_group(executor);executor->driving=false;
-        return task_core_completion_status(executor);
+        executor->driving=true;executor->fatal_closing=true;
+        bool closed=task_core_close_group(executor);executor->driving=false;
+        return closed?task_core_completion_status(executor):XR_XIR_CALL_CLOSE_FAILED;
     }
     (void)xr_xir_task_executor_stop(executor);
     XrXirDomainBudgetStats work = xr_xir_domain_budget_stats(executor->config.domain);
@@ -938,6 +962,7 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_drain(XrXirTaskExecutor *executor, 
         XR_CHECK(remaining, "task shutdown stays inside its prepaid release and work bound");
         --remaining;
         (void)xr_xir_task_executor_poll(executor, 1);
+        if(xir_task_executor_retirement_pending(executor))return XR_XIR_CALL_CLOSE_FAILED;
     }
     return task_core_completion_status(executor);
 }
@@ -946,6 +971,7 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_free(XrXirTaskExecutor *executor, X
     if (!executor) return XR_XIR_CALL_READY;
     if (executor->driving || task_executor_observing(executor)) return XR_XIR_CALL_BUSY;
     XrXirCallStatus status = xr_xir_task_executor_drain(executor,XR_XIR_CALL_READY);
+    if(status==XR_XIR_CALL_CLOSE_FAILED)return status;
     XrXirTaskExecutorConfig config = executor->config;
     if (accounting) *accounting = *executor->budget;
     xr_xir_call_result_drop(&executor->failure);

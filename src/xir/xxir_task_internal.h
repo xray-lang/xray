@@ -17,6 +17,8 @@
 #include "xxir_call_internal.h"
 #include "xxir_root_callback_internal.h"
 typedef struct XrXirTaskExecutor XrXirTaskExecutor;
+/* Only physical close retries are pending here; this never drives guest code. */
+XR_FUNC bool xir_task_executor_retirement_pending(const XrXirTaskExecutor *executor);
 typedef struct XirTaskGroup XirTaskGroup;
 typedef struct XirTaskSubscription XirTaskSubscription;
 typedef enum XirTaskState {

@@ -239,15 +239,19 @@ static XrXirCallStatus host_complete(XrXirHostCall *call,XrXirCallResult *output
 host_observed: ;
     }
     call->busy=true;
-    XR_CHECK(xir_instance_host_finish(call->instance,&call->observed)==XR_XIR_CALL_READY,
+    XrXirCallStatus finished=xir_instance_host_finish(call->instance,&call->observed);
+    XR_CHECK(finished==XR_XIR_CALL_READY || finished==XR_XIR_CALL_CLOSE_FAILED,
         "the host exclusively owns its terminal, unprepared current instance");
     call->busy=false;observed=call->observed;
+    if(finished==XR_XIR_CALL_CLOSE_FAILED)status=finished;
     goto complete;
 host_failure:
     call->busy=true;
-    XR_CHECK(xir_instance_host_failure(call->instance,&call->observed)==XR_XIR_CALL_READY,
+    XrXirCallStatus failed=xir_instance_host_failure(call->instance,&call->observed);
+    XR_CHECK(failed==XR_XIR_CALL_READY || failed==XR_XIR_CALL_CLOSE_FAILED,
         "the host exclusively owns its waiting, unprepared current instance");
-    call->busy=false;observed=call->observed;status=observed.outcome.status;
+    call->busy=false;observed=call->observed;
+    status=failed==XR_XIR_CALL_CLOSE_FAILED?failed:observed.outcome.status;
 complete: ;
     XrXirCallResult owned = {0};
     if (status == XR_XIR_CALL_READY || status==observed.outcome.status) status = xr_xir_host_call_take(call, &owned);
