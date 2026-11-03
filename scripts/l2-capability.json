@@ -898,7 +898,12 @@
         "src/xir/xxir_native_callable.h",
         "src/xir/xxir_declarations.c",
         "src/xir/xxir_instance.c",
-        "src/xir/xxir_ctfe_native_callable.inc.c"
+        "src/xir/xxir_ctfe_native_callable.inc.c",
+        "src/os/os_pipe_owned.h",
+        "src/os/win/pipe_owned_win.c",
+        "src/os/unix/pipe_owned_unix.c",
+        "tests/unit/base/test_pipe_owned.c",
+        "tests/unit/base/pipe_owned.cmake"
       ],
       "reason": "Real CPU and Path host calls preserve canonical permissions, ownership, cancellation, and the scalar runtime closure.",
       "tests": [
@@ -908,7 +913,8 @@
         "os_file_metadata",
         "os_file_mutation",
         "os_signal",
-        "os_thread_token"
+        "os_thread_token",
+        "os_pipe_owned"
       ],
       "targets": [
         "test_host_os_source",
@@ -917,7 +923,8 @@
         "test_os_file_metadata",
         "test_os_file_mutation",
         "test_os_signal",
-        "test_os_thread_token"
+        "test_os_thread_token",
+        "test_os_pipe_owned"
       ]
     }
   },
