@@ -1,5 +1,14 @@
-/* Copyright (c) 2026 Xinglei Xu. MIT License.
- * The private result has owned metadata and no source constructor or AST. */
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xxir_source_file_stat.inc.c - Owned private metadata without a language constructor
+ *
+ * KEY CONCEPT:
+ *   Native results have actual query identities and no source declaration AST.
+ */
 static bool source_file_stat_declare(SourceContext *ctx,XrXirType *output) {
     const XrNativeTypeDeclaration *native=xr_native_declaration_by_id(XR_NATIVE_DECLARATION_FILE_STAT);
     if(!xr_native_declaration_validate(native) || native->member_count!=10)
