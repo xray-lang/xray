@@ -1150,6 +1150,38 @@ def render_sys_signal(declarations):
         '    {XR_NATIVE_CALLABLE_SYS_ON_SIGNAL, NULL, &xr_native_sys_on_signal, NULL, false, "sys", "stdlib/defs/core.def", FINGERPRINT}']
 
 
+def render_sys_thread_tokens(declarations):
+    contracts = (
+        ('__threadLocalId', '(): i64', '', 'sys_thread_local_id', 'xrt_sys_thread_local_id', 'SYS_THREAD_LOCAL_ID', 'I64', 4),
+        ('__threadLocalAlive', '(id: i64): bool', 'v', 'sys_thread_local_alive', 'xrt_sys_thread_local_alive', 'SYS_THREAD_LOCAL_ALIVE', 'BOOL', 5),
+    )
+    lines, rows = [], []
+    for name, signature, arguments, vm, aot, identity, result, ordinal in contracts:
+        candidates = [row for row in declarations if row.module == 'sys' and row.name == name]
+        if len(candidates) != 1:
+            raise ValueError('Thread token callable requires its sole governed declaration: ' + name)
+        row = candidates[0]
+        if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+                row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
+                row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
+                row.ret, row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
+                signature, str(len(arguments)), arguments, 'internal', '', '', '', 'system', vm,
+                aot, True, 'method', '', 'normal', '', '', 'value', False, None, (), ''):
+            raise ValueError('Thread token callable differs from its complete source contract: ' + name)
+        symbol = 'xr_native_' + identity.lower()
+        if arguments:
+            lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {',
+                      '    {"id", "i64", XR_NATIVE_TERM_I64, false, false},', '};']
+        lines += ['static const XrNativeMemberDeclaration ' + symbol + ' = {',
+            '    ' + str(ordinal) + ', ' + c_string(name) + ', ' + c_string(signature) + ', ' +
+            c_string('bool' if arguments else 'i64') + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
+            '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
+            '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + (symbol + '_parameters' if arguments else 'NULL') +
+            ', ' + str(len(arguments)) + ', XR_NATIVE_TERM_' + result, '};']
+        rows += ['    {XR_NATIVE_CALLABLE_' + identity + ', NULL, &' + symbol + ', NULL, false, "sys", "stdlib/defs/core.def", FINGERPRINT}']
+    return lines, rows
+
+
 def render_cpu_callables(declarations):
     contracts = (
         ('os', '__cpuCount', '(): i64', 'os_cpuCount', 'xrt_os_cpu_count', 'OS_CPU_COUNT', 'I64', 13),
@@ -1491,6 +1523,9 @@ def render_unicode_callable(root, decoder):
     signal_lines, signal_rows = render_sys_signal(declarations)
     buffer_lines += signal_lines
     buffer_rows += signal_rows
+    thread_lines, thread_rows = render_sys_thread_tokens(declarations)
+    buffer_lines += thread_lines
+    buffer_rows += thread_rows
     os_lines, os_rows = render_os_callables(declarations)
     buffer_lines += os_lines
     buffer_rows += os_rows

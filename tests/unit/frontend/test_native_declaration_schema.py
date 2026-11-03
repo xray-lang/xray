@@ -767,6 +767,44 @@ class SignalCallableSchemaTests(unittest.TestCase):
                                           for item in self.declarations])
 
 
+class ThreadTokenCallableSchemaTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / 'tools/stdlibgen'))
+        from stdlibgen import parse_defs
+        cls.declarations = parse_defs(ROOT)
+
+    def test_exact_thread_token_contracts_are_runtime_only(self):
+        lines, rows = schema.render_sys_thread_tokens(self.declarations)
+        self.assertEqual(len(rows), 2)
+        self.assertIn('XR_NATIVE_CALLABLE_SYS_THREAD_LOCAL_ID, NULL,', rows[0])
+        self.assertIn('XR_NATIVE_CALLABLE_SYS_THREAD_LOCAL_ALIVE, NULL,', rows[1])
+        text = '\n'.join(lines)
+        self.assertIn('"__threadLocalId", "(): i64", "i64"', text)
+        self.assertIn('"__threadLocalAlive", "(id: i64): bool", "bool"', text)
+        self.assertIn('{"id", "i64", XR_NATIVE_TERM_I64, false, false}', text)
+        self.assertEqual(text.count('XR_NATIVE_ALLOCATION_UNKNOWN'), 2)
+        for row in rows:
+            self.assertIn('NULL, false, "sys", "stdlib/defs/core.def", FINGERPRINT', row)
+
+    def test_missing_duplicate_and_complete_metadata_changes_are_rejected(self):
+        for name in ('__threadLocalId', '__threadLocalAlive'):
+            row = next(item for item in self.declarations if item.module == 'sys' and item.name == name)
+            for changed in ([item for item in self.declarations if item is not row], self.declarations + [row]):
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    schema.render_sys_thread_tokens(changed)
+            for field, value in [('module', 'other'), ('signature', '(): string'), ('argc', '9'),
+                                 ('arg_spec', 'invalid'), ('visibility', 'public'), ('effect', 'nothrow'),
+                                 ('allocation', 'no_heap'), ('return_ownership', 'borrowed'), ('layer', 'core'),
+                                 ('vm', 'other'), ('aot', 'other'), ('aot_direct', False), ('aot_kind', 'builtin'),
+                                 ('link_object', 'other'), ('vm_binding', 'yieldable'), ('vm_ifdef', 'OTHER'),
+                                 ('define', 'OTHER'), ('ret', 'i64'), ('semantic_intrinsic', True),
+                                 ('provider_declaration', object()), ('caps', ('task',)), ('suspension_kind', 'task')]:
+                with self.subTest(name=name, field=field), self.assertRaises(ValueError):
+                    schema.render_sys_thread_tokens([replace(item, **{field: value}) if item is row else item
+                                                     for item in self.declarations])
+
+
 class CpuCallableSchemaTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

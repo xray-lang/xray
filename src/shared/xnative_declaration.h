@@ -296,7 +296,9 @@ typedef enum XrNativeCallableId {
     XR_NATIVE_CALLABLE_IO_REMOVE = 83,
     XR_NATIVE_CALLABLE_IO_RENAME = 84,
     XR_NATIVE_CALLABLE_IO_UTIME_NOW = 85,
-    XR_NATIVE_CALLABLE_SYS_ON_SIGNAL = 86
+    XR_NATIVE_CALLABLE_SYS_ON_SIGNAL = 86,
+    XR_NATIVE_CALLABLE_SYS_THREAD_LOCAL_ID = 92,
+    XR_NATIVE_CALLABLE_SYS_THREAD_LOCAL_ALIVE = 93
 } XrNativeCallableId;
 
 /* Callable IDs authenticate ordinary function bodies, independently of inline intrinsics. */
