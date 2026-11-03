@@ -213,6 +213,13 @@ def main():
     parser.add_argument('--msvc-runtime', default='MultiThreaded')
     parser.add_argument('--asan', action='store_true')
     args = parser.parse_args()
+    args.runtime_archives = args.library
+    args.runtime_system_libraries = []
+    if os.name == 'nt':
+        assert tuple(str(p) for p in args.library[-2:]) == ('advapi32.lib', 'userenv.lib'), args.library
+        args.runtime_archives = args.library[:-2]
+        args.runtime_system_libraries = [str(p) for p in args.library[-2:]]
+    assert len(args.runtime_archives) == 5 and all(p.is_absolute() and p.is_file() for p in args.runtime_archives), args.library
     args.work.mkdir(parents=True, exist_ok=True)
     root = Path(tempfile.mkdtemp(prefix='lir-pipeline-', dir=args.work)).resolve()
     inputs = root / 'inputs'
@@ -276,7 +283,8 @@ def main():
     compiler = Path(shutil.which(str(args.compiler)) or args.compiler).resolve()
     assert compiler.is_file()
     identity = {'compiler': str(compiler), 'compilerSHA256': digest(compiler),
-                'driverSHA256': digest(args.driver), 'libraries': [{'path': str(p), 'sha256': digest(p)} for p in args.library],
+                'driverSHA256': digest(args.driver), 'libraries': [{'path': str(p), 'sha256': digest(p)} for p in args.runtime_archives],
+                'systemLibraries': args.runtime_system_libraries,
                 'headerSHA256': digest(args.include / 'xray_native_runtime.h'),
                 'asan': args.asan, 'msvcRuntime': args.msvc_runtime,
                 'sourceInputs': sources, 'formal_performance': False}

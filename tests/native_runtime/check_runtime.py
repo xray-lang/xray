@@ -20,7 +20,12 @@ def header_clients(build, logs, libraries):
     source = Path(cache['CMAKE_HOME_DIRECTORY'])
     compiler = cache['CMAKE_C_COMPILER']
     msvc = os.name == 'nt' and Path(compiler).name.lower() in ('cl', 'cl.exe', 'clang-cl', 'clang-cl.exe')
-    assert libraries and all(p.is_file() for p in libraries), libraries
+    system_libraries = []
+    if os.name == 'nt':
+        assert tuple(str(p) for p in libraries[-2:]) == ('advapi32.lib', 'userenv.lib'), libraries
+        system_libraries = [str(p) for p in libraries[-2:]]
+        libraries = libraries[:-2]
+    assert len(libraries) == 5 and all(p.is_absolute() and p.is_file() for p in libraries), libraries
     prefix = Path(tempfile.mkdtemp(prefix='native-prefix-', dir=logs))
     (prefix / 'include').mkdir(); (prefix / 'lib').mkdir()
     shutil.copyfile(source / 'include/xray_native_runtime.h', prefix / 'include/xray_native_runtime.h')
@@ -70,10 +75,10 @@ def header_clients(build, logs, libraries):
         if msvc:
             command = [compiler, *flags, '/std:' + language,
                        '/I' + str(include), ('/Tc' if language == 'c11' else '/Tp') + str(client),
-                       *libraries, '/Fe:' + str(executable), *link]
+                       *libraries, *system_libraries, '/Fe:' + str(executable), *link]
         else:
             command = [compiler, *flags, '-std=' + language, '-x', 'c' if language == 'c11' else 'c++',
-                       '-I' + str(include), client, '-x', 'none', *libraries, '-o', executable, *link]
+                       '-I' + str(include), client, '-x', 'none', *libraries, *system_libraries, '-o', executable, *link]
         compiled = subprocess.run(command, cwd=logs, capture_output=True, timeout=30)
         compile_log = logs / (language.replace('+', 'x') + '-compile.log')
         compile_log.write_bytes(compiled.stdout + compiled.stderr)
@@ -85,6 +90,7 @@ def header_clients(build, logs, libraries):
                         'compileExit': compiled.returncode, 'exit': ran.returncode,
                         'stderrHex': ran.stderr.hex(),
                         'libraries': [{'path': str(p), 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()} for p in libraries],
+                        'systemLibraries': system_libraries,
                         'headerSHA256': hashlib.sha256((source / 'include/xray_native_runtime.h').read_bytes()).hexdigest()})
     (logs / 'header-clients.json').write_text(json.dumps(records, indent=2), encoding='utf-8')
     return records

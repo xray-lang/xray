@@ -271,7 +271,8 @@ def _f64_cases(args, root, results):
                                             fpOnlyQualification=marker == _FP_ERROR)
                             record['guardRejections'].append(rejected)
                     if output:
-                        record['runtime'] = {'libraries': [{'path': str(p), 'sha256': digest(p)} for p in args.library],
+                        record['runtime'] = {'libraries': [{'path': str(p), 'sha256': digest(p)} for p in args.runtime_archives],
+                                             'systemLibraries': args.runtime_system_libraries,
                                              'header': str(args.include / 'xray_native_runtime.h'),
                                              'headerSHA256': digest(args.include / 'xray_native_runtime.h'),
                                              'msvcRuntime': args.msvc_runtime}
@@ -452,7 +453,8 @@ def _fneg_cases(args, root, results):
                     if base == 'fneg-zero' and not output and mode == 'before' and fp == 'default':
                         record['guardRejections'] = _fneg_controls(args, flags, generated, work)
                     if output:
-                        record['runtime'] = {'libraries': [{'path': str(p), 'sha256': digest(p)} for p in args.library],
+                        record['runtime'] = {'libraries': [{'path': str(p), 'sha256': digest(p)} for p in args.runtime_archives],
+                            'systemLibraries': args.runtime_system_libraries,
                             'header': str(args.include / 'xray_native_runtime.h'),
                             'headerSHA256': digest(args.include / 'xray_native_runtime.h'), 'msvcRuntime': args.msvc_runtime}
                     results.append(record)
@@ -470,6 +472,13 @@ def main():
     parser.add_argument('--work', type=Path, required=True)
     parser.add_argument('--asan', action='store_true')
     args = parser.parse_args()
+    args.runtime_archives = args.library
+    args.runtime_system_libraries = []
+    if os.name == 'nt':
+        assert tuple(str(p) for p in args.library[-2:]) == ('advapi32.lib', 'userenv.lib'), args.library
+        args.runtime_archives = args.library[:-2]
+        args.runtime_system_libraries = [str(p) for p in args.library[-2:]]
+    assert len(args.runtime_archives) == 5 and all(p.is_absolute() and p.is_file() for p in args.runtime_archives), args.library
     args.work.mkdir(parents=True, exist_ok=True)
     root = Path(tempfile.mkdtemp(prefix='lir-carriers-', dir=args.work))
     inputs = {'i8': ['-128', '-1', '127'], 'u16': ['32768', '65535', '0'], 'u64': [],
@@ -565,7 +574,8 @@ def main():
             assert native['stdoutHex'] == expected.hex() and native['stderrHex'] == ''
             runtime = None
             if output:
-                runtime = {'libraries': [{'path': str(p), 'sha256': digest(p)} for p in args.library],
+                runtime = {'libraries': [{'path': str(p), 'sha256': digest(p)} for p in args.runtime_archives],
+                           'systemLibraries': args.runtime_system_libraries,
                            'header': str(args.include / 'xray_native_runtime.h'),
                            'headerSHA256': digest(args.include / 'xray_native_runtime.h'), 'msvcRuntime': args.msvc_runtime}
             results.append({'case': case, 'mode': mode, 'expectedHex': expected.hex(), 'producer': producer,

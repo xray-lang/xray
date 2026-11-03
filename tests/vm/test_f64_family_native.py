@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -120,6 +121,13 @@ def main():
     parser.add_argument('--msvc-runtime', default='MultiThreaded')
     parser.add_argument('--asan', action='store_true')
     args = parser.parse_args()
+    args.runtime_archives = args.library
+    args.runtime_system_libraries = []
+    if os.name == 'nt':
+        assert tuple(str(p) for p in args.library[-2:]) == ('advapi32.lib', 'userenv.lib'), args.library
+        args.runtime_archives = args.library[:-2]
+        args.runtime_system_libraries = [str(p) for p in args.library[-2:]]
+    assert len(args.runtime_archives) == 5 and all(p.is_absolute() and p.is_file() for p in args.runtime_archives), args.library
     args.work.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix='family-', dir=args.work)).resolve()
     commands = []
@@ -209,12 +217,12 @@ def main():
                   expected=b'14\n' if mode == 'relations' else b'')
     closure = work / 'moved-build-closure';(closure / 'include').mkdir(parents=True);(closure / 'lib').mkdir()
     copied = []
-    for path in [args.include / 'xray_native_runtime.h', args.include / 'xray_export.h', *args.library]:
+    for path in [args.include / 'xray_native_runtime.h', args.include / 'xray_export.h', *args.runtime_archives]:
         target = closure / ('include' if path.suffix == '.h' else 'lib') / path.name
         shutil.copy2(path, target);assert path.read_bytes() == target.read_bytes()
         copied.append({'source': str(path), 'path': str(target), 'sha256': hashlib.sha256(target.read_bytes()).hexdigest()})
-    assert len(args.library) == 5
-    libraries = [closure / 'lib' / p.name for p in args.library]
+    assert len(args.runtime_archives) == 5
+    libraries = [closure / 'lib' / p.name for p in args.runtime_archives] + args.runtime_system_libraries
     for cpp in (False, True):
         folder = closure / ('public-cpp17' if cpp else 'public-c11');folder.mkdir()
         (folder / 'arithmetic-values.h').write_text(arithmetic, encoding='ascii')
@@ -236,6 +244,7 @@ def main():
     (work / 'result.json').write_text(json.dumps({'state': 'PASS', 'observation': observation,
         'profile': profile, 'allKernelGoldenRowsPreserved': 6432, 'F64RowsActuallyExecuted': 3216,
         'comparisonPairsActuallyExecuted': 676, 'nativeProducts': artifacts, 'movedBuildClosure': copied,
+        'systemLibraries': args.runtime_system_libraries,
         'distribution': 'Build closure moved for cold public C11/C++17 consumers; no cmake installation or official SDK claim.',
         'negativeControls': negative}, indent=2) + '\n')
     print(work)

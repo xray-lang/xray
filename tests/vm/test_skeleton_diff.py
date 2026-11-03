@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -20,9 +21,17 @@ def main():
     parser.add_argument('--work', type=Path, required=True)
     parser.add_argument('--asan', action='store_true')
     args = parser.parse_args()
+    args.runtime_archives = args.library
+    args.runtime_system_libraries = []
+    if os.name == 'nt':
+        assert tuple(str(p) for p in args.library[-2:]) == ('advapi32.lib', 'userenv.lib'), args.library
+        args.runtime_archives = args.library[:-2]
+        args.runtime_system_libraries = [str(p) for p in args.library[-2:]]
+    assert len(args.runtime_archives) == 5 and all(p.is_absolute() and p.is_file() for p in args.runtime_archives), args.library
     args.work.mkdir(parents=True, exist_ok=True)
     root = Path(tempfile.mkdtemp(prefix='skeleton-', dir=args.work)).resolve()
-    identity = {'libraries': [{'path': str(p), 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()} for p in args.library],
+    identity = {'libraries': [{'path': str(p), 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()} for p in args.runtime_archives],
+                'systemLibraries': args.runtime_system_libraries,
                 'headerSHA256': hashlib.sha256((args.include / 'xray_native_runtime.h').read_bytes()).hexdigest(),
                 'compiler': str(args.compiler), 'kind': args.kind, 'msvcRuntime': args.msvc_runtime,
                 'asan': args.asan}

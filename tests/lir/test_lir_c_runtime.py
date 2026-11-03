@@ -40,10 +40,18 @@ def main():
     parser.add_argument('--work', type=Path, required=True)
     parser.add_argument('--asan', action='store_true')
     args = parser.parse_args()
+    args.runtime_archives = args.library
+    args.runtime_system_libraries = []
+    if os.name == 'nt':
+        assert tuple(str(p) for p in args.library[-2:]) == ('advapi32.lib', 'userenv.lib'), args.library
+        args.runtime_archives = args.library[:-2]
+        args.runtime_system_libraries = [str(p) for p in args.library[-2:]]
+    assert len(args.runtime_archives) == 5 and all(p.is_absolute() and p.is_file() for p in args.runtime_archives), args.library
     args.work.mkdir(parents=True, exist_ok=True)
     root = Path(tempfile.mkdtemp(prefix='lir-runtime-', dir=args.work))
     header = args.include / 'xray_native_runtime.h'
-    identity = {'libraries': [{'path': str(p), 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()} for p in args.library],
+    identity = {'libraries': [{'path': str(p), 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()} for p in args.runtime_archives],
+                'systemLibraries': args.runtime_system_libraries,
                 'header': str(header), 'headerSHA256': hashlib.sha256(header.read_bytes()).hexdigest()}
     print(json.dumps(identity), flush=True)
     cases = {

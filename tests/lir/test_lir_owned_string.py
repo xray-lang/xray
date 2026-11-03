@@ -18,6 +18,13 @@ def main():
     parser.add_argument('--msvc-runtime', default='MultiThreaded')
     parser.add_argument('--asan', action='store_true')
     args = parser.parse_args()
+    args.runtime_archives = args.library
+    args.runtime_system_libraries = []
+    if os.name == 'nt':
+        assert tuple(str(p) for p in args.library[-2:]) == ('advapi32.lib', 'userenv.lib'), args.library
+        args.runtime_archives = args.library[:-2]
+        args.runtime_system_libraries = [str(p) for p in args.library[-2:]]
+    assert len(args.runtime_archives) == 5 and all(p.is_absolute() and p.is_file() for p in args.runtime_archives), args.library
     args.work.mkdir(parents=True, exist_ok=True)
     root = Path(tempfile.mkdtemp(prefix='owned-string-', dir=args.work)).resolve()
     records = []
@@ -311,7 +318,8 @@ def main():
     assert result.returncode == 1 and not result.stdout and not generated.exists()
     assert result.stderr.splitlines() == [b'lowering: module initialization call before complete publication is not supported by LIR lowering yet']
     (root / 'result.json').write_text(json.dumps({'state': 'PASS', 'cases': records,
-        'libraries': [{'path': str(p), 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()} for p in args.library]}, indent=2) + '\n')
+        'libraries': [{'path': str(p), 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()} for p in args.runtime_archives],
+        'systemLibraries': args.runtime_system_libraries}, indent=2) + '\n')
     print('PASS: owned String complete Source/RBC/C/native', root)
 
 
