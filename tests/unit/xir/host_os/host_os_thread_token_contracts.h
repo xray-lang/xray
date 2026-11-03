@@ -30,7 +30,10 @@ static const char host_thread_token_tail[]=
  "export fn waited()->i64{const local=ThreadLocal<i64,Never>(fn()->i64{return 42})\nvar result=try! local.get()\nvar task=go child()\nvar unused=await task\nreturn result}\n"
  "export fn dynamic()->i64{var init:nosuspend fn()->i64=fn()->i64{return 42}\nconst local=ThreadLocal<i64,Never>(init);return try! local.get()}\n"
  "export fn nullable()->i64{var calls=0\nconst local=ThreadLocal<i64?,Never>(fn()->i64?{calls=calls+1;return null})\n"
- "assert(try! local.get()==null);assert(try! local.get()==null);assert(calls==1);return 42}\n";
+ "assert(try! local.get()==null);assert(try! local.get()==null);assert(calls==1);return 42}\n"
+ "export fn barrier()->i64{const value=try! OsBarrier(1);assert(value.wait());assert(value.wait());return 42}\n"
+ "export fn invalidBarrier(parties:i64)->i64{try{var unused=try OsBarrier(parties)}catch(error:BarrierError){\n"
+ "assert(error==BarrierError.InvalidBarrierParties);return 42}\nreturn -1}\n";
 
 /* Only these exact source-owned bodies are selected. Unsupported unrelated
  * sys features are not a claim of complete module admission. */
@@ -38,12 +41,13 @@ static char *host_thread_token_source(void){
  FILE *file=fopen(XR_HOST_OS_ROOT "/stdlib/sys/sys.xr","rb");CHECK(file&&!fseek(file,0,SEEK_END));
  long length=ftell(file);CHECK(length>=0&&(uint64_t)length<SIZE_MAX&&!fseek(file,0,SEEK_SET));
  char *whole=xr_malloc((size_t)length+1);CHECK(whole&&fread(whole,1,(size_t)length,file)==(size_t)length&&!fclose(file));whole[length]=0;
- const char *spin=strstr(whole,"fn _spinAcquire("),*spin_end=strstr(whole,"// A negative state denotes a writer");
+ const char *barrier_error=strstr(whole,"export enum BarrierError {"),*spin=strstr(whole,"fn _spinAcquire("),*spin_end=strstr(whole,"// A negative state denotes a writer");
+ const char *barrier=strstr(whole,"export class OsBarrier {"),*barrier_end=strstr(whole,"export class OsOnce {");
  const char *local=strstr(whole,"export enum ThreadLocalError {"),*local_end=strstr(whole,"export class Dylib {");
- CHECK(spin&&spin_end&&spin<spin_end&&local&&local_end&&local<local_end);
- size_t a=(size_t)(spin_end-spin),b=(size_t)(local_end-local),tail=sizeof(host_thread_token_tail);
- CHECK(a<=SIZE_MAX-b&&a+b<=SIZE_MAX-tail);char *text=xr_malloc(a+b+tail);CHECK(text);
- memcpy(text,spin,a);memcpy(text+a,local,b);memcpy(text+a+b,host_thread_token_tail,tail);xr_free(whole);return text;
+ CHECK(barrier_error&&spin&&spin_end&&barrier_error<spin&&spin<spin_end&&barrier&&barrier_end&&barrier<barrier_end&&local&&local_end&&local<local_end);
+ size_t a=(size_t)(spin_end-barrier_error),b=(size_t)(local_end-local),c=(size_t)(barrier_end-barrier),tail=sizeof(host_thread_token_tail);
+ CHECK(a<=SIZE_MAX-b&&a+b<=SIZE_MAX-c&&a+b+c<=SIZE_MAX-tail);char *text=xr_malloc(a+b+c+tail);CHECK(text);
+ memcpy(text,barrier_error,a);memcpy(text+a,local,b);memcpy(text+a+b,barrier,c);memcpy(text+a+b+c,host_thread_token_tail,tail);xr_free(whole);return text;
 }
 static void host_thread_token_contracts(XrXirCompileContext *context,const XrXirArtifact *code){
  const XrXirModule *m=xr_xir_compile_artifact_module(code);const char *names[]={"__threadLocalId","__threadLocalAlive"};

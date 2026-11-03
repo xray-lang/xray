@@ -10,7 +10,7 @@
 
 import time
 
-enum _SysError {
+export enum BarrierError {
     InvalidBarrierParties
 }
 
@@ -114,8 +114,8 @@ export class OsBarrier {
     private _arrived: Atomic<i64>
     private _generation: Atomic<i64>
 
-    init(parties: i64) {
-        if (parties <= 0) { throw _SysError.InvalidBarrierParties }
+    init(parties: i64) throws(BarrierError) {
+        if (parties <= 0) { throw BarrierError.InvalidBarrierParties }
         this._parties = parties
         this._arrived = Atomic<i64>(0)
         this._generation = Atomic<i64>(0)

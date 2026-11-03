@@ -222,7 +222,7 @@ static void host_product(XrXirCompileContext *context,unsigned kind,const char *
  char *owned=kind==9?host_thread_token_source():NULL;
  XrXirArtifact *code=host_code(context,modules[kind],owned?owned:texts[kind]);xr_free(owned);const XrXirModule *m=xr_xir_compile_artifact_module(code);
  uint32_t ids[HOST_TOKEN_COUNT]={m->declarations->entry_function};unsigned count=kind==9?HOST_TOKEN_COUNT:kind==8?4u:kind==7?6u:kind==6?5u:kind==5?7u:kind==4?4u:kind==3?9u:kind==2?5u:2u;
- if(kind==9){const char *names[]={"current","alive","throughValue","basic","retry","recursion","panicked","cancelled","yielded","waited","dynamic","nullable","__threadLocalId","__threadLocalAlive"};for(unsigned n=0;n<14;++n)ids[n+1]=host_named(m,names[n]);}
+ if(kind==9){const char *names[]={"current","alive","throughValue","basic","retry","recursion","panicked","cancelled","yielded","waited","dynamic","nullable","__threadLocalId","__threadLocalAlive","barrier","invalidBarrier"};for(unsigned n=0;n<16;++n)ids[n+1]=host_named(m,names[n]);}
  else if(kind==3){const char *names[]={"uid","gid","parent","signal","total","available","elapsed","load"};for(unsigned n=0;n<8;++n)ids[n+1]=host_named(m,names[n]);}
  else ids[1]=host_named(m,kind==8?"directory":kind==6?"parent":(kind==2||kind==4||kind==5||kind==7)?"make":"answer");
  if(kind==8){ids[2]=host_named(m,"file");ids[3]=host_named(m,"nested");}
