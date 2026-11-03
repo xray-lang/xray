@@ -11,25 +11,24 @@
 #include "xir/xxir_output.h"
 #include "xir_source_compile_owner.h"
 #define xr_xir_call_view_operation array_real_view_operation
-#define xr_xir_instance_array_write array_real_array_write
+#define xr_xir_instance_path_write_at array_real_path_write_at
 #include "xir_runtime_allocations.h"
 #undef xr_xir_call_view_operation
-#undef xr_xir_instance_array_write
+#undef xr_xir_instance_path_write_at
 static unsigned array_raw_view_checks;
 static unsigned array_string_fault,array_string_fault_hits;
 /* Arm the actual allocator/cancellation at the first managed swap. The real
  * operation still validates and mutates only its private candidate. */
-XR_FUNC XrXirCallStatus xr_xir_instance_array_write(XrXirCallView *view,
-    const XrXirValueReceiver *receiver,int64_t index,const XrXirValue *element,
-    bool append,XrXirFaultDetail *fault){
-    bool inject=array_string_fault&&!append&&element&&element->type==XR_XIR_STRING;
+XR_FUNC XrXirCallStatus xr_xir_instance_path_write_at(XrXirCallView *view,uint32_t instruction,
+    const XrXirValueReceiver *receiver,const XrXirValuePath *path,const XrXirValue *element,XrXirFaultDetail *fault){
+    bool inject=array_string_fault&&element&&element->type==XR_XIR_STRING&&path&&path->count==1&&path->steps&&path->steps[0].kind==XR_XIR_PATH_INDEX;
     if(inject){
         ++array_string_fault_hits;
         if(array_string_fault==1)runtime_fail_at=runtime_attempts;
         else CHECK(xr_xir_call_request_cancel(view->activation)==XR_XIR_CALL_CANCEL_REQUESTED);
         array_string_fault=0;
     }
-    XrXirCallStatus status=array_real_array_write(view,receiver,index,element,append,fault);
+    XrXirCallStatus status=array_real_path_write_at(view,instruction,receiver,path,element,fault);
     if(inject)runtime_fail_at=SIZE_MAX;return status;
 }
 /* The original operation always runs unchanged. These bounded invalid requests
@@ -155,7 +154,9 @@ static void array_string_cases(XrXirProgram *program,const uint32_t *ids){
         else{
             CHECK(xr_xir_instance_start(instance,ids[8],&box,1)==XR_XIR_CALL_READY);
             XrXirCallStatus expected=mode==1?XR_XIR_CALL_OOM:XR_XIR_CALL_CANCELLED;
-            CHECK(array_drive(instance).outcome.status==expected&&array_string_fault_hits==hits+1&&!array_string_fault);
+            XrXirCallStatus observed=array_drive(instance).outcome.status;
+            fprintf(stderr,"String sort injection%u observed%u hits%u armed%u\n",mode,observed,array_string_fault_hits-hits,array_string_fault);
+            CHECK(observed==expected&&array_string_fault_hits==hits+1&&!array_string_fault);
             XrXirValue rejected={0};CHECK(xr_xir_instance_take_result(instance,&rejected)==(mode==1?XR_XIR_CALL_OOM:XR_XIR_CALL_BAD_STATE)&&!rejected.type&&!rejected.payload&&!rejected.reserved);
         }
         CHECK(xr_xir_class_get(&box,0,&access,&after)==XR_XIR_VALUE_OK);array_string_values(&after,mode?original:sorted,lengths,3);
