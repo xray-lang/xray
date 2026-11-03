@@ -38,6 +38,7 @@ typedef struct XirTask {
     struct XirTask *active_next, *active_previous;
     XrXirCall *waiter_head, *waiter_tail;
     XirTaskGroup *aggregation;
+    uint64_t cancel_scope;
     XirTaskSubscription *subscriptions;
     XirTaskActivation activation;
     uint64_t generation, identity, terminal_order;
@@ -80,6 +81,14 @@ XR_FUNC XrXirCallStatus xir_task_scope_cleanup(XrXirTaskExecutor *executor,
     XrXirCallView *view,XrXirValue *output);
 XR_FUNC XrXirCallStatus xir_task_scope_observe(const XrXirValue *task,
     XrXirCall *call,uint64_t frame,uint64_t *failure_order);
+/* A failure-induced cancellation may stop only at its original lexical owner. */
+XR_FUNC bool xir_task_scope_cancel_boundary(const XirTaskGroup *group,
+    const XrXirCall *call,uint64_t frame,uint32_t frontier);
+XR_FUNC XrXirCallStatus xir_call_request_scope_cancel(XrXirCall *call,XirTaskGroup *group);
+XR_FUNC XirTaskGroup *xir_call_cancel_origin(const XrXirCall *call);
+XR_FUNC uint64_t xir_task_scope_identity(const XirTaskGroup *group);
+XR_FUNC XrXirCallStatus xir_task_cancel_origin(XrXirTaskExecutor *executor,
+    const XirTask *task,XrXirValueAdmission *admission,XirTaskGroup **output);
 /* Driver publication order is separate from Task identity and source order. */
 XR_FUNC XrXirCallStatus xir_task_scope_failure_order(XrXirTaskExecutor *executor,uint64_t *output);
 XR_FUNC XrXirCallStatus xr_xir_task_executor_poll(XrXirTaskExecutor *executor, uint64_t quantum);

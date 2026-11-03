@@ -8,9 +8,9 @@
 const ch = Channel<i64>(3)
 
 // Send values (buffered, non-blocking up to capacity)
-try ch.send(10)
-try ch.send(20)
-try ch.send(30)
+ch.send(10)
+ch.send(20)
+ch.send(30)
 
 // Receive values
 match (ch.recv()) {
@@ -30,9 +30,9 @@ ch.close()
 // === Producer-Consumer pattern ===
 const data = Channel<i64>(5)
 
-fn producer(out: Channel<i64>, count: i64) throws(SendResult) {
+fn producer(out: Channel<i64>, count: i64) {
     for (i in 0..count) {
-        try out.send(i * i)
+        out.send(i * i)
     }
     out.close()
 }
@@ -62,8 +62,7 @@ fn worker(id: i64, jobs: Channel<i64>) {
         }
     }
 }
-try {
-    // Start 3 workers
+// Start 3 workers
     scope {
         go worker(1, work)
         go worker(2, work)
@@ -71,15 +70,14 @@ try {
 
         // Send jobs
         for (i in 0..9) {
-            try work.send(i)
+            work.send(i)
         }
         work.close()
     }
-} catch (e) { throw e }
 
 // === tryRecv (non-blocking) ===
 const ch2 = Channel<i64>(1)
-try ch2.send(42)
+ch2.send(42)
 
 match (ch2.tryRecv()) {
     Recv.Value { value: val } -> print("tryRecv: value=${val}")

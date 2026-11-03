@@ -82,7 +82,7 @@ export fn stopPair() -> i64 {
     while (true) { Coro.yield(); count = count + 1 }
     return count
 }
-export fn fatalTask() -> i64 { try { const t = go taskFatal(); return await t } catch (e) { return -7 } }
+export fn fatalTask() -> i64 { const t = go taskFatal(); return await t }
 export fn cancellable() -> i64 {
     defer { const ignored = divide(0) }
     print("armed")
@@ -105,7 +105,7 @@ export fn unsafeOrdinary() -> i64 {
     try { return unsafeBusiness() } catch (e) { return -1 }
     catch panic (p) { return p.replacedError != null ? p.code : -2 }
 }
-export fn unsafeTask() -> i64 { try { const task = go unsafeWorker(); return await task } catch (e) { return -3 } }
+export fn unsafeTask() -> i64 { const task = go unsafeWorker(); return await task }
 export fn singleError() throws(Failure) -> i64 { return try oldFailure() }
 export fn single446() throws(Failure) -> i64 { return try bothFailure() }
 print(run())

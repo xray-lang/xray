@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "demos/05-concurrency/goroutines.xr",
-  "sourceCanonicalSha256": "6734856fce13e283ed985fe98de3bfd24b4ba60dfd1797abab613d0999966366",
+  "sourceCanonicalSha256": "feb225a6375e25700abb30c57a5b6a32857cadd1876ef1741ddc23154ddbf3e1",
   "traces": [
     "task-1 computed sum(0..100) = 4950\nresult: 4950\nalpha computed sum(0..50) = 1225\nbeta computed sum(0..75) = 2775\ngamma computed sum(0..100) = 4950\nall results: [1225, 2775, 4950]\nfirst finished: fast done after 10ms\ncheck computed sum(0..10) = 45\ntask.poll: TaskResult.Success(45)\ntask.result: 45\ntask.awaitResult: TaskResult.Success(45)\n",
     "task-1 computed sum(0..100) = 4950\nresult: 4950\nalpha computed sum(0..50) = 1225\nbeta computed sum(0..75) = 2775\ngamma computed sum(0..100) = 4950\nall results: [1225, 2775, 4950]\nfirst finished: slow done after 200ms\ncheck computed sum(0..10) = 45\ntask.poll: TaskResult.Success(45)\ntask.result: 45\ntask.awaitResult: TaskResult.Success(45)\n",

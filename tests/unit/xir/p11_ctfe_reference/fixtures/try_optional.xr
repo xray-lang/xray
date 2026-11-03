@@ -32,10 +32,10 @@ print((try? it.hasNext()) ?? false)
 const indexed = values()
 print((try? indexed.nth(1)) ?? -1)
 const pure = pureValues()
-print((try? pure.next()) ?? -1)
+print(pure.next())
 print(folded)
 const owned: string? = try? text()
 print(owned ?? "missing")
 print((try? (part(31, false) + part(32, true) + part(33, false))) ?? -3)
-try { const ignored = try? divide(0); print(ignored ?? -9) }
+try { const ignored = divide(0); print(ignored) }
 catch panic (p) { print(p.code) }

@@ -162,6 +162,7 @@ typedef enum XrNativeOperation {
     XR_NATIVE_OPERATION_STRING_SPLIT,
     XR_NATIVE_OPERATION_TASK_ALL,
     XR_NATIVE_OPERATION_TASK_FIRST,
+    XR_NATIVE_OPERATION_TASK_TIMEOUT,
     XR_NATIVE_OPERATION_COUNT
 } XrNativeOperation;
 typedef enum XrNativeAllocation {

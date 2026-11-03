@@ -71,7 +71,7 @@ def main():
             path = directory/(name+'.xr');path.write_bytes(text)
             run(name+'-check', [binary, 'check', path]);run(name+'-vm', [binary, 'run', path], b'42\n' if name in ('ordinary-unused','rooted-callback') else expected)
         refusals = (
-            ('root-required', 'var state:i64=1\nfn rooted()->i64{return state}\nconst task=go rooted()\nprint(try await task)\n',
+            ('root-required', 'var state:i64=1\nfn rooted()->i64{return state}\nconst task=go rooted()\nprint(await task)\n',
              'GO target requires the current instance root execution'),
             ('nosuspend-reference', 'fn use(callback:nosuspend fn(i64)->i64)->i64{return callback(41)}\n'
              'fn value(x:i64)->i64{return x+1}\nprint(use(value))\n', 'qualified reference requires an explicit target promise'),

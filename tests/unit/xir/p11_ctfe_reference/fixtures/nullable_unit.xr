@@ -21,7 +21,7 @@ print(none == null)
 const unwrapped: () = some!
 const success = try? value(false)
 const failure = try? value(true)
-const pure = try? never()
+const pure: ()? = never()
 print(success != null)
 print(failure == null)
 print(pure != null)
@@ -35,11 +35,11 @@ print(items[0] == null)
 print(items[1] != null)
 print(foldedWitness())
 try { const unwrappedNone: () = none! } catch panic (p) { print(p.code) }
-try { const result = try? panicUnit(); print("unreached") }
+try { const result = panicUnit(); print("unreached") }
 catch panic (p) { print(p.code) }
 fn worker() {}
 const task: Task<()> = go worker()
-try await task
+await task
 print("task")
 var fallbacks = 0
 fn fallback() { fallbacks += 1 }

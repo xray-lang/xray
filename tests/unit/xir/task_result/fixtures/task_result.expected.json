@@ -1,6 +1,6 @@
 {
-  "sourceBytes": 3694,
-  "sourceSHA256": "79765c5ff145314f2aeeb572c80cc23649b1b703853b957d636bdc609ba89e60",
+  "sourceBytes": 3571,
+  "sourceSHA256": "dc65cca3f217d7ae85316646a6f9e11f3c313bb674584ddbdb42bbdbb762bb4b",
   "stdoutHex": "6368696c642d636c65616e75700a300a310a320a330a34320a300a300a310a",
   "stdoutBytes": 31
 }

@@ -6,18 +6,18 @@ fn failUnion(first: bool) throws(A|B) -> i64 {
     if (first) { throw A.Bad { text: "union é\0界" } }
     throw B.Bad
 }
-export fn awaitNever() throws(Cancelled) -> string {
+export fn awaitNever() -> string {
     var task: Task<string> = go value()
-    const first = try await task
+    const first = await task
     task.cancel()
     task.cancel()
-    return try await task
+    return await task
 }
-export fn awaitOne() throws(A|Cancelled) -> string {
+export fn awaitOne() throws(A) -> string {
     const task: Task<string,A> = go failOne()
     return try await task
 }
-export fn awaitUnion(first: bool) throws(A|B|Cancelled) -> i64 {
+export fn awaitUnion(first: bool) throws(A|B) -> i64 {
     const task: Task<i64,A|B> = go failUnion(first)
     return try await task
 }
@@ -31,30 +31,34 @@ export fn childCancellation() -> i64 {
     task.cancel()
     task.cancel()
     var caught = 0
-    try { const ignored = try await task } catch (e: Cancelled) { caught += 1 }
-    try { const ignored = try await task } catch (e: Cancelled) { caught += 1 }
+    try { const ignored = await task; failOne() } catch (e) { caught += 1 }
+    try { const ignored = await task; failOne() } catch (e) { caught += 1 }
     return caught
 }
-export fn cancelledError() throws(Cancelled) -> i64 {
+export fn cancelledError() -> i64 {
     var task = go spinning()
     task.cancel()
-    return try await task
+    return await task
 }
 export fn ownCancellation() -> i64 {
     var task = go spinning()
     defer { print("parent-cleanup"); task.cancel() }
-    try { return try await task }
-    catch (e: Cancelled) { print("caught-own"); return -1 }
+    try { const value = await task; failOne(); return value }
+    catch (e) { print("caught-own"); return -1 }
 }
 export fn independentParent() -> i64 {
     defer { print("parent-cleanup") }
     const task = go spinning()
-    try { return try await task }
-    catch (e: Cancelled) { print("caught-own"); return -1 }
+    try { const value = await task; failOne(); return value }
+    catch (e) { print("caught-own"); return -1 }
 }
 
-print(childCancellation())
-print(try awaitNever())
+fn observeChild() -> i64 {
+    var task = go childCancellation()
+    return task.awaitResult().ordinal
+}
+print(observeChild())
+print(awaitNever())
 try { print(try awaitOne()) } catch (e: A) { print("one-error") }
 try { print(try awaitUnion(true)) } catch (e: A) { print("union-a") } catch (e: B) { print("wrong-b") }
 try { print(try awaitUnion(false)) } catch (e: A) { print("wrong-a") } catch (e: B) { print("union-b") }
