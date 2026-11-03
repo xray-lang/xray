@@ -64,7 +64,7 @@ static void task_error_fixture_new(TaskErrorFixture *f) {
         code[i][1] = (XrXirInstruction){XR_XIR_MATCH_FAIL,XR_XIR_UNIT,{0},{0},0,{0}};
         functions[i] = (XrXirFunction){names[i],(uint32_t)strlen(names[i]),entries[i].parameters,
             entries[i].parameter_count,entries[i].result,&block,1,code[i],2,NULL,0,
-            i == 1 ? (XrXirType)257 : XR_XIR_NEVER};
+            i == 1 ? (XrXirType)257 : XR_XIR_NEVER,0,NULL};
     }
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL,XR_XIR_PROGRAM,NULL};
     XrXirArtifact *checked = NULL, *closed = NULL;
