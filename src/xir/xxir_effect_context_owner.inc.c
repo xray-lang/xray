@@ -327,6 +327,21 @@ static XrXirStatus effect_context_dense_intern(EffectContextOwner *owner,
      * IDs cannot name another numeric declaration domain. */
     const XrXirType *physical=vector->physical;
     XrXirStatus status=XR_XIR_OK;
+    if (source->declarations->functions[original->declaration].native_callable==XR_NATIVE_CALLABLE_SYS_ON_SIGNAL) {
+        /* An opaque native ABI does not execute the handler while registering.
+         * Authenticate the actual vector, then retain its fixed public formal
+         * bounds instead of emitting a differently typed native declaration. */
+        status=xir_native_callable_verify(source,original->declaration);
+        if (status!=XR_XIR_OK) return status;
+        if (ordinary>=dense->base_count || ordinary>=dense->count ||
+            dense->nodes[ordinary].declaration!=original->declaration || count!=2 ||
+            physical[0]!=XR_XIR_I64) return XR_XIR_BAD_STRUCTURE;
+        const XrXirType *formal=dense->nodes[ordinary].physical_types;
+        if (!formal || formal[0]!=XR_XIR_I64) return XR_XIR_BAD_STRUCTURE;
+        status=xr_xir_compile_callable_weakening(dense->terms.remaining,&dense->terms.types,physical[1],formal[1]);
+        if(status!=XR_XIR_OK)return status;
+        *output=ordinary;return XR_XIR_OK;
+    }
     uint32_t parent=source->declarations->functions[original->declaration].cleanup_owner;
     uint32_t owner_index=UINT32_MAX;
     if (parent) {

@@ -28,7 +28,11 @@ static XrXirStatus effect_invocation_native_root(const EffectBodyMaterial *body,
     if (body->ordinary_identities) {
         declaration=body->ordinary_identities[function].declaration;
         if (declaration>=body->ordinary_source_count) return XR_XIR_BAD_STRUCTURE;
-        while (declaration_body->backbone) declaration_body=declaration_body->backbone;
+        if (body->canonical_source) declaration_body=body->canonical_source;
+        else {
+            while (declaration_body->backbone) declaration_body=declaration_body->backbone;
+            if (declaration_body->ordinary_identities) return XR_XIR_BAD_STRUCTURE;
+        }
     }
     if (declaration>=effect_body_count(declaration_body) || !declaration_body->declarations ||
         !declaration_body->declarations->functions ||
