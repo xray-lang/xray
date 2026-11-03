@@ -20,6 +20,8 @@
 #include "xir/xxir_ctfe.h"
 #include "xir/xxir_native_callable.h"
 #include "toolchain/xcompiler_session.h"
+#include "os/os_time.h"
+#include "os/os_thread.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -127,7 +129,14 @@ static void pipe_cancel_read(XrXirProgram *program,const uint32_t *ids){
  }
  CHECK(suspended&&xr_xir_instance_cancel_current(instance)==XR_XIR_CALL_CANCEL_REQUESTED);
  CHECK(pipe_drive(instance).outcome.status==XR_XIR_CALL_CANCELLED);XrXirValue output={0};CHECK(xr_xir_instance_take_result(instance,&output)==XR_XIR_CALL_BAD_STATE&&!output.type&&!output.payload);
- xr_xir_value_drop(&p);CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+ xr_xir_value_drop(&p);uint64_t started=xr_time_monotonic_ns();CHECK(started);
+ /* Cancellation requests termination; only a successful public close retires
+  * the owner. Failed closes retry cleanup without executing the guest again. */
+ for(;;){
+  XrXirCallStatus closed=xr_xir_instance_free(instance);if(closed==XR_XIR_CALL_READY)break;
+  CHECK(closed==XR_XIR_CALL_CLOSE_FAILED);uint64_t now=xr_time_monotonic_ns();
+  CHECK(now&&now>=started&&now-started<UINT64_C(5000000000));xr_thread_yield();
+ }
 }
 static void pipe_execute(XrXirProgram *program,const uint32_t *ids){
  size_t live=runtime_live,bytes=runtime_bytes;pipe_roundtrip(program,ids);pipe_refusals(program,ids);pipe_cancel_read(program,ids);
