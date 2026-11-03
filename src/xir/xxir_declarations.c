@@ -57,6 +57,8 @@ XrXirStatus xr_xir_compile_method_signature_verify(const XrXirCompileContext *co
     uint32_t owner = identity->nominal_owner-1;
     if (!table || owner >= table->count || (!table->declarations && !table->identities))
         return XR_XIR_BAD_STRUCTURE;
+    uint32_t native_id=table->declarations?table->declarations[owner].native.native_id:table->identities[owner].native.native_id;
+    if(native_id==XR_NATIVE_DECLARATION_FILE_STAT)return XR_XIR_BAD_TYPE;
     uint32_t flags=table->declarations?table->declarations[owner].flags:table->identities[owner].flags;
     if (flags & XR_XIR_NOMINAL_RECORD) return XR_XIR_BAD_TYPE;
     if (identity->native_callable) return xir_native_callable_verify(module,index);

@@ -263,6 +263,10 @@ static bool source_struct_default_functions(SourceContext *ctx, uint32_t *next) 
 }
 static bool source_struct_field(SourceContext *ctx,AstNode *node,XrXirType type,
     const char *name,unsigned write,uint32_t *index,XrXirType *field_type) {
+    const XrXirTypeNode *native=xr_xir_type_node(&ctx->types,type);
+    if(write && native && native->kind==XR_XIR_TYPE_NOMINAL &&
+        ctx->nominals.declarations[native->nominal.declaration].native.native_id==XR_NATIVE_DECLARATION_FILE_STAT)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"file metadata fields are immutable native results");
     XrHirPlaceAction base;
     if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_SELECT,.value=type,.type=type,.field=UINT32_MAX},&base)||
         !source_hir_place_emitted(ctx,&base,NULL,ctx->bodies[ctx->function].count))return false;

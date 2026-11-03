@@ -803,5 +803,52 @@ class IoCallableSchemaTests(unittest.TestCase):
                                                 for item in self.declarations])
 
 
+
+class OsSystemDeclarations(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / 'tools/stdlibgen'))
+        from stdlibgen import parse_defs
+        cls.declarations = parse_defs(ROOT)
+
+    def test_system_queries_preserve_exact_owned_runtime_contracts(self):
+        lines, rows = schema.render_os_system_callables(self.declarations)
+        expected = ('OS_UID', 'OS_GID', 'OS_PPID', 'OS_KILL', 'OS_TOTAL_MEMORY',
+                    'OS_FREE_MEMORY', 'OS_UPTIME', 'OS_LOADAVG')
+        self.assertEqual(len(rows), len(expected))
+        for row, identity in zip(rows, expected):
+            self.assertIn('XR_NATIVE_CALLABLE_' + identity + ', NULL,', row)
+            self.assertIn('NULL, false, "os", "stdlib/defs/core.def", FINGERPRINT', row)
+        text = '\n'.join(lines)
+        self.assertEqual(text.count('XR_NATIVE_ALLOCATION_UNKNOWN'), 8)
+        self.assertEqual(text.count('XR_NATIVE_RESULT_OWNERSHIP_OWNED'), 8)
+        self.assertEqual(text.count('XR_NATIVE_TERM_NULLABLE_I64'), 2)
+        self.assertIn('XR_NATIVE_TERM_ARRAY_F64', text)
+        self.assertIn('{"pid", "i64", XR_NATIVE_TERM_I64, false, false}', text)
+        self.assertIn('{"signal", "i64", XR_NATIVE_TERM_I64, false, false}', text)
+        self.assertEqual(schema.simple_term(schema.TypeParser('Array<f64>').type(), ''), 'ARRAY_F64')
+        for name in ('__uid', '__gid'):
+            row = next(item for item in self.declarations if item.module == 'os' and item.name == name)
+            self.assertEqual(row.signature, '(): i64?')
+            self.assertEqual((row.aot, row.aot_direct, row.aot_kind), ('', False, ''))
+
+    def test_system_queries_reject_missing_duplicate_and_changed_metadata(self):
+        for name in ('uid', 'gid', 'ppid', 'kill', 'totalMemory', 'freeMemory', 'uptime', 'loadavg'):
+            row = next(item for item in self.declarations if item.module == 'os' and item.name == '__' + name)
+            for changed in ([item for item in self.declarations if item is not row], self.declarations + [row]):
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    schema.render_os_system_callables(changed)
+            for field, value in [('signature', '(): string'), ('argc', '9'), ('arg_spec', 'invalid'),
+                                 ('visibility', 'public'), ('effect', 'nothrow'), ('allocation', 'no_heap'),
+                                 ('return_ownership', 'borrowed'), ('layer', 'core'), ('vm', 'other'),
+                                 ('aot', 'other'), ('aot_direct', not row.aot_direct), ('aot_kind', 'builtin'),
+                                 ('link_object', 'other'), ('vm_binding', 'yieldable'), ('vm_ifdef', 'OTHER'),
+                                 ('define', 'OTHER'), ('ret', 'i64'), ('semantic_intrinsic', True),
+                                 ('provider_declaration', object()), ('caps', ('task',)), ('suspension_kind', 'task')]:
+                with self.subTest(name=name, field=field), self.assertRaises(ValueError):
+                    schema.render_os_system_callables([replace(item, **{field: value}) if item is row else item
+                                                       for item in self.declarations])
+
+
 if __name__ == '__main__':
     unittest.main()

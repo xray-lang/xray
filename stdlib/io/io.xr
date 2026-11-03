@@ -15,14 +15,14 @@ export final class FileStat {
     mtime: i64
     atime: i64
     ctime: i64
-    uid: i64
-    gid: i64
+    uid: i64?
+    gid: i64?
     isFile: bool
     isDir: bool
     isSymlink: bool
 
     init(size: i64, mode: i64, mtime: i64, atime: i64, ctime: i64,
-                uid: i64, gid: i64, isFile: bool, isDir: bool, isSymlink: bool) {
+                uid: i64?, gid: i64?, isFile: bool, isDir: bool, isSymlink: bool) {
         this.size = size
         this.mode = mode
         this.mtime = mtime

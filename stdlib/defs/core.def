@@ -1012,25 +1012,21 @@ module os {
   }
 
   fn __uid {
-    signature: "(): i64"
+    signature: "(): i64?"
     doc: "Get user ID"
     vm: "os_uid"
-    aot: "xrt_os_uid"
     argc: 0
     arg_spec: ""
-    aot_direct: true
     link_object: false
     layer: "system"
   }
 
   fn __gid {
-    signature: "(): i64"
+    signature: "(): i64?"
     doc: "Get group ID"
     vm: "os_gid"
-    aot: "xrt_os_gid"
     argc: 0
     arg_spec: ""
-    aot_direct: true
     link_object: false
     layer: "system"
   }
@@ -1124,7 +1120,7 @@ module os {
 
 module io {
   handle __FileStat {
-    fields: "const size: i64, const mode: i64, const mtime: i64, const atime: i64, const ctime: i64, const uid: i64, const gid: i64, const isFile: bool, const isDir: bool, const isSymlink: bool"
+    fields: "const size: i64, const mode: i64, const mtime: i64, const atime: i64, const ctime: i64, const uid: i64?, const gid: i64?, const isFile: bool, const isDir: bool, const isSymlink: bool"
   }
 
   fn __chmod {
@@ -1365,10 +1361,8 @@ module io {
     signature: "(path: Path): __FileStat?"
     doc: "Get file stat info"
     vm: "io_stat"
-    aot: "xrt_io_stat"
     argc: 1
     arg_spec: "p"
-    aot_direct: true
     link_object: false
     layer: "system"
     return_ownership: "fresh"

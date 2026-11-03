@@ -56,6 +56,10 @@ static XrXirCallStatus instance_io_call(XrXirCallView *view,XrXirInstance *insta
         !xr_xir_domain_work(instance->domain,length+1)))status=XR_XIR_CALL_LIMIT;
     if(status==XR_XIR_CALL_READY && xr_utf8_core_scan_strict((const uint8_t *)bytes,length).error!=XR_UTF8_OK)
         status=XR_XIR_CALL_HOST_ERROR;
+    if(id==XR_NATIVE_CALLABLE_IO_STAT) {
+        if(status==XR_XIR_CALL_READY)status=instance_file_metadata_query(view,instance,bytes,length,entry->result,output);
+        xr_xir_value_drop(&text);return status;
+    }
     bool chmod=id==XR_NATIVE_CALLABLE_IO_CHMOD;
     bool valid=status==XR_XIR_CALL_READY && !memchr(bytes,0,length) &&
         (!chmod || (view->arguments[1].payload>=0 && view->arguments[1].payload<=INT_MAX));

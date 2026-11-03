@@ -94,6 +94,8 @@ typedef struct InstanceStorageRoute {
     uint32_t index;
 } InstanceStorageRoute;
 typedef struct XirEnvironmentSnapshotOwner XirEnvironmentSnapshotOwner;
+typedef struct XirSystemOwner XirSystemOwner;
+typedef struct XirFileMetadataOwner XirFileMetadataOwner;
 struct XrXirInstance {
     XrXirProgram *program;
     XrXirInstanceConfig config;
@@ -126,10 +128,14 @@ struct XrXirInstance {
     struct XirInstanceBindingTable *symbol_bindings;
     bool bindings_published;
     XirEnvironmentSnapshotOwner *environment_snapshots;
+    XirSystemOwner *system_owners;
+    XirFileMetadataOwner *file_metadata_owners;
 };
 #if defined(XR_OS_WINDOWS)
 static bool instance_environment_snapshots_close(XrXirInstance *instance);
 #endif
+static bool instance_system_owners_close(XrXirInstance *root);
+static bool instance_file_metadata_owners_close(XrXirInstance *root);
 static void instance_bindings_free(XrXirInstance *instance);
 static bool instance_bindings_ready(const XrXirInstance *instance);
 static XrXirInstance *instance_root(XrXirInstance *instance) {
@@ -526,6 +532,8 @@ XR_FUNC XrXirCallStatus xr_xir_instance_config_init_sandbox(XrXirInstanceConfig 
 static void instance_dispose(XrXirInstance *instance) {
     XR_CHECK(instance && instance_owner_current(instance), "instance internal owner requires its current domain");
     XR_CHECK(!instance->environment_snapshots,"instance disposal requires discharged environment snapshots");
+    XR_CHECK(!instance->system_owners,"instance disposal requires discharged process handles");
+    XR_CHECK(!instance->file_metadata_owners,"instance disposal requires discharged file metadata handles");
     XrXirDomain *domain = instance->domain;
     XrXirProgram *program = instance->program;
     const XrXirDeclarations *d = program ? program->declarations : NULL;
@@ -1090,6 +1098,12 @@ XrXirCallStatus xr_xir_instance_free(XrXirInstance *instance) {
         root->driving=false;return XR_XIR_CALL_CLOSE_FAILED;
     }
 #endif
+    if(!instance_system_owners_close(root)) {
+        root->driving=false;return XR_XIR_CALL_CLOSE_FAILED;
+    }
+    if(!instance_file_metadata_owners_close(root)) {
+        root->driving=false;return XR_XIR_CALL_CLOSE_FAILED;
+    }
     bool exhausted=root->budget.exhausted;
     XrXirValueStatus closed=xr_xir_domain_close(root->domain);
     if (closed!=XR_XIR_VALUE_OK) {
@@ -2409,6 +2423,8 @@ XR_FUNC XrXirCallStatus xr_xir_instance_pointer(XrXirCallView *view,XrXirOp oper
 
 #include "xxir_instance_math.inc.c"
 #include "xxir_instance_environment_win.inc.c"
+#include "xxir_instance_system.inc.c"
+#include "xxir_instance_file_metadata.inc.c"
 #include "xxir_instance_io.inc.c"
 XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
     XrXirInstance *instance=view_instance(view);XrXirValue *value=NULL;
@@ -2456,7 +2472,10 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
         if(evaluated!=XR_XIR_RUN_OK)return xr_xir_call_fault(evaluated);
     } else if(xir_os_native_id(id)) {
         if(!xir_os_native_scope(program->declarations,index,program->entry_count))goto failed;
-        if(id==XR_NATIVE_CALLABLE_OS_SYSTEM_HOMEDIR) {
+        if(xir_os_system_contract(id)) {
+            status=instance_system_query(view,instance,id,entry->result,value);
+            if(status!=XR_XIR_CALL_READY)goto failed;
+        } else if(id==XR_NATIVE_CALLABLE_OS_SYSTEM_HOMEDIR) {
 #if defined(XR_OS_WINDOWS)
             status=instance_system_homedir(view,instance,entry->result,value);
 #else

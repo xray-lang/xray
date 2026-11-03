@@ -40,13 +40,15 @@ fn test_homedir_skips_empty_home_env() {
 @test
 fn test_uid() {
     var id = os.uid()
-    assert(id >= 0)
+    if (os.platform() == "windows") { assert(id == null) }
+    else { assert(id != null && id! >= 0) }
 }
 
 @test
 fn test_gid() {
     var id = os.gid()
-    assert(id >= 0)
+    if (os.platform() == "windows") { assert(id == null) }
+    else { assert(id != null && id! >= 0) }
 }
 
 // ===== System Information =====

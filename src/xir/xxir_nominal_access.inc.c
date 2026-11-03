@@ -41,6 +41,8 @@ XR_FUNC XrXirStatus xr_xir_compile_nominal_access(const XrXirCompileContext *com
             !(access==XR_XIR_NOMINAL_TYPE&&xir_path_prelude_type(scope,table,declaration))) return XR_XIR_BAD_TYPE;
     }
     if (access == XR_XIR_NOMINAL_TYPE) return XR_XIR_OK;
+    if(identity.native.native_id==XR_NATIVE_DECLARATION_FILE_STAT && access!=XR_XIR_NOMINAL_READ)
+        return XR_XIR_BAD_TYPE;
     if (access == XR_XIR_NOMINAL_CONSTRUCT && identity.kind == XR_XIR_NOMINAL_STRUCT &&
         (identity.flags & XR_XIR_NOMINAL_MODULE_LITERAL) && !xr_xir_module_same_scope(scope, caller->module, declaring_module))
         return XR_XIR_BAD_TYPE;

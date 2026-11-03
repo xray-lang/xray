@@ -22,8 +22,25 @@ static const char host_io_text[]=
  "export fn viaRef(raw:string)->bool{var path:Path=Child(raw);return borrowed(ref path)}\n"
  "export fn ctfeDir()->bool{return __chdir(Child(\".\"))}\n"
  "export fn ctfeMode()->bool{return __chmod(Child(\".\"),384)}\n";
+static const char host_stat_text[]=
+ "import {Path} from path\n"
+ "class Child extends Path{extra:string\ninit(raw:string){super(raw);this.extra=\"stat-owned-tail\"}}\n"
+ "export fn make(raw:string)->Path{return Child(raw)}\n"
+ "export fn query(path:Path)->bool{var r=__stat(path);if(r==null)return false;"
+ "return r!.size==3&&r!.mode>=0&&r!.mtime>0&&r!.atime>0&&r!.ctime>0&&"
+ "(r!.uid==null||r!.uid!>=0)&&(r!.gid==null||r!.gid!>=0)&&r!.isFile&&!r!.isDir&&!r!.isSymlink}\n"
+ "export fn ctfeStat()->bool{return __stat(Child(\".\"))!=null}\n";
 static const char host_count_text[]="export fn answer()->i64{return __cpuCount()}\n";
 static const char host_pin_text[]="export fn answer(cpu:i64)->bool{return __pinToCpu(cpu)}\n";
+static const char host_system_text[]=
+ "export fn uid()->i64?{return __uid()}\n"
+ "export fn gid()->i64?{return __gid()}\n"
+ "export fn parent()->i64{return __ppid()}\n"
+ "export fn signal(pid:i64,signal:i64)->bool{return __kill(pid,signal)}\n"
+ "export fn total()->i64{return __totalMemory()}\n"
+ "export fn available()->i64{return __freeMemory()}\n"
+ "export fn elapsed()->f64{return __uptime()}\n"
+ "export fn load()->Array<f64>{return __loadavg()}\n";
 static const char *const host_io_controls[]={
  "import {Path} from path\nclass Wrong{raw:string\ninit(raw:string){this.raw=raw}}\nexport fn wrong(p:Wrong)->bool{return __chdir(p)}\n",
  "import {Path} from path\nexport fn conflict(v:Slice<u8>,p:Path)->i64{const changed=__chdir(p);return len(v)}\n",
