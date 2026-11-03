@@ -42,6 +42,7 @@
 #include "xxir_class_method_internal.h"
 #include "xxir_pointer.h"
 #include "xxir_task_result.h"
+#include "xxir_sys_native.h"
 #include "xxir_nominal.h"
 #include "xxir_float.h"
 #include "../hir/xhir_literal.h"
