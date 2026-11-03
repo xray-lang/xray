@@ -42,6 +42,8 @@ static TempActualCreate temp_actual_create;
 static unsigned temp_entropy_mode,temp_entropy_calls;
 static HANDLE temp_parent,temp_child,temp_fail_close;
 static bool temp_cancel_created,temp_fail_delete,temp_missing_api;
+static wchar_t temp_long_root_path[32768];
+static bool temp_long_root_created;
 static NTSTATUS NTAPI temp_observed_create(PHANDLE handle,ACCESS_MASK access,POBJECT_ATTRIBUTES attributes,
     PIO_STATUS_BLOCK status,PLARGE_INTEGER allocation,ULONG flags,ULONG share,ULONG disposition,
     ULONG options,PVOID ea,ULONG ea_length) {
@@ -166,11 +168,27 @@ static int temp_collisions(const char *root,bool directory) {
     CHECK(GetFileAttributesW(protected_name)!=INVALID_FILE_ATTRIBUTES);temp_drop_prepared();temp_entropy_mode=0;
     CHECK(DeleteFileW(protected_name)&&RemoveDirectoryW(name)&&!metadata_memory.live&&!metadata_memory.held);return 1;
 }
+static int temp_long_positive(void) {
+    wchar_t leaf[106];char root[65536];
+    for(size_t n=0;n<100;++n)leaf[n]=L'l';
+    memcpy(leaf+100,L"-\x4e2d-\xd83d\xde00",6*sizeof(wchar_t));
+    CHECK(wide_join(temp_long_root_path,paths.child,leaf)&&wcslen(temp_long_root_path)>260);
+    CHECK(directory_operation(temp_long_root_path,true));temp_long_root_created=true;
+    CHECK(xr_win_utf16_to_utf8(temp_long_root_path,wcslen(temp_long_root_path),root,sizeof(root)));
+    fprintf(stderr,"file temp actual long root UTF16=%zu\n",wcslen(temp_long_root_path));
+    return temp_visible(root,false)&&temp_visible(root,true);
+}
 int main(void) {
     reset_memory();int passed=setup_paths();char root[65536];
     if(passed)passed=xr_win_utf16_to_utf8(paths.child,wcslen(paths.child),root,sizeof(root));
     for(unsigned directory=0;directory<2&&passed;++directory)
         passed=temp_visible(root,directory!=0)&&temp_faults(root,directory!=0)&&temp_collisions(root,directory!=0);
+    if(passed)passed=temp_long_positive();
+    if(temp_long_root_created) {
+        bool removed=directory_operation(temp_long_root_path,false)!=0;
+        if(removed)temp_long_root_created=false;
+        if(!removed)passed=0;
+    }
     temp_drop_prepared();cleanup_paths();
     if(metadata_memory.live||metadata_memory.held||kernel_handles)return 1;
     if(passed)puts("file temp: real exclusive file/directory creation, prepared results and retained cleanup");
