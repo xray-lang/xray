@@ -155,6 +155,7 @@ static XrXirArtifact *comparator_artifact(const XrXirCompileContext *context) {
     };
     XrXirBlock block = {0, 2, 0, 0};
     XrXirFunction function = {"compare", 7, types, 2, XR_XIR_BOOL, &block, 1, instructions, 2, NULL, 0};
+    function.error_type=XR_XIR_NEVER;
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *lowered = NULL;
@@ -575,8 +576,8 @@ static void call_owned_recovery(void) {
         }else CHECK(escaped.type==XR_XIR_I64 && escaped.payload==4);
         xr_xir_value_drop(&escaped);
         CHECK(!runtime_live && !runtime_bytes);instance_compile_zero();
-        printf("Calls mode=%u native=%u attack=%u real_callbacks=%u lease=1 compiler_work=%llu physical_zero\n",
-            mode,native,attack,call_binding_callbacks,(unsigned long long)stats.work);
+        printf("Calls mode=%u native=%u attack=%u real_callbacks=%u lease=1 physical_zero\n",
+            mode,native,attack,call_binding_callbacks);
     }
     instance_compile_report();puts("Calls current Input failure recovery, producer death, actual callbacks, execution4 and escaped Error91 passed");
 }

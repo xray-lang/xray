@@ -65,6 +65,9 @@ static XrXirArtifact *call_fixture(const XrXirCompileContext *context, uint32_t 
         {"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0},
         {"main",4,NULL,0,XR_XIR_I64,&root_block,1,entry,2,NULL,0}
     };
+    functions[0].error_type=mode==1 && (!guarded || rethrow) ? (XrXirType)256 : XR_XIR_NEVER;
+    functions[1].error_type=functions[2].error_type=mode==1 ? (XrXirType)256 : XR_XIR_NEVER;
+    functions[3].error_type=functions[4].error_type=XR_XIR_NEVER;
     XrXirInstruction invoke[] = {
         {XR_XIR_INVOKE,XR_XIR_I64,{0,2},{1,2},1,{0}},
         {XR_XIR_INVOKE_RESULT,XR_XIR_I64,{0},{0},0,{0}},

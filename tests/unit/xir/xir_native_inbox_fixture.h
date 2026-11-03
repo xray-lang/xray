@@ -38,6 +38,7 @@ static XrXirArtifact *native_inbox_fixture(const XrXirCompileContext *context, u
         {"cleanup",7,&string_parameter,1,XR_XIR_UNIT,&two,1,cleanup,2,NULL,0},
         {"init",4,NULL,0,XR_XIR_UNIT,&one,1,&done,1,NULL,0},
         {"main",4,NULL,0,XR_XIR_I64,&two,1,main_ops,2,NULL,0}};
+    for(uint32_t f=0;f<sizeof(functions)/sizeof(*functions);++f)functions[f].error_type=XR_XIR_NEVER;
     XrXirInstruction discarded[] = {
         {XR_XIR_INVOKE,XR_XIR_STRING,{0,1},{1,2},1,{0}},
         {XR_XIR_INVOKE_DISCARD,XR_XIR_UNIT,{0},{0},0,{0}},
