@@ -14,10 +14,10 @@
 #define PIPE_CASES_H
 enum { PIPE_ENTRY,PIPE_OPEN,PIPE_READ,PIPE_WRITE,PIPE_CLOSE_READ,PIPE_CLOSE_WRITE,
  PIPE_CLOSE_ALL,PIPE_ENDS,PIPE_RAW_READ,PIPE_RAW_WRITE,PIPE_RAW_CLOSE,PIPE_HANDOFF,
- PIPE_DEFER_ENDS,PIPE_ENTRY_COUNT };
+ PIPE_DEFER_ENDS,PIPE_SCOPE_READ,PIPE_ENTRY_COUNT };
 #if defined(XR_PIPE_SOURCE)
 static const char *const pipe_names[]={"","openPipe","readPipe","writePipe","closeRead",
- "closeWrite","closeAll","ends","readToken","writeToken","closeToken","handoff","deferEnds"};
+ "closeWrite","closeAll","ends","readToken","writeToken","closeToken","handoff","deferEnds","scopeRead"};
 static const char pipe_wrappers[]=
  "\nexport fn openPipe()->Pipe?{return Pipe.open()}\n"
  "export fn readPipe(p:Pipe,n:i64)->Array<u8>?{return p.read(n)}\n"
@@ -40,7 +40,9 @@ static const char pipe_wrappers[]=
  "export fn ctfeOpen()->(i64,i64)?{return __pipeOpen()}\n"
  "export fn ctfeRead()->Array<u8>?{return __pipeRead(1,0)}\n"
  "export fn ctfeWrite()->i64{var data:Array<u8>=[];return __pipeWrite(1,data)}\n"
- "export fn ctfeClose()->bool{return __pipeClose(1)}\n";
+ "export fn ctfeClose()->bool{return __pipeClose(1)}\n"
+ "fn pendingPipe(h:i64)->Array<u8>?{return __pipeRead(h,1)}\n"
+ "export fn scopeRead(p:Pipe){scope{var task=go pendingPipe(p.readEnd());var ignored=await task}}\n";
 #endif
 static const unsigned char pipe_bytes[]={0,255,13,10,42};
 #endif // PIPE_CASES_H
