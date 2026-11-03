@@ -62,15 +62,22 @@ static BOOL WINAPI observed_close(HANDLE handle) {
 #include <pthread.h>
 #include <errno.h>
 #include <time.h>
+static bool fail_key;
+static int observed_key_create(pthread_key_t *key,void (*destructor)(void *)) {
+    if(fail_key){fail_key=false;return EAGAIN;}
+    return pthread_key_create(key,destructor);
+}
 static int observed_key_delete(pthread_key_t key) {
     if(atomic_exchange_explicit(&fail_close,false,memory_order_acq_rel)) {++close_faults;return EIO;}
     return pthread_key_delete(key);
 }
 #define xr_calloc observed_calloc
 #define xr_free observed_free
+#define pthread_key_create observed_key_create
 #define pthread_key_delete observed_key_delete
 #include "os/unix/thread_token_unix.c"
 #undef pthread_key_delete
+#undef pthread_key_create
 #undef xr_free
 #undef xr_calloc
 #endif
@@ -190,6 +197,10 @@ static void failure_controls(int64_t current) {
 int main(void) {
     atomic_init(&fail_allocate,false);atomic_init(&fail_close,false);
     int64_t current=-1,again=-2;
+#if !defined(XR_OS_WINDOWS)
+    fail_key=true;
+    CHECK(xr_os_io_thread_token_current(NULL,&current)==XR_OS_IO_OVERFLOW && current==-1 && !process_live);
+#endif
     CHECK(xr_os_io_thread_token_current(NULL,&current)==XR_OS_IO_OK && current>0);
     CHECK(xr_os_io_thread_token_current(NULL,&again)==XR_OS_IO_OK && again==current);
     CHECK(xr_os_io_thread_token_current(NULL,NULL)==XR_OS_IO_BAD_ARGUMENT);
