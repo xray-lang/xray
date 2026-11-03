@@ -24,19 +24,26 @@ typedef union PermissionBlock {
 } PermissionBlock;
 _Static_assert(_Alignof(PermissionBlock) >= _Alignof(wchar_t), "policy blocks preserve wide buffer alignment");
 typedef struct PermissionMemory {
-    size_t attempts, fail_at, live, held;
+    size_t attempts, fail_at, cancel_at, live, held;
+    bool cancelled;
 } PermissionMemory;
 
 static XrOsIoStatus permission_alloc(void *context, size_t size, void **output) {
     PermissionMemory *memory = context;
     if (!output || *output) return XR_OS_IO_BAD_ARGUMENT;
-    if (memory->attempts++ == memory->fail_at) return XR_OS_IO_OUT_OF_MEMORY;
+    size_t attempt = memory->attempts++;
+    if (attempt == memory->fail_at) return XR_OS_IO_OUT_OF_MEMORY;
     if (size > SIZE_MAX - sizeof(PermissionBlock)) return XR_OS_IO_OVERFLOW;
     size_t total = sizeof(PermissionBlock) + size;
     PermissionBlock *block = xr_malloc(total);
     if (!block) return XR_OS_IO_OUT_OF_MEMORY;
     block->bytes = total; ++memory->live; memory->held += total;
-    *output = block + 1; return XR_OS_IO_OK;
+    *output = block + 1;
+    if (attempt == memory->cancel_at) memory->cancelled = true;
+    return XR_OS_IO_OK;
+}
+static bool permission_current(void *context) {
+    return !((PermissionMemory *)context)->cancelled;
 }
 static void permission_free(void *context, void *data) {
     if (!data) return;
@@ -70,7 +77,7 @@ static DWORD permission_attributes(const char *path) {
 
 static int verify_permissions(const char *root) {
     XrOsIoPolicy system = xr_os_io_system_policy();
-    PermissionMemory memory = {.fail_at = SIZE_MAX};
+    PermissionMemory memory = {.fail_at = SIZE_MAX, .cancel_at = SIZE_MAX};
     XrOsIoPolicy observed = {&memory, permission_alloc, permission_free};
     char tail[221], path[4096], missing[4096];
     memset(tail, 'p', sizeof(tail) - 1); tail[sizeof(tail) - 1] = 0;
@@ -85,48 +92,67 @@ static int verify_permissions(const char *root) {
     PERMISSION_CHECK(xr_os_io_write_new_file_sync(&system, path, payload, sizeof(payload)) == XR_OS_IO_OK);
     created = true;
     PERMISSION_CHECK(permission_attributes(path) != INVALID_FILE_ATTRIBUTES);
-    PERMISSION_CHECK(xr_os_io_chmod(&system, path, _S_IREAD) == XR_OS_IO_OK);
+    PERMISSION_CHECK(xr_os_io_chmod(&system, path, _S_IREAD, NULL) == XR_OS_IO_OK);
     PERMISSION_CHECK(permission_attributes(path) & FILE_ATTRIBUTE_READONLY);
-    PERMISSION_CHECK(xr_os_io_chmod(&system, path, _S_IWRITE) == XR_OS_IO_OK);
+    PERMISSION_CHECK(xr_os_io_chmod(&system, path, _S_IWRITE, NULL) == XR_OS_IO_OK);
     PERMISSION_CHECK(!(permission_attributes(path) & FILE_ATTRIBUTE_READONLY));
-    PERMISSION_CHECK(xr_os_io_chmod(&system, path, _S_IREAD | _S_IWRITE) == XR_OS_IO_OK);
+    PERMISSION_CHECK(xr_os_io_chmod(&system, path, _S_IREAD | _S_IWRITE, NULL) == XR_OS_IO_OK);
     PERMISSION_CHECK(!(permission_attributes(path) & FILE_ATTRIBUTE_READONLY));
-    PERMISSION_CHECK(xr_os_io_chmod(&system, path, INT_MAX) == XR_OS_IO_OK);
+    PERMISSION_CHECK(xr_os_io_chmod(&system, path, INT_MAX, NULL) == XR_OS_IO_OK);
     PERMISSION_CHECK(!(permission_attributes(path) & FILE_ATTRIBUTE_READONLY));
     static const int64_t invalid_modes[] = {-1, INT64_MIN, (int64_t)INT_MAX + 1, INT64_MAX};
     for (size_t i = 0; i < sizeof(invalid_modes) / sizeof(invalid_modes[0]); ++i) {
         size_t before = memory.attempts;
-        PERMISSION_CHECK(xr_os_io_chmod(&observed, path, invalid_modes[i]) == XR_OS_IO_BAD_ARGUMENT);
+        PERMISSION_CHECK(xr_os_io_chmod(&observed, path, invalid_modes[i], NULL) == XR_OS_IO_BAD_ARGUMENT);
         PERMISSION_CHECK(memory.attempts == before && !memory.live && !memory.held);
         PERMISSION_CHECK(!(permission_attributes(path) & FILE_ATTRIBUTE_READONLY));
     }
-    PERMISSION_CHECK(xr_os_io_chmod(&observed, missing, _S_IREAD) == XR_OS_IO_NOT_FOUND);
+    PERMISSION_CHECK(xr_os_io_chmod(&observed, missing, _S_IREAD, NULL) == XR_OS_IO_NOT_FOUND);
     PERMISSION_CHECK(!memory.live && !memory.held);
-    PERMISSION_CHECK(xr_os_io_chmod(&observed, "\xc0\xaf", _S_IREAD) == XR_OS_IO_BAD_ARGUMENT);
+    PERMISSION_CHECK(xr_os_io_chmod(&observed, "\xc0\xaf", _S_IREAD, NULL) == XR_OS_IO_BAD_ARGUMENT);
     PERMISSION_CHECK(!memory.live && !memory.held);
-    PERMISSION_CHECK(xr_os_io_chmod(NULL, path, _S_IREAD) == XR_OS_IO_BAD_ARGUMENT);
-    PERMISSION_CHECK(xr_os_io_chmod(&observed, NULL, _S_IREAD) == XR_OS_IO_BAD_ARGUMENT);
+    PERMISSION_CHECK(xr_os_io_chmod(NULL, path, _S_IREAD, NULL) == XR_OS_IO_BAD_ARGUMENT);
+    PERMISSION_CHECK(xr_os_io_chmod(&observed, NULL, _S_IREAD, NULL) == XR_OS_IO_BAD_ARGUMENT);
+    memory.cancelled = true; memory.attempts = 0;
+    PERMISSION_CHECK(xr_os_io_chmod(&observed, path, _S_IREAD, permission_current) == XR_OS_IO_CANCELLED);
+    PERMISSION_CHECK(!memory.attempts && !memory.live && !memory.held);
+    PERMISSION_CHECK(!(permission_attributes(path) & FILE_ATTRIBUTE_READONLY));
+    memory.cancelled = false; memory.cancel_at = 0;
+    PERMISSION_CHECK(xr_os_io_chmod(&observed, path, _S_IREAD, permission_current) == XR_OS_IO_CANCELLED);
+    PERMISSION_CHECK(memory.cancelled && memory.attempts && !memory.live && !memory.held);
+    PERMISSION_CHECK(!(permission_attributes(path) & FILE_ATTRIBUTE_READONLY));
+    char saved[4096], current[4096];
+    PERMISSION_CHECK(xr_os_io_getcwd(&system, saved, sizeof(saved)) == XR_OS_IO_OK && strcmp(saved, root));
     memory.attempts = 0;
-    PERMISSION_CHECK(xr_os_io_chmod(&observed, path, _S_IREAD) == XR_OS_IO_OK);
+    PERMISSION_CHECK(xr_os_io_chdir(&observed, root, permission_current) == XR_OS_IO_CANCELLED);
+    PERMISSION_CHECK(!memory.attempts && !memory.live && !memory.held);
+    PERMISSION_CHECK(xr_os_io_getcwd(&system, current, sizeof(current)) == XR_OS_IO_OK && !strcmp(current, saved));
+    memory.cancelled = false;
+    PERMISSION_CHECK(xr_os_io_chdir(&observed, root, permission_current) == XR_OS_IO_CANCELLED);
+    PERMISSION_CHECK(memory.cancelled && memory.attempts && !memory.live && !memory.held);
+    PERMISSION_CHECK(xr_os_io_getcwd(&system, current, sizeof(current)) == XR_OS_IO_OK && !strcmp(current, saved));
+    memory.cancelled = false; memory.cancel_at = SIZE_MAX;
+    memory.attempts = 0;
+    PERMISSION_CHECK(xr_os_io_chmod(&observed, path, _S_IREAD, permission_current) == XR_OS_IO_OK);
     sites = memory.attempts;
     PERMISSION_CHECK(sites && !memory.live && !memory.held);
     for (size_t failure = 0; failure < sites; ++failure) {
-        PERMISSION_CHECK(xr_os_io_chmod(&system, path, _S_IWRITE) == XR_OS_IO_OK);
+        PERMISSION_CHECK(xr_os_io_chmod(&system, path, _S_IWRITE, NULL) == XR_OS_IO_OK);
         memory.attempts = 0; memory.fail_at = failure;
-        PERMISSION_CHECK(xr_os_io_chmod(&observed, path, _S_IREAD) == XR_OS_IO_OUT_OF_MEMORY);
+        PERMISSION_CHECK(xr_os_io_chmod(&observed, path, _S_IREAD, NULL) == XR_OS_IO_OUT_OF_MEMORY);
         PERMISSION_CHECK(memory.attempts == failure + 1 && !memory.live && !memory.held);
         PERMISSION_CHECK(!(permission_attributes(path) & FILE_ATTRIBUTE_READONLY));
     }
     memory.fail_at = SIZE_MAX;
-    PERMISSION_CHECK(xr_os_io_chmod(&observed, path, _S_IREAD) == XR_OS_IO_OK);
+    PERMISSION_CHECK(xr_os_io_chmod(&observed, path, _S_IREAD, NULL) == XR_OS_IO_OK);
     PERMISSION_CHECK(!memory.live && !memory.held);
     passed = 1;
 cleanup:
     if (created) {
-        if (xr_os_io_chmod(&system, path, _S_IWRITE) != XR_OS_IO_OK ||
+        if (xr_os_io_chmod(&system, path, _S_IWRITE, NULL) != XR_OS_IO_OK ||
             xr_os_io_remove(&system, path) != XR_OS_IO_OK) passed = 0;
     }
-    printf("Unicode chmod: read/write attributes, typed refusals, OOM sites %zu, owners %zu/%zu\n",
+    printf("Unicode chmod: read/write attributes, typed refusals, prewrite cancellation, OOM sites %zu, owners %zu/%zu\n",
         sites, memory.live, memory.held);
     return passed;
 }
@@ -149,9 +175,9 @@ static int verify_publication(const char *root) {
     if (xr_os_io_publish_noreplace(&policy,other,final)!=XR_OS_IO_EXISTS ||
         xr_os_io_exists(&policy,other,&exists)!=XR_OS_IO_OK || !exists) return 0;
     if (xr_os_io_publish_noreplace(&policy,other,first)!=XR_OS_IO_OK) return 0;
-    if (xr_os_io_getcwd(&policy,saved,sizeof(saved))!=XR_OS_IO_OK || xr_os_io_chdir(&policy,root)!=XR_OS_IO_OK) return 0;
+    if (xr_os_io_getcwd(&policy,saved,sizeof(saved))!=XR_OS_IO_OK || xr_os_io_chdir(&policy,root,NULL)!=XR_OS_IO_OK) return 0;
     int same=xr_os_io_getcwd(&policy,current,sizeof(current))==XR_OS_IO_OK && !strcmp(current,root);
-    if (xr_os_io_chdir(&policy,saved)!=XR_OS_IO_OK || !same) return 0;
+    if (xr_os_io_chdir(&policy,saved,NULL)!=XR_OS_IO_OK || !same) return 0;
     if (xr_os_io_remove(&policy,first)!=XR_OS_IO_OK || xr_os_io_remove(&policy,final)!=XR_OS_IO_OK) return 0;
     return 1;
 }
