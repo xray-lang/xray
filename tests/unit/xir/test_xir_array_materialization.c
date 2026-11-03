@@ -114,7 +114,7 @@ static void array_error_order(const XrXirModule *module) {
 static void array_materialization_one(const XrXirCompileContext *context,const char *text,size_t count,bool original,const char *path) {
     XrXirSourceResult source={0};CHECK(array_materialization_check(context,text,count,&source)==XR_XIR_OK);
     if(original)array_plain_control(context,&source);
-    else{array_error_order(xr_xir_compile_artifact_module(source.checked));array_string_ctfe(source.checked);}
+    else array_error_order(xr_xir_compile_artifact_module(source.checked));
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&source);XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
@@ -122,6 +122,7 @@ static void array_materialization_one(const XrXirCompileContext *context,const c
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    if(!original)array_string_ctfe(lowered);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);uint32_t ids[ARRAY_MATERIALIZATION_ENTRY_COUNT]={0};
     if(original)ids[0]=module->declarations->entry_function;
     else for(unsigned i=0;i<ARRAY_MATERIALIZATION_ENTRY_COUNT;++i) {
