@@ -39,7 +39,7 @@ def raw_error_abi_cases(original):
 
 
 def cleanup_abi_cases(original):
-    assert original['call_abi']==38 and original['semantic']==126
+    assert original['call_abi']==38 and original['semantic']==127
     rows=original['abi_measurements'];cases=[('cleanup-current',original,0)]
     for field,offset in ((305,56),(406,104),(407,176),(3014,124),(3113,108)):
         indexes=[i for i,row in enumerate(rows) if row['id']==field]
