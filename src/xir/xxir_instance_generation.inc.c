@@ -38,6 +38,9 @@ static XrXirCallStatus generation_owner(XrXirInstance *instance) {
     if (!instance_owner_current(instance)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!instance || instance->owner) return XR_XIR_CALL_BAD_ARGUMENT;
     if (instance_busy(instance)) return XR_XIR_CALL_BUSY;
+    /* Registrations are operation/generation-owned. No generation transfer is
+     * inferred from a FunctionBinding with matching physical signature. */
+    if (instance->signals) return XR_XIR_CALL_BAD_STATE;
     return instance->stopping ? XR_XIR_CALL_BAD_STATE : XR_XIR_CALL_READY;
 }
 static XrXirCallStatus generation_storage_receive(XrXirInstance *candidate,

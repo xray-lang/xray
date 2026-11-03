@@ -19,6 +19,7 @@
 #include "xxir_call_generator.h"
 #include "xxir_call_internal.h"
 #include "xxir_signal_frontier_internal.h"
+#include "xxir_call_signal_internal.h"
 #include "xxir_call_take_internal.h"
 #include "xxir_program.h"
 #include "xxir_call_observer_internal.h"
@@ -120,6 +121,9 @@ typedef struct CallFrame {
     uint32_t take_captures;
     uint32_t effect_instruction;
     bool effect_pending;
+    XirCallSignalOrigin signal_origin,signal_pending;
+    uint64_t signal_parent_epoch;
+    bool signal_staged,signal_available;
     uint32_t cleanup_frontier;
     uint32_t scope_cleanup_callee;
     uint32_t cancel_boundary;
@@ -276,6 +280,7 @@ XrXirValueAdmission *xr_xir_call_admission(const XrXirCallView *view) {
 }
 
 #include "xxir_call_invocation.inc.c"
+#include "xxir_call_signal.inc.c"
 
 XR_FUNC bool xir_call_frame_span(const XrXirCallView *view,const void *frame,uint32_t bytes) {
     if(!xr_xir_call_admission(view)||!frame)return false;
@@ -1160,6 +1165,13 @@ static void accept_child_action(XrXirCall *call, XrXirAction action) {
     if (status == XR_XIR_CALL_READY)
         status = push_frame(call, action.callee, action.arguments, action.argument_count, binding,&preparation);
     call->admitting = false;
+    if (status==XR_XIR_CALL_READY && parent->signal_staged && !cleanup && !binding &&
+        metadata.entries==parent->metadata->entries && parent->signal_pending.target==action.callee) {
+        call->top->signal_origin=parent->signal_pending;
+        call->top->signal_parent_epoch=parent->epoch;
+        call->top->signal_available=true;
+    }
+    parent->signal_staged=false;
     parent->effect_pending=false;
     parent->pending_invocation=(XirEffectInvocationSelection){0};
     parent->take=(XirCallTakeArguments){0};
@@ -1503,6 +1515,7 @@ XrXirCallResult xr_xir_call_poll_bounded(XrXirCall *call, uint64_t quantum) {
         XrXirCallView view = frame_view(call);
         call->top->entered = true;
         call->active_view = &view;
+        call->top->signal_staged=false;
         call->top->effect_pending=false;
         call->top->effect_instruction=UINT32_MAX;
         call->top->pending_invocation=(XirEffectInvocationSelection){0};
@@ -1537,6 +1550,7 @@ XrXirCallResult xr_xir_call_poll_bounded(XrXirCall *call, uint64_t quantum) {
         call->active_view = NULL;
         if (call->top) {
             /* A selection is consumed only by a successful frame publication. */
+            call->top->signal_staged=false;
             call->top->effect_pending=false;
             call->top->pending_invocation=(XirEffectInvocationSelection){0};
         }

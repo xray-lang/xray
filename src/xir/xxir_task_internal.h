@@ -122,6 +122,9 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_stop(XrXirTaskExecutor *executor);
 XR_FUNC XrXirCallStatus xr_xir_task_executor_drain(XrXirTaskExecutor *executor, XrXirCallStatus hard_failure);
 XR_FUNC XrXirCallStatus xr_xir_task_executor_free(XrXirTaskExecutor *executor, XrXirCallBudget *accounting);
 XR_FUNC bool xr_xir_task_storage_valid(const XirTask *task);
+/* A deferred Root callback preparation fault stops the group through its real
+ * cleanup path, never through Parent's await/catch inbox. */
+XR_FUNC XrXirCallStatus xir_task_callback_failure(XrXirTaskExecutor *executor,XrXirCallStatus status);
 XR_FUNC XrXirCallStatus xir_task_callback_attach(XrXirTaskExecutor *executor,XrXirCall *call);
 XR_FUNC bool xir_task_callback_active(const XrXirTaskExecutor *executor);
 XR_FUNC XrXirCallStatus xir_task_host_wait_deadline(XrXirTaskExecutor *executor,
