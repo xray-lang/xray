@@ -94,7 +94,7 @@ static void host_directory_authority(const XrXirCompileContext *context,XrXirPro
  xr_xir_value_drop(&other);CHECK(xr_xir_instance_free(second)==XR_XIR_CALL_BAD_ARGUMENT);host_active=first;
  XrXirProgram *replica=host_directory_replica(context,program);uint64_t generation=0;
  CHECK(replica!=program&&xr_xir_instance_generation_prepare(first,replica,&generation)==XR_XIR_CALL_READY&&generation);
- XrXirValue initialized=host_invoke(first,ids[0],NULL,0);CHECK(initialized.type==XR_XIR_I64&&!initialized.payload);xr_xir_value_drop(&initialized);
+ /* The candidate's sole Call initializes its real modules before the wrapper. */
  host_io_phase="directory candidate generation";
  host_io_failure(first,ids[3],&token,1,XR_XIR_CALL_BAD_ARGUMENT);CHECK(directory_calls[1]==next);
  CHECK(xr_xir_instance_generation_abort(first,generation)==XR_XIR_CALL_BAD_ARGUMENT);xr_xir_compile_program_drop(replica);
