@@ -34,6 +34,19 @@ XR_FUNC XrXirCallStatus xir_task_callback_attach(XrXirTaskExecutor *executor,XrX
     task_core_enqueue(executor,&executor->callback);
     return XR_XIR_CALL_READY;
 }
+XR_FUNC XrXirCallStatus xir_task_callback_failure(XrXirTaskExecutor *executor,XrXirCallStatus status) {
+    if (!executor || !task_executor_owner_current(executor)) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (executor->driving || task_executor_observing(executor)) return XR_XIR_CALL_BUSY;
+    if (status!=XR_XIR_CALL_LIMIT && status!=XR_XIR_CALL_OOM && status!=XR_XIR_CALL_HOST_ERROR &&
+        status!=XR_XIR_CALL_CANCELLED && status!=XR_XIR_CALL_UNSUPPORTED &&
+        status!=XR_XIR_CALL_BAD_STATE && status!=XR_XIR_CALL_BAD_ARGUMENT)
+        return XR_XIR_CALL_BAD_ARGUMENT;
+    if (executor->first_failure==XR_XIR_CALL_READY) {
+        executor->callback_failed=true;executor->first_failure=status;executor->shutdown_status=status;
+        xr_xir_call_result_drop(&executor->failure);executor->failure.status=status;
+    }
+    (void)xr_xir_task_executor_stop(executor);return XR_XIR_CALL_READY;
+}
 static void task_core_cancel_callback(XrXirTaskExecutor *executor) {
     XirTaskActivation *activation=&executor->callback;
     if (!activation->call) return;
