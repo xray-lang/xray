@@ -178,9 +178,11 @@ static void arena_budget_and_output(void) {
 #include "xir_compile_program_owner_cases.h"
 #include "xir_construction_owner_cases.h"
 int main(void) {
-    arena_lifetime_and_authenticity(); arena_allocation_failures(); arena_budget_and_output();
-    program_lifetime(); program_take_failures(); program_abi_and_owner();
-    program_method_kind_match(); construction_cross_owner();
+#define RUN_OWNER_CASE(f) do { fprintf(stderr,"owner begin %s\n",#f); f(); fprintf(stderr,"owner end %s\n",#f); } while(0)
+    RUN_OWNER_CASE(arena_lifetime_and_authenticity);RUN_OWNER_CASE(arena_allocation_failures);RUN_OWNER_CASE(arena_budget_and_output);
+    RUN_OWNER_CASE(program_lifetime);RUN_OWNER_CASE(program_take_failures);RUN_OWNER_CASE(program_abi_and_owner);
+    RUN_OWNER_CASE(program_method_kind_match);RUN_OWNER_CASE(construction_cross_owner);
+#undef RUN_OWNER_CASE
     puts("Canonical metadata: producer/domain release, nested forged handles rejected, physical zero");
     return 0;
 }
