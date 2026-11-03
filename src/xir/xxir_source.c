@@ -1825,6 +1825,8 @@ static bool source_function_value(SourceContext *ctx, AstNode *node, SourceName 
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "function value requires a declared function");
     if (ctx->identities[symbol->index].native_callable==XR_NATIVE_CALLABLE_SYS_ON_SIGNAL)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"signal registration requires a direct call");
+    if(xir_sys_thread_token_id(ctx->identities[symbol->index].native_callable))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"thread identity queries require a direct call");
     if (!source_query_reference(ctx, node, binding, symbol, XR_XIR_SOURCE_FUNCTION_VALUE)) return false;
     if (!source_initialization_require(ctx,symbol->index)) return false;
     const XrXirFunction *function = &ctx->functions[symbol->index];

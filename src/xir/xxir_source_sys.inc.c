@@ -38,7 +38,13 @@ static bool source_sys_declare(SourceContext *ctx) {
                         .result=XR_XIR_UNIT,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},parameters+p))return false;
                 } else return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"sys parameter requires its governed exact type");
             }
-            XrXirType result=count?XR_XIR_BOOL:XR_XIR_UNIT;
+            XrXirType result=XR_XIR_UNIT;
+            switch(native->member->result) {
+            case XR_NATIVE_TERM_UNIT:break;
+            case XR_NATIVE_TERM_BOOL:result=XR_XIR_BOOL;break;
+            case XR_NATIVE_TERM_I64:result=XR_XIR_I64;break;
+            default:return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"sys result requires its governed exact type");
+            }
             if(!xir_sys_native_signature(id,&ctx->types,parameters,count,result,XR_XIR_NEVER))
                 return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"sys callable differs from its governed signature");
             if(find_name(ctx,ctx->names[m],native->member->name))continue;
