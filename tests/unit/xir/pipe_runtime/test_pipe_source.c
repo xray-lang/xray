@@ -80,7 +80,9 @@ int main(int argc,char **argv){
  for(unsigned n=1;n<PIPE_ENTRY_COUNT;++n)ids[n]=pipe_named(module,pipe_names[n]);
  char generated[2048];CHECK(snprintf(generated,sizeof(generated),"%s/pipe_runtime.c",emit?argv[2]:XR_PIPE_GENERATED)>0);pipe_emit(lowered,ids,generated,emit);
  if(emit)xr_xir_compile_artifact_free(lowered);
- else{pipe_contracts(&context,lowered);XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK&&!lowered);pipe_execute(program,ids);xr_xir_compile_program_drop(program);}
+ else{pipe_contracts(&context,lowered);XrXirProgram *program=NULL;XrXirStatus status=xr_xir_compile_vm_program_take(&lowered,&program);
+  if(status!=XR_XIR_OK)fprintf(stderr,"Pipe VM program take status%u\n",status);
+  CHECK(status==XR_XIR_OK&&!lowered);pipe_execute(program,ids);xr_xir_compile_program_drop(program);}
  CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK&&after.held_bytes==before.held_bytes&&!runtime_live&&!runtime_bytes);xr_compile_resources_release(context.resources);
  if(!emit)puts("42");return 0;
 }
