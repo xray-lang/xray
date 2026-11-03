@@ -45,6 +45,14 @@ static const char host_io_bool_text[]=
  "export fn ctfeMutation()->bool{return __mkdir(Child(\".\"))}\n";
 static const char host_count_text[]="export fn answer()->i64{return __cpuCount()}\n";
 static const char host_pin_text[]="export fn answer(cpu:i64)->bool{return __pinToCpu(cpu)}\n";
+static const char host_signal_frontier_text[]=
+ "fn plain(n:i64)->i64{return n}\n"
+ "fn read(v:Slice<u8>)->i64{return (v[0] as i64)+(v[1] as i64)}\n"
+ "fn countRef(v:ref Array<u8>)->i64{return len(v)}\n"
+ "export fn parent()->i64{defer{assert(plain(42)==42)};assert(__cpuCount()>0);"
+ "var bytes:Array<u8>=[20,22];const loan:Slice<u8>=bytes[:];const total=read(loan);"
+ "const count=countRef(ref bytes);bytes=[42];return plain(total+count-2)}\n"
+ "export fn failed()->i64{assert(false);return 0}\n";
 static const char host_system_text[]=
  "export fn uid()->i64?{return __uid()}\n"
  "export fn gid()->i64?{return __gid()}\n"
