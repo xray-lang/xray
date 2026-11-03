@@ -47,7 +47,9 @@ endif()
 target_link_libraries(xir_compile_owner_runtime PRIVATE compile_owner_core)
 add_executable(test_xir_compile_runtime_owner
     "${CMAKE_CURRENT_LIST_DIR}/test_xir_compile_runtime_owner.c"
-    "${XIR_OWNER_ROOT}/src/xir/xxir_vm.c")
+    "${XIR_OWNER_ROOT}/src/xir/xxir_vm.c"
+    "${XIR_OWNER_ROOT}/src/xir/xxir_vm_debug.c"
+    "${XIR_OWNER_ROOT}/src/xir/xxir_vm_debug_calls.c")
 target_link_libraries(test_xir_compile_runtime_owner PRIVATE xir_compile_owner_runtime)
 add_executable(test_xir_compile_emit_owner
     "${CMAKE_CURRENT_LIST_DIR}/test_xir_compile_emit_owner.c"
