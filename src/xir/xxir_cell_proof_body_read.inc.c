@@ -46,9 +46,24 @@ static XrXirStatus cell_proof_raw_shape(const XrXirCompileContext *context,const
 
     *output=(XrXirCellProofInstructionShape){operation->op,operation->type};return XR_XIR_OK;
 }
+static XrXirStatus cell_proof_raw_methods(const XrXirCompileContext *context,const void *owner,
+    uint32_t f,uint32_t i,XirClassMethodVisitor visit,void *data) {
+    const XrXirModule *module=owner;
+    if(!xir_compile_context_valid(context) || !module || !module->functions ||
+        f>=module->function_count || i>=module->functions[f].instruction_count ||
+        !module->functions[f].instructions)return XR_XIR_BAD_STRUCTURE;
+    const XrXirInstruction *op=&module->functions[f].instructions[i];
+    if(op->op!=XR_XIR_CLASS_METHOD_REF || op->args[0]>=(uint64_t)module->functions[f].parameter_count+i)
+        return XR_XIR_BAD_STRUCTURE;
+    XrXirType receiver=xr_xir_operand_type(&module->functions[f],op->args[0]);XirClassMethodTarget selected={0};
+    XrXirStatus status=xir_compile_class_method_site(module,f,i,receiver,&selected,NULL);
+    return status!=XR_XIR_OK?status:xir_compile_class_method_candidates(module,receiver,
+        (uint32_t)op->immediate,visit,data,NULL);
+}
 static XrXirCellProofBodyRead cell_proof_raw_body(const XrXirCompileContext *context,const XrXirModule *module) {
     return (XrXirCellProofBodyRead){xir_metadata_domain_from_module(module),context->resources,module,
-        cell_proof_raw_head,cell_proof_raw_instruction,cell_proof_raw_type,cell_proof_raw_shape,NULL,NULL,NULL,NULL};
+        cell_proof_raw_head,cell_proof_raw_instruction,cell_proof_raw_type,cell_proof_raw_shape,NULL,NULL,NULL,NULL,
+        cell_proof_raw_methods};
 }
 static bool cell_proof_body_valid(const XrXirCompileContext *context,const XrXirCellProofBodyRead *body) {
     return xir_compile_context_valid(context) && body && body->resources==context->resources && body->owner &&
@@ -61,7 +76,8 @@ static bool cell_proof_body_valid(const XrXirCompileContext *context,const XrXir
 static bool cell_proof_raw_callbacks(const XrXirCellProofBodyRead *body) {
     return body->head==cell_proof_raw_head && body->instruction==cell_proof_raw_instruction &&
         body->type==cell_proof_raw_type && body->shape==cell_proof_raw_shape &&
-        !body->span && !body->range && !body->range_row && !body->range_shape;
+        !body->span && !body->range && !body->range_row && !body->range_shape &&
+        body->method_candidates==cell_proof_raw_methods;
 }
 static bool cell_proof_raw_current(CellProofBuild *build) {
     const XrXirCellProofBodyRead *body=build->body;const XrXirModule *module=body->owner;

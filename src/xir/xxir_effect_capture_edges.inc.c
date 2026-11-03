@@ -17,6 +17,18 @@ typedef struct EffectCaptureActual {
     uint64_t rank;
     bool captured,unbound,opaque,active;
 } EffectCaptureActual;
+static XrXirStatus effect_capture_method_prefix(const EffectCaptureRead *read,
+    const EffectInvocationSite *site) {
+    if(!site || site->captures!=1)return XR_XIR_BAD_STRUCTURE;
+    XrXirInstruction storage;const XrXirInstruction *producer=NULL;
+    XrXirStatus status=effect_body_request_instruction(&read->body,site->function,site->instruction,
+        &storage,&producer);
+    if(status!=XR_XIR_OK)return status;
+    if(producer->op!=XR_XIR_CLASS_METHOD_REF)return XR_XIR_BAD_STRUCTURE;
+    XirClassMethodTarget selected={0};
+    return effect_class_method_target(read->work,read->final->material,site->function,
+        site->instruction,site->target,&selected);
+}
 struct EffectCaptureActualRead {
     uint32_t edges,offsets[65];
     EffectCaptureActual values[64];
@@ -140,8 +152,15 @@ static XrXirStatus effect_capture_actual_current(const EffectCaptureRead *read,u
             status=effect_body_request_type(&read->body,read->final->nodes[edge->caller].body,(uint32_t)op->immediate,&type);
             if(status!=XR_XIR_OK) return status;
             const XrXirTypeNode *signature=xr_xir_callable_signature(read->body.domain.types,type);
-            uint32_t captures=read->final->sites[edge->producer].captures,suffix=parameter-captures;
-            if(!signature || captures || suffix>=signature->parameter_count || signature->parameters[suffix].mode!=XR_PARAM_REF ||
+            if(edge->producer>=read->final->site_count)return XR_XIR_BAD_STRUCTURE;
+            const EffectInvocationSite *site=&read->final->sites[edge->producer];
+            uint32_t captures=site->captures;
+            if(parameter<captures)return XR_XIR_BAD_STRUCTURE;
+            if(captures) {
+                status=effect_capture_method_prefix(read,site);if(status!=XR_XIR_OK)return status;
+            }
+            uint32_t suffix=parameter-captures;
+            if(!signature || suffix>=signature->parameter_count || signature->parameters[suffix].mode!=XR_PARAM_REF ||
                 xr_xir_cell_provenance_role(read->final->cells,read->final->nodes[edge->target].body,parameter)!=XR_XIR_CELL_PROOF_SCOPED_REF)
                 return XR_XIR_BAD_STRUCTURE;
         }

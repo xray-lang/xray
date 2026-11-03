@@ -74,6 +74,7 @@
         "xir_checked_previous124",
         "xir_checked_previous125",
         "xir_checked_previous126",
+        "xir_checked_previous127",
         "test_xir_runtime_sdk_combined_identity",
         "test_xir_runtime_sdk_current_wire_vector",
         "local_toolchain_real",
@@ -113,6 +114,21 @@
         "src/xir/xxir_checked*",
         "src/xir/xxir_library*",
         "src/xir/xxir_nominal*",
+        "src/xir/xxir_byte_array*",
+        "src/xir/xxir_emit_byte_array.inc.c",
+        "src/xir/xxir_vm_byte_array.inc.c",
+        "src/xir/xxir_array*",
+        "stdlib/compress/compress.xr",
+        "stdlib/types/array.xr",
+        "tests/unit/xir/test_xir_byte_array_value.c",
+        "tests/unit/xir/byte_array_value.cmake",
+        "tests/unit/xir/test_xir_compress_suite*.c",
+        "tests/unit/xir/compress_suite*",
+        "tests/unit/xir/run_compress_suite.py",
+        "tests/unit/xir/slice_u8_byte_bulk_cases.h",
+        "tests/diff/cases/semantics/stdlib/compress_*_direct.xr*",
+        "tests/regression/10_stdlib/1301_compress.xr",
+        "tests/stdlib/contracts/compress/diff_cases.txt",
         "tests/fixtures/xir_records/*",
         "src/xir/xxir_source_string*",
         "src/xir/xxir_source_context.inc.c",
@@ -207,6 +223,9 @@
         "xir_map_iteration_source",
         "xir_typed_display_source",
         "xir_typed_display_values",
+        "test_xir_byte_array_value",
+        "xir_compress_suite",
+        "cli_compress_consumers",
         "xir_typed_display_native",
         "test_xir_move_values",
         "xir_fixed_bytes",
@@ -266,6 +285,9 @@
         "test_xir_map_iteration_source",
         "test_xir_typed_display_source",
         "test_xir_typed_display_values",
+        "test_xir_byte_array_value",
+        "test_xir_compress_suite",
+        "test_xir_compress_suite_native",
         "test_xir_typed_display_native",
         "test_xir_move_values",
         "test_xir_fixed_bytes",
@@ -704,6 +726,30 @@
         "test_xir_rest_values",
         "test_xir_rest_values_native",
         "test_xir_rest_values_cold_native"
+      ]
+    },
+    "api-knowledge": {
+      "tier": "L2",
+      "match": [
+        "src/app/mcp/xmcp_knowledge_generated.c",
+        "scripts/gen_api_inventory.py",
+        "scripts/gen_mcp_knowledge.py",
+        "scripts/gen_language_docs.py",
+        "stdlib/compress/compress.xr",
+        "tests/mcp/test_knowledge_generation.py",
+        "spec/source/cards/*",
+        "spec/source/sections/*",
+        "stdlib/defs/*",
+        "stdlib/prelude/*",
+        "stdlib/types/*"
+      ],
+      "reason": "Source-backed API inventory and generated MCP knowledge stay consistent with managed declarations and specification inputs.",
+      "tests": [
+        "api_inventory_docs_coverage",
+        "test_mcp_knowledge_generation"
+      ],
+      "targets": [
+        "xray"
       ]
     },
     "class-inheritance": {

@@ -5,7 +5,7 @@
 // Array<u8> payload rather than a rune-level cut on a string.
 import compress
 
-fn compressionInvalidData(body: fn()) -> bool {
+fn compressionInvalidData(body: fn() throws(CompressionError)) -> bool {
     try {
         body()
         return false
@@ -20,12 +20,12 @@ var text = "Task 200 compress truncated input contract. Task 200 compress trunca
 
 var gz = compress.gzip(text.bytes())
 print(len(gz) > 1)
-print(compressionInvalidData(fn() { compress.gunzip(gz[0:1]) }))
+print(compressionInvalidData(fn() throws(CompressionError) { try compress.gunzip(gz[0:1]) }))
 
 var deflated = compress.deflate(text.bytes())
 print(len(deflated) > 1)
-print(compressionInvalidData(fn() { compress.inflate(deflated[0:1]) }))
+print(compressionInvalidData(fn() throws(CompressionError) { try compress.inflate(deflated[0:1]) }))
 
 var zlibbed = compress.zlibCompress(text.bytes())
 print(len(zlibbed) > 1)
-print(compressionInvalidData(fn() { compress.zlibDecompress(zlibbed[0:1]) }))
+print(compressionInvalidData(fn() throws(CompressionError) { try compress.zlibDecompress(zlibbed[0:1]) }))

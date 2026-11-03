@@ -60,6 +60,11 @@ struct Array<T> {
     some(fn: fn(item: T) -> bool) -> bool
     // @native-operation ARRAY_FILL allocation=may_heap failures=allocation,retain,limit ownership=owned
     ref fill(value: T, start?: i64, end?: i64) -> Array<T>
+    // Byte bulk operations require an exact Array<u8> receiver.
+    // @native-operation ARRAY_BYTE_APPEND allocation=may_heap failures=allocation,retain,limit ownership=owned
+    ref appendFrom(src: Slice<u8>) -> Array<u8>
+    // @native-operation ARRAY_BYTE_REPEAT allocation=may_heap failures=bounds,allocation,retain,limit ownership=owned
+    ref repeatFrom(distance: i64, count: i64) -> Array<u8>
     // All arrays, including Array<byte>, render the "[a, b]" container form.
     // Decode UTF-8 byte arrays explicitly with string.fromUtf8().
     toString() -> string

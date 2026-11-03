@@ -132,7 +132,7 @@ static bool source_slice(SourceContext *ctx,AstNode *node,SourceExpectedType exp
             if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             syntax=syntax->as.grouping;
         }
-        SourceName *binding=syntax ? visible_name(ctx,syntax->as.variable.name) : NULL;
+        SourceName *binding=syntax && syntax->type==AST_VARIABLE ? visible_name(ctx,syntax->as.variable.name) : NULL;
         if (kind==XR_XIR_TYPE_MUT_SLICE && (!binding || !binding->mutable))
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"mutable view requires an exclusively writable owner");
     }

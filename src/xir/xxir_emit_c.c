@@ -843,6 +843,7 @@ static void emit_tuple_step(CBuffer *buffer,const XrXirFunction *function,
     EMIT_STATIC(buffer, es_babd64ba6b0681db," }\n return (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0}, {0}, 0};\n");
 }
 #include "xxir_emit_fixed_array.inc.c"
+#include "xxir_emit_byte_array.inc.c"
 static void emit_nominal_step(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t destination) {
     if (op->op == XR_XIR_STRUCT_SET) {
@@ -1280,6 +1281,9 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET) || op->op == XR_XIR_ERROR_ERASE ||
         op->op == XR_XIR_ERROR_IS || op->op == XR_XIR_ERROR_NARROW) {
         emit_nominal_step(buffer, function, op, layout, destination); return;
+    }
+    if (op->op==XR_XIR_BYTE_ARRAY_APPEND || op->op==XR_XIR_BYTE_ARRAY_REPEAT) {
+        emit_byte_array_step(buffer,function,op,layout,destination,index);return;
     }
     if (op->op == XR_XIR_ARRAY_CAPACITY || op->op == XR_XIR_ARRAY_WITH_CAPACITY || op->op == XR_XIR_ARRAY_RESERVE) {
         emit_array_capacity_step(buffer, function, op, layout, destination, index);

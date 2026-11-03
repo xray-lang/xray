@@ -270,7 +270,7 @@ class Huffman {
     }
 }
 
-fn buildHuffman(lengths: Array<i64>, n: i64) -> Huffman {
+fn buildHuffman(lengths: Array<i64>, n: i64) throws(CompressionError) -> Huffman {
     var counts = Array<i64>(MAX_BITS + 1, 0)
     for (var i = 0; i < n; i++) {
         counts[lengths[i]] = counts[lengths[i]] + 1
@@ -473,11 +473,11 @@ fn distCodeFor(distance: i64) -> i64 {
     return code
 }
 
-fn emitLiteral(w: ref BitWriter, value: i64, codes: Array<i64>, lengths: Array<i64>) {
+fn emitLiteral(w: BitWriter, value: i64, codes: Array<i64>, lengths: Array<i64>) {
     w.writeCode(codes[value], lengths[value])
 }
 
-fn emitMatch(w: ref BitWriter, length: i64, distance: i64,
+fn emitMatch(w: BitWriter, length: i64, distance: i64,
              litCodes: Array<i64>, litLengths: Array<i64>,
              distCodes: Array<i64>, distLengths: Array<i64>) {
     var lengthCode = lengthCodeFor(length)
@@ -523,7 +523,7 @@ fn deflateFixed(src: Slice<u8>, level: i64) -> Array<u8> {
         }
 
         if (matchLength >= MIN_MATCH) {
-            emitMatch(ref w, matchLength, matchDistance, litCodes, litLengths, distCodes,
+            emitMatch(w, matchLength, matchDistance, litCodes, litLengths, distCodes,
                       distLengths)
             // Every position the match covered still has to enter the chain, or
             // later matches would never see it.
@@ -532,7 +532,7 @@ fn deflateFixed(src: Slice<u8>, level: i64) -> Array<u8> {
             }
             pos = pos + matchLength
         } else {
-            emitLiteral(ref w, src[pos] as i64, litCodes, litLengths)
+            emitLiteral(w, src[pos] as i64, litCodes, litLengths)
             if (pos + MIN_MATCH <= total) { insertHash(src, pos, ref head, ref prev) }
             pos++
         }
@@ -588,7 +588,7 @@ class Inflater {
 
     // Reads count bits, low bit first. Running past the end is a malformed
     // stream, not a zero fill.
-    readBits(count: i64) -> i64 {
+    readBits(count: i64) throws(CompressionError) -> i64 {
         while (this.bitCount < count) {
             if (this.pos >= len(this.src)) { throw CompressionError.InvalidData }
             this.bitBuf = this.bitBuf | ((this.src[this.pos] as i64) << this.bitCount)
@@ -611,12 +611,12 @@ class Inflater {
     // Walks one bit at a time, comparing the code so far against the first code
     // of that length -- the shape puff.c uses, because it needs no table beyond
     // the two vectors buildHuffman produces.
-    decodeSymbol(tree: Huffman) -> i64 {
+    decodeSymbol(tree: Huffman) throws(CompressionError) -> i64 {
         var code = 0
         var first = 0
         var index = 0
         for (var length = 1; length <= MAX_BITS; length++) {
-            code = code | this.readBits(1)
+            code = code | try this.readBits(1)
             var count = tree.counts[length]
             if (code - count < first) { return tree.symbols[index + (code - first)] }
             index = index + count
@@ -628,7 +628,7 @@ class Inflater {
 
     // A stored block restates its length twice, the second time complemented,
     // so a stream that lost its alignment is caught before any bytes are copied.
-    storedBlock() {
+    storedBlock() throws(CompressionError) {
         this.alignByte()
         var total = len(this.src)
         if (this.pos + 4 > total) { throw CompressionError.InvalidData }
@@ -637,17 +637,18 @@ class Inflater {
         if (blockNlen != ((~blockLen) & 65535)) { throw CompressionError.InvalidData }
         this.pos = this.pos + 4
         if (this.pos + blockLen > total) { throw CompressionError.InvalidData }
-        this.out.appendFrom(this.src[this.pos:this.pos + blockLen])
+        var input = this.src
+        this.out.appendFrom(input[this.pos:this.pos + blockLen])
         this.pos = this.pos + blockLen
     }
 
     // The code lengths of a dynamic block are themselves Huffman coded, with
     // three symbols above the literal ones that repeat: 16 repeats the previous
     // length, 17 and 18 repeat zero over two different ranges.
-    readCodeLengths(tree: Huffman, count: i64, lengths: ref Array<i64>) {
+    readCodeLengths(tree: Huffman, count: i64, lengths: ref Array<i64>) throws(CompressionError) {
         var i = 0
         while (i < count) {
-            var symbol = this.decodeSymbol(tree)
+            var symbol = try this.decodeSymbol(tree)
             if (symbol < 16) {
                 lengths[i] = symbol
                 i++
@@ -655,21 +656,21 @@ class Inflater {
                 // Nothing precedes the first length, so it cannot be repeated.
                 if (i == 0) { throw CompressionError.InvalidData }
                 var previous = lengths[i - 1]
-                var repeat = 3 + this.readBits(2)
+                var repeat = 3 + try this.readBits(2)
                 if (i + repeat > count) { throw CompressionError.InvalidData }
                 for (var k = 0; k < repeat; k++) {
                     lengths[i] = previous
                     i++
                 }
             } else if (symbol == 17) {
-                var repeat = 3 + this.readBits(3)
+                var repeat = 3 + try this.readBits(3)
                 if (i + repeat > count) { throw CompressionError.InvalidData }
                 for (var k = 0; k < repeat; k++) {
                     lengths[i] = 0
                     i++
                 }
             } else if (symbol == 18) {
-                var repeat = 11 + this.readBits(7)
+                var repeat = 11 + try this.readBits(7)
                 if (i + repeat > count) { throw CompressionError.InvalidData }
                 for (var k = 0; k < repeat; k++) {
                     lengths[i] = 0
@@ -685,9 +686,9 @@ class Inflater {
     // applied with repeatFrom, whose overlapping semantics are exactly the ones
     // deflate defines: a distance shorter than the length repeats what it just
     // wrote, byte by byte.
-    codedBlock(litTree: Huffman, distTree: Huffman) {
+    codedBlock(litTree: Huffman, distTree: Huffman) throws(CompressionError) {
         while (true) {
-            var symbol = this.decodeSymbol(litTree)
+            var symbol = try this.decodeSymbol(litTree)
             if (symbol < 256) {
                 this.out.push(symbol as u8)
             } else if (symbol == END_OF_BLOCK) {
@@ -697,13 +698,13 @@ class Inflater {
                 if (lengthIndex >= 29) { throw CompressionError.InvalidData }
                 var length = LENGTH_BASE[lengthIndex]
                 var lengthExtra = LENGTH_EXTRA[lengthIndex]
-                if (lengthExtra > 0) { length = length + this.readBits(lengthExtra) }
+                if (lengthExtra > 0) { length = length + try this.readBits(lengthExtra) }
 
-                var distSymbol = this.decodeSymbol(distTree)
+                var distSymbol = try this.decodeSymbol(distTree)
                 if (distSymbol >= 30) { throw CompressionError.InvalidData }
                 var distance = DIST_BASE[distSymbol]
                 var distExtra = DIST_EXTRA[distSymbol]
-                if (distExtra > 0) { distance = distance + this.readBits(distExtra) }
+                if (distExtra > 0) { distance = distance + try this.readBits(distExtra) }
 
                 // A distance reaching back past the start of the output names
                 // bytes that were never written.
@@ -713,40 +714,40 @@ class Inflater {
         }
     }
 
-    dynamicBlock() {
-        var hlit = this.readBits(5) + 257
-        var hdist = this.readBits(5) + 1
-        var hclen = this.readBits(4) + 4
+    dynamicBlock() throws(CompressionError) {
+        var hlit = try this.readBits(5) + 257
+        var hdist = try this.readBits(5) + 1
+        var hclen = try this.readBits(4) + 4
 
         // The code-length lengths arrive in an order that front-loads the ones
         // most often non-zero, so a short block can stop early.
         var clcl = Array<i64>(19, 0)
         for (var i = 0; i < hclen; i++) {
-            clcl[CLCL_ORDER[i]] = this.readBits(3)
+            clcl[CLCL_ORDER[i]] = try this.readBits(3)
         }
-        var clTree = buildHuffman(clcl, 19)
+        var clTree = try buildHuffman(clcl, 19)
 
         // Literal and distance lengths are coded as one run and split
         // afterwards, because a repeat may straddle the boundary between them.
         var all = Array<i64>(hlit + hdist, 0)
-        this.readCodeLengths(clTree, hlit + hdist, ref all)
-        var litLengths = copy(all[0:hlit])
-        var distLengths = copy(all[hlit:hlit + hdist])
+        try this.readCodeLengths(clTree, hlit + hdist, ref all)
+        var litLengths = copy all[0:hlit]
+        var distLengths = copy all[hlit:hlit + hdist]
 
-        this.codedBlock(buildHuffman(litLengths, hlit), buildHuffman(distLengths, hdist))
+        try this.codedBlock(try buildHuffman(litLengths, hlit), try buildHuffman(distLengths, hdist))
     }
 
-    run() -> Array<u8> {
+    run() throws(CompressionError) -> Array<u8> {
         while (true) {
-            var isFinal = this.readBits(1)
-            var blockType = this.readBits(2)
+            var isFinal = try this.readBits(1)
+            var blockType = try this.readBits(2)
             if (blockType == 0) {
-                this.storedBlock()
+                try this.storedBlock()
             } else if (blockType == 1) {
-                this.codedBlock(buildHuffman(fixedLiteralLengths(), 288),
-                                buildHuffman(fixedDistanceLengths(), 30))
+                try this.codedBlock(try buildHuffman(fixedLiteralLengths(), 288),
+                                try buildHuffman(fixedDistanceLengths(), 30))
             } else if (blockType == 2) {
-                this.dynamicBlock()
+                try this.dynamicBlock()
             } else {
                 // BTYPE 3 is reserved and names no coding.
                 throw CompressionError.InvalidData
@@ -757,10 +758,10 @@ class Inflater {
     }
 }
 
-fn inflateRaw(src: Slice<u8>) -> Array<u8> {
-    var owned = copy(src[0:len(src)])
+fn inflateRaw(src: Slice<u8>) throws(CompressionError) -> Array<u8> {
+    var owned = copy src[0:len(src)]
     var decoder = Inflater(owned)
-    return (move decoder).run()
+    return try (move decoder).run()
 }
 // ── Container framing ───────────────────────────────────────────────────────
 //
@@ -820,7 +821,7 @@ export fn gzip(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION) -> Array<u8> {
 // Unwrap a gzip member and decompress it. A member shorter than a header plus
 // an empty payload plus a trailer cannot be one, whatever its first two bytes
 // say, and a method other than deflate is one this decoder does not implement.
-export fn gunzip(data: Slice<u8>) -> Array<u8> {
+export fn gunzip(data: Slice<u8>) throws(CompressionError) -> Array<u8> {
     if (!isGzipBytes(data)) { throw CompressionError.InvalidData }
     var total = len(data)
     if (total < GZIP_MIN_MEMBER_LEN) { throw CompressionError.InvalidData }
@@ -846,7 +847,7 @@ export fn gunzip(data: Slice<u8>) -> Array<u8> {
     if ((flags & GZIP_FHCRC) != 0) { pos = pos + 2 }
     if (pos + GZIP_TRAILER_LEN > total) { throw CompressionError.InvalidData }
 
-    var out = inflateRaw(data[pos:total - GZIP_TRAILER_LEN])
+    var out = try inflateRaw(data[pos:total - GZIP_TRAILER_LEN])
 
     // Both trailer fields are checked. The length alone would miss a corrupted
     // byte, and the checksum alone would miss a stream truncated at a block
@@ -901,7 +902,7 @@ export fn zlibCompress(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION) -> Arr
 // Unwrap a zlib stream and decompress it. A preset dictionary is announced by
 // FDICT and would name a dictionary this decoder was never given, so the four
 // bytes naming it are skipped and the stream is decoded without it.
-export fn zlibDecompress(data: Slice<u8>) -> Array<u8> {
+export fn zlibDecompress(data: Slice<u8>) throws(CompressionError) -> Array<u8> {
     if (!isZlibBytes(data)) { throw CompressionError.InvalidData }
     var total = len(data)
     if (total < ZLIB_MIN_STREAM_LEN) { throw CompressionError.InvalidData }
@@ -912,7 +913,7 @@ export fn zlibDecompress(data: Slice<u8>) -> Array<u8> {
         if (total < headerLen + ZLIB_TRAILER_LEN) { throw CompressionError.InvalidData }
     }
 
-    var out = inflateRaw(data[headerLen:total - ZLIB_TRAILER_LEN])
+    var out = try inflateRaw(data[headerLen:total - ZLIB_TRAILER_LEN])
     if (readU32BE(data, total - ZLIB_TRAILER_LEN) != adler32Bytes(out[:])) {
         throw CompressionError.InvalidData
     }
@@ -949,6 +950,6 @@ export fn deflate(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION) -> Array<u8
 
 // Raw inflate. A deflate stream carries no header to check ahead of time, so
 // every input goes to the decoder and malformed ones come back as the error.
-export fn inflate(data: Slice<u8>) -> Array<u8> {
-    return inflateRaw(data)
+export fn inflate(data: Slice<u8>) throws(CompressionError) -> Array<u8> {
+    return try inflateRaw(data)
 }

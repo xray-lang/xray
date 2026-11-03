@@ -447,7 +447,7 @@ static EffectSeedProjection effect_seed_opcode(XrXirOp op,XrXirFunctionEffects *
     case XR_XIR_HASH_LEN: case XR_XIR_MAP_SET: case XR_XIR_SET_ADD: case XR_XIR_HASH_DELETE: case XR_XIR_HASH_CLEAR:
     case XR_XIR_ARRAY_NEW: case XR_XIR_ARRAY_GET: case XR_XIR_ARRAY_SET:
     case XR_XIR_ARRAY_PUSH: case XR_XIR_ARRAY_LEN: case XR_XIR_ARRAY_CAPACITY:
-    case XR_XIR_ARRAY_WITH_CAPACITY: case XR_XIR_ARRAY_RESERVE: case XR_XIR_ADD_FLOAT:
+    case XR_XIR_ARRAY_WITH_CAPACITY: case XR_XIR_BYTE_ARRAY_APPEND: case XR_XIR_BYTE_ARRAY_REPEAT: case XR_XIR_ARRAY_RESERVE: case XR_XIR_ADD_FLOAT:
     case XR_XIR_SUB_FLOAT: case XR_XIR_MUL_FLOAT: case XR_XIR_DIV_FLOAT:
     case XR_XIR_STRUCT_NEW: case XR_XIR_STRUCT_GET: case XR_XIR_STRUCT_SET:
     case XR_XIR_CLASS_NEW: case XR_XIR_CLASS_GET: case XR_XIR_CLASS_SET:
@@ -818,7 +818,7 @@ static bool effect_default_access_local(XrXirOp op) {
     case XR_XIR_FIELD_PLACE: case XR_XIR_INDEX_PLACE: case XR_XIR_PLACE_READ: case XR_XIR_PLACE_WRITE:
     case XR_XIR_ARRAY_NEW: case XR_XIR_ARRAY_GET: case XR_XIR_ARRAY_SET: case XR_XIR_ARRAY_PUSH:
     case XR_XIR_ARRAY_LEN: case XR_XIR_ARRAY_REPEAT: case XR_XIR_ARRAY_CAPACITY:
-    case XR_XIR_ARRAY_WITH_CAPACITY: case XR_XIR_ARRAY_RESERVE: case XR_XIR_CELL_STRING_APPEND:
+    case XR_XIR_ARRAY_WITH_CAPACITY: case XR_XIR_BYTE_ARRAY_APPEND: case XR_XIR_BYTE_ARRAY_REPEAT: case XR_XIR_ARRAY_RESERVE: case XR_XIR_CELL_STRING_APPEND:
     case XR_XIR_STRING_LEN: case XR_XIR_EQ_STRING: case XR_XIR_NE_STRING: case XR_XIR_LT_STRING:
     case XR_XIR_LE_STRING: case XR_XIR_GT_STRING: case XR_XIR_GE_STRING:
     case XR_XIR_RUNE_IS_WHITESPACE: case XR_XIR_RUNE_TO_INTEGER: case XR_XIR_INTEGER_TO_RUNE:
@@ -837,6 +837,20 @@ static bool effect_default_access_local(XrXirOp op) {
     default: return false;
     }
 }
+static bool effect_default_access_scalar_slot(const XrXirModule *module,uint32_t function,
+    const XrXirInstruction *op) {
+    const XrXirDeclarations *d=module->declarations;
+    if(op->op!=XR_XIR_SLOT_LOAD || !d || !d->functions || !d->slots ||
+        function>=module->function_count || op->immediate<0 || (uint64_t)op->immediate>=d->slot_count)
+        return false;
+    const XrXirSlot *slot=&d->slots[op->immediate];
+    bool scalar=slot->type==XR_XIR_BOOL || slot->type==XR_XIR_RUNE || xr_xir_type_is_number(slot->type);
+    /* Loading an immutable scalar has no referent that can overlap a loan.
+     * Declaration, import, initialization and ordinary ROOT checks still apply. */
+    return scalar && !slot->mutable && op->type==slot->type &&
+        d->functions[function].module==slot->module &&
+        xr_xir_module_imports(d,d->functions[function].module,slot->module);
+}
 static XrXirStatus effect_default_access_seed(XirEffectDefaultAccessScope *scope) {
     EffectGraph *graph=&scope->graph;uint32_t count=effect_body_count(graph->material);
     EffectBodyRequest body=effect_body_owned_request(&scope->work,graph->material);
@@ -850,7 +864,8 @@ static XrXirStatus effect_default_access_seed(XirEffectDefaultAccessScope *scope
             status=effect_body_request_instruction(&body,f,i,&storage,&op);
             if (status!=XR_XIR_OK) return status;
             if (op->op<=XR_XIR_INVALID || op->op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
-            if (!effect_default_access_local(op->op)) graph->default_access_denied[f]=1;
+            if (!effect_default_access_local(op->op) &&
+                !effect_default_access_scalar_slot(scope->module,f,op)) graph->default_access_denied[f]=1;
         }
     }
     return XR_XIR_OK;

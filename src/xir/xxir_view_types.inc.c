@@ -191,7 +191,10 @@ XR_FUNC XrXirStatus xir_compile_view_module_boundary_input(const XrXirCompileCon
         }
         for (uint32_t p=0;p<body->parameter_count && status==XR_XIR_OK;++p) {
             if (!view_boundary_supported(module->types,flags,body->parameters[p])&&
-                !(callback&&p+1u==body->parameter_count)) status=XR_XIR_BAD_TYPE;
+                !(callback&&p+1u==body->parameter_count)) {
+                status=XR_XIR_BAD_TYPE;
+                if(diagnostic)*diagnostic=(XrXirDiagnostic){status,f,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+            }
         }
         for (uint32_t i=0;i<body->instruction_count && status==XR_XIR_OK;++i) {
             const XrXirInstruction *op=body->instructions+i;

@@ -85,6 +85,44 @@ class TierTests(unittest.TestCase):
         self.assertNotIn("native_runtime_installed", plan["tests"])
         self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
 
+    def test_compression_sources_and_oracles_select_their_runtime_gates(self):
+        paths = (
+            "stdlib/compress/compress.xr",
+            "stdlib/types/array.xr",
+            "src/xir/xxir_byte_array_value.inc.c",
+            "src/xir/xxir_emit_byte_array.inc.c",
+            "src/xir/xxir_vm_byte_array.inc.c",
+            "tests/unit/xir/test_xir_byte_array_value.c",
+            "tests/unit/xir/test_xir_compress_suite.c",
+            "tests/unit/xir/compress_suite_runtime.h",
+            "tests/unit/xir/run_compress_suite.py",
+            "tests/unit/xir/slice_u8_byte_bulk_cases.h",
+            "tests/diff/cases/semantics/stdlib/compress_external_codec_direct.xr.expected",
+            "tests/regression/10_stdlib/1301_compress.xr",
+            "tests/stdlib/contracts/compress/diff_cases.txt",
+        )
+        for path in paths:
+            with self.subTest(path=path):
+                plan = xray_l1.tier_plan(ROOT, "L2", changed=[path])
+                self.assertIn("public-values", plan["groups"])
+                self.assertTrue({"test_xir_byte_array_value", "xir_compress_suite",
+                                 "cli_compress_consumers"} <= set(plan["tests"]))
+                self.assertIn("test_xir_compress_suite_native", plan["targets"])
+                self.assertNotIn("native-runtime", plan["groups"])
+        self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
+
+    def test_generated_api_knowledge_selects_its_existing_sync_gates(self):
+        for path in ("src/app/mcp/xmcp_knowledge_generated.c", "stdlib/types/array.xr",
+                     "stdlib/compress/compress.xr", "scripts/gen_language_docs.py",
+                     "scripts/gen_api_inventory.py", "spec/source/cards/stdlib/compress.json"):
+            with self.subTest(path=path):
+                plan = xray_l1.tier_plan(ROOT, "L2", changed=[path])
+                self.assertIn("api-knowledge", plan["groups"])
+                self.assertTrue({"api_inventory_docs_coverage", "test_mcp_knowledge_generation"}
+                                <= set(plan["tests"]))
+                self.assertNotIn("native-runtime", plan["groups"])
+        self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
+
     def test_installed_source_sdk_scripts_select_their_installation_family(self):
         for script in ("source_sdk_install.py", "source_sdk_owned.py"):
             with self.subTest(script=script):

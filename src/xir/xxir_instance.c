@@ -1443,6 +1443,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_array_reserve(XrXirCallView *view,
     if (capacity < 0) return XR_XIR_CALL_NUMERIC_RANGE;
     return value_call_status(xr_xir_array_reserve(array, capacity, xr_xir_call_admission(view), output));
 }
+#include "xxir_instance_byte_array.inc.c"
 XR_FUNC XrXirCallStatus xr_xir_instance_array_capacity(XrXirCallView *view,
     const XrXirValueReceiver *receiver, XrXirValue *output) {
     if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;

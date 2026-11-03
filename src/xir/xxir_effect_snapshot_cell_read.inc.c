@@ -13,6 +13,8 @@ typedef struct EffectCellBodyAdapter {
     const XrXirCompileContext *work;
     EffectBodyRequest request;
 } EffectCellBodyAdapter;
+static XrXirStatus effect_class_method_candidates(const XrXirCompileContext *,
+    const EffectBodyMaterial *,uint32_t,uint32_t,XirClassMethodVisitor,void *);
 
 static bool effect_cell_body_adapter_valid(const XrXirCompileContext *work,
     const EffectCellBodyAdapter *adapter) {
@@ -240,6 +242,27 @@ static XrXirStatus effect_cell_body_range_shape(const XrXirCompileContext *work,
     *output=(XrXirCellProofInstructionShape){(XrXirOp)opcode,(XrXirType)type};return XR_XIR_OK;
 }
 
+static XrXirStatus effect_cell_body_methods(const XrXirCompileContext *work,const void *owner,
+    uint32_t f,uint32_t i,XirClassMethodVisitor visit,void *data) {
+    const EffectCellBodyAdapter *adapter=owner;
+    if(!effect_cell_body_adapter_valid(work,adapter))return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyRequest *request=&adapter->request;
+    if(effect_body_request_sequence_owned(request))
+        return effect_class_method_candidates(work,request->owner,f,i,visit,data);
+    if(request->head!=effect_body_raw_head || request->instruction!=effect_body_raw_instruction ||
+        request->type!=effect_body_raw_type || request->shape!=effect_body_raw_shape)return XR_XIR_BAD_STRUCTURE;
+    const XrXirModule *module=request->owner;
+    if(!module->functions || f>=module->function_count || i>=module->functions[f].instruction_count ||
+        !module->functions[f].instructions)
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirInstruction *op=&module->functions[f].instructions[i];
+    if(op->op!=XR_XIR_CLASS_METHOD_REF || op->args[0]>=(uint64_t)module->functions[f].parameter_count+i)
+        return XR_XIR_BAD_STRUCTURE;
+    XrXirType receiver=xr_xir_operand_type(&module->functions[f],op->args[0]);XirClassMethodTarget selected={0};
+    XrXirStatus status=xir_compile_class_method_site(module,f,i,receiver,&selected,NULL);
+    return status!=XR_XIR_OK?status:xir_compile_class_method_candidates(module,receiver,
+        (uint32_t)op->immediate,visit,data,NULL);
+}
 static XrXirStatus effect_cell_body_bind(const XrXirCompileContext *work,
     const EffectBodyRequest *request,EffectCellBodyAdapter *adapter,XrXirCellProofBodyRead *output) {
     if (!xir_compile_context_valid(work) || !request || !adapter || !output || !request->owner ||
@@ -253,7 +276,8 @@ static XrXirStatus effect_cell_body_bind(const XrXirCompileContext *work,
         request->head==effect_body_owned_head?effect_cell_body_span:NULL,
         request->head==effect_body_owned_head?effect_cell_body_range:NULL,
         request->head==effect_body_owned_head?effect_cell_body_range_row:NULL,
-        request->head==effect_body_owned_head?effect_cell_body_range_shape:NULL};return XR_XIR_OK;
+        request->head==effect_body_owned_head?effect_cell_body_range_shape:NULL,
+        effect_cell_body_methods};return XR_XIR_OK;
 }
 /* Getter identity selects only the genuine storage layout. It supplies no
  * permission fact; full admission and independent source matching remain

@@ -337,7 +337,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         (!xr_xir_type_is_nullable(module->types,op->type) || xr_xir_nullable_element(module->types,op->type)!=XR_XIR_ERROR))
         return XR_XIR_BAD_TYPE;
     if (op->op == XR_XIR_PHI && (!op->args[1] || op->args[1] % 2)) return XR_XIR_BAD_STRUCTURE;
-    if ((op->op == XR_XIR_MAP_SET || op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_STRING_REPLACE || op->op == XR_XIR_RANGE_CHECK) && op->args[1] != 3) return XR_XIR_BAD_STRUCTURE;
+    if ((op->op == XR_XIR_MAP_SET || op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_STRING_REPLACE || op->op == XR_XIR_BYTE_ARRAY_REPEAT || op->op == XR_XIR_RANGE_CHECK) && op->args[1] != 3) return XR_XIR_BAD_STRUCTURE;
     if (op->op==XR_XIR_STRING_COPY_BYTES || op->op==XR_XIR_STRING_REPLACE) {
         if (op->targets[0] || op->targets[1] || op->type_arguments[0] || op->type_arguments[1] ||
             op->immediate<0 || op->immediate>(op->op==XR_XIR_STRING_REPLACE ? 1 : 0) ||
@@ -862,6 +862,7 @@ static XrXirStatus role_operand(const XrXirFunction *function, const Graph *grap
 
 #include "xxir_hash_verify.inc.c"
 #include "xxir_view_verify.inc.c"
+#include "xxir_byte_array_verify.inc.c"
 
 static XrXirStatus array_uses(const Graph *graph, const XrXirFunction *function,
                              VerifyContext *context, uint32_t instruction) {
@@ -1107,6 +1108,8 @@ static XrXirStatus graph_specialized_uses(const Graph *graph,const XrXirFunction
         if (status != XR_XIR_OK) return status;
         return XR_XIR_OK;
     }
+    if (op->op==XR_XIR_BYTE_ARRAY_APPEND || op->op==XR_XIR_BYTE_ARRAY_REPEAT)
+        return byte_array_uses(graph,function,context,i);
     if ((op->op >= XR_XIR_CELL_PLACE && op->op <= XR_XIR_ARRAY_LEN) || op->op == XR_XIR_ARRAY_REPEAT ||
         (op->op >= XR_XIR_ARRAY_CAPACITY && op->op <= XR_XIR_ARRAY_RESERVE)) {
         XrXirStatus status = array_uses(graph, function, context, i);
@@ -1310,7 +1313,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                 if (operand_type == XR_XIR_UNIT) return XR_XIR_BAD_VALUE;
                 if (operand_type != XR_XIR_BOOL && operand_type != XR_XIR_RUNE && !xr_xir_type_is_number(operand_type) && operand_type != XR_XIR_STRING) return XR_XIR_BAD_TYPE;
             }
-            uint32_t id = xr_xir_op_references_function(op->op) || op->op == XR_XIR_CALL_INTRINSIC || op->op == XR_XIR_CALL_REQUIREMENT || op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_PRINT || op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_STRING_REPLACE || op->op == XR_XIR_RANGE_CHECK ?
+            uint32_t id = xr_xir_op_references_function(op->op) || op->op == XR_XIR_CALL_INTRINSIC || op->op == XR_XIR_CALL_REQUIREMENT || op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_PRINT || op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_STRING_REPLACE || op->op == XR_XIR_BYTE_ARRAY_REPEAT || op->op == XR_XIR_RANGE_CHECK ?
                 function->operands[op->args[0] + a] : op->args[a];
             XrXirStatus status = local_operand(context->module->types, function, op, id, a);
             if (status == XR_XIR_OK) status = value_use(function, graph, i, id, operand_type);

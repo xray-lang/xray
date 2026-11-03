@@ -9,6 +9,8 @@
 #include "xxir_view_access_graph.inc.c"
 #include "xxir_view_access_entry.inc.c"
 #include "xxir_view_access_epoch.inc.c"
+static XrXirStatus view_access_class_fresh_input(ViewAccess *,const XrXirViewRootEvent *,
+    const XrXirViewRootEvent *,bool *);
 #include "xxir_view_access_relation.inc.c"
 #include "xxir_view_types_internal.h"
 static XrXirStatus view_access_buffer_alias(ViewAccess *a,uint32_t *value) {
@@ -429,6 +431,46 @@ static XrXirStatus view_access_plain_storage(ViewAccess *a,XrXirType type,bool *
 static bool view_access_scalar_storage(XrXirType type) {
     return type==XR_XIR_BOOL || type==XR_XIR_RUNE || xr_xir_type_is_number(type);
 }
+#include "xxir_view_access_class_candidate.inc.c"
+#include "xxir_view_access_uncaptured.inc.c"
+static XrXirStatus view_access_indirect_captures(ViewAccess *a,const XrXirViewOwnerEvent *event) {
+    const XrXirInstruction *call=&a->body->instructions[event->instruction];uint32_t producer=UINT32_MAX;
+    XrXirStatus status=view_root_reference_producer(&a->resolver->check,a->function,
+        (uint32_t)call->immediate,&producer,a->cells?a->cells->control:NULL);
+    if(status!=XR_XIR_OK)return status;
+    if(producer==UINT32_MAX) {
+        bool empty=false;status=view_access_uncaptured_result(a,(uint32_t)call->immediate,&empty);
+        if(status!=XR_XIR_OK || empty)return status;
+        /* Arity and NoSuspend do not describe an unknown callable's captures. */
+        for(uint32_t p=0;p<event->before.count;++p)
+            if(event->before.bits[p/64u]&(UINT64_C(1)<<(p%64u)))return XR_XIR_UNRESOLVED;
+        return XR_XIR_OK;
+    }
+    const XrXirInstruction *binding=&a->body->instructions[producer];
+    if(binding->op==XR_XIR_CLASS_METHOD_REF)
+        return view_access_use(a,&event->before,binding->args[0],true,false,NULL);
+    const XrXirTypes *types=a->resolver->check.module->types;
+    for(uint32_t p=0;p<binding->args[1];++p) {
+        uint32_t value=a->body->operands[binding->args[0]+p];XrXirType type=xr_xir_operand_type(a->body,value);
+        uint32_t borrowed=view_flags_at(types,a->resolver->check.flags,type);
+        if(borrowed) {
+            const XrXirTypeNode *node=xr_xir_type_node(types,type);
+            bool write=(borrowed&XR_XIR_VIEW_MUTABLE)!=0 || (node && node->kind==XR_XIR_TYPE_MUT_PTR);
+            status=view_access_use(a,&event->before,value,write,true,NULL);
+        }
+        else if(xr_xir_type_is_class(types,type) || xr_xir_type_is_cell(types,type) || type==XR_XIR_BUFFER_STORAGE)
+            status=view_access_use(a,&event->before,value,true,false,NULL);
+        else {
+            bool plain=false;status=view_access_plain_storage(a,type,&plain);
+            if(status==XR_XIR_OK && !plain) {
+                for(uint32_t q=0;q<event->before.count;++q)
+                    if(event->before.bits[q/64u]&(UINT64_C(1)<<(q%64u)))return XR_XIR_UNRESOLVED;
+            }
+        }
+        if(status!=XR_XIR_OK)return status;
+    }
+    return XR_XIR_OK;
+}
 static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEvent *event) {
     const XrXirInstruction *op=a->body->instructions+event->instruction;
     const XrXirTypes *types=a->resolver->check.module->types;const uint8_t *flags=a->resolver->check.flags;
@@ -475,6 +517,10 @@ static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEve
         return view_access_use(a,&event->before,source,op->op==XR_XIR_VIEW_SET,true,NULL);
     }
     bool call=op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE || op->op==XR_XIR_INVOKE_INDIRECT;
+    if(op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT) {
+        XrXirStatus status=view_access_indirect_captures(a,event);
+        if(status!=XR_XIR_OK)return status;
+    }
     if(call) {
         uint32_t cell=0;bool scoped=false;XrXirStatus status=view_access_buffer_scope(a,&cell,&scoped);
         if(status!=XR_XIR_OK)return status;
@@ -515,7 +561,9 @@ static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEve
             XrXirStatus status=view_access_use(a,&event->before,value,write,true,NULL);
             if (status!=XR_XIR_OK) return status;
         } else if (cell || object || type==XR_XIR_BUFFER_STORAGE || place!=XR_XIR_PLACE_NONE) {
-            bool read=op->op==XR_XIR_CELL_READ || op->op==XR_XIR_CLASS_GET || role==XR_XIR_OPERAND_READ || (receiver_read && p==0);
+            /* Binding observes and retains identity; invocation has its own access obligations. */
+            bool read=op->op==XR_XIR_CELL_READ || op->op==XR_XIR_CLASS_GET || op->op==XR_XIR_CLASS_METHOD_REF ||
+                role==XR_XIR_OPERAND_READ || (receiver_read && p==0);
             bool write=(call && !(receiver_read && p==0)) || op->op==XR_XIR_CELL_TAKE || op->op==XR_XIR_CELL_WRITE_TAKE || op->op==XR_XIR_CELL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE ||
                 op->op==XR_XIR_CELL_STRING_APPEND || op->op==XR_XIR_CLASS_SET || role==XR_XIR_OPERAND_WRITE;
             if (!read && !write) return XR_XIR_UNRESOLVED;

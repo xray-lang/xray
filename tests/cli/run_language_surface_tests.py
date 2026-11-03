@@ -28,17 +28,21 @@ def run(argv, **kwargs):
 
 class LanguageSurface(unittest.TestCase):
     def check_ok(self, source, expected):
+        self.check_ok_bytes(source, expected.encode("utf-8"))
+
+    def check_ok_bytes(self, source, expected):
         result = run([XRAY, "run", str(source)])
         self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
-        self.assertEqual(result.stdout.decode(), expected)
-        self.assertEqual(result.stderr.decode(), "")
+        self.assertEqual(result.stdout, expected)
+        self.assertEqual(result.stderr, b"")
         with tempfile.TemporaryDirectory(prefix="xray-lang-") as directory:
             exe = Path(directory) / "program.exe"
             built = run([XRAY, "build", str(source), "-o", str(exe)])
             self.assertEqual(built.returncode, 0, built.stderr.decode(errors="replace"))
             native = run([str(exe)])
             self.assertEqual(native.returncode, 0, native.stderr.decode(errors="replace"))
-            self.assertEqual(native.stdout.decode(), expected)
+            self.assertEqual(native.stdout, expected)
+            self.assertEqual(native.stderr, b"")
 
     def check_fault(self, source, fragment, expected):
         result = run([XRAY, "run", str(source)])
@@ -87,10 +91,22 @@ def add_cases():
                     lambda self, s=source, f=fragment: self.check_reject(s, f))
 
 
+def add_explicit_cases(pairs):
+    for index, (source_name, expected_name) in enumerate(pairs):
+        source = Path(source_name).resolve(strict=True)
+        expected = Path(expected_name).resolve(strict=True).read_bytes()
+        setattr(LanguageSurface, f"test_explicit_{index}_{source.stem}",
+                lambda self, s=source, e=expected: self.check_ok_bytes(s, e))
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--xray", required=True)
+    parser.add_argument("--case", nargs=2, action="append", metavar=("SOURCE", "EXPECTED"))
     args, rest = parser.parse_known_args()
     XRAY = str(Path(args.xray).resolve())
-    add_cases()
+    if args.case:
+        add_explicit_cases(args.case)
+    else:
+        add_cases()
     unittest.main(argv=[sys.argv[0]] + rest)

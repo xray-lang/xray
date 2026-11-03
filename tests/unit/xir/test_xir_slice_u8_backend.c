@@ -56,6 +56,7 @@ static XrXirStatus source_check(const XrXirCompileContext *context,const char *t
     xr_compile_session_free(session);
     return status;
 }
+#include "slice_u8_byte_bulk_cases.h"
 
 static void inspect(const XrXirModule *module) {
     bool view=false,get=false,cleanup=false;
@@ -1050,6 +1051,7 @@ int main(int argc,char **argv) {
     else if(argc==3 && !strcmp(argv[1],"--emit-local-storage")) {closed=local_storage_positive(&context);local_storage_emit(closed,argv[2]);}
     else if (argc==3 && !strcmp(argv[1],"--emit")) {closed=cold_fixture(&context,identity);emit(closed,argv[2]);}
     else {
+        if(argc==1)slice_byte_bulk_source_controls(&context);
         CHECK(argc==1);string_bytes_rejections(&context);local_storage_rejections(&context);local_storage_owned_capture(&context);local_storage_execution(&context);scalar_slot_execution(&context);default_class_execution(&context);imported_default_execution(&context);observed_cases(&context);
         closed=fixture(&context,identity);strict_normalization(&context,closed);
         XrXirArtifact *code=lower(closed);const XrXirModule *module=xr_xir_compile_artifact_module(code);

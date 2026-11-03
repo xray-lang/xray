@@ -458,6 +458,8 @@ def parse_source(source, prelude):
             'ARRAY_GET': ('get', 'READ', ('I64',), 'ELEMENT', 'may_heap', 'bounds,allocation,retain,limit', 'owned'),
             'ARRAY_SET': ('set', 'REF', ('I64', 'ELEMENT'), 'UNIT', 'may_heap', 'bounds,allocation,retain,limit', 'unit'),
             'ARRAY_PUSH': ('push', 'REF', ('ELEMENT',), 'UNIT', 'may_heap', 'allocation,retain,limit', 'unit'),
+            'ARRAY_BYTE_APPEND': ('appendFrom', 'REF', ('SLICE_U8',), 'ARRAY_U8', 'may_heap', 'allocation,retain,limit', 'owned'),
+            'ARRAY_BYTE_REPEAT': ('repeatFrom', 'REF', ('I64', 'I64'), 'ARRAY_U8', 'may_heap', 'bounds,allocation,retain,limit', 'owned'),
             'ARRAY_CAPACITY': ('capacity', 'READ', (), 'I64', 'no_heap', 'limit', 'owned'),
             'ARRAY_WITH_CAPACITY': ('withCapacity', 'READ', ('I64',), 'ARRAY_ELEMENT', 'may_heap', 'allocation,retain,limit', 'owned'),
             'ARRAY_RESERVE': ('reserve', 'REF', ('I64',), 'ARRAY_ELEMENT', 'may_heap', 'allocation,retain,limit', 'owned'),
@@ -485,7 +487,7 @@ def parse_source(source, prelude):
         expected_method = member.operation != 'ARRAY_CAPACITY'
         if shape != expected or member.static != expected_static or member.method != expected_method or optional != expected_optional or any(p[4] for p in member.parameters):
             raise ValueError('operation declaration disagrees with its semantic contract: ' + member.operation)
-    required = {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH', 'ARRAY_CAPACITY', 'ARRAY_WITH_CAPACITY', 'ARRAY_RESERVE'} | set(recipes) if header[0] == 1 else {
+    required = {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH', 'ARRAY_CAPACITY', 'ARRAY_WITH_CAPACITY', 'ARRAY_RESERVE', 'ARRAY_BYTE_APPEND', 'ARRAY_BYTE_REPEAT'} | set(recipes) if header[0] == 1 else {
         'STRING_CONTAINS', 'STRING_STARTS_WITH', 'STRING_ENDS_WITH', 'STRING_INDEX_OF', 'STRING_LAST_INDEX_OF',
         'STRING_TO_STRING', 'STRING_REPEAT', 'STRING_COPY_BYTES', 'STRING_REPLACE', 'STRING_REPLACE_ALL', 'STRING_SLICE', 'STRING_FROM_UTF8', 'STRING_RUNES', 'STRING_SPLIT'}
     if used != required:

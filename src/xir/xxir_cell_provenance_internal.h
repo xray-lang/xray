@@ -13,6 +13,7 @@
 #define XXIR_CELL_PROVENANCE_INTERNAL_H
 #include "xxir.h"
 #include "xxir_metadata_domain_internal.h"
+#include "xxir_class_method_internal.h"
 
 #define XR_XIR_CELL_ORIGIN_OWNED 1u
 #define XR_XIR_CELL_ORIGIN_SCOPED 2u
@@ -97,6 +98,10 @@ struct XrXirCellProofBodyRead {
     /* Shape reads share the same current owner and complete range checks. */
     XrXirStatus (*range_shape)(const XrXirCompileContext *,const XrXirCellProofBodyRead *,
         const XrXirCellProofRunCursor *,uint32_t,uint32_t,XrXirCellProofInstructionShape *);
+    /* Synchronous headers from this same complete owner establish the actual
+     * method candidate set. No callback result grants execution or Cell origin. */
+    XrXirStatus (*method_candidates)(const XrXirCompileContext *,const void *,uint32_t,uint32_t,
+        XirClassMethodVisitor,void *);
 };
 
 /* One construction-local provider builder consumes actual writer rows. It
