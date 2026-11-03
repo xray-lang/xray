@@ -183,6 +183,79 @@ static int links_faults(void) {
     CHECK(DeleteFileW(links_paths.file_locator));links_paths.file_created=false;
     puts("file links: typed UTF/NUL/OOM/cancel refusals, no half output and retained close retry");return 1;
 }
+typedef XrOsIoStatus (*LinksQuery)(const XrOsIoPolicy *,XrOsPathSpan,bool (*)(void *),
+    XrOsFileMetadataOwner *,XrOsFileLinkText *);
+static int links_query_failures(LinksQuery query,const char *name) {
+    XrOsIoPolicy policy=test_policy();XrOsFileMetadataOwner owner={0};XrOsFileLinkText text={0};
+    const char bad[]={'\xff'},nul[]={'a',0,'b'};
+    reset_memory();
+    CHECK(query(&policy,(XrOsPathSpan){bad,sizeof(bad)},NULL,&owner,&text)==XR_OS_IO_BAD_ARGUMENT&&!text.text&&!owner.handle);
+    CHECK(query(&policy,(XrOsPathSpan){nul,sizeof(nul)},NULL,&owner,&text)==XR_OS_IO_BAD_ARGUMENT&&!text.text&&!owner.handle);
+    reset_memory();metadata_memory.fail_at=0;
+    CHECK(query(&policy,links_span(name),test_current,&owner,&text)==XR_OS_IO_OUT_OF_MEMORY&&
+        !text.text&&!owner.handle&&!kernel_handles&&!metadata_memory.live&&!metadata_memory.held);
+    reset_memory();metadata_memory.fail_at=0;metadata_memory.failure=XR_OS_IO_MEMORY_LIMIT;
+    CHECK(query(&policy,links_span(name),test_current,&owner,&text)==XR_OS_IO_MEMORY_LIMIT&&
+        !text.text&&!owner.handle&&!kernel_handles&&!metadata_memory.live&&!metadata_memory.held);
+    reset_memory();metadata_memory.cancelled=true;
+    CHECK(query(&policy,links_span(name),test_current,&owner,&text)==XR_OS_IO_CANCELLED&&
+        !text.text&&!owner.handle&&!kernel_handles&&!metadata_memory.live&&!metadata_memory.held);
+    reset_memory();cancel_after_open=true;
+    XrOsIoStatus cancelled=query(&policy,links_span(name),test_current,&owner,&text);
+    cancel_after_open=false;
+    CHECK(cancelled==XR_OS_IO_CANCELLED&&!text.text&&!owner.handle&&!kernel_handles&&
+        !metadata_memory.live&&!metadata_memory.held);
+    reset_memory();close_failures=1;
+    CHECK(query(&policy,links_span(name),NULL,&owner,&text)==XR_OS_IO_IO&&
+        !text.text&&owner.handle&&!metadata_memory.live&&!metadata_memory.held);
+    CHECK(xr_os_io_file_metadata_close(&owner)==XR_OS_IO_OK&&!owner.handle&&!kernel_handles);
+    CHECK(query(&policy,links_span(name),test_current,&owner,&text)==XR_OS_IO_OK&&text.text&&!owner.handle&&!kernel_handles);
+    links_text_free(&policy,&text);
+    CHECK(!metadata_memory.live&&!metadata_memory.held);return 1;
+}
+static int links_following_paths(void) {
+    XrOsIoPolicy policy=test_policy();XrOsFileMetadataOwner owner={0};XrOsFileLinkText text={0},other={0};
+    char marker[65536],junction[65536],route[65536];wchar_t dotted[32768];
+    CHECK(xr_win_utf16_to_utf8(paths.marker,wcslen(paths.marker),marker,sizeof(marker)));
+    CHECK(xr_win_utf16_to_utf8(paths.junction,wcslen(paths.junction),junction,sizeof(junction)));
+    CHECK(xr_os_io_path_realpath(&policy,links_span(marker),test_current,&owner,&text)==XR_OS_IO_OK&&text.text);
+    CHECK(links_reference_final(paths.marker,&text));links_text_free(&policy,&text);
+    CHECK(xr_os_io_path_realpath(&policy,links_span(paths.utf8),test_current,&owner,&text)==XR_OS_IO_OK&&text.text);
+    CHECK(links_reference_final(paths.extended,&text));links_text_free(&policy,&text);
+    const wchar_t *child=wcsrchr(paths.child,L'\\'),*file=wcsrchr(paths.file,L'\\');CHECK(child&&file);
+    int n=swprintf(dotted,32768,L"%ls\\.\\..\\%ls\\%ls",paths.child,child+1,file+1);
+    CHECK(n>0&&n<32768&&xr_win_utf16_to_utf8(dotted,wcslen(dotted),route,sizeof(route)));
+    CHECK(xr_os_io_path_realpath(&policy,links_span(route),test_current,&owner,&text)==XR_OS_IO_OK&&text.text);
+    CHECK(links_reference_final(paths.extended,&text));links_text_free(&policy,&text);
+    CHECK(xr_os_io_path_realpath(&policy,links_span(junction),test_current,&owner,&text)==XR_OS_IO_OK&&text.text);
+    CHECK(links_reference_final(paths.outside,&text));links_text_free(&policy,&text);
+    CHECK(xr_os_io_path_realpath(&policy,links_span(links_paths.dangling_utf8),NULL,&owner,&text)==XR_OS_IO_OK&&!text.text);
+    CHECK(links_query_failures(xr_os_io_path_realpath,paths.utf8));
+    /* An unrelated query and its retirement cannot invalidate owned text. */
+    CHECK(xr_os_io_path_realpath(&policy,links_span(paths.utf8),NULL,&owner,&text)==XR_OS_IO_OK&&text.text);
+    CHECK(xr_os_io_path_realpath(&policy,links_span(junction),NULL,&owner,&other)==XR_OS_IO_OK&&other.text);
+    links_text_free(&policy,&other);CHECK(links_reference_final(paths.extended,&text));links_text_free(&policy,&text);
+    CHECK(!owner.handle&&!kernel_handles&&!metadata_memory.live&&!metadata_memory.held);
+    puts("file links following-path: regular/Unicode/long/dot/junction paths, owned text and typed cleanup");return 1;
+}
+static int links_mount_point_readlink(void) {
+    XrOsIoPolicy policy=test_policy();XrOsFileMetadataOwner owner={0};XrOsFileLinkText text={0};
+    char junction[65536];wchar_t expected[32768],decoded[32768];
+    CHECK(xr_win_utf16_to_utf8(paths.junction,wcslen(paths.junction),junction,sizeof(junction)));
+    CHECK(xr_os_io_path_readlink(&policy,links_span(paths.utf8),NULL,&owner,&text)==XR_OS_IO_OK&&!text.text);
+    CHECK(links_query_failures(xr_os_io_path_readlink,junction));
+    CHECK(xr_os_io_path_readlink(&policy,links_span(junction),test_current,&owner,&text)==XR_OS_IO_OK&&text.text);
+    int n=swprintf(expected,32768,L"\\\\?\\%ls",paths.outside);
+    CHECK(n>0&&n<32768&&xr_win_utf8_to_utf16(text.text,text.length,decoded,32768)&&!wcscmp(expected,decoded));
+    CHECK(RemoveDirectoryW(paths.junction));paths.junction_created=false;
+    CHECK(xr_win_utf8_to_utf16(text.text,text.length,decoded,32768)&&!wcscmp(expected,decoded));
+    links_text_free(&policy,&text);
+    HANDLE protected_file=CreateFileW(paths.marker,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,0,NULL);
+    CHECK(protected_file!=INVALID_HANDLE_VALUE);unsigned char bytes[6];DWORD read=0;
+    bool unchanged=ReadFile(protected_file,bytes,sizeof(bytes),&read,NULL)&&read==sizeof(bytes)&&!memcmp(bytes,"m\0\xff" "eta",6);
+    CHECK(CloseHandle(protected_file)&&unchanged&&!owner.handle&&!kernel_handles&&!metadata_memory.live&&!metadata_memory.held);
+    puts("file links MOUNT_POINT readlink: actual substitute text, independent owner and typed cleanup");return 1;
+}
 static void links_cleanup(void) {
     close_failures=0;
     if (links_paths.file_created) (void)DeleteFileW(links_paths.file_locator);
@@ -191,14 +264,21 @@ static void links_cleanup(void) {
     if (links_paths.absolute_created) (void)DeleteFileW(links_paths.absolute_locator);
     cleanup_paths();
 }
-int main(void) {
-    reset_memory();int passed=setup_paths()&&links_setup()&&links_visible_results()&&links_faults();
+int main(int argc,char **argv) {
+    bool following=argc==2&&!strcmp(argv[1],"--following-path");
+    bool mount_point=argc==2&&!strcmp(argv[1],"--mount-point-readlink");
+    if (argc!=1&&!following&&!mount_point) return 2;
+    reset_memory();int passed=setup_paths()&&links_setup();
+    if (passed) passed=following?links_following_paths():mount_point?links_mount_point_readlink():
+        links_visible_results()&&links_faults();
     links_cleanup();if(metadata_memory.live||metadata_memory.held||kernel_handles)return 1;
     return passed?0:1;
 }
 #else
 #include "os/unix/file_links_unix.c"
-int main(void) {
+int main(int argc,char **argv) {
+    (void)argv;
+    if (argc!=1) return 2;
     char root[]="/tmp/xray-file-links-XXXXXX",file[1024],name[1024],dangling[1024],directory[1024];
     if(!mkdtemp(root))return 1;
     int a=snprintf(file,sizeof(file),"%s/\xe4\xb8\xad.bin",root),b=snprintf(name,sizeof(name),"%s/link",root);
