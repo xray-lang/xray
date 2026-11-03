@@ -17,7 +17,8 @@ static XrXirStatus effect_capture_reference_seed(const EffectCaptureRead *read,
     if(status==XR_XIR_OK) status=effect_body_request_instruction(&read->body,reference->function,reference->instruction,&storage,&op);
     if(status!=XR_XIR_OK) return status;
     if(reference->captures>target.parameter_count) return XR_XIR_BAD_STRUCTURE;
-    if(op->op==XR_XIR_CLASS_METHOD_REF) {
+    bool method=op->op==XR_XIR_CLASS_METHOD_REF;
+    if(method) {
         XirClassMethodTarget selected={0};
         status=effect_class_method_target(read->work,read->final->material,reference->function,reference->instruction,reference->target,&selected);
         if(status!=XR_XIR_OK || reference->captures!=1)return status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:status;
@@ -43,7 +44,10 @@ static XrXirStatus effect_capture_reference_seed(const EffectCaptureRead *read,
             const XrXirCallableParameter *parameter=&signature->parameters[p];
             if(xr_xir_type_span(read->body.domain.types,parameter->type)) return XR_XIR_OK;
             if(!xr_xir_callable_parameter_storage_valid(read->body.domain.types,parameter) ||
-                (parameter->mode==XR_PARAM_REF && reference->captures)) return XR_XIR_BAD_TYPE;
+                (parameter->mode==XR_PARAM_REF && reference->captures && !method)) return XR_XIR_BAD_TYPE;
+            if(method && parameter->mode==XR_PARAM_REF &&
+                xr_xir_cell_provenance_role(read->final->cells,reference->target,reference->captures+p)!=
+                    XR_XIR_CELL_PROOF_SCOPED_REF)return XR_XIR_BAD_TYPE;
             if(parameter->type!=target.parameters[reference->captures+p]) return XR_XIR_BAD_TYPE;
             if(parameter->mode!=xr_xir_declared_parameter_mode(read->body.domain.types,
                 target.parameters[reference->captures+p],target.consume_parameters,
