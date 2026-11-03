@@ -20,6 +20,7 @@
 #include "base/xresource_limits.h"
 #include "os/os_fs.h"
 #include "os/os_thread.h"
+#include "os/os_system.h"
 #if defined(XR_OS_WINDOWS)
 #include <windows.h>
 #ifdef interface
@@ -36,6 +37,15 @@
 #include <string.h>
 #include <wchar.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"host OS %d: %s\n",__LINE__,#c);exit(1);}}while(0)
+static XrOsIoStatus host_system_uid(XrOsOptionalI64 *);
+static XrOsIoStatus host_system_gid(XrOsOptionalI64 *);
+static XrOsIoStatus host_system_ppid(XrOsSystemOwner *,void *,bool(*)(void *),int64_t *);
+static XrOsIoStatus host_system_kill(XrOsSystemOwner *,int64_t,int64_t,void *,bool(*)(void *),bool *);
+static XrOsIoStatus host_system_total(int64_t *);
+static XrOsIoStatus host_system_free(int64_t *);
+static XrOsIoStatus host_system_uptime(double *);
+static XrOsIoStatus host_system_loadavg(XrOsLoadAverages *);
+static XrOsIoStatus host_system_close(XrOsSystemOwner *);
 static unsigned int host_count(void);
 static int host_pin(unsigned int);
 static XrOsIoStatus host_chmod(const XrOsIoPolicy *,const char *,int64_t,bool(*)(void *),bool *);
@@ -44,7 +54,26 @@ static XrOsIoStatus host_chdir(const XrOsIoPolicy *,const char *,bool(*)(void *)
 #define xr_thread_pin_to_cpu host_pin
 #define xr_os_io_chmod host_chmod
 #define xr_os_io_chdir host_chdir
+#define xr_os_io_uid host_system_uid
+#define xr_os_io_gid host_system_gid
+#define xr_os_io_ppid host_system_ppid
+#define xr_os_io_kill host_system_kill
+#define xr_os_io_total_memory host_system_total
+#define xr_os_io_free_memory host_system_free
+#define xr_os_io_uptime host_system_uptime
+#define xr_os_io_loadavg host_system_loadavg
+#define xr_os_io_system_close host_system_close
 #include "../xir_runtime_allocations.h"
+#undef xr_os_io_uid
+#undef xr_os_io_gid
+#undef xr_os_io_ppid
+#undef xr_os_io_kill
+#undef xr_os_io_total_memory
+#undef xr_os_io_free_memory
+#undef xr_os_io_uptime
+#undef xr_os_io_loadavg
+#undef xr_os_io_system_close
+
 #undef xr_os_cpu_count
 #undef xr_thread_pin_to_cpu
 #undef xr_os_io_chmod
@@ -54,6 +83,48 @@ static unsigned host_mode,host_calls,count_calls,pin_calls,last_cpu;
 static uint64_t host_cstring_requested;
 static XrXirInstance *host_active;
 static XrOsIoPolicy host_policy;
+enum { SYSTEM_NORMAL, SYSTEM_OOM_AFTER, SYSTEM_CANCEL_AFTER, SYSTEM_IO_AFTER,
+ SYSTEM_LIMIT_AFTER, SYSTEM_CLOSE_ONCE, SYSTEM_CLOSE_PERSISTENT, SYSTEM_CANCEL_BEFORE };
+static unsigned system_mode,system_calls[8],system_close_calls;
+#if defined(XR_OS_WINDOWS)
+static HANDLE system_retained_handle;
+static bool system_close_reentry;
+#endif
+static XrOsIoStatus host_system_after(XrOsIoStatus status){
+ if(status!=XR_OS_IO_OK)return status;
+ if(system_mode==SYSTEM_OOM_AFTER)runtime_fail_at=runtime_attempts;
+ if(system_mode==SYSTEM_CANCEL_AFTER)CHECK(host_active&&xr_xir_call_request_cancel(host_active->call)==XR_XIR_CALL_CANCEL_REQUESTED);
+ if(system_mode==SYSTEM_LIMIT_AFTER)CHECK(host_active&&!xr_xir_domain_work(host_active->domain,UINT64_MAX));
+ return system_mode==SYSTEM_IO_AFTER?XR_OS_IO_IO:status;
+}
+static XrOsIoStatus host_system_uid(XrOsOptionalI64 *o){++system_calls[0];return host_system_after(xr_os_io_uid(o));}
+static XrOsIoStatus host_system_gid(XrOsOptionalI64 *o){++system_calls[1];return host_system_after(xr_os_io_gid(o));}
+static XrOsIoStatus host_system_ppid(XrOsSystemOwner *o,void *c,bool(*current)(void *),int64_t *out){
+ ++system_calls[2];XrOsIoStatus status=xr_os_io_ppid(o,c,current,out);
+#if defined(XR_OS_WINDOWS)
+ if(status==XR_OS_IO_OK&&(system_mode==SYSTEM_CLOSE_ONCE||system_mode==SYSTEM_CLOSE_PERSISTENT)){
+  CHECK(!o->handle);HANDLE handle=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,FALSE,GetCurrentProcessId());CHECK(handle);
+  o->handle=(intptr_t)handle;system_retained_handle=handle;return XR_OS_IO_IO;
+ }
+#endif
+ return host_system_after(status);
+}
+static XrOsIoStatus host_system_kill(XrOsSystemOwner *o,int64_t pid,int64_t signal,void *c,bool(*current)(void *),bool *out){
+ ++system_calls[3];if(system_mode==SYSTEM_CANCEL_BEFORE)CHECK(host_active&&xr_xir_call_request_cancel(host_active->call)==XR_XIR_CALL_CANCEL_REQUESTED);
+ return host_system_after(xr_os_io_kill(o,pid,signal,c,current,out));
+}
+static XrOsIoStatus host_system_total(int64_t *o){++system_calls[4];return host_system_after(xr_os_io_total_memory(o));}
+static XrOsIoStatus host_system_free(int64_t *o){++system_calls[5];return host_system_after(xr_os_io_free_memory(o));}
+static XrOsIoStatus host_system_uptime(double *o){++system_calls[6];return host_system_after(xr_os_io_uptime(o));}
+static XrOsIoStatus host_system_loadavg(XrOsLoadAverages *o){++system_calls[7];return host_system_after(xr_os_io_loadavg(o));}
+static XrOsIoStatus host_system_close(XrOsSystemOwner *o){
+ ++system_close_calls;
+#if defined(XR_OS_WINDOWS)
+ if(system_close_reentry){system_close_reentry=false;CHECK(host_active&&xr_xir_instance_free(host_active)==XR_XIR_CALL_BUSY);}
+ if(system_mode==SYSTEM_CLOSE_PERSISTENT)return XR_OS_IO_IO;
+#endif
+ return xr_os_io_system_close(o);
+}
 static unsigned int host_count(void){
  ++count_calls;
  if(host_mode==HOST_CANCEL_COUNT){host_mode=HOST_NORMAL;CHECK(host_active&&xr_xir_call_request_cancel(host_active->call)==XR_XIR_CALL_CANCEL_REQUESTED);}

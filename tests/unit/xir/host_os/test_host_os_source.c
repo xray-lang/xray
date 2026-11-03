@@ -10,6 +10,7 @@
 #include "host_os_source_cases.h"
 #include "host_os_path_cases.h"
 #include "host_os_cpu_cases.h"
+#include "host_os_system_cases.h"
 static uint32_t host_named(const XrXirModule *module,const char *name){
  for(uint32_t f=0;f<module->function_count;++f)
   if(module->functions[f].name_length==strlen(name)&&!memcmp(module->functions[f].name,name,strlen(name)))return f;
@@ -111,15 +112,49 @@ static void host_cpu_contracts(XrXirCompileContext *context,const XrXirArtifact 
  memcpy(functions,m->functions,m->function_count*sizeof(*functions));memcpy(identities,scope.functions,m->function_count*sizeof(*identities));memcpy(modules,scope.modules,scope.module_count*sizeof(*modules));changed.functions=functions;changed.declarations=&scope;scope.functions=identities;scope.modules=modules;uint32_t owner=identities[f].module;
  modules[owner].name=module;modules[owner].name_length=(uint32_t)strlen(module);CHECK(xir_native_callable_verify(&changed,f)==XR_XIR_BAD_TYPE);modules[owner]=m->declarations->modules[owner];functions[f].result=XR_XIR_STRING;CHECK(xir_native_callable_verify(&changed,f)==XR_XIR_BAD_TYPE);functions[f]=m->functions[f];identities[f].promises=0;CHECK(xir_native_callable_verify(&changed,f)==XR_XIR_BAD_STRUCTURE);
 }
+static void host_system_contracts(XrXirCompileContext *context,const XrXirArtifact *code){
+ const char *names[]={"__uid","__gid","__ppid","__kill","__totalMemory","__freeMemory","__uptime","__loadavg"};
+ const char *shadows[]={"fn __uid()->i64?{return null}","fn __gid()->i64?{return null}",
+  "fn __ppid()->i64{return 7}","fn __kill(pid:i64,signal:i64)->bool{return false}",
+  "fn __totalMemory()->i64{return 7}","fn __freeMemory()->i64{return 7}",
+  "fn __uptime()->f64{return 0.0}","fn __loadavg()->Array<f64>{return []}"};
+ const XrXirModule *m=xr_xir_compile_artifact_module(code);
+ for(unsigned n=0;n<8;++n){
+  uint32_t f=host_named(m,names[n]);CHECK(xir_native_callable_verify(m,f)==XR_XIR_OK);
+  XrXirValue args[]={{XR_XIR_I64,0,1},{XR_XIR_I64,0,0}};host_ctfe(code,f,n==3?args:NULL,n==3?2u:0u);
+  XrXirSourceResult output={0};XrXirSourceDiagnostic diagnostic={0};char text[128];
+  CHECK(snprintf(text,sizeof(text),"%s(%s)",names[n],n==3?"1,0":"")>0);
+  CHECK(host_check(context,"os",text,false,&output,&diagnostic)==XR_XIR_BAD_VALUE&&!output.checked&&!output.snapshot);
+  xr_xir_compile_source_result_free(&output);
+  CHECK(snprintf(text,sizeof(text),"%s(%s)",names[n],n==3?"":"1")>0);
+  CHECK(host_check(context,"os",text,true,&output,&diagnostic)==XR_XIR_BAD_TYPE&&!output.checked&&!output.snapshot);
+  xr_xir_compile_source_result_free(&output);
+  CHECK(host_check(context,"os",shadows[n],true,&output,&diagnostic)==XR_XIR_OK);
+  const XrXirModule *shadow=xr_xir_compile_artifact_module(output.checked);
+  CHECK(!shadow->declarations->functions[host_named(shadow,names[n])].native_callable);
+  xr_xir_compile_source_result_free(&output);
+  XrXirModule changed=*m;XrXirFunction functions[64];XrXirDeclarations scope=*m->declarations;
+  XrXirFunctionIdentity identities[64];XrXirSourceModule modules[16];CHECK(m->function_count<64&&scope.module_count<16);
+  memcpy(functions,m->functions,m->function_count*sizeof(*functions));changed.functions=functions;
+  memcpy(identities,scope.functions,m->function_count*sizeof(*identities));scope.functions=identities;
+  memcpy(modules,scope.modules,scope.module_count*sizeof(*modules));scope.modules=modules;changed.declarations=&scope;
+  functions[f].result=XR_XIR_STRING;CHECK(xir_native_callable_verify(&changed,f)==XR_XIR_BAD_TYPE);functions[f]=m->functions[f];
+  uint32_t owner=identities[f].module;modules[owner].name="os";modules[owner].name_length=2;
+  CHECK(xir_native_callable_verify(&changed,f)==XR_XIR_BAD_TYPE);modules[owner]=m->declarations->modules[owner];
+  identities[f].promises=0;CHECK(xir_native_callable_verify(&changed,f)==XR_XIR_BAD_STRUCTURE);
+ }
+}
 static void host_product(XrXirCompileContext *context,unsigned kind,const char *directory,bool emit){
- const char *modules[]={"os","sys","io"},*texts[]={host_count_text,host_pin_text,host_io_text},*prefixes[]={"host_count","host_pin","host_path"};
+ const char *modules[]={"os","sys","io","os"},*texts[]={host_count_text,host_pin_text,host_io_text,host_system_text},*prefixes[]={"host_count","host_pin","host_path","host_system"};
  XrXirArtifact *code=host_code(context,modules[kind],texts[kind]);const XrXirModule *m=xr_xir_compile_artifact_module(code);
- uint32_t ids[5]={m->declarations->entry_function,host_named(m,kind==2?"make":"answer"),0,0,0};unsigned count=kind==2?5u:2u;
+ uint32_t ids[9]={m->declarations->entry_function};unsigned count=kind==3?9u:kind==2?5u:2u;
+ if(kind==3){const char *names[]={"uid","gid","parent","signal","total","available","elapsed","load"};for(unsigned n=0;n<8;++n)ids[n+1]=host_named(m,names[n]);}
+ else ids[1]=host_named(m,kind==2?"make":"answer");
  if(kind==2){ids[2]=host_named(m,"chmodPath");ids[3]=host_named(m,"chdirPath");ids[4]=host_named(m,"viaRef");}
  host_emit(code,prefixes[kind],ids,count,directory,emit);
- if(!emit){if(kind==2)host_io_contracts(context,code);else host_cpu_contracts(context,code,kind==1);}
+ if(!emit){if(kind==2)host_io_contracts(context,code);else if(kind==3)host_system_contracts(context,code);else host_cpu_contracts(context,code,kind==1);}
  if(emit)xr_xir_compile_artifact_free(code);
- else{XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&code,&program)==XR_XIR_OK&&!code);if(kind==2){host_path_execute(program,ids);host_path_receiving(context,&program,ids);CHECK(!program);}else{host_cpu_execute(program,ids,kind==1);xr_xir_compile_program_drop(program);}}
+ else{XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&code,&program)==XR_XIR_OK&&!code);if(kind==3){host_system_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==2){host_path_execute(program,ids);host_path_receiving(context,&program,ids);CHECK(!program);}else{host_cpu_execute(program,ids,kind==1);xr_xir_compile_program_drop(program);}}
 }
 int main(int argc,char **argv){
 #if defined(XR_OS_WINDOWS)
@@ -128,7 +163,7 @@ int main(int argc,char **argv){
  bool emit=argc==3&&!strcmp(argv[1],"--emit");CHECK(emit||argc==1);if(!emit)host_cpu_concurrency();
  XrCompileResourceLimits limits=XR_RESOURCE_DEFAULT_COMPILER_LIMITS;XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
  XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
- for(unsigned kind=0;kind<3;++kind)host_product(&context,kind,emit?argv[2]:XR_HOST_OS_GENERATED,emit);
+ for(unsigned kind=0;kind<4;++kind)host_product(&context,kind,emit?argv[2]:XR_HOST_OS_GENERATED,emit);
  CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK&&before.held_bytes==after.held_bytes&&!runtime_live&&!runtime_bytes);
  xr_compile_resources_release(context.resources);if(!emit)puts("42");return 0;
 }

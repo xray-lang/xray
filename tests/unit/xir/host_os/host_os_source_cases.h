@@ -24,6 +24,15 @@ static const char host_io_text[]=
  "export fn ctfeMode()->bool{return __chmod(Child(\".\"),384)}\n";
 static const char host_count_text[]="export fn answer()->i64{return __cpuCount()}\n";
 static const char host_pin_text[]="export fn answer(cpu:i64)->bool{return __pinToCpu(cpu)}\n";
+static const char host_system_text[]=
+ "export fn uid()->i64?{return __uid()}\n"
+ "export fn gid()->i64?{return __gid()}\n"
+ "export fn parent()->i64{return __ppid()}\n"
+ "export fn signal(pid:i64,signal:i64)->bool{return __kill(pid,signal)}\n"
+ "export fn total()->i64{return __totalMemory()}\n"
+ "export fn available()->i64{return __freeMemory()}\n"
+ "export fn elapsed()->f64{return __uptime()}\n"
+ "export fn load()->Array<f64>{return __loadavg()}\n";
 static const char *const host_io_controls[]={
  "import {Path} from path\nclass Wrong{raw:string\ninit(raw:string){this.raw=raw}}\nexport fn wrong(p:Wrong)->bool{return __chdir(p)}\n",
  "import {Path} from path\nexport fn conflict(v:Slice<u8>,p:Path)->i64{const changed=__chdir(p);return len(v)}\n",
