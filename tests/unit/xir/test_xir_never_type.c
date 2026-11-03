@@ -595,10 +595,27 @@ static void check_imported_default(const XrXirCompileContext *work,bool wide) {
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILE_RESOURCE_OK);
     request.session=session;request.entry_path=root;request.linkage_kind=XR_XIR_PROGRAM;request.libraries=catalog;
-    char consumer[]="import {raw} from \"./lib\"\n"
-        "export fn fromDefault(x:i64=try raw())->i64{return x}\ntry fromDefault()\n";
-    input=(XrXirSourceText){"root.xr",consumer,sizeof(consumer)-1};
-    CHECK(xr_xir_compile_source_check_text(&request,&input,&source,&diagnostic,NULL)==XR_XIR_OK);
+    if (!wide) {
+        char redundant[]="import {raw} from \"./lib\"\n"
+            "export fn fromDefault(x:i64=try raw())->i64{return x}\ntry fromDefault()\n";
+        input=(XrXirSourceText){"root.xr",redundant,sizeof(redundant)-1};
+        XrXirStatus rejected=xr_xir_compile_source_check_text(&request,&input,&source,&diagnostic,NULL);
+        CHECK(rejected==XR_XIR_BAD_TYPE && diagnostic.status==rejected && !source.checked && !source.snapshot);
+        CHECK(strncmp(diagnostic.message,"E0336:",6)==0);
+        CHECK(strstr(diagnostic.message,"try expression has no business-error source"));
+        memset(redundant,0xa5,sizeof(redundant));
+        xr_xir_compile_source_result_free(&source);xr_compile_session_free(session);session=NULL;
+        CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILE_RESOURCE_OK);request.session=session;
+    }
+    char consumer[256];
+    int length=snprintf(consumer,sizeof(consumer),"import {raw} from \"./lib\"\n"
+        "export fn fromDefault(x:i64=%sraw())->i64{return x}\n%sfromDefault()\n",wide?"try ":"",wide?"try ":"");
+    CHECK(length>0 && (size_t)length<sizeof(consumer));
+    input=(XrXirSourceText){"root.xr",consumer,(size_t)length};
+    XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&source,&diagnostic,NULL);
+    if (status!=XR_XIR_OK) fprintf(stderr,"imported default wide%u status%u %d:%d %s\n",
+        (unsigned)wide,(unsigned)status,diagnostic.line,diagnostic.column,diagnostic.message);
+    CHECK(status==XR_XIR_OK);
     memset(consumer,0xa5,sizeof(consumer));
     xr_compile_session_free(session);xr_xir_compile_library_catalog_free(catalog);
     check_imported_default_bound(source.checked,wide);
