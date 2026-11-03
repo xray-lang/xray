@@ -63,6 +63,10 @@ XR_FUNC XrOsIoStatus xr_os_io_touch(const XrOsIoPolicy *policy, const char *path
 XR_FUNC XrOsIoStatus xr_os_io_realpath(const XrOsIoPolicy *policy, const char *path, char *out, size_t out_size);
 XR_FUNC XrOsIoStatus xr_os_io_getcwd(const XrOsIoPolicy *policy, char *out, size_t out_size);
 XR_FUNC XrOsIoStatus xr_os_io_chdir(const XrOsIoPolicy *policy, const char *path);
+/* Mode must fit a nonnegative C int, preserving the stdlib conversion range.
+ * Windows changes only the CRT read/write file attributes, never ACLs or file
+ * ownership. Unsupported permission bits retain the platform's own meaning. */
+XR_FUNC XrOsIoStatus xr_os_io_chmod(const XrOsIoPolicy *policy, const char *path, int64_t mode);
 #ifdef __cplusplus
 }
 #endif
