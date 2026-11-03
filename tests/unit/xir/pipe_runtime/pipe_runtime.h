@@ -32,6 +32,12 @@
 #define CHECK(c) do{if(!(c)){fprintf(stderr,"Pipe product %d: %s\n",__LINE__,#c);exit(1);}}while(0)
 #include "../xir_runtime_allocations.h"
 #include "pipe_cases.h"
+static void pipe_trace(const char *message){
+ const char *enabled=getenv("XR_PIPE_TRACE");if(enabled&&!strcmp(enabled,"1"))fprintf(stderr,"Pipe trace: %s\n",message);
+}
+static void pipe_trace_status(const char *message,XrXirCallStatus status){
+ const char *enabled=getenv("XR_PIPE_TRACE");if(enabled&&!strcmp(enabled,"1"))fprintf(stderr,"Pipe trace: %s status%u\n",message,status);
+}
 static void pipe_resume(XrXirInstance *instance,XrXirInstanceResult event){
  XrXirWaitRequest wait={0};CHECK(event.outcome.status==XR_XIR_CALL_SUSPENDED&&event.epoch);
  CHECK(xr_xir_instance_wait_request(instance,event.epoch,event.outcome.wake,&wait)==XR_XIR_CALL_READY&&wait.kind==XR_XIR_WAIT_YIELD);
@@ -126,14 +132,17 @@ static void pipe_cancel_read(XrXirProgram *program,const uint32_t *ids,bool scop
  for(unsigned n=0;n<1000000&&!suspended;++n){XrXirInstanceResult event=xr_xir_instance_poll_bounded(instance,64);
   if(event.outcome.status==XR_XIR_CALL_READY)continue;CHECK(event.outcome.status==XR_XIR_CALL_SUSPENDED);
   XrXirWaitRequest wait={0};CHECK(xr_xir_instance_wait_request(instance,event.epoch,event.outcome.wake,&wait)==XR_XIR_CALL_READY);
-  if(wait.kind==XR_XIR_WAIT_YIELD)suspended=true;
+  if(wait.kind==XR_XIR_WAIT_YIELD){suspended=true;pipe_trace(scoped?"scope_cancel YIELD observed":"plain_cancel YIELD observed");}
   else{CHECK(scoped&&wait.kind==XR_XIR_WAIT_TASK);xr_thread_yield();}
  }
  CHECK(suspended&&xr_xir_instance_cancel_current(instance)==XR_XIR_CALL_CANCEL_REQUESTED);
- CHECK(pipe_drive(instance).outcome.status==XR_XIR_CALL_CANCELLED);XrXirValue output={0};CHECK(xr_xir_instance_take_result(instance,&output)==XR_XIR_CALL_BAD_STATE&&!output.type&&!output.payload);
+ pipe_trace(scoped?"scope_cancel requested":"plain_cancel requested");
+ XrXirCallStatus terminal=pipe_drive(instance).outcome.status;pipe_trace_status(scoped?"scope_cancel terminal":"plain_cancel terminal",terminal);
+ CHECK(terminal==XR_XIR_CALL_CANCELLED);XrXirValue output={0};CHECK(xr_xir_instance_take_result(instance,&output)==XR_XIR_CALL_BAD_STATE&&!output.type&&!output.payload);
  /* Public terminal cancellation must already have retired both the root read
   * and any scope-owned child read. Close cannot race an orphaned operation. */
  pipe_bool(instance,ids[PIPE_CLOSE_ALL],&p,true);
+ pipe_trace(scoped?"scope_cancel endpoints closed":"plain_cancel endpoints closed");
  xr_xir_value_drop(&p);uint64_t started=xr_time_monotonic_ns();CHECK(started);
  /* Cancellation requests termination; only a successful public close retires
   * the owner. Failed closes retry cleanup without executing the guest again. */
@@ -142,13 +151,19 @@ static void pipe_cancel_read(XrXirProgram *program,const uint32_t *ids,bool scop
   CHECK(closed==XR_XIR_CALL_CLOSE_FAILED);uint64_t now=xr_time_monotonic_ns();
   CHECK(now&&now>=started&&now-started<UINT64_C(5000000000));xr_thread_yield();
  }
+ pipe_trace(scoped?"scope_cancel instance retired":"plain_cancel instance retired");
 }
 static void pipe_execute(XrXirProgram *program,const uint32_t *ids){
- size_t live=runtime_live,bytes=runtime_bytes;pipe_roundtrip(program,ids);pipe_refusals(program,ids);
- pipe_cancel_read(program,ids,false);pipe_cancel_read(program,ids,true);
- XrXirInstance *instance=pipe_instance(program,ids);XrXirValue value=pipe_invoke(instance,ids[PIPE_HANDOFF],NULL,0);CHECK(value.type==XR_XIR_I64&&value.payload==42);xr_xir_value_drop(&value);
+ size_t live=runtime_live,bytes=runtime_bytes;
+ pipe_trace("roundtrip enter");pipe_roundtrip(program,ids);pipe_trace("roundtrip exit");
+ pipe_trace("refusals enter");pipe_refusals(program,ids);pipe_trace("refusals exit");
+ pipe_trace("plain_cancel enter");pipe_cancel_read(program,ids,false);pipe_trace("plain_cancel exit");
+ pipe_trace("scope_cancel enter");pipe_cancel_read(program,ids,true);pipe_trace("scope_cancel exit");
+ pipe_trace("handoff enter");XrXirInstance *instance=pipe_instance(program,ids);XrXirValue value=pipe_invoke(instance,ids[PIPE_HANDOFF],NULL,0);CHECK(value.type==XR_XIR_I64&&value.payload==42);xr_xir_value_drop(&value);pipe_trace("handoff exit");
+ pipe_trace("defer enter");
  XrXirValue closed=pipe_invoke(instance,ids[PIPE_DEFER_ENDS],NULL,0);
  for(unsigned n=0;n<2;++n){XrXirValue token={0};CHECK(xr_xir_tuple_get(&closed,n,&token)==XR_XIR_VALUE_OK);pipe_bool(instance,ids[PIPE_RAW_CLOSE],&token,false);xr_xir_value_drop(&token);}xr_xir_value_drop(&closed);
+ pipe_trace("defer exit");pipe_trace("privateHost enter");
  XrXirValue p=pipe_open(instance,ids),tokens[2]={{0},{0}};pipe_tokens(instance,ids,&p,tokens);
  XrXirValue data=pipe_data(instance,program,ids,1);
  for(unsigned n=0;n<4;++n){uint32_t f=UINT32_MAX;for(uint32_t i=0;i<program->entry_count;++i)if(program->declarations->functions[i].native_callable==97+n)f=i;
@@ -157,6 +172,7 @@ static void pipe_execute(XrXirProgram *program,const uint32_t *ids){
   CHECK(xr_xir_instance_start(instance,f,n?args:NULL,n==0?0u:n==3?1u:2u)==XR_XIR_CALL_BAD_ARGUMENT);
  }
  xr_xir_value_drop(&data);xr_xir_value_drop(&p);CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+ pipe_trace("privateHost exit");
  CHECK(runtime_live==live&&runtime_bytes==bytes);
 }
 #endif // PIPE_RUNTIME_H
