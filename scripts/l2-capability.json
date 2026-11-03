@@ -806,6 +806,10 @@
         "src/os/os_system.h",
         "src/os/os_file_metadata.h",
         "src/os/os_file_mutation.h",
+        "src/os/os_signal.h",
+        "src/os/win/signal_win.c",
+        "src/os/unix/signal_unix.c",
+        "tests/unit/base/test_signal.c",
         "src/os/win/file_mutation_win.c",
         "src/os/unix/file_mutation_unix.c",
         "tests/unit/base/test_file_mutation.c",
@@ -845,14 +849,16 @@
         "host_os_native",
         "os_system_queries",
         "os_file_metadata",
-        "os_file_mutation"
+        "os_file_mutation",
+        "os_signal"
       ],
       "targets": [
         "test_host_os_source",
         "test_host_os_native",
         "test_os_system_queries",
         "test_os_file_metadata",
-        "test_os_file_mutation"
+        "test_os_file_mutation",
+        "test_os_signal"
       ]
     }
   },
