@@ -115,6 +115,8 @@
         "src/xir/xxir_library*",
         "src/xir/xxir_nominal*",
         "src/xir/xxir_byte_array*",
+        "src/xir/xxir_emit_byte_array.inc.c",
+        "src/xir/xxir_vm_byte_array.inc.c",
         "src/xir/xxir_array*",
         "stdlib/compress/compress.xr",
         "stdlib/types/array.xr",

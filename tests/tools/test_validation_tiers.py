@@ -90,6 +90,8 @@ class TierTests(unittest.TestCase):
             "stdlib/compress/compress.xr",
             "stdlib/types/array.xr",
             "src/xir/xxir_byte_array_value.inc.c",
+            "src/xir/xxir_emit_byte_array.inc.c",
+            "src/xir/xxir_vm_byte_array.inc.c",
             "tests/unit/xir/test_xir_byte_array_value.c",
             "tests/unit/xir/test_xir_compress_suite.c",
             "tests/unit/xir/compress_suite_runtime.h",
