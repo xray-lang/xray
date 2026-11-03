@@ -804,6 +804,11 @@
       "match": [
         "src/os/os_fs.h",
         "src/os/os_system.h",
+        "src/os/os_file_metadata.h",
+        "src/os/file_metadata_path.inc.h",
+        "src/os/win/file_metadata_win.c",
+        "src/os/unix/file_metadata_unix.c",
+        "tests/unit/base/test_file_metadata.c",
         "src/os/win/system_win.c",
         "src/os/unix/system_unix.c",
         "tests/unit/base/test_system_queries.c",
@@ -835,12 +840,14 @@
       "tests": [
         "host_os_source",
         "host_os_native",
-        "os_system_queries"
+        "os_system_queries",
+        "os_file_metadata"
       ],
       "targets": [
         "test_host_os_source",
         "test_host_os_native",
-        "test_os_system_queries"
+        "test_os_system_queries",
+        "test_os_file_metadata"
       ]
     }
   },

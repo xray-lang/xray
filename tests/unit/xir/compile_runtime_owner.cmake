@@ -27,13 +27,14 @@ if(WIN32)
     target_sources(xir_compile_owner_runtime PRIVATE
         "${XIR_OWNER_ROOT}/src/os/win/random_win.c" "${XIR_OWNER_ROOT}/src/os/win/mem_win.c"
         "${XIR_OWNER_ROOT}/src/os/win/thread_win.c" "${XIR_OWNER_ROOT}/src/os/win/proc_self_win.c"
-        "${XIR_OWNER_ROOT}/src/os/win/fs_mutation_win.c" "${XIR_OWNER_ROOT}/src/os/win/system_win.c")
+        "${XIR_OWNER_ROOT}/src/os/win/fs_mutation_win.c" "${XIR_OWNER_ROOT}/src/os/win/system_win.c"
+        "${XIR_OWNER_ROOT}/src/os/win/file_metadata_win.c")
     target_link_libraries(xir_compile_owner_runtime PRIVATE advapi32 userenv)
 else()
     target_sources(xir_compile_owner_runtime PRIVATE
         "${XIR_OWNER_ROOT}/src/os/unix/random_unix.c" "${XIR_OWNER_ROOT}/src/os/unix/mem_unix.c"
         "${XIR_OWNER_ROOT}/src/os/unix/thread_unix.c" "${XIR_OWNER_ROOT}/src/os/unix/fs_mutation_unix.c"
-        "${XIR_OWNER_ROOT}/src/os/unix/system_unix.c")
+        "${XIR_OWNER_ROOT}/src/os/unix/system_unix.c" "${XIR_OWNER_ROOT}/src/os/unix/file_metadata_unix.c")
     target_compile_definitions(xir_compile_owner_runtime PRIVATE _POSIX_C_SOURCE=200809L _GNU_SOURCE)
     target_link_libraries(xir_compile_owner_runtime PRIVATE m pthread)
 endif()
