@@ -1287,10 +1287,12 @@ static XrXirCallStatus instance_call_entry_check(XrXirCallView *view, uint32_t e
         return target==instance && !child && caller == program->entry_count &&
             instance->state == XR_XIR_INSTANCE_INITIALIZING && instance->current_module == module ?
             XR_XIR_CALL_READY : XR_XIR_CALL_BAD_STATE;
-    if (caller == instance->program->entry_count &&
-        (target!=instance || instance->state != XR_XIR_INSTANCE_READY ||
-         (instance->requested != entry && !instance_callback_entry_admitted(instance,view,entry,function,arguments,count))))
-        return XR_XIR_CALL_BAD_STATE;
+    if (caller == instance->program->entry_count) {
+        if (target!=instance || instance->state!=XR_XIR_INSTANCE_READY) return XR_XIR_CALL_BAD_STATE;
+        bool callback=xir_instance_callback_owns(instance,instance->executor,view->activation);
+        if (callback ? !instance_callback_entry_admitted(instance,view,entry,function,arguments,count) :
+            instance->requested!=entry) return XR_XIR_CALL_BAD_STATE;
+    }
     if (!target->ready[module] && target->current_module != module) {
         XrXirCallStatus cleanup=target==instance?instance_cleanup_entry(view,instance,caller,entry):XR_XIR_CALL_BAD_STATE;
         if (cleanup!=XR_XIR_CALL_READY) return cleanup;
