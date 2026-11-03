@@ -154,8 +154,9 @@ static XrXirArtifact *comparator_artifact(const XrXirCompileContext *context) {
         {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0, 0}, 0, {0}}
     };
     XrXirBlock block = {0, 2, 0, 0};
-    XrXirFunction function = {"compare", 7, types, 2, XR_XIR_BOOL, &block, 1, instructions, 2, NULL, 0};
-    function.error_type=XR_XIR_NEVER;
+    XrXirFunction function = {.name="compare",.name_length=7,.parameters=types,.parameter_count=2,
+        .result=XR_XIR_BOOL,.blocks=&block,.block_count=1,.instructions=instructions,.instruction_count=2,
+        .error_type=XR_XIR_NEVER};
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *lowered = NULL;
