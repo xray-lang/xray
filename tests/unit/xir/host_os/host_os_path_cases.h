@@ -73,7 +73,8 @@ static void host_path_execute(XrXirProgram *program,const uint32_t ids[5]){
  CHECK(xr_xir_string_new(instance->domain,folder,strlen(folder),&text)==XR_XIR_VALUE_OK);object=host_invoke(instance,ids[1],&text,1);xr_xir_value_drop(&text);result=host_invoke(instance,ids[3],&object,1);CHECK(result.type==XR_XIR_BOOL&&result.payload==1);xr_xir_value_drop(&result);xr_xir_value_drop(&object);
  char *now=NULL;CHECK(xr_os_io_getcwd_owned(&policy,&now)==XR_OS_IO_OK&&strcmp(now,old));host_cwd_free(&context,now);
  bool restored=false;CHECK(xr_os_io_chdir(&policy,old,NULL,&restored)==XR_OS_IO_OK&&restored);
- CHECK(xr_xir_string_new(instance->domain,"./missing-host-path",19,&text)==XR_XIR_VALUE_OK);object=host_invoke(instance,ids[1],&text,1);xr_xir_value_drop(&text);result=host_invoke(instance,ids[3],&object,1);CHECK(result.type==XR_XIR_BOOL&&!result.payload);xr_xir_value_drop(&result);xr_xir_value_drop(&object);
+ char missing[128];CHECK(snprintf(missing,sizeof(missing),"%s/missing",folder)>0);
+ CHECK(xr_xir_string_new(instance->domain,missing,strlen(missing),&text)==XR_XIR_VALUE_OK);object=host_invoke(instance,ids[1],&text,1);xr_xir_value_drop(&text);result=host_invoke(instance,ids[3],&object,1);CHECK(result.type==XR_XIR_BOOL&&!result.payload);xr_xir_value_drop(&result);xr_xir_value_drop(&object);
  CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);host_active=NULL;CHECK(!unlink(file)&&!rmdir(folder));host_cwd_free(&context,old);CHECK(runtime_live==live&&runtime_bytes==bytes);
 }
 #endif
