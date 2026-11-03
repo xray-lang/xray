@@ -97,7 +97,9 @@ static XrXirArtifact *root_signal_code(const XrXirCompileContext *context,uint32
     xr_xir_compile_source_result_free(&source);XrXirArtifact *cold=NULL,*closed=NULL,*code=NULL;
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&cold,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(cold,&closed,NULL,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(cold);
+    XrXirDiagnostic position={0};status=xr_xir_compile_specialize(cold,&closed,&position,NULL);
+    if(status!=XR_XIR_OK)fprintf(stderr,"signal Specialize%u f%u b%u i%u reason%u\n",status,position.function,position.block,position.instruction,position.reason);
+    CHECK(status==XR_XIR_OK);xr_xir_compile_artifact_free(cold);
     CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},NULL,&code,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     const char *names[]={"parent","guarded","owned","withHandler","__onSignal","read"};
