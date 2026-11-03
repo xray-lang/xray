@@ -10,13 +10,41 @@
  *   A failed OS close retains its real handle without retaining a Call stack.
  */
 #include "../os/os_file_metadata.h"
+#include "../os/os_file_temp.h"
+
+static XrOsIoStatus instance_temp_allocate(void *context,size_t bytes,void **output) {
+    XrXirDomain *domain=context;
+    if(!output || *output || !xr_xir_domain_current(domain))return XR_OS_IO_BAD_ARGUMENT;
+    if(bytes>SIZE_MAX-sizeof(XirEnvironmentBlock))return XR_OS_IO_OVERFLOW;
+    size_t total=sizeof(XirEnvironmentBlock)+(bytes?bytes:1);
+    if(!xr_xir_domain_work(domain,total))return XR_OS_IO_MEMORY_LIMIT;
+    XrXirValueStatus status=XR_XIR_VALUE_OK;
+    XirEnvironmentBlock *block=xr_xir_domain_call_allocate(domain,total,&status);
+    if(!block) {
+        if(status==XR_XIR_VALUE_OOM)return XR_OS_IO_OUT_OF_MEMORY;
+        if(status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT)return XR_OS_IO_MEMORY_LIMIT;
+        return status==XR_XIR_VALUE_UNSUPPORTED?XR_OS_IO_UNSUPPORTED:XR_OS_IO_BAD_ARGUMENT;
+    }
+    block->bytes=total;*output=block+1;return XR_OS_IO_OK;
+}
+static void instance_temp_free(void *context,void *memory) {
+    if(!memory)return;
+    XirEnvironmentBlock *block=(XirEnvironmentBlock *)memory-1;
+    xr_xir_domain_call_deallocate(context,block,block->bytes);
+}
+static XrOsIoPolicy instance_temp_policy(XrXirInstance *root) {
+    return (XrOsIoPolicy){root->domain,instance_temp_allocate,instance_temp_free};
+}
 
 struct XirFileMetadataOwner {
     XrOsFileMetadataOwner owner;
+    XrOsFileTempOwner temporary;
+    uint32_t kind;
     XirFileMetadataOwner *next;
 };
+enum { XIR_FILE_METADATA_OWNER, XIR_FILE_TEMP_OWNER };
 static void instance_file_metadata_owner_unlink(XrXirInstance *root,XirFileMetadataOwner *owner) {
-    XR_CHECK(!owner->owner.handle,"only a discharged filesystem owner can retire");
+    XR_CHECK(!owner->owner.handle && !owner->temporary.state,"only a discharged filesystem owner can retire");
     XirFileMetadataOwner **link=&root->file_metadata_owners;
     while(*link && *link!=owner)link=&(*link)->next;
     XR_CHECK(*link==owner,"filesystem close requires its root-owned node");
@@ -27,7 +55,13 @@ static bool instance_file_metadata_owners_close(XrXirInstance *root) {
     bool complete=true;
     for(XirFileMetadataOwner *owner=root->file_metadata_owners;owner;) {
         XirFileMetadataOwner *next=owner->next;
-        if(xr_os_io_file_metadata_close(&owner->owner)==XR_OS_IO_OK)
+        XrOsIoStatus status=XR_OS_IO_BAD_ARGUMENT;
+        if(owner->kind==XIR_FILE_METADATA_OWNER)status=xr_os_io_file_metadata_close(&owner->owner);
+        else if(owner->kind==XIR_FILE_TEMP_OWNER) {
+            XrOsIoPolicy policy=instance_temp_policy(root);
+            status=xr_os_io_temp_finish(&policy,&owner->temporary,false);
+        }
+        if(status==XR_OS_IO_OK)
             instance_file_metadata_owner_unlink(root,owner);
         else complete=false;
         owner=next;
