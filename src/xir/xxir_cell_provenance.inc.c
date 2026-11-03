@@ -198,7 +198,7 @@ static bool cell_proof_inventory_parameter(CellProofBuild *build,uint32_t f,
 /* Both readers validate the physical range and independent actual type before
  * this shared instruction inventory; no shape temporary or permission is passed. */
 static bool cell_proof_inventory_calls(CellProofBuild *build,uint32_t f,XrXirOp opcode) {
-    if (opcode!=XR_XIR_FUNCTION_REF && opcode!=XR_XIR_CALL &&
+    if (opcode!=XR_XIR_FUNCTION_REF && opcode!=XR_XIR_CLASS_METHOD_REF && opcode!=XR_XIR_CALL &&
         opcode!=XR_XIR_INVOKE && opcode!=XR_XIR_GENERATOR_NEW && opcode!=XR_XIR_CLEANUP_REGISTER) return true;
     if (!((build)->status == XR_XIR_OK)) return false;
     build->proof->functions[f].role_calls=1;return true;
@@ -413,12 +413,14 @@ static bool cell_proof_inventory(CellProofBuild *build) {
 }
 
 
+#include "xxir_cell_method_roles.inc.c"
 static bool cell_proof_role_opcode(XrXirOp op) {
-    return op==XR_XIR_FUNCTION_REF || op==XR_XIR_GENERATOR_NEW || op==XR_XIR_CALL || op==XR_XIR_INVOKE || op==XR_XIR_CLEANUP_REGISTER;
+    return op==XR_XIR_FUNCTION_REF || op==XR_XIR_CLASS_METHOD_REF || op==XR_XIR_GENERATOR_NEW || op==XR_XIR_CALL || op==XR_XIR_INVOKE || op==XR_XIR_CLEANUP_REGISTER;
 }
 static bool cell_proof_role_row(CellProofBuild *build,uint32_t f,uint32_t i,const XrXirInstruction *op) {
     XrXirCellProvenance *proof=build->proof;const XirMetadataDomain *module=&build->body->domain;
     if (!cell_proof_role_opcode(op->op)) return true;
+    if(op->op==XR_XIR_CLASS_METHOD_REF)return cell_proof_method_roles(build,f,i,op);
     uint32_t target = (uint32_t)op->immediate;
     if (target >= module->function_count) return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
     CellProofFunction *callee = &proof->functions[target];
@@ -459,7 +461,7 @@ static bool cell_proof_roles_range(CellProofBuild *build,uint32_t f,
     if (!((build)->status == XR_XIR_OK)) return false;
     const XrXirInstruction *op=&run->operation;
     if (!cell_proof_role_opcode(op->op)) {*handled=true;return true;}
-    if (op->op==XR_XIR_FUNCTION_REF || run->varying&UINT32_C(200) || op->args[1]) return true;
+    if (op->op==XR_XIR_FUNCTION_REF || op->op==XR_XIR_CLASS_METHOD_REF || run->varying&UINT32_C(200) || op->args[1]) return true;
     if (!cell_proof_role_row(build,f,run->first,op)) return false;
     *handled=true;return true;
 }
