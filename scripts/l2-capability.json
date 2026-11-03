@@ -327,7 +327,12 @@
         "tests/fixtures/xir_path_prelude/*",
         "tests/unit/xir/*path_prelude*",
         "tests/unit/test_path_prelude_projection.py",
-        "tests/unit/frontend/test_native_declaration_schema.py"
+        "tests/unit/frontend/test_native_declaration_schema.py",
+        "tests/unit/xir/array_materialization_fixture.h",
+        "tests/unit/xir/array_materialization_runtime.h",
+        "tests/unit/xir/test_xir_array_materialization.c",
+        "tests/unit/xir/test_xir_array_materialization_native.c",
+        "tests/unit/xir/array_materialization.cmake"
       ],
       "reason": "HIR and complete Source language-family consumers.",
       "tests": [
