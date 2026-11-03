@@ -23,11 +23,15 @@
   "sections": [
     {
       "heading": "throw",
-      "markdown": "`throw expr` writes an enum variant into the error channel and returns. The operand must be an enum variant value. No stack unwinding occurs."
+      "markdown": "`throw expr` produces a business error directly and needs no extra try. Its enum value must satisfy the enclosing error declaration or an outer ordinary handler. Existing cleanup and owned pending-transfer rules apply; this does not select a platform unwinder or error ABI."
     },
     {
       "heading": "try / catch",
-      "markdown": "`try { ... } catch (e: ErrType) { ... }` handles errors locally; calls in its protected body need no individual marker. The region excludes nested function and closure bodies and that try statement's own handlers; a nested handler may still be protected by an outer try. Typed catches filter enum types; catch (e) catches any error. A bare uppercase-leading catch head is rejected with a suggestion to use catch (e: T). Remaining errors must fit the enclosing signature."
+      "markdown": "`try { ... } catch (e: ErrType) { ... }` handles errors locally; calls in its protected body need no individual marker. The region excludes nested function and closure bodies and that try statement's own handlers; a nested handler may still be protected by an outer try. Typed catches filter enum types; catch (e) binds Error. A bare uppercase-leading catch head is rejected with a suggestion to use catch (e: T). Remaining errors must fit the enclosing signature. A panic-only try also permits business calls but does not consume their errors: they must reach an outer ordinary catch or the function's throws, otherwise E0331. A handler cannot catch its own or a sibling handler's new error or panic.",
+      "fences": [
+        "error-panic-only",
+        "error-panic-mixed-redundant"
+      ]
     },
     {
       "heading": "catch panic",
@@ -35,7 +39,7 @@
     },
     {
       "heading": "Error propagation",
-      "markdown": "`try expr` propagates business errors, `try? expr` turns them into null, and `try! expr` turns them into a panic carrying the original error value. A wait that can fail is marked try await; a try, try?, try! or try { } that covers nothing able to throw is error E0336. try? preserves an already Optional result type without adding or recursively flattening layers; write (try? expr) ?? fallback. Top-level code and main permit any error but still require markers. Callee signatures, not whole-program inference, determine escaping errors."
+      "markdown": "`try expr` propagates business errors, `try? expr` turns them into null, and `try! expr` turns them into a panic carrying the original error value. None converts cancellation or catches an independent panic. An expression marker with no business-error source is E0336. Any try block with an ordinary catch also needs a body source, even if it has a panic handler. A try with only a panic handler is exempt from that block-level check, including a pure body; inner expression markers are still checked. Direct throw counts as a source. An inner try?, try! or ordinary catch consuming an error does not erase the source fact in an outer body; E0336 is not dead-handler analysis. Unsubstituted generic E counts at definition time, but a caller's complete Never instantiation does not. try? preserves an already Optional result type without adding or recursively flattening layers; write (try? expr) ?? fallback. Entry-file top-level code permits errors but still requires call markers; main is an ordinary function and must declare its escaping errors. Callee signatures, not whole-program inference, determine escaping errors."
     },
     {
       "heading": "Debugger execution-flow boundaries",

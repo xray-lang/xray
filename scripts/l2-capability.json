@@ -450,10 +450,13 @@
         "src/xir/*cleanup*",
         "src/xir/*await*",
         "src/xir/*task*",
-        "src/xir/xxir_source*"
+        "src/xir/xxir_source*",
+        "tests/cli/test_await_cancel_surface.py"
       ],
       "reason": "Typed errors, cleanup, optional and task-family receivers.",
       "tests": [
+        "test_await_cancel_surface_vm",
+        "test_await_cancel_surface_native",
         "test_xir_try_assert_source",
         "test_xir_try_assert_native",
         "test_xir_try_assert_owner",

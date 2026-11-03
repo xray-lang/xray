@@ -1,2 +1,2 @@
 --> 2:28
-E0336: redundant try has no potentially throwing operation
+E0336: try expression has no business-error source; remove the marker and preserve the expression

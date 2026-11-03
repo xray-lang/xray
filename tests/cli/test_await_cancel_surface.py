@@ -19,6 +19,16 @@ fn waiting(ready: Channel<i64>) -> i64 {
 }
 '''
 
+CANCELLABLE_ERROR = '''import time
+enum Failure { Bad }
+fn waiting(ready: Channel<i64>) throws(Failure) -> i64 {
+    defer { print("child-cleanup") }
+    ready.send(1)
+    time.sleep(10000)
+    return 7
+}
+'''
+
 CASES = {
     "never": ('''fn value() -> i64 { return 42 }
 var task = go value()
@@ -223,6 +233,129 @@ fn main() {
 }
 main()
 ''', "child-cleanup\nparent-cleanup\nroot-cleanup\n", 1, "[Uncaught Cancellation]\n"),
+    "a03_panic_only_pure": ('''try { print(42) }
+catch panic { print("unexpected") }
+''', "42\n", 0, ""),
+    "a03_a07_a08_spec": ('''enum Failure { Bad }
+fn fail() throws(Failure) { throw Failure.Bad }
+fn relay() throws(Failure) {
+    try { fail() } catch panic { print("unexpected panic") }
+}
+const ch = Channel<i64>(1)
+ch.close()
+try { ch.send(1) } catch panic (p) { print(p.code) }
+try { relay() } catch (e: Failure) { print("business error") }
+try { throw Failure.Bad } catch (e: Failure) { print("direct throw") }
+''', "702\nbusiness error\ndirect throw\n", 0, ""),
+    "a02_error_expressions": ('''enum Failure { Bad }
+fn fail() throws(Failure) -> i64 { throw Failure.Bad }
+try { print(try fail()) } catch (e: Failure) { print("propagated") }
+print((try? fail()) == null)
+try { print(try! fail()) } catch panic (p) { print(p.code) }
+''', "propagated\ntrue\n446\n", 0, ""),
+    "a08_direct_throw_mixed": ('''enum Failure { Bad }
+try { throw Failure.Bad }
+catch (e: Failure) { print("business") }
+catch panic { print("unexpected") }
+''', "business\n", 0, ""),
+    "a10_consumed_sources": ('''enum Failure { Bad }
+fn maybe() throws(Failure) -> i64 { return 42 }
+try { print((try? maybe()) ?? 0) } catch (e: Failure) { print("unexpected") }
+try { print(try! maybe()) } catch (e: Failure) { print("unexpected") }
+try { try { maybe() } catch (e: Failure) {} }
+catch (e: Failure) { print("unexpected") }
+print("alive")
+''', "42\n42\nalive\n", 0, ""),
+    "a11_generic_business": ('''enum Failure { Bad }
+fn maybe() throws(Failure) -> i64 { return 42 }
+fn generic<E: Error>(action: fn() throws(E) -> i64) throws(E) -> i64 {
+    return try action()
+}
+print(try generic<Failure>(maybe))
+''', "42\n", 0, ""),
+    "a10_dead_handler_generic_storage": ('''enum Failure { Bad }
+fn maybe() throws(Failure) -> i64 { return 42 }
+fn identity<T>(value: T) -> T { return value }
+print(identity<i64>(1))
+try { print((try? maybe()) ?? 0) }
+catch (e: Failure) {
+    print(identity<i64>(2))
+    print(identity<i64>(3))
+    print(identity<i64>(4))
+}
+print(identity<i64>(5))
+print(identity<i64>(6))
+''', "1\n42\n5\n6\n", 0, ""),
+    "a12_declared_indirect": ('''enum Failure { Bad }
+fn maybe() throws(Failure) -> i64 { return 42 }
+var action: fn() throws(Failure) -> i64 = maybe
+print(try action())
+''', "42\n", 0, ""),
+    "a15_separate_channels": ('''enum Failure { Bad }
+fn action(panicNow: bool) throws(Failure) {
+    if (panicNow) { assert(false) }
+    throw Failure.Bad
+}
+try { action(false) }
+catch (e: Failure) { print("business") }
+catch panic { print("unexpected") }
+try { action(true) }
+catch (e: Failure) { print("unexpected") }
+catch panic { print("panic") }
+''', "business\npanic\n", 0, ""),
+    "a16_handler_escape": ('''enum Failure { First, Second }
+fn fail() throws(Failure) { throw Failure.First }
+try {
+    try { fail() } catch (e: Failure) { throw Failure.Second }
+} catch (e: Failure) { print(e.ordinal) }
+try {
+    try { fail() } catch (e: Failure) { assert(false) }
+} catch panic { print("outer panic") }
+''', "1\nouter panic\n", 0, ""),
+    "a17_independent_panic": ('''enum Failure { Bad }
+fn crash() throws(Failure) -> i64 {
+    const ch = Channel<i64>(1)
+    ch.close()
+    ch.send(1)
+    return 42
+}
+try { const value = try? crash(); print("unexpected") }
+catch panic (p) { print(p.code) }
+try { const value = try! crash(); print("unexpected") }
+catch panic (p) { print(p.code) }
+''', "702\n702\n", 0, ""),
+    "a17_optional_cancellation": (CANCELLABLE_ERROR + '''fn main() {
+    defer { print("root-cleanup") }
+    const ready = Channel<i64>(1)
+    var task = go waiting(ready)
+    ready.recv()
+    task.cancel()
+    try { const value = try? await task; print("unreachable") }
+    catch (e: Failure) { print("caught-error") }
+    catch panic { print("caught-panic") }
+}
+main()
+''', "child-cleanup\nroot-cleanup\n", 1, "[Uncaught Cancellation]\n"),
+    "a17_assert_cancellation": (CANCELLABLE_ERROR + '''fn main() {
+    defer { print("root-cleanup") }
+    const ready = Channel<i64>(1)
+    var task = go waiting(ready)
+    ready.recv()
+    task.cancel()
+    try { const value = try! await task; print("unreachable") }
+    catch (e: Failure) { print("caught-error") }
+    catch panic { print("caught-panic") }
+}
+main()
+''', "child-cleanup\nroot-cleanup\n", 1, "[Uncaught Cancellation]\n"),
+    "timeout_parenthesized_read": ('''fn value() -> i64 { return 42 }
+fn main() throws(Timeout) {
+    var task = go value()
+    var milliseconds = 100
+    print(try Task.timeout(((task)), ((milliseconds))))
+}
+try main()
+''', "42\n", 0, ""),
 }
 
 REJECTED = {
@@ -235,6 +368,30 @@ REJECTED = {
     "nested": "enum E { Bad }\ntry { const f = fn() throws(E) { throw E.Bad }; print(1) } catch(e) {}\n",
     "missing_try": "enum E { Bad }\nfn fail() throws(E) { throw E.Bad }\nfail()\n",
     "timeout_missing_try": "fn value()->i64{return 42}\nvar t=go value()\nTask.timeout(t, 100)\n",
+    "a05_mixed_without_error": "try { print(42) } catch(e) {} catch panic {}\n",
+    "a06_inner_try_send": "const ch=Channel<i64>(1)\ntry { try ch.send(1) } catch panic {}\n",
+    "a06_inner_try_await": "fn value()->i64{return 42}\nvar t=go value()\ntry { print(try await t) } catch panic {}\n",
+    "a07_panic_only_undeclared": "enum Failure { Bad }\nfn fail() throws(Failure){throw Failure.Bad}\nfn relay(){try { fail() } catch panic {}}\nrelay()\n",
+    "a09_handler_only": "enum Failure { Bad }\nfn f() throws(Failure){try { print(1) } catch(e){throw Failure.Bad}}\ntry f()\n",
+    "a11_caller_never": "fn value()->i64{return 42}\nfn generic<E: Error>(action:fn() throws(E)->i64) throws(E)->i64{return try action()}\nprint(try generic<Never>(value))\n",
+    "a10_dead_handler_redundant": "enum Failure { Bad }\nfn maybe() throws(Failure)->i64{return 42}\ntry { print((try? maybe()) ?? 0) } catch(e: Failure) { try { print(1) } catch(inner) {} }\n",
+    "a13_explicit_skips_default": "enum Failure { Bad }\nfn read() throws(Failure)->i64{throw Failure.Bad}\nfn value(x:i64=try read())->i64{return x}\nprint(try value(42))\n",
+    "a14_panic_scope": "try scope { go fn(){assert(false)}() }\n",
+    "a14_cancel_scope": "try scope { var task=go fn(){}(); task.cancel() }\n",
+    "timeout_grouped_move_task": "fn value()->i64{return 42}\nfn main() throws(Timeout){var task=go value();var ms=100;print(try Task.timeout((move task),ms))}\ntry main()\n",
+    "timeout_grouped_move_duration": "fn value()->i64{return 42}\nfn main() throws(Timeout){var task=go value();var ms=100;print(try Task.timeout(task,(move ms)))}\ntry main()\n",
+    "timeout_ref_task": "fn value()->i64{return 42}\nfn main() throws(Timeout){var task=go value();print(try Task.timeout(ref task,100))}\ntry main()\n",
+    "timeout_ref_duration": "fn value()->i64{return 42}\nfn main() throws(Timeout){var task=go value();var ms=100;print(try Task.timeout(task,ref ms))}\ntry main()\n",
+}
+
+REJECTION_DIAGNOSTICS = {
+    "a05_mixed_without_error": b"keep only the panic boundary and review ordinary handler logic before removal",
+    "a06_inner_try_send": b"remove the marker and preserve the expression",
+    "a07_panic_only_undeclared": b"E0331:",
+    "timeout_grouped_move_task": b"Task.timeout takes ordinary readonly Task and i64 arguments",
+    "timeout_grouped_move_duration": b"Task.timeout takes ordinary readonly Task and i64 arguments",
+    "timeout_ref_task": b"Task.timeout requires its Task and i64 duration",
+    "timeout_ref_duration": b"Task.timeout requires its Task and i64 duration",
 }
 
 
@@ -243,23 +400,25 @@ def main() -> int:
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--engine", choices=("vm", "native"), required=True)
-    parser.add_argument("--case", choices=tuple(CASES))
+    parser.add_argument("--case", choices=(*CASES, *REJECTED))
     args = parser.parse_args()
     binary = args.binary.resolve()
     env = dict(os.environ, PYTHONUTF8="1", NO_COLOR="1")
     failures = []
     with tempfile.TemporaryDirectory(prefix="await-cancel-") as directory:
-        if not args.case:
-            for name, code in REJECTED.items():
-                source = Path(directory) / f"rejected_{name}.xr"
-                source.write_text(code, encoding="utf-8")
-                result = subprocess.run([str(binary), "check", str(source)], cwd=args.root,
-                                        env=env, capture_output=True, timeout=30)
-                diagnostic = b"E0330:" if name.endswith("missing_try") else b"E0336:"
-                if result.returncode != 1 or result.stdout or diagnostic not in result.stderr:
-                    failures.append(f"{name}: expected {diagnostic!r}, got {result.returncode}, {result.stderr!r}")
-                else:
-                    print(f"PASS {args.engine} rejected_{name}")
+        for name, code in REJECTED.items():
+            if args.case and args.case != name:
+                continue
+            source = Path(directory) / f"rejected_{name}.xr"
+            source.write_text(code, encoding="utf-8")
+            result = subprocess.run([str(binary), "check", str(source)], cwd=args.root,
+                                    env=env, capture_output=True, timeout=30)
+            diagnostic = REJECTION_DIAGNOSTICS.get(name,
+                b"E0330:" if name.endswith("missing_try") else b"E0336:")
+            if result.returncode != 1 or result.stdout or diagnostic not in result.stderr:
+                failures.append(f"{name}: expected {diagnostic!r}, got {result.returncode}, {result.stderr!r}")
+            else:
+                print(f"PASS {args.engine} rejected_{name}")
         for name, (code, stdout, status, stderr) in CASES.items():
             if args.case and args.case != name:
                 continue

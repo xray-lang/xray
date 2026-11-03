@@ -67,7 +67,7 @@ def main() -> None:
                 result.stdout.count(b"43\n") == 1, result)
         result = run("enum Cancelled{Fake}\nfn worker()->i64{Coro.yield();return 42}\n"
                      "fn onlyUser() throws(Cancelled)->i64{return try await go worker()}\n42\n.exit\n")
-        require(result.stderr.count(b"E0336: redundant try has no potentially throwing operation") == 1 and
+        require(result.stderr.count(b"E0336: try expression has no business-error source; remove the marker and preserve the expression") == 1 and
                 result.stdout.count(b"42\n") == 1, result)
     print("Source REPL CLI: ten commands, real FILE imports, old birth state, type effects, multiline/long input, strict bytes, timer and Task yield PASS")
 
