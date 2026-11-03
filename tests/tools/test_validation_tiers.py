@@ -168,6 +168,7 @@ class TierTests(unittest.TestCase):
                      "tests/unit/base/file_links.cmake",
                      "src/xir/xxir_instance_io_mutation.inc.c",
                      "src/xir/xxir_instance_io_links.inc.c",
+                     "src/xir/xxir_instance_io_temp.inc.c",
                      "src/xir/xxir_call_signal_frontier.inc.c",
                      "src/xir/xxir_instance_signal_frontier.inc.c",
                      "src/xir/xxir_signal_frontier_internal.h",
