@@ -44,6 +44,8 @@ static void host_directory_fixture(HostDirectoryFixture *fixture,bool create){
 static XrXirValue host_directory_open_path(XrXirInstance *instance,const uint32_t ids[6],const char *path){
  XrXirValue object=host_io_object(instance,ids[1],path,strlen(path));
  XrXirValue token=host_invoke(instance,ids[2],&object,1);xr_xir_value_drop(&object);
+ if(token.type!=XR_XIR_I64||token.payload<=0||token.payload>INT64_MAX)
+  fprintf(stderr,"directory open phase=%s mode%u type%u token%llu path=%s\n",host_io_phase,directory_mode,token.type,(unsigned long long)token.payload,path);
  CHECK(token.type==XR_XIR_I64&&token.payload>0&&token.payload<=INT64_MAX);return token;
 }
 static bool host_directory_name(const XrXirValue *value,const char **bytes,size_t *length){
@@ -146,10 +148,11 @@ static void host_io_directory_execute(const XrXirCompileContext *context,XrXirPr
  host_io_phase="directory pending fault";host_directory_pending(program,ids,fixture.path);
  host_io_phase="directory close controls";host_directory_close_controls(program,ids,fixture.path);
  XrXirInstance *instance=host_instance(program,ids[0]);host_active=instance;char path[16384];
- CHECK(snprintf(path,sizeof(path),"%s/nested",fixture.path)>0);XrXirValue token=host_directory_open_path(instance,ids,path);
+ host_io_phase="directory empty and refused paths";
+ CHECK(snprintf(path,sizeof(path),"%s\\nested",fixture.path)>0);XrXirValue token=host_directory_open_path(instance,ids,path);
  XrXirValue empty=host_invoke(instance,ids[3],&token,1);const char *text=NULL;size_t length=0;CHECK(!host_directory_name(&empty,&text,&length));xr_xir_value_drop(&empty);
  host_io_bool(instance,ids[4],&token,1,true);xr_xir_value_drop(&token);
- const char *leaves[]={"entry-00","absent"};for(unsigned n=0;n<2;++n){CHECK(snprintf(path,sizeof(path),"%s/%s",fixture.path,leaves[n])>0);
+ const char *leaves[]={"entry-00","absent"};for(unsigned n=0;n<2;++n){CHECK(snprintf(path,sizeof(path),"%s\\%s",fixture.path,leaves[n])>0);
   XrXirValue object=host_io_object(instance,ids[1],path,strlen(path));XrXirValue refused=host_invoke(instance,ids[2],&object,1);
   CHECK(refused.type==XR_XIR_I64&&!refused.payload&&!instance->file_metadata_owners);xr_xir_value_drop(&refused);xr_xir_value_drop(&object);}
  CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);host_active=NULL;host_directory_fixture(&fixture,false);
