@@ -46,7 +46,8 @@ static XrXirCallStatus instance_system_query(XrXirCallView *view,XrXirInstance *
     XrOsIoStatus observed=XR_OS_IO_UNSUPPORTED;
     XrOsOptionalI64 identity={0};int64_t integer=0;double seconds=0;bool changed=false;
     XrXirInstance *root=instance_root(instance);XirSystemOwner *owner=NULL;
-    if(id==XR_NATIVE_CALLABLE_OS_PPID || id==XR_NATIVE_CALLABLE_OS_KILL) {
+    if(id==XR_NATIVE_CALLABLE_OS_PPID || id==XR_NATIVE_CALLABLE_OS_KILL ||
+        id==XR_NATIVE_CALLABLE_OS_FREE_MEMORY) {
         XrXirCallStatus allocated=XR_XIR_CALL_READY;
         if(!xr_xir_domain_work(root->domain,sizeof(*owner)))return XR_XIR_CALL_LIMIT;
         owner=instance_metadata_allocate(root->domain,sizeof(*owner),&allocated);
@@ -62,7 +63,7 @@ static XrXirCallStatus instance_system_query(XrXirCallView *view,XrXirInstance *
         observed=xr_os_io_kill(&owner->owner,view->arguments[0].payload,view->arguments[1].payload,
             &query,instance_system_current,&changed);break;
     case XR_NATIVE_CALLABLE_OS_TOTAL_MEMORY:observed=xr_os_io_total_memory(&integer);break;
-    case XR_NATIVE_CALLABLE_OS_FREE_MEMORY:observed=xr_os_io_free_memory(&integer);break;
+    case XR_NATIVE_CALLABLE_OS_FREE_MEMORY:observed=xr_os_io_free_memory(&owner->owner,&integer);break;
     case XR_NATIVE_CALLABLE_OS_UPTIME:observed=xr_os_io_uptime(&seconds);break;
     default:break;
     }

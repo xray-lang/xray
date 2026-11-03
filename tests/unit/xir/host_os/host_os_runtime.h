@@ -42,7 +42,7 @@ static XrOsIoStatus host_system_gid(XrOsOptionalI64 *);
 static XrOsIoStatus host_system_ppid(XrOsSystemOwner *,void *,bool(*)(void *),int64_t *);
 static XrOsIoStatus host_system_kill(XrOsSystemOwner *,int64_t,int64_t,void *,bool(*)(void *),bool *);
 static XrOsIoStatus host_system_total(int64_t *);
-static XrOsIoStatus host_system_free(int64_t *);
+static XrOsIoStatus host_system_free(XrOsSystemOwner *,int64_t *);
 static XrOsIoStatus host_system_uptime(double *);
 static XrOsIoStatus host_system_loadavg(XrOsLoadAverages *);
 static XrOsIoStatus host_system_close(XrOsSystemOwner *);
@@ -84,7 +84,7 @@ static uint64_t host_cstring_requested;
 static XrXirInstance *host_active;
 static XrOsIoPolicy host_policy;
 enum { SYSTEM_NORMAL, SYSTEM_OOM_AFTER, SYSTEM_CANCEL_AFTER, SYSTEM_IO_AFTER,
- SYSTEM_LIMIT_AFTER, SYSTEM_CLOSE_ONCE, SYSTEM_CLOSE_PERSISTENT, SYSTEM_CANCEL_BEFORE };
+ SYSTEM_LIMIT_AFTER, SYSTEM_CLOSE_ONCE, SYSTEM_CLOSE_PERSISTENT, SYSTEM_CANCEL_BEFORE, SYSTEM_SOME_ZERO };
 static unsigned system_mode,system_calls[8],system_close_calls;
 #if defined(XR_OS_WINDOWS)
 static HANDLE system_retained_handle;
@@ -97,7 +97,12 @@ static XrOsIoStatus host_system_after(XrOsIoStatus status){
  if(system_mode==SYSTEM_LIMIT_AFTER)CHECK(host_active&&!xr_xir_domain_work(host_active->domain,UINT64_MAX));
  return system_mode==SYSTEM_IO_AFTER?XR_OS_IO_IO:status;
 }
-static XrOsIoStatus host_system_uid(XrOsOptionalI64 *o){++system_calls[0];return host_system_after(xr_os_io_uid(o));}
+static XrOsIoStatus host_system_uid(XrOsOptionalI64 *o){
+ ++system_calls[0];XrOsIoStatus status=xr_os_io_uid(o);
+ /* Adapter injection proves Some(0), not a Windows numeric identity. */
+ if(status==XR_OS_IO_OK&&system_mode==SYSTEM_SOME_ZERO)*o=(XrOsOptionalI64){true,0};
+ return host_system_after(status);
+}
 static XrOsIoStatus host_system_gid(XrOsOptionalI64 *o){++system_calls[1];return host_system_after(xr_os_io_gid(o));}
 static XrOsIoStatus host_system_ppid(XrOsSystemOwner *o,void *c,bool(*current)(void *),int64_t *out){
  ++system_calls[2];XrOsIoStatus status=xr_os_io_ppid(o,c,current,out);
@@ -114,7 +119,7 @@ static XrOsIoStatus host_system_kill(XrOsSystemOwner *o,int64_t pid,int64_t sign
  return host_system_after(xr_os_io_kill(o,pid,signal,c,current,out));
 }
 static XrOsIoStatus host_system_total(int64_t *o){++system_calls[4];return host_system_after(xr_os_io_total_memory(o));}
-static XrOsIoStatus host_system_free(int64_t *o){++system_calls[5];return host_system_after(xr_os_io_free_memory(o));}
+static XrOsIoStatus host_system_free(XrOsSystemOwner *owner,int64_t *o){++system_calls[5];return host_system_after(xr_os_io_free_memory(owner,o));}
 static XrOsIoStatus host_system_uptime(double *o){++system_calls[6];return host_system_after(xr_os_io_uptime(o));}
 static XrOsIoStatus host_system_loadavg(XrOsLoadAverages *o){++system_calls[7];return host_system_after(xr_os_io_loadavg(o));}
 static XrOsIoStatus host_system_close(XrOsSystemOwner *o){

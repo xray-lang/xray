@@ -89,6 +89,12 @@ static void host_system_execute(XrXirProgram *program,const uint32_t ids[9]){
  /* These actual Optional values retain their metadata after the producer dies. */
  for(unsigned kind=0;kind<2;++kind){bool present=false;const XrXirValue *payload=NULL;CHECK(xr_xir_nullable_view(kept+kind,&present,&payload));xr_xir_value_drop(kept+kind);}
  CHECK(runtime_live==live&&runtime_bytes==bytes);
+ instance=host_instance(program,ids[0]);host_active=instance;system_mode=SYSTEM_SOME_ZERO;
+ XrXirValue zero=host_invoke(instance,ids[1],NULL,0);bool present=false;const XrXirValue *payload=NULL;
+ CHECK(xr_xir_nullable_view(&zero,&present,&payload)&&present&&payload&&payload->type==XR_XIR_I64&&!payload->payload);
+ CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);host_active=NULL;system_mode=SYSTEM_NORMAL;
+ CHECK(xr_xir_nullable_view(&zero,&present,&payload)&&present&&payload&&!payload->payload);xr_xir_value_drop(&zero);
+ CHECK(runtime_live==live&&runtime_bytes==bytes);
  host_system_failures(program,ids);
  instance=host_instance(program,ids[0]);host_active=instance;system_mode=SYSTEM_CANCEL_BEFORE;
  CHECK(xr_xir_instance_start(instance,ids[4],args,2)==XR_XIR_CALL_READY&&host_poll(instance)==XR_XIR_CALL_CANCELLED);
