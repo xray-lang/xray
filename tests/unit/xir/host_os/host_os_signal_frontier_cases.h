@@ -16,8 +16,17 @@
 typedef struct HostSignalFrontier {
  unsigned views,loans,no_suspend,parent_safe,parent_after_view,cleanup,fault,busy,observing;
  XrXirCallObserver observer;
+ XirCallNativeObserver native_observer;
+ XrXirExecutorBinding held_binding;
+ uint64_t held_frame;
+ bool hold_case,hold_seen,parent_native;
 } HostSignalFrontier;
 static HostSignalFrontier *host_signal_counts;
+static XrXirCallStatus host_signal_throw(void *owner,const XirCallNativeThrowEvent *event,bool *pause){
+ HostSignalFrontier *counts=owner;CHECK(counts->hold_case&&!counts->hold_seen);
+ counts->held_binding=event->frame.binding;counts->held_frame=event->frame.frame;
+ *pause=true;return XR_XIR_CALL_READY;
+}
 static void host_signal_observer(void *owner,const XrXirCallEvent *event){
  HostSignalFrontier *counts=owner;CHECK(host_active&&event->instance==host_active);
  bool eligible=true;CHECK(xir_call_signal_frontier(host_active->call,&eligible)==XR_XIR_CALL_BUSY&&eligible);
@@ -28,11 +37,8 @@ static void host_signal_provider_probe(void){
  CHECK(xir_call_signal_frontier(host_active->call,&eligible)==XR_XIR_CALL_BUSY&&eligible);
  ++host_signal_counts->busy;
  CHECK(xr_xir_call_observer_bind(host_active->call->active_view,&host_signal_counts->observer)==XR_XIR_CALL_READY);
-}
-static void *host_signal_foreign(void *pointer){
- bool eligible=true;
- CHECK(xir_call_signal_frontier(pointer,&eligible)==XR_XIR_CALL_BAD_ARGUMENT&&eligible);
- return NULL;
+ if(host_signal_counts->hold_case)
+  CHECK(xir_call_native_observer_bind(host_active->call->active_view,&host_signal_counts->native_observer)==XR_XIR_CALL_READY);
 }
 static bool host_signal_observe(XrXirInstance *instance,uint32_t parent,HostSignalFrontier *counts){
  XrXirCall *call=instance->call;unsigned char saved[sizeof(*call)];memcpy(saved,call,sizeof(saved));
@@ -44,6 +50,7 @@ static bool host_signal_observe(XrXirInstance *instance,uint32_t parent,HostSign
   if(frame->metadata->cell_context==instance->program&&entry<instance->program->entry_count){
    protected|=(instance->program->declarations->functions[entry].promises&XR_XIR_FUNCTION_NO_SUSPEND)!=0;
    parent_live|=entry==parent&&!frame->exiting;
+   if(entry==parent&&frame->code_kind==XR_XIR_CALL_CODE_NATIVE)counts->parent_native=true;
   }
   for(CallViewBinding *binding=frame->views;binding;binding=binding->next)
    view|=xr_xir_view_scope_active(&binding->pin);
@@ -68,6 +75,12 @@ static XrXirCallStatus host_signal_poll(XrXirInstance *instance,uint32_t parent,
  bool cancelled=false;
  for(unsigned n=0;n<100000;++n){
   bool view=host_signal_observe(instance,parent,counts);
+  if(instance->budget.native_hold){
+   XrXirCall *held=instance->budget.native_hold;CHECK(counts->hold_case&&!counts->hold_seen&&held!=instance->call);
+   bool eligible=true;CHECK(xir_call_signal_frontier(instance->call,&eligible)==XR_XIR_CALL_READY&&!eligible);
+   CHECK(xr_xir_call_executor_member(held,&counts->held_binding));counts->hold_seen=true;
+   CHECK(xir_call_native_throw_continue(held,&counts->held_binding,counts->held_frame)==XR_XIR_CALL_READY);
+  }
   if(cancel&&view&&!cancelled){
    CHECK(xr_xir_call_request_cancel(instance->call)==XR_XIR_CALL_CANCEL_REQUESTED);cancelled=true;
    bool eligible=true;CHECK(xir_call_signal_frontier(instance->call,&eligible)==XR_XIR_CALL_READY&&!eligible);
@@ -77,13 +90,15 @@ static XrXirCallStatus host_signal_poll(XrXirInstance *instance,uint32_t parent,
  }
  CHECK(false);return XR_XIR_CALL_LIMIT;
 }
-static void host_signal_frontier_execute(XrXirProgram *program,const uint32_t ids[3]){
+static void host_signal_frontier_execute(XrXirProgram *program,const uint32_t ids[4]){
  size_t live=runtime_live,bytes=runtime_bytes;
- for(unsigned mode=0;mode<3;++mode){
+ for(unsigned mode=0;mode<4;++mode){
   XrXirInstance *instance=host_instance(program,ids[0]);host_active=instance;host_mode=HOST_NORMAL;
   HostSignalFrontier counts={0};counts.observer=(XrXirCallObserver){&counts,host_signal_observer};
+  counts.hold_case=mode==3;counts.native_observer=(XirCallNativeObserver){&counts,host_signal_throw};
   host_signal_counts=&counts;host_count_probe=host_signal_provider_probe;
-  CHECK(xr_xir_instance_start(instance,ids[mode==2?2:1],NULL,0)==XR_XIR_CALL_READY);
+  uint32_t parent=ids[mode==3?3:mode==2?2:1];
+  CHECK(xr_xir_instance_start(instance,parent,NULL,0)==XR_XIR_CALL_READY);
   if(mode==0){
    /* An identical public entry table is not an owned Root or sealed promise. */
    XrXirCallAccounting accounting={0};XrXirCallConfig config=instance->call->config;config.accounting=&accounting;
@@ -91,15 +106,19 @@ static void host_signal_frontier_execute(XrXirProgram *program,const uint32_t id
    bool eligible=true;CHECK(xir_call_signal_frontier(raw,&eligible)==XR_XIR_CALL_READY&&!eligible);
    CHECK(xr_xir_call_free(raw)==XR_XIR_CALL_READY&&!accounting.live_bytes);
   }
-  xr_thread_t foreign;CHECK(xr_thread_create(&foreign,host_signal_foreign,instance->call));
-  void *returned=NULL;CHECK(!xr_thread_join(foreign,&returned)&&!returned);
+  XrXirInstance *other=host_instance(program,ids[0]);bool no_suspend=true;
+  const CallFrame *top=instance->call->top;
+  CHECK(!xir_instance_signal_frame(other,instance->call,&instance->call->config.admission,
+   top->metadata,(uint32_t)(top->entry-top->metadata->entries),&no_suspend)&&no_suspend);
+  CHECK(xr_xir_instance_free(other)==XR_XIR_CALL_READY);
   bool untouched=true;CHECK(xir_call_signal_frontier(NULL,&untouched)==XR_XIR_CALL_BAD_ARGUMENT&&untouched);
   CHECK(xir_call_signal_frontier(instance->call,NULL)==XR_XIR_CALL_BAD_ARGUMENT);
-  XrXirCallStatus status=host_signal_poll(instance,ids[mode==2?2:1],&counts,mode==1);
-  CHECK(status==(mode==0?XR_XIR_CALL_RETURNED:mode==1?XR_XIR_CALL_CANCELLED:XR_XIR_CALL_ASSERTION));
-  if(mode==0){
-   CHECK(counts.views&&counts.loans&&counts.no_suspend&&counts.parent_safe&&counts.parent_after_view&&
+  XrXirCallStatus status=host_signal_poll(instance,parent,&counts,mode==1);
+  CHECK(status==((mode==0||mode==3)?XR_XIR_CALL_RETURNED:mode==1?XR_XIR_CALL_CANCELLED:XR_XIR_CALL_ASSERTION));
+  if(mode==0||mode==3){
+   if(mode==0)CHECK(counts.views&&counts.loans&&counts.no_suspend&&counts.parent_safe&&counts.parent_after_view&&
     counts.cleanup&&counts.busy&&counts.observing);
+   else CHECK(counts.hold_seen==counts.parent_native);
    XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED&&
     value.type==XR_XIR_I64&&value.payload==42);xr_xir_value_drop(&value);
   }else if(mode==1)CHECK(counts.views&&counts.cleanup);

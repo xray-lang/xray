@@ -52,7 +52,11 @@ static const char host_signal_frontier_text[]=
  "export fn parent()->i64{defer{assert(plain(42)==42)};assert(__cpuCount()>0);"
  "var bytes:Array<u8>=[20,22];const loan:Slice<u8>=bytes[:];const total=read(loan);"
  "const count=countRef(ref bytes);bytes=[42];return plain(total+count-2)}\n"
- "export fn failed()->i64{assert(false);return 0}\n";
+ "export fn failed()->i64{assert(false);return 0}\n"
+ "enum FrontierFailure{Raised}\n"
+ "fn raise() throws(FrontierFailure)->i64{throw FrontierFailure.Raised}\n"
+ "export fn heldParent()->i64{assert(__cpuCount()>0);const task=go raise();"
+ "try{return try await task}catch(FrontierFailure.Raised){return 42}}\n";
 static const char host_system_text[]=
  "export fn uid()->i64?{return __uid()}\n"
  "export fn gid()->i64?{return __gid()}\n"
