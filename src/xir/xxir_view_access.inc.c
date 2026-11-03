@@ -432,12 +432,15 @@ static bool view_access_scalar_storage(XrXirType type) {
     return type==XR_XIR_BOOL || type==XR_XIR_RUNE || xr_xir_type_is_number(type);
 }
 #include "xxir_view_access_class_candidate.inc.c"
+#include "xxir_view_access_uncaptured.inc.c"
 static XrXirStatus view_access_indirect_captures(ViewAccess *a,const XrXirViewOwnerEvent *event) {
     const XrXirInstruction *call=&a->body->instructions[event->instruction];uint32_t producer=UINT32_MAX;
     XrXirStatus status=view_root_reference_producer(&a->resolver->check,a->function,
         (uint32_t)call->immediate,&producer,a->cells?a->cells->control:NULL);
     if(status!=XR_XIR_OK)return status;
     if(producer==UINT32_MAX) {
+        bool empty=false;status=view_access_uncaptured_result(a,(uint32_t)call->immediate,&empty);
+        if(status!=XR_XIR_OK || empty)return status;
         /* Arity and NoSuspend do not describe an unknown callable's captures. */
         for(uint32_t p=0;p<event->before.count;++p)
             if(event->before.bits[p/64u]&(UINT64_C(1)<<(p%64u)))return XR_XIR_UNRESOLVED;
