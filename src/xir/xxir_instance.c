@@ -987,6 +987,9 @@ XrXirCallStatus xr_xir_instance_close_activation(XrXirInstance *instance) {
     if (!instance->executor) return XR_XIR_CALL_READY;
     instance_driving(instance, true);
     XrXirCallStatus status = xr_xir_task_executor_drain(instance->executor,XR_XIR_CALL_READY);
+    if(status==XR_XIR_CALL_CLOSE_FAILED) {
+        instance_driving(instance,false);return status;
+    }
     XR_CHECK(xr_xir_task_executor_root_idle(instance->executor),
         "an exclusively owned current activation drains every runnable task");
     if (instance->call && instance->state == XR_XIR_INSTANCE_INITIALIZING) {
@@ -1030,6 +1033,9 @@ XR_FUNC XrXirCallStatus xir_instance_host_finish(XrXirInstance *instance,XrXirIn
         active->last_outcome==XR_XIR_CALL_SUSPENDED) return XR_XIR_CALL_BAD_STATE;
     instance_driving(active,true);
     XrXirCallStatus closed=xr_xir_task_executor_drain(active->executor,XR_XIR_CALL_READY);
+    if(closed==XR_XIR_CALL_CLOSE_FAILED) {
+        instance_driving(active,false);return closed;
+    }
     if (active->state==XR_XIR_INSTANCE_FAILED &&
         ((closed==XR_XIR_CALL_CLEANUP_FAILED &&
           (active->failure.status==XR_XIR_CALL_THROWN || xr_xir_call_panic_status(active->failure.status))) ||
@@ -1060,6 +1066,7 @@ XR_FUNC XrXirCallStatus xir_instance_host_failure(XrXirInstance *instance,XrXirI
     instance_driving(instance,true);
     XrXirCallStatus status=xr_xir_task_executor_drain(instance->executor,XR_XIR_CALL_HOST_ERROR);
     instance_driving(instance,false);
+    if(status==XR_XIR_CALL_CLOSE_FAILED)return status;
     (void)xr_xir_instance_stop(root);
     XrXirInstanceResult result=xr_xir_instance_poll_bounded(instance,1);
     XR_CHECK(result.outcome.status==status && xr_xir_call_result_valid(&result.outcome),
@@ -1090,7 +1097,12 @@ XrXirCallStatus xr_xir_instance_stop(XrXirInstance *instance) {
     if (!driving && xr_xir_task_executor_root_idle(instance->executor))
         status = xr_xir_task_executor_completion_status(instance->executor);
     else if (instance->call && !driving) {
-        do { status = xr_xir_task_executor_poll_root(instance->executor, 256).status; }
+        do {
+            status = xr_xir_task_executor_poll_root(instance->executor, 256).status;
+            if(xir_task_executor_retirement_pending(instance->executor)) {
+                status=XR_XIR_CALL_CLOSE_FAILED;break;
+            }
+        }
         while (status == XR_XIR_CALL_READY);
     }
     if (!driving && instance->call && instance->state == XR_XIR_INSTANCE_INITIALIZING &&
@@ -1112,8 +1124,15 @@ static XrXirCallStatus instance_drain_state(XrXirInstance *instance) {
     instance->driving=true;instance->stopping=true;
     if (instance->function_gate) instance->function_gate->instance=NULL;
     XrXirCallStatus tasks=xr_xir_task_executor_free(instance->executor,NULL);
+    if(tasks==XR_XIR_CALL_CLOSE_FAILED) {
+        instance->driving=false;return tasks;
+    }
     instance->executor=NULL;
-    XrXirCallStatus status=xr_xir_call_free(instance->call);instance->call=NULL;
+    XrXirCallStatus status=xr_xir_call_free(instance->call);
+    if(status==XR_XIR_CALL_CLOSE_FAILED) {
+        instance->driving=false;return status;
+    }
+    instance->call=NULL;
     if (status==XR_XIR_CALL_READY) status=tasks;
     clear_slots(instance);
     instance->close_status=status;instance->close_drained=true;instance->driving=false;
@@ -1124,7 +1143,9 @@ static XrXirCallStatus instance_free_state(XrXirInstance *instance) {
     if (!instance) return XR_XIR_CALL_READY;
     if (instance_observing(instance)) return XR_XIR_CALL_BUSY;
     XR_CHECK(instance->owner,"only a child generation retires without closing the Domain owner");
-    XrXirCallStatus status=instance_drain_state(instance);instance_dispose(instance);return status;
+    XrXirCallStatus status=instance_drain_state(instance);
+    if(status!=XR_XIR_CALL_CLOSE_FAILED)instance_dispose(instance);
+    return status;
 }
 XrXirCallStatus xr_xir_instance_free(XrXirInstance *instance) {
     if (!instance_owner_current(instance)) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -1136,9 +1157,15 @@ XrXirCallStatus xr_xir_instance_free(XrXirInstance *instance) {
     XrXirCallStatus status=XR_XIR_CALL_READY;
     for (XrXirInstance *state=root->generation_next;state;state=state->generation_next) {
         XrXirCallStatus drained=instance_drain_state(state);
+        if(drained==XR_XIR_CALL_CLOSE_FAILED) {
+            root->driving=false;return drained;
+        }
         if (state==current) status=drained;
     }
     XrXirCallStatus original=instance_drain_state(root);
+    if(original==XR_XIR_CALL_CLOSE_FAILED) {
+        root->driving=false;return original;
+    }
     if (current==root) status=original;
     root->driving=true;
     if(!instance_pipe_owners_close(root,true)) {
