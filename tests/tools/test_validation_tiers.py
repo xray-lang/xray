@@ -159,6 +159,9 @@ class TierTests(unittest.TestCase):
                      "src/os/os_fs.h", "src/base/xwindows_utf8.h",
                      "src/os/os_file_links.h", "src/os/win/file_links_win.c",
                      "src/os/os_file_temp.h", "src/os/win/file_temp_win.c",
+                     "src/os/os_thread_token.h", "src/os/win/thread_token_win.c",
+                     "src/os/unix/thread_token_unix.c", "tests/unit/base/test_thread_token.c",
+                     "tests/unit/base/thread_token.cmake",
                      "src/os/unix/file_temp_unix.c", "tests/unit/base/test_file_temp.c",
                      "tests/unit/base/file_temp.cmake",
                      "src/os/unix/file_links_unix.c", "tests/unit/base/test_file_links.c",
@@ -190,6 +193,8 @@ class TierTests(unittest.TestCase):
                 self.assertIn("test_os_file_links", plan["targets"])
                 self.assertIn("os_file_temp", plan["tests"])
                 self.assertIn("test_os_file_temp", plan["targets"])
+                self.assertIn("os_thread_token", plan["tests"])
+                self.assertIn("test_os_thread_token", plan["targets"])
                 self.assertIn("os_signal", plan["tests"])
                 self.assertIn("test_os_signal", plan["targets"])
                 self.assertNotIn("native-runtime", plan["groups"])

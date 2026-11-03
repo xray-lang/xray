@@ -845,6 +845,11 @@
         "src/os/os_file_mutation.h",
         "src/os/os_file_links.h",
         "src/os/os_file_temp.h",
+        "src/os/os_thread_token.h",
+        "src/os/win/thread_token_win.c",
+        "src/os/unix/thread_token_unix.c",
+        "tests/unit/base/test_thread_token.c",
+        "tests/unit/base/thread_token.cmake",
         "src/os/win/file_temp_win.c",
         "src/os/unix/file_temp_unix.c",
         "tests/unit/base/test_file_temp.c",
@@ -919,6 +924,7 @@
         "os_signal",
         "os_file_links",
         "os_file_temp",
+        "os_thread_token",
         "os_file_links_following_path",
         "os_file_links_mount_point_readlink"
       ],
@@ -930,7 +936,8 @@
         "test_os_file_mutation",
         "test_os_signal",
         "test_os_file_links",
-        "test_os_file_temp"
+        "test_os_file_temp",
+        "test_os_thread_token"
       ]
     }
   },
