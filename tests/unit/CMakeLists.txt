@@ -4382,6 +4382,7 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/xir/task_array_error.cmake")
 include(xir/task_array_admission.cmake)
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/byte_array_value.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/compress_suite.cmake")
 
 add_executable(test_xir_array_capacity_core xir/test_xir_array_capacity_core.c)
 target_include_directories(test_xir_array_capacity_core PRIVATE "${CMAKE_SOURCE_DIR}/src")
