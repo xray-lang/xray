@@ -24,6 +24,7 @@
 #include "os/os_file_metadata.h"
 #include "os/os_file_mutation.h"
 #include "os/os_file_links.h"
+#include "os/os_file_temp.h"
 #if defined(XR_OS_WINDOWS)
 #include <windows.h>
 #ifdef interface
@@ -59,6 +60,9 @@ static XrOsIoStatus host_io_utime(const XrOsIoPolicy *,XrOsPathSpan,bool(*)(void
 static XrOsIoStatus host_links_symlink(const XrOsIoPolicy *,XrOsPathSpan,XrOsPathSpan,bool(*)(void *),bool *);
 static XrOsIoStatus host_links_readlink(const XrOsIoPolicy *,XrOsPathSpan,bool(*)(void *),XrOsFileMetadataOwner *,XrOsFileLinkText *);
 static XrOsIoStatus host_links_realpath(const XrOsIoPolicy *,XrOsPathSpan,bool(*)(void *),XrOsFileMetadataOwner *,XrOsFileLinkText *);
+static XrOsIoStatus host_temp_directory(const XrOsFileTempRequest *,XrOsFileTempOwner *,bool *);
+static XrOsIoStatus host_temp_file(const XrOsFileTempRequest *,XrOsFileTempOwner *,bool *);
+static XrOsIoStatus host_temp_finish(const XrOsIoPolicy *,XrOsFileTempOwner *,bool);
 static unsigned int host_count(void);
 static int host_pin(unsigned int);
 static XrOsIoStatus host_chmod(const XrOsIoPolicy *,const char *,int64_t,bool(*)(void *),bool *);
@@ -71,6 +75,9 @@ static XrOsIoStatus host_chdir(const XrOsIoPolicy *,const char *,bool(*)(void *)
 #define xr_os_io_path_symlink host_links_symlink
 #define xr_os_io_path_readlink host_links_readlink
 #define xr_os_io_path_realpath host_links_realpath
+#define xr_os_io_temp_directory host_temp_directory
+#define xr_os_io_temp_file host_temp_file
+#define xr_os_io_temp_finish host_temp_finish
 #define xr_os_io_file_metadata host_metadata
 #define xr_os_io_file_metadata_close host_metadata_close
 #define xr_os_cpu_count host_count
@@ -105,6 +112,9 @@ static XrOsIoStatus host_chdir(const XrOsIoPolicy *,const char *,bool(*)(void *)
 #undef xr_os_io_path_symlink
 #undef xr_os_io_path_readlink
 #undef xr_os_io_path_realpath
+#undef xr_os_io_temp_directory
+#undef xr_os_io_temp_file
+#undef xr_os_io_temp_finish
 #undef xr_os_io_file_metadata
 #undef xr_os_io_file_metadata_close
 #undef xr_os_cpu_count
@@ -276,6 +286,35 @@ static XrOsIoStatus host_links_query(const XrOsIoPolicy *policy,XrOsPathSpan pat
 }
 static XrOsIoStatus host_links_readlink(const XrOsIoPolicy *p,XrOsPathSpan a,bool(*c)(void *),XrOsFileMetadataOwner *h,XrOsFileLinkText *o){return host_links_query(p,a,c,h,o,false);}
 static XrOsIoStatus host_links_realpath(const XrOsIoPolicy *p,XrOsPathSpan a,bool(*c)(void *),XrOsFileMetadataOwner *h,XrOsFileLinkText *o){return host_links_query(p,a,c,h,o,true);}
+enum { IO_TEMP_NORMAL,IO_TEMP_PREPARE_OOM,IO_TEMP_PREPARE_CANCEL,IO_TEMP_KEEP_FAIL,IO_TEMP_AFTER_KEEP_OOM };
+static unsigned io_temp_mode,io_temp_creates,io_temp_keeps,io_temp_rollbacks,io_temp_rollback_failures;
+static char io_temp_candidate[65536];
+typedef struct HostTempRequest {const XrOsFileTempRequest *actual;} HostTempRequest;
+static bool host_temp_current_proxy(void *context){
+ HostTempRequest *borrow=context;return !borrow->actual->current||borrow->actual->current(borrow->actual->context);
+}
+static XrOsIoStatus host_temp_prepare_proxy(void *context,const char *text,size_t length){
+ HostTempRequest *borrow=context;CHECK(length<sizeof(io_temp_candidate));memcpy(io_temp_candidate,text,length);io_temp_candidate[length]=0;
+ if(io_temp_mode==IO_TEMP_PREPARE_OOM)runtime_fail_at=runtime_attempts;
+ XrOsIoStatus status=borrow->actual->prepare(borrow->actual->context,text,length);runtime_fail_at=SIZE_MAX;
+ if(status==XR_OS_IO_OK&&io_temp_mode==IO_TEMP_PREPARE_CANCEL)
+  CHECK(host_active&&xr_xir_call_request_cancel(host_active->call)==XR_XIR_CALL_CANCEL_REQUESTED);
+ return status;
+}
+static XrOsIoStatus host_temp_create(const XrOsFileTempRequest *request,XrOsFileTempOwner *owner,bool *created,bool directory){
+ ++io_temp_creates;HostTempRequest borrow={request};XrOsFileTempRequest proxy=*request;
+ proxy.context=&borrow;proxy.current=host_temp_current_proxy;proxy.prepare=host_temp_prepare_proxy;
+ return directory?xr_os_io_temp_directory(&proxy,owner,created):xr_os_io_temp_file(&proxy,owner,created);
+}
+static XrOsIoStatus host_temp_directory(const XrOsFileTempRequest *r,XrOsFileTempOwner *o,bool *c){return host_temp_create(r,o,c,true);}
+static XrOsIoStatus host_temp_file(const XrOsFileTempRequest *r,XrOsFileTempOwner *o,bool *c){return host_temp_create(r,o,c,false);}
+static XrOsIoStatus host_temp_finish(const XrOsIoPolicy *policy,XrOsFileTempOwner *owner,bool keep){
+ if(keep){++io_temp_keeps;if(io_temp_mode==IO_TEMP_KEEP_FAIL)return XR_OS_IO_IO;}
+ else {++io_temp_rollbacks;if(io_temp_rollback_failures){--io_temp_rollback_failures;return XR_OS_IO_IO;}}
+ XrOsIoStatus status=xr_os_io_temp_finish(policy,owner,keep);
+ if(keep&&status==XR_OS_IO_OK&&io_temp_mode==IO_TEMP_AFTER_KEEP_OOM)runtime_fail_at=runtime_attempts;
+ return status;
+}
 static unsigned int host_count(void){
  ++count_calls;
  if(host_count_probe)host_count_probe();
