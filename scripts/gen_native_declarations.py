@@ -1231,6 +1231,11 @@ def render_io_callables(declarations):
         ('__chmod', '(path: Path, mode: i64): bool', 'pv', 'io_chmod', 'xrt_io_chmod_value', 'IO_CHMOD'),
         ('__chdir', '(path: Path): bool', 'p', 'io_chdir', 'xrt_io_chdir', 'IO_CHDIR'),
         ('__stat', '(path: Path): __FileStat?', 'p', 'io_stat', '', 'IO_STAT'),
+        ('__mkdir', '(path: Path): bool', 'p', 'io_mkdir', 'xrt_io_mkdir', 'IO_MKDIR'),
+        ('__rmdir', '(path: Path): bool', 'p', 'io_rmdir', 'xrt_io_rmdir', 'IO_RMDIR'),
+        ('__remove', '(path: Path): bool', 'p', 'io_remove', 'xrt_io_remove', 'IO_REMOVE'),
+        ('__rename', '(old: Path, new: Path): bool', 'pp', 'io_rename', 'xrt_io_rename', 'IO_RENAME'),
+        ('__utimeNow', '(path: Path): bool', 'p', 'io_utime_now', 'xrt_io_utime_now', 'IO_UTIME_NOW'),
     )
     lines, rows = [], []
     for ordinal, (name, signature, arguments, vm, aot, identity) in enumerate(contracts, 1):
@@ -1248,10 +1253,14 @@ def render_io_callables(declarations):
             raise ValueError('Filesystem callable differs from its complete source contract: ' + name)
         symbol = 'xr_native_' + identity.lower()
         result, term = ('__FileStat?', 'NULLABLE_FILE_STAT') if stat else ('bool', 'BOOL')
-        lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {',
-            '    {"path", "Path", XR_NATIVE_TERM_PATH, false, false},']
-        if len(arguments) == 2:
-            lines += ['    {"mode", "i64", XR_NATIVE_TERM_I64, false, false},']
+        lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {']
+        if identity == 'IO_RENAME':
+            lines += ['    {"old", "Path", XR_NATIVE_TERM_PATH, false, false},',
+                      '    {"new", "Path", XR_NATIVE_TERM_PATH, false, false},']
+        else:
+            lines += ['    {"path", "Path", XR_NATIVE_TERM_PATH, false, false},']
+            if len(arguments) == 2:
+                lines += ['    {"mode", "i64", XR_NATIVE_TERM_I64, false, false},']
         lines += ['};', 'static const XrNativeMemberDeclaration ' + symbol + ' = {',
             '    ' + str(ordinal) + ', ' + c_string(name) + ', ' + c_string(signature) + ', ' + c_string(result) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
             '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',

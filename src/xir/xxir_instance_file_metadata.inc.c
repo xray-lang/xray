@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_instance_file_metadata.inc.c - Root-owned temporary metadata handles
+ * xxir_instance_file_metadata.inc.c - Root-owned temporary filesystem handles
  *
  * KEY CONCEPT:
  *   A failed OS close retains its real handle without retaining a Call stack.
@@ -16,10 +16,10 @@ struct XirFileMetadataOwner {
     XirFileMetadataOwner *next;
 };
 static void instance_file_metadata_owner_unlink(XrXirInstance *root,XirFileMetadataOwner *owner) {
-    XR_CHECK(!owner->owner.handle,"only a discharged file metadata owner can retire");
+    XR_CHECK(!owner->owner.handle,"only a discharged filesystem owner can retire");
     XirFileMetadataOwner **link=&root->file_metadata_owners;
     while(*link && *link!=owner)link=&(*link)->next;
-    XR_CHECK(*link==owner,"file metadata close requires its root-owned node");
+    XR_CHECK(*link==owner,"filesystem close requires its root-owned node");
     *link=owner->next;xr_xir_domain_metadata_deallocate(root->domain,owner,sizeof(*owner));
 }
 static bool instance_file_metadata_owners_close(XrXirInstance *root) {

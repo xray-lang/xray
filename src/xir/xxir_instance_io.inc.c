@@ -14,41 +14,50 @@
 #include "../shared/xr_utf8_core.h"
 
 static XrXirCallStatus instance_io_permission(XrXirCallView *view,XrXirInstance *instance,
-    uint32_t index,uint32_t *field) {
+    uint32_t index,uint32_t fields[2]) {
     const XrXirModule *module=instance_method_module(instance);
     XrXirValueAdmission *admission=xr_xir_call_admission(view);
     if(!module || !module->types || !module->types->nominals || !module->declarations ||
         index>=module->function_count || !admission || admission->domain!=instance->domain ||
         admission->arena!=view->arena)return XR_XIR_CALL_BAD_STATE;
     const XrXirFunction *function=module->functions+index;
-    if(!function->parameters || !function->parameter_count ||
-        function->parameter_count!=instance->program->entries[index].parameter_count ||
-        function->parameters[0]!=instance->program->entries[index].parameters[0] ||
-        !xir_io_native_id(module->declarations->functions[index].native_callable))return XR_XIR_CALL_BAD_STATE;
-    const XrXirTypeNode *path=xr_xir_type_node(module->types,function->parameters[0]);
-    if(!path || path->kind!=XR_XIR_TYPE_NOMINAL)return XR_XIR_CALL_BAD_STATE;
-    uint64_t work=32u+8u*((uint64_t)module->types->nominals->count+
-        module->declarations->module_count+path->nominal.field_count);
+    const XirIoNativeContract *contract=xir_io_native_contract(module->declarations->functions[index].native_callable);
+    const XrXirCallEntry *entry=instance->program->entries+index;
+    if(!contract || !function->parameters || function->parameter_count!=contract->count ||
+        function->parameter_count!=entry->parameter_count || !entry->parameters || function->result!=entry->result)
+        return XR_XIR_CALL_BAD_STATE;
+    uint64_t work=32u;
+    for(uint32_t p=0;p<contract->paths;++p) {
+        const XrXirTypeNode *path=xr_xir_type_node(module->types,function->parameters[p]);
+        if(!path || path->kind!=XR_XIR_TYPE_NOMINAL || function->parameters[p]!=entry->parameters[p])return XR_XIR_CALL_BAD_STATE;
+        work+=8u*((uint64_t)module->types->nominals->count+module->declarations->module_count+path->nominal.field_count);
+    }
     if(work>admission->work || !xr_xir_domain_work(instance->domain,work))return XR_XIR_CALL_LIMIT;
     admission->work-=work;
-    if(xir_native_callable_verify(module,index)!=XR_XIR_OK ||
-        !xir_io_native_scope(module->declarations,module->types,index,module->function_count,function->parameters[0],field) ||
-        xr_xir_compile_nominal_access(&instance->program->context,module,index,function->parameters[0],*field,
-            XR_XIR_NOMINAL_READ)!=XR_XIR_OK)return XR_XIR_CALL_BAD_STATE;
+    if(xir_native_callable_verify(module,index)!=XR_XIR_OK)return XR_XIR_CALL_BAD_STATE;
+    for(uint32_t p=0;p<contract->paths;++p) {
+        if(!xir_io_native_scope(module->declarations,module->types,index,module->function_count,function->parameters[p],fields+p) ||
+            xr_xir_compile_nominal_access(&instance->program->context,module,index,function->parameters[p],fields[p],
+                XR_XIR_NOMINAL_READ)!=XR_XIR_OK)return XR_XIR_CALL_BAD_STATE;
+        if(!xr_xir_value_argument(view->arguments+p,view->arena,entry->parameters[p]))return XR_XIR_CALL_BAD_ARGUMENT;
+    }
     return XR_XIR_CALL_READY;
 }
+#include "xxir_instance_io_mutation.inc.c"
 
 static XrXirCallStatus instance_io_call(XrXirCallView *view,XrXirInstance *instance,
     uint32_t index,uint32_t id,const XrXirCallEntry *entry,XrXirValue *output) {
-    uint32_t field=0;
-    XrXirCallStatus status=instance_io_permission(view,instance,index,&field);
+    uint32_t fields[2]={0};
+    XrXirCallStatus status=instance_io_permission(view,instance,index,fields);
     if(status!=XR_XIR_CALL_READY)return status;
+    if(id>=XR_NATIVE_CALLABLE_IO_MKDIR && id<=XR_NATIVE_CALLABLE_IO_UTIME_NOW)
+        return instance_io_mutation(view,instance,id,entry,fields,output);
     XrXirValue base={0},text={0};
     /* This borrowed view is never retained or dropped. Its arena and Path
      * ancestor coordinate are recovered from the authenticated actual object. */
     if(!xr_xir_value_from_payload(view->arena,entry->parameters[0],view->arguments[0].payload,&base))
         return XR_XIR_CALL_BAD_ARGUMENT;
-    status=value_call_status(xr_xir_class_get(&base,field,xr_xir_call_admission(view),&text));
+    status=value_call_status(xr_xir_class_get(&base,fields[0],xr_xir_call_admission(view),&text));
     if(status!=XR_XIR_CALL_READY)return status;
     const char *bytes=NULL;size_t length=0;bool changed=false;
     if(!xr_xir_string_view(&text,&bytes,&length))status=XR_XIR_CALL_HOST_ERROR;

@@ -17,9 +17,26 @@
 #include "xxir_file_stat_native.h"
 #include "../shared/xnative_declaration.h"
 
-static inline bool xir_io_native_id(uint32_t id) {
-    return id==XR_NATIVE_CALLABLE_IO_CHMOD || id==XR_NATIVE_CALLABLE_IO_CHDIR || id==XR_NATIVE_CALLABLE_IO_STAT;
+typedef struct XirIoNativeContract {
+    uint32_t id,count,paths;
+    const char *name,*signature;
+} XirIoNativeContract;
+static const XirIoNativeContract xir_io_native_contracts[]={
+    {XR_NATIVE_CALLABLE_IO_CHMOD,2,1,"__chmod","(path: Path, mode: i64): bool"},
+    {XR_NATIVE_CALLABLE_IO_CHDIR,1,1,"__chdir","(path: Path): bool"},
+    {XR_NATIVE_CALLABLE_IO_STAT,1,1,"__stat","(path: Path): __FileStat?"},
+    {XR_NATIVE_CALLABLE_IO_MKDIR,1,1,"__mkdir","(path: Path): bool"},
+    {XR_NATIVE_CALLABLE_IO_RMDIR,1,1,"__rmdir","(path: Path): bool"},
+    {XR_NATIVE_CALLABLE_IO_REMOVE,1,1,"__remove","(path: Path): bool"},
+    {XR_NATIVE_CALLABLE_IO_RENAME,2,2,"__rename","(old: Path, new: Path): bool"},
+    {XR_NATIVE_CALLABLE_IO_UTIME_NOW,1,1,"__utimeNow","(path: Path): bool"}
+};
+static inline const XirIoNativeContract *xir_io_native_contract(uint32_t id) {
+    for(uint32_t n=0;n<sizeof(xir_io_native_contracts)/sizeof(*xir_io_native_contracts);++n)
+        if(xir_io_native_contracts[n].id==id)return xir_io_native_contracts+n;
+    return NULL;
 }
+static inline bool xir_io_native_id(uint32_t id) {return xir_io_native_contract(id)!=NULL;}
 /* This observes a declaration, not a field-read capability. */
 static inline bool xir_io_path_field(const XrXirTypes *types,XrXirType type,uint32_t *output) {
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
@@ -47,28 +64,31 @@ static inline bool xir_io_path_field(const XrXirTypes *types,XrXirType type,uint
 static inline bool xir_io_native_signature(uint32_t id,const XrXirTypes *types,
     const XrXirType *parameters,uint32_t count,XrXirType result,XrXirType error) {
     const XrNativeCallableDeclaration *native=xr_native_callable_by_id(id);
-    bool chmod=id==XR_NATIVE_CALLABLE_IO_CHMOD,stat=id==XR_NATIVE_CALLABLE_IO_STAT;
-    if(!xir_io_native_id(id) || !native || native->owner || native->error_e_type || native->ctfe ||
+    const XirIoNativeContract *contract=xir_io_native_contract(id);
+    bool stat=id==XR_NATIVE_CALLABLE_IO_STAT;
+    if(!contract || !native || native->owner || native->error_e_type || native->ctfe ||
         !native->namespace_id || strcmp(native->namespace_id,"io") || !native->source_path ||
         strcmp(native->source_path,"stdlib/defs/core.def") || !native->member)return false;
     const XrNativeMemberDeclaration *m=native->member;
-    if(!m->name || strcmp(m->name,chmod?"__chmod":stat?"__stat":"__chdir") || !m->signature ||
-        strcmp(m->signature,chmod?"(path: Path, mode: i64): bool":stat?"(path: Path): __FileStat?":"(path: Path): bool") ||
+    if(!m->name || strcmp(m->name,contract->name) || !m->signature ||
+        strcmp(m->signature,contract->signature) ||
         !m->result_text || strcmp(m->result_text,stat?"__FileStat?":"bool") || m->is_public || m->is_static ||
         m->is_method || m->lowered || m->receiver!=XR_NATIVE_RECEIVER_READ ||
         m->operation!=XR_NATIVE_OPERATION_NONE || m->allocation!=XR_NATIVE_ALLOCATION_UNKNOWN ||
         !m->failures || *m->failures || m->ownership!=XR_NATIVE_RESULT_OWNERSHIP_OWNED ||
-        !m->parameters || m->parameter_count!=(chmod?2u:1u) || count!=m->parameter_count ||
+        !m->parameters || m->parameter_count!=contract->count || count!=m->parameter_count ||
         !parameters || (stat?!xir_file_stat_nullable(types,result):result!=XR_XIR_BOOL) || error!=XR_XIR_NEVER ||
         m->result!=(stat?XR_NATIVE_TERM_NULLABLE_FILE_STAT:XR_NATIVE_TERM_BOOL))return false;
     for(uint32_t p=0;p<count;++p) {
-        const XrNativeParameter *parameter=m->parameters+p;
-        if(!parameter->name || strcmp(parameter->name,p?"mode":"path") || !parameter->type_text ||
-            strcmp(parameter->type_text,p?"i64":"Path") || parameter->type!=(p?XR_NATIVE_TERM_I64:XR_NATIVE_TERM_PATH) ||
+        bool path=p<contract->paths;const XrNativeParameter *parameter=m->parameters+p;
+        const char *name=contract->paths==2?(p?"new":"old"):p?"mode":"path";
+        if(!parameter->name || strcmp(parameter->name,name) || !parameter->type_text ||
+            strcmp(parameter->type_text,path?"Path":"i64") || parameter->type!=(path?XR_NATIVE_TERM_PATH:XR_NATIVE_TERM_I64) ||
             parameter->optional || parameter->variadic)return false;
+        uint32_t field=0;
+        if(path?!xir_io_path_field(types,parameters[p],&field):parameters[p]!=XR_XIR_I64)return false;
     }
-    uint32_t field=0;
-    return (!chmod || parameters[1]==XR_XIR_I64) && xir_io_path_field(types,parameters[0],&field);
+    return true;
 }
 static inline bool xir_io_native_scope(const XrXirDeclarations *scope,const XrXirTypes *types,
     uint32_t function,uint32_t count,XrXirType path,uint32_t *field) {
