@@ -69,6 +69,7 @@ static int wait_previous(uint32_t count) {
 static int console_controls(void) {
     DWORD clients[8] = {0};
     CHECK(GetConsoleProcessList(clients, 8) == 1 && clients[0] == GetCurrentProcessId());
+    CHECK(atomic_is_lock_free(&signal_int_slot.word) && atomic_is_lock_free(&previous_hits));
     CHECK(SetConsoleCtrlHandler(previous_handler, TRUE));
     XrOsSignalOwner owner = {0}, competing = {0}; bool installed = true, pending = true;
     fail_console_list = true; injected_error = ERROR_NOT_ENOUGH_MEMORY;
