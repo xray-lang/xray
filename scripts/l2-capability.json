@@ -816,6 +816,7 @@
         "src/xir/xxir_instance_io.inc.c",
         "src/xir/xxir_instance_system.inc.c",
         "src/xir/xxir_os_native.h",
+        "src/xir/xxir_os_system_native.h",
         "src/xir/xxir_sys_native.h",
         "src/xir/xxir_source_io.inc.c",
         "src/xir/xxir_source_os.inc.c",

@@ -140,6 +140,7 @@ class TierTests(unittest.TestCase):
         for path in ("src/os/win/fs_mutation_win.c", "src/os/unix/fs_mutation_unix.c",
                      "src/os/os_system.h", "src/os/win/system_win.c", "src/os/unix/system_unix.c",
                      "src/xir/xxir_instance_system.inc.c", "tests/unit/base/test_system_queries.c",
+                     "src/xir/xxir_os_system_native.h",
                      "src/os/os_fs.h", "src/base/xwindows_utf8.h",
                      "src/xir/xxir_instance_io.inc.c", "src/xir/xxir_source_io.inc.c",
                      "src/xir/xxir_path_prelude.h", "src/xir/xxir_native_callable.h",
