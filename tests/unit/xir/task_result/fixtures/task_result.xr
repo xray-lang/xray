@@ -46,11 +46,11 @@ export fn nestedResult() -> TaskResult<TaskResult<null,Never>,Never> {
 export fn resultArray() -> Array<TaskResult<null,Never>> {
     return [returnedResult()]
 }
-export fn runtimeProbe() throws(Cancelled) -> i64 {
+export fn runtimeProbe() -> i64 {
     var task = go scalar42()
     const before = task.poll()
     const wrapped = task.awaitResult()
-    return try await task
+    return await task
 }
 const success = successResult()
 const error = errorResult()
@@ -104,8 +104,7 @@ export fn fatalResult() -> TaskResult<i64,Never> {
 export fn ownAwaitResult() -> TaskResult<i64,Never> {
     var task = go spinning()
     defer { print("parent-cleanup"); task.cancel() }
-    try { return task.awaitResult() }
-    catch (error: Cancelled) { print("caught-own"); return TaskResult<i64,Never>.Cancelled }
+    return task.awaitResult()
 }
 
 export fn replacedGraph() -> Error? {

@@ -1,2 +1,2 @@
 --> 2:28
-try expressions are not yet supported by the compiler
+E0336: redundant try has no potentially throwing operation

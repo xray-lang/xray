@@ -5,10 +5,10 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_channel_select_internal.h - Owned buffered receive selection
+ * xxir_channel_select_internal.h - Owned buffered send and receive selection
  *
  * KEY CONCEPT:
- *   Every candidate is observed together, but only one prepared receive can
+ *   Every candidate is observed together, but only one prepared operation can
  *   commit. A parked owner retains values and notifications, never a frame.
  */
 #ifndef XXIR_CHANNEL_SELECT_INTERNAL_H
@@ -33,16 +33,18 @@ typedef enum XrXirChannelSelectState {
 typedef enum XrXirChannelSelectKind {
     XR_XIR_CHANNEL_SELECT_RECEIVE,
     XR_XIR_CHANNEL_SELECT_DEFAULT,
-    XR_XIR_CHANNEL_SELECT_TIMEOUT
+    XR_XIR_CHANNEL_SELECT_TIMEOUT,
+    XR_XIR_CHANNEL_SELECT_SEND,
+    XR_XIR_CHANNEL_SELECT_SEND_CLOSED
 } XrXirChannelSelectKind;
 typedef struct XrXirChannelSelectDeadline {
     uint64_t start_ns,last_ns,duration_ns;
     bool enabled;
 } XrXirChannelSelectDeadline;
 
-/* Copies all Channel handles. Only buffered receive arms are accepted.
- * Closed empty Channels are not receive-ready. Default plus timeout, send
- * arms and zero-capacity rendezvous have no contract in this interface.
+/* Copies all receive handles and owned (Channel, payload) send pairs.
+ * Closed empty Channels are not receive-ready; closed sends are ready panics.
+ * Default plus timeout and open zero-capacity rendezvous are not admitted here.
  * Positive deadlines use an already validated, positive monotonic sample;
  * the caller owns the clock provider and reports its failures separately. */
 XR_FUNC XrXirValueStatus xr_xir_channel_select_begin(const XrXirChannelSelectRequest *request,

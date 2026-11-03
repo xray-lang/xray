@@ -29,7 +29,6 @@ static bool source_select_prepare(SourceContext *ctx,AstNode *node,SourceSelectP
         if(!arm_node||arm_node->type!=AST_SELECT_CASE)
             return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"select arm has no syntax owner");
         SelectCaseNode *arm=&arm_node->as.select_case;
-        if(arm->is_send)return source_fail(ctx,arm_node,XR_XIR_UNSUPPORTED,"select send arms are not yet admitted");
         if(!arm->body||arm->body->type!=AST_BLOCK||
             (arm->is_default&&arm->is_timeout))
             return source_fail(ctx,arm_node,XR_XIR_BAD_STRUCTURE,"select arm requires a real block");
@@ -38,8 +37,8 @@ static bool source_select_prepare(SourceContext *ctx,AstNode *node,SourceSelectP
                 return source_fail(ctx,arm_node,XR_XIR_BAD_STRUCTURE,"select requires at most one exact fallback");
             plan->mode=arm->is_timeout?2u:1u;
         } else {
-            if(!arm->channel||!arm->var_name||arm->value)
-                return source_fail(ctx,arm_node,XR_XIR_BAD_STRUCTURE,"select receive requires its channel and binding");
+            if(!arm->channel||(arm->is_send ? (!arm->value||arm->var_name) : (!arm->var_name||arm->value)))
+                return source_fail(ctx,arm_node,XR_XIR_BAD_STRUCTURE,"select arm requires its channel and exact payload syntax");
             ++plan->channels;
         }
         plan->arms[a].node=arm_node;
@@ -65,8 +64,18 @@ static bool source_select_prepare(SourceContext *ctx,AstNode *node,SourceSelectP
             if(!expression(ctx,arm->channel,value))return false;
             if(!xr_xir_type_is_channel(&ctx->types,value->type))
                 return source_fail(ctx,arm->channel,XR_XIR_BAD_TYPE,"select receive requires an actual Channel value");
-            XrXirType nullable;
-            if(!source_nullable_type(ctx,xr_xir_channel_element(&ctx->types,value->type),&nullable))return false;
+            XrXirType element=xr_xir_channel_element(&ctx->types,value->type),nullable;
+            if(!source_nullable_type(ctx,element,&nullable))return false;
+            if(arm->is_send) {
+                SourceValue payload[2]={*value};XrXirType pair;
+                XrXirCallableParameter *members=source_alloc(ctx,2,sizeof(*members));
+                if(!members)return false;
+                members[0]=(XrXirCallableParameter){value->type,XR_PARAM_READ};
+                members[1]=(XrXirCallableParameter){element,XR_PARAM_READ};
+                if(!source_plan_expression(ctx,arm->value,(SourceExpectedType){true,element,false,false},payload+1)||
+                    !source_hir_tuple_type(ctx,members,2,&pair)||
+                    !source_tuple_construct(ctx,plan->arms[a].node,pair,payload,2,NULL,value))return false;
+            }
             fields[channel+1]=(XrXirCallableParameter){nullable,XR_PARAM_READ};
             plan->arms[a].tag=channel++;
         }
@@ -79,7 +88,7 @@ static bool source_select_arm(SourceContext *ctx,const SourceSelectArm *planned,
     SourceName *saved=ctx->locals,*saved_scope=ctx->scope;XrHirBodyScope typed={0};
     if(!source_hir_scope_enter(ctx,node,&typed))return false;
     ctx->scope=saved;bool ok=true;
-    if(!arm->is_default&&!arm->is_timeout) {
+    if(!arm->is_default&&!arm->is_timeout&&!arm->is_send) {
         SourceValue nullable={0},value={0};
         ok=source_tuple_projection(ctx,node,result,planned->tag+1,&nullable)&&
             source_unwrap_value(ctx,node,nullable,&value);

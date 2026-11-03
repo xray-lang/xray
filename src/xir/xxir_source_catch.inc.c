@@ -332,7 +332,10 @@ static bool source_try(SourceContext *ctx, AstNode *node) {
     if (!local) return false;
     *local=(SourceLocalHandler){body->local_handler,types,complete,(uint32_t)attempt->catch_count};
     body->local_handler=local;
+    SourceTryRegion *region=ordinary ? source_try_region_begin(ctx,node) : NULL;
+    if(ordinary&&!region)return false;
     bool ok = scoped_statement(ctx,attempt->try_body);
+    if(region)body->active_try=region->parent;
     body->local_handler=local->previous;
     body->error_context = outer;
     if (!ok) return false;

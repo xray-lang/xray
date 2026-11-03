@@ -196,18 +196,15 @@ static bool source_task_expression(SourceContext *ctx, AstNode *node, SourceExpe
     SourceExpressionPlan *plan = source_plan_collect(ctx, node, expected);
     return plan && source_task_result_hint(ctx, plan, task_context, 0) && source_plan_complete(ctx, plan, value);
 }
-static bool source_task_await_value(SourceContext *ctx, AstNode *node, SourceValue task, SourceValue *value) {
+static bool source_task_await_emit(SourceContext *ctx, AstNode *node, SourceValue task, SourceValue *value,bool marked) {
     const XrXirTypeNode *type = xr_xir_type_node(&ctx->types, task.type);
     if (!type || type->kind != XR_XIR_TYPE_TASK)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "await requires an admitted Task value");
     XrXirType element = type->element,declared_error=type->result;
     if (type->result==XR_XIR_UNIT)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Task error declaration is not yet supported");
-    XrXirType cancelled=xr_xir_cancelled_error_type(&ctx->types),error_type=XR_XIR_UNIT;
-    if (cancelled==XR_XIR_UNIT) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"await requires the governed Cancelled declaration");
-    XrXirCallableParameter errors[2]={{declared_error,0},{cancelled,0}};
-    if (!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,.parameters=errors,.parameter_count=2},&error_type) ||
-        !source_local_error(ctx,node,error_type,true)) return false;
+    if (!source_local_accept(ctx,node,declared_error,marked,ctx->bodies[ctx->function].local_handler,
+        ctx->bodies[ctx->function].error_context && ctx->bodies[ctx->function].error_context->asserted)) return false;
     SourceFunction *body = &ctx->bodies[ctx->function];
     if (!body->block_count && !begin_block(ctx)) return false;
     uint32_t origin = body->count, error = body->block_count;
@@ -226,6 +223,9 @@ static bool source_task_await_value(SourceContext *ctx, AstNode *node, SourceVal
     if (element == XR_XIR_UNIT) { *value = (SourceValue){.id=UINT32_MAX, .type=XR_XIR_UNIT,.place={0}}; return true; }
     return source_recipe_append(ctx,
         (XrXirInstruction) {XR_XIR_INVOKE_RESULT, element, {0}, {0}, origin, {0}}, value);
+}
+static bool source_task_await_value(SourceContext *ctx,AstNode *node,SourceValue task,SourceValue *value) {
+    return source_task_await_emit(ctx,node,task,value,source_local_marked(ctx));
 }
 static bool source_task_await(SourceContext *ctx, AstNode *node, SourceExpectedType context, SourceValue *value) {
     AwaitExprNode *await = &node->as.await_expr;

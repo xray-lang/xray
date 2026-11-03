@@ -135,7 +135,7 @@ static int host_terminal(XrXirCallStatus status, const XrXirCallResult *result) 
     if (status == XR_XIR_CALL_HOST_ERROR)
         return host_failure("XR_RUN_6007: a host clock or timer service failed\n", 1);
     if (status == XR_XIR_CALL_CANCELLED)
-        return host_failure("XR_RUN_6002: canonical execution was cancelled\n", 1);
+        return host_failure("[Uncaught Cancellation]\n", 1);
     return host_failure("XR_RUN_6002: canonical execution returned an invalid or unavailable outcome\n", 4);
 }
 

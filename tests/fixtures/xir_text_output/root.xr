@@ -49,6 +49,7 @@ export fn caught()->i64 {
     }
     return i64(destination)+count
 }
+fn possibleRune() throws(Fault)->i64 { return i64(rune(-1)) }
 export fn ordinary()->i64 {
-    try { return i64(rune(-1)) } catch(e:Fault) { return 0 }
+    try { return possibleRune() } catch(e:Fault) { return 0 }
 }

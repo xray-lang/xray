@@ -10,4 +10,4 @@ print(try! (step(true)+step(true)))
 try {print(try! (step(false)+step(true)))}
 catch panic(p) {print(p.code,p.message)}
 print(calls)
-try {print(try! divide(0))} catch panic(p) {print(p.code)}
+try {print(divide(0))} catch panic(p) {print(p.code)}

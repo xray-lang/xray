@@ -10,6 +10,8 @@
  *   The input Array owns real Tasks. A closed native signature creates an
  *   aggregate handle; the existing await path owns its error continuation.
  */
+static bool source_task_timeout_call(SourceContext *ctx,AstNode *node,
+    const XrNativeMemberDeclaration *member,SourceValue *output);
 static bool source_task_aggregate_receiver(SourceContext *ctx,AstNode *callee) {
     AstNode *object=callee->as.member_access.object;
     if(!object||object->type!=AST_VARIABLE||source_native_type_shadowed(ctx,object->as.variable.name))return false;
@@ -41,6 +43,7 @@ static bool source_task_aggregate_reference(SourceContext *ctx,AstNode *node,
     }
     if(!declaration) {
         XrXirType element=(XrXirType)XR_XIR_TYPE_PARAMETER_BASE,error=(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+1);
+        bool timeout=member->operation==XR_NATIVE_OPERATION_TASK_TIMEOUT;
         XrXirType task,array,result=element;
         if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_TASK,.element=element,.result=error},&task)||
             !source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=task},&array)||
@@ -48,16 +51,17 @@ static bool source_task_aggregate_reference(SourceContext *ctx,AstNode *node,
                 !source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=element},&result)))return false;
         SourceName symbol={0};symbol.name=source_owned_text(ctx,member->name);
         const char *signature=source_owned_text(ctx,member->signature);
-        XrXirSourceType *parameter=source_alloc(ctx,1,sizeof(*parameter));
+        XrXirSourceType *parameter=source_alloc(ctx,timeout?2:1,sizeof(*parameter));
         if(!symbol.name||!signature||!parameter)return false;
-        *parameter=(XrXirSourceType){array,ctx->task_declaration,true};
+        *parameter=(XrXirSourceType){timeout?task:array,ctx->task_declaration,true};
+        if(timeout)parameter[1]=(XrXirSourceType){XR_XIR_I64,0,true};
         if(!source_query_declare(ctx,&symbol,XR_XIR_SOURCE_MEMBER,ctx->task_declaration,
             (XrXirSourceRange){ctx->task_module,(int)member->line,(int)member->column,
                 (int)member->line,(int)(member->column+source_text_size(ctx,member->name))}))return false;
         declaration=symbol.declaration;
         XrXirSourceDeclaration *row=(XrXirSourceDeclaration *)&ctx->query.declarations[declaration-1];
         row->native_identity=member->id;row->signature=signature;row->exported=true;
-        row->type=(XrXirSourceType){result,ctx->task_declaration,true};row->parameters=parameter;row->parameter_count=1;
+        row->type=(XrXirSourceType){result,ctx->task_declaration,true};row->parameters=parameter;row->parameter_count=timeout?2:1;
         row->generic_parent=ctx->task_declaration;row->generic_parent_count=2;
     }
     return source_query_target_token_reference(ctx,node->as.member_access.object,ctx->task_declaration,XR_XIR_SOURCE_READ)&&
@@ -97,6 +101,8 @@ static bool source_task_aggregate_call(SourceContext *ctx,AstNode *node,SourceVa
     if(!source_native_task_declaration(ctx))return false;
     const XrNativeTypeDeclaration *native=xr_native_declaration_by_id(XR_NATIVE_DECLARATION_TASK);
     const XrNativeMemberDeclaration *member=source_native_member(ctx,native,call->callee->as.member_access.name);
+    if(member&&member->operation==XR_NATIVE_OPERATION_TASK_TIMEOUT)
+        return source_task_timeout_call(ctx,node,member,output);
     if(!member||!member->is_public||!member->is_static||!member->is_method||!member->lowered||
         member->receiver!=XR_NATIVE_RECEIVER_READ||member->parameter_count!=1||!member->parameters||
         member->parameters[0].type!=XR_NATIVE_TERM_ARRAY_TASK||member->parameters[0].optional||

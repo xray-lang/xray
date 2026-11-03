@@ -10,6 +10,7 @@
  *   The Call owns the parked frontier. Provider calls and tuple allocation
  *   precede the winner commit; publication after that commit cannot fail.
  */
+#include "xxir_channel_select_arm.h"
 static XrXirCallStatus call_select_clock(XrXirCall *call,bool needed,uint64_t *now) {
     *now=0;if(!needed)return XR_XIR_CALL_READY;
     XrXirCallStatus status=channel_timing_clock(call,now);
@@ -46,9 +47,10 @@ static XrXirCallStatus call_select_shape(XrXirValueAdmission *admission,
         const XrXirValue *channel=request->channels+a;
         XrXirType type=(XrXirType)channel->type;
         const XrXirTypeNode *field=xr_xir_type_node(types,tuple->parameters[a+1].type);
-        if(output==channel||!xr_xir_type_is_channel(types,type)||
+        bool sending=false;XrXirType receiver=xir_channel_select_operand_type(types,type,&sending);
+        if(output==channel||receiver==XR_XIR_UNIT||
             !xr_xir_value_argument(channel,admission->arena,type)||!field||
-            field->kind!=XR_XIR_TYPE_NULLABLE||field->element!=xr_xir_channel_element(types,type)||
+            field->kind!=XR_XIR_TYPE_NULLABLE||field->element!=xr_xir_channel_element(types,receiver)||
             tuple->parameters[a+1].mode!=XR_PARAM_READ)return XR_XIR_CALL_BAD_ARGUMENT;
     }
     return XR_XIR_CALL_READY;
@@ -60,13 +62,14 @@ static XrXirCallStatus call_select_result(XrXirCall *call,XrXirChannelSelectKind
     if(!tuple||tuple->kind!=XR_XIR_TYPE_TUPLE||!tuple->parameters||!tuple->parameter_count)
         return XR_XIR_CALL_BAD_STATE;
     uint32_t count=tuple->parameter_count;
-    if(kind==XR_XIR_CHANNEL_SELECT_RECEIVE&&arm>=count-1)return XR_XIR_CALL_BAD_STATE;
+    if((kind==XR_XIR_CHANNEL_SELECT_RECEIVE||kind==XR_XIR_CHANNEL_SELECT_SEND)&&arm>=count-1)return XR_XIR_CALL_BAD_STATE;
     XrXirValueStatus value=XR_XIR_VALUE_OK;
     uint64_t bytes=(uint64_t)count*sizeof(XrXirValue);
     XrXirValue *fields=xr_xir_domain_metadata_allocate(admission->domain,bytes,&value);
     if(!fields)return channel_call_value_status(value);
     memset(fields,0,(size_t)bytes);
-    fields[0]=(XrXirValue){XR_XIR_I64,0,kind==XR_XIR_CHANNEL_SELECT_RECEIVE?arm:count-1};
+    fields[0]=(XrXirValue){XR_XIR_I64,0,
+        kind==XR_XIR_CHANNEL_SELECT_RECEIVE||kind==XR_XIR_CHANNEL_SELECT_SEND?arm:count-1};
     for(uint32_t a=1;value==XR_XIR_VALUE_OK&&a<count;++a)
         value=xr_xir_nullable_new(tuple->parameters[a].type,
             kind==XR_XIR_CHANNEL_SELECT_RECEIVE&&a==arm+1?payload:NULL,admission,&fields[a]);
@@ -122,7 +125,8 @@ XR_FUNC XrXirCallStatus xr_xir_call_select_step(XrXirCallView *view,
         !xr_xir_channel_select_candidate(call->channel_select,&kind,&arm,&payload)) {
         status=XR_XIR_CALL_BAD_STATE;goto failed;
     }
-    XrXirValue prepared={0};status=call_select_result(call,kind,arm,payload,&prepared);
+    XrXirValue prepared={0};status=kind==XR_XIR_CHANNEL_SELECT_SEND_CLOSED ? XR_XIR_CALL_READY :
+        call_select_result(call,kind,arm,payload,&prepared);
     if(status==XR_XIR_CALL_READY)status=call_select_clock(call,request->has_timeout,&now);
     if(status==XR_XIR_CALL_READY)status=xr_xir_call_execution_status(view);
     if(status==XR_XIR_CALL_READY)
@@ -134,7 +138,7 @@ XR_FUNC XrXirCallStatus xr_xir_call_select_step(XrXirCallView *view,
         xr_xir_channel_select_take(call->channel_select,&committed,&selected,&consumed)&&
         committed==kind&&selected==arm,"one committed winner matches the prepared typed tuple");
     xr_xir_value_drop(&consumed);release_channel_wait(call);*state=(XrXirChannelSelectCallState){0};
-    *output=prepared;return XR_XIR_CALL_READY;
+    *output=prepared;return kind==XR_XIR_CHANNEL_SELECT_SEND_CLOSED ? XR_XIR_CALL_RUNTIME_PANIC : XR_XIR_CALL_READY;
 failed:
     release_channel_wait(call);*state=(XrXirChannelSelectCallState){0};return status;
 }

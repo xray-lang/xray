@@ -125,6 +125,8 @@ XR_FUNC XrXirCallStatus xr_xir_call_discard_inbox(XrXirCallView *view, XrXirType
  * The backend records registration after preparation and retirement only
  * after the cleanup returned; this records an obligation, not its execution. */
 XR_FUNC XrXirCallStatus xr_xir_call_cleanup_frontier(XrXirCallView *view, uint32_t frontier);
+/* Nonzero only while an owned scope absorbs its own sibling cancellation. */
+XR_FUNC uint32_t xr_xir_call_scope_cancel_frontier(XrXirCallView *view);
 /* Internal authority exists only within an active cleanup callback or value admission. */
 XR_FUNC bool xr_xir_call_cleanup_active(const XrXirCall *activation);
 typedef XrXirAction (*XrXirResumeEntry)(XrXirCallView *view);

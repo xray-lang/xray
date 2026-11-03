@@ -91,14 +91,14 @@ static void ordinary(const char *stdlib,const char *path) {
     XrSourceResult *owned=NULL;CHECK(xray_source_result_copy(first,&owned)==XR_SOURCE_OK && owned);
     xray_source_result_free(first);output.length=0;
     XrSourceResult *cancelled=execute(instance,"cancelledError");
-    CHECK(xray_source_result_event(cancelled,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_THROWN);
+    CHECK(xray_source_result_event(cancelled,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_CANCELLED);
     CHECK(output.length==14 && !memcmp(output.bytes,"child-cleanup\n",14));output.length=0;
     XrSourceResult *error=execute(instance,"awaitOne");
     CHECK(xray_source_result_event(error,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_THROWN);
     CHECK(xray_source_instance_drop(&instance,NULL)==XR_SOURCE_OK && !instance);
     const char expected[]="owned \303\251\0\347\225\214";const char *bytes=NULL;size_t length=0;
     CHECK(xray_source_result_bytes(owned,&bytes,&length)==XR_SOURCE_OK && length==sizeof(expected)-1 && !memcmp(bytes,expected,length));
-    CHECK(xray_source_result_format(cancelled,collect,&output)==XR_SOURCE_OK && contains(&output,"Cancelled.Cancelled"));
+    CHECK(xray_source_result_event(cancelled,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_CANCELLED);
     output.length=0;
     CHECK(xray_source_result_format(error,collect,&output)==XR_SOURCE_OK && contains(&output,"A.Bad") && contains(&output,"owned"));
     xray_source_result_free(owned);xray_source_result_free(cancelled);xray_source_result_free(error);

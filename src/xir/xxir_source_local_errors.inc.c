@@ -77,6 +77,17 @@ static bool source_local_marked(SourceContext *ctx) {
             plan->syntax->as.try_expr.mode==XR_TRY_OPTIONAL)) return true;
     return false;
 }
+static SourceTryRegion *source_try_region_begin(SourceContext *ctx,AstNode *node) {
+    SourceFunction *body=&ctx->bodies[ctx->function];
+    SourceTryRegion *region=source_alloc(ctx,1,sizeof(*region));
+    if (!region) return NULL;
+    *region=(SourceTryRegion){body->active_try,body->try_regions,node,false};
+    body->active_try=body->try_regions=region;return region;
+}
+static void source_try_region_error(SourceTryRegion *region,XrXirType error) {
+    if (error==XR_XIR_NEVER || error==XR_XIR_UNIT) return;
+    for (;region;region=region->parent) region->throwing=true;
+}
 static bool source_local_escape_until(SourceContext *ctx,AstNode *node,XrXirType error,
     SourceLocalHandler *handlers,SourceLocalHandler *stop,bool asserted,XrXirType *output) {
     if (error==XR_XIR_UNIT) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"call has no declared error type");
@@ -106,6 +117,7 @@ static bool source_local_escape(SourceContext *ctx,AstNode *node,XrXirType error
 }
 static bool source_local_accept(SourceContext *ctx, AstNode *node, XrXirType error,
     bool marked, SourceLocalHandler *handlers, bool asserted) {
+    source_try_region_error(ctx->bodies[ctx->function].active_try,error);
     if (error!=XR_XIR_NEVER && error!=XR_XIR_UNIT && !marked)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"E0330: throwing call requires try or a try body");
     for(SourceTaskScope *scope=ctx->task_scope;scope;scope=scope->parent) if(scope->function==ctx->function) {
@@ -259,7 +271,7 @@ static bool source_local_call(SourceContext *ctx,const XrXirInstruction *op) {
                  ctx->bodies[target].node && ctx->bodies[target].node->type==AST_FIELD_DECL);
             *site=(SourcePendingError){body->pending_errors,body->local_handler,node,target,
                 op->type_arguments[0],op->type_arguments[1],generated || source_local_marked(ctx),
-                body->error_context && body->error_context->asserted};
+                body->error_context && body->error_context->asserted,body->active_try};
             body->pending_errors=site;return true;
         }
         if (!source_local_declared_error(ctx,target,op->type_arguments[0],op->type_arguments[1],&error)) return false;
@@ -368,13 +380,20 @@ static bool source_local_errors_finish(SourceContext *ctx) {
         if (!source_request_poll(ctx,ctx->bodies[f].node) || !source_initialization_require(ctx,f)) goto done;
     }
     for (uint32_t f=0;f<ctx->function_count;++f) {
-        if (ctx->bodies[f].infer_initializer) continue;
         ctx->function=f;ctx->module=ctx->bodies[f].module;
         for (SourcePendingError *site=ctx->bodies[f].pending_errors;site;site=site->next) {
             XrXirType error;
             if (!source_request_poll(ctx,site->node) ||
-                !source_local_declared_error(ctx,site->target,site->first_argument,site->argument_count,&error) ||
+                !source_local_declared_error(ctx,site->target,site->first_argument,site->argument_count,&error)) goto done;
+            source_try_region_error(site->try_region,error);
+            if (!ctx->bodies[f].infer_initializer &&
                 !source_local_accept(ctx,site->node,error,site->marked,site->handler,site->asserted)) goto done;
+        }
+        for (SourceTryRegion *region=ctx->bodies[f].try_regions;region;region=region->next) {
+            if (!source_request_poll(ctx,region->node)) goto done;
+            if (!region->throwing) {
+                source_fail(ctx,region->node,XR_XIR_BAD_TYPE,"E0336: redundant try has no potentially throwing operation");goto done;
+            }
         }
     }
     XrXirDeclarations declarations;XrXirModule module=source_module_view(ctx,&declarations);

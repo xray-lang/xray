@@ -24,7 +24,7 @@ export fn arrayMutation()->i64{var callbacks=[plain];callbacks.push(other);retur
 export fn nullableFixed()->i64{const maybe:(fn()->i64)?=plain;return maybe!()}
 export fn nullablePrecise()->i64{const f=plain;const box:(fn()->i64)?=f;return f()}
 export fn moduleRead()->i64{return moduleCallback()}
-export fn pureCycle()->i64{const f=pureCycle;try{return f()}catch(e){return 0}}
-export fn rootCycle()->i64{const f=rootCycle;try{return state+f()}catch(e){return state}}
+export fn pureCycle()->i64{const f=pureCycle;return f()}
+export fn rootCycle()->i64{const f=rootCycle;return state+f()}
 export fn mixed(f:fn()->i64)->i64{const callback=rootLeaf;return f()+callback()}
 fn main()->i64{return 0}

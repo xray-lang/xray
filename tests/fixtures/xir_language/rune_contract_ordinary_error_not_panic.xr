@@ -1,6 +1,7 @@
 enum Fault { Bad }
+fn possible() throws(Fault) -> rune { return rune(-1) }
 fn main() {
-    try { print(rune(-1)) } catch(e:Fault) { print("wrong") }
+    try { print(possible()) } catch(e:Fault) { print("wrong") }
 }
 
 main()

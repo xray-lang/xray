@@ -140,13 +140,9 @@ static XrXirStatus local_error_call(LocalErrorCfg *cfg,const XrXirInstruction *o
     } else if (op->op==XR_XIR_TASK_AWAIT) {
         if (op->args[0]>=cfg->values) return XR_XIR_BAD_STRUCTURE;
         const XrXirTypeNode *task=xr_xir_type_node(&cfg->terms.types,cfg->types[op->args[0]]);
-        XrXirType cancelled=xr_xir_cancelled_error_type(&cfg->terms.types);
-        if (!task || task->kind!=XR_XIR_TYPE_TASK || task->result==XR_XIR_UNIT || cancelled==XR_XIR_UNIT)
+        if (!task || task->kind!=XR_XIR_TYPE_TASK || task->result==XR_XIR_UNIT)
             return XR_XIR_BAD_TYPE;
-        XrXirCallableParameter errors[2]={{task->result,0},{cancelled,0}};
-        *output=effect_term_intern(&cfg->terms,(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,
-            .parameters=errors,.parameter_count=2});
-        return cfg->terms.status;
+        *output=task->result;return XR_XIR_OK;
     }
     else if (op->op==XR_XIR_ITERATOR_HAS_NEXT || op->op==XR_XIR_ITERATOR_NEXT || op->op==XR_XIR_ITERATOR_NTH) {
         if (op->args[0]>=cfg->values) return XR_XIR_BAD_STRUCTURE;

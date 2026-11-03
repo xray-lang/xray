@@ -45,6 +45,8 @@ static void task_aggregate_complete(XirTaskGroup *group) {
         task_core_record_shutdown(group->executor,&result);
     }
     if(group->winner)task_group_cancel_members(group);
+    if(result.status==XR_XIR_CALL_CANCELLED&&group->winner)
+        group->completion->cancel_scope=group->winner->task->cancel_scope;
     task_group_publish(group,&result);
 }
 static XrXirCallStatus task_aggregate_shape(XrXirTaskExecutor *executor,const XrXirValue *array,

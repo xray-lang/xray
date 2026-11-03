@@ -102,6 +102,8 @@ static bool source_task_scope(SourceContext *ctx,AstNode *node,bool marked) {
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"scope requires a real lexical block and supported mode");
     SourceScopeScan scan={ctx,0,0};if(!source_scope_member(scope->body,&scan))return false;
     if(!scan.count)return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"scope has no direct go member; use an ordinary block");
+    SourceTryRegion *region=marked ? source_try_region_begin(ctx,node) : NULL;
+    if(marked&&!region)return false;
     uint32_t frontier=body->frontier;
     SourceTaskScope group={.parent=ctx->task_scope,.function=ctx->function,.handler=body->local_handler,
         .body_error=XR_XIR_NEVER,.child_error=XR_XIR_NEVER,.mode=scope->scope_mode,.error_context=body->error_context};
@@ -131,5 +133,6 @@ static bool source_task_scope(SourceContext *ctx,AstNode *node,bool marked) {
             source_recipe_append(ctx,(XrXirInstruction){XR_XIR_CLEANUP_LEAVE,XR_XIR_UNIT,{0},{body->block_count},frontier,{0}},NULL);
         body->frontier=frontier;if(ok)ok=begin_block(ctx);
     } else body->frontier=frontier;
+    if(region)body->active_try=region->parent;
     return ok;
 }

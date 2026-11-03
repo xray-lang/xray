@@ -213,5 +213,6 @@ static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceEx
             "comptime result receiving failed");
     } else site->value=matched->value;
     ++ctx->comptime_matched;
+    source_try_region_error(ctx->bodies[owner].active_try,ctx->functions[helper].error_type);
     return source_comptime_constant(ctx,node,&site->value,ctx->functions[helper].result,value);
 }
