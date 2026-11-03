@@ -64,12 +64,16 @@ static XrOsIoStatus metadata_follow(const wchar_t *wide, bool (*current)(void *)
     if (status == XR_OS_IO_OK && result->present) {
         if (!GetFileInformationByHandle((HANDLE)owner->handle, &data)) status = io_windows_status(GetLastError());
         else {
+            SetLastError(ERROR_SUCCESS);
+            DWORD file_type = GetFileType((HANDLE)owner->handle);
+            DWORD type_error = file_type == FILE_TYPE_UNKNOWN ? GetLastError() : ERROR_SUCCESS;
             uint64_t size = ((uint64_t)data.nFileSizeHigh << 32) | data.nFileSizeLow;
-            if (size > INT64_MAX) status = XR_OS_IO_OVERFLOW;
+            if (type_error != ERROR_SUCCESS) status = io_windows_status(type_error);
+            else if (size > INT64_MAX) status = XR_OS_IO_OVERFLOW;
             else {
                 result->size = (int64_t)size;
                 result->is_dir = (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-                result->is_file = !result->is_dir && GetFileType((HANDLE)owner->handle) == FILE_TYPE_DISK;
+                result->is_file = !result->is_dir && file_type == FILE_TYPE_DISK;
                 result->mode = _S_IREAD | ((data.dwFileAttributes & FILE_ATTRIBUTE_READONLY) ? 0 : _S_IWRITE);
                 if (result->is_dir || metadata_executable_name(wide)) result->mode |= _S_IEXEC;
                 result->mode &= 0777;
