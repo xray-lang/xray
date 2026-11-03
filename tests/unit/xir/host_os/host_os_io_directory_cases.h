@@ -89,16 +89,19 @@ static void host_directory_authority(const XrXirCompileContext *context,XrXirPro
  XrXirInstance *first=host_instance(program,ids[0]);host_active=first;XrXirValue token=host_directory_open_path(first,ids,path);
  XrXirInstance *second=host_instance(program,ids[0]);host_active=second;XrXirValue other=host_directory_open_path(second,ids,path);
  CHECK(other.payload!=token.payload);unsigned next=directory_calls[1];
+ host_io_phase="directory foreign root";
  host_io_failure(second,ids[3],&token,1,XR_XIR_CALL_BAD_ARGUMENT);CHECK(directory_calls[1]==next);
  xr_xir_value_drop(&other);CHECK(xr_xir_instance_free(second)==XR_XIR_CALL_BAD_ARGUMENT);host_active=first;
  XrXirProgram *replica=host_directory_replica(context,program);uint64_t generation=0;
  CHECK(replica!=program&&xr_xir_instance_generation_prepare(first,replica,&generation)==XR_XIR_CALL_READY&&generation);
  XrXirValue initialized=host_invoke(first,ids[0],NULL,0);CHECK(initialized.type==XR_XIR_I64&&!initialized.payload);xr_xir_value_drop(&initialized);
+ host_io_phase="directory candidate generation";
  host_io_failure(first,ids[3],&token,1,XR_XIR_CALL_BAD_ARGUMENT);CHECK(directory_calls[1]==next);
  CHECK(xr_xir_instance_generation_abort(first,generation)==XR_XIR_CALL_BAD_ARGUMENT);xr_xir_compile_program_drop(replica);
  XrXirValue name=host_invoke(first,ids[3],&token,1);const char *text=NULL;size_t length=0;CHECK(host_directory_name(&name,&text,&length));xr_xir_value_drop(&name);
  host_io_bool(first,ids[4],&token,1,true);xr_xir_value_drop(&token);CHECK(xr_xir_instance_free(first)==XR_XIR_CALL_READY);host_active=NULL;
  second=host_instance(program,ids[0]);host_active=second;XrXirValue fake={XR_XIR_I64,0,0};next=directory_calls[1];
+ host_io_phase="directory fake token";
  host_io_failure(second,ids[3],&fake,1,XR_XIR_CALL_BAD_ARGUMENT);CHECK(directory_calls[1]==next&&xr_xir_instance_free(second)==XR_XIR_CALL_BAD_ARGUMENT);host_active=NULL;
 }
 static void host_directory_pending(XrXirProgram *program,const uint32_t ids[6],const char *path){
@@ -139,8 +142,9 @@ static void host_io_directory_execute(const XrXirCompileContext *context,XrXirPr
  size_t live=runtime_live,bytes=runtime_bytes;directory_mode=DIR_NORMAL;directory_close_failures=0;
 #if defined(XR_OS_WINDOWS)
  HostDirectoryFixture fixture={0};host_directory_fixture(&fixture,true);
- host_directory_names(program,ids,&fixture);host_directory_authority(context,program,ids,fixture.path);
- host_directory_pending(program,ids,fixture.path);host_directory_close_controls(program,ids,fixture.path);
+ host_io_phase="directory names and stale token";host_directory_names(program,ids,&fixture);host_directory_authority(context,program,ids,fixture.path);
+ host_io_phase="directory pending fault";host_directory_pending(program,ids,fixture.path);
+ host_io_phase="directory close controls";host_directory_close_controls(program,ids,fixture.path);
  XrXirInstance *instance=host_instance(program,ids[0]);host_active=instance;char path[16384];
  CHECK(snprintf(path,sizeof(path),"%s/nested",fixture.path)>0);XrXirValue token=host_directory_open_path(instance,ids,path);
  XrXirValue empty=host_invoke(instance,ids[3],&token,1);const char *text=NULL;size_t length=0;CHECK(!host_directory_name(&empty,&text,&length));xr_xir_value_drop(&empty);
@@ -155,6 +159,6 @@ static void host_io_directory_execute(const XrXirCompileContext *context,XrXirPr
  host_io_failure(instance,ids[2],&object,1,XR_XIR_CALL_UNSUPPORTED);CHECK(directory_calls[0]==opens+1&&!instance->file_metadata_owners);
  xr_xir_value_drop(&object);CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_UNSUPPORTED);host_active=NULL;
 #endif
- CHECK(directory_mode==DIR_NORMAL&&!directory_close_failures&&runtime_live==live&&runtime_bytes==bytes);
+ host_io_phase="existing IO";CHECK(directory_mode==DIR_NORMAL&&!directory_close_failures&&runtime_live==live&&runtime_bytes==bytes);
 }
 #endif // HOST_OS_IO_DIRECTORY_CASES_H

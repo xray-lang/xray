@@ -71,8 +71,11 @@ static void host_io_old_times(const char *path){
  struct utimbuf old={946684800,946684800};CHECK(!utime(path,&old));
 #endif
 }
+static const char *host_io_phase="existing IO";
 static void host_io_failure(XrXirInstance *instance,uint32_t function,const XrXirValue *args,uint32_t count,XrXirCallStatus expected){
- CHECK(xr_xir_instance_start(instance,function,args,count)==XR_XIR_CALL_READY);CHECK(host_poll(instance)==expected);XrXirValue result={0};
+ XrXirCallStatus start=xr_xir_instance_start(instance,function,args,count);
+ if(start!=XR_XIR_CALL_READY)fprintf(stderr,"failure start function%u status%u directoryMode%u phase=%s\n",function,start,directory_mode,host_io_phase);
+ CHECK(start==XR_XIR_CALL_READY);CHECK(host_poll(instance)==expected);XrXirValue result={0};
  CHECK(xr_xir_instance_take_result(instance,&result)==(expected==XR_XIR_CALL_CANCELLED?XR_XIR_CALL_BAD_STATE:expected)&&!result.type&&!result.payload&&!result.reserved);
 }
 static void host_io_limit(XrXirProgram *program,const uint32_t ids[7],const char *path){
