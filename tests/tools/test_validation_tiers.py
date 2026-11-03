@@ -155,6 +155,7 @@ class TierTests(unittest.TestCase):
                      "src/os/unix/file_links_unix.c", "tests/unit/base/test_file_links.c",
                      "tests/unit/base/file_links.cmake",
                      "src/xir/xxir_instance_io_mutation.inc.c",
+                     "src/xir/xxir_instance_io_links.inc.c",
                      "src/xir/xxir_call_signal_frontier.inc.c",
                      "src/xir/xxir_instance_signal_frontier.inc.c",
                      "src/xir/xxir_signal_frontier_internal.h",
@@ -162,7 +163,9 @@ class TierTests(unittest.TestCase):
                      "src/xir/xxir_path_prelude.h", "src/xir/xxir_native_callable.h",
                      "src/xir/xxir_declarations.c", "src/xir/xxir_instance.c",
                      "src/xir/xxir_ctfe_native_callable.inc.c",
-                     "tests/unit/xir/host_os/host_os_path_cases.h"):
+                     "tests/unit/xir/host_os/host_os_path_cases.h",
+                     "tests/unit/xir/host_os/host_os_io_links_cases.h",
+                     "tests/unit/xir/host_os/host_os.cmake"):
             with self.subTest(path=path):
                 plan = xray_l1.tier_plan(ROOT, "L2", changed=[path])
                 self.assertIn("host-os", plan["groups"])
