@@ -64,6 +64,18 @@ static const char host_io_temp_text[]=
  "export fn nested(v:Array<Array<string?>>)->Array<Array<string?>>{return v}\n"
  "export fn ctfeDirectory()->string?{return __makeTempDir(\".\")}\n"
  "export fn ctfeFile()->string?{return __makeTempFile(\".\")}\n";
+static const char host_io_directory_text[]=
+ "import {Path} from path\n"
+ "class Child extends Path{tail:string\ninit(raw:string){super(raw);this.tail=\"directory-owned-tail\"}}\n"
+ "export fn make(raw:string)->Path{return Child(raw)}\n"
+ "export fn openPath(path:Path)->i64{return __dirOpen(path)}\n"
+ "export fn nextName(handle:i64)->string?{return __dirNext(handle)}\n"
+ "export fn closePath(handle:i64)->bool{return __dirClose(handle)}\n"
+ "fn refOpen(path:ref Path)->i64{return __dirOpen(path)}\n"
+ "export fn byRef(raw:string)->i64{var path:Path=Child(raw);return refOpen(ref path)}\n"
+ "export fn ctfeOpen()->i64{return __dirOpen(Child(\".\"))}\n"
+ "export fn ctfeNext()->string?{return __dirNext(1)}\n"
+ "export fn ctfeClose()->bool{return __dirClose(1)}\n";
 static const char host_signal_frontier_text[]=
  "fn plain(n:i64)->i64{return n}\n"
  "fn read(v:Slice<u8>)->i64{return (v[0] as i64)+(v[1] as i64)}\n"
