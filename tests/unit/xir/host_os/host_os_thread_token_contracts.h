@@ -72,6 +72,8 @@ static void host_thread_token_contracts(XrXirCompileContext *context,const XrXir
  const char *invalid[]={
   "export fn bad(){var local=ThreadLocal<i64,Never>(fn()->i64{Coro.yield();return 42})}",
   "export fn bad(init:fn()->i64){var local=ThreadLocal<i64,Never>(init)}",
+  "export fn bad(){var local=ThreadLocal<i64,Never>(42)}",
+  "export fn bad(){var local=ThreadLocal<i64,Never>(fn()->i64{return 42});local._init=fn()->i64{Coro.yield();return 42}}",
   "enum InitErr{Failed}\nexport fn bad(){var local=ThreadLocal<i64,Never>(fn()throws(InitErr)->i64{throw InitErr.Failed})}"};
  char *source=host_thread_token_source();char *tail=strstr(source,"enum InitErr{Failed}");CHECK(tail);size_t prefix=(size_t)(tail-source);
  for(unsigned n=0;n<sizeof(invalid)/sizeof(*invalid);++n){
