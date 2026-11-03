@@ -63,7 +63,8 @@ static const char root_signal_text[]=
  "export fn guarded(mode:i64)->i64{try{return parent(mode)}catch panic{print(\"unexpected-catch\");return -1}}\n"
  "export fn owned()->fn(){return make(0)}\n"
  "export fn withHandler(handler:fn())->bool{return __onSignal(2,handler)}\n"
- "export fn read()->i64{return state}\n";
+ "export fn read()->i64{return state}\n"
+ "export fn ctfeRegister()->bool{return __onSignal(2,fn(){})}\n";
 typedef struct RootSignalLog {
     unsigned registered,entered,returned,callback_cleanup,parent_cleanup,replaced,refused,unexpected;
 } RootSignalLog;
