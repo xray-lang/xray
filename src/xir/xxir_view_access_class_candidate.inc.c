@@ -51,7 +51,7 @@ static XrXirStatus view_access_class_local_cell(ViewAccess *a,uint32_t cell,bool
         const XrXirInstruction *op=&a->body->instructions[i];
         for(uint32_t p=0;p<view_access_operands(a,op);++p) {
             uint32_t value=xr_xir_op_uses_operand_table(op->op)?a->body->operands[op->args[0]+p]:op->args[p];
-            if(value==cell && (op->op!=XR_XIR_CELL_READ || p))return XR_XIR_OK;
+            if(value==cell && ((op->op!=XR_XIR_CELL_READ && op->op!=XR_XIR_CELL_TAKE) || p))return XR_XIR_OK;
         }
     }
     *stable=true;return XR_XIR_OK;
@@ -68,7 +68,7 @@ static XrXirStatus view_access_class_seed(ViewAccess *a,uint32_t value,bool *fre
             if(op->args[0]>=value || xr_xir_operand_type(a->body,op->args[0])!=type)return XR_XIR_OK;
             value=op->args[0];continue;
         }
-        if(op->op==XR_XIR_CELL_READ) {
+        if(op->op==XR_XIR_CELL_READ || op->op==XR_XIR_CELL_TAKE) {
             uint32_t cell=op->args[0];bool stable=false;
             status=view_access_class_local_cell(a,cell,&stable);if(status!=XR_XIR_OK || !stable)return status;
             const XrXirInstruction *owner=&a->body->instructions[cell-a->body->parameter_count];
