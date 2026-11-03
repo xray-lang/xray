@@ -1,6 +1,5 @@
-add_executable(test_xir_root_callback xir/test_xir_root_callback.c
-    "${PROJECT_SOURCE_DIR}/src/execution/xr_xir_host_time.c")
-target_link_libraries(test_xir_root_callback PRIVATE xray_xir_source xray_xir_vm)
+add_executable(test_xir_root_callback xir/test_xir_root_callback.c)
+target_link_libraries(test_xir_root_callback PRIVATE xray_xir_source xray_xir_vm xray_xir_runtime_host)
 set_target_properties(test_xir_root_callback PROPERTIES
     C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 if(MSVC)
