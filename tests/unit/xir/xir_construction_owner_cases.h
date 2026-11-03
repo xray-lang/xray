@@ -15,13 +15,9 @@
 #ifndef XIR_CONSTRUCTION_OWNER_CASES_H
 #define XIR_CONSTRUCTION_OWNER_CASES_H
 static void construction_dense_owner(void) {
-    /* One struct row and two absent bindings: owner56 + row24 + kind4 + fields8.
-     * clone shape3, constructor shape2, callocs57+25+5, row2, copy1+8 = 103.
-     * This observation fixture creates no executable Artifact or authority. */
-    _Static_assert(sizeof(XrXirConstruction)==56 && sizeof(XrXirConstructionRow)==24,
-        "Independent x64 construction allocation formula");
-    for (unsigned mode=0;mode<11;++mode) {
-        reset_observer();XrXirCompileContext producer=context_new(UINT64_MAX);
+    uint64_t required=0;
+    for (unsigned mode=0;mode<7;++mode) {
+        reset_observer();XrXirCompileContext producer=context_new(0);
         XrXirNominalField fields[]={{{"a",1},XR_XIR_I64,0},{{"b",1},XR_XIR_I64,0}};
         XrXirNominalDeclaration declaration={0};declaration.module=(XrXirLiteral){"m",1};
         declaration.name=(XrXirLiteral){"Pair",4};declaration.kind=XR_XIR_NOMINAL_STRUCT;
@@ -29,64 +25,58 @@ static void construction_dense_owner(void) {
         XrXirNominalTable table={&declaration,1,NULL};XrXirTypes types={0};types.nominals=&table;
         uint32_t helpers[2]={0,0};XrXirConstructionRow row={0,helpers,2};
         XrXirConstruction *source=NULL,*copy=NULL;
-        CHECK(xr_xir_compile_construction_new_v5(&producer,&types,&(XrXirConstructionSpec){&row,1,NULL,0,NULL},&(XrXirSlotFacts){NULL,0},&source, NULL)==XR_XIR_OK);
+        CHECK(xr_xir_compile_construction_new_v5(&producer,&types,&(XrXirConstructionSpec){&row,1,NULL,0,NULL},&(XrXirSlotFacts){NULL,0},&source,NULL)==XR_XIR_OK);
         helpers[0]=UINT32_MAX;
         CHECK(xr_xir_compile_construction_row(source,0)->field_initializers[0]==0);
-        uint64_t exact_bytes=sizeof(XrCompileResources)+4*sizeof(CompileAllocation)+92;
-        XrCompileResourceLimits caps={UINT64_MAX,UINT64_MAX,UINT64_MAX};
-        if (mode>=5) {
-            unsigned axis=(mode-5)/2,minus=(mode-5)%2;
-            if (!axis) caps.allocated_bytes=exact_bytes-minus;
-            else if (axis==1) caps.live_bytes=exact_bytes-minus;
-            else caps.work=104-minus;
-        }
+        XrCompileResourceLimits caps={XR_COMPILE_MEMORY_ORDINARY,0,true};
+        if(mode>=5){CHECK(required>sizeof(XrCompileResources));caps.memory_mode=XR_COMPILE_MEMORY_FINITE;caps.memory_limit=required-(mode==6);}
         XrXirCompileContext receiver={0};receiver.limits=xr_xir_compile_default_limits();
         CHECK(xr_compile_resources_new(&caps,&receiver.resources)==XR_COMPILE_RESOURCE_OK);
-        size_t start=attempts,baseline_live=live,baseline_physical=physical;
-        if (mode>=1 && mode<=4) fail_at=start+mode-1;
-        XrXirStatus expected=mode>=1 && mode<=4?XR_XIR_OUT_OF_MEMORY:
-            mode>=5 && (mode-5)%2?XR_XIR_BUDGET:XR_XIR_OK;
-        CHECK(xir_construction_clone(&receiver,&types,source,&copy, NULL)==expected);
+        XrCompileResourceStats before={0};CHECK(xr_compile_resources_stats(receiver.resources,&before)==XR_COMPILE_RESOURCE_OK);
+        size_t start=attempts,baseline_live=live,baseline_physical=physical,baseline_total=total;
+        if(mode>=1&&mode<=4)fail_at=start+mode-1;
+        XrXirStatus expected=mode>=1&&mode<=4?XR_XIR_OUT_OF_MEMORY:mode==6?XR_XIR_BUDGET:XR_XIR_OK;
+        CHECK(xir_construction_clone(&receiver,&types,source,&copy,NULL)==expected);
         XrCompileResourceStats used={0};CHECK(xr_compile_resources_stats(receiver.resources,&used)==XR_COMPILE_RESOURCE_OK);
-        if (expected==XR_XIR_OK) {
-            CHECK(copy && copy!=source && copy->context.resources==receiver.resources && attempts==start+4);
-            CHECK(used.work==104 && used.allocated_bytes==exact_bytes && used.peak_bytes==exact_bytes);
+        if(!mode)required=used.peak_bytes;
+        if(expected==XR_XIR_OK){
+            CHECK(copy&&copy!=source&&copy->context.resources==receiver.resources&&attempts==start+4);
+            /* The observer includes real allocation headers and alignment, not
+             * a copied payload formula or a cumulative allocation quota. */
+            CHECK(used.held_bytes==before.held_bytes+physical-baseline_physical);
+            CHECK(used.allocated_bytes==before.allocated_bytes+total-baseline_total);
             const XrXirConstructionRow *got=xr_xir_compile_construction_row(copy,0);
-            CHECK(got && got->field_count==2 && !got->default_initializer &&
-                !got->field_initializers[0] && !got->field_initializers[1]);
-            CHECK(got!=xr_xir_compile_construction_row(source,0) &&
+            CHECK(got&&got->field_count==2&&!got->default_initializer&&
+                !got->field_initializers[0]&&!got->field_initializers[1]);
+            CHECK(got!=xr_xir_compile_construction_row(source,0)&&
                 got->field_initializers!=xr_xir_compile_construction_row(source,0)->field_initializers);
-            if (!mode) {
+            if(!mode){
                 XrXirConstruction *untouched=copy;size_t before_attempts=attempts;
-                CHECK(xir_construction_clone(&receiver,&types,source,&untouched, NULL)==XR_XIR_BAD_STRUCTURE && untouched==copy);
-                CHECK(attempts==before_attempts);
-                XrXirConstruction *bad=NULL;
-                CHECK(xir_construction_clone(&receiver,&types,NULL,&bad, NULL)==XR_XIR_BAD_STRUCTURE && !bad);
+                CHECK(xir_construction_clone(&receiver,&types,source,&untouched,NULL)==XR_XIR_BAD_STRUCTURE&&untouched==copy);
+                CHECK(attempts==before_attempts);XrXirConstruction *bad=NULL;
+                CHECK(xir_construction_clone(&receiver,&types,NULL,&bad,NULL)==XR_XIR_BAD_STRUCTURE&&!bad);
                 declaration.field_count=1;
-                CHECK(xir_construction_clone(&receiver,&types,source,&bad, NULL)==XR_XIR_BAD_STRUCTURE && !bad);
+                CHECK(xir_construction_clone(&receiver,&types,source,&bad,NULL)==XR_XIR_BAD_STRUCTURE&&!bad);
                 declaration.field_count=2;declaration.kind=XR_XIR_NOMINAL_CLASS;
-                CHECK(xir_construction_clone(&receiver,&types,source,&bad, NULL)==XR_XIR_BAD_STRUCTURE && !bad);
+                CHECK(xir_construction_clone(&receiver,&types,source,&bad,NULL)==XR_XIR_BAD_STRUCTURE&&!bad);
                 declaration.kind=XR_XIR_NOMINAL_STRUCT;table.count=0;
-                CHECK(xir_construction_clone(&receiver,&types,source,&bad, NULL)==XR_XIR_BAD_STRUCTURE && !bad);
+                CHECK(xir_construction_clone(&receiver,&types,source,&bad,NULL)==XR_XIR_BAD_STRUCTURE&&!bad);
                 table.count=1;CHECK(attempts==before_attempts);
             }
-        } else {
-            CHECK(!copy && live==baseline_live && physical==baseline_physical);
-            if (expected==XR_XIR_OUT_OF_MEMORY) CHECK(attempts==start+mode);
-            else {
-                /* Original receiving limits and consumed work/storage remain. */
-                CHECK(xir_construction_clone(&receiver,&types,source,&copy, NULL)==XR_XIR_BUDGET && !copy);
-                CHECK(live==baseline_live && physical==baseline_physical);
+        }else{
+            CHECK(!copy&&live==baseline_live&&physical==baseline_physical&&used.held_bytes==before.held_bytes);
+            if(expected==XR_XIR_OUT_OF_MEMORY)CHECK(attempts==start+mode);
+            else{
+                CHECK(xir_construction_clone(&receiver,&types,source,&copy,NULL)==XR_XIR_BUDGET&&!copy);
+                CHECK(live==baseline_live&&physical==baseline_physical);
             }
         }
         fail_at=SIZE_MAX;
         xr_xir_compile_construction_free(source);xr_compile_resources_release(producer.resources);
-        if (copy) {
-            const XrXirConstructionRow *got=xr_xir_compile_construction_row(copy,0);
-            CHECK(got && got->field_count==2 && !got->field_initializers[0] && !got->field_initializers[1]);
-        }
+        if(copy){const XrXirConstructionRow *got=xr_xir_compile_construction_row(copy,0);
+            CHECK(got&&got->field_count==2&&!got->field_initializers[0]&&!got->field_initializers[1]);}
         xr_xir_compile_construction_free(copy);xr_compile_resources_release(receiver.resources);
-        CHECK(!live && !physical);
+        CHECK(!live&&!physical);
     }
 }
 static void construction_cross_owner(void) {
@@ -94,14 +84,14 @@ static void construction_cross_owner(void) {
     size_t sites=0;
     for (size_t failure=SIZE_MAX;;) {
         reset_observer();
-        XrXirCompileContext producer=context_new(UINT64_MAX);
+        XrXirCompileContext producer=context_new(0);
         XrXirArtifact *lowered=owner_lowered(&producer),*checked=NULL;
         XrXirProgramPacket proof=xir_program_packet_borrow(lowered);
         CHECK(xr_xir_compile_checked_read(&producer,proof.bytes,proof.length,&checked,NULL)==XR_XIR_OK);
         xr_xir_compile_artifact_free(lowered);lowered=NULL;
         const XrXirConstruction *facts=xr_xir_compile_artifact_construction(checked);
         CHECK(facts && xr_xir_compile_construction_count(facts)==0);
-        XrXirCompileContext receiver=context_new(UINT64_MAX);
+        XrXirCompileContext receiver=context_new(0);
         CHECK(receiver.resources!=producer.resources);
         XrCompileResourceStats before={0},after={0};
         CHECK(xr_compile_resources_stats(receiver.resources,&before)==XR_COMPILE_RESOURCE_OK);
@@ -118,7 +108,7 @@ static void construction_cross_owner(void) {
             CHECK(xr_xir_compile_artifact_construction(copy)!=facts);
         } else {
             CHECK(status==XR_XIR_OUT_OF_MEMORY && !copy);
-            CHECK(after.live_bytes==before.live_bytes && physical==physical_before && live==live_before);
+            CHECK(after.held_bytes==before.held_bytes && physical==physical_before && live==live_before);
             CHECK(attempts==start+failure+1);
             copy=NULL;fail_at=SIZE_MAX;
             CHECK(xr_xir_compile_artifact_verify(checked,NULL)==XR_XIR_OK);
