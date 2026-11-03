@@ -30,7 +30,9 @@ static bool source_io_types(SourceContext *ctx) {
 }
 static bool source_io_declare(SourceContext *ctx) {
     uint32_t saved_module=ctx->module,saved_function=ctx->function;
-    static const uint32_t ids[]={XR_NATIVE_CALLABLE_IO_CHMOD,XR_NATIVE_CALLABLE_IO_CHDIR,XR_NATIVE_CALLABLE_IO_STAT};
+    static const uint32_t ids[]={XR_NATIVE_CALLABLE_IO_CHMOD,XR_NATIVE_CALLABLE_IO_CHDIR,XR_NATIVE_CALLABLE_IO_STAT,
+        XR_NATIVE_CALLABLE_IO_MKDIR,XR_NATIVE_CALLABLE_IO_RMDIR,XR_NATIVE_CALLABLE_IO_REMOVE,
+        XR_NATIVE_CALLABLE_IO_RENAME,XR_NATIVE_CALLABLE_IO_UTIME_NOW};
     for(uint32_t m=0;m<ctx->module_count;++m) {
         if(!source_request_poll(ctx,NULL))return false;
         if(!source_io_module(ctx,m) || source_owned_checked(&ctx->graph->specs[m]))continue;
@@ -40,7 +42,8 @@ static bool source_io_declare(SourceContext *ctx) {
             return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"io file metadata identity is missing");
         if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=carrier->type},&file_stat))return false;
         for(uint32_t n=0;n<sizeof(ids)/sizeof(*ids);++n) {
-            uint32_t id=ids[n],count=id==XR_NATIVE_CALLABLE_IO_CHMOD?2u:1u;
+            uint32_t id=ids[n];const XirIoNativeContract *contract=xir_io_native_contract(id);
+            uint32_t count=contract->count;
             const XrNativeCallableDeclaration *native=xr_native_callable_by_id(id);
             if(!native || !native->member || !native->member->name)
                 return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"io callable declaration is missing");
@@ -50,7 +53,7 @@ static bool source_io_declare(SourceContext *ctx) {
             XrXirType path=XR_XIR_UNIT;
             if(!source_path_prelude_type(ctx,&path))return false;
             XrXirType *parameters=source_alloc(ctx,count,sizeof(*parameters));if(!parameters)return false;
-            parameters[0]=path;if(count==2)parameters[1]=XR_XIR_I64;
+            for(uint32_t p=0;p<count;++p)parameters[p]=p<contract->paths?path:XR_XIR_I64;
             XrXirType result=id==XR_NATIVE_CALLABLE_IO_STAT?file_stat:XR_XIR_BOOL;
             if(!xir_io_native_signature(id,&ctx->types,parameters,count,result,XR_XIR_NEVER))
                 return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"io callable differs from its governed signature");
@@ -65,9 +68,10 @@ static bool source_io_declare(SourceContext *ctx) {
                 .promises=XR_XIR_FUNCTION_NO_SUSPEND,.native_callable=id};
             ctx->bodies[index].module=m;ctx->bodies[index].parameters=parameters;
             XrXirDeclarations declarations;XrXirModule module=source_module_view(ctx,&declarations);uint32_t field=0;
-            if(!xir_io_native_scope(&declarations,&ctx->types,index,ctx->function_count,path,&field) ||
-                xr_xir_compile_nominal_access(&ctx->compile,&module,index,path,field,XR_XIR_NOMINAL_READ)!=XR_XIR_OK)
-                return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"io callable requires the real Path field read permission");
+            for(uint32_t p=0;p<contract->paths;++p)
+                if(!xir_io_native_scope(&declarations,&ctx->types,index,ctx->function_count,parameters[p],&field) ||
+                    xr_xir_compile_nominal_access(&ctx->compile,&module,index,parameters[p],field,XR_XIR_NOMINAL_READ)!=XR_XIR_OK)
+                    return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"io callable requires every real Path field read permission");
             if(!source_query_declare(ctx,symbol,XR_XIR_SOURCE_FUNCTION,0,(XrXirSourceRange){m,0,0,0,0}))return false;
             ((XrXirSourceDeclaration *)ctx->query.declarations)[symbol->declaration-1].signature=signature;
             ctx->bodies[index].declaration=symbol->declaration;ctx->function=index;
