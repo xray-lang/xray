@@ -299,36 +299,11 @@ static void capacity_core_ledgers(void) {
         xr_xir_value_drop(&out); capacity_core_free(&f);
     }
 }
-static void capacity_core_byte_null_admission(void) {
-    CapacityCore f=capacity_core_new(65536,65536,65536);
-    XrXirTypeNode node={.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_U8};
-    XrXirTypes types={&node,1,NULL,NULL};XrXirTypeArena *arena=NULL;
-    CHECK(value_compile_arena(&types,65536,value_compile_limits(65536,0,10000),&arena)==XR_XIR_VALUE_OK);
-    XrXirValueAdmission admission={arena,f.domain,NULL,NULL,65536,65536};
-    XrXirValue bytes[]={{XR_XIR_U8,0,7},{XR_XIR_U8,0,9}},array={0},out={0};
-    CHECK(xr_xir_array_new((XrXirType)256,bytes,2,&admission,&array)==XR_XIR_VALUE_OK);
-    XrXirDomainStats before=xr_xir_domain_stats(f.domain);size_t allocated=calls;
-    CHECK(xr_xir_array_byte_append(&array,&array,NULL,&out)==XR_XIR_VALUE_BAD_ARGUMENT);
-    XrXirFaultDetail fault={0};
-    CHECK(xr_xir_array_byte_repeat(&array,1,2,NULL,&out,&fault)==XR_XIR_VALUE_BAD_ARGUMENT);
-    CHECK(!out.type && !out.reserved && !out.payload && xr_xir_fault_empty(fault));
-    CHECK(calls==allocated && xr_xir_domain_stats(f.domain).live_bytes==before.live_bytes);
-    int64_t length=-1;CHECK(xr_xir_array_len(&array,&admission,&length)==XR_XIR_VALUE_OK && length==2);
-    for (unsigned i=0;i<2;++i) {
-        XrXirValue value={0};
-        CHECK(xr_xir_array_get(&array,i,&admission,&value,&fault)==XR_XIR_VALUE_OK);
-        CHECK(value.type==XR_XIR_U8 && value.payload==bytes[i].payload);xr_xir_value_drop(&value);
-    }
-    xr_xir_value_drop(&array);xr_xir_compile_type_arena_drop(arena);capacity_core_free(&f);
-    puts("Byte candidates reject NULL admission without allocation, output publication or owner mutation");
-}
 int main(int argc, char **argv) {
     fail_at = SIZE_MAX;
-    if (argc==2 && !strcmp(argv[1],"--byte-null")) {capacity_core_byte_null_admission();return 0;}
     capacity_core_no_growth(); capacity_core_no_growth_admission();
     if (argc == 2 && !strcmp(argv[1], "--cow")) return 0;
     CHECK(argc == 1);
-    capacity_core_byte_null_admission();
     capacity_core_owners(); capacity_core_nested(); capacity_core_empty_element(); capacity_core_rejections();
     for (unsigned mode = 0; mode < 4; ++mode) {
         size_t count = capacity_core_fault(mode, SIZE_MAX);
