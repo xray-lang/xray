@@ -29,8 +29,8 @@ static const char *const host_io_controls[]={
  "import {Path} from path\nexport fn conflict(v:Slice<u8>,p:Path)->i64{const changed=__chdir(p);return len(v)}\n",
  "export fn noRead(p:Path)->bool{return __chdir(p)}\n",
  "import {Path} from path\nexport fn borrowed(p:ref Path)->bool{return __chdir(p)}\n",
- "import {Path} from path\nclass Child extends Path{items:Array<u8>\ninit(){super(\".\");this.items=[1 as u8]}}\n"
- "export fn fieldClosed()->i64{var p=Child();var loan:Slice<u8>=p.items[:];__chdir(p);return len(loan)}\n"
+ ("import {Path} from path\nclass Child extends Path{items:Array<u8>\ninit(){super(\".\");this.items=[1 as u8]}}\n"
+ "export fn fieldClosed()->i64{var p=Child();var loan:Slice<u8>=p.items[:];__chdir(p);return len(loan)}\n")
 };
 static const XrXirStatus host_io_statuses[]={XR_XIR_BAD_TYPE,XR_XIR_UNRESOLVED,XR_XIR_BAD_TYPE,XR_XIR_OK,XR_XIR_BAD_TYPE};
 #endif // HOST_OS_SOURCE_CASES_H
