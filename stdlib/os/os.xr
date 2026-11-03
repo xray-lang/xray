@@ -146,8 +146,8 @@ export fn homedir() -> string? {
     if (system != null && len(system!) > 0) { return system }
     return null
 }
-export fn uid() -> i64 { return __uid() }
-export fn gid() -> i64 { return __gid() }
+export fn uid() -> i64? { return __uid() }
+export fn gid() -> i64? { return __gid() }
 export fn cpuCount() -> i64 {
     var count = __cpuCount()
     if (count > 0) { return count }

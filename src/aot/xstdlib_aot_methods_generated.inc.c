@@ -44,8 +44,6 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"os", "__hostname", 0, "xrt_os_hostname", "", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"os", "__systemUsername", 0, "xrt_os_system_username", "", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"os", "__systemHomedir", 0, "xrt_os_system_homedir", "", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"os", "__uid", 0, "xrt_os_uid", "", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"os", "__gid", 0, "xrt_os_gid", "", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"os", "__cpuCount", 0, "xrt_os_cpu_count", "", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"os", "__ppid", 0, "xrt_os_ppid", "", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"os", "__kill", 2, "xrt_os_kill_signal", "vv", "..", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
@@ -71,7 +69,6 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"io", "__rmdir", 1, "xrt_io_rmdir", "p", ".", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__remove", 1, "xrt_io_remove", "p", ".", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__rename", 2, "xrt_io_rename", "pp", "..", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"io", "__stat", 1, "xrt_io_stat", "p", ".", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__symlink", 2, "xrt_io_symlink", "pp", "..", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__makeTempDir", 1, "xrt_io_make_temp_dir", "s", ".", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__makeTempFile", 1, "xrt_io_make_temp_file", "s", ".", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
@@ -128,7 +125,7 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"net", "__udpFromHost", 1, "xrt_net_udp_from_host", "v", "w", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__udpFromPort", 1, "xrt_net_udp_from_port", "v", "w", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
 };
-#define CG_AOT_STDLIB_GENERATED_METHOD_COUNT ((int) 119)
+#define CG_AOT_STDLIB_GENERATED_METHOD_COUNT ((int) 116)
 
 typedef enum CgAotStdlibConstKind {
     CG_AOT_STDLIB_CONST_I64,

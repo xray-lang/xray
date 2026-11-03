@@ -306,7 +306,7 @@ class = "host_abi_leaf"
 abi = "stat(2) plus lstat(2) -- the second call only to derive the symlink flag, since stat follows links; Win32 CRT stat plus GetFileAttributesA"
 ownership = "fresh"
 effect = "nothrow"
-provider = "kernel. VM stdlib/io/io.c io_stat and AOT src/aot/xrt_io.h xrt_io_stat execute the same stat(2)/lstat(2) pair and pack ten scalar fields into the private __FileStat boundary shape. io.xr alone projects that shape into public FileStat and derives exists, fileSize, isFile, isDir and isSymlink"
+provider = "kernel. The private __FileStat boundary has ten fields, including nullable uid/gid: Unix supplies real IDs and Windows supplies absence. stdlib/io/io.c preserves that shape for its VM consumer; io.xr projects it into public FileStat. The old xrt_io_stat direct provider is retired rather than retaining non-nullable identity fields"
 deletion_trigger = "when Xray source can issue the stat(2)/lstat(2) pair itself; every path-metadata policy above that pair already lives in io.xr"
 
 [[leaf]]
@@ -990,10 +990,10 @@ deletion_trigger = "when Xray source can issue the getpid(2) call itself; the le
 module = "os"
 symbol = "__gid"
 class = "host_abi_leaf"
-abi = "getgid(2); Windows has no equivalent and both backends answer 0"
-ownership = "none"
+abi = "getgid(2); Unix returns the real ID, including a present zero; Windows has no equivalent and returns absence"
+ownership = "fresh"
 effect = "nothrow"
-provider = "the kernel. VM stdlib/os/os.c os_gid; AOT src/aot/xrt_os.h xrt_os_gid. One line each"
+provider = "the kernel through the nullable identity boundary shared by the current VM and Checked-C path; stdlib/os/os.c preserves nullable results for its VM consumer. The old xrt_os_gid direct provider is retired"
 deletion_trigger = "when Xray source can issue the getgid(2) call itself; the leaf is already the minimal form of this boundary"
 
 [[leaf]]
@@ -1090,10 +1090,10 @@ deletion_trigger = "when Xray source can issue the per-platform memory query its
 module = "os"
 symbol = "__uid"
 class = "host_abi_leaf"
-abi = "getuid(2); Windows has no equivalent and both backends answer 0"
-ownership = "none"
+abi = "getuid(2); Unix returns the real ID, including a present zero; Windows has no equivalent and returns absence"
+ownership = "fresh"
 effect = "nothrow"
-provider = "the kernel. VM stdlib/os/os.c os_uid; AOT src/aot/xrt_os.h xrt_os_uid. One line each"
+provider = "the kernel through the nullable identity boundary shared by the current VM and Checked-C path; stdlib/os/os.c preserves nullable results for its VM consumer. The old xrt_os_uid direct provider is retired"
 deletion_trigger = "when Xray source can issue the getuid(2) call itself; the leaf is already the minimal form of this boundary"
 
 [[leaf]]

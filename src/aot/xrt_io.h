@@ -202,46 +202,6 @@ static inline XrValue xrt_io_chdir(const char *path_data, int64_t path_len) {
     return XR_FROM_BOOL(ok);
 }
 
-static inline XrValue xrt_io_stat(const char *path_data, int64_t path_len) {
-    char stack_path[512];
-    char *owned = NULL;
-    char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
-    struct stat st;
-    if (!path || stat(path, &st) != 0) {
-        XRT_FREE(owned);
-        return XR_NULL_VAL;
-    }
-#if defined(XR_OS_WINDOWS)
-    DWORD attrs = GetFileAttributesA(path);
-    bool is_symlink = attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_REPARSE_POINT);
-    XrIoCoreStatFields fields = xr_io_core_stat_fields(
-        (int64_t) st.st_size, (int64_t) st.st_mode, (int64_t) st.st_mtime, (int64_t) st.st_atime,
-        (int64_t) st.st_ctime, 0, 0, (st.st_mode & _S_IFREG) != 0, (st.st_mode & _S_IFDIR) != 0,
-        is_symlink);
-#else
-    struct stat lst;
-    bool is_symlink = lstat(path, &lst) == 0 && S_ISLNK(lst.st_mode);
-    XrIoCoreStatFields fields = xr_io_core_stat_fields(
-        (int64_t) st.st_size, (int64_t) st.st_mode, (int64_t) st.st_mtime, (int64_t) st.st_atime,
-        (int64_t) st.st_ctime, (int64_t) st.st_uid, (int64_t) st.st_gid, S_ISREG(st.st_mode),
-        S_ISDIR(st.st_mode), is_symlink);
-#endif
-    XrValue obj =
-        xrt_struct_object_new_named(XR_IO_CORE_STAT_FIELD_COUNT, XR_IO_CORE_STAT_FIELD_NAMES);
-    xrt_object_set_field(obj, XR_IO_CORE_STAT_SIZE, XR_FROM_INT(fields.size));
-    xrt_object_set_field(obj, XR_IO_CORE_STAT_MODE, XR_FROM_INT(fields.mode));
-    xrt_object_set_field(obj, XR_IO_CORE_STAT_MTIME, XR_FROM_INT(fields.mtime));
-    xrt_object_set_field(obj, XR_IO_CORE_STAT_ATIME, XR_FROM_INT(fields.atime));
-    xrt_object_set_field(obj, XR_IO_CORE_STAT_CTIME, XR_FROM_INT(fields.ctime));
-    xrt_object_set_field(obj, XR_IO_CORE_STAT_UID, XR_FROM_INT(fields.uid));
-    xrt_object_set_field(obj, XR_IO_CORE_STAT_GID, XR_FROM_INT(fields.gid));
-    xrt_object_set_field(obj, XR_IO_CORE_STAT_IS_FILE, XR_FROM_BOOL(fields.is_file));
-    xrt_object_set_field(obj, XR_IO_CORE_STAT_IS_DIR, XR_FROM_BOOL(fields.is_dir));
-    xrt_object_set_field(obj, XR_IO_CORE_STAT_IS_SYMLINK, XR_FROM_BOOL(fields.is_symlink));
-    XRT_FREE(owned);
-    return obj;
-}
-
 static inline XrValue xrt_io_chmod_value(const char *path_data, int64_t path_len,
                                          XrValue mode_value) {
     char stack_path[512];

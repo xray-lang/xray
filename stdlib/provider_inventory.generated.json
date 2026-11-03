@@ -2367,7 +2367,7 @@
     },
     {
       "symbol": "os.__gid",
-      "signature": "(): i64",
+      "signature": "(): i64?",
       "declared": false,
       "admitted": false,
       "blocking_reasons": [
@@ -2557,7 +2557,7 @@
     },
     {
       "symbol": "os.__uid",
-      "signature": "(): i64",
+      "signature": "(): i64?",
       "declared": false,
       "admitted": false,
       "blocking_reasons": [

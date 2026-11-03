@@ -118,10 +118,11 @@ static inline XrXirStatus xir_native_callable_verify(const XrXirModule *module,u
     if (!id->native_callable) return XR_XIR_OK;
     const XrXirFunction *function=&module->functions[index];
     if(xir_io_native_id(id->native_callable)) {
-        uint32_t field=0;
-        if(!function->parameter_count || !function->parameters ||
-            !xir_io_native_scope(module->declarations,module->types,index,module->function_count,
-                function->parameters[0],&field))return XR_XIR_BAD_TYPE;
+        const XirIoNativeContract *contract=xir_io_native_contract(id->native_callable);uint32_t field=0;
+        if(function->parameter_count!=contract->count || !function->parameters)return XR_XIR_BAD_TYPE;
+        for(uint32_t p=0;p<contract->paths;++p)
+            if(!xir_io_native_scope(module->declarations,module->types,index,module->function_count,
+                function->parameters[p],&field))return XR_XIR_BAD_TYPE;
     }
     if(xir_sys_native_id(id->native_callable) &&
         !xir_sys_native_scope(module->declarations,index,module->function_count))return XR_XIR_BAD_TYPE;

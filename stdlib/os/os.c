@@ -250,7 +250,7 @@ static XrValue os_uid(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 #ifdef XR_OS_WINDOWS
-    return xr_int(0);
+    return xr_null();
 #else
     return xr_int(getuid());
 #endif
@@ -262,7 +262,7 @@ static XrValue os_gid(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 #ifdef XR_OS_WINDOWS
-    return xr_int(0);
+    return xr_null();
 #else
     return xr_int(getgid());
 #endif

@@ -129,6 +129,13 @@ static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
         NULL,d->field_count,d->kind,d->variants,d->variant_count,d->flags,d->native,d->parent};
     status = nominal_native_verify( &native_identity);
     if (status != XR_XIR_OK) return status;
+    if(d->native.native_id==XR_NATIVE_DECLARATION_FILE_STAT) {
+        const XrNativeTypeDeclaration *native=xr_native_declaration_by_id(d->native.native_id);
+        if(d->constraints)return XR_XIR_BAD_STRUCTURE;
+        for(uint32_t f=0;f<10;++f)
+            if(d->fields[f].flags || !xir_file_stat_name(d->fields[f].name,native->members[f].name) ||
+                !xir_file_stat_field_type(types,f,d->fields[f].type))return XR_XIR_BAD_TYPE;
+    }
     if (d->native.native_id==XR_NATIVE_DECLARATION_RECV) {
         if (d->fields[0].type!=(XrXirType)XR_XIR_TYPE_PARAMETER_BASE || d->constraints[0].markers ||
             d->constraints[0].interface_count) return XR_XIR_BAD_TYPE;
@@ -343,6 +350,10 @@ static XrXirStatus nominal_nodes_verify(const XrXirTypes *types, XrXirCompileCon
         const XrXirTypeNode *node = &types->nodes[i];
         if (node->kind != XR_XIR_TYPE_NOMINAL) continue;
         if (!types->nominals || node->nominal.declaration >= types->nominals->count) return XR_XIR_BAD_TYPE;
+        uint32_t native_id=types->nominals->identities?types->nominals->identities[node->nominal.declaration].native.native_id:
+            types->nominals->declarations[node->nominal.declaration].native.native_id;
+        if(native_id==XR_NATIVE_DECLARATION_FILE_STAT && !xir_file_stat_type(types,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+i)))
+            return XR_XIR_BAD_TYPE;
         if (types->nominals->identities) {
             const XrXirNominalIdentity *identity = &types->nominals->identities[node->nominal.declaration];
             if (node->nominal.argument_count != identity->arity || node->nominal.field_count != identity->field_count)
