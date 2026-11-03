@@ -37,7 +37,9 @@ static bool token_current(const XrOsThreadTokenQuery *query) {
     return !query || query->current(query->context);
 }
 static XrOsIoStatus token_posix_error(int error) {
-    return error == ENOMEM || error == EAGAIN ? XR_OS_IO_OUT_OF_MEMORY : XR_OS_IO_IO;
+    if (error == ENOMEM) return XR_OS_IO_OUT_OF_MEMORY;
+    if (error == EAGAIN) return XR_OS_IO_OVERFLOW;
+    return XR_OS_IO_IO;
 }
 static XrOsIoStatus token_begin(const XrOsThreadTokenQuery *query) {
     if (token_entered || token_exiting || (query && !query->current)) return XR_OS_IO_BAD_ARGUMENT;
