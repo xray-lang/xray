@@ -30,6 +30,7 @@ if(WIN32)
         "${XIR_OWNER_ROOT}/src/os/win/fs_mutation_win.c" "${XIR_OWNER_ROOT}/src/os/win/system_win.c"
         "${XIR_OWNER_ROOT}/src/os/win/file_metadata_win.c"
         "${XIR_OWNER_ROOT}/src/os/win/file_mutation_win.c"
+        "${XIR_OWNER_ROOT}/src/os/win/file_links_win.c"
         "${XIR_OWNER_ROOT}/src/os/win/signal_win.c")
     target_link_libraries(xir_compile_owner_runtime PRIVATE advapi32 userenv)
 else()
@@ -38,6 +39,7 @@ else()
         "${XIR_OWNER_ROOT}/src/os/unix/thread_unix.c" "${XIR_OWNER_ROOT}/src/os/unix/fs_mutation_unix.c"
         "${XIR_OWNER_ROOT}/src/os/unix/system_unix.c" "${XIR_OWNER_ROOT}/src/os/unix/file_metadata_unix.c"
         "${XIR_OWNER_ROOT}/src/os/unix/file_mutation_unix.c"
+        "${XIR_OWNER_ROOT}/src/os/unix/file_links_unix.c"
         "${XIR_OWNER_ROOT}/src/os/unix/signal_unix.c")
     target_compile_definitions(xir_compile_owner_runtime PRIVATE _POSIX_C_SOURCE=200809L _GNU_SOURCE)
     target_link_libraries(xir_compile_owner_runtime PRIVATE m pthread)
