@@ -98,7 +98,12 @@ static XrXirStatus view_root_edges(ViewRootCheck *c,bool fill,XrCompileRequestCo
             bool method=false;
             ViewRootMethodEdges method_edges={c,NULL,NULL,f,&count,fill};
             XrXirStatus status=view_root_method_edges(&method_edges,i,&method,control);
-            if(status!=XR_XIR_OK)return status;
+            if(status!=XR_XIR_OK) {
+                uint32_t block=UINT32_MAX;
+                for(uint32_t b=0;b<body->block_count;++b)
+                    if(i>=body->blocks[b].first && i-body->blocks[b].first<body->blocks[b].count)block=b;
+                c->location=(XrXirDiagnostic){status,f,block,i,XR_XIR_DIAGNOSTIC_NONE};return status;
+            }
             if(method)continue;
             status=view_root_target(c,f,op,&target,&prefix);if (status!=XR_XIR_OK) return status;
             if (target==UINT32_MAX) continue;

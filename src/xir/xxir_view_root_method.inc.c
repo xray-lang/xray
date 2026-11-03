@@ -12,14 +12,16 @@
  *   Every admitted override contributes the same physical parameter boundary.
  */
 #include "xxir_class_method_internal.h"
-static XrXirStatus view_root_method_producer(ViewRootCheck *c,uint32_t f,uint32_t value,
+static XrXirStatus view_root_reference_producer(ViewRootCheck *c,uint32_t f,uint32_t value,
     uint32_t *output,XrCompileRequestControl *control) {
     *output=UINT32_MAX;const XrXirFunction *body=&c->module->functions[f];uint32_t progress=0;
     for(uint32_t depth=0;value>=body->parameter_count && depth<body->instruction_count;++depth) {
         XrXirStatus status=xir_receive_step(control,&progress);if(status!=XR_XIR_OK)return status;
         uint32_t i=value-body->parameter_count;if(i>=body->instruction_count)return XR_XIR_BAD_STRUCTURE;
         const XrXirInstruction *producer=&body->instructions[i];
-        if(producer->op==XR_XIR_CLASS_METHOD_REF){*output=i;return XR_XIR_OK;}
+        if(producer->op==XR_XIR_CLASS_METHOD_REF || producer->op==XR_XIR_FUNCTION_REF) {
+            *output=i;return XR_XIR_OK;
+        }
         if(producer->op!=XR_XIR_COPY && producer->op!=XR_XIR_OWNED_RETAIN &&
             producer->op!=XR_XIR_FUNCTION_WEAKEN)return XR_XIR_OK;
         if(producer->args[0]>=value)return XR_XIR_BAD_STRUCTURE;
@@ -66,11 +68,12 @@ static XrXirStatus view_root_method_edges(ViewRootMethodEdges *query,uint32_t in
     if(op->op==XR_XIR_CLASS_METHOD_REF)producer=instruction;
     else if(op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT) {
         if(op->immediate<0 || (uint64_t)op->immediate>UINT32_MAX)return XR_XIR_BAD_STRUCTURE;
-        XrXirStatus status=view_root_method_producer(c,f,(uint32_t)op->immediate,&producer,control);
+        XrXirStatus status=view_root_reference_producer(c,f,(uint32_t)op->immediate,&producer,control);
         if(status!=XR_XIR_OK)return status;
     }
     if(producer==UINT32_MAX)return XR_XIR_OK;
     const XrXirInstruction *binding=&body->instructions[producer];
+    if(binding->op!=XR_XIR_CLASS_METHOD_REF)return XR_XIR_OK;
     XrXirType receiver=xr_xir_operand_type(body,binding->args[0]);XirClassMethodTarget selected={0};
     XrXirStatus status=xir_compile_class_method_site(c->module,f,producer,receiver,&selected,control);
     if(status!=XR_XIR_OK)return status;
