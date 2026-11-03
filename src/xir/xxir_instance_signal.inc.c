@@ -59,7 +59,7 @@ static bool instance_signal_native_target(const XrXirProgram *program,uint32_t t
         return false;
     const XrXirCallEntry *entry=&program->entries[target];
     uint32_t id=program->declarations->functions[target].native_callable;
-    if (!xir_sys_native_id(id) || !id || entry->resume!=xr_xir_instance_native_callable ||
+    if (id!=XR_NATIVE_CALLABLE_SYS_ON_SIGNAL || !xir_sys_native_id(id) || entry->resume!=xr_xir_instance_native_callable ||
         entry->release!=xr_xir_instance_native_callable_release || entry->parameter_count!=2 ||
         !entry->parameters || entry->parameters[0]!=XR_XIR_I64 || entry->result!=XR_XIR_BOOL ||
         entry->state_bytes!=sizeof(XrXirValue) || entry->environment || entry->flags || entry->cleanup_owner ||
@@ -74,7 +74,8 @@ static XrXirCallStatus instance_signal_site(XrXirCallView *view,XrXirInstance *i
     const XrXirProgram *program=instance->program;
     const XrXirProgramPermissions *permissions=program->permissions;
     if (root->stopping || instance->stopping || root->prepared_generation || active!=instance ||
-        view->activation!=active->call || view_is_child(instance,view) ||
+        (view->activation!=active->call && !xir_instance_callback_owns(root,active->executor,view->activation)) ||
+        view_is_child(instance,view) ||
         view->phase!=XR_XIR_CALL_NORMAL || view->scope_exit ||
         !permissions || !permissions->input || !permissions->input->artifact ||
         !permissions->effects || !instance_signal_native_target(program,origin->target) || count!=2 || !arguments)

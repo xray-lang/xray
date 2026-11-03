@@ -13,7 +13,10 @@
 /* Only the actual native frame reached through one retained, direct checked
  * CALL can register. The complete native declaration, sys authority and actual
  * owned FunctionBinding producer are independently rechecked. Raw host entry,
- * worker/callback registration and unreceived generations grant no authority.
+ * worker registration and unreceived generations grant no authority. An actual
+ * owned Root callback can replace the same owner's registration through its own
+ * independently checked direct CALL; the running callback keeps its old capture
+ * and code snapshot until retirement.
  * The registered function remains Unit/Never and may suspend. This operation
  * itself does not invoke it or manufacture a NoSuspend/Sendable promise. */
 XR_FUNC XrXirCallStatus xir_instance_signal_register(XrXirCallView *view,bool *output);
