@@ -335,7 +335,8 @@ static XrValue io_chdir(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_bool(false);
 
     XrOsIoPolicy policy = xr_os_io_system_policy();
-    return xr_bool(xr_os_io_chdir(&policy, path, NULL) == XR_OS_IO_OK);
+    bool changed = false;
+    return xr_bool(xr_os_io_chdir(&policy, path, NULL, &changed) == XR_OS_IO_OK && changed);
 }
 
 // stat(path) - Get file stat info

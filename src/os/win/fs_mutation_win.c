@@ -14,28 +14,52 @@
 #include <io.h>
 #include <sys/stat.h>
 
+static bool mutation_errno_refused(int error) {
+    return error == EACCES || error == EPERM || error == EINVAL || error == ENOENT ||
+        error == ENOTDIR || error == ENAMETOOLONG || error == ERANGE;
+}
 XR_FUNC XrOsIoStatus xr_os_io_chdir(const XrOsIoPolicy *policy, const char *path,
-    bool (*current)(void *context)) {
-    if (!io_policy_valid(policy) || !path) return XR_OS_IO_BAD_ARGUMENT;
+    bool (*current)(void *context), bool *output) {
+    if (!io_policy_valid(policy) || !path || !output) return XR_OS_IO_BAD_ARGUMENT;
     if (current && !current(policy->context)) return XR_OS_IO_CANCELLED;
     XrIoContext io = {policy, XR_OS_IO_OK}; wchar_t *wide = NULL;
-    io_status(&io, xr_win_utf8_path_owned(policy, path, &wide));
-    if (io.status == XR_OS_IO_OK && current && !current(policy->context))
-        io_status(&io, XR_OS_IO_CANCELLED);
-    if (((&io)->status == XR_OS_IO_OK) && !SetCurrentDirectoryW(wide)) io_status(&io, io_windows_status(GetLastError()));
-    io_free(&io, wide); return io.status;
+    bool refused = false, changed = false;
+    io_status(&io, xr_win_utf8_path_owned_classified(policy, path, &wide, &refused));
+    if (io.status == XR_OS_IO_OK || refused) {
+        if (current && !current(policy->context)) io.status = XR_OS_IO_CANCELLED;
+        else if (refused) io.status = XR_OS_IO_OK;
+        else {
+            SetLastError(ERROR_SUCCESS);
+            changed = SetCurrentDirectoryW(wide) != 0;
+            if (!changed) {
+                DWORD error = GetLastError();
+                if (!xr_win_path_error_refused(error)) io_status(&io, io_windows_status(error));
+            }
+        }
+    }
+    io_free(&io, wide);
+    if (io.status == XR_OS_IO_OK) *output = changed;
+    return io.status;
 }
 XR_FUNC XrOsIoStatus xr_os_io_chmod(const XrOsIoPolicy *policy, const char *path, int64_t mode_value,
-    bool (*current)(void *context)) {
+    bool (*current)(void *context), bool *output) {
     int mode = 0;
-    if (!io_policy_valid(policy) || !path || !xr_io_core_chmod_mode(mode_value, &mode))
+    if (!io_policy_valid(policy) || !path || !output || !xr_io_core_chmod_mode(mode_value, &mode))
         return XR_OS_IO_BAD_ARGUMENT;
     if (current && !current(policy->context)) return XR_OS_IO_CANCELLED;
     XrIoContext io = {policy, XR_OS_IO_OK}; wchar_t *wide = NULL;
-    io_status(&io, xr_win_utf8_path_owned(policy, path, &wide));
-    if (io.status == XR_OS_IO_OK && current && !current(policy->context))
-        io_status(&io, XR_OS_IO_CANCELLED);
-    if (io.status == XR_OS_IO_OK && _wchmod(wide, mode) != 0)
-        io_status(&io, io_errno_status(errno));
-    io_free(&io, wide); return io.status;
+    bool refused = false, changed = false;
+    io_status(&io, xr_win_utf8_path_owned_classified(policy, path, &wide, &refused));
+    if (io.status == XR_OS_IO_OK || refused) {
+        if (current && !current(policy->context)) io.status = XR_OS_IO_CANCELLED;
+        else if (refused) io.status = XR_OS_IO_OK;
+        else {
+            errno = 0;
+            changed = _wchmod(wide, mode) == 0;
+            if (!changed && !mutation_errno_refused(errno)) io_status(&io, io_errno_status(errno));
+        }
+    }
+    io_free(&io, wide);
+    if (io.status == XR_OS_IO_OK) *output = changed;
+    return io.status;
 }
