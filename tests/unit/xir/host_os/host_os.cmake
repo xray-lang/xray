@@ -4,7 +4,8 @@ file(MAKE_DIRECTORY "${host_os_generated}")
 set(host_os_c
     "${host_os_generated}/host_count.c"
     "${host_os_generated}/host_pin.c"
-    "${host_os_generated}/host_path.c")
+    "${host_os_generated}/host_path.c"
+    "${host_os_generated}/host_system.c")
 
 add_executable(test_host_os_source "${host_os_dir}/test_host_os_source.c")
 target_link_libraries(test_host_os_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
@@ -16,6 +17,7 @@ add_custom_command(OUTPUT ${host_os_c}
         "${host_os_dir}/host_os_runtime.h"
         "${host_os_dir}/host_os_path_cases.h"
         "${host_os_dir}/host_os_cpu_cases.h"
+        "${host_os_dir}/host_os_system_cases.h"
     VERBATIM)
 add_executable(test_host_os_native "${host_os_dir}/test_host_os_native.c" ${host_os_c})
 target_link_libraries(test_host_os_native PRIVATE xray_xir_scalar)

@@ -138,6 +138,8 @@ class TierTests(unittest.TestCase):
 
     def test_host_os_changes_select_paired_source_and_native_consumers(self):
         for path in ("src/os/win/fs_mutation_win.c", "src/os/unix/fs_mutation_unix.c",
+                     "src/os/os_system.h", "src/os/win/system_win.c", "src/os/unix/system_unix.c",
+                     "src/xir/xxir_instance_system.inc.c", "tests/unit/base/test_system_queries.c",
                      "src/os/os_fs.h", "src/base/xwindows_utf8.h",
                      "src/xir/xxir_instance_io.inc.c", "src/xir/xxir_source_io.inc.c",
                      "src/xir/xxir_path_prelude.h", "src/xir/xxir_native_callable.h",
@@ -149,6 +151,8 @@ class TierTests(unittest.TestCase):
                 self.assertIn("host-os", plan["groups"])
                 self.assertTrue({"host_os_source", "host_os_native"} <= set(plan["tests"]))
                 self.assertTrue({"test_host_os_source", "test_host_os_native"} <= set(plan["targets"]))
+                self.assertIn("os_system_queries", plan["tests"])
+                self.assertIn("test_os_system_queries", plan["targets"])
                 self.assertNotIn("native-runtime", plan["groups"])
         self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
 
