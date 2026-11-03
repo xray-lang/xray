@@ -146,6 +146,10 @@ static void root_signal_cases(XrXirProgram *program,const uint32_t ids[6]) {
         } while (result.outcome.status==XR_XIR_CALL_READY || result.outcome.status==XR_XIR_CALL_SUSPENDED);
         XrXirCallStatus expected=mode==0||mode==4?XR_XIR_CALL_RETURNED:mode==1?XR_XIR_CALL_ASSERTION:
             mode==2?XR_XIR_CALL_CANCELLED:XR_XIR_CALL_CLEANUP_FAILED;
+        if(result.outcome.status!=expected || log.unexpected || !xr_xir_call_result_valid(&result.outcome))
+            fprintf(stderr,"signal mode%u status%u expected%u prior%u entered%u returned%u cleanup%u/%u unexpected%u\n",
+                mode,result.outcome.status,expected,result.outcome.prior_status,log.entered,log.returned,
+                log.callback_cleanup,log.parent_cleanup,log.unexpected);
         CHECK(result.outcome.status==expected && !log.unexpected && xr_xir_call_result_valid(&result.outcome));
         if (mode==3 || mode==5) CHECK(result.outcome.prior_status==XR_XIR_CALL_ASSERTION &&
             xr_xir_call_panic_payload(result.outcome.prior_status,&result.outcome.prior_panic));
@@ -287,8 +291,13 @@ static void root_signal_isolate(const wchar_t *mode,DWORD flags) {
     if (waited!=WAIT_OBJECT_0) {CHECK(TerminateJobObject(job,99));CHECK(WaitForSingleObject(process.hProcess,10000)==WAIT_OBJECT_0);}
     CHECK(GetExitCodeProcess(process.hProcess,&code));CHECK(CloseHandle(process.hProcess));
     JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting={0};
-    CHECK(QueryInformationJobObject(job,JobObjectBasicAccountingInformation,&accounting,sizeof(accounting),NULL));
-    CHECK(!accounting.ActiveProcesses && CloseHandle(job));CHECK(waited==WAIT_OBJECT_0 && !code);
+    ULONGLONG drain=GetTickCount64()+10000;
+    do {
+        CHECK(QueryInformationJobObject(job,JobObjectBasicAccountingInformation,&accounting,sizeof(accounting),NULL));
+        if(!accounting.ActiveProcesses)break;
+        CHECK(GetTickCount64()<drain);Sleep(1);
+    } while(true);
+    CHECK(CloseHandle(job));CHECK(waited==WAIT_OBJECT_0 && !code);
 }
 #endif
 #endif // ROOT_SIGNAL_RUNTIME_H
