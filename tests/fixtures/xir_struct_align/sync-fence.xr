@@ -1,0 +1,13 @@
+import sync
+
+assert(Ordering.Relaxed.ordinal == 0)
+assert(Ordering.Acquire.ordinal == 1)
+assert(Ordering.Release.ordinal == 2)
+assert(Ordering.AcquireRelease.ordinal == 3)
+assert(Ordering.SeqCst.ordinal == 4)
+sync.fence(Ordering.Relaxed)
+sync.fence(Ordering.Acquire)
+sync.fence(Ordering.Release)
+sync.fence(Ordering.AcquireRelease)
+sync.fence(Ordering.SeqCst)
+print(42)

@@ -459,9 +459,9 @@ export class Condvar {
     }
 }
 
-// fence — standalone memory fence in Ordering-enum form. The enum's backing
-// value maps directly onto the runtime's memory-order ladder.
+// fence — standalone memory fence in Ordering-enum form. The declared
+// ordinal maps directly onto the runtime's memory-order ladder.
 import mem
 export fn fence(order: Ordering) {
-    mem.fence(order as i64)
+    mem.fence(order.ordinal)
 }
