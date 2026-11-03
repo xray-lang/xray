@@ -32,6 +32,7 @@ typedef struct XrOsPipeProgress {
  * Calls on a pair and its operations are externally serialized. Copies do not
  * acquire ownership. The copied memory policy/context outlive the pair and all
  * operations. A supplied query/current is borrowed only inside open/begin.
+ * Misaligned policy allocations are freed and rejected before typed access.
  * No worker calls the allocator, query or any guest code.
  *
  * Failed creation or begin may retain an owner with cleanup duties; always

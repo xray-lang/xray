@@ -26,7 +26,8 @@
 
 static DWORD caller_thread;
 static size_t live_blocks;
-static bool fail_allocate,current=true;
+static bool fail_allocate,misalign_allocate,current=true;
+static uint8_t *misaligned_memory;
 static size_t fail_size;
 static _Atomic(bool) gate_read,partial_write,fail_pipe_close,fail_cancel;
 static HANDLE entered,proceed;
@@ -34,11 +35,14 @@ static HANDLE entered,proceed;
 static XrOsIoStatus test_allocate(void *context,size_t bytes,void **output){
  CHECK(context&&GetCurrentThreadId()==caller_thread);
  if(fail_allocate||(fail_size&&bytes==fail_size)){fail_allocate=false;fail_size=0;return XR_OS_IO_OUT_OF_MEMORY;}
- void *memory=xr_malloc(bytes);if(!memory)return XR_OS_IO_OUT_OF_MEMORY;
+ void *memory=xr_malloc(bytes+(misalign_allocate?1u:0u));if(!memory)return XR_OS_IO_OUT_OF_MEMORY;
+ if(misalign_allocate){misalign_allocate=false;misaligned_memory=memory;memory=misaligned_memory+1;}
  ++live_blocks;*output=memory;return XR_OS_IO_OK;
 }
 static void test_free(void *context,void *memory){
- CHECK(context&&GetCurrentThreadId()==caller_thread&&memory&&live_blocks);--live_blocks;xr_free(memory);
+ CHECK(context&&GetCurrentThreadId()==caller_thread&&memory&&live_blocks);--live_blocks;
+ if(misaligned_memory&&memory==misaligned_memory+1){memory=misaligned_memory;misaligned_memory=NULL;}
+ xr_free(memory);
 }
 static bool test_current(void *context){CHECK(context&&GetCurrentThreadId()==caller_thread);return current;}
 static BOOL WINAPI test_read(HANDLE handle,LPVOID buffer,DWORD length,LPDWORD count,LPOVERLAPPED overlap){
@@ -124,7 +128,9 @@ static void cancellation_and_close(void){
 static void failed_preparation(void){
  XrOsPipeOwner owner={0};bool opened=true;fail_allocate=true;
  CHECK(xr_os_io_pipe_open(&memory,&query,&owner,&opened)==XR_OS_IO_OUT_OF_MEMORY&&opened);dispose_pipe(&owner);
+ misalign_allocate=true;CHECK(xr_os_io_pipe_open(&memory,&query,&owner,&opened)==XR_OS_IO_BAD_ARGUMENT&&opened&&!live_blocks);
  open_pipe(&owner);uint8_t bytes[53];bytes_fill(bytes);XrOsPipeOperation operation={0};XrOsPipeRequest request={XR_OS_PIPE_WRITE,bytes,53};
+ misalign_allocate=true;CHECK(xr_os_io_pipe_begin(&owner,&request,&query,&operation)==XR_OS_IO_BAD_ARGUMENT);
  fail_size=53;CHECK(xr_os_io_pipe_begin(&owner,&request,&query,&operation)==XR_OS_IO_OUT_OF_MEMORY);close_operation(&operation);
  XrOsPipeOwner copy=owner;intptr_t borrowed=7;
  CHECK(xr_os_io_pipe_borrow(&copy,XR_OS_PIPE_READ,&borrowed)==XR_OS_IO_BAD_ARGUMENT&&borrowed==7);
@@ -138,7 +144,7 @@ static bool spawn_child(XrOsPipeOwner *owner,bool writer,PipeChild *child){
  intptr_t raw=0;HANDLE redirect=NULL,null=NULL,job=NULL;STARTUPINFOEXW startup={0};PROCESS_INFORMATION process={0};
  LPPROC_THREAD_ATTRIBUTE_LIST attributes=NULL;SIZE_T bytes=0;bool initialized=false,okay=false;
  wchar_t path[32768],command[32768];DWORD count=GetModuleFileNameW(NULL,path,32768);
- if(!count||count>=32768||swprintf(command,32768,L"\"%ls\" --child-%ls",path,writer?L"write":L"read")<0)goto done;
+ if(!count||count>=32768||swprintf_s(command,32768,L"\"%ls\" --child-%ls",path,writer?L"write":L"read")<0)goto done;
  if(xr_os_io_pipe_borrow(owner,writer?XR_OS_PIPE_WRITE:XR_OS_PIPE_READ,&raw)!=XR_OS_IO_OK)goto done;
  if(!DuplicateHandle(GetCurrentProcess(),(HANDLE)raw,GetCurrentProcess(),&redirect,0,TRUE,DUPLICATE_SAME_ACCESS))goto done;
  SECURITY_ATTRIBUTES security={sizeof(security),NULL,TRUE};
