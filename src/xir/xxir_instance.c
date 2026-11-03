@@ -2470,6 +2470,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_pointer(XrXirCallView *view,XrXirOp oper
 #include "xxir_instance_math.inc.c"
 #include "xxir_instance_environment_win.inc.c"
 #include "xxir_instance_system.inc.c"
+#include "xxir_instance_sys_tokens.inc.c"
 #include "xxir_instance_file_metadata.inc.c"
 #include "xxir_instance_io.inc.c"
 XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
@@ -2503,6 +2504,9 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
             bool installed=false;status=xir_instance_signal_register(view,&installed);
             if(status!=XR_XIR_CALL_READY)goto failed;
             *value=(XrXirValue){XR_XIR_BOOL,0,installed?1:0};
+        } else if(xir_sys_thread_token_id(id)) {
+            status=instance_sys_token_call(view,instance,id,value);
+            if(status!=XR_XIR_CALL_READY)goto failed;
         } else {
             int64_t cpu=view->arguments[0].payload;bool pinned=false;
             if(cpu>=0) {
