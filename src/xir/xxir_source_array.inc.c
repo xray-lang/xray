@@ -280,6 +280,7 @@ static bool source_array_set_values(SourceContext *ctx,AstNode *node,SourceValue
             (XrXirType[]){args[1].type,args[2].type},2},XR_XIR_UNIT))return false;
     *value=args[2];return true;
 }
+#include "xxir_source_byte_array.inc.c"
 static bool source_array_call(SourceContext *ctx, AstNode *node, const SourceValue *evaluated, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
     MemberAccessNode *access = &call->callee->as.member_access;
@@ -295,6 +296,8 @@ static bool source_array_call(SourceContext *ctx, AstNode *node, const SourceVal
         (call->arg_count && !call->arguments))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array method requires its declared arguments");
     switch (member->operation) {
+    case XR_NATIVE_OPERATION_ARRAY_BYTE_APPEND: case XR_NATIVE_OPERATION_ARRAY_BYTE_REPEAT:
+        return source_byte_array_call(ctx,node,member,value);
     case XR_NATIVE_OPERATION_ARRAY_RESERVE: {
         SourceValue root, capacity, current, candidate;XrXirType parameter=XR_XIR_I64;uint32_t supplied;
         if (!source_value_place(ctx, access->object, &root) ||

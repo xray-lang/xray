@@ -43,4 +43,10 @@ XR_FUNC XrXirValueStatus xr_xir_array_set(const XrXirValuePlace *place, int64_t 
     const XrXirValue *element, XrXirValueAdmission *admission, XrXirFaultDetail *fault);
 XR_FUNC XrXirValueStatus xr_xir_array_push(const XrXirValuePlace *place,
     const XrXirValue *element, XrXirValueAdmission *admission);
+/* Each candidate owns a complete replacement; the input arrays remain unchanged. */
+XR_FUNC XrXirValueStatus xr_xir_array_byte_append(const XrXirValue *array,
+    const XrXirValue *snapshot,XrXirValueAdmission *admission,XrXirValue *output);
+XR_FUNC XrXirValueStatus xr_xir_array_byte_repeat(const XrXirValue *array,
+    int64_t distance,int64_t count,XrXirValueAdmission *admission,XrXirValue *output,
+    XrXirFaultDetail *fault);
 #endif // XXIR_ARRAY_H
