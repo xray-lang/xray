@@ -197,10 +197,12 @@ static void host_io_temp_contracts(XrXirCompileContext *context,const XrXirArtif
   XrXirSourceResult output={0};XrXirSourceDiagnostic diagnostic={0};char text[160];
   CHECK(snprintf(text,sizeof(text),"%s(\".\")",names[n])>0);
   CHECK(host_check(context,"io",text,false,&output,&diagnostic)==XR_XIR_BAD_VALUE&&!output.checked&&!output.snapshot);xr_xir_compile_source_result_free(&output);
-  CHECK(snprintf(text,sizeof(text),"export fn bad(root:i64)->string?{return %s(root)}",names[n])>0);
+  CHECK(snprintf(text,sizeof(text),"import {Path} from path\nexport fn bad(root:i64)->string?{return %s(root)}",names[n])>0);
   CHECK(host_check(context,"io",text,true,&output,&diagnostic)==XR_XIR_BAD_TYPE&&!output.checked&&!output.snapshot);xr_xir_compile_source_result_free(&output);
-  CHECK(snprintf(text,sizeof(text),"fn %s(root:string)->string?{return null}",names[n])>0);
-  CHECK(host_check(context,"io",text,true,&output,&diagnostic)==XR_XIR_OK);
+  CHECK(snprintf(text,sizeof(text),"import {Path} from path\nfn %s(root:string)->string?{return null}",names[n])>0);
+  XrXirStatus shadow_status=host_check(context,"io",text,true,&output,&diagnostic);
+  if(shadow_status!=XR_XIR_OK)fprintf(stderr,"temp shadow %u %s\n",shadow_status,diagnostic.message);
+  CHECK(shadow_status==XR_XIR_OK);
   CHECK(!xr_xir_compile_artifact_module(output.checked)->declarations->functions[host_named(xr_xir_compile_artifact_module(output.checked),names[n])].native_callable);
   xr_xir_compile_source_result_free(&output);
   XrXirModule changed=*m;XrXirDeclarations scope=*m->declarations;XrXirSourceModule modules[16];XrXirFunction functions[64];
