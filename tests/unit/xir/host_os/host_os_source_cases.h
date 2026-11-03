@@ -29,6 +29,7 @@ static const char host_stat_text[]=
  "export fn query(path:Path)->bool{var r=__stat(path);if(r==null)return false;"
  "return r!.size==3&&r!.mode>=0&&r!.mtime>0&&r!.atime>0&&r!.ctime>0&&"
  "(r!.uid==null||r!.uid!>=0)&&(r!.gid==null||r!.gid!>=0)&&r!.isFile&&!r!.isDir&&!r!.isSymlink}\n"
+ "export fn snapshot(path:Path)->__FileStat?{return __stat(path)}\n"
  "export fn ctfeStat()->bool{return __stat(Child(\".\"))!=null}\n";
 static const char host_count_text[]="export fn answer()->i64{return __cpuCount()}\n";
 static const char host_pin_text[]="export fn answer(cpu:i64)->bool{return __pinToCpu(cpu)}\n";
