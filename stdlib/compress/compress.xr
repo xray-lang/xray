@@ -473,11 +473,11 @@ fn distCodeFor(distance: i64) -> i64 {
     return code
 }
 
-fn emitLiteral(w: ref BitWriter, value: i64, codes: Array<i64>, lengths: Array<i64>) {
+fn emitLiteral(w: BitWriter, value: i64, codes: Array<i64>, lengths: Array<i64>) {
     w.writeCode(codes[value], lengths[value])
 }
 
-fn emitMatch(w: ref BitWriter, length: i64, distance: i64,
+fn emitMatch(w: BitWriter, length: i64, distance: i64,
              litCodes: Array<i64>, litLengths: Array<i64>,
              distCodes: Array<i64>, distLengths: Array<i64>) {
     var lengthCode = lengthCodeFor(length)
@@ -523,7 +523,7 @@ fn deflateFixed(src: Slice<u8>, level: i64) -> Array<u8> {
         }
 
         if (matchLength >= MIN_MATCH) {
-            emitMatch(ref w, matchLength, matchDistance, litCodes, litLengths, distCodes,
+            emitMatch(w, matchLength, matchDistance, litCodes, litLengths, distCodes,
                       distLengths)
             // Every position the match covered still has to enter the chain, or
             // later matches would never see it.
@@ -532,7 +532,7 @@ fn deflateFixed(src: Slice<u8>, level: i64) -> Array<u8> {
             }
             pos = pos + matchLength
         } else {
-            emitLiteral(ref w, src[pos] as i64, litCodes, litLengths)
+            emitLiteral(w, src[pos] as i64, litCodes, litLengths)
             if (pos + MIN_MATCH <= total) { insertHash(src, pos, ref head, ref prev) }
             pos++
         }
