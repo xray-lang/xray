@@ -22,6 +22,14 @@ static const char host_io_text[]=
  "export fn viaRef(raw:string)->bool{var path:Path=Child(raw);return borrowed(ref path)}\n"
  "export fn ctfeDir()->bool{return __chdir(Child(\".\"))}\n"
  "export fn ctfeMode()->bool{return __chmod(Child(\".\"),384)}\n";
+static const char host_stat_text[]=
+ "import {Path} from path\n"
+ "class Child extends Path{extra:string\ninit(raw:string){super(raw);this.extra=\"stat-owned-tail\"}}\n"
+ "export fn make(raw:string)->Path{return Child(raw)}\n"
+ "export fn query(path:Path)->bool{var r=__stat(path);if(r==null)return false;"
+ "return r!.size==3&&r!.mode>=0&&r!.mtime>0&&r!.atime>0&&r!.ctime>0&&"
+ "(r!.uid==null||r!.uid!>=0)&&(r!.gid==null||r!.gid!>=0)&&r!.isFile&&!r!.isDir&&!r!.isSymlink}\n"
+ "export fn ctfeStat()->bool{return __stat(Child(\".\"))!=null}\n";
 static const char host_count_text[]="export fn answer()->i64{return __cpuCount()}\n";
 static const char host_pin_text[]="export fn answer(cpu:i64)->bool{return __pinToCpu(cpu)}\n";
 static const char host_system_text[]=

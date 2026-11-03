@@ -21,6 +21,7 @@
 #include "os/os_fs.h"
 #include "os/os_thread.h"
 #include "os/os_system.h"
+#include "os/os_file_metadata.h"
 #if defined(XR_OS_WINDOWS)
 #include <windows.h>
 #ifdef interface
@@ -46,10 +47,14 @@ static XrOsIoStatus host_system_free(XrOsSystemOwner *,int64_t *);
 static XrOsIoStatus host_system_uptime(double *);
 static XrOsIoStatus host_system_loadavg(XrOsLoadAverages *);
 static XrOsIoStatus host_system_close(XrOsSystemOwner *);
+static XrOsIoStatus host_metadata(const XrOsIoPolicy *,const char *,size_t,bool(*)(void *),XrOsFileMetadataOwner *,XrOsFileMetadata *);
+static XrOsIoStatus host_metadata_close(XrOsFileMetadataOwner *);
 static unsigned int host_count(void);
 static int host_pin(unsigned int);
 static XrOsIoStatus host_chmod(const XrOsIoPolicy *,const char *,int64_t,bool(*)(void *),bool *);
 static XrOsIoStatus host_chdir(const XrOsIoPolicy *,const char *,bool(*)(void *),bool *);
+#define xr_os_io_file_metadata host_metadata
+#define xr_os_io_file_metadata_close host_metadata_close
 #define xr_os_cpu_count host_count
 #define xr_thread_pin_to_cpu host_pin
 #define xr_os_io_chmod host_chmod
@@ -74,6 +79,8 @@ static XrOsIoStatus host_chdir(const XrOsIoPolicy *,const char *,bool(*)(void *)
 #undef xr_os_io_loadavg
 #undef xr_os_io_system_close
 
+#undef xr_os_io_file_metadata
+#undef xr_os_io_file_metadata_close
 #undef xr_os_cpu_count
 #undef xr_thread_pin_to_cpu
 #undef xr_os_io_chmod
@@ -138,6 +145,34 @@ static XrOsIoStatus host_system_close(XrOsSystemOwner *o){
  if(system_mode==SYSTEM_CLOSE_PERSISTENT)return XR_OS_IO_IO;
 #endif
  return xr_os_io_system_close(o);
+}
+static XrOsIoStatus host_allocate_cancel(void *,size_t,void **);
+enum { STAT_NORMAL,STAT_ZERO_IDS,STAT_OOM,STAT_CANCEL,STAT_CANCEL_CONVERT,STAT_CANCEL_AFTER,STAT_BAD_UTF,STAT_RETAIN_CLOSE };
+static unsigned stat_mode,stat_calls,stat_close_calls,stat_close_failures;
+static bool stat_close_reentry;
+static XrOsIoStatus host_metadata(const XrOsIoPolicy *policy,const char *path,size_t length,
+ bool(*current)(void *),XrOsFileMetadataOwner *owner,XrOsFileMetadata *output){
+ ++stat_calls;CHECK(host_active&&policy&&current);XrOsIoPolicy proxy=*policy;
+ if(stat_mode==STAT_OOM)runtime_fail_at=runtime_attempts;
+ if(stat_mode==STAT_CANCEL)CHECK(xr_xir_call_request_cancel(host_active->call)==XR_XIR_CALL_CANCEL_REQUESTED);
+ if(stat_mode==STAT_CANCEL_CONVERT){host_policy=*policy;proxy.alloc=host_allocate_cancel;}
+ if(stat_mode==STAT_BAD_UTF){path="\xFF";length=1;} /* OS-policy injection, never a malformed Source String. */
+ XrOsIoStatus status=xr_os_io_file_metadata(&proxy,path,length,current,owner,output);runtime_fail_at=SIZE_MAX;
+ if(status==XR_OS_IO_OK&&output->present&&stat_mode==STAT_ZERO_IDS){output->uid=(XrOsOptionalI64){true,0};output->gid=(XrOsOptionalI64){true,0};}
+ if(stat_mode==STAT_CANCEL_AFTER)CHECK(xr_xir_call_request_cancel(host_active->call)==XR_XIR_CALL_CANCEL_REQUESTED);
+#if defined(XR_OS_WINDOWS)
+ if(status==XR_OS_IO_OK&&stat_mode==STAT_RETAIN_CLOSE){
+  HANDLE held=CreateFileW(L".",FILE_READ_ATTRIBUTES,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,NULL,OPEN_EXISTING,FILE_FLAG_BACKUP_SEMANTICS,NULL);
+  CHECK(held!=INVALID_HANDLE_VALUE&&!owner->handle);owner->handle=(intptr_t)held;status=XR_OS_IO_IO;
+ }
+#endif
+ return status;
+}
+static XrOsIoStatus host_metadata_close(XrOsFileMetadataOwner *owner){
+ ++stat_close_calls;
+ if(stat_close_reentry){stat_close_reentry=false;CHECK(host_active&&xr_xir_instance_free(host_active)==XR_XIR_CALL_BUSY);}
+ if(stat_close_failures){--stat_close_failures;return XR_OS_IO_IO;}
+ return xr_os_io_file_metadata_close(owner);
 }
 static unsigned int host_count(void){
  ++count_calls;
