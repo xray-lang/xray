@@ -148,7 +148,7 @@ static XrOsIoStatus host_system_close(XrOsSystemOwner *o){
 }
 static XrOsIoStatus host_allocate_cancel(void *,size_t,void **);
 enum { STAT_NORMAL,STAT_ZERO_IDS,STAT_OOM,STAT_CANCEL,STAT_CANCEL_CONVERT,STAT_CANCEL_AFTER,STAT_BAD_UTF,STAT_RETAIN_CLOSE };
-static unsigned stat_mode,stat_calls,stat_close_calls,stat_close_failures;
+static unsigned stat_mode,stat_calls,stat_close_calls,stat_close_failures,stat_vector_flags;
 static bool stat_close_reentry;
 static XrOsIoStatus host_metadata(const XrOsIoPolicy *policy,const char *path,size_t length,
  bool(*current)(void *),XrOsFileMetadataOwner *owner,XrOsFileMetadata *output){
@@ -158,7 +158,9 @@ static XrOsIoStatus host_metadata(const XrOsIoPolicy *policy,const char *path,si
  if(stat_mode==STAT_CANCEL_CONVERT){host_policy=*policy;proxy.alloc=host_allocate_cancel;}
  if(stat_mode==STAT_BAD_UTF){path="\xFF";length=1;} /* OS-policy injection, never a malformed Source String. */
  XrOsIoStatus status=xr_os_io_file_metadata(&proxy,path,length,current,owner,output);runtime_fail_at=SIZE_MAX;
- if(status==XR_OS_IO_OK&&output->present&&stat_mode==STAT_ZERO_IDS){output->uid=(XrOsOptionalI64){true,0};output->gid=(XrOsOptionalI64){true,0};}
+ /* A synthetic adapter vector tests field geometry, not Windows identity or sampled timestamps. */
+ if(status==XR_OS_IO_OK&&output->present&&stat_mode==STAT_ZERO_IDS)
+  *output=(XrOsFileMetadata){true,17,23,101,202,303,{true,0},{true,42},false,(stat_vector_flags&2)!=0,(stat_vector_flags&4)!=0};
  if(stat_mode==STAT_CANCEL_AFTER)CHECK(xr_xir_call_request_cancel(host_active->call)==XR_XIR_CALL_CANCEL_REQUESTED);
 #if defined(XR_OS_WINDOWS)
  if(status==XR_OS_IO_OK&&stat_mode==STAT_RETAIN_CLOSE){

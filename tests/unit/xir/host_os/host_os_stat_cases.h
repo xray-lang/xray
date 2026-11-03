@@ -9,10 +9,10 @@
 #ifndef HOST_OS_STAT_CASES_H
 #define HOST_OS_STAT_CASES_H
 static XrOsIoStatus host_stat_allocate(void *context,size_t size,void **output){
- (void)context;void *value=xr_malloc(size);if(!value)return XR_OS_IO_OOM;*output=value;return XR_OS_IO_OK;
+ (void)context;void *value=xr_malloc(size);if(!value)return XR_OS_IO_OUT_OF_MEMORY;*output=value;return XR_OS_IO_OK;
 }
 static void host_stat_free(void *context,void *value){(void)context;xr_free(value);}
-static void host_stat_fields(const XrXirValue *result,const XrOsFileMetadata *expected,bool zero){
+static void host_stat_fields(const XrXirValue *result,const XrOsFileMetadata *expected){
  bool some=false;const XrXirValue *object=NULL;CHECK(xr_xir_nullable_view(result,&some,&object)&&some&&object);
  const XrXirTypeArena *arena=xr_xir_value_arena(object);CHECK(arena);
  CHECK(xir_file_stat_type(xr_xir_compile_type_arena_types(arena),object->type));
@@ -23,8 +23,8 @@ static void host_stat_fields(const XrXirValue *result,const XrOsFileMetadata *ex
   if(f<5)CHECK(value.type==XR_XIR_I64&&value.payload==integers[f]);
   else if(f<7){
    const XrOsOptionalI64 *identity=f==5?&expected->uid:&expected->gid;const XrXirValue *number=NULL;bool present=false;
-   CHECK(xr_xir_nullable_view(&value,&present,&number)&&present==(zero||identity->present));
-   if(present)CHECK(number&&number->type==XR_XIR_I64&&number->payload==(zero?0:identity->value));
+   CHECK(xr_xir_nullable_view(&value,&present,&number)&&present==identity->present);
+   if(present)CHECK(number&&number->type==XR_XIR_I64&&number->payload==identity->value);
   }else CHECK(value.type==XR_XIR_BOOL&&value.payload==(f==7?expected->is_file:f==8?expected->is_dir:expected->is_symlink));
   xr_xir_value_drop(&value);
  }
@@ -47,19 +47,21 @@ static void host_stat_execute(XrXirProgram *program,const uint32_t ids[4]){
 #endif
  XrOsIoPolicy policy={NULL,host_stat_allocate,host_stat_free};XrOsFileMetadataOwner owner={0};XrOsFileMetadata reference={0};
  CHECK(xr_os_io_file_metadata(&policy,path,strlen(path),NULL,&owner,&reference)==XR_OS_IO_OK&&!owner.handle&&reference.present&&reference.size==3&&reference.is_file);
- for(unsigned pass=0;pass<2;++pass){
+ for(unsigned pass=0;pass<3;++pass){
+  XrOsFileMetadata expected=reference;
+  if(pass){stat_vector_flags=pass==1?2u:4u;expected=(XrOsFileMetadata){true,17,23,101,202,303,{true,0},{true,42},false,pass==1,pass==2};}
   XrXirInstance *instance=host_instance(program,ids[0]);host_active=instance;stat_mode=pass?STAT_ZERO_IDS:STAT_NORMAL;
   XrXirValue object=host_stat_path(instance,ids[1],path);
-  XrXirValue checked=host_invoke(instance,ids[2],&object,1);CHECK(checked.type==XR_XIR_BOOL&&checked.payload);xr_xir_value_drop(&checked);
+  XrXirValue checked=host_invoke(instance,ids[2],&object,1);CHECK(checked.type==XR_XIR_BOOL&&checked.payload==!pass);xr_xir_value_drop(&checked);
   unsigned before=stat_calls;
-  XrXirValue result=host_invoke(instance,ids[3],&object,1);CHECK(stat_calls==before+1);host_stat_fields(&result,&reference,pass!=0);
+  XrXirValue result=host_invoke(instance,ids[3],&object,1);CHECK(stat_calls==before+1);host_stat_fields(&result,&expected);
   bool some=false;const XrXirValue *body=NULL;CHECK(xr_xir_nullable_view(&result,&some,&body)&&some);
   XrXirValueAdmission admission={.arena=xr_xir_value_arena(body),.work=100000,.scratch_bytes=65536};XrXirValue uid={0};
   CHECK(xr_xir_class_get(body,5,&admission,&uid)==XR_XIR_VALUE_OK);xr_xir_value_drop(&object);
   CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);host_active=NULL;
   CHECK(xr_xir_nullable_view(&result,&some,&body)&&some&&body);
   const XrXirValue *number=NULL;CHECK(xr_xir_nullable_view(&uid,&some,&number));if(pass)CHECK(some&&number&&number->payload==0);
-  XrXirValue size={0};CHECK(xr_xir_class_get(body,0,&admission,&size)==XR_XIR_VALUE_OK&&size.payload==3);xr_xir_value_drop(&size);
+  XrXirValue size={0};CHECK(xr_xir_class_get(body,0,&admission,&size)==XR_XIR_VALUE_OK&&size.payload==expected.size);xr_xir_value_drop(&size);
   xr_xir_value_drop(&uid);xr_xir_value_drop(&result);CHECK(runtime_live==live&&runtime_bytes==bytes);
  }
  char missing[sizeof(path)+16];CHECK(snprintf(missing,sizeof(missing),"%s.missing",path)>0);
