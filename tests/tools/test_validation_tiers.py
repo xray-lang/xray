@@ -152,6 +152,9 @@ class TierTests(unittest.TestCase):
                      "src/xir/xxir_source_nominal_contract.inc.c", "src/xir/xxir_path_verify.inc.c",
                      "src/os/os_fs.h", "src/base/xwindows_utf8.h",
                      "src/os/os_file_links.h", "src/os/win/file_links_win.c",
+                     "src/os/os_file_temp.h", "src/os/win/file_temp_win.c",
+                     "src/os/unix/file_temp_unix.c", "tests/unit/base/test_file_temp.c",
+                     "tests/unit/base/file_temp.cmake",
                      "src/os/unix/file_links_unix.c", "tests/unit/base/test_file_links.c",
                      "tests/unit/base/file_links.cmake",
                      "src/xir/xxir_instance_io_mutation.inc.c",
@@ -179,6 +182,8 @@ class TierTests(unittest.TestCase):
                 self.assertIn("test_os_file_mutation", plan["targets"])
                 self.assertIn("os_file_links", plan["tests"])
                 self.assertIn("test_os_file_links", plan["targets"])
+                self.assertIn("os_file_temp", plan["tests"])
+                self.assertIn("test_os_file_temp", plan["targets"])
                 self.assertNotIn("native-runtime", plan["groups"])
         self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
 

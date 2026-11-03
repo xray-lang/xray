@@ -807,6 +807,11 @@
         "src/os/os_file_metadata.h",
         "src/os/os_file_mutation.h",
         "src/os/os_file_links.h",
+        "src/os/os_file_temp.h",
+        "src/os/win/file_temp_win.c",
+        "src/os/unix/file_temp_unix.c",
+        "tests/unit/base/test_file_temp.c",
+        "tests/unit/base/file_temp.cmake",
         "src/os/win/file_links_win.c",
         "src/os/unix/file_links_unix.c",
         "tests/unit/base/test_file_links.c",
@@ -865,6 +870,7 @@
         "os_file_metadata",
         "os_file_mutation",
         "os_file_links",
+        "os_file_temp",
         "os_file_links_following_path",
         "os_file_links_mount_point_readlink"
       ],
@@ -874,7 +880,8 @@
         "test_os_system_queries",
         "test_os_file_metadata",
         "test_os_file_mutation",
-        "test_os_file_links"
+        "test_os_file_links",
+        "test_os_file_temp"
       ]
     }
   },
