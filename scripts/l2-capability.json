@@ -799,6 +799,43 @@
         "class_inheritance_native"
       ]
     },
+    "fixed-array-scalars": {
+      "tier": "L2",
+      "match": [
+        "src/xir/xxir_fixed_array*",
+        "src/xir/xxir_source_fixed*",
+        "src/xir/xxir_source.c",
+        "src/xir/xxir_source_array.inc.c",
+        "src/xir/xxir_source_index.inc.c",
+        "src/xir/xxir_source_ground_type.inc.c",
+        "src/xir/xxir_types.c",
+        "src/xir/xxir_checked.c",
+        "src/xir/xxir_checked_codec.inc.c",
+        "src/xir/xxir_verify.c",
+        "src/xir/xxir_type_layout.c",
+        "src/xir/xxir_value.c",
+        "src/xir/xxir_value_path.inc.c",
+        "src/xir/xxir_path_verify.inc.c",
+        "src/xir/xxir_cell_projection.inc.c",
+        "src/xir/xxir_storage_pack.inc.c",
+        "src/xir/xxir_storage_unpack.inc.c",
+        "src/hir/xhir_body_place.inc.c",
+        "stdlib/simd/simd.xr",
+        "tests/unit/xir/fixed_array_scalar/*",
+        "tests/unit/xir/fixed_bytes_value_alloc.c"
+      ],
+      "reason": "Typed fixed arrays retain exact scalar widths, inline storage, owned copies and transactional indexed writes in VM and the same generated C.",
+      "tests": [
+        "fixed_array_scalar_source",
+        "fixed_array_scalar_native",
+        "fixed_array_scalar_value"
+      ],
+      "targets": [
+        "test_fixed_array_scalar_source",
+        "test_fixed_array_scalar_native",
+        "test_fixed_array_scalar_value"
+      ]
+    },
     "host-os": {
       "tier": "L2",
       "match": [

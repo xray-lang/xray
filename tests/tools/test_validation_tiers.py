@@ -152,6 +152,24 @@ class TierTests(unittest.TestCase):
                 self.assertNotIn("native-runtime", plan["groups"])
         self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
 
+    def test_scalar_fixed_arrays_select_real_consumers_without_expanding_l1(self):
+        paths = ("src/xir/xxir_fixed_array_type_internal.h",
+                 "src/xir/xxir_source_fixed_array.inc.c",
+                 "src/xir/xxir_source.c", "src/xir/xxir_source_index.inc.c",
+                 "src/xir/xxir_value_path.inc.c", "src/xir/xxir_type_layout.c",
+                 "src/hir/xhir_body_place.inc.c", "stdlib/simd/simd.xr",
+                 "tests/unit/xir/fixed_array_scalar/fixed_array_scalar.cmake")
+        tests = {"fixed_array_scalar_source", "fixed_array_scalar_native", "fixed_array_scalar_value"}
+        targets = {"test_" + name for name in tests}
+        for path in paths:
+            with self.subTest(path=path):
+                plan = xray_l1.tier_plan(ROOT, "L2", changed=[path])
+                self.assertIn("fixed-array-scalars", plan["groups"])
+                self.assertTrue(tests <= set(plan["tests"]))
+                self.assertTrue(targets <= set(plan["targets"]))
+                self.assertNotIn("native-runtime", plan["groups"])
+        self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
+
     def test_recursive_fixture_selection_matches_actual_ctest_report(self):
         catalog = {"groups": {"family": {"tier": "L2", "tests": ["leaf"], "targets": []}},
                    "l2": {"interfaceMatches": {}, "requiredOn": {}, "prerequisites": {

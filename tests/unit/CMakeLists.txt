@@ -2522,6 +2522,7 @@ set_tests_properties(test_xr_program_aot_provider_output PROPERTIES
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/rune_text_output.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/fixed_bytes.cmake)
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/fixed_array_scalar/fixed_array_scalar.cmake")
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/source_copy.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/array_binding.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/nominal_inference.cmake)
