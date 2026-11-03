@@ -9,6 +9,7 @@
 #ifndef XIR_MIXED_BINDING_PROJECTION_H
 #define XIR_MIXED_BINDING_PROJECTION_H
 #include "xir/xxir_program_internal.h"
+#include "xir/xxir_compile_memory.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_value_place.h"
 typedef struct XirMixedProjection {
@@ -30,8 +31,7 @@ static inline XrXirStatus xir_mixed_projection_prepare(const XrXirCompileContext
     XrCompileResourceStatus physical=xr_compile_resources_allocation(context->resources,bindings,
         (uint64_t)count*sizeof(*bindings));
     if(physical!=XR_COMPILE_RESOURCE_OK)
-        return physical==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
-    if(!xir_compile_work(context,(uint64_t)count*(2*sizeof(*entries)+sizeof(uint64_t)))) return XR_XIR_BUDGET;
+        return xir_compile_resource_status(physical);
     projection->artifact=artifact;projection->bindings=bindings;projection->count=count;projection->native_mask=0;
     for(uint32_t f=0;f<count;++f){
         const XrXirFunctionLayout *layout=xr_xir_compile_artifact_layout(artifact,f);
@@ -46,8 +46,7 @@ static inline XrXirStatus xir_mixed_projection_prepare(const XrXirCompileContext
 
 static inline XrXirStatus xir_mixed_projection_native(const XrXirCompileContext *context,
     XirMixedProjection *projection,uint32_t function,const XrXirCallEntry *entry) {
-    if(function>=projection->count) return XR_XIR_BAD_STRUCTURE;
-    if(!xir_compile_work(context,sizeof(*entry)+sizeof(projection->native_mask))) return XR_XIR_BUDGET;
+    if(!xir_compile_context_valid(context) || function>=projection->count) return XR_XIR_BAD_STRUCTURE;
     projection->entries[function]=*entry;projection->native_mask|=UINT64_C(1)<<function;
     return XR_XIR_OK;
 }
@@ -63,10 +62,8 @@ static inline XrXirStatus xir_mixed_projection_match(const XrXirCompileContext *
     XrCompileResourceStatus physical=xr_compile_resources_allocation(context->resources,
         projection->bindings,(uint64_t)projection->count*sizeof(*projection->bindings));
     if(physical!=XR_COMPILE_RESOURCE_OK)
-        return physical==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
+        return xir_compile_resource_status(physical);
     for(uint32_t f=0;f<projection->count;++f){
-        if(!xir_compile_work(context,2*sizeof(XrXirCallEntry)+sizeof(XrXirVmBinding)+sizeof(uint64_t)))
-            return XR_XIR_BUDGET;
         const XrXirCallEntry *entry=&program->entries[f],*expected=&projection->entries[f];
         const XrXirVmBinding *binding=&projection->bindings[f];
         if(binding->artifact!=projection->artifact || binding->function!=f ||
