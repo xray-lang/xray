@@ -373,6 +373,24 @@ static bool source_initialization_require(SourceContext *ctx,uint32_t function) 
 done:
     ctx->function=saved_function;ctx->module=saved_module;return ok;
 }
+static bool source_redundant_try(SourceContext *ctx,AstNode *node) {
+    if(node&&node->type==AST_TRY_CATCH) {
+        TryCatchNode *attempt=&node->as.try_catch;
+        for(int i=0;i<attempt->catch_count;++i) {
+            if(!(i&63)&&!source_request_poll(ctx,node))return false;
+            if(attempt->catch_clauses[i]->is_panic)
+                return source_fail(ctx,node,XR_XIR_BAD_TYPE,
+                    "E0336: try body has no business-error source; for a panic-only intent keep only the panic boundary and review ordinary handler logic before removal");
+        }
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,
+            "E0336: try body has no business-error source; remove or revise the ordinary catch boundary, preserving its handler logic");
+    }
+    if(node&&node->type==AST_SCOPE_BLOCK)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,
+            "E0336: try scope exposes no business errors; remove the marker and keep the scope");
+    return source_fail(ctx,node,XR_XIR_BAD_TYPE,
+        "E0336: try expression has no business-error source; remove the marker and preserve the expression");
+}
 static bool source_local_errors_finish(SourceContext *ctx) {
     uint32_t saved_function=ctx->function,saved_module=ctx->module;bool ok=false;
     for (uint32_t f=0;f<ctx->function_count;++f) {
@@ -392,7 +410,7 @@ static bool source_local_errors_finish(SourceContext *ctx) {
         for (SourceTryRegion *region=ctx->bodies[f].try_regions;region;region=region->next) {
             if (!source_request_poll(ctx,region->node)) goto done;
             if (!region->throwing) {
-                source_fail(ctx,region->node,XR_XIR_BAD_TYPE,"E0336: redundant try has no potentially throwing operation");goto done;
+                source_redundant_try(ctx,region->node);goto done;
             }
         }
     }
