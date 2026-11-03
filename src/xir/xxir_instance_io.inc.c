@@ -38,20 +38,6 @@ static XrXirCallStatus instance_io_permission(XrXirCallView *view,XrXirInstance 
     return XR_XIR_CALL_READY;
 }
 
-/* Invalid locators are ordinary refusals after the String and bounded UTF-8
- * protocol have been checked. The policy's first fault remains independent. */
-static XrXirCallStatus instance_io_result(XrOsIoStatus called,bool *changed) {
-    switch(called) {
-    case XR_OS_IO_OK:*changed=true;return XR_XIR_CALL_READY;
-    case XR_OS_IO_BAD_ARGUMENT:case XR_OS_IO_OVERFLOW:case XR_OS_IO_IO:
-    case XR_OS_IO_NOT_FOUND:case XR_OS_IO_EXISTS:*changed=false;return XR_XIR_CALL_READY;
-    case XR_OS_IO_OUT_OF_MEMORY:return XR_XIR_CALL_OOM;
-    case XR_OS_IO_MEMORY_LIMIT:return XR_XIR_CALL_LIMIT;
-    case XR_OS_IO_UNSUPPORTED:return XR_XIR_CALL_UNSUPPORTED;
-    default:return XR_XIR_CALL_HOST_ERROR;
-    }
-}
-
 static XrXirCallStatus instance_io_call(XrXirCallView *view,XrXirInstance *instance,
     uint32_t index,uint32_t id,const XrXirCallEntry *entry,XrXirValue *output) {
     uint32_t field=0;
@@ -80,13 +66,13 @@ static XrXirCallStatus instance_io_call(XrXirCallView *view,XrXirInstance *insta
         called=instance_environment_allocate(&query,length+1,&owned);
         if(called==XR_OS_IO_OK) {
             memcpy(owned,bytes,length);((char *)owned)[length]=0;
-            called=chmod?xr_os_io_chmod(&policy,owned,view->arguments[1].payload,instance_environment_current):
-                xr_os_io_chdir(&policy,owned,instance_environment_current);
+            called=chmod?xr_os_io_chmod(&policy,owned,view->arguments[1].payload,instance_environment_current,&changed):
+                xr_os_io_chdir(&policy,owned,instance_environment_current,&changed);
         }
     }
     instance_environment_free(&query,owned);xr_xir_value_drop(&text);
     if(!instance_environment_current(&query))return query.status;
-    if(valid)status=instance_io_result(called,&changed);
+    if(valid)status=instance_environment_status(called);
     if(status==XR_XIR_CALL_READY)*output=(XrXirValue){XR_XIR_BOOL,0,changed?1:0};
     return status;
 }
