@@ -1143,6 +1143,19 @@ static const XrNativeMemberDeclaration xr_native_os_system_homedir = {
     false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
     "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_NULLABLE_STRING
 };
+static const XrNativeMemberDeclaration xr_native_os_cpu_count = {
+    13, "__cpuCount", "(): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_I64
+};
+static const XrNativeParameter xr_native_sys_pin_to_cpu_parameters[] = {
+    {"cpu", "i64", XR_NATIVE_TERM_I64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_sys_pin_to_cpu = {
+    2, "__pinToCpu", "(cpu: i64): bool", "bool", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_sys_pin_to_cpu_parameters, 1, XR_NATIVE_TERM_BOOL
+};
 static const XrNativeParameter xr_native_unicode_property_parameters[] = {
     {"name", "string", XR_NATIVE_TERM_STRING, false, false},
 };
@@ -1227,5 +1240,7 @@ static const XrNativeCallableDeclaration xr_native_callables[] = {
     {XR_NATIVE_CALLABLE_OS_GETCWD, NULL, &xr_native_os_getcwd, NULL, false, "os", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
     {XR_NATIVE_CALLABLE_OS_HOSTNAME, NULL, &xr_native_os_hostname, NULL, false, "os", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
     {XR_NATIVE_CALLABLE_OS_SYSTEM_USERNAME, NULL, &xr_native_os_system_username, NULL, false, "os", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
-    {XR_NATIVE_CALLABLE_OS_SYSTEM_HOMEDIR, NULL, &xr_native_os_system_homedir, NULL, false, "os", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}}
+    {XR_NATIVE_CALLABLE_OS_SYSTEM_HOMEDIR, NULL, &xr_native_os_system_homedir, NULL, false, "os", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {XR_NATIVE_CALLABLE_OS_CPU_COUNT, NULL, &xr_native_os_cpu_count, NULL, false, "os", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}},
+    {XR_NATIVE_CALLABLE_SYS_PIN_TO_CPU, NULL, &xr_native_sys_pin_to_cpu, NULL, false, "sys", "stdlib/defs/core.def", {{230,76,101,179,183,161,57,87,31,231,109,95,245,255,3,61,104,120,197,12,247,204,247,251,240,224,70,239,255,165,52,203}}}
 };

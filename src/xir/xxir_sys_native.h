@@ -17,22 +17,34 @@
 #include "../shared/xnative_declaration.h"
 #include <string.h>
 
-static inline bool xir_sys_thread_yield_signature(const XrXirType *parameters,
+static inline bool xir_sys_native_id(uint32_t id) {
+    return id==XR_NATIVE_CALLABLE_SYS_THREAD_YIELD || id==XR_NATIVE_CALLABLE_SYS_PIN_TO_CPU;
+}
+static inline bool xir_sys_native_signature(uint32_t id,const XrXirType *parameters,
     uint32_t count,XrXirType result,XrXirType error) {
-    const XrNativeCallableDeclaration *native=xr_native_callable_by_id(XR_NATIVE_CALLABLE_SYS_THREAD_YIELD);
-    if(!native || native->owner || native->error_e_type || native->ctfe || !native->namespace_id ||
+    const XrNativeCallableDeclaration *native=xr_native_callable_by_id(id);
+    bool pin=id==XR_NATIVE_CALLABLE_SYS_PIN_TO_CPU;
+    if(!xir_sys_native_id(id) || !native || native->owner || native->error_e_type || native->ctfe || !native->namespace_id ||
         strcmp(native->namespace_id,"sys") || !native->source_path ||
         strcmp(native->source_path,"stdlib/defs/core.def") || !native->member) return false;
     const XrNativeMemberDeclaration *member=native->member;
-    return member->name && !strcmp(member->name,"__threadYield") && member->signature &&
-        !strcmp(member->signature,"(): ()") && member->result_text && !strcmp(member->result_text,"()") &&
-        !member->is_public && !member->is_method && !member->is_static &&
-        member->receiver==XR_NATIVE_RECEIVER_READ && member->operation==XR_NATIVE_OPERATION_NONE &&
-        member->allocation==XR_NATIVE_ALLOCATION_UNKNOWN && member->failures && !*member->failures &&
-        member->ownership==XR_NATIVE_RESULT_OWNERSHIP_OWNED && !member->parameters && !member->parameter_count &&
-        member->result==XR_NATIVE_TERM_UNIT && !parameters && !count && result==XR_XIR_UNIT && error==XR_XIR_NEVER;
+    if(!member->name || strcmp(member->name,pin?"__pinToCpu":"__threadYield") || !member->signature ||
+        strcmp(member->signature,pin?"(cpu: i64): bool":"(): ()") || !member->result_text ||
+        strcmp(member->result_text,pin?"bool":"()") || member->is_public || member->is_method ||
+        member->is_static || member->lowered ||
+        member->receiver!=XR_NATIVE_RECEIVER_READ || member->operation!=XR_NATIVE_OPERATION_NONE ||
+        member->allocation!=XR_NATIVE_ALLOCATION_UNKNOWN || !member->failures || *member->failures ||
+        member->ownership!=XR_NATIVE_RESULT_OWNERSHIP_OWNED || error!=XR_XIR_NEVER) return false;
+    if(!pin)return
+        !member->parameters && !member->parameter_count &&
+        member->result==XR_NATIVE_TERM_UNIT && !parameters && !count && result==XR_XIR_UNIT;
+    const XrNativeParameter *parameter=member->parameters;
+    return parameter && member->parameter_count==1 && count==1 && parameters && parameters[0]==XR_XIR_I64 &&
+        parameter->name && !strcmp(parameter->name,"cpu") && parameter->type_text && !strcmp(parameter->type_text,"i64") &&
+        parameter->type==XR_NATIVE_TERM_I64 && !parameter->optional && !parameter->variadic &&
+        member->result==XR_NATIVE_TERM_BOOL && result==XR_XIR_BOOL;
 }
-static inline bool xir_sys_thread_yield_scope(const XrXirDeclarations *declarations,
+static inline bool xir_sys_native_scope(const XrXirDeclarations *declarations,
     uint32_t function,uint32_t count) {
     static const char identity[]="stdlib-module-v1:module=3:sys:path=10:sys/sys.xr";
     if(!declarations || !declarations->functions || !declarations->modules || function>=count) return false;

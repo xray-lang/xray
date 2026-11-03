@@ -2431,10 +2431,21 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
     value=state;
     status=xr_xir_call_execution_status(view);if (status!=XR_XIR_CALL_READY) goto failed;
     XrXirViewAccess access={0};XrXirValueStatus converted=XR_XIR_VALUE_OK;
-    if(id==XR_NATIVE_CALLABLE_SYS_THREAD_YIELD) {
-        if(!xir_sys_thread_yield_scope(program->declarations,index,program->entry_count))goto failed;
-        xr_thread_yield();
-        *value=(XrXirValue){XR_XIR_UNIT,0,0};
+    if(xir_sys_native_id(id)) {
+        if(!xir_sys_native_scope(program->declarations,index,program->entry_count))goto failed;
+        if(id==XR_NATIVE_CALLABLE_SYS_THREAD_YIELD) {
+            xr_thread_yield();
+            *value=(XrXirValue){XR_XIR_UNIT,0,0};
+        } else {
+            int64_t cpu=view->arguments[0].payload;bool pinned=false;
+            if(cpu>=0) {
+                unsigned int count=xr_os_cpu_count();
+                unsigned int selected=(unsigned int)((uint64_t)cpu%count);
+                status=xr_xir_call_execution_status(view);if(status!=XR_XIR_CALL_READY)goto failed;
+                pinned=xr_thread_pin_to_cpu(selected)==0;
+            }
+            *value=(XrXirValue){XR_XIR_BOOL,0,pinned?1:0};
+        }
     } else if(xir_math_native_id(id)) {
         if(!xir_math_native_scope(program->declarations,index,program->entry_count))goto failed;
         XrXirRunStatus evaluated=instance_math_call(id,view->arguments,view->argument_count,value);
@@ -2465,6 +2476,8 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
         } else if(id==XR_NATIVE_CALLABLE_OS_GETCWD) {
             status=instance_current_directory(view,instance,value);
             if(status!=XR_XIR_CALL_READY)goto failed;
+        } else if(id==XR_NATIVE_CALLABLE_OS_CPU_COUNT) {
+            *value=(XrXirValue){XR_XIR_I64,0,(int64_t)xr_os_cpu_count()};
         } else if(id==XR_NATIVE_CALLABLE_OS_GETPID) {
             *value=(XrXirValue){XR_XIR_I64,0,xr_os_core_getpid()};
         } else if(id==XR_NATIVE_CALLABLE_OS_EXIT) {

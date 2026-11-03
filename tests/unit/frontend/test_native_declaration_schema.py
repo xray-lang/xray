@@ -725,5 +725,44 @@ class MathCallableDeclarations(unittest.TestCase):
                     schema.render_math_callables(changed)
 
 
+class CpuCallableSchemaTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / 'tools/stdlibgen'))
+        from stdlibgen import parse_defs
+        cls.declarations = parse_defs(ROOT)
+
+    def test_exact_scalar_contract_and_runtime_only_rows(self):
+        lines, rows = schema.render_cpu_callables(self.declarations)
+        self.assertEqual(len(rows), 2)
+        self.assertIn('XR_NATIVE_CALLABLE_OS_CPU_COUNT, NULL,', rows[0])
+        self.assertIn('XR_NATIVE_CALLABLE_SYS_PIN_TO_CPU, NULL,', rows[1])
+        self.assertIn('NULL, false, "os", "stdlib/defs/core.def", FINGERPRINT', rows[0])
+        self.assertIn('NULL, false, "sys", "stdlib/defs/core.def", FINGERPRINT', rows[1])
+        text = '\n'.join(lines)
+        self.assertIn('"__cpuCount", "(): i64", "i64"', text)
+        self.assertIn('"__pinToCpu", "(cpu: i64): bool", "bool"', text)
+        self.assertEqual(text.count('XR_NATIVE_ALLOCATION_UNKNOWN'), 2)
+        self.assertNotIn('XR_NATIVE_ALLOCATION_NO_HEAP', text)
+        self.assertIn('{"cpu", "i64", XR_NATIVE_TERM_I64, false, false}', text)
+
+    def test_missing_duplicate_and_single_contract_changes_are_rejected(self):
+        for module, name in (('os', '__cpuCount'), ('sys', '__pinToCpu')):
+            row = next(item for item in self.declarations if item.module == module and item.name == name)
+            for changed in ([item for item in self.declarations if item is not row], self.declarations + [row]):
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    schema.render_cpu_callables(changed)
+            for field, value in [('module', 'other'), ('signature', '(): string'), ('argc', '9'),
+                                 ('arg_spec', 'invalid'), ('visibility', 'public'), ('effect', 'nothrow'),
+                                 ('allocation', 'no_heap'), ('return_ownership', 'fresh'), ('layer', 'core'),
+                                 ('vm', 'other'), ('aot', 'other'), ('aot_direct', False), ('aot_kind', 'builtin'),
+                                 ('link_object', 'other'), ('vm_binding', 'yieldable'), ('vm_ifdef', 'OTHER'),
+                                 ('define', 'OTHER'), ('ret', 'i64'), ('semantic_intrinsic', True),
+                                 ('provider_declaration', object()), ('caps', ('task',)), ('suspension_kind', 'task')]:
+                with self.subTest(name=name, field=field), self.assertRaises(ValueError):
+                    schema.render_cpu_callables([replace(item, **{field: value}) if item is row else item
+                                                 for item in self.declarations])
+
+
 if __name__ == '__main__':
     unittest.main()
