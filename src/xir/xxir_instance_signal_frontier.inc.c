@@ -31,7 +31,10 @@ XR_FUNC bool xir_instance_signal_frame(const void *pointer,const XrXirCall *call
     if (!instance_owner_current(root) || instance_root(root)!=root || admission->domain!=root->domain ||
         root->stopping || instance_busy(root)) return false;
     XrXirInstance *active=instance_current(root),*selected=NULL;
-    if (!active || active->call!=call || active->stopping || active->state!=XR_XIR_INSTANCE_READY ||
+    /* Observing sealed code during initialization grants no storage access.
+     * Slot publication and partial-object reads retain their ordinary gates. */
+    if (!active || active->call!=call || active->stopping ||
+        (active->state!=XR_XIR_INSTANCE_READY && active->state!=XR_XIR_INSTANCE_INITIALIZING) ||
         instance_busy(active)) return false;
     if (metadata->admission_context==root) selected=root;
     else if (metadata->admission_context==active) selected=active;

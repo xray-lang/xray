@@ -152,10 +152,10 @@ static void host_system_contracts(XrXirCompileContext *context,const XrXirArtifa
 static void host_product(XrXirCompileContext *context,unsigned kind,const char *directory,bool emit){
  const char *modules[]={"os","sys","io","os","io","io","os"},*texts[]={host_count_text,host_pin_text,host_io_text,host_system_text,host_stat_text,host_io_bool_text,host_signal_frontier_text},*prefixes[]={"host_count","host_pin","host_path","host_system","host_stat","host_io_bool","host_signal_frontier"};
  XrXirArtifact *code=host_code(context,modules[kind],texts[kind]);const XrXirModule *m=xr_xir_compile_artifact_module(code);
- uint32_t ids[9]={m->declarations->entry_function};unsigned count=kind==6?4u:kind==5?7u:kind==4?4u:kind==3?9u:kind==2?5u:2u;
+ uint32_t ids[9]={m->declarations->entry_function};unsigned count=kind==6?5u:kind==5?7u:kind==4?4u:kind==3?9u:kind==2?5u:2u;
  if(kind==3){const char *names[]={"uid","gid","parent","signal","total","available","elapsed","load"};for(unsigned n=0;n<8;++n)ids[n+1]=host_named(m,names[n]);}
  else ids[1]=host_named(m,kind==6?"parent":(kind==2||kind==4||kind==5)?"make":"answer");
- if(kind==6){ids[2]=host_named(m,"failed");ids[3]=host_named(m,"heldParent");}
+ if(kind==6){ids[2]=host_named(m,"failed");ids[3]=host_named(m,"heldParent");ids[4]=host_named(m,"initialized");}
  if(kind==5){const char *names[]={"mkdirPath","rmdirPath","removePath","renamePath","utimePath"};for(unsigned n=0;n<5;++n)ids[n+2]=host_named(m,names[n]);}
  if(kind==4){ids[2]=host_named(m,"query");ids[3]=host_named(m,"snapshot");}
  if(kind==2){ids[2]=host_named(m,"chmodPath");ids[3]=host_named(m,"chdirPath");ids[4]=host_named(m,"viaRef");}
