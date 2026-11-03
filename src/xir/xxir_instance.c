@@ -2514,6 +2514,8 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
             *value=(XrXirValue){XR_XIR_BOOL,0,pinned?1:0};
         }
     } else if(xir_io_native_id(id)) {
+        if(id==XR_NATIVE_CALLABLE_IO_MAKE_TEMP_DIR || id==XR_NATIVE_CALLABLE_IO_MAKE_TEMP_FILE)
+            return instance_io_temp_action(view,instance,index,id,entry,value);
         status=instance_io_call(view,instance,index,id,entry,value);
         if(status!=XR_XIR_CALL_READY)goto failed;
     } else if(xir_math_native_id(id)) {
