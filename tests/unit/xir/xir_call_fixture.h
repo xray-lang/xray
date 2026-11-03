@@ -59,15 +59,21 @@ static XrXirArtifact *call_fixture(const XrXirCompileContext *context, uint32_t 
     XrXirInstruction entry[]={{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0, {0}},{XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}}};
     XrXirBlock init_block={0,1, 0, 0};
     XrXirFunction functions[] = {
-        {"entry", 5, params, 2, XR_XIR_I64, &root_block, 1, root, 2, operands, 2},
-        {"minimum", 7, params, 2, XR_XIR_I64, sort_blocks, 3, sort, 4, operands, 2},
-        {"compare", 7, params, 2, XR_XIR_BOOL, &compare_block, 1, compare, 4, mode == 1 ? &error_operand : NULL, mode == 1 ? 1u : 0u},
-        {"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0},
-        {"main",4,NULL,0,XR_XIR_I64,&root_block,1,entry,2,NULL,0}
+        {.name="entry",.name_length=5,.parameters=params,.parameter_count=2,.result=XR_XIR_I64,
+         .blocks=&root_block,.block_count=1,.instructions=root,.instruction_count=2,.operands=operands,.operand_count=2,
+         .error_type=mode==1 && (!guarded || rethrow) ? (XrXirType)256 : XR_XIR_NEVER},
+        {.name="minimum",.name_length=7,.parameters=params,.parameter_count=2,.result=XR_XIR_I64,
+         .blocks=sort_blocks,.block_count=3,.instructions=sort,.instruction_count=4,.operands=operands,.operand_count=2,
+         .error_type=mode==1 ? (XrXirType)256 : XR_XIR_NEVER},
+        {.name="compare",.name_length=7,.parameters=params,.parameter_count=2,.result=XR_XIR_BOOL,
+         .blocks=&compare_block,.block_count=1,.instructions=compare,.instruction_count=4,
+         .operands=mode==1 ? &error_operand : NULL,.operand_count=mode==1 ? 1u : 0u,
+         .error_type=mode==1 ? (XrXirType)256 : XR_XIR_NEVER},
+        {.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&init_block,.block_count=1,
+         .instructions=&init,.instruction_count=1,.error_type=XR_XIR_NEVER},
+        {.name="main",.name_length=4,.result=XR_XIR_I64,.blocks=&root_block,.block_count=1,
+         .instructions=entry,.instruction_count=2,.error_type=XR_XIR_NEVER}
     };
-    functions[0].error_type=mode==1 && (!guarded || rethrow) ? (XrXirType)256 : XR_XIR_NEVER;
-    functions[1].error_type=functions[2].error_type=mode==1 ? (XrXirType)256 : XR_XIR_NEVER;
-    functions[3].error_type=functions[4].error_type=XR_XIR_NEVER;
     XrXirInstruction invoke[] = {
         {XR_XIR_INVOKE,XR_XIR_I64,{0,2},{1,2},1,{0}},
         {XR_XIR_INVOKE_RESULT,XR_XIR_I64,{0},{0},0,{0}},
