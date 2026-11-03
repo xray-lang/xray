@@ -96,8 +96,10 @@ static void host_thread_tokens_execute(XrXirProgram *program,const uint32_t *ids
   CHECK(xr_xir_instance_start(instance,function,NULL,0)==XR_XIR_CALL_READY);
   XrXirCallStatus expected=mode==TOKEN_OOM?XR_XIR_CALL_OOM:mode==TOKEN_IO?XR_XIR_CALL_HOST_ERROR:XR_XIR_CALL_CANCELLED;
   CHECK(host_token_poll(instance)==expected);XrXirValue value={0};
-  CHECK(xr_xir_instance_take_result(instance,&value)==expected&&!value.type&&!value.payload);
-  CHECK(xr_xir_instance_free(instance)==expected);host_active=NULL;token_mode=TOKEN_NORMAL;
+  bool cancelled=expected==XR_XIR_CALL_CANCELLED;
+  /* Cancellation has no transferable RETURNED/THROWN value and is a normal close. */
+  CHECK(xr_xir_instance_take_result(instance,&value)==(cancelled?XR_XIR_CALL_BAD_STATE:expected)&&!value.type&&!value.reserved&&!value.payload);
+  CHECK(xr_xir_instance_free(instance)==(cancelled?XR_XIR_CALL_READY:expected));host_active=NULL;token_mode=TOKEN_NORMAL;
  }
  host_token_limit(program,ids);
  CHECK(runtime_live==live&&runtime_bytes==bytes);
