@@ -10,6 +10,7 @@ set(host_os_c
     "${host_os_generated}/host_io_bool.c"
     "${host_os_generated}/host_io_links.c"
     "${host_os_generated}/host_io_temp.c"
+    "${host_os_generated}/host_io_directory.c"
     "${host_os_generated}/host_thread_tokens.c"
     "${host_os_generated}/host_signal_frontier.c")
 
@@ -28,6 +29,7 @@ add_custom_command(OUTPUT ${host_os_c}
         "${host_os_dir}/host_os_io_bool_cases.h"
         "${host_os_dir}/host_os_io_links_cases.h"
         "${host_os_dir}/host_os_io_temp_cases.h"
+        "${host_os_dir}/host_os_io_directory_cases.h"
         "${host_os_dir}/host_os_thread_token_cases.h"
         "${host_os_dir}/host_os_thread_token_contracts.h"
         "${PROJECT_SOURCE_DIR}/stdlib/sys/sys.xr"
