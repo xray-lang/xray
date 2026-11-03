@@ -217,6 +217,9 @@ class TierTests(unittest.TestCase):
                      "src/xir/xxir_effect_invocation_primitive.inc.c",
                      "src/xir/xxir_effect_invocation_query.inc.c",
                      "src/xir/xxir_effect_invocation_solve.inc.c",
+                     "src/xir/xxir_effect_context_owner.inc.c",
+                     "src/xir/xxir_effect_snapshot_storage.inc.c",
+                     "src/xir/xxir_effect_snapshot_types.inc.c",
                      "tests/unit/xir/test_xir_signal_source.c",
                      "tests/unit/xir/test_xir_signal_native.c",
                      "tests/unit/xir/root_signal_runtime.h", "tests/unit/xir/root_signal.cmake"):
