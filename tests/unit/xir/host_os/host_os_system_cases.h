@@ -26,9 +26,30 @@ static int64_t host_parent_reference(void){
 #endif
 }
 static double host_double(XrXirValue value){double result=0;CHECK(value.type==XR_XIR_F64);memcpy(&result,&value.payload,sizeof(result));return result;}
+static void host_system_limit(XrXirProgram *program,const uint32_t ids[9]){
+ size_t live=runtime_live,bytes=runtime_bytes;uint64_t limit=0;
+ for(unsigned pass=0;pass<3;++pass){
+  XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
+  if(pass==1)config.work_limit=limit;
+  XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
+  XrXirValue value=host_invoke(instance,ids[0],NULL,0);CHECK(value.type==XR_XIR_I64&&!value.payload);xr_xir_value_drop(&value);
+  host_active=instance;system_mode=SYSTEM_NORMAL;unsigned before=system_calls[2];
+  CHECK(xr_xir_instance_start(instance,ids[3],NULL,0)==XR_XIR_CALL_READY);XrXirCallStatus status=host_poll(instance);
+  CHECK(system_calls[2]==before+1&&!instance->system_owners);
+  if(pass==1){
+   CHECK(status==XR_XIR_CALL_LIMIT&&xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_LIMIT&&!value.type&&!value.reserved&&!value.payload);
+  }else{
+   CHECK(status==XR_XIR_CALL_RETURNED&&xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED&&value.type==XR_XIR_I64&&value.payload==host_parent_reference());
+   CHECK(system_provider_work&&system_provider_work<UINT64_MAX);limit=system_provider_work+1;xr_xir_value_drop(&value);
+  }
+  fprintf(stderr,"system finite work pass%u poll%u provider%u\n",pass,status,system_calls[2]-before);
+  CHECK(xr_xir_instance_free(instance)==(pass==1?XR_XIR_CALL_LIMIT:XR_XIR_CALL_READY));host_active=NULL;
+  CHECK(runtime_live==live&&runtime_bytes==bytes);
+ }
+}
 static void host_system_failures(XrXirProgram *program,const uint32_t ids[9]){
- const unsigned modes[]={SYSTEM_OOM_AFTER,SYSTEM_CANCEL_AFTER,SYSTEM_IO_AFTER,SYSTEM_LIMIT_AFTER};
- const XrXirCallStatus expected[]={XR_XIR_CALL_OOM,XR_XIR_CALL_CANCELLED,XR_XIR_CALL_HOST_ERROR,XR_XIR_CALL_LIMIT};
+ const unsigned modes[]={SYSTEM_OOM_AFTER,SYSTEM_CANCEL_AFTER,SYSTEM_IO_AFTER};
+ const XrXirCallStatus expected[]={XR_XIR_CALL_OOM,XR_XIR_CALL_CANCELLED,XR_XIR_CALL_HOST_ERROR};
  for(unsigned n=0;n<sizeof(modes)/sizeof(*modes);++n){
   size_t live=runtime_live,bytes=runtime_bytes;XrXirInstance *instance=host_instance(program,ids[0]);host_active=instance;
   unsigned before=system_calls[0];system_mode=modes[n];
@@ -98,6 +119,7 @@ static void host_system_execute(XrXirProgram *program,const uint32_t ids[9]){
  CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);host_active=NULL;system_mode=SYSTEM_NORMAL;
  CHECK(xr_xir_nullable_view(&zero,&present,&payload)&&present&&payload&&!payload->payload);xr_xir_value_drop(&zero);
  CHECK(runtime_live==live&&runtime_bytes==bytes);
+ host_system_limit(program,ids);
  host_system_failures(program,ids);
  instance=host_instance(program,ids[0]);host_active=instance;system_mode=SYSTEM_CANCEL_BEFORE;
  CHECK(xr_xir_instance_start(instance,ids[4],args,2)==XR_XIR_CALL_READY&&host_poll(instance)==XR_XIR_CALL_CANCELLED);

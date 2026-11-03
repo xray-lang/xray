@@ -84,8 +84,9 @@ static uint64_t host_cstring_requested;
 static XrXirInstance *host_active;
 static XrOsIoPolicy host_policy;
 enum { SYSTEM_NORMAL, SYSTEM_OOM_AFTER, SYSTEM_CANCEL_AFTER, SYSTEM_IO_AFTER,
- SYSTEM_LIMIT_AFTER, SYSTEM_CLOSE_ONCE, SYSTEM_CLOSE_PERSISTENT, SYSTEM_CANCEL_BEFORE, SYSTEM_SOME_ZERO };
+ SYSTEM_CLOSE_ONCE, SYSTEM_CLOSE_PERSISTENT, SYSTEM_CANCEL_BEFORE, SYSTEM_SOME_ZERO };
 static unsigned system_mode,system_calls[8],system_close_calls;
+static uint64_t system_provider_work;
 #if defined(XR_OS_WINDOWS)
 static HANDLE system_retained_handle;
 static bool system_close_reentry;
@@ -94,7 +95,6 @@ static XrOsIoStatus host_system_after(XrOsIoStatus status){
  if(status!=XR_OS_IO_OK)return status;
  if(system_mode==SYSTEM_OOM_AFTER)runtime_fail_at=runtime_attempts;
  if(system_mode==SYSTEM_CANCEL_AFTER)CHECK(host_active&&xr_xir_call_request_cancel(host_active->call)==XR_XIR_CALL_CANCEL_REQUESTED);
- if(system_mode==SYSTEM_LIMIT_AFTER)CHECK(host_active&&!xr_xir_domain_work(host_active->domain,UINT64_MAX));
  return system_mode==SYSTEM_IO_AFTER?XR_OS_IO_IO:status;
 }
 static XrOsIoStatus host_system_uid(XrOsOptionalI64 *o){
@@ -105,7 +105,8 @@ static XrOsIoStatus host_system_uid(XrOsOptionalI64 *o){
 }
 static XrOsIoStatus host_system_gid(XrOsOptionalI64 *o){++system_calls[1];return host_system_after(xr_os_io_gid(o));}
 static XrOsIoStatus host_system_ppid(XrOsSystemOwner *o,void *c,bool(*current)(void *),int64_t *out){
- ++system_calls[2];XrOsIoStatus status=xr_os_io_ppid(o,c,current,out);
+ ++system_calls[2];CHECK(host_active);system_provider_work=xr_xir_domain_budget_stats(host_active->domain).work;
+ XrOsIoStatus status=xr_os_io_ppid(o,c,current,out);
 #if defined(XR_OS_WINDOWS)
  if(status==XR_OS_IO_OK&&(system_mode==SYSTEM_CLOSE_ONCE||system_mode==SYSTEM_CLOSE_PERSISTENT)){
   CHECK(!o->handle);HANDLE handle=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,FALSE,GetCurrentProcessId());CHECK(handle);
