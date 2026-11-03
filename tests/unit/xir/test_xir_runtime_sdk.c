@@ -422,7 +422,7 @@ static void sdk_fixed_parent_prefixes(XrCompileResources *resources,const XrXirS
     }
 }
 static void sdk_legacy_known_bytes(void) {
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==42 && XR_XIR_CHECKED_CONTRACT==127 &&
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==42 && XR_XIR_CHECKED_CONTRACT==128 &&
         XR_XIR_VALUE_ABI_VERSION==31 && XR_XIR_CALL_ABI_VERSION==38 && XR_XIR_PROGRAM_ABI_VERSION==37,
         "SDK known bytes require the independently framed public contract");
     _Static_assert(sizeof(previous_call29_sdk_kat_preimage)==3186,"complete retired Call29 SDK preimage");
@@ -809,7 +809,7 @@ static void sdk_known_bytes(void) {
     _Static_assert(sizeof(XrXirNominalDeclaration)==128 && offsetof(XrXirNominalDeclaration,parent)==124 &&
         sizeof(XrXirNominalIdentity)==112 && offsetof(XrXirNominalIdentity,parent)==108,
         "nominal parent fields occupy the original tail padding");
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==42 && XR_XIR_CHECKED_CONTRACT==127 &&
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==42 && XR_XIR_CHECKED_CONTRACT==128 &&
         XR_XIR_VALUE_ABI_VERSION==31 && XR_XIR_CALL_ABI_VERSION==38 && XR_XIR_PROGRAM_ABI_VERSION==37,
         "current known bytes require their independently framed identity");
     _Static_assert(sizeof(current_sdk_kat_preimage)==3411 && sizeof(previous42_125_sdk_kat_preimage)==3388 &&
@@ -818,7 +818,8 @@ static void sdk_known_bytes(void) {
     uint8_t digest[32];
     xr_sha256(current_sdk_kat_preimage,sizeof(current_sdk_kat_preimage),digest);
     CHECK(!memcmp(digest,current_sdk_kat_digest,32));
-    CHECK(!memcmp(previous42_126_sdk_kat_file_digest,current_sdk_kat_file_digest,32) &&
+    CHECK(!memcmp(previous42_127_sdk_kat_file_digest,current_sdk_kat_file_digest,32) &&
+        !memcmp(previous42_126_sdk_kat_file_digest,current_sdk_kat_file_digest,32) &&
         !memcmp(missing_advapi32_sdk_kat_file_digest,current_sdk_kat_file_digest,32) &&
         !memcmp(missing_userenv_sdk_kat_file_digest,current_sdk_kat_file_digest,32));
     _Static_assert(sizeof(previous_resource_sdk_kat_preimage)==3338,"complete retired resource ABI wire image");
@@ -843,14 +844,14 @@ static void sdk_known_bytes(void) {
     sdk_missing_userenv_known_bytes(resources,&manifest);
     const uint8_t *prior_images[]={previous39_100_sdk_kat_preimage,
         previous39_106_sdk_kat_preimage,previous39_107_sdk_kat_preimage,
-        previous39_108_sdk_kat_preimage,previous39_109_sdk_kat_preimage,previous39_110_sdk_kat_preimage,previous39_111_sdk_kat_preimage,previous39_112_sdk_kat_preimage,previous39_113_sdk_kat_preimage,previous39_114_sdk_kat_preimage,previous39_115_sdk_kat_preimage,previous39_116_sdk_kat_preimage,previous39_117_sdk_kat_preimage,previous40_118_sdk_kat_preimage,previous40_119_sdk_kat_preimage,previous41_120_sdk_kat_preimage,previous41_121_sdk_kat_preimage,previous41_122_sdk_kat_preimage,previous41_123_sdk_kat_preimage,previous41_124_sdk_kat_preimage,previous42_125_sdk_kat_preimage,previous42_126_sdk_kat_preimage,missing_advapi32_sdk_kat_preimage,missing_userenv_sdk_kat_preimage};
+        previous39_108_sdk_kat_preimage,previous39_109_sdk_kat_preimage,previous39_110_sdk_kat_preimage,previous39_111_sdk_kat_preimage,previous39_112_sdk_kat_preimage,previous39_113_sdk_kat_preimage,previous39_114_sdk_kat_preimage,previous39_115_sdk_kat_preimage,previous39_116_sdk_kat_preimage,previous39_117_sdk_kat_preimage,previous40_118_sdk_kat_preimage,previous40_119_sdk_kat_preimage,previous41_120_sdk_kat_preimage,previous41_121_sdk_kat_preimage,previous41_122_sdk_kat_preimage,previous41_123_sdk_kat_preimage,previous41_124_sdk_kat_preimage,previous42_125_sdk_kat_preimage,previous42_126_sdk_kat_preimage,previous42_127_sdk_kat_preimage,previous42_127_missing_advapi32_sdk_kat_preimage,previous42_127_missing_userenv_sdk_kat_preimage,missing_advapi32_sdk_kat_preimage,missing_userenv_sdk_kat_preimage};
     const uint8_t *prior_digests[]={previous39_100_sdk_kat_digest,
         previous39_106_sdk_kat_digest,previous39_107_sdk_kat_digest,
-        previous39_108_sdk_kat_digest,previous39_109_sdk_kat_digest,previous39_110_sdk_kat_digest,previous39_111_sdk_kat_digest,previous39_112_sdk_kat_digest,previous39_113_sdk_kat_digest,previous39_114_sdk_kat_digest,previous39_115_sdk_kat_digest,previous39_116_sdk_kat_digest,previous39_117_sdk_kat_digest,previous40_118_sdk_kat_digest,previous40_119_sdk_kat_digest,previous41_120_sdk_kat_digest,previous41_121_sdk_kat_digest,previous41_122_sdk_kat_digest,previous41_123_sdk_kat_digest,previous41_124_sdk_kat_digest,previous42_125_sdk_kat_digest,previous42_126_sdk_kat_digest,missing_advapi32_sdk_kat_digest,missing_userenv_sdk_kat_digest};
+        previous39_108_sdk_kat_digest,previous39_109_sdk_kat_digest,previous39_110_sdk_kat_digest,previous39_111_sdk_kat_digest,previous39_112_sdk_kat_digest,previous39_113_sdk_kat_digest,previous39_114_sdk_kat_digest,previous39_115_sdk_kat_digest,previous39_116_sdk_kat_digest,previous39_117_sdk_kat_digest,previous40_118_sdk_kat_digest,previous40_119_sdk_kat_digest,previous41_120_sdk_kat_digest,previous41_121_sdk_kat_digest,previous41_122_sdk_kat_digest,previous41_123_sdk_kat_digest,previous41_124_sdk_kat_digest,previous42_125_sdk_kat_digest,previous42_126_sdk_kat_digest,previous42_127_sdk_kat_digest,previous42_127_missing_advapi32_sdk_kat_digest,previous42_127_missing_userenv_sdk_kat_digest,missing_advapi32_sdk_kat_digest,missing_userenv_sdk_kat_digest};
     const size_t prior_lengths[]={sizeof(previous39_100_sdk_kat_preimage),
         sizeof(previous39_106_sdk_kat_preimage),sizeof(previous39_107_sdk_kat_preimage),
-        sizeof(previous39_108_sdk_kat_preimage),sizeof(previous39_109_sdk_kat_preimage),sizeof(previous39_110_sdk_kat_preimage),sizeof(previous39_111_sdk_kat_preimage),sizeof(previous39_112_sdk_kat_preimage),sizeof(previous39_113_sdk_kat_preimage),sizeof(previous39_114_sdk_kat_preimage),sizeof(previous39_115_sdk_kat_preimage),sizeof(previous39_116_sdk_kat_preimage),sizeof(previous39_117_sdk_kat_preimage),sizeof(previous40_118_sdk_kat_preimage),sizeof(previous40_119_sdk_kat_preimage),sizeof(previous41_120_sdk_kat_preimage),sizeof(previous41_121_sdk_kat_preimage),sizeof(previous41_122_sdk_kat_preimage),sizeof(previous41_123_sdk_kat_preimage),sizeof(previous41_124_sdk_kat_preimage),sizeof(previous42_125_sdk_kat_preimage),sizeof(previous42_126_sdk_kat_preimage),sizeof(missing_advapi32_sdk_kat_preimage),sizeof(missing_userenv_sdk_kat_preimage)};
-    const uint32_t prior_semantics[]={100,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,126,126};
+        sizeof(previous39_108_sdk_kat_preimage),sizeof(previous39_109_sdk_kat_preimage),sizeof(previous39_110_sdk_kat_preimage),sizeof(previous39_111_sdk_kat_preimage),sizeof(previous39_112_sdk_kat_preimage),sizeof(previous39_113_sdk_kat_preimage),sizeof(previous39_114_sdk_kat_preimage),sizeof(previous39_115_sdk_kat_preimage),sizeof(previous39_116_sdk_kat_preimage),sizeof(previous39_117_sdk_kat_preimage),sizeof(previous40_118_sdk_kat_preimage),sizeof(previous40_119_sdk_kat_preimage),sizeof(previous41_120_sdk_kat_preimage),sizeof(previous41_121_sdk_kat_preimage),sizeof(previous41_122_sdk_kat_preimage),sizeof(previous41_123_sdk_kat_preimage),sizeof(previous41_124_sdk_kat_preimage),sizeof(previous42_125_sdk_kat_preimage),sizeof(previous42_126_sdk_kat_preimage),sizeof(previous42_127_sdk_kat_preimage),sizeof(previous42_127_missing_advapi32_sdk_kat_preimage),sizeof(previous42_127_missing_userenv_sdk_kat_preimage),sizeof(missing_advapi32_sdk_kat_preimage),sizeof(missing_userenv_sdk_kat_preimage)};
+    const uint32_t prior_semantics[]={100,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,127,127,126,126};
     for(unsigned i=0;i<sizeof(prior_semantics)/sizeof(prior_semantics[0]);++i) {
         xr_sha256(prior_images[i],prior_lengths[i],digest);
         CHECK(!memcmp(digest,prior_digests[i],32) && memcmp(digest,current_sdk_kat_digest,32));
