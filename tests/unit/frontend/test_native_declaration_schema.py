@@ -725,6 +725,48 @@ class MathCallableDeclarations(unittest.TestCase):
                     schema.render_math_callables(changed)
 
 
+class SignalCallableSchemaTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / 'tools/stdlibgen'))
+        from stdlibgen import parse_defs
+        cls.declarations = parse_defs(ROOT)
+
+    def test_owned_recipe_preserves_the_ordinary_callback_contract(self):
+        lines, rows = schema.render_sys_signal(self.declarations)
+        self.assertEqual(len(rows), 1)
+        self.assertIn('XR_NATIVE_CALLABLE_SYS_ON_SIGNAL, NULL,', rows[0])
+        self.assertIn('NULL, false, "sys", "stdlib/defs/core.def", FINGERPRINT', rows[0])
+        text = '\n'.join(lines)
+        self.assertIn('{"signal", "i64", XR_NATIVE_TERM_I64, false, false}', text)
+        self.assertIn('{"handler", "fn(): ()", XR_NATIVE_TERM_UNIT_CALLBACK, false, false}', text)
+        self.assertIn('XR_NATIVE_ALLOCATION_UNKNOWN', text)
+        self.assertNotIn('XR_NATIVE_ALLOCATION_NO_HEAP', text)
+
+    def test_callback_shape_and_foreign_declaration_changes_are_rejected(self):
+        row = next(item for item in self.declarations if item.module == 'sys' and item.name == '__onSignal')
+        for changed in ([item for item in self.declarations if item is not row], self.declarations + [row]):
+            with self.assertRaises(ValueError):
+                schema.render_sys_signal(changed)
+        mutations = [('module', 'other'), ('name', '__other'),
+                     ('signature', '(signal: i64, handler: fn(x: i64): ()): bool'),
+                     ('signature', '(signal: i64, handler: fn(...i64): ()): bool'),
+                     ('signature', '(signal: i64, handler: nosuspend fn(): ()): bool'),
+                     ('signature', '(signal: i64, handler: fn(): i64): bool'),
+                     ('signature', '(signal: i64, handler: fn() throws Error): bool'),
+                     ('argc', '1'), ('arg_spec', 'v'), ('visibility', 'public'),
+                     ('effect', 'nothrow'), ('allocation', 'no_heap'), ('return_ownership', 'fresh'),
+                     ('layer', 'core'), ('vm', 'other'), ('aot', 'other'), ('aot_direct', False),
+                     ('aot_kind', 'builtin'), ('link_object', 'other'), ('vm_binding', 'yieldable'),
+                     ('vm_ifdef', 'OTHER'), ('define', 'OTHER'), ('ret', 'i64'),
+                     ('semantic_intrinsic', True), ('provider_declaration', object()),
+                     ('caps', ('task',)), ('suspension_kind', 'task')]
+        for field, value in mutations:
+            with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                schema.render_sys_signal([replace(item, **{field: value}) if item is row else item
+                                          for item in self.declarations])
+
+
 class CpuCallableSchemaTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
