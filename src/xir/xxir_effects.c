@@ -848,6 +848,7 @@ static bool effect_default_access_scalar_slot(const XrXirModule *module,uint32_t
     /* Loading an immutable scalar has no referent that can overlap a loan.
      * Declaration, import, initialization and ordinary ROOT checks still apply. */
     return scalar && !slot->mutable && op->type==slot->type &&
+        d->functions[function].module==slot->module &&
         xr_xir_module_imports(d,d->functions[function].module,slot->module);
 }
 static XrXirStatus effect_default_access_seed(XirEffectDefaultAccessScope *scope) {
