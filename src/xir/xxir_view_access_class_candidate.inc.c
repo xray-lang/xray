@@ -44,7 +44,9 @@ static XrXirStatus view_access_class_local_cell(ViewAccess *a,uint32_t cell,bool
     if(cell<a->body->parameter_count || cell-a->body->parameter_count>=a->instruction)return XR_XIR_OK;
     XrXirStatus status=view_access_stable(a,cell,stable);if(status!=XR_XIR_OK || !*stable)return status;
     *stable=false;uint32_t progress=0;
-    for(uint32_t i=cell-a->body->parameter_count+1u;i<=a->instruction;++i) {
+    /* Instruction order alone does not order loop backedges or CFG predecessors.
+     * Any replacement or exposed Cell alias in this body keeps the root unknown. */
+    for(uint32_t i=0;i<a->body->instruction_count;++i) {
         status=xir_receive_step(a->cells?a->cells->control:NULL,&progress);if(status!=XR_XIR_OK)return status;
         const XrXirInstruction *op=&a->body->instructions[i];
         for(uint32_t p=0;p<view_access_operands(a,op);++p) {
