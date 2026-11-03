@@ -7,7 +7,9 @@
  * system_win.c - Typed system queries and owned temporary process handles
  */
 #include "../os_system.h"
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include <tlhelp32.h>
 #include <limits.h>
