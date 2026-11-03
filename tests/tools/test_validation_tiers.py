@@ -112,13 +112,17 @@ class TierTests(unittest.TestCase):
         self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
 
     def test_generated_api_knowledge_selects_its_existing_sync_gates(self):
-        for path in ("src/app/mcp/xmcp_knowledge_generated.c", "stdlib/types/array.xr",
+        for path in ("src/app/mcp/xmcp_knowledge_generated.c",
+                     "src/app/lsp/xlsp_stdlib_generated.inc", "scripts/gen_stdlib_types.py",
+                     "stdlib/types/array.xr",
                      "stdlib/compress/compress.xr", "scripts/gen_language_docs.py",
                      "scripts/gen_api_inventory.py", "spec/source/cards/stdlib/compress.json"):
             with self.subTest(path=path):
                 plan = xray_l1.tier_plan(ROOT, "L2", changed=[path])
                 self.assertIn("api-knowledge", plan["groups"])
-                self.assertTrue({"api_inventory_docs_coverage", "test_mcp_knowledge_generation"}
+                self.assertTrue({"stdlib_metadata_sync", "stdlib_analyzer_builtins_sync",
+                                 "stdlib_lsp_stdlib_sync", "stdlib_def_source_gate",
+                                 "api_inventory_docs_coverage", "test_mcp_knowledge_generation"}
                                 <= set(plan["tests"]))
                 self.assertNotIn("native-runtime", plan["groups"])
         self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
