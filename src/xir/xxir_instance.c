@@ -37,6 +37,7 @@
 #include "xxir_type_arena_internal.h"
 #include "xxir_call_internal.h"
 #include "xxir_signal_frontier_internal.h"
+#include "xxir_root_callback_internal.h"
 #include "xxir_call_select_internal.h"
 #include "xxir_channel_select_shape.h"
 #include "xxir_call_move_internal.h"
@@ -97,6 +98,7 @@ typedef struct InstanceStorageRoute {
 typedef struct XirEnvironmentSnapshotOwner XirEnvironmentSnapshotOwner;
 typedef struct XirSystemOwner XirSystemOwner;
 typedef struct XirFileMetadataOwner XirFileMetadataOwner;
+typedef struct XirRootCallback XirRootCallback;
 struct XrXirInstance {
     XrXirProgram *program;
     XrXirInstanceConfig config;
@@ -131,6 +133,7 @@ struct XrXirInstance {
     XirEnvironmentSnapshotOwner *environment_snapshots;
     XirSystemOwner *system_owners;
     XirFileMetadataOwner *file_metadata_owners;
+    XirRootCallback *callback;
 };
 #if defined(XR_OS_WINDOWS)
 static bool instance_environment_snapshots_close(XrXirInstance *instance);
@@ -532,6 +535,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_config_init_sandbox(XrXirInstanceConfig 
 }
 static void instance_dispose(XrXirInstance *instance) {
     XR_CHECK(instance && instance_owner_current(instance), "instance internal owner requires its current domain");
+    XR_CHECK(!instance->callback,"instance disposal requires a retired callback activation");
     XR_CHECK(!instance->environment_snapshots,"instance disposal requires discharged environment snapshots");
     XR_CHECK(!instance->system_owners,"instance disposal requires discharged process handles");
     XR_CHECK(!instance->file_metadata_owners,"instance disposal requires discharged file metadata handles");
@@ -1794,6 +1798,7 @@ static XrXirCallStatus resolve_function(XrXirInstance *instance, const XrXirValu
     *entry = binding->entry; return XR_XIR_CALL_READY;
 }
 #include "xxir_instance_signal_frontier.inc.c"
+#include "xxir_instance_root_callback.inc.c"
 XrXirCallStatus xr_xir_instance_start_function(XrXirInstance *instance, const XrXirValue *function,
     const XrXirValue *arguments, uint32_t count) {
     if (!instance_owner_current(instance)) return XR_XIR_CALL_BAD_ARGUMENT;
