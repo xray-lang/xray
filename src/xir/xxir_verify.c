@@ -16,6 +16,7 @@
  */
 
 #include "xxir_internal.h"
+#include "xxir_fixed_array_type_internal.h"
 #include "xxir_intrinsic.h"
 #include "xxir_source_replay_internal.h"
 #include "xxir_map.h"

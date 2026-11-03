@@ -51,6 +51,7 @@ static XrXirValueStatus path_unique(ValuePathSlot *slot,
     const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
     bool array = xr_xir_type_is_array(types, slot->type);
     bool map = xr_xir_type_is_map(types, slot->type);
+    bool fixed = xr_xir_type_is_fixed_array(types, slot->type);
     if (!array && !map && slot->inline_storage) return XR_XIR_VALUE_OK;
     XrXirValue current = path_handle(*slot);
     XirObject *object = object_pointer(&current);
@@ -58,6 +59,10 @@ static XrXirValueStatus path_unique(ValuePathSlot *slot,
         (!write->domain_sensitive || object->domain == admission->domain)) return XR_XIR_VALUE_OK;
     XrXirValue copy = {0}; XrXirValueStatus status;
     if (array) status = path_array_clone(&current, admission, &copy);
+    else if (fixed) {
+        const XirFixedArray *source=(const XirFixedArray *)object;
+        status=fixed_array_from_storage(slot->type,source->bytes,source->length,admission,&copy);
+    }
     else if (map) {
         XirHash *cloned = NULL;
         status = hash_clone((const XirHash *)object, ((const XirHash *)object)->capacity, NULL, admission, &cloned);
@@ -148,6 +153,27 @@ static XrXirValueStatus path_storage_step(ValuePathSlot *slot,
         *slot = (ValuePathSlot){map->value_type, (unsigned char *)hash_span(map, probe.entry, true).bytes, true, map->object.arena};
         return XR_XIR_VALUE_OK;
     }
+    if(step->kind==XR_XIR_PATH_INDEX && xr_xir_type_is_fixed_array(types,slot->type)) {
+        XrXirType element=xir_fixed_array_element(types,slot->type);
+        uint32_t length=xr_xir_fixed_array_length(types,slot->type);
+        uint32_t stride=xir_fixed_array_scalar_bytes(element);
+        if(!stride)return XR_XIR_VALUE_BAD_ARGUMENT;
+        if(step->selector<0 || (uint64_t)step->selector>=length) {
+            *fault=(XrXirFaultDetail){430,0,step->selector,length};
+            return XR_XIR_VALUE_BOUNDS;
+        }
+        if(write) {
+            XrXirValueStatus status=path_unique(slot,write,admission);
+            if(status!=XR_XIR_VALUE_OK)return status;
+        }
+        unsigned char *bytes=slot->bytes;
+        if(!slot->inline_storage) {
+            XrXirValue value=path_handle(*slot);
+            bytes=((XirFixedArray *)object_pointer(&value))->bytes;
+        }
+        *slot=(ValuePathSlot){element,bytes+(size_t)step->selector*stride,true,slot->arena};
+        return XR_XIR_VALUE_OK;
+    }
     if (step->kind != XR_XIR_PATH_INDEX || !xr_xir_type_is_array(types, slot->type))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValue value = path_handle(*slot);
@@ -173,7 +199,7 @@ static XrXirValueStatus path_step(ValuePathSlot *slot,ValuePathSelector selector
     if (!xir_type_arena_same_type(slot->arena,slot->type,selector.arena,selector.step->container))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrXirTypes *types=xr_xir_compile_type_arena_types(slot->arena);
-    if (owned_carrier_type(slot->type) && (!slot->inline_storage || !inline_nominal_type(types,slot->type))) {
+    if (owned_carrier_type(slot->type) && (!slot->inline_storage || (!inline_nominal_type(types,slot->type) && !xr_xir_type_is_fixed_array(types,slot->type)))) {
         XrXirValue value=path_handle(*slot);
         if (!xr_xir_value_argument(&value,slot->arena,slot->type)) return XR_XIR_VALUE_BAD_ARGUMENT;
         if (owned_carrier_type((XrXirType)value.type) && object_pointer(&value)->arena) {

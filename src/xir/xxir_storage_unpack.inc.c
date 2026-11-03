@@ -24,7 +24,7 @@ static XrXirValueStatus storage_unpack_leaf(StorageSpan span,
     XrXirValueAdmission *admission, XrXirValue *output,bool receiving) {
     XrXirLayout layout = {0};
     uint32_t length=xr_xir_fixed_array_length(xr_xir_compile_type_arena_types(admission->arena),span.type);
-    if(length)return xr_xir_fixed_array_from_bytes(span.type,span.bytes,length,admission,output);
+    if(length)return fixed_array_from_storage(span.type,span.bytes,length,admission,output);
     if (!xr_xir_compile_type_arena_layout(admission->arena, span.type, &layout) ||
         !layout.size || layout.size > sizeof(uint64_t) || !span.bytes) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValue value = {0};

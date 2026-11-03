@@ -36,7 +36,9 @@ static XrXirValueStatus storage_pack_leaf(StoragePack *pack,
                 return XR_XIR_VALUE_LIMIT;
             pack->admission->work-=fixed->length;
         }
-        memcpy(bytes,fixed->bytes,fixed->length);return XR_XIR_VALUE_OK;
+        uint32_t stride=xir_fixed_array_scalar_bytes(xir_fixed_array_element(types,type));
+        if(!stride)return XR_XIR_VALUE_BAD_ARGUMENT;
+        memcpy(bytes,fixed->bytes,(size_t)fixed->length*stride);return XR_XIR_VALUE_OK;
     }
     if (!xr_xir_compile_type_arena_layout(pack->admission->arena,type,&layout) ||
         layout.size > sizeof(value->payload) || (layout.size && !bytes)) return XR_XIR_VALUE_BAD_ARGUMENT;

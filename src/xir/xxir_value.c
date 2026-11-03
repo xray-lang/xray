@@ -32,6 +32,7 @@
 #include "xxir_task_result.h"
 #include "xxir_array.h"
 #include "xxir_fixed_array.h"
+#include "xxir_fixed_array_type_internal.h"
 #include "xxir_struct.h"
 #include "xxir_class.h"
 #include "xxir_enum.h"
@@ -452,7 +453,9 @@ XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
     if(object->kind==XR_XIR_TYPE_FIXED_ARRAY) {
         const XirFixedArray *fixed=(const XirFixedArray *)object;
         uint32_t length=xr_xir_fixed_array_length(xr_xir_compile_type_arena_types(object->arena),object->type);
-        return length && length==fixed->length && fixed->bytes==(const uint8_t *)(fixed+1);
+        return length && length==fixed->length && xir_fixed_array_element(
+            xr_xir_compile_type_arena_types(object->arena),object->type)!=XR_XIR_UNIT &&
+            fixed->bytes==(const uint8_t *)(fixed+1);
     }
     if (object->kind == XIR_OBJECT_BUFFER_STORAGE) {
         const XirBufferStorage *storage=(const XirBufferStorage *)object;
@@ -1169,7 +1172,10 @@ static void release_pending(XirObject *pending) {
             class_storage_deallocate((XirClassObject *)object, false, 0, XR_XIR_VALUE_OK);
         } else if(object->kind==XR_XIR_TYPE_FIXED_ARRAY) {
             XirFixedArray *fixed=(XirFixedArray *)object;
-            xr_xir_domain_deallocate(domain,fixed,sizeof(*fixed)+(size_t)fixed->length);
+            uint32_t stride=xir_fixed_array_scalar_bytes(xir_fixed_array_element(
+                xr_xir_compile_type_arena_types(object->arena),object->type));
+            XR_CHECK(stride,"fixed owner retains its scalar element layout");
+            xr_xir_domain_deallocate(domain,fixed,sizeof(*fixed)+(size_t)fixed->length*stride);
         } else if (object->kind == XR_XIR_TYPE_TUPLE) {
             XirTuple *tuple=(XirTuple *)object;
             for (uint32_t i=object->graph_dead ? 0 : tuple->count;i;--i) queue_release(&tuple->fields[i-1],&pending);

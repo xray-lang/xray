@@ -78,7 +78,7 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
         if (receiver.present && xr_xir_type_is_array(&ctx->types,receiver.type))
             *output=(SourceExpectedType){true,xr_xir_array_element(&ctx->types,receiver.type), false, false};
         if(receiver.present && xr_xir_type_is_fixed_array(&ctx->types,receiver.type))
-            *output=(SourceExpectedType){true,XR_XIR_U8,false,false};
+            *output=(SourceExpectedType){true,xir_fixed_array_element(&ctx->types,receiver.type),false,false};
         if (receiver.present && xr_xir_type_is_pointer(&ctx->types,receiver.type))
             *output=(SourceExpectedType){true,XR_XIR_U8,false,false};
         uint32_t kind=0;XrXirType element=XR_XIR_UNIT;

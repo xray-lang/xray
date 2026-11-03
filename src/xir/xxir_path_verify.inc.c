@@ -48,7 +48,8 @@ static XrXirStatus path_uses(const Graph *graph, const XrXirFunction *function,
                 xr_xir_place_kind(function, step->args[0]) == XR_XIR_PLACE_OBJECT &&
                 xr_xir_type_is_class(types, container);
             if (kind == XR_XIR_PLACE_FIELD ? (!xr_xir_type_is_struct(types, container) && !object_root) :
-                (!xr_xir_type_is_array(types, container) && !xr_xir_type_is_map(types, container))) return XR_XIR_BAD_TYPE;
+                (!xr_xir_type_is_array(types, container) && !xr_xir_type_is_map(types, container) &&
+                 !xr_xir_type_is_fixed_array(types,container))) return XR_XIR_BAD_TYPE;
             /* Each producer already passed the same typed field/index checker.
              * This walk only restricts descriptor roots and identity boundaries. */
             id = step->args[0];
@@ -58,8 +59,10 @@ static XrXirStatus path_uses(const Graph *graph, const XrXirFunction *function,
     if (op->op == XR_XIR_INDEX_PLACE) {
         const XrXirTypes *types = context->module->types;
         bool map = xr_xir_type_is_map(types, parent);
-        if (!map && !xr_xir_type_is_array(types, parent)) return XR_XIR_BAD_TYPE;
-        XrXirType element = map ? xr_xir_map_element(types, parent) : xr_xir_array_element(types, parent);
+        bool fixed=xr_xir_type_is_fixed_array(types,parent);
+        if (!map && !fixed && !xr_xir_type_is_array(types, parent)) return XR_XIR_BAD_TYPE;
+        XrXirType element = map ? xr_xir_map_element(types, parent) :
+            fixed?xir_fixed_array_element(types,parent):xr_xir_array_element(types,parent);
         if (element != op->type) return XR_XIR_BAD_TYPE;
         return role_operand(function, graph, context, index, 1, map ? xr_xir_map_key(types, parent) : XR_XIR_I64);
     }

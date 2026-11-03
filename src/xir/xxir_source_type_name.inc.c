@@ -111,7 +111,9 @@ static bool source_type_name_collect(SourceContext *ctx, AstNode *node, XrXirTyp
         }
         return true;
     case XR_XIR_TYPE_FIXED_ARRAY: {
-        char spelling[32];int size=snprintf(spelling,sizeof(spelling),"[u8; %u]",shape->parameter_count);
+        source_type_name_append(name,"[",1);
+        if(!source_type_name_collect(ctx,node,shape->element,false,depth+1,name))return false;
+        char spelling[32];int size=snprintf(spelling,sizeof(spelling),"; %u]",shape->parameter_count);
         if(size<0 || (size_t)size>=sizeof(spelling))return source_fail(ctx,node,XR_XIR_BAD_TYPE,"fixed type name exceeds its scalar bound");
         source_type_name_append(name,spelling,(size_t)size);return true;
     }

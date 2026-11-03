@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_fixed_array_value.inc.c - Failure-atomic publication of fixed byte storage
+ * xxir_fixed_array_value.inc.c - Failure-atomic publication of fixed scalar storage
  *
  * KEY CONCEPT:
  *   All type, element and allocation checks precede publication of the one owner.
@@ -19,7 +19,10 @@ static XrXirValueStatus fixed_array_prepare(XrXirType type,uint32_t count,
         if(count>admission->work || !xr_xir_domain_work(admission->domain,count))return XR_XIR_VALUE_LIMIT;
         admission->work-=count;
     }
-    uint64_t bytes=sizeof(XirFixedArray)+(uint64_t)count;
+    const XrXirTypes *types=xr_xir_compile_type_arena_types(admission->arena);
+    uint32_t stride=xir_fixed_array_scalar_bytes(xir_fixed_array_element(types,type));
+    if(!stride)return XR_XIR_VALUE_BAD_ARGUMENT;
+    uint64_t bytes=sizeof(XirFixedArray)+(uint64_t)count*stride;
     if(bytes>SIZE_MAX)return XR_XIR_VALUE_LIMIT;
     XrXirValueStatus status=XR_XIR_VALUE_OK;
     XirFixedArray *fixed=(XirFixedArray *)constructed_allocate(admission->domain,
@@ -32,15 +35,24 @@ static void fixed_array_publish(XirFixedArray *fixed,XrXirValue *output) {
     xr_xir_value_object_publish(&fixed->object);
     *output=(XrXirValue){fixed->object.type,0,(int64_t)(uintptr_t)fixed};
 }
-XR_FUNC XrXirValueStatus xr_xir_fixed_array_from_bytes(XrXirType type,const uint8_t *bytes,
+static XrXirValueStatus fixed_array_from_storage(XrXirType type,const uint8_t *bytes,
     uint32_t count,XrXirValueAdmission *admission,XrXirValue *output) {
     if(!bytes)return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();XirFixedArray *fixed=NULL;
     XrXirValueStatus status=fixed_array_prepare(type,count,admission,output,&fixed);
     if(status==XR_XIR_VALUE_OK) {
-        memcpy(fixed->bytes,bytes,count);fixed_array_publish(fixed,output);
+        uint32_t stride=xir_fixed_array_scalar_bytes(xir_fixed_array_element(
+            xr_xir_compile_type_arena_types(admission->arena),type));
+        memcpy(fixed->bytes,bytes,(size_t)count*stride);fixed_array_publish(fixed,output);
     }
     xr_xir_value_graph_end();return status;
+}
+XR_FUNC XrXirValueStatus xr_xir_fixed_array_from_bytes(XrXirType type,const uint8_t *bytes,
+    uint32_t count,XrXirValueAdmission *admission,XrXirValue *output) {
+    if(!admission || !admission->arena || xir_fixed_array_element(
+        xr_xir_compile_type_arena_types(admission->arena),type)!=XR_XIR_U8)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    return fixed_array_from_storage(type,bytes,count,admission,output);
 }
 XR_FUNC XrXirValueStatus xr_xir_fixed_array_new(XrXirType type,const XrXirValue *values,
     uint32_t count,XrXirValueAdmission *admission,XrXirValue *output) {
@@ -48,13 +60,16 @@ XR_FUNC XrXirValueStatus xr_xir_fixed_array_new(XrXirType type,const XrXirValue 
         !unit_value(output) || !count || xr_xir_fixed_array_length(
         xr_xir_compile_type_arena_types(admission->arena),type)!=count)return XR_XIR_VALUE_BAD_ARGUMENT;
     if(!admission_is_compile(admission) && count>admission->work)return XR_XIR_VALUE_LIMIT;
+    XrXirType element=xir_fixed_array_element(xr_xir_compile_type_arena_types(admission->arena),type);
+    uint32_t stride=xir_fixed_array_scalar_bytes(element);
+    if(!stride)return XR_XIR_VALUE_BAD_ARGUMENT;
     for(uint32_t i=0;i<count;++i)
-        if(values[i].type!=XR_XIR_U8 || values[i].reserved ||
-            !xr_xir_integer_payload_valid(XR_XIR_U8,values[i].payload))return XR_XIR_VALUE_BAD_ARGUMENT;
+        if(values[i].type!=element || values[i].reserved ||
+            !xr_xir_integer_payload_valid(element,values[i].payload))return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();XirFixedArray *fixed=NULL;
     XrXirValueStatus status=fixed_array_prepare(type,count,admission,output,&fixed);
     if(status==XR_XIR_VALUE_OK) {
-        for(uint32_t i=0;i<count;++i)fixed->bytes[i]=(uint8_t)values[i].payload;
+        for(uint32_t i=0;i<count;++i)memcpy(fixed->bytes+(size_t)i*stride,&values[i].payload,stride);
         fixed_array_publish(fixed,output);
     }
     xr_xir_value_graph_end();return status;
@@ -70,7 +85,12 @@ XR_FUNC XrXirValueStatus xr_xir_fixed_array_get(const XrXirValue *value,int64_t 
         if(fault)*fault=(XrXirFaultDetail){XR_XIR_PANIC_BOUNDS,0,index,fixed->length};
         return XR_XIR_VALUE_BOUNDS;
     }
-    *output=(XrXirValue){XR_XIR_U8,0,fixed->bytes[index]};return XR_XIR_VALUE_OK;
+    XrXirType element=xir_fixed_array_element(xr_xir_compile_type_arena_types(object->arena),object->type);
+    uint32_t stride=xir_fixed_array_scalar_bytes(element);
+    if(!stride)return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValue result={element,0,0};
+    memcpy(&result.payload,fixed->bytes+(size_t)index*stride,stride);
+    *output=result;return XR_XIR_VALUE_OK;
 }
 XR_FUNC XrXirValueStatus xr_xir_fixed_array_count(const XrXirValue *value,int64_t *output) {
     if(!output || !xr_xir_value_valid(value) || !xr_xir_type_is_fixed_array(

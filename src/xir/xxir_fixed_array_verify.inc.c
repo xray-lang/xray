@@ -17,18 +17,19 @@ static XrXirStatus fixed_array_uses(const Graph *graph,const XrXirFunction *func
     XrXirType type=construct?op->type:xr_xir_operand_type(function,op->args[0]);
     const XrXirTypes *types=context->module->types;
     uint32_t length=xr_xir_fixed_array_length(types,type);
-    if(!length)return XR_XIR_BAD_TYPE;
+    XrXirType element=xir_fixed_array_element(types,type);
+    if(!length || element==XR_XIR_UNIT)return XR_XIR_BAD_TYPE;
     XrXirStatus status=type_use_context(context,context->location.function,type);
     if(status!=XR_XIR_OK)return status;
     if(construct) {
         if(op->args[1]!=length)return XR_XIR_BAD_STRUCTURE;
         for(uint32_t p=0;p<length;++p) {
-            status=role_operand(function,graph,context,instruction,p,XR_XIR_U8);
+            status=role_operand(function,graph,context,instruction,p,element);
             if(status!=XR_XIR_OK)return status;
         }
         return XR_XIR_OK;
     }
-    if(op->type!=(op->op==XR_XIR_FIXED_ARRAY_LEN?XR_XIR_I64:XR_XIR_U8))return XR_XIR_BAD_TYPE;
+    if(op->type!=(op->op==XR_XIR_FIXED_ARRAY_LEN?XR_XIR_I64:element))return XR_XIR_BAD_TYPE;
     status=role_operand(function,graph,context,instruction,0,type);
     if(status==XR_XIR_OK && op->op==XR_XIR_FIXED_ARRAY_GET)
         status=role_operand(function,graph,context,instruction,1,XR_XIR_I64);

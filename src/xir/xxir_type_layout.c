@@ -10,6 +10,7 @@
  *   Compact storage and compiler frames consume the same physical authority.
  */
 #include "xxir_types.h"
+#include "xxir_fixed_array_type_internal.h"
 #include "xxir_compile_memory.h"
 #include "xxir_storage.h"
 #include "../base/xmalloc.h"
@@ -50,10 +51,11 @@ XrXirStatus xr_xir_compile_layout(const XrXirCompileContext *compile_context,
     if (!node) return xr_xir_builtin_layout(type, target, context, layout);
     if (node->kind == XR_XIR_TYPE_UNION) return XR_XIR_BAD_LAYOUT;
     if(node->kind==XR_XIR_TYPE_FIXED_ARRAY && context==XR_XIR_LAYOUT_STORAGE) {
-        if(node->element!=XR_XIR_U8 || !node->parameter_count ||
+        uint32_t stride=xir_fixed_array_scalar_bytes(node->element);
+        if(!stride || !node->parameter_count ||
             node->parameters || node->result!=XR_XIR_UNIT || node->flags || node->parameter_span)
             return XR_XIR_BAD_LAYOUT;
-        *layout=(XrXirLayout){node->parameter_count,1};return XR_XIR_OK;
+        *layout=(XrXirLayout){(uint64_t)node->parameter_count*stride,stride};return XR_XIR_OK;
     }
     if (!xr_xir_type_is_owned(types, type) || xr_xir_type_span(types, type) ||
         (xr_xir_type_is_nominal(types, type) && !xr_xir_type_is_class(types, type) &&

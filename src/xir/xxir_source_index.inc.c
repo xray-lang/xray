@@ -18,9 +18,9 @@ static bool source_index_get(SourceContext *ctx, AstNode *node, SourceValue *val
     if (!source_array_receiver(ctx, receiver, index, false, &container)) return false;
     if(xr_xir_type_is_fixed_array(&ctx->types,container.type)) {
         if(!source_plan_expression(ctx,index,(SourceExpectedType){true,XR_XIR_I64,false,false},&key))return false;
-        if(key.type!=XR_XIR_I64)return source_fail(ctx,index,XR_XIR_BAD_TYPE,"fixed byte index requires exact i64");
+        if(key.type!=XR_XIR_I64)return source_fail(ctx,index,XR_XIR_BAD_TYPE,"fixed array index requires exact i64");
         return source_recipe_record(ctx,(XrXirInstruction){.op=XR_XIR_FIXED_ARRAY_GET,
-            .type=XR_XIR_U8,.args={container.id,key.id}},value);
+            .type=xir_fixed_array_element(&ctx->types,container.type),.args={container.id,key.id}},value);
     }
     if (xr_xir_type_is_pointer(&ctx->types,container.type)) {
         return source_pointer_access(ctx,node,container.type,false) &&
@@ -81,6 +81,24 @@ static bool source_index_set(SourceContext *ctx, AstNode *node, SourceValue *val
         *value=args[2];return true;
     }
     if (!source_array_receiver(ctx, node->as.index_set.array, NULL, true, args)) return false;
+    if(xr_xir_type_is_fixed_array(&ctx->types,args[0].type)) {
+        XrXirType element=xir_fixed_array_element(&ctx->types,args[0].type);
+        XrHirPlaceAction index,store;SourceValue place;
+        if(!source_plan_expression(ctx,node->as.index_set.index,(SourceExpectedType){true,XR_XIR_I64,false,false},args+1) ||
+            !source_plan_expression(ctx,node->as.index_set.value,(SourceExpectedType){true,element,false,false},args+2) ||
+            !source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_INDEX,.parent=args[0].place,
+                .key=args[1].type,.selector=args[1].id},&index))return false;
+        uint32_t before=ctx->bodies[ctx->function].count;
+        if(!source_recipe_record(ctx,(XrXirInstruction){.op=index.operation,.type=index.type,
+                .args={args[0].id,args[1].id}},&place) ||
+            !source_hir_place_emitted(ctx,&index,&place,before) ||
+            !source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_WRITE,.parent=index.place,
+                .value=args[2].type,.value_id=args[2].id},&store))return false;
+        before=ctx->bodies[ctx->function].count;
+        if(!source_recipe_record(ctx,(XrXirInstruction){.op=store.operation,.type=store.type,
+                .args={place.id,args[2].id}},NULL) || !source_hir_place_emitted(ctx,&store,NULL,before))return false;
+        *value=args[2];return true;
+    }
     XrHirPlaceAction shape,action;
     if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_SHAPE,.parent=args[0].place,
         .type=args[0].type,.failure="indexed writable receiver is not an Array or Map"},&shape)||

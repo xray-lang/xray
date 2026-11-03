@@ -181,6 +181,8 @@ static bool source_array_class_context(SourceContext *ctx,ArrayLiteralNode *lite
 }
 static bool source_array_literal(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value) {
     ArrayLiteralNode *literal = &node->as.array_literal;
+    if(literal->is_repeat || (expected.present && xr_xir_type_is_fixed_array(&ctx->types,expected.type)))
+        return source_fixed_array_literal(ctx,node,expected,value);
     if (literal->is_repeat || literal->count < 0 ||
         (literal->count && !literal->elements))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array literal needs an admitted explicit element list");

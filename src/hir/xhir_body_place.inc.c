@@ -123,19 +123,22 @@ XR_FUNC XrXirStatus xr_hir_body_place(XrHirBody *body,const XrHirPlaceInput *inp
             status=body_place_view_write(body,input,&action,reason);break;
         }
         bool map=xr_xir_type_is_map(body->types,row.type);
+        bool fixed=xr_xir_type_is_fixed_array(body->types,row.type);
         if(input->kind==XR_HIR_PLACE_ARRAY_SHAPE&&!xr_xir_type_is_array(body->types,row.type))
             return body_place_failure(input,reason,"indexed receiver is not an Array");
-        if(!map&&!xr_xir_type_is_array(body->types,row.type)) {
-            status=body_place_failure(input,reason,"indexed place requires an Array or Map");break;
+        if(!map&&!fixed&&!xr_xir_type_is_array(body->types,row.type)) {
+            status=body_place_failure(input,reason,"indexed place requires an Array, fixed array or Map");break;
         }
         action.key=map?xr_xir_map_key(body->types,row.type):XR_XIR_I64;
-        action.type=map?xr_xir_map_element(body->types,row.type):xr_xir_array_element(body->types,row.type);
+        action.type=map?xr_xir_map_element(body->types,row.type):fixed?view->element:xr_xir_array_element(body->types,row.type);
+        if(fixed && input->kind==XR_HIR_PLACE_INDEX_WRITE)
+            return body_place_failure(input,reason,"fixed element writes require an indexed place transaction");
         if(input->kind!=XR_HIR_PLACE_SHAPE&&input->kind!=XR_HIR_PLACE_ARRAY_SHAPE&&input->kind!=XR_HIR_PLACE_HINT_SHAPE&&input->key!=action.key){status=body_place_failure(input,reason,"indexed place requires its exact key type");break;}
         if(input->kind==XR_HIR_PLACE_INDEX_WRITE&&(!row.writable||input->value!=action.type)) {
             status=body_place_failure(input,reason,"indexed assignment requires exact key and element types");break;
         }
         row.type=action.type;row.key=action.key;row.selector=input->selector;
-        action.operation=input->kind==XR_HIR_PLACE_INDEX_READ?(map?XR_XIR_MAP_INDEX:XR_XIR_ARRAY_GET):
+        action.operation=input->kind==XR_HIR_PLACE_INDEX_READ?(map?XR_XIR_MAP_INDEX:fixed?XR_XIR_FIXED_ARRAY_GET:XR_XIR_ARRAY_GET):
             input->kind==XR_HIR_PLACE_INDEX_WRITE?(map?XR_XIR_MAP_SET:XR_XIR_ARRAY_SET):XR_XIR_INDEX_PLACE;
         if(input->kind==XR_HIR_PLACE_INDEX_WRITE){action.declared=action.type;action.type=XR_XIR_UNIT;}
         break;

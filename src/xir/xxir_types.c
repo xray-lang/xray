@@ -10,6 +10,7 @@
  *   Earlier node edges form a finite graph whose exact contracts have one identity.
  */
 #include "xxir_types.h"
+#include "xxir_fixed_array_type_internal.h"
 #include "xxir_task_result.h"
 #include "xxir_task_shapes.h"
 #include "xxir_map.h"
@@ -333,7 +334,7 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
             if (component > span) span = component;
         }
     } else if (node->kind == XR_XIR_TYPE_FIXED_ARRAY) {
-        if(node->element!=XR_XIR_U8 || !node->parameter_count || node->parameter_count>65535 ||
+        if(!xir_fixed_array_scalar_bytes(node->element) || !node->parameter_count || node->parameter_count>65535 ||
             node->parameters || node->result!=XR_XIR_UNIT || node->flags) return XR_XIR_BAD_TYPE;
     } else if (node->kind == XR_XIR_TYPE_TUPLE) {
         if (node->element != XR_XIR_UNIT || node->result != XR_XIR_UNIT || node->flags)

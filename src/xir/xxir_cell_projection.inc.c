@@ -52,8 +52,9 @@ static XrXirValueStatus cell_projection_shape(const XrXirValuePath *path,
         const XrXirValuePathStep *step = &path->steps[i];
         if (step->container != current) return XR_XIR_VALUE_BAD_ARGUMENT;
         if (step->kind == XR_XIR_PATH_INDEX) {
-            if (!xr_xir_type_is_array(types, current)) return XR_XIR_VALUE_BAD_ARGUMENT;
-            current = xr_xir_array_element(types, current);
+            bool fixed=xr_xir_type_is_fixed_array(types,current);
+            if (!fixed && !xr_xir_type_is_array(types, current)) return XR_XIR_VALUE_BAD_ARGUMENT;
+            current = fixed?xir_fixed_array_element(types,current):xr_xir_array_element(types,current);
         } else if (step->kind == XR_XIR_PATH_KEY) {
             if (!xr_xir_type_is_map(types, current)) return XR_XIR_VALUE_BAD_ARGUMENT;
             XrXirValue key = path_key_value(step, admission->arena);

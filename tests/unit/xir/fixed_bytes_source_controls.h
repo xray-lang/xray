@@ -46,14 +46,15 @@ static void fixed_source_controls(const XrXirCompileContext *context) {
         "const x=b\"\"\n",
         "const x:[u8;0]=b\"A\"\n",
         "const x:[u8;65536]=b\"A\"\n",
-        "var x=b\"AB\"\nx[0]=1\n",
+        "var x=b\"AB\"\nx[0]=1\nassert(x[0]==1 && x[1]==66)\n",
         "const x=c\"A\\0B\"\n"};
     uint64_t held=fixed_held(context);
     for(unsigned i=0;i<sizeof(sources)/sizeof(*sources);++i) {
         XrXirSourceResult result={0};
         XrXirStatus status=fixed_source_text(context,sources[i],"fixed-control.xr",
             XR_XIR_PROGRAM,NULL,NULL,&result);
-        CHECK((status==XR_XIR_OK)==!i && (result.checked!=NULL)==!i);
+        bool accepted=i==0 || i==7;
+        CHECK((status==XR_XIR_OK)==accepted && (result.checked!=NULL)==accepted);
         xr_xir_compile_source_result_free(&result);CHECK(fixed_held(context)==held);
     }
     FixedBytesCancel cancelled={0,1};XrCompileRequestControl control={0};

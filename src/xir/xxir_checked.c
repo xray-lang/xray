@@ -11,6 +11,7 @@
  *   independent semantic verification of fully owned data.
  */
 #include "xxir_checked.h"
+#include "xxir_fixed_array_type_internal.h"
 #include "xxir_compile_memory.h"
 #include "xxir_nominal.h"
 #include "xxir_interface.h"

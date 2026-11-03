@@ -10,6 +10,7 @@
  *   Source names are resolved before lowering and never rediscovered at runtime.
  */
 #include "xxir_source.h"
+#include "xxir_fixed_array_type_internal.h"
 #include "xxir_display.h"
 #include "../hir/xhir_items.h"
 #include "../hir/xhir_body.h"
@@ -1230,6 +1231,7 @@ static bool source_range_is(SourceContext *ctx,XrXirType type);
 static bool source_range_length(SourceContext *ctx,AstNode *node,SourceValue receiver,SourceValue *value);
 static bool source_range_index(SourceContext *ctx,AstNode *node,SourceValue receiver,AstNode *index,SourceValue *value);
 static bool source_mem_length(SourceContext *ctx,AstNode *node,SourceValue receiver,SourceValue *value);
+#include "xxir_source_fixed_array.inc.c"
 #include "xxir_source_array.inc.c"
 #include "xxir_source_pointer.inc.c"
 static bool source_hash_for_each(SourceContext *ctx, AstNode *node, const SourceValue *evaluated,
