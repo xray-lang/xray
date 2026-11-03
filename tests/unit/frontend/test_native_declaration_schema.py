@@ -854,7 +854,7 @@ class IoCallableSchemaTests(unittest.TestCase):
     def test_exact_filesystem_contract_and_runtime_only_rows(self):
         lines, rows = schema.render_io_callables(self.declarations)
         identities = ('CHMOD', 'CHDIR', 'STAT', 'MKDIR', 'RMDIR', 'REMOVE', 'RENAME', 'UTIME_NOW',
-                      'SYMLINK', 'READLINK', 'REALPATH', 'MAKE_TEMP_DIR', 'MAKE_TEMP_FILE')
+                      'SYMLINK', 'READLINK', 'REALPATH', 'MAKE_TEMP_DIR', 'MAKE_TEMP_FILE', 'DIR_OPEN', 'DIR_NEXT', 'DIR_CLOSE')
         self.assertEqual(len(rows), len(identities))
         for row, identity in zip(rows, identities):
             self.assertIn('XR_NATIVE_CALLABLE_IO_' + identity + ', NULL,', row)
@@ -863,7 +863,7 @@ class IoCallableSchemaTests(unittest.TestCase):
         text = '\n'.join(lines)
         self.assertIn('"__chmod", "(path: Path, mode: i64): bool", "bool"', text)
         self.assertIn('"__chdir", "(path: Path): bool", "bool"', text)
-        self.assertEqual(text.count('{"path", "Path", XR_NATIVE_TERM_PATH, false, false}'), 9)
+        self.assertEqual(text.count('{"path", "Path", XR_NATIVE_TERM_PATH, false, false}'), 10)
         self.assertIn('{"mode", "i64", XR_NATIVE_TERM_I64, false, false}', text)
         self.assertIn('{"old", "Path", XR_NATIVE_TERM_PATH, false, false}', text)
         self.assertIn('{"new", "Path", XR_NATIVE_TERM_PATH, false, false}', text)
@@ -872,13 +872,17 @@ class IoCallableSchemaTests(unittest.TestCase):
         self.assertEqual(text.count('{"root", "string", XR_NATIVE_TERM_STRING, false, false}'), 2)
         self.assertIn('"__makeTempDir", "(root: string): string?", "string?"', text)
         self.assertIn('"__makeTempFile", "(root: string): string?", "string?"', text)
-        self.assertEqual(text.count('1, XR_NATIVE_TERM_NULLABLE_STRING'), 4)
+        self.assertEqual(text.count('1, XR_NATIVE_TERM_NULLABLE_STRING'), 5)
+        self.assertIn('"__dirOpen", "(path: Path): i64", "i64"', text)
+        self.assertIn('"__dirNext", "(handle: i64): string?", "string?"', text)
+        self.assertIn('"__dirClose", "(handle: i64): bool", "bool"', text)
+        self.assertEqual(text.count('{"handle", "i64", XR_NATIVE_TERM_I64, false, false}'), 2)
         self.assertIn('XR_NATIVE_TERM_NULLABLE_FILE_STAT', text)
         self.assertEqual(text.count('XR_NATIVE_ALLOCATION_UNKNOWN'), len(identities))
 
     def test_missing_duplicate_and_single_contract_changes_are_rejected(self):
         for name in ('__chmod', '__chdir', '__stat', '__mkdir', '__rmdir', '__remove', '__rename', '__utimeNow',
-                     '__symlink', '__readlink', '__realpath', '__makeTempDir', '__makeTempFile'):
+                     '__symlink', '__readlink', '__realpath', '__makeTempDir', '__makeTempFile', '__dirOpen', '__dirNext', '__dirClose'):
             row = next(item for item in self.declarations if item.module == 'io' and item.name == name)
             for changed in ([item for item in self.declarations if item is not row], self.declarations + [row]):
                 with self.subTest(name=name), self.assertRaises(ValueError):
