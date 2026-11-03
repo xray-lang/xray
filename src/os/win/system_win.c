@@ -123,7 +123,8 @@ static XrOsIoStatus system_memory(bool available, int64_t *output) {
 XR_FUNC XrOsIoStatus xr_os_io_total_memory(int64_t *output) {
     return system_memory(false, output);
 }
-XR_FUNC XrOsIoStatus xr_os_io_free_memory(int64_t *output) {
+XR_FUNC XrOsIoStatus xr_os_io_free_memory(XrOsSystemOwner *owner, int64_t *output) {
+    if (!owner || owner->handle) return XR_OS_IO_BAD_ARGUMENT;
     return system_memory(true, output);
 }
 XR_FUNC XrOsIoStatus xr_os_io_uptime(double *output) {
