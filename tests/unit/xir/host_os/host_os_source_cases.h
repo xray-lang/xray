@@ -44,6 +44,18 @@ static const char host_io_bool_text[]=
  "export fn byRef(a:string,b:string)->bool{var old:Path=Child(a);var next:Path=Child(b);return refs(ref old,ref next)}\n"
  "export fn ctfeMutation()->bool{return __mkdir(Child(\".\"))}\n";
 static const char host_count_text[]="export fn answer()->i64{return __cpuCount()}\n";
+static const char host_io_links_text[]=
+ "import {Path} from path\n"
+ "class Child extends Path{tail:string\ninit(raw:string){super(raw);this.tail=\"links-owned-tail\"}}\n"
+ "export fn make(raw:string)->Path{return Child(raw)}\n"
+ "export fn symlinkPath(source:Path,link:Path)->bool{return __symlink(source,link)}\n"
+ "export fn readlinkPath(path:Path)->string?{return __readlink(path)}\n"
+ "export fn realpathPath(path:Path)->string?{return __realpath(path)}\n"
+ "fn fromRef(path:ref Path)->string?{return __realpath(path)}\n"
+ "export fn byRef(raw:string)->string?{var path:Path=Child(raw);return fromRef(ref path)}\n"
+ "export fn ctfeSymlink()->bool{return __symlink(Child(\".\"),Child(\".\"))}\n"
+ "export fn ctfeReadlink()->string?{return __readlink(Child(\".\"))}\n"
+ "export fn ctfeRealpath()->string?{return __realpath(Child(\".\"))}\n";
 static const char host_pin_text[]="export fn answer(cpu:i64)->bool{return __pinToCpu(cpu)}\n";
 static const char host_signal_frontier_text[]=
  "fn plain(n:i64)->i64{return n}\n"
