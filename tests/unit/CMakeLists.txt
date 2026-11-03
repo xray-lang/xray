@@ -3609,6 +3609,7 @@ set_tests_properties(os_file_mutation PROPERTIES RUN_SERIAL TRUE TIMEOUT 60 LABE
 include("${CMAKE_CURRENT_LIST_DIR}/base/file_links.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/base/file_temp.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/base/directory_owned.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/base/pipe_owned.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/base/thread_token.cmake")
 add_executable(test_os_signal base/test_signal.c)
 target_include_directories(test_os_signal PRIVATE "${PROJECT_SOURCE_DIR}/src")
