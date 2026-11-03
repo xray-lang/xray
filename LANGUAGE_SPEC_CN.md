@@ -4521,7 +4521,7 @@ Xray 的错误处理分为两个严格分离的通道：
 - **错误是值**：错误载荷是 enum 值；传播不把它转换为 `PanicInfo`。
 - **签名决定错误类型**：省略 `throws` 表示 `Never`，即保证不抛业务错误；`throws(E)` 声明允许逃逸的错误类型，裸 `throws` 等价于 `throws(Error)`。签名和函数类型规则见 §2.2、§5.2。
 - **检查是局部的**：每个函数按自身正文和被调用签名检查错误子集，不分析被调函数体、不做全程序错误推导。没有错误子句的具名函数不会自动获得抛错签名；闭包规则见 §5.2。
-- **传播点可见**：可能抛错的调用必须在 `try`、`try?`、`try!` 表达式或 `try { }` 的保护区域内（§8.1.6）；反过来，没有任何可能抛错位置的 `try` 也是编译错误（`E0336`）。
+- **传播点可见**：可能抛错的调用必须在 `try`、`try?`、`try!` 表达式或 `try { }` 的保护区域内（§8.1.6）。没有业务错误来源的表达式标记或含普通 catch 的 try 块报 `E0336`；只有 panic handler 的 try 块是独立故障边界，不受这一块级要求限制。
 - **panic 不进入签名**：不抛业务错误的函数仍可能 panic；`try?` 不会吞掉 panic。
 - **`defer` 替代 `finally`**：清理绑定最近的真实 `{}` 块，清理体必须静态证明没有逃逸的业务错误（`E0387`，§8.3.1）。
 
@@ -4750,7 +4750,30 @@ fn main() { caller() }
 try main()
 ```
 
-标记只写在可能抛错的位置。`try`、`try?`、`try!` 的作用范围内没有任何可能抛出业务错误的调用、`await` 或 `scope`，或者 `try { }` 的保护区域内没有这样的位置时，报 `E0336`。判断依据是定义处的声明签名：错误类型为 `Never` 的调用不算；错误类型含未替换类型参数的调用算可能抛错，因此泛型体不会因为某次实例化把错误类型变成 `Never` 而报错。等待 `Task<T, Never>` 直接写 `await t`，向 channel 发送直接写 `ch.send(v)`。
+标记只写在可能产生业务错误的位置。`try`、`try?`、`try!` 的作用范围内没有业务错误来源时，报 `E0336`。含任意普通 catch 的 try 块也要求主体保护区域中存在业务来源；即使同时有 panic handler，也不豁免。只有 panic handler 的 try 块不要求业务来源，也不要求静态证明主体可能 panic；但其内部的表达式标记仍独立检查。
+
+业务来源包括直接 `throw`、声明可抛的调用，以及暴露业务错误的 `await` 或 `scope`。判断依据是定义处的声明签名：错误类型为 `Never` 的调用不算；错误类型含未替换类型参数的调用算可能抛错，因此泛型体不会因为某次实例化把错误类型变成 `Never` 而报错。调用方看到完整实例化后的 `Never` 时，其多余标记仍报错。实际求值的实参、默认值和生成初始化器按其真实错误合同贡献来源；嵌套函数或闭包的定义体、本语句自己的 handler 不属于主体来源。内层 `try?`、`try!` 或普通 catch 消费了业务错误，也不抹去外层主体中已存在的来源事实；E0336 不兼作死 handler 分析。等待 `Task<T, Never>` 直接写 `await t`，向 channel 发送直接写 `ch.send(v)`。
+
+只有 panic handler 的主体同样许可业务调用，但不捕获它们的错误。剩余业务错误必须由外层普通 catch 或所在函数的 `throws` 接收，否则报 `E0331`。直接 `throw` 本身产生业务错误，不另加 try。panic、取消和业务错误仍是独立通道。
+
+```xray @run
+enum Failure { Bad }
+fn fail() throws(Failure) { throw Failure.Bad }
+fn relay() throws(Failure) {
+    try { fail() } catch panic { print("unexpected panic") }
+}
+const ch = Channel<i64>(1)
+ch.close()
+try { ch.send(1) } catch panic (p) { print(p.code) }
+try { relay() } catch (e: Failure) { print("business error") }
+try { throw Failure.Bad } catch (e: Failure) { print("direct throw") }
+```
+
+```xray @error=E0336
+try { print(42) }
+catch (e) { print("ordinary") }
+catch panic { print("panic") }
+```
 
 ```xray @error=E0336
 fn add(a: i64, b: i64) -> i64 { return a + b }
@@ -8481,7 +8504,7 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 | `E0333` | `XR_ERR_ANALYZE_ERASED_THROWS` | freestanding 或 `@strict(alloc)` 中使用擦除错误类型，包括裸 `throws` 与 `throws(Error)` |
 | `E0334` | `XR_ERR_ANALYZE_CATCH_TYPE_NAME` | catch 头部单个大写开头标识符，提示使用 `catch (e: T)` |
 | `E0335` | `XR_ERR_ANALYZE_IMPORTED_TOP_LEVEL` | 被导入模块包含独立的表达式语句或控制流语句；移到入口文件，模块只保留声明及状态初始化 |
-| `E0336` | `XR_ERR_ANALYZE_REDUNDANT_TRY` | `try`、`try?`、`try!` 或 `try { }` 的作用范围内没有可能抛错的调用、`await` 或 `scope`；删去该 `try` |
+| `E0336` | `XR_ERR_ANALYZE_REDUNDANT_TRY` | 表达式标记或含普通 catch 的 try 块没有业务错误来源（直接 throw、可抛调用、await、scope）；panic-only 块豁免，内部表达式仍检查。移除多余标记但保留表达式；普通 handler 逻辑须单独检查 |
 
 #### Analyzer
 
