@@ -11,6 +11,7 @@ foreach(t test_dap_process_handoff test_dap_process_handoff_faults)
         "${HANDOFF_ROOT}/src/os/win/proc_self_win.c"
         "${HANDOFF_ROOT}/src/os/win/pipe_win.c"
         "${HANDOFF_ROOT}/src/base/xutf8.c")
+    target_link_libraries(${t} PRIVATE userenv)
     set_target_properties(${t} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
     target_include_directories(${t} PRIVATE "${HANDOFF_ROOT}/src")
     target_compile_definitions(${t} PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
