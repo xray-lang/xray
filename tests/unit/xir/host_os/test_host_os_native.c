@@ -14,7 +14,7 @@
 #include "host_os_io_bool_cases.h"
 #include "host_os_signal_frontier_cases.h"
 extern const XrXirProgramSpec host_count_program,host_pin_program,host_path_program,host_system_program,host_stat_program,host_io_bool_program,host_signal_frontier_program;
-extern const uint32_t host_count_ids[2],host_pin_ids[2],host_path_ids[5],host_system_ids[9],host_stat_ids[4],host_io_bool_ids[7],host_signal_frontier_ids[4];
+extern const uint32_t host_count_ids[2],host_pin_ids[2],host_path_ids[5],host_system_ids[9],host_stat_ids[4],host_io_bool_ids[7],host_signal_frontier_ids[5];
 static XrXirProgram *host_replica(const XrXirCompileContext *context,const XrXirProgram *source){
  (void)source;XrXirProgram *out=NULL;CHECK(xr_xir_compile_program_seal(context,&host_path_program,&out)==XR_XIR_OK);return out;
 }

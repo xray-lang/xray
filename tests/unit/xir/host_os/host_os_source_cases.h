@@ -56,7 +56,9 @@ static const char host_signal_frontier_text[]=
  "enum FrontierFailure{Raised}\n"
  "fn raise() throws(FrontierFailure)->i64{throw FrontierFailure.Raised}\n"
  "export fn heldParent()->i64{assert(__cpuCount()>0);const task=go raise();"
- "try{return try await task}catch(FrontierFailure.Raised){return 42}}\n";
+ "try{return try await task}catch(FrontierFailure.Raised){return 42}}\n"
+ "const initialValue:i64=parent()\n"
+ "export fn initialized()->i64{return initialValue}\n";
 static const char host_system_text[]=
  "export fn uid()->i64?{return __uid()}\n"
  "export fn gid()->i64?{return __gid()}\n"
