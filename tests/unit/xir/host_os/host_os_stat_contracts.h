@@ -65,7 +65,7 @@ static void host_stat_contracts(XrXirCompileContext *context,const XrXirArtifact
  static const char *const rejected[]={
   "import {Path} from path\nexport fn bad(){var value=__FileStat()}\n",
   "import {Path} from path\nclass __FileStat{size:i64}\n",
-  "import {Path} from path\nexport fn bad(p:Path){var value=__stat(p);if(value!=null)value!.size=7}\n",
+  "import {Path} from path\nexport fn bad(p:Path){var value=__stat(p);if(value!=null){value!.size=7}}\n",
   "import {Path} from path\nclass Spoof{size:i64\ninit(){this.size=0}}\nexport fn bad(p:Path)->bool{return __stat(Spoof())!=null}\n"
  };
  for(unsigned n=0;n<sizeof(rejected)/sizeof(*rejected);++n){
