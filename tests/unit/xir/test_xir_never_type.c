@@ -684,25 +684,27 @@ static void check_catch_binding_names(const XrXirCompileContext *work) {
     CHECK(xr_test_realpath_buf(directory,absolute,sizeof(absolute)));
     CHECK(snprintf(root,sizeof(root),"%s/root.xr",absolute)>0);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,absolute};
-    const struct { const char *clause; bool valid; } cases[]={
-        {"catch (Fault)",false},
-        {"catch (Typo)",false},
-        {"catch (\xCE\x94)",false},
-        {"catch (\xC4\x82)",false},
-        {"catch (\xD0\x81)",false},
-        {"catch (\xF0\x90\x90\x80)",false},
-        {"catch (error)",true},
-        {"catch (Fault: Fault)",true},
-        {"catch (Fault.Bad)",true},
-        {"catch panic (P)",true},
-        {"catch (\xCE\xB4)",true},
-        {"catch (\xCE\xA2)",true},
-        {"catch (_Fault)",true},
+    const struct { const char *clause; bool valid, redundant; } cases[]={
+        {"catch (Fault)",false,false},
+        {"catch (Typo)",false,false},
+        {"catch (\xCE\x94)",false,false},
+        {"catch (\xC4\x82)",false,false},
+        {"catch (\xD0\x81)",false,false},
+        {"catch (\xF0\x90\x90\x80)",false,false},
+        {"catch (error)",true,false},
+        {"catch (Fault: Fault)",true,false},
+        {"catch (Fault.Bad)",true,false},
+        {"catch panic (P)",true,false},
+        {"catch (\xCE\xB4)",true,false},
+        {"catch (\xCE\xA2)",true,false},
+        {"catch (_Fault)",true,false},
+        {"catch (error)",false,true},
     };
     for (size_t i=0;i<sizeof(cases)/sizeof(cases[0]);++i) {
         char text[256];
+        const char *body=cases[i].redundant || !strncmp(cases[i].clause,"catch panic",11)?"":"throw Fault.Bad";
         int length=snprintf(text,sizeof(text),
-            "enum Fault { Bad }\nfn caller() {\n    try {} %s {}\n}\n",cases[i].clause);
+            "enum Fault { Bad }\nfn caller() {\n    try {%s} %s {}\n}\n",body,cases[i].clause);
         CHECK(length>0 && (size_t)length<sizeof(text));
         XrCompilerSession *session=NULL;
         CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILE_RESOURCE_OK);
@@ -720,9 +722,15 @@ static void check_catch_binding_names(const XrXirCompileContext *work) {
         } else {
             CHECK(status==XR_XIR_BAD_TYPE && diagnostic.status==status);
             CHECK(!result.checked && !result.snapshot);
-            CHECK(diagnostic.line==3 && diagnostic.column==19);
-            CHECK(strncmp(diagnostic.message,"E0334:",6)==0);
-            CHECK(strstr(diagnostic.message,"catch (e: TypeName)"));
+            CHECK(diagnostic.line==3);
+            if (cases[i].redundant) {
+                CHECK(strncmp(diagnostic.message,"E0336:",6)==0);
+                CHECK(strstr(diagnostic.message,"try body has no business-error source"));
+            } else {
+                CHECK(diagnostic.column==34);
+                CHECK(strncmp(diagnostic.message,"E0334:",6)==0);
+                CHECK(strstr(diagnostic.message,"catch (e: TypeName)"));
+            }
         }
         xr_xir_compile_source_result_free(&result);
     }
