@@ -1239,6 +1239,8 @@ def render_io_callables(declarations):
         ('__symlink', '(source: Path, link: Path): bool', 'pp', 'io_symlink', 'xrt_io_symlink', 'IO_SYMLINK'),
         ('__readlink', '(path: Path): string?', 'p', 'io_readlink', 'xrt_io_readlink', 'IO_READLINK'),
         ('__realpath', '(path: Path): string?', 'p', 'io_realpath', 'xrt_io_realpath', 'IO_REALPATH'),
+        ('__makeTempDir', '(root: string): string?', 's', 'io_make_temp_dir', 'xrt_io_make_temp_dir', 'IO_MAKE_TEMP_DIR'),
+        ('__makeTempFile', '(root: string): string?', 's', 'io_make_temp_file', 'xrt_io_make_temp_file', 'IO_MAKE_TEMP_FILE'),
     )
     lines, rows = [], []
     for ordinal, (name, signature, arguments, vm, aot, identity) in enumerate(contracts, 1):
@@ -1247,7 +1249,7 @@ def render_io_callables(declarations):
             raise ValueError('Filesystem callable requires its sole governed declaration: ' + name)
         row = candidates[0]
         stat = identity == 'IO_STAT'
-        text_result = identity in ('IO_READLINK', 'IO_REALPATH')
+        text_result = identity in ('IO_READLINK', 'IO_REALPATH', 'IO_MAKE_TEMP_DIR', 'IO_MAKE_TEMP_FILE')
         if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
                 row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
                 row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
@@ -1260,7 +1262,9 @@ def render_io_callables(declarations):
         if text_result:
             result, term = 'string?', 'NULLABLE_STRING'
         lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {']
-        if identity == 'IO_RENAME':
+        if identity in ('IO_MAKE_TEMP_DIR', 'IO_MAKE_TEMP_FILE'):
+            lines += ['    {"root", "string", XR_NATIVE_TERM_STRING, false, false},']
+        elif identity == 'IO_RENAME':
             lines += ['    {"old", "Path", XR_NATIVE_TERM_PATH, false, false},',
                       '    {"new", "Path", XR_NATIVE_TERM_PATH, false, false},']
         elif identity == 'IO_SYMLINK':
