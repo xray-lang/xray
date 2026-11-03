@@ -50,12 +50,12 @@ static XrOsIoStatus root_signal_close(XrOsSignalOwner *owner) {
 static const char root_signal_text[]=
  "import stdlib.time\nvar state:i64=0\n"
  "fn worker(value:i64)->i64{Coro.yield();time.sleep(2);return value}\n"
- "fn make(mode:i64)->fn(){let captured=42;return fn(){"
+ "fn make(mode:i64)->fn(){var captured:i64=41;return fn(){"
  "defer{print(\"callback-cleanup\");if(mode==3){assert(false)}};print(\"callback-enter\");"
- "let task=go worker(captured);let value=await task;"
+ "captured+=1;let task=go worker(captured);let value=await task;"
  "if(mode==1||mode==3||mode==5){assert(false)};if(mode==2){time.sleep(100)};"
  "if(mode==4){let next=fn(){defer{print(\"callback-cleanup\")};print(\"callback-enter\");"
- "state=captured+1;print(\"callback-returned\")};assert(__onSignal(2,next));print(\"replaced\");"
+ "captured+=1;state=captured;print(\"callback-returned\")};assert(__onSignal(2,next));print(\"replaced\");"
  "print(\"callback-returned\");return};state=value;print(\"callback-returned\")}}\n"
  "export fn parent(mode:i64)->i64{defer{print(\"parent-cleanup\");if(mode==5){assert(false)}};"
  "let handler=make(mode);let register=withHandler;if(!register(handler)){print(\"refused\");return -2};"
@@ -143,7 +143,9 @@ static void root_signal_cases(XrXirProgram *program,const uint32_t ids[6]) {
         } while (result.outcome.status==XR_XIR_CALL_READY || result.outcome.status==XR_XIR_CALL_SUSPENDED);
         XrXirCallStatus expected=mode==0||mode==4?XR_XIR_CALL_RETURNED:mode==1?XR_XIR_CALL_ASSERTION:
             mode==2?XR_XIR_CALL_CANCELLED:XR_XIR_CALL_CLEANUP_FAILED;
-        CHECK(result.outcome.status==expected && !log.unexpected);
+        CHECK(result.outcome.status==expected && !log.unexpected && xr_xir_call_result_valid(&result.outcome));
+        if (mode==3 || mode==5) CHECK(result.outcome.prior_status==XR_XIR_CALL_ASSERTION &&
+            xr_xir_call_panic_payload(result.outcome.prior_status,&result.outcome.prior_panic));
         if (expected==XR_XIR_CALL_RETURNED) {
             XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED &&
                 value.type==XR_XIR_I64 && value.payload==(mode==4?43:42));xr_xir_value_drop(&value);
