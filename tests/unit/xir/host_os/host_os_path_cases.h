@@ -8,6 +8,20 @@
  */
 #ifndef HOST_OS_PATH_CASES_H
 #define HOST_OS_PATH_CASES_H
+static void host_path_limit(XrXirProgram *program,const uint32_t ids[5]){
+ size_t live=runtime_live,bytes=runtime_bytes;uint64_t limit=0;host_mode=HOST_NORMAL;
+ for(unsigned pass=0;pass<3;++pass){
+  XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
+  if(pass==1)config.requested_call_limit=limit;
+  XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);host_active=instance;
+  XrXirValue text={0},result={0};CHECK(xr_xir_string_new(instance->domain,".",1,&text)==XR_XIR_VALUE_OK);unsigned before=host_calls;
+  CHECK(xr_xir_instance_start(instance,ids[4],&text,1)==XR_XIR_CALL_READY);XrXirCallStatus status=host_poll(instance);xr_xir_value_drop(&text);
+  if(pass==1){CHECK(status==XR_XIR_CALL_LIMIT&&host_calls==before);CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_LIMIT&&!result.type&&!result.reserved&&!result.payload);}
+  else{CHECK(status==XR_XIR_CALL_RETURNED&&host_calls==before+1);CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED&&result.type==XR_XIR_BOOL&&result.payload==1);CHECK(host_cstring_requested>1);limit=host_cstring_requested-1;}
+  xr_xir_value_drop(&result);CHECK(xr_xir_instance_free(instance)==(pass==1?XR_XIR_CALL_LIMIT:XR_XIR_CALL_READY));host_active=NULL;
+  CHECK(runtime_live==live&&runtime_bytes==bytes);
+ }
+}
 #if defined(XR_OS_WINDOWS)
 static void host_path_execute(XrXirProgram *program,const uint32_t ids[5]){
  size_t baseline=runtime_live,bytes=runtime_bytes;wchar_t old[32768],folder[32768],file[32768];char utf8[131072];
@@ -56,6 +70,7 @@ static void host_path_execute(XrXirProgram *program,const uint32_t ids[5]){
  }
  host_mode=HOST_NORMAL;CHECK(DeleteFileW(file)&&RemoveDirectoryW(folder));CHECK(runtime_live==baseline&&runtime_bytes==bytes);
  fprintf(stderr,"Path raw field1 public subclass real Unicode chmod/chdir; status/cleanup controls complete\n");
+ host_path_limit(program,ids);
 }
 #else
 static XrOsIoStatus host_cwd_allocate(void *context,size_t bytes,void **output){
@@ -76,6 +91,7 @@ static void host_path_execute(XrXirProgram *program,const uint32_t ids[5]){
  char missing[128];CHECK(snprintf(missing,sizeof(missing),"%s/missing",folder)>0);
  CHECK(xr_xir_string_new(instance->domain,missing,strlen(missing),&text)==XR_XIR_VALUE_OK);object=host_invoke(instance,ids[1],&text,1);xr_xir_value_drop(&text);result=host_invoke(instance,ids[3],&object,1);CHECK(result.type==XR_XIR_BOOL&&!result.payload);xr_xir_value_drop(&result);xr_xir_value_drop(&object);
  CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);host_active=NULL;CHECK(!unlink(file)&&!rmdir(folder));host_cwd_free(&context,old);CHECK(runtime_live==live&&runtime_bytes==bytes);
+ host_path_limit(program,ids);
 }
 #endif
 static XrXirProgram *host_replica(const XrXirCompileContext *,const XrXirProgram *);

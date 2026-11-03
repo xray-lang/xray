@@ -51,6 +51,7 @@ static XrOsIoStatus host_chdir(const XrOsIoPolicy *,const char *,bool(*)(void *)
 #undef xr_os_io_chdir
 enum { HOST_NORMAL, HOST_OOM_WIDE, HOST_CANCEL_BEFORE, HOST_CANCEL_CONVERSION, HOST_CANCEL_AFTER, HOST_BAD_UTF, HOST_CANCEL_COUNT };
 static unsigned host_mode,host_calls,count_calls,pin_calls,last_cpu;
+static uint64_t host_cstring_requested;
 static XrXirInstance *host_active;
 static XrOsIoPolicy host_policy;
 static unsigned int host_count(void){
@@ -67,6 +68,7 @@ static XrOsIoStatus host_allocate_cancel(void *context,size_t bytes,void **outpu
 static XrOsIoStatus host_mutate(const XrOsIoPolicy *policy,const char *path,int64_t mode,
  bool(*current)(void *),bool *output,bool chmod){
  ++host_calls;CHECK(host_active&&policy&&policy->context&&current);
+ host_cstring_requested=xr_xir_domain_budget_stats(host_active->domain).requested_call_bytes;
  if(host_mode==HOST_CANCEL_BEFORE)CHECK(xr_xir_call_request_cancel(host_active->call)==XR_XIR_CALL_CANCEL_REQUESTED);
  XrOsIoPolicy proxy=*policy;
  if(host_mode==HOST_CANCEL_CONVERSION){host_policy=*policy;proxy.alloc=host_allocate_cancel;}
