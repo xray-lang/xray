@@ -18,9 +18,11 @@
 #include <windows.h>
 
 typedef union PermissionBlock {
-    max_align_t alignment;
+    long double alignment;
+    void *pointer_alignment;
     size_t bytes;
 } PermissionBlock;
+_Static_assert(_Alignof(PermissionBlock) >= _Alignof(wchar_t), "policy blocks preserve wide buffer alignment");
 typedef struct PermissionMemory {
     size_t attempts, fail_at, live, held;
 } PermissionMemory;
