@@ -144,12 +144,15 @@ static bool spawn_child(XrOsPipeOwner *owner,bool writer,PipeChild *child){
  intptr_t raw=0;HANDLE redirect=NULL,null=NULL,job=NULL;STARTUPINFOEXW startup={0};PROCESS_INFORMATION process={0};
  LPPROC_THREAD_ATTRIBUTE_LIST attributes=NULL;SIZE_T bytes=0;bool initialized=false,okay=false;
  wchar_t path[32768],command[32768];DWORD count=GetModuleFileNameW(NULL,path,32768);
- if(!count||count>=32768||swprintf_s(command,32768,L"\"%ls\" --child-%ls",path,writer?L"write":L"read")<0)goto done;
- if(xr_os_io_pipe_borrow(owner,writer?XR_OS_PIPE_WRITE:XR_OS_PIPE_READ,&raw)!=XR_OS_IO_OK)goto done;
- if(!DuplicateHandle(GetCurrentProcess(),(HANDLE)raw,GetCurrentProcess(),&redirect,0,TRUE,DUPLICATE_SAME_ACCESS))goto done;
+ if(!count||count>=32768||swprintf_s(command,32768,L"\"%ls\" --child-%ls",path,owner?(writer?L"write":L"read"):L"neutral")<0)goto done;
+ if(owner){
+  if(xr_os_io_pipe_borrow(owner,writer?XR_OS_PIPE_WRITE:XR_OS_PIPE_READ,&raw)!=XR_OS_IO_OK)goto done;
+  if(!DuplicateHandle(GetCurrentProcess(),(HANDLE)raw,GetCurrentProcess(),&redirect,0,TRUE,DUPLICATE_SAME_ACCESS))goto done;
+ }
  SECURITY_ATTRIBUTES security={sizeof(security),NULL,TRUE};
  null=CreateFileW(L"NUL",GENERIC_READ|GENERIC_WRITE,FILE_SHARE_READ|FILE_SHARE_WRITE,&security,OPEN_EXISTING,0,NULL);
  if(null==INVALID_HANDLE_VALUE){null=NULL;goto done;}
+ if(!owner&&!DuplicateHandle(GetCurrentProcess(),null,GetCurrentProcess(),&redirect,0,TRUE,DUPLICATE_SAME_ACCESS))goto done;
  job=CreateJobObjectW(NULL,NULL);if(!job)goto done;JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits={0};
  limits.BasicLimitInformation.LimitFlags=JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;if(!SetInformationJobObject(job,JobObjectExtendedLimitInformation,&limits,sizeof(limits)))goto done;
  (void)InitializeProcThreadAttributeList(NULL,1,0,&bytes);attributes=xr_malloc(bytes);if(!attributes)goto done;
@@ -171,6 +174,14 @@ static void join_child(PipeChild *child){
  if(waited!=WAIT_OBJECT_0){CHECK(TerminateJobObject(child->job,1));CHECK(WaitForSingleObject(child->process,30000)==WAIT_OBJECT_0);}
  CHECK(GetExitCodeProcess(child->process,&code));CHECK(CloseHandle(child->process)&&CloseHandle(child->job));
  CHECK(waited==WAIT_OBJECT_0&&code==0);memset(child,0,sizeof(*child));
+}
+/* Win32 pipe and process services retain their own process-lifetime handles.
+ * Establish those services without exercising an owned pipe or policy. */
+static void native_services_baseline(void){
+ HANDLE reading=NULL,writing=NULL;CHECK(CreatePipe(&reading,&writing,NULL,0));
+ CHECK(CloseHandle(reading)&&CloseHandle(writing));
+ PipeChild child={0};CHECK(spawn_child(NULL,false,&child));join_child(&child);
+ CHECK(!live_blocks);
 }
 static int child_main(bool writer){
  uint8_t expected[53];bytes_fill(expected);
@@ -199,16 +210,12 @@ static void child_stdio(bool writer){
 
 int main(int argc,char **argv){
 #if defined(XR_OS_WINDOWS)
+ if(argc==2&&!strcmp(argv[1],"--child-neutral"))return 0;
  if(argc==2&&!strcmp(argv[1],"--child-write"))return child_main(true);
  if(argc==2&&!strcmp(argv[1],"--child-read"))return child_main(false);
- CHECK(argc==1);caller_thread=GetCurrentThreadId();DWORD before=0,after=0;CHECK(GetProcessHandleCount(GetCurrentProcess(),&before));
- fprintf(stderr,"PIPE_PHASE before handles=%lu blocks=%zu\n",(unsigned long)before,live_blocks);
- failed_preparation();CHECK(GetProcessHandleCount(GetCurrentProcess(),&after));fprintf(stderr,"PIPE_PHASE preparation handles=%lu blocks=%zu\n",(unsigned long)after,live_blocks);
- byte_operations(false);CHECK(GetProcessHandleCount(GetCurrentProcess(),&after));fprintf(stderr,"PIPE_PHASE bytes handles=%lu blocks=%zu\n",(unsigned long)after,live_blocks);
- byte_operations(true);CHECK(GetProcessHandleCount(GetCurrentProcess(),&after));fprintf(stderr,"PIPE_PHASE partial handles=%lu blocks=%zu\n",(unsigned long)after,live_blocks);
- cancellation_and_close();CHECK(GetProcessHandleCount(GetCurrentProcess(),&after));fprintf(stderr,"PIPE_PHASE cancellation handles=%lu blocks=%zu\n",(unsigned long)after,live_blocks);
- child_stdio(true);CHECK(GetProcessHandleCount(GetCurrentProcess(),&after));fprintf(stderr,"PIPE_PHASE child-write handles=%lu blocks=%zu\n",(unsigned long)after,live_blocks);
- child_stdio(false);CHECK(GetProcessHandleCount(GetCurrentProcess(),&after));fprintf(stderr,"PIPE_PHASE child-read handles=%lu blocks=%zu\n",(unsigned long)after,live_blocks);
+ CHECK(argc==1);caller_thread=GetCurrentThreadId();native_services_baseline();
+ DWORD before=0,after=0;CHECK(GetProcessHandleCount(GetCurrentProcess(),&before));
+ failed_preparation();byte_operations(false);byte_operations(true);cancellation_and_close();child_stdio(true);child_stdio(false);
  CHECK(GetProcessHandleCount(GetCurrentProcess(),&after)&&after==before&&!live_blocks);
 #else
  (void)argc;(void)argv;XrOsPipeOwner owner={0};bool opened=true;
