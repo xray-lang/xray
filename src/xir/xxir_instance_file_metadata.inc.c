@@ -11,6 +11,7 @@
  */
 #include "../os/os_file_metadata.h"
 #include "../os/os_file_temp.h"
+#include "../os/os_directory_owned.h"
 
 static XrOsIoStatus instance_temp_allocate(void *context,size_t bytes,void **output) {
     XrXirDomain *domain=context;
@@ -39,12 +40,20 @@ static XrOsIoPolicy instance_temp_policy(XrXirInstance *root) {
 struct XirFileMetadataOwner {
     XrOsFileMetadataOwner owner;
     XrOsFileTempOwner temporary;
+    XrOsDirectoryOwner directory;
+    XrOsDirectoryText pending_name;
+    uint64_t directory_token,directory_generation;
+    bool directory_published,directory_closing,directory_end;
     uint32_t kind;
     XirFileMetadataOwner *next;
 };
-enum { XIR_FILE_METADATA_OWNER, XIR_FILE_TEMP_OWNER };
+enum { XIR_FILE_METADATA_OWNER, XIR_FILE_TEMP_OWNER, XIR_DIRECTORY_OWNER };
+static void instance_directory_name_drop(XrXirInstance *root,XirFileMetadataOwner *owner) {
+    instance_temp_free(root->domain,owner->pending_name.bytes);owner->pending_name=(XrOsDirectoryText){0};
+}
 static void instance_file_metadata_owner_unlink(XrXirInstance *root,XirFileMetadataOwner *owner) {
-    XR_CHECK(!owner->owner.handle && !owner->temporary.state,"only a discharged filesystem owner can retire");
+    XR_CHECK(!owner->owner.handle && !owner->temporary.state && !owner->directory.state &&
+        !owner->pending_name.bytes && !owner->pending_name.length,"only a discharged filesystem owner can retire");
     XirFileMetadataOwner **link=&root->file_metadata_owners;
     while(*link && *link!=owner)link=&(*link)->next;
     XR_CHECK(*link==owner,"filesystem close requires its root-owned node");
@@ -60,6 +69,9 @@ static bool instance_file_metadata_owners_close(XrXirInstance *root) {
         else if(owner->kind==XIR_FILE_TEMP_OWNER) {
             XrOsIoPolicy policy=instance_temp_policy(root);
             status=xr_os_io_temp_finish(&policy,&owner->temporary,false);
+        }else if(owner->kind==XIR_DIRECTORY_OWNER) {
+            status=xr_os_io_directory_close(&owner->directory);
+            if(status==XR_OS_IO_OK)instance_directory_name_drop(root,owner);
         }
         if(status==XR_OS_IO_OK)
             instance_file_metadata_owner_unlink(root,owner);

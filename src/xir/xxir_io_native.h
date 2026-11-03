@@ -34,7 +34,10 @@ static const XirIoNativeContract xir_io_native_contracts[]={
     {XR_NATIVE_CALLABLE_IO_READLINK,1,1,"__readlink","(path: Path): string?"},
     {XR_NATIVE_CALLABLE_IO_REALPATH,1,1,"__realpath","(path: Path): string?"},
     {XR_NATIVE_CALLABLE_IO_MAKE_TEMP_DIR,1,0,"__makeTempDir","(root: string): string?"},
-    {XR_NATIVE_CALLABLE_IO_MAKE_TEMP_FILE,1,0,"__makeTempFile","(root: string): string?"}
+    {XR_NATIVE_CALLABLE_IO_MAKE_TEMP_FILE,1,0,"__makeTempFile","(root: string): string?"},
+    {XR_NATIVE_CALLABLE_IO_DIR_OPEN,1,1,"__dirOpen","(path: Path): i64"},
+    {XR_NATIVE_CALLABLE_IO_DIR_NEXT,1,0,"__dirNext","(handle: i64): string?"},
+    {XR_NATIVE_CALLABLE_IO_DIR_CLOSE,1,0,"__dirClose","(handle: i64): bool"}
 };
 static inline const XirIoNativeContract *xir_io_native_contract(uint32_t id) {
     for(uint32_t n=0;n<sizeof(xir_io_native_contracts)/sizeof(*xir_io_native_contracts);++n)
@@ -75,24 +78,26 @@ static inline bool xir_io_native_signature(uint32_t id,const XrXirTypes *types,
     const XrNativeCallableDeclaration *native=xr_native_callable_by_id(id);
     const XirIoNativeContract *contract=xir_io_native_contract(id);
     bool stat=id==XR_NATIVE_CALLABLE_IO_STAT;
+    bool directory=id==XR_NATIVE_CALLABLE_IO_DIR_OPEN;
+    bool token=id==XR_NATIVE_CALLABLE_IO_DIR_NEXT || id==XR_NATIVE_CALLABLE_IO_DIR_CLOSE;
     bool temporary=id==XR_NATIVE_CALLABLE_IO_MAKE_TEMP_DIR || id==XR_NATIVE_CALLABLE_IO_MAKE_TEMP_FILE;
-    bool text=temporary || id==XR_NATIVE_CALLABLE_IO_READLINK || id==XR_NATIVE_CALLABLE_IO_REALPATH;
+    bool text=temporary || id==XR_NATIVE_CALLABLE_IO_READLINK || id==XR_NATIVE_CALLABLE_IO_REALPATH || id==XR_NATIVE_CALLABLE_IO_DIR_NEXT;
     if(!contract || !native || native->owner || native->error_e_type || native->ctfe ||
         !native->namespace_id || strcmp(native->namespace_id,"io") || !native->source_path ||
         strcmp(native->source_path,"stdlib/defs/core.def") || !native->member)return false;
     const XrNativeMemberDeclaration *m=native->member;
     if(!m->name || strcmp(m->name,contract->name) || !m->signature ||
         strcmp(m->signature,contract->signature) ||
-        !m->result_text || strcmp(m->result_text,stat?"__FileStat?":text?"string?":"bool") || m->is_public || m->is_static ||
+        !m->result_text || strcmp(m->result_text,stat?"__FileStat?":text?"string?":directory?"i64":"bool") || m->is_public || m->is_static ||
         m->is_method || m->lowered || m->receiver!=XR_NATIVE_RECEIVER_READ ||
         m->operation!=XR_NATIVE_OPERATION_NONE || m->allocation!=XR_NATIVE_ALLOCATION_UNKNOWN ||
         !m->failures || *m->failures || m->ownership!=XR_NATIVE_RESULT_OWNERSHIP_OWNED ||
         !m->parameters || m->parameter_count!=contract->count || count!=m->parameter_count ||
-        !parameters || (stat?!xir_file_stat_nullable(types,result):text?!xir_io_nullable_string(types,result):result!=XR_XIR_BOOL) ||
-        error!=XR_XIR_NEVER || m->result!=(stat?XR_NATIVE_TERM_NULLABLE_FILE_STAT:text?XR_NATIVE_TERM_NULLABLE_STRING:XR_NATIVE_TERM_BOOL))return false;
+        !parameters || (stat?!xir_file_stat_nullable(types,result):text?!xir_io_nullable_string(types,result):result!=(directory?XR_XIR_I64:XR_XIR_BOOL)) ||
+        error!=XR_XIR_NEVER || m->result!=(stat?XR_NATIVE_TERM_NULLABLE_FILE_STAT:text?XR_NATIVE_TERM_NULLABLE_STRING:directory?XR_NATIVE_TERM_I64:XR_NATIVE_TERM_BOOL))return false;
     for(uint32_t p=0;p<count;++p) {
         bool path=p<contract->paths;const XrNativeParameter *parameter=m->parameters+p;
-        const char *name=temporary?"root":id==XR_NATIVE_CALLABLE_IO_SYMLINK?(p?"link":"source"):
+        const char *name=temporary?"root":token?"handle":id==XR_NATIVE_CALLABLE_IO_SYMLINK?(p?"link":"source"):
             contract->paths==2?(p?"new":"old"):p?"mode":"path";
         if(!parameter->name || strcmp(parameter->name,name) || !parameter->type_text ||
             strcmp(parameter->type_text,path?"Path":temporary?"string":"i64") ||

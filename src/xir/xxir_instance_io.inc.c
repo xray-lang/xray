@@ -46,6 +46,7 @@ static XrXirCallStatus instance_io_permission(XrXirCallView *view,XrXirInstance 
 #include "xxir_instance_io_mutation.inc.c"
 #include "xxir_instance_io_links.inc.c"
 #include "xxir_instance_io_temp.inc.c"
+#include "xxir_instance_io_directory.inc.c"
 
 static XrXirCallStatus instance_io_call(XrXirCallView *view,XrXirInstance *instance,
     uint32_t index,uint32_t id,const XrXirCallEntry *entry,XrXirValue *output) {

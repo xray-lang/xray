@@ -34,7 +34,8 @@ static bool source_io_declare(SourceContext *ctx) {
         XR_NATIVE_CALLABLE_IO_MKDIR,XR_NATIVE_CALLABLE_IO_RMDIR,XR_NATIVE_CALLABLE_IO_REMOVE,
         XR_NATIVE_CALLABLE_IO_RENAME,XR_NATIVE_CALLABLE_IO_UTIME_NOW,XR_NATIVE_CALLABLE_IO_SYMLINK,
         XR_NATIVE_CALLABLE_IO_READLINK,XR_NATIVE_CALLABLE_IO_REALPATH,
-        XR_NATIVE_CALLABLE_IO_MAKE_TEMP_DIR,XR_NATIVE_CALLABLE_IO_MAKE_TEMP_FILE};
+        XR_NATIVE_CALLABLE_IO_MAKE_TEMP_DIR,XR_NATIVE_CALLABLE_IO_MAKE_TEMP_FILE,
+        XR_NATIVE_CALLABLE_IO_DIR_OPEN,XR_NATIVE_CALLABLE_IO_DIR_NEXT,XR_NATIVE_CALLABLE_IO_DIR_CLOSE};
     for(uint32_t m=0;m<ctx->module_count;++m) {
         if(!source_request_poll(ctx,NULL))return false;
         if(!source_io_module(ctx,m) || source_owned_checked(&ctx->graph->specs[m]))continue;
@@ -58,8 +59,8 @@ static bool source_io_declare(SourceContext *ctx) {
             XrXirType *parameters=source_alloc(ctx,count,sizeof(*parameters));if(!parameters)return false;
             bool temporary=id==XR_NATIVE_CALLABLE_IO_MAKE_TEMP_DIR || id==XR_NATIVE_CALLABLE_IO_MAKE_TEMP_FILE;
             for(uint32_t p=0;p<count;++p)parameters[p]=p<contract->paths?path:temporary?XR_XIR_STRING:XR_XIR_I64;
-            bool text=temporary || id==XR_NATIVE_CALLABLE_IO_READLINK || id==XR_NATIVE_CALLABLE_IO_REALPATH;
-            XrXirType result=id==XR_NATIVE_CALLABLE_IO_STAT?file_stat:text?optional_string:XR_XIR_BOOL;
+            bool text=temporary || id==XR_NATIVE_CALLABLE_IO_READLINK || id==XR_NATIVE_CALLABLE_IO_REALPATH || id==XR_NATIVE_CALLABLE_IO_DIR_NEXT;
+            XrXirType result=id==XR_NATIVE_CALLABLE_IO_STAT?file_stat:text?optional_string:id==XR_NATIVE_CALLABLE_IO_DIR_OPEN?XR_XIR_I64:XR_XIR_BOOL;
             if(!xir_io_native_signature(id,&ctx->types,parameters,count,result,XR_XIR_NEVER))
                 return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"io callable differs from its governed signature");
             const char *name=source_owned_text(ctx,native->member->name);
