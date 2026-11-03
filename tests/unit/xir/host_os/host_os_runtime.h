@@ -103,6 +103,7 @@ static XrOsIoStatus host_chdir(const XrOsIoPolicy *,const char *,bool(*)(void *)
 #undef xr_os_io_chdir
 enum { HOST_NORMAL, HOST_OOM_WIDE, HOST_CANCEL_BEFORE, HOST_CANCEL_CONVERSION, HOST_CANCEL_AFTER, HOST_BAD_UTF, HOST_CANCEL_COUNT };
 static unsigned host_mode,host_calls,count_calls,pin_calls,last_cpu;
+static void (*host_count_probe)(void);
 static uint64_t host_cstring_requested;
 static XrXirInstance *host_active;
 static XrOsIoPolicy host_policy;
@@ -238,6 +239,7 @@ static XrOsIoStatus host_io_rename(const XrOsIoPolicy *p,XrOsPathSpan a,XrOsPath
 static XrOsIoStatus host_io_utime(const XrOsIoPolicy *p,XrOsPathSpan a,bool(*c)(void *),XrOsFileMetadataOwner *h,bool *o){return host_io_operation(p,a,(XrOsPathSpan){0},c,h,o,4);}
 static unsigned int host_count(void){
  ++count_calls;
+ if(host_count_probe)host_count_probe();
  if(host_mode==HOST_CANCEL_COUNT){host_mode=HOST_NORMAL;CHECK(host_active&&xr_xir_call_request_cancel(host_active->call)==XR_XIR_CALL_CANCEL_REQUESTED);}
  return xr_os_cpu_count();
 }

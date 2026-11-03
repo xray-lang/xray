@@ -36,6 +36,7 @@
 #include "xxir_call_take_internal.h"
 #include "xxir_type_arena_internal.h"
 #include "xxir_call_internal.h"
+#include "xxir_signal_frontier_internal.h"
 #include "xxir_call_select_internal.h"
 #include "xxir_channel_select_shape.h"
 #include "xxir_call_move_internal.h"
@@ -1792,6 +1793,7 @@ static XrXirCallStatus resolve_function(XrXirInstance *instance, const XrXirValu
     if (admitted != XR_XIR_CALL_READY) return admitted;
     *entry = binding->entry; return XR_XIR_CALL_READY;
 }
+#include "xxir_instance_signal_frontier.inc.c"
 XrXirCallStatus xr_xir_instance_start_function(XrXirInstance *instance, const XrXirValue *function,
     const XrXirValue *arguments, uint32_t count) {
     if (!instance_owner_current(instance)) return XR_XIR_CALL_BAD_ARGUMENT;

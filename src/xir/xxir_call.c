@@ -18,6 +18,7 @@
 #include "../base/xresource_limits.h"
 #include "xxir_call_generator.h"
 #include "xxir_call_internal.h"
+#include "xxir_signal_frontier_internal.h"
 #include "xxir_call_take_internal.h"
 #include "xxir_program.h"
 #include "xxir_call_observer_internal.h"
@@ -625,6 +626,7 @@ XR_FUNC XrXirCallStatus xir_call_vm_visit_ready(XrXirCall *call,const XrXirExecu
 }
 #include "xxir_call_class_access.inc.c"
 #include "xxir_call_view.inc.c"
+#include "xxir_call_signal_frontier.inc.c"
 #include "xxir_call_view_operation.inc.c"
 static bool call_take_parameter(const XirCallTakeArguments *,uint32_t);
 #include "xxir_call_view_arguments.inc.c"
