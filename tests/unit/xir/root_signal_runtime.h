@@ -186,6 +186,7 @@ static void root_signal_stop_cases(XrXirProgram *program,const uint32_t ids[6]) 
         CHECK(runtime_live==baseline && runtime_bytes==bytes);
     }
 }
+static void root_signal_program_release(void *owner) {xr_xir_compile_program_drop(owner);}
 static void root_signal_owner_cases(XrXirProgram *program,const uint32_t ids[6],const XrXirCompileContext *context) {
     for (unsigned failures=1;failures<=2;++failures) {
         size_t baseline=runtime_live,bytes=runtime_bytes;RootSignalLog log={0};
@@ -214,9 +215,12 @@ static void root_signal_owner_cases(XrXirProgram *program,const uint32_t ids[6],
         refused.type==XR_XIR_I64 && refused.payload==-2);xr_xir_value_drop(&refused);
     CHECK(xr_xir_instance_free(other)==XR_XIR_CALL_READY);
     const XrXirArtifact *actual=program->permissions->input->artifact;
+    CHECK(xr_xir_compile_program_retain(program));
     XrXirProgramSpec descriptor={XR_XIR_PROGRAM_ABI_VERSION,actual->target,program->entries,
-        program->entry_count,program->declarations,program->code,program->types,xir_program_packet_borrow(actual)};
-    XrXirProgram *received=NULL;CHECK(xr_xir_compile_program_seal(context,&descriptor,&received)==XR_XIR_OK);
+        program->entry_count,program->declarations,{program,root_signal_program_release},program->types,xir_program_packet_borrow(actual)};
+    XrXirProgram *received=NULL;XrXirStatus sealed=xr_xir_compile_program_seal(context,&descriptor,&received);
+    if(sealed!=XR_XIR_OK)xr_xir_compile_program_drop(program);
+    CHECK(sealed==XR_XIR_OK);
     uint64_t generation=0;CHECK(xr_xir_instance_generation_prepare(first,received,&generation)==XR_XIR_CALL_BAD_STATE && !generation);
     root_signal_send();CHECK(root_signal_until(first,&first_log,false).outcome.status==XR_XIR_CALL_RETURNED);
     CHECK(xr_xir_instance_generation_prepare(first,received,&generation)==XR_XIR_CALL_READY && generation);
