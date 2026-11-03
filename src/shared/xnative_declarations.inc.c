@@ -1337,6 +1337,22 @@ static const XrNativeMemberDeclaration xr_native_io_realpath = {
     false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
     "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_io_realpath_parameters, 1, XR_NATIVE_TERM_NULLABLE_STRING
 };
+static const XrNativeParameter xr_native_io_make_temp_dir_parameters[] = {
+    {"root", "string", XR_NATIVE_TERM_STRING, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_io_make_temp_dir = {
+    12, "__makeTempDir", "(root: string): string?", "string?", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_io_make_temp_dir_parameters, 1, XR_NATIVE_TERM_NULLABLE_STRING
+};
+static const XrNativeParameter xr_native_io_make_temp_file_parameters[] = {
+    {"root", "string", XR_NATIVE_TERM_STRING, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_io_make_temp_file = {
+    13, "__makeTempFile", "(root: string): string?", "string?", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_io_make_temp_file_parameters, 1, XR_NATIVE_TERM_NULLABLE_STRING
+};
 static const XrNativeParameter xr_native_unicode_property_parameters[] = {
     {"name", "string", XR_NATIVE_TERM_STRING, false, false},
 };
@@ -1443,5 +1459,7 @@ static const XrNativeCallableDeclaration xr_native_callables[] = {
     {XR_NATIVE_CALLABLE_IO_UTIME_NOW, NULL, &xr_native_io_utime_now, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
     {XR_NATIVE_CALLABLE_IO_SYMLINK, NULL, &xr_native_io_symlink, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
     {XR_NATIVE_CALLABLE_IO_READLINK, NULL, &xr_native_io_readlink, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_IO_REALPATH, NULL, &xr_native_io_realpath, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}}
+    {XR_NATIVE_CALLABLE_IO_REALPATH, NULL, &xr_native_io_realpath, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
+    {XR_NATIVE_CALLABLE_IO_MAKE_TEMP_DIR, NULL, &xr_native_io_make_temp_dir, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
+    {XR_NATIVE_CALLABLE_IO_MAKE_TEMP_FILE, NULL, &xr_native_io_make_temp_file, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}}
 };
