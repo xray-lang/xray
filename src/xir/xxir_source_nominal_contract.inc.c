@@ -71,6 +71,10 @@ static bool source_hir_nominal_emit(SourceContext *ctx,AstNode *node,const XrHir
 typedef struct SourceNominalEmission {XrXirType type;uint32_t variant;const SourceValue *values;uint32_t count;} SourceNominalEmission;
 static bool source_hir_nominal_construct(SourceContext *ctx,AstNode *node,const SourceNominalEmission *emission,SourceValue *value) {
     XrXirType type=emission->type;const SourceValue *values=emission->values;uint32_t count=emission->count;
+    const XrXirTypeNode *native=xr_xir_type_node(&ctx->types,type);
+    if(native && native->kind==XR_XIR_TYPE_NOMINAL &&
+        ctx->nominals.declarations[native->nominal.declaration].native.native_id==XR_NATIVE_DECLARATION_FILE_STAT)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"file metadata can only be produced by its native query");
     XrHirNominalShape shape={0};XrHirBodyScope scope={0};
     if(!source_hir_nominal_shape(ctx,node,type,&shape,NULL)||!source_hir_current_scope(ctx,&scope))return false;
     XrHirNominalValue *fields=count?source_recipe_storage(ctx,count,sizeof(*fields)):NULL;if(count&&!fields)return false;

@@ -95,6 +95,7 @@ typedef struct InstanceStorageRoute {
 } InstanceStorageRoute;
 typedef struct XirEnvironmentSnapshotOwner XirEnvironmentSnapshotOwner;
 typedef struct XirSystemOwner XirSystemOwner;
+typedef struct XirFileMetadataOwner XirFileMetadataOwner;
 struct XrXirInstance {
     XrXirProgram *program;
     XrXirInstanceConfig config;
@@ -128,11 +129,13 @@ struct XrXirInstance {
     bool bindings_published;
     XirEnvironmentSnapshotOwner *environment_snapshots;
     XirSystemOwner *system_owners;
+    XirFileMetadataOwner *file_metadata_owners;
 };
 #if defined(XR_OS_WINDOWS)
 static bool instance_environment_snapshots_close(XrXirInstance *instance);
 #endif
 static bool instance_system_owners_close(XrXirInstance *root);
+static bool instance_file_metadata_owners_close(XrXirInstance *root);
 static void instance_bindings_free(XrXirInstance *instance);
 static bool instance_bindings_ready(const XrXirInstance *instance);
 static XrXirInstance *instance_root(XrXirInstance *instance) {
@@ -530,6 +533,7 @@ static void instance_dispose(XrXirInstance *instance) {
     XR_CHECK(instance && instance_owner_current(instance), "instance internal owner requires its current domain");
     XR_CHECK(!instance->environment_snapshots,"instance disposal requires discharged environment snapshots");
     XR_CHECK(!instance->system_owners,"instance disposal requires discharged process handles");
+    XR_CHECK(!instance->file_metadata_owners,"instance disposal requires discharged file metadata handles");
     XrXirDomain *domain = instance->domain;
     XrXirProgram *program = instance->program;
     const XrXirDeclarations *d = program ? program->declarations : NULL;
@@ -1095,6 +1099,9 @@ XrXirCallStatus xr_xir_instance_free(XrXirInstance *instance) {
     }
 #endif
     if(!instance_system_owners_close(root)) {
+        root->driving=false;return XR_XIR_CALL_CLOSE_FAILED;
+    }
+    if(!instance_file_metadata_owners_close(root)) {
         root->driving=false;return XR_XIR_CALL_CLOSE_FAILED;
     }
     bool exhausted=root->budget.exhausted;
@@ -2417,6 +2424,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_pointer(XrXirCallView *view,XrXirOp oper
 #include "xxir_instance_math.inc.c"
 #include "xxir_instance_environment_win.inc.c"
 #include "xxir_instance_system.inc.c"
+#include "xxir_instance_file_metadata.inc.c"
 #include "xxir_instance_io.inc.c"
 XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
     XrXirInstance *instance=view_instance(view);XrXirValue *value=NULL;

@@ -1202,10 +1202,35 @@ def render_os_system_callables(declarations):
     return lines, rows
 
 
+def render_file_stat_identity(root):
+    import sys
+    sys.path.insert(0, str(root / 'tools/stdlibgen'))
+    from stdlibgen import parse_handles
+    candidates = [h for h in parse_handles(root) if h.module == 'io' and h.name == '__FileStat']
+    expected = tuple(zip(('size', 'mode', 'mtime', 'atime', 'ctime', 'uid', 'gid',
+                         'isFile', 'isDir', 'isSymlink'),
+                        ('i64',) * 5 + ('i64?',) * 2 + ('bool',) * 3))
+    if len(candidates) != 1 or tuple((f.name, f.type) for f in candidates[0].fields) != expected or not all(f.is_const for f in candidates[0].fields):
+        raise ValueError('File metadata requires its exact immutable governed fields')
+    digest = hashlib.sha256((root / 'stdlib/defs/core.def').read_text(encoding='utf-8').encode('utf-8')).digest()
+    fingerprint = '{{' + ','.join(str(b) for b in digest) + '}}'
+    lines = ['static const XrNativeMemberDeclaration xr_native_file_stat_members[] = {']
+    for index, (name, type_text) in enumerate(expected):
+        term = {'i64': 'I64', 'i64?': 'NULLABLE_I64', 'bool': 'BOOL'}[type_text]
+        lines += ['    {' + str(index + 1) + ', ' + c_string(name) + ', ' + c_string(': ' + type_text) + ', ' + c_string(type_text) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
+                  '        false, false, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_NO_HEAP,',
+                  '        "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_' + term + '},']
+    return lines + ['};', 'static const XrNativeTypeDeclaration xr_native_file_stat = {',
+        '    XR_NATIVE_DECLARATION_FILE_STAT, XR_NATIVE_DECLARATION_IDENTITY, "__FileStat", NULL, 0,',
+        '    "stdlib/defs/core.def", "xray.native-type.v1/io/__FileStat", ' + fingerprint + ', 0, 0,',
+        '    xr_native_file_stat_members, 10', '};']
+
+
 def render_io_callables(declarations):
     contracts = (
         ('__chmod', '(path: Path, mode: i64): bool', 'pv', 'io_chmod', 'xrt_io_chmod_value', 'IO_CHMOD'),
         ('__chdir', '(path: Path): bool', 'p', 'io_chdir', 'xrt_io_chdir', 'IO_CHDIR'),
+        ('__stat', '(path: Path): __FileStat?', 'p', 'io_stat', '', 'IO_STAT'),
     )
     lines, rows = [], []
     for ordinal, (name, signature, arguments, vm, aot, identity) in enumerate(contracts, 1):
@@ -1213,22 +1238,24 @@ def render_io_callables(declarations):
         if len(candidates) != 1:
             raise ValueError('Filesystem callable requires its sole governed declaration: ' + name)
         row = candidates[0]
+        stat = identity == 'IO_STAT'
         if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
                 row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
                 row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
                 row.ret, row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
-                signature, str(len(arguments)), arguments, 'internal', '', '', '', 'system', vm,
-                aot, True, 'method', '', 'normal', '', '', 'value', False, None, (), ''):
+                signature, str(len(arguments)), arguments, 'internal', '', '', 'fresh' if stat else '', 'system', vm,
+                aot, not stat, '' if stat else 'method', '', 'normal', '', '', 'value', False, None, (), ''):
             raise ValueError('Filesystem callable differs from its complete source contract: ' + name)
         symbol = 'xr_native_' + identity.lower()
+        result, term = ('__FileStat?', 'NULLABLE_FILE_STAT') if stat else ('bool', 'BOOL')
         lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {',
             '    {"path", "Path", XR_NATIVE_TERM_PATH, false, false},']
         if len(arguments) == 2:
             lines += ['    {"mode", "i64", XR_NATIVE_TERM_I64, false, false},']
         lines += ['};', 'static const XrNativeMemberDeclaration ' + symbol + ' = {',
-            '    ' + str(ordinal) + ', ' + c_string(name) + ', ' + c_string(signature) + ', "bool", 0, 0, XR_NATIVE_RECEIVER_READ,',
+            '    ' + str(ordinal) + ', ' + c_string(name) + ', ' + c_string(signature) + ', ' + c_string(result) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
             '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
-            '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + symbol + '_parameters, ' + str(len(arguments)) + ', XR_NATIVE_TERM_BOOL', '};']
+            '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + symbol + '_parameters, ' + str(len(arguments)) + ', XR_NATIVE_TERM_' + term, '};']
         rows += ['    {XR_NATIVE_CALLABLE_' + identity + ', NULL, &' + symbol + ', NULL, false, "io", "stdlib/defs/core.def", FINGERPRINT}']
     return lines, rows
 
@@ -1472,6 +1499,7 @@ def render(root):
         generated, _, _ = render_type(root, stem)
         scalar_lines += generated
     lines += array_lines + string_lines + integer_lines + scalar_lines + render_atomic_identities(root) + render_task_identity(root) + render_channel_identity(root) + render_channel_result_identities(root) + render_iterator_identity(root) + render_type(root, 'map')[0] + render_type(root, 'set')[0]
+    lines += render_file_stat_identity(root)
     lines += render_intrinsics(root)
     _, _, string_members = render_type(root, 'string')
     decoder = next(i for i, m in enumerate(string_members) if m.operation == 'STRING_FROM_UTF8')
