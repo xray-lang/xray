@@ -188,6 +188,23 @@ class TierTests(unittest.TestCase):
                 self.assertNotIn("native-runtime", plan["groups"])
         self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
 
+    def test_pipe_product_and_test_leaves_select_both_carriers(self):
+        for path in ("tests/unit/xir/pipe_runtime/test_pipe_source.c",
+                     "tests/unit/xir/pipe_runtime/test_pipe_native.c",
+                     "tests/unit/xir/pipe_runtime/pipe_cases.h",
+                     "tests/unit/xir/pipe_runtime/pipe_runtime.h",
+                     "tests/unit/xir/pipe_runtime/pipe_runtime.cmake",
+                     "src/xir/xxir_instance_pipe.inc.c",
+                     "src/xir/xxir_instance_pipe_owner.inc.c",
+                     "src/xir/xxir_sys_pipe_native.h"):
+            with self.subTest(path=path):
+                plan = xray_l1.tier_plan(ROOT, "L2", changed=[path])
+                self.assertIn("host-os", plan["groups"])
+                self.assertTrue({"test_xir_pipe_source", "test_xir_pipe_native"} <= set(plan["tests"]))
+                self.assertTrue({"test_xir_pipe_source", "test_xir_pipe_native"} <= set(plan["targets"]))
+                self.assertNotIn("native-runtime", plan["groups"])
+        self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
+
     def test_callback_mechanisms_and_test_recipes_select_the_existing_runtime_home(self):
         for path in ("src/execution/xr_xir_host_execution.c",
                      "src/xir/xxir_root_callback_internal.h",
