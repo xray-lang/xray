@@ -32,6 +32,8 @@ typedef struct XrOsFileMetadataOwner { intptr_t handle; } XrOsFileMetadataOwner;
  * times are integer Unix-epoch seconds. Windows ctime is creation time, as in
  * its CRT stat convention; uid/gid are absent and mode does not describe ACLs.
  * Metadata follows the target while is_symlink describes the named leaf.
+ * On Windows this includes name-surrogate reparse routes such as junctions,
+ * so recursive consumers do not follow them into an external tree.
  * The two observations do not claim an atomic snapshot across path changes. */
 XR_FUNC XrOsIoStatus xr_os_io_file_metadata(const XrOsIoPolicy *policy,
     const char *path, size_t length, bool (*current)(void *context),
