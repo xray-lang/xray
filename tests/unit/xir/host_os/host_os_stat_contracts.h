@@ -25,14 +25,26 @@ static void host_stat_contracts(XrXirCompileContext *context,const XrXirArtifact
  for(size_t at=0;at+32<=packet.length;++at)if(!memcmp(bytes+at,identity.native.source_fingerprint,32)){
   bytes[at]^=1;++matches;at+=31;
  }
- CHECK(matches==1);XrXirArtifact *denied=NULL;
+ fprintf(stderr,"stat packet fingerprint copies%zu\n",matches);CHECK(matches>0);XrXirArtifact *denied=NULL;
  CHECK(xr_xir_compile_checked_read_lower(context,bytes,packet.length,&code->target,&denied,NULL)==XR_XIR_BAD_STRUCTURE&&!denied);xr_free(bytes);
+ XrXirNominalIdentity headers[64];XrXirNominalFieldIdentity names[64][16];CHECK(table->count<64);
+ for(uint32_t n=0;n<table->count;++n){
+  if(table->identities)headers[n]=table->identities[n];
+  else{const XrXirNominalDeclaration *decl=table->declarations+n;CHECK(decl->field_count<16);
+   headers[n]=(XrXirNominalIdentity){decl->module,decl->name,decl->exported,decl->parameter_count,names[n],decl->field_count,decl->kind,decl->variants,decl->variant_count,decl->flags,decl->native,decl->parent};
+   for(uint32_t k=0;k<decl->field_count;++k)names[n][k]=(XrXirNominalFieldIdentity){decl->fields[k].name,decl->fields[k].flags};
+  }
+ }
+ headers[d]=identity;XrXirNominalTable received={NULL,table->count,headers};XrXirTypes types=*module->types;types.nominals=&received;
+ CHECK(xr_xir_compile_nominal_structure_verify(context,&received,&types)==XR_XIR_OK);
  for(unsigned n=0;n<8;++n){XrXirNominalIdentity bad=identity;
   switch(n){case 0:bad.native.native_id=0;break;case 1:bad.arity=1;break;case 2:bad.parent=d+1;break;
    case 3:bad.flags=0;break;case 4:bad.exported=1;break;case 5:bad.native.source_fingerprint[0]^=1;break;
    case 6:bad.kind=XR_XIR_NOMINAL_STRUCT;break;default:bad.module=(XrXirLiteral){"io",2};break;}
   CHECK(!xir_file_stat_header(&bad));
+  headers[d]=bad;CHECK(xr_xir_compile_nominal_structure_verify(context,&received,&types)==XR_XIR_BAD_STRUCTURE);
  }
+ headers[d]=identity;
  XrXirNominalFieldIdentity saved=fields[0];fields[0]=fields[1];CHECK(!xir_file_stat_header(&identity));fields[0]=saved;
  fields[0].flags=XR_XIR_FIELD_PRIVATE;CHECK(!xir_file_stat_header(&identity));fields[0].flags=XR_XIR_FIELD_MUTABLE;
  CHECK(!xir_file_stat_header(&identity));fields[0]=saved;

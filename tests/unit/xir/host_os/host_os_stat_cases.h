@@ -45,7 +45,7 @@ static void host_stat_execute(XrXirProgram *program,const uint32_t ids[4]){
  CHECK(snprintf(path,sizeof(path),"host-stat-%ld-\xE6\xB5\x8B\xE8\xAF\x95.bin",(long)getpid())>0);
  FILE *file=fopen(path,"wb");CHECK(file&&fwrite("abc",1,3,file)==3&&!fclose(file));
 #endif
- XrOsIoPolicy policy={NULL,host_stat_allocate,host_stat_free};XrOsFileMetadataOwner owner={0};XrOsFileMetadata reference={0};
+ XrOsFileMetadataOwner owner={0};XrOsIoPolicy policy={&owner,host_stat_allocate,host_stat_free};XrOsFileMetadata reference={0};
  CHECK(xr_os_io_file_metadata(&policy,path,strlen(path),NULL,&owner,&reference)==XR_OS_IO_OK&&!owner.handle&&reference.present&&reference.size==3&&reference.is_file);
  for(unsigned pass=0;pass<3;++pass){
   XrOsFileMetadata expected=reference;
