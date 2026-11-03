@@ -69,7 +69,7 @@ static XrOsIoStatus metadata_follow(const wchar_t *wide, bool (*current)(void *)
             else {
                 result->size = (int64_t)size;
                 result->is_dir = (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-                result->is_file = !result->is_dir;
+                result->is_file = !result->is_dir && GetFileType((HANDLE)owner->handle) == FILE_TYPE_DISK;
                 result->mode = _S_IREAD | ((data.dwFileAttributes & FILE_ATTRIBUTE_READONLY) ? 0 : _S_IWRITE);
                 if (result->is_dir || metadata_executable_name(wide)) result->mode |= _S_IEXEC;
                 result->mode &= 0777;
