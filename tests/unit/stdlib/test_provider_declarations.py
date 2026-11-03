@@ -39,7 +39,7 @@ class ProviderDeclarationTests(unittest.TestCase):
     def test_repository_inventory_has_every_private_leaf(self):
         from stdlibgen import parse_defs
         inventory = declaration_inventory(parse_defs(ROOT))
-        self.assertEqual(153, inventory["leaf_count"])
+        self.assertEqual(154, inventory["leaf_count"])
         expected_symbols = {
             "crypto.__fillRandomBytes", "mem.__alloc", "mem.__allocAligned",
             "mem.__allocZeroed", "mem.__bufferLength", "os.__getpid",
@@ -161,18 +161,27 @@ class ProviderDeclarationTests(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "invalid result token transition"):
             parse(props, result="(i64, i64)?")
 
-    def test_false_close_consumes_token_on_call_entry(self):
+    def test_pipe_close_consumes_token_only_on_success(self):
         transition = {"resource": PIPE_RESOURCE, "value": "parameter.0",
-                      "action": "consume", "when": "call-enter"}
+                      "action": "consume", "when": "result-true"}
         props = {**properties(), "provider_parameter_modes": "in",
+                 "provider_contract": "xray.runtime.provider.v1/io",
+                 "provider_operation": "xray.runtime.provider-operation.v1/io/pipe-close",
                  "provider_parameter_owners": "trivial", "provider_adapter": "bool-i64-pipe-close",
                  "provider_resources": json.dumps([transition])}
         declaration = parse(props, ("i64",), "bool")
         self.assertFalse(admission_reasons(declaration))
         self.assertEqual("trap", declaration.logical.refusal)
-        transition["when"] = "result-true"
+        self.assertEqual("result-true", declaration.logical.resources[0].when)
+        transition["when"] = "call-enter"
         with self.assertRaisesRegex(SystemExit, "invalid parameter token transition"):
             parse({**props, "provider_resources": json.dumps([transition])}, ("i64",), "bool")
+        transition["when"] = "result-true"
+        for changes in ({"provider_operation": "xray.runtime.provider-operation.v1/io/other"},
+                        {"provider_contract": "xray.runtime.provider.v1/clock",
+                         "provider_operation": "xray.runtime.provider-operation.v1/clock/realtime-nanos"}):
+            with self.subTest(changes=changes), self.assertRaisesRegex(SystemExit, "invalid parameter token transition"):
+                parse({**props, **changes, "provider_resources": json.dumps([transition])}, ("i64",), "bool")
 
     def test_inventory_retains_undeclared_and_unadmitted_leaves(self):
         def entry(name, declaration):

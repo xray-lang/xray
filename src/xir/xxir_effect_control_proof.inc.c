@@ -92,6 +92,13 @@ static XrXirStatus effect_control_local_read(const EffectControlRead *read,uint3
     if(actual<XR_XIR_EFFECT_NONE || actual>XR_XIR_EFFECT_MAY ||
         (read->claims->task_creation[function]!=XR_XIR_EFFECT_NONE &&
          read->claims->task_creation[function]!=XR_XIR_EFFECT_MAY)) return XR_XIR_BAD_STRUCTURE;
+    bool native_suspend=false;
+    XrXirStatus native_status=effect_control_native_suspend(&read->input,function,&native_suspend);
+    if(native_status!=XR_XIR_OK)return native_status;
+    if(native_suspend) {
+        if(actual!=XR_XIR_EFFECT_MAY)return XR_XIR_BAD_STRUCTURE;
+        local.suspend=true;local.instruction=UINT32_MAX;local.cause=XR_XIR_EFFECT_CAUSE_SUSPEND;
+    }
     EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
     for(uint32_t r=0;r<head->run_count;++r) {
         const EffectBodyRun *run=NULL;XrXirStatus status=effect_body_range_ref(&read->input.read,head,&cursor,&run);

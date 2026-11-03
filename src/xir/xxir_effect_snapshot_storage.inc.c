@@ -324,7 +324,8 @@ static XrXirStatus effect_body_material_generation_input(const XrXirCompileConte
         bool native_source=false;
         for(uint32_t f=0;f<ordinary->source->function_count;++f) {
             if(ordinary->source->declarations && ordinary->source->declarations->functions &&
-                ordinary->source->declarations->functions[f].native_callable==XR_NATIVE_CALLABLE_SYS_ON_SIGNAL)native_source=true;
+                (ordinary->source->declarations->functions[f].native_callable==XR_NATIVE_CALLABLE_SYS_ON_SIGNAL ||
+                 xir_sys_pipe_id(ordinary->source->declarations->functions[f].native_callable)))native_source=true;
         }
         if(status==XR_XIR_OK && native_source)
             status=effect_body_material_generation_input(work,ordinary->source,NULL,NULL,input_facts,&body->canonical_source);

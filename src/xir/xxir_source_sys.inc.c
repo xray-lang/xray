@@ -33,6 +33,9 @@ static bool source_sys_declare(SourceContext *ctx) {
             if(count&&!parameters)return false;
             for(uint32_t p=0;p<count;++p) {
                 if(native->member->parameters[p].type==XR_NATIVE_TERM_I64)parameters[p]=XR_XIR_I64;
+                else if(native->member->parameters[p].type==XR_NATIVE_TERM_ARRAY_U8) {
+                    if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_U8},parameters+p))return false;
+                }
                 else if(native->member->parameters[p].type==XR_NATIVE_TERM_UNIT_CALLBACK) {
                     if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,
                         .result=XR_XIR_UNIT,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},parameters+p))return false;
@@ -43,6 +46,17 @@ static bool source_sys_declare(SourceContext *ctx) {
             case XR_NATIVE_TERM_UNIT:break;
             case XR_NATIVE_TERM_BOOL:result=XR_XIR_BOOL;break;
             case XR_NATIVE_TERM_I64:result=XR_XIR_I64;break;
+            case XR_NATIVE_TERM_NULLABLE_ARRAY_U8:
+                if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_U8},&result) ||
+                    !source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=result},&result))return false;
+                break;
+            case XR_NATIVE_TERM_NULLABLE_I64_PAIR: {
+                XrXirCallableParameter *pair=source_alloc(ctx,2,sizeof(*pair));if(!pair)return false;
+                pair[0]=(XrXirCallableParameter){.type=XR_XIR_I64};pair[1]=pair[0];
+                if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_TUPLE,.parameters=pair,.parameter_count=2},&result) ||
+                    !source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=result},&result))return false;
+                break;
+            }
             default:return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"sys result requires its governed exact type");
             }
             if(!xir_sys_native_signature(id,&ctx->types,parameters,count,result,XR_XIR_NEVER))
@@ -59,7 +73,7 @@ static bool source_sys_declare(SourceContext *ctx) {
             ctx->functions[index]=(XrXirFunction){.name=name,.name_length=(uint32_t)strlen(name),
                 .parameters=parameters,.parameter_count=count,.result=result,.error_type=XR_XIR_NEVER};
             ctx->identities[index]=(XrXirFunctionIdentity){.module=m,
-                .promises=XR_XIR_FUNCTION_NO_SUSPEND,.native_callable=id};
+                .promises=xir_sys_pipe_can_suspend(id)?0:XR_XIR_FUNCTION_NO_SUSPEND,.native_callable=id};
             ctx->bodies[index].module=m;ctx->bodies[index].parameters=parameters;
             if(!source_query_declare(ctx,symbol,XR_XIR_SOURCE_FUNCTION,0,(XrXirSourceRange){m,0,0,0,0}))return false;
             ((XrXirSourceDeclaration *)ctx->query.declarations)[symbol->declaration-1].signature=signature;

@@ -6,12 +6,12 @@
  *
  * xxir_call_signal.inc.c - Direct-call origin transport without permissions
  */
-XR_FUNC XrXirCallStatus xir_call_signal_stage(XrXirCallView *view,uint32_t instruction,uint32_t target) {
+static XrXirCallStatus call_direct_origin_stage(XrXirCallView *view,uint32_t instruction,uint32_t target,bool cleanup) {
     if (!view || !call_owner_current(view->activation) || !xr_xir_call_admission(view))
         return XR_XIR_CALL_BAD_ARGUMENT;
     CallFrame *frame=view->activation->top;
     if (view->phase!=XR_XIR_CALL_NORMAL || view->scope_exit || !frame || frame->exiting ||
-        frame->in_cleanup || frame->cleanup_call || frame->signal_staged ||
+        (!cleanup && (frame->in_cleanup || frame->cleanup_call)) || frame->signal_staged ||
         instruction==UINT32_MAX || target>=frame->metadata->entry_count)
         return XR_XIR_CALL_BAD_STATE;
     XrXirCallStatus status=xr_xir_call_execution_status(view);
@@ -21,7 +21,7 @@ XR_FUNC XrXirCallStatus xir_call_signal_stage(XrXirCallView *view,uint32_t instr
         (uint32_t)(frame->entry-frame->metadata->entries),instruction,target};
     frame->signal_staged=true;return XR_XIR_CALL_READY;
 }
-XR_FUNC XrXirCallStatus xir_call_signal_origin(XrXirCallView *view,XirCallSignalOrigin *output) {
+static XrXirCallStatus call_direct_origin_read(XrXirCallView *view,XirCallSignalOrigin *output,bool cleanup) {
     if (!view || !output || !call_owner_current(view->activation) || !xr_xir_call_admission(view))
         return XR_XIR_CALL_BAD_ARGUMENT;
     CallFrame *frame=view->activation->top;
@@ -31,12 +31,28 @@ XR_FUNC XrXirCallStatus xir_call_signal_origin(XrXirCallView *view,XirCallSignal
     frame->signal_available=false;
     const CallFrame *parent=frame->parent;
     if (!parent || view->phase!=XR_XIR_CALL_NORMAL || view->scope_exit || frame->exiting ||
-        frame->in_cleanup || frame->cleanup_call || frame->metadata!=parent->metadata ||
-        parent->epoch!=frame->signal_parent_epoch || parent->exiting || parent->in_cleanup ||
-        parent->cleanup_call || frame->signal_origin.caller!=(uint32_t)(parent->entry-parent->metadata->entries) ||
+        (!cleanup && (frame->in_cleanup || frame->cleanup_call)) || frame->metadata!=parent->metadata ||
+        parent->epoch!=frame->signal_parent_epoch || parent->exiting ||
+        (!cleanup && (parent->in_cleanup || parent->cleanup_call)) ||
+        frame->signal_origin.caller!=(uint32_t)(parent->entry-parent->metadata->entries) ||
         frame->signal_origin.target!=(uint32_t)(frame->entry-frame->metadata->entries))
         return XR_XIR_CALL_BAD_STATE;
     XrXirCallStatus status=xr_xir_call_execution_status(view);
     if (status!=XR_XIR_CALL_READY) return status;
     *output=frame->signal_origin;return XR_XIR_CALL_READY;
+}
+XR_FUNC XrXirCallStatus xir_call_signal_stage(XrXirCallView *view,uint32_t instruction,uint32_t target) {
+    return call_direct_origin_stage(view,instruction,target,false);
+}
+XR_FUNC XrXirCallStatus xir_call_signal_origin(XrXirCallView *view,XirCallSignalOrigin *output) {
+    return call_direct_origin_read(view,output,false);
+}
+XR_FUNC XrXirCallStatus xir_call_private_native_stage(XrXirCallView *view,uint32_t instruction,uint32_t target) {
+    if(!xir_instance_pipe_nosuspend_transport(view,target))return XR_XIR_CALL_BAD_STATE;
+    return call_direct_origin_stage(view,instruction,target,true);
+}
+XR_FUNC XrXirCallStatus xir_call_private_native_origin(XrXirCallView *view,XirCallSignalOrigin *output) {
+    if(!view || !xir_instance_pipe_nosuspend_transport(view,xr_xir_call_current_entry(view->activation)))
+        return XR_XIR_CALL_BAD_STATE;
+    return call_direct_origin_read(view,output,true);
 }
