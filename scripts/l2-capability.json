@@ -863,7 +863,9 @@
         "os_system_queries",
         "os_file_metadata",
         "os_file_mutation",
-        "os_file_links"
+        "os_file_links",
+        "os_file_links_following_path",
+        "os_file_links_mount_point_readlink"
       ],
       "targets": [
         "test_host_os_source",
