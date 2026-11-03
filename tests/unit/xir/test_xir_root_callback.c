@@ -42,6 +42,9 @@ typedef struct CallbackLog {
 static XrXirTimeStatus failed_guest_clock(void *context,XrXirClockKind kind,int64_t *output) {
     (void)context;(void)kind;(void)output;return XR_XIR_TIME_FAILED;
 }
+static XrXirTimeStatus failed_guest_offset(void *context,int64_t seconds,int64_t *output) {
+    (void)context;(void)seconds;(void)output;return XR_XIR_TIME_FAILED;
+}
 static bool output_line(const char *bytes,size_t length,const char *expected) {
     return length==strlen(expected) && !memcmp(bytes,expected,length);
 }
@@ -88,7 +91,7 @@ static XrXirProgram *compile_program(const XrXirCompileContext *context,
 }
 static XrXirInstance *new_instance(XrXirProgram *program,XrXirOutputSink *sink) {
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
-    config.time=(XrXirTimeProvider){XR_XIR_CALL_ABI_VERSION,0,failed_guest_clock,NULL,NULL};
+    config.time=(XrXirTimeProvider){XR_XIR_CALL_ABI_VERSION,0,failed_guest_clock,failed_guest_offset,NULL};
     config.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,xr_xir_output_render,sink};
     XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
     return instance;
