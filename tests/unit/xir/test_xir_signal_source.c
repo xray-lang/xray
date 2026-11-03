@@ -29,9 +29,11 @@ static XrXirStatus root_signal_check(const XrXirCompileContext *context,const ch
 }
 static void root_signal_canonical_owner(const XrXirCompileContext *context,const XrXirArtifact *code,XrXirEffects *effects) {
     const XrXirModule *source=xr_xir_compile_artifact_module(code);
-    const EffectContextOwner *context_owner=effect_contexts_read(effects);
-    CHECK(context_owner && context_owner->ordinary);
-    EffectOrdinaryContexts *ordinary=context_owner->ordinary;
+    (void)effects;
+    EffectInputFacts *facts=NULL;EffectBodyMaterial *initial=NULL;EffectOrdinaryContexts *ordinary=NULL;
+    CHECK(effect_input_facts_new(context,(XirEffectInput){source,code->construction,NULL},&facts)==XR_XIR_OK);
+    CHECK(effect_body_material_generation(context,source,NULL,facts,&initial)==XR_XIR_OK);
+    CHECK(effect_ordinary_build(context,source,initial,NULL,facts,&ordinary)==XR_XIR_OK);
     const XrXirCompileContext *saved=ordinary->terms.remaining;ordinary->terms.remaining=context;
     EffectOrdinaryView view={0};CHECK(effect_ordinary_view(ordinary,source,&view)==XR_XIR_OK);
     /* A real complete copy has no borrowed backbone or optional sharing prior. */
@@ -57,7 +59,7 @@ static void root_signal_canonical_owner(const XrXirCompileContext *context,const
     changed.functions=heads;heads[full->ordinary_identities[selected].declaration].parameter_count=1;
     invalid=*full;invalid.canonical_source=&changed;native=true;
     CHECK(effect_invocation_native_root(&invalid,selected,&native)==XR_XIR_BAD_TYPE && !native);
-    effect_body_material_free(full);
+    effect_body_material_free(full);effect_ordinary_free(ordinary);effect_body_material_free(initial);effect_input_facts_free(facts);
 }
 static void root_signal_contracts(const XrXirCompileContext *context,const XrXirArtifact *code,const uint32_t ids[6]) {
     const XrXirModule *module=xr_xir_compile_artifact_module(code);uint32_t native=ids[4];
@@ -74,7 +76,7 @@ static void root_signal_contracts(const XrXirCompileContext *context,const XrXir
     CHECK(steps && count && steps[count-1].function==native && steps[count-1].cause==XR_XIR_ROOT_CAUSE_NATIVE &&
         steps[count-1].instruction==UINT32_MAX && !steps[count-1].distance);
     xr_xir_compile_root_cause_trace_free(trace);
-    root_signal_canonical_owner(context,code,effects);xr_xir_compile_effects_free(effects);
+    xr_xir_compile_effects_free(effects);
     XrXirCtfeCallRequest request={.evaluation={.artifact=code,.function=root_signal_named(module,"ctfeRegister"),
         .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES}},
@@ -127,6 +129,7 @@ static XrXirArtifact *root_signal_code(const XrXirCompileContext *context,uint32
     XrXirStatus status=root_signal_check(context,root_signal_text,true,&source,&diagnostic);
     if (status!=XR_XIR_OK) fprintf(stderr,"signal Source%u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);
     CHECK(status==XR_XIR_OK);
+    root_signal_canonical_owner(context,source.checked,NULL);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&source);XrXirArtifact *cold=NULL,*closed=NULL,*code=NULL;
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&cold,NULL)==XR_XIR_OK);
