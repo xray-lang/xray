@@ -1303,6 +1303,31 @@ static const XrNativeMemberDeclaration xr_native_io_utime_now = {
     false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
     "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_io_utime_now_parameters, 1, XR_NATIVE_TERM_BOOL
 };
+static const XrNativeParameter xr_native_io_symlink_parameters[] = {
+    {"source", "Path", XR_NATIVE_TERM_PATH, false, false},
+    {"link", "Path", XR_NATIVE_TERM_PATH, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_io_symlink = {
+    9, "__symlink", "(source: Path, link: Path): bool", "bool", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_io_symlink_parameters, 2, XR_NATIVE_TERM_BOOL
+};
+static const XrNativeParameter xr_native_io_readlink_parameters[] = {
+    {"path", "Path", XR_NATIVE_TERM_PATH, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_io_readlink = {
+    10, "__readlink", "(path: Path): string?", "string?", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_io_readlink_parameters, 1, XR_NATIVE_TERM_NULLABLE_STRING
+};
+static const XrNativeParameter xr_native_io_realpath_parameters[] = {
+    {"path", "Path", XR_NATIVE_TERM_PATH, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_io_realpath = {
+    11, "__realpath", "(path: Path): string?", "string?", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_io_realpath_parameters, 1, XR_NATIVE_TERM_NULLABLE_STRING
+};
 static const XrNativeParameter xr_native_unicode_property_parameters[] = {
     {"name", "string", XR_NATIVE_TERM_STRING, false, false},
 };
@@ -1405,5 +1430,8 @@ static const XrNativeCallableDeclaration xr_native_callables[] = {
     {XR_NATIVE_CALLABLE_IO_RMDIR, NULL, &xr_native_io_rmdir, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
     {XR_NATIVE_CALLABLE_IO_REMOVE, NULL, &xr_native_io_remove, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
     {XR_NATIVE_CALLABLE_IO_RENAME, NULL, &xr_native_io_rename, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_IO_UTIME_NOW, NULL, &xr_native_io_utime_now, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}}
+    {XR_NATIVE_CALLABLE_IO_UTIME_NOW, NULL, &xr_native_io_utime_now, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
+    {XR_NATIVE_CALLABLE_IO_SYMLINK, NULL, &xr_native_io_symlink, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
+    {XR_NATIVE_CALLABLE_IO_READLINK, NULL, &xr_native_io_readlink, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
+    {XR_NATIVE_CALLABLE_IO_REALPATH, NULL, &xr_native_io_realpath, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}}
 };

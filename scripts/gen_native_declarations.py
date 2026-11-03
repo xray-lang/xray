@@ -1236,6 +1236,9 @@ def render_io_callables(declarations):
         ('__remove', '(path: Path): bool', 'p', 'io_remove', 'xrt_io_remove', 'IO_REMOVE'),
         ('__rename', '(old: Path, new: Path): bool', 'pp', 'io_rename', 'xrt_io_rename', 'IO_RENAME'),
         ('__utimeNow', '(path: Path): bool', 'p', 'io_utime_now', 'xrt_io_utime_now', 'IO_UTIME_NOW'),
+        ('__symlink', '(source: Path, link: Path): bool', 'pp', 'io_symlink', 'xrt_io_symlink', 'IO_SYMLINK'),
+        ('__readlink', '(path: Path): string?', 'p', 'io_readlink', 'xrt_io_readlink', 'IO_READLINK'),
+        ('__realpath', '(path: Path): string?', 'p', 'io_realpath', 'xrt_io_realpath', 'IO_REALPATH'),
     )
     lines, rows = [], []
     for ordinal, (name, signature, arguments, vm, aot, identity) in enumerate(contracts, 1):
@@ -1244,19 +1247,25 @@ def render_io_callables(declarations):
             raise ValueError('Filesystem callable requires its sole governed declaration: ' + name)
         row = candidates[0]
         stat = identity == 'IO_STAT'
+        text_result = identity in ('IO_READLINK', 'IO_REALPATH')
         if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
                 row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
                 row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
                 row.ret, row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
-                signature, str(len(arguments)), arguments, 'internal', '', '', 'fresh' if stat else '', 'system', vm,
+                signature, str(len(arguments)), arguments, 'internal', '', '', 'fresh' if stat or text_result else '', 'system', vm,
                 aot, not stat, '' if stat else 'method', '', 'normal', '', '', 'value', False, None, (), ''):
             raise ValueError('Filesystem callable differs from its complete source contract: ' + name)
         symbol = 'xr_native_' + identity.lower()
         result, term = ('__FileStat?', 'NULLABLE_FILE_STAT') if stat else ('bool', 'BOOL')
+        if text_result:
+            result, term = 'string?', 'NULLABLE_STRING'
         lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {']
         if identity == 'IO_RENAME':
             lines += ['    {"old", "Path", XR_NATIVE_TERM_PATH, false, false},',
                       '    {"new", "Path", XR_NATIVE_TERM_PATH, false, false},']
+        elif identity == 'IO_SYMLINK':
+            lines += ['    {"source", "Path", XR_NATIVE_TERM_PATH, false, false},',
+                      '    {"link", "Path", XR_NATIVE_TERM_PATH, false, false},']
         else:
             lines += ['    {"path", "Path", XR_NATIVE_TERM_PATH, false, false},']
             if len(arguments) == 2:

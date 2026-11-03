@@ -773,20 +773,29 @@ class IoCallableSchemaTests(unittest.TestCase):
 
     def test_exact_path_contract_and_runtime_only_rows(self):
         lines, rows = schema.render_io_callables(self.declarations)
-        self.assertEqual(len(rows), 2)
-        self.assertIn('XR_NATIVE_CALLABLE_IO_CHMOD, NULL,', rows[0])
-        self.assertIn('XR_NATIVE_CALLABLE_IO_CHDIR, NULL,', rows[1])
+        identities = ('CHMOD', 'CHDIR', 'STAT', 'MKDIR', 'RMDIR', 'REMOVE', 'RENAME', 'UTIME_NOW',
+                      'SYMLINK', 'READLINK', 'REALPATH')
+        self.assertEqual(len(rows), len(identities))
+        for row, identity in zip(rows, identities):
+            self.assertIn('XR_NATIVE_CALLABLE_IO_' + identity + ', NULL,', row)
         for row in rows:
             self.assertIn('NULL, false, "io", "stdlib/defs/core.def", FINGERPRINT', row)
         text = '\n'.join(lines)
         self.assertIn('"__chmod", "(path: Path, mode: i64): bool", "bool"', text)
         self.assertIn('"__chdir", "(path: Path): bool", "bool"', text)
-        self.assertEqual(text.count('{"path", "Path", XR_NATIVE_TERM_PATH, false, false}'), 2)
+        self.assertEqual(text.count('{"path", "Path", XR_NATIVE_TERM_PATH, false, false}'), 9)
         self.assertIn('{"mode", "i64", XR_NATIVE_TERM_I64, false, false}', text)
-        self.assertEqual(text.count('XR_NATIVE_ALLOCATION_UNKNOWN'), 2)
+        self.assertIn('{"old", "Path", XR_NATIVE_TERM_PATH, false, false}', text)
+        self.assertIn('{"new", "Path", XR_NATIVE_TERM_PATH, false, false}', text)
+        self.assertIn('{"source", "Path", XR_NATIVE_TERM_PATH, false, false}', text)
+        self.assertIn('{"link", "Path", XR_NATIVE_TERM_PATH, false, false}', text)
+        self.assertEqual(text.count('1, XR_NATIVE_TERM_NULLABLE_STRING'), 2)
+        self.assertIn('XR_NATIVE_TERM_NULLABLE_FILE_STAT', text)
+        self.assertEqual(text.count('XR_NATIVE_ALLOCATION_UNKNOWN'), len(identities))
 
     def test_missing_duplicate_and_single_contract_changes_are_rejected(self):
-        for name in ('__chmod', '__chdir'):
+        for name in ('__chmod', '__chdir', '__stat', '__mkdir', '__rmdir', '__remove', '__rename', '__utimeNow',
+                     '__symlink', '__readlink', '__realpath'):
             row = next(item for item in self.declarations if item.module == 'io' and item.name == name)
             for changed in ([item for item in self.declarations if item is not row], self.declarations + [row]):
                 with self.subTest(name=name), self.assertRaises(ValueError):
@@ -798,6 +807,8 @@ class IoCallableSchemaTests(unittest.TestCase):
                                  ('link_object', 'other'), ('vm_binding', 'yieldable'), ('vm_ifdef', 'OTHER'),
                                  ('define', 'OTHER'), ('ret', 'i64'), ('semantic_intrinsic', True),
                                  ('provider_declaration', object()), ('caps', ('task',)), ('suspension_kind', 'task')]:
+                if value == getattr(row, field):
+                    value = True if field == 'aot_direct' else ''
                 with self.subTest(name=name, field=field), self.assertRaises(ValueError):
                     schema.render_io_callables([replace(item, **{field: value}) if item is row else item
                                                 for item in self.declarations])
