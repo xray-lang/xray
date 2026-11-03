@@ -109,7 +109,7 @@ static inline XrXirType xir_native_callable_error(const XrXirTypes *types,uint32
 static inline bool xir_native_callable_identity(const XrXirFunctionIdentity *id) {
     return id && id->native_callable && !id->exported && !id->nominal_owner && !id->member_access &&
         !id->cleanup_owner && !id->method_kind && !id->test_role && !id->test_timeout_seconds &&
-        id->promises==XR_XIR_FUNCTION_NO_SUSPEND;
+        id->promises==(xir_sys_pipe_can_suspend(id->native_callable)?0:XR_XIR_FUNCTION_NO_SUSPEND);
 }
 static inline XrXirStatus xir_native_callable_verify(const XrXirModule *module,uint32_t index) {
     if (!module || !module->declarations || !module->declarations->functions ||

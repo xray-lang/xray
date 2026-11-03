@@ -593,6 +593,10 @@ static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *re
     const EffectBodyFunction *owned=&graph->material->functions[f];
 
     if (effects) effects->outcomes_work.functions[f]=(XrXirFunctionEffects){0};
+    bool native_suspend=false;
+    status=effect_control_native_suspend(&request,f,&native_suspend);
+    if(status!=XR_XIR_OK)return status;
+    if(effects && native_suspend)effects->outcomes_work.functions[f].suspend=XR_XIR_EFFECT_MAY;
     EffectBodyRecordCursor cursor={0,0,UINT32_MAX};uint32_t r=0;
 
     while (r<physical->count && physical->records[r].value<function->parameter_count) {
@@ -901,6 +905,14 @@ static XrXirStatus effect_witnesses(const XrXirModule *module, XrXirEffects *eff
         if (head_status!=XR_XIR_OK) return head_status;
         const EffectBodyFunctionDimensions *function=&dimensions;
         XrXirEffect fact = effects->outcomes_work.functions[f].suspend;
+        bool native_suspend=false;
+        head_status=effect_control_native_suspend(&body,f,&native_suspend);
+        if(head_status!=XR_XIR_OK)return head_status;
+        if(native_suspend) {
+            if(fact!=XR_XIR_EFFECT_MAY)return XR_XIR_BAD_STRUCTURE;
+            effects->outcomes_work.witnesses[f]=(XrXirEffectWitness){XR_XIR_EFFECT_CAUSE_SUSPEND,UINT32_MAX,UINT32_MAX,0};
+            graph->queue[back++]=f;continue;
+        }
         /* The pre-existing NONE precharge is retained in this slice. No
          * accounting reduction is attributed to a walk that never occurred. */
         if (fact == XR_XIR_EFFECT_NONE) {

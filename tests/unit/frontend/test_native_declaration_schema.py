@@ -948,5 +948,40 @@ class OsSystemDeclarations(unittest.TestCase):
                                                        for item in self.declarations])
 
 
+class SysPipeDeclarations(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / 'tools/stdlibgen'))
+        from stdlibgen import parse_defs
+        cls.declarations = parse_defs(ROOT)
+
+    def test_pipe_heads_and_true_close_transition_are_exact(self):
+        lines, rows = schema.render_sys_pipes(self.declarations)
+        self.assertEqual(len(rows), 4)
+        for row, name in zip(rows, ('OPEN', 'READ', 'WRITE', 'CLOSE')):
+            self.assertIn('XR_NATIVE_CALLABLE_SYS_PIPE_' + name + ', NULL,', row)
+        self.assertIn('XR_NATIVE_TERM_NULLABLE_I64_PAIR', '\n'.join(lines))
+        self.assertIn('XR_NATIVE_TERM_NULLABLE_ARRAY_U8', '\n'.join(lines))
+        close = next(r for r in self.declarations if r.module == 'sys' and r.name == '__pipeClose')
+        self.assertEqual(close.provider_declaration.logical.resources[0].when, 'result-true')
+
+    def test_pipe_complete_contract_mutations_are_rejected(self):
+        for name in ('__pipeOpen', '__pipeRead', '__pipeWrite', '__pipeClose'):
+            row = next(r for r in self.declarations if r.module == 'sys' and r.name == name)
+            for changed in ([r for r in self.declarations if r is not row], self.declarations + [row]):
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    schema.render_sys_pipes(changed)
+            changes = [('module', 'other'), ('signature', '(): bool'), ('argc', '9'), ('arg_spec', 's'),
+                ('visibility', 'public'), ('effect', 'other'), ('allocation', 'no_heap'),
+                ('return_ownership', 'borrowed'), ('layer', 'core'), ('vm', 'other'), ('aot', 'other'),
+                ('aot_direct', False), ('aot_kind', 'builtin'), ('link_object', 'other'),
+                ('vm_binding', 'other'), ('vm_ifdef', 'OTHER'), ('define', 'OTHER'), ('ret', 'i64'),
+                ('semantic_intrinsic', True), ('caps', ('task',)), ('suspension_kind', 'task'),
+                ('provider_declaration', object())]
+            for key, value in changes:
+                with self.subTest(name=name, field=key), self.assertRaises(ValueError):
+                    schema.render_sys_pipes([replace(r, **{key: value}) if r is row else r for r in self.declarations])
+
+
 if __name__ == '__main__':
     unittest.main()

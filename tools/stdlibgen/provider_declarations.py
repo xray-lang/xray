@@ -127,7 +127,7 @@ def choice_set(props: Mapping[str, object], suffix: str, choices: set[str],
 
 
 def parse_resources(raw: str, parameters: tuple[LogicalParameter, ...], result: str,
-                    context: str) -> tuple[ResourceTransition, ...]:
+                    context: str, operation: str) -> tuple[ResourceTransition, ...]:
     def unique_object(pairs):
         values = {}
         for key, value in pairs:
@@ -157,8 +157,11 @@ def parse_resources(raw: str, parameters: tuple[LogicalParameter, ...], result: 
         parameter = re.fullmatch(r"parameter\.([0-9]+)", row["value"])
         if parameter:
             index = int(parameter.group(1))
+            successful_close = (operation == "xray.runtime.provider-operation.v1/io/pipe-close"
+                                and result == "bool" and len(parameters) == 1 and index == 0
+                                and row["resource"] == PIPE_RESOURCE)
             if (index >= len(parameters) or parameters[index] != LogicalParameter("i64", "in", "trivial")
-                    or row["action"] != "consume" or row["when"] != "call-enter"):
+                    or row["action"] != "consume" or row["when"] != ("result-true" if successful_close else "call-enter")):
                 fail(context, "provider_resources has an invalid parameter token transition")
         elif row["value"] in {"result.some.0", "result.some.1"}:
             if (result != "(i64, i64)?" or row["action"] != "acquire"
@@ -202,7 +205,7 @@ def parse_provider_declaration(props: Mapping[str, object], parameter_types: Seq
         normalized.append(LogicalParameter(prefix[2] if prefix else spelling, mode, owner))
     parameters = tuple(normalized)
     resources = parse_resources(text_property(props, "provider_resources", context),
-                                parameters, result_type, context)
+                                parameters, result_type, context, operation)
     logical = ProviderLogicalDeclaration(
         parameters=parameters, result_type=result_type,
         result_owner=choice(props, "result_owner", {"trivial", "owned", "borrowed"}, context),
@@ -288,7 +291,7 @@ def admission_reasons(declaration: ProviderDeclaration) -> tuple[str, ...]:
             PIPE_RESOURCE, f"result.some.{index}", "acquire", "result-present") for index in (0, 1))
     elif host.adapter == "bool-i64-pipe-close":
         expected_resources = (ResourceTransition(
-            PIPE_RESOURCE, "parameter.0", "consume", "call-enter"),)
+            PIPE_RESOURCE, "parameter.0", "consume", "result-true"),)
     if logical.resources != expected_resources:
         reasons.append("declared-resources-do-not-match-explicit-host-adapter")
     return tuple(reasons)

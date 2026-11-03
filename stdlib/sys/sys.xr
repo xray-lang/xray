@@ -210,22 +210,28 @@ export class Pipe {
     closeRead() -> bool {
         if (this._readHandle < 0) { return true }
         var ok = __pipeClose(this._readHandle)
-        this._readHandle = -1
+        if (ok) { this._readHandle = -1 }
         return ok
     }
 
     closeWrite() -> bool {
         if (this._writeHandle < 0) { return true }
         var ok = __pipeClose(this._writeHandle)
-        this._writeHandle = -1
+        if (ok) { this._writeHandle = -1 }
         return ok
     }
 
     close() -> bool {
         var r = true
-        if (this._readHandle >= 0) { r = __pipeClose(this._readHandle) }
+        if (this._readHandle >= 0) {
+            r = __pipeClose(this._readHandle)
+            if (r) { this._readHandle = -1 }
+        }
         var w = true
-        if (this._writeHandle >= 0) { w = __pipeClose(this._writeHandle) }
+        if (this._writeHandle >= 0) {
+            w = __pipeClose(this._writeHandle)
+            if (w) { this._writeHandle = -1 }
+        }
         if (r) { return w }
         return false
     }

@@ -803,7 +803,7 @@ module sys {
     provider_panic: "none"
     provider_suspend: "never"
     provider_refusal: "trap"
-    provider_resources: [{"resource":"xray.runtime.resource.v1/pipe-endpoint","value":"parameter.0","action":"consume","when":"call-enter"}]
+    provider_resources: [{"resource":"xray.runtime.resource.v1/pipe-endpoint","value":"parameter.0","action":"consume","when":"result-true"}]
     provider_effects: "io"
     provider_threads: "any"
     provider_reentry: "allowed"
