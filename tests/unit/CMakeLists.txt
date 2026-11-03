@@ -4398,6 +4398,7 @@ add_test(NAME xir_scope_syntax COMMAND test_xir_scope_syntax)
 set_tests_properties(xir_scope_syntax PROPERTIES TIMEOUT 60 LABELS "unit;parser;ownership")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/task_executor.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/root_callback.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/task_product.cmake")
 
