@@ -18,7 +18,8 @@ XR_FUNC XrXirCallStatus xir_call_signal_frontier(const XrXirCall *call,bool *eli
     *eligible=false;
     if (!call->top || (call->result.status!=XR_XIR_CALL_READY && call->result.status!=XR_XIR_CALL_SUSPENDED) ||
         call->cancel_requested || call->aborting || call->abort_reason!=XR_XIR_CALL_READY ||
-        call->cleanup_incomplete || (call->budget && call->budget->exhausted)) return XR_XIR_CALL_READY;
+        call->cleanup_incomplete || (call->budget && (call->budget->exhausted || call->budget->native_hold)))
+        return XR_XIR_CALL_READY;
     uint32_t remaining=call->top->depth;
     for (const CallFrame *frame=call->top;frame;frame=frame->parent) {
         if (!remaining || frame->depth!=remaining-- || !frame->epoch || !frame->metadata ||
