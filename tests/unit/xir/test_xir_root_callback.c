@@ -29,7 +29,7 @@ static const char callback_source[]=
  "state+=1;time.sleep(7);state+=1;print(\"callback-returned\")}}\n"
  "export fn makePanic()->fn(){return fn(){defer{print(\"callback-cleanup\")};print(\"callback-enter\");assert(false)}}\n"
  "export fn makeCancel()->fn(){return fn(){defer{state+=4;print(\"callback-cleanup\")};"
- "print(\"callback-enter\");time.sleep(500)}}\n"
+ "const task=go worker();print(\"callback-enter\");const result=await task;assert(result==11);time.sleep(500)}}\n"
  "export fn makeFatal()->fn(){return fn(){defer{print(\"callback-cleanup\");assert(false)};"
  "print(\"callback-enter\");assert(false)}}\n"
  "export fn parent()->i64{defer{print(\"parent-cleanup\")};time.sleep(30);return state}\n"
@@ -183,6 +183,33 @@ static void callback_cases(XrXirProgram *program,const uint32_t ids[7]) {
     CHECK(!first_log.entered&&!first_log.callback_cleanup&&!first_log.unexpected&&
         first_log.parent_cleanup==1&&!other_log.entered&&!other_log.unexpected);
 }
+static void stop_free_cases(XrXirProgram *program,const uint32_t ids[7]) {
+    for(unsigned direct_free=0;direct_free<2;++direct_free) {
+        size_t baseline=runtime_live,bytes=runtime_bytes;
+        CallbackLog log={0};
+        XrXirOutputSink sink={XR_XIR_CALL_ABI_VERSION,0,counted_output,&log,4096};
+        XrXirInstance *instance=new_instance(program,&sink);
+        XrXirValue function=make_function(instance,ids[2]);
+        (void)park_parent(instance,ids[4]);
+        CHECK(xir_instance_callback_begin(instance,&function)==XR_XIR_CALL_READY);
+        unsigned steps=0;
+        while(!log.entered) {
+            CHECK(++steps<10000);
+            XrXirCallStatus status=xr_xir_instance_poll_bounded(instance,1).outcome.status;
+            CHECK(status==XR_XIR_CALL_READY||status==XR_XIR_CALL_SUSPENDED);
+        }
+        if(!direct_free) {
+            CHECK(xr_xir_instance_stop(instance)==XR_XIR_CALL_READY);
+            CHECK(xir_instance_callback_begin(instance,&function)==XR_XIR_CALL_BAD_STATE);
+            CHECK(xr_xir_instance_poll_bounded(instance,1).outcome.status==XR_XIR_CALL_CANCELLED);
+        }
+        xr_xir_value_drop(&function);
+        XrXirCallStatus closed=xr_xir_instance_free(instance);
+        CHECK(closed==XR_XIR_CALL_READY||closed==XR_XIR_CALL_CANCELLED);
+        CHECK(log.entered==1&&!log.returned&&log.callback_cleanup==1&&log.parent_cleanup==1&&!log.unexpected);
+        CHECK(runtime_live==baseline&&runtime_bytes==bytes);
+    }
+}
 int main(int argc,char **argv) {
     CHECK(argc==3);
     XrCompileResourceLimits limits=XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
@@ -191,7 +218,7 @@ int main(int argc,char **argv) {
     XrCompileResourceStats baseline={0};CHECK(xr_compile_resources_stats(resources,&baseline)==XR_COMPILE_RESOURCE_OK);
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};uint32_t ids[7];
     XrXirProgram *program=compile_program(&context,argv[1],argv[2],ids);
-    callback_cases(program,ids);xr_xir_compile_program_drop(program);
+    callback_cases(program,ids);stop_free_cases(program,ids);xr_xir_compile_program_drop(program);
     CHECK(!runtime_live&&!runtime_bytes);
     XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK &&
         after.held_bytes==baseline.held_bytes);
