@@ -1823,6 +1823,8 @@ static bool source_function_value(SourceContext *ctx, AstNode *node, SourceName 
     if (symbol && symbol->kind == SOURCE_IMPORT) symbol = imported_declaration(ctx, symbol, symbol->imported);
     if (!symbol || symbol->kind != SOURCE_FUNCTION)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "function value requires a declared function");
+    if (ctx->identities[symbol->index].native_callable==XR_NATIVE_CALLABLE_SYS_ON_SIGNAL)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"signal registration requires a direct call");
     if (!source_query_reference(ctx, node, binding, symbol, XR_XIR_SOURCE_FUNCTION_VALUE)) return false;
     if (!source_initialization_require(ctx,symbol->index)) return false;
     const XrXirFunction *function = &ctx->functions[symbol->index];
@@ -2560,8 +2562,9 @@ static bool collect_declarations(SourceContext *ctx) {
     for(uint32_t m=0;m<count;++m) {
         if(!source_request_poll(ctx,NULL))return false;
         if(!source_sys_module(ctx,m) || source_owned_checked(&ctx->graph->specs[m]))continue;
-        if(capacity>UINT32_MAX-2u)return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"sys native callable capacity overflow");
-        capacity+=2u;
+        uint32_t natives=(uint32_t)(sizeof(xir_sys_native_ids)/sizeof(*xir_sys_native_ids));
+        if(natives>UINT32_MAX-capacity)return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"sys native callable capacity overflow");
+        capacity+=natives;
     }
     for(uint32_t m=0;m<count;++m) {
         if(!source_request_poll(ctx,NULL))return false;

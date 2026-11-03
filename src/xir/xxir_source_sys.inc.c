@@ -20,19 +20,26 @@ static bool source_sys_module(SourceContext *ctx,uint32_t module) {
 }
 static bool source_sys_declare(SourceContext *ctx) {
     uint32_t saved_module=ctx->module,saved_function=ctx->function;
-    static const uint32_t ids[]={XR_NATIVE_CALLABLE_SYS_THREAD_YIELD,XR_NATIVE_CALLABLE_SYS_PIN_TO_CPU};
     for(uint32_t m=0;m<ctx->module_count;++m) {
         if(!source_request_poll(ctx,NULL))return false;
         if(!source_sys_module(ctx,m) || source_owned_checked(&ctx->graph->specs[m]))continue;
         ctx->module=m;
-        for(uint32_t n=0;n<sizeof(ids)/sizeof(*ids);++n) {
-            uint32_t id=ids[n],count=id==XR_NATIVE_CALLABLE_SYS_PIN_TO_CPU?1u:0u;
+        for(uint32_t n=0;n<sizeof(xir_sys_native_ids)/sizeof(*xir_sys_native_ids);++n) {
+            uint32_t id=xir_sys_native_ids[n];
+            const XrNativeCallableDeclaration *native=xr_native_callable_by_id(id);
+            if(!native || !native->member)return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"sys native declaration is missing");
+            uint32_t count=native->member->parameter_count;
             XrXirType *parameters=count?source_alloc(ctx,count,sizeof(*parameters)):NULL;
             if(count&&!parameters)return false;
-            if(count)parameters[0]=XR_XIR_I64;
+            for(uint32_t p=0;p<count;++p) {
+                if(native->member->parameters[p].type==XR_NATIVE_TERM_I64)parameters[p]=XR_XIR_I64;
+                else if(native->member->parameters[p].type==XR_NATIVE_TERM_UNIT_CALLBACK) {
+                    if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,
+                        .result=XR_XIR_UNIT,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},parameters+p))return false;
+                } else return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"sys parameter requires its governed exact type");
+            }
             XrXirType result=count?XR_XIR_BOOL:XR_XIR_UNIT;
-            const XrNativeCallableDeclaration *native=xr_native_callable_by_id(id);
-            if(!xir_sys_native_signature(id,parameters,count,result,XR_XIR_NEVER))
+            if(!xir_sys_native_signature(id,&ctx->types,parameters,count,result,XR_XIR_NEVER))
                 return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"sys callable differs from its governed signature");
             if(find_name(ctx,ctx->names[m],native->member->name))continue;
             if(ctx->function_count>=ctx->function_capacity)

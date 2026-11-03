@@ -18,6 +18,7 @@
 #include "xxir_internal.h"
 #include "xxir_source_replay_internal.h"
 #include "xxir_types.h"
+#include "xxir_native_callable.h"
 #include "xxir_class_hierarchy_internal.h"
 #include "xxir_class_method_read_internal.h"
 #include "xxir_interface.h"
