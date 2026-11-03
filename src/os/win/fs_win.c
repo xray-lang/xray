@@ -15,6 +15,9 @@
 #include "../xcwd_owned.h"
 #include "../../base/xwindows_utf8.h"
 #include "../../base/xfileio.h"
+#include "../../shared/xr_io_core.h"
+#include <io.h>
+#include <sys/stat.h>
 
 static HANDLE open_file(XrIoContext *io, const char *path, DWORD access, DWORD share,
     DWORD creation, DWORD flags, wchar_t **held_path) {
@@ -206,6 +209,16 @@ XR_FUNC XrOsIoStatus xr_os_io_chdir(const XrOsIoPolicy *policy, const char *path
     XrIoContext io = {policy, XR_OS_IO_OK}; wchar_t *wide = NULL;
     io_status(&io, xr_win_utf8_path_owned(policy, path, &wide));
     if (((&io)->status == XR_OS_IO_OK) && !SetCurrentDirectoryW(wide)) io_status(&io, io_windows_status(GetLastError()));
+    io_free(&io, wide); return io.status;
+}
+XR_FUNC XrOsIoStatus xr_os_io_chmod(const XrOsIoPolicy *policy, const char *path, int64_t mode_value) {
+    int mode = 0;
+    if (!io_policy_valid(policy) || !path || !xr_io_core_chmod_mode(mode_value, &mode))
+        return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {policy, XR_OS_IO_OK}; wchar_t *wide = NULL;
+    io_status(&io, xr_win_utf8_path_owned(policy, path, &wide));
+    if (io.status == XR_OS_IO_OK && _wchmod(wide, mode) != 0)
+        io_status(&io, io_errno_status(errno));
     io_free(&io, wide); return io.status;
 }
 #include "../os_fs_common.inc.c"
