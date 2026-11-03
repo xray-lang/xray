@@ -10,12 +10,19 @@
  *   Identity handles pin their field storage, type arena and physical accounting domain.
  */
 typedef struct ClassFieldFrame { uint32_t index, next, count; bool declaration; } ClassFieldFrame;
-static XrXirStatus class_field_leaf(const XrXirTypes *types, XrXirType type, bool *leaf) {
+static XrXirStatus type_payload(const XrXirTypes *types,uint32_t index,XrXirCompileContext *remaining);
+static XrXirStatus class_field_leaf(XrXirCompileContext *budget,const XrXirTypes *types, XrXirType type, bool *leaf) {
     *leaf=true;
     if (type==XR_XIR_BOOL || type==XR_XIR_RUNE || xr_xir_type_is_number(type) || type==XR_XIR_STRING ||
         type==XR_XIR_BUFFER_STORAGE) return XR_XIR_OK;
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
     if (!node || node->parameter_span) return XR_XIR_BAD_TYPE;
+    /* A closed function retains its existing captures and code lease behind
+     * one owned handle. Shape admission grants no invocation authority. */
+    if (node->kind==XR_XIR_TYPE_CALLABLE) {
+        XrXirStatus status=type_payload(types,(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE,budget);
+        return status==XR_XIR_OK?xr_xir_compile_type_expression_shape(budget,types,type,0):status;
+    }
     /* The canonical Atomic carrier is an owned identity leaf; field storage
      * retains that handle rather than copying the synchronized cell. */
     if (node->kind==XR_XIR_TYPE_ATOMIC) return XR_XIR_OK;
@@ -72,7 +79,7 @@ XR_FUNC XrXirStatus xr_xir_compile_class_field_verify(const XrXirCompileContext 
     XrXirCompileContext *budget = &compile_state;
     if (!budget) return XR_XIR_BAD_STRUCTURE;
 
-    bool leaf=false;XrXirStatus status=class_field_leaf(types,type,&leaf);
+    bool leaf=false;XrXirStatus status=class_field_leaf(budget,types,type,&leaf);
     if (status!=XR_XIR_OK || leaf) return status;
     uint32_t count=types->count;
     uint64_t bytes=(uint64_t)count*(sizeof(ClassFieldFrame)+sizeof(unsigned char));
@@ -93,7 +100,7 @@ XR_FUNC XrXirStatus xr_xir_compile_class_field_verify(const XrXirCompileContext 
             node->kind==XR_XIR_TYPE_NULLABLE ? node->element : frame->declaration ?
             types->nominals->declarations[node->nominal.declaration].fields[field].type : node->nominal.fields[field];
         if (node->kind==XR_XIR_TYPE_TUPLE && child==XR_XIR_UNIT) continue;
-        status=class_field_leaf(types,child,&leaf);
+        status=class_field_leaf(budget,types,child,&leaf);
         if (status!=XR_XIR_OK || leaf) continue;
         index=(uint32_t)child-XR_XIR_CONSTRUCTED_TYPE_BASE;
         if (states[index]==1) {status=XR_XIR_BAD_TYPE;break;}
