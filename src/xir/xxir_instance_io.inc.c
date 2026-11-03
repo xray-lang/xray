@@ -27,8 +27,8 @@ static XrXirCallStatus instance_io_permission(XrXirCallView *view,XrXirInstance 
         !xir_io_native_id(module->declarations->functions[index].native_callable))return XR_XIR_CALL_BAD_STATE;
     const XrXirTypeNode *path=xr_xir_type_node(module->types,function->parameters[0]);
     if(!path || path->kind!=XR_XIR_TYPE_NOMINAL)return XR_XIR_CALL_BAD_STATE;
-    uint64_t work=32u+8u*((uint64_t)module->types->nominals->count+module->declarations->module_count)+
-        path->nominal.field_count;
+    uint64_t work=32u+8u*((uint64_t)module->types->nominals->count+
+        module->declarations->module_count+path->nominal.field_count);
     if(work>admission->work || !xr_xir_domain_work(instance->domain,work))return XR_XIR_CALL_LIMIT;
     admission->work-=work;
     if(xir_native_callable_verify(module,index)!=XR_XIR_OK ||
