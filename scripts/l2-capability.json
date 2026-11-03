@@ -817,6 +817,11 @@
         "src/os/os_system.h",
         "src/os/os_file_metadata.h",
         "src/os/os_file_mutation.h",
+        "src/os/os_file_links.h",
+        "src/os/win/file_links_win.c",
+        "src/os/unix/file_links_unix.c",
+        "tests/unit/base/test_file_links.c",
+        "tests/unit/base/file_links.cmake",
         "src/os/os_signal.h",
         "src/os/win/signal_win.c",
         "src/os/unix/signal_unix.c",
@@ -879,7 +884,8 @@
         "os_system_queries",
         "os_file_metadata",
         "os_file_mutation",
-        "os_signal"
+        "os_signal",
+        "os_file_links"
       ],
       "targets": [
         "test_host_os_source",
@@ -887,7 +893,8 @@
         "test_os_system_queries",
         "test_os_file_metadata",
         "test_os_file_mutation",
-        "test_os_signal"
+        "test_os_signal",
+        "test_os_file_links"
       ]
     }
   },
