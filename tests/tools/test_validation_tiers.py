@@ -111,6 +111,17 @@ class TierTests(unittest.TestCase):
                 self.assertNotIn("native-runtime", plan["groups"])
         self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
 
+    def test_generated_api_knowledge_selects_its_existing_sync_gates(self):
+        for path in ("src/app/mcp/xmcp_knowledge_generated.c", "stdlib/types/array.xr",
+                     "scripts/gen_api_inventory.py", "spec/source/cards/stdlib/compress.json"):
+            with self.subTest(path=path):
+                plan = xray_l1.tier_plan(ROOT, "L2", changed=[path])
+                self.assertIn("api-knowledge", plan["groups"])
+                self.assertTrue({"api_inventory_docs_coverage", "test_mcp_knowledge_generation"}
+                                <= set(plan["tests"]))
+                self.assertNotIn("native-runtime", plan["groups"])
+        self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
+
     def test_installed_source_sdk_scripts_select_their_installation_family(self):
         for script in ("source_sdk_install.py", "source_sdk_owned.py"):
             with self.subTest(script=script):

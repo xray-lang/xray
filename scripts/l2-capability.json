@@ -728,6 +728,28 @@
         "test_xir_rest_values_cold_native"
       ]
     },
+    "api-knowledge": {
+      "tier": "L2",
+      "match": [
+        "src/app/mcp/xmcp_knowledge_generated.c",
+        "scripts/gen_api_inventory.py",
+        "scripts/gen_mcp_knowledge.py",
+        "tests/mcp/test_knowledge_generation.py",
+        "spec/source/cards/*",
+        "spec/source/sections/*",
+        "stdlib/defs/*",
+        "stdlib/prelude/*",
+        "stdlib/types/*"
+      ],
+      "reason": "Source-backed API inventory and generated MCP knowledge stay consistent with managed declarations and specification inputs.",
+      "tests": [
+        "api_inventory_docs_coverage",
+        "test_mcp_knowledge_generation"
+      ],
+      "targets": [
+        "xray"
+      ]
+    },
     "class-inheritance": {
       "tier": "L2",
       "match": [
