@@ -43,12 +43,17 @@ XR_FUNC bool xir_instance_callback_owns(const XrXirInstance *instance,
         !callback->generation || callback->generation!=instance_current((XrXirInstance *)root) ||
         callback->generation->call!=callback->parent || callback->generation->epoch!=callback->parent_epoch ||
         callback->generation->executor!=executor || callback->generation->domain!=root->domain) return false;
+    /* Revoking new FunctionBinding admission does not revoke the stable owner
+     * already linked to this exact executor/Call/Parent epoch. Its real cleanup
+     * and retirement must remain authenticated after stop clears gate.instance. */
     const XrXirFunctionBinding *binding=xr_xir_function_binding(&callback->function);
     return binding && binding->owner && callback->generation->function_gate &&
         binding->release==function_gate_drop && binding->owner==callback->generation->function_gate &&
         callback->entry==binding->entry && callback->entry<callback->generation->program->entry_count &&
         callback->generation->function_gate->program==callback->generation->program &&
-        callback->generation->function_gate->instance==root;
+        (callback->generation->function_gate->instance==root ||
+         (!callback->generation->function_gate->instance &&
+          (root->stopping || callback->generation->stopping)));
 }
 XR_FUNC bool xir_instance_callback_active(const XrXirInstance *instance) {
     if (!instance || !instance_owner_current(instance)) return false;
