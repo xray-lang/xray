@@ -64,6 +64,8 @@ static const char root_signal_text[]=
  "export fn owned()->fn(){return make(0)}\n"
  "export fn withHandler(handler:fn())->bool{return __onSignal(2,handler)}\n"
  "export fn read()->i64{return state}\n"
+ "fn ctfeReceive(handler:fn())->bool{handler();return true}\n"
+ "export fn ctfePlain()->bool{return ctfeReceive(fn(){})}\n"
  "export fn ctfeRegister()->bool{return __onSignal(2,fn(){})}\n";
 typedef struct RootSignalLog {
     unsigned registered,entered,returned,callback_cleanup,parent_cleanup,replaced,refused,unexpected;

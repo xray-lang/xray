@@ -56,9 +56,15 @@ static XrXirValueStatus ctfe_function_admit(void *context,const XrXirFunctionBin
     if (lease->instruction>=producer->instruction_count || lease->origin_instruction>=origin->instruction_count)
         return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrXirInstruction *op=&producer->instructions[lease->instruction],*reference=&origin->instructions[lease->origin_instruction];
-    if ((op->op!=XR_XIR_FUNCTION_REF && op->op!=XR_XIR_FUNCTION_WEAKEN) || op->type!=type ||
+    if ((op->op!=XR_XIR_FUNCTION_REF && op->op!=XR_XIR_FUNCTION_WEAKEN) ||
         reference->op!=XR_XIR_FUNCTION_REF || reference->immediate!=(int64_t)lease->entry || reference->args[1]!=lease->captures)
         return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (type!=op->type) {
+        XrXirStatus narrowed=xr_xir_compile_callable_weakening(state->context,module->types,op->type,type);
+        if (narrowed!=XR_XIR_OK) return narrowed==XR_XIR_OUT_OF_MEMORY?XR_XIR_VALUE_OOM:
+            narrowed==XR_XIR_MEMORY_LIMIT?XR_XIR_VALUE_MEMORY_LIMIT:narrowed==XR_XIR_OVERFLOW?XR_XIR_VALUE_OVERFLOW:
+            narrowed==XR_XIR_BUDGET?XR_XIR_VALUE_LIMIT:XR_XIR_VALUE_BAD_ARGUMENT;
+    }
     if (type!=reference->type) {
         XrXirStatus narrowed=xr_xir_compile_callable_weakening(state->context,module->types,reference->type,type);
         if (narrowed!=XR_XIR_OK) return narrowed==XR_XIR_OUT_OF_MEMORY?XR_XIR_VALUE_OOM:
@@ -89,6 +95,30 @@ static XrXirCtfeStatus ctfe_function_binding(CtfeOwnedState *state,const XrXirVa
     if (status == XR_XIR_CTFE_OK)
         *output = binding;
     return status;
+}
+/* A parameter receives a real owned Function at its declared bound. The
+ * original producer and closure remain authenticated by the receiving lease. */
+static XrXirCtfeStatus ctfe_function_weaken(CtfeOwnedState *state,const XrXirValue *input,
+    XrXirType type,XrXirValue *output) {
+    const XrXirFunctionBinding *binding=NULL;
+    XrXirCtfeStatus status=ctfe_function_binding(state,input,&binding);
+    if (status!=XR_XIR_CTFE_OK) return status;
+    status=ctfe_compile_status(xr_xir_compile_callable_weakening(state->context,
+        state->artifact->module.types,(XrXirType)input->type,type));
+    if (status!=XR_XIR_CTFE_OK) return status;
+    void *memory=NULL;
+    status=ctfe_compile_status(xir_compile_resource_status(xr_compile_resources_calloc(
+        state->context->resources,1,sizeof(CtfeFunctionLease),&memory)));
+    if (status!=XR_XIR_CTFE_OK) return status;
+    const CtfeFunctionLease *origin=binding->owner;CtfeFunctionLease *lease=memory;
+    *lease=*origin;lease->previous=NULL;lease->next=state->identity->functions;lease->type=type;
+    if (lease->next) lease->next->previous=lease;
+    state->identity->functions=lease;
+    XrXirFunctionBinding received={lease,ctfe_function_release,binding->entry,binding->captures,binding->capture_count};
+    XrXirValueAdmission admission=ctfe_value_admission(state);
+    XrXirValueStatus created=xr_xir_function_new(state->domain,state->arena,type,&received,&admission,output);
+    if (created!=XR_XIR_VALUE_OK) ctfe_function_release(lease);
+    return ctfe_value_status(created);
 }
 static XrXirCtfeStatus ctfe_function_step(ScalarRun *run,VmState *vm,CtfeOwnedState *state,uint32_t function) {
     const XrXirInstruction *op=&run->function->instructions[vm->instruction];

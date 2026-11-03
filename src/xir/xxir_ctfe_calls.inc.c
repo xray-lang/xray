@@ -290,8 +290,17 @@ static XrXirCtfeStatus ctfe_call_enter(CtfeCallExecution *execution,
         status=ctfe_value_type_admit(&parent->run,&execution->owned,target->parameters[p]);
         if (status!=XR_XIR_CTFE_OK) break;
 
-        if (!xr_xir_value_argument(&argument,execution->owned.arena,target->parameters[p])) { status=XR_XIR_CTFE_BAD_ARTIFACT;break; }
-        status=ctfe_argument_store(&child->run,target_layout->offsets[p],&argument,&execution->owned,false);
+        XrXirValue received={0};
+        if (argument.type!=(uint32_t)target->parameters[p] &&
+            xr_xir_callable_signature(artifact->module.types,(XrXirType)argument.type) &&
+            xr_xir_callable_signature(artifact->module.types,target->parameters[p])) {
+            status=ctfe_function_weaken(&execution->owned,&argument,target->parameters[p],&received);
+            if (status!=XR_XIR_CTFE_OK) break;
+            argument=received;
+        }
+        if (!xr_xir_value_argument(&argument,execution->owned.arena,target->parameters[p])) status=XR_XIR_CTFE_BAD_ARTIFACT;
+        else status=ctfe_argument_store(&child->run,target_layout->offsets[p],&argument,&execution->owned,false);
+        xr_xir_value_drop(&received);
         if (status!=XR_XIR_CTFE_OK) break;
     }
     if (status==XR_XIR_CTFE_OK) status=ctfe_call_loans_prepare(execution,child,captures);
