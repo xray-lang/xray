@@ -1,9 +1,9 @@
 import sys
 
-const local = sys.ThreadLocal<i64>(fn() -> i64 {
+const local = sys.ThreadLocal<i64, Never>(fn() -> i64 {
     return 10
 })
 
-print(local.get())
+print(try! local.get())
 local.set(20)
-print(local.get())
+print(try! local.get())

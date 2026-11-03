@@ -10,7 +10,7 @@ enum InitErr {
 
 var fail = true
 var calls = 0
-var local = sys.ThreadLocal<i64>(fn() -> i64 {
+var local = sys.ThreadLocal<i64, InitErr>(fn() throws(InitErr) -> i64 {
     calls = calls + 1
     if (fail) {
         throw InitErr.Failed
@@ -19,11 +19,11 @@ var local = sys.ThreadLocal<i64>(fn() -> i64 {
 })
 
 try {
-    print(local.get())
+    print(try local.get())
 } catch (e) {
     print("failed")
 }
 
 fail = false
-print(local.get())
+print(try! local.get())
 print(calls)

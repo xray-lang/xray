@@ -4,16 +4,16 @@
 
 import sys
 
-const local = sys.ThreadLocal<i64>(fn() -> i64 {
-    return local.get()
+const local = sys.ThreadLocal<i64, sys.ThreadLocalError>(fn() throws(sys.ThreadLocalError) -> i64 {
+    return try local.get()
 })
 
 try {
-    print(local.get())
+    print(try local.get())
 } catch (e) {
     print("recursive")
 }
 
-var recovered = sys.ThreadLocal<i64>(fn() -> i64 { return 0 })
+var recovered = sys.ThreadLocal<i64, Never>(fn() -> i64 { return 0 })
 recovered.set(7)
-print(recovered.get())
+print(try! recovered.get())
