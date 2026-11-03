@@ -4540,7 +4540,7 @@ Xray separates two channels:
 - **Errors are values**: error payloads are enum values; propagation does not turn them into `PanicInfo`.
 - **Signatures determine error types**: omitting `throws` means `Never`, a guarantee of no business errors. `throws(E)` declares the permitted escaping error type; bare `throws` means `throws(Error)`. See §2.2 and §5.2 for signatures and callable types.
 - **Checking is local**: each function is checked using its body and callee signatures, without inspecting callee bodies or whole-program error inference. A named function without a clause never acquires an inferred throwing signature; see §5.2 for closures.
-- **Propagation is visible**: potentially throwing calls must occur within a `try`, `try?`, or `try!` expression or the protected region of `try { }` (§8.1.6); conversely, a `try` that covers nothing able to throw is a compile error (`E0336`).
+- **Propagation is visible**: potentially throwing calls must occur within a `try`, `try?`, or `try!` expression or the protected region of `try { }` (§8.1.6). An expression marker or a try block with an ordinary catch requires a business-error source, otherwise it reports `E0336`. A try block with only a panic handler is an independent fault boundary and has no such block-level requirement.
 - **Panic stays outside signatures**: a non-throwing function may still panic; `try?` never absorbs panic.
 - **`defer` replaces `finally`**: cleanup belongs to the nearest real `{}` block and must statically have no escaping business errors (`E0387`, §8.3.1).
 
@@ -4769,7 +4769,30 @@ fn main() { caller() }
 try main()
 ```
 
-Markers appear only where errors can occur. A `try`, `try?` or `try!` whose extent contains no call, `await` or `scope` able to throw a business error, and a `try { }` whose protected region contains none, is rejected with `E0336`. The check uses the declared signatures at the definition site: a call whose error type is `Never` does not count, and a call whose error type mentions an unsubstituted type parameter counts as throwing, so a generic body is never rejected because one instantiation makes its error type `Never`. Waiting on a `Task<T, Never>` is written `await t`, and sending on a channel is written `ch.send(v)`.
+Markers appear only where business errors can occur. A `try`, `try?` or `try!` whose extent has no business-error source is rejected with `E0336`. A try block with any ordinary catch also requires a source in its protected body; adding a panic handler grants no exemption. A try block with only a panic handler requires neither a business-error source nor static proof that its body may panic, but expression markers within that body are still checked independently.
+
+Sources include direct `throw`, calls declared to throw, and `await` or `scope` exposing business errors. The check uses declared signatures at the definition site: a call whose error type is `Never` does not count, and one whose error type mentions an unsubstituted type parameter counts as throwing, so instantiating that generic body with `Never` does not reject the body. A redundant marker at a caller that sees the complete `Never` instantiation still rejects. Actually evaluated arguments, defaults and generated initializers contribute their authentic error contracts. Nested function or closure definitions and the statement's own handlers do not contribute body sources. An inner `try?`, `try!` or ordinary catch consuming an error does not erase a source already present in an outer body; E0336 is not dead-handler analysis. Waiting on a `Task<T, Never>` is written `await t`, and sending on a channel is written `ch.send(v)`.
+
+A body with only a panic handler also permits business calls but does not catch their errors. Remaining business errors need an outer ordinary catch or the enclosing function's `throws`, otherwise they report `E0331`. Direct `throw` produces a business error itself and needs no extra try. Panic, cancellation and business errors remain separate channels.
+
+```xray @run
+enum Failure { Bad }
+fn fail() throws(Failure) { throw Failure.Bad }
+fn relay() throws(Failure) {
+    try { fail() } catch panic { print("unexpected panic") }
+}
+const ch = Channel<i64>(1)
+ch.close()
+try { ch.send(1) } catch panic (p) { print(p.code) }
+try { relay() } catch (e: Failure) { print("business error") }
+try { throw Failure.Bad } catch (e: Failure) { print("direct throw") }
+```
+
+```xray @error=E0336
+try { print(42) }
+catch (e) { print("ordinary") }
+catch panic { print("panic") }
+```
 
 ```xray @error=E0336
 fn add(a: i64, b: i64) -> i64 { return a + b }
@@ -8702,7 +8725,7 @@ These numbers follow the Task329 §2.9 decision. Header definitions and position
 | `E0333` | `XR_ERR_ANALYZE_ERASED_THROWS` | Erased errors in freestanding or @strict(alloc), including bare throws and throws(Error) |
 | `E0334` | `XR_ERR_ANALYZE_CATCH_TYPE_NAME` | Single uppercase-leading catch identifier; suggest catch (e: T) |
 | `E0335` | `XR_ERR_ANALYZE_IMPORTED_TOP_LEVEL` | Imported module contains a standalone expression or control-flow statement; move it to the entry file and retain only declarations and state initialization |
-| `E0336` | `XR_ERR_ANALYZE_REDUNDANT_TRY` | `try`, `try?`, `try!` or `try { }` covers no call, `await` or `scope` that can throw; remove the `try` |
+| `E0336` | `XR_ERR_ANALYZE_REDUNDANT_TRY` | An expression marker or try block with an ordinary catch has no business-error source (direct throw, throwing call, await or scope). Panic-only blocks are exempt; inner expressions still check. Remove a redundant marker while preserving its expression; review ordinary handler logic separately |
 
 #### Analyzer
 
