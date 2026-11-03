@@ -664,8 +664,9 @@ static bool source_array_recipe_callbacks(SourceContext *ctx, AstNode *node, Sou
 /* Sorting constructs a private logical replacement. Fallible comparisons and
  * writes cannot publish a partially sorted caller root. No callback is invoked. */
 static bool source_array_sort_type(SourceContext *ctx,AstNode *node,XrXirType array) {
-    return (xr_xir_type_is_array(&ctx->types,array) && xr_xir_array_element(&ctx->types,array)==XR_XIR_I64) ||
-        source_fail(ctx,node,XR_XIR_BAD_TYPE,"sort currently requires exact Array<i64> and no comparator");
+    XrXirType element=xr_xir_type_is_array(&ctx->types,array)?xr_xir_array_element(&ctx->types,array):XR_XIR_UNIT;
+    return element==XR_XIR_I64 || element==XR_XIR_STRING ||
+        source_fail(ctx,node,XR_XIR_BAD_TYPE,"sort currently requires exact Array<i64> or Array<string> and no comparator");
 }
 static bool source_array_sort_call(SourceContext *ctx,AstNode *node,SourceValue *value,SourceNativeCallShape *shape) {
     CallExprNode *call=&node->as.call_expr;
@@ -681,15 +682,16 @@ static bool source_array_sort_call(SourceContext *ctx,AstNode *node,SourceValue 
         !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ARRAY_LEN,XR_XIR_I64,{array.id},{0},0,{0}},&length) ||
         !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},&zero) ||
         !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},1,{0}},&one)) return false;
+    XrXirType element=xr_xir_array_element(&ctx->types,root.type);
     SourceCounter outer,inner;SourceValue first;
     if (!source_counter_open(ctx,zero,length,false,&outer) ||
         !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ADD_INT,XR_XIR_I64,{outer.index.id,one.id},{0},0,{0}},&first) ||
         !source_counter_open(ctx,first,length,false,&inner)) return false;
     SourceValue current,left,right,less;SourceGuard swap;
     if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_PLACE_READ,root.type,{place.id},{0},0,{0}},&current) ||
-        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ARRAY_GET,XR_XIR_I64,{current.id,outer.index.id},{0},0,{0}},&left) ||
-        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ARRAY_GET,XR_XIR_I64,{current.id,inner.index.id},{0},0,{0}},&right) ||
-        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_LT_INT,XR_XIR_BOOL,{right.id,left.id},{0},0,{0}},&less) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ARRAY_GET,element,{current.id,outer.index.id},{0},0,{0}},&left) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ARRAY_GET,element,{current.id,inner.index.id},{0},0,{0}},&right) ||
+        !source_recipe_record(ctx,(XrXirInstruction){element==XR_XIR_STRING?XR_XIR_LT_STRING:XR_XIR_LT_INT,XR_XIR_BOOL,{right.id,left.id},{0},0,{0}},&less) ||
         !source_guard_open(ctx,less,false,&swap)) return false;
     SourceValue left_write[]={place,outer.index,right},right_write[]={place,inner.index,left};
     if (!source_recipe_group(ctx,(XrXirInstruction){XR_XIR_ARRAY_SET,XR_XIR_UNIT,{0},{0},0,{0}},left_write,3,NULL) ||
@@ -701,7 +703,7 @@ static bool source_array_sort_call(SourceContext *ctx,AstNode *node,SourceValue 
      * value. Its concrete signature remains visible to ordinary Source queries. */
     XrXirCallableParameter *parameters=source_alloc(ctx,2,sizeof(*parameters));
     if (!parameters) return false;
-    parameters[0]=(XrXirCallableParameter){XR_XIR_I64,XR_PARAM_READ};parameters[1]=parameters[0];
+    parameters[0]=(XrXirCallableParameter){element,XR_PARAM_READ};parameters[1]=parameters[0];
     XrXirType comparator;
     return source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,
         .result=XR_XIR_I64,.parameters=parameters,.parameter_count=2,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},&comparator) &&

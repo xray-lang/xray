@@ -9,6 +9,7 @@
 #include "xir/xxir_source.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_emit_c.h"
+#include "xir/xxir_ctfe.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,7 +30,7 @@ static void array_materialization_refusals(const XrXirCompileContext *context) {
         "fn fresh()->Array<i64>{return [1]};var bad=copy fresh()[0:1]\n",
         "var bad=copy [1,2][0:1]\n",
         "var values=[1.0];values.sort()\n",
-        "var values=[\"b\",\"a\"];values.sort()\n",
+        "var values=[\"b\",\"a\"];values.sort(fn(a:string,b:string)->i64{return 0})\n",
         "var values:Array<u8>=[2,1];values.sort()\n",
         "var values=[2,1];values.sort(fn(a:i64,b:i64)->i64{return a-b})\n",
         "const values=[2,1];values.sort()\n",
@@ -81,6 +82,16 @@ static uint32_t array_named(const XrXirModule *module,const char *name) {
         !memcmp(module->functions[f].name,name,strlen(name)))return f;
     CHECK(false);return UINT32_MAX;
 }
+static void array_string_ctfe(const XrXirArtifact *artifact){
+    const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
+    XrXirCtfeCallRequest request={.evaluation={.artifact=artifact,.function=array_named(module,"strings"),
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
+        .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES}},.call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
+    memcpy(request.evaluation.checked_identity,artifact->checked_identity,32);XrXirValue value={0};
+    XrXirCtfeStatus status=xr_xir_compile_ctfe_calls(&request,&value);
+    if(status!=XR_XIR_CTFE_OK)fprintf(stderr,"String sort CTFE status%u\n",status);
+    CHECK(status==XR_XIR_CTFE_OK);array_sorted_strings(&value);xr_xir_value_drop(&value);
+}
 static void array_error_order(const XrXirModule *module) {
     uint32_t fail=array_named(module,"failLower"),later=array_named(module,"laterUpper");
     const char *names[]={"borrowError","copyError"};
@@ -103,7 +114,7 @@ static void array_error_order(const XrXirModule *module) {
 static void array_materialization_one(const XrXirCompileContext *context,const char *text,size_t count,bool original,const char *path) {
     XrXirSourceResult source={0};CHECK(array_materialization_check(context,text,count,&source)==XR_XIR_OK);
     if(original)array_plain_control(context,&source);
-    else array_error_order(xr_xir_compile_artifact_module(source.checked));
+    else{array_error_order(xr_xir_compile_artifact_module(source.checked));array_string_ctfe(source.checked);}
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&source);XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
