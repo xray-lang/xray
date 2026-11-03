@@ -2602,7 +2602,7 @@ static bool collect_declarations(SourceContext *ctx) {
         }
     }
     if (!source_library_metadata(ctx) || !source_history_bindings(ctx,true)) return false;
-    if (!source_nominal_constraints(ctx) || !source_interface_constraints(ctx) ||
+    if (!source_io_types(ctx) || !source_nominal_constraints(ctx) || !source_interface_constraints(ctx) ||
         !source_interface_signatures(ctx) || !source_struct_fields(ctx) || !source_enum_fields(ctx) ||
         !source_class_field_capabilities(ctx)) return false;
     if (!source_struct_defaultability(ctx)) return false;

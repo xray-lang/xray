@@ -299,7 +299,9 @@ XR_FUNC XrXirStatus xr_hir_body_nominal_schedule(XrHirBody *body,uint32_t functi
             if (status != XR_XIR_OK)
                 break;
             HirBodyNominalDeclaration row=((HirBodyNominalDeclaration *)body->nominal_declarations.items)[d];
-            if((row.flags&XR_XIR_NOMINAL_RECORD)||row.imported||row.explicit_initializer||available[d]||(row.kind!=XR_XIR_NOMINAL_STRUCT&&row.kind!=XR_XIR_NOMINAL_CLASS))continue;
+            if((row.flags&XR_XIR_NOMINAL_RECORD)||row.imported||row.explicit_initializer||available[d]||
+                body->types->nominals->declarations[d].native.native_id==XR_NATIVE_DECLARATION_FILE_STAT ||
+                (row.kind!=XR_XIR_NOMINAL_STRUCT&&row.kind!=XR_XIR_NOMINAL_CLASS))continue;
             bool ready=true;
             for(uint32_t f=0;f<row.count;++f) {
                 if (!(f % 64))

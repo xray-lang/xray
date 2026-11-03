@@ -18,6 +18,16 @@ static bool source_io_module(SourceContext *ctx,uint32_t module) {
         source_text_same(ctx,NULL,spec->logical_path,"io/io.xr");
 }
 #include "xxir_source_file_stat.inc.c"
+static bool source_io_types(SourceContext *ctx) {
+    uint32_t saved=ctx->module;
+    for(uint32_t m=0;m<ctx->module_count;++m) {
+        if(!source_request_poll(ctx,NULL))return false;
+        if(!source_io_module(ctx,m) || source_owned_checked(&ctx->graph->specs[m]))continue;
+        ctx->module=m;XrXirType type=XR_XIR_UNIT;
+        if(!source_file_stat_declare(ctx,&type))return false;
+    }
+    ctx->module=saved;return true;
+}
 static bool source_io_declare(SourceContext *ctx) {
     uint32_t saved_module=ctx->module,saved_function=ctx->function;
     static const uint32_t ids[]={XR_NATIVE_CALLABLE_IO_CHMOD,XR_NATIVE_CALLABLE_IO_CHDIR,XR_NATIVE_CALLABLE_IO_STAT};
@@ -25,7 +35,10 @@ static bool source_io_declare(SourceContext *ctx) {
         if(!source_request_poll(ctx,NULL))return false;
         if(!source_io_module(ctx,m) || source_owned_checked(&ctx->graph->specs[m]))continue;
         ctx->module=m;XrXirType file_stat=XR_XIR_UNIT;
-        if(!source_file_stat_declare(ctx,&file_stat))return false;
+        SourceName *carrier=find_name(ctx,ctx->names[m],"__FileStat");
+        if(!carrier || carrier->kind!=SOURCE_NOMINAL || !xir_file_stat_type(&ctx->types,carrier->type))
+            return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"io file metadata identity is missing");
+        if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=carrier->type},&file_stat))return false;
         for(uint32_t n=0;n<sizeof(ids)/sizeof(*ids);++n) {
             uint32_t id=ids[n],count=id==XR_NATIVE_CALLABLE_IO_CHMOD?2u:1u;
             const XrNativeCallableDeclaration *native=xr_native_callable_by_id(id);
