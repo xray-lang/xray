@@ -32,15 +32,17 @@ static bool source_io_declare(SourceContext *ctx) {
     uint32_t saved_module=ctx->module,saved_function=ctx->function;
     static const uint32_t ids[]={XR_NATIVE_CALLABLE_IO_CHMOD,XR_NATIVE_CALLABLE_IO_CHDIR,XR_NATIVE_CALLABLE_IO_STAT,
         XR_NATIVE_CALLABLE_IO_MKDIR,XR_NATIVE_CALLABLE_IO_RMDIR,XR_NATIVE_CALLABLE_IO_REMOVE,
-        XR_NATIVE_CALLABLE_IO_RENAME,XR_NATIVE_CALLABLE_IO_UTIME_NOW};
+        XR_NATIVE_CALLABLE_IO_RENAME,XR_NATIVE_CALLABLE_IO_UTIME_NOW,XR_NATIVE_CALLABLE_IO_SYMLINK,
+        XR_NATIVE_CALLABLE_IO_READLINK,XR_NATIVE_CALLABLE_IO_REALPATH};
     for(uint32_t m=0;m<ctx->module_count;++m) {
         if(!source_request_poll(ctx,NULL))return false;
         if(!source_io_module(ctx,m) || source_owned_checked(&ctx->graph->specs[m]))continue;
-        ctx->module=m;XrXirType file_stat=XR_XIR_UNIT;
+        ctx->module=m;XrXirType file_stat=XR_XIR_UNIT,optional_string=XR_XIR_UNIT;
         SourceName *carrier=find_name(ctx,ctx->names[m],"__FileStat");
         if(!carrier || carrier->kind!=SOURCE_NOMINAL || !xir_file_stat_type(&ctx->types,carrier->type))
             return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"io file metadata identity is missing");
         if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=carrier->type},&file_stat))return false;
+        if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=XR_XIR_STRING},&optional_string))return false;
         for(uint32_t n=0;n<sizeof(ids)/sizeof(*ids);++n) {
             uint32_t id=ids[n];const XirIoNativeContract *contract=xir_io_native_contract(id);
             uint32_t count=contract->count;
@@ -54,7 +56,8 @@ static bool source_io_declare(SourceContext *ctx) {
             if(!source_path_prelude_type(ctx,&path))return false;
             XrXirType *parameters=source_alloc(ctx,count,sizeof(*parameters));if(!parameters)return false;
             for(uint32_t p=0;p<count;++p)parameters[p]=p<contract->paths?path:XR_XIR_I64;
-            XrXirType result=id==XR_NATIVE_CALLABLE_IO_STAT?file_stat:XR_XIR_BOOL;
+            bool text=id==XR_NATIVE_CALLABLE_IO_READLINK || id==XR_NATIVE_CALLABLE_IO_REALPATH;
+            XrXirType result=id==XR_NATIVE_CALLABLE_IO_STAT?file_stat:text?optional_string:XR_XIR_BOOL;
             if(!xir_io_native_signature(id,&ctx->types,parameters,count,result,XR_XIR_NEVER))
                 return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"io callable differs from its governed signature");
             const char *name=source_owned_text(ctx,native->member->name);
