@@ -450,7 +450,11 @@ static XrXirStatus view_access_indirect_captures(ViewAccess *a,const XrXirViewOw
     for(uint32_t p=0;p<binding->args[1];++p) {
         uint32_t value=a->body->operands[binding->args[0]+p];XrXirType type=xr_xir_operand_type(a->body,value);
         uint32_t borrowed=view_flags_at(types,a->resolver->check.flags,type);
-        if(borrowed)status=view_access_use(a,&event->before,value,view_access_mutable(a,type),true,NULL);
+        if(borrowed) {
+            const XrXirTypeNode *node=xr_xir_type_node(types,type);
+            bool write=(borrowed&XR_XIR_VIEW_MUTABLE)!=0 || (node && node->kind==XR_XIR_TYPE_MUT_PTR);
+            status=view_access_use(a,&event->before,value,write,true,NULL);
+        }
         else if(xr_xir_type_is_class(types,type) || xr_xir_type_is_cell(types,type) || type==XR_XIR_BUFFER_STORAGE)
             status=view_access_use(a,&event->before,value,true,false,NULL);
         else {
