@@ -490,3 +490,5 @@ XR_FUNC XrXirValueStatus xr_xir_compile_value_observe(XrCompileResources *resour
     }
     xr_xir_value_graph_end();return status;
 }
+
+#include "xxir_byte_array_value.inc.c"

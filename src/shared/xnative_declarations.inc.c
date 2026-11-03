@@ -67,6 +67,13 @@ static const XrNativeParameter xr_native_array_parameters_27[] = {
     {"start", "i64", XR_NATIVE_TERM_I64, true, false},
     {"end", "i64", XR_NATIVE_TERM_I64, true, false},
 };
+static const XrNativeParameter xr_native_array_parameters_28[] = {
+    {"src", "Slice < u8 >", XR_NATIVE_TERM_SLICE_U8, false, false},
+};
+static const XrNativeParameter xr_native_array_parameters_29[] = {
+    {"distance", "i64", XR_NATIVE_TERM_I64, false, false},
+    {"count", "i64", XR_NATIVE_TERM_I64, false, false},
+};
 static const XrNativeMemberDeclaration xr_native_array_members[] = {
     {1, "withCapacity", "(capacity: i64) -> Array<T>", "Array < T >", 5, 12, XR_NATIVE_RECEIVER_READ, true, true, false, true, XR_NATIVE_OPERATION_ARRAY_WITH_CAPACITY, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_0, 1, XR_NATIVE_TERM_ARRAY_ELEMENT},
     {2, "capacity", ": i64", "i64", 7, 5, XR_NATIVE_RECEIVER_READ, false, false, false, true, XR_NATIVE_OPERATION_ARRAY_CAPACITY, XR_NATIVE_ALLOCATION_NO_HEAP, "limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_I64},
@@ -96,16 +103,18 @@ static const XrNativeMemberDeclaration xr_native_array_members[] = {
     {26, "every", "(fn: fn(item: T) -> bool) -> bool", "bool", 58, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_EVERY, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_25, 1, XR_NATIVE_TERM_BOOL},
     {27, "some", "(fn: fn(item: T) -> bool) -> bool", "bool", 60, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_SOME, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_26, 1, XR_NATIVE_TERM_BOOL},
     {28, "fill", "(value: T, start?: i64, end?: i64) -> Array<T>", "Array < T >", 62, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_FILL, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_27, 3, XR_NATIVE_TERM_ARRAY_ELEMENT},
-    {29, "toString", "() -> string", "string", 65, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_STRING},
-    {30, "iterator", "() -> Iterator<T>", "Iterator < T >", 69, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
-    {31, "entriesIterator", "() -> Iterator<(i64, T)>", "Iterator < ( i64 , T ) >", 70, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
-    {32, "entries", "() -> Array<(i64, T)>", "Array < ( i64 , T ) >", 72, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_ENTRIES, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ARRAY_INDEX_ELEMENT},
+    {29, "appendFrom", "(src: Slice<u8>) -> Array<u8>", "Array < u8 >", 65, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_BYTE_APPEND, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_28, 1, XR_NATIVE_TERM_ARRAY_U8},
+    {30, "repeatFrom", "(distance: i64, count: i64) -> Array<u8>", "Array < u8 >", 67, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_BYTE_REPEAT, XR_NATIVE_ALLOCATION_MAY_HEAP, "bounds,allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_29, 2, XR_NATIVE_TERM_ARRAY_U8},
+    {31, "toString", "() -> string", "string", 70, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_STRING},
+    {32, "iterator", "() -> Iterator<T>", "Iterator < T >", 74, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
+    {33, "entriesIterator", "() -> Iterator<(i64, T)>", "Iterator < ( i64 , T ) >", 75, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
+    {34, "entries", "() -> Array<(i64, T)>", "Array < ( i64 , T ) >", 77, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_ENTRIES, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ARRAY_INDEX_ELEMENT},
 };
 static const char *const xr_native_array_type_parameters[] = {"T"};
 static const XrNativeTypeDeclaration xr_native_array = {
     1, XR_NATIVE_DECLARATION_VALUE, "Array", xr_native_array_type_parameters, 1,
-    "stdlib/types/array.xr", "xray-native:prelude/Array", {{93, 181, 195, 55, 178, 7, 91, 32, 142, 77, 179, 246, 152, 92, 247, 70, 209, 25, 160, 114, 225, 6, 84, 97, 80, 52, 47, 191, 65, 243, 173, 49}},
-    3, 8, xr_native_array_members, 32
+    "stdlib/types/array.xr", "xray-native:prelude/Array", {{189, 57, 213, 68, 107, 91, 117, 219, 136, 23, 166, 121, 135, 141, 8, 22, 146, 21, 28, 248, 115, 70, 35, 85, 13, 28, 84, 74, 158, 77, 194, 183}},
+    3, 8, xr_native_array_members, 34
 };
 
 static const XrNativeParameter xr_native_string_parameters_0[] = {

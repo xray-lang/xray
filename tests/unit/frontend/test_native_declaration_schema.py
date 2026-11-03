@@ -27,12 +27,33 @@ class NativeDeclarations(unittest.TestCase):
             self.assertEqual((ROOT / name).read_text(encoding='utf-8'), text)
         header, members = schema.parse_source(self.source, self.prelude)
         self.assertEqual(header[:3], (1, 'Array', ('T',)))
-        self.assertEqual(len(members), 32)
+        self.assertEqual(len(members), 34)
         self.assertEqual({m.operation for m in members if m.operation != 'NONE'},
                          {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH', 'ARRAY_CAPACITY',
-                          'ARRAY_WITH_CAPACITY', 'ARRAY_RESERVE'} | set(schema.array_recipe_contracts('T')))
+                          'ARRAY_WITH_CAPACITY', 'ARRAY_RESERVE', 'ARRAY_BYTE_APPEND', 'ARRAY_BYTE_REPEAT'} | set(schema.array_recipe_contracts('T')))
         self.assertEqual(next(m for m in members if m.name == 'map').operation, 'ARRAY_MAP')
         self.assertNotIn('xr_native_def_array', embed.render(ROOT / 'stdlib/types'))
+
+    def test_byte_bulk_receiver_and_owned_result_contracts(self):
+        _, members = schema.parse_source(self.source, self.prelude)
+        for name, operation, count in [('appendFrom', 'ARRAY_BYTE_APPEND', 1),
+                                       ('repeatFrom', 'ARRAY_BYTE_REPEAT', 2)]:
+            member = next(m for m in members if m.name == name)
+            self.assertEqual((member.operation, member.receiver, len(member.parameters)),
+                             (operation, 'REF', count))
+            self.assertEqual(schema.simple_term(member.result, ('T',)), 'ARRAY_U8')
+        for before, after in [('ref appendFrom', 'appendFrom'),
+                              ('src: Slice<u8>', 'src: Array<u8>'),
+                              ('ref repeatFrom(distance: i64, count: i64)',
+                               'ref repeatFrom(distance: i64, count: i32)'),
+                              ('ref repeatFrom', 'repeatFrom'),
+                              ('appendFrom(src: Slice<u8>) -> Array<u8>',
+                               'appendFrom(src: Slice<u8>) -> ()')]:
+            with self.subTest(before=before):
+                changed = self.source.replace(before, after)
+                self.assertNotEqual(changed, self.source)
+                with self.assertRaises(ValueError):
+                    schema.parse_source(changed, self.prelude)
 
     def test_integer_definition_and_recipe_rejections(self):
         source = (ROOT / 'stdlib/types/i64.xr').read_text(encoding='utf-8')

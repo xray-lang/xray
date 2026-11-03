@@ -252,6 +252,7 @@ static XrXirRunStatus vm_array_capacity_step(ScalarRun *run, VmState *state,
     else xr_xir_scalar_store(run->frame, destination, output.payload);
     return XR_XIR_RUN_OK;
 }
+#include "xxir_vm_byte_array.inc.c"
 static XrXirRunStatus vm_array_step(ScalarRun *run, VmState *state,
     const XrXirInstruction *op, uint32_t destination, XrXirAction *action) {
     if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
@@ -711,6 +712,10 @@ static XrXirRunStatus vm_step_dispatch(ScalarRun *run,VmState *state,const XrXir
         op->op == XR_XIR_FIELD_PLACE || op->op == XR_XIR_INDEX_PLACE) {
         state->instruction = next;
         return XR_XIR_RUN_OK;
+    }
+    if (op->op==XR_XIR_BYTE_ARRAY_APPEND || op->op==XR_XIR_BYTE_ARRAY_REPEAT) {
+        state->instruction=next;
+        return vm_byte_array_step(run,state,op,run->layout->offsets[result_id],action);
     }
     if (op->op == XR_XIR_ARRAY_CAPACITY || op->op == XR_XIR_ARRAY_WITH_CAPACITY ||
         op->op == XR_XIR_ARRAY_RESERVE) {

@@ -111,7 +111,7 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     case XR_XIR_ARRAY_REPEAT:
     case XR_XIR_ARRAY_CAPACITY:
     case XR_XIR_ARRAY_WITH_CAPACITY:
-    case XR_XIR_ARRAY_RESERVE:
+    case XR_XIR_BYTE_ARRAY_APPEND: case XR_XIR_BYTE_ARRAY_REPEAT: case XR_XIR_ARRAY_RESERVE:
     case XR_XIR_FIXED_ARRAY_NEW: case XR_XIR_FIXED_ARRAY_GET: case XR_XIR_FIXED_ARRAY_LEN:
     case XR_XIR_TUPLE_NEW:
     case XR_XIR_TUPLE_FIELD:
