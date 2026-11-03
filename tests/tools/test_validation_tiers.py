@@ -204,6 +204,27 @@ class TierTests(unittest.TestCase):
                 self.assertNotIn("native-runtime", plan["groups"])
         self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
 
+    def test_signal_registration_sources_and_native_root_replay_select_both_carriers(self):
+        for path in ("src/xir/xxir_call_signal.inc.c", "src/xir/xxir_call_signal_internal.h",
+                     "src/xir/xxir_instance_signal.inc.c", "src/xir/xxir_instance_signal_internal.h",
+                     "src/xir/xxir_source_sys.inc.c", "src/xir/xxir_source.c",
+                     "src/xir/xxir_sys_native.h", "src/xir/xxir_verify.c",
+                     "src/xir/xxir_effects.c", "src/xir/xxir_effects.h",
+                     "src/xir/xxir_effect_invocation_causes.inc.c",
+                     "src/xir/xxir_effect_invocation_primitive.inc.c",
+                     "src/xir/xxir_effect_invocation_query.inc.c",
+                     "src/xir/xxir_effect_invocation_solve.inc.c",
+                     "tests/unit/xir/test_xir_signal_source.c",
+                     "tests/unit/xir/test_xir_signal_native.c",
+                     "tests/unit/xir/root_signal_runtime.h", "tests/unit/xir/root_signal.cmake"):
+            with self.subTest(path=path):
+                plan = xray_l1.tier_plan(ROOT, "L2", changed=[path])
+                self.assertIn("runtime", plan["groups"])
+                self.assertTrue({"test_xir_signal_source", "test_xir_signal_native"} <= set(plan["tests"]))
+                self.assertTrue({"test_xir_signal_source", "test_xir_signal_native"} <= set(plan["targets"]))
+                self.assertNotIn("native-runtime", plan["groups"])
+        self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
+
     def test_recursive_fixture_selection_matches_actual_ctest_report(self):
         catalog = {"groups": {"family": {"tier": "L2", "tests": ["leaf"], "targets": []}},
                    "l2": {"interfaceMatches": {}, "requiredOn": {}, "prerequisites": {
