@@ -65,7 +65,7 @@ static XrXirValueAdmission pipe_access(const XrXirValue *value){
 }
 static void pipe_tokens(XrXirInstance *instance,const uint32_t *ids,const XrXirValue *pipe,XrXirValue tokens[2]){
  XrXirValue pair=pipe_invoke(instance,ids[PIPE_ENDS],pipe,1);
- for(unsigned n=0;n<2;++n)CHECK(xr_xir_tuple_get(&pair,n,&tokens[n])==XR_XIR_VALUE_OK&&tokens[n].type==XR_XIR_I64);
+ for(unsigned n=0;n<2;++n){xr_xir_value_drop(&tokens[n]);CHECK(xr_xir_tuple_get(&pair,n,&tokens[n])==XR_XIR_VALUE_OK&&tokens[n].type==XR_XIR_I64);}
  xr_xir_value_drop(&pair);
 }
 static void pipe_bool(XrXirInstance *instance,uint32_t entry,const XrXirValue *arg,bool expected){
