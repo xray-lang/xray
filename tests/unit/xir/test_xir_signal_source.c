@@ -8,6 +8,7 @@
  */
 #include "root_signal_runtime.h"
 #include "xir/xxir_effects.h"
+#include "xir/xxir_ctfe.h"
 static uint32_t root_signal_named(const XrXirModule *module,const char *name) {
     for (uint32_t i=0;i<module->function_count;++i)
         if (module->functions[i].name_length==strlen(name) && !memcmp(module->functions[i].name,name,strlen(name))) return i;
@@ -40,6 +41,12 @@ static void root_signal_contracts(const XrXirCompileContext *context,const XrXir
     CHECK(steps && count && steps[count-1].function==native && steps[count-1].cause==XR_XIR_ROOT_CAUSE_NATIVE &&
         steps[count-1].instruction==UINT32_MAX && !steps[count-1].distance);
     xr_xir_compile_root_cause_trace_free(trace);xr_xir_compile_effects_free(effects);
+    XrXirCtfeCallRequest request={.evaluation={.artifact=code,.function=root_signal_named(module,"ctfeRegister"),
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
+        .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES}},
+        .call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
+    memcpy(request.evaluation.checked_identity,code->checked_identity,32);XrXirValue constant={0};
+    CHECK(xr_xir_compile_ctfe_calls(&request,&constant)==XR_XIR_CTFE_NOT_SUPPORTED && !constant.type && !constant.reserved && !constant.payload);
     /* These local metadata views never become Source artifacts or Programs. */
     XrXirTypeNode nodes[256];CHECK(module->types->count<256);
     memcpy(nodes,module->types->nodes,module->types->count*sizeof(*nodes));
