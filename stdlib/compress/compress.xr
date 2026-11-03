@@ -730,8 +730,8 @@ class Inflater {
         // afterwards, because a repeat may straddle the boundary between them.
         var all = Array<i64>(hlit + hdist, 0)
         try this.readCodeLengths(clTree, hlit + hdist, ref all)
-        var litLengths = copy(all[0:hlit])
-        var distLengths = copy(all[hlit:hlit + hdist])
+        var litLengths = copy all[0:hlit]
+        var distLengths = copy all[hlit:hlit + hdist]
 
         try this.codedBlock(try buildHuffman(litLengths, hlit), try buildHuffman(distLengths, hdist))
     }
@@ -758,7 +758,7 @@ class Inflater {
 }
 
 fn inflateRaw(src: Slice<u8>) throws(CompressionError) -> Array<u8> {
-    var owned = copy(src[0:len(src)])
+    var owned = copy src[0:len(src)]
     var decoder = Inflater(owned)
     return try (move decoder).run()
 }
