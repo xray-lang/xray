@@ -80,7 +80,7 @@ static XrXirValueStatus byte_array_candidate(const XrXirValue *value,const ByteA
 }
 XR_FUNC XrXirValueStatus xr_xir_array_byte_append(const XrXirValue *array,
     const XrXirValue *snapshot,XrXirValueAdmission *admission,XrXirValue *output) {
-    if (!snapshot) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!snapshot || !admission) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValueAdmission local={0};
     XrXirValueStatus status=storage_admission_begin(array,admission,&local);
     if (status!=XR_XIR_VALUE_OK)return status;
@@ -91,6 +91,7 @@ XR_FUNC XrXirValueStatus xr_xir_array_byte_append(const XrXirValue *array,
 XR_FUNC XrXirValueStatus xr_xir_array_byte_repeat(const XrXirValue *array,
     int64_t distance,int64_t count,XrXirValueAdmission *admission,XrXirValue *output,XrXirFaultDetail *fault) {
     if (fault) *fault=(XrXirFaultDetail){0};
+    if (!admission) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValueAdmission local={0};
     XrXirValueStatus status=storage_admission_begin(array,admission,&local);
     if (status!=XR_XIR_VALUE_OK)return status;
