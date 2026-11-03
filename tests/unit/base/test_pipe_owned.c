@@ -202,7 +202,13 @@ int main(int argc,char **argv){
  if(argc==2&&!strcmp(argv[1],"--child-write"))return child_main(true);
  if(argc==2&&!strcmp(argv[1],"--child-read"))return child_main(false);
  CHECK(argc==1);caller_thread=GetCurrentThreadId();DWORD before=0,after=0;CHECK(GetProcessHandleCount(GetCurrentProcess(),&before));
- failed_preparation();byte_operations(false);byte_operations(true);cancellation_and_close();child_stdio(true);child_stdio(false);
+ fprintf(stderr,"PIPE_PHASE before handles=%lu blocks=%zu\n",(unsigned long)before,live_blocks);
+ failed_preparation();CHECK(GetProcessHandleCount(GetCurrentProcess(),&after));fprintf(stderr,"PIPE_PHASE preparation handles=%lu blocks=%zu\n",(unsigned long)after,live_blocks);
+ byte_operations(false);CHECK(GetProcessHandleCount(GetCurrentProcess(),&after));fprintf(stderr,"PIPE_PHASE bytes handles=%lu blocks=%zu\n",(unsigned long)after,live_blocks);
+ byte_operations(true);CHECK(GetProcessHandleCount(GetCurrentProcess(),&after));fprintf(stderr,"PIPE_PHASE partial handles=%lu blocks=%zu\n",(unsigned long)after,live_blocks);
+ cancellation_and_close();CHECK(GetProcessHandleCount(GetCurrentProcess(),&after));fprintf(stderr,"PIPE_PHASE cancellation handles=%lu blocks=%zu\n",(unsigned long)after,live_blocks);
+ child_stdio(true);CHECK(GetProcessHandleCount(GetCurrentProcess(),&after));fprintf(stderr,"PIPE_PHASE child-write handles=%lu blocks=%zu\n",(unsigned long)after,live_blocks);
+ child_stdio(false);CHECK(GetProcessHandleCount(GetCurrentProcess(),&after));fprintf(stderr,"PIPE_PHASE child-read handles=%lu blocks=%zu\n",(unsigned long)after,live_blocks);
  CHECK(GetProcessHandleCount(GetCurrentProcess(),&after)&&after==before&&!live_blocks);
 #else
  (void)argc;(void)argv;XrOsPipeOwner owner={0};bool opened=true;
