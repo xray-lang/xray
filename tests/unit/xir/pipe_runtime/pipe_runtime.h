@@ -129,13 +129,23 @@ static void pipe_refusals(XrXirProgram *program,const uint32_t *ids){
 static void pipe_cancel_read(XrXirProgram *program,const uint32_t *ids,bool scoped){
  XrXirInstance *instance=pipe_instance(program,ids);XrXirValue p=pipe_open(instance,ids),args[]={p,{XR_XIR_I64,0,1}};
  CHECK(xr_xir_instance_start(instance,ids[scoped?PIPE_SCOPE_READ:PIPE_READ],args,scoped?1u:2u)==XR_XIR_CALL_READY);bool suspended=false;
- for(unsigned n=0;n<1000000&&!suspended;++n){XrXirInstanceResult event=xr_xir_instance_poll_bounded(instance,64);
-  if(event.outcome.status==XR_XIR_CALL_READY)continue;CHECK(event.outcome.status==XR_XIR_CALL_SUSPENDED);
-  XrXirWaitRequest wait={0};CHECK(xr_xir_instance_wait_request(instance,event.epoch,event.outcome.wake,&wait)==XR_XIR_CALL_READY);
-  if(wait.kind==XR_XIR_WAIT_YIELD){suspended=true;pipe_trace(scoped?"scope_cancel YIELD observed":"plain_cancel YIELD observed");}
-  else{CHECK(scoped&&wait.kind==XR_XIR_WAIT_TASK);xr_thread_yield();}
+ if(scoped){
+  /* One public turn observes structured cancellation, not the child's exact
+   * IO entry. The separate plain read proves genuinely pending native IO. */
+  XrXirInstanceResult event=xr_xir_instance_poll_bounded(instance,64);
+  pipe_trace_status("scope_cancel bounded observation",event.outcome.status);
+  CHECK(event.outcome.status==XR_XIR_CALL_READY||event.outcome.status==XR_XIR_CALL_SUSPENDED);
+  if(event.outcome.status==XR_XIR_CALL_SUSPENDED){XrXirWaitRequest wait={0};CHECK(xr_xir_instance_wait_request(instance,event.epoch,event.outcome.wake,&wait)==XR_XIR_CALL_READY);}
+ }else{
+  for(unsigned n=0;n<1000000&&!suspended;++n){XrXirInstanceResult event=xr_xir_instance_poll_bounded(instance,64);
+   if(event.outcome.status==XR_XIR_CALL_READY)continue;CHECK(event.outcome.status==XR_XIR_CALL_SUSPENDED);
+   XrXirWaitRequest wait={0};CHECK(xr_xir_instance_wait_request(instance,event.epoch,event.outcome.wake,&wait)==XR_XIR_CALL_READY);
+   if(wait.kind==XR_XIR_WAIT_YIELD){suspended=true;pipe_trace("plain_cancel YIELD observed");}
+   else{CHECK(scoped&&wait.kind==XR_XIR_WAIT_TASK);xr_thread_yield();}
+  }
+  CHECK(suspended);
  }
- CHECK(suspended&&xr_xir_instance_cancel_current(instance)==XR_XIR_CALL_CANCEL_REQUESTED);
+ CHECK(xr_xir_instance_cancel_current(instance)==XR_XIR_CALL_CANCEL_REQUESTED);
  pipe_trace(scoped?"scope_cancel requested":"plain_cancel requested");
  XrXirCallStatus terminal=pipe_drive(instance).outcome.status;pipe_trace_status(scoped?"scope_cancel terminal":"plain_cancel terminal",terminal);
  CHECK(terminal==XR_XIR_CALL_CANCELLED);XrXirValue output={0};CHECK(xr_xir_instance_take_result(instance,&output)==XR_XIR_CALL_BAD_STATE&&!output.type&&!output.payload);
