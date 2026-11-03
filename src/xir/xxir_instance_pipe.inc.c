@@ -165,7 +165,7 @@ static XrXirCallStatus instance_pipe_io(XrXirCallView *view,XrXirInstance *insta
         XirPipeQuery current={view,instance->domain,XR_XIR_CALL_READY};uint32_t end=0;
         XirPipeOwner *pipe=instance_pipe_lookup(root,view->arguments[0].payload,&end,&current);
         if(current.status!=XR_XIR_CALL_READY)return current.status;
-        bool invalid=!pipe || end!=(reading?XR_OS_PIPE_READ:XR_OS_PIPE_WRITE) || (reading && view->arguments[1].payload<0);
+        bool invalid=!pipe || end!=(uint32_t)(reading?XR_OS_PIPE_READ:XR_OS_PIPE_WRITE) || (reading && view->arguments[1].payload<0);
         if(invalid) {
             frame->terminal=true;
             if(!reading){*output=(XrXirValue){XR_XIR_I64,0,-1};return XR_XIR_CALL_READY;}
