@@ -26,7 +26,7 @@ static const char host_stat_text[]=
  "import {Path} from path\n"
  "class Child extends Path{extra:string\ninit(raw:string){super(raw);this.extra=\"stat-owned-tail\"}}\n"
  "export fn make(raw:string)->Path{return Child(raw)}\n"
- "export fn query(path:Path)->bool{var r=__stat(path);if(r==null){return false;}"
+ "export fn query(path:Path)->bool{var r=__stat(path);if(r==null){return false;}\n"
  "return r!.size==3&&r!.mode>=0&&r!.mtime>0&&r!.atime>0&&r!.ctime>0&&"
  "(r!.uid==null||r!.uid!>=0)&&(r!.gid==null||r!.gid!>=0)&&r!.isFile&&!r!.isDir&&!r!.isSymlink}\n"
  "export fn ctfeStat()->bool{return __stat(Child(\".\"))!=null}\n";
