@@ -165,7 +165,10 @@ static void arena_budget_and_output(void) {
         reset_observer();context=context_new(required-shortage);
         XrXirTypeArena *arena=NULL;
         XrXirValueStatus status=arena_fixture(&context,&arena);
-        CHECK(status==(shortage?XR_XIR_VALUE_LIMIT:XR_XIR_VALUE_OK));
+        XrCompileResourceStats observed=stats(&context);
+        fprintf(stderr,"arena finite shortage%u status%u cap%llu held%llu peak%llu\n",shortage,(unsigned)status,
+            (unsigned long long)(required-shortage),(unsigned long long)observed.held_bytes,(unsigned long long)observed.peak_bytes);
+        CHECK(status==(shortage?XR_XIR_VALUE_MEMORY_LIMIT:XR_XIR_VALUE_OK));
         CHECK(shortage?!arena:arena!=NULL);CHECK(stats(&context).held_bytes<=required-shortage);
         xr_xir_compile_type_arena_drop(arena);
         xr_compile_resources_release(context.resources);

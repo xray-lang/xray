@@ -35,8 +35,10 @@ static void construction_dense_owner(void) {
         XrCompileResourceStats before={0};CHECK(xr_compile_resources_stats(receiver.resources,&before)==XR_COMPILE_RESOURCE_OK);
         size_t start=attempts,baseline_live=live,baseline_physical=physical,baseline_total=total;
         if(mode>=1&&mode<=4)fail_at=start+mode-1;
-        XrXirStatus expected=mode>=1&&mode<=4?XR_XIR_OUT_OF_MEMORY:mode==6?XR_XIR_BUDGET:XR_XIR_OK;
-        CHECK(xir_construction_clone(&receiver,&types,source,&copy,NULL)==expected);
+        XrXirStatus expected=mode>=1&&mode<=4?XR_XIR_OUT_OF_MEMORY:mode==6?XR_XIR_MEMORY_LIMIT:XR_XIR_OK;
+        XrXirStatus cloned=xir_construction_clone(&receiver,&types,source,&copy,NULL);
+        if(mode>=5)fprintf(stderr,"construction finite mode%u status%u cap%llu\n",mode,(unsigned)cloned,(unsigned long long)caps.memory_limit);
+        CHECK(cloned==expected);
         XrCompileResourceStats used={0};CHECK(xr_compile_resources_stats(receiver.resources,&used)==XR_COMPILE_RESOURCE_OK);
         if(!mode)required=used.peak_bytes;
         if(expected==XR_XIR_OK){
@@ -67,7 +69,7 @@ static void construction_dense_owner(void) {
             CHECK(!copy&&live==baseline_live&&physical==baseline_physical&&used.held_bytes==before.held_bytes);
             if(expected==XR_XIR_OUT_OF_MEMORY)CHECK(attempts==start+mode);
             else{
-                CHECK(xir_construction_clone(&receiver,&types,source,&copy,NULL)==XR_XIR_BUDGET&&!copy);
+                CHECK(xir_construction_clone(&receiver,&types,source,&copy,NULL)==XR_XIR_MEMORY_LIMIT&&!copy);
                 CHECK(live==baseline_live&&physical==baseline_physical);
             }
         }

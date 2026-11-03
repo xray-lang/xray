@@ -82,7 +82,10 @@ static void program_take_failures(void) {
     CHECK(xr_compile_resources_alloc(context.resources,(size_t)remaining,&guard)==XR_COMPILE_RESOURCE_OK);
     CHECK(stats(&context).held_bytes==limit);
     XrXirProgram *program=NULL;
-    CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_BUDGET);
+    XrXirStatus limited=xr_xir_compile_vm_program_take(&lowered,&program);
+    fprintf(stderr,"VM take finite status%u cap%llu held%llu\n",(unsigned)limited,
+        (unsigned long long)limit,(unsigned long long)stats(&context).held_bytes);
+    CHECK(limited==XR_XIR_MEMORY_LIMIT);
     CHECK(lowered==original && !program && stats(&context).held_bytes==limit);
     xr_compile_resources_free(guard);CHECK(stats(&context).held_bytes==before.held_bytes);
     CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);
