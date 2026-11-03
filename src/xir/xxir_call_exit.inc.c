@@ -106,6 +106,7 @@ static void finish_exit(XrXirCall *call) {
         return;
     }
     if (frame->scope_exit) {
+        frame->cancel_boundary=0;
         frame->exiting = frame->scope_exit = frame->exit_done = false;
         xr_xir_call_result_drop(&frame->inbox);
         xr_xir_call_result_move(&result, &frame->inbox);frame->inbox_dispatched=false;

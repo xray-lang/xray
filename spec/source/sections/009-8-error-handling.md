@@ -22,7 +22,7 @@ Xray 的错误处理分为两个严格分离的通道：
 - **错误是值**：错误载荷是 enum 值；传播不把它转换为 `PanicInfo`。
 - **签名决定错误类型**：省略 `throws` 表示 `Never`，即保证不抛业务错误；`throws(E)` 声明允许逃逸的错误类型，裸 `throws` 等价于 `throws(Error)`。签名和函数类型规则见 §2.2、§5.2。
 - **检查是局部的**：每个函数按自身正文和被调用签名检查错误子集，不分析被调函数体、不做全程序错误推导。没有错误子句的具名函数不会自动获得抛错签名；闭包规则见 §5.2。
-- **传播点可见**：可能抛错的调用必须在 `try`、`try?`、`try!` 表达式或 `try { }` 的保护区域内（§8.1.6）；反过来，没有任何可能抛错位置的 `try` 也是编译错误（`E0336`）。
+- **传播点可见**：可能抛错的调用必须在 `try`、`try?`、`try!` 表达式或 `try { }` 的保护区域内（§8.1.6）。没有业务错误来源的表达式标记或含普通 catch 的 try 块报 `E0336`；只有 panic handler 的 try 块是独立故障边界，不受这一块级要求限制。
 - **panic 不进入签名**：不抛业务错误的函数仍可能 panic；`try?` 不会吞掉 panic。
 - **`defer` 替代 `finally`**：清理绑定最近的真实 `{}` 块，清理体必须静态证明没有逃逸的业务错误（`E0387`，§8.3.1）。
 
@@ -251,7 +251,30 @@ fn main() { caller() }
 try main()
 ```
 
-标记只写在可能抛错的位置。`try`、`try?`、`try!` 的作用范围内没有任何可能抛出业务错误的调用、`await` 或 `scope`，或者 `try { }` 的保护区域内没有这样的位置时，报 `E0336`。判断依据是定义处的声明签名：错误类型为 `Never` 的调用不算；错误类型含未替换类型参数的调用算可能抛错，因此泛型体不会因为某次实例化把错误类型变成 `Never` 而报错。等待 `Task<T, Never>` 直接写 `await t`，向 channel 发送直接写 `ch.send(v)`。
+标记只写在可能产生业务错误的位置。`try`、`try?`、`try!` 的作用范围内没有业务错误来源时，报 `E0336`。含任意普通 catch 的 try 块也要求主体保护区域中存在业务来源；即使同时有 panic handler，也不豁免。只有 panic handler 的 try 块不要求业务来源，也不要求静态证明主体可能 panic；但其内部的表达式标记仍独立检查。
+
+业务来源包括直接 `throw`、声明可抛的调用，以及暴露业务错误的 `await` 或 `scope`。判断依据是定义处的声明签名：错误类型为 `Never` 的调用不算；错误类型含未替换类型参数的调用算可能抛错，因此泛型体不会因为某次实例化把错误类型变成 `Never` 而报错。调用方看到完整实例化后的 `Never` 时，其多余标记仍报错。实际求值的实参、默认值和生成初始化器按其真实错误合同贡献来源；嵌套函数或闭包的定义体、本语句自己的 handler 不属于主体来源。内层 `try?`、`try!` 或普通 catch 消费了业务错误，也不抹去外层主体中已存在的来源事实；E0336 不兼作死 handler 分析。等待 `Task<T, Never>` 直接写 `await t`，向 channel 发送直接写 `ch.send(v)`。
+
+只有 panic handler 的主体同样许可业务调用，但不捕获它们的错误。剩余业务错误必须由外层普通 catch 或所在函数的 `throws` 接收，否则报 `E0331`。直接 `throw` 本身产生业务错误，不另加 try。panic、取消和业务错误仍是独立通道。
+
+```xray @id=error-panic-only @run
+enum Failure { Bad }
+fn fail() throws(Failure) { throw Failure.Bad }
+fn relay() throws(Failure) {
+    try { fail() } catch panic { print("unexpected panic") }
+}
+const ch = Channel<i64>(1)
+ch.close()
+try { ch.send(1) } catch panic (p) { print(p.code) }
+try { relay() } catch (e: Failure) { print("business error") }
+try { throw Failure.Bad } catch (e: Failure) { print("direct throw") }
+```
+
+```xray @id=error-panic-mixed-redundant @error=E0336
+try { print(42) }
+catch (e) { print("ordinary") }
+catch panic { print("panic") }
+```
 
 ```xray @error=E0336
 fn add(a: i64, b: i64) -> i64 { return a + b }
@@ -355,7 +378,7 @@ fn main() {
     }
 }
 
-try main()
+main()
 ```
 ```output
 message: array index out of range: 10 (length 3)
@@ -449,7 +472,7 @@ fn main() {
     }
     print("body")
 }
-try main()
+main()
 ```
 ```output
 body
@@ -484,7 +507,7 @@ fn main() {
     print(found ?? 0)
     print((try? lookup(false)) ?? 0)
 }
-try main()
+main()
 ```
 ```output
 7
@@ -559,7 +582,7 @@ fn main() {
     }
 }
 
-try main()
+main()
 ```
 ```output
 closed
@@ -639,7 +662,7 @@ fn main() {
     }
 }
 
-try main()
+main()
 ```
 ```output
 empty input
@@ -661,7 +684,7 @@ fn main() {
     try { work() } catch (e) { print("caught") }
 }
 
-try main()
+main()
 ```
 ```output
 body
@@ -684,7 +707,7 @@ fn main() {
     }
 }
 
-try main()
+main()
 ```
 ```output
 message: array index out of range: 10 (length 3)
@@ -711,7 +734,7 @@ Xray separates two channels:
 - **Errors are values**: error payloads are enum values; propagation does not turn them into `PanicInfo`.
 - **Signatures determine error types**: omitting `throws` means `Never`, a guarantee of no business errors. `throws(E)` declares the permitted escaping error type; bare `throws` means `throws(Error)`. See §2.2 and §5.2 for signatures and callable types.
 - **Checking is local**: each function is checked using its body and callee signatures, without inspecting callee bodies or whole-program error inference. A named function without a clause never acquires an inferred throwing signature; see §5.2 for closures.
-- **Propagation is visible**: potentially throwing calls must occur within a `try`, `try?`, or `try!` expression or the protected region of `try { }` (§8.1.6); conversely, a `try` that covers nothing able to throw is a compile error (`E0336`).
+- **Propagation is visible**: potentially throwing calls must occur within a `try`, `try?`, or `try!` expression or the protected region of `try { }` (§8.1.6). An expression marker or a try block with an ordinary catch requires a business-error source, otherwise it reports `E0336`. A try block with only a panic handler is an independent fault boundary and has no such block-level requirement.
 - **Panic stays outside signatures**: a non-throwing function may still panic; `try?` never absorbs panic.
 - **`defer` replaces `finally`**: cleanup belongs to the nearest real `{}` block and must statically have no escaping business errors (`E0387`, §8.3.1).
 
@@ -940,7 +963,30 @@ fn main() { caller() }
 try main()
 ```
 
-Markers appear only where errors can occur. A `try`, `try?` or `try!` whose extent contains no call, `await` or `scope` able to throw a business error, and a `try { }` whose protected region contains none, is rejected with `E0336`. The check uses the declared signatures at the definition site: a call whose error type is `Never` does not count, and a call whose error type mentions an unsubstituted type parameter counts as throwing, so a generic body is never rejected because one instantiation makes its error type `Never`. Waiting on a `Task<T, Never>` is written `await t`, and sending on a channel is written `ch.send(v)`.
+Markers appear only where business errors can occur. A `try`, `try?` or `try!` whose extent has no business-error source is rejected with `E0336`. A try block with any ordinary catch also requires a source in its protected body; adding a panic handler grants no exemption. A try block with only a panic handler requires neither a business-error source nor static proof that its body may panic, but expression markers within that body are still checked independently.
+
+Sources include direct `throw`, calls declared to throw, and `await` or `scope` exposing business errors. The check uses declared signatures at the definition site: a call whose error type is `Never` does not count, and one whose error type mentions an unsubstituted type parameter counts as throwing, so instantiating that generic body with `Never` does not reject the body. A redundant marker at a caller that sees the complete `Never` instantiation still rejects. Actually evaluated arguments, defaults and generated initializers contribute their authentic error contracts. Nested function or closure definitions and the statement's own handlers do not contribute body sources. An inner `try?`, `try!` or ordinary catch consuming an error does not erase a source already present in an outer body; E0336 is not dead-handler analysis. Waiting on a `Task<T, Never>` is written `await t`, and sending on a channel is written `ch.send(v)`.
+
+A body with only a panic handler also permits business calls but does not catch their errors. Remaining business errors need an outer ordinary catch or the enclosing function's `throws`, otherwise they report `E0331`. Direct `throw` produces a business error itself and needs no extra try. Panic, cancellation and business errors remain separate channels.
+
+```xray @id=error-panic-only @run
+enum Failure { Bad }
+fn fail() throws(Failure) { throw Failure.Bad }
+fn relay() throws(Failure) {
+    try { fail() } catch panic { print("unexpected panic") }
+}
+const ch = Channel<i64>(1)
+ch.close()
+try { ch.send(1) } catch panic (p) { print(p.code) }
+try { relay() } catch (e: Failure) { print("business error") }
+try { throw Failure.Bad } catch (e: Failure) { print("direct throw") }
+```
+
+```xray @id=error-panic-mixed-redundant @error=E0336
+try { print(42) }
+catch (e) { print("ordinary") }
+catch panic { print("panic") }
+```
 
 ```xray @error=E0336
 fn add(a: i64, b: i64) -> i64 { return a + b }
@@ -1044,7 +1090,7 @@ fn main() {
     }
 }
 
-try main()
+main()
 ```
 ```output
 message: array index out of range: 10 (length 3)
@@ -1150,7 +1196,7 @@ fn main() {
     }
     print("body")
 }
-try main()
+main()
 ```
 ```output
 body
@@ -1185,7 +1231,7 @@ fn main() {
     print(found ?? 0)
     print((try? lookup(false)) ?? 0)
 }
-try main()
+main()
 ```
 ```output
 7
@@ -1260,7 +1306,7 @@ fn main() {
     }
 }
 
-try main()
+main()
 ```
 ```output
 closed
@@ -1340,7 +1386,7 @@ fn main() {
     }
 }
 
-try main()
+main()
 ```
 ```output
 empty input
@@ -1362,7 +1408,7 @@ fn main() {
     try { work() } catch (e) { print("caught") }
 }
 
-try main()
+main()
 ```
 ```output
 body
@@ -1385,7 +1431,7 @@ fn main() {
     }
 }
 
-try main()
+main()
 ```
 ```output
 message: array index out of range: 10 (length 3)

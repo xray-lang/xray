@@ -14,6 +14,7 @@
 #define XXIR_CHANNEL_SELECT_SHAPE_H
 #include "xxir_operand_roles.h"
 #include "xxir_receive_control.h"
+#include "xxir_channel_select_arm.h"
 /* Modes are no fallback, default, and timeout. The final timeout operand is
  * I64; every preceding value is an actual receive Channel. */
 static inline XrXirStatus xir_channel_select_shape(const XrXirModule *module,
@@ -39,7 +40,8 @@ static inline XrXirStatus xir_channel_select_shape(const XrXirModule *module,
         if(value>=(uint64_t)function->parameter_count+function->instruction_count)return XR_XIR_BAD_VALUE;
         XrXirType actual=xr_xir_operand_type(function,value);
         if(a==count){if(actual!=XR_XIR_I64)return XR_XIR_BAD_TYPE;continue;}
-        if(!xr_xir_type_is_channel(module->types,actual))return XR_XIR_BAD_TYPE;
+        bool sending=false;actual=xir_channel_select_operand_type(module->types,actual,&sending);
+        if(actual==XR_XIR_UNIT)return XR_XIR_BAD_TYPE;
         const XrXirCallableParameter *field=result->parameters+a+1;
         const XrXirTypeNode *nullable=xr_xir_type_node(module->types,field->type);
         if(field->mode!=XR_PARAM_READ||!nullable||nullable->kind!=XR_XIR_TYPE_NULLABLE||

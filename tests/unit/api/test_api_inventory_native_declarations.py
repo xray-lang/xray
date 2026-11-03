@@ -280,7 +280,7 @@ class TaskReceiverInventoryTest(unittest.TestCase):
 
     def test_real_task_ref_methods_keep_their_signatures(self) -> None:
         rows = [row for row in inventory.collect_native_types(ROOT)
-                if row["namespace"] == "Task" and row["kind"] != "type"]
+                if row["namespace"] == "Task" and row["kind"] == "method"]
         self.assertEqual({row["name"] for row in rows}, {"cancel", "poll", "awaitResult"})
         expected = {"cancel": "(): ()", "poll": "(): TaskResult<T, E>?",
                     "awaitResult": "(): TaskResult<T, E>"}
@@ -288,6 +288,19 @@ class TaskReceiverInventoryTest(unittest.TestCase):
             self.assertEqual(row["receiver"], "ref")
             self.assertEqual(row["source"], "stdlib/types/coroutine.xr")
             self.assertEqual(row["signature"], expected[row["name"]])
+
+    def test_task_aggregate_signatures_exclude_cancellation(self) -> None:
+        rows = {row["name"]: row for row in inventory.collect_native_types(ROOT)
+                if row["namespace"] == "Task" and row["kind"] == "static-method"}
+        expected = {
+            "all": "(tasks: Array<Task<T, E>>) throws(E): Array<T>",
+            "first": "(tasks: Array<Task<T, E>>) throws(E): T",
+            "timeout": "(task: Task<T, E>, milliseconds: i64) throws(E | Timeout): T",
+        }
+        self.assertEqual(set(rows), set(expected))
+        for name, signature in expected.items():
+            self.assertEqual(rows[name]["signature"], signature)
+            self.assertNotIn("receiver", rows[name])
 
     def test_ordinary_static_and_ref_methods_share_the_source_parser(self) -> None:
         source = "class Probe {\n  readValue() -> i64\n  static make() -> Probe\n  ref update(value: i64)\n}\n"

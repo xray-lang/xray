@@ -77,10 +77,10 @@ static void ready_task_wait_case(const char *code) {
 }
 static void task_wait_cases(void) {
     const char task_timer[] = "import time\nfn worker()->i64 { time.sleep(5); return 42 }\n"
-        "fn main() throws(Error)->i64 { return try await go worker() }\nprint(try main())\n";
+        "fn main()->i64 { return await go worker() }\nprint(main())\n";
     expect_output(task_timer, "42\n", 3, 0, false);
     const char task_timeout[] = "import time\nfn worker()->i64 { time.sleep(2000); return 42 }\n"
-        "fn main() throws(Error)->i64 { return try await go worker() }\nprint(try main())\n";
+        "fn main()->i64 { return await go worker() }\nprint(main())\n";
     XrJsonValue *task_result=run(task_timeout,sizeof(task_timeout)-1,50,0);
     XrJsonValue *task_value=xjson_get_object(task_result,"structuredContent");
     CHECK(xjson_get_bool(task_result,"isError") && xjson_get_bool(task_value,"timedOut"));
@@ -98,18 +98,18 @@ static void task_wait_cases(void) {
 }
 static void constructed_task_cases(void) {
     expect_output("fn worker()->Array<i64> { Coro.yield(); return [10,20] }\n"
-        "fn main() throws(Error)->i64 { const task=go worker(); var first=try await task; first[0]=99; const second=try await task; return second[0] }\n"
-        "print(try main())\n", "10\n", 3, 0, false);
+        "fn main()->i64 { const task=go worker(); var first=await task; first[0]=99; const second=await task; return second[0] }\n"
+        "print(main())\n", "10\n", 3, 0, false);
     expect_output("fn worker()->Array<Array<string>> { Coro.yield(); return [[\"owned\"]] }\n"
-        "fn main() throws(Error)->string { const task=go worker(); var first=try await task; first[0][0]=\"changed\"; const second=try await task; return second[0][0] }\n"
-        "print(try main())\n", "owned\n", 6, 0, false);
+        "fn main()->string { const task=go worker(); var first=await task; first[0][0]=\"changed\"; const second=await task; return second[0][0] }\n"
+        "print(main())\n", "owned\n", 6, 0, false);
     expect_output("fn worker()->(i64,string) { Coro.yield(); return (42,\"owned\") }\n"
-        "fn main() throws(Error)->i64 { const task=go worker(); const first=try await task; const second=try await task; return second.0 }\n"
-        "print(try main())\n", "42\n", 3, 0, false);
+        "fn main()->i64 { const task=go worker(); const first=await task; const second=await task; return second.0 }\n"
+        "print(main())\n", "42\n", 3, 0, false);
     expect_output("fn leaf()->i64 { Coro.yield(); return 42 }\n"
         "fn worker()->Task<i64> { Coro.yield(); return go leaf() }\n"
-        "fn main() throws(Error)->i64 { const outer=go worker(); const inner=try await outer; return try await inner }\n"
-        "print(try main())\n", "42\n", 3, 0, false);
+        "fn main()->i64 { const outer=go worker(); const inner=await outer; return await inner }\n"
+        "print(main())\n", "42\n", 3, 0, false);
     puts("MCP constructed Task array copy isolation, nested strings, tuple and nested Task PASS");
 }
 static void normal_cases(void) {
@@ -283,10 +283,10 @@ int main(int argc, char **argv) {
         tool_faults("print(42)\n"); same_owner_faults("print(42)\n"); axes("print(42)\n"); return 0;
     }
     if (argc == 2 && !strcmp(argv[1], "--channel-resources")) {
-        const char code[]="fn send(ch:Channel<i64>) throws(SendResult)->() { try ch.send(42) }\n"
-            "fn main() throws(Error)->i64 { const ch=Channel<i64>(); const task=go send(ch); "
+        const char code[]="fn send(ch:Channel<i64>)->() { ch.send(42) }\n"
+            "fn main()->i64 { const ch=Channel<i64>(); const task=go send(ch); "
             "const n=match(ch.recv()) { Recv.Value { value:item } -> item, Recv.Empty -> -1, "
-            "Recv.Timeout -> -2, Recv.Closed -> -3 }; try await task; ch.close(); return n+ch.recvOr(0) }\nprint(try main())\n";
+            "Recv.Timeout -> -2, Recv.Closed -> -3 }; await task; ch.close(); return n+ch.recvOr(0) }\nprint(main())\n";
         expect_output(code,"42\n",3,0,false);
         tool_faults(code); same_owner_faults(code); axes(code); return 0;
     }

@@ -22,6 +22,11 @@ static XrXirRunStatus vm_select_step(ScalarRun *run,VmState *state,
         *action=(XrXirAction){.kind=status==XR_XIR_CALL_SUSPENDED||status==XR_XIR_CALL_DEFER_ASYNC?
             XR_XIR_ACTION_AWAIT_CHANNEL:XR_XIR_ACTION_CONTINUE};return XR_XIR_RUN_OK;
     }
+    if(status==XR_XIR_CALL_RUNTIME_PANIC) {
+        *action=(XrXirAction){.kind=XR_XIR_ACTION_FAULT,
+            .value={XR_XIR_I64,0,XR_XIR_CALL_RUNTIME_PANIC},
+            .panic={.detail={XR_XIR_PANIC_CHANNEL_CLOSED,0,0,0}}};return XR_XIR_RUN_OK;
+    }
     if(status!=XR_XIR_CALL_READY)return status==XR_XIR_CALL_OOM?XR_XIR_RUN_OUT_OF_MEMORY:
         status==XR_XIR_CALL_LIMIT?XR_XIR_RUN_FRAME_LIMIT:status==XR_XIR_CALL_HOST_ERROR?XR_XIR_RUN_HOST_ERROR:
         status==XR_XIR_CALL_NUMERIC_RANGE?XR_XIR_RUN_NUMERIC_RANGE:

@@ -68,7 +68,8 @@ static void task_group_cancel_members(XirTaskGroup *group) {
             if(nested&&nested->kind&&!nested->published){nested->cancel_requested=true;task_group_queue(nested);}
             continue;
         }
-        XrXirCallStatus status=xr_xir_call_request_cancel(task->call);
+        XrXirCallStatus status=!group->kind&&!group->isolated&&(group->first_error||group->first_panic) ?
+            xir_call_request_scope_cancel(task->call,group) : xr_xir_call_request_cancel(task->call);
         XR_CHECK(status==XR_XIR_CALL_CANCEL_REQUESTED||status==XR_XIR_CALL_BAD_STATE,
             "a lexical group requests cancellation only from its live owned members");
         if(!task->activation.queued&&executor->current!=&task->activation&&
@@ -225,6 +226,28 @@ XR_FUNC XrXirCallStatus xir_task_scope_failure_order(XrXirTaskExecutor *executor
         return XR_XIR_CALL_BAD_ARGUMENT;
     if(executor->publication_order>=UINT64_MAX-executor->pending_terminals)return XR_XIR_CALL_LIMIT;
     *output=++executor->publication_order;return XR_XIR_CALL_READY;
+}
+XR_FUNC bool xir_task_scope_cancel_boundary(const XirTaskGroup *group,
+    const XrXirCall *call,uint64_t frame,uint32_t frontier) {
+    return group&&!group->kind&&!group->isolated&&group->cancelling&&
+        (group->first_error||group->first_panic)&&group->owner==call&&
+        group->frame==frame&&group->frontier==frontier;
+}
+XR_FUNC uint64_t xir_task_scope_identity(const XirTaskGroup *group) {
+    return group ? group->completion->identity : 0;
+}
+XR_FUNC XrXirCallStatus xir_task_cancel_origin(XrXirTaskExecutor *executor,
+    const XirTask *task,XrXirValueAdmission *admission,XirTaskGroup **output) {
+    *output=NULL;
+    if(!task||!admission)return XR_XIR_CALL_BAD_ARGUMENT;
+    if(!executor||!task->cancel_scope)return XR_XIR_CALL_READY;
+    if(!task_executor_owner_current(executor))return XR_XIR_CALL_BAD_ARGUMENT;
+    if(task->generation!=executor->generation)return XR_XIR_CALL_READY;
+    for(XirTaskGroup *group=executor->groups;group;group=group->next) {
+        if(!task_pending_member_work(admission,1))return XR_XIR_CALL_LIMIT;
+        if(group->completion->identity==task->cancel_scope) {*output=group;return XR_XIR_CALL_READY;}
+    }
+    return XR_XIR_CALL_BAD_STATE;
 }
 XR_FUNC XrXirCallStatus xir_task_scope_cleanup(XrXirTaskExecutor *executor,
     XrXirCallView *view,XrXirValue *output) {

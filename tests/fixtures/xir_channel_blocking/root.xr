@@ -14,14 +14,7 @@ fn recvWorker(channel: Channel<i64>) -> i64 { return unpack(channel.recv()) }
 fn failSend(channel: Channel<i64>) -> i64 { channel.send(88); return -99 }
 fn caughtSend(channel: Channel<i64>) -> i64 {
     try { return failSend(channel) }
-    catch(e: SendResult) {
-        return match(e) {
-            SendResult.Sent -> -10,
-            SendResult.Full -> -11,
-            SendResult.Timeout -> -12,
-            SendResult.Closed -> 61,
-        }
-    }
+    catch panic(p) { assert(p.code == 702); return 61 }
 }
 fn tick(counter: Atomic<i64>) { counter.add(1) }
 fn sendUnitWorker(channel: Channel<()>, counter: Atomic<i64>) -> i64 {
@@ -30,42 +23,20 @@ fn sendUnitWorker(channel: Channel<()>, counter: Atomic<i64>) -> i64 {
 }
 fn directCaught(channel: Channel<i64>, counter: Atomic<i64>) -> i64 {
     try { defer { tick(counter) }; channel.send(88); return -99 }
-    catch(e: SendResult) {
-        return match(e) {
-            SendResult.Sent -> -10,
-            SendResult.Full -> -11,
-            SendResult.Timeout -> -12,
-            SendResult.Closed -> 62,
-        }
-    }
+    catch panic(p) { assert(p.code == 702); return 62 }
 }
 fn rethrowSend(channel: Channel<i64>) -> i64 {
-    try { return failSend(channel) }
-    catch(e: SendResult) { throw e }
+    return failSend(channel)
 }
 fn caughtRethrow(channel: Channel<i64>) -> i64 {
     try { return rethrowSend(channel) }
-    catch(e: SendResult) {
-        return match(e) {
-            SendResult.Sent -> -10,
-            SendResult.Full -> -11,
-            SendResult.Timeout -> -12,
-            SendResult.Closed -> 63,
-        }
-    }
+    catch panic(p) { assert(p.code == 702); return 63 }
 }
 fn genericRecv<T: Sendable>(channel: Channel<T>) -> Recv<T> { return channel.recv() }
 fn escapedTaskError(channel: Channel<i64>) -> i64 {
     const failing = go failSend(channel)
     try { return await failing }
-    catch(e: SendResult) {
-        return match(e) {
-            SendResult.Sent -> -10,
-            SendResult.Full -> -11,
-            SendResult.Timeout -> -12,
-            SendResult.Closed -> 64,
-        }
-    }
+    catch panic(p) { assert(p.code == 702); return 64 }
 }
 export fn newBlockingUnit() -> Channel<()> { return Channel<()>() }
 export fn blockingUnitSend(channel: Channel<()>) -> i64 {
