@@ -147,6 +147,7 @@ class TierTests(unittest.TestCase):
                      "src/os/win/file_metadata_win.c", "src/os/unix/file_metadata_unix.c",
                      "tests/unit/base/test_file_metadata.c",
                      "src/xir/xxir_instance_system.inc.c", "tests/unit/base/test_system_queries.c",
+                     "src/xir/xxir_instance_sys_tokens.inc.c",
                      "src/xir/xxir_os_system_native.h",
                      "src/xir/xxir_file_stat_native.h", "src/xir/xxir_source_file_stat.inc.c",
                      "src/xir/xxir_instance_file_metadata.inc.c", "src/xir/xxir_nominal.inc.c",
