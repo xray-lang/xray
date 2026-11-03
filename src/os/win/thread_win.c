@@ -123,14 +123,14 @@ void xr_thread_sleep_ms(unsigned int ms) {
 
 XR_FUNC unsigned int xr_os_cpu_count(void) {
     static atomic_uint cached;
-    unsigned int current = atomic_load_explicit(&cached, memory_order_acquire);
+    unsigned int current = atomic_load_explicit(&cached, memory_order_relaxed);
     if (current != 0) return current;
     SYSTEM_INFO si;
     GetSystemInfo(&si);
     unsigned int detected = si.dwNumberOfProcessors ? (unsigned int) si.dwNumberOfProcessors : 1u;
     unsigned int expected = 0;
     if (!atomic_compare_exchange_strong_explicit(&cached, &expected, detected,
-            memory_order_release, memory_order_acquire)) return expected;
+            memory_order_relaxed, memory_order_relaxed)) return expected;
     return detected;
 }
 
