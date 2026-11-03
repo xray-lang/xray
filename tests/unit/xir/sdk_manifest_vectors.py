@@ -51,7 +51,7 @@ def cleanup_abi_cases(original):
             elif attack=='offset':value['abi_measurements'][index]['value']=offset+1
             else:value['abi_measurements'][index]['id']=999999
             cases.append((f'cleanup-{field}-{attack}',value,1))
-    for attack in ('old-call36','old-common102','old-common103','old-common104','old-common105','old-common106','old-common107','old-common108','old-common109','old-common110','old-common111','old-common112','old-common113','old-common114','old-common115','old-common116','old-common117','old-common118','old-common119','old-common120','old-common121','old-common122','old-common123','old-common124','old-common125','extra','duplicate','order'):
+    for attack in ('old-call36','old-common102','old-common103','old-common104','old-common105','old-common106','old-common107','old-common108','old-common109','old-common110','old-common111','old-common112','old-common113','old-common114','old-common115','old-common116','old-common117','old-common118','old-common119','old-common120','old-common121','old-common122','old-common123','old-common124','old-common125','old-common126','extra','duplicate','order'):
         value=json.loads(json.dumps(original))
         if attack=='old-call36':value['call_abi']=36
         elif attack=='old-common102':value['semantic']=102
@@ -78,6 +78,7 @@ def cleanup_abi_cases(original):
         elif attack=='old-common123':value['semantic']=123
         elif attack=='old-common124':value['semantic']=124
         elif attack=='old-common125':value['semantic']=125
+        elif attack=='old-common126':value['semantic']=126
         elif attack=='extra':value['abi_measurements'].append({'id':999999,'value':0})
         elif attack=='duplicate':value['abi_measurements'].append(value['abi_measurements'][-1])
         else:value['abi_measurements'][-1],value['abi_measurements'][-2]=value['abi_measurements'][-2],value['abi_measurements'][-1]
@@ -115,11 +116,15 @@ def main():
         for case in cleanup_abi_cases(original):add(*case)
         escaped=json.dumps(original).replace('"schema"','"\\u0073chema"').replace('kernel32','kernel\\u0033\\u0032')
         add('escaped-same',escaped.encode(),0)
-        assert original['system_libraries']==['kernel32','bcrypt']
+        assert original['system_libraries']==['kernel32','bcrypt','advapi32','userenv']
         for name,libraries in (
-            ('missing-bcrypt',['kernel32']),('missing-kernel32',['bcrypt']),
-            ('reordered',['bcrypt','kernel32']),('duplicate',['kernel32','bcrypt','bcrypt']),
-            ('extra',['kernel32','bcrypt','user32']),('empty',[])):
+            ('missing-bcrypt',['kernel32','advapi32','userenv']),
+            ('missing-kernel32',['bcrypt','advapi32','userenv']),
+            ('missing-advapi32',['kernel32','bcrypt','userenv']),
+            ('missing-userenv',['kernel32','bcrypt','advapi32']),
+            ('reordered',['bcrypt','kernel32','advapi32','userenv']),
+            ('duplicate',['kernel32','bcrypt','advapi32','userenv','userenv']),
+            ('extra',['kernel32','bcrypt','advapi32','userenv','user32']),('empty',[])):
             value=modified();value['system_libraries']=libraries;add('libraries-'+name,value)
         for name in list(original)[:17]:
             value=modified();value[name]+=1;add('prefix-'+name,value,6 if name in ('sanitizers','allocator') else 1)
