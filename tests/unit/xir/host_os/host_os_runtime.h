@@ -26,6 +26,7 @@
 #include "os/os_thread_token.h"
 #include "os/os_file_links.h"
 #include "os/os_file_temp.h"
+#include "os/os_directory_owned.h"
 #if defined(XR_OS_WINDOWS)
 #include <windows.h>
 #ifdef interface
@@ -64,6 +65,9 @@ static XrOsIoStatus host_links_realpath(const XrOsIoPolicy *,XrOsPathSpan,bool(*
 static XrOsIoStatus host_temp_directory(const XrOsFileTempRequest *,XrOsFileTempOwner *,bool *);
 static XrOsIoStatus host_temp_file(const XrOsFileTempRequest *,XrOsFileTempOwner *,bool *);
 static XrOsIoStatus host_temp_finish(const XrOsIoPolicy *,XrOsFileTempOwner *,bool);
+static XrOsIoStatus host_directory_open(const XrOsDirectoryRequest *,XrOsDirectoryOwner *,bool *);
+static XrOsIoStatus host_directory_next(XrOsDirectoryOwner *,void *,bool(*)(void *),XrOsDirectoryText *);
+static XrOsIoStatus host_directory_close(XrOsDirectoryOwner *);
 static unsigned int host_count(void);
 static int host_pin(unsigned int);
 static XrOsIoStatus host_chmod(const XrOsIoPolicy *,const char *,int64_t,bool(*)(void *),bool *);
@@ -83,6 +87,9 @@ static XrOsIoStatus host_token_alive(const XrOsThreadTokenQuery *,int64_t,bool *
 #define xr_os_io_temp_directory host_temp_directory
 #define xr_os_io_temp_file host_temp_file
 #define xr_os_io_temp_finish host_temp_finish
+#define xr_os_io_directory_open host_directory_open
+#define xr_os_io_directory_next host_directory_next
+#define xr_os_io_directory_close host_directory_close
 #define xr_os_io_file_metadata host_metadata
 #define xr_os_io_file_metadata_close host_metadata_close
 #define xr_os_cpu_count host_count
@@ -122,6 +129,9 @@ static XrOsIoStatus host_token_alive(const XrOsThreadTokenQuery *,int64_t,bool *
 #undef xr_os_io_temp_directory
 #undef xr_os_io_temp_file
 #undef xr_os_io_temp_finish
+#undef xr_os_io_directory_open
+#undef xr_os_io_directory_next
+#undef xr_os_io_directory_close
 #undef xr_os_io_file_metadata
 #undef xr_os_io_file_metadata_close
 #undef xr_os_cpu_count
@@ -320,6 +330,36 @@ static XrOsIoStatus host_temp_finish(const XrOsIoPolicy *policy,XrOsFileTempOwne
  else {++io_temp_rollbacks;if(io_temp_rollback_failures){--io_temp_rollback_failures;return XR_OS_IO_IO;}}
  XrOsIoStatus status=xr_os_io_temp_finish(policy,owner,keep);
  if(keep&&status==XR_OS_IO_OK&&io_temp_mode==IO_TEMP_AFTER_KEEP_OOM)runtime_fail_at=runtime_attempts;
+ return status;
+}
+enum { DIR_NORMAL,DIR_OPEN_CANCEL,DIR_NEXT_OOM,DIR_NEXT_CANCEL,DIR_NEXT_ERROR,DIR_CLOSE_CANCEL };
+static unsigned directory_mode,directory_calls[3],directory_close_failures;
+static char directory_observed_name[1024];
+static void host_directory_cancel(void){
+ CHECK(host_active&&xr_xir_call_request_cancel(instance_current(host_active)->call)==XR_XIR_CALL_CANCEL_REQUESTED);
+}
+static XrOsIoStatus host_directory_open(const XrOsDirectoryRequest *request,XrOsDirectoryOwner *owner,bool *opened){
+ ++directory_calls[0];XrOsIoStatus status=xr_os_io_directory_open(request,owner,opened);
+ if(status==XR_OS_IO_OK&&*opened&&directory_mode==DIR_OPEN_CANCEL)host_directory_cancel();
+ return status;
+}
+static XrOsIoStatus host_directory_next(XrOsDirectoryOwner *owner,void *context,bool(*current)(void *),XrOsDirectoryText *output){
+ ++directory_calls[1];if(directory_mode==DIR_NEXT_ERROR)return XR_OS_IO_IO;
+ XrOsIoStatus status=xr_os_io_directory_next(owner,context,current,output);
+ if(status==XR_OS_IO_OK){
+  CHECK(host_active&&output->bytes&&output->length<sizeof(directory_observed_name));
+  memcpy(directory_observed_name,output->bytes,output->length);directory_observed_name[output->length]=0;
+  if(directory_mode==DIR_NEXT_OOM)runtime_fail_at=runtime_attempts;
+  if(directory_mode==DIR_NEXT_CANCEL)host_directory_cancel();
+ }
+ return status;
+}
+static XrOsIoStatus host_directory_close(XrOsDirectoryOwner *owner){
+ ++directory_calls[2];
+ /* An adapter refusal retains the actual kernel owner; no OS failure is claimed. */
+ if(directory_close_failures){--directory_close_failures;return XR_OS_IO_IO;}
+ XrOsIoStatus status=xr_os_io_directory_close(owner);
+ if(status==XR_OS_IO_OK&&directory_mode==DIR_CLOSE_CANCEL){directory_mode=DIR_NORMAL;host_directory_cancel();}
  return status;
 }
 static unsigned int host_count(void){
