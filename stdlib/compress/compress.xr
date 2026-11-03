@@ -637,7 +637,8 @@ class Inflater {
         if (blockNlen != ((~blockLen) & 65535)) { throw CompressionError.InvalidData }
         this.pos = this.pos + 4
         if (this.pos + blockLen > total) { throw CompressionError.InvalidData }
-        this.out.appendFrom(this.src[this.pos:this.pos + blockLen])
+        var input = this.src
+        this.out.appendFrom(input[this.pos:this.pos + blockLen])
         this.pos = this.pos + blockLen
     }
 
