@@ -522,6 +522,7 @@ class StringBuilder {
                                               ('Timeout', 'NONE'), ('Closed', 'NONE')], 8, 0),
                 ('Endian', 'ENDIAN', [('Native', 'NONE'), ('LE', 'NONE'), ('BE', 'NONE')], 0, 0),
                 ('Cancelled', 'CANCELLED', [('Cancelled', 'NONE')], 18, 0),
+                ('Timeout', 'TASK_TIMEOUT', [('Timeout', 'NONE')], 0, 0),
                 ('TaskResult', 'TASK_RESULT', [('Success', 'TYPE_PARAM_0'), ('Error', 'ERROR'),
                                             ('Panic', 'PANIC_INFO'), ('Cancelled', 'NONE')], 19, 2),
                 ('CompressionError', 'COMPRESSION_ERROR', [('InvalidData', 'NONE')], 0, 0)])

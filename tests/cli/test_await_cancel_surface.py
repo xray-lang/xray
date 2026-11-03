@@ -348,6 +348,30 @@ main()
 }
 main()
 ''', "child-cleanup\nroot-cleanup\n", 1, "[Uncaught Cancellation]\n"),
+    "a21_cancel_cleanup_fatal": ('''import time
+fn waiting(ready: Channel<i64>) -> i64 {
+    defer {
+        print("child-cleanup")
+        assert(false, "cleanup-cancel")
+    }
+    ready.send(1)
+    time.sleep(10000)
+    return 7
+}
+fn main() {
+    const ready = Channel<i64>(1)
+    var task = go waiting(ready)
+    ready.recv()
+    task.cancel()
+    try {
+        const value = await task
+        print("unreachable")
+    } catch panic (p) {
+        print("caught-panic")
+    }
+}
+main()
+''', "child-cleanup\n", 70, "[Fatal Cleanup] E0445: cleanup-cancel\n[Prior Cancellation]\n"),
     "timeout_parenthesized_read": ('''fn value() -> i64 { return 42 }
 fn main() throws(Timeout) {
     var task = go value()
