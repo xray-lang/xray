@@ -18,8 +18,9 @@ typedef struct XrOsFileMetadata {
     bool is_file, is_dir, is_symlink;
 } XrOsFileMetadata;
 
-/* Only one temporary handle is owned at a time, including when separate
- * following and link queries are needed. A failed close retains that handle. */
+/* Owns one temporary file handle for metadata or controlled mutations. Only
+ * one is held at a time, including separate following/link queries. A failed
+ * close retains the handle; closing it never replays the original operation. */
 typedef struct XrOsFileMetadataOwner { intptr_t handle; } XrOsFileMetadataOwner;
 
 /* Path is an exact UTF-8 span, not necessarily NUL-terminated. Embedded NUL
