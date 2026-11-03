@@ -11,10 +11,27 @@
  *   Filesystem-visible results are checked independently of allocation order.
  *   A refused symlink remains a real failure, never a junction substitute.
  */
+#include "os/os_file_links.h"
+#include <stdio.h>
+#if defined(XR_OS_WINDOWS)
+#include "base/xwindows_utf8.h"
+static BOOL WINAPI links_directory(LPCWSTR path,LPSECURITY_ATTRIBUTES security) {
+    BOOL made=CreateDirectoryW(path,security);
+    if (!made) {
+        DWORD error=GetLastError();
+        fwprintf(stderr,L"file links setup CreateDirectoryW error=%lu path=%ls\n",(unsigned long)error,path);
+        SetLastError(error);
+    }
+    return made;
+}
+#define CreateDirectoryW links_directory
+#endif
 #define main metadata_fixture_main
 #include "test_file_metadata.c"
 #undef main
-#include "os/os_file_links.h"
+#if defined(XR_OS_WINDOWS)
+#undef CreateDirectoryW
+#endif
 
 static XrOsPathSpan links_span(const char *text) {return (XrOsPathSpan){text,strlen(text)};}
 static void links_text_free(const XrOsIoPolicy *policy,XrOsFileLinkText *text) {
