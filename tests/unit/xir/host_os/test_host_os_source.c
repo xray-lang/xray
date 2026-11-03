@@ -152,7 +152,7 @@ static void host_product(XrXirCompileContext *context,unsigned kind,const char *
  uint32_t ids[9]={m->declarations->entry_function};unsigned count=kind==4?4u:kind==3?9u:kind==2?5u:2u;
  if(kind==3){const char *names[]={"uid","gid","parent","signal","total","available","elapsed","load"};for(unsigned n=0;n<8;++n)ids[n+1]=host_named(m,names[n]);}
  else ids[1]=host_named(m,(kind==2||kind==4)?"make":"answer");
- if(kind==4){ids[2]=host_named(m,"query");ids[3]=host_named(m,"__stat");}
+ if(kind==4){ids[2]=host_named(m,"query");ids[3]=host_named(m,"snapshot");}
  if(kind==2){ids[2]=host_named(m,"chmodPath");ids[3]=host_named(m,"chdirPath");ids[4]=host_named(m,"viaRef");}
  host_emit(code,prefixes[kind],ids,count,directory,emit);
  if(!emit){if(kind==4)host_stat_contracts(context,code);else if(kind==2)host_io_contracts(context,code);else if(kind==3)host_system_contracts(context,code);else host_cpu_contracts(context,code,kind==1);}

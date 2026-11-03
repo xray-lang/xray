@@ -54,6 +54,10 @@ static void host_stat_execute(XrXirProgram *program,const uint32_t ids[4]){
   XrXirValue object=host_stat_path(instance,ids[1],path);
   XrXirValue checked=host_invoke(instance,ids[2],&object,1);CHECK(checked.type==XR_XIR_BOOL&&checked.payload==!pass);xr_xir_value_drop(&checked);
   unsigned before=stat_calls;
+  if(!pass){uint32_t native=UINT32_MAX;
+   for(uint32_t n=0;n<program->entry_count;++n)if(program->declarations->functions[n].native_callable==XR_NATIVE_CALLABLE_IO_STAT)native=n;
+   CHECK(native!=UINT32_MAX&&xr_xir_instance_start(instance,native,&object,1)==XR_XIR_CALL_BAD_ARGUMENT&&stat_calls==before);
+  }
   XrXirValue result=host_invoke(instance,ids[3],&object,1);CHECK(stat_calls==before+1);host_stat_fields(&result,&expected);
   bool some=false;const XrXirValue *body=NULL;CHECK(xr_xir_nullable_view(&result,&some,&body)&&some);
   XrXirValueAdmission admission={.arena=xr_xir_value_arena(body),.work=100000,.scratch_bytes=65536};XrXirValue uid={0};
