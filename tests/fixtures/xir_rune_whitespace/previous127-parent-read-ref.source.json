@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "producerSource": "89930974ec5cc54e233c86be8f94899b14868646",
+  "producerDirty": false,
+  "wire": 42,
+  "common": 127,
+  "stage": 2,
+  "length": 3332,
+  "sha256": "486077cd5a226bc8d1bbda621e83e67aa34477e0f170593d7060ffad2fa26fca",
+  "input": "fn ordinary(value:i64)->i64{return value+1}\nfn reference(value:ref i64){value=ordinary(value)}\nclass PacketBase{value:i64;init(value:i64){this.value=value}}\nclass PacketChild extends PacketBase{init(value:i64){super(value)}}\nexport fn answer()->i64{var value=41;reference(ref value);var result=PacketChild(value);return result.value}\n",
+  "inputSHA256": "38465e6c406d6babd21f9917b54f9a9af4dc53d498246b991b03670f3754a89c",
+  "sourceAndSessionRetiredBeforeColdRead": true,
+  "coldReadStatus": 0,
+  "ledgerBaseline": 80,
+  "ledgerRestored": 80,
+  "producer": "MSVC C11 Release MD; genuine Source SDK 15 archives; kernel32,bcrypt,advapi32,userenv",
+  "evidence": "D:\\xray-build\\coordinator\\20261029-resume\\r3-sdk-common128-20261103\\previous127-v1\\result.json",
+  "evidenceSHA256": "29ca5c77f0e192fe3a79eb7287b57147b14d50e993c37a1f543f3dd2a6a1ac67"
+}
