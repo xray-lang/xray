@@ -12,14 +12,15 @@ static XrOsIoStatus host_stat_allocate(void *context,size_t size,void **output){
  (void)context;void *value=xr_malloc(size);if(!value)return XR_OS_IO_OUT_OF_MEMORY;*output=value;return XR_OS_IO_OK;
 }
 static void host_stat_free(void *context,void *value){(void)context;xr_free(value);}
-static void host_stat_fields(const XrXirValue *result,const XrOsFileMetadata *expected){
+static void host_stat_fields(const XrXirValue *result,const XrOsFileMetadata *expected,XrXirDomain *domain){
  bool some=false;const XrXirValue *object=NULL;CHECK(xr_xir_nullable_view(result,&some,&object)&&some&&object);
  const XrXirTypeArena *arena=xr_xir_value_arena(object);CHECK(arena);
  CHECK(xir_file_stat_type(xr_xir_compile_type_arena_types(arena),object->type));
- XrXirValueAdmission admission={.arena=arena,.work=100000,.scratch_bytes=65536};
+ XrXirValueAdmission admission={.domain=domain,.arena=arena,.work=100000,.scratch_bytes=65536};
  const int64_t integers[]={expected->size,expected->mode,expected->mtime,expected->atime,expected->ctime};
  for(uint32_t f=0;f<10;++f){
-  XrXirValue value={0};CHECK(xr_xir_class_get(object,f,&admission,&value)==XR_XIR_VALUE_OK);
+  XrXirValue value={0};XrXirValueStatus status=xr_xir_class_get(object,f,&admission,&value);
+  if(status!=XR_XIR_VALUE_OK)fprintf(stderr,"stat field%u status%u\n",f,status);CHECK(status==XR_XIR_VALUE_OK);
   if(f<5)CHECK(value.type==XR_XIR_I64&&value.payload==integers[f]);
   else if(f<7){
    const XrOsOptionalI64 *identity=f==5?&expected->uid:&expected->gid;const XrXirValue *number=NULL;bool present=false;
@@ -58,9 +59,9 @@ static void host_stat_execute(XrXirProgram *program,const uint32_t ids[4]){
    for(uint32_t n=0;n<program->entry_count;++n)if(program->declarations->functions[n].native_callable==XR_NATIVE_CALLABLE_IO_STAT)native=n;
    CHECK(native!=UINT32_MAX&&xr_xir_instance_start(instance,native,&object,1)==XR_XIR_CALL_BAD_ARGUMENT&&stat_calls==before);
   }
-  XrXirValue result=host_invoke(instance,ids[3],&object,1);CHECK(stat_calls==before+1);host_stat_fields(&result,&expected);
+  XrXirValue result=host_invoke(instance,ids[3],&object,1);CHECK(stat_calls==before+1);host_stat_fields(&result,&expected,instance->domain);
   bool some=false;const XrXirValue *body=NULL;CHECK(xr_xir_nullable_view(&result,&some,&body)&&some);
-  XrXirValueAdmission admission={.arena=xr_xir_value_arena(body),.work=100000,.scratch_bytes=65536};XrXirValue uid={0};
+  XrXirValueAdmission admission={.domain=instance->domain,.arena=xr_xir_value_arena(body),.work=100000,.scratch_bytes=65536};XrXirValue uid={0};
   CHECK(xr_xir_class_get(body,5,&admission,&uid)==XR_XIR_VALUE_OK);xr_xir_value_drop(&object);
   CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);host_active=NULL;
   CHECK(xr_xir_nullable_view(&result,&some,&body)&&some&&body);
