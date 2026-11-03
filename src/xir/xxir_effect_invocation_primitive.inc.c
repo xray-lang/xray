@@ -42,7 +42,7 @@ static XrXirStatus effect_invocation_native_root(const EffectBodyMaterial *body,
         !xir_native_callable_identity(&declaration_body->declarations->functions[declaration]) ||
         !xir_sys_native_scope(declaration_body->declarations,declaration,effect_body_count(declaration_body)) ||
         head->block_count || head->instruction_count || head->run_count || head->operand_count ||
-        head->consume_parameter_count || head->parameter_count!=2 || head->parameters[0]!=XR_XIR_I64 ||
+        head->consume_parameter_count || head->parameter_count!=2 || !head->parameters || head->parameters[0]!=XR_XIR_I64 ||
         head->result!=XR_XIR_BOOL || head->error_type!=XR_XIR_NEVER || !actual ||
         actual->kind!=XR_XIR_TYPE_CALLABLE || actual->parameter_count || actual->parameters || actual->parameter_span ||
         actual->result!=XR_XIR_UNIT || actual->element!=XR_XIR_NEVER ||
