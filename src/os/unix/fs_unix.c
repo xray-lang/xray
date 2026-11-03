@@ -12,7 +12,6 @@
 #include "../xcwd_owned.h"
 #include "../../base/xfileio.h"
 #include "../../base/xio_policy.inc.h"
-#include "../../shared/xr_io_core.h"
 #include <fcntl.h>
 #include <sys/file.h>
 #include <sys/stat.h>
@@ -192,27 +191,5 @@ XR_FUNC XrOsIoStatus xr_os_io_getcwd(const XrOsIoPolicy *policy, char *out, size
         else io_copy(&io,out,text,length+1);
     }
     io_free(&io,text);return io.status;
-}
-XR_FUNC XrOsIoStatus xr_os_io_chdir(const XrOsIoPolicy *policy, const char *path,
-    bool (*current)(void *context)) {
-    if (!io_policy_valid(policy) || !path) return XR_OS_IO_BAD_ARGUMENT;
-    if (current && !current(policy->context)) return XR_OS_IO_CANCELLED;
-    XrIoContext io = {policy, XR_OS_IO_OK};
-    if (!path_ready(&io, path)) return io.status;
-    if (current && !current(policy->context)) return XR_OS_IO_CANCELLED;
-    if (chdir(path)) io_status(&io, io_errno_status(errno));
-    return io.status;
-}
-XR_FUNC XrOsIoStatus xr_os_io_chmod(const XrOsIoPolicy *policy, const char *path, int64_t mode_value,
-    bool (*current)(void *context)) {
-    int mode = 0;
-    if (!io_policy_valid(policy) || !path || !xr_io_core_chmod_mode(mode_value, &mode))
-        return XR_OS_IO_BAD_ARGUMENT;
-    if (current && !current(policy->context)) return XR_OS_IO_CANCELLED;
-    XrIoContext io = {policy, XR_OS_IO_OK};
-    if (!path_ready(&io, path)) return io.status;
-    if (current && !current(policy->context)) return XR_OS_IO_CANCELLED;
-    if (chmod(path, (mode_t)mode) != 0) io_status(&io, io_errno_status(errno));
-    return io.status;
 }
 #include "../os_fs_common.inc.c"
