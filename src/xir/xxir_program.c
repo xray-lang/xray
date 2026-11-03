@@ -98,8 +98,7 @@ static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXir
             const XrXirFunctionIdentity *id=&spec->declarations->functions[i];
             if (entry->resume!=xr_xir_instance_native_callable || entry->release!=xr_xir_instance_native_callable_release ||
                 entry->environment || entry->state_bytes!=sizeof(XrXirValue) ||
-                entry->flags || id->exported || id->nominal_owner || id->member_access || id->cleanup_owner ||
-                id->method_kind || id->test_role || id->test_timeout_seconds || id->promises!=XR_XIR_FUNCTION_NO_SUSPEND ||
+                entry->flags || !xir_native_callable_identity(id) ||
                 !xir_native_callable_types(native,spec->types,entry->parameters,entry->parameter_count,entry->result,
                     xir_native_callable_error(spec->types,native))) return XR_XIR_BAD_STRUCTURE;
         } else if (entry->resume==xr_xir_instance_native_callable) return XR_XIR_BAD_STRUCTURE;
