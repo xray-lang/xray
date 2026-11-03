@@ -837,6 +837,19 @@ static bool effect_default_access_local(XrXirOp op) {
     default: return false;
     }
 }
+static bool effect_default_access_scalar_slot(const XrXirModule *module,uint32_t function,
+    const XrXirInstruction *op) {
+    const XrXirDeclarations *d=module->declarations;
+    if(op->op!=XR_XIR_SLOT_LOAD || !d || !d->functions || !d->slots ||
+        function>=module->function_count || op->immediate<0 || (uint64_t)op->immediate>=d->slot_count)
+        return false;
+    const XrXirSlot *slot=&d->slots[op->immediate];
+    bool scalar=slot->type==XR_XIR_BOOL || slot->type==XR_XIR_RUNE || xr_xir_type_is_number(slot->type);
+    /* Loading an immutable scalar has no referent that can overlap a loan.
+     * Declaration, import, initialization and ordinary ROOT checks still apply. */
+    return scalar && !slot->mutable && op->type==slot->type &&
+        xr_xir_module_imports(d,d->functions[function].module,slot->module);
+}
 static XrXirStatus effect_default_access_seed(XirEffectDefaultAccessScope *scope) {
     EffectGraph *graph=&scope->graph;uint32_t count=effect_body_count(graph->material);
     EffectBodyRequest body=effect_body_owned_request(&scope->work,graph->material);
@@ -850,7 +863,8 @@ static XrXirStatus effect_default_access_seed(XirEffectDefaultAccessScope *scope
             status=effect_body_request_instruction(&body,f,i,&storage,&op);
             if (status!=XR_XIR_OK) return status;
             if (op->op<=XR_XIR_INVALID || op->op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
-            if (!effect_default_access_local(op->op)) graph->default_access_denied[f]=1;
+            if (!effect_default_access_local(op->op) &&
+                !effect_default_access_scalar_slot(scope->module,f,op)) graph->default_access_denied[f]=1;
         }
     }
     return XR_XIR_OK;
