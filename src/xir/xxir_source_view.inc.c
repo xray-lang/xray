@@ -40,10 +40,31 @@ static bool source_string_bytes_call(SourceContext *ctx,AstNode *node,SourceValu
         if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},arguments+i)) return false;
     return source_recipe_group(ctx,(XrXirInstruction){XR_XIR_VIEW_NEW,result,{0},{0},1,{0}},arguments,3,value);
 }
-static bool source_slice_root(SourceContext *ctx,AstNode *node,SourceValue *root,bool *reborrow) {
+static bool source_slice_root(SourceContext *ctx,AstNode *node,SourceValue *root,bool *reborrow,bool readonly) {
     while (node && node->type==AST_GROUPING) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         node=node->as.grouping;
+    }
+    if (node && node->type==AST_MEMBER_ACCESS && readonly) {
+        AstNode *base=node;
+        for (uint32_t depth=0;base && depth<128;++depth) {
+            if (!source_request_poll(ctx,base))return false;
+            if (base->type==AST_VARIABLE || base->type==AST_THIS_EXPR)break;
+            if (base->type==AST_GROUPING)base=base->as.grouping;
+            else if (base->type==AST_MEMBER_ACCESS)base=base->as.member_access.object;
+            else return source_fail(ctx,node,XR_XIR_BAD_TYPE,"readonly field view requires a named owner");
+        }
+        if (!base || (base->type!=AST_VARIABLE && base->type!=AST_THIS_EXPR))
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"readonly field view owner is too deep");
+        SourceValue selected;XrXirType cell;
+        /* A genuine field read owns a logical Array snapshot before bounds can
+         * rebind its original owner. No mutable projection is granted here. */
+        if (!expression(ctx,node,&selected))return false;
+        if (!xr_xir_type_is_array(&ctx->types,selected.type))
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"readonly field view requires an Array value");
+        *reborrow=false;
+        return source_cell_type(ctx,selected.type,&cell) &&
+            source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_NEW,cell,{selected.id},{0},0,{0}},root);
     }
     if (!node || node->type!=AST_VARIABLE)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"projected view root has not completed Source admission");
@@ -119,7 +140,7 @@ static bool source_slice(SourceContext *ctx,AstNode *node,SourceExpectedType exp
     if (!expected.present || !source_view_shape(ctx,target,&kind,&element))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"slice expression requires an explicit Slice or MutSlice target type");
     AstNode *syntax=node->as.slice_expr.source;SourceValue args[3]={{0}};bool reborrow=false;
-    if (!source_slice_root(ctx,syntax,args,&reborrow)) return false;
+    if (!source_slice_root(ctx,syntax,args,&reborrow,kind==XR_XIR_TYPE_SLICE)) return false;
     XrXirType source_element=XR_XIR_UNIT;uint32_t parent_kind=0;
     if (reborrow) {
         if (!source_view_shape(ctx,args[0].type,&parent_kind,&source_element) ||
@@ -132,7 +153,7 @@ static bool source_slice(SourceContext *ctx,AstNode *node,SourceExpectedType exp
             if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             syntax=syntax->as.grouping;
         }
-        SourceName *binding=syntax ? visible_name(ctx,syntax->as.variable.name) : NULL;
+        SourceName *binding=syntax && syntax->type==AST_VARIABLE ? visible_name(ctx,syntax->as.variable.name) : NULL;
         if (kind==XR_XIR_TYPE_MUT_SLICE && (!binding || !binding->mutable))
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"mutable view requires an exclusively writable owner");
     }
