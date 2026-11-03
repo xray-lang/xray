@@ -48,7 +48,7 @@ static XrOsIoStatus root_signal_close(XrOsSignalOwner *owner) {
     return xr_os_io_signal_close(owner);
 }
 static const char root_signal_text[]=
- "import stdlib.time\nvar state:i64=0\n"
+ "import time\nvar state:i64=0\n"
  "fn worker(value:i64)->i64{Coro.yield();time.sleep(2);return value}\n"
  "fn make(mode:i64)->fn(){var captured:i64=41;return fn(){"
  "defer{print(\"callback-cleanup\");if(mode==3){assert(false)}};print(\"callback-enter\");"
