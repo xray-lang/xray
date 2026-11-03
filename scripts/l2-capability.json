@@ -626,6 +626,15 @@
     "runtime": {
       "tier": "L2",
       "match": [
+        "src/execution/xr_xir_host_execution.c",
+        "src/xir/xxir_root_callback_internal.h",
+        "src/xir/xxir_task.c",
+        "src/xir/xxir_task_internal.h",
+        "src/xir/xxir_task_root_callback.inc.c",
+        "src/xir/xxir_task_generator.inc.c",
+        "src/xir/xxir_task_channel.inc.c",
+        "tests/unit/xir/test_xir_root_callback.c",
+        "tests/unit/xir/root_callback.cmake",
         "src/runtime/*",
         "src/program/*",
         "src/xir/xxir_vm*",

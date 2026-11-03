@@ -182,6 +182,23 @@ class TierTests(unittest.TestCase):
                 self.assertNotIn("native-runtime", plan["groups"])
         self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
 
+    def test_callback_mechanisms_and_test_recipes_select_the_existing_runtime_home(self):
+        for path in ("src/execution/xr_xir_host_execution.c",
+                     "src/xir/xxir_root_callback_internal.h",
+                     "src/xir/xxir_task.c", "src/xir/xxir_task_internal.h",
+                     "src/xir/xxir_task_root_callback.inc.c",
+                     "src/xir/xxir_task_generator.inc.c", "src/xir/xxir_task_channel.inc.c",
+                     "src/xir/xxir_instance_root_callback.inc.c",
+                     "tests/unit/xir/test_xir_root_callback.c",
+                     "tests/unit/xir/root_callback.cmake"):
+            with self.subTest(path=path):
+                plan = xray_l1.tier_plan(ROOT, "L2", changed=[path])
+                self.assertIn("runtime", plan["groups"])
+                self.assertIn("test_xir_root_callback", plan["tests"])
+                self.assertIn("test_xir_root_callback", plan["targets"])
+                self.assertNotIn("native-runtime", plan["groups"])
+        self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
+
     def test_recursive_fixture_selection_matches_actual_ctest_report(self):
         catalog = {"groups": {"family": {"tier": "L2", "tests": ["leaf"], "targets": []}},
                    "l2": {"interfaceMatches": {}, "requiredOn": {}, "prerequisites": {
