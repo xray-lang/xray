@@ -470,7 +470,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F13",
-        "first_diagnostic": "stdlib/os/os.xr:69:41: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/os/os.xr:149:33: error: name is not an initialized value"
       }
     },
     {
@@ -490,7 +490,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F13",
-        "first_diagnostic": "stdlib/os/os.xr:69:41: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/os/os.xr:149:33: error: name is not an initialized value"
       }
     },
     {
@@ -546,7 +546,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F13",
-        "first_diagnostic": "stdlib/sys/sys.xr:21:9: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/sys/sys.xr:161:12: error: name is not an initialized value"
       }
     },
     {
