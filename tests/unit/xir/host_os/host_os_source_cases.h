@@ -57,6 +57,13 @@ static const char host_io_links_text[]=
  "export fn ctfeReadlink()->string?{return __readlink(Child(\".\"))}\n"
  "export fn ctfeRealpath()->string?{return __realpath(Child(\".\"))}\n";
 static const char host_pin_text[]="export fn answer(cpu:i64)->bool{return __pinToCpu(cpu)}\n";
+static const char host_io_temp_text[]=
+ "import {Path} from path\n"
+ "export fn directory(root:string)->string?{return __makeTempDir(root)}\n"
+ "export fn file(root:string)->string?{return __makeTempFile(root)}\n"
+ "export fn nested(v:Array<Array<string?>>)->Array<Array<string?>>{return v}\n"
+ "export fn ctfeDirectory()->string?{return __makeTempDir(\".\")}\n"
+ "export fn ctfeFile()->string?{return __makeTempFile(\".\")}\n";
 static const char host_signal_frontier_text[]=
  "fn plain(n:i64)->i64{return n}\n"
  "fn read(v:Slice<u8>)->i64{return (v[0] as i64)+(v[1] as i64)}\n"
