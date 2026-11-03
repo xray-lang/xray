@@ -131,7 +131,7 @@ static int links_visible_results(void) {
 }
 static int links_faults(void) {
     XrOsIoPolicy policy=test_policy();XrOsFileMetadataOwner owner={0};XrOsFileLinkText text={0};bool changed=true;
-    const char bad[]={(char)0xff},nul[]={'a',0,'b'};
+    const char bad[]={'\xff'},nul[]={'a',0,'b'};
     CHECK(xr_os_io_path_symlink(&policy,(XrOsPathSpan){bad,sizeof(bad)},links_span(links_paths.file_utf8),NULL,&changed)==
         XR_OS_IO_BAD_ARGUMENT&&changed);
     CHECK(xr_os_io_path_symlink(&policy,links_span("missing"),(XrOsPathSpan){nul,sizeof(nul)},NULL,&changed)==
