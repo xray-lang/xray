@@ -35,7 +35,10 @@ static void host_system_failures(XrXirProgram *program,const uint32_t ids[9]){
   CHECK(xr_xir_instance_start(instance,ids[1],NULL,0)==XR_XIR_CALL_READY);
   XrXirCallStatus status=host_poll(instance);runtime_fail_at=SIZE_MAX;system_mode=SYSTEM_NORMAL;
   CHECK(status==expected[n]&&system_calls[0]==before+1);XrXirValue value={0};
-  CHECK(xr_xir_instance_take_result(instance,&value)==expected[n]&&!value.type&&!value.reserved&&!value.payload);
+  XrXirCallStatus taken=xr_xir_instance_take_result(instance,&value);
+  fprintf(stderr,"system mode%u poll%u take%u\n",modes[n],status,taken);
+  /* A cancelled ordinary Call has no transferable RETURNED/THROWN value. */
+  CHECK(taken==(n==1?XR_XIR_CALL_BAD_STATE:expected[n])&&!value.type&&!value.reserved&&!value.payload);
   CHECK(xr_xir_instance_free(instance)==(n==1?XR_XIR_CALL_READY:expected[n]));host_active=NULL;
   CHECK(runtime_live==live&&runtime_bytes==bytes);
  }
@@ -98,7 +101,7 @@ static void host_system_execute(XrXirProgram *program,const uint32_t ids[9]){
  host_system_failures(program,ids);
  instance=host_instance(program,ids[0]);host_active=instance;system_mode=SYSTEM_CANCEL_BEFORE;
  CHECK(xr_xir_instance_start(instance,ids[4],args,2)==XR_XIR_CALL_READY&&host_poll(instance)==XR_XIR_CALL_CANCELLED);
- XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_CANCELLED&&!result.type&&!result.payload);
+ XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_BAD_STATE&&!result.type&&!result.payload);
  CHECK(!instance->system_owners&&xr_xir_instance_free(instance)==XR_XIR_CALL_READY);host_active=NULL;system_mode=SYSTEM_NORMAL;
  CHECK(runtime_live==live&&runtime_bytes==bytes);
 }
