@@ -96,7 +96,8 @@ static XrXirStatus view_root_edges(ViewRootCheck *c,bool fill,XrCompileRequestCo
 
             const XrXirInstruction *op=&body->instructions[i];uint32_t target,prefix;
             bool method=false;
-            XrXirStatus status=view_root_method_edges(c,f,i,fill,&count,&method,control);
+            ViewRootMethodEdges method_edges={c,NULL,NULL,f,&count,fill};
+            XrXirStatus status=view_root_method_edges(&method_edges,i,&method,control);
             if(status!=XR_XIR_OK)return status;
             if(method)continue;
             status=view_root_target(c,f,op,&target,&prefix);if (status!=XR_XIR_OK) return status;

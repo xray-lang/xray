@@ -58,8 +58,9 @@ static XrXirStatus view_root_method_candidate(void *owner,const XirClassMethodTa
         status=view_root_method_edge(q,target->function,p+1u,caller->operands[q->call->args[0]+p]);
     return status;
 }
-static XrXirStatus view_root_method_edges(ViewRootCheck *c,uint32_t f,uint32_t instruction,
-    bool fill,uint32_t *count,bool *handled,XrCompileRequestControl *control) {
+static XrXirStatus view_root_method_edges(ViewRootMethodEdges *query,uint32_t instruction,
+    bool *handled,XrCompileRequestControl *control) {
+    ViewRootCheck *c=query->check;uint32_t f=query->function;
     *handled=false;const XrXirFunction *body=&c->module->functions[f];
     const XrXirInstruction *op=&body->instructions[instruction];uint32_t producer=UINT32_MAX;
     if(op->op==XR_XIR_CLASS_METHOD_REF)producer=instruction;
@@ -73,8 +74,8 @@ static XrXirStatus view_root_method_edges(ViewRootCheck *c,uint32_t f,uint32_t i
     XrXirType receiver=xr_xir_operand_type(body,binding->args[0]);XirClassMethodTarget selected={0};
     XrXirStatus status=xir_compile_class_method_site(c->module,f,producer,receiver,&selected,control);
     if(status!=XR_XIR_OK)return status;
-    ViewRootMethodEdges query={c,binding,producer==instruction?NULL:op,f,count,fill};
+    query->binding=binding;query->call=producer==instruction?NULL:op;
     *handled=true;
     return xir_compile_class_method_candidates(c->module,receiver,(uint32_t)binding->immediate,
-        view_root_method_candidate,&query,control);
+        view_root_method_candidate,query,control);
 }
