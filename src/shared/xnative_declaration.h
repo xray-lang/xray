@@ -54,7 +54,7 @@ typedef enum XrNativeTypeTerm {
     XR_NATIVE_TERM_BUFFER_REF, XR_NATIVE_TERM_MUT_SLICE_U8,
     XR_NATIVE_TERM_ARRAY_TASK, XR_NATIVE_TERM_TASK_ARRAY, XR_NATIVE_TERM_TASK_ELEMENT,
     XR_NATIVE_TERM_NULLABLE_STRING,
-    XR_NATIVE_TERM_PATH
+    XR_NATIVE_TERM_PATH, XR_NATIVE_TERM_ARRAY_F64
 } XrNativeTypeTerm;
 /* RESULT_VARIABLE and the callback terms require an admitted recipe's exact
  * signature. They never grant authority to an arbitrary unparsed signature. */
@@ -278,7 +278,15 @@ typedef enum XrNativeCallableId {
     XR_NATIVE_CALLABLE_OS_CPU_COUNT = 68,
     XR_NATIVE_CALLABLE_SYS_PIN_TO_CPU = 69,
     XR_NATIVE_CALLABLE_IO_CHMOD = 70,
-    XR_NATIVE_CALLABLE_IO_CHDIR = 71
+    XR_NATIVE_CALLABLE_IO_CHDIR = 71,
+    XR_NATIVE_CALLABLE_OS_UID = 72,
+    XR_NATIVE_CALLABLE_OS_GID = 73,
+    XR_NATIVE_CALLABLE_OS_PPID = 74,
+    XR_NATIVE_CALLABLE_OS_KILL = 75,
+    XR_NATIVE_CALLABLE_OS_TOTAL_MEMORY = 76,
+    XR_NATIVE_CALLABLE_OS_FREE_MEMORY = 77,
+    XR_NATIVE_CALLABLE_OS_UPTIME = 78,
+    XR_NATIVE_CALLABLE_OS_LOADAVG = 79
 } XrNativeCallableId;
 
 /* Callable IDs authenticate ordinary function bodies, independently of inline intrinsics. */

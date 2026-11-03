@@ -169,6 +169,8 @@ def simple_term(term, binder):
         return 'ARRAY_U8'
     if term == ('name', 'Array', (('name', 'string', ()),)):
         return 'ARRAY_STRING'
+    if term == ('name', 'Array', (('name', 'f64', ()),)):
+        return 'ARRAY_F64'
     if term == ('name', 'Slice', (('name', 'u8', ()),)):
         return 'SLICE_U8'
     if term == ('name', 'string', ()):
@@ -1156,6 +1158,50 @@ def render_cpu_callables(declarations):
     return lines, rows
 
 
+
+def render_os_system_callables(declarations):
+    contracts = (
+        ('uid', '(): i64?', 'uid', 'NULLABLE_I64'),
+        ('gid', '(): i64?', 'gid', 'NULLABLE_I64'),
+        ('ppid', '(): i64', 'ppid', 'I64'),
+        ('kill', '(pid: i64, signal: i64): bool', 'kill_signal', 'BOOL'),
+        ('totalMemory', '(): i64', 'total_memory', 'I64'),
+        ('freeMemory', '(): i64', 'free_memory', 'I64'),
+        ('uptime', '(): f64', 'uptime', 'F64'),
+        ('loadavg', '(): Array<f64>', 'loadavg', 'ARRAY_F64'),
+    )
+    lines, rows = [], []
+    for ordinal, (name, signature, provider, term) in enumerate(contracts, 14):
+        candidates = [row for row in declarations if row.module == 'os' and row.name == '__' + name]
+        if len(candidates) != 1:
+            raise ValueError('OS system query requires its sole governed declaration: ' + name)
+        row = candidates[0]
+        kill = name == 'kill'
+        if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+                row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
+                row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
+                row.ret, row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
+                signature, '2' if kill else '0', 'vv' if kill else '', 'internal', '', '',
+                'fresh' if name == 'loadavg' else '', 'system', 'os_' + name,
+                '' if name in ('uid', 'gid') else 'xrt_os_' + provider, name not in ('uid', 'gid'), '' if name in ('uid', 'gid') else 'method', '', 'normal', '', '',
+                'value', False, None, (), ''):
+            raise ValueError('OS system query differs from its complete source contract: ' + name)
+        identity = 'OS_' + ('KILL' if kill else provider.upper())
+        symbol = 'xr_native_' + identity.lower()
+        if kill:
+            lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {',
+                '    {"pid", "i64", XR_NATIVE_TERM_I64, false, false},',
+                '    {"signal", "i64", XR_NATIVE_TERM_I64, false, false},', '};']
+        lines += ['static const XrNativeMemberDeclaration ' + symbol + ' = {',
+            '    ' + str(ordinal) + ', ' + c_string('__' + name) + ', ' + c_string(signature) + ', ' +
+            c_string(signature.split(': ')[-1]) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
+            '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
+            '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + (symbol + '_parameters' if kill else 'NULL') +
+            ', ' + ('2' if kill else '0') + ', XR_NATIVE_TERM_' + term, '};']
+        rows += ['    {XR_NATIVE_CALLABLE_' + identity + ', NULL, &' + symbol + ', NULL, false, "os", "stdlib/defs/core.def", FINGERPRINT}']
+    return lines, rows
+
+
 def render_io_callables(declarations):
     contracts = (
         ('__chmod', '(path: Path, mode: i64): bool', 'pv', 'io_chmod', 'xrt_io_chmod_value', 'IO_CHMOD'),
@@ -1386,6 +1432,9 @@ def render_unicode_callable(root, decoder):
     cpu_lines, cpu_rows = render_cpu_callables(declarations)
     buffer_lines += cpu_lines
     buffer_rows += cpu_rows
+    system_lines, system_rows = render_os_system_callables(declarations)
+    buffer_lines += system_lines
+    buffer_rows += system_rows
     io_lines, io_rows = render_io_callables(declarations)
     buffer_lines += io_lines
     buffer_rows += io_rows
