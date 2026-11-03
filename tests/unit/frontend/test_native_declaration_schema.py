@@ -764,5 +764,44 @@ class CpuCallableSchemaTests(unittest.TestCase):
                                                  for item in self.declarations])
 
 
+class IoCallableSchemaTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / 'tools/stdlibgen'))
+        from stdlibgen import parse_defs
+        cls.declarations = parse_defs(ROOT)
+
+    def test_exact_path_contract_and_runtime_only_rows(self):
+        lines, rows = schema.render_io_callables(self.declarations)
+        self.assertEqual(len(rows), 2)
+        self.assertIn('XR_NATIVE_CALLABLE_IO_CHMOD, NULL,', rows[0])
+        self.assertIn('XR_NATIVE_CALLABLE_IO_CHDIR, NULL,', rows[1])
+        for row in rows:
+            self.assertIn('NULL, false, "io", "stdlib/defs/core.def", FINGERPRINT', row)
+        text = '\n'.join(lines)
+        self.assertIn('"__chmod", "(path: Path, mode: i64): bool", "bool"', text)
+        self.assertIn('"__chdir", "(path: Path): bool", "bool"', text)
+        self.assertEqual(text.count('{"path", "Path", XR_NATIVE_TERM_PATH, false, false}'), 2)
+        self.assertIn('{"mode", "i64", XR_NATIVE_TERM_I64, false, false}', text)
+        self.assertEqual(text.count('XR_NATIVE_ALLOCATION_UNKNOWN'), 2)
+
+    def test_missing_duplicate_and_single_contract_changes_are_rejected(self):
+        for name in ('__chmod', '__chdir'):
+            row = next(item for item in self.declarations if item.module == 'io' and item.name == name)
+            for changed in ([item for item in self.declarations if item is not row], self.declarations + [row]):
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    schema.render_io_callables(changed)
+            for field, value in [('module', 'other'), ('signature', '(path: string): bool'), ('argc', '9'),
+                                 ('arg_spec', 's'), ('visibility', 'public'), ('effect', 'nothrow'),
+                                 ('allocation', 'no_heap'), ('return_ownership', 'fresh'), ('layer', 'core'),
+                                 ('vm', 'other'), ('aot', 'other'), ('aot_direct', False), ('aot_kind', 'builtin'),
+                                 ('link_object', 'other'), ('vm_binding', 'yieldable'), ('vm_ifdef', 'OTHER'),
+                                 ('define', 'OTHER'), ('ret', 'i64'), ('semantic_intrinsic', True),
+                                 ('provider_declaration', object()), ('caps', ('task',)), ('suspension_kind', 'task')]:
+                with self.subTest(name=name, field=field), self.assertRaises(ValueError):
+                    schema.render_io_callables([replace(item, **{field: value}) if item is row else item
+                                                for item in self.declarations])
+
+
 if __name__ == '__main__':
     unittest.main()

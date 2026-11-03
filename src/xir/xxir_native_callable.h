@@ -18,6 +18,7 @@
 #include "xxir_math_native.h"
 #include "xxir_sys_native.h"
 #include "xxir_os_native.h"
+#include "xxir_io_native.h"
 #include "../shared/xnative_declaration.h"
 
 static inline bool xir_native_error_type(const XrXirTypes *types,XrXirType type,uint32_t id) {
@@ -36,6 +37,7 @@ static inline bool xir_native_callable_types(uint32_t id,const XrXirTypes *types
     const XrXirType *parameters,uint32_t count,XrXirType result,XrXirType error) {
     const XrNativeCallableDeclaration *canonical=xr_native_callable_by_id(id);
     if(xir_sys_native_id(id))return xir_sys_native_signature(id,parameters,count,result,error);
+    if(xir_io_native_id(id))return xir_io_native_signature(id,types,parameters,count,result,error);
     if(xir_os_native_id(id))return xir_os_native_signature(id,types,parameters,count,result,error);
     if(xir_math_native_id(id))return xir_math_native_signature(id,parameters,count,result,error);
     if(xir_task_aggregate_native(id))return xir_task_aggregate_signature(id,types,parameters,count,result,error);
@@ -115,6 +117,12 @@ static inline XrXirStatus xir_native_callable_verify(const XrXirModule *module,u
     const XrXirFunctionIdentity *id=&module->declarations->functions[index];
     if (!id->native_callable) return XR_XIR_OK;
     const XrXirFunction *function=&module->functions[index];
+    if(xir_io_native_id(id->native_callable)) {
+        uint32_t field=0;
+        if(!function->parameter_count || !function->parameters ||
+            !xir_io_native_scope(module->declarations,module->types,index,module->function_count,
+                function->parameters[0],&field))return XR_XIR_BAD_TYPE;
+    }
     if(xir_sys_native_id(id->native_callable) &&
         !xir_sys_native_scope(module->declarations,index,module->function_count))return XR_XIR_BAD_TYPE;
     if(xir_os_native_id(id->native_callable) &&

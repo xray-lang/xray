@@ -44,7 +44,15 @@ XrXirStatus xr_xir_compile_method_signature_verify(const XrXirCompileContext *co
     if (identity->method_kind > XR_XIR_CONSTRUCTOR_FIELDS ||
         (!!identity->nominal_owner != (identity->method_kind != XR_XIR_NON_MEMBER)))
         return XR_XIR_BAD_STRUCTURE;
-    if (!identity->nominal_owner) return identity->native_callable?xir_native_callable_verify(module,index):XR_XIR_OK;
+    if (!identity->nominal_owner) {
+        if(!identity->native_callable)return XR_XIR_OK;
+        XrXirStatus status=xir_native_callable_verify(module,index);
+        if(status!=XR_XIR_OK || !xir_io_native_id(identity->native_callable))return status;
+        const XrXirFunction *native=&module->functions[index];uint32_t field=0;
+        if(!xir_io_native_scope(module->declarations,module->types,index,module->function_count,
+            native->parameters[0],&field))return XR_XIR_BAD_TYPE;
+        return xr_xir_compile_nominal_access(budget,module,index,native->parameters[0],field,XR_XIR_NOMINAL_READ);
+    }
     const XrXirNominalTable *table = module->types ? module->types->nominals : NULL;
     uint32_t owner = identity->nominal_owner-1;
     if (!table || owner >= table->count || (!table->declarations && !table->identities))

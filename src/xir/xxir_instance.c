@@ -2409,6 +2409,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_pointer(XrXirCallView *view,XrXirOp oper
 
 #include "xxir_instance_math.inc.c"
 #include "xxir_instance_environment_win.inc.c"
+#include "xxir_instance_io.inc.c"
 XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
     XrXirInstance *instance=view_instance(view);XrXirValue *value=NULL;
     XrXirCallStatus status=XR_XIR_CALL_BAD_STATE;bool thrown=false;
@@ -2446,6 +2447,9 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
             }
             *value=(XrXirValue){XR_XIR_BOOL,0,pinned?1:0};
         }
+    } else if(xir_io_native_id(id)) {
+        status=instance_io_call(view,instance,index,id,entry,value);
+        if(status!=XR_XIR_CALL_READY)goto failed;
     } else if(xir_math_native_id(id)) {
         if(!xir_math_native_scope(program->declarations,index,program->entry_count))goto failed;
         XrXirRunStatus evaluated=instance_math_call(id,view->arguments,view->argument_count,value);

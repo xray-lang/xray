@@ -31,9 +31,8 @@ static inline bool xir_path_prelude_literal(XrXirLiteral actual,const char *text
 }
 /* A complete module supplies the actual declaration ordinal. This observation
  * is deliberately insufficient for construction, field or call authority. */
-static inline bool xir_path_prelude_type(const XrXirDeclarations *scope,
-    const XrXirNominalTable *table,uint32_t ordinal) {
-    if(!scope||!scope->modules||!table||ordinal>=table->count)return false;
+static inline bool xir_path_prelude_declaration(const XrXirNominalTable *table,uint32_t ordinal) {
+    if(!table||ordinal>=table->count)return false;
     XrXirNominalIdentity identity;
     if(table->declarations) {
         const XrXirNominalDeclaration *d=table->declarations+ordinal;
@@ -50,18 +49,24 @@ static inline bool xir_path_prelude_type(const XrXirDeclarations *scope,
         if(identity.native.source_fingerprint[b])return false;
     char logical[64],canonical[160];if(!xir_path_prelude_coordinates(logical,canonical)||
         !xir_path_prelude_literal(identity.module,canonical))return false;
-    uint32_t owners=0,declared=0;
-    for(uint32_t m=0;m<scope->module_count;++m) {
-        const XrXirSourceModule *module=scope->modules+m;
-        owners+=module->name&&module->name_length==strlen(canonical)&&
-            !memcmp(module->name,canonical,module->name_length);
-    }
-    if(owners!=1)return false;
+    uint32_t declared=0;
     for(uint32_t n=0;n<table->count;++n) {
         XrXirLiteral module=table->declarations?table->declarations[n].module:table->identities[n].module;
         XrXirLiteral name=table->declarations?table->declarations[n].name:table->identities[n].name;
         declared+=xir_path_prelude_literal(module,canonical)&&xir_path_prelude_literal(name,"Path");
     }
     return declared==1;
+}
+static inline bool xir_path_prelude_type(const XrXirDeclarations *scope,
+    const XrXirNominalTable *table,uint32_t ordinal) {
+    if(!scope||!scope->modules||!xir_path_prelude_declaration(table,ordinal))return false;
+    char logical[64],canonical[160];if(!xir_path_prelude_coordinates(logical,canonical))return false;
+    uint32_t owners=0;
+    for(uint32_t m=0;m<scope->module_count;++m) {
+        const XrXirSourceModule *module=scope->modules+m;
+        owners+=module->name&&module->name_length==strlen(canonical)&&
+            !memcmp(module->name,canonical,module->name_length);
+    }
+    return owners==1;
 }
 #endif // XXIR_PATH_PRELUDE_H

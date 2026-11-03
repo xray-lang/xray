@@ -2417,6 +2417,7 @@ static bool source_resolved_identity(SourceContext *ctx, const XrModuleSpec *spe
 #include "xxir_source_math.inc.c"
 #include "xxir_source_sys.inc.c"
 #include "xxir_source_os.inc.c"
+#include "xxir_source_io.inc.c"
 static bool collect_declarations(SourceContext *ctx) {
     uint32_t count = (uint32_t) ctx->graph->spec_count, functions = count + (ctx->linkage_kind == XR_XIR_PROGRAM), slots = 0, nominals = 0, interfaces = 0;
     uint32_t readers = ctx->repl_tail ? 1u : 0u, function_values=0;
@@ -2569,6 +2570,12 @@ static bool collect_declarations(SourceContext *ctx) {
         if(natives>UINT32_MAX-capacity)return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"os native callable capacity overflow");
         capacity+=natives;
     }
+    for(uint32_t m=0;m<count;++m) {
+        if(!source_request_poll(ctx,NULL))return false;
+        if(!source_io_module(ctx,m) || source_owned_checked(&ctx->graph->specs[m]))continue;
+        if(capacity>UINT32_MAX-2u)return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"io native callable capacity overflow");
+        capacity+=2u;
+    }
     if (!ctx->core_factory && capacity <= UINT32_MAX - 9) capacity += 9;
     if (readers>UINT32_MAX-capacity) return source_fail(ctx,NULL,XR_XIR_BUDGET,"binding reader capacity exhausted");
     capacity+=readers;
@@ -2651,7 +2658,7 @@ static bool collect_declarations(SourceContext *ctx) {
             if (p->kind == SOURCE_IMPORT && !source_import_selectors(ctx,p)) return false;
     }
     return source_unicode_declare(ctx) && source_crypto_declare(ctx) && source_mem_declare(ctx) &&
-        source_math_declare(ctx) && source_sys_declare(ctx) && source_os_declare(ctx);
+        source_math_declare(ctx) && source_sys_declare(ctx) && source_os_declare(ctx) && source_io_declare(ctx);
 }
 static bool source_parameter_promise(SourceContext *ctx, uint32_t function, uint32_t parameter) {
     SourceFunction *body = &ctx->bodies[function];
