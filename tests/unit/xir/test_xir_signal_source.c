@@ -85,6 +85,10 @@ static void root_signal_contracts(const XrXirCompileContext *context,const XrXir
     XrXirCtfeStatus evaluated=xr_xir_compile_ctfe_calls(&request,&constant);
     if(evaluated!=XR_XIR_CTFE_NOT_SUPPORTED)fprintf(stderr,"signal CTFE status%u value%u/%u/%lld\n",evaluated,constant.type,constant.reserved,(long long)constant.payload);
     CHECK(evaluated==XR_XIR_CTFE_NOT_SUPPORTED && !constant.type && !constant.reserved && !constant.payload);
+    request.evaluation.function=root_signal_named(module,"ctfePlain");
+    CHECK(xr_xir_compile_ctfe_calls(&request,&constant)==XR_XIR_CTFE_OK &&
+        constant.type==XR_XIR_BOOL && !constant.reserved && constant.payload==1);
+    xr_xir_value_drop(&constant);
     /* These local metadata views never become Source artifacts or Programs. */
     XrXirTypeNode nodes[256];CHECK(module->types->count<256);
     memcpy(nodes,module->types->nodes,module->types->count*sizeof(*nodes));
