@@ -69,9 +69,9 @@ static void root_signal_contracts(const XrXirCompileContext *context,const XrXir
     }
     nodes[h]=original;CHECK(xir_native_callable_verify(&changed,native)==XR_XIR_OK);
     static const char *const denied[]={
-        "export fn bad(){let saved=__onSignal}\n",
+        "export fn bad(){const saved=__onSignal}\n",
         "export fn bad()->bool{return __onSignal(2,fn(){return 42})}\n",
-        "fn handler(){}\nfn worker()->bool{return __onSignal(2,handler)}\nlet task=go worker()\n"
+        "fn handler(){}\nfn worker()->bool{return __onSignal(2,handler)}\nconst task=go worker()\n"
     };
     for (unsigned i=0;i<3;++i) {
         XrXirSourceResult output={0};XrXirSourceDiagnostic diagnostic={0};
