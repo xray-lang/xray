@@ -155,6 +155,7 @@ class TierTests(unittest.TestCase):
                      "src/xir/xxir_source_methods.inc.c",
                      "src/hir/xhir_body_nominal.inc.c",
                      "src/os/os_fs.h", "src/base/xwindows_utf8.h",
+                     "src/xir/xxir_instance_io_mutation.inc.c",
                      "src/xir/xxir_instance_io.inc.c", "src/xir/xxir_source_io.inc.c",
                      "src/xir/xxir_path_prelude.h", "src/xir/xxir_native_callable.h",
                      "src/xir/xxir_declarations.c", "src/xir/xxir_instance.c",
