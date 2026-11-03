@@ -241,13 +241,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_compress[] = {
     {.name = "adler32", .signature = "(data: Slice<u8>): i64", .summary = "",},
     {.name = "crc32", .signature = "(data: Slice<u8>): i64", .summary = "",},
     {.name = "deflate", .signature = "(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>", .summary = "",},
-    {.name = "gunzip", .signature = "(data: Slice<u8>): Array<u8>", .summary = "",},
+    {.name = "gunzip", .signature = "(data: Slice<u8>) throws(CompressionError): Array<u8>", .summary = "",},
     {.name = "gzip", .signature = "(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>", .summary = "",},
-    {.name = "inflate", .signature = "(data: Slice<u8>): Array<u8>", .summary = "",},
+    {.name = "inflate", .signature = "(data: Slice<u8>) throws(CompressionError): Array<u8>", .summary = "",},
     {.name = "isGzip", .signature = "(data: Slice<u8>): bool", .summary = "",},
     {.name = "isZlib", .signature = "(data: Slice<u8>): bool", .summary = "",},
     {.name = "zlibCompress", .signature = "(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>", .summary = "",},
-    {.name = "zlibDecompress", .signature = "(data: Slice<u8>): Array<u8>", .summary = "",},
+    {.name = "zlibDecompress", .signature = "(data: Slice<u8>) throws(CompressionError): Array<u8>", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_crypto[] = {
@@ -1916,7 +1916,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "compress",
         .summary = "Compression/decompression (zlib)",
         .body =
-            "# compress module\n" "\n" "Compression/decompression (zlib).\n" "\n" "Usage: `import compress` then call `compress.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `compress.adler32` | `(data: Slice<u8>): i64` |  |\n" "| `compress.crc32` | `(data: Slice<u8>): i64` |  |\n" "| `compress.deflate` | `(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>` |  |\n" "| `compress.gunzip` | `(data: Slice<u8>): Array<u8>` |  |\n" "| `compress.gzip` | `(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>` |  |\n" "| `compress.inflate` | `(data: Slice<u8>): Array<u8>` |  |\n" "| `compress.isGzip` | `(data: Slice<u8>): bool` |  |\n" "| `compress.isZlib` | `(data: Slice<u8>): bool` |  |\n" "| `compress.zlibCompress` | `(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>` |  |\n" "| `compress.zlibDecompress` | `(data: Slice<u8>): Array<u8>` |  |\n" "",
+            "# compress module\n" "\n" "Compression/decompression (zlib).\n" "\n" "Usage: `import compress` then call `compress.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `compress.adler32` | `(data: Slice<u8>): i64` |  |\n" "| `compress.crc32` | `(data: Slice<u8>): i64` |  |\n" "| `compress.deflate` | `(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>` |  |\n" "| `compress.gunzip` | `(data: Slice<u8>) throws(CompressionError): Array<u8>` |  |\n" "| `compress.gzip` | `(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>` |  |\n" "| `compress.inflate` | `(data: Slice<u8>) throws(CompressionError): Array<u8>` |  |\n" "| `compress.isGzip` | `(data: Slice<u8>): bool` |  |\n" "| `compress.isZlib` | `(data: Slice<u8>): bool` |  |\n" "| `compress.zlibCompress` | `(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>` |  |\n" "| `compress.zlibDecompress` | `(data: Slice<u8>) throws(CompressionError): Array<u8>` |  |\n" "",
         .symbols = _symbols_compress,
         .symbol_count = (int)(sizeof(_symbols_compress) / sizeof(_symbols_compress[0])),
     },
