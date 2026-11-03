@@ -50,9 +50,5 @@ static bool source_file_stat_declare(SourceContext *ctx,XrXirType *output) {
             (XrXirSourceRange){ctx->module,0,0,0,0}))return false;
         members[f]=member.declaration;source_query_binding_type(ctx,&member);
     }
-    XrHirNominalDeclarationInput input={.types=&ctx->types,.declaration=d,.module=ctx->module,
-        .source_declaration=owner->declaration};const char *reason=NULL;
-    XrXirStatus status=xr_hir_body_nominal_declare(ctx->typed_body,&input,ctx->request,&reason);
-    if(!source_hir_nominal_status(ctx,NULL,status,reason))return false;
     return source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=owner->type},output);
 }
