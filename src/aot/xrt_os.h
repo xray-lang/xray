@@ -174,22 +174,6 @@ static inline XrValue xrt_os_getpid(void) {
     return XR_FROM_INT(xr_os_core_getpid());
 }
 
-static inline XrValue xrt_os_uid(void) {
-#ifdef _WIN32
-    return XR_FROM_INT(0);
-#else
-    return XR_FROM_INT((int64_t) getuid());
-#endif
-}
-
-static inline XrValue xrt_os_gid(void) {
-#ifdef _WIN32
-    return XR_FROM_INT(0);
-#else
-    return XR_FROM_INT((int64_t) getgid());
-#endif
-}
-
 static inline XrValue xrt_os_cpu_count(void) {
 #ifdef _WIN32
     SYSTEM_INFO si;
