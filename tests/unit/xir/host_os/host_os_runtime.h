@@ -87,6 +87,13 @@ enum { SYSTEM_NORMAL, SYSTEM_OOM_AFTER, SYSTEM_CANCEL_AFTER, SYSTEM_IO_AFTER,
  SYSTEM_CLOSE_ONCE, SYSTEM_CLOSE_PERSISTENT, SYSTEM_CANCEL_BEFORE, SYSTEM_SOME_ZERO };
 static unsigned system_mode,system_calls[8],system_close_calls;
 static uint64_t system_provider_work;
+static unsigned system_current_calls,system_current_failures,system_current_failure_at;
+typedef struct HostSystemCurrent {void *context;bool(*current)(void *);} HostSystemCurrent;
+static bool host_system_current_proxy(void *context){
+ HostSystemCurrent *borrow=context;++system_current_calls;bool accepted=borrow->current(borrow->context);
+ if(!accepted){++system_current_failures;system_current_failure_at=system_current_calls;}
+ return accepted;
+}
 #if defined(XR_OS_WINDOWS)
 static HANDLE system_retained_handle;
 static bool system_close_reentry;
@@ -106,7 +113,8 @@ static XrOsIoStatus host_system_uid(XrOsOptionalI64 *o){
 static XrOsIoStatus host_system_gid(XrOsOptionalI64 *o){++system_calls[1];return host_system_after(xr_os_io_gid(o));}
 static XrOsIoStatus host_system_ppid(XrOsSystemOwner *o,void *c,bool(*current)(void *),int64_t *out){
  ++system_calls[2];CHECK(host_active);system_provider_work=xr_xir_domain_budget_stats(host_active->domain).work;
- XrOsIoStatus status=xr_os_io_ppid(o,c,current,out);
+ system_current_calls=system_current_failures=system_current_failure_at=0;CHECK(current);
+ HostSystemCurrent borrow={c,current};XrOsIoStatus status=xr_os_io_ppid(o,&borrow,host_system_current_proxy,out);
 #if defined(XR_OS_WINDOWS)
  if(status==XR_OS_IO_OK&&(system_mode==SYSTEM_CLOSE_ONCE||system_mode==SYSTEM_CLOSE_PERSISTENT)){
   CHECK(!o->handle);HANDLE handle=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,FALSE,GetCurrentProcessId());CHECK(handle);

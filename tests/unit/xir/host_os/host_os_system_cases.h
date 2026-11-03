@@ -37,12 +37,14 @@ static void host_system_limit(XrXirProgram *program,const uint32_t ids[9]){
   CHECK(xr_xir_instance_start(instance,ids[3],NULL,0)==XR_XIR_CALL_READY);XrXirCallStatus status=host_poll(instance);
   CHECK(system_calls[2]==before+1&&!instance->system_owners);
   if(pass==1){
+   CHECK(system_current_calls==2&&system_current_failures==1&&system_current_failure_at==2);
    CHECK(status==XR_XIR_CALL_LIMIT&&xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_LIMIT&&!value.type&&!value.reserved&&!value.payload);
   }else{
+   CHECK(system_current_calls>=2&&!system_current_failures);
    CHECK(status==XR_XIR_CALL_RETURNED&&xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED&&value.type==XR_XIR_I64&&value.payload==host_parent_reference());
    CHECK(system_provider_work&&system_provider_work<UINT64_MAX);limit=system_provider_work+1;xr_xir_value_drop(&value);
   }
-  fprintf(stderr,"system finite work pass%u poll%u provider%u\n",pass,status,system_calls[2]-before);
+  fprintf(stderr,"system finite work pass%u poll%u provider%u current%u failed%u at%u\n",pass,status,system_calls[2]-before,system_current_calls,system_current_failures,system_current_failure_at);
   CHECK(xr_xir_instance_free(instance)==(pass==1?XR_XIR_CALL_LIMIT:XR_XIR_CALL_READY));host_active=NULL;
   CHECK(runtime_live==live&&runtime_bytes==bytes);
  }
