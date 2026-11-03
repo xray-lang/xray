@@ -798,6 +798,37 @@
         "class_inheritance_source",
         "class_inheritance_native"
       ]
+    },
+    "host-os": {
+      "tier": "L2",
+      "match": [
+        "src/os/os_fs.h",
+        "src/os/win/thread_win.c",
+        "src/os/unix/thread_unix.c",
+        "src/os/win/fs_mutation_win.c",
+        "src/os/unix/fs_mutation_unix.c",
+        "src/base/xwindows_utf8.h",
+        "src/xir/xxir_io_native.h",
+        "src/xir/xxir_instance_io.inc.c",
+        "src/xir/xxir_os_native.h",
+        "src/xir/xxir_sys_native.h",
+        "src/xir/xxir_source_io.inc.c",
+        "src/xir/xxir_source_os.inc.c",
+        "src/xir/xxir_source_sys.inc.c",
+        "src/shared/xnative_declaration*",
+        "scripts/gen_native_declarations.py",
+        "src/xir/CMakeLists.txt",
+        "tests/unit/xir/host_os/*"
+      ],
+      "reason": "Real CPU and Path host calls preserve canonical permissions, ownership, cancellation, and the scalar runtime closure.",
+      "tests": [
+        "host_os_source",
+        "host_os_native"
+      ],
+      "targets": [
+        "test_host_os_source",
+        "test_host_os_native"
+      ]
     }
   },
   "prerequisites": {

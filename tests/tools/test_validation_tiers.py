@@ -136,6 +136,19 @@ class TierTests(unittest.TestCase):
                 self.assertIn("source_sdk_owned_installed", plan["tests"])
                 self.assertNotIn("native-runtime", plan["groups"])
 
+    def test_host_os_changes_select_paired_source_and_native_consumers(self):
+        for path in ("src/os/win/fs_mutation_win.c", "src/os/unix/fs_mutation_unix.c",
+                     "src/os/os_fs.h", "src/base/xwindows_utf8.h",
+                     "src/xir/xxir_instance_io.inc.c", "src/xir/xxir_source_io.inc.c",
+                     "tests/unit/xir/host_os/host_os_path_cases.h"):
+            with self.subTest(path=path):
+                plan = xray_l1.tier_plan(ROOT, "L2", changed=[path])
+                self.assertIn("host-os", plan["groups"])
+                self.assertTrue({"host_os_source", "host_os_native"} <= set(plan["tests"]))
+                self.assertTrue({"test_host_os_source", "test_host_os_native"} <= set(plan["targets"]))
+                self.assertNotIn("native-runtime", plan["groups"])
+        self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
+
     def test_recursive_fixture_selection_matches_actual_ctest_report(self):
         catalog = {"groups": {"family": {"tier": "L2", "tests": ["leaf"], "targets": []}},
                    "l2": {"interfaceMatches": {}, "requiredOn": {}, "prerequisites": {
