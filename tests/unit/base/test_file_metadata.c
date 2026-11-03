@@ -92,6 +92,12 @@ static int wide_join(wchar_t *output, const wchar_t *root, const wchar_t *tail) 
     int count = swprintf(output, 32768, L"%ls\\%ls", root, tail);
     return count > 0 && count < 32768;
 }
+static int directory_operation(const wchar_t *path, bool create) {
+    wchar_t locator[32768];
+    int count = swprintf(locator, 32768, L"\\\\?\\%ls", path);
+    if (count <= 0 || count >= 32768) return 0;
+    return create ? CreateDirectoryW(locator, NULL) != 0 : RemoveDirectoryW(locator) != 0;
+}
 static int write_marker(const wchar_t *path, const uint8_t *bytes, DWORD length) {
     HANDLE handle = CreateFileW(path, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
     if (handle == INVALID_HANDLE_VALUE) return 0;
@@ -131,16 +137,16 @@ static int setup_paths(void) {
     CHECK(length && length < 32768);
     int count = swprintf(suffix, 128, L"xray-metadata-%lu-\x4e2d-\xd83d\xde00", (unsigned long)GetCurrentProcessId());
     CHECK(count > 0 && count < 128 && wide_join(paths.root, temporary, suffix));
-    CHECK(CreateDirectoryW(paths.root, NULL)); paths.root_created = true;
+    CHECK(directory_operation(paths.root, true)); paths.root_created = true;
     count = swprintf(suffix, 128, L"xray-metadata-protected-%lu", (unsigned long)GetCurrentProcessId());
     CHECK(count > 0 && count < 128 && wide_join(paths.outside, temporary, suffix));
-    CHECK(CreateDirectoryW(paths.outside, NULL)); paths.outside_created = true;
+    CHECK(directory_operation(paths.outside, true)); paths.outside_created = true;
     CHECK(wide_join(paths.marker, paths.outside, L"protected.bin"));
     static const uint8_t bytes[] = {'m', 0, 0xff, 'e', 't', 'a'};
     CHECK(write_marker(paths.marker, bytes, sizeof(bytes))); paths.marker_created = true;
     for (size_t i = 0; i < 100; ++i) child[i] = L'd'; child[100] = 0;
     CHECK(wide_join(paths.child, paths.root, child));
-    CHECK(CreateDirectoryW(paths.child, NULL)); paths.child_created = true;
+    CHECK(directory_operation(paths.child, true)); paths.child_created = true;
     for (size_t i = 0; i < 200; ++i) name[i] = L'f';
     memcpy(name + 200, L".bin", 5 * sizeof(wchar_t));
     CHECK(wide_join(paths.file, paths.child, name) && wcslen(paths.file) > 260);
@@ -151,7 +157,7 @@ static int setup_paths(void) {
     CHECK(converted > 0 && converted <= (int)sizeof(paths.utf8));
     CHECK(xr_win_utf16_to_utf8(paths.file, wcslen(paths.file), paths.utf8, sizeof(paths.utf8)));
     CHECK(wide_join(paths.junction, paths.root, L"route-outside"));
-    CHECK(CreateDirectoryW(paths.junction, NULL)); paths.junction_created = true;
+    CHECK(directory_operation(paths.junction, true)); paths.junction_created = true;
     CHECK(make_junction(paths.junction, paths.outside));
     return 1;
 }
@@ -174,6 +180,11 @@ static int verify_fields(void) {
         !result.uid.present && !result.gid.present && result.mtime == 1500000003 &&
         result.atime == 1500000002 && result.ctime == 1500000001 && result.mode == (_S_IREAD | _S_IWRITE));
     CHECK(!memory.live && !memory.held && !kernel_handles && !owner.handle);
+    char span[65536]; size_t length = strlen(paths.utf8);
+    CHECK(length + 1 < sizeof(span)); memcpy(span, paths.utf8, length);
+    span[length] = 'X'; span[length + 1] = 0;
+    CHECK(xr_os_io_file_metadata(&policy, span, length, NULL, &owner, &result) == XR_OS_IO_OK &&
+        result.present && result.size == 6 && !memory.live && !kernel_handles);
     CHECK(SetFileAttributesW(paths.extended, FILE_ATTRIBUTE_READONLY));
     CHECK(xr_os_io_file_metadata(&policy, paths.utf8, strlen(paths.utf8), NULL, &owner, &result) == XR_OS_IO_OK &&
         result.present && result.mode == _S_IREAD && result.size == 6);
@@ -211,6 +222,15 @@ static int verify_failures(void) {
     reset_memory(); memory.fail_at = 0; memory.failure = XR_OS_IO_MEMORY_LIMIT; memcpy(&output, &sentinel, sizeof(output));
     CHECK(xr_os_io_file_metadata(&policy, paths.utf8, strlen(paths.utf8), NULL, &owner, &output) ==
         XR_OS_IO_MEMORY_LIMIT && !memcmp(&output, &sentinel, sizeof(output)) && !memory.live);
+    const XrOsIoStatus policy_errors[] = {XR_OS_IO_BAD_ARGUMENT, XR_OS_IO_OVERFLOW};
+    for (size_t i = 0; i < sizeof(policy_errors) / sizeof(policy_errors[0]); ++i) {
+        reset_memory(); memory.fail_at = sites - 1; memory.failure = policy_errors[i];
+        CHECK(xr_os_io_file_metadata(&policy, paths.utf8, strlen(paths.utf8), NULL, &owner, &output) ==
+            policy_errors[i] && !memcmp(&output, &sentinel, sizeof(output)) && !memory.live && !kernel_handles);
+    }
+    reset_memory(); memory.fail_at = 0; memory.failure = XR_OS_IO_OK;
+    CHECK(xr_os_io_file_metadata(&policy, paths.utf8, strlen(paths.utf8), NULL, &owner, &output) ==
+        XR_OS_IO_BAD_ARGUMENT && !memcmp(&output, &sentinel, sizeof(output)) && !memory.live);
     reset_memory(); memory.cancelled = true; memcpy(&output, &sentinel, sizeof(output));
     CHECK(xr_os_io_file_metadata(&policy, paths.utf8, strlen(paths.utf8), test_current, &owner, &output) ==
         XR_OS_IO_CANCELLED && !memcmp(&output, &sentinel, sizeof(output)) && !memory.attempts);
@@ -241,7 +261,10 @@ static int verify_failures(void) {
     CHECK(xr_os_io_file_metadata(&policy, "x", (size_t)INT_MAX + 1, NULL, &owner, &output) == XR_OS_IO_OVERFLOW);
     CHECK(!memcmp(&output, &sentinel, sizeof(output)) && !memory.attempts && !memory.live && !kernel_handles);
     CHECK(xr_os_io_file_metadata(&policy, "", 0, NULL, &owner, &output) == XR_OS_IO_OK && !output.present);
-    CHECK(xr_os_io_file_metadata(&policy, "Z:\\xray-nonexistent-metadata", 28, NULL, &owner, &output) ==
+    wchar_t missing_wide[32768]; char missing[65536];
+    CHECK(wide_join(missing_wide, paths.root, L"missing-entry"));
+    CHECK(xr_win_utf16_to_utf8(missing_wide, wcslen(missing_wide), missing, sizeof(missing)));
+    CHECK(xr_os_io_file_metadata(&policy, missing, strlen(missing), NULL, &owner, &output) ==
         XR_OS_IO_OK && !output.present);
     CHECK(!memory.live && !memory.held && !kernel_handles);
     printf("metadata: %zu observed allocation failures, limit, cancel, protocol and retained-close cleanup\n", sites);
@@ -250,11 +273,11 @@ static int verify_failures(void) {
 static void cleanup_paths(void) {
     close_failures = 0;
     if (paths.file_created) { (void)SetFileAttributesW(paths.extended, FILE_ATTRIBUTE_NORMAL); (void)DeleteFileW(paths.extended); }
-    if (paths.junction_created) (void)RemoveDirectoryW(paths.junction);
-    if (paths.child_created) (void)RemoveDirectoryW(paths.child);
-    if (paths.root_created) (void)RemoveDirectoryW(paths.root);
+    if (paths.junction_created) (void)directory_operation(paths.junction, false);
+    if (paths.child_created) (void)directory_operation(paths.child, false);
+    if (paths.root_created) (void)directory_operation(paths.root, false);
     if (paths.marker_created) (void)DeleteFileW(paths.marker);
-    if (paths.outside_created) (void)RemoveDirectoryW(paths.outside);
+    if (paths.outside_created) (void)directory_operation(paths.outside, false);
 }
 int main(void) {
     reset_memory();
@@ -274,7 +297,7 @@ int main(void) {
     int descriptor = open(file, O_CREAT | O_EXCL | O_WRONLY, 0600);
     if (descriptor < 0) return 1;
     static const uint8_t bytes[] = {0, 0xff, 42};
-    bool written = write(descriptor, bytes, sizeof(bytes)) == sizeof(bytes);
+    bool written = write(descriptor, bytes, sizeof(bytes)) == (ssize_t)sizeof(bytes);
     if (close(descriptor) || !written) return 1;
     length = snprintf(link, sizeof(link), "%s/link", root);
     if (length < 0 || (size_t)length >= sizeof(link) || symlink(file, link)) return 1;
@@ -282,7 +305,7 @@ int main(void) {
     XrOsFileMetadataOwner owner = {0}; XrOsFileMetadata output;
     struct stat reference;
     int passed = !stat(file, &reference) && xr_os_io_file_metadata(&policy, link, strlen(link),
-        test_current, &owner, &output) == XR_OS_IO_OK && output.present && output.size == sizeof(bytes) &&
+        test_current, &owner, &output) == XR_OS_IO_OK && output.present && output.size == (int64_t)sizeof(bytes) &&
         output.uid.present && output.uid.value == (int64_t)reference.st_uid &&
         output.gid.present && output.gid.value == (int64_t)reference.st_gid && output.mode == 0600 &&
         output.mtime == reference.st_mtime && output.atime == reference.st_atime && output.ctime == reference.st_ctime &&
