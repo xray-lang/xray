@@ -323,7 +323,7 @@ export class Process {
     }
 }
 
-enum _ThreadLocalError {
+export enum ThreadLocalError {
     RecursiveInit
 }
 
@@ -345,21 +345,29 @@ fn _threadLocalPruneDeadFlags(values: ref Map<i64, bool>) {
     }
 }
 
-export class ThreadLocal<T> {
+export class ThreadLocal<T, E: Error> {
     _lock: OsMutex
     _values: Map<i64, T>
     _initializing: Map<i64, bool>
-    _init: fn() -> T
+    _init: nosuspend fn() throws(E) -> T
 
-    init(init: fn() -> T) {
+    init(init: nosuspend fn() throws(E) -> T) {
         this._lock = OsMutex()
         this._values = #{}
         this._initializing = #{}
         this._init = init
     }
 
-    get() -> T {
+    get() throws(E | ThreadLocalError) -> T {
         var key = __threadLocalId()
+        var armed = false
+        defer {
+            if (armed) {
+                this._lock.lock()
+                defer { this._lock.unlock() }
+                this._initializing.delete(key)
+            }
+        }
         {
             this._lock.lock()
             defer { this._lock.unlock() }
@@ -369,35 +377,28 @@ export class ThreadLocal<T> {
             }
             _threadLocalPruneDeadFlags(ref this._initializing)
             if (this._initializing.containsKey(key)) {
-                throw _ThreadLocalError.RecursiveInit
+                throw ThreadLocalError.RecursiveInit
             }
             this._initializing.set(key, true)
+            armed = true
         }
 
-        try {
-            var init = this._init
-            var value = init()
-            var result = value
-            {
-                this._lock.lock()
-                defer { this._lock.unlock() }
-                _threadLocalPruneDeadSlots(ref this._values)
-                _threadLocalPruneDeadFlags(ref this._initializing)
-                this._initializing.delete(key)
-                if (!this._values.containsKey(key)) {
-                    this._values.set(key, value)
-                }
-                result = this._values[key]
+        var init = this._init
+        var value = try init()
+        var result = value
+        {
+            this._lock.lock()
+            defer { this._lock.unlock() }
+            _threadLocalPruneDeadSlots(ref this._values)
+            _threadLocalPruneDeadFlags(ref this._initializing)
+            if (!this._values.containsKey(key)) {
+                this._values.set(key, value)
             }
-            return result
-        } catch (e) {
-            {
-                this._lock.lock()
-                defer { this._lock.unlock() }
-                this._initializing.delete(key)
-            }
-            throw e
+            result = this._values[key]
+            this._initializing.delete(key)
+            armed = false
         }
+        return result
     }
 
     set(value: T) {
