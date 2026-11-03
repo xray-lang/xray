@@ -31,6 +31,18 @@ static const char host_stat_text[]=
  "(r!.uid==null||r!.uid!>=0)&&(r!.gid==null||r!.gid!>=0)&&r!.isFile&&!r!.isDir&&!r!.isSymlink}\n"
  "export fn snapshot(path:Path)->__FileStat?{return __stat(path)}\n"
  "export fn ctfeStat()->bool{return __stat(Child(\".\"))!=null}\n";
+static const char host_io_bool_text[]=
+ "import {Path} from path\n"
+ "class Child extends Path{tail:string\ninit(raw:string){super(raw);this.tail=\"io-owned-tail\"}}\n"
+ "export fn make(raw:string)->Path{return Child(raw)}\n"
+ "export fn mkdirPath(path:Path)->bool{return __mkdir(path)}\n"
+ "export fn rmdirPath(path:Path)->bool{return __rmdir(path)}\n"
+ "export fn removePath(path:Path)->bool{return __remove(path)}\n"
+ "export fn renamePath(old:Path,next:Path)->bool{return __rename(old,next)}\n"
+ "export fn utimePath(path:Path)->bool{return __utimeNow(path)}\n"
+ "fn refs(a:ref Path,b:ref Path)->bool{return __rename(a,b)}\n"
+ "export fn byRef(a:string,b:string)->bool{var old:Path=Child(a);var next:Path=Child(b);return refs(ref old,ref next)}\n"
+ "export fn ctfeMutation()->bool{return __mkdir(Child(\".\"))}\n";
 static const char host_count_text[]="export fn answer()->i64{return __cpuCount()}\n";
 static const char host_pin_text[]="export fn answer(cpu:i64)->bool{return __pinToCpu(cpu)}\n";
 static const char host_system_text[]=

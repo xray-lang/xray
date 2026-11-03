@@ -22,6 +22,7 @@
 #include "os/os_thread.h"
 #include "os/os_system.h"
 #include "os/os_file_metadata.h"
+#include "os/os_file_mutation.h"
 #if defined(XR_OS_WINDOWS)
 #include <windows.h>
 #ifdef interface
@@ -49,10 +50,20 @@ static XrOsIoStatus host_system_loadavg(XrOsLoadAverages *);
 static XrOsIoStatus host_system_close(XrOsSystemOwner *);
 static XrOsIoStatus host_metadata(const XrOsIoPolicy *,const char *,size_t,bool(*)(void *),XrOsFileMetadataOwner *,XrOsFileMetadata *);
 static XrOsIoStatus host_metadata_close(XrOsFileMetadataOwner *);
+static XrOsIoStatus host_io_mkdir(const XrOsIoPolicy *,XrOsPathSpan,bool(*)(void *),bool *);
+static XrOsIoStatus host_io_rmdir(const XrOsIoPolicy *,XrOsPathSpan,bool(*)(void *),bool *);
+static XrOsIoStatus host_io_remove(const XrOsIoPolicy *,XrOsPathSpan,bool(*)(void *),XrOsFileMetadataOwner *,bool *);
+static XrOsIoStatus host_io_rename(const XrOsIoPolicy *,XrOsPathSpan,XrOsPathSpan,bool(*)(void *),bool *);
+static XrOsIoStatus host_io_utime(const XrOsIoPolicy *,XrOsPathSpan,bool(*)(void *),XrOsFileMetadataOwner *,bool *);
 static unsigned int host_count(void);
 static int host_pin(unsigned int);
 static XrOsIoStatus host_chmod(const XrOsIoPolicy *,const char *,int64_t,bool(*)(void *),bool *);
 static XrOsIoStatus host_chdir(const XrOsIoPolicy *,const char *,bool(*)(void *),bool *);
+#define xr_os_io_path_mkdir host_io_mkdir
+#define xr_os_io_path_rmdir host_io_rmdir
+#define xr_os_io_path_remove host_io_remove
+#define xr_os_io_path_rename host_io_rename
+#define xr_os_io_path_utime_now host_io_utime
 #define xr_os_io_file_metadata host_metadata
 #define xr_os_io_file_metadata_close host_metadata_close
 #define xr_os_cpu_count host_count
@@ -79,6 +90,11 @@ static XrOsIoStatus host_chdir(const XrOsIoPolicy *,const char *,bool(*)(void *)
 #undef xr_os_io_loadavg
 #undef xr_os_io_system_close
 
+#undef xr_os_io_path_mkdir
+#undef xr_os_io_path_rmdir
+#undef xr_os_io_path_remove
+#undef xr_os_io_path_rename
+#undef xr_os_io_path_utime_now
 #undef xr_os_io_file_metadata
 #undef xr_os_io_file_metadata_close
 #undef xr_os_cpu_count
@@ -176,6 +192,50 @@ static XrOsIoStatus host_metadata_close(XrOsFileMetadataOwner *owner){
  if(stat_close_failures){--stat_close_failures;return XR_OS_IO_IO;}
  return xr_os_io_file_metadata_close(owner);
 }
+enum { IO_BOOL_NORMAL,IO_BOOL_OOM,IO_BOOL_CANCEL_ALLOC,IO_BOOL_CANCEL_AFTER,IO_BOOL_RETAIN_CLOSE };
+static unsigned io_bool_mode,io_bool_calls,io_bool_allocations,io_bool_fault_at,io_bool_currents,io_bool_failed_at;
+static uint64_t io_bool_entry_work;
+static XrOsIoPolicy io_bool_policy;
+static bool (*io_bool_current)(void *);
+static bool host_io_current(void *context){
+ ++io_bool_currents;bool okay=io_bool_current(context);if(!okay)io_bool_failed_at=io_bool_currents;return okay;
+}
+static XrOsIoStatus host_io_allocate(void *context,size_t bytes,void **output){
+ unsigned ordinal=io_bool_allocations++;
+ if(ordinal==io_bool_fault_at&&io_bool_mode==IO_BOOL_OOM)runtime_fail_at=runtime_attempts;
+ XrOsIoStatus status=io_bool_policy.alloc(context,bytes,output);runtime_fail_at=SIZE_MAX;
+ if(ordinal==io_bool_fault_at&&io_bool_mode==IO_BOOL_CANCEL_ALLOC&&status==XR_OS_IO_OK)
+  CHECK(xr_xir_call_request_cancel(host_active->call)==XR_XIR_CALL_CANCEL_REQUESTED);
+ return status;
+}
+static XrOsIoStatus host_io_operation(const XrOsIoPolicy *policy,XrOsPathSpan first,XrOsPathSpan second,
+ bool(*current)(void *),XrOsFileMetadataOwner *owner,bool *output,unsigned op){
+ ++io_bool_calls;CHECK(host_active&&policy&&current);io_bool_policy=*policy;XrOsIoPolicy proxy=*policy;proxy.alloc=host_io_allocate;
+ io_bool_allocations=io_bool_currents=io_bool_failed_at=0;io_bool_current=current;
+ io_bool_entry_work=xr_xir_domain_budget_stats(host_active->domain).work;XrOsIoStatus status=XR_OS_IO_BAD_ARGUMENT;
+ switch(op){
+ case 0:status=xr_os_io_path_mkdir(&proxy,first,host_io_current,output);break;
+ case 1:status=xr_os_io_path_rmdir(&proxy,first,host_io_current,output);break;
+ case 2:status=xr_os_io_path_remove(&proxy,first,host_io_current,owner,output);break;
+ case 3:status=xr_os_io_path_rename(&proxy,first,second,host_io_current,output);break;
+ case 4:status=xr_os_io_path_utime_now(&proxy,first,host_io_current,owner,output);break;
+ default:CHECK(false);break;
+ }
+ io_bool_current=NULL;
+ if(io_bool_mode==IO_BOOL_CANCEL_AFTER)CHECK(xr_xir_call_request_cancel(host_active->call)==XR_XIR_CALL_CANCEL_REQUESTED);
+#if defined(XR_OS_WINDOWS)
+ if(status==XR_OS_IO_OK&&io_bool_mode==IO_BOOL_RETAIN_CLOSE){
+  CHECK(owner&&!owner->handle);HANDLE held=CreateFileW(L".",FILE_READ_ATTRIBUTES,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,NULL,OPEN_EXISTING,FILE_FLAG_BACKUP_SEMANTICS,NULL);
+  CHECK(held!=INVALID_HANDLE_VALUE);owner->handle=(intptr_t)held;status=XR_OS_IO_IO;
+ }
+#endif
+ return status;
+}
+static XrOsIoStatus host_io_mkdir(const XrOsIoPolicy *p,XrOsPathSpan a,bool(*c)(void *),bool *o){return host_io_operation(p,a,(XrOsPathSpan){0},c,NULL,o,0);}
+static XrOsIoStatus host_io_rmdir(const XrOsIoPolicy *p,XrOsPathSpan a,bool(*c)(void *),bool *o){return host_io_operation(p,a,(XrOsPathSpan){0},c,NULL,o,1);}
+static XrOsIoStatus host_io_remove(const XrOsIoPolicy *p,XrOsPathSpan a,bool(*c)(void *),XrOsFileMetadataOwner *h,bool *o){return host_io_operation(p,a,(XrOsPathSpan){0},c,h,o,2);}
+static XrOsIoStatus host_io_rename(const XrOsIoPolicy *p,XrOsPathSpan a,XrOsPathSpan b,bool(*c)(void *),bool *o){return host_io_operation(p,a,b,c,NULL,o,3);}
+static XrOsIoStatus host_io_utime(const XrOsIoPolicy *p,XrOsPathSpan a,bool(*c)(void *),XrOsFileMetadataOwner *h,bool *o){return host_io_operation(p,a,(XrOsPathSpan){0},c,h,o,4);}
 static unsigned int host_count(void){
  ++count_calls;
  if(host_mode==HOST_CANCEL_COUNT){host_mode=HOST_NORMAL;CHECK(host_active&&xr_xir_call_request_cancel(host_active->call)==XR_XIR_CALL_CANCEL_REQUESTED);}
