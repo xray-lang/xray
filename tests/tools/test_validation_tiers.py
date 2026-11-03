@@ -220,6 +220,8 @@ class TierTests(unittest.TestCase):
                      "src/xir/xxir_effect_context_owner.inc.c",
                      "src/xir/xxir_effect_snapshot_storage.inc.c",
                      "src/xir/xxir_effect_snapshot_types.inc.c",
+                     "src/xir/xxir_ctfe_calls.inc.c",
+                     "src/xir/xxir_ctfe_function.inc.c",
                      "tests/unit/xir/test_xir_signal_source.c",
                      "tests/unit/xir/test_xir_signal_native.c",
                      "tests/unit/xir/root_signal_runtime.h", "tests/unit/xir/root_signal.cmake"):
