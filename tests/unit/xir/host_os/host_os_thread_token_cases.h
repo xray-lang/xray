@@ -9,7 +9,7 @@
 #ifndef HOST_OS_THREAD_TOKEN_CASES_H
 #define HOST_OS_THREAD_TOKEN_CASES_H
 enum { TOKEN_NORMAL,TOKEN_OOM,TOKEN_IO,TOKEN_CANCEL,TOKEN_CANCEL_INITIALIZER };
-enum { HOST_TOKEN_COUNT=15 };
+enum { HOST_TOKEN_COUNT=17 };
 static unsigned token_mode,token_calls;
 static uint64_t token_entry_work;
 
@@ -87,6 +87,12 @@ static void host_thread_tokens_execute(XrXirProgram *program,const uint32_t *ids
  for(unsigned n=4;n<=12;++n){
   if(n==8)continue;
   XrXirValue value=host_token_invoke(instance,ids[n],NULL,0);CHECK(value.type==XR_XIR_I64&&value.payload==42);xr_xir_value_drop(&value);
+ }
+ XrXirValue barrier=host_token_invoke(instance,ids[15],NULL,0);CHECK(barrier.type==XR_XIR_I64&&barrier.payload==42);xr_xir_value_drop(&barrier);
+ const int64_t invalid_parties[]={0,-1,INT64_MIN};
+ for(unsigned n=0;n<sizeof(invalid_parties)/sizeof(*invalid_parties);++n){
+  XrXirValue argument={XR_XIR_I64,0,invalid_parties[n]},value=host_token_invoke(instance,ids[16],&argument,1);
+  CHECK(value.type==XR_XIR_I64&&value.payload==42);xr_xir_value_drop(&value);
  }
  CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);host_active=NULL;
  bool alive=false;CHECK(xr_os_io_thread_token_alive(NULL,reference,&alive)==XR_OS_IO_OK&&alive);

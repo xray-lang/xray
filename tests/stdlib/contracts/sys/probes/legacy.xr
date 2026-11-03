@@ -20,7 +20,7 @@ condvarMutex.unlock()
 condvar.signal()
 condvar.broadcast()
 
-const barrier = sys.OsBarrier(1)
+const barrier = try! sys.OsBarrier(1)
 assert(barrier.wait())
 assert(barrier.wait())
 
