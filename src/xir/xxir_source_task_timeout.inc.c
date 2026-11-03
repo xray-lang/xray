@@ -95,6 +95,18 @@ static bool source_timeout_bodies(SourceContext *ctx,AstNode *node,const uint32_
     ctx->returned=true;if(ok)ok=finish_body(ctx);
     source_comptime_restore(ctx,&saved);ctx->task_scope=scope;return ok;
 }
+static bool source_timeout_read_argument(SourceContext *ctx,AstNode *site,AstNode *argument) {
+    for(uint32_t depth=0;argument&&argument->type==AST_GROUPING;++depth) {
+        if(depth>=128)return source_fail(ctx,site,XR_XIR_BUDGET,"Task timeout argument nesting exhausted");
+        if(!(depth%64u)&&!source_request_poll(ctx,site))return false;
+        argument=argument->as.grouping;
+    }
+    if(!argument||argument->type==AST_MOVE_EXPR||
+        (argument->type==AST_VARIABLE&&argument->as.variable.access_marker_span.line>0)||
+        (argument->type==AST_THIS_EXPR&&argument->as.this_expr.access_marker_span.line>0))
+        return source_fail(ctx,site,XR_XIR_BAD_TYPE,"Task.timeout takes ordinary readonly Task and i64 arguments");
+    return true;
+}
 static bool source_task_timeout_call(SourceContext *ctx,AstNode *node,
     const XrNativeMemberDeclaration *member,SourceValue *output) {
     CallExprNode *call=&node->as.call_expr;
@@ -103,6 +115,8 @@ static bool source_task_timeout_call(SourceContext *ctx,AstNode *node,
         call->arg_count!=2||!call->arguments||call->type_arg_count||call->default_arg_count||
         (call->arg_accesses&&(call->arg_accesses[0]!=XR_CALL_ARG_PLAIN||call->arg_accesses[1]!=XR_CALL_ARG_PLAIN)))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Task.timeout requires its Task and i64 duration");
+    if(!source_timeout_read_argument(ctx,node,call->arguments[0])||
+        !source_timeout_read_argument(ctx,node,call->arguments[1]))return false;
     SourceValue input={0},duration={0};
     if(!expression(ctx,call->arguments[0],&input)||
         !source_plan_expression(ctx,call->arguments[1],(SourceExpectedType){true,XR_XIR_I64,false,false},&duration))return false;
