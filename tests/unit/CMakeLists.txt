@@ -129,6 +129,7 @@ if(WIN32)
     add_executable(test_windows_paths base/test_windows_paths.c
         ${CMAKE_SOURCE_DIR}/src/base/xfileio.c
         ${CMAKE_SOURCE_DIR}/src/os/win/fs_win.c
+        ${CMAKE_SOURCE_DIR}/src/os/win/fs_mutation_win.c
         ${CMAKE_SOURCE_DIR}/src/os/win/file_read_win.c)
     target_link_libraries(test_windows_paths PRIVATE xray_compile_resources)
     target_sources(test_windows_paths PRIVATE ${CMAKE_SOURCE_DIR}/src/base/xio_policy.c)
