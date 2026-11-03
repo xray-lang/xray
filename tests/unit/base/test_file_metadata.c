@@ -290,6 +290,11 @@ static int verify_failures(void) {
         XR_OS_IO_BAD_ARGUMENT && !memcmp(&output, &sentinel, sizeof(output)) && !metadata_memory.attempts &&
         !owner.handle && kernel_attributes == attributes && kernel_opens == opened);
     reset_memory();
+    large_span[sizeof(large_span) - 1] = 'p';
+    CHECK(xr_os_io_file_metadata(&policy, large_span, sizeof(large_span), test_current, &owner, &output) ==
+        XR_OS_IO_OK && !output.present && !metadata_memory.live && !metadata_memory.held && !owner.handle &&
+        kernel_attributes == attributes && kernel_opens == opened);
+    reset_memory();
     CHECK(xr_os_io_file_metadata(&policy, "", 0, NULL, &owner, &output) == XR_OS_IO_OK && !output.present);
     wchar_t missing_wide[32768]; char missing[65536];
     CHECK(wide_join(missing_wide, paths.root, L"missing-entry"));

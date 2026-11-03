@@ -96,7 +96,11 @@ XR_FUNC XrOsIoStatus xr_os_io_file_metadata(const XrOsIoPolicy *policy,
     XrOsFileMetadata result = {0};
     io_status(&io, metadata_path_owned(policy, path, length, current, &terminated));
     bool refused = false;
-    if (io.status == XR_OS_IO_OK) {
+    /* Validation above reaches the entire span. A UTF-16 unit has at most
+     * three UTF-8 bytes, so this valid input cannot fit the locator ceiling.
+     * Bound the old C-string conversion scans without skipping invalid tails. */
+    if (io.status == XR_OS_IO_OK && length > (size_t)32767 * 3) refused = true;
+    if (io.status == XR_OS_IO_OK && !refused) {
         io_status(&io, xr_win_utf8_path_owned_classified(policy, terminated, &wide, &refused));
         if (refused) io.status = XR_OS_IO_OK;
     }
