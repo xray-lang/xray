@@ -636,6 +636,7 @@
       "reason": "Execution, native provider and instance consumers.",
       "tests": [
         "native_runtime_failures",
+        "test_xir_root_callback",
         "test_xir_instance_limit_result",
         "xir_intrinsic_contains",
         "xir_intrinsic_contains_native",
@@ -666,6 +667,7 @@
       ],
       "targets": [
         "test_native_runtime_clients",
+        "test_xir_root_callback",
         "test_xir_task_executor",
         "test_xir_intrinsic_registry",
         "test_xir_intrinsic_registry_native",
