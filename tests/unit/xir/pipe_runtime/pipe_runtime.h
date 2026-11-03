@@ -22,6 +22,7 @@
 #include "toolchain/xcompiler_session.h"
 #include "os/os_time.h"
 #include "os/os_thread.h"
+#include "os/os_pipe_owned.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,8 +31,33 @@
 #include <fcntl.h>
 #endif
 #define CHECK(c) do{if(!(c)){fprintf(stderr,"Pipe product %d: %s\n",__LINE__,#c);exit(1);}}while(0)
+static XrOsIoStatus pipe_observed_begin(XrOsPipeOwner *,const XrOsPipeRequest *,const XrOsPipeQuery *,XrOsPipeOperation *);
+static XrOsIoStatus pipe_observed_poll(XrOsPipeOperation *,XrOsPipeProgress *);
+#define xr_os_io_pipe_begin pipe_observed_begin
+#define xr_os_io_pipe_poll pipe_observed_poll
 #include "../xir_runtime_allocations.h"
+#undef xr_os_io_pipe_begin
+#undef xr_os_io_pipe_poll
 #include "pipe_cases.h"
+static bool pipe_oom_observing,pipe_oom_armed;
+static unsigned pipe_oom_read_begins,pipe_oom_hits;
+static unsigned char pipe_oom_bytes[sizeof(pipe_bytes)];
+static size_t pipe_oom_count,pipe_oom_allocation;
+static XrOsIoStatus pipe_observed_begin(XrOsPipeOwner *owner,const XrOsPipeRequest *request,
+ const XrOsPipeQuery *query,XrOsPipeOperation *operation){
+ if(pipe_oom_observing&&request&&request->end==XR_OS_PIPE_READ)++pipe_oom_read_begins;
+ return xr_os_io_pipe_begin(owner,request,query,operation);
+}
+static XrOsIoStatus pipe_observed_poll(XrOsPipeOperation *operation,XrOsPipeProgress *output){
+ XrOsIoStatus status=xr_os_io_pipe_poll(operation,output);
+ if(pipe_oom_observing&&pipe_oom_armed&&status==XR_OS_IO_OK&&output&&output->terminal&&output->status==XR_OS_IO_OK&&output->count&&output->bytes){
+  /* Observe only the successful synchronous borrow. The next real allocation
+   * prepares the owned result; no operation or byte pointer is retained. */
+  CHECK(output->count<=sizeof(pipe_oom_bytes));memcpy(pipe_oom_bytes,output->bytes,output->count);pipe_oom_count=output->count;
+  ++pipe_oom_hits;pipe_oom_armed=false;pipe_oom_allocation=runtime_attempts;runtime_fail_at=pipe_oom_allocation;
+ }
+ return status;
+}
 static void pipe_trace(const char *message){
  const char *enabled=getenv("XR_PIPE_TRACE");if(enabled&&!strcmp(enabled,"1"))fprintf(stderr,"Pipe trace: %s\n",message);
 }
@@ -163,10 +189,33 @@ static void pipe_cancel_read(XrXirProgram *program,const uint32_t *ids,bool scop
  }
  pipe_trace(scoped?"scope_cancel instance retired":"plain_cancel instance retired");
 }
+static void pipe_read_materialization_oom(XrXirProgram *program,const uint32_t *ids){
+ size_t live=runtime_live,bytes=runtime_bytes;CHECK(runtime_fail_at==SIZE_MAX&&!pipe_oom_observing&&!pipe_oom_armed);
+ XrXirInstance *instance=pipe_instance(program,ids);XrXirValue p=pipe_open(instance,ids),data=pipe_data(instance,program,ids,sizeof(pipe_bytes)),args[]={p,data};
+ XrXirValue written=pipe_invoke(instance,ids[PIPE_WRITE],args,2);CHECK(written.type==XR_XIR_I64&&written.payload==(int64_t)sizeof(pipe_bytes));xr_xir_value_drop(&written);
+ pipe_bool(instance,ids[PIPE_CLOSE_WRITE],&p,true);pipe_oom_read_begins=pipe_oom_hits=0;pipe_oom_count=0;pipe_oom_observing=pipe_oom_armed=true;
+ args[1]=(XrXirValue){XR_XIR_I64,0,sizeof(pipe_bytes)};CHECK(xr_xir_instance_start(instance,ids[PIPE_READ],args,2)==XR_XIR_CALL_READY);
+ XrXirCallStatus terminal=pipe_drive(instance).outcome.status;runtime_fail_at=SIZE_MAX;
+ pipe_trace_status("read_oom terminal",terminal);
+ CHECK(terminal==XR_XIR_CALL_OOM&&pipe_oom_hits==1&&!pipe_oom_armed&&runtime_attempts>pipe_oom_allocation);
+ CHECK(pipe_oom_count&&pipe_oom_count<=sizeof(pipe_bytes)&&!memcmp(pipe_oom_bytes,pipe_bytes,pipe_oom_count));
+ XrXirValue result={0};XrXirCallStatus taken=xr_xir_instance_take_result(instance,&result);
+ if(taken!=XR_XIR_CALL_OOM)fprintf(stderr,"Pipe read OOM take status%u\n",taken);
+ CHECK(taken==XR_XIR_CALL_OOM&&!result.type&&!result.reserved&&!result.payload);
+ CHECK(pipe_check_bytes(&data,0,sizeof(pipe_bytes))==sizeof(pipe_bytes));xr_xir_value_drop(&data);xr_xir_value_drop(&p);
+ uint64_t started=xr_time_monotonic_ns();CHECK(started);
+ for(;;){
+  XrXirCallStatus closed=xr_xir_instance_free(instance);
+  if(closed!=XR_XIR_CALL_CLOSE_FAILED){if(closed!=XR_XIR_CALL_OOM)fprintf(stderr,"Pipe read OOM free status%u\n",closed);CHECK(closed==XR_XIR_CALL_OOM);break;}
+  uint64_t now=xr_time_monotonic_ns();CHECK(now&&now>=started&&now-started<UINT64_C(5000000000));xr_thread_yield();
+ }
+ pipe_oom_observing=false;CHECK(pipe_oom_read_begins==1&&runtime_live==live&&runtime_bytes==bytes);
+}
 static void pipe_execute(XrXirProgram *program,const uint32_t *ids){
  size_t live=runtime_live,bytes=runtime_bytes;
  pipe_trace("roundtrip enter");pipe_roundtrip(program,ids);pipe_trace("roundtrip exit");
  pipe_trace("refusals enter");pipe_refusals(program,ids);pipe_trace("refusals exit");
+ pipe_trace("read_oom enter");pipe_read_materialization_oom(program,ids);pipe_trace("read_oom exit");
  pipe_trace("plain_cancel enter");pipe_cancel_read(program,ids,false);pipe_trace("plain_cancel exit");
  pipe_trace("scope_cancel enter");pipe_cancel_read(program,ids,true);pipe_trace("scope_cancel exit");
  pipe_trace("handoff enter");XrXirInstance *instance=pipe_instance(program,ids);XrXirValue value=pipe_invoke(instance,ids[PIPE_HANDOFF],NULL,0);CHECK(value.type==XR_XIR_I64&&value.payload==42);xr_xir_value_drop(&value);pipe_trace("handoff exit");
