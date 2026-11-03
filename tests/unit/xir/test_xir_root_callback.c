@@ -158,7 +158,9 @@ static void callback_cases(XrXirProgram *program,const uint32_t ids[7]) {
         XrXirInstanceResult terminal=drive(instance,mode==2,&log);
         XrXirCallStatus expected=mode==0?XR_XIR_CALL_RETURNED:mode==2?XR_XIR_CALL_CANCELLED:
             mode==3||mode==4?XR_XIR_CALL_CLEANUP_FAILED:XR_XIR_CALL_ASSERTION;
-        if(terminal.outcome.status!=expected)fprintf(stderr,"callback mode%u actual%u expected%u\n",mode,terminal.outcome.status,expected);
+        if(terminal.outcome.status!=expected)fprintf(stderr,
+            "callback mode%u actual%u expected%u logs enter%u returned%u callbackCleanup%u parentCleanup%u unexpected%u\n",
+            mode,terminal.outcome.status,expected,log.entered,log.returned,log.callback_cleanup,log.parent_cleanup,log.unexpected);
         CHECK(terminal.outcome.status==expected);
         if(mode==0) {
             XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED &&
