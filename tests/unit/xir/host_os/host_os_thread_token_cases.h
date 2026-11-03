@@ -13,6 +13,26 @@ enum { HOST_TOKEN_COUNT=15 };
 static unsigned token_mode,token_calls;
 static uint64_t token_entry_work;
 
+static XrXirCallStatus host_token_poll(XrXirInstance *instance){
+ for(unsigned n=0;n<100000;++n){
+  XrXirInstanceResult event=xr_xir_instance_poll_bounded(instance,32);
+  if(event.outcome.status==XR_XIR_CALL_READY)continue;
+  if(event.outcome.status!=XR_XIR_CALL_SUSPENDED)return event.outcome.status;
+  XrXirWaitRequest wait={0};
+  CHECK(xr_xir_instance_wait_request(instance,event.epoch,event.outcome.wake,&wait)==XR_XIR_CALL_READY);
+  CHECK(wait.kind==XR_XIR_WAIT_YIELD);
+  CHECK(xr_xir_instance_resume(instance,event.epoch,event.outcome.wake)==XR_XIR_CALL_READY);
+ }
+ CHECK(false);return XR_XIR_CALL_LIMIT;
+}
+static XrXirValue host_token_invoke(XrXirInstance *instance,uint32_t function,const XrXirValue *arguments,uint32_t count){
+ CHECK(xr_xir_instance_start(instance,function,arguments,count)==XR_XIR_CALL_READY);
+ XrXirCallStatus status=host_token_poll(instance);
+ if(status!=XR_XIR_CALL_RETURNED)fprintf(stderr,"thread function%u status%u\n",function,status);
+ CHECK(status==XR_XIR_CALL_RETURNED);XrXirValue value={0};
+ CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);return value;
+}
+
 static XrOsIoStatus host_token_current(const XrOsThreadTokenQuery *query,int64_t *output){
  ++token_calls;CHECK(host_active&&query&&query->current);
  token_entry_work=xr_xir_domain_budget_stats(host_active->domain).work;
@@ -34,9 +54,9 @@ static void host_token_limit(XrXirProgram *program,const uint32_t *ids){
   XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
   if(pass==1)config.work_limit=limit;
   XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
-  host_active=instance;token_mode=TOKEN_NORMAL;XrXirValue init=host_invoke(instance,ids[0],NULL,0);xr_xir_value_drop(&init);
+  host_active=instance;token_mode=TOKEN_NORMAL;XrXirValue init=host_token_invoke(instance,ids[0],NULL,0);xr_xir_value_drop(&init);
   CHECK(xr_xir_instance_start(instance,ids[1],NULL,0)==XR_XIR_CALL_READY);
-  XrXirCallStatus status=host_poll(instance);XrXirValue value={0};
+  XrXirCallStatus status=host_token_poll(instance);XrXirValue value={0};
   if(pass==1){
    CHECK(status==XR_XIR_CALL_LIMIT&&xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_LIMIT&&!value.type&&!value.payload);
   }else{
@@ -55,18 +75,18 @@ static void host_thread_tokens_execute(XrXirProgram *program,const uint32_t *ids
  XrXirValue private_argument={XR_XIR_I64,0,reference};
  CHECK(xr_xir_instance_start(instance,ids[14],&private_argument,1)==XR_XIR_CALL_BAD_ARGUMENT);
  for(unsigned pass=0;pass<2;++pass){
-  XrXirValue value=host_invoke(instance,ids[1],NULL,0);CHECK(value.type==XR_XIR_I64&&value.payload==reference);xr_xir_value_drop(&value);
+  XrXirValue value=host_token_invoke(instance,ids[1],NULL,0);CHECK(value.type==XR_XIR_I64&&value.payload==reference);xr_xir_value_drop(&value);
  }
  const int64_t samples[]={reference,0,-1,INT64_MAX};
  for(unsigned n=0;n<sizeof(samples)/sizeof(*samples);++n){
   bool expected=true;CHECK(xr_os_io_thread_token_alive(NULL,samples[n],&expected)==XR_OS_IO_OK);
-  XrXirValue argument={XR_XIR_I64,0,samples[n]},value=host_invoke(instance,ids[2],&argument,1);
+  XrXirValue argument={XR_XIR_I64,0,samples[n]},value=host_token_invoke(instance,ids[2],&argument,1);
   CHECK(value.type==XR_XIR_BOOL&&value.payload==(expected?1:0));xr_xir_value_drop(&value);
  }
- XrXirValue wrapped=host_invoke(instance,ids[3],NULL,0);CHECK(wrapped.type==XR_XIR_I64&&wrapped.payload==reference);xr_xir_value_drop(&wrapped);
+ XrXirValue wrapped=host_token_invoke(instance,ids[3],NULL,0);CHECK(wrapped.type==XR_XIR_I64&&wrapped.payload==reference);xr_xir_value_drop(&wrapped);
  for(unsigned n=4;n<=12;++n){
   if(n==8)continue;
-  XrXirValue value=host_invoke(instance,ids[n],NULL,0);CHECK(value.type==XR_XIR_I64&&value.payload==42);xr_xir_value_drop(&value);
+  XrXirValue value=host_token_invoke(instance,ids[n],NULL,0);CHECK(value.type==XR_XIR_I64&&value.payload==42);xr_xir_value_drop(&value);
  }
  CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);host_active=NULL;
  bool alive=false;CHECK(xr_os_io_thread_token_alive(NULL,reference,&alive)==XR_OS_IO_OK&&alive);
@@ -75,7 +95,7 @@ static void host_thread_tokens_execute(XrXirProgram *program,const uint32_t *ids
   uint32_t function=mode==TOKEN_CANCEL_INITIALIZER?ids[8]:ids[1];
   CHECK(xr_xir_instance_start(instance,function,NULL,0)==XR_XIR_CALL_READY);
   XrXirCallStatus expected=mode==TOKEN_OOM?XR_XIR_CALL_OOM:mode==TOKEN_IO?XR_XIR_CALL_HOST_ERROR:XR_XIR_CALL_CANCELLED;
-  CHECK(host_poll(instance)==expected);XrXirValue value={0};
+  CHECK(host_token_poll(instance)==expected);XrXirValue value={0};
   CHECK(xr_xir_instance_take_result(instance,&value)==expected&&!value.type&&!value.payload);
   CHECK(xr_xir_instance_free(instance)==expected);host_active=NULL;token_mode=TOKEN_NORMAL;
  }
