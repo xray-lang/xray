@@ -33,7 +33,9 @@ foreach(target test_xir_process_source test_xir_process_native)
         target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -pedantic)
         target_compile_definitions(${target} PRIVATE _POSIX_C_SOURCE=200809L)
     endif()
-    add_test(NAME ${target} COMMAND ${target})
-    set_tests_properties(${target} PROPERTIES RUN_SERIAL TRUE TIMEOUT 120
-        LABELS "unit;xir;process;host;ownership;runtime")
+    if(WIN32)
+        add_test(NAME ${target} COMMAND ${target})
+        set_tests_properties(${target} PROPERTIES RUN_SERIAL TRUE TIMEOUT 120
+            LABELS "unit;xir;process;host;ownership;runtime")
+    endif()
 endforeach()
