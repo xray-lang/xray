@@ -114,6 +114,9 @@ class TierTests(unittest.TestCase):
     def test_generated_api_knowledge_selects_its_existing_sync_gates(self):
         for path in ("src/app/mcp/xmcp_knowledge_generated.c",
                      "src/app/lsp/xlsp_stdlib_generated.inc", "scripts/gen_stdlib_types.py",
+                     "src/frontend/analyzer/xanalyzer_builtins_generated.h",
+                     "src/stdlib/xstdlib_defs_generated.h",
+                     "stdlib/provider_inventory.generated.json",
                      "stdlib/types/array.xr",
                      "stdlib/compress/compress.xr", "scripts/gen_language_docs.py",
                      "scripts/gen_api_inventory.py", "spec/source/cards/stdlib/compress.json"):
@@ -125,6 +128,14 @@ class TierTests(unittest.TestCase):
                                  "api_inventory_docs_coverage", "test_mcp_knowledge_generation"}
                                 <= set(plan["tests"]))
                 self.assertNotIn("native-runtime", plan["groups"])
+        for path in ("src/frontend/analyzer/xanalyzer_builtins_generated.h.unrelated",
+                     "stdlib/provider_inventory.generated.json.unrelated"):
+            with self.subTest(path=path):
+                plan = xray_l1.tier_plan(ROOT, "L2", changed=[path])
+                self.assertNotIn("api-knowledge", plan["groups"])
+        with self.assertRaisesRegex(ValueError, "No affected validation group"):
+            xray_l1.tier_plan(ROOT, "L2", changed=[
+                "src/stdlib/xstdlib_defs_generated.h.unrelated"])
         self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
 
     def test_installed_source_sdk_scripts_select_their_installation_family(self):
