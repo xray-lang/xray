@@ -40,6 +40,7 @@
 #define CHECK(c) do { if(!(c)) { fprintf(stderr,"Process product %d: %s\n",__LINE__,#c);exit(1); } } while(0)
 #if defined(XR_OS_WINDOWS)
 static XrOsIoStatus process_observed_prepare(const XrOsIoPolicy *,const XrOsProcessQuery *,const XrOsProcessRequest *,XrOsProcessOwner *,bool *);
+static XrOsIoStatus process_observed_prepare_shell(const XrOsIoPolicy *,const XrOsProcessQuery *,const XrOsProcessRequest *,const XrOsProcessText *,XrOsProcessOwner *,bool *);
 static XrOsIoStatus process_observed_start(XrOsProcessOwner *);
 static XrOsIoStatus process_complete_os_begin(XrOsPipeOwner *,const XrOsPipeRequest *,const XrOsPipeQuery *,XrOsPipeOperation *);
 static XrOsIoStatus process_complete_os_poll(XrOsPipeOperation *,XrOsPipeProgress *);
@@ -47,6 +48,7 @@ static XrOsIoStatus process_complete_os_operation_close(XrOsPipeOperation *,bool
 static XrOsIoStatus process_complete_os_close_end(XrOsPipeOwner *,XrOsPipeEnd,bool *);
 static XrOsIoStatus process_complete_os_dispose(XrOsPipeOwner *,bool *);
 #define xr_os_io_process_prepare process_observed_prepare
+#define xr_os_io_process_prepare_shell process_observed_prepare_shell
 #define xr_os_io_process_start process_observed_start
 #define xr_os_io_pipe_begin process_complete_os_begin
 #define xr_os_io_pipe_poll process_complete_os_poll
@@ -57,6 +59,7 @@ static XrOsIoStatus process_complete_os_dispose(XrOsPipeOwner *,bool *);
 #include "../xir_runtime_allocations.h"
 #if defined(XR_OS_WINDOWS)
 #undef xr_os_io_process_prepare
+#undef xr_os_io_process_prepare_shell
 #undef xr_os_io_process_start
 #undef xr_os_io_pipe_begin
 #undef xr_os_io_pipe_poll
@@ -170,6 +173,11 @@ static XrOsIoStatus process_observed_prepare(const XrOsIoPolicy *memory,const Xr
     const XrOsProcessRequest *request,XrOsProcessOwner *owner,bool *created) {
     if(process_oom_observing)++process_oom_prepares;
     return xr_os_io_process_prepare(memory,query,request,owner,created);
+}
+static XrOsIoStatus process_observed_prepare_shell(const XrOsIoPolicy *memory,const XrOsProcessQuery *query,
+    const XrOsProcessRequest *request,const XrOsProcessText *command,XrOsProcessOwner *owner,bool *created){
+    if(process_oom_observing)++process_oom_prepares;
+    return xr_os_io_process_prepare_shell(memory,query,request,command,owner,created);
 }
 static XrOsIoStatus process_observed_start(XrOsProcessOwner *owner) {
     if(process_oom_observing)++process_oom_starts;
