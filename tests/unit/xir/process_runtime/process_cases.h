@@ -28,7 +28,7 @@ static const char *const process_names[] = {
     "closeRead", "closeWrite"
 };
 static const char process_wrappers[] =
-    "\nexport fn spawnProcess(program:string,args:Array<string>)->Process?{return Process.spawn(program,args)}\n"
+    "\nexport fn spawnProcess(program:string,args:Array<string>)->Process?{if(len(args)==0){return Process.spawn(program)};return Process.spawn(program,args)}\n"
     "export fn spawnDetached(program:string,args:Array<string>)->Process?{return Process.spawn(program,args,ProcessOptions(null,null,null,null,null,true))}\n"
     "export fn spawnConfigured(program:string,args:Array<string>,cwd:string)->Process?{\n"
     " var env:Map<string,string>=#{\"XR_PROCESS_CHILD\":\"exact-env\"}\n"
