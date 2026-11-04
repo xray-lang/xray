@@ -210,7 +210,7 @@ static void path_complete_provider_cases(XrXirProgram *program,const uint32_t *i
             "//server/share-longer-than-eighty-abcdefghijklmnopqrstuvwxyz-ABCDEFGHIJKLMNOPQRSTUVWXYZ-0123456789-abcdefghijklmnopqrstuvwxyz",
             "/server/share-longer-than-eighty-abcdefghijklmnopqrstuvwxyz-ABCDEFGHIJKLMNOPQRSTUVWXYZ-0123456789-abcdefghijklmnopqrstuvwxyz/leaf"}
     };
-    static const wchar_t *const denied[]={L"\\\\?\\C:\\x",L"\\\\.\\PIPE\\x",L"\\\\C:\\share",L"\\\\srv\\C:",
+    static const wchar_t *const denied[]={L"",L"\\\\srv\\.",L"\\\\srv\\..",L"\\\\?\\C:\\x",L"\\\\.\\PIPE\\x",L"\\\\C:\\share",L"\\\\srv\\C:",
         L"\\\\..\\share",L"\\\\??\\C:\\x",L"\\\\server",L"\\\\server\\",L"\\\\srv\\\\share",L"C:relative",L"relative\\path",L"\\\\srv\\bad\tname"};
     /* These are synthetic provider facts after an actual owned query. They
      * qualify defensive projection, never actual SMB access or host discovery. */
