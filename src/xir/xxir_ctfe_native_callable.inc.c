@@ -27,7 +27,7 @@ static XrXirCtfeStatus ctfe_native_callable_step(CtfeCallExecution *execution,
     if (xir_mem_native_id(native_id) || native_id==XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM ||
         native_id==XR_NATIVE_CALLABLE_CRYPTO_TIMING_EQUAL || native_id==XR_NATIVE_CALLABLE_TASK_ALL_BEGIN ||
         native_id==XR_NATIVE_CALLABLE_TASK_FIRST_BEGIN || xir_sys_native_id(native_id) || xir_io_native_id(native_id) ||
-        xir_os_native_id(native_id))
+        xir_os_native_id(native_id) || xir_path_native_id(native_id))
         return XR_XIR_CTFE_NOT_SUPPORTED;
     CtfeOwnedState *state=&execution->owned;
     XrXirCtfeStatus status=ctfe_control_poll(state->control);

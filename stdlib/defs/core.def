@@ -1,3 +1,19 @@
+module path {
+  fn __getcwd {
+    signature: "(): string"
+    doc: "Read the current working directory for relative Path resolution"
+    vm: ""
+    aot: ""
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+    visibility: "internal"
+    return_ownership: "fresh"
+  }
+}
+
 module time {
   fn __realtimeNanos {
     signature: "(): i64"
