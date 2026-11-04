@@ -202,13 +202,27 @@ static XrXirCallStatus instance_environment_snapshot(XrXirCallView *view,XrXirIn
 #endif // XR_OS_WINDOWS
 
 #if defined(XR_OS_WINDOWS)
+static XrXirCallStatus instance_path_unc_component(XirEnvironmentQuery *query,const char *text,
+    size_t length) {
+    if(!length || (text[0]=='.' && (length==1 || (length==2 && text[1]=='.'))))
+        return XR_XIR_CALL_HOST_ERROR;
+    for(size_t offset=0;offset<length;++offset) {
+        if(!(offset&4095u) && !instance_environment_current(query))return query->status;
+        uint8_t byte=(uint8_t)text[offset];
+        if(byte<32 || strchr("\\/:*?\"<>|",byte))return XR_XIR_CALL_HOST_ERROR;
+    }
+    return instance_environment_current(query)?XR_XIR_CALL_READY:query->status;
+}
 static XrXirCallStatus instance_path_cwd_anchor(XirEnvironmentQuery *query,char *raw,
     size_t *offset,size_t *length) {
-    size_t bytes=0,first_separator=SIZE_MAX;
+    size_t bytes=0,first_separator=SIZE_MAX,second_separator=SIZE_MAX;
     while(raw[bytes]) {
         if(!(bytes&4095u) && !instance_environment_current(query))return query->status;
         if(raw[bytes]=='\\')raw[bytes]='/';
-        if(bytes>=2 && raw[bytes]=='/' && first_separator==SIZE_MAX)first_separator=bytes;
+        if(bytes>=2 && raw[bytes]=='/') {
+            if(first_separator==SIZE_MAX)first_separator=bytes;
+            else if(second_separator==SIZE_MAX)second_separator=bytes;
+        }
         ++bytes;
     }
     if(!xr_xir_domain_work(query->domain,(uint64_t)bytes+1))return XR_XIR_CALL_LIMIT;
@@ -218,12 +232,15 @@ static XrXirCallStatus instance_path_cwd_anchor(XirEnvironmentQuery *query,char 
         raw[1]==':' && raw[2]=='/';
     if(drive)start=2;
     else {
-        // A host UNC anchor is distinct from a device or extended namespace.
-        bool unc=bytes>=5 && raw[0]=='/' && raw[1]=='/' && raw[2]!='/' &&
+        bool unc=bytes>=5 && raw[0]=='/' && raw[1]=='/' &&
             first_separator!=SIZE_MAX && first_separator>2 && first_separator+1<bytes &&
             raw[first_separator+1]!='/';
-        bool device=bytes>=4 && (raw[2]=='?' || raw[2]=='.') && raw[3]=='/';
-        if(!unc || device)return XR_XIR_CALL_HOST_ERROR;
+        if(!unc)return XR_XIR_CALL_HOST_ERROR;
+        XrXirCallStatus status=instance_path_unc_component(query,raw+2,first_separator-2);
+        size_t share_end=second_separator==SIZE_MAX?bytes:second_separator;
+        if(status==XR_XIR_CALL_READY)status=instance_path_unc_component(query,raw+first_separator+1,
+            share_end-first_separator-1);
+        if(status!=XR_XIR_CALL_READY)return status;
     }
     *offset=start;*length=bytes-start;return XR_XIR_CALL_READY;
 }
