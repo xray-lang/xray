@@ -639,8 +639,8 @@ static bool call_take_parameter(const XirCallTakeArguments *,uint32_t);
 #include "xxir_call_view_returns.inc.c"
 #include "xxir_call_take.inc.c"
 
-XR_FUNC XrXirCallStatus xr_xir_call_return_move(XrXirCallView *view,
-    XrXirValue *source, XrXirAction *action) {
+static XrXirCallStatus call_return_move(XrXirCallView *view,
+    XrXirValue *source,XrXirAction *action,XirCallReturnCommit commit,void *context) {
     XrXirValueAdmission *admission=xr_xir_call_admission(view);
     if (!admission || !source || !action || view->phase!=XR_XIR_CALL_NORMAL)
         return XR_XIR_CALL_BAD_ARGUMENT;
@@ -663,11 +663,26 @@ XR_FUNC XrXirCallStatus xr_xir_call_return_move(XrXirCallView *view,
     XR_CHECK(frame->pending.status==XR_XIR_CALL_READY && !frame->pending.value.type &&
         !frame->pending.value.reserved && !frame->pending.value.payload &&
         xr_xir_panic_empty(&frame->pending.panic),"a normal frame owns no prior pending exit");
+    if (commit) {
+        status=xr_xir_call_execution_status(view);
+        if (status!=XR_XIR_CALL_READY) return status;
+        status=commit(context);
+        if (status!=XR_XIR_CALL_READY) return status;
+    }
     /* Admission and terminal work precede the only ownership mutation. */
     frame->pending=call_result(XR_XIR_CALL_RETURNED);
     frame->pending.value=*source;*source=(XrXirValue){0};frame->return_staged=true;
     *action=(XrXirAction){.kind=XR_XIR_ACTION_RETURN,.value=frame->pending.value};
     return XR_XIR_CALL_READY;
+}
+XR_FUNC XrXirCallStatus xr_xir_call_return_move(XrXirCallView *view,
+    XrXirValue *source,XrXirAction *action) {
+    return call_return_move(view,source,action,NULL,NULL);
+}
+XR_FUNC XrXirCallStatus xir_call_return_move_commit(XrXirCallView *view,
+    XrXirValue *source,XrXirAction *action,XirCallReturnCommit commit,void *context) {
+    if(!commit)return XR_XIR_CALL_BAD_ARGUMENT;
+    return call_return_move(view,source,action,commit,context);
 }
 
 typedef struct CallFramePreparation {
