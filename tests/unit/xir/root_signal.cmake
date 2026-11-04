@@ -9,6 +9,7 @@ target_compile_definitions(test_xir_signal_source PRIVATE
 add_custom_command(OUTPUT "${root_signal_generated}/root_signal.c"
     COMMAND $<TARGET_FILE:test_xir_signal_source> --emit "${root_signal_generated}"
     DEPENDS test_xir_signal_source "${CMAKE_CURRENT_LIST_DIR}/root_signal_runtime.h"
+        "${PROJECT_SOURCE_DIR}/stdlib/path/path.xr"
     VERBATIM)
 add_executable(test_xir_signal_native xir/test_xir_signal_native.c
     "${root_signal_generated}/root_signal.c")
