@@ -805,6 +805,9 @@
       "match": [
         "src/app/mcp/xmcp_knowledge_generated.c",
         "src/app/lsp/xlsp_stdlib_generated.inc",
+        "src/frontend/analyzer/xanalyzer_builtins_generated.h",
+        "src/stdlib/xstdlib_defs_generated.h",
+        "stdlib/provider_inventory.generated.json",
         "scripts/gen_stdlib_types.py",
         "scripts/gen_api_inventory.py",
         "scripts/gen_mcp_knowledge.py",
