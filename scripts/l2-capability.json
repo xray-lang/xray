@@ -845,6 +845,7 @@
       "tier": "L2",
       "match": [
         "stdlib/sys/sys.xr",
+        "stdlib/time/time.xr",
         "src/os/os_fs.h",
         "src/os/os_system.h",
         "src/os/os_file_metadata.h",
