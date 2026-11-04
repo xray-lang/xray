@@ -17,6 +17,8 @@
 #include "host_os_io_links_cases.h"
 #include "host_os_io_temp_cases.h"
 #include "host_os_io_directory_cases.h"
+#define XR_HOST_OS_FILE_PREPARE_SOURCE 1
+#include "host_os_io_file_prepare_cases.h"
 #include "host_os_signal_frontier_cases.h"
 #include "host_os_thread_token_cases.h"
 static uint32_t host_named(const XrXirModule *module,const char *name){
@@ -80,6 +82,7 @@ static void host_ctfe(const XrXirArtifact *code,uint32_t function,const XrXirVal
  memcpy(request.evaluation.checked_identity,code->checked_identity,32);XrXirValue value={0};
  CHECK(xr_xir_compile_ctfe_calls(&request,&value)==XR_XIR_CTFE_NOT_SUPPORTED&&!value.type&&!value.payload);
 }
+#include "host_os_io_file_prepare_contracts.h"
 static void host_io_contracts(XrXirCompileContext *context,const XrXirArtifact *code){
  const XrXirModule *m=xr_xir_compile_artifact_module(code);uint32_t f=host_named(m,"__chdir"),field=0;XrXirType path=m->functions[f].parameters[0];
  CHECK(xir_native_callable_verify(m,f)==XR_XIR_OK&&xir_native_callable_verify(m,host_named(m,"__chmod"))==XR_XIR_OK);
@@ -259,13 +262,14 @@ static void host_io_directory_contracts(XrXirCompileContext *context,const XrXir
  }
 }
 static void host_product(XrXirCompileContext *context,unsigned kind,const char *directory,bool emit){
- const char *modules[]={"os","sys","io","os","io","io","os","io","io","sys","io"},*texts[]={host_count_text,host_pin_text,host_io_text,host_system_text,host_stat_text,host_io_bool_text,host_signal_frontier_text,host_io_links_text,host_io_temp_text,NULL,host_io_directory_text},*prefixes[]={"host_count","host_pin","host_path","host_system","host_stat","host_io_bool","host_signal_frontier","host_io_links","host_io_temp","host_thread_tokens","host_io_directory"};
+ const char *modules[]={"os","sys","io","os","io","io","os","io","io","sys","io","io"},*texts[]={host_count_text,host_pin_text,host_io_text,host_system_text,host_stat_text,host_io_bool_text,host_signal_frontier_text,host_io_links_text,host_io_temp_text,NULL,host_io_directory_text,host_file_prepare_text},*prefixes[]={"host_count","host_pin","host_path","host_system","host_stat","host_io_bool","host_signal_frontier","host_io_links","host_io_temp","host_thread_tokens","host_io_directory","host_io_file_prepare"};
  char *owned=kind==9?host_thread_token_source():NULL;
  XrXirArtifact *code=host_code(context,modules[kind],owned?owned:texts[kind]);xr_free(owned);const XrXirModule *m=xr_xir_compile_artifact_module(code);
- uint32_t ids[HOST_TOKEN_COUNT]={m->declarations->entry_function};unsigned count=kind==10?6u:kind==9?HOST_TOKEN_COUNT:kind==8?4u:kind==7?6u:kind==6?5u:kind==5?7u:kind==4?4u:kind==3?9u:kind==2?5u:2u;
+ uint32_t ids[HOST_TOKEN_COUNT]={m->declarations->entry_function};unsigned count=kind==11?HOST_FILE_COUNT:kind==10?6u:kind==9?HOST_TOKEN_COUNT:kind==8?4u:kind==7?6u:kind==6?5u:kind==5?7u:kind==4?4u:kind==3?9u:kind==2?5u:2u;
  if(kind==9){const char *names[]={"current","alive","throughValue","basic","retry","recursion","panicked","cancelled","yielded","waited","dynamic","nullable","__threadLocalId","__threadLocalAlive","barrier","invalidBarrier"};for(unsigned n=0;n<16;++n)ids[n+1]=host_named(m,names[n]);}
  else if(kind==3){const char *names[]={"uid","gid","parent","signal","total","available","elapsed","load"};for(unsigned n=0;n<8;++n)ids[n+1]=host_named(m,names[n]);}
- else ids[1]=host_named(m,kind==8?"directory":kind==6?"parent":(kind==2||kind==4||kind==5||kind==7||kind==10)?"make":"answer");
+ else ids[1]=host_named(m,kind==8?"directory":kind==6?"parent":(kind==2||kind==4||kind==5||kind==7||kind==10||kind==11)?"make":"answer");
+ if(kind==11){const char *names[]={"closeFile","flushFile","openFile","openWrite","readFile","writeFile","writeText"};for(unsigned n=0;n<7;++n)ids[HOST_FILE_CLOSE+n]=host_named(m,names[n]);}
  if(kind==10){const char *names[]={"openPath","nextName","closePath","byRef"};for(unsigned n=0;n<4;++n)ids[n+2]=host_named(m,names[n]);}
  if(kind==8){ids[2]=host_named(m,"file");ids[3]=host_named(m,"nested");}
  if(kind==7){const char *names[]={"symlinkPath","readlinkPath","realpathPath","byRef"};for(unsigned n=0;n<4;++n)ids[n+2]=host_named(m,names[n]);}
@@ -274,18 +278,23 @@ static void host_product(XrXirCompileContext *context,unsigned kind,const char *
  if(kind==4){ids[2]=host_named(m,"query");ids[3]=host_named(m,"snapshot");}
  if(kind==2){ids[2]=host_named(m,"chmodPath");ids[3]=host_named(m,"chdirPath");ids[4]=host_named(m,"viaRef");}
  host_emit(code,prefixes[kind],ids,count,directory,emit);
- if(!emit){if(kind==10)host_io_directory_contracts(context,code);else if(kind==9)host_thread_token_contracts(context,code);else if(kind==8)host_io_temp_contracts(context,code);else if(kind==7)host_io_links_contracts(context,code);else if(kind==6){CHECK(!(m->declarations->functions[ids[1]].promises&XR_XIR_FUNCTION_NO_SUSPEND));CHECK(m->declarations->functions[host_named(m,"__cpuCount")].promises&XR_XIR_FUNCTION_NO_SUSPEND);}else if(kind==5)host_io_bool_contracts(context,code);else if(kind==4)host_stat_contracts(context,code);else if(kind==2)host_io_contracts(context,code);else if(kind==3)host_system_contracts(context,code);else host_cpu_contracts(context,code,kind==1);}
+ if(!emit){if(kind==11){if(!host_file_prepare_child)host_file_prepare_contracts(context,code);}else if(kind==10)host_io_directory_contracts(context,code);else if(kind==9)host_thread_token_contracts(context,code);else if(kind==8)host_io_temp_contracts(context,code);else if(kind==7)host_io_links_contracts(context,code);else if(kind==6){CHECK(!(m->declarations->functions[ids[1]].promises&XR_XIR_FUNCTION_NO_SUSPEND));CHECK(m->declarations->functions[host_named(m,"__cpuCount")].promises&XR_XIR_FUNCTION_NO_SUSPEND);}else if(kind==5)host_io_bool_contracts(context,code);else if(kind==4)host_stat_contracts(context,code);else if(kind==2)host_io_contracts(context,code);else if(kind==3)host_system_contracts(context,code);else host_cpu_contracts(context,code,kind==1);}
  if(emit)xr_xir_compile_artifact_free(code);
- else{XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&code,&program)==XR_XIR_OK&&!code);if(kind==10){host_io_directory_execute(context,program,ids);xr_xir_compile_program_drop(program);}else if(kind==9){host_thread_tokens_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==8){host_io_temp_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==7){host_io_links_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==6){host_signal_frontier_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==5){host_io_bool_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==4){host_stat_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==3){host_system_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==2){host_path_execute(program,ids);host_path_receiving(context,&program,ids);CHECK(!program);}else{host_cpu_execute(program,ids,kind==1);xr_xir_compile_program_drop(program);}}
+ else{XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&code,&program)==XR_XIR_OK&&!code);if(kind==11){host_file_prepare_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==10){host_io_directory_execute(context,program,ids);xr_xir_compile_program_drop(program);}else if(kind==9){host_thread_tokens_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==8){host_io_temp_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==7){host_io_links_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==6){host_signal_frontier_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==5){host_io_bool_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==4){host_stat_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==3){host_system_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==2){host_path_execute(program,ids);host_path_receiving(context,&program,ids);CHECK(!program);}else{host_cpu_execute(program,ids,kind==1);xr_xir_compile_program_drop(program);}}
 }
 int main(int argc,char **argv){
 #if defined(XR_OS_WINDOWS)
  CHECK(_setmode(_fileno(stdout),_O_BINARY)!=-1);
 #endif
- bool emit=argc==3&&!strcmp(argv[1],"--emit");CHECK(emit||argc==1);if(!emit)host_cpu_concurrency();
+ host_file_prepare_child=argc==2&&!strcmp(argv[1],"--file-prepare-stdio");host_file_prepare_executable=argv[0];
+#if defined(XR_OS_WINDOWS)
+ if(host_file_prepare_child)CHECK(_setmode(_fileno(stdin),_O_BINARY)!=-1&&_setmode(_fileno(stderr),_O_BINARY)!=-1);
+#endif
+ bool emit=argc==3&&!strcmp(argv[1],"--emit");CHECK(emit||argc==1||host_file_prepare_child);if(!emit&&!host_file_prepare_child)host_cpu_concurrency();
  XrCompileResourceLimits limits=XR_RESOURCE_DEFAULT_COMPILER_LIMITS;XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
  XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
- for(unsigned kind=0;kind<11;++kind)host_product(&context,kind,emit?argv[2]:XR_HOST_OS_GENERATED,emit);
+ if(host_file_prepare_child)host_product(&context,11,XR_HOST_OS_GENERATED,false);
+ else for(unsigned kind=0;kind<12;++kind)host_product(&context,kind,emit?argv[2]:XR_HOST_OS_GENERATED,emit);
  CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK&&before.held_bytes==after.held_bytes&&!runtime_live&&!runtime_bytes);
- xr_compile_resources_release(context.resources);if(!emit){CHECK(xr_os_io_thread_token_shutdown()==XR_OS_IO_OK);puts("42");}return 0;
+ xr_compile_resources_release(context.resources);if(!emit){CHECK(xr_os_io_thread_token_shutdown()==XR_OS_IO_OK);if(!host_file_prepare_child)puts("42");}return 0;
 }
