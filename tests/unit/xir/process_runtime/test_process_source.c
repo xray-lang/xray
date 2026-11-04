@@ -21,7 +21,7 @@ static char *process_source_text(size_t *length){
  FILE *file=fopen(XR_PROCESS_ROOT "/stdlib/sys/sys.xr","rb");CHECK(file&&!fseek(file,0,SEEK_END));long size=ftell(file);CHECK(size>0&&!fseek(file,0,SEEK_SET));
  char *original=xr_malloc((size_t)size+1);CHECK(original&&fread(original,1,(size_t)size,file)==(size_t)size&&!fclose(file));original[size]=0;
  const char *signal=strstr(original,"export enum Signal {"),*signal_end=signal?strstr(signal,"\n// KILL cannot be caught"):NULL;
- const char *start=strstr(original,"export class Pipe {"),*end=start?strstr(start,"\nenum _ThreadLocalError {"):NULL;
+ const char *start=strstr(original,"export class Pipe {"),*end=start?strstr(start,"\nexport enum ThreadLocalError {"):NULL;
  CHECK(signal&&signal_end&&signal_end>signal&&start&&end&&end>start);
  static const char imports[]="import time\n";
  size_t first=(size_t)(signal_end-signal),count=(size_t)(end-start);
