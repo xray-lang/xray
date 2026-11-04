@@ -311,7 +311,7 @@ static void process_complete_os_failure(XrXirProgram *program,const uint32_t *id
             XrXirCallStatus status=process_complete_os_step(instance,&child).outcome.status;CHECK(status==XR_XIR_CALL_READY||status==XR_XIR_CALL_SUSPENDED);
             uint64_t now=xr_time_monotonic_ns();CHECK(now>=started&&now-started<UINT64_C(10000000000));
         }
-        CHECK(xr_xir_call_request_cancel(instance->call)==XR_XIR_CALL_CANCEL_REQUESTED);
+        CHECK(xr_xir_instance_cancel_current(instance)==XR_XIR_CALL_CANCEL_REQUESTED);
     }
     XrXirCallStatus status=process_complete_os_drive(instance,&child);runtime_fail_at=SIZE_MAX;
     if(status!=(cancel?XR_XIR_CALL_CANCELLED:XR_XIR_CALL_OOM))fprintf(stderr,"complete os.exec cancel%u status%u\n",(unsigned)cancel,status);
