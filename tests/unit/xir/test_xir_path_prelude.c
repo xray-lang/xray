@@ -31,6 +31,8 @@
 #define CHECK(c) do{if(!(c)){fprintf(stderr,"Path %d: %s\n",__LINE__,#c);exit(1);}}while(0)
 #include "path_source_memory.h"
 #include "xir_path_prelude_runtime.h"
+#include "xir_path_complete_runtime.h"
+#include "xir_path_complete_source.h"
 static XrXirStatus path_checked(const XrXirCompileContext *context,const char *text,
     const char *stdlib,const XrXirLibraryCatalog *catalog,XrXirSourceResult *result) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
@@ -220,7 +222,7 @@ int main(int argc,char **argv) {
     if(argc==3&&!strcmp(argv[1],"--previous123")) {
         unsigned char packet[8192];FILE *file=fopen(argv[2],"rb");CHECK(file);
         size_t length=fread(packet,1,sizeof(packet),file);CHECK(length&&feof(file)&&!ferror(file)&&!fclose(file));
-        CHECK(packet[8]==41&&packet[12]==123&&XR_XIR_CHECKED_CONTRACT==128);XrXirArtifact *rejected=NULL;
+        CHECK(packet[8]==41&&packet[12]==123&&XR_XIR_CHECKED_CONTRACT==129);XrXirArtifact *rejected=NULL;
         CHECK(xr_xir_compile_checked_read(&context,packet,length,&rejected,NULL)==XR_XIR_BAD_STRUCTURE&&!rejected);
         CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK&&before.held_bytes==after.held_bytes);
         xr_compile_resources_release(context.resources);return 0;
@@ -253,9 +255,10 @@ int main(int argc,char **argv) {
             path_execute(program,entry,mode==1?1:0);xr_xir_compile_program_drop(program);
         }
     }
+    path_complete_product(&context,argc==4?argv[2]:NULL);
     CHECK(checked(&context,"class Path{value:i64 init(value:i64){this.value=value}}\nfn keep(value:Path)->Path{return value}")==XR_XIR_OK);
     CHECK(checked(&context,"fn keep<Path>(value:Path)->Path{return value}")==XR_XIR_OK);
     CHECK(checked(&context,"import {Path} from \"./custom\"\nfn keep(value:Path)->Path{return value}")==XR_XIR_OK);
-    CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);CHECK(before.held_bytes==after.held_bytes);
+    CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);CHECK(before.held_bytes==after.held_bytes&&!runtime_live&&!runtime_bytes);
     xr_compile_resources_release(context.resources);puts("Path declaration-only access and lexical shadow controls passed");return 0;
 }

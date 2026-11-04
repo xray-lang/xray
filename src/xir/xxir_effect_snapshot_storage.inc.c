@@ -40,6 +40,7 @@ static void effect_body_material_free(EffectBodyMaterial *body) {
     effect_terms_free(&body->terms);
     xr_xir_compile_types_free(body->owned_types);
     effect_input_facts_free(body->input_facts);
+    effect_body_material_free(body->canonical_source);
     xr_compile_resources_free(body);
 }
 
@@ -319,6 +320,18 @@ static XrXirStatus effect_body_material_generation_input(const XrXirCompileConte
     if (status==XR_XIR_OK) status=xir_cell_proof_builder_finish(&cells,&body->cells);
     if (status==XR_XIR_OK) status=effect_body_advertisements_finish(&advertisements,&body->declared);
     effect_body_advertisements_free(advertisements);xir_cell_proof_builder_free(cells);
+    if (status==XR_XIR_OK && ordinary) {
+        bool native_source=false;
+        for(uint32_t f=0;f<ordinary->source->function_count;++f) {
+            if(ordinary->source->declarations && ordinary->source->declarations->functions &&
+                (ordinary->source->declarations->functions[f].native_callable==XR_NATIVE_CALLABLE_SYS_ON_SIGNAL ||
+                 (xir_sys_pipe_id(ordinary->source->declarations->functions[f].native_callable) ||
+                  xir_sys_process_id(ordinary->source->declarations->functions[f].native_callable)||
+                  xir_sys_dylib_id(ordinary->source->declarations->functions[f].native_callable))))native_source=true;
+        }
+        if(status==XR_XIR_OK && native_source)
+            status=effect_body_material_generation_input(work,ordinary->source,NULL,NULL,input_facts,&body->canonical_source);
+    }
     if (status!=XR_XIR_OK) { effect_body_material_free(body);return status; }
 
     *output=body;return XR_XIR_OK;

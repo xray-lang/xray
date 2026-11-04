@@ -53,9 +53,9 @@ static void reset_observer(void) {
     CHECK(!live && !physical);
     attempts = peak = total = 0; fail_at = SIZE_MAX;
 }
-static XrXirCompileContext context_new(uint64_t work) {
+static XrXirCompileContext context_new(uint64_t memory) {
     XrXirCompileContext context = {0};
-    const XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, work};
+    const XrCompileResourceLimits limits = {memory ? XR_COMPILE_MEMORY_FINITE : XR_COMPILE_MEMORY_ORDINARY, memory, true};
     CHECK(xr_compile_resources_new(&limits, &context.resources) == XR_COMPILE_RESOURCE_OK);
     context.limits = xr_xir_compile_default_limits();
     return context;
@@ -63,7 +63,7 @@ static XrXirCompileContext context_new(uint64_t work) {
 static XrCompileResourceStats stats(const XrXirCompileContext *context) {
     XrCompileResourceStats value;
     CHECK(xr_compile_resources_stats(context->resources, &value) == XR_COMPILE_RESOURCE_OK);
-    CHECK(value.live_bytes == physical && value.peak_bytes == peak && value.allocated_bytes == total);
+    CHECK(value.held_bytes == physical && value.peak_bytes == peak && value.allocated_bytes == total);
     return value;
 }
 
@@ -85,7 +85,7 @@ static XrXirValueStatus arena_fixture(const XrXirCompileContext *context, XrXirT
 }
 static void arena_lifetime_and_authenticity(void) {
     reset_observer();
-    XrXirCompileContext context = context_new(UINT64_MAX);
+    XrXirCompileContext context = context_new(0);
     XrXirTypeArena *arena = NULL;
     CHECK(arena_fixture(&context,&arena) == XR_XIR_VALUE_OK);
     const XrXirTypes *types = xr_xir_compile_type_arena_types(arena);
@@ -121,7 +121,7 @@ static void arena_lifetime_and_authenticity(void) {
     xr_compile_resources_release(context.resources);
     xr_xir_domain_drop(domain);
     CHECK(xr_xir_value_valid(&outer) && xr_xir_value_valid(&copy));
-    CHECK(stats(&context).work == active.work);
+    CHECK(stats(&context).held_bytes==active.held_bytes && stats(&context).allocated_bytes==active.allocated_bytes);
     xr_xir_value_drop(&outer);
     xr_xir_value_drop(&empty);
     XrXirValue survivor={0};
@@ -137,7 +137,7 @@ static void arena_allocation_failures(void) {
     size_t count=0;
     for (size_t failure=SIZE_MAX;;) {
         reset_observer();
-        XrXirCompileContext context=context_new(UINT64_MAX);
+        XrXirCompileContext context=context_new(0);
         fail_at=failure;
         XrXirTypeArena *arena=NULL;
         XrXirValueStatus status=arena_fixture(&context,&arena);
@@ -154,16 +154,23 @@ static void arena_allocation_failures(void) {
 }
 static void arena_budget_and_output(void) {
     reset_observer();
-    XrXirCompileContext context=context_new(UINT64_MAX);
+    XrXirCompileContext context=context_new(0);
     XrXirTypeArena *untouched=(XrXirTypeArena *)(uintptr_t)1;
     CHECK(arena_fixture(&context,&untouched) == XR_XIR_VALUE_BAD_ARGUMENT);
     CHECK(untouched == (XrXirTypeArena *)(uintptr_t)1 && attempts==1);
-    xr_compile_resources_release(context.resources);
-    for (uint64_t work=1;work<128;++work) {
-        reset_observer();context=context_new(work);
+    XrXirTypeArena *baseline=NULL;CHECK(arena_fixture(&context,&baseline)==XR_XIR_VALUE_OK);
+    uint64_t required=stats(&context).peak_bytes;CHECK(required>sizeof(XrCompileResources));
+    xr_xir_compile_type_arena_drop(baseline);xr_compile_resources_release(context.resources);CHECK(!live&&!physical);
+    for (unsigned shortage=0;shortage<2;++shortage) {
+        reset_observer();context=context_new(required-shortage);
         XrXirTypeArena *arena=NULL;
-        CHECK(arena_fixture(&context,&arena) == XR_XIR_VALUE_LIMIT && !arena);
-        CHECK(stats(&context).work <= work);
+        XrXirValueStatus status=arena_fixture(&context,&arena);
+        XrCompileResourceStats observed=stats(&context);
+        fprintf(stderr,"arena finite shortage%u status%u cap%llu held%llu peak%llu\n",shortage,(unsigned)status,
+            (unsigned long long)(required-shortage),(unsigned long long)observed.held_bytes,(unsigned long long)observed.peak_bytes);
+        CHECK(status==(shortage?XR_XIR_VALUE_MEMORY_LIMIT:XR_XIR_VALUE_OK));
+        CHECK(shortage?!arena:arena!=NULL);CHECK(stats(&context).held_bytes<=required-shortage);
+        xr_xir_compile_type_arena_drop(arena);
         xr_compile_resources_release(context.resources);
         CHECK(!live && !physical);
     }
@@ -171,9 +178,11 @@ static void arena_budget_and_output(void) {
 #include "xir_compile_program_owner_cases.h"
 #include "xir_construction_owner_cases.h"
 int main(void) {
-    arena_lifetime_and_authenticity(); arena_allocation_failures(); arena_budget_and_output();
-    program_lifetime(); program_take_failures(); program_abi_and_owner();
-    program_method_kind_match(); construction_cross_owner();
+#define RUN_OWNER_CASE(f) do { fprintf(stderr,"owner begin %s\n",#f); f(); fprintf(stderr,"owner end %s\n",#f); } while(0)
+    RUN_OWNER_CASE(arena_lifetime_and_authenticity);RUN_OWNER_CASE(arena_allocation_failures);RUN_OWNER_CASE(arena_budget_and_output);
+    RUN_OWNER_CASE(program_lifetime);RUN_OWNER_CASE(program_take_failures);RUN_OWNER_CASE(program_abi_and_owner);
+    RUN_OWNER_CASE(program_method_kind_match);RUN_OWNER_CASE(construction_cross_owner);
+#undef RUN_OWNER_CASE
     puts("Canonical metadata: producer/domain release, nested forged handles rejected, physical zero");
     return 0;
 }

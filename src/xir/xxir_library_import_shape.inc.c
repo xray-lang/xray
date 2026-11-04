@@ -170,13 +170,20 @@ static bool library_catalog_state_type(const XrXirTypes *types,XrXirType type) {
     default:return false;
     }
 }
-/* Only an actual immutable floating slot with complete ownership facts is
- * admitted; a logical Cell element cannot grant the same permission. */
+/* Only a directly immutable floating or fixed-byte slot with complete ownership
+ * facts is admitted; a logical Cell element cannot grant the same permission. */
 static bool library_catalog_state_slot(const XrXirTypes *types,const XrXirDeclarations *declarations,
     const XrXirSlotFacts *facts,uint32_t ordinal) {
     if (!declarations || ordinal>=declarations->slot_count || !declarations->slots) return false;
     const XrXirSlot *slot=&declarations->slots[ordinal];
-    if (slot->type!=XR_XIR_F32 && slot->type!=XR_XIR_F64) return library_catalog_state_type(types,slot->type);
+    const XrXirTypeNode *node=xr_xir_type_node(types,slot->type);
+    if (node && node->kind==XR_XIR_TYPE_FIXED_ARRAY) {
+        if (node->element!=XR_XIR_U8 || !node->parameter_count || node->parameter_count>65535 ||
+            node->parameters || node->result!=XR_XIR_UNIT || node->flags || node->parameter_span ||
+            node->nominal.declaration || node->nominal.arguments || node->nominal.argument_count ||
+            node->nominal.fields || node->nominal.field_count) return false;
+    } else if (slot->type!=XR_XIR_F32 && slot->type!=XR_XIR_F64)
+        return library_catalog_state_type(types,slot->type);
     if (slot->mutable || !facts || facts->count!=declarations->slot_count || !facts->rows) return false;
     const XrXirSlotFact *fact=&facts->rows[ordinal];
     return fact->slot==ordinal && fact->name && fact->name_length && fact->exported<=1;

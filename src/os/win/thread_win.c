@@ -26,7 +26,9 @@
 #include "../os_thread.h"
 
 #include "../../base/xmalloc.h"
+#include <limits.h>
 #include <process.h>
+#include <stdatomic.h>
 
 struct xr_thread_ctx {
     xr_thread_fn fn;
@@ -119,20 +121,24 @@ void xr_thread_sleep_ms(unsigned int ms) {
     Sleep((DWORD) ms);
 }
 
-unsigned int xr_os_cpu_count(void) {
-    static unsigned int cached = 0;
-    if (cached != 0) {
-        return cached;
-    }
+XR_FUNC unsigned int xr_os_cpu_count(void) {
+    static atomic_uint cached;
+    unsigned int current = atomic_load_explicit(&cached, memory_order_relaxed);
+    if (current != 0) return current;
     SYSTEM_INFO si;
     GetSystemInfo(&si);
-    cached = (si.dwNumberOfProcessors > 0) ? (unsigned int) si.dwNumberOfProcessors : 1u;
-    return cached;
+    unsigned int detected = si.dwNumberOfProcessors ? (unsigned int) si.dwNumberOfProcessors : 1u;
+    unsigned int expected = 0;
+    if (!atomic_compare_exchange_strong_explicit(&cached, &expected, detected,
+            memory_order_relaxed, memory_order_relaxed)) return expected;
+    return detected;
 }
 
-int xr_thread_pin_to_cpu(unsigned int cpu_index) {
+XR_FUNC int xr_thread_pin_to_cpu(unsigned int cpu_index) {
     unsigned int n = xr_os_cpu_count();
-    DWORD_PTR mask = ((DWORD_PTR) 1) << (cpu_index % n);
+    unsigned int index = cpu_index % n;
+    if (index >= sizeof(DWORD_PTR) * CHAR_BIT) return -1;
+    DWORD_PTR mask = ((DWORD_PTR) 1) << index;
     DWORD_PTR prev = SetThreadAffinityMask(GetCurrentThread(), mask);
     return prev != 0 ? 0 : -1;
 }

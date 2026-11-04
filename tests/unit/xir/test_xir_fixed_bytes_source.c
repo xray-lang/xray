@@ -55,7 +55,8 @@ int main(int argc,char **argv) {
     if(argc==2) {
         FILE *file=fopen(argv[1],"wb");CHECK(file);
         CHECK(fwrite(native.text,1,native.length,file)==native.length);
-        CHECK(fprintf(file,"\nconst uint32_t fixed_bytes_entry=%uu;\n",entry)>0 && !fclose(file));
+        CHECK(fprintf(file,"\nconst uint32_t fixed_bytes_entry=%uu;\n",entry)>0);
+        fixed_cold_library(&owner.context,file);CHECK(!fclose(file));
     }
     xr_xir_compile_c_source_free(&native);
     if(argc==1) {
@@ -63,7 +64,9 @@ int main(int argc,char **argv) {
         if(status!=XR_XIR_OK)fprintf(stderr,"fixed VM Program status%u\n",status);
         CHECK(status==XR_XIR_OK);
         fixed_bytes_run(program,entry);xr_xir_compile_program_drop(program);
-        fixed_source_controls(&owner.context);fixed_cold_library(&owner.context);
+        fixed_source_controls(&owner.context);fixed_sendable_controls(&owner.context);
+        fixed_cold_library(&owner.context,NULL);
     }
-    xr_xir_compile_artifact_free(code);source_fixture_owner_free(&owner);return 0;
+    xr_xir_compile_artifact_free(code);source_fixture_owner_free(&owner);
+    CHECK(!runtime_live && !runtime_bytes);return 0;
 }

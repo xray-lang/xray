@@ -19,10 +19,10 @@ static XrXirTypeArena *class_inline_arena(XrXirDomain *domain) {
         {{"empty",5},0},{{"text",4},0}};
     XrXirNominalVariant variants[]={{{"None",4},0,0},{{"Full",4},0,1}};
     XrXirNominalIdentity ids[]={
-        {{"m",1},{"Record",6},1,0,rf,3,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}},
-        {{"m",1},{"Choice",6},1,0,ef,1,XR_XIR_NOMINAL_ENUM,variants,2,0,{0}},
-        {{"m",1},{"Empty",5},1,0,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}},
-        {{"m",1},{"Owner",5},1,0,cf,4,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL,{0}}};
+        {{"m",1},{"Record",6},1,0,rf,3,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}, 0},
+        {{"m",1},{"Choice",6},1,0,ef,1,XR_XIR_NOMINAL_ENUM,variants,2,0,{0}, 0},
+        {{"m",1},{"Empty",5},1,0,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}, 0},
+        {{"m",1},{"Owner",5},1,0,cf,4,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL,{0}, 0}};
     XrXirNominalTable table={NULL,4,ids};
     XrXirType rfields[]={XR_XIR_I64,XR_XIR_STRING,XR_XIR_I64};
     XrXirType efields[]={XR_XIR_CONSTRUCTED_TYPE_BASE};
@@ -33,7 +33,7 @@ static XrXirTypeArena *class_inline_arena(XrXirDomain *domain) {
         {.kind=XR_XIR_TYPE_NOMINAL,.nominal={1,NULL,0,efields,1}},
         {.kind=XR_XIR_TYPE_NOMINAL,.nominal={2,NULL,0,NULL,0}},
         {.kind=XR_XIR_TYPE_NOMINAL,.nominal={3,NULL,0,cfields,4}}};
-    XrXirTypes types={nodes,4,&table,NULL};XrCompileResourceLimits limits = value_compile_limits(65536, 65536, 10000);
+    XrXirTypes types={nodes,4,&table,NULL};XrCompileResourceLimits limits = value_compile_limits();
     XrXirTypeArena *arena=NULL;CHECK(value_compile_arena(&types, 100, limits, &arena)==XR_XIR_VALUE_OK);
     const XrXirStorageLayout *layout=xr_xir_compile_type_arena_storage(arena,XR_XIR_CONSTRUCTED_TYPE_BASE+3);
     CHECK(layout && layout->value.size==8 && layout->body.size==64);
@@ -45,13 +45,13 @@ static void class_inline_faults(XrXirValue *object, const XrXirValue *fields,
         size_t sites=0,baseline=live;uint64_t own_bytes=xr_xir_domain_stats(owner->domain).live_bytes;
         uint64_t read_bytes=xr_xir_domain_stats(reader->domain).live_bytes;
         for(size_t pass=0;pass<=sites;++pass) {
-            calls=0;fail_at=pass?pass-1:SIZE_MAX;XrXirValue value={0};
+            value_allocation_calls=0;fail_at=pass?pass-1:SIZE_MAX;XrXirValue value={0};
             owner->work=reader->work=100000;uint64_t scratch=reader->scratch_bytes;
             XrXirValueStatus status=mode==0 ? xr_xir_class_new(XR_XIR_CONSTRUCTED_TYPE_BASE+3,fields,4,owner,&value) :
                 mode==1 ? xr_xir_class_get(object,0,reader,&value) : xr_xir_class_set(object,0,&fields[0],owner);
-            if(!pass){CHECK(status==XR_XIR_VALUE_OK);sites=calls;CHECK(sites>0);}
+            if(!pass){CHECK(status==XR_XIR_VALUE_OK);sites=value_allocation_calls;CHECK(sites>0);}
             else CHECK(status==XR_XIR_VALUE_OOM && !value.type);
-            size_t before=calls;xr_xir_value_drop(&value);CHECK(calls==before);
+            size_t before=value_allocation_calls;xr_xir_value_drop(&value);CHECK(value_allocation_calls==before);
             CHECK(live==baseline && reader->scratch_bytes==scratch &&
                 xr_xir_domain_stats(owner->domain).live_bytes==own_bytes &&
                 xr_xir_domain_stats(reader->domain).live_bytes==read_bytes);
@@ -61,11 +61,11 @@ static void class_inline_faults(XrXirValue *object, const XrXirValue *fields,
 }
 static void class_inline_capabilities(void) {
     XrXirNominalFieldIdentity fields[]={{{"f",1},0}};
-    XrXirNominalIdentity id={{"m",1},{"R",1},1,0,fields,1,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}};
+    XrXirNominalIdentity id={{"m",1},{"R",1},1,0,fields,1,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}, 0};
     XrXirNominalTable table={NULL,1,&id};XrXirType field=XR_XIR_I64;
     XrXirTypeNode nodes[2]={{.kind=XR_XIR_TYPE_NOMINAL,.nominal={0,NULL,0,&field,1}},{0}};
     XrXirTypes types={nodes,2,&table,NULL};
-    const XrCompileResourceLimits limits=value_compile_limits(0,1024,100);
+    const XrCompileResourceLimits limits=value_compile_limits();
     const ValueCompileProbe probe={&types,NULL,XR_XIR_CONSTRUCTED_TYPE_BASE,3,65536};
     value_compile_boundaries(&probe,limits);
     ValueCompileOwner owner={0};CHECK(value_compile_owner_new(&owner,limits,65536)==XR_XIR_OK);
@@ -80,7 +80,7 @@ static void class_inline_capabilities(void) {
             (i==2 ? XR_XIR_OK : XR_XIR_BAD_TYPE));}
     /* A structurally valid array may still lack class-field capability. */
     const XrXirTypeNode excluded_nodes[]={
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_CONSTRUCTED_TYPE_BASE}};
     const XrXirTypes excluded_types={excluded_nodes,2,NULL,NULL};
     CHECK(xr_xir_compile_types_structure_verify(&owner.context,&excluded_types)==XR_XIR_OK);
@@ -93,7 +93,7 @@ static void class_inline_capabilities(void) {
     id.kind=UINT32_MAX;
     CHECK(xr_xir_compile_class_field_verify(&owner.context,&types,XR_XIR_CONSTRUCTED_TYPE_BASE)==XR_XIR_BAD_TYPE);
     CHECK(!memcmp(&structural,&owner.context.limits,sizeof(structural)));
-    CHECK(value_compile_stats(&owner.context).live_bytes==owner.baseline.live_bytes);
+    CHECK(value_compile_stats(&owner.context).held_bytes==owner.baseline.held_bytes);
     value_compile_owner_release(&owner);
 }
 static void class_inline_value_cases(void) {
@@ -113,8 +113,8 @@ static void class_inline_value_cases(void) {
     CHECK(xr_xir_class_new(XR_XIR_CONSTRUCTED_TYPE_BASE+3,fields,4,&a,&object)==XR_XIR_VALUE_OK);
     class_inline_faults(&object,fields,&a,&b);
     XrXirValue out={0};XrXirValueAdmission leaf={arena,NULL,NULL,NULL,100,0};
-    size_t before=calls;fail_at=calls;
-    CHECK(xr_xir_class_get(&object,3,&leaf,&out)==XR_XIR_VALUE_OK && calls==before);xr_xir_value_drop(&out);
+    size_t before=value_allocation_calls;fail_at=value_allocation_calls;
+    CHECK(xr_xir_class_get(&object,3,&leaf,&out)==XR_XIR_VALUE_OK && value_allocation_calls==before);xr_xir_value_drop(&out);
     CHECK(xr_xir_class_get(&object,0,&leaf,&out)==XR_XIR_VALUE_BAD_ARGUMENT && !out.type);fail_at=SIZE_MAX;
     XrXirTypeArena *foreign=class_inline_arena(owner);
     XrXirValueAdmission wrong={foreign,reader,NULL,NULL,10000,65536};
@@ -164,6 +164,6 @@ static void class_inline_value_cases(void) {
     XrXirValue held={0};XrXirValueAdmission retained={xr_xir_value_arena(&out),reader,NULL,NULL,100,65536};
     CHECK(xr_xir_struct_get(&out,1,&retained,&held)==XR_XIR_VALUE_OK);xr_xir_value_drop(&out);
     const char *bytes=NULL;size_t length=0;CHECK(xr_xir_string_view(&held,&bytes,&length)&&length==6&&!memcmp(bytes,"mapped",6));
-    before=calls;fail_at=calls;xr_xir_value_drop(&held);CHECK(calls==before && live==initial);fail_at=SIZE_MAX;
+    before=value_allocation_calls;fail_at=value_allocation_calls;xr_xir_value_drop(&held);CHECK(value_allocation_calls==before && live==initial);fail_at=SIZE_MAX;
 }
 #endif /* XIR_CLASS_INLINE_VALUE_CASES_H */

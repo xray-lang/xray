@@ -24,10 +24,10 @@ static void storage_pack_drop(XrXirTypeArena *arena, unsigned char *bytes) {
 }
 static void storage_unpack_cases(XrXirValueAdmission *admission, const unsigned char *bytes) {
     StorageSpan span = {(XrXirType)257, bytes}; XrXirValue value = {0};
-    uint64_t baseline = admission->domain->stats.live_bytes; size_t blocks = live, begin = calls;
+    uint64_t baseline = admission->domain->stats.live_bytes; size_t blocks = live, begin = value_allocation_calls;
     admission->work = 100000;
     CHECK(storage_unpack(span, admission, &value) == XR_XIR_VALUE_OK && xr_xir_value_valid(&value));
-    uint64_t work = 100000 - admission->work; size_t sites = calls - begin;
+    uint64_t work = 100000 - admission->work; size_t sites = value_allocation_calls - begin;
     CHECK(sites == 3 && work > 0 && admission->scratch_bytes == 65536);
     XirNominalValue *box = (XirNominalValue *)object_pointer(&value);
     XirNominalValue *pair = (XirNominalValue *)object_pointer(&box->fields[0]);
@@ -38,7 +38,7 @@ static void storage_unpack_cases(XrXirValueAdmission *admission, const unsigned 
     CHECK(xr_xir_string_view(&pair->fields[1], &text, &length) && length == 5 && !memcmp(text, "right", 5));
     xr_xir_value_drop(&value);
     for (size_t i = 0; i < sites; ++i) {
-        admission->work = 100000; fail_at = calls + i;
+        admission->work = 100000; fail_at = value_allocation_calls + i;
         CHECK(storage_unpack(span, admission, &value) == XR_XIR_VALUE_OOM && unit_value(&value));
         fail_at = SIZE_MAX;
         CHECK(admission->domain->stats.live_bytes == baseline && live == blocks && admission->scratch_bytes == 65536);
@@ -48,8 +48,8 @@ static void storage_unpack_cases(XrXirValueAdmission *admission, const unsigned 
         CHECK(storage_unpack(span, admission, &value) == XR_XIR_VALUE_LIMIT && unit_value(&value));
         CHECK(admission->domain->stats.live_bytes == baseline && live == blocks && admission->scratch_bytes == 65536);
     }
-    admission->work = 100000; admission->scratch_bytes = 2 * sizeof(StorageUnpackFrame) - 1; begin = calls;
-    CHECK(storage_unpack(span, admission, &value) == XR_XIR_VALUE_LIMIT && calls == begin && unit_value(&value));
+    admission->work = 100000; admission->scratch_bytes = 2 * sizeof(StorageUnpackFrame) - 1; begin = value_allocation_calls;
+    CHECK(storage_unpack(span, admission, &value) == XR_XIR_VALUE_LIMIT && value_allocation_calls == begin && unit_value(&value));
     admission->scratch_bytes = 65536;
     XrXirValue leaf = {XR_XIR_STRING, 0, 0}; memcpy(&leaf.payload, bytes + 16, 8);
     uint32_t refs = atomic_load(&object_pointer(&leaf)->references);
@@ -71,7 +71,7 @@ static void storage_unpack_cases(XrXirValueAdmission *admission, const unsigned 
 }
 static void storage_copy_cases(StoragePack *pack, unsigned char *bytes) {
     unsigned char copied[48]; XrXirValueAdmission *admission = pack->admission;
-    uint64_t baseline = admission->domain->stats.live_bytes; size_t allocations = calls;
+    uint64_t baseline = admission->domain->stats.live_bytes; size_t allocations = value_allocation_calls;
     XrXirValue left = {XR_XIR_STRING, 0, 0}, right = left;
     memcpy(&left.payload, bytes + 8, 8); memcpy(&right.payload, bytes + 16, 8);
     uint32_t left_refs = atomic_load(&object_pointer(&left)->references);
@@ -95,7 +95,7 @@ static void storage_copy_cases(StoragePack *pack, unsigned char *bytes) {
     admission->work = work;
     CHECK(storage_pack_copy(pack, bytes, copied) == XR_XIR_VALUE_OK && !admission->work);
     storage_pack_release(pack, copied, UINT64_MAX);
-    CHECK(calls == allocations && admission->domain->stats.live_bytes == baseline);
+    CHECK(value_allocation_calls == allocations && admission->domain->stats.live_bytes == baseline);
     CHECK(atomic_load(&object_pointer(&left)->references) == left_refs);
     CHECK(atomic_load(&object_pointer(&right)->references) == right_refs);
 }
@@ -135,12 +135,12 @@ static void storage_pack_cases(void) {
         CHECK(atomic_load(&object_pointer(&strings[0])->references) == first_refs);
         CHECK(atomic_load(&object_pointer(&strings[1])->references) == second_refs);
     }
-    admission.work = 100000; fail_at = calls;
+    admission.work = 100000; fail_at = value_allocation_calls;
     CHECK(storage_pack(&box, bytes, &admission) == XR_XIR_VALUE_OOM);
     CHECK(domain->stats.live_bytes == baseline && live == blocks && admission.scratch_bytes == 65536);
     fail_at = SIZE_MAX;
-    admission.scratch_bytes = 2 * sizeof(StoragePackFrame) - 1; size_t allocations = calls;
-    CHECK(storage_pack(&box, bytes, &admission) == XR_XIR_VALUE_LIMIT && calls == allocations);
+    admission.scratch_bytes = 2 * sizeof(StoragePackFrame) - 1; size_t allocations = value_allocation_calls;
+    CHECK(storage_pack(&box, bytes, &admission) == XR_XIR_VALUE_LIMIT && value_allocation_calls == allocations);
     admission.scratch_bytes = 65536;
     atomic_store(&object_pointer(&strings[1])->references, UINT32_MAX);
     CHECK(storage_pack(&box, bytes, &admission) == XR_XIR_VALUE_REFCOUNT_LIMIT);
@@ -150,15 +150,15 @@ static void storage_pack_cases(void) {
     atomic_store(&object_pointer(&strings[1])->references, second_refs);
     StoragePack bulk = {0}; admission.work = 100000;
     CHECK(storage_pack_begin(&admission, (XrXirType)257, &bulk) == XR_XIR_VALUE_OK);
-    allocations = calls;
+    allocations = value_allocation_calls;
     for (unsigned i = 0; i < 16; ++i) {
-        CHECK(storage_pack_value(&bulk, &box, bytes) == XR_XIR_VALUE_OK && calls == allocations);
+        CHECK(storage_pack_value(&bulk, &box, bytes) == XR_XIR_VALUE_OK && value_allocation_calls == allocations);
         storage_pack_drop(arena, bytes);
     }
     admission.work = 2;
-    CHECK(storage_pack_value(&bulk, &box, bytes) == XR_XIR_VALUE_LIMIT && calls == allocations);
+    CHECK(storage_pack_value(&bulk, &box, bytes) == XR_XIR_VALUE_LIMIT && value_allocation_calls == allocations);
     admission.work = 100000;
-    CHECK(storage_pack_value(&bulk, &box, bytes) == XR_XIR_VALUE_OK && calls == allocations);
+    CHECK(storage_pack_value(&bulk, &box, bytes) == XR_XIR_VALUE_OK && value_allocation_calls == allocations);
     storage_copy_cases(&bulk, bytes);
     storage_pack_drop(arena, bytes); storage_pack_end(&bulk);
     CHECK(domain->stats.live_bytes == baseline && live == blocks && admission.scratch_bytes == 65536);
@@ -169,10 +169,10 @@ static void storage_pack_cases(void) {
     xr_xir_value_drop(&strings[0]); xr_xir_value_drop(&strings[1]);
     CHECK(xr_xir_string_view(&first, &text, &length) && length == 4);
     storage_unpack_cases(&admission, bytes);
-    allocations = calls; fail_at = calls;
+    allocations = value_allocation_calls; fail_at = value_allocation_calls;
     storage_pack_drop(arena, bytes);
-    CHECK(domain->stats.live_bytes == empty_bytes && calls == allocations);
+    CHECK(domain->stats.live_bytes == empty_bytes && value_allocation_calls == allocations);
     xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
-    CHECK(!live && calls == allocations); fail_at = SIZE_MAX;
+    CHECK(!live && value_allocation_calls == allocations); fail_at = SIZE_MAX;
 }
 #endif // XIR_STORAGE_PACK_CASES_H

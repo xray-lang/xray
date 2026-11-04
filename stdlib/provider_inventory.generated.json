@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "evidence_scope": "generated-provider-path; binding and tests require build-bound evidence",
-  "leaf_count": 154,
+  "leaf_count": 157,
   "leaves": [
     {
       "symbol": "crypto.__fillRandomBytes",
@@ -2241,6 +2241,44 @@
       }
     },
     {
+      "symbol": "os.__execPipeClose",
+      "signature": "(readToken: i64, writeToken: i64): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "os.__execShellSpawn",
+      "signature": "(command: string, stdoutToken: i64, stderrToken: i64): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
       "symbol": "os.__exit",
       "signature": "(code: i64): ()",
       "declared": false,
@@ -2367,7 +2405,7 @@
     },
     {
       "symbol": "os.__gid",
-      "signature": "(): i64",
+      "signature": "(): i64?",
       "declared": false,
       "admitted": false,
       "blocking_reasons": [
@@ -2557,7 +2595,7 @@
     },
     {
       "symbol": "os.__uid",
-      "signature": "(): i64",
+      "signature": "(): i64?",
       "declared": false,
       "admitted": false,
       "blocking_reasons": [
@@ -2596,6 +2634,25 @@
     {
       "symbol": "os.__uptime",
       "signature": "(): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "path.__getcwd",
+      "signature": "(): string",
       "declared": false,
       "admitted": false,
       "blocking_reasons": [
@@ -2887,7 +2944,7 @@
               "resource": "xray.runtime.resource.v1/pipe-endpoint",
               "value": "parameter.0",
               "action": "consume",
-              "when": "call-enter"
+              "when": "result-true"
             }
           ],
           "effects": [
@@ -2911,7 +2968,7 @@
           "symbol": "xr_pipe_close"
         }
       },
-      "logical_declaration_sha256": "a9396fa6d3f17dd1635edbcc6fdc06d349531d30d46725d260eb2c51f1911b69",
+      "logical_declaration_sha256": "15f4bace5abc6ad107a7dfa55888ff3ca4a30a42606cb1daa574a6d08b5b8f38",
       "binding": {
         "state": "NOT_VERIFIED",
         "reason": "requires-compiled-runtime-evidence"

@@ -266,8 +266,8 @@ static inline XrXirStatus effect_body_records_copy(const XrXirCompileContext *wo
     return effect_body_records_write(work,source,target,NULL);
 }
 
-/* Five actual physical slots have only 32 selection patterns. Direct
- * dispatch retains every selected nonzero check in ascending field order. */
+/* Keep selected reads and callbacks in field order. Charge the whole group
+ * only after every check succeeds so failures leave units unchanged. */
 static XrXirStatus effect_body_delta_group(const EffectBodyRead *read,uint32_t mask,
     const uint32_t *delta,uint64_t *units) {
     if (!mask) return XR_XIR_OK;
@@ -277,40 +277,13 @@ static XrXirStatus effect_body_delta_group(const EffectBodyRead *read,uint32_t m
     if (!((read) && ((read)->execution ? effect_body_execution_work((read)->execution, 1) : xir_compile_context_valid((read)->owner)))) return XR_XIR_BUDGET; \
     if (!delta[I]) return XR_XIR_BAD_STRUCTURE; \
 } while (0)
-    switch (mask) {
-    case 1:EFFECT_BODY_DELTA_CHECK(0);if (units) *units+=4;break;
-    case 2:EFFECT_BODY_DELTA_CHECK(1);if (units) *units+=4;break;
-    case 3:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(1);if (units) *units+=8;break;
-    case 4:EFFECT_BODY_DELTA_CHECK(2);if (units) *units+=4;break;
-    case 5:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(2);if (units) *units+=8;break;
-    case 6:EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(2);if (units) *units+=8;break;
-    case 7:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(2);if (units) *units+=12;break;
-    case 8:EFFECT_BODY_DELTA_CHECK(3);if (units) *units+=4;break;
-    case 9:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(3);if (units) *units+=8;break;
-    case 10:EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(3);if (units) *units+=8;break;
-    case 11:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(3);if (units) *units+=12;break;
-    case 12:EFFECT_BODY_DELTA_CHECK(2);EFFECT_BODY_DELTA_CHECK(3);if (units) *units+=8;break;
-    case 13:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(2);EFFECT_BODY_DELTA_CHECK(3);if (units) *units+=12;break;
-    case 14:EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(2);EFFECT_BODY_DELTA_CHECK(3);if (units) *units+=12;break;
-    case 15:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(2);EFFECT_BODY_DELTA_CHECK(3);if (units) *units+=16;break;
-    case 16:EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=4;break;
-    case 17:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=8;break;
-    case 18:EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=8;break;
-    case 19:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=12;break;
-    case 20:EFFECT_BODY_DELTA_CHECK(2);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=8;break;
-    case 21:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(2);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=12;break;
-    case 22:EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(2);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=12;break;
-    case 23:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(2);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=16;break;
-    case 24:EFFECT_BODY_DELTA_CHECK(3);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=8;break;
-    case 25:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(3);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=12;break;
-    case 26:EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(3);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=12;break;
-    case 27:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(3);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=16;break;
-    case 28:EFFECT_BODY_DELTA_CHECK(2);EFFECT_BODY_DELTA_CHECK(3);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=12;break;
-    case 29:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(2);EFFECT_BODY_DELTA_CHECK(3);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=16;break;
-    case 30:EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(2);EFFECT_BODY_DELTA_CHECK(3);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=16;break;
-    case 31:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(2);EFFECT_BODY_DELTA_CHECK(3);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=20;break;
-    default:return XR_XIR_BAD_STRUCTURE;
-    }
+    uint32_t selected_count=0;
+    if (mask & UINT32_C(1)) { EFFECT_BODY_DELTA_CHECK(0);++selected_count; }
+    if (mask & UINT32_C(2)) { EFFECT_BODY_DELTA_CHECK(1);++selected_count; }
+    if (mask & UINT32_C(4)) { EFFECT_BODY_DELTA_CHECK(2);++selected_count; }
+    if (mask & UINT32_C(8)) { EFFECT_BODY_DELTA_CHECK(3);++selected_count; }
+    if (mask & UINT32_C(16)) { EFFECT_BODY_DELTA_CHECK(4);++selected_count; }
+    if (units) *units+=4*selected_count;
 #undef EFFECT_BODY_DELTA_CHECK
     return XR_XIR_OK;
 }

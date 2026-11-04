@@ -19,7 +19,7 @@ static void cross_extra_begin(CrossExtra *f, const XrXirTypes *types, XrXirType 
     CHECK(!live && !value_compile_live && !value_compile_bytes && !closed_fail_all);
     *f = (CrossExtra){0}; fail_at = SIZE_MAX;
     for (unsigned i = 0; i < 2; ++i) CHECK(xr_xir_domain_new(65536, &f->domains[i]) == XR_XIR_VALUE_OK);
-    CHECK(value_compile_arena(types, 65536, value_compile_limits(65536, 1048576, 65536), &f->arena) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(types, 65536, value_compile_limits(), &f->arena) == XR_XIR_VALUE_OK);
     f->local = allocation_admission(f->domains[0], f->arena, &f->releases);
     f->remote = allocation_admission(f->domains[1], f->arena, &f->releases);
     f->local.scratch_bytes = f->remote.scratch_bytes = 65536;
@@ -62,7 +62,7 @@ static void cross_extra_finish(CrossExtra *f, const char *mode, unsigned order) 
 
 static void cross_domain_nested_case(unsigned order) {
     const XrXirTypeNode nodes[] = {
-        {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind = XR_XIR_TYPE_NULLABLE, .element = (XrXirType)256},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)257},
         {.kind = XR_XIR_TYPE_CELL, .element = (XrXirType)258},
@@ -97,7 +97,7 @@ static void cross_domain_nested_case(unsigned order) {
 static void cross_domain_set_case(unsigned order) {
     const XrXirCallableParameter fields[] = {{(XrXirType)257, 0}, {XR_XIR_STRING, 0}};
     const XrXirTypeNode nodes[] = {
-        {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind = XR_XIR_TYPE_NULLABLE, .element = (XrXirType)256},
         {.kind = XR_XIR_TYPE_TUPLE, .parameters = fields, .parameter_count = 2},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)258},

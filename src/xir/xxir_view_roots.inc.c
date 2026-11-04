@@ -104,11 +104,18 @@ static XrXirStatus view_root_call(ViewRootQuery *q,ViewOriginPair site,const XrX
     ViewRootCheck *c=q->check;const XrXirFunction *body=&c->module->functions[site.first];uint32_t candidate=UINT32_MAX;
     if (op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE) candidate=c->candidates[op->immediate];
     else if (op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT) {
-        if (view_pointer(c->module->types,op->type)) return XR_XIR_UNRESOLVED;
+        if (view_pointer_result(c->module->types,op->type)) {
+            if(op->immediate<0 || (uint64_t)op->immediate>UINT32_MAX)return XR_XIR_BAD_STRUCTURE;
+            XrXirStatus status=view_pointer_indirect(c->module,site.first,
+                (uint32_t)op->immediate,c->candidates,q->control,&candidate);
+            if(status!=XR_XIR_OK)return status;
+            if(candidate==UINT32_MAX)return XR_XIR_UNRESOLVED;
+        } else {
         const XrXirTypeNode *signature=xr_xir_callable_signature(c->module->types,xr_xir_operand_type(body,(uint32_t)op->immediate));
         if (!signature) return XR_XIR_BAD_TYPE;
         XrXirStatus status=view_return_candidate(c->module->types,c->flags,signature,&candidate);
         if (status!=XR_XIR_OK) return status;
+        }
     } else return view_root_emit(q,site,(ViewOriginPair){context.first|1u,context.second},XR_XIR_VIEW_ROOT_UNRESOLVED);
     if (candidate==UINT32_MAX-1u) return view_root_emit(q,site,context,XR_XIR_VIEW_ROOT_ABSENT);
     if (candidate==UINT32_MAX || candidate>=op->args[1]) return XR_XIR_BAD_TYPE;
@@ -257,7 +264,7 @@ XR_FUNC XrXirStatus xir_compile_view_roots_verified(const XrXirCompileContext *c
     for (uint32_t f=0;f<module->function_count;++f) for (uint32_t i=0;i<module->functions[f].instruction_count;++i) {
 
         const XrXirInstruction *op=&module->functions[f].instructions[i];
-        needed|=op->op==XR_XIR_VIEW_NEW || op->op==XR_XIR_VIEW_REBORROW || view_pointer(module->types,op->type);
+        needed|=op->op==XR_XIR_VIEW_NEW || op->op==XR_XIR_VIEW_REBORROW || view_pointer_result(module->types,op->type);
     }
     if (!needed) return XR_XIR_OK;
     uint8_t *flags=NULL;XrXirStatus status=view_flags_build_mode(context,module->types,&flags,true);

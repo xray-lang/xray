@@ -13,11 +13,11 @@
 enum { EFFECT_FINAL_SELECT_REFERENCE=1,EFFECT_FINAL_SELECT_EDGE=2,
     EFFECT_FINAL_SELECT_PRODUCER=3,EFFECT_FINAL_SELECT_INDIRECT=4,
     EFFECT_FINAL_SELECT_CAPTURE=5,EFFECT_FINAL_SELECT_WRITE=6,
-    EFFECT_FINAL_SELECT_RETURN=7,EFFECT_FINAL_SELECT_BARRIER=8 };
+    EFFECT_FINAL_SELECT_RETURN=7,EFFECT_FINAL_SELECT_BARRIER=8,
+    EFFECT_FINAL_SELECT_RESULT=9 };
 typedef struct EffectFinalInputSelect {
     EffectBodyRecordCursor cursor;
-    const EffectBodyRun *run;
-    uint32_t next,end,selection;
+    uint32_t first,next,end,selection;
 } EffectFinalInputSelect;
 static bool effect_final_input_selected(uint32_t selection,XrXirOp op) {
     if(selection==EFFECT_FINAL_SELECT_REFERENCE) return (op==XR_XIR_FUNCTION_REF || op==XR_XIR_CLASS_METHOD_REF || op==XR_XIR_GENERATOR_NEW);
@@ -28,6 +28,8 @@ static bool effect_final_input_selected(uint32_t selection,XrXirOp op) {
     if(selection==EFFECT_FINAL_SELECT_WRITE) return op==XR_XIR_LOCAL_WRITE || op==XR_XIR_SCALAR_LOCAL_WRITE || op==XR_XIR_OWNED_LOCAL_WRITE;
     if(selection==EFFECT_FINAL_SELECT_RETURN) return op==XR_XIR_RETURN;
     if(selection==EFFECT_FINAL_SELECT_BARRIER) return (effect_physical_opcode(op)&EFFECT_PHYSICAL_BARRIER)!=0;
+    if(selection==EFFECT_FINAL_SELECT_RESULT) return op==XR_XIR_CALL || op==XR_XIR_CALL_DEFAULT ||
+        op==XR_XIR_CALL_INDIRECT || op==XR_XIR_INVOKE_RESULT;
     if(selection!=EFFECT_FINAL_SELECT_PRODUCER) return false;
     return (op==XR_XIR_FUNCTION_REF || op==XR_XIR_CLASS_METHOD_REF || op==XR_XIR_GENERATOR_NEW) || op==XR_XIR_COPY || op==XR_XIR_SCALAR_COPY || op==XR_XIR_OWNED_RETAIN ||
         op==XR_XIR_LOCAL_NEW || op==XR_XIR_SCALAR_LOCAL_NEW || op==XR_XIR_OWNED_LOCAL_NEW ||
@@ -37,37 +39,51 @@ static bool effect_final_input_selected(uint32_t selection,XrXirOp op) {
 }
 static XrXirStatus effect_final_input_select_begin(const EffectBodyRequest *body,
     uint32_t selection,EffectFinalInputSelect *cursor) {
-    if(!cursor || selection<EFFECT_FINAL_SELECT_REFERENCE || selection>EFFECT_FINAL_SELECT_BARRIER ||
+    if(!cursor || selection<EFFECT_FINAL_SELECT_REFERENCE || selection>EFFECT_FINAL_SELECT_RESULT ||
         !effect_body_request_sequence_owned(body)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=effect_body_request_sequence_binding(body);if(status!=XR_XIR_OK) return status;
     if(!(((&body->read)->execution ? effect_body_execution_work((&body->read)->execution, sizeof(*cursor)) : xir_compile_context_valid((&body->read)->owner)))) return XR_XIR_BUDGET;
     *cursor=(EffectFinalInputSelect){.cursor={0,0,UINT32_MAX},.selection=selection};return XR_XIR_OK;
 }
-/* The returned ordinal and full operation live only in the enclosing read.
- * No previous result, physical-use mask or stored empty claim selects a row. */
+/* Numeric positions survive a caller's allocation or release callback. Each
+ * read reopens the actual run and its neighboring boundary before decoding;
+ * no borrowed run pointer or saved semantic verdict crosses that callback. */
 static XrXirStatus effect_final_input_select_next(const EffectBodyRequest *body,
     uint32_t function,EffectFinalInputSelect *cursor,uint32_t *instruction,
     XrXirInstruction *operation,bool *found) {
     if(!body || !cursor || !instruction || !operation || !found ||
-        function>=body->domain.function_count) return XR_XIR_BAD_STRUCTURE;
+        function>=body->domain.function_count || !effect_body_request_sequence_owned(body) ||
+        cursor->selection<EFFECT_FINAL_SELECT_REFERENCE ||
+        cursor->selection>EFFECT_FINAL_SELECT_RESULT) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=effect_body_request_sequence_binding(body);if(status!=XR_XIR_OK) return status;
     const EffectBodyMaterial *material=body->owner;const EffectBodyFunction *head=&material->functions[function];
     if(!head->instruction_count && (head->run_count || head->run_capacity || head->runs))
         return XR_XIR_BAD_STRUCTURE;
     status=effect_role_range(body->read.owner,head->runs,head->run_capacity,sizeof(*head->runs));
     if(status!=XR_XIR_OK) return status;
+    const EffectBodyRun *run=NULL;
+    if(cursor->cursor.run) {
+        if(cursor->first>cursor->next || cursor->next>cursor->end || cursor->end!=cursor->cursor.first)
+            return XR_XIR_BAD_STRUCTURE;
+        EffectBodyRecordCursor current={cursor->first,cursor->cursor.run-1,UINT32_MAX};
+        status=effect_body_range_ref(&body->read,head,&current,&run);
+        if(status!=XR_XIR_OK) return status;
+        if(current.run!=cursor->cursor.run || current.first!=cursor->end || run->first!=cursor->first)
+            return XR_XIR_BAD_STRUCTURE;
+    } else if(cursor->first || cursor->next || cursor->end || cursor->cursor.first)
+        return XR_XIR_BAD_STRUCTURE;
     *found=false;
     for(;;) {
         if(cursor->next==cursor->end) {
             if(cursor->cursor.run==head->run_count) {
                 return cursor->cursor.first==head->instruction_count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
             }
-            status=effect_body_range_ref(&body->read,head,&cursor->cursor,&cursor->run);
+            status=effect_body_range_ref(&body->read,head,&cursor->cursor,&run);
             if(status!=XR_XIR_OK) return status;
-            cursor->next=cursor->run->first;cursor->end=cursor->next+cursor->run->count;
-            if(!(cursor->run->mask&UINT32_C(1))) {
+            cursor->first=run->first;cursor->next=run->first;cursor->end=cursor->next+run->count;
+            if(!(run->mask&UINT32_C(1))) {
                 uint32_t opcode=XR_XIR_INVALID;
-                status=effect_body_run_word(&body->read,cursor->run,cursor->next,0,&opcode);
+                status=effect_body_run_word(&body->read,run,cursor->next,0,&opcode);
                 if(status!=XR_XIR_OK) return status;
                 if(opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
                 if(!effect_final_input_selected(cursor->selection,(XrXirOp)opcode)) {
@@ -76,11 +92,11 @@ static XrXirStatus effect_final_input_select_next(const EffectBodyRequest *body,
             }
         }
         uint32_t at=cursor->next++,opcode=XR_XIR_INVALID;
-        status=effect_body_run_word(&body->read,cursor->run,at,0,&opcode);
+        status=effect_body_run_word(&body->read,run,at,0,&opcode);
         if(status!=XR_XIR_OK) return status;
         if(opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
         if(!effect_final_input_selected(cursor->selection,(XrXirOp)opcode)) continue;
-        status=effect_body_instruction_ref_value(&body->read,cursor->run,at,operation);
+        status=effect_body_instruction_ref_value(&body->read,run,at,operation);
         if(status!=XR_XIR_OK) return status;
         *instruction=at;*found=true;return XR_XIR_OK;
     }

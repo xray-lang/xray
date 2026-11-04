@@ -33,7 +33,7 @@ XR_FUNC bool xr_xir_generator_storage_valid(const XirGenerator *generator) {
 }
 static XirGenerator *generator_core_activation(const XrXirTaskExecutor *executor,
     const XirTaskActivation *activation) {
-    if(!activation || activation->task || activation==&executor->root) return NULL;
+    if(!activation || activation->task || activation==&executor->root || activation==&executor->callback) return NULL;
     XirGenerator *generator=(XirGenerator *)((unsigned char *)activation- offsetof(XirGenerator,activation));
     return generator->executor==executor && generator->call==activation->call &&
         generator->generation==executor->generation && generator->identity==activation->ticket ? generator : NULL;

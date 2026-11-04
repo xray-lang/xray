@@ -93,6 +93,9 @@ typedef struct EffectBodyMaterial {
     /* A thin generation owns its mutable advertisement overlay and retains
      * the complete immutable backbone. It never frees borrowed child owners. */
     struct EffectBodyMaterial *backbone;
+    /* A fully copied ordinary body owns the complete canonical source too.
+     * Thin holders borrow this pointer only through their retained backbone. */
+    struct EffectBodyMaterial *canonical_source;
     /* Only an initial ordinary holder owns these transformed heads. */
     EffectBodyOrdinaryOverlay *overlay;
     EffectTerms terms;
@@ -186,7 +189,13 @@ static inline bool effect_body_backbone_shape(const EffectBodyMaterial *body) {
 /* Ownership consistency is only a storage precondition. Semantic callers
  * still prove complete external correspondence and actual equation closure. */
 static inline bool effect_body_material_shape(const EffectBodyMaterial *body) {
-    return body && body->resources && body->references && effect_body_backbone_shape(body) &&
+    const EffectBodyMaterial *canonical=body?body->canonical_source:NULL;
+    bool canonical_shape=!canonical || (canonical!=body && canonical->references && canonical->resources==body->resources &&
+        !canonical->ordinary_identities && !canonical->backbone && !canonical->canonical_source &&
+        canonical->domain.function_count==body->ordinary_source_count &&
+        canonical->domain.types==&canonical->terms.types && canonical->domain.declarations==canonical->declarations);
+    return body && canonical_shape && (!body->backbone || body->canonical_source==body->backbone->canonical_source) &&
+        body->resources && body->references && effect_body_backbone_shape(body) &&
         body->domain.types==&body->terms.types &&
         (!!body->domain.function_count==!!body->functions) &&
         body->domain.declarations==body->declarations && body->domain.generics==body->generics &&

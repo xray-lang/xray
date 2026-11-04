@@ -42,6 +42,7 @@
 #include "xxir_class_method_internal.h"
 #include "xxir_pointer.h"
 #include "xxir_task_result.h"
+#include "xxir_sys_native.h"
 #include "xxir_nominal.h"
 #include "xxir_float.h"
 #include "../hir/xhir_literal.h"
@@ -1823,6 +1824,10 @@ static bool source_function_value(SourceContext *ctx, AstNode *node, SourceName 
     if (symbol && symbol->kind == SOURCE_IMPORT) symbol = imported_declaration(ctx, symbol, symbol->imported);
     if (!symbol || symbol->kind != SOURCE_FUNCTION)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "function value requires a declared function");
+    if (ctx->identities[symbol->index].native_callable==XR_NATIVE_CALLABLE_SYS_ON_SIGNAL)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"signal registration requires a direct call");
+    if(xir_sys_thread_token_id(ctx->identities[symbol->index].native_callable))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"thread identity queries require a direct call");
     if (!source_query_reference(ctx, node, binding, symbol, XR_XIR_SOURCE_FUNCTION_VALUE)) return false;
     if (!source_initialization_require(ctx,symbol->index)) return false;
     const XrXirFunction *function = &ctx->functions[symbol->index];
@@ -2416,7 +2421,9 @@ static bool source_resolved_identity(SourceContext *ctx, const XrModuleSpec *spe
 #include "xxir_source_crypto.inc.c"
 #include "xxir_source_math.inc.c"
 #include "xxir_source_sys.inc.c"
+#include "xxir_source_path_native.inc.c"
 #include "xxir_source_os.inc.c"
+#include "xxir_source_io.inc.c"
 static bool collect_declarations(SourceContext *ctx) {
     uint32_t count = (uint32_t) ctx->graph->spec_count, functions = count + (ctx->linkage_kind == XR_XIR_PROGRAM), slots = 0, nominals = 0, interfaces = 0;
     uint32_t readers = ctx->repl_tail ? 1u : 0u, function_values=0;
@@ -2559,15 +2566,29 @@ static bool collect_declarations(SourceContext *ctx) {
     for(uint32_t m=0;m<count;++m) {
         if(!source_request_poll(ctx,NULL))return false;
         if(!source_sys_module(ctx,m) || source_owned_checked(&ctx->graph->specs[m]))continue;
-        if(capacity==UINT32_MAX)return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"sys native callable capacity overflow");
-        ++capacity;
+        uint32_t natives=(uint32_t)(sizeof(xir_sys_native_ids)/sizeof(*xir_sys_native_ids));
+        if(natives>UINT32_MAX-capacity)return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"sys native callable capacity overflow");
+        capacity+=natives;
     }
     for(uint32_t m=0;m<count;++m) {
         if(!source_request_poll(ctx,NULL))return false;
         if(!source_os_module(ctx,m) || source_owned_checked(&ctx->graph->specs[m]))continue;
-        uint32_t natives=XR_NATIVE_CALLABLE_OS_SYSTEM_HOMEDIR-XR_NATIVE_CALLABLE_OS_PLATFORM+1;
+        uint32_t natives=(uint32_t)(sizeof(xir_os_native_ids)/sizeof(*xir_os_native_ids));
         if(natives>UINT32_MAX-capacity)return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"os native callable capacity overflow");
         capacity+=natives;
+    }
+    for(uint32_t m=0;m<count;++m) {
+        if(!source_request_poll(ctx,NULL))return false;
+        if(!source_io_module(ctx,m) || source_owned_checked(&ctx->graph->specs[m]))continue;
+        uint32_t natives=(uint32_t)(sizeof(xir_io_native_contracts)/sizeof(*xir_io_native_contracts));
+        if(natives>UINT32_MAX-capacity)return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"io native callable capacity overflow");
+        capacity+=natives;
+    }
+    for(uint32_t m=0;m<count;++m) {
+        if(!source_request_poll(ctx,NULL))return false;
+        if(!source_path_native_module(ctx,m)||source_owned_checked(&ctx->graph->specs[m]))continue;
+        if(capacity==UINT32_MAX)return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"Path native callable capacity overflow");
+        ++capacity;
     }
     if (!ctx->core_factory && capacity <= UINT32_MAX - 9) capacity += 9;
     if (readers>UINT32_MAX-capacity) return source_fail(ctx,NULL,XR_XIR_BUDGET,"binding reader capacity exhausted");
@@ -2595,7 +2616,7 @@ static bool collect_declarations(SourceContext *ctx) {
         }
     }
     if (!source_library_metadata(ctx) || !source_history_bindings(ctx,true)) return false;
-    if (!source_nominal_constraints(ctx) || !source_interface_constraints(ctx) ||
+    if (!source_io_types(ctx) || !source_nominal_constraints(ctx) || !source_interface_constraints(ctx) ||
         !source_interface_signatures(ctx) || !source_struct_fields(ctx) || !source_enum_fields(ctx) ||
         !source_class_field_capabilities(ctx)) return false;
     if (!source_struct_defaultability(ctx)) return false;
@@ -2651,7 +2672,7 @@ static bool collect_declarations(SourceContext *ctx) {
             if (p->kind == SOURCE_IMPORT && !source_import_selectors(ctx,p)) return false;
     }
     return source_unicode_declare(ctx) && source_crypto_declare(ctx) && source_mem_declare(ctx) &&
-        source_math_declare(ctx) && source_sys_declare(ctx) && source_os_declare(ctx);
+        source_math_declare(ctx) && source_sys_declare(ctx) && source_os_declare(ctx) && source_io_declare(ctx) && source_path_native_declare(ctx);
 }
 static bool source_parameter_promise(SourceContext *ctx, uint32_t function, uint32_t parameter) {
     SourceFunction *body = &ctx->bodies[function];

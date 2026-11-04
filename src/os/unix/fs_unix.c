@@ -192,10 +192,4 @@ XR_FUNC XrOsIoStatus xr_os_io_getcwd(const XrOsIoPolicy *policy, char *out, size
     }
     io_free(&io,text);return io.status;
 }
-XR_FUNC XrOsIoStatus xr_os_io_chdir(const XrOsIoPolicy *policy, const char *path) {
-    if (!io_policy_valid(policy) || !path) return XR_OS_IO_BAD_ARGUMENT;
-    XrIoContext io = {policy, XR_OS_IO_OK};
-    if (path_ready(&io, path) && ((&io)->status == XR_OS_IO_OK) && chdir(path)) io_status(&io, io_errno_status(errno));
-    return io.status;
-}
 #include "../os_fs_common.inc.c"

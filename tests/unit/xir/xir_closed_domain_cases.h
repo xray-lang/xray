@@ -38,10 +38,10 @@ static void closed_ring_owners_drop(ClosedRing *r) {
     xr_xir_domain_drop(r->domain); r->domain = NULL;
 }
 static void closed_no_alloc_begin(size_t *before) {
-    CHECK(!closed_fail_all); *before = calls; closed_fail_all = true;
+    CHECK(!closed_fail_all); *before = value_allocation_calls; closed_fail_all = true;
 }
 static void closed_no_alloc_end(size_t before) {
-    CHECK(calls == before); closed_fail_all = false;
+    CHECK(value_allocation_calls == before); closed_fail_all = false;
 }
 static void closed_string(const XrXirValue *value) {
     const char *bytes = NULL; size_t length = 0;

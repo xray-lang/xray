@@ -2,7 +2,7 @@ import parallel
 import sys
 
 const initCount = Atomic<i64>(0)
-const tls = sys.ThreadLocal<i64>(() -> initCount.fetchAdd(1, Ordering.AcquireRelease))
+const tls = sys.ThreadLocal<i64, Never>(() -> initCount.fetchAdd(1, Ordering.AcquireRelease))
 const touched = Atomic<i64>(0)
 const lane0 = Atomic<i64>(0)
 const lane1 = Atomic<i64>(0)
@@ -12,7 +12,7 @@ const lane3 = Atomic<i64>(0)
 var plan = parallel.Plan<i64>(parallel.Options(4), (lane) -> lane)
 
 var mapped = plan.map(0..20000, (state, i) -> {
-    var token = tls.get()
+    var token = try! tls.get()
     if (token >= 0) {
         touched.add(1, Ordering.Relaxed)
     }
@@ -30,7 +30,7 @@ var mapped = plan.map(0..20000, (state, i) -> {
 
 var out: Array<i64> = []
 plan.mapInto(0..20000, ref out, (state, i) -> {
-    var token = tls.get()
+    var token = try! tls.get()
     if (token >= 0) {
         touched.add(1, Ordering.Relaxed)
     }

@@ -335,7 +335,8 @@ static XrValue io_chdir(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_bool(false);
 
     XrOsIoPolicy policy = xr_os_io_system_policy();
-    return xr_bool(xr_os_io_chdir(&policy, path) == XR_OS_IO_OK);
+    bool changed = false;
+    return xr_bool(xr_os_io_chdir(&policy, path, NULL, &changed) == XR_OS_IO_OK && changed);
 }
 
 // stat(path) - Get file stat info
@@ -392,8 +393,13 @@ static XrValue io_stat(XrVMRuntime *X, XrValue *args, int argc) {
     xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_MTIME, xr_int(fields.mtime));
     xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_ATIME, xr_int(fields.atime));
     xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_CTIME, xr_int(fields.ctime));
+#ifdef XR_OS_WINDOWS
+    xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_UID, xr_null());
+    xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_GID, xr_null());
+#else
     xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_UID, xr_int(fields.uid));
     xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_GID, xr_int(fields.gid));
+#endif
     xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_IS_FILE, xr_bool(fields.is_file));
     xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_IS_DIR, xr_bool(fields.is_dir));
     xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_IS_SYMLINK, xr_bool(fields.is_symlink));

@@ -26,19 +26,42 @@ add_library(xir_compile_owner_runtime STATIC
 if(WIN32)
     target_sources(xir_compile_owner_runtime PRIVATE
         "${XIR_OWNER_ROOT}/src/os/win/random_win.c" "${XIR_OWNER_ROOT}/src/os/win/mem_win.c"
-        "${XIR_OWNER_ROOT}/src/os/win/thread_win.c" "${XIR_OWNER_ROOT}/src/os/win/proc_self_win.c")
+        "${XIR_OWNER_ROOT}/src/os/win/thread_win.c" "${XIR_OWNER_ROOT}/src/os/win/proc_self_win.c"
+        "${XIR_OWNER_ROOT}/src/os/win/fs_mutation_win.c" "${XIR_OWNER_ROOT}/src/os/win/system_win.c"
+        "${XIR_OWNER_ROOT}/src/os/win/file_metadata_win.c"
+        "${XIR_OWNER_ROOT}/src/os/win/file_mutation_win.c"
+        "${XIR_OWNER_ROOT}/src/os/win/file_links_win.c"
+        "${XIR_OWNER_ROOT}/src/os/win/file_temp_win.c"
+        "${XIR_OWNER_ROOT}/src/os/win/thread_token_win.c"
+        "${XIR_OWNER_ROOT}/src/os/win/directory_owned_win.c"
+        "${XIR_OWNER_ROOT}/src/os/win/pipe_owned_win.c"
+        "${XIR_OWNER_ROOT}/src/os/win/process_owned_win.c"
+        "${XIR_OWNER_ROOT}/src/os/win/dylib_owned_win.c"
+        "${XIR_OWNER_ROOT}/src/os/win/signal_win.c")
     target_link_libraries(xir_compile_owner_runtime PRIVATE advapi32 userenv)
 else()
     target_sources(xir_compile_owner_runtime PRIVATE
         "${XIR_OWNER_ROOT}/src/os/unix/random_unix.c" "${XIR_OWNER_ROOT}/src/os/unix/mem_unix.c"
-        "${XIR_OWNER_ROOT}/src/os/unix/thread_unix.c")
+        "${XIR_OWNER_ROOT}/src/os/unix/thread_unix.c" "${XIR_OWNER_ROOT}/src/os/unix/fs_mutation_unix.c"
+        "${XIR_OWNER_ROOT}/src/os/unix/system_unix.c" "${XIR_OWNER_ROOT}/src/os/unix/file_metadata_unix.c"
+        "${XIR_OWNER_ROOT}/src/os/unix/file_mutation_unix.c"
+        "${XIR_OWNER_ROOT}/src/os/unix/file_links_unix.c"
+        "${XIR_OWNER_ROOT}/src/os/unix/file_temp_unix.c"
+        "${XIR_OWNER_ROOT}/src/os/unix/thread_token_unix.c"
+        "${XIR_OWNER_ROOT}/src/os/unix/directory_owned_unix.c"
+        "${XIR_OWNER_ROOT}/src/os/unix/pipe_owned_unix.c"
+        "${XIR_OWNER_ROOT}/src/os/unix/process_owned_unix.c"
+        "${XIR_OWNER_ROOT}/src/os/unix/dylib_owned_unix.c"
+        "${XIR_OWNER_ROOT}/src/os/unix/signal_unix.c")
     target_compile_definitions(xir_compile_owner_runtime PRIVATE _POSIX_C_SOURCE=200809L _GNU_SOURCE)
     target_link_libraries(xir_compile_owner_runtime PRIVATE m pthread)
 endif()
 target_link_libraries(xir_compile_owner_runtime PRIVATE compile_owner_core)
 add_executable(test_xir_compile_runtime_owner
     "${CMAKE_CURRENT_LIST_DIR}/test_xir_compile_runtime_owner.c"
-    "${XIR_OWNER_ROOT}/src/xir/xxir_vm.c")
+    "${XIR_OWNER_ROOT}/src/xir/xxir_vm.c"
+    "${XIR_OWNER_ROOT}/src/xir/xxir_vm_debug.c"
+    "${XIR_OWNER_ROOT}/src/xir/xxir_vm_debug_calls.c")
 target_link_libraries(test_xir_compile_runtime_owner PRIVATE xir_compile_owner_runtime)
 add_executable(test_xir_compile_emit_owner
     "${CMAKE_CURRENT_LIST_DIR}/test_xir_compile_emit_owner.c"

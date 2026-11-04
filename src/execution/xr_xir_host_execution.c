@@ -13,6 +13,7 @@
  */
 #include "xr_xir_host_execution.h"
 #include "../xir/xxir_instance_activation.h"
+#include "../xir/xxir_root_callback_internal.h"
 #include "xr_xir_host_time.h"
 #include "../os/os_time.h"
 #include "../base/xmalloc.h"
@@ -209,10 +210,24 @@ static XrXirCallStatus host_complete(XrXirHostCall *call,XrXirCallResult *output
                 observed=xr_xir_host_call_step_bounded(call,256);
                 continue;
             }
-            XrXirHostWaitStatus waiting = status == XR_XIR_CALL_READY ?
-                xr_xir_host_wait_begin(&wait, &wait_request) : XR_XIR_HOST_WAIT_BAD_ARGUMENT;
-            while (waiting == XR_XIR_HOST_WAIT_PENDING)
-                waiting = xr_xir_host_wait_poll(&wait, UINT64_MAX);
+            XirHostWaitDeadline deadline={0};
+            uint64_t waiting_epoch=observed.epoch,waiting_wake=observed.outcome.wake;
+            if (status==XR_XIR_CALL_READY)
+                status=xir_instance_host_wait_deadline(call->instance,waiting_epoch,waiting_wake,
+                    wait_request.kind==XR_XIR_WAIT_TIMER_MS?xr_time_monotonic_ns():0,&deadline);
+            XrXirHostWaitStatus waiting=status==XR_XIR_CALL_READY?
+                XR_XIR_HOST_WAIT_PENDING:XR_XIR_HOST_WAIT_BAD_ARGUMENT;
+            if (status==XR_XIR_CALL_READY)
+                wait=(XrXirHostWait){deadline.start_ns,deadline.duration_ns,deadline.active};
+            while (waiting==XR_XIR_HOST_WAIT_PENDING) {
+                waiting=xr_xir_host_wait_poll(&wait,UINT64_C(1000000));
+                if (waiting!=XR_XIR_HOST_WAIT_PENDING) break;
+                /* Bounded observation can select a sibling's owned wait. Its
+                 * original deadline remains with the actual activation. */
+                observed=xr_xir_host_call_step_bounded(call,256);
+                if (observed.outcome.status!=XR_XIR_CALL_SUSPENDED || observed.epoch!=waiting_epoch ||
+                    observed.outcome.wake!=waiting_wake) goto host_observed;
+            }
             if (waiting != XR_XIR_HOST_WAIT_DUE) {
                 status=XR_XIR_CALL_HOST_ERROR;
                 goto host_failure;
@@ -221,17 +236,22 @@ static XrXirCallStatus host_complete(XrXirHostCall *call,XrXirCallResult *output
             if (status != XR_XIR_CALL_READY) goto host_failure;
         }
         observed = xr_xir_host_call_step_bounded(call, 256);
+host_observed: ;
     }
     call->busy=true;
-    XR_CHECK(xir_instance_host_finish(call->instance,&call->observed)==XR_XIR_CALL_READY,
+    XrXirCallStatus finished=xir_instance_host_finish(call->instance,&call->observed);
+    XR_CHECK(finished==XR_XIR_CALL_READY || finished==XR_XIR_CALL_CLOSE_FAILED,
         "the host exclusively owns its terminal, unprepared current instance");
     call->busy=false;observed=call->observed;
+    if(finished==XR_XIR_CALL_CLOSE_FAILED)status=finished;
     goto complete;
 host_failure:
     call->busy=true;
-    XR_CHECK(xir_instance_host_failure(call->instance,&call->observed)==XR_XIR_CALL_READY,
+    XrXirCallStatus failed=xir_instance_host_failure(call->instance,&call->observed);
+    XR_CHECK(failed==XR_XIR_CALL_READY || failed==XR_XIR_CALL_CLOSE_FAILED,
         "the host exclusively owns its waiting, unprepared current instance");
-    call->busy=false;observed=call->observed;status=observed.outcome.status;
+    call->busy=false;observed=call->observed;
+    status=failed==XR_XIR_CALL_CLOSE_FAILED?failed:observed.outcome.status;
 complete: ;
     XrXirCallResult owned = {0};
     if (status == XR_XIR_CALL_READY || status==observed.outcome.status) status = xr_xir_host_call_take(call, &owned);

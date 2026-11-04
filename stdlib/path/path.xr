@@ -1,7 +1,9 @@
 // path — pure-Xray cross-platform path manipulation (POSIX semantics).
 //
 // Every operation here is a pure string algorithm; the sole runtime dependency
-// is `os.getcwd()`, used by `resolve` to anchor relative inputs.
+// is a current-directory query used by `resolve` to anchor relative inputs.
+// Only this host anchor uses POSIX separators without a Windows drive prefix;
+// ordinary path arguments retain the POSIX parsing rules below.
 //
 // Semantics:
 //   * output always uses '/' as the separator;
@@ -12,7 +14,6 @@
 // Char-indexed scanning is safe for separator logic because '/' and '.' are
 // single-byte ASCII scalars that never appear inside a multi-byte UTF-8 unit.
 
-import os
 
 // Platform surface. POSIX values; see the module note above.
 export const sep = "/"
@@ -234,7 +235,7 @@ fn _resolveRawArray(parts: Array<string>) -> string {
 
     var all: Array<string> = []
     if (!hasAbs) {
-        all.push(os.getcwd())
+        all.push(__getcwd())
     }
     for (var i = 0; i < len(parts); i++) {
         all.push(parts[i])

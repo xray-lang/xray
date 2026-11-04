@@ -40,12 +40,14 @@ static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXir
     if (spec->abi_version != XR_XIR_PROGRAM_ABI_VERSION ||
         spec->target.architecture != XR_XIR_ARCH_LE64 || spec->target.abi_version != XR_XIR_VALUE_ABI_VERSION)
         return XR_XIR_BAD_LAYOUT;
-    if (!spec->entries || !spec->entry_count || !spec->declarations || !spec->declarations->functions ||
-        (!!spec->code.owner != !!spec->code.release)) return XR_XIR_BAD_STRUCTURE;
+    if (!spec->entries || !spec->entry_count) return XR_XIR_BAD_STRUCTURE;
     if (spec->entry_count > 65535 || spec->entry_count > context->limits.functions) return XR_XIR_BUDGET;
-    for (uint32_t i = 0; i < spec->entry_count; ++i) {
-
+    /* Reject every entry ABI before interpreting declaration metadata. */
+    for (uint32_t i = 0; i < spec->entry_count; ++i)
         if (spec->entries[i].abi_version != XR_XIR_CALL_ABI_VERSION) return XR_XIR_BAD_LAYOUT;
+    if (!spec->declarations || !spec->declarations->functions ||
+        (!!spec->code.owner != !!spec->code.release)) return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t i = 0; i < spec->entry_count; ++i) {
         if ((spec->entries[i].flags & ~(XR_XIR_ENTRY_EXIT | XR_XIR_ENTRY_GENERATOR)) ||
             (((spec->entries[i].flags & XR_XIR_ENTRY_GENERATOR)!=0)!=
              ((spec->declarations->functions[i].promises & XR_XIR_FUNCTION_GENERATOR)!=0))) return XR_XIR_BAD_STRUCTURE;
@@ -96,8 +98,7 @@ static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXir
             const XrXirFunctionIdentity *id=&spec->declarations->functions[i];
             if (entry->resume!=xr_xir_instance_native_callable || entry->release!=xr_xir_instance_native_callable_release ||
                 entry->environment || entry->state_bytes!=sizeof(XrXirValue) ||
-                entry->flags || id->exported || id->nominal_owner || id->member_access || id->cleanup_owner ||
-                id->method_kind || id->test_role || id->test_timeout_seconds || id->promises!=XR_XIR_FUNCTION_NO_SUSPEND ||
+                entry->flags || !xir_native_callable_identity(id) ||
                 !xir_native_callable_types(native,spec->types,entry->parameters,entry->parameter_count,entry->result,
                     xir_native_callable_error(spec->types,native))) return XR_XIR_BAD_STRUCTURE;
         } else if (entry->resume==xr_xir_instance_native_callable) return XR_XIR_BAD_STRUCTURE;

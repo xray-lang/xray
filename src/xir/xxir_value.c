@@ -47,7 +47,7 @@
 #include "xxir_float.h"
 #include "xxir_atomic.h"
 #include "xxir_buffer_storage.h"
-#include "xxir_pointer.h"
+#include "xxir_pointer_origin_internal.h"
 #include "xxir_channel.h"
 #include "xxir_channel_watch_internal.h"
 #include "xxir_channel_rendezvous_internal.h"
@@ -191,7 +191,7 @@ typedef struct XirString {
     char *bytes;
     size_t length, runes, capacity;
 } XirString;
-typedef struct XirPointerOrigin {
+struct XirPointerOrigin {
     _Atomic(uint32_t) references;
     XrXirDomain *domain;
     uint64_t generation;
@@ -199,7 +199,7 @@ typedef struct XirPointerOrigin {
     XirPageRecord *page;
     XrXirViewStorage *exclusive;
     uint32_t shared_views;
-} XirPointerOrigin;
+};
 typedef struct XirBufferStorage {
     XirObject object;
     void *data;
@@ -241,9 +241,11 @@ _Static_assert(offsetof(XrXirDomain, identity) == 0 && sizeof(atomic_bool) == 1 
     sizeof(_Atomic(uint32_t)) == 4, "domain identity rejects the complete retired prefix");
 XR_FUNC bool xr_xir_domain_current(const XrXirDomain *domain) {
     if (!domain) return false;
-    unsigned char identity[8];
-    memcpy(identity, domain, sizeof(identity));
-    return !memcmp(identity, domain_identity, sizeof(identity));
+    _Static_assert(sizeof(uint64_t) == sizeof(domain_identity), "domain identity occupies one exact-width word");
+    uint64_t actual, expected;
+    memcpy(&actual, domain, sizeof(actual));
+    memcpy(&expected, domain_identity, sizeof(expected));
+    return actual == expected;
 }
 XR_FUNC bool xr_xir_domain_is_compile(const XrXirDomain *domain) {
     return xr_xir_domain_current(domain) && domain->compile_resources && !domain->budget.bound;

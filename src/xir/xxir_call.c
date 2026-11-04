@@ -18,6 +18,8 @@
 #include "../base/xresource_limits.h"
 #include "xxir_call_generator.h"
 #include "xxir_call_internal.h"
+#include "xxir_signal_frontier_internal.h"
+#include "xxir_call_signal_internal.h"
 #include "xxir_call_take_internal.h"
 #include "xxir_program.h"
 #include "xxir_call_observer_internal.h"
@@ -119,6 +121,9 @@ typedef struct CallFrame {
     uint32_t take_captures;
     uint32_t effect_instruction;
     bool effect_pending;
+    XirCallSignalOrigin signal_origin,signal_pending;
+    uint64_t signal_parent_epoch;
+    bool signal_staged,signal_available;
     uint32_t cleanup_frontier;
     uint32_t scope_cleanup_callee;
     uint32_t cancel_boundary;
@@ -275,6 +280,7 @@ XrXirValueAdmission *xr_xir_call_admission(const XrXirCallView *view) {
 }
 
 #include "xxir_call_invocation.inc.c"
+#include "xxir_call_signal.inc.c"
 
 XR_FUNC bool xir_call_frame_span(const XrXirCallView *view,const void *frame,uint32_t bytes) {
     if(!xr_xir_call_admission(view)||!frame)return false;
@@ -625,6 +631,7 @@ XR_FUNC XrXirCallStatus xir_call_vm_visit_ready(XrXirCall *call,const XrXirExecu
 }
 #include "xxir_call_class_access.inc.c"
 #include "xxir_call_view.inc.c"
+#include "xxir_call_signal_frontier.inc.c"
 #include "xxir_call_view_operation.inc.c"
 static bool call_take_parameter(const XirCallTakeArguments *,uint32_t);
 #include "xxir_call_view_arguments.inc.c"
@@ -632,8 +639,8 @@ static bool call_take_parameter(const XirCallTakeArguments *,uint32_t);
 #include "xxir_call_view_returns.inc.c"
 #include "xxir_call_take.inc.c"
 
-XR_FUNC XrXirCallStatus xr_xir_call_return_move(XrXirCallView *view,
-    XrXirValue *source, XrXirAction *action) {
+static XrXirCallStatus call_return_move(XrXirCallView *view,
+    XrXirValue *source,XrXirAction *action,XirCallReturnCommit commit,void *context) {
     XrXirValueAdmission *admission=xr_xir_call_admission(view);
     if (!admission || !source || !action || view->phase!=XR_XIR_CALL_NORMAL)
         return XR_XIR_CALL_BAD_ARGUMENT;
@@ -656,11 +663,26 @@ XR_FUNC XrXirCallStatus xr_xir_call_return_move(XrXirCallView *view,
     XR_CHECK(frame->pending.status==XR_XIR_CALL_READY && !frame->pending.value.type &&
         !frame->pending.value.reserved && !frame->pending.value.payload &&
         xr_xir_panic_empty(&frame->pending.panic),"a normal frame owns no prior pending exit");
+    if (commit) {
+        status=xr_xir_call_execution_status(view);
+        if (status!=XR_XIR_CALL_READY) return status;
+        status=commit(context);
+        if (status!=XR_XIR_CALL_READY) return status;
+    }
     /* Admission and terminal work precede the only ownership mutation. */
     frame->pending=call_result(XR_XIR_CALL_RETURNED);
     frame->pending.value=*source;*source=(XrXirValue){0};frame->return_staged=true;
     *action=(XrXirAction){.kind=XR_XIR_ACTION_RETURN,.value=frame->pending.value};
     return XR_XIR_CALL_READY;
+}
+XR_FUNC XrXirCallStatus xr_xir_call_return_move(XrXirCallView *view,
+    XrXirValue *source,XrXirAction *action) {
+    return call_return_move(view,source,action,NULL,NULL);
+}
+XR_FUNC XrXirCallStatus xir_call_return_move_commit(XrXirCallView *view,
+    XrXirValue *source,XrXirAction *action,XirCallReturnCommit commit,void *context) {
+    if(!commit)return XR_XIR_CALL_BAD_ARGUMENT;
+    return call_return_move(view,source,action,commit,context);
 }
 
 typedef struct CallFramePreparation {
@@ -845,6 +867,31 @@ static XrXirCallView frame_view(XrXirCall *call) {
     return (XrXirCallView) {call, call->config.instance, frame->entry->environment,
         frame->state, frame->arguments, frame->entry->parameter_count, frame->inbox,
         call->config.admission.arena, frame->exiting ? XR_XIR_CALL_EXIT : XR_XIR_CALL_NORMAL, frame->pending, frame->scope_exit};
+}
+XR_FUNC const XrXirValueAdmission *xir_call_retirement_admission(const XrXirCallView *view,uint32_t *entry) {
+    if(!view || !entry || !call_owner_current(view->activation))return NULL;
+    XrXirCall *call=view->activation;
+    if(!call || !call->driving || !call->cleaning || call->active_view!=view || !call->top)return NULL;
+    CallFrame *frame=call->top;
+    if(view->instance!=call->config.instance || view->state!=frame->state ||
+        view->arguments!=frame->arguments || view->argument_count!=frame->entry->parameter_count ||
+        view->arena!=frame->metadata->arena)return NULL;
+    *entry=(uint32_t)(frame->entry-frame->metadata->entries);return &call->config.admission;
+}
+XR_FUNC bool xir_call_retirement_pending(const XrXirCall *call) {
+    return call_owner_current(call) && call && call->top &&
+        (xir_instance_pipe_retirement_pending(call->config.instance,call,&call->config.admission)||
+         xir_instance_process_retirement_pending(call->config.instance,call,&call->config.admission)||
+         xir_instance_dylib_retirement_pending(call->config.instance,call,&call->config.admission));
+}
+static bool retire_frame(XrXirCall *call,XrXirCallStatus *failure) {
+    XrXirCallView view=frame_view(call);
+    call->cleaning=true;call->active_view=&view;
+    bool closed=xir_instance_pipe_retire(&view,failure);
+    if(closed)closed=xir_instance_process_retire(&view,failure);
+    if(closed)closed=xir_instance_dylib_retire(&view,failure);
+    call->active_view=NULL;call->cleaning=false;
+    return closed;
 }
 
 static void pop_frame(XrXirCall *call, XrXirCallStatus reason) {
@@ -1158,6 +1205,13 @@ static void accept_child_action(XrXirCall *call, XrXirAction action) {
     if (status == XR_XIR_CALL_READY)
         status = push_frame(call, action.callee, action.arguments, action.argument_count, binding,&preparation);
     call->admitting = false;
+    if (status==XR_XIR_CALL_READY && parent->signal_staged && !cleanup && !binding &&
+        metadata.entries==parent->metadata->entries && parent->signal_pending.target==action.callee) {
+        call->top->signal_origin=parent->signal_pending;
+        call->top->signal_parent_epoch=parent->epoch;
+        call->top->signal_available=true;
+    }
+    parent->signal_staged=false;
     parent->effect_pending=false;
     parent->pending_invocation=(XirEffectInvocationSelection){0};
     parent->take=(XirCallTakeArguments){0};
@@ -1444,6 +1498,8 @@ XrXirCallResult xr_xir_call_poll_bounded(XrXirCall *call, uint64_t quantum) {
             call_observer_event(call, call->top, XR_XIR_CALL_FRAME_ENTER, XR_XIR_CALL_READY);
         if (call->aborting) {
             --quantum;
+            XrXirCallStatus failure=XR_XIR_CALL_READY;
+            if(!retire_frame(call,&failure))break;
             pop_frame(call, call->abort_reason);
             if (!call->top) {
                 xr_xir_call_result_drop(&call->result);
@@ -1451,6 +1507,11 @@ XrXirCallResult xr_xir_call_poll_bounded(XrXirCall *call, uint64_t quantum) {
                     xr_xir_call_result_move(&call->abort_outcome,&call->result);
                 else call->result = call_result(call->abort_reason);
             }
+            continue;
+        }
+        if(xir_call_retirement_pending(call)) {
+            --quantum;finish_exit(call);
+            if(xir_call_retirement_pending(call))break;
             continue;
         }
         if (call->budget && (call->budget->exhausted || !xr_xir_domain_work(call->budget->work_domain, 1))) {
@@ -1501,6 +1562,7 @@ XrXirCallResult xr_xir_call_poll_bounded(XrXirCall *call, uint64_t quantum) {
         XrXirCallView view = frame_view(call);
         call->top->entered = true;
         call->active_view = &view;
+        call->top->signal_staged=false;
         call->top->effect_pending=false;
         call->top->effect_instruction=UINT32_MAX;
         call->top->pending_invocation=(XirEffectInvocationSelection){0};
@@ -1535,6 +1597,7 @@ XrXirCallResult xr_xir_call_poll_bounded(XrXirCall *call, uint64_t quantum) {
         call->active_view = NULL;
         if (call->top) {
             /* A selection is consumed only by a successful frame publication. */
+            call->top->signal_staged=false;
             call->top->effect_pending=false;
             call->top->pending_invocation=(XirEffectInvocationSelection){0};
         }
@@ -1603,7 +1666,10 @@ XR_FUNC XrXirCallStatus xir_call_close_bound(XrXirCall *call, const XrXirExecuto
     xr_xir_call_result_drop(&call->result);
     abort_frames(call,XR_XIR_CALL_CANCELLED);
     XrXirCallResult observed;
-    do observed=xr_xir_call_poll_bounded(call,256); while (observed.status==XR_XIR_CALL_READY);
+    do {
+        observed=xr_xir_call_poll_bounded(call,256);
+        if(xir_call_retirement_pending(call))return XR_XIR_CALL_CLOSE_FAILED;
+    } while (observed.status==XR_XIR_CALL_READY);
     if (terminal) {xr_xir_call_result_drop(&call->result);xr_xir_call_result_move(terminal,&call->result);}
     return call->result.status;
 }
@@ -1855,7 +1921,10 @@ XrXirCallStatus xr_xir_call_free(XrXirCall *call) {
     XrXirCallStatus status = XR_XIR_CALL_READY;
     if (call->top) {
         if (!call->aborting) (void)xr_xir_call_request_cancel(call);
-        do { status = xr_xir_call_poll_bounded(call, 256).status; }
+        do {
+            status = xr_xir_call_poll_bounded(call, 256).status;
+            if(xir_call_retirement_pending(call))return XR_XIR_CALL_CLOSE_FAILED;
+        }
         while (status == XR_XIR_CALL_READY);
         if (status == XR_XIR_CALL_CANCELLED) status = XR_XIR_CALL_READY;
     }

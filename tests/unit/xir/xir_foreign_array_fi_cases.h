@@ -23,12 +23,12 @@ static void foreign_array_prepare(ForeignArray *f) {
         CHECK(xr_xir_domain_new_budgeted(65536, &controls, &f->domains[i]) == XR_XIR_VALUE_OK);
     const XrXirCallableParameter fields[] = {{(XrXirType)257, 0}, {XR_XIR_STRING, 0}};
     const XrXirTypeNode nodes[] = {
-        {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind = XR_XIR_TYPE_NULLABLE, .element = (XrXirType)256},
         {.kind = XR_XIR_TYPE_TUPLE, .parameters = fields, .parameter_count = 2},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)258}};
     const XrXirTypes types = {nodes, 4, NULL, NULL};
-    CHECK(value_compile_arena(&types, 65536, value_compile_limits(65536, 1048576, 65536), &f->arena) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&types, 65536, value_compile_limits(), &f->arena) == XR_XIR_VALUE_OK);
     f->local = allocation_admission(f->domains[0], f->arena, &f->releases);
     f->remote = allocation_admission(f->domains[1], f->arena, &f->releases);
     f->local.scratch_bytes = f->remote.scratch_bytes = 65536;
@@ -91,12 +91,12 @@ static size_t foreign_array_attempt(bool append, size_t point, unsigned boundary
     if (boundary == 2) f.local.scratch_bytes = 0;
     if (boundary == 3) f.domains[0]->limit = a.live_bytes;
     if (boundary == 4) f.domains[0]->budget.requested_limit = requested;
-    size_t physical = live, compiler = value_compile_live, compiler_bytes = value_compile_bytes, begin = calls;
+    size_t physical = live, compiler = value_compile_live, compiler_bytes = value_compile_bytes, begin = value_allocation_calls;
     if (point != SIZE_MAX) { CHECK(point <= SIZE_MAX - begin); fail_at = begin + point; }
     XrXirValuePlace place = {(XrXirType)259, &f.array.payload}; XrXirFaultDetail fault = {0};
     XrXirValueStatus status = append ? xr_xir_array_push(&place, &f.replacement, &f.local) :
         xr_xir_array_set(&place, 0, &f.replacement, &f.local, &fault);
-    size_t attempts = calls - begin; fail_at = SIZE_MAX;
+    size_t attempts = value_allocation_calls - begin; fail_at = SIZE_MAX;
     CHECK(!fault.code && !f.releases);
     bool changed = !boundary && point == SIZE_MAX;
     if (changed) {

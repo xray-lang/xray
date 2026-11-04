@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   A native record never replaces declaration shape or module authority.
  */
+#include "xxir_file_stat_native.h"
 static XrXirStatus nominal_native_name(
     XrXirLiteral actual, const char *expected) {
     size_t length = 0;
@@ -32,6 +33,8 @@ static XrXirStatus nominal_native_verify(
         }
         return XR_XIR_OK;
     }
+    if(record->native_id==XR_NATIVE_DECLARATION_FILE_STAT)
+        return xir_file_stat_header(identity)?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
     uint32_t arity=0, fields=0, variants=0;
     if (record->native_id==XR_NATIVE_DECLARATION_ORDERING) variants=5;
     else if (record->native_id==XR_NATIVE_DECLARATION_RECV) { arity=1; fields=1; variants=4; }

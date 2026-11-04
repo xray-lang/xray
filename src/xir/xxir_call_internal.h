@@ -149,6 +149,19 @@ XR_FUNC bool xir_call_bound_yield_pending(const XrXirCall *call,const XrXirExecu
 /* Physical release only; never resumes guest cleanup in a failed group. */
 XR_FUNC XrXirCallStatus xir_call_close_bound(XrXirCall *call, const XrXirExecutorBinding *binding,
     XrXirCallResult *terminal);
+/* Physical retirement borrows the actual top frame synchronously. Pending OS
+ * cleanup keeps that frame and its original outcome owned by the activation. */
+XR_FUNC const XrXirValueAdmission *xir_call_retirement_admission(const XrXirCallView *view,uint32_t *entry);
+XR_FUNC bool xir_call_retirement_pending(const XrXirCall *call);
+XR_FUNC bool xir_instance_dylib_retire(XrXirCallView *view,XrXirCallStatus *failure);
+XR_FUNC bool xir_instance_dylib_retirement_pending(const void *instance,const XrXirCall *call,
+    const XrXirValueAdmission *admission);
+XR_FUNC bool xir_instance_process_retire(XrXirCallView *view,XrXirCallStatus *failure);
+XR_FUNC bool xir_instance_process_retirement_pending(const void *instance,const XrXirCall *call,
+    const XrXirValueAdmission *admission);
+XR_FUNC bool xir_instance_pipe_retire(XrXirCallView *view,XrXirCallStatus *failure);
+XR_FUNC bool xir_instance_pipe_retirement_pending(const void *instance,const XrXirCall *call,
+    const XrXirValueAdmission *admission);
 XR_FUNC bool xr_xir_call_driver_failure(const XrXirCall *call, const XrXirExecutorBinding *binding,
     XrXirCallStatus *output);
 XR_FUNC bool xr_xir_call_task_wait_token(const XrXirCall *call, XrXirTaskWaitToken *output);

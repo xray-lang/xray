@@ -15,26 +15,26 @@ static void value_observer_unit_case(XrXirTypeArena *arena,XrXirDomain *domain,X
     CHECK(xr_xir_tuple_new((XrXirType)260,&empty,1,&owner,&value)==XR_XIR_VALUE_OK);
     XrXirValuePathStep step={XR_XIR_PATH_TUPLE_FIELD,(XrXirType)260,0};
     XrXirValueAdmission observing={arena,observer,NULL,NULL,65536,65536};
-    XrXirValue result={0};XrXirFaultDetail fault={0};size_t allocations=calls;
+    XrXirValue result={0};XrXirFaultDetail fault={0};size_t allocations=value_allocation_calls;
     CHECK(xir_value_observe_child(&value,&step,&observing,&result,&fault)==XR_XIR_VALUE_OK);
     uint64_t spent=65536-observing.work;
-    CHECK(spent && unit_value(&result) && calls==allocations);
+    CHECK(spent && unit_value(&result) && value_allocation_calls==allocations);
     for (uint64_t work=0;work<spent;++work) {
         observing.work=work;XrXirFaultDetail kept={430,0,7,9};fault=kept;
         CHECK(xir_value_observe_child(&value,&step,&observing,&result,&fault)==XR_XIR_VALUE_LIMIT);
-        CHECK(unit_value(&result) && !memcmp(&kept,&fault,sizeof(kept)) && calls==allocations);
+        CHECK(unit_value(&result) && !memcmp(&kept,&fault,sizeof(kept)) && value_allocation_calls==allocations);
     }
     XirTuple *tuple=(XirTuple *)object_pointer(&value);tuple->fields[0].payload=1;observing.work=65536;
     CHECK(xir_value_observe_child(&value,&step,&observing,&result,&fault)==XR_XIR_VALUE_BAD_ARGUMENT);
-    CHECK(unit_value(&result) && calls==allocations);tuple->fields[0].payload=0;xr_xir_value_drop(&value);
+    CHECK(unit_value(&result) && value_allocation_calls==allocations);tuple->fields[0].payload=0;xr_xir_value_drop(&value);
     puts("Unit child observation authenticates its parent, spends exact finite work, allocates nothing and grants no argument admission PASS");
 }
 static void value_observer_wrapper_cases(XrXirDomain *domain) {
     XrXirNominalFieldIdentity field={ {"value",5},XR_XIR_FIELD_MUTABLE },payload={ {"object",6},0 };
     XrXirNominalVariant variants[]={{{"Full",4},0,1},{{"Empty",5},1,0}};
     XrXirNominalIdentity identities[]={
-        {{"wrapper",7},{"Box",3},1,0,&field,1,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL,{0}},
-        {{"wrapper",7},{"Choice",6},1,0,&payload,1,XR_XIR_NOMINAL_ENUM,variants,2,0,{0}}};
+        {{"wrapper",7},{"Box",3},1,0,&field,1,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL,{0}, 0},
+        {{"wrapper",7},{"Choice",6},1,0,&payload,1,XR_XIR_NOMINAL_ENUM,variants,2,0,{0}, 0}};
     XrXirNominalTable table={NULL,2,identities};XrXirType scalar[]={XR_XIR_I64},object[]={(XrXirType)256};
     XrXirCallableParameter unit_member[]={{XR_XIR_UNIT,XR_PARAM_READ}};
     XrXirCallableParameter members[]={{(XrXirType)256,XR_PARAM_READ},{XR_XIR_I64,XR_PARAM_READ}};
@@ -45,7 +45,7 @@ static void value_observer_wrapper_cases(XrXirDomain *domain) {
         {.kind=XR_XIR_TYPE_NOMINAL,.nominal={1,NULL,0,object,1}},
         {.kind=XR_XIR_TYPE_TUPLE,.parameters=unit_member,.parameter_count=1}};
     XrXirTypes types={nodes,5,&table,NULL};XrXirTypeArena *arena=NULL;
-    XrCompileResourceLimits limits=value_compile_limits(1048576,1048576,1000000);
+    XrCompileResourceLimits limits=value_compile_limits();
     CHECK(value_compile_arena(&types,100,limits,&arena)==XR_XIR_VALUE_OK);
     memset(nodes,0xcc,sizeof(nodes));memset(identities,0xcc,sizeof(identities));memset(variants,0xcc,sizeof(variants));
     XrXirValueAdmission owner={arena,domain,NULL,NULL,100000,65536};XrXirValue box={0},values[5]={{0}};
@@ -63,14 +63,14 @@ static void value_observer_wrapper_cases(XrXirDomain *domain) {
     const XrXirValuePathKind kinds[]={XR_XIR_PATH_TUPLE_FIELD,XR_XIR_PATH_NULLABLE_VALUE,XR_XIR_PATH_ENUM_FIELD};
     for (uint32_t i=0;i<5;++i) {
         uint32_t family=i<3 ? i : i-2;XrXirValuePathStep step={kinds[family],(XrXirType)values[i].type,0};XrXirFaultDetail fault={0};XrXirValue result={0};
-        uint64_t work=xr_xir_domain_budget_stats(observer).work,available=observing.work;size_t allocations=calls;
+        uint64_t work=xr_xir_domain_budget_stats(observer).work,available=observing.work;size_t allocations=value_allocation_calls;
         XrXirValueStatus status=xir_value_observe_child(&values[i],&step,&observing,&result,&fault);
-        CHECK(calls==allocations && xr_xir_domain_budget_stats(observer).work>work);
+        CHECK(value_allocation_calls==allocations && xr_xir_domain_budget_stats(observer).work>work);
         uint64_t spent=available-observing.work;CHECK(spent);
         for (uint64_t limit=0;limit<spent;++limit) {
             XrXirValue unavailable={0};XrXirFaultDetail kept={430,0,7,9},failed=kept;observing.work=limit;
             CHECK(xir_value_observe_child(&values[i],&step,&observing,&unavailable,&failed)==XR_XIR_VALUE_LIMIT);
-            CHECK(unit_value(&unavailable) && !memcmp(&kept,&failed,sizeof(kept)) && calls==allocations);
+            CHECK(unit_value(&unavailable) && !memcmp(&kept,&failed,sizeof(kept)) && value_allocation_calls==allocations);
         }
         observing.work=65536;
         if (i>=3) {CHECK(status==XR_XIR_VALUE_BOUNDS && !fault.length && unit_value(&result));continue;}

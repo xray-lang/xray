@@ -725,5 +725,451 @@ class MathCallableDeclarations(unittest.TestCase):
                     schema.render_math_callables(changed)
 
 
+class SignalCallableSchemaTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / 'tools/stdlibgen'))
+        from stdlibgen import parse_defs
+        cls.declarations = parse_defs(ROOT)
+
+    def test_owned_recipe_preserves_the_ordinary_callback_contract(self):
+        lines, rows = schema.render_sys_signal(self.declarations)
+        self.assertEqual(len(rows), 1)
+        self.assertIn('XR_NATIVE_CALLABLE_SYS_ON_SIGNAL, NULL,', rows[0])
+        self.assertIn('NULL, false, "sys", "stdlib/defs/core.def", FINGERPRINT', rows[0])
+        text = '\n'.join(lines)
+        self.assertIn('{"signal", "i64", XR_NATIVE_TERM_I64, false, false}', text)
+        self.assertIn('{"handler", "fn(): ()", XR_NATIVE_TERM_UNIT_CALLBACK, false, false}', text)
+        self.assertIn('XR_NATIVE_ALLOCATION_UNKNOWN', text)
+        self.assertNotIn('XR_NATIVE_ALLOCATION_NO_HEAP', text)
+
+    def test_callback_shape_and_foreign_declaration_changes_are_rejected(self):
+        row = next(item for item in self.declarations if item.module == 'sys' and item.name == '__onSignal')
+        for changed in ([item for item in self.declarations if item is not row], self.declarations + [row]):
+            with self.assertRaises(ValueError):
+                schema.render_sys_signal(changed)
+        mutations = [('module', 'other'), ('name', '__other'),
+                     ('signature', '(signal: i64, handler: fn(x: i64): ()): bool'),
+                     ('signature', '(signal: i64, handler: fn(...i64): ()): bool'),
+                     ('signature', '(signal: i64, handler: nosuspend fn(): ()): bool'),
+                     ('signature', '(signal: i64, handler: fn(): i64): bool'),
+                     ('signature', '(signal: i64, handler: fn() throws Error): bool'),
+                     ('argc', '1'), ('arg_spec', 'v'), ('visibility', 'public'),
+                     ('effect', 'nothrow'), ('allocation', 'no_heap'), ('return_ownership', 'fresh'),
+                     ('layer', 'core'), ('vm', 'other'), ('aot', 'other'), ('aot_direct', False),
+                     ('aot_kind', 'builtin'), ('link_object', 'other'), ('vm_binding', 'yieldable'),
+                     ('vm_ifdef', 'OTHER'), ('define', 'OTHER'), ('ret', 'i64'),
+                     ('semantic_intrinsic', True), ('provider_declaration', object()),
+                     ('caps', ('task',)), ('suspension_kind', 'task')]
+        for field, value in mutations:
+            with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                schema.render_sys_signal([replace(item, **{field: value}) if item is row else item
+                                          for item in self.declarations])
+
+
+class ThreadTokenCallableSchemaTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / 'tools/stdlibgen'))
+        from stdlibgen import parse_defs
+        cls.declarations = parse_defs(ROOT)
+
+    def test_exact_thread_token_contracts_are_runtime_only(self):
+        lines, rows = schema.render_sys_thread_tokens(self.declarations)
+        self.assertEqual(len(rows), 2)
+        self.assertIn('XR_NATIVE_CALLABLE_SYS_THREAD_LOCAL_ID, NULL,', rows[0])
+        self.assertIn('XR_NATIVE_CALLABLE_SYS_THREAD_LOCAL_ALIVE, NULL,', rows[1])
+        text = '\n'.join(lines)
+        self.assertIn('"__threadLocalId", "(): i64", "i64"', text)
+        self.assertIn('"__threadLocalAlive", "(id: i64): bool", "bool"', text)
+        self.assertIn('{"id", "i64", XR_NATIVE_TERM_I64, false, false}', text)
+        self.assertEqual(text.count('XR_NATIVE_ALLOCATION_UNKNOWN'), 2)
+        for row in rows:
+            self.assertIn('NULL, false, "sys", "stdlib/defs/core.def", FINGERPRINT', row)
+
+    def test_missing_duplicate_and_complete_metadata_changes_are_rejected(self):
+        for name in ('__threadLocalId', '__threadLocalAlive'):
+            row = next(item for item in self.declarations if item.module == 'sys' and item.name == name)
+            for changed in ([item for item in self.declarations if item is not row], self.declarations + [row]):
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    schema.render_sys_thread_tokens(changed)
+            for field, value in [('module', 'other'), ('signature', '(): string'), ('argc', '9'),
+                                 ('arg_spec', 'invalid'), ('visibility', 'public'), ('effect', 'nothrow'),
+                                 ('allocation', 'no_heap'), ('return_ownership', 'borrowed'), ('layer', 'core'),
+                                 ('vm', 'other'), ('aot', 'other'), ('aot_direct', False), ('aot_kind', 'builtin'),
+                                 ('link_object', 'other'), ('vm_binding', 'yieldable'), ('vm_ifdef', 'OTHER'),
+                                 ('define', 'OTHER'), ('ret', 'i64'), ('semantic_intrinsic', True),
+                                 ('provider_declaration', object()), ('caps', ('task',)), ('suspension_kind', 'task')]:
+                with self.subTest(name=name, field=field), self.assertRaises(ValueError):
+                    schema.render_sys_thread_tokens([replace(item, **{field: value}) if item is row else item
+                                                     for item in self.declarations])
+
+
+class CpuCallableSchemaTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / 'tools/stdlibgen'))
+        from stdlibgen import parse_defs
+        cls.declarations = parse_defs(ROOT)
+
+    def test_exact_scalar_contract_and_runtime_only_rows(self):
+        lines, rows = schema.render_cpu_callables(self.declarations)
+        self.assertEqual(len(rows), 2)
+        self.assertIn('XR_NATIVE_CALLABLE_OS_CPU_COUNT, NULL,', rows[0])
+        self.assertIn('XR_NATIVE_CALLABLE_SYS_PIN_TO_CPU, NULL,', rows[1])
+        self.assertIn('NULL, false, "os", "stdlib/defs/core.def", FINGERPRINT', rows[0])
+        self.assertIn('NULL, false, "sys", "stdlib/defs/core.def", FINGERPRINT', rows[1])
+        text = '\n'.join(lines)
+        self.assertIn('"__cpuCount", "(): i64", "i64"', text)
+        self.assertIn('"__pinToCpu", "(cpu: i64): bool", "bool"', text)
+        self.assertEqual(text.count('XR_NATIVE_ALLOCATION_UNKNOWN'), 2)
+        self.assertNotIn('XR_NATIVE_ALLOCATION_NO_HEAP', text)
+        self.assertIn('{"cpu", "i64", XR_NATIVE_TERM_I64, false, false}', text)
+
+    def test_missing_duplicate_and_single_contract_changes_are_rejected(self):
+        for module, name in (('os', '__cpuCount'), ('sys', '__pinToCpu')):
+            row = next(item for item in self.declarations if item.module == module and item.name == name)
+            for changed in ([item for item in self.declarations if item is not row], self.declarations + [row]):
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    schema.render_cpu_callables(changed)
+            for field, value in [('module', 'other'), ('signature', '(): string'), ('argc', '9'),
+                                 ('arg_spec', 'invalid'), ('visibility', 'public'), ('effect', 'nothrow'),
+                                 ('allocation', 'no_heap'), ('return_ownership', 'fresh'), ('layer', 'core'),
+                                 ('vm', 'other'), ('aot', 'other'), ('aot_direct', False), ('aot_kind', 'builtin'),
+                                 ('link_object', 'other'), ('vm_binding', 'yieldable'), ('vm_ifdef', 'OTHER'),
+                                 ('define', 'OTHER'), ('ret', 'i64'), ('semantic_intrinsic', True),
+                                 ('provider_declaration', object()), ('caps', ('task',)), ('suspension_kind', 'task')]:
+                with self.subTest(name=name, field=field), self.assertRaises(ValueError):
+                    schema.render_cpu_callables([replace(item, **{field: value}) if item is row else item
+                                                 for item in self.declarations])
+
+
+class IoCallableSchemaTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / 'tools/stdlibgen'))
+        from stdlibgen import parse_defs
+        cls.declarations = parse_defs(ROOT)
+
+    def test_exact_filesystem_contract_and_runtime_only_rows(self):
+        lines, rows = schema.render_io_callables(self.declarations)
+        identities = ('CHMOD', 'CHDIR', 'STAT', 'MKDIR', 'RMDIR', 'REMOVE', 'RENAME', 'UTIME_NOW',
+                      'SYMLINK', 'READLINK', 'REALPATH', 'MAKE_TEMP_DIR', 'MAKE_TEMP_FILE', 'DIR_OPEN', 'DIR_NEXT', 'DIR_CLOSE')
+        self.assertEqual(len(rows), len(identities))
+        for row, identity in zip(rows, identities):
+            self.assertIn('XR_NATIVE_CALLABLE_IO_' + identity + ', NULL,', row)
+        for row in rows:
+            self.assertIn('NULL, false, "io", "stdlib/defs/core.def", FINGERPRINT', row)
+        text = '\n'.join(lines)
+        self.assertIn('"__chmod", "(path: Path, mode: i64): bool", "bool"', text)
+        self.assertIn('"__chdir", "(path: Path): bool", "bool"', text)
+        self.assertEqual(text.count('{"path", "Path", XR_NATIVE_TERM_PATH, false, false}'), 10)
+        self.assertIn('{"mode", "i64", XR_NATIVE_TERM_I64, false, false}', text)
+        self.assertIn('{"old", "Path", XR_NATIVE_TERM_PATH, false, false}', text)
+        self.assertIn('{"new", "Path", XR_NATIVE_TERM_PATH, false, false}', text)
+        self.assertIn('{"source", "Path", XR_NATIVE_TERM_PATH, false, false}', text)
+        self.assertIn('{"link", "Path", XR_NATIVE_TERM_PATH, false, false}', text)
+        self.assertEqual(text.count('{"root", "string", XR_NATIVE_TERM_STRING, false, false}'), 2)
+        self.assertIn('"__makeTempDir", "(root: string): string?", "string?"', text)
+        self.assertIn('"__makeTempFile", "(root: string): string?", "string?"', text)
+        self.assertEqual(text.count('1, XR_NATIVE_TERM_NULLABLE_STRING'), 5)
+        self.assertIn('"__dirOpen", "(path: Path): i64", "i64"', text)
+        self.assertIn('"__dirNext", "(handle: i64): string?", "string?"', text)
+        self.assertIn('"__dirClose", "(handle: i64): bool", "bool"', text)
+        self.assertEqual(text.count('{"handle", "i64", XR_NATIVE_TERM_I64, false, false}'), 2)
+        self.assertIn('XR_NATIVE_TERM_NULLABLE_FILE_STAT', text)
+        self.assertEqual(text.count('XR_NATIVE_ALLOCATION_UNKNOWN'), len(identities))
+
+    def test_missing_duplicate_and_single_contract_changes_are_rejected(self):
+        for name in ('__chmod', '__chdir', '__stat', '__mkdir', '__rmdir', '__remove', '__rename', '__utimeNow',
+                     '__symlink', '__readlink', '__realpath', '__makeTempDir', '__makeTempFile', '__dirOpen', '__dirNext', '__dirClose'):
+            row = next(item for item in self.declarations if item.module == 'io' and item.name == name)
+            for changed in ([item for item in self.declarations if item is not row], self.declarations + [row]):
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    schema.render_io_callables(changed)
+            for field, value in [('module', 'other'), ('signature', '(path: string): bool'), ('argc', '9'),
+                                 ('arg_spec', 's'), ('visibility', 'public'), ('effect', 'nothrow'),
+                                 ('allocation', 'no_heap'), ('return_ownership', 'fresh'), ('layer', 'core'),
+                                 ('vm', 'other'), ('aot', 'other'), ('aot_direct', False), ('aot_kind', 'builtin'),
+                                 ('link_object', 'other'), ('vm_binding', 'yieldable'), ('vm_ifdef', 'OTHER'),
+                                 ('define', 'OTHER'), ('ret', 'i64'), ('semantic_intrinsic', True),
+                                 ('provider_declaration', object()), ('caps', ('task',)), ('suspension_kind', 'task')]:
+                if value == getattr(row, field):
+                    value = True if field == 'aot_direct' else ''
+                with self.subTest(name=name, field=field), self.assertRaises(ValueError):
+                    schema.render_io_callables([replace(item, **{field: value}) if item is row else item
+                                                for item in self.declarations])
+
+
+
+class OsSystemDeclarations(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / 'tools/stdlibgen'))
+        from stdlibgen import parse_defs
+        cls.declarations = parse_defs(ROOT)
+
+    def test_system_queries_preserve_exact_owned_runtime_contracts(self):
+        lines, rows = schema.render_os_system_callables(self.declarations)
+        expected = ('OS_UID', 'OS_GID', 'OS_PPID', 'OS_KILL', 'OS_TOTAL_MEMORY',
+                    'OS_FREE_MEMORY', 'OS_UPTIME', 'OS_LOADAVG')
+        self.assertEqual(len(rows), len(expected))
+        for row, identity in zip(rows, expected):
+            self.assertIn('XR_NATIVE_CALLABLE_' + identity + ', NULL,', row)
+            self.assertIn('NULL, false, "os", "stdlib/defs/core.def", FINGERPRINT', row)
+        text = '\n'.join(lines)
+        self.assertEqual(text.count('XR_NATIVE_ALLOCATION_UNKNOWN'), 8)
+        self.assertEqual(text.count('XR_NATIVE_RESULT_OWNERSHIP_OWNED'), 8)
+        self.assertEqual(text.count('XR_NATIVE_TERM_NULLABLE_I64'), 2)
+        self.assertIn('XR_NATIVE_TERM_ARRAY_F64', text)
+        self.assertIn('{"pid", "i64", XR_NATIVE_TERM_I64, false, false}', text)
+        self.assertIn('{"signal", "i64", XR_NATIVE_TERM_I64, false, false}', text)
+        self.assertEqual(schema.simple_term(schema.TypeParser('Array<f64>').type(), ''), 'ARRAY_F64')
+        for name in ('__uid', '__gid'):
+            row = next(item for item in self.declarations if item.module == 'os' and item.name == name)
+            self.assertEqual(row.signature, '(): i64?')
+            self.assertEqual((row.aot, row.aot_direct, row.aot_kind), ('', False, ''))
+
+    def test_system_queries_reject_missing_duplicate_and_changed_metadata(self):
+        for name in ('uid', 'gid', 'ppid', 'kill', 'totalMemory', 'freeMemory', 'uptime', 'loadavg'):
+            row = next(item for item in self.declarations if item.module == 'os' and item.name == '__' + name)
+            for changed in ([item for item in self.declarations if item is not row], self.declarations + [row]):
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    schema.render_os_system_callables(changed)
+            for field, value in [('signature', '(): string'), ('argc', '9'), ('arg_spec', 'invalid'),
+                                 ('visibility', 'public'), ('effect', 'nothrow'), ('allocation', 'no_heap'),
+                                 ('return_ownership', 'borrowed'), ('layer', 'core'), ('vm', 'other'),
+                                 ('aot', 'other'), ('aot_direct', not row.aot_direct), ('aot_kind', 'builtin'),
+                                 ('link_object', 'other'), ('vm_binding', 'yieldable'), ('vm_ifdef', 'OTHER'),
+                                 ('define', 'OTHER'), ('ret', 'i64'), ('semantic_intrinsic', True),
+                                 ('provider_declaration', object()), ('caps', ('task',)), ('suspension_kind', 'task')]:
+                with self.subTest(name=name, field=field), self.assertRaises(ValueError):
+                    schema.render_os_system_callables([replace(item, **{field: value}) if item is row else item
+                                                       for item in self.declarations])
+
+
+class SysPipeDeclarations(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / 'tools/stdlibgen'))
+        from stdlibgen import parse_defs
+        cls.declarations = parse_defs(ROOT)
+
+    def test_pipe_heads_and_true_close_transition_are_exact(self):
+        lines, rows = schema.render_sys_pipes(self.declarations)
+        self.assertEqual(len(rows), 4)
+        for row, name in zip(rows, ('OPEN', 'READ', 'WRITE', 'CLOSE')):
+            self.assertIn('XR_NATIVE_CALLABLE_SYS_PIPE_' + name + ', NULL,', row)
+        self.assertIn('XR_NATIVE_TERM_NULLABLE_I64_PAIR', '\n'.join(lines))
+        self.assertIn('XR_NATIVE_TERM_NULLABLE_ARRAY_U8', '\n'.join(lines))
+        close = next(r for r in self.declarations if r.module == 'sys' and r.name == '__pipeClose')
+        self.assertEqual(close.provider_declaration.logical.resources[0].when, 'result-true')
+
+    def test_pipe_complete_contract_mutations_are_rejected(self):
+        for name in ('__pipeOpen', '__pipeRead', '__pipeWrite', '__pipeClose'):
+            row = next(r for r in self.declarations if r.module == 'sys' and r.name == name)
+            for changed in ([r for r in self.declarations if r is not row], self.declarations + [row]):
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    schema.render_sys_pipes(changed)
+            changes = [('module', 'other'), ('signature', '(): bool'), ('argc', '9'), ('arg_spec', 's'),
+                ('visibility', 'public'), ('effect', 'other'), ('allocation', 'no_heap'),
+                ('return_ownership', 'borrowed'), ('layer', 'core'), ('vm', 'other'), ('aot', 'other'),
+                ('aot_direct', False), ('aot_kind', 'builtin'), ('link_object', 'other'),
+                ('vm_binding', 'other'), ('vm_ifdef', 'OTHER'), ('define', 'OTHER'), ('ret', 'i64'),
+                ('semantic_intrinsic', True), ('caps', ('task',)), ('suspension_kind', 'task'),
+                ('provider_declaration', object())]
+            for key, value in changes:
+                with self.subTest(name=name, field=key), self.assertRaises(ValueError):
+                    schema.render_sys_pipes([replace(r, **{key: value}) if r is row else r for r in self.declarations])
+
+
+class SysProcessDeclarations(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / 'tools/stdlibgen'))
+        from stdlibgen import parse_defs
+        cls.declarations = parse_defs(ROOT)
+
+    def test_process_complete_nine_parameter_contract(self):
+        lines, rows = schema.render_sys_processes(self.declarations)
+        self.assertEqual(len(rows), 3)
+        self.assertIn('XR_NATIVE_TERM_NULLABLE_ARRAY_STRING', '\n'.join(lines))
+        for row, name in zip(rows, ('SPAWN', 'TRY_WAIT', 'KILL')):
+            self.assertIn('XR_NATIVE_CALLABLE_SYS_PROCESS_' + name + ', NULL,', row)
+
+    def test_process_complete_contract_mutations_are_rejected(self):
+        for name in ('__processSpawn', '__processTryWait', '__processKill'):
+            row = next(r for r in self.declarations if r.module == 'sys' and r.name == name)
+            for changed in ([r for r in self.declarations if r is not row], self.declarations + [row]):
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    schema.render_sys_processes(changed)
+            changes = [('module', 'other'), ('signature', '(): bool'), ('argc', '10'), ('arg_spec', 's'),
+                ('visibility', 'public'), ('effect', 'other'), ('allocation', 'no_heap'),
+                ('return_ownership', 'borrowed'), ('layer', 'core'), ('vm', 'other'), ('aot', 'other'),
+                ('aot_direct', False), ('aot_kind', 'builtin'), ('link_object', 'other'),
+                ('vm_binding', 'yieldable'), ('vm_ifdef', 'OTHER'), ('define', 'OTHER'), ('ret', 'i64'),
+                ('semantic_intrinsic', True), ('caps', ('task',)), ('suspension_kind', 'task'),
+                ('provider_declaration', object())]
+            for key, value in changes:
+                self.assertNotEqual(getattr(row, key), value)
+                with self.subTest(name=name, field=key), self.assertRaises(ValueError):
+                    schema.render_sys_processes([replace(r, **{key: value}) if r is row else r for r in self.declarations])
+
+
+class SysDylibDeclarations(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / 'tools/stdlibgen'))
+        from stdlibgen import parse_defs
+        cls.declarations = parse_defs(ROOT)
+
+    def test_dylib_complete_heads_and_owned_thread_error(self):
+        lines, rows = schema.render_sys_dylibs(self.declarations)
+        self.assertEqual(len(rows), 4)
+        self.assertIn('XR_NATIVE_TERM_NULLABLE_PTR_U8', '\n'.join(lines))
+        for row, name in zip(rows, ('OPEN', 'SYMBOL', 'CLOSE', 'LAST_ERROR')):
+            self.assertIn('XR_NATIVE_CALLABLE_SYS_DYLIB_' + name + ', NULL,', row)
+        last = next(r for r in self.declarations if r.module == 'sys' and r.name == '__dylibLastError')
+        self.assertEqual(last.return_ownership, 'fresh')
+
+    def test_dylib_complete_contract_mutations_are_rejected(self):
+        for name in ('__dylibOpen', '__dylibSymbol', '__dylibClose', '__dylibLastError'):
+            row = next(r for r in self.declarations if r.module == 'sys' and r.name == name)
+            for changed in ([r for r in self.declarations if r is not row], self.declarations + [row]):
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    schema.render_sys_dylibs(changed)
+            changes = [('module', 'other'), ('signature', '(): bool'), ('argc', '9'), ('arg_spec', 'x'),
+                ('visibility', 'public'), ('effect', 'other'), ('allocation', 'no_heap'),
+                ('return_ownership', 'borrowed'), ('layer', 'core'), ('vm', 'other'), ('aot', 'other'),
+                ('aot_direct', False), ('aot_kind', 'builtin'), ('link_object', 'other'),
+                ('vm_binding', 'yieldable'), ('vm_ifdef', 'OTHER'), ('define', 'OTHER'), ('ret', 'i64'),
+                ('semantic_intrinsic', True), ('caps', ('task',)), ('suspension_kind', 'task'),
+                ('provider_declaration', object())]
+            for key, value in changes:
+                self.assertNotEqual(getattr(row, key), value)
+                with self.subTest(name=name, field=key), self.assertRaises(ValueError):
+                    schema.render_sys_dylibs([replace(r, **{key: value}) if r is row else r for r in self.declarations])
+
+
+class ShellCaptureCleanupDeclarations(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / 'tools/stdlibgen'))
+        from stdlibgen import parse_defs
+        cls.declarations = parse_defs(ROOT)
+
+    def test_shell_spawn_has_no_legacy_provider(self):
+        from stdlibgen import unique_vm_binding_entries, emit_aot_methods, emit_driver_metadata, emit_provider_aot_sources, parse_def_metadata
+        lines, rows = schema.render_os_exec_shell_spawn(self.declarations)
+        self.assertEqual(len(rows), 1)
+        self.assertIn('XR_NATIVE_CALLABLE_OS_EXEC_SHELL_SPAWN', rows[0])
+        self.assertIn('XR_NATIVE_TERM_STRING', '\n'.join(lines))
+        row = next(r for r in self.declarations if r.module == 'os' and r.name == '__execShellSpawn')
+        self.assertNotIn(row, unique_vm_binding_entries(self.declarations))
+        entries, constants, _, _, enums, _, native_classes, *_ = parse_def_metadata(ROOT)
+        without = [r for r in entries if not (r.module == 'os' and r.name == '__execShellSpawn')]
+        self.assertEqual(emit_aot_methods(entries, constants, enums, native_classes),
+                         emit_aot_methods(without, constants, enums, native_classes))
+        self.assertEqual(emit_driver_metadata(entries, constants), emit_driver_metadata(without, constants))
+        self.assertEqual(emit_provider_aot_sources(entries), emit_provider_aot_sources(without))
+
+    def test_shell_spawn_complete_contract_is_required(self):
+        row = next(r for r in self.declarations if r.module == 'os' and r.name == '__execShellSpawn')
+        for changed in ([r for r in self.declarations if r is not row], self.declarations + [row]):
+            with self.assertRaises(ValueError):
+                schema.render_os_exec_shell_spawn(changed)
+        changes = [('module', 'sys'), ('name', '__other'), ('signature', '(command: string, stdoutToken: i64, stderrToken: i64): i64 throws(Error)'),
+            ('argc', '2'), ('arg_spec', 'iii'), ('visibility', 'public'), ('effect', 'other'), ('allocation', 'no_heap'),
+            ('return_ownership', 'borrowed'), ('layer', 'core'), ('vm', 'sys_process_spawn'), ('aot', 'xrt_process_spawn'),
+            ('aot_direct', True), ('aot_kind', 'method'), ('link_object', 'other'), ('vm_binding', 'yieldable'),
+            ('vm_ifdef', 'OTHER'), ('define', 'OTHER'), ('ret', 'i64'), ('semantic_intrinsic', True),
+            ('provider_declaration', object()), ('caps', ('task',)), ('suspension_kind', 'task')]
+        for key, value in changes:
+            self.assertNotEqual(getattr(row, key), value)
+            with self.subTest(field=key), self.assertRaises(ValueError):
+                schema.render_os_exec_shell_spawn([replace(r, **{key: value}) if r is row else r for r in self.declarations])
+        for signature in ('(command: ref string, stdoutToken: i64, stderrToken: i64): i64',
+                '(command: string, stdoutToken: i64, stderrToken: i64): i64?',
+                '(command: string, stdoutToken: i64, ...stderrToken: i64): i64',
+                'nosuspend (command: string, stdoutToken: i64, stderrToken: i64): i64'):
+            with self.subTest(signature=signature), self.assertRaises(ValueError):
+                schema.render_os_exec_shell_spawn([replace(r, signature=signature) if r is row else r for r in self.declarations])
+
+    def test_cleanup_has_no_legacy_provider(self):
+        from stdlibgen import unique_vm_binding_entries, emit_aot_methods, emit_driver_metadata, emit_provider_aot_sources, parse_def_metadata
+        lines, rows = schema.render_os_exec_pipe_close(self.declarations)
+        self.assertEqual(len(rows), 1)
+        self.assertIn('XR_NATIVE_CALLABLE_OS_EXEC_PIPE_CLOSE', rows[0])
+        self.assertIn('XR_NATIVE_TERM_BOOL', '\n'.join(lines))
+        row = next(r for r in self.declarations if r.module == 'os' and r.name == '__execPipeClose')
+        self.assertNotIn(row, unique_vm_binding_entries(self.declarations))
+        entries, constants, _, _, enums, _, native_classes, *_ = parse_def_metadata(ROOT)
+        without = [r for r in entries if not (r.module == 'os' and r.name == '__execPipeClose')]
+        self.assertEqual(emit_aot_methods(entries, constants, enums, native_classes),
+                         emit_aot_methods(without, constants, enums, native_classes))
+        self.assertEqual(emit_driver_metadata(entries, constants), emit_driver_metadata(without, constants))
+        self.assertEqual(emit_provider_aot_sources(entries), emit_provider_aot_sources(without))
+
+    def test_cleanup_complete_contract_is_required(self):
+        row = next(r for r in self.declarations if r.module == 'os' and r.name == '__execPipeClose')
+        for changed in ([r for r in self.declarations if r is not row], self.declarations + [row]):
+            with self.assertRaises(ValueError):
+                schema.render_os_exec_pipe_close(changed)
+        changes = [('module', 'sys'), ('name', '__other'), ('signature', '(readToken: i64, writeToken: i64): bool throws(Error)'),
+            ('argc', '1'), ('arg_spec', 'iv'), ('visibility', 'public'), ('effect', 'other'), ('allocation', 'no_heap'),
+            ('return_ownership', 'borrowed'), ('layer', 'core'), ('vm', 'sys_pipe_close'), ('aot', 'xrt_pipe_close'),
+            ('aot_direct', True), ('aot_kind', 'method'), ('link_object', 'other'), ('vm_binding', 'yieldable'),
+            ('vm_ifdef', 'OTHER'), ('define', 'OTHER'), ('ret', 'i64'), ('semantic_intrinsic', True),
+            ('provider_declaration', object()), ('caps', ('task',)), ('suspension_kind', 'task')]
+        for key, value in changes:
+            self.assertNotEqual(getattr(row, key), value)
+            with self.subTest(field=key), self.assertRaises(ValueError):
+                schema.render_os_exec_pipe_close([replace(r, **{key: value}) if r is row else r for r in self.declarations])
+        for signature in ('(readToken: i64, writeToken: i64): ()', '(readToken: ref i64, writeToken: i64): bool',
+                '(readToken: i64, writeToken: string): bool', '(...readToken: i64): bool',
+                'nosuspend (readToken: i64, writeToken: i64): bool'):
+            with self.subTest(signature=signature), self.assertRaises(ValueError):
+                schema.render_os_exec_pipe_close([replace(r, signature=signature) if r is row else r for r in self.declarations])
+
+
+class PathCurrentDirectoryDeclarations(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / 'tools/stdlibgen'))
+        from stdlibgen import parse_defs
+        cls.declarations = parse_defs(ROOT)
+
+    def test_owned_path_query_has_no_legacy_provider(self):
+        from stdlibgen import unique_vm_binding_entries, emit_aot_methods, emit_driver_metadata, emit_provider_aot_sources, parse_def_metadata
+        lines, rows = schema.render_path_getcwd(self.declarations)
+        self.assertEqual(len(rows), 1)
+        self.assertIn('XR_NATIVE_CALLABLE_PATH_GETCWD', rows[0])
+        self.assertIn('XR_NATIVE_TERM_STRING', '\n'.join(lines))
+        row = next(r for r in self.declarations if r.module == 'path' and r.name == '__getcwd')
+        self.assertNotIn(row, unique_vm_binding_entries(self.declarations))
+        entries, constants, _, _, enums, _, native_classes, *_ = parse_def_metadata(ROOT)
+        without = [r for r in entries if not (r.module == 'path' and r.name == '__getcwd')]
+        self.assertEqual(emit_aot_methods(entries, constants, enums, native_classes),
+                         emit_aot_methods(without, constants, enums, native_classes))
+        self.assertEqual(emit_driver_metadata(entries, constants), emit_driver_metadata(without, constants))
+        self.assertEqual(emit_provider_aot_sources(entries), emit_provider_aot_sources(without))
+
+    def test_exact_path_query_mutations_are_rejected(self):
+        row = next(r for r in self.declarations if r.module == 'path' and r.name == '__getcwd')
+        for changed in ([r for r in self.declarations if r is not row], self.declarations + [row]):
+            with self.assertRaises(ValueError):
+                schema.render_path_getcwd(changed)
+        changes = [('module', 'os'), ('name', '__other'), ('signature', '(): string?'), ('argc', '1'),
+            ('arg_spec', 's'), ('visibility', 'public'), ('effect', 'other'), ('allocation', 'no_heap'),
+            ('return_ownership', 'borrowed'), ('layer', 'core'), ('vm', 'os_getcwd'), ('aot', 'xrt_os_getcwd'),
+            ('aot_direct', True), ('aot_kind', 'method'), ('link_object', 'other'), ('vm_binding', 'yieldable'),
+            ('vm_ifdef', 'OTHER'), ('define', 'OTHER'), ('ret', 'i64'), ('semantic_intrinsic', True),
+            ('provider_declaration', object()), ('caps', ('task',)), ('suspension_kind', 'task')]
+        for key, value in changes:
+            self.assertNotEqual(getattr(row, key), value)
+            with self.subTest(field=key), self.assertRaises(ValueError):
+                schema.render_path_getcwd([replace(r, **{key: value}) if r is row else r for r in self.declarations])
+
+
 if __name__ == '__main__':
     unittest.main()

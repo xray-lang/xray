@@ -14,13 +14,13 @@
 static XrXirTypeArena *class_array_field_arena(XrXirDomain *domain) {
     (void)domain;
     XrXirNominalFieldIdentity fields[]={{{"flag",4},0},{{"items",5},XR_XIR_FIELD_MUTABLE},{{"text",4},XR_XIR_FIELD_MUTABLE}};
-    XrXirNominalIdentity identity={{"module",6},{"Bag",3},1,0,fields,3,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL,{0}};
+    XrXirNominalIdentity identity={{"module",6},{"Bag",3},1,0,fields,3,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL,{0}, 0};
     XrXirNominalTable table={NULL,1,&identity};XrXirType field_types[]={XR_XIR_BOOL,(XrXirType)256,(XrXirType)257};
     XrXirTypeNode nodes[]={
         {XR_XIR_TYPE_ARRAY,XR_XIR_I64,NULL,0,XR_XIR_UNIT,0,0,{0}},
         {XR_XIR_TYPE_ARRAY,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0,{0}},
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,NULL,0,field_types,3}}};
-    XrXirTypes types={nodes,3,&table,NULL};XrCompileResourceLimits limits = value_compile_limits(65536, 65536, 10000);
+    XrXirTypes types={nodes,3,&table,NULL};XrCompileResourceLimits limits = value_compile_limits();
     XrXirTypeArena *arena=NULL;CHECK(value_compile_arena(&types, 100, limits, &arena)==XR_XIR_VALUE_OK);
     return arena;
 }
@@ -58,21 +58,21 @@ static void class_array_field_value_cases(void) {
     atomic_store(&last->references,refs);
     XrXirValue observed={0};CHECK(xr_xir_class_get(&object,1,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&object),.work=10000},&observed)==XR_XIR_VALUE_OK && observed.payload==old.payload);xr_xir_value_drop(&observed);
     size_t sites=0;
-    for(size_t pass=0;pass<=sites;++pass){calls=0;fail_at=pass?pass-1:SIZE_MAX;
+    for(size_t pass=0;pass<=sites;++pass){value_allocation_calls=0;fail_at=pass?pass-1:SIZE_MAX;
         XrXirValue value={0};XrXirValueStatus status=xr_xir_class_new((XrXirType)258,fields,3,&admission,&value);
-        if(!pass){CHECK(status==XR_XIR_VALUE_OK);sites=calls;CHECK(sites>0);}else CHECK(status==XR_XIR_VALUE_OOM && !value.type);
-        size_t before=calls;xr_xir_value_drop(&value);CHECK(calls==before && live==baseline && xr_xir_domain_stats(domain).live_bytes==bytes);
+        if(!pass){CHECK(status==XR_XIR_VALUE_OK);sites=value_allocation_calls;CHECK(sites>0);}else CHECK(status==XR_XIR_VALUE_OOM && !value.type);
+        size_t before=value_allocation_calls;xr_xir_value_drop(&value);CHECK(value_allocation_calls==before && live==baseline && xr_xir_domain_stats(domain).live_bytes==bytes);
     }
     fail_at=SIZE_MAX;
     xr_xir_value_drop(&old);xr_xir_value_drop(&alias);xr_xir_value_drop(&number);xr_xir_value_drop(&texts);xr_xir_value_drop(&text);
     CHECK(xr_xir_class_get(&object,2,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&object),.work=10000},&observed)==XR_XIR_VALUE_OK);
     xr_xir_compile_type_arena_drop(arena);xr_xir_domain_drop(domain);xr_xir_domain_drop(foreign);
-    size_t before=calls;fail_at=calls;xr_xir_value_drop(&object);CHECK(calls==before);
+    size_t before=value_allocation_calls;fail_at=value_allocation_calls;xr_xir_value_drop(&object);CHECK(value_allocation_calls==before);
     XrXirValueAdmission retained={xr_xir_value_arena(&observed),NULL,NULL,NULL,64,0};XrXirFaultDetail fault={0};
     CHECK(xr_xir_array_get(&observed,0,&retained,&text,&fault)==XR_XIR_VALUE_OK);
     xr_xir_value_drop(&observed);const char *data=NULL;size_t length=0;
     CHECK(xr_xir_string_view(&text,&data,&length)&&length==6&&!memcmp(data,"mapped",6));
-    xr_xir_value_drop(&text);CHECK(calls==before && live==initial);fail_at=SIZE_MAX;
+    xr_xir_value_drop(&text);CHECK(value_allocation_calls==before && live==initial);fail_at=SIZE_MAX;
     printf("class Array fields: %zu NEW failure sites, cross-domain backing, physical release PASS\n",sites);
 }
 #endif

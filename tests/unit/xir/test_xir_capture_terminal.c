@@ -43,7 +43,24 @@ static void capture_free(void *p) {
 #include "xir/xxir_effects.c"
 #include "xir_construction_fixture.h"
 static EffectInvocationFinal *attack_final;
-static uint32_t mutation_kind;
+static uint32_t mutation_kind,routing_caller,routing_other_head;
+static uint64_t capture_held(const XrXirCompileContext *context) {
+    XrCompileResourceStats stats={0};
+    CHECK(xr_compile_resources_stats(context->resources,&stats)==XR_COMPILE_RESOURCE_OK);
+    return stats.held_bytes;
+}
+static void routing_select(const EffectInvocationFinal *final) {
+    routing_caller=UINT32_MAX;routing_other_head=UINT32_MAX;
+    CHECK(final->edge_count>1);
+    for(uint32_t n=0;n<final->count;++n) {
+        uint32_t head=final->nodes[n].edge_head;
+        if(head==UINT32_MAX) continue;
+        CHECK(head<final->edge_count && final->edges[head].caller==n);
+        if(routing_caller==UINT32_MAX) routing_caller=n;
+        else { routing_other_head=head;break; }
+    }
+    CHECK(routing_caller<final->count && routing_other_head<final->edge_count);
+}
 static void unsupported_capture(EffectInvocationFinal *final) {
     EffectCaptureFact fact={final->roots[5],2,0,final->site_count+3,0};
     CHECK(final->capture.count<final->capture.capacity);uint32_t at=0;
@@ -62,7 +79,16 @@ static void last_release_attack(void) {
         ++attack_final->capture.facts[0].rank;break;
     case 3:CHECK(attack_final->material->functions[1].runs[0].base.op==XR_XIR_CONST_INT);
         attack_final->material->functions[1].runs[0].base.type=XR_XIR_BOOL;break;
-    default:CHECK(attack_final->edge_count);attack_final->edges[0].target=attack_final->count;break;
+    case 4:CHECK(attack_final->edge_count);attack_final->edges[0].target=attack_final->count;break;
+    case 5: {
+        uint32_t head=attack_final->nodes[routing_caller].edge_head;
+        attack_final->nodes[routing_caller].edge_head=attack_final->edges[head].next;break;
+    }
+    case 6:attack_final->nodes[routing_caller].edge_head=routing_other_head;break;
+    case 7:attack_final->edges[0].next=0;break;
+    case 8:attack_final->edges[0].next=1;break;
+    case 9:attack_final->nodes[routing_caller].edge_head=attack_final->edge_count;break;
+    default:CHECK(false);break;
     }
     ++attacks;
 }
@@ -145,7 +171,10 @@ static void fixture(bool source) {
         EffectBodyRun *run=&final->material->functions[1].runs[0];
         XrXirInstruction original_input=run->base;
         CHECK(final->edge_count);EffectInvocationEdge original_edge=final->edges[0];
-        for(uint32_t mutation=0;mutation<5;++mutation) {
+        routing_select(final);
+        uint32_t original_head=final->nodes[routing_caller].edge_head;
+        for(uint32_t mutation=0;mutation<10;++mutation) {
+            uint64_t held=capture_held(&context);
             void *retired=NULL;
             CHECK(xr_compile_resources_alloc(context.resources,1,&retired)==XR_COMPILE_RESOURCE_OK);
             attack_final=final;mutation_kind=mutation;attack_cut=1;
@@ -162,10 +191,15 @@ static void fixture(bool source) {
             CHECK(allocations==a&&releases==f);
             XrXirStatus public_status=xir_effects_source_terminal_input(&context,(XirEffectInput){xr_xir_compile_artifact_module(artifact),xr_xir_compile_artifact_construction(artifact),NULL},effects);
             CHECK(public_status==XR_XIR_BAD_STRUCTURE);
+            CHECK(capture_held(&context)==held);
             final->capture.count=count;memcpy(replacement,saved,(size_t)count*sizeof(*saved));
             run->base=original_input;final->edges[0]=original_edge;
+            final->nodes[routing_caller].edge_head=original_head;
+            a=allocations;f=releases;
             CHECK(terminal(&context,artifact,effects,source)==XR_XIR_OK);
+            CHECK(allocations==a&&releases==f);
             CHECK(xir_effects_source_terminal_input(&context,(XirEffectInput){xr_xir_compile_artifact_module(artifact),xr_xir_compile_artifact_construction(artifact),NULL},effects)==XR_XIR_OK);
+            CHECK(capture_held(&context)==held);
             fprintf(stderr,"terminal%u target%u mutation%u: cleanup observed, rejected status%u, restored PASS\n",
                 source,target,mutation,status);
         }
@@ -190,8 +224,239 @@ static void fixture(bool source) {
     XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(context.resources,&stats)==XR_COMPILE_RESOURCE_OK&&stats.held_bytes==initial.held_bytes);
     xr_compile_resources_release(context.resources);CHECK(!blocks);
 }
+typedef struct CaptureClassFixture {
+    XrXirNominalField field;
+    XrXirNominalDeclaration declaration;
+    XrXirNominalTable nominals;
+    XrXirType field_type,constructor_parameter,forward_parameter;
+    XrXirTypeNode nodes[2];
+    XrXirTypes types;
+    XrXirInstruction init[1],constructor[2],forward[2],entry[11],main[3];
+    uint32_t constructor_operands[1],forward_operands[1],entry_operands[7];
+    XrXirBlock init_block,constructor_block,forward_block,entry_blocks[4],main_block;
+    XrXirFunction functions[5];
+    XrXirFunctionIdentity identities[5];
+    XrXirEffectParameter plain;
+    XrXirFunctionEffectContract contracts[5];
+    XrXirProvenance provenance;
+    XrXirSourceModule source;
+    XrXirDeclarations declarations;
+    XrXirModule module;
+} CaptureClassFixture;
+
+/* These literal graphs distinguish a constructor, PHI, local writes, Cell
+ * transport and recursion without deriving the expected masks from a solver. */
+static void capture_class_fixture(CaptureClassFixture *f,uint32_t mode) {
+    CHECK(mode<7);memset(f,0,sizeof(*f));
+    const XrXirType object=(XrXirType)256,cell=(XrXirType)257;
+    f->field=(XrXirNominalField){{"value",5},XR_XIR_I64,XR_XIR_FIELD_PRIVATE|XR_XIR_FIELD_MUTABLE};
+    f->declaration=(XrXirNominalDeclaration){.module={"root",4},.name={"RowObject",9},.exported=1,
+        .fields=&f->field,.field_count=1,.kind=XR_XIR_NOMINAL_CLASS,.flags=XR_XIR_NOMINAL_FINAL};
+    f->nominals=(XrXirNominalTable){&f->declaration,1,NULL};f->field_type=XR_XIR_I64;
+    f->nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NOMINAL,.nominal={0,NULL,0,&f->field_type,1}};
+    f->nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CELL,.element=object};
+    f->types=(XrXirTypes){f->nodes,2,&f->nominals,NULL};
+    f->constructor_parameter=XR_XIR_I64;f->forward_parameter=object;
+    f->init[0]=(XrXirInstruction){.op=XR_XIR_RETURN};
+    f->constructor[0]=(XrXirInstruction){.op=XR_XIR_CLASS_NEW,.type=object,.args={0,1}};
+    f->constructor[1]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={1}};
+    f->forward[0]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={0}};
+    f->entry[0]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=40};
+    f->entry[1]=(XrXirInstruction){.op=XR_XIR_CALL,.type=object,.args={0,1},.immediate=1};
+    f->entry[2]=(XrXirInstruction){.op=XR_XIR_CALL,.type=object,.args={1,1},.immediate=2};
+    f->entry[3]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={2}};
+    f->entry_operands[0]=0;f->entry_operands[1]=1;
+    uint32_t entry_count=4,operand_count=2,block_count=1,forward_count=1;
+    if(mode==1 || mode==4) {
+        f->entry[2]=mode==1?
+            (XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=7}:
+            (XrXirInstruction){.op=XR_XIR_CELL_NEW,.type=cell,.args={1}};
+        f->entry[3]=mode==1?
+            (XrXirInstruction){.op=XR_XIR_CALL,.type=object,.args={1,1},.immediate=1}:
+            (XrXirInstruction){.op=XR_XIR_CELL_READ,.type=object,.args={2}};
+        f->entry[4]=(XrXirInstruction){.op=XR_XIR_CONST_BOOL,.type=XR_XIR_BOOL,.immediate=1};
+        f->entry[5]=(XrXirInstruction){.op=XR_XIR_BRANCH,.args={4},.targets={1,2}};
+        f->entry[6]=(XrXirInstruction){.op=XR_XIR_JUMP,.targets={3}};
+        f->entry[7]=(XrXirInstruction){.op=XR_XIR_JUMP,.targets={3}};
+        f->entry[8]=(XrXirInstruction){.op=XR_XIR_PHI,.type=object,.args={2,4}};
+        f->entry[9]=(XrXirInstruction){.op=XR_XIR_CALL,.type=object,.args={6,1},.immediate=2};
+        f->entry[10]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={9}};
+        f->entry_operands[1]=2;f->entry_operands[2]=1;f->entry_operands[3]=1;
+        f->entry_operands[4]=2;f->entry_operands[5]=3;f->entry_operands[6]=8;
+        if(mode==4) {
+            f->entry[8].args[0]=1;f->entry[9].args[0]=5;
+            f->entry_operands[1]=1;f->entry_operands[2]=1;
+            f->entry_operands[3]=2;f->entry_operands[4]=3;f->entry_operands[5]=8;
+        }
+        f->entry_blocks[0]=(XrXirBlock){0,6,0,0};f->entry_blocks[1]=(XrXirBlock){6,1,0,0};
+        f->entry_blocks[2]=(XrXirBlock){7,1,0,0};f->entry_blocks[3]=(XrXirBlock){8,3,0,0};
+        entry_count=11;operand_count=mode==4?6:7;block_count=4;
+    } else if(mode==2 || mode==6) {
+        f->entry[2]=(XrXirInstruction){.op=XR_XIR_LOCAL_NEW,.type=object,.args={1}};
+        f->entry[3]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=7};
+        f->entry[4]=(XrXirInstruction){.op=XR_XIR_CALL,.type=object,.args={1,1},.immediate=1};
+        f->entry[5]=(XrXirInstruction){.op=XR_XIR_LOCAL_WRITE,.args={2,4}};
+        f->entry[6]=(XrXirInstruction){.op=XR_XIR_LOCAL_READ,.type=object,.args={2}};
+        f->entry[7]=(XrXirInstruction){.op=XR_XIR_CALL,.type=object,.args={2,1},.immediate=2};
+        f->entry[8]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={7}};
+        f->entry_operands[1]=3;f->entry_operands[2]=6;entry_count=9;operand_count=3;
+        if(mode==6) {
+            f->entry[3]=(XrXirInstruction){.op=XR_XIR_CELL_NEW,.type=cell,.args={1}};
+            f->entry[4]=(XrXirInstruction){.op=XR_XIR_CELL_READ,.type=object,.args={3}};
+            f->entry[7].args[0]=1;f->entry_operands[1]=6;operand_count=2;
+        }
+    } else if(mode==3) {
+        f->entry[2]=(XrXirInstruction){.op=XR_XIR_CELL_NEW,.type=cell,.args={1}};
+        f->entry[3]=(XrXirInstruction){.op=XR_XIR_CELL_READ,.type=object,.args={2}};
+        f->entry[4]=(XrXirInstruction){.op=XR_XIR_CALL,.type=object,.args={1,1},.immediate=2};
+        f->entry[5]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={4}};
+        f->entry_operands[1]=3;entry_count=6;
+    } else if(mode==5) {
+        f->forward[0]=(XrXirInstruction){.op=XR_XIR_CALL,.type=object,.args={0,1},.immediate=2};
+        f->forward[1]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={1}};forward_count=2;
+    }
+    f->init_block=(XrXirBlock){0,1,0,0};f->constructor_block=(XrXirBlock){0,2,0,0};
+    f->forward_block=(XrXirBlock){0,forward_count,0,0};
+    if(block_count==1) f->entry_blocks[0]=(XrXirBlock){0,entry_count,0,0};
+    f->functions[0]=(XrXirFunction){.name="init",.name_length=4,.result=XR_XIR_UNIT,
+        .blocks=&f->init_block,.block_count=1,.instructions=f->init,.instruction_count=1,.error_type=XR_XIR_NEVER};
+    f->functions[1]=(XrXirFunction){.name="new",.name_length=3,.parameters=&f->constructor_parameter,
+        .parameter_count=1,.result=object,.blocks=&f->constructor_block,.block_count=1,
+        .instructions=f->constructor,.instruction_count=2,.operands=f->constructor_operands,.operand_count=1,.error_type=XR_XIR_NEVER};
+    f->functions[2]=(XrXirFunction){.name="forward",.name_length=7,.parameters=&f->forward_parameter,
+        .parameter_count=1,.result=object,.blocks=&f->forward_block,.block_count=1,
+        .instructions=f->forward,.instruction_count=forward_count,.operands=mode==5?f->forward_operands:NULL,
+        .operand_count=mode==5?1u:0u,.error_type=XR_XIR_NEVER};
+    f->functions[3]=(XrXirFunction){.name="entry",.name_length=5,.result=object,
+        .blocks=f->entry_blocks,.block_count=block_count,.instructions=f->entry,.instruction_count=entry_count,
+        .operands=f->entry_operands,.operand_count=operand_count,.error_type=XR_XIR_NEVER};
+    f->main[0]=(XrXirInstruction){.op=XR_XIR_CALL,.type=object,.immediate=3};
+    f->main[1]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64};
+    f->main[2]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={1}};
+    f->main_block=(XrXirBlock){0,3,0,0};
+    f->functions[4]=(XrXirFunction){.name="main",.name_length=4,.result=XR_XIR_I64,
+        .blocks=&f->main_block,.block_count=1,.instructions=f->main,.instruction_count=3,.error_type=XR_XIR_NEVER};
+    f->identities[1]=(XrXirFunctionIdentity){.nominal_owner=1,.method_kind=XR_XIR_CONSTRUCTOR};
+    f->source=(XrXirSourceModule){.name="root",.name_length=4,.initializer=0,.storage=XR_XIR_MODULE_FRESH_STORAGE};
+    f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=f->identities,.entry_function=4};
+    f->contracts[0].formula.constant_mask=XR_XIR_CALLABLE_ROOT_REQUIRED;
+    f->contracts[1]=(XrXirFunctionEffectContract){.parameters=&f->plain,.parameter_count=1};
+    f->contracts[2]=(XrXirFunctionEffectContract){.parameters=&f->plain,.parameter_count=1};
+    f->provenance=(XrXirProvenance){.kind=XR_XIR_EVIDENCE_TEMPLATE,.contracts=f->contracts,.contract_count=5};
+    f->module=(XrXirModule){.stage=XR_XIR_BUILT,.functions=f->functions,.function_count=5,
+        .declarations=&f->declarations,.types=&f->types,.linkage_kind=XR_XIR_PROGRAM,.provenance=&f->provenance};
+}
+
+static EffectCaptureFact *capture_class_fact(const XrXirCompileContext *context,
+    EffectInvocationFinal *final,uint32_t index,uint32_t value,uint32_t flag) {
+    EffectCaptureRead read={.work=context,.final=final,.body=effect_body_owned_request(context,final->material)};
+    EffectCaptureNode node={0};CHECK(effect_capture_node(&read,index,&node)==XR_XIR_OK && flag<3);
+    uint32_t bit=node.basis.parameters+flag;const EffectCaptureFact *fact=NULL;
+    CHECK(effect_capture_find(&read,(EffectCaptureFact){index,value,node.basis.fn_words+bit/64,bit%64,0},&fact)==XR_XIR_OK);
+    return (EffectCaptureFact *)fact;
+}
+static void capture_class_remove(EffectCaptureProof *proof,EffectCaptureFact *fact) {
+    CHECK(fact && fact>=proof->facts && fact<proof->facts+proof->count);
+    uint32_t at=(uint32_t)(fact-proof->facts);
+    memmove(fact,fact+1,(size_t)(proof->count-at-1)*sizeof(*fact));--proof->count;
+}
+static void capture_class_mask(const XrXirCompileContext *context,EffectInvocationFinal *final,
+    uint32_t index,uint32_t value,uint32_t mask) {
+    EffectCaptureFact *known=capture_class_fact(context,final,index,value,2);CHECK(known);
+    uint64_t known_rank=known->rank;
+    for(uint32_t flag=0;flag<3;++flag) {
+        EffectCaptureFact *fact=capture_class_fact(context,final,index,value,flag);
+        if(fact) capture_class_remove(&final->capture,fact);
+    }
+    EffectCaptureRead read={.work=context,.final=final,.body=effect_body_owned_request(context,final->material)};
+    EffectCaptureNode node={0};CHECK(effect_capture_node(&read,index,&node)==XR_XIR_OK);
+    for(uint32_t flag=0;flag<3;++flag) {
+        uint32_t present=flag==0?EFFECT_CLASS_ROOT:flag==1?EFFECT_CLASS_UNKNOWN:EFFECT_CLASS_KNOWN;
+        if(!(mask&present)) continue;
+        uint32_t bit=node.basis.parameters+flag,at=0;
+        EffectCaptureFact fact={index,value,node.basis.fn_words+bit/64,bit%64,flag==2?known_rank:0};
+        CHECK(final->capture.count<final->capture.capacity && effect_capture_lower(&read,&fact,&at)==XR_XIR_OK);
+        memmove(final->capture.facts+at+1,final->capture.facts+at,(size_t)(final->capture.count-at)*sizeof(fact));
+        final->capture.facts[at]=fact;++final->capture.count;
+    }
+}
+static void capture_class_rejections(const XrXirCompileContext *context,XrXirArtifact *artifact,
+    XrXirEffects *effects,uint32_t node,uint32_t value,uint32_t expected) {
+    EffectInvocationFinal *final=effects->invocations->final;EffectCaptureProof saved=final->capture;
+    CHECK(saved.count<UINT32_MAX);XrXirStatus status=XR_XIR_OK;
+    EffectCaptureFact *facts=xir_compile_alloc(context,((size_t)saved.count+1)*sizeof(*facts),&status);
+    CHECK(facts && status==XR_XIR_OK);
+    final->capture=(EffectCaptureProof){facts,saved.count,saved.count+1};
+    XirEffectInput input={xr_xir_compile_artifact_module(artifact),xr_xir_compile_artifact_construction(artifact),NULL};
+    for(uint32_t mutation=0;mutation<3;++mutation) {
+        memcpy(facts,saved.facts,(size_t)saved.count*sizeof(*facts));final->capture.count=saved.count;
+        uint64_t held=capture_held(context);
+        if(!mutation) {
+            uint32_t counterfactual=expected==1?5u:1u,mask=0;
+            capture_class_mask(context,final,node,value,counterfactual);
+            CHECK(effect_final_class_mask(context,final,node,value,&mask)==XR_XIR_OK && mask==counterfactual);
+        } else {
+            EffectCaptureFact *known=capture_class_fact(context,final,node,value,2);CHECK(known);
+            if(mutation==1) capture_class_remove(&final->capture,known);
+            else known->rank=UINT32_MAX;
+        }
+        size_t a=allocations,f=releases;
+        CHECK(terminal(context,artifact,effects,false)==XR_XIR_BAD_STRUCTURE);
+        CHECK(terminal(context,artifact,effects,true)==XR_XIR_BAD_STRUCTURE);
+        CHECK(allocations==a && releases==f);
+        CHECK(xir_effects_source_terminal_input(context,input,effects)==XR_XIR_BAD_STRUCTURE);
+        CHECK(capture_held(context)==held);
+        memcpy(facts,saved.facts,(size_t)saved.count*sizeof(*facts));final->capture.count=saved.count;
+        a=allocations;f=releases;
+        CHECK(terminal(context,artifact,effects,false)==XR_XIR_OK);
+        CHECK(terminal(context,artifact,effects,true)==XR_XIR_OK);
+        CHECK(allocations==a && releases==f);
+        CHECK(xir_effects_source_terminal_input(context,input,effects)==XR_XIR_OK);
+        CHECK(capture_held(context)==held);
+    }
+    final->capture=saved;xr_compile_resources_free(facts);
+}
+static void capture_class_case(uint32_t mode) {
+    static const uint32_t values[7]={2,9,7,4,9,2,7},masks[7]={1,1,1,5,5,5,5};
+    CaptureClassFixture literal;capture_class_fixture(&literal,mode);
+    XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};
+    XrXirCompileContext context={.limits=xr_xir_compile_default_limits()};
+    CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    uint64_t baseline=capture_held(&context);
+    XrXirArtifact *artifact=NULL;XrXirEffects *effects=NULL;XrXirDiagnostic diagnostic={0};
+    XrXirStatus status=xir_fixture_check(&context,&literal.module,&artifact,&diagnostic);
+    if(status!=XR_XIR_OK) fprintf(stderr,"Class mode%u check status%u f%u b%u i%u\n",
+        mode,status,diagnostic.function,diagnostic.block,diagnostic.instruction);
+    CHECK(status==XR_XIR_OK && artifact);
+    CHECK(xr_xir_compile_artifact_verify(artifact,&diagnostic)==XR_XIR_OK);
+    CHECK(xr_xir_compile_effects_analyze(artifact,&effects)==XR_XIR_OK && effects);
+    CHECK(terminal(&context,artifact,effects,false)==XR_XIR_OK);
+    CHECK(terminal(&context,artifact,effects,true)==XR_XIR_OK);
+    EffectInvocationFinal *final=effects->invocations->final;
+    uint32_t selected=final->roots[3],output=0;CHECK(final->capture.count);
+    size_t a=allocations,f=releases;
+    CHECK(xir_effects_class_value(&context,effects,selected,3,values[mode],&output)==XR_XIR_OK && output==masks[mode]);
+    output=0;CHECK(xir_effects_class_value(&context,effects,final->roots[2],2,0,&output)==XR_XIR_OK && output==5);
+    uint32_t factory=final->roots[1],factory_values=final->nodes[factory].parameter_count+final->nodes[factory].instruction_count;
+    output=0;CHECK(effect_final_class_mask(&context,final,factory,factory_values,&output)==XR_XIR_OK && output==1);
+    uint32_t returned=final->nodes[selected].parameter_count+final->nodes[selected].instruction_count;
+    output=0;CHECK(effect_final_class_mask(&context,final,selected,returned,&output)==XR_XIR_OK && output==masks[mode]);
+    if(mode==6) { output=0;CHECK(xir_effects_class_value(&context,effects,selected,3,2,&output)==XR_XIR_OK && output==5); }
+    CHECK(allocations==a && releases==f);
+    capture_class_rejections(&context,artifact,effects,selected,values[mode],masks[mode]);
+    xr_xir_compile_artifact_free(artifact);artifact=NULL;memset(&literal,0xCE,sizeof(literal));
+    a=allocations;f=releases;
+    CHECK(terminal(&context,artifact,effects,false)==XR_XIR_OK);
+    CHECK(terminal(&context,artifact,effects,true)==XR_XIR_OK);
+    CHECK(allocations==a && releases==f);
+    xr_xir_compile_effects_free(effects);CHECK(capture_held(&context)==baseline);
+    xr_compile_resources_release(context.resources);CHECK(!blocks);
+    fprintf(stderr,"Class mode%u value%u mask%u: mask/known/rank rejected, restored, producer retired PASS\n",
+        mode,values[mode],masks[mode]);
+}
 int main(void) {
     fixture(false);fixture(true);
+    for(uint32_t mode=0;mode<7;++mode) capture_class_case(mode);
     puts("Complete capture terminals: outer/nested callback-free receivers reject cleanup mutation PASS");
     return 0;
 }

@@ -1,6 +1,6 @@
 import sys
 
-const local = sys.ThreadLocal<i64>(fn() -> i64 {
+const local = sys.ThreadLocal<i64, Never>(fn() -> i64 {
     return 1
 })
 
@@ -8,6 +8,7 @@ fn worker() -> i64 {
     return 2
 }
 
-print(local.get())
+print(try! local.get())
 var y = await go worker()
+assert(y == 2)
 print(y)

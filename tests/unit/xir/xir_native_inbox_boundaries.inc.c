@@ -205,7 +205,7 @@ static bool native_inbox_run(const XrXirCompileContext *context,
     CHECK(!runtime_live && !runtime_bytes);
     XrCompileResourceStats released={0};
     CHECK(xr_compile_resources_stats(context->resources,&released)==XR_COMPILE_RESOURCE_OK &&
-        released.live_bytes==compiler_baseline.live_bytes);
+        released.held_bytes==compiler_baseline.held_bytes);
     return completed;
 }
 static void native_inbox_boundaries(const XrXirCompileContext *context) {
@@ -233,6 +233,6 @@ static void native_inbox_boundaries(const XrXirCompileContext *context) {
     CHECK(native_inbox_run(context,tables[2],2,10,false));
     XrCompileResourceStats stats={0};
     CHECK(xr_compile_resources_stats(context->resources,&stats)==XR_COMPILE_RESOURCE_OK &&
-        stats.live_bytes==compiler_baseline.live_bytes);
+        stats.held_bytes==compiler_baseline.held_bytes);
     puts("Generated native Inbox: discard refund, Unit admission, retain limit, panic cleanup, same-frontier landing, missing handler and actual OOM");
 }

@@ -81,3 +81,38 @@ static XrXirStatus effect_capture_schedule_run(EffectCaptureRead *read,EffectCap
     }
     read->schedule=NULL;return status;
 }
+/* Exact-row Class gates can change as facts grow. Preserve each full sweep's
+ * ordinal order; only a previously successful clause with unchanged local
+ * dependencies may be omitted. A job dirtied during or after its visit stays
+ * pending for the next sweep, including the job that emitted the change. */
+static XrXirStatus effect_capture_schedule_ordered(EffectCaptureRead *read,EffectCaptureSchedule *schedule) {
+    if(!read || !read->final || !schedule || read->builder!=&read->final->capture ||
+        read->selected || read->fixed_only || read->schedule || read->complete_scope || read->body.current ||
+        !effect_body_request_owned_matches(read->work,&read->body,read->final->material) ||
+        !read->fallback || !read->class_results || !schedule->nodes || !schedule->queue || !schedule->pending ||
+        (uint64_t)schedule->nodes+schedule->edges!=schedule->capacity ||
+        read->final->count!=schedule->nodes || read->final->edge_count!=schedule->edges)
+        return XR_XIR_BAD_STRUCTURE;
+    memset(schedule->pending,0,schedule->capacity*sizeof(unsigned char));schedule->front=schedule->back=schedule->count=0;
+    read->schedule=schedule;XrXirStatus status=XR_XIR_OK;
+    for(uint32_t job=0;job<schedule->capacity && status==XR_XIR_OK;++job) status=effect_capture_schedule_push(read,job);
+    while(status==XR_XIR_OK && schedule->count) {
+        read->changed=false;
+        for(uint32_t job=0;job<schedule->capacity && status==XR_XIR_OK;++job) {
+            if(read->final->count!=schedule->nodes || read->final->edge_count!=schedule->edges ||
+                (uint64_t)schedule->nodes+schedule->edges!=schedule->capacity ||
+                schedule->count>schedule->capacity || schedule->back>=schedule->capacity) {
+                status=XR_XIR_BAD_STRUCTURE;break;
+            }
+            if(!schedule->pending[job]) continue;
+            if(!schedule->count) { status=XR_XIR_BAD_STRUCTURE;break; }
+            schedule->pending[job]=0;--schedule->count;
+            if(job<schedule->nodes) status=effect_capture_node_clauses(read,job,false);
+            else status=effect_capture_edge(read,job-schedule->nodes);
+        }
+    }
+    /* Push still bounds the existing ring writes, but this walk consumes only
+     * pending bits. No queue payload or borrowed semantic view survives a job. */
+    read->schedule=NULL;if(status==XR_XIR_OK) read->changed=false;
+    return status;
+}

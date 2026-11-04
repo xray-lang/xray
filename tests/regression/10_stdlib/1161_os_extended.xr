@@ -5,6 +5,11 @@ import io
 import path
 import time
 
+// Shell output remains bytes until these text assertions strictly decode it.
+fn execText(data: Array<u8>) -> string {
+    return (try? string.fromUtf8(data[:]))!
+}
+
 // ===== User Information =====
 
 @test
@@ -40,13 +45,15 @@ fn test_homedir_skips_empty_home_env() {
 @test
 fn test_uid() {
     var id = os.uid()
-    assert(id >= 0)
+    if (os.platform() == "windows") { assert(id == null) }
+    else { assert(id != null && id! >= 0) }
 }
 
 @test
 fn test_gid() {
     var id = os.gid()
-    assert(id >= 0)
+    if (os.platform() == "windows") { assert(id == null) }
+    else { assert(id != null && id! >= 0) }
 }
 
 // ===== System Information =====
@@ -107,7 +114,8 @@ fn test_clock() {
 fn test_exec_echo() {
     var result = os.exec("echo hello")
     assert(result != null)
-    assertEqual(result!.stdout.toString(), "hello\n")
+    var expected = os.platform() == "windows" ? "hello\r\n" : "hello\n"
+    assertEqual(execText(result!.stdout), expected)
     assertEqual(result!.exitCode, 0)
     assertEqual(result!.stdoutTruncated, false)
     assertEqual(result!.stderrTruncated, false)
@@ -118,7 +126,7 @@ fn test_exec_stderr() {
     var result = os.exec("echo error_msg >&2")
     assert(result != null)
     var expected = os.platform() == "windows" ? "error_msg\r\n" : "error_msg\n"
-    assertEqual(result!.stderr.toString(), expected)
+    assertEqual(execText(result!.stderr), expected)
     assertEqual(result!.exitCode, 0)
 }
 
@@ -139,15 +147,16 @@ fn test_exec_command_output() {
     } else {
         var result = os.exec("printf 'abc'")
         assert(result != null)
-        assertEqual(result!.stdout.toString(), "abc")
+        assertEqual(execText(result!.stdout), "abc")
     }
 }
 
 @test
 fn test_exec_byte_capture_limits() {
-    var result = os.exec("printf 123456789", 4, 0)
+    var command = os.platform() == "windows" ? "echo 123456789" : "printf 123456789"
+    var result = os.exec(command, 4, 0)
     assert(result != null)
-    assertEqual(result!.stdout.toString(), "1234")
+    assertEqual(execText(result!.stdout), "1234")
     assertEqual(result!.stdoutTruncated, true)
     assertEqual(len(result!.stderr), 0)
     assertEqual(result!.stderrTruncated, false)

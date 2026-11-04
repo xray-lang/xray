@@ -13,9 +13,9 @@ static void storage_cache_cases(void) {
         {{"Empty", 5}, 0, 0}, {{"Small", 5}, 0, 2}, {{"Text", 4}, 2, 1}};
     XrXirNominalFieldIdentity fields[] = {{{"a", 1}, 0}, {{"b", 1}, 0}, {{"c", 1}, 0}};
     XrXirNominalIdentity identities[] = {
-        {{"alpha", 5}, {"Choice", 6}, 1, 0, fields, 3, XR_XIR_NOMINAL_ENUM, variants, 3, 0,{0}},
-        {{"alpha", 5}, {"Outer", 5}, 1, 0, fields, 3, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0,{0}},
-        {{"alpha", 5}, {"Empty", 5}, 1, 0, NULL, 0, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0,{0}}};
+        {{"alpha", 5}, {"Choice", 6}, 1, 0, fields, 3, XR_XIR_NOMINAL_ENUM, variants, 3, 0,{0}, 0},
+        {{"alpha", 5}, {"Outer", 5}, 1, 0, fields, 3, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0,{0}, 0},
+        {{"alpha", 5}, {"Empty", 5}, 1, 0, NULL, 0, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0,{0}, 0}};
     XrXirNominalTable table = {NULL, 3, identities};
     XrXirType inner[] = {XR_XIR_I8, XR_XIR_BOOL, XR_XIR_STRING};
     XrXirType outer[] = {XR_XIR_BOOL, (XrXirType)256, XR_XIR_I16};
@@ -27,7 +27,7 @@ static void storage_cache_cases(void) {
     XrXirTypes types = {nodes, 4, &table, NULL};
     XrXirDomain *domain = NULL; XrXirTypeArena *arena = NULL;
     CHECK(!live && xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
-    const XrCompileResourceLimits limits=value_compile_limits(1048576,1048576,16777216);
+    const XrCompileResourceLimits limits=value_compile_limits();
     const ValueCompileProbe probe={&types,NULL,XR_XIR_UNIT,0,65536};
     value_compile_boundaries(&probe,limits);
     CHECK(value_compile_arena(&types,65536,limits,&arena)==XR_XIR_VALUE_OK);
@@ -35,7 +35,7 @@ static void storage_cache_cases(void) {
     memset(nodes, 0xCC, sizeof(nodes)); memset(inner, 0xCC, sizeof(inner));
     memset(outer, 0xCC, sizeof(outer)); memset(identities, 0xCC, sizeof(identities));
     memset(fields, 0xCC, sizeof(fields)); memset(variants, 0xCC, sizeof(variants));
-    size_t allocations = calls; fail_at = calls;
+    size_t allocations = value_allocation_calls; fail_at = value_allocation_calls;
     const XrXirStorageLayout *choice = xr_xir_compile_type_arena_storage(arena, (XrXirType)256);
     const XrXirStorageLayout *box = xr_xir_compile_type_arena_storage(arena, (XrXirType)257);
     const XrXirStorageLayout *empty = xr_xir_compile_type_arena_storage(arena, (XrXirType)258);
@@ -55,7 +55,7 @@ static void storage_cache_cases(void) {
     xr_xir_domain_drop(domain);
     CHECK(xr_xir_compile_type_arena_layout(arena, (XrXirType)257, &layout) && layout.size == 32);
     xr_xir_compile_type_arena_drop(arena);
-    CHECK(!live && calls == allocations); fail_at = SIZE_MAX;
+    CHECK(!live && value_allocation_calls == allocations); fail_at = SIZE_MAX;
 }
 static void storage_cache_shared_graph(void) {
     enum { COUNT = 160 };
@@ -67,7 +67,7 @@ static void storage_cache_shared_graph(void) {
         int length = snprintf(names[i], sizeof(names[i]), "T%u", i);
         CHECK(length > 0 && (size_t)length < sizeof(names[i]));
         identities[i] = (XrXirNominalIdentity) {{"alpha", 5}, {names[i], (uint32_t)length},
-            1, 0, fields, i ? 1u : 2u, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0,{0}};
+            1, 0, fields, i ? 1u : 2u, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0,{0}, 0};
         nodes[i].nominal.declaration = i;
         inner[i] = i + 1 == COUNT ? XR_XIR_STRING : (XrXirType)(257 + i);
         nodes[i].kind = XR_XIR_TYPE_NOMINAL;
@@ -78,7 +78,7 @@ static void storage_cache_shared_graph(void) {
     nodes[0].nominal.fields = roots; nodes[0].nominal.field_count = 2;
     XrXirTypes types = {nodes, COUNT, &table, NULL}; XrXirDomain *domain = NULL; XrXirTypeArena *arena = NULL;
     CHECK(!live && xr_xir_domain_new(1048576, &domain) == XR_XIR_VALUE_OK);
-    XrCompileResourceLimits limits=value_compile_limits(1048576,1048576,16777216);
+    XrCompileResourceLimits limits=value_compile_limits();
     CHECK(value_compile_arena(&types,65536,limits,&arena) == XR_XIR_VALUE_OK);
     const XrXirStorageLayout *root = xr_xir_compile_type_arena_storage(arena, (XrXirType)256);
     CHECK(root && root->value.size == 16 && root->field_offsets[0] == 0 && root->field_offsets[1] == 8);

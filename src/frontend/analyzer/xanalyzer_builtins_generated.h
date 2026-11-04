@@ -94,8 +94,8 @@ static const XaBuiltinHandleField g_gen_io___filestat_fields[] = {
     {"mtime", "i64", true},
     {"atime", "i64", true},
     {"ctime", "i64", true},
-    {"uid", "i64", true},
-    {"gid", "i64", true},
+    {"uid", "i64?", true},
+    {"gid", "i64?", true},
     {"isFile", "bool", true},
     {"isDir", "bool", true},
     {"isSymlink", "bool", true},
@@ -243,6 +243,8 @@ static const XaBuiltinMember g_gen_net_functions[] = {
 
 // os module functions
 static const XaBuiltinMember g_gen_os_functions[] = {
+    {"__execShellSpawn", "(command: string, stdoutToken: i64, stderrToken: i64): i64", "Prepare and publish a system shell with owned output redirections", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__execPipeClose", "(readToken: i64, writeToken: i64): bool", "Close shell capture endpoints owned by the current execution root", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__platform", "(): string", "Host operating system name", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__arch", "(): string", "Host CPU architecture name", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__getenv", "(name: string): string?", "Get environment variable", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
@@ -255,8 +257,8 @@ static const XaBuiltinMember g_gen_os_functions[] = {
     {"__hostname", "(): string", "Get hostname", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__systemUsername", "(): string?", "Get the host-reported current user name", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__systemHomedir", "(): string?", "Get user home directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__uid", "(): i64", "Get user ID", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__gid", "(): i64", "Get group ID", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__uid", "(): i64?", "Get user ID", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__gid", "(): i64?", "Get group ID", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__cpuCount", "(): i64", "Get number of CPU cores", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__ppid", "(): i64", "Get parent process ID", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__kill", "(pid: i64, signal: i64): bool", "Send signal to process", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
@@ -265,7 +267,13 @@ static const XaBuiltinMember g_gen_os_functions[] = {
     {"__uptime", "(): f64", "Get system uptime in seconds", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__loadavg", "(): Array<f64>", "Get system load averages (1, 5, 15 min)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
 };
-#define GEN_OS_FUNCTION_COUNT 21
+#define GEN_OS_FUNCTION_COUNT 23
+
+// path module functions
+static const XaBuiltinMember g_gen_path_functions[] = {
+    {"__getcwd", "(): string", "Read the current working directory for relative Path resolution", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+};
+#define GEN_PATH_FUNCTION_COUNT 1
 
 // regex module functions
 static const XaBuiltinMember g_gen_regex_functions[] = {
@@ -324,12 +332,13 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"mem", g_gen_mem_functions, GEN_MEM_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, g_gen_mem_classes, GEN_MEM_CLASS_COUNT},
     {"net", g_gen_net_functions, GEN_NET_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, g_gen_net_classes, GEN_NET_CLASS_COUNT},
     {"os", g_gen_os_functions, GEN_OS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
+    {"path", g_gen_path_functions, GEN_PATH_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"regex", g_gen_regex_functions, GEN_REGEX_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"runtime", g_gen_runtime_functions, GEN_RUNTIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"sys", g_gen_sys_functions, GEN_SYS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
 };
-#define GEN_BUILTIN_MODULE_COUNT 11
+#define GEN_BUILTIN_MODULE_COUNT 12
 
 /* clang-format on */
 

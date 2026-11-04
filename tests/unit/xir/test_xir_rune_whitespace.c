@@ -209,15 +209,15 @@ static void previous126_packet_case(const char *path) {
     xr_compile_resources_release(resources);
     puts("Genuine common126 wire42 whole packet and independent prefix rejected without publication PASS");
 }
-static void previous127_packet_case(const char *path) {
+static void previous_parent_packet_case(const char *path,uint32_t common,const char *expected_digest) {
     unsigned char bytes[3332],digest[32];char hexadecimal[65];
     FILE *file=fopen(path,"rb");CHECK(file && fread(bytes,1,sizeof(bytes),file)==sizeof(bytes));
     CHECK(fgetc(file)==EOF && !ferror(file) && !fclose(file));
-    CHECK(bytes[8]==42 && !bytes[9] && !bytes[10] && !bytes[11] && bytes[12]==127 &&
+    CHECK(bytes[8]==42 && !bytes[9] && !bytes[10] && !bytes[11] && bytes[12]==common &&
         !bytes[13] && !bytes[14] && !bytes[15]);
     xr_sha256(bytes,sizeof(bytes),digest);
     for(unsigned i=0;i<32;++i)CHECK(snprintf(hexadecimal+2*i,3,"%02x",digest[i])==2);
-    CHECK(!strcmp(hexadecimal,"486077cd5a226bc8d1bbda621e83e67aa34477e0f170593d7060ffad2fa26fca"));
+    CHECK(!strcmp(hexadecimal,expected_digest));
     XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,true};XrCompileResources *resources=NULL;
     CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
@@ -233,7 +233,7 @@ static void previous127_packet_case(const char *path) {
         after.held_bytes==before.held_bytes && after.allocation_count==before.allocation_count &&
         after.allocated_bytes==before.allocated_bytes);
     xr_compile_resources_release(resources);
-    puts("Genuine common127 wire42 whole packet and independent prefix rejected without publication PASS");
+    printf("Genuine common%u wire42 whole packet and independent prefix rejected without publication PASS\n",common);
 }
 static XrXirArtifact *whitespace_build(const XrXirCompileContext *context) {
     XrXirType parameter=XR_XIR_RUNE;
@@ -290,7 +290,10 @@ int main(int argc,char **argv) {
     if(argc==3 && !strcmp(argv[1],"--previous124")){previous124_packet_case(argv[2]);return 0;}
     if(argc==3 && !strcmp(argv[1],"--previous125")){previous125_packet_case(argv[2]);return 0;}
     if(argc==3 && !strcmp(argv[1],"--previous126")){previous126_packet_case(argv[2]);return 0;}
-    if(argc==3 && !strcmp(argv[1],"--previous127")){previous127_packet_case(argv[2]);return 0;}
+    if(argc==3 && !strcmp(argv[1],"--previous127")){previous_parent_packet_case(argv[2],127,
+        "486077cd5a226bc8d1bbda621e83e67aa34477e0f170593d7060ffad2fa26fca");return 0;}
+    if(argc==3 && !strcmp(argv[1],"--previous128")){previous_parent_packet_case(argv[2],128,
+        "af407dd1669cc070605c40894d479c75dcb3bd6203341f507b75d06b9e610372");return 0;}
     CHECK(argc==1 || argc==2);
     uint32_t count=0;
     for(uint32_t code=0;code<=0x10ffff;++code) if(code<0xd800 || code>0xdfff) {

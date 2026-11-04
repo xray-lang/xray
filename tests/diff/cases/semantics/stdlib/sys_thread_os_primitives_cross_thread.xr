@@ -43,7 +43,7 @@ print(state.load(Ordering.Acquire))
 cm.unlock()
 print(producer.join())
 
-const barrier = sys.OsBarrier(3)
+const barrier = try! sys.OsBarrier(3)
 const arrived = Atomic<i64>(0)
 
 var b1 = sys.Thread.spawn(fn() -> i64 {

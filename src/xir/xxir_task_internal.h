@@ -15,7 +15,10 @@
 #include "xxir_program_internal.h"
 #include "xxir_value_internal.h"
 #include "xxir_call_internal.h"
+#include "xxir_root_callback_internal.h"
 typedef struct XrXirTaskExecutor XrXirTaskExecutor;
+/* Only physical close retries are pending here; this never drives guest code. */
+XR_FUNC bool xir_task_executor_retirement_pending(const XrXirTaskExecutor *executor);
 typedef struct XirTaskGroup XirTaskGroup;
 typedef struct XirTaskSubscription XirTaskSubscription;
 typedef enum XirTaskState {
@@ -28,6 +31,7 @@ typedef struct XirTaskActivation {
     uint64_t ticket;
     uint32_t entry;
     bool queued;
+    uint64_t host_token, host_call_wake, host_start_ns, host_last_ns, host_duration_ns;
 } XirTaskActivation;
 typedef struct XirTask {
     XirObject object;
@@ -120,4 +124,11 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_stop(XrXirTaskExecutor *executor);
 XR_FUNC XrXirCallStatus xr_xir_task_executor_drain(XrXirTaskExecutor *executor, XrXirCallStatus hard_failure);
 XR_FUNC XrXirCallStatus xr_xir_task_executor_free(XrXirTaskExecutor *executor, XrXirCallBudget *accounting);
 XR_FUNC bool xr_xir_task_storage_valid(const XirTask *task);
+/* A deferred Root callback preparation fault stops the group through its real
+ * cleanup path, never through Parent's await/catch inbox. */
+XR_FUNC XrXirCallStatus xir_task_callback_failure(XrXirTaskExecutor *executor,XrXirCallStatus status);
+XR_FUNC XrXirCallStatus xir_task_callback_attach(XrXirTaskExecutor *executor,XrXirCall *call);
+XR_FUNC bool xir_task_callback_active(const XrXirTaskExecutor *executor);
+XR_FUNC XrXirCallStatus xir_task_host_wait_deadline(XrXirTaskExecutor *executor,
+    uint64_t epoch,uint64_t wake,uint64_t now_ns,XirHostWaitDeadline *output);
 #endif // XXIR_TASK_INTERNAL_H

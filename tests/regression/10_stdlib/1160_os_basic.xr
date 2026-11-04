@@ -78,7 +78,9 @@ fn test_environ() {
         path = env.get("Path")
     }
     assert(path != null)
-    assertEqual(env.get("XRAY_TEST_ENV_EMPTY"), "")
+    var empty = env.get("XRAY_TEST_ENV_EMPTY")
+    assert(empty != null)
+    assertEqual(empty!, "")
     os.unsetenv("XRAY_TEST_ENV_EMPTY")
 }
 

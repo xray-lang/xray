@@ -13,7 +13,7 @@ static void error_deep_value_cases(void) {
     const XrXirNominalVariant variants[] = {{{"End", 3}, 0, 0}, {{"Link", 4}, 0, 1}};
     const XrXirNominalFieldIdentity field = {{"inner", 5}, 0};
     const XrXirNominalIdentity identity = {{"alpha", 5}, {"Chain", 5}, 1, 0, &field, 1,
-        XR_XIR_NOMINAL_ENUM, variants, 2, 0,{0}};
+        XR_XIR_NOMINAL_ENUM, variants, 2, 0,{0}, 0};
     const XrXirNominalTable table = {NULL, 1, &identity};
     const XrXirType field_type = XR_XIR_ERROR;
     const XrXirTypeNode nodes[] = {
@@ -21,7 +21,7 @@ static void error_deep_value_cases(void) {
         {.kind = XR_XIR_TYPE_ARRAY, .element = XR_XIR_ERROR}};
     const XrXirTypes types = {nodes, 2, &table, NULL};
     XrXirDomain *domain = NULL; XrXirTypeArena *arena = NULL;
-    XrCompileResourceLimits limits = value_compile_limits(65536, 65536, 10000);
+    XrCompileResourceLimits limits = value_compile_limits();
     CHECK(!live && xr_xir_domain_new(4194304, &domain) == XR_XIR_VALUE_OK);
     CHECK(value_compile_arena(&types, 100, limits, &arena) == XR_XIR_VALUE_OK);
     XrXirValueAdmission admission = {arena, domain, NULL, NULL, 10000000, 65536};
@@ -41,15 +41,15 @@ static void error_deep_value_cases(void) {
     CHECK(DEPTH > xr_xir_compile_type_arena_types(arena)->count);
     CHECK(xr_xir_array_new((XrXirType)257, &error, 1, &admission, &array) == XR_XIR_VALUE_OK);
     xr_xir_value_drop(&error); xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
-    size_t baseline = live, begin = calls; uint64_t bytes = xr_xir_domain_stats(domain).live_bytes;
+    size_t baseline = live, begin = value_allocation_calls; uint64_t bytes = xr_xir_domain_stats(domain).live_bytes;
     XrXirValueStatus admitted=xr_xir_value_admit(&array,(XrXirType)257,&admission);
     if (admitted!=XR_XIR_VALUE_OK) fprintf(stderr,"deep Error admission status=%u frame=%zu scratch=%llu work=%llu\n",
         (unsigned)admitted,sizeof(ValueAdmissionFrame),(unsigned long long)admission.scratch_bytes,
         (unsigned long long)admission.work);
     CHECK(admitted==XR_XIR_VALUE_OK);
-    size_t sites = calls - begin; CHECK(sites > 1);
+    size_t sites = value_allocation_calls - begin; CHECK(sites > 1);
     for (size_t i = 0; i < sites; ++i) {
-        admission.work = 10000000; fail_at = calls + i;
+        admission.work = 10000000; fail_at = value_allocation_calls + i;
         CHECK(xr_xir_value_admit(&array, (XrXirType)257, &admission) == XR_XIR_VALUE_OOM);
         fail_at = SIZE_MAX;
         CHECK(admission.scratch_bytes == 65536 && live == baseline && xr_xir_domain_stats(domain).live_bytes == bytes);
@@ -87,7 +87,7 @@ static void error_nominal_identity_cases(const XrXirTypes *types, const XrXirVal
     }
     ids[2].kind = XR_XIR_NOMINAL_STRUCT; ids[2].variants = NULL; ids[2].variant_count = 0;
     XrXirNominalTable table = {NULL, 3, ids}; XrXirTypes local = {nodes, 3, &table, NULL};
-    XrCompileResourceLimits limits = value_compile_limits(65536, 65536, 100000);
+    XrCompileResourceLimits limits = value_compile_limits();
     XrXirTypeArena *arena = NULL;
     CHECK(value_compile_arena(&local, 1000, limits, &arena) == XR_XIR_VALUE_OK);
     XrXirValueAdmission receiving = *admission; receiving.arena = arena;
@@ -96,10 +96,10 @@ static void error_nominal_identity_cases(const XrXirTypes *types, const XrXirVal
     CHECK(xr_xir_error_erase(&concrete, &receiving, &error) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_error_narrow(&error, (XrXirType)257, &receiving, &output) == XR_XIR_VALUE_BAD_ARGUMENT && !output.type);
     bool matches = true;
-    size_t allocations = calls; uint32_t references = atomic_load(&object_pointer(&error)->references);
+    size_t allocations = value_allocation_calls; uint32_t references = atomic_load(&object_pointer(&error)->references);
     CHECK(xr_xir_error_is(&error, (XrXirType)257, &receiving, &matches) == XR_XIR_VALUE_OK && !matches);
     CHECK(xr_xir_error_is(&error, (XrXirType)256, &receiving, &matches) == XR_XIR_VALUE_OK && matches);
-    CHECK(calls == allocations && atomic_load(&object_pointer(&error)->references) == references);
+    CHECK(value_allocation_calls == allocations && atomic_load(&object_pointer(&error)->references) == references);
     CHECK(xr_xir_error_is(&error, (XrXirType)258, &receiving, &matches) == XR_XIR_VALUE_BAD_ARGUMENT && !matches);
     CHECK(xr_xir_error_is(&error, (XrXirType)256, admission, &matches) == XR_XIR_VALUE_BAD_ARGUMENT && !matches);
     XrXirValueAdmission limited = receiving; limited.work = 0; matches = true;
@@ -119,9 +119,9 @@ static void error_value_cases(const XrXirTypes *types, const XrXirValue *empty,
     error_nominal_identity_cases(types, pair, admission);
     size_t baseline = live;
     XrXirValue error = {0}, copy = {0}, narrowed = {0};
-    size_t before = calls;
+    size_t before = value_allocation_calls;
     CHECK(xr_xir_error_erase(empty, admission, &error) == XR_XIR_VALUE_OK);
-    CHECK(error.type == XR_XIR_ERROR && error.payload == empty->payload && calls == before);
+    CHECK(error.type == XR_XIR_ERROR && error.payload == empty->payload && value_allocation_calls == before);
     XrXirValue borrowed = {0};
     uint32_t retained = atomic_load(&((XrXirTypeArena *) admission->arena)->references);
     CHECK(xr_xir_error_borrow(&error, &borrowed) && borrowed.type == empty->type && borrowed.payload == empty->payload);
@@ -131,7 +131,7 @@ static void error_value_cases(const XrXirTypes *types, const XrXirValue *empty,
     CHECK(xr_xir_value_arena(&error) == admission->arena);
     CHECK(xr_xir_value_copy(&error, &copy) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_error_narrow(&copy, (XrXirType)256, admission, &narrowed) == XR_XIR_VALUE_OK);
-    CHECK(narrowed.type == 256 && narrowed.payload == empty->payload && calls == before);
+    CHECK(narrowed.type == 256 && narrowed.payload == empty->payload && value_allocation_calls == before);
     xr_xir_value_drop(&copy); xr_xir_value_drop(&narrowed);
     uint32_t variant = 99;
     CHECK(xr_xir_enum_variant(&error, &variant) == XR_XIR_VALUE_BAD_ARGUMENT && variant == 99);
@@ -146,7 +146,7 @@ static void error_value_cases(const XrXirTypes *types, const XrXirValue *empty,
     CHECK(xr_xir_error_erase(empty, admission, &copy) == XR_XIR_VALUE_REFCOUNT_LIMIT && !copy.type);
     CHECK(xr_xir_error_narrow(&error, (XrXirType)256, admission, &copy) == XR_XIR_VALUE_REFCOUNT_LIMIT && !copy.type);
     atomic_store(&arena->references, leases);
-    XrCompileResourceLimits limits = value_compile_limits(65536, 65536, 10000);
+    XrCompileResourceLimits limits = value_compile_limits();
     XrXirTypeArena *foreign = NULL;
     CHECK(value_compile_arena(types, 100, limits, &foreign) == XR_XIR_VALUE_OK);
     XrXirValueAdmission receiving = *admission; receiving.arena = foreign;
@@ -158,12 +158,12 @@ static void error_value_cases(const XrXirTypes *types, const XrXirValue *empty,
     int64_t slot = 0;
     CHECK(xr_xir_owned_slot_copy(&slot, 0, arena, XR_XIR_ERROR, error.payload) == XR_XIR_VALUE_OK);
     xr_xir_value_drop(&error); xr_xir_owned_slot_clear(&slot, 0); CHECK(!slot);
-    before = calls;
+    before = value_allocation_calls;
     CHECK(xr_xir_error_erase(pair, admission, &error) == XR_XIR_VALUE_OK);
-    CHECK(error.payload == pair->payload && calls == before && live == baseline);
+    CHECK(error.payload == pair->payload && value_allocation_calls == before && live == baseline);
     CHECK(xr_xir_enum_get(&error, 1, 0, admission, &copy) == XR_XIR_VALUE_BAD_ARGUMENT && !copy.type);
-    fail_at = calls;
-    CHECK(xr_xir_error_narrow(&error, (XrXirType)256, admission, &copy) == XR_XIR_VALUE_OK && copy.payload == pair->payload && calls == before);
+    fail_at = value_allocation_calls;
+    CHECK(xr_xir_error_narrow(&error, (XrXirType)256, admission, &copy) == XR_XIR_VALUE_OK && copy.payload == pair->payload && value_allocation_calls == before);
     fail_at = SIZE_MAX;
     xr_xir_value_drop(&copy); CHECK(live == baseline);
     XirObject *object = object_pointer(pair); uint32_t references = atomic_load(&object->references);

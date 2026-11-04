@@ -15,7 +15,7 @@
 #include "xir_class_owned_fixture.h"
 static void program_lifetime(void) {
     reset_observer();
-    XrXirCompileContext context=context_new(UINT64_MAX);
+    XrXirCompileContext context=context_new(0);
     XrXirArtifact *lowered=owner_lowered(&context);
     XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);
@@ -24,7 +24,7 @@ static void program_lifetime(void) {
     CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     XrXirInstance *instance=NULL;
     CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
-    uint64_t compile_work=stats(&context).work;
+    uint64_t compile_allocated=stats(&context).allocated_bytes;
     xr_compile_resources_release(context.resources);
     xr_xir_compile_program_drop(program);
     CHECK(xr_xir_instance_start(instance,1,NULL,0)==XR_XIR_CALL_READY);
@@ -36,7 +36,7 @@ static void program_lifetime(void) {
     CHECK(xr_xir_instance_start(instance,2,NULL,0)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
     CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
-    CHECK(stats(&context).work==compile_work);
+    CHECK(stats(&context).allocated_bytes==compile_allocated);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
     CHECK(!live && !physical);
     const char *bytes=NULL; size_t length=0;
@@ -45,10 +45,10 @@ static void program_lifetime(void) {
     xr_xir_value_drop(&result);
 }
 static void program_take_failures(void) {
-    size_t take_allocations=0;
+    size_t take_allocations=0;uint64_t required=0;
     for (size_t failure=SIZE_MAX;;) {
         reset_observer();
-        XrXirCompileContext context=context_new(UINT64_MAX);
+        XrXirCompileContext context=context_new(0);
         XrXirArtifact *lowered=owner_lowered(&context),*original=lowered;
         XrCompileResourceStats before=stats(&context);
         size_t start=attempts;
@@ -58,9 +58,10 @@ static void program_take_failures(void) {
         if (failure==SIZE_MAX) {
             CHECK(status==XR_XIR_OK && !lowered && program);
             take_allocations=attempts-start;
+            required=stats(&context).peak_bytes;
         } else {
             CHECK(status==XR_XIR_OUT_OF_MEMORY && lowered==original && !program);
-            CHECK(stats(&context).live_bytes==before.live_bytes);
+            CHECK(stats(&context).held_bytes==before.held_bytes);
             fail_at=SIZE_MAX;
             CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);
         }
@@ -71,20 +72,31 @@ static void program_take_failures(void) {
         else if (++failure==take_allocations) break;
     }
     reset_observer();
-    XrXirCompileContext context=context_new(UINT64_MAX);
+    CHECK(required<=UINT64_MAX-sizeof(CompileAllocation)-1);
+    uint64_t limit=required+sizeof(CompileAllocation)+1;
+    XrXirCompileContext context=context_new(limit);
     XrXirArtifact *lowered=owner_lowered(&context),*original=lowered;
     XrCompileResourceStats before=stats(&context);
-    CHECK(xr_compile_resources_work(context.resources,UINT64_MAX-before.work)==XR_COMPILE_RESOURCE_OK);
+    CHECK(limit>before.held_bytes+sizeof(CompileAllocation));void *guard=NULL;
+    uint64_t remaining=limit-before.held_bytes-sizeof(CompileAllocation);CHECK(remaining<=SIZE_MAX);
+    CHECK(xr_compile_resources_alloc(context.resources,(size_t)remaining,&guard)==XR_COMPILE_RESOURCE_OK);
+    CHECK(stats(&context).held_bytes==limit);
     XrXirProgram *program=NULL;
-    CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_BUDGET);
-    CHECK(lowered==original && !program && stats(&context).live_bytes==before.live_bytes);
-    xr_xir_compile_artifact_free(lowered); xr_compile_resources_release(context.resources);
+    XrXirStatus limited=xr_xir_compile_vm_program_take(&lowered,&program);
+    fprintf(stderr,"VM take finite status%u cap%llu held%llu\n",(unsigned)limited,
+        (unsigned long long)limit,(unsigned long long)stats(&context).held_bytes);
+    CHECK(limited==XR_XIR_MEMORY_LIMIT);
+    CHECK(lowered==original && !program && stats(&context).held_bytes==limit);
+    xr_compile_resources_free(guard);CHECK(stats(&context).held_bytes==before.held_bytes);
+    CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK&&!lowered&&program);
+    xr_xir_compile_program_drop(program);xr_compile_resources_release(context.resources);
     CHECK(!live && !physical);
-    printf("VM take: %zu actual OOM points, exhausted work preserves input, physical zero\n",take_allocations);
+    printf("VM take: %zu actual OOM points, finite held memory preserves input and retries, physical zero\n",take_allocations);
 }
 static void program_abi_and_owner(void) {
     reset_observer();
-    XrXirCompileContext context=context_new(UINT64_MAX);
+    XrXirCompileContext context=context_new(0);
     XrXirProgram *out=NULL;
     XrXirProgramSpec poison={0};
     poison.abi_version=26;
@@ -104,7 +116,7 @@ static void program_abi_and_owner(void) {
     spec.declarations=(const XrXirDeclarations *)(uintptr_t)1;
     CHECK(xr_xir_compile_program_seal(&context,&spec,&out)==XR_XIR_BAD_LAYOUT && !out);
     entries[0].abi_version=XR_XIR_CALL_ABI_VERSION; spec.declarations=module->declarations;
-    XrXirCompileContext foreign=context_new(UINT64_MAX);
+    XrXirCompileContext foreign=context_new(0);
     CHECK(xr_xir_compile_program_match(&foreign,&spec,xr_xir_compile_artifact_layout(lowered, 0),lowered)==XR_XIR_BAD_STRUCTURE);
     xr_compile_resources_release(foreign.resources);
     XrXirVmBinding binding={lowered,99},saved_binding=binding;
@@ -122,10 +134,16 @@ static XrXirArtifact *program_method_lowered(const XrXirCompileContext *context,
     uint32_t method_kind) {
     ClassOwnedFixture fixture;
     class_owned_fixture(&fixture);
+    /* These actual bodies have no business-error source, including identity. */
+    for(uint32_t f=0;f<fixture.module.function_count;++f)fixture.functions[f].error_type=XR_XIR_NEVER;
     fixture.identities[2].method_kind = method_kind;
     const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *closed = NULL, *lowered = NULL;
-    CHECK(xir_fixture_check(context, &fixture.module, &checked, NULL) == XR_XIR_OK);
+    XrXirDiagnostic diagnostic={0};
+    XrXirStatus verified=xir_fixture_check(context,&fixture.module,&checked,&diagnostic);
+    if(verified!=XR_XIR_OK)fprintf(stderr,"method fixture kind%u status%u function%u block%u instruction%u reason%u\n",
+        method_kind,(unsigned)verified,diagnostic.function,diagnostic.block,diagnostic.instruction,(unsigned)diagnostic.reason);
+    CHECK(verified==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
@@ -147,7 +165,7 @@ static void program_method_result(XrXirProgram *program, uint32_t entry) {
 }
 static void program_method_kind_match(void) {
     reset_observer();
-    XrXirCompileContext context = context_new(UINT64_MAX);
+    XrXirCompileContext context = context_new(0);
     const uint32_t roles[] = {XR_XIR_READ_METHOD, XR_XIR_MEMBER_HELPER};
     XrXirArtifact *lowered[2] = {NULL, NULL};
     XrXirVmBinding bindings[2][5];
@@ -207,7 +225,7 @@ static void program_method_kind_match(void) {
         xr_xir_compile_program_drop(program);
         CHECK(matched == XR_XIR_BAD_STRUCTURE && proof == XR_XIR_BAD_STRUCTURE &&
             sealed == XR_XIR_BAD_STRUCTURE && empty);
-        CHECK(stats(&context).live_bytes == before.live_bytes);
+        CHECK(stats(&context).held_bytes == before.held_bytes);
         CHECK(xr_xir_compile_artifact_verify(lowered[side], NULL) == XR_XIR_OK);
     }
     xr_xir_compile_artifact_free(lowered[0]);

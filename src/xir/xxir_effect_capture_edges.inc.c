@@ -386,16 +386,39 @@ static XrXirStatus effect_capture_results(EffectCaptureRead *read,uint32_t selec
     if(read->selected && (read->selected->value<caller->head.parameter_count || read->selected->value>=caller->values)) return XR_XIR_OK;
     uint64_t rank=0;bool active=false;status=effect_capture_edge_active(read,selected,&rank,&active);
     if(status!=XR_XIR_OK || !active) return status;
-    for(uint32_t i=0;i<caller->head.instruction_count;++i) {
-        if(read->selected && caller->head.parameter_count+i!=read->selected->value) continue;
-
+    bool owning=!read->selected && effect_body_request_sequence_owned(&read->body);
+    EffectFinalInputSelect cursor;
+    if(owning) {
+        status=effect_final_input_select_begin(&read->body,EFFECT_FINAL_SELECT_RESULT,&cursor);
+        if(status!=XR_XIR_OK) return status;
+    }
+    uint32_t scan_first=read->selected?read->selected->value-caller->head.parameter_count:0;
+    uint32_t scan_count=read->selected?1:caller->head.instruction_count,scan_at=0;
+    for(;;) {
+        uint32_t i=0;
         XrXirInstruction storage;const XrXirInstruction *op=NULL;
-        status=effect_body_request_operation(&read->body,read->final->nodes[edge->caller].body,i,&storage,&op);
+        if(owning) {
+            bool found=false;
+            status=effect_final_input_select_next(&read->body,read->final->nodes[edge->caller].body,
+                &cursor,&i,&storage,&found);
+            if(status!=XR_XIR_OK) return status;
+            if(!found) break;
+            op=&storage;
+        } else {
+            if(scan_at==scan_count) break;
+            i=scan_first+scan_at++;
+            status=effect_body_request_operation(&read->body,read->final->nodes[edge->caller].body,i,&storage,&op);
+        }
         if(status!=XR_XIR_OK) return status;
         bool result=(op->op==XR_XIR_INVOKE_RESULT && op->immediate==(int64_t)edge->instruction) ||
             (i==edge->instruction && (op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_CALL_INDIRECT));
         if(!result) continue;
-        uint32_t kind=0,provided=0;status=effect_capture_kind(read,caller,caller->head.parameter_count+i,&kind,NULL);
+        uint32_t kind=0,provided=0;const EffectBodyCurrentRead *current=owning?read->body.current:NULL;
+        /* The current scope has no callback between the full row and this SSA type. */
+        if(owning && current && current->material==read->body.owner && current->work==read->body.read.owner &&
+            caller->head.parameter_count==current->material->functions[read->final->nodes[edge->caller].body].parameter_count &&
+            (uint64_t)caller->head.parameter_count+i<caller->values) kind=effect_capture_type_kind(read->body.domain.types,op->type);
+        else status=effect_capture_kind(read,caller,caller->head.parameter_count+i,&kind,NULL);
         if(status==XR_XIR_OK) status=effect_capture_kind(read,target,target->values,&provided,NULL);
         if(status!=XR_XIR_OK) return status;
         if(kind!=EFFECT_CAPTURE_CALLABLE && kind!=EFFECT_CAPTURE_CLASS) continue;
@@ -542,16 +565,24 @@ static XrXirStatus effect_capture_inputs_match(const EffectCaptureRead *read) {
             if(bits!=read->final->nodes[n].input[(uint64_t)p*node.basis.row_words+w]) return XR_XIR_BAD_STRUCTURE;
         }
     }
+    XrXirStatus links=effect_final_outgoing_links(read->final);if(links!=XR_XIR_OK) return links;
     for(uint32_t e=0;e<read->final->edge_count;++e) {
         const EffectInvocationEdge *edge=&read->final->edges[e];bool first=true,complete=false;
-        for(uint32_t p=0;p<e;++p) {
+        /* A group cannot have a member at another caller. Current outgoing
+         * membership bounds these pure comparisons without retaining facts. */
+        for(uint32_t p=edge->next;p!=UINT32_MAX;p=read->final->edges[p].next) {
 
             const EffectInvocationEdge *other=&read->final->edges[p];
             if(edge->caller==other->caller && edge->instruction==other->instruction && edge->latent==other->latent &&
-                edge->producer==other->producer && read->final->nodes[edge->target].body==read->final->nodes[other->target].body) first=false;
+                edge->producer==other->producer && read->final->nodes[edge->target].body==read->final->nodes[other->target].body) {
+                first=false;break;
+            }
         }
         if(!first) continue;
-        for(uint32_t p=e;p<read->final->edge_count && !complete;++p) {
+        uint32_t end=read->final->nodes[edge->caller].edge_head+1;
+        /* Completeness still visits matching edges in ascending ordinal order;
+         * errors and the first successful witness keep their original order. */
+        for(uint32_t p=e;p<end && !complete;++p) {
 
             const EffectInvocationEdge *other=&read->final->edges[p];
             if(edge->caller!=other->caller || edge->instruction!=other->instruction || edge->latent!=other->latent ||

@@ -20,20 +20,20 @@ static XrXirTypeArena *foreign_write_arena(void) {
         {{"callback", 8}, XR_XIR_FIELD_MUTABLE}, {{"text", 4}, 0}, {{"number", 6}, 0}};
     const XrXirNominalFieldIdentity outer_fields[] = {{{"items", 5}, XR_XIR_FIELD_MUTABLE}, {{"sibling", 7}, 0}};
     const XrXirNominalIdentity identities[] = {
-        {{"test", 4}, {"ForeignInner", 12}, 1, 0, inner_fields, 3, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0, {0}},
-        {{"test", 4}, {"ForeignOuter", 12}, 1, 0, outer_fields, 2, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0, {0}}};
+        {{"test", 4}, {"ForeignInner", 12}, 1, 0, inner_fields, 3, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0, {0}, 0},
+        {{"test", 4}, {"ForeignOuter", 12}, 1, 0, outer_fields, 2, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0, {0}, 0}};
     const XrXirNominalTable table = {NULL, 2, identities};
     const XrXirType inner[] = {(XrXirType)257, XR_XIR_STRING, XR_XIR_I64};
     const XrXirType outer[] = {(XrXirType)259, XR_XIR_I64};
     const XrXirTypeNode nodes[] = {
-        {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind = XR_XIR_TYPE_NULLABLE, .element = (XrXirType)256},
         {.kind = XR_XIR_TYPE_NOMINAL, .nominal = {0, NULL, 0, inner, 3}},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)258},
         {.kind = XR_XIR_TYPE_NOMINAL, .nominal = {1, NULL, 0, outer, 2}},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)260}};
     const XrXirTypes types = {nodes, 6, &table, NULL}; XrXirTypeArena *arena = NULL;
-    CHECK(value_compile_arena(&types, 65536, value_compile_limits(65536, 1048576, 65536), &arena) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&types, 65536, value_compile_limits(), &arena) == XR_XIR_VALUE_OK);
     return arena;
 }
 
@@ -120,12 +120,12 @@ static void foreign_write_observe(ForeignWrite *f, const XrXirValue *root, unsig
 
 static size_t foreign_write_attempt(unsigned mode, bool alias, size_t point) {
     ForeignWrite f; foreign_write_prepare(&f, mode, alias);
-    XrXirValue before_value = f.root; size_t before_live = live, begin = calls;
+    XrXirValue before_value = f.root; size_t before_live = live, begin = value_allocation_calls;
     size_t compiler_blocks = value_compile_live, compiler_bytes = value_compile_bytes;
     XrXirDomainStats a = xr_xir_domain_stats(f.domains[0]), b = xr_xir_domain_stats(f.domains[1]);
     if (point != SIZE_MAX) { CHECK(point <= SIZE_MAX - begin); fail_at = begin + point; }
     XrXirValueStatus status = foreign_write_apply(&f, mode);
-    size_t attempts = calls - begin; fail_at = SIZE_MAX;
+    size_t attempts = value_allocation_calls - begin; fail_at = SIZE_MAX;
     if (point == SIZE_MAX) {
         CHECK(status == XR_XIR_VALUE_OK && attempts > 0);
         CHECK(f.root.payload != before_value.payload);
