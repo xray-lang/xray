@@ -131,7 +131,7 @@ static XrOsIoStatus dylib_observed_symbol(XrOsDylibOwner *owner,const XrOsDylibQ
     if(dylib_observing&&dylib_fault_mode&&status==XR_OS_IO_OK&&found&&*found){
         unsigned mode=dylib_fault_mode;dylib_fault_mode=DYLIB_FAULT_NONE;++dylib_fault_hits;
         if(mode==DYLIB_FAULT_OOM){dylib_fault_allocation=runtime_attempts;runtime_fail_at=runtime_attempts;}
-        else CHECK(dylib_fault_instance&&xr_xir_instance_cancel_current(dylib_fault_instance)==XR_XIR_CALL_CANCEL_REQUESTED);
+        else CHECK(dylib_fault_instance&&xr_xir_call_request_cancel(dylib_fault_instance->call)==XR_XIR_CALL_CANCEL_REQUESTED);
     }
     return status;
 }
