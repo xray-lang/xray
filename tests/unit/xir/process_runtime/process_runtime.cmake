@@ -8,10 +8,14 @@ target_link_libraries(test_xir_process_source PRIVATE
 target_compile_definitions(test_xir_process_source PRIVATE
     XR_PROCESS_GENERATED="${process_runtime_generated}")
 add_custom_command(OUTPUT "${process_runtime_generated}/process_runtime.c"
+        "${process_runtime_generated}/process_runtime.c.complete-os.c"
     COMMAND $<TARGET_FILE:test_xir_process_source> --emit "${process_runtime_generated}"
     DEPENDS test_xir_process_source
         "${process_runtime_dir}/process_cases.h"
         "${process_runtime_dir}/process_runtime.h"
+        "${process_runtime_dir}/process_complete_os_source.h"
+        "${process_runtime_dir}/process_complete_os_runtime.h"
+        "${PROJECT_SOURCE_DIR}/stdlib/os/os.xr"
         "${PROJECT_SOURCE_DIR}/stdlib/sys/sys.xr"
         "${PROJECT_SOURCE_DIR}/stdlib/path/path.xr"
         "${PROJECT_SOURCE_DIR}/tests/unit/xir/xir_genuine_sys_path.h"
@@ -19,7 +23,8 @@ add_custom_command(OUTPUT "${process_runtime_generated}/process_runtime.c"
     VERBATIM)
 
 add_executable(test_xir_process_native "${process_runtime_dir}/test_process_native.c"
-    "${process_runtime_generated}/process_runtime.c")
+    "${process_runtime_generated}/process_runtime.c"
+    "${process_runtime_generated}/process_runtime.c.complete-os.c")
 target_link_libraries(test_xir_process_native PRIVATE xray_xir_scalar)
 foreach(target test_xir_process_source test_xir_process_native)
     target_compile_definitions(${target} PRIVATE XR_PROCESS_ROOT="${PROJECT_SOURCE_DIR}")
