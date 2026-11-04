@@ -20,7 +20,7 @@ typedef struct ProcessCompleteOsRecord {DWORD pid,completed;uint64_t output_leng
 typedef struct ProcessCompleteOsChild {
     HANDLE mapping,ready,release,done,process;
     ProcessCompleteOsRecord *record;
-    char name[128];bool allow_output;
+    char name[128];bool allow_output,spaced_argument;
 } ProcessCompleteOsChild;
 static unsigned process_complete_os_serial;
 static bool process_complete_os_observing,process_complete_os_oom,process_complete_os_pending;
@@ -107,22 +107,25 @@ static void process_complete_os_write(HANDLE pipe,uint64_t length,unsigned seed,
 }
 static bool process_complete_os_child(int argc,char **argv){
     if(argc<2||strcmp(argv[1],"--process-exec-child"))return false;
-    CHECK(argc==4);char name[160];process_object_name(argv[3],"map",name);
+    CHECK(argc>=3);bool spaced=!strcmp(argv[2],"flood-spaced");CHECK(argc==(spaced?5:4));
+    if(spaced)CHECK(!strcmp(argv[4],"argument with spaces"));char name[160];process_object_name(argv[3],"map",name);
     HANDLE mapping=OpenFileMappingA(FILE_MAP_ALL_ACCESS,FALSE,name);CHECK(mapping);
     ProcessCompleteOsRecord *record=MapViewOfFile(mapping,FILE_MAP_ALL_ACCESS,0,0,sizeof(*record));CHECK(record);
     HANDLE ready=process_event(argv[3],"ready",false),release=process_event(argv[3],"release",false),done=process_event(argv[3],"done",false);
     HANDLE output=GetStdHandle(STD_OUTPUT_HANDLE),error=GetStdHandle(STD_ERROR_HANDLE);
     record->pid=GetCurrentProcessId();record->output_length=process_complete_os_size(output,65537);record->error_length=process_complete_os_size(error,65793);
     CHECK(SetEvent(ready)&&WaitForSingleObject(release,30000)==WAIT_OBJECT_0);
-    CHECK(!strcmp(argv[2],"flood")||!strcmp(argv[2],"hold"));
+    CHECK(!strcmp(argv[2],"flood")||!strcmp(argv[2],"hold")||spaced);
     process_complete_os_write(output,record->output_length,11,37);process_complete_os_write(error,record->error_length,197,53);
     record->completed=1;CHECK(SetEvent(done));
     CHECK(CloseHandle(ready)&&CloseHandle(release)&&CloseHandle(done)&&UnmapViewOfFile(record)&&CloseHandle(mapping));ExitProcess(23);
 }
 static char *process_complete_os_command(ProcessCompleteOsChild *child){
     wchar_t executable[32768];DWORD length=GetModuleFileNameW(NULL,executable,32768);CHECK(length&&length<32768);char *utf8=process_utf8(executable);
-    size_t bytes=strlen(utf8);CHECK(bytes<=SIZE_MAX-sizeof(child->name)-64);size_t capacity=bytes+sizeof(child->name)+64;char *command=xr_malloc(capacity);CHECK(command);
-    int count=snprintf(command,capacity,"\"%s\" --process-exec-child %s %s",utf8,child->allow_output?"flood":"hold",child->name);
+    size_t bytes=strlen(utf8);CHECK(bytes<=SIZE_MAX-sizeof(child->name)-96);size_t capacity=bytes+sizeof(child->name)+96;char *command=xr_malloc(capacity);CHECK(command);
+    const char *mode=child->spaced_argument?"flood-spaced":child->allow_output?"flood":"hold";
+    int count=snprintf(command,capacity,"\"%s\" --process-exec-child %s %s%s",utf8,mode,child->name,
+        child->spaced_argument?" \"argument with spaces\"":"");
     CHECK(count>0&&(size_t)count<capacity);xr_free(utf8);return command;
 }
 static XrXirInstanceResult process_complete_os_step(XrXirInstance *instance,ProcessCompleteOsChild *child){
@@ -207,8 +210,9 @@ static void process_complete_os_diagnostic(XrXirInstance *instance,const uint32_
     }
     for(unsigned n=0;n<5;++n)xr_xir_value_drop(&values[n]);xr_xir_value_drop(&fields);
 }
-static void process_complete_os_success(XrXirProgram *program,const uint32_t *ids,const int64_t limits[2]){
+static void process_complete_os_success(XrXirProgram *program,const uint32_t *ids,const int64_t limits[2],bool spaced_argument){
     size_t live=runtime_live,bytes=runtime_bytes;XrXirInstance *instance=process_instance(program,ids);ProcessCompleteOsChild child;process_complete_os_open(&child,true);
+    child.spaced_argument=spaced_argument;
     char *command=process_complete_os_command(&child);XrXirValue text=process_string(instance,command);
     XrXirValue args[]={text,{XR_XIR_I64,0,limits[0]},{XR_XIR_I64,0,limits[1]}};process_complete_os_arm(false);
     CHECK(xr_xir_instance_start(instance,ids[PROCESS_COMPLETE_OS_EXEC],args,3)==XR_XIR_CALL_READY);
@@ -218,9 +222,13 @@ static void process_complete_os_success(XrXirProgram *program,const uint32_t *id
     CHECK(complete);xr_free(command);process_child_done(child.process,23,true);
     CHECK(process_complete_os_acquired&&process_complete_os_acquired==process_complete_os_retired&&process_oom_prepares==1&&process_oom_starts==1);
     CHECK(process_complete_os_closed_ends[0]==2&&process_complete_os_closed_ends[1]==2);
-    uint32_t close_native=UINT32_MAX;for(uint32_t f=0;f<program->entry_count;++f)if(program->declarations->functions[f].native_callable==109)close_native=f;
-    XrXirValue absent[]={{XR_XIR_I64,0,-1},{XR_XIR_I64,0,-1}};
+    uint32_t close_native=UINT32_MAX,spawn_native=UINT32_MAX;for(uint32_t f=0;f<program->entry_count;++f){
+        if(program->declarations->functions[f].native_callable==109)close_native=f;
+        if(program->declarations->functions[f].native_callable==110)spawn_native=f;
+    }
+    XrXirValue absent[]={{XR_XIR_I64,0,-1},{XR_XIR_I64,0,-1}},shell_args[]={text,absent[0],absent[1]};
     CHECK(close_native!=UINT32_MAX&&xr_xir_instance_start(instance,close_native,absent,2)==XR_XIR_CALL_BAD_ARGUMENT);
+    CHECK(spawn_native!=UINT32_MAX&&xr_xir_instance_start(instance,spawn_native,shell_args,3)==XR_XIR_CALL_BAD_ARGUMENT);
     process_complete_os_result(instance,ids,&result,&child,limits);xr_xir_value_drop(&result);xr_xir_value_drop(&text);
     unsigned acquired=process_complete_os_acquired;process_retire(instance);CHECK(process_complete_os_acquired==acquired);process_complete_os_disarm();
     process_complete_os_close(&child);CHECK(runtime_live==live&&runtime_bytes==bytes);
@@ -325,7 +333,8 @@ static void process_complete_os_failure(XrXirProgram *program,const uint32_t *id
 static void process_complete_os_execute(XrXirProgram *program,const uint32_t *ids){
     const int64_t limits[][2]={{2147483647,2147483647},{7,11},{0,0}};
     process_trace("complete os.exec capture enter");
-    for(unsigned n=0;n<sizeof(limits)/sizeof(*limits);++n)process_complete_os_success(program,ids,limits[n]);
+    for(unsigned n=0;n<sizeof(limits)/sizeof(*limits);++n)process_complete_os_success(program,ids,limits[n],false);
+    process_complete_os_success(program,ids,limits[1],true);
     process_trace("complete os.exec capture exit");process_complete_os_refusals(program,ids);
     process_trace("complete os.exec cleanup refusals enter");process_complete_os_cleanup_refusals(program,ids);process_trace("complete os.exec cleanup refusals exit");
     process_trace("complete os.exec cleanup fault enter");process_complete_os_cleanup_fault(program,ids);process_trace("complete os.exec cleanup fault exit");

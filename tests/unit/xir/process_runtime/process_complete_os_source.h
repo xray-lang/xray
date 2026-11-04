@@ -22,7 +22,8 @@ static const char process_complete_os_wrappers[]=
     " return(opened!.readEnd(),opened!.writeEnd())}\n"
     "export fn cleanupClose(read:i64,write:i64)->bool{return __execPipeClose(read,write)}\n"
     "export fn cleanupOrdinaryClose(read:i64,write:i64)->bool{return Pipe(read,write).close()}\n"
-    "export fn ctfeExecClose()->bool{return __execPipeClose(-1,-1)}\n";
+    "export fn ctfeExecClose()->bool{return __execPipeClose(-1,-1)}\n"
+    "export fn ctfeExecSpawn()->i64{return __execShellSpawn(\"\",-1,-1)}\n";
 static uint32_t process_complete_os_named(const XrXirModule *module,const char *name){
     for(uint32_t f=0;f<module->function_count;++f)if(module->functions[f].name_length==strlen(name)&&!memcmp(module->functions[f].name,name,strlen(name)))return f;
     CHECK(false);return UINT32_MAX;
@@ -43,23 +44,28 @@ static XrXirStatus process_complete_os_check(const XrXirCompileContext *context,
     xr_compile_session_free(session);return status;
 }
 static void process_complete_os_contracts(const XrXirCompileContext *context,const XrXirArtifact *code){
-    const XrXirModule *module=xr_xir_compile_artifact_module(code);uint32_t native=process_complete_os_named(module,"__execPipeClose");
-    CHECK(module->declarations->functions[native].native_callable==109&&xir_native_callable_verify(module,native)==XR_XIR_OK);
-    XrXirModule changed=*module;XrXirDeclarations scope=*module->declarations;changed.declarations=&scope;
-    size_t module_count=scope.module_count;CHECK(module_count&&module_count<=SIZE_MAX/sizeof(XrXirSourceModule));
-    XrXirSourceModule *modules=xr_malloc(module_count*sizeof(*modules));CHECK(modules);
-    memcpy(modules,scope.modules,module_count*sizeof(*modules));scope.modules=modules;uint32_t owner=scope.functions[native].module;CHECK(owner<scope.module_count);
-    modules[owner].name="os";modules[owner].name_length=2;
-    CHECK(xir_native_callable_verify(&changed,native)==XR_XIR_BAD_TYPE);xr_free(modules);
-    XrXirCtfeCallRequest request={.evaluation={.artifact=code,.function=process_complete_os_named(module,"ctfeExecClose"),.target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
-        .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES}},.call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
-    memcpy(request.evaluation.checked_identity,code->checked_identity,32);XrXirValue value={0};
-    CHECK(xr_xir_compile_ctfe_calls(&request,&value)==XR_XIR_CTFE_NOT_SUPPORTED&&!value.type&&!value.reserved&&!value.payload);
+    const XrXirModule *module=xr_xir_compile_artifact_module(code);
+    const char *const names[]={"__execPipeClose","__execShellSpawn"},*const ctfe[]={"ctfeExecClose","ctfeExecSpawn"};
+    for(unsigned n=0;n<2;++n){
+        uint32_t native=process_complete_os_named(module,names[n]);
+        CHECK(module->declarations->functions[native].native_callable==109+n&&xir_native_callable_verify(module,native)==XR_XIR_OK);
+        XrXirModule changed=*module;XrXirDeclarations scope=*module->declarations;changed.declarations=&scope;
+        size_t module_count=scope.module_count;CHECK(module_count&&module_count<=SIZE_MAX/sizeof(XrXirSourceModule));
+        XrXirSourceModule *modules=xr_malloc(module_count*sizeof(*modules));CHECK(modules);
+        memcpy(modules,scope.modules,module_count*sizeof(*modules));scope.modules=modules;uint32_t owner=scope.functions[native].module;CHECK(owner<scope.module_count);
+        modules[owner].name="os";modules[owner].name_length=2;
+        CHECK(xir_native_callable_verify(&changed,native)==XR_XIR_BAD_TYPE);xr_free(modules);
+        XrXirCtfeCallRequest request={.evaluation={.artifact=code,.function=process_complete_os_named(module,ctfe[n]),.target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
+            .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES}},.call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
+        memcpy(request.evaluation.checked_identity,code->checked_identity,32);XrXirValue value={0};
+        CHECK(xr_xir_compile_ctfe_calls(&request,&value)==XR_XIR_CTFE_NOT_SUPPORTED&&!value.type&&!value.reserved&&!value.payload);
+    }
     static const char *const denied[]={
         "\nexport fn badCloseRef()->bool{var f=__execPipeClose;return f(-1,-1)}\n",
-        "\nfn badPipeWorker(p:Pipe)->i64{return p.readEnd()}\n"
+        "\nexport fn badSpawnRef()->i64{var f=__execShellSpawn;return f(\"\",-1,-1)}\n",
+        ("\nfn badPipeWorker(p:Pipe)->i64{return p.readEnd()}\n"
         "export fn badPipeGo()->i64{var opened=Pipe.open();if(opened==null){return -1};var p=opened!\n"
-        " var task=go badPipeWorker(p);return await task}\n"};
+        " var task=go badPipeWorker(p);return await task}\n")};
     size_t length=0;char *body=process_complete_os_text(&length);
     for(unsigned n=0;n<sizeof(denied)/sizeof(*denied);++n){
         size_t extra=strlen(denied[n]);CHECK(length<=SIZE_MAX-extra-1);char *negative=xr_malloc(length+extra+1);CHECK(negative);
@@ -68,9 +74,12 @@ static void process_complete_os_contracts(const XrXirCompileContext *context,con
         memset(negative,0xa5,length+extra);xr_free(negative);xr_xir_compile_source_result_free(&rejected);
     }
     memset(body,0xa5,length);xr_free(body);
-    static const char fake[]="export fn fakeExecClose(read:i64,write:i64)->bool{return __execPipeClose(read,write)}\n";
-    XrXirSourceResult rejected={0};CHECK(process_complete_os_check(context,fake,sizeof(fake)-1,false,&rejected)==XR_XIR_BAD_VALUE&&!rejected.checked&&!rejected.snapshot);
-    xr_xir_compile_source_result_free(&rejected);
+    static const char *const fake[]={"export fn fakeExecClose(read:i64,write:i64)->bool{return __execPipeClose(read,write)}\n",
+        "export fn fakeExecSpawn(command:string,read:i64,write:i64)->i64{return __execShellSpawn(command,read,write)}\n"};
+    for(unsigned n=0;n<2;++n){
+        XrXirSourceResult rejected={0};CHECK(process_complete_os_check(context,fake[n],strlen(fake[n]),false,&rejected)==XR_XIR_BAD_VALUE&&!rejected.checked&&!rejected.snapshot);
+        xr_xir_compile_source_result_free(&rejected);
+    }
 }
 static void process_complete_os_emit(const XrXirArtifact *code,const uint32_t *ids,const char *path,bool write){
     XrXirCSource source={0};CHECK(xr_xir_compile_emit_c(code,"process_complete_os",16777216,&source)==XR_XIR_OK);
