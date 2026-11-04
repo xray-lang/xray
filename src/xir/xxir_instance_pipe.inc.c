@@ -212,15 +212,8 @@ static XrXirAction instance_pipe_resume(XrXirCallView *view,XrXirInstance *insta
     if(status!=XR_XIR_CALL_READY)return instance_pipe_fault(status);
     if(id==XR_NATIVE_CALLABLE_SYS_PIPE_OPEN)status=instance_pipe_open_value(view,instance,frame,entry->result,output);
     else if(id==XR_NATIVE_CALLABLE_SYS_PIPE_CLOSE) {
-        XirPipeQuery current={view,instance->domain,XR_XIR_CALL_READY};uint32_t end=0;
-        XirPipeOwner *pipe=instance_pipe_lookup(root,view->arguments[0].payload,&end,&current);bool closed=false;
-        if(current.status!=XR_XIR_CALL_READY)status=current.status;
-        else if(pipe) {
-            if(pipe->references==UINT64_MAX)return instance_pipe_fault(XR_XIR_CALL_LIMIT);
-            frame->pipe=pipe;++pipe->references;
-            status=instance_pipe_status(xr_os_io_pipe_close_end(&pipe->owner,(XrOsPipeEnd)end,&closed));
-            if(status==XR_XIR_CALL_READY && closed)pipe->tokens[end]=0;
-        }
+        bool closed=false;
+        status=instance_pipe_close_endpoint(view,instance,view->arguments[0].payload,UINT32_MAX,&frame->pipe,&closed);
         if(status==XR_XIR_CALL_READY)*output=(XrXirValue){XR_XIR_BOOL,0,closed?1:0};
         frame->terminal=true;
     } else status=instance_pipe_io(view,instance,frame,id,entry->result,output);

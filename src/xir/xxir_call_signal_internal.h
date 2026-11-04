@@ -21,6 +21,7 @@ XR_FUNC XrXirCallStatus xir_call_signal_origin(XrXirCallView *view,XirCallSignal
  * registration always uses the original, cleanup-rejecting variants. */
 XR_FUNC bool xir_instance_dylib_nosuspend_transport(XrXirCallView *view,uint32_t target);
 XR_FUNC bool xir_instance_path_nosuspend_transport(XrXirCallView *view,uint32_t target);
+XR_FUNC bool xir_instance_exec_pipe_nosuspend_transport(XrXirCallView *view,uint32_t target);
 XR_FUNC bool xir_instance_process_nosuspend_transport(XrXirCallView *view,uint32_t target);
 XR_FUNC bool xir_instance_pipe_nosuspend_transport(XrXirCallView *view,uint32_t target);
 XR_FUNC XrXirCallStatus xir_call_private_native_stage(XrXirCallView *view,uint32_t instruction,uint32_t target);

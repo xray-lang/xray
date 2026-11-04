@@ -1275,6 +1275,31 @@ def render_sys_processes(declarations):
     return lines, rows
 
 
+def render_os_exec_pipe_close(declarations):
+    candidates = [r for r in declarations if r.module == 'os' and r.name == '__execPipeClose']
+    if len(candidates) != 1:
+        raise ValueError('Shell capture cleanup requires its sole governed declaration')
+    row = candidates[0]
+    if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+            row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct, row.aot_kind,
+            row.link_object, row.vm_binding, row.vm_ifdef, row.define, row.ret,
+            row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
+            '(readToken: i64, writeToken: i64): bool', '2', 'ii', 'internal', '', '', 'fresh', 'system', '', '', False, '',
+            '', 'normal', '', '', 'value', False, None, (), ''):
+        raise ValueError('Shell capture cleanup differs from its complete source contract')
+    return [
+        'static const XrNativeParameter xr_native_os_exec_pipe_close_parameters[] = {',
+        '    {"readToken", "i64", XR_NATIVE_TERM_I64, false, false},',
+        '    {"writeToken", "i64", XR_NATIVE_TERM_I64, false, false},',
+        '};',
+        'static const XrNativeMemberDeclaration xr_native_os_exec_pipe_close = {',
+        '    1, "__execPipeClose", "(readToken: i64, writeToken: i64): bool", "bool", 0, 0, XR_NATIVE_RECEIVER_READ,',
+        '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
+        '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_os_exec_pipe_close_parameters, 2, XR_NATIVE_TERM_BOOL,',
+        '};',
+    ], ['    {XR_NATIVE_CALLABLE_OS_EXEC_PIPE_CLOSE, NULL, &xr_native_os_exec_pipe_close, NULL, false, "os", "stdlib/defs/core.def", FINGERPRINT}']
+
+
 def render_path_getcwd(declarations):
     candidates = [r for r in declarations if r.module == 'path' and r.name == '__getcwd']
     if len(candidates) != 1:
@@ -1698,6 +1723,9 @@ def render_unicode_callable(root, decoder):
     path_lines, path_rows = render_path_getcwd(declarations)
     buffer_lines += path_lines
     buffer_rows += path_rows
+    exec_lines, exec_rows = render_os_exec_pipe_close(declarations)
+    buffer_lines += exec_lines
+    buffer_rows += exec_rows
     digest = hashlib.sha256((root / 'stdlib/defs/core.def').read_text(encoding='utf-8').encode('utf-8')).digest()
     fingerprint = '{{' + ','.join(str(byte) for byte in digest) + '}}'
     return buffer_lines + [
