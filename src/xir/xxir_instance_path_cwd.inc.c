@@ -51,7 +51,7 @@ static XrXirAction instance_path_resume(XrXirCallView *view,XrXirInstance *insta
     if(status==XR_XIR_CALL_READY)status=instance_path_site(view,instance,&origin);
     XrXirValue *value=view->state;
     if(status==XR_XIR_CALL_READY&&(value->type||value->reserved||value->payload))status=XR_XIR_CALL_BAD_STATE;
-    if(status==XR_XIR_CALL_READY)status=instance_current_directory(view,instance,value);
+    if(status==XR_XIR_CALL_READY)status=instance_current_directory(view,instance,true,value);
     XrXirAction action={0};if(status==XR_XIR_CALL_READY)status=xr_xir_call_return_move(view,value,&action);
     return status==XR_XIR_CALL_READY?action:instance_pipe_fault(status);
 }

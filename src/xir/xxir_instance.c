@@ -2655,7 +2655,7 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
 #endif
             if(status!=XR_XIR_CALL_READY)goto failed;
         } else if(id==XR_NATIVE_CALLABLE_OS_GETCWD) {
-            status=instance_current_directory(view,instance,value);
+            status=instance_current_directory(view,instance,false,value);
             if(status!=XR_XIR_CALL_READY)goto failed;
         } else if(id==XR_NATIVE_CALLABLE_OS_CPU_COUNT) {
             *value=(XrXirValue){XR_XIR_I64,0,(int64_t)xr_os_cpu_count()};
