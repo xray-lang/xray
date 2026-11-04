@@ -278,6 +278,18 @@ class TierTests(unittest.TestCase):
                 self.assertNotIn("native-runtime", plan["groups"])
         self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
 
+    def test_complete_path_inputs_keep_the_existing_carriers(self):
+        for path in ("tests/unit/xir/xir_path_complete_source.h",
+                     "tests/unit/xir/xir_path_complete_runtime.h",
+                     "src/xir/xxir_path_native.h", "src/xir/xxir_instance_path_cwd.inc.c"):
+            with self.subTest(path=path):
+                plan = xray_l1.tier_plan(ROOT, "L2", changed=[path])
+                self.assertIn("frontend", plan["groups"])
+                self.assertTrue({"xir_path_prelude", "xir_path_prelude_native"} <= set(plan["tests"]))
+                self.assertTrue({"test_xir_path_prelude", "test_xir_path_prelude_native"} <= set(plan["targets"]))
+                self.assertNotIn("native-runtime", plan["groups"])
+        self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
+
     def test_callback_mechanisms_and_test_recipes_select_the_existing_runtime_home(self):
         for path in ("src/execution/xr_xir_host_execution.c",
                      "src/xir/xxir_root_callback_internal.h",

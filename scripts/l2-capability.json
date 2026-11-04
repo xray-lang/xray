@@ -332,7 +332,11 @@
         "tests/unit/xir/array_materialization_runtime.h",
         "tests/unit/xir/test_xir_array_materialization.c",
         "tests/unit/xir/test_xir_array_materialization_native.c",
-        "tests/unit/xir/array_materialization.cmake"
+        "tests/unit/xir/array_materialization.cmake",
+        "tests/unit/xir/xir_path_complete_source.h",
+        "tests/unit/xir/xir_path_complete_runtime.h",
+        "src/xir/xxir_path_native.h",
+        "src/xir/xxir_instance_path_cwd.inc.c"
       ],
       "reason": "HIR and complete Source language-family consumers.",
       "tests": [
