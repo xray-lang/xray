@@ -108,9 +108,9 @@ static XrXirStatus effect_final_edge_payload(const XrXirCompileContext *work,
     if(signature->parameter_count!=target.parameter_count-site->captures) return XR_XIR_BAD_STRUCTURE;
     return effect_final_edge_operands(work,&head,op,signature->parameter_count);
 }
-/* Strictly descending outgoing links give linear exact membership. The reverse
- * link is compared with the previous real target occurrence, without scratch. */
-static XrXirStatus effect_final_edge_links(const EffectInvocationFinal *final) {
+/* Strictly descending outgoing links give linear exact membership without
+ * scratch. Each caller's head is its greatest actual edge ordinal. */
+static XrXirStatus effect_final_outgoing_links(const EffectInvocationFinal *final) {
     uint64_t linked=0;
     for(uint32_t n=0;n<final->count;++n) {
 
@@ -121,6 +121,12 @@ static XrXirStatus effect_final_edge_links(const EffectInvocationFinal *final) {
         }
     }
     if(linked!=final->edge_count) return XR_XIR_BAD_STRUCTURE;
+    return XR_XIR_OK;
+}
+/* The reverse link is compared with the previous real target occurrence.
+ * Outgoing membership remains independent of this target ordering. */
+static XrXirStatus effect_final_edge_links(const EffectInvocationFinal *final) {
+    XrXirStatus status=effect_final_outgoing_links(final);if(status!=XR_XIR_OK) return status;
     for(uint32_t e=0;e<final->edge_count;++e) {
         const EffectInvocationEdge *edge=&final->edges[e];uint32_t previous=UINT32_MAX;
         for(uint32_t p=e;p>0;) {

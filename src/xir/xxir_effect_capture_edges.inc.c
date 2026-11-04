@@ -560,16 +560,24 @@ static XrXirStatus effect_capture_inputs_match(const EffectCaptureRead *read) {
             if(bits!=read->final->nodes[n].input[(uint64_t)p*node.basis.row_words+w]) return XR_XIR_BAD_STRUCTURE;
         }
     }
+    XrXirStatus links=effect_final_outgoing_links(read->final);if(links!=XR_XIR_OK) return links;
     for(uint32_t e=0;e<read->final->edge_count;++e) {
         const EffectInvocationEdge *edge=&read->final->edges[e];bool first=true,complete=false;
-        for(uint32_t p=0;p<e;++p) {
+        /* A group cannot have a member at another caller. Current outgoing
+         * membership bounds these pure comparisons without retaining facts. */
+        for(uint32_t p=edge->next;p!=UINT32_MAX;p=read->final->edges[p].next) {
 
             const EffectInvocationEdge *other=&read->final->edges[p];
             if(edge->caller==other->caller && edge->instruction==other->instruction && edge->latent==other->latent &&
-                edge->producer==other->producer && read->final->nodes[edge->target].body==read->final->nodes[other->target].body) first=false;
+                edge->producer==other->producer && read->final->nodes[edge->target].body==read->final->nodes[other->target].body) {
+                first=false;break;
+            }
         }
         if(!first) continue;
-        for(uint32_t p=e;p<read->final->edge_count && !complete;++p) {
+        uint32_t end=read->final->nodes[edge->caller].edge_head+1;
+        /* Completeness still visits matching edges in ascending ordinal order;
+         * errors and the first successful witness keep their original order. */
+        for(uint32_t p=e;p<end && !complete;++p) {
 
             const EffectInvocationEdge *other=&read->final->edges[p];
             if(edge->caller!=other->caller || edge->instruction!=other->instruction || edge->latent!=other->latent ||

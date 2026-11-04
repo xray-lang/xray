@@ -43,7 +43,24 @@ static void capture_free(void *p) {
 #include "xir/xxir_effects.c"
 #include "xir_construction_fixture.h"
 static EffectInvocationFinal *attack_final;
-static uint32_t mutation_kind;
+static uint32_t mutation_kind,routing_caller,routing_other_head;
+static uint64_t capture_held(const XrXirCompileContext *context) {
+    XrCompileResourceStats stats={0};
+    CHECK(xr_compile_resources_stats(context->resources,&stats)==XR_COMPILE_RESOURCE_OK);
+    return stats.held_bytes;
+}
+static void routing_select(const EffectInvocationFinal *final) {
+    routing_caller=UINT32_MAX;routing_other_head=UINT32_MAX;
+    CHECK(final->edge_count>1);
+    for(uint32_t n=0;n<final->count;++n) {
+        uint32_t head=final->nodes[n].edge_head;
+        if(head==UINT32_MAX) continue;
+        CHECK(head<final->edge_count && final->edges[head].caller==n);
+        if(routing_caller==UINT32_MAX) routing_caller=n;
+        else { routing_other_head=head;break; }
+    }
+    CHECK(routing_caller<final->count && routing_other_head<final->edge_count);
+}
 static void unsupported_capture(EffectInvocationFinal *final) {
     EffectCaptureFact fact={final->roots[5],2,0,final->site_count+3,0};
     CHECK(final->capture.count<final->capture.capacity);uint32_t at=0;
@@ -62,7 +79,16 @@ static void last_release_attack(void) {
         ++attack_final->capture.facts[0].rank;break;
     case 3:CHECK(attack_final->material->functions[1].runs[0].base.op==XR_XIR_CONST_INT);
         attack_final->material->functions[1].runs[0].base.type=XR_XIR_BOOL;break;
-    default:CHECK(attack_final->edge_count);attack_final->edges[0].target=attack_final->count;break;
+    case 4:CHECK(attack_final->edge_count);attack_final->edges[0].target=attack_final->count;break;
+    case 5: {
+        uint32_t head=attack_final->nodes[routing_caller].edge_head;
+        attack_final->nodes[routing_caller].edge_head=attack_final->edges[head].next;break;
+    }
+    case 6:attack_final->nodes[routing_caller].edge_head=routing_other_head;break;
+    case 7:attack_final->edges[0].next=0;break;
+    case 8:attack_final->edges[0].next=1;break;
+    case 9:attack_final->nodes[routing_caller].edge_head=attack_final->edge_count;break;
+    default:CHECK(false);break;
     }
     ++attacks;
 }
@@ -145,7 +171,10 @@ static void fixture(bool source) {
         EffectBodyRun *run=&final->material->functions[1].runs[0];
         XrXirInstruction original_input=run->base;
         CHECK(final->edge_count);EffectInvocationEdge original_edge=final->edges[0];
-        for(uint32_t mutation=0;mutation<5;++mutation) {
+        routing_select(final);
+        uint32_t original_head=final->nodes[routing_caller].edge_head;
+        for(uint32_t mutation=0;mutation<10;++mutation) {
+            uint64_t held=capture_held(&context);
             void *retired=NULL;
             CHECK(xr_compile_resources_alloc(context.resources,1,&retired)==XR_COMPILE_RESOURCE_OK);
             attack_final=final;mutation_kind=mutation;attack_cut=1;
@@ -162,10 +191,15 @@ static void fixture(bool source) {
             CHECK(allocations==a&&releases==f);
             XrXirStatus public_status=xir_effects_source_terminal_input(&context,(XirEffectInput){xr_xir_compile_artifact_module(artifact),xr_xir_compile_artifact_construction(artifact),NULL},effects);
             CHECK(public_status==XR_XIR_BAD_STRUCTURE);
+            CHECK(capture_held(&context)==held);
             final->capture.count=count;memcpy(replacement,saved,(size_t)count*sizeof(*saved));
             run->base=original_input;final->edges[0]=original_edge;
+            final->nodes[routing_caller].edge_head=original_head;
+            a=allocations;f=releases;
             CHECK(terminal(&context,artifact,effects,source)==XR_XIR_OK);
+            CHECK(allocations==a&&releases==f);
             CHECK(xir_effects_source_terminal_input(&context,(XirEffectInput){xr_xir_compile_artifact_module(artifact),xr_xir_compile_artifact_construction(artifact),NULL},effects)==XR_XIR_OK);
+            CHECK(capture_held(&context)==held);
             fprintf(stderr,"terminal%u target%u mutation%u: cleanup observed, rejected status%u, restored PASS\n",
                 source,target,mutation,status);
         }
