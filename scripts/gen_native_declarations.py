@@ -1275,6 +1275,40 @@ def render_sys_processes(declarations):
     return lines, rows
 
 
+def render_sys_dylibs(declarations):
+    contracts = (
+        ('__dylibOpen', '(path: Path): i64', 'SYS_DYLIB_OPEN', 'I64', 'i64', (('path', 'Path', 'PATH'),), 'sys_dylib_open'),
+        ('__dylibSymbol', '(handle: i64, name: string): Ptr<u8>?', 'SYS_DYLIB_SYMBOL', 'NULLABLE_PTR_U8', 'Ptr<u8>?', (('handle', 'i64', 'I64'), ('name', 'string', 'STRING')), 'sys_dylib_symbol'),
+        ('__dylibClose', '(handle: i64): bool', 'SYS_DYLIB_CLOSE', 'BOOL', 'bool', (('handle', 'i64', 'I64'),), 'sys_dylib_close'),
+        ('__dylibLastError', '(): string', 'SYS_DYLIB_LAST_ERROR', 'STRING', 'string', (), 'sys_dylib_last_error'),
+    )
+    lines, rows = [], []
+    for at, (name, signature, identity, term, result, parameters, vm) in enumerate(contracts):
+        candidates = [r for r in declarations if r.module == 'sys' and r.name == name]
+        if len(candidates) != 1:
+            raise ValueError('Dylib callable requires its sole governed declaration: ' + name)
+        row = candidates[0]
+        if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+                row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
+                row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
+                row.ret, row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
+                signature, str(len(parameters)), ('p', 'vs', 'v', '')[at],
+                'internal', '', '', 'fresh' if at == 3 else '', 'system', vm, 'xrt_' + vm, True, 'method', '', 'normal', '', '',
+                'value', False, None, (), ''):
+            raise ValueError('Dylib callable differs from its complete source contract: ' + name)
+        symbol = 'xr_native_' + identity.lower()
+        if parameters:
+            lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {']
+            lines += ['    {' + c_string(n) + ', ' + c_string(t) + ', XR_NATIVE_TERM_' + k + ', false, false},' for n, t, k in parameters]
+            lines += ['};']
+        lines += ['static const XrNativeMemberDeclaration ' + symbol + ' = {',
+            '    ' + str(at + 13) + ', ' + c_string(name) + ', ' + c_string(signature) + ', ' + c_string(result) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
+            '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
+            '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + (symbol + '_parameters' if parameters else 'NULL') + ', ' + str(len(parameters)) + ', XR_NATIVE_TERM_' + term, '};']
+        rows += ['    {XR_NATIVE_CALLABLE_' + identity + ', NULL, &' + symbol + ', NULL, false, "sys", "stdlib/defs/core.def", FINGERPRINT}']
+    return lines, rows
+
+
 def render_cpu_callables(declarations):
     contracts = (
         ('os', '__cpuCount', '(): i64', 'os_cpuCount', 'xrt_os_cpu_count', 'OS_CPU_COUNT', 'I64', 13),
@@ -1645,6 +1679,9 @@ def render_unicode_callable(root, decoder):
     process_lines, process_rows = render_sys_processes(declarations)
     buffer_lines += process_lines
     buffer_rows += process_rows
+    dylib_lines, dylib_rows = render_sys_dylibs(declarations)
+    buffer_lines += dylib_lines
+    buffer_rows += dylib_rows
     os_lines, os_rows = render_os_callables(declarations)
     buffer_lines += os_lines
     buffer_rows += os_rows

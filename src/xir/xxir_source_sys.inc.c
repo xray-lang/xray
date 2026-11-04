@@ -36,6 +36,9 @@ static bool source_sys_declare(SourceContext *ctx) {
                 if(term==XR_NATIVE_TERM_I64)parameters[p]=XR_XIR_I64;
                 else if(term==XR_NATIVE_TERM_BOOL)parameters[p]=XR_XIR_BOOL;
                 else if(term==XR_NATIVE_TERM_STRING)parameters[p]=XR_XIR_STRING;
+                else if(term==XR_NATIVE_TERM_PATH) {
+                    if(!source_path_prelude_type(ctx,parameters+p))return false;
+                }
                 else if(term==XR_NATIVE_TERM_NULLABLE_I64||term==XR_NATIVE_TERM_NULLABLE_STRING||
                     term==XR_NATIVE_TERM_ARRAY_STRING||term==XR_NATIVE_TERM_NULLABLE_ARRAY_STRING) {
                     XrXirType element=term==XR_NATIVE_TERM_NULLABLE_I64?XR_XIR_I64:XR_XIR_STRING;
@@ -58,6 +61,11 @@ static bool source_sys_declare(SourceContext *ctx) {
             case XR_NATIVE_TERM_UNIT:break;
             case XR_NATIVE_TERM_BOOL:result=XR_XIR_BOOL;break;
             case XR_NATIVE_TERM_I64:result=XR_XIR_I64;break;
+            case XR_NATIVE_TERM_STRING:result=XR_XIR_STRING;break;
+            case XR_NATIVE_TERM_NULLABLE_PTR_U8:
+                if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_PTR,.element=XR_XIR_U8},&result)||
+                    !source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=result},&result))return false;
+                break;
             case XR_NATIVE_TERM_NULLABLE_I64:
                 if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=XR_XIR_I64},&result))return false;
                 break;
@@ -93,6 +101,12 @@ static bool source_sys_declare(SourceContext *ctx) {
             if(!source_query_declare(ctx,symbol,XR_XIR_SOURCE_FUNCTION,0,(XrXirSourceRange){m,0,0,0,0}))return false;
             ((XrXirSourceDeclaration *)ctx->query.declarations)[symbol->declaration-1].signature=signature;
             ctx->bodies[index].declaration=symbol->declaration;ctx->function=index;
+            if(id==XR_NATIVE_CALLABLE_SYS_DYLIB_OPEN) {
+                XrXirDeclarations scope;XrXirModule module=source_module_view(ctx,&scope);uint32_t field=0;
+                if(!xir_sys_dylib_path_scope(&scope,&ctx->types,index,ctx->function_count,parameters[0],&field)||
+                    xr_xir_compile_nominal_access(&ctx->compile,&module,index,parameters[0],field,XR_XIR_NOMINAL_READ)!=XR_XIR_OK)
+                    return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"sys loader requires a canonical public Path read");
+            }
             if(!source_query_parameters(ctx,symbol->declaration))return false;
         }
     }

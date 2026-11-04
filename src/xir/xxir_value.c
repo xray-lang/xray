@@ -47,7 +47,7 @@
 #include "xxir_float.h"
 #include "xxir_atomic.h"
 #include "xxir_buffer_storage.h"
-#include "xxir_pointer.h"
+#include "xxir_pointer_origin_internal.h"
 #include "xxir_channel.h"
 #include "xxir_channel_watch_internal.h"
 #include "xxir_channel_rendezvous_internal.h"
@@ -191,7 +191,7 @@ typedef struct XirString {
     char *bytes;
     size_t length, runes, capacity;
 } XirString;
-typedef struct XirPointerOrigin {
+struct XirPointerOrigin {
     _Atomic(uint32_t) references;
     XrXirDomain *domain;
     uint64_t generation;
@@ -199,7 +199,7 @@ typedef struct XirPointerOrigin {
     XirPageRecord *page;
     XrXirViewStorage *exclusive;
     uint32_t shared_views;
-} XirPointerOrigin;
+};
 typedef struct XirBufferStorage {
     XirObject object;
     void *data;

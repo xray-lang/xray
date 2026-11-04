@@ -59,7 +59,7 @@ typedef enum XrNativeTypeTerm {
     /* Nullary Unit/Never only; no NoSuspend, NoRoot or Sendable guarantee. */
     XR_NATIVE_TERM_UNIT_CALLBACK,
     XR_NATIVE_TERM_NULLABLE_I64_PAIR, XR_NATIVE_TERM_NULLABLE_ARRAY_U8,
-    XR_NATIVE_TERM_NULLABLE_ARRAY_STRING
+    XR_NATIVE_TERM_NULLABLE_ARRAY_STRING, XR_NATIVE_TERM_NULLABLE_PTR_U8
 } XrNativeTypeTerm;
 /* RESULT_VARIABLE and the callback terms require an admitted recipe's exact
  * signature. They never grant authority to an arbitrary unparsed signature. */
@@ -315,7 +315,11 @@ typedef enum XrNativeCallableId {
     XR_NATIVE_CALLABLE_SYS_PIPE_CLOSE = 100,
     XR_NATIVE_CALLABLE_SYS_PROCESS_SPAWN = 101,
     XR_NATIVE_CALLABLE_SYS_PROCESS_TRY_WAIT = 102,
-    XR_NATIVE_CALLABLE_SYS_PROCESS_KILL = 103
+    XR_NATIVE_CALLABLE_SYS_PROCESS_KILL = 103,
+    XR_NATIVE_CALLABLE_SYS_DYLIB_OPEN = 104,
+    XR_NATIVE_CALLABLE_SYS_DYLIB_SYMBOL = 105,
+    XR_NATIVE_CALLABLE_SYS_DYLIB_CLOSE = 106,
+    XR_NATIVE_CALLABLE_SYS_DYLIB_LAST_ERROR = 107
 } XrNativeCallableId;
 
 /* Callable IDs authenticate ordinary function bodies, independently of inline intrinsics. */

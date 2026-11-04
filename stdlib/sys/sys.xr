@@ -438,8 +438,10 @@ export class Dylib {
     close() -> bool {
         if (!this._open) { return true }
         var ok = __dylibClose(this._handle)
-        this._handle = 0
-        this._open = false
+        if (ok) {
+            this._handle = 0
+            this._open = false
+        }
         return ok
     }
 
