@@ -201,8 +201,36 @@ static XrXirCallStatus instance_environment_snapshot(XrXirCallView *view,XrXirIn
 
 #endif // XR_OS_WINDOWS
 
+#if defined(XR_OS_WINDOWS)
+static XrXirCallStatus instance_path_cwd_anchor(XirEnvironmentQuery *query,char *raw,
+    size_t *offset,size_t *length) {
+    size_t bytes=0,first_separator=SIZE_MAX;
+    while(raw[bytes]) {
+        if(!(bytes&4095u) && !instance_environment_current(query))return query->status;
+        if(raw[bytes]=='\\')raw[bytes]='/';
+        if(bytes>=2 && raw[bytes]=='/' && first_separator==SIZE_MAX)first_separator=bytes;
+        ++bytes;
+    }
+    if(!xr_xir_domain_work(query->domain,(uint64_t)bytes+1))return XR_XIR_CALL_LIMIT;
+    if(!instance_environment_current(query))return query->status;
+    size_t start=0;
+    bool drive=bytes>=3 && ((raw[0]>='A'&&raw[0]<='Z') || (raw[0]>='a'&&raw[0]<='z')) &&
+        raw[1]==':' && raw[2]=='/';
+    if(drive)start=2;
+    else {
+        // A host UNC anchor is distinct from a device or extended namespace.
+        bool unc=bytes>=5 && raw[0]=='/' && raw[1]=='/' && raw[2]!='/' &&
+            first_separator!=SIZE_MAX && first_separator>2 && first_separator+1<bytes &&
+            raw[first_separator+1]!='/';
+        bool device=bytes>=4 && (raw[2]=='?' || raw[2]=='.') && raw[3]=='/';
+        if(!unc || device)return XR_XIR_CALL_HOST_ERROR;
+    }
+    *offset=start;*length=bytes-start;return XR_XIR_CALL_READY;
+}
+#endif // XR_OS_WINDOWS
+
 static XrXirCallStatus instance_current_directory(XrXirCallView *view,XrXirInstance *instance,
-    XrXirValue *output) {
+    bool path_anchor,XrXirValue *output) {
     XirEnvironmentQuery query={view,instance->domain,XR_XIR_CALL_READY};
     if(!instance_environment_current(&query))return query.status;
     XrOsIoPolicy policy={&query,instance_environment_allocate,instance_environment_free};char *raw=NULL;
@@ -211,8 +239,17 @@ static XrXirCallStatus instance_current_directory(XrXirCallView *view,XrXirInsta
     if(status==XR_XIR_CALL_READY)status=instance_environment_status(queried);
     if(status==XR_XIR_CALL_READY)status=xr_xir_call_execution_status(view);
     if(status==XR_XIR_CALL_READY && !raw)status=XR_XIR_CALL_HOST_ERROR;
+    size_t offset=0,length=0;
     if(status==XR_XIR_CALL_READY) {
-        XrXirValueStatus copied=xr_xir_string_new(instance->domain,raw,strlen(raw),&result);
+#if defined(XR_OS_WINDOWS)
+        if(path_anchor)status=instance_path_cwd_anchor(&query,raw,&offset,&length);
+        else length=strlen(raw);
+#else
+        (void)path_anchor;length=strlen(raw);
+#endif
+    }
+    if(status==XR_XIR_CALL_READY) {
+        XrXirValueStatus copied=xr_xir_string_new(instance->domain,raw+offset,length,&result);
         status=copied==XR_XIR_VALUE_BAD_UTF8?XR_XIR_CALL_HOST_ERROR:value_call_status(copied);
     }
     instance_environment_free(&query,raw);

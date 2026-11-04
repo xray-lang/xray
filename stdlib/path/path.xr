@@ -1,7 +1,9 @@
 // path — pure-Xray cross-platform path manipulation (POSIX semantics).
 //
 // Every operation here is a pure string algorithm; the sole runtime dependency
-// is `os.getcwd()`, used by `resolve` to anchor relative inputs.
+// is a current-directory query used by `resolve` to anchor relative inputs.
+// Only this host anchor uses POSIX separators without a Windows drive prefix;
+// ordinary path arguments retain the POSIX parsing rules below.
 //
 // Semantics:
 //   * output always uses '/' as the separator;
