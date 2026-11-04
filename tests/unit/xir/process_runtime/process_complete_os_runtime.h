@@ -13,7 +13,8 @@
  */
 #ifndef PROCESS_COMPLETE_OS_RUNTIME_H
 #define PROCESS_COMPLETE_OS_RUNTIME_H
-enum {PROCESS_COMPLETE_OS_ENTRY,PROCESS_COMPLETE_OS_EXEC,PROCESS_COMPLETE_OS_FIELDS,PROCESS_COMPLETE_OS_COUNT};
+enum {PROCESS_COMPLETE_OS_ENTRY,PROCESS_COMPLETE_OS_EXEC,PROCESS_COMPLETE_OS_FIELDS,
+    PROCESS_COMPLETE_OS_OPEN,PROCESS_COMPLETE_OS_CLOSE,PROCESS_COMPLETE_OS_ORDINARY_CLOSE,PROCESS_COMPLETE_OS_COUNT};
 #if defined(XR_OS_WINDOWS)
 typedef struct ProcessCompleteOsRecord {DWORD pid,completed;uint64_t output_length,error_length;} ProcessCompleteOsRecord;
 typedef struct ProcessCompleteOsChild {
@@ -25,6 +26,8 @@ static unsigned process_complete_os_serial;
 static bool process_complete_os_observing,process_complete_os_oom,process_complete_os_pending;
 static unsigned process_complete_os_acquired,process_complete_os_retired,process_complete_os_hits;
 static unsigned process_complete_os_closed_ends[2];
+static unsigned process_complete_os_close_attempts[2],process_complete_os_disposals,process_complete_os_close_faults;
+static bool process_complete_os_fail_close;
 static size_t process_complete_os_allocation;
 static XrOsIoStatus process_complete_os_begin(XrOsPipeOwner *owner,const XrOsPipeRequest *request,
     const XrOsPipeQuery *query,XrOsPipeOperation *operation){
@@ -51,10 +54,23 @@ static XrOsIoStatus process_complete_os_operation_close(XrOsPipeOperation *opera
     return status;
 }
 static XrOsIoStatus process_complete_os_close_end(XrOsPipeOwner *owner,XrOsPipeEnd end,bool *closed){
+    if(process_complete_os_observing){
+        CHECK(end==XR_OS_PIPE_READ||end==XR_OS_PIPE_WRITE);++process_complete_os_close_attempts[end==XR_OS_PIPE_WRITE];
+        if(process_complete_os_fail_close&&end==XR_OS_PIPE_READ){
+            /* Inject a typed provider failure without consuming this endpoint. */
+            process_complete_os_fail_close=false;++process_complete_os_close_faults;
+            return XR_OS_IO_IO;
+        }
+    }
     XrOsIoStatus status=xr_os_io_pipe_close_end(owner,end,closed);
     if(process_complete_os_observing&&status==XR_OS_IO_OK&&closed&&*closed){
         CHECK(end==XR_OS_PIPE_READ||end==XR_OS_PIPE_WRITE);++process_complete_os_closed_ends[end==XR_OS_PIPE_WRITE];
     }
+    return status;
+}
+static XrOsIoStatus process_complete_os_dispose(XrOsPipeOwner *owner,bool *closed){
+    bool owned=owner&&owner->state!=NULL;XrOsIoStatus status=xr_os_io_pipe_dispose(owner,closed);
+    if(process_complete_os_observing&&owned&&status==XR_OS_IO_OK&&closed&&*closed)++process_complete_os_disposals;
     return status;
 }
 static void process_complete_os_open(ProcessCompleteOsChild *child,bool output){
@@ -130,6 +146,8 @@ static void process_complete_os_arm(bool oom){
     process_oom_prepares=process_oom_starts=0;process_oom_observing=true;process_complete_os_observing=true;process_complete_os_oom=oom;
     process_complete_os_pending=false;process_complete_os_acquired=process_complete_os_retired=process_complete_os_hits=0;
     process_complete_os_closed_ends[0]=process_complete_os_closed_ends[1]=0;
+    process_complete_os_close_attempts[0]=process_complete_os_close_attempts[1]=0;
+    process_complete_os_disposals=process_complete_os_close_faults=0;process_complete_os_fail_close=false;
 }
 static void process_complete_os_disarm(void){
     process_oom_observing=process_complete_os_observing=process_complete_os_oom=false;
@@ -179,6 +197,63 @@ static void process_complete_os_refusals(XrXirProgram *program,const uint32_t *i
     }
     CHECK(!process_oom_prepares&&!process_oom_starts&&!process_complete_os_acquired);xr_xir_value_drop(&text);process_retire(instance);process_complete_os_disarm();CHECK(runtime_live==live&&runtime_bytes==bytes);
 }
+static void process_complete_os_tokens(XrXirInstance *instance,const uint32_t *ids,int64_t tokens[2]){
+    XrXirValue opened=process_invoke(instance,ids[PROCESS_COMPLETE_OS_OPEN],NULL,0);const XrXirValue *tuple=process_some(&opened,true);
+    for(unsigned n=0;n<2;++n){
+        XrXirValue token={0};CHECK(xr_xir_tuple_get(tuple,n,&token)==XR_XIR_VALUE_OK&&token.type==XR_XIR_I64&&token.payload>0);
+        tokens[n]=token.payload;xr_xir_value_drop(&token);
+    }
+    CHECK(tokens[0]!=tokens[1]);xr_xir_value_drop(&opened);
+}
+static void process_complete_os_cleanup(XrXirInstance *instance,uint32_t entry,int64_t read,int64_t write,bool expected){
+    XrXirValue args[]={{XR_XIR_I64,0,read},{XR_XIR_I64,0,write}},result=process_invoke(instance,entry,args,2);
+    CHECK(result.type==XR_XIR_BOOL&&result.payload==expected);xr_xir_value_drop(&result);
+}
+static void process_complete_os_cleanup_refusals(XrXirProgram *program,const uint32_t *ids){
+    size_t live=runtime_live,bytes=runtime_bytes;XrXirInstance *a=process_instance(program,ids),*b=process_instance(program,ids);
+    int64_t first[2]={0},second[2]={0};process_complete_os_tokens(a,ids,first);process_complete_os_tokens(b,ids,second);
+    for(unsigned n=0;n<2;++n)for(unsigned m=0;m<2;++m)CHECK(first[n]!=second[m]);
+    CHECK(first[0]!=INT64_MAX&&first[1]!=INT64_MAX);process_complete_os_arm(false);
+    process_complete_os_cleanup(b,ids[PROCESS_COMPLETE_OS_CLOSE],first[0],first[1],false);
+    process_complete_os_cleanup(a,ids[PROCESS_COMPLETE_OS_CLOSE],first[1],first[0],false);
+    process_complete_os_cleanup(a,ids[PROCESS_COMPLETE_OS_CLOSE],INT64_MAX,-1,false);
+    CHECK(!process_complete_os_close_attempts[0]&&!process_complete_os_close_attempts[1]);
+    /* An unknown first endpoint cannot suppress closing the valid second one. */
+    process_complete_os_cleanup(a,ids[PROCESS_COMPLETE_OS_CLOSE],INT64_MAX,first[1],false);
+    CHECK(!process_complete_os_close_attempts[0]&&process_complete_os_close_attempts[1]==1&&process_complete_os_closed_ends[1]==1);
+    process_complete_os_cleanup(a,ids[PROCESS_COMPLETE_OS_ORDINARY_CLOSE],-1,first[1],false);
+    process_complete_os_cleanup(a,ids[PROCESS_COMPLETE_OS_CLOSE],first[0],-1,true);
+    CHECK(process_complete_os_close_attempts[0]==1&&process_complete_os_close_attempts[1]==1);
+    /* A genuinely closed first endpoint is stale, rather than absent. */
+    process_complete_os_cleanup(b,ids[PROCESS_COMPLETE_OS_ORDINARY_CLOSE],second[0],-1,true);
+    process_complete_os_cleanup(b,ids[PROCESS_COMPLETE_OS_CLOSE],second[0],second[1],false);
+    CHECK(process_complete_os_close_attempts[0]==2&&process_complete_os_close_attempts[1]==2&&
+        process_complete_os_closed_ends[0]==2&&process_complete_os_closed_ends[1]==2);
+    process_complete_os_cleanup(b,ids[PROCESS_COMPLETE_OS_CLOSE],second[0],second[1],false);
+    process_complete_os_cleanup(b,ids[PROCESS_COMPLETE_OS_CLOSE],-1,-1,true);
+    CHECK(process_complete_os_close_attempts[0]==2&&process_complete_os_close_attempts[1]==2);
+    process_retire(a);process_retire(b);process_complete_os_disarm();CHECK(runtime_live==live&&runtime_bytes==bytes);
+}
+static void process_complete_os_cleanup_fault(XrXirProgram *program,const uint32_t *ids){
+    size_t live=runtime_live,bytes=runtime_bytes;XrXirInstance *instance=process_instance(program,ids);int64_t tokens[2]={0};process_complete_os_tokens(instance,ids,tokens);
+    XrXirValue args[]={{XR_XIR_I64,0,tokens[0]},{XR_XIR_I64,0,tokens[1]}};process_complete_os_arm(false);process_complete_os_fail_close=true;
+    CHECK(xr_xir_instance_start(instance,ids[PROCESS_COMPLETE_OS_CLOSE],args,2)==XR_XIR_CALL_READY);
+    CHECK(process_drive(instance).outcome.status==XR_XIR_CALL_HOST_ERROR);XrXirValue result={0};
+    CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_HOST_ERROR&&!result.type&&!result.reserved&&!result.payload);
+    CHECK(process_complete_os_close_faults==1&&!process_complete_os_fail_close&&
+        process_complete_os_close_attempts[0]==1&&process_complete_os_close_attempts[1]==1&&
+        !process_complete_os_closed_ends[0]&&process_complete_os_closed_ends[1]==1&&!process_complete_os_disposals);
+    /* The failed read close remains a Root duty. Retirement never replays the guest. */
+    uint64_t started=xr_time_monotonic_ns();CHECK(started);
+    for(;;){
+        XrXirCallStatus status=xr_xir_instance_free(instance);
+        if(status!=XR_XIR_CALL_CLOSE_FAILED){CHECK(status==XR_XIR_CALL_HOST_ERROR);break;}
+        uint64_t now=xr_time_monotonic_ns();CHECK(now>=started&&now-started<UINT64_C(10000000000));xr_thread_yield();
+    }
+    CHECK(process_complete_os_disposals==1&&process_complete_os_close_faults==1&&
+        process_complete_os_close_attempts[0]==1&&process_complete_os_close_attempts[1]==1);
+    process_complete_os_disarm();CHECK(runtime_live==live&&runtime_bytes==bytes);
+}
 static void process_complete_os_failure(XrXirProgram *program,const uint32_t *ids,bool cancel){
     size_t live=runtime_live,bytes=runtime_bytes;XrXirInstance *instance=process_instance(program,ids);ProcessCompleteOsChild child;process_complete_os_open(&child,!cancel);
     char *command=process_complete_os_command(&child);XrXirValue text=process_string(instance,command);xr_free(command);
@@ -214,6 +289,8 @@ static void process_complete_os_execute(XrXirProgram *program,const uint32_t *id
     process_trace("complete os.exec capture enter");
     for(unsigned n=0;n<sizeof(limits)/sizeof(*limits);++n)process_complete_os_success(program,ids,limits[n]);
     process_trace("complete os.exec capture exit");process_complete_os_refusals(program,ids);
+    process_trace("complete os.exec cleanup refusals enter");process_complete_os_cleanup_refusals(program,ids);process_trace("complete os.exec cleanup refusals exit");
+    process_trace("complete os.exec cleanup fault enter");process_complete_os_cleanup_fault(program,ids);process_trace("complete os.exec cleanup fault exit");
     process_trace("complete os.exec cancel enter");process_complete_os_failure(program,ids,true);process_trace("complete os.exec cancel exit");
     process_trace("complete os.exec OOM enter");process_complete_os_failure(program,ids,false);process_trace("complete os.exec OOM exit");
 }

@@ -45,12 +45,14 @@ static XrOsIoStatus process_complete_os_begin(XrOsPipeOwner *,const XrOsPipeRequ
 static XrOsIoStatus process_complete_os_poll(XrOsPipeOperation *,XrOsPipeProgress *);
 static XrOsIoStatus process_complete_os_operation_close(XrOsPipeOperation *,bool *);
 static XrOsIoStatus process_complete_os_close_end(XrOsPipeOwner *,XrOsPipeEnd,bool *);
+static XrOsIoStatus process_complete_os_dispose(XrOsPipeOwner *,bool *);
 #define xr_os_io_process_prepare process_observed_prepare
 #define xr_os_io_process_start process_observed_start
 #define xr_os_io_pipe_begin process_complete_os_begin
 #define xr_os_io_pipe_poll process_complete_os_poll
 #define xr_os_io_pipe_operation_close process_complete_os_operation_close
 #define xr_os_io_pipe_close_end process_complete_os_close_end
+#define xr_os_io_pipe_dispose process_complete_os_dispose
 #endif
 #include "../xir_runtime_allocations.h"
 #if defined(XR_OS_WINDOWS)
@@ -60,6 +62,7 @@ static XrOsIoStatus process_complete_os_close_end(XrOsPipeOwner *,XrOsPipeEnd,bo
 #undef xr_os_io_pipe_poll
 #undef xr_os_io_pipe_operation_close
 #undef xr_os_io_pipe_close_end
+#undef xr_os_io_pipe_dispose
 #endif
 #include "process_cases.h"
 
