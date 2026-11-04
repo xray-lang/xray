@@ -162,9 +162,18 @@ static void process_child_tree(const char *base,ProcessChildRecord *record) {
     CHECK(CloseHandle(ready)&&CloseHandle(info.hThread)&&CloseHandle(info.hProcess));
 }
 static bool process_child(int argc,char **argv) {
-    if(argc<2||strcmp(argv[1],"--process-child"))return false;
-    CHECK(argc==4);const char *mode=argv[2],*base=argv[3];char name[160];process_object_name(base,"map",name);
-    HANDLE mapping=OpenFileMappingA(FILE_MAP_ALL_ACCESS,FALSE,name);CHECK(mapping);
+    char inherited[128]={0},name[160];HANDLE mapping=NULL;const char *mode=NULL,*base=NULL;
+    if(argc==1) {
+        static const char prefix[]="Local\\xray-process-";
+        DWORD length=GetEnvironmentVariableA("XR_PROCESS_NOARGS_CHILD",inherited,sizeof(inherited));
+        if(!length||length>=sizeof(inherited)||strncmp(inherited,prefix,sizeof(prefix)-1))return false;
+        process_object_name(inherited,"map",name);mapping=OpenFileMappingA(FILE_MAP_ALL_ACCESS,FALSE,name);
+        if(!mapping)return false;mode="hold";base=inherited;
+    } else {
+        if(strcmp(argv[1],"--process-child"))return false;
+        CHECK(argc==4);mode=argv[2];base=argv[3];process_object_name(base,"map",name);
+        mapping=OpenFileMappingA(FILE_MAP_ALL_ACCESS,FALSE,name);CHECK(mapping);
+    }
     ProcessChildRecord *record=MapViewOfFile(mapping,FILE_MAP_ALL_ACCESS,0,0,sizeof(ProcessChildRecord));CHECK(record);
     bool leaf=!strcmp(mode,"leaf");record->pid[leaf?1:0]=GetCurrentProcessId();
     HANDLE ready=process_event(base,leaf?"leaf-ready":"ready",false),release=process_event(base,leaf?"leaf-release":"release",false);
@@ -202,10 +211,23 @@ static XrXirValue process_spawn(XrXirInstance *instance,XrXirProgram *program,co
     }
     XrXirValue values[]={process_string(instance,"--process-child"),process_string(instance,mode),process_string(instance,child->name)},arguments={0};
     XrXirValueAdmission access={.arena=program->arena,.domain=instance->domain,.work=UINT64_MAX,.scratch_bytes=UINT64_MAX};
-    CHECK(xr_xir_array_new(program->entries[ids[PROCESS_SPAWN]].parameters[1],values,3,&access,&arguments)==XR_XIR_VALUE_OK);
+    bool noargs=!strcmp(mode,"noargs");
+    CHECK(xr_xir_array_new(program->entries[ids[PROCESS_SPAWN]].parameters[1],values,noargs?0u:3u,&access,&arguments)==XR_XIR_VALUE_OK);
     for(unsigned n=0;n<3;++n)xr_xir_value_drop(&values[n]);
     XrXirValue args[]={executable,arguments,cwd},optional={0};
+    wchar_t *previous=NULL;
+    if(noargs) {
+        /* Preserve the exact process-local value, including absence and UTF-16. */
+        SetLastError(ERROR_SUCCESS);DWORD required=GetEnvironmentVariableW(L"XR_PROCESS_NOARGS_CHILD",NULL,0),error=GetLastError();
+        if(required||error==ERROR_SUCCESS) {
+            size_t units=required?required:1;CHECK(units<=SIZE_MAX/sizeof(wchar_t));previous=xr_malloc(units*sizeof(wchar_t));CHECK(previous);
+            if(required)CHECK(GetEnvironmentVariableW(L"XR_PROCESS_NOARGS_CHILD",previous,required)==required-1);else previous[0]=0;
+        } else CHECK(error==ERROR_ENVVAR_NOT_FOUND);
+        wchar_t marker[128];CHECK(MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,child->name,-1,marker,128)>0);
+        CHECK(SetEnvironmentVariableW(L"XR_PROCESS_NOARGS_CHILD",marker));
+    }
     optional=process_invoke(instance,ids[entry],args,entry==PROCESS_CONFIGURED?3u:2u);
+    if(noargs) { CHECK(SetEnvironmentVariableW(L"XR_PROCESS_NOARGS_CHILD",previous));xr_free(previous); }
     for(unsigned n=0;n<3;++n)xr_xir_value_drop(&args[n]);return process_owned_some(&optional);
 }
 static void process_code(XrXirInstance *instance,uint32_t entry,const XrXirValue *process,int64_t expected) {
@@ -222,10 +244,10 @@ static void process_basic(XrXirProgram *program,const uint32_t *ids,uint32_t ent
     process_code(instance,ids[PROCESS_WAIT],&process,-1);xr_xir_value_drop(&process);xr_xir_value_drop(&token);
     process_retire(instance);CHECK(process_some(&code,true)->payload==(!strcmp(mode,"zero")?0:23));xr_xir_value_drop(&code);process_child_close(&child);
 }
-static void process_wait_resume(XrXirProgram *program,const uint32_t *ids) {
+static void process_wait_resume(XrXirProgram *program,const uint32_t *ids,const char *mode) {
     size_t live=runtime_live,bytes=runtime_bytes;
     XrXirInstance *instance=process_instance(program,ids);ProcessChild child;process_child_open(&child);
-    XrXirValue process=process_spawn(instance,program,ids,&child,"hold",PROCESS_SPAWN);process_child_observe(&child,false);
+    XrXirValue process=process_spawn(instance,program,ids,&child,mode,PROCESS_SPAWN);process_child_observe(&child,false);
     CHECK(xr_xir_instance_start(instance,ids[PROCESS_WAIT],&process,1)==XR_XIR_CALL_READY);
     uint64_t started=xr_time_monotonic_ns();CHECK(started);
     for(;;) {
@@ -381,7 +403,8 @@ static void process_execute(XrXirProgram *program,const uint32_t *ids) {
     size_t live=runtime_live,bytes=runtime_bytes;
     process_trace("basic enter");process_basic(program,ids,PROCESS_SPAWN,"hold");process_basic(program,ids,PROCESS_SPAWN,"zero");
     process_basic(program,ids,PROCESS_CONFIGURED,"configured");process_trace("basic exit");
-    process_trace("wait_resume enter");process_wait_resume(program,ids);process_trace("wait_resume exit");
+    process_trace("default_args enter");process_wait_resume(program,ids,"noargs");process_trace("default_args exit");
+    process_trace("wait_resume enter");process_wait_resume(program,ids,"hold");process_trace("wait_resume exit");
     process_trace("streams enter");process_streams(program,ids);process_trace("streams exit");
     process_trace("kill enter");process_kill_and_retire(program,ids,true);process_kill_and_retire(program,ids,false);process_trace("kill exit");
     process_trace("tree enter");process_detached_and_tree(program,ids,false);process_trace("tree exit");
