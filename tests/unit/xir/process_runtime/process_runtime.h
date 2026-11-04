@@ -228,7 +228,8 @@ static void process_kill_and_retire(XrXirProgram *program,const uint32_t *ids,bo
     if(kill) {
         process_bool(instance,ids[PROCESS_KILL],&process,true);process_child_done(child.leader,0,false);
         DWORD actual=0;CHECK(GetExitCodeProcess(child.leader,&actual)&&actual!=STILL_ACTIVE);
-        XrXirValue code=process_invoke(instance,ids[PROCESS_WAIT],&process,1);CHECK(code.type==XR_XIR_I64&&code.payload==actual);xr_xir_value_drop(&code);
+        /* Portable forced termination is -1, rather than the raw Win32 code. */
+        CHECK(actual==UINT32_C(0xe0000001));process_code(instance,ids[PROCESS_WAIT],&process,-1);
     }
     xr_xir_value_drop(&process);process_retire(instance);process_child_done(child.leader,0,false);process_child_close(&child);
 }
