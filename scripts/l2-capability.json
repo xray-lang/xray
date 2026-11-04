@@ -957,7 +957,9 @@
         "src/xir/xxir_view_origins.inc.c",
         "src/xir/xxir_view_roots.inc.c",
         "src/xir/xxir_view_types.inc.c",
-        "src/xir/xxir_view_pointer_calls.inc.c"
+        "src/xir/xxir_view_pointer_calls.inc.c",
+        "src/xir/xxir_view_access.inc.c",
+        "src/xir/xxir_view_loan_origins.inc.c"
       ],
       "reason": "Real CPU and Path host calls preserve canonical permissions, ownership, cancellation, and the scalar runtime closure.",
       "tests": [
