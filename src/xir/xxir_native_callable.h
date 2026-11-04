@@ -124,6 +124,11 @@ static inline XrXirStatus xir_native_callable_verify(const XrXirModule *module,u
             if(!xir_io_native_scope(module->declarations,module->types,index,module->function_count,
                 function->parameters[p],&field))return XR_XIR_BAD_TYPE;
     }
+    if(id->native_callable==XR_NATIVE_CALLABLE_SYS_DYLIB_OPEN) {
+        uint32_t field=0;
+        if(function->parameter_count!=1||!function->parameters||!xir_sys_dylib_path_scope(module->declarations,
+            module->types,index,module->function_count,function->parameters[0],&field))return XR_XIR_BAD_TYPE;
+    }
     if(xir_sys_native_id(id->native_callable) &&
         !xir_sys_native_scope(module->declarations,index,module->function_count))return XR_XIR_BAD_TYPE;
     if(xir_os_native_id(id->native_callable) &&

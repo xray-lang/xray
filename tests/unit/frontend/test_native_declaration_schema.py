@@ -1004,5 +1004,40 @@ class SysProcessDeclarations(unittest.TestCase):
                     schema.render_sys_processes([replace(r, **{key: value}) if r is row else r for r in self.declarations])
 
 
+class SysDylibDeclarations(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / 'tools/stdlibgen'))
+        from stdlibgen import parse_defs
+        cls.declarations = parse_defs(ROOT)
+
+    def test_dylib_complete_heads_and_owned_thread_error(self):
+        lines, rows = schema.render_sys_dylibs(self.declarations)
+        self.assertEqual(len(rows), 4)
+        self.assertIn('XR_NATIVE_TERM_NULLABLE_PTR_U8', '\n'.join(lines))
+        for row, name in zip(rows, ('OPEN', 'SYMBOL', 'CLOSE', 'LAST_ERROR')):
+            self.assertIn('XR_NATIVE_CALLABLE_SYS_DYLIB_' + name + ', NULL,', row)
+        last = next(r for r in self.declarations if r.module == 'sys' and r.name == '__dylibLastError')
+        self.assertEqual(last.return_ownership, 'fresh')
+
+    def test_dylib_complete_contract_mutations_are_rejected(self):
+        for name in ('__dylibOpen', '__dylibSymbol', '__dylibClose', '__dylibLastError'):
+            row = next(r for r in self.declarations if r.module == 'sys' and r.name == name)
+            for changed in ([r for r in self.declarations if r is not row], self.declarations + [row]):
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    schema.render_sys_dylibs(changed)
+            changes = [('module', 'other'), ('signature', '(): bool'), ('argc', '9'), ('arg_spec', 'x'),
+                ('visibility', 'public'), ('effect', 'other'), ('allocation', 'no_heap'),
+                ('return_ownership', 'borrowed'), ('layer', 'core'), ('vm', 'other'), ('aot', 'other'),
+                ('aot_direct', False), ('aot_kind', 'builtin'), ('link_object', 'other'),
+                ('vm_binding', 'yieldable'), ('vm_ifdef', 'OTHER'), ('define', 'OTHER'), ('ret', 'i64'),
+                ('semantic_intrinsic', True), ('caps', ('task',)), ('suspension_kind', 'task'),
+                ('provider_declaration', object())]
+            for key, value in changes:
+                self.assertNotEqual(getattr(row, key), value)
+                with self.subTest(name=name, field=key), self.assertRaises(ValueError):
+                    schema.render_sys_dylibs([replace(r, **{key: value}) if r is row else r for r in self.declarations])
+
+
 if __name__ == '__main__':
     unittest.main()
