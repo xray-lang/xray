@@ -209,18 +209,39 @@ static XrXirValue process_spawn(XrXirInstance *instance,XrXirProgram *program,co
     for(unsigned n=0;n<3;++n)xr_xir_value_drop(&args[n]);return process_owned_some(&optional);
 }
 static void process_code(XrXirInstance *instance,uint32_t entry,const XrXirValue *process,int64_t expected) {
-    XrXirValue result=process_invoke(instance,entry,process,1);CHECK(result.type==XR_XIR_I64&&result.payload==(uint64_t)expected);xr_xir_value_drop(&result);
+    XrXirValue result=process_invoke(instance,entry,process,1);CHECK(result.type==XR_XIR_I64&&result.payload==expected);xr_xir_value_drop(&result);
 }
 static void process_basic(XrXirProgram *program,const uint32_t *ids,uint32_t entry,const char *mode) {
     XrXirInstance *instance=process_instance(program,ids);ProcessChild child;process_child_open(&child);
     XrXirValue process=process_spawn(instance,program,ids,&child,mode,entry);process_child_observe(&child,false);
-    XrXirValue token=process_invoke(instance,ids[PROCESS_ID],&process,1);CHECK(token.type==XR_XIR_I64&&(int64_t)token.payload>0);
+    XrXirValue token=process_invoke(instance,ids[PROCESS_ID],&process,1);CHECK(token.type==XR_XIR_I64&&token.payload>0);
     XrXirValue pending=process_invoke(instance,ids[PROCESS_TRY_WAIT],&process,1);process_some(&pending,false);xr_xir_value_drop(&pending);
     CHECK(SetEvent(child.release));process_child_done(child.leader,!strcmp(mode,"zero")?0u:23u,true);
     XrXirValue code=process_invoke(instance,ids[PROCESS_TRY_WAIT],&process,1);
-    CHECK(process_some(&code,true)->type==XR_XIR_I64&&process_some(&code,true)->payload==(!strcmp(mode,"zero")?0u:23u));
+    CHECK(process_some(&code,true)->type==XR_XIR_I64&&process_some(&code,true)->payload==(!strcmp(mode,"zero")?0:23));
     process_code(instance,ids[PROCESS_WAIT],&process,-1);xr_xir_value_drop(&process);xr_xir_value_drop(&token);
-    process_retire(instance);CHECK(process_some(&code,true)->payload==(!strcmp(mode,"zero")?0u:23u));xr_xir_value_drop(&code);process_child_close(&child);
+    process_retire(instance);CHECK(process_some(&code,true)->payload==(!strcmp(mode,"zero")?0:23));xr_xir_value_drop(&code);process_child_close(&child);
+}
+static void process_wait_resume(XrXirProgram *program,const uint32_t *ids) {
+    size_t live=runtime_live,bytes=runtime_bytes;
+    XrXirInstance *instance=process_instance(program,ids);ProcessChild child;process_child_open(&child);
+    XrXirValue process=process_spawn(instance,program,ids,&child,"hold",PROCESS_SPAWN);process_child_observe(&child,false);
+    CHECK(xr_xir_instance_start(instance,ids[PROCESS_WAIT],&process,1)==XR_XIR_CALL_READY);
+    uint64_t started=xr_time_monotonic_ns();CHECK(started);
+    for(;;) {
+        XrXirInstanceResult event=xr_xir_instance_poll_bounded(instance,64);
+        if(event.outcome.status==XR_XIR_CALL_SUSPENDED) {
+            XrXirWaitRequest request={0};CHECK(xr_xir_instance_wait_request(instance,event.epoch,event.outcome.wake,&request)==XR_XIR_CALL_READY);
+            CHECK(request.kind==XR_XIR_WAIT_TIMER_MS&&request.after_ms>0&&SetEvent(child.release));
+            process_resume(instance,event);break;
+        }
+        CHECK(event.outcome.status==XR_XIR_CALL_READY);uint64_t now=xr_time_monotonic_ns();
+        CHECK(now>=started&&now-started<UINT64_C(10000000000));
+    }
+    CHECK(process_drive(instance).outcome.status==XR_XIR_CALL_RETURNED);XrXirValue result={0};
+    CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED&&result.type==XR_XIR_I64&&result.payload==23);
+    process_child_done(child.leader,23,true);xr_xir_value_drop(&result);xr_xir_value_drop(&process);
+    process_retire(instance);process_child_close(&child);CHECK(runtime_live==live&&runtime_bytes==bytes);
 }
 static void process_kill_and_retire(XrXirProgram *program,const uint32_t *ids,bool kill) {
     XrXirInstance *instance=process_instance(program,ids);ProcessChild child;process_child_open(&child);
@@ -253,19 +274,19 @@ static void process_refusals(XrXirProgram *program,const uint32_t *ids) {
     XrXirInstance *a=process_instance(program,ids),*b=process_instance(program,ids);
     ProcessChild child;process_child_open(&child);XrXirValue process=process_spawn(a,program,ids,&child,"hold",PROCESS_SPAWN);
     process_child_observe(&child,false);XrXirValue token=process_invoke(a,ids[PROCESS_ID],&process,1);
-    CHECK(token.type==XR_XIR_I64&&(int64_t)token.payload>0);
+    CHECK(token.type==XR_XIR_I64&&token.payload>0);
     XrXirValue rejected[]={token,{XR_XIR_I64,0,0},{XR_XIR_I64,0,INT64_MAX}};
     for(unsigned n=0;n<3;++n) {
         XrXirValue result=process_invoke(b,ids[PROCESS_RAW_WAIT],&rejected[n],1);
-        CHECK(process_some(&result,true)->type==XR_XIR_I64&&process_some(&result,true)->payload==UINT64_MAX);xr_xir_value_drop(&result);
+        CHECK(process_some(&result,true)->type==XR_XIR_I64&&process_some(&result,true)->payload==-1);xr_xir_value_drop(&result);
         process_bool(b,ids[PROCESS_RAW_KILL],&rejected[n],false);
     }
     CHECK(WaitForSingleObject(child.leader,0)==WAIT_TIMEOUT);xr_xir_value_drop(&process);process_retire(a);process_child_done(child.leader,0,false);
     XrXirInstance *fresh=process_instance(program,ids);XrXirValue stale=process_invoke(fresh,ids[PROCESS_RAW_WAIT],&token,1);
-    CHECK(process_some(&stale,true)->payload==UINT64_MAX);xr_xir_value_drop(&stale);process_bool(fresh,ids[PROCESS_RAW_KILL],&token,false);
+    CHECK(process_some(&stale,true)->payload==-1);xr_xir_value_drop(&stale);process_bool(fresh,ids[PROCESS_RAW_KILL],&token,false);
     ProcessChild next;process_child_open(&next);XrXirValue replacement=process_spawn(fresh,program,ids,&next,"hold",PROCESS_SPAWN);
     process_child_observe(&next,false);XrXirValue next_token=process_invoke(fresh,ids[PROCESS_ID],&replacement,1);
-    CHECK(next_token.type==XR_XIR_I64&&(int64_t)next_token.payload>0&&next_token.payload!=token.payload);
+    CHECK(next_token.type==XR_XIR_I64&&next_token.payload>0&&next_token.payload!=token.payload);
     xr_xir_value_drop(&next_token);xr_xir_value_drop(&replacement);xr_xir_value_drop(&token);
     process_retire(fresh);process_child_done(next.leader,0,false);process_child_close(&next);process_retire(b);process_child_close(&child);
 }
@@ -306,7 +327,7 @@ static void process_streams(XrXirProgram *program,const uint32_t *ids) {
     XrXirValueAdmission access={.arena=program->arena,.domain=instance->domain,.work=UINT64_MAX,.scratch_bytes=UINT64_MAX};
     CHECK(xr_xir_array_new(program->entries[ids[PROCESS_PIPE_WRITE]].parameters[1],elements,sizeof(process_input),&access,&data)==XR_XIR_VALUE_OK);
     XrXirValue args[]={pipes[0],data},written=process_invoke(instance,ids[PROCESS_PIPE_WRITE],args,2);
-    CHECK(written.type==XR_XIR_I64&&written.payload==sizeof(process_input));xr_xir_value_drop(&written);
+    CHECK(written.type==XR_XIR_I64&&written.payload==(int64_t)sizeof(process_input));xr_xir_value_drop(&written);
     /* Inheritable copies belong to the child. These original endpoints remain
      * owned and closeable by their original Pipe instances. */
     process_bool(instance,ids[PROCESS_PIPE_CLOSE_READ],&pipes[0],true);
@@ -315,7 +336,7 @@ static void process_streams(XrXirProgram *program,const uint32_t *ids) {
     process_bool(instance,ids[PROCESS_PIPE_CLOSE_WRITE],&pipes[2],true);
     process_read_bytes(instance,ids,&pipes[1],process_input,sizeof(process_input));process_read_bytes(instance,ids,&pipes[2],process_error,sizeof(process_error));
     process_child_done(child.leader,23,true);process_code(instance,ids[PROCESS_WAIT],&process,23);
-    access=process_access(&data);int64_t length=-1;CHECK(xr_xir_array_len(&data,&access,&length)==XR_XIR_VALUE_OK&&length>=0&&(uint64_t)length==sizeof(process_input));
+    access=process_access(&data);int64_t length=-1;CHECK(xr_xir_array_len(&data,&access,&length)==XR_XIR_VALUE_OK&&length==(int64_t)sizeof(process_input));
     for(unsigned n=0;n<sizeof(process_input);++n) {
         XrXirValue byte={0};XrXirFaultDetail fault={0};CHECK(xr_xir_array_get(&data,n,&access,&byte,&fault)==XR_XIR_VALUE_OK&&byte.payload==process_input[n]);xr_xir_value_drop(&byte);
     }
@@ -360,6 +381,7 @@ static void process_execute(XrXirProgram *program,const uint32_t *ids) {
     size_t live=runtime_live,bytes=runtime_bytes;
     process_trace("basic enter");process_basic(program,ids,PROCESS_SPAWN,"hold");process_basic(program,ids,PROCESS_SPAWN,"zero");
     process_basic(program,ids,PROCESS_CONFIGURED,"configured");process_trace("basic exit");
+    process_trace("wait_resume enter");process_wait_resume(program,ids);process_trace("wait_resume exit");
     process_trace("streams enter");process_streams(program,ids);process_trace("streams exit");
     process_trace("kill enter");process_kill_and_retire(program,ids,true);process_kill_and_retire(program,ids,false);process_trace("kill exit");
     process_trace("tree enter");process_detached_and_tree(program,ids,false);process_trace("tree exit");
