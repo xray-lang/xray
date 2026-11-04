@@ -63,6 +63,21 @@ static void root_signal_canonical_owner(const XrXirCompileContext *context,const
     CHECK(effect_invocation_native_root(&invalid,selected,&native)==XR_XIR_BAD_TYPE && !native);
     effect_body_material_free(full);effect_ordinary_free(ordinary);effect_body_material_free(initial);effect_input_facts_free(facts);
 }
+/* These synchronous metadata views borrow the still-live complete owner.
+ * Interior self references belong to the view; no view is retained or freed. */
+static void root_signal_material_view(EffectBodyMaterial *view,const EffectBodyMaterial *owner) {
+    *view=*owner;view->domain.types=&view->terms.types;
+    if(view->domain.defaults)view->domain.defaults=&view->defaults;
+}
+static void root_signal_io_suspend(const XrXirCompileContext *context,const EffectBodyMaterial *body,
+    uint32_t function,XrXirStatus expected,bool expected_suspend,const char *phase) {
+    CHECK(effect_body_material_shape(body));EffectBodyRequest read=effect_body_owned_request(context,body);
+    CHECK(read.owner==body);bool suspend=false;
+    XrXirStatus status=effect_control_native_suspend(&read,function,&suspend);
+    if(status!=expected||suspend!=expected_suspend)
+        fprintf(stderr,"IO canonical %s status%u expected%u suspend%u expected%u\n",phase,status,expected,(unsigned)suspend,(unsigned)expected_suspend);
+    CHECK(status==expected&&suspend==expected_suspend);
+}
 static void root_signal_io_canonical_owner(const XrXirCompileContext *context) {
     XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
     static const char input[]="import {Path} from path\nexport fn flush(handle:i64)->bool{return __fileFlush(handle)}\n";
@@ -91,23 +106,27 @@ static void root_signal_io_canonical_owner(const XrXirCompileContext *context) {
      * owners. The primitive must still find its actual canonical declaration. */
     uint32_t selected=UINT32_MAX;
     for(uint32_t f=0;f<effect_body_count(full);++f)if(full->declarations->functions[f].native_callable==112u){selected=f;break;}
-    CHECK(selected!=UINT32_MAX);EffectBodyRequest read=effect_body_owned_request(context,full);bool suspend=false;
-    CHECK(effect_control_native_suspend(&read,selected,&suspend)==XR_XIR_OK&&suspend);
-    EffectBodyMaterial invalid=*full;invalid.canonical_source=NULL;read=effect_body_owned_request(context,&invalid);suspend=false;
-    CHECK(effect_control_native_suspend(&read,selected,&suspend)==XR_XIR_BAD_STRUCTURE&&!suspend);
+    CHECK(selected!=UINT32_MAX);root_signal_io_suspend(context,full,selected,XR_XIR_OK,true,"owned");
+    EffectBodyMaterial invalid;root_signal_material_view(&invalid,full);
+    root_signal_io_suspend(context,&invalid,selected,XR_XIR_OK,true,"legal view");
+    invalid.canonical_source=NULL;
+    root_signal_io_suspend(context,&invalid,selected,XR_XIR_BAD_STRUCTURE,false,"missing source");
     EffectBodyOrdinaryIdentity identities[256];CHECK(effect_body_count(full)<256);
     memcpy(identities,full->ordinary_identities,effect_body_count(full)*sizeof(*identities));
-    invalid=*full;invalid.ordinary_identities=identities;
+    root_signal_material_view(&invalid,full);invalid.ordinary_identities=identities;
+    root_signal_io_suspend(context,&invalid,selected,XR_XIR_OK,true,"legal map copy");
     identities[selected].declaration=full->canonical_source->declarations->entry_function;
     CHECK(identities[selected].declaration<effect_body_count(full->canonical_source)&&
         full->canonical_source->declarations->functions[identities[selected].declaration].native_callable!=112u);
-    read=effect_body_owned_request(context,&invalid);suspend=false;
-    CHECK(effect_control_native_suspend(&read,selected,&suspend)==XR_XIR_BAD_STRUCTURE&&!suspend);
-    EffectBodyMaterial changed=*full->canonical_source;EffectBodyFunction heads[256];
+    root_signal_io_suspend(context,&invalid,selected,XR_XIR_BAD_STRUCTURE,false,"wrong declaration");
+    EffectBodyMaterial changed;root_signal_material_view(&changed,full->canonical_source);EffectBodyFunction heads[256];
     CHECK(effect_body_count(&changed)<256);memcpy(heads,changed.functions,effect_body_count(&changed)*sizeof(*heads));
-    changed.functions=heads;heads[full->ordinary_identities[selected].declaration].result=XR_XIR_I64;
-    invalid=*full;invalid.canonical_source=&changed;read=effect_body_owned_request(context,&invalid);suspend=false;
-    CHECK(effect_control_native_suspend(&read,selected,&suspend)==XR_XIR_BAD_TYPE&&!suspend);
+    changed.functions=heads;uint32_t declaration=full->ordinary_identities[selected].declaration;
+    root_signal_io_suspend(context,&changed,declaration,XR_XIR_OK,true,"legal canonical copy");
+    root_signal_material_view(&invalid,full);invalid.canonical_source=&changed;
+    root_signal_io_suspend(context,&invalid,selected,XR_XIR_OK,true,"legal canonical view");
+    heads[declaration].result=XR_XIR_I64;
+    root_signal_io_suspend(context,&invalid,selected,XR_XIR_BAD_TYPE,false,"wrong canonical result");
     effect_body_material_free(full);
     CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK&&after.held_bytes==before.held_bytes);
 }
