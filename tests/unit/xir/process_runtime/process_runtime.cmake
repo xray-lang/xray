@@ -13,6 +13,7 @@ add_custom_command(OUTPUT "${process_runtime_generated}/process_runtime.c"
         "${process_runtime_dir}/process_cases.h"
         "${process_runtime_dir}/process_runtime.h"
         "${PROJECT_SOURCE_DIR}/stdlib/sys/sys.xr"
+        "${PROJECT_SOURCE_DIR}/stdlib/path/path.xr"
         "${PROJECT_SOURCE_DIR}/stdlib/time/time.xr"
     VERBATIM)
 
