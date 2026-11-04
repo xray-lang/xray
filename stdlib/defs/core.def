@@ -855,6 +855,20 @@ module regex {
 }
 
 module os {
+  fn __execShellSpawn {
+    signature: "(command: string, stdoutToken: i64, stderrToken: i64): i64"
+    doc: "Prepare and publish a system shell with owned output redirections"
+    vm: ""
+    aot: ""
+    argc: 3
+    arg_spec: "sii"
+    aot_direct: false
+    link_object: false
+    layer: "system"
+    visibility: "internal"
+    return_ownership: "fresh"
+  }
+
   fn __execPipeClose {
     signature: "(readToken: i64, writeToken: i64): bool"
     doc: "Close shell capture endpoints owned by the current execution root"

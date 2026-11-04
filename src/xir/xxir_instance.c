@@ -1953,8 +1953,10 @@ XR_FUNC XrXirCallStatus xr_xir_instance_call_at(XrXirCallView *view,uint32_t ins
         return instance_signal_stage(view,instruction,entry,arguments,count);
     if(entry<instance->program->entry_count&&xir_path_native_id(instance->program->declarations->functions[entry].native_callable))
         return count?XR_XIR_CALL_BAD_ARGUMENT:instance_path_stage(view,instruction,entry);
-    if(entry<instance->program->entry_count&&xir_os_exec_native_id(instance->program->declarations->functions[entry].native_callable))
+    if(entry<instance->program->entry_count&&xir_os_exec_close_id(instance->program->declarations->functions[entry].native_callable))
         return instance_exec_pipe_stage(view,instruction,entry,arguments,count);
+    if(entry<instance->program->entry_count&&xir_os_exec_shell_id(instance->program->declarations->functions[entry].native_callable))
+        return instance_process_stage(view,instruction,entry,arguments,count);
     if(entry<instance->program->entry_count &&
         xir_sys_dylib_id(instance->program->declarations->functions[entry].native_callable))
         return instance_dylib_stage(view,instruction,entry,arguments,count);
@@ -2584,10 +2586,10 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
     for (uint32_t p=0;p<entry->parameter_count;++p)
         if (!xr_xir_value_argument(&view->arguments[p],view->arena,entry->parameters[p])) goto failed;
     if(xir_sys_dylib_id(id))return instance_dylib_resume(view,instance,id,entry);
-    if(xir_sys_process_id(id))return instance_process_resume(view,instance,id,entry);
+    if(xir_sys_process_id(id)||xir_os_exec_shell_id(id))return instance_process_resume(view,instance,id,entry);
     if(xir_sys_pipe_id(id))return instance_pipe_resume(view,instance,id,entry);
     if(xir_path_native_id(id))return instance_path_resume(view,instance);
-    if(xir_os_exec_native_id(id))return instance_exec_pipe_resume(view,instance);
+    if(xir_os_exec_close_id(id))return instance_exec_pipe_resume(view,instance);
     XrXirValue *state=view->state;
     if (state->type || state->reserved || state->payload) goto failed;
     value=state;

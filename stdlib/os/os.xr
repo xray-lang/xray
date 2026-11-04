@@ -1,7 +1,7 @@
 // os — typed public process/environment surface over private platform syscalls.
 
 import sys
-import { Pipe, ProcessOptions } from sys
+import { Pipe, Process, ProcessOptions } from sys
 
 const EXEC_READ_CHUNK_BYTES: i64 = 65536
 const DEFAULT_EXEC_CAPTURE_BYTES: i64 = 16777216
@@ -187,15 +187,16 @@ export fn exec(command: string, maxStdoutBytes: i64 = DEFAULT_EXEC_CAPTURE_BYTES
     stderrRead = stderrPipe.readEnd()
     stderrWrite = stderrPipe.writeEnd()
 
-    var program = "/bin/sh"
-    var args: Array<string> = ["-c", command]
+    var spawned: Process? = null
     if (platform() == "windows") {
-        program = "cmd.exe"
-        args = ["/D", "/S", "/C", command]
+        var id = __execShellSpawn(command, stdoutWrite, stderrWrite)
+        if (id > 0) { spawned = Process(id, false) }
+    } else {
+        var program = "/bin/sh"
+        var args: Array<string> = ["-c", command]
+        spawned = sys.Process.spawn(program, args,
+            ProcessOptions(null, null, null, stdoutWrite, stderrWrite))
     }
-
-    var spawned = sys.Process.spawn(program, args,
-        ProcessOptions(null, null, null, stdoutWrite, stderrWrite))
     if (spawned == null) { return null }
 
     // Process.spawn borrows redirection endpoints. The parent must close both

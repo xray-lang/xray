@@ -7,6 +7,11 @@
  * process_owned_unix.c - Closed boundary until owned child retirement is available
  */
 #include "../os_process_owned.h"
+XR_FUNC XrOsIoStatus xr_os_io_process_prepare_shell(const XrOsIoPolicy *memory,
+    const XrOsProcessQuery *query,const XrOsProcessRequest *request,
+    const XrOsProcessText *command,XrOsProcessOwner *owner,bool *created) {
+    (void)memory;(void)query;(void)request;(void)command;(void)owner;(void)created;return XR_OS_IO_UNSUPPORTED;
+}
 XR_FUNC XrOsIoStatus xr_os_io_process_prepare(const XrOsIoPolicy *memory,
     const XrOsProcessQuery *query,const XrOsProcessRequest *request,XrOsProcessOwner *owner,bool *created) {
     (void)memory;(void)query;(void)request;(void)owner;(void)created;return XR_OS_IO_UNSUPPORTED;

@@ -82,11 +82,15 @@ static char *owned_process_text(OwnedProcessBuild *build,XrOsProcessText text) {
     if(status!=XR_OS_IO_OK)build->status=status;
     return output;
 }
-XR_FUNC XrOsIoStatus xr_os_io_process_prepare(const XrOsIoPolicy *memory,
-    const XrOsProcessQuery *query,const XrOsProcessRequest *request,XrOsProcessOwner *owner,bool *created) {
+#include "process_shell_win.inc.c"
+static XrOsIoStatus owned_process_prepare(const XrOsIoPolicy *memory,
+    const XrOsProcessQuery *query,const XrOsProcessRequest *request,
+    const XrOsProcessText *shell,XrOsProcessOwner *owner,bool *created) {
     if(!memory||!memory->context||!memory->alloc||!memory->free||!request||!owner||owner->state||owner->busy||
         !created||(query&&!query->current)||(request->argument_count&&!request->arguments)||
         (request->environment_count&&(!request->env_keys||!request->env_values)))return XR_OS_IO_BAD_ARGUMENT;
+    if(shell&&(request->program.text||request->program.length||request->arguments||request->argument_count||request->detached))
+        return XR_OS_IO_BAD_ARGUMENT;
     for(uint32_t i=0;i<3;++i)if(request->redirected[i]&&
         (!request->streams[i]||request->streams[i]==(intptr_t)INVALID_HANDLE_VALUE))return XR_OS_IO_BAD_ARGUMENT;
     owner->busy=true;OwnedProcessBuild build={memory,query,XR_OS_IO_OK};OwnedProcessState *state=NULL;
@@ -102,7 +106,7 @@ XR_FUNC XrOsIoStatus xr_os_io_process_prepare(const XrOsIoPolicy *memory,
     count=request->argument_count+3+request->environment_count*2;
     if(count>SIZE_MAX/sizeof(*texts)){build.status=XR_OS_IO_OVERFLOW;goto done;}
     status=owned_process_allocate(&build,count*sizeof(*texts),(void **)&texts);if(status!=XR_OS_IO_OK)goto done;
-    memset(texts,0,count*sizeof(*texts));texts[0]=owned_process_text(&build,request->program);
+    memset(texts,0,count*sizeof(*texts));texts[0]=owned_process_text(&build,shell?*shell:request->program);
     for(size_t i=0;i<request->argument_count&&build.status==XR_OS_IO_OK;++i)
         texts[i+1]=owned_process_text(&build,request->arguments[i]);
     size_t at=request->argument_count+2;
@@ -117,7 +121,9 @@ XR_FUNC XrOsIoStatus xr_os_io_process_prepare(const XrOsIoPolicy *memory,
     if(!*texts[0]||refused){refused=true;goto done;}
     XrProcMemory text_memory={&build,owned_process_text_allocate,owned_process_free};
     ProcBuild text={.memory=text_memory,.status=XR_PROC_OK,.query_context=&build,.current=owned_process_current};
-    command=proc_command(&text,(const char *const *)texts);program=proc_wide(&text,texts[0]);
+    if(shell)command=owned_process_shell_command(&text,texts[0],&program,&refused);
+    else {command=proc_command(&text,(const char *const *)texts);program=proc_wide(&text,texts[0]);}
+    if(refused)goto done;
     if(request->cwd&&text.status==XR_PROC_OK)cwd=proc_wide(&text,texts[request->argument_count+2]);
     if(text.status!=XR_PROC_OK){status=owned_process_text_status(text.status);goto done;}
     if(!proc_exact_program(program)) {
@@ -194,6 +200,16 @@ done:
     if(build.status!=XR_OS_IO_OK)status=build.status;
     if(status==XR_OS_IO_OK)*created=!refused&&state&&state->prepared;
     owner->busy=false;return status;
+}
+XR_FUNC XrOsIoStatus xr_os_io_process_prepare(const XrOsIoPolicy *memory,
+    const XrOsProcessQuery *query,const XrOsProcessRequest *request,XrOsProcessOwner *owner,bool *created) {
+    return owned_process_prepare(memory,query,request,NULL,owner,created);
+}
+XR_FUNC XrOsIoStatus xr_os_io_process_prepare_shell(const XrOsIoPolicy *memory,
+    const XrOsProcessQuery *query,const XrOsProcessRequest *request,
+    const XrOsProcessText *command,XrOsProcessOwner *owner,bool *created) {
+    if(!command)return XR_OS_IO_BAD_ARGUMENT;
+    return owned_process_prepare(memory,query,request,command,owner,created);
 }
 XR_FUNC XrOsIoStatus xr_os_io_process_start(XrOsProcessOwner *owner) {
     OwnedProcessState *state=owned_process_state(owner);

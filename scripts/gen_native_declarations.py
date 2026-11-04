@@ -1275,6 +1275,32 @@ def render_sys_processes(declarations):
     return lines, rows
 
 
+def render_os_exec_shell_spawn(declarations):
+    candidates = [r for r in declarations if r.module == 'os' and r.name == '__execShellSpawn']
+    if len(candidates) != 1:
+        raise ValueError('System shell spawn requires its sole governed declaration')
+    row = candidates[0]
+    if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+            row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct, row.aot_kind,
+            row.link_object, row.vm_binding, row.vm_ifdef, row.define, row.ret,
+            row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
+            '(command: string, stdoutToken: i64, stderrToken: i64): i64', '3', 'sii', 'internal', '', '', 'fresh', 'system', '', '', False, '',
+            '', 'normal', '', '', 'value', False, None, (), ''):
+        raise ValueError('System shell spawn differs from its complete source contract')
+    return [
+        'static const XrNativeParameter xr_native_os_exec_shell_spawn_parameters[] = {',
+        '    {"command", "string", XR_NATIVE_TERM_STRING, false, false},',
+        '    {"stdoutToken", "i64", XR_NATIVE_TERM_I64, false, false},',
+        '    {"stderrToken", "i64", XR_NATIVE_TERM_I64, false, false},',
+        '};',
+        'static const XrNativeMemberDeclaration xr_native_os_exec_shell_spawn = {',
+        '    1, "__execShellSpawn", "(command: string, stdoutToken: i64, stderrToken: i64): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,',
+        '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
+        '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_os_exec_shell_spawn_parameters, 3, XR_NATIVE_TERM_I64,',
+        '};',
+    ], ['    {XR_NATIVE_CALLABLE_OS_EXEC_SHELL_SPAWN, NULL, &xr_native_os_exec_shell_spawn, NULL, false, "os", "stdlib/defs/core.def", FINGERPRINT}']
+
+
 def render_os_exec_pipe_close(declarations):
     candidates = [r for r in declarations if r.module == 'os' and r.name == '__execPipeClose']
     if len(candidates) != 1:
@@ -1746,6 +1772,9 @@ def render_unicode_callable(root, decoder):
     exec_lines, exec_rows = render_os_exec_pipe_close(declarations)
     buffer_lines += exec_lines
     buffer_rows += exec_rows
+    shell_lines, shell_rows = render_os_exec_shell_spawn(declarations)
+    buffer_lines += shell_lines
+    buffer_rows += shell_rows
     digest = hashlib.sha256((root / 'stdlib/defs/core.def').read_text(encoding='utf-8').encode('utf-8')).digest()
     fingerprint = '{{' + ','.join(str(byte) for byte in digest) + '}}'
     return buffer_lines + [
