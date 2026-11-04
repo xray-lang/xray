@@ -33,7 +33,7 @@ static const char dylib_wrappers[]=
     "export fn peek(p:Ptr<u8>)->i64{unsafe{return p[0] as i64}}\n"
     "export fn offset(p:Ptr<u8>)->Ptr<u8>{return p.offset(1)}\n"
     "export fn deferred(path:Path)->Ptr<u8>?{var opened=Dylib.open(path);if(opened==null){return null}\n"
-    " var lib=opened!;defer{lib.close()};return lib.symbol(\"xray_dylib_bytes\")}\n"
+    " var lib=opened!;defer{__dylibClose(lib._handle)};return lib.symbol(\"xray_dylib_bytes\")}\n"
     "export fn ctfeOpen()->i64{return __dylibOpen(Path(\"absent\"))}\n"
     "export fn ctfeSymbol()->Ptr<u8>?{return __dylibSymbol(1,\"absent\")}\n"
     "export fn ctfeClose()->bool{return __dylibClose(1)}\n"
