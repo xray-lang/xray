@@ -224,6 +224,27 @@ class TierTests(unittest.TestCase):
                 self.assertNotIn("native-runtime", plan["groups"])
         self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
 
+    def test_dylib_product_and_test_leaves_select_both_carriers(self):
+        for path in ("stdlib/path/path.xr", "src/os/os_dylib_owned.h",
+                     "src/os/win/dylib_owned_win.c", "src/os/unix/dylib_owned_unix.c",
+                     "src/xir/xxir_pointer_origin_internal.h",
+                     "src/xir/xxir_instance_dylib.inc.c",
+                     "src/xir/xxir_instance_dylib_owner.inc.c",
+                     "src/xir/xxir_sys_dylib_native.h",
+                     "tests/unit/xir/dylib_runtime/test_dylib_source.c",
+                     "tests/unit/xir/dylib_runtime/test_dylib_native.c",
+                     "tests/unit/xir/dylib_runtime/dylib_cases.h",
+                     "tests/unit/xir/dylib_runtime/dylib_runtime.h",
+                     "tests/unit/xir/dylib_runtime/test_dylib_data.c",
+                     "tests/unit/xir/dylib_runtime/dylib_runtime.cmake"):
+            with self.subTest(path=path):
+                plan = xray_l1.tier_plan(ROOT, "L2", changed=[path])
+                self.assertIn("host-os", plan["groups"])
+                self.assertTrue({"test_xir_dylib_source", "test_xir_dylib_native"} <= set(plan["tests"]))
+                self.assertTrue({"test_xir_dylib_source", "test_xir_dylib_native"} <= set(plan["targets"]))
+                self.assertNotIn("native-runtime", plan["groups"])
+        self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
+
     def test_callback_mechanisms_and_test_recipes_select_the_existing_runtime_home(self):
         for path in ("src/execution/xr_xir_host_execution.c",
                      "src/xir/xxir_root_callback_internal.h",
