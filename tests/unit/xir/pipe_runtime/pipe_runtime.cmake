@@ -14,6 +14,7 @@ add_custom_command(OUTPUT "${pipe_runtime_generated}/pipe_runtime.c"
         "${pipe_runtime_dir}/pipe_runtime.h"
         "${PROJECT_SOURCE_DIR}/stdlib/sys/sys.xr"
         "${PROJECT_SOURCE_DIR}/stdlib/path/path.xr"
+        "${PROJECT_SOURCE_DIR}/tests/unit/xir/xir_genuine_sys_path.h"
     VERBATIM)
 
 add_executable(test_xir_pipe_native "${pipe_runtime_dir}/test_pipe_native.c"
