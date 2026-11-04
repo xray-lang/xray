@@ -12,6 +12,7 @@
 #include "xir/xxir_library_catalog.h"
 #include "base/xsha256.h"
 #include "base/xcompile_request.h"
+#include "xir/xxir_library_catalog.c"
 static uint64_t fixed_held(const XrXirCompileContext *context) {
     XrCompileResourceStats stats={0};
     CHECK(xr_compile_resources_stats(context->resources,&stats)==XR_COMPILE_RESOURCE_OK);
@@ -106,6 +107,61 @@ static void fixed_sendable_controls(const XrXirCompileContext *context) {
     CHECK(xr_xir_compile_type_markers_prove(context,&proof,type,XR_XIR_CONSTRAINT_EQUAL)==XR_XIR_BAD_TYPE);
     CHECK(fixed_held(context)==held);
 }
+/* These are private negative probes over copies of real verified declarations,
+ * not alternate Source programs or substitutes for packet reception. */
+static void fixed_cold_slot_refusal(const XrXirModule *module,
+    const XrXirConstruction *construction,bool cell) {
+    CHECK(module && module->declarations && construction);
+    const XrXirDeclarations *original=module->declarations;
+    CHECK(original->slot_count && original->slot_count<=2 && original->slots);
+    const XrXirSlotFacts *facts=xr_xir_compile_construction_slots(construction);
+    CHECK(facts && facts->count==original->slot_count && facts->rows);
+    XrXirSlot slots[2];memcpy(slots,original->slots,original->slot_count*sizeof(*slots));
+    XrXirDeclarations copy=*original;copy.slots=slots;uint32_t ordinal=UINT32_MAX;
+    for(uint32_t s=0;s<original->slot_count;++s) {
+        const XrXirTypeNode *node=xr_xir_type_node(module->types,slots[s].type);
+        if(cell) {
+            if(!node || node->kind!=XR_XIR_TYPE_CELL || slots[s].mutable!=1)continue;
+            node=xr_xir_type_node(module->types,node->element);
+        } else if(slots[s].mutable)continue;
+        if(node && node->kind==XR_XIR_TYPE_FIXED_ARRAY && node->element==XR_XIR_U8) {
+            ordinal=s;break;
+        }
+    }
+    CHECK(ordinal!=UINT32_MAX && facts->rows[ordinal].slot==ordinal);
+    const XrXirSlot saved=slots[ordinal];slots[ordinal].mutable=cell?0:1;
+    CHECK(!library_catalog_state_slot(module->types,&copy,facts,ordinal));
+    CHECK(!memcmp(&original->slots[ordinal],&saved,sizeof(saved)));
+}
+static void fixed_cold_state_refusal(const XrXirCompileContext *context) {
+    uint64_t held=fixed_held(context);XrXirSourceResult producer={0};
+    CHECK(fixed_source_text(context,"var blocked=b\"\\x00\\xFF\"\n"
+        "export fn readFixed()->[u8;2]{return blocked}\n",
+        "fixed-state.xr",XR_XIR_LIBRARY,NULL,NULL,&producer)==XR_XIR_OK);
+    const XrXirModule *module=xr_xir_compile_artifact_module(producer.checked);
+    CHECK(module && module->declarations && module->declarations->slot_count==1);
+    const XrXirSlot *slot=&module->declarations->slots[0];
+    const XrXirTypeNode *cell=xr_xir_type_node(module->types,slot->type);
+    CHECK(slot->mutable && cell && cell->kind==XR_XIR_TYPE_CELL);
+    const XrXirTypeNode *fixed=xr_xir_type_node(module->types,cell->element);
+    CHECK(fixed && fixed->kind==XR_XIR_TYPE_FIXED_ARRAY && fixed->element==XR_XIR_U8 &&
+        fixed->parameter_count==2);
+    CHECK(xr_xir_compile_artifact_verify(producer.checked,NULL)==XR_XIR_OK);
+    fixed_cold_slot_refusal(module,xr_xir_compile_artifact_construction(producer.checked),true);
+    XrXirCheckedPacket packet={0};
+    CHECK(xr_xir_compile_checked_write(producer.checked,&packet,NULL)==XR_XIR_OK);
+    xr_xir_compile_source_result_free(&producer);
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_FIXED_BYTES_ROOT};
+    XrXirLibraryModuleInput binding={authority,"fixed-state.xr"};
+    XrXirLibraryInput input={.packet=packet.bytes,.length=packet.length,
+        .modules=&binding,.module_count=1};xr_sha256(packet.bytes,packet.length,input.sha256);
+    XrXirLibraryCatalog *catalog=NULL;
+    XrXirStatus status=xr_xir_compile_library_catalog_new_v2(context,&input,1,&catalog);
+    if(status!=XR_XIR_BAD_STAGE)fprintf(stderr,"fixed mutable Cell catalog status%u\n",(unsigned)status);
+    CHECK(status==XR_XIR_BAD_STAGE && !catalog);
+    memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
+    CHECK(fixed_held(context)==held);
+}
 static void fixed_cold_library(const XrXirCompileContext *context,FILE *generated) {
     uint64_t held=fixed_held(context);XrXirSourceResult producer={0};
     CHECK(fixed_source_text(context,"const hidden=b\"AB\"\n"
@@ -115,6 +171,8 @@ static void fixed_cold_library(const XrXirCompileContext *context,FILE *generate
         "fixed-lib.xr",XR_XIR_LIBRARY,NULL,NULL,&producer)==XR_XIR_OK);
     XrXirCheckedPacket packet={0};
     CHECK(xr_xir_compile_checked_write(producer.checked,&packet,NULL)==XR_XIR_OK);
+    fixed_cold_slot_refusal(xr_xir_compile_artifact_module(producer.checked),
+        xr_xir_compile_artifact_construction(producer.checked),false);
     xr_xir_compile_source_result_free(&producer);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_FIXED_BYTES_ROOT};
     XrXirLibraryModuleInput binding={authority,"fixed-lib.xr"};
@@ -133,6 +191,7 @@ static void fixed_cold_library(const XrXirCompileContext *context,FILE *generate
             (unsigned)catalog_status<sizeof(names)/sizeof(*names)?names[catalog_status]:"unknown XrXirStatus");
     }
     CHECK(catalog_status==XR_XIR_OK);
+    fixed_cold_state_refusal(context);
     memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
     XrXirSourceResult consumer={0};
     CHECK(fixed_source_text(context,"import {magic,makeBytes} from \"./fixed-lib\"\n"
