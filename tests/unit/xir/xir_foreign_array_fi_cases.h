@@ -28,7 +28,7 @@ static void foreign_array_prepare(ForeignArray *f) {
         {.kind = XR_XIR_TYPE_TUPLE, .parameters = fields, .parameter_count = 2},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)258}};
     const XrXirTypes types = {nodes, 4, NULL, NULL};
-    CHECK(value_compile_arena(&types, 65536, value_compile_limits(65536, 1048576, 65536), &f->arena) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&types, 65536, value_compile_limits(), &f->arena) == XR_XIR_VALUE_OK);
     f->local = allocation_admission(f->domains[0], f->arena, &f->releases);
     f->remote = allocation_admission(f->domains[1], f->arena, &f->releases);
     f->local.scratch_bytes = f->remote.scratch_bytes = 65536;

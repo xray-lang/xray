@@ -19,7 +19,7 @@ static void cross_extra_begin(CrossExtra *f, const XrXirTypes *types, XrXirType 
     CHECK(!live && !value_compile_live && !value_compile_bytes && !closed_fail_all);
     *f = (CrossExtra){0}; fail_at = SIZE_MAX;
     for (unsigned i = 0; i < 2; ++i) CHECK(xr_xir_domain_new(65536, &f->domains[i]) == XR_XIR_VALUE_OK);
-    CHECK(value_compile_arena(types, 65536, value_compile_limits(65536, 1048576, 65536), &f->arena) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(types, 65536, value_compile_limits(), &f->arena) == XR_XIR_VALUE_OK);
     f->local = allocation_admission(f->domains[0], f->arena, &f->releases);
     f->remote = allocation_admission(f->domains[1], f->arena, &f->releases);
     f->local.scratch_bytes = f->remote.scratch_bytes = 65536;

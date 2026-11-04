@@ -25,7 +25,7 @@ static void closed_tuple_nullable(void) {
         {.kind=XR_XIR_TYPE_NULLABLE,.element=(XrXirType)256},
         {.kind=XR_XIR_TYPE_TUPLE,.parameters=fields,.parameter_count=7}};
     XrXirTypes types = {nodes,3,NULL,NULL}; XrXirTypeArena *arena = NULL;
-    CHECK(value_compile_arena(&types,100,value_compile_limits(65536,65536,10000),&arena) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&types,100,value_compile_limits(),&arena) == XR_XIR_VALUE_OK);
     XrXirDomain *domain = NULL; CHECK(xr_xir_domain_new(65536,&domain) == XR_XIR_VALUE_OK);
     XrXirValueAdmission admission = {arena,domain,NULL,NULL,100000,65536};
     XrXirValue text = {0}, inner[2] = {{0}}, outer[3] = {{0}}, tuple = {0}, alias = {0};
@@ -183,7 +183,7 @@ static void closed_class_publish_before_callback(void) {
         {.kind=XR_XIR_TYPE_ARRAY,.element=(XrXirType)257},
         {.kind=XR_XIR_TYPE_NOMINAL,.nominal={0,NULL,0,&member,1}}};
     XrXirTypes types = {nodes,4,&table,NULL}; XrXirTypeArena *arena = NULL;
-    CHECK(value_compile_arena(&types,100,value_compile_limits(65536,65536,10000),&arena) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&types,100,value_compile_limits(),&arena) == XR_XIR_VALUE_OK);
     XrXirDomain *domain = NULL; CHECK(xr_xir_domain_new(65536,&domain) == XR_XIR_VALUE_OK);
     ClassReentry test = {0}; XrXirValue object = {0}, arrays[2] = {{0}};
     XrXirValueAdmission admission = {arena,domain,class_reentry_admit,&test,1000000,65536};

@@ -27,7 +27,7 @@ static void storage_cache_cases(void) {
     XrXirTypes types = {nodes, 4, &table, NULL};
     XrXirDomain *domain = NULL; XrXirTypeArena *arena = NULL;
     CHECK(!live && xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
-    const XrCompileResourceLimits limits=value_compile_limits(1048576,1048576,16777216);
+    const XrCompileResourceLimits limits=value_compile_limits();
     const ValueCompileProbe probe={&types,NULL,XR_XIR_UNIT,0,65536};
     value_compile_boundaries(&probe,limits);
     CHECK(value_compile_arena(&types,65536,limits,&arena)==XR_XIR_VALUE_OK);
@@ -78,7 +78,7 @@ static void storage_cache_shared_graph(void) {
     nodes[0].nominal.fields = roots; nodes[0].nominal.field_count = 2;
     XrXirTypes types = {nodes, COUNT, &table, NULL}; XrXirDomain *domain = NULL; XrXirTypeArena *arena = NULL;
     CHECK(!live && xr_xir_domain_new(1048576, &domain) == XR_XIR_VALUE_OK);
-    XrCompileResourceLimits limits=value_compile_limits(1048576,1048576,16777216);
+    XrCompileResourceLimits limits=value_compile_limits();
     CHECK(value_compile_arena(&types,65536,limits,&arena) == XR_XIR_VALUE_OK);
     const XrXirStorageLayout *root = xr_xir_compile_type_arena_storage(arena, (XrXirType)256);
     CHECK(root && root->value.size == 16 && root->field_offsets[0] == 0 && root->field_offsets[1] == 8);

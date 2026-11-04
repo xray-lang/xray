@@ -27,7 +27,7 @@ static XrXirTypeArena *storage_cursor_arena(XrXirDomain *domain) {
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)257},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)258}};
     const XrXirTypes types = {nodes, 6, &table, NULL};
-    XrCompileResourceLimits limits = value_compile_limits(65536, 65536, 10000);
+    XrCompileResourceLimits limits = value_compile_limits();
     XrXirTypeArena *arena = NULL;
     CHECK(value_compile_arena(&types, 100, limits, &arena) == XR_XIR_VALUE_OK);
     const XrXirStorageLayout *choice = xr_xir_compile_type_arena_storage(arena, (XrXirType)256);

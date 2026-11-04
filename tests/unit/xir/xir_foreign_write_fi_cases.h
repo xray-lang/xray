@@ -33,7 +33,7 @@ static XrXirTypeArena *foreign_write_arena(void) {
         {.kind = XR_XIR_TYPE_NOMINAL, .nominal = {1, NULL, 0, outer, 2}},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)260}};
     const XrXirTypes types = {nodes, 6, &table, NULL}; XrXirTypeArena *arena = NULL;
-    CHECK(value_compile_arena(&types, 65536, value_compile_limits(65536, 1048576, 65536), &arena) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&types, 65536, value_compile_limits(), &arena) == XR_XIR_VALUE_OK);
     return arena;
 }
 

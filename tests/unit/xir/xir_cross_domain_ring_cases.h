@@ -15,7 +15,7 @@ static XrXirTypeArena *cross_ring_arena(void) {
         {.kind = XR_XIR_TYPE_CELL, .element = (XrXirType)257}};
     const XrXirTypes types = {nodes, 3, NULL, NULL};
     XrXirTypeArena *arena = NULL;
-    CHECK(value_compile_arena(&types, 65536, value_compile_limits(65536, 1048576, 65536), &arena) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&types, 65536, value_compile_limits(), &arena) == XR_XIR_VALUE_OK);
     return arena;
 }
 

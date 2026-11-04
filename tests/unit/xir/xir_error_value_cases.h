@@ -21,7 +21,7 @@ static void error_deep_value_cases(void) {
         {.kind = XR_XIR_TYPE_ARRAY, .element = XR_XIR_ERROR}};
     const XrXirTypes types = {nodes, 2, &table, NULL};
     XrXirDomain *domain = NULL; XrXirTypeArena *arena = NULL;
-    XrCompileResourceLimits limits = value_compile_limits(65536, 65536, 10000);
+    XrCompileResourceLimits limits = value_compile_limits();
     CHECK(!live && xr_xir_domain_new(4194304, &domain) == XR_XIR_VALUE_OK);
     CHECK(value_compile_arena(&types, 100, limits, &arena) == XR_XIR_VALUE_OK);
     XrXirValueAdmission admission = {arena, domain, NULL, NULL, 10000000, 65536};
@@ -87,7 +87,7 @@ static void error_nominal_identity_cases(const XrXirTypes *types, const XrXirVal
     }
     ids[2].kind = XR_XIR_NOMINAL_STRUCT; ids[2].variants = NULL; ids[2].variant_count = 0;
     XrXirNominalTable table = {NULL, 3, ids}; XrXirTypes local = {nodes, 3, &table, NULL};
-    XrCompileResourceLimits limits = value_compile_limits(65536, 65536, 100000);
+    XrCompileResourceLimits limits = value_compile_limits();
     XrXirTypeArena *arena = NULL;
     CHECK(value_compile_arena(&local, 1000, limits, &arena) == XR_XIR_VALUE_OK);
     XrXirValueAdmission receiving = *admission; receiving.arena = arena;
@@ -146,7 +146,7 @@ static void error_value_cases(const XrXirTypes *types, const XrXirValue *empty,
     CHECK(xr_xir_error_erase(empty, admission, &copy) == XR_XIR_VALUE_REFCOUNT_LIMIT && !copy.type);
     CHECK(xr_xir_error_narrow(&error, (XrXirType)256, admission, &copy) == XR_XIR_VALUE_REFCOUNT_LIMIT && !copy.type);
     atomic_store(&arena->references, leases);
-    XrCompileResourceLimits limits = value_compile_limits(65536, 65536, 10000);
+    XrCompileResourceLimits limits = value_compile_limits();
     XrXirTypeArena *foreign = NULL;
     CHECK(value_compile_arena(types, 100, limits, &foreign) == XR_XIR_VALUE_OK);
     XrXirValueAdmission receiving = *admission; receiving.arena = foreign;

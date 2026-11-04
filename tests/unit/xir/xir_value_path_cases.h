@@ -25,7 +25,7 @@ static XrXirTypeArena *value_path_arena(XrXirDomain *domain) {
         {.kind = XR_XIR_TYPE_NOMINAL, .nominal = {1, NULL, 0, outer, 2}},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)258}};
     const XrXirTypes types = {nodes, 4, &table, NULL};
-    XrCompileResourceLimits limits = value_compile_limits(65536, 65536, 10000);
+    XrCompileResourceLimits limits = value_compile_limits();
     XrXirTypeArena *arena = NULL;
     CHECK(value_compile_arena(&types, 100, limits, &arena) == XR_XIR_VALUE_OK);
     return arena;

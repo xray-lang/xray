@@ -12,7 +12,7 @@ static XrXirTypeArena *array_allocation_arena(XrXirDomain *domain,
                                             const XrXirTypeNode *nodes, uint32_t count) {
     (void)domain;
     XrXirTypes types = {nodes, count, NULL, NULL}; XrXirTypeArena *arena = NULL;
-    XrCompileResourceLimits limits = value_compile_limits(1024 * 1024, 0, 8388608);
+    XrCompileResourceLimits limits = value_compile_limits();
     CHECK(value_compile_arena(&types, 65536, limits, &arena) == XR_XIR_VALUE_OK);
     return arena;
 }

@@ -33,7 +33,7 @@ static XrXirTypeArena *class_inline_arena(XrXirDomain *domain) {
         {.kind=XR_XIR_TYPE_NOMINAL,.nominal={1,NULL,0,efields,1}},
         {.kind=XR_XIR_TYPE_NOMINAL,.nominal={2,NULL,0,NULL,0}},
         {.kind=XR_XIR_TYPE_NOMINAL,.nominal={3,NULL,0,cfields,4}}};
-    XrXirTypes types={nodes,4,&table,NULL};XrCompileResourceLimits limits = value_compile_limits(65536, 65536, 10000);
+    XrXirTypes types={nodes,4,&table,NULL};XrCompileResourceLimits limits = value_compile_limits();
     XrXirTypeArena *arena=NULL;CHECK(value_compile_arena(&types, 100, limits, &arena)==XR_XIR_VALUE_OK);
     const XrXirStorageLayout *layout=xr_xir_compile_type_arena_storage(arena,XR_XIR_CONSTRUCTED_TYPE_BASE+3);
     CHECK(layout && layout->value.size==8 && layout->body.size==64);
@@ -65,7 +65,7 @@ static void class_inline_capabilities(void) {
     XrXirNominalTable table={NULL,1,&id};XrXirType field=XR_XIR_I64;
     XrXirTypeNode nodes[2]={{.kind=XR_XIR_TYPE_NOMINAL,.nominal={0,NULL,0,&field,1}},{0}};
     XrXirTypes types={nodes,2,&table,NULL};
-    const XrCompileResourceLimits limits=value_compile_limits(0,1024,100);
+    const XrCompileResourceLimits limits=value_compile_limits();
     const ValueCompileProbe probe={&types,NULL,XR_XIR_CONSTRUCTED_TYPE_BASE,3,65536};
     value_compile_boundaries(&probe,limits);
     ValueCompileOwner owner={0};CHECK(value_compile_owner_new(&owner,limits,65536)==XR_XIR_OK);
@@ -93,7 +93,7 @@ static void class_inline_capabilities(void) {
     id.kind=UINT32_MAX;
     CHECK(xr_xir_compile_class_field_verify(&owner.context,&types,XR_XIR_CONSTRUCTED_TYPE_BASE)==XR_XIR_BAD_TYPE);
     CHECK(!memcmp(&structural,&owner.context.limits,sizeof(structural)));
-    CHECK(value_compile_stats(&owner.context).live_bytes==owner.baseline.live_bytes);
+    CHECK(value_compile_stats(&owner.context).held_bytes==owner.baseline.held_bytes);
     value_compile_owner_release(&owner);
 }
 static void class_inline_value_cases(void) {

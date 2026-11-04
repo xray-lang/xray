@@ -235,7 +235,7 @@ static XrXirTypeArena *allocation_arena(XrXirDomain *domain) {
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType) 256},
     };
     XrXirTypes types = {nodes, 7, NULL, NULL};
-    XrCompileResourceLimits limits = value_compile_limits(65536, 1048576, 65536);
+    XrCompileResourceLimits limits = value_compile_limits();
     XrXirTypeArena *arena = NULL;
     CHECK(value_compile_arena(&types, 65536, limits, &arena) == XR_XIR_VALUE_OK);
     return arena;
@@ -307,7 +307,7 @@ static void arena_allocation_cases(void) {
     XrXirTypeNode node = {.kind = XR_XIR_TYPE_CALLABLE, .parameters = &parameter,
         .parameter_count = 1, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     XrXirTypes types = {&node, 1, NULL, NULL};
-    const XrCompileResourceLimits limits=value_compile_limits(65536,1048576,100);
+    const XrCompileResourceLimits limits=value_compile_limits();
     const ValueCompileProbe probe={&types,NULL,XR_XIR_UNIT,0,10};
     value_compile_boundaries(&probe,limits);
     XrXirTypeArena *arena=NULL;
@@ -358,7 +358,7 @@ static void deep_arena_release(void) {
         nodes[i].element = i ? (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + i - 1) : XR_XIR_STRING;
     }
     XrXirTypes types = {nodes, count, NULL, NULL};
-    XrCompileResourceLimits limits = value_compile_limits(1024 * 1024, 1048576, 8 * 1024 * 1024);
+    XrCompileResourceLimits limits = value_compile_limits();
     XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(1024 * 1024, &domain) == XR_XIR_VALUE_OK);
     XrXirTypeArena *arena = NULL;
@@ -382,7 +382,7 @@ static void nominal_arena_allocation(void) {
     XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     size_t baseline = live;
-    const XrCompileResourceLimits limits=value_compile_limits(65536,1048576,10000);
+    const XrCompileResourceLimits limits=value_compile_limits();
     const ValueCompileProbe probe={&types,NULL,XR_XIR_UNIT,0,100};
     value_compile_boundaries(&probe,limits);
     XrXirTypeArena *arena=NULL;
@@ -484,7 +484,7 @@ static void string_predicate_allocations(void) {
 #include "xir_enum_metadata_fixture.h"
 static void enum_arena_allocations(void) {
     EnumMetadataFixture f;enum_metadata_fixture(&f);
-    const XrCompileResourceLimits limits=value_compile_limits(65536,65536,10000);
+    const XrCompileResourceLimits limits=value_compile_limits();
     ValueCompileOwner owner={0};XrXirNominalTable *projection=NULL;
     CHECK(value_compile_owner_new(&owner,limits,100)==XR_XIR_OK);
     CHECK(xr_xir_compile_nominal_structure_verify(&owner.context,&f.table,NULL)==XR_XIR_OK);
@@ -511,7 +511,7 @@ static void enum_arena_allocations(void) {
 }
 
 static void enum_layout_allocation_failures(const XrXirTypes *types) {
-    const XrCompileResourceLimits limits=value_compile_limits(65536,65536,10000);
+    const XrCompileResourceLimits limits=value_compile_limits();
     const ValueCompileProbe probe={types,NULL,(XrXirType)256,2,100};
     value_compile_boundaries(&probe,limits);
     ValueCompileOwner owner={0};ValueCompileResult result={0};
@@ -525,7 +525,7 @@ static void enum_arena_and_slot_boundaries(const XrXirTypes *types, const XrXirV
     size_t baseline = live;
     XrXirNominalIdentity identity = types->nominals->identities[0]; identity.module = (XrXirLiteral) {"beta", 4};
     XrXirNominalTable table = {NULL, 1, &identity}; XrXirTypes other = *types; other.nominals = &table;
-    XrCompileResourceLimits limits = value_compile_limits(65536, 65536, 10000);
+    XrCompileResourceLimits limits = value_compile_limits();
     XrXirTypeArena *arena = NULL;
     CHECK(value_compile_arena(&other, 100, limits, &arena) == XR_XIR_VALUE_OK);
     XrXirValueAdmission receiving = *admission; receiving.arena = arena;
@@ -559,7 +559,7 @@ static void enum_value_ownership(void) {
     XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_NOMINAL;
     node.nominal.fields = field_types; node.nominal.field_count = 2;
     const XrXirTypes types = {&node, 1, &table, NULL};
-    const XrCompileResourceLimits limits=value_compile_limits(65536,65536,10000);
+    const XrCompileResourceLimits limits=value_compile_limits();
     XrXirDomain *domain=NULL;XrXirTypeArena *arena=NULL;
     CHECK(live==0 && xr_xir_domain_new(65536,&domain)==XR_XIR_VALUE_OK);
     const ValueCompileProbe probe={&types,NULL,XR_XIR_UNIT,0,100};
