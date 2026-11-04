@@ -628,6 +628,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_sys_symbols[] = {
     {"threadYield", XLSP_SYM_FUNCTION, "fn(): ()", "", NULL, 0},
     {"pinToCpu", XLSP_SYM_FUNCTION, "fn(cpu: i64): bool", "", NULL, 0},
     {"onSignal", XLSP_SYM_FUNCTION, "fn(signal: Signal, handler: fn()): bool", "", NULL, 0},
+    {"BarrierError", XLSP_SYM_CLASS, "type BarrierError", "Enum type", NULL, 0},
     {"OsMutex", XLSP_SYM_CLASS, "type OsMutex", "Class type", NULL, 0},
     {"OsRwLock", XLSP_SYM_CLASS, "type OsRwLock", "Class type", NULL, 0},
     {"OsCondvar", XLSP_SYM_CLASS, "type OsCondvar", "Class type", NULL, 0},
@@ -637,10 +638,11 @@ static const XlspSymbolInfo g_xlsp_stdlib_sys_symbols[] = {
     {"Pipe", XLSP_SYM_CLASS, "type Pipe", "Class type", NULL, 0},
     {"ProcessOptions", XLSP_SYM_CLASS, "type ProcessOptions", "Class type", NULL, 0},
     {"Process", XLSP_SYM_CLASS, "type Process", "Class type", NULL, 0},
+    {"ThreadLocalError", XLSP_SYM_CLASS, "type ThreadLocalError", "Enum type", NULL, 0},
     {"ThreadLocal", XLSP_SYM_CLASS, "type ThreadLocal", "Class type", NULL, 0},
     {"Dylib", XLSP_SYM_CLASS, "type Dylib", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT 14
+#define GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT 16
 
 // text module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_text_symbols[] = {
