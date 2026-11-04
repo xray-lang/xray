@@ -738,6 +738,30 @@
         "test_xir_callable_array_transport"
       ]
     },
+    "process-link-closure": {
+      "tier": "L2",
+      "match": [
+        "tests/unit/cli/toolchain_process_owned.cmake",
+        "tests/unit/cli/process_image_observer/*",
+        "tests/unit/dap/current/process_handoff/*"
+      ],
+      "reason": "Independent Windows process consumers must link their real OS dependencies; selected existing tests catch the missing userenv closure found by the full build.",
+      "tests": [
+        "test_toolchain_process_owned",
+        "test_toolchain_process_hidden_environment",
+        "test_toolchain_process_sdk_target",
+        "process_image_observer",
+        "test_dap_process_handoff",
+        "test_dap_process_handoff_faults"
+      ],
+      "targets": [
+        "test_toolchain_process_owned",
+        "image_observer_dll",
+        "test_process_image_observer",
+        "test_dap_process_handoff",
+        "test_dap_process_handoff_faults"
+      ]
+    },
     "source-tools": {
       "tier": "L2",
       "match": [
