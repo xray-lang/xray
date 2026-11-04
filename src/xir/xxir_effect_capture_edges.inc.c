@@ -413,7 +413,12 @@ static XrXirStatus effect_capture_results(EffectCaptureRead *read,uint32_t selec
         bool result=(op->op==XR_XIR_INVOKE_RESULT && op->immediate==(int64_t)edge->instruction) ||
             (i==edge->instruction && (op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_CALL_INDIRECT));
         if(!result) continue;
-        uint32_t kind=0,provided=0;status=effect_capture_kind(read,caller,caller->head.parameter_count+i,&kind,NULL);
+        uint32_t kind=0,provided=0;const EffectBodyCurrentRead *current=owning?read->body.current:NULL;
+        /* The current scope has no callback between the full row and this SSA type. */
+        if(owning && current && current->material==read->body.owner && current->work==read->body.read.owner &&
+            caller->head.parameter_count==current->material->functions[read->final->nodes[edge->caller].body].parameter_count &&
+            (uint64_t)caller->head.parameter_count+i<caller->values) kind=effect_capture_type_kind(read->body.domain.types,op->type);
+        else status=effect_capture_kind(read,caller,caller->head.parameter_count+i,&kind,NULL);
         if(status==XR_XIR_OK) status=effect_capture_kind(read,target,target->values,&provided,NULL);
         if(status!=XR_XIR_OK) return status;
         if(kind!=EFFECT_CAPTURE_CALLABLE && kind!=EFFECT_CAPTURE_CLASS) continue;
