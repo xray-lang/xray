@@ -106,15 +106,16 @@ static XrXirStatus view_root_call(ViewRootQuery *q,ViewOriginPair site,const XrX
     else if (op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT) {
         if (view_pointer_result(c->module->types,op->type)) {
             if(op->immediate<0 || (uint64_t)op->immediate>UINT32_MAX)return XR_XIR_BAD_STRUCTURE;
-            bool known=false;XrXirStatus status=view_pointer_indirect(c->module,site.first,
-                (uint32_t)op->immediate,c->candidates,q->control,&known);
-            if(status!=XR_XIR_OK || !known)return status!=XR_XIR_OK?status:XR_XIR_UNRESOLVED;
-            return view_root_emit(q,site,context,XR_XIR_VIEW_ROOT_ABSENT);
-        }
+            XrXirStatus status=view_pointer_indirect(c->module,site.first,
+                (uint32_t)op->immediate,c->candidates,q->control,&candidate);
+            if(status!=XR_XIR_OK)return status;
+            if(candidate==UINT32_MAX)return XR_XIR_UNRESOLVED;
+        } else {
         const XrXirTypeNode *signature=xr_xir_callable_signature(c->module->types,xr_xir_operand_type(body,(uint32_t)op->immediate));
         if (!signature) return XR_XIR_BAD_TYPE;
         XrXirStatus status=view_return_candidate(c->module->types,c->flags,signature,&candidate);
         if (status!=XR_XIR_OK) return status;
+        }
     } else return view_root_emit(q,site,(ViewOriginPair){context.first|1u,context.second},XR_XIR_VIEW_ROOT_UNRESOLVED);
     if (candidate==UINT32_MAX-1u) return view_root_emit(q,site,context,XR_XIR_VIEW_ROOT_ABSENT);
     if (candidate==UINT32_MAX || candidate>=op->args[1]) return XR_XIR_BAD_TYPE;
