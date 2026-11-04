@@ -933,7 +933,14 @@
         "tests/unit/base/pipe_owned.cmake",
         "tests/unit/xir/pipe_runtime/*",
         "src/xir/xxir_instance_pipe*.inc.c",
-        "src/xir/xxir_sys_pipe_native.h"
+        "src/xir/xxir_sys_pipe_native.h",
+        "src/os/os_process_owned.h",
+        "src/os/win/process_owned_win.c",
+        "src/os/win/proc_text_win.inc.c",
+        "src/os/unix/process_owned_unix.c",
+        "tests/unit/xir/process_runtime/*",
+        "src/xir/xxir_instance_process*.inc.c",
+        "src/xir/xxir_sys_process_native.h"
       ],
       "reason": "Real CPU and Path host calls preserve canonical permissions, ownership, cancellation, and the scalar runtime closure.",
       "tests": [
@@ -951,7 +958,9 @@
         "os_directory_owned",
         "os_pipe_owned",
         "test_xir_pipe_source",
-        "test_xir_pipe_native"
+        "test_xir_pipe_native",
+        "test_xir_process_source",
+        "test_xir_process_native"
       ],
       "targets": [
         "test_host_os_source",
@@ -966,7 +975,9 @@
         "test_os_directory_owned",
         "test_os_pipe_owned",
         "test_xir_pipe_source",
-        "test_xir_pipe_native"
+        "test_xir_pipe_native",
+        "test_xir_process_source",
+        "test_xir_process_native"
       ]
     }
   },
