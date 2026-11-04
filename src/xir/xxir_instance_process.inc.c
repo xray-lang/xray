@@ -125,7 +125,7 @@ static XrXirCallStatus instance_process_spawn(XrXirCallView *view,XrXirInstance 
         uint32_t end=0;XirPipeOwner *pipe=instance_pipe_lookup(root,optional[p+3]->payload,&end,&current);
         status=current.status;
         if(status!=XR_XIR_CALL_READY)break;
-        if(!pipe||end!=(p?XR_OS_PIPE_WRITE:XR_OS_PIPE_READ)){valid=false;continue;}
+        if(!pipe||end!=(uint32_t)(p?XR_OS_PIPE_WRITE:XR_OS_PIPE_READ)){valid=false;continue;}
         status=instance_pipe_status(xr_os_io_pipe_borrow(&pipe->owner,(XrOsPipeEnd)end,request.streams+p));
         request.redirected[p]=true;
     }

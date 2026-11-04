@@ -24,6 +24,8 @@ typedef struct OwnedProcessState {
     LPWCH inherited;
     bool prepared,started,detached,independent,terminating,assigned;
 } OwnedProcessState;
+_Static_assert(_Alignof(OwnedProcessState)>=_Alignof(void *)&&_Alignof(OwnedProcessState)>=_Alignof(wchar_t),
+    "process allocations align state, pointer tables and UTF-16 text");
 typedef struct OwnedProcessBuild {
     const XrOsIoPolicy *memory;
     const XrOsProcessQuery *query;
@@ -53,7 +55,7 @@ static XrOsIoStatus owned_process_allocate(void *context,size_t bytes,void **out
     OwnedProcessBuild *build=context;void *memory=NULL;
     if(!owned_process_current(build))return build->status;
     XrOsIoStatus status=build->memory->alloc(build->memory->context,bytes,&memory);
-    if(status==XR_OS_IO_OK&&(!memory||(uintptr_t)memory%_Alignof(max_align_t)))status=XR_OS_IO_BAD_ARGUMENT;
+    if(status==XR_OS_IO_OK&&(!memory||(uintptr_t)memory%_Alignof(OwnedProcessState)))status=XR_OS_IO_BAD_ARGUMENT;
     if(status!=XR_OS_IO_OK) {
         if(memory)build->memory->free(build->memory->context,memory);
         build->status=status;return status;
