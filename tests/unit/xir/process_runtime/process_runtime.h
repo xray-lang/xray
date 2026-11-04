@@ -181,7 +181,7 @@ static bool process_child(int argc,char **argv) {
         process_child_bytes(GetStdHandle(STD_ERROR_HANDLE),process_error,sizeof(process_error),true);
     } else CHECK(WaitForSingleObject(release,10000)==WAIT_OBJECT_0);
     CHECK(CloseHandle(ready)&&CloseHandle(release)&&UnmapViewOfFile(record)&&CloseHandle(mapping));
-    ExitProcess(!strcmp(mode,"zero")?0u:23u);return true;
+    ExitProcess(!strcmp(mode,"zero")?0u:23u);
 }
 static char *process_utf8(const wchar_t *wide) {
     int count=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,wide,-1,NULL,0,NULL,NULL);CHECK(count>0);
