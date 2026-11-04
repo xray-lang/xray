@@ -327,7 +327,11 @@
         "tests/fixtures/xir_path_prelude/*",
         "tests/unit/xir/*path_prelude*",
         "tests/unit/test_path_prelude_projection.py",
-        "tests/unit/frontend/test_native_declaration_schema.py"
+        "tests/unit/frontend/test_native_declaration_schema.py",
+        "tests/unit/xir/xir_path_complete_source.h",
+        "tests/unit/xir/xir_path_complete_runtime.h",
+        "src/xir/xxir_path_native.h",
+        "src/xir/xxir_instance_path_cwd.inc.c"
       ],
       "reason": "HIR and complete Source language-family consumers.",
       "tests": [
