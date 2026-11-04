@@ -207,7 +207,9 @@ class TierTests(unittest.TestCase):
 
     def test_process_product_and_test_leaves_select_both_carriers(self):
         for path in ("stdlib/os/os.xr", "stdlib/time/time.xr", "src/os/os_process_owned.h", "src/os/win/process_owned_win.c",
+                     "src/xir/xxir_os_exec_native.h", "src/xir/xxir_instance_exec_pipe.inc.c",
                      "src/os/win/proc_text_win.inc.c", "src/os/unix/process_owned_unix.c",
+                     "tests/regression/10_stdlib/1161_os_extended.xr",
                      "tests/unit/xir/process_runtime/test_process_source.c",
                      "tests/unit/xir/process_runtime/test_process_native.c",
                      "tests/unit/xir/process_runtime/process_cases.h",
