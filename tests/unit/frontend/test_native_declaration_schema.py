@@ -971,5 +971,38 @@ class SysPipeDeclarations(unittest.TestCase):
                     schema.render_sys_pipes([replace(r, **{key: value}) if r is row else r for r in self.declarations])
 
 
+class SysProcessDeclarations(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / 'tools/stdlibgen'))
+        from stdlibgen import parse_defs
+        cls.declarations = parse_defs(ROOT)
+
+    def test_process_complete_nine_parameter_contract(self):
+        lines, rows = schema.render_sys_processes(self.declarations)
+        self.assertEqual(len(rows), 3)
+        self.assertIn('XR_NATIVE_TERM_NULLABLE_ARRAY_STRING', '\n'.join(lines))
+        for row, name in zip(rows, ('SPAWN', 'TRY_WAIT', 'KILL')):
+            self.assertIn('XR_NATIVE_CALLABLE_SYS_PROCESS_' + name + ', NULL,', row)
+
+    def test_process_complete_contract_mutations_are_rejected(self):
+        for name in ('__processSpawn', '__processTryWait', '__processKill'):
+            row = next(r for r in self.declarations if r.module == 'sys' and r.name == name)
+            for changed in ([r for r in self.declarations if r is not row], self.declarations + [row]):
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    schema.render_sys_processes(changed)
+            changes = [('module', 'other'), ('signature', '(): bool'), ('argc', '10'), ('arg_spec', 's'),
+                ('visibility', 'public'), ('effect', 'other'), ('allocation', 'no_heap'),
+                ('return_ownership', 'borrowed'), ('layer', 'core'), ('vm', 'other'), ('aot', 'other'),
+                ('aot_direct', False), ('aot_kind', 'builtin'), ('link_object', 'other'),
+                ('vm_binding', 'yieldable'), ('vm_ifdef', 'OTHER'), ('define', 'OTHER'), ('ret', 'i64'),
+                ('semantic_intrinsic', True), ('caps', ('task',)), ('suspension_kind', 'task'),
+                ('provider_declaration', object())]
+            for key, value in changes:
+                self.assertNotEqual(getattr(row, key), value)
+                with self.subTest(name=name, field=key), self.assertRaises(ValueError):
+                    schema.render_sys_processes([replace(r, **{key: value}) if r is row else r for r in self.declarations])
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -153,6 +153,9 @@ XR_FUNC XrXirCallStatus xir_call_close_bound(XrXirCall *call, const XrXirExecuto
  * cleanup keeps that frame and its original outcome owned by the activation. */
 XR_FUNC const XrXirValueAdmission *xir_call_retirement_admission(const XrXirCallView *view,uint32_t *entry);
 XR_FUNC bool xir_call_retirement_pending(const XrXirCall *call);
+XR_FUNC bool xir_instance_process_retire(XrXirCallView *view,XrXirCallStatus *failure);
+XR_FUNC bool xir_instance_process_retirement_pending(const void *instance,const XrXirCall *call,
+    const XrXirValueAdmission *admission);
 XR_FUNC bool xir_instance_pipe_retire(XrXirCallView *view,XrXirCallStatus *failure);
 XR_FUNC bool xir_instance_pipe_retirement_pending(const void *instance,const XrXirCall *call,
     const XrXirValueAdmission *admission);

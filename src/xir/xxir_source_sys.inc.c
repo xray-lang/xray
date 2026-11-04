@@ -32,7 +32,19 @@ static bool source_sys_declare(SourceContext *ctx) {
             XrXirType *parameters=count?source_alloc(ctx,count,sizeof(*parameters)):NULL;
             if(count&&!parameters)return false;
             for(uint32_t p=0;p<count;++p) {
-                if(native->member->parameters[p].type==XR_NATIVE_TERM_I64)parameters[p]=XR_XIR_I64;
+                XrNativeTypeTerm term=native->member->parameters[p].type;
+                if(term==XR_NATIVE_TERM_I64)parameters[p]=XR_XIR_I64;
+                else if(term==XR_NATIVE_TERM_BOOL)parameters[p]=XR_XIR_BOOL;
+                else if(term==XR_NATIVE_TERM_STRING)parameters[p]=XR_XIR_STRING;
+                else if(term==XR_NATIVE_TERM_NULLABLE_I64||term==XR_NATIVE_TERM_NULLABLE_STRING||
+                    term==XR_NATIVE_TERM_ARRAY_STRING||term==XR_NATIVE_TERM_NULLABLE_ARRAY_STRING) {
+                    XrXirType element=term==XR_NATIVE_TERM_NULLABLE_I64?XR_XIR_I64:XR_XIR_STRING;
+                    if(term==XR_NATIVE_TERM_ARRAY_STRING||term==XR_NATIVE_TERM_NULLABLE_ARRAY_STRING)
+                        if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=element},&element))return false;
+                    if(term!=XR_NATIVE_TERM_ARRAY_STRING)
+                        if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=element},&element))return false;
+                    parameters[p]=element;
+                }
                 else if(native->member->parameters[p].type==XR_NATIVE_TERM_ARRAY_U8) {
                     if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_U8},parameters+p))return false;
                 }
@@ -46,6 +58,9 @@ static bool source_sys_declare(SourceContext *ctx) {
             case XR_NATIVE_TERM_UNIT:break;
             case XR_NATIVE_TERM_BOOL:result=XR_XIR_BOOL;break;
             case XR_NATIVE_TERM_I64:result=XR_XIR_I64;break;
+            case XR_NATIVE_TERM_NULLABLE_I64:
+                if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=XR_XIR_I64},&result))return false;
+                break;
             case XR_NATIVE_TERM_NULLABLE_ARRAY_U8:
                 if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_U8},&result) ||
                     !source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=result},&result))return false;

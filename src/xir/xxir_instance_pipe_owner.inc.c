@@ -165,16 +165,17 @@ static void instance_pipe_frame_release(XrXirCallView *view) {
     bool driving=root->driving;root->driving=true;
     (void)instance_pipe_owners_close(root,false);root->driving=driving;
 }
-static XrXirCallStatus instance_pipe_token_pair(int64_t tokens[2]) {
+static XrXirCallStatus instance_owned_tokens(uint32_t count,int64_t *tokens) {
     static _Atomic(uint64_t) sequence;
     uint64_t old=atomic_load_explicit(&sequence,memory_order_relaxed);
     for(;;) {
-        if(old>(uint64_t)INT64_MAX-2)return XR_XIR_CALL_LIMIT;
-        if(atomic_compare_exchange_weak_explicit(&sequence,&old,old+2,memory_order_relaxed,memory_order_relaxed)) {
-            tokens[0]=(int64_t)(old+1);tokens[1]=(int64_t)(old+2);return XR_XIR_CALL_READY;
+        if(!count||old>(uint64_t)INT64_MAX-count)return XR_XIR_CALL_LIMIT;
+        if(atomic_compare_exchange_weak_explicit(&sequence,&old,old+count,memory_order_relaxed,memory_order_relaxed)) {
+            for(uint32_t i=0;i<count;++i)tokens[i]=(int64_t)(old+i+1);return XR_XIR_CALL_READY;
         }
     }
 }
+static XrXirCallStatus instance_pipe_token_pair(int64_t tokens[2]) {return instance_owned_tokens(2,tokens);}
 static XirPipeOwner *instance_pipe_lookup(XrXirInstance *root,int64_t token,uint32_t *end,XirPipeQuery *query) {
     if(token<=0)return NULL;
     for(XirPipeOwner *pipe=root->pipe_owners;pipe;pipe=pipe->next) {

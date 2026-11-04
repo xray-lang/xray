@@ -17,13 +17,14 @@
 #include "xxir_types.h"
 #include "../shared/xnative_declaration.h"
 #include "xxir_sys_pipe_native.h"
+#include "xxir_sys_process_native.h"
 #include <string.h>
 
 static inline bool xir_sys_thread_token_id(uint32_t id) {
     return id==XR_NATIVE_CALLABLE_SYS_THREAD_LOCAL_ID || id==XR_NATIVE_CALLABLE_SYS_THREAD_LOCAL_ALIVE;
 }
 static inline bool xir_sys_direct_native_id(uint32_t id) {
-    return id==XR_NATIVE_CALLABLE_SYS_ON_SIGNAL || xir_sys_thread_token_id(id) || xir_sys_pipe_id(id);
+    return id==XR_NATIVE_CALLABLE_SYS_ON_SIGNAL || xir_sys_thread_token_id(id) || xir_sys_pipe_id(id) || xir_sys_process_id(id);
 }
 static inline bool xir_sys_native_id(uint32_t id) {
     return id==XR_NATIVE_CALLABLE_SYS_THREAD_YIELD || id==XR_NATIVE_CALLABLE_SYS_PIN_TO_CPU ||
@@ -33,9 +34,11 @@ static const uint32_t xir_sys_native_ids[]={XR_NATIVE_CALLABLE_SYS_THREAD_YIELD,
     XR_NATIVE_CALLABLE_SYS_PIN_TO_CPU,XR_NATIVE_CALLABLE_SYS_ON_SIGNAL,
     XR_NATIVE_CALLABLE_SYS_THREAD_LOCAL_ID,XR_NATIVE_CALLABLE_SYS_THREAD_LOCAL_ALIVE,
     XR_NATIVE_CALLABLE_SYS_PIPE_OPEN,XR_NATIVE_CALLABLE_SYS_PIPE_READ,
-    XR_NATIVE_CALLABLE_SYS_PIPE_WRITE,XR_NATIVE_CALLABLE_SYS_PIPE_CLOSE};
+    XR_NATIVE_CALLABLE_SYS_PIPE_WRITE,XR_NATIVE_CALLABLE_SYS_PIPE_CLOSE,
+    XR_NATIVE_CALLABLE_SYS_PROCESS_SPAWN,XR_NATIVE_CALLABLE_SYS_PROCESS_TRY_WAIT,XR_NATIVE_CALLABLE_SYS_PROCESS_KILL};
 static inline bool xir_sys_native_signature(uint32_t id,const XrXirTypes *types,const XrXirType *parameters,
     uint32_t count,XrXirType result,XrXirType error) {
+    if(xir_sys_process_id(id))return xir_sys_process_signature(id,types,parameters,count,result,error);
     if(xir_sys_pipe_id(id))return xir_sys_pipe_signature(id,types,parameters,count,result,error);
     const XrNativeCallableDeclaration *native=xr_native_callable_by_id(id);
     bool pin=id==XR_NATIVE_CALLABLE_SYS_PIN_TO_CPU,signal=id==XR_NATIVE_CALLABLE_SYS_ON_SIGNAL;

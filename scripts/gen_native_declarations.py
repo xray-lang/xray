@@ -1244,6 +1244,37 @@ def render_sys_pipes(declarations):
     return lines, rows
 
 
+def render_sys_processes(declarations):
+    contracts = (
+        ('__processSpawn', '(program: string, args: Array<string>, cwd: string?, envKeys: Array<string>?, envValues: Array<string>?, stdinRead: i64?, stdoutWrite: i64?, stderrWrite: i64?, detached: bool): i64', 'SYS_PROCESS_SPAWN', 'I64', 'i64', (('program', 'string', 'STRING'), ('args', 'Array<string>', 'ARRAY_STRING'), ('cwd', 'string?', 'NULLABLE_STRING'), ('envKeys', 'Array<string>?', 'NULLABLE_ARRAY_STRING'), ('envValues', 'Array<string>?', 'NULLABLE_ARRAY_STRING'), ('stdinRead', 'i64?', 'NULLABLE_I64'), ('stdoutWrite', 'i64?', 'NULLABLE_I64'), ('stderrWrite', 'i64?', 'NULLABLE_I64'), ('detached', 'bool', 'BOOL')), 'sys_process_spawn'),
+        ('__processTryWait', '(id: i64): i64?', 'SYS_PROCESS_TRY_WAIT', 'NULLABLE_I64', 'i64?', (('id', 'i64', 'I64'),), 'sys_process_try_wait'),
+        ('__processKill', '(id: i64, signal: i64): bool', 'SYS_PROCESS_KILL', 'BOOL', 'bool', (('id', 'i64', 'I64'), ('signal', 'i64', 'I64')), 'sys_process_kill'),
+    )
+    lines, rows = [], []
+    for at, (name, signature, identity, term, result, parameters, vm) in enumerate(contracts):
+        candidates = [r for r in declarations if r.module == 'sys' and r.name == name]
+        if len(candidates) != 1:
+            raise ValueError('Process callable requires its sole governed declaration: ' + name)
+        row = candidates[0]
+        if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+                row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
+                row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
+                row.ret, row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
+                signature, str(len(parameters)), 'svvvvvvvv' if at == 0 else 'v' * len(parameters),
+                'internal', '', '', '', 'system', vm, 'xrt_' + vm, True, 'method', '', 'normal', '', '',
+                'value', False, None, (), ''):
+            raise ValueError('Process callable differs from its complete source contract: ' + name)
+        symbol = 'xr_native_' + identity.lower()
+        lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {']
+        lines += ['    {' + c_string(n) + ', ' + c_string(t) + ', XR_NATIVE_TERM_' + k + ', false, false},' for n, t, k in parameters]
+        lines += ['};', 'static const XrNativeMemberDeclaration ' + symbol + ' = {',
+            '    ' + str(at + 10) + ', ' + c_string(name) + ', ' + c_string(signature) + ', ' + c_string(result) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
+            '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
+            '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + symbol + '_parameters, ' + str(len(parameters)) + ', XR_NATIVE_TERM_' + term, '};']
+        rows += ['    {XR_NATIVE_CALLABLE_' + identity + ', NULL, &' + symbol + ', NULL, false, "sys", "stdlib/defs/core.def", FINGERPRINT}']
+    return lines, rows
+
+
 def render_cpu_callables(declarations):
     contracts = (
         ('os', '__cpuCount', '(): i64', 'os_cpuCount', 'xrt_os_cpu_count', 'OS_CPU_COUNT', 'I64', 13),
@@ -1591,6 +1622,9 @@ def render_unicode_callable(root, decoder):
     pipe_lines, pipe_rows = render_sys_pipes(declarations)
     buffer_lines += pipe_lines
     buffer_rows += pipe_rows
+    process_lines, process_rows = render_sys_processes(declarations)
+    buffer_lines += process_lines
+    buffer_rows += process_rows
     os_lines, os_rows = render_os_callables(declarations)
     buffer_lines += os_lines
     buffer_rows += os_rows
