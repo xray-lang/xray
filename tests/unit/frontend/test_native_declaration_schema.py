@@ -854,7 +854,8 @@ class IoCallableSchemaTests(unittest.TestCase):
     def test_exact_filesystem_contract_and_runtime_only_rows(self):
         lines, rows = schema.render_io_callables(self.declarations)
         identities = ('CHMOD', 'CHDIR', 'STAT', 'MKDIR', 'RMDIR', 'REMOVE', 'RENAME', 'UTIME_NOW',
-                      'SYMLINK', 'READLINK', 'REALPATH', 'MAKE_TEMP_DIR', 'MAKE_TEMP_FILE', 'DIR_OPEN', 'DIR_NEXT', 'DIR_CLOSE')
+                      'SYMLINK', 'READLINK', 'REALPATH', 'MAKE_TEMP_DIR', 'MAKE_TEMP_FILE', 'DIR_OPEN', 'DIR_NEXT', 'DIR_CLOSE',
+                      'FILE_CLOSE', 'FILE_FLUSH', 'FILE_OPEN', 'FILE_OPEN_WRITE', 'FILE_READ', 'FILE_WRITE', 'FILE_WRITE_STR')
         self.assertEqual(len(rows), len(identities))
         for row, identity in zip(rows, identities):
             self.assertIn('XR_NATIVE_CALLABLE_IO_' + identity + ', NULL,', row)
@@ -863,7 +864,7 @@ class IoCallableSchemaTests(unittest.TestCase):
         text = '\n'.join(lines)
         self.assertIn('"__chmod", "(path: Path, mode: i64): bool", "bool"', text)
         self.assertIn('"__chdir", "(path: Path): bool", "bool"', text)
-        self.assertEqual(text.count('{"path", "Path", XR_NATIVE_TERM_PATH, false, false}'), 10)
+        self.assertEqual(text.count('{"path", "Path", XR_NATIVE_TERM_PATH, false, false}'), 12)
         self.assertIn('{"mode", "i64", XR_NATIVE_TERM_I64, false, false}', text)
         self.assertIn('{"old", "Path", XR_NATIVE_TERM_PATH, false, false}', text)
         self.assertIn('{"new", "Path", XR_NATIVE_TERM_PATH, false, false}', text)
@@ -876,7 +877,7 @@ class IoCallableSchemaTests(unittest.TestCase):
         self.assertIn('"__dirOpen", "(path: Path): i64", "i64"', text)
         self.assertIn('"__dirNext", "(handle: i64): string?", "string?"', text)
         self.assertIn('"__dirClose", "(handle: i64): bool", "bool"', text)
-        self.assertEqual(text.count('{"handle", "i64", XR_NATIVE_TERM_I64, false, false}'), 2)
+        self.assertEqual(text.count('{"handle", "i64", XR_NATIVE_TERM_I64, false, false}'), 7)
         self.assertIn('XR_NATIVE_TERM_NULLABLE_FILE_STAT', text)
         self.assertEqual(text.count('XR_NATIVE_ALLOCATION_UNKNOWN'), len(identities))
 
@@ -900,6 +901,48 @@ class IoCallableSchemaTests(unittest.TestCase):
                     schema.render_io_callables([replace(item, **{field: value}) if item is row else item
                                                 for item in self.declarations])
 
+
+
+class IoFileCallableSchemaTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / 'tools/stdlibgen'))
+        from stdlibgen import parse_defs
+        cls.declarations = parse_defs(ROOT)
+
+    def test_file_declarations_preserve_every_parameter_and_carrier(self):
+        lines, rows = schema.render_io_file_callables(self.declarations)
+        self.assertEqual(len(rows), 7)
+        text = '\n'.join(lines)
+        for identity in ('CLOSE', 'FLUSH', 'OPEN', 'OPEN_WRITE', 'READ', 'WRITE', 'WRITE_STR'):
+            self.assertIn('XR_NATIVE_CALLABLE_IO_FILE_' + identity + ', NULL,', '\n'.join(rows))
+        self.assertIn('{"append", "bool", XR_NATIVE_TERM_BOOL, false, false}', text)
+        self.assertIn('{"data", "Array<u8>", XR_NATIVE_TERM_ARRAY_U8, false, false}', text)
+        self.assertIn('{"data", "string", XR_NATIVE_TERM_STRING, false, false}', text)
+        self.assertIn('{"maxBytes", "i64", XR_NATIVE_TERM_I64, false, false}', text)
+        self.assertEqual(text.count('{"offset", "i64", XR_NATIVE_TERM_I64, false, false}'), 2)
+        self.assertIn('2, XR_NATIVE_TERM_NULLABLE_ARRAY_U8', text)
+        self.assertTrue(all('NULL, false, "io", "stdlib/defs/core.def", FINGERPRINT' in row for row in rows))
+
+    def test_file_contract_mutations_fail_before_native_registration(self):
+        names = ('__fileClose', '__fileFlush', '__fileOpen', '__fileOpenWrite', '__fileRead', '__fileWrite', '__fileWriteStr')
+        for name in names:
+            row = next(item for item in self.declarations if item.module == 'io' and item.name == name)
+            for changed in ([item for item in self.declarations if item is not row], self.declarations + [row]):
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    schema.render_io_file_callables(changed)
+            changes = [('module', 'sys'), ('signature', '(): bool'), ('argc', '9'), ('arg_spec', 'other'),
+                ('visibility', 'public'), ('effect', 'nothrow'), ('allocation', 'no_heap'),
+                ('return_ownership', 'borrowed'), ('layer', 'core'), ('vm', 'other'), ('aot', 'other'),
+                ('aot_direct', False), ('aot_kind', 'builtin'), ('link_object', 'other'),
+                ('vm_binding', 'normal' if row.vm_binding == 'yieldable' else 'yieldable'),
+                ('vm_ifdef', 'OTHER'), ('define', 'OTHER'), ('ret', 'i64'), ('semantic_intrinsic', True),
+                ('provider_declaration', object()), ('caps', ('task',)), ('suspension_kind', 'task')]
+            for field, value in changes:
+                self.assertNotEqual(getattr(row, field), value)
+                with self.subTest(name=name, field=field), self.assertRaises(ValueError):
+                    schema.render_io_file_callables([replace(item, **{field: value}) if item is row else item
+                                                    for item in self.declarations])
 
 
 class OsSystemDeclarations(unittest.TestCase):

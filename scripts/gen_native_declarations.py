@@ -1543,6 +1543,44 @@ def render_io_callables(declarations):
             '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
             '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + symbol + '_parameters, ' + str(len(arguments)) + ', XR_NATIVE_TERM_' + term, '};']
         rows += ['    {XR_NATIVE_CALLABLE_' + identity + ', NULL, &' + symbol + ', NULL, false, "io", "stdlib/defs/core.def", FINGERPRINT}']
+    file_lines, file_rows = render_io_file_callables(declarations)
+    return lines + file_lines, rows + file_rows
+
+
+def render_io_file_callables(declarations):
+    contracts = (
+        ('__fileClose', '(handle: i64): bool', 'i', 'io_fileClose', 'xrt_io_file_close', 'IO_FILE_CLOSE', 'BOOL', 'bool', (('handle', 'i64', 'I64'),)),
+        ('__fileFlush', '(handle: i64): bool', 'i', 'io_fileFlush', 'xrt_io_file_flush', 'IO_FILE_FLUSH', 'BOOL', 'bool', (('handle', 'i64', 'I64'),)),
+        ('__fileOpen', '(path: Path): i64', 'p', 'io_fileOpen', 'xrt_io_file_open', 'IO_FILE_OPEN', 'I64', 'i64', (('path', 'Path', 'PATH'),)),
+        ('__fileOpenWrite', '(path: Path, append: bool): i64', 'pv', 'io_fileOpenWrite', 'xrt_io_file_open_write', 'IO_FILE_OPEN_WRITE', 'I64', 'i64', (('path', 'Path', 'PATH'), ('append', 'bool', 'BOOL'))),
+        ('__fileRead', '(handle: i64, maxBytes: i64): Array<u8>?', 'ii', 'io_fileRead', 'xrt_io_read_handle_chunk', 'IO_FILE_READ', 'NULLABLE_ARRAY_U8', 'Array<u8>?', (('handle', 'i64', 'I64'), ('maxBytes', 'i64', 'I64'))),
+        ('__fileWrite', '(handle: i64, data: Array<u8>, offset: i64): i64', 'ivi', 'io_fileWrite', 'xrt_io_write_handle_chunk', 'IO_FILE_WRITE', 'I64', 'i64', (('handle', 'i64', 'I64'), ('data', 'Array<u8>', 'ARRAY_U8'), ('offset', 'i64', 'I64'))),
+        ('__fileWriteStr', '(handle: i64, data: string, offset: i64): i64', 'isi', 'io_fileWriteStr', 'xrt_io_write_handle_str', 'IO_FILE_WRITE_STR', 'I64', 'i64', (('handle', 'i64', 'I64'), ('data', 'string', 'STRING'), ('offset', 'i64', 'I64'))),
+    )
+    lines, rows = [], []
+    for ordinal, (name, signature, arguments, vm, aot, identity, term, result, parameters) in enumerate(contracts, 17):
+        candidates = [row for row in declarations if row.module == 'io' and row.name == name]
+        if len(candidates) != 1:
+            raise ValueError('File callable requires its sole governed declaration: ' + name)
+        row = candidates[0]
+        binding = 'yieldable' if identity in ('IO_FILE_WRITE', 'IO_FILE_WRITE_STR') else 'normal'
+        if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+                row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct, row.aot_kind,
+                row.link_object, row.vm_binding, row.vm_ifdef, row.define, row.ret,
+                row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
+                signature, str(len(parameters)), arguments, 'internal', '', '',
+                'fresh' if identity == 'IO_FILE_READ' else '', 'system', vm, aot, True, 'method',
+                '', binding, '', '', 'value', False, None, (), ''):
+            raise ValueError('File callable differs from its complete source contract: ' + name)
+        symbol = 'xr_native_' + identity.lower()
+        lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {']
+        lines += ['    {' + c_string(n) + ', ' + c_string(t) + ', XR_NATIVE_TERM_' + kind + ', false, false},'
+                  for n, t, kind in parameters]
+        lines += ['};', 'static const XrNativeMemberDeclaration ' + symbol + ' = {',
+            '    ' + str(ordinal) + ', ' + c_string(name) + ', ' + c_string(signature) + ', ' + c_string(result) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
+            '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
+            '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + symbol + '_parameters, ' + str(len(parameters)) + ', XR_NATIVE_TERM_' + term, '};']
+        rows += ['    {XR_NATIVE_CALLABLE_' + identity + ', NULL, &' + symbol + ', NULL, false, "io", "stdlib/defs/core.def", FINGERPRINT}']
     return lines, rows
 
 

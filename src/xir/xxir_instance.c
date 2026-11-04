@@ -169,6 +169,7 @@ static XrXirCallStatus instance_path_stage(XrXirCallView *,uint32_t,uint32_t);
 static XrXirCallStatus instance_process_stage(XrXirCallView *,uint32_t,uint32_t,const XrXirValue *,uint32_t);
 static XrXirCallStatus instance_pipe_stage(XrXirCallView *,uint32_t,uint32_t,const XrXirValue *,uint32_t);
 static XrXirCallStatus instance_exec_pipe_stage(XrXirCallView *,uint32_t,uint32_t,const XrXirValue *,uint32_t);
+static XrXirCallStatus instance_io_file_stage(XrXirCallView *,uint32_t,uint32_t,const XrXirValue *,uint32_t);
 static XrXirCallStatus instance_signals_poll(XrXirInstance *instance);
 static bool instance_signal_native_target(const XrXirProgram *program,uint32_t target);
 static XrXirCallStatus instance_signal_stage(XrXirCallView *view,uint32_t instruction,
@@ -1966,6 +1967,9 @@ XR_FUNC XrXirCallStatus xr_xir_instance_call_at(XrXirCallView *view,uint32_t ins
     if(entry<instance->program->entry_count &&
         xir_sys_pipe_id(instance->program->declarations->functions[entry].native_callable))
         return instance_pipe_stage(view,instruction,entry,arguments,count);
+    if(entry<instance->program->entry_count &&
+        xir_io_file_id(instance->program->declarations->functions[entry].native_callable))
+        return instance_io_file_stage(view,instruction,entry,arguments,count);
     if (!view_is_child(instance,view) && (entry>=instance->program->entry_count ||
         instance->program->declarations->functions[entry].method_kind!=XR_XIR_CONSTRUCTOR_FIELDS))
         return XR_XIR_CALL_READY;
@@ -2560,6 +2564,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_pointer(XrXirCallView *view,XrXirOp oper
 #include "xxir_instance_sys_tokens.inc.c"
 #include "xxir_instance_file_metadata.inc.c"
 #include "xxir_instance_io.inc.c"
+#include "xxir_instance_io_file.inc.c"
 #include "xxir_instance_pipe_owner.inc.c"
 #include "xxir_instance_pipe.inc.c"
 #include "xxir_instance_exec_pipe.inc.c"
@@ -2618,6 +2623,7 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
             *value=(XrXirValue){XR_XIR_BOOL,0,pinned?1:0};
         }
     } else if(xir_io_native_id(id)) {
+        if(xir_io_file_id(id))return instance_io_file_action(view,instance,id);
         if(id==XR_NATIVE_CALLABLE_IO_MAKE_TEMP_DIR || id==XR_NATIVE_CALLABLE_IO_MAKE_TEMP_FILE)
             return instance_io_temp_action(view,instance,index,id,entry,value);
         if(id>=XR_NATIVE_CALLABLE_IO_DIR_OPEN && id<=XR_NATIVE_CALLABLE_IO_DIR_CLOSE)

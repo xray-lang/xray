@@ -10,13 +10,16 @@
  * Input retains no computed Control row. Both construction and receiving use
  * these read-only primitives within one callback-free interval.
  */
-/* An opaque pipe body has no synthetic SUSPEND instruction. Its complete
+/* An opaque I/O body has no synthetic SUSPEND instruction. Its complete
  * owned declaration is the terminal, and receiving repeats this same read. */
 static XrXirStatus effect_control_native_suspend(const EffectBodyRequest *input,uint32_t function,bool *output) {
     const EffectBodyMaterial *body=input->owner;
     if(!body || function>=effect_body_count(body) || !output)return XR_XIR_BAD_STRUCTURE;
     *output=false;const XrXirDeclarations *decls=body->declarations;
-    if(!decls || !decls->functions || !xir_sys_pipe_can_suspend(decls->functions[function].native_callable))return XR_XIR_OK;
+    if(!decls || !decls->functions)return XR_XIR_OK;
+    uint32_t native=decls->functions[function].native_callable;
+    bool io=xir_io_native_can_suspend(native);
+    if(!io && !xir_sys_pipe_can_suspend(native))return XR_XIR_OK;
     uint32_t id=decls->functions[function].native_callable,declaration=function;
     const EffectBodyMaterial *canonical=body;
     if(body->ordinary_identities) {
@@ -33,15 +36,28 @@ static XrXirStatus effect_control_native_suspend(const EffectBodyRequest *input,
     const EffectBodyFunction *head=body->functions+function,*formal=canonical->functions+declaration;
     if(!xir_native_callable_identity(decls->functions+function) ||
         !xir_native_callable_identity(canonical->declarations->functions+declaration) ||
-        !xir_sys_native_scope(decls,function,effect_body_count(body)) ||
-        !xir_sys_native_scope(canonical->declarations,declaration,effect_body_count(canonical)) ||
+        (io?!xir_io_native_module_scope(decls,function,effect_body_count(body)):
+            !xir_sys_native_scope(decls,function,effect_body_count(body))) ||
+        (io?!xir_io_native_module_scope(canonical->declarations,declaration,effect_body_count(canonical)):
+            !xir_sys_native_scope(canonical->declarations,declaration,effect_body_count(canonical))) ||
         head->block_count || head->instruction_count || head->run_count || head->operand_count || head->consume_parameter_count ||
         formal->block_count || formal->instruction_count || formal->run_count || formal->operand_count || formal->consume_parameter_count ||
         (body->generics && (body->generics[function].parameter_count || body->generics[function].argument_count)) ||
         (canonical->generics && (canonical->generics[declaration].parameter_count || canonical->generics[declaration].argument_count)) ||
-        !xir_sys_pipe_signature(id,body->domain.types,head->parameters,head->parameter_count,head->result,head->error_type) ||
-        !xir_sys_pipe_signature(id,canonical->domain.types,formal->parameters,formal->parameter_count,formal->result,formal->error_type))
+        (io?!xir_io_native_signature(id,body->domain.types,head->parameters,head->parameter_count,head->result,head->error_type):
+            !xir_sys_pipe_signature(id,body->domain.types,head->parameters,head->parameter_count,head->result,head->error_type)) ||
+        (io?!xir_io_native_signature(id,canonical->domain.types,formal->parameters,formal->parameter_count,formal->result,formal->error_type):
+            !xir_sys_pipe_signature(id,canonical->domain.types,formal->parameters,formal->parameter_count,formal->result,formal->error_type)))
         return XR_XIR_BAD_TYPE;
+    if(io) {
+        const XirIoNativeContract *contract=xir_io_native_contract(id);
+        for(uint32_t p=0;p<contract->paths;++p) {
+            uint32_t field=0;
+            if(!xir_io_native_scope(decls,body->domain.types,function,effect_body_count(body),head->parameters[p],&field) ||
+                !xir_io_native_scope(canonical->declarations,canonical->domain.types,declaration,
+                    effect_body_count(canonical),formal->parameters[p],&field))return XR_XIR_BAD_TYPE;
+        }
+    }
     *output=true;return XR_XIR_OK;
 }
 static bool effect_control_direct(XrXirOp opcode) {
