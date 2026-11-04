@@ -839,6 +839,7 @@
     "host-os": {
       "tier": "L2",
       "match": [
+        "stdlib/os/os.xr",
         "stdlib/sys/sys.xr",
         "stdlib/time/time.xr",
         "src/os/os_fs.h",
