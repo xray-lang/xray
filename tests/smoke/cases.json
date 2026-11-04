@@ -414,7 +414,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F13",
-        "first_diagnostic": "stdlib/io/io.xr:333:57: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/io/io.xr:57:22: error: name is not an initialized value"
       }
     },
     {
@@ -461,13 +461,9 @@
       "id": "stdlib/os/os.xr",
       "path": "stdlib/os/os.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F13",
-        "first_diagnostic": "stdlib/os/os.xr:149:33: error: name is not an initialized value"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "stdlib/parallel/parallel.xr",
@@ -481,13 +477,9 @@
       "id": "stdlib/path/path.xr",
       "path": "stdlib/path/path.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F13",
-        "first_diagnostic": "stdlib/os/os.xr:149:33: error: name is not an initialized value"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "stdlib/regex/regex.xr",
@@ -537,13 +529,9 @@
       "id": "stdlib/sys/sys.xr",
       "path": "stdlib/sys/sys.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F13",
-        "first_diagnostic": "stdlib/sys/sys.xr:161:12: error: name is not an initialized value"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "stdlib/text/text.xr",
@@ -594,7 +582,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F13",
-        "first_diagnostic": "stdlib/io/io.xr:333:57: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/toml/toml.xr:631:0: error: name is not an initialized value"
       }
     },
     {
@@ -872,6 +860,30 @@
     {
       "id": "native:stdlib/compress/compress.xr",
       "path": "stdlib/compress/compress.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
+    },
+    {
+      "id": "native:stdlib/os/os.xr",
+      "path": "stdlib/os/os.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
+    },
+    {
+      "id": "native:stdlib/sys/sys.xr",
+      "path": "stdlib/sys/sys.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
+    },
+    {
+      "id": "native:stdlib/path/path.xr",
+      "path": "stdlib/path/path.xr",
       "mode": "build-run",
       "expect": "pass",
       "exit_code": 0,

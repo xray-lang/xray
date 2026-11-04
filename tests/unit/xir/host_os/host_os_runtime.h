@@ -24,6 +24,9 @@
 #include "os/os_file_metadata.h"
 #include "os/os_file_mutation.h"
 #include "os/os_thread_token.h"
+#include "os/os_file_links.h"
+#include "os/os_file_temp.h"
+#include "os/os_directory_owned.h"
 #if defined(XR_OS_WINDOWS)
 #include <windows.h>
 #ifdef interface
@@ -56,6 +59,15 @@ static XrOsIoStatus host_io_rmdir(const XrOsIoPolicy *,XrOsPathSpan,bool(*)(void
 static XrOsIoStatus host_io_remove(const XrOsIoPolicy *,XrOsPathSpan,bool(*)(void *),XrOsFileMetadataOwner *,bool *);
 static XrOsIoStatus host_io_rename(const XrOsIoPolicy *,XrOsPathSpan,XrOsPathSpan,bool(*)(void *),bool *);
 static XrOsIoStatus host_io_utime(const XrOsIoPolicy *,XrOsPathSpan,bool(*)(void *),XrOsFileMetadataOwner *,bool *);
+static XrOsIoStatus host_links_symlink(const XrOsIoPolicy *,XrOsPathSpan,XrOsPathSpan,bool(*)(void *),bool *);
+static XrOsIoStatus host_links_readlink(const XrOsIoPolicy *,XrOsPathSpan,bool(*)(void *),XrOsFileMetadataOwner *,XrOsFileLinkText *);
+static XrOsIoStatus host_links_realpath(const XrOsIoPolicy *,XrOsPathSpan,bool(*)(void *),XrOsFileMetadataOwner *,XrOsFileLinkText *);
+static XrOsIoStatus host_temp_directory(const XrOsFileTempRequest *,XrOsFileTempOwner *,bool *);
+static XrOsIoStatus host_temp_file(const XrOsFileTempRequest *,XrOsFileTempOwner *,bool *);
+static XrOsIoStatus host_temp_finish(const XrOsIoPolicy *,XrOsFileTempOwner *,bool);
+static XrOsIoStatus host_directory_open(const XrOsDirectoryRequest *,XrOsDirectoryOwner *,bool *);
+static XrOsIoStatus host_directory_next(XrOsDirectoryOwner *,void *,bool(*)(void *),XrOsDirectoryText *);
+static XrOsIoStatus host_directory_close(XrOsDirectoryOwner *);
 static unsigned int host_count(void);
 static int host_pin(unsigned int);
 static XrOsIoStatus host_chmod(const XrOsIoPolicy *,const char *,int64_t,bool(*)(void *),bool *);
@@ -69,6 +81,15 @@ static XrOsIoStatus host_token_alive(const XrOsThreadTokenQuery *,int64_t,bool *
 #define xr_os_io_path_remove host_io_remove
 #define xr_os_io_path_rename host_io_rename
 #define xr_os_io_path_utime_now host_io_utime
+#define xr_os_io_path_symlink host_links_symlink
+#define xr_os_io_path_readlink host_links_readlink
+#define xr_os_io_path_realpath host_links_realpath
+#define xr_os_io_temp_directory host_temp_directory
+#define xr_os_io_temp_file host_temp_file
+#define xr_os_io_temp_finish host_temp_finish
+#define xr_os_io_directory_open host_directory_open
+#define xr_os_io_directory_next host_directory_next
+#define xr_os_io_directory_close host_directory_close
 #define xr_os_io_file_metadata host_metadata
 #define xr_os_io_file_metadata_close host_metadata_close
 #define xr_os_cpu_count host_count
@@ -102,6 +123,15 @@ static XrOsIoStatus host_token_alive(const XrOsThreadTokenQuery *,int64_t,bool *
 #undef xr_os_io_path_remove
 #undef xr_os_io_path_rename
 #undef xr_os_io_path_utime_now
+#undef xr_os_io_path_symlink
+#undef xr_os_io_path_readlink
+#undef xr_os_io_path_realpath
+#undef xr_os_io_temp_directory
+#undef xr_os_io_temp_file
+#undef xr_os_io_temp_finish
+#undef xr_os_io_directory_open
+#undef xr_os_io_directory_next
+#undef xr_os_io_directory_close
 #undef xr_os_io_file_metadata
 #undef xr_os_io_file_metadata_close
 #undef xr_os_cpu_count
@@ -244,6 +274,94 @@ static XrOsIoStatus host_io_rmdir(const XrOsIoPolicy *p,XrOsPathSpan a,bool(*c)(
 static XrOsIoStatus host_io_remove(const XrOsIoPolicy *p,XrOsPathSpan a,bool(*c)(void *),XrOsFileMetadataOwner *h,bool *o){return host_io_operation(p,a,(XrOsPathSpan){0},c,h,o,2);}
 static XrOsIoStatus host_io_rename(const XrOsIoPolicy *p,XrOsPathSpan a,XrOsPathSpan b,bool(*c)(void *),bool *o){return host_io_operation(p,a,b,c,NULL,o,3);}
 static XrOsIoStatus host_io_utime(const XrOsIoPolicy *p,XrOsPathSpan a,bool(*c)(void *),XrOsFileMetadataOwner *h,bool *o){return host_io_operation(p,a,(XrOsPathSpan){0},c,h,o,4);}
+enum { LINKS_NORMAL,LINKS_OOM,LINKS_CANCEL_BEFORE,LINKS_CANCEL_AFTER,LINKS_RESULT_OOM,LINKS_RETAIN_CLOSE };
+static unsigned links_mode,links_calls[3];
+static XrOsIoStatus host_links_symlink(const XrOsIoPolicy *policy,XrOsPathSpan source,XrOsPathSpan name,
+ bool(*current)(void *),bool *output){
+ ++links_calls[0];CHECK(host_active&&current);
+ return xr_os_io_path_symlink(policy,source,name,current,output);
+}
+static XrOsIoStatus host_links_query(const XrOsIoPolicy *policy,XrOsPathSpan path,
+ bool(*current)(void *),XrOsFileMetadataOwner *owner,XrOsFileLinkText *output,bool following){
+ ++links_calls[following?2:1];CHECK(host_active&&current);
+ if(links_mode==LINKS_OOM)runtime_fail_at=runtime_attempts;
+ if(links_mode==LINKS_CANCEL_BEFORE)CHECK(xr_xir_call_request_cancel(host_active->call)==XR_XIR_CALL_CANCEL_REQUESTED);
+ XrOsIoStatus status=following?xr_os_io_path_realpath(policy,path,current,owner,output):
+  xr_os_io_path_readlink(policy,path,current,owner,output);
+ runtime_fail_at=SIZE_MAX;
+ if(links_mode==LINKS_CANCEL_AFTER)CHECK(xr_xir_call_request_cancel(host_active->call)==XR_XIR_CALL_CANCEL_REQUESTED);
+ if(status==XR_OS_IO_OK&&links_mode==LINKS_RESULT_OOM)runtime_fail_at=runtime_attempts;
+#if defined(XR_OS_WINDOWS)
+ /* Adapter injection retains a real handle; it is not a Windows close fault. */
+ if(status==XR_OS_IO_OK&&links_mode==LINKS_RETAIN_CLOSE){
+  CHECK(!owner->handle);HANDLE held=CreateFileW(L".",FILE_READ_ATTRIBUTES,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
+   NULL,OPEN_EXISTING,FILE_FLAG_BACKUP_SEMANTICS,NULL);CHECK(held!=INVALID_HANDLE_VALUE);
+  owner->handle=(intptr_t)held;status=XR_OS_IO_IO;
+ }
+#endif
+ return status;
+}
+static XrOsIoStatus host_links_readlink(const XrOsIoPolicy *p,XrOsPathSpan a,bool(*c)(void *),XrOsFileMetadataOwner *h,XrOsFileLinkText *o){return host_links_query(p,a,c,h,o,false);}
+static XrOsIoStatus host_links_realpath(const XrOsIoPolicy *p,XrOsPathSpan a,bool(*c)(void *),XrOsFileMetadataOwner *h,XrOsFileLinkText *o){return host_links_query(p,a,c,h,o,true);}
+enum { IO_TEMP_NORMAL,IO_TEMP_PREPARE_OOM,IO_TEMP_PREPARE_CANCEL,IO_TEMP_KEEP_FAIL,IO_TEMP_AFTER_KEEP_OOM };
+static unsigned io_temp_mode,io_temp_creates,io_temp_keeps,io_temp_rollbacks,io_temp_rollback_failures;
+static char io_temp_candidate[65536];
+typedef struct HostTempRequest {const XrOsFileTempRequest *actual;} HostTempRequest;
+static bool host_temp_current_proxy(void *context){
+ HostTempRequest *borrow=context;return !borrow->actual->current||borrow->actual->current(borrow->actual->context);
+}
+static XrOsIoStatus host_temp_prepare_proxy(void *context,const char *text,size_t length){
+ HostTempRequest *borrow=context;CHECK(length<sizeof(io_temp_candidate));memcpy(io_temp_candidate,text,length);io_temp_candidate[length]=0;
+ if(io_temp_mode==IO_TEMP_PREPARE_OOM)runtime_fail_at=runtime_attempts;
+ XrOsIoStatus status=borrow->actual->prepare(borrow->actual->context,text,length);runtime_fail_at=SIZE_MAX;
+ if(status==XR_OS_IO_OK&&io_temp_mode==IO_TEMP_PREPARE_CANCEL)
+  CHECK(host_active&&xr_xir_call_request_cancel(host_active->call)==XR_XIR_CALL_CANCEL_REQUESTED);
+ return status;
+}
+static XrOsIoStatus host_temp_create(const XrOsFileTempRequest *request,XrOsFileTempOwner *owner,bool *created,bool directory){
+ ++io_temp_creates;HostTempRequest borrow={request};XrOsFileTempRequest proxy=*request;
+ proxy.context=&borrow;proxy.current=host_temp_current_proxy;proxy.prepare=host_temp_prepare_proxy;
+ return directory?xr_os_io_temp_directory(&proxy,owner,created):xr_os_io_temp_file(&proxy,owner,created);
+}
+static XrOsIoStatus host_temp_directory(const XrOsFileTempRequest *r,XrOsFileTempOwner *o,bool *c){return host_temp_create(r,o,c,true);}
+static XrOsIoStatus host_temp_file(const XrOsFileTempRequest *r,XrOsFileTempOwner *o,bool *c){return host_temp_create(r,o,c,false);}
+static XrOsIoStatus host_temp_finish(const XrOsIoPolicy *policy,XrOsFileTempOwner *owner,bool keep){
+ if(keep){++io_temp_keeps;if(io_temp_mode==IO_TEMP_KEEP_FAIL)return XR_OS_IO_IO;}
+ else {++io_temp_rollbacks;if(io_temp_rollback_failures){--io_temp_rollback_failures;return XR_OS_IO_IO;}}
+ XrOsIoStatus status=xr_os_io_temp_finish(policy,owner,keep);
+ if(keep&&status==XR_OS_IO_OK&&io_temp_mode==IO_TEMP_AFTER_KEEP_OOM)runtime_fail_at=runtime_attempts;
+ return status;
+}
+enum { DIR_NORMAL,DIR_OPEN_CANCEL,DIR_NEXT_OOM,DIR_NEXT_CANCEL,DIR_NEXT_ERROR,DIR_CLOSE_CANCEL };
+static unsigned directory_mode,directory_calls[3],directory_close_failures;
+static char directory_observed_name[1024];
+static void host_directory_cancel(void){
+ CHECK(host_active&&xr_xir_call_request_cancel(instance_current(host_active)->call)==XR_XIR_CALL_CANCEL_REQUESTED);
+}
+static XrOsIoStatus host_directory_open(const XrOsDirectoryRequest *request,XrOsDirectoryOwner *owner,bool *opened){
+ ++directory_calls[0];XrOsIoStatus status=xr_os_io_directory_open(request,owner,opened);
+ if(status==XR_OS_IO_OK&&*opened&&directory_mode==DIR_OPEN_CANCEL)host_directory_cancel();
+ return status;
+}
+static XrOsIoStatus host_directory_next(XrOsDirectoryOwner *owner,void *context,bool(*current)(void *),XrOsDirectoryText *output){
+ ++directory_calls[1];if(directory_mode==DIR_NEXT_ERROR)return XR_OS_IO_IO;
+ XrOsIoStatus status=xr_os_io_directory_next(owner,context,current,output);
+ if(status==XR_OS_IO_OK){
+  CHECK(host_active&&output->bytes&&output->length<sizeof(directory_observed_name));
+  memcpy(directory_observed_name,output->bytes,output->length);directory_observed_name[output->length]=0;
+  if(directory_mode==DIR_NEXT_OOM)runtime_fail_at=runtime_attempts;
+  if(directory_mode==DIR_NEXT_CANCEL)host_directory_cancel();
+ }
+ return status;
+}
+static XrOsIoStatus host_directory_close(XrOsDirectoryOwner *owner){
+ ++directory_calls[2];
+ /* An adapter refusal retains the actual kernel owner; no OS failure is claimed. */
+ if(directory_close_failures){--directory_close_failures;return XR_OS_IO_IO;}
+ XrOsIoStatus status=xr_os_io_directory_close(owner);
+ if(status==XR_OS_IO_OK&&directory_mode==DIR_CLOSE_CANCEL){directory_mode=DIR_NORMAL;host_directory_cancel();}
+ return status;
+}
 static unsigned int host_count(void){
  ++count_calls;
  if(host_count_probe)host_count_probe();

@@ -44,12 +44,17 @@ static XrXirCallStatus instance_io_permission(XrXirCallView *view,XrXirInstance 
     return XR_XIR_CALL_READY;
 }
 #include "xxir_instance_io_mutation.inc.c"
+#include "xxir_instance_io_links.inc.c"
+#include "xxir_instance_io_temp.inc.c"
+#include "xxir_instance_io_directory.inc.c"
 
 static XrXirCallStatus instance_io_call(XrXirCallView *view,XrXirInstance *instance,
     uint32_t index,uint32_t id,const XrXirCallEntry *entry,XrXirValue *output) {
     uint32_t fields[2]={0};
     XrXirCallStatus status=instance_io_permission(view,instance,index,fields);
     if(status!=XR_XIR_CALL_READY)return status;
+    if(id==XR_NATIVE_CALLABLE_IO_SYMLINK || id==XR_NATIVE_CALLABLE_IO_READLINK || id==XR_NATIVE_CALLABLE_IO_REALPATH)
+        return instance_io_links(view,instance,id,entry,fields,output);
     if(id>=XR_NATIVE_CALLABLE_IO_MKDIR && id<=XR_NATIVE_CALLABLE_IO_UTIME_NOW)
         return instance_io_mutation(view,instance,id,entry,fields,output);
     XrXirValue base={0},text={0};

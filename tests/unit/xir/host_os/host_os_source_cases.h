@@ -44,7 +44,38 @@ static const char host_io_bool_text[]=
  "export fn byRef(a:string,b:string)->bool{var old:Path=Child(a);var next:Path=Child(b);return refs(ref old,ref next)}\n"
  "export fn ctfeMutation()->bool{return __mkdir(Child(\".\"))}\n";
 static const char host_count_text[]="export fn answer()->i64{return __cpuCount()}\n";
+static const char host_io_links_text[]=
+ "import {Path} from path\n"
+ "class Child extends Path{tail:string\ninit(raw:string){super(raw);this.tail=\"links-owned-tail\"}}\n"
+ "export fn make(raw:string)->Path{return Child(raw)}\n"
+ "export fn symlinkPath(source:Path,link:Path)->bool{return __symlink(source,link)}\n"
+ "export fn readlinkPath(path:Path)->string?{return __readlink(path)}\n"
+ "export fn realpathPath(path:Path)->string?{return __realpath(path)}\n"
+ "fn fromRef(path:ref Path)->string?{return __realpath(path)}\n"
+ "export fn byRef(raw:string)->string?{var path:Path=Child(raw);return fromRef(ref path)}\n"
+ "export fn ctfeSymlink()->bool{return __symlink(Child(\".\"),Child(\".\"))}\n"
+ "export fn ctfeReadlink()->string?{return __readlink(Child(\".\"))}\n"
+ "export fn ctfeRealpath()->string?{return __realpath(Child(\".\"))}\n";
 static const char host_pin_text[]="export fn answer(cpu:i64)->bool{return __pinToCpu(cpu)}\n";
+static const char host_io_temp_text[]=
+ "import {Path} from path\n"
+ "export fn directory(root:string)->string?{return __makeTempDir(root)}\n"
+ "export fn file(root:string)->string?{return __makeTempFile(root)}\n"
+ "export fn nested(v:Array<Array<string?>>)->Array<Array<string?>>{return v}\n"
+ "export fn ctfeDirectory()->string?{return __makeTempDir(\".\")}\n"
+ "export fn ctfeFile()->string?{return __makeTempFile(\".\")}\n";
+static const char host_io_directory_text[]=
+ "import {Path} from path\n"
+ "class Child extends Path{tail:string\ninit(raw:string){super(raw);this.tail=\"directory-owned-tail\"}}\n"
+ "export fn make(raw:string)->Path{return Child(raw)}\n"
+ "export fn openPath(path:Path)->i64{return __dirOpen(path)}\n"
+ "export fn nextName(handle:i64)->string?{return __dirNext(handle)}\n"
+ "export fn closePath(handle:i64)->bool{return __dirClose(handle)}\n"
+ "fn refOpen(path:ref Path)->i64{return __dirOpen(path)}\n"
+ "export fn byRef(raw:string)->i64{var path:Path=Child(raw);return refOpen(ref path)}\n"
+ "export fn ctfeOpen()->i64{return __dirOpen(Child(\".\"))}\n"
+ "export fn ctfeNext()->string?{return __dirNext(1)}\n"
+ "export fn ctfeClose()->bool{return __dirClose(1)}\n";
 static const char host_signal_frontier_text[]=
  "fn plain(n:i64)->i64{return n}\n"
  "fn read(v:Slice<u8>)->i64{return (v[0] as i64)+(v[1] as i64)}\n"

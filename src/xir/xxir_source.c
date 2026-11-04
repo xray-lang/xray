@@ -2580,8 +2580,9 @@ static bool collect_declarations(SourceContext *ctx) {
     for(uint32_t m=0;m<count;++m) {
         if(!source_request_poll(ctx,NULL))return false;
         if(!source_io_module(ctx,m) || source_owned_checked(&ctx->graph->specs[m]))continue;
-        if(capacity>UINT32_MAX-8u)return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"io native callable capacity overflow");
-        capacity+=8u;
+        uint32_t natives=(uint32_t)(sizeof(xir_io_native_contracts)/sizeof(*xir_io_native_contracts));
+        if(natives>UINT32_MAX-capacity)return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"io native callable capacity overflow");
+        capacity+=natives;
     }
     for(uint32_t m=0;m<count;++m) {
         if(!source_request_poll(ctx,NULL))return false;

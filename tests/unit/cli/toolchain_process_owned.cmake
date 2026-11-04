@@ -13,6 +13,7 @@ add_executable(test_toolchain_process_owned
     "${PROCESS_ROOT}/src/os/win/proc_self_win.c"
     "${PROCESS_ROOT}/src/os/win/time_win.c")
 add_dependencies(test_toolchain_process_owned xray_toolchain_process)
+target_link_libraries(test_toolchain_process_owned PRIVATE userenv)
 foreach(t test_toolchain_process_owned)
     target_include_directories(${t} PRIVATE "${PROCESS_ROOT}/src")
     target_compile_features(${t} PRIVATE c_std_11)

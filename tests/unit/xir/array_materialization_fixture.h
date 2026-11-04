@@ -43,8 +43,20 @@ static const char array_materialization_source[]=
     "export fn negative()->i64{var xs=[1];var out=copy xs[-1:];return len(out)}\n"
     "export fn reversed()->i64{var xs=[1,2];var out=copy xs[2:1];return len(out)}\n"
     "export fn oversized()->i64{var xs=[1];var out=copy xs[:2];return len(out)}\n"
-    "export fn subview()->i64{var xs:Array<u8>=[1];var v:Slice<u8>=xs[:];var child:Slice<u8>=v[-1:];return len(child)}\n";
-#define ARRAY_MATERIALIZATION_ENTRY_COUNT 6
-static const char *const array_materialization_names[]={"answer","kept","negative","reversed","oversized","subview"};
+    "export fn subview()->i64{var xs:Array<u8>=[1];var v:Slice<u8>=xs[:];var child:Slice<u8>=v[-1:];return len(child)}\n"
+    "export fn strings()->Array<string>{\n"
+    " var basic=[\"b\",\"a\"];basic.sort();assert(basic[0]==\"a\"&&basic[1]==\"b\")\n"
+    " var empty:Array<string>=[];var emptyResult=empty.sort();assert(len(emptyResult)==0)\n"
+    " var one=[\"中\"];var oneResult=one.sort();assert(oneResult[0]==\"中\")\n"
+    " var names=[\"😀\",\"中\",\"é\",\"a\\0b\",\"a\",\"\",\"中\",\"a\\0\",\"z\"]\n"
+    " const original=names;var sorted=names.sort();names[0]=\"changed\"\n"
+    " assert(original[0]==\"😀\"&&sorted[0]==\"\"&&names[0]==\"changed\")\n"
+    " return sorted\n}\n"
+    "export class SortBox{values:Array<string>\ninit(){this.values=[\"z\",\"m\",\"a\"]}}\n"
+    "export fn stringBox()->SortBox{return SortBox()}\n"
+    "export fn sortBox(box:SortBox)->Array<string>{return box.values.sort()}\n";
+#define ARRAY_MATERIALIZATION_OLD_ENTRY_COUNT 6
+#define ARRAY_MATERIALIZATION_ENTRY_COUNT 9
+static const char *const array_materialization_names[]={"answer","kept","negative","reversed","oversized","subview","strings","stringBox","sortBox"};
 static const char array_demo_expected[]="nums: [1, 2, 3, 4, 5]\nempty: []\nfirst: 1, last: 5\nafter push(6) + pop(): [1, 2, 3, 4, 5], popped: 6\nafter unshift(0) + shift(): [1, 2, 3, 4, 5], shifted: 0\nnums[1:4] = [2, 3, 4]\nnums[:3]  = [1, 2, 3]\nnums[3:]  = [4, 5]\nindexOf(3) = 2\nincludes(5) = true\nhello, world\nsorted: [1, 2, 3, 5, 8, 9]\nreversed: [9, 8, 5, 3, 2, 1]\nevens: [2, 4, 6, 8, 10]\ndoubled: [2, 4, 6, 8, 10, 12, 14, 16, 18, 20]\nsum: 55\neven squares: [4, 16, 36, 64, 100]\nfirst > 5: 6\nall positive: true\nhas > 8: true\nfilled: [7, 7, 7, 7, 7]\n";
 #endif

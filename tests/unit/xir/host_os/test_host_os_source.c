@@ -14,6 +14,9 @@
 #include "host_os_system_cases.h"
 #include "host_os_stat_cases.h"
 #include "host_os_io_bool_cases.h"
+#include "host_os_io_links_cases.h"
+#include "host_os_io_temp_cases.h"
+#include "host_os_io_directory_cases.h"
 #include "host_os_signal_frontier_cases.h"
 #include "host_os_thread_token_cases.h"
 static uint32_t host_named(const XrXirModule *module,const char *name){
@@ -57,6 +60,9 @@ static XrXirProgram *host_replica(const XrXirCompileContext *context,const XrXir
  CHECK(xr_xir_compile_checked_read_lower(context,packet.bytes,packet.length,&actual->target,&copy,NULL)==XR_XIR_OK);
  XrXirProgram *out=NULL;CHECK(xr_xir_compile_vm_program_take(&copy,&out)==XR_XIR_OK&&!copy);return out;
 }
+#if defined(XR_OS_WINDOWS)
+static XrXirProgram *host_directory_replica(const XrXirCompileContext *context,const XrXirProgram *source){return host_replica(context,source);}
+#endif
 static void host_emit(const XrXirArtifact *code,const char *prefix,const uint32_t *ids,unsigned count,const char *directory,bool write){
  XrXirCSource c={0};CHECK(xr_xir_compile_emit_c(code,prefix,16777216,&c)==XR_XIR_OK);char path[2048],tail[256];
  CHECK(snprintf(path,sizeof(path),"%s/%s.c",directory,prefix)>0);
@@ -154,22 +160,123 @@ static void host_system_contracts(XrXirCompileContext *context,const XrXirArtifa
 #include "host_os_stat_contracts.h"
 #include "host_os_io_bool_contracts.h"
 #include "host_os_thread_token_contracts.h"
+static void host_io_links_contracts(XrXirCompileContext *context,const XrXirArtifact *code){
+ const XrXirModule *module=xr_xir_compile_artifact_module(code);
+ const char *names[]={"__symlink","__readlink","__realpath"},*ctfe[]={"ctfeSymlink","ctfeReadlink","ctfeRealpath"};
+ for(unsigned n=0;n<3;++n){uint32_t f=host_named(module,names[n]);
+  CHECK(module->declarations->functions[f].native_callable==XR_NATIVE_CALLABLE_IO_SYMLINK+n&&xir_native_callable_verify(module,f)==XR_XIR_OK);
+  host_ctfe(code,host_named(module,ctfe[n]),NULL,0);
+  XrXirSourceResult output={0};XrXirSourceDiagnostic diagnostic={0};char text[128];
+  CHECK(snprintf(text,sizeof(text),"%s()",names[n])>0);
+  CHECK(host_check(context,"io",text,false,&output,&diagnostic)==XR_XIR_BAD_VALUE&&!output.checked&&!output.snapshot);
+  xr_xir_compile_source_result_free(&output);
+ }
+ uint32_t symlink=host_named(module,"__symlink");XrXirModule changed=*module;XrXirFunction functions[64];CHECK(module->function_count<64);
+ memcpy(functions,module->functions,module->function_count*sizeof(*functions));changed.functions=functions;
+ XrXirType parameters[2]={functions[symlink].parameters[0],functions[symlink].parameters[1]};functions[symlink].parameters=parameters;
+ for(unsigned p=0;p<2;++p){XrXirType saved=parameters[p];parameters[p]=XR_XIR_STRING;
+  CHECK(xir_native_callable_verify(&changed,symlink)==XR_XIR_BAD_TYPE);parameters[p]=saved;
+ }
+ for(unsigned n=0;n<3;++n){uint32_t f=host_named(module,names[n]);XrXirType result=functions[f].result;functions[f].result=XR_XIR_I64;
+  CHECK(xir_native_callable_verify(&changed,f)==XR_XIR_BAD_TYPE);functions[f].result=result;
+ }
+ static const char *const rejected[]={
+  "import {Path} from path\nexport fn wrong(p:Path)->bool{return __symlink(42,p)}\n",
+  "import {Path} from path\nexport fn wrong(p:Path)->bool{return __symlink(p,42)}\n",
+  "export fn noRead(p:Path)->string?{return __realpath(p)}\n",
+  "import {Path} from path\nclass Wrong{raw:string\ninit(raw:string){this.raw=raw}}\nexport fn fake(p:Wrong)->string?{return __readlink(p)}\n",
+  "import {Path} from path\nexport fn conflict(v:Slice<u8>,a:Path,b:Path)->i64{var changed=__symlink(a,b);return len(v)}\n"
+ };
+ for(unsigned n=0;n<sizeof(rejected)/sizeof(*rejected);++n){XrXirSourceResult output={0};XrXirSourceDiagnostic diagnostic={0};
+  CHECK(host_check(context,"io",rejected[n],true,&output,&diagnostic)==(n==4?XR_XIR_UNRESOLVED:XR_XIR_BAD_TYPE)&&!output.checked&&!output.snapshot);
+  if(n==4)CHECK(strstr(diagnostic.message,"view lifetime normalization")&&strstr(diagnostic.message,"(CALL)"));
+  xr_xir_compile_source_result_free(&output);
+ }
+ const char *alias="import {Path} from path\nfn pair(a:ref Path,b:ref Path)->bool{return __symlink(a,b)}\nexport fn bad()->bool{var p=Path(\".\");return pair(ref p,ref p)}\n";
+ XrXirSourceResult output={0};XrXirSourceDiagnostic diagnostic={0};
+ CHECK(host_check(context,"io",alias,true,&output,&diagnostic)==XR_XIR_BAD_TYPE&&!output.checked&&!output.snapshot&&strstr(diagnostic.message,"must not alias"));
+ xr_xir_compile_source_result_free(&output);
+}
+static void host_io_temp_contracts(XrXirCompileContext *context,const XrXirArtifact *code){
+ const XrXirModule *m=xr_xir_compile_artifact_module(code);const char *names[]={"__makeTempDir","__makeTempFile"};
+ const char *ctfe[]={"ctfeDirectory","ctfeFile"};
+ for(unsigned n=0;n<2;++n){
+  uint32_t f=host_named(m,names[n]);CHECK(m->declarations->functions[f].native_callable==XR_NATIVE_CALLABLE_IO_MAKE_TEMP_DIR+n&&xir_native_callable_verify(m,f)==XR_XIR_OK);
+  host_ctfe(code,host_named(m,ctfe[n]),NULL,0);
+  XrXirSourceResult output={0};XrXirSourceDiagnostic diagnostic={0};char text[160];
+  CHECK(snprintf(text,sizeof(text),"%s(\".\")",names[n])>0);
+  CHECK(host_check(context,"io",text,false,&output,&diagnostic)==XR_XIR_BAD_VALUE&&!output.checked&&!output.snapshot);xr_xir_compile_source_result_free(&output);
+  CHECK(snprintf(text,sizeof(text),"import {Path} from path\nexport fn bad(root:i64)->string?{return %s(root)}",names[n])>0);
+  CHECK(host_check(context,"io",text,true,&output,&diagnostic)==XR_XIR_BAD_TYPE&&!output.checked&&!output.snapshot);xr_xir_compile_source_result_free(&output);
+  CHECK(snprintf(text,sizeof(text),"import {Path} from path\nfn %s(root:string)->string?{return null}",names[n])>0);
+  XrXirStatus shadow_status=host_check(context,"io",text,true,&output,&diagnostic);
+  if(shadow_status!=XR_XIR_OK)fprintf(stderr,"temp shadow %u %s\n",shadow_status,diagnostic.message);
+  CHECK(shadow_status==XR_XIR_OK);
+  CHECK(!xr_xir_compile_artifact_module(output.checked)->declarations->functions[host_named(xr_xir_compile_artifact_module(output.checked),names[n])].native_callable);
+  xr_xir_compile_source_result_free(&output);
+  XrXirModule changed=*m;XrXirDeclarations scope=*m->declarations;XrXirSourceModule modules[16];XrXirFunction functions[64];
+  CHECK(scope.module_count<16&&m->function_count<64);memcpy(modules,scope.modules,scope.module_count*sizeof(*modules));scope.modules=modules;changed.declarations=&scope;
+  memcpy(functions,m->functions,m->function_count*sizeof(*functions));changed.functions=functions;
+  uint32_t owner=scope.functions[f].module;modules[owner].name="io";modules[owner].name_length=2;
+  CHECK(xir_native_callable_verify(&changed,f)==XR_XIR_BAD_TYPE);modules[owner]=m->declarations->modules[owner];
+  modules[owner].lexical_scope=1;CHECK(xir_native_callable_verify(&changed,f)==XR_XIR_BAD_TYPE);modules[owner]=m->declarations->modules[owner];
+  XrXirType wrong=XR_XIR_I64;functions[f].parameters=&wrong;CHECK(xir_native_callable_verify(&changed,f)==XR_XIR_BAD_TYPE);functions[f]=m->functions[f];
+  functions[f].result=XR_XIR_STRING;CHECK(xir_native_callable_verify(&changed,f)==XR_XIR_BAD_TYPE);
+ }
+}
+static void host_io_directory_contracts(XrXirCompileContext *context,const XrXirArtifact *code){
+ const XrXirModule *m=xr_xir_compile_artifact_module(code);const char *names[]={"__dirOpen","__dirNext","__dirClose"};
+ const char *ctfe[]={"ctfeOpen","ctfeNext","ctfeClose"};
+ const char *shadows[]={"fn __dirOpen(path:Path)->i64{return 0}","fn __dirNext(handle:i64)->string?{return null}","fn __dirClose(handle:i64)->bool{return false}"};
+ for(unsigned n=0;n<3;++n){
+  uint32_t f=host_named(m,names[n]);CHECK(m->declarations->functions[f].native_callable==XR_NATIVE_CALLABLE_IO_DIR_OPEN+n&&xir_native_callable_verify(m,f)==XR_XIR_OK);
+  host_ctfe(code,host_named(m,ctfe[n]),NULL,0);XrXirSourceResult output={0};XrXirSourceDiagnostic diagnostic={0};char text[192];
+  CHECK(snprintf(text,sizeof(text),"%s(1)",names[n])>0);
+  CHECK(host_check(context,"io",text,false,&output,&diagnostic)==XR_XIR_BAD_VALUE&&!output.checked&&!output.snapshot);xr_xir_compile_source_result_free(&output);
+  CHECK(snprintf(text,sizeof(text),"import {Path} from path\n%s\n",shadows[n])>0);
+  CHECK(host_check(context,"io",text,true,&output,&diagnostic)==XR_XIR_OK);
+  const XrXirModule *shadow=xr_xir_compile_artifact_module(output.checked);CHECK(!shadow->declarations->functions[host_named(shadow,names[n])].native_callable);xr_xir_compile_source_result_free(&output);
+  XrXirModule changed=*m;XrXirDeclarations scope=*m->declarations;XrXirSourceModule modules[16];XrXirFunction functions[64];
+  CHECK(scope.module_count<16&&m->function_count<64);memcpy(modules,scope.modules,scope.module_count*sizeof(*modules));scope.modules=modules;changed.declarations=&scope;
+  memcpy(functions,m->functions,m->function_count*sizeof(*functions));changed.functions=functions;uint32_t owner=scope.functions[f].module;
+  modules[owner].name="io";modules[owner].name_length=2;CHECK(xir_native_callable_verify(&changed,f)==XR_XIR_BAD_TYPE);modules[owner]=m->declarations->modules[owner];
+  modules[owner].lexical_scope=1;CHECK(xir_native_callable_verify(&changed,f)==XR_XIR_BAD_TYPE);modules[owner]=m->declarations->modules[owner];
+  XrXirType wrong=XR_XIR_STRING;functions[f].parameters=&wrong;CHECK(xir_native_callable_verify(&changed,f)==XR_XIR_BAD_TYPE);functions[f]=m->functions[f];
+  functions[f].result=n==0?XR_XIR_BOOL:XR_XIR_I64;CHECK(xir_native_callable_verify(&changed,f)==XR_XIR_BAD_TYPE);
+ }
+ static const char *const rejected[]={
+  "import {Path} from path\nexport fn wrong()->i64{return __dirOpen(42)}\n",
+  "import {Path} from path\nexport fn wrong()->string?{return __dirNext(\"1\")}\n",
+  "import {Path} from path\nexport fn wrong()->bool{return __dirClose(\"1\")}\n",
+  "export fn noRead(p:Path)->i64{return __dirOpen(p)}\n",
+  "import {Path} from path\nclass Wrong{raw:string\ninit(raw:string){this.raw=raw}}\nexport fn fake(p:Wrong)->i64{return __dirOpen(p)}\n",
+  "import {Path} from path\nexport fn conflict(v:Slice<u8>,p:Path)->i64{var opened=__dirOpen(p);return len(v)}\n"
+ };
+ for(unsigned n=0;n<sizeof(rejected)/sizeof(*rejected);++n){XrXirSourceResult output={0};XrXirSourceDiagnostic diagnostic={0};
+  CHECK(host_check(context,"io",rejected[n],true,&output,&diagnostic)==(n==5?XR_XIR_UNRESOLVED:XR_XIR_BAD_TYPE)&&!output.checked&&!output.snapshot);
+  if(n==5)CHECK(strstr(diagnostic.message,"view lifetime normalization")&&strstr(diagnostic.message,"(CALL)"));
+  xr_xir_compile_source_result_free(&output);
+ }
+}
 static void host_product(XrXirCompileContext *context,unsigned kind,const char *directory,bool emit){
- const char *modules[]={"os","sys","io","os","io","io","os","sys"},*texts[]={host_count_text,host_pin_text,host_io_text,host_system_text,host_stat_text,host_io_bool_text,host_signal_frontier_text,NULL},*prefixes[]={"host_count","host_pin","host_path","host_system","host_stat","host_io_bool","host_signal_frontier","host_thread_tokens"};
- char *owned=kind==7?host_thread_token_source():NULL;
+ const char *modules[]={"os","sys","io","os","io","io","os","io","io","sys","io"},*texts[]={host_count_text,host_pin_text,host_io_text,host_system_text,host_stat_text,host_io_bool_text,host_signal_frontier_text,host_io_links_text,host_io_temp_text,NULL,host_io_directory_text},*prefixes[]={"host_count","host_pin","host_path","host_system","host_stat","host_io_bool","host_signal_frontier","host_io_links","host_io_temp","host_thread_tokens","host_io_directory"};
+ char *owned=kind==9?host_thread_token_source():NULL;
  XrXirArtifact *code=host_code(context,modules[kind],owned?owned:texts[kind]);xr_free(owned);const XrXirModule *m=xr_xir_compile_artifact_module(code);
- uint32_t ids[HOST_TOKEN_COUNT]={m->declarations->entry_function};unsigned count=kind==7?HOST_TOKEN_COUNT:kind==6?5u:kind==5?7u:kind==4?4u:kind==3?9u:kind==2?5u:2u;
- if(kind==7){const char *names[]={"current","alive","throughValue","basic","retry","recursion","panicked","cancelled","yielded","waited","dynamic","nullable","__threadLocalId","__threadLocalAlive","barrier","invalidBarrier"};for(unsigned n=0;n<16;++n)ids[n+1]=host_named(m,names[n]);}
+ uint32_t ids[HOST_TOKEN_COUNT]={m->declarations->entry_function};unsigned count=kind==10?6u:kind==9?HOST_TOKEN_COUNT:kind==8?4u:kind==7?6u:kind==6?5u:kind==5?7u:kind==4?4u:kind==3?9u:kind==2?5u:2u;
+ if(kind==9){const char *names[]={"current","alive","throughValue","basic","retry","recursion","panicked","cancelled","yielded","waited","dynamic","nullable","__threadLocalId","__threadLocalAlive","barrier","invalidBarrier"};for(unsigned n=0;n<16;++n)ids[n+1]=host_named(m,names[n]);}
  else if(kind==3){const char *names[]={"uid","gid","parent","signal","total","available","elapsed","load"};for(unsigned n=0;n<8;++n)ids[n+1]=host_named(m,names[n]);}
- else ids[1]=host_named(m,kind==6?"parent":(kind==2||kind==4||kind==5)?"make":"answer");
+ else ids[1]=host_named(m,kind==8?"directory":kind==6?"parent":(kind==2||kind==4||kind==5||kind==7||kind==10)?"make":"answer");
+ if(kind==10){const char *names[]={"openPath","nextName","closePath","byRef"};for(unsigned n=0;n<4;++n)ids[n+2]=host_named(m,names[n]);}
+ if(kind==8){ids[2]=host_named(m,"file");ids[3]=host_named(m,"nested");}
+ if(kind==7){const char *names[]={"symlinkPath","readlinkPath","realpathPath","byRef"};for(unsigned n=0;n<4;++n)ids[n+2]=host_named(m,names[n]);}
  if(kind==6){ids[2]=host_named(m,"failed");ids[3]=host_named(m,"heldParent");ids[4]=host_named(m,"initialized");}
  if(kind==5){const char *names[]={"mkdirPath","rmdirPath","removePath","renamePath","utimePath"};for(unsigned n=0;n<5;++n)ids[n+2]=host_named(m,names[n]);}
  if(kind==4){ids[2]=host_named(m,"query");ids[3]=host_named(m,"snapshot");}
  if(kind==2){ids[2]=host_named(m,"chmodPath");ids[3]=host_named(m,"chdirPath");ids[4]=host_named(m,"viaRef");}
  host_emit(code,prefixes[kind],ids,count,directory,emit);
- if(!emit){if(kind==7)host_thread_token_contracts(context,code);else if(kind==6){CHECK(!(m->declarations->functions[ids[1]].promises&XR_XIR_FUNCTION_NO_SUSPEND));CHECK(m->declarations->functions[host_named(m,"__cpuCount")].promises&XR_XIR_FUNCTION_NO_SUSPEND);}else if(kind==5)host_io_bool_contracts(context,code);else if(kind==4)host_stat_contracts(context,code);else if(kind==2)host_io_contracts(context,code);else if(kind==3)host_system_contracts(context,code);else host_cpu_contracts(context,code,kind==1);}
+ if(!emit){if(kind==10)host_io_directory_contracts(context,code);else if(kind==9)host_thread_token_contracts(context,code);else if(kind==8)host_io_temp_contracts(context,code);else if(kind==7)host_io_links_contracts(context,code);else if(kind==6){CHECK(!(m->declarations->functions[ids[1]].promises&XR_XIR_FUNCTION_NO_SUSPEND));CHECK(m->declarations->functions[host_named(m,"__cpuCount")].promises&XR_XIR_FUNCTION_NO_SUSPEND);}else if(kind==5)host_io_bool_contracts(context,code);else if(kind==4)host_stat_contracts(context,code);else if(kind==2)host_io_contracts(context,code);else if(kind==3)host_system_contracts(context,code);else host_cpu_contracts(context,code,kind==1);}
  if(emit)xr_xir_compile_artifact_free(code);
- else{XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&code,&program)==XR_XIR_OK&&!code);if(kind==7){host_thread_tokens_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==6){host_signal_frontier_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==5){host_io_bool_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==4){host_stat_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==3){host_system_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==2){host_path_execute(program,ids);host_path_receiving(context,&program,ids);CHECK(!program);}else{host_cpu_execute(program,ids,kind==1);xr_xir_compile_program_drop(program);}}
+ else{XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&code,&program)==XR_XIR_OK&&!code);if(kind==10){host_io_directory_execute(context,program,ids);xr_xir_compile_program_drop(program);}else if(kind==9){host_thread_tokens_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==8){host_io_temp_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==7){host_io_links_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==6){host_signal_frontier_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==5){host_io_bool_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==4){host_stat_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==3){host_system_execute(program,ids);xr_xir_compile_program_drop(program);}else if(kind==2){host_path_execute(program,ids);host_path_receiving(context,&program,ids);CHECK(!program);}else{host_cpu_execute(program,ids,kind==1);xr_xir_compile_program_drop(program);}}
 }
 int main(int argc,char **argv){
 #if defined(XR_OS_WINDOWS)
@@ -178,7 +285,7 @@ int main(int argc,char **argv){
  bool emit=argc==3&&!strcmp(argv[1],"--emit");CHECK(emit||argc==1);if(!emit)host_cpu_concurrency();
  XrCompileResourceLimits limits=XR_RESOURCE_DEFAULT_COMPILER_LIMITS;XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
  XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
- for(unsigned kind=0;kind<8;++kind)host_product(&context,kind,emit?argv[2]:XR_HOST_OS_GENERATED,emit);
+ for(unsigned kind=0;kind<11;++kind)host_product(&context,kind,emit?argv[2]:XR_HOST_OS_GENERATED,emit);
  CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK&&before.held_bytes==after.held_bytes&&!runtime_live&&!runtime_bytes);
  xr_compile_resources_release(context.resources);if(!emit){CHECK(xr_os_io_thread_token_shutdown()==XR_OS_IO_OK);puts("42");}return 0;
 }

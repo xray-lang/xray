@@ -136,6 +136,16 @@ class TierTests(unittest.TestCase):
                 self.assertIn("source_sdk_owned_installed", plan["tests"])
                 self.assertNotIn("native-runtime", plan["groups"])
 
+    def test_array_materialization_changes_select_both_existing_carriers(self):
+        for path in ("array_materialization_fixture.h", "array_materialization_runtime.h",
+                     "test_xir_array_materialization.c", "test_xir_array_materialization_native.c",
+                     "array_materialization.cmake"):
+            with self.subTest(path=path):
+                plan = xray_l1.tier_plan(ROOT, "L2", changed=["tests/unit/xir/" + path])
+                self.assertIn("frontend", plan["groups"])
+                self.assertTrue({"xir_array_materialization", "xir_array_materialization_native"} <= set(plan["tests"]))
+                self.assertTrue({"test_xir_array_materialization", "test_xir_array_materialization_native"} <= set(plan["targets"]))
+
     def test_host_os_changes_select_paired_source_and_native_consumers(self):
         for path in ("stdlib/sys/sys.xr", "src/os/win/fs_mutation_win.c", "src/os/unix/fs_mutation_unix.c",
                      "src/os/os_system.h", "src/os/win/system_win.c", "src/os/unix/system_unix.c",
@@ -158,10 +168,18 @@ class TierTests(unittest.TestCase):
                      "src/xir/xxir_source_methods.inc.c",
                      "src/hir/xhir_body_nominal.inc.c",
                      "src/os/os_fs.h", "src/base/xwindows_utf8.h",
+                     "src/os/os_file_links.h", "src/os/win/file_links_win.c",
+                     "src/os/os_file_temp.h", "src/os/win/file_temp_win.c",
                      "src/os/os_thread_token.h", "src/os/win/thread_token_win.c",
                      "src/os/unix/thread_token_unix.c", "tests/unit/base/test_thread_token.c",
                      "tests/unit/base/thread_token.cmake",
+                     "src/os/unix/file_temp_unix.c", "tests/unit/base/test_file_temp.c",
+                     "tests/unit/base/file_temp.cmake",
+                     "src/os/unix/file_links_unix.c", "tests/unit/base/test_file_links.c",
+                     "tests/unit/base/file_links.cmake",
                      "src/xir/xxir_instance_io_mutation.inc.c",
+                     "src/xir/xxir_instance_io_links.inc.c",
+                     "src/xir/xxir_instance_io_temp.inc.c",
                      "src/xir/xxir_call_signal_frontier.inc.c",
                      "src/xir/xxir_instance_signal_frontier.inc.c",
                      "src/xir/xxir_signal_frontier_internal.h",
@@ -169,7 +187,9 @@ class TierTests(unittest.TestCase):
                      "src/xir/xxir_path_prelude.h", "src/xir/xxir_native_callable.h",
                      "src/xir/xxir_declarations.c", "src/xir/xxir_instance.c",
                      "src/xir/xxir_ctfe_native_callable.inc.c",
-                     "tests/unit/xir/host_os/host_os_path_cases.h"):
+                     "tests/unit/xir/host_os/host_os_path_cases.h",
+                     "tests/unit/xir/host_os/host_os_io_links_cases.h",
+                     "tests/unit/xir/host_os/host_os.cmake"):
             with self.subTest(path=path):
                 plan = xray_l1.tier_plan(ROOT, "L2", changed=[path])
                 self.assertIn("host-os", plan["groups"])
@@ -181,6 +201,10 @@ class TierTests(unittest.TestCase):
                 self.assertIn("test_os_file_metadata", plan["targets"])
                 self.assertIn("os_file_mutation", plan["tests"])
                 self.assertIn("test_os_file_mutation", plan["targets"])
+                self.assertIn("os_file_links", plan["tests"])
+                self.assertIn("test_os_file_links", plan["targets"])
+                self.assertIn("os_file_temp", plan["tests"])
+                self.assertIn("test_os_file_temp", plan["targets"])
                 self.assertIn("os_thread_token", plan["tests"])
                 self.assertIn("test_os_thread_token", plan["targets"])
                 self.assertIn("os_signal", plan["tests"])
@@ -298,6 +322,11 @@ class TierTests(unittest.TestCase):
                      "src/xir/xxir_effect_invocation_primitive.inc.c",
                      "src/xir/xxir_effect_invocation_query.inc.c",
                      "src/xir/xxir_effect_invocation_solve.inc.c",
+                     "src/xir/xxir_effect_context_owner.inc.c",
+                     "src/xir/xxir_effect_snapshot_storage.inc.c",
+                     "src/xir/xxir_effect_snapshot_types.inc.c",
+                     "src/xir/xxir_ctfe_calls.inc.c",
+                     "src/xir/xxir_ctfe_function.inc.c",
                      "tests/unit/xir/test_xir_signal_source.c",
                      "tests/unit/xir/test_xir_signal_native.c",
                      "tests/unit/xir/root_signal_runtime.h", "tests/unit/xir/root_signal.cmake"):

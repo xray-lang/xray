@@ -1493,6 +1493,14 @@ def render_io_callables(declarations):
         ('__remove', '(path: Path): bool', 'p', 'io_remove', 'xrt_io_remove', 'IO_REMOVE'),
         ('__rename', '(old: Path, new: Path): bool', 'pp', 'io_rename', 'xrt_io_rename', 'IO_RENAME'),
         ('__utimeNow', '(path: Path): bool', 'p', 'io_utime_now', 'xrt_io_utime_now', 'IO_UTIME_NOW'),
+        ('__symlink', '(source: Path, link: Path): bool', 'pp', 'io_symlink', 'xrt_io_symlink', 'IO_SYMLINK'),
+        ('__readlink', '(path: Path): string?', 'p', 'io_readlink', 'xrt_io_readlink', 'IO_READLINK'),
+        ('__realpath', '(path: Path): string?', 'p', 'io_realpath', 'xrt_io_realpath', 'IO_REALPATH'),
+        ('__makeTempDir', '(root: string): string?', 's', 'io_make_temp_dir', 'xrt_io_make_temp_dir', 'IO_MAKE_TEMP_DIR'),
+        ('__makeTempFile', '(root: string): string?', 's', 'io_make_temp_file', 'xrt_io_make_temp_file', 'IO_MAKE_TEMP_FILE'),
+        ('__dirOpen', '(path: Path): i64', 'p', 'io_dirOpen', 'xrt_io_dir_open', 'IO_DIR_OPEN'),
+        ('__dirNext', '(handle: i64): string?', 'i', 'io_dirNext', 'xrt_io_dir_next', 'IO_DIR_NEXT'),
+        ('__dirClose', '(handle: i64): bool', 'i', 'io_dirClose', 'xrt_io_dir_close', 'IO_DIR_CLOSE'),
     )
     lines, rows = [], []
     for ordinal, (name, signature, arguments, vm, aot, identity) in enumerate(contracts, 1):
@@ -1501,19 +1509,31 @@ def render_io_callables(declarations):
             raise ValueError('Filesystem callable requires its sole governed declaration: ' + name)
         row = candidates[0]
         stat = identity == 'IO_STAT'
+        text_result = identity in ('IO_READLINK', 'IO_REALPATH', 'IO_MAKE_TEMP_DIR', 'IO_MAKE_TEMP_FILE', 'IO_DIR_NEXT')
         if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
                 row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
                 row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
                 row.ret, row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
-                signature, str(len(arguments)), arguments, 'internal', '', '', 'fresh' if stat else '', 'system', vm,
+                signature, str(len(arguments)), arguments, 'internal', '', '', 'fresh' if stat or text_result else '', 'system', vm,
                 aot, not stat, '' if stat else 'method', '', 'normal', '', '', 'value', False, None, (), ''):
             raise ValueError('Filesystem callable differs from its complete source contract: ' + name)
         symbol = 'xr_native_' + identity.lower()
         result, term = ('__FileStat?', 'NULLABLE_FILE_STAT') if stat else ('bool', 'BOOL')
+        if text_result:
+            result, term = 'string?', 'NULLABLE_STRING'
+        elif identity == 'IO_DIR_OPEN':
+            result, term = 'i64', 'I64'
         lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {']
-        if identity == 'IO_RENAME':
+        if identity in ('IO_MAKE_TEMP_DIR', 'IO_MAKE_TEMP_FILE'):
+            lines += ['    {"root", "string", XR_NATIVE_TERM_STRING, false, false},']
+        elif identity in ('IO_DIR_NEXT', 'IO_DIR_CLOSE'):
+            lines += ['    {"handle", "i64", XR_NATIVE_TERM_I64, false, false},']
+        elif identity == 'IO_RENAME':
             lines += ['    {"old", "Path", XR_NATIVE_TERM_PATH, false, false},',
                       '    {"new", "Path", XR_NATIVE_TERM_PATH, false, false},']
+        elif identity == 'IO_SYMLINK':
+            lines += ['    {"source", "Path", XR_NATIVE_TERM_PATH, false, false},',
+                      '    {"link", "Path", XR_NATIVE_TERM_PATH, false, false},']
         else:
             lines += ['    {"path", "Path", XR_NATIVE_TERM_PATH, false, false},']
             if len(arguments) == 2:
