@@ -206,7 +206,7 @@ class TierTests(unittest.TestCase):
         self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
 
     def test_process_product_and_test_leaves_select_both_carriers(self):
-        for path in ("src/os/os_process_owned.h", "src/os/win/process_owned_win.c",
+        for path in ("stdlib/time/time.xr", "src/os/os_process_owned.h", "src/os/win/process_owned_win.c",
                      "src/os/win/proc_text_win.inc.c", "src/os/unix/process_owned_unix.c",
                      "tests/unit/xir/process_runtime/test_process_source.c",
                      "tests/unit/xir/process_runtime/test_process_native.c",
