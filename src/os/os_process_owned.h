@@ -36,6 +36,15 @@ typedef struct XrOsProcessProgress { bool exited; int64_t code; } XrOsProcessPro
 XR_FUNC XrOsIoStatus xr_os_io_process_prepare(const XrOsIoPolicy *memory,
     const XrOsProcessQuery *query,const XrOsProcessRequest *request,
     XrOsProcessOwner *owner,bool *created);
+/* Explicit system-shell transport, independent of ordinary argv encoding.
+ * The request supplies environment/cwd/stdio only: program, arguments and
+ * detached must be empty. Windows resolves its actual system cmd.exe and
+ * passes the strict command span as the raw tail of /D /S /C. Request and
+ * command are borrowed synchronously; all owner/start/close rules above apply.
+ * Other platforms currently return UNSUPPORTED without publishing output. */
+XR_FUNC XrOsIoStatus xr_os_io_process_prepare_shell(const XrOsIoPolicy *memory,
+    const XrOsProcessQuery *query,const XrOsProcessRequest *request,
+    const XrOsProcessText *command,XrOsProcessOwner *owner,bool *created);
 /* C-only commit after result admission. Successful start is the last fallible
  * publication step. A detached child becomes independent only on success;
  * subsequent close releases handles without terminating its execution. */
