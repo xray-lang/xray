@@ -13,6 +13,8 @@
  */
 #define XR_PROCESS_SOURCE 1
 #include "process_runtime.h"
+#include "process_complete_os_runtime.h"
+#include "process_complete_os_source.h"
 #include "../xir_genuine_sys_path.h"
 static uint32_t process_named(const XrXirModule *module,const char *name){
  for(uint32_t f=0;f<module->function_count;++f)if(module->functions[f].name_length==strlen(name)&&!memcmp(module->functions[f].name,name,strlen(name)))return f;
@@ -80,7 +82,7 @@ int main(int argc,char **argv){
 #if defined(XR_OS_WINDOWS)
  CHECK(_setmode(_fileno(stdout),_O_BINARY)!=-1);
 #endif
- if(process_child(argc,argv))return 0;
+ if(process_complete_os_child(argc,argv)||process_child(argc,argv))return 0;
  bool emit=argc==3&&!strcmp(argv[1],"--emit");CHECK(emit||argc==1);
  XrCompileResourceLimits limits=XR_RESOURCE_DEFAULT_COMPILER_LIMITS;XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};
  CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);XrCompileResourceStats before,after;CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
@@ -96,6 +98,7 @@ int main(int argc,char **argv){
  else{process_contracts(&context,lowered);XrXirProgram *program=NULL;XrXirStatus status=xr_xir_compile_vm_program_take(&lowered,&program);
   if(status!=XR_XIR_OK)fprintf(stderr,"Process VM program take status%u\n",status);
   CHECK(status==XR_XIR_OK&&!lowered);process_execute(program,ids);xr_xir_compile_program_drop(program);}
+ process_complete_os_product(&context,generated,emit);
  CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK&&after.held_bytes==before.held_bytes&&!runtime_live&&!runtime_bytes);xr_compile_resources_release(context.resources);
  if(!emit)puts("42");return 0;
 }
