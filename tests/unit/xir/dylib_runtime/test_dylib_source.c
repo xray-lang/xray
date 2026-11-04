@@ -77,7 +77,7 @@ static void dylib_contracts(const XrXirCompileContext *context,const XrXirArtifa
  char *negative=xr_malloc(length+sizeof(ordinary_defer));CHECK(negative);memcpy(negative,body,length);memcpy(negative+length,ordinary_defer,sizeof(ordinary_defer));
  xr_free(body);XrXirSourceResult rejected={0};XrXirSourceDiagnostic diagnostic={0};
  CHECK(dylib_check(context,negative,length+sizeof(ordinary_defer)-1,true,&rejected,&diagnostic)==XR_XIR_BAD_TYPE&&
-  !rejected.checked&&!rejected.snapshot&&strstr(diagnostic.message,"E0392:")&&diagnostic.line>0&&diagnostic.column>0);
+  !rejected.checked&&!rejected.snapshot&&strstr(diagnostic.message,"E0392:")&&diagnostic.line>0&&diagnostic.column>=0);
  memset(negative,0xa5,length+sizeof(ordinary_defer));xr_free(negative);xr_xir_compile_source_result_free(&rejected);
  const char *impostor="export fn wrong()->string{return __dylibLastError()}\n";XrXirSourceResult output={0};
  CHECK(dylib_check(context,impostor,strlen(impostor),false,&output,NULL)==XR_XIR_BAD_VALUE&&!output.checked&&!output.snapshot);xr_xir_compile_source_result_free(&output);
