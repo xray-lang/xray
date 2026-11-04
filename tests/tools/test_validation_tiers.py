@@ -180,6 +180,12 @@ class TierTests(unittest.TestCase):
                      "src/xir/xxir_instance_io_mutation.inc.c",
                      "src/xir/xxir_instance_io_links.inc.c",
                      "src/xir/xxir_instance_io_temp.inc.c",
+                     "src/xir/xxir_instance_io_file.inc.c",
+                     "src/xir/xxir_call_signal.inc.c",
+                     "src/xir/xxir_call_signal_internal.h",
+                     "src/xir/xxir_effect_control_primitive.inc.c",
+                     "src/xir/xxir_effect_snapshot_storage.inc.c",
+                     "src/xir/xxir_verify.c",
                      "src/xir/xxir_call_signal_frontier.inc.c",
                      "src/xir/xxir_instance_signal_frontier.inc.c",
                      "src/xir/xxir_signal_frontier_internal.h",
@@ -210,6 +216,14 @@ class TierTests(unittest.TestCase):
                 self.assertIn("os_signal", plan["tests"])
                 self.assertIn("test_os_signal", plan["targets"])
                 self.assertNotIn("native-runtime", plan["groups"])
+        for path in ("src/xir/xxir_instance_io_file_unrelated.inc.c",
+                     "src/xir/xxir_call_signal_unrelated.inc.c",
+                     "src/xir/xxir_effect_control_unrelated.inc.c"):
+            with self.subTest(unrelated=path):
+                plan = xray_l1.tier_plan(ROOT, "L2", changed=[path])
+                self.assertNotIn("host-os", plan["groups"])
+                self.assertTrue({"host_os_source", "host_os_native"}.isdisjoint(plan["tests"]))
+                self.assertTrue({"test_host_os_source", "test_host_os_native"}.isdisjoint(plan["targets"]))
         self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
 
     def test_pipe_product_and_test_leaves_select_both_carriers(self):
