@@ -171,13 +171,51 @@ static void process_complete_os_result(XrXirInstance *instance,const uint32_t *i
     CHECK(values[4].type==XR_XIR_BOOL&&values[4].payload==(child->record->error_length>(uint64_t)limits[1]));
     for(unsigned n=0;n<5;++n)xr_xir_value_drop(&values[n]);xr_xir_value_drop(&fields);
 }
+static void process_complete_os_diagnostic_bytes(XrXirInstance *instance,const XrXirValue *array,const char *name){
+    XrXirValueAdmission access={.arena=xr_xir_value_arena(array),.domain=instance->domain,.work=UINT64_MAX,.scratch_bytes=UINT64_MAX};int64_t length=-1;
+    XrXirValueStatus status=xr_xir_array_len(array,&access,&length);
+    fprintf(stderr,"complete os.exec %s type%u lenStatus%u length%lld hex:",name,array->type,(unsigned)status,(long long)length);
+    if(status==XR_XIR_VALUE_OK)for(int64_t n=0;n<length&&n<256;++n){
+        XrXirValue byte={0};XrXirFaultDetail fault={0};status=xr_xir_array_get(array,n,&access,&byte,&fault);
+        if(status==XR_XIR_VALUE_OK&&byte.type==XR_XIR_U8)fprintf(stderr," %02x",(unsigned)byte.payload);
+        else fprintf(stderr," [status%u type%u]",(unsigned)status,byte.type);
+        xr_xir_value_drop(&byte);if(status!=XR_XIR_VALUE_OK)break;
+    }
+    fputc('\n',stderr);
+}
+static void process_complete_os_diagnostic(XrXirInstance *instance,const uint32_t *ids,const XrXirValue *result,
+    const ProcessCompleteOsChild *child,const char *command){
+    DWORD exit_code=0;BOOL queried=child->process?GetExitCodeProcess(child->process,&exit_code):FALSE;
+    bool present=false;const XrXirValue *object=NULL;bool nullable=xr_xir_nullable_view(result,&present,&object);
+    fprintf(stderr,"complete os.exec command=%s\nchild pid%lu completed%lu stdout%llu stderr%llu ready%lu done%lu handle%u wait%lu exitValid%u exit%lu\nresult type%u nullable%u Some%u\n",
+        command,(unsigned long)child->record->pid,(unsigned long)child->record->completed,
+        (unsigned long long)child->record->output_length,(unsigned long long)child->record->error_length,
+        (unsigned long)WaitForSingleObject(child->ready,0),(unsigned long)WaitForSingleObject(child->done,0),(unsigned)(child->process!=NULL),
+        (unsigned long)(child->process?WaitForSingleObject(child->process,0):WAIT_FAILED),(unsigned)(queried!=FALSE),(unsigned long)exit_code,
+        result->type,(unsigned)nullable,(unsigned)present);
+    if(!nullable||!present||!object)return;
+    XrXirValue fields={0},values[5]={{0}};XrXirCallStatus status=xr_xir_instance_start(instance,ids[PROCESS_COMPLETE_OS_FIELDS],object,1);
+    if(status==XR_XIR_CALL_READY){status=process_drive(instance).outcome.status;if(status==XR_XIR_CALL_RETURNED)status=xr_xir_instance_take_result(instance,&fields);}
+    fprintf(stderr,"complete os.exec fields status%u\n",(unsigned)status);
+    if(status==XR_XIR_CALL_RETURNED){
+        for(unsigned n=0;n<5;++n){
+            XrXirValueStatus projected=xr_xir_tuple_get(&fields,n,&values[n]);
+            fprintf(stderr,"complete os.exec field%u status%u type%u",n,(unsigned)projected,values[n].type);
+            if(values[n].type==XR_XIR_I64||values[n].type==XR_XIR_BOOL)fprintf(stderr," scalar%lld",(long long)values[n].payload);fputc('\n',stderr);
+            if(projected==XR_XIR_VALUE_OK&&n<2)process_complete_os_diagnostic_bytes(instance,&values[n],n?"stderr":"stdout");
+        }
+    }
+    for(unsigned n=0;n<5;++n)xr_xir_value_drop(&values[n]);xr_xir_value_drop(&fields);
+}
 static void process_complete_os_success(XrXirProgram *program,const uint32_t *ids,const int64_t limits[2]){
     size_t live=runtime_live,bytes=runtime_bytes;XrXirInstance *instance=process_instance(program,ids);ProcessCompleteOsChild child;process_complete_os_open(&child,true);
-    char *command=process_complete_os_command(&child);XrXirValue text=process_string(instance,command);xr_free(command);
+    char *command=process_complete_os_command(&child);XrXirValue text=process_string(instance,command);
     XrXirValue args[]={text,{XR_XIR_I64,0,limits[0]},{XR_XIR_I64,0,limits[1]}};process_complete_os_arm(false);
     CHECK(xr_xir_instance_start(instance,ids[PROCESS_COMPLETE_OS_EXEC],args,3)==XR_XIR_CALL_READY);
     CHECK(process_complete_os_drive(instance,&child)==XR_XIR_CALL_RETURNED);XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
-    CHECK(child.process&&child.record->completed&&WaitForSingleObject(child.done,0)==WAIT_OBJECT_0);process_child_done(child.process,23,true);
+    bool complete=child.process&&child.record->completed&&WaitForSingleObject(child.done,0)==WAIT_OBJECT_0;
+    if(!complete)process_complete_os_diagnostic(instance,ids,&result,&child,command);
+    CHECK(complete);xr_free(command);process_child_done(child.process,23,true);
     CHECK(process_complete_os_acquired&&process_complete_os_acquired==process_complete_os_retired&&process_oom_prepares==1&&process_oom_starts==1);
     CHECK(process_complete_os_closed_ends[0]==2&&process_complete_os_closed_ends[1]==2);
     uint32_t close_native=UINT32_MAX;for(uint32_t f=0;f<program->entry_count;++f)if(program->declarations->functions[f].native_callable==109)close_native=f;
