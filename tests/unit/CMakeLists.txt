@@ -4403,6 +4403,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/task_executor.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/root_callback.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/root_signal.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/pipe_runtime/pipe_runtime.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/process_runtime/process_runtime.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/task_product.cmake")
 
