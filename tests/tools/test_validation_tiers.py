@@ -279,7 +279,7 @@ class TierTests(unittest.TestCase):
         self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
 
     def test_complete_path_inputs_keep_the_existing_carriers(self):
-        for path in ("tests/unit/xir/xir_path_complete_source.h",
+        for path in ("stdlib/path/path.xr", "tests/unit/xir/xir_path_complete_source.h",
                      "tests/unit/xir/xir_path_complete_runtime.h",
                      "src/xir/xxir_path_native.h", "src/xir/xxir_instance_path_cwd.inc.c"):
             with self.subTest(path=path):

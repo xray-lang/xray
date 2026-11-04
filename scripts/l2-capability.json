@@ -336,7 +336,8 @@
         "tests/unit/xir/xir_path_complete_source.h",
         "tests/unit/xir/xir_path_complete_runtime.h",
         "src/xir/xxir_path_native.h",
-        "src/xir/xxir_instance_path_cwd.inc.c"
+        "src/xir/xxir_instance_path_cwd.inc.c",
+        "stdlib/path/path.xr"
       ],
       "reason": "HIR and complete Source language-family consumers.",
       "tests": [
