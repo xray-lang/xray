@@ -94,8 +94,10 @@ fn hexOf(bytes: Array<u8>) -> string {
         var b = bytes[i] as i64
         var hi = (b >> 4) & 15
         var lo = b & 15
-        out += HEX_DIGITS.slice(hi, hi + 1)
-        out += HEX_DIGITS.slice(lo, lo + 1)
+        const highDigit = HEX_DIGITS.slice(hi, hi + 1)
+        out += highDigit
+        const lowDigit = HEX_DIGITS.slice(lo, lo + 1)
+        out += lowDigit
     }
     return out
 }
