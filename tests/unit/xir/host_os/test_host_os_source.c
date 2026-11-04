@@ -7,6 +7,7 @@
  * test_host_os_source.c - Cold canonical host declarations and actual VM calls
  */
 #include "host_os_runtime.h"
+#include "../xir_genuine_sys_path.h"
 #include "host_os_source_cases.h"
 #include "host_os_path_cases.h"
 #include "host_os_cpu_cases.h"
@@ -35,6 +36,8 @@ static XrXirStatus host_check(const XrXirCompileContext *context,const char *mod
   XrModuleOverlayInput overlays[]={{{XR_MODULE_IDENTITY_STDLIB,"path",root},"path/path.xr",locator,host_path_text,strlen(host_path_text)},
    {authority,logical,path,text,strlen(text)}};
   status=xr_xir_compile_source_check_overlay(&request,overlays,2,output,diagnostic,NULL);
+ }else if(!strcmp(module,"sys")&&genuine){
+  status=xir_genuine_sys_path_check(&request,text,strlen(text),output,diagnostic);
  }else{
   XrXirSourceText input={genuine?logical:NULL,text,strlen(text)};
   status=xr_xir_compile_source_check_text(&request,&input,output,diagnostic,NULL);

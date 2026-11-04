@@ -13,6 +13,7 @@
  */
 #define XR_PROCESS_SOURCE 1
 #include "process_runtime.h"
+#include "../xir_genuine_sys_path.h"
 static uint32_t process_named(const XrXirModule *module,const char *name){
  for(uint32_t f=0;f<module->function_count;++f)if(module->functions[f].name_length==strlen(name)&&!memcmp(module->functions[f].name,name,strlen(name)))return f;
  CHECK(false);return UINT32_MAX;
@@ -39,7 +40,8 @@ static XrXirStatus process_check(const XrXirCompileContext *context,const char *
  XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
  XrXirSourceRequest request={session,genuine?XR_PROCESS_ROOT "/stdlib/sys/sys.xr":NULL,&authority,context,root,NULL,XR_XIR_PROGRAM,NULL};
  XrXirSourceText source={genuine?"sys/sys.xr":NULL,text,length};XrXirSourceDiagnostic diagnostic={0};
- XrXirStatus status=xr_xir_compile_source_check_text(&request,&source,output,&diagnostic,NULL);
+ XrXirStatus status=genuine?xir_genuine_sys_path_check(&request,text,length,output,&diagnostic):
+  xr_xir_compile_source_check_text(&request,&source,output,&diagnostic,NULL);
  if(status!=XR_XIR_OK)fprintf(stderr,"Process Source%u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);
  xr_compile_session_free(session);return status;
 }
