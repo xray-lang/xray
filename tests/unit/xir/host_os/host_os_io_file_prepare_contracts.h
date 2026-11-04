@@ -13,6 +13,34 @@
  */
 #ifndef HOST_OS_IO_FILE_PREPARE_CONTRACTS_H
 #define HOST_OS_IO_FILE_PREPARE_CONTRACTS_H
+static void host_file_prepare_raw_references(XrXirCompileContext *context){
+ static const char text[]="import {Path} from path\nfn plainHandle(handle:i64)->bool{return handle>0}\n"
+  "export fn reference()->fn(i64)->bool{return plainHandle}\n";
+ XrXirArtifact *code=host_code(context,"io",text);const XrXirModule *module=xr_xir_compile_artifact_module(code);
+ uint32_t function=host_named(module,"reference"),instruction=UINT32_MAX;
+ const XrXirFunction *body=module->functions+function;CHECK(body->instructions&&body->instruction_count);
+ for(uint32_t i=0;i<body->instruction_count;++i)if(body->instructions[i].op==XR_XIR_FUNCTION_REF){CHECK(instruction==UINT32_MAX);instruction=i;}
+ CHECK(instruction!=UINT32_MAX);const XrXirInstruction *original=body->instructions+instruction;
+ const XrXirTypeNode *signature=xr_xir_callable_signature(module->types,original->type);
+ CHECK(signature&&signature->parameter_count==1&&signature->parameters&&signature->parameters[0].type==XR_XIR_I64&&
+  signature->parameters[0].mode==XR_PARAM_READ&&signature->result==XR_XIR_BOOL&&signature->element==XR_XIR_NEVER&&
+  !(signature->flags&XR_XIR_CALLABLE_NO_SUSPEND)&&!original->args[0]&&!original->args[1]);
+ XrXirFunction *functions=xr_malloc(module->function_count*sizeof(*functions));
+ XrXirInstruction *instructions=xr_malloc(body->instruction_count*sizeof(*instructions));CHECK(functions&&instructions);
+ memcpy(functions,module->functions,module->function_count*sizeof(*functions));memcpy(instructions,body->instructions,body->instruction_count*sizeof(*instructions));
+ XrXirModule changed=*module;changed.functions=functions;functions[function].instructions=instructions;XrXirDiagnostic diagnostic={0};
+ CHECK(xr_xir_compile_structure_verify_v2(context,&changed,code->construction,&diagnostic)==XR_XIR_OK);
+ const char *targets[]={"__fileClose","__fileFlush"};
+ for(unsigned n=0;n<2;++n){
+  uint32_t target=host_named(module,targets[n]);const XrXirFunction *callee=module->functions+target;
+  CHECK(callee->parameter_count==1&&callee->parameters[0]==XR_XIR_I64&&callee->result==XR_XIR_BOOL&&callee->error_type==XR_XIR_NEVER);
+  instructions[instruction].immediate=target;diagnostic=(XrXirDiagnostic){0};
+  CHECK(xr_xir_compile_structure_verify_v2(context,&changed,code->construction,&diagnostic)==XR_XIR_BAD_TYPE&&
+   diagnostic.function==function&&diagnostic.instruction==instruction);
+ }
+ instructions[instruction]=*original;CHECK(xr_xir_compile_structure_verify_v2(context,&changed,code->construction,NULL)==XR_XIR_OK);
+ xr_free(instructions);xr_free(functions);xr_xir_compile_artifact_free(code);
+}
 static void host_file_prepare_rejected(XrXirCompileContext *context,const char *text,bool genuine,
  XrXirStatus expected,const char *reason){
  XrXirSourceResult output={0};XrXirSourceDiagnostic diagnostic={0};
@@ -23,6 +51,7 @@ static void host_file_prepare_rejected(XrXirCompileContext *context,const char *
  xr_xir_compile_source_result_free(&output);
 }
 static void host_file_prepare_contracts(XrXirCompileContext *context,const XrXirArtifact *code){
+ host_file_prepare_raw_references(context);
  static const char *const names[]={"__fileClose","__fileFlush","__fileOpen","__fileOpenWrite","__fileRead","__fileWrite","__fileWriteStr"};
  static const char *const signatures[]={"(handle: i64): bool","(handle: i64): bool","(path: Path): i64","(path: Path, append: bool): i64",
   "(handle: i64, maxBytes: i64): Array<u8>?","(handle: i64, data: Array<u8>, offset: i64): i64","(handle: i64, data: string, offset: i64): i64"};
@@ -53,7 +82,7 @@ static void host_file_prepare_contracts(XrXirCompileContext *context,const XrXir
   CHECK(xir_native_callable_verify(&changed,function)==XR_XIR_BAD_TYPE);modules[owner]=module->declarations->modules[owner];
   modules[owner].lexical_scope=1;CHECK(xir_native_callable_verify(&changed,function)==XR_XIR_BAD_TYPE);modules[owner]=module->declarations->modules[owner];
   identities[function].promises^=XR_XIR_FUNCTION_NO_SUSPEND;
-  CHECK(xir_native_callable_verify(&changed,function)==XR_XIR_BAD_TYPE);identities[function]=module->declarations->functions[function];
+  CHECK(xir_native_callable_verify(&changed,function)==XR_XIR_BAD_STRUCTURE);identities[function]=module->declarations->functions[function];
   XrXirType parameters[3]={0};CHECK(functions[function].parameter_count<=3);
   memcpy(parameters,functions[function].parameters,functions[function].parameter_count*sizeof(*parameters));functions[function].parameters=parameters;
   parameters[0]=XR_XIR_STRING;CHECK(xir_native_callable_verify(&changed,function)==XR_XIR_BAD_TYPE);functions[function]=module->functions[function];
