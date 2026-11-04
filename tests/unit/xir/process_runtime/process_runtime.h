@@ -23,6 +23,7 @@
 #include "toolchain/xcompiler_session.h"
 #include "os/os_time.h"
 #include "os/os_thread.h"
+#include "os/os_process_owned.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,7 +37,17 @@
 #include <fcntl.h>
 #endif
 #define CHECK(c) do { if(!(c)) { fprintf(stderr,"Process product %d: %s\n",__LINE__,#c);exit(1); } } while(0)
+#if defined(XR_OS_WINDOWS)
+static XrOsIoStatus process_observed_prepare(const XrOsIoPolicy *,const XrOsProcessQuery *,const XrOsProcessRequest *,XrOsProcessOwner *,bool *);
+static XrOsIoStatus process_observed_start(XrOsProcessOwner *);
+#define xr_os_io_process_prepare process_observed_prepare
+#define xr_os_io_process_start process_observed_start
+#endif
 #include "../xir_runtime_allocations.h"
+#if defined(XR_OS_WINDOWS)
+#undef xr_os_io_process_prepare
+#undef xr_os_io_process_start
+#endif
 #include "process_cases.h"
 
 static void process_trace(const char *text) {
@@ -134,6 +145,27 @@ static void process_child_observe(ProcessChild *child,bool tree) {
     if(tree) {
         CHECK(child->record->pid[1]);child->leaf=OpenProcess(SYNCHRONIZE|PROCESS_QUERY_LIMITED_INFORMATION|PROCESS_TERMINATE,FALSE,child->record->pid[1]);CHECK(child->leaf);
     }
+}
+static ProcessChild *process_oom_child;
+static bool process_oom_observing,process_oom_armed;
+static unsigned process_oom_prepares,process_oom_starts,process_oom_hits;
+static size_t process_oom_allocation;
+static XrOsIoStatus process_observed_prepare(const XrOsIoPolicy *memory,const XrOsProcessQuery *query,
+    const XrOsProcessRequest *request,XrOsProcessOwner *owner,bool *created) {
+    if(process_oom_observing)++process_oom_prepares;
+    return xr_os_io_process_prepare(memory,query,request,owner,created);
+}
+static XrOsIoStatus process_observed_start(XrOsProcessOwner *owner) {
+    if(process_oom_observing)++process_oom_starts;
+    XrOsIoStatus status=xr_os_io_process_start(owner);
+    if(process_oom_observing&&process_oom_armed&&status==XR_OS_IO_OK) {
+        /* The native start has succeeded. Only the subsequent real public
+         * Process result path is faulted; no guest or OS call is faked. */
+        CHECK(process_oom_child);process_child_observe(process_oom_child,false);
+        ++process_oom_hits;process_oom_armed=false;process_oom_allocation=runtime_attempts;
+        runtime_fail_at=process_oom_allocation;
+    }
+    return status;
 }
 static void process_child_done(HANDLE child,DWORD expected,bool exact) {
     CHECK(WaitForSingleObject(child,10000)==WAIT_OBJECT_0);DWORD code=STILL_ACTIVE;
@@ -399,6 +431,31 @@ static void process_private_host(XrXirProgram *program,const uint32_t *ids) {
     CHECK(xr_xir_instance_start(instance,native[1],args,1)==XR_XIR_CALL_BAD_ARGUMENT);
     CHECK(xr_xir_instance_start(instance,native[2],args,2)==XR_XIR_CALL_BAD_ARGUMENT);process_retire(instance);
 }
+static void process_result_oom(XrXirProgram *program,const uint32_t *ids) {
+    size_t live=runtime_live,bytes=runtime_bytes;CHECK(runtime_fail_at==SIZE_MAX&&!process_oom_observing&&!process_oom_armed);
+    XrXirInstance *instance=process_instance(program,ids);ProcessChild child;process_child_open(&child);
+    wchar_t path[32768];DWORD count=GetModuleFileNameW(NULL,path,32768);CHECK(count&&count<32768);char *text=process_utf8(path);
+    XrXirValue executable=process_string(instance,text);xr_free(text);
+    XrXirValue values[]={process_string(instance,"--process-child"),process_string(instance,"hold"),process_string(instance,child.name)},arguments={0};
+    XrXirValueAdmission access={.arena=program->arena,.domain=instance->domain,.work=UINT64_MAX,.scratch_bytes=UINT64_MAX};
+    CHECK(xr_xir_array_new(program->entries[ids[PROCESS_SPAWN]].parameters[1],values,3,&access,&arguments)==XR_XIR_VALUE_OK);
+    for(unsigned n=0;n<3;++n)xr_xir_value_drop(&values[n]);
+    XrXirValue args[]={executable,arguments};process_oom_prepares=process_oom_starts=process_oom_hits=0;
+    process_oom_child=&child;process_oom_observing=process_oom_armed=true;
+    CHECK(xr_xir_instance_start(instance,ids[PROCESS_SPAWN],args,2)==XR_XIR_CALL_READY);
+    XrXirCallStatus terminal=process_drive(instance).outcome.status;runtime_fail_at=SIZE_MAX;
+    if(terminal!=XR_XIR_CALL_OOM)fprintf(stderr,"Process post-start OOM status%u\n",terminal);
+    CHECK(terminal==XR_XIR_CALL_OOM&&process_oom_hits==1&&!process_oom_armed&&child.leader&&runtime_attempts>process_oom_allocation);
+    XrXirValue output={0};CHECK(xr_xir_instance_take_result(instance,&output)==XR_XIR_CALL_OOM&&!output.type&&!output.reserved&&!output.payload);
+    xr_xir_value_drop(&executable);xr_xir_value_drop(&arguments);uint64_t started=xr_time_monotonic_ns();CHECK(started);
+    for(;;) {
+        XrXirCallStatus closed=xr_xir_instance_free(instance);
+        if(closed!=XR_XIR_CALL_CLOSE_FAILED) { CHECK(closed==XR_XIR_CALL_OOM);break; }
+        uint64_t now=xr_time_monotonic_ns();CHECK(now>=started&&now-started<UINT64_C(10000000000));xr_thread_yield();
+    }
+    CHECK(process_oom_prepares==1&&process_oom_starts==1);process_oom_observing=false;process_oom_child=NULL;
+    process_child_done(child.leader,0,false);process_child_close(&child);CHECK(runtime_live==live&&runtime_bytes==bytes);
+}
 static void process_execute(XrXirProgram *program,const uint32_t *ids) {
     size_t live=runtime_live,bytes=runtime_bytes;
     process_trace("basic enter");process_basic(program,ids,PROCESS_SPAWN,"hold");process_basic(program,ids,PROCESS_SPAWN,"zero");
@@ -412,6 +469,7 @@ static void process_execute(XrXirProgram *program,const uint32_t *ids) {
     process_trace("refusals enter");process_refusals(program,ids);process_trace("refusals exit");
     process_trace("cancel enter");process_cancel(program,ids);process_trace("cancel exit");
     process_trace("privateHost enter");process_private_host(program,ids);process_trace("privateHost exit");
+    process_trace("post_start_oom enter");process_result_oom(program,ids);process_trace("post_start_oom exit");
     CHECK(runtime_live==live&&runtime_bytes==bytes);
 }
 #else
