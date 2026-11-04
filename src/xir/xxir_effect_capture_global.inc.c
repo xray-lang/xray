@@ -802,6 +802,7 @@ static XrXirStatus effect_capture_build(const XrXirCompileContext *work,EffectIn
             if(domain==1) {
                 status=effect_capture_schedule_run(&read,schedule);
             } else if(domain==2) status=effect_capture_fallback_build(&read);
+            else if(domain==3) status=effect_capture_schedule_ordered(&read,schedule);
             else do { read.changed=false;status=effect_capture_clauses(&read); } while(status==XR_XIR_OK && read.changed);
         }
     }
