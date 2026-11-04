@@ -169,6 +169,10 @@ static ProcessChild *process_oom_child;
 static bool process_oom_observing,process_oom_armed;
 static unsigned process_oom_prepares,process_oom_starts,process_oom_hits;
 static size_t process_oom_allocation;
+static bool process_shell_prepare_oom,process_shell_prepare_unchanged,process_shell_prepare_owned;
+static unsigned process_shell_prepare_hits;
+static size_t process_shell_prepare_allocation;
+static XrOsIoStatus process_shell_prepare_status;
 static XrOsIoStatus process_observed_prepare(const XrOsIoPolicy *memory,const XrOsProcessQuery *query,
     const XrOsProcessRequest *request,XrOsProcessOwner *owner,bool *created) {
     if(process_oom_observing)++process_oom_prepares;
@@ -177,7 +181,17 @@ static XrOsIoStatus process_observed_prepare(const XrOsIoPolicy *memory,const Xr
 static XrOsIoStatus process_observed_prepare_shell(const XrOsIoPolicy *memory,const XrOsProcessQuery *query,
     const XrOsProcessRequest *request,const XrOsProcessText *command,XrOsProcessOwner *owner,bool *created){
     if(process_oom_observing)++process_oom_prepares;
-    return xr_os_io_process_prepare_shell(memory,query,request,command,owner,created);
+    bool fault=process_oom_observing&&process_shell_prepare_oom,before=created?*created:false;
+    if(fault){
+        process_shell_prepare_oom=false;++process_shell_prepare_hits;
+        process_shell_prepare_allocation=runtime_attempts;runtime_fail_at=runtime_attempts;
+    }
+    XrOsIoStatus status=xr_os_io_process_prepare_shell(memory,query,request,command,owner,created);
+    if(fault){
+        process_shell_prepare_status=status;process_shell_prepare_unchanged=created&&*created==before;
+        process_shell_prepare_owned=owner&&owner->state!=NULL;
+    }
+    return status;
 }
 static XrOsIoStatus process_observed_start(XrOsProcessOwner *owner) {
     if(process_oom_observing)++process_oom_starts;

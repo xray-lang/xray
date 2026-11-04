@@ -25,12 +25,16 @@ typedef struct ProcessCompleteOsChild {
 static unsigned process_complete_os_serial;
 static bool process_complete_os_observing,process_complete_os_oom,process_complete_os_pending;
 static unsigned process_complete_os_acquired,process_complete_os_retired,process_complete_os_hits;
+static unsigned process_complete_os_begins[2];
 static unsigned process_complete_os_closed_ends[2];
 static unsigned process_complete_os_close_attempts[2],process_complete_os_disposals,process_complete_os_close_faults;
 static bool process_complete_os_fail_close;
 static size_t process_complete_os_allocation;
 static XrOsIoStatus process_complete_os_begin(XrOsPipeOwner *owner,const XrOsPipeRequest *request,
     const XrOsPipeQuery *query,XrOsPipeOperation *operation){
+    if(process_complete_os_observing&&request){
+        CHECK(request->end==XR_OS_PIPE_READ||request->end==XR_OS_PIPE_WRITE);++process_complete_os_begins[request->end==XR_OS_PIPE_WRITE];
+    }
     bool owned=operation&&operation->state!=NULL;
     XrOsIoStatus status=xr_os_io_pipe_begin(owner,request,query,operation);
     if(process_complete_os_observing&&!owned&&operation&&operation->state)++process_complete_os_acquired;
@@ -120,8 +124,10 @@ static bool process_complete_os_child(int argc,char **argv){
     record->completed=1;CHECK(SetEvent(done));
     CHECK(CloseHandle(ready)&&CloseHandle(release)&&CloseHandle(done)&&UnmapViewOfFile(record)&&CloseHandle(mapping));ExitProcess(23);
 }
-static char *process_complete_os_command(ProcessCompleteOsChild *child){
-    wchar_t executable[32768];DWORD length=GetModuleFileNameW(NULL,executable,32768);CHECK(length&&length<32768);char *utf8=process_utf8(executable);
+static char *process_complete_os_command(ProcessCompleteOsChild *child,const wchar_t *image){
+    wchar_t executable[32768];
+    if(!image){DWORD length=GetModuleFileNameW(NULL,executable,32768);CHECK(length&&length<32768);image=executable;}
+    char *utf8=process_utf8(image);
     size_t bytes=strlen(utf8);CHECK(bytes<=SIZE_MAX-sizeof(child->name)-96);size_t capacity=bytes+sizeof(child->name)+96;char *command=xr_malloc(capacity);CHECK(command);
     const char *mode=child->spaced_argument?"flood-spaced":child->allow_output?"flood":"hold";
     int count=snprintf(command,capacity,"\"%s\" --process-exec-child %s %s%s",utf8,mode,child->name,
@@ -145,10 +151,11 @@ static XrXirCallStatus process_complete_os_drive(XrXirInstance *instance,Process
     }
 }
 static void process_complete_os_arm(bool oom){
-    CHECK(!process_oom_observing&&!process_oom_armed&&!process_complete_os_observing&&runtime_fail_at==SIZE_MAX);
+    CHECK(!process_oom_observing&&!process_oom_armed&&!process_shell_prepare_oom&&!process_complete_os_observing&&runtime_fail_at==SIZE_MAX);
     process_oom_prepares=process_oom_starts=0;process_oom_observing=true;process_complete_os_observing=true;process_complete_os_oom=oom;
     process_complete_os_pending=false;process_complete_os_acquired=process_complete_os_retired=process_complete_os_hits=0;
     process_complete_os_closed_ends[0]=process_complete_os_closed_ends[1]=0;
+    process_complete_os_begins[0]=process_complete_os_begins[1]=0;
     process_complete_os_close_attempts[0]=process_complete_os_close_attempts[1]=0;
     process_complete_os_disposals=process_complete_os_close_faults=0;process_complete_os_fail_close=false;
 }
@@ -210,10 +217,10 @@ static void process_complete_os_diagnostic(XrXirInstance *instance,const uint32_
     }
     for(unsigned n=0;n<5;++n)xr_xir_value_drop(&values[n]);xr_xir_value_drop(&fields);
 }
-static void process_complete_os_success(XrXirProgram *program,const uint32_t *ids,const int64_t limits[2],bool spaced_argument){
+static void process_complete_os_success(XrXirProgram *program,const uint32_t *ids,const int64_t limits[2],bool spaced_argument,const wchar_t *image){
     size_t live=runtime_live,bytes=runtime_bytes;XrXirInstance *instance=process_instance(program,ids);ProcessCompleteOsChild child;process_complete_os_open(&child,true);
     child.spaced_argument=spaced_argument;
-    char *command=process_complete_os_command(&child);XrXirValue text=process_string(instance,command);
+    char *command=process_complete_os_command(&child,image);XrXirValue text=process_string(instance,command);
     XrXirValue args[]={text,{XR_XIR_I64,0,limits[0]},{XR_XIR_I64,0,limits[1]}};process_complete_os_arm(false);
     CHECK(xr_xir_instance_start(instance,ids[PROCESS_COMPLETE_OS_EXEC],args,3)==XR_XIR_CALL_READY);
     CHECK(process_complete_os_drive(instance,&child)==XR_XIR_CALL_RETURNED);XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
@@ -232,6 +239,43 @@ static void process_complete_os_success(XrXirProgram *program,const uint32_t *id
     process_complete_os_result(instance,ids,&result,&child,limits);xr_xir_value_drop(&result);xr_xir_value_drop(&text);
     unsigned acquired=process_complete_os_acquired;process_retire(instance);CHECK(process_complete_os_acquired==acquired);process_complete_os_disarm();
     process_complete_os_close(&child);CHECK(runtime_live==live&&runtime_bytes==bytes);
+}
+static void process_complete_os_unicode(XrXirProgram *program,const uint32_t *ids,const int64_t limits[2]){
+    wchar_t root[32768],source[32768],directory[32768],file[32768];
+    DWORD length=GetTempPathW(32768,root),source_length=GetModuleFileNameW(NULL,source,32768);
+    CHECK(length&&length<32768&&source_length&&source_length<32768);
+    while(length>3&&(root[length-1]==L'\\'||root[length-1]==L'/'))root[--length]=0;
+    CHECK(swprintf(directory,32768,L"%ls\\xray exec \u4e2d-\u03b2-%lu-%u",root,(unsigned long)GetCurrentProcessId(),++process_complete_os_serial)>0);
+    CHECK(swprintf(file,32768,L"%ls\\capture child \u4e2d.exe",directory)>0);
+    CHECK(CreateDirectoryW(directory,NULL)&&CopyFileW(source,file,TRUE));
+    /* Only the executable path is Unicode. Cooperative argv remains ASCII. */
+    process_complete_os_success(program,ids,limits,false,file);
+    CHECK(DeleteFileW(file)&&RemoveDirectoryW(directory));
+}
+static void process_complete_os_prepare_oom(XrXirProgram *program,const uint32_t *ids){
+    size_t live=runtime_live,bytes=runtime_bytes;XrXirInstance *instance=process_instance(program,ids);ProcessCompleteOsChild child;process_complete_os_open(&child,true);
+    char *command=process_complete_os_command(&child,NULL);XrXirValue text=process_string(instance,command);xr_free(command);
+    XrXirValue args[]={text,{XR_XIR_I64,0,2147483647},{XR_XIR_I64,0,2147483647}};process_complete_os_arm(false);
+    process_shell_prepare_hits=0;process_shell_prepare_unchanged=process_shell_prepare_owned=false;process_shell_prepare_status=XR_OS_IO_OK;process_shell_prepare_oom=true;
+    CHECK(xr_xir_instance_start(instance,ids[PROCESS_COMPLETE_OS_EXEC],args,3)==XR_XIR_CALL_READY);
+    XrXirCallStatus status=process_complete_os_drive(instance,&child);runtime_fail_at=SIZE_MAX;
+    if(status!=XR_XIR_CALL_OOM)fprintf(stderr,"complete os.exec prepare OOM status%u\n",(unsigned)status);
+    CHECK(status==XR_XIR_CALL_OOM&&!process_shell_prepare_oom&&process_shell_prepare_hits==1&&
+        runtime_attempts>process_shell_prepare_allocation&&process_shell_prepare_status==XR_OS_IO_OUT_OF_MEMORY&&
+        process_shell_prepare_unchanged&&process_oom_prepares==1&&!process_oom_starts);
+    if(getenv("XR_PROCESS_TRACE"))fprintf(stderr,"complete os.exec prepare OOM retained owner=%u\n",(unsigned)process_shell_prepare_owned);
+    CHECK(!process_complete_os_begins[0]&&!process_complete_os_begins[1]&&!process_complete_os_acquired&&!process_complete_os_retired);
+    CHECK(!child.process&&!child.record->pid&&!child.record->completed&&
+        WaitForSingleObject(child.ready,0)==WAIT_TIMEOUT&&WaitForSingleObject(child.done,0)==WAIT_TIMEOUT);
+    XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_OOM&&!result.type&&!result.reserved&&!result.payload);
+    xr_xir_value_drop(&text);uint64_t started=xr_time_monotonic_ns();CHECK(started);
+    for(;;){
+        XrXirCallStatus closed=xr_xir_instance_free(instance);
+        if(closed!=XR_XIR_CALL_CLOSE_FAILED){CHECK(closed==XR_XIR_CALL_OOM);break;}
+        uint64_t now=xr_time_monotonic_ns();CHECK(now>=started&&now-started<UINT64_C(10000000000));xr_thread_yield();
+    }
+    CHECK(process_oom_prepares==1&&!process_oom_starts&&!process_complete_os_begins[0]&&!process_complete_os_begins[1]);
+    process_complete_os_disarm();process_complete_os_close(&child);CHECK(runtime_live==live&&runtime_bytes==bytes);
 }
 static void process_complete_os_refusals(XrXirProgram *program,const uint32_t *ids){
     size_t live=runtime_live,bytes=runtime_bytes;XrXirInstance *instance=process_instance(program,ids);XrXirValue text=process_string(instance,"");
@@ -302,7 +346,7 @@ static void process_complete_os_cleanup_fault(XrXirProgram *program,const uint32
 }
 static void process_complete_os_failure(XrXirProgram *program,const uint32_t *ids,bool cancel){
     size_t live=runtime_live,bytes=runtime_bytes;XrXirInstance *instance=process_instance(program,ids);ProcessCompleteOsChild child;process_complete_os_open(&child,!cancel);
-    char *command=process_complete_os_command(&child);XrXirValue text=process_string(instance,command);xr_free(command);
+    char *command=process_complete_os_command(&child,NULL);XrXirValue text=process_string(instance,command);xr_free(command);
     XrXirValue args[]={text,{XR_XIR_I64,0,2147483647},{XR_XIR_I64,0,2147483647}};process_complete_os_arm(!cancel);
     CHECK(xr_xir_instance_start(instance,ids[PROCESS_COMPLETE_OS_EXEC],args,3)==XR_XIR_CALL_READY);
     if(cancel){
@@ -333,8 +377,10 @@ static void process_complete_os_failure(XrXirProgram *program,const uint32_t *id
 static void process_complete_os_execute(XrXirProgram *program,const uint32_t *ids){
     const int64_t limits[][2]={{2147483647,2147483647},{7,11},{0,0}};
     process_trace("complete os.exec capture enter");
-    for(unsigned n=0;n<sizeof(limits)/sizeof(*limits);++n)process_complete_os_success(program,ids,limits[n],false);
-    process_complete_os_success(program,ids,limits[1],true);
+    for(unsigned n=0;n<sizeof(limits)/sizeof(*limits);++n)process_complete_os_success(program,ids,limits[n],false,NULL);
+    process_complete_os_success(program,ids,limits[1],true,NULL);
+    process_trace("complete os.exec Unicode enter");process_complete_os_unicode(program,ids,limits[1]);process_trace("complete os.exec Unicode exit");
+    process_trace("complete os.exec prepare OOM enter");process_complete_os_prepare_oom(program,ids);process_trace("complete os.exec prepare OOM exit");
     process_trace("complete os.exec capture exit");process_complete_os_refusals(program,ids);
     process_trace("complete os.exec cleanup refusals enter");process_complete_os_cleanup_refusals(program,ids);process_trace("complete os.exec cleanup refusals exit");
     process_trace("complete os.exec cleanup fault enter");process_complete_os_cleanup_fault(program,ids);process_trace("complete os.exec cleanup fault exit");
