@@ -235,6 +235,7 @@ class TierTests(unittest.TestCase):
                      "src/xir/xxir_view_roots.inc.c",
                      "src/xir/xxir_view_types.inc.c",
                      "src/xir/xxir_view_pointer_calls.inc.c",
+                     "src/xir/xxir_view_access.inc.c", "src/xir/xxir_view_loan_origins.inc.c",
                      "src/xir/xxir_instance_dylib.inc.c",
                      "src/xir/xxir_instance_dylib_owner.inc.c",
                      "src/xir/xxir_sys_dylib_native.h",
