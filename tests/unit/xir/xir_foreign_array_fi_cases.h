@@ -23,7 +23,7 @@ static void foreign_array_prepare(ForeignArray *f) {
         CHECK(xr_xir_domain_new_budgeted(65536, &controls, &f->domains[i]) == XR_XIR_VALUE_OK);
     const XrXirCallableParameter fields[] = {{(XrXirType)257, 0}, {XR_XIR_STRING, 0}};
     const XrXirTypeNode nodes[] = {
-        {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind = XR_XIR_TYPE_NULLABLE, .element = (XrXirType)256},
         {.kind = XR_XIR_TYPE_TUPLE, .parameters = fields, .parameter_count = 2},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)258}};

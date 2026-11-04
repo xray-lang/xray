@@ -67,7 +67,7 @@ static void struct_function_gate(void) {
     f.identities[0].field_count = f.identities[1].field_count = 1;
     XrXirType fields[] = {(XrXirType)256, (XrXirType)257};
     XrXirTypeNode nodes[] = {
-        {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, NULL, 0, fields, 1}},
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {1, NULL, 0, fields + 1, 1}}};
     XrXirTypes types = {nodes, 3, &f.table, NULL};

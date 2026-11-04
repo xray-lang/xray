@@ -226,7 +226,7 @@ static XrXirValueStatus capture_admit(void *context, const XrXirFunctionBinding 
 static XrXirTypeArena *allocation_arena(XrXirDomain *domain) {
     (void)domain;
     const XrXirTypeNode nodes[] = {
-        {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind = XR_XIR_TYPE_CELL, .element = XR_XIR_STRING},
         {.kind = XR_XIR_TYPE_CELL, .element = (XrXirType) 256},
         {.kind = XR_XIR_TYPE_CELL, .element = XR_XIR_I64},
@@ -304,7 +304,7 @@ static void arena_allocation_cases(void) {
     size_t baseline = live;
     uint64_t bytes = xr_xir_domain_stats(domain).live_bytes;
     XrXirCallableParameter parameter = {XR_XIR_STRING, 0};
-    XrXirTypeNode node = {.kind = XR_XIR_TYPE_CALLABLE, .parameters = &parameter,
+    XrXirTypeNode node = {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER, .parameters = &parameter,
         .parameter_count = 1, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     XrXirTypes types = {&node, 1, NULL, NULL};
     const XrCompileResourceLimits limits=value_compile_limits();

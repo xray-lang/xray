@@ -178,7 +178,7 @@ static void closed_class_publish_before_callback(void) {
     XrXirNominalTable table = {NULL,1,&identity}; XrXirType member = (XrXirType)258;
     XrXirCallableParameter tuple_fields[] = {{(XrXirType)256,0},{XR_XIR_I64,0}};
     XrXirTypeNode nodes[] = {
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind=XR_XIR_TYPE_TUPLE,.parameters=tuple_fields,.parameter_count=2},
         {.kind=XR_XIR_TYPE_ARRAY,.element=(XrXirType)257},
         {.kind=XR_XIR_TYPE_NOMINAL,.nominal={0,NULL,0,&member,1}}};

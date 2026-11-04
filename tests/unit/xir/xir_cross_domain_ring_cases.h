@@ -10,7 +10,7 @@
 
 static XrXirTypeArena *cross_ring_arena(void) {
     const XrXirTypeNode nodes[] = {
-        {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)256},
         {.kind = XR_XIR_TYPE_CELL, .element = (XrXirType)257}};
     const XrXirTypes types = {nodes, 3, NULL, NULL};

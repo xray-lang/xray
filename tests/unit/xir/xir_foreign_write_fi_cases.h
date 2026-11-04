@@ -26,7 +26,7 @@ static XrXirTypeArena *foreign_write_arena(void) {
     const XrXirType inner[] = {(XrXirType)257, XR_XIR_STRING, XR_XIR_I64};
     const XrXirType outer[] = {(XrXirType)259, XR_XIR_I64};
     const XrXirTypeNode nodes[] = {
-        {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind = XR_XIR_TYPE_NULLABLE, .element = (XrXirType)256},
         {.kind = XR_XIR_TYPE_NOMINAL, .nominal = {0, NULL, 0, inner, 3}},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)258},
