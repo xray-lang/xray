@@ -144,6 +144,7 @@ typedef struct XrStdlibClassFieldDefEntry {
 } XrStdlibClassFieldDefEntry;
 
 static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
+    {"path", "__getcwd", "(): string", "Read the current working directory for relative Path resolution", "", "normal", "", "", "", "value", "", "", "", "system", "", "fresh", "", "", "", 0, 0, false},
     {"time", "__realtimeNanos", "(): i64", "Nanoseconds since the Unix epoch on the wall clock", "time_realtimeNanos", "normal", "", "xrt_time_realtime_nanos", "", "value", "", "time.__realtimeNanos", "", "system", "method", "", "xray.runtime.provider.v1/clock", "xray.runtime.provider-operation.v1/clock/realtime-nanos", "", 0, 0, true},
     {"time", "__monotonicNanos", "(): i64", "Nanoseconds on the runtime monotonic clock", "time_monotonicNanos", "normal", "", "xrt_time_monotonic_nanos", "", "value", "", "time.__monotonicNanos", "", "system", "method", "", "xray.runtime.provider.v1/clock", "xray.runtime.provider-operation.v1/clock/monotonic-nanos", "", 0, 0, true},
     {"time", "__cpuNanos", "(): i64", "Nanoseconds of process CPU time consumed", "time_cpuNanos", "normal", "", "xrt_time_cpu_nanos", "", "value", "", "time.__cpuNanos", "", "system", "method", "", "xray.runtime.provider.v1/clock", "xray.runtime.provider-operation.v1/clock/process-cpu-nanos", "", 0, 0, true},
@@ -197,6 +198,8 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"sys", "__pipeClose", "(handle: i64): bool", "Close a pipe endpoint", "sys_pipe_close", "normal", "", "xrt_sys_pipe_close", "v", "value", "", "", "", "system", "method", "", "xray.runtime.provider.v1/io", "xray.runtime.provider-operation.v1/io/pipe-close", "", 0, 1, true},
     {"regex", "__unicodePropId", "(name: string): i64", "Unicode property name to id, -1 when unknown", "regex_unicode_prop_id", "normal", "", "", "s", "value", "", "", "", "pure", "", "", "", "", "", 0, 1, false},
     {"regex", "__unicodeHasProp", "(cp: i64, propId: i64): bool", "Whether a code point carries a unicode property", "regex_unicode_has_prop", "normal", "", "", "vv", "value", "", "", "", "pure", "", "", "", "", "", 0, 2, false},
+    {"os", "__execShellSpawn", "(command: string, stdoutToken: i64, stderrToken: i64): i64", "Prepare and publish a system shell with owned output redirections", "", "normal", "", "", "sii", "value", "", "", "", "system", "", "fresh", "", "", "", 0, 3, false},
+    {"os", "__execPipeClose", "(readToken: i64, writeToken: i64): bool", "Close shell capture endpoints owned by the current execution root", "", "normal", "", "", "ii", "value", "", "", "", "system", "", "fresh", "", "", "", 0, 2, false},
     {"os", "__platform", "(): string", "Host operating system name", "os_platform", "normal", "", "xrt_os_platform", "", "value", "", "", "", "system", "method", "fresh", "", "", "", 0, 0, true},
     {"os", "__arch", "(): string", "Host CPU architecture name", "os_arch", "normal", "", "xrt_os_arch", "", "value", "", "", "", "system", "method", "fresh", "", "", "", 0, 0, true},
     {"os", "__getenv", "(name: string): string?", "Get environment variable", "os_getenv", "normal", "", "xrt_os_getenv", "s", "value", "", "", "", "system", "method", "fresh", "", "", "", 0, 1, true},
@@ -299,7 +302,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"net", "__udpFromHost", "(conn: NetConn): string", "Sender address of the last successful datagram receive; empty when none", "net_udp_from_host", "normal", "", "xrt_net_udp_from_host", "v", "value", "", "", "", "runtime", "method", "fresh", "", "", "", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 1, true},
     {"net", "__udpFromPort", "(conn: NetConn): i64", "Sender port of the last successful datagram receive; 0 when none", "net_udp_from_port", "normal", "", "xrt_net_udp_from_port", "v", "value", "", "", "", "runtime", "method", "", "", "", "", 0, 1, true},
 };
-#define XR_STDLIB_DEF_ENTRY_COUNT ((uint32_t) 154)
+#define XR_STDLIB_DEF_ENTRY_COUNT ((uint32_t) 157)
 
 static const XrStdlibConstDefEntry xr_stdlib_const_def_entries[1] = {0};
 #define XR_STDLIB_CONST_DEF_ENTRY_COUNT ((uint32_t) 0)

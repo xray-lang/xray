@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "evidence_scope": "generated-provider-path; binding and tests require build-bound evidence",
-  "leaf_count": 154,
+  "leaf_count": 157,
   "leaves": [
     {
       "symbol": "crypto.__fillRandomBytes",
@@ -2241,6 +2241,44 @@
       }
     },
     {
+      "symbol": "os.__execPipeClose",
+      "signature": "(readToken: i64, writeToken: i64): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "os.__execShellSpawn",
+      "signature": "(command: string, stdoutToken: i64, stderrToken: i64): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
       "symbol": "os.__exit",
       "signature": "(code: i64): ()",
       "declared": false,
@@ -2596,6 +2634,25 @@
     {
       "symbol": "os.__uptime",
       "signature": "(): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "path.__getcwd",
+      "signature": "(): string",
       "declared": false,
       "admitted": false,
       "blocking_reasons": [
