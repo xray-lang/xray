@@ -552,7 +552,7 @@ static void enum_value_ownership(void) {
     const XrXirNominalVariant variants[] = {{{"Empty", 5}, 0, 0}, {{"Pair", 4}, 0, 2}};
     const XrXirNominalFieldIdentity fields[] = {{{"left", 4}, 0}, {{"right", 5}, 0}};
     const XrXirNominalIdentity identity = {{"alpha", 5}, {"Choice", 6}, 1, 0, fields, 2,
-        XR_XIR_NOMINAL_ENUM, variants, 2, 0,{0}};
+        XR_XIR_NOMINAL_ENUM, variants, 2, 0,{0}, 0};
     const XrXirNominalTable table = {NULL, 1, &identity};
     XrXirType field_types[] = {XR_XIR_STRING, XR_XIR_STRING};
     const XrXirType type = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
@@ -672,6 +672,24 @@ static void deep_value_admission_failures(void) {
 #include "xir_foreign_array_fi_cases.h"
 #include "xir_array_set_callback_case.h"
 #include "xir_value_path_replacement_cases.h"
+static void domain_identity_bytes_case(void) {
+    const size_t baseline = live;
+    CHECK(fail_at == SIZE_MAX && !closed_fail_all);
+    CHECK(!xr_xir_domain_current(NULL));
+    XrXirDomain *domain = NULL;
+    CHECK(xr_xir_domain_new(sizeof(*domain), &domain) == XR_XIR_VALUE_OK && domain);
+    CHECK(xr_xir_domain_current(domain));
+    unsigned char saved[sizeof(domain->identity)];
+    memcpy(saved, domain->identity, sizeof(saved));
+    for (size_t i = 0; i < sizeof(saved); ++i) {
+        domain->identity[i] = (unsigned char)(saved[i] ^ 1u);
+        CHECK(!xr_xir_domain_current(domain));
+        domain->identity[i] = saved[i];
+        CHECK(xr_xir_domain_current(domain));
+    }
+    xr_xir_domain_drop(domain);
+    CHECK(live == baseline);
+}
 int main(int argc, char **argv) {
     if (argc != 1) {
         if (argc == 2 && !strcmp(argv[1], "--path-replacement")) { value_path_replacement_cases(true); return 0; }
@@ -715,6 +733,7 @@ int main(int argc, char **argv) {
     foreign_write_fi_cases();
     foreign_array_fi_cases();
     array_set_callback_case();
+    domain_identity_bytes_case();
     printf("Managed allocation failures: %zu; every domain, string and activation physically released\n", count);
     CHECK(!value_compile_live && !value_compile_bytes);
     return 0;

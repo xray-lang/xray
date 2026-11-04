@@ -20,8 +20,8 @@ static XrXirTypeArena *foreign_write_arena(void) {
         {{"callback", 8}, XR_XIR_FIELD_MUTABLE}, {{"text", 4}, 0}, {{"number", 6}, 0}};
     const XrXirNominalFieldIdentity outer_fields[] = {{{"items", 5}, XR_XIR_FIELD_MUTABLE}, {{"sibling", 7}, 0}};
     const XrXirNominalIdentity identities[] = {
-        {{"test", 4}, {"ForeignInner", 12}, 1, 0, inner_fields, 3, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0, {0}},
-        {{"test", 4}, {"ForeignOuter", 12}, 1, 0, outer_fields, 2, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0, {0}}};
+        {{"test", 4}, {"ForeignInner", 12}, 1, 0, inner_fields, 3, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0, {0}, 0},
+        {{"test", 4}, {"ForeignOuter", 12}, 1, 0, outer_fields, 2, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0, {0}, 0}};
     const XrXirNominalTable table = {NULL, 2, identities};
     const XrXirType inner[] = {(XrXirType)257, XR_XIR_STRING, XR_XIR_I64};
     const XrXirType outer[] = {(XrXirType)259, XR_XIR_I64};

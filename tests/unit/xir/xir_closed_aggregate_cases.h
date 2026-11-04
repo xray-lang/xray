@@ -174,7 +174,7 @@ static XrXirValueStatus class_reentry_admit(void *context,const XrXirFunctionBin
 }
 static void closed_class_publish_before_callback(void) {
     XrXirNominalFieldIdentity field = {{"items",5},XR_XIR_FIELD_MUTABLE};
-    XrXirNominalIdentity identity = {{"module",6},{"CallbackBox",11},1,0,&field,1,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL,{0}};
+    XrXirNominalIdentity identity = {{"module",6},{"CallbackBox",11},1,0,&field,1,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL,{0}, 0};
     XrXirNominalTable table = {NULL,1,&identity}; XrXirType member = (XrXirType)258;
     XrXirCallableParameter tuple_fields[] = {{(XrXirType)256,0},{XR_XIR_I64,0}};
     XrXirTypeNode nodes[] = {

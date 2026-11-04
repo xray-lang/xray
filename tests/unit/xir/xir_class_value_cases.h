@@ -16,7 +16,7 @@
 static XrXirTypeArena *class_value_arena(XrXirDomain *domain) {
     (void)domain;
     XrXirNominalFieldIdentity fields[]={{{"count",5},XR_XIR_FIELD_MUTABLE},{{"label",5},0},{{"text",4},XR_XIR_FIELD_MUTABLE}};
-    XrXirNominalIdentity identity={{"module",6},{"Counter",7},1,0,fields,3,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL,{0}};
+    XrXirNominalIdentity identity={{"module",6},{"Counter",7},1,0,fields,3,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL,{0}, 0};
     XrXirNominalTable table={NULL,1,&identity};XrXirType types_[]={XR_XIR_I64,XR_XIR_STRING,XR_XIR_STRING};
     XrXirTypeNode nodes[]={
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,NULL,0,types_,3}},

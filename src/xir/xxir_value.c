@@ -241,9 +241,11 @@ _Static_assert(offsetof(XrXirDomain, identity) == 0 && sizeof(atomic_bool) == 1 
     sizeof(_Atomic(uint32_t)) == 4, "domain identity rejects the complete retired prefix");
 XR_FUNC bool xr_xir_domain_current(const XrXirDomain *domain) {
     if (!domain) return false;
-    unsigned char identity[8];
-    memcpy(identity, domain, sizeof(identity));
-    return !memcmp(identity, domain_identity, sizeof(identity));
+    _Static_assert(sizeof(uint64_t) == sizeof(domain_identity), "domain identity occupies one exact-width word");
+    uint64_t actual, expected;
+    memcpy(&actual, domain, sizeof(actual));
+    memcpy(&expected, domain_identity, sizeof(expected));
+    return actual == expected;
 }
 XR_FUNC bool xr_xir_domain_is_compile(const XrXirDomain *domain) {
     return xr_xir_domain_current(domain) && domain->compile_resources && !domain->budget.bound;
