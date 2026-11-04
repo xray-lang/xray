@@ -104,7 +104,13 @@ static XrXirStatus view_root_call(ViewRootQuery *q,ViewOriginPair site,const XrX
     ViewRootCheck *c=q->check;const XrXirFunction *body=&c->module->functions[site.first];uint32_t candidate=UINT32_MAX;
     if (op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE) candidate=c->candidates[op->immediate];
     else if (op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT) {
-        if (view_pointer_result(c->module->types,op->type)) return XR_XIR_UNRESOLVED;
+        if (view_pointer_result(c->module->types,op->type)) {
+            if(op->immediate<0 || (uint64_t)op->immediate>UINT32_MAX)return XR_XIR_BAD_STRUCTURE;
+            bool known=false;XrXirStatus status=view_pointer_indirect(c->module,site.first,
+                (uint32_t)op->immediate,c->candidates,q->control,&known);
+            if(status!=XR_XIR_OK || !known)return status!=XR_XIR_OK?status:XR_XIR_UNRESOLVED;
+            return view_root_emit(q,site,context,XR_XIR_VIEW_ROOT_ABSENT);
+        }
         const XrXirTypeNode *signature=xr_xir_callable_signature(c->module->types,xr_xir_operand_type(body,(uint32_t)op->immediate));
         if (!signature) return XR_XIR_BAD_TYPE;
         XrXirStatus status=view_return_candidate(c->module->types,c->flags,signature,&candidate);
