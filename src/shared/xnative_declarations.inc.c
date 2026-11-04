@@ -1160,6 +1160,39 @@ static const XrNativeMemberDeclaration xr_native_sys_pipe_close = {
     false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
     "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_sys_pipe_close_parameters, 1, XR_NATIVE_TERM_BOOL
 };
+static const XrNativeParameter xr_native_sys_process_spawn_parameters[] = {
+    {"program", "string", XR_NATIVE_TERM_STRING, false, false},
+    {"args", "Array<string>", XR_NATIVE_TERM_ARRAY_STRING, false, false},
+    {"cwd", "string?", XR_NATIVE_TERM_NULLABLE_STRING, false, false},
+    {"envKeys", "Array<string>?", XR_NATIVE_TERM_NULLABLE_ARRAY_STRING, false, false},
+    {"envValues", "Array<string>?", XR_NATIVE_TERM_NULLABLE_ARRAY_STRING, false, false},
+    {"stdinRead", "i64?", XR_NATIVE_TERM_NULLABLE_I64, false, false},
+    {"stdoutWrite", "i64?", XR_NATIVE_TERM_NULLABLE_I64, false, false},
+    {"stderrWrite", "i64?", XR_NATIVE_TERM_NULLABLE_I64, false, false},
+    {"detached", "bool", XR_NATIVE_TERM_BOOL, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_sys_process_spawn = {
+    10, "__processSpawn", "(program: string, args: Array<string>, cwd: string?, envKeys: Array<string>?, envValues: Array<string>?, stdinRead: i64?, stdoutWrite: i64?, stderrWrite: i64?, detached: bool): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_sys_process_spawn_parameters, 9, XR_NATIVE_TERM_I64
+};
+static const XrNativeParameter xr_native_sys_process_try_wait_parameters[] = {
+    {"id", "i64", XR_NATIVE_TERM_I64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_sys_process_try_wait = {
+    11, "__processTryWait", "(id: i64): i64?", "i64?", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_sys_process_try_wait_parameters, 1, XR_NATIVE_TERM_NULLABLE_I64
+};
+static const XrNativeParameter xr_native_sys_process_kill_parameters[] = {
+    {"id", "i64", XR_NATIVE_TERM_I64, false, false},
+    {"signal", "i64", XR_NATIVE_TERM_I64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_sys_process_kill = {
+    12, "__processKill", "(id: i64, signal: i64): bool", "bool", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_sys_process_kill_parameters, 2, XR_NATIVE_TERM_BOOL
+};
 static const XrNativeMemberDeclaration xr_native_os_platform = {
     1, "__platform", "(): string", "string", 0, 0, XR_NATIVE_RECEIVER_READ,
     false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
@@ -1501,6 +1534,9 @@ static const XrNativeCallableDeclaration xr_native_callables[] = {
     {XR_NATIVE_CALLABLE_SYS_PIPE_READ, NULL, &xr_native_sys_pipe_read, NULL, false, "sys", "stdlib/defs/core.def", {{88,231,47,116,116,120,185,249,130,218,157,56,57,166,11,176,119,182,240,54,97,129,185,230,243,205,40,44,66,44,19,127}}},
     {XR_NATIVE_CALLABLE_SYS_PIPE_WRITE, NULL, &xr_native_sys_pipe_write, NULL, false, "sys", "stdlib/defs/core.def", {{88,231,47,116,116,120,185,249,130,218,157,56,57,166,11,176,119,182,240,54,97,129,185,230,243,205,40,44,66,44,19,127}}},
     {XR_NATIVE_CALLABLE_SYS_PIPE_CLOSE, NULL, &xr_native_sys_pipe_close, NULL, false, "sys", "stdlib/defs/core.def", {{88,231,47,116,116,120,185,249,130,218,157,56,57,166,11,176,119,182,240,54,97,129,185,230,243,205,40,44,66,44,19,127}}},
+    {XR_NATIVE_CALLABLE_SYS_PROCESS_SPAWN, NULL, &xr_native_sys_process_spawn, NULL, false, "sys", "stdlib/defs/core.def", {{88,231,47,116,116,120,185,249,130,218,157,56,57,166,11,176,119,182,240,54,97,129,185,230,243,205,40,44,66,44,19,127}}},
+    {XR_NATIVE_CALLABLE_SYS_PROCESS_TRY_WAIT, NULL, &xr_native_sys_process_try_wait, NULL, false, "sys", "stdlib/defs/core.def", {{88,231,47,116,116,120,185,249,130,218,157,56,57,166,11,176,119,182,240,54,97,129,185,230,243,205,40,44,66,44,19,127}}},
+    {XR_NATIVE_CALLABLE_SYS_PROCESS_KILL, NULL, &xr_native_sys_process_kill, NULL, false, "sys", "stdlib/defs/core.def", {{88,231,47,116,116,120,185,249,130,218,157,56,57,166,11,176,119,182,240,54,97,129,185,230,243,205,40,44,66,44,19,127}}},
     {XR_NATIVE_CALLABLE_OS_PLATFORM, NULL, &xr_native_os_platform, NULL, false, "os", "stdlib/defs/core.def", {{88,231,47,116,116,120,185,249,130,218,157,56,57,166,11,176,119,182,240,54,97,129,185,230,243,205,40,44,66,44,19,127}}},
     {XR_NATIVE_CALLABLE_OS_ARCH, NULL, &xr_native_os_arch, NULL, false, "os", "stdlib/defs/core.def", {{88,231,47,116,116,120,185,249,130,218,157,56,57,166,11,176,119,182,240,54,97,129,185,230,243,205,40,44,66,44,19,127}}},
     {XR_NATIVE_CALLABLE_OS_GETENV, NULL, &xr_native_os_getenv, NULL, false, "os", "stdlib/defs/core.def", {{88,231,47,116,116,120,185,249,130,218,157,56,57,166,11,176,119,182,240,54,97,129,185,230,243,205,40,44,66,44,19,127}}},
