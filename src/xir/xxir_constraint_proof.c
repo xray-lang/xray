@@ -180,8 +180,18 @@ static XrXirStatus constraint_markers(const XrXirConstraintEnvironment *environm
         if (node && (node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_NOMINAL ||
                      node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET))
             return constraint_sendable_graph(environment,type,work,read);
-        if (!node || (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_NULLABLE &&
-                      node->kind != XR_XIR_TYPE_TASK && node->kind != XR_XIR_TYPE_CHANNEL)) return XR_XIR_BAD_TYPE;
+        if (node && node->kind == XR_XIR_TYPE_FIXED_ARRAY) {
+            /* Immutable fixed bytes inherit only their admitted scalar element's
+             * transfer proof. A kind tag alone does not authenticate storage. */
+            if (node->nominal.declaration || node->nominal.arguments || node->nominal.argument_count ||
+                node->nominal.fields || node->nominal.field_count) return XR_XIR_BAD_STRUCTURE;
+            if (node->element != XR_XIR_U8 || !node->parameter_count || node->parameter_count > 65535 ||
+                node->parameters || node->result != XR_XIR_UNIT || node->flags || node->parameter_span)
+                return XR_XIR_BAD_TYPE;
+        }
+        if (!node || (node->kind != XR_XIR_TYPE_FIXED_ARRAY && node->kind != XR_XIR_TYPE_ARRAY &&
+                      node->kind != XR_XIR_TYPE_NULLABLE && node->kind != XR_XIR_TYPE_TASK &&
+                      node->kind != XR_XIR_TYPE_CHANNEL)) return XR_XIR_BAD_TYPE;
         if ((uint32_t) node->element >= XR_XIR_CONSTRUCTED_TYPE_BASE &&
             (uint32_t) node->element < XR_XIR_CONSTRUCTED_TYPE_LIMIT && (uint32_t) node->element >= id)
             return XR_XIR_BAD_TYPE;

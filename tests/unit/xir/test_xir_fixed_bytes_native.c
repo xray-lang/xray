@@ -19,11 +19,15 @@
 #include "fixed_bytes_product.h"
 XR_DATA const XrXirProgramSpec fixed_bytes_program;
 XR_DATA const uint32_t fixed_bytes_entry;
+XR_DATA const XrXirProgramSpec fixed_transfer_program;
+XR_DATA const uint32_t fixed_transfer_ids[4];
 int main(void) {
     SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);XrXirProgram *program=NULL;
     XrXirStatus status=xr_xir_compile_program_seal(&owner.context,&fixed_bytes_program,&program);
     if(status!=XR_XIR_OK)fprintf(stderr,"fixed native Program status%u\n",status);
     CHECK(status==XR_XIR_OK);
-    fixed_bytes_run(program,fixed_bytes_entry);xr_xir_compile_program_drop(program);
-    source_fixture_owner_free(&owner);return 0;
+    fixed_bytes_run(program,fixed_bytes_entry);xr_xir_compile_program_drop(program);program=NULL;
+    CHECK(xr_xir_compile_program_seal(&owner.context,&fixed_transfer_program,&program)==XR_XIR_OK);
+    fixed_transfer_run(&owner.context,program,fixed_transfer_ids);
+    source_fixture_owner_free(&owner);CHECK(!runtime_live && !runtime_bytes);return 0;
 }
