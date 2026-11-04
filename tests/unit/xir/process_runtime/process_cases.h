@@ -29,12 +29,12 @@ static const char *const process_names[] = {
 };
 static const char process_wrappers[] =
     "\nexport fn spawnProcess(program:string,args:Array<string>)->Process?{return Process.spawn(program,args)}\n"
-    "export fn spawnDetached(program:string,args:Array<string>)->Process?{return Process.spawn(program,args,ProcessOptions(detached:true))}\n"
+    "export fn spawnDetached(program:string,args:Array<string>)->Process?{return Process.spawn(program,args,ProcessOptions(null,null,null,null,null,true))}\n"
     "export fn spawnConfigured(program:string,args:Array<string>,cwd:string)->Process?{\n"
     " var env:Map<string,string>=#{\"XR_PROCESS_CHILD\":\"exact-env\"}\n"
-    " return Process.spawn(program,args,ProcessOptions(cwd:cwd,env:env))}\n"
+    " return Process.spawn(program,args,ProcessOptions(cwd,env))}\n"
     "export fn spawnStreams(program:string,args:Array<string>,input:Pipe,output:Pipe,error:Pipe)->Process?{\n"
-    " return Process.spawn(program,args,ProcessOptions(stdin:input.readEnd(),stdout:output.writeEnd(),stderr:error.writeEnd()))}\n"
+    " return Process.spawn(program,args,ProcessOptions(null,null,input.readEnd(),output.writeEnd(),error.writeEnd()))}\n"
     "export fn processId(p:Process)->i64{return p.id()}\n"
     "export fn waitProcess(p:Process)->i64{return p.wait()}\n"
     "export fn tryProcess(p:Process)->i64?{return p.tryWait()}\n"
