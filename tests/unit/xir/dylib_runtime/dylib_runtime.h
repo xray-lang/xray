@@ -186,6 +186,9 @@ static void dylib_refusals(XrXirProgram *program,const uint32_t *ids,const Dylib
     XrXirValue token=dylib_invoke(a,ids[DYLIB_TOKEN],&first,1),other=dylib_invoke(b,ids[DYLIB_TOKEN],&second,1);
     CHECK(token.type==XR_XIR_I64&&other.type==XR_XIR_I64&&token.payload>0&&other.payload>0&&token.payload!=other.payload);
     XrXirValue pointer=dylib_symbol(a,ids,&first,"xray_dylib_bytes",true),live=dylib_symbol(b,ids,&second,"xray_dylib_bytes",true);
+    XrXirValue readonly={0},offset=dylib_invoke(a,ids[DYLIB_OFFSET],&pointer,1);
+    CHECK(xr_xir_pointer_readonly(&pointer,xr_xir_value_arena(&pointer),(XrXirType)pointer.type,&readonly)==XR_XIR_VALUE_OK);
+    dylib_peek(a,ids,&readonly,dylib_expected[0]);dylib_peek(a,ids,&offset,dylib_expected[1]);
     XrXirValue rejected[]={token,{XR_XIR_I64,0,0},{XR_XIR_I64,0,INT64_MAX}},name=dylib_string(b,"xray_dylib_bytes");
     for(unsigned n=0;n<3;++n){
         dylib_bool(b,ids[DYLIB_RAW_CLOSE],rejected+n,false);XrXirValue args[]={rejected[n],name};
@@ -194,13 +197,14 @@ static void dylib_refusals(XrXirProgram *program,const uint32_t *ids,const Dylib
     xr_xir_value_drop(&name);xr_xir_value_drop(&first);dylib_retire(a,XR_XIR_CALL_READY);
     /* The second loader owner keeps the image mapped, but cannot resurrect
      * the first Root's stale pointer origin or accept its token. */
-    CHECK(GetModuleHandleW(fixture->file));dylib_stale(&pointer);dylib_peek(b,ids,&live,dylib_expected[0]);
+    CHECK(GetModuleHandleW(fixture->file));dylib_stale(&pointer);dylib_stale(&readonly);dylib_stale(&offset);dylib_peek(b,ids,&live,dylib_expected[0]);
     dylib_bool(b,ids[DYLIB_RAW_CLOSE],&token,false);dylib_bool(b,ids[DYLIB_CLOSE],&second,true);dylib_stale(&live);
     xr_xir_value_drop(&second);xr_xir_value_drop(&other);dylib_retire(b,XR_XIR_CALL_READY);CHECK(!GetModuleHandleW(fixture->file));
     XrXirInstance *fresh=dylib_instance(program,ids);XrXirValue next=dylib_open(fresh,ids,fixture->path),next_token=dylib_invoke(fresh,ids[DYLIB_TOKEN],&next,1);
     CHECK(next_token.type==XR_XIR_I64&&next_token.payload>0&&next_token.payload!=token.payload);dylib_stale(&pointer);
     dylib_bool(fresh,ids[DYLIB_RAW_CLOSE],&token,false);xr_xir_value_drop(&next_token);xr_xir_value_drop(&next);
     dylib_retire(fresh,XR_XIR_CALL_READY);xr_xir_value_drop(&token);xr_xir_value_drop(&pointer);xr_xir_value_drop(&live);
+    xr_xir_value_drop(&readonly);xr_xir_value_drop(&offset);
 }
 static void dylib_defer(XrXirProgram *program,const uint32_t *ids,const DylibFixture *fixture){
     XrXirInstance *instance=dylib_instance(program,ids);XrXirValue path=dylib_path(instance,ids,fixture->path);
