@@ -211,6 +211,61 @@ class GitTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             progress.legacy_deletions(self.root, self.base)
 
+    def approved_table(self):
+        path, before, after = progress.LEGACY_COUNT_RETIREMENT
+        file = self.root / path
+        file.parent.mkdir(parents=True, exist_ok=True)
+        old = progress.git(ROOT, "cat-file", "blob", before)
+        new = progress.git(ROOT, "cat-file", "blob", after)
+        file.write_bytes(old)
+        self.commit()
+        base = self.git("rev-parse", "HEAD")
+        file.write_bytes(new)
+        self.commit()
+        return file, base, old, new
+
+    def test_exact_approved_generated_count_retirement_passes(self):
+        file, base, old, new = self.approved_table()
+        value = progress.legacy_deletions(self.root, base)
+        self.assertEqual(value["changed_files"], 1)
+        self.assertEqual(len(old.splitlines()) - len(new.splitlines()), 3)
+        self.assertEqual(value["c_h_lines"], len(new.splitlines()) + 2)
+        # Later genuine deletion needs no exception.
+        base = self.git("rev-parse", "HEAD")
+        file.write_bytes(new.replace(b"typedef enum CgAotStdlibConstKind {\n", b""))
+        self.commit()
+        progress.legacy_deletions(self.root, base)
+
+    def test_approved_count_does_not_allow_another_count_or_table_edit(self):
+        file, base, _, new = self.approved_table()
+        for changed in (new.replace(b"((int) 116)", b"((int) 115)"), new + b"/* extra */\n"):
+            file.write_bytes(changed)
+            self.commit()
+            with self.assertRaisesRegex(ValueError, "deletions only"):
+                progress.legacy_deletions(self.root, base)
+
+    def test_approved_table_does_not_allow_other_legacy_rewrites(self):
+        _, base, _, _ = self.approved_table()
+        (self.root / "src/ir/old.c").write_text("replacement\n", encoding="utf-8")
+        self.commit()
+        with self.assertRaisesRegex(ValueError, "deletions only"):
+            progress.legacy_deletions(self.root, base)
+
+    def test_approved_count_cannot_be_reversed_or_reused_from_another_blob(self):
+        file, _, old, new = self.approved_table()
+        approved = self.git("rev-parse", "HEAD")
+        file.write_bytes(old)
+        self.commit()
+        with self.assertRaisesRegex(ValueError, "deletions only"):
+            progress.legacy_deletions(self.root, approved)
+        file.write_bytes(old + b"/* other base */\n")
+        self.commit()
+        other = self.git("rev-parse", "HEAD")
+        file.write_bytes(new)
+        self.commit()
+        with self.assertRaisesRegex(ValueError, "deletions only"):
+            progress.legacy_deletions(self.root, other)
+
     def test_empty_new_file_and_move_out_are_rejected(self):
         (self.root / "src/ir/empty.h").touch()
         self.commit()

@@ -11,6 +11,13 @@ import xray_crypto_suite
 
 
 LEGACY = ("src/ir/", "src/plan/", "src/aot/", "src/analysis/")
+# One approved retirement removes uid, gid and stat and recalculates 119 to 116.
+# Exact blobs prevent this exception from authorizing any later table rewrite.
+LEGACY_COUNT_RETIREMENT = (
+    "src/aot/xstdlib_aot_methods_generated.inc.c",
+    "084a920caab4c1b6c8126be0cc8e287cc82a99a1",
+    "814645d2a1d6ed814d181a7da7e15dcb1e07cc5d",
+)
 TASK = "tasks/327-end-to-end-usability-first-reset-cn.md"
 
 
@@ -19,7 +26,7 @@ def git(root: Path, *arguments: str) -> bytes:
 
 
 def legacy_deletions(root: Path, base: str, candidate: str = "HEAD") -> dict:
-    """Reject additions, rewrites, binaries and moves; count tracked C/H lines."""
+    """Reject legacy growth except one exact retirement; count C/H lines."""
     raw = git(root, "diff", "--raw", "--no-renames", base, candidate,
               "--", *LEGACY).decode("utf-8").splitlines()
     deleted = set()
@@ -35,6 +42,11 @@ def legacy_deletions(root: Path, base: str, candidate: str = "HEAD") -> dict:
     for change in changes:
         added, removed, path = change.split("\t", 2)
         if path not in deleted and (added != "0" or removed == "-"):
+            approved_path, before, after = LEGACY_COUNT_RETIREMENT
+            if (path == approved_path and added == "1" and removed == "4" and
+                    git(root, "rev-parse", f"{base}:{path}").decode("ascii").strip() == before and
+                    git(root, "rev-parse", f"{candidate}:{path}").decode("ascii").strip() == after):
+                continue
             raise ValueError(f"legacy directories permit deletions only: {path}")
     # A move out of the legacy tree is not a retirement.
     moves = git(root, "diff", "--find-renames", "--name-status", base, candidate).decode("utf-8")
