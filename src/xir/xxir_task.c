@@ -708,13 +708,20 @@ static bool task_core_close_group(XrXirTaskExecutor *executor) {
      * Closing never installs a panic as an ordinary frame completion. */
     if (executor->callback_failed && (executor->failure.status==XR_XIR_CALL_THROWN ||
         xr_xir_call_panic_status(executor->failure.status))) return true;
+    /* Repeated closing keeps the complete fatal owner already in the root
+     * Call instead of constructing a payload-free replacement from its status. */
+    bool retained_fatal=executor->root.call && executor->first_failure==XR_XIR_CALL_CLEANUP_FAILED &&
+        xr_xir_call_result_empty(&executor->failure) &&
+        xr_xir_call_state(executor->root.call)==XR_XIR_CALL_CLEANUP_FAILED;
     XrXirCallResult terminal={0};
-    if (!xr_xir_call_result_empty(&executor->failure) && executor->failure.status==executor->first_failure)
-        xr_xir_call_result_move(&executor->failure,&terminal);
-    else {xr_xir_call_result_drop(&executor->failure);terminal.status=executor->first_failure;}
+    if (!retained_fatal) {
+        if (!xr_xir_call_result_empty(&executor->failure) && executor->failure.status==executor->first_failure)
+            xr_xir_call_result_move(&executor->failure,&terminal);
+        else {xr_xir_call_result_drop(&executor->failure);terminal.status=executor->first_failure;}
+    }
     if (executor->root.call) {
         XrXirExecutorBinding binding={executor,&executor->root,executor->generation,executor->root.ticket};
-        XR_CHECK(xir_call_close_bound(executor->root.call,&binding,&terminal)==executor->first_failure,
+        XR_CHECK(xir_call_close_bound(executor->root.call,&binding,retained_fatal?NULL:&terminal)==executor->first_failure,
             "the existing root Call receives the complete first group failure");
     } else xr_xir_call_result_move(&terminal,&executor->failure);
     return true;
