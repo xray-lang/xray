@@ -15,16 +15,20 @@ static bool instance_process_target(const XrXirProgram *program,uint32_t target)
     if(!program||target>=program->entry_count||!program->declarations||!program->declarations->functions||
         !program->permissions||!program->permissions->input||!program->permissions->input->artifact||
         !program->permissions->effects||!program->permissions->entries||
-        program->permissions->function_count!=program->entry_count||
-        !xir_sys_native_scope(program->declarations,target,program->entry_count))return false;
+        program->permissions->function_count!=program->entry_count)return false;
     uint32_t id=program->declarations->functions[target].native_callable;
+    bool shell=xir_os_exec_shell_id(id);
+    if(shell?!xir_os_native_scope(program->declarations,target,program->entry_count):
+        !xir_sys_native_scope(program->declarations,target,program->entry_count))return false;
     const XrXirCallEntry *entry=program->entries+target;
     XrXirEffectFacts facts=xr_xir_effects_read(program->permissions->effects,target);
-    return xir_sys_process_id(id)&&xir_native_callable_identity(program->declarations->functions+target)&&
+    return (shell||xir_sys_process_id(id))&&xir_native_callable_identity(program->declarations->functions+target)&&
         facts.status==XR_XIR_OK&&facts.control.suspend==XR_XIR_EFFECT_NONE&&
+        (!shell||(!facts.root.requires_root&&!facts.root.unresolved))&&
         entry->resume==xr_xir_instance_native_callable&&entry->release==xr_xir_instance_native_callable_release&&
         entry->state_bytes==sizeof(XrXirValue)&&!entry->environment&&!entry->flags&&!entry->cleanup_owner&&
-        xir_sys_process_signature(id,program->types,entry->parameters,entry->parameter_count,entry->result,XR_XIR_NEVER);
+        (shell?xir_os_exec_shell_signature(id,entry->parameters,entry->parameter_count,entry->result,XR_XIR_NEVER):
+        xir_sys_process_signature(id,program->types,entry->parameters,entry->parameter_count,entry->result,XR_XIR_NEVER));
 }
 XR_FUNC bool xir_instance_process_nosuspend_transport(XrXirCallView *view,uint32_t target) {
     if(!view||!instance_view_current(view))return false;
@@ -45,7 +49,10 @@ static XrXirCallStatus instance_process_site(XrXirCallView *view,XrXirInstance *
     const XrXirCallEntry *entry=program->entries+origin->target;
     if(op->op!=XR_XIR_CALL||op->immediate!=(int64_t)origin->target||op->args[1]!=count||count!=entry->parameter_count||
         (count&&!arguments))return XR_XIR_CALL_BAD_STATE;
-    if(program->declarations->functions[origin->target].native_callable==XR_NATIVE_CALLABLE_SYS_PROCESS_SPAWN&&
+    uint32_t id=program->declarations->functions[origin->target].native_callable;
+    if(xir_os_exec_shell_id(id)&&!xir_os_native_scope(module->declarations,origin->caller,module->function_count))
+        return XR_XIR_CALL_BAD_STATE;
+    if((id==XR_NATIVE_CALLABLE_SYS_PROCESS_SPAWN||xir_os_exec_shell_id(id))&&
         (instance->stopping||instance_root(instance)->stopping))return XR_XIR_CALL_BAD_STATE;
     XrXirValueAdmission *admission=xr_xir_call_admission(view);
     if(admission->context!=instance||admission->domain!=instance->domain||admission->arena!=program->arena)return XR_XIR_CALL_BAD_STATE;
@@ -148,6 +155,7 @@ static XrXirCallStatus instance_process_spawn(XrXirCallView *view,XrXirInstance 
     if(status==XR_XIR_CALL_READY)*frame->frame=(XrXirValue){XR_XIR_I64,0,frame->created?frame->process->token:-1};
     return status;
 }
+#include "xxir_instance_exec_shell.inc.c"
 static XrXirCallStatus instance_process_commit(void *context) {
     XirProcessFrame *frame=context;
     if(frame->created) {
@@ -167,7 +175,8 @@ static XrXirAction instance_process_resume(XrXirCallView *view,XrXirInstance *in
         frame->entry!=xr_xir_call_current_entry(view->activation))status=XR_XIR_CALL_BAD_STATE;
     if(status==XR_XIR_CALL_READY)status=instance_process_site(view,instance,&frame->origin,view->arguments,view->argument_count);
     if(status!=XR_XIR_CALL_READY)return instance_pipe_fault(status);
-    if(id==XR_NATIVE_CALLABLE_SYS_PROCESS_SPAWN)status=instance_process_spawn(view,instance,frame);
+    if(xir_os_exec_shell_id(id))status=instance_process_spawn_shell(view,instance,frame);
+    else if(id==XR_NATIVE_CALLABLE_SYS_PROCESS_SPAWN)status=instance_process_spawn(view,instance,frame);
     else {
         XirPipeQuery current={view,instance->domain,XR_XIR_CALL_READY};
         XirProcessOwner *node=instance_process_lookup(instance,view->arguments[0].payload,&current);status=current.status;

@@ -15,7 +15,7 @@ static bool instance_exec_pipe_target(const XrXirProgram *program,uint32_t targe
     uint32_t id=program->declarations->functions[target].native_callable;
     const XrXirCallEntry *entry=program->entries+target;
     XrXirEffectFacts facts=xr_xir_effects_read(program->permissions->effects,target);
-    return xir_os_exec_native_id(id)&&xir_native_callable_identity(program->declarations->functions+target)&&
+    return xir_os_exec_close_id(id)&&xir_native_callable_identity(program->declarations->functions+target)&&
         facts.status==XR_XIR_OK&&facts.control.suspend==XR_XIR_EFFECT_NONE&&
         !facts.root.requires_root&&!facts.root.unresolved&&
         entry->resume==xr_xir_instance_native_callable&&entry->release==xr_xir_instance_native_callable_release&&

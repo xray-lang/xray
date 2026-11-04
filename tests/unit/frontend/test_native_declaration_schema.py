@@ -1046,6 +1046,43 @@ class ShellCaptureCleanupDeclarations(unittest.TestCase):
         from stdlibgen import parse_defs
         cls.declarations = parse_defs(ROOT)
 
+    def test_shell_spawn_has_no_legacy_provider(self):
+        from stdlibgen import unique_vm_binding_entries, emit_aot_methods, emit_driver_metadata, emit_provider_aot_sources, parse_def_metadata
+        lines, rows = schema.render_os_exec_shell_spawn(self.declarations)
+        self.assertEqual(len(rows), 1)
+        self.assertIn('XR_NATIVE_CALLABLE_OS_EXEC_SHELL_SPAWN', rows[0])
+        self.assertIn('XR_NATIVE_TERM_STRING', '\n'.join(lines))
+        row = next(r for r in self.declarations if r.module == 'os' and r.name == '__execShellSpawn')
+        self.assertNotIn(row, unique_vm_binding_entries(self.declarations))
+        entries, constants, _, _, enums, _, native_classes, *_ = parse_def_metadata(ROOT)
+        without = [r for r in entries if not (r.module == 'os' and r.name == '__execShellSpawn')]
+        self.assertEqual(emit_aot_methods(entries, constants, enums, native_classes),
+                         emit_aot_methods(without, constants, enums, native_classes))
+        self.assertEqual(emit_driver_metadata(entries, constants), emit_driver_metadata(without, constants))
+        self.assertEqual(emit_provider_aot_sources(entries), emit_provider_aot_sources(without))
+
+    def test_shell_spawn_complete_contract_is_required(self):
+        row = next(r for r in self.declarations if r.module == 'os' and r.name == '__execShellSpawn')
+        for changed in ([r for r in self.declarations if r is not row], self.declarations + [row]):
+            with self.assertRaises(ValueError):
+                schema.render_os_exec_shell_spawn(changed)
+        changes = [('module', 'sys'), ('name', '__other'), ('signature', '(command: string, stdoutToken: i64, stderrToken: i64): i64 throws(Error)'),
+            ('argc', '2'), ('arg_spec', 'iii'), ('visibility', 'public'), ('effect', 'other'), ('allocation', 'no_heap'),
+            ('return_ownership', 'borrowed'), ('layer', 'core'), ('vm', 'sys_process_spawn'), ('aot', 'xrt_process_spawn'),
+            ('aot_direct', True), ('aot_kind', 'method'), ('link_object', 'other'), ('vm_binding', 'yieldable'),
+            ('vm_ifdef', 'OTHER'), ('define', 'OTHER'), ('ret', 'i64'), ('semantic_intrinsic', True),
+            ('provider_declaration', object()), ('caps', ('task',)), ('suspension_kind', 'task')]
+        for key, value in changes:
+            self.assertNotEqual(getattr(row, key), value)
+            with self.subTest(field=key), self.assertRaises(ValueError):
+                schema.render_os_exec_shell_spawn([replace(r, **{key: value}) if r is row else r for r in self.declarations])
+        for signature in ('(command: ref string, stdoutToken: i64, stderrToken: i64): i64',
+                '(command: string, stdoutToken: i64, stderrToken: i64): i64?',
+                '(command: string, stdoutToken: i64, ...stderrToken: i64): i64',
+                'nosuspend (command: string, stdoutToken: i64, stderrToken: i64): i64'):
+            with self.subTest(signature=signature), self.assertRaises(ValueError):
+                schema.render_os_exec_shell_spawn([replace(r, signature=signature) if r is row else r for r in self.declarations])
+
     def test_cleanup_has_no_legacy_provider(self):
         from stdlibgen import unique_vm_binding_entries, emit_aot_methods, emit_driver_metadata, emit_provider_aot_sources, parse_def_metadata
         lines, rows = schema.render_os_exec_pipe_close(self.declarations)
