@@ -130,7 +130,12 @@ static XrXirStatus view_origin_candidates(
         }
         /* A pointer without a receiver summary must prove a nonborrowed
          * producer in every return path. A parameter is never such evidence. */
-        if (view_pointer(module->types,body->result)) {candidates[f]=UINT32_MAX-1u;continue;}
+        if (view_pointer_result(module->types,body->result)) {
+            if (native==XR_NATIVE_CALLABLE_SYS_DYLIB_SYMBOL) {
+                XrXirStatus status=xir_native_callable_verify(module,f);if (status!=XR_XIR_OK) return status;
+            }
+            candidates[f]=UINT32_MAX-1u;continue;
+        }
         for (uint32_t p=captures[f];p<body->parameter_count;++p) {
 
             bool reference=xr_xir_type_is_cell(module->types,body->parameters[p]);
@@ -187,7 +192,7 @@ static XrXirStatus view_origin_call(ViewOriginQuery *q,const XrXirInstruction *o
         if (op->immediate<0 || (uint64_t)op->immediate>=q->module->function_count) return XR_XIR_BAD_STRUCTURE;
         candidate=q->candidates[op->immediate];
     } else {
-        if (view_pointer(q->module->types,op->type)) return XR_XIR_UNRESOLVED;
+        if (view_pointer_result(q->module->types,op->type)) return XR_XIR_UNRESOLVED;
         if (op->immediate<0 || (uint64_t)op->immediate>=
             (uint64_t)q->function->parameter_count+q->function->instruction_count) return XR_XIR_BAD_STRUCTURE;
         const XrXirTypeNode *signature=xr_xir_callable_signature(q->module->types,

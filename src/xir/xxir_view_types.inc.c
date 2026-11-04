@@ -17,6 +17,11 @@ static bool view_pointer(const XrXirTypes *types,XrXirType type) {
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
     return node && (node->kind==XR_XIR_TYPE_PTR || node->kind==XR_XIR_TYPE_MUT_PTR);
 }
+static bool view_pointer_result(const XrXirTypes *types,XrXirType type) {
+    const XrXirTypeNode *node=xr_xir_type_node(types,type);
+    return view_pointer(types,type) || (node && node->kind==XR_XIR_TYPE_NULLABLE &&
+        view_pointer(types,node->element));
+}
 static uint32_t view_flags_at(const XrXirTypes *types,const uint8_t *flags,XrXirType type) {
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
     return node && flags ? flags[(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE]&3u : 0;
@@ -93,7 +98,7 @@ static XrXirStatus view_return_candidate(
             candidates=candidates>1 || leaves>1 ? 2u : candidates+leaves;candidate=p;
             permission=parameter->mode==XR_PARAM_REF ? XR_XIR_VIEW_MUTABLE : borrowed;
         }
-        if (!candidates && view_pointer(types,node->result)) {*output=UINT32_MAX-1u;return XR_XIR_OK;}
+        if (!candidates && view_pointer_result(types,node->result)) {*output=UINT32_MAX-1u;return XR_XIR_OK;}
         if (candidates!=1 || ((result&XR_XIR_VIEW_MUTABLE) && !(permission&XR_XIR_VIEW_MUTABLE)))
             return XR_XIR_BAD_TYPE;
     }
@@ -162,6 +167,8 @@ XR_FUNC XrXirStatus xr_xir_compile_view_return_candidate(const XrXirCompileConte
 static bool view_boundary_supported(const XrXirTypes *types,const uint8_t *flags,XrXirType type) {
     if (!view_flags_at(types,flags,type)) return true;
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
+    if (node && node->kind==XR_XIR_TYPE_NULLABLE && view_pointer(types,node->element))
+        node=xr_xir_type_node(types,node->element);
     return node && (node->kind==XR_XIR_TYPE_SLICE || node->kind==XR_XIR_TYPE_PTR ||
         node->kind==XR_XIR_TYPE_MUT_PTR) && node->element==XR_XIR_U8;
 }

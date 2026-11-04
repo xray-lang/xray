@@ -9,6 +9,7 @@
 // only for direct host ABI operations.
 
 import time
+import {Path} from path
 
 export enum BarrierError {
     InvalidBarrierParties
