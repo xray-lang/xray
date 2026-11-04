@@ -109,7 +109,8 @@ fn test_clock() {
 fn test_exec_echo() {
     var result = os.exec("echo hello")
     assert(result != null)
-    assertEqual(result!.stdout.toString(), "hello\n")
+    var expected = os.platform() == "windows" ? "hello\r\n" : "hello\n"
+    assertEqual(result!.stdout.toString(), expected)
     assertEqual(result!.exitCode, 0)
     assertEqual(result!.stdoutTruncated, false)
     assertEqual(result!.stderrTruncated, false)
@@ -147,7 +148,8 @@ fn test_exec_command_output() {
 
 @test
 fn test_exec_byte_capture_limits() {
-    var result = os.exec("printf 123456789", 4, 0)
+    var command = os.platform() == "windows" ? "echo 123456789" : "printf 123456789"
+    var result = os.exec(command, 4, 0)
     assert(result != null)
     assertEqual(result!.stdout.toString(), "1234")
     assertEqual(result!.stdoutTruncated, true)
