@@ -24,6 +24,7 @@
 #include "os/os_time.h"
 #include "os/os_thread.h"
 #include "os/os_process_owned.h"
+#include "os/os_pipe_owned.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -40,13 +41,25 @@
 #if defined(XR_OS_WINDOWS)
 static XrOsIoStatus process_observed_prepare(const XrOsIoPolicy *,const XrOsProcessQuery *,const XrOsProcessRequest *,XrOsProcessOwner *,bool *);
 static XrOsIoStatus process_observed_start(XrOsProcessOwner *);
+static XrOsIoStatus process_complete_os_begin(XrOsPipeOwner *,const XrOsPipeRequest *,const XrOsPipeQuery *,XrOsPipeOperation *);
+static XrOsIoStatus process_complete_os_poll(XrOsPipeOperation *,XrOsPipeProgress *);
+static XrOsIoStatus process_complete_os_operation_close(XrOsPipeOperation *,bool *);
+static XrOsIoStatus process_complete_os_close_end(XrOsPipeOwner *,XrOsPipeEnd,bool *);
 #define xr_os_io_process_prepare process_observed_prepare
 #define xr_os_io_process_start process_observed_start
+#define xr_os_io_pipe_begin process_complete_os_begin
+#define xr_os_io_pipe_poll process_complete_os_poll
+#define xr_os_io_pipe_operation_close process_complete_os_operation_close
+#define xr_os_io_pipe_close_end process_complete_os_close_end
 #endif
 #include "../xir_runtime_allocations.h"
 #if defined(XR_OS_WINDOWS)
 #undef xr_os_io_process_prepare
 #undef xr_os_io_process_start
+#undef xr_os_io_pipe_begin
+#undef xr_os_io_pipe_poll
+#undef xr_os_io_pipe_operation_close
+#undef xr_os_io_pipe_close_end
 #endif
 #include "process_cases.h"
 
