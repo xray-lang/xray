@@ -66,16 +66,16 @@ static void storage_cursor_cases(void) {
     CHECK(leaf.type == XR_XIR_STRING && leaf.bytes == bytes + 8);
     CHECK(storage_cursor_next(&cursor, &work, &leaf, &found) == XR_XIR_VALUE_OK && found && leaf.bytes == bytes + 16);
     CHECK(storage_cursor_next(&cursor, &work, &leaf, &found) == XR_XIR_VALUE_OK && !found);
-    size_t allocations = calls; fail_at = calls; XirObject *pending = NULL;
+    size_t allocations = value_allocation_calls; fail_at = value_allocation_calls; XirObject *pending = NULL;
     CHECK(storage_cursor_init(arena, root, frames, 2, true, &cursor) == XR_XIR_VALUE_OK);
     storage_queue_release(&cursor, UINT64_MAX, &pending); CHECK(pending);
-    release_pending(pending); CHECK(calls == allocations && domain->stats.live_bytes == baseline);
+    release_pending(pending); CHECK(value_allocation_calls == allocations && domain->stats.live_bytes == baseline);
     fail_at = SIZE_MAX;
     storage_cursor_owners(domain, bytes); bytes[24] = 255;
-    allocations = calls; fail_at = calls; pending = NULL;
+    allocations = value_allocation_calls; fail_at = value_allocation_calls; pending = NULL;
     CHECK(storage_cursor_init(arena, root, frames, 2, true, &cursor) == XR_XIR_VALUE_OK);
     storage_queue_release(&cursor, 2, &pending);
-    release_pending(pending); CHECK(calls == allocations && domain->stats.live_bytes == baseline);
+    release_pending(pending); CHECK(value_allocation_calls == allocations && domain->stats.live_bytes == baseline);
     /* The suffix tag is uninitialized: rollback above must not inspect it. */
     root = (StorageSpan) {(XrXirType)256, bytes + 24}; work = 100;
     CHECK(storage_cursor_init(arena, root, frames, 2, false, &cursor) == XR_XIR_VALUE_OK);
@@ -86,8 +86,8 @@ static void storage_cursor_cases(void) {
     CHECK(storage_cursor_init(arena, root, frames, 2, false, &cursor) == XR_XIR_VALUE_OK);
     CHECK(storage_cursor_next(&cursor, NULL, &leaf, &found) == XR_XIR_VALUE_OK && !found);
     CHECK(storage_cursor_init(arena, (StorageSpan){XR_XIR_STRING, NULL}, NULL, 0, true, &cursor) == XR_XIR_VALUE_BAD_ARGUMENT);
-    CHECK(calls == allocations);
-    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain); CHECK(!live && calls == allocations);
+    CHECK(value_allocation_calls == allocations);
+    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain); CHECK(!live && value_allocation_calls == allocations);
     fail_at = SIZE_MAX;
 }
 #endif // XIR_STORAGE_CURSOR_CASES_H

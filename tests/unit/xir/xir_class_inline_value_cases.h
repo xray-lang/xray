@@ -45,13 +45,13 @@ static void class_inline_faults(XrXirValue *object, const XrXirValue *fields,
         size_t sites=0,baseline=live;uint64_t own_bytes=xr_xir_domain_stats(owner->domain).live_bytes;
         uint64_t read_bytes=xr_xir_domain_stats(reader->domain).live_bytes;
         for(size_t pass=0;pass<=sites;++pass) {
-            calls=0;fail_at=pass?pass-1:SIZE_MAX;XrXirValue value={0};
+            value_allocation_calls=0;fail_at=pass?pass-1:SIZE_MAX;XrXirValue value={0};
             owner->work=reader->work=100000;uint64_t scratch=reader->scratch_bytes;
             XrXirValueStatus status=mode==0 ? xr_xir_class_new(XR_XIR_CONSTRUCTED_TYPE_BASE+3,fields,4,owner,&value) :
                 mode==1 ? xr_xir_class_get(object,0,reader,&value) : xr_xir_class_set(object,0,&fields[0],owner);
-            if(!pass){CHECK(status==XR_XIR_VALUE_OK);sites=calls;CHECK(sites>0);}
+            if(!pass){CHECK(status==XR_XIR_VALUE_OK);sites=value_allocation_calls;CHECK(sites>0);}
             else CHECK(status==XR_XIR_VALUE_OOM && !value.type);
-            size_t before=calls;xr_xir_value_drop(&value);CHECK(calls==before);
+            size_t before=value_allocation_calls;xr_xir_value_drop(&value);CHECK(value_allocation_calls==before);
             CHECK(live==baseline && reader->scratch_bytes==scratch &&
                 xr_xir_domain_stats(owner->domain).live_bytes==own_bytes &&
                 xr_xir_domain_stats(reader->domain).live_bytes==read_bytes);
@@ -113,8 +113,8 @@ static void class_inline_value_cases(void) {
     CHECK(xr_xir_class_new(XR_XIR_CONSTRUCTED_TYPE_BASE+3,fields,4,&a,&object)==XR_XIR_VALUE_OK);
     class_inline_faults(&object,fields,&a,&b);
     XrXirValue out={0};XrXirValueAdmission leaf={arena,NULL,NULL,NULL,100,0};
-    size_t before=calls;fail_at=calls;
-    CHECK(xr_xir_class_get(&object,3,&leaf,&out)==XR_XIR_VALUE_OK && calls==before);xr_xir_value_drop(&out);
+    size_t before=value_allocation_calls;fail_at=value_allocation_calls;
+    CHECK(xr_xir_class_get(&object,3,&leaf,&out)==XR_XIR_VALUE_OK && value_allocation_calls==before);xr_xir_value_drop(&out);
     CHECK(xr_xir_class_get(&object,0,&leaf,&out)==XR_XIR_VALUE_BAD_ARGUMENT && !out.type);fail_at=SIZE_MAX;
     XrXirTypeArena *foreign=class_inline_arena(owner);
     XrXirValueAdmission wrong={foreign,reader,NULL,NULL,10000,65536};
@@ -164,6 +164,6 @@ static void class_inline_value_cases(void) {
     XrXirValue held={0};XrXirValueAdmission retained={xr_xir_value_arena(&out),reader,NULL,NULL,100,65536};
     CHECK(xr_xir_struct_get(&out,1,&retained,&held)==XR_XIR_VALUE_OK);xr_xir_value_drop(&out);
     const char *bytes=NULL;size_t length=0;CHECK(xr_xir_string_view(&held,&bytes,&length)&&length==6&&!memcmp(bytes,"mapped",6));
-    before=calls;fail_at=calls;xr_xir_value_drop(&held);CHECK(calls==before && live==initial);fail_at=SIZE_MAX;
+    before=value_allocation_calls;fail_at=value_allocation_calls;xr_xir_value_drop(&held);CHECK(value_allocation_calls==before && live==initial);fail_at=SIZE_MAX;
 }
 #endif /* XIR_CLASS_INLINE_VALUE_CASES_H */

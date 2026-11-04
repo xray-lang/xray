@@ -60,13 +60,13 @@ static size_t array_allocation_failure(unsigned mode, size_t offset) {
     if (mode == 3) admission.domain = receiver;
     XirArray *original = (XirArray *) object_pointer(&array);
     XrXirValuePlace place = {(XrXirType) 260, &array.payload};
-    size_t start = calls, physical = live, old_length = original->length, old_capacity = original->capacity;
+    size_t start = value_allocation_calls, physical = live, old_length = original->length, old_capacity = original->capacity;
     uint64_t bytes = domain->stats.live_bytes, receiver_bytes = receiver->stats.live_bytes;
     uint32_t references = atomic_load(&object_pointer(&string)->references);
     fail_at = offset == SIZE_MAX ? SIZE_MAX : start + offset;
     XrXirValueStatus status = mode == 0 ? xr_xir_array_new((XrXirType) 260, inputs, 4, &admission, &output) :
         xr_xir_array_push(&place, &string, &admission);
-    size_t count = calls - start; fail_at = SIZE_MAX;
+    size_t count = value_allocation_calls - start; fail_at = SIZE_MAX;
     if (offset == SIZE_MAX) {
         CHECK(status == XR_XIR_VALUE_OK);
         if (mode) CHECK(((XirArray *) object_pointer(&array))->length == old_length + 1);
@@ -107,9 +107,9 @@ static void array_cross_domain_accounting(void) {
     CHECK(original->stride == 8 && original->capacity == 4);
     admission.domain = receiver;
     origin->limit = origin->stats.live_bytes; receiver->limit = receiver->stats.live_bytes;
-    size_t allocations = calls;
+    size_t allocations = value_allocation_calls;
     for (unsigned i = 0; i < 3; ++i) CHECK(xr_xir_array_push(&place, &string, &admission) == XR_XIR_VALUE_OK);
-    CHECK(calls == allocations && object_pointer(&array) == &original->object);
+    CHECK(value_allocation_calls == allocations && object_pointer(&array) == &original->object);
     uint64_t origin_bytes = origin->stats.live_bytes, receiver_bytes = receiver->stats.live_bytes;
     CHECK(xr_xir_array_push(&place, &string, &admission) == XR_XIR_VALUE_LIMIT);
     CHECK(original->length == 4 && origin->stats.live_bytes == origin_bytes && receiver->stats.live_bytes == receiver_bytes);
@@ -121,9 +121,9 @@ static void array_cross_domain_accounting(void) {
     CHECK(receiver->stats.live_bytes == receiver_bytes + sizeof(XirArray) + moved->capacity * 8);
     CHECK(xr_xir_value_copy(&array, &copy) == XR_XIR_VALUE_OK);
     admission.domain = origin; origin->limit = origin->stats.live_bytes;
-    XrXirFaultDetail fault = {0}; allocations = calls;
+    XrXirFaultDetail fault = {0}; allocations = value_allocation_calls;
     CHECK(xr_xir_array_set(&place, 0, &string, &admission, &fault) == XR_XIR_VALUE_LIMIT);
-    CHECK(array.payload == copy.payload && calls == allocations);
+    CHECK(array.payload == copy.payload && value_allocation_calls == allocations);
     origin->limit = 65536;
     CHECK(xr_xir_array_set(&place, 0, &string, &admission, &fault) == XR_XIR_VALUE_OK);
     CHECK(array.payload != copy.payload && object_pointer(&array)->domain == origin);
@@ -186,36 +186,36 @@ static void array_nested_gate_scratch(void) {
     CHECK(xr_xir_array_new((XrXirType) 257, &function, 1, &admission, &array) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_array_new((XrXirType) 258, &array, 1, &admission, &nested) == XR_XIR_VALUE_OK);
     size_t physical = live; uint64_t bytes = domain->stats.live_bytes, scratch = admission.scratch_bytes;
-    size_t first_attempts = calls;
-    admission.work = 5; admission.scratch_bytes = sizeof(ValueAdmissionFrame); fail_at = calls;
+    size_t first_attempts = value_allocation_calls;
+    admission.work = 5; admission.scratch_bytes = sizeof(ValueAdmissionFrame); fail_at = value_allocation_calls;
     CHECK(xr_xir_value_admit(&array, (XrXirType)257, &admission) == XR_XIR_VALUE_OK);
-    CHECK(!admission.work && admission.scratch_bytes == sizeof(ValueAdmissionFrame) && calls == first_attempts);
+    CHECK(!admission.work && admission.scratch_bytes == sizeof(ValueAdmissionFrame) && value_allocation_calls == first_attempts);
     admission.work = 4;
     CHECK(xr_xir_value_admit(&array, (XrXirType)257, &admission) == XR_XIR_VALUE_LIMIT);
-    CHECK(!admission.work && admission.scratch_bytes == sizeof(ValueAdmissionFrame) && calls == first_attempts);
+    CHECK(!admission.work && admission.scratch_bytes == sizeof(ValueAdmissionFrame) && value_allocation_calls == first_attempts);
     admission.work = 100; admission.context = NULL;
     CHECK(xr_xir_value_admit(&array, (XrXirType)257, &admission) == XR_XIR_VALUE_BAD_ARGUMENT);
-    CHECK(admission.scratch_bytes == sizeof(ValueAdmissionFrame) && calls == first_attempts);
+    CHECK(admission.scratch_bytes == sizeof(ValueAdmissionFrame) && value_allocation_calls == first_attempts);
     admission.context = &releases; admission.work = 100; admission.scratch_bytes = scratch;
-    fail_at = calls;
+    fail_at = value_allocation_calls;
     CHECK(xr_xir_value_admit(&nested, (XrXirType) 258, &admission) == XR_XIR_VALUE_OOM);
     fail_at = SIZE_MAX;
     CHECK(admission.scratch_bytes == scratch && live == physical && domain->stats.live_bytes == bytes);
     admission.scratch_bytes = sizeof(ValueAdmissionFrame) - 1;
-    size_t allocations = calls;
-    CHECK(xr_xir_value_admit(&nested, (XrXirType) 258, &admission) == XR_XIR_VALUE_LIMIT && calls == allocations);
+    size_t allocations = value_allocation_calls;
+    CHECK(xr_xir_value_admit(&nested, (XrXirType) 258, &admission) == XR_XIR_VALUE_LIMIT && value_allocation_calls == allocations);
     admission.scratch_bytes = 3 * sizeof(ValueAdmissionFrame) - 1;
-    CHECK(xr_xir_value_admit(&nested, (XrXirType) 258, &admission) == XR_XIR_VALUE_LIMIT && calls == allocations);
+    CHECK(xr_xir_value_admit(&nested, (XrXirType) 258, &admission) == XR_XIR_VALUE_LIMIT && value_allocation_calls == allocations);
     CHECK(admission.scratch_bytes == 3 * sizeof(ValueAdmissionFrame) - 1 && live == physical && domain->stats.live_bytes == bytes);
     admission.scratch_bytes = 3 * sizeof(ValueAdmissionFrame);
-    admission.work = 100; allocations = calls;
-    CHECK(xr_xir_value_admit(&nested, (XrXirType)258, &admission) == XR_XIR_VALUE_OK && calls == allocations + 1);
+    admission.work = 100; allocations = value_allocation_calls;
+    CHECK(xr_xir_value_admit(&nested, (XrXirType)258, &admission) == XR_XIR_VALUE_OK && value_allocation_calls == allocations + 1);
     CHECK(admission.scratch_bytes == 3 * sizeof(ValueAdmissionFrame) && live == physical && domain->stats.live_bytes == bytes);
     ValueAdmissionStack overflow = {.depth = SIZE_MAX / 2 / sizeof(ValueAdmissionFrame) + 1,
         .capacity = SIZE_MAX / 2 / sizeof(ValueAdmissionFrame) + 1};
-    allocations = calls;
+    allocations = value_allocation_calls;
     CHECK(admission_push(&overflow, (ValueAdmissionFrame){0}, &admission) == XR_XIR_VALUE_LIMIT);
-    CHECK(!overflow.frames && !overflow.bytes && calls == allocations &&
+    CHECK(!overflow.frames && !overflow.bytes && value_allocation_calls == allocations &&
         admission.scratch_bytes == 3 * sizeof(ValueAdmissionFrame));
     admission.scratch_bytes = scratch;
     admission.work = 5;
@@ -247,14 +247,14 @@ static void array_copy_work_budget(void) {
         if (!mode) CHECK(xr_xir_value_copy(&array, &copy) == XR_XIR_VALUE_OK);
         else if (mode == 1) admission.domain = receiver;
         XrXirValuePlace place = {(XrXirType) 260, &array.payload};
-        int64_t payload = array.payload; size_t physical = live, allocations = calls;
+        int64_t payload = array.payload; size_t physical = live, allocations = value_allocation_calls;
         uint64_t bytes = domain->stats.live_bytes, receiver_bytes = receiver->stats.live_bytes;
         XrXirDomainStats before = domain->stats, receiving_before = receiver->stats;
         uint32_t references = atomic_load(&object_pointer(&string)->references);
         /* Receiver + two descriptor nodes + RHS + 64 copied/moved elements. */
         admission.work = 67;
         CHECK(xr_xir_array_push(&place, &string, &admission) == XR_XIR_VALUE_LIMIT);
-        CHECK(array.payload == payload && live == physical && calls == allocations);
+        CHECK(array.payload == payload && live == physical && value_allocation_calls == allocations);
         CHECK(domain->stats.live_bytes == bytes && receiver->stats.live_bytes == receiver_bytes);
         CHECK(!memcmp(&before, &domain->stats, sizeof(before)) &&
               !memcmp(&receiving_before, &receiver->stats, sizeof(receiving_before)));
@@ -287,8 +287,8 @@ static void array_deep_release(void) {
         xr_xir_value_drop(&previous); previous = next;
     }
     xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
-    size_t allocations = calls; fail_at = calls;
-    xr_xir_value_drop(&previous); CHECK(!live && calls == allocations); fail_at = SIZE_MAX;
+    size_t allocations = value_allocation_calls; fail_at = value_allocation_calls;
+    xr_xir_value_drop(&previous); CHECK(!live && value_allocation_calls == allocations); fail_at = SIZE_MAX;
     puts("Array cleanup: 2048 nested compact backings; zero cleanup allocations; zero live blocks");
 }
 static void array_allocation_cases(void) {

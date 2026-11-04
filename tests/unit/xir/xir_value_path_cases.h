@@ -59,15 +59,15 @@ static void value_path_failures(XrXirValue *root, const XrXirValuePath *path,
     XrXirValue copy = {0}, replacement = {XR_XIR_I64, 0, 99};
     XrXirValuePlace place = {(XrXirType)root->type, &copy.payload}; XrXirFaultDetail fault = {0};
     CHECK(xr_xir_value_copy(root, &copy) == XR_XIR_VALUE_OK);
-    admission->work = 100000; size_t begin = calls;
+    admission->work = 100000; size_t begin = value_allocation_calls;
     CHECK(xr_xir_value_path_write(&place, path, &replacement, admission, &fault) == XR_XIR_VALUE_OK);
-    uint64_t work = 100000 - admission->work; size_t sites = calls - begin;
+    uint64_t work = 100000 - admission->work; size_t sites = value_allocation_calls - begin;
     CHECK(sites >= 4 && value_path_number(&copy, path, admission) == 99);
     CHECK(value_path_number(root, path, admission) == 11); xr_xir_value_drop(&copy);
     size_t blocks = live; uint64_t bytes = admission->domain->stats.live_bytes;
     for (size_t i = 0; i < sites; ++i) {
         CHECK(xr_xir_value_copy(root, &copy) == XR_XIR_VALUE_OK);
-        admission->work = 100000; fail_at = calls + i;
+        admission->work = 100000; fail_at = value_allocation_calls + i;
         CHECK(xr_xir_value_path_write(&place, path, &replacement, admission, &fault) == XR_XIR_VALUE_OOM);
         fail_at = SIZE_MAX;
         CHECK(copy.payload == root->payload && admission->scratch_bytes == 65536);
@@ -137,16 +137,16 @@ static void value_path_append(XrXirValueAdmission *admission, bool boxed) {
     XrXirFaultDetail fault = {0};
     CHECK(xr_xir_value_path_read(&place, &element, admission, &item, &fault) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_value_copy(&root, &copy) == XR_XIR_VALUE_OK);
-    admission->work = 100000; size_t begin = calls;
+    admission->work = 100000; size_t begin = value_allocation_calls;
     CHECK(xr_xir_value_path_push(&target, &path, &item, admission, &fault) == XR_XIR_VALUE_OK);
-    size_t sites = calls - begin; uint64_t work = 100000 - admission->work;
+    size_t sites = value_allocation_calls - begin; uint64_t work = 100000 - admission->work;
     CHECK(xr_xir_value_path_read(&target, &path, admission, &observed, &fault) == XR_XIR_VALUE_OK);
     CHECK(((XirArray *)object_pointer(&observed))->length == 2);
     xr_xir_value_drop(&observed); xr_xir_value_drop(&copy);
     size_t blocks = live; uint64_t bytes = admission->domain->stats.live_bytes;
     for (size_t i = 0; i < sites; ++i) {
         CHECK(xr_xir_value_copy(&root, &copy) == XR_XIR_VALUE_OK);
-        admission->work = 100000; fail_at = calls + i;
+        admission->work = 100000; fail_at = value_allocation_calls + i;
         CHECK(xr_xir_value_path_push(&target, &path, &item, admission, &fault) == XR_XIR_VALUE_OOM);
         fail_at = SIZE_MAX;
         CHECK(copy.payload == root.payload && admission->scratch_bytes == 65536);
@@ -176,7 +176,7 @@ static void value_path_append(XrXirValueAdmission *admission, bool boxed) {
     uint64_t source_bytes = original->stats.live_bytes, receiving_bytes = receiving->stats.live_bytes;
     blocks = live;
     for (size_t i = 0;; ++i) {
-        CHECK(i < 32); admission->work = 100000; fail_at = calls + i;
+        CHECK(i < 32); admission->work = 100000; fail_at = value_allocation_calls + i;
         XrXirValueStatus status = xr_xir_value_path_push(&place, &path, &item, admission, &fault);
         fail_at = SIZE_MAX;
         if (status == XR_XIR_VALUE_OK) break;

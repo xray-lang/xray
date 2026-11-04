@@ -120,12 +120,12 @@ static void foreign_write_observe(ForeignWrite *f, const XrXirValue *root, unsig
 
 static size_t foreign_write_attempt(unsigned mode, bool alias, size_t point) {
     ForeignWrite f; foreign_write_prepare(&f, mode, alias);
-    XrXirValue before_value = f.root; size_t before_live = live, begin = calls;
+    XrXirValue before_value = f.root; size_t before_live = live, begin = value_allocation_calls;
     size_t compiler_blocks = value_compile_live, compiler_bytes = value_compile_bytes;
     XrXirDomainStats a = xr_xir_domain_stats(f.domains[0]), b = xr_xir_domain_stats(f.domains[1]);
     if (point != SIZE_MAX) { CHECK(point <= SIZE_MAX - begin); fail_at = begin + point; }
     XrXirValueStatus status = foreign_write_apply(&f, mode);
-    size_t attempts = calls - begin; fail_at = SIZE_MAX;
+    size_t attempts = value_allocation_calls - begin; fail_at = SIZE_MAX;
     if (point == SIZE_MAX) {
         CHECK(status == XR_XIR_VALUE_OK && attempts > 0);
         CHECK(f.root.payload != before_value.payload);

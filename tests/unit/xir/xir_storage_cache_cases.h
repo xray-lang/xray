@@ -35,7 +35,7 @@ static void storage_cache_cases(void) {
     memset(nodes, 0xCC, sizeof(nodes)); memset(inner, 0xCC, sizeof(inner));
     memset(outer, 0xCC, sizeof(outer)); memset(identities, 0xCC, sizeof(identities));
     memset(fields, 0xCC, sizeof(fields)); memset(variants, 0xCC, sizeof(variants));
-    size_t allocations = calls; fail_at = calls;
+    size_t allocations = value_allocation_calls; fail_at = value_allocation_calls;
     const XrXirStorageLayout *choice = xr_xir_compile_type_arena_storage(arena, (XrXirType)256);
     const XrXirStorageLayout *box = xr_xir_compile_type_arena_storage(arena, (XrXirType)257);
     const XrXirStorageLayout *empty = xr_xir_compile_type_arena_storage(arena, (XrXirType)258);
@@ -55,7 +55,7 @@ static void storage_cache_cases(void) {
     xr_xir_domain_drop(domain);
     CHECK(xr_xir_compile_type_arena_layout(arena, (XrXirType)257, &layout) && layout.size == 32);
     xr_xir_compile_type_arena_drop(arena);
-    CHECK(!live && calls == allocations); fail_at = SIZE_MAX;
+    CHECK(!live && value_allocation_calls == allocations); fail_at = SIZE_MAX;
 }
 static void storage_cache_shared_graph(void) {
     enum { COUNT = 160 };

@@ -33,10 +33,10 @@ static void class_value_count(const XrXirValue *value,int64_t expected) {
 static void class_value_replace_faults(XrXirValue *first, XrXirValue *alias,
     XrXirValue *label, XrXirValue *text, XrXirValueAdmission *admission) {
     XrXirDomain *domain = admission->domain;
-    size_t baseline = live, begin = calls;
+    size_t baseline = live, begin = value_allocation_calls;
     uint64_t bytes = xr_xir_domain_stats(domain).live_bytes;
     CHECK(xr_xir_class_set(first, 2, label, admission) == XR_XIR_VALUE_OK);
-    size_t sites = calls - begin;
+    size_t sites = value_allocation_calls - begin;
     CHECK(live == baseline && xr_xir_domain_stats(domain).live_bytes == bytes);
     XrXirValue observed = {0};
     CHECK(xr_xir_class_get(alias, 2, admission, &observed) == XR_XIR_VALUE_OK && observed.payload == label->payload);
@@ -44,9 +44,9 @@ static void class_value_replace_faults(XrXirValue *first, XrXirValue *alias,
     for (size_t ordinal = 0; ordinal < sites; ++ordinal) {
         CHECK(xr_xir_class_set(first, 2, text, admission) == XR_XIR_VALUE_OK);
         baseline = live; bytes = xr_xir_domain_stats(domain).live_bytes;
-        fail_at = calls + ordinal;
+        fail_at = value_allocation_calls + ordinal;
         CHECK(xr_xir_class_set(first, 2, label, admission) == XR_XIR_VALUE_OOM);
-        CHECK(calls > fail_at); fail_at = SIZE_MAX;
+        CHECK(value_allocation_calls > fail_at); fail_at = SIZE_MAX;
         CHECK(live == baseline && xr_xir_domain_stats(domain).live_bytes == bytes);
         CHECK(xr_xir_class_get(first, 2, admission, &observed) == XR_XIR_VALUE_OK && observed.payload == text->payload);
         xr_xir_value_drop(&observed);
@@ -110,7 +110,7 @@ static void class_value_cases(void) {
     xr_xir_value_drop(&label);xr_xir_value_drop(&text);xr_xir_value_drop(&alias);xr_xir_value_drop(&separate);
     xr_xir_compile_type_arena_drop(arena);xr_xir_domain_drop(domain);xr_xir_domain_drop(foreign);
     CHECK(xr_xir_class_get(&first,1,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&first),.work=10000},&observed)==XR_XIR_VALUE_OK);
-    size_t before=calls;xr_xir_value_drop(&first);CHECK(calls==before);
+    size_t before=value_allocation_calls;xr_xir_value_drop(&first);CHECK(value_allocation_calls==before);
     const char *bytes=NULL;size_t length=0;CHECK(xr_xir_string_view(&observed,&bytes,&length));
     CHECK(length==8 && !memcmp(bytes,"retained",8));xr_xir_value_drop(&observed);CHECK(live==initial);
 }
@@ -121,12 +121,12 @@ static void class_value_allocation_failures(void) {
     XrXirValue fields[]={{XR_XIR_I64,0,40},text,text};size_t baseline=live,sites=0;
     uint64_t bytes=xr_xir_domain_stats(domain).live_bytes;
     for(size_t pass=0;pass<=sites;++pass){
-        calls=0;fail_at=pass?pass-1:SIZE_MAX;XrXirValue value={0};
+        value_allocation_calls=0;fail_at=pass?pass-1:SIZE_MAX;XrXirValue value={0};
         XrXirValueAdmission admission={arena,domain,NULL,NULL,1000000,65536};
         XrXirValueStatus status=xr_xir_class_new((XrXirType)256,fields,3,&admission,&value);
-        if(!pass){CHECK(status==XR_XIR_VALUE_OK);sites=calls;CHECK(sites>0);}
+        if(!pass){CHECK(status==XR_XIR_VALUE_OK);sites=value_allocation_calls;CHECK(sites>0);}
         else CHECK(status==XR_XIR_VALUE_OOM && !value.type && !value.payload);
-        size_t before=calls;xr_xir_value_drop(&value);CHECK(calls==before);
+        size_t before=value_allocation_calls;xr_xir_value_drop(&value);CHECK(value_allocation_calls==before);
         CHECK(live==baseline && xr_xir_domain_stats(domain).live_bytes==bytes);
     }
     fail_at=SIZE_MAX;xr_xir_value_drop(&text);xr_xir_compile_type_arena_drop(arena);xr_xir_domain_drop(domain);CHECK(live==initial);
@@ -144,13 +144,13 @@ static void class_array_allocation_failures(void) {
         CHECK(xr_xir_array_new((XrXirType)257,&object,1,&admission,&array)==XR_XIR_VALUE_OK);
         CHECK(xr_xir_value_copy(&array,&alias)==XR_XIR_VALUE_OK);
         size_t baseline=live;uint64_t bytes=xr_xir_domain_stats(domain).live_bytes;
-        calls=0;fail_at=pass?pass-1:SIZE_MAX;XrXirValuePlace place={(XrXirType)257,&array.payload};
+        value_allocation_calls=0;fail_at=pass?pass-1:SIZE_MAX;XrXirValuePlace place={(XrXirType)257,&array.payload};
         XrXirValueStatus status=xr_xir_array_push(&place,&object,&admission);
-        if(!pass){CHECK(status==XR_XIR_VALUE_OK);sites=calls;CHECK(sites>0);}
+        if(!pass){CHECK(status==XR_XIR_VALUE_OK);sites=value_allocation_calls;CHECK(sites>0);}
         else {CHECK(status==XR_XIR_VALUE_OOM && array.payload==alias.payload);
             CHECK(live==baseline && xr_xir_domain_stats(domain).live_bytes==bytes);}
         fail_at=SIZE_MAX;class_value_count(&object,40);
-        size_t before=calls;xr_xir_value_drop(&alias);xr_xir_value_drop(&array);CHECK(calls==before);
+        size_t before=value_allocation_calls;xr_xir_value_drop(&alias);xr_xir_value_drop(&array);CHECK(value_allocation_calls==before);
     }
     xr_xir_value_drop(&object);xr_xir_value_drop(&text);xr_xir_compile_type_arena_drop(arena);xr_xir_domain_drop(domain);CHECK(live==initial);
 }

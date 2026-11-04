@@ -18,11 +18,11 @@
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_value_compile_owner.h"
-static size_t calls, live, fail_at = SIZE_MAX;
+static size_t value_allocation_calls, live, fail_at = SIZE_MAX;
 static bool closed_fail_all;
 
 static void *counted_malloc(size_t size) {
-    if (calls++ == fail_at || closed_fail_all)
+    if (value_allocation_calls++ == fail_at || closed_fail_all)
         return NULL;
     void *pointer = xr_malloc(size);
     if (pointer)
@@ -31,7 +31,7 @@ static void *counted_malloc(size_t size) {
 }
 
 static void *counted_calloc(size_t count, size_t size) {
-    if (calls++ == fail_at || closed_fail_all)
+    if (value_allocation_calls++ == fail_at || closed_fail_all)
         return NULL;
     void *pointer = xr_calloc(count, size);
     if (pointer)
@@ -48,7 +48,7 @@ static void counted_free(void *pointer) {
 }
 
 static void *counted_realloc(void *pointer, size_t size) {
-    if (calls++ == fail_at || closed_fail_all)
+    if (value_allocation_calls++ == fail_at || closed_fail_all)
         return NULL;
     bool was_null = pointer == NULL;
     void *replacement = xr_realloc(pointer, size);
@@ -92,16 +92,16 @@ static XrXirOutputStatus counted_float_sink(void *context, XrXirOutputStream str
 static void float_output_allocation(void) {
     XrXirValue values[] = {{XR_XIR_F32, 0, INT64_C(0x3dcccccd)}, {XR_XIR_F64, 0, INT64_MIN}};
     XrXirOutputGroup group = {XR_XIR_STDOUT, values, 2, true};
-    size_t published = 0, before = calls;
+    size_t published = 0, before = value_allocation_calls;
     XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, counted_float_sink, &published, 9};
-    fail_at = calls;
+    fail_at = value_allocation_calls;
     CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_OOM && !published && !live);
-    CHECK(calls == before + 1);
-    fail_at = SIZE_MAX; before = calls;
+    CHECK(value_allocation_calls == before + 1);
+    fail_at = SIZE_MAX; before = value_allocation_calls;
     CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_OK && published == 1 && !live);
-    CHECK(calls == before + 1);
-    before = calls; sink.byte_limit = 8;
-    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_LIMIT && published == 1 && calls == before && !live);
+    CHECK(value_allocation_calls == before + 1);
+    before = value_allocation_calls; sink.byte_limit = 8;
+    CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_LIMIT && published == 1 && value_allocation_calls == before && !live);
 }
 static XrXirOutputStatus counted_sink(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
     size_t *published = context;
@@ -114,11 +114,11 @@ static void output_allocation(void) {
     XrXirOutputGroup group = {XR_XIR_STDOUT, values, 3, true};
     size_t published = 0;
     XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, counted_sink, &published, 12};
-    fail_at = calls;
+    fail_at = value_allocation_calls;
     CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_OOM && !published && !live);
     fail_at = SIZE_MAX;
     CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_OK && published == 1 && !live);
-    size_t before = calls;
+    size_t before = value_allocation_calls;
     sink.byte_limit = 10;
     CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_LIMIT);
     sink.byte_limit = 12;
@@ -137,7 +137,7 @@ static void output_allocation(void) {
     CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_BAD_ARGUMENT);
     group.count = 3; group.values = NULL;
     CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_BAD_ARGUMENT);
-    CHECK(calls == before && published == 1 && !live);
+    CHECK(value_allocation_calls == before && published == 1 && !live);
 }
 static XrXirAction identity_resume(XrXirCallView *view) {
     return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, view->arguments[0], {0}, 0};
@@ -260,7 +260,7 @@ static void capture_ownership(void) {
     CHECK(!output.type && !releases && live == baseline && xr_xir_domain_stats(domain).live_bytes == bytes);
     CHECK(atomic_load(&object_pointer(values)->references) == 1);
     atomic_store(&object_pointer(values+1)->references,1);
-    fail_at = calls;
+    fail_at = value_allocation_calls;
     CHECK(xr_xir_function_new(domain,arena,(XrXirType)256,&binding,&admission,&output) == XR_XIR_VALUE_OOM);
     CHECK(!output.type && !releases && live == baseline && xr_xir_domain_stats(domain).live_bytes == bytes);
     fail_at = SIZE_MAX;
@@ -291,10 +291,10 @@ static void deep_capture_release(void) {
         xr_xir_value_drop(&previous); previous = next;
     }
     xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
-    size_t allocations = calls;
-    fail_at = calls;
+    size_t allocations = value_allocation_calls;
+    fail_at = value_allocation_calls;
     xr_xir_value_drop(&previous);
-    CHECK(releases == 100000 && !live && calls == allocations);
+    CHECK(releases == 100000 && !live && value_allocation_calls == allocations);
     fail_at = SIZE_MAX;
     puts("Capture cleanup: 100000 nested environments; zero cleanup allocations; zero live blocks");
 }
@@ -343,10 +343,10 @@ static void arena_allocation_cases(void) {
     atomic_store(&arena->references, 1);
     CHECK(xr_xir_function_new(domain, arena, (XrXirType) 256, &binding, &admission, &function) == XR_XIR_VALUE_OK);
     xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
-    size_t allocations = calls; fail_at = calls;
+    size_t allocations = value_allocation_calls; fail_at = value_allocation_calls;
     CHECK(xr_xir_value_valid(&function));
     xr_xir_value_drop(&function);
-    CHECK(!live && releases == 1 && calls == allocations);
+    CHECK(!live && releases == 1 && value_allocation_calls == allocations);
     fail_at = SIZE_MAX;
 }
 static void deep_arena_release(void) {
@@ -365,9 +365,9 @@ static void deep_arena_release(void) {
     CHECK(value_compile_arena(&types, 65536, limits, &arena) == XR_XIR_VALUE_OK);
     counted_free(nodes);
     xr_xir_domain_drop(domain);
-    size_t allocations = calls; fail_at = calls;
+    size_t allocations = value_allocation_calls; fail_at = value_allocation_calls;
     xr_xir_compile_type_arena_drop(arena);
-    CHECK(!live && calls == allocations); fail_at = SIZE_MAX;
+    CHECK(!live && value_allocation_calls == allocations); fail_at = SIZE_MAX;
 }
 #include "xir_cell_allocation_cases.h"
 #include "xir_closed_domain_cases.h"
@@ -378,7 +378,7 @@ static void nominal_arena_allocation(void) {
     XrXirType field_types[] = {XR_XIR_I64, XR_XIR_STRING};
     XrXirTypeNode node = {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, NULL, 0, field_types, 2}};
     XrXirTypes types = {&node, 1, &f.table, NULL};
-    calls = 0; fail_at = SIZE_MAX;
+    value_allocation_calls = 0; fail_at = SIZE_MAX;
     XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     size_t baseline = live;
@@ -387,16 +387,16 @@ static void nominal_arena_allocation(void) {
     value_compile_boundaries(&probe,limits);
     XrXirTypeArena *arena=NULL;
     CHECK(value_compile_arena(&types,100,limits,&arena)==XR_XIR_VALUE_OK);
-    CHECK(calls==1 && live==baseline);
+    CHECK(value_allocation_calls==1 && live==baseline);
     memset(&f, 0xCC, sizeof(f)); memset(field_types, 0xCC, sizeof(field_types)); memset(&node, 0xCC, sizeof(node));
     CHECK(xr_xir_compile_type_arena_types(arena)->nodes[0].nominal.fields[0] == XR_XIR_I64);
     CHECK(xr_xir_compile_type_arena_types(arena)->nodes[0].nominal.fields[1] == XR_XIR_STRING);
     xr_xir_domain_drop(domain);
     CHECK(!memcmp(xr_xir_compile_type_arena_types(arena)->nominals->identities[0].name.bytes, "Pair", 4));
-    size_t allocations = calls; fail_at = calls;
+    size_t allocations = value_allocation_calls; fail_at = value_allocation_calls;
     xr_xir_compile_type_arena_drop(arena);
-    CHECK(live == 0 && calls == allocations);
-    fail_at = SIZE_MAX; calls = 0;
+    CHECK(live == 0 && value_allocation_calls == allocations);
+    fail_at = SIZE_MAX; value_allocation_calls = 0;
 }
 
 #include "xir_struct_value_cases.h"
@@ -418,11 +418,11 @@ static void struct_allocation_failures(void) {
         for (size_t attempt = 0; attempt <= sites; ++attempt) {
             XrXirValue destination = {0}, output = {0};
             CHECK(xr_xir_value_copy(&parent, &destination) == XR_XIR_VALUE_OK);
-            admission.work = 100000; calls = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
+            admission.work = 100000; value_allocation_calls = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
             XrXirValueStatus status = mode == 0 ? xr_xir_struct_new((XrXirType)257, outer, 2, &admission, &output) :
                 mode == 1 ? xr_xir_struct_get(&parent, 0, &admission, &output) :
                 xr_xir_struct_set(&(XrXirValuePlace) {(XrXirType) destination.type, &destination.payload}, 0, &leaf, &admission);
-            if (!attempt) { CHECK(status == XR_XIR_VALUE_OK); sites = calls; }
+            if (!attempt) { CHECK(status == XR_XIR_VALUE_OK); sites = value_allocation_calls; }
             else {
                 CHECK(status == XR_XIR_VALUE_OOM && !output.type && destination.payload == parent.payload);
                 CHECK(live == baseline && admission.scratch_bytes == 65536);
@@ -440,8 +440,8 @@ static void struct_allocation_failures(void) {
     atomic_store(&string->references, references);
     xr_xir_value_drop(&parent); xr_xir_value_drop(&leaf); xr_xir_value_drop(&fields[1]);
     xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain); CHECK(!live);
-    XrXirValue deep = struct_deep_value(); size_t before = calls; fail_at = calls;
-    xr_xir_value_drop(&deep); CHECK(!live && calls == before); fail_at = SIZE_MAX;
+    XrXirValue deep = struct_deep_value(); size_t before = value_allocation_calls; fail_at = value_allocation_calls;
+    xr_xir_value_drop(&deep); CHECK(!live && value_allocation_calls == before); fail_at = SIZE_MAX;
 }
 static void string_predicate_allocations(void) {
     XrXirDomain *domain = NULL;
@@ -452,10 +452,10 @@ static void string_predicate_allocations(void) {
     CHECK(xr_xir_string_new(domain, "abcdefghijklmnop", 16, &pattern) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_value_copy(&text, &copy) == XR_XIR_VALUE_OK);
     xr_xir_domain_drop(domain); xr_xir_value_drop(&text);
-    size_t before = calls, allocations = live;
+    size_t before = value_allocation_calls, allocations = live;
     uint32_t text_references = atomic_load(&object_pointer(&copy)->references);
     uint32_t pattern_references = atomic_load(&object_pointer(&pattern)->references);
-    fail_at = calls;
+    fail_at = value_allocation_calls;
     bool result = false;
     CHECK(xr_xir_string_contains(&copy, &pattern, &result) && result);
     CHECK(xr_xir_string_starts_with(&copy, &pattern, &result) && !result);
@@ -474,11 +474,11 @@ static void string_predicate_allocations(void) {
     CHECK(xr_xir_string_index_of(&copy, &pattern, 0, &index) == XR_XIR_VALUE_LIMIT && index == 99);
     CHECK(xr_xir_string_last_index_of(&copy, &pattern, &index) == XR_XIR_VALUE_LIMIT && index == 99);
     stored->runes = saved_runes;
-    CHECK(calls == before && live == allocations);
+    CHECK(value_allocation_calls == before && live == allocations);
     CHECK(atomic_load(&object_pointer(&copy)->references) == text_references);
     CHECK(atomic_load(&object_pointer(&pattern)->references) == pattern_references);
     xr_xir_value_drop(&copy); xr_xir_value_drop(&pattern);
-    CHECK(!live && calls == before);
+    CHECK(!live && value_allocation_calls == before);
     fail_at = SIZE_MAX;
 }
 #include "xir_enum_metadata_fixture.h"
@@ -507,7 +507,7 @@ static void enum_arena_allocations(void) {
     const XrXirNominalIdentity *identity=&xr_xir_compile_type_arena_types(arena)->nominals->identities[0];
     CHECK(identity->kind==XR_XIR_NOMINAL_ENUM && identity->variant_count==3);
     CHECK(identity->variants[2].field_begin==1 && !memcmp(identity->variants[2].name.bytes,"Right",5));
-    xr_xir_compile_type_arena_drop(arena);CHECK(!live);calls=0;
+    xr_xir_compile_type_arena_drop(arena);CHECK(!live);value_allocation_calls=0;
 }
 
 static void enum_layout_allocation_failures(const XrXirTypes *types) {
@@ -569,15 +569,15 @@ static void enum_value_ownership(void) {
     XrXirValueAdmission admission = {0}; admission.domain = domain; admission.arena = arena;
     admission.work = 100000; admission.scratch_bytes = 65536;
     XrXirValue empty = {0}, pair = {0}, values[2] = {{0}}, out = {0};
-    size_t before = calls;
-    fail_at = calls;
+    size_t before = value_allocation_calls;
+    fail_at = value_allocation_calls;
     CHECK(xr_xir_enum_new(type, 0, NULL, 0, &admission, &empty) == XR_XIR_VALUE_OK);
     for (uint32_t i = 0; i < 1000; ++i) {
         CHECK(xr_xir_value_copy(&empty, &out) == XR_XIR_VALUE_OK);
         CHECK(xr_xir_value_admit(&out, type, &admission) == XR_XIR_VALUE_OK);
         xr_xir_value_drop(&out);
     }
-    CHECK(calls == before); fail_at = SIZE_MAX;
+    CHECK(value_allocation_calls == before); fail_at = SIZE_MAX;
     uint32_t leases = atomic_load(&arena->references);
     atomic_store(&arena->references, UINT32_MAX);
     CHECK(xr_xir_value_copy(&empty, &out) == XR_XIR_VALUE_REFCOUNT_LIMIT && !out.type);
@@ -599,7 +599,7 @@ static void enum_value_ownership(void) {
     CHECK(xr_xir_string_new(domain, "left", 4, &values[0]) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_string_new(domain, "right", 5, &values[1]) == XR_XIR_VALUE_OK);
     size_t baseline = live; uint64_t bytes = xr_xir_domain_stats(domain).live_bytes;
-    fail_at = calls;
+    fail_at = value_allocation_calls;
     CHECK(xr_xir_enum_new(type, 1, values, 2, &admission, &out) == XR_XIR_VALUE_OOM && !out.type);
     fail_at = SIZE_MAX;
     CHECK(live == baseline && xr_xir_domain_stats(domain).live_bytes == bytes);
@@ -639,13 +639,13 @@ static void deep_value_admission_failures(void) {
     XrXirValue value = struct_deep_value();
     XirObject *object = object_pointer(&value);
     XrXirValueAdmission admission = {object->arena, object->domain, NULL, NULL, 1000000, 65536};
-    size_t baseline = live, begin = calls;
+    size_t baseline = live, begin = value_allocation_calls;
     uint64_t bytes = xr_xir_domain_stats(object->domain).live_bytes;
     CHECK(xr_xir_value_admit(&value, (XrXirType)value.type, &admission) == XR_XIR_VALUE_OK);
-    size_t sites = calls - begin; CHECK(sites > 1);
+    size_t sites = value_allocation_calls - begin; CHECK(sites > 1);
     CHECK(admission.scratch_bytes == 65536 && live == baseline);
     for (size_t i = 0; i < sites; ++i) {
-        admission.work = 1000000; fail_at = calls + i;
+        admission.work = 1000000; fail_at = value_allocation_calls + i;
         CHECK(xr_xir_value_admit(&value, (XrXirType)value.type, &admission) == XR_XIR_VALUE_OOM);
         fail_at = SIZE_MAX;
         CHECK(admission.scratch_bytes == 65536 && live == baseline);
@@ -704,9 +704,9 @@ int main(int argc, char **argv) {
     class_inline_value_cases();
     class_value_cases(); class_value_allocation_failures(); class_array_allocation_failures(); CHECK(!live);
     nominal_arena_allocation();
-    fail_at = SIZE_MAX; calls = 0; fail_sequence();
-    size_t count = calls;
-    for (size_t i = 0; i < count; ++i) { fail_at = i; calls = 0; fail_sequence(); }
+    fail_at = SIZE_MAX; value_allocation_calls = 0; fail_sequence();
+    size_t count = value_allocation_calls;
+    for (size_t i = 0; i < count; ++i) { fail_at = i; value_allocation_calls = 0; fail_sequence(); }
     fail_at = SIZE_MAX; saturation(); output_allocation(); float_output_allocation(); capture_ownership(); deep_capture_release();
     cell_allocation_cases(); cell_cycles_and_domains(); deep_cell_release(); closed_domain_cases(); closed_aggregate_cases(); closed_thread_cases();
     arena_allocation_cases(); deep_arena_release(); array_allocation_cases();

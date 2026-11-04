@@ -12,16 +12,16 @@
 static void value_path_replacement_nested(XrXirValueAdmission *admission,bool boxed,bool resources) {
     XrXirValue root=value_path_root(admission,boxed),output={0},replacement={XR_XIR_I64,0,99};
     XrXirValuePath path={value_path_steps+(boxed ? 1 : 0),boxed ? 3 : 4};XrXirFaultDetail fault={0};
-    size_t blocks=live,begin=calls;uint64_t bytes=admission->domain->stats.live_bytes;admission->work=100000;
+    size_t blocks=live,begin=value_allocation_calls;uint64_t bytes=admission->domain->stats.live_bytes;admission->work=100000;
     CHECK(xir_value_path_replacement(&root,&path,&replacement,admission,&output,&fault)==XR_XIR_VALUE_OK);
-    size_t sites=calls-begin;uint64_t work=100000-admission->work;
+    size_t sites=value_allocation_calls-begin;uint64_t work=100000-admission->work;
     CHECK(sites && output.payload!=root.payload && value_path_number(&output,&path,admission)==99);
     CHECK(value_path_number(&root,&path,admission)==11);xr_xir_value_drop(&output);
     for (size_t i=0;i<sites;++i) {
         if (!resources && i && i!=sites-1) continue;
-        admission->work=100000;fail_at=calls+i;
+        admission->work=100000;fail_at=value_allocation_calls+i;
         CHECK(xir_value_path_replacement(&root,&path,&replacement,admission,&output,&fault)==XR_XIR_VALUE_OOM);
-        CHECK(calls>fail_at);fail_at=SIZE_MAX;
+        CHECK(value_allocation_calls>fail_at);fail_at=SIZE_MAX;
         CHECK(unit_value(&output) && live==blocks && admission->domain->stats.live_bytes==bytes);
         CHECK(admission->scratch_bytes==65536 && value_path_number(&root,&path,admission)==11);
     }

@@ -91,12 +91,12 @@ static size_t foreign_array_attempt(bool append, size_t point, unsigned boundary
     if (boundary == 2) f.local.scratch_bytes = 0;
     if (boundary == 3) f.domains[0]->limit = a.live_bytes;
     if (boundary == 4) f.domains[0]->budget.requested_limit = requested;
-    size_t physical = live, compiler = value_compile_live, compiler_bytes = value_compile_bytes, begin = calls;
+    size_t physical = live, compiler = value_compile_live, compiler_bytes = value_compile_bytes, begin = value_allocation_calls;
     if (point != SIZE_MAX) { CHECK(point <= SIZE_MAX - begin); fail_at = begin + point; }
     XrXirValuePlace place = {(XrXirType)259, &f.array.payload}; XrXirFaultDetail fault = {0};
     XrXirValueStatus status = append ? xr_xir_array_push(&place, &f.replacement, &f.local) :
         xr_xir_array_set(&place, 0, &f.replacement, &f.local, &fault);
-    size_t attempts = calls - begin; fail_at = SIZE_MAX;
+    size_t attempts = value_allocation_calls - begin; fail_at = SIZE_MAX;
     CHECK(!fault.code && !f.releases);
     bool changed = !boundary && point == SIZE_MAX;
     if (changed) {
