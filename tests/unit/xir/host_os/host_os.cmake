@@ -13,7 +13,8 @@ set(host_os_c
     "${host_os_generated}/host_io_directory.c"
     "${host_os_generated}/host_thread_tokens.c"
     "${host_os_generated}/host_signal_frontier.c"
-    "${host_os_generated}/host_io_file_prepare.c")
+    "${host_os_generated}/host_io_file_prepare.c"
+    "${host_os_generated}/host_io_file_real.c")
 
 add_executable(test_host_os_source "${host_os_dir}/test_host_os_source.c")
 target_link_libraries(test_host_os_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
@@ -33,6 +34,11 @@ add_custom_command(OUTPUT ${host_os_c}
         "${host_os_dir}/host_os_io_directory_cases.h"
         "${host_os_dir}/host_os_io_file_prepare_cases.h"
         "${host_os_dir}/host_os_io_file_prepare_contracts.h"
+        "${host_os_dir}/host_os_io_file_real_source.h"
+        "${host_os_dir}/host_os_io_file_real_cases.h"
+        "${PROJECT_SOURCE_DIR}/stdlib/io/io.xr"
+        "${PROJECT_SOURCE_DIR}/stdlib/os/os.xr"
+        "${PROJECT_SOURCE_DIR}/stdlib/time/time.xr"
         "${host_os_dir}/host_os_thread_token_cases.h"
         "${host_os_dir}/host_os_thread_token_contracts.h"
         "${PROJECT_SOURCE_DIR}/stdlib/sys/sys.xr"

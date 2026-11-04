@@ -19,6 +19,7 @@
 #include "host_os_io_directory_cases.h"
 #define XR_HOST_OS_FILE_PREPARE_SOURCE 1
 #include "host_os_io_file_prepare_cases.h"
+#include "host_os_io_file_real_cases.h"
 #include "host_os_signal_frontier_cases.h"
 #include "host_os_thread_token_cases.h"
 static uint32_t host_named(const XrXirModule *module,const char *name){
@@ -83,6 +84,7 @@ static void host_ctfe(const XrXirArtifact *code,uint32_t function,const XrXirVal
  CHECK(xr_xir_compile_ctfe_calls(&request,&value)==XR_XIR_CTFE_NOT_SUPPORTED&&!value.type&&!value.payload);
 }
 #include "host_os_io_file_prepare_contracts.h"
+#include "host_os_io_file_real_source.h"
 static void host_io_contracts(XrXirCompileContext *context,const XrXirArtifact *code){
  const XrXirModule *m=xr_xir_compile_artifact_module(code);uint32_t f=host_named(m,"__chdir"),field=0;XrXirType path=m->functions[f].parameters[0];
  CHECK(xir_native_callable_verify(m,f)==XR_XIR_OK&&xir_native_callable_verify(m,host_named(m,"__chmod"))==XR_XIR_OK);
@@ -295,6 +297,7 @@ int main(int argc,char **argv){
  XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
  if(host_file_prepare_child)host_product(&context,11,XR_HOST_OS_GENERATED,false);
  else for(unsigned kind=0;kind<12;++kind)host_product(&context,kind,emit?argv[2]:XR_HOST_OS_GENERATED,emit);
+ if(!host_file_prepare_child)host_file_real_product(&context,emit?argv[2]:XR_HOST_OS_GENERATED,emit);
  CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK&&before.held_bytes==after.held_bytes&&!runtime_live&&!runtime_bytes);
  xr_compile_resources_release(context.resources);if(!emit){CHECK(xr_os_io_thread_token_shutdown()==XR_OS_IO_OK);if(!host_file_prepare_child)puts("42");}return 0;
 }

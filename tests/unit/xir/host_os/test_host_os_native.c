@@ -16,10 +16,13 @@
 #include "host_os_io_temp_cases.h"
 #include "host_os_io_directory_cases.h"
 #include "host_os_io_file_prepare_cases.h"
+#include "host_os_io_file_real_cases.h"
 #include "host_os_signal_frontier_cases.h"
 #include "host_os_thread_token_cases.h"
 extern const XrXirProgramSpec host_count_program,host_pin_program,host_path_program,host_system_program,host_stat_program,host_io_bool_program,host_signal_frontier_program,host_io_links_program,host_io_temp_program,host_thread_tokens_program,host_io_directory_program,host_io_file_prepare_program;
 extern const uint32_t host_count_ids[2],host_pin_ids[2],host_path_ids[5],host_system_ids[9],host_stat_ids[4],host_io_bool_ids[7],host_signal_frontier_ids[5],host_io_links_ids[6],host_io_temp_ids[4],host_thread_tokens_ids[HOST_TOKEN_COUNT],host_io_directory_ids[6],host_io_file_prepare_ids[HOST_FILE_COUNT];
+extern const XrXirProgramSpec host_io_file_real_program;
+extern const uint32_t host_io_file_real_ids[4];
 static XrXirProgram *host_replica(const XrXirCompileContext *context,const XrXirProgram *source){
  (void)source;XrXirProgram *out=NULL;CHECK(xr_xir_compile_program_seal(context,&host_path_program,&out)==XR_XIR_OK);return out;
 }
@@ -45,6 +48,8 @@ int main(int argc,char **argv){
   if(kind==11){host_file_prepare_execute(program,ids[kind]);xr_xir_compile_program_drop(program);}else if(kind==10){host_io_directory_execute(&context,program,ids[kind]);xr_xir_compile_program_drop(program);}else if(kind==9){host_thread_tokens_execute(program,ids[kind]);xr_xir_compile_program_drop(program);}else if(kind==8){host_io_temp_execute(program,ids[kind]);xr_xir_compile_program_drop(program);}else if(kind==7){host_io_links_execute(program,ids[kind]);xr_xir_compile_program_drop(program);}else if(kind==6){host_signal_frontier_execute(program,ids[kind]);xr_xir_compile_program_drop(program);}else if(kind==5){host_io_bool_execute(program,ids[kind]);xr_xir_compile_program_drop(program);}else if(kind==4){host_stat_execute(program,ids[kind]);xr_xir_compile_program_drop(program);}else if(kind==3){host_system_execute(program,ids[kind]);xr_xir_compile_program_drop(program);}else if(kind==2){host_path_execute(program,ids[kind]);host_path_receiving(&context,&program,ids[kind]);CHECK(!program);}
   else{host_cpu_execute(program,ids[kind],kind==1);xr_xir_compile_program_drop(program);}
  }
+ if(!host_file_prepare_child){XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(&context,&host_io_file_real_program,&program)==XR_XIR_OK);
+  host_file_real_execute(program,host_io_file_real_ids);xr_xir_compile_program_drop(program);}
  CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK&&before.held_bytes==after.held_bytes&&!runtime_live&&!runtime_bytes);
  xr_compile_resources_release(context.resources);CHECK(xr_os_io_thread_token_shutdown()==XR_OS_IO_OK);if(!host_file_prepare_child)puts("42");return 0;
 }
