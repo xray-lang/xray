@@ -232,6 +232,13 @@ static XrXirStatus effect_invocation_certificate_cause(const XrXirCompileContext
                 !effect_invocation_witness_equal(&cause->witness,&effect_invocation_local_causes(node)[atom].witness))
                 return XR_XIR_BAD_STRUCTURE;
             XrXirRootEffectWitness witness=cause->witness;
+            if (witness.cause==XR_XIR_ROOT_CAUSE_NATIVE) {
+                bool native_root=false;
+                XrXirStatus status=effect_invocation_native_root(certificate->body,node->body,&native_root);
+                if (status!=XR_XIR_OK) return status;
+                return native_root && !atom && witness.instruction==UINT32_MAX &&
+                    witness.callee==UINT32_MAX && witness.slot==UINT32_MAX?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+            }
             if (witness.cause==XR_XIR_ROOT_CAUSE_INITIALIZER) {
                 const XrXirDeclarations *declarations=certificate->declarations;
                 if (witness.instruction!=UINT32_MAX) {

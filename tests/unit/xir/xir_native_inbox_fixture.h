@@ -33,11 +33,17 @@ static XrXirArtifact *native_inbox_fixture(const XrXirCompileContext *context, u
     XrXirInstruction cleanup[]={{XR_XIR_OUTPUT,XR_XIR_UNIT,{0},{0},1,{0}},
         {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
     XrXirFunction functions[]={
-        {"root",4,&string_parameter,1,XR_XIR_I64,root_blocks,1,root,3,operands,1},
-        {"child",5,&string_parameter,1,XR_XIR_STRING,&child_block,1,child,2,NULL,0},
-        {"cleanup",7,&string_parameter,1,XR_XIR_UNIT,&two,1,cleanup,2,NULL,0},
-        {"init",4,NULL,0,XR_XIR_UNIT,&one,1,&done,1,NULL,0},
-        {"main",4,NULL,0,XR_XIR_I64,&two,1,main_ops,2,NULL,0}};
+        {.name="root",.name_length=4,.parameters=&string_parameter,.parameter_count=1,.result=XR_XIR_I64,
+         .blocks=root_blocks,.block_count=1,.instructions=root,.instruction_count=3,
+         .operands=operands,.operand_count=1,.error_type=XR_XIR_NEVER},
+        {.name="child",.name_length=5,.parameters=&string_parameter,.parameter_count=1,.result=XR_XIR_STRING,
+         .blocks=&child_block,.block_count=1,.instructions=child,.instruction_count=2,.error_type=XR_XIR_NEVER},
+        {.name="cleanup",.name_length=7,.parameters=&string_parameter,.parameter_count=1,.result=XR_XIR_UNIT,
+         .blocks=&two,.block_count=1,.instructions=cleanup,.instruction_count=2,.error_type=XR_XIR_NEVER},
+        {.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&one,.block_count=1,
+         .instructions=&done,.instruction_count=1,.error_type=XR_XIR_NEVER},
+        {.name="main",.name_length=4,.result=XR_XIR_I64,.blocks=&two,.block_count=1,
+         .instructions=main_ops,.instruction_count=2,.error_type=XR_XIR_NEVER}};
     XrXirInstruction discarded[] = {
         {XR_XIR_INVOKE,XR_XIR_STRING,{0,1},{1,2},1,{0}},
         {XR_XIR_INVOKE_DISCARD,XR_XIR_UNIT,{0},{0},0,{0}},

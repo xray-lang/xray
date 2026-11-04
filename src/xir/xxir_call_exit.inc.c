@@ -95,6 +95,13 @@ static bool cleanup_escape(XrXirCall *call,XrXirCallResult *escaped) {
 }
 static void finish_exit(XrXirCall *call) {
     CallFrame *frame = call->top;
+    XrXirCallStatus failure=XR_XIR_CALL_READY;
+    if(!frame->scope_exit && !retire_frame(call,&failure))return;
+    if(failure!=XR_XIR_CALL_READY && frame->pending.status==XR_XIR_CALL_RETURNED &&
+        call->abort_reason==XR_XIR_CALL_READY && !call->cancel_requested) {
+        xr_xir_call_result_drop(&frame->pending);
+        frame->pending=call_result(failure);call->abort_reason=failure;
+    }
     XrXirCallResult result = call_result(XR_XIR_CALL_READY);
     xr_xir_call_result_move(&frame->pending, &result);
     if (frame->cleanup_call && !frame->scope_exit &&

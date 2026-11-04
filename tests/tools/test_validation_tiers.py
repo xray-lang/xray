@@ -147,22 +147,32 @@ class TierTests(unittest.TestCase):
                 self.assertTrue({"test_xir_array_materialization", "test_xir_array_materialization_native"} <= set(plan["targets"]))
 
     def test_host_os_changes_select_paired_source_and_native_consumers(self):
-        for path in ("src/os/win/fs_mutation_win.c", "src/os/unix/fs_mutation_unix.c",
+        for path in ("stdlib/sys/sys.xr", "src/os/win/fs_mutation_win.c", "src/os/unix/fs_mutation_unix.c",
                      "src/os/os_system.h", "src/os/win/system_win.c", "src/os/unix/system_unix.c",
+                     "src/os/os_signal.h", "src/os/win/signal_win.c",
+                     "src/os/unix/signal_unix.c", "tests/unit/base/test_signal.c",
                      "src/os/os_file_mutation.h", "src/os/win/file_mutation_win.c",
                      "src/os/unix/file_mutation_unix.c", "tests/unit/base/test_file_mutation.c",
                      "src/os/os_file_metadata.h", "src/os/file_metadata_path.inc.h",
                      "src/os/win/file_metadata_win.c", "src/os/unix/file_metadata_unix.c",
                      "tests/unit/base/test_file_metadata.c",
                      "src/xir/xxir_instance_system.inc.c", "tests/unit/base/test_system_queries.c",
+                     "src/xir/xxir_instance_sys_tokens.inc.c",
                      "src/xir/xxir_os_system_native.h",
                      "src/xir/xxir_file_stat_native.h", "src/xir/xxir_source_file_stat.inc.c",
                      "src/xir/xxir_instance_file_metadata.inc.c", "src/xir/xxir_nominal.inc.c",
                      "src/xir/xxir_nominal_native.inc.c", "src/xir/xxir_nominal_access.inc.c",
                      "src/xir/xxir_source_nominal_contract.inc.c", "src/xir/xxir_path_verify.inc.c",
+                     "src/xir/xxir_source.c", "src/xir/xxir_source_struct.inc.c",
+                     "src/xir/xxir_source_implements.inc.c",
+                     "src/xir/xxir_source_methods.inc.c",
+                     "src/hir/xhir_body_nominal.inc.c",
                      "src/os/os_fs.h", "src/base/xwindows_utf8.h",
                      "src/os/os_file_links.h", "src/os/win/file_links_win.c",
                      "src/os/os_file_temp.h", "src/os/win/file_temp_win.c",
+                     "src/os/os_thread_token.h", "src/os/win/thread_token_win.c",
+                     "src/os/unix/thread_token_unix.c", "tests/unit/base/test_thread_token.c",
+                     "tests/unit/base/thread_token.cmake",
                      "src/os/unix/file_temp_unix.c", "tests/unit/base/test_file_temp.c",
                      "tests/unit/base/file_temp.cmake",
                      "src/os/unix/file_links_unix.c", "tests/unit/base/test_file_links.c",
@@ -195,6 +205,136 @@ class TierTests(unittest.TestCase):
                 self.assertIn("test_os_file_links", plan["targets"])
                 self.assertIn("os_file_temp", plan["tests"])
                 self.assertIn("test_os_file_temp", plan["targets"])
+                self.assertIn("os_thread_token", plan["tests"])
+                self.assertIn("test_os_thread_token", plan["targets"])
+                self.assertIn("os_signal", plan["tests"])
+                self.assertIn("test_os_signal", plan["targets"])
+                self.assertNotIn("native-runtime", plan["groups"])
+        self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
+
+    def test_pipe_product_and_test_leaves_select_both_carriers(self):
+        for path in ("tests/unit/xir/pipe_runtime/test_pipe_source.c",
+                     "tests/unit/xir/pipe_runtime/test_pipe_native.c",
+                     "tests/unit/xir/pipe_runtime/pipe_cases.h",
+                     "tests/unit/xir/pipe_runtime/pipe_runtime.h",
+                     "tests/unit/xir/pipe_runtime/pipe_runtime.cmake",
+                     "src/xir/xxir_instance_pipe.inc.c",
+                     "src/xir/xxir_instance_pipe_owner.inc.c",
+                     "src/xir/xxir_sys_pipe_native.h"):
+            with self.subTest(path=path):
+                plan = xray_l1.tier_plan(ROOT, "L2", changed=[path])
+                self.assertIn("host-os", plan["groups"])
+                self.assertTrue({"test_xir_pipe_source", "test_xir_pipe_native"} <= set(plan["tests"]))
+                self.assertTrue({"test_xir_pipe_source", "test_xir_pipe_native"} <= set(plan["targets"]))
+                self.assertNotIn("native-runtime", plan["groups"])
+        self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
+
+    def test_process_product_and_test_leaves_select_both_carriers(self):
+        for path in ("stdlib/os/os.xr", "stdlib/time/time.xr", "src/os/os_process_owned.h", "src/os/win/process_owned_win.c",
+                     "src/os/win/process_shell_win.inc.c", "src/xir/xxir_instance_exec_shell.inc.c",
+                     "src/xir/xxir_os_exec_native.h", "src/xir/xxir_instance_exec_pipe.inc.c",
+                     "src/os/win/proc_text_win.inc.c", "src/os/unix/process_owned_unix.c",
+                     "tests/regression/10_stdlib/1161_os_extended.xr",
+                     "tests/unit/xir/process_runtime/test_process_source.c",
+                     "tests/unit/xir/process_runtime/test_process_native.c",
+                     "tests/unit/xir/process_runtime/process_cases.h",
+                     "tests/unit/xir/process_runtime/process_runtime.h",
+                     "tests/unit/xir/process_runtime/process_complete_os_source.h",
+                     "tests/unit/xir/process_runtime/process_complete_os_runtime.h",
+                     "tests/unit/xir/process_runtime/process_runtime.cmake",
+                     "src/xir/xxir_instance_process.inc.c",
+                     "src/xir/xxir_instance_process_owner.inc.c",
+                     "src/xir/xxir_sys_process_native.h"):
+            with self.subTest(path=path):
+                plan = xray_l1.tier_plan(ROOT, "L2", changed=[path])
+                self.assertIn("host-os", plan["groups"])
+                self.assertTrue({"test_xir_process_source", "test_xir_process_native"} <= set(plan["tests"]))
+                self.assertTrue({"test_xir_process_source", "test_xir_process_native"} <= set(plan["targets"]))
+                self.assertNotIn("native-runtime", plan["groups"])
+        self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
+
+    def test_dylib_product_and_test_leaves_select_both_carriers(self):
+        for path in ("stdlib/path/path.xr", "src/os/os_dylib_owned.h",
+                     "src/os/win/dylib_owned_win.c", "src/os/unix/dylib_owned_unix.c",
+                     "src/xir/xxir_pointer_origin_internal.h",
+                     "src/xir/xxir_pointer_value.inc.c", "src/xir/xxir_value.c",
+                     "src/xir/xxir_pointer.h",
+                     "src/xir/xxir_view_affine.c",
+                     "src/xir/xxir_view_origins.inc.c",
+                     "src/xir/xxir_view_roots.inc.c",
+                     "src/xir/xxir_view_types.inc.c",
+                     "src/xir/xxir_view_pointer_calls.inc.c",
+                     "src/xir/xxir_view_access.inc.c", "src/xir/xxir_view_loan_origins.inc.c",
+                     "src/xir/xxir_instance_dylib.inc.c",
+                     "src/xir/xxir_instance_dylib_owner.inc.c",
+                     "src/xir/xxir_sys_dylib_native.h",
+                     "tests/unit/xir/dylib_runtime/test_dylib_source.c",
+                     "tests/unit/xir/dylib_runtime/test_dylib_native.c",
+                     "tests/unit/xir/dylib_runtime/dylib_cases.h",
+                     "tests/unit/xir/dylib_runtime/dylib_runtime.h",
+                     "tests/unit/xir/dylib_runtime/test_dylib_data.c",
+                     "tests/unit/xir/dylib_runtime/dylib_runtime.cmake",
+                     "tests/unit/xir/xir_genuine_sys_path.h"):
+            with self.subTest(path=path):
+                plan = xray_l1.tier_plan(ROOT, "L2", changed=[path])
+                self.assertIn("host-os", plan["groups"])
+                self.assertTrue({"test_xir_dylib_source", "test_xir_dylib_native"} <= set(plan["tests"]))
+                self.assertTrue({"test_xir_dylib_source", "test_xir_dylib_native"} <= set(plan["targets"]))
+                self.assertNotIn("native-runtime", plan["groups"])
+        self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
+
+    def test_complete_path_inputs_keep_the_existing_carriers(self):
+        for path in ("stdlib/path/path.xr", "tests/unit/xir/xir_path_complete_source.h",
+                     "tests/unit/xir/xir_path_complete_runtime.h",
+                     "src/xir/xxir_path_native.h", "src/xir/xxir_instance_path_cwd.inc.c"):
+            with self.subTest(path=path):
+                plan = xray_l1.tier_plan(ROOT, "L2", changed=[path])
+                self.assertIn("frontend", plan["groups"])
+                self.assertTrue({"xir_path_prelude", "xir_path_prelude_native"} <= set(plan["tests"]))
+                self.assertTrue({"test_xir_path_prelude", "test_xir_path_prelude_native"} <= set(plan["targets"]))
+                self.assertNotIn("native-runtime", plan["groups"])
+        self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
+
+    def test_callback_mechanisms_and_test_recipes_select_the_existing_runtime_home(self):
+        for path in ("src/execution/xr_xir_host_execution.c",
+                     "src/xir/xxir_root_callback_internal.h",
+                     "src/xir/xxir_task.c", "src/xir/xxir_task_internal.h",
+                     "src/xir/xxir_task_root_callback.inc.c",
+                     "src/xir/xxir_task_generator.inc.c", "src/xir/xxir_task_channel.inc.c",
+                     "src/xir/xxir_instance_root_callback.inc.c",
+                     "tests/unit/xir/test_xir_root_callback.c",
+                     "tests/unit/xir/root_callback.cmake"):
+            with self.subTest(path=path):
+                plan = xray_l1.tier_plan(ROOT, "L2", changed=[path])
+                self.assertIn("runtime", plan["groups"])
+                self.assertIn("test_xir_root_callback", plan["tests"])
+                self.assertIn("test_xir_root_callback", plan["targets"])
+                self.assertNotIn("native-runtime", plan["groups"])
+        self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
+
+    def test_signal_registration_sources_and_native_root_replay_select_both_carriers(self):
+        for path in ("src/xir/xxir_call_signal.inc.c", "src/xir/xxir_call_signal_internal.h",
+                     "src/xir/xxir_instance_signal.inc.c", "src/xir/xxir_instance_signal_internal.h",
+                     "src/xir/xxir_source_sys.inc.c", "src/xir/xxir_source.c",
+                     "src/xir/xxir_sys_native.h", "src/xir/xxir_verify.c",
+                     "src/xir/xxir_effects.c", "src/xir/xxir_effects.h",
+                     "src/xir/xxir_effect_invocation_causes.inc.c",
+                     "src/xir/xxir_effect_invocation_primitive.inc.c",
+                     "src/xir/xxir_effect_invocation_query.inc.c",
+                     "src/xir/xxir_effect_invocation_solve.inc.c",
+                     "src/xir/xxir_effect_context_owner.inc.c",
+                     "src/xir/xxir_effect_snapshot_storage.inc.c",
+                     "src/xir/xxir_effect_snapshot_types.inc.c",
+                     "src/xir/xxir_ctfe_calls.inc.c",
+                     "src/xir/xxir_ctfe_function.inc.c",
+                     "tests/unit/xir/test_xir_signal_source.c",
+                     "tests/unit/xir/test_xir_signal_native.c",
+                     "tests/unit/xir/root_signal_runtime.h", "tests/unit/xir/root_signal.cmake"):
+            with self.subTest(path=path):
+                plan = xray_l1.tier_plan(ROOT, "L2", changed=[path])
+                self.assertIn("runtime", plan["groups"])
+                self.assertTrue({"test_xir_signal_source", "test_xir_signal_native"} <= set(plan["tests"]))
+                self.assertTrue({"test_xir_signal_source", "test_xir_signal_native"} <= set(plan["targets"]))
                 self.assertNotIn("native-runtime", plan["groups"])
         self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
 

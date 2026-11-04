@@ -111,7 +111,9 @@ static int directory_operation(const wchar_t *path, bool create) {
     wchar_t locator[32768];
     int count = swprintf(locator, 32768, L"\\\\?\\%ls", path);
     if (count <= 0 || count >= 32768) return 0;
-    return create ? CreateDirectoryW(locator, NULL) != 0 : RemoveDirectoryW(locator) != 0;
+    bool changed = create ? CreateDirectoryW(locator, NULL) != 0 : RemoveDirectoryW(locator) != 0;
+    if (!changed) fwprintf(stderr, L"metadata directory error %lu: %ls\n", (unsigned long)GetLastError(), locator);
+    return changed;
 }
 static int write_marker(const wchar_t *path, const uint8_t *bytes, DWORD length) {
     HANDLE handle = CreateFileW(path, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -287,7 +289,7 @@ static int verify_failures(void) {
         XR_OS_IO_CANCELLED && !memcmp(&output, &sentinel, sizeof(output)) && metadata_memory.attempts == 1 &&
         metadata_memory.copy_polls == 2 && !metadata_memory.live && !metadata_memory.held && !owner.handle &&
         !kernel_handles && kernel_attributes == attributes && kernel_opens == opened);
-    reset_memory(); large_span[sizeof(large_span) - 1] = '\xff';
+    reset_memory(); memset(large_span + sizeof(large_span) - 1, 0xff, 1);
     CHECK(xr_os_io_file_metadata(&policy, large_span, sizeof(large_span), test_current, &owner, &output) ==
         XR_OS_IO_BAD_ARGUMENT && !memcmp(&output, &sentinel, sizeof(output)) && !metadata_memory.attempts &&
         !owner.handle && kernel_attributes == attributes && kernel_opens == opened);

@@ -96,7 +96,7 @@ static bool native_invoke_allocation_run(const XrXirCompileContext *context,
     xr_xir_compile_program_drop(program);xr_xir_value_drop(&owned);
     XrCompileResourceStats released={0};
     CHECK(xr_compile_resources_stats(context->resources,&released)==XR_COMPILE_RESOURCE_OK &&
-        released.live_bytes==baseline.live_bytes);
+        released.held_bytes==baseline.held_bytes);
     return completed;
 }
 static void native_invoke_allocation_failures(const XrXirCompileContext *context,
@@ -159,14 +159,14 @@ int main(void) {
         if (escaped.type) {
             XrCompileResourceStats pinned={0};
             CHECK(xr_compile_resources_stats(compiler.context.resources,&pinned)==XR_COMPILE_RESOURCE_OK);
-            CHECK(pinned.live_bytes>compiler.baseline.live_bytes);
+            CHECK(pinned.held_bytes>compiler.baseline.held_bytes);
             XrXirDomain *reader=NULL;CHECK(xr_xir_domain_new(65536,&reader)==XR_XIR_VALUE_OK);
             CHECK(error_fixture_is_code(&escaped,reader,91));
             xr_xir_value_drop(&escaped);xr_xir_domain_drop(reader);
         }
         XrCompileResourceStats released={0};
         CHECK(xr_compile_resources_stats(compiler.context.resources,&released)==XR_COMPILE_RESOURCE_OK);
-        CHECK(released.live_bytes==compiler.baseline.live_bytes);
+        CHECK(released.held_bytes==compiler.baseline.held_bytes);
     }
     CHECK(!runtime_live && !runtime_bytes);
     native_invoke_allocation_failures(&compiler.context, tables);

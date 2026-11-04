@@ -683,7 +683,7 @@ static const XrNativeMemberDeclaration xr_native_file_stat_members[] = {
 };
 static const XrNativeTypeDeclaration xr_native_file_stat = {
     XR_NATIVE_DECLARATION_FILE_STAT, XR_NATIVE_DECLARATION_IDENTITY, "__FileStat", NULL, 0,
-    "stdlib/defs/core.def", "xray.native-type.v1/io/__FileStat", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}, 0, 0,
+    "stdlib/defs/core.def", "xray.native-type.v1/io/__FileStat", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}, 0, 0,
     xr_native_file_stat_members, 10
 };
 static const XrNativeIntrinsicDeclaration xr_native_intrinsics[] = {
@@ -1107,6 +1107,122 @@ static const XrNativeMemberDeclaration xr_native_sys_thread_yield = {
     false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
     "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_UNIT
 };
+static const XrNativeParameter xr_native_sys_on_signal_parameters[] = {
+    {"signal", "i64", XR_NATIVE_TERM_I64, false, false},
+    {"handler", "fn(): ()", XR_NATIVE_TERM_UNIT_CALLBACK, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_sys_on_signal = {
+    3, "__onSignal", "(signal: i64, handler: fn(): ()): bool", "bool", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_sys_on_signal_parameters, 2, XR_NATIVE_TERM_BOOL
+};
+static const XrNativeMemberDeclaration xr_native_sys_thread_local_id = {
+    4, "__threadLocalId", "(): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_I64
+};
+static const XrNativeParameter xr_native_sys_thread_local_alive_parameters[] = {
+    {"id", "i64", XR_NATIVE_TERM_I64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_sys_thread_local_alive = {
+    5, "__threadLocalAlive", "(id: i64): bool", "bool", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_sys_thread_local_alive_parameters, 1, XR_NATIVE_TERM_BOOL
+};
+static const XrNativeMemberDeclaration xr_native_sys_pipe_open = {
+    6, "__pipeOpen", "(): (i64, i64)?", "(i64, i64)?", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_NULLABLE_I64_PAIR
+};
+static const XrNativeParameter xr_native_sys_pipe_read_parameters[] = {
+    {"handle", "i64", XR_NATIVE_TERM_I64, false, false},
+    {"maxBytes", "i64", XR_NATIVE_TERM_I64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_sys_pipe_read = {
+    7, "__pipeRead", "(handle: i64, maxBytes: i64): Array<u8>?", "Array<u8>?", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_sys_pipe_read_parameters, 2, XR_NATIVE_TERM_NULLABLE_ARRAY_U8
+};
+static const XrNativeParameter xr_native_sys_pipe_write_parameters[] = {
+    {"handle", "i64", XR_NATIVE_TERM_I64, false, false},
+    {"data", "Array<u8>", XR_NATIVE_TERM_ARRAY_U8, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_sys_pipe_write = {
+    8, "__pipeWrite", "(handle: i64, data: Array<u8>): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_sys_pipe_write_parameters, 2, XR_NATIVE_TERM_I64
+};
+static const XrNativeParameter xr_native_sys_pipe_close_parameters[] = {
+    {"handle", "i64", XR_NATIVE_TERM_I64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_sys_pipe_close = {
+    9, "__pipeClose", "(handle: i64): bool", "bool", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_sys_pipe_close_parameters, 1, XR_NATIVE_TERM_BOOL
+};
+static const XrNativeParameter xr_native_sys_process_spawn_parameters[] = {
+    {"program", "string", XR_NATIVE_TERM_STRING, false, false},
+    {"args", "Array<string>", XR_NATIVE_TERM_ARRAY_STRING, false, false},
+    {"cwd", "string?", XR_NATIVE_TERM_NULLABLE_STRING, false, false},
+    {"envKeys", "Array<string>?", XR_NATIVE_TERM_NULLABLE_ARRAY_STRING, false, false},
+    {"envValues", "Array<string>?", XR_NATIVE_TERM_NULLABLE_ARRAY_STRING, false, false},
+    {"stdinRead", "i64?", XR_NATIVE_TERM_NULLABLE_I64, false, false},
+    {"stdoutWrite", "i64?", XR_NATIVE_TERM_NULLABLE_I64, false, false},
+    {"stderrWrite", "i64?", XR_NATIVE_TERM_NULLABLE_I64, false, false},
+    {"detached", "bool", XR_NATIVE_TERM_BOOL, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_sys_process_spawn = {
+    10, "__processSpawn", "(program: string, args: Array<string>, cwd: string?, envKeys: Array<string>?, envValues: Array<string>?, stdinRead: i64?, stdoutWrite: i64?, stderrWrite: i64?, detached: bool): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_sys_process_spawn_parameters, 9, XR_NATIVE_TERM_I64
+};
+static const XrNativeParameter xr_native_sys_process_try_wait_parameters[] = {
+    {"id", "i64", XR_NATIVE_TERM_I64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_sys_process_try_wait = {
+    11, "__processTryWait", "(id: i64): i64?", "i64?", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_sys_process_try_wait_parameters, 1, XR_NATIVE_TERM_NULLABLE_I64
+};
+static const XrNativeParameter xr_native_sys_process_kill_parameters[] = {
+    {"id", "i64", XR_NATIVE_TERM_I64, false, false},
+    {"signal", "i64", XR_NATIVE_TERM_I64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_sys_process_kill = {
+    12, "__processKill", "(id: i64, signal: i64): bool", "bool", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_sys_process_kill_parameters, 2, XR_NATIVE_TERM_BOOL
+};
+static const XrNativeParameter xr_native_sys_dylib_open_parameters[] = {
+    {"path", "Path", XR_NATIVE_TERM_PATH, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_sys_dylib_open = {
+    13, "__dylibOpen", "(path: Path): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_sys_dylib_open_parameters, 1, XR_NATIVE_TERM_I64
+};
+static const XrNativeParameter xr_native_sys_dylib_symbol_parameters[] = {
+    {"handle", "i64", XR_NATIVE_TERM_I64, false, false},
+    {"name", "string", XR_NATIVE_TERM_STRING, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_sys_dylib_symbol = {
+    14, "__dylibSymbol", "(handle: i64, name: string): Ptr<u8>?", "Ptr<u8>?", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_sys_dylib_symbol_parameters, 2, XR_NATIVE_TERM_NULLABLE_PTR_U8
+};
+static const XrNativeParameter xr_native_sys_dylib_close_parameters[] = {
+    {"handle", "i64", XR_NATIVE_TERM_I64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_sys_dylib_close = {
+    15, "__dylibClose", "(handle: i64): bool", "bool", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_sys_dylib_close_parameters, 1, XR_NATIVE_TERM_BOOL
+};
+static const XrNativeMemberDeclaration xr_native_sys_dylib_last_error = {
+    16, "__dylibLastError", "(): string", "string", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_STRING
+};
 static const XrNativeMemberDeclaration xr_native_os_platform = {
     1, "__platform", "(): string", "string", 0, 0, XR_NATIVE_RECEIVER_READ,
     false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
@@ -1368,6 +1484,30 @@ static const XrNativeMemberDeclaration xr_native_io_dir_close = {
     false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
     "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_io_dir_close_parameters, 1, XR_NATIVE_TERM_BOOL
 };
+static const XrNativeMemberDeclaration xr_native_path_getcwd = {
+    1, "__getcwd", "(): string", "string", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_STRING,
+};
+static const XrNativeParameter xr_native_os_exec_pipe_close_parameters[] = {
+    {"readToken", "i64", XR_NATIVE_TERM_I64, false, false},
+    {"writeToken", "i64", XR_NATIVE_TERM_I64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_os_exec_pipe_close = {
+    1, "__execPipeClose", "(readToken: i64, writeToken: i64): bool", "bool", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_os_exec_pipe_close_parameters, 2, XR_NATIVE_TERM_BOOL,
+};
+static const XrNativeParameter xr_native_os_exec_shell_spawn_parameters[] = {
+    {"command", "string", XR_NATIVE_TERM_STRING, false, false},
+    {"stdoutToken", "i64", XR_NATIVE_TERM_I64, false, false},
+    {"stderrToken", "i64", XR_NATIVE_TERM_I64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_os_exec_shell_spawn = {
+    1, "__execShellSpawn", "(command: string, stdoutToken: i64, stderrToken: i64): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_os_exec_shell_spawn_parameters, 3, XR_NATIVE_TERM_I64,
+};
 static const XrNativeParameter xr_native_unicode_property_parameters[] = {
     {"name", "string", XR_NATIVE_TERM_STRING, false, false},
 };
@@ -1389,94 +1529,111 @@ static const XrNativeCallableDeclaration xr_native_callables[] = {
     {XR_NATIVE_CALLABLE_STRING_FROM_UTF8, &xr_native_string, &xr_native_string_members[0], &xr_native_utf8_error, false, NULL, NULL, {{0}}},
     {XR_NATIVE_CALLABLE_TASK_ALL_BEGIN, &xr_native_task, &xr_native_task_members[3], NULL, false, NULL, NULL, {{0}}},
     {XR_NATIVE_CALLABLE_TASK_FIRST_BEGIN, &xr_native_task, &xr_native_task_members[4], NULL, false, NULL, NULL, {{0}}},
-    {XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID, NULL, &xr_native_unicode_property, NULL, true, "regex", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY, NULL, &xr_native_unicode_has_property, NULL, true, "regex", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {4, NULL, &xr_native_buffer_0, NULL, false, "mem", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {5, NULL, &xr_native_buffer_1, NULL, false, "mem", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {6, NULL, &xr_native_buffer_2, NULL, false, "mem", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {7, NULL, &xr_native_buffer_3, NULL, false, "mem", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {10, NULL, &xr_native_buffer_4, NULL, false, "mem", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {11, NULL, &xr_native_buffer_5, NULL, false, "mem", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {12, NULL, &xr_native_buffer_6, NULL, false, "mem", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {13, NULL, &xr_native_buffer_7, NULL, false, "mem", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {14, NULL, &xr_native_buffer_8, NULL, false, "mem", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {15, NULL, &xr_native_buffer_9, NULL, false, "mem", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {16, NULL, &xr_native_buffer_10, NULL, false, "mem", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {17, NULL, &xr_native_buffer_11, NULL, false, "mem", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {18, NULL, &xr_native_buffer_12, NULL, false, "mem", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {19, NULL, &xr_native_buffer_13, NULL, false, "mem", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {20, NULL, &xr_native_buffer_14, NULL, false, "mem", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {21, NULL, &xr_native_buffer_15, NULL, false, "mem", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {22, NULL, &xr_native_buffer_16, NULL, false, "mem", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {23, NULL, &xr_native_buffer_17, NULL, false, "mem", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {24, NULL, &xr_native_buffer_18, NULL, false, "mem", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {8, NULL, &xr_native_crypto_0, NULL, false, "crypto", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {9, NULL, &xr_native_crypto_1, NULL, false, "crypto", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {27, NULL, &xr_native_math_0, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {28, NULL, &xr_native_math_1, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {29, NULL, &xr_native_math_2, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {30, NULL, &xr_native_math_3, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {31, NULL, &xr_native_math_4, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {32, NULL, &xr_native_math_5, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {33, NULL, &xr_native_math_6, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {34, NULL, &xr_native_math_7, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {35, NULL, &xr_native_math_8, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {36, NULL, &xr_native_math_9, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {37, NULL, &xr_native_math_10, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {38, NULL, &xr_native_math_11, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {39, NULL, &xr_native_math_12, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {40, NULL, &xr_native_math_13, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {41, NULL, &xr_native_math_14, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {42, NULL, &xr_native_math_15, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {43, NULL, &xr_native_math_16, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {44, NULL, &xr_native_math_17, NULL, false, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {45, NULL, &xr_native_math_18, NULL, false, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {46, NULL, &xr_native_math_19, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {47, NULL, &xr_native_math_20, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {48, NULL, &xr_native_math_21, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {49, NULL, &xr_native_math_22, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {50, NULL, &xr_native_math_23, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {51, NULL, &xr_native_math_24, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {52, NULL, &xr_native_math_25, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {53, NULL, &xr_native_math_26, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {54, NULL, &xr_native_math_27, NULL, true, "math", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_SYS_THREAD_YIELD, NULL, &xr_native_sys_thread_yield, NULL, false, "sys", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_OS_PLATFORM, NULL, &xr_native_os_platform, NULL, false, "os", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_OS_ARCH, NULL, &xr_native_os_arch, NULL, false, "os", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_OS_GETENV, NULL, &xr_native_os_getenv, NULL, false, "os", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_OS_SETENV, NULL, &xr_native_os_setenv, NULL, false, "os", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_OS_UNSETENV, NULL, &xr_native_os_unsetenv, NULL, false, "os", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_OS_ENVIRON_BLOCK, NULL, &xr_native_os_environ_block, NULL, false, "os", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_OS_EXIT, NULL, &xr_native_os_exit, NULL, false, "os", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_OS_GETPID, NULL, &xr_native_os_getpid, NULL, false, "os", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_OS_GETCWD, NULL, &xr_native_os_getcwd, NULL, false, "os", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_OS_HOSTNAME, NULL, &xr_native_os_hostname, NULL, false, "os", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_OS_SYSTEM_USERNAME, NULL, &xr_native_os_system_username, NULL, false, "os", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_OS_SYSTEM_HOMEDIR, NULL, &xr_native_os_system_homedir, NULL, false, "os", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_OS_CPU_COUNT, NULL, &xr_native_os_cpu_count, NULL, false, "os", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_SYS_PIN_TO_CPU, NULL, &xr_native_sys_pin_to_cpu, NULL, false, "sys", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_OS_UID, NULL, &xr_native_os_uid, NULL, false, "os", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_OS_GID, NULL, &xr_native_os_gid, NULL, false, "os", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_OS_PPID, NULL, &xr_native_os_ppid, NULL, false, "os", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_OS_KILL, NULL, &xr_native_os_kill, NULL, false, "os", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_OS_TOTAL_MEMORY, NULL, &xr_native_os_total_memory, NULL, false, "os", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_OS_FREE_MEMORY, NULL, &xr_native_os_free_memory, NULL, false, "os", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_OS_UPTIME, NULL, &xr_native_os_uptime, NULL, false, "os", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_OS_LOADAVG, NULL, &xr_native_os_loadavg, NULL, false, "os", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_IO_CHMOD, NULL, &xr_native_io_chmod, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_IO_CHDIR, NULL, &xr_native_io_chdir, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_IO_STAT, NULL, &xr_native_io_stat, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_IO_MKDIR, NULL, &xr_native_io_mkdir, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_IO_RMDIR, NULL, &xr_native_io_rmdir, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_IO_REMOVE, NULL, &xr_native_io_remove, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_IO_RENAME, NULL, &xr_native_io_rename, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_IO_UTIME_NOW, NULL, &xr_native_io_utime_now, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_IO_SYMLINK, NULL, &xr_native_io_symlink, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_IO_READLINK, NULL, &xr_native_io_readlink, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_IO_REALPATH, NULL, &xr_native_io_realpath, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_IO_MAKE_TEMP_DIR, NULL, &xr_native_io_make_temp_dir, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_IO_MAKE_TEMP_FILE, NULL, &xr_native_io_make_temp_file, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_IO_DIR_OPEN, NULL, &xr_native_io_dir_open, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_IO_DIR_NEXT, NULL, &xr_native_io_dir_next, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}},
-    {XR_NATIVE_CALLABLE_IO_DIR_CLOSE, NULL, &xr_native_io_dir_close, NULL, false, "io", "stdlib/defs/core.def", {{140,184,168,73,136,253,86,103,152,51,216,179,31,57,190,154,103,83,76,62,157,50,242,75,248,136,109,96,147,198,215,40}}}
+    {XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID, NULL, &xr_native_unicode_property, NULL, true, "regex", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY, NULL, &xr_native_unicode_has_property, NULL, true, "regex", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {4, NULL, &xr_native_buffer_0, NULL, false, "mem", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {5, NULL, &xr_native_buffer_1, NULL, false, "mem", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {6, NULL, &xr_native_buffer_2, NULL, false, "mem", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {7, NULL, &xr_native_buffer_3, NULL, false, "mem", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {10, NULL, &xr_native_buffer_4, NULL, false, "mem", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {11, NULL, &xr_native_buffer_5, NULL, false, "mem", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {12, NULL, &xr_native_buffer_6, NULL, false, "mem", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {13, NULL, &xr_native_buffer_7, NULL, false, "mem", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {14, NULL, &xr_native_buffer_8, NULL, false, "mem", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {15, NULL, &xr_native_buffer_9, NULL, false, "mem", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {16, NULL, &xr_native_buffer_10, NULL, false, "mem", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {17, NULL, &xr_native_buffer_11, NULL, false, "mem", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {18, NULL, &xr_native_buffer_12, NULL, false, "mem", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {19, NULL, &xr_native_buffer_13, NULL, false, "mem", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {20, NULL, &xr_native_buffer_14, NULL, false, "mem", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {21, NULL, &xr_native_buffer_15, NULL, false, "mem", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {22, NULL, &xr_native_buffer_16, NULL, false, "mem", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {23, NULL, &xr_native_buffer_17, NULL, false, "mem", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {24, NULL, &xr_native_buffer_18, NULL, false, "mem", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {8, NULL, &xr_native_crypto_0, NULL, false, "crypto", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {9, NULL, &xr_native_crypto_1, NULL, false, "crypto", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {27, NULL, &xr_native_math_0, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {28, NULL, &xr_native_math_1, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {29, NULL, &xr_native_math_2, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {30, NULL, &xr_native_math_3, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {31, NULL, &xr_native_math_4, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {32, NULL, &xr_native_math_5, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {33, NULL, &xr_native_math_6, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {34, NULL, &xr_native_math_7, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {35, NULL, &xr_native_math_8, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {36, NULL, &xr_native_math_9, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {37, NULL, &xr_native_math_10, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {38, NULL, &xr_native_math_11, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {39, NULL, &xr_native_math_12, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {40, NULL, &xr_native_math_13, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {41, NULL, &xr_native_math_14, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {42, NULL, &xr_native_math_15, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {43, NULL, &xr_native_math_16, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {44, NULL, &xr_native_math_17, NULL, false, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {45, NULL, &xr_native_math_18, NULL, false, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {46, NULL, &xr_native_math_19, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {47, NULL, &xr_native_math_20, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {48, NULL, &xr_native_math_21, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {49, NULL, &xr_native_math_22, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {50, NULL, &xr_native_math_23, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {51, NULL, &xr_native_math_24, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {52, NULL, &xr_native_math_25, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {53, NULL, &xr_native_math_26, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {54, NULL, &xr_native_math_27, NULL, true, "math", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_SYS_THREAD_YIELD, NULL, &xr_native_sys_thread_yield, NULL, false, "sys", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_SYS_ON_SIGNAL, NULL, &xr_native_sys_on_signal, NULL, false, "sys", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_SYS_THREAD_LOCAL_ID, NULL, &xr_native_sys_thread_local_id, NULL, false, "sys", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_SYS_THREAD_LOCAL_ALIVE, NULL, &xr_native_sys_thread_local_alive, NULL, false, "sys", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_SYS_PIPE_OPEN, NULL, &xr_native_sys_pipe_open, NULL, false, "sys", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_SYS_PIPE_READ, NULL, &xr_native_sys_pipe_read, NULL, false, "sys", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_SYS_PIPE_WRITE, NULL, &xr_native_sys_pipe_write, NULL, false, "sys", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_SYS_PIPE_CLOSE, NULL, &xr_native_sys_pipe_close, NULL, false, "sys", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_SYS_PROCESS_SPAWN, NULL, &xr_native_sys_process_spawn, NULL, false, "sys", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_SYS_PROCESS_TRY_WAIT, NULL, &xr_native_sys_process_try_wait, NULL, false, "sys", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_SYS_PROCESS_KILL, NULL, &xr_native_sys_process_kill, NULL, false, "sys", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_SYS_DYLIB_OPEN, NULL, &xr_native_sys_dylib_open, NULL, false, "sys", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_SYS_DYLIB_SYMBOL, NULL, &xr_native_sys_dylib_symbol, NULL, false, "sys", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_SYS_DYLIB_CLOSE, NULL, &xr_native_sys_dylib_close, NULL, false, "sys", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_SYS_DYLIB_LAST_ERROR, NULL, &xr_native_sys_dylib_last_error, NULL, false, "sys", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_OS_PLATFORM, NULL, &xr_native_os_platform, NULL, false, "os", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_OS_ARCH, NULL, &xr_native_os_arch, NULL, false, "os", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_OS_GETENV, NULL, &xr_native_os_getenv, NULL, false, "os", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_OS_SETENV, NULL, &xr_native_os_setenv, NULL, false, "os", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_OS_UNSETENV, NULL, &xr_native_os_unsetenv, NULL, false, "os", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_OS_ENVIRON_BLOCK, NULL, &xr_native_os_environ_block, NULL, false, "os", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_OS_EXIT, NULL, &xr_native_os_exit, NULL, false, "os", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_OS_GETPID, NULL, &xr_native_os_getpid, NULL, false, "os", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_OS_GETCWD, NULL, &xr_native_os_getcwd, NULL, false, "os", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_OS_HOSTNAME, NULL, &xr_native_os_hostname, NULL, false, "os", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_OS_SYSTEM_USERNAME, NULL, &xr_native_os_system_username, NULL, false, "os", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_OS_SYSTEM_HOMEDIR, NULL, &xr_native_os_system_homedir, NULL, false, "os", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_OS_CPU_COUNT, NULL, &xr_native_os_cpu_count, NULL, false, "os", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_SYS_PIN_TO_CPU, NULL, &xr_native_sys_pin_to_cpu, NULL, false, "sys", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_OS_UID, NULL, &xr_native_os_uid, NULL, false, "os", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_OS_GID, NULL, &xr_native_os_gid, NULL, false, "os", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_OS_PPID, NULL, &xr_native_os_ppid, NULL, false, "os", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_OS_KILL, NULL, &xr_native_os_kill, NULL, false, "os", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_OS_TOTAL_MEMORY, NULL, &xr_native_os_total_memory, NULL, false, "os", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_OS_FREE_MEMORY, NULL, &xr_native_os_free_memory, NULL, false, "os", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_OS_UPTIME, NULL, &xr_native_os_uptime, NULL, false, "os", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_OS_LOADAVG, NULL, &xr_native_os_loadavg, NULL, false, "os", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_IO_CHMOD, NULL, &xr_native_io_chmod, NULL, false, "io", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_IO_CHDIR, NULL, &xr_native_io_chdir, NULL, false, "io", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_IO_STAT, NULL, &xr_native_io_stat, NULL, false, "io", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_IO_MKDIR, NULL, &xr_native_io_mkdir, NULL, false, "io", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_IO_RMDIR, NULL, &xr_native_io_rmdir, NULL, false, "io", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_IO_REMOVE, NULL, &xr_native_io_remove, NULL, false, "io", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_IO_RENAME, NULL, &xr_native_io_rename, NULL, false, "io", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_IO_UTIME_NOW, NULL, &xr_native_io_utime_now, NULL, false, "io", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_IO_SYMLINK, NULL, &xr_native_io_symlink, NULL, false, "io", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_IO_READLINK, NULL, &xr_native_io_readlink, NULL, false, "io", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_IO_REALPATH, NULL, &xr_native_io_realpath, NULL, false, "io", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_IO_MAKE_TEMP_DIR, NULL, &xr_native_io_make_temp_dir, NULL, false, "io", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_IO_MAKE_TEMP_FILE, NULL, &xr_native_io_make_temp_file, NULL, false, "io", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_IO_DIR_OPEN, NULL, &xr_native_io_dir_open, NULL, false, "io", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_IO_DIR_NEXT, NULL, &xr_native_io_dir_next, NULL, false, "io", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_IO_DIR_CLOSE, NULL, &xr_native_io_dir_close, NULL, false, "io", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_PATH_GETCWD, NULL, &xr_native_path_getcwd, NULL, false, "path", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_OS_EXEC_PIPE_CLOSE, NULL, &xr_native_os_exec_pipe_close, NULL, false, "os", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}},
+    {XR_NATIVE_CALLABLE_OS_EXEC_SHELL_SPAWN, NULL, &xr_native_os_exec_shell_spawn, NULL, false, "os", "stdlib/defs/core.def", {{233,156,250,243,13,146,44,218,150,190,115,177,215,94,191,53,184,175,19,255,90,166,61,203,96,190,25,13,64,112,4,103}}}
 };

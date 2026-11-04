@@ -57,6 +57,26 @@ static XrXirValueStatus pointer_new(XrXirDomain *domain,const XrXirTypeArena *ar
     XrXirValue value={(uint32_t)type,0,0};memcpy(&value.payload,&pointer,sizeof(pointer));
     *output=value;return XR_XIR_VALUE_OK;
 }
+XR_FUNC XrXirValueStatus xir_pointer_origin_create(XrXirDomain *domain,XirPointerOrigin **output) {
+    if(!domain||!output||*output||!xr_xir_domain_current(domain)||xr_xir_domain_is_compile(domain))return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();XrXirValueStatus status=pointer_origin_new(domain,output);
+    xr_xir_value_graph_end();return status;
+}
+XR_FUNC void xir_pointer_origin_invalidate(XirPointerOrigin **owner) {
+    if(!owner)return;
+    xr_xir_value_graph_begin();pointer_origin_close(owner);xr_xir_value_graph_end();
+}
+XR_FUNC XrXirValueStatus xir_pointer_origin_readonly(XirPointerOrigin *origin,
+    const XrXirTypeArena *arena,XrXirType type,uintptr_t address,XrXirValue *output) {
+    xr_xir_value_graph_begin();XrXirValueStatus status=XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrXirTypes *types=xr_xir_compile_type_arena_types(arena);
+    if(origin&&origin->active&&!origin->page&&!origin->exclusive&&pointer_type(arena,type)&&
+        !xr_xir_pointer_writable(types,type)) {
+        XirPointer source={.origin=origin,.generation=origin->generation,.address=address};
+        status=pointer_new(origin->domain,arena,type,&source,output);
+    }
+    xr_xir_value_graph_end();return status;
+}
 static bool pointer_argument(const XrXirValue *value,bool writable,const XirPointer **output) {
     if (!xr_xir_value_valid(value) || !pointer_type(xr_xir_value_arena(value),(XrXirType)value->type)) return false;
     const XirObject *object=object_pointer(value);

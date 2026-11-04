@@ -38,6 +38,9 @@ static XrXirCallStatus generation_owner(XrXirInstance *instance) {
     if (!instance_owner_current(instance)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!instance || instance->owner) return XR_XIR_CALL_BAD_ARGUMENT;
     if (instance_busy(instance)) return XR_XIR_CALL_BUSY;
+    /* Registrations are operation/generation-owned. No generation transfer is
+     * inferred from a FunctionBinding with matching physical signature. */
+    if (instance->signals) return XR_XIR_CALL_BAD_STATE;
     return instance->stopping ? XR_XIR_CALL_BAD_STATE : XR_XIR_CALL_READY;
 }
 static XrXirCallStatus generation_storage_receive(XrXirInstance *candidate,
@@ -209,11 +212,14 @@ XR_FUNC XrXirCallStatus xr_xir_instance_generation_abort(XrXirInstance *instance
     XrXirInstance *candidate = instance->prepared_generation;
     if (!generation || !candidate || candidate->generation_id != generation) return XR_XIR_CALL_BAD_STATE;
     XR_CHECK(instance->generation_next == candidate, "the sole candidate is the newest owned generation");
-    instance->generation_next = candidate->generation_next;
-    instance->prepared_generation = NULL;
+    XrXirInstance *next=candidate->generation_next;
     XrXirInstance *previous = candidate->previous_generation;
     instance->driving = true;
     status = instance_free_state(candidate);
+    if(status==XR_XIR_CALL_CLOSE_FAILED) {
+        instance->driving=false;return status;
+    }
+    instance->generation_next=next;instance->prepared_generation=NULL;
     instance->active_generation = previous;
     instance->driving = false;
     return status;

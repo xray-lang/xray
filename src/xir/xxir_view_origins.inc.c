@@ -22,6 +22,7 @@ typedef struct ViewOriginQuery {
     const uint32_t *candidates;
     const XrXirFunction *function;
     uint32_t candidate,function_index;
+    XrCompileRequestControl *control;
     ViewOriginSet tasks,paths;
 } ViewOriginQuery;
 
@@ -128,9 +129,6 @@ static XrXirStatus view_origin_candidates(
             XrXirStatus status=xir_native_callable_verify(module,f);if (status!=XR_XIR_OK) return status;
             candidates[f]=native==XR_NATIVE_CALLABLE_BUFFER_SLICE_MUT_BEGIN?2:0;continue;
         }
-        /* A pointer without a receiver summary must prove a nonborrowed
-         * producer in every return path. A parameter is never such evidence. */
-        if (view_pointer(module->types,body->result)) {candidates[f]=UINT32_MAX-1u;continue;}
         for (uint32_t p=captures[f];p<body->parameter_count;++p) {
 
             bool reference=xr_xir_type_is_cell(module->types,body->parameters[p]);
@@ -138,6 +136,13 @@ static XrXirStatus view_origin_candidates(
             if (!leaves) continue;
             count=count>1 || leaves>1 ? 2u : count+leaves;candidates[f]=p;
             permission=reference ? XR_XIR_VIEW_MUTABLE : view_flags_at(module->types,flags,body->parameters[p]);
+        }
+        if (view_pointer_result(module->types,body->result)) {
+            if (native==XR_NATIVE_CALLABLE_SYS_DYLIB_SYMBOL) {
+                XrXirStatus status=xir_native_callable_verify(module,f);if (status!=XR_XIR_OK) return status;
+            }
+            if (!count) {candidates[f]=UINT32_MAX-1u;continue;}
+            if (count!=1 || !view_pointer_result(module->types,body->parameters[candidates[f]]))return XR_XIR_BAD_TYPE;
         }
         if (count!=1 || ((result&XR_XIR_VIEW_MUTABLE) && !(permission&XR_XIR_VIEW_MUTABLE)))
             return XR_XIR_BAD_TYPE;
@@ -181,13 +186,20 @@ static XrXirStatus view_origin_tuple(ViewOriginQuery *q,const XrXirInstruction *
     }
     return operand==op->args[1] ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
 }
+#include "xxir_view_pointer_calls.inc.c"
 static XrXirStatus view_origin_call(ViewOriginQuery *q,const XrXirInstruction *op) {
     uint32_t candidate=UINT32_MAX;
     if (op->op==XR_XIR_CALL) {
         if (op->immediate<0 || (uint64_t)op->immediate>=q->module->function_count) return XR_XIR_BAD_STRUCTURE;
         candidate=q->candidates[op->immediate];
     } else {
-        if (view_pointer(q->module->types,op->type)) return XR_XIR_UNRESOLVED;
+        if (view_pointer_result(q->module->types,op->type)) {
+            if(op->immediate<0 || (uint64_t)op->immediate>UINT32_MAX)return XR_XIR_BAD_STRUCTURE;
+            XrXirStatus status=view_pointer_indirect(q->module,q->function_index,
+                (uint32_t)op->immediate,q->candidates,q->control,&candidate);
+            if(status!=XR_XIR_OK)return status;
+            if(candidate==UINT32_MAX)return XR_XIR_UNRESOLVED;
+        } else {
         if (op->immediate<0 || (uint64_t)op->immediate>=
             (uint64_t)q->function->parameter_count+q->function->instruction_count) return XR_XIR_BAD_STRUCTURE;
         const XrXirTypeNode *signature=xr_xir_callable_signature(q->module->types,
@@ -195,6 +207,7 @@ static XrXirStatus view_origin_call(ViewOriginQuery *q,const XrXirInstruction *o
         if (!signature) return XR_XIR_BAD_TYPE;
         XrXirStatus status=view_return_candidate(q->module->types,q->flags,signature,&candidate);
         if (status!=XR_XIR_OK) return status;
+        }
     }
     if (candidate==UINT32_MAX-1u) return XR_XIR_OK;
     if (candidate==UINT32_MAX || candidate>=op->args[1] || op->args[0]>q->function->operand_count ||
@@ -273,7 +286,7 @@ static XrXirStatus view_origins_verify(const XrXirCompileContext *context,
         const XrXirFunction *body=&module->functions[f];
         if (module->declarations && module->declarations->functions[f].native_callable) continue;
         ViewOriginQuery query={.context=context,.module=module,.construction=construction,.flags=flags,
-            .candidates=candidates,.function=body,.function_index=f,.candidate=candidates[f]};
+            .candidates=candidates,.function=body,.function_index=f,.candidate=candidates[f],.control=control};
         for (uint32_t b=0;b<body->block_count && status==XR_XIR_OK;++b) {
 
             uint32_t last=body->blocks[b].first+body->blocks[b].count-1u;

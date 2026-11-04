@@ -1,7 +1,7 @@
 // os — typed public process/environment surface over private platform syscalls.
 
 import sys
-import { Pipe, ProcessOptions } from sys
+import { Pipe, Process, ProcessOptions } from sys
 
 const EXEC_READ_CHUNK_BYTES: i64 = 65536
 const DEFAULT_EXEC_CAPTURE_BYTES: i64 = 16777216
@@ -24,9 +24,9 @@ export final class ExecResult {
     }
 }
 
-final class _CapturedOutput {
-    bytes: Array<u8>
-    truncated: bool
+final class _CapturedOutput implements Sendable {
+    const bytes: Array<u8>
+    const truncated: bool
 
     init(bytes: Array<u8>, truncated: bool) {
         this.bytes = bytes
@@ -36,11 +36,9 @@ final class _CapturedOutput {
 
 // A capture limit bounds retained memory, not pipe progress. Once the limit is
 // reached the reader keeps draining so a child cannot deadlock on a full pipe.
-fn _capturePipe(pipe: move Pipe, maxBytes: i64) -> _CapturedOutput? {
-    defer {
-        pipe.closeRead()
-        pipe.closeWrite()
-    }
+fn _capturePipe(ends: (i64, i64), maxBytes: i64) -> _CapturedOutput? {
+    defer { __execPipeClose(ends.0, ends.1) }
+    var pipe = Pipe(ends.0, ends.1)
     var out = Array<u8>()
     var truncated = false
     while (true) {
@@ -170,42 +168,49 @@ export fn exec(command: string, maxStdoutBytes: i64 = DEFAULT_EXEC_CAPTURE_BYTES
         return null
     }
 
+    var stdoutRead = -1
+    var stdoutWrite = -1
+    var stderrRead = -1
+    var stderrWrite = -1
+    defer { __execPipeClose(stdoutRead, stdoutWrite) }
+    defer { __execPipeClose(stderrRead, stderrWrite) }
+
     var stdoutOpened = sys.Pipe.open()
     if (stdoutOpened == null) { return null }
     var stdoutPipe = stdoutOpened!
+    stdoutRead = stdoutPipe.readEnd()
+    stdoutWrite = stdoutPipe.writeEnd()
 
     var stderrOpened = sys.Pipe.open()
-    if (stderrOpened == null) {
-        (move stdoutPipe).close()
-        return null
-    }
+    if (stderrOpened == null) { return null }
     var stderrPipe = stderrOpened!
+    stderrRead = stderrPipe.readEnd()
+    stderrWrite = stderrPipe.writeEnd()
 
-    var program = "/bin/sh"
-    var args: Array<string> = ["-c", command]
+    var spawned: Process? = null
     if (platform() == "windows") {
-        program = "cmd.exe"
-        args = ["/D", "/S", "/C", command]
+        var id = __execShellSpawn(command, stdoutWrite, stderrWrite)
+        if (id > 0) { spawned = Process(id, false) }
+    } else {
+        var program = "/bin/sh"
+        var args: Array<string> = ["-c", command]
+        spawned = sys.Process.spawn(program, args,
+            ProcessOptions(null, null, null, stdoutWrite, stderrWrite))
     }
-
-    var spawned = sys.Process.spawn(program, args,
-        ProcessOptions(null, null, null, stdoutPipe.writeEnd(), stderrPipe.writeEnd()))
-    if (spawned == null) {
-        (move stdoutPipe).close()
-        (move stderrPipe).close()
-        return null
-    }
+    if (spawned == null) { return null }
 
     // Process.spawn borrows redirection endpoints. The parent must close both
     // write ends before waiting, otherwise EOF can never reach the readers.
     var stdoutWriteClosed = stdoutPipe.closeWrite()
     var stderrWriteClosed = stderrPipe.closeWrite()
+    if (stdoutWriteClosed) { stdoutWrite = -1 }
+    if (stderrWriteClosed) { stderrWrite = -1 }
     var stdoutCapture: _CapturedOutput? = null
     var stderrCapture: _CapturedOutput? = null
     var exitCode = -1
     scope {
-        var stdoutTask = go _capturePipe(move stdoutPipe, maxStdoutBytes)
-        var stderrTask = go _capturePipe(move stderrPipe, maxStderrBytes)
+        var stdoutTask = go _capturePipe((stdoutRead, stdoutWrite), maxStdoutBytes)
+        var stderrTask = go _capturePipe((stderrRead, stderrWrite), maxStderrBytes)
         exitCode = spawned!.wait()
         stdoutCapture = await stdoutTask
         stderrCapture = await stderrTask

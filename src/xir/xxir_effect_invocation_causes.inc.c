@@ -33,8 +33,16 @@ static XrXirStatus effect_invocation_local(EffectInvocationWorkspace *owner,
         return XR_XIR_BAD_STRUCTURE;
     EffectBodyFunctionDimensions head={0};XrXirStatus status=effect_invocation_dimensions(&owner->read,owner->final.nodes[node].body,&head);
     if (status!=XR_XIR_OK) return status;
-    if (witness.instruction==UINT32_MAX ? witness.cause!=XR_XIR_ROOT_CAUSE_INITIALIZER :
+    if (witness.instruction==UINT32_MAX ?
+        (witness.cause!=XR_XIR_ROOT_CAUSE_INITIALIZER && witness.cause!=XR_XIR_ROOT_CAUSE_NATIVE) :
         witness.instruction>=head.instruction_count) return XR_XIR_BAD_STRUCTURE;
+    if (witness.cause==XR_XIR_ROOT_CAUSE_NATIVE) {
+        bool native_root=false;
+        status=effect_invocation_native_root(owner->final.material,owner->final.nodes[node].body,&native_root);
+        if (status!=XR_XIR_OK) return status;
+        if (!native_root || atom || witness.instruction!=UINT32_MAX || witness.callee!=UINT32_MAX ||
+            witness.slot!=UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
+    }
 
     EffectInvocationCause *to=&owner->final.nodes[node].causes[atom];
     if (to->witness.cause && !effect_root_cause_before(&witness,&to->witness)) return XR_XIR_OK;

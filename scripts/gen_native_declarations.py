@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Project governed native value declarations into shared compiler metadata."""
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 import argparse
 import hashlib
 import json
@@ -1124,6 +1124,263 @@ def render_sys_thread_yield(declarations):
         '    {XR_NATIVE_CALLABLE_SYS_THREAD_YIELD, NULL, &xr_native_sys_thread_yield, NULL, false, "sys", "stdlib/defs/core.def", FINGERPRINT}']
 
 
+def render_sys_signal(declarations):
+    candidates = [row for row in declarations if row.module == 'sys' and row.name == '__onSignal']
+    if len(candidates) != 1:
+        raise ValueError('Signal registration requires its sole governed declaration')
+    row = candidates[0]
+    if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+            row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
+            row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
+            row.ret, row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
+            '(signal: i64, handler: fn(): ()): bool', '2', 'vv', 'internal', '', '', '',
+            'system', 'sys_on_signal', 'xrt_sys_on_signal', True, 'method', '', 'normal', '', '',
+            'value', False, None, (), ''):
+        raise ValueError('Signal registration differs from its complete source contract')
+    return [
+        'static const XrNativeParameter xr_native_sys_on_signal_parameters[] = {',
+        '    {"signal", "i64", XR_NATIVE_TERM_I64, false, false},',
+        '    {"handler", "fn(): ()", XR_NATIVE_TERM_UNIT_CALLBACK, false, false},',
+        '};',
+        'static const XrNativeMemberDeclaration xr_native_sys_on_signal = {',
+        '    3, "__onSignal", "(signal: i64, handler: fn(): ()): bool", "bool", 0, 0, XR_NATIVE_RECEIVER_READ,',
+        '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
+        '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_sys_on_signal_parameters, 2, XR_NATIVE_TERM_BOOL',
+        '};'], [
+        '    {XR_NATIVE_CALLABLE_SYS_ON_SIGNAL, NULL, &xr_native_sys_on_signal, NULL, false, "sys", "stdlib/defs/core.def", FINGERPRINT}']
+
+
+def render_sys_thread_tokens(declarations):
+    contracts = (
+        ('__threadLocalId', '(): i64', '', 'sys_thread_local_id', 'xrt_sys_thread_local_id', 'SYS_THREAD_LOCAL_ID', 'I64', 4),
+        ('__threadLocalAlive', '(id: i64): bool', 'v', 'sys_thread_local_alive', 'xrt_sys_thread_local_alive', 'SYS_THREAD_LOCAL_ALIVE', 'BOOL', 5),
+    )
+    lines, rows = [], []
+    for name, signature, arguments, vm, aot, identity, result, ordinal in contracts:
+        candidates = [row for row in declarations if row.module == 'sys' and row.name == name]
+        if len(candidates) != 1:
+            raise ValueError('Thread token callable requires its sole governed declaration: ' + name)
+        row = candidates[0]
+        if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+                row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
+                row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
+                row.ret, row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
+                signature, str(len(arguments)), arguments, 'internal', '', '', '', 'system', vm,
+                aot, True, 'method', '', 'normal', '', '', 'value', False, None, (), ''):
+            raise ValueError('Thread token callable differs from its complete source contract: ' + name)
+        symbol = 'xr_native_' + identity.lower()
+        if arguments:
+            lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {',
+                      '    {"id", "i64", XR_NATIVE_TERM_I64, false, false},', '};']
+        lines += ['static const XrNativeMemberDeclaration ' + symbol + ' = {',
+            '    ' + str(ordinal) + ', ' + c_string(name) + ', ' + c_string(signature) + ', ' +
+            c_string('bool' if arguments else 'i64') + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
+            '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
+            '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + (symbol + '_parameters' if arguments else 'NULL') +
+            ', ' + str(len(arguments)) + ', XR_NATIVE_TERM_' + result, '};']
+        rows += ['    {XR_NATIVE_CALLABLE_' + identity + ', NULL, &' + symbol + ', NULL, false, "sys", "stdlib/defs/core.def", FINGERPRINT}']
+    return lines, rows
+
+
+def render_sys_pipes(declarations):
+    contracts = (
+        ('__pipeOpen', '(): (i64, i64)?', 'SYS_PIPE_OPEN', 'NULLABLE_I64_PAIR', '(i64, i64)?', (), 'sys_pipe_open'),
+        ('__pipeRead', '(handle: i64, maxBytes: i64): Array<u8>?', 'SYS_PIPE_READ', 'NULLABLE_ARRAY_U8', 'Array<u8>?', (('handle', 'i64', 'I64'), ('maxBytes', 'i64', 'I64')), 'sys_pipe_read'),
+        ('__pipeWrite', '(handle: i64, data: Array<u8>): i64', 'SYS_PIPE_WRITE', 'I64', 'i64', (('handle', 'i64', 'I64'), ('data', 'Array<u8>', 'ARRAY_U8')), 'sys_pipe_write'),
+        ('__pipeClose', '(handle: i64): bool', 'SYS_PIPE_CLOSE', 'BOOL', 'bool', (('handle', 'i64', 'I64'),), 'sys_pipe_close'),
+    )
+    expected_provider = {
+        'contract': 'xray.runtime.provider.v1/io',
+        'operation': 'xray.runtime.provider-operation.v1/io/pipe-open',
+        'logical': {'parameters': (), 'result_type': '(i64, i64)?', 'result_owner': 'trivial',
+            'error': 'none', 'panic': 'none', 'suspend': 'never', 'refusal': 'trap',
+            'resources': tuple({'resource': 'xray.runtime.resource.v1/pipe-endpoint',
+                'value': 'result.some.' + str(i), 'action': 'acquire', 'when': 'result-present'} for i in range(2)),
+            'effects': ('io',), 'threads': 'any', 'reentry': 'allowed', 'callbacks': 'none',
+            'platforms': ('linux', 'macos', 'windows'), 'profiles': ('hosted',)},
+        'host': {'adapter': 'optional-i64-pair-pipe-create', 'header': 'os/os_pipe.h', 'symbol': 'xr_pipe_create'}}
+    expected_close = {
+        'contract': 'xray.runtime.provider.v1/io',
+        'operation': 'xray.runtime.provider-operation.v1/io/pipe-close',
+        'logical': {'parameters': ({'type': 'i64', 'mode': 'in', 'owner': 'trivial'},),
+            'result_type': 'bool', 'result_owner': 'trivial', 'error': 'none', 'panic': 'none',
+            'suspend': 'never', 'refusal': 'trap',
+            'resources': ({'resource': 'xray.runtime.resource.v1/pipe-endpoint',
+                'value': 'parameter.0', 'action': 'consume', 'when': 'result-true'},),
+            'effects': ('io',), 'threads': 'any', 'reentry': 'allowed', 'callbacks': 'none',
+            'platforms': ('linux', 'macos', 'windows'), 'profiles': ('hosted',)},
+        'host': {'adapter': 'bool-i64-pipe-close', 'header': 'os/os_pipe.h', 'symbol': 'xr_pipe_close'}}
+    lines, rows = [], []
+    for at, (name, signature, identity, term, result, parameters, vm) in enumerate(contracts):
+        candidates = [r for r in declarations if r.module == 'sys' and r.name == name]
+        if len(candidates) != 1:
+            raise ValueError('Pipe callable requires its sole governed declaration: ' + name)
+        row = candidates[0]
+        suspend = at in (1, 2)
+        if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+                row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
+                row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
+                row.ret, row.semantic_intrinsic, row.caps, row.suspension_kind) != (
+                signature, str(len(parameters)), 'v' * len(parameters), 'internal', 'nothrow' if at in (0, 3) else '', '',
+                'fresh' if at == 1 else '', 'system', vm + ('_yieldable' if suspend else ''),
+                'xrt_' + vm, True, 'method', '', 'yieldable' if suspend else 'normal', '', '', 'value', False, (), ''):
+            raise ValueError('Pipe callable differs from its complete source contract: ' + name)
+        try:
+            provider = asdict(row.provider_declaration) if row.provider_declaration else None
+        except TypeError as error:
+            raise ValueError('Malformed pipe provider: ' + name) from error
+        if provider != (expected_provider if at == 0 else expected_close if at == 3 else None):
+            raise ValueError('Pipe provider differs from its complete source contract: ' + name)
+        symbol = 'xr_native_' + identity.lower()
+        if parameters:
+            lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {']
+            lines += ['    {' + c_string(n) + ', ' + c_string(t) + ', XR_NATIVE_TERM_' + k + ', false, false},' for n, t, k in parameters]
+            lines += ['};']
+        lines += ['static const XrNativeMemberDeclaration ' + symbol + ' = {',
+            '    ' + str(at + 6) + ', ' + c_string(name) + ', ' + c_string(signature) + ', ' + c_string(result) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
+            '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
+            '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + (symbol + '_parameters' if parameters else 'NULL') + ', ' + str(len(parameters)) + ', XR_NATIVE_TERM_' + term, '};']
+        rows += ['    {XR_NATIVE_CALLABLE_' + identity + ', NULL, &' + symbol + ', NULL, false, "sys", "stdlib/defs/core.def", FINGERPRINT}']
+    return lines, rows
+
+
+def render_sys_processes(declarations):
+    contracts = (
+        ('__processSpawn', '(program: string, args: Array<string>, cwd: string?, envKeys: Array<string>?, envValues: Array<string>?, stdinRead: i64?, stdoutWrite: i64?, stderrWrite: i64?, detached: bool): i64', 'SYS_PROCESS_SPAWN', 'I64', 'i64', (('program', 'string', 'STRING'), ('args', 'Array<string>', 'ARRAY_STRING'), ('cwd', 'string?', 'NULLABLE_STRING'), ('envKeys', 'Array<string>?', 'NULLABLE_ARRAY_STRING'), ('envValues', 'Array<string>?', 'NULLABLE_ARRAY_STRING'), ('stdinRead', 'i64?', 'NULLABLE_I64'), ('stdoutWrite', 'i64?', 'NULLABLE_I64'), ('stderrWrite', 'i64?', 'NULLABLE_I64'), ('detached', 'bool', 'BOOL')), 'sys_process_spawn'),
+        ('__processTryWait', '(id: i64): i64?', 'SYS_PROCESS_TRY_WAIT', 'NULLABLE_I64', 'i64?', (('id', 'i64', 'I64'),), 'sys_process_try_wait'),
+        ('__processKill', '(id: i64, signal: i64): bool', 'SYS_PROCESS_KILL', 'BOOL', 'bool', (('id', 'i64', 'I64'), ('signal', 'i64', 'I64')), 'sys_process_kill'),
+    )
+    lines, rows = [], []
+    for at, (name, signature, identity, term, result, parameters, vm) in enumerate(contracts):
+        candidates = [r for r in declarations if r.module == 'sys' and r.name == name]
+        if len(candidates) != 1:
+            raise ValueError('Process callable requires its sole governed declaration: ' + name)
+        row = candidates[0]
+        if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+                row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
+                row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
+                row.ret, row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
+                signature, str(len(parameters)), 'svvvvvvvv' if at == 0 else 'v' * len(parameters),
+                'internal', '', '', '', 'system', vm, 'xrt_' + vm, True, 'method', '', 'normal', '', '',
+                'value', False, None, (), ''):
+            raise ValueError('Process callable differs from its complete source contract: ' + name)
+        symbol = 'xr_native_' + identity.lower()
+        lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {']
+        lines += ['    {' + c_string(n) + ', ' + c_string(t) + ', XR_NATIVE_TERM_' + k + ', false, false},' for n, t, k in parameters]
+        lines += ['};', 'static const XrNativeMemberDeclaration ' + symbol + ' = {',
+            '    ' + str(at + 10) + ', ' + c_string(name) + ', ' + c_string(signature) + ', ' + c_string(result) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
+            '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
+            '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + symbol + '_parameters, ' + str(len(parameters)) + ', XR_NATIVE_TERM_' + term, '};']
+        rows += ['    {XR_NATIVE_CALLABLE_' + identity + ', NULL, &' + symbol + ', NULL, false, "sys", "stdlib/defs/core.def", FINGERPRINT}']
+    return lines, rows
+
+
+def render_os_exec_shell_spawn(declarations):
+    candidates = [r for r in declarations if r.module == 'os' and r.name == '__execShellSpawn']
+    if len(candidates) != 1:
+        raise ValueError('System shell spawn requires its sole governed declaration')
+    row = candidates[0]
+    if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+            row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct, row.aot_kind,
+            row.link_object, row.vm_binding, row.vm_ifdef, row.define, row.ret,
+            row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
+            '(command: string, stdoutToken: i64, stderrToken: i64): i64', '3', 'sii', 'internal', '', '', 'fresh', 'system', '', '', False, '',
+            '', 'normal', '', '', 'value', False, None, (), ''):
+        raise ValueError('System shell spawn differs from its complete source contract')
+    return [
+        'static const XrNativeParameter xr_native_os_exec_shell_spawn_parameters[] = {',
+        '    {"command", "string", XR_NATIVE_TERM_STRING, false, false},',
+        '    {"stdoutToken", "i64", XR_NATIVE_TERM_I64, false, false},',
+        '    {"stderrToken", "i64", XR_NATIVE_TERM_I64, false, false},',
+        '};',
+        'static const XrNativeMemberDeclaration xr_native_os_exec_shell_spawn = {',
+        '    1, "__execShellSpawn", "(command: string, stdoutToken: i64, stderrToken: i64): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,',
+        '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
+        '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_os_exec_shell_spawn_parameters, 3, XR_NATIVE_TERM_I64,',
+        '};',
+    ], ['    {XR_NATIVE_CALLABLE_OS_EXEC_SHELL_SPAWN, NULL, &xr_native_os_exec_shell_spawn, NULL, false, "os", "stdlib/defs/core.def", FINGERPRINT}']
+
+
+def render_os_exec_pipe_close(declarations):
+    candidates = [r for r in declarations if r.module == 'os' and r.name == '__execPipeClose']
+    if len(candidates) != 1:
+        raise ValueError('Shell capture cleanup requires its sole governed declaration')
+    row = candidates[0]
+    if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+            row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct, row.aot_kind,
+            row.link_object, row.vm_binding, row.vm_ifdef, row.define, row.ret,
+            row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
+            '(readToken: i64, writeToken: i64): bool', '2', 'ii', 'internal', '', '', 'fresh', 'system', '', '', False, '',
+            '', 'normal', '', '', 'value', False, None, (), ''):
+        raise ValueError('Shell capture cleanup differs from its complete source contract')
+    return [
+        'static const XrNativeParameter xr_native_os_exec_pipe_close_parameters[] = {',
+        '    {"readToken", "i64", XR_NATIVE_TERM_I64, false, false},',
+        '    {"writeToken", "i64", XR_NATIVE_TERM_I64, false, false},',
+        '};',
+        'static const XrNativeMemberDeclaration xr_native_os_exec_pipe_close = {',
+        '    1, "__execPipeClose", "(readToken: i64, writeToken: i64): bool", "bool", 0, 0, XR_NATIVE_RECEIVER_READ,',
+        '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
+        '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_os_exec_pipe_close_parameters, 2, XR_NATIVE_TERM_BOOL,',
+        '};',
+    ], ['    {XR_NATIVE_CALLABLE_OS_EXEC_PIPE_CLOSE, NULL, &xr_native_os_exec_pipe_close, NULL, false, "os", "stdlib/defs/core.def", FINGERPRINT}']
+
+
+def render_path_getcwd(declarations):
+    candidates = [r for r in declarations if r.module == 'path' and r.name == '__getcwd']
+    if len(candidates) != 1:
+        raise ValueError('Path query requires its sole governed declaration')
+    row = candidates[0]
+    if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+            row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct, row.aot_kind,
+            row.link_object, row.vm_binding, row.vm_ifdef, row.define, row.ret,
+            row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
+            '(): string', '0', '', 'internal', '', '', 'fresh', 'system', '', '', False, '',
+            '', 'normal', '', '', 'value', False, None, (), ''):
+        raise ValueError('Path query differs from its complete source contract')
+    return [
+        'static const XrNativeMemberDeclaration xr_native_path_getcwd = {',
+        '    1, "__getcwd", "(): string", "string", 0, 0, XR_NATIVE_RECEIVER_READ,',
+        '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
+        '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_STRING,',
+        '};',
+    ], ['    {XR_NATIVE_CALLABLE_PATH_GETCWD, NULL, &xr_native_path_getcwd, NULL, false, "path", "stdlib/defs/core.def", FINGERPRINT}']
+
+
+def render_sys_dylibs(declarations):
+    contracts = (
+        ('__dylibOpen', '(path: Path): i64', 'SYS_DYLIB_OPEN', 'I64', 'i64', (('path', 'Path', 'PATH'),), 'sys_dylib_open'),
+        ('__dylibSymbol', '(handle: i64, name: string): Ptr<u8>?', 'SYS_DYLIB_SYMBOL', 'NULLABLE_PTR_U8', 'Ptr<u8>?', (('handle', 'i64', 'I64'), ('name', 'string', 'STRING')), 'sys_dylib_symbol'),
+        ('__dylibClose', '(handle: i64): bool', 'SYS_DYLIB_CLOSE', 'BOOL', 'bool', (('handle', 'i64', 'I64'),), 'sys_dylib_close'),
+        ('__dylibLastError', '(): string', 'SYS_DYLIB_LAST_ERROR', 'STRING', 'string', (), 'sys_dylib_last_error'),
+    )
+    lines, rows = [], []
+    for at, (name, signature, identity, term, result, parameters, vm) in enumerate(contracts):
+        candidates = [r for r in declarations if r.module == 'sys' and r.name == name]
+        if len(candidates) != 1:
+            raise ValueError('Dylib callable requires its sole governed declaration: ' + name)
+        row = candidates[0]
+        if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+                row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
+                row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
+                row.ret, row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
+                signature, str(len(parameters)), ('p', 'vs', 'v', '')[at],
+                'internal', '', '', 'fresh' if at == 3 else '', 'system', vm, 'xrt_' + vm, True, 'method', '', 'normal', '', '',
+                'value', False, None, (), ''):
+            raise ValueError('Dylib callable differs from its complete source contract: ' + name)
+        symbol = 'xr_native_' + identity.lower()
+        if parameters:
+            lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {']
+            lines += ['    {' + c_string(n) + ', ' + c_string(t) + ', XR_NATIVE_TERM_' + k + ', false, false},' for n, t, k in parameters]
+            lines += ['};']
+        lines += ['static const XrNativeMemberDeclaration ' + symbol + ' = {',
+            '    ' + str(at + 13) + ', ' + c_string(name) + ', ' + c_string(signature) + ', ' + c_string(result) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
+            '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
+            '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + (symbol + '_parameters' if parameters else 'NULL') + ', ' + str(len(parameters)) + ', XR_NATIVE_TERM_' + term, '};']
+        rows += ['    {XR_NATIVE_CALLABLE_' + identity + ', NULL, &' + symbol + ', NULL, false, "sys", "stdlib/defs/core.def", FINGERPRINT}']
+    return lines, rows
+
+
 def render_cpu_callables(declarations):
     contracts = (
         ('os', '__cpuCount', '(): i64', 'os_cpuCount', 'xrt_os_cpu_count', 'OS_CPU_COUNT', 'I64', 13),
@@ -1482,6 +1739,21 @@ def render_unicode_callable(root, decoder):
     sys_lines, sys_rows = render_sys_thread_yield(declarations)
     buffer_lines += sys_lines
     buffer_rows += sys_rows
+    signal_lines, signal_rows = render_sys_signal(declarations)
+    buffer_lines += signal_lines
+    buffer_rows += signal_rows
+    thread_lines, thread_rows = render_sys_thread_tokens(declarations)
+    buffer_lines += thread_lines
+    buffer_rows += thread_rows
+    pipe_lines, pipe_rows = render_sys_pipes(declarations)
+    buffer_lines += pipe_lines
+    buffer_rows += pipe_rows
+    process_lines, process_rows = render_sys_processes(declarations)
+    buffer_lines += process_lines
+    buffer_rows += process_rows
+    dylib_lines, dylib_rows = render_sys_dylibs(declarations)
+    buffer_lines += dylib_lines
+    buffer_rows += dylib_rows
     os_lines, os_rows = render_os_callables(declarations)
     buffer_lines += os_lines
     buffer_rows += os_rows
@@ -1494,6 +1766,15 @@ def render_unicode_callable(root, decoder):
     io_lines, io_rows = render_io_callables(declarations)
     buffer_lines += io_lines
     buffer_rows += io_rows
+    path_lines, path_rows = render_path_getcwd(declarations)
+    buffer_lines += path_lines
+    buffer_rows += path_rows
+    exec_lines, exec_rows = render_os_exec_pipe_close(declarations)
+    buffer_lines += exec_lines
+    buffer_rows += exec_rows
+    shell_lines, shell_rows = render_os_exec_shell_spawn(declarations)
+    buffer_lines += shell_lines
+    buffer_rows += shell_rows
     digest = hashlib.sha256((root / 'stdlib/defs/core.def').read_text(encoding='utf-8').encode('utf-8')).digest()
     fingerprint = '{{' + ','.join(str(byte) for byte in digest) + '}}'
     return buffer_lines + [

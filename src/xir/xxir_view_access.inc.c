@@ -372,18 +372,20 @@ static uint32_t view_access_operands(const ViewAccess *a,const XrXirInstruction 
 static XrXirStatus view_access_binding(ViewAccess *a,const XrXirInstruction *op,bool *handled) {
     *handled=op->op==XR_XIR_LOCAL_NEW || op->op==XR_XIR_LOCAL_READ || op->op==XR_XIR_LOCAL_WRITE ||
         op->op==XR_XIR_LOCAL_UNINIT || op->op==XR_XIR_OWNED_LOCAL_NEW || op->op==XR_XIR_OWNED_LOCAL_READ ||
+        op->op==XR_XIR_CLEANUP_REGISTER ||
         op->op==XR_XIR_OWNED_LOCAL_WRITE || op->op==XR_XIR_SCALAR_LOCAL_NEW ||
         op->op==XR_XIR_SCALAR_LOCAL_READ || op->op==XR_XIR_SCALAR_LOCAL_WRITE ||
         ((op->op==XR_XIR_PLACE_READ || op->op==XR_XIR_PLACE_WRITE) &&
         xr_xir_place_kind(a->body,op->args[0])==XR_XIR_PLACE_LOCAL);
     if (!*handled) return XR_XIR_OK;
     ViewRootCheck *c=&a->resolver->check;
-    /* Slot copies and replacements transport bindings, not referent payloads.
-     * Borrowed local transfers still require their separate availability proof. */
+    /* Registration retains capture identities; the cleanup body checks actual
+     * accesses. Borrowed transfers still require their availability proof. */
     if (view_flags_at(c->module->types,c->flags,op->type)) return XR_XIR_UNRESOLVED;
     for (uint32_t p=0;p<view_access_operands(a,op);++p) {
 
-        if (view_flags_at(c->module->types,c->flags,xr_xir_operand_type(a->body,op->args[p]))) return XR_XIR_UNRESOLVED;
+        uint32_t value=xr_xir_op_uses_operand_table(op->op)?a->body->operands[op->args[0]+p]:op->args[p];
+        if (view_flags_at(c->module->types,c->flags,xr_xir_operand_type(a->body,value))) return XR_XIR_UNRESOLVED;
     }
     return XR_XIR_OK;
 }

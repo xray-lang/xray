@@ -29,6 +29,10 @@ static void task_core_scan_channels(XrXirTaskExecutor *executor) {
     executor->channel_waiting = false;
     if (executor->root.call) task_core_scan_channel(executor, &executor->root,
         xr_xir_domain_work(executor->config.domain, 1));
+    if (executor->callback.call) task_core_scan_channel(executor,&executor->callback,
+        xr_xir_domain_work(executor->config.domain,1));
+    for (XirGenerator *generator=executor->generators;generator;generator=generator->active_next)
+        task_core_scan_channel(executor,&generator->activation,xr_xir_domain_work(executor->config.domain,1));
     for (XirTask *task = executor->active; task; task = task->active_next)
         task_core_scan_channel(executor, &task->activation, xr_xir_domain_work(executor->config.domain, 1));
 }

@@ -9,8 +9,9 @@
 // only for direct host ABI operations.
 
 import time
+import {Path} from path
 
-enum _SysError {
+export enum BarrierError {
     InvalidBarrierParties
 }
 
@@ -114,8 +115,8 @@ export class OsBarrier {
     private _arrived: Atomic<i64>
     private _generation: Atomic<i64>
 
-    init(parties: i64) {
-        if (parties <= 0) { throw _SysError.InvalidBarrierParties }
+    init(parties: i64) throws(BarrierError) {
+        if (parties <= 0) { throw BarrierError.InvalidBarrierParties }
         this._parties = parties
         this._arrived = Atomic<i64>(0)
         this._generation = Atomic<i64>(0)
@@ -210,22 +211,28 @@ export class Pipe {
     closeRead() -> bool {
         if (this._readHandle < 0) { return true }
         var ok = __pipeClose(this._readHandle)
-        this._readHandle = -1
+        if (ok) { this._readHandle = -1 }
         return ok
     }
 
     closeWrite() -> bool {
         if (this._writeHandle < 0) { return true }
         var ok = __pipeClose(this._writeHandle)
-        this._writeHandle = -1
+        if (ok) { this._writeHandle = -1 }
         return ok
     }
 
     close() -> bool {
         var r = true
-        if (this._readHandle >= 0) { r = __pipeClose(this._readHandle) }
+        if (this._readHandle >= 0) {
+            r = __pipeClose(this._readHandle)
+            if (r) { this._readHandle = -1 }
+        }
         var w = true
-        if (this._writeHandle >= 0) { w = __pipeClose(this._writeHandle) }
+        if (this._writeHandle >= 0) {
+            w = __pipeClose(this._writeHandle)
+            if (w) { this._writeHandle = -1 }
+        }
         if (r) { return w }
         return false
     }
@@ -291,7 +298,7 @@ export class Process {
         return __processKill(this._id, _signalCode(signal))
     }
 
-    static spawn(program: string, args: Array<string> = Array<string>(0), options: ProcessOptions? = null) -> Process? {
+    static spawn(program: string, args: Array<string> = Array<string>(), options: ProcessOptions? = null) -> Process? {
         var cwd: string? = null
         var envKeys: Array<string>? = null
         var envValues: Array<string>? = null
@@ -323,7 +330,7 @@ export class Process {
     }
 }
 
-enum _ThreadLocalError {
+export enum ThreadLocalError {
     RecursiveInit
 }
 
@@ -345,21 +352,29 @@ fn _threadLocalPruneDeadFlags(values: ref Map<i64, bool>) {
     }
 }
 
-export class ThreadLocal<T> {
+export class ThreadLocal<T, E: Error> {
     _lock: OsMutex
     _values: Map<i64, T>
     _initializing: Map<i64, bool>
-    _init: fn() -> T
+    _init: nosuspend fn() throws(E) -> T
 
-    init(init: fn() -> T) {
+    init(init: nosuspend fn() throws(E) -> T) {
         this._lock = OsMutex()
         this._values = #{}
         this._initializing = #{}
         this._init = init
     }
 
-    get() -> T {
+    get() throws(E | ThreadLocalError) -> T {
         var key = __threadLocalId()
+        var armed = false
+        defer {
+            if (armed) {
+                this._lock.lock()
+                defer { this._lock.unlock() }
+                this._initializing.delete(key)
+            }
+        }
         {
             this._lock.lock()
             defer { this._lock.unlock() }
@@ -369,35 +384,28 @@ export class ThreadLocal<T> {
             }
             _threadLocalPruneDeadFlags(ref this._initializing)
             if (this._initializing.containsKey(key)) {
-                throw _ThreadLocalError.RecursiveInit
+                throw ThreadLocalError.RecursiveInit
             }
             this._initializing.set(key, true)
+            armed = true
         }
 
-        try {
-            var init = this._init
-            var value = init()
-            var result = value
-            {
-                this._lock.lock()
-                defer { this._lock.unlock() }
-                _threadLocalPruneDeadSlots(ref this._values)
-                _threadLocalPruneDeadFlags(ref this._initializing)
-                this._initializing.delete(key)
-                if (!this._values.containsKey(key)) {
-                    this._values.set(key, value)
-                }
-                result = this._values[key]
+        var init = this._init
+        var value = try init()
+        var result = value
+        {
+            this._lock.lock()
+            defer { this._lock.unlock() }
+            _threadLocalPruneDeadSlots(ref this._values)
+            _threadLocalPruneDeadFlags(ref this._initializing)
+            if (!this._values.containsKey(key)) {
+                this._values.set(key, value)
             }
-            return result
-        } catch (e) {
-            {
-                this._lock.lock()
-                defer { this._lock.unlock() }
-                this._initializing.delete(key)
-            }
-            throw e
+            result = this._values[key]
+            this._initializing.delete(key)
+            armed = false
         }
+        return result
     }
 
     set(value: T) {
@@ -431,8 +439,10 @@ export class Dylib {
     close() -> bool {
         if (!this._open) { return true }
         var ok = __dylibClose(this._handle)
-        this._handle = 0
-        this._open = false
+        if (ok) {
+            this._handle = 0
+            this._open = false
+        }
         return ok
     }
 

@@ -37,6 +37,9 @@
 #include "xxir_type_arena_internal.h"
 #include "xxir_call_internal.h"
 #include "xxir_signal_frontier_internal.h"
+#include "xxir_root_callback_internal.h"
+#include "xxir_instance_signal_internal.h"
+#include "xxir_call_signal_internal.h"
 #include "xxir_call_select_internal.h"
 #include "xxir_channel_select_shape.h"
 #include "xxir_call_move_internal.h"
@@ -97,6 +100,16 @@ typedef struct InstanceStorageRoute {
 typedef struct XirEnvironmentSnapshotOwner XirEnvironmentSnapshotOwner;
 typedef struct XirSystemOwner XirSystemOwner;
 typedef struct XirFileMetadataOwner XirFileMetadataOwner;
+typedef struct XirRootCallback XirRootCallback;
+typedef struct XirSignalRegistration XirSignalRegistration;
+typedef struct XirPipeOwner XirPipeOwner;
+typedef struct XirPipeFrame XirPipeFrame;
+typedef struct XirProcessOwner XirProcessOwner;
+typedef struct XirProcessFrame XirProcessFrame;
+typedef struct XirDylibOwner XirDylibOwner;
+typedef struct XirDylibFrame XirDylibFrame;
+static bool instance_callback_entry_admitted(XrXirInstance *instance,const XrXirCallView *view,
+    uint32_t entry,const XrXirValue *function,const XrXirValue *arguments,uint32_t count);
 struct XrXirInstance {
     XrXirProgram *program;
     XrXirInstanceConfig config;
@@ -131,12 +144,35 @@ struct XrXirInstance {
     XirEnvironmentSnapshotOwner *environment_snapshots;
     XirSystemOwner *system_owners;
     XirFileMetadataOwner *file_metadata_owners;
+    XirRootCallback *callback;
+    XirSignalRegistration *signals;
+    XirPipeOwner *pipe_owners;
+    XirPipeFrame *pipe_frames;
+    XirProcessOwner *process_owners;
+    XirProcessFrame *process_frames;
+    XirDylibOwner *dylib_owners;
+    XirDylibFrame *dylib_frames;
 };
 #if defined(XR_OS_WINDOWS)
 static bool instance_environment_snapshots_close(XrXirInstance *instance);
 #endif
 static bool instance_system_owners_close(XrXirInstance *root);
 static bool instance_file_metadata_owners_close(XrXirInstance *root);
+static bool instance_signals_close(XrXirInstance *root);
+static bool instance_pipe_owners_close(XrXirInstance *root,bool all);
+static bool instance_process_owners_close(XrXirInstance *root,bool all);
+static bool instance_process_generation_close(XrXirInstance *instance);
+static bool instance_dylib_owners_close(XrXirInstance *root,bool all);
+static bool instance_dylib_generation_close(XrXirInstance *instance);
+static XrXirCallStatus instance_dylib_stage(XrXirCallView *,uint32_t,uint32_t,const XrXirValue *,uint32_t);
+static XrXirCallStatus instance_path_stage(XrXirCallView *,uint32_t,uint32_t);
+static XrXirCallStatus instance_process_stage(XrXirCallView *,uint32_t,uint32_t,const XrXirValue *,uint32_t);
+static XrXirCallStatus instance_pipe_stage(XrXirCallView *,uint32_t,uint32_t,const XrXirValue *,uint32_t);
+static XrXirCallStatus instance_exec_pipe_stage(XrXirCallView *,uint32_t,uint32_t,const XrXirValue *,uint32_t);
+static XrXirCallStatus instance_signals_poll(XrXirInstance *instance);
+static bool instance_signal_native_target(const XrXirProgram *program,uint32_t target);
+static XrXirCallStatus instance_signal_stage(XrXirCallView *view,uint32_t instruction,
+    uint32_t target,const XrXirValue *arguments,uint32_t count);
 static void instance_bindings_free(XrXirInstance *instance);
 static bool instance_bindings_ready(const XrXirInstance *instance);
 static XrXirInstance *instance_root(XrXirInstance *instance) {
@@ -532,9 +568,14 @@ XR_FUNC XrXirCallStatus xr_xir_instance_config_init_sandbox(XrXirInstanceConfig 
 }
 static void instance_dispose(XrXirInstance *instance) {
     XR_CHECK(instance && instance_owner_current(instance), "instance internal owner requires its current domain");
+    XR_CHECK(!instance->callback,"instance disposal requires a retired callback activation");
     XR_CHECK(!instance->environment_snapshots,"instance disposal requires discharged environment snapshots");
     XR_CHECK(!instance->system_owners,"instance disposal requires discharged process handles");
     XR_CHECK(!instance->file_metadata_owners,"instance disposal requires discharged file metadata handles");
+    XR_CHECK(!instance->signals,"instance disposal requires discharged signal registrations");
+    XR_CHECK(!instance->pipe_owners && !instance->pipe_frames,"instance disposal requires discharged pipes");
+    XR_CHECK(!instance->process_owners&&!instance->process_frames,"instance disposal requires discharged processes");
+    XR_CHECK(!instance->dylib_owners&&!instance->dylib_frames,"instance disposal requires discharged loaders");
     XrXirDomain *domain = instance->domain;
     XrXirProgram *program = instance->program;
     const XrXirDeclarations *d = program ? program->declarations : NULL;
@@ -748,6 +789,11 @@ static XrXirCallStatus instance_start(XrXirInstance *instance, uint32_t entry,
         if (state == XR_XIR_CALL_READY || state == XR_XIR_CALL_SUSPENDED) return XR_XIR_CALL_BUSY;
         if (instance_root(instance)->prepared_generation == instance) return XR_XIR_CALL_BAD_STATE;
     }
+    XrXirInstance *signal_root=instance_root(instance);
+    instance_driving(instance,true);
+    bool signals_closed=instance_signals_close(signal_root);
+    instance_driving(instance,false);
+    if (!signals_closed) return XR_XIR_CALL_CLOSE_FAILED;
     const XrXirDeclarations *d = instance->program->declarations;
     const XrXirFunctionBinding *binding = function ? xr_xir_function_binding(function) : NULL;
     if (function && !binding) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -874,8 +920,16 @@ XrXirInstanceResult xr_xir_instance_poll_bounded(XrXirInstance *instance, uint64
     if (instance->state == XR_XIR_INSTANCE_FAILED)
         return (XrXirInstanceResult) {instance->failure, instance->epoch};
     if (!instance->call) return (XrXirInstanceResult) {instance_result(XR_XIR_CALL_BAD_STATE), instance->epoch};
+    XrXirCallStatus signal_status=instance_signals_poll(instance);
+    if (signal_status!=XR_XIR_CALL_READY) {
+        XrXirCallStatus recorded=xir_task_callback_failure(instance->executor,signal_status);
+        if (recorded!=XR_XIR_CALL_READY)
+            return (XrXirInstanceResult){instance_result(recorded),instance->epoch};
+    }
     instance_driving(instance, true);
     XrXirCallResult result = xr_xir_task_executor_poll_root(instance->executor, quantum);
+    if (result.status!=XR_XIR_CALL_READY && result.status!=XR_XIR_CALL_SUSPENDED)
+        (void)instance_signals_close(instance_root(instance));
     if (instance->state == XR_XIR_INSTANCE_INITIALIZING &&
         result.status != XR_XIR_CALL_READY && result.status != XR_XIR_CALL_SUSPENDED) {
         fail_initialization(instance, result);
@@ -951,6 +1005,9 @@ XrXirCallStatus xr_xir_instance_close_activation(XrXirInstance *instance) {
     if (!instance->executor) return XR_XIR_CALL_READY;
     instance_driving(instance, true);
     XrXirCallStatus status = xr_xir_task_executor_drain(instance->executor,XR_XIR_CALL_READY);
+    if(status==XR_XIR_CALL_CLOSE_FAILED) {
+        instance_driving(instance,false);return status;
+    }
     XR_CHECK(xr_xir_task_executor_root_idle(instance->executor),
         "an exclusively owned current activation drains every runnable task");
     if (instance->call && instance->state == XR_XIR_INSTANCE_INITIALIZING) {
@@ -958,6 +1015,12 @@ XrXirCallStatus xr_xir_instance_close_activation(XrXirInstance *instance) {
         XR_CHECK(result.status != XR_XIR_CALL_READY && result.status != XR_XIR_CALL_SUSPENDED,
             "drain leaves the actual initialization outcome terminal");
         fail_initialization(instance, result);
+    }
+    if (!instance_signals_close(root)) {
+        instance_driving(instance,false);return XR_XIR_CALL_CLOSE_FAILED;
+    }
+    if(!instance_pipe_owners_close(root,false)||!instance_process_owners_close(root,false)||!instance_dylib_owners_close(root,false)) {
+        instance_driving(instance,false);return XR_XIR_CALL_CLOSE_FAILED;
     }
     (void)xr_xir_task_executor_free(instance->executor, NULL);
     instance->executor = NULL;
@@ -988,6 +1051,9 @@ XR_FUNC XrXirCallStatus xir_instance_host_finish(XrXirInstance *instance,XrXirIn
         active->last_outcome==XR_XIR_CALL_SUSPENDED) return XR_XIR_CALL_BAD_STATE;
     instance_driving(active,true);
     XrXirCallStatus closed=xr_xir_task_executor_drain(active->executor,XR_XIR_CALL_READY);
+    if(closed==XR_XIR_CALL_CLOSE_FAILED) {
+        instance_driving(active,false);return closed;
+    }
     if (active->state==XR_XIR_INSTANCE_FAILED &&
         ((closed==XR_XIR_CALL_CLEANUP_FAILED &&
           (active->failure.status==XR_XIR_CALL_THROWN || xr_xir_call_panic_status(active->failure.status))) ||
@@ -1018,6 +1084,7 @@ XR_FUNC XrXirCallStatus xir_instance_host_failure(XrXirInstance *instance,XrXirI
     instance_driving(instance,true);
     XrXirCallStatus status=xr_xir_task_executor_drain(instance->executor,XR_XIR_CALL_HOST_ERROR);
     instance_driving(instance,false);
+    if(status==XR_XIR_CALL_CLOSE_FAILED)return status;
     (void)xr_xir_instance_stop(root);
     XrXirInstanceResult result=xr_xir_instance_poll_bounded(instance,1);
     XR_CHECK(result.outcome.status==status && xr_xir_call_result_valid(&result.outcome),
@@ -1040,12 +1107,22 @@ XrXirCallStatus xr_xir_instance_stop(XrXirInstance *instance) {
     if (instance->function_gate) instance->function_gate->instance = NULL;
     bool driving = instance->driving;
     instance_driving(instance, true);
-    if (!instance->executor) { instance_driving(instance, driving); return XR_XIR_CALL_READY; }
+    if (!instance->executor) {
+        bool closed=instance_pipe_owners_close(root,true);
+        if(!instance_process_owners_close(root,true))closed=false;
+        if(!instance_dylib_owners_close(root,true))closed=false;
+        instance_driving(instance,driving);return closed?XR_XIR_CALL_READY:XR_XIR_CALL_CLOSE_FAILED;
+    }
     XrXirCallStatus status = xr_xir_task_executor_stop(instance->executor);
     if (!driving && xr_xir_task_executor_root_idle(instance->executor))
         status = xr_xir_task_executor_completion_status(instance->executor);
     else if (instance->call && !driving) {
-        do { status = xr_xir_task_executor_poll_root(instance->executor, 256).status; }
+        do {
+            status = xr_xir_task_executor_poll_root(instance->executor, 256).status;
+            if(xir_task_executor_retirement_pending(instance->executor)) {
+                status=XR_XIR_CALL_CLOSE_FAILED;break;
+            }
+        }
         while (status == XR_XIR_CALL_READY);
     }
     if (!driving && instance->call && instance->state == XR_XIR_INSTANCE_INITIALIZING &&
@@ -1057,6 +1134,10 @@ XrXirCallStatus xr_xir_instance_stop(XrXirInstance *instance) {
             status = instance->failure.status;
         }
     }
+    if (!driving && !instance_signals_close(root)) status=XR_XIR_CALL_CLOSE_FAILED;
+    if (!driving && !instance_pipe_owners_close(root,true)) status=XR_XIR_CALL_CLOSE_FAILED;
+    if (!driving && !instance_process_owners_close(root,true)) status=XR_XIR_CALL_CLOSE_FAILED;
+    if (!driving && !instance_dylib_owners_close(root,true)) status=XR_XIR_CALL_CLOSE_FAILED;
     instance_driving(instance, driving);
     return status == XR_XIR_CALL_CANCELLED || status == XR_XIR_CALL_CANCEL_REQUESTED ? XR_XIR_CALL_READY : status;
 }
@@ -1065,8 +1146,15 @@ static XrXirCallStatus instance_drain_state(XrXirInstance *instance) {
     instance->driving=true;instance->stopping=true;
     if (instance->function_gate) instance->function_gate->instance=NULL;
     XrXirCallStatus tasks=xr_xir_task_executor_free(instance->executor,NULL);
+    if(tasks==XR_XIR_CALL_CLOSE_FAILED) {
+        instance->driving=false;return tasks;
+    }
     instance->executor=NULL;
-    XrXirCallStatus status=xr_xir_call_free(instance->call);instance->call=NULL;
+    XrXirCallStatus status=xr_xir_call_free(instance->call);
+    if(status==XR_XIR_CALL_CLOSE_FAILED) {
+        instance->driving=false;return status;
+    }
+    instance->call=NULL;
     if (status==XR_XIR_CALL_READY) status=tasks;
     clear_slots(instance);
     instance->close_status=status;instance->close_drained=true;instance->driving=false;
@@ -1077,7 +1165,15 @@ static XrXirCallStatus instance_free_state(XrXirInstance *instance) {
     if (!instance) return XR_XIR_CALL_READY;
     if (instance_observing(instance)) return XR_XIR_CALL_BUSY;
     XR_CHECK(instance->owner,"only a child generation retires without closing the Domain owner");
-    XrXirCallStatus status=instance_drain_state(instance);instance_dispose(instance);return status;
+    XrXirCallStatus status=instance_drain_state(instance);
+    if(status!=XR_XIR_CALL_CLOSE_FAILED) {
+        XrXirInstance *root=instance_root(instance);bool driving=root->driving;root->driving=true;
+        if(!instance_process_generation_close(instance))status=XR_XIR_CALL_CLOSE_FAILED;
+        if(!instance_dylib_generation_close(instance))status=XR_XIR_CALL_CLOSE_FAILED;
+        root->driving=driving;
+        if(status!=XR_XIR_CALL_CLOSE_FAILED)instance_dispose(instance);
+    }
+    return status;
 }
 XrXirCallStatus xr_xir_instance_free(XrXirInstance *instance) {
     if (!instance_owner_current(instance)) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -1089,11 +1185,23 @@ XrXirCallStatus xr_xir_instance_free(XrXirInstance *instance) {
     XrXirCallStatus status=XR_XIR_CALL_READY;
     for (XrXirInstance *state=root->generation_next;state;state=state->generation_next) {
         XrXirCallStatus drained=instance_drain_state(state);
+        if(drained==XR_XIR_CALL_CLOSE_FAILED) {
+            root->driving=false;return drained;
+        }
         if (state==current) status=drained;
     }
     XrXirCallStatus original=instance_drain_state(root);
+    if(original==XR_XIR_CALL_CLOSE_FAILED) {
+        root->driving=false;return original;
+    }
     if (current==root) status=original;
     root->driving=true;
+    if(!instance_pipe_owners_close(root,true)||!instance_process_owners_close(root,true)||!instance_dylib_owners_close(root,true)) {
+        root->driving=false;return XR_XIR_CALL_CLOSE_FAILED;
+    }
+    if(!instance_signals_close(root)) {
+        root->driving=false;return XR_XIR_CALL_CLOSE_FAILED;
+    }
 #if defined(XR_OS_WINDOWS)
     if(!instance_environment_snapshots_close(root)) {
         root->driving=false;return XR_XIR_CALL_CLOSE_FAILED;
@@ -1281,8 +1389,12 @@ static XrXirCallStatus instance_call_entry_check(XrXirCallView *view, uint32_t e
         return target==instance && !child && caller == program->entry_count &&
             instance->state == XR_XIR_INSTANCE_INITIALIZING && instance->current_module == module ?
             XR_XIR_CALL_READY : XR_XIR_CALL_BAD_STATE;
-    if (caller == instance->program->entry_count &&
-        (target!=instance || instance->state != XR_XIR_INSTANCE_READY || instance->requested != entry)) return XR_XIR_CALL_BAD_STATE;
+    if (caller == instance->program->entry_count) {
+        if (target!=instance || instance->state!=XR_XIR_INSTANCE_READY) return XR_XIR_CALL_BAD_STATE;
+        bool callback=xir_instance_callback_owns(instance,instance->executor,view->activation);
+        if (callback ? !instance_callback_entry_admitted(instance,view,entry,function,arguments,count) :
+            instance->requested!=entry) return XR_XIR_CALL_BAD_STATE;
+    }
     if (!target->ready[module] && target->current_module != module) {
         XrXirCallStatus cleanup=target==instance?instance_cleanup_entry(view,instance,caller,entry):XR_XIR_CALL_BAD_STATE;
         if (cleanup!=XR_XIR_CALL_READY) return cleanup;
@@ -1794,6 +1906,7 @@ static XrXirCallStatus resolve_function(XrXirInstance *instance, const XrXirValu
     *entry = binding->entry; return XR_XIR_CALL_READY;
 }
 #include "xxir_instance_signal_frontier.inc.c"
+#include "xxir_instance_root_callback.inc.c"
 XrXirCallStatus xr_xir_instance_start_function(XrXirInstance *instance, const XrXirValue *function,
     const XrXirValue *arguments, uint32_t count) {
     if (!instance_owner_current(instance)) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -1836,6 +1949,23 @@ XR_FUNC XrXirCallStatus xr_xir_instance_call_at(XrXirCallView *view,uint32_t ins
     if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirInstance *instance=view_instance(view);
     if (!instance) return XR_XIR_CALL_BAD_STATE;
+    if (instance_signal_native_target(instance->program,entry))
+        return instance_signal_stage(view,instruction,entry,arguments,count);
+    if(entry<instance->program->entry_count&&xir_path_native_id(instance->program->declarations->functions[entry].native_callable))
+        return count?XR_XIR_CALL_BAD_ARGUMENT:instance_path_stage(view,instruction,entry);
+    if(entry<instance->program->entry_count&&xir_os_exec_close_id(instance->program->declarations->functions[entry].native_callable))
+        return instance_exec_pipe_stage(view,instruction,entry,arguments,count);
+    if(entry<instance->program->entry_count&&xir_os_exec_shell_id(instance->program->declarations->functions[entry].native_callable))
+        return instance_process_stage(view,instruction,entry,arguments,count);
+    if(entry<instance->program->entry_count &&
+        xir_sys_dylib_id(instance->program->declarations->functions[entry].native_callable))
+        return instance_dylib_stage(view,instruction,entry,arguments,count);
+    if(entry<instance->program->entry_count &&
+        xir_sys_process_id(instance->program->declarations->functions[entry].native_callable))
+        return instance_process_stage(view,instruction,entry,arguments,count);
+    if(entry<instance->program->entry_count &&
+        xir_sys_pipe_id(instance->program->declarations->functions[entry].native_callable))
+        return instance_pipe_stage(view,instruction,entry,arguments,count);
     if (!view_is_child(instance,view) && (entry>=instance->program->entry_count ||
         instance->program->declarations->functions[entry].method_kind!=XR_XIR_CONSTRUCTOR_FIELDS))
         return XR_XIR_CALL_READY;
@@ -2091,6 +2221,7 @@ XrXirCallStatus xr_xir_instance_function(XrXirCallView *view,XrXirType type,uint
 }
 #include "xxir_instance_class_method.inc.c"
 #include "xxir_instance_function_producer.inc.c"
+#include "xxir_instance_signal.inc.c"
 #include "xxir_instance_generator.inc.c"
 #include "xxir_instance_task_result.inc.c"
 static XrXirCallStatus instance_task_spawn(XrXirCallView *view,const XrXirScopedSpawn *spawn,
@@ -2426,8 +2557,17 @@ XR_FUNC XrXirCallStatus xr_xir_instance_pointer(XrXirCallView *view,XrXirOp oper
 #include "xxir_instance_math.inc.c"
 #include "xxir_instance_environment_win.inc.c"
 #include "xxir_instance_system.inc.c"
+#include "xxir_instance_sys_tokens.inc.c"
 #include "xxir_instance_file_metadata.inc.c"
 #include "xxir_instance_io.inc.c"
+#include "xxir_instance_pipe_owner.inc.c"
+#include "xxir_instance_pipe.inc.c"
+#include "xxir_instance_exec_pipe.inc.c"
+#include "xxir_instance_process_owner.inc.c"
+#include "xxir_instance_process.inc.c"
+#include "xxir_instance_dylib_owner.inc.c"
+#include "xxir_instance_dylib.inc.c"
+#include "xxir_instance_path_cwd.inc.c"
 XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
     XrXirInstance *instance=view_instance(view);XrXirValue *value=NULL;
     XrXirCallStatus status=XR_XIR_CALL_BAD_STATE;bool thrown=false;
@@ -2445,6 +2585,11 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
         !xir_native_callable_types(id,program->types,entry->parameters,entry->parameter_count,entry->result,error)) goto failed;
     for (uint32_t p=0;p<entry->parameter_count;++p)
         if (!xr_xir_value_argument(&view->arguments[p],view->arena,entry->parameters[p])) goto failed;
+    if(xir_sys_dylib_id(id))return instance_dylib_resume(view,instance,id,entry);
+    if(xir_sys_process_id(id)||xir_os_exec_shell_id(id))return instance_process_resume(view,instance,id,entry);
+    if(xir_sys_pipe_id(id))return instance_pipe_resume(view,instance,id,entry);
+    if(xir_path_native_id(id))return instance_path_resume(view,instance);
+    if(xir_os_exec_close_id(id))return instance_exec_pipe_resume(view,instance);
     XrXirValue *state=view->state;
     if (state->type || state->reserved || state->payload) goto failed;
     value=state;
@@ -2455,6 +2600,13 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
         if(id==XR_NATIVE_CALLABLE_SYS_THREAD_YIELD) {
             xr_thread_yield();
             *value=(XrXirValue){XR_XIR_UNIT,0,0};
+        } else if(id==XR_NATIVE_CALLABLE_SYS_ON_SIGNAL) {
+            bool installed=false;status=xir_instance_signal_register(view,&installed);
+            if(status!=XR_XIR_CALL_READY)goto failed;
+            *value=(XrXirValue){XR_XIR_BOOL,0,installed?1:0};
+        } else if(xir_sys_thread_token_id(id)) {
+            status=instance_sys_token_call(view,instance,id,value);
+            if(status!=XR_XIR_CALL_READY)goto failed;
         } else {
             int64_t cpu=view->arguments[0].payload;bool pinned=false;
             if(cpu>=0) {
@@ -2503,7 +2655,7 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
 #endif
             if(status!=XR_XIR_CALL_READY)goto failed;
         } else if(id==XR_NATIVE_CALLABLE_OS_GETCWD) {
-            status=instance_current_directory(view,instance,value);
+            status=instance_current_directory(view,instance,false,value);
             if(status!=XR_XIR_CALL_READY)goto failed;
         } else if(id==XR_NATIVE_CALLABLE_OS_CPU_COUNT) {
             *value=(XrXirValue){XR_XIR_I64,0,(int64_t)xr_os_cpu_count()};
@@ -2576,5 +2728,8 @@ failed:
 }
 XR_FUNC void xr_xir_instance_native_callable_release(XrXirCallView *view,XrXirCallStatus reason) {
     (void)reason;
+    instance_dylib_frame_release(view);
+    instance_process_frame_release(view);
+    instance_pipe_frame_release(view);
     xr_xir_value_drop(view->state);
 }

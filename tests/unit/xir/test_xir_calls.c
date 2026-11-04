@@ -154,7 +154,9 @@ static XrXirArtifact *comparator_artifact(const XrXirCompileContext *context) {
         {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0, 0}, 0, {0}}
     };
     XrXirBlock block = {0, 2, 0, 0};
-    XrXirFunction function = {"compare", 7, types, 2, XR_XIR_BOOL, &block, 1, instructions, 2, NULL, 0};
+    XrXirFunction function = {.name="compare",.name_length=7,.parameters=types,.parameter_count=2,
+        .result=XR_XIR_BOOL,.blocks=&block,.block_count=1,.instructions=instructions,.instruction_count=2,
+        .error_type=XR_XIR_NEVER};
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *lowered = NULL;
@@ -254,10 +256,12 @@ static void recursive_cleanup(XrXirCallView *view, XrXirCallStatus reason) {
 }
 static void bounded_stack(void) {
     XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, types, 1, XR_XIR_I64, sizeof(RecursiveState), recursive_resume, recursive_cleanup, NULL, 0, 0};
-    for (uint32_t variant = 0; variant < 3; ++variant) {
+    for (uint32_t variant = 0; variant < 4; ++variant) {
         Witness witness = {0};
         XrXirCallAccounting accounting = {0};
-        XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = &entry; config.entry_count = 1; config.instance = &witness; config.byte_limit = 4 * 1024 * 1024; config.poll_limit = variant == 2 ? 5 : 30000; config.depth_limit = variant == 1 ? 5 : 10001; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
+        XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = &entry; config.entry_count = 1; config.instance = &witness; config.poll_limit = variant == 2 ? 5 : 30000; config.depth_limit = variant == 1 ? 5 : 10001; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
+        /* Keep finite-memory refusal separate from deep stack and poll bounds. */
+        if (variant==3) config.byte_limit=4*1024*1024;
         XrXirValue argument = {XR_XIR_I64, 0, 10000};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, &argument, 1, &call) == XR_XIR_CALL_READY);
@@ -575,8 +579,8 @@ static void call_owned_recovery(void) {
         }else CHECK(escaped.type==XR_XIR_I64 && escaped.payload==4);
         xr_xir_value_drop(&escaped);
         CHECK(!runtime_live && !runtime_bytes);instance_compile_zero();
-        printf("Calls mode=%u native=%u attack=%u real_callbacks=%u lease=1 compiler_work=%llu physical_zero\n",
-            mode,native,attack,call_binding_callbacks,(unsigned long long)stats.work);
+        printf("Calls mode=%u native=%u attack=%u real_callbacks=%u lease=1 physical_zero\n",
+            mode,native,attack,call_binding_callbacks);
     }
     instance_compile_report();puts("Calls current Input failure recovery, producer death, actual callbacks, execution4 and escaped Error91 passed");
 }

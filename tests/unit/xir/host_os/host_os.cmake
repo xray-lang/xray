@@ -11,6 +11,7 @@ set(host_os_c
     "${host_os_generated}/host_io_links.c"
     "${host_os_generated}/host_io_temp.c"
     "${host_os_generated}/host_io_directory.c"
+    "${host_os_generated}/host_thread_tokens.c"
     "${host_os_generated}/host_signal_frontier.c")
 
 add_executable(test_host_os_source "${host_os_dir}/test_host_os_source.c")
@@ -29,6 +30,11 @@ add_custom_command(OUTPUT ${host_os_c}
         "${host_os_dir}/host_os_io_links_cases.h"
         "${host_os_dir}/host_os_io_temp_cases.h"
         "${host_os_dir}/host_os_io_directory_cases.h"
+        "${host_os_dir}/host_os_thread_token_cases.h"
+        "${host_os_dir}/host_os_thread_token_contracts.h"
+        "${PROJECT_SOURCE_DIR}/stdlib/sys/sys.xr"
+        "${PROJECT_SOURCE_DIR}/stdlib/path/path.xr"
+        "${PROJECT_SOURCE_DIR}/tests/unit/xir/xir_genuine_sys_path.h"
         "${host_os_dir}/host_os_signal_frontier_cases.h"
     VERBATIM)
 add_executable(test_host_os_native "${host_os_dir}/test_host_os_native.c" ${host_os_c})
