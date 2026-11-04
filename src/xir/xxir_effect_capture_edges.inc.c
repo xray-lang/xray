@@ -386,11 +386,29 @@ static XrXirStatus effect_capture_results(EffectCaptureRead *read,uint32_t selec
     if(read->selected && (read->selected->value<caller->head.parameter_count || read->selected->value>=caller->values)) return XR_XIR_OK;
     uint64_t rank=0;bool active=false;status=effect_capture_edge_active(read,selected,&rank,&active);
     if(status!=XR_XIR_OK || !active) return status;
-    for(uint32_t i=0;i<caller->head.instruction_count;++i) {
-        if(read->selected && caller->head.parameter_count+i!=read->selected->value) continue;
-
+    bool owning=!read->selected && effect_body_request_sequence_owned(&read->body);
+    EffectFinalInputSelect cursor;
+    if(owning) {
+        status=effect_final_input_select_begin(&read->body,EFFECT_FINAL_SELECT_RESULT,&cursor);
+        if(status!=XR_XIR_OK) return status;
+    }
+    uint32_t scan_first=read->selected?read->selected->value-caller->head.parameter_count:0;
+    uint32_t scan_count=read->selected?1:caller->head.instruction_count,scan_at=0;
+    for(;;) {
+        uint32_t i=0;
         XrXirInstruction storage;const XrXirInstruction *op=NULL;
-        status=effect_body_request_operation(&read->body,read->final->nodes[edge->caller].body,i,&storage,&op);
+        if(owning) {
+            bool found=false;
+            status=effect_final_input_select_next(&read->body,read->final->nodes[edge->caller].body,
+                &cursor,&i,&storage,&found);
+            if(status!=XR_XIR_OK) return status;
+            if(!found) break;
+            op=&storage;
+        } else {
+            if(scan_at==scan_count) break;
+            i=scan_first+scan_at++;
+            status=effect_body_request_operation(&read->body,read->final->nodes[edge->caller].body,i,&storage,&op);
+        }
         if(status!=XR_XIR_OK) return status;
         bool result=(op->op==XR_XIR_INVOKE_RESULT && op->immediate==(int64_t)edge->instruction) ||
             (i==edge->instruction && (op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_CALL_INDIRECT));
