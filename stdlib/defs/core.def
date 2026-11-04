@@ -855,6 +855,20 @@ module regex {
 }
 
 module os {
+  fn __execPipeClose {
+    signature: "(readToken: i64, writeToken: i64): bool"
+    doc: "Close shell capture endpoints owned by the current execution root"
+    vm: ""
+    aot: ""
+    argc: 2
+    arg_spec: "ii"
+    aot_direct: false
+    link_object: false
+    layer: "system"
+    visibility: "internal"
+    return_ownership: "fresh"
+  }
+
   fn __platform {
     signature: "(): string"
     doc: "Host operating system name"

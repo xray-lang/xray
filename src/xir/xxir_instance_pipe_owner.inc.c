@@ -184,3 +184,19 @@ static XirPipeOwner *instance_pipe_lookup(XrXirInstance *root,int64_t token,uint
     }
     return NULL;
 }
+/* A token identifies only a live endpoint in this Root. The optional exact
+ * role prevents a cleanup pair from closing a different kind of endpoint. */
+static XrXirCallStatus instance_pipe_close_endpoint(XrXirCallView *view,XrXirInstance *instance,
+    int64_t token,uint32_t expected,XirPipeOwner **held,bool *closed) {
+    if(!held||*held||!closed)return XR_XIR_CALL_BAD_STATE;
+    XirPipeQuery current={view,instance->domain,XR_XIR_CALL_READY};uint32_t end=0;
+    XirPipeOwner *pipe=instance_pipe_lookup(instance_root(instance),token,&end,&current);
+    if(current.status!=XR_XIR_CALL_READY)return current.status;
+    *closed=false;
+    if(!pipe||(expected!=UINT32_MAX&&end!=expected))return XR_XIR_CALL_READY;
+    if(pipe->references==UINT64_MAX)return XR_XIR_CALL_LIMIT;
+    *held=pipe;++pipe->references;
+    XrXirCallStatus status=instance_pipe_status(xr_os_io_pipe_close_end(&pipe->owner,(XrOsPipeEnd)end,closed));
+    if(status==XR_XIR_CALL_READY&&*closed)pipe->tokens[end]=0;
+    return status;
+}

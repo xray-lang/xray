@@ -168,6 +168,7 @@ static XrXirCallStatus instance_dylib_stage(XrXirCallView *,uint32_t,uint32_t,co
 static XrXirCallStatus instance_path_stage(XrXirCallView *,uint32_t,uint32_t);
 static XrXirCallStatus instance_process_stage(XrXirCallView *,uint32_t,uint32_t,const XrXirValue *,uint32_t);
 static XrXirCallStatus instance_pipe_stage(XrXirCallView *,uint32_t,uint32_t,const XrXirValue *,uint32_t);
+static XrXirCallStatus instance_exec_pipe_stage(XrXirCallView *,uint32_t,uint32_t,const XrXirValue *,uint32_t);
 static XrXirCallStatus instance_signals_poll(XrXirInstance *instance);
 static bool instance_signal_native_target(const XrXirProgram *program,uint32_t target);
 static XrXirCallStatus instance_signal_stage(XrXirCallView *view,uint32_t instruction,
@@ -1952,6 +1953,8 @@ XR_FUNC XrXirCallStatus xr_xir_instance_call_at(XrXirCallView *view,uint32_t ins
         return instance_signal_stage(view,instruction,entry,arguments,count);
     if(entry<instance->program->entry_count&&xir_path_native_id(instance->program->declarations->functions[entry].native_callable))
         return count?XR_XIR_CALL_BAD_ARGUMENT:instance_path_stage(view,instruction,entry);
+    if(entry<instance->program->entry_count&&xir_os_exec_native_id(instance->program->declarations->functions[entry].native_callable))
+        return instance_exec_pipe_stage(view,instruction,entry,arguments,count);
     if(entry<instance->program->entry_count &&
         xir_sys_dylib_id(instance->program->declarations->functions[entry].native_callable))
         return instance_dylib_stage(view,instruction,entry,arguments,count);
@@ -2557,6 +2560,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_pointer(XrXirCallView *view,XrXirOp oper
 #include "xxir_instance_io.inc.c"
 #include "xxir_instance_pipe_owner.inc.c"
 #include "xxir_instance_pipe.inc.c"
+#include "xxir_instance_exec_pipe.inc.c"
 #include "xxir_instance_process_owner.inc.c"
 #include "xxir_instance_process.inc.c"
 #include "xxir_instance_dylib_owner.inc.c"
@@ -2583,6 +2587,7 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
     if(xir_sys_process_id(id))return instance_process_resume(view,instance,id,entry);
     if(xir_sys_pipe_id(id))return instance_pipe_resume(view,instance,id,entry);
     if(xir_path_native_id(id))return instance_path_resume(view,instance);
+    if(xir_os_exec_native_id(id))return instance_exec_pipe_resume(view,instance);
     XrXirValue *state=view->state;
     if (state->type || state->reserved || state->payload) goto failed;
     value=state;

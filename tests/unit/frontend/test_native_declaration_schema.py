@@ -1051,6 +1051,50 @@ class SysDylibDeclarations(unittest.TestCase):
                     schema.render_sys_dylibs([replace(r, **{key: value}) if r is row else r for r in self.declarations])
 
 
+class ShellCaptureCleanupDeclarations(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / 'tools/stdlibgen'))
+        from stdlibgen import parse_defs
+        cls.declarations = parse_defs(ROOT)
+
+    def test_cleanup_has_no_legacy_provider(self):
+        from stdlibgen import unique_vm_binding_entries, emit_aot_methods, emit_driver_metadata, emit_provider_aot_sources, parse_def_metadata
+        lines, rows = schema.render_os_exec_pipe_close(self.declarations)
+        self.assertEqual(len(rows), 1)
+        self.assertIn('XR_NATIVE_CALLABLE_OS_EXEC_PIPE_CLOSE', rows[0])
+        self.assertIn('XR_NATIVE_TERM_BOOL', '\n'.join(lines))
+        row = next(r for r in self.declarations if r.module == 'os' and r.name == '__execPipeClose')
+        self.assertNotIn(row, unique_vm_binding_entries(self.declarations))
+        entries, constants, _, _, enums, _, native_classes, *_ = parse_def_metadata(ROOT)
+        without = [r for r in entries if not (r.module == 'os' and r.name == '__execPipeClose')]
+        self.assertEqual(emit_aot_methods(entries, constants, enums, native_classes),
+                         emit_aot_methods(without, constants, enums, native_classes))
+        self.assertEqual(emit_driver_metadata(entries, constants), emit_driver_metadata(without, constants))
+        self.assertEqual(emit_provider_aot_sources(entries), emit_provider_aot_sources(without))
+
+    def test_cleanup_complete_contract_is_required(self):
+        row = next(r for r in self.declarations if r.module == 'os' and r.name == '__execPipeClose')
+        for changed in ([r for r in self.declarations if r is not row], self.declarations + [row]):
+            with self.assertRaises(ValueError):
+                schema.render_os_exec_pipe_close(changed)
+        changes = [('module', 'sys'), ('name', '__other'), ('signature', '(readToken: i64, writeToken: i64): bool throws(Error)'),
+            ('argc', '1'), ('arg_spec', 'iv'), ('visibility', 'public'), ('effect', 'other'), ('allocation', 'no_heap'),
+            ('return_ownership', 'borrowed'), ('layer', 'core'), ('vm', 'sys_pipe_close'), ('aot', 'xrt_pipe_close'),
+            ('aot_direct', True), ('aot_kind', 'method'), ('link_object', 'other'), ('vm_binding', 'yieldable'),
+            ('vm_ifdef', 'OTHER'), ('define', 'OTHER'), ('ret', 'i64'), ('semantic_intrinsic', True),
+            ('provider_declaration', object()), ('caps', ('task',)), ('suspension_kind', 'task')]
+        for key, value in changes:
+            self.assertNotEqual(getattr(row, key), value)
+            with self.subTest(field=key), self.assertRaises(ValueError):
+                schema.render_os_exec_pipe_close([replace(r, **{key: value}) if r is row else r for r in self.declarations])
+        for signature in ('(readToken: i64, writeToken: i64): ()', '(readToken: ref i64, writeToken: i64): bool',
+                '(readToken: i64, writeToken: string): bool', '(...readToken: i64): bool',
+                'nosuspend (readToken: i64, writeToken: i64): bool'):
+            with self.subTest(signature=signature), self.assertRaises(ValueError):
+                schema.render_os_exec_pipe_close([replace(r, signature=signature) if r is row else r for r in self.declarations])
+
+
 class PathCurrentDirectoryDeclarations(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
