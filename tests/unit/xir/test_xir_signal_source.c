@@ -7,6 +7,7 @@
  * test_xir_signal_source.c - Cold Source bindings and real isolated VM delivery
  */
 #include "root_signal_runtime.h"
+#include "xir_genuine_sys_path.h"
 #include "xir/xxir_effects.c"
 #include "xir/xxir_effects.h"
 #include "xir/xxir_ctfe.h"
@@ -24,7 +25,8 @@ static XrXirStatus root_signal_check(const XrXirCompileContext *context,const ch
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest request={session,genuine?path:NULL,&authority,context,root,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText text={genuine?"sys/sys.xr":NULL,input,strlen(input)};
-    XrXirStatus status=xr_xir_compile_source_check_text(&request,&text,source,diagnostic,NULL);
+    XrXirStatus status=genuine?xir_genuine_sys_path_check(&request,input,strlen(input),source,diagnostic):
+        xr_xir_compile_source_check_text(&request,&text,source,diagnostic,NULL);
     xr_compile_session_free(session);return status;
 }
 static void root_signal_canonical_owner(const XrXirCompileContext *context,const XrXirArtifact *code,XrXirEffects *effects) {
