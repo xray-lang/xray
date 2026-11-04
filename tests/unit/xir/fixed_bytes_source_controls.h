@@ -121,7 +121,18 @@ static void fixed_cold_library(const XrXirCompileContext *context,FILE *generate
     XrXirLibraryInput input={.packet=packet.bytes,.length=packet.length,
         .modules=&binding,.module_count=1};xr_sha256(packet.bytes,packet.length,input.sha256);
     XrXirLibraryCatalog *catalog=NULL;
-    CHECK(xr_xir_compile_library_catalog_new_v2(context,&input,1,&catalog)==XR_XIR_OK);
+    XrXirStatus catalog_status=xr_xir_compile_library_catalog_new_v2(context,&input,1,&catalog);
+    if(catalog_status!=XR_XIR_OK) {
+        static const char *const names[]={"XR_XIR_OK","XR_XIR_BAD_STRUCTURE","XR_XIR_BAD_STAGE",
+            "XR_XIR_BAD_TYPE","XR_XIR_BAD_VALUE","XR_XIR_BAD_DOMINANCE","XR_XIR_BUDGET",
+            "XR_XIR_OUT_OF_MEMORY","XR_XIR_BAD_LAYOUT","XR_XIR_IO","XR_XIR_UNRESOLVED",
+            "XR_XIR_UNSUPPORTED","XR_XIR_MEMORY_LIMIT","XR_XIR_OVERFLOW","XR_XIR_CANCELLED",
+            "XR_XIR_DEADLINE","XR_XIR_CLOCK_FAILURE"};
+        _Static_assert(sizeof(names)/sizeof(*names)==XR_XIR_CLOCK_FAILURE+1,"catalog status names match the public enum");
+        fprintf(stderr,"fixed cold stage=catalog_new_v2 status=%u (%s)\n",(unsigned)catalog_status,
+            (unsigned)catalog_status<sizeof(names)/sizeof(*names)?names[catalog_status]:"unknown XrXirStatus");
+    }
+    CHECK(catalog_status==XR_XIR_OK);
     memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
     XrXirSourceResult consumer={0};
     CHECK(fixed_source_text(context,"import {magic,makeBytes} from \"./fixed-lib\"\n"
