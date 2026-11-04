@@ -37,7 +37,7 @@ static char *dylib_path_text(void){
  size_t count=(size_t)(end-start);char *text=xr_malloc(count+1);CHECK(text);memcpy(text,start,count);text[count]=0;
  memset(original,0xa5,strlen(original));xr_free(original);return text;
 }
-static XrXirStatus dylib_check(const XrXirCompileContext *context,const char *text,size_t length,bool genuine,XrXirSourceResult *output){
+static XrXirStatus dylib_check(const XrXirCompileContext *context,const char *text,size_t length,bool genuine,XrXirSourceResult *output,XrXirSourceDiagnostic *observed){
  const char *root=XR_DYLIB_ROOT "/stdlib";XrModuleIdentityAuthority authority={genuine?XR_MODULE_IDENTITY_STDLIB:XR_MODULE_IDENTITY_MEMORY,"sys",genuine?root:NULL};
  XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
  XrXirSourceRequest request={session,genuine?XR_DYLIB_ROOT "/stdlib/sys/sys.xr":NULL,&authority,context,root,NULL,XR_XIR_PROGRAM,NULL};
@@ -49,6 +49,7 @@ static XrXirStatus dylib_check(const XrXirCompileContext *context,const char *te
   status=xr_xir_compile_source_check_overlay(&request,overlay,2,output,&diagnostic,NULL);memset(path,0xa5,strlen(path));xr_free(path);
  }else{XrXirSourceText source={NULL,text,length};status=xr_xir_compile_source_check_text(&request,&source,output,&diagnostic,NULL);}
  if(status!=XR_XIR_OK)fprintf(stderr,"Dylib Source%u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);
+ if(observed)*observed=diagnostic;
  xr_compile_session_free(session);return status;
 }
 static void dylib_contracts(const XrXirCompileContext *context,const XrXirArtifact *code){
@@ -69,10 +70,17 @@ static void dylib_contracts(const XrXirCompileContext *context,const XrXirArtifa
   "import {Path} from path\nclass Fake{raw:string\ninit(raw:string){this.raw=raw}}\nexport fn wrong(p:Fake)->i64{return __dylibOpen(p)}\n"
  };
  for(unsigned n=0;n<sizeof(invalid)/sizeof(*invalid);++n){
-  XrXirSourceResult output={0};CHECK(dylib_check(context,invalid[n],strlen(invalid[n]),true,&output)==XR_XIR_BAD_TYPE&&!output.checked&&!output.snapshot);xr_xir_compile_source_result_free(&output);
+  XrXirSourceResult output={0};CHECK(dylib_check(context,invalid[n],strlen(invalid[n]),true,&output,NULL)==XR_XIR_BAD_TYPE&&!output.checked&&!output.snapshot);xr_xir_compile_source_result_free(&output);
  }
+ static const char ordinary_defer[]="\nexport fn ordinaryDefer(lib:Dylib){defer{lib.close()}}\n";
+ size_t length=0;char *body=dylib_source_text(&length);CHECK(length<=SIZE_MAX-sizeof(ordinary_defer));
+ char *negative=xr_malloc(length+sizeof(ordinary_defer));CHECK(negative);memcpy(negative,body,length);memcpy(negative+length,ordinary_defer,sizeof(ordinary_defer));
+ xr_free(body);XrXirSourceResult rejected={0};XrXirSourceDiagnostic diagnostic={0};
+ CHECK(dylib_check(context,negative,length+sizeof(ordinary_defer)-1,true,&rejected,&diagnostic)==XR_XIR_BAD_TYPE&&
+  !rejected.checked&&!rejected.snapshot&&strstr(diagnostic.message,"E0392:")&&diagnostic.line>0&&diagnostic.column>0);
+ memset(negative,0xa5,length+sizeof(ordinary_defer));xr_free(negative);xr_xir_compile_source_result_free(&rejected);
  const char *impostor="export fn wrong()->string{return __dylibLastError()}\n";XrXirSourceResult output={0};
- CHECK(dylib_check(context,impostor,strlen(impostor),false,&output)==XR_XIR_BAD_VALUE&&!output.checked&&!output.snapshot);xr_xir_compile_source_result_free(&output);
+ CHECK(dylib_check(context,impostor,strlen(impostor),false,&output,NULL)==XR_XIR_BAD_VALUE&&!output.checked&&!output.snapshot);xr_xir_compile_source_result_free(&output);
 }
 static void dylib_emit(const XrXirArtifact *code,const uint32_t *ids,const char *path,bool write){
  XrXirCSource source={0};CHECK(xr_xir_compile_emit_c(code,"dylib_runtime",16777216,&source)==XR_XIR_OK);
@@ -90,7 +98,7 @@ int main(int argc,char **argv){
  bool emit=argc==3&&!strcmp(argv[1],"--emit");CHECK(emit||argc==1);
  XrCompileResourceLimits limits=XR_RESOURCE_DEFAULT_COMPILER_LIMITS;XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};
  CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);XrCompileResourceStats before,after;CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
- size_t length=0;char *text=dylib_source_text(&length);XrXirSourceResult source={0};CHECK(dylib_check(&context,text,length,true,&source)==XR_XIR_OK);memset(text,0xa5,length);xr_free(text);
+ size_t length=0;char *text=dylib_source_text(&length);XrXirSourceResult source={0};CHECK(dylib_check(&context,text,length,true,&source,NULL)==XR_XIR_OK);memset(text,0xa5,length);xr_free(text);
  XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);xr_xir_compile_source_result_free(&source);
  XrXirArtifact *cold=NULL,*closed=NULL,*lowered=NULL;CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&cold,NULL)==XR_XIR_OK);
  memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);CHECK(xr_xir_compile_specialize(cold,&closed,NULL,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(cold);
