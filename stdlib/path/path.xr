@@ -12,7 +12,6 @@
 // Char-indexed scanning is safe for separator logic because '/' and '.' are
 // single-byte ASCII scalars that never appear inside a multi-byte UTF-8 unit.
 
-import os
 
 // Platform surface. POSIX values; see the module note above.
 export const sep = "/"
@@ -234,7 +233,7 @@ fn _resolveRawArray(parts: Array<string>) -> string {
 
     var all: Array<string> = []
     if (!hasAbs) {
-        all.push(os.getcwd())
+        all.push(__getcwd())
     }
     for (var i = 0; i < len(parts); i++) {
         all.push(parts[i])
