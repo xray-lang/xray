@@ -252,6 +252,8 @@ class TierTests(unittest.TestCase):
         for path in ("stdlib/path/path.xr", "src/os/os_dylib_owned.h",
                      "src/os/win/dylib_owned_win.c", "src/os/unix/dylib_owned_unix.c",
                      "src/xir/xxir_pointer_origin_internal.h",
+                     "src/xir/xxir_pointer_value.inc.c", "src/xir/xxir_value.c",
+                     "src/xir/xxir_pointer.h",
                      "src/xir/xxir_instance_dylib.inc.c",
                      "src/xir/xxir_instance_dylib_owner.inc.c",
                      "src/xir/xxir_sys_dylib_native.h",
