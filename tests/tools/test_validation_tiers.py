@@ -268,7 +268,8 @@ class TierTests(unittest.TestCase):
                      "tests/unit/xir/dylib_runtime/dylib_cases.h",
                      "tests/unit/xir/dylib_runtime/dylib_runtime.h",
                      "tests/unit/xir/dylib_runtime/test_dylib_data.c",
-                     "tests/unit/xir/dylib_runtime/dylib_runtime.cmake"):
+                     "tests/unit/xir/dylib_runtime/dylib_runtime.cmake",
+                     "tests/unit/xir/xir_genuine_sys_path.h"):
             with self.subTest(path=path):
                 plan = xray_l1.tier_plan(ROOT, "L2", changed=[path])
                 self.assertIn("host-os", plan["groups"])
