@@ -172,6 +172,84 @@ static void path_flavours_contracts(const XrXirCompileContext *context){
         xr_xir_compile_source_result_free(&result);
     }
 }
+static void path_prelude_range_contract(const XrXirCompileContext *context,const XrXirLibraryCatalog *catalog){
+    static const char canonical[]="stdlib-module-v1:module=7:prelude:path=27:prelude/builtin_symbols.def";
+    size_t resource_count=0;const XrModuleResourceBinding *resources=xr_xir_compile_library_catalog_resources_v2(catalog,&resource_count);
+    const XrModuleResourceBinding *prelude=NULL;
+    for(size_t r=0;r<resource_count;++r)if(!strcmp(resources[r].canonical,canonical)){CHECK(!prelude);prelude=resources+r;}
+    CHECK(prelude);const XrXirModule *module=xr_xir_compile_artifact_module(prelude->checked);
+    const XrXirDeclarations *declarations=module->declarations;
+    const XrXirNominalTable *table=module->types->nominals;uint32_t range=UINT32_MAX,function=UINT32_MAX,step=UINT32_MAX;
+    for(uint32_t n=0;n<table->count;++n){
+        const XrXirNominalDeclaration *record=table->declarations+n;
+        if(record->name.length==5&&!memcmp(record->name.bytes,"Range",5)&&
+            record->module.length==sizeof(canonical)-1&&!memcmp(record->module.bytes,canonical,sizeof(canonical)-1)){
+            CHECK(range==UINT32_MAX);range=n;
+        }
+    }
+    CHECK(range!=UINT32_MAX);
+    for(uint32_t f=0;f<module->function_count;++f)
+        if(declarations->functions[f].module==prelude->checked_module&&declarations->functions[f].nominal_owner==range+1&&
+            declarations->functions[f].method_kind==XR_XIR_CONSTRUCTOR){CHECK(function==UINT32_MAX);function=f;}
+    CHECK(function!=UINT32_MAX&&!declarations->functions[function].promises);
+    const XrXirFunction *body=module->functions+function;
+    const XrXirNominalDeclaration *record=table->declarations+range;
+    for(uint32_t f=0;f<record->field_count;++f)
+        if(record->fields[f].name.length==5&&!memcmp(record->fields[f].name.bytes,"_step",5)){CHECK(step==UINT32_MAX);step=f;}
+    CHECK(step!=UINT32_MAX);uint32_t literal=UINT32_MAX;
+    for(uint32_t i=0;i<body->instruction_count;++i)if(body->instructions[i].op==XR_XIR_CLASS_NEW){
+        const XrXirInstruction *create=body->instructions+i;CHECK(step<create->args[1]);
+        uint32_t value=body->operands[create->args[0]+step];CHECK(value>=body->parameter_count&&value-body->parameter_count<i);
+        const XrXirInstruction *read=body->instructions+value-body->parameter_count;CHECK(read->op==XR_XIR_LOCAL_READ);
+        for(uint32_t w=0;w<value-body->parameter_count;++w)
+            if(body->instructions[w].op==XR_XIR_LOCAL_WRITE&&body->instructions[w].args[0]==read->args[0]){
+                uint32_t stored=body->instructions[w].args[1];CHECK(literal==UINT32_MAX&&stored>=body->parameter_count&&stored-body->parameter_count<w);
+                literal=stored-body->parameter_count;
+            }
+    }
+    CHECK(literal!=UINT32_MAX&&body->instructions[literal].op==XR_XIR_CONST_INT&&
+        body->instructions[literal].type==XR_XIR_I64&&body->instructions[literal].immediate==1);
+    XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
+    XrXirLibraryModuleInput *bindings=xr_malloc(declarations->module_count*sizeof(*bindings));
+    XrXirFunctionIdentity *identities=xr_malloc(module->function_count*sizeof(*identities));
+    XrXirFunction *functions=xr_malloc(module->function_count*sizeof(*functions));
+    XrXirInstruction *instructions=xr_malloc(body->instruction_count*sizeof(*instructions));CHECK(bindings&&identities&&functions&&instructions);
+    uint32_t views=0;
+    for(size_t r=0;r<resource_count;++r)if(resources[r].checked==prelude->checked){
+        CHECK(resources[r].checked_module<declarations->module_count);
+        bindings[resources[r].checked_module]=(XrXirLibraryModuleInput){resources[r].authority,resources[r].logical_path};++views;
+    }
+    CHECK(views==declarations->module_count);
+    for(unsigned mode=0;mode<5;++mode){
+        memcpy(identities,declarations->functions,module->function_count*sizeof(*identities));
+        memcpy(functions,module->functions,module->function_count*sizeof(*functions));
+        memcpy(instructions,body->instructions,body->instruction_count*sizeof(*instructions));
+        identities[function].promises=mode==1?XR_XIR_FUNCTION_NO_SUSPEND:mode==2?UINT32_C(0x80000000):0;
+        if(mode==3)instructions[literal].immediate=2;
+        XrXirDeclarations changed_declarations=*declarations;changed_declarations.functions=identities;
+        XrXirModule changed=*module;changed.declarations=&changed_declarations;changed.functions=functions;
+        functions[function].instructions=instructions;XrXirArtifact *owned=NULL;XrXirDiagnostic diagnostic={0};
+        XrXirStatus status=xr_xir_compile_recheck_v2(context,&changed,
+            xr_xir_compile_artifact_construction(prelude->checked),&owned,&diagnostic,NULL);
+        if(status!=(mode==2?XR_XIR_BAD_STRUCTURE:XR_XIR_OK))
+            fprintf(stderr,"Range contract Common mode%u status%u f%u b%u i%u reason%u\n",mode,status,diagnostic.function,diagnostic.block,diagnostic.instruction,diagnostic.reason);
+        if(mode==2){CHECK(status==XR_XIR_BAD_STRUCTURE&&!owned);continue;}
+        CHECK(status==XR_XIR_OK&&owned);
+        XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(owned,&packet,NULL)==XR_XIR_OK);
+        xr_xir_compile_artifact_free(owned);
+        XrXirLibraryInput input={.packet=packet.bytes,.length=packet.length,.modules=bindings,.module_count=views};
+        xr_sha256(input.packet,input.length,input.sha256);XrXirLibraryCatalog *cold=NULL;
+        status=xr_xir_compile_library_catalog_new_v2(context,&input,1,&cold);
+        if(status!=(mode==3?XR_XIR_BAD_STRUCTURE:XR_XIR_OK))
+            fprintf(stderr,"Range contract Catalog mode%u status%u\n",mode,status);
+        if(mode==3)CHECK(status==XR_XIR_BAD_STRUCTURE&&!cold);
+        else CHECK(status==XR_XIR_OK&&cold);
+        memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
+        xr_xir_compile_library_catalog_free(cold);
+    }
+    xr_free(instructions);xr_free(functions);xr_free(identities);xr_free(bindings);
+    CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK&&before.held_bytes==after.held_bytes);
+}
 static void path_flavours_product(const XrXirCompileContext *context,const char *emit_base){
     path_previous134(context);path_previous135(context);
     FILE *file=fopen(XR_PATH_FIXTURES "/flavours.xr","rb");CHECK(file&&!fseek(file,0,SEEK_END));
@@ -180,6 +258,7 @@ static void path_flavours_product(const XrXirCompileContext *context,const char 
     CHECK(fread(text,1,(size_t)bytes,file)==(size_t)bytes&&!fclose(file));text[bytes]=0;
     XrXirLibraryCatalog *catalog=NULL;XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
     CHECK(xir_stdlib_library_catalog_new(context,XR_PATH_ROOT "/stdlib",&catalog)==XR_XIR_OK);
+    path_prelude_range_contract(context,catalog);
     XrXirStatus status=path_flavours_check(context,text,catalog,&source,&diagnostic);
     if(status!=XR_XIR_OK)fprintf(stderr,"Path checked import status%u module%u %d:%d %s\n",
         status,diagnostic.module,diagnostic.line,diagnostic.column,diagnostic.message);
