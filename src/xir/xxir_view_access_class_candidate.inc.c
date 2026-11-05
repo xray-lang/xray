@@ -106,3 +106,52 @@ static XrXirStatus view_access_class_fresh_input(ViewAccess *a,const XrXirViewRo
     }
     return view_access_class_seed(a,fresh->root_value,disjoint);
 }
+
+/* Valid byte views use an ordinary Cell or independent Buffer storage.
+ * Neither representation owns this direct Class Array field's logical slot. */
+static XrXirStatus view_access_class_byte_field_input(ViewAccess *a,const XrXirViewRootEvent *field,
+    const XrXirViewRootEvent *input,uint32_t queried,uint32_t other,bool *disjoint) {
+    *disjoint=false;const XrXirModule *module=a->resolver->check.module;
+    if(!a->cells || !a->cells->owner || !a->cells->construction ||
+        a->instruction>=a->body->instruction_count || field->kind!=XR_XIR_VIEW_ROOT_OBJECT ||
+        field->root_function!=a->function || field->root_value>=a->body->parameter_count ||
+        field->opaque_suffix || field->selection_count || field->step_count!=1 || !field->steps ||
+        input->selection_count || input->root_value!=other ||
+        (module->generics && module->generics[a->function].parameter_count))return XR_XIR_OK;
+    const XrXirInstruction *use=a->body->instructions+a->instruction;
+    if(use->op!=XR_XIR_ARRAY_PUSH || use->args[0]!=queried)return XR_XIR_OK;
+    XrXirType borrowed=XR_XIR_UNIT;bool entry=false;
+    XrXirStatus status=view_access_entry_root_type(a,input,&borrowed,&entry);
+    if(status!=XR_XIR_OK || !entry)return status;
+    const XrXirTypes *types=module->types;
+    const XrXirTypeNode *slice=xr_xir_type_node(types,borrowed);
+    if(!slice || slice->kind!=XR_XIR_TYPE_SLICE || slice->element!=XR_XIR_U8)return XR_XIR_OK;
+    const XrXirViewRootStep *step=field->steps;
+    if(step->function!=a->function || step->value!=queried || step->operation!=XR_XIR_FIELD_PLACE ||
+        queried<a->body->parameter_count || queried-a->body->parameter_count>=a->body->instruction_count)return XR_XIR_OK;
+    const XrXirInstruction *leaf=a->body->instructions+queried-a->body->parameter_count;
+    if(leaf->op!=XR_XIR_FIELD_PLACE || leaf->immediate<0 || (uint64_t)leaf->immediate>UINT32_MAX ||
+        step->selector!=(uint32_t)leaf->immediate || leaf->args[0]<a->body->parameter_count ||
+        leaf->args[0]-a->body->parameter_count>=a->body->instruction_count)return XR_XIR_OK;
+    const XrXirInstruction *object=a->body->instructions+leaf->args[0]-a->body->parameter_count;
+    XrXirType receiver=a->body->parameters[field->root_value];
+    const XrXirTypeNode *nominal=xr_xir_type_node(types,receiver),*array=xr_xir_type_node(types,leaf->type);
+    if(object->op!=XR_XIR_OBJECT_PLACE || object->args[0]!=field->root_value || object->type!=receiver ||
+        step->container!=receiver || !nominal || !xr_xir_type_is_class(types,receiver) || nominal->parameter_span ||
+        nominal->nominal.argument_count || !array || array->kind!=XR_XIR_TYPE_ARRAY || array->element!=XR_XIR_U8 ||
+        !types->nominals || nominal->nominal.declaration>=types->nominals->count ||
+        step->selector>=nominal->nominal.field_count || nominal->nominal.fields[step->selector]!=leaf->type)return XR_XIR_OK;
+    const XrXirNominalTable *table=types->nominals;uint32_t owner=nominal->nominal.declaration,flags=0;
+    if(table->declarations) {
+        const XrXirNominalDeclaration *decl=table->declarations+owner;
+        if(decl->parameter_count || decl->parent || decl->native.native_id || step->selector>=decl->field_count ||
+            !decl->fields || decl->fields[step->selector].type!=leaf->type)return XR_XIR_OK;
+        flags=decl->fields[step->selector].flags;
+    } else if(table->identities) {
+        const XrXirNominalIdentity *identity=table->identities+owner;
+        if(identity->arity || identity->parent || identity->native.native_id || step->selector>=identity->field_count ||
+            !identity->fields)return XR_XIR_OK;
+        flags=identity->fields[step->selector].flags;
+    } else return XR_XIR_OK;
+    *disjoint=(flags&XR_XIR_FIELD_MUTABLE)!=0;return XR_XIR_OK;
+}

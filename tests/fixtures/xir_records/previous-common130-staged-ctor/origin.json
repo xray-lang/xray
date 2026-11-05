@@ -1,0 +1,37 @@
+{
+  "state": "IMMUTABLE_GENUINE_PREDECESSOR_PACKET",
+  "sourceCommit": "3f266cdd16c8fb7b4190d904b5c932bf8a17d877",
+  "capturedWorkspaceHead": "e4585414963102ac2c96d1ef74340e031c3c38d0",
+  "engineBoundary": "Actual frozen3f common130 archives; not fullB exacte458",
+  "schema": 42,
+  "common": 130,
+  "packetBytes": 3228,
+  "packetSha256": "0195f93168c89c6eb074b97f2fc60f5a5b508ff1d50591aab9816a20cd80bc5c",
+  "sourceSha256": "7d913671514777c2cc8eab444010aff1252374d7eefceb190a6c91e932438dcb",
+  "sourcePath": "staged_ctor.xr",
+  "producerEvidence": {
+    "path": "D:\\xray-build\\coordinator\\20261029-resume\\r3-f13-host-complete-20261103\\root-common130-staged-ctor-producer-preparation-v1\\evidence.json",
+    "sha256": "46c348b6f87d0056b001b9f50c5957eaa8b4815ffa9fcd4d6e23a6b4546992a2"
+  },
+  "producerResult": {
+    "path": "D:/xray-build/coordinator/20261029-resume/r3-f13-host-complete-20261103/root-common130-staged-ctor-producer-preparation-v1/result.json",
+    "bytes": 13378,
+    "mtimeNs": 1793856210750593900,
+    "sha256": "bcca7384e88f0aa95a8b61fee4a5c43445a1e2307bf8ac7cdad0f6fc7547074f"
+  },
+  "actualProvenance": "Actual frozen3f engine Source check/write. Base/Derived real nonfinal field helpers and constructors have matching zero promises. Producer/session/resources retired before a new owner cold-read the disk packet successfully with resource restoration. No header/payload/digest edits. Current131 rejection is a separate regression, not supplied by the producer PASS.",
+  "base": {
+    "helper": 5,
+    "constructor": 3,
+    "promises": 0,
+    "ArrayString": true
+  },
+  "derived": {
+    "helper": 6,
+    "constructor": 4,
+    "promises": 0,
+    "ArrayString": true,
+    "string": true,
+    "parent": 1
+  }
+}

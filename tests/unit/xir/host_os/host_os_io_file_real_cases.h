@@ -14,10 +14,12 @@
 #ifndef HOST_OS_IO_FILE_REAL_CASES_H
 #define HOST_OS_IO_FILE_REAL_CASES_H
 #include "os/os_time.h"
+#include "xir/xxir_view_value_internal.h"
+#include "xir/xxir_buffer_storage.h"
 static bool host_file_stdio_child;
 enum { HOST_REAL_ENTRY,HOST_REAL_PATH,HOST_REAL_ROUNDTRIP,HOST_REAL_DEFER,HOST_REAL_STDIO,
  HOST_REAL_OPEN,HOST_REAL_READ,HOST_REAL_CLOSE,HOST_REAL_FLUSH,HOST_REAL_WRITE,HOST_REAL_WRITE_STR,
- HOST_REAL_LOSSY,HOST_REAL_LOSSY_CHECK,HOST_REAL_CONSTRUCTOR,HOST_REAL_EAGER,HOST_REAL_EMPTY,HOST_REAL_FIELD_PLACES,HOST_REAL_CTOR_HELPER,HOST_REAL_COUNT };
+ HOST_REAL_LOSSY,HOST_REAL_LOSSY_CHECK,HOST_REAL_CONSTRUCTOR,HOST_REAL_EAGER,HOST_REAL_EMPTY,HOST_REAL_FIELD_PLACES,HOST_REAL_BUFFERED,HOST_REAL_CTOR_HELPER,HOST_REAL_COUNT };
 #if defined(XR_OS_WINDOWS)
 static const unsigned char host_file_real_input[]={0x41,0x0D,0x0A,0x1A,0,0xFF,0x42};
 /* The two-byte UTF-8 prefix makes offset two distinct from a rune index. */
@@ -118,6 +120,28 @@ static void host_file_real_array(const XrXirValue *value,const unsigned char *ex
   CHECK(xr_xir_array_get(value,(int64_t)n,admission,&element,&fault)==XR_XIR_VALUE_OK&&element.type==XR_XIR_U8&&element.payload==expected[n]);
   xr_xir_value_drop(&element);}
 }
+static void host_file_view_conflicts(XrXirProgram *program,XrXirInstance *instance,XrXirType array_type){
+ size_t live=runtime_live,bytes=runtime_bytes;const XrXirTypes *types=xr_xir_compile_type_arena_types(program->arena);
+ XrXirType cell_type=XR_XIR_UNIT,slice_type=XR_XIR_UNIT;
+ for(uint32_t n=0;n<types->count;++n){const XrXirTypeNode *node=types->nodes+n;
+  if(node->kind==XR_XIR_TYPE_CELL&&node->element==array_type)cell_type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+n);
+  if(node->kind==XR_XIR_TYPE_SLICE&&node->element==XR_XIR_U8)slice_type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+n);}
+ CHECK(cell_type!=XR_XIR_UNIT&&slice_type!=XR_XIR_UNIT);
+ XrXirValueAdmission admission={.arena=program->arena,.domain=instance->domain,.work=UINT64_MAX,.scratch_bytes=UINT64_MAX};
+ XrXirValue byte={XR_XIR_U8,0,42},array={0},cell={0},view={0};
+ CHECK(xr_xir_array_new(array_type,&byte,1,&admission,&array)==XR_XIR_VALUE_OK);
+ CHECK(xr_xir_cell_new(instance->domain,program->arena,cell_type,&array,&admission,&cell)==XR_XIR_VALUE_OK);
+ XrXirCellAuthority authority={instance,&cell,1};XrXirViewStorageSpec spec={authority,0,1,XR_XIR_TYPE_SLICE};XrXirViewOriginPin pin={0};
+ CHECK(xr_xir_view_new(slice_type,&cell,NULL,&spec,&admission,&view)==XR_XIR_VALUE_OK);xr_xir_view_scope_pin_created(&view,&authority,&pin);
+ CHECK(xr_xir_cell_write(&cell,&array,&admission)==XR_XIR_VALUE_BAD_ARGUMENT);
+ xr_xir_view_scope_close(&pin);xr_xir_value_drop(&view);CHECK(xr_xir_cell_write(&cell,&array,&admission)==XR_XIR_VALUE_OK);
+ xr_xir_value_drop(&cell);xr_xir_value_drop(&array);
+ XrXirValue storage={0};CHECK(xr_xir_buffer_storage_new(instance->domain,3,0,true,&storage)==XR_XIR_VALUE_OK);
+ CHECK(xr_xir_buffer_storage_view(&storage,slice_type,&authority,&admission,&view)==XR_XIR_VALUE_OK);xr_xir_view_scope_pin_created(&view,&authority,&pin);
+ bool resized=false;CHECK(xr_xir_buffer_storage_resize(&storage,4,&resized)==XR_XIR_VALUE_BAD_ARGUMENT&&!resized);
+ xr_xir_view_scope_close(&pin);xr_xir_value_drop(&view);CHECK(xr_xir_buffer_storage_resize(&storage,4,&resized)==XR_XIR_VALUE_OK&&resized);
+ xr_xir_value_drop(&storage);CHECK(runtime_live==live&&runtime_bytes==bytes);
+}
 static XrXirInstance *host_file_real_instance(XrXirProgram *program){
  XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
  XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);return instance;
@@ -212,6 +236,11 @@ static void host_file_real_execute(XrXirProgram *program,const uint32_t ids[HOST
  host_file_real_array(&input,host_file_real_input,sizeof(host_file_real_input),&admission);
  const char *actual=NULL;size_t length=0;CHECK(xr_xir_string_view(&text,&actual,&length)&&length==sizeof(host_file_real_text)&&!memcmp(actual,host_file_real_text,length));
  xr_xir_value_drop(&result);host_file_real_fixture(&fixture,1);
+ static const unsigned char buffered_expected[]={0x41,0x0D,0x0A,0x1A,0,0xFF,0x42,0x41,0x0D,0x0A,0x1A,0,0xFF,0x42,
+  0x41,0,0xE4,0xB8,0xAD,0,0,0,0x41,0,0xE4,0xB8,0xAD};
+ XrXirValue buffered_args[]={path,input};result=host_file_real_invoke(instance,ids[HOST_REAL_BUFFERED],buffered_args,2);
+ host_file_real_array(&result,buffered_expected,sizeof(buffered_expected),&admission);host_file_real_array(&input,host_file_real_input,sizeof(host_file_real_input),&admission);
+ xr_xir_value_drop(&result);host_file_view_conflicts(program,instance,(XrXirType)input.type);host_file_real_fixture(&fixture,1);
  result=host_file_real_invoke(instance,ids[3],&path,1);CHECK(result.type==XR_XIR_I64&&result.payload==13);xr_xir_value_drop(&result);
  host_file_real_fixture(&fixture,1);xr_xir_value_drop(&path);xr_xir_value_drop(&input);xr_xir_value_drop(&text);
  CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY&&runtime_live==live&&runtime_bytes==bytes);

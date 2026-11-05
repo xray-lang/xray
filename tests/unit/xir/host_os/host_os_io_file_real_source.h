@@ -15,7 +15,7 @@
 #define HOST_OS_IO_FILE_REAL_SOURCE_H
 #include "xir/xxir_class_stage_internal.h"
 static const char host_file_real_exports[]=
- "\nexport fn filePath(raw:string)->Path{return Path(raw)}\n"
+ "\nimport {Buffer} from mem\nexport fn filePath(raw:string)->Path{return Path(raw)}\n"
  "export fn fileRoundtrip(path:Path,bytes:Array<u8>,text:string)->Array<u8>{\n"
  " var opened=File.openWrite(path,false);assert(opened!=null);const writer=opened!\n"
  " var offset:i64=1;while(offset<len(bytes)){const n=writer.write(bytes,offset);assert(n>0&&n<=len(bytes)-offset);offset+=n}\n"
@@ -64,7 +64,14 @@ static const char host_file_real_exports[]=
  "  this.data.reserve(len(this.data=[7,8])+4);assert(this.data.capacity>=6)\n"
  "  this.grid=[[3]];var count:i64=0;this.grid[(count=count+1)-1].push(4);this.seen+=count}\n"
  " result()->Array<i64>{assert(this.seen==3);assert(len(this.grid[0])==2&&this.grid[0][1]==4);return this.data}}\n"
- "export fn fileFieldPlaces(input:Array<i64>)->Array<i64>{return FileFieldPlaces(input).result()}\n";
+ "export fn fileFieldPlaces(input:Array<i64>)->Array<i64>{return FileFieldPlaces(input).result()}\n"
+ "export fn fileBuffered(path:Path,input:Array<u8>)->Array<u8>{const writer=BufWriter(path,1)\n"
+ " assert(writer.writeBytes(input)==len(input));const snapshot=writer.bytes()\n"
+ " assert(writer.write(snapshot[:])==len(snapshot));var i:i64=0\n"
+ " while(i<len(input)){assert(snapshot[i]==input[i]);i+=1}\n"
+ " const text=\"A\\0\xE4\xB8\xAD\";assert(writer.write(text.bytes())==5)\n"
+ " const storage=Buffer(3,true);assert(writer.write(storage.asBytes())==3);assert(storage.resize(4))\n"
+ " assert(writer.writeString(text)==5);const result=writer.bytes();writer.reset();assert(writer.size()==0);return result}\n";
 static XrXirArtifact *host_file_real_code(XrXirCompileContext *context){
  FILE *file=fopen(XR_HOST_OS_ROOT "/stdlib/io/io.xr","rb");CHECK(file&&!fseek(file,0,SEEK_END));long size=ftell(file);CHECK(size>0&&!fseek(file,0,SEEK_SET));
  CHECK((uint64_t)size<=SIZE_MAX-sizeof(host_file_real_exports));size_t length=(size_t)size+sizeof(host_file_real_exports)-1;
@@ -107,7 +114,7 @@ static void host_file_real_product(XrXirCompileContext *context,const char *dire
  if(!emit&&!host_file_stdio_child)host_file_contracts(context);
  XrXirArtifact *code=host_file_real_code(context);const XrXirModule *module=xr_xir_compile_artifact_module(code);
  uint32_t ids[HOST_REAL_COUNT]={module->declarations->entry_function};
- static const char *const names[]={"filePath","fileRoundtrip","fileDeferred","fileStdio","fileOpenRaw","fileReadRaw","fileCloseRaw","fileFlushRaw","fileWriteRaw","fileWriteTextRaw","fileLossy","fileLossyCheck","fileConstructorRaw","fileEager","fileEmptyIterator","fileFieldPlaces"};
+ static const char *const names[]={"filePath","fileRoundtrip","fileDeferred","fileStdio","fileOpenRaw","fileReadRaw","fileCloseRaw","fileFlushRaw","fileWriteRaw","fileWriteTextRaw","fileLossy","fileLossyCheck","fileConstructorRaw","fileEager","fileEmptyIterator","fileFieldPlaces","fileBuffered"};
  for(unsigned n=0;n<HOST_REAL_COUNT-2;++n)ids[n+1]=host_named(module,names[n]);
  ids[HOST_REAL_CTOR_HELPER]=host_file_constructor_contracts(module,ids[HOST_REAL_CONSTRUCTOR]);
  uint32_t decoder=host_named(module,"fromUtf8Lossy");CHECK(module->declarations->functions[decoder].native_callable==118u&&

@@ -108,9 +108,11 @@ static XrXirStatus view_access_ancestor(ViewAccess *a,const ViewAccessOrigin *pa
     return XR_XIR_OK;
 }
 static XrXirStatus view_access_fresh_input(ViewAccess *a,const XrXirViewRootEvent *fresh,
-    const XrXirViewRootEvent *input,uint32_t queried,bool *disjoint) {
+    const XrXirViewRootEvent *input,uint32_t queried,uint32_t other,bool *disjoint) {
     *disjoint=false;
-    XrXirStatus candidate=view_access_class_fresh_input(a,fresh,input,disjoint);
+    XrXirStatus candidate=view_access_class_byte_field_input(a,fresh,input,queried,other,disjoint);
+    if(candidate!=XR_XIR_OK || *disjoint)return candidate;
+    candidate=view_access_class_fresh_input(a,fresh,input,disjoint);
     if(candidate!=XR_XIR_OK || *disjoint)return candidate;
     if (fresh->opaque_suffix || input->opaque_suffix || fresh->dynamic_identity || input->dynamic_identity ||
         fresh->kind!=XR_XIR_VIEW_ROOT_CELL || fresh->root_function!=a->function || input->root_function!=a->function ||
@@ -229,8 +231,8 @@ static XrXirStatus view_access_storage(ViewAccess *a,uint32_t left,uint32_t righ
     for (ViewRootSaved *p=l.left;p && status==XR_XIR_OK;p=p->next) for (ViewRootSaved *q=r.left;q;q=q->next) {
         bool disjoint=false,fresh=false,entry=false,epochs=false,overlap=false;
         status=view_root_path_pair(&a->resolver->check,&p->event,&q->event,&disjoint);
-        if (status==XR_XIR_OK && !disjoint) status=view_access_fresh_input(a,&p->event,&q->event,left_query,&fresh);
-        if (status==XR_XIR_OK && !disjoint && !fresh) status=view_access_fresh_input(a,&q->event,&p->event,right_query,&fresh);
+        if (status==XR_XIR_OK && !disjoint) status=view_access_fresh_input(a,&p->event,&q->event,left_query,right_query,&fresh);
+        if (status==XR_XIR_OK && !disjoint && !fresh) status=view_access_fresh_input(a,&q->event,&p->event,right_query,left_query,&fresh);
         if (status==XR_XIR_OK && !disjoint && !fresh && !entry) status=view_access_entry_regions(a,&p->event,&q->event,&entry);
         if (status==XR_XIR_OK && !disjoint && !fresh && !entry) status=view_access_epoch_separation(a,&p->event,&q->event,left_query,right_query,&epochs);
         if (status==XR_XIR_OK && !disjoint && !fresh && !entry && !epochs) status=view_access_overlap(a,&p->event,&q->event,left_query,right_query,&overlap);

@@ -271,13 +271,14 @@ static void stage_transition(StageFixture *f) {
     CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK && before.held_bytes==after.held_bytes);
     xr_compile_resources_release(context.resources);
 }
-static void stage_previous129_rejected(void) {
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==42 && XR_XIR_CHECKED_CONTRACT==130,"staged constructor acceptance identity");
-    FILE *file=fopen(XR_CLASS_STAGE_PREVIOUS "/old129.xrchk","rb");CHECK(file);
+static void stage_previous_rejected(const char *path,unsigned predecessor,const uint8_t expected[32]) {
+    _Static_assert(XR_XIR_CHECKED_CONTRACT>129,"the genuine predecessor contract remains retired");
+    CHECK(XR_XIR_CHECKED_CONTRACT>predecessor);
+    FILE *file=fopen(path,"rb");CHECK(file);
     uint8_t packet[3228];CHECK(fread(packet,1,sizeof(packet),file)==sizeof(packet)&&fgetc(file)==EOF&&!ferror(file)&&!fclose(file));
     CHECK(!memcmp(packet,"XRCHK\0\0\0",8)&&packet[8]==42&&!packet[9]&&!packet[10]&&!packet[11]&&
-        packet[12]==129&&!packet[13]&&!packet[14]&&!packet[15]);
-    static const uint8_t expected[32]={0x29,0x1f,0xa6,0x89,0xcf,0x58,0x73,0x0e,0x67,0x3e,0x59,0x0e,0xcb,0xee,0x57,0x33,0xaa,0xd5,0x7a,0x85,0x3d,0x23,0x74,0xc8,0x19,0x2d,0xf0,0xc0,0x46,0x2a,0x05,0x24};uint8_t digest[32];xr_sha256(packet,sizeof(packet),digest);CHECK(!memcmp(digest,expected,32));
+        packet[12]==predecessor&&!packet[13]&&!packet[14]&&!packet[15]);
+    uint8_t digest[32];xr_sha256(packet,sizeof(packet),digest);CHECK(!memcmp(digest,expected,32));
     XrSHA256Context sha;xr_sha256_init(&sha);xr_sha256_update(&sha,packet,32);xr_sha256_update(&sha,packet+64,sizeof(packet)-64);
     xr_sha256_final(&sha,digest);CHECK(!memcmp(digest,packet+32,32));
     XrCompileResourceLimits limits=XR_RESOURCE_DEFAULT_COMPILER_LIMITS;XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};
@@ -287,9 +288,15 @@ static void stage_previous129_rejected(void) {
     CHECK(diagnostic.status==XR_XIR_BAD_STRUCTURE&&xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK&&
         before.held_bytes==after.held_bytes&&before.allocation_count==after.allocation_count);xr_compile_resources_release(context.resources);
 }
+static void stage_previous_contracts_rejected(void) {
+    static const uint8_t old129[32]={0x29,0x1f,0xa6,0x89,0xcf,0x58,0x73,0x0e,0x67,0x3e,0x59,0x0e,0xcb,0xee,0x57,0x33,0xaa,0xd5,0x7a,0x85,0x3d,0x23,0x74,0xc8,0x19,0x2d,0xf0,0xc0,0x46,0x2a,0x05,0x24};
+    static const uint8_t old130[32]={0x01,0x95,0xf9,0x31,0x68,0xc8,0x9c,0x6e,0xb0,0x74,0xb9,0x7f,0x2f,0xc6,0x0f,0x5a,0x5b,0x50,0x8f,0xf1,0xd5,0x05,0x91,0xaa,0xb9,0x81,0x6a,0x20,0xcd,0x80,0xbc,0x5c};
+    stage_previous_rejected(XR_CLASS_STAGE_PREVIOUS "/old129.xrchk",129,old129);
+    stage_previous_rejected(XR_CLASS_STAGE_PREVIOUS130 "/old130.xrchk",130,old130);
+}
 int main(int argc,char **argv) {
     CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--raw-only")));
-    stage_previous129_rejected();
+    stage_previous_contracts_rejected();
     StageFixture f;stage_fixture(&f);stage_expect(&f,XR_XIR_OK);
     CHECK(xir_compile_class_stage_call(&f.module,BASE_CTOR,0,NULL)==XR_XIR_OK);
     CHECK(xir_compile_class_stage_call(&f.module,CHILD_HELPER,3,NULL)==XR_XIR_OK);

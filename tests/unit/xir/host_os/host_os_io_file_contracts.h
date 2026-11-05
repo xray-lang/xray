@@ -71,7 +71,21 @@ static void host_file_contract_rejected(XrXirCompileContext *context,const char 
  if(reason)CHECK(strstr(diagnostic.message,reason));
  xr_xir_compile_source_result_free(&output);
 }
+static void host_file_byte_slice_refusals(XrXirCompileContext *context){
+ static const char *const rejected[]={
+  "final class C{data:Array<i64> init(){this.data=[1]} append(input:Slice<i64>){this.data.push(input[0])}}\n",
+  "final class C<T>{data:Array<u8> init(){this.data=[]} append(input:Slice<u8>){this.data.push(input[0])}}\n",
+  "final class C{data:Array<u8> init(){this.data=[]} append(input:MutSlice<u8>){this.data.push(input[0])}}\n",
+  "final class C{data:Array<Array<u8>> init(){this.data=[[0 as u8]]} append(input:Slice<u8>){this.data[0].push(input[0])}}\n",
+  "final class C{data:Array<u8> init(){this.data=[]} append(input:(Slice<u8>,i64)){this.data.push(input.0[0])}}\n",
+  "final class C{data:Array<u8> init(){this.data=[]}}\nfn append<T>(value:C,input:Slice<u8>){value.data.push(input[0])}\n"};
+ for(unsigned n=0;n<sizeof(rejected)/sizeof(*rejected);++n)
+  host_file_contract_rejected(context,rejected[n],false,XR_XIR_UNRESOLVED,"(ARRAY_PUSH)");
+ const char *projected="fn edit(value:ref Array<u8>){}\nfinal class C{data:Array<u8> init(){this.data=[];edit(ref this.data)}}\n";
+ host_file_contract_rejected(context,projected,false,XR_XIR_BAD_TYPE,"ref requires a mutable stored binding");
+}
 static void host_file_contracts(XrXirCompileContext *context){
+ host_file_byte_slice_refusals(context);
  XrXirArtifact *code=host_code(context,"io",host_file_contract_text);
  host_file_contract_raw_references(context);
  static const char *const names[]={"__fileClose","__fileFlush","__fileOpen","__fileOpenWrite","__fileRead","__fileWrite","__fileWriteStr"};

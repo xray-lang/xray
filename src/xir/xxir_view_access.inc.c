@@ -11,6 +11,8 @@
 #include "xxir_view_access_epoch.inc.c"
 static XrXirStatus view_access_class_fresh_input(ViewAccess *,const XrXirViewRootEvent *,
     const XrXirViewRootEvent *,bool *);
+static XrXirStatus view_access_class_byte_field_input(ViewAccess *,const XrXirViewRootEvent *,
+    const XrXirViewRootEvent *,uint32_t,uint32_t,bool *);
 #include "xxir_view_access_relation.inc.c"
 #include "xxir_view_types_internal.h"
 static XrXirStatus view_access_buffer_alias(ViewAccess *a,uint32_t *value) {
