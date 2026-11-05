@@ -62,11 +62,41 @@ static void host_file_contract_raw_references(XrXirCompileContext *context){
  instructions[instruction]=*original;CHECK(xr_xir_compile_structure_verify_v2(context,&changed,code->construction,NULL)==XR_XIR_OK);
  xr_free(instructions);xr_free(functions);xr_xir_compile_artifact_free(code);
 }
+static void host_file_refusal_ir(const XrXirArtifact *checked){
+ const XrXirModule *module=xr_xir_compile_artifact_module(checked);uint32_t shown=0,scanned=0;bool truncated=false;
+ uint32_t functions=module->function_count>64u?64u:module->function_count;truncated=functions<module->function_count;
+ for(uint32_t f=0;f<functions&&shown<8u;++f){
+  const XrXirFunction *body=module->functions+f;bool push=false;
+  uint32_t inspected=body->instruction_count>512u?512u:body->instruction_count;
+  truncated|=inspected<body->instruction_count;++scanned;
+  for(uint32_t i=0;i<inspected;++i)if(body->instructions[i].op==XR_XIR_ARRAY_PUSH)push=true;
+  if(!push)continue;
+  ++shown;uint32_t count=body->instruction_count>128u?128u:body->instruction_count;
+  uint32_t parameters=body->parameter_count>8u?8u:body->parameter_count;truncated|=count<body->instruction_count;
+  fprintf(stderr,"file refusal function%u name=%.*s nameTruncated=%u parameters=%u parametersTruncated=%u result=%u error=%u instructions=%u shown=%u instructionTruncated=%u\n",
+   f,(int)(body->name_length>200u?200u:body->name_length),(body->name?body->name:""),(unsigned)(body->name_length>200u),
+   body->parameter_count,(unsigned)(parameters<body->parameter_count),body->result,body->error_type,body->instruction_count,count,(unsigned)(count<body->instruction_count));
+  for(uint32_t p=0;p<parameters;++p)fprintf(stderr,"file refusal parameter%u type%u\n",p,body->parameters[p]);
+  for(uint32_t i=0;i<count;++i){const XrXirInstruction *op=body->instructions+i;const char *name=xr_xir_op_name(op->op);
+   fprintf(stderr,"file refusal i%u value%u op=%s type%u args=%u,%u targets=%u,%u immediate=%lld typeargs=%u,%u\n",
+    i,body->parameter_count+i,name?name:"UNKNOWN",op->type,op->args[0],op->args[1],op->targets[0],op->targets[1],(long long)op->immediate,op->type_arguments[0],op->type_arguments[1]);
+   if(op->op==XR_XIR_VIEW_CLEANUP){uint32_t operands=op->args[1]>16u?16u:op->args[1];
+    for(uint32_t p=0;p<operands;++p)fprintf(stderr,"file refusal cleanup i%u operand%u value%u\n",i,p,body->operands[op->args[0]+p]);
+    fprintf(stderr,"file refusal cleanup i%u operandTruncated=%u\n",i,(unsigned)(operands<op->args[1]));}
+  }
+ }
+ truncated|=scanned<module->function_count;
+ fprintf(stderr,"file refusal IR summary functions=%u scanned=%u containingPushShown=%u truncated=%u\n",module->function_count,scanned,shown,(unsigned)truncated);
+}
 static void host_file_contract_rejected(XrXirCompileContext *context,const char *text,bool genuine,
  XrXirStatus expected,const char *reason){
  XrXirSourceResult output={0};XrXirSourceDiagnostic diagnostic={0};
  XrXirStatus status=host_check(context,"io",text,genuine,&output,&diagnostic);
- if(status!=expected)fprintf(stderr,"file contract status%u expected%u %d:%d %s\n",status,expected,diagnostic.line,diagnostic.column,diagnostic.message);
+ if(status!=expected){
+  fprintf(stderr,"file contract status%u expected%u %d:%d %s\n",status,expected,diagnostic.line,diagnostic.column,diagnostic.message);
+  fprintf(stderr,"file refusal actual text begin\n%sfile refusal actual text end\n",text);
+  if(status==XR_XIR_OK&&output.checked)host_file_refusal_ir(output.checked);
+ }
  CHECK(status==expected&&!output.checked&&!output.snapshot&&diagnostic.status==expected);
  if(reason)CHECK(strstr(diagnostic.message,reason));
  xr_xir_compile_source_result_free(&output);
