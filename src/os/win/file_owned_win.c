@@ -10,6 +10,7 @@
 #include "../file_metadata_path.inc.h"
 #include "../../base/xwindows_utf8.h"
 #include <errno.h>
+#include <process.h>
 #include <stdatomic.h>
 #include <stdio.h>
 
@@ -122,7 +123,7 @@ static void owned_file_stream_io(OwnedFileOp *op) {
      * next genuine read from the shared stream. Buffered bytes remain intact. */
     if(op->result.status==XR_OS_IO_CANCELLED)clearerr(op->stream);
 }
-static DWORD WINAPI owned_file_worker(void *context) {
+static unsigned __stdcall owned_file_worker(void *context) {
     OwnedFileOp *op=context;
     if(atomic_load_explicit(&op->cancelled,memory_order_acquire))op->result.status=XR_OS_IO_CANCELLED;
     else if(op->action==XR_OS_FILE_OPEN_READ || op->action==XR_OS_FILE_OPEN_WRITE) {
@@ -192,8 +193,19 @@ static XrOsIoStatus owned_file_op_new(const XrOsIoPolicy *memory,OwnedFileState 
 }
 static XrOsIoStatus owned_file_launch(OwnedFileOp *op,const XrOsFileQuery *query,XrOsIoStatus status) {
     if(status==XR_OS_IO_OK && !owned_file_current(query))status=XR_OS_IO_CANCELLED;
-    if(status==XR_OS_IO_OK && !(op->thread=CreateThread(NULL,0,owned_file_worker,op,0,NULL)))
-        status=owned_file_error(GetLastError());
+    if(status==XR_OS_IO_OK) {
+        errno=0;_set_doserrno(0);
+        uintptr_t thread=_beginthreadex(NULL,0,owned_file_worker,op,0,NULL);
+        if(thread)op->thread=(HANDLE)thread;
+        else {
+            int error=errno;unsigned long native=0;
+            if(_get_doserrno(&native)==0 && native)status=owned_file_error((DWORD)native);
+            else if(error==ENOMEM)status=XR_OS_IO_OUT_OF_MEMORY;
+            else if(error==EAGAIN || error==EACCES)status=XR_OS_IO_MEMORY_LIMIT;
+            else status=error==EINVAL?XR_OS_IO_BAD_ARGUMENT:XR_OS_IO_IO;
+            op->result.native_error=(uint32_t)native;
+        }
+    }
     if(!op->thread) {
         op->terminal=true;op->result.status=status;
         atomic_store_explicit(&op->complete,true,memory_order_release);
