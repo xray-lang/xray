@@ -50,7 +50,9 @@ static XrOsIoStatus host_system_kill(XrOsSystemOwner *,int64_t,int64_t,void *,bo
 static XrOsIoStatus host_system_total(int64_t *);
 static XrOsIoStatus host_system_free(XrOsSystemOwner *,int64_t *);
 static XrOsIoStatus host_system_uptime(double *);
+#if !defined(XR_OS_WINDOWS)
 static XrOsIoStatus host_system_loadavg(XrOsLoadAverages *);
+#endif
 static XrOsIoStatus host_system_close(XrOsSystemOwner *);
 static XrOsIoStatus host_metadata(const XrOsIoPolicy *,const char *,size_t,bool(*)(void *),XrOsFileMetadataOwner *,XrOsFileMetadata *);
 static XrOsIoStatus host_metadata_close(XrOsFileMetadataOwner *);
@@ -191,7 +193,9 @@ static XrOsIoStatus host_system_kill(XrOsSystemOwner *o,int64_t pid,int64_t sign
 static XrOsIoStatus host_system_total(int64_t *o){++system_calls[4];return host_system_after(xr_os_io_total_memory(o));}
 static XrOsIoStatus host_system_free(XrOsSystemOwner *owner,int64_t *o){++system_calls[5];return host_system_after(xr_os_io_free_memory(owner,o));}
 static XrOsIoStatus host_system_uptime(double *o){++system_calls[6];return host_system_after(xr_os_io_uptime(o));}
+#if !defined(XR_OS_WINDOWS)
 static XrOsIoStatus host_system_loadavg(XrOsLoadAverages *o){++system_calls[7];return host_system_after(xr_os_io_loadavg(o));}
+#endif
 static XrOsIoStatus host_system_close(XrOsSystemOwner *o){
  ++system_close_calls;
 #if defined(XR_OS_WINDOWS)
