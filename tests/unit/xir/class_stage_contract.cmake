@@ -4,7 +4,8 @@ target_compile_definitions(test_xir_class_stage_contract PRIVATE
     XR_CLASS_STAGE_PREVIOUS="${PROJECT_SOURCE_DIR}/tests/fixtures/xir_records/previous-common129-staged-ctor"
     XR_CLASS_STAGE_PREVIOUS130="${PROJECT_SOURCE_DIR}/tests/fixtures/xir_records/previous-common130-staged-ctor"
     XR_CLASS_STAGE_PREVIOUS131="${PROJECT_SOURCE_DIR}/tests/fixtures/xir_records/previous-common131-staged-ctor"
-    XR_CLASS_STAGE_PREVIOUS132="${PROJECT_SOURCE_DIR}/tests/fixtures/xir_records/previous-common132-staged-ctor")
+    XR_CLASS_STAGE_PREVIOUS132="${PROJECT_SOURCE_DIR}/tests/fixtures/xir_records/previous-common132-staged-ctor"
+    XR_CLASS_STAGE_PREVIOUS133="${PROJECT_SOURCE_DIR}/tests/fixtures/xir_records/previous-common133-staged-ctor")
 if(MSVC)
     target_compile_options(test_xir_class_stage_contract PRIVATE /W4 /WX /utf-8)
 else()

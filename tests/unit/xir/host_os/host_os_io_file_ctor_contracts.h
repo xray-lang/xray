@@ -11,6 +11,7 @@
 #include "xir/xxir_view_prepare_internal.h"
 #include "xir/xxir_internal.h"
 #include "xir/xxir_native_callable.h"
+#include "host_os_io_file_write_contracts.h"
 static void host_file_ctor_boundary_controls(XrXirCompileContext *context,const XrXirArtifact *cold){
  const XrXirModule *module=xr_xir_compile_artifact_module(cold);
  const XrXirConstruction *construction=xr_xir_compile_artifact_construction(cold);
@@ -41,6 +42,7 @@ static void host_file_ctor_boundary_controls(XrXirCompileContext *context,const 
  XrXirDiagnostic diagnostic={0};XirEffectInput input={&raw,construction,NULL};
  CHECK(xir_compile_view_prepare_ordinary(context,input,&diagnostic)==XR_XIR_OK);
  CHECK(xr_xir_compile_structure_verify_v2(context,&raw,construction,&diagnostic)==XR_XIR_OK);
+ host_file_write_boundary_controls(context,&raw,construction,entry,borrow_site);
  /* A legal static factory keeps the actual Class body and complete signature.
   * Its declaration alone must not gain the constructor boundary. */
  identities[constructor].method_kind=XR_XIR_STATIC_METHOD;

@@ -1,0 +1,10 @@
+class Base {
+ items:Array<string>
+ init(items:Array<string>){this.items=items}
+}
+class Derived extends Base {
+ label:string
+ init(items:Array<string>,label:string){super(items);this.label=label}
+}
+export fn make()->Derived{return Derived(["old-owned-first","old-owned-second"],"common129-owned-tail")}
+export fn answer()->i64{const value=make();return len(value.items)}

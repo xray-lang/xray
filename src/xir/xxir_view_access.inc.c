@@ -13,6 +13,8 @@ static XrXirStatus view_access_class_fresh_input(ViewAccess *,const XrXirViewRoo
     const XrXirViewRootEvent *,bool *);
 static XrXirStatus view_access_class_byte_field_input(ViewAccess *,const XrXirViewRootEvent *,
     const XrXirViewRootEvent *,uint32_t,uint32_t,bool *);
+static XrXirStatus view_access_class_buffer_write(ViewAccess *,uint32_t,uint32_t,
+    const ViewAccessOrigin *,bool *);
 #include "xxir_view_access_relation.inc.c"
 #include "xxir_view_types_internal.h"
 static XrXirStatus view_access_buffer_alias(ViewAccess *a,uint32_t *value) {
@@ -252,8 +254,11 @@ static XrXirStatus view_access_owner(ViewAccess *a,uint32_t value,uint32_t owner
     bool all_safe=true,all_blocked=true,any=false;
     for (ViewAccessOrigin *r=right;r;r=r->next) {
         if (!view) {
-            ViewAccessDecision decision=VIEW_ACCESS_UNKNOWN;
-            if (writable && r->event.kind==XR_XIR_VIEW_LOAN_CALL) {
+            ViewAccessDecision decision=VIEW_ACCESS_UNKNOWN;bool field_only=false;
+            if(writable)status=view_access_class_buffer_write(a,value,owner,r,&field_only);
+            if(status!=XR_XIR_OK)return status;
+            if(field_only)decision=VIEW_ACCESS_SAFE;
+            if (!field_only && writable && r->event.kind==XR_XIR_VIEW_LOAN_CALL) {
                 uint32_t receiver=0,cell=0;bool known=false,present=false;
                 status=view_access_buffer_source(a,r->event.value,&receiver,&known);
                 if (status==XR_XIR_OK && known) status=view_access_buffer_binding(a,receiver,&cell,&present);
@@ -261,10 +266,12 @@ static XrXirStatus view_access_owner(ViewAccess *a,uint32_t value,uint32_t owner
                 if (status!=XR_XIR_OK) return status;
                 if (present && decision!=VIEW_ACCESS_SAFE) return decision==VIEW_ACCESS_BLOCKED?XR_XIR_BAD_VALUE:XR_XIR_UNRESOLVED;
             }
-            if (r->event.kind==XR_XIR_VIEW_LOAN_ABSENT || (!writable && view_access_shared(a,r->event.type)))
-                decision=VIEW_ACCESS_SAFE;
-            else if (r->event.kind==XR_XIR_VIEW_LOAN_UNRESOLVED) decision=VIEW_ACCESS_UNKNOWN;
-            else {status=view_access_storage(a,value,r->event.value,value,r->queried_value,&decision);if (status!=XR_XIR_OK) return status;}
+            if(!field_only) {
+                if (r->event.kind==XR_XIR_VIEW_LOAN_ABSENT || (!writable && view_access_shared(a,r->event.type)))
+                    decision=VIEW_ACCESS_SAFE;
+                else if (r->event.kind==XR_XIR_VIEW_LOAN_UNRESOLVED) decision=VIEW_ACCESS_UNKNOWN;
+                else {status=view_access_storage(a,value,r->event.value,value,r->queried_value,&decision);if (status!=XR_XIR_OK) return status;}
+            }
             if (decision!=VIEW_ACCESS_SAFE) {
                 bool present=true;status=view_access_presence(a,owner,NULL,&r->event,&present);
                 if (status != XR_XIR_OK)

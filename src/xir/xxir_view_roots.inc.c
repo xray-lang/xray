@@ -102,6 +102,10 @@ static XrXirStatus view_root_tuple(ViewRootQuery *q,ViewOriginPair site,const Xr
 static XrXirStatus view_root_call(ViewRootQuery *q,ViewOriginPair site,const XrXirInstruction *op,
     ViewOriginPair context) {
     ViewRootCheck *c=q->check;const XrXirFunction *body=&c->module->functions[site.first];uint32_t candidate=UINT32_MAX;
+    /* An owned Class call denotes a dynamic object, not a borrowed return
+     * parameter. Its opaque identity proves neither freshness nor separation. */
+    if(op->op==XR_XIR_CALL && xr_xir_type_is_class(c->module->types,op->type))
+        return view_root_emit(q,site,(ViewOriginPair){context.first|1u,context.second},XR_XIR_VIEW_ROOT_OBJECT);
     if (op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE) candidate=c->candidates[op->immediate];
     else if (op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT) {
         if (view_pointer_result(c->module->types,op->type)) {
