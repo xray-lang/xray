@@ -43,7 +43,10 @@ typedef struct XrOsFileProgress {
  * serialized. Copies acquire no ownership. Memory policy/context outlive every
  * owner and operation. Queries are borrowed synchronously by begin only; no
  * worker invokes an allocator callback or retains a query, guest value or frame.
- * Failed begin can retain cleanup duties. Outputs change only on OK.
+ * Failed begin can retain cleanup duties. A cancellation already observed by
+ * begin remains its result; a subsequent cancellation-request failure is
+ * reported by the next poll/operation_close without releasing the operation.
+ * Outputs change only on OK.
  * Unix entry points return UNSUPPORTED without altering owners or outputs. */
 XR_FUNC XrOsIoStatus xr_os_io_file_open_begin(const XrOsIoPolicy *memory,
     const XrOsFileQuery *query,const XrOsFileRequest *request,

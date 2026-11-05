@@ -28,6 +28,7 @@ typedef struct OwnedFileOp {
     bool append, terminal;
     _Atomic(bool) cancelled, complete;
     XrOsFileProgress result;
+    XrOsIoStatus cancellation_error;
 } OwnedFileOp;
 struct OwnedFileState {
     XrOsFileOwner *anchor;
@@ -156,6 +157,10 @@ static XrOsIoStatus owned_file_request_cancel(OwnedFileOp *op) {
     DWORD error=GetLastError();return error==ERROR_NOT_FOUND?XR_OS_IO_OK:owned_file_error(error);
 }
 static XrOsIoStatus owned_file_probe(OwnedFileOp *op) {
+    if(op->cancellation_error!=XR_OS_IO_OK) {
+        XrOsIoStatus status=op->cancellation_error;op->cancellation_error=XR_OS_IO_OK;
+        return status;
+    }
     if(!op->terminal) {
         if(atomic_load_explicit(&op->cancelled,memory_order_acquire)) {
             XrOsIoStatus status=owned_file_request_cancel(op);if(status!=XR_OS_IO_OK)return status;
@@ -193,8 +198,10 @@ static XrOsIoStatus owned_file_launch(OwnedFileOp *op,const XrOsFileQuery *query
         op->terminal=true;op->result.status=status;
         atomic_store_explicit(&op->complete,true,memory_order_release);
     } else if(!owned_file_current(query)) {
-        status=XR_OS_IO_CANCELLED;XrOsIoStatus cancelled=owned_file_request_cancel(op);
-        if(cancelled!=XR_OS_IO_OK)status=cancelled;
+        status=XR_OS_IO_CANCELLED;
+        /* The begin result keeps its first cancellation. Poll/close reports
+         * a failed cancellation request once before another close-only try. */
+        op->cancellation_error=owned_file_request_cancel(op);
     }
     return status;
 }
