@@ -1131,6 +1131,7 @@ static bool source_hash_for_each(SourceContext *ctx, AstNode *node, const Source
 static bool source_string_owned_call(SourceContext *ctx,AstNode *node,SourceValue receiver,
     const XrNativeMemberDeclaration *member,SourceValue *value);
 #include "xxir_source_string.inc.c"
+#include "xxir_source_string_bytes.inc.c"
 #include "xxir_source_decimal.inc.c"
 static bool source_literal_append(SourceContext *ctx, AstNode *node, const char *bytes,
     size_t length, uint32_t *literal);
@@ -1311,6 +1312,8 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
                 return source_array_call(ctx, node, NULL, value);
             XrXirType path_type;
             if (!source_path_type(ctx,member->object,&path_type)) return false;
+            if (path_type==XR_XIR_STRING && source_text_same(ctx,callee,member->name,"bytes"))
+                return source_string_bytes_call(ctx,node,value);
             if (xr_xir_type_is_map(&ctx->types, path_type) || xr_xir_type_is_set(&ctx->types, path_type))
                 return source_hash_call(ctx, node, NULL, path_type, value);
             if (xr_xir_type_is_array(&ctx->types,path_type)) {

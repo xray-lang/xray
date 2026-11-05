@@ -13,6 +13,8 @@
 
 static bool source_string_value_call(SourceContext *ctx,AstNode *node,SourceValue receiver,
     const XrNativeMemberDeclaration *member,SourceValue *value);
+static bool source_string_value_reference(SourceContext *ctx,AstNode *node,
+    const XrNativeMemberDeclaration *member,XrXirType result);
 static bool source_string_declaration(SourceContext *ctx) {
     if (ctx->string_declaration) return true;
     const XrNativeTypeDeclaration *native = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_STRING);

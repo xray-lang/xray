@@ -84,6 +84,12 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
     }
     SourceExpectedType receiver;
     if (!source_ground_type(ctx,member->as.member_access.object,depth+1,&receiver)) return false;
+    if (call && receiver.present && receiver.type==XR_XIR_STRING &&
+        source_text_same(ctx,member,member->as.member_access.name,"bytes")) {
+        const XrNativeIntrinsicDeclaration *intrinsic=NULL;
+        if (!source_string_bytes_contract(ctx,node,&intrinsic,&output->type)) return false;
+        output->present=true;return true;
+    }
     const XrXirTypeNode *iterator=receiver.present ? xr_xir_type_node(&ctx->types,receiver.type) : NULL;
     if(call && iterator && iterator->kind==XR_XIR_TYPE_ITERATOR) {
         const XrNativeMemberDeclaration *native=source_iterator_member(ctx,member,member->as.member_access.name);

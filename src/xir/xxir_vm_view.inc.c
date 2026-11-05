@@ -11,14 +11,15 @@
  */
 static XrXirRunStatus vm_view_step(ScalarRun *run,VmState *state,
     const XrXirInstruction *op,uint32_t destination,XrXirAction *action) {
-    bool group=xr_xir_op_uses_operand_table(op->op);
+    bool group=xr_xir_op_uses_operand_table(op->op),bytes=xr_xir_instruction_is_string_bytes(op);
     const uint32_t *args=group ? run->function->operands+op->args[0] : op->args;
     XrXirValue root=vm_value_operand(run,args[0]),element={0};
     XrXirValue *scratch=state->arguments;
     scratch[0]=scratch[1]=(XrXirValue){0};
-    XrXirCallViewOperation request={.operation=op->op,.type=op->type,.root=&root};
+    XrXirCallViewOperation request={.operation=bytes?XR_XIR_VIEW_NEW:op->op,
+        .type=op->type,.root=&root,.to_end=bytes};
     XrXirValueStatus status=XR_XIR_VALUE_OK;bool ended=op->op==XR_XIR_VIEW_END;
-    if (op->op==XR_XIR_VIEW_NEW) {
+    if (op->op==XR_XIR_VIEW_NEW || bytes) {
         status=xr_xir_value_copy(&root,scratch);
         request.root=scratch;
     } else if (ended) {
@@ -26,7 +27,7 @@ static XrXirRunStatus vm_view_step(ScalarRun *run,VmState *state,
         xr_xir_scalar_store(run->frame,run->layout->offsets[args[0]],0);
         request.root=NULL;request.owned=scratch;
     }
-    if (group) {
+    if (group && !bytes) {
         request.start=xr_xir_scalar_load(run->frame,run->layout->offsets[args[1]]);
         if (op->op==XR_XIR_VIEW_SET) {element=vm_value_operand(run,args[2]);request.element=&element;}
         else {request.end=xr_xir_scalar_load(run->frame,run->layout->offsets[args[2]]);request.to_end=op->immediate!=0;}

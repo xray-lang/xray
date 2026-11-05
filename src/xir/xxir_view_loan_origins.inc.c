@@ -111,6 +111,11 @@ static XrXirStatus view_loan_step(ViewLoanQuery *q,ViewOriginPair site,ViewOrigi
     if (!xir_compile_work(c->context,2)) return XR_XIR_BUDGET;
     if (site.second<body->parameter_count) return view_loan_emit(q,site,context,XR_XIR_VIEW_LOAN_INPUT,UINT32_MAX,false);
     const XrXirInstruction *op=body->instructions+site.second-body->parameter_count;
+    if (xr_xir_instruction_is_string_bytes(op)) {
+        if (context.second || op->args[1]!=1 || op->args[0]>=body->operand_count)
+            return XR_XIR_BAD_STRUCTURE;
+        return view_loan_emit(q,site,context,XR_XIR_VIEW_LOAN_NEW,body->operands[op->args[0]],false);
+    }
     switch (op->op) {
     case XR_XIR_VIEW_NEW:case XR_XIR_VIEW_REBORROW:
         if (context.second || op->args[1]!=3) return XR_XIR_BAD_STRUCTURE;

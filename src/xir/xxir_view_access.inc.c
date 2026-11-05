@@ -174,7 +174,8 @@ static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEve
     uint32_t result=a->body->parameter_count+event->instruction;
     bool binding=false;XrXirStatus bound=view_access_binding(a,op,&binding);if (binding) return bound;
     if (view_access_structural(op->op)) return XR_XIR_OK;
-    if (op->op==XR_XIR_VIEW_NEW || op->op==XR_XIR_VIEW_REBORROW) {
+    if (op->op==XR_XIR_VIEW_NEW || op->op==XR_XIR_VIEW_REBORROW ||
+        xr_xir_instruction_is_string_bytes(op)) {
         uint32_t source=a->body->operands[op->args[0]];bool sub=op->op==XR_XIR_VIEW_REBORROW;
         XrXirStatus status=sub?XR_XIR_OK:view_access_constructor(a,source);
         return status==XR_XIR_OK?view_access_use(a,&event->before,source,view_access_mutable(a,op->type),sub,NULL):status;

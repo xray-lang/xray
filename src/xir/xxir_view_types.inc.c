@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Earlier descriptor edges propagate borrowed leaves without expanding a DAG.
  */
+#include "xxir_view_access_internal.h"
 static uint32_t view_flags_at(const XrXirTypes *types,const uint8_t *flags,XrXirType type) {
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
     return node && flags ? flags[(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE]&3u : 0;
@@ -134,6 +135,11 @@ XR_FUNC XrXirStatus xr_xir_compile_view_return_candidate(const XrXirCompileConte
 #include "xxir_view_liveness_internal.h"
 #include "xxir_view_roots.inc.c"
 
+static bool view_boundary_supported(const XrXirTypes *types,const uint8_t *flags,XrXirType type) {
+    if (!view_flags_at(types,flags,type)) return true;
+    const XrXirTypeNode *node=xr_xir_type_node(types,type);
+    return node && node->kind==XR_XIR_TYPE_SLICE && node->element==XR_XIR_U8;
+}
 XR_FUNC XrXirStatus xir_compile_view_module_boundary(const XrXirCompileContext *context,
     const XrXirModule *module,XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(context) || !module) return XR_XIR_BAD_STRUCTURE;
@@ -147,19 +153,21 @@ XR_FUNC XrXirStatus xir_compile_view_module_boundary(const XrXirCompileContext *
     for (uint32_t f=0;f<module->function_count && status==XR_XIR_OK;++f) {
         const XrXirFunction *body=&module->functions[f];
         if (!xir_compile_work(context,1)) {status=XR_XIR_BUDGET;break;}
-        if (view_flags_at(module->types,flags,body->result)) {
+        if (!view_boundary_supported(module->types,flags,body->result)) {
             status=XR_XIR_BAD_TYPE;
             if (diagnostic) *diagnostic=(XrXirDiagnostic){status,f,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
             break;
         }
         for (uint32_t p=0;p<body->parameter_count && status==XR_XIR_OK;++p) {
             if (!xir_compile_work(context,1)) status=XR_XIR_BUDGET;
-            else if (view_flags_at(module->types,flags,body->parameters[p])) status=XR_XIR_BAD_TYPE;
+            else if (!view_boundary_supported(module->types,flags,body->parameters[p])) status=XR_XIR_BAD_TYPE;
         }
         for (uint32_t i=0;i<body->instruction_count && status==XR_XIR_OK;++i) {
             if (!xir_compile_work(context,1)) status=XR_XIR_BUDGET;
-            else if (view_flags_at(module->types,flags,body->instructions[i].type)) status=XR_XIR_BAD_TYPE;
+            else if (!view_boundary_supported(module->types,flags,body->instructions[i].type)) status=XR_XIR_BAD_TYPE;
         }
     }
-    xr_compile_resources_free(flags);return status;
+    xr_compile_resources_free(flags);
+    if (status==XR_XIR_OK) status=xir_compile_view_cell_access_verified(context,module,diagnostic);
+    return status;
 }

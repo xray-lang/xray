@@ -87,7 +87,8 @@ static XrXirStatus layout_outgoing(const LayoutInputRequest *request,
             if (next->op!=XR_XIR_PHI) { phi_count=0;borrowed_phi=false; }
         }
         if (op->op==XR_XIR_VIEW_CLEANUP) count=op->args[1];
-        else if (op->op>=XR_XIR_VIEW_NEW && op->op<=XR_XIR_VIEW_END && count<2) count=2;
+        else if (((op->op>=XR_XIR_VIEW_NEW && op->op<=XR_XIR_VIEW_END) ||
+            xr_xir_instruction_is_string_bytes(op)) && count<2) count=2;
         if (count > outgoing) outgoing = count;
     }
     *output=outgoing;return XR_XIR_OK;
