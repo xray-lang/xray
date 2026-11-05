@@ -89,3 +89,5 @@ tests/unit/hir/body/nominal_order.out text eol=lf
 
 # Public constant product fixtures keep exact Source and stdout bytes.
 tests/unit/xir/public_const_inputs/* text eol=lf
+
+/tests/smoke/expected/variables.txt text eol=lf

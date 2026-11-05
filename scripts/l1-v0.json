@@ -519,7 +519,9 @@
     "xir_record_owner",
     "xir_record_source",
     "xir_record_native",
-    "xir_record_sdk"
+    "xir_record_sdk",
+    "test_xir_source_array_bindings",
+    "test_xir_source_array_bindings_native"
   ],
   "versionCommand": [
     "{build}/xray.exe",

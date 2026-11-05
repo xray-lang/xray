@@ -41,9 +41,12 @@ static bool source_destructure_collect(SourceContext *ctx,AstNode *node,
         plan->fields=fields;fields[plan->count-1]=(SourceDestructureField){.pattern=pattern};
         return true;
     }
-    bool tuple=pattern->type==PATTERN_TUPLE,object=pattern->type==PATTERN_OBJECT;
-    int count=tuple ? pattern->as.array.element_count : object ? pattern->as.object.field_count : -1;
-    if (count<0 || (count && (tuple ? !pattern->as.array.elements :
+    bool array=pattern->type==PATTERN_ARRAY,tuple=pattern->type==PATTERN_TUPLE;
+    bool object=pattern->type==PATTERN_OBJECT,ordered=array||tuple;
+    if (array && depth)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"nested Array binding is not admitted");
+    int count=ordered ? pattern->as.array.element_count : object ? pattern->as.object.field_count : -1;
+    if (count<0 || (count && (ordered ? !pattern->as.array.elements :
         (!pattern->as.object.field_names || !pattern->as.object.patterns))))
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"product binding fields are missing");
     for (int i=0;i<count;++i) {
@@ -59,14 +62,16 @@ static bool source_destructure_collect(SourceContext *ctx,AstNode *node,
                     return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"duplicate object binding field");
             }
         }
-        const XrDestructurePattern *child=tuple ? pattern->as.array.elements[i] : pattern->as.object.patterns[i];
+        const XrDestructurePattern *child=ordered ? pattern->as.array.elements[i] : pattern->as.object.patterns[i];
+        if (array && (!child || (child->type!=PATTERN_IDENTIFIER && child->type!=PATTERN_SKIP)))
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Array binding requires flat identifiers or discards");
         if (!source_destructure_collect(ctx,node,child,plan,depth+1)) return false;
     }
     return true;
 }
 static bool source_destructure_pattern(SourceContext *ctx,AstNode *node,SourceDestructurePlan *plan) {
     const XrDestructurePattern *pattern=node->as.destructure_decl.pattern;
-    if (!pattern || (pattern->type!=PATTERN_TUPLE && pattern->type!=PATTERN_OBJECT) ||
+    if (!pattern || (pattern->type!=PATTERN_TUPLE && pattern->type!=PATTERN_OBJECT && pattern->type!=PATTERN_ARRAY) ||
         !node->as.destructure_decl.initializer)
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"product binding and initializer required");
     return source_destructure_collect(ctx,node,pattern,plan,0);
@@ -91,6 +96,26 @@ static bool source_destructure_object_field(SourceContext *ctx,AstNode *node,
     return source_struct_field(ctx,site,receiver.type,name,false,&index,&type) &&
         source_hir_nominal_get(ctx,site,receiver,index,0,value);
 }
+static bool source_destructure_array_type(SourceContext *ctx,AstNode *node,
+    XrXirType type,XrXirType *element) {
+    if (!xr_xir_type_is_array(&ctx->types,type))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Array binding requires an exact Array type");
+    *element=xr_xir_array_element(&ctx->types,type);
+    return source_native_array_declaration(ctx);
+}
+static bool source_destructure_array_guard(SourceContext *ctx,AstNode *node,
+    SourceValue array,uint32_t count) {
+    SourceValue length,expected,condition,message;
+    static const char text[]="Array binding requires its exact element count";
+    return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ARRAY_LEN,XR_XIR_I64,
+            {array.id},{0},0,{0}},&length) &&
+        source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,
+            {0},{0},count,{0}},&expected) &&
+        source_binary_apply(ctx,node,AST_BINARY_EQ,length,expected,&condition) &&
+        source_string_literal(ctx,node,text,sizeof(text)-1,&message) &&
+        source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ASSERT_CONDITION,XR_XIR_UNIT,
+            {condition.id,message.id},{0},0,{0}},NULL);
+}
 static bool source_destructure_project(SourceContext *ctx,AstNode *node,
     const XrDestructurePattern *pattern,SourceValue initial,SourceDestructurePlan *plan,uint32_t depth) {
     if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
@@ -104,18 +129,29 @@ static bool source_destructure_project(SourceContext *ctx,AstNode *node,
             return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"product binding inventory mismatch");
         plan->fields[plan->next].value=initial;plan->fields[plan->next++].type=initial.type;return true;
     }
-    bool tuple=pattern->type==PATTERN_TUPLE;
-    uint32_t count=(uint32_t)(tuple ? pattern->as.array.element_count : pattern->as.object.field_count);
-    if (tuple) {
+    bool array=pattern->type==PATTERN_ARRAY,tuple=pattern->type==PATTERN_TUPLE;
+    uint32_t count=(uint32_t)(array||tuple ? pattern->as.array.element_count : pattern->as.object.field_count);
+    XrXirType element=XR_XIR_UNIT;
+    if (array) {
+        if (!source_destructure_array_type(ctx,node,initial.type,&element) ||
+            !source_destructure_array_guard(ctx,node,initial,count)) return false;
+    } else if (tuple) {
         XrXirStatus status=xr_hir_tuple_arity(&ctx->types,initial.type,count,ctx->request,NULL);
         if(status!=XR_XIR_OK)return source_fail(ctx,node,status,count?
             "Tuple binding requires its exact ordered arity":"empty binding requires Unit");
     } else if (!source_destructure_object_type(ctx,initial.type))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"object binding requires statically known fields");
     for (uint32_t i=0;i<count;++i) {
-        SourceValue value;const XrDestructurePattern *child=tuple ?
+        SourceValue value;const XrDestructurePattern *child=array||tuple ?
             pattern->as.array.elements[i] : pattern->as.object.patterns[i];
-        if (tuple) {
+        if (array) {
+            if (child->type==PATTERN_SKIP) continue;
+            SourceValue index;
+            if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,
+                    {0},{0},i,{0}},&index) ||
+                !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ARRAY_GET,element,
+                    {initial.id,index.id},{0},0,{0}},&value)) return false;
+        } else if (tuple) {
             if (!source_tuple_projection(ctx,node,initial,i,&value)) return false;
         } else if (!source_destructure_object_field(ctx,node,initial,pattern->as.object.field_names[i],child,&value))
             return false;
