@@ -106,21 +106,33 @@ static void host_file_write_other_owner(XrXirCompileContext *context,const XrXir
  XrXirBlock *blocks=xr_malloc(body->block_count*sizeof(*blocks));
  uint32_t *operands=xr_malloc((body->operand_count+2u)*sizeof(*operands));CHECK(functions&&ops&&blocks&&operands);
  memcpy(functions,module->functions,module->function_count*sizeof(*functions));memcpy(blocks,body->blocks,body->block_count*sizeof(*blocks));
- for(uint32_t p=0;p<body->operand_count;++p)operands[p]=body->operands[p]+(body->operands[p]>=inserted);
  for(uint32_t i=0;i<body->instruction_count;++i){XrXirInstruction op=body->instructions[i];
   CHECK(op.op!=XR_XIR_PHI&&op.op!=XR_XIR_INVOKE_RESULT&&!xr_xir_op_uses_value_path(body,&op));
   if(!xr_xir_op_uses_operand_table(op.op)){uint32_t count=op.op==XR_XIR_RETURN?1u:counts[op.op];CHECK(count<=2);
    for(uint32_t p=0;p<count;++p)if(op.args[p]>=inserted)++op.args[p];}
   ops[i+(i>=site)]=op;
  }
- ops[site]=body->instructions[loan-body->parameter_count];
+ ops[site]=body->instructions[loan-body->parameter_count];CHECK(ops[site].args[1]==1);
  for(uint32_t b=0;b<body->block_count;++b){CHECK(!blocks[b].frontier);
   if(blocks[b].first>site)++blocks[b].first;
   else if(site>=blocks[b].first&&site-blocks[b].first<blocks[b].count)++blocks[b].count;}
  /* Both genuine readonly Buffer results stay alive until this cleanup. Only
   * the original one is the write argument; the other owner must still reject. */
- operands[body->operand_count]=loan;operands[body->operand_count+1u]=inserted;
- ops[site+2u].args[0]=body->operand_count;ops[site+2u].args[1]=2;
+ uint32_t prefix=0;
+ for(uint32_t i=0;i<body->instruction_count+1u;++i){XrXirInstruction *op=ops+i;
+  if(!xr_xir_op_uses_operand_table(op->op)||!op->args[1])continue;
+  uint32_t first=op->args[0],count=op->args[1];op->args[0]=prefix;
+  if(i==site+2u){
+   CHECK(op->op==XR_XIR_VIEW_CLEANUP&&count==1&&prefix<=body->operand_count);
+   operands[prefix++]=loan;operands[prefix++]=inserted;op->args[1]=2;
+  }else{
+   CHECK(first<=body->operand_count&&count<=body->operand_count-first&&
+    prefix<=body->operand_count+2u&&count<=body->operand_count+2u-prefix);
+   for(uint32_t p=0;p<count;++p){uint32_t value=body->operands[first+p];
+    operands[prefix++]=value+(value>=inserted);}
+  }
+ }
+ CHECK(prefix==body->operand_count+2u);
  XrXirModule changed=*module;changed.functions=functions;functions[entry].instructions=ops;functions[entry].blocks=blocks;
  functions[entry].operands=operands;functions[entry].operand_count=body->operand_count+2u;++functions[entry].instruction_count;
  host_file_write_rejected(context,&changed,construction,entry,site+1u,"other-live-owner");
