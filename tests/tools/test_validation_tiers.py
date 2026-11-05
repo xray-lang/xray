@@ -159,6 +159,7 @@ class TierTests(unittest.TestCase):
 
     def test_host_os_changes_select_paired_source_and_native_consumers(self):
         for path in ("stdlib/sys/sys.xr", "src/xir/xxir_effect_constructor_boundary.inc.c",
+                     "src/xir/xxir_view_access_class_candidate.inc.c",
                      "src/os/win/fs_mutation_win.c", "src/os/unix/fs_mutation_unix.c",
                      "src/os/os_system.h", "src/os/win/system_win.c", "src/os/unix/system_unix.c",
                      "src/os/os_signal.h", "src/os/win/signal_win.c",
@@ -284,6 +285,7 @@ class TierTests(unittest.TestCase):
                      "src/xir/xxir_view_types.inc.c",
                      "src/xir/xxir_view_pointer_calls.inc.c",
                      "src/xir/xxir_view_access.inc.c", "src/xir/xxir_view_loan_origins.inc.c",
+                     "src/xir/xxir_view_access_class_candidate.inc.c",
                      "src/xir/xxir_instance_dylib.inc.c",
                      "src/xir/xxir_instance_dylib_owner.inc.c",
                      "src/xir/xxir_sys_dylib_native.h",

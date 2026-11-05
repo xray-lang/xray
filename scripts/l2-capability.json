@@ -1012,6 +1012,7 @@
         "src/xir/xxir_view_types.inc.c",
         "src/xir/xxir_view_pointer_calls.inc.c",
         "src/xir/xxir_view_access.inc.c",
+        "src/xir/xxir_view_access_class_candidate.inc.c",
         "src/xir/xxir_view_loan_origins.inc.c",
         "tests/unit/xir/xir_genuine_sys_path.h"
       ],
