@@ -409,13 +409,9 @@
       "id": "stdlib/io/io.xr",
       "path": "stdlib/io/io.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F13",
-        "first_diagnostic": "stdlib/io/io.xr:57:22: error: name is not an initialized value"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "stdlib/log/log.xr",
@@ -884,6 +880,14 @@
     {
       "id": "native:stdlib/path/path.xr",
       "path": "stdlib/path/path.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
+    },
+    {
+      "id": "native:stdlib/io/io.xr",
+      "path": "stdlib/io/io.xr",
       "mode": "build-run",
       "expect": "pass",
       "exit_code": 0,
