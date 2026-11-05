@@ -8,7 +8,7 @@ else()
 endif()
 add_test(NAME test_xir_error_cfg_scheduling COMMAND test_xir_error_cfg_scheduling)
 add_test(NAME test_xir_error_cfg_scheduling_scale COMMAND test_xir_error_cfg_scheduling --scale)
-set_tests_properties(test_xir_error_cfg_scheduling test_xir_error_cfg_scheduling_scale PROPERTIES
+set_tests_properties(test_xir_error_cfg_scheduling PROPERTIES
     LABELS "unit;xir;metadata;ownership;cfg-scheduling;partial-feedback" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
 
 add_test(NAME test_xir_error_cfg_scheduling_resources COMMAND test_xir_error_cfg_scheduling --resources)

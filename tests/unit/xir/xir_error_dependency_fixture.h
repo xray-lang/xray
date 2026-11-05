@@ -39,8 +39,8 @@ static void ed_fixture(ErrorDependencyFixture *f, ErrorDependencyMode mode, bool
         .exported=1,.kind=XR_XIR_NOMINAL_ENUM,.variants=f->variants,.variant_count=2};
     f->nominals=(XrXirNominalTable){.declarations=&f->nominal,.count=1};
     f->nodes[0].kind=XR_XIR_TYPE_NOMINAL;
-    f->nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_TASK,.element=XR_XIR_UNIT};
-    f->nodes[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
+    f->nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_TASK,.element=XR_XIR_UNIT,.result=(XrXirType)ED_ENUM};
+    f->nodes[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_ERROR,.result=XR_XIR_UNIT,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     f->types=(XrXirTypes){.nodes=f->nodes,.count=3,.nominals=&f->nominals};
     f->parameter=(XrXirType)ED_ENUM;
     f->dynamic_parameters[0]=f->parameter;f->dynamic_parameters[1]=(XrXirType)ED_FN;
@@ -94,5 +94,7 @@ static void ed_fixture(ErrorDependencyFixture *f, ErrorDependencyMode mode, bool
         .root_module=UINT32_MAX,.entry_function=UINT32_MAX};
     f->module=(XrXirModule){.stage=XR_XIR_CHECKED,.functions=f->functions,.function_count=ED_COUNT,
         .declarations=&f->declarations,.types=&f->types,.linkage_kind=XR_XIR_LIBRARY};
+    for(uint32_t i=0;i<ED_COUNT;++i)f->functions[i].error_type=i<2?XR_XIR_NEVER:(XrXirType)ED_ENUM;
+    if(mode==ED_GO || mode==ED_UNKNOWN)f->functions[2].error_type=XR_XIR_ERROR;
 }
 #endif // XIR_ERROR_DEPENDENCY_FIXTURE_H

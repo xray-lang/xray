@@ -32,26 +32,18 @@ static void pc_unit_cell_fixture(EdgeFixture *f,unsigned mode) {
         f->subject[3]=f->init;f->functions[1].instruction_count=4;
     }
     f->blocks[0]=(XrXirBlock){.count=f->functions[1].instruction_count};
+    f->module.stage=XR_XIR_BUILT;
 }
 static void pc_unit_cell_controls(void) {
     for(unsigned mode=0;mode<4;++mode) {
         EdgeFixture f;pc_unit_cell_fixture(&f,mode);
         XrXirCompileContext c=pc_owner(pc_caps());uint64_t baseline=pc_stats(&c).live_bytes;
-        XrXirEffects e={0};EffectTerms terms={0};ErrorFlow flow={0};flow.remaining=&c;
-        pc_private_begin(&c,&f,&e,&terms,&flow);
-        CHECK(error_function(&flow,1)==XR_XIR_OK);
-        /* Parameter0 deliberately carries Error's unidentified bit. */
-        CHECK(error_read(&flow,flow.work,0)[0]==UINT64_C(2));
-        uint32_t first=mode==0 || mode==2 ? 2u : 1u;
-        uint32_t alias=mode==3 ? 3u : mode==1 ? 2u : 3u;
-        uint64_t expected=mode<2 ? 0u : mode==2 ? UINT64_C(12) : UINT64_C(4);
-        CHECK(flow.cell_count==2 && flow.slots[first]!=UINT32_MAX && flow.slots[alias]!=UINT32_MAX);
-        CHECK(error_read(&flow,flow.work,first)[0]==expected);
-        CHECK(error_read(&flow,flow.work,alias)[0]==expected);
-        CHECK(flow.roots[alias]==flow.roots[first] && !e.outcomes_work.errors[1]);
-        CHECK(flow.zero[0]==0 && flow.zero!=flow.work && flow.zero!=flow.snapshot);
-        pc_private_free(&flow,&terms,&e);pc_release(&c,baseline);
+        f.functions[0].error_type=XR_XIR_NEVER;f.functions[1].error_type=XR_XIR_NEVER;
+        f.functions[2].error_type=(XrXirType)EE_ENUM;
+        XrXirArtifact *checked=NULL;CHECK(xir_fixture_check(&c,&f.module,&checked,NULL)==XR_XIR_OK);
+        CHECK(xr_xir_compile_artifact_verify(checked,NULL)==XR_XIR_OK);
+        xr_xir_compile_artifact_free(checked);pc_release(&c,baseline);
     }
-    puts("Unit Cell NEW/WRITE ignore absent payload; Error index0 and nonUnit enum aliases preserved");
+    puts("Unit Cell and copied enum aliases retain complete common admission");
 }
 #endif

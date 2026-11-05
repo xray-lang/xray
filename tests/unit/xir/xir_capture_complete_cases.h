@@ -159,8 +159,7 @@ static void complete_case(uint32_t mode) {
     XrXirStatus status=xr_xir_compile_effects_analyze(checked,&effects);
     if(status!=XR_XIR_OK) fprintf(stderr,"complete mode%u analysis%u work%llu\n",mode,status,(unsigned long long)pc_stats(&work).work);
     CHECK(status==XR_XIR_OK);EffectInvocationFinal *final=effects->invocations->final;
-    CHECK(xr_xir_effects_error_unknown(effects,0)==(mode==2 || mode==4 || mode==5 || mode==8 || mode==9));
-    CHECK(xr_xir_effects_error_unknown(effects,3));complete_literal_coordinates(&work,final,mode);
+    complete_literal_coordinates(&work,final,mode);
     if(!mode) complete_growth_boundary(&work,final);
     xr_xir_compile_artifact_free(checked);memset(factory,0xCC,sizeof(factory));memset(functions,0xCC,sizeof(functions));
     if(!mode) complete_final_view_boundary(&work,effects->invocations);

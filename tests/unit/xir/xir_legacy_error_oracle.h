@@ -240,56 +240,10 @@ static XrXirStatus effect_control_prepare_fields(const XrXirCompileContext *work
     return status;
 }
 
-static inline void effect_legacy_error_oracle_free(XrXirEffects *fresh) {
-    effect_outcomes_clear(&fresh->outcomes_work,fresh->count);
-}
-static inline XrXirStatus effect_legacy_error_oracle_prepare(const XrXirCompileContext *work,
-    const XrXirEffects *effects,XrXirEffects *fresh) {
-    const EffectFinalOutcomes *actual=effect_final_outcomes(effects);
-    if (!actual) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,sizeof(*fresh))) return XR_XIR_BUDGET;
-    *fresh=(XrXirEffects){.resources=work->resources,.count=effects->count,.root_input=actual,
-        .invocations=effects->invocations,
-        .result_borrow=effects->result_borrow,.generation=effects->invocations->body,
-        .cells=effects->cells};
-    fresh->outcomes_work.source_type_count=actual->source_type_count;
-    XrXirStatus status=XR_XIR_OK;
-    fresh->outcomes_work.functions=xir_compile_calloc(work,fresh->count,sizeof(*fresh->outcomes_work.functions),&status);
-    if (status==XR_XIR_OK) fresh->outcomes_work.task_errors=xir_compile_calloc(work,fresh->count,sizeof(*fresh->outcomes_work.task_errors),&status);
-    return status;
-}
-static inline XrXirStatus effect_legacy_error_oracle_match(const XrXirCompileContext *work,
-    const XrXirEffects *effects,const XrXirEffects *fresh) {
-    const EffectFinalOutcomes *actual=effect_final_outcomes(effects);
-    if (!actual) return XR_XIR_BAD_STRUCTURE;
-    if (actual->error_rows!=fresh->outcomes_work.error_rows ||
-        actual->atom_count!=fresh->outcomes_work.atom_count || actual->words!=fresh->outcomes_work.words ||
-        actual->atom_count>actual->atom_capacity || !!actual->atoms!=!!actual->atom_capacity ||
-        !actual->errors || !fresh->outcomes_work.errors) return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t a=0;a<actual->atom_count;++a) {
-        if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
-        if (actual->atoms[a].type!=fresh->outcomes_work.atoms[a].type || actual->atoms[a].variant!=fresh->outcomes_work.atoms[a].variant)
-            return XR_XIR_BAD_STRUCTURE;
-    }
-    uint64_t words=(uint64_t)actual->error_rows*actual->words;
-    for (uint64_t w=0;w<words;++w) {
-        if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
-        if (actual->errors[w]!=fresh->outcomes_work.errors[w]) return XR_XIR_BAD_STRUCTURE;
-    }
-    return XR_XIR_OK;
-}
-static inline XrXirStatus effect_legacy_error_dependencies_move(const XrXirCompileContext *work,
-    EffectControlCheck *input,EffectGraph *graph) {
-    if (!xir_compile_context_valid(work) || !input || !graph || !input->final ||
-        input->final->resources!=work->resources || graph->material!=input->input.owner ||
-        graph->physical_owned || graph->heads || graph->queue || graph->queued || graph->edges || graph->edge_count ||
-        !input->heads || !input->queue || !input->seen || !!input->edges!=!!input->edge_count)
-        return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,8*sizeof(void *)+sizeof(graph->edge_count))) return XR_XIR_BUDGET;
-    graph->heads=input->heads;graph->queue=input->queue;graph->queued=input->seen;
-    graph->edges=input->edges;graph->edge_count=input->edge_count;
-    input->heads=NULL;input->queue=NULL;input->seen=NULL;input->edges=NULL;return XR_XIR_OK;
-}
+
+
+
+
 static inline XrXirStatus effect_legacy_control_prepare(const XrXirCompileContext *work,
     const XrXirEffects *effects,EffectControlCheck *check) {
     const EffectFinalOutcomes *final=effect_final_outcomes(effects);

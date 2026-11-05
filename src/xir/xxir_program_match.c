@@ -296,7 +296,7 @@ static XrXirStatus program_permissions(const XrXirCompileContext *context,
         bool generator=xr_xir_function_is_generator(module,f);
         XrXirStatus permission = xr_xir_function_has_go_role(module, f) || generator ?
             xr_xir_effects_go_safe(effects, f) : XR_XIR_BAD_TYPE;
-        if (permission == XR_XIR_OK && !generator) permission = xr_xir_effects_task_errors(effects, f);
+        if (permission == XR_XIR_OK && !generator) permission = xir_compile_worker_error_verify(context,module,f);
         XrXirProofContext proof = {module, {XR_XIR_CONTEXT_FUNCTION, f, 0}};
         const XrXirFunction *function = &module->functions[f];
         permissions->entries[f].reference_begin = reference_at;

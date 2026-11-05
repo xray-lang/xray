@@ -24,7 +24,7 @@ static void invocation_deferred_fixture(InvocationDeferredFixture *f,uint32_t mo
     memset(f,0,sizeof(*f));f->cell=(XrXirType)256;
     f->nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64};
     f->ref=(XrXirCallableParameter){f->cell,XR_PARAM_REF};
-    f->nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,
+    f->nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,
         .parameters=&f->ref,.parameter_count=1,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     f->types=(XrXirTypes){f->nodes,2,NULL,NULL};
     f->parameters[0]=(XrXirType)257;f->parameters[1]=f->cell;
@@ -68,6 +68,7 @@ static void invocation_deferred_fixture(InvocationDeferredFixture *f,uint32_t mo
         .entry_function=0,.slots=mode?&f->slot:NULL,.slot_count=mode?1:0};
     f->module=(XrXirModule){.stage=XR_XIR_BUILT,.functions=f->functions,.function_count=4,
         .types=&f->types,.declarations=&f->declarations,.linkage_kind=XR_XIR_PROGRAM};
+    for(uint32_t fno=0;fno<f->module.function_count;++fno)f->functions[fno].error_type=XR_XIR_NEVER;
 }
 
 static void invocation_deferred_rejections(const XrXirCompileContext *context,

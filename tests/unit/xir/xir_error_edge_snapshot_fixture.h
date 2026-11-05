@@ -158,12 +158,8 @@ static void ee_fixture(EdgeFixture *f, EdgeCase mode, bool snapshot) {
     if (mode==EE_CLEANUP || mode==EE_PANIC) ee_cleanup_fixture(f,mode,snapshot);
     if (mode==EE_PHI) ee_phi_fixture(f);
     if (mode==EE_BULK) ee_bulk_fixture(f);
-}
-/* Literal bits: unknown=1, unidentified=2, First=4, Second=8. */
-static uint64_t ee_expected(EdgeCase mode, bool snapshot) {
-    if (mode==EE_INVOKE || mode==EE_PHI) return UINT64_C(12);
-    if (mode==EE_CLEANUP || mode==EE_PANIC) return snapshot?UINT64_C(4):UINT64_C(12);
-    if (mode==EE_TEMPORARY) return snapshot?UINT64_C(4):UINT64_C(8);
-    return UINT64_C(4);
+    for(uint32_t fno=0;fno<f->module.function_count;++fno)f->functions[fno].error_type=XR_XIR_NEVER;
+    f->functions[1].error_type=(XrXirType)EE_ENUM;
+    f->functions[2].error_type=(XrXirType)EE_ENUM;
 }
 #endif // XIR_ERROR_EDGE_SNAPSHOT_FIXTURE_H

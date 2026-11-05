@@ -332,6 +332,10 @@ static void callable_error_host(const XrXirCompileContext *work,const XrXirArtif
 static void callable_error_program(const XrXirCompileContext *work,XrXirType error) {
     CallableErrorFixture *f=xr_malloc(sizeof(*f));CHECK(f);callable_error_fixture(f,error);
     XrXirArtifact *checked=NULL,*received=NULL,*closed=NULL,*lowered=NULL;XrXirDiagnostic diagnostic={0};
+    f->functions[1].error_type=XR_XIR_NEVER;
+    CHECK(xir_fixture_check(work,&f->module,&checked,&diagnostic)==XR_XIR_BAD_TYPE && !checked);
+    CHECK(diagnostic.function==1 && diagnostic.instruction==f->functions[1].instruction_count-2);
+    f->functions[1].error_type=XR_XIR_ERROR;
     XrXirStatus status=xir_fixture_check(work,&f->module,&checked,&diagnostic);
     if (status!=XR_XIR_OK) fprintf(stderr,"Callable E%u status%u f%u b%u i%u reason%u\n",
         (unsigned)error,(unsigned)status,diagnostic.function,diagnostic.block,diagnostic.instruction,(unsigned)diagnostic.reason);

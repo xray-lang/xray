@@ -83,12 +83,4 @@ static void pc_fixture(EdgeFixture *f,PendingCase mode,bool snapshot) {
         f->functions[1].instruction_count=7;f->functions[1].operand_count=4;
     } else if (mode!=PC_FORWARD && mode!=PC_TEMPORARY) pc_reverse_blocks(f);
 }
-static uint64_t pc_expected(PendingCase mode,bool snapshot) {
-    if (mode==PC_PHI_SWAP || mode==PC_PHI_SELF || mode==PC_LATE_JOIN || mode==PC_INVOKE) return 12;
-    if (mode==PC_CLEANUP || mode==PC_PANIC) return snapshot ? 4u : 12u;
-    if (mode==PC_TEMPORARY) return snapshot ? 4u : 8u;
-    /* The reused declaration fixture's original constants remain independent. */
-    CHECK(ee_expected(EE_BULK,false)==4);
-    return 4;
-}
 #endif

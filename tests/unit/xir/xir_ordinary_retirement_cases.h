@@ -43,6 +43,7 @@ static void pc_context_resurrection(const XrXirCompileContext *context,const XrX
     EffectOrdinaryContexts *ordinary=select_dense?owner->dense:owner->ordinary;
     CHECK(effect_ordinary_work_empty(ordinary));
     for (uint32_t field=0;field<32;++field) {
+        if ((field>=13 && field<=17) || (field>=20 && field<=22)) continue;
         XrXirEffects *uses=&ordinary->uses;EffectFinalOutcomes *out=&uses->outcomes_work;
         switch (field) {
         case 0:uses->resources=context->resources;break;
@@ -57,14 +58,9 @@ static void pc_context_resurrection(const XrXirCompileContext *context,const XrX
         case 9:uses->result_borrow=(const EffectFinalFunctions *)(uintptr_t)1;break;
         case 10:uses->generation=(EffectBodyMaterial *)(uintptr_t)1;break;
         case 11:out->resources=context->resources;break;
-        case 12:out->count=1;break;case 13:out->atom_count=1;break;
-        case 14:out->atom_capacity=1;break;case 15:out->words=1;break;
-        case 16:out->source_type_count=1;break;case 17:out->error_rows=1;break;
+        case 12:out->count=1;break;
         case 18:out->functions=(XrXirFunctionEffects *)(uintptr_t)1;break;
         case 19:out->witnesses=(XrXirEffectWitness *)(uintptr_t)1;break;
-        case 20:out->atoms=(EffectErrorAtom *)(uintptr_t)1;break;
-        case 21:out->errors=(uint64_t *)(uintptr_t)1;break;
-        case 22:out->task_errors=(XrXirStatus *)(uintptr_t)1;break;
         case 23:out->go_safe=(XrXirStatus *)(uintptr_t)1;break;
         case 24:out->task_creation=(XrXirEffect *)(uintptr_t)1;break;
         case 25:out->root=(XrXirRootEffects *)(uintptr_t)1;break;

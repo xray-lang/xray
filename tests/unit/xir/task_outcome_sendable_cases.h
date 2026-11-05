@@ -137,6 +137,9 @@ static XrXirStatus task_error_effects(const XrXirCompileContext *c) {
     XrXirInstruction initializer = {.op = XR_XIR_RETURN};
     functions[7] = (XrXirFunction){.name = "init", .name_length = 4, .blocks = &parameter_block,
         .block_count = 1, .instructions = &initializer, .instruction_count = 1};
+    const XrXirType errors[]={(XrXirType)259,(XrXirType)259,XR_XIR_NEVER,
+        (XrXirType)257,XR_XIR_ERROR,symbolic,symbolic,XR_XIR_NEVER};
+    for(uint32_t i=0;i<8;++i)functions[i].error_type=errors[i];
     XrXirSourceModule source = {"m", 1, NULL, 0, 7, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[8] = {0};
     XrXirDeclarations declarations = {.modules = &source, .module_count = 1, .functions = identities,
@@ -152,9 +155,8 @@ static XrXirStatus task_error_effects(const XrXirCompileContext *c) {
     if (status == XR_XIR_OK) {
         const XrXirStatus expected[] = {XR_XIR_BAD_TYPE, XR_XIR_BAD_TYPE, XR_XIR_OK,
             XR_XIR_OK, XR_XIR_BAD_TYPE, XR_XIR_OK, XR_XIR_BAD_TYPE};
-        for (uint32_t i = 0; i < 7; ++i) CHECK(xr_xir_effects_task_errors(effects, i) == expected[i]);
-        CHECK(xr_xir_effects_error(effects, 0, (XrXirType)259, 0));
-        CHECK(!xr_xir_effects_error(effects, 0, (XrXirType)259, 1));
+        for (uint32_t i = 0; i < 7; ++i)
+            CHECK(xir_compile_worker_error_verify(c,xr_xir_compile_artifact_module(checked),i)==expected[i]);
         CHECK(xr_xir_effects_read(effects, 2).control.throws == XR_XIR_EFFECT_NONE);
     }
     xr_xir_compile_effects_free(effects); xr_xir_compile_artifact_free(checked); return status;

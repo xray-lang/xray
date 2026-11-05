@@ -21,45 +21,23 @@ static XrXirStatus owned_error_refuse_head(const EffectBodyRequest *read,uint32_
 }
 
 static void owned_error_input_controls(const XrXirCompileContext *context,
-    XrXirEffects *effects,ErrorFlow *flow) {
-    ErrorInvocationContexts *sentinel=(ErrorInvocationContexts *)(uintptr_t)1;
-    XrCompileResourceStats before=rp_stats(context);size_t attempts=rp_attempts;
-    CHECK(error_invocation_contexts_new(flow,&sentinel)==XR_XIR_BAD_STRUCTURE &&
-        sentinel==(ErrorInvocationContexts *)(uintptr_t)1);
-    CHECK(rp_stats(context).work==before.work && rp_attempts==attempts);
-    ErrorInvocationContexts *output=NULL;EffectBodyRequest saved=flow->body;
-    flow->body.head=owned_error_refuse_head;owned_error_refusals=0;
-    CHECK(error_invocation_contexts_new(flow,&output)==XR_XIR_BAD_STRUCTURE &&
-        !output && owned_error_refusals==1);
-    flow->body=saved;
-    flow->body.domain.function_count++;
-    CHECK(error_invocation_contexts_new(flow,&output)==XR_XIR_BAD_STRUCTURE && !output);
-    flow->body=saved;
-    flow->body.owner=NULL;
-    CHECK(error_invocation_contexts_new(flow,&output)==XR_XIR_BAD_STRUCTURE && !output);
-    flow->body=saved;
-    const EffectBodyFunction *function=(const EffectBodyFunction *)(uintptr_t)1;
-    before=rp_stats(context);attempts=rp_attempts;
-    CHECK(error_owned_function(flow,&function)==XR_XIR_BAD_STRUCTURE &&
-        function==(const EffectBodyFunction *)(uintptr_t)1 &&
-        rp_stats(context).work==before.work && rp_attempts==attempts);
-    function=NULL;
-    for (uint32_t mismatch=0;mismatch<3;++mismatch) {
-        if (!mismatch) flow->body.domain.defaults=(const XrXirDefaultTable *)(uintptr_t)1;
-        else if (mismatch==1) ++flow->body.domain.function_count;
-        else flow->body.domain.types=(const XrXirTypes *)(uintptr_t)1;
-        CHECK(error_owned_function(flow,&function)==XR_XIR_BAD_STRUCTURE && !function &&
-            rp_stats(context).work==before.work && rp_attempts==attempts);
-        flow->body=saved;
+    XrXirEffects *effects,EffectBodyRequest *input) {
+    uint64_t live_before=rp_stats(context).live_bytes;EffectBodyRequest saved=*input;
+    input->head=owned_error_refuse_head;owned_error_refusals=0;
+    CHECK(local_errors_request(context,input,NULL)==XR_XIR_BAD_STRUCTURE && owned_error_refusals==1);
+    *input=saved;
+    for(uint32_t mode=0;mode<5;++mode) {
+        if(!mode)++input->domain.function_count;
+        else if(mode==1)input->owner=NULL;
+        else if(mode==2)input->domain.defaults=(const XrXirDefaultTable *)(uintptr_t)1;
+        else if(mode==3)input->domain.types=(const XrXirTypes *)(uintptr_t)1;
+        else input->domain.declarations=NULL;
+        CHECK(local_errors_request(context,input,NULL)==XR_XIR_BAD_STRUCTURE);*input=saved;
     }
     XrXirCompileContext foreign=rp_owner(rp_caps());uint64_t baseline=rp_stats(&foreign).live_bytes;
-    XrXirCompileContext *remaining=flow->remaining;flow->remaining=&foreign;
-    before=rp_stats(&foreign);attempts=rp_attempts;
-    CHECK(error_invocation_contexts_new(flow,&output)==XR_XIR_BAD_STRUCTURE && !output);
-    CHECK(rp_stats(&foreign).work==before.work && rp_attempts==attempts && effects->resources==context->resources);
-    CHECK(error_owned_function(flow,&function)==XR_XIR_BAD_STRUCTURE && !function &&
-        rp_stats(&foreign).work==before.work && rp_attempts==attempts);
-    flow->remaining=remaining;rp_owner_free(&foreign,baseline);
+    CHECK(local_errors_request(&foreign,input,NULL)==XR_XIR_BAD_STRUCTURE);
+    rp_owner_free(&foreign,baseline);
+    CHECK(effects->resources==context->resources && rp_stats(context).live_bytes==live_before);
 }
 
 static void owned_error_source_controls(const XrXirCompileContext *context,
@@ -81,43 +59,22 @@ static void owned_error_source_controls(const XrXirCompileContext *context,
  * known and UNKNOWN error outcomes after both producers have been destroyed. */
 /* Replay allocates fresh writable rows from the actual retained Input.
  * The published Final remains owned and unchanged throughout this probe. */
-static XrXirStatus owned_error_replay_begin(const XrXirCompileContext *context,
-    const XrXirEffects *effects,XrXirEffects *replay) {
-    XrXirStatus status=effect_legacy_error_oracle_prepare(context,effects,replay);
-    XrXirCompileContext remaining=*context;
-    if (status==XR_XIR_OK) status=effect_errors_seed(&effects->invocations->body->domain,replay,&remaining);
-    return status;
-}
+
 
 static XrXirStatus conditional_owned_error(const XrXirCompileContext *context,
     uint32_t mode,bool oracle) {
     InvocationReturnedFixture fixture;invocation_returned_fixture(&fixture,mode?4:0);
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,NULL);
-    if (status==XR_XIR_OK) status=xr_xir_compile_effects_analyze(checked,&effects);
-    if (status==XR_XIR_OK && oracle)
-        owned_error_source_controls(context,effects->invocations->body,xr_xir_compile_artifact_module(checked));
-    xr_xir_compile_artifact_free(checked);checked=NULL;memset(&fixture,0xCE,sizeof(fixture));
-    EffectTerms terms={0};terms.remaining=context;ErrorFlow flow={0};XrXirEffects replay={0};
-    if (status==XR_XIR_OK) status=owned_error_replay_begin(context,effects,&replay);
-    if (status==XR_XIR_OK) {
-        flow.body=effect_body_owned_request(context,effects->invocations->body);
-        terms.types=*flow.body.domain.types;flow.effects=&replay;
-        flow.remaining=(XrXirCompileContext *)context;flow.terms=&terms;
-        flow.summary_count=effects->count;flow.invocation=UINT32_MAX;
-        if (oracle) owned_error_input_controls(context,effects,&flow);
-        status=error_invocation_contexts_new(&flow,&flow.invocations);
+    if(status==XR_XIR_OK)status=xr_xir_compile_effects_analyze(checked,&effects);
+    if(status==XR_XIR_OK && oracle)owned_error_source_controls(context,effects->invocations->body,xr_xir_compile_artifact_module(checked));
+    xr_xir_compile_artifact_free(checked);memset(&fixture,0xCE,sizeof(fixture));
+    if(status==XR_XIR_OK) {
+        EffectBodyRequest input=effect_body_owned_request(context,effects->invocations->body);
+        if(oracle)owned_error_input_controls(context,effects,&input);
+        status=local_errors_request(context,&input,NULL);
     }
-    if (status==XR_XIR_OK && !flow.invocations) status=XR_XIR_BAD_STRUCTURE;
-    if (status==XR_XIR_OK) status=error_invocation_summaries(&flow);
-    if (status==XR_XIR_OK) status=error_invocation_functions(&flow);
-    if (status==XR_XIR_OK) {
-        CHECK(effects->count==5 && replay.outcomes_work.errors && replay.outcomes_work.words==1);
-        CHECK(error_bit(replay.outcomes_work.errors,0)==(mode!=0) && !error_bit(replay.outcomes_work.errors,1));
-        CHECK((effects->invocations->final->material!=NULL) && (effects->invocations->final->material!=NULL));
-    }
-    error_storage_free(&flow);error_invocation_contexts_free(flow.invocations);
-    effect_terms_free(&terms);effect_legacy_error_oracle_free(&replay);xr_xir_compile_effects_free(effects);return status;
+    xr_xir_compile_effects_free(effects);return status;
 }
 
 /* Each scan starts at physical zero. The independent literal rows retain
@@ -416,53 +373,14 @@ static XrXirStatus owned_error_cell_custom_type(const EffectBodyRequest *request
 
 /* Mutations are independent of the fixture's classification. A custom reader
  * remains observable even after the canonical inventory has been constructed. */
-static void owned_error_cell_identity_controls(const XrXirCompileContext *context,ErrorFlow *flow) {
-    CHECK(flow->cell_types && flow->cell_material==flow->body.owner &&
-        flow->cell_function==1 && flow->cell_type_count==3 && flow->cell_count==3);
+static void owned_error_cell_identity_controls(const XrXirCompileContext *context,EffectBodyRequest *input) {
     const uint32_t ids[3]={0,5,6};
-    for (uint32_t c=0;c<3;++c) {
-        XrXirType type=XR_XIR_UNIT;
-        CHECK(error_type_at(flow,ids[c],&type)==XR_XIR_OK && type==(XrXirType)CI_CELL);
-        CHECK(flow->cells[c]==ids[c] && flow->cell_types[c].value==ids[c] && flow->cell_types[c].type==type);
+    for(uint32_t i=0;i<3;++i) {XrXirType type=XR_XIR_UNIT;
+        CHECK(effect_body_request_type(input,1,ids[i],&type)==XR_XIR_OK && type==(XrXirType)CI_CELL);
     }
-    CHECK(flow->stride<=16);uint64_t saved[16];
-    memcpy(saved,flow->work,flow->stride*sizeof(*saved));
-    ErrorCellType row=flow->cell_types[0];uint32_t value=flow->cells[0];
-    const EffectBodyMaterial *material=flow->cell_material;
-    uint32_t function=flow->cell_function,count=flow->cell_type_count;
-    for (uint32_t mode=0;mode<7;++mode) {
-        if (!mode) flow->cells[0]=flow->values;
-        else if (mode==1) flow->cells[0]=2;
-        else if (mode==2) flow->cell_types[0].value=2;
-        else if (mode==3) flow->cell_types[0].type=XR_XIR_I64;
-        else if (mode==4) flow->cell_material=NULL;
-        else if (mode==5) flow->cell_function=2;
-        else flow->cell_type_count=2;
-        CHECK(error_cells(flow,UINT32_MAX,NULL)==XR_XIR_BAD_STRUCTURE &&
-            !memcmp(saved,flow->work,flow->stride*sizeof(*saved)));
-        flow->cells[0]=value;flow->cell_types[0]=row;flow->cell_material=material;
-        flow->cell_function=function;flow->cell_type_count=count;
-    }
-    EffectBodyRequest request=flow->body;XrCompileResourceStats before=rp_stats(context);
-    flow->body.domain.defaults=(const XrXirDefaultTable *)(uintptr_t)1;
-    CHECK(error_cells(flow,UINT32_MAX,NULL)==XR_XIR_BAD_STRUCTURE &&
-        rp_stats(context).work==before.work && !memcmp(saved,flow->work,flow->stride*sizeof(*saved)));
-    flow->body=request;
-    XrXirCompileContext foreign=rp_owner(rp_caps());uint64_t baseline=rp_stats(&foreign).live_bytes;
-    XrXirCompileContext *remaining=flow->remaining;flow->remaining=&foreign;before=rp_stats(&foreign);
-    CHECK(error_cells(flow,UINT32_MAX,NULL)==XR_XIR_BAD_STRUCTURE && rp_stats(&foreign).work==before.work &&
-        !memcmp(saved,flow->work,flow->stride*sizeof(*saved)));
-    flow->remaining=remaining;rp_owner_free(&foreign,baseline);
-    flow->body.type=owned_error_cell_custom_type;owned_error_cell_type_reads=0;
-    flow->cell_types[0].type=XR_XIR_I64;
-    CHECK(error_cells(flow,UINT32_MAX,NULL)==XR_XIR_OK && owned_error_cell_type_reads==3);
-    flow->cell_types[0]=row;flow->body=request;
-    CHECK(error_value(flow,flow->work,5)[0]==UINT64_C(12) && error_value(flow,flow->work,6)[0]==UINT64_C(12));
-    uint64_t second=UINT64_C(8);
-    CHECK(error_cells(flow,5,&second)==XR_XIR_OK && error_value(flow,flow->work,5)[0]==second &&
-        error_value(flow,flow->work,6)[0]==second && error_value(flow,flow->work,0)[0]==UINT64_C(12) &&
-        error_value(flow,flow->work,7)[0]==UINT64_C(4));
-    CHECK(error_cells(flow,UINT32_MAX,NULL)==XR_XIR_OK && error_value(flow,flow->work,5)[0]==UINT64_C(12));
+    EffectBodyRequest saved=*input;input->type=owned_error_cell_custom_type;owned_error_cell_type_reads=0;
+    CHECK(local_errors_request(context,input,NULL)==XR_XIR_OK && owned_error_cell_type_reads);
+    *input=saved;
 }
 
 /* This genuine checked library retains a Cell formal, a new Cell and its COPY
@@ -470,45 +388,21 @@ static void owned_error_cell_identity_controls(const XrXirCompileContext *contex
 static XrXirStatus conditional_owned_error_cells(const XrXirCompileContext *context,
     uint32_t mode,bool oracle) {
     CellIndexFixture fixture;ci_fixture(&fixture,CI_CALL,mode!=0,false);
-    XrXirEffects *effects=NULL;
-    XrXirStatus status=xir_fixture_verify(context,&fixture.module,NULL);
-    if (status==XR_XIR_OK) status=xr_xir_compile_effects_infer_verified(context,&fixture.module,&effects);
-    if (status==XR_XIR_OK && oracle) {
+    XrXirEffects *effects=NULL;XrXirStatus status=xir_fixture_verify(context,&fixture.module,NULL);
+    if(status==XR_XIR_OK)status=xr_xir_compile_effects_infer_verified(context,&fixture.module,&effects);
+    if(status==XR_XIR_OK && oracle) {
         CHECK(effect_body_source_match(context,effects->invocations->body,&fixture.module)==XR_XIR_OK);
         XrXirInstruction saved=fixture.subject[1];fixture.subject[1].type=XR_XIR_I64;
         CHECK(effect_body_source_match(context,effects->invocations->body,&fixture.module)==XR_XIR_BAD_STRUCTURE);
-        fixture.subject[1]=saved;
-        CHECK(effect_body_source_match(context,effects->invocations->body,&fixture.module)==XR_XIR_OK);
+        fixture.subject[1]=saved;CHECK(effect_body_source_match(context,effects->invocations->body,&fixture.module)==XR_XIR_OK);
     }
     memset(&fixture,0xCE,sizeof(fixture));
-    EffectTerms terms={0};terms.remaining=context;ErrorFlow flow={0};XrXirEffects replay={0};
-    if (status==XR_XIR_OK) status=owned_error_replay_begin(context,effects,&replay);
-    if (status==XR_XIR_OK) {
-        flow.body=effect_body_owned_request(context,effects->invocations->body);
-        terms.types=*flow.body.domain.types;flow.effects=&replay;
-        flow.remaining=(XrXirCompileContext *)context;flow.terms=&terms;
-        flow.summary_count=effects->count;flow.invocation=UINT32_MAX;
+    if(status==XR_XIR_OK) {
+        EffectBodyRequest input=effect_body_owned_request(context,effects->invocations->body);
+        status=local_errors_request(context,&input,NULL);
+        if(status==XR_XIR_OK && oracle)owned_error_cell_identity_controls(context,&input);
     }
-    if (status==XR_XIR_OK) status=error_function(&flow,1);
-    if (status==XR_XIR_OK) {
-        CHECK(effects->count==3 && replay.outcomes_work.words==1 && replay.outcomes_work.atom_count==2 &&
-            replay.outcomes_work.errors[1]==(mode?UINT64_C(4):UINT64_C(12)) &&
-            !xr_xir_effects_error_unknown(effects,1) && !xr_xir_effects_error_unidentified(effects,1));
-        CHECK(ci_expected(CI_CALL,mode!=0)==(mode?UINT64_C(4):UINT64_C(12)));
-        CHECK(flow.cell_count==3 && flow.cell_type_count==3 && flow.cell_material==flow.body.owner &&
-            (effects->invocations->final->material!=NULL) && (effects->invocations->final->material!=NULL));
-        if (oracle) {
-            owned_error_cell_identity_controls(context,&flow);
-            uint8_t *storage=flow.storage;size_t capacity=flow.storage_capacity;
-            CHECK(error_function(&flow,2)==XR_XIR_OK && !flow.cell_types && !flow.cell_material &&
-                !flow.cell_count && !flow.cell_type_count && flow.storage==storage && flow.storage_capacity==capacity);
-            CHECK(error_function(&flow,1)==XR_XIR_OK && flow.cell_type_count==3 &&
-                replay.outcomes_work.errors[1]==(mode?UINT64_C(4):UINT64_C(12)));
-        }
-    }
-    error_storage_free(&flow);
-    CHECK(!flow.cell_types && !flow.cell_material && !flow.cell_type_count);
-    effect_terms_free(&terms);effect_legacy_error_oracle_free(&replay);xr_xir_compile_effects_free(effects);return status;
+    xr_xir_compile_effects_free(effects);return status;
 }
 
 /* The original two recipes retain their complete loops unchanged. These two

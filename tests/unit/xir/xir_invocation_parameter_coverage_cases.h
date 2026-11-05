@@ -175,8 +175,6 @@ static XrXirStatus conditional_parameter_case(const XrXirCompileContext *context
     xr_xir_compile_artifact_free(checked);memset(&fixture,0,sizeof(fixture));
     if(status==XR_XIR_OK) status=effect_capture_match(context,certificate->final);
     if (status==XR_XIR_OK && oracle) {
-        CHECK(xr_xir_effects_error_unknown(published,0)==(mode>=2));
-        CHECK(xr_xir_effects_error_unknown(published,5));
         invocation_parameter_rejections(context,certificate->final,mode);
         CHECK((certificate->final->material!=NULL));
     }

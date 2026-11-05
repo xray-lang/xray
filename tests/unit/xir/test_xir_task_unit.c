@@ -96,7 +96,7 @@ static XrXirProgram *unit_program(const UnitOracle *oracle, uint32_t *entry) {
             if (checked->functions[f].name_length == 4 && !memcmp(checked->functions[f].name, "wait", 4)) {
                 CHECK(xr_xir_effects_read(effects, f).control.throws == XR_XIR_EFFECT_MAY &&
                     xr_xir_effects_read(effects, f).control.suspend == XR_XIR_EFFECT_MAY);
-                CHECK(xr_xir_effects_error_unidentified(effects, f)); ++matches;
+                 ++matches;
             }
         CHECK(matches == 1); xr_xir_compile_effects_free(effects);
     }

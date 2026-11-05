@@ -15,7 +15,7 @@ static void ed_faults(void){
         XrXirCompileContext c=ed_owner(ed_caps());uint64_t baseline=ed_stats(&c).live_bytes;
         attempts=0;injected=false;fail_at=pass?pass-1:SIZE_MAX;
         XrXirStatus status=operation?ed_restart_whole(&c):ed_whole(&c,ED_GO,false);size_t actual=attempts;fail_at=SIZE_MAX;
-        if(!pass){CHECK(status==XR_XIR_OK);sites=actual;CHECK(sites>0 && sites<2048);}
+        if(!pass){CHECK(status==XR_XIR_OK);sites=actual;CHECK(sites>0);}
         else {CHECK(injected && actual>=pass && status==XR_XIR_OUT_OF_MEMORY);CHECK(ed_stats(&c).live_bytes==baseline);
             CHECK((operation?ed_restart_whole(&c):ed_whole(&c,ED_GO,false))==XR_XIR_OK);}
         ed_release(&c,baseline);

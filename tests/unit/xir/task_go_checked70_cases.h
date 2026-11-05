@@ -85,8 +85,7 @@ static XrXirStatus task_go_pipeline(const XrXirCompileContext *c) {
             xr_xir_effects_read(effects, 2).control.throws == XR_XIR_EFFECT_NONE);
         CHECK(xr_xir_effects_read(effects, 1).control.suspend == XR_XIR_EFFECT_MAY &&
             xr_xir_effects_read(effects, 1).control.throws == XR_XIR_EFFECT_NONE);
-        CHECK(xr_xir_effects_read(effects, 4).control.throws == XR_XIR_EFFECT_MAY &&
-            xr_xir_effects_error_unidentified(effects, 4));
+        CHECK(xr_xir_effects_read(effects, 4).control.throws == XR_XIR_EFFECT_MAY);
         CHECK(xr_xir_effects_task_creation(effects, 2) == XR_XIR_EFFECT_MAY &&
             xr_xir_effects_task_creation(effects, 3) == XR_XIR_EFFECT_MAY &&
             xr_xir_effects_task_creation(effects, 4) == XR_XIR_EFFECT_NONE);
@@ -244,9 +243,6 @@ static void task_go_outcomes(void) {
             CHECK(xr_xir_effects_go_safe(effects, 0) == XR_XIR_OK);
             CHECK(xr_xir_effects_read(effects, 2).control.throws == XR_XIR_EFFECT_NONE &&
                 xr_xir_effects_read(effects, 2).control.suspend == XR_XIR_EFFECT_NONE);
-            CHECK(xr_xir_effects_error(effects, 1, (XrXirType)257, 0) == !mode &&
-                !xr_xir_effects_error(effects, 1, (XrXirType)257, 1) &&
-                !xr_xir_effects_error_unidentified(effects, 1));
             xr_xir_compile_effects_free(effects);
         }
         xr_xir_compile_artifact_free(checked); owner_free(&c, baseline);
@@ -267,9 +263,7 @@ static void task_go_caught(void) {
     f.functions[0].operands = &f.worker_operand; f.functions[0].operand_count = 1;
     XrXirArtifact *checked = NULL; task_go_expected(&c, &f, XR_XIR_OK, &checked);
     XrXirEffects *effects = NULL; CHECK(xr_xir_compile_effects_analyze(checked, &effects) == XR_XIR_OK);
-    CHECK(xr_xir_effects_task_errors(effects, 3) == XR_XIR_BAD_TYPE &&
-        xr_xir_effects_task_errors(effects, 0) == XR_XIR_OK &&
-        xr_xir_effects_read(effects, 0).control.throws == XR_XIR_EFFECT_NONE);
+    CHECK(xr_xir_effects_read(effects, 0).control.throws == XR_XIR_EFFECT_NONE);
     xr_xir_compile_effects_free(effects); xr_xir_compile_artifact_free(checked); owner_free(&c, baseline);
 }
 static void task_go_cleanup(void) {
@@ -326,9 +320,6 @@ static void task_go_phi(void) {
         f.functions[1].operands = operands; f.functions[1].operand_count = 5 + unknown;
         XrXirArtifact *checked = NULL; task_go_expected(&c, &f, XR_XIR_OK, &checked);
         XrXirEffects *effects = NULL; CHECK(xr_xir_compile_effects_analyze(checked, &effects) == XR_XIR_OK);
-        CHECK(xr_xir_effects_error(effects, 1, (XrXirType)257, 0) &&
-            !xr_xir_effects_error(effects, 1, (XrXirType)257, 1) &&
-            xr_xir_effects_error_unidentified(effects, 1) == (unknown != 0));
         xr_xir_compile_effects_free(effects); xr_xir_compile_artifact_free(checked); owner_free(&c, baseline);
     }
 }

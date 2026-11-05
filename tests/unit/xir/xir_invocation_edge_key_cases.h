@@ -188,7 +188,6 @@ static XrXirStatus invocation_edge_operation(const XrXirCompileContext *context,
     if (status==XR_XIR_OK) status=xr_xir_compile_effects_infer_verified(context,module,&effects);
     if (status==XR_XIR_OK) {
         invocation_edge_published_keys(effects->invocations->final,mode);
-        CHECK(effect_final_outcomes(effects)->words==1 && effect_final_outcomes(effects)->errors[1]==(mode==2?UINT64_C(0):mode?UINT64_C(4):UINT64_C(12)));
     }
     if (status==XR_XIR_OK && oracle) {
         CHECK(effect_body_source_match(context,effects->invocations->body,module)==XR_XIR_OK);
@@ -201,25 +200,8 @@ static XrXirStatus invocation_edge_operation(const XrXirCompileContext *context,
     }
     memset(&cells,0xCE,sizeof(cells));memset(&phi,0xCE,sizeof(phi));
     if (status==XR_XIR_OK && oracle) invocation_edge_dimension_controls(context,effects);
-    EffectTerms terms={0};terms.remaining=context;ErrorFlow flow={0};XrXirEffects replay={0};
-    if (status==XR_XIR_OK) status=owned_error_replay_begin(context,effects,&replay);
-    if (status==XR_XIR_OK) {
-        flow.body=effect_body_owned_request(context,effects->invocations->body);
-        terms.types=*flow.body.domain.types;flow.effects=&replay;
-        flow.remaining=(XrXirCompileContext *)context;flow.terms=&terms;
-        flow.summary_count=effects->count;flow.invocation=UINT32_MAX;
-        status=error_invocation_contexts_new(&flow,&flow.invocations);
-    }
-    if (status==XR_XIR_OK && mode==2) {
-        CHECK(flow.invocations);status=error_invocation_summaries(&flow);
-        if (status==XR_XIR_OK) status=error_invocation_functions(&flow);
-    } else if (status==XR_XIR_OK) {
-        CHECK(!flow.invocations);status=error_function(&flow,1);
-    }
-    if (status==XR_XIR_OK) CHECK(replay.outcomes_work.errors[1]==
-        (mode==2?UINT64_C(0):mode?UINT64_C(4):UINT64_C(12)));
-    error_storage_free(&flow);error_invocation_contexts_free(flow.invocations);
-    effect_terms_free(&terms);effect_legacy_error_oracle_free(&replay);xr_xir_compile_effects_free(effects);return status;
+    if(status==XR_XIR_OK)status=local_errors_owned(context,effects->invocations->body,NULL);
+    xr_xir_compile_effects_free(effects);return status;
 }
 
 static void invocation_edge_poison_allocation(void *memory) {

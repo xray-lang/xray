@@ -79,7 +79,6 @@ static XrXirStatus pipeline(XrCompileResources *owner, bool release_caller, unsi
     XrXirStatus status = kind == 4 ? generic_error_built(&context,&checked) : kind == 3 ? implementation_built(&context,&checked) : kind == 2 ? nominal_built(&context,&checked) : kind == 1 ? generic_built(&context,&checked) : xir_fixture_check(&context, &module, &checked, NULL);
     if (status == XR_XIR_OK && kind == 4) {
         status = xr_xir_compile_effects_analyze(checked,&effects);
-        if (status == XR_XIR_OK) CHECK(xr_xir_effects_error(effects,1,(XrXirType)257,1));
         xr_xir_compile_effects_free(effects); effects = NULL;
     }
     if (status == XR_XIR_OK) status = xr_xir_compile_specialize(checked,&specialized,NULL);

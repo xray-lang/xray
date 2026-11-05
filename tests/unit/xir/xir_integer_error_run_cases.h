@@ -11,18 +11,12 @@ static XrXirStatus integer_scalar_read(const EffectBodyRequest *request,uint32_t
     EffectBodyInstructionFields *fields) {
     return effect_body_owned_instruction(request,f,i,storage,output,fields);
 }
-static void integer_error_replay(const XrXirCompileContext *work,const XrXirEffects *effects,bool scalar,
+static void integer_body_replay(const XrXirCompileContext *work,const XrXirEffects *effects,bool scalar,
     XrXirStatus expected) {
-    XrXirEffects fresh={0};EffectTerms terms={.remaining=work};ErrorFlow flow={0};
     uint64_t baseline=rp_stats(work).live_bytes;
-    CHECK(owned_error_replay_begin(work,effects,&fresh)==XR_XIR_OK);
-    flow.body=effect_body_owned_request(work,effects->invocations->body);
-    if (scalar) flow.body.instruction=integer_scalar_read;
-    terms.types=*flow.body.domain.types;flow.terms=&terms;flow.effects=&fresh;
-    flow.remaining=(XrXirCompileContext *)work;flow.invocation=UINT32_MAX;
-    CHECK(error_function(&flow,0)==expected);
-    if (expected==XR_XIR_OK) CHECK(fresh.outcomes_work.words==1 && !fresh.outcomes_work.errors[0]);
-    error_storage_free(&flow);effect_terms_free(&terms);effect_source_outcomes_free(&fresh);
+    EffectBodyRequest input=effect_body_owned_request(work,effects->invocations->body);
+    if (scalar) input.instruction=integer_scalar_read;
+    CHECK(local_errors_request(work,&input,NULL)==expected);
     CHECK(rp_stats(work).live_bytes==baseline);
 }
 static void integer_owned_case(void) {
@@ -48,22 +42,22 @@ static void integer_owned_case(void) {
      * admission and permission checks remain independent obligations. */
     for (uint32_t w=2;w<EFFECT_BODY_WORDS;++w) {
         head->runs[0].mask=UINT32_C(1)<<w;head->runs[0].delta[w]=UINT32_MAX;
-        integer_error_replay(&context,effects,false,XR_XIR_OK);
-        integer_error_replay(&context,effects,true,XR_XIR_OK);
+        integer_body_replay(&context,effects,false,XR_XIR_OK);
+        integer_body_replay(&context,effects,true,XR_XIR_OK);
         head->runs[0].delta[w]=0;
-        integer_error_replay(&context,effects,false,XR_XIR_BAD_STRUCTURE);
-        integer_error_replay(&context,effects,true,XR_XIR_BAD_STRUCTURE);
+        integer_body_replay(&context,effects,false,XR_XIR_BAD_STRUCTURE);
+        integer_body_replay(&context,effects,true,XR_XIR_BAD_STRUCTURE);
         head->runs[0]=saved;
     }
     head->runs[0].base.op=(XrXirOp)(XR_XIR_INVALID+1);
     head->runs[0].mask|=1;head->runs[0].delta[0]=UINT32_MAX;
-    integer_error_replay(&context,effects,false,XR_XIR_BAD_STRUCTURE);
-    integer_error_replay(&context,effects,true,XR_XIR_BAD_STRUCTURE);head->runs[0]=saved;
+    integer_body_replay(&context,effects,false,XR_XIR_BAD_STRUCTURE);
+    integer_body_replay(&context,effects,true,XR_XIR_BAD_STRUCTURE);head->runs[0]=saved;
     head->runs[0].mask|=2;head->runs[0].delta[1]=0;
-    integer_error_replay(&context,effects,false,XR_XIR_BAD_STRUCTURE);head->runs[0]=saved;
-    ++head->runs[1].first;integer_error_replay(&context,effects,false,XR_XIR_BAD_STRUCTURE);
+    integer_body_replay(&context,effects,false,XR_XIR_BAD_STRUCTURE);head->runs[0]=saved;
+    ++head->runs[1].first;integer_body_replay(&context,effects,false,XR_XIR_BAD_STRUCTURE);
     head->runs[1]=tail;
-    integer_error_replay(&context,effects,false,XR_XIR_OK);
+    integer_body_replay(&context,effects,false,XR_XIR_OK);
     xr_xir_compile_effects_free(effects);rp_owner_free(&context,baseline);rp_balanced(physical);
     CHECK(!rp_live && !rp_live_bytes && !rp_allocation_observer);
 }

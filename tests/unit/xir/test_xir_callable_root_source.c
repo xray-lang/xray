@@ -57,8 +57,6 @@ static void root_source_facts(XrXirArtifact *artifact, bool flows) {
         const XrXirRootEffects *actual=(actual_read.status==XR_XIR_OK?&actual_read.root:NULL);
         CHECK(actual && !actual->requires_root && !actual->unresolved);
         CHECK(xr_xir_effects_go_safe(effects,f) == XR_XIR_OK);
-        CHECK(xr_xir_effects_task_errors(effects,f) == XR_XIR_OK);
-        CHECK(!xr_xir_effects_error_unknown(effects,f) && !xr_xir_effects_error_unidentified(effects,f));
     }
     xr_xir_compile_effects_free(effects);
 }

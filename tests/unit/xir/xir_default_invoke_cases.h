@@ -76,9 +76,7 @@ static void default_invoke_case(unsigned mode,bool generic) {
     CHECK(status==expected && ((checked!=NULL)==(expected==XR_XIR_OK)));
     if(!checked)return;
     XrXirEffects *effects=NULL;CHECK(xr_xir_compile_effects_analyze(checked, &effects)==XR_XIR_OK);
-    CHECK(xr_xir_effects_error(effects,3,XR_XIR_CONSTRUCTED_TYPE_BASE,0));
-    CHECK(xr_xir_effects_error(effects,1,XR_XIR_CONSTRUCTED_TYPE_BASE,0)==(mode==15));
-    CHECK(!xr_xir_effects_error_unknown(effects,1));xr_xir_compile_effects_free(effects);
+    xr_xir_compile_effects_free(effects);
     XrXirArtifact *special=NULL,*read=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_specialize(checked, &special, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;

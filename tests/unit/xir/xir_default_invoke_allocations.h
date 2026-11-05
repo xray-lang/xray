@@ -53,7 +53,7 @@ static XrXirStatus default_invoke_allocation_case(const XrXirCompileContext *con
     XrXirStatus status=xir_fixture_check(context, &module, &checked, NULL);
     if(status!=XR_XIR_OK)CHECK(!checked);
     if(status==XR_XIR_OK){status=xr_xir_compile_effects_analyze(checked,&effects);if(status!=XR_XIR_OK)CHECK(!effects);}
-    if(status==XR_XIR_OK){CHECK(!xr_xir_effects_error(effects,1,XR_XIR_CONSTRUCTED_TYPE_BASE,0));
+    if(status==XR_XIR_OK){
         status=xr_xir_compile_specialize(checked,&special,NULL);if(status!=XR_XIR_OK)CHECK(!special);}
     if(status==XR_XIR_OK){status=xr_xir_compile_checked_write(special,&packet,NULL);if(status!=XR_XIR_OK)CHECK(!packet.bytes&&!packet.length);}
     if(status==XR_XIR_OK){status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&read,NULL);if(status!=XR_XIR_OK)CHECK(!read);}

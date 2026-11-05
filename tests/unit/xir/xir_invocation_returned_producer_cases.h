@@ -43,7 +43,7 @@ static void invocation_returned_capture_fixture(InvocationReturnedFixture *f,
  * non-producing recursive factory remain distinct from genuine return data. */
 static void invocation_returned_fixture(InvocationReturnedFixture *f,uint32_t mode) {
     memset(f,0,sizeof(*f));
-    f->nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,
+    f->nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,
         .flags=XR_XIR_CALLABLE_ROOT_NONE};
     f->nodes[1]=f->nodes[0];f->nodes[1].flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     f->nodes[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64};
@@ -93,6 +93,7 @@ static void invocation_returned_fixture(InvocationReturnedFixture *f,uint32_t mo
         .functions=f->identities,.entry_function=0};
     f->module=(XrXirModule){.stage=XR_XIR_BUILT,.types=&f->types,.functions=f->functions,.function_count=5,
         .declarations=&f->declarations,.linkage_kind=XR_XIR_PROGRAM};
+    for(uint32_t fno=0;fno<f->module.function_count;++fno)f->functions[fno].error_type=XR_XIR_NEVER;
 }
 
 /* A real Cell environment has its own rooted cause, independent of the

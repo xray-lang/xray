@@ -99,18 +99,8 @@ static XrXirStatus pc_current_input_operation(const XrXirCompileContext *context
         if(status==XR_XIR_OK) status=effect_propagate(effects,&graph,&final);
         if(status==XR_XIR_OK) status=effect_go_safe(&source,effects,&graph,&final);
         if(status==XR_XIR_OK) status=effect_witnesses(&source,effects,&graph,&final);
-        if(status==XR_XIR_OK) {
-            /* The retry owns the previous unpublished Error allocations. Retire
-             * them before the original one-shot seeder creates fresh rows. */
-            CHECK(!effects->outcomes_work.error_proof);
-            xr_compile_resources_free(effects->outcomes_work.atoms);
-            xr_compile_resources_free(effects->outcomes_work.errors);
-            effects->outcomes_work.atoms=NULL;effects->outcomes_work.errors=NULL;
-            effects->outcomes_work.atom_count=effects->outcomes_work.atom_capacity=0;
-            effects->outcomes_work.words=effects->outcomes_work.error_rows=0;
-            effects->outcomes_work.source_type_count=0;
-            status=effect_errors_analyze(effects,&graph,&final);
-        }
+        if(status==XR_XIR_OK)status=local_errors_owned(&final,graph.material,NULL);
+        if(status==XR_XIR_OK)status=local_error_outcomes(&final,graph.material,effects->outcomes_work.functions,false);
         if(status==XR_XIR_OK) {
             const XirEffectEntryRootView *sealed=effects->outcomes_work.entry_roots;
             size_t allocations=attempts;XrCompileResourceStats retained=pc_stats(context);

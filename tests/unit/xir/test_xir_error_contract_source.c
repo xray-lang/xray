@@ -32,15 +32,14 @@ static const char *const error_contract_sources[]={
     "enum E{Bad}\nfn worker()->i64{try{\ntry{throw E.Bad}\ncatch(e:E){throw e}\n}catch(e:E){return 11}}\n"
 };
 typedef struct ErrorContractExpected {
-    bool root_unknown,error_unknown,error_unidentified,known_variant;
-    XrXirEffect throws;
+    bool root_unknown;
     XrXirStatus task,go;
 } ErrorContractExpected;
 static const ErrorContractExpected error_contract_expected[]={
-    {false,false,false,false,XR_XIR_EFFECT_NONE,XR_XIR_OK,XR_XIR_OK},
-    {false,false,true,false,XR_XIR_EFFECT_MAY,XR_XIR_BAD_TYPE,XR_XIR_OK},
-    {false,false,false,true,XR_XIR_EFFECT_MAY,XR_XIR_OK,XR_XIR_OK},
-    {true,true,false,false,XR_XIR_EFFECT_UNKNOWN,XR_XIR_BAD_TYPE,XR_XIR_BAD_TYPE}
+    {false,XR_XIR_OK,XR_XIR_OK},
+    {false,XR_XIR_BAD_TYPE,XR_XIR_OK},
+    {false,XR_XIR_OK,XR_XIR_OK},
+    {true,XR_XIR_BAD_TYPE,XR_XIR_BAD_TYPE}
 };
 typedef struct ErrorContractCase { uint32_t which;bool inspect; } ErrorContractCase;
 
@@ -62,32 +61,22 @@ static XrXirStatus error_contract_program(const XrXirCompileContext *context,uin
 
 static XrXirStatus error_contract_facts(XrXirArtifact **artifact,const ErrorContractCase *fixture,uint32_t pass) {
     const XrXirModule *module=xr_xir_compile_artifact_module(*artifact);CHECK(module);
-    uint32_t worker=UINT32_MAX;XrXirType error=XR_XIR_UNIT;
+    uint32_t worker=UINT32_MAX;
     for (uint32_t f=0;f<module->function_count;++f)
         if (module->functions[f].name_length==6 && !memcmp(module->functions[f].name,"worker",6)) worker=f;
     CHECK(worker!=UINT32_MAX);
-    for (uint32_t t=0;module->types && module->types->nominals && t<module->types->count;++t) {
-        const XrXirTypeNode *node=&module->types->nodes[t];
-        if (node->kind!=XR_XIR_TYPE_NOMINAL || node->nominal.declaration>=module->types->nominals->count) continue;
-        const XrXirNominalDeclaration *declaration=&module->types->nominals->declarations[node->nominal.declaration];
-        if (declaration->name.length==7 && !memcmp(declaration->name.bytes,"Failure",7))
-            error=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+t);
-    }
+    XrXirStatus task=xir_compile_worker_error_verify(&(*artifact)->context,module,worker);
     XrXirEffects *effects=NULL;XrXirStatus status=xr_xir_compile_effects_analyze(*artifact,&effects);
     if (status!=XR_XIR_OK) { CHECK(!effects);return status; }
     xr_xir_compile_artifact_free(*artifact);*artifact=NULL;
-    const XrXirRootEffects *root=xr_xir_effects_root(effects,worker);
-    const XrXirFunctionEffects *function=xr_xir_effects_function(effects,worker);CHECK(root && function);
+    XrXirEffectFacts read=xr_xir_effects_read(effects,worker);CHECK(read.status==XR_XIR_OK);
+    const XrXirRootEffects *root=&read.root;
     const ErrorContractExpected *expected=&error_contract_expected[fixture->which];
-    bool unknown=xr_xir_effects_error_unknown(effects,worker),unidentified=xr_xir_effects_error_unidentified(effects,worker);
-    bool known=error!=XR_XIR_UNIT && xr_xir_effects_error(effects,worker,error,0);
-    XrXirStatus task=xr_xir_effects_task_errors(effects,worker),go=xr_xir_effects_go_safe(effects,worker);
+    XrXirStatus go=xr_xir_effects_go_safe(effects,worker);
     CHECK(!root->requires_root && root->unresolved==expected->root_unknown);
-    CHECK(unknown==expected->error_unknown && unidentified==expected->error_unidentified);
-    CHECK(known==expected->known_variant && function->throws==expected->throws && task==expected->task && go==expected->go);
-    if (fixture->inspect) printf("error contract%u pass%u rootNONE unknown%u throws%u error_unknown%u unidentified%u known%u task%u go%u\n",
-        fixture->which,pass,(unsigned)root->unresolved,(unsigned)function->throws,(unsigned)unknown,
-        (unsigned)unidentified,(unsigned)known,(unsigned)task,(unsigned)go);
+    CHECK(task==expected->task && go==expected->go);
+    if (fixture->inspect) printf("error contract%u pass%u rootNONE unknown%u task%u go%u\n",
+        fixture->which,pass,(unsigned)root->unresolved,(unsigned)task,(unsigned)go);
     xr_xir_compile_effects_free(effects);return XR_XIR_OK;
 }
 

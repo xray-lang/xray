@@ -81,6 +81,7 @@ static void fixture(ErrorFixture *f) {
     f->functions[4]=f->functions[3];f->functions[4].name="rethrow";f->functions[4].instructions=f->rethrow;
     f->source=(XrXirSourceModule){"errors",6,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=f->identities,.root_module=UINT32_MAX,.entry_function=UINT32_MAX};
+    for(uint32_t i=0;i<5;++i)f->functions[i].error_type=(i==1 || i==4)?XR_XIR_ERROR:XR_XIR_NEVER;
     f->module=(XrXirModule){.stage=XR_XIR_CHECKED,.functions=f->functions,.function_count=5,.declarations=&f->declarations,.linkage_kind=XR_XIR_LIBRARY};
 }
 static XrCompileResourceLimits caps(void){return (XrCompileResourceLimits){2097152,1048576,2000000};}
@@ -98,7 +99,7 @@ static void golden(const XrXirEffects *e){
     static const XrXirEffect expected[]={XR_XIR_EFFECT_NONE,XR_XIR_EFFECT_MAY,XR_XIR_EFFECT_NONE,XR_XIR_EFFECT_NONE,XR_XIR_EFFECT_MAY};
     for(uint32_t f=0;f<5;++f){XrXirEffectFacts v_read=xr_xir_effects_read(e,f);
         const XrXirFunctionEffects *v=(v_read.status==XR_XIR_OK?&v_read.control:NULL);CHECK(v && v->suspend==XR_XIR_EFFECT_NONE && v->throws==expected[f]);
-        CHECK(!xr_xir_effects_error_unknown(e,f));CHECK(xr_xir_effects_error_unidentified(e,f)==(f==1 || f==4));}
+        }
 }
 static XrXirStatus whole(const XrXirCompileContext *context){
     ErrorFixture f;fixture(&f);XrXirStatus status=xir_fixture_verify(context, &f.module, NULL);XrXirEffects *effects=NULL;
@@ -125,23 +126,6 @@ static void limits(void){
     XrCompileResourceLimits less=exact;--less.allocated_bytes;(void)measured(less,XR_XIR_BUDGET);
     less=exact;--less.live_bytes;(void)measured(less,XR_XIR_BUDGET);less=exact;--less.work;(void)measured(less,XR_XIR_BUDGET);
 }
-static void storage_freshness(void){
-    ErrorFixture f;fixture(&f);XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).live_bytes;
-    CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
-    XrXirFunctionEffects functions[5]={{0}};uint64_t errors[5]={0};XrXirEffects effects={0};
-    effects.count=5;effects.outcomes_work.words=1;effects.outcomes_work.functions=functions;effects.outcomes_work.errors=errors;
-    EffectTerms terms={0};terms.remaining=&c;ErrorFlow flow={0};flow.body=effect_body_raw_request(&c,&f.module);
-    flow.effects=&effects;flow.remaining=&c;flow.terms=&terms;
-    attempts=0;CHECK(error_function(&flow,1)==XR_XIR_OK && errors[1]==2);CHECK(attempts==1);
-    size_t small_capacity=flow.storage_capacity;
-    CHECK(error_function(&flow,2)==XR_XIR_OK && !errors[2]);CHECK(attempts==2 && flow.storage_capacity>small_capacity);
-    uint8_t *large=flow.storage;size_t capacity=flow.storage_capacity;
-    memset(flow.storage,0xff,capacity);
-    CHECK(error_function(&flow,1)==XR_XIR_OK && errors[1]==2 && flow.storage==large && flow.storage_capacity==capacity && attempts==2);
-    CHECK(error_function(&flow,2)==XR_XIR_OK && !errors[2] && flow.storage==large && attempts==2);
-    error_storage_free(&flow);effect_terms_free(&terms);CHECK(!flow.storage && !flow.storage_capacity && !flow.states && !flow.roots && !flow.reachable);
-    owner_free(&c,baseline);
-}
 static void negative_body(void){
     ErrorFixture f;fixture(&f);XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).live_bytes;
     CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
@@ -149,4 +133,4 @@ static void negative_body(void){
     f.throw_op.op=XR_XIR_THROW;CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
     owner_free(&c,baseline);
 }
-int main(void){storage_freshness();negative_body();faults();limits();puts("error flow fresh facts, owned scratch, actual OOM and three finite axes PASS");return 0;}
+int main(void){negative_body();faults();limits();puts("error flow fresh facts, owned scratch, actual OOM and three finite axes PASS");return 0;}

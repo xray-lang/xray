@@ -288,6 +288,8 @@ static void check_lowered_error_remap(const XrXirCompileContext *work) {
     functions[1].error_type=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;
     CHECK(xir_fixture_check(work,&module,&checked,NULL)==XR_XIR_BAD_TYPE && !checked);
     functions[1].error_type=XR_XIR_NEVER;
+    CHECK(xir_fixture_check(work,&module,&checked,NULL)==XR_XIR_BAD_TYPE && !checked);
+    functions[1].error_type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1);
     CHECK(xir_fixture_check(work,&module,&checked,NULL)==XR_XIR_OK);
     memset(nodes,0xa5,sizeof(nodes));
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);

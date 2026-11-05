@@ -64,8 +64,8 @@ static void ci_fixture(CellIndexFixture *f, CellBoundary boundary, bool snapshot
     f->nominals=(XrXirNominalTable){.declarations=&f->nominal,.count=1};
     f->nodes[0].kind=XR_XIR_TYPE_NOMINAL;
     f->nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CELL,.element=(XrXirType)CI_ENUM};
-    f->nodes[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_TASK,.element=XR_XIR_UNIT};
-    f->nodes[3]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,
+    f->nodes[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_TASK,.element=XR_XIR_UNIT,.result=XR_XIR_NEVER};
+    f->nodes[3]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_UNIT,
         .flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     f->types=(XrXirTypes){.nodes=f->nodes,.count=4,.nominals=&f->nominals};
     f->parameters[0]=(XrXirType)CI_CELL; f->parameters[1]=(XrXirType)CI_FN;
@@ -162,6 +162,8 @@ static void ci_fixture(CellIndexFixture *f, CellBoundary boundary, bool snapshot
         f->functions[1].operands=f->operands;f->functions[1].operand_count=4;
         f->expected_ids[1]=3;f->expected_ids[2]=7;
     }
+    for(uint32_t fno=0;fno<f->module.function_count;++fno)f->functions[fno].error_type=XR_XIR_NEVER;
+    f->functions[1].error_type=(XrXirType)CI_ENUM;
 }
 /* Literal bit positions: unknown=1, unidentified=2, First=4, Second=8. */
 static uint64_t ci_expected(CellBoundary boundary,bool snapshot){

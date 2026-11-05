@@ -70,12 +70,7 @@ static XrXirStatus pc_outcome_late_operation(const XrXirCompileContext *context,
             owned->unresolved_witnesses==pc_outcome_unknown_witness_allocation &&
             effect_outcomes_empty(&effects->outcomes_work));
         pc_empty_golden(effects,0);
-        CHECK(xr_xir_effects_read(effects,1).control.suspend==XR_XIR_EFFECT_NONE &&
-            xr_xir_effects_read(effects,1).control.throws==XR_XIR_EFFECT_NONE &&
-            xr_xir_effects_go_safe(effects,1)==XR_XIR_OK &&
-            xr_xir_effects_task_errors(effects,1)==XR_XIR_OK &&
-            xr_xir_effects_task_creation(effects,1)==XR_XIR_EFFECT_NONE &&
-            xr_xir_effects_error(effects,2,(XrXirType)EE_ENUM,1));
+        CHECK(xr_xir_effects_read(effects,1).control.suspend==XR_XIR_EFFECT_NONE && xr_xir_effects_read(effects,1).control.throws==XR_XIR_EFFECT_NONE && xr_xir_effects_go_safe(effects,1)==XR_XIR_OK && xr_xir_effects_task_creation(effects,1)==XR_XIR_EFFECT_NONE);
     }
     xr_xir_compile_effects_free(effects);
     pc_outcome_root_allocation=NULL;pc_outcome_root_witness_allocation=NULL;
@@ -99,9 +94,7 @@ static void pc_outcome_owner_literals(void) {
     CHECK(xir_fixture_check(&context,&fixture.module,&checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_effects_analyze(checked,&effects)==XR_XIR_OK);
     const EffectFinalOutcomes *final=effect_final_outcomes(effects);
-    CHECK(final && final==effects->invocations->final->outcomes &&
-        final->resources==context.resources && final->count==3 && final->error_rows>=3 &&
-        !effects->outcomes_owner && effect_outcomes_empty(&effects->outcomes_work));
+    CHECK(final && final==effects->invocations->final->outcomes && final->resources==context.resources && final->count==3 && !effects->outcomes_owner && effect_outcomes_empty(&effects->outcomes_work));
     XrXirEffectFacts control_read=xr_xir_effects_read(effects,1);
     const XrXirFunctionEffects *control=(control_read.status==XR_XIR_OK?&control_read.control:NULL);
     CHECK(control && control->suspend==XR_XIR_EFFECT_NONE && control->throws==XR_XIR_EFFECT_NONE);
@@ -131,12 +124,7 @@ static void pc_outcome_owner_literals(void) {
     XrXirEffects incomplete={.resources=context.resources,.count=effects->count,.invocations=effects->invocations};
     incomplete.outcomes_work.functions=final->functions;
     XrCompileResourceStats before=pc_stats(&context);size_t attempts_before=attempts;
-    CHECK(!effect_final_outcomes(&incomplete) && !(xr_xir_effects_read(&incomplete,1).status==XR_XIR_OK) &&
-        !(xr_xir_effects_read(&incomplete,1).status==XR_XIR_OK && xr_xir_effects_read(&incomplete,1).suspend_witness.cause!=0) &&
-        xr_xir_effects_go_safe(&incomplete,1)==XR_XIR_BAD_STRUCTURE &&
-        xr_xir_effects_task_errors(&incomplete,1)==XR_XIR_BAD_STRUCTURE &&
-        xr_xir_effects_task_creation(&incomplete,1)==XR_XIR_EFFECT_UNKNOWN &&
-        !xr_xir_effects_error(&incomplete,2,(XrXirType)EE_ENUM,1));
+    CHECK(!effect_final_outcomes(&incomplete) && !(xr_xir_effects_read(&incomplete,1).status==XR_XIR_OK) && !(xr_xir_effects_read(&incomplete,1).status==XR_XIR_OK && xr_xir_effects_read(&incomplete,1).suspend_witness.cause!=0) && xr_xir_effects_go_safe(&incomplete,1)==XR_XIR_BAD_STRUCTURE && xr_xir_effects_task_creation(&incomplete,1)==XR_XIR_EFFECT_UNKNOWN);
     CHECK(pc_stats(&context).work==before.work && attempts==attempts_before);
     uint32_t count=effects->invocations->final->outcomes->count;
     effects->invocations->final->outcomes->count=count+1;
@@ -149,48 +137,6 @@ static void pc_outcome_owner_literals(void) {
     pc_release(&context,baseline);
 }
 
-static void pc_outcome_error_rows_literals(void) {
-    XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
-    InvocationRotationFixture fixture;invocation_rotation_fixture(&fixture);
-    XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
-    CHECK(xir_fixture_check(&context,&fixture.module,&checked,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_effects_analyze(checked,&effects)==XR_XIR_OK);
-    const EffectFinalOutcomes *final=effect_final_outcomes(effects);
-    CHECK(final && final->count==5 && final->error_rows>5 && final->words==1 &&
-        final->errors[0]==0 && final->errors[1]==1 && final->errors[2]==0 &&
-        final->errors[3]==0 && final->errors[4]==0);
-    XrXirEffects fresh={0};CHECK(effect_legacy_error_oracle_prepare(&context,effects,&fresh)==XR_XIR_OK);
-    XrXirCompileContext remaining=context;
-    CHECK(effect_errors_seed(&effects->invocations->body->domain,&fresh,&remaining)==XR_XIR_OK);
-    EffectTerms terms={.types=*effects->invocations->body->domain.types,.remaining=&remaining};
-    ErrorFlow flow={.body=effect_body_owned_request(&remaining,effects->invocations->body),
-        .effects=&fresh,.remaining=&remaining,.terms=&terms,.summary_count=5,.invocation=UINT32_MAX};
-    CHECK(error_invocation_contexts_new(&flow,&flow.invocations)==XR_XIR_OK && flow.invocations);
-    CHECK(error_invocation_summaries(&flow)==XR_XIR_OK && error_invocation_functions(&flow)==XR_XIR_OK);
-    CHECK(fresh.outcomes_work.error_rows==final->error_rows &&
-        effect_legacy_error_oracle_match(&context,effects,&fresh)==XR_XIR_OK);
-    xr_xir_compile_artifact_free(checked);memset(&fixture,0xCE,sizeof(fixture));
-    uint32_t poisoned=0;
-    for (uint32_t n=0;n<effects->invocations->final->count;++n) {
-        const EffectInvocationNode *node=&effects->invocations->final->nodes[n];
-        uint32_t row=flow.invocations->nodes[n].summary;
-        if (node->root!=0 || node->body!=1 || row<5) continue;
-        /* These closed rotations execute known pure/Cell-read callbacks.
-         * Their zero error sets are literal, independent of stored answers. */
-        CHECK(row<final->error_rows && final->errors[row]==0 && fresh.outcomes_work.errors[row]==0);
-        effects->invocations->final->outcomes->errors[row]=1;
-        CHECK(final->errors[0]==0 && final->errors[1]==1 && final->errors[2]==0 &&
-            final->errors[3]==0 && final->errors[4]==0 &&
-            effect_legacy_error_oracle_match(&context,effects,&fresh)==XR_XIR_BAD_STRUCTURE);
-        effects->invocations->final->outcomes->errors[row]=0;++poisoned;
-        CHECK(effect_legacy_error_oracle_match(&context,effects,&fresh)==XR_XIR_OK);
-    }
-    CHECK(poisoned==5);
-    printf("whole Final error rows%u public5 closed rotations%u extra-row poisoning rejected and restored\n",
-        final->error_rows,poisoned);
-    error_storage_free(&flow);error_invocation_contexts_free(flow.invocations);effect_terms_free(&terms);
-    effect_legacy_error_oracle_free(&fresh);xr_xir_compile_effects_free(effects);pc_release(&context,baseline);
-}
 
 static void pc_outcome_retry(const XrXirCompileContext *context,uint32_t mutation,
     XrCompileResourceLimits caps,const PcCurrentInputMeasure *normal) {

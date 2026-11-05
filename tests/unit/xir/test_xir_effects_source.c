@@ -46,20 +46,12 @@ static void source_generic_effects(const XrXirModule *module, const XrXirEffects
         if (!use && !missing && !parameter) continue;
         ++found;
         CHECK(xr_xir_effects_read(effects,f).control.throws==XR_XIR_EFFECT_MAY);
-        CHECK(!xr_xir_effects_error_unknown(effects,f));
-        CHECK(!xr_xir_effects_error_unidentified(effects,f));
-        if (parameter) CHECK(xr_xir_effects_error(effects,f,(XrXirType)XR_XIR_TYPE_PARAMETER_BASE,
-            XR_XIR_ERROR_SYMBOLIC_VARIANT)==open);
+
+
         if (use) {
-            uint32_t matches=0;
-            for (uint32_t t=0;t<module->types->count;++t) {
-                XrXirType type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+t);
-                if (!xr_xir_effects_error(effects,f,type,0)) continue;
-                const XrXirTypeNode *node=xr_xir_type_node(module->types,type);
-                CHECK(node && node->nominal.argument_count==1 && node->nominal.arguments[0]==XR_XIR_I64);
-                ++matches;
-            }
-            CHECK(matches==1);
+            const XrXirTypeNode *node=xr_xir_type_node(module->types,fn->error_type);
+            CHECK(node && xr_xir_type_is_enum(module->types,fn->error_type) &&
+                node->nominal.argument_count==1 && node->nominal.arguments[0]==XR_XIR_I64);
         }
     }
     CHECK(found==3);
@@ -77,7 +69,7 @@ static void source_generic_effects(const XrXirModule *module, const XrXirEffects
             if (fn->name_length!=strlen(names[n]) || memcmp(fn->name,names[n],fn->name_length)) continue;
             seen=true;
             CHECK(xr_xir_effects_read(effects,f).control.throws==(n==2 ? XR_XIR_EFFECT_MAY : XR_XIR_EFFECT_NONE));
-            CHECK(!xr_xir_effects_error_unknown(effects,f) && !xr_xir_effects_error_unidentified(effects,f));
+
         }
         CHECK(seen);
     }
@@ -142,29 +134,7 @@ static void source_effects(const XrXirArtifact *artifact) {
             if (fact->suspend != expected[e].suspend || fact->throws != expected[e].throws)
                 fprintf(stderr, "effect %s: suspend=%u throws=%u\n", expected[e].name, fact->suspend, fact->throws);
             CHECK(fact->suspend == expected[e].suspend && fact->throws == expected[e].throws); found = true;
-            uint32_t mask = expected[e].throws == XR_XIR_EFFECT_MAY ? 1u : 0u;
-            if (!strcmp(expected[e].name,"unknownParameter")) mask=0;
-            if (!strcmp(expected[e].name,"cellAfterCleanup") || !strcmp(expected[e].name,"cellPanicCleanup") ||
-                !strcmp(expected[e].name,"cellErrorCleanup")) mask=3;
-            if (!strcmp(expected[e].name,"parameterThrow") || !strcmp(expected[e].name,"phiThrow") ||
-                !strcmp(expected[e].name,"loopThrow") || !strcmp(expected[e].name,"cellAfterCall") ||
-                !strcmp(expected[e].name,"cellAfterYield") || !strcmp(expected[e].name,"cellAfterOutput") || !strcmp(expected[e].name,"paramForward")) mask = 3;
-            if (!strcmp(expected[e].name,"localOverwrite") || !strcmp(expected[e].name,"recursiveError") ||
-                !strcmp(expected[e].name,"recursivePeer") || !strcmp(expected[e].name,"panicThrows")) mask = 2;
-            for (uint32_t t = 0; t < module->types->count; ++t) {
-                XrXirType type = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+t);
-                if (!xr_xir_type_is_enum(module->types,type)) continue;
-                uint32_t d = module->types->nodes[t].nominal.declaration;
-                const XrXirNominalTable *table = module->types->nominals;
-                XrXirLiteral name = table->declarations ? table->declarations[d].name : table->identities[d].name;
-                bool fault = name.length == 5 && !memcmp(name.bytes,"Fault",5);
-                if (xr_xir_effects_error(effects,f,type,0) != (fault && (mask&1) != 0))
-                    fprintf(stderr,"error atom %s type=%u name=%.*s fault=%u mask=%u bad=%u stage=%u\n",expected[e].name,type,(int)name.length,name.bytes,fault,mask,xr_xir_effects_error(effects,f,type,0),module->stage);
-                CHECK(xr_xir_effects_error(effects,f,type,0) == (fault && (mask&1) != 0));
-                if (fault) CHECK(xr_xir_effects_error(effects,f,type,1) == ((mask&2) != 0));
-            }
-            CHECK(xr_xir_effects_error_unidentified(effects,f)==(!strcmp(expected[e].name,"unknownParameter")));
-            CHECK(xr_xir_effects_error_unknown(effects,f) == (expected[e].throws == XR_XIR_EFFECT_UNKNOWN || !strcmp(expected[e].name,"dynamicKnownMix")));
+
         }
         if (!found) fprintf(stderr, "missing effect function %s at stage %u\n", expected[e].name, module->stage);
         CHECK(found);

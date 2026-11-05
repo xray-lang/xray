@@ -62,15 +62,14 @@ static XrXirStatus effect_program_parameter_domains(const XrXirCompileContext *w
     return XR_XIR_OK;
 }
 
-/* Consume the sole Final's finite evidence against its current owned Input.
- * These checks allocate no receiving graph, queue or scratch and run again
- * after the last preparation callback before Program publication. */
+/* Pure final projections follow every temporary CFG release. Root and
+ * suspension evidence retain their independent receiving checks. */
 static XrXirStatus effect_program_semantics_current(const XrXirCompileContext *work,
     const XrXirEffects *effects) {
     XrXirStatus status=effect_source_terminal_roles(work,effects);
     if (status==XR_XIR_OK) status=effect_source_outcomes(work,effects);
-    if (status==XR_XIR_OK) status=error_finite_outcomes_match(work,
-        effects->invocations->body,effect_final_outcomes(effects));
+    if (status==XR_XIR_OK) status=local_error_outcomes(work,effects->invocations->body,
+        effect_final_outcomes(effects)->functions,true);
     return status;
 }
 
@@ -90,6 +89,8 @@ XR_FUNC XrXirStatus xir_effects_program_final_verify(const XrXirCompileContext *
         if (contexts) status=effect_source_contexts(work,source,effects);
         else if (final->contexts) status=XR_XIR_BAD_STRUCTURE;
     }
+    if (status==XR_XIR_OK) status=local_errors_owned(work,certificate->body,NULL);
+    if (status==XR_XIR_OK) status=effect_program_final_storage(work,effects);
     if (status==XR_XIR_OK) status=effect_source_publication_match(work,source,effects);
     if (status==XR_XIR_OK) status=effect_program_semantics_current(work,effects);
     if (status==XR_XIR_OK) status=xir_effects_program_body_match(work,source,effects);

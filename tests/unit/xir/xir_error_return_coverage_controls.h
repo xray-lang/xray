@@ -23,9 +23,9 @@ static void er_fixture(ReturnErrorFixture *fixture,unsigned mode) {
     CHECK(mode<ER_CASES);memset(fixture,0,sizeof(*fixture));
     EdgeFixture *f=&fixture->edge;ee_fixture(f,EE_JUMP,false);
     memcpy(fixture->nodes,f->nodes,sizeof(f->nodes));
-    fixture->nodes[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,
+    fixture->nodes[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.element=(XrXirType)EE_ENUM,
         .flags=XR_XIR_CALLABLE_ROOT_NONE,.result=XR_XIR_UNIT};
-    fixture->nodes[3]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,
+    fixture->nodes[3]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,
         .flags=XR_XIR_CALLABLE_ROOT_NONE,.result=(XrXirType)ER_CALLBACK};
     f->types.nodes=fixture->nodes;f->types.count=4;
     memcpy(fixture->functions,f->functions,sizeof(f->functions));
@@ -85,18 +85,14 @@ static void er_fixture(ReturnErrorFixture *fixture,unsigned mode) {
             .type=(XrXirType)ER_CALLBACK,.immediate=2};
         fixture->functions[1].instruction_count=4;f->blocks[0].count=4;
     }
+    fixture->functions[1].error_type=(XrXirType)EE_ENUM;
+    fixture->functions[2].error_type=(XrXirType)EE_ENUM;
+    fixture->functions[4].error_type=XR_XIR_NEVER;
+    if(mode==4)fixture->functions[5].error_type=XR_XIR_NEVER;
 }
 
 static XrXirStatus er_golden(const XrXirCompileContext *context,const XrXirEffects *effects,unsigned mode) {
-    static const uint64_t errors[ER_CASES]={0,8,8,1,0,1};
     CHECK(mode<ER_CASES && effects && effects->count==(mode==4?6u:5u));
-    CHECK(effect_final_outcomes(effects)->words==1 && effect_final_outcomes(effects)->atom_count==2 && !effect_final_outcomes(effects)->errors[0]);
-    CHECK(effect_final_outcomes(effects)->errors[1]==errors[mode] && effect_final_outcomes(effects)->errors[3]==8 && !effect_final_outcomes(effects)->errors[4]);
-    CHECK(!xr_xir_effects_error_unidentified(effects,1));
-    CHECK(xr_xir_effects_error_unknown(effects,1)==(mode==3 || mode==5));
-    CHECK(!xr_xir_effects_error(effects,1,(XrXirType)EE_ENUM,0));
-    CHECK(xr_xir_effects_error(effects,1,(XrXirType)EE_ENUM,1)==(mode==1 || mode==2));
-    CHECK(effect_final_outcomes(effects)->task_errors[1]==(mode==3 || mode==5?XR_XIR_BAD_TYPE:XR_XIR_OK));
     CHECK(effects->invocations && effects->invocations->final);
     const EffectInvocationFinal *owner=effects->invocations->final;
     CHECK(owner->site_count);
