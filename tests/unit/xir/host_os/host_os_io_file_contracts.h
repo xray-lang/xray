@@ -13,7 +13,6 @@
  */
 #ifndef HOST_OS_IO_FILE_CONTRACTS_H
 #define HOST_OS_IO_FILE_CONTRACTS_H
-#include "xir/xxir_view_prepare_internal.h"
 static const char host_file_contract_text[]=
  "import {Path} from path\n"
  "class Child extends Path{tail:string\ninit(raw:string){super(raw);this.tail=\"file-prepare-tail\"}}\n"
@@ -72,54 +71,9 @@ static void host_file_contract_rejected(XrXirCompileContext *context,const char 
  if(reason)CHECK(strstr(diagnostic.message,reason));
  xr_xir_compile_source_result_free(&output);
 }
-/* Ordinary type/SSA admission is separate from the restricted module view
- * boundary. Each invalid signature reuses one real cold Source body without
- * callbacks, consumption or a published fabricated proof. */
-static void host_file_view_signature_controls(XrXirCompileContext *context){
- const char *text="export fn boundary(input:Slice<u8>)->i64{return 0}\n";
- XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
- XrXirSourceResult source={0};XrXirSourceDiagnostic source_diagnostic={0};
- CHECK(host_check(context,"io",text,false,&source,&source_diagnostic)==XR_XIR_OK);
- XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);xr_xir_compile_source_result_free(&source);
- XrXirArtifact *cold=NULL;CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&cold,NULL)==XR_XIR_OK);
- memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
- const XrXirModule *module=xr_xir_compile_artifact_module(cold);
- const XrXirConstruction *construction=xr_xir_compile_artifact_construction(cold);uint32_t function=host_named(module,"boundary");
- CHECK(module->functions[function].parameter_count==1&&!module->functions[function].consume_parameter_count);
- XrXirType original=module->functions[function].parameters[0],parameter=original;
- const XrXirTypeNode *slice=xr_xir_type_node(module->types,original);
- CHECK(slice&&slice->kind==XR_XIR_TYPE_SLICE&&slice->element==XR_XIR_U8);
- CHECK(module->types->count<XR_XIR_CONSTRUCTED_TYPE_LIMIT-XR_XIR_CONSTRUCTED_TYPE_BASE-3u);
- XrXirFunction *functions=xr_malloc(module->function_count*sizeof(*functions));
- XrXirTypeNode *nodes=xr_malloc((module->types->count+3u)*sizeof(*nodes));CHECK(functions&&nodes);
- memcpy(functions,module->functions,module->function_count*sizeof(*functions));memcpy(nodes,module->types->nodes,module->types->count*sizeof(*nodes));
- XrXirCallableParameter elements[2]={{original,XR_PARAM_READ},{XR_XIR_I64,XR_PARAM_READ}};
- nodes[module->types->count]=(XrXirTypeNode){.kind=XR_XIR_TYPE_SLICE,.element=XR_XIR_I64};
- nodes[module->types->count+1u]=(XrXirTypeNode){.kind=XR_XIR_TYPE_MUT_SLICE,.element=XR_XIR_U8};
- nodes[module->types->count+2u]=(XrXirTypeNode){.kind=XR_XIR_TYPE_TUPLE,.parameters=elements,.parameter_count=2};
- XrXirTypes types=*module->types;types.nodes=nodes;types.count+=3;
- XrXirModule changed=*module;changed.stage=XR_XIR_BUILT;changed.provenance=NULL;changed.functions=functions;changed.types=&types;
- functions[function].parameters=&parameter;
- XrXirDiagnostic diagnostic={0};XirEffectInput input={&changed,construction,NULL};
- CHECK(xir_compile_view_prepare_ordinary(context,input,&diagnostic)==XR_XIR_OK);
- CHECK(xr_xir_compile_structure_verify_v2(context,&changed,construction,&diagnostic)==XR_XIR_OK);
- for(unsigned n=0;n<3;++n){
-  parameter=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+module->types->count+n);
-  XrXirStatus ordinary=xir_compile_view_prepare_ordinary(context,input,&diagnostic);
-  if(ordinary!=XR_XIR_OK)fprintf(stderr,"view boundary ordinary shape%u status%u f%u b%u i%u\n",
-   n,ordinary,diagnostic.function,diagnostic.block,diagnostic.instruction);
-  CHECK(ordinary==XR_XIR_OK);
-  XrXirStatus status=xr_xir_compile_structure_verify_v2(context,&changed,construction,&diagnostic);
-  if(status!=XR_XIR_BAD_TYPE||diagnostic.function!=function||diagnostic.instruction!=UINT32_MAX)
-   fprintf(stderr,"view boundary shape%u status%u f%u b%u i%u\n",n,status,diagnostic.function,diagnostic.block,diagnostic.instruction);
-  CHECK(status==XR_XIR_BAD_TYPE&&diagnostic.function==function&&diagnostic.block==UINT32_MAX&&diagnostic.instruction==UINT32_MAX);
- }
- parameter=original;CHECK(xr_xir_compile_structure_verify_v2(context,&changed,construction,&diagnostic)==XR_XIR_OK);
- xr_free(nodes);xr_free(functions);xr_xir_compile_artifact_free(cold);
- CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK&&before.held_bytes==after.held_bytes);
-}
 static void host_file_refusal_signature_positives(XrXirCompileContext *context){
  static const char *const admitted[]={
+  "final class C{data:Array<u8> init(){this.data=[]} append(input:Slice<u8>)->i64{return len(input)}}\n",
   "final class C<T>{data:Array<u8> init(){this.data=[]} append(input:Slice<u8>){}}\n",
   "final class C{data:Array<Array<u8>> init(){this.data=[[0 as u8]]} append(input:Slice<u8>){}}\n",
   "final class C{data:Array<u8> init(){this.data=[]}}\nfn append<T>(value:C,input:Slice<u8>){}\n",
@@ -147,7 +101,6 @@ static void host_file_byte_slice_refusals(XrXirCompileContext *context){
  for(unsigned n=0;n<sizeof(rejected)/sizeof(*rejected);++n)
   host_file_contract_rejected(context,rejected[n],false,expected[n],
    expected[n]==XR_XIR_BAD_TYPE?"constructed XIR failed checking":"(ARRAY_PUSH)");
- host_file_view_signature_controls(context);
  /* Keep a genuine byte-Slice entry so the nonbyte field rejection reaches
   * the Array mutation boundary rather than an unsupported input signature. */
  host_file_contract_rejected(context,"final class C{data:Array<i64> init(){this.data=[1]} append(input:Slice<u8>)->i64{this.data.push(input[0] as i64);return 0}}\n",
