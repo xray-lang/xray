@@ -23,10 +23,6 @@
 #include "../lexer/xquoted_literal.h"
 #include "../../shared/xr_decimal_float.h"
 
-static bool parser_decimal_charge(void *context, uint64_t units) {
-    return xr_compile_state_work((XrCompileState *) context, units) == XR_COMPILE_RESOURCE_OK;
-}
-
 #include <stdint.h>
 
 /* ========== Helpers ========== */
@@ -40,14 +36,14 @@ static const char *XR_ARROW_RETURN_TYPE_DIAGNOSTIC =
 static int strip_underscores(Parser *parser, const char *src, int src_len, char *dst, int dst_size) {
     if (!xr_parser_healthy(parser)) return 0;
     int n = 0;
-    for (int i = 0; xr_parser_step(parser) && (i < src_len && n < dst_size - 1); i++) {
+    for (int i = 0; xr_parser_healthy(parser) && (i < src_len && n < dst_size - 1); i++) {
         if (xr_parser_read_byte(parser, src + (i)) != '_')
             do {
                 dst[n++] = xr_parser_read_byte(parser, src + (i));
                 if (!xr_parser_healthy(parser)) return 0;
             } while (0);
     }
-    do { if (!ast_work(parser->compiler_session, 1)) return 0; dst[n] = '\0'; } while (0);
+    do { dst[n] = '\0'; } while (0);
     return n;
 }
 
@@ -329,15 +325,9 @@ AstNode *xr_parse_literal(Parser *parser) {
         case TK_LITERAL_FLOAT: {
             size_t length = (size_t) parser->previous.length;
             uint64_t bits = 0;
-            XrDecimalWork work = {parser->state, parser_decimal_charge, false};
-            XrDecimalStatus decimal = xr_decimal_float_parse_work(
-                &work, parser->previous.start, length, 64, &bits);
+            bool decimal=xr_decimal_float_parse(parser->previous.start,length,64,&bits);
             if (!xr_parser_healthy(parser)) return NULL;
-            if (decimal == XR_DECIMAL_WORK_LIMIT) {
-                xr_compile_state_fail(parser->state, XR_COMPILE_RESOURCE_BUDGET);
-                return NULL;
-            }
-            if (decimal != XR_DECIMAL_OK)
+            if (!decimal)
                 do {
                     xr_parser_error_at_previous(parser, "invalid decimal floating literal");
                     if (!xr_parser_healthy(parser)) return NULL;
@@ -350,7 +340,7 @@ AstNode *xr_parse_literal(Parser *parser) {
             char *text = ast_alloc(parser->compiler_session, length + 1);
             if (!xr_parser_healthy(parser)) return NULL;
             do { if (!ast_copy(parser->compiler_session, text, parser->previous.start, length)) return NULL; } while (0);
-            if (!ast_work(parser->compiler_session, 1)) return NULL;
+
             text[length] = 0;
             node->as.literal.decimal_text = text; node->as.literal.decimal_length = length;
             node->column = column;
@@ -518,7 +508,7 @@ AstNode *xr_parse_regex_literal(Parser *parser) {
 
     // Find closing '/'
     const char *end_slash = NULL;
-    for (int i = length - 1; xr_parser_step(parser) && (xr_parser_healthy(parser) && i >= 0); i--) {
+    for (int i = length - 1; xr_parser_healthy(parser) && (xr_parser_healthy(parser) && i >= 0); i--) {
         if (xr_parser_read_byte(parser, start + (i)) == '/') {
             end_slash = start + i;
             break;
@@ -538,7 +528,7 @@ AstNode *xr_parse_regex_literal(Parser *parser) {
     char *pattern = (char *) ast_alloc(parser->compiler_session, pattern_len + 1);
     if (!xr_parser_healthy(parser)) return NULL;
     do { if (!ast_copy(parser->compiler_session, pattern, start, pattern_len)) return NULL; } while (0);
-    do { if (!ast_work(parser->compiler_session, 1)) return NULL; pattern[pattern_len] = '\0'; } while (0);
+    do { pattern[pattern_len] = '\0'; } while (0);
 
     // Extract flags
     const char *flags_start = end_slash + 1;
@@ -548,7 +538,7 @@ AstNode *xr_parse_regex_literal(Parser *parser) {
     if (flags_len > 0) {
         do { if (!ast_copy(parser->compiler_session, flags, flags_start, flags_len)) return NULL; } while (0);
     }
-    do { if (!ast_work(parser->compiler_session, 1)) return NULL; flags[flags_len] = '\0'; } while (0);
+    do { flags[flags_len] = '\0'; } while (0);
 
     // Create AST node
     AstNode *node =
@@ -693,7 +683,7 @@ static AstNode *make_template_part(Parser *parser, const char *src, int len, boo
         // Same decoder as plain string literals (xr_compile_quoted_payload_decode)
         // so escape semantics cannot drift between the two surfaces.
         const char *error = NULL;
-        if (xr_compile_escaped_bytes_decode(parser->state, (const uint8_t *) src, (size_t) len, (uint8_t *) buf, &out_len,
+        if (xr_compile_escaped_bytes_decode(&(XrQuotedInput){parser->state,xr_compile_session_request(parser->compiler_session)}, (const uint8_t *) src, (size_t) len, (uint8_t *) buf, &out_len,
                                      &error) != XR_QUOTED_OK) {
 
             do {
@@ -708,7 +698,7 @@ static AstNode *make_template_part(Parser *parser, const char *src, int len, boo
         xr_parser_error_at_previous(parser, "template string must be valid UTF-8");
         return NULL;
     }
-    do { if (!ast_work(parser->compiler_session, 1)) return NULL; buf[out_len] = '\0'; } while (0);
+    do { buf[out_len] = '\0'; } while (0);
     AstNode *node = xr_ast_literal_string(parser->compiler_session, buf, out_len,
                                           is_raw ? XR_LITERAL_RAW : XR_LITERAL_ESCAPED, source_form,
                                           parser->previous.line);
@@ -746,7 +736,7 @@ static bool template_skip_quoted_token(Parser *parser, const char *src, int len,
     if (lead != '"' && lead != 'r' && lead != 'b' && lead != 'c')
         return false;
     Scanner scanner;
-    if (xr_compile_scanner_open(&scanner, parser->state, parser->arena, src + *pos) != XR_COMPILE_RESOURCE_OK) return false;
+    if (xr_compile_scanner_open(&scanner, parser->state, parser->arena, src + *pos,NULL) != XR_COMPILE_RESOURCE_OK) return false;
     Token token = xr_scanner_scan(&scanner);
     if (!xr_parser_healthy(parser)) return false;
     switch (token.type) {
@@ -877,7 +867,7 @@ AstNode *xr_parse_template_string(Parser *parser) {
     while (xr_parser_healthy(parser) && i < tmpl_len) {
         // Find next ${ (for normal mode, \$ escapes the dollar sign)
         int expr_start = -1;
-        for (int j = i; xr_parser_step(parser) && (xr_parser_healthy(parser) && j < tmpl_len - 1); j++) {
+        for (int j = i; xr_parser_healthy(parser) && (xr_parser_healthy(parser) && j < tmpl_len - 1); j++) {
             if (!is_raw && xr_parser_read_byte(parser, tmpl + (j)) == '\\' && j + 1 < tmpl_len) {
                 j++;
                 continue;
@@ -937,12 +927,12 @@ AstNode *xr_parse_template_string(Parser *parser) {
             char *expr_code = (char *) ast_alloc(parser->compiler_session, expr_len + 1);
             if (!xr_parser_healthy(parser)) return NULL;
             do { if (!ast_copy(parser->compiler_session, expr_code, tmpl + expr_start + 2, expr_len)) return NULL; } while (0);
-            do { if (!ast_work(parser->compiler_session, 1)) return NULL; expr_code[expr_len] = '\0'; } while (0);
+            do { expr_code[expr_len] = '\0'; } while (0);
 
             Scanner expr_scanner;
-            if (xr_compile_scanner_open(&expr_scanner, parser->state, parser->arena, expr_code) != XR_COMPILE_RESOURCE_OK) return NULL;
+            if (xr_compile_scanner_open(&expr_scanner, parser->state, parser->arena, expr_code,NULL) != XR_COMPILE_RESOURCE_OK) return NULL;
             int expr_line = parser->previous.line + (source_form == XR_LITERAL_BLOCK ? 1 : 0);
-            for (int p = 0; xr_parser_step(parser) && (xr_parser_healthy(parser) && p < expr_start + 2); p++) {
+            for (int p = 0; xr_parser_healthy(parser) && (xr_parser_healthy(parser) && p < expr_start + 2); p++) {
                 if (xr_parser_read_byte(parser, tmpl + (p)) == '\n')
                     expr_line++;
             }
@@ -1206,7 +1196,7 @@ AstNode *xr_parse_grouping(Parser *parser) {
             AstNode **resized = (AstNode **) ast_alloc_array(parser->compiler_session,
                                                              sizeof(AstNode *), (size_t) new_cap);
             if (!xr_parser_healthy(parser)) return NULL;
-            for (int i = 0; xr_parser_step(parser) && (i < count); i++)
+            for (int i = 0; xr_parser_healthy(parser) && (i < count); i++)
                 resized[i] = elems[i];
             elems = resized;
             cap = new_cap;
@@ -1532,7 +1522,7 @@ AstNode *xr_parse_struct_literal_after_type(Parser *parser, AstNode *type_path,
         if (!field_name)
             return NULL;
         do { if (!ast_copy(parser->compiler_session, field_name, parser->previous.start, (size_t) parser->previous.length)) return NULL; } while (0);
-        do { if (!ast_work(parser->compiler_session, 1)) return NULL; field_name[parser->previous.length] = '\0'; } while (0);
+        do { field_name[parser->previous.length] = '\0'; } while (0);
         field_names[field_count] = field_name;
         if (!xr_parser_match(parser, TK_COLON)) {
             do {
@@ -1900,7 +1890,7 @@ AstNode *xr_parse_optional_chain(Parser *parser, AstNode *object) {
         char *name_str = (char *) ast_alloc(parser->compiler_session, name_len + 1);
         if (!xr_parser_healthy(parser)) return NULL;
         do { if (!ast_copy(parser->compiler_session, name_str, name, name_len)) return NULL; } while (0);
-        do { if (!ast_work(parser->compiler_session, 1)) return NULL; name_str[name_len] = '\0'; } while (0);
+        do { name_str[name_len] = '\0'; } while (0);
 
         // Check for method call
         if (parser->current.type == TK_LPAREN) {

@@ -6,7 +6,7 @@ static bool local_workspace(XtcXirLocalToolchain *owner, const char *explicit_pa
         XrOsIoStatus status = xr_os_io_environment_get(&owner->policy, keys[i], &candidate);
         if (status == XR_OS_IO_NOT_FOUND) continue;
         if (!local_io(owner, status)) return false;
-        if (!local_work(owner, 1)) { xr_compile_resources_free(candidate); return false; }
+
         bool nonempty = candidate[0] != 0;
         if (nonempty) {
             bool okay = local_path(owner, candidate, true, &owner->view.workspace_parent);
@@ -17,13 +17,13 @@ static bool local_workspace(XtcXirLocalToolchain *owner, const char *explicit_pa
     const DWORD capacity = 32768;
     wchar_t *wide = local_allocate(owner, (size_t)capacity * sizeof(wchar_t));
     if (!wide) return false;
-    bool okay = local_work(owner, 1 + (uint64_t)capacity * sizeof(wchar_t));
+    bool okay = owner->diagnostic.status == XTC_XIR_LOCAL_OK;
     if (okay) {
         DWORD count = GetTempPathW(capacity, wide);
         if (!count) {
             DWORD error = GetLastError();
             okay = local_io(owner, io_windows_status(error)); owner->diagnostic.os_error = error;
-        } else if (count >= capacity) okay = local_fail(owner, XTC_XIR_LOCAL_BUDGET, XTC_XIR_LOCAL_FILESYSTEM, XR_OS_IO_BUDGET);
+        } else if (count >= capacity) okay = local_fail(owner, XTC_XIR_LOCAL_BUDGET, XTC_XIR_LOCAL_FILESYSTEM, XR_OS_IO_OVERFLOW);
         else okay = local_io(owner, xr_win_utf16_text_owned(&owner->policy, wide, &candidate));
     }
     if (okay) okay = local_path(owner, candidate, true, &owner->view.workspace_parent);
@@ -33,7 +33,7 @@ static bool local_same_path(XtcXirLocalToolchain *owner, const char *a, const ch
     wchar_t *left = NULL, *right = NULL; size_t left_size = 0, right_size = 0;
     bool okay = local_io(owner, xr_win_utf8_owned(&owner->policy, a, &left, &left_size)) &&
         local_io(owner, xr_win_utf8_owned(&owner->policy, b, &right, &right_size));
-    if (okay && local_work(owner, 1 + (left_size + right_size) * sizeof(wchar_t))) {
+    if (okay) {
         int compared = CompareStringOrdinal(left, (int)left_size, right, (int)right_size, TRUE);
         if (!compared) { DWORD error = GetLastError(); okay = local_io(owner, io_windows_status(error)); owner->diagnostic.os_error = error; }
         else if (compared != CSTR_EQUAL) okay = local_fail(owner, XTC_XIR_LOCAL_INVALID, XTC_XIR_LOCAL_SELF, 0);
@@ -49,16 +49,16 @@ static bool local_environment(XtcXirLocalToolchain *owner, const XrProcessByteBu
     static const size_t sizes[4] = {17, 13, 17, 10};
     if (!bytes || !bytes->data || !bytes->length || bytes->length % 2 || bytes->truncated)
         return local_fail(owner, XTC_XIR_LOCAL_INVALID, XTC_XIR_LOCAL_SELF, 0);
-    if (bytes->length > SIZE_MAX - sizeof(wchar_t)) return local_fail(owner, XTC_XIR_LOCAL_BUDGET, XTC_XIR_LOCAL_SELF, 0);
+    if (bytes->length > SIZE_MAX - sizeof(wchar_t)) return local_fail(owner, XTC_XIR_LOCAL_OVERFLOW, XTC_XIR_LOCAL_SELF, 0);
     wchar_t *text = local_allocate(owner, bytes->length + sizeof(wchar_t));
     if (!text) return false;
-    bool okay = local_work(owner, bytes->length + sizeof(wchar_t));
+    bool okay = owner->diagnostic.status == XTC_XIR_LOCAL_OK;
     size_t units = bytes->length / 2, at = 0; unsigned present = 0;
     if (okay) { memcpy(text, bytes->data, bytes->length); text[units] = 0; }
-    if (okay && local_work(owner, 2)) { if (text[0] == 0xfeff) ++at; } else okay = false;
+    if (okay) { if (text[0] == 0xfeff) ++at; } else okay = false;
     while (okay && at < units) {
         size_t start = at, equals = SIZE_MAX;
-        while (at < units && local_work(owner, 2)) {
+        while (at < units) {
             wchar_t value = text[at];
             if (!value) { okay = local_fail(owner, XTC_XIR_LOCAL_INVALID, XTC_XIR_LOCAL_SELF, 0); break; }
             if (value == L'\r' || value == L'\n') break;
@@ -67,7 +67,7 @@ static bool local_environment(XtcXirLocalToolchain *owner, const XrProcessByteBu
         }
         if (owner->diagnostic.status != XTC_XIR_LOCAL_OK) okay = false;
         size_t end = at;
-        while (okay && at < units && local_work(owner, 2)) {
+        while (okay && at < units) {
             if (text[at] != L'\r' && text[at] != L'\n') break;
             ++at;
         }
@@ -77,7 +77,7 @@ static bool local_environment(XtcXirLocalToolchain *owner, const XrProcessByteBu
             if (equals == SIZE_MAX || equals - start != sizes[key]) continue;
             bool matches = true;
             for (size_t i = 0; i < sizes[key]; ++i) {
-                if (!local_work(owner, 4)) { okay = false; break; }
+
                 wchar_t a = text[start+i], b = keys[key][i];
                 if (a >= L'A' && a <= L'Z') a += L'a' - L'A';
                 if (b >= L'A' && b <= L'Z') b += L'a' - L'A';
@@ -88,7 +88,7 @@ static bool local_environment(XtcXirLocalToolchain *owner, const XrProcessByteBu
             if ((present & (1u << key)) || end == equals + 1) {
                 okay = local_fail(owner, XTC_XIR_LOCAL_INVALID, XTC_XIR_LOCAL_SELF, 0); break;
             }
-            if (!local_work(owner, 2)) { okay = false; break; }
+
             text[end] = 0; char *value = NULL;
             okay = local_io(owner, xr_win_utf16_text_owned(&owner->policy, text + equals + 1, &value)) &&
                 local_keep(owner, value, &values[key]);
@@ -104,13 +104,13 @@ static bool local_version_component(XtcXirLocalToolchain *owner, const char *ver
     size_t length = 0;
     if (!local_length(owner, version, &length)) return false;
     while (length) {
-        if (!local_work(owner, 1)) return false;
+
         if (version[length-1] != '/' && version[length-1] != '\\') break;
         --length;
     }
     bool digit = false;
     for (size_t i = 0; i < length; ++i) {
-        if (!local_work(owner, 1)) return false;
+
         char c = version[i];
         if (c >= '0' && c <= '9') digit = true;
         else if (c != '.' || !digit || i + 1 == length)
@@ -145,10 +145,10 @@ static bool local_paths(XtcXirLocalToolchain *owner, const char *const *values, 
         "ucrt/x64/ucrt.lib", "um/x64/kernel32.Lib"};
     for (unsigned i = 0; okay && i < 5; ++i) {
         okay = local_join_path(owner, i < 3 ? vc : libraries, names[i], false, &owner->view.libraries[i].path);
-        if (okay) okay = local_work(owner, sizeof(owner->view.libraries[i].kind));
+
         if (okay) owner->view.libraries[i].kind = i == 4 ? XR_XIR_INVOCATION_SYSTEM : XR_XIR_INVOCATION_CRT;
     }
-    if (okay && local_work(owner, sizeof(owner->view.library_count))) owner->view.library_count = 5;
+    if (okay) owner->view.library_count = 5;
     else okay = false;
     xr_compile_resources_free(version); xr_compile_resources_free(include);
     xr_compile_resources_free(libraries); xr_compile_resources_free(joined); return okay;
@@ -158,17 +158,17 @@ static bool local_installation(XtcXirLocalToolchain *owner, const XrProcessByteB
         return local_fail(owner, XTC_XIR_LOCAL_UNRESOLVED, XTC_XIR_LOCAL_SELF, 0);
     size_t start = 0, end = bytes->length;
     if (bytes->length >= 3) {
-        if (!local_work(owner, 3)) return false;
+
         if (bytes->data[0] == 0xef && bytes->data[1] == 0xbb && bytes->data[2] == 0xbf) start = 3;
     }
     while (end > start) {
-        if (!local_work(owner, 1)) return false;
+
         if (bytes->data[end-1] != '\r' && bytes->data[end-1] != '\n') break;
         --end;
     }
     if (start == end) return local_fail(owner, XTC_XIR_LOCAL_UNRESOLVED, XTC_XIR_LOCAL_SELF, 0);
     for (size_t i = start; i < end; ++i) {
-        if (!local_work(owner, 1)) return false;
+
         unsigned char c = bytes->data[i];
         /* cmd expands percent even inside quotes; batch metacharacters and
          * delayed expansion are not permitted in this discovery command. */
@@ -187,7 +187,7 @@ static bool local_discover(XtcXirLocalToolchain *owner, const XtcXirLocalToolcha
         local_path(owner, system_root, true, &discovery_cwd) &&
         local_join_path(owner, discovery_cwd, "System32/cmd.exe", false, &cmd);
     XrProcessSpec spec;
-    if (okay) okay = local_work(owner, sizeof(spec));
+
     if (okay) {
         xtc_process_spec_init(&spec, vswhere, request->timeout_ms);
         spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT; spec.cwd = discovery_cwd;
@@ -201,7 +201,7 @@ static bool local_discover(XtcXirLocalToolchain *owner, const XtcXirLocalToolcha
             local_join_path(owner, installation, "Common7/Tools/VsDevCmd.bat", false, &script);
     }
     xtc_process_result_free(&result);
-    if (okay) okay = local_work(owner, sizeof(spec));
+
     if (okay) {
         owner->diagnostic.stage = XTC_XIR_LOCAL_ENVIRONMENT;
         xtc_process_spec_init(&spec, cmd, request->timeout_ms);

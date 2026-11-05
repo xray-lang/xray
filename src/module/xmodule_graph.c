@@ -63,7 +63,7 @@ XR_FUNC XrModuleStatus xr_compile_module_graph_find(const XrModuleGraph *graph, 
 XR_FUNC XrModuleStatus xr_compile_module_graph_find_source(const XrModuleGraph *graph, const char *path, int *output) {
     if (!graph || !graph->resources || !path || !output) return XR_MODULE_INVALID;
     ModuleWork work = {graph->resources,XR_MODULE_OK}; int found = -1;
-    for (int i = 0; i < graph->spec_count && module_work(&work,1); ++i)
+    for (int i = 0; i < graph->spec_count && ((&work)->status == XR_MODULE_OK); ++i)
         if (graph->specs[i].source_path && module_equal(&work,graph->specs[i].source_path,path)) { found = i; break; }
     if (work.status == XR_MODULE_OK) *output = found;
     return work.status;
@@ -72,11 +72,11 @@ XR_FUNC XrModuleStatus xr_compile_module_graph_owns_top_level_decl(const XrModul
     const XrModuleSpec *spec, const AstNode *decl, bool *output) {
     if (!graph || !graph->resources || !output) return XR_MODULE_INVALID;
     ModuleWork work = {graph->resources,XR_MODULE_OK}; bool owned = false; uint32_t matches = 0;
-    for (int i = 0; i < graph->spec_count && module_work(&work,1); ++i)
+    for (int i = 0; i < graph->spec_count && ((&work)->status == XR_MODULE_OK); ++i)
         if (&graph->specs[i] == spec) { owned = true; break; }
     if (owned && decl && spec->ast && spec->ast->type == AST_PROGRAM) {
         const ProgramNode *program = &spec->ast->as.program;
-        for (int i = 0; i < program->count && module_work(&work,1); ++i)
+        for (int i = 0; i < program->count && ((&work)->status == XR_MODULE_OK); ++i)
             if (program->statements[i] == decl) ++matches;
     }
     if (work.status == XR_MODULE_OK) *output = matches == 1;
@@ -92,7 +92,7 @@ XR_FUNC XrModuleStatus xr_compile_module_graph_find_named_dependency(const XrMod
     if (importer < 0) { *output = -1; return XR_MODULE_OK; }
     size_t length = module_length(&work,specifier);
     const XrModuleSpec *owner = &graph->specs[importer]; XrOsIoPolicy policy = xr_compile_io_policy(graph->resources);
-    for (int edge = 0; edge < owner->dep_count && module_work(&work,1); ++edge) {
+    for (int edge = 0; edge < owner->dep_count && ((&work)->status == XR_MODULE_OK); ++edge) {
         int index = owner->dep_indices[edge];
         if (index < 0 || index >= graph->spec_count) { module_status(&work,XR_MODULE_INVALID); break; }
         const XrModuleSpec *candidate = &graph->specs[index]; const char *coordinate = candidate->authority.namespace_id;
@@ -100,7 +100,7 @@ XR_FUNC XrModuleStatus xr_compile_module_graph_find_named_dependency(const XrMod
         if (!matches && candidate->kind == XR_MOD_PACKAGE && coordinate) {
             size_t n = module_length(&work,coordinate);
             if (n > length && n-length > 1 && module_prefix(&work,coordinate,specifier) &&
-                module_work(&work,1) && coordinate[length] == '@')
+                ((&work)->status == XR_MODULE_OK) && coordinate[length] == '@')
                 module_io(&work,xr_semver_is_valid_owned(&policy,coordinate+length+1,&matches));
         }
         if (!matches || work.status != XR_MODULE_OK) continue;
@@ -133,14 +133,14 @@ static int graph_add_spec(ModuleWork *work, XrModuleGraph *graph, const char *ca
     graph->specs[index] = spec; ++graph->spec_count; return index;
 }
 static void spec_add_dep(ModuleWork *work, XrModuleSpec *spec, int index) {
-    for (int i = 0; i < spec->dep_count && module_work(work,1); ++i) if (spec->dep_indices[i] == index) return;
+    for (int i = 0; i < spec->dep_count && ((work)->status == XR_MODULE_OK); ++i) if (spec->dep_indices[i] == index) return;
     if (spec->dep_count == spec->dep_capacity) {
         if (spec->dep_capacity >= XR_MODULE_GRAPH_MAX_MODULES) { module_status(work,XR_MODULE_BUDGET); return; }
         int capacity = spec->dep_capacity ? spec->dep_capacity*2 : 4; void *memory = spec->dep_indices;
         if (!module_resize(work,&memory,(size_t)capacity*sizeof(int))) return;
         spec->dep_indices = memory; spec->dep_capacity = capacity;
     }
-    if (module_work(work,1)) spec->dep_indices[spec->dep_count++] = index;
+    if ((work)->status == XR_MODULE_OK) spec->dep_indices[spec->dep_count++] = index;
 }
 static void graph_resolve_dependency(ModuleWork *work, XrModuleGraph *graph, int from, const char *specifier) {
     if (!specifier) { module_status(work,XR_MODULE_INVALID); return; }
@@ -150,7 +150,7 @@ static void graph_resolve_dependency(ModuleWork *work, XrModuleGraph *graph, int
     bool embedded = false;
     if (!id.source_path && (id.kind == XR_MOD_STDLIB || id.kind == XR_MOD_PACKAGE)) {
         const char *text = NULL;
-        module_io(work,xr_get_embedded_stdlib_work(work,module_io_charge,id.authority.namespace_id,&text));
+        text=xr_get_embedded_stdlib(id.authority.namespace_id);
         if (!text || work->status != XR_MODULE_OK) { xr_compile_module_id_cleanup(&id); return; }
         id.source_path = module_format(work,GRAPH_EMBEDDED_STDLIB_PREFIX "%s/%s.xr",id.authority.namespace_id,id.authority.namespace_id);
         embedded = true;
@@ -175,7 +175,7 @@ static void graph_checked_imports(ModuleWork *work, XrModuleGraph *graph, int fr
     if (!owner || !owner->checked || (owner->dependency_count && !owner->dependencies)) {
         module_status(work,XR_MODULE_INVALID); return;
     }
-    for (uint32_t e = 0; e < owner->dependency_count && module_work(work,1); ++e) {
+    for (uint32_t e = 0; e < owner->dependency_count && ((work)->status == XR_MODULE_OK); ++e) {
         const XrModuleResourceBinding *edge = owner->dependencies[e];
         if (!edge || !edge->checked || edge->checked != owner->checked || !edge->canonical ||
             !edge->logical_path || !edge->source_locator) { module_status(work,XR_MODULE_INVALID); break; }
@@ -198,7 +198,7 @@ static void graph_checked_imports(ModuleWork *work, XrModuleGraph *graph, int fr
 }
 static void graph_imports(ModuleWork *work, XrModuleGraph *graph, int index, AstNode *ast) {
     if (ast->type != AST_PROGRAM) { module_status(work,XR_MODULE_INVALID); return; }
-    for (int i = 0; i < ast->as.program.count && module_work(work,1); ++i) {
+    for (int i = 0; i < ast->as.program.count && ((work)->status == XR_MODULE_OK); ++i) {
         AstNode *statement = ast->as.program.statements[i]; if (!statement) continue;
         if (statement->type == AST_IMPORT_STMT) graph_resolve_dependency(work,graph,index,statement->as.import_stmt.module_name);
         else if (statement->type == AST_EXPORT_STMT && statement->as.export_stmt.from_path)
@@ -217,6 +217,11 @@ static XrModuleStatus parse_status(XrParseStatus status) {
     switch (status) {
     case XR_PARSE_OK: return XR_MODULE_OK;
     case XR_PARSE_BUDGET: return XR_MODULE_BUDGET;
+    case XR_PARSE_MEMORY_LIMIT: return XR_MODULE_MEMORY_LIMIT;
+    case XR_PARSE_OVERFLOW: return XR_MODULE_OVERFLOW;
+    case XR_PARSE_CANCELLED: return XR_MODULE_CANCELLED;
+    case XR_PARSE_DEADLINE: return XR_MODULE_DEADLINE;
+    case XR_PARSE_CLOCK_FAILURE: return XR_MODULE_CLOCK_FAILURE;
     case XR_PARSE_OUT_OF_MEMORY: return XR_MODULE_OUT_OF_MEMORY;
     case XR_PARSE_IO: return XR_MODULE_IO;
     default: return XR_MODULE_INVALID;
@@ -236,7 +241,7 @@ static void graph_source_diagnostic(GraphParseCapture *capture,XrModuleSourceDia
     diagnostic->line=line;diagnostic->column=column;
     if(!message){module_status(capture->work,XR_MODULE_INVALID);return;}
     size_t length=0;
-    while(length+1<sizeof(diagnostic->message) && module_work(capture->work,1)) {
+    while(length+1<sizeof(diagnostic->message) && ((capture->work)->status == XR_MODULE_OK)) {
         if(!message[length])break;
         ++length;
     }
@@ -253,7 +258,7 @@ static void graph_parse_diagnostic(void *context,int line,int column,int end_lin
     size_t source_length=module_length(capture->work,capture->text);
     if(capture->work->status!=XR_MODULE_OK)return;
     XrModuleSourcePosition position={0};
-    XrModuleStatus projected=xr_compile_module_source_position(capture->work->resources,
+    XrModuleStatus projected=xr_module_source_position(
         capture->text,source_length,line,column,&position);
     if(projected==XR_MODULE_OK){diagnostic->utf16_position=position;diagnostic->has_utf16_position=true;}
     else if(projected!=XR_MODULE_INVALID)module_status(capture->work,projected);
@@ -262,6 +267,8 @@ static XrModuleStatus read_status(XrFileReadStatus status) {
     switch (status) {
     case XR_FILE_READ_OK: return XR_MODULE_OK;
     case XR_FILE_READ_LIMIT: return XR_MODULE_BUDGET;
+    case XR_FILE_READ_MEMORY_LIMIT: return XR_MODULE_MEMORY_LIMIT;
+    case XR_FILE_READ_OVERFLOW: return XR_MODULE_OVERFLOW;
     case XR_FILE_READ_OUT_OF_MEMORY: return XR_MODULE_OUT_OF_MEMORY;
     case XR_FILE_READ_MISSING: return XR_MODULE_NOT_FOUND;
     case XR_FILE_READ_IO: return XR_MODULE_IO;
@@ -279,9 +286,8 @@ static void graph_expand(ModuleWork *work, XrModuleGraph *graph, const GraphSour
         if (found->status >= XR_MODSPEC_RESOLVED) {
             if (root->source) {
                 XrFingerprint content = {0};
-                module_status(work,module_resource_status(xr_compile_module_source_fingerprint(
-                    graph->resources,root->source,&content)));
-                if (module_work(work,sizeof(content.bytes)) &&
+                xr_module_source_fingerprint(root->source,&content);
+                if (((work)->status == XR_MODULE_OK) &&
                     memcmp(content.bytes,found->source_content_fingerprint.bytes,sizeof(content.bytes)))
                     module_status(work,XR_MODULE_INVALID);
             }
@@ -291,12 +297,12 @@ static void graph_expand(ModuleWork *work, XrModuleGraph *graph, const GraphSour
     if (work->status != XR_MODULE_OK) return;
     xr_compile_resources_free(graph->topo_order); graph->topo_order = NULL; graph->topo_count = 0;
     xr_compile_resources_free(graph->cycle_desc); graph->cycle_desc = NULL; graph->has_cycle = false;
-    for (int i = 0; i < graph->spec_count && module_work(work,1); ++i) graph->specs[i].topo_index = graph->specs[i].scc_id = -1;
+    for (int i = 0; i < graph->spec_count && ((work)->status == XR_MODULE_OK); ++i) graph->specs[i].topo_index = graph->specs[i].scc_id = -1;
     if (entry < 0 && work->status == XR_MODULE_OK) entry = graph_add_spec(work,graph,root->canonical,root->logical,root->path,root->kind,root->authority);
     if (work->status != XR_MODULE_OK) return;
     if (graph->entry_index < 0) graph->entry_index = entry;
     XrOsIoPolicy policy = xr_compile_io_policy(graph->resources);
-    for (int index = 0; index < graph->spec_count && module_work(work,1); ++index) {
+    for (int index = 0; index < graph->spec_count && ((work)->status == XR_MODULE_OK); ++index) {
         XrModuleSpec *spec = &graph->specs[index];
         if (spec->representation == XR_MODULE_CHECKED_LIBRARY) {
             if (!spec->resource || !spec->resource->checked) { module_status(work,XR_MODULE_INVALID); break; }
@@ -326,12 +332,12 @@ static void graph_expand(ModuleWork *work, XrModuleGraph *graph, const GraphSour
         }
         if ((!spec->source_path && !supplied) || spec->status >= XR_MODSPEC_RESOLVED) continue;
         if (!supplied && spec->embedded_source) {
-            module_io(work,xr_get_embedded_stdlib_work(work,module_io_charge,spec->authority.namespace_id,&text));
+            text=xr_get_embedded_stdlib(spec->authority.namespace_id);
             if (!text) module_status(work,XR_MODULE_INVALID);
         } else if (!supplied) {
             module_status(work,read_status(xr_os_io_read_under_root(&policy,spec->authority.physical_root,spec->logical_path,SIZE_MAX-1,&bytes)));
             size_t line=1,line_start=0;
-            for (size_t i = 0; i < bytes.size && module_work(work,1); ++i) {
+            for (size_t i = 0; i < bytes.size && ((work)->status == XR_MODULE_OK); ++i) {
                 if (!bytes.data[i]) {
                     if(line>INT_MAX || i-line_start>=INT_MAX)module_status(work,XR_MODULE_BUDGET);
                     else {
@@ -353,8 +359,8 @@ static void graph_expand(ModuleWork *work, XrModuleGraph *graph, const GraphSour
             module_status(work,parse_status(xr_compile_parse_with_diagnostics(
                 graph->compiler_session,text,spec->source_path,&diagnostics,&ast)));
         }
-        if (work->status == XR_MODULE_OK) module_status(work,module_resource_status(
-            xr_compile_module_source_fingerprint(graph->resources,text,&spec->source_content_fingerprint)));
+        if (work->status == XR_MODULE_OK)
+            xr_module_source_fingerprint(text,&spec->source_content_fingerprint);
         xr_compile_resources_free(bytes.data);
         if (work->status != XR_MODULE_OK) { if (ast) xr_program_destroy(ast); break; }
         spec->ast = ast; spec->status = XR_MODSPEC_PARSED;
@@ -440,10 +446,12 @@ XR_FUNC XrModuleStatus xr_compile_module_graph_build_ast(XrModuleGraph *graph,
         input->program->as.program.capacity < input->program->as.program.count ||
         (input->program->as.program.count && !input->program->as.program.statements)) return XR_MODULE_INVALID;
     XrCompileState *state = xr_compiler_arena_compile_state(input->program->as.program.arena);
-    if (!state || xr_compile_state_resources(state) != graph->resources ||
-        (state != xr_compile_session_compile_state(graph->compiler_session) && xr_compile_state_has_sessions(state))) return XR_MODULE_INVALID;
+    if (!state || (state != xr_compile_session_compile_state(graph->compiler_session) &&
+        xr_compile_state_has_sessions(state))) return XR_MODULE_INVALID;
+    /* The caller pins detached input syntax through this synchronous build.
+     * The graph borrows it and owns all newly resolved modules independently. */
     XrCompileResourceStatus status = xr_compiler_arena_capture_status(input->program->as.program.arena,state);
-    if (status != XR_COMPILE_RESOURCE_OK) return graph_failure(graph,module_resource_status(status));
+    if (status != XR_COMPILE_RESOURCE_OK) return graph_failure(graph,xr_module_status_from_resource(status));
     if (graph->resolver->overlay) return XR_MODULE_INVALID;
     return graph_include_logical_input(graph,input->authority,input->logical_path,input->source_path,
         (GraphLogicalInput){input->source,input->program},error);
@@ -466,7 +474,7 @@ XR_FUNC XrModuleStatus xr_compile_module_graph_include_catalog_logical(XrModuleG
     module_status(&work,xr_compile_module_identity_from_logical(graph->resources,authority,logical,&canonical));
     size_t count=0;
     const XrModuleResourceBinding *bindings=xr_xir_compile_library_catalog_resources_v2(catalog,&count), *selected=NULL;
-    for (size_t i=0;i<count && module_work(&work,1);++i) {
+    for (size_t i=0;i<count && ((&work)->status == XR_MODULE_OK);++i) {
         if (bindings[i].canonical && module_equal(&work,bindings[i].canonical,canonical)) {
             if (selected) { module_status(&work,XR_MODULE_INVALID); break; }
             selected=&bindings[i];
@@ -497,7 +505,7 @@ XR_FUNC XrModuleStatus xr_compile_module_graph_include_catalog_logical(XrModuleG
             else { spec->representation=XR_MODULE_CHECKED_LIBRARY; spec->resource=selected; }
         }
         /* Expand the real artifact's dependency views by ordinary graph ownership. */
-        for (int m=0;m<graph->spec_count && module_work(&work,1);++m)
+        for (int m=0;m<graph->spec_count && ((&work)->status == XR_MODULE_OK);++m)
             if (graph->specs[m].representation==XR_MODULE_CHECKED_LIBRARY && graph->specs[m].status!=XR_MODSPEC_RESOLVED)
                 graph_checked_imports(&work,graph,m);
         if (work.status==XR_MODULE_OK && fresh) {
@@ -519,7 +527,7 @@ XR_FUNC XrModuleStatus xr_compile_module_graph_add_dependency(XrModuleGraph *gra
     if (work.status == XR_MODULE_OK && count != source->dep_count) {
         xr_compile_resources_free(graph->topo_order); graph->topo_order = NULL; graph->topo_count = 0;
         xr_compile_resources_free(graph->cycle_desc); graph->cycle_desc = NULL; graph->has_cycle = false;
-        for (int i = 0; i < graph->spec_count && module_work(&work,1); ++i)
+        for (int i = 0; i < graph->spec_count && ((&work)->status == XR_MODULE_OK); ++i)
             graph->specs[i].topo_index = graph->specs[i].scc_id = -1;
     }
     return graph_result(&work,graph,NULL);
@@ -532,11 +540,11 @@ typedef struct GraphTarjanCtx {
     int stack_top, next_index, next_scc;
 } GraphTarjanCtx;
 static void strongconnect(GraphTarjanCtx *context, int vertex) {
-    if (!module_work(context->work,1)) return;
+    if (!((context->work)->status == XR_MODULE_OK)) return;
     GraphTarjanNode *node = &context->nodes[vertex];
     node->index = node->lowlink = context->next_index++; context->stack[context->stack_top++] = vertex; node->on_stack = true;
     const XrModuleSpec *spec = &context->graph->specs[vertex];
-    for (int i = 0; i < spec->dep_count && module_work(context->work,1); ++i) {
+    for (int i = 0; i < spec->dep_count && ((context->work)->status == XR_MODULE_OK); ++i) {
         int next = spec->dep_indices[i];
         if (next < 0 || next >= context->graph->spec_count) { module_status(context->work,XR_MODULE_INVALID); return; }
         if (context->nodes[next].index < 0) {
@@ -548,21 +556,21 @@ static void strongconnect(GraphTarjanCtx *context, int vertex) {
     if (context->work->status == XR_MODULE_OK && node->lowlink == node->index) {
         int scc = context->next_scc++, next;
         do {
-            if (!module_work(context->work,1)) return;
+            if (!((context->work)->status == XR_MODULE_OK)) return;
             next = context->stack[--context->stack_top]; context->nodes[next].on_stack = false;
             context->nodes[next].scc = scc; ++context->sizes[scc];
         } while (next != vertex);
     }
 }
 static const char *cycle_name(ModuleWork *work, const XrModuleSpec *spec) {
-    if (spec->logical_path && module_work(work,1) && spec->logical_path[0]) return spec->logical_path;
+    if (spec->logical_path && ((work)->status == XR_MODULE_OK) && spec->logical_path[0]) return spec->logical_path;
     const char *name = spec->canonical ? spec->canonical : "?", *last = name;
-    for (const char *p = name; module_work(work,1); ++p) { if (!*p) break; if (*p == '/') last = p+1; }
+    for (const char *p = name; (work)->status == XR_MODULE_OK; ++p) { if (!*p) break; if (*p == '/') last = p+1; }
     return last;
 }
 static char *format_cycle(ModuleWork *work, const XrModuleGraph *graph, const int *path, int count) {
     static const char prefix[] = "E0504: circular dependency: "; size_t total = sizeof(prefix);
-    for (int i = 0; i < count && module_work(work,1); ++i) {
+    for (int i = 0; i < count && ((work)->status == XR_MODULE_OK); ++i) {
         size_t n = module_length(work,cycle_name(work,&graph->specs[path[i]]));
         size_t separator = i ? 4 : 0;
         if (n > SIZE_MAX-total || separator > SIZE_MAX-total-n) { module_status(work,XR_MODULE_BUDGET); break; }
@@ -571,20 +579,20 @@ static char *format_cycle(ModuleWork *work, const XrModuleGraph *graph, const in
     char *text = module_alloc(work,total); size_t pos = sizeof(prefix)-1;
     if (!text) return NULL;
     module_copy(work,text,prefix,pos);
-    for (int i = 0; i < count && module_work(work,1); ++i) {
+    for (int i = 0; i < count && ((work)->status == XR_MODULE_OK); ++i) {
         if (i) { module_copy(work,text+pos," -> ",4); pos += 4; }
         const char *name = cycle_name(work,&graph->specs[path[i]]); size_t n = module_length(work,name);
         if (module_copy(work,text+pos,name,n)) pos += n;
     }
-    if (module_work(work,1)) text[pos] = 0;
+    if ((work)->status == XR_MODULE_OK) text[pos] = 0;
     if (work->status != XR_MODULE_OK) { xr_compile_resources_free(text); return NULL; }
     return text;
 }
 static bool cycle_dfs(GraphTarjanCtx *context, int scc, int start, int current, bool *seen, int *path, int depth, int *length) {
-    if (!module_work(context->work,1)) return false;
+    if (!((context->work)->status == XR_MODULE_OK)) return false;
     seen[current] = true; path[depth] = current;
     const XrModuleSpec *spec = &context->graph->specs[current];
-    for (int i = 0; i < spec->dep_count && module_work(context->work,1); ++i) {
+    for (int i = 0; i < spec->dep_count && ((context->work)->status == XR_MODULE_OK); ++i) {
         int next = spec->dep_indices[i]; if (context->nodes[next].scc != scc) continue;
         if (next == start && depth >= 1) { path[depth+1] = start; *length = depth+2; return true; }
         if (!seen[next] && cycle_dfs(context,scc,start,next,seen,path,depth+1,length)) return true;
@@ -593,13 +601,13 @@ static bool cycle_dfs(GraphTarjanCtx *context, int scc, int start, int current, 
 }
 static char *cycle_description(GraphTarjanCtx *context) {
     ModuleWork *work = context->work; XrModuleGraph *graph = context->graph; int n = graph->spec_count;
-    for (int scc = 0; scc < context->next_scc && module_work(work,1); ++scc) {
+    for (int scc = 0; scc < context->next_scc && ((work)->status == XR_MODULE_OK); ++scc) {
         if (context->sizes[scc] <= 1) continue;
         bool *seen = module_calloc(work,(size_t)n,sizeof(bool)); int *path = module_calloc(work,(size_t)n+1,sizeof(int));
         char *description = NULL;
-        for (int i = 0; i < n && module_work(work,1); ++i) {
+        for (int i = 0; i < n && ((work)->status == XR_MODULE_OK); ++i) {
             if (context->nodes[i].scc != scc) continue;
-            if (!module_work(work,(uint64_t)n)) break;
+            if (!((work)->status == XR_MODULE_OK)) break;
             memset(seen,0,(size_t)n*sizeof(bool)); int length = 0;
             if (cycle_dfs(context,scc,i,i,seen,path,0,&length)) { description = format_cycle(work,graph,path,length); break; }
         }
@@ -607,8 +615,8 @@ static char *cycle_description(GraphTarjanCtx *context) {
         if (!description && work->status == XR_MODULE_OK) module_status(work,XR_MODULE_INVALID);
         return description;
     }
-    for (int i = 0; i < n && module_work(work,1); ++i)
-        for (int edge = 0; edge < graph->specs[i].dep_count && module_work(work,1); ++edge)
+    for (int i = 0; i < n && ((work)->status == XR_MODULE_OK); ++i)
+        for (int edge = 0; edge < graph->specs[i].dep_count && ((work)->status == XR_MODULE_OK); ++edge)
             if (graph->specs[i].dep_indices[edge] == i) { int path[] = {i,i}; return format_cycle(work,graph,path,2); }
     return NULL;
 }
@@ -620,15 +628,15 @@ XR_FUNC XrModuleStatus xr_compile_module_graph_topological_sort(XrModuleGraph *g
     GraphTarjanNode *nodes = module_calloc(&work,(size_t)n,sizeof(*nodes));
     int *stack = module_calloc(&work,(size_t)n,sizeof(int)), *sizes = module_calloc(&work,(size_t)n,sizeof(int));
     int *order = module_calloc(&work,(size_t)n,sizeof(int));
-    for (int i = 0; i < n && module_work(&work,1); ++i) nodes[i].index = nodes[i].lowlink = nodes[i].scc = -1;
+    for (int i = 0; i < n && ((&work)->status == XR_MODULE_OK); ++i) nodes[i].index = nodes[i].lowlink = nodes[i].scc = -1;
     GraphTarjanCtx context = {&work,graph,nodes,stack,sizes,0,0,0};
-    for (int i = 0; i < n && module_work(&work,1); ++i) if (nodes[i].index < 0) strongconnect(&context,i);
+    for (int i = 0; i < n && ((&work)->status == XR_MODULE_OK); ++i) if (nodes[i].index < 0) strongconnect(&context,i);
     char *description = work.status == XR_MODULE_OK ? cycle_description(&context) : NULL;
     int position = 0;
-    for (int scc = 0; scc < context.next_scc && module_work(&work,1); ++scc)
-        for (int i = 0; i < n && module_work(&work,1); ++i) if (nodes[i].scc == scc) order[position++] = i;
+    for (int scc = 0; scc < context.next_scc && ((&work)->status == XR_MODULE_OK); ++scc)
+        for (int i = 0; i < n && ((&work)->status == XR_MODULE_OK); ++i) if (nodes[i].scc == scc) order[position++] = i;
     if (work.status == XR_MODULE_OK && position != n) module_status(&work,XR_MODULE_INVALID);
-    if (module_work(&work,(uint64_t)n)) {
+    if ((&work)->status == XR_MODULE_OK) {
         for (int i = 0; i < n; ++i) { int index = order[i]; graph->specs[index].topo_index = i; graph->specs[index].scc_id = nodes[index].scc; }
         xr_compile_resources_free(graph->topo_order); xr_compile_resources_free(graph->cycle_desc);
         graph->topo_order = order; order = NULL; graph->topo_count = n;

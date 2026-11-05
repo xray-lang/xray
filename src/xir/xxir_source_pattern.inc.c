@@ -56,12 +56,12 @@ static bool source_pattern_field_types(SourceContext *ctx, XrXirType type, uint3
     if (!types) return false;
     SourceSubstitution sub={nominal.arguments,nominal.argument_count};
     for (uint32_t i=0;i<*count;++i)
-        if (!source_work(ctx,NULL) || !source_substitute(ctx,&sub,d->fields[v.field_begin+i].type,0,&types[i])) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_substitute(ctx,&sub,d->fields[v.field_begin+i].type,0,&types[i])) return false;
     *output=types; return true;
 }
 static bool source_match_pattern(SourceContext *ctx, AstNode *node, XrXirType type,
     SourceMatchPattern *out, uint32_t depth) {
-    if (!node || !source_work(ctx,node)) return false;
+    if (!node || !((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (depth>=128) return source_fail(ctx,node,XR_XIR_BUDGET,"pattern depth exhausted");
     out->node=node; out->type=type;
     if (node->type==AST_PATTERN_RANGE) {
@@ -130,7 +130,7 @@ static bool source_match_pattern(SourceContext *ctx, AstNode *node, XrXirType ty
     const XrXirNominalDeclaration *d=&ctx->nominals.declarations[declaration];
     uint32_t v=0;
     for (;v<d->variant_count;++v) {
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (source_text_size(ctx, path->as.member_access.name)==d->variants[v].name.length &&
             source_span_same(ctx, NULL, path->as.member_access.name, d->variants[v].name.bytes, d->variants[v].name.length)) break;
     }
@@ -149,7 +149,7 @@ static bool source_match_pattern(SourceContext *ctx, AstNode *node, XrXirType ty
     for (int i=0;i<payload->count;++i) {
         const char *name=payload->field_names[i]; uint32_t field=0;
         for (;field<variant.field_count;++field) {
-            if (!source_work(ctx,node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             XrXirLiteral spelling=d->fields[variant.field_begin+field].name;
             if (source_text_size(ctx, name)==spelling.length && source_span_same(ctx, NULL, name, spelling.bytes, spelling.length)) break;
         }

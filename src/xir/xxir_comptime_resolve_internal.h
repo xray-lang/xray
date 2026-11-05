@@ -19,6 +19,7 @@ typedef struct XirComptimeResolveRequest {
     XrXirTarget target;
     XrXirCtfeLimits limits;
     uint32_t call_depth;
+    XrCompileRequestControl *control; /* Borrowed only during this synchronous request. */
 } XirComptimeResolveRequest;
 typedef struct XirComptimeResolveFailure {
     XrXirCtfeStatus status;

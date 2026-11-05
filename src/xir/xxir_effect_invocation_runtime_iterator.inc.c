@@ -39,7 +39,7 @@ static XrXirStatus effect_runtime_origin_shape(const EffectRuntimeOriginRead *re
     XrXirStatus status=effect_runtime_work(&read->request->read,13+sizeof(*captures));
     if(status!=XR_XIR_OK) return status;
     if(!(read->row[column+value->producer/64]&(UINT64_C(1)<<(value->producer%64)))) return XR_XIR_BAD_TYPE;
-    EffectBodyRead body=effect_body_runtime_read(&read->request->read);XrXirInstruction reference;
+    EffectBodyRead body=(EffectBodyRead){.execution=&read->request->read};XrXirInstruction reference;
     status=effect_body_instruction_get(&body,&certificate->body->functions[site->function],site->instruction,&reference);
     if(status!=XR_XIR_OK) return status;
     if(reference.op!=(iterator?XR_XIR_GENERATOR_NEW:XR_XIR_FUNCTION_REF) ||

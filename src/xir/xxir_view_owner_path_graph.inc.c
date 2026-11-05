@@ -23,19 +23,19 @@ static XrXirStatus owner_path_choices(ViewOwnerPath *p) {
         const XrXirViewLoanChoice *choices=side?p->request->right:p->request->left;
         uint32_t count=side?p->request->right_count:p->request->left_count;
         for (uint32_t i=0;i<count;++i) {
-            if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
             XrXirViewLoanChoice choice=choices[i];
             if (!choice.block || choice.block>=f->block_count || choice.predecessor>=f->block_count)
                 return XR_XIR_BAD_STRUCTURE;
             const XrXirBlock *block=f->blocks+choice.predecessor;
             const XrXirInstruction *term=f->instructions+block->first+block->count-1u;bool edge=false;
             for (uint32_t e=0;e<affine_rules[term->op].edges;++e) {
-                if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;edge|=term->targets[e]==choice.block;
+                edge|=term->targets[e]==choice.block;
             }
             if (!edge) return XR_XIR_BAD_STRUCTURE;
             bool found=false;
             for (uint32_t j=0;j<p->count;++j) {
-                if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
                 if (p->points[j].block==choice.block) {
                     found=true;p->conflicting|=p->points[j].predecessor!=choice.predecessor;
                 }
@@ -49,18 +49,18 @@ static XrXirStatus owner_path_edge(ViewOwnerPath *p,uint32_t b,uint32_t edge,boo
     uint32_t *target,bool *present) {
     AffineCheck *a=&p->may.affine;const XrXirBlock *block=a->function->blocks+b;
     const XrXirInstruction *term=a->function->instructions+block->first+block->count-1u;*present=false;
-    if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
     if (edge<2?edge>=affine_rules[term->op].edges:!block->panic) return XR_XIR_OK;
     *target=edge<2?term->targets[edge]:block->panic;*present=true;
     if (filtered) for (uint32_t i=0;i<p->count;++i) {
-        if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
         if (p->points[i].block==*target && (edge==2 || p->points[i].predecessor!=b)) *present=false;
     }
     return XR_XIR_OK;
 }
 static XrXirStatus owner_path_walk(ViewOwnerPath *p,uint32_t start,uint32_t stop,bool filtered,bool *repeated) {
     AffineCheck *a=&p->may.affine;uint32_t blocks=a->function->block_count;*repeated=false;
-    if (!xir_compile_work(a->context,blocks)) return XR_XIR_BUDGET;
+
     memset(a->reachable,0,blocks);a->reachable[start]=1;a->queue[0]=start;uint32_t head=0,tail=1;
     while (head<tail) {
         uint32_t b=a->queue[head++];if (b==stop) continue;
@@ -82,16 +82,16 @@ static XrXirStatus owner_path_order(ViewOwnerPath *p) {
         bool repeated=false;XrXirStatus status=owner_path_walk(p,p->points[i].block,UINT32_MAX,false,&repeated);
         if (status!=XR_XIR_OK || repeated) return status!=XR_XIR_OK?status:XR_XIR_UNRESOLVED;
         for (uint32_t j=0;j<p->count;++j) {
-            if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
             if (i!=j) p->points[i].rank+=a->reachable[p->points[j].block]!=0;
         }
     }
     for (uint32_t i=1;i<p->count;++i) {
         ViewOwnerWaypoint point=p->points[i];uint32_t j=i;
         while (j && p->points[j-1u].rank<point.rank) {
-            if (!xir_compile_work(a->context,sizeof(point))) return XR_XIR_BUDGET;p->points[j]=p->points[j-1u];--j;
+            p->points[j]=p->points[j-1u];--j;
         }
-        if (!xir_compile_work(a->context,sizeof(point))) return XR_XIR_BUDGET;p->points[j]=point;
+        p->points[j]=point;
     }
     return XR_XIR_OK;
 }

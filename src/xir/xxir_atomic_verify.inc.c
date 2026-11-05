@@ -27,12 +27,11 @@ static XrXirStatus atomic_result(const XrXirTypes *types, const XrXirInstruction
 /* Only already-proved SSA constructors expose a known ordinal. Parameters and
  * arbitrary arithmetic/immediates remain dynamic; the runtime checks them. */
 static XrXirStatus atomic_known_ordering(const XrXirFunction *function,
-    const XrXirTypes *types, XrXirType nullable, uint32_t value,
-    const XrXirCompileContext *context, int *ordinal) {
+    const XrXirTypes *types, XrXirType nullable, uint32_t value, int *ordinal) {
     XrXirType expected = nullable;
     *ordinal = -1;
     for (uint32_t steps = 0; steps < function->instruction_count; ++steps) {
-        if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
         if (value < function->parameter_count) return XR_XIR_OK;
         uint32_t index = value - function->parameter_count;
         if (index >= function->instruction_count) return XR_XIR_BAD_VALUE;
@@ -61,7 +60,7 @@ static XrXirStatus atomic_uses(const Graph *graph, const XrXirFunction *function
     uint32_t required = create ? 1 : xr_xir_atomic_required_operands(op->op);
     uint32_t count = create ? 1 : op->args[1];
     uint32_t first = create ? op->args[0] : function->operands[op->args[0]];
-    if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
+
     if (first >= (uint64_t)function->parameter_count + function->instruction_count) return XR_XIR_BAD_VALUE;
     XrXirType receiver = create ? op->type : xr_xir_operand_type(function, first);
     if (!xr_xir_type_is_atomic(types, receiver)) return XR_XIR_BAD_TYPE;
@@ -77,17 +76,17 @@ static XrXirStatus atomic_uses(const Graph *graph, const XrXirFunction *function
     if (status != XR_XIR_OK) return status;
     XrXirType ordering = XR_XIR_UNIT;
     if (!create && count > required) {
-        if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
+
         uint32_t value = function->operands[op->args[0] + required];
         if (value >= (uint64_t)function->parameter_count + function->instruction_count) return XR_XIR_BAD_VALUE;
         ordering = xr_xir_operand_type(function, value);
         if (!xr_xir_type_is_nullable(types, ordering)) return XR_XIR_BAD_TYPE;
-        if (!xir_compile_work(&context->remaining, 36)) return XR_XIR_BUDGET;
+
         if (!xr_xir_nominal_native_ordering(types, xr_xir_nullable_element(types, ordering))) return XR_XIR_BAD_TYPE;
         status = type_use_context(context, context->location.function, ordering);
         if (status != XR_XIR_OK) return status;
     }
-    if (!xir_compile_work(&context->remaining, count)) return XR_XIR_BUDGET;
+
     for (uint32_t a = 0; a < count; ++a) {
         XrXirType expected = create || a ? element : receiver;
         if (!create && a == required) expected = ordering;
@@ -97,7 +96,7 @@ static XrXirStatus atomic_uses(const Graph *graph, const XrXirFunction *function
     if (count > required && (op->op == XR_XIR_ATOMIC_LOAD || op->op == XR_XIR_ATOMIC_STORE)) {
         int ordinal = -1;
         status = atomic_known_ordering(function, types, ordering,
-            function->operands[op->args[0] + required], &context->remaining, &ordinal);
+            function->operands[op->args[0] + required], &ordinal);
         if (status != XR_XIR_OK) return status;
         if ((op->op == XR_XIR_ATOMIC_LOAD && (ordinal == 2 || ordinal == 3)) ||
             (op->op == XR_XIR_ATOMIC_STORE && (ordinal == 1 || ordinal == 3))) return XR_XIR_BAD_TYPE;

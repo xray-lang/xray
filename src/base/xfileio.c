@@ -30,7 +30,7 @@ XR_FUNC XrOsIoStatus xr_file_probe_owned(const XrOsIoPolicy *policy, const char 
     wchar_t *wide = NULL;
     io_status(&io, xr_win_utf8_path_owned(policy, path, &wide));
     WIN32_FILE_ATTRIBUTE_DATA attributes;
-    if (!io_work(&io, 1)) { io_free(&io, wide); return io.status; }
+    if (!((&io)->status == XR_OS_IO_OK)) { io_free(&io, wide); return io.status; }
     BOOL found = GetFileAttributesExW(wide, GetFileExInfoStandard, &attributes);
     DWORD error = found ? ERROR_SUCCESS : GetLastError();
     io_free(&io, wide);
@@ -39,7 +39,7 @@ XR_FUNC XrOsIoStatus xr_file_probe_owned(const XrOsIoPolicy *policy, const char 
     return !allow_links && (attributes.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) ? XR_OS_IO_BAD_ARGUMENT : XR_OS_IO_OK;
 #else
     size_t length = 0;
-    if (!io_length(&io, path, &length) || !io_work(&io, 1)) return io.status;
+    if (!io_length(&io, path, &length) || !((&io)->status == XR_OS_IO_OK)) return io.status;
     struct stat attributes;
     if (lstat(path, &attributes)) return io_errno_status(errno);
     return S_ISREG(attributes.st_mode) || (allow_links && S_ISLNK(attributes.st_mode)) ? XR_OS_IO_OK : XR_OS_IO_BAD_ARGUMENT;
@@ -97,18 +97,18 @@ static bool path_separator(char c) {
 }
 /* Root recognition is lexical. It grants no filesystem authority. */
 static size_t path_root_length(XrIoContext *io, const char *path, size_t length) {
-    if (!length || !io_work(io, 1)) return 0;
+    if (!length || !((io)->status == XR_OS_IO_OK)) return 0;
     bool rooted = path_separator(path[0]);
 #ifdef XR_OS_WINDOWS
-    if (length >= 2 && io_work(io, 1)) {
+    if (length >= 2 && ((io)->status == XR_OS_IO_OK)) {
         char second = path[1];
-        if (!rooted && second == ':' && length >= 3 && io_work(io, 1))
+        if (!rooted && second == ':' && length >= 3 && ((io)->status == XR_OS_IO_OK))
             return path_separator(path[2]) ? 3 : 0;
         if (rooted && path_separator(second)) {
             size_t offset = 2;
             for (unsigned component = 0; component < 2; ++component) {
                 size_t begin = offset;
-                while (offset < length && io_work(io, 1) && !path_separator(path[offset])) ++offset;
+                while (offset < length && ((io)->status == XR_OS_IO_OK) && !path_separator(path[offset])) ++offset;
                 if (offset == begin) return 1;
                 if (component == 0 && offset < length) ++offset;
             }
@@ -124,13 +124,13 @@ XR_FUNC XrOsIoStatus xr_path_dirname_owned(const XrOsIoPolicy *policy, const cha
     size_t length = 0;
     if (!io_length(&io, path, &length)) return io.status;
     size_t root = path_root_length(&io, path, length);
-    while (length > root && io_work(&io, 1) && path_separator(path[length - 1])) --length;
-    while (length > root && io_work(&io, 1) && !path_separator(path[length - 1])) --length;
-    while (length > root && io_work(&io, 1) && path_separator(path[length - 1])) --length;
+    while (length > root && ((&io)->status == XR_OS_IO_OK) && path_separator(path[length - 1])) --length;
+    while (length > root && ((&io)->status == XR_OS_IO_OK) && !path_separator(path[length - 1])) --length;
+    while (length > root && ((&io)->status == XR_OS_IO_OK) && path_separator(path[length - 1])) --length;
     const char *source = path;
     if (!length) { source = "."; length = 1; }
     char *result = io_alloc(&io, length + 1);
-    if (result && io_copy(&io, result, source, length) && io_work(&io, 1)) result[length] = 0;
+    if (result && io_copy(&io, result, source, length) && ((&io)->status == XR_OS_IO_OK)) result[length] = 0;
     if (io.status == XR_OS_IO_OK) *output = result;
     else io_free(&io, result);
     return io.status;
@@ -141,18 +141,18 @@ XR_FUNC XrOsIoStatus xr_path_join_owned(const XrOsIoPolicy *policy, const char *
     if (!io_policy_valid(policy) || !dir || !name || !output) return XR_OS_IO_BAD_ARGUMENT;
     XrIoContext io = {policy, XR_OS_IO_OK}; size_t dl = 0, nl = 0;
     if (!io_length(&io, dir, &dl) || !io_length(&io, name, &nl)) return io.status;
-    if (dl > 1 && io_work(&io, 1) && path_separator(dir[dl - 1])) {
+    if (dl > 1 && ((&io)->status == XR_OS_IO_OK) && path_separator(dir[dl - 1])) {
         size_t root = path_root_length(&io, dir, dl);
-        while (dl > root && io_work(&io, 1) && path_separator(dir[dl - 1])) --dl;
+        while (dl > root && ((&io)->status == XR_OS_IO_OK) && path_separator(dir[dl - 1])) --dl;
     }
     bool separator = dl != 0;
-    if (separator && io_work(&io, 1) && path_separator(dir[dl - 1])) separator = false;
-    if (nl > SIZE_MAX - 2 || dl > SIZE_MAX - nl - 2) return XR_OS_IO_BUDGET;
+    if (separator && ((&io)->status == XR_OS_IO_OK) && path_separator(dir[dl - 1])) separator = false;
+    if (nl > SIZE_MAX - 2 || dl > SIZE_MAX - nl - 2) return XR_OS_IO_OVERFLOW;
     size_t size = dl + (separator ? 1u : 0u) + nl + 1;
     char *result = io_alloc(&io, size);
     if (result && io_copy(&io, result, dir, dl)) {
         size_t offset = dl;
-        if (separator && io_work(&io, 1)) result[offset++] = '/';
+        if (separator && ((&io)->status == XR_OS_IO_OK)) result[offset++] = '/';
         if (io_copy(&io, result + offset, name, nl + 1)) *output = result;
     }
     if (io.status != XR_OS_IO_OK) io_free(&io, result);
@@ -197,14 +197,14 @@ XR_FUNC XrOsIoStatus xr_realpath_owned(const XrOsIoPolicy *policy, const char *p
     wchar_t *wide = NULL, *resolved = NULL;
     io_status(&io, xr_win_utf8_text_owned(policy, path, &wide));
     DWORD units = 0;
-    if (io_work(&io, 1)) {
+    if ((&io)->status == XR_OS_IO_OK) {
         units = GetFullPathNameW(wide, 0, NULL, NULL);
-        if (!units || units > 32768) io_status(&io, units ? XR_OS_IO_BUDGET : io_windows_status(GetLastError()));
+        if (!units || units > 32768) io_status(&io, units ? XR_OS_IO_OVERFLOW : io_windows_status(GetLastError()));
     }
     if (io.status == XR_OS_IO_OK) resolved = io_alloc(&io, (size_t)units * sizeof(wchar_t));
-    if (resolved && io_work(&io, 1 + (size_t)units * sizeof(wchar_t))) {
+    if (resolved && ((&io)->status == XR_OS_IO_OK)) {
         DWORD length = GetFullPathNameW(wide, units, resolved, NULL);
-        if (!length || length >= units) io_status(&io, length ? XR_OS_IO_BUDGET : io_windows_status(GetLastError()));
+        if (!length || length >= units) io_status(&io, length ? XR_OS_IO_OVERFLOW : io_windows_status(GetLastError()));
     }
     char *result = NULL;
     if (io.status == XR_OS_IO_OK) io_status(&io, xr_win_utf16_text_owned(policy, resolved, &result));
@@ -215,7 +215,7 @@ XR_FUNC XrOsIoStatus xr_realpath_owned(const XrOsIoPolicy *policy, const char *p
     /* Supplying the output storage avoids realpath(NULL)'s hidden allocation.
      * POSIX realpath requires room for PATH_MAX, including its terminator. */
     char *result = io_alloc(&io, XR_PATH_LIMIT_MAX_PATH);
-    if (result && io_work(&io, 1 + length + XR_PATH_LIMIT_MAX_PATH) && !realpath(path, result))
+    if (result && ((&io)->status == XR_OS_IO_OK) && !realpath(path, result))
         io_status(&io, io_errno_status(errno));
     if (io.status != XR_OS_IO_OK) { io_free(&io, result); result = NULL; }
 #endif

@@ -8,7 +8,7 @@
  *
  * KEY CONCEPT:
  *   Retained immutable inputs preserve lifetimes, never admission. Every factory
- *   receives fresh Checked bytes and executes under its original finite ledger.
+ *   receives fresh Checked bytes and executes under its original memory owner.
  */
 #include "xxir_ctfe_instance_internal.h"
 #include "xxir_ctfe_batch_internal.h"
@@ -26,7 +26,13 @@ struct XirCtfeInstanceResult {
 
 static XrXirCtfeStatus instance_compile_status(XrXirStatus status) {
     return status==XR_XIR_OK?XR_XIR_CTFE_OK:status==XR_XIR_OUT_OF_MEMORY?XR_XIR_CTFE_OUT_OF_MEMORY:
-        status==XR_XIR_BUDGET?XR_XIR_CTFE_BUDGET:status==XR_XIR_BAD_LAYOUT?XR_XIR_CTFE_PROFILE:XR_XIR_CTFE_BAD_ARTIFACT;
+        status==XR_XIR_BUDGET?XR_XIR_CTFE_COMPLEXITY_LIMIT:
+        status==XR_XIR_MEMORY_LIMIT?XR_XIR_CTFE_MEMORY_LIMIT:status==XR_XIR_OVERFLOW?XR_XIR_CTFE_OVERFLOW:
+        status==XR_XIR_CANCELLED?XR_XIR_CTFE_CANCELLED:status==XR_XIR_DEADLINE?XR_XIR_CTFE_DEADLINE:
+        status==XR_XIR_CLOCK_FAILURE?XR_XIR_CTFE_CLOCK_FAILURE:status==XR_XIR_BAD_LAYOUT?XR_XIR_CTFE_PROFILE:XR_XIR_CTFE_BAD_ARTIFACT;
+}
+static XrXirCtfeStatus instance_control_poll(XrCompileRequestControl *control) {
+    return control?instance_compile_status(xir_compile_resource_status(xr_compile_request_control_poll(control))):XR_XIR_CTFE_OK;
 }
 static bool instance_limits_valid(const XirCtfeInstanceRequest *request) {
     return request->limits.steps<=XR_XIR_CTFE_MAX_STEPS &&
@@ -47,7 +53,7 @@ static XrXirStatus instance_packet_read(const XrXirCompileContext *context,const
  * Concrete equality never repairs missing symbolic constraints or witnesses. */
 static XrXirCtfeStatus instance_definition(const XrXirArtifact *artifact,uint32_t function,
     const XrXirArtifact **definition,uint32_t *declaration) {
-    if (!xir_compile_work(&artifact->context,sizeof(XrXirOrigin)+8)) return XR_XIR_CTFE_BUDGET;
+
     const XrXirModule *module=&artifact->module;const XrXirProvenance *proof=module->provenance;
     if (artifact->evaluation_only && (!proof || function!=proof->evaluation.callee)) return XR_XIR_CTFE_NOT_SUPPORTED;
     if (module->stage!=XR_XIR_CHECKED || module->generics || !module->declarations ||
@@ -69,8 +75,7 @@ static XrXirStatus instance_inputs_match(const XrXirCompileContext *context,
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(lowered,NULL);
     if (status==XR_XIR_OK) {
         const XrXirCheckedPacket *original=&lowered->checked_packet;
-        if (!xir_compile_work(context,(uint64_t)current.length+2*sizeof(*original))) status=XR_XIR_BUDGET;
-        else if (current.length!=original->length || !original->bytes ||
+        if (current.length!=original->length || !original->bytes ||
             memcmp(current.bytes,original->bytes,current.length)) status=XR_XIR_BAD_STRUCTURE;
     }
     xr_xir_compile_checked_packet_free(&current);return status;
@@ -82,10 +87,12 @@ XR_FUNC void xr_xir_compile_ctfe_instance_free(XirCtfeInstanceResult *owner) {
     xr_xir_compile_artifact_free(owner->checked);
     xr_compile_resources_free(owner);
 }
-XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance(const XirCtfeInstanceRequest *request,
+XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance(const XirCtfeInstanceRequest *request,XrCompileRequestControl *control,
     XirCtfeInstanceResult **output) {
     if (!request || !request->checked || !output || *output || !instance_limits_valid(request))
         return XR_XIR_CTFE_BAD_ARGUMENT;
+    XrXirCtfeStatus controlled=instance_control_poll(control);
+    if (controlled!=XR_XIR_CTFE_OK) return controlled;
     const XrXirArtifact *input=request->checked;
     if (!xir_compile_context_valid(&input->context)) return XR_XIR_CTFE_BAD_ARTIFACT;
     XrXirStatus status=xr_xir_compile_artifact_verify(input,NULL);
@@ -96,33 +103,31 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance(const XirCtfeInstanceReques
     (void)definition;(void)declaration;
     XirCtfeInstanceResult *owner=xir_compile_calloc(&input->context,1,sizeof(*owner),&status);
     if (!owner) return instance_compile_status(status);
-    if (!xir_compile_work(&input->context,sizeof(owner->context)+sizeof(owner->function))) {
-        xr_xir_compile_ctfe_instance_free(owner);return XR_XIR_CTFE_BUDGET;
-    }
+
     owner->context=input->context;owner->function=request->function;
     XrXirCheckedPacket packet={0};status=instance_packet_write(input,&packet);
     if (status==XR_XIR_OK) status=instance_packet_read(&owner->context,input,&packet,&owner->checked);
     xr_xir_compile_checked_packet_free(&packet);
-    if (status==XR_XIR_OK) status=xr_xir_compile_lower(owner->checked,&request->target,&owner->lowered,NULL);
+    if (status==XR_XIR_OK) {
+        controlled=instance_control_poll(control);
+        if (controlled!=XR_XIR_CTFE_OK) { xr_xir_compile_ctfe_instance_free(owner);return controlled; }
+        status=xr_xir_compile_lower(owner->checked,&request->target,&owner->lowered,NULL);
+    }
     if (status!=XR_XIR_OK) { xr_xir_compile_ctfe_instance_free(owner);return instance_compile_status(status); }
     XrXirCtfeCallRequest call={.evaluation={.artifact=owner->lowered,.function=request->function,
-        .target=request->target,.limits=request->limits},.call_depth=request->call_depth};
-    if (!xir_compile_work(&owner->context,sizeof(call)+sizeof(call.evaluation.checked_identity))) {
-        xr_xir_compile_ctfe_instance_free(owner);return XR_XIR_CTFE_BUDGET;
-    }
+        .target=request->target,.limits=request->limits,.control=control},.call_depth=request->call_depth};
+
     memcpy(call.evaluation.checked_identity,owner->lowered->checked_identity,sizeof(call.evaluation.checked_identity));
     admitted=xr_xir_compile_ctfe_calls(&call,&owner->value);
     if (admitted!=XR_XIR_CTFE_OK) { xr_xir_compile_ctfe_instance_free(owner);return admitted; }
-    if (!xir_compile_work(&owner->context,sizeof(*output))) {
-        xr_xir_compile_ctfe_instance_free(owner);return XR_XIR_CTFE_BUDGET;
-    }
+
     *output=owner;return XR_XIR_CTFE_OK;
 }
 XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance_view(const XirCtfeInstanceResult *owner,
     XirCtfeInstanceView *output) {
     if (!owner || !output || output->checked || output->lowered || output->definition || output->value ||
         output->instance_function || output->definition_function) return XR_XIR_CTFE_BAD_ARGUMENT;
-    if (!xir_compile_work(&owner->context,sizeof(*output))) return XR_XIR_CTFE_BUDGET;
+
     XrXirStatus status=instance_inputs_match(&owner->context,owner->checked,owner->lowered);
     if (status!=XR_XIR_OK) return instance_compile_status(status);
     const XrXirArtifact *definition=NULL;uint32_t declaration=0;

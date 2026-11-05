@@ -53,6 +53,8 @@
 #define XINSTANCE_H
 
 #include "../value/xvalue.h"
+#include "../xvm_call.h"
+#include "../object/xtext_worker.h"
 #include "xclass.h"
 #include "../mem/xobj_header.h"
 
@@ -87,8 +89,10 @@ XR_FUNC XrValue xr_instance_source_provider_storage(XrValue wrapper);
  * while the tagged slot remains the ownership anchor for referenced values. */
 XR_FUNC bool xr_instance_set_decoded_field(XrObjectInstance *inst, int index, XrValue value);
 
-XR_FUNC XrValue xr_instance_call_method(XrVMRuntime *X, XrObjectInstance *inst, const char *name,
-                                        XrValue *args, int argc);
+/* Normal missing/non-String returns remain values; failed VM calls are
+ * distinguishable so formatting cannot turn OOM into fallback text. */
+XR_FUNC XrValue xr_instance_call_method_checked(XrVMRuntime *X, XrObjectInstance *inst,
+    const char *name, XrValue *args, int argc, XrVMResult *status);
 
 // Shallow clone: allocate new instance, copy all field values
 XR_FUNC XrObjectInstance *xr_instance_clone(XrVMRuntime *X, XrObjectInstance *src);
@@ -109,6 +113,8 @@ static inline XrValue xr_instance_get_field_fast(XrObjectInstance *inst, int ind
 }
 
 static inline void xr_instance_set_field_fast(XrObjectInstance *inst, int index, XrValue value) {
+    if (xr_text_worker_is_private(value))
+        return;
     inst->fields[index] = value;
 }
 

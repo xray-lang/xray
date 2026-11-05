@@ -10,10 +10,7 @@
 
 static XrXirStatus effect_context_owner_project(const XrXirCompileContext *context,
     const XrXirModule *source, XrXirEffects *effects, const EffectContextOwner *fresh) {
-    if (!xir_compile_work(context,(uint64_t)effects->count*
-        (sizeof(XrXirRootEffects)+2*sizeof(XrXirRootEffectWitness)))) {
-        return XR_XIR_BUDGET;
-    }
+
     for (uint32_t f=0;f<effects->count;++f) {
         if (source->generics && source->generics[f].parameter_count) continue;
         EffectContextRootValue value;
@@ -59,7 +56,7 @@ XR_FUNC XrXirStatus xir_effects_context_refresh(const XrXirCompileContext *conte
     }
     const EffectOrdinaryContexts *ordinary=effect_contexts_read(effects)->ordinary;
     EffectTerms terms={.types=ordinary->terms.types,.remaining=context};
-    if (!xir_compile_work(context,sizeof(terms))) return XR_XIR_BUDGET;
+
     XrXirStatus status=effect_terms_snapshot_match(&terms,source->types,ordinary->source_type_count);
     if (status==XR_XIR_OK) status=effect_ordinary_bodies_match(ordinary,source,&terms);
     effect_terms_free(&terms);
@@ -96,7 +93,7 @@ static XrXirStatus effect_context_origin_match(const XrXirCompileContext *contex
         if (status==XR_XIR_BAD_TYPE) { *same=false;status=XR_XIR_OK; }
     }
     for (uint32_t p=0;p<count && *same && status==XR_XIR_OK;++p) {
-        if (!xir_compile_work(context,1)) { status=XR_XIR_BUDGET;break; }
+
         if (origin->effect_arguments[p].parameter!=p) { *same=false;break; }
         status=xr_xir_compile_type_substitution_matches_between_scratch(context,
             &dense->terms.types,input->types,NULL,0,node->physical_types[p],origin->effect_arguments[p].type,&scratch);
@@ -107,10 +104,10 @@ static XrXirStatus effect_context_origin_match(const XrXirCompileContext *contex
 
 /* Check each lexical vector before any matching identity can read it.
  * The complete typed owner-chain comparison still runs for every candidate. */
-static XrXirStatus effect_context_owner_shapes(const XrXirCompileContext *context,
+static XrXirStatus effect_context_owner_shapes(
     const XirEffectContextInput *input) {
     for (uint32_t a=0;a<input->owner_count;++a) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         const XrXirOrigin *owner=&input->owners[a];
         if (!!owner->arguments!=!!owner->argument_count ||
             !!owner->effect_arguments!=!!owner->effect_argument_count) return XR_XIR_BAD_STRUCTURE;
@@ -123,7 +120,7 @@ static XrXirStatus effect_context_owners_match(const XrXirCompileContext *contex
     uint32_t selected, bool *same) {
     uint32_t owner=dense->nodes[selected].owner;
     for (uint32_t a=0;a<input->owner_count && *same;++a) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         if (owner>=dense->count) { *same=false;break; }
         XirEffectContextInput parent=*input;parent.origin=&input->owners[a];
         XrXirStatus status=effect_context_origin_match(context,dense,&parent,owner,same);
@@ -157,7 +154,7 @@ static XrXirStatus effect_context_admission(const XrXirCompileContext *context,
     const EffectOrdinaryContexts *dense=effect_contexts_read(effects)->dense;
     const EffectOrdinaryContexts *ordinary=effect_contexts_read(effects)->ordinary;
     EffectTerms terms={.types=ordinary->terms.types,.remaining=context};
-    if (!xir_compile_work(context,sizeof(terms))) return XR_XIR_BUDGET;
+
     XrXirStatus status=effect_terms_snapshot_match(&terms,normalized.types,dense->source_type_count);
     if (status==XR_XIR_OK) status=effect_ordinary_bodies_match(ordinary,&normalized,&terms);
     if (status==XR_XIR_OK) status=types->interfaces ?
@@ -173,7 +170,7 @@ static XrXirStatus effect_context_select_actual(const XrXirCompileContext *conte
     XrXirStatus status=XR_XIR_OK;
     uint32_t caller=UINT32_MAX;
     for (uint32_t f=0;f<dense->count;++f) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         bool same=false;status=effect_context_origin_match(context,dense,input,f,&same);
         if (status==XR_XIR_OK && same) status=effect_context_owners_match(context,dense,input,f,&same);
         if (status!=XR_XIR_OK) return status;
@@ -194,7 +191,7 @@ static XrXirStatus effect_context_select_actual(const XrXirCompileContext *conte
         if (caller<dense->base_count && input->source->generics &&
             input->source->generics[input->origin->function].parameter_count) return XR_XIR_BAD_TYPE;
     }
-    if (!xir_compile_work(context,sizeof(*output))) return XR_XIR_BUDGET;
+
     EffectContextRootValue value;
     status=effect_invocation_forest_values(context,effect_contexts_read(effects)->forest,target,&value);
     if(status!=XR_XIR_OK) return status;
@@ -225,7 +222,7 @@ XR_FUNC XrXirStatus xir_effects_context_select(const XrXirCompileContext *contex
     if (!normalized.types) normalized.types=&effect_empty_types;
     if (!request.types) request.types=&effect_empty_types;
     request.source=&normalized;
-    XrXirStatus status=effect_context_owner_shapes(context,&request);
+    XrXirStatus status=effect_context_owner_shapes(&request);
     if (status==XR_XIR_OK) status=effect_context_admission(context,effects,request.source,request.types);
     if (status!=XR_XIR_OK) return status;
     return effect_context_select_actual(context,effects,&request,output);
@@ -248,7 +245,7 @@ XR_FUNC XrXirStatus xir_effects_context_operation(const XrXirCompileContext *con
         !operation || effects->count!=source->function_count) return XR_XIR_BAD_STRUCTURE;
     XirEffectContextScope selection_scope={context,effects,source,types,XR_XIR_OK,
         EFFECT_CONTEXT_ADMISSION_PENDING};
-    if (!xir_compile_work(context,sizeof(selection_scope))) return XR_XIR_BUDGET;
+
     XrXirStatus status=operation(data,&selection_scope);
     return selection_scope.status!=XR_XIR_OK ? selection_scope.status : status;
 }
@@ -264,8 +261,8 @@ XR_FUNC XrXirStatus xir_effects_context_select_scoped(XirEffectContextScope *sco
         !!input->origin->arguments!=!!input->origin->argument_count ||
         !!input->owners!=!!input->owner_count || input->owner_count>scope->effects->count)
         return effect_context_scope_failure(scope,XR_XIR_BAD_STRUCTURE);
-    if (!xir_compile_work(scope->context,1)) return effect_context_scope_failure(scope,XR_XIR_BUDGET);
-    XrXirStatus shape=effect_context_owner_shapes(scope->context,input);
+
+    XrXirStatus shape=effect_context_owner_shapes(input);
     if (shape!=XR_XIR_OK) return effect_context_scope_failure(scope,shape);
     if (scope->state==EFFECT_CONTEXT_ADMISSION_PENDING) {
         scope->status=effect_context_admission(scope->context,scope->effects,scope->source,scope->types);
@@ -289,7 +286,7 @@ static XrXirStatus effect_context_base_owner_origins(const XrXirCompileContext *
     const XrXirModule *module,uint32_t function,XrXirOrigin **output,uint32_t *output_count) {
     if (!module || function>=module->function_count || !output || *output ||
         !output_count || *output_count) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
     /* An absent declaration table has no lexical chain. The complete source
      * snapshot and strict selector still reject omission of an actual owner. */
     if (!module->declarations) return XR_XIR_OK;
@@ -297,7 +294,7 @@ static XrXirStatus effect_context_base_owner_origins(const XrXirCompileContext *
     const XrXirFunctionIdentity *identities=module->declarations->functions;
     uint32_t current=function,count=0;
     for (;;) {
-        if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
+
         uint32_t parent=identities[current].cleanup_owner;
         if (!parent) break;
         if (parent>module->function_count || count>=module->function_count ||
@@ -312,7 +309,7 @@ static XrXirStatus effect_context_base_owner_origins(const XrXirCompileContext *
     if (count && !owners) return status;
     current=function;
     for (uint32_t a=0;a<count;++a) {
-        if (!xir_compile_work(context,2+sizeof(*owners))) { status=XR_XIR_BUDGET;break; }
+
         uint32_t parent=identities[current].cleanup_owner;
         if (!parent || parent>module->function_count || parent-1==function) {
             status=XR_XIR_BAD_STRUCTURE;break;
@@ -343,7 +340,7 @@ static XrXirStatus effect_context_reference_root(const XrXirCompileContext *cont
     const XrXirInstruction *op=&module->functions[function].instructions[instruction];
     if (op->op!=XR_XIR_FUNCTION_REF || op->immediate<0 || (uint64_t)op->immediate>=effects->count)
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,sizeof(location))) return XR_XIR_BUDGET;
+
     uint32_t mask=0;
     if (effect_contexts_read(effects) && (!module->generics || !module->generics[function].parameter_count)) {
         XrXirOrigin origin={.function=function};
@@ -366,7 +363,7 @@ static XrXirStatus effect_context_reference_root(const XrXirCompileContext *cont
         mask=(facts->requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
             (facts->unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);
     }
-    if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
     *output=mask;return XR_XIR_OK;
 }
 

@@ -48,16 +48,17 @@ typedef struct XrFmtConfig {
 extern XrFmtConfig xfmt_default_config;
 
 typedef enum XrFmtStatus {
-    XR_FMT_OK, XR_FMT_BAD_ARGUMENT, XR_FMT_BUDGET, XR_FMT_OUT_OF_MEMORY
+    XR_FMT_OK, XR_FMT_BAD_ARGUMENT, XR_FMT_BUDGET, XR_FMT_OUT_OF_MEMORY,
+    XR_FMT_MEMORY_LIMIT, XR_FMT_OVERFLOW, XR_FMT_CANCELLED, XR_FMT_DEADLINE, XR_FMT_CLOCK_FAILURE
 } XrFmtStatus;
 typedef struct XrFmtOutput { char *text; size_t length; } XrFmtOutput;
 
 /* Synchronously borrows syntax and configuration. Only success publishes an
- * independent ledger allocation into an empty output. A program arena must
+ * independent memory allocation into an empty output. A program arena must
  * belong to the exact state; borrowed non-program nodes remain caller-owned. */
 XR_FUNC XrFmtStatus xr_compile_format_ast(XrCompileState *state, AstNode *ast,
     const XrFmtConfig *config, XrFmtOutput *output);
-/* Unconditional physical cleanup; no work admission or allocation. */
+/* Unconditional physical cleanup; no admission or allocation. */
 XR_FUNC void xr_compile_format_output_free(XrFmtOutput *output);
 
 #endif // XFMT_H

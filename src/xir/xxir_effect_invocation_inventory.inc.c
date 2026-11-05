@@ -32,12 +32,12 @@ static XrXirStatus effect_final_inventory_sites(const XrXirCompileContext *work,
             status=effect_final_input_select_next(&body,f,&cursor,&i,&storage,&found);
             if(status!=XR_XIR_OK) return status;
             if(!found) break;
-            if(!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+
             if(at>=final->site_count || op->immediate<0 || (uint64_t)op->immediate>=effect_body_count(material))
                 return XR_XIR_BAD_STRUCTURE;
             EffectBodyFunctionDimensions target={0};status=effect_body_request_dimensions(&body,(uint32_t)op->immediate,&target);
             if(status!=XR_XIR_OK) return status;
-            if(!xir_compile_work(work,6)) return XR_XIR_BUDGET;
+
             const EffectInvocationSite *site=&final->sites[at++];
             if(site->function!=f || site->instruction!=i || site->target!=(uint32_t)op->immediate ||
                 site->captures!=op->args[1] || site->binding!=bindings || site->captures>target.parameter_count ||
@@ -51,7 +51,7 @@ static XrXirStatus effect_final_inventory_sites(const XrXirCompileContext *work,
 static XrXirStatus effect_final_inventory_tracked(const XrXirCompileContext *work,
     const EffectBodyMaterial *material,XrXirType type,bool *output) {
     const XrXirTypes *types=material->domain.types;const XrXirTypeNode *node=xr_xir_type_node(types,type);
-    if(!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+
     *output=node && (node->kind==XR_XIR_TYPE_CELL || node->kind==XR_XIR_TYPE_CALLABLE || node->kind==XR_XIR_TYPE_ITERATOR);
     if(!node || node->kind!=XR_XIR_TYPE_NOMINAL) return XR_XIR_OK;
     const XrXirNominalTable *table=types->nominals;
@@ -82,7 +82,7 @@ static XrXirStatus effect_final_inventory_roots(const XrXirCompileContext *work,
         }
         if(!tracked && shared==UINT32_MAX) shared=f;
         uint32_t expected=tracked?f:shared;
-        if(!xir_compile_work(work,5)) return XR_XIR_BUDGET;
+
         if(final->root_spaces[f]!=expected || final->roots[f]>=final->count) return XR_XIR_BAD_STRUCTURE;
         const EffectInvocationNode *root=&final->nodes[final->roots[f]];
         if(root->root!=expected || root->body!=f) return XR_XIR_BAD_STRUCTURE;
@@ -94,7 +94,7 @@ static XrXirStatus effect_final_inventory_keys(const XrXirCompileContext *work,
     uint32_t functions=effect_body_count(material);
     for(uint32_t n=0;n<final->count;++n) {
         const EffectInvocationNode *node=&final->nodes[n];
-        if(!xir_compile_work(work,5)) return XR_XIR_BUDGET;
+
         if(node->root>=functions || node->body>=functions || node->parameter_count!=material->functions[node->body].parameter_count ||
             node->instruction_count!=material->functions[node->body].instruction_count) return XR_XIR_BAD_STRUCTURE;
         EffectInvocationBasis basis={0};XrXirStatus status=effect_invocation_basis_parameters_read(work,final,
@@ -108,17 +108,17 @@ static XrXirStatus effect_final_inventory_keys(const XrXirCompileContext *work,
             if(status!=XR_XIR_OK) return status;
             if(tracked || final->roots[node->body]==n) continue;
             for(uint32_t w=0;w<basis.row_words;++w) {
-                if(!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+
                 if(node->input[(uint64_t)p*basis.row_words+w]) return XR_XIR_BAD_STRUCTURE;
             }
         }
         for(uint32_t earlier=0;earlier<n;++earlier) {
             const EffectInvocationNode *other=&final->nodes[earlier];
-            if(!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+
             if(node->root!=other->root || node->body!=other->body) continue;
             bool same=true;
             for(uint64_t w=0;w<words;++w) {
-                if(!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+
                 if(node->input[w]!=other->input[w]) same=false;
             }
             if(same) return XR_XIR_BAD_STRUCTURE;
@@ -128,7 +128,7 @@ static XrXirStatus effect_final_inventory_keys(const XrXirCompileContext *work,
 }
 static XrXirStatus effect_final_inventory_seeds(const XrXirCompileContext *work,
     const EffectBodyMaterial *material,const EffectInvocationFinal *final) {
-    EffectBodyRequest body=effect_body_owned_request(work,material);EffectBodyRead role=effect_body_compile_read(work);
+    EffectBodyRequest body=effect_body_owned_request(work,material);EffectBodyRead role=(EffectBodyRead){.owner=work};
     for(uint32_t f=0;f<effect_body_count(material);++f) {
         EffectInvocationSeedRead read={0};XrXirStatus status=effect_invocation_seed_open(work,&body,final,f,&read);
         if(status!=XR_XIR_OK) return status;
@@ -143,7 +143,7 @@ static XrXirStatus effect_final_inventory_seeds(const XrXirCompileContext *work,
             for(uint32_t w=0;w<read.basis.row_words;++w) {
                 uint64_t expected=0;status=effect_invocation_seed_word(&read,&bits,w,&expected);
                 if(status!=XR_XIR_OK) return status;
-                if(!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+
                 if(node->input[(uint64_t)p*read.basis.row_words+w]!=expected) return XR_XIR_BAD_STRUCTURE;
             }
         }

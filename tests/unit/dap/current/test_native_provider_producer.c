@@ -20,7 +20,7 @@ int main(int argc,char **argv) {
     XrSourceCompilerConfig config={*context,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},XR_SOURCE_STDLIB,
         xr_source_compile_default_manifest_limits()};
     XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};
-    CHECK(xr_source_compiler_new(&config,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);
+    CHECK(xr_source_compiler_new(&config,NULL,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);
     XrXirSourceProduct *source=NULL;
     XrSourceCompileStatus status=xr_source_compiler_build_file(compiler,XR_NATIVE_PROVIDER_FIXTURE,&source,&diagnostic);
     if(status!=XR_SOURCE_COMPILE_OK) { char message[1024];xr_source_compile_diagnostic_format(&diagnostic,message,sizeof(message));fprintf(stderr,"%s\n",message); }

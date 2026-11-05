@@ -42,7 +42,7 @@ static XrXirStatus generated_text_copy(const XrXirCompileContext *context,
     XrXirGeneratedText from, XrXirGeneratedText *to, bool required) {
     if ((from.length!=0)!=(from.bytes!=NULL) || (required && !from.length))
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,from.length)) return XR_XIR_BUDGET;
+
     if (from.length && (memchr(from.bytes,0,from.length) ||
         xr_utf8_core_scan_strict((const uint8_t *)from.bytes,from.length).error!=XR_UTF8_OK))
         return XR_XIR_BAD_STRUCTURE;
@@ -60,9 +60,6 @@ static XrXirStatus generated_origin_copy(const XrXirCompileContext *context,
     if (status==XR_XIR_OK) { to->line=from->line; to->column=from->column; }
     return status;
 }
-static bool generated_input_work(const void *context,uint64_t units) {
-    return xir_compile_work(context,units);
-}
 /* Extents and metadata must be readable before copying. These common metadata
  * checks carry no instruction, borrow, effect or private-operation permission. */
 static XrXirStatus generated_receive_shape(const XrXirCompileContext *context,
@@ -74,9 +71,8 @@ static XrXirStatus generated_receive_shape(const XrXirCompileContext *context,
         return XR_XIR_BAD_STRUCTURE;
     if (module->function_count>context->limits.functions) return XR_XIR_BUDGET;
     XrXirCompileLimits remaining=context->limits;
-    XirInputWork work={context,generated_input_work};
     for (uint32_t f=0; f<module->function_count; ++f) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         const XrXirFunction *function=&module->functions[f];
         if (function->parameter_count>remaining.parameters || function->block_count>remaining.blocks ||
             function->instruction_count>remaining.instructions) return XR_XIR_BUDGET;
@@ -94,7 +90,7 @@ static XrXirStatus generated_receive_shape(const XrXirCompileContext *context,
         XirInputFunctionHead head={function->name,function->name_length,function->parameters,
             function->parameter_count,function->result,function->blocks,function->block_count,
             function->instruction_count,function->operands,function->operand_count,function->error_type};
-        XrXirStatus status=xir_input_function_head_shape(&work,&head);
+        XrXirStatus status=xir_input_function_head_shape(&head);
         if (status!=XR_XIR_OK) return status;
     }
     XrXirStatus status=xr_xir_compile_types_structure_verify(context,module->types);

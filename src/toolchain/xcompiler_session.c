@@ -13,6 +13,7 @@
 
 struct XrCompilerSession {
     XrCompileState *state;
+    XrCompileRequestControl *request;
     XrArena *arena;
     XrCompileStringPool *pool;
     XrCompilerSessionScope *scope;
@@ -20,40 +21,31 @@ struct XrCompilerSession {
     uint64_t next_scope_token;
 };
 
-static XrCompilerSessionStatus session_status(XrCompileResourceStatus status) {
-    switch (status) {
-        case XR_COMPILE_RESOURCE_OK: return XR_COMPILER_SESSION_OK;
-        case XR_COMPILE_RESOURCE_BUDGET: return XR_COMPILER_SESSION_BUDGET;
-        case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: return XR_COMPILER_SESSION_OUT_OF_MEMORY;
-        default: return XR_COMPILER_SESSION_BAD_ARGUMENT;
-    }
-}
-
-static XrCompilerSessionStatus session_receive(XrCompileState *state,XrCompilerSession **output) {
+static XrCompileResourceStatus session_receive(XrCompileState *state,XrCompilerSession **output) {
     XrCompileResourceStatus status=xr_compile_state_session_open(state);
-    if (status!=XR_COMPILE_RESOURCE_OK) {xr_compile_state_release(state);return session_status(status);}
+    if (status!=XR_COMPILE_RESOURCE_OK) {xr_compile_state_release(state);return status;}
     void *memory = NULL;
     status = xr_compile_state_calloc(state, 1, sizeof(XrCompilerSession), &memory);
     if (status != XR_COMPILE_RESOURCE_OK) {
         xr_compile_state_session_close(state);
         xr_compile_state_release(state);
-        return session_status(status);
+        return status;
     }
     XrCompilerSession *session = memory;
     session->state = state;
     *output = session;
-    return XR_COMPILER_SESSION_OK;
+    return XR_COMPILE_RESOURCE_OK;
 }
-XrCompilerSessionStatus xr_compile_session_new(XrCompileResources *resources, XrCompilerSession **output) {
-    if (!resources || !output || *output) return XR_COMPILER_SESSION_BAD_ARGUMENT;
+XrCompileResourceStatus xr_compile_session_new(XrCompileResources *resources, XrCompilerSession **output) {
+    if (!resources || !output || *output) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
     XrCompileState *state=NULL;
     XrCompileResourceStatus status=xr_compile_state_new(resources,&state);
-    return status==XR_COMPILE_RESOURCE_OK ? session_receive(state,output) : session_status(status);
+    return status==XR_COMPILE_RESOURCE_OK ? session_receive(state,output) : status;
 }
-XrCompilerSessionStatus xr_compile_session_new_with_state(XrCompileState *state,XrCompilerSession **output) {
-    if (!state || !output || *output) return XR_COMPILER_SESSION_BAD_ARGUMENT;
+XrCompileResourceStatus xr_compile_session_new_with_state(XrCompileState *state,XrCompilerSession **output) {
+    if (!state || !output || *output) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
     XrCompileResourceStatus status=xr_compile_state_retain(state);
-    return status==XR_COMPILE_RESOURCE_OK ? session_receive(state,output) : session_status(status);
+    return status==XR_COMPILE_RESOURCE_OK ? session_receive(state,output) : status;
 }
 
 void xr_compile_session_free(XrCompilerSession *session) {
@@ -68,6 +60,24 @@ void xr_compile_session_free(XrCompilerSession *session) {
     xr_compile_state_free(session);
     xr_compile_state_session_close(state);
     xr_compile_state_release(state);
+}
+
+XR_FUNC XrCompileResourceStatus xr_compile_session_bind_request(XrCompilerSession *session,
+    XrCompileRequestControl *request) {
+    if(!session || !request || !request->initialized || session->request || session->arena || session->scope)
+        return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    session->request=request;return XR_COMPILE_RESOURCE_OK;
+}
+XR_FUNC XrCompileRequestControl *xr_compile_session_request(const XrCompilerSession *session) {
+    return session && session->request && (session->request->cancel_poll || session->request->has_deadline)
+        ? session->request : NULL;
+}
+XR_FUNC XrCompileResourceStatus xr_compile_session_poll(XrCompilerSession *session) {
+    if(!session)return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    XrCompileResourceStatus status=xr_compile_state_status(session->state);
+    if(status==XR_COMPILE_RESOURCE_OK && session->request)
+        status=xr_compile_request_control_poll(session->request);
+    return xr_compile_state_fail(session->state,status);
 }
 
 XrCompileState *xr_compile_session_compile_state(const XrCompilerSession *session) {
@@ -88,7 +98,7 @@ XrCompileStringPool *xr_compile_session_string_pool(const XrCompilerSession *ses
 uint32_t xr_compile_session_next_ast_node_id(XrCompilerSession *session) {
     if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return 0;
     if (session->next_ast_id == UINT32_MAX) {
-        xr_compile_state_fail(session->state, XR_COMPILE_RESOURCE_BUDGET);
+        xr_compile_state_fail(session->state, XR_COMPILE_RESOURCE_OVERFLOW);
         return 0;
     }
     return ++session->next_ast_id;
@@ -104,7 +114,7 @@ XrCompileResourceStatus xr_compile_session_push_arena(XrCompilerSession *session
     status = xr_compiler_arena_capture_status(arena, state);
     if (status != XR_COMPILE_RESOURCE_OK) return status;
     if (session->next_scope_token == UINT64_MAX)
-        return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET);
+        return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_OVERFLOW);
     XrCompileStringPool *pool = session->pool;
     if (!xr_string_pool_matches(pool, state, arena)) {
         pool = NULL;

@@ -14,7 +14,7 @@ static bool source_program_sites(SourceContext *ctx,const XrXirModule *module,Xr
     if (!module->generics) return true;
     uint32_t count=0;
     for (const SourceComptimeSite *s=ctx->comptime_sites;s;s=s->next) {
-        if (!source_work_units(ctx,s->syntax,4)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (module->generics[s->helper].parameter_count) ++count;
     }
     XrXirComptimeSite *sites=count?source_alloc(ctx,count,sizeof(*sites)):NULL;
@@ -23,11 +23,11 @@ static bool source_program_sites(SourceContext *ctx,const XrXirModule *module,Xr
     for (uint32_t f=0;f<module->function_count;++f) {
         const XrXirFunction *body=&module->functions[f];
         for (uint32_t i=0;i<body->instruction_count;++i) {
-            if (!source_work_units(ctx,NULL,sizeof(XrXirInstruction))) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             const XrXirInstruction *op=&body->instructions[i];
             if (op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE) continue;
             for (const SourceComptimeSite *s=ctx->comptime_sites;s;s=s->next) {
-                if (!source_work_units(ctx,s->syntax,4)) return false;
+                if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
                 if (s->owner!=f || op->immediate!=s->helper || !module->generics[s->helper].parameter_count) continue;
                 if (next==count) return source_fail(ctx,s->syntax,XR_XIR_BAD_STRUCTURE,"comptime source call inventory grew");
                 sites[next++]=(XrXirComptimeSite){f,i,s->helper};
@@ -39,7 +39,7 @@ static bool source_program_sites(SourceContext *ctx,const XrXirModule *module,Xr
 }
 static const SourceComptimeSite *source_program_syntax(SourceContext *ctx,uint32_t helper) {
     for (const SourceComptimeSite *site=ctx->comptime_sites;site;site=site->next) {
-        if (!source_work_units(ctx,site->syntax,2)) return NULL;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return NULL;
         if (site->helper==helper) return site;
     }
     return NULL;

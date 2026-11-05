@@ -44,7 +44,7 @@ static XrXirStatus effect_control_target(const EffectBodyRequest *input,uint32_t
     return *target<count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
 }
 
-static XrXirStatus effect_control_entry(const XrXirCompileContext *work,
+static XrXirStatus effect_control_entry(
     const EffectBodyRequest *input,const EffectFinalOutcomes *final,uint32_t f) {
     EffectBodyFunctionHead head={0};XrXirStatus status=effect_body_request_head(input,f,&head);
     if (status!=XR_XIR_OK) return status;
@@ -55,7 +55,7 @@ static XrXirStatus effect_control_entry(const XrXirCompileContext *work,
         !!formula->terms!=!!formula->term_count || !!entry->parameters!=!!entry->parameter_count ||
         (mask&~(XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED))) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t t=0;t<formula->term_count;++t) {
-        if (!xir_compile_work(work,6)) return XR_XIR_BUDGET;
+
         const XrXirRootTerm *term=&formula->terms[t];
         if (term->kind==XR_XIR_ROOT_TERM_CONTEXT_CALL) mask|=XR_XIR_CALLABLE_ROOT_UNRESOLVED;
         else {

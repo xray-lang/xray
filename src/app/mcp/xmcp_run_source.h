@@ -7,7 +7,7 @@
  * xmcp_run_source.h - SourceProduct admission under the MCP import policy
  *
  * KEY CONCEPT:
- *   One caller ledger checks imports and builds the ordinary owned product.
+ *   One memory owner and a short borrowed control admit an owned product.
  */
 #ifndef XMCP_RUN_SOURCE_H
 #define XMCP_RUN_SOURCE_H

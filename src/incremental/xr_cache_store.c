@@ -66,18 +66,18 @@ static XrCompileResourceStatus cache_resource(XrCacheStore *store, XrCompileReso
 }
 static XrOsIoStatus cache_io_status(const XrCacheStore *store) {
     XrCompileResourceStatus status = (XrCompileResourceStatus)atomic_load_explicit(&store->resource_status, memory_order_relaxed);
-    return status == XR_COMPILE_RESOURCE_BUDGET ? XR_OS_IO_BUDGET :
+    return status == XR_COMPILE_RESOURCE_BUDGET ? XR_OS_IO_OVERFLOW :
         status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_OS_IO_OUT_OF_MEMORY :
         status == XR_COMPILE_RESOURCE_BAD_ARGUMENT ? XR_OS_IO_BAD_ARGUMENT : XR_OS_IO_OK;
 }
 static XrOsIoStatus cache_failure_io(const XrCacheStore *store) {
     XrOsIoStatus status = cache_io_status(store);
     if (status == XR_OS_IO_OUT_OF_MEMORY) return XR_OS_IO_OUT_OF_MEMORY;
-    if (status == XR_OS_IO_BUDGET) return XR_OS_IO_BUDGET;
+    if (status == XR_OS_IO_OVERFLOW) return XR_OS_IO_OVERFLOW;
     return XR_OS_IO_BAD_ARGUMENT;
 }
 static XrOsIoStatus cache_io(XrCacheStore *store, XrOsIoStatus status) {
-    if (status == XR_OS_IO_BUDGET) cache_resource(store, XR_COMPILE_RESOURCE_BUDGET);
+    if (status == XR_OS_IO_OVERFLOW) cache_resource(store, XR_COMPILE_RESOURCE_BUDGET);
     else if (status == XR_OS_IO_OUT_OF_MEMORY) cache_resource(store, XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
     else if (status == XR_OS_IO_BAD_ARGUMENT) cache_resource(store, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
     return cache_ready(store) ? status : cache_failure_io(store);
@@ -149,17 +149,17 @@ static char *cache_join(XrCacheStore *store, const char *dir, const char *name) 
 }
 static XrCompileCacheStatus cache_status(const XrCacheStore *store, bool ok) {
     XrOsIoStatus status = cache_io_status(store);
-    return status == XR_OS_IO_BUDGET ? XR_COMPILE_CACHE_BUDGET : status == XR_OS_IO_OUT_OF_MEMORY ? XR_COMPILE_CACHE_OUT_OF_MEMORY :
+    return status == XR_OS_IO_OVERFLOW ? XR_COMPILE_CACHE_BUDGET : status == XR_OS_IO_OUT_OF_MEMORY ? XR_COMPILE_CACHE_OUT_OF_MEMORY :
         status == XR_OS_IO_BAD_ARGUMENT ? XR_COMPILE_CACHE_BAD_ARGUMENT : ok ? XR_COMPILE_CACHE_OK : XR_COMPILE_CACHE_IO;
 }
 static XrCacheLoadStatus cache_load_status(const XrCacheStore *store, XrCacheLoadStatus status) {
     XrOsIoStatus resource = cache_io_status(store);
-    return resource == XR_OS_IO_BUDGET ? XR_CACHE_LOAD_BUDGET : resource == XR_OS_IO_OUT_OF_MEMORY ? XR_CACHE_LOAD_OUT_OF_MEMORY :
+    return resource == XR_OS_IO_OVERFLOW ? XR_CACHE_LOAD_BUDGET : resource == XR_OS_IO_OUT_OF_MEMORY ? XR_CACHE_LOAD_OUT_OF_MEMORY :
         resource == XR_OS_IO_BAD_ARGUMENT ? XR_CACHE_LOAD_BAD_ARGUMENT : status;
 }
 static XrCachePublishStatus cache_publish_status(const XrCacheStore *store, XrCachePublishStatus status) {
     XrOsIoStatus resource = cache_io_status(store);
-    return resource == XR_OS_IO_BUDGET ? XR_CACHE_PUBLISH_BUDGET : resource == XR_OS_IO_OUT_OF_MEMORY ? XR_CACHE_PUBLISH_OUT_OF_MEMORY :
+    return resource == XR_OS_IO_OVERFLOW ? XR_CACHE_PUBLISH_BUDGET : resource == XR_OS_IO_OUT_OF_MEMORY ? XR_CACHE_PUBLISH_OUT_OF_MEMORY :
         resource == XR_OS_IO_BAD_ARGUMENT ? XR_CACHE_PUBLISH_BAD_ARGUMENT : status;
 }
 XR_FUNC XrCompileResources *xr_compile_cache_store_resources(const XrCacheStore *store) {

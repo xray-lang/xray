@@ -34,7 +34,7 @@ static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXir
         (!!spec->code.owner != !!spec->code.release)) return XR_XIR_BAD_STRUCTURE;
     if (spec->entry_count > 65535 || spec->entry_count > context->limits.functions) return XR_XIR_BUDGET;
     for (uint32_t i = 0; i < spec->entry_count; ++i) {
-        if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
         if (spec->entries[i].abi_version != XR_XIR_CALL_ABI_VERSION) return XR_XIR_BAD_LAYOUT;
         if ((spec->entries[i].flags & ~(XR_XIR_ENTRY_EXIT | XR_XIR_ENTRY_GENERATOR)) ||
             (((spec->entries[i].flags & XR_XIR_ENTRY_GENERATOR)!=0)!=
@@ -44,7 +44,7 @@ static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXir
     XrXirStatus status = xr_xir_compile_types_structure_verify(context, spec->types);
     if (status != XR_XIR_OK) return status;
     if (spec->types) for (uint32_t t = 0; t < spec->types->count; ++t) {
-        if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
         if (spec->types->nodes[t].parameter_span) return XR_XIR_BAD_TYPE;
         const XrXirTypeNode *node=spec->types->nodes+t;
         if (node->kind==XR_XIR_TYPE_MUT_SLICE || (node->kind==XR_XIR_TYPE_SLICE && node->element!=XR_XIR_U8))
@@ -54,7 +54,7 @@ static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXir
         spec->entry_count, XR_XIR_PROGRAM);
     if (status != XR_XIR_OK) return status;
     for (uint32_t s = 0; s < spec->declarations->slot_count; ++s) {
-        if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
         const XrXirSlot *slot = &spec->declarations->slots[s];
         if (xr_xir_type_is_cell(spec->types, slot->type) != !!slot->mutable ||
             (slot->type != XR_XIR_UNIT && !program_value_type(spec, slot->type)) ||
@@ -63,7 +63,7 @@ static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXir
              spec->declarations->modules[slot->module].storage!=XR_XIR_MODULE_BIRTH_STORAGE)) return XR_XIR_BAD_TYPE;
     }
     for (uint32_t i = 0; i < spec->entry_count; ++i) {
-        if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
         const XrXirCallEntry *entry = &spec->entries[i];
         if (spec->declarations->functions[i].test_role &&
             (entry->parameter_count || entry->result != XR_XIR_UNIT)) return XR_XIR_BAD_TYPE;
@@ -80,7 +80,7 @@ static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXir
             (entry->result != XR_XIR_UNIT && !program_value_type(spec, entry->result))) return XR_XIR_BAD_TYPE;
         if (entry->parameter_count > context->limits.parameters) return XR_XIR_BUDGET;
         for (uint32_t p = 0; p < entry->parameter_count; ++p) {
-            if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
             /* A cell parameter is a ref parameter: only the program's own functions can build one. */
             if (!program_value_type(spec, entry->parameters[p])) return XR_XIR_BAD_TYPE;
         }
@@ -89,7 +89,7 @@ static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXir
     const XrXirCallEntry *entry = &spec->entries[d->entry_function];
     if (entry->parameter_count || entry->result != XR_XIR_I64) return XR_XIR_BAD_TYPE;
     for (uint32_t m = 0; m < d->module_count; ++m) {
-        if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
         const XrXirCallEntry *init = &spec->entries[d->modules[m].initializer];
         if (init->parameter_count || init->result != XR_XIR_UNIT) return XR_XIR_BAD_TYPE;
     }
@@ -111,7 +111,7 @@ static XrXirStatus program_execution_order(XrXirProgram *program) {
     XrXirStatus status=xr_xir_compile_declarations_active(&program->context,program->declarations,
         program->order,program->active_modules,&program->initialization_count);
     for (uint32_t i=0;status==XR_XIR_OK && i<program->declarations->module_count;++i) {
-        if (!xir_compile_work(&program->context,1)) {status=XR_XIR_BUDGET;break;}
+
         if (program->declarations->modules[i].storage==XR_XIR_MODULE_BIRTH_STORAGE)
             program->requires_birth_storage=true;
     }
@@ -122,7 +122,7 @@ static XrXirStatus program_copy_entries(XrXirProgram *program, const XrXirProgra
     XrXirStatus status = XR_XIR_OK;
     program->entries = xir_compile_calloc(context, spec->entry_count, sizeof(*program->entries), &status);
     for (uint32_t i = 0; i < spec->entry_count && status == XR_XIR_OK; ++i) {
-        if (!xir_compile_work(context, sizeof(*program->entries))) return XR_XIR_BUDGET;
+
         program->entries[i] = spec->entries[i];
         program->entries[i].parameters = NULL;
         uint64_t bytes = (uint64_t)spec->entries[i].parameter_count * sizeof(XrXirType);
@@ -143,7 +143,7 @@ static XrXirStatus program_owned_storage(const XrXirCompileContext *context,
         context->resources,entries,(size_t)bytes));
     if (status!=XR_XIR_OK) return status;
     for (uint32_t i=0;i<spec->entry_count;++i) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         const XrXirCallEntry *entry=&entries[i];
         if (!entry->parameter_count) {
             if (entry->parameters) return XR_XIR_BAD_STRUCTURE;
@@ -160,7 +160,7 @@ static XrXirStatus program_owned_storage(const XrXirCompileContext *context,
             context->resources,entry->parameters,(size_t)bytes));
         if (status!=XR_XIR_OK) return status;
         for (uint32_t p=0;p<i;++p) {
-            if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
             if (entries[p].parameters==entry->parameters) return XR_XIR_BAD_STRUCTURE;
         }
     }
@@ -175,12 +175,12 @@ XR_FUNC XrXirStatus xir_program_receive(const XrXirCompileContext *context,
     XrCompileResourceStatus input_extent=xr_compile_resources_allocation(context->resources,
         original_input,sizeof(*original_input));
     if (input_extent!=XR_COMPILE_RESOURCE_OK)
-        return input_extent==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
+        return XR_XIR_BAD_STRUCTURE;
     XrXirArtifact *original_artifact=original_input->artifact;
     if (!original_artifact || (uintptr_t)original_artifact%_Alignof(XrXirArtifact)) return XR_XIR_BAD_STRUCTURE;
     input_extent=xr_compile_resources_allocation(context->resources,original_artifact,sizeof(*original_artifact));
     if (input_extent!=XR_COMPILE_RESOURCE_OK)
-        return input_extent==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
+        return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=owned_entries?program_owned_storage(context,spec,*owned_entries,
         original_input,original_artifact):XR_XIR_OK;
     if (status!=XR_XIR_OK) return status;
@@ -199,7 +199,7 @@ XR_FUNC XrXirStatus xir_program_receive(const XrXirCompileContext *context,
     /* The received Input owns canonical semantic storage. The physical callback
      * wiring remains borrowed until the final current-descriptor comparison. */
     for (uint32_t i = 0; i < types->count; ++i) {
-        if (!xir_compile_work(context, 1)) { xir_program_permissions_free(permissions); return XR_XIR_BUDGET; }
+
         if (types->nodes[i].kind == XR_XIR_TYPE_ATOMIC && !xr_xir_atomic_capability())
             { xir_program_permissions_free(permissions); return XR_XIR_UNSUPPORTED; }
     }
@@ -224,6 +224,8 @@ XR_FUNC XrXirStatus xir_program_receive(const XrXirCompileContext *context,
         XrXirValueStatus value_status = xr_xir_compile_type_arena_new(context, types, &program->arena);
         if (value_status != XR_XIR_VALUE_OK) {
             status = value_status == XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
+                value_status == XR_XIR_VALUE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+                value_status == XR_XIR_VALUE_OVERFLOW ? XR_XIR_OVERFLOW :
                 value_status == XR_XIR_VALUE_BAD_ARGUMENT ? XR_XIR_BAD_TYPE :
                 value_status == XR_XIR_VALUE_UNSUPPORTED ? XR_XIR_UNSUPPORTED : XR_XIR_BUDGET;
             goto failed;
@@ -236,7 +238,7 @@ XR_FUNC XrXirStatus xir_program_receive(const XrXirCompileContext *context,
     status = program_execution_order(program);
     if (status != XR_XIR_OK) goto failed;
     for (uint32_t i = 0; i < program->declarations->slot_count; ++i) {
-        if (!xir_compile_work(context, 1)) { status = XR_XIR_BUDGET; goto failed; }
+
         ++program->module_slots[program->declarations->slots[i].module];
     }
     XrXirProgramSpec owned={XR_XIR_PROGRAM_ABI_VERSION,permissions->target,
@@ -262,7 +264,7 @@ XR_FUNC XrXirStatus xir_program_receive(const XrXirCompileContext *context,
     if (status==XR_XIR_OK) status=xr_xir_compile_program_descriptor_match(context,&owned,permissions);
     if (status==XR_XIR_OK && (packet.bytes || packet.length || packet.identity)) {
         if (!packet.bytes || !packet.identity) status=XR_XIR_BAD_STRUCTURE;
-        else if (packet.length>UINT64_MAX-32 || !xir_compile_work(context,packet.length+32)) status=XR_XIR_BUDGET;
+        else if (packet.length>UINT64_MAX-32) status=XR_XIR_BUDGET;
         else {
             uint8_t digest[32];
             xr_sha256(packet.bytes,packet.length,digest);

@@ -70,7 +70,7 @@ static void pool_parse(XrLspIndexPool *p,XrLspIndexResult *n) {
     if(atomic_load(&n->cancel_requested))return;
     XrOsIoPolicy policy=xr_compile_io_policy(p->resources);uint8_t *text=NULL;size_t length=0;
     XrOsIoStatus read=xr_os_io_read_regular_file(&policy,n->path,p->maximum_file_bytes,&text,&length);
-    n->status=read==XR_OS_IO_OK?XR_XIR_OK:read==XR_OS_IO_BUDGET?XR_XIR_BUDGET:
+    n->status=read==XR_OS_IO_OK?XR_XIR_OK:read==XR_OS_IO_OVERFLOW?XR_XIR_BUDGET:
         read==XR_OS_IO_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:read==XR_OS_IO_BAD_ARGUMENT?XR_XIR_BAD_STRUCTURE:XR_XIR_IO;
     if(n->status==XR_XIR_OK&&!atomic_load(&n->cancel_requested)){
         size_t uri_length=0;n->status=pool_length(p->resources,n->uri,&uri_length);

@@ -26,18 +26,30 @@ struct XrSourceCompiler {
     XrCompilerSession *session;
     XrXirLibraryCatalog *libraries;
     char *stdlib_path;
+    bool borrowed_catalog;
 };
 static XrSourceCompileStatus compiler_resource(XrCompileResourceStatus status) {
-    return status == XR_COMPILE_RESOURCE_OK ? XR_SOURCE_COMPILE_OK :
-        status == XR_COMPILE_RESOURCE_BUDGET ? XR_SOURCE_COMPILE_BUDGET :
-        status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_SOURCE_COMPILE_OUT_OF_MEMORY : XR_SOURCE_COMPILE_BAD_ARGUMENT;
+    switch(status) {
+    case XR_COMPILE_RESOURCE_OK:return XR_SOURCE_COMPILE_OK;
+    case XR_COMPILE_RESOURCE_MEMORY_LIMIT:return XR_SOURCE_COMPILE_MEMORY_LIMIT;
+    case XR_COMPILE_RESOURCE_OVERFLOW:return XR_SOURCE_COMPILE_OVERFLOW;
+    case XR_COMPILE_RESOURCE_OUT_OF_MEMORY:return XR_SOURCE_COMPILE_OUT_OF_MEMORY;
+    case XR_COMPILE_RESOURCE_CANCELLED:return XR_SOURCE_COMPILE_CANCELLED;
+    case XR_COMPILE_RESOURCE_DEADLINE:return XR_SOURCE_COMPILE_DEADLINE;
+    case XR_COMPILE_RESOURCE_CLOCK_FAILURE:return XR_SOURCE_COMPILE_CLOCK_FAILURE;
+    default:return XR_SOURCE_COMPILE_BAD_ARGUMENT;
+    }
 }
 static XrSourceCompileStatus compiler_io(XrOsIoStatus status) {
     switch (status) {
     case XR_OS_IO_OK: return XR_SOURCE_COMPILE_OK;
     case XR_OS_IO_NOT_FOUND: return XR_SOURCE_COMPILE_NOT_FOUND;
     case XR_OS_IO_BAD_ARGUMENT: return XR_SOURCE_COMPILE_BAD_ARGUMENT;
-    case XR_OS_IO_BUDGET: return XR_SOURCE_COMPILE_BUDGET;
+    case XR_OS_IO_OVERFLOW: return XR_SOURCE_COMPILE_OVERFLOW;
+    case XR_OS_IO_MEMORY_LIMIT: return XR_SOURCE_COMPILE_MEMORY_LIMIT;
+    case XR_OS_IO_CANCELLED: return XR_SOURCE_COMPILE_CANCELLED;
+    case XR_OS_IO_DEADLINE: return XR_SOURCE_COMPILE_DEADLINE;
+    case XR_OS_IO_CLOCK_FAILURE: return XR_SOURCE_COMPILE_CLOCK_FAILURE;
     case XR_OS_IO_OUT_OF_MEMORY: return XR_SOURCE_COMPILE_OUT_OF_MEMORY;
     case XR_OS_IO_UNSUPPORTED: return XR_SOURCE_COMPILE_UNSUPPORTED;
     default: return XR_SOURCE_COMPILE_IO;
@@ -49,6 +61,11 @@ static XrSourceCompileStatus compiler_xir(XrXirStatus status) {
     case XR_XIR_BAD_STRUCTURE: return XR_SOURCE_COMPILE_BAD_ARGUMENT;
     case XR_XIR_BUDGET: return XR_SOURCE_COMPILE_BUDGET;
     case XR_XIR_OUT_OF_MEMORY: return XR_SOURCE_COMPILE_OUT_OF_MEMORY;
+    case XR_XIR_MEMORY_LIMIT: return XR_SOURCE_COMPILE_MEMORY_LIMIT;
+    case XR_XIR_OVERFLOW: return XR_SOURCE_COMPILE_OVERFLOW;
+    case XR_XIR_CANCELLED: return XR_SOURCE_COMPILE_CANCELLED;
+    case XR_XIR_DEADLINE: return XR_SOURCE_COMPILE_DEADLINE;
+    case XR_XIR_CLOCK_FAILURE: return XR_SOURCE_COMPILE_CLOCK_FAILURE;
     case XR_XIR_IO: return XR_SOURCE_COMPILE_IO;
     case XR_XIR_UNRESOLVED: return XR_SOURCE_COMPILE_NOT_FOUND;
     default: return XR_SOURCE_COMPILE_REJECTED;
@@ -60,7 +77,8 @@ static XrSourceCompileStatus compiler_manifest(XrManifestStatus status) {
     case XR_MANIFEST_BAD_ARGUMENT: return XR_SOURCE_COMPILE_BAD_ARGUMENT;
     case XR_MANIFEST_NOT_FOUND: return XR_SOURCE_COMPILE_NOT_FOUND;
     case XR_MANIFEST_LIMIT: return XR_SOURCE_COMPILE_LIMIT;
-    case XR_MANIFEST_BUDGET: return XR_SOURCE_COMPILE_BUDGET;
+    case XR_MANIFEST_OVERFLOW: return XR_SOURCE_COMPILE_OVERFLOW;
+    case XR_MANIFEST_MEMORY_LIMIT: return XR_SOURCE_COMPILE_MEMORY_LIMIT;
     case XR_MANIFEST_OUT_OF_MEMORY: return XR_SOURCE_COMPILE_OUT_OF_MEMORY;
     case XR_MANIFEST_IO: return XR_SOURCE_COMPILE_IO;
     case XR_MANIFEST_UNSUPPORTED: return XR_SOURCE_COMPILE_UNSUPPORTED;
@@ -79,15 +97,15 @@ static XrSourceCompileStatus compiler_publish(XrSourceCompileDiagnostic *out,
 }
 XR_FUNC void xr_source_compiler_free(XrSourceCompiler *compiler) {
     if (!compiler) return;
-    xr_xir_compile_library_catalog_free(compiler->libraries);
+    if (!compiler->borrowed_catalog) xr_xir_compile_library_catalog_free(compiler->libraries);
     xr_compile_session_free(compiler->session);
-    xr_compile_resources_free(compiler->stdlib_path);
+    if (!compiler->borrowed_catalog) xr_compile_resources_free(compiler->stdlib_path);
     xr_compile_resources_free(compiler);
 }
 static bool compiler_absolute(XrIoContext *io, const char *path) {
     unsigned char prefix[3] = {0};
     for (size_t i = 0; i < sizeof(prefix); ++i) {
-        if (!io_work(io, 1)) return false;
+        if (!((io)->status == XR_OS_IO_OK)) return false;
         prefix[i] = (unsigned char)path[i]; if (!prefix[i]) break;
     }
 #ifdef XR_OS_WINDOWS
@@ -100,7 +118,7 @@ static bool compiler_absolute(XrIoContext *io, const char *path) {
 #endif
 }
 XR_FUNC XrSourceCompileStatus xr_source_compiler_new(const XrSourceCompilerConfig *config,
-    XrSourceCompiler **output, XrSourceCompileDiagnostic *diagnostic) {
+    XrCompileRequestControl *control,XrSourceCompiler **output, XrSourceCompileDiagnostic *diagnostic) {
     if (!compiler_diagnostic_empty(diagnostic)) return XR_SOURCE_COMPILE_BAD_ARGUMENT;
     XrSourceCompileDiagnostic detail = {0};
     if (!config || !output || *output || !xir_compile_context_valid(&config->context) ||
@@ -123,9 +141,10 @@ XR_FUNC XrSourceCompileStatus xr_source_compiler_new(const XrSourceCompilerConfi
     compiler->manifest_limits = config->manifest_limits;
     detail.stage = XR_SOURCE_COMPILE_SESSION;
     detail.session_status = xr_compile_session_new(config->context.resources, &compiler->session);
-    if (detail.session_status != XR_COMPILER_SESSION_OK) {
-        status = detail.session_status == XR_COMPILER_SESSION_BUDGET ? XR_SOURCE_COMPILE_BUDGET :
-            detail.session_status == XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_SOURCE_COMPILE_OUT_OF_MEMORY : XR_SOURCE_COMPILE_BAD_ARGUMENT;
+    if(detail.session_status==XR_COMPILE_RESOURCE_OK && control)
+        detail.session_status=xr_compile_session_bind_request(compiler->session,control);
+    if (detail.session_status != XR_COMPILE_RESOURCE_OK) {
+        status=compiler_resource(detail.session_status);
     } else {
         detail.stage = XR_SOURCE_COMPILE_PATH;
         XrOsIoPolicy policy = xr_compile_io_policy(config->context.resources);
@@ -142,6 +161,39 @@ XR_FUNC XrSourceCompileStatus xr_source_compiler_new(const XrSourceCompilerConfi
     if (status == XR_SOURCE_COMPILE_OK) *output = compiler;
     else xr_source_compiler_free(compiler);
     return compiler_publish(diagnostic, &detail, status);
+}
+XR_FUNC XrSourceCompileStatus xr_source_compiler_take_catalog(XrSourceCompiler **owner,
+    XrSourceCompilerConfig *config,XrXirLibraryCatalog **libraries,char **stdlib_path) {
+    if (!owner || !*owner || !config || !libraries || *libraries || !stdlib_path || *stdlib_path)
+        return XR_SOURCE_COMPILE_BAD_ARGUMENT;
+    XrSourceCompiler *compiler=*owner;
+    if (compiler->borrowed_catalog || !compiler->libraries || !compiler->stdlib_path)
+        return XR_SOURCE_COMPILE_BAD_ARGUMENT;
+    *config=(XrSourceCompilerConfig){compiler->context,compiler->target,compiler->stdlib_path,compiler->manifest_limits};
+    *libraries=compiler->libraries;*stdlib_path=compiler->stdlib_path;
+    compiler->libraries=NULL;compiler->stdlib_path=NULL;
+    xr_source_compiler_free(compiler);*owner=NULL;return XR_SOURCE_COMPILE_OK;
+}
+XR_FUNC XrSourceCompileStatus xr_source_compiler_catalog_request(const XrSourceCompilerConfig *config,
+    XrXirLibraryCatalog *libraries,XrCompileRequestControl *control,XrSourceCompiler **output) {
+    if (!config || !libraries || !output || *output || !xir_compile_context_valid(&config->context) ||
+        !config->absolute_stdlib_path || !*config->absolute_stdlib_path ||
+        xr_xir_compile_library_catalog_context(libraries)->resources!=config->context.resources)
+        return XR_SOURCE_COMPILE_BAD_ARGUMENT;
+    XrSourceCompiler *compiler=NULL;
+    XrSourceCompileStatus status=compiler_resource(xr_compile_resources_calloc(config->context.resources,
+        1,sizeof(*compiler),(void **)&compiler));
+    if (status!=XR_SOURCE_COMPILE_OK)return status;
+    compiler->context=config->context;compiler->target=config->target;
+    compiler->manifest_limits=config->manifest_limits;compiler->libraries=libraries;
+    compiler->stdlib_path=(char *)config->absolute_stdlib_path;compiler->borrowed_catalog=true;
+    XrCompileResourceStatus opened=xr_compile_session_new(config->context.resources,&compiler->session);
+    if(opened==XR_COMPILE_RESOURCE_OK && control)opened=xr_compile_session_bind_request(compiler->session,control);
+    if (opened!=XR_COMPILE_RESOURCE_OK) {
+        status=compiler_resource(opened);
+        xr_source_compiler_free(compiler);return status;
+    }
+    *output=compiler;return XR_SOURCE_COMPILE_OK;
 }
 XR_FUNC const XrXirCompileContext *xr_source_compiler_context(const XrSourceCompiler *compiler) {
     return compiler ? &compiler->context : NULL;
@@ -165,11 +217,6 @@ XR_FUNC XrSourceCompileStatus xr_source_compiler_generation_config(const XrSourc
         NULL,compiler->libraries};
     return XR_SOURCE_COMPILE_OK;
 }
-static XrSourceCompileStatus compiler_capture(XrSourceCompiler *compiler, XrSourceCompileStatus status) {
-    if (status != XR_SOURCE_COMPILE_BUDGET && status != XR_SOURCE_COMPILE_OUT_OF_MEMORY) return status;
-    return compiler_resource(xr_compile_state_fail(xr_source_compiler_state(compiler),
-        status == XR_SOURCE_COMPILE_BUDGET ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY));
-}
 XR_FUNC XrSourceCompileStatus xr_source_compiler_open_input(XrSourceCompiler *compiler,const XrSourceEntryInput *input,
     XrSourceAuthority **output,XrSourceCompileDiagnostic *diagnostic) {
     if(!compiler || !input || !output || *output || !compiler_diagnostic_empty(diagnostic))
@@ -180,7 +227,7 @@ XR_FUNC XrSourceCompileStatus xr_source_compiler_open_input(XrSourceCompiler *co
         const XrSourceAuthorityDiagnostics receivers={&detail.authority,&detail.source.source,&detail.source.failure};
         detail.authority_status=xr_source_authority_open_input(&compiler->context,input,compiler->libraries,
             &compiler->manifest_limits,output,&receivers);
-        status=compiler_capture(compiler,compiler_manifest(detail.authority_status));
+        status=compiler_manifest(detail.authority_status);
     }
     return compiler_publish(diagnostic,&detail,status);
 }
@@ -205,7 +252,6 @@ XR_FUNC XrSourceCompileStatus xr_source_compiler_read_file(XrSourceCompiler *com
         status=compiler_io(xr_os_io_read_regular_file(&policy,xr_source_authority_source_path(file.authority),
             SIZE_MAX-1,&file.bytes,&file.length));
     }
-    status=compiler_capture(compiler,status);
     if(status==XR_SOURCE_COMPILE_OK)*output=file;
     else xr_source_compiler_file_clear(&file);
     return compiler_publish(diagnostic,&detail,status);
@@ -233,10 +279,15 @@ static XrSourceCompileStatus compiler_build_supplied(XrSourceCompiler *compiler,
         return compiler_publish(diagnostic, &detail, XR_SOURCE_COMPILE_BAD_ARGUMENT);
     XrSourceCompileStatus status = compiler_resource(xr_compile_session_resource_status(compiler->session));
     if (status != XR_SOURCE_COMPILE_OK) return compiler_publish(diagnostic, &detail, status);
-    if (supplied.ast && (supplied.program->type!=AST_PROGRAM ||
-        !supplied.program->as.program.owns_arena ||
-        !xr_compiler_arena_matches_state(supplied.program->as.program.arena,xr_source_compiler_state(compiler))))
-        return compiler_publish(diagnostic,&detail,XR_SOURCE_COMPILE_BAD_ARGUMENT);
+    if (supplied.ast) {
+        if (supplied.program->type!=AST_PROGRAM || !supplied.program->as.program.owns_arena)
+            return compiler_publish(diagnostic,&detail,XR_SOURCE_COMPILE_BAD_ARGUMENT);
+        XrCompileState *syntax=xr_compiler_arena_compile_state(supplied.program->as.program.arena);
+        if (!syntax || (syntax!=xr_source_compiler_state(compiler) && xr_compile_state_has_sessions(syntax)))
+            return compiler_publish(diagnostic,&detail,XR_SOURCE_COMPILE_BAD_ARGUMENT);
+        /* Detached syntax is immutable borrowed input. Checking and the ready
+         * projection allocate into this request, never into the input arena. */
+    }
     XrSourceAuthority *authority = NULL;
     XrModuleIdentityAuthority memory = {XR_MODULE_IDENTITY_MEMORY, input->namespace_id, NULL};
     const XrModuleIdentityAuthority *identity = &memory;
@@ -279,7 +330,6 @@ static XrSourceCompileStatus compiler_build_supplied(XrSourceCompiler *compiler,
         }
     }
     xr_source_authority_close(authority);
-    status = compiler_capture(compiler, status);
     if (status == XR_SOURCE_COMPILE_OK) *output = product;
     return compiler_publish(diagnostic, &detail, status);
 }

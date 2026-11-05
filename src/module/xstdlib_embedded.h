@@ -42,14 +42,6 @@ typedef struct {
  * the script and package resolvers. */
 XR_FUNC const XrStdlibSourceDescriptor *xr_stdlib_source_descriptor(const char *module_name);
 
-/* Compiler queries admit each table entry and compared byte before reading it.
- * Missing or ambiguous names publish NULL on OK; failures preserve output. */
-XR_FUNC XrOsIoStatus xr_stdlib_source_descriptor_work(void *owner,
-    XrOsIoStatus (*work)(void *, uint64_t), const char *name,
-    const XrStdlibSourceDescriptor **output);
-XR_FUNC XrOsIoStatus xr_get_embedded_stdlib_work(void *owner,
-    XrOsIoStatus (*work)(void *, uint64_t), const char *name, const char **output);
-
 // Get source code for a stdlib module (fallback).
 // Returns NULL if module not found.
 XR_FUNC const char *xr_get_embedded_stdlib(const char *module_name);

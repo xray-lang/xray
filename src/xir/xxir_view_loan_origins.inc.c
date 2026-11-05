@@ -18,7 +18,7 @@ typedef struct ViewLoanQuery {
 static XrXirStatus view_loan_selected(ViewLoanQuery *q,ViewOriginPair site,uint32_t selection,XrXirType *type) {
     ViewRootCheck *c=q->root.check;*type=xr_xir_operand_type(c->module->functions+site.first,site.second);
     for (uint32_t p=selection;p;p=q->root.selections.pairs[p-1u].second) {
-        if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;
+
         const XrXirTypeNode *node=xr_xir_type_node(c->module->types,*type);
         uint32_t field=q->root.selections.pairs[p-1u].first;if (!node) return XR_XIR_BAD_TYPE;
         if (field==UINT32_MAX) {
@@ -36,10 +36,10 @@ static XrXirStatus view_loan_emit(ViewLoanQuery *q,ViewOriginPair site,ViewOrigi
     XrXirStatus status=view_loan_selected(q,site,context.second,&type);if (status!=XR_XIR_OK) return status;
     uint32_t choices=0,selections=0;
     for (uint32_t p=context.first;p;p=q->root.paths.pairs[p-1u].second) {
-        if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;++choices;
+        ++choices;
     }
     for (uint32_t p=context.second;p;p=q->root.selections.pairs[p-1u].second) {
-        if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;++selections;
+        ++selections;
     }
     uint64_t bytes=(uint64_t)choices*sizeof(XrXirViewLoanChoice)+(uint64_t)selections*sizeof(uint32_t);
     if (bytes>SIZE_MAX || c->reserved>c->context->limits.frame_bytes ||
@@ -49,19 +49,19 @@ static XrXirStatus view_loan_emit(ViewLoanQuery *q,ViewOriginPair site,ViewOrigi
     XrXirViewLoanChoice *branch=choices?(XrXirViewLoanChoice *)storage:NULL;
     uint32_t *selected=selections?(uint32_t *)(storage+(size_t)choices*sizeof(*branch)):NULL,index=0;
     for (uint32_t p=context.first;p;p=q->root.paths.pairs[p-1u].second) {
-        if (!xir_compile_work(c->context,sizeof(*branch))) {status=XR_XIR_BUDGET;break;}
+
         ViewOriginPair choice=q->choices.pairs[q->root.paths.pairs[p-1u].first];
         branch[index++]=(XrXirViewLoanChoice){choice.first,choice.second};
     }
     index=0;
     for (uint32_t p=context.second;status==XR_XIR_OK && p;p=q->root.selections.pairs[p-1u].second) {
-        if (!xir_compile_work(c->context,1)) {status=XR_XIR_BUDGET;break;}
+
         selected[index++]=q->root.selections.pairs[p-1u].first;
     }
     if (status==XR_XIR_OK) {
         XrXirViewLoanOrigin event={site.first,c->location.instruction,site.second,source,kind,type,
             selected,selections,branch,choices,repeated};
-        if (q->count==UINT32_MAX || !xir_compile_work(c->context,sizeof(event))) status=XR_XIR_BUDGET;
+        if (q->count==UINT32_MAX) status=XR_XIR_BUDGET;
         else {++q->count;if (q->visitor) status=q->visitor(q->user,c->context,&event);}
     }
     XR_CHECK(c->reserved>=bytes,"loan observations borrow storage from their exact replay owner");
@@ -71,12 +71,12 @@ static XrXirStatus view_loan_phi(ViewLoanQuery *q,ViewOriginPair site,ViewOrigin
     ViewRootCheck *c=q->root.check;const XrXirFunction *body=c->module->functions+site.first;
     uint32_t instruction=site.second-body->parameter_count,block=UINT32_MAX;
     for (uint32_t b=0;b<body->block_count;++b) {
-        if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;
+
         if (instruction>=body->blocks[b].first && instruction-body->blocks[b].first<body->blocks[b].count) block=b;
     }
     if (block==UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t p=context.first;p;p=q->root.paths.pairs[p-1u].second) {
-        if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;
+
         if (q->choices.pairs[q->root.paths.pairs[p-1u].first].first==block)
             return view_loan_emit(q,site,context,XR_XIR_VIEW_LOAN_UNRESOLVED,UINT32_MAX,true);
     }
@@ -99,7 +99,7 @@ static XrXirStatus view_loan_call(ViewLoanQuery *q,ViewOriginPair site,ViewOrigi
         const XrXirTypeNode *signature=xr_xir_callable_signature(c->module->types,
             xr_xir_operand_type(body,(uint32_t)op->immediate));
         if (!signature) return XR_XIR_BAD_TYPE;
-        XrXirStatus status=view_return_candidate(c->context,c->module->types,c->flags,signature,&candidate);
+        XrXirStatus status=view_return_candidate(c->module->types,c->flags,signature,&candidate);
         if (status!=XR_XIR_OK) return status;
     }
     if (candidate==UINT32_MAX) return view_loan_emit(q,site,context,XR_XIR_VIEW_LOAN_UNRESOLVED,UINT32_MAX,false);
@@ -108,7 +108,7 @@ static XrXirStatus view_loan_call(ViewLoanQuery *q,ViewOriginPair site,ViewOrigi
 }
 static XrXirStatus view_loan_step(ViewLoanQuery *q,ViewOriginPair site,ViewOriginPair context) {
     ViewRootCheck *c=q->root.check;const XrXirFunction *body=c->module->functions+site.first;
-    if (!xir_compile_work(c->context,2)) return XR_XIR_BUDGET;
+
     if (site.second<body->parameter_count) return view_loan_emit(q,site,context,XR_XIR_VIEW_LOAN_INPUT,UINT32_MAX,false);
     const XrXirInstruction *op=body->instructions+site.second-body->parameter_count;
     switch (op->op) {

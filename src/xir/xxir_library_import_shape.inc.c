@@ -167,14 +167,13 @@ static bool library_catalog_state_slot(const XrXirTypes *types,const XrXirDeclar
     const XrXirSlotFact *fact=&facts->rows[ordinal];
     return fact->slot==ordinal && fact->name && fact->name_length && fact->exported<=1;
 }
-static XrXirStatus library_catalog_closed_types(const XrXirModule *m,
-    const XrXirCompileContext *context) {
+static XrXirStatus library_catalog_closed_types(const XrXirModule *m) {
     const XrXirTypes *types = m->types;
     if (!types) return XR_XIR_OK;
     const XrXirNominalTable *nominals = types->nominals;
     if (nominals && nominals->count && !nominals->declarations) return XR_XIR_BAD_STAGE;
     for (uint32_t d=0; nominals && d<nominals->count; ++d) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         const XrXirNominalDeclaration *record=&nominals->declarations[d];
         if ((record->kind!=XR_XIR_NOMINAL_STRUCT && record->kind!=XR_XIR_NOMINAL_ENUM &&
              record->kind!=XR_XIR_NOMINAL_CLASS) ||
@@ -182,7 +181,7 @@ static XrXirStatus library_catalog_closed_types(const XrXirModule *m,
              record->native.native_id!=XR_NATIVE_DECLARATION_RECV && record->native.native_id!=XR_NATIVE_DECLARATION_SEND_RESULT))
             return XR_XIR_BAD_STAGE;
         for (uint32_t f=0; f<record->field_count; ++f) {
-            if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
             uint32_t parameter=(uint32_t)record->fields[f].type-XR_XIR_TYPE_PARAMETER_BASE;
             if (!library_catalog_builtin(record->fields[f].type) &&
                 !xr_xir_type_node(types,record->fields[f].type) &&
@@ -194,16 +193,16 @@ static XrXirStatus library_catalog_closed_types(const XrXirModule *m,
     const XrXirInterfaceTable *interfaces=types->interfaces;
     if (interfaces && interfaces->count && !interfaces->declarations) return XR_XIR_BAD_STAGE;
     for (uint32_t d=0; interfaces && d<interfaces->count; ++d) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         const XrXirInterfaceDeclaration *record=&interfaces->declarations[d];
         /* Parent applications and both binder scopes are deeply remapped. */
         for (uint32_t member=0; member<record->method_count; ++member) {
-            if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
             if (!xr_xir_callable_signature(types,record->methods[member].signature)) return XR_XIR_BAD_STAGE;
         }
     }
     for (uint32_t t=0; t<types->count; ++t) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         const XrXirTypeNode *node=&types->nodes[t];
         if (node->kind!=XR_XIR_TYPE_NOMINAL && node->kind!=XR_XIR_TYPE_CALLABLE &&
             node->kind!=XR_XIR_TYPE_ARRAY && node->kind!=XR_XIR_TYPE_MAP && node->kind!=XR_XIR_TYPE_SET &&
@@ -223,17 +222,16 @@ static bool library_catalog_type(const XrXirModule *module, const XrXirGeneric *
     return generic && (uint32_t)type >= XR_XIR_TYPE_PARAMETER_BASE &&
         (uint32_t)type < XR_XIR_TYPE_PARAMETER_LIMIT && ordinal < generic->parameter_count;
 }
-static XrXirStatus library_catalog_generic(const XrXirModule *module, const XrXirGeneric *generic,
-    const XrXirCompileContext *context) {
+static XrXirStatus library_catalog_generic(const XrXirModule *module, const XrXirGeneric *generic) {
     if (!generic) return XR_XIR_OK;
     for (uint32_t p = 0; p < generic->parameter_count; ++p) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         const XrXirConstraint *constraint = &generic->constraints[p];
         if (xr_xir_binder_kind(generic,p) != XR_XIR_BINDER_TYPE ||
             (constraint->markers & ~XR_XIR_CONSTRAINT_MASK)) return XR_XIR_BAD_STAGE;
     }
     for (uint32_t a = 0; a < generic->argument_count; ++a) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         XrXirType type=generic->arguments[a];
         if (!library_catalog_type(module,generic,type) && !xr_xir_type_is_number(type) && type!=XR_XIR_RUNE)
             return XR_XIR_BAD_STAGE;
@@ -241,7 +239,7 @@ static XrXirStatus library_catalog_generic(const XrXirModule *module, const XrXi
     return XR_XIR_OK;
 }
 static XrXirStatus library_catalog_shape(const XrXirModule *m,
-    const XrXirConstruction *construction,const XrXirCompileContext *context) {
+    const XrXirConstruction *construction) {
     const XrXirDeclarations *d=m->declarations;
     uint32_t nominal_count=m->types && m->types->nominals ? m->types->nominals->count : 0;
     if (!construction || xr_xir_compile_construction_count(construction)!=nominal_count) return XR_XIR_BAD_STRUCTURE;
@@ -255,25 +253,25 @@ static XrXirStatus library_catalog_shape(const XrXirModule *m,
      * initializer and access; import bounds the owned relocation surface. */
     const XrXirSlotFacts *slot_facts=xr_xir_compile_construction_slots(construction);
     for (uint32_t s=0; s<d->slot_count; ++s) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         const XrXirSlot *slot=&d->slots[s];
         if (slot->module>=d->module_count || slot->mutable>1 ||
             !library_catalog_state_slot(m->types,d,slot_facts,s))
             return XR_XIR_BAD_STAGE;
     }
-    XrXirStatus typed_status = library_catalog_closed_types(m,context);
+    XrXirStatus typed_status = library_catalog_closed_types(m);
     if (typed_status != XR_XIR_OK) return typed_status;
     /* The reader has completely verified this evidence. Instances cannot
      * authorize declaration import, even when their body is scalar. */
     if (m->provenance) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         if (m->provenance->kind != XR_XIR_EVIDENCE_TEMPLATE) return XR_XIR_BAD_STAGE;
     }
     for(uint32_t f=0;f<m->function_count;++f){
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         const XrXirFunction *fn=&m->functions[f];
         const XrXirGeneric *generic = m->generics ? &m->generics[f] : NULL;
-        XrXirStatus status = library_catalog_generic(m,generic,context);
+        XrXirStatus status = library_catalog_generic(m,generic);
         if (status != XR_XIR_OK) return status;
         if((fn->result!=XR_XIR_UNIT&&!library_catalog_type(m,generic,fn->result)) ||
             d->functions[f].cleanup_owner ||
@@ -292,19 +290,19 @@ static XrXirStatus library_catalog_shape(const XrXirModule *m,
             if (!row || row->field_count!=record->field_count || (row->field_count && !row->field_initializers))
                 return XR_XIR_BAD_STRUCTURE;
             for (uint32_t field=0; field<record->field_count; ++field) {
-                if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
                 bound |= row->field_initializers[field]==f+1;
             }
             for (uint32_t a=0; m->defaults && a<m->defaults->count; ++a) {
-                if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
                 bound |= m->defaults->records[a].function==f;
             }
             for (uint32_t s=0;s<comptime->site_count;++s) {
-                if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
                 bound |= comptime->sites[s].helper==f;
             }
             for (uint32_t b=0;b<comptime->binding_count;++b) {
-                if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
                 bound |= comptime->bindings[b].provider==f;
             }
             /* Closed comptime thunks carry no generic site. They remain
@@ -315,12 +313,12 @@ static XrXirStatus library_catalog_shape(const XrXirModule *m,
                 d->functions[f].test_role || d->functions[f].promises)) return XR_XIR_BAD_STAGE;
         }
         for (uint32_t p = 0; p < fn->parameter_count; ++p) {
-            if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
             if (!library_catalog_type(m,generic,fn->parameters[p]))
                 return XR_XIR_BAD_STAGE;
         }
         for(uint32_t i=0;i<fn->instruction_count;++i){
-            if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
             const XrXirInstruction *op=&fn->instructions[i];
             if (!library_catalog_local_instruction(op->op) &&
                 op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE && op->op!=XR_XIR_GO &&

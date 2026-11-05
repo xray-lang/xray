@@ -18,7 +18,7 @@ static XrXirStatus source_dependencies_publish(SourceContext *ctx, XrXirSourceSn
     const XrModuleSpec *entry = &graph->specs[graph->entry_index];
     facts.entry_path = entry->source_path ? entry->source_path : entry->canonical;
     for (uint32_t i = 0; i < count; ++i) {
-        if (!source_work(ctx, NULL)) return ctx->diagnostic.status;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return ctx->diagnostic.status;
         int index = graph->topo_order[i];
         if (index < 0 || index >= graph->spec_count) return XR_XIR_BAD_STRUCTURE;
         const XrModuleSpec *spec = &graph->specs[index];
@@ -35,7 +35,7 @@ static XrXirStatus source_dependencies_publish(SourceContext *ctx, XrXirSourceSn
         uint32_t *imports = spec->dep_count ? source_alloc(ctx, (uint32_t)spec->dep_count, sizeof(*imports)) : NULL;
         if (spec->dep_count && !imports) return ctx->diagnostic.status;
         for (int j = 0; j < spec->dep_count; ++j) {
-            if (!source_work(ctx, NULL)) return ctx->diagnostic.status;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return ctx->diagnostic.status;
             if (spec->dep_indices[j] < 0 || spec->dep_indices[j] >= graph->spec_count)
                 return XR_XIR_BAD_STRUCTURE;
             imports[j] = (uint32_t)spec->dep_indices[j];

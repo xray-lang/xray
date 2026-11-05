@@ -36,7 +36,7 @@ static XrXirStatus effect_invocation_seed_open(const XrXirCompileContext *work,
     if(status==XR_XIR_OK) {
         /* Only the namespace's actual formal count enters the basis. The
          * current compile read has no callback between these projections. */
-        if(root==function && body->read.consume==effect_body_compile_consume)
+        if(root==function && body->read.execution == NULL)
             space.parameter_count=head.parameter_count;
         else status=effect_body_request_dimensions(body,root,&space);
     }
@@ -55,14 +55,14 @@ static XrXirStatus effect_invocation_seed_open(const XrXirCompileContext *work,
     }
     EffectInvocationBasis basis={0};status=effect_invocation_basis_parameters_read(work,final,space.parameter_count,&basis);
     if(status!=XR_XIR_OK) return status;
-    if(!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=(EffectInvocationSeedRead){work,types,head,basis,final->site_count};return XR_XIR_OK;
 }
 static XrXirStatus effect_invocation_seed_bits(const EffectInvocationSeedRead *read,
     uint32_t parameter,uint32_t kind,EffectInvocationSeedBits *output) {
     if(!read || !output || parameter>=read->head.parameter_count || kind>XR_XIR_EFFECT_PARAMETER_CONDITIONAL_STATIC)
         return XR_XIR_BAD_STRUCTURE;
-    if(!xir_compile_work(read->work,5)) return XR_XIR_BUDGET;
+
     output->origin_count=0;output->cell_count=0;
     const XrXirTypes *types=read->types;
     const XrXirTypeNode *node=xr_xir_type_node(types,read->head.parameters[parameter]);
@@ -78,12 +78,12 @@ static XrXirStatus effect_invocation_seed_bits(const EffectInvocationSeedRead *r
     if(node->kind!=XR_XIR_TYPE_CELL && node->kind!=XR_XIR_TYPE_CALLABLE && node->kind!=XR_XIR_TYPE_ITERATOR && !object) return XR_XIR_OK;
     if(parameter>=read->basis.parameters) return XR_XIR_BAD_STRUCTURE;
     if(node->kind==XR_XIR_TYPE_CELL || object) {
-        if(!xir_compile_work(read->work,2*sizeof(uint32_t)+1)) return XR_XIR_BUDGET;
+
         output->cells[0]=object?read->basis.parameters+1:parameter;
         output->cells[1]=read->basis.parameters+2;output->cell_count=2;return XR_XIR_OK;
     }
     if(node->kind==XR_XIR_TYPE_ITERATOR) {
-        if(!xir_compile_work(read->work,1+sizeof(uint32_t))) return XR_XIR_BUDGET;
+
         output->origins[0]=read->sites+parameter;output->origin_count=1;return XR_XIR_OK;
     }
     if(!xr_xir_callable_flags_valid(node->flags) || !!node->parameters!=!!node->parameter_count) return XR_XIR_BAD_TYPE;
@@ -91,13 +91,13 @@ static XrXirStatus effect_invocation_seed_bits(const EffectInvocationSeedRead *r
     if(status!=XR_XIR_OK) return status;
     bool ref=false;
     for(uint32_t p=0;p<node->parameter_count;++p) {
-        if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+
         if(!xr_xir_callable_parameter_storage_valid(types,&node->parameters[p])) return XR_XIR_BAD_TYPE;
         if(node->parameters[p].mode==XR_PARAM_REF) ref=true;
     }
     uint32_t mask=node->flags&(XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED);
     uint32_t opaque=read->sites+read->basis.parameters;
-    if(!xir_compile_work(read->work,8)) return XR_XIR_BUDGET;
+
     if(mask && ((ref && (mask&XR_XIR_CALLABLE_ROOT_UNRESOLVED)) || kind==XR_XIR_EFFECT_PARAMETER_VARIABLE)) {
         output->origins[output->origin_count++]=read->sites+parameter;
         if(ref && (mask&XR_XIR_CALLABLE_ROOT_REQUIRED)) {
@@ -115,7 +115,7 @@ static XrXirStatus effect_invocation_seed_word(const EffectInvocationSeedRead *r
     const EffectInvocationSeedBits *bits,uint32_t word,uint64_t *output) {
     if(!read || !bits || !output || word>=read->basis.row_words || bits->origin_count>3 || bits->cell_count>2)
         return XR_XIR_BAD_STRUCTURE;
-    if(!xir_compile_work(read->work,2+bits->origin_count+bits->cell_count)) return XR_XIR_BUDGET;
+
     uint64_t result=0;
     for(uint32_t b=0;b<bits->origin_count;++b) {
         if(bits->origins[b]/64>=read->basis.origin_words) return XR_XIR_BAD_STRUCTURE;

@@ -41,7 +41,6 @@ typedef struct XtcCapture {
     bool eof;
 } XtcCapture;
 
-
 static bool xtc_env_key_contains(const char *key, size_t key_size, const char *needle) {
     size_t needle_size = strlen(needle);
     if (!key || needle_size == 0 || key_size < needle_size)
@@ -184,7 +183,6 @@ XR_FUNC bool xtc_process_bytes_contains_ascii(const XrProcessByteBuffer *bytes,
     return false;
 }
 
-
 struct XrToolchainProcess {
     XrCompileResources *resources;
     XrProcessSpec spec;
@@ -199,8 +197,11 @@ static XrProcessStatus process_resource(XrCompileResourceStatus s) {
     switch (s) {
     case XR_COMPILE_RESOURCE_OK: return XTC_PROCESS_OK;
     case XR_COMPILE_RESOURCE_CANCELLED:
+    case XR_COMPILE_RESOURCE_DEADLINE:
+    case XR_COMPILE_RESOURCE_CLOCK_FAILURE:
     case XR_COMPILE_RESOURCE_BAD_ARGUMENT: return XTC_PROCESS_INVALID;
-    case XR_COMPILE_RESOURCE_BUDGET: return XTC_PROCESS_BUDGET;
+    case XR_COMPILE_RESOURCE_MEMORY_LIMIT: return XTC_PROCESS_MEMORY_LIMIT;
+    case XR_COMPILE_RESOURCE_OVERFLOW: return XTC_PROCESS_OVERFLOW;
     case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: return XTC_PROCESS_OUT_OF_MEMORY;
     }
     return XTC_PROCESS_INVALID;
@@ -211,6 +212,8 @@ static XrProcessStatus process_os(XrOsProcStatus s) {
     case XR_PROC_INVALID_ARGUMENT: return XTC_PROCESS_INVALID;
     case XR_PROC_UNRESOLVED: return XTC_PROCESS_UNRESOLVED;
     case XR_PROC_BUDGET: return XTC_PROCESS_BUDGET;
+    case XR_PROC_MEMORY_LIMIT: return XTC_PROCESS_MEMORY_LIMIT;
+    case XR_PROC_OVERFLOW: return XTC_PROCESS_OVERFLOW;
     case XR_PROC_OUT_OF_MEMORY: return XTC_PROCESS_OUT_OF_MEMORY;
     case XR_PROC_UNSUPPORTED: return XTC_PROCESS_UNSUPPORTED;
     case XR_PROC_IO: return XTC_PROCESS_IO;
@@ -221,8 +224,11 @@ static XrOsProcStatus process_os_resource(XrCompileResourceStatus s) {
     switch (s) {
     case XR_COMPILE_RESOURCE_OK: return XR_PROC_OK;
     case XR_COMPILE_RESOURCE_CANCELLED:
+    case XR_COMPILE_RESOURCE_DEADLINE:
+    case XR_COMPILE_RESOURCE_CLOCK_FAILURE:
     case XR_COMPILE_RESOURCE_BAD_ARGUMENT: return XR_PROC_INVALID_ARGUMENT;
-    case XR_COMPILE_RESOURCE_BUDGET: return XR_PROC_BUDGET;
+    case XR_COMPILE_RESOURCE_MEMORY_LIMIT: return XR_PROC_MEMORY_LIMIT;
+    case XR_COMPILE_RESOURCE_OVERFLOW: return XR_PROC_OVERFLOW;
     case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: return XR_PROC_OUT_OF_MEMORY;
     }
     return XR_PROC_INVALID_ARGUMENT;
@@ -231,26 +237,17 @@ static XrOsProcStatus process_allocate(void *context, size_t bytes, void **out) 
     return process_os_resource(xr_compile_resources_alloc(context, bytes, out));
 }
 static void process_release(void *context, void *p) { (void)context; xr_compile_resources_free(p); }
-static XrOsProcStatus process_charge(void *context, uint64_t units) {
-    return process_os_resource(xr_compile_resources_work(context, units));
-}
-static XrProcessStatus process_work(XrCompileResources *r, uint64_t n) {
-    return process_resource(xr_compile_resources_work(r, n));
-}
 static XrProcessStatus process_copy(XrCompileResources *r, const char *text, const char **out) {
     if (!text) return XTC_PROCESS_INVALID;
     size_t n = 0; XrProcessStatus s;
     for (;;) {
-        s = process_work(r, 1); if (s != XTC_PROCESS_OK) return s;
         if (!text[n]) break;
         if (n == 32767) return XTC_PROCESS_BUDGET;
         ++n;
     }
-    s = process_work(r, n); if (s != XTC_PROCESS_OK) return s;
     if (!xr_utf8_validate(text, n)) return XTC_PROCESS_INVALID;
     void *p = NULL; s = process_resource(xr_compile_resources_alloc(r, n + 1, &p));
     if (s != XTC_PROCESS_OK) return s;
-    s = process_work(r, n + 1);
     if (s != XTC_PROCESS_OK) { xr_compile_resources_free(p); return s; }
     memcpy(p, text, n + 1); *out = p; return XTC_PROCESS_OK;
 }
@@ -270,34 +267,30 @@ static XrProcessStatus process_env_add(XrToolchainProcess *p, const char *key,
     XrProcessStatus s = process_copy(p->resources, key, &k);
     if (s != XTC_PROCESS_OK) return s;
     size_t length = 0;
-    for (;;) { s = process_work(p->resources, 1); if (s != XTC_PROCESS_OK) goto done; if (!k[length]) break; ++length; }
+    while (k[length]) ++length;
     if (!length) { s = XTC_PROCESS_INVALID; goto done; }
     for (size_t i = 0; i < length; ++i) {
-        s = process_work(p->resources, 1); if (s != XTC_PROCESS_OK) goto done;
         if (k[i] == '=' && !(system_entry && !i && length > 1)) { s = XTC_PROCESS_INVALID; goto done; }
     }
 #if defined(XR_OS_WINDOWS)
-    s = process_work(p->resources, length + 1); if (s != XTC_PROCESS_OK) goto done;
+
     units = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, k, (int)length + 1, NULL, 0);
     if (!units) { s = process_os(xr_proc_last_error()); goto done; }
     s = process_resource(xr_compile_resources_alloc(p->resources, (size_t)units * sizeof(wchar_t), (void **)&wide));
     if (s != XTC_PROCESS_OK) goto done;
-    s = process_work(p->resources, length + 1 + (uint64_t)units * sizeof(wchar_t)); if (s != XTC_PROCESS_OK) goto done;
     if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, k, (int)length + 1, wide, units)) { s = process_os(xr_proc_last_error()); goto done; }
 #endif
     size_t slot = p->spec.env_count;
     for (size_t i = 0; i < slot; ++i) {
         bool equal = false;
 #if defined(XR_OS_WINDOWS)
-        s = process_work(p->resources, 1 + (uint64_t)(units + p->wide_lengths[i]) * sizeof(wchar_t));
-        if (s != XTC_PROCESS_OK) goto done;
+
         int order = CompareStringOrdinal(wide, units - 1, p->wide_keys[i], p->wide_lengths[i] - 1, TRUE);
         if (!order) { s = process_os(xr_proc_last_error()); goto done; }
         equal = order == CSTR_EQUAL;
 #else
         const char *existing = p->spec.env_keys[i]; size_t at = 0;
         for (;;) {
-            s = process_work(p->resources, 2); if (s != XTC_PROCESS_OK) goto done;
             if (k[at] != existing[at]) break;
             if (!k[at]) { equal = true; break; } ++at;
         }
@@ -330,31 +323,31 @@ static XrProcessStatus process_env_add(XrToolchainProcess *p, const char *key,
 #if defined(XR_OS_WINDOWS)
 static XrProcessStatus process_from_wide(XrCompileResources *r, const wchar_t *wide, char **output, size_t *units) {
     size_t n = 0; XrProcessStatus s;
-    for (;;) { s = process_work(r, sizeof(wchar_t)); if (s != XTC_PROCESS_OK) return s; if (!wide[n]) break; ++n; }
+    while (wide[n]) ++n;
     if (units) *units = n + 1;
     if (n >= INT_MAX) return XTC_PROCESS_BUDGET;
-    s = process_work(r, (n + 1) * sizeof(wchar_t)); if (s != XTC_PROCESS_OK) return s;
+
     int length = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide, (int)n + 1, NULL, 0, NULL, NULL);
     if (!length) return process_os(xr_proc_last_error());
     s = process_resource(xr_compile_resources_alloc(r, (size_t)length, (void **)output));
     if (s != XTC_PROCESS_OK) return s;
-    s = process_work(r, (n + 1) * sizeof(wchar_t) + (uint64_t)length);
-    if (s == XTC_PROCESS_OK && !WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide, (int)n + 1, *output, length, NULL, NULL)) s = process_os(xr_proc_last_error());
+    if (!WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide, (int)n + 1, *output, length, NULL, NULL)) s = process_os(xr_proc_last_error());
     if (s != XTC_PROCESS_OK) { xr_compile_resources_free(*output); *output = NULL; }
     return s;
 }
 #endif
 static XrProcessStatus process_snapshot(XrToolchainProcess *p) {
-    XrProcessStatus s = process_work(p->resources, 1); if (s != XTC_PROCESS_OK) return s;
+    XrProcessStatus s = XTC_PROCESS_OK;
+
 #if defined(XR_OS_WINDOWS)
     LPWCH environment = GetEnvironmentStringsW();
     if (!environment) return process_os(xr_proc_last_error());
     for (const wchar_t *entry = environment;;) {
-        s = process_work(p->resources, sizeof(wchar_t)); if (s != XTC_PROCESS_OK || !*entry) break;
+        if (!*entry) break;
         char *pair = NULL; size_t units = 0; s = process_from_wide(p->resources, entry, &pair, &units);
         if (s != XTC_PROCESS_OK) break;
         char *equals = pair + (pair[0] == '=' ? 1 : 0);
-        for (;;) { s = process_work(p->resources, 1); if (s != XTC_PROCESS_OK || !*equals || *equals == '=') break; ++equals; }
+        while (*equals && *equals != '=') ++equals;
         if (s == XTC_PROCESS_OK) {
             if (!*equals || equals == pair) s = XTC_PROCESS_INVALID;
             else { *equals = 0; s = process_env_add(p, pair, equals + 1, false, true); }
@@ -364,11 +357,10 @@ static XrProcessStatus process_snapshot(XrToolchainProcess *p) {
     }
     FreeEnvironmentStringsW(environment);
     if (s != XTC_PROCESS_OK || p->spec.cwd) return s;
-    s = process_work(p->resources, 1); if (s != XTC_PROCESS_OK) return s;
+
     DWORD units = GetCurrentDirectoryW(0, NULL); if (!units) return process_os(xr_proc_last_error());
     wchar_t *cwd = NULL; s = process_resource(xr_compile_resources_alloc(p->resources, (size_t)units * sizeof(wchar_t), (void **)&cwd));
     if (s != XTC_PROCESS_OK) return s;
-    s = process_work(p->resources, 1 + (uint64_t)units * sizeof(wchar_t));
     if (s == XTC_PROCESS_OK) {
         DWORD actual = GetCurrentDirectoryW(units, cwd);
         if (!actual || actual >= units) s = XTC_PROCESS_IO;
@@ -379,7 +371,7 @@ static XrProcessStatus process_snapshot(XrToolchainProcess *p) {
     for (char **entry = xtc_environ; entry && *entry; ++entry) {
         const char *copy = NULL; s = process_copy(p->resources, *entry, &copy); if (s != XTC_PROCESS_OK) return s;
         char *equals = (char *)copy;
-        for (;;) { s = process_work(p->resources, 1); if (s != XTC_PROCESS_OK || !*equals || *equals == '=') break; ++equals; }
+        while (*equals && *equals != '=') ++equals;
         if (s == XTC_PROCESS_OK) {
             if (!*equals) s = XTC_PROCESS_INVALID;
             else { *equals = 0; s = process_env_add(p, copy, equals + 1, false, true); }
@@ -387,7 +379,7 @@ static XrProcessStatus process_snapshot(XrToolchainProcess *p) {
         xr_compile_resources_free((void *)copy); if (s != XTC_PROCESS_OK) return s;
     }
     if (!p->spec.cwd) {
-        char cwd[32768]; s = process_work(p->resources, 1); if (s != XTC_PROCESS_OK) return s;
+        char cwd[32768];
         if (!getcwd(cwd, sizeof(cwd))) return process_os(xr_proc_last_error());
         s = process_copy(p->resources, cwd, &p->spec.cwd);
     }
@@ -417,7 +409,7 @@ XR_FUNC XrProcessStatus xtc_process_prepare(XrCompileResources *r, const XrProce
     XrProcessStatus s = process_resource(xr_compile_resources_calloc(r, 1, sizeof(*p), (void **)&p));
     if (s != XTC_PROCESS_OK) return s;
     p->spec.image_mode = spec->image_mode; p->spec.image_observer = spec->image_observer;
-    s = process_work(r, sizeof(p->spec.completion_policy)); if (s != XTC_PROCESS_OK) goto fail;
+
     p->spec.completion_policy = spec->completion_policy;
     p->resources = r; p->spec.timeout_ms = spec->timeout_ms; p->spec.output_limit = spec->output_limit;
     s = process_copy(r, spec->executable, &p->spec.executable); if (s != XTC_PROCESS_OK) goto fail;
@@ -448,8 +440,6 @@ static XrProcessStatus process_clone_bytes(XrCompileResources *resources,
     void *copy = NULL;
     XrProcessStatus status = process_resource(xr_compile_resources_alloc(resources, bytes, &copy));
     if (status != XTC_PROCESS_OK) return status;
-    status = process_work(resources, bytes);
-    if (status != XTC_PROCESS_OK) { xr_compile_resources_free(copy); return status; }
     memcpy(copy, source, bytes);
     *output = copy;
     return XTC_PROCESS_OK;
@@ -458,8 +448,6 @@ static XrProcessStatus process_clone_text(XrCompileResources *resources,
     const char *source, const char **output) {
     size_t bytes = 0;
     for (;;) {
-        XrProcessStatus status = process_work(resources, 1);
-        if (status != XTC_PROCESS_OK) return status;
         if (!source[bytes++]) break;
     }
     void *copy = NULL;
@@ -478,10 +466,7 @@ XR_FUNC XrProcessStatus xtc_process_clone_observed(const XrToolchainProcess *sou
     XrToolchainProcess *copy = NULL;
     XrProcessStatus status = process_resource(xr_compile_resources_calloc(resources, 1, sizeof(*copy), (void **)&copy));
     if (status != XTC_PROCESS_OK) return status;
-    status = process_work(resources, sizeof(copy->resources) + sizeof(copy->argc) +
-        sizeof(copy->spec.env_count) + sizeof(copy->spec.timeout_ms) + sizeof(copy->spec.output_limit) +
-        sizeof(copy->spec.image_mode) + sizeof(copy->spec.image_observer) + sizeof(copy->spec.completion_policy));
-    if (status != XTC_PROCESS_OK) goto fail;
+
     copy->resources = resources; copy->argc = source->argc;
     copy->spec.env_count = source->spec.env_count;
     copy->spec.timeout_ms = source->spec.timeout_ms; copy->spec.output_limit = source->spec.output_limit;
@@ -500,8 +485,7 @@ XR_FUNC XrProcessStatus xtc_process_clone_observed(const XrToolchainProcess *sou
         if (status != XTC_PROCESS_OK) goto fail;
         status = process_clone_text(resources, source->spec.env_values[i], &copy->spec.env_values[i]);
         if (status != XTC_PROCESS_OK) goto fail;
-        status = process_work(resources, sizeof(copy->wide_lengths[i]));
-        if (status != XTC_PROCESS_OK) goto fail;
+
         copy->wide_lengths[i] = source->wide_lengths[i];
         void *wide = NULL;
         status = process_clone_bytes(resources, source->wide_keys[i],
@@ -539,7 +523,6 @@ static XrProcessStatus process_capture_append(XrCompileResources *r, XtcCapture 
         XrProcessStatus s = process_resource(xr_compile_resources_resize(r, (void **)&c->data, next));
         if (s != XTC_PROCESS_OK) return s; c->cap = next;
     }
-    XrProcessStatus s = process_work(r, accepted + 1); if (s != XTC_PROCESS_OK) return s;
     memcpy(c->data + c->len, bytes, accepted); c->len += accepted; c->data[c->len] = 0;
     return XTC_PROCESS_OK;
 }
@@ -547,13 +530,13 @@ static XrProcessStatus process_capture_append(XrCompileResources *r, XtcCapture 
 static XrProcessStatus process_capture_read(XrCompileResources *r, XrPipeHandle handle, XtcCapture *c) {
     if (c->eof) return XTC_PROCESS_OK;
     uint8_t bytes[4096]; size_t available = 0; bool eof = false;
-    XrProcessStatus s = process_work(r, 1); if (s != XTC_PROCESS_OK) return s;
+
     XrPipeIoStatus result = xr_pipe_probe(handle, &available, &eof);
     if (result == XR_PIPE_IO_WOULD_BLOCK) return XTC_PROCESS_OK;
     if (result == XR_PIPE_IO_ERROR) return process_os(xr_proc_last_error());
     if (eof) { c->eof = true; return XTC_PROCESS_OK; }
     size_t requested = available < sizeof(bytes) ? available : sizeof(bytes);
-    s = process_work(r, requested + 1); if (s != XTC_PROCESS_OK) return s;
+
     int64_t n = xr_pipe_read(handle, bytes, requested);
     if (n < 0) return process_os(xr_proc_last_error());
     if (!n) { c->eof = true; return XTC_PROCESS_OK; }
@@ -574,23 +557,21 @@ XR_FUNC XrProcessStatus xtc_process_run(const XrToolchainProcess *p,
     if (s != XTC_PROCESS_OK) goto done;
     s = process_capture_init(r, &captures[1], p->spec.output_limit); if (s != XTC_PROCESS_OK) goto done;
     for (unsigned i = 0; i < 2; ++i) {
-        s = process_work(r, 1); if (s != XTC_PROCESS_OK) goto done;
         if (xr_pipe_create(&pipes[i], NULL) != 0) { s = process_os(xr_proc_last_error()); goto done; }
     }
     if (cancelled && cancelled(context)) { s = XTC_PROCESS_CANCELLED; goto done; }
     XrProcSpawnOptions options = {0};
-    options.memory = (XrProcMemory){r, process_allocate, process_release, process_charge};
+    options.memory = (XrProcMemory){r, process_allocate, process_release};
     options.cwd = p->spec.cwd; options.env_keys = p->spec.env_keys; options.env_values = p->spec.env_values; options.env_count = p->spec.env_count;
     options.complete_environment = true; options.new_process_group = true;
     options.image_mode = p->spec.image_mode; options.image_observer = p->spec.image_observer;
-    s = process_work(r, sizeof(options.completion_policy)); if (s != XTC_PROCESS_OK) goto done;
+
     options.completion_policy = p->spec.completion_policy;
     options.has_stdout = options.has_stderr = true; options.stdout_write = pipes[0].write; options.stderr_write = pipes[1].write;
     s = process_os(xr_proc_spawn(p->spec.executable, p->spec.argv, &options, &pid));
     for (unsigned i = 0; i < 2; ++i) { if (xr_pipe_close(pipes[i].write) != 0 && s == XTC_PROCESS_OK) s = XTC_PROCESS_IO; pipes[i].write = XR_PIPE_INVALID; }
     if (s != XTC_PROCESS_OK) goto done;
     while (!exited || !images_drained || !captures[0].eof || !captures[1].eof) {
-        s = process_work(r, 1); if (s != XTC_PROCESS_OK) break;
         if (cancelled && cancelled(context)) { s = XTC_PROCESS_CANCELLED; break; }
         if (xr_time_monotonic_ms() - start >= p->spec.timeout_ms) { s = XTC_PROCESS_TIMEOUT; break; }
         bool image_progress = false;
@@ -603,7 +584,7 @@ XR_FUNC XrProcessStatus xtc_process_run(const XrToolchainProcess *p,
         s = process_capture_read(r, pipes[0].read, &captures[0]); if (s != XTC_PROCESS_OK) break;
         s = process_capture_read(r, pipes[1].read, &captures[1]); if (s != XTC_PROCESS_OK) break;
         if (!exited) {
-            s = process_work(r, 1); if (s != XTC_PROCESS_OK) break;
+
             XrProcWaitResult wait = xr_proc_try_wait(pid, &result.exit_code);
             if (wait == XR_PROC_WAIT_ERROR) { s = process_os(xr_proc_last_error()); break; }
             exited = wait == XR_PROC_WAIT_EXITED;
@@ -652,7 +633,9 @@ XR_FUNC const char *xtc_process_status_name(XrProcessStatus s) {
     case XTC_PROCESS_OK: return "ok";
     case XTC_PROCESS_INVALID: return "invalid process request";
     case XTC_PROCESS_UNRESOLVED: return "process input not found";
-    case XTC_PROCESS_BUDGET: return "process budget exhausted";
+    case XTC_PROCESS_BUDGET: return "process local limit exceeded";
+    case XTC_PROCESS_MEMORY_LIMIT: return "process memory limit exceeded";
+    case XTC_PROCESS_OVERFLOW: return "process size overflow";
     case XTC_PROCESS_OUT_OF_MEMORY: return "process out of memory";
     case XTC_PROCESS_IO: return "process IO failure";
     case XTC_PROCESS_TIMEOUT: return "process timed out";

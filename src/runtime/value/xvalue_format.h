@@ -33,7 +33,9 @@ struct XrVMRuntime;
 XR_FUNC XrString *xr_value_to_string(struct XrVMRuntime *isolate, XrValue val);
 
 // Append `val`'s formatted form onto `sb`. `depth` tracks recursion to
-// break cycles and truncate deep structures.
-XR_FUNC void xr_value_to_strbuf(struct XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int depth);
+// break cycles and truncate deep structures. False leaves a possibly appended
+// prefix in caller-owned storage; discard it or explicitly resume using the
+// normal buffer API. It never marks the buffer permanently failed.
+XR_FUNC bool xr_value_to_strbuf(struct XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int depth);
 
 #endif  // XVALUE_FORMAT_H

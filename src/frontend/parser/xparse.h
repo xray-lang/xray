@@ -55,7 +55,12 @@ typedef enum XrParseStatus {
     XR_PARSE_BAD_ARGUMENT,
     XR_PARSE_BUDGET,
     XR_PARSE_OUT_OF_MEMORY,
-    XR_PARSE_IO
+    XR_PARSE_IO,
+    XR_PARSE_MEMORY_LIMIT,
+    XR_PARSE_OVERFLOW,
+    XR_PARSE_CANCELLED,
+    XR_PARSE_DEADLINE,
+    XR_PARSE_CLOCK_FAILURE
 } XrParseStatus;
 typedef struct XrTypeScope XrTypeScope;  // Defined in xtype_scope.h
 struct XrArena;                          // Defined in base/xarena.h

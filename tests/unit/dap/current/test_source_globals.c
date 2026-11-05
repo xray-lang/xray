@@ -95,7 +95,7 @@ int main(void) {
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     XrSourceCompilerConfig config={context,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},XR_DAP_STDLIB,xr_source_compile_default_manifest_limits()};
     XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};
-    CHECK(xr_source_compiler_new(&config,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);
+    CHECK(xr_source_compiler_new(&config,NULL,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);
     XrXirSourceProduct *product=NULL;
     XrSourceCompileStatus status=xr_source_compiler_build_file(compiler,XR_DAP_GLOBAL_SLOTS_FIXTURE,&product,&diagnostic);
     if (status!=XR_SOURCE_COMPILE_OK) fprintf(stderr,"global source=%u stage=%u: %s\n",status,diagnostic.source.stage,diagnostic.source.source.message);

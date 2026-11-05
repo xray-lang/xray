@@ -59,7 +59,7 @@ static void affine_set(uint64_t *bits,uint32_t id,bool available) {
     if (available) bits[id/64]|=mask;else bits[id/64]&=~mask;
 }
 static XrXirStatus affine_copy(AffineCheck *a,uint64_t *to,const uint64_t *from) {
-    if (!xir_compile_work(a->context,a->words)) return XR_XIR_BUDGET;
+
     memcpy(to,from,(size_t)a->words*sizeof(*to));return XR_XIR_OK;
 }
 static void affine_free(AffineCheck *a) {
@@ -70,7 +70,7 @@ static XrXirStatus affine_allocate(AffineCheck *a) {
     const XrXirFunction *f=a->function;uint64_t values=(uint64_t)f->parameter_count+f->instruction_count;
     if (values>UINT32_MAX || values>SIZE_MAX/sizeof(uint32_t)) return XR_XIR_BUDGET;
     for (uint32_t v=0;v<(uint32_t)values;++v) {
-        if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
         a->count+=affine_owner(a,v);
     }
     if (!a->count) return XR_XIR_OK;
@@ -87,18 +87,18 @@ static XrXirStatus affine_allocate(AffineCheck *a) {
     if (status!=XR_XIR_OK) return status;
     uint32_t index=0;
     for (uint32_t v=0;v<(uint32_t)values;++v) {
-        if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
         a->indices[v]=affine_owner(a,v) ? index++ : UINT32_MAX;
     }
     XR_CHECK(index==a->count,"borrowed owner inventory stays immutable during CFG checking");
     a->inputs=a->storage;a->current=a->inputs+(size_t)f->block_count*a->words;
     a->edge=a->current+a->words;a->borrowed=a->edge+a->words;a->initial=a->borrowed+a->words;
     for (uint32_t p=0;p<f->parameter_count;++p) {
-        if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
         if (a->indices[p]!=UINT32_MAX) affine_set(a->initial,a->indices[p],true);
     }
     for (uint32_t b=0;b<f->block_count;++b) for (uint32_t w=0;w<a->words;++w) {
-        if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
         a->inputs[(size_t)b*a->words+w]=b ? UINT64_MAX : a->initial[w];
     }
     return XR_XIR_OK;
@@ -109,7 +109,7 @@ static XrXirStatus affine_reachable(AffineCheck *a) {
         uint32_t b=a->queue[head++];const XrXirBlock *block=&a->function->blocks[b];
         const XrXirInstruction *term=&a->function->instructions[block->first+block->count-1];
         for (uint32_t e=0;e<3;++e) {
-            if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
             if (e<2 ? e>=affine_rules[term->op].edges : !block->panic) continue;
             uint32_t target=e<2 ? term->targets[e] : block->panic;
             if (!a->reachable[target]) {a->reachable[target]=1;a->queue[tail++]=target;}
@@ -134,7 +134,7 @@ static uint32_t affine_operands(const AffineCheck *a,const XrXirInstruction *op)
     return xr_xir_op_uses_operand_table(op->op) ? op->args[1] : affine_rules[op->op].operands;
 }
 static XrXirStatus affine_use(AffineCheck *a,uint32_t value,bool consume,bool borrow,bool check) {
-    if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
     uint32_t id=affine_index(a,value);if (id==UINT32_MAX) return XR_XIR_OK;
     if (check && (!affine_has(a->current,id) || (borrow && affine_has(a->borrowed,id))))
         return XR_XIR_BAD_VALUE;
@@ -147,7 +147,7 @@ static XrXirStatus affine_instruction(AffineCheck *a,uint32_t i,bool check) {
     uint32_t result=affine_index(a,f->parameter_count+i);a->location.instruction=i;
     if (op->op==XR_XIR_VIEW_CLEANUP) {
         for (uint32_t p=0;p<op->args[1];++p) {
-            if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
             uint32_t id=affine_index(a,f->operands[op->args[0]+p]);
             if (id==UINT32_MAX) return XR_XIR_BAD_TYPE;
             affine_set(a->current,id,false);
@@ -164,7 +164,7 @@ static XrXirStatus affine_instruction(AffineCheck *a,uint32_t i,bool check) {
         (shared_copy && !affine_mutable(a,f->parameter_count+i));
     if (check && result!=UINT32_MAX && !definition) return XR_XIR_BAD_VALUE;
     if (call) {
-        if (!xir_compile_work(a->context,a->words)) return XR_XIR_BUDGET;
+
         memset(a->borrowed,0,(size_t)a->words*sizeof(*a->borrowed));
     }
     if (op->op!=XR_XIR_PHI) for (uint32_t p=0;p<affine_operands(a,op);++p) {
@@ -186,7 +186,7 @@ static XrXirStatus affine_transfer(AffineCheck *a,uint32_t b,bool check) {
     XrXirStatus status=affine_copy(a,a->current,a->inputs+(size_t)b*a->words);
     const XrXirBlock *block=&a->function->blocks[b];
     for (uint32_t i=block->first;i<block->first+block->count && status==XR_XIR_OK;++i) {
-        if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
         status=affine_instruction(a,i,check);
     }
     return status;
@@ -196,10 +196,10 @@ static XrXirStatus affine_transfer(AffineCheck *a,uint32_t b,bool check) {
 static XrXirStatus affine_phi_edge(AffineCheck *a,uint32_t from,uint32_t target,bool check) {
     const XrXirFunction *f=a->function;const XrXirBlock *block=&f->blocks[target];
     for (uint32_t i=block->first;i<block->first+block->count;++i) {
-        if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
         const XrXirInstruction *op=&f->instructions[i];if (op->op!=XR_XIR_PHI) continue;
         for (uint32_t p=0;p<op->args[1];p+=2) {
-            if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
             if (f->operands[op->args[0]+p]!=from) continue;
             uint32_t id=affine_index(a,f->operands[op->args[0]+p+1]);
             if (id!=UINT32_MAX) {
@@ -216,21 +216,21 @@ static XrXirStatus affine_edges(AffineCheck *a,uint32_t b,bool check,bool *chang
     const XrXirBlock *block=&a->function->blocks[b];
     const XrXirInstruction *term=&a->function->instructions[block->first+block->count-1];
     for (uint32_t e=0;e<3;++e) {
-        if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
         if (e<2 ? e>=affine_rules[term->op].edges : !block->panic) continue;
         uint32_t target=e<2 ? term->targets[e] : block->panic;
         XrXirStatus status=affine_copy(a,a->edge,a->current);if (status!=XR_XIR_OK) return status;
         if (e<2) {
             status=affine_phi_edge(a,b,target,check);if (status!=XR_XIR_OK) return status;
         } else for (uint32_t w=0;w<a->words;++w) {
-            if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
             /* A panic can happen at any prefix. Local definitions cannot
              * escape through it, and a prior transfer cannot be undone. */
             a->edge[w]&=a->inputs[(size_t)b*a->words+w];
         }
         if (check) continue;
         for (uint32_t w=0;w<a->words;++w) {
-            if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
             uint64_t *input=&a->inputs[(size_t)target*a->words+w],meet=*input&a->edge[w];
             if (*input!=meet) {*input=meet;*changed=true;}
         }
@@ -244,14 +244,14 @@ static XrXirStatus affine_function(AffineCheck *a) {
     while (changed && status==XR_XIR_OK) {
         changed=false;
         for (uint32_t b=0;b<a->function->block_count && status==XR_XIR_OK;++b) {
-            if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
             if (!a->reachable[b]) continue;
             status=affine_transfer(a,b,false);
             if (status==XR_XIR_OK) status=affine_edges(a,b,false,&changed);
         }
     }
     for (uint32_t b=0;b<a->function->block_count && status==XR_XIR_OK;++b) {
-        if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
         status=affine_transfer(a,b,true);
         if (status==XR_XIR_OK && a->reachable[b]) status=affine_edges(a,b,true,&changed);
     }
@@ -264,7 +264,7 @@ XR_FUNC XrXirStatus xir_compile_view_affine_verified(const XrXirCompileContext *
     uint8_t *types=NULL;XrXirStatus status=xir_compile_view_flags_new(context,module->types,&types);
     if (status!=XR_XIR_OK || !types) return status;
     for (uint32_t f=0;f<module->function_count && status==XR_XIR_OK;++f) {
-        if (!xir_compile_work(context,1)) {status=XR_XIR_BUDGET;break;}
+
         AffineCheck a={.context=context,.module=module,.function=&module->functions[f],.types=types,
             .location={XR_XIR_OK,f,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE}};
         status=affine_function(&a);

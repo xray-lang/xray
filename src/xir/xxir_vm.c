@@ -999,8 +999,7 @@ static void debug_vm_release(XrXirCallView *view, XrXirCallStatus reason) {
 static XrXirStatus bind_verified(const XrXirArtifact *artifact, uint32_t function,
                                  XrXirVmBinding *binding, XrXirCallEntry *entry) {
     if (xir_artifact_is_evaluation(artifact)) return XR_XIR_BAD_STAGE;
-    const XrXirCompileContext *context = xr_xir_compile_artifact_context(artifact);
-    if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     const XrXirFunction *body = &module->functions[function];
     const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(artifact, function);
@@ -1014,11 +1013,11 @@ static XrXirStatus bind_verified(const XrXirArtifact *artifact, uint32_t functio
         result.cleanup_owner = module->declarations->functions[function].cleanup_owner;
         if (xr_xir_function_is_generator(module,function)) result.flags|=XR_XIR_ENTRY_GENERATOR;
         for (uint32_t i = function + 1; i < module->function_count; ++i) {
-            if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
             if (module->declarations->functions[i].cleanup_owner == function + 1) result.flags |= XR_XIR_ENTRY_EXIT;
         }
     }
-    if (!xir_compile_work(context, sizeof(*binding) + sizeof(*entry))) return XR_XIR_BUDGET;
+
     *binding = (XrXirVmBinding) {artifact, function};
     *entry = result;
     return XR_XIR_OK;
@@ -1051,10 +1050,7 @@ XR_FUNC XrXirStatus xr_xir_compile_vm_bind_table(const XrXirArtifact *artifact,
         status = bind_verified(artifact, i, &bound[i], &table[i]);
         if (status != XR_XIR_OK) goto finish;
     }
-    if (!xir_compile_work(context, sizeof(*bindings) + sizeof(*entries))) {
-        status = XR_XIR_BUDGET;
-        goto finish;
-    }
+
     *bindings = bound;
     *entries = table;
     return XR_XIR_OK;
@@ -1084,7 +1080,7 @@ static XrXirStatus vm_program_match(const XrXirCompileContext *context,
     const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
     if (!owner->bindings || program->entry_count!=module->function_count) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t f=0;f<program->entry_count;++f) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         const XrXirCallEntry *entry=&program->entries[f];
         const XrXirVmBinding *binding=&owner->bindings[f];
         const XrXirFunctionLayout *layout=xr_xir_compile_artifact_layout(artifact,f);
@@ -1194,8 +1190,7 @@ static XrXirStatus debug_native_match(const XrXirArtifact *artifact,const XrXirV
     XrXirProgramPacket packet=xir_program_packet_borrow(artifact);
     if (!packet.bytes || !packet.identity || !packet.length || !native->packet.bytes ||
         !native->packet.identity || native->packet.length!=packet.length) return XR_XIR_BAD_STRUCTURE;
-    const XrXirCompileContext *context=xr_xir_compile_artifact_context(artifact);
-    if (!xir_compile_work(context,packet.length+32+count)) return XR_XIR_BUDGET;
+
     if (memcmp(packet.bytes,native->packet.bytes,packet.length) || memcmp(packet.identity,native->packet.identity,32))
         return XR_XIR_BAD_STRUCTURE;
     uint32_t natives=0;
@@ -1238,7 +1233,7 @@ static XrXirStatus debug_program_match(const XrXirCompileContext *context,const 
         if (status!=XR_XIR_OK) return status;
     }
     for (uint32_t f=0;f<program->entry_count;++f) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         const XrXirCallEntry *entry=&program->entries[f];
         if (request->native && request->native->mask[f]) {
             const XrXirCallEntry *native=&request->native->program->entries[f];
@@ -1270,7 +1265,7 @@ static XrXirStatus debug_program_take(XrXirArtifact **artifact,XrXirVmDebug *deb
     XrXirCompileContext current_context=*xr_xir_compile_artifact_context(*artifact);
     const XrXirCompileContext *context=&current_context;
     DebugProgramAdmission request={native,native?native->program->code:(XrXirCodeLease){0}};
-    if (!xir_compile_work(context,sizeof(request))) return XR_XIR_BUDGET;
+
     XrXirArtifact *original=*artifact,*moved=original;XrXirProgramInput *input=NULL;
     XrXirStatus status=xir_program_input_take(context,&moved,&input);
     if (status!=XR_XIR_OK) return status;
@@ -1291,9 +1286,7 @@ static XrXirStatus debug_program_take(XrXirArtifact **artifact,XrXirVmDebug *deb
     if (native) {
         owner->native_offsets=xir_compile_calloc(context,count,sizeof(*owner->native_offsets),&status);
         if (!owner->native_offsets) goto finish;
-        if (!xir_compile_work(context,(uint64_t)count*sizeof(*owner->native_offsets)+sizeof(owner->native_code))) {
-            status=XR_XIR_BUDGET;goto finish;
-        }
+
         for (uint32_t f=0;f<count;++f) owner->native_offsets[f]=native->mask[f]?native->source->offsets[f]:UINT32_MAX;
         owner->native_code=(XirCallNativeSourceCode){XIR_CALL_NATIVE_SOURCE_VERSION,count,NULL,owner->native_offsets};
     }

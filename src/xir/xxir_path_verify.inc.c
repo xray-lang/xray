@@ -36,7 +36,7 @@ static XrXirStatus path_uses(const Graph *graph, const XrXirFunction *function,
             xr_xir_type_is_cell(types, parent)) return XR_XIR_BAD_TYPE;
         uint32_t id = op->args[0], depth = 0;
         for (;;) {
-            if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
+
             XrXirPlaceKind kind = xr_xir_place_kind(function, id);
             if (kind != XR_XIR_PLACE_FIELD && kind != XR_XIR_PLACE_INDEX)
                 return depth && (kind == XR_XIR_PLACE_CELL || kind == XR_XIR_PLACE_OBJECT) ?

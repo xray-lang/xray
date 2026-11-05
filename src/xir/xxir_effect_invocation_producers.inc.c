@@ -11,10 +11,10 @@
  *   Sparse SSA facts use the fixed site basis and descending authentic causes.
  *   They supplement an advertisement; they never replace its ROOT mask.
  */
-static XrXirStatus effect_invocation_return_supported(const XrXirCompileContext *work,
+static XrXirStatus effect_invocation_return_supported(
     const XrXirTypes *types,XrXirType type,bool *output) {
     const XrXirTypeNode *signature=xr_xir_callable_signature(types,type);
-    if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+
     if (signature && (!xr_xir_callable_flags_valid(signature->flags) ||
         (!!signature->parameters!=!!signature->parameter_count))) return XR_XIR_BAD_TYPE;
     if(effect_physical_iterator(types,type)) {
@@ -23,7 +23,7 @@ static XrXirStatus effect_invocation_return_supported(const XrXirCompileContext 
     bool supported=signature && !signature->parameter_span &&
         (signature->flags&XR_XIR_CALLABLE_ROOT_MASK)==XR_XIR_CALLABLE_ROOT_NONE;
     for (uint32_t p=0;signature && p<signature->parameter_count;++p) {
-        if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+
         if (!xr_xir_callable_parameter_storage_valid(types,&signature->parameters[p]))
             return XR_XIR_BAD_TYPE;
         if (signature->parameters[p].mode!=XR_PARAM_READ) supported=false;
@@ -34,7 +34,7 @@ static XrXirStatus effect_invocation_producer_return_read(const EffectInvocation
     const EffectBodyRequest *request,uint32_t body,bool *output) {
     if (!owner || !request || !output || body>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
     EffectBodyFunctionHead head={0};XrXirStatus status=effect_body_request_head(request,body,&head);
-    return status==XR_XIR_OK?effect_invocation_return_supported(owner->work,request->domain.types,head.result,output):status;
+    return status==XR_XIR_OK?effect_invocation_return_supported(request->domain.types,head.result,output):status;
 }
 /* Scalar, owned Cell and callable prefixes can propose identities. Their
  * actual environments still need complete finite support at publication;
@@ -62,7 +62,7 @@ static XrXirStatus effect_invocation_producer_site_supported_read(const EffectIn
         return XR_XIR_BAD_STRUCTURE;
     bool supported=true;
     for (uint32_t p=0;p<site->captures;++p) {
-        if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
+
         XrXirType type=target->parameters[p];
         if (xr_xir_type_span(request->domain.types,type)) supported=false;
         else if (xr_xir_type_is_cell(request->domain.types,type)) {
@@ -89,7 +89,7 @@ static XrXirStatus effect_invocation_producer_atoms(const EffectInvocationRead *
     if (owner->final->binding_count>(UINT32_MAX-UINT64_C(1))/stride) return XR_XIR_BUDGET;
     uint64_t atoms=(uint64_t)owner->final->binding_count*stride+1;
     if (atoms>UINT32_MAX) return XR_XIR_BUDGET;
-    if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
+
     *output=(uint32_t)atoms;return XR_XIR_OK;
 }
 
@@ -121,7 +121,7 @@ static XrXirStatus effect_invocation_producer_column_read(const EffectInvocation
     bool origin=code>=cells;uint64_t bit=0,binding=0;
     if (origin) {code-=cells;binding=code/origin_bits;bit=code%origin_bits;}
     else {binding=code/cell_bits;bit=code%cell_bits;}
-    if (!xir_compile_work(owner->work,5)) return XR_XIR_BUDGET;
+
     if (binding>=owner->final->binding_count) return XR_XIR_BAD_STRUCTURE;
     XrXirType type=0;
     XrXirStatus status=effect_invocation_producer_binding_read(owner,request,index,(uint32_t)binding,&type);
@@ -155,7 +155,7 @@ static XrXirStatus effect_invocation_producer_column_flow(EffectInvocationFlow *
     XrXirStatus status=effect_invocation_producer_column_read(flow->read,&flow->body,
         &flow->basis,site,atom,&column);
     if (status!=XR_XIR_OK) return status;
-    if (!xir_compile_work(flow->read->work,sizeof(*word)+sizeof(*bit))) return XR_XIR_BUDGET;
+
     *word=column.word;*bit=column.bit;return XR_XIR_OK;
 }
 
@@ -207,7 +207,7 @@ static XrXirStatus effect_invocation_producer_put(EffectInvocationFlow *flow,
         else if (fact->value<flow->function->parameter_count)
             row=node->input+(size_t)fact->value*flow->basis.row_words;
         if (!row) return XR_XIR_BAD_STRUCTURE;
-        if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
+
         if (!fact->atom && !(row[fact->site/64]&(UINT64_C(1)<<(fact->site%64)))) return XR_XIR_OK;
         if (fact->atom) {
             uint32_t word=0,bit=0;
@@ -217,12 +217,12 @@ static XrXirStatus effect_invocation_producer_put(EffectInvocationFlow *flow,
         }
     }
     for (uint32_t p=0;p<current->count;++p) {
-        if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
+
         const EffectInvocationProducer *present=&current->facts[p];
         if (present->value!=fact->value || present->site!=fact->site || present->atom!=fact->atom) continue;
         if (verify) return present->distance<=fact->distance?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
         if (!effect_invocation_producer_before(fact,present)) return XR_XIR_OK;
-        if (!xir_compile_work(owner->work,sizeof(*fact))) return XR_XIR_BUDGET;
+
         if (!flow->owner || owner!=&flow->owner->read) return XR_XIR_BAD_STRUCTURE;
         flow->owner->states[flow->node].producers.facts[p]=*fact;
         *changed=true;return effect_invocation_enqueue_precision(flow->owner,flow->node);
@@ -240,13 +240,11 @@ static XrXirStatus effect_invocation_producer_put(EffectInvocationFlow *flow,
         XrXirStatus status=XR_XIR_OK;
         EffectInvocationProducer *records=xir_compile_alloc(owner->work,(size_t)capacity*sizeof(*records),&status);
         if (!records) return status;
-        if (!xir_compile_work(owner->work,(uint64_t)receiving->count*sizeof(*records))) {
-            xr_compile_resources_free(records);return XR_XIR_BUDGET;
-        }
+
         if (receiving->count) memcpy(records,receiving->facts,(size_t)receiving->count*sizeof(*records));
         xr_compile_resources_free(receiving->facts);receiving->facts=records;receiving->capacity=capacity;
     }
-    if (!xir_compile_work(owner->work,sizeof(*fact)+1)) return XR_XIR_BUDGET;
+
     receiving->facts[receiving->count++]=*fact;*changed=true;
     return effect_invocation_enqueue_precision(flow->owner,flow->node);
 }
@@ -257,7 +255,7 @@ static XrXirStatus effect_invocation_producer_alias(EffectInvocationFlow *flow,
     const EffectInvocationProducerSet *node=effect_invocation_discovery_read(flow->read,flow->node);
     if(!node) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t p=0;p<node->count;++p) {
-        if (!xir_compile_work(flow->read->work,2)) return XR_XIR_BUDGET;
+
         EffectInvocationProducer from=node->facts[p];
         if (from.value!=source || from.site==UINT32_MAX) continue;
         EffectInvocationProducer fact={destination,from.site,flow->node,source,UINT32_MAX,instruction,from.distance+1,from.atom};
@@ -274,7 +272,7 @@ static XrXirStatus effect_invocation_capture_owner(const EffectInvocationRead *o
     if (!output || binding>=owner->final->binding_count) return XR_XIR_BAD_STRUCTURE;
     uint32_t found=UINT32_MAX;
     for (uint32_t s=0;s<owner->final->site_count;++s) {
-        if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
+
         const EffectInvocationSite *site=&owner->final->sites[s];
         if (binding>=site->binding && binding-site->binding<site->captures) {
             if (found!=UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
@@ -282,7 +280,7 @@ static XrXirStatus effect_invocation_capture_owner(const EffectInvocationRead *o
         }
     }
     if (found==UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(owner->work,sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=found;return XR_XIR_OK;
 }
 
@@ -295,7 +293,7 @@ static XrXirStatus effect_invocation_producer_capture_atoms(EffectInvocationFlow
     uint64_t cells=(uint64_t)flow->read->final->binding_count*cell_bits;
     uint32_t binding_words=flow->basis.origin_words+flow->basis.cell_words;
     for (uint32_t w=flow->basis.origin_words;w<flow->basis.fn_words;++w) {
-        if (!xir_compile_work(flow->read->work,1)) return XR_XIR_BUDGET;
+
         uint64_t present=row[w];
         uint32_t relative=w-flow->basis.origin_words,binding=relative/binding_words;
         uint32_t column=relative%binding_words;bool origin=column<flow->basis.origin_words;
@@ -305,7 +303,7 @@ static XrXirStatus effect_invocation_producer_capture_atoms(EffectInvocationFlow
             if (status!=XR_XIR_OK) return status;
         }
         while (present) {
-            if (!xir_compile_work(flow->read->work,3)) return XR_XIR_BUDGET;
+
             uint32_t bit=(uint32_t)__builtin_ctzll(present);present&=present-1;
             uint64_t index=(uint64_t)word*64+bit;
             if (index>=(origin?origin_bits:cell_bits)) return XR_XIR_BAD_STRUCTURE;
@@ -343,13 +341,13 @@ static XrXirStatus effect_invocation_producer_seed(EffectInvocationFlow *flow,
     const uint64_t *row=effect_invocation_row(flow,destination);
     if (!row) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t p=0;p<source->captures;++p) {
-        if (!xir_compile_work(flow->read->work,1)) return XR_XIR_BUDGET;
+
         if (effect_physical_origin(flow->body.domain.types,target->parameters[p]))
             return effect_invocation_producer_capture_atoms(flow,&fact,row,changed,verify);
     }
     uint64_t bits=(uint64_t)flow->basis.parameters+3;
     for (uint32_t p=0;status==XR_XIR_OK && p<source->captures;++p) {
-        if (!xir_compile_work(flow->read->work,2)) return XR_XIR_BUDGET;
+
         bool is_class=xr_xir_type_is_class(flow->body.domain.types,target->parameters[p]);
         if (!is_class && !xr_xir_type_is_cell(flow->body.domain.types,target->parameters[p])) continue;
         for (uint32_t b=is_class?flow->basis.parameters:0;status==XR_XIR_OK && b<bits;++b) {
@@ -373,7 +371,7 @@ static XrXirStatus effect_invocation_producer_callable_cell(EffectInvocationFlow
     status=effect_body_request_sequence_begin(&flow->body,&cursor);
     if(status!=XR_XIR_OK) return status;
     for(uint32_t i=0;i<flow->function->instruction_count;++i) {
-        if(!xir_compile_work(flow->read->work,3)) return XR_XIR_BUDGET;
+
         XrXirInstruction decoded;const XrXirInstruction *op=NULL;
         status=effect_body_request_sequence_operation(&flow->body,
             flow->read->final->nodes[flow->node].body,i,&cursor,&decoded,&op);
@@ -419,7 +417,7 @@ static XrXirStatus effect_invocation_producer_instruction(EffectInvocationFlow *
         const EffectInvocationProducerSet *node=effect_invocation_discovery_read(flow->read,flow->node);
         if(!node) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t p=0;p<node->count;++p) {
-            if (!xir_compile_work(flow->read->work,2)) return XR_XIR_BUDGET;
+
             EffectInvocationProducer from=node->facts[p];
             if (from.value!=op->args[0] || from.site==UINT32_MAX) continue;
             EffectInvocationProducer fact={flow->values,from.site,flow->node,from.value,
@@ -443,7 +441,7 @@ static XrXirStatus effect_invocation_producer_source_read(const EffectInvocation
     EffectInvocationProducerSource *output) {
     if (!owner || !request || !edge || !output || edge->caller>=owner->final->count || edge->target>=owner->final->count)
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(owner->work,sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=(EffectInvocationProducerSource){UINT32_MAX,UINT32_MAX,UINT32_MAX,parameter};
     const EffectInvocationNode *caller=&owner->final->nodes[edge->caller],*target=&owner->final->nodes[edge->target];
     if (caller->body>=request->domain.function_count || target->body>=request->domain.function_count ||
@@ -457,7 +455,7 @@ static XrXirStatus effect_invocation_producer_source_read(const EffectInvocation
     XrXirInstruction storage;const XrXirInstruction *op=NULL;
     status=effect_body_request_operation(request,caller->body,edge->instruction,&storage,&op);
     if (status!=XR_XIR_OK) return status;
-    if (!xir_compile_work(owner->work,6)) return XR_XIR_BUDGET;
+
     uint32_t captures=0;
     bool iterator=effect_invocation_iterator_operation(op->op);
     if (op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT || iterator) {
@@ -506,14 +504,14 @@ static XrXirStatus effect_invocation_producer_source_atom(const EffectInvocation
     if (status!=XR_XIR_OK) return status;
     if (atom>=atoms) return XR_XIR_BAD_STRUCTURE;
     if (atom) {
-        if (!xir_compile_work(owner->work,sizeof(*output))) return XR_XIR_BUDGET;
+
         *output=atom;return XR_XIR_OK;
     }
     uint64_t cells=(uint64_t)owner->final->binding_count*((uint64_t)basis->parameters+3);
     uint64_t bits=(uint64_t)owner->final->site_count+basis->parameters+3;
     uint64_t code=1+cells+(uint64_t)source->binding*bits+site;
     if (code>UINT32_MAX) return XR_XIR_BUDGET;
-    if (!xir_compile_work(owner->work,3+sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=(uint32_t)code;return XR_XIR_OK;
 }
 
@@ -527,7 +525,7 @@ static XrXirStatus effect_invocation_producer_capture_inputs(EffectInvocationFlo
     const uint64_t *row=target->input+(size_t)source->parameter*flow->basis.row_words;
     const EffectInvocationEdge edge=owner->final->edges[edge_index];
     for (uint32_t a=0;a<caller->count;++a) {
-        if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
+
         const EffectInvocationProducer from=caller->facts[a];
         if (from.value!=source->value || !from.atom || from.site==UINT32_MAX) continue;
         EffectInvocationProducer fact={source->parameter,from.site,flow->node,source->value,edge_index,
@@ -536,7 +534,7 @@ static XrXirStatus effect_invocation_producer_capture_inputs(EffectInvocationFlo
         if (status!=XR_XIR_OK) return status;
         if (from.site!=source->producer) continue;
         for (uint32_t site=0;site<owner->final->site_count;++site) {
-            if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
+
             if (!(row[site/64]&(UINT64_C(1)<<(site%64)))) continue;
             bool supported=false;
             status=effect_invocation_producer_site_supported_read(owner,&flow->body,site,&supported);
@@ -564,11 +562,11 @@ static XrXirStatus effect_invocation_producer_inputs(EffectInvocationFlow *flow,
     const EffectBodyFunctionHead *function=&target_head;
     uint64_t values=(uint64_t)function->parameter_count+function->instruction_count;
     if (values>UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(owner->work,sizeof(flow->body))) return XR_XIR_BUDGET;
+
     EffectInvocationFlow projection={.owner=flow->owner,.read=owner,.node=edge.target,.function=function,
         .body=flow->body,.basis=flow->basis,.values=(uint32_t)values};
     for (uint32_t p=0;p<function->parameter_count;++p) {
-        if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
+
         if (!effect_physical_origin(flow->body.domain.types,function->parameters[p])) continue;
         EffectInvocationProducerSource source={0};
         XrXirStatus status=effect_invocation_producer_source_read(owner,&flow->body,&edge,p,&source);
@@ -583,7 +581,7 @@ static XrXirStatus effect_invocation_producer_inputs(EffectInvocationFlow *flow,
         const EffectInvocationProducerSet *caller=effect_invocation_discovery_read(owner,flow->node);
         if(!caller) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t a=0;a<caller->count;++a) {
-            if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
+
             EffectInvocationProducer from=caller->facts[a];
             if (from.value!=actual || from.site==UINT32_MAX) continue;
             EffectInvocationProducer fact={p,from.site,flow->node,actual,edge_index,
@@ -616,14 +614,14 @@ static XrXirStatus effect_invocation_producer_results(EffectInvocationFlow *flow
     for (uint32_t r=0;r<count;++r) {
         uint32_t i=r;
         if (owned) {
-            if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+
             const EffectPhysicalRecord record=flow->physical->records[r];
             if (!(record.mask&(EFFECT_PHYSICAL_CALLABLE|EFFECT_PHYSICAL_ITERATOR)) ||
                 record.value<flow->function->parameter_count) continue;
             if (record.value>=flow->values) return XR_XIR_BAD_STRUCTURE;
             i=record.value-flow->function->parameter_count;
         }
-        if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
+
         XrXirInstruction body_op_2;const XrXirInstruction *op=NULL;
         XrXirStatus body_read_2=owned?effect_invocation_flow_instruction(flow,i,&body_op_2,&op):
             effect_body_request_sequence_operation(&flow->body,
@@ -635,7 +633,7 @@ static XrXirStatus effect_invocation_producer_results(EffectInvocationFlow *flow
             op->op==XR_XIR_CALL_INDIRECT));
         if (!source) continue;
         for (uint32_t p=0;p<records->count;++p) {
-            if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
+
             EffectInvocationProducer from=records->facts[p];
             if (from.value!=returned || from.site==UINT32_MAX) continue;
             EffectInvocationProducer fact={flow->function->parameter_count+i,from.site,
@@ -652,9 +650,8 @@ static XrXirStatus effect_invocation_producer_results(EffectInvocationFlow *flow
  * each selected operation still supplies its complete current operands. */
 static XrXirStatus effect_invocation_producer_owned_instructions(EffectInvocationFlow *flow,
     bool *changed,bool verify) {
-    const EffectInvocationRead *owner=flow->read;
     for (uint32_t r=0;r<flow->physical->count;++r) {
-        if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+
         const EffectPhysicalRecord record=flow->physical->records[r];
         if (!(record.mask&(EFFECT_PHYSICAL_TRANSFER|EFFECT_PHYSICAL_RETURN))) continue;
         if (record.value<flow->function->parameter_count || record.value>=flow->values) return XR_XIR_BAD_STRUCTURE;
@@ -679,7 +676,7 @@ static XrXirStatus effect_invocation_producer_step(EffectInvocationFlow *flow,
         read_status=effect_body_request_sequence_begin(&flow->body,&cursor);
         if (read_status!=XR_XIR_OK) return read_status;
         for (uint32_t i=0;i<flow->function->instruction_count;++i) {
-            if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+
             XrXirInstruction storage;const XrXirInstruction *op=NULL;
             XrXirStatus status=effect_body_request_sequence_operation(&flow->body,
                 owner->final->nodes[flow->node].body,i,&cursor,&storage,&op);
@@ -690,7 +687,7 @@ static XrXirStatus effect_invocation_producer_step(EffectInvocationFlow *flow,
     }
     if (read_status!=XR_XIR_OK) return read_status;
     for (uint32_t e=owner->final->nodes[flow->node].edge_head;e!=UINT32_MAX;e=owner->final->edges[e].next) {
-        if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
+
         if (e>=owner->final->edge_count || owner->final->edges[e].caller!=flow->node ||
             owner->final->edges[e].target>=owner->final->count ||
             owner->final->nodes[owner->final->edges[e].target].root!=owner->final->nodes[flow->node].root)
@@ -716,7 +713,7 @@ static XrXirStatus effect_invocation_producer_callable_cell_cause(EffectInvocati
     if(status!=XR_XIR_OK) return status;
     bool found=false;
     for(uint32_t i=0;i<flow->function->instruction_count;++i) {
-        if(!xir_compile_work(flow->read->work,3)) return XR_XIR_BUDGET;
+
         XrXirInstruction decoded;const XrXirInstruction *op=NULL;
         status=effect_body_request_sequence_operation(&flow->body,
             flow->read->final->nodes[flow->node].body,i,&cursor,&decoded,&op);
@@ -741,7 +738,7 @@ static XrXirStatus effect_invocation_producer_cause(EffectInvocationFlow *flow,
     if (!key) return XR_XIR_BAD_STRUCTURE;
     *key=(EffectInvocationProducerKey){fact->site,fact->atom};
     if (fact->next_node>=owner->final->count) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(owner->work,8)) return XR_XIR_BUDGET;
+
     if (fact->edge!=UINT32_MAX) {
         if (fact->edge>=owner->final->edge_count) return XR_XIR_BAD_STRUCTURE;
         const EffectInvocationEdge *edge=&owner->final->edges[fact->edge];
@@ -798,7 +795,7 @@ static XrXirStatus effect_invocation_producer_cause(EffectInvocationFlow *flow,
     case XR_XIR_PHI:
         if (fact->value!=destination) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t a=1;a<op->args[1];a+=2) {
-            if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+
             if (head->operands[op->args[0]+a]==fact->next_value) return XR_XIR_OK;
         }
         return XR_XIR_BAD_STRUCTURE;
@@ -817,7 +814,7 @@ static XrXirStatus effect_invocation_producer_record_verify(EffectInvocationFlow
     if (admitted==XR_XIR_OK) admitted=effect_invocation_producer_atoms(owner,&flow->basis,&atoms);
     if (admitted!=XR_XIR_OK) return admitted;
     if (!supported || fact->atom>=atoms) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(owner->work,5)) return XR_XIR_BUDGET;
+
     const uint64_t *row=fact->value<flow->values ? effect_invocation_row(flow,fact->value) : NULL;
     if (fact->value<flow->values && (!row || (!fact->atom && !(row[fact->site/64]&
         (UINT64_C(1)<<(fact->site%64)))))) return XR_XIR_BAD_STRUCTURE;
@@ -847,7 +844,7 @@ static XrXirStatus effect_invocation_producer_record_verify(EffectInvocationFlow
     const EffectInvocationProducerSet *next=effect_invocation_discovery_read(owner,fact->next_node);
     if(!next) return XR_XIR_BAD_STRUCTURE;
     for(uint32_t p=0;p<next->count;++p) {
-        if(!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
+
         const EffectInvocationProducer *cause=&next->facts[p];
         if(cause->value==fact->next_value && cause->site==key.site && cause->atom==key.atom)
             return cause->distance+1==fact->distance?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
@@ -866,7 +863,7 @@ static XrXirStatus effect_invocation_discovery_verify(const EffectInvocationWork
     uint64_t maximum=0;bool enabled=owner->final->site_count!=0;
     if(enabled!=owner->producer_enabled) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t n=0;n<owner->final->count;++n) {
-        if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
+
         const EffectInvocationNode *node=&owner->final->nodes[n];
         const EffectInvocationProducerSet *records=effect_invocation_discovery_read(owner,n);
         if(!records) return XR_XIR_BAD_STRUCTURE;
@@ -876,7 +873,7 @@ static XrXirStatus effect_invocation_discovery_verify(const EffectInvocationWork
         EffectBodyFunctionDimensions body_head={0};
         XrXirStatus head_status=effect_body_request_dimensions(request,node->body,&body_head);
         if (head_status!=XR_XIR_OK) return head_status;
-        if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+
         uint32_t root_parameters=body_head.parameter_count;
         if (node->root!=node->body) {
             EffectBodyFunctionDimensions root_head={0};
@@ -897,7 +894,7 @@ static XrXirStatus effect_invocation_discovery_verify(const EffectInvocationWork
         /* Validate coordinates before origin projection can consume a record.
          * A real Cell environment still enters the complete charged replay. */
         for (uint32_t p=0;p<records->count;++p) {
-            if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
+
             const EffectInvocationProducer *fact=&records->facts[p];
             if (fact->value>values || fact->site>=owner->final->site_count || fact->atom>=atoms)
                 return XR_XIR_BAD_STRUCTURE;
@@ -922,7 +919,7 @@ static XrXirStatus effect_invocation_discovery_verify(const EffectInvocationWork
         for (uint32_t p=0;status==XR_XIR_OK && p<records->count;++p) {
             const EffectInvocationProducer *fact=&records->facts[p];
             for (uint32_t a=0;a<p;++a) {
-                if (!xir_compile_work(owner->work,2)) { status=XR_XIR_BUDGET;break; }
+
                 if (records->facts[a].value==fact->value && records->facts[a].site==fact->site &&
                     records->facts[a].atom==fact->atom) {
                     status=XR_XIR_BAD_STRUCTURE;break;

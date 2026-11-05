@@ -43,7 +43,7 @@ static XrXirStatus effect_invocation_edge_shape_request(const XrXirCompileContex
     if (to->root!=from->root || to->body>=domain->function_count ||
         edge.instruction>=request->instructions) return XR_XIR_BAD_STRUCTURE;
     const XrXirInstruction *op=request->op;const XrXirTypes *types=request->types;
-    if (!xir_compile_work(work,8)) return XR_XIR_BUDGET;
+
     if (op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE || op->op==XR_XIR_CLEANUP_REGISTER || op->op==XR_XIR_GO || op->op==XR_XIR_GENERATOR_NEW)
         return edge.producer==UINT32_MAX && op->immediate>=0 && (uint64_t)op->immediate==to->body &&
             edge.latent==(op->op==XR_XIR_GO || op->op==XR_XIR_GENERATOR_NEW)?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
@@ -90,7 +90,7 @@ static XrXirStatus effect_invocation_edge_shape_request(const XrXirCompileContex
     XrXirStatus status=xr_xir_compile_type_substitution_matches_between_scratch(work,
         types,types,NULL,0,actual->result,bound->result,&scratch);
     for (uint32_t p=0;p<actual->parameter_count && status==XR_XIR_OK;++p) {
-        if (!xir_compile_work(work,2)) { status=XR_XIR_BUDGET;break; }
+
         if (actual->parameters[p].mode!=bound->parameters[p].mode ||
             !xr_xir_callable_parameter_storage_valid(types,&actual->parameters[p]) ||
             !xr_xir_callable_parameter_storage_valid(types,&bound->parameters[p])) {
@@ -115,7 +115,7 @@ static XrXirStatus effect_invocation_edge_read_selected(const XrXirCompileContex
     const EffectInvocationNode *from=&equations->nodes[caller];
     if (edge->target>=equations->count) return XR_XIR_BAD_STRUCTURE;
     uint32_t target=equations->nodes[edge->target].body;
-    if (!xir_compile_work(work,2*sizeof(EffectBodyFunctionDimensions))) return XR_XIR_BUDGET;
+
     EffectBodyFunctionDimensions function={0},callee={0};
     XrXirStatus status=effect_body_request_dimensions(body,from->body,&function);
     if (status==XR_XIR_OK) status=effect_body_request_dimensions(body,target,&callee);
@@ -131,7 +131,7 @@ static XrXirStatus effect_invocation_edge_read_selected(const XrXirCompileContex
         .instructions=function.instruction_count,.target_parameters=callee.parameter_count};
     if (edge->producer<equations->site_count) {
         const EffectInvocationSite *site=&equations->sites[edge->producer];
-        if (!xir_compile_work(work,sizeof(EffectBodyFunctionDimensions))) return XR_XIR_BUDGET;
+
         EffectBodyFunctionDimensions producer={0};
         status=effect_body_request_dimensions(body,site->function,&producer);
         if (status==XR_XIR_OK)
@@ -154,7 +154,7 @@ static XrXirStatus effect_invocation_edge_read_selected(const XrXirCompileContex
     if (status!=XR_XIR_OK) return status;
     uint64_t units=(decoded?sizeof(decoded->operation):0)+
         (selection->opcode?1+sizeof(*selection->opcode):0);
-    if (units && !effect_body_read_work(&body->read,units)) return XR_XIR_BUDGET;
+    if (units && !(((&body->read)->execution ? effect_body_execution_work((&body->read)->execution, units) : xir_compile_context_valid((&body->read)->owner)))) return XR_XIR_BUDGET;
     if (decoded) decoded->operation=op;
     if (selection->opcode) *selection->opcode=op->op;
     return XR_XIR_OK;
@@ -165,7 +165,7 @@ static XrXirStatus effect_invocation_edge_shape_read(const XrXirCompileContext *
     const XrXirTypes *types,uint32_t caller,uint32_t edge_index) {
     if (!body || !equations || caller>=equations->count || edge_index>=equations->edge_count ||
         equations->edges[edge_index].target>=equations->count) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,sizeof(EffectInvocationEdgeRead))) return XR_XIR_BUDGET;
+
     const EffectInvocationEdgeRead request={caller,edge_index,NULL};
     return effect_invocation_edge_read_selected(work,equations,body,types,&request,NULL);
 }
@@ -186,7 +186,7 @@ static XrXirStatus effect_invocation_certificate_edge_selected(const XrXirCompil
     if (caller>=certificate->final->count || edge_index>=certificate->final->edge_count ||
         certificate->final->edges[edge_index].target>=certificate->final->count)
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,sizeof(EffectInvocationEdgeRead))) return XR_XIR_BUDGET;
+
     const EffectInvocationEdgeRead request={caller,edge_index,opcode};
     EffectBodyRequest body=effect_body_owned_request(work,certificate->body);
     return effect_invocation_edge_read_selected(work,certificate->final,&body,
@@ -212,10 +212,10 @@ static XrXirStatus effect_invocation_certificate_cause(const XrXirCompileContext
     uint32_t parameters=certificate->body->functions[root].parameter_count;
     uint32_t current=selected,walked=0;
     for (;;) {
-        if (!xir_compile_work(work,10)) return XR_XIR_BUDGET;
+
         if (current>=equations->count || ++walked>equations->count) return XR_XIR_BAD_STRUCTURE;
         const EffectInvocationNode *node=&equations->nodes[current];
-        if (!xir_compile_work(work,9)) return XR_XIR_BUDGET;
+
         if (node->root!=root || node->body>=effect_body_count(certificate->body) || atom>=node->cause_count ||
             !effect_invocation_node_shape(node,parameters,certificate->body->functions[node->body].instruction_count) ||
             !effect_invocation_local_causes(node) || !effect_invocation_atom(node,parameters,atom,false))
@@ -236,7 +236,7 @@ static XrXirStatus effect_invocation_certificate_cause(const XrXirCompileContext
                     if (witness.instruction>=function->instruction_count || !declarations || atom ||
                         witness.callee!=UINT32_MAX || witness.slot>=declarations->slot_count)
                         return XR_XIR_BAD_STRUCTURE;
-                    EffectBodyRead read=effect_body_compile_read(work);XrXirInstruction decoded;
+                    EffectBodyRead read=(EffectBodyRead){.owner=work};XrXirInstruction decoded;
                     XrXirStatus status=effect_body_instruction_get(&read,function,witness.instruction,&decoded);
                     if (status!=XR_XIR_OK) return status;
                     const XrXirInstruction *op=&decoded;
@@ -254,7 +254,7 @@ static XrXirStatus effect_invocation_certificate_cause(const XrXirCompileContext
             }
             if (witness.instruction>=function->instruction_count || witness.callee!=UINT32_MAX)
                 return XR_XIR_BAD_STRUCTURE;
-            EffectBodyRead read=effect_body_compile_read(work);
+            EffectBodyRead read=(EffectBodyRead){.owner=work};
             /* This terminal really consumes args0. All other branches below
              * ask only for the opcode through the same canonical reader. */
             if (atom<2 && witness.cause==XR_XIR_ROOT_CAUSE_CELL_ACCESS) {
@@ -266,7 +266,7 @@ static XrXirStatus effect_invocation_certificate_cause(const XrXirCompileContext
                     op==XR_XIR_PLACE_READ || op==XR_XIR_PLACE_WRITE || op==XR_XIR_CELL_PROJECT) &&
                     witness.slot==decoded.args[0]?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
             }
-            if (!xir_compile_work(work,sizeof(XrXirOp))) return XR_XIR_BUDGET;
+
             XrXirOp op=XR_XIR_INVALID;
             XrXirStatus status=effect_body_instruction_op(&read,function,witness.instruction,&op);
             if (status!=XR_XIR_OK) return status;
@@ -302,7 +302,7 @@ static XrXirStatus effect_invocation_certificate_cause(const XrXirCompileContext
             cause->witness.instruction!=edge.instruction || cause->witness.callee!=target->body ||
             cause->witness.slot!=UINT32_MAX || target->causes[atom].distance+1!=cause->distance)
             return XR_XIR_BAD_STRUCTURE;
-        if (!xir_compile_work(work,sizeof(XrXirOp))) return XR_XIR_BUDGET;
+
         XrXirOp op=XR_XIR_INVALID;
         XrXirStatus edge_status=effect_invocation_certificate_edge_selected(work,certificate,current,cause->edge,&op);
         if (edge_status!=XR_XIR_OK) return edge_status;
@@ -329,13 +329,13 @@ static XrXirStatus effect_invocation_certificate_node_mask(const XrXirCompileCon
             certificate->body->functions[node->root].parameter_count*2+3)
         return XR_XIR_BAD_STRUCTURE;
     uint32_t parameters=certificate->body->functions[node->root].parameter_count;
-    if (!xir_compile_work(work,9)) return XR_XIR_BUDGET;
+
     if (!effect_invocation_node_shape(node,parameters,
         certificate->body->functions[node->body].instruction_count)) return XR_XIR_BAD_STRUCTURE;
     uint32_t mask=node->intrinsic_mask;
     if (mask&~(XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t atom=0;atom<node->cause_count;++atom) {
-        if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
+
         bool fact=effect_invocation_atom(node,parameters,atom,false);
         const EffectInvocationCause *cause=&node->causes[atom];
         if (fact!=(cause->distance!=UINT32_MAX) || (fact && (!cause->witness.cause ||
@@ -357,7 +357,7 @@ static XrXirStatus effect_invocation_certificate_node_mask(const XrXirCompileCon
             mask|=original;
         } else mask|=XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     }
-    if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+
     *output=mask;return XR_XIR_OK;
 }
 
@@ -374,7 +374,7 @@ static inline XrXirStatus effect_invocation_certificate_edge_mask(const XrXirCom
         instruction>=certificate->body->functions[caller].instruction_count)
         return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationFinal *equations=certificate->final;
-    EffectBodyRead read=effect_body_compile_read(work);XrXirInstruction decoded;
+    EffectBodyRead read=(EffectBodyRead){.owner=work};XrXirInstruction decoded;
     XrXirStatus decoded_status=effect_body_instruction_get(&read,
         &certificate->body->functions[caller],instruction,&decoded);
     if (decoded_status!=XR_XIR_OK) return decoded_status;
@@ -389,7 +389,7 @@ static inline XrXirStatus effect_invocation_certificate_edge_mask(const XrXirCom
     if (!executing && !transport && !reference) return XR_XIR_BAD_STRUCTURE;
     uint32_t mask=0;bool found=false;uint64_t walked=0;
     for (uint32_t e=equations->nodes[parent].edge_head;e!=UINT32_MAX;e=equations->edges[e].next) {
-        if (!xir_compile_work(work,5)) return XR_XIR_BUDGET;
+
         if (e>=equations->edge_count || ++walked>equations->edge_count) return XR_XIR_BAD_STRUCTURE;
         EffectInvocationEdge edge=equations->edges[e];
         if (edge.caller!=parent || edge.target>=equations->count ||
@@ -412,7 +412,7 @@ static inline XrXirStatus effect_invocation_certificate_edge_mask(const XrXirCom
         found=true;mask|=actual;
     }
     if (!found) mask|=XR_XIR_CALLABLE_ROOT_UNRESOLVED;
-    if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+
     *output=mask;return XR_XIR_OK;
 }
 
@@ -431,7 +431,7 @@ XR_FUNC XrXirStatus xir_effects_class_value(const XrXirCompileContext *context,
     const EffectBodyFunction *body=&certificate->body->functions[function];
     if (node->body!=function ||
         value>=(uint64_t)body->parameter_count+body->instruction_count) return XR_XIR_BAD_STRUCTURE;
-    EffectBodyRead read=effect_body_compile_read(context);XrXirType type;
+    EffectBodyRead read=(EffectBodyRead){.owner=context};XrXirType type;
     XrXirStatus status=effect_body_operand_type(&read,body,value,&type);
     if (status!=XR_XIR_OK) return status;
     if (!xr_xir_type_is_class(certificate->body->domain.types,type)) return XR_XIR_BAD_STRUCTURE;

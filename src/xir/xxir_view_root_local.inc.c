@@ -23,10 +23,10 @@ static XrXirStatus view_root_local_unknown(ViewRootLocal *l) {
         (ViewOriginPair){l->context.first|1u,l->context.second},XR_XIR_VIEW_ROOT_UNRESOLVED);
 }
 static XrXirStatus view_root_local_scan(ViewRootLocal *l,uint32_t block,uint32_t cutoff,bool prefixes,bool *closed) {
-    *closed=false;ViewRootCheck *c=l->query->check;const XrXirBlock *span=l->body->blocks+block;
+    *closed=false;const XrXirBlock *span=l->body->blocks+block;
     if (cutoff<span->first || cutoff-span->first>span->count) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i=cutoff;i>span->first;) {
-        --i;if (!xir_compile_work(c->context,2)) return XR_XIR_BUDGET;
+        --i;
         const XrXirInstruction *op=l->body->instructions+i;uint32_t value=UINT32_MAX;
         bool initialized=true;
         if (l->body->parameter_count+i==l->slot) {
@@ -49,7 +49,7 @@ static XrXirStatus view_root_local_predecessors(ViewRootLocal *l,uint32_t block)
     ViewRootCheck *c=l->query->check;bool found=false;
     if (!block) return view_root_local_unknown(l);
     for (uint32_t b=0;b<l->body->block_count;++b) {
-        if (!xir_compile_work(c->context,2)) return XR_XIR_BUDGET;
+
         const XrXirBlock *source=l->body->blocks+b;
         const XrXirInstruction *end=l->body->instructions+source->first+source->count-1u;
         bool normal=false;
@@ -68,12 +68,12 @@ static XrXirStatus view_root_local_at(ViewRootQuery *q,ViewOriginPair site,uint3
     ViewRootCheck *c=q->check;const XrXirFunction *body=c->module->functions+site.first;
     uint64_t fixed=sizeof(ViewRootLocal);
     if (c->reserved>c->context->limits.frame_bytes || fixed>c->context->limits.frame_bytes-c->reserved) return XR_XIR_BUDGET;
-    if (!xir_compile_work(c->context,fixed)) return XR_XIR_BUDGET;
+
     c->reserved+=fixed;ViewRootLocal l={.query=q,.body=body,.context=context,.function=site.first,.slot=slot};
     uint32_t block=UINT32_MAX;
     XrXirStatus status=XR_XIR_OK;bool closed=false;
     for (uint32_t b=0;b<body->block_count;++b) {
-        if (!xir_compile_work(c->context,1)) {status=XR_XIR_BUDGET;break;}
+
         const XrXirBlock *span=body->blocks+b;
         if (instruction>=span->first && instruction-span->first<span->count) block=b;
     }

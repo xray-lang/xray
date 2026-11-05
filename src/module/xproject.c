@@ -27,12 +27,12 @@ static bool project_string_array(ManifestContext *ctx, XrTomlValue *table, const
     char ***output, int *count) {
     XrTomlValue *array=manifest_get_type(ctx,table,key,XR_TOML_ARRAY);
     if (!array) return ctx->status==XR_MANIFEST_OK;
-    if (!manifest_work(ctx,1)) return false;
+    if (!((ctx)->status == XR_MANIFEST_OK)) return false;
     int length=array->as.array.count;
     char **items=manifest_calloc(ctx,(size_t)length,sizeof(*items));
     if (!items) return false;
     for (int i=0;i<length;++i) {
-        if (!manifest_work(ctx,1)) break;
+        if (!((ctx)->status == XR_MANIFEST_OK)) break;
         XrTomlValue *item=array->as.array.items[i];
         if (!item || item->type!=XR_TOML_STRING) { manifest_error(ctx,"target string array contains a non-string"); break; }
         items[i]=manifest_duplicate(ctx,item->as.string);
@@ -95,7 +95,7 @@ XR_FUNC XrManifestStatus xr_project_load_owned(const XrOsIoPolicy *policy,
     }
     XrTomlValue *dependencies=manifest_get_type(&ctx,document,"dependencies",XR_TOML_TABLE);
     if (dependencies) for (int i=0;i<dependencies->as.table.count;++i) {
-        if (!manifest_work(&ctx,1)) break;
+        if (!((&ctx)->status == XR_MANIFEST_OK)) break;
         XrTomlMember *member=&dependencies->as.table.members[i];
         XrDependency *dependency=manifest_calloc(&ctx,1,sizeof(*dependency));
         if (!dependency) break;
@@ -113,7 +113,7 @@ XR_FUNC XrManifestStatus xr_project_load_owned(const XrOsIoPolicy *policy,
     }
     XrTomlValue *targets=manifest_get_type(&ctx,document,"target",XR_TOML_TABLE);
     if (targets) for (int i=0;i<targets->as.table.count;++i) {
-        if (!manifest_work(&ctx,1)) break;
+        if (!((&ctx)->status == XR_MANIFEST_OK)) break;
         XrTomlMember *member=&targets->as.table.members[i];
         XrTargetConfig *target=project_target(&ctx,member->key,member->value);
         if (!target) break;
@@ -124,7 +124,7 @@ XR_FUNC XrManifestStatus xr_project_load_owned(const XrOsIoPolicy *policy,
         XrManifestStatus status=xr_native_package_plan_parse_owned(policy,document,project->root,&project->native_plan,diagnostic);
         if (status!=XR_MANIFEST_NOT_FOUND) manifest_status(&ctx,status);
     }
-    if (ctx.status==XR_MANIFEST_OK && manifest_work(&ctx,1)) {
+    if (ctx.status==XR_MANIFEST_OK && ((&ctx)->status == XR_MANIFEST_OK)) {
         project->initialized=true;*output=project;project=NULL;
     }
 done:
@@ -187,7 +187,6 @@ XR_FUNC void xr_project_free_owned(XrProject *project) {
 XR_FUNC bool xr_project_uses_policy(const XrProject *project, const XrOsIoPolicy *policy) {
     return manifest_uses_policy(project,policy);
 }
-static bool project_identity_work(void *opaque, uint64_t units) { return manifest_work(opaque,units); }
 XR_FUNC XrManifestStatus xr_project_authority_build_owned(const XrProject *project,
     XrProjectAuthority **output, XrManifestDiagnostic *diagnostic) {
     if (!project||!output||*output) return XR_MANIFEST_BAD_ARGUMENT;
@@ -204,19 +203,18 @@ XR_FUNC XrManifestStatus xr_project_authority_build_owned(const XrProject *proje
     authority->root=manifest_duplicate(&ctx,project->root);
     if (project->is_package) {
         size_t a=manifest_length(&ctx,project->name),b=manifest_length(&ctx,project->version);
-        if (a>SIZE_MAX-2||b>SIZE_MAX-a-2) manifest_status(&ctx,XR_MANIFEST_BUDGET);
+        if (a>SIZE_MAX-2||b>SIZE_MAX-a-2) manifest_status(&ctx,XR_MANIFEST_OVERFLOW);
         if (ctx.status==XR_MANIFEST_OK)authority->namespace_id=manifest_alloc(&ctx,a+b+2);
-        if (authority->namespace_id&&manifest_work(&ctx,a+b+2)) {
+        if (authority->namespace_id&&((&ctx)->status == XR_MANIFEST_OK)) {
             memcpy(authority->namespace_id,project->name,a);authority->namespace_id[a]='@';
             memcpy(authority->namespace_id+a+1,project->version,b+1);
         }
     } else authority->namespace_id=manifest_duplicate(&ctx,project->name);
     authority->view.kind=project->is_package?XR_MODULE_IDENTITY_PACKAGE:XR_MODULE_IDENTITY_PROJECT;
     authority->view.namespace_id=authority->namespace_id;authority->view.physical_root=authority->root;
-    XrModuleIdentityWork work={&ctx,project_identity_work,XR_MODULE_OK};
-    if (ctx.status==XR_MANIFEST_OK&&!xr_module_identity_authority_walk(&work,&authority->view))
+    if (ctx.status==XR_MANIFEST_OK&&!xr_module_identity_authority_valid(&authority->view))
         manifest_error(&ctx,"manifest name is not an exact project or owner/package coordinate");
-    if (ctx.status==XR_MANIFEST_OK&&manifest_work(&ctx,1)) { *output=authority;authority=NULL; }
+    if (ctx.status==XR_MANIFEST_OK&&((&ctx)->status == XR_MANIFEST_OK)) { *output=authority;authority=NULL; }
     xr_project_authority_free_owned(authority);return ctx.status;
 }
 XR_FUNC const XrModuleIdentityAuthority *xr_project_authority_view(const XrProjectAuthority *authority) {
@@ -237,7 +235,7 @@ XR_FUNC XrManifestStatus xr_resolve_local_dependency_owned(const XrProject *proj
         bool absolute=manifest_absolute(&ctx,dependency->path);
         path=absolute?manifest_duplicate(&ctx,dependency->path):manifest_join(&ctx,project->root,dependency->path);
     }
-    if (ctx.status==XR_MANIFEST_OK&&manifest_work(&ctx,1)) { *output=path;path=NULL; }
+    if (ctx.status==XR_MANIFEST_OK&&((&ctx)->status == XR_MANIFEST_OK)) { *output=path;path=NULL; }
     manifest_free(path);return ctx.status;
 }
 XR_FUNC void xr_project_path_free_owned(char *path) { manifest_free(path); }
@@ -245,9 +243,6 @@ XR_FUNC XrManifestStatus xr_project_find_target_config_owned(const XrProject *pr
     const char *name, const XrTargetConfig **output) {
     if (!project||!name||!output)return XR_MANIFEST_BAD_ARGUMENT;
     void *found=NULL;XrOsIoStatus status=xr_hashmap_owned_get(project->targets,name,&found);
-    if (status==XR_OS_IO_OK) {
-        const XrOsIoPolicy *policy=manifest_policy(project);status=policy->work(policy->context,1);
-        if (status==XR_OS_IO_OK)*output=found;
-    }
+    if (status==XR_OS_IO_OK)*output=found;
     return manifest_io_status(status);
 }

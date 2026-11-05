@@ -17,7 +17,7 @@ static XrXirStatus view_cleanup_uses(const XrXirFunction *function,VerifyContext
     if (op->immediate) return XR_XIR_BAD_STRUCTURE;
     uint8_t *flags=NULL;XrXirStatus status=xir_compile_view_flags_new(&context->remaining,context->module->types,&flags);
     for (uint32_t p=0;status==XR_XIR_OK && p<op->args[1];++p) {
-        if (!xir_compile_work(&context->remaining,2)) {status=XR_XIR_BUDGET;break;}
+
         uint32_t value=function->operands[op->args[0]+p];
         if (value>=(uint64_t)function->parameter_count+function->instruction_count ||
             (p && value<=function->operands[op->args[0]+p-1])) {status=XR_XIR_BAD_STRUCTURE;break;}

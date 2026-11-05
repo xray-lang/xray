@@ -28,6 +28,10 @@ XrClass *xr_register_native_type(XrVMRuntime *isolate, const XrNativeTypeInfo *i
     XR_DCHECK(info->name != NULL, "Type name must not be NULL");
     XR_DCHECK(info->gc_type < XR_NATIVE_TYPE_MAX, "GC type out of range");
 
+    if (!isolate || !info || !info->name || info->gc_type >= XR_NATIVE_TYPE_MAX ||
+        info->gc_type == XR_TTEXT_WORKER)
+        return NULL;
+
     // Check if already registered
     XrClass *existing = xr_isolate_get_native_type_class(isolate, info->gc_type);
     if (existing != NULL) {

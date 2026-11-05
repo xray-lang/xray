@@ -69,7 +69,7 @@ static bool keyword_fixture_open(void) {
 /* Keep the scanner arena alive until every returned token is inspected. */
 static void keyword_scanner_open(Scanner *scanner, const char *source) {
     XrCompileResourceStatus status = xr_compile_scanner_open(scanner, keyword_state,
-        &keyword_arena, source);
+        &keyword_arena, source,NULL);
     if (status != XR_COMPILE_RESOURCE_OK) {
         fprintf(stderr, "keyword scanner open failed: %u\n", (unsigned)status);
         keyword_fixture_close();

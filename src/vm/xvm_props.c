@@ -27,7 +27,6 @@
 #include "xdebug.h"
 #include "../runtime/xray_debug_hooks.h"
 #include "../runtime/xstrbuf.h"
-#include "../runtime/object/xstringbuilder.h"
 
 #include "../runtime/object/xjson.h"
 #include "../runtime/object/xtuple.h"

@@ -22,7 +22,9 @@ typedef enum XrFileReadStatus {
     XR_FILE_READ_LIMIT,
     XR_FILE_READ_IO,
     XR_FILE_READ_OUT_OF_MEMORY,
-    XR_FILE_READ_BAD_ARGUMENT
+    XR_FILE_READ_BAD_ARGUMENT,
+    XR_FILE_READ_MEMORY_LIMIT,
+    XR_FILE_READ_OVERFLOW
 } XrFileReadStatus;
 
 typedef struct XrFileBytes {

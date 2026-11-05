@@ -85,7 +85,7 @@
 #include <stddef.h>
 #include "../base/xarena.h"
 #include "../os/os_time.h"
-#include "../runtime/object/xstringbuilder.h"
+#include "../runtime/object/xtext_worker.h"
 #include "../runtime/object/xbuffer.h"
 
 #include "../runtime/object/xjson.h"
@@ -389,6 +389,22 @@ XrVMResult run(XrVMRuntime *isolate, XrVMContext *vm_ctx) {
 
 #define VM_RUNTIME_ERROR(code, fmt, ...)                                                           \
     VM_THROW_EXCEPTION_VALUE(xr_panic_info_newf(isolate, (code), fmt, ##__VA_ARGS__))
+
+#define VM_TEXT_WORKER_REQUIRE(operation, slot, role)                                               \
+    do {                                                                                           \
+        XrTextWorkerStatus _text_status = (operation);                                               \
+        if (_text_status != XR_TEXT_WORKER_OK) {                                                     \
+            (void) xr_text_worker_close(isolate, &(slot), (role));                                   \
+            VM_RUNTIME_ERROR(_text_status == XR_TEXT_WORKER_OUT_OF_MEMORY                           \
+                                 ? XR_ERR_OUT_OF_MEMORY : XR_ERR_TYPE_MISMATCH,                      \
+                             "%s", "private text worker operation failed");                        \
+        }                                                                                          \
+    } while (0)
+#define VM_REJECT_TEXT_WORKER(value)                                                               \
+    do {                                                                                           \
+        if (xr_text_worker_is_private(value))                                                       \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "%s", "private text worker cannot escape");       \
+    } while (0)
 
 #define VM_ARRAY_INDEX_OOB(raw_idx, raw_length)                                                    \
     do {                                                                                           \
@@ -883,7 +899,7 @@ startfunc:
 
 /* Arithmetic + unary opcodes — see xvm_dispatch_arith.inc.c. */
 #include "xvm_dispatch_arith.inc.c"
-/* Box/unbox + StringBuilder helpers — see xvm_dispatch_data.inc.c. */
+/* Box/unbox + private text helpers — see xvm_dispatch_data.inc.c. */
 #include "xvm_dispatch_data.inc.c"
 /* Bitwise opcodes — see xvm_dispatch_bitwise.inc.c. */
 #include "xvm_dispatch_bitwise.inc.c"

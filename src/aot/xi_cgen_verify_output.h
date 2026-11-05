@@ -16,7 +16,7 @@
  * well-formedness is not negotiable.
  *
  * The structural passes are string / char / comment aware. Their scratch
- * storage and actual traversal work use the caller's compiler ledger.
+ * storage uses the caller's controlled compiler memory.
  */
 
 #ifndef XI_CGEN_VERIFY_OUTPUT_H
@@ -49,7 +49,12 @@ typedef enum XiCgenVerifyStatus {
     XI_CGEN_VERIFY_OUT_OF_MEMORY = 1,
     XI_CGEN_VERIFY_BAD_ARGUMENT = 2,
     XI_CGEN_VERIFY_MALFORMED = 3,
-    XI_CGEN_VERIFY_BUDGET = 4,
+    XI_CGEN_VERIFY_BUDGET = 4, /* Local input/structure complexity limit. */
+    XI_CGEN_VERIFY_MEMORY_LIMIT,
+    XI_CGEN_VERIFY_OVERFLOW,
+    XI_CGEN_VERIFY_CANCELLED,
+    XI_CGEN_VERIFY_DEADLINE,
+    XI_CGEN_VERIFY_CLOCK_FAILURE,
 } XiCgenVerifyStatus;
 
 /* Structural check of a generated C translation unit.
@@ -59,11 +64,8 @@ typedef enum XiCgenVerifyStatus {
  * preserve diagnostic bytes. NULL source is legal only with zero length.
  * Resources are mandatory and borrowed for this synchronous call. Scratch
  * blocks include ledger allocation overhead and coexist during growth.
- * Work charges precede each source/keyword byte read, byte-pair comparison,
- * traversal iteration, definition lookup/store, and diagnostic conversion;
- * copies, clears and writes charge their actual byte counts. Scalar control
- * state and static keyword tables do not allocate. Inputs above INT_MAX-1
- * bytes return BUDGET before reading, preserving bounded line/depth indices. */
+ * Scalar control state and static keyword tables do not allocate. Inputs above
+ * INT_MAX-1 bytes return BUDGET before reading, preserving bounded indices. */
 XR_FUNC XiCgenVerifyStatus xr_compile_cgen_verify_output(XrCompileResources *resources,
     const char *c_src, size_t len, XiCgenVerifyResult *out);
 

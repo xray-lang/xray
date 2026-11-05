@@ -27,8 +27,8 @@ static XrXirValue path_handle(ValuePathSlot slot) {
 static XrXirValueStatus path_array_clone(const XrXirValue *value,
     XrXirValueAdmission *admission, XrXirValue *output) {
     XirArray *source = (XirArray *)object_pointer(value), *copy = NULL;
-    if (source->length > admission->work) return XR_XIR_VALUE_LIMIT;
-    admission->work -= source->length;
+    if (!admission_is_compile(admission) && (source->length > admission->work)) return XR_XIR_VALUE_LIMIT;
+    if (!admission_is_compile(admission)) admission->work -= source->length;
     XrXirValueStatus status = array_allocate((XrXirType)value->type, source->capacity, admission, &copy);
     if (status != XR_XIR_VALUE_OK) return status;
     XrXirValue owned = array_value(copy); StoragePack pack = {0};
@@ -65,8 +65,8 @@ static XrXirValueStatus path_unique(ValuePathSlot *slot,
     }
     else {
         XirNominalValue *record = (XirNominalValue *)object;
-        if (record->count > admission->work) return XR_XIR_VALUE_LIMIT;
-        admission->work -= record->count;
+        if (!admission_is_compile(admission) && (record->count > admission->work)) return XR_XIR_VALUE_LIMIT;
+        if (!admission_is_compile(admission)) admission->work -= record->count;
         status = struct_copy_fields(slot->type, record->fields, record->count, admission, &copy);
     }
     if (status != XR_XIR_VALUE_OK) return status;
@@ -82,8 +82,8 @@ static XrXirValueStatus path_unique(ValuePathSlot *slot,
 static XrXirValueStatus path_storage_step(ValuePathSlot *slot,
     const XrXirValuePathStep *step, XrXirValueAdmission *admission,
     ValuePathWrite *write, XrXirFaultDetail *fault, const XirObject *borrow_owner) {
-    if (!admission->work) return XR_XIR_VALUE_LIMIT;
-    --admission->work;
+    if (!admission_is_compile(admission) && (!admission->work)) return XR_XIR_VALUE_LIMIT;
+    if (!admission_is_compile(admission)) --admission->work;
     if (slot->type != step->container) return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
     const XrXirTypeNode *node = xr_xir_type_node(types, slot->type);
@@ -193,7 +193,7 @@ static XrXirValueStatus path_begin(const XrXirValuePlace *root,
     if (fault) *fault = (XrXirFaultDetail){0};
     if (!root || !root->payload || !path || (path->count && !path->steps) ||
         !admission || !admission->arena || !fault) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (path->count > admission->work) return XR_XIR_VALUE_LIMIT;
+    if (!admission_is_compile(admission) && (path->count > admission->work)) return XR_XIR_VALUE_LIMIT;
     *slot = (ValuePathSlot){root->type, root->payload, false,admission->arena};
     XrXirValue value = path_handle(*slot);
     return xr_xir_value_admit(&value, root->type, admission);

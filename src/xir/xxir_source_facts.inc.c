@@ -36,17 +36,17 @@ static XrXirStatus source_facts_retain(const XrXirCompileContext *context,
     uint_fast64_t count=atomic_load_explicit(&facts->references,memory_order_relaxed);
     for (;;) {
         if (!count || count==UINT_FAST64_MAX) return XR_XIR_BUDGET;
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         if (atomic_compare_exchange_strong_explicit(&facts->references,&count,count+1,
             memory_order_relaxed,memory_order_relaxed)) break;
     }
-    if (!xir_compile_work(context,sizeof(*output))) { xir_source_facts_release(facts);return XR_XIR_BUDGET; }
+
     *output=facts;return XR_XIR_OK;
 }
 
-static XrXirStatus source_facts_contract_match(const XrXirCompileContext *context,
+static XrXirStatus source_facts_contract_match(
     const XrXirFunctionEffectContract *stored,const XrXirFunctionEffectContract *actual) {
-    if (!xir_compile_work(context,5)) return XR_XIR_BUDGET;
+
     if (stored->parameter_count!=actual->parameter_count ||
         stored->formula.constant_mask!=actual->formula.constant_mask ||
         stored->formula.term_count!=actual->formula.term_count ||
@@ -58,23 +58,23 @@ static XrXirStatus source_facts_contract_match(const XrXirCompileContext *contex
         !!stored->bindings!=!!stored->binding_count || !!actual->bindings!=!!actual->binding_count)
         return XR_XIR_BAD_STRUCTURE;
     for (uint32_t p=0;p<stored->parameter_count;++p) {
-        if (!xir_compile_work(context,4)) return XR_XIR_BUDGET;
+
         if (stored->parameters[p].kind!=actual->parameters[p].kind ||
             stored->parameters[p].uses!=actual->parameters[p].uses) return XR_XIR_BAD_STRUCTURE;
     }
     for (uint32_t t=0;t<stored->formula.term_count;++t) {
-        if (!xir_compile_work(context,4)) return XR_XIR_BUDGET;
+
         if (stored->formula.terms[t].kind!=actual->formula.terms[t].kind ||
             stored->formula.terms[t].index!=actual->formula.terms[t].index) return XR_XIR_BAD_STRUCTURE;
     }
     for (uint32_t v=0;v<stored->value_count;++v) {
-        if (!xir_compile_work(context,6)) return XR_XIR_BUDGET;
+
         if (stored->values[v].instruction!=actual->values[v].instruction ||
             stored->values[v].mode!=actual->values[v].mode ||
             stored->values[v].declared_type!=actual->values[v].declared_type) return XR_XIR_BAD_STRUCTURE;
     }
     for (uint32_t b=0;b<stored->binding_count;++b) {
-        if (!xir_compile_work(context,8)) return XR_XIR_BUDGET;
+
         if (stored->bindings[b].family!=actual->bindings[b].family ||
             stored->bindings[b].instruction!=actual->bindings[b].instruction ||
             stored->bindings[b].parameter!=actual->bindings[b].parameter ||
@@ -98,7 +98,7 @@ static XrXirStatus source_facts_input_match(const XrXirCompileContext *context,
         !artifact->module.provenance || artifact->module.provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE)
         return XR_XIR_BAD_STRUCTURE;
     const XrXirProvenance *actual=artifact->module.provenance,*stored=facts->input;
-    if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
+
     if (stored->kind!=actual->kind || stored->contract_count!=actual->contract_count ||
         stored->contract_count!=artifact->module.function_count || !stored->contract_count ||
         !stored->contracts || !actual->contracts || stored->source || actual->source ||
@@ -109,7 +109,7 @@ static XrXirStatus source_facts_input_match(const XrXirCompileContext *context,
      * allocation admission belongs to the actual clone, never to this read. */
     XrXirStatus status=XR_XIR_OK;
     for (uint32_t f=0;f<stored->contract_count && status==XR_XIR_OK;++f)
-        status=source_facts_contract_match(context,&stored->contracts[f],&actual->contracts[f]);
+        status=source_facts_contract_match(&stored->contracts[f],&actual->contracts[f]);
     if (status==XR_XIR_OK) status=source_facts_construction_match(context,&artifact->module,
         facts->construction,artifact->construction);
     return status;
@@ -143,11 +143,7 @@ static XrXirStatus source_facts_build(XrXirArtifact *artifact,XrXirDiagnostic *d
         artifact->construction,&effects,diagnostic);
     XirSourceFacts *facts=status==XR_XIR_OK?xir_compile_calloc(context,1,sizeof(*facts),&status):NULL;
     if (status==XR_XIR_OK && !facts) status=XR_XIR_OUT_OF_MEMORY;
-    if (facts && !xir_compile_work(context,
-        sizeof(facts->context)+sizeof(facts->references)+sizeof(facts->effects))) {
-        xr_compile_resources_free(facts);xr_xir_compile_effects_free(effects);
-        return XR_XIR_BUDGET;
-    }
+
     if (facts) {
         atomic_init(&facts->references,1);
         facts->context=*context;facts->effects=effects;effects=NULL;
@@ -159,9 +155,7 @@ static XrXirStatus source_facts_build(XrXirArtifact *artifact,XrXirDiagnostic *d
     }
     xr_xir_compile_effects_free(effects);
     if (status!=XR_XIR_OK) { xir_source_facts_release(facts);return status; }
-    if (!xir_compile_work(context,sizeof(artifact->source_facts))) {
-        xir_source_facts_release(facts);return XR_XIR_BUDGET;
-    }
+
     artifact->source_facts=facts;return XR_XIR_OK;
 }
 

@@ -136,9 +136,9 @@ static int isolate_init_full(XrVMRuntime *isolate) {
     XrCompileResources *resources = NULL;
     if (xr_compile_resources_new(&limits, &resources) != XR_COMPILE_RESOURCE_OK)
         return -1;
-    XrCompilerSessionStatus session_status = xr_compile_session_new(resources, &isolate->compiler_session);
+    XrCompileResourceStatus session_status = xr_compile_session_new(resources, &isolate->compiler_session);
     xr_compile_resources_release(resources);
-    if (session_status != XR_COMPILER_SESSION_OK)
+    if (session_status != XR_COMPILE_RESOURCE_OK)
         return -1;
     XrCompileState *state = xr_compile_session_compile_state(isolate->compiler_session);
     if (xr_compile_type_pool_open(state, &isolate->native_type_pool) != XR_COMPILE_RESOURCE_OK)

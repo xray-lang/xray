@@ -16,7 +16,7 @@ static XrXirStatus effect_program_layout_head(const XrXirCompileContext *work,
     EffectBodyFunctionHead head;
     XrXirStatus status=effect_body_request_head(&request,function,&head);
     if (status!=XR_XIR_OK) return status;
-    if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=(XirInputFunctionHead){head.name,head.name_length,head.parameters,head.parameter_count,
         head.result,head.blocks,head.block_count,head.instruction_count,head.operands,head.operand_count,head.error_type};
     return XR_XIR_OK;
@@ -49,7 +49,7 @@ static XrXirStatus effect_program_parameter_domains(const XrXirCompileContext *w
         if(status!=XR_XIR_OK) return status;
         const EffectBodyFunction *function=&body->functions[f];
         for(uint32_t p=0;p<function->parameter_count;++p) {
-            if(!xir_compile_work(work,4)) return XR_XIR_BUDGET;
+
             const XrXirEffectParameter *parameter=&contracts[f].parameters[p];
             if(parameter->kind>XR_XIR_EFFECT_PARAMETER_CONDITIONAL_STATIC) return XR_XIR_BAD_STRUCTURE;
             /* Fixed domains contain no callable-origin variable or use row. */
@@ -107,7 +107,7 @@ XR_FUNC XrXirStatus xir_effects_program_root_current(const XrXirCompileContext *
     if (status!=XR_XIR_OK) return status;
     const EffectInvocationCertificate *certificate=effects->invocations;
     status=effect_source_equation_shape(work,certificate);
-    if (status==XR_XIR_OK) status=effect_source_result_views(work,certificate,effects);
+    if (status==XR_XIR_OK) status=effect_source_result_views(certificate,effects);
     if (status==XR_XIR_OK) status=effect_program_parameter_domains(work,effects);
     if (status==XR_XIR_OK) status=effect_source_atoms(work,certificate);
     if (status==XR_XIR_OK) status=effect_source_projections(work,certificate);

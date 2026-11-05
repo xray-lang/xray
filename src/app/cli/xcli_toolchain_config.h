@@ -25,25 +25,26 @@ typedef struct XrCliToolchainConfigView {
 typedef enum XrCliToolchainConfigStatus {
     XR_CLI_TOOLCHAIN_CONFIG_OK, XR_CLI_TOOLCHAIN_CONFIG_INVALID,
     XR_CLI_TOOLCHAIN_CONFIG_BUDGET, XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY,
-    XR_CLI_TOOLCHAIN_CONFIG_IO, XR_CLI_TOOLCHAIN_CONFIG_UNRESOLVED
+    XR_CLI_TOOLCHAIN_CONFIG_IO, XR_CLI_TOOLCHAIN_CONFIG_UNRESOLVED,
+    XR_CLI_TOOLCHAIN_CONFIG_MEMORY_LIMIT, XR_CLI_TOOLCHAIN_CONFIG_OVERFLOW
 } XrCliToolchainConfigStatus;
 
-/* Read one bounded regular-file snapshot on the required original state/ledger.
+/* Read one bounded regular-file snapshot on the required original memory state.
  * NULL path selects the actual platform preference path. Missing files are an
  * empty configuration; malformed files never become an automatic selection.
  * Failure preserves output. All request borrows end on return. A snapshot
- * outlives its input bytes and the caller's state/ledger references. Preferences are
+ * outlives its input bytes and the caller's memory-state references. Preferences are
  * configuration facts, not provider readiness or execution authority. Fatal
  * resource errors latch in the caller's state even if construction fails;
- * subsequent entries on that state perform no new work or allocation. */
+ * subsequent entries on that state perform no allocation. */
 XR_FUNC XrCliToolchainConfigStatus xr_cli_toolchain_config_open(
     XrCompileState *state, const char *path, XrCliToolchainConfig **output);
 /* Resolve the same preference locator without reading its contents. This lets
  * an explicit reset repair a corrupt configuration. Output must be NULL; the
- * returned string owns its original ledger and uses resources_free. */
+ * returned string owns its original memory owner and uses resources_free. */
 XR_FUNC XrCliToolchainConfigStatus xr_cli_toolchain_config_path(
     XrCompileState *state, const char *path, char **output);
-/* Immutable borrows remain valid until free and do not consume work. */
+/* Immutable borrows remain valid until free and do not allocate. */
 XR_FUNC const XrCliToolchainConfigView *xr_cli_toolchain_config_view(const XrCliToolchainConfig *owner);
 XR_FUNC void xr_cli_toolchain_config_free(XrCliToolchainConfig *owner);
 #endif // XCLI_TOOLCHAIN_CONFIG_H

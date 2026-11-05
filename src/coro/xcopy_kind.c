@@ -17,6 +17,9 @@ XrCopyKind xr_value_copy_kind(XrValue value) {
     if (!XR_IS_PTR(value))
         return XR_COPY_IMMEDIATE;
 
+    if (XR_HEAP_TYPE(value) == XR_TTEXT_WORKER)
+        return XR_COPY_DEEP;
+
     if (XR_HEAP_TYPE(value) == XR_TSTRING) {
         const XrString *string = (const XrString *) XR_VALUE_GCPTR(value);
         if (!string)
@@ -27,6 +30,8 @@ XrCopyKind xr_value_copy_kind(XrValue value) {
     }
 
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
+    if (obj && XR_OBJ_GET_TYPE(obj) == XR_TTEXT_WORKER)
+        return XR_COPY_DEEP;
     /* Scheduler-owned handles (Task, Coroutine, CoroPool, and future managed
      * control-plane objects) are identity values, never execution-local data
      * graphs. Their signed atomic-band RC and MANAGED lifetime make compiler

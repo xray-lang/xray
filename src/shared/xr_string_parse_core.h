@@ -158,8 +158,8 @@ static inline double xr_string_parse_infinity(void) {
  * Runtime parsing uses no compiler-work callback. */
 static inline XrStringParseFloatResult xr_string_parse_float64(const char *data, size_t len) {
     XrStringParseFloatResult out={XR_NUMBER_PARSE_INVALID_SYNTAX,0.0};
-    XrDecimalWork work=xr_decimal_runtime_work();uint64_t bits=0;
-    if(xr_decimal_float_text_work(&work,data,len,64,&bits)!=XR_DECIMAL_OK)return out;
+    uint64_t bits=0;
+    if(xr_decimal_float_text_work(NULL,data,len,64,&bits)!=XR_DECIMAL_OK)return out;
     memcpy(&out.value,&bits,sizeof(bits));out.failure=XR_NUMBER_PARSE_OK;return out;
 }
 

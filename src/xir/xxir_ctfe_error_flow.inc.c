@@ -14,11 +14,10 @@ enum { CTFE_EXIT_NONE,CTFE_EXIT_RETURN,CTFE_EXIT_ERROR,CTFE_EXIT_LOCAL_ERROR,CTF
 static XrXirCtfeStatus ctfe_frame_edge(CtfeCallExecution *execution,CtfeCallFrame *frame,uint32_t target) {
     const XrXirFunction *body=frame->run.function;
     if (target>=body->block_count) return XR_XIR_CTFE_BAD_ARTIFACT;
-    if (!scalar_compile_work(&frame->run,16)) return XR_XIR_CTFE_BUDGET;
     XrXirInstruction edge={.op=XR_XIR_JUMP,.targets={target}};
-    XrXirCtfeStatus status=ctfe_tuple_flow_work(&frame->run,&edge,&execution->owned);if (status!=XR_XIR_CTFE_OK) return status;
+    XrXirCtfeStatus status=ctfe_tuple_flow_admit(&frame->run,&edge,&execution->owned);if (status!=XR_XIR_CTFE_OK) return status;
     XrXirRunStatus moved=xir_scalar_core_edge(&frame->run,frame->state.instruction,target);
-    if (moved!=XR_XIR_RUN_OK) return moved==XR_XIR_RUN_STEP_LIMIT?XR_XIR_CTFE_BUDGET:XR_XIR_CTFE_BAD_ARTIFACT;
+    if (moved!=XR_XIR_RUN_OK) return moved==XR_XIR_RUN_STEP_LIMIT?XR_XIR_CTFE_STEP_LIMIT:XR_XIR_CTFE_BAD_ARTIFACT;
     frame->state.instruction=body->blocks[target].first;return XR_XIR_CTFE_OK;
 }
 static XrXirCtfeStatus ctfe_invoke_deliver(CtfeCallExecution *execution,CtfeCallFrame *parent,
@@ -33,9 +32,9 @@ static XrXirCtfeStatus ctfe_invoke_deliver(CtfeCallExecution *execution,CtfeCall
     if ((error && marker->op!=XR_XIR_INVOKE_ERROR) || (!error && expected!=XR_XIR_UNIT && !produced) ||
         (produced && marker->immediate!=(int64_t)at) || (!discard && produced && marker->type!=expected)) return XR_XIR_CTFE_BAD_ARTIFACT;
     CtfeOwnedState *state=&execution->owned;XrXirValue erased={0};const XrXirValue *received=value;
-    XrXirCtfeStatus status=ctfe_validation_work(&parent->run,state,expected);
+    XrXirCtfeStatus status=ctfe_value_type_admit(&parent->run,state,expected);
     if (status==XR_XIR_CTFE_OK && error) {
-        status=ctfe_admission_work(&parent->run,state,value);
+        status=ctfe_value_graph_admit(&parent->run,state,value);
         if (status==XR_XIR_CTFE_OK) {
             XrXirValueAdmission admission=ctfe_value_admission(state);
             status=ctfe_value_status(xr_xir_error_erase(value,&admission,&erased));received=&erased;
@@ -50,10 +49,9 @@ static XrXirCtfeStatus ctfe_invoke_deliver(CtfeCallExecution *execution,CtfeCall
 }
 static XrXirCtfeStatus ctfe_error_begin(CtfeCallExecution *execution,const XrXirValue *value,uint8_t kind) {
     CtfeCallFrame *frame=execution->top;XrXirValue concrete={0};
-    XrXirCtfeStatus status=ctfe_error_concrete(&frame->run,&execution->owned,value,&concrete);
-    if (status==XR_XIR_CTFE_OK) status=ctfe_admission_work(&frame->run,&execution->owned,&concrete);
+    XrXirCtfeStatus status=ctfe_error_concrete(&frame->run,value,&concrete);
+    if (status==XR_XIR_CTFE_OK) status=ctfe_value_graph_admit(&frame->run,&execution->owned,&concrete);
     if (status!=XR_XIR_CTFE_OK) return status;
-    if (!scalar_compile_work(&frame->run,sizeof(XrXirValue)+16)) return XR_XIR_CTFE_BUDGET;
     status=ctfe_value_status(xr_xir_value_copy(&concrete,&frame->returned));if (status!=XR_XIR_CTFE_OK) return status;
     frame->exit_kind=kind;frame->state.leaving=true;
     const XrXirInstruction *op=&frame->run.function->instructions[frame->state.instruction];
@@ -64,7 +62,6 @@ static XrXirCtfeStatus ctfe_error_unwind(CtfeCallExecution *execution,bool *done
     CtfeCallFrame *frame=execution->top,*parent=frame->parent;
     if (!parent) { *done=true;return XR_XIR_CTFE_UNCAUGHT_ERROR; }
     if (frame->cleanup || parent->exit_kind) return XR_XIR_CTFE_BAD_ARTIFACT;
-    if (!scalar_compile_work(&frame->run,2*sizeof(XrXirValue)+64)) return XR_XIR_CTFE_BUDGET;
     bool invoked=frame->invoked;XrXirValue held=frame->returned;frame->returned=(XrXirValue){0};
     execution->top=parent;--execution->depth;execution->live_bytes-=frame->bytes;ctfe_call_frame_free(frame);
     execution->owned.activation=parent;execution->owned.authority=(XrXirCellAuthority){execution,parent,parent->epoch};

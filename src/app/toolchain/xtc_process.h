@@ -26,7 +26,8 @@
 typedef enum XrProcessStatus {
     XTC_PROCESS_OK, XTC_PROCESS_INVALID, XTC_PROCESS_UNRESOLVED,
     XTC_PROCESS_BUDGET, XTC_PROCESS_OUT_OF_MEMORY, XTC_PROCESS_IO,
-    XTC_PROCESS_TIMEOUT, XTC_PROCESS_CANCELLED, XTC_PROCESS_UNSUPPORTED
+    XTC_PROCESS_TIMEOUT, XTC_PROCESS_CANCELLED, XTC_PROCESS_UNSUPPORTED,
+    XTC_PROCESS_MEMORY_LIMIT, XTC_PROCESS_OVERFLOW
 } XrProcessStatus;
 typedef enum XrProcessEnvironmentSource {
     XTC_PROCESS_ENV_EXPLICIT, XTC_PROCESS_ENV_SNAPSHOT
@@ -54,7 +55,7 @@ typedef struct XrProcessSpec {
     XrProcImageMode image_mode;
     XrProcCompletionPolicy completion_policy;
     /* Copied by prepare; context is borrowed only throughout each run and
-     * its cleanup. Callback work and retained records use this process ledger.
+     * its cleanup. Retained records use this process memory owner.
      * Observations are provisional until run succeeds; the callback owns its
      * rollback. No image callback occurs during failure cleanup. */
     XrProcImageObserver image_observer;
@@ -98,12 +99,11 @@ XR_FUNC XrProcessStatus xtc_process_prepare(XrCompileResources *resources,
  * changes: WINDOWS_TREE uses the new callback/context, borrowed during run and
  * cleanup. No ambient environment or cwd is captured. Source may then be freed.
  * Non-Windows returns UNSUPPORTED. Output must be empty; failure preserves it.
- * Work covers text scans including NUL, copied bytes, copied policy fields and
- * the ledger's actual allocation/zeroing work. Cleanup consumes no new work. */
+ * Owned copies retain the original memory owner. Cleanup needs no allocation. */
 XR_FUNC XrProcessStatus xtc_process_clone_observed(const XrToolchainProcess *source,
     const XrProcImageObserver *observer, XrToolchainProcess **output);
 /* Borrow the exact frozen inputs used by run until process_free. These queries
- * do not scan text, allocate, capture ambient state or consume work. The view
+ * do not scan text, allocate or capture ambient state. The view
  * describes a complete environment, including captured system-reserved keys.
  * Invalid arguments preserve the entire output. No execution authority is
  * issued; recipients must copy borrowed inputs into their own resource owner. */

@@ -21,11 +21,16 @@ static bool source_manifest_same(SourceContext *ctx, const XrModuleIdentityAutho
 static bool source_manifest_failure(SourceContext *ctx, XrDeclarationStatus status) {
     return source_fail(ctx, NULL, status == XR_DECLARATION_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
         status == XR_DECLARATION_LIMIT ? XR_XIR_BUDGET :
+        status == XR_DECLARATION_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        status == XR_DECLARATION_OVERFLOW ? XR_XIR_OVERFLOW :
+        status == XR_DECLARATION_CANCELLED ? XR_XIR_CANCELLED :
+        status == XR_DECLARATION_DEADLINE ? XR_XIR_DEADLINE :
+        status == XR_DECLARATION_CLOCK_FAILURE ? XR_XIR_CLOCK_FAILURE :
         status == XR_DECLARATION_IO ? XR_XIR_IO : XR_XIR_BAD_STRUCTURE,
         "declaration manifest admission failed");
 }
 static bool source_manifest_module(SourceContext *ctx, SourceManifest *manifest, const char *logical) {
-    if (!source_work(ctx, NULL)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     /* A supplied AST is the entry snapshot. Its declarations still receive
      * every manifest obligation; unrelated disk bytes cannot replace it. */
     if (ctx->graph->entry_index >= 0) {
@@ -40,25 +45,26 @@ static bool source_manifest_module(SourceContext *ctx, SourceManifest *manifest,
     if (read != XR_FILE_READ_OK)
         return source_fail(ctx, NULL, read == XR_FILE_READ_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
             read == XR_FILE_READ_LIMIT ? XR_XIR_BUDGET :
+            read == XR_FILE_READ_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+            read == XR_FILE_READ_OVERFLOW ? XR_XIR_OVERFLOW :
             read == XR_FILE_READ_IO ? XR_XIR_IO :
             read == XR_FILE_READ_MISSING ? XR_XIR_UNRESOLVED : XR_XIR_BAD_STRUCTURE,
             "declaration source is missing or outside its authority");
     for (size_t i = 0; i < bytes.size; ++i) {
-        if (!source_work(ctx, NULL)) { xr_compile_resources_free(bytes.data); return false; }
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) { xr_compile_resources_free(bytes.data); return false; }
         if (!bytes.data[i]) {
             xr_compile_resources_free(bytes.data);
             return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "declaration source contains a NUL byte");
         }
     }
     XrFingerprint fingerprint;
-    XrCompileResourceStatus hashed = xr_compile_module_source_fingerprint(ctx->compile.resources, bytes.data, &fingerprint);
+    xr_module_source_fingerprint(bytes.data, &fingerprint);
     xr_compile_resources_free(bytes.data);
-    if (hashed != XR_COMPILE_RESOURCE_OK)
-        return source_fail(ctx, NULL, XR_XIR_BUDGET, "declaration fingerprint work exhausted");
     char *path = NULL;
     XrOsIoStatus joined = xr_path_join_owned(&policy, manifest->authority.physical_root, logical, &path);
     if (joined != XR_OS_IO_OK)
-        return source_fail(ctx, NULL, joined == XR_OS_IO_BUDGET ? XR_XIR_BUDGET :
+        return source_fail(ctx, NULL, joined == XR_OS_IO_OVERFLOW ? XR_XIR_OVERFLOW :
+            joined == XR_OS_IO_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
             joined == XR_OS_IO_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
             joined == XR_OS_IO_IO ? XR_XIR_IO : XR_XIR_BAD_STRUCTURE, "declaration path construction failed");
     char *error = NULL;
@@ -100,14 +106,14 @@ static bool source_manifest_load(SourceContext *ctx, const XrModuleIdentityAutho
 static bool source_manifests_load(SourceContext *ctx) {
     for (int m = 0; m < ctx->graph->spec_count; ++m) {
         ctx->module = (uint32_t)m;
-        if (!source_work(ctx, NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrModuleIdentityAuthority *authority = &ctx->graph->specs[m].authority;
         if (authority->kind == XR_MODULE_IDENTITY_MEMORY || authority->kind == XR_MODULE_IDENTITY_STDLIB) continue;
         if (!authority->physical_root)
             return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "declaration authority lacks a physical root");
         bool found = false;
         for (SourceManifest *manifest = ctx->manifests; manifest; manifest = manifest->next) {
-            if (!source_work(ctx, NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (source_manifest_same(ctx, &manifest->authority, authority)) { found = true; break; }
         }
         if (!found && !source_manifest_load(ctx, authority)) return false;
@@ -123,7 +129,7 @@ static bool source_manifest_parameters(SourceContext *ctx, uint32_t function, co
     for (uint32_t p = 0; p < record->parameter_count; ++p) {
         uint32_t selected = UINT32_MAX;
         for (int i = 0; i < count; ++i) {
-            if (!source_work(ctx, node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (!source_text_same(ctx, node, parameters[i]->name, record->parameters[p])) continue;
             if (selected != UINT32_MAX)
                 return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "ambiguous declaration parameter name");
@@ -154,7 +160,7 @@ static bool source_manifest_requirement(SourceContext *ctx, SourceDeclarationTar
     for (uint32_t p = 0; p < record->parameter_count; ++p) {
         uint32_t selected = UINT32_MAX;
         for (int a = 0; a < method->param_count; ++a) {
-            if (!source_work(ctx,node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (source_text_same(ctx, node, record->parameters[p],method->params[a]->name)) selected = (uint32_t)a;
         }
         if (selected == UINT32_MAX)
@@ -175,7 +181,7 @@ static bool source_manifests_bind(SourceContext *ctx) {
     for (SourceManifest *manifest = ctx->manifests; manifest; manifest = manifest->next) {
         if (!manifest->declarations) continue;
         for (uint32_t i = 0; i < manifest->declarations->count; ++i) {
-            if (!source_work(ctx, NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             const XrDeclarationRecord *record = &manifest->declarations->records[i];
             char *canonical = NULL;
             XrModuleStatus identity_status = xr_compile_module_identity_from_logical(ctx->compile.resources, &manifest->authority, record->module, &canonical);

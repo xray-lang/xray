@@ -39,7 +39,7 @@ static bool source_pattern_product_description(SourceContext *ctx,XrXirType type
     if (product->count && !product->fields) return false;
     SourceSubstitution substitution={instance.arguments,instance.argument_count};
     for (uint32_t f=0;f<product->count;++f) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         SourceProductField *field=&product->fields[f];field->selection=f;
         if (nominal) {
             field->name=declaration.fields[f].name;
@@ -54,7 +54,7 @@ static bool source_pattern_product_select(SourceContext *ctx,AstNode *node,
     SourcePatternProduct *product,const char *name,uint32_t *output) {
     size_t length=0;if (!source_text_length(ctx,node,name,&length)) return false;
     for (uint32_t f=0;f<product->count;++f) {
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         XrXirLiteral spelling=product->fields[f].name;
         if (length==spelling.length && source_span_same(ctx,node,name,spelling.bytes,length)) {*output=f;return true;}
     }
@@ -91,7 +91,7 @@ static bool source_pattern_product(SourceContext *ctx,AstNode *node,XrXirType ty
     if (out->count && !out->fields) return false;
     for (int i=0;i<count;++i) {
         uint32_t f=(uint32_t)i;
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (!tuple) {
             const char *name=node->as.pattern_object.field_names[i];
             if (!source_pattern_product_select(ctx,node,product,name,&f)) return false;

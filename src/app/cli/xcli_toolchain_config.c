@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xcli_toolchain_config.c - Strict preference snapshots on one caller ledger
+ * xcli_toolchain_config.c - Strict preference snapshots on one caller memory owner
  */
 #include "xcli_toolchain_config.h"
 #include "../../base/xfileio.h"
@@ -26,18 +26,21 @@ struct XrCliToolchainConfig {
 };
 static XrCliToolchainConfigStatus config_resource_status(XrCompileResourceStatus status) {
     return status==XR_COMPILE_RESOURCE_OK ? XR_CLI_TOOLCHAIN_CONFIG_OK :
-        status==XR_COMPILE_RESOURCE_BUDGET ? XR_CLI_TOOLCHAIN_CONFIG_BUDGET :
+        status==XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_CLI_TOOLCHAIN_CONFIG_MEMORY_LIMIT :
+        status==XR_COMPILE_RESOURCE_OVERFLOW ? XR_CLI_TOOLCHAIN_CONFIG_OVERFLOW :
         status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY : XR_CLI_TOOLCHAIN_CONFIG_INVALID;
 }
 static XrCliToolchainConfigStatus config_capture(XrCompileState *state,XrCliToolchainConfigStatus status) {
-    if(status==XR_CLI_TOOLCHAIN_CONFIG_BUDGET || status==XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY)
-        return config_resource_status(xr_compile_state_fail(state,status==XR_CLI_TOOLCHAIN_CONFIG_BUDGET ?
-            XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY));
-    return status;
+    XrCompileResourceStatus resource=XR_COMPILE_RESOURCE_OK;
+    if (status==XR_CLI_TOOLCHAIN_CONFIG_MEMORY_LIMIT) resource=XR_COMPILE_RESOURCE_MEMORY_LIMIT;
+    else if (status==XR_CLI_TOOLCHAIN_CONFIG_OVERFLOW) resource=XR_COMPILE_RESOURCE_OVERFLOW;
+    else if (status==XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY) resource=XR_COMPILE_RESOURCE_OUT_OF_MEMORY;
+    return resource==XR_COMPILE_RESOURCE_OK ? status : config_resource_status(xr_compile_state_fail(state,resource));
 }
 static XrCliToolchainConfigStatus config_io_status(XrOsIoStatus status) {
     return status == XR_OS_IO_OK ? XR_CLI_TOOLCHAIN_CONFIG_OK :
-        status == XR_OS_IO_BUDGET ? XR_CLI_TOOLCHAIN_CONFIG_BUDGET :
+        status == XR_OS_IO_MEMORY_LIMIT ? XR_CLI_TOOLCHAIN_CONFIG_MEMORY_LIMIT :
+        status == XR_OS_IO_OVERFLOW ? XR_CLI_TOOLCHAIN_CONFIG_OVERFLOW :
         status == XR_OS_IO_OUT_OF_MEMORY ? XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY :
         status == XR_OS_IO_NOT_FOUND ? XR_CLI_TOOLCHAIN_CONFIG_UNRESOLVED :
         status == XR_OS_IO_BAD_ARGUMENT ? XR_CLI_TOOLCHAIN_CONFIG_INVALID : XR_CLI_TOOLCHAIN_CONFIG_IO;
@@ -46,10 +49,6 @@ static bool config_io(XrCliToolchainConfig *owner, XrOsIoStatus status) {
     if (owner->status == XR_CLI_TOOLCHAIN_CONFIG_OK) owner->status = config_io_status(status);
     return owner->status == XR_CLI_TOOLCHAIN_CONFIG_OK;
 }
-static bool config_work(XrCliToolchainConfig *owner, uint64_t units) {
-    return owner->status == XR_CLI_TOOLCHAIN_CONFIG_OK &&
-        config_io(owner, owner->policy.work(owner->policy.context, units));
-}
 static bool config_invalid(XrCliToolchainConfig *owner) {
     if (owner->status == XR_CLI_TOOLCHAIN_CONFIG_OK) owner->status = XR_CLI_TOOLCHAIN_CONFIG_INVALID;
     return false;
@@ -57,7 +56,9 @@ static bool config_invalid(XrCliToolchainConfig *owner) {
 static bool config_parse_status(XrCliToolchainConfig *owner, XrTomlParseStatus status) {
     if (status == XR_TOML_PARSE_OK) return true;
     if (owner->status == XR_CLI_TOOLCHAIN_CONFIG_OK) owner->status =
-        status == XR_TOML_PARSE_BUDGET ? XR_CLI_TOOLCHAIN_CONFIG_BUDGET :
+        status == XR_TOML_PARSE_LIMIT ? XR_CLI_TOOLCHAIN_CONFIG_BUDGET :
+        status == XR_TOML_PARSE_MEMORY_LIMIT ? XR_CLI_TOOLCHAIN_CONFIG_MEMORY_LIMIT :
+        status == XR_TOML_PARSE_OVERFLOW ? XR_CLI_TOOLCHAIN_CONFIG_OVERFLOW :
         status == XR_TOML_PARSE_OUT_OF_MEMORY ? XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY :
         status == XR_TOML_PARSE_IO ? XR_CLI_TOOLCHAIN_CONFIG_IO : XR_CLI_TOOLCHAIN_CONFIG_INVALID;
     return false;
@@ -74,7 +75,7 @@ static bool config_known(XrCliToolchainConfig *owner, const XrTomlValue *table,
         bool known = false;
         for (size_t k = 0; k < count; ++k) {
             size_t n = strlen(keys[k]);
-            if (!config_work(owner, n + 1)) return false;
+
             if (n == member->key_length && !memcmp(member->key, keys[k], n)) { known = true; break; }
         }
         if (!known) return config_invalid(owner);
@@ -85,7 +86,7 @@ static bool config_string(XrCliToolchainConfig *owner, const XrTomlValue *value,
     size_t limit, const char **output) {
     if (!value || value->type != XR_TOML_STRING || !value->string_length ||
         value->string_length > limit) return config_invalid(owner);
-    if (!config_work(owner, value->string_length)) return false;
+
     if (memchr(value->as.string, 0, value->string_length)) return config_invalid(owner);
     *output = value->as.string; return true;
 }
@@ -104,7 +105,7 @@ static bool config_preference(XrCliToolchainConfig *owner, XrTomlValue *table,
     bool found = false;
     for (size_t i = 0; i < 6; ++i) {
         size_t n = strlen(selectors[i]);
-        if (!config_work(owner, n + 1)) return false;
+
         if (n == provider->string_length && !memcmp(name, selectors[i], n)) {
             preference.selector = (XrToolchainSelector)i; found = true; break;
         }
@@ -115,7 +116,7 @@ static bool config_preference(XrCliToolchainConfig *owner, XrTomlValue *table,
     if ((preference.compiler && preference.selector == XR_TOOLCHAIN_SELECTOR_ZIG) ||
         (preference.zig && preference.selector != XR_TOOLCHAIN_SELECTOR_AUTO &&
             preference.selector != XR_TOOLCHAIN_SELECTOR_ZIG)) return config_invalid(owner);
-    if (!config_work(owner, sizeof(preference))) return false;
+
     owner->preferences[owner->view.count++] = preference; return true;
 }
 static bool config_boolean(XrCliToolchainConfig *owner, XrTomlValue *table,
@@ -127,10 +128,9 @@ static bool config_boolean(XrCliToolchainConfig *owner, XrTomlValue *table,
     *output = value->as.boolean; return true;
 }
 static bool config_target(XrCliToolchainConfig *owner, const XrTomlMember *member) {
-    /* The model parser owns recognized triples. Its display list may omit a
-     * valid host record and is not an admission directory. Charge this fixed
-     * model lookup and its received text/result on the original ledger. */
-    if (!config_work(owner, 1 + member->key_length + sizeof(XrToolchainTarget))) return false;
+    /* Recognized triples come from the model parser, including valid host
+     * records omitted by its display list. */
+
     XrToolchainTarget target; char error[256];
     return xtc_target_parse(member->key,&target,error,sizeof(error)) || config_invalid(owner);
 }
@@ -148,8 +148,7 @@ static bool config_decode(XrCliToolchainConfig *owner) {
         if (targets->type != XR_TOML_TABLE || targets->as.table.count > 16) return config_invalid(owner);
         for (int i = 0; i < targets->as.table.count; ++i) {
             XrTomlMember *member = &targets->as.table.members[i];
-            if (!member->key_length || member->key_length > 127 ||
-                !config_work(owner, member->key_length)) return config_invalid(owner);
+            if ((!(member->key_length)) || (member->key_length > 127)) return config_invalid(owner);
             if (memchr(member->key, 0, member->key_length) || !strcmp(member->key, "native"))
                 return config_invalid(owner);
             if (!config_target(owner, member)) return false;
@@ -168,14 +167,14 @@ static bool config_decode(XrCliToolchainConfig *owner) {
 static bool config_path(XrCliToolchainConfig *owner, const char *path) {
     if (path) {
         size_t length = 0;
-        while (config_work(owner, 1)) {
+        while (owner->status == XR_CLI_TOOLCHAIN_CONFIG_OK) {
             if (!path[length]) break;
             if (++length > XR_PATH_LIMIT_MAX_PATH) return config_invalid(owner);
         }
         if (owner->status != XR_CLI_TOOLCHAIN_CONFIG_OK) return false;
         if (!length) return config_invalid(owner);
-        if (!config_io(owner, owner->policy.alloc(owner->policy.context, length + 1,
-            (void **)&owner->path)) || !config_work(owner, length + 1)) return false;
+        if (!(config_io(owner, owner->policy.alloc(owner->policy.context, length + 1,
+            (void **)&owner->path)))) return false;
         memcpy(owner->path, path, length + 1); return true;
     }
     char *base = NULL;
@@ -226,7 +225,7 @@ XR_FUNC XrCliToolchainConfigStatus xr_cli_toolchain_config_open(
         }
     }
     xr_compile_resources_free(bytes);
-    if (okay && config_work(owner, sizeof(owner->view))) {
+    if (okay && owner->status == XR_CLI_TOOLCHAIN_CONFIG_OK) {
         owner->view.path = owner->path; *output = owner; return XR_CLI_TOOLCHAIN_CONFIG_OK;
     }
     XrCliToolchainConfigStatus failure = config_capture(state,owner->status);

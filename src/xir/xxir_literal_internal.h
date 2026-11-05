@@ -20,6 +20,7 @@ typedef struct XirLiteralRequest {
     const XrXirCompileContext *context;
     const XirCtfeInstanceBatch *instances;
     uint32_t count;
+    XrCompileRequestControl *control; /* Borrowed only during this synchronous request. */
 } XirLiteralRequest;
 typedef struct XirLiteralBinding {
     uint32_t definition,instance,provider;

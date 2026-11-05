@@ -8,7 +8,7 @@
  *
  * KEY CONCEPT:
  *   Requests die before JSON observation; compiler fault loops keep all
- *   failure sites and retry on the same finite ledger without refunds.
+ *   failure sites and retry on the same memory owner after every failure.
  */
 #include "app/mcp/xmcp_run_source.h"
 #include "app/mcp/xmcp_tools_internal.h"
@@ -17,8 +17,9 @@
 #include <stdio.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
-#include "../xir/xir_source_compile_owner.h"
+#include "mcp_compile_memory.h"
 #include "mcp_timed_channel_cases.h"
+#include "app/mcp/xmcp_tools_run.c"
 static void physical_zero(void) { CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes); }
 static XrJsonValue *run(const char *code, size_t length, int timeout, int limit) {
     XmcpServer server = {0}; XmcpCallContext context = {0};
@@ -48,6 +49,31 @@ static void expect_output(const char *code, const char *output, size_t length, i
     size_t size = 0; char *json = xjson_stringify(result, &size); CHECK(json && size);
     xr_free(json); xjson_free(result);
 }
+static void ready_task_wait_case(const char *code) {
+    XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,true};
+    XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};
+    CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    XrCompileRequestOptions options={0};XrCompileRequestControl control={0};
+    CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+    XmcpSourceRequest request={code,strlen(code),"mcp-ready-task-wait",&context,&control};
+    XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
+    CHECK(xmcp_run_source_product(&request,&product,&diagnostic)==XR_XIR_OK);
+    uint32_t entry=xr_xir_compile_source_product_facts(product)->entry;
+    XrXirProgram *program=NULL;CHECK(xr_xir_compile_source_product_vm_take(product,&program)==XR_XIR_OK);
+    xr_xir_compile_source_product_free(product);xr_xir_compile_source_product_diagnostic_free(&diagnostic);
+    xr_compile_resources_release(context.resources);
+    memset(&context,0,sizeof(context));memset(&request,0,sizeof(request));memset(&control,0,sizeof(control));
+    RunCapture capture={0};XmcpServer server={0};
+    CHECK(bytes_open(&capture.out,XMCP_TOOLS_RUN_OUTPUT_DEFAULT));
+    CHECK(bytes_open(&capture.error,XMCP_TOOLS_RUN_OUTPUT_DEFAULT));
+    uint64_t start=xr_time_monotonic_ns();CHECK(start);
+    RunExecution execution=execute_program(program,entry,&capture,&server,start,UINT64_C(50000000));
+    CHECK(execution.status==XR_XIR_CALL_CANCELLED && execution.owned.status==XR_XIR_CALL_CANCELLED);
+    CHECK(execution.timed_out && !capture.out.used && !capture.error.used);
+    xr_xir_compile_program_drop(program);xr_xir_call_result_drop(&execution.owned);
+    xr_free(capture.out.bytes);xr_free(capture.error.bytes);physical_zero();
+    puts("same Source ready after request death: production Task/await execution50ms terminal CANCELLED; all owners released PASS");
+}
 static void task_wait_cases(void) {
     const char task_timer[] = "import time\nfn worker()->i64 { time.sleep(5); return 42 }\n"
         "fn main()->i64 { return await go worker() }\nprint(main())\n";
@@ -57,11 +83,17 @@ static void task_wait_cases(void) {
     XrJsonValue *task_result=run(task_timeout,sizeof(task_timeout)-1,50,0);
     XrJsonValue *task_value=xjson_get_object(task_result,"structuredContent");
     CHECK(xjson_get_bool(task_result,"isError") && xjson_get_bool(task_value,"timedOut"));
-    CHECK(xjson_get_int_or(task_value,"runtimeStatus",-1)==XR_XIR_CALL_CANCELLED);
+    size_t json_length=0;char *json=xjson_stringify(task_result,&json_length);
+    CHECK(json && json_length);fprintf(stderr,"whole-request50ms: %s\n",json);xr_free(json);
+    int64_t source_status=xjson_get_int_or(task_value,"sourceStatus",-1);
+    if(source_status==XR_XIR_DEADLINE)
+        CHECK(xjson_get_int_or(task_value,"runtimeStatus",-1)==XR_XIR_CALL_READY);
+    else CHECK(source_status==XR_XIR_OK && xjson_get_int_or(task_value,"runtimeStatus",-1)==XR_XIR_CALL_CANCELLED);
     CHECK(xjson_get_int_or(task_value,"outputBytes",-1)==0);
     xjson_free(task_result);
     expect_output("print(42)\n", "42\n", 3, 0, false);
-    puts("MCP Task timer normal/cancelled terminal ownership and recovery PASS");
+    ready_task_wait_case(task_timeout);
+    puts("MCP Task timer normal, precise whole-request deadline stage, terminal ownership and recovery PASS");
 }
 static void constructed_task_cases(void) {
     expect_output("fn worker()->Array<i64> { Coro.yield(); return [10,20] }\n"
@@ -146,13 +178,13 @@ static void tool_faults(const char *code) {
 static XrXirStatus product_on(XrCompileResources *resources, const char *code, XrXirSourceProduct **product,
     XrXirSourceProductDiagnostic *diagnostic) {
     XrXirCompileContext context = {resources, xr_xir_compile_default_limits()};
-    XmcpSourceRequest request = {code, strlen(code), "mcp-run-owner", &context};
+    XmcpSourceRequest request = {code, strlen(code), "mcp-run-owner", &context,NULL};
     return xmcp_run_source_product(&request, product, diagnostic);
 }
-static void same_ledger_faults(const char *code) {
+static void same_owner_faults(const char *code) {
     size_t sites = 0;
     for (size_t probe = 0; probe <= sites; ++probe) {
-        XrCompileResourceLimits limits = xmcp_source_default_limits(); XrCompileResources *resources = NULL;
+        XrCompileResourceLimits limits = xmcp_source_default_limits(); limits.profile_allocations=true; XrCompileResources *resources = NULL;
         CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
         XrCompileResourceStats baseline, failed, retried;
         CHECK(xr_compile_resources_stats(resources, &baseline) == XR_COMPILE_RESOURCE_OK);
@@ -166,49 +198,43 @@ static void same_ledger_faults(const char *code) {
         xr_xir_compile_source_product_free(product); product = NULL;
         xr_xir_compile_source_product_diagnostic_free(&diagnostic);
         CHECK(xr_compile_resources_stats(resources, &failed) == XR_COMPILE_RESOURCE_OK);
-        CHECK(failed.live_bytes == baseline.live_bytes && failed.work > baseline.work);
+        CHECK(failed.held_bytes == baseline.held_bytes);
         CHECK(product_on(resources, code, &product, &diagnostic) == XR_XIR_OK);
         xr_xir_compile_source_product_free(product); xr_xir_compile_source_product_diagnostic_free(&diagnostic);
         CHECK(xr_compile_resources_stats(resources, &retried) == XR_COMPILE_RESOURCE_OK);
-        CHECK(retried.live_bytes == baseline.live_bytes && retried.work > failed.work);
+        CHECK(retried.held_bytes == baseline.held_bytes);
         CHECK(retried.allocated_bytes > failed.allocated_bytes);
         xr_compile_resources_release(resources); physical_zero();
     }
-    printf("MCP run helper: %zu complete failures and same-ledger retries, physical0\n", sites);
+    printf("MCP run helper: %zu complete failures and same-owner retries, physical0\n", sites);
 }
 static void axes(const char *code) {
-    XrCompileResourceLimits limits = xmcp_source_default_limits(); XrCompileResources *resources = NULL;
+    XrCompileResourceLimits limits = xmcp_source_default_limits(); limits.profile_allocations=true; XrCompileResources *resources = NULL;
     CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
     XrXirSourceProduct *product = NULL; XrXirSourceProductDiagnostic diagnostic = {0};
     CHECK(product_on(resources, code, &product, &diagnostic) == XR_XIR_OK);
     XrCompileResourceStats observed; CHECK(xr_compile_resources_stats(resources, &observed) == XR_COMPILE_RESOURCE_OK);
     xr_xir_compile_source_product_free(product); xr_xir_compile_source_product_diagnostic_free(&diagnostic);
     xr_compile_resources_release(resources); physical_zero();
-    for (unsigned axis = 0; axis < 3; ++axis) for (int delta = -1; delta <= 1; ++delta) {
-        limits = xmcp_source_default_limits();
-        uint64_t exact = axis == 0 ? observed.allocated_bytes : axis == 1 ? observed.peak_bytes : observed.work;
-        uint64_t boundary = delta < 0 ? exact - 1 : delta > 0 ? exact + 1 : exact;
-        if (axis == 0) limits.allocated_bytes = boundary;
-        else if (axis == 1) limits.live_bytes = boundary;
-        else limits.work = boundary;
-        resources = NULL; product = NULL; memset(&diagnostic, 0, sizeof(diagnostic));
-        CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
-        XrXirStatus status = product_on(resources, code, &product, &diagnostic);
-        CHECK(status == (delta < 0 ? XR_XIR_BUDGET : XR_XIR_OK));
-        CHECK((status == XR_XIR_OK) == (product != NULL));
-        xr_xir_compile_source_product_free(product); xr_xir_compile_source_product_diagnostic_free(&diagnostic);
-        xr_compile_resources_release(resources); physical_zero();
+    for (int delta=-1;delta<=1;++delta) {
+        uint64_t boundary=delta<0?observed.peak_bytes-1:observed.peak_bytes+(unsigned)delta;
+        limits=(XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,boundary,true};
+        resources=NULL; product=NULL; memset(&diagnostic,0,sizeof(diagnostic));
+        CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
+        XrXirStatus status=product_on(resources,code,&product,&diagnostic);
+        CHECK(status==(delta<0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
+        CHECK((status==XR_XIR_OK)==(product!=NULL));
+        xr_xir_compile_source_product_free(product);xr_xir_compile_source_product_diagnostic_free(&diagnostic);
+        xr_compile_resources_release(resources);physical_zero();
     }
-    printf("MCP run exact/minus1/plus1 allocated=%llu peak=%llu work=%llu, physical0\n",
-        (unsigned long long)observed.allocated_bytes, (unsigned long long)observed.peak_bytes,
-        (unsigned long long)observed.work);
+    printf("MCP run held peak=%llu minus1/exact/plus1, physical0\n",(unsigned long long)observed.peak_bytes);
 }
 int main(int argc, char **argv) {
     xr_test_suppress_dialogs();
     if (argc == 2 && !strcmp(argv[1], "--task-wait")) { task_wait_cases(); return 0; }
     if (argc == 2 && !strcmp(argv[1], "--constructed-tasks")) { constructed_task_cases(); return 0; }
     if (argc == 2 && !strcmp(argv[1], "--resources")) {
-        tool_faults("print(42)\n"); same_ledger_faults("print(42)\n"); axes("print(42)\n"); return 0;
+        tool_faults("print(42)\n"); same_owner_faults("print(42)\n"); axes("print(42)\n"); return 0;
     }
     if (argc == 2 && !strcmp(argv[1], "--channel-resources")) {
         const char code[]="fn send(ch:Channel<i64>)->() { ch.send(42) }\n"
@@ -216,14 +242,14 @@ int main(int argc, char **argv) {
             "const n=match(ch.recv()) { Recv.Value { value:item } -> item, Recv.Empty -> -1, "
             "Recv.Timeout -> -2, Recv.Closed -> -3 }; await task; ch.close(); return n+ch.recvOr(0) }\nprint(main())\n";
         expect_output(code,"42\n",3,0,false);
-        tool_faults(code); same_ledger_faults(code); axes(code); return 0;
+        tool_faults(code); same_owner_faults(code); axes(code); return 0;
     }
     if (argc == 2 && !strcmp(argv[1], "--timed-channel")) {
         expect_output(mcp_timed_channel_code,"14177\n",6,0,false);
         puts("MCP real timed buffered/empty/Task/Unit outputs, natural deadlines and once evaluation PASS");return 0;
     }
     if (argc == 2 && !strcmp(argv[1], "--timed-channel-resources")) {
-        tool_faults(mcp_timed_channel_code);same_ledger_faults(mcp_timed_channel_code);
+        tool_faults(mcp_timed_channel_code);same_owner_faults(mcp_timed_channel_code);
         axes(mcp_timed_channel_code);return 0;
     }
     CHECK(argc == 1); normal_cases(); return 0;

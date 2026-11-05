@@ -62,7 +62,7 @@ static void emit_view_cleanup(CBuffer *buffer,const XrXirFunction *function,
     const XrXirInstruction *op,const XrXirFunctionLayout *layout,uint32_t index) {
     if (op->args[1]) {
         append(buffer," { static const XrXirViewEndWord words[]={\n");
-        for (uint32_t i=0;i<op->args[1] && emit_work(buffer,1);++i) {
+        for (uint32_t i=0;i<op->args[1] && ((buffer)->status == XR_XIR_OK);++i) {
             uint32_t value=function->operands[op->args[0]+i];
             append(buffer," {(XrXirType)%uu,%uu},\n",(uint32_t)xr_xir_operand_type(function,value),layout->offsets[value]);
         }

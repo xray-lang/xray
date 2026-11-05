@@ -15,7 +15,7 @@ static XrXirStatus source_debug_throw_validate(SourceQueryCopy *copy,
     if (function->throw_count && (!body->instructions || !module->types ||
         (body->parameter_count && !body->parameters))) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t t=0;t<function->throw_count;++t) {
-        if (!query_work(copy,sizeof(*function->throw_sites))) return copy->status;
+        if (!((copy)->status == XR_XIR_OK)) return copy->status;
         const XrXirSourceDebugThrow *site=&function->throw_sites[t];
         if (site->instruction>=body->instruction_count ||
             (uint64_t)site->operand>=(uint64_t)body->parameter_count+body->instruction_count ||
@@ -42,7 +42,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_debug_copy(XrXirSourceSnapsho
          debug->global_count>module->declarations->slot_count))) return XR_XIR_BAD_STRUCTURE;
     SourceQueryCopy copy={snapshot,XR_XIR_OK};
     for (uint32_t g=0;g<debug->global_count;++g) {
-        if (!query_work(&copy,sizeof(*debug->globals))) return copy.status;
+        if (!((&copy)->status == XR_XIR_OK)) return copy.status;
         const XrXirSourceDebugGlobal *global=&debug->globals[g];
         if (!global->declaration || global->declaration>snapshot->view.declaration_count ||
             global->slot>=module->declarations->slot_count ||
@@ -58,18 +58,18 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_debug_copy(XrXirSourceSnapsho
         const XrXirSourceModule *owner=&module->declarations->modules[slot->module];
         const char *identity=snapshot->view.modules[declaration->range.module].identity;
         size_t bytes=query_length(&copy,identity);
-        if (!query_work(&copy,bytes)) return copy.status;
+        if (!((&copy)->status == XR_XIR_OK)) return copy.status;
         if (!bytes || !owner->name || bytes-1!=owner->name_length || memcmp(identity,owner->name,bytes-1)) return XR_XIR_BAD_STRUCTURE;
     }
     for (uint32_t f=0;f<debug->function_count;++f) {
-        if (!query_work(&copy,1)) return copy.status;
+        if (!((&copy)->status == XR_XIR_OK)) return copy.status;
         const XrXirSourceDebugFunction *function=&debug->functions[f];
         if (function->function!=f || function->declaration>snapshot->view.declaration_count ||
             function->parameter_count!=module->functions[f].parameter_count ||
             function->instruction_count!=module->functions[f].instruction_count ||
             (function->binding_count && !function->bindings)) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t b=0;b<function->binding_count;++b) {
-            if (!query_work(&copy,1)) return copy.status;
+            if (!((&copy)->status == XR_XIR_OK)) return copy.status;
             const XrXirSourceDebugBinding *binding=&function->bindings[b];
             if (!binding->declaration || binding->declaration>snapshot->view.declaration_count || binding->parent>b ||
                 (binding->flags & ~(XR_XIR_SOURCE_DEBUG_UNIT|XR_XIR_SOURCE_DEBUG_CELL|XR_XIR_SOURCE_DEBUG_UNAVAILABLE)) ||
@@ -81,11 +81,11 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_debug_copy(XrXirSourceSnapsho
         }
         XrXirStatus throws=source_debug_throw_validate(&copy,function,module,f);
         if (throws!=XR_XIR_OK) return throws;
-        XrXirStatus handlers=source_debug_handler_validate(snapshot->context.resources,function,&module->functions[f]);
+        XrXirStatus handlers=source_debug_handler_validate(function,&module->functions[f]);
         if (handlers!=XR_XIR_OK) return handlers;
         if (!function->points) continue;
         for (uint32_t i=0;i<function->instruction_count;++i) {
-            if (!query_work(&copy,1)) return copy.status;
+            if (!((&copy)->status == XR_XIR_OK)) return copy.status;
             const XrXirSourceDebugPoint *point=&function->points[i];
             const XrXirSourceRange *range=&point->range;
             if ((point->flags & ~(XR_XIR_SOURCE_DEBUG_ENTRY|XR_XIR_SOURCE_DEBUG_HANDLER_ACCEPT)) || (point->flags && !point->statement) ||
@@ -110,7 +110,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_debug_copy(XrXirSourceSnapsho
                 debug->functions[f].throw_count,sizeof(*functions[f].throw_sites));
         source_debug_handler_copy(&copy,&debug->functions[f],&functions[f]);
     }
-    if (!query_work(&copy,sizeof(snapshot->debug)+sizeof(snapshot->debug_ready))) {
+    if (!((&copy)->status == XR_XIR_OK)) {
         while (snapshot->memory!=previous) {
             SourceQueryMemory *memory=snapshot->memory;snapshot->memory=memory->next;xr_compile_resources_free(memory);
         }

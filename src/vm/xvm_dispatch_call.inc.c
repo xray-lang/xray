@@ -44,6 +44,8 @@ op_call_entry:;
     int a = GETARG_A(i);
     int nargs = GETARG_B(i);
 
+    for (int arg = 0; arg <= nargs; arg++)
+        VM_REJECT_TEXT_WORKER(R(a + arg));
     XrValue func_val = R(a);
     bool static_closure = GET_OPCODE(i) == OP_CALL_STATIC;
 
@@ -520,6 +522,8 @@ vmcase(OP_TAILCALL) {
     */
 
     // Get the called function
+    for (int arg = 0; arg <= nargs; arg++)
+        VM_REJECT_TEXT_WORKER(R(a + arg));
     XrValue func_val = R(a);
 
     if (XR_IS_CFUNCTION(func_val)) {
@@ -675,6 +679,8 @@ vmcase(OP_RETURN) {
 
     int a = GETARG_A(i);
     int nret = GETARG_B(i);  // Return value count
+    for (int result = 0; result < nret; result++)
+        VM_REJECT_TEXT_WORKER(R(a + result));
 
     // Save return count for caller
     vm_ctx->last_nret = nret;
@@ -733,10 +739,17 @@ vmcase(OP_RETURN) {
      * PRINT_GROUP_APPEND placed the buffer two slots below this frame's base. */
     if ((frame_flags & XR_FRAME_PRINT_GROUP_APPEND) != 0 &&
         ci->base_offset >= (int) XI_PRINT_GROUP_CALL_SLOT) {
-        XrValue group_value = VM_STACK[ci->base_offset - (int) XI_PRINT_GROUP_CALL_SLOT];
-        XrStringBuilder *group = xr_to_stringbuilder(group_value);
-        if (group)
-            xr_stringbuilder_append_str(group, xr_value_to_string(isolate, ret_result));
+        int group_offset = ci->base_offset - (int) XI_PRINT_GROUP_CALL_SLOT;
+        ptrdiff_t return_offset = return_slot ? return_slot - VM_STACK : -1;
+        XrString *text = xr_value_to_string(isolate, ret_result);
+        /* Formatting can reenter VM code and grow both stack and frames. */
+        VM_REBIND_AFTER_NATIVE_CALL();
+        return_slot = return_offset >= 0 ? VM_STACK + return_offset : NULL;
+        XrValue *group_slot = &VM_STACK[group_offset];
+        VM_TEXT_WORKER_REQUIRE(text
+                                   ? xr_text_worker_append_bytes(isolate, *group_slot,
+                                       XR_TEXT_WORKER_PRINT, text->data, text->length)
+                                   : XR_TEXT_WORKER_OUT_OF_MEMORY, *group_slot, XR_TEXT_WORKER_PRINT);
     }
 
     if (VM_MODULE_BASE >= 0 && VM_FRAME_COUNT == VM_MODULE_BASE) {
@@ -834,6 +847,7 @@ vmcase(OP_RETURN1) {
     */
     int a = GETARG_A(i);
     XrValue ret_val = R(a);
+    VM_REJECT_TEXT_WORKER(ret_val);
 
     // Clean up exception handlers belonging to current frame
     while (VM_HANDLER_COUNT > 0 &&
@@ -887,10 +901,17 @@ vmcase(OP_RETURN1) {
      * two slots below this frame's base and reaches the output only at flush. */
     if ((frame_flags & XR_FRAME_PRINT_GROUP_APPEND) != 0 &&
         ci->base_offset >= (int) XI_PRINT_GROUP_CALL_SLOT) {
-        XrValue group_value = VM_STACK[ci->base_offset - (int) XI_PRINT_GROUP_CALL_SLOT];
-        XrStringBuilder *group = xr_to_stringbuilder(group_value);
-        if (group)
-            xr_stringbuilder_append_str(group, xr_value_to_string(isolate, ret_val));
+        int group_offset = ci->base_offset - (int) XI_PRINT_GROUP_CALL_SLOT;
+        ptrdiff_t return_offset = return_slot ? return_slot - VM_STACK : -1;
+        XrString *text = xr_value_to_string(isolate, ret_val);
+        /* Formatting can reenter VM code and grow both stack and frames. */
+        VM_REBIND_AFTER_NATIVE_CALL();
+        return_slot = return_offset >= 0 ? VM_STACK + return_offset : NULL;
+        XrValue *group_slot = &VM_STACK[group_offset];
+        VM_TEXT_WORKER_REQUIRE(text
+                                   ? xr_text_worker_append_bytes(isolate, *group_slot,
+                                       XR_TEXT_WORKER_PRINT, text->data, text->length)
+                                   : XR_TEXT_WORKER_OUT_OF_MEMORY, *group_slot, XR_TEXT_WORKER_PRINT);
     }
 
     // Check module boundary

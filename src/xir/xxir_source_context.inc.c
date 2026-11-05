@@ -57,6 +57,8 @@ typedef struct SourceContext {
     XrModuleGraph *graph;
     XrXirLinkageKind linkage_kind;
     XrXirCompileContext compile;
+    /* Borrowed only by this synchronous construction, never semantic history. */
+    XrCompileRequestControl *request;
     uint32_t remaining_blocks, remaining_instructions;
     XrXirSourceDiagnostic diagnostic;
     SourceMemory *memory,*retired_arrays;

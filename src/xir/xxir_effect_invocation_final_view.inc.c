@@ -47,7 +47,7 @@ static XrXirStatus effect_invocation_final_layout(const EffectInvocationFlow *fl
     EffectInvocationBasis basis={0};
     status=effect_invocation_basis_parameters_read(owner->work,final,root->parameter_count,&basis);
     if(status!=XR_XIR_OK) return status;
-    if(!xir_compile_work(owner->work,sizeof(*output)+12)) return XR_XIR_BUDGET;
+
     *output=(EffectInvocationViewLayout){basis,node->body,node->root,(uint32_t)values,rows,
         node->parameter_count,node->instruction_count,final->site_count,final->binding_count};return XR_XIR_OK;
 }
@@ -88,13 +88,11 @@ static XrXirStatus effect_invocation_final_head(EffectInvocationFlow *flow,
     EffectBodyFunctionHead head={0};
     status=effect_body_request_head(request,final->nodes[flow->node].body,&head);
     if(status!=XR_XIR_OK) return status;
-    if(!xir_compile_work(owner->work,6)) return XR_XIR_BUDGET;
+
     if(head.parameters!=node.head.parameters || head.parameter_count!=node.head.parameter_count ||
         head.instruction_count!=node.head.instruction_count || head.operands!=node.head.operands ||
         head.operand_count!=node.head.operand_count || head.result!=node.head.result) return XR_XIR_BAD_STRUCTURE;
-    if(!xir_compile_work(owner->work,sizeof(*request)+sizeof(head)+sizeof(node.basis)+
-        sizeof(flow->function)+sizeof(flow->physical)+sizeof(flow->values)))
-        return XR_XIR_BUDGET;
+
     flow->body=*request;flow->head=head;flow->function=&flow->head;
     flow->basis=node.basis;flow->values=node.values;flow->physical=physical;return XR_XIR_OK;
 }
@@ -109,7 +107,7 @@ static XrXirStatus effect_invocation_final_view_facts(EffectInvocationFlow *flow
     EffectCaptureFact key={flow->node,0,0,0,0};uint32_t at=0;
     status=effect_capture_lower(&read,&key,&at);if(status!=XR_XIR_OK) return status;
     for(;at<final->capture.count;++at) {
-        if(!xir_compile_work(owner->work,6)) return XR_XIR_BUDGET;
+
         EffectCaptureFact fact=final->capture.facts[at];
         if(fact.node!=flow->node) break;
         if(fact.value>=flow->values) continue;
@@ -118,7 +116,7 @@ static XrXirStatus effect_invocation_final_view_facts(EffectInvocationFlow *flow
             if((uint64_t)fact.bit>EFFECT_CAPTURE_COMPLETE+(uint64_t)final->binding_count) return XR_XIR_BAD_STRUCTURE;
             if(fact.bit==EFFECT_CAPTURE_FIXED) {
                 if(!flow->fixed) return XR_XIR_BAD_STRUCTURE;
-                if(!xir_compile_work(owner->work,sizeof(uint64_t))) return XR_XIR_BUDGET;
+
                 flow->fixed[fact.value/64]|=UINT64_C(1)<<(fact.value%64);
             }
             continue;
@@ -126,13 +124,13 @@ static XrXirStatus effect_invocation_final_view_facts(EffectInvocationFlow *flow
         if(fact.word>=flow->basis.row_words || fact.bit>=64) return XR_XIR_BAD_STRUCTURE;
         if(fact.word>=flow->basis.fn_words) continue;
         uint64_t *row=effect_invocation_row(flow,fact.value);if(!row) return XR_XIR_BAD_STRUCTURE;
-        if(!xir_compile_work(owner->work,sizeof(*row))) return XR_XIR_BUDGET;
+
         row[fact.word]|=UINT64_C(1)<<fact.bit;
     }
     for(uint32_t r=0;r<flow->row_count;++r) {
         bool present=false;
         for(uint32_t w=0;w<flow->basis.origin_words;++w) {
-            if(!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+
             present|=flow->rows[(size_t)r*flow->basis.fn_words+w]!=0;
         }
         if(!present) return XR_XIR_BAD_STRUCTURE;
@@ -165,7 +163,7 @@ static XrXirStatus effect_invocation_final_view_read(EffectInvocationFlow *flow,
         flow->read->final!=final || final->site_count!=layout.sites || final->binding_count!=layout.bindings ||
         final->nodes[flow->node].body!=layout.body || final->nodes[flow->node].root!=layout.root)
         return XR_XIR_BAD_STRUCTURE;
-    if(!xir_compile_work(flow->read->work,words*sizeof(uint64_t)+indices+flags*sizeof(uint64_t))) return XR_XIR_BUDGET;
+
     flow->rows=flow->memory;flow->row_count=rows;
     flow->row_indices=rows?(uint32_t *)(flow->rows+(size_t)words):NULL;
     flow->fixed=flags?(uint64_t *)((uint8_t *)flow->memory+(size_t)offset):NULL;
@@ -174,11 +172,11 @@ static XrXirStatus effect_invocation_final_view_read(EffectInvocationFlow *flow,
     if(flags) memset(flow->fixed,0,(size_t)flags*sizeof(uint64_t));
     uint32_t row=0;
     for(uint32_t r=0;r<flow->physical->count;++r) {
-        if(!xir_compile_work(flow->read->work,1)) return XR_XIR_BUDGET;
+
         EffectPhysicalRecord record=flow->physical->records[r];
         if(!(record.mask&(EFFECT_PHYSICAL_CALLABLE|EFFECT_PHYSICAL_ITERATOR))) continue;
         if(record.value>=values || row>=rows || flow->row_indices[record.value]!=UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
-        if(!xir_compile_work(flow->read->work,sizeof(uint32_t))) return XR_XIR_BUDGET;
+
         flow->row_indices[record.value]=row++;
     }
     if(row!=rows) return XR_XIR_BAD_STRUCTURE;

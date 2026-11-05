@@ -16,7 +16,7 @@ static bool source_program_complete(SourceContext *ctx,const XrXirArtifact *sour
     XrXirArtifact *sealed=NULL;
     if (!source_program_seal(ctx,source,&sealed)) return false;
     XirComptimeResolveRequest request={sealed,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
-        {XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES},XR_XIR_CTFE_MAX_CALL_DEPTH};
+        {XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES},XR_XIR_CTFE_MAX_CALL_DEPTH,ctx->request};
     XirComptimeResolveFailure failure={0};XrXirDiagnostic diagnostic={0};
     XrXirStatus status=source_comptime_resolve(&request,output,&failure,&diagnostic,ctx);
     xr_xir_compile_artifact_free(sealed);
@@ -26,7 +26,7 @@ static bool source_program_complete(SourceContext *ctx,const XrXirArtifact *sour
 }
 static bool source_program_has_closed(SourceContext *ctx,bool *closed) {
     for (const SourceComptimeSite *site=ctx->comptime_sites;site;site=site->next) {
-        if (!source_work_units(ctx,site->syntax,2)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (!ctx->generics[site->helper].parameter_count) *closed=true;
     }
     return true;
@@ -44,10 +44,10 @@ static void source_program_comptime_receive(SourceContext *ctx,XrXirSourceResult
     }
     if (ok) ok=source_comptime_evaluate(ctx,complete,true);
     xr_xir_compile_artifact_free(complete);complete=NULL;
-    if (!ok || !source_work_units(ctx,NULL,sizeof(SourceContext))) {
+    if (!ok || !((ctx)->diagnostic.status == XR_XIR_OK)) {
         xr_xir_compile_source_result_free(output);source_comptime_values_free(ctx);return;
     }
-    SourceContext received={0};received.compile=ctx->compile;received.graph=ctx->graph;received.linkage_kind=ctx->linkage_kind;
+    SourceContext received={0};received.request=ctx->request;received.compile=ctx->compile;received.graph=ctx->graph;received.linkage_kind=ctx->linkage_kind;
     received.manifests=ctx->manifests;received.prelude_module=ctx->prelude_module;received.core_factory=ctx->core_factory;
     received.remaining_blocks=ctx->remaining_blocks;received.remaining_instructions=ctx->remaining_instructions;
     received.comptime_input=ctx->comptime_sites;received.comptime_input_types=&ctx->types;

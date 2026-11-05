@@ -22,6 +22,7 @@
 
 #include "../../base/xdefs.h"
 #include "../../base/xcompile_state.h"
+#include "../../base/xcompile_request.h"
 #include <stddef.h>
 
 struct XrArena;
@@ -40,12 +41,12 @@ XR_FUNC bool xr_string_pool_matches(const XrCompileStringPool *pool,
  *   - If the string is already in the pool, returns the existing pointer.
  *   - Otherwise, copies it into the arena, inserts it, and returns the copy.
  * NULL input returns NULL. */
-XR_FUNC const char *xr_string_pool_intern(XrCompileStringPool *pool, const char *str);
+XR_FUNC const char *xr_string_pool_intern(XrCompileStringPool *pool, const char *str, XrCompileRequestControl *request);
 
 /* Intern a length-delimited string (may contain embedded NULs, but the
  * pool stores up to |len| bytes followed by a NUL terminator). */
 XR_FUNC const char *xr_string_pool_intern_len(XrCompileStringPool *pool, const char *str,
-                                              size_t len);
+                                              size_t len, XrCompileRequestControl *request);
 
 /* Number of unique strings currently in the pool (for diagnostics). */
 XR_FUNC size_t xr_string_pool_count(const XrCompileStringPool *pool);

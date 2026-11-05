@@ -20,7 +20,6 @@
 #include <inttypes.h>
 #include "../coro/xchannel.h"
 #include "../module/xmodule.h"
-#include "../runtime/object/xstringbuilder.h"
 #include "../runtime/object/xrange.h"
 #include "../runtime/object/xjson.h"
 #include <stdlib.h>

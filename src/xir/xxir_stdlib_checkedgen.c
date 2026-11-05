@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
     CHECK(xr_compile_resources_new(&caps,&context.resources) == XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats initial = {0}; CHECK(xr_compile_resources_stats(context.resources,&initial) == XR_COMPILE_RESOURCE_OK);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context.resources,&session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context.resources,&session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_STDLIB,argv[3],argv[1]};
     XrXirSourceRequest request = {session,argv[2],&authority,&context,argv[1],NULL,XR_XIR_LIBRARY,NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
     xr_compile_session_free(session);
     XrCompileResourceStats final = {0};
     CHECK(xr_compile_resources_stats(context.resources,&final) == XR_COMPILE_RESOURCE_OK);
-    CHECK(final.live_bytes == initial.live_bytes);
+    CHECK(final.held_bytes == initial.held_bytes);
     xr_compile_resources_release(context.resources);
     return 0;
 }

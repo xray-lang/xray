@@ -18,7 +18,7 @@ typedef struct SourceDestructurePlan {
 } SourceDestructurePlan;
 static bool source_destructure_collect(SourceContext *ctx,AstNode *node,
     const XrDestructurePattern *pattern,SourceDestructurePlan *plan,uint32_t depth) {
-    if (!source_work(ctx,node)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (!pattern)
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"product binding pattern is missing");
     if (depth>=128)
@@ -31,7 +31,7 @@ static bool source_destructure_collect(SourceContext *ctx,AstNode *node,
             source_text_same(ctx,node,pattern->as.identifier.name,"_"))
             return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"product binding needs an identifier or discard");
         for (uint32_t i=0;i<plan->count;++i) {
-            if (!source_work(ctx,node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (source_text_same(ctx,node,plan->fields[i].pattern->as.identifier.name,pattern->as.identifier.name))
                 return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"duplicate product binding name");
         }
@@ -47,14 +47,14 @@ static bool source_destructure_collect(SourceContext *ctx,AstNode *node,
         (!pattern->as.object.field_names || !pattern->as.object.patterns))))
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"product binding fields are missing");
     for (int i=0;i<count;++i) {
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (object) {
             size_t length=0;
             if (!pattern->as.object.field_names[i] ||
                 !source_text_length(ctx,node,pattern->as.object.field_names[i],&length) || !length)
                 return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"object binding field name is missing");
             for (int j=0;j<i;++j) {
-                if (!source_work(ctx,node)) return false;
+                if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
                 if (source_text_same(ctx,node,pattern->as.object.field_names[i],pattern->as.object.field_names[j]))
                     return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"duplicate object binding field");
             }
@@ -94,7 +94,7 @@ static bool source_destructure_object_field(SourceContext *ctx,AstNode *node,
 }
 static bool source_destructure_project(SourceContext *ctx,AstNode *node,
     const XrDestructurePattern *pattern,SourceValue initial,SourceDestructurePlan *plan,uint32_t depth) {
-    if (!source_work(ctx,node)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (!pattern)
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"product binding pattern is missing");
     if (depth>=128)
@@ -136,7 +136,7 @@ static bool source_destructure_binding(SourceContext *ctx,AstNode *node,bool top
     for (uint32_t i=0;i<plan.count;++i) {
         const char *name=plan.fields[i].pattern->as.identifier.name;
         for (SourceName *prior=top ? ctx->scope : ctx->locals;prior!=ctx->scope;prior=prior->next) {
-            if (!source_work(ctx,node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (source_text_same(ctx,node,prior->name,name))
                 return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"duplicate local product binding name");
         }

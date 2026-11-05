@@ -17,7 +17,7 @@ static XrXirStatus effect_body_current_open(const XrXirCompileContext *work,
     if(!output || output->work || output->material) return XR_XIR_BAD_STRUCTURE;
     EffectRoleCheck check={.work=work,.material=material};
     XrXirStatus status=effect_role_frame(&check);if(status!=XR_XIR_OK) return status;
-    EffectBodyRead read=effect_body_compile_read(work);
+    EffectBodyRead read=(EffectBodyRead){.owner=work};
     for(uint32_t f=0;f<check.functions;++f) {
         const EffectBodyFunction *head=&material->functions[f];
         if(!!head->runs!=!!head->run_capacity || !!head->run_count!=!!head->instruction_count ||
@@ -36,7 +36,7 @@ static XrXirStatus effect_body_current_open(const XrXirCompileContext *work,
         }
         if(cursor.first!=head->instruction_count || cursor.run!=head->run_count) return XR_XIR_BAD_STRUCTURE;
     }
-    if(!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=(EffectBodyCurrentRead){work,material};return XR_XIR_OK;
 }
 
@@ -47,19 +47,19 @@ static XrXirStatus effect_body_current_record(const EffectBodyRequest *request,
     uint32_t function,uint32_t instruction,const EffectBodyRun **output) {
     const EffectBodyCurrentRead *current=request?request->current:NULL;
     if(!current || !output || current->material!=request->owner || current->work!=request->read.owner ||
-        request->read.consume!=effect_body_compile_consume || !current->material ||
+        request->read.execution != NULL || !current->material ||
         function>=effect_body_count(current->material)) return XR_XIR_BAD_STRUCTURE;
     const EffectBodyFunction *head=&current->material->functions[function];
     if(instruction>=head->instruction_count || !head->run_count) return XR_XIR_BAD_STRUCTURE;
     uint32_t low=0,high=head->run_count;
     while(low<high) {
-        if(!xir_compile_work(current->work,3+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
+
         uint32_t middle=low+(high-low)/2;
         if(head->runs[middle].first<=instruction) low=middle+1;else high=middle;
     }
     if(!low) return XR_XIR_BAD_STRUCTURE;
     const EffectBodyRun *ref=&head->runs[low-1];
     if(instruction<ref->first || instruction-ref->first>=ref->count) return XR_XIR_BAD_STRUCTURE;
-    if(!xir_compile_work(current->work,3+sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=ref;return XR_XIR_OK;
 }

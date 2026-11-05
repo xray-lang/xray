@@ -16,8 +16,11 @@ static XrArenaStatus compiler_arena_status(XrCompileResourceStatus status) {
     switch (status) {
         case XR_COMPILE_RESOURCE_OK: return XR_ARENA_OK;
         case XR_COMPILE_RESOURCE_CANCELLED:
+        case XR_COMPILE_RESOURCE_DEADLINE:
+        case XR_COMPILE_RESOURCE_CLOCK_FAILURE:
         case XR_COMPILE_RESOURCE_BAD_ARGUMENT: return XR_ARENA_BAD_ARGUMENT;
-        case XR_COMPILE_RESOURCE_BUDGET: return XR_ARENA_BUDGET;
+        case XR_COMPILE_RESOURCE_MEMORY_LIMIT: return XR_ARENA_MEMORY_LIMIT;
+        case XR_COMPILE_RESOURCE_OVERFLOW: return XR_ARENA_OVERFLOW;
         case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: return XR_ARENA_OUT_OF_MEMORY;
     }
     return XR_ARENA_BAD_ARGUMENT;
@@ -32,10 +35,6 @@ static void compiler_arena_free(void *context, void *memory) {
     xr_compile_resources_free(memory);
 }
 
-static XrArenaStatus compiler_arena_work(void *context, uint64_t units) {
-    return compiler_arena_status(xr_compile_resources_work(context, units));
-}
-
 static XrArenaStatus compiler_arena_retain(void *context) {
     return compiler_arena_status(xr_compile_resources_retain(context));
 }
@@ -48,16 +47,12 @@ XR_FUNC XrArenaStatus xr_compiler_arena_backing(
     XrCompileResources *resources, XrArenaBacking *output) {
     if (!resources || !output) return XR_ARENA_BAD_ARGUMENT;
     *output = (XrArenaBacking) {resources, compiler_arena_alloc, compiler_arena_free,
-        compiler_arena_work, compiler_arena_retain, compiler_arena_release};
+        compiler_arena_retain, compiler_arena_release};
     return XR_ARENA_OK;
 }
 
 static XrArenaStatus compiler_state_arena_alloc(void *context, size_t bytes, void **output) {
     return compiler_arena_status(xr_compile_state_alloc(context, bytes, output));
-}
-
-static XrArenaStatus compiler_state_arena_work(void *context, uint64_t units) {
-    return compiler_arena_status(xr_compile_state_work(context, units));
 }
 
 static XrArenaStatus compiler_state_arena_retain(void *context) {
@@ -71,14 +66,14 @@ static void compiler_state_arena_release(void *context) {
 XR_FUNC XrArenaStatus xr_compiler_arena_state_backing(XrCompileState *state, XrArenaBacking *output) {
     if (!state || !output) return XR_ARENA_BAD_ARGUMENT;
     *output = (XrArenaBacking) {state, compiler_state_arena_alloc, compiler_arena_free,
-        compiler_state_arena_work, compiler_state_arena_retain, compiler_state_arena_release};
+        compiler_state_arena_retain, compiler_state_arena_release};
     return XR_ARENA_OK;
 }
 
 XR_FUNC XrCompileState *xr_compiler_arena_compile_state(const XrArena *arena) {
     bool owned = arena && arena->retained && arena->backing.context &&
         arena->backing.alloc == compiler_state_arena_alloc && arena->backing.free == compiler_arena_free &&
-        arena->backing.work == compiler_state_arena_work && arena->backing.retain == compiler_state_arena_retain &&
+        arena->backing.retain == compiler_state_arena_retain &&
         arena->backing.release == compiler_state_arena_release;
     return owned ? arena->backing.context : NULL;
 }
@@ -93,7 +88,8 @@ XR_FUNC XrCompileResourceStatus xr_compiler_arena_capture_status(const XrArena *
     switch (xr_arena_status(arena)) {
         case XR_ARENA_OK: return xr_compile_state_status(state);
         case XR_ARENA_BAD_ARGUMENT: return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
-        case XR_ARENA_BUDGET: return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET);
+        case XR_ARENA_MEMORY_LIMIT: return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_MEMORY_LIMIT);
+        case XR_ARENA_OVERFLOW: return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_OVERFLOW);
         case XR_ARENA_OUT_OF_MEMORY: return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
     }
     return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);

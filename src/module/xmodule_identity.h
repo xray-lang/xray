@@ -25,17 +25,38 @@ typedef enum XrModuleStatus {
     XR_MODULE_OUT_OF_MEMORY = -2,
     XR_MODULE_BUDGET = -3,
     XR_MODULE_IO = -4,
-    XR_MODULE_NOT_FOUND = -5
+    XR_MODULE_NOT_FOUND = -5,
+    XR_MODULE_MEMORY_LIMIT = -6,
+    XR_MODULE_OVERFLOW = -7,
+    XR_MODULE_CANCELLED = -8,
+    XR_MODULE_DEADLINE = -9,
+    XR_MODULE_CLOCK_FAILURE = -10
 } XrModuleStatus;
 
 static inline XrModuleStatus xr_module_status_from_io(XrOsIoStatus status) {
     switch (status) {
         case XR_OS_IO_OK: return XR_MODULE_OK;
         case XR_OS_IO_OUT_OF_MEMORY: return XR_MODULE_OUT_OF_MEMORY;
-        case XR_OS_IO_BUDGET: return XR_MODULE_BUDGET;
+        case XR_OS_IO_OVERFLOW: return XR_MODULE_OVERFLOW;
+        case XR_OS_IO_MEMORY_LIMIT: return XR_MODULE_MEMORY_LIMIT;
+        case XR_OS_IO_CANCELLED: return XR_MODULE_CANCELLED;
+        case XR_OS_IO_DEADLINE: return XR_MODULE_DEADLINE;
+        case XR_OS_IO_CLOCK_FAILURE: return XR_MODULE_CLOCK_FAILURE;
         case XR_OS_IO_NOT_FOUND: return XR_MODULE_NOT_FOUND;
         case XR_OS_IO_BAD_ARGUMENT: return XR_MODULE_INVALID;
         default: return XR_MODULE_IO;
+    }
+}
+static inline XrModuleStatus xr_module_status_from_resource(XrCompileResourceStatus status) {
+    switch (status) {
+    case XR_COMPILE_RESOURCE_OK: return XR_MODULE_OK;
+    case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: return XR_MODULE_OUT_OF_MEMORY;
+    case XR_COMPILE_RESOURCE_MEMORY_LIMIT: return XR_MODULE_MEMORY_LIMIT;
+    case XR_COMPILE_RESOURCE_OVERFLOW: return XR_MODULE_OVERFLOW;
+    case XR_COMPILE_RESOURCE_CANCELLED: return XR_MODULE_CANCELLED;
+    case XR_COMPILE_RESOURCE_DEADLINE: return XR_MODULE_DEADLINE;
+    case XR_COMPILE_RESOURCE_CLOCK_FAILURE: return XR_MODULE_CLOCK_FAILURE;
+    default: return XR_MODULE_INVALID;
     }
 }
 typedef enum XrModuleIdentityKind {

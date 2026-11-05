@@ -37,7 +37,7 @@ XR_FUNC const XrXirSourceCalls *xlsp_source_bindings_calls(const XlspSourceBindi
 XR_FUNC const XrXirSourceTypeFacts *xlsp_source_bindings_types(const XlspSourceBindings *owner,size_t index){return xr_xir_compile_source_snapshot_type_facts(bindings_snapshot(owner,index));}
 XR_FUNC const char *xlsp_source_bindings_path(const XlspSourceBindings *owner,size_t index){return owner&&index<owner->count?owner->paths[index]:NULL;}
 static XrXirStatus bindings_manifest(XrManifestStatus s) {
-    return s==XR_MANIFEST_OK?XR_XIR_OK:s==XR_MANIFEST_BUDGET?XR_XIR_BUDGET:s==XR_MANIFEST_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
+    return s==XR_MANIFEST_OK?XR_XIR_OK:s==XR_MANIFEST_OVERFLOW?XR_XIR_BUDGET:s==XR_MANIFEST_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
         s==XR_MANIFEST_IO?XR_XIR_IO:s==XR_MANIFEST_NOT_FOUND?XR_XIR_UNRESOLVED:s==XR_MANIFEST_UNSUPPORTED?XR_XIR_UNSUPPORTED:XR_XIR_BAD_STRUCTURE;
 }
 static XrXirStatus bindings_path_copy(XrCompileResources *r,const char *text,char **out) {
@@ -83,8 +83,8 @@ XR_FUNC XrXirStatus xlsp_source_bindings_build(const XrXirCompileContext *contex
         status=bindings_resource(xr_compile_resources_work(r,sizeof(*overlay)));if(status!=XR_XIR_OK)goto done;overlays[i]=*overlay;
         status=bindings_path_copy(r,xr_source_authority_source_path(authorities[i]),&owner->paths[i]);if(status!=XR_XIR_OK)goto done;
     }
-    XrCompilerSessionStatus opened=xr_compile_session_new(r,&session);
-    if(opened!=XR_COMPILER_SESSION_OK){status=opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:opened==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;}
+    XrCompileResourceStatus opened=xr_compile_session_new(r,&session);
+    if(opened!=XR_COMPILE_RESOURCE_OK){status=opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:opened==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;}
     for(size_t i=0;i<count;++i) {
         const XrProject *project=xr_source_authority_project(authorities[i]);size_t included_count=0;
         for(size_t j=0;j<i;++j){bool same=false;status=bindings_resource(xr_compile_resources_work(r,sizeof(size_t)));if(status!=XR_XIR_OK)goto done;
@@ -95,7 +95,7 @@ XR_FUNC XrXirStatus xlsp_source_bindings_build(const XrXirCompileContext *contex
         if(project&&project->main) {
             XrOsIoPolicy policy=xr_compile_io_policy(r);
             XrOsIoStatus joined=xr_path_join_owned(&policy,project->root,project->main,&program_path);
-            if(joined!=XR_OS_IO_OK){status=joined==XR_OS_IO_BUDGET?XR_XIR_BUDGET:joined==XR_OS_IO_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;}
+            if(joined!=XR_OS_IO_OK){status=joined==XR_OS_IO_OVERFLOW?XR_XIR_BUDGET:joined==XR_OS_IO_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;}
             entry=program_path;
         }
         for(size_t j=0;j<count;++j){bool same=false;status=bindings_resource(xr_compile_resources_work(r,sizeof(size_t)));if(status!=XR_XIR_OK)goto done;

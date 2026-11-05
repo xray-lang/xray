@@ -44,7 +44,7 @@ static XrXirStatus effect_ordinary_op_match(const EffectOrdinaryContexts *contex
             expected.type_arguments[0]=expected.type_arguments[1]=0;
         }
     }
-    if (!xir_compile_work(terms->remaining,11)) return XR_XIR_BUDGET;
+
     if (expected.op!=actual.op || expected.immediate!=actual.immediate ||
         expected.args[0]!=actual.args[0] || expected.args[1]!=actual.args[1] ||
         expected.targets[0]!=actual.targets[0] || expected.targets[1]!=actual.targets[1] ||
@@ -95,7 +95,7 @@ static XrXirStatus effect_ordinary_implementations_match(const EffectOrdinaryCon
     if (!!a!=!!b || (a && a->count!=b->count)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i=0;a && i<a->count;++i) {
         const XrXirImplementation *left=&a->records[i],*right=&b->records[i];
-        if (!xir_compile_work(terms->remaining,2)) return XR_XIR_BUDGET;
+
         if (left->nominal_declaration!=right->nominal_declaration || left->binding_count!=right->binding_count ||
             !terms->types.nominals || left->nominal_declaration>=terms->types.nominals->count)
             return XR_XIR_BAD_STRUCTURE;
@@ -114,7 +114,6 @@ static XrXirStatus effect_ordinary_implementations_match(const EffectOrdinaryCon
 
 static XrXirStatus effect_ordinary_declarations_match(const EffectOrdinaryContexts *contexts,
     const XrXirModule *source, EffectTerms *terms) {
-    const XrXirCompileContext *context=terms->remaining;
     const XrXirDeclarations *a=contexts->source_declarations,*b=source->declarations;
     if (!!a!=!!b || (a && (a->module_count!=b->module_count || a->slot_count!=b->slot_count ||
         a->literal_count!=b->literal_count || a->root_module!=b->root_module ||
@@ -124,24 +123,24 @@ static XrXirStatus effect_ordinary_declarations_match(const EffectOrdinaryContex
         if (left->initializer!=right->initializer || left->lexical_scope!=right->lexical_scope ||
             left->storage!=right->storage || left->dependency_count!=right->dependency_count)
             return XR_XIR_BAD_STRUCTURE;
-        XrXirStatus status=effect_terms_literal_same(terms,
+        XrXirStatus status=effect_terms_literal_same(
             (XrXirLiteral){left->name,left->name_length},(XrXirLiteral){right->name,right->name_length});
         if (status!=XR_XIR_OK) return status;
-        if (!xir_compile_work(context,(uint64_t)left->dependency_count*sizeof(uint32_t))) return XR_XIR_BUDGET;
+
         if (left->dependency_count && (!right->dependencies || memcmp(left->dependencies,right->dependencies,
             (size_t)left->dependency_count*sizeof(uint32_t)))) return XR_XIR_BAD_STRUCTURE;
     }
     for (uint32_t f=0;a && f<contexts->base_count;++f) {
-        if (!xir_compile_work(context,sizeof(XrXirFunctionIdentity))) return XR_XIR_BUDGET;
+
         if (!b->functions || memcmp(&a->functions[f],&b->functions[f],sizeof(XrXirFunctionIdentity)))
             return XR_XIR_BAD_STRUCTURE;
     }
     for (uint32_t l=0;a && l<a->literal_count;++l) {
-        XrXirStatus status=effect_terms_literal_same(terms,a->literals[l],b->literals[l]);
+        XrXirStatus status=effect_terms_literal_same(a->literals[l],b->literals[l]);
         if (status!=XR_XIR_OK) return status;
     }
     for (uint32_t s=0;a && s<a->slot_count;++s) {
-        if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
+
         if (!b->slots || a->slots[s].module!=b->slots[s].module || a->slots[s].mutable!=b->slots[s].mutable)
             return XR_XIR_BAD_STRUCTURE;
         XrXirStatus status=effect_terms_domain_type(terms,source->types,a->slots[s].type,b->slots[s].type,0);
@@ -155,7 +154,7 @@ static XrXirStatus effect_ordinary_declarations_match(const EffectOrdinaryContex
         XrXirStatus status=effect_terms_domain_constraints(terms,source->types,
             left->constraints,right->constraints,left->parameter_count);
         for (uint32_t p=0;p<left->parameter_count && status==XR_XIR_OK;++p) {
-            if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
             if (xr_xir_binder_kind(left,p)!=xr_xir_binder_kind(right,p)) return XR_XIR_BAD_STRUCTURE;
         }
         for (uint32_t v=0;v<left->argument_count && status==XR_XIR_OK;++v)
@@ -164,7 +163,7 @@ static XrXirStatus effect_ordinary_declarations_match(const EffectOrdinaryContex
     }
     uint32_t count=source->defaults ? source->defaults->count : 0;
     if (count!=contexts->source_defaults.count) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,(uint64_t)count*sizeof(XrXirDefaultBinding))) return XR_XIR_BUDGET;
+
     if (count && (!source->defaults->records || memcmp(contexts->source_defaults.records,
         source->defaults->records,(size_t)count*sizeof(XrXirDefaultBinding)))) return XR_XIR_BAD_STRUCTURE;
     return effect_ordinary_implementations_match(contexts,source,terms);
@@ -175,20 +174,20 @@ static XrXirStatus effect_ordinary_bodies_match(const EffectOrdinaryContexts *co
     XrXirStatus declarations=effect_ordinary_declarations_match(contexts,source,terms);
     if (declarations!=XR_XIR_OK) return declarations;
     for (uint32_t f=0;f<contexts->count;++f) {
-        if (!xir_compile_work(terms->remaining,3)) return XR_XIR_BUDGET;
+
         uint32_t declaration=contexts->nodes[f].declaration;
         if (declaration>=source->function_count) return XR_XIR_BAD_STRUCTURE;
         const XrXirFunction *original=&source->functions[declaration], *actual=&contexts->functions[f];
         if (actual->parameter_count!=original->parameter_count ||
             actual->instruction_count!=original->instruction_count ||
             actual->operand_count!=original->operand_count) return XR_XIR_BAD_STRUCTURE;
-        XrXirStatus name=effect_terms_literal_same(terms,
+        XrXirStatus name=effect_terms_literal_same(
             (XrXirLiteral){actual->name,actual->name_length},(XrXirLiteral){original->name,original->name_length});
         if (name!=XR_XIR_OK) return name;
         XrXirStatus signature=effect_ordinary_signature_match(contexts,source,f,terms);
         if (signature!=XR_XIR_OK) return signature;
         for (uint32_t v=0;v<actual->operand_count;++v) {
-            if (!xir_compile_work(terms->remaining,2)) return XR_XIR_BUDGET;
+
             if (actual->operands[v]!=original->operands[v]) return XR_XIR_BAD_STRUCTURE;
         }
         for (uint32_t i=0;i<actual->instruction_count;++i) {
@@ -248,7 +247,7 @@ static XrXirStatus effect_ordinary_roots_publish(const XrXirCompileContext *cont
         view->module.provenance || (graph->material && (graph->physical_owned ||
         graph->material!=contexts->uses.generation || graph->ordinary.contexts!=view->input.contexts ||
         graph->ordinary.source!=view->input.source))) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,14)) return XR_XIR_BUDGET;
+
     XrXirStatus status=effect_ordinary_root_storage(contexts,context);
     if (status==XR_XIR_OK && !graph->material) {
         graph->ordinary=view->input;

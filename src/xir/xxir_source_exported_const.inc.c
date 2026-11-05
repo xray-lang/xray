@@ -12,7 +12,7 @@
  *   loads it within its actual module under the common verifier's guards.
  */
 static bool source_exported_numeric_syntax(SourceContext *ctx,AstNode *node,uint32_t depth) {
-    if (!node || !source_work(ctx,node)) return false;
+    if (!node || !((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (depth>=128) return source_fail(ctx,node,XR_XIR_BUDGET,"constant expression depth exhausted");
     switch (node->type) {
     case AST_LITERAL_INT:case AST_LITERAL_FLOAT:return true;
@@ -76,7 +76,7 @@ static bool source_exported_const_reserve(SourceContext *ctx) {
     for (uint32_t m=0;m<(uint32_t)ctx->graph->spec_count;++m) {
         ctx->module=m;
         for (SourceName *name=ctx->names[m];name;name=name->next) {
-            if (!source_work(ctx,name->node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (!source_exported_const(ctx,name)) {
                 if (ctx->diagnostic.status!=XR_XIR_OK) return false;
                 continue;
@@ -101,7 +101,7 @@ static bool source_exported_const_reserve(SourceContext *ctx) {
 static bool source_exported_const_finish(SourceContext *ctx) {
     for (uint32_t m=0;m<(uint32_t)ctx->graph->spec_count;++m) {
         for (SourceName *name=ctx->names[m];name;name=name->next) {
-            if (!source_work(ctx,name->node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (name->kind!=SOURCE_SLOT || !name->reader) continue;
             uint32_t slot=name->index,f=name->reader-1;
             if (!source_exported_const(ctx,name) || slot>=ctx->slot_count || f>=ctx->function_count ||

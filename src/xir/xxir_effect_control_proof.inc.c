@@ -113,7 +113,7 @@ static XrXirStatus effect_control_local_read(const EffectControlRead *read,uint3
                 if(!cleanup && (actual<read->claims->functions[target].suspend ||
                     read->claims->task_creation[function]<read->claims->task_creation[target])) return XR_XIR_BAD_STRUCTURE;
             }
-            if(!xir_compile_work(read->work,12)) return XR_XIR_BUDGET;
+
             if(seed.suspend>actual) return XR_XIR_BAD_STRUCTURE;
             if(actual && seed.suspend==actual && !local.suspend) {
                 local.suspend=true;local.instruction=run->first+i;
@@ -123,7 +123,7 @@ static XrXirStatus effect_control_local_read(const EffectControlRead *read,uint3
         }
     }
     if(cursor.first!=head->instruction_count || cursor.run!=head->run_count) return XR_XIR_BAD_STRUCTURE;
-    if(!xir_compile_work(read->work,sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=local;return XR_XIR_OK;
 }
 static XrXirStatus effect_control_read_frame(EffectControlRead *read,
@@ -149,14 +149,14 @@ static XrXirStatus effect_control_positions_check(const EffectControlRead *read,
     uint32_t count=read->proof->counts[mode];if(count>read->functions) return XR_XIR_BAD_STRUCTURE;
     const EffectControlPositions *positions=effect_control_positions(read->proof);const uint32_t *order=effect_control_order(read->proof,mode);
     for(uint32_t f=0;f<read->functions;++f) {
-        if(!xir_compile_work(read->work,5)) return XR_XIR_BUDGET;
+
         uint32_t position=positions[f].position[mode];bool active=position!=UINT32_MAX;
         if(active && (position>=count || order[position]!=f)) return XR_XIR_BAD_STRUCTURE;
         if((!mode && !!read->claims->functions[f].suspend!=active) ||
             (mode==1 && (read->claims->task_creation[f]==XR_XIR_EFFECT_MAY)!=active)) return XR_XIR_BAD_STRUCTURE;
     }
     for(uint32_t i=0;i<read->functions;++i) {
-        if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
+
         if(i<count) { if(order[i]>=read->functions || positions[order[i]].position[mode]!=i) return XR_XIR_BAD_STRUCTURE; }
         else if(order[i]) return XR_XIR_BAD_STRUCTURE;
     }
@@ -177,14 +177,14 @@ static XrXirStatus effect_control_proof_seeds(const EffectControlRead *read,uint
             return XR_XIR_BAD_STRUCTURE;
         bool shape=positions[f].position[2]!=UINT32_MAX,root=read->claims->root[f].requires_root || read->claims->root[f].unresolved;
         if(read->claims->go_safe[f]!=(shape || root?XR_XIR_BAD_TYPE:XR_XIR_OK)) return XR_XIR_BAD_STRUCTURE;
-        status=effect_control_entry(read->work,&read->input,read->claims,f);if(status!=XR_XIR_OK) return status;
+        status=effect_control_entry(&read->input,read->claims,f);if(status!=XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
 }
 static XrXirStatus effect_control_proof_edge(const EffectControlRead *read,uint32_t mode,
     uint32_t caller,uint32_t instruction,uint32_t callee,uint32_t *next) {
     const EffectControlPositions *positions=effect_control_positions(read->proof);
-    if(!xir_compile_work(read->work,5)) return XR_XIR_BUDGET;
+
     if(!mode && read->claims->functions[caller].suspend!=read->claims->functions[callee].suspend) return XR_XIR_OK;
     if(positions[caller].position[mode]<*next) return XR_XIR_OK;
     if(*next>=read->proof->counts[mode] || positions[caller].position[mode]!=*next) return XR_XIR_BAD_STRUCTURE;
@@ -245,7 +245,7 @@ static XrXirStatus effect_control_edges_check(const EffectControlRead *read) {
     const EffectControlEdgeId *edges=effect_control_edges_read(read->proof);
     if(offsets[0] || offsets[read->functions]!=read->proof->edges) return XR_XIR_BAD_STRUCTURE;
     for(uint32_t f=0;f<read->functions;++f) {
-        if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
+
         if(offsets[f]>offsets[f+1] || offsets[f+1]>read->proof->edges) return XR_XIR_BAD_STRUCTURE;
         for(uint32_t i=offsets[f];i<offsets[f+1];++i) {
             EffectControlEdgeId id=edges[i];uint32_t target=UINT32_MAX;bool cleanup=false;
@@ -297,7 +297,7 @@ static XrXirStatus effect_control_edges_build(EffectControlRead *read,EffectCont
                 }
                 EffectControlEdgeId id={f,run->first+i};uint32_t target=UINT32_MAX;bool cleanup=false;
                 status=effect_control_id_read(read,id,&target,&cleanup);if(status!=XR_XIR_OK) return status;
-                if(written>=proof->edges || !xir_compile_work(read->work,3+sizeof(id)))
+                if(written>=proof->edges)
                     return written>=proof->edges?XR_XIR_BAD_STRUCTURE:XR_XIR_BUDGET;
                 if(!pass) ++offsets[target+1];
                 else { if(offsets[target]>=proof->edges) return XR_XIR_BAD_STRUCTURE;edges[offsets[target]++]=id; }
@@ -307,12 +307,12 @@ static XrXirStatus effect_control_edges_build(EffectControlRead *read,EffectCont
     }
     if(written!=proof->edges) return XR_XIR_BAD_STRUCTURE;
     if(!pass) for(uint32_t f=0;f<read->functions;++f) {
-        if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+
         offsets[f+1]+=offsets[f];
     }
     else {
         for(uint32_t f=read->functions;f>0;--f) {
-            if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+
             offsets[f]=offsets[f-1];
         }
         offsets[0]=0;
@@ -324,7 +324,7 @@ static XrXirStatus effect_control_order_build(EffectControlRead *read,EffectCont
     for(uint32_t f=0;f<read->functions;++f) {
         EffectControlLocal local;XrXirStatus status=effect_control_local_read(read,f,&local);if(status!=XR_XIR_OK) return status;
         bool seeds[3]={local.suspend,local.task,local.shape};
-        if(!xir_compile_work(read->work,3*sizeof(uint32_t))) return XR_XIR_BUDGET;
+
         for(uint32_t mode=0;mode<3;++mode) {
             positions[f].position[mode]=UINT32_MAX;
             if(seeds[mode]) {
@@ -344,7 +344,7 @@ static XrXirStatus effect_control_order_build(EffectControlRead *read,EffectCont
                 if((mode!=2 && cleanup) || positions[id.caller].position[mode]!=UINT32_MAX ||
                     (!mode && read->claims->functions[id.caller].suspend!=read->claims->functions[callee].suspend)) continue;
                 uint32_t next=proof->counts[mode];if(next>=read->functions) return XR_XIR_BAD_STRUCTURE;
-                if(!xir_compile_work(read->work,3*sizeof(uint32_t))) return XR_XIR_BUDGET;
+
                 order[next]=id.caller;positions[id.caller].position[mode]=next;proof->counts[mode]=next+1;
             }
         }
@@ -368,7 +368,7 @@ static XrXirStatus effect_control_proof_build(const XrXirCompileContext *work,
     status=effect_role_range(work,certificate,1,sizeof(*certificate));
     if(status==XR_XIR_OK && (certificate->resources!=work->resources || certificate->body!=body || *output)) status=XR_XIR_BAD_STRUCTURE;
     if(status==XR_XIR_OK) status=effect_control_constructor_frame(work,body,claims,functions,&read.current);
-    if(status==XR_XIR_OK && !xir_compile_work(work,sizeof(*proof))) status=XR_XIR_BUDGET;
+
     if(status==XR_XIR_OK) {
         *proof=(EffectControlProof){.resources=work->resources,.material=body,.functions=functions,.edges=edges};
         read.proof=proof;read.input=effect_body_owned_request(work,body);read.input.current=&read.current;

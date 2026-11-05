@@ -106,7 +106,7 @@ static bool source_atomic_member_reference(SourceContext *ctx,AstNode *node,
         XrXirSourceType *parameters=member->parameter_count ? source_alloc(ctx,member->parameter_count,sizeof(*parameters)) : NULL;
         if (member->parameter_count && !parameters) return false;
         for (uint32_t p=0;p<member->parameter_count;++p) {
-            if (!source_work(ctx,node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             parameters[p]=source_atomic_schema_type(ctx,member->parameters[p].type);
             if (!parameters[p].known) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Atomic parameter schema is not admitted");
         }

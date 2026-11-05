@@ -61,8 +61,8 @@ XR_FUNC XrXirStatus xlsp_source_syntax_arguments(const XlspSyntaxSnapshot *s,Xls
     if(status!=XR_XIR_OK)goto done;owner->view.uri=uri;
     status=arguments_resource_status(xr_compile_resources_work(resources,s->uri_length+1));
     if(status!=XR_XIR_OK)goto done;memcpy(uri,s->uri,s->uri_length+1);
-    status=arguments_resource_status(xr_compile_module_source_fingerprint(resources,s->text,&owner->view.fingerprint));
-    if(status==XR_XIR_OK)status=syntax_arguments_copy(s,owner);
+    xr_module_source_fingerprint(s->text,&owner->view.fingerprint);
+    status=syntax_arguments_copy(s,owner);
     if(status==XR_XIR_OK){*out=owner;owner=NULL;}
 done:
     xlsp_source_call_arguments_free(owner);return status;

@@ -29,7 +29,7 @@ static XrXirStatus query_syntax_names(SourceQueryCopy *copy,const XrXirSourceDec
         (decl->kind!=XR_XIR_SOURCE_FUNCTION&&decl->kind!=XR_XIR_SOURCE_TYPE&&
             decl->kind!=XR_XIR_SOURCE_MEMBER&&decl->kind!=XR_XIR_SOURCE_INTRINSIC))return XR_XIR_BAD_STRUCTURE;
     for(uint32_t p=0;p<fact->type_parameter_count;++p) {
-        if(!query_work(copy,sizeof(*fact->type_parameters)))return copy->status;
+        if(!((copy)->status == XR_XIR_OK))return copy->status;
         if(!fact->type_parameters[p]||!*fact->type_parameters[p])return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
@@ -42,7 +42,7 @@ static XrXirStatus query_syntax_pattern_binding(SourceQueryCopy *copy,const XrXi
         return XR_XIR_BAD_STRUCTURE;
     bool field=false,declared=query_syntax_same_range(syntax->declarations[marker->declaration-1].name,marker->range);
     for(uint32_t i=0;i<view->reference_count;++i) {
-        if(!query_work(copy,sizeof(view->references[i])+sizeof(syntax->references[i])))return copy->status;
+        if(!((copy)->status == XR_XIR_OK))return copy->status;
         if(!query_syntax_same_range(syntax->references[i],marker->range))continue;
         const XrXirSourceReference *reference=&view->references[i];
         if(reference->declaration==marker->declaration&&reference->access==XR_XIR_SOURCE_WRITE)declared=true;
@@ -58,7 +58,7 @@ static XrXirStatus query_syntax_import(SourceQueryCopy *copy,const XrXirSourceSy
     const XrXirSourceDeclaration *decl=&view->declarations[marker->declaration-1];
     const XrXirSourceDeclarationSyntax *fact=&syntax->declarations[marker->declaration-1];
     for(uint32_t i=0;i<syntax->marker_count;++i) {
-        if(!query_work(copy,sizeof(syntax->markers[i])))return copy->status;
+        if(!((copy)->status == XR_XIR_OK))return copy->status;
         const XrXirSourceMarker *other=&syntax->markers[i];
         if(other!=marker&&(other->declaration==marker->declaration||query_syntax_same_range(other->range,marker->range))&&
             (other->role==XR_XIR_SOURCE_MARKER_IMPORT_BINDING||other->role==XR_XIR_SOURCE_MARKER_IMPORT_IMPLICIT))
@@ -76,7 +76,7 @@ static XrXirStatus query_syntax_import(SourceQueryCopy *copy,const XrXirSourceSy
         return XR_XIR_BAD_STRUCTURE;
     bool selected=false;
     for(uint32_t i=0;i<view->reference_count;++i) {
-        if(!query_work(copy,sizeof(view->references[i])+sizeof(syntax->references[i])))return copy->status;
+        if(!((copy)->status == XR_XIR_OK))return copy->status;
         const XrXirSourceReference *ref=&view->references[i];
         if(!query_syntax_same_range(syntax->references[i],marker->range))continue;
         if(ref->declaration!=decl->target||ref->target!=decl->target||ref->access!=XR_XIR_SOURCE_IMPORT_SELECTOR)
@@ -94,7 +94,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_syntax_copy(XrXirSourceSnapsh
         (!!syntax->references!=!!syntax->reference_count)|| (!!syntax->markers!=!!syntax->marker_count))return XR_XIR_BAD_STRUCTURE;
     SourceQueryCopy copy={snapshot,XR_XIR_OK};
     for(uint32_t i=0;i<syntax->declaration_count;++i) {
-        if(!query_work(&copy,sizeof(syntax->declarations[i])))return copy.status;
+        if(!((&copy)->status == XR_XIR_OK))return copy.status;
         const XrXirSourceDeclarationSyntax *fact=&syntax->declarations[i];
         const XrXirSourceDeclaration *decl=&view->declarations[i];
         bool absent=fact->role==XR_XIR_SOURCE_SYNTAX_NONE||fact->role==XR_XIR_SOURCE_SYNTAX_CLOSURE||fact->role==XR_XIR_SOURCE_SYNTAX_RECEIVER;
@@ -120,12 +120,12 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_syntax_copy(XrXirSourceSnapsh
                 (syntax->declarations[decl->parent-1].flags&XR_XIR_SOURCE_SYNTAX_STATIC)))return XR_XIR_BAD_STRUCTURE;
     }
     for(uint32_t i=0;i<syntax->reference_count;++i) {
-        if(!query_work(&copy,sizeof(syntax->references[i])))return copy.status;
+        if(!((&copy)->status == XR_XIR_OK))return copy.status;
         if(syntax->references[i].module!=view->references[i].range.module||
             syntax->references[i].module>=view->module_count)return XR_XIR_BAD_STRUCTURE;
     }
     for(uint32_t i=0;i<syntax->marker_count;++i) {
-        if(!query_work(&copy,sizeof(syntax->markers[i])))return copy.status;
+        if(!((&copy)->status == XR_XIR_OK))return copy.status;
         const XrXirSourceMarker *marker=&syntax->markers[i];
         if(!marker->declaration||marker->declaration>view->declaration_count||
             (marker->role!=XR_XIR_SOURCE_MARKER_REF&&marker->role!=XR_XIR_SOURCE_MARKER_MOVE&&marker->role!=XR_XIR_SOURCE_MARKER_REF_ARGUMENT&&
@@ -163,7 +163,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_syntax_copy(XrXirSourceSnapsh
     SourceQueryMemory *previous=snapshot->memory;
     XrXirSourceSyntaxView owned=*syntax;
     owned.declarations=query_copy(&copy,syntax->declarations,syntax->declaration_count,sizeof(*syntax->declarations));
-    for(uint32_t i=0;owned.declarations&&i<syntax->declaration_count&&query_work(&copy,1);++i) {
+    for(uint32_t i=0;owned.declarations&&i<syntax->declaration_count&&((&copy)->status == XR_XIR_OK);++i) {
         const XrXirSourceDeclarationSyntax *source=&syntax->declarations[i];
         const char **names=query_allocate(&copy,source->type_parameter_count,sizeof(*names));
         ((XrXirSourceDeclarationSyntax *)owned.declarations)[i].type_parameters=names;
@@ -172,7 +172,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_syntax_copy(XrXirSourceSnapsh
     }
     owned.references=query_copy(&copy,syntax->references,syntax->reference_count,sizeof(*syntax->references));
     owned.markers=query_copy(&copy,syntax->markers,syntax->marker_count,sizeof(*syntax->markers));
-    (void)query_work(&copy,sizeof(owned)+sizeof(snapshot->syntax_ready));
+    (void)((&copy)->status == XR_XIR_OK);
     if(copy.status!=XR_XIR_OK) {
         while(snapshot->memory!=previous) {SourceQueryMemory *next=snapshot->memory->next;xr_compile_resources_free(snapshot->memory);snapshot->memory=next;}
         return copy.status;

@@ -10,17 +10,11 @@
 #define XCOMPILER_SESSION_H
 #include "../base/xdefs.h"
 #include "../base/xcompile_state.h"
+#include "../base/xcompile_request.h"
 
 struct XrArena;
 struct XrCompileStringPool;
 typedef struct XrCompilerSession XrCompilerSession;
-typedef enum XrCompilerSessionStatus {
-    XR_COMPILER_SESSION_OK,
-    XR_COMPILER_SESSION_BAD_ARGUMENT,
-    XR_COMPILER_SESSION_BUDGET,
-    XR_COMPILER_SESSION_OUT_OF_MEMORY
-} XrCompilerSessionStatus;
-
 /* Zero-initialize before push. A live scope cannot move or be copied; only the
  * exact top scope may pop. The borrowed scope storage must stay alive until
  * pop or session destruction. Closing with open scopes invalidates them and
@@ -37,11 +31,18 @@ typedef struct XrCompilerSessionScope {
 /* The caller supplies the sole ledger; output must be empty. No VM, target,
  * analyzer, REPL, cache or dependency-graph ownership belongs to this session.
  * Completed AST arenas retain their own state and may outlive the session. */
-XR_FUNC XrCompilerSessionStatus xr_compile_session_new(XrCompileResources *resources, XrCompilerSession **output);
+XR_FUNC XrCompileResourceStatus xr_compile_session_new(XrCompileResources *resources, XrCompilerSession **output);
 /* A retained AST owner can create a temporary parser context on its exact
- * state. It shares sticky failures and the sole ledger without copying quota. */
-XR_FUNC XrCompilerSessionStatus xr_compile_session_new_with_state(XrCompileState *state, XrCompilerSession **output);
+ * state. It shares its arena memory owner without copying limits. */
+XR_FUNC XrCompileResourceStatus xr_compile_session_new_with_state(XrCompileState *state, XrCompilerSession **output);
 XR_FUNC void xr_compile_session_free(XrCompilerSession *session);
+/* A parser session borrows one initialized request control. The control and
+ * session remain live throughout parsing; AST arenas retain memory only.
+ * Bind once before parsing. Destruction never invokes a borrowed callback. */
+XR_FUNC XrCompileResourceStatus xr_compile_session_bind_request(XrCompilerSession *, XrCompileRequestControl *);
+XR_FUNC XrCompileRequestControl *xr_compile_session_request(const XrCompilerSession *);
+XR_FUNC XrCompileResourceStatus xr_compile_session_poll(XrCompilerSession *);
+
 XR_FUNC XrCompileResources *xr_compile_session_resources(const XrCompilerSession *session);
 XR_FUNC XrCompileState *xr_compile_session_compile_state(const XrCompilerSession *session);
 XR_FUNC XrCompileResourceStatus xr_compile_session_resource_status(const XrCompilerSession *session);

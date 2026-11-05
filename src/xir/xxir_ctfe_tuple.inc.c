@@ -15,40 +15,31 @@
 #include "xxir_array.h"
 #include "xxir_struct.h"
 #include "xxir_enum.h"
-static XrXirCtfeStatus ctfe_validation_work(ScalarRun *run,CtfeOwnedState *state,XrXirType type) {
+static XrXirCtfeStatus ctfe_value_type_admit(ScalarRun *run,CtfeOwnedState *state,XrXirType type) {
     if (xr_xir_type_is_cell(run->module->types,type)) type=xr_xir_cell_element(run->module->types,type);
-    if (type==XR_XIR_ERROR) return scalar_compile_work(run,64+state->value_header_work)?XR_XIR_CTFE_OK:XR_XIR_CTFE_BUDGET;
-    if (type==XR_XIR_PANIC_INFO) return scalar_compile_work(run,512)?XR_XIR_CTFE_OK:XR_XIR_CTFE_BUDGET;
     if (!ctfe_execution_node(run->module->types,type,true)) return XR_XIR_CTFE_OK;
     uint32_t index=(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE;
-    if (!state->tuple_costs) {
+    if (!state->type_info) {
         void *memory=NULL;
         XrXirCtfeStatus status=ctfe_compile_status(xir_compile_resource_status(xr_compile_resources_calloc(
-            run->compile_resources,run->module->types->count,sizeof(XrXirCtfeTypeShape),&memory)));
+            run->compile_resources,run->module->types->count,sizeof(CtfeTypeInfo),&memory)));
         if (status!=XR_XIR_CTFE_OK) return status;
-        state->tuple_costs=memory;
+        state->type_info=memory;
     }
-    if (!state->tuple_costs[index].work) {
-        XrXirCtfeStatus status=ctfe_type_info(state->context,run->module->types,type,true,&state->tuple_costs[index]);
-        if (status!=XR_XIR_CTFE_OK) return status;
-    }
-    uint64_t work=state->tuple_costs[index].work;
-    if (work>UINT64_MAX/16) return XR_XIR_CTFE_BUDGET;
-    /* Expanded type shape includes every repeated immutable child occurrence,
-     * covering Value's full nested receiving and immediate header scans. */
-    return scalar_compile_work(run,work*16)?XR_XIR_CTFE_OK:XR_XIR_CTFE_BUDGET;
+    if (!state->type_info[index].admitted)
+        return ctfe_type_info(state->context,run->module->types,type,true,&state->type_info[index]);
+    return XR_XIR_CTFE_OK;
 }
 static bool ctfe_tuple_opcode(XrXirOp op) { return op==XR_XIR_TUPLE_NEW || op==XR_XIR_TUPLE_FIELD; }
-static XrXirCtfeStatus ctfe_tuple_flow_work(ScalarRun *run,const XrXirInstruction *op,CtfeOwnedState *state) {
+static XrXirCtfeStatus ctfe_tuple_flow_admit(ScalarRun *run,const XrXirInstruction *op,CtfeOwnedState *state) {
     if (op->op==XR_XIR_OWNED_LOCAL_WRITE)
-        return ctfe_validation_work(run,state,xr_xir_operand_type(run->function,op->args[0]));
+        return ctfe_value_type_admit(run,state,xr_xir_operand_type(run->function,op->args[0]));
     if (op->op!=XR_XIR_JUMP && op->op!=XR_XIR_BRANCH) return XR_XIR_CTFE_OK;
     uint32_t edge=op->op==XR_XIR_BRANCH && !xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[0]])?1u:0u;
     uint32_t first=run->function->blocks[op->targets[edge]].first;
     for (uint32_t i=first;i<run->function->instruction_count;++i) {
-        if (!scalar_compile_work(run,1)) return XR_XIR_CTFE_BUDGET;
         if (run->function->instructions[i].op!=XR_XIR_PHI) break;
-        XrXirCtfeStatus status=ctfe_validation_work(run,state,run->function->instructions[i].type);
+        XrXirCtfeStatus status=ctfe_value_type_admit(run,state,run->function->instructions[i].type);
         if (status!=XR_XIR_CTFE_OK) return status;
     }
     return XR_XIR_CTFE_OK;
@@ -57,15 +48,14 @@ static XrXirCtfeStatus ctfe_tuple_step(ScalarRun *run,VmState *state,CtfeOwnedSt
     const XrXirInstruction *op=&run->function->instructions[state->instruction];
     XrXirValue result={0};XrXirValueStatus value;
     XrXirType receiver_type=op->op==XR_XIR_TUPLE_NEW?op->type:xr_xir_operand_type(run->function,op->args[0]);
-    XrXirCtfeStatus status=ctfe_validation_work(run,owned,receiver_type);
+    XrXirCtfeStatus status=ctfe_value_type_admit(run,owned,receiver_type);
     if (status!=XR_XIR_CTFE_OK) return status;
     if (op->op==XR_XIR_TUPLE_FIELD && op->type==XR_XIR_ERROR) {
-        status=ctfe_validation_work(run,owned,op->type);if (status!=XR_XIR_CTFE_OK) return status;
+        status=ctfe_value_type_admit(run,owned,op->type);if (status!=XR_XIR_CTFE_OK) return status;
     }
     if (op->op==XR_XIR_TUPLE_NEW) {
         const XrXirTypeNode *tuple=xr_xir_tuple_signature(run->module->types,op->type);uint32_t payload=0;
         if (!tuple || !state->arguments || tuple->parameter_count>run->layout->outgoing_count) return XR_XIR_CTFE_BAD_ARTIFACT;
-        if (!scalar_compile_work(run,(uint64_t)tuple->parameter_count*(2*sizeof(XrXirValue)+2))) return XR_XIR_CTFE_BUDGET;
         for (uint32_t i=0;i<tuple->parameter_count;++i) {
             if (tuple->parameters[i].type==XR_XIR_UNIT) state->arguments[i]=(XrXirValue){0};
             else {
@@ -75,7 +65,7 @@ static XrXirCtfeStatus ctfe_tuple_step(ScalarRun *run,VmState *state,CtfeOwnedSt
             }
         }
         for (uint32_t i=0;i<tuple->parameter_count;++i) {
-            status=ctfe_admission_work(run,owned,&state->arguments[i]);if (status!=XR_XIR_CTFE_OK) return status;
+            status=ctfe_value_graph_admit(run,owned,&state->arguments[i]);if (status!=XR_XIR_CTFE_OK) return status;
         }
         XrXirValueAdmission admission=ctfe_value_admission(owned);
         value=xr_xir_tuple_new(op->type,state->arguments,tuple->parameter_count,&admission,&result);
@@ -96,8 +86,12 @@ static XrXirCtfeStatus ctfe_tuple_export_bytes(ScalarRun *run,const XrXirValue *
     CtfeOwnedState *state,uint64_t maximum) {
     CtfeTupleExportFrame *stack=NULL;uint32_t depth=0,capacity=0;uint64_t bytes=0;
     XrXirCtfeStatus status=XR_XIR_CTFE_OK;XrXirValue current=*value;bool current_owned=false;
+    uint32_t observations=0;
     for (;;) {
-        if (!scalar_compile_work(run,sizeof(CtfeTupleExportFrame)+4)) { status=XR_XIR_CTFE_BUDGET;break; }
+        if (!(observations++ & 63u)) {
+            status=ctfe_control_poll(state->control);
+            if (status!=XR_XIR_CTFE_OK) break;
+        }
         const XrXirTypeNode *tuple=ctfe_composite_node(run->module->types,(XrXirType)current.type);
         if (tuple && tuple->kind==XR_XIR_TYPE_NULLABLE) {
             bool some=false;const XrXirValue *payload=NULL;
@@ -113,7 +107,7 @@ static XrXirCtfeStatus ctfe_tuple_export_bytes(ScalarRun *run,const XrXirValue *
         }
         uint64_t count=tuple?ctfe_composite_fields(tuple):0;uint32_t variant=0;
         if (tuple && xr_xir_type_is_enum(run->module->types,(XrXirType)current.type)) {
-            status=ctfe_validation_work(run,state,(XrXirType)current.type);if (status!=XR_XIR_CTFE_OK) break;
+            status=ctfe_value_type_admit(run,state,(XrXirType)current.type);if (status!=XR_XIR_CTFE_OK) break;
             status=ctfe_value_status(xr_xir_enum_variant(&current,&variant));if (status!=XR_XIR_CTFE_OK) break;
             const XrXirNominalVariant *info=ctfe_enum_variant_info(run->module->types,tuple,variant);
             const XrXirStorageLayout *layout=xr_xir_compile_type_arena_storage(state->arena,(XrXirType)current.type);
@@ -161,12 +155,12 @@ static XrXirCtfeStatus ctfe_tuple_export_bytes(ScalarRun *run,const XrXirValue *
         }
         if (!depth) break;
         CtfeTupleExportFrame *frame=&stack[depth-1];
-        status=ctfe_validation_work(run,state,(XrXirType)frame->value.type);
+        status=ctfe_value_type_admit(run,state,(XrXirType)frame->value.type);
         if (status!=XR_XIR_CTFE_OK) break;
         tuple=ctfe_composite_node(run->module->types,(XrXirType)frame->value.type);
         if (tuple->kind==XR_XIR_TYPE_ARRAY || tuple->kind==XR_XIR_TYPE_NOMINAL) {
             CtfeOwnedState bounded=*state;bounded.frame_spare-=(uint64_t)capacity*sizeof(*stack);
-            status=ctfe_admission_work(run,&bounded,&frame->value);state->tuple_costs=bounded.tuple_costs;
+            status=ctfe_value_graph_admit(run,&bounded,&frame->value);state->type_info=bounded.type_info;
             if (status!=XR_XIR_CTFE_OK) break;
             XrXirValueAdmission admission=ctfe_value_admission(&bounded);XrXirFaultDetail fault={0};
             if (tuple->kind==XR_XIR_TYPE_ARRAY) status=ctfe_value_status(xr_xir_array_get(&frame->value,(int64_t)frame->next++,&admission,&current,&fault));

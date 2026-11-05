@@ -32,7 +32,7 @@ typedef struct EffectErrorEquationQuery {
 static inline XrXirStatus error_equation_domain_open(const EffectErrorEquationDomain *domain,
     uint32_t context,EffectErrorEquationProof *output) {
     if(context>=domain->context_count) return XR_XIR_BAD_STRUCTURE;
-    if(!xir_compile_work(domain->work,sizeof(*output))) return XR_XIR_BUDGET;
+
     uint32_t function=UINT32_MAX;
     XrXirStatus status=domain->function(domain,context,&function);
     if(status!=XR_XIR_OK) return status;
@@ -59,7 +59,7 @@ static inline XrXirStatus error_equation_domain_word(const EffectErrorEquationDo
     EffectErrorEquationProof proof;
     XrXirStatus status=error_equation_domain_open(domain,query->context,&proof);
     if(status!=XR_XIR_OK) return status;
-    if(!xir_compile_work(domain->work,sizeof(EffectErrorEquationRead))) return XR_XIR_BUDGET;
+
     EffectErrorEquationRead read=error_equation_proof_read(&proof,query->rank_limit);
     return error_equation_fact_word(&read,query->block,query->value,query->word,output);
 }
@@ -72,17 +72,17 @@ static inline XrXirStatus error_equation_domain_span(const EffectErrorEquationDo
     XrCompileResourceStatus status=xr_compile_resources_extent(domain->work->resources,
         memory,(size_t)count*size);
     return status==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:
-        status==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
+        XR_XIR_BAD_STRUCTURE;
 }
 static inline XrXirStatus error_equation_domain_atoms(const EffectErrorEquationDomain *domain) {
     const XrXirTypes *types=domain->body.domain.types;uint32_t at=0;
     for(uint32_t t=0;types && t<types->count;++t) {
-        if(!xir_compile_work(domain->work,1)) return XR_XIR_BUDGET;
+
         XrXirType type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+t);
         if(!xr_xir_type_is_enum(types,type)) continue;
         uint32_t variants=error_variant_count(types,t);
         for(uint32_t v=0;v<variants;++v) {
-            if(!xir_compile_work(domain->work,4)) return XR_XIR_BUDGET;
+
             if(at>=domain->atom_count || domain->atoms[at].type!=type || domain->atoms[at].variant!=v)
                 return XR_XIR_BAD_STRUCTURE;
             ++at;
@@ -90,12 +90,12 @@ static inline XrXirStatus error_equation_domain_atoms(const EffectErrorEquationD
     }
     uint32_t parameters=0;
     for(uint32_t f=0;domain->body.domain.generics && f<domain->body.domain.function_count;++f) {
-        if(!xir_compile_work(domain->work,1)) return XR_XIR_BUDGET;
+
         uint32_t count=domain->body.domain.generics[f].parameter_count;
         if(count>parameters) parameters=count;
     }
     for(uint32_t p=0;p<parameters;++p) {
-        if(!xir_compile_work(domain->work,4)) return XR_XIR_BUDGET;
+
         if(at>=domain->atom_count || domain->atoms[at].type!=(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+p) ||
             domain->atoms[at].variant!=XR_XIR_ERROR_SYMBOLIC_VARIANT) return XR_XIR_BAD_STRUCTURE;
         ++at;
@@ -117,7 +117,7 @@ static inline XrXirStatus error_equation_domain_shape(const EffectErrorEquationD
     if(status!=XR_XIR_OK) return status;
     uint32_t next=0;
     for(uint32_t c=0;c<domain->context_count;++c) {
-        if(!xir_compile_work(domain->work,3)) return XR_XIR_BUDGET;
+
         const EffectErrorEquationContext *record=&domain->contexts[c];
         if(record->first!=next || record->count>domain->fact_count-next)
             return XR_XIR_BAD_STRUCTURE;
@@ -158,8 +158,7 @@ static inline XrXirStatus error_equation_domain_ground(EffectErrorEquationDomain
     if(!domain || facts!=domain->facts) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=error_equation_domain_shape(domain);
     if(status!=XR_XIR_OK) return status;
-    if(!xir_compile_work(domain->work,(uint64_t)domain->fact_count*sizeof(facts->rank)))
-        return XR_XIR_BUDGET;
+
     for(uint32_t n=0;n<domain->fact_count;++n) facts[n].rank=UINT32_MAX;
     uint32_t derived=0;
     while(derived<domain->fact_count) {
@@ -172,10 +171,10 @@ static inline XrXirStatus error_equation_domain_ground(EffectErrorEquationDomain
                 if(status!=XR_XIR_OK) return status;
                 const EffectErrorEquationContext *record=&domain->contexts[c];
                 for(uint32_t offset=0;offset<record->count;++offset) {
-                    if(!xir_compile_work(domain->work,1)) return XR_XIR_BUDGET;
+
                     uint32_t n=record->first+offset;
                     if(facts[n].rank!=UINT32_MAX) continue;
-                    if(!xir_compile_work(domain->work,sizeof(EffectErrorEquationRead))) return XR_XIR_BUDGET;
+
                     EffectErrorEquationRead read=error_equation_proof_read(&proof,derived+1);
                     uint64_t actual=0;
                     status=error_equation_fact_rhs(&read,facts[n].block,facts[n].value,facts[n].bit/64,&actual);

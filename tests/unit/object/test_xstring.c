@@ -14,6 +14,8 @@
 #include "runtime/object/xmap.h"
 #include "runtime/mem/xruntime_object_heap.h"
 
+#include "../runtime/xvalue_formatter_allocation_cases.h"
+
 static XrVMRuntime *X = NULL;
 
 /* ========== Setup / Teardown ========== */
@@ -704,6 +706,7 @@ TEST(string_hash_different) {
 /* ========== Main ========== */
 
 static void run_all_tests(void) {
+    RUN_TEST(formatter_actual_allocation_failures);
     RUN_TEST_SUITE("String Creation");
     RUN_TEST(string_intern_empty);
     RUN_TEST(string_intern_simple);

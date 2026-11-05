@@ -31,7 +31,7 @@ static bool spec_capture_flow(SpecContext *c, uint32_t index) {
     if (selected.types->count && !cache) return false;
     XrXirInstruction *ops=(XrXirInstruction *)function->instructions;
     for (uint32_t i=0;i<function->instruction_count;++i) {
-        if (!spec_work(c,2)) return false;
+        if (!((c)->diagnostic.status == XR_XIR_OK)) return false;
         ops[i].type=spec_effect_child(c,cache,selected.types->count,selected.function->instructions[i].type);
         if (c->diagnostic.status!=XR_XIR_OK) return false;
     }

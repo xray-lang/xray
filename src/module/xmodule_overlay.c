@@ -60,7 +60,7 @@ static bool overlay_entry_copy(ModuleWork *work, const XrModuleOverlayInput *inp
     entry->source.source_path = module_dup(work, input->source_path);
     char *text = module_calloc(work, input->length + 1, 1);
     entry->source.text = text; entry->source.length = input->length;
-    for (size_t i = 0; i < input->length && module_work(work, 1); ++i) {
+    for (size_t i = 0; i < input->length && ((work)->status == XR_MODULE_OK); ++i) {
         if (!input->text[i]) { module_status(work, XR_MODULE_INVALID); break; }
     }
     if (work->status == XR_MODULE_OK) module_copy(work, text, input->text, input->length);
@@ -70,10 +70,10 @@ static char *overlay_key(ModuleWork *work,const char *canonical,const XrModuleId
     const char *root=authority->physical_root?authority->physical_root:"";
     size_t length=module_length(work,root);
     char decimal[sizeof(size_t)*3+1];size_t cursor=sizeof(decimal)-1;
-    if (!module_work(work,1)) return NULL;
+    if (!((work)->status == XR_MODULE_OK)) return NULL;
     decimal[cursor]=0;
     do {
-        if (!module_work(work,3)) return NULL;
+        if (!((work)->status == XR_MODULE_OK)) return NULL;
         decimal[--cursor]=(char)('0'+length%10);length/=10;
     } while (length);
     return module_format(work,"%s:%s%s",decimal+cursor,root,canonical);
@@ -81,7 +81,7 @@ static char *overlay_key(ModuleWork *work,const char *canonical,const XrModuleId
 static char *overlay_path(ModuleWork *work,const char *path) {
     char *key=module_dup(work,path);
     if(!key)return NULL;
-    for(size_t i=0;module_work(work,1)&&key[i];++i) {
+    for(size_t i=0;((work)->status == XR_MODULE_OK)&&key[i];++i) {
 #ifdef XR_OS_WINDOWS
         if(key[i]=='\\')key[i]='/';
 #endif
@@ -103,7 +103,7 @@ XR_FUNC XrModuleStatus xr_compile_module_overlay_new(XrCompileResources *resourc
     XrOsIoPolicy policy = xr_compile_io_policy(resources);
     if (work.status == XR_MODULE_OK) module_io(&work, xr_hashmap_owned_new(&policy, &overlay->index));
     if (work.status == XR_MODULE_OK) module_io(&work, xr_hashmap_owned_new(&policy, &overlay->physical));
-    for (size_t i = 0; i < count && module_work(&work, 1); ++i) {
+    for (size_t i = 0; i < count && ((&work)->status == XR_MODULE_OK); ++i) {
         XrModuleOverlayEntry *entry = &overlay->entries[i];
         overlay->initialized = i + 1;
         if (!overlay_entry_copy(&work, &inputs[i], entry)) break;
@@ -146,7 +146,7 @@ XR_FUNC XrModuleStatus xr_compile_module_overlay_lookup(const XrModuleOverlay *o
     if(work.status==XR_MODULE_OK)module_io(&work, xr_hashmap_owned_get(overlay->index, key, &value));
     xr_compile_resources_free(key);
     const XrModuleOverlayEntry *entry = value;
-    if(!entry) for(size_t i=0;i<overlay->count&&module_work(&work,1);++i)
+    if(!entry) for(size_t i=0;i<overlay->count&&((&work)->status == XR_MODULE_OK);++i)
         if(module_equal(&work,overlay->entries[i].canonical,canonical)) {module_status(&work,XR_MODULE_INVALID);break;}
     if (entry && work.status == XR_MODULE_OK) {
         const XrModuleIdentityAuthority *stored = &entry->source.authority;
@@ -171,11 +171,11 @@ XR_FUNC XrModuleStatus xr_compile_module_overlay_bind(const XrModuleOverlay *ove
      * logical names remain exact. An ambiguous spelling must not silently
      * choose disk over edited text; reject without asserting OS equivalence. */
 #ifdef XR_OS_WINDOWS
-    if(!entry)for(size_t i=0;i<overlay->count&&module_work(&work,1);++i) {
+    if(!entry)for(size_t i=0;i<overlay->count&&((&work)->status == XR_MODULE_OK);++i) {
         const char *other=overlay->paths[i];if(!other)continue;
         size_t n=0;bool ambiguous=true;
         for(;;++n) {
-            if(!module_work(&work,2)){ambiguous=false;break;}
+            if(!((&work)->status == XR_MODULE_OK)){ambiguous=false;break;}
             if(tolower((unsigned char)key[n])!=tolower((unsigned char)other[n])){ambiguous=false;break;}
             if(!key[n])break;
         }

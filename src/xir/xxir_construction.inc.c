@@ -15,13 +15,13 @@ static XrXirStatus construction_slots_shape(const XrXirCompileContext *context,
     const XrXirSlotFacts *slots) {
     if (!xir_compile_context_valid(context) || !slots || (!!slots->rows!=!!slots->count))
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
     for (uint32_t s=0;s<slots->count;++s) {
-        if (!xir_compile_work(context,sizeof(*slots->rows))) return XR_XIR_BUDGET;
+
         const XrXirSlotFact *row=&slots->rows[s];
         if (row->slot!=s || !row->name || !row->name_length || row->exported>1)
             return XR_XIR_BAD_STRUCTURE;
-        if (!xir_compile_work(context,(uint64_t)row->name_length*2)) return XR_XIR_BUDGET;
+
         if (memchr(row->name,0,row->name_length) ||
             xr_utf8_core_scan_strict((const uint8_t *)row->name,row->name_length).error!=XR_UTF8_OK)
             return XR_XIR_BAD_STRUCTURE;
@@ -35,7 +35,7 @@ static XrXirStatus construction_slots_copy(const XrXirCompileContext *context,
     if (status!=XR_XIR_OK) return status;
     output->rows=rows;output->count=input->count;
     for (uint32_t s=0;s<input->count;++s) {
-        if (!xir_compile_work(context,sizeof(*rows))) return XR_XIR_BUDGET;
+
         rows[s]=input->rows[s];rows[s].name=NULL;
         rows[s].name=xir_compile_copy(context,input->rows[s].name,rows[s].name_length,&status);
         if (status!=XR_XIR_OK) return status;
@@ -46,23 +46,23 @@ static XrXirStatus construction_slots_copy(const XrXirCompileContext *context,
 static XrXirStatus construction_rows_shape(const XrXirCompileContext *context,
     const XrXirTypes *types, const XrXirConstructionRow *rows, uint32_t count) {
     if (!xir_compile_context_valid(context) || (!!rows != !!count)) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
     const XrXirNominalTable *table = types ? types->nominals : NULL;
     uint32_t expected = table && table->declarations ? table->count : 0;
     if (count != expected) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t n = 0; n < count; ++n) {
-        if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
         if (rows[n].field_count != table->declarations[n].field_count ||
             (!!rows[n].field_initializers != !!rows[n].field_count)) return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
 }
-static XrXirStatus construction_materialization_shape(const XrXirCompileContext *context,
+static XrXirStatus construction_materialization_shape(
     const XrXirTypes *types,const XrXirMaterializationBinding *bindings,uint32_t count) {
     if (!!bindings!=!!count) return XR_XIR_BAD_STRUCTURE;
     const XrXirNominalTable *table=types?types->nominals:NULL;
     for (uint32_t i=0;i<count;++i) {
-        if (!xir_compile_work(context,sizeof(*bindings)+1)) return XR_XIR_BUDGET;
+
         const XrXirMaterializationBinding *row=&bindings[i];
         /* Ordinals belong to the complete input, not the receiver's remaining
          * quotas. Full checking bounds each coordinate against its actual body. */
@@ -94,7 +94,7 @@ XR_FUNC XrXirStatus xr_xir_compile_construction_new_v4(const XrXirCompileContext
     if (!output || *output || !input) return XR_XIR_BAD_STRUCTURE;
     const XrXirConstructionRow *rows=input->rows;uint32_t count=input->count;
     XrXirStatus status = construction_rows_shape(context, types, rows, count);
-    if (status==XR_XIR_OK) status=construction_materialization_shape(context,types,
+    if (status==XR_XIR_OK) status=construction_materialization_shape(types,
         input->materializations,input->materialization_count);
     if (status==XR_XIR_OK) status=comptime_storage_shape(context,input->comptime);
     if (status==XR_XIR_OK) status=construction_slots_shape(context,complete_slots);
@@ -108,7 +108,7 @@ XR_FUNC XrXirStatus xr_xir_compile_construction_new_v4(const XrXirCompileContext
         owned->kinds = xir_compile_calloc(context, count, sizeof(*owned->kinds), &status);
     if (status != XR_XIR_OK) goto failed;
     for (uint32_t n = 0; n < count; ++n) {
-        if (!xir_compile_work(context, 2)) { status = XR_XIR_BUDGET; goto failed; }
+
         XrXirConstructionRow *to = &owned->rows[n];
         owned->kinds[n] = types->nominals->declarations[n].kind;
         to->default_initializer = rows[n].default_initializer;
@@ -178,56 +178,56 @@ XR_FUNC XrXirStatus xir_construction_shape(const XrXirCompileContext *context,
     if (status != XR_XIR_OK) return status;
     if (!!construction->kinds != !!construction->count) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t n = 0; n < construction->count; ++n) {
-        if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
         if (construction->kinds[n] != types->nominals->declarations[n].kind)
             return XR_XIR_BAD_STRUCTURE;
     }
-    status=construction_materialization_shape(context,types,construction->materializations,construction->materialization_count);
+    status=construction_materialization_shape(types,construction->materializations,construction->materialization_count);
     if (status==XR_XIR_OK) status=comptime_storage_shape(context,&construction->comptime);
     return status==XR_XIR_OK?construction_slots_shape(context,&construction->slots):status;
 }
-static XrXirStatus construction_compare_rows(const XrXirCompileContext *context,
+static XrXirStatus construction_compare_rows(
     const XrXirConstruction *left,const XrXirConstruction *right,bool *same) {
     for (uint32_t s=0;s<left->slots.count;++s) {
         const XrXirSlotFact *a=&left->slots.rows[s],*b=&right->slots.rows[s];
-        if (!xir_compile_work(context,sizeof(*a)+(uint64_t)a->name_length)) return XR_XIR_BUDGET;
+
         if (a->slot!=b->slot || a->name_length!=b->name_length || a->exported!=b->exported ||
             (a->name_length && memcmp(a->name,b->name,a->name_length))) { *same=false;return XR_XIR_OK; }
     }
     for (uint32_t n=0;n<left->count;++n) {
         const XrXirConstructionRow *a=&left->rows[n],*b=&right->rows[n];
-        if (!xir_compile_work(context,6)) return XR_XIR_BUDGET;
+
         if (left->kinds[n]!=right->kinds[n] || a->default_initializer!=b->default_initializer ||
             a->field_count!=b->field_count) { *same=false;return XR_XIR_OK; }
         for (uint32_t f=0;f<a->field_count;++f) {
-            if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
+
             if (a->field_initializers[f]!=b->field_initializers[f]) { *same=false;return XR_XIR_OK; }
         }
     }
     return XR_XIR_OK;
 }
-static XrXirStatus construction_compare_bindings(const XrXirCompileContext *context,
+static XrXirStatus construction_compare_bindings(
     const XrXirConstruction *left,const XrXirConstruction *right,bool *same) {
     for (uint32_t m=0;m<left->materialization_count;++m) {
         const XrXirMaterializationBinding *a=&left->materializations[m],*b=&right->materializations[m];
-        if (!xir_compile_work(context,8)) return XR_XIR_BUDGET;
+
         if (a->caller!=b->caller || a->instruction!=b->instruction ||
             a->function!=b->function || a->nominal!=b->nominal) { *same=false;return XR_XIR_OK; }
     }
     for (uint32_t s=0;s<left->comptime.site_count;++s) {
         const XrXirComptimeSite *a=&left->comptime.sites[s],*b=&right->comptime.sites[s];
-        if (!xir_compile_work(context,6)) return XR_XIR_BUDGET;
+
         if (a->caller!=b->caller || a->instruction!=b->instruction || a->helper!=b->helper) {
             *same=false;return XR_XIR_OK;
         }
     }
     for (uint32_t b=0;b<left->comptime.binding_count;++b) {
         const XrXirComptimeBinding *a=&left->comptime.bindings[b],*c=&right->comptime.bindings[b];
-        if (!xir_compile_work(context,6)) return XR_XIR_BUDGET;
+
         if (a->site!=c->site || a->argument_count!=c->argument_count || a->provider!=c->provider) {
             *same=false;return XR_XIR_OK;
         }
-        if (!xir_compile_work(context,(uint64_t)a->argument_count*2)) return XR_XIR_BUDGET;
+
         if (xir_comptime_key_order(a,c)) { *same=false;return XR_XIR_OK; }
     }
     return XR_XIR_OK;
@@ -239,13 +239,13 @@ XR_FUNC XrXirStatus xir_construction_compare(const XrXirCompileContext *context,
     XrXirStatus status=xir_construction_shape(context,types,right);
     if (status==XR_XIR_OK) status=xir_construction_shape(context,types,left);
     if (status!=XR_XIR_OK) return status;
-    if (!xir_compile_work(context,5)) return XR_XIR_BUDGET;
+
     bool equal=left->count==right->count && left->slots.count==right->slots.count &&
         left->materialization_count==right->materialization_count &&
         left->comptime.site_count==right->comptime.site_count &&
         left->comptime.binding_count==right->comptime.binding_count;
-    if (equal) status=construction_compare_rows(context,left,right,&equal);
-    if (status==XR_XIR_OK && equal) status=construction_compare_bindings(context,left,right,&equal);
+    if (equal) status=construction_compare_rows(left,right,&equal);
+    if (status==XR_XIR_OK && equal) status=construction_compare_bindings(left,right,&equal);
     if (status==XR_XIR_OK) *same=equal;
     return status;
 }
@@ -282,7 +282,7 @@ XR_FUNC XrXirStatus xir_construction_project(const XrXirCompileContext *context,
         owned->kinds = xir_compile_calloc(context, count, sizeof(*owned->kinds), &status);
     if (status != XR_XIR_OK) goto failed;
     for (uint32_t n = 0; n < count; ++n) {
-        if (!xir_compile_work(context, 1)) { status = XR_XIR_BUDGET; goto failed; }
+
         XrXirConstructionRow *row = &owned->rows[n];
         owned->kinds[n] = table->declarations[n].kind;
         row->field_count = table->declarations[n].field_count;

@@ -25,7 +25,7 @@ static XrXirStatus enum_uses(const Graph *graph, const XrXirFunction *function,
     const XrXirNominalVariant *variant = tag ? NULL : &variants[(uint32_t) op->immediate];
     bool unit_payload=false;
     if (construct && variant->field_count==1 && instance->argument_count==1 && instance->arguments[0]==XR_XIR_UNIT) {
-        if (!xir_compile_work(&context->remaining,40)) return XR_XIR_BUDGET;
+
         unit_payload=xr_xir_nominal_native_recv(types,type,XR_XIR_UNIT);
     }
     if (!tag && (construct ? op->args[1] != (unit_payload ? 0u : variant->field_count) : op->args[1] >= variant->field_count))
@@ -45,7 +45,7 @@ static XrXirStatus enum_uses(const Graph *graph, const XrXirFunction *function,
         if (status != XR_XIR_OK || tag) return status;
     }
     uint32_t count = construct ? variant->field_count : 1;
-    if (!xir_compile_work(&context->remaining, count)) return XR_XIR_BUDGET;
+
     for (uint32_t i = 0; i < count; ++i) {
         uint32_t field = construct ? variant->field_begin + i : first;
         uint32_t value = construct ? function->operands[op->args[0] + i] : op->args[0];

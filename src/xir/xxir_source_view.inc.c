@@ -11,7 +11,7 @@
  */
 static bool source_slice_root(SourceContext *ctx,AstNode *node,SourceValue *root,bool *reborrow) {
     while (node && node->type==AST_GROUPING) {
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         node=node->as.grouping;
     }
     if (!node || node->type!=AST_VARIABLE)
@@ -47,7 +47,7 @@ static bool source_slice(SourceContext *ctx,AstNode *node,SourceExpectedType exp
         XrXirType array=xr_xir_cell_element(&ctx->types,args[0].type);
         source_element=xr_xir_array_element(&ctx->types,array);
         while (syntax && syntax->type==AST_GROUPING) {
-            if (!source_work(ctx,syntax)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             syntax=syntax->as.grouping;
         }
         SourceName *binding=syntax ? visible_name(ctx,syntax->as.variable.name) : NULL;

@@ -161,7 +161,7 @@ static char *token_to_ast_string(Parser *parser, Token tok) {
     char *s = (char *) ast_alloc(parser->compiler_session, (size_t) tok.length + 1);
     if (!xr_parser_healthy(parser)) return NULL;
     do { if (!ast_copy(parser->compiler_session, s, tok.start, (size_t) tok.length)) return NULL; } while (0);
-    do { if (!ast_work(parser->compiler_session, 1)) return NULL; s[tok.length] = '\0'; } while (0);
+    do { s[tok.length] = '\0'; } while (0);
     return s;
 }
 
@@ -440,7 +440,7 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
             if (!xr_parser_healthy(parser)) return NULL;
         } while (0);
         do { if (!ast_copy(parser->compiler_session, first_name, parser->previous.start, parser->previous.length)) return NULL; } while (0);
-        do { if (!ast_work(parser->compiler_session, 1)) return NULL; first_name[parser->previous.length] = '\0'; } while (0);
+        do { first_name[parser->previous.length] = '\0'; } while (0);
     }
 
     // Check for comma (key-value pattern)
@@ -469,7 +469,7 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
             if (!xr_parser_healthy(parser)) return NULL;
         } while (0);
         do { if (!ast_copy(parser->compiler_session, second_name, parser->previous.start, parser->previous.length)) return NULL; } while (0);
-        do { if (!ast_work(parser->compiler_session, 1)) return NULL; second_name[parser->previous.length] = '\0'; } while (0);
+        do { second_name[parser->previous.length] = '\0'; } while (0);
     }
 
     XrTypeRef *item_type = NULL;
@@ -526,7 +526,7 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
             parser->compiler_session, sizeof(AstNode *), (size_t) new_capacity);
         if (!xr_parser_healthy(parser)) return NULL;
         new_stmts[0] = destructure_decl;
-        for (int i = 0; xr_parser_step(parser) && (i < old_count); i++)
+        for (int i = 0; xr_parser_healthy(parser) && (i < old_count); i++)
             new_stmts[i + 1] = body->as.block.statements[i];
         body->as.block.statements = new_stmts;
         body->as.block.count = old_count + 1;

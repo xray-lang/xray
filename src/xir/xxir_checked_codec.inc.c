@@ -38,22 +38,14 @@ static bool checked_room(CheckedCursor *c, size_t size) {
     }
     return true;
 }
-/* Sizing, encoding and decoding all charge their actual field traversal. */
-static bool checked_read_work(CheckedCursor *c, size_t bytes) {
-    if (c->status != XR_XIR_OK) return false;
-
-    if (!xir_compile_work(&c->remaining, bytes)) { c->status = XR_XIR_BUDGET; return false; }
-
-    return true;
-}
 static uint64_t checked_integer(CheckedCursor *c, uint64_t value, unsigned width) {
     if (!checked_room(c, width)) return 0;
     if (!c->reading && !c->output) {
-        if (!checked_read_work(c,1)) return 0;
+        if (!(c->status == XR_XIR_OK)) return 0;
         c->position += width;
         return value;
     }
-    if (!checked_read_work(c,width)) return 0;
+    if (!(c->status == XR_XIR_OK)) return 0;
     if (c->reading) value = 0;
     for (unsigned i = 0; i < width; ++i) {
         if (c->reading) value |= (uint64_t) c->input[c->position + i] << (8 * i);
@@ -105,11 +97,11 @@ static const char *checked_blob(CheckedCursor *c, const char *bytes, uint32_t *l
     *length = checked_u32(c, *length);
     if (!checked_room(c, *length)) return NULL;
     if (!c->reading && !c->output) {
-        if (!checked_read_work(c,1)) return NULL;
+        if (!(c->status == XR_XIR_OK)) return NULL;
         c->position += *length;
         return bytes;
     }
-    if (!checked_read_work(c,*length)) return NULL;
+    if (!(c->status == XR_XIR_OK)) return NULL;
     if (c->reading) {
         char *copy = checked_array(c, NULL, *length, 1, 1);
         if (*length && !copy) return NULL;
@@ -148,7 +140,7 @@ static void checked_function(CheckedCursor *c, XrXirFunction *f) {
     if (f->instruction_count && c->status == XR_XIR_OK) {
         XrXirInstruction in;
         if (c->reading) {
-            if (!checked_read_work(c, sizeof(in))) return;
+            if (!(c->status == XR_XIR_OK)) return;
             in = (XrXirInstruction){0};
         } else in = instructions[0];
         /* Every wire field replaces the reused, initialized decode scratch. */
@@ -779,9 +771,7 @@ static XrXirStatus checked_encode_mode(const XrXirArtifact *artifact,XrXirChecke
     size_t size = c.position;
     uint8_t *bytes = xir_compile_calloc(&artifact->context, size, 1, &allocation_status);
     if (!bytes) return checked_error(allocation_status, diagnostic);
-    if (!xir_compile_work(&limits, 8)) {
-        xr_compile_resources_free(bytes); return checked_error(XR_XIR_BUDGET, diagnostic);
-    }
+
     memcpy(bytes,evaluation?"XRCEV\0\0\0":"XRCHK\0\0\0",8);
     c = (CheckedCursor) {NULL, bytes, 8, size, limits.limits, limits, XR_XIR_OK, false};
     checked_u32(&c,evaluation?1u:XR_XIR_CHECKED_SCHEMA); checked_u32(&c, XR_XIR_CHECKED_CONTRACT);
@@ -796,9 +786,7 @@ static XrXirStatus checked_encode_mode(const XrXirArtifact *artifact,XrXirChecke
     if (c.status != XR_XIR_OK || c.position != size) {
         xr_compile_resources_free(bytes); return checked_error(c.status != XR_XIR_OK ? c.status : XR_XIR_BAD_STRUCTURE, diagnostic);
     }
-    if (!xir_compile_work(&limits, size - 32)) {
-        xr_compile_resources_free(bytes); return checked_error(XR_XIR_BUDGET, diagnostic);
-    }
+
     checked_digest(bytes, size, bytes + 32);
     *output = (XrXirCheckedPacket) {bytes, size};
     return XR_XIR_OK;

@@ -45,7 +45,12 @@ typedef enum XrXirStatus {
     XR_XIR_BAD_LAYOUT,
     XR_XIR_IO,
     XR_XIR_UNRESOLVED,
-    XR_XIR_UNSUPPORTED
+    XR_XIR_UNSUPPORTED,
+    XR_XIR_MEMORY_LIMIT,
+    XR_XIR_OVERFLOW,
+    XR_XIR_CANCELLED,
+    XR_XIR_DEADLINE,
+    XR_XIR_CLOCK_FAILURE
 } XrXirStatus;
 
 typedef struct XrXirTarget {

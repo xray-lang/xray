@@ -50,7 +50,7 @@ static bool literal_seed(SourceContext *ctx,const XrXirArtifact *definition,uint
     }
     ctx->remaining_instructions=ctx->compile.limits.instructions;ctx->remaining_blocks=ctx->compile.limits.blocks;
     for (uint32_t f=0;f<module->function_count;++f) {
-        if (!source_work_units(ctx,NULL,sizeof(XrXirFunction)+4)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirFunction *body=&module->functions[f];
         if (body->instruction_count>ctx->remaining_instructions || body->block_count>ctx->remaining_blocks)
             return source_fail(ctx,NULL,XR_XIR_BUDGET,"literal receiving body inventory exhausted");
@@ -68,7 +68,7 @@ static bool literal_seed(SourceContext *ctx,const XrXirArtifact *definition,uint
 static bool literal_binding(SourceContext *ctx,const XirCtfeInstanceView *view,XirLiteralBinding *output) {
     const XrXirModule *closed=&view->checked->module;
     const XrXirOrigin *origin=&closed->provenance->origins[view->instance_function];
-    if (!source_work_units(ctx,NULL,sizeof(*output)+sizeof(*origin))) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (view->definition_function>=ctx->function_count || origin->function!=view->definition_function ||
         !origin->argument_count || origin->argument_count!=ctx->generics[origin->function].parameter_count)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"literal receiving lost its actual definition or ordered substitution");

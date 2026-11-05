@@ -36,7 +36,7 @@ int main(void) {
     CHECK(xr_compile_parse_with_trivia(session, source, "initializer.xr", NULL, &ast) == XR_PARSE_OK);
     CHECK(ast && ast->type == AST_PROGRAM && ast->as.program.count == 2);
     Scanner scanner;
-    CHECK(xr_compile_scanner_open(&scanner, state, ast->as.program.arena, "init constructor") == XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_compile_scanner_open(&scanner, state, ast->as.program.arena, "init constructor",NULL) == XR_COMPILE_RESOURCE_OK);
     Token init = xr_scanner_scan(&scanner), retired = xr_scanner_scan(&scanner);
     CHECK(init.type == TK_NAME && init.length == 4 && !memcmp(init.start, "init", 4));
     CHECK(retired.type == TK_NAME && retired.length == 11 && !memcmp(retired.start, "constructor", 11));

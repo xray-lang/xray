@@ -73,7 +73,7 @@ static bool source_defer(SourceContext *ctx, AstNode *node) {
         if (p->source->construction) {
             uint32_t fields = xr_xir_type_node(&ctx->types, p->source->type)->nominal.field_count;
             for (uint32_t f = 0; f < fields; ++f)
-                if (!source_constructor_storage(ctx, node, f, &captures[p->index + f])) return false;
+                if (!source_constructor_storage(ctx, f, &captures[p->index + f])) return false;
         } else captures[p->index] = (SourceValue){p->source->index, type};
     }
     if (!owner->block_count && !begin_block(ctx)) return false;

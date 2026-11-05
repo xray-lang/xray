@@ -25,7 +25,7 @@ static XrXirStatus generation_ordinary_receive(void *opaque,const XrXirSpecializ
     if (status!=XR_XIR_OK) return status;
     receive->count=view->function_count;
     for (uint32_t f=0;f<view->function_count;++f) {
-        if (!xir_compile_work(receive->context,1)) return XR_XIR_BUDGET;
+
         uint32_t target=view->identity ? f : view->functions[f];
         if (target!=UINT32_MAX && target>=closed->function_count) return XR_XIR_BAD_STRUCTURE;
         receive->functions[f]=target;
@@ -43,19 +43,19 @@ static XrXirStatus generation_actual_program(GenerationOrdinaryFunctions *receiv
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(closed);
     return status;
 }
-static XrXirStatus generation_scalar_origin(const XrXirCompileContext *context,
+static XrXirStatus generation_scalar_origin(
     const XrXirOrigin *from,const XrXirOrigin *to,bool *equal) {
     *equal=false;
     if (from->argument_count!=to->argument_count || from->effect_argument_count!=to->effect_argument_count)
         return XR_XIR_OK;
     for (uint32_t a=0;a<from->argument_count;++a) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         XrXirType left=from->arguments[a],right=to->arguments[a];
         if (left!=right || left==XR_XIR_ERROR || (uint32_t)left>=XR_XIR_CONSTRUCTED_TYPE_BASE)
             return XR_XIR_OK;
     }
     for (uint32_t a=0;a<from->effect_argument_count;++a) {
-        if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
+
         const XrXirEffectArgument *left=&from->effect_arguments[a],*right=&to->effect_arguments[a];
         if (left->parameter!=right->parameter || left->type!=right->type || left->type==XR_XIR_ERROR ||
             (uint32_t)left->type>=XR_XIR_CONSTRUCTED_TYPE_BASE) return XR_XIR_OK;
@@ -80,7 +80,7 @@ static XrXirStatus generation_scalar_instances(const GenerationFunctionReceiving
     if (!before || !after || before->function_count!=prior->entry_count ||
         after->function_count!=receive->program->entry_count) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t f=0;f<prior->entry_count;++f) {
-        if (!xir_compile_work(receive->context,1)) return XR_XIR_BUDGET;
+
         if (receive->functions[f]!=UINT32_MAX || prior->entries[f].cleanup_owner) continue;
         const XrXirProvenance *a=before->provenance,*b=after->provenance;
         if (!a || !b || a->kind!=XR_XIR_EVIDENCE_INSTANCE || b->kind!=XR_XIR_EVIDENCE_INSTANCE ||
@@ -90,10 +90,10 @@ static XrXirStatus generation_scalar_instances(const GenerationFunctionReceiving
         if (origin->function>=map->function_count) return XR_XIR_BAD_STRUCTURE;
         uint32_t declaration=map->functions[origin->function],found=UINT32_MAX;
         for (uint32_t g=0;g<after->function_count;++g) {
-            if (!xir_compile_work(receive->context,1)) return XR_XIR_BUDGET;
+
             if (receive->program->entries[g].cleanup_owner || b->origins[g].function!=declaration) continue;
             bool equal=false;
-            XrXirStatus status=generation_scalar_origin(receive->context,origin,&b->origins[g],&equal);
+            XrXirStatus status=generation_scalar_origin(origin,&b->origins[g],&equal);
             if (status!=XR_XIR_OK) return status;
             if (!equal) continue;
             if (found!=UINT32_MAX || prior->entries[f].parameter_count!=receive->program->entries[g].parameter_count)
@@ -102,7 +102,7 @@ static XrXirStatus generation_scalar_instances(const GenerationFunctionReceiving
         }
         if (found==UINT32_MAX) continue;
         for (uint32_t other=0;other<prior->entry_count;++other) {
-            if (!xir_compile_work(receive->context,1)) return XR_XIR_BUDGET;
+
             if (receive->functions[other]==found) return XR_XIR_BAD_STRUCTURE;
         }
         receive->functions[f]=found;
@@ -128,12 +128,10 @@ static XrXirStatus generation_function_correspondence(const XrXirCompileContext 
     uint32_t *functions=NULL;
     status=generation_allocate(context,count,sizeof(*functions),(void **)&functions);
     if (status!=XR_XIR_OK) goto done;
-    if (!xir_compile_work(context,(uint64_t)count*sizeof(*functions))) {
-        xr_compile_resources_free(functions);status=XR_XIR_BUDGET;goto done;
-    }
+
     for (uint32_t f=0;f<count;++f) functions[f]=UINT32_MAX;
     for (uint32_t f=0;f<before.count;++f) {
-        if (!xir_compile_work(context,1)) {status=XR_XIR_BUDGET;break;}
+
         uint32_t source=before.functions[f],received=map->functions[f];
         if (received>=after.count) {status=XR_XIR_BAD_STRUCTURE;break;}
         uint32_t target=after.functions[received];

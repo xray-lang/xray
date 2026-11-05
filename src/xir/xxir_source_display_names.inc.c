@@ -13,7 +13,7 @@ static bool source_display_names_copy(SourceContext *ctx,XrXirSourceDeclarationS
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"display generic names are missing");
     const char **names=source_alloc(ctx,count,sizeof(*names));if(!names)return false;
     for(uint32_t p=0;p<count;++p) {
-        if(!source_work(ctx,NULL))return false;
+        if(!((ctx)->diagnostic.status == XR_XIR_OK))return false;
         if(!fact->type_parameters[p]||!*fact->type_parameters[p])
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"display generic spelling is missing");
         names[p]=source_owned_text(ctx,fact->type_parameters[p]);if(!names[p])return false;
@@ -27,7 +27,7 @@ static bool source_display_names(SourceContext *ctx,uint32_t declaration,XrGener
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"display generic owner diverged");
     const char **names=source_alloc(ctx,count,sizeof(*names));if(!names)return false;
     for(uint32_t p=0;p<count;++p) {
-        if(!source_work(ctx,NULL))return false;
+        if(!((ctx)->diagnostic.status == XR_XIR_OK))return false;
         if(!parameters[p]||!parameters[p]->name||!*parameters[p]->name)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"display generic spelling is missing");
         names[p]=source_owned_text(ctx,parameters[p]->name);if(!names[p])return false;
@@ -52,7 +52,7 @@ static bool source_display_interface_names(SourceContext *ctx,const SourceName *
     if(!owner||!owner->node||owner->checked_library)return true;
     InterfaceDeclNode *decl=&owner->node->as.interface_decl;
     for(int m=0;m<decl->method_count;++m) {
-        if(!source_work(ctx,NULL))return false;
+        if(!((ctx)->diagnostic.status == XR_XIR_OK))return false;
         AstNode *node=decl->methods[m];
         if(!node||node->type!=AST_INTERFACE_METHOD)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"display interface method is invalid");
@@ -64,7 +64,7 @@ static bool source_display_interface_names(SourceContext *ctx,const SourceName *
         XrGenericParam **parameters=count?source_alloc(ctx,count,sizeof(*parameters)):NULL;
         if(count&&!parameters)return false;
         for(uint32_t p=0;p<count;++p) {
-            if(!source_work(ctx,node))return false;
+            if(!((ctx)->diagnostic.status == XR_XIR_OK))return false;
             parameters[p]=p<prefix?decl->type_params[p]:method->type_params[p-prefix];
         }
         if(!source_display_names(ctx,ctx->interface_member_declarations[owner->index][m],parameters,count))return false;
@@ -73,7 +73,7 @@ static bool source_display_interface_names(SourceContext *ctx,const SourceName *
 }
 static bool source_display_names_publish(SourceContext *ctx) {
     for(uint32_t f=0;f<ctx->function_count;++f) {
-        if(!source_work(ctx,NULL))return false;
+        if(!((ctx)->diagnostic.status == XR_XIR_OK))return false;
         const SourceFunction *body=&ctx->bodies[f];
         /* A field initializer inherits its nominal scope; the field itself declares no type parameters. */
         uint32_t declaration=body->node&&body->node->type==AST_FIELD_DECL?body->generic_owner:body->declaration;
@@ -89,12 +89,12 @@ static bool source_display_names_publish(SourceContext *ctx) {
             !source_display_names(ctx,declaration,body->type_parameters,count))return false;
     }
     for(uint32_t d=0;d<ctx->nominals.count;++d)
-        if(!source_work(ctx,NULL)||!source_display_nominal_names(ctx,ctx->nominal_sources[d]))return false;
+        if(!((ctx)->diagnostic.status == XR_XIR_OK)||!source_display_nominal_names(ctx,ctx->nominal_sources[d]))return false;
     for(uint32_t d=0;d<ctx->interfaces.count;++d)
-        if(!source_work(ctx,NULL)||!source_display_nominal_names(ctx,ctx->interface_sources[d])||
+        if(!((ctx)->diagnostic.status == XR_XIR_OK)||!source_display_nominal_names(ctx,ctx->interface_sources[d])||
             !source_display_interface_names(ctx,ctx->interface_sources[d]))return false;
     for(uint32_t d=0;d<ctx->query.declaration_count;++d) {
-        if(!source_work(ctx,NULL))return false;
+        if(!((ctx)->diagnostic.status == XR_XIR_OK))return false;
         const XrXirSourceDeclaration *parameter=&ctx->query.declarations[d];
         if(parameter->kind!=XR_XIR_SOURCE_TYPE_PARAMETER||!parameter->parent)continue;
         uint32_t parent=parameter->parent;

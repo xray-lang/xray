@@ -46,7 +46,7 @@ static bool expression_member_tokens(ExpressionState *state) {
     if (state->status==XR_XIR_OK && opened==XR_ARENA_OK) opened=xr_arena_open(&arena,1,&backing);
     if (opened!=XR_ARENA_OK) state->status=opened==XR_ARENA_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
         opened==XR_ARENA_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
-    if (state->status==XR_XIR_OK) state->status=expression_member_status(xr_compile_scanner_open(&scanner,owner,&arena,state->request->text));
+    if (state->status==XR_XIR_OK) state->status=expression_member_status(xr_compile_scanner_open(&scanner,owner,&arena,state->request->text,NULL));
     while (state->status==XR_XIR_OK) {
         Token token=xr_scanner_scan(&scanner);
         state->status=expression_member_status(xr_compile_state_status(owner));

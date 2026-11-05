@@ -8,7 +8,7 @@ static XrXirStatus scan_resource(XrCompileResourceStatus status) {
         status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
 }
 static XrXirStatus scan_io(XrOsIoStatus status) {
-    return status==XR_OS_IO_OK?XR_XIR_OK:status==XR_OS_IO_BUDGET?XR_XIR_BUDGET:
+    return status==XR_OS_IO_OK?XR_XIR_OK:status==XR_OS_IO_OVERFLOW?XR_XIR_BUDGET:
         status==XR_OS_IO_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:status==XR_OS_IO_BAD_ARGUMENT?XR_XIR_BAD_STRUCTURE:XR_XIR_IO;
 }
 static XrXirStatus scan_length(XrCompileResources *resources,const char *text,size_t *out) {

@@ -236,7 +236,7 @@ invoke_dispatch:;
      *
      * All remaining types: value types (int/float/bool), collections
      * (string/array/map/set), native types (json/bigint/datetime/regex/
-     * iterator/range/stringbuilder), instances, struct refs, and enum
+     * iterator/range), instances, struct refs, and enum
      * values/types. Single code path with polymorphic inline cache.
      * ══════════════════════════════════════════════════════════════════ */
     {

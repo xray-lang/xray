@@ -162,13 +162,13 @@ static XrXirStatus semantic_sort(const XlspSourceSnapshot *s,XlspSourceTokens *t
 static XrXirStatus semantic_lexical_spans(const XlspSourceSnapshot *s,const LspSourceText *text,const XlspSourceTokens *out) {
     XrCompilerSession *session=NULL;XrArena arena={0};XrXirStatus status=XR_XIR_OK;
     size_t matched=0;
-    XrCompilerSessionStatus created=xr_compile_session_new(s->resources,&session);
-    if(created!=XR_COMPILER_SESSION_OK)return created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus created=xr_compile_session_new(s->resources,&session);
+    if(created!=XR_COMPILE_RESOURCE_OK)return created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
     XrCompileState *state=xr_compile_session_compile_state(session);XrArenaBacking backing;
     if(xr_compiler_arena_state_backing(state,&backing)!=XR_ARENA_OK){status=XR_XIR_BAD_STRUCTURE;goto done;}
     (void)xr_arena_open(&arena,XR_ARENA_SEGMENT_SIZE,&backing);
     status=lsp_resource_status(xr_compiler_arena_capture_status(&arena,state));if(status!=XR_XIR_OK)goto done;
-    Scanner scanner={0};status=lsp_resource_status(xr_compile_scanner_open(&scanner,state,&arena,text->text));
+    Scanner scanner={0};status=lsp_resource_status(xr_compile_scanner_open(&scanner,state,&arena,text->text,NULL));
     while(status==XR_XIR_OK) {
         Token token=xr_scanner_scan(&scanner);status=lsp_resource_status(xr_compile_state_status(state));if(status!=XR_XIR_OK)break;
         if(token.type==TK_EOF){if(matched!=out->count)status=XR_XIR_UNSUPPORTED;break;}if(token.type==TK_ERROR){status=XR_XIR_BAD_STRUCTURE;break;}

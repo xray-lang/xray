@@ -30,20 +30,19 @@ typedef struct XrSourceReplBindingInfo {
  * Pending input and callback reentry return BUSY, preserving empty outputs. */
 XRAY_API XrSourceStatus xray_source_repl_bindings(const XrSourceRepl *,
     const XrSourceReplBindingInfo **, size_t *);
-/* Owns one compiler, its real Catalog and one cumulative runtime Instance.
- * Options and namespace are copied during construction. Output callbacks and
- * their context remain caller-owned until drop. Every operation requires
- * caller exclusion; mutation during an output callback returns BUSY.
- * Each call selects this explicit owner. Concurrently live owners keep their
- * own domains and executors; there is no ambient current-VM selection.
- * OOM/BUDGET from preparation or reading latches the same Compiler state;
- * retry cannot allocate or obtain a fresh allowance after that first failure.
- * Inputs use the common Source checker. A non-Unit tail owns an immutable
- * result declaration; it selects the last successfully displayed and published
- * result in later inputs. Unit and failed inputs preserve it. Top-level it
- * declarations are reserved; local bindings may shadow it. */
-XRAY_API XrSourceStatus xray_source_repl_new(const XrSourceCompilerOptions *, const char *namespace_id,
-    const XrSourceCallOptions *, XrSourceRepl **);
+/* Owns incremental semantic history and its real Catalog. Each compilation
+ * preparation has a fresh parser request and failure state; no Compiler is
+ * retained. Compile options are copied. Their cancellation callback/context
+ * are borrowed for later synchronous preparations and must live until drop.
+ * Every preparation establishes one new deadline from the copied duration.
+ * The held-memory policy includes retained semantic history and transient
+ * compilation storage; it is not a process limit. Execution/output providers
+ * and their context stay alive until drop. The Execution handle may die after
+ * construction; results and values own their retained execution storage.
+ * Mutation requires caller exclusion and callback reentry returns BUSY.
+ * Failed candidates preserve published declarations, values and implicit it. */
+XRAY_API XrSourceStatus xray_source_repl_new(const XrSourceCompileOptions *, XrSourceExecution *,
+    const char *namespace_id, const XrSourceCallOptions *, XrSourceRepl **);
 /* Parses once and owns the exact AST through the paired transaction. MEMORY
  * namespace must match construction. Rooted text requires an absolute_path
  * and NULL namespace; it derives the real nearest project/script authority,
@@ -53,26 +52,25 @@ XRAY_API XrSourceStatus xray_source_repl_new(const XrSourceCompilerOptions *, co
  * A pending input or an untaken terminal result excludes another begin.
  * Compile failure leaves published declarations and values intact. */
 XRAY_API XrSourceStatus xray_source_repl_begin(XrSourceRepl *, const XrSourceText *, XrSourceDiagnostic **);
-/* Reads an exact regular-file snapshot with the original Compiler ledger and
+/* Reads an exact regular-file snapshot with the semantic memory owner and
  * genuine FILE authority, then parses once into the same paired transaction.
- * Relative paths resolve from the real working directory on that same ledger.
+ * Relative paths resolve from the real working directory on that same semantic owner.
  * Relative imports use its real project/script root and lockfile. The path and
  * file contents may change after return; execution retains the admitted AST.
  * Missing/nonregular files and invalid nearer configuration never fall back
- * to MEMORY or an unsaved input. Lifecycle and sticky limits match begin. */
+ * to MEMORY or an unsaved input. Lifecycle and failure isolation match begin. */
 XRAY_API XrSourceStatus xray_source_repl_begin_file(XrSourceRepl *, const char *path, XrSourceDiagnostic **);
 typedef enum XrSourceInputState { XR_SOURCE_INPUT_COMPLETE, XR_SOURCE_INPUT_INCOMPLETE } XrSourceInputState;
-/* Scans an exact input span with the real lexer and this Compiler's cumulative
- * ledger. Empty input is complete; open delimiters or unterminated literals
+/* Scans an exact input span with the real lexer and a short-lived parser request. Empty input is complete; open delimiters or unterminated literals
  * need more input. Other syntax errors are complete and remain for the parser.
  * This observation grants no checking or execution authority. Pending input,
- * callback reentry and failed resource state preserve the output. */
+ * callback reentry and request failure preserve the output. */
 XRAY_API XrSourceStatus xray_source_repl_check_input(XrSourceRepl *, const char *bytes, size_t length,
     XrSourceInputState *);
 /* Inspects exactly one expression. The same checker evaluates its real
  * typeName once, including ordinary effects, and returns/displays that String.
  * The temporary candidate is aborted; published declarations and it stay fixed.
- * Uses the same poll/wait/resume/cancel/take lifecycle and cumulative limits. */
+ * Uses the same poll/wait/resume/cancel/take lifecycle and execution limits. */
 XRAY_API XrSourceStatus xray_source_repl_begin_type(XrSourceRepl *, const XrSourceText *, XrSourceDiagnostic **);
 /* Bounded polls publish only an actual normally returned candidate. Other
  * outcomes drain and abort it, preserving ordinary prior-state side effects.
@@ -88,7 +86,7 @@ XRAY_API XrSourceStatus xray_source_repl_wait_request(const XrSourceRepl *, uint
 XRAY_API XrSourceStatus xray_source_repl_resume(XrSourceRepl *, uint64_t epoch, uint64_t wake);
 XRAY_API XrSourceStatus xray_source_repl_cancel(XrSourceRepl *);
 /* Transfers one terminal result without allocating. The result and read values
- * survive destruction of the entire REPL, Compiler and original input. */
+ * survive destruction of the entire REPL and original input. */
 XRAY_API XrSourceStatus xray_source_repl_take(XrSourceRepl *, XrSourceResult **);
 /* Executes the selected declaration's real checked birth reader. Names select
  * published bindings, never numeric slots or runtime permissions. A pending
@@ -100,7 +98,7 @@ XRAY_API XrSourceStatus xray_source_repl_read(XrSourceRepl *, const char *name, 
  * callback reentry return BUSY. Uses the same cumulative limits, publishes no
  * input and preserves it. Failed cleanup stops the owner. */
 XRAY_API XrSourceStatus xray_source_repl_write(XrSourceRepl *, const char *name, const XrSourceValue *);
-/* Drains the real transaction before freeing its Compiler/Catalog. Consumes
+/* Drains the real transaction before freeing its semantic Catalog. Consumes
  * and clears the owner except on BUSY; NULL drop is a successful no-op. */
 XRAY_API XrSourceStatus xray_source_repl_drop(XrSourceRepl **, XrSourceEvent *cleanup);
 #ifdef __cplusplus

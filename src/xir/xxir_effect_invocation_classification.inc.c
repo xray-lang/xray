@@ -195,13 +195,11 @@ static XrXirStatus effect_physical_record(const XrXirCompileContext *work,
         XrXirStatus status=XR_XIR_OK;
         EffectPhysicalRecord *records=xir_compile_alloc(work,(size_t)capacity*sizeof(*records),&status);
         if (!records) return status;
-        if (!xir_compile_work(work,(uint64_t)body->count*sizeof(*records))) {
-            xr_compile_resources_free(records);return XR_XIR_BUDGET;
-        }
+
         if (body->count) memcpy(records,body->records,(size_t)body->count*sizeof(*records));
         xr_compile_resources_free(body->records);body->records=records;body->capacity=capacity;
     }
-    if (!xir_compile_work(work,sizeof(*body->records))) return XR_XIR_BUDGET;
+
     body->records[body->count++]=(EffectPhysicalRecord){value,mask};return XR_XIR_OK;
 }
 
@@ -222,17 +220,17 @@ static XrXirStatus effect_physical_value(const XrXirCompileContext *work,
     }
     if (xr_xir_callable_signature(types,type)) mask|=EFFECT_PHYSICAL_CALLABLE;
     if (effect_physical_iterator(types,type)) mask|=EFFECT_PHYSICAL_ITERATOR;
-    if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+
     if (xr_xir_type_is_class(types,type)) {
-        if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+
         mask|=EFFECT_PHYSICAL_CLASS;++body->classes;
     }
     if (mask&EFFECT_PHYSICAL_CALLABLE) {
-        if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+
         ++body->rows;
     }
     if(mask&(EFFECT_PHYSICAL_CALLABLE|EFFECT_PHYSICAL_ITERATOR)) {
-        if(!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+
         ++body->origins;
     }
     return mask?effect_physical_record(work,body,value,mask):XR_XIR_OK;
@@ -244,11 +242,11 @@ static XrXirStatus effect_physical_function(const XrXirCompileContext *work,
     if (values>UINT32_MAX) return XR_XIR_BUDGET;
     if ((function->parameter_count && !function->parameters) ||
         (function->instruction_count && !function->instructions)) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+
     body->parameters=function->parameter_count;body->instructions=function->instruction_count;
     body->values=(uint32_t)values;
     for (uint32_t v=0;v<body->values;++v) {
-        if (!xir_compile_work(work,v<body->parameters?2:4)) return XR_XIR_BUDGET;
+
         XrXirOp op=XR_XIR_INVALID;
         if (v>=body->parameters) {
             op=function->instructions[v-body->parameters].op;

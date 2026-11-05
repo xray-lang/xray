@@ -16,7 +16,7 @@ static bool source_decimal_static_receiver(SourceContext *ctx, AstNode *node) {
 static bool source_decimal_declaration(SourceContext *ctx) {
     if (ctx->f64_declaration) return true;
     const XrNativeTypeDeclaration *native = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_FLOAT);
-    if (!source_work(ctx, NULL) || !source_native_admit(ctx, native)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_native_admit(ctx, native)) return false;
     XrXirSourceQueryModule *modules = source_query_append(ctx, ctx->query.modules,
         &ctx->query.module_count, &ctx->query_module_capacity, sizeof(*modules));
     if (!modules) return false;

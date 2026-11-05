@@ -10,7 +10,7 @@ static XrXirStatus generation_birth(const XrXirSourceGenerations *owner,
     const SourceGenerationRecord *pending,uint64_t serial,const SourceGenerationRecord **output) {
     if(pending && pending->view.serial==serial){*output=pending;return XR_XIR_OK;}
     for(const SourceGenerationRecord *record=owner->published;record;record=record->previous) {
-        if(!xir_compile_work(&owner->config.context,1))return XR_XIR_BUDGET;
+
         if(record->view.serial==serial){*output=record;return XR_XIR_OK;}
     }
     return XR_XIR_BAD_STRUCTURE;
@@ -42,7 +42,7 @@ static XrXirStatus generation_display_type(XrXirSourceGenerations *owner,
     if(text.overflow)return XR_XIR_OK;
     char *copy=NULL;XrXirStatus status=generation_allocate(&owner->config.context,text.length+1,1,(void **)&copy);
     if(status!=XR_XIR_OK)return status;
-    if(!xir_compile_work(&owner->config.context,text.length+1)){xr_compile_resources_free(copy);return XR_XIR_BUDGET;}
+
     memcpy(copy,text.bytes,text.length);name->type_name=copy;return XR_XIR_OK;
 }
 static XrXirStatus generation_names(XrXirSourceGenerations *owner,SourceGenerationRecord *record) {
@@ -53,7 +53,7 @@ static XrXirStatus generation_names(XrXirSourceGenerations *owner,SourceGenerati
     XrXirStatus status=generation_allocate(&owner->config.context,count,sizeof(*record->names),(void **)&record->names);
     if(status!=XR_XIR_OK)return status;
     for(size_t i=0;i<count;++i) {
-        if(!xir_compile_work(&owner->config.context,1))return XR_XIR_BUDGET;
+
         XrXirSourceGenerationName *name=&record->names[record->name_count++];
         if(i==environment->latest_count) {
             name->binding=record->implicit_result;name->name="it";name->implicit_result=true;

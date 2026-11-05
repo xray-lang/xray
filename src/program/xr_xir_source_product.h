@@ -98,6 +98,11 @@ XR_FUNC XrXirStatus xr_xir_compile_source_lowered_public_admit(
 XR_FUNC const XrXirSourceProductFacts *xr_xir_compile_source_product_facts(const XrXirSourceProduct *product);
 /* The borrowed context is the owner's actual ledger, including after VM take. */
 XR_FUNC const XrXirCompileContext *xr_xir_compile_source_product_context(const XrXirSourceProduct *product);
+/* Borrows the authentic immutable Lowered module consumed by VM preparation.
+ * Valid only before successful VM take and while the product stays alive.
+ * This is a typed owned view, not another serialized receive or validation. */
+XR_FUNC const XrXirModule *xr_xir_compile_source_product_module(const XrXirSourceProduct *product);
+
 /* Root-module roles use actual closed function indexes. Entries and names are
  * product-owned on its original ledger, survive VM transfer and producer
  * destruction, and are borrowed until product free. They confer no authority. */

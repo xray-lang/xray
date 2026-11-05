@@ -30,7 +30,6 @@
 #include "xdebug.h"
 #include "../runtime/xray_debug_hooks.h"
 #include "../runtime/xstrbuf.h"
-#include "../runtime/object/xstringbuilder.h"
 
 #include "../base/xglobal_indices.h"
 #include "../runtime/object/xjson.h"

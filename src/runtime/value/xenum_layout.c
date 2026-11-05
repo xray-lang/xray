@@ -35,7 +35,7 @@ static bool layout_shape(const XrEnumLayout *layout, const EnumLayoutOwner *owne
     return layout->variant_count == owner->count && layout->variants == owner->variants;
 }
 static bool enum_work(XrIoContext *io, uint64_t units) {
-    return !io || io_work(io, units);
+    return !io || ((io)->status == XR_OS_IO_OK);
 }
 static char *enum_copy_text(XrIoContext *io, const char *text) {
     size_t length;
@@ -78,7 +78,7 @@ static uint64_t enum_nominal_hash_string(XrIoContext *io, uint64_t hash, const c
         if (!io_length(io, value, &length))
             return 0;
         if (length > UINT32_MAX) {
-            (void) io_status(io, XR_OS_IO_BUDGET);
+            (void) io_status(io, XR_OS_IO_OVERFLOW);
             return 0;
         }
     } else if (value)
@@ -183,7 +183,7 @@ static uint8_t enum_tag_size(uint32_t variant_count) {
 static bool enum_layout_recompute(XrIoContext *io, XrEnumLayout *layout) {
     uint16_t max_payload = 0;
     for (uint32_t i = 0; i < layout->variant_count; i++) {
-        if (!io_work(io, 1))
+        if (!((io)->status == XR_OS_IO_OK))
             return false;
         if (layout->variants[i].payload_count > max_payload)
             max_payload = layout->variants[i].payload_count;
@@ -209,7 +209,7 @@ static bool enum_layout_recompute(XrIoContext *io, XrEnumLayout *layout) {
                        : enum_align_up(layout->payload_offset + layout->payload_size, enum_align);
 
     for (uint32_t i = 0; i < layout->variant_count; i++) {
-        if (!io_work(io, 1))
+        if (!((io)->status == XR_OS_IO_OK))
             return false;
         XrEnumVariantLayout *variant = &layout->variants[i];
         variant->payload_size = (uint32_t) variant->payload_count * payload_slot_size;
@@ -226,7 +226,7 @@ XR_FUNC XrOsIoStatus xr_enum_layout_new(const XrOsIoPolicy *policy, const char *
         !variant_names || !count)
         return XR_OS_IO_BAD_ARGUMENT;
     if ((size_t) count > SIZE_MAX / sizeof(XrEnumVariantLayout))
-        return XR_OS_IO_BUDGET;
+        return XR_OS_IO_OVERFLOW;
     XrIoContext io = {policy, XR_OS_IO_OK};
     EnumLayoutOwner *owner = io_alloc(&io, sizeof(*owner));
     if (!owner)
@@ -257,7 +257,7 @@ XR_FUNC XrOsIoStatus xr_enum_layout_new(const XrOsIoPolicy *policy, const char *
     if (io.status == XR_OS_IO_OK)
         layout->name = enum_copy_text(&io, name);
     for (uint32_t i = 0; i < count && io.status == XR_OS_IO_OK; ++i) {
-        if (!io_work(&io, 1))
+        if (!((&io)->status == XR_OS_IO_OK))
             break;
         layout->variants[i].name = enum_copy_text(&io, variant_names[i]);
         if (io.status != XR_OS_IO_OK)
@@ -268,7 +268,7 @@ XR_FUNC XrOsIoStatus xr_enum_layout_new(const XrOsIoPolicy *policy, const char *
     if (io.status == XR_OS_IO_OK && enum_layout_recompute(&io, layout))
         layout->layout_id = enum_nominal_id(&io, layout);
     if (io.status == XR_OS_IO_OK)
-        (void) io_work(&io, 1);
+        (void) ((&io)->status == XR_OS_IO_OK);
     if (io.status != XR_OS_IO_OK) {
         xr_enum_layout_free(layout);
         return io.status;
@@ -286,7 +286,7 @@ XR_FUNC XrOsIoStatus xr_enum_layout_set_payload_counts(XrEnumLayout *layout, con
         return XR_OS_IO_BAD_ARGUMENT;
     XrIoContext io = {&owner->policy, XR_OS_IO_OK};
     for (uint32_t i = 0; i < count; ++i) {
-        if (!io_work(&io, 1))
+        if (!((&io)->status == XR_OS_IO_OK))
             return io.status;
         if (counts[i] < 0 || counts[i] > UINT16_MAX)
             return XR_OS_IO_BAD_ARGUMENT;
@@ -297,7 +297,7 @@ XR_FUNC XrOsIoStatus xr_enum_layout_set_payload_counts(XrEnumLayout *layout, con
         return io.status;
     (void) io_copy(&io, variants, owner->variants, bytes);
     for (uint32_t i = 0; i < count && io.status == XR_OS_IO_OK; ++i) {
-        if (!io_work(&io, 1))
+        if (!((&io)->status == XR_OS_IO_OK))
             break;
         if (variants[i].payload_count != (uint16_t) counts[i]) {
             variants[i].payload_names = NULL;
@@ -310,7 +310,7 @@ XR_FUNC XrOsIoStatus xr_enum_layout_set_payload_counts(XrEnumLayout *layout, con
     if (io.status == XR_OS_IO_OK && enum_layout_recompute(&io, &staged))
         staged.layout_id = enum_nominal_id(&io, &staged);
     if (io.status == XR_OS_IO_OK)
-        (void) io_work(&io, (uint64_t) bytes + sizeof(staged));
+        (void) ((&io)->status == XR_OS_IO_OK);
     if (io.status == XR_OS_IO_OK) {
         for (uint32_t i = 0; i < count; ++i)
             if (variants[i].payload_count != owner->variants[i].payload_count) {
@@ -341,7 +341,7 @@ XR_FUNC XrOsIoStatus xr_enum_layout_set_variant_payload_metadata(XrEnumLayout *l
         return io.status;
     }
     for (uint16_t i = 0; i < count; ++i) {
-        if (!io_work(&io, 1))
+        if (!((&io)->status == XR_OS_IO_OK))
             return io.status;
         if (type_ids[i] >= XR_TID_COUNT)
             return XR_OS_IO_BAD_ARGUMENT;
@@ -361,7 +361,7 @@ XR_FUNC XrOsIoStatus xr_enum_layout_set_variant_payload_metadata(XrEnumLayout *l
             staged.payload_names[i] = enum_copy_text(&io, names[i]);
     }
     if (io.status == XR_OS_IO_OK)
-        (void) io_work(&io, 1);
+        (void) ((&io)->status == XR_OS_IO_OK);
     if (io.status != XR_OS_IO_OK) {
         enum_free_payload(&owner->policy, &staged, count);
         return io.status;
@@ -382,7 +382,7 @@ XR_FUNC XrOsIoStatus xr_enum_layout_set_variant_symbol(XrEnumLayout *layout, uin
     if (!layout_shape(layout, owner) || tag >= owner->count)
         return XR_OS_IO_BAD_ARGUMENT;
     XrIoContext io = {&owner->policy, XR_OS_IO_OK};
-    if (io_work(&io, 1))
+    if ((&io)->status == XR_OS_IO_OK)
         layout->variants[tag].symbol = symbol;
     return io.status;
 }

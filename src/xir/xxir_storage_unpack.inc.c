@@ -76,8 +76,8 @@ static XrXirValueStatus storage_unpack_walk(StorageUnpack *unpack,
     StorageSpan span, XrXirValue *output) {
     XrXirValue ready = {0}; bool first = true;
     while (first || unpack->depth) {
-        if (!unpack->admission->work || (unpack->observer && !xr_xir_domain_work(unpack->admission->domain,1))) return XR_XIR_VALUE_LIMIT;
-        --unpack->admission->work;
+        if (!admission_is_compile(unpack->admission) && (!unpack->admission->work || (unpack->observer && !xr_xir_domain_work(unpack->admission->domain,1)))) return XR_XIR_VALUE_LIMIT;
+        if (!admission_is_compile(unpack->admission)) --unpack->admission->work;
         XrXirValueStatus status = XR_XIR_VALUE_OK;
         if (first) { first = false; status = storage_unpack_enter(unpack, span, &ready); }
         else {

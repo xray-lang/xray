@@ -34,8 +34,12 @@ typedef enum XrTypeScopeStatus {
     XR_TYPE_SCOPE_OK,
     XR_TYPE_SCOPE_DUPLICATE,
     XR_TYPE_SCOPE_BAD_ARGUMENT,
-    XR_TYPE_SCOPE_BUDGET,
-    XR_TYPE_SCOPE_OUT_OF_MEMORY
+    XR_TYPE_SCOPE_MEMORY_LIMIT,
+    XR_TYPE_SCOPE_OUT_OF_MEMORY,
+    XR_TYPE_SCOPE_OVERFLOW,
+    XR_TYPE_SCOPE_CANCELLED,
+    XR_TYPE_SCOPE_DEADLINE,
+    XR_TYPE_SCOPE_CLOCK_FAILURE
 } XrTypeScopeStatus;
 
 // Single alias entry. `name` is heap-allocated and owned by the scope.

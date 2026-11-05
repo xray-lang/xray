@@ -68,8 +68,7 @@ static void *effect_ordinary_descriptor_alloc(EffectOrdinaryContexts *contexts,
     uint32_t count, size_t size) {
     EffectTerms *terms=&contexts->terms;
     if (terms->status!=XR_XIR_OK) return NULL;
-    if (!size || count>SIZE_MAX/size ||
-        !xir_compile_work(terms->remaining,(uint64_t)count+1)) {
+    if ((!(size)) || (count>SIZE_MAX/size)) {
         terms->status=XR_XIR_BUDGET;return NULL;
     }
     return xir_compile_calloc(terms->remaining,count,size,&terms->status);
@@ -82,9 +81,7 @@ static XrXirStatus effect_ordinary_capacity(EffectOrdinaryContexts *contexts, ui
     if (needed>maximum) { contexts->terms.status=XR_XIR_BUDGET;return contexts->terms.status; }
     uint32_t capacity=contexts->capacity<8 ? 8 : contexts->capacity;
     while (capacity<needed) {
-        if (!xir_compile_work(contexts->terms.remaining,1)) {
-            contexts->terms.status=XR_XIR_BUDGET;return contexts->terms.status;
-        }
+
         if (capacity>maximum/2) { capacity=maximum;break; }
         capacity*=2;
     }
@@ -96,11 +93,7 @@ static XrXirStatus effect_ordinary_capacity(EffectOrdinaryContexts *contexts, ui
         xr_compile_resources_free(nodes);xr_compile_resources_free(functions);
         return contexts->terms.status;
     }
-    if (!xir_compile_work(contexts->terms.remaining,(uint64_t)contexts->count*
-        (sizeof(*nodes)+sizeof(*functions)))) {
-        xr_compile_resources_free(nodes);xr_compile_resources_free(functions);
-        contexts->terms.status=XR_XIR_BUDGET;return contexts->terms.status;
-    }
+
     if (contexts->count) {
         memcpy(nodes,contexts->nodes,(size_t)contexts->count*sizeof(*nodes));
         memcpy(functions,contexts->functions,(size_t)contexts->count*sizeof(*functions));
@@ -112,8 +105,7 @@ static XrXirStatus effect_ordinary_capacity(EffectOrdinaryContexts *contexts, ui
 
 static XrXirStatus effect_ordinary_function(EffectOrdinaryContexts *contexts,
     const XrXirModule *source, uint32_t index) {
-    if (!xir_compile_work(contexts->terms.remaining,
-        sizeof(EffectOrdinaryNode)+2*sizeof(XrXirFunction))) return XR_XIR_BUDGET;
+
     EffectOrdinaryNode identity=contexts->nodes[index];
     XrXirFunction function=source->functions[identity.declaration];
     XrXirGeneric environment={.arguments=identity.arguments,.argument_count=identity.argument_count};
@@ -127,22 +119,21 @@ static XrXirStatus effect_ordinary_function(EffectOrdinaryContexts *contexts,
     if ((function.parameter_count && !parameters) || (function.instruction_count && !ops) ||
         (function.operand_count && !operands)) return contexts->terms.status;
     for (uint32_t p=0;p<function.parameter_count;++p) {
-        if (!xir_compile_work(contexts->terms.remaining,1)) return XR_XIR_BUDGET;
+
         XrXirStatus status=substitute ? effect_terms_substitute(&contexts->terms,
             function.parameters[p],&environment,&parameters[p]) : XR_XIR_OK;
         if (!substitute) parameters[p]=function.parameters[p];
         if (status!=XR_XIR_OK) return status;
     }
     for (uint32_t i=0;i<function.instruction_count;++i) {
-        if (!xir_compile_work(contexts->terms.remaining,sizeof(*ops))) return XR_XIR_BUDGET;
+
         ops[i]=function.instructions[i];
         if (substitute) {
             XrXirStatus status=effect_terms_substitute(&contexts->terms,ops[i].type,&environment,&ops[i].type);
             if (status!=XR_XIR_OK) return status;
         }
     }
-    if (!xir_compile_work(contexts->terms.remaining,(uint64_t)function.operand_count*sizeof(*operands)))
-        return XR_XIR_BUDGET;
+
     if (function.operand_count) memcpy(operands,function.operands,(size_t)function.operand_count*sizeof(*operands));
     if (substitute) {
         XrXirStatus status=effect_terms_substitute(&contexts->terms,function.result,&environment,&function.result);
@@ -151,7 +142,7 @@ static XrXirStatus effect_ordinary_function(EffectOrdinaryContexts *contexts,
     function.parameters=parameters;function.instructions=ops;function.operands=operands;
     char *name=function.name_length ? effect_terms_alloc(&contexts->terms,function.name_length,1) : NULL;
     if (function.name_length && !name) return contexts->terms.status;
-    if (!xir_compile_work(contexts->terms.remaining,function.name_length)) return XR_XIR_BUDGET;
+
     if (function.name_length) memcpy(name,function.name,function.name_length);
     function.name=name;function.blocks=NULL;function.block_count=0;
     contexts->functions[index]=function;contexts->nodes[index].source_parameters=parameters;
@@ -185,7 +176,7 @@ static XrXirStatus effect_ordinary_intern(EffectOrdinaryContexts *contexts,
      * copy. Only a genuinely new key owns imported argument storage. */
     XrXirStatus status=XR_XIR_OK;
     for (uint32_t n=contexts->base_count;n<contexts->count;++n) {
-        if (!xir_compile_work(contexts->terms.remaining,2)) return XR_XIR_BUDGET;
+
         EffectOrdinaryNode node=contexts->nodes[n];
         if (node.owner!=owner) continue;
         bool equal=false;
@@ -202,9 +193,9 @@ static XrXirStatus effect_ordinary_intern(EffectOrdinaryContexts *contexts,
     if (!arguments) return contexts->terms.status;
     for (uint32_t a=0;a<target->argument_count;++a) {
         if (local) {
-            if (!xir_compile_work(contexts->terms.remaining,1)) return XR_XIR_BUDGET;
+
             arguments[a]=target->arguments[a];
-        } else status=effect_terms_import_child(&contexts->terms,cache,target->terms.types.count,
+        } else status=effect_terms_import_child(cache,target->terms.types.count,
             target->arguments[a],&arguments[a]);
         if (status!=XR_XIR_OK) return status;
     }
@@ -226,7 +217,7 @@ static XrXirStatus effect_ordinary_expand(EffectOrdinaryContexts *contexts,
     if (index<contexts->base_count && generic && generic->parameter_count) return XR_XIR_OK;
     uint32_t count=source->functions[identity.declaration].instruction_count;
     for (uint32_t i=0;i<count;++i) {
-        if (!xir_compile_work(contexts->terms.remaining,1)) return XR_XIR_BUDGET;
+
         XrXirInstruction original=source->functions[identity.declaration].instructions[i];
         if (!effect_context_family(original.op)) continue;
         EffectContextRequest request={source,&contexts->terms.types,identity.arguments,
@@ -262,7 +253,7 @@ static XrXirStatus effect_ordinary_snapshot(EffectOrdinaryContexts *contexts,
         uint32_t count=source->defaults->count;
         XrXirDefaultBinding *records=count ? effect_terms_alloc(&contexts->terms,count,sizeof(*records)) : NULL;
         if (count && !records) return contexts->terms.status;
-        if (!xir_compile_work(context,(uint64_t)count*sizeof(*records))) return XR_XIR_BUDGET;
+
         if (count) memcpy(records,source->defaults->records,(size_t)count*sizeof(*records));
         contexts->source_defaults=(XrXirDefaultTable){records,count};
     }
@@ -293,7 +284,7 @@ static XrXirStatus effect_body_ordinary_input_verify(const XrXirCompileContext *
         return XR_XIR_BAD_STRUCTURE;
     if (source->function_count>work->limits.functions ||
         contexts->count>effect_body_entry_limit(work)) return XR_XIR_BUDGET;
-    if (!xir_compile_work(work,13)) return XR_XIR_BUDGET;
+
     if (source->function_count>work->limits.functions || contexts->count>effect_equation_maximum(work))
         return XR_XIR_BUDGET;
     const XrXirDeclarations *expected=source->declarations,*actual=module->declarations;
@@ -306,7 +297,7 @@ static XrXirStatus effect_body_ordinary_input_verify(const XrXirCompileContext *
     XrXirStatus status=effect_terms_snapshot_match(&contexts->terms,source->types,contexts->source_type_count);
     if (status!=XR_XIR_OK) return status;
     for (uint32_t f=0;f<contexts->count;++f) {
-        if (!xir_compile_work(work,9+sizeof(XrXirFunctionIdentity)+sizeof(XrXirGeneric))) return XR_XIR_BUDGET;
+
         const EffectOrdinaryNode *node=&contexts->nodes[f];const XrXirFunction *function=&contexts->functions[f];
         if (node->declaration>=source->function_count || !!node->arguments!=!!node->argument_count ||
             (f<contexts->base_count && node->declaration!=f) ||
@@ -333,7 +324,7 @@ static XrXirStatus effect_body_ordinary_input_verify(const XrXirCompileContext *
         const XrXirType *physical=contexts->dense?node->physical_types:node->source_parameters;
         XrXirProofContext proof={module,{XR_XIR_CONTEXT_FUNCTION,f,0}};
         for (uint32_t p=0;p<function->parameter_count;++p) {
-            if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+
             if (function->parameters[p]!=physical[p]) return XR_XIR_BAD_STRUCTURE;
             status=xr_xir_compile_type_use_verify(work,&proof,function->parameters[p]);
             if (status!=XR_XIR_OK) return status;
@@ -349,7 +340,7 @@ static XrXirStatus effect_body_ordinary_identity(const XrXirCompileContext *work
     const EffectOrdinaryNode *node=&input->contexts->nodes[function];
     if (node->declaration>=input->source->function_count ||
         (node->owner!=UINT32_MAX && node->owner>=input->contexts->count)) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,2+sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=(EffectBodyOrdinaryIdentity){node->declaration,node->owner};return XR_XIR_OK;
 }
 
@@ -366,7 +357,7 @@ static XrXirStatus effect_ordinary_basis_source(const XrXirCompileContext *work,
         !source->declarations->functions || !source->declarations->modules)
         return XR_XIR_BAD_STRUCTURE;
     for (uint32_t f=0;f<basis->count;++f) {
-        if (!xir_compile_work(work,8)) return XR_XIR_BUDGET;
+
         uint32_t declaration=basis->nodes[f].declaration;
         if (declaration>=source->function_count) return XR_XIR_BAD_STRUCTURE;
         const XrXirFunction *actual=&source->functions[declaration];
@@ -399,7 +390,7 @@ static XrXirStatus effect_body_ordinary_basis(const XrXirCompileContext *work,
         (basis->uses.generation->backbone && basis->uses.generation->backbone->backbone) ||
         !basis->uses.generation->ordinary_identities ||
         effect_body_count(basis->uses.generation)!=basis->count) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,12+sizeof(*output))) return XR_XIR_BUDGET;
+
     XrXirStatus status=effect_ordinary_basis_source(work,input->basis,input->source);
     if (status!=XR_XIR_OK) return status;
     *output=basis->uses.generation;return XR_XIR_OK;
@@ -414,7 +405,7 @@ static XrXirStatus effect_body_ordinary_record_parent(const XrXirCompileContext 
     if (!source) return XR_XIR_OK;
     if (!effect_body_material_shape(source) || source->resources!=work->resources)
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,3+sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=source;return XR_XIR_OK;
 }
 
@@ -423,7 +414,7 @@ static XrXirStatus effect_body_ordinary_record_index(const XrXirCompileContext *
     if (!xir_compile_context_valid(work) || !input || !input->contexts || !output ||
         function>=input->contexts->count || !input->contexts->nodes ||
         (!!input->basis==!!(input->initial || input->record_source))) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,5+sizeof(*output))) return XR_XIR_BUDGET;
+
     const EffectOrdinaryNode *node=&input->contexts->nodes[function];
     *output=input->basis?node->ordinary:node->declaration;return XR_XIR_OK;
 }
@@ -443,8 +434,7 @@ static XrXirStatus effect_ordinary_view(EffectOrdinaryContexts *contexts,
     XrXirGeneric *generics=effect_terms_alloc(&contexts->terms,contexts->count,sizeof(*generics));
     if (!identities || !generics) return contexts->terms.status;
     for (uint32_t f=0;f<contexts->count;++f) {
-        if (!xir_compile_work(contexts->terms.remaining,sizeof(*identities)+sizeof(*generics)+2))
-            return XR_XIR_BUDGET;
+
         uint32_t declaration=contexts->nodes[f].declaration;
         if (declaration>=source->function_count) return XR_XIR_BAD_STRUCTURE;
         identities[f]=source->declarations->functions[declaration];
@@ -560,8 +550,7 @@ static XrXirStatus effect_ordinary_build(const XrXirCompileContext *context,
     EffectGraph graph={0};EffectOrdinaryView view={0};
     contexts->uses.resources=context->resources;contexts->uses.count=contexts->count;
     if (status==XR_XIR_OK) status=effect_ordinary_view(contexts,source,&view);
-    if (status==XR_XIR_OK && !xir_compile_work(context,
-        sizeof(view.input.initial)+sizeof(view.input.record_source))) status=XR_XIR_BUDGET;
+
     if (status==XR_XIR_OK) {
         view.input.initial=refinement?NULL:initial;view.input.record_source=initial;graph.ordinary=view.input;
         status=effect_parameters_derive(&view.module,&contexts->uses,&graph,context);

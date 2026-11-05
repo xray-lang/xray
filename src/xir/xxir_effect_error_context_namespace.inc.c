@@ -15,7 +15,7 @@ static XrXirStatus error_finite_returned_node(const XrXirCompileContext *work,
     *output=false;
     uint32_t function=final->nodes[node].body;
     const XrXirDeclarations *declarations=material->domain.declarations;
-    if(!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+
     if(declarations && declarations->functions &&
         (declarations->functions[function].promises&XR_XIR_FUNCTION_GENERATOR)) return XR_XIR_OK;
     EffectBodyRequest body=effect_body_owned_request(work,material);
@@ -39,7 +39,7 @@ static XrXirStatus error_finite_context_count(const XrXirCompileContext *work,
     if(status==XR_XIR_OK) status=effect_role_range(work,final->roots,proof->functions,sizeof(*final->roots));
     if(status!=XR_XIR_OK) return status;
     for(uint32_t f=0;f<proof->functions;++f) {
-        if(!xir_compile_work(work,4)) return XR_XIR_BUDGET;
+
         uint32_t node=final->roots[f];
         if(node>=final->count || final->nodes[node].body!=f) return XR_XIR_BAD_STRUCTURE;
     }
@@ -47,7 +47,7 @@ static XrXirStatus error_finite_context_count(const XrXirCompileContext *work,
     if(!final->site_count) return XR_XIR_OK;
     status=effect_final_inventory_sites(work,proof->material,final);
     if(status!=XR_XIR_OK) return status;
-    EffectBodyRead body=effect_body_compile_read(work);
+    EffectBodyRead body=(EffectBodyRead){.owner=work};
     for(uint32_t f=0;f<proof->functions;++f) {
         const EffectBodyFunction *head=&proof->material->functions[f];
         EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
@@ -81,7 +81,7 @@ static XrXirStatus error_finite_context_node(const XrXirCompileContext *work,
     if(context>=proof->contexts) return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationFinal *final=proof->invocations;
     if(context<proof->functions) {
-        if(!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+
         uint32_t node=final->roots[context];
         if(node>=final->count || final->nodes[node].body!=context) return XR_XIR_BAD_STRUCTURE;
         *output=node;return XR_XIR_OK;
@@ -101,7 +101,7 @@ static XrXirStatus error_finite_context_node(const XrXirCompileContext *work,
     for(uint32_t n=0;n<final->count;++n) {
         bool root=false;
         for(uint32_t f=0;f<proof->functions;++f) {
-            if(!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+
             if(final->roots[f]==n) root=true;
         }
         if(root) continue;
@@ -109,7 +109,7 @@ static XrXirStatus error_finite_context_node(const XrXirCompileContext *work,
     }
     return XR_XIR_BAD_STRUCTURE;
 }
-static XrXirStatus error_finite_node_context(const XrXirCompileContext *work,
+static XrXirStatus error_finite_node_context(
     const EffectErrorFinite *proof,uint32_t node,bool returned,uint32_t *output) {
     if(node>=proof->invocations->count) return XR_XIR_BAD_STRUCTURE;
     if(!proof->contextual) {
@@ -118,7 +118,7 @@ static XrXirStatus error_finite_node_context(const XrXirCompileContext *work,
         return *output<proof->functions?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
     }
     for(uint32_t c=0;c<proof->contexts;++c) {
-        if(!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+
         if(proof->rows[c].returned==(uint32_t)returned && proof->rows[c].node==node) {
             *output=c;return XR_XIR_OK;
         }
@@ -138,7 +138,7 @@ static XrXirStatus error_finite_context_body(const XrXirCompileContext *work,
     if(status==XR_XIR_OK) status=effect_role_range(work,proof->rows,proof->contexts,sizeof(*proof->rows));
     if(status!=XR_XIR_OK) return status;
     const EffectInvocationFinal *final=proof->invocations;
-    if(!xir_compile_work(work,7)) return XR_XIR_BUDGET;
+
     uint32_t node=proof->rows[context].node;
     if(final->material!=proof->material || final->count>final->capacity || node>=final->count)
         return XR_XIR_BAD_STRUCTURE;
@@ -166,6 +166,6 @@ static XrXirStatus error_finite_context_read(const EffectErrorFiniteRead *read,
     if(final->material!=current->material || node>=final->count) return XR_XIR_BAD_STRUCTURE;
     uint32_t function=final->nodes[node].body;
     if(function>=proof->functions) return XR_XIR_BAD_STRUCTURE;
-    if(!xir_compile_work(read->work,7+sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=function;return XR_XIR_OK;
 }

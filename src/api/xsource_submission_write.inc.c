@@ -18,12 +18,11 @@ static XrSourceStatus submission_write_binding(XrSourceSubmission *owner,const c
     if(!definition.mutable || definition.writer==UINT32_MAX)return XR_SOURCE_REJECTED;
     const SubmissionBirth *birth=owner->published_births;
     while(birth && birth->source!=selected.generation) {
-        if(xr_compile_state_work(owner->state,1)!=XR_COMPILE_RESOURCE_OK)
-            return submission_resource(xr_compile_state_status(owner->state));
+
         birth=birth->previous;
     }
     if(!birth)return XR_SOURCE_BAD_STATE;
-    uint8_t key[16];status=submission_xir(submission_accessor_key(owner,selected.generation,definition.writer,key));
+    uint8_t key[16];status=submission_xir(submission_accessor_key(selected.generation,definition.writer,key));
     if(status!=XR_SOURCE_OK)return status;
     const XrXirInstanceBinding *binding=NULL;
     status=submission_call(xr_xir_instance_binding_lookup(owner->runtime,(const char *)key,sizeof(key),&binding));
@@ -52,9 +51,8 @@ XR_FUNC XrSourceStatus xr_source_submission_write(XrSourceSubmission *owner,cons
     const XrXirValue *value,XrXirCallStatus *cleanup) {
     if(!owner || !name || !value || !cleanup)return XR_SOURCE_BAD_ARGUMENT;
     if(owner->busy || owner->source_serial)return XR_SOURCE_BUSY;
-    XrSourceStatus status=submission_resource(xr_compile_state_status(owner->state));
-    if(status!=XR_SOURCE_OK)return status;
+    XrSourceStatus status=XR_SOURCE_OK;
     owner->busy=true;*cleanup=XR_XIR_CALL_READY;
-    status=submission_capture(owner,submission_write_binding(owner,name,value,cleanup));
+    status=submission_write_binding(owner,name,value,cleanup);
     owner->busy=false;return status;
 }

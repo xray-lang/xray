@@ -26,7 +26,7 @@
 // ----------------------------------------------------------------------------
 
 static void fmt_loop_prefix(XrFmtContext *ctx, const char *label) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     xfmt_write_indent(ctx);
     if (label) {
         xfmt_write_str(ctx, label);
@@ -35,7 +35,7 @@ static void fmt_loop_prefix(XrFmtContext *ctx, const char *label) {
 }
 
 static void fmt_if_stmt(XrFmtContext *ctx, AstNode *node) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     xfmt_write_indent(ctx);
     xfmt_write_str(ctx, "if (");
     xfmt_emit_expression(ctx, node->as.if_stmt.condition);
@@ -56,7 +56,7 @@ static void fmt_if_stmt(XrFmtContext *ctx, AstNode *node) {
 }
 
 static void fmt_while_stmt(XrFmtContext *ctx, AstNode *node) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     fmt_loop_prefix(ctx, node->as.while_stmt.label);
     xfmt_write_str(ctx, "while (");
     xfmt_emit_expression(ctx, node->as.while_stmt.condition);
@@ -66,7 +66,7 @@ static void fmt_while_stmt(XrFmtContext *ctx, AstNode *node) {
 }
 
 static void fmt_for_stmt(XrFmtContext *ctx, AstNode *node) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     fmt_loop_prefix(ctx, node->as.for_stmt.label);
     xfmt_write_str(ctx, "for (");
 
@@ -102,7 +102,7 @@ static void fmt_for_stmt(XrFmtContext *ctx, AstNode *node) {
 }
 
 static void fmt_for_in_stmt(XrFmtContext *ctx, AstNode *node) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     fmt_loop_prefix(ctx, node->as.for_in_stmt.label);
     xfmt_write_str(ctx, "for (");
 
@@ -138,14 +138,14 @@ static void fmt_for_in_stmt(XrFmtContext *ctx, AstNode *node) {
 }
 
 static void fmt_try_catch(XrFmtContext *ctx, AstNode *node) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     xfmt_write_indent(ctx);
     TryCatchNode *tc = &node->as.try_catch;
 
     xfmt_write_str(ctx, "try ");
     xfmt_emit_block(ctx, tc->try_body);
 
-    for (int ci = 0; xfmt_step(ctx) && (ci < tc->catch_count); ci++) {
+    for (int ci = 0; xfmt_healthy(ctx) && (ci < tc->catch_count); ci++) {
         XrCatchClause *cc = tc->catch_clauses[ci];
         if (!cc)
             continue;
@@ -173,7 +173,7 @@ static void fmt_try_catch(XrFmtContext *ctx, AstNode *node) {
 }
 
 static int fmt_select_case_head(XrFmtContext *ctx, SelectCaseNode *sc) {
-    if (!xfmt_step(ctx)) return 0;
+    if (!xfmt_healthy(ctx)) return 0;
     size_t saved_len = ctx->length;
     int indent_chars =
         xfmt_indent_width(ctx);
@@ -194,7 +194,7 @@ static int fmt_select_case_head(XrFmtContext *ctx, SelectCaseNode *sc) {
         xfmt_emit_expression(ctx, sc->channel);
     }
 
-    for (size_t k = saved_len; xfmt_step(ctx) && (k < ctx->length); k++) {
+    for (size_t k = saved_len; xfmt_healthy(ctx) && (k < ctx->length); k++) {
         if (ctx->output[k] == '\n')
             return -1;
     }
@@ -203,7 +203,7 @@ static int fmt_select_case_head(XrFmtContext *ctx, SelectCaseNode *sc) {
 }
 
 static void fmt_select_stmt(XrFmtContext *ctx, AstNode *node) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     xfmt_write_indent(ctx);
     xfmt_write_str(ctx, "select {");
     xfmt_write_newline(ctx);
@@ -218,7 +218,7 @@ static void fmt_select_stmt(XrFmtContext *ctx, AstNode *node) {
         if (!widths) return;
     }
     if (align) {
-        for (int i = 0; xfmt_step(ctx) && (i < sel->case_count); i++) {
+        for (int i = 0; xfmt_healthy(ctx) && (i < sel->case_count); i++) {
             AstNode *c = sel->cases[i];
             SelectCaseNode *sc = &c->as.select_case;
             size_t saved_len = ctx->length;
@@ -237,14 +237,14 @@ static void fmt_select_stmt(XrFmtContext *ctx, AstNode *node) {
         }
     }
 
-    for (int i = 0; xfmt_step(ctx) && (i < sel->case_count); i++) {
+    for (int i = 0; xfmt_healthy(ctx) && (i < sel->case_count); i++) {
         AstNode *c = sel->cases[i];
         SelectCaseNode *sc = &c->as.select_case;
 
         int w = fmt_select_case_head(ctx, sc);
         if (align && widths && widths[i] >= 0 && w >= 0) {
             int pad = max_width - w;
-            for (int j = 0; xfmt_step(ctx) && (j < pad); j++)
+            for (int j = 0; xfmt_healthy(ctx) && (j < pad); j++)
                 xfmt_write_char(ctx, ' ');
         }
         xfmt_write_str(ctx, " -> ");
@@ -270,7 +270,7 @@ static void fmt_select_stmt(XrFmtContext *ctx, AstNode *node) {
 // ----------------------------------------------------------------------------
 
 XR_FUNC void xfmt_emit_block(XrFmtContext *ctx, AstNode *node) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     if (!node || node->type != AST_BLOCK) {
         xfmt_write_str(ctx, "{}");
         return;
@@ -281,7 +281,7 @@ XR_FUNC void xfmt_emit_block(XrFmtContext *ctx, AstNode *node) {
     ctx->indent_level++;
 
     BlockNode *block = &node->as.block;
-    for (int i = 0; xfmt_step(ctx) && (i < block->count); i++) {
+    for (int i = 0; xfmt_healthy(ctx) && (i < block->count); i++) {
         xfmt_emit_statement(ctx, block->statements[i]);
     }
 
@@ -291,7 +291,7 @@ XR_FUNC void xfmt_emit_block(XrFmtContext *ctx, AstNode *node) {
 }
 
 XR_FUNC void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     if (!node)
         return;
 
@@ -378,7 +378,7 @@ XR_FUNC void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
             ReturnStmtNode *ret = &node->as.return_stmt;
             if (ret->value_count > 0) {
                 xfmt_write_space(ctx);
-                for (int i = 0; xfmt_step(ctx) && (i < ret->value_count); i++) {
+                for (int i = 0; xfmt_healthy(ctx) && (i < ret->value_count); i++) {
                     if (i > 0)
                         xfmt_write_str(ctx, ", ");
                     xfmt_emit_expression(ctx, ret->values[i]);
@@ -425,7 +425,7 @@ XR_FUNC void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
 
             if (imp->member_count > 0) {
                 xfmt_write_str(ctx, "import { ");
-                for (int i = 0; xfmt_step(ctx) && (i < imp->member_count); i++) {
+                for (int i = 0; xfmt_healthy(ctx) && (i < imp->member_count); i++) {
                     if (i > 0)
                         xfmt_write_str(ctx, ", ");
                     xfmt_write_str(ctx, imp->members[i].name);
@@ -473,7 +473,7 @@ XR_FUNC void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
                         xfmt_write_char(ctx, '"');
                 } else {
                     xfmt_write_str(ctx, "{ ");
-                    for (int i = 0; xfmt_step(ctx) && (i < exp->reexport_count); i++) {
+                    for (int i = 0; xfmt_healthy(ctx) && (i < exp->reexport_count); i++) {
                         if (i > 0)
                             xfmt_write_str(ctx, ", ");
                         xfmt_write_str(ctx, exp->reexport_members[i].name);
@@ -619,7 +619,7 @@ XR_FUNC void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
 // ----------------------------------------------------------------------------
 
 XR_FUNC void xfmt_emit_program(XrFmtContext *ctx, AstNode *node) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     if (!node || node->type != AST_PROGRAM)
         return;
 
@@ -631,7 +631,7 @@ XR_FUNC void xfmt_emit_program(XrFmtContext *ctx, AstNode *node) {
     ProgramNode *prog = &node->as.program;
     int last_was_decl = 0;
 
-    for (int i = 0; xfmt_step(ctx) && (i < prog->count); i++) {
+    for (int i = 0; xfmt_healthy(ctx) && (i < prog->count); i++) {
         AstNode *stmt = prog->statements[i];
 
         int is_decl = (stmt->type == AST_FUNCTION_DECL || stmt->type == AST_CLASS_DECL ||

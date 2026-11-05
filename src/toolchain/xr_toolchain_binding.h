@@ -8,7 +8,7 @@
  */
 #ifndef XR_TOOLCHAIN_BINDING_H
 #define XR_TOOLCHAIN_BINDING_H
-#include "../base/xcompile_resources.h"
+#include "../base/xdefs.h"
 #include "../base/xstable_id.h"
 
 #define XR_TOOLCHAIN_BINDING_SCHEMA_VERSION 2u
@@ -35,22 +35,18 @@ typedef struct XrToolchainBinding {
 typedef enum XrToolchainBindingStatus {
     XR_TOOLCHAIN_BINDING_OK,
     XR_TOOLCHAIN_BINDING_BAD_ARGUMENT,
-    XR_TOOLCHAIN_BINDING_BAD_STRUCTURE,
-    XR_TOOLCHAIN_BINDING_BUDGET
+    XR_TOOLCHAIN_BINDING_BAD_STRUCTURE
 } XrToolchainBindingStatus;
 
 /* These fixed values allocate nothing and retain no borrowed text. Identity
  * validation does not confer SDK or target authority. All failures preserve
  * outputs, including padding. Inputs and outputs require caller exclusion.
- * Work: scanned/read bytes, copied/cleared bytes, compared bytes (two per pair),
- * encoded bytes, SHA input bytes, one per SHA init/final and 32 digest bytes.
- * Charging precedes each operation; rejected charges perform no operation.
  * Text reads include the terminating NUL, with a maximum of 4097 reads. */
 XR_FUNC XrToolchainBindingStatus xr_compile_toolchain_binding_build(
-    XrCompileResources *resources, const XrToolchainInput *input, XrToolchainBinding *output);
+    const XrToolchainInput *input, XrToolchainBinding *output);
 XR_FUNC XrToolchainBindingStatus xr_compile_toolchain_binding_validate(
-    XrCompileResources *resources, const XrToolchainBinding *binding);
+    const XrToolchainBinding *binding);
 XR_FUNC XrToolchainBindingStatus xr_compile_toolchain_binding_equal(
-    XrCompileResources *resources, const XrToolchainBinding *left,
+    const XrToolchainBinding *left,
     const XrToolchainBinding *right, bool *output);
 #endif // XR_TOOLCHAIN_BINDING_H

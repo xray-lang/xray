@@ -161,9 +161,6 @@ static XrXirArtifact *clone_module_receiving(const XrXirCompileContext *compile_
         if (owned_provenance) {
             if (!*owned_provenance || source->provenance != *owned_provenance)
                 *allocation_status = XR_XIR_BAD_STRUCTURE;
-            else if (!xir_compile_work(compile_context,
-                sizeof(copy->module.provenance) + sizeof(*owned_provenance)))
-                *allocation_status = XR_XIR_BUDGET;
             if (*allocation_status != XR_XIR_OK) { xr_xir_compile_artifact_free(copy); return NULL; }
             copy->module.provenance = *owned_provenance; *owned_provenance = NULL;
         } else {
@@ -243,10 +240,7 @@ XrXirStatus xr_xir_compile_recheck_provenance_take(const XrXirCompileContext *co
     XrXirProvenance *receiving_owner = *owned_provenance; *owned_provenance = NULL;
     XrXirStatus status = XR_XIR_OK;
     XrXirArtifact *receiving_copy = NULL;XrXirEffects *receiving_effects=NULL;
-    if (!xir_compile_work(compile_context, sizeof(XrXirModule) + 4 * sizeof(receiving_owner) +
-        sizeof(*receiving))) {
-        status = transition_error(XR_XIR_BUDGET, diagnostic); goto done;
-    }
+
     const XirProvenanceReceiving request=*receiving;
     XrXirModule receiving_module = *checked;
     receiving_module.provenance = receiving_owner;
@@ -279,7 +273,7 @@ static XrXirStatus transition_shape(const XrXirModule *input, XrXirStage source,
             return transition_error(XR_XIR_BAD_STAGE, diagnostic);
         if (input->types) {
             if (input->types->count && !input->types->nodes) return transition_error(XR_XIR_BAD_STRUCTURE,diagnostic);
-            if (!xir_compile_work(budget,input->types->count)) return transition_error(XR_XIR_BUDGET,diagnostic);
+
         }
         XrXirLayout layout;
         XrXirStatus layout_status = xr_xir_compile_layout(budget, NULL, XR_XIR_I64, target, XR_XIR_LAYOUT_FRAME, &layout);
@@ -319,9 +313,7 @@ static XrXirStatus transition_owned(const XrXirModule *input, const XrXirConstru
     if (source == XR_XIR_CHECKED) {
         status = proof->writer(copy, &copy->checked_packet, diagnostic);
         if (status != XR_XIR_OK) { xr_xir_compile_artifact_free(copy); return status; }
-        if (!xir_compile_work(budget, copy->checked_packet.length)) {
-            xr_xir_compile_artifact_free(copy); return transition_error(XR_XIR_BUDGET, diagnostic);
-        }
+
         xr_sha256(copy->checked_packet.bytes, copy->checked_packet.length, copy->checked_identity);
     }
     if (copy->source_facts) { xir_source_facts_release(copy->source_facts);copy->source_facts=NULL; }
@@ -338,9 +330,7 @@ static XrXirStatus transition_owned(const XrXirModule *input, const XrXirConstru
         for (uint32_t f = 0; f < copy->module.function_count; ++f) {
             const XrXirFunction *function = &copy->module.functions[f];
             XrXirInstruction *instructions = (XrXirInstruction *) function->instructions;
-            if (!xir_compile_work(budget, function->instruction_count)) {
-                xr_xir_compile_artifact_free(copy); return transition_error(XR_XIR_BUDGET, diagnostic);
-            }
+
             for (uint32_t i = 0; i < function->instruction_count; ++i) {
                 if (instructions[i].op == XR_XIR_COPY)
                     instructions[i].op = xr_xir_type_is_owned(copy->module.types, instructions[i].type) ?
@@ -503,7 +493,7 @@ static XrXirStatus artifact_verify_owned_effects(const XrXirArtifact *artifact,
         const XrXirCheckedPacket *packet = &artifact->checked_packet;
         if (!packet->bytes || packet->length < 64)
             return transition_error(XR_XIR_BAD_STRUCTURE, diagnostic);
-        if ((packet->length > SIZE_MAX) ||!xir_compile_work(&limits, packet->length))
+        if (packet->length > SIZE_MAX)
             return transition_error(XR_XIR_BUDGET, diagnostic);
 
 
@@ -516,7 +506,7 @@ static XrXirStatus artifact_verify_owned_effects(const XrXirArtifact *artifact,
                 return transition_error(XR_XIR_BAD_STRUCTURE,diagnostic);
             const XirEvaluationRoot *root=&artifact->module.provenance->evaluation;
             uint32_t wanted[3]={root->caller,root->instruction,root->callee};
-            if (!xir_compile_work(&limits,12)) return transition_error(XR_XIR_BUDGET,diagnostic);
+
             for (uint32_t i=0;i<3;++i) {
                 const uint8_t *p=packet->bytes+64+4*i;
                 uint32_t actual=(uint32_t)p[0]|((uint32_t)p[1]<<8)|((uint32_t)p[2]<<16)|((uint32_t)p[3]<<24);

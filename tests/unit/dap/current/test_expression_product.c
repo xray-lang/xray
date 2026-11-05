@@ -17,7 +17,7 @@ static size_t product_expression(size_t fail,bool boolean) {
     XrSourceCompilerConfig config={{resources,xr_xir_compile_default_limits()},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},XR_DAP_STDLIB,xr_source_compile_default_manifest_limits()};
     XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};
-    CHECK(xr_source_compiler_new(&config,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);xr_source_compile_diagnostic_free(&diagnostic);
+    CHECK(xr_source_compiler_new(&config,NULL,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);xr_source_compile_diagnostic_free(&diagnostic);
     const char *text=boolean ? "const evaluator = fn(value:i64) { return value==40 && value<42 }\n" :
         "const evaluator = fn(value:i64) { return value+2 }\n";
     XrSourceCompilerText input={NULL,"dap-expression-product",text,strlen(text)};XrXirSourceProduct *product=NULL;

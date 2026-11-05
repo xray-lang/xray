@@ -243,7 +243,7 @@ static inline XrXirStatus effect_invocation_producer_column(const EffectInvocati
     const EffectInvocationBasis *basis,uint32_t site,uint32_t atom,uint32_t *word,uint32_t *bit);
 
 static XrXirStatus effect_invocation_class_verify(EffectInvocationWorkspace *owner);
-static XrXirStatus effect_invocation_return_supported(const XrXirCompileContext *work,
+static XrXirStatus effect_invocation_return_supported(
     const XrXirTypes *types,XrXirType type,bool *output);
 static XrXirStatus effect_final_callable_complete(const XrXirCompileContext *work,
     const EffectInvocationFinal *final,uint32_t node,uint32_t value,bool *complete);

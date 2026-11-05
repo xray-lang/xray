@@ -493,8 +493,8 @@ static XrXirStatus hierarchy_syntax(XlspHierarchyRequest *request, XrJsonValue *
     XrCompilerSession *session = NULL;
     XlspSyntaxSnapshot *syntax = NULL;
     XlspSourceOutline *outline = NULL;
-    XrCompilerSessionStatus opened = xr_compile_session_new(request->context.resources, &session);
-    XrXirStatus status = opened == XR_COMPILER_SESSION_OK ? XR_XIR_OK :
+    XrCompileResourceStatus opened = xr_compile_session_new(request->context.resources, &session);
+    XrXirStatus status = opened == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
         opened == XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
     if (status != XR_XIR_OK) goto done;
     XrParseStatus parsed = xlsp_source_syntax_build(session, &request->documents[0], &syntax);

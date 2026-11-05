@@ -10,7 +10,7 @@ typedef struct SourceClosureCount { SourceContext *ctx; uint32_t count, depth, d
 static bool count_closures(AstNode *node, void *pointer) {
     SourceClosureCount *scan = pointer;
     if (!node) return true;
-    if (!source_work(scan->ctx,node)) return false;
+    if (!((scan->ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (!source_error_syntax(scan->ctx, node)) return false;
     /* A module-level declaration is a direct child of the program node, at depth one. */
     bool closure = node->type == AST_FUNCTION_EXPR || node->type == AST_DEFER_STMT ||
@@ -36,7 +36,7 @@ static bool count_closures(AstNode *node, void *pointer) {
     int count = node->type == AST_FUNCTION_DECL ? node->as.function_decl.param_count :
         node->type == AST_METHOD_DECL ? node->as.method_decl.param_count : 0;
     for (int p = 0; p < count; ++p) {
-        if (!source_work(scan->ctx, node)) return false;
+        if (!((scan->ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (parameters[p]->default_value) {
             if (scan->defaults == scan->ctx->compile.limits.functions)
                 return source_fail(scan->ctx, node, XR_XIR_BUDGET, "default argument function budget exhausted");
@@ -71,6 +71,6 @@ static bool source_comptime_inventory(SourceContext *ctx,uint32_t count,uint32_t
     if (!count) return true;
     if (count>UINT32_MAX-*capacity)
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"comptime function capacity overflow");
-    if (!source_work_units(ctx,NULL,sizeof(*capacity)+sizeof(ctx->comptime_capacity))) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     *capacity+=count;ctx->comptime_capacity=count;return true;
 }

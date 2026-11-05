@@ -62,7 +62,7 @@ static bool consume_gt_in_generic(Parser *parser) {
 static int alias_param_index(Parser *parser, const XrTypeAlias *alias, const char *name) {
     if (!alias || !name)
         return -1;
-    for (int i = 0; xr_parser_step(parser) && (xr_parser_healthy(parser) && i < alias->type_param_count); i++) {
+    for (int i = 0; xr_parser_healthy(parser) && (xr_parser_healthy(parser) && i < alias->type_param_count); i++) {
         if (alias->type_param_names && alias->type_param_names[i] &&
             xr_parser_compare_string(parser, alias->type_param_names[i], name) == 0)
             return i;
@@ -249,7 +249,7 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
         case XR_TREF_GENERIC: {
             XrTypeRef *args[256];
             int count = src->nchildren;
-            for (int i = 0; xr_parser_step(parser) && (i < count); i++)
+            for (int i = 0; xr_parser_healthy(parser) && (i < count); i++)
                 do {
                     args[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
                     if (!xr_parser_healthy(parser)) return NULL;
@@ -266,7 +266,7 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
         case XR_TREF_UNION: {
             XrTypeRef *members[256];
             int count = src->nchildren;
-            for (int i = 0; xr_parser_step(parser) && (i < count); i++)
+            for (int i = 0; xr_parser_healthy(parser) && (i < count); i++)
                 do {
                     members[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
                     if (!xr_parser_healthy(parser)) return NULL;
@@ -281,7 +281,7 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
             XrTypeRef *params[256];
             XrParamMode modes[256];
             int nparam = total - 1;
-            for (int i = 0; xr_parser_step(parser) && (i < nparam); i++) {
+            for (int i = 0; xr_parser_healthy(parser) && (i < nparam); i++) {
                 do {
                     params[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
                     if (!xr_parser_healthy(parser)) return NULL;
@@ -298,7 +298,7 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
         case XR_TREF_TUPLE: {
             XrTypeRef *elems[256];
             int count = src->nchildren;
-            for (int i = 0; xr_parser_step(parser) && (i < count); i++)
+            for (int i = 0; xr_parser_healthy(parser) && (i < count); i++)
                 do {
                     elems[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
                     if (!xr_parser_healthy(parser)) return NULL;
@@ -308,7 +308,7 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
         case XR_TREF_OBJECT: {
             XrTypeRef *fields[256];
             int count = src->nchildren;
-            for (int i = 0; xr_parser_step(parser) && (i < count); i++)
+            for (int i = 0; xr_parser_healthy(parser) && (i < count); i++)
                 do {
                     fields[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
                     if (!xr_parser_healthy(parser)) return NULL;
@@ -345,7 +345,7 @@ static XrTypeRef *parse_nullable_suffixes(Parser *parser, XrTypeRef *base) {
         unsigned layers=xr_parser_check(parser,TK_NULLISH_COALESCE)?2u:1u;
         xr_parser_advance(parser);
         for (unsigned layer=0;layer<layers;++layer) {
-            if (!xr_parser_step(parser)) return NULL;
+            if (!xr_parser_healthy(parser)) return NULL;
             base=xr_tref_optional(parser->compiler_session,base);
             if (!xr_parser_healthy(parser)) return NULL;
         }
@@ -471,7 +471,7 @@ static void xr_parse_reject_postfix_param_mode(Parser *parser) {
 static bool parse_param_type_annotation_span(Parser *parser, bool allow_mode,
     XrParamMode *out_mode, XrTypeRef **out_type, XrNameSpan *out_span) {
     if (out_span) {
-        if (!ast_work(parser->compiler_session, sizeof(*out_span))) return false;
+
         *out_span = (XrNameSpan){0};
     }
     if (!xr_parser_healthy(parser)) return false;
@@ -514,7 +514,7 @@ static bool parse_param_type_annotation_span(Parser *parser, bool allow_mode,
     if (out_mode)
         *out_mode = mode;
     if (out_span && mode != XR_PARAM_READ) {
-        if (!ast_work(parser->compiler_session, sizeof(*out_span))) return false;
+
         *out_span = (XrNameSpan){mode_token.line, mode_token.column};
     }
     if (out_type)
@@ -967,7 +967,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
                         (char *) ast_alloc(parser->compiler_session, (size_t) name.length + 1);
                     if (!xr_parser_healthy(parser)) return NULL;
                     do { if (!ast_copy(parser->compiler_session, copy, name.start, (size_t) name.length)) return NULL; } while (0);
-                    do { if (!ast_work(parser->compiler_session, 1)) return NULL; copy[name.length] = '\0'; } while (0);
+                    do { copy[name.length] = '\0'; } while (0);
                     param_names[count] = copy;
                     do {
                         xr_parser_advance(parser);
@@ -1149,7 +1149,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             xr_parser_copy_string_n(parser, temp_name, name_token.start, (size_t) name_len);
             if (!xr_parser_healthy(parser)) return NULL;
         } while (0);
-        do { if (!ast_work(parser->compiler_session, 1)) return NULL; temp_name[name_len] = '\0'; } while (0);
+        do { temp_name[name_len] = '\0'; } while (0);
 
         /* Module-qualified type names share one type-ref identity. JSON uses
          * this path for Value/Object/Path rather than introducing a source
@@ -1176,9 +1176,9 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
                 } while (0);
                 return xr_tref_error(parser->compiler_session);
             }
-            do { if (!ast_work(parser->compiler_session, 1)) return NULL; temp_name[name_len] = '.'; } while (0);
+            do { temp_name[name_len] = '.'; } while (0);
             do { if (!ast_copy(parser->compiler_session, temp_name + name_len + 1, member_token.start, (size_t) member_len)) return NULL; } while (0);
-            do { if (!ast_work(parser->compiler_session, 1)) return NULL; temp_name[name_len + 1 + member_len] = '\0'; } while (0);
+            do { temp_name[name_len + 1 + member_len] = '\0'; } while (0);
             name_len += 1 + member_len;
         }
 
@@ -1327,11 +1327,11 @@ XrGenericParam **xr_parse_generic_params(Parser *parser, int *out_count) {
             (char *) ast_alloc(parser->compiler_session, (size_t) param_token.length + 1);
         if (!xr_parser_healthy(parser)) return NULL;
         do { if (!ast_copy(parser->compiler_session, param_name, param_token.start, param_token.length)) return NULL; } while (0);
-        do { if (!ast_work(parser->compiler_session, 1)) return NULL; param_name[param_token.length] = '\0'; } while (0);
+        do { param_name[param_token.length] = '\0'; } while (0);
 
         /* `<T, T>` would make every mention of T ambiguous and silently bind to
          * whichever the scope kept. */
-        for (int i = 0; xr_parser_step(parser) && (i < count); i++) {
+        for (int i = 0; xr_parser_healthy(parser) && (i < count); i++) {
             if (params[i] && params[i]->name && xr_parser_compare_string(parser, params[i]->name, param_name) == 0) {
                 char msg[160];
                 xr_parser_format(parser, msg, sizeof(msg), "duplicate type parameter name '%s'", param_name);
@@ -1438,7 +1438,7 @@ void xr_parse_where_clause(Parser *parser, XrGenericParam **params, int param_co
         Token subject = parser->previous;
 
         XrGenericParam *target = NULL;
-        for (int i = 0; xr_parser_step(parser) && (i < param_count); i++) {
+        for (int i = 0; xr_parser_healthy(parser) && (i < param_count); i++) {
             if (params[i] && params[i]->name &&
                 xr_parser_compare_string_n(parser, params[i]->name, subject.start, (size_t) subject.length) == 0 &&
                 xr_parser_read_byte(parser, params[i]->name + subject.length) == '\0') {
@@ -1495,9 +1495,9 @@ void xr_parse_where_clause(Parser *parser, XrGenericParam **params, int param_co
             } while (0);
             return;
         }
-        for (int i = 0; xr_parser_step(parser) && (i < target->constraint_count); i++)
+        for (int i = 0; xr_parser_healthy(parser) && (i < target->constraint_count); i++)
             merged[i] = target->constraints[i];
-        for (int i = 0; xr_parser_step(parser) && (i < added_count); i++)
+        for (int i = 0; xr_parser_healthy(parser) && (i < added_count); i++)
             merged[target->constraint_count + i] = added[i];
         target->constraints = merged;
         target->constraint_count = merged_count;
@@ -1528,7 +1528,7 @@ XrGenericParam **xr_parse_method_conditions(Parser *parser, int *out_count) {
             return NULL;
         }
         do { if (!ast_copy(parser->compiler_session, name, subject.start, (size_t)subject.length)) return NULL; } while (0);
-        if (!ast_work(parser->compiler_session, 1)) return NULL;
+
         name[subject.length] = '\0';
         condition->name = name;
         do {
@@ -1575,7 +1575,7 @@ void xr_parse_borrow_origin_set(Parser *parser, XrBorrowOriginSyntaxState *out_s
             char *name = (char *) ast_alloc(parser->compiler_session, (size_t) token.length + 1);
             if (!xr_parser_healthy(parser)) return;
             do { if (!ast_copy(parser->compiler_session, name, token.start, (size_t) token.length)) return; } while (0);
-            do { if (!ast_work(parser->compiler_session, 1)) return; name[token.length] = '\0'; } while (0);
+            do { name[token.length] = '\0'; } while (0);
             origin.name = name;
         } else {
             do {

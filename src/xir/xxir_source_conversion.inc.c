@@ -88,7 +88,7 @@ static bool source_conversion_emit(SourceContext *ctx, const SourceConversionRec
     if (recipe->operation == XR_XIR_COPY || recipe->operation == XR_XIR_FUNCTION_WEAKEN)
         ctx->bodies[ctx->function].recipes[value->id - ctx->functions[ctx->function].parameter_count].root.kind = recipe->inferred ? 2 : 1;
     if (recipe->effect_binding) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         SourceRootValue *root = &ctx->bodies[ctx->function].recipes[
             value->id - ctx->functions[ctx->function].parameter_count].root;
         root->kind = 5; root->declared = recipe->declared_bound;

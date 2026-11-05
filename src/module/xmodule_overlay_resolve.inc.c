@@ -8,7 +8,7 @@ XR_FUNC XrModuleStatus xr_compile_module_resolver_set_overlay(XrModuleResolver *
     module_status(&work, xr_compile_module_overlay_new(resolver->resources, inputs, count, &overlay));
     size_t bindings_count = 0;
     const XrModuleResourceBinding *bindings = xr_xir_compile_library_catalog_resources_v2(resolver->config.catalog, &bindings_count);
-    for (size_t i = 0; i < bindings_count && module_work(&work, 1); ++i) {
+    for (size_t i = 0; i < bindings_count && ((&work)->status == XR_MODULE_OK); ++i) {
         const XrModuleOverlayEntry *found = NULL;
         module_status(&work, xr_compile_module_overlay_lookup(overlay, bindings[i].canonical, &bindings[i].authority, &found));
         if (found) module_status(&work, XR_MODULE_INVALID);
@@ -26,7 +26,7 @@ XR_FUNC XrModuleStatus xr_compile_module_resolver_set_overlay(XrModuleResolver *
 static char *overlay_relative_logical(ModuleWork *work, const char *importer,
     const char *relative, const char *suffix) {
     size_t importer_length = module_length(work, importer), directory = 0;
-    for (size_t i = 0; i < importer_length && module_work(work, 1); ++i)
+    for (size_t i = 0; i < importer_length && ((work)->status == XR_MODULE_OK); ++i)
         if (importer[i] == '/') directory = i;
     char *raw = module_format(work, "%s%s", relative, suffix);
     size_t length = raw ? module_length(work, raw) : 0;
@@ -35,27 +35,27 @@ static char *overlay_relative_logical(ModuleWork *work, const char *importer,
     if (logical) module_copy(work, logical, importer, directory);
     for (size_t start = 0; start < length && work->status == XR_MODULE_OK;) {
         size_t end = start;
-        while (end < length && module_work(work, 1) && raw[end] != '/' && raw[end] != '\\') ++end;
+        while (end < length && ((work)->status == XR_MODULE_OK) && raw[end] != '/' && raw[end] != '\\') ++end;
         if (work->status != XR_MODULE_OK) break;
         size_t count = end-start; bool current = false, parent = false;
-        if (count == 1) { if (!module_work(work, 1)) break; current = raw[start] == '.'; }
+        if (count == 1) { if (!((work)->status == XR_MODULE_OK)) break; current = raw[start] == '.'; }
         else if (count == 2) {
-            if (!module_work(work, 2)) break;
+            if (!((work)->status == XR_MODULE_OK)) break;
             char first = raw[start], second = raw[start+1]; parent = first == '.' && second == '.';
         }
         if (current) { /* Current directory has no component. */ }
         else if (parent) {
             if (!used) { module_status(work, XR_MODULE_INVALID); break; }
-            while (used && module_work(work, 1) && logical[used-1] != '/') --used;
+            while (used && ((work)->status == XR_MODULE_OK) && logical[used-1] != '/') --used;
             if (used) --used;
         } else if (count) {
-            if (used && module_work(work, 1)) logical[used++] = '/';
+            if (used && ((work)->status == XR_MODULE_OK)) logical[used++] = '/';
             if (!module_copy(work, logical+used, raw+start, count)) break;
             used += count;
         }
         start = end < length ? end+1 : end;
     }
-    if (work->status == XR_MODULE_OK && module_work(work, 1)) logical[used] = 0;
+    if (work->status == XR_MODULE_OK && ((work)->status == XR_MODULE_OK)) logical[used] = 0;
     xr_compile_resources_free(raw);
     if (work->status != XR_MODULE_OK) { xr_compile_resources_free(logical); return NULL; }
     return logical;

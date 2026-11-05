@@ -81,8 +81,7 @@ XR_FUNCDEF XrXirStatus xr_xir_compile_result_binders_verify(const XrXirCompileCo
     for (uint32_t f = 0; m->generics && f < m->function_count; ++f) {
         const XrXirGeneric *g = &m->generics[f];
         if (!g->parameter_kinds) continue;
-        uint64_t work = 20 + (m->defaults ? (uint64_t)m->defaults->count * 21 : 0);
-        if (!xir_compile_work(b, work)) return XR_XIR_BUDGET;
+
 
         if (g->parameter_count != 1 || !g->constraints || g->argument_count || g->arguments ||
             g->parameter_kinds[0] != XR_XIR_BINDER_RESULT_VARIABLE || g->constraints[0].markers ||
@@ -96,7 +95,7 @@ XR_FUNCDEF XrXirStatus xr_xir_compile_result_argument(const XrXirCompileContext 
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *b = &compile_state;
     if (!m || !b || caller >= m->function_count) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(b, 1)) return XR_XIR_BUDGET;
+
 
     if (type == XR_XIR_UNIT) return XR_XIR_OK;
     if (m->generics && result_symbol(&m->generics[caller],type)) return XR_XIR_BAD_TYPE;
@@ -116,7 +115,7 @@ XR_FUNCDEF XrXirStatus xr_xir_compile_result_unit_use(const XrXirCompileContext 
     if (function->instruction_count && !function->instructions) return XR_XIR_BAD_STRUCTURE;
     bool used = false;
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
-        if (!xir_compile_work(b, 1)) return XR_XIR_BUDGET;
+
 
         const XrXirInstruction *op = &function->instructions[i];
         uint32_t first = op->type_arguments[0], count = op->type_arguments[1];

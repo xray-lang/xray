@@ -26,7 +26,7 @@ static const SourceExpressionPlan *source_existing_plan(SourceContext *ctx,const
     const SourceFunction *body=&ctx->bodies[ctx->function];
     for (const SourceExpressionStorage *storage=body->expressions;storage;storage=storage->next)
         for (uint32_t e=storage->count;e;--e) {
-            if (!source_work(ctx,(AstNode *)syntax)) return NULL;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return NULL;
             const SourceExpressionPlan *plan=&storage->expressions[e-1];
             if (plan->owner==ctx->function && plan->syntax==syntax) return plan;
         }
@@ -48,7 +48,7 @@ typedef struct SourceWriteScan {
 static bool source_write_scan(AstNode *node, void *pointer) {
     SourceWriteScan *scan = pointer;
     if (!node || scan->found) return true;
-    if (!source_work(scan->ctx, node)) return false;
+    if (!((scan->ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (scan->depth == 128) return source_fail(scan->ctx, node, XR_XIR_BUDGET, "write scan depth exhausted");
     bool counted = !scan->closure_only || scan->inside_closure;
     if (!scan->closure_only && node->type==AST_NULLISH_COALESCE) {
@@ -121,7 +121,7 @@ struct SourceEpoch { SourceEpoch *next;SourceName *binding;uint64_t identity; };
 struct SourceConditionFlow { SourceFact *facts[2];SourceEpoch *epochs[2]; };
 static uint64_t source_epoch(SourceContext *ctx,const SourceEpoch *epochs,const SourceName *binding) {
     for (const SourceEpoch *epoch=epochs;epoch;epoch=epoch->next) {
-        if (!source_work(ctx,NULL)) return 0;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return 0;
         if (epoch->binding==binding) return epoch->identity;
     }
     return 0;
@@ -135,7 +135,7 @@ static bool source_epochs_join(SourceContext *ctx,SourceEpoch *first,SourceEpoch
     ctx->epochs=first;
     for (unsigned pass=0;pass<2;++pass)
         for (SourceEpoch *p=pass?second:first;p;p=p->next) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             uint64_t a=source_epoch(ctx,first,p->binding),b=source_epoch(ctx,second,p->binding);
             uint64_t current=source_epoch(ctx,ctx->epochs,p->binding);
             if (ctx->diagnostic.status!=XR_XIR_OK) return false;
@@ -146,7 +146,7 @@ static bool source_epochs_join(SourceContext *ctx,SourceEpoch *first,SourceEpoch
 /* A prefix belongs to this lexical binding, not to a type or an SSA opcode. */
 static uint32_t source_fact_depth(SourceContext *ctx,const SourceName *binding) {
     for (const SourceFact *fact=ctx->facts;fact;fact=fact->next) {
-        if (!source_work(ctx,NULL)) return 0;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return 0;
         if (fact->binding==binding) return fact->epoch==source_epoch(ctx,ctx->epochs,binding)?fact->prefix:0;
     }
     return 0;
@@ -163,7 +163,7 @@ static XrXirType source_symbol_type(SourceContext *ctx,const SourceName *symbol)
     XrXirType type=symbol?symbol->type:XR_XIR_UNIT;
     uint32_t prefix=symbol && symbol->kind==SOURCE_LOCAL?source_fact_depth(ctx,symbol):0;
     for (uint32_t layer=0;layer<prefix;++layer) {
-        if (!source_work(ctx,NULL)) return XR_XIR_UNIT;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return XR_XIR_UNIT;
         if (!xr_xir_type_is_nullable(&ctx->types,type)) {
             source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"nullable fact exceeds its declared prefix");return XR_XIR_UNIT;
         }
@@ -180,7 +180,7 @@ static bool source_fact_collect(SourceContext *ctx,SourceFactSet *set,const Sour
     if (read->read_prefix==UINT32_MAX) return source_fail(ctx,read->syntax,XR_XIR_BUDGET,"nullable prefix exhausted");
     uint32_t prefix=read->read_prefix+1;
     for (uint32_t i=0;i<set->count;++i) {
-        if (!source_work(ctx,read->syntax)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (set->entries[i].binding==binding) {
             if (prefix>set->entries[i].prefix) set->entries[i].prefix=prefix;
             return true;
@@ -199,7 +199,7 @@ static bool source_fact_collect(SourceContext *ctx,SourceFactSet *set,const Sour
  * short-circuit right operand. No AST re-inference or value evaluation occurs. */
 static bool source_condition_facts(SourceContext *ctx,const SourceExpressionPlan *condition,
     bool direction,SourceFactSet *set,uint32_t depth) {
-    if (!condition || !source_work(ctx,condition->syntax)) return condition==NULL;
+    if (!condition || !((ctx)->diagnostic.status == XR_XIR_OK)) return condition==NULL;
     if (depth>=128) return source_fail(ctx,condition->syntax,XR_XIR_BUDGET,"condition fact depth exhausted");
     switch(condition->syntax->type) {
     case AST_GROUPING:return source_condition_facts(ctx,condition->left,direction,set,depth+1);
@@ -217,7 +217,7 @@ static bool source_condition_facts(SourceContext *ctx,const SourceExpressionPlan
         if (a==b || direction!=(condition->syntax->type==AST_BINARY_NE)) return true;
         const SourceExpressionPlan *read=a?right:left;
         while (read && read->syntax->type==AST_GROUPING) {
-            if (!source_work(ctx,read->syntax)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (++depth>=128) return source_fail(ctx,read->syntax,XR_XIR_BUDGET,"condition grouping depth exhausted");
             read=read->left;
         }
@@ -262,7 +262,7 @@ static bool source_facts_join(SourceContext *ctx,SourceFact *first,SourceEpoch *
     if (!source_epochs_join(ctx,first_epochs,second_epochs)) return false;
     SourceEpoch *joined_epochs=ctx->epochs;*joined=NULL;
     for (SourceFact *fact=first;fact;fact=fact->next) {
-        if (!source_work(ctx,NULL)) {ctx->facts=saved;ctx->epochs=joined_epochs;return false;}
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) {ctx->facts=saved;ctx->epochs=joined_epochs;return false;}
         if (!fact->prefix) continue;
         ctx->facts=first;ctx->epochs=first_epochs;uint32_t a=source_fact_depth(ctx,fact->binding);
         ctx->facts=second;ctx->epochs=second_epochs;uint32_t b=source_fact_depth(ctx,fact->binding);
@@ -277,7 +277,7 @@ static bool source_facts_join(SourceContext *ctx,SourceFact *first,SourceEpoch *
 }
 static bool source_facts_kill(SourceContext *ctx,AstNode *region) {
     for (SourceFact *fact=ctx->facts;fact;fact=fact->next) {
-        if (!source_work(ctx,region)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (!fact->prefix || !source_fact_depth(ctx,fact->binding)) continue;
         bool writes;
         if (!source_region_writes(ctx,region,fact->binding->name,false,&writes)) return false;
@@ -308,7 +308,7 @@ static bool source_condition_combine(SourceContext *ctx,AstNode *node,SourceCond
  * proof. A fact about the original binding is not a proof about an unwrapped
  * payload; only an explicit Some conversion supplies a new known layer. */
 static bool source_planned_effects(SourceContext *ctx,const SourceExpressionPlan *plan,uint32_t depth) {
-    if (!plan || !source_work(ctx,plan->syntax)) return plan==NULL;
+    if (!plan || !((ctx)->diagnostic.status == XR_XIR_OK)) return plan==NULL;
     if (depth>=128) return source_fail(ctx,plan->syntax,XR_XIR_BUDGET,"assignment planning depth exhausted");
     switch (plan->syntax->type) {
     case AST_ASSIGNMENT:
@@ -363,7 +363,7 @@ typedef struct SourceBreakScan { SourceContext *ctx; uint32_t depth; bool found;
 static bool source_break_scan(AstNode *node, void *pointer) {
     SourceBreakScan *scan = pointer;
     if (!node || scan->found) return true;
-    if (!source_work(scan->ctx, node)) return false;
+    if (!((scan->ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (node->type == AST_BREAK_STMT) { scan->found = true; return true; }
     if (scan->depth == 128) return source_fail(scan->ctx, node, XR_XIR_BUDGET, "break scan depth exhausted");
     ++scan->depth;

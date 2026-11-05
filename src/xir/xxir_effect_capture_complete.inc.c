@@ -39,14 +39,14 @@ static XrXirStatus effect_capture_complete_type(const EffectCaptureRead *read,ui
     if(!column || column>read->final->binding_count) return XR_XIR_BAD_STRUCTURE;
     uint32_t binding=column-1;
     for(uint32_t s=0;s<read->final->site_count;++s) {
-        if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
+
         const EffectInvocationSite *site=&read->final->sites[s];
         if(binding<site->binding || binding-site->binding>=site->captures) continue;
         EffectBodyFunctionSignature target={0};XrXirStatus status=effect_body_request_signature(&read->body,site->target,&target);
         if(status!=XR_XIR_OK) return status;
         uint32_t parameter=binding-site->binding;
         if(parameter>=target.parameter_count) return XR_XIR_BAD_STRUCTURE;
-        if(!xir_compile_work(read->work,sizeof(*output))) return XR_XIR_BUDGET;
+
         *output=target.parameters[parameter];return XR_XIR_OK;
     }
     return XR_XIR_BAD_STRUCTURE;
@@ -61,14 +61,14 @@ static XrXirStatus effect_capture_complete_types_open(EffectCaptureRead *read) {
         return XR_XIR_OK;
     if(read->body.current->work!=read->work || read->body.current->material!=read->final->material)
         return XR_XIR_BAD_STRUCTURE;
-    if(!xir_compile_work(read->work,sizeof(types->count))) return XR_XIR_BUDGET;
+
     types->count=0;
     if(read->final->binding_count>XR_COUNTOF(types->values)) return XR_XIR_OK;
     for(uint32_t p=0;p<read->final->binding_count;++p) {
         XrXirStatus status=effect_capture_complete_type(read,p+1,&types->values[p]);
         if(status!=XR_XIR_OK) return status;
     }
-    if(!xir_compile_work(read->work,sizeof(types->count))) return XR_XIR_BUDGET;
+
     types->count=read->final->binding_count;return XR_XIR_OK;
 }
 static XrXirStatus effect_capture_complete_column(const EffectCaptureRead *read,uint32_t column,bool *callable) {
@@ -78,7 +78,7 @@ static XrXirStatus effect_capture_complete_column(const EffectCaptureRead *read,
         const EffectBodyCurrentRead *current=read->body.current;
         if(!current || current->work!=read->work || current->material!=read->final->material ||
             read->complete_types->count!=read->final->binding_count) return XR_XIR_BAD_STRUCTURE;
-        if(!xir_compile_work(read->work,5+sizeof(type))) return XR_XIR_BUDGET;
+
         type=read->complete_types->values[column-1];
     } else status=effect_capture_complete_type(read,column,&type);
     if(status==XR_XIR_OK) *callable=effect_physical_origin(read->body.domain.types,type);
@@ -99,7 +99,7 @@ static XrXirStatus effect_capture_complete_admit(const EffectCaptureRead *read,
     status=effect_capture_lower(read,&key,&at);if(status!=XR_XIR_OK) return status;
     bool present=false;
     for(;at<read->final->capture.count;++at) {
-        if(!xir_compile_work(read->work,4)) return XR_XIR_BUDGET;
+
         const EffectCaptureFact *fact=&read->final->capture.facts[at];
         if(fact->node!=node->node || fact->value!=value || fact->word>=node->basis.origin_words) break;
         uint64_t bit=(uint64_t)fact->word*64+fact->bit;
@@ -117,7 +117,7 @@ static XrXirStatus effect_capture_complete_initial(const EffectCaptureRead *read
     }
     uint32_t count=0;
     for(uint32_t e=0;e<read->final->edge_count;++e) {
-        if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+
         if(read->final->edges[e].target!=node->node) continue;
         bool matched=false;XrXirStatus status=effect_capture_edge_complete(read,e,&matched);
         if(status!=XR_XIR_OK) return status;
@@ -168,7 +168,7 @@ static XrXirStatus effect_capture_complete_call(const EffectCaptureRead *read,
     }
     uint32_t count=0;
     for(uint32_t e=0;e<read->final->edge_count;++e) {
-        if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
+
         const EffectInvocationEdge *edge=&read->final->edges[e];
         if(edge->caller!=node->node || edge->instruction!=frontier || edge->latent) continue;
         bool matched=false;status=effect_capture_edge_complete(read,e,&matched);
@@ -180,7 +180,7 @@ static XrXirStatus effect_capture_complete_call(const EffectCaptureRead *read,
         bool returned=effect_physical_iterator(read->body.domain.types,target.head.result) || (signature && !signature->parameter_span &&
             (signature->flags&XR_XIR_CALLABLE_ROOT_MASK)==XR_XIR_CALLABLE_ROOT_NONE);
         for(uint32_t p=0;signature && p<signature->parameter_count;++p) {
-            if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+
             if(!xr_xir_callable_parameter_storage_valid(read->body.domain.types,&signature->parameters[p])) return XR_XIR_BAD_TYPE;
             if(signature->parameters[p].mode!=XR_PARAM_READ) returned=false;
         }
@@ -197,7 +197,7 @@ static XrXirStatus effect_capture_complete_call(const EffectCaptureRead *read,
         if(!origin) continue;
         uint32_t matches=0;
         for(uint32_t e=0;e<read->final->edge_count;++e) {
-            if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
+
             const EffectInvocationEdge *edge=&read->final->edges[e];
             if(edge->caller!=node->node || edge->instruction!=frontier || edge->latent || edge->producer!=s) continue;
             bool matched=false;status=effect_capture_edge_complete(read,e,&matched);
@@ -231,7 +231,7 @@ static XrXirStatus effect_capture_complete_reference(const EffectCaptureRead *re
     const EffectCaptureNode *node,uint32_t instruction,uint32_t column,EffectCaptureComplete *result) {
     result->complete=false;
     for(uint32_t s=0;s<read->final->site_count;++s) {
-        if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+
         const EffectInvocationSite *site=&read->final->sites[s];
         if(site->function!=read->final->nodes[node->node].body || site->instruction!=instruction) continue;
         XrXirStatus status=effect_capture_reference_seed(read,s,&result->complete);
@@ -242,7 +242,7 @@ static XrXirStatus effect_capture_complete_reference(const EffectCaptureRead *re
         if(status!=XR_XIR_OK) return status;
         if(op->args[0]>node->head.operand_count || site->captures>node->head.operand_count-op->args[0]) return XR_XIR_BAD_STRUCTURE;
         for(uint32_t p=0;p<site->captures;++p) {
-            if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
+
             if(!effect_physical_origin(read->body.domain.types,target.parameters[p])) continue;
             uint32_t source=node->head.operands[op->args[0]+p];
             if(column-1==site->binding+p) {
@@ -338,7 +338,7 @@ static XrXirStatus effect_capture_complete_put(EffectCaptureRead *read,
     bool growing=read->builder && read->builder->count==read->builder->capacity && !stored;
     if(growing) {
         if(read->complete_types) {
-            if(!xir_compile_work(read->work,sizeof(read->complete_types->count))) return XR_XIR_BUDGET;
+
             read->complete_types->count=0;
         }
         read->node_view=NULL;read->body.current=NULL;
@@ -383,7 +383,7 @@ static XrXirStatus effect_capture_complete_walk(EffectCaptureRead *read,
                         EffectCaptureFact key={n,value,EFFECT_CAPTURE_FLAGS,EFFECT_CAPTURE_COMPLETE,0};uint32_t at=0;
                         status=effect_capture_lower(read,&key,&at);if(status!=XR_XIR_OK) return status;
                         if(at<read->final->capture.count) {
-                            if(!xir_compile_work(read->work,4)) return XR_XIR_BUDGET;
+
                             const EffectCaptureFact *fact=&read->final->capture.facts[at];
                             if(fact->node==n && fact->value==value && fact->word==EFFECT_CAPTURE_FLAGS &&
                                 fact->bit>=EFFECT_CAPTURE_COMPLETE) return XR_XIR_BAD_STRUCTURE;
@@ -396,11 +396,11 @@ static XrXirStatus effect_capture_complete_walk(EffectCaptureRead *read,
             EffectCaptureCompleteCoordinate coordinate={n,value,column};
             if(jobs && result.admitted && !jobs->overflow) {
                 if(jobs->count==XR_COUNTOF(jobs->values)) {
-                    if(!xir_compile_work(read->work,sizeof(jobs->overflow))) return XR_XIR_BUDGET;
+
                     jobs->overflow=true;
                 }
                 else {
-                    if(!xir_compile_work(read->work,sizeof(coordinate)+sizeof(jobs->count))) return XR_XIR_BUDGET;
+
                     jobs->values[jobs->count++]=coordinate;
                 }
             }
@@ -424,7 +424,7 @@ static XrXirStatus effect_capture_complete_jobs(EffectCaptureRead *read,
     EffectCaptureNode *views,EffectCaptureActualRead *actuals,const EffectCaptureCompleteJobs *jobs) {
     if(!read->builder || !read->complete_scope || !jobs || jobs->overflow) return XR_XIR_BAD_STRUCTURE;
     for(uint32_t j=0;j<jobs->count;++j) {
-        if(!xir_compile_work(read->work,sizeof(EffectCaptureCompleteCoordinate))) return XR_XIR_BUDGET;
+
         EffectCaptureCompleteCoordinate coordinate=jobs->values[j];
         XrXirStatus status=effect_capture_complete_open(read,current,views,actuals);
         if(status!=XR_XIR_OK) return status;
@@ -453,7 +453,7 @@ static XrXirStatus effect_capture_complete_empty(const EffectCaptureRead *read,b
      * finite origin bit, so neither a value nor any capture column can be
      * Complete. Check every stored claim instead of walking empty columns. */
     for(uint32_t p=0;p<read->final->capture.count;++p) {
-        if(!xir_compile_work(read->work,4)) return XR_XIR_BUDGET;
+
         const EffectCaptureFact *fact=&read->final->capture.facts[p];
         if(fact->word==EFFECT_CAPTURE_FLAGS && fact->bit>=EFFECT_CAPTURE_COMPLETE)
             return XR_XIR_BAD_STRUCTURE;
@@ -468,7 +468,7 @@ static XrXirStatus effect_capture_complete_clauses(EffectCaptureRead *read) {
     if(read->complete_types || (read->builder && (saved_current || saved_node))) return XR_XIR_BAD_STRUCTURE;
     EffectBodyCurrentRead current={0};EffectCaptureNode borrowed={0};EffectCaptureCompleteTypes types;
     if(read->final->binding_count && read->final->binding_count<=XR_COUNTOF(types.values)) {
-        if(!xir_compile_work(read->work,sizeof(types.count)+sizeof(read->complete_types))) return XR_XIR_BUDGET;
+
         types.count=0;read->complete_types=&types;
         status=effect_capture_complete_types_open(read);
     }
@@ -489,11 +489,11 @@ static XrXirStatus effect_capture_complete_construct(EffectCaptureRead *read,Eff
     if(status!=XR_XIR_OK || empty) return status;
     EffectCaptureNode borrowed={0},views[32];EffectCaptureActualRead actuals;
     EffectCaptureCompleteJobs jobs;
-    if(!xir_compile_work(read->work,sizeof(jobs.count)+sizeof(jobs.overflow))) return XR_XIR_BUDGET;
+
     jobs.count=0;jobs.overflow=false;
     EffectCaptureCompleteTypes types;
     if(read->final->binding_count && read->final->binding_count<=XR_COUNTOF(types.values)) {
-        if(!xir_compile_work(read->work,sizeof(types.count)+sizeof(read->complete_types))) return XR_XIR_BUDGET;
+
         types.count=0;read->complete_types=&types;
     }
     read->complete_scope=true;read->changed=false;

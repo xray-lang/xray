@@ -32,6 +32,8 @@ XrValue xr_instance_get_dynamic_field(XrObjectInstance *inst, uint16_t index) {
 }
 
 bool xr_instance_set_dynamic_field_direct(XrObjectInstance *inst, uint16_t index, XrValue value) {
+    if (xr_text_worker_is_private(value))
+        return false;
     XR_DCHECK(inst != NULL, "set_dynamic_field: NULL inst");
     XrClass *klass = inst->klass;
     XR_DCHECK(klass->flags & XR_CLASS_DYNAMIC_LAYOUT, "set_dynamic_field: not dynamic");

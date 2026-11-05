@@ -285,7 +285,7 @@ typedef struct {
 } ShallowCompletionCtx;
 
 static XrXirStatus completion_index_io(XrOsIoStatus status) {
-    return status==XR_OS_IO_OK?XR_XIR_OK:status==XR_OS_IO_BUDGET?XR_XIR_BUDGET:
+    return status==XR_OS_IO_OK?XR_XIR_OK:status==XR_OS_IO_OVERFLOW?XR_XIR_BUDGET:
         status==XR_OS_IO_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
 }
 static XrJsonValue *completion_index_failed(XrLspServer *server,XrJsonValue *items,XrHashMap *seen,XrXirStatus status) {

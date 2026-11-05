@@ -14,7 +14,7 @@ static bool source_array_callback_context(SourceContext *ctx,AstNode *node,
     SourceExpressionPlan *original=source_call_argument_value_plan(argument);
     AstNode *literal=original->syntax;
     while (literal && literal->type==AST_GROUPING) {
-        if (!source_work(ctx,literal)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         literal=literal->as.grouping;
     }
     if (!literal || literal->type!=AST_FUNCTION_EXPR) return true;
@@ -24,7 +24,7 @@ static bool source_array_callback_context(SourceContext *ctx,AstNode *node,
     XrXirCallableParameter *parameters=source_alloc(ctx,count,sizeof(*parameters));
     if (!parameters) return false;
     for (uint32_t p=0;p<count;++p) {
-        if (!source_work(ctx,literal)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         parameters[p]=(XrXirCallableParameter){shape->parameters[p],XR_PARAM_READ};
     }
     XrXirType expected;
@@ -40,7 +40,7 @@ static bool source_array_callback_check(SourceContext *ctx,AstNode *node,
     if (!xr_xir_error_bound_accepts(signature->element,shape->error_type))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Array callback error exceeds its declaration");
     for (uint32_t p=0;p<signature->parameter_count;++p) {
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (signature->parameters[p].type!=shape->parameters[p] || signature->parameters[p].mode!=XR_PARAM_READ)
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Array callback parameter type differs from the element");
     }
@@ -59,7 +59,7 @@ static bool source_array_callback_arguments(SourceContext *ctx,AstNode *node,
     if (!source_call_syntax(ctx,node,&syntax)) return false;
     if (syntax.type_arg_count)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Array method requires its declared arguments");
-    if (!source_call_expand(ctx,node,&syntax,&plan,count)) return false;
+    if (!source_call_expand(ctx,&syntax,&plan,count)) return false;
     if ((uint32_t)syntax.arg_count!=count || !syntax.expanded)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Array method requires its declared arguments");
     XrXirType element=xr_xir_array_element(&ctx->types,array.type);
@@ -75,7 +75,7 @@ static bool source_array_callback_arguments(SourceContext *ctx,AstNode *node,
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"reduce initial type is not admitted without a known context");
         XrXirType accumulator=argument->ground_type;
         for (uint32_t claim=0;claim<argument->read_claims && xr_xir_type_is_nullable(&ctx->types,accumulator);++claim) {
-            if (!source_work(ctx,node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             accumulator=xr_xir_nullable_element(&ctx->types,accumulator);
         }
         if (accumulator==XR_XIR_UNIT)

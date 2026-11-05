@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xsource_value_api.inc.c - Owned data and host scalars on the original ledger
+ * xsource_value_api.inc.c - Owned data and host scalars on an independent execution memory owner
  */
 #include "../xir/xxir_types.h"
 #include "../xir/xxir_nominal.h"
@@ -13,15 +13,11 @@ _Static_assert(sizeof(float)==sizeof(uint32_t),"the public float carrier is bina
 _Static_assert(sizeof(double)==sizeof(uint64_t),"the public double carrier is binary64");
 static XrSourceStatus api_value_status(XrXirValueStatus status) {
     return status==XR_XIR_VALUE_OK ? XR_SOURCE_OK : status==XR_XIR_VALUE_OOM ? XR_SOURCE_OUT_OF_MEMORY :
+        status==XR_XIR_VALUE_MEMORY_LIMIT ? XR_SOURCE_MEMORY_LIMIT :
+        status==XR_XIR_VALUE_OVERFLOW ? XR_SOURCE_OVERFLOW :
         status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_SOURCE_LIMIT :
         status==XR_XIR_VALUE_UNSUPPORTED ? XR_SOURCE_UNSUPPORTED :
         status==XR_XIR_VALUE_BAD_UTF8 ? XR_SOURCE_INVALID : XR_SOURCE_BAD_ARGUMENT;
-}
-static XrSourceStatus api_value_constructed(XrSourceCompiler *compiler,XrSourceStatus status) {
-    if(status==XR_SOURCE_BUDGET || status==XR_SOURCE_OUT_OF_MEMORY)
-        (void)xr_compile_state_fail(xr_source_compiler_state(compiler),status==XR_SOURCE_BUDGET ?
-            XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
-    return status;
 }
 static bool api_scalar_type(XrSourceValueKind kind,XrXirType *type) {
     switch(kind) {
@@ -52,9 +48,9 @@ static XrSourceStatus api_value_wrap(XrCompileResources *resources,const XrXirVa
     if(status!=XR_SOURCE_OK){xr_compile_resources_free(owner);return status;}
     *output=owner;return XR_SOURCE_OK;
 }
-XRAY_API XrSourceStatus xray_source_value_new_scalar(XrSourceCompiler *compiler,const XrSourceScalar *scalar,
+XRAY_API XrSourceStatus xray_source_value_new_scalar(XrSourceExecution *execution,const XrSourceScalar *scalar,
     XrSourceValue **output) {
-    if(!compiler || !scalar || !output || *output)return XR_SOURCE_BAD_ARGUMENT;
+    if(!execution || !scalar || !output || *output)return XR_SOURCE_BAD_ARGUMENT;
     XrXirType type=XR_XIR_UNIT;
     if(!api_scalar_type(scalar->kind,&type))return XR_SOURCE_BAD_ARGUMENT;
     XrXirValue value={(uint32_t)type,0,0};
@@ -67,30 +63,20 @@ XRAY_API XrSourceStatus xray_source_value_new_scalar(XrSourceCompiler *compiler,
         uint32_t bits;memcpy(&bits,&scalar->value.f32,sizeof(bits));value.payload=bits;
     } else if(type==XR_XIR_F64)memcpy(&value.payload,&scalar->value.f64,sizeof(value.payload));
     if(!xr_xir_value_valid(&value))return XR_SOURCE_INVALID;
-    XrSourceStatus status=api_resource(xr_compile_state_status(xr_source_compiler_state(compiler)));
-    if(status==XR_SOURCE_OK)status=api_value_wrap(xr_source_compiler_resources(compiler),&value,output);
-    return api_value_constructed(compiler,status);
+    return api_value_wrap(execution->resources,&value,output);
 }
-XRAY_API XrSourceStatus xray_source_value_new_string(XrSourceCompiler *compiler,const char *bytes,size_t length,
+XRAY_API XrSourceStatus xray_source_value_new_string(XrSourceExecution *execution,const char *bytes,size_t length,
     XrSourceValue **output) {
-    if(!compiler || !output || *output || (length && !bytes))return XR_SOURCE_BAD_ARGUMENT;
+    if(!execution || !output || *output || (length && !bytes))return XR_SOURCE_BAD_ARGUMENT;
     if(length>PTRDIFF_MAX)return XR_SOURCE_LIMIT;
-    XrSourceStatus status=api_resource(xr_compile_state_status(xr_source_compiler_state(compiler)));
-    if(status!=XR_SOURCE_OK)return status;
-    XrCompileResources *resources=xr_source_compiler_resources(compiler);XrXirDomain *domain=NULL;
+    XrCompileResources *resources=execution->resources;XrXirDomain *domain=NULL;
     XrXirValueStatus made=xr_xir_compile_domain_new(resources,UINT64_MAX,&domain);
-    if(made!=XR_XIR_VALUE_OK)return api_value_constructed(compiler,
-        made==XR_XIR_VALUE_LIMIT ? XR_SOURCE_BUDGET : api_value_status(made));
+    if(made!=XR_XIR_VALUE_OK)return api_value_status(made);
     XrXirValue value={0};made=xr_xir_string_new(domain,bytes,length,&value);
     xr_xir_domain_drop(domain);
-    status=made==XR_XIR_VALUE_LIMIT ? XR_SOURCE_BUDGET : api_value_status(made);
-    if(status==XR_SOURCE_OK) {
-        status=api_value_wrap(resources,&value,output);
-        /* This fresh String has no local cap or saturated reference count;
-         * its final copy can exhaust only the original compiler ledger. */
-        if(status==XR_SOURCE_LIMIT)status=XR_SOURCE_BUDGET;
-    }
-    xr_xir_value_drop(&value);return api_value_constructed(compiler,status);
+    XrSourceStatus status=api_value_status(made);
+    if(status==XR_SOURCE_OK)status=api_value_wrap(resources,&value,output);
+    xr_xir_value_drop(&value);return status;
 }
 XRAY_API XrSourceStatus xray_source_result_value(const XrSourceResult *result,XrSourceValue **output) {
     if(!result || !output || *output)return XR_SOURCE_BAD_ARGUMENT;

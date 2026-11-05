@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xfmt.c - One metered formatter output owner
+ * xfmt.c - Owned formatting with distinct memory and local limits
  */
 #include "xfmt_internal.h"
 #include "../../toolchain/xcompiler_arena_backing.h"
@@ -31,37 +31,40 @@ XrFmtConfig xfmt_default_config = {.indent_size = 4,
                                    .multiline_trailing_comma = 1};
 
 XR_FUNC bool xfmt_healthy(const XrFmtContext *ctx) {
-    return ctx && xr_compile_state_status(ctx->state) == XR_COMPILE_RESOURCE_OK;
+    return ctx && ctx->local_status == XR_FMT_OK &&
+        xr_compile_state_status(ctx->state) == XR_COMPILE_RESOURCE_OK;
 }
-XR_FUNC bool xfmt_work(XrFmtContext *ctx, uint64_t units) {
-    return xr_compile_state_work(ctx->state, units) == XR_COMPILE_RESOURCE_OK;
-}
-XR_FUNC bool xfmt_step(XrFmtContext *ctx) { return xfmt_work(ctx, 1); }
 XR_FUNC void xfmt_fail(XrFmtContext *ctx, XrCompileResourceStatus status) {
     (void)xr_compile_state_fail(ctx->state, status);
 }
 XR_FUNC void *xfmt_alloc_array(XrFmtContext *ctx, size_t count, size_t size) {
+    if (!xfmt_healthy(ctx)) return NULL;
     void *memory = NULL;
-    if (!count || !size || count > SIZE_MAX / size) {
-        xfmt_fail(ctx, XR_COMPILE_RESOURCE_BUDGET);
+    if (!count || !size) {
+        xfmt_fail(ctx, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+        return NULL;
+    }
+    if (count > SIZE_MAX / size) {
+        xfmt_fail(ctx, XR_COMPILE_RESOURCE_OVERFLOW);
         return NULL;
     }
     (void)xr_compile_state_alloc(ctx->state, count * size, &memory);
     return memory;
 }
 XR_FUNC size_t xfmt_length(XrFmtContext *ctx, const char *text) {
+    if (!xfmt_healthy(ctx)) return 0;
     size_t length = 0;
     if (text) (void)xr_compile_state_string_length(ctx->state, text, &length);
     /* Reserve the largest fixed declaration prefix before signed alignment math. */
     if (length > INT_MAX - 16u) {
-        xfmt_fail(ctx, XR_COMPILE_RESOURCE_BUDGET);
+        xfmt_fail(ctx, XR_COMPILE_RESOURCE_OVERFLOW);
         return 0;
     }
     return length;
 }
 XR_FUNC int xfmt_compare(XrFmtContext *ctx, const char *left, const char *right) {
+    if (!xfmt_healthy(ctx)) return 1;
     for (;;) {
-        if (!xfmt_work(ctx, 2)) return 1;
         unsigned char a = (unsigned char)*left++, b = (unsigned char)*right++;
         if (a != b || !a) return (a > b) - (a < b);
     }
@@ -69,14 +72,13 @@ XR_FUNC int xfmt_compare(XrFmtContext *ctx, const char *left, const char *right)
 XR_FUNC bool xfmt_ensure_capacity(XrFmtContext *ctx, size_t additional) {
     if (!xfmt_healthy(ctx)) return false;
     if (additional > INT_MAX - 1u || ctx->length > INT_MAX - 1u - additional) {
-        xfmt_fail(ctx, XR_COMPILE_RESOURCE_BUDGET);
+        xfmt_fail(ctx, XR_COMPILE_RESOURCE_OVERFLOW);
         return false;
     }
     size_t required = ctx->length + additional + 1;
     if (required <= ctx->capacity) return true;
     size_t capacity = ctx->capacity ? ctx->capacity : 4096;
     while (capacity < required) {
-        if (!xfmt_step(ctx)) return false;
         capacity = capacity > INT_MAX / 2u ? (size_t)INT_MAX : capacity * 2;
     }
     void *memory = ctx->output;
@@ -91,13 +93,12 @@ XR_FUNC void xfmt_write_bytes(XrFmtContext *ctx, const char *bytes, size_t lengt
     if (!length || !xfmt_ensure_capacity(ctx, length)) return;
     int column = ctx->column, line_start = ctx->line_start;
     for (size_t i = 0; i < length; ++i) {
-        if (!xfmt_step(ctx)) return;
         if (bytes[i] == '\n') { column = 0; line_start = 1; }
-        else if (column == INT_MAX) { xfmt_fail(ctx, XR_COMPILE_RESOURCE_BUDGET); return; }
+        else if (column == INT_MAX) { xfmt_fail(ctx, XR_COMPILE_RESOURCE_OVERFLOW); return; }
         else ++column;
     }
     if (xr_compile_state_copy(ctx->state, ctx->output + ctx->length, bytes, length) != XR_COMPILE_RESOURCE_OK ||
-        !xfmt_step(ctx)) return;
+        !xfmt_healthy(ctx)) return;
     ctx->length += length;
     ctx->output[ctx->length] = 0;
     ctx->column = column;
@@ -119,7 +120,7 @@ XR_FUNC void xfmt_write_str(XrFmtContext *ctx, const char *text) {
     if (ctx->block_literal_closed) {
         size_t skip = 0;
         while (skip < length) {
-            if (!xfmt_step(ctx)) return;
+            if (!xfmt_healthy(ctx)) return;
             if (text[skip] != ' ' && text[skip] != '\t') break;
             ++skip;
         }
@@ -131,16 +132,17 @@ XR_FUNC void xfmt_write_str(XrFmtContext *ctx, const char *text) {
     xfmt_write_bytes(ctx, text, length);
 }
 XR_FUNC void xfmt_write_fmt(XrFmtContext *ctx, const char *format, ...) {
-    /* All callers supply fixed formats and bounded scalar arguments. Charge the
-     * submitted stack capacity before invoking the C numeric conversion. */
+    /* Numeric spelling uses bounded stack scratch; exceeding it is a local
+     * formatter limit and does not poison the shared memory owner. */
     char buffer[1024];
-    if (!xfmt_work(ctx, sizeof(buffer))) return;
+    if (!xfmt_healthy(ctx)) return;
     va_list args;
     va_start(args, format);
     int length = vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
-    if (length < 0 || (size_t)length >= sizeof(buffer)) {
-        xfmt_fail(ctx, length < 0 ? XR_COMPILE_RESOURCE_BAD_ARGUMENT : XR_COMPILE_RESOURCE_BUDGET);
+    if (length < 0) { xfmt_fail(ctx, XR_COMPILE_RESOURCE_BAD_ARGUMENT); return; }
+    if ((size_t)length >= sizeof(buffer)) {
+        ctx->local_status = XR_FMT_BUDGET;
         return;
     }
     xfmt_write_str(ctx, buffer);
@@ -150,14 +152,14 @@ XR_FUNC int xfmt_indent_width(XrFmtContext *ctx) {
     if (ctx->indent_level < 0 || ctx->config->indent_size < 0 ||
         (!ctx->config->use_tabs && ctx->config->indent_size &&
          ctx->indent_level > INT_MAX / ctx->config->indent_size)) {
-        xfmt_fail(ctx, XR_COMPILE_RESOURCE_BUDGET); return 0;
+        xfmt_fail(ctx, XR_COMPILE_RESOURCE_OVERFLOW); return 0;
     }
     return ctx->config->use_tabs ? ctx->indent_level : ctx->indent_level * ctx->config->indent_size;
 }
 XR_FUNC void xfmt_write_indent(XrFmtContext *ctx) {
     if (!xfmt_healthy(ctx) || !ctx->line_start) return;
     int count = xfmt_indent_width(ctx);
-    for (int i = 0; i < count && xfmt_step(ctx); ++i)
+    for (int i = 0; i < count && xfmt_healthy(ctx); ++i)
         xfmt_write_char(ctx, ctx->config->use_tabs ? '\t' : ' ');
     if (xfmt_healthy(ctx)) ctx->line_start = 0;
 }
@@ -167,7 +169,7 @@ XR_FUNC void xfmt_snapshot(XrFmtContext *ctx, XfmtSnapshot *snapshot) {
     *snapshot = (XfmtSnapshot){ctx->length,ctx->column,ctx->line_start,ctx->indent_level,ctx->block_literal_closed};
 }
 XR_FUNC void xfmt_rollback(XrFmtContext *ctx, const XfmtSnapshot *snapshot) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     ctx->length = snapshot->length;
     ctx->output[ctx->length] = 0;
     ctx->column = snapshot->column; ctx->line_start = snapshot->line_start;
@@ -175,7 +177,7 @@ XR_FUNC void xfmt_rollback(XrFmtContext *ctx, const XfmtSnapshot *snapshot) {
 }
 XR_FUNC bool xfmt_fits_on_line(XrFmtContext *ctx, const XfmtSnapshot *snapshot) {
     for (size_t i = snapshot->length; i < ctx->length; ++i) {
-        if (!xfmt_step(ctx) || ctx->output[i] == '\n') return false;
+        if (!xfmt_healthy(ctx) || ctx->output[i] == '\n') return false;
     }
     return xfmt_healthy(ctx) && ctx->column <= ctx->config->max_line_length;
 }
@@ -185,7 +187,7 @@ static bool fmt_trailing_comment(XrFmtContext *ctx, const char *bytes, size_t be
     bool in_double = false, in_single = false;
     size_t pos = begin;
     while (pos < end) {
-        if (!xfmt_step(ctx)) return false;
+        if (!xfmt_healthy(ctx)) return false;
         char c = bytes[pos];
         if (in_double || in_single) {
             if (c == '\\' && pos + 1 < end) { pos += 2; continue; }
@@ -195,12 +197,12 @@ static bool fmt_trailing_comment(XrFmtContext *ctx, const char *bytes, size_t be
         } else if (c == '"') { in_double = true; ++pos; }
         else if (c == '\'') { in_single = true; ++pos; }
         else if (c == '/' && pos + 1 < end) {
-            if (!xfmt_step(ctx)) return false;
+            if (!xfmt_healthy(ctx)) return false;
             char next = bytes[pos + 1];
             if (next == '/') {
                 size_t code_end = pos;
                 while (code_end > begin) {
-                    if (!xfmt_step(ctx)) return false;
+                    if (!xfmt_healthy(ctx)) return false;
                     if (bytes[code_end - 1] != ' ') break;
                     --code_end;
                 }
@@ -211,7 +213,7 @@ static bool fmt_trailing_comment(XrFmtContext *ctx, const char *bytes, size_t be
             if (next == '*') {
                 pos += 2;
                 while (pos + 1 < end) {
-                    if (!xfmt_work(ctx, 2)) return false;
+                    if (!xfmt_healthy(ctx)) return false;
                     if (bytes[pos] == '*' && bytes[pos + 1] == '/') break;
                     ++pos;
                 }
@@ -223,17 +225,25 @@ static bool fmt_trailing_comment(XrFmtContext *ctx, const char *bytes, size_t be
 }
 typedef struct XfmtLine { size_t begin, end, width, comment; bool trailing; } XfmtLine;
 
+static void fmt_publish_clone(XrFmtContext *ctx, XrFmtContext *out) {
+    if (ctx->local_status == XR_FMT_OK) ctx->local_status = out->local_status;
+    if (xfmt_healthy(ctx)) {
+        xr_compile_state_free(ctx->output);
+        ctx->output = out->output; ctx->length = out->length; ctx->capacity = out->capacity;
+    } else xr_compile_state_free(out->output);
+    out->output = NULL; out->length = 0; out->capacity = 0;
+}
 static void fmt_align_comments(XrFmtContext *ctx) {
     if (!ctx->length || !xfmt_healthy(ctx)) return;
     size_t count = 1;
     for (size_t i = 0; i < ctx->length; ++i) {
-        if (!xfmt_step(ctx)) return;
+        if (!xfmt_healthy(ctx)) return;
         if (ctx->output[i] == '\n') ++count;
     }
     XfmtLine *lines = xfmt_alloc_array(ctx, count, sizeof(*lines));
     if (!lines) return;
     size_t begin = 0, used = 0;
-    for (size_t i = 0; i <= ctx->length && xfmt_step(ctx); ++i) {
+    for (size_t i = 0; i <= ctx->length && xfmt_healthy(ctx); ++i) {
         if (i == ctx->length || ctx->output[i] == '\n') {
             XfmtLine line = {begin,i,0,0,false};
             line.trailing = fmt_trailing_comment(ctx, ctx->output, begin, i, &line.width, &line.comment);
@@ -243,7 +253,7 @@ static void fmt_align_comments(XrFmtContext *ctx) {
     }
     XrFmtContext out = {0};
     out.state = ctx->state; out.config = ctx->config;
-    for (size_t i = 0; i < used && xfmt_step(ctx);) {
+    for (size_t i = 0; i < used && xfmt_healthy(&out);) {
         if (!lines[i].trailing) {
             xfmt_write_bytes(&out, ctx->output + lines[i].begin, lines[i].end - lines[i].begin);
             if (lines[i].end < ctx->length) xfmt_write_bytes(&out, "\n", 1);
@@ -251,27 +261,24 @@ static void fmt_align_comments(XrFmtContext *ctx) {
             continue;
         }
         size_t j = i + 1, width = lines[i].width;
-        while (j < used && xfmt_step(ctx) && lines[j].trailing) {
+        while (j < used && xfmt_healthy(&out) && lines[j].trailing) {
             if (lines[j].width > width) width = lines[j].width;
             ++j;
         }
-        for (size_t k = i; k < j && xfmt_step(ctx); ++k) {
+        for (size_t k = i; k < j && xfmt_healthy(&out); ++k) {
             xfmt_write_bytes(&out, ctx->output + lines[k].begin, lines[k].width);
             size_t padding = width - lines[k].width + 2;
-            for (size_t p = 0; p < padding && xfmt_step(ctx); ++p) xfmt_write_bytes(&out, " ", 1);
+            for (size_t p = 0; p < padding && xfmt_healthy(&out); ++p) xfmt_write_bytes(&out, " ", 1);
             xfmt_write_bytes(&out, ctx->output + lines[k].comment, lines[k].end - lines[k].comment);
             if (lines[k].end < ctx->length) xfmt_write_bytes(&out, "\n", 1);
         }
         i = j;
     }
     xr_compile_state_free(lines);
-    if (xfmt_healthy(ctx)) {
-        xr_compile_state_free(ctx->output);
-        ctx->output = out.output; ctx->length = out.length; ctx->capacity = out.capacity;
-    } else xr_compile_state_free(out.output);
+    fmt_publish_clone(ctx, &out);
 }
 XR_FUNC void xfmt_node(XrFmtContext *ctx, AstNode *node) {
-    if (!node || !xfmt_step(ctx)) return;
+    if (!node || !xfmt_healthy(ctx)) return;
     if (node->type == AST_PROGRAM) xfmt_emit_program(ctx, node);
     else xfmt_emit_statement(ctx, node);
 }
@@ -280,7 +287,11 @@ XR_FUNC void xfmt_type(XrFmtContext *ctx, XrTypeRef *type) { xfmt_emit_type(ctx,
 static XrFmtStatus fmt_status(const XrCompileState *state) {
     switch (xr_compile_state_status(state)) {
         case XR_COMPILE_RESOURCE_OK: return XR_FMT_OK;
-        case XR_COMPILE_RESOURCE_BUDGET: return XR_FMT_BUDGET;
+        case XR_COMPILE_RESOURCE_MEMORY_LIMIT: return XR_FMT_MEMORY_LIMIT;
+        case XR_COMPILE_RESOURCE_OVERFLOW: return XR_FMT_OVERFLOW;
+        case XR_COMPILE_RESOURCE_CANCELLED: return XR_FMT_CANCELLED;
+        case XR_COMPILE_RESOURCE_DEADLINE: return XR_FMT_DEADLINE;
+        case XR_COMPILE_RESOURCE_CLOCK_FAILURE: return XR_FMT_CLOCK_FAILURE;
         case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: return XR_FMT_OUT_OF_MEMORY;
         default: return XR_FMT_BAD_ARGUMENT;
     }
@@ -296,12 +307,12 @@ XR_FUNC XrFmtStatus xr_compile_format_ast(XrCompileState *state, AstNode *ast,
     if (xr_compile_state_copy(state, &ctx.configuration, config ? config : &xfmt_default_config,
         sizeof(ctx.configuration)) != XR_COMPILE_RESOURCE_OK) return fmt_status(state);
     if (ctx.config->indent_size < 0 || ctx.config->max_line_length < 0) return XR_FMT_BAD_ARGUMENT;
-    if (xfmt_ensure_capacity(&ctx, 0) && xfmt_step(&ctx)) ctx.output[0] = 0;
+    if (xfmt_ensure_capacity(&ctx, 0) && xfmt_healthy(&ctx)) ctx.output[0] = 0;
     xfmt_node(&ctx, ast);
     if (xfmt_healthy(&ctx) && config && config->trailing_newline && ctx.length &&
         ctx.output[ctx.length - 1] != '\n') xfmt_write_char(&ctx, '\n');
     if (xfmt_healthy(&ctx) && config && config->align_trailing_comments) fmt_align_comments(&ctx);
-    XrFmtStatus status = fmt_status(state);
+    XrFmtStatus status = ctx.local_status != XR_FMT_OK ? ctx.local_status : fmt_status(state);
     if (status == XR_FMT_OK) *output = (XrFmtOutput){ctx.output,ctx.length};
     else xr_compile_state_free(ctx.output);
     return status;

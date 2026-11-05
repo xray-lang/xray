@@ -386,6 +386,8 @@ static inline XrClass *invoke_resolve_class(XrVMRuntime *isolate, XrValue receiv
     XrObjHeader *gc = (XrObjHeader *) XR_TO_PTR(receiver);
     XrObjType type = XR_OBJ_GET_TYPE(gc);
 
+    if (type == XR_TTEXT_WORKER)
+        return NULL;
     if (type == XR_TINSTANCE) {
         XrObjectInstance *inst = (XrObjectInstance *) gc;
         return inst->klass;
@@ -418,6 +420,11 @@ static inline bool invoke_unwrap_primitive_args(XrVMContext *vm_ctx, XrValue *ar
             args[i] = vm_ctx->stack[slot];
         }
     materialize_aggregate:
+        if (XR_IS_PTR(args[i]) &&
+            (XR_HEAP_TYPE(args[i]) == XR_TTEXT_WORKER ||
+             (XR_HEAP_TYPE(args[i]) != XR_TSTRING && args[i].ptr &&
+              XR_OBJ_GET_TYPE((XrObjHeader *) args[i].ptr) == XR_TTEXT_WORKER)))
+            return false;
         if (XR_IS_AGG_REF(args[i]) && !XR_IS_ARRAY_REF(args[i]) && !XR_IS_SLICE_REF(args[i])) {
             args[i] = xr_struct_materialize_instance(vm_ctx->isolate, args[i]);
             if (XR_IS_NULL(args[i]))

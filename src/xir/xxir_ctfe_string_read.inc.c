@@ -7,8 +7,8 @@
  * xxir_ctfe_string_read.inc.c - Bounded compiler String comparison and search
  *
  * KEY CONCEPT:
- *   Ordinary Value operations determine UTF-8 semantics. Worst-case byte visits,
- *   comparison spans and search-table construction pay the original ledger first.
+ *   Ordinary Value operations determine UTF-8 comparison, Unicode indices
+ *   and invalid-start behavior without compiler work prepayment.
  */
 static bool ctfe_string_read_opcode(XrXirOp op) {
     switch (op) {
@@ -18,49 +18,7 @@ static bool ctfe_string_read_opcode(XrXirOp op) {
     default: return false;
     }
 }
-static XrXirCtfeStatus ctfe_string_read_work(ScalarRun *run,XrXirOp op,const XrNativeIntrinsicDeclaration *call,
-    const XrXirValue *left,const XrXirValue *right,int64_t start) {
-    const char *a=NULL,*b=NULL;size_t ac=0,bc=0;
-    if (!xr_xir_string_view(left,&a,&ac) || !xr_xir_string_view(right,&b,&bc)) return XR_XIR_CTFE_BAD_ARTIFACT;
-    uint64_t bytes=0;
-    if (op>=XR_XIR_LT_STRING && op<=XR_XIR_GE_STRING) bytes=ac<bc?ac:bc;
-    else if (call && (call->implementation==XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_STARTS_WITH ||
-        call->implementation==XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_ENDS_WITH)) bytes=bc<=ac?bc:0;
-    else {
-        if (op==XR_XIR_STRING_INDEX_OF) {
-            size_t runes=0;
-            if (!xr_xir_string_runes(left,&runes)) return XR_XIR_CTFE_BAD_ARTIFACT;
-            if (start<0 || (uint64_t)start>runes) return XR_XIR_CTFE_NUMERIC_RANGE;
-            if (!bc || (uint64_t)start==runes) return XR_XIR_CTFE_OK;
-        }
-        if (!bc) return XR_XIR_CTFE_OK;
-        /* Index conversion may scan UTF-8 twice. Search uses at most one
-         * comparison and constant loop bookkeeping per candidate byte.
-         * Long-pattern skip-table lookups also pay their complete slot span. */
-        if (!call || call->implementation!=XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_CONTAINS) {
-            if (ac>UINT64_MAX/2) return XR_XIR_CTFE_BUDGET;
-            bytes=2*(uint64_t)ac;
-        }
-        if (bc<=ac) {
-            uint64_t visits=(uint64_t)ac-bc+1;
-            uint64_t overhead=2+(bc>8 && op!=XR_XIR_STRING_LAST_INDEX_OF?sizeof(size_t):0);
-            if (bc>UINT64_MAX-overhead || visits>UINT64_MAX/((uint64_t)bc+overhead)) return XR_XIR_CTFE_BUDGET;
-            uint64_t comparisons=visits*((uint64_t)bc+overhead);
-            if (comparisons>UINT64_MAX-bytes) return XR_XIR_CTFE_BUDGET;
-            bytes+=comparisons;
-            if (op!=XR_XIR_STRING_LAST_INDEX_OF) {
-                uint64_t setup=(uint64_t)ac;
-                if (bc>8) {
-                    if (bc>(UINT64_MAX-256*sizeof(size_t))/(sizeof(size_t)+1)) return XR_XIR_CTFE_BUDGET;
-                    setup=256*sizeof(size_t)+(uint64_t)bc*(sizeof(size_t)+1);
-                }
-                if (setup>UINT64_MAX-bytes) return XR_XIR_CTFE_BUDGET;
-                bytes+=setup;
-            }
-        }
-    }
-    return scalar_compile_work(run,bytes)?XR_XIR_CTFE_OK:XR_XIR_CTFE_BUDGET;
-}
+
 static XrXirCtfeStatus ctfe_string_read_step(ScalarRun *run,uint32_t *cursor) {
     const XrXirInstruction *op=&run->function->instructions[*cursor];
     const XrNativeIntrinsicDeclaration *call = op->op == XR_XIR_CALL_INTRINSIC ?
@@ -70,8 +28,7 @@ static XrXirCtfeStatus ctfe_string_read_step(ScalarRun *run,uint32_t *cursor) {
     XrXirValue left={XR_XIR_STRING,0,xr_xir_scalar_load(run->frame,run->layout->offsets[args[0]])};
     XrXirValue right={XR_XIR_STRING,0,xr_xir_scalar_load(run->frame,run->layout->offsets[args[1]])};
     int64_t start=op->op==XR_XIR_STRING_INDEX_OF?xr_xir_scalar_load(run->frame,run->layout->offsets[args[2]]):0;
-    XrXirCtfeStatus status=ctfe_string_read_work(run,op->op,call,&left,&right,start);
-    if (status!=XR_XIR_CTFE_OK) return status;
+    XrXirCtfeStatus status=XR_XIR_CTFE_OK;
     int64_t result=0;
     if (op->op==XR_XIR_STRING_INDEX_OF || op->op==XR_XIR_STRING_LAST_INDEX_OF) {
         XrXirValueStatus value=op->op==XR_XIR_STRING_INDEX_OF?

@@ -27,9 +27,9 @@ static bool layout_equal(XrXirLayout left, XrXirLayout right) {
 #include "xxir_layout_input.inc.c"
 
 
-static XrXirStatus layout_function_bounds(const XrXirModule *module, const XrXirCompileContext *context) {
+static XrXirStatus layout_function_bounds(const XrXirModule *module) {
     for (uint32_t f = 0; f < module->function_count; ++f) {
-        if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
         const XrXirFunction *function = &module->functions[f];
         uint64_t slots = (uint64_t)function->parameter_count + function->instruction_count;
         if (slots > UINT32_MAX / 2 || slots > SIZE_MAX / (sizeof(uint32_t) * 2)) return XR_XIR_BUDGET;
@@ -41,7 +41,7 @@ static XrXirStatus layout_structure(const XrXirModule *module, const XrXirCompil
     XrXirStatus status = xr_xir_compile_types_structure_verify(context, module->types);
     if (status == XR_XIR_OK) status = xr_xir_compile_declarations_verify(context,
         module->declarations, module->types, module->function_count, module->linkage_kind);
-    return status == XR_XIR_OK ? layout_function_bounds(module, context) : status;
+    return status == XR_XIR_OK ? layout_function_bounds(module) : status;
 }
 
 static XrXirStatus layout_outgoing(const LayoutInputRequest *request,
@@ -53,7 +53,7 @@ static XrXirStatus layout_outgoing(const LayoutInputRequest *request,
     if (result_flags) outgoing=2;
     uint32_t phi_count=0;bool borrowed_phi=false;
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
-        if (!xir_compile_work(budget, 1)) return XR_XIR_BUDGET;
+
         XrXirInstruction storage;const XrXirInstruction *op=NULL;
         XrXirStatus reading=request->input->instruction(budget,request->input->owner,index,i,&storage,&op);
         if (reading!=XR_XIR_OK) return reading;
@@ -130,7 +130,7 @@ static XrXirStatus function_layout(const LayoutInputRequest *request,uint32_t in
     }
     uint32_t bytes = 0, owned = 0, outgoing = 0;
     for (uint32_t slot = 0; slot < slots; ++slot) {
-        if (!xir_compile_work(budget, 1)) return XR_XIR_BUDGET;
+
         LayoutInputSlot field;
         XrXirStatus reading=layout_read_slot(request,function,index,slot,&field);
         if (reading!=XR_XIR_OK) return reading;
@@ -257,7 +257,7 @@ XR_FUNC XrXirStatus xr_xir_compile_layout_match_verified(const XrXirArtifact *ar
         return (!artifact->layouts && !artifact->target.architecture && !artifact->target.abi_version) ? XR_XIR_OK : XR_XIR_BAD_LAYOUT;
     if (!artifact->layouts) return XR_XIR_BAD_LAYOUT;
     XrXirCompileContext budget = artifact->context;
-    XrXirStatus status = layout_function_bounds(&artifact->module, &budget);
+    XrXirStatus status = layout_function_bounds(&artifact->module);
     return status == XR_XIR_OK ? layout_match(artifact, &budget) : status;
 }
 

@@ -9,20 +9,20 @@
  * KEY CONCEPT:
  *   The real host owner keeps one Domain, initialization and cumulative budget.
  */
-XRAY_API XrSourceStatus xray_source_instance_new(XrSourceProgram *program,
+XRAY_API XrSourceStatus xray_source_instance_new(XrSourceExecution *execution,XrSourceArtifact *program,
     const XrSourceCallOptions *options,XrSourceInstance **output) {
-    if(!program || !output || *output)return XR_SOURCE_BAD_ARGUMENT;
+    if(!execution || !program || !output || *output)return XR_SOURCE_BAD_ARGUMENT;
     XrSourceStatus status=api_options_admit(options);
     if(status!=XR_SOURCE_OK)return status;
     if(options->metadata_limit<sizeof(XrSourceInstance)+sizeof(XrSourceCall))return XR_SOURCE_LIMIT;
     if(program->references==UINT32_MAX)return XR_SOURCE_LIMIT;
     XrSourceInstance *owner=NULL;
-    status=api_resource(xr_compile_resources_calloc(program->resources,1,sizeof(*owner),(void **)&owner));
+    status=api_resource(xr_compile_resources_calloc(execution->resources,1,sizeof(*owner),(void **)&owner));
     if(status!=XR_SOURCE_OK)return status;
-    owner->resources=program->resources;
+    owner->resources=execution->resources;
     XrXirInstanceConfig config;
     status=api_config(options,&owner->sink,&config);
-    if(status==XR_SOURCE_OK)status=api_program_code(program);
+    if(status==XR_SOURCE_OK)status=api_ready_vm(program);
     if(status==XR_SOURCE_OK) {
         config.metadata_limit-=sizeof(*owner);
         status=api_call(xr_xir_host_instance_new(program->code,&config,&owner->host));
@@ -52,7 +52,7 @@ XRAY_API XrSourceStatus xray_source_instance_begin_main(XrSourceInstance *owner,
     if(!output || *output)return XR_SOURCE_BAD_ARGUMENT;
     XrSourceStatus status=api_instance_admit(owner);if(status!=XR_SOURCE_OK)return status;
     owner->busy=true;
-    const ApiEntry entry={owner->program,owner->program->info.entry,NULL,0};
+    const ApiEntry entry={owner->program,owner->resources,owner->program->info.entry,NULL,0};
     status=api_instance_begin(owner,&entry,NULL,output);
     owner->busy=false;return status;
 }
@@ -61,7 +61,7 @@ XRAY_API XrSourceStatus xray_source_instance_begin(XrSourceInstance *owner,
     if(!output || *output)return XR_SOURCE_BAD_ARGUMENT;
     XrSourceStatus status=api_instance_admit(owner);if(status!=XR_SOURCE_OK)return status;
     owner->busy=true;ApiEntry entry={0};XrXirValue *arguments=NULL;
-    status=api_invocation_entry(owner->program,invocation,&entry,&arguments);
+    status=api_invocation_entry(&(ApiInvocation){owner->program,owner->resources,invocation},&entry,&arguments);
     if(status==XR_SOURCE_OK)status=api_instance_begin(owner,&entry,NULL,output);
     xr_compile_resources_free(arguments);owner->busy=false;return status;
 }
@@ -70,8 +70,8 @@ XRAY_API XrSourceStatus xray_source_instance_begin_function(XrSourceInstance *ow
     if(!function || !function->resources || !output || *output)return XR_SOURCE_BAD_ARGUMENT;
     XrSourceStatus status=api_instance_admit(owner);if(status!=XR_SOURCE_OK)return status;
     owner->busy=true;XrXirValue *arguments=NULL;
-    status=api_arguments(owner->program,values,count,&arguments);
-    const ApiEntry entry={owner->program,0,arguments,(uint32_t)count};
+    status=api_arguments(owner->resources,values,count,&arguments);
+    const ApiEntry entry={owner->program,owner->resources,0,arguments,(uint32_t)count};
     if(status==XR_SOURCE_OK)status=api_instance_begin(owner,&entry,function,output);
     xr_compile_resources_free(arguments);owner->busy=false;return status;
 }
@@ -80,7 +80,7 @@ XRAY_API XrSourceStatus xray_source_instance_execute(XrSourceInstance *owner,
     if(!output || *output)return XR_SOURCE_BAD_ARGUMENT;
     XrSourceStatus status=api_instance_admit(owner);if(status!=XR_SOURCE_OK)return status;
     owner->busy=true;ApiEntry entry={0};XrXirValue *arguments=NULL;XrSourceResult *result=NULL;
-    status=api_invocation_entry(owner->program,invocation,&entry,&arguments);
+    status=api_invocation_entry(&(ApiInvocation){owner->program,owner->resources,invocation},&entry,&arguments);
     if(status==XR_SOURCE_OK)status=api_resource(xr_compile_resources_calloc(owner->resources,1,sizeof(*result),(void **)&result));
     if(status==XR_SOURCE_OK) {
         result->resources=owner->resources;
@@ -104,5 +104,5 @@ XRAY_API XrSourceStatus xray_source_instance_drop(XrSourceInstance **output,XrSo
     XrXirCallStatus dropped=xr_xir_host_instance_drop(owner->host);
     if(dropped==XR_XIR_CALL_BUSY){owner->busy=false;return XR_SOURCE_BUSY;}
     if(cleanup){*cleanup=api_event(dropped,0,0);if(dropped!=XR_XIR_CALL_READY)cleanup->state=XR_SOURCE_RUN_CLEANUP_FAILED;}
-    xray_source_program_free(owner->program);xr_compile_resources_free(owner);*output=NULL;return XR_SOURCE_OK;
+    xray_source_artifact_free(owner->program);xr_compile_resources_free(owner);*output=NULL;return XR_SOURCE_OK;
 }

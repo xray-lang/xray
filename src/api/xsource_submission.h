@@ -9,20 +9,20 @@
 #ifndef XSOURCE_SUBMISSION_H
 #define XSOURCE_SUBMISSION_H
 #include "../../include/xray_source.h"
-#include "../base/xcompile_state.h"
+#include "../base/xcompile_resources.h"
 #include "../xir/xxir_source_generation.h"
 #include "../xir/xxir_instance_generation.h"
 #include "../xir/xxir_instance_binding.h"
 
 typedef struct XrSourceSubmission XrSourceSubmission;
 typedef struct XrSourceSubmissionConfig {
-    XrCompileState *state;
+    XrCompileResources *resources;
     XrXirSourceGenerationConfig source;
     XrXirTarget target;
     XrXirInstanceConfig runtime;
 } XrSourceSubmissionConfig;
-/* State and source.context must name the same cumulative ledger. The owner
- * retains state and copies runtime configuration; provider contexts, Catalog
+/* Resources and source.context name one persistent semantic memory owner.
+ * The owner copies runtime configuration; provider contexts, Catalog
  * and lockfile stay caller-owned until drop. One candidate excludes another
  * preparation. This coordinator does not synthesize historical source bindings. */
 XR_FUNC XrSourceStatus xr_source_submission_new(const XrSourceSubmissionConfig *, XrSourceSubmission **);
@@ -48,7 +48,7 @@ XR_FUNC XrSourceStatus xr_source_submission_cancel(XrSourceSubmission *);
 XR_FUNC XrSourceStatus xr_source_submission_take(XrSourceSubmission *, XrXirCallResult *);
 /* Only the actual normally returned candidate can publish. Both commits spend
  * no resources. Abort drains the Instance before releasing the Source record;
- * old state and cumulative charges remain. All callback reentry returns BUSY. */
+ * published semantic state remains. All callback reentry returns BUSY. */
 XR_FUNC XrSourceStatus xr_source_submission_publish(XrSourceSubmission *);
 XR_FUNC XrSourceStatus xr_source_submission_abort(XrSourceSubmission *, XrXirCallStatus *cleanup);
 XR_FUNC XrSourceStatus xr_source_submission_lookup(const XrSourceSubmission *, const char *, XrXirSourceGenerationBinding *);

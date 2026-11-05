@@ -13,7 +13,7 @@ static void checked_resource_select(ModuleWork *work, XrModuleResolver *resolver
     size_t count = 0;
     const XrModuleResourceBinding *bindings = xr_xir_compile_library_catalog_resources_v2(resolver->config.catalog,&count);
     const XrModuleResourceBinding *selected = NULL;
-    for (size_t i = 0; i < count && module_work(work,1); ++i) {
+    for (size_t i = 0; i < count && ((work)->status == XR_MODULE_OK); ++i) {
         if (bindings[i].canonical && module_equal(work,bindings[i].canonical,canonical)) {
             if (selected) { module_status(work,XR_MODULE_INVALID); break; }
             selected = &bindings[i];

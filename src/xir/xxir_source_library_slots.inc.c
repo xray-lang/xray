@@ -27,7 +27,7 @@ static bool source_library_slot_map(SourceContext *ctx,const XrXirModule *librar
     map->slots=source_scratch(ctx,d->slot_count,sizeof(*map->slots),false);
     if (!map->slots) return false;
     for (uint32_t s=0; s<d->slot_count; ++s) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         uint32_t owner=d->slots[s].module;
         if (owner>=map->module_count)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library slot owner is invalid");
@@ -54,7 +54,7 @@ static bool source_library_slot_instruction(SourceContext *ctx,const SourceLibra
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library slot group is invalid");
     uint32_t target=map->slots[first];
     for (uint32_t i=0; i<count; ++i) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (i>UINT32_MAX-target || map->slots[first+i]!=target+i)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library slot group is not contiguous");
     }
@@ -67,7 +67,7 @@ static bool source_library_public_slot(SourceContext *ctx,const XrXirModule *lib
     if (library->linkage_kind!=XR_XIR_LIBRARY || original->mutable ||
         (original->type!=XR_XIR_I64 && original->type!=XR_XIR_F64) || fact->exported!=1) return true;
     for (uint32_t s=0;s<map->slot_count;++s) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (s==slot || map->slots[s]==UINT32_MAX ||
             library->declarations->slots[s].module!=original->module) continue;
         const XrXirSlotFact *peer=&facts->rows[s];
@@ -97,7 +97,7 @@ static bool source_library_slots(SourceContext *ctx,const XrXirModule *library,
         map->slot_count!=d->slot_count || map->unit->library!=library)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library complete slot facts are missing");
     for (uint32_t s=0; s<map->slot_count; ++s) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         uint32_t target=map->slots[s];
         if (target==UINT32_MAX) continue;
         const XrXirSlot *original=&d->slots[s];

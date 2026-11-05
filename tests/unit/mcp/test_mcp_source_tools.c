@@ -8,7 +8,7 @@
  *
  * KEY CONCEPT:
  *   Production tool handlers produce independently expected JSON responses.
- *   Compiler faults use the ordinary ledger implementation and physical owner.
+ *   Compiler faults use the ordinary memory implementation and physical owner.
  */
 #include "app/mcp/xmcp_source.h"
 #include "app/mcp/xmcp_tools_internal.h"
@@ -18,7 +18,7 @@
 #include <stdio.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
-#include "../xir/xir_source_compile_owner.h"
+#include "mcp_compile_memory.h"
 
 static void physical_zero(void) {
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
@@ -102,11 +102,11 @@ static void definition_cases(void) {
 }
 static void owner_case(void) {
     char text[]="export fn answer()->i64 { return 42 }\n";
-    XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+    XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,true};
     XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats baseline={0};CHECK(xr_compile_resources_stats(context.resources,&baseline)==XR_COMPILE_RESOURCE_OK);
-    XmcpSourceOwner owner={0};XmcpSourceRequest request={text,sizeof(text)-1,"mcp-owner-test",&context};
+    XmcpSourceOwner owner={0};XmcpSourceRequest request={text,sizeof(text)-1,"mcp-owner-test",&context,NULL};
     CHECK(xmcp_source_check(&request,&owner)==XR_XIR_OK);
     memset(text,'?',sizeof(text));memset(&request,0,sizeof(request));
     const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(owner.result.snapshot);
@@ -115,28 +115,28 @@ static void owner_case(void) {
         if(!strcmp(view->declarations[i].name,"answer"))found=true;
     CHECK(found);xmcp_source_free(&owner);
     XrCompileResourceStats final={0};CHECK(xr_compile_resources_stats(context.resources,&final)==XR_COMPILE_RESOURCE_OK);
-    CHECK(final.live_bytes==baseline.live_bytes && final.work>baseline.work && final.allocated_bytes>baseline.allocated_bytes);
+    CHECK(final.held_bytes==baseline.held_bytes && final.allocated_bytes>baseline.allocated_bytes);
     xr_compile_resources_release(context.resources);physical_zero();
 }
 static XrCompileResourceLimits resource_limits(void) {
-    return (XrCompileResourceLimits){UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+    return (XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true};
 }
 static XrXirStatus helper_operation(XrCompileResourceLimits limits,XrCompileResourceStats *required) {
     XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};
     XrCompileResourceStatus made=xr_compile_resources_new(&limits,&context.resources);
-    if(made!=XR_COMPILE_RESOURCE_OK)return made==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    if(made!=XR_COMPILE_RESOURCE_OK)return xmcp_source_resource_status(made);
     XrCompileResourceStats baseline={0};CHECK(xr_compile_resources_stats(context.resources,&baseline)==XR_COMPILE_RESOURCE_OK);
     static const char code[]="export fn answer()->i64 { return 42 }\n";
-    XmcpSourceRequest request={code,sizeof(code)-1,"mcp-resource-test",&context};
+    XmcpSourceRequest request={code,sizeof(code)-1,"mcp-resource-test",&context,NULL};
     XmcpSourceOwner owner={0};XrXirStatus status=xmcp_source_check(&request,&owner);
     if(required)CHECK(xr_compile_resources_stats(context.resources,required)==XR_COMPILE_RESOURCE_OK);
     if(status!=XR_XIR_OK)CHECK(!owner.result.checked);
     xmcp_source_free(&owner);
     XrCompileResourceStats final={0};CHECK(xr_compile_resources_stats(context.resources,&final)==XR_COMPILE_RESOURCE_OK);
-    CHECK(final.live_bytes==baseline.live_bytes && final.work>=baseline.work && final.allocated_bytes>=baseline.allocated_bytes);
+    CHECK(final.held_bytes==baseline.held_bytes && final.allocated_bytes>=baseline.allocated_bytes);
     xr_compile_resources_release(context.resources);physical_zero();return status;
 }
-static void same_ledger_faults(void) {
+static void same_owner_faults(void) {
     size_t sites=0;
     for(size_t probe=0;probe<=sites;++probe) {
         source_fixture_compile_fail_at=SIZE_MAX;
@@ -144,7 +144,7 @@ static void same_ledger_faults(void) {
         CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
         XrCompileResourceStats baseline={0};CHECK(xr_compile_resources_stats(context.resources,&baseline)==XR_COMPILE_RESOURCE_OK);
         static const char code[]="export fn answer()->i64 { return 42 }\n";
-        XmcpSourceRequest request={code,sizeof(code)-1,"mcp-resource-test",&context};
+        XmcpSourceRequest request={code,sizeof(code)-1,"mcp-resource-test",&context,NULL};
         source_fixture_compile_attempts=0;source_fixture_compile_fail_at=probe?probe-1:SIZE_MAX;
         source_fixture_compile_injected=false;XmcpSourceOwner owner={0};
         XrXirStatus status=xmcp_source_check(&request,&owner);
@@ -152,35 +152,29 @@ static void same_ledger_faults(void) {
         else{CHECK(source_fixture_compile_injected && status==XR_XIR_OUT_OF_MEMORY && !owner.result.checked);}
         xmcp_source_free(&owner);
         XrCompileResourceStats after_failure={0};CHECK(xr_compile_resources_stats(context.resources,&after_failure)==XR_COMPILE_RESOURCE_OK);
-        CHECK(after_failure.live_bytes==baseline.live_bytes);
+        CHECK(after_failure.held_bytes==baseline.held_bytes);
         source_fixture_compile_fail_at=SIZE_MAX;
         CHECK(xmcp_source_check(&request,&owner)==XR_XIR_OK);
         CHECK(xr_xir_compile_source_snapshot_view(owner.result.snapshot)->complete);
         xmcp_source_free(&owner);
         XrCompileResourceStats after_retry={0};CHECK(xr_compile_resources_stats(context.resources,&after_retry)==XR_COMPILE_RESOURCE_OK);
-        CHECK(after_retry.live_bytes==baseline.live_bytes && after_retry.work>after_failure.work &&
-            after_retry.allocated_bytes>after_failure.allocated_bytes && after_retry.work<=limits.work);
+        CHECK(after_retry.held_bytes==baseline.held_bytes &&
+            after_retry.allocated_bytes>after_failure.allocated_bytes);
         xr_compile_resources_release(context.resources);physical_zero();
     }
-    printf("MCP Source helper: %zu full allocation failures and same-ledger retries, physical0\n",sites);
+    printf("MCP Source helper: %zu full allocation failures and same-owner retries, physical0\n",sites);
 }
 static void resource_axes(void) {
     source_fixture_compile_fail_at=SIZE_MAX;
     XrCompileResourceStats required={0};CHECK(helper_operation(resource_limits(),&required)==XR_XIR_OK);
-    CHECK(required.allocated_bytes && required.peak_bytes && required.work);
-    for(unsigned axis=0;axis<3;++axis) {
-        uint64_t exact=axis==0?required.allocated_bytes:axis==1?required.peak_bytes:required.work;
-        for(int delta=-1;delta<=1;++delta) {
-            XrCompileResourceLimits limits=resource_limits();
-            if(axis==0)limits.allocated_bytes=exact+delta;
-            else if(axis==1)limits.live_bytes=exact+delta;
-            else limits.work=exact+delta;
-            XrXirStatus status=helper_operation(limits,NULL);
-            CHECK(status==(delta<0?XR_XIR_BUDGET:XR_XIR_OK));
-        }
+    CHECK(required.allocated_bytes && required.peak_bytes);
+    for(int delta=-1;delta<=1;++delta) {
+        uint64_t boundary=delta<0?required.peak_bytes-1:required.peak_bytes+(unsigned)delta;
+        XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,boundary,true};
+        CHECK(helper_operation(limits,NULL)==(delta<0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
     }
-    printf("MCP Source exact/minus1/plus1 allocated=%llu peak=%llu work=%llu, physical0\n",
-        (unsigned long long)required.allocated_bytes,(unsigned long long)required.peak_bytes,(unsigned long long)required.work);
+    printf("MCP Source held peak=%llu minus1/exact/plus1, physical0\n",
+        (unsigned long long)required.peak_bytes);
 }
 static void tool_faults(bool syntax,bool query) {
     static const char good[]="export fn answer()->i64 { return 42 }\n";
@@ -205,14 +199,70 @@ static void tool_faults(bool syntax,bool query) {
     printf("MCP %s: %zu complete compiler allocation failures, exact OOM and physical0\n",
         query?"source definition":syntax?"syntax analyze":"semantic analyze",sites);
 }
+typedef struct CancelProbe { size_t polls, cancel_at; } CancelProbe;
+static bool cancel_probe(const void *context) {
+    CancelProbe *probe=(CancelProbe *)context;
+    return ++probe->polls>=probe->cancel_at;
+}
+static void request_control_cases(void) {
+    XrCompileResourceLimits limits=resource_limits();
+    XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};
+    CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    XrCompileResourceStats baseline={0};CHECK(xr_compile_resources_stats(context.resources,&baseline)==XR_COMPILE_RESOURCE_OK);
+    static const char code[]="export fn answer()->i64 { return 42 }\n";
+    CancelProbe probe={0,SIZE_MAX};XrCompileRequestControl control={0};
+    XrCompileRequestOptions options={cancel_probe,&probe,XR_COMPILE_DEADLINE_NONE,0};
+    CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+    XmcpSourceRequest request={code,sizeof(code)-1,"mcp-control-test",&context,&control};
+    XmcpSourceOwner owner={0};CHECK(xmcp_source_check(&request,&owner)==XR_XIR_OK);
+    size_t polls=probe.polls;CHECK(polls>=3);
+    memset(&control,0,sizeof(control));memset(&probe,0,sizeof(probe));
+    const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(owner.result.snapshot);
+    CHECK(view && view->complete);xmcp_source_free(&owner);
+    size_t cuts[]={1,polls/2,polls};
+    for(size_t i=0;i<3;++i) {
+        probe=(CancelProbe){0,cuts[i]};control=(XrCompileRequestControl){0};
+        CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+        CHECK(xmcp_source_check(&request,&owner)==XR_XIR_CANCELLED);
+        CHECK(probe.polls==cuts[i] && !owner.result.checked && !owner.result.snapshot);
+        xmcp_source_free(&owner);
+        XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
+        CHECK(after.held_bytes==baseline.held_bytes);
+    }
+    control=(XrCompileRequestControl){0};options=(XrCompileRequestOptions){NULL,NULL,XR_COMPILE_DEADLINE_AFTER,0};
+    CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+    CHECK(xmcp_source_check(&request,&owner)==XR_XIR_DEADLINE && !owner.result.checked && !owner.result.snapshot);
+    xmcp_source_free(&owner);
+    control=(XrCompileRequestControl){0};options=(XrCompileRequestOptions){0};
+    CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+    CHECK(xmcp_source_check(&request,&owner)==XR_XIR_OK);xmcp_source_free(&owner);
+    xr_compile_resources_release(context.resources);physical_zero();
+    XmcpServer server={0};server.shutdown=1;XmcpCallContext call={0};
+    for(unsigned tool=0;tool<4;++tool) {
+        XrJsonValue *args=xjson_new_object();XJSON_SET_STRING(args,"code",code);
+        XJSON_SET_STRING(args,"mode","full");XJSON_SET_STRING(args,"symbol","answer");
+        XJSON_SET_STRING(args,"moduleId","mcp-control-test");
+        XrJsonValue *result=tool==0?xmcp_tool_xray_analyze(&server,&call,args):
+            tool==1?xmcp_tool_xray_format(&server,&call,args):
+            tool==2?xmcp_tool_xray_definition(&server,&call,args):xmcp_tool_xray_run(&server,&call,args);
+        CHECK(result && xjson_get_bool(result,"isError"));
+        if(tool==1) {
+            XrJsonValue *content=xjson_array_get(xjson_get_array(result,"content"),0);
+            CHECK(content && strstr(xjson_get_string(content,"text"),"domain=request"));
+        }
+        if(tool==3)CHECK(xjson_get_int_or(xjson_get_object(result,"structuredContent"),"sourceStatus",-1)==XR_XIR_CANCELLED);
+        xjson_free(result);xjson_free(args);physical_zero();
+    }
+    printf("Source request cancel at first/middle/final %zu polls, zero deadline, owner reuse, request death and four shutdown handlers PASS\n",polls);
+}
 static void resource_cases(void) {
     tool_faults(false,false);tool_faults(true,false);tool_faults(false,true);
-    same_ledger_faults();resource_axes();owner_case();
+    same_owner_faults();resource_axes();owner_case();
 }
 int main(int argc,char **argv) {
     xr_test_suppress_dialogs();
     if(argc==2 && !strcmp(argv[1],"--resources")){resource_cases();return 0;}
-    CHECK(argc==1);analyze_cases();definition_cases();owner_case();
+    CHECK(argc==1);request_control_cases();analyze_cases();definition_cases();owner_case();
     puts("MCP analyze/source definition: independent normal, refusal, NUL, ambiguity, lifetime and recovery PASS");
     return 0;
 }

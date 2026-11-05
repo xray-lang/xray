@@ -24,7 +24,7 @@ static XrXirStatus effect_body_records_share(const XrXirCompileContext *work,
         body->resources!=work->resources || request->function>=effect_body_count(body) ||
         !request->source)
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,12+sizeof(uint32_t)+sizeof(EffectBodyRead))) return XR_XIR_BUDGET;
+
     uint32_t index=UINT32_MAX;
     XrXirStatus status=effect_body_ordinary_record_index(work,ordinary,request->function,&index);
     if (status!=XR_XIR_OK) return status;
@@ -33,10 +33,10 @@ static XrXirStatus effect_body_records_share(const XrXirCompileContext *work,
     EffectBodyFunction *target=&body->functions[request->function];
     if (target->runs || target->run_count || target->run_capacity || target->borrowed_runs)
         return XR_XIR_BAD_STRUCTURE;
-    EffectBodyRead read=effect_body_compile_read(work);bool same=true;
+    EffectBodyRead read=(EffectBodyRead){.owner=work};bool same=true;
     status=effect_body_records_compare(&read,previous,request->source,&same);
     if (status!=XR_XIR_OK || !same || !previous->run_count) return status;
-    if (!xir_compile_work(work,3*sizeof(void *)+2*sizeof(uint32_t)+sizeof(bool))) return XR_XIR_BUDGET;
+
     status=effect_body_runs_retain(work,previous);
     if (status!=XR_XIR_OK) return status;
     /* All aliases follow the successful lifetime acquisition. Even a later
@@ -44,8 +44,8 @@ static XrXirStatus effect_body_records_share(const XrXirCompileContext *work,
     target->runs=previous->runs;target->run_count=previous->run_count;
     target->run_capacity=previous->run_capacity;target->borrowed_runs=true;
     for (uint32_t r=0;r<previous->run_count;++r) {
-        if (!xir_compile_work(work,1+3*sizeof(uint32_t))) return XR_XIR_BUDGET;
-        status=effect_body_run_intake(work,request->source,&previous->runs[r],request->sink);
+
+        status=effect_body_run_intake(request->source,&previous->runs[r],request->sink);
         if (status!=XR_XIR_OK) return status;
     }
     *shared=true;return XR_XIR_OK;

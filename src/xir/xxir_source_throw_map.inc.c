@@ -13,7 +13,7 @@ static bool source_throw_map(SourceContext *ctx,const uint32_t *map,uint32_t val
     XrXirSourceDebugThrow *sites=source_alloc(ctx,body->throw_count,sizeof(*sites));if (!sites) return false;
     uint32_t count=0;
     for (const SourceThrowRecipe *recipe=body->throw_recipes;recipe;recipe=recipe->next) {
-        if (!source_work_units(ctx,NULL,sizeof(*recipe))) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         uint32_t instruction=0,operand=0;
         if (count==body->throw_count || recipe->instruction>=body->count ||
             (uint64_t)parameters+recipe->instruction>=value_count ||
@@ -22,7 +22,7 @@ static bool source_throw_map(SourceContext *ctx,const uint32_t *map,uint32_t val
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source throw has a foreign region identity");
         instruction-=parameters;uint32_t at=count;
         while (at && sites[at-1].instruction>instruction) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             sites[at]=sites[at-1];--at;
         }
         if (at && sites[at-1].instruction==instruction)

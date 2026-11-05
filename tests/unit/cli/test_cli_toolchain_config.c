@@ -1,4 +1,4 @@
-/* Owned preference snapshots, physical allocation cuts and shared limits. */
+/* Owned preference snapshots, physical allocation cuts and held-memory policy. */
 #include "app/cli/xcli_toolchain_config.h"
 #include "base/xmalloc.h"
 #include <stdio.h>
@@ -36,17 +36,19 @@ static void observed_free(void *memory) {
 #include "base/xcompile_resources.c"
 #undef xr_malloc
 #undef xr_free
-static const XrCompileResourceLimits defaults={UINT64_C(1)<<28,UINT64_C(1)<<26,UINT64_C(1)<<32};
+static const XrCompileResourceLimits defaults={.memory_mode=XR_COMPILE_MEMORY_ORDINARY,.profile_allocations=true};
 static XrCliToolchainConfigStatus run(const char *path,size_t fault,
     const XrCompileResourceLimits *limits,XrCompileResourceStats *stats,bool check) {
     CHECK(!physical_live); calls=0; fail_at=fault;
     XrCompileResources *resources=NULL;
     XrCompileResourceStatus allocation=xr_compile_resources_new(limits,&resources);
-    if (allocation!=XR_COMPILE_RESOURCE_OK) { CHECK(!physical_live);return XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY; }
+    if (allocation!=XR_COMPILE_RESOURCE_OK) { CHECK(!physical_live);return allocation==XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_CLI_TOOLCHAIN_CONFIG_MEMORY_LIMIT :
+        allocation==XR_COMPILE_RESOURCE_OVERFLOW ? XR_CLI_TOOLCHAIN_CONFIG_OVERFLOW : XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY; }
     XrCompileState *state=NULL;allocation=xr_compile_state_new(resources,&state);
     if(allocation!=XR_COMPILE_RESOURCE_OK) {
         xr_compile_resources_release(resources);CHECK(!physical_live);
-        return allocation==XR_COMPILE_RESOURCE_BUDGET ? XR_CLI_TOOLCHAIN_CONFIG_BUDGET : XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY;
+        return allocation==XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_CLI_TOOLCHAIN_CONFIG_MEMORY_LIMIT :
+            allocation==XR_COMPILE_RESOURCE_OVERFLOW ? XR_CLI_TOOLCHAIN_CONFIG_OVERFLOW : XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY;
     }
     XrCliToolchainConfig *owner=NULL;
     XrCliToolchainConfigStatus status=xr_cli_toolchain_config_open(state,path,&owner);
@@ -72,12 +74,12 @@ static XrCliToolchainConfigStatus run(const char *path,size_t fault,
     } else {
         CHECK(!owner);
         XrCompileResourceStats before=*stats, after;
-        if(status==XR_CLI_TOOLCHAIN_CONFIG_BUDGET || status==XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY) {
+        if(status==XR_CLI_TOOLCHAIN_CONFIG_MEMORY_LIMIT || status==XR_CLI_TOOLCHAIN_CONFIG_OVERFLOW || status==XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY) {
             size_t attempts=calls;char *locator=NULL;
             CHECK(xr_cli_toolchain_config_open(state,path,&owner)==status && !owner);
             CHECK(xr_cli_toolchain_config_path(state,path,&locator)==status && !locator && calls==attempts);
             CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK);
-            CHECK(before.allocated_bytes==after.allocated_bytes && before.work==after.work);
+            CHECK(before.allocated_bytes==after.allocated_bytes && before.held_bytes==after.held_bytes);
         }
     }
     xr_cli_toolchain_config_free(owner);xr_compile_state_release(state);xr_compile_resources_release(resources);
@@ -93,18 +95,16 @@ static int test_main(int argc,char **argv) {
             XrCompileResourceStats unused={0};
             CHECK(run(argv[1],cut,&defaults,&unused,false)==XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY);
         }
-        const uint64_t bounds[3]={stats.allocated_bytes,stats.peak_bytes,stats.work};
-        for(unsigned axis=0;axis<3;++axis) for(int delta=-1;delta<=1;++delta) {
+        uint64_t held_peak=stats.peak_bytes;CHECK(held_peak>0);
+        for(int delta=-1;delta<=1;++delta) {
             XrCompileResourceLimits limits=defaults;
-            uint64_t bound=bounds[axis];CHECK(bound>0);
-            if(axis==0)limits.allocated_bytes=delta<0?bound-1:bound+(unsigned)delta;
-            if(axis==1)limits.live_bytes=delta<0?bound-1:bound+(unsigned)delta;
-            if(axis==2)limits.work=delta<0?bound-1:bound+(unsigned)delta;
+            limits.memory_mode=XR_COMPILE_MEMORY_FINITE;
+            limits.memory_limit=delta<0?held_peak-1:held_peak+(unsigned)delta;
             XrCompileResourceStats unused={0};
             XrCliToolchainConfigStatus status=run(argv[1],SIZE_MAX,&limits,&unused,delta>=0);
-            CHECK(status==(delta<0?XR_CLI_TOOLCHAIN_CONFIG_BUDGET:XR_CLI_TOOLCHAIN_CONFIG_OK));
+            CHECK(status==(delta<0?XR_CLI_TOOLCHAIN_CONFIG_MEMORY_LIMIT:XR_CLI_TOOLCHAIN_CONFIG_OK));
         }
-        printf("complete allocation cuts=%zu axes=3 physical=0\n",count);return 0;
+        printf("complete allocation cuts=%zu held-boundary physical=0\n",count);return 0;
     }
     int expected=atoi(argv[2]);
     XrCliToolchainConfigStatus actual=run(argv[1],SIZE_MAX,&defaults,&stats,false);

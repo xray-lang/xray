@@ -53,7 +53,7 @@ static XrXirValueStatus admission_push(ValueAdmissionStack *stack, ValueAdmissio
             if (!xr_xir_domain_current(admission->domain)) return XR_XIR_VALUE_BAD_ARGUMENT;
             /* A call-local first frame still reserves the original scratch and
              * pays the same owner's push work. Only its heap request disappears. */
-            if (!xr_xir_domain_work(admission->domain, 1)) return XR_XIR_VALUE_LIMIT;
+            if (!xr_xir_domain_is_compile(admission->domain) && (!xr_xir_domain_work(admission->domain, 1))) return XR_XIR_VALUE_LIMIT;
             frames = &stack->first;
         } else {
             frames = xr_xir_domain_allocate(admission->domain, bytes, &status);
@@ -74,8 +74,8 @@ static XrXirValueStatus admission_push(ValueAdmissionStack *stack, ValueAdmissio
 static XrXirValueStatus type_needs_admission(const XrXirTypes *types, XrXirType type,
     XrXirValueAdmission *admission, bool *needed) {
     for (;;) {
-        if (!admission->work) return XR_XIR_VALUE_LIMIT;
-        --admission->work;
+        if (!admission_is_compile(admission) && (!admission->work)) return XR_XIR_VALUE_LIMIT;
+        if (!admission_is_compile(admission)) --admission->work;
         const XrXirTypeNode *node = xr_xir_type_node(types, type);
         if (!node) { *needed = type == XR_XIR_ERROR; return XR_XIR_VALUE_OK; }
         if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_NOMINAL ||
@@ -160,10 +160,10 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
     StorageSpan span = {0}; bool inlined = false, tuple_field=false;
     XrXirValueStatus status = XR_XIR_VALUE_OK;
     for (;;) {
-        if (!admission->work || (admission->domain && !xr_xir_domain_work(admission->domain, 1))) {
+        if (!admission_is_compile(admission) && (!admission->work || (admission->domain && !xr_xir_domain_work(admission->domain, 1)))) {
             status = XR_XIR_VALUE_LIMIT; break;
         }
-        --admission->work;
+        if (!admission_is_compile(admission)) --admission->work;
         if (inlined && inline_nominal_type(xr_xir_compile_type_arena_types(arena), type)) {
             status = admission_inline(&stack, span,arena,admission);
             if (status != XR_XIR_VALUE_OK) break;
@@ -193,16 +193,16 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
                     if (object->domain != admission->domain || !body) {
                         status=XR_XIR_VALUE_BAD_ARGUMENT;break;
                     }
-                    if (body->field_count > admission->work) {status=XR_XIR_VALUE_LIMIT;break;}
-                    admission->work-=body->field_count;
+                    if (!admission_is_compile(admission) && (body->field_count > admission->work)) {status=XR_XIR_VALUE_LIMIT;break;}
+                    if (!admission_is_compile(admission)) admission->work-=body->field_count;
                     count=body->field_count;
                     /* This identity's active ancestor already schedules every
                      * child. Revalidate this handle, then stop only its back edge. */
                     for (size_t i = 0; i < stack.depth; ++i) {
-                        if (!admission->work || !xr_xir_domain_work(admission->domain, 1)) {
+                        if (!admission_is_compile(admission) && (!admission->work || !xr_xir_domain_work(admission->domain, 1))) {
                             status = XR_XIR_VALUE_LIMIT; break;
                         }
-                        --admission->work;
+                        if (!admission_is_compile(admission)) --admission->work;
                         if (!stack.frames[i].boxed.inline_storage && stack.frames[i].boxed.object == object) {
                             count = 0; break;
                         }
@@ -239,7 +239,7 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
                         const XrXirTypeArena *caller_arena=admission->arena;
                         admission->arena=arena;
                         status = admission->function(admission->context,
-                            &((XirFunction *) object)->binding, type, &admission->work);
+                            &((XirFunction *) object)->binding, type, admission_is_compile(admission)?NULL:&admission->work);
                         admission->arena=caller_arena;
                         if (status != XR_XIR_VALUE_OK) break;
                     } else if (object->kind == XR_XIR_TYPE_ATOMIC) {

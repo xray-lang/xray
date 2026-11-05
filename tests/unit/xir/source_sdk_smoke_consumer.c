@@ -18,6 +18,16 @@ static_assert(sizeof(XrSourceReplBindingInfo)==40,"Public REPL binding layout");
 _Static_assert(sizeof(XrSourceReplBindingInfo)==40,"Public REPL binding layout");
 #endif
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while (0)
+static XrSourceExecution *sdk_execution_new(void) {
+    XrSourceExecutionOptions options=xray_source_execution_options_default();XrSourceExecution *owner=NULL;
+    CHECK(xray_source_execution_new(&options,&owner)==XR_SOURCE_OK && owner);return owner;
+}
+static XrSourceStatus sdk_repl_new(const XrSourceCompileOptions *options,const char *namespace_id,
+    const XrSourceCallOptions *runtime,XrSourceRepl **output) {
+    XrSourceExecution *execution=sdk_execution_new();
+    XrSourceStatus status=xray_source_repl_new(options,execution,namespace_id,runtime,output);
+    xray_source_execution_free(execution);return status;
+}
 static XrSourceInvocation request(const char *name,const XrSourceValue *const *arguments,size_t count) {
     XrSourceInvocation result;
     CHECK(xray_source_invocation_init(&result,sizeof(result))==XR_SOURCE_OK);
@@ -79,13 +89,12 @@ static void sdk_repl_integer(XrSourceRepl *owner,const char *name,int64_t expect
     integer(value,expected);xray_source_value_free(value);
 }
 static void sdk_repl_cases(const char *stdlib_path) {
-    XrSourceCompilerOptions compiler;XrSourceCallOptions runtime;
-    CHECK(xray_source_compiler_options_init(&compiler,sizeof(compiler))==XR_SOURCE_OK);
+    XrSourceCompileOptions compiler=xray_source_compile_options_default();XrSourceCallOptions runtime;
     CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
     SdkReplTrace trace;memset(&trace,0,sizeof(trace));
     compiler.stdlib_path=stdlib_path;runtime.write=sdk_repl_output;runtime.context=&trace;runtime.output_byte_limit=sizeof(trace.bytes);
     XrSourceRepl *owner=NULL;
-    CHECK(xray_source_repl_new(&compiler,"installed-repl",&runtime,&owner)==XR_SOURCE_OK && owner);trace.owner=owner;
+    CHECK(sdk_repl_new(&compiler,"installed-repl",&runtime,&owner)==XR_SOURCE_OK && owner);trace.owner=owner;
     XrSourceText foreign={NULL,"foreign-repl","var no=0\n",9};
     CHECK(xray_source_repl_begin(owner,&foreign,NULL)==XR_SOURCE_BAD_ARGUMENT);
     char first[]="var state=40\n";
@@ -142,13 +151,12 @@ static const XrSourceReplBindingInfo *sdk_repl_binding(XrSourceRepl *owner,const
     return found;
 }
 static void sdk_repl_inspection_cases(const char *stdlib_path) {
-    XrSourceCompilerOptions compiler;XrSourceCallOptions runtime;
-    CHECK(xray_source_compiler_options_init(&compiler,sizeof(compiler))==XR_SOURCE_OK);
+    XrSourceCompileOptions compiler=xray_source_compile_options_default();XrSourceCallOptions runtime;
     CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
     SdkReplTrace trace;memset(&trace,0,sizeof(trace));
     compiler.stdlib_path=stdlib_path;runtime.write=sdk_repl_output;runtime.context=&trace;runtime.output_byte_limit=sizeof(trace.bytes);
     XrSourceRepl *owner=NULL;
-    CHECK(xray_source_repl_new(&compiler,"installed-repl",&runtime,&owner)==XR_SOURCE_OK && owner);trace.owner=owner;
+    CHECK(sdk_repl_new(&compiler,"installed-repl",&runtime,&owner)==XR_SOURCE_OK && owner);trace.owner=owner;
     CHECK(!sdk_repl_binding(owner,"it",0));
     CHECK(sdk_repl_begin(owner,"var value=40\nconst fixed=2\nfn next()->i64{value+=1;return value}\n",NULL)==XR_SOURCE_OK);
     const XrSourceReplBindingInfo *rows=NULL;size_t count=0;
@@ -195,29 +203,27 @@ int main(int argc,char **argv) {
         "export fn reader()->fn(i64)->i64{return fn(extra:i64)->i64{return state+extra}}\n"
         "export fn echo(value:string)->string{return value}\n"
         "export fn parts()->(i64,string){return (state,\"stable\")}\n";
-    XrSourceCompilerOptions options;
-    CHECK(xray_source_compiler_options_init(&options,sizeof(options))==XR_SOURCE_OK);options.stdlib_path=argv[1];
-    XrSourceCompiler *compiler=NULL;XrSourceDiagnostic *diagnostic=NULL;
-    CHECK(xray_source_compiler_new(&options,&compiler)==XR_SOURCE_OK && compiler);
+    XrSourceCompileOptions options=xray_source_compile_options_default();options.stdlib_path=argv[1];
+    XrSourceExecution *execution=sdk_execution_new();XrSourceDiagnostic *diagnostic=NULL;
     XrSourceText text={NULL,"installed-owned-api",source,sizeof(source)-1};XrSourceAst *ast=NULL;
-    XrSourceStatus parsed=xray_source_parse_text(compiler,&text,&ast,&diagnostic);
+    XrSourceStatus parsed=xray_source_parse(&text,&options,&ast,NULL,&diagnostic);
     if(diagnostic){XrSourceDiagnosticInfo detail;CHECK(xray_source_diagnostic_info(diagnostic,&detail)==XR_SOURCE_OK);fprintf(stderr,"parse=%u line=%d col=%d %s\n",(unsigned)parsed,detail.line,detail.column,detail.message);}
     else if(parsed!=XR_SOURCE_OK)fprintf(stderr,"parse=%u without diagnostic\n",(unsigned)parsed);
     CHECK(parsed==XR_SOURCE_OK && ast && !diagnostic);
-    memset(source,0xa5,sizeof(source));XrSourceProgram *program=NULL;
-    XrSourceStatus compiled=xray_source_compile_ast(compiler,ast,&program,&diagnostic);
+    memset(source,0xa5,sizeof(source));XrSourceArtifact *program=NULL;
+    XrSourceStatus compiled=xray_source_build_ast(ast,&options,&program,NULL,&diagnostic);
     if(diagnostic){XrSourceDiagnosticInfo detail;CHECK(xray_source_diagnostic_info(diagnostic,&detail)==XR_SOURCE_OK);fprintf(stderr,"compile=%u %s\n",(unsigned)compiled,detail.message);}
     CHECK(compiled==XR_SOURCE_OK && program && !diagnostic);xray_source_ast_free(ast);
     XrSourceScalar scalar;memset(&scalar,0,sizeof(scalar));scalar.kind=XR_SOURCE_VALUE_I64;scalar.value.signed_value=2;
     XrSourceValue *two=NULL,*string=NULL;
-    CHECK(xray_source_value_new_scalar(compiler,&scalar,&two)==XR_SOURCE_OK && two);
+    CHECK(xray_source_value_new_scalar(execution,&scalar,&two)==XR_SOURCE_OK && two);
     const unsigned char binary[]={ 'A',0,0xe4,0xb8,0xad };
-    CHECK(xray_source_value_new_string(compiler,(const char *)binary,sizeof(binary),&string)==XR_SOURCE_OK && string);
+    CHECK(xray_source_value_new_string(execution,(const char *)binary,sizeof(binary),&string)==XR_SOURCE_OK && string);
     XrSourceCallOptions runtime;CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
     XrSourceInstance *first=NULL,*other=NULL;
-    CHECK(xray_source_instance_new(program,&runtime,&first)==XR_SOURCE_OK && first);
-    CHECK(xray_source_instance_new(program,&runtime,&other)==XR_SOURCE_OK && other);
-    xray_source_program_free(program);xray_source_compiler_free(compiler);
+    CHECK(xray_source_instance_new(execution,program,&runtime,&first)==XR_SOURCE_OK && first);
+    CHECK(xray_source_instance_new(execution,program,&runtime,&other)==XR_SOURCE_OK && other);
+    xray_source_artifact_free(program);xray_source_execution_free(execution);
     const XrSourceValue *arguments[]={two},*strings[]={string};
     XrSourceInvocation next=request("next",arguments,1),read=request("read",NULL,0),echo=request("echo",strings,1);
     XrSourceValue *answer=execute(first,&next),*independent=execute(other,&read),*echoed=execute(first,&echo);

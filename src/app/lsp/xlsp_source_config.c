@@ -39,7 +39,7 @@ static XrXirStatus config_resource(XrCompileResourceStatus status) {
         status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BAD_STRUCTURE;
 }
 static XrXirStatus config_io(XrOsIoStatus status) {
-    return status == XR_OS_IO_OK ? XR_XIR_OK : status == XR_OS_IO_BUDGET ? XR_XIR_BUDGET :
+    return status == XR_OS_IO_OK ? XR_XIR_OK : status == XR_OS_IO_OVERFLOW ? XR_XIR_BUDGET :
         status == XR_OS_IO_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
         status == XR_OS_IO_NOT_FOUND ? XR_XIR_UNRESOLVED :
         status == XR_OS_IO_UNSUPPORTED ? XR_XIR_UNSUPPORTED :
@@ -47,7 +47,7 @@ static XrXirStatus config_io(XrOsIoStatus status) {
 }
 static XrXirStatus config_toml(XrTomlParseStatus status) {
     return status == XR_TOML_PARSE_OK ? XR_XIR_OK :
-        status == XR_TOML_PARSE_BUDGET || status == XR_TOML_PARSE_LIMIT ? XR_XIR_BUDGET :
+        status == XR_TOML_PARSE_OVERFLOW || status == XR_TOML_PARSE_LIMIT ? XR_XIR_BUDGET :
         status == XR_TOML_PARSE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
         status == XR_TOML_PARSE_IO ? XR_XIR_IO : XR_XIR_BAD_STRUCTURE;
 }

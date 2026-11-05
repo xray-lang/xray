@@ -319,7 +319,8 @@ static inline const char *xr_obj_type_name(XrObjType type) {
                                   "enum_descriptor",
                                   "enum_scalar_layout",
                                   "weak_handle",
-                                  "enum_box"};
+                                  "enum_box",
+                                  TYPE_NAME_UNKNOWN};
     _Static_assert(sizeof(names) / sizeof(names[0]) == XR_OBJ_TYPE_BUILTIN_COUNT,
                    "xr_obj_type_name: names array out of sync with XrObjType enum");
     /* Unsigned compares: a negative id is not a builtin and must not index the

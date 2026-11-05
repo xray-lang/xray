@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xray_source_value.h - Independently owned typed data on its original ledger
+ * xray_source_value.h - Independently owned typed data on its execution memory owner
  */
 #ifndef XRAY_SOURCE_VALUE_H
 #define XRAY_SOURCE_VALUE_H
@@ -28,14 +28,13 @@ typedef struct XrSourceScalar {
         uint32_t rune; int boolean; } value;
 } XrSourceScalar;
 /* Outputs must be NULL and remain unchanged on failure. Scalars and String
- * storage spend the Compiler's original cumulative ledger. String accepts an
+ * storage belong to the explicit execution memory owner. String accepts an
  * exact UTF-8 span, including NUL. F32 requires its runtime's canonical NaN;
- * F64 preserves every binary64 bit. Owned values may outlive their producers.
- * Calls require caller exclusion; failures never refund cumulative spending.
- * Constructors honor the Compiler's existing first OOM/BUDGET failure latch.
- * Strings above PTRDIFF_MAX bytes are unrepresentable and return LIMIT. */
-XRAY_API XrSourceStatus xray_source_value_new_scalar(XrSourceCompiler *, const XrSourceScalar *, XrSourceValue **);
-XRAY_API XrSourceStatus xray_source_value_new_string(XrSourceCompiler *, const char *, size_t, XrSourceValue **);
+ * F64 preserves every binary64 bit. Owned values may outlive the execution
+ * handle. Calls require caller exclusion. Strings above PTRDIFF_MAX bytes
+ * are unrepresentable and return LIMIT. */
+XRAY_API XrSourceStatus xray_source_value_new_scalar(XrSourceExecution *, const XrSourceScalar *, XrSourceValue **);
+XRAY_API XrSourceStatus xray_source_value_new_string(XrSourceExecution *, const char *, size_t, XrSourceValue **);
 /* Copy actual RETURNED or THROWN data, without adopting its execution state.
  * Owning data grants no Domain, loan, callable or Task execution permission. */
 XRAY_API XrSourceStatus xray_source_result_value(const XrSourceResult *, XrSourceValue **);
@@ -56,7 +55,7 @@ XRAY_API XrSourceStatus xray_source_value_format(const XrSourceValue *, XrSource
  * and publishes an owned payload only for Some. All failures preserve outputs;
  * owned outputs must be NULL. PanicInfo messages own exact assertion bytes or
  * the common kernel's canonical intrinsic message. Copies and allocations use
- * the original ledgers and may fail with their existing BUDGET/LIMIT status. */
+ * the retained execution memory owner and preserve outputs on failure. */
 XRAY_API XrSourceStatus xray_source_value_tuple_count(const XrSourceValue *, size_t *);
 XRAY_API XrSourceStatus xray_source_value_tuple_get(const XrSourceValue *, size_t, XrSourceValue **);
 XRAY_API XrSourceStatus xray_source_value_nullable(const XrSourceValue *, int *, XrSourceValue **);
@@ -66,7 +65,7 @@ XRAY_API XrSourceStatus xray_source_value_panic_message(const XrSourceValue *, X
  * Result. OK means the copy succeeded; inspect result_event for RETURNED,
  * THROWN, PANICKED, CANCELLED or another real terminal state. Pending returns
  * BAD_STATE without driving, waiting, cancelling or acquiring an executor
- * lease. Copies spend the original Task Domain and compiler ledgers; failure
+ * lease. Copies retain actual Task data and use the execution memory owner; failure
  * preserves *output, which must be NULL. Producers and the Task may die after
  * success. Data ownership grants no Task execution or cross-Instance access. */
 XRAY_API XrSourceStatus xray_source_value_task_result(const XrSourceValue *, XrSourceResult **);

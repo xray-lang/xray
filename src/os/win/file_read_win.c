@@ -20,7 +20,8 @@ enum { FILE_PATH_UNITS = 32768, FILE_ANCESTOR_LIMIT = 256 };
 static XrFileReadStatus file_io_status(XrOsIoStatus status) {
     switch (status) {
     case XR_OS_IO_OK: return XR_FILE_READ_OK;
-    case XR_OS_IO_BUDGET: return XR_FILE_READ_LIMIT;
+    case XR_OS_IO_OVERFLOW: return XR_FILE_READ_OVERFLOW;
+    case XR_OS_IO_MEMORY_LIMIT: return XR_FILE_READ_MEMORY_LIMIT;
     case XR_OS_IO_OUT_OF_MEMORY: return XR_FILE_READ_OUT_OF_MEMORY;
     case XR_OS_IO_BAD_ARGUMENT: return XR_FILE_READ_FORBIDDEN;
     default: return XR_FILE_READ_IO;
@@ -28,11 +29,11 @@ static XrFileReadStatus file_io_status(XrOsIoStatus status) {
 }
 static bool logical_path_valid(XrIoContext *io, const char *path) {
     const char *segment = path;
-    for (const char *p = path; io_work(io, 1); ++p) {
+    for (const char *p = path; (io)->status == XR_OS_IO_OK; ++p) {
         unsigned char c = (unsigned char)*p;
         if (!c || c == '/') {
             size_t length = (size_t)(p - segment);
-            if (!length || !io_work(io, 1)) return false;
+            if (!length || !((io)->status == XR_OS_IO_OK)) return false;
             char last = segment[length - 1];
             if (last == '.' || last == ' ') return false;
             if (!c) return true;
@@ -45,16 +46,16 @@ static bool logical_path_valid(XrIoContext *io, const char *path) {
 }
 static bool wide_length(XrIoContext *io, const wchar_t *text, size_t *length) {
     size_t n = 0;
-    while (io_work(io, sizeof(wchar_t))) {
+    while ((io)->status == XR_OS_IO_OK) {
         if (!text[n]) { *length = n; return true; }
-        if (++n == FILE_PATH_UNITS) return io_status(io, XR_OS_IO_BUDGET);
+        if (++n == FILE_PATH_UNITS) return io_status(io, XR_OS_IO_OVERFLOW);
     }
     return false;
 }
 /* The whole prefix is traversed because the final separator determines the parent. */
 static wchar_t *last_separator(XrIoContext *io, wchar_t *text, size_t *length) {
     wchar_t *last = NULL;
-    for (size_t n = 0; io_work(io, sizeof(wchar_t)); ++n) {
+    for (size_t n = 0; (io)->status == XR_OS_IO_OK; ++n) {
         wchar_t c = text[n];
         if (!c) { *length = n; return last; }
         if (c == L'\\') last = text + n;
@@ -63,24 +64,24 @@ static wchar_t *last_separator(XrIoContext *io, wchar_t *text, size_t *length) {
 }
 static bool same_file(XrIoContext *io, const BY_HANDLE_FILE_INFORMATION *a,
     const BY_HANDLE_FILE_INFORMATION *b) {
-    if (!io_work(io, 6 * sizeof(DWORD))) return false;
+    if (!((io)->status == XR_OS_IO_OK)) return false;
     return a->dwVolumeSerialNumber == b->dwVolumeSerialNumber &&
         a->nFileIndexHigh == b->nFileIndexHigh && a->nFileIndexLow == b->nFileIndexLow;
 }
-static HANDLE open_directory(XrIoContext *io, const wchar_t *path, size_t length) {
-    if (!io_work(io, 1 + (length + 1) * sizeof(wchar_t))) return INVALID_HANDLE_VALUE;
+static HANDLE open_directory(XrIoContext *io, const wchar_t *path) {
+    if (!((io)->status == XR_OS_IO_OK)) return INVALID_HANDLE_VALUE;
     return CreateFileW(path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
         OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
 }
 static bool file_information(XrIoContext *io, HANDLE file, BY_HANDLE_FILE_INFORMATION *information) {
-    return io_work(io, 1 + sizeof(*information)) && GetFileInformationByHandle(file, information);
+    return ((io)->status == XR_OS_IO_OK) && GetFileInformationByHandle(file, information);
 }
 static wchar_t *parent_path(XrIoContext *io, wchar_t *path, size_t *length, bool *drive_root) {
     wchar_t *slash = last_separator(io, path, length);
-    if (!slash || slash == path || !io_work(io, sizeof(wchar_t))) return NULL;
+    if (!slash || slash == path || !((io)->status == XR_OS_IO_OK)) return NULL;
     *drive_root = slash[-1] == L':';
     *length = (size_t)(slash - path) + (*drive_root ? 1u : 0u);
-    if (!io_work(io, sizeof(wchar_t))) return NULL;
+    if (!((io)->status == XR_OS_IO_OK)) return NULL;
     path[*length] = 0;
     return slash;
 }
@@ -89,14 +90,14 @@ static XrFileReadStatus physical_ancestor(XrIoContext *io, HANDLE file,
     wchar_t *path = io_alloc(io, FILE_PATH_UNITS * sizeof(wchar_t));
     if (!path) return file_io_status(io->status);
     XrFileReadStatus status = XR_FILE_READ_FORBIDDEN;
-    if (!io_work(io, 1 + FILE_PATH_UNITS * sizeof(wchar_t))) goto done;
+    if (!((io)->status == XR_OS_IO_OK)) goto done;
     DWORD length = GetFinalPathNameByHandleW(file, path, FILE_PATH_UNITS, FILE_NAME_NORMALIZED);
     if (!length) { status = XR_FILE_READ_IO; goto done; }
     if (length >= FILE_PATH_UNITS) { status = XR_FILE_READ_LIMIT; goto done; }
     for (unsigned depth = 0; depth < FILE_ANCESTOR_LIMIT; ++depth) {
         size_t parent_length = 0; bool drive_root = false;
         if (!parent_path(io, path, &parent_length, &drive_root)) goto done;
-        HANDLE parent = open_directory(io, path, parent_length);
+        HANDLE parent = open_directory(io, path);
         if (parent == INVALID_HANDLE_VALUE) { status = XR_FILE_READ_IO; goto done; }
         BY_HANDLE_FILE_INFORMATION information;
         bool read = file_information(io, parent, &information);
@@ -115,7 +116,7 @@ done:
 }
 static XrFileReadStatus read_bytes(XrIoContext *io, HANDLE file, size_t limit, XrFileBytes *output) {
     LARGE_INTEGER size;
-    if (!io_work(io, 1 + sizeof(size))) return file_io_status(io->status);
+    if (!((io)->status == XR_OS_IO_OK)) return file_io_status(io->status);
     if (!GetFileSizeEx(file, &size) || size.QuadPart < 0) return XR_FILE_READ_IO;
     if ((uint64_t)size.QuadPart > limit || (uint64_t)size.QuadPart >= SIZE_MAX)
         return XR_FILE_READ_LIMIT;
@@ -125,17 +126,17 @@ static XrFileReadStatus read_bytes(XrIoContext *io, HANDLE file, size_t limit, X
     while (offset < length) {
         size_t remaining = length - offset;
         DWORD count = remaining > 65536 ? 65536 : (DWORD)remaining, got = 0;
-        if (!io_work(io, 1 + count)) goto fail;
+        if (!((io)->status == XR_OS_IO_OK)) goto fail;
         if (!ReadFile(file, data + offset, count, &got, NULL) || !got) goto fail;
         offset += got;
     }
     char extra; DWORD got = 0;
-    if (!io_work(io, 2)) goto fail;
+    if (!((io)->status == XR_OS_IO_OK)) goto fail;
     if (!ReadFile(file, &extra, 1, &got, NULL) || got) goto fail;
     LARGE_INTEGER after;
-    if (!io_work(io, 1 + sizeof(after))) goto fail;
+    if (!((io)->status == XR_OS_IO_OK)) goto fail;
     if (!GetFileSizeEx(file, &after) || after.QuadPart != size.QuadPart) goto fail;
-    if (!io_work(io, 1)) goto fail;
+    if (!((io)->status == XR_OS_IO_OK)) goto fail;
     data[length] = 0;
     *output = (XrFileBytes){data, length};
     return XR_FILE_READ_OK;
@@ -149,7 +150,7 @@ static XrFileReadStatus missing_target_status(XrIoContext *io, wchar_t *path,
     for (unsigned depth = 0; depth < FILE_ANCESTOR_LIMIT; ++depth) {
         size_t length = 0; bool drive_root = false;
         if (!parent_path(io, path, &length, &drive_root)) return XR_FILE_READ_FORBIDDEN;
-        HANDLE parent = open_directory(io, path, length);
+        HANDLE parent = open_directory(io, path);
         if (parent == INVALID_HANDLE_VALUE) {
             if (io->status != XR_OS_IO_OK) return file_io_status(io->status);
             DWORD error = GetLastError();
@@ -182,7 +183,7 @@ XR_FUNC XrFileReadStatus xr_os_io_read_under_root(const XrOsIoPolicy *policy,
     if (!directory) goto done;
     size_t root_length = 0, logical_length = 0;
     if (!wide_length(&io, directory, &root_length)) goto done;
-    if (!io_work(&io, 3 * sizeof(wchar_t))) goto done;
+    if (!((&io)->status == XR_OS_IO_OK)) goto done;
     bool absolute = root_length >= 3 && ((directory[1] == L':' &&
         (directory[2] == L'/' || directory[2] == L'\\')) ||
         (directory[0] == L'\\' && directory[1] == L'\\'));
@@ -194,13 +195,13 @@ XR_FUNC XrFileReadStatus xr_os_io_read_under_root(const XrOsIoPolicy *policy,
     combined = io_alloc(&io, units * sizeof(wchar_t));
     if (!combined) goto done;
     if (!io_copy(&io, combined, directory, root_length * sizeof(wchar_t)) ||
-        !io_work(&io, sizeof(wchar_t))) goto done;
+        !((&io)->status == XR_OS_IO_OK)) goto done;
     combined[root_length] = L'\\';
     if (!io_copy(&io, combined + root_length + 1, relative, (logical_length + 1) * sizeof(wchar_t))) goto done;
     for (size_t n = 0; n < units; ++n) {
-        if (!io_work(&io, sizeof(wchar_t))) goto done;
+        if (!((&io)->status == XR_OS_IO_OK)) goto done;
         if (combined[n] == L'/') {
-            if (!io_work(&io, sizeof(wchar_t))) goto done;
+            if (!((&io)->status == XR_OS_IO_OK)) goto done;
             combined[n] = L'\\';
         }
     }
@@ -210,12 +211,12 @@ XR_FUNC XrFileReadStatus xr_os_io_read_under_root(const XrOsIoPolicy *policy,
     units = combined_length + 1;
     if (!io_status(&io, xr_win_path_locator_owned(policy, &directory, root_length)) ||
         !wide_length(&io, directory, &root_length)) goto done;
-    root_handle = open_directory(&io, directory, root_length);
+    root_handle = open_directory(&io, directory);
     if (root_handle == INVALID_HANDLE_VALUE) { status = XR_FILE_READ_IO; goto done; }
     BY_HANDLE_FILE_INFORMATION root_info, file_info;
     if (!file_information(&io, root_handle, &root_info)) { status = XR_FILE_READ_IO; goto done; }
     if (!(root_info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) goto done;
-    if (!io_work(&io, 1 + units * sizeof(wchar_t))) goto done;
+    if (!((&io)->status == XR_OS_IO_OK)) goto done;
     file = CreateFileW(combined, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
         FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
     if (file == INVALID_HANDLE_VALUE) {
@@ -224,7 +225,7 @@ XR_FUNC XrFileReadStatus xr_os_io_read_under_root(const XrOsIoPolicy *policy,
             missing_target_status(&io, combined, &root_info) : XR_FILE_READ_IO;
         goto done;
     }
-    if (!io_work(&io, 1) || GetFileType(file) != FILE_TYPE_DISK) goto done;
+    if (!((&io)->status == XR_OS_IO_OK) || GetFileType(file) != FILE_TYPE_DISK) goto done;
     if (!file_information(&io, file, &file_info)) { status = XR_FILE_READ_IO; goto done; }
     if (file_info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) goto done;
     status = physical_ancestor(&io, file, &root_info);

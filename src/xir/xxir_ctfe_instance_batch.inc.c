@@ -20,13 +20,15 @@ XR_FUNC void xr_xir_compile_ctfe_instance_batch_free(XirCtfeInstanceBatch *owner
     xr_compile_resources_free(owner->values);xr_compile_resources_free(owner->functions);
     xr_compile_resources_free(owner);
 }
-static XrXirCtfeStatus instance_batch_receive(const XirCtfeInstanceBatchRequest *request,
+static XrXirCtfeStatus instance_batch_receive(const XirCtfeInstanceBatchRequest *request,XrCompileRequestControl *control,
     XirCtfeInstanceBatch **output,uint32_t *failed_index) {
     if (!request || !request->checked || !request->functions || !request->count || !output || *output)
         return XR_XIR_CTFE_BAD_ARGUMENT;
     if (failed_index && *failed_index!=UINT32_MAX) return XR_XIR_CTFE_BAD_ARGUMENT;
     XirCtfeInstanceRequest single={request->checked,0,request->target,request->limits,request->call_depth};
     if (!instance_limits_valid(&single)) return XR_XIR_CTFE_BAD_ARGUMENT;
+    XrXirCtfeStatus controlled=instance_control_poll(control);
+    if (controlled!=XR_XIR_CTFE_OK) return controlled;
     const XrXirArtifact *input=request->checked;
     if (!xir_compile_context_valid(&input->context)) return XR_XIR_CTFE_BAD_ARTIFACT;
     if (request->count>input->context.limits.functions ||
@@ -34,7 +36,7 @@ static XrXirCtfeStatus instance_batch_receive(const XirCtfeInstanceBatchRequest 
         (uint64_t)request->count*sizeof(uint32_t)>SIZE_MAX) return XR_XIR_CTFE_BAD_ARGUMENT;
     XrXirStatus status=xr_xir_compile_artifact_verify(input,NULL);
     if (status!=XR_XIR_OK) return instance_compile_status(status);
-    if (!xir_compile_work(&input->context,(uint64_t)request->count*sizeof(uint32_t))) return XR_XIR_CTFE_BUDGET;
+
     for (uint32_t i=0;i<request->count;++i) {
         const XrXirArtifact *definition=NULL;uint32_t declaration=0;
         XrXirCtfeStatus admitted=instance_definition(input,request->functions[i],&definition,&declaration);
@@ -42,45 +44,43 @@ static XrXirCtfeStatus instance_batch_receive(const XirCtfeInstanceBatchRequest 
     }
     XirCtfeInstanceBatch *owner=xir_compile_calloc(&input->context,1,sizeof(*owner),&status);
     if (!owner) return instance_compile_status(status);
-    if (!xir_compile_work(&input->context,sizeof(owner->context)+sizeof(owner->count))) {
-        xr_xir_compile_ctfe_instance_batch_free(owner);return XR_XIR_CTFE_BUDGET;
-    }
+
     owner->context=input->context;owner->count=request->count;
     owner->values=xir_compile_calloc(&input->context,request->count,sizeof(*owner->values),&status);
     if (status==XR_XIR_OK) owner->functions=xir_compile_calloc(&input->context,request->count,sizeof(*owner->functions),&status);
-    if (status==XR_XIR_OK && !xir_compile_work(&input->context,(uint64_t)request->count*sizeof(uint32_t))) status=XR_XIR_BUDGET;
+
     if (status==XR_XIR_OK) memcpy(owner->functions,request->functions,(size_t)request->count*sizeof(uint32_t));
     XrXirCheckedPacket packet={0};
     if (status==XR_XIR_OK) status=instance_packet_write(input,&packet);
     if (status==XR_XIR_OK) status=instance_packet_read(&owner->context,input,&packet,&owner->checked);
     xr_xir_compile_checked_packet_free(&packet);
-    if (status==XR_XIR_OK) status=xr_xir_compile_lower(owner->checked,&request->target,&owner->lowered,NULL);
+    if (status==XR_XIR_OK) {
+        controlled=instance_control_poll(control);
+        if (controlled!=XR_XIR_CTFE_OK) { xr_xir_compile_ctfe_instance_batch_free(owner);return controlled; }
+        status=xr_xir_compile_lower(owner->checked,&request->target,&owner->lowered,NULL);
+    }
     if (status!=XR_XIR_OK) { xr_xir_compile_ctfe_instance_batch_free(owner);return instance_compile_status(status); }
     XirCtfeBatchRequest call={owner->lowered,owner->functions,owner->count,request->target,{0},request->limits,request->call_depth};
-    if (!xir_compile_work(&owner->context,sizeof(call)+sizeof(call.checked_identity))) {
-        xr_xir_compile_ctfe_instance_batch_free(owner);return XR_XIR_CTFE_BUDGET;
-    }
+
     memcpy(call.checked_identity,owner->lowered->checked_identity,sizeof(call.checked_identity));
-    XrXirCtfeStatus evaluated=failed_index?xr_xir_compile_ctfe_batch_at(&call,owner->values,failed_index):
-        xr_xir_compile_ctfe_batch(&call,owner->values);
+    XrXirCtfeStatus evaluated=failed_index?xr_xir_compile_ctfe_batch_at(&call,control,owner->values,failed_index):
+        xr_xir_compile_ctfe_batch(&call,control,owner->values);
     if (evaluated!=XR_XIR_CTFE_OK) { xr_xir_compile_ctfe_instance_batch_free(owner);return evaluated; }
-    if (!xir_compile_work(&owner->context,sizeof(*output))) {
-        xr_xir_compile_ctfe_instance_batch_free(owner);return XR_XIR_CTFE_BUDGET;
-    }
+
     *output=owner;return XR_XIR_CTFE_OK;
 }
-XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance_batch(const XirCtfeInstanceBatchRequest *request,
+XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance_batch(const XirCtfeInstanceBatchRequest *request,XrCompileRequestControl *control,
     XirCtfeInstanceBatch **output) {
-    return instance_batch_receive(request,output,NULL);
+    return instance_batch_receive(request,control,output,NULL);
 }
-XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance_batch_at(const XirCtfeInstanceBatchRequest *request,
+XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance_batch_at(const XirCtfeInstanceBatchRequest *request,XrCompileRequestControl *control,
     XirCtfeInstanceBatch **output,uint32_t *failed_index) {
-    return failed_index?instance_batch_receive(request,output,failed_index):XR_XIR_CTFE_BAD_ARGUMENT;
+    return failed_index?instance_batch_receive(request,control,output,failed_index):XR_XIR_CTFE_BAD_ARGUMENT;
 }
 XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance_batch_views(const XirCtfeInstanceBatch *owner,
     XirCtfeInstanceView *output,uint32_t count) {
     if (!owner || !output || count!=owner->count) return XR_XIR_CTFE_BAD_ARGUMENT;
-    if (!xir_compile_work(&owner->context,(uint64_t)count*sizeof(*output)*2)) return XR_XIR_CTFE_BUDGET;
+
     for (uint32_t i=0;i<count;++i)
         if (output[i].checked || output[i].lowered || output[i].definition || output[i].value ||
             output[i].instance_function || output[i].definition_function) return XR_XIR_CTFE_BAD_ARGUMENT;

@@ -37,35 +37,37 @@ struct XrXirTypeArena {
 static XrXirValueStatus arena_status(XrXirStatus status) {
     return status == XR_XIR_OK ? XR_XIR_VALUE_OK :
         status == XR_XIR_BUDGET ? XR_XIR_VALUE_LIMIT :
+        status == XR_XIR_MEMORY_LIMIT ? XR_XIR_VALUE_MEMORY_LIMIT :
+        status == XR_XIR_OVERFLOW ? XR_XIR_VALUE_OVERFLOW :
         status == XR_XIR_OUT_OF_MEMORY ? XR_XIR_VALUE_OOM : XR_XIR_VALUE_BAD_ARGUMENT;
 }
 static XrXirStorageLayout *arena_storage(ArenaNominalCursor *c, const XrXirTypes *types) {
     uint32_t count = types ? types->count : 0;
     XrXirStorageLayout *layouts = arena_nominal_span(c, count, sizeof(*layouts), _Alignof(XrXirStorageLayout));
     for (uint32_t i = 0; i < count && c->status == XR_XIR_VALUE_OK; ++i) {
-        if (!arena_nominal_work(c, 1)) break;
+        if (!((c)->status == XR_XIR_VALUE_OK)) break;
         uint32_t fields = types->nodes[i].nominal.field_count;
         uint32_t *offsets = arena_nominal_span(c, fields, sizeof(*offsets), _Alignof(uint32_t));
-        if (layouts && arena_nominal_work(c, sizeof(*layouts)))
+        if (layouts && ((c)->status == XR_XIR_VALUE_OK))
             layouts[i] = (XrXirStorageLayout) {{0, 0}, offsets, fields, 0, 0, 0, {0,0}};
     }
     return layouts;
 }
-/* Both traversals consume the caller's ledger. The first only computes spans;
- * the second additionally charges the actual metadata writes and byte copies. */
-static XrXirValueStatus arena_pool_walk(const XrXirCompileContext *context,
+/* The first traversal computes checked spans; the second copies metadata into
+ * the one receiving allocation using exactly those spans. */
+static XrXirValueStatus arena_pool_walk(
     const XrXirTypes *types, XrXirTypeArena *arena, size_t limit, size_t *size) {
-    ArenaNominalCursor cursor = {(char *)arena, sizeof(XrXirTypeArena), limit, context, XR_XIR_VALUE_OK};
+    ArenaNominalCursor cursor = {(char *)arena, sizeof(XrXirTypeArena), limit, XR_XIR_VALUE_OK};
     uint32_t count = types ? types->count : 0;
     XrXirTypeNode *nodes = arena_nominal_span(&cursor, count, sizeof(*nodes), _Alignof(XrXirTypeNode));
     for (uint32_t i = 0; i < count && cursor.status == XR_XIR_VALUE_OK; ++i) {
-        if (!arena_nominal_work(&cursor, 1)) break;
+        if (!((&cursor)->status == XR_XIR_VALUE_OK)) break;
         const XrXirTypeNode *source = &types->nodes[i];
         if (source->parameter_span) return XR_XIR_VALUE_BAD_ARGUMENT;
         XrXirCallableParameter *parameters = arena_nominal_span(&cursor, source->parameter_count,
             sizeof(*parameters), _Alignof(XrXirCallableParameter));
         uint64_t parameter_bytes = (uint64_t)source->parameter_count * sizeof(*parameters);
-        if (nodes && arena_nominal_work(&cursor, sizeof(*nodes) + sizeof(nodes[i].parameters) + parameter_bytes)) {
+        if (nodes && ((&cursor)->status == XR_XIR_VALUE_OK)) {
             nodes[i] = *source;
             nodes[i].parameters = parameters;
             if (parameter_bytes) memcpy(parameters, source->parameters, (size_t)parameter_bytes);
@@ -77,7 +79,7 @@ static XrXirValueStatus arena_pool_walk(const XrXirCompileContext *context,
     XrXirStorageLayout *storage = arena_storage(&cursor, types);
     if (cursor.status != XR_XIR_VALUE_OK) return cursor.status;
     if (arena) {
-        if (!arena_nominal_work(&cursor, sizeof(arena->types) + sizeof(arena->empty_variants) + sizeof(arena->storage)))
+        if (!((&cursor)->status == XR_XIR_VALUE_OK))
             return cursor.status;
         arena->types = (XrXirTypes) {nodes, count, nominals, NULL};
         arena->empty_variants = empty_variants;
@@ -94,18 +96,15 @@ XR_FUNC XrXirValueStatus xr_xir_compile_type_arena_new(const XrXirCompileContext
     XrXirStatus status = xr_xir_compile_types_structure_verify(context, types);
     if (status != XR_XIR_OK) return arena_status(status);
     size_t bytes = 0;
-    XrXirValueStatus value_status = arena_pool_walk(context, types, NULL, SIZE_MAX, &bytes);
+    XrXirValueStatus value_status = arena_pool_walk( types, NULL, SIZE_MAX, &bytes);
     if (value_status != XR_XIR_VALUE_OK) return value_status;
     XrXirTypeArena *arena = xir_compile_calloc(context, 1, bytes, &status);
     if (!arena) return arena_status(status);
-    if (!xir_compile_work(context, sizeof(arena->references) + sizeof(arena->context))) {
-        value_status = XR_XIR_VALUE_LIMIT;
-        goto failed;
-    }
+
     atomic_init(&arena->references, 1);
     arena->context = *context;
     size_t copied = 0;
-    value_status = arena_pool_walk(context, types, arena, bytes, &copied);
+    value_status = arena_pool_walk( types, arena, bytes, &copied);
     if (value_status != XR_XIR_VALUE_OK) goto failed;
     if (copied != bytes) { value_status = XR_XIR_VALUE_BAD_ARGUMENT; goto failed; }
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};

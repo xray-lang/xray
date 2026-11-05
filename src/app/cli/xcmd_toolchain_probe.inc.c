@@ -92,7 +92,11 @@ static void toolchain_probe_native(XrCompileState *state,const XrCliInvocation *
     uint64_t started=GetTickCount64();XrCliToolchainConfig *preferences=NULL;XrCliNativeProbe *owner=NULL;
     XrCliToolchainConfigStatus configured=xr_cli_toolchain_config_open(state,NULL,&preferences);
     if (configured!=XR_CLI_TOOLCHAIN_CONFIG_OK) {
-        toolchain_probe_failure(report,"CONFIG_INVALID","preferences",(unsigned)configured,0);goto done;
+        toolchain_probe_failure(report,configured==XR_CLI_TOOLCHAIN_CONFIG_MEMORY_LIMIT ? "PROBE_MEMORY_LIMIT" :
+            configured==XR_CLI_TOOLCHAIN_CONFIG_OVERFLOW ? "PROBE_OVERFLOW" :
+            configured==XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY ? "PROBE_OUT_OF_MEMORY" :
+            configured==XR_CLI_TOOLCHAIN_CONFIG_BUDGET ? "PROBE_BUDGET" :
+            "CONFIG_INVALID","preferences",(unsigned)configured,0);goto done;
     }
     const XrCliToolchainConfigView *config=xr_cli_toolchain_config_view(preferences);
     if (xr_cli_opt_present(&inv->options,"zig") || strcmp(xr_cli_opt_string(&inv->options,"profile","hosted"),"hosted")) {
@@ -101,9 +105,12 @@ static void toolchain_probe_native(XrCompileState *state,const XrCliInvocation *
     XrCliNativeProbeOptions options={config,report->requested,xr_cli_opt_string(&inv->options,"provider",NULL),
         xr_cli_opt_string(&inv->options,"cc",NULL)};
     XrCliNativeProbeRequest request;
-    XrCliNativeProbeStatus resolved=xr_cli_native_probe_resolve(resources,&options,&request);
+    XrCliNativeProbeStatus resolved=xr_cli_native_probe_resolve(&options,&request);
     if (resolved!=XR_CLI_NATIVE_PROBE_OK) {
-        toolchain_probe_failure(report,resolved==XR_CLI_NATIVE_PROBE_BUDGET ? "PROBE_BUDGET" : "PROVIDER_UNSUPPORTED",
+        toolchain_probe_failure(report,resolved==XR_CLI_NATIVE_PROBE_MEMORY_LIMIT ? "PROBE_MEMORY_LIMIT" :
+            resolved==XR_CLI_NATIVE_PROBE_OVERFLOW ? "PROBE_OVERFLOW" :
+            resolved==XR_CLI_NATIVE_PROBE_OUT_OF_MEMORY ? "PROBE_OUT_OF_MEMORY" :
+            resolved==XR_CLI_NATIVE_PROBE_BUDGET ? "PROBE_BUDGET" : "PROVIDER_UNSUPPORTED",
             "provider",(unsigned)resolved,0);goto done;
     }
     XrCliNativeProbeStatus status=xr_cli_native_probe_new(resources,&owner);
@@ -127,7 +134,10 @@ static void toolchain_probe_native(XrCompileState *state,const XrCliInvocation *
         }
     }
     if (status!=XR_CLI_NATIVE_PROBE_OK && !report->code)
-        toolchain_probe_failure(report,"PROBE_UNAVAILABLE","capability",(unsigned)status,0);
+        toolchain_probe_failure(report,status==XR_CLI_NATIVE_PROBE_MEMORY_LIMIT ? "PROBE_MEMORY_LIMIT" :
+            status==XR_CLI_NATIVE_PROBE_OVERFLOW ? "PROBE_OVERFLOW" :
+            status==XR_CLI_NATIVE_PROBE_OUT_OF_MEMORY ? "PROBE_OUT_OF_MEMORY" :
+            "PROBE_UNAVAILABLE","capability",(unsigned)status,0);
 done:
     xr_cli_toolchain_config_free(preferences);
     if (!toolchain_probe_close(&owner)) toolchain_probe_failure(report,"PROBE_CLEANUP_FAILED","cleanup",0,0);

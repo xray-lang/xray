@@ -44,11 +44,11 @@ static void fmt_io_failure(FmtWork *work, const char *path, XrOsIoStatus status)
     bool internal = status == XR_OS_IO_OUT_OF_MEMORY || status == XR_OS_IO_BAD_ARGUMENT;
     fmt_failure(work,internal ? XR_CLI_EXIT_INTERNAL :
         status == XR_OS_IO_UNSUPPORTED ? XR_CLI_EXIT_UNAVAILABLE : XR_CLI_EXIT_FAIL,
-        internal || status == XR_OS_IO_BUDGET);
+        internal || status == XR_OS_IO_OVERFLOW);
 }
 static bool fmt_resource(FmtWork *work, XrCompileResourceStatus status, const char *path) {
     if (status == XR_COMPILE_RESOURCE_OK) return true;
-    fmt_io_failure(work,path,status == XR_COMPILE_RESOURCE_BUDGET ? XR_OS_IO_BUDGET :
+    fmt_io_failure(work,path,status == XR_COMPILE_RESOURCE_BUDGET ? XR_OS_IO_OVERFLOW :
         status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_OS_IO_OUT_OF_MEMORY : XR_OS_IO_BAD_ARGUMENT);
     return false;
 }
@@ -104,10 +104,10 @@ static void fmt_file(FmtWork *work, const char *path) {
     source=terminated;
     if(!fmt_resource(work,resized,path) || !fmt_resource(work,xr_compile_state_work(work->state,1),path)) goto cleanup;
     source[length]=0;
-    XrCompilerSessionStatus opened=xr_compile_session_new(work->resources,&session);
-    if(opened!=XR_COMPILER_SESSION_OK) {
+    XrCompileResourceStatus opened=xr_compile_session_new(work->resources,&session);
+    if(opened!=XR_COMPILE_RESOURCE_OK) {
         fmt_resource(work,opened==XR_COMPILER_SESSION_BUDGET ? XR_COMPILE_RESOURCE_BUDGET :
-            opened==XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_BAD_ARGUMENT,path);
+            opened==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_BAD_ARGUMENT,path);
         goto cleanup;
     }
     XrParseStatus parsed=xr_compile_parse_with_trivia(session,(const char *)source,path,NULL,&ast);

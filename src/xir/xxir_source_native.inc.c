@@ -37,7 +37,7 @@ static bool source_query_target_token_reference(SourceContext *ctx, AstNode *nod
 static bool source_native_array_declaration(SourceContext *ctx) {
     if (ctx->array_declaration) return true;
     const XrNativeTypeDeclaration *native = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_ARRAY);
-    if (!source_work(ctx, NULL)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (!source_native_admit(ctx,native)) return false;
     XrXirSourceQueryModule *modules = source_query_append(ctx, ctx->query.modules,
         &ctx->query.module_count, &ctx->query_module_capacity, sizeof(*modules));
@@ -113,18 +113,17 @@ static bool source_array_element_type(SourceContext *ctx, XrXirType element, XrX
 static bool source_native_type_shadowed(SourceContext *ctx, const char *name) {
     if (find_name(ctx, ctx->locals, name) || find_name(ctx, ctx->names[ctx->module], name) ||
         source_history_name(ctx,name)) return true;
-    AstNode *owner = ctx->bodies[ctx->function].type_owner;
     int count;
     XrGenericParam **parameters = source_type_parameters(ctx, &count);
     for (int i = 0; i < count; ++i) {
-        if (!source_work(ctx, owner)) return true;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return true;
         if (source_text_same(ctx, NULL, name, parameters[i]->name)) return true;
     }
     /* Module declarations are hoisted, including ones whose signatures follow this one. */
     AstNode *module = ctx->graph->specs[ctx->module].ast;
     for (int i = 0; i < module->as.program.count; ++i) {
         AstNode *node = module->as.program.statements[i];
-        if (!source_work(ctx, node)) return true;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return true;
         const char *declared = node->type == AST_FUNCTION_DECL ? node->as.function_decl.name :
             node->type == AST_CLASS_DECL ? node->as.class_decl.name :
             node->type == AST_STRUCT_DECL ? node->as.struct_decl.name :
@@ -135,7 +134,7 @@ static bool source_native_type_shadowed(SourceContext *ctx, const char *name) {
             ImportStmtNode *import = &node->as.import_stmt;
             if (!import->member_count && import->alias && source_text_same(ctx, NULL, import->alias, name)) return true;
             for (int m = 0; m < import->member_count; ++m) {
-                if (!source_work(ctx, node)) return true;
+                if (!((ctx)->diagnostic.status == XR_XIR_OK)) return true;
                 const char *alias = import->members[m].alias ? import->members[m].alias : import->members[m].name;
                 if (source_text_same(ctx, NULL, alias, name)) return true;
             }

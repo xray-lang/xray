@@ -90,7 +90,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
         &paths, &path_diagnostic);
     XrXirSourceProduct *product = NULL;
     XrSourceCompileDiagnostic diagnostic = {0};
-    XrSourceProgram *owned = NULL;
+    XrSourceArtifact *owned = NULL;
     XrXirProgram *program = NULL;
     uint32_t entry = 0;
     int result = XR_CLI_EXIT_FAIL;
@@ -106,22 +106,22 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
         if (status != XR_SOURCE_COMPILE_OK) {
             result = report_source_failure(&diagnostic);
         } else {
-            XrSourceStatus wrapped = xr_source_program_take_product(&product, &owned);
+            XrSourceStatus wrapped = xr_source_artifact_take_product(&product, XR_SOURCE_TARGET_VM, &owned);
             if (wrapped != XR_SOURCE_OK) {
                 fprintf(stderr, "XR_RUN_6002: cannot admit owned API program (status=%u)\n", (unsigned)wrapped);
-                result = wrapped == XR_SOURCE_BUDGET ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL;
+                result = wrapped == XR_SOURCE_MEMORY_LIMIT ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL;
             } else {
-                XrSourceStatus taken = xr_source_program_take_vm(&owned, &program, &entry);
+                XrSourceStatus taken = xr_source_artifact_take_vm(&owned, &program, &entry);
                 if (taken != XR_SOURCE_OK) {
                     fprintf(stderr, "XR_RUN_6002: cannot prepare VM program (status=%u)\n", (unsigned)taken);
-                    result = taken == XR_SOURCE_BUDGET ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL;
+                    result = taken == XR_SOURCE_MEMORY_LIMIT ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL;
                 }
             }
         }
     }
     xr_source_paths_free(&paths);
     xr_source_paths_diagnostic_free(&path_diagnostic);
-    xray_source_program_free(owned);
+    xray_source_artifact_free(owned);
     xr_xir_compile_source_product_free(product);
     xr_source_compile_diagnostic_free(&diagnostic);
     xr_compile_resources_release(resources);

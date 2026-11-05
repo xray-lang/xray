@@ -17,11 +17,11 @@ static bool materialization_scalar(XrXirType type) {
     return type==XR_XIR_UNIT || type==XR_XIR_BOOL || type==XR_XIR_RUNE ||
         type==XR_XIR_STRING || xr_xir_type_is_number(type);
 }
-static XrXirStatus materialization_type_cycle(const XrXirCompileContext *context,
+static XrXirStatus materialization_type_cycle(
     const XrXirTypes *types,const MaterializationTypeFrame *stack,uint32_t depth,XrXirType type) {
     bool reference=false,array_only=true;
     while (depth) {
-        if (!xir_compile_work(context,8)) return XR_XIR_BUDGET;
+
         const MaterializationTypeFrame *frame=&stack[--depth];const XrXirTypeNode *node=xr_xir_type_node(types,frame->type);
         reference|=node->kind!=XR_XIR_TYPE_NOMINAL && node->kind!=XR_XIR_TYPE_NULLABLE;
         array_only&=node->kind==XR_XIR_TYPE_ARRAY;
@@ -31,7 +31,7 @@ static XrXirStatus materialization_type_cycle(const XrXirCompileContext *context
 }
 static XrXirStatus materialization_data_type(const XrXirCompileContext *context,
     const XrXirTypes *types,XrXirType type) {
-    if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
+
     if (materialization_scalar(type)) return XR_XIR_OK;
     if (!types || !types->count || !xr_xir_type_node(types,type)) return XR_XIR_BAD_TYPE;
     uint64_t bytes=(uint64_t)types->count*(sizeof(MaterializationTypeFrame)+1);
@@ -42,7 +42,7 @@ static XrXirStatus materialization_data_type(const XrXirCompileContext *context,
     uint8_t *colors=(uint8_t *)(stack+types->count);uint32_t depth=1;
     stack[0]=(MaterializationTypeFrame){type,0};colors[(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE]=1;
     while (depth) {
-        if (!xir_compile_work(context,8)) { status=XR_XIR_BUDGET;break; }
+
         MaterializationTypeFrame *frame=&stack[depth-1];
         const XrXirTypeNode *node=xr_xir_type_node(types,frame->type);
         bool single=node->kind==XR_XIR_TYPE_ARRAY || node->kind==XR_XIR_TYPE_NULLABLE;
@@ -56,7 +56,7 @@ static XrXirStatus materialization_data_type(const XrXirCompileContext *context,
         }
         uint32_t count=single?1:nominal?node->nominal.field_count:node->parameter_count;
         if (frame->next==count) { colors[(uint32_t)frame->type-XR_XIR_CONSTRUCTED_TYPE_BASE]=2;--depth;continue; }
-        if (!xir_compile_work(context,sizeof(XrXirCallableParameter)+1)) { status=XR_XIR_BUDGET;break; }
+
         XrXirType child=single?node->element:nominal?node->nominal.fields[frame->next]:node->parameters[frame->next].type;
         if (!single && !nominal && node->parameters[frame->next].mode) { status=XR_XIR_BAD_TYPE;break; }
         ++frame->next;
@@ -67,7 +67,7 @@ static XrXirStatus materialization_data_type(const XrXirCompileContext *context,
         if (!xr_xir_type_node(types,child)) { status=XR_XIR_BAD_TYPE;break; }
         uint32_t index=(uint32_t)child-XR_XIR_CONSTRUCTED_TYPE_BASE;
         if (colors[index]==1) {
-            status=materialization_type_cycle(context,types,stack,depth,child);
+            status=materialization_type_cycle(types,stack,depth,child);
             if (status!=XR_XIR_OK) break;continue;
         }
         if (colors[index]==2) continue;
@@ -92,7 +92,7 @@ static bool materialization_opcode(XrXirOp op) {
 XR_FUNC XrXirStatus xir_literal_type_names(const XrXirCompileContext *context,
     const XrXirModule *module,const XrXirConstruction *construction,uint32_t function,bool *output) {
     *output=false;
-    if (!xir_compile_work(context,sizeof(XrXirFunction)+sizeof(XrXirFunctionIdentity))) return XR_XIR_BUDGET;
+
     if (!construction || !module->provenance || module->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE || !module->declarations)
         return XR_XIR_OK;
     const XrXirFunction *body=&module->functions[function];
@@ -105,11 +105,11 @@ XR_FUNC XrXirStatus xir_literal_type_names(const XrXirCompileContext *context,
         (module->generics && (module->generics[function].parameter_count || module->generics[function].argument_count))) return XR_XIR_OK;
     bool bound=false;
     for (uint32_t b=0;b<construction->comptime.binding_count;++b) {
-        if (!xir_compile_work(context,sizeof(XrXirComptimeBinding))) return XR_XIR_BUDGET;
+
         bound|=construction->comptime.bindings[b].provider==function;
     }
     for (uint32_t b=0;id->method_kind==XR_XIR_MATERIALIZER && b<construction->materialization_count;++b) {
-        if (!xir_compile_work(context,sizeof(XrXirMaterializationBinding))) return XR_XIR_BUDGET;
+
         bound|=construction->materializations[b].function==function;
     }
     if (!bound) return XR_XIR_OK;
@@ -117,7 +117,7 @@ XR_FUNC XrXirStatus xir_literal_type_names(const XrXirCompileContext *context,
     if (body->blocks[0].first || body->blocks[0].count!=body->instruction_count || body->blocks[0].panic) return XR_XIR_OK;
     XrXirStatus status=materialization_data_type(context,module->types,body->result);
     for (uint32_t i=0;status==XR_XIR_OK && i<body->instruction_count;++i) {
-        if (!xir_compile_work(context,sizeof(XrXirInstruction))) return XR_XIR_BUDGET;
+
         const XrXirInstruction *op=&body->instructions[i];
         if (!materialization_opcode(op->op)) return XR_XIR_OK;
         XrXirType type=op->type;
@@ -147,7 +147,7 @@ static XrXirStatus materialization_target(const XrXirCompileContext *context,
         return XR_XIR_BAD_TYPE;
     XrXirStatus status=materialization_data_type(context,module->types,body->result);
     for (uint32_t i=0;status==XR_XIR_OK && i<body->instruction_count;++i) {
-        if (!xir_compile_work(context,sizeof(XrXirInstruction))) return XR_XIR_BUDGET;
+
         const XrXirInstruction *op=&body->instructions[i];
         if (!materialization_opcode(op->op)) return XR_XIR_BAD_TYPE;
         XrXirType type=op->type;
@@ -183,12 +183,12 @@ static XrXirStatus materialization_acyclic(const XrXirCompileContext *context,
     if (!stack) return status;
     uint8_t *colors=(uint8_t *)(stack+module->function_count);uint32_t depth=0;
     for (uint32_t f=0;status==XR_XIR_OK && f<module->function_count;++f) {
-        if (!xir_compile_work(context,4)) { status=XR_XIR_BUDGET;break; }
+
         if (module->declarations->functions[f].method_kind!=XR_XIR_MATERIALIZER || colors[f]) continue;
-        if (!xir_compile_work(context,256)) { status=XR_XIR_BUDGET;break; }
+
         colors[f]=1;stack[depth++]=(MaterializationCallFrame){f,materialization_first(owner,f)};
         while (depth) {
-            if (!xir_compile_work(context,sizeof(XrXirMaterializationBinding)+8)) { status=XR_XIR_BUDGET;break; }
+
             MaterializationCallFrame *frame=&stack[depth-1];
             if (frame->next==owner->materialization_count || owner->materializations[frame->next].caller!=frame->function) {
                 colors[frame->function]=2;--depth;continue;
@@ -197,7 +197,7 @@ static XrXirStatus materialization_acyclic(const XrXirCompileContext *context,
             if (colors[child]==1) { status=XR_XIR_BAD_TYPE;break; }
             if (colors[child]==2) continue;
             if (depth==module->function_count) { status=XR_XIR_BAD_STRUCTURE;break; }
-            if (!xir_compile_work(context,256)) { status=XR_XIR_BUDGET;break; }
+
             colors[child]=1;stack[depth++]=(MaterializationCallFrame){child,materialization_first(owner,child)};
         }
     }
@@ -207,13 +207,13 @@ XR_FUNC XrXirStatus xir_materialization_verify(const XrXirCompileContext *contex
     const XrXirModule *module,const XrXirConstruction *owner) {
     const XrXirDeclarations *d=module->declarations;uint32_t helpers=0;
     for (uint32_t f=0;d && f<module->function_count;++f) {
-        if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
+
         if (d->functions[f].method_kind==XR_XIR_MATERIALIZER) ++helpers;
     }
     if (!helpers) return owner->materialization_count?XR_XIR_BAD_STRUCTURE:XR_XIR_OK;
     if (!d || !owner->materialization_count) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i=0;module->defaults && i<module->defaults->count;++i) {
-        if (!xir_compile_work(context,4)) return XR_XIR_BUDGET;
+
         uint32_t function=module->defaults->records[i].function;
         if (function<module->function_count && d->functions[function].method_kind==XR_XIR_MATERIALIZER)
             return XR_XIR_BAD_TYPE;
@@ -222,7 +222,7 @@ XR_FUNC XrXirStatus xir_materialization_verify(const XrXirCompileContext *contex
     for (uint32_t i=0;implementations && i<implementations->count;++i) {
         const XrXirImplementation *implementation=&implementations->records[i];
         for (uint32_t j=0;j<implementation->binding_count;++j) {
-            if (!xir_compile_work(context,4)) return XR_XIR_BUDGET;
+
             uint32_t function=implementation->bindings[j].function;
             if (function<module->function_count && d->functions[function].method_kind==XR_XIR_MATERIALIZER)
                 return XR_XIR_BAD_TYPE;
@@ -232,7 +232,7 @@ XR_FUNC XrXirStatus xir_materialization_verify(const XrXirCompileContext *contex
     uint8_t *covered=xir_compile_calloc(context,module->function_count,1,&status);
     if (!covered) return status;
     for (uint32_t i=0;i<owner->materialization_count;++i) {
-        if (!xir_compile_work(context,sizeof(XrXirMaterializationBinding)+8)) { status=XR_XIR_BUDGET;break; }
+
         const XrXirMaterializationBinding *row=&owner->materializations[i];
         if (row->caller>=module->function_count || row->function>=module->function_count) { status=XR_XIR_BAD_STRUCTURE;break; }
         const XrXirFunction *caller=&module->functions[row->caller];
@@ -245,17 +245,17 @@ XR_FUNC XrXirStatus xir_materialization_verify(const XrXirCompileContext *contex
         covered[row->function]=1;
     }
     for (uint32_t f=0;status==XR_XIR_OK && f<module->function_count;++f) {
-        if (!xir_compile_work(context,4)) { status=XR_XIR_BUDGET;break; }
+
         const XrXirFunction *body=&module->functions[f];
         if (d->functions[f].method_kind==XR_XIR_MATERIALIZER && !covered[f]) { status=XR_XIR_BAD_STRUCTURE;break; }
         if (body->instruction_count && !body->instructions) { status=XR_XIR_BAD_STRUCTURE;break; }
         for (uint32_t i=0;i<body->instruction_count;++i) {
-            if (!xir_compile_work(context,4)) { status=XR_XIR_BUDGET;break; }
+
             const XrXirInstruction *op=&body->instructions[i];
             bool call=xr_xir_op_references_function(op->op);
             if (!call || op->immediate<0 || (uint64_t)op->immediate>=module->function_count ||
                 d->functions[op->immediate].method_kind!=XR_XIR_MATERIALIZER) continue;
-            if (!xir_compile_work(context,256)) { status=XR_XIR_BUDGET;break; }
+
             const XrXirMaterializationBinding *row=xir_materialization_binding(owner,f,i);
             if (op->op!=XR_XIR_CALL || !row || row->function!=(uint32_t)op->immediate) { status=XR_XIR_BAD_TYPE;break; }
         }

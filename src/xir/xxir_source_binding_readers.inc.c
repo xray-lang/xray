@@ -66,7 +66,7 @@ static bool source_binding_readers(SourceContext *ctx) {
     if(!source_history_binding_accessors(ctx))return false;
     uint32_t root=(uint32_t)ctx->graph->entry_index;
     for(SourceName *symbol=ctx->names[root];symbol;symbol=symbol->next) {
-        if(!source_work(ctx,symbol->node))return false;
+        if(!((ctx)->diagnostic.status == XR_XIR_OK))return false;
         if(symbol->kind!=SOURCE_SLOT && symbol->kind!=SOURCE_UNIT_SLOT)continue;
         if(symbol->index>=ctx->slot_count || ctx->slots[symbol->index].module!=root || ctx->binding_reads[symbol->index])
             return source_fail(ctx,symbol->node,XR_XIR_BAD_STRUCTURE,"binding reader has no unique actual root slot");
@@ -75,7 +75,7 @@ static bool source_binding_readers(SourceContext *ctx) {
         if(symbol->mutable && xr_xir_type_is_array(&ctx->types,symbol->type) && !source_binding_accessor(ctx,symbol,SOURCE_ACCESS_PUSH,&ctx->binding_pushes[symbol->index]))return false;
     }
     for(SourceFunctionValue *pair=ctx->function_values;pair;pair=pair->next) {
-        if(!source_work(ctx,pair->function->node))return false;
+        if(!((ctx)->diagnostic.status == XR_XIR_OK))return false;
         if(pair->value->index>=ctx->slot_count || !ctx->binding_reads[pair->value->index])
             return source_fail(ctx,pair->function->node,XR_XIR_BAD_STRUCTURE,"function value has no actual slot reader");
         pair->function->reader=ctx->binding_reads[pair->value->index];

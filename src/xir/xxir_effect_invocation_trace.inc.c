@@ -33,10 +33,10 @@ typedef struct EffectInvocationTraceSelection {
     XrXirRootEffectWitness witness;
 } EffectInvocationTraceSelection;
 
-static XrXirStatus effect_invocation_trace_finish(const XrXirCompileContext *work,
+static XrXirStatus effect_invocation_trace_finish(
     uint32_t count,uint32_t atom,XrXirRootEffectWitness witness,uint32_t *length,
     EffectInvocationTraceSelection *selection) {
-    if (selection && !xir_compile_work(work,sizeof(*selection))) return XR_XIR_BUDGET;
+
     if (selection) *selection=(EffectInvocationTraceSelection){atom,witness};
     *length=count;return XR_XIR_OK;
 }
@@ -56,18 +56,18 @@ static XrXirStatus effect_invocation_trace_walk_selected(const XrXirCompileConte
     XrXirStatus status=chosen?XR_XIR_OK:effect_invocation_projection_select(work,certificate,request->function,request->domain,
         &scalar_atom,&scalar_witness);
     if (status!=XR_XIR_OK) return status;
-    if(!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+
     uint32_t atom=chosen?chosen->atom:scalar_atom;
     const XrXirRootEffectWitness *witness=chosen?&chosen->witness:&scalar_witness;
     status=effect_invocation_projection_result_match(work,certificate,request->function,request->domain,
         atom,witness);
     if (status!=XR_XIR_OK) return status;
     bool fact=atom!=UINT32_MAX;
-    if (!fact) return effect_invocation_trace_finish(work,0,atom,*witness,length,selection);
+    if (!fact) return effect_invocation_trace_finish(0,atom,*witness,length,selection);
     const EffectInvocationFinal *equations=certificate->final;
     uint32_t current=equations->roots[request->function],count=0;
     for (;;) {
-        if (!xir_compile_work(work,8)) return XR_XIR_BUDGET;
+
         if (current>=equations->count || count>=equations->count) return XR_XIR_BAD_STRUCTURE;
         const EffectInvocationNode *node=&equations->nodes[current];
         if (node->body>=effect_body_count(certificate->body) || atom>=node->cause_count)
@@ -77,14 +77,14 @@ static XrXirStatus effect_invocation_trace_walk_selected(const XrXirCompileConte
             return XR_XIR_BAD_STRUCTURE;
         XrXirRootEffectWitness public_value=effect_invocation_public_witness(certificate,node,cause);
         if (request->steps) {
-            if (!xir_compile_work(work,sizeof(*request->steps))) return XR_XIR_BUDGET;
+
             request->steps[count]=(EffectInvocationTraceStep){current,node->root,
                 certificate->origins[node->body].function,public_value};
         }
         ++count;
         if (!cause->distance) {
             if (cause->next!=UINT32_MAX || cause->edge!=UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
-            return effect_invocation_trace_finish(work,count,atom,*witness,length,selection);
+            return effect_invocation_trace_finish(count,atom,*witness,length,selection);
         }
         if (cause->next>=equations->count || cause->edge>=equations->edge_count ||
             equations->edges[cause->edge].caller!=current ||
@@ -125,7 +125,7 @@ static inline XrXirStatus effect_invocation_certificate_trace(const XrXirCompile
     request=(EffectInvocationTraceRequest){function,1,steps+counts[0]};
     if (status==XR_XIR_OK) status=effect_invocation_trace_walk(work,certificate,&request,&copied);
     if (status==XR_XIR_OK && copied!=counts[1]) status=XR_XIR_BAD_STRUCTURE;
-    if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(*trace))) status=XR_XIR_BUDGET;
+
     if (status!=XR_XIR_OK) { effect_invocation_trace_free(trace);return status; }
     trace->resources=work->resources;
     status=effect_invocation_certificate_facts(work,certificate,function,&trace->facts);

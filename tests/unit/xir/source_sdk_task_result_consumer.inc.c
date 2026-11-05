@@ -37,26 +37,25 @@ static void sdk_terminal_task_cases(const char *stdlib_path) {
         "export fn errorTask()->Task<i64>{const t=go broken();try{await t}catch(e){};return t}\n"
         "export fn panicTask()->Task<i64>{const t=go panicValue();try{await t}catch panic(p){};return t}\n";
     static const char *names[]={"numberTask","textTask","arrayTask","unitTask","nestedTask","errorTask","panicTask"};
-    XrSourceCompilerOptions options;
-    CHECK(xray_source_compiler_options_init(&options,sizeof(options))==XR_SOURCE_OK);
+    XrSourceCompileOptions options=xray_source_compile_options_default();
     options.stdlib_path=stdlib_path;
-    XrSourceCompiler *compiler=NULL;XrSourceProgram *program=NULL;
-    CHECK(xray_source_compiler_new(&options,&compiler)==XR_SOURCE_OK && compiler);
+    XrSourceExecution *execution=sdk_execution_new();XrSourceArtifact *program=NULL;
     const XrSourceText text={NULL,"installed-terminal-tasks",source,sizeof(source)-1};
-    CHECK(xray_source_compile_text(compiler,&text,&program,NULL)==XR_SOURCE_OK && program);
+    XrSourceInput input;memset(&input,0,sizeof(input));input.kind=XR_SOURCE_INPUT_TEXT;input.value.text=text;
+    CHECK(xray_source_build(&input,&options,&program,NULL,NULL)==XR_SOURCE_OK && program);
     XrSourceCallOptions runtime;
     CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
     XrSourceValue *tasks[7]={NULL};XrSourceResult *survivors[7]={NULL};
     XrSourceInvocation missing_options=request(names[0],NULL,0);XrSourceResult *unpublished=NULL;
-    CHECK(xray_source_invoke(program,&missing_options,NULL,&unpublished,NULL)==XR_SOURCE_BAD_ARGUMENT && !unpublished);
+    CHECK(xray_source_invoke(execution,program,&missing_options,NULL,&unpublished,NULL)==XR_SOURCE_BAD_ARGUMENT && !unpublished);
     for(size_t i=0;i<7;++i) {
         XrSourceInvocation invocation=request(names[i],NULL,0);XrSourceResult *result=NULL;
-        CHECK(xray_source_invoke(program,&invocation,&runtime,&result,NULL)==XR_SOURCE_OK && result);
+        CHECK(xray_source_invoke(execution,program,&invocation,&runtime,&result,NULL)==XR_SOURCE_OK && result);
         XrSourceEvent event;
         CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);
         tasks[i]=sdk_task_value(result,XR_SOURCE_VALUE_TASK);xray_source_result_free(result);
     }
-    xray_source_program_free(program);xray_source_compiler_free(compiler);
+    xray_source_artifact_free(program);xray_source_execution_free(execution);
     for(size_t i=0;i<7;++i) {
         XrSourceResult *first=NULL;
         CHECK(xray_source_value_task_result(tasks[i],&first)==XR_SOURCE_OK && first);

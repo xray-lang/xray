@@ -98,7 +98,7 @@ static bool source_closure_error_bound(SourceContext *ctx) {
         (ctx->identities[function].promises & XR_XIR_FUNCTION_GENERATOR))
         return true;
     for (uint32_t i=0;i<ctx->bodies[function].count;++i) {
-        if (!source_work(ctx,ctx->bodies[function].node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         XrXirInstruction op=ctx->bodies[function].recipes[i].instruction;
         bool empty=false;
         if (!source_recipe_never(ctx,&op,i,&empty)) return false;

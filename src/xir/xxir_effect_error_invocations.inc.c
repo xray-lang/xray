@@ -41,7 +41,7 @@ static XrXirStatus error_invocation_storage(ErrorFlow *flow,
         (owner->edge_count && !owner->edges)) return XR_XIR_BAD_STRUCTURE;
     uint64_t calls=0;
     for (uint32_t n=0;n<owner->count;++n) {
-        if (!xir_compile_work(flow->remaining,2)) return XR_XIR_BUDGET;
+
         if (owner->nodes[n].body>=flow->body.domain.function_count ||
             owner->nodes[n].root>=flow->body.domain.function_count) return XR_XIR_BAD_STRUCTURE;
         EffectBodyFunctionDimensions head={0};
@@ -69,7 +69,7 @@ static XrXirStatus error_invocation_storage(ErrorFlow *flow,
     contexts->queued=(uint8_t *)(contexts->queue+owner->count);
     uint32_t at=0;
     for (uint32_t n=0;n<owner->count;++n) {
-        if (!xir_compile_work(flow->remaining,4)) { status=XR_XIR_BUDGET;break; }
+
         contexts->nodes[n]=(ErrorInvocationNode){owner->nodes[n].body,UINT32_MAX,at,UINT32_MAX};
         contexts->consumers[n]=UINT32_MAX;
         EffectBodyFunctionDimensions head={0};
@@ -77,13 +77,13 @@ static XrXirStatus error_invocation_storage(ErrorFlow *flow,
         if (status!=XR_XIR_OK) break;
         uint32_t count=head.instruction_count;
         for (uint32_t i=0;i<count;++i) {
-            if (!xir_compile_work(flow->remaining,1)) { status=XR_XIR_BUDGET;break; }
+
             contexts->calls[at++].head=UINT32_MAX;
         }
         if (status!=XR_XIR_OK) break;
     }
     for (uint32_t f=0;status==XR_XIR_OK && f<flow->body.domain.function_count;++f) {
-        if (!xir_compile_work(flow->remaining,3)) { status=XR_XIR_BUDGET;break; }
+
         uint32_t n=owner->roots[f];
         if (n>=owner->count || owner->root_spaces[f]>=flow->body.domain.function_count ||
             owner->nodes[n].body!=f || owner->nodes[n].root!=owner->root_spaces[f] ||
@@ -92,7 +92,7 @@ static XrXirStatus error_invocation_storage(ErrorFlow *flow,
     }
     contexts->summaries=flow->body.domain.function_count;
     for (uint32_t n=0;status==XR_XIR_OK && n<owner->count;++n) {
-        if (!xir_compile_work(flow->remaining,1)) { status=XR_XIR_BUDGET;break; }
+
         if (contexts->nodes[n].summary!=UINT32_MAX) continue;
         if (contexts->summaries==UINT32_MAX) { status=XR_XIR_BUDGET;break; }
         contexts->nodes[n].summary=contexts->summaries++;
@@ -100,13 +100,13 @@ static XrXirStatus error_invocation_storage(ErrorFlow *flow,
     /* Returned Task and Iterator values carry latent Error sets separately
      * from errors escaping the factory invocation. Both use the same CFG. */
     for (uint32_t n=0;status==XR_XIR_OK && n<owner->count;++n) {
-        if (!xir_compile_work(flow->remaining,6)) { status=XR_XIR_BUDGET;break; }
+
         bool returned=false;
         status=error_finite_returned_node(flow->remaining,certificate->body,owner,n,&returned);
         if (status!=XR_XIR_OK) break;
         if (!returned) continue;
         if (contexts->summaries==UINT32_MAX) { status=XR_XIR_BUDGET;break; }
-        if (!xir_compile_work(flow->remaining,1)) { status=XR_XIR_BUDGET;break; }
+
         contexts->nodes[n].returned=contexts->summaries++;
     }
     if (status!=XR_XIR_OK) { error_invocation_contexts_free(contexts);return status; }
@@ -131,19 +131,19 @@ static XrXirStatus error_invocation_indirect_check(EffectInvocationFlow *replay,
         replay->node,(uint32_t)op->immediate,&complete);
     if(status!=XR_XIR_OK) return status;
     for (uint32_t bit=owner->final->site_count;bit<=opaque+2;++bit) {
-        if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+
         /* The original ROOT advertisement stays intact. Only independently
          * certified exhaustive targets discharge its error-only residual. */
         if (bit==opaque && complete) continue;
         if (row[bit/64]&(UINT64_C(1)<<(bit%64))) unresolved=true;
     }
     for (uint32_t s=0;s<owner->final->site_count;++s) {
-        if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+
         if (!(row[s/64]&(UINT64_C(1)<<(s%64)))) continue;
         present=true;uint32_t matched=0;
         const ErrorInvocationCall *call=&contexts->calls[contexts->nodes[replay->node].calls+instruction];
         for (uint32_t e=call->head;e!=UINT32_MAX;e=contexts->links[e].next) {
-            if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
+
             if (e>=contexts->link_count) return XR_XIR_BAD_STRUCTURE;
             if (contexts->links[e].producer==s) ++matched;
         }
@@ -201,7 +201,7 @@ static XrXirStatus error_invocation_input_match(EffectInvocationFlow *replay,
     if (status==XR_XIR_OK && words && (!input || !target->input)) status=XR_XIR_BAD_STRUCTURE;
     bool same=true;
     for (size_t w=0;status==XR_XIR_OK && w<(size_t)words;++w) {
-        if (!xir_compile_work(replay->read->work,2)) { status=XR_XIR_BUDGET;break; }
+
         if (input[w]!=target->input[w]) same=false;
     }
     xr_compile_resources_free(input);if (status==XR_XIR_OK) *matched=same;return status;
@@ -231,7 +231,7 @@ static XrXirStatus error_invocation_link(ErrorFlow *flow,ErrorInvocationContexts
     if (!matched) return XR_XIR_OK;
     if (contexts->link_count>=contexts->link_capacity) return XR_XIR_BAD_STRUCTURE;
     uint32_t link=contexts->link_count++;
-    if (!xir_compile_work(flow->remaining,6)) return XR_XIR_BUDGET;
+
     contexts->links[link]=(ErrorInvocationLink){edge.caller,edge.target,edge.producer,
         call->head,contexts->consumers[edge.target]};
     call->head=link;call->handled=true;contexts->consumers[edge.target]=link;
@@ -266,7 +266,7 @@ static XrXirStatus error_invocation_fallback_row(ErrorFlow *flow,ErrorInvocation
     target=certificate->final->roots[target];
     if (target>=contexts->count) return XR_XIR_BAD_STRUCTURE;
     uint32_t link=contexts->link_count++;
-    if (!xir_compile_work(flow->remaining,5)) return XR_XIR_BUDGET;
+
     contexts->links[link]=(ErrorInvocationLink){n,target,UINT32_MAX,call->head,contexts->consumers[target]};
     call->head=link;contexts->consumers[target]=link;return XR_XIR_OK;
 }
@@ -299,29 +299,29 @@ static XrXirStatus error_invocation_fallback_body(ErrorFlow *flow,ErrorInvocatio
     if (f>=effect_body_count(material) || count!=material->functions[f].instruction_count)
         return XR_XIR_BAD_STRUCTURE;
     const EffectBodyFunction *function=&material->functions[f];
-    if (!xir_compile_work(flow->remaining,sizeof(EffectBodyRecordCursor))) return XR_XIR_BUDGET;
+
     EffectBodyRecordCursor finish={0,0,UINT32_MAX};
     while (cursor.first<count) {
-        if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
+
         const EffectBodyRun *ref=NULL;
         status=effect_body_range_ref(&flow->body.read,function,&cursor,&ref);
         if (status!=XR_XIR_OK) return status;
-        if (!xir_compile_work(flow->remaining,sizeof(finish))) return XR_XIR_BUDGET;
+
         finish=(EffectBodyRecordCursor){ref->first,cursor.run-1,cursor.first-1};
         uint32_t opcode;
         status=effect_body_run_word(&flow->body.read,ref,ref->first,0,&opcode);
         if (status!=XR_XIR_OK) return status;
-        if (!xir_compile_work(flow->remaining,2)) return XR_XIR_BUDGET;
+
         if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
         if (!(ref->mask&UINT32_C(1)) && !error_invocation_fallback_direct((XrXirOp)opcode) &&
             !error_invocation_fallback_default((XrXirOp)opcode)) continue;
         for (uint32_t i=ref->first;i-ref->first<ref->count;++i) {
-            if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
+
             if (contexts->calls[contexts->nodes[n].calls+i].handled) continue;
             if (i!=ref->first && (ref->mask&UINT32_C(1))) {
                 status=effect_body_run_word(&flow->body.read,ref,i,0,&opcode);
                 if (status!=XR_XIR_OK) return status;
-                if (!xir_compile_work(flow->remaining,2)) return XR_XIR_BUDGET;
+
                 if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
             }
             if (!error_invocation_fallback_direct((XrXirOp)opcode) &&
@@ -350,7 +350,7 @@ static XrXirStatus error_invocation_has_indirect(ErrorFlow *flow,bool *output) {
         if (status!=XR_XIR_OK) return status;
         if (!effect_body_request_sequence_owned(&flow->body)) {
             for (uint32_t i=0;i<head.instruction_count;++i) {
-                if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
+
                 EffectBodyInstructionShape shape={0};status=error_shape(flow,f,i,&shape);
                 if (status!=XR_XIR_OK) return status;
                 if (error_invocation_indirect_opcode(shape.op)) {found=true;break;}
@@ -363,27 +363,27 @@ static XrXirStatus error_invocation_has_indirect(ErrorFlow *flow,bool *output) {
         if (status!=XR_XIR_OK) return status;
         const EffectBodyMaterial *material=flow->body.owner;
         const EffectBodyFunction *function=&material->functions[f];
-        if (!xir_compile_work(flow->remaining,sizeof(EffectBodyRecordCursor))) return XR_XIR_BUDGET;
+
         EffectBodyRecordCursor finish={0,0,UINT32_MAX};
         while (cursor.first<head.instruction_count) {
-            if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
+
             const EffectBodyRun *ref=NULL;
             status=effect_body_range_ref(&flow->body.read,function,&cursor,&ref);
             if (status!=XR_XIR_OK) return status;
-            if (!xir_compile_work(flow->remaining,sizeof(finish))) return XR_XIR_BUDGET;
+
             finish=(EffectBodyRecordCursor){ref->first,cursor.run-1,cursor.first-1};
             if (found) continue;
             uint32_t opcode;
             status=effect_body_run_word(&flow->body.read,ref,ref->first,0,&opcode);
             if (status!=XR_XIR_OK) return status;
-            if (!xir_compile_work(flow->remaining,2)) return XR_XIR_BUDGET;
+
             if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
             found=error_invocation_indirect_opcode((XrXirOp)opcode);
             if (!(ref->mask&UINT32_C(1))) continue;
             for (uint32_t i=ref->first+1;!found && i<ref->first+ref->count;++i) {
                 status=effect_body_run_word(&flow->body.read,ref,i,0,&opcode);
                 if (status!=XR_XIR_OK) return status;
-                if (!xir_compile_work(flow->remaining,2)) return XR_XIR_BUDGET;
+
                 if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
                 found=error_invocation_indirect_opcode((XrXirOp)opcode);
             }
@@ -391,7 +391,7 @@ static XrXirStatus error_invocation_has_indirect(ErrorFlow *flow,bool *output) {
         status=effect_body_request_sequence_finish(&flow->body,f,&finish);
         if (status!=XR_XIR_OK) return status;
     }
-    if (!xir_compile_work(flow->remaining,sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=found;return XR_XIR_OK;
 }
 
@@ -424,12 +424,12 @@ static XrXirStatus error_invocation_contexts_new(ErrorFlow *flow,ErrorInvocation
         status=effect_invocation_final_view(&replay);
         uint32_t walked=0;
         for (uint32_t e=owner.final->nodes[n].edge_head;status==XR_XIR_OK && e!=UINT32_MAX;e=owner.final->edges[e].next) {
-            if (!xir_compile_work(flow->remaining,1)) { status=XR_XIR_BUDGET;break; }
+
             if (e>=owner.final->edge_count || ++walked>owner.final->edge_count) { status=XR_XIR_BAD_STRUCTURE;break; }
             status=error_invocation_link(flow,contexts,certificate,&replay,e);
         }
         for (uint32_t i=0;status==XR_XIR_OK && i<replay.function->instruction_count;++i) {
-            if (!xir_compile_work(flow->remaining,1)) { status=XR_XIR_BUDGET;break; }
+
             XrXirInstruction op_storage;const XrXirInstruction *instruction=NULL;
             status=effect_invocation_flow_instruction(&replay,i,&op_storage,&instruction);
             if (status!=XR_XIR_OK) break;
@@ -460,8 +460,7 @@ static XrXirStatus error_invocation_summaries(ErrorFlow *flow) {
     if (flow->summary_count==flow->effects->count) return XR_XIR_OK;
     uint64_t words=(uint64_t)flow->summary_count*flow->effects->outcomes_work.words;
     uint64_t bytes=(uint64_t)flow->effects->count*flow->effects->outcomes_work.words*sizeof(uint64_t);
-    if (words>SIZE_MAX/sizeof(uint64_t) || bytes>SIZE_MAX ||
-        !xir_compile_work(flow->remaining,bytes)) return XR_XIR_BUDGET;
+    if ((words>SIZE_MAX/sizeof(uint64_t)) || (bytes>SIZE_MAX)) return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
     uint64_t *rows=xir_compile_calloc(flow->remaining,(size_t)words,sizeof(*rows),&status);
     if (!rows) return status;
@@ -485,7 +484,7 @@ static XrXirStatus error_invocation_call(ErrorFlow *flow,const XrXirInstruction 
     if (!*handled) return XR_XIR_OK;
     if (call->unknown) error_add(set,0);
     for (uint32_t e=call->head;e!=UINT32_MAX;e=contexts->links[e].next) {
-        if (!xir_compile_work(flow->remaining,2)) return XR_XIR_BUDGET;
+
         if (e>=contexts->link_count || contexts->links[e].caller!=flow->invocation ||
             contexts->links[e].target>=contexts->count) return XR_XIR_BAD_STRUCTURE;
         const uint64_t *from=flow->effects->outcomes_work.errors+(size_t)contexts->nodes[contexts->links[e].target].summary*
@@ -501,7 +500,7 @@ static XrXirStatus error_invocation_call(ErrorFlow *flow,const XrXirInstruction 
 static XrXirStatus error_invocation_enqueue(ErrorFlow *flow,uint32_t n) {
     ErrorInvocationContexts *contexts=flow->invocations;
     if (n>=contexts->count || contexts->pending>contexts->count) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
+
     if (contexts->queued[n]) return XR_XIR_OK;
     if (contexts->pending==contexts->count) return XR_XIR_BAD_STRUCTURE;
     contexts->queue[contexts->back]=n;contexts->queued[n]=1;
@@ -515,28 +514,28 @@ static XrXirStatus error_invocation_functions(ErrorFlow *flow) {
     ErrorInvocationContexts *contexts=flow->invocations;
     XrXirStatus status=XR_XIR_OK;
     do {
-        if (!xir_compile_work(flow->remaining,contexts->count)) return XR_XIR_BUDGET;
+
         memset(contexts->queued,0,contexts->count);
         contexts->front=contexts->back=contexts->pending=0;flow->restart=false;
         for (uint32_t n=0;status==XR_XIR_OK && n<contexts->count;++n)
             status=error_invocation_enqueue(flow,n);
         while (status==XR_XIR_OK && contexts->pending && !flow->restart) {
-            if (!xir_compile_work(flow->remaining,3)) return XR_XIR_BUDGET;
+
             uint32_t n=contexts->queue[contexts->front];
             if (n>=contexts->count) return XR_XIR_BAD_STRUCTURE;
             contexts->front=contexts->front+1==contexts->count?0:contexts->front+1;
             --contexts->pending;contexts->queued[n]=0;flow->invocation=n;flow->summary_changed=false;
             bool empty=false;uint32_t f=contexts->nodes[n].body;
-            status=error_empty_escaping_read(&flow->body,f,flow->remaining,&empty);
+            status=error_empty_escaping_read(&flow->body,f,&empty);
             if (status==XR_XIR_OK && empty && contexts->nodes[n].returned==UINT32_MAX) {
-                if (!xir_compile_work(flow->remaining,flow->effects->outcomes_work.words)) return XR_XIR_BUDGET;
+
                 empty=!error_any(flow->effects->outcomes_work.errors+(size_t)contexts->nodes[n].summary*
                     flow->effects->outcomes_work.words,flow->effects->outcomes_work.words);
             }
             if (status==XR_XIR_OK && (!empty || contexts->nodes[n].returned!=UINT32_MAX)) status=error_function(flow,f);
             if (status!=XR_XIR_OK || flow->restart || !flow->summary_changed) continue;
             for (uint32_t e=contexts->consumers[n];e!=UINT32_MAX;e=contexts->links[e].consumer_next) {
-                if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
+
                 if (e>=contexts->link_count) return XR_XIR_BAD_STRUCTURE;
                 status=error_invocation_enqueue(flow,contexts->links[e].caller);
                 if (status!=XR_XIR_OK) break;
@@ -577,7 +576,7 @@ static XrXirStatus effect_errors_analyze(XrXirEffects *effects,
         XrXirStatus qualified = error_bit(set, 0) || error_bit(set, 1) ? XR_XIR_BAD_TYPE : XR_XIR_OK;
         XirMetadataProofContext proof={&permission,{XR_XIR_CONTEXT_FUNCTION,f,0}};
         for (uint32_t a = 0; qualified == XR_XIR_OK && a < effects->outcomes_work.atom_count; ++a) {
-            if (!xir_compile_work(remaining, 1)) { status = XR_XIR_BUDGET; break; }
+
             if (!error_bit(set, a + 2)) continue;
             qualified = xir_metadata_type_markers_prove(remaining,&proof, effects->outcomes_work.atoms[a].type,
                 XR_XIR_CONSTRAINT_ERROR | XR_XIR_CONSTRAINT_SENDABLE);
@@ -596,7 +595,7 @@ static XrXirStatus effect_errors_analyze(XrXirEffects *effects,
         const uint64_t *set = effects->outcomes_work.errors + (size_t)f * effects->outcomes_work.words;
         XrXirEffect fact = error_bit(set, 0) ? XR_XIR_EFFECT_UNKNOWN : XR_XIR_EFFECT_NONE;
         if (error_bit(set,1)) fact=XR_XIR_EFFECT_MAY;
-        if (!xir_compile_work(remaining, effects->outcomes_work.atom_count + 1)) return XR_XIR_BUDGET;
+
         for (uint32_t a = 0; a < effects->outcomes_work.atom_count; ++a) if (error_bit(set, a + 2)) fact = XR_XIR_EFFECT_MAY;
         effects->outcomes_work.functions[f].throws = fact;
     }

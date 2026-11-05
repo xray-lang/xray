@@ -115,6 +115,7 @@ typedef struct XrCopyContext {
     XrSeenArena *arena_head;  // arena block list for seen entries
     int depth;                // current recursion depth (bounded by XR_DEEP_COPY_MAX_DEPTH)
     bool depth_exceeded;      // set once the bound is hit; whole copy fails
+    bool private_value_rejected; // internal workers cannot cross the copy boundary
 } XrCopyContext;
 
 XR_FUNC void xr_copy_context_init_core(XrCopyContext *ctx, struct XrRuntimeCore *core,

@@ -29,7 +29,7 @@ XR_FUNC XrOsIoStatus xr_os_io_realpath(const XrOsIoPolicy *policy, const char *p
     XrIoContext io = {policy, XR_OS_IO_OK}; char *resolved = NULL; size_t length = 0;
     io_status(&io, xr_realpath_owned(policy, path, &resolved));
     if (io.status == XR_OS_IO_OK && io_length(&io, resolved, &length)) {
-        if (length >= capacity) io_status(&io, XR_OS_IO_BUDGET);
+        if (length >= capacity) io_status(&io, XR_OS_IO_OVERFLOW);
         else io_copy(&io, output, resolved, length + 1);
     }
     io_free(&io, resolved);

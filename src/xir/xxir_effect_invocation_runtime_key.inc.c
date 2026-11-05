@@ -46,7 +46,7 @@ static XrXirStatus effect_runtime_key_bound(const EffectRuntimeKeyRead *read,uin
     XrXirStatus status=XR_XIR_OK;
     if(!captured) status=effect_runtime_key_fixed(read,projection->value,&fixed);
     if(status!=XR_XIR_OK) return status;
-    uint32_t kind=UINT32_MAX;EffectBodyRead body=effect_body_runtime_read(&read->request->read);
+    uint32_t kind=UINT32_MAX;EffectBodyRead body=(EffectBodyRead){.execution=&read->request->read};
     status=effect_role_parameter_value(&body,certificate->body,&certificate->final->role_proof,
         read->request->target,p,&kind);
     if(status!=XR_XIR_OK) return status;

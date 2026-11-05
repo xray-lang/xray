@@ -16,8 +16,8 @@ static XrXirValueStatus xr_xir_enum_new_graph_operation(XrXirType type, uint32_t
     const XrXirNominalIdentity *identity = &types->nominals->identities[node->nominal.declaration];
     if (variant >= identity->variant_count || count != identity->variants[variant].field_count)
         return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!admission->work || count > admission->work - 1) return XR_XIR_VALUE_LIMIT;
-    admission->work -= (uint64_t) count + 1;
+    if (!admission_is_compile(admission) && (!admission->work || count > admission->work - 1)) return XR_XIR_VALUE_LIMIT;
+    if (!admission_is_compile(admission)) admission->work -= (uint64_t) count + 1;
     XrXirTypeArena *arena = (XrXirTypeArena *) admission->arena;
     if (!count) {
         const XirNominalValue *record = xr_xir_compile_type_arena_empty_variant(arena, type, variant);
@@ -31,8 +31,8 @@ static XrXirValueStatus xr_xir_enum_new_graph_operation(XrXirType type, uint32_t
         if (node->nominal.fields[begin+i]==XR_XIR_UNIT) {
             if (!xr_xir_nominal_native_recv(types,type,XR_XIR_UNIT) || !unit_value(&fields[i]))
                 return XR_XIR_VALUE_BAD_ARGUMENT;
-            if (!admission->work || !xr_xir_domain_work(admission->domain,1)) return XR_XIR_VALUE_LIMIT;
-            --admission->work;
+            if (!admission_is_compile(admission) && (!admission->work || !xr_xir_domain_work(admission->domain,1))) return XR_XIR_VALUE_LIMIT;
+            if (!admission_is_compile(admission)) --admission->work;
         } else {
             XrXirValueStatus status=xr_xir_value_admit(&fields[i],node->nominal.fields[begin+i],admission);
             if (status!=XR_XIR_VALUE_OK) return status;

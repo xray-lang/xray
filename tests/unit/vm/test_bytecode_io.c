@@ -23,6 +23,9 @@
 #include "runtime/class/xinstance.h"
 #include "runtime/class/xclass_system.h"
 #include "runtime/object/xstring.h"
+#include "runtime/object/xtext_worker.h"
+#include "runtime/core/xr_runtime_core.h"
+#include "runtime/core/xr_exec_context.h"
 #include "runtime/object/xbigint.h"
 #include "runtime/symbol/xsymbol_table.h"
 #include "runtime/value/xchunk.h"
@@ -1501,8 +1504,43 @@ TEST(bytecode_roundtrips_extern_cfn_callback_signature) {
     xray_vm_delete(iso);
 }
 
+TEST(bytecode_rejects_private_and_legacy_extension_35_constants) {
+    XrVMRuntime *iso = new_test_isolate();
+    ASSERT_NOT_NULL(iso);
+    XrRuntimeCore *core = xr_isolate_get_runtime_core(iso);
+    ASSERT_NOT_NULL(core);
+    xr_exec_context_enter(xr_runtime_core_root_exec(core));
+    XrValue worker = xr_null();
+    ASSERT_EQ_INT(xr_text_worker_new(iso, XR_TEXT_WORKER_CONCAT, &worker), XR_TEXT_WORKER_OK);
+    /* A safely addressable header-only old extension object must reject without
+     * treating its nonexistent payload as current private worker storage. */
+    XrObjHeader legacy = {0};
+    legacy.type = 35u;
+    legacy.objsize = (uint32_t) sizeof(legacy);
+    const XrObjHeader legacy_before = legacy;
+    XrValue values[] = {worker, xr_make_typed_ptr_val(&legacy, 35u)};
+    for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); ++i) {
+        XrProto *proto = make_minimal_proto();
+        ASSERT_NOT_NULL(proto);
+        ASSERT_EQ_INT(xr_instruction_unit_add_constant(proto, values[i]), 0);
+        size_t size = SIZE_MAX;
+        XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
+        uint8_t *bytes = xr_bootstrap_container_write(iso, proto, 0, &size, &error);
+        ASSERT_TRUE(bytes == NULL);
+        ASSERT_EQ_UINT(size, 0u);
+        ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT);
+        ASSERT_TRUE(memcmp(&legacy, &legacy_before, sizeof(legacy)) == 0);
+        xr_instruction_unit_free(proto);
+    }
+    /* Rejection neither consumes nor closes the current valid worker. */
+    ASSERT_EQ_INT(xr_text_worker_append_bytes(iso, worker, XR_TEXT_WORKER_CONCAT, "x", 1u), XR_TEXT_WORKER_OK);
+    ASSERT_EQ_INT(xr_text_worker_close(iso, &worker, XR_TEXT_WORKER_CONCAT), XR_TEXT_WORKER_OK);
+    xray_vm_delete(iso);
+}
+
 static void run_all_tests(void) {
     RUN_TEST_SUITE("Bytecode I/O");
+    RUN_TEST(bytecode_rejects_private_and_legacy_extension_35_constants);
     RUN_TEST(bytecode_write_emits_current_header_and_roundtrips_u64_instruction);
     RUN_TEST(bytecode_roundtrips_reachable_entry_plan);
     RUN_TEST(bytecode_roundtrips_struct_area_size);

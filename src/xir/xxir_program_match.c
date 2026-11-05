@@ -21,21 +21,21 @@
 #include "../base/xsha256.h"
 
 #define MATCH(a, b) do { \
-    if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET; if ((a) != (b)) return XR_XIR_BAD_STRUCTURE; \
+     if ((a) != (b)) return XR_XIR_BAD_STRUCTURE; \
 } while (0)
 #define TRY(expression) do { \
     XrXirStatus status = (expression); \
     if (status != XR_XIR_OK) return status; \
 } while (0)
-static XrXirStatus match_bytes(const void *a, const void *b, size_t size, const XrXirCompileContext *context) {
-    if (!xir_compile_work(context, size)) return XR_XIR_BUDGET;
+static XrXirStatus match_bytes(const void *a, const void *b, size_t size) {
+
     return size && (!a || !b || memcmp(a, b, size)) ? XR_XIR_BAD_STRUCTURE : XR_XIR_OK;
 }
-static XrXirStatus match_literal(XrXirLiteral a, XrXirLiteral b, const XrXirCompileContext *context) {
+static XrXirStatus match_literal(XrXirLiteral a, XrXirLiteral b) {
     MATCH(a.length, b.length);
-    return match_bytes(a.bytes, b.bytes, a.length, context);
+    return match_bytes(a.bytes, b.bytes, a.length);
 }
-static XrXirStatus match_types(const XrXirTypes *a, const XrXirTypes *b, const XrXirCompileContext *context) {
+static XrXirStatus match_types(const XrXirTypes *a, const XrXirTypes *b) {
     MATCH(!!a, !!b);
     if (!a) return XR_XIR_OK;
     if (a->interfaces || b->interfaces) return XR_XIR_BAD_STRUCTURE;
@@ -69,30 +69,30 @@ static XrXirStatus match_types(const XrXirTypes *a, const XrXirTypes *b, const X
         return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i = 0; i < x->count; ++i) {
         const XrXirNominalIdentity *u = &x->identities[i], *v = &y->identities[i];
-        TRY(match_literal(u->module, v->module, context));
-        TRY(match_literal(u->name, v->name, context));
+        TRY(match_literal(u->module, v->module));
+        TRY(match_literal(u->name, v->name));
         MATCH(u->exported, v->exported); MATCH(u->arity, v->arity);
         MATCH(u->kind, v->kind); MATCH(u->flags, v->flags); MATCH(u->variant_count, v->variant_count);
         MATCH(u->native.native_id, v->native.native_id);
         if (u->variant_count && (!u->variants || !v->variants)) return XR_XIR_BAD_STRUCTURE;
         TRY(match_bytes(u->native.source_fingerprint, v->native.source_fingerprint,
-            sizeof(u->native.source_fingerprint), context));
+            sizeof(u->native.source_fingerprint)));
         for (uint32_t j = 0; j < u->variant_count; ++j) {
-            TRY(match_literal(u->variants[j].name, v->variants[j].name, context));
+            TRY(match_literal(u->variants[j].name, v->variants[j].name));
             MATCH(u->variants[j].field_begin, v->variants[j].field_begin);
             MATCH(u->variants[j].field_count, v->variants[j].field_count);
         }
         MATCH(u->field_count, v->field_count);
         if (u->field_count && (!u->fields || !v->fields)) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t p = 0; p < u->field_count; ++p) {
-            TRY(match_literal(u->fields[p].name, v->fields[p].name, context));
+            TRY(match_literal(u->fields[p].name, v->fields[p].name));
             MATCH(u->fields[p].flags, v->fields[p].flags);
         }
     }
     return XR_XIR_OK;
 }
 static XrXirStatus match_declarations(const XrXirDeclarations *a,
-    const XrXirDeclarations *b, uint32_t functions, const XrXirCompileContext *context) {
+    const XrXirDeclarations *b, uint32_t functions) {
     if (!a || !b || a->implementations || b->implementations) return XR_XIR_BAD_STRUCTURE;
     MATCH(a->module_count, b->module_count); MATCH(a->slot_count, b->slot_count);
     MATCH(a->literal_count, b->literal_count); MATCH(a->root_module, b->root_module);
@@ -104,7 +104,7 @@ static XrXirStatus match_declarations(const XrXirDeclarations *a,
     for (uint32_t i = 0; i < a->module_count; ++i) {
         const XrXirSourceModule *x = &a->modules[i], *y = &b->modules[i];
         MATCH(x->name_length, y->name_length);
-        TRY(match_bytes(x->name, y->name, x->name_length, context));
+        TRY(match_bytes(x->name, y->name, x->name_length));
         MATCH(x->initializer, y->initializer); MATCH(x->dependency_count, y->dependency_count);
         MATCH(x->lexical_scope, y->lexical_scope);
         MATCH(x->storage,y->storage);
@@ -129,11 +129,11 @@ static XrXirStatus match_declarations(const XrXirDeclarations *a,
         MATCH(a->slots[i].mutable, b->slots[i].mutable);
     }
     for (uint32_t i = 0; i < a->literal_count; ++i)
-        TRY(match_literal(a->literals[i], b->literals[i], context));
+        TRY(match_literal(a->literals[i], b->literals[i]));
     return XR_XIR_OK;
 }
 static XrXirStatus match_layout(const XrXirFunctionLayout *a,
-    const XrXirFunctionLayout *b, uint32_t parameters, const XrXirCompileContext *context) {
+    const XrXirFunctionLayout *b, uint32_t parameters) {
     MATCH(a->slot_count, b->slot_count); MATCH(a->frame_bytes, b->frame_bytes);
     MATCH(a->owned_count, b->owned_count); MATCH(a->outgoing_count, b->outgoing_count);
     MATCH(a->path_count, b->path_count);
@@ -167,14 +167,14 @@ XR_FUNC XrXirStatus xr_xir_compile_program_match(const XrXirCompileContext *cont
     if (!module->declarations) return XR_XIR_BAD_STRUCTURE;
     bool cleanup = false;
     for (uint32_t i = 0; i < module->function_count; ++i) {
-        if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
         if (module->declarations->functions[i].cleanup_owner) cleanup = true;
     }
     for (uint32_t i = 0; i < spec->entry_count; ++i) {
         const XrXirCallEntry *entry = &spec->entries[i];
         uint32_t flags = xr_xir_function_is_generator(module,i) ? XR_XIR_ENTRY_GENERATOR : 0;
         if (cleanup) for (uint32_t child = 0; child < module->function_count; ++child) {
-            if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
             if (module->declarations->functions[child].cleanup_owner == i + 1) flags |= XR_XIR_ENTRY_EXIT;
         }
         MATCH(entry->flags, flags);
@@ -183,12 +183,12 @@ XR_FUNC XrXirStatus xr_xir_compile_program_match(const XrXirCompileContext *cont
         MATCH(entry->parameter_count, function->parameter_count);
         MATCH(entry->result, function->result);
         TRY(match_layout(&layouts[i], xr_xir_compile_artifact_layout(lowered, i),
-            function->parameter_count, context));
+            function->parameter_count));
         for (uint32_t p = 0; p < entry->parameter_count; ++p)
             MATCH(entry->parameters[p], function->parameters[p]);
     }
-    TRY(match_types(spec->types, module->types, context));
-    return match_declarations(spec->declarations, module->declarations, spec->entry_count, context);
+    TRY(match_types(spec->types, module->types));
+    return match_declarations(spec->declarations, module->declarations, spec->entry_count);
 }
 XR_FUNC XrXirStatus xr_xir_compile_program_descriptor_match(const XrXirCompileContext *context,
     const XrXirProgramSpec *spec, const XrXirProgramPermissions *permissions) {
@@ -202,11 +202,11 @@ XR_FUNC XrXirStatus xr_xir_compile_program_descriptor_match(const XrXirCompileCo
     const XrXirDeclarations *declarations=NULL;
     TRY(xir_effects_program_metadata(context,permissions->effects,&types,&declarations));
     const XrXirTypes empty={0};
-    TRY(match_types(spec->types ? spec->types : &empty,types,context));
-    TRY(match_declarations(spec->declarations,declarations,spec->entry_count,context));
+    TRY(match_types(spec->types ? spec->types : &empty,types));
+    TRY(match_declarations(spec->declarations,declarations,spec->entry_count));
     bool cleanup=false;
     for (uint32_t f=0;f<spec->entry_count;++f) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         if (declarations->functions[f].cleanup_owner) cleanup=true;
     }
     for (uint32_t f=0;f<spec->entry_count;++f) {
@@ -217,7 +217,7 @@ XR_FUNC XrXirStatus xr_xir_compile_program_descriptor_match(const XrXirCompileCo
         uint32_t flags=(declarations->functions[f].promises & XR_XIR_FUNCTION_GENERATOR) ?
             XR_XIR_ENTRY_GENERATOR : 0;
         if (cleanup) for (uint32_t child=0;child<spec->entry_count;++child) {
-            if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
             if (declarations->functions[child].cleanup_owner==f+1) flags|=XR_XIR_ENTRY_EXIT;
         }
         MATCH(entry->flags,flags);
@@ -242,7 +242,7 @@ XR_FUNC XrXirStatus xr_xir_compile_program_body_match(const XrXirCompileContext 
     if (layout_status!=XR_XIR_OK) return layout_status==XR_XIR_BAD_LAYOUT ? XR_XIR_BAD_STRUCTURE : layout_status;
     for (uint32_t f=0;f<permissions->function_count;++f)
         TRY(match_layout(xr_xir_compile_artifact_layout(lowered,f),&permissions->layouts[f],
-            lowered->module.functions[f].parameter_count,context));
+            lowered->module.functions[f].parameter_count));
     return XR_XIR_OK;
 }
 #undef MATCH
@@ -264,7 +264,7 @@ static XrXirStatus program_permissions(const XrXirCompileContext *context,
     uint64_t references = 0, generators = 0;
     for (uint32_t f = 0; f < module->function_count && status == XR_XIR_OK; ++f) {
         const XrXirFunction *function = &module->functions[f];
-        if (!xir_compile_work(context, function->instruction_count)) { status = XR_XIR_BUDGET; break; }
+
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
             if (function->instructions[i].op == XR_XIR_FUNCTION_REF) ++references;
             if (function->instructions[i].op == XR_XIR_GENERATOR_NEW) ++generators;
@@ -287,7 +287,7 @@ static XrXirStatus program_permissions(const XrXirCompileContext *context,
     }
     uint32_t reference_at = 0, generator_at = 0;
     for (uint32_t f = 0; f < module->function_count && status == XR_XIR_OK; ++f) {
-        if (!xir_compile_work(context, 1)) { status = XR_XIR_BUDGET; break; }
+
         XrXirEffectFacts root_read=xr_xir_effects_read(effects, f);
         const XrXirRootEffects *root=(root_read.status==XR_XIR_OK?&root_read.root:NULL);
         if (!root) { status = XR_XIR_BAD_STRUCTURE; break; }
@@ -301,7 +301,7 @@ static XrXirStatus program_permissions(const XrXirCompileContext *context,
         const XrXirFunction *function = &module->functions[f];
         permissions->entries[f].reference_begin = reference_at;
         permissions->entries[f].generator_begin=generator_at;
-        if (!xir_compile_work(context, function->instruction_count)) { status = XR_XIR_BUDGET; break; }
+
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
             const XrXirInstruction *op = &function->instructions[i];
             if(op->op==XR_XIR_GENERATOR_NEW) {
@@ -336,7 +336,7 @@ static XrXirStatus program_permissions(const XrXirCompileContext *context,
         else permissions->entries[f].worker = permission;
     }
     for (uint32_t slot = 0; slot < module->declarations->slot_count && status == XR_XIR_OK; ++slot) {
-        if (!xir_compile_work(context, 1)) { status = XR_XIR_BUDGET; break; }
+
         const XrXirSlot *entry = &module->declarations->slots[slot];
         XrXirProofContext proof = {module, {XR_XIR_CONTEXT_CLOSED, 0, 0}};
         XrXirStatus permission = entry->mutable ? XR_XIR_BAD_TYPE :
@@ -346,7 +346,7 @@ static XrXirStatus program_permissions(const XrXirCompileContext *context,
     }
     if (status == XR_XIR_OK && (reference_at != references || generator_at != generators))
         status = XR_XIR_BAD_STRUCTURE;
-    if (status == XR_XIR_OK && !xir_compile_work(context, sizeof(effects))) status = XR_XIR_BUDGET;
+
     if (status != XR_XIR_OK) { xir_program_permissions_free(permissions);return status; }
     permissions->effects=effects;
     *output = permissions;

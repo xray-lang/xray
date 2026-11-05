@@ -88,6 +88,9 @@ static inline bool xr_xir_reference_release(_Atomic(uint32_t) *references) {
 }
 /* Reads only the immutable eight-byte prefix, before current storage access. */
 XR_FUNC bool xr_xir_domain_current(const XrXirDomain *domain);
+/* Only the compiler constructor supplies this immutable memory-owner mode.
+ * It cannot bind execution policy or allocate execution metadata/call state. */
+XR_FUNC bool xr_xir_domain_is_compile(const XrXirDomain *domain);
 XR_FUNC bool xr_xir_domain_retain(XrXirDomain *domain);
 /* Only the actual NEW Instance calls this before any value publication. */
 XR_FUNC XrXirValueStatus xr_xir_domain_class_observation_open(XrXirDomain *domain,

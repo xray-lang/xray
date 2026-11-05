@@ -42,10 +42,10 @@ static const XrTypeIdentityCoreKind tag_to_type_identity[8] = {
  * a builtin appended to XrObjType would just widen the table with a zeroed
  * (XR_TYPE_IDENTITY_CORE_NULL) slot and read as deliberately unmapped.
  * Re-anchor this count by hand after adding the new type's entry below. */
-_Static_assert(XR_OBJ_TYPE_BUILTIN_COUNT == 35,
+_Static_assert(XR_OBJ_TYPE_BUILTIN_COUNT == 36,
                "XrObjType gained a member: give it a kind in gctype_to_type_identity "
-               "(XR_TYPE_IDENTITY_CORE_NULL if it is internal and never surfaces as a "
-               "value), then re-anchor this count");
+               "(UINT8_MAX for private values rejected at user boundaries; "
+               "internal handles may have an explicit mapping), then re-anchor this count");
 
 static const XrTypeIdentityCoreKind gctype_to_type_identity[XR_OBJ_TYPE_BUILTIN_COUNT] = {
     [XR_TNULL] = XR_TYPE_IDENTITY_CORE_NULL,
@@ -90,10 +90,14 @@ static const XrTypeIdentityCoreKind gctype_to_type_identity[XR_OBJ_TYPE_BUILTIN_
      * and XR_BK_ADT_ENUM below — the boxing is a representation choice, not a
      * different type to the program. */
     [XR_TENUM_BOX] = XR_TYPE_IDENTITY_CORE_ENUM_VALUE,
+    /* Compiler workers have no source-visible type identity. */
+    [XR_TTEXT_WORKER] = (XrTypeIdentityCoreKind) UINT8_MAX,
 };
 
 static XrTypeIdentityCoreKind xr_value_type_identity_kind(XrValue v) {
     XR_DCHECK(v.tag <= XR_TAG_NOTFOUND, "value_typeid: invalid tag");
+    if (v.tag == XR_TAG_PTR && v.heap_type == XR_TTEXT_WORKER)
+        return (XrTypeIdentityCoreKind) UINT8_MAX;
     if (v.tag <= XR_TAG_F64)
         return tag_to_type_identity[v.tag];
     if (v.tag == XR_TAG_PTR && v.ptr) {

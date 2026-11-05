@@ -12,7 +12,7 @@
 #include <limits.h>
 
 static unsigned char character(XrIoContext *io, const char *text) {
-    return io_work(io, 1) ? (unsigned char)*text : 0;
+    return ((io)->status == XR_OS_IO_OK) ? (unsigned char)*text : 0;
 }
 static const char *skip_whitespace(XrIoContext *io, const char *text) {
     unsigned char c;
@@ -36,9 +36,9 @@ static char *parse_identifier(XrIoContext *io, const char **text) {
     while ((c = character(io, *text)) != 0 && c != '+' && (isalnum(c) || c == '.' || c == '-')) ++*text;
     if (*text == start || io->status != XR_OS_IO_OK) return NULL;
     size_t length = (size_t)(*text - start);
-    if (length == SIZE_MAX) { io_status(io, XR_OS_IO_BUDGET); return NULL; }
+    if (length == SIZE_MAX) { io_status(io, XR_OS_IO_OVERFLOW); return NULL; }
     char *result = io_alloc(io, length + 1);
-    if (result && io_copy(io, result, start, length) && io_work(io, 1)) result[length] = 0;
+    if (result && io_copy(io, result, start, length) && ((io)->status == XR_OS_IO_OK)) result[length] = 0;
     if (io->status != XR_OS_IO_OK) { io_free(io, result); return NULL; }
     return result;
 }
@@ -81,7 +81,7 @@ XR_FUNC XrOsIoStatus xr_semver_is_valid_owned(const XrOsIoPolicy *policy, const 
     if (!io_policy_valid(policy) || !text || !output) return XR_OS_IO_BAD_ARGUMENT;
     XrIoContext io = {policy, XR_OS_IO_OK}; XrSemVer pending = {0};
     bool valid = parse_version(&io, text, &pending); xr_semver_free_owned(&pending);
-    if (io_work(&io, sizeof(*output))) *output = valid;
+    if ((&io)->status == XR_OS_IO_OK) *output = valid;
     return io.status;
 }
 static size_t segment_length(XrIoContext *io, const char *text) {
@@ -100,20 +100,20 @@ static int compare_segment(XrIoContext *io, const char *a, size_t al, const char
          * Leading zeros retain the existing numeric-equality behavior. */
         while (al && character(io, a) == '0') { ++a; --al; }
         while (bl && character(io, b) == '0') { ++b; --bl; }
-        if (!io_work(io, 1)) return 0;
+        if (!((io)->status == XR_OS_IO_OK)) return 0;
         if (al != bl) return al < bl ? -1 : 1;
     }
     size_t common = al < bl ? al : bl;
     for (size_t i = 0; i < common; ++i) {
         unsigned char av = character(io, a + i), bv = character(io, b + i);
-        if (!io_work(io, 1)) return 0;
+        if (!((io)->status == XR_OS_IO_OK)) return 0;
         if (av != bv) return av < bv ? -1 : 1;
     }
-    if (!io_work(io, 1)) return 0;
+    if (!((io)->status == XR_OS_IO_OK)) return 0;
     return (al > bl) - (al < bl);
 }
 static int compare_prerelease(XrIoContext *io, const char *a, const char *b) {
-    if (!io_work(io, 1)) return 0;
+    if (!((io)->status == XR_OS_IO_OK)) return 0;
     if (!a || !b) return !a && !b ? 0 : !a ? 1 : -1;
     while (io->status == XR_OS_IO_OK) {
         unsigned char ac = character(io, a), bc = character(io, b);
@@ -128,11 +128,11 @@ static int compare_prerelease(XrIoContext *io, const char *a, const char *b) {
     return 0;
 }
 static int compare_version(XrIoContext *io, const XrSemVer *a, const XrSemVer *b) {
-    if (!io_work(io, 1)) return 0;
+    if (!((io)->status == XR_OS_IO_OK)) return 0;
     if (a->major != b->major) return (a->major > b->major) - (a->major < b->major);
-    if (!io_work(io, 1)) return 0;
+    if (!((io)->status == XR_OS_IO_OK)) return 0;
     if (a->minor != b->minor) return (a->minor > b->minor) - (a->minor < b->minor);
-    if (!io_work(io, 1)) return 0;
+    if (!((io)->status == XR_OS_IO_OK)) return 0;
     if (a->patch != b->patch) return (a->patch > b->patch) - (a->patch < b->patch);
     return compare_prerelease(io, a->prerelease, b->prerelease);
 }
@@ -140,7 +140,7 @@ XR_FUNC XrOsIoStatus xr_semver_compare_owned(const XrOsIoPolicy *policy, const X
     const XrSemVer *b, int *output) {
     if (!io_policy_valid(policy) || !a || !b || !output) return XR_OS_IO_BAD_ARGUMENT;
     XrIoContext io = {policy, XR_OS_IO_OK}; int result = compare_version(&io, a, b);
-    if (io_work(&io, sizeof(*output))) *output = result;
+    if ((&io)->status == XR_OS_IO_OK) *output = result;
     return io.status;
 }
 XR_FUNC void xr_constraint_free_owned(XrVersionConstraint *constraint) {
@@ -168,7 +168,7 @@ XR_FUNC XrOsIoStatus xr_constraint_parse_owned(const XrOsIoPolicy *policy, const
 }
 static bool matches_constraint(XrIoContext *io, const XrSemVer *version, const XrVersionConstraint *constraint) {
     int comparison = compare_version(io, version, &constraint->version);
-    if (!io_work(io, 1)) return false;
+    if (!((io)->status == XR_OS_IO_OK)) return false;
     const XrSemVer *base = &constraint->version;
     switch (constraint->op) {
     case SEMVER_OP_ANY: return true;
@@ -190,29 +190,29 @@ XR_FUNC XrOsIoStatus xr_constraint_matches_owned(const XrOsIoPolicy *policy, con
     const XrVersionConstraint *constraint, bool *output) {
     if (!io_policy_valid(policy) || !version || !constraint || !output) return XR_OS_IO_BAD_ARGUMENT;
     XrIoContext io = {policy, XR_OS_IO_OK}; bool result = matches_constraint(&io, version, constraint);
-    if (io_work(&io, sizeof(*output))) *output = result;
+    if ((&io)->status == XR_OS_IO_OK) *output = result;
     return io.status;
 }
 XR_FUNC XrOsIoStatus xr_semver_select_best_owned(const XrOsIoPolicy *policy, const XrSemVer *versions,
     int count, const XrVersionConstraint *constraint, int *output) {
     if (!io_policy_valid(policy) || count < 0 || (!versions && count) || !constraint || !output) return XR_OS_IO_BAD_ARGUMENT;
     XrIoContext io = {policy, XR_OS_IO_OK}; int best = -1;
-    for (int i = 0; i < count && io_work(&io, 1); ++i) {
+    for (int i = 0; i < count && ((&io)->status == XR_OS_IO_OK); ++i) {
         if (matches_constraint(&io, &versions[i], constraint) &&
             (best < 0 || compare_version(&io, &versions[i], &versions[best]) > 0)) best = i;
     }
-    if (io_work(&io, sizeof(*output))) *output = best;
+    if ((&io)->status == XR_OS_IO_OK) *output = best;
     return io.status;
 }
 static size_t integer_text(XrIoContext *io, int value, char output[12]) {
     uint32_t magnitude = value < 0 ? (uint32_t)(-(int64_t)value) : (uint32_t)value;
     char reversed[10]; size_t count = 0, written = 0;
     do {
-        if (!io_work(io, 1)) return 0;
+        if (!((io)->status == XR_OS_IO_OK)) return 0;
         reversed[count++] = (char)('0' + magnitude % 10); magnitude /= 10;
     } while (magnitude);
-    if (value < 0 && io_work(io, 1)) output[written++] = '-';
-    while (count && io_work(io, 2)) output[written++] = reversed[--count];
+    if (value < 0 && ((io)->status == XR_OS_IO_OK)) output[written++] = '-';
+    while (count && ((io)->status == XR_OS_IO_OK)) output[written++] = reversed[--count];
     return written;
 }
 static XrOsIoStatus format_version(const XrOsIoPolicy *policy, const XrSemVer *version, const char *prefix,
@@ -227,10 +227,10 @@ static XrOsIoStatus format_version(const XrOsIoPolicy *policy, const XrSemVer *v
         if (version->prerelease) io_length(&io, version->prerelease, &pre);
         if (version->build) io_length(&io, version->build, &build);
     }
-    if (pre > SIZE_MAX - build || pre + build > SIZE_MAX - 48) return XR_OS_IO_BUDGET;
+    if (pre > SIZE_MAX - build || pre + build > SIZE_MAX - 48) return XR_OS_IO_OVERFLOW;
     size_t size = any ? 1 : pl + ml + nl + kl + 2 + pre + build + (version->prerelease ? 1 : 0) + (version->build ? 1 : 0);
     if (io.status != XR_OS_IO_OK) return io.status;
-    if (size >= capacity) return XR_OS_IO_BUDGET;
+    if (size >= capacity) return XR_OS_IO_OVERFLOW;
     char *buffer = io_alloc(&io, size + 1); size_t offset = 0;
 #define APPEND(text, length) do { if (io_copy(&io, buffer + offset, (text), (length))) offset += (length); } while (0)
     if (buffer) {
@@ -241,7 +241,7 @@ static XrOsIoStatus format_version(const XrOsIoPolicy *policy, const XrSemVer *v
             if (version->build) { APPEND("+", 1); APPEND(version->build, build); }
         }
         APPEND("", 1);
-        if (io_work(&io, size + 1 + sizeof(*written))) { memcpy(output, buffer, size + 1); *written = size; }
+        if ((&io)->status == XR_OS_IO_OK) { memcpy(output, buffer, size + 1); *written = size; }
     }
 #undef APPEND
     io_free(&io, buffer); return io.status;

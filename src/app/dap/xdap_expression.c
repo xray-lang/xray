@@ -165,8 +165,8 @@ static XrParseStatus expression_parse(XrSourceCompiler *compiler,const char *tex
     if (status!=XR_COMPILE_RESOURCE_OK) return status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_PARSE_OUT_OF_MEMORY :
         status==XR_COMPILE_RESOURCE_BUDGET ? XR_PARSE_BUDGET : XR_PARSE_BAD_ARGUMENT;
     XrCompilerSession *parser=NULL;
-    XrCompilerSessionStatus opened=xr_compile_session_new(xr_source_compiler_resources(compiler),&parser);
-    if (opened!=XR_COMPILER_SESSION_OK) return opened==XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_PARSE_OUT_OF_MEMORY :
+    XrCompileResourceStatus opened=xr_compile_session_new(xr_source_compiler_resources(compiler),&parser);
+    if (opened!=XR_COMPILE_RESOURCE_OK) return opened==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_PARSE_OUT_OF_MEMORY :
         opened==XR_COMPILER_SESSION_BUDGET ? XR_PARSE_BUDGET : XR_PARSE_BAD_ARGUMENT;
     XrParseStatus parsed=xr_compile_parse_expression_string(parser,text,file,output);
     xr_compile_session_free(parser);return parsed;
@@ -232,7 +232,12 @@ static XrXirStatus expression_compiled(ExpressionState *state,XrXirValue *output
             XrXirCtfeLimits limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES};
             XrXirCtfeStatus evaluated=xr_xir_compile_source_product_scalar(product,function,scalar_arguments,state->count,limits,output);
             status=evaluated==XR_XIR_CTFE_OK ? XR_XIR_OK : evaluated==XR_XIR_CTFE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
-                evaluated==XR_XIR_CTFE_BUDGET || evaluated==XR_XIR_CTFE_STEP_LIMIT || evaluated==XR_XIR_CTFE_FRAME_LIMIT ||
+                evaluated==XR_XIR_CTFE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+                evaluated==XR_XIR_CTFE_OVERFLOW ? XR_XIR_OVERFLOW :
+                evaluated==XR_XIR_CTFE_CANCELLED ? XR_XIR_CANCELLED :
+                evaluated==XR_XIR_CTFE_DEADLINE ? XR_XIR_DEADLINE :
+                evaluated==XR_XIR_CTFE_CLOCK_FAILURE ? XR_XIR_CLOCK_FAILURE :
+                evaluated==XR_XIR_CTFE_COMPLEXITY_LIMIT || evaluated==XR_XIR_CTFE_STEP_LIMIT || evaluated==XR_XIR_CTFE_FRAME_LIMIT ||
                 evaluated==XR_XIR_CTFE_OUTPUT_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_TYPE;
         }
     }

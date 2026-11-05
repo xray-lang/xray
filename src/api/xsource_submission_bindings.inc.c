@@ -7,15 +7,13 @@
  * xsource_submission_bindings.inc.c - Source declarations to actual birth storage
  */
 static XrXirStatus submission_compile_status(XrCompileResourceStatus status) {
-    return status==XR_COMPILE_RESOURCE_OK ? XR_XIR_OK : status==XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET :
+    return status==XR_COMPILE_RESOURCE_OK ? XR_XIR_OK : status==XR_COMPILE_RESOURCE_MEMORY_LIMIT || status==XR_COMPILE_RESOURCE_OVERFLOW ? XR_XIR_BUDGET :
         status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BAD_STRUCTURE;
 }
 static XrXirStatus submission_binding_mismatch(SubmissionBindingDraft *draft,const char *message) {
     draft->failure=message;return XR_XIR_BAD_STRUCTURE;
 }
-static XrXirStatus submission_accessor_key(XrSourceSubmission *owner,uint64_t source,uint32_t accessor,uint8_t key[16]) {
-    XrXirStatus status=submission_compile_status(xr_compile_state_work(owner->state,16));
-    if(status!=XR_XIR_OK)return status;
+static XrXirStatus submission_accessor_key(uint64_t source,uint32_t accessor,uint8_t key[16]) {
     /* An embedded NUL separates internal selectors from Source identifiers.
      * The serial and Checked ordinal select a copied binding, never authority. */
     key[0]=0;key[1]='a';key[2]='c';key[3]='c';
@@ -59,20 +57,17 @@ static XrXirStatus submission_receive_accessor(SubmissionBindingDraft *draft,
         draft->repl_entry=physical;
     }
     uint8_t prepared[16];
-    XrXirStatus status=submission_accessor_key(draft->owner,definition->generation,accessor,prepared);
+    XrXirStatus status=submission_accessor_key(definition->generation,accessor,prepared);
     if(status!=XR_XIR_OK)return status;
     for(uint32_t i=0;i<draft->accessors;++i) {
-        if(xr_compile_state_work(draft->owner->state,16)!=XR_COMPILE_RESOURCE_OK)
-            return submission_compile_status(xr_compile_state_status(draft->owner->state));
+
         if(!memcmp(draft->accessor_keys+(size_t)i*16,prepared,16))return XR_XIR_OK;
     }
     uint8_t *key=draft->accessor_keys+(size_t)draft->accessors*16;
-    status=submission_compile_status(xr_compile_state_copy(draft->owner->state,key,prepared,16));
-    if(status==XR_XIR_OK) {
-        ++draft->accessors;
-        draft->rows[draft->count++]=(XrXirInstanceBindingSpec){(const char *)key,16,XR_XIR_INSTANCE_BINDING_FUNCTION,physical};
-    }
-    return status;
+    memcpy(key,prepared,16);
+    ++draft->accessors;
+    draft->rows[draft->count++]=(XrXirInstanceBindingSpec){(const char *)key,16,XR_XIR_INSTANCE_BINDING_FUNCTION,physical};
+    return XR_XIR_OK;
 }
 static XrXirStatus submission_receive_bindings(void *context,const XrXirSpecializationMapView *mapping) {
     SubmissionBindingDraft *draft=context;XrSourceSubmission *owner=draft->owner;
@@ -86,8 +81,7 @@ static XrXirStatus submission_receive_bindings(void *context,const XrXirSpeciali
         return submission_binding_mismatch(draft,"Specialization source or declaration shape differs");
     size_t capacity=0;
     for(size_t i=0;i<draft->name_count;++i) {
-        if(xr_compile_state_work(owner->state,1)!=XR_COMPILE_RESOURCE_OK)
-            return submission_compile_status(xr_compile_state_status(owner->state));
+
         const XrXirSourceDeclaration *declaration=draft->names[i].declaration;
         if(draft->names[i].generation==owner->source_serial && declaration &&
             (declaration->kind==XR_XIR_SOURCE_FUNCTION || declaration->kind==XR_XIR_SOURCE_BINDING))
@@ -97,13 +91,12 @@ static XrXirStatus submission_receive_bindings(void *context,const XrXirSpeciali
         }
     }
     if(capacity>UINT32_MAX)return XR_XIR_BUDGET;
-    XrXirStatus status=capacity ? submission_compile_status(xr_compile_state_calloc(owner->state,
+    XrXirStatus status=capacity ? submission_compile_status(xr_compile_resources_calloc(owner->resources,
         capacity,sizeof(*draft->rows)+16,(void **)&draft->rows)) : XR_XIR_OK;
     if(status!=XR_XIR_OK)return status;
     draft->accessor_keys=capacity ? (uint8_t *)(draft->rows+capacity) : NULL;
     for(size_t i=0;i<draft->name_count;++i) {
-        if(xr_compile_state_work(owner->state,1)!=XR_COMPILE_RESOURCE_OK)
-            return submission_compile_status(xr_compile_state_status(owner->state));
+
         const XrXirSourceGenerationBinding *name=&draft->names[i];
         if(name->generation!=owner->source_serial)continue;
         if(!name->declaration || !name->declaration->name)return XR_XIR_BAD_STRUCTURE;
@@ -136,9 +129,7 @@ static XrXirStatus submission_receive_bindings(void *context,const XrXirSpeciali
             kind=XR_XIR_INSTANCE_BINDING_FUNCTION;
         } else if(definition.kind!=XR_XIR_SOURCE_DEFINITION_UNIT)continue;
         if(kind) {
-            size_t length=0;
-            status=submission_compile_status(xr_compile_state_string_length(owner->state,definition.name,&length));
-            if(status!=XR_XIR_OK)return status;
+            size_t length=strlen(definition.name);
             if(!length || length>UINT32_MAX)return XR_XIR_BAD_STRUCTURE;
             draft->rows[draft->count++]=(XrXirInstanceBindingSpec){definition.name,(uint32_t)length,kind,ordinal};
         }
@@ -158,8 +149,7 @@ static XrXirStatus submission_lowered_bindings(const SubmissionBindingDraft *dra
     /* The actual lower producer preserves ordinals. Match bound declaration
      * shapes before transfer; the Program receiver still decides permissions. */
     for(uint32_t i=0;i<draft->count;++i) {
-        if(xr_compile_state_work(draft->owner->state,1)!=XR_COMPILE_RESOURCE_OK)
-            return submission_compile_status(xr_compile_state_status(draft->owner->state));
+
         const XrXirInstanceBindingSpec *row=&draft->rows[i];uint32_t index=row->ordinal;
         if(row->kind==XR_XIR_INSTANCE_BINDING_SLOT) {
             if(index>=x->slot_count || x->slots[index].module!=y->slots[index].module ||
@@ -170,8 +160,7 @@ static XrXirStatus submission_lowered_bindings(const SubmissionBindingDraft *dra
                 a->functions[index].result!=b->functions[index].result ||
                 a->functions[index].parameter_count!=b->functions[index].parameter_count)return XR_XIR_BAD_STRUCTURE;
             for(uint32_t p=0;p<a->functions[index].parameter_count;++p) {
-                if(xr_compile_state_work(draft->owner->state,1)!=XR_COMPILE_RESOURCE_OK)
-                    return submission_compile_status(xr_compile_state_status(draft->owner->state));
+
                 if(a->functions[index].parameters[p]!=b->functions[index].parameters[p])return XR_XIR_BAD_STRUCTURE;
             }
         }

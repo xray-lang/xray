@@ -296,7 +296,7 @@ static void utf8_and_scanner_lifetime(void) {
     CHECK(xr_arena_open(&arena, 64, &backing) == XR_ARENA_OK);
     Scanner scanner = {0};
     char borrowed_source[] = "// hello\nvar name = 1";
-    OK(xr_compile_scanner_open_source(&scanner, state, &arena, borrowed_source, true));
+    OK(xr_compile_scanner_open_source(&scanner, state, &arena, borrowed_source, true,NULL));
     xr_compile_state_release(state);
     xr_compile_resources_release(resources);
     Token token = xr_scanner_scan(&scanner);

@@ -24,7 +24,7 @@ static XrXirStatus error_finite_empty(const EffectErrorFiniteRead *read,
     /* No escaping errors does not prove the returned carrier has no errors. */
     if(read->proof->rows[function].returned) { *empty=false;return XR_XIR_OK; }
     const EffectBodyFunction *head=&read->proof->material->functions[actual];
-    EffectBodyRead body=effect_body_compile_read(read->work);
+    EffectBodyRead body=(EffectBodyRead){.owner=read->work};
     if(!read->current) status=effect_role_range(read->work,head->runs,head->run_capacity,sizeof(*head->runs));
     if(status!=XR_XIR_OK) return status;
     EffectBodyRecordCursor cursor={0,0,UINT32_MAX};*empty=false;
@@ -47,12 +47,12 @@ static XrXirStatus error_finite_empty(const EffectErrorFiniteRead *read,
 }
 static XrXirStatus error_finite_carrier(EffectErrorFiniteRead *read,const EffectErrorEquationRead *equation,
     uint32_t function,uint32_t value,ErrorFiniteVisit visit,void *owner,bool *paused) {
-    if(!xir_compile_work(read->work,2*sizeof(uint32_t))) return XR_XIR_BUDGET;
+
     uint32_t blocks=read->proof->rows[function].blocks;
     for(uint32_t b=0;b<blocks;++b) {
-        if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+
         for(uint32_t w=0;w<read->proof->words;++w) {
-            if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+
             XrXirStatus status=visit(read,equation,function,error_finite_entry_coordinate(read->proof,function,b,value,w),owner,paused);
             if(status!=XR_XIR_OK || *paused) return status;
         }
@@ -80,12 +80,12 @@ static XrXirStatus error_finite_values(EffectErrorFiniteRead *read,const EffectE
     const EffectBodyFunction *head=&read->proof->material->functions[view->function_index];
     XrXirStatus status=XR_XIR_OK;
     for(uint32_t p=0;p<head->parameter_count;++p) {
-        if(!xir_compile_work(read->work,2+sizeof(*head->parameters))) return XR_XIR_BUDGET;
+
         bool active=false;status=error_type_active(view,head->parameters[p],&active);
         if(status!=XR_XIR_OK) return status;
         if(active) { status=error_finite_carrier(read,equation,function,p,visit,owner,paused);if(status!=XR_XIR_OK || *paused) return status; }
     }
-    EffectBodyRead body=effect_body_compile_read(read->work);
+    EffectBodyRead body=(EffectBodyRead){.owner=read->work};
     EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
     for(uint32_t run=0;run<head->run_count;++run) {
         const EffectBodyRun *ref=NULL;status=effect_body_range_ref(&body,head,&cursor,&ref);
@@ -115,7 +115,7 @@ static XrXirStatus error_finite_walk(const EffectErrorFiniteRead *read,
     bool paused=false;
     XrXirStatus status=error_finite_empty(read,function,empty);
     if(status!=XR_XIR_OK || *empty) return status;
-    if(!xir_compile_work(read->work,sizeof(EffectErrorFiniteRead))) return XR_XIR_BUDGET;
+
     EffectErrorFiniteRead current=*read;
     EffectErrorEquationRead equation;status=error_finite_equation(&current,function,&equation);
     if(status!=XR_XIR_OK) return status;
@@ -139,7 +139,7 @@ static XrXirStatus error_finite_compare(EffectErrorFiniteRead *read,const Effect
     uint32_t function,uint64_t coordinate,void *owner,bool *paused) {
     (void)owner;*paused=false;uint64_t expected=0,actual=0;uint32_t bits=0;
     const EffectErrorFiniteRow *row=&read->proof->rows[function];
-    if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
+
     bool reach=coordinate>=row->first && coordinate-row->first<row->blocks;
     XrXirStatus status=error_finite_word(read,coordinate,reach?1:64,&actual);
     if(status!=XR_XIR_OK) return status;

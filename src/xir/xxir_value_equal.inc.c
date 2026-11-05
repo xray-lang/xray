@@ -32,21 +32,21 @@ static bool equal_work(XrXirValueAdmission *admission, uint64_t count) {
 /* An empty active member of a payload-bearing enum is not this domain. */
 static XrXirValueStatus equal_enum_type(const XrXirTypes *types,
     const XrXirTypeNode *node, XrXirValueAdmission *admission) {
-    if (!equal_work(admission,sizeof(XrXirNominalTable))) return XR_XIR_VALUE_LIMIT;
+    if ((!admission_is_compile(admission) && !equal_work(admission,sizeof(XrXirNominalTable)))) return XR_XIR_VALUE_LIMIT;
     const XrXirNominalTable *table=types ? types->nominals : NULL;
     if (!table || !table->identities || node->nominal.declaration>=table->count)
         return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!equal_work(admission,sizeof(XrXirNominalIdentity))) return XR_XIR_VALUE_LIMIT;
+    if ((!admission_is_compile(admission) && !equal_work(admission,sizeof(XrXirNominalIdentity)))) return XR_XIR_VALUE_LIMIT;
     const XrXirNominalIdentity *d=&table->identities[node->nominal.declaration];
     if (d->kind!=XR_XIR_NOMINAL_ENUM || d->field_count || node->nominal.field_count ||
         node->nominal.argument_count!=d->arity || (d->arity && !node->nominal.arguments) ||
         (d->variant_count && !d->variants)) return XR_XIR_VALUE_BAD_ARGUMENT;
     for (uint32_t a=0;a<d->arity;++a) {
-        if (!equal_work(admission,sizeof(XrXirType))) return XR_XIR_VALUE_LIMIT;
+        if ((!admission_is_compile(admission) && !equal_work(admission,sizeof(XrXirType)))) return XR_XIR_VALUE_LIMIT;
         if (node->nominal.arguments[a]==XR_XIR_UNIT) return XR_XIR_VALUE_BAD_ARGUMENT;
     }
     for (uint32_t v=0;v<d->variant_count;++v) {
-        if (!equal_work(admission,sizeof(*d->variants))) return XR_XIR_VALUE_LIMIT;
+        if ((!admission_is_compile(admission) && !equal_work(admission,sizeof(*d->variants)))) return XR_XIR_VALUE_LIMIT;
         if (d->variants[v].field_begin || d->variants[v].field_count) return XR_XIR_VALUE_BAD_ARGUMENT;
     }
     return XR_XIR_VALUE_OK;
@@ -55,13 +55,13 @@ static XrXirValueStatus equal_inline_enum(const XrXirTypes *types,const XrXirTyp
     const unsigned char *left,const unsigned char *right,uint32_t size,
     XrXirValueAdmission *admission,bool *equal) {
     if (!left || !right || !size || size>sizeof(uint32_t)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!equal_work(admission,2*(uint64_t)size)) return XR_XIR_VALUE_LIMIT;
+    if ((!admission_is_compile(admission) && !equal_work(admission,2*(uint64_t)size))) return XR_XIR_VALUE_LIMIT;
     uint32_t a=0,b=0;memcpy(&a,left,size);memcpy(&b,right,size);
-    if (!equal_work(admission,sizeof(XrXirNominalTable))) return XR_XIR_VALUE_LIMIT;
+    if ((!admission_is_compile(admission) && !equal_work(admission,sizeof(XrXirNominalTable)))) return XR_XIR_VALUE_LIMIT;
     const XrXirNominalTable *table=types ? types->nominals : NULL;
     if (!table || !table->identities || node->nominal.declaration>=table->count)
         return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!equal_work(admission,sizeof(XrXirNominalIdentity))) return XR_XIR_VALUE_LIMIT;
+    if ((!admission_is_compile(admission) && !equal_work(admission,sizeof(XrXirNominalIdentity)))) return XR_XIR_VALUE_LIMIT;
     const XrXirNominalIdentity *identity=&table->identities[node->nominal.declaration];
     if (a>=identity->variant_count || b>=identity->variant_count) return XR_XIR_VALUE_BAD_ARGUMENT;
     *equal=a==b;return XR_XIR_VALUE_OK;
@@ -69,7 +69,7 @@ static XrXirValueStatus equal_inline_enum(const XrXirTypes *types,const XrXirTyp
 static XrXirValueStatus equal_closed_type(XrXirType type, XrXirValueAdmission *admission) {
     const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
     for (;;) {
-        if (!equal_work(admission, 1)) return XR_XIR_VALUE_LIMIT;
+        if ((!admission_is_compile(admission) && !equal_work(admission, 1))) return XR_XIR_VALUE_LIMIT;
         if (type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) || type == XR_XIR_STRING)
             return XR_XIR_VALUE_OK;
         const XrXirTypeNode *node = xr_xir_type_node(types, type);
@@ -87,7 +87,7 @@ static XrXirValueStatus equal_push(ValueEqualStack *stack, ValueEqualFrame frame
         size_t capacity = stack->capacity ? stack->capacity * 2 : 1;
         size_t bytes = capacity * sizeof(*stack->frames);
         if (bytes > admission->scratch_bytes) return XR_XIR_VALUE_LIMIT;
-        if (!equal_work(admission, (uint64_t)stack->depth + 1)) return XR_XIR_VALUE_LIMIT;
+        if ((!admission_is_compile(admission) && !equal_work(admission, (uint64_t)stack->depth + 1))) return XR_XIR_VALUE_LIMIT;
         XrXirValueStatus status = XR_XIR_VALUE_OK;
         ValueEqualFrame *frames = xr_xir_domain_allocate(admission->domain, bytes, &status);
         if (!frames) return status;
@@ -108,7 +108,7 @@ static XrXirValueStatus equal_leaf(const XrXirValue *left, const XrXirValue *rig
     if (type == XR_XIR_STRING) {
         const XirString *a = string_pointer(left), *b = string_pointer(right);
         if (a->length != b->length) { *equal = false; return XR_XIR_VALUE_OK; }
-        if (!equal_work(admission, a->length)) return XR_XIR_VALUE_LIMIT;
+        if ((!admission_is_compile(admission) && !equal_work(admission, a->length))) return XR_XIR_VALUE_LIMIT;
         *equal = !a->length || !memcmp(a->bytes, b->bytes, a->length);
     } else if (xr_xir_float_bits(type)) {
         int64_t result = 0;
@@ -161,7 +161,7 @@ static XrXirValueStatus equal_current(ValueEqualCursor *cursor, ValueEqualStack 
     if (right->type != left->type || !xr_xir_value_argument(left, admission->arena, type) ||
         !xr_xir_value_argument(right, admission->arena, type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (xr_xir_type_is_enum(types,type)) {
-        if (!equal_work(admission,2*sizeof(uint32_t))) return XR_XIR_VALUE_LIMIT;
+        if ((!admission_is_compile(admission) && !equal_work(admission,2*sizeof(uint32_t)))) return XR_XIR_VALUE_LIMIT;
         const XirNominalValue *a=(const XirNominalValue *)object_pointer(left);
         const XirNominalValue *b=(const XirNominalValue *)object_pointer(right);
         *equal=a->variant==b->variant;
@@ -198,7 +198,7 @@ static XrXirValueStatus xr_xir_value_equal_graph_operation(const XrXirValue *lef
     ValueEqualCursor cursor = {*left,*right,{0},{0},false,false};
     bool equal = true;
     for (;;) {
-        if (!equal_work(admission, 1)) { status = XR_XIR_VALUE_LIMIT; break; }
+        if ((!admission_is_compile(admission) && !equal_work(admission, 1))) { status = XR_XIR_VALUE_LIMIT; break; }
         status = equal_current(&cursor,&stack,admission,&equal);
         if (status != XR_XIR_VALUE_OK || !equal) break;
         if (cursor.descend) continue;

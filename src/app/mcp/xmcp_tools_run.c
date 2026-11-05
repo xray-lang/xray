@@ -92,6 +92,8 @@ static XrXirCallStatus run_copy_status(XrXirValueStatus status) {
     case XR_XIR_VALUE_OK: return XR_XIR_CALL_READY;
     case XR_XIR_VALUE_OOM: return XR_XIR_CALL_OOM;
     case XR_XIR_VALUE_LIMIT:
+    case XR_XIR_VALUE_MEMORY_LIMIT:
+    case XR_XIR_VALUE_OVERFLOW:
     case XR_XIR_VALUE_REFCOUNT_LIMIT: return XR_XIR_CALL_LIMIT;
     default: return XR_XIR_CALL_BAD_ARGUMENT;
     }
@@ -193,17 +195,23 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_run(XmcpServer *server, const XmcpCallContex
     if (!bytes_open(&capture.out, (size_t)limit) || !bytes_open(&capture.error, (size_t)limit)) {
         status = XR_XIR_OUT_OF_MEMORY; goto publish;
     }
-    uint64_t start = xr_time_monotonic_ns();
-    if (!start) {
-        execution.status = XR_XIR_CALL_HOST_ERROR;
-        snprintf(summary, sizeof(summary), "Error: monotonic host clock failed"); goto publish;
+    uint64_t duration=(uint64_t)timeout * UINT64_C(1000000);
+    XrCompileRequestControl control={0};
+    XrCompileResourceStatus controlled=xmcp_request_control_init(server,duration,&control);
+    if (controlled!=XR_COMPILE_RESOURCE_OK) {
+        status=xmcp_source_resource_status(controlled);
+        snprintf(summary,sizeof(summary),"Error: request control failed (status=%u)",(unsigned)controlled);goto publish;
     }
+    /* AFTER was initialized once at the original whole-request start. Both
+     * compilation and execution keep that same absolute deadline. */
+    uint64_t start=control.deadline_ns-duration;
     XrXirCompileContext context = {NULL, xr_xir_compile_default_limits()};
     XrCompileResourceLimits limits = xmcp_source_default_limits();
-    XrCompileResourceStatus created = xr_compile_resources_new(&limits, &context.resources);
+    XrCompileResourceStatus created = xr_compile_request_control_poll(&control);
+    if (created == XR_COMPILE_RESOURCE_OK) created = xr_compile_resources_new(&limits, &context.resources);
     status = created == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
-        created == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
-    XmcpSourceRequest request = {code->as.string, code->string_len, identity->as.string, &context};
+        xmcp_source_resource_status(created);
+    XmcpSourceRequest request = {code->as.string, code->string_len, identity->as.string, &context, &control};
     XrXirSourceProduct *product = NULL; XrXirSourceProductDiagnostic diagnostic = {0};
     XrXirProgram *program = NULL; uint32_t entry = 0;
     if (status == XR_XIR_OK) status = xmcp_run_source_product(&request, &product, &diagnostic);
@@ -215,8 +223,10 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_run(XmcpServer *server, const XmcpCallContex
         diagnostic.source.line, diagnostic.source.column, diagnostic.source.message);
     xr_xir_compile_source_product_diagnostic_free(&diagnostic);
     xr_xir_compile_source_product_free(product); xr_compile_resources_release(context.resources);
-    if (status == XR_XIR_OK) execution = execute_program(program, entry, &capture, server, start,
-        (uint64_t)timeout * UINT64_C(1000000));
+    if (status == XR_XIR_DEADLINE) {
+        execution.timed_out=true;snprintf(summary,sizeof(summary),"Request timed out after %lldms during compilation",(long long)timeout);
+    }
+    if (status == XR_XIR_OK) execution = execute_program(program, entry, &capture, server, start, duration);
     xr_xir_compile_program_drop(program);
     if (status == XR_XIR_OK) {
         if (execution.owned.status == XR_XIR_CALL_THROWN || xr_xir_call_panic_status(execution.owned.status)) {

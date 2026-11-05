@@ -48,7 +48,7 @@ static XtcXirPublicationStatus publication_io_status(XrOsIoStatus status) {
     case XR_OS_IO_NOT_FOUND: return XTC_XIR_PUBLICATION_UNRESOLVED;
     case XR_OS_IO_UNSUPPORTED: return XTC_XIR_PUBLICATION_UNSUPPORTED;
     case XR_OS_IO_BAD_ARGUMENT: return XTC_XIR_PUBLICATION_INVALID;
-    case XR_OS_IO_BUDGET: return XTC_XIR_PUBLICATION_BUDGET;
+    case XR_OS_IO_OVERFLOW: return XTC_XIR_PUBLICATION_BUDGET;
     case XR_OS_IO_OUT_OF_MEMORY: return XTC_XIR_PUBLICATION_OUT_OF_MEMORY;
     default: return XTC_XIR_PUBLICATION_IO;
     }

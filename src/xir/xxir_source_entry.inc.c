@@ -27,7 +27,7 @@ static bool source_module_entry_check(SourceContext *ctx, const AstNode *program
      * their ordinary construction rules. */
     for (int i=0;i<program->as.program.count;++i) {
         AstNode *node=program->as.program.statements[i];
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (!node) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"module statement is missing");
         if (!source_module_declaration(node))
             return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,

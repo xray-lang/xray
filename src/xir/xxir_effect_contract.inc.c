@@ -43,7 +43,7 @@ static XrXirStatus effect_callable_bound_compare_scratch(const XrXirCompileConte
     if (!xir_compile_context_valid(context) || !request || !scratch ||
         scratch->resources!=context->resources ||
         !!request->arguments != !!request->argument_count) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
     const XrXirTypeNode *declared=xr_xir_callable_signature(request->source,request->declared);
     const XrXirTypeNode *actual=xr_xir_callable_signature(request->destination,request->actual);
     if (!declared || !actual || actual->parameter_span>actual_scope ||
@@ -57,7 +57,7 @@ static XrXirStatus effect_callable_bound_compare_scratch(const XrXirCompileConte
         request->source,request->destination,request->arguments,request->argument_count,
         declared->result,actual->result,scratch);
     for (uint32_t p=0;status==XR_XIR_OK && p<declared->parameter_count;++p) {
-        if (!xir_compile_work(context,1)) { status=XR_XIR_BUDGET;break; }
+
         if (declared->parameters[p].mode != actual->parameters[p].mode) { status=XR_XIR_BAD_TYPE;break; }
         status=xr_xir_compile_type_substitution_matches_between_scratch(context,
             request->source,request->destination,request->arguments,request->argument_count,
@@ -91,7 +91,7 @@ static XrXirStatus effect_callable_bound_metadata_scratch(const XrXirCompileCont
         !!generic->arguments!=!!generic->argument_count || (!count && generic->parameter_kinds)))
         return XR_XIR_BAD_STRUCTURE;
     for (uint32_t p=0;p<count;++p) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         if (xr_xir_binder_kind(generic,p)>XR_XIR_BINDER_RESULT_VARIABLE) return XR_XIR_BAD_STRUCTURE;
     }
     XirMetadataProofContext proof={module,{XR_XIR_CONTEXT_FUNCTION,function,0}};
@@ -109,7 +109,7 @@ static XrXirStatus effect_callable_bound_metadata_scratch(const XrXirCompileCont
     xr_xir_constraint_scratch_free(&use);
     XrXirType *arguments=status==XR_XIR_OK && count?xir_compile_alloc(context,(size_t)count*sizeof(*arguments),&status):NULL;
     for (uint32_t p=0;p<count && status==XR_XIR_OK;++p) {
-        if (!xir_compile_work(context,sizeof(*arguments)+1)) { status=XR_XIR_BUDGET;break; }
+
         arguments[p]=(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+p);
     }
     XirEffectCallableBound bound=*request;bound.arguments=arguments;bound.argument_count=count;
@@ -141,10 +141,10 @@ XR_FUNC XrXirStatus xir_effect_callable_bound_matches(const XrXirCompileContext 
     xr_xir_type_match_scratch_free(&scratch);return status;
 }
 
-static XrXirStatus effect_contract_vector(const XrXirCompileContext *context,
+static XrXirStatus effect_contract_vector(
     const void *data, uint32_t count, size_t size) {
     if ((uint64_t)count > SIZE_MAX / size) return XR_XIR_BUDGET;
-    if (!xir_compile_work(context, 3)) return XR_XIR_BUDGET;
+
     return !!data == !!count ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
 }
 
@@ -155,19 +155,19 @@ static bool effect_contract_context_op(XrXirOp op) {
         op == XR_XIR_ITERATOR_HAS_NEXT || op == XR_XIR_ITERATOR_NEXT || op == XR_XIR_ITERATOR_NTH;
 }
 
-static XrXirStatus effect_contract_formula(const XrXirCompileContext *context,
+static XrXirStatus effect_contract_formula(
     const XrXirTypes *types, const XrXirFunction *function, const XrXirFunctionEffectContract *contract) {
     const XrXirRootFormula *formula = &contract->formula;
-    if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
     if (formula->constant_mask & ~(XR_XIR_CALLABLE_ROOT_REQUIRED | XR_XIR_CALLABLE_ROOT_UNRESOLVED))
         return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status = effect_contract_vector(context, formula->terms,
+    XrXirStatus status = effect_contract_vector( formula->terms,
         formula->term_count, sizeof(*formula->terms));
     if (status != XR_XIR_OK) return status;
     if ((uint64_t)formula->term_count > (uint64_t)function->parameter_count + function->instruction_count)
         return XR_XIR_BAD_STRUCTURE;
     for (uint32_t t = 0; t < formula->term_count; ++t) {
-        if (!xir_compile_work(context, 6)) return XR_XIR_BUDGET;
+
         const XrXirRootTerm *term = &formula->terms[t];
         if (t && (formula->terms[t - 1].kind > term->kind ||
             (formula->terms[t - 1].kind == term->kind && formula->terms[t - 1].index >= term->index)))
@@ -189,17 +189,17 @@ static XrXirStatus effect_contract_formula(const XrXirCompileContext *context,
     return XR_XIR_OK;
 }
 
-static XrXirStatus effect_contract_parameters(const XrXirCompileContext *context,
+static XrXirStatus effect_contract_parameters(
     const XrXirModule *module, uint32_t function, const XrXirFunctionEffectContract *contract) {
     const XrXirFunction *definition = &module->functions[function];
-    if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
     if (contract->parameter_count != definition->parameter_count) return XR_XIR_BAD_STRUCTURE;
     if (!definition->parameters && definition->parameter_count) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status = effect_contract_vector(context, contract->parameters,
+    XrXirStatus status = effect_contract_vector( contract->parameters,
         contract->parameter_count, sizeof(*contract->parameters));
     if (status != XR_XIR_OK) return status;
     for (uint32_t p = 0; p < contract->parameter_count; ++p) {
-        if (!xir_compile_work(context, 3)) return XR_XIR_BUDGET;
+
         const XrXirEffectParameter *parameter = &contract->parameters[p];
         if (parameter->kind > XR_XIR_EFFECT_PARAMETER_CONDITIONAL_STATIC || parameter->uses & ~511u)
             return XR_XIR_BAD_STRUCTURE;
@@ -209,15 +209,15 @@ static XrXirStatus effect_contract_parameters(const XrXirCompileContext *context
     return XR_XIR_OK;
 }
 
-static XrXirStatus effect_contract_values(const XrXirCompileContext *context,
+static XrXirStatus effect_contract_values(
     const XrXirModule *module, uint32_t function, const XrXirFunctionEffectContract *contract) {
     const XrXirFunction *definition = &module->functions[function];
-    XrXirStatus status = effect_contract_vector(context, contract->values,
+    XrXirStatus status = effect_contract_vector( contract->values,
         contract->value_count, sizeof(*contract->values));
     if (status != XR_XIR_OK) return status;
     if (contract->value_count > definition->instruction_count) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t v = 0; v < contract->value_count; ++v) {
-        if (!xir_compile_work(context, 5)) return XR_XIR_BUDGET;
+
         const XrXirRootValueIdentity *value = &contract->values[v];
         if (value->instruction >= definition->instruction_count ||
             (v && contract->values[v - 1].instruction >= value->instruction) ||
@@ -243,15 +243,15 @@ static int effect_contract_binding_order(const XrXirEffectCallBinding *left,
     return 0;
 }
 
-static XrXirStatus effect_contract_bindings(const XrXirCompileContext *context,
+static XrXirStatus effect_contract_bindings(
     const XrXirFunction *function, const XrXirFunctionEffectContract *contract) {
-    XrXirStatus status = effect_contract_vector(context, contract->bindings,
+    XrXirStatus status = effect_contract_vector( contract->bindings,
         contract->binding_count, sizeof(*contract->bindings));
     if (status != XR_XIR_OK) return status;
     if (contract->binding_count > function->operand_count) return XR_XIR_BAD_STRUCTURE;
     uint64_t values = (uint64_t)function->parameter_count + function->instruction_count;
     for (uint32_t b = 0; b < contract->binding_count; ++b) {
-        if (!xir_compile_work(context, 10)) return XR_XIR_BUDGET;
+
         const XrXirEffectCallBinding *binding = &contract->bindings[b];
         if (binding->family < XR_XIR_EFFECT_BINDING_DIRECT || binding->family > XR_XIR_EFFECT_BINDING_REQUIREMENT ||
             binding->instruction >= function->instruction_count || binding->value >= values ||
@@ -261,21 +261,21 @@ static XrXirStatus effect_contract_bindings(const XrXirCompileContext *context,
     return XR_XIR_OK;
 }
 
-static XrXirStatus effect_contract_template(const XrXirCompileContext *context,
+static XrXirStatus effect_contract_template(
     const XrXirModule *module, const XrXirProvenance *p) {
     if (p->source || p->origins || p->count || p->bindings || p->binding_count ||
         p->contract_count != module->function_count) return XR_XIR_BAD_STRUCTURE;
     if (module->stage == XR_XIR_LOWERED) return XR_XIR_BAD_STAGE;
-    XrXirStatus status = effect_contract_vector(context, p->contracts,
+    XrXirStatus status = effect_contract_vector( p->contracts,
         p->contract_count, sizeof(*p->contracts));
     if (status != XR_XIR_OK) return status;
     for (uint32_t f = 0; f < p->contract_count; ++f) {
-        if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
         const XrXirFunctionEffectContract *contract = &p->contracts[f];
-        status = effect_contract_parameters(context, module, f, contract);
-        if (status == XR_XIR_OK) status = effect_contract_formula(context, module->types, &module->functions[f], contract);
-        if (status == XR_XIR_OK) status = effect_contract_values(context, module, f, contract);
-        if (status == XR_XIR_OK) status = effect_contract_bindings(context, &module->functions[f], contract);
+        status = effect_contract_parameters( module, f, contract);
+        if (status == XR_XIR_OK) status = effect_contract_formula( module->types, &module->functions[f], contract);
+        if (status == XR_XIR_OK) status = effect_contract_values( module, f, contract);
+        if (status == XR_XIR_OK) status = effect_contract_bindings( &module->functions[f], contract);
         if (status != XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
@@ -295,9 +295,9 @@ XR_FUNC XrXirStatus xir_effect_binding_proofs_shape(const XrXirCompileContext *c
     if (!xir_compile_context_valid(context) || !module || !p ||
         !!p->bindings != !!p->binding_count || (module->function_count && !module->functions))
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
+
     for (uint32_t b = 0; b < p->binding_count; ++b) {
-        if (!xir_compile_work(context, 14)) return XR_XIR_BUDGET;
+
         const XrXirEffectBindingProof *proof = &p->bindings[b];
         if (proof->family < XR_XIR_EFFECT_BINDING_DIRECT || proof->family > XR_XIR_EFFECT_BINDING_REQUIREMENT ||
             proof->caller >= module->function_count || proof->callee >= module->function_count ||
@@ -314,29 +314,29 @@ XR_FUNC XrXirStatus xir_effect_binding_proofs_shape(const XrXirCompileContext *c
 
 /* Keys are read from this request's full sorted/unique inventory. The two
  * remaining fields still establish exact membership, never authority. */
-static XrXirStatus effect_contract_proof_key_compare(const XrXirCompileContext *context,
+static XrXirStatus effect_contract_proof_key_compare(
     const XrXirEffectBindingProof *left,const XrXirEffectBindingProof *right,int *output) {
-    if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
     if (left->caller!=right->caller) {
-        if (!xir_compile_work(context,1+sizeof(*output))) return XR_XIR_BUDGET;
+
         *output=left->caller<right->caller?-1:1;return XR_XIR_OK;
     }
-    if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
     if (left->family!=right->family) {
-        if (!xir_compile_work(context,1+sizeof(*output))) return XR_XIR_BUDGET;
+
         *output=left->family<right->family?-1:1;return XR_XIR_OK;
     }
-    if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
     if (left->instruction!=right->instruction) {
-        if (!xir_compile_work(context,1+sizeof(*output))) return XR_XIR_BUDGET;
+
         *output=left->instruction<right->instruction?-1:1;return XR_XIR_OK;
     }
-    if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
     if (left->parameter!=right->parameter) {
-        if (!xir_compile_work(context,1+sizeof(*output))) return XR_XIR_BUDGET;
+
         *output=left->parameter<right->parameter?-1:1;return XR_XIR_OK;
     }
-    if (!xir_compile_work(context,sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=0;return XR_XIR_OK;
 }
 
@@ -347,35 +347,35 @@ XR_FUNC XrXirStatus xir_effect_binding_proof_lookup(const XrXirCompileContext *c
     const XrXirProvenance *p,const XrXirEffectBindingProof *wanted,bool *output) {
     if (!xir_compile_context_valid(context) || !p || !wanted || !output ||
         !!p->bindings!=!!p->binding_count) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,2*sizeof(uint32_t))) return XR_XIR_BUDGET;
+
     uint32_t first=0,last=p->binding_count;
     while (first<last) {
-        if (!xir_compile_work(context,3+sizeof(uint32_t)+sizeof(int))) return XR_XIR_BUDGET;
+
         uint32_t middle=first+(last-first)/2;int order=0;
-        XrXirStatus status=effect_contract_proof_key_compare(context,&p->bindings[middle],wanted,&order);
+        XrXirStatus status=effect_contract_proof_key_compare(&p->bindings[middle],wanted,&order);
         if (status!=XR_XIR_OK) return status;
-        if (!xir_compile_work(context,1+sizeof(uint32_t))) return XR_XIR_BUDGET;
+
         if (order<0) {
-            if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
             first=middle+1;
         } else last=middle;
     }
-    if (!xir_compile_work(context,sizeof(bool)+1)) return XR_XIR_BUDGET;
+
     bool same=false;
     if (first<p->binding_count) {
-        if (!xir_compile_work(context,sizeof(int))) return XR_XIR_BUDGET;
+
         int order=0;
-        XrXirStatus status=effect_contract_proof_key_compare(context,&p->bindings[first],wanted,&order);
+        XrXirStatus status=effect_contract_proof_key_compare(&p->bindings[first],wanted,&order);
         if (status!=XR_XIR_OK) return status;
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         if (!order) {
-            if (!xir_compile_work(context,3+2*sizeof(bool)+sizeof(same))) return XR_XIR_BUDGET;
+
             bool callee=p->bindings[first].callee==wanted->callee;
             bool value=p->bindings[first].actual_value==wanted->actual_value;
             same=callee && value;
         }
     }
-    if (!xir_compile_work(context,sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=same;return XR_XIR_OK;
 }
 
@@ -389,24 +389,24 @@ static XrXirStatus effect_contract_instance(const XrXirCompileContext *context,
     if (p->source->module.provenance && p->source->module.provenance->kind != XR_XIR_EVIDENCE_TEMPLATE)
         return XR_XIR_BAD_STRUCTURE;
     if (!p->source->module.functions || !p->source->module.function_count) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status = effect_contract_vector(context, p->origins, p->count, sizeof(*p->origins));
-    if (status == XR_XIR_OK) status = effect_contract_vector(context, p->bindings,
+    XrXirStatus status = effect_contract_vector( p->origins, p->count, sizeof(*p->origins));
+    if (status == XR_XIR_OK) status = effect_contract_vector( p->bindings,
         p->binding_count, sizeof(*p->bindings));
     if (status != XR_XIR_OK) return status;
     for (uint32_t f = 0; f < p->count; ++f) {
-        if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
         const XrXirOrigin *origin = &p->origins[f];
         if (origin->function >= p->source->module.function_count) return XR_XIR_BAD_STRUCTURE;
-        status = effect_contract_vector(context, origin->arguments, origin->argument_count,
+        status = effect_contract_vector( origin->arguments, origin->argument_count,
             sizeof(*origin->arguments));
-        if (status == XR_XIR_OK) status = effect_contract_vector(context, origin->effect_arguments,
+        if (status == XR_XIR_OK) status = effect_contract_vector( origin->effect_arguments,
             origin->effect_argument_count, sizeof(*origin->effect_arguments));
         if (status != XR_XIR_OK) return status;
         uint32_t physical=p->source->module.functions[origin->function].parameter_count;
         if (p->source->module.provenance && origin->effect_argument_count!=physical)
             return XR_XIR_BAD_STRUCTURE;
         for (uint32_t a = 0; a < origin->effect_argument_count; ++a) {
-            if (!xir_compile_work(context, 3)) return XR_XIR_BUDGET;
+
             const XrXirEffectArgument *argument = &origin->effect_arguments[a];
             if (argument->parameter >= p->source->module.functions[origin->function].parameter_count ||
                 (a && origin->effect_arguments[a - 1].parameter >= argument->parameter))
@@ -423,11 +423,11 @@ XR_FUNC XrXirStatus xir_effect_contract_shape_verify(const XrXirCompileContext *
     if (!xir_compile_context_valid(context) || !module || !module->functions || !module->function_count)
         return XR_XIR_BAD_STRUCTURE;
     if (!module->provenance) return XR_XIR_OK;
-    if (!xir_compile_work(context, 8)) return XR_XIR_BUDGET;
+
     const XrXirProvenance *p = module->provenance;
     if (p->kind!=XR_XIR_EVIDENCE_EVALUATION &&
         (p->evaluation.caller || p->evaluation.instruction || p->evaluation.callee)) return XR_XIR_BAD_STRUCTURE;
-    if (p->kind == XR_XIR_EVIDENCE_TEMPLATE) return effect_contract_template(context, module, p);
+    if (p->kind == XR_XIR_EVIDENCE_TEMPLATE) return effect_contract_template( module, p);
     if (xir_effect_kind_is_closed(p->kind)) return effect_contract_instance(context, module, p);
     return XR_XIR_BAD_STRUCTURE;
 }
@@ -536,18 +536,18 @@ static XrXirStatus effect_contract_instance_candidate(const XrXirCompileContext 
     const XrXirRootValueIdentity *identity=NULL;
     uint32_t matches=0;
     for (uint32_t v=0;v<consumer->value_count;++v) {
-        if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
+
         if (consumer->values[v].instruction==producer) identity=&consumer->values[v];
     }
     if (!identity || identity->mode!=XR_XIR_EFFECT_VALUE_CALL_BIND) return XR_XIR_BAD_TYPE;
     for (uint32_t b=0;b<consumer->binding_count;++b) {
-        if (!xir_compile_work(context,4)) return XR_XIR_BUDGET;
+
         const XrXirEffectCallBinding *binding=&consumer->bindings[b];
         if (binding->family==family && binding->instruction==instruction &&
             binding->parameter==parameter && binding->value==value) ++matches;
     }
     if (matches!=1) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,sizeof(XrXirEffectBindingProof)+sizeof(bool))) return XR_XIR_BUDGET;
+
     XrXirEffectBindingProof wanted={family,caller,instruction,target,parameter,value};bool found=false;
     status=xir_effect_binding_proof_lookup(context,p,&wanted,&found);
     if (status!=XR_XIR_OK) return status;
@@ -573,11 +573,11 @@ XR_FUNC XrXirStatus xir_effect_call_binding_candidate(const XrXirCompileContext 
     if (xir_effect_kind_is_closed(p->kind))
         return effect_contract_instance_candidate(context,module,caller,instruction,parameter);
     if (p->kind!=XR_XIR_EVIDENCE_TEMPLATE) return XR_XIR_BAD_TYPE;
-    if (!xir_compile_work(context, 8)) return XR_XIR_BUDGET;
+
     if ((module->stage != XR_XIR_BUILT && module->stage != XR_XIR_CHECKED) ||
         p->source || p->origins || p->count || p->bindings || p->binding_count ||
         p->contract_count != module->function_count) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status = effect_contract_vector(context,p->contracts,p->contract_count,sizeof(*p->contracts));
+    XrXirStatus status = effect_contract_vector(p->contracts,p->contract_count,sizeof(*p->contracts));
     if (status != XR_XIR_OK) return status;
     const XrXirFunction *function = &module->functions[caller];
     if (!function->instructions || (function->parameter_count && !function->parameters))
@@ -596,11 +596,11 @@ XR_FUNC XrXirStatus xir_effect_call_binding_candidate(const XrXirCompileContext 
     uint32_t callee = requirement ? UINT32_MAX : (uint32_t)op->immediate;
     const XrXirFunctionEffectContract *definition = requirement ? NULL : &p->contracts[callee];
     const XrXirFunctionEffectContract *consumer = &p->contracts[caller];
-    status=effect_contract_parameters(context,module,caller,consumer);
+    status=effect_contract_parameters(module,caller,consumer);
     if (status==XR_XIR_OK && !requirement && caller!=callee)
-        status=effect_contract_parameters(context,module,callee,definition);
-    if (status == XR_XIR_OK) status = effect_contract_values(context,module,caller,consumer);
-    if (status == XR_XIR_OK) status = effect_contract_bindings(context,function,consumer);
+        status=effect_contract_parameters(module,callee,definition);
+    if (status == XR_XIR_OK) status = effect_contract_values(module,caller,consumer);
+    if (status == XR_XIR_OK) status = effect_contract_bindings(function,consumer);
     if (status != XR_XIR_OK) return status;
     if (!requirement && (parameter>=definition->parameter_count ||
         definition->parameters[parameter].kind==XR_XIR_EFFECT_PARAMETER_FIXED)) return XR_XIR_BAD_TYPE;
@@ -610,7 +610,7 @@ XR_FUNC XrXirStatus xir_effect_call_binding_candidate(const XrXirCompileContext 
     if (requirement && !parameter) return XR_XIR_BAD_TYPE;
     const XrXirEffectCallBinding *binding = NULL;
     for (uint32_t b = 0; b < consumer->binding_count; ++b) {
-        if (!xir_compile_work(context, 3)) return XR_XIR_BUDGET;
+
         const XrXirEffectCallBinding *current = &consumer->bindings[b];
         if (current->family == family && current->instruction == instruction && current->parameter == parameter)
             binding = current;
@@ -625,7 +625,7 @@ XR_FUNC XrXirStatus xir_effect_call_binding_candidate(const XrXirCompileContext 
     if (copy->op != XR_XIR_COPY || copy->args[0] >= values) return XR_XIR_BAD_TYPE;
     const XrXirRootValueIdentity *identity = NULL;
     for (uint32_t v = 0; v < consumer->value_count; ++v) {
-        if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
         if (consumer->values[v].instruction == producer) identity = &consumer->values[v];
     }
     if (!identity || identity->mode != XR_XIR_EFFECT_VALUE_CALL_BIND ||

@@ -55,7 +55,7 @@ static bool source_concat_spread(SourceContext *ctx, AstNode *node,
     XrXirCallableParameter *fields = source_alloc(ctx, count, sizeof(*fields));
     if (!fields || !source_copy_bytes(ctx, node, fields, signature->parameters, count * sizeof(*fields))) return false;
     for (uint32_t i = 0; i < count; ++i) {
-        if (!source_work(ctx, node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (fields[i].type != arguments->array_type || fields[i].mode)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array concat spread fields require its receiver Array type");
         SourceValue value;
@@ -73,7 +73,7 @@ static bool source_concat_arguments(SourceContext *ctx, AstNode *node,
     const CallExprNode *call = &node->as.call_expr;
     for (int i = 0; i < call->arg_count; ++i) {
         AstNode *argument = call->arguments[i];
-        if (!source_work(ctx, node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (!argument)
             return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "Array concat argument expression is missing");
         if (argument->type == AST_SPREAD_EXPR) {

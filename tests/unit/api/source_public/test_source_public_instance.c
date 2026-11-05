@@ -62,20 +62,20 @@ static XrSourceWriteStatus count_output(void *context,XrSourceOutputStream strea
     else CHECK(length==out->piece_bytes+1 && !memcmp(bytes,out->piece,out->piece_bytes) && bytes[length-1]=='\n');
     CHECK(length<=SIZE_MAX-out->bytes);out->bytes+=length;++out->calls;return XR_SOURCE_WRITE_OK;
 }
-static void default_output(XrSourceCompiler *compiler,XrSourceProgram *program) {
+static void default_output(XrSourceExecution *execution,XrSourceArtifact *program) {
     char piece[4096];memset(piece,'x',sizeof(piece));
-    XrSourceValue *argument=NULL;CHECK(xray_source_value_new_string(compiler,piece,sizeof(piece),&argument)==XR_SOURCE_OK);
+    XrSourceValue *argument=NULL;CHECK(xray_source_value_new_string(execution,piece,sizeof(piece),&argument)==XR_SOURCE_OK);
     const XrSourceValue *arguments[]={argument};XrSourceInvocation request=invocation("manyLines",arguments,1);
     XrSourceCallOptions runtime;CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
     CHECK(runtime.output_byte_limit==SIZE_MAX);
     CountedOutput out={.piece=piece,.piece_bytes=sizeof(piece)};runtime.write=count_output;runtime.context=&out;
-    XrSourceInstance *owner=NULL;CHECK(xray_source_instance_new(program,&runtime,&owner)==XR_SOURCE_OK);
+    XrSourceInstance *owner=NULL;CHECK(xray_source_instance_new(execution,program,&runtime,&owner)==XR_SOURCE_OK);
     returned_i64(execute(owner,&request),40);
     const size_t expected=3+257*(sizeof(piece)+1);
     CHECK(out.calls==258 && out.bytes==expected && out.bytes>1048576);
     CHECK(xray_source_instance_drop(&owner,NULL)==XR_SOURCE_OK && !owner);
     out.bytes=out.calls=0;XrSourceResult *result=NULL;
-    CHECK(xray_source_invoke(program,&request,&runtime,&result,NULL)==XR_SOURCE_OK && result);
+    CHECK(xray_source_invoke(execution,program,&request,&runtime,&result,NULL)==XR_SOURCE_OK && result);
     returned_i64(result,40);CHECK(out.calls==258 && out.bytes==expected);
     xray_source_value_free(argument);
     puts("public default output: persistent and one-shot cumulative bytes exceed 1 MiB PASS");
@@ -88,33 +88,35 @@ int main(void) {
         "export fn emit()->i64{print(7);return state}\nfn hidden()->i64{return 99}\n"
         "export fn twoLines()->i64{print(7);print(8);return state}\n"
         "export fn manyLines(value:string)->i64{var n:i64=0;while(n<257){print(value);n+=1};return state}\n";
-    XrSourceCompilerOptions options;CHECK(xray_source_compiler_options_init(&options,sizeof(options))==XR_SOURCE_OK);
+    XrSourceCompileOptions options=xray_source_compile_options_default();
     options.stdlib_path=XR_PUBLIC_STDLIB;
-    XrSourceCompiler *compiler=NULL;CHECK(xray_source_compiler_new(&options,&compiler)==XR_SOURCE_OK);
+    XrSourceExecutionOptions policy=xray_source_execution_options_default();
+    XrSourceExecution *execution=NULL;CHECK(xray_source_execution_new(&policy,&execution)==XR_SOURCE_OK);
     XrSourceText text={NULL,"public-persistent-instance",source,sizeof(source)-1};
-    XrSourceProgram *program=NULL;XrSourceDiagnostic *diagnostic=NULL;
-    XrSourceStatus status=xray_source_compile_text(compiler,&text,&program,&diagnostic);
+    XrSourceArtifact *program=NULL;XrSourceDiagnostic *diagnostic=NULL;
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text=text};
+    XrSourceStatus status=xray_source_build(&input,&options,&program,NULL,&diagnostic);
     if(diagnostic) {XrSourceDiagnosticInfo info;CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);fprintf(stderr,"%u: %s\n",(unsigned)status,info.message);}
     CHECK(status==XR_SOURCE_OK && program && !diagnostic);
-    default_output(compiler,program);
+    default_output(execution,program);
     XrSourceScalar scalar={.kind=XR_SOURCE_VALUE_I64,.value.signed_value=2};
     XrSourceValue *two=NULL,*wrong=NULL;
-    CHECK(xray_source_value_new_scalar(compiler,&scalar,&two)==XR_SOURCE_OK);
-    CHECK(xray_source_value_new_string(compiler,"wrong",5,&wrong)==XR_SOURCE_OK);
+    CHECK(xray_source_value_new_scalar(execution,&scalar,&two)==XR_SOURCE_OK);
+    CHECK(xray_source_value_new_string(execution,"wrong",5,&wrong)==XR_SOURCE_OK);
     XrSourceCallOptions runtime;CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
     runtime.output_byte_limit=6;runtime.write=collect;
     Output outputs[3]={0};XrSourceInstance *owners[3]={0};
     for(unsigned i=0;i<3;++i) {
         runtime.context=&outputs[i];
-        CHECK(xray_source_instance_new(program,&runtime,&owners[i])==XR_SOURCE_OK);
+        CHECK(xray_source_instance_new(execution,program,&runtime,&owners[i])==XR_SOURCE_OK);
         outputs[i].owner=owners[i];
     }
     Output one_shot={0};runtime.output_byte_limit=5;runtime.context=&one_shot;
     XrSourceInvocation two_lines=invocation("twoLines",NULL,0);XrSourceResult *limited=NULL;
     /* The initial module line spends three bytes, leaving only one full line. */
-    CHECK(xray_source_invoke(program,&two_lines,&runtime,&limited,NULL)==XR_SOURCE_LIMIT && !limited);
+    CHECK(xray_source_invoke(execution,program,&two_lines,&runtime,&limited,NULL)==XR_SOURCE_LIMIT && !limited);
     CHECK(one_shot.length==5 && !memcmp(one_shot.bytes,"90\n7\n",5));
-    xray_source_program_free(program);xray_source_compiler_free(compiler);
+    xray_source_artifact_free(program);xray_source_execution_free(execution);
     const XrSourceValue *arguments[]={two};
     XrSourceInvocation next=invocation("next",arguments,1),read=invocation("read",NULL,0),reader=invocation("reader",NULL,0);
     returned_i64(execute(owners[0],&next),42);returned_i64(execute(owners[1],&read),40);

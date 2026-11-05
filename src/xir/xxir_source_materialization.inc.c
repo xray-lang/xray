@@ -31,7 +31,7 @@ static bool source_materialization_receive(SourceContext *ctx,AstNode *node,
     const XrXirNominalDeclaration *record=&ctx->nominals.declarations[nominal];
     bool restricted=false;
     for (uint32_t f=0;f<record->field_count;++f) {
-        if (!source_work_units(ctx,node,sizeof(XrXirNominalField))) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         restricted|=(record->fields[f].flags&(XR_XIR_FIELD_PRIVATE|XR_XIR_FIELD_PROTECTED))!=0;
     }
     if (!restricted) return true;
@@ -40,8 +40,8 @@ static bool source_materialization_receive(SourceContext *ctx,AstNode *node,
     if (ctx->literal_definition) {
         for (uint32_t m=0;m<ctx->module_count;++m) {
             XrXirLiteral name={ctx->modules[m].name,ctx->modules[m].name_length};
-            if (!source_work_units(ctx,node,sizeof(XrXirSourceModule))) return false;
-            if (source_comptime_name_same(ctx,node,record->module,name)) {
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
+            if (source_comptime_name_same(ctx,record->module,name)) {
                 if (module!=UINT32_MAX) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"constant declaration module is ambiguous");
                 module=m;
             }
@@ -63,7 +63,7 @@ static bool source_materialization_receive(SourceContext *ctx,AstNode *node,
         ctx->materialization_count>=ctx->compile.limits.functions-ctx->materialization_begin)
         return source_fail(ctx,node,XR_XIR_BUDGET,"constant materializer inventory exhausted");
     SourceMaterialization *request=source_alloc(ctx,1,sizeof(*request));
-    if (!request || !source_work_units(ctx,node,sizeof(*request)+sizeof(XrXirValue))) return false;
+    if (!request || !((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     XrXirValueStatus copied=xr_xir_value_copy(value,&request->value);
     if (copied!=XR_XIR_VALUE_OK) return source_fail(ctx,node,
         copied==XR_XIR_VALUE_LIMIT || copied==XR_XIR_VALUE_REFCOUNT_LIMIT?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE,

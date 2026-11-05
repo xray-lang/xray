@@ -22,7 +22,7 @@
 static bool tref_count(struct XrCompilerSession *session, int count, unsigned maximum) {
     if (count >= 0 && (unsigned) count <= maximum) return true;
     xr_compile_state_fail(xr_compile_session_compile_state(session),
-                          count < 0 ? XR_COMPILE_RESOURCE_BAD_ARGUMENT : XR_COMPILE_RESOURCE_BUDGET);
+                          count < 0 ? XR_COMPILE_RESOURCE_BAD_ARGUMENT : XR_COMPILE_RESOURCE_OVERFLOW);
     return false;
 }
 
@@ -188,7 +188,7 @@ XR_FUNC XrTypeRef *xr_tref_optional(struct XrCompilerSession *session, XrTypeRef
         t->children = (XrTypeRef **) ast_alloc_array(session, sizeof(XrTypeRef *), 1);
         if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     } while (0);
-    if (!ast_work(session, sizeof(*t->children))) return NULL;
+
     t->children[0] = inner;
     return t;
 }
@@ -254,16 +254,16 @@ XR_FUNC XrTypeRef *xr_tref_function_signature(struct XrCompilerSession *session,
         } while (0);
     }
     for (int i = 0; i < nparam; i++) {
-        if (!ast_work(session, sizeof(*t->children) + sizeof(*t->function_param_modes))) return NULL;
+
         t->children[i] = params[i];
         XrParamMode mode = param_modes ? param_modes[i] : XR_PARAM_READ;
         t->function_param_modes[i] = xr_param_mode_is_valid(mode) ? mode : XR_PARAM_READ;
         const char *name = param_names && param_names[i] ? tref_strdup(session, param_names[i]) : NULL;
         if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
-        if (!ast_work(session, sizeof(*t->function_param_names))) return NULL;
+
         t->function_param_names[i] = name;
     }
-    if (!ast_work(session, sizeof(*t->children))) return NULL;
+
     t->children[nparam] = ret;
     t->borrow_origin_syntax = borrow_origin_syntax;
     t->borrow_origin_count = borrow_origin_count;
@@ -334,7 +334,7 @@ XR_FUNC XrTypeRef *xr_tref_object(struct XrCompilerSession *session, const char 
         } while (0);
         for (int i = 0; i < count; i++)
             do {
-                if (!ast_work(session, sizeof(*t->field_names))) return NULL;
+
                 t->field_names[i] = tref_strdup(session, field_names_src[i]);
                 if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
             } while (0);
@@ -372,7 +372,7 @@ XR_FUNC XrTypeRef *xr_tref_fixed_array_expr(struct XrCompilerSession *session, X
         t->children = (XrTypeRef **) ast_alloc_array(session, sizeof(XrTypeRef *), 1);
         if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     } while (0);
-    if (!ast_work(session, sizeof(*t->children))) return NULL;
+
     t->children[0] = elem;
     return t;
 }

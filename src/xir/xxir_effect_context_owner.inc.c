@@ -48,20 +48,20 @@ static void effect_context_summary_clear(EffectOrdinaryContexts *contexts) {
 /* The original COPY is an inferred SSA value, not a declared barrier. Its
  * complete operand/target/type-argument edge must survive normalization;
  * both current operand weakening and all final semantic gates still run. */
-static XrXirStatus effect_refinement_copy_transition(const XrXirCompileContext *work,
+static XrXirStatus effect_refinement_copy_transition(
     const EffectRefinementFunction *original,uint32_t instruction,const XrXirInstruction *current) {
     if (!original || !current || instruction>=original->instruction_count ||
         !original->instructions || original->copy_count>original->instruction_count ||
         !!original->copies!=!!original->copy_count) return XR_XIR_BAD_STRUCTURE;
     uint32_t low=0,high=original->copy_count;
     while (low<high) {
-        if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+
         uint32_t at=low+(high-low)/2;
         if (original->copies[at].instruction<instruction) low=at+1;else high=at;
     }
     if (low>=original->copy_count || original->copies[low].instruction!=instruction) return XR_XIR_UNRESOLVED;
     const XrXirInstruction *saved=&original->copies[low].operation;
-    if (!xir_compile_work(work,2*sizeof(*saved))) return XR_XIR_BUDGET;
+
     return saved->op==XR_XIR_COPY && saved->type==original->instructions[instruction] &&
         saved->args[0]==current->args[0] && saved->args[1]==current->args[1] &&
         saved->targets[0]==current->targets[0] && saved->targets[1]==current->targets[1] &&
@@ -73,7 +73,7 @@ static XrXirStatus effect_invocation_source_fixed(const XrXirCompileContext *wor
     const EffectRefinementFunction *original) {
     const XrXirFunction *body=&source->functions[function];
     const XrXirInstruction *op=&body->instructions[identity->instruction];
-    if (!xir_compile_work(work,5)) return XR_XIR_BUDGET;
+
     if (!original || identity->instruction>=original->instruction_count ||
         identity->mode!=XR_XIR_EFFECT_VALUE_FIXED || op->op!=XR_XIR_FUNCTION_WEAKEN ||
         op->type!=identity->declared_type ||
@@ -82,7 +82,7 @@ static XrXirStatus effect_invocation_source_fixed(const XrXirCompileContext *wor
     XrXirStatus status=xr_xir_compile_callable_weakening(work,source->types,
         xr_xir_operand_type(body,op->args[0]),identity->declared_type);
     if (status!=XR_XIR_OK) return status;
-    status=effect_refinement_copy_transition(work,original,identity->instruction,op);
+    status=effect_refinement_copy_transition(original,identity->instruction,op);
     if (status!=XR_XIR_UNRESOLVED) return status;
     return xr_xir_compile_callable_weakening(work,source->types,
         original->instructions[identity->instruction],identity->declared_type);
@@ -106,10 +106,10 @@ static XrXirStatus effect_invocation_source_declarations(const XrXirCompileConte
         return XR_XIR_BAD_STRUCTURE;
     const XrXirFunction *body=&source->functions[function];
     const XrXirFunctionEffectContract *contract=&provenance->contracts[function];
-    XrXirStatus status=effect_contract_values(work,source,function,contract);
+    XrXirStatus status=effect_contract_values(source,function,contract);
     bool present=false;
     for (uint32_t v=0;v<contract->value_count && status==XR_XIR_OK;++v) {
-        if (!xir_compile_work(work,3)) { status=XR_XIR_BUDGET;break; }
+
         const XrXirRootValueIdentity *identity=&contract->values[v];
         if (identity->mode==XR_XIR_EFFECT_VALUE_CALL_BIND ||
             (prebottom && identity->mode==XR_XIR_EFFECT_VALUE_FIXED &&
@@ -121,11 +121,11 @@ static XrXirStatus effect_invocation_source_declarations(const XrXirCompileConte
     XrXirType *types=xir_compile_alloc(work,(size_t)bytes,&status);
     if (!types) return status;
     for (uint32_t i=0;i<body->instruction_count && status==XR_XIR_OK;++i) {
-        if (!xir_compile_work(work,sizeof(*types)+1)) { status=XR_XIR_BUDGET;break; }
+
         types[i]=prebottom?prebottom[i]:body->instructions[i].type;
     }
     for (uint32_t v=0;v<contract->value_count && status==XR_XIR_OK;++v) {
-        if (!xir_compile_work(work,2)) { status=XR_XIR_BUDGET;break; }
+
         const XrXirRootValueIdentity *identity=&contract->values[v];
         if (identity->mode==XR_XIR_EFFECT_VALUE_CALL_BIND)
             status=xr_xir_compile_callable_weakening(work,source->types,
@@ -148,7 +148,7 @@ static XrXirStatus effect_invocation_source_declarations(const XrXirCompileConte
 static XrXirStatus effect_invocation_context_reference_result(EffectOrdinaryContexts *dense,
     const XrXirModule *source,uint32_t index,uint32_t instruction,XrXirType *declared) {
     EffectTerms *terms=&dense->terms;
-    if (!xir_compile_work(terms->remaining,8)) return XR_XIR_BUDGET;
+
     if (index>=dense->base_count || index>=dense->count || !declared ||
         !source || !source->functions || dense->nodes[index].declaration>=source->function_count)
         return XR_XIR_BAD_STRUCTURE;
@@ -184,7 +184,7 @@ static XrXirStatus effect_invocation_context_reference_result(EffectOrdinaryCont
         current->result,saved->result);
     XrXirTypeMatchScratch *scratch=effect_terms_type_scratch(terms);
     for (uint32_t p=0;p<current->parameter_count && status==XR_XIR_OK;++p) {
-        if (!xir_compile_work(terms->remaining,2)) { status=XR_XIR_BUDGET;break; }
+
         if (!xr_xir_callable_parameter_storage_valid(&terms->types,&current->parameters[p])) {
             status=XR_XIR_BAD_TYPE;break;
         }
@@ -192,7 +192,7 @@ static XrXirStatus effect_invocation_context_reference_result(EffectOrdinaryCont
             &terms->types,&terms->types,NULL,0,current->parameters[p].type,target->parameters[p+op->args[1]],scratch);
     }
     for (uint32_t p=0;p<op->args[1] && status==XR_XIR_OK;++p) {
-        if (!xir_compile_work(terms->remaining,2)) { status=XR_XIR_BUDGET;break; }
+
         uint32_t value=caller->operands[op->args[0]+p];
         if ((uint64_t)value>=(uint64_t)caller->parameter_count+caller->instruction_count) {
             status=XR_XIR_BAD_VALUE;break;
@@ -239,7 +239,7 @@ static XrXirStatus effect_invocation_context_declarations(EffectOrdinaryContexts
     if (count && !types) { xr_compile_resources_free(source_types);return dense->terms.status; }
     XrXirGeneric environment={.arguments=node.arguments,.argument_count=node.argument_count};
     for (uint32_t i=0;i<count && status==XR_XIR_OK;++i) {
-        if (!xir_compile_work(dense->terms.remaining,sizeof(*types)+1)) { status=XR_XIR_BUDGET;break; }
+
         types[i]=source_types?source_types[i]:original->instructions[i];
         if (index>=dense->base_count) {
             status=effect_terms_substitute(&dense->terms,types[i],&environment,&types[i]);
@@ -290,7 +290,7 @@ static XrXirStatus effect_context_dense_function(EffectContextOwner *owner,
     if (!physical && count) return XR_XIR_BAD_STRUCTURE;
     XrXirType *parameters=(XrXirType *)dense->functions[index].parameters;
     for (uint32_t p=0;p<count;++p) {
-        if (!xir_compile_work(dense->terms.remaining,1)) return XR_XIR_BUDGET;
+
         parameters[p]=physical[p];
     }
     const XrXirType *declared_instructions=NULL;
@@ -303,7 +303,7 @@ static XrXirStatus effect_context_dense_function(EffectContextOwner *owner,
      * No caller can consume this state until the owner is fully solved. */
     XrXirInstruction *instructions=(XrXirInstruction *)dense->functions[index].instructions;
     for (uint32_t i=0;i<dense->functions[index].instruction_count;++i) {
-        if (!xir_compile_work(dense->terms.remaining,1)) return XR_XIR_BUDGET;
+
         if (instructions[i].op!=XR_XIR_FUNCTION_REF) continue;
         const XrXirTypeNode *signature=xr_xir_callable_signature(&dense->terms.types,instructions[i].type);
         if (!signature) return XR_XIR_BAD_TYPE;
@@ -336,11 +336,11 @@ static XrXirStatus effect_context_dense_intern(EffectContextOwner *owner,
     }
     XrXirTypeMatchScratch *scratch=effect_terms_type_scratch(&dense->terms);
     for (uint32_t n=0;n<dense->count && status==XR_XIR_OK;++n) {
-        if (!xir_compile_work(dense->terms.remaining,3)) { status=XR_XIR_BUDGET;break; }
+
         if (dense->nodes[n].ordinary!=ordinary || dense->nodes[n].owner!=owner_index) continue;
         bool equal=true;
         for (uint32_t p=0;p<count && equal;++p) {
-            if (!xir_compile_work(dense->terms.remaining,1)) { status=XR_XIR_BUDGET;break; }
+
             /* Identical immutable IDs in the same verified pool are exact;
              * different IDs still undergo complete structural matching. */
             if (dense->nodes[n].physical_types[p]==physical[p]) continue;
@@ -361,7 +361,7 @@ static XrXirStatus effect_context_dense_intern(EffectContextOwner *owner,
         XrXirType *arguments=effect_terms_alloc(&dense->terms,original->argument_count,sizeof(*arguments));
         if (!arguments) return dense->terms.status;
         for (uint32_t a=0;a<original->argument_count;++a) {
-            if (!xir_compile_work(dense->terms.remaining,1)) return XR_XIR_BUDGET;
+
             arguments[a]=original->arguments[a];
         }
         dense->nodes[index].arguments=arguments;
@@ -402,13 +402,10 @@ static void effect_context_dense_scratch_finish(EffectDenseScratch *scratch) {
     if (scratch->capacity>4096) effect_context_dense_scratch_free(scratch);
 }
 
-static bool effect_context_dense_scratch_zero(EffectDenseScratch *scratch,
+static bool effect_context_dense_scratch_zero(
     void *memory, uint32_t count, size_t size) {
     if (!count) return true;
-    if (!xir_compile_work(scratch->remaining,(uint64_t)count+1) ||
-        !xir_compile_work(scratch->remaining,(uint64_t)count*size)) {
-        scratch->status=XR_XIR_BUDGET;return false;
-    }
+
     memset(memory,0,(size_t)count*size);return true;
 }
 
@@ -421,7 +418,7 @@ static XrXirStatus effect_context_dense_scratch_arrays(const XrXirCompileContext
     scratch->claimed=true;
     /* Charge checked layout computation. Original per-array reservation and
      * complete zeroing charges remain below on every use, including reuse. */
-    if (!xir_compile_work(context,8)) { scratch->status=XR_XIR_BUDGET;return scratch->status; }
+
     uint64_t total=(uint64_t)parameters+instructions;
     uint64_t words=2*total+instructions;
     if (total>UINT32_MAX || words>SIZE_MAX/sizeof(XrXirType)) {
@@ -443,10 +440,10 @@ static XrXirStatus effect_context_dense_scratch_arrays(const XrXirCompileContext
     XrXirType *types=scratch->memory;
     EffectDenseArrays arrays={types,types+count,instructions?types+2*(size_t)count:NULL,
         (uint8_t *)(types+(size_t)words)};
-    if (!effect_context_dense_scratch_zero(scratch,arrays.declared,count,sizeof(*arrays.declared)) ||
-        !effect_context_dense_scratch_zero(scratch,arrays.values,count,sizeof(*arrays.values)) ||
-        !effect_context_dense_scratch_zero(scratch,arrays.before,instructions,sizeof(*arrays.before)) ||
-        !effect_context_dense_scratch_zero(scratch,arrays.fixed,count,sizeof(*arrays.fixed))) return scratch->status;
+    if (!effect_context_dense_scratch_zero(arrays.declared,count,sizeof(*arrays.declared)) ||
+        !effect_context_dense_scratch_zero(arrays.values,count,sizeof(*arrays.values)) ||
+        !effect_context_dense_scratch_zero(arrays.before,instructions,sizeof(*arrays.before)) ||
+        !effect_context_dense_scratch_zero(arrays.fixed,count,sizeof(*arrays.fixed))) return scratch->status;
     *output=arrays;return XR_XIR_OK;
 }
 
@@ -463,7 +460,7 @@ static XrXirStatus effect_context_dense_actuals(EffectContextOwner *owner,
     XrXirType *declared=arrays.declared,*values=arrays.values,*before=arrays.before;
     uint8_t *fixed=arrays.fixed;
     for (uint32_t v=0;v<count;++v) {
-        if (!xir_compile_work(dense->terms.remaining,3)) return XR_XIR_BUDGET;
+
         declared[v]=values[v]=xr_xir_operand_type(function,v);
         if (v>=function->parameter_count) {
             before[v-function->parameter_count]=declared[v];
@@ -487,7 +484,7 @@ static XrXirStatus effect_context_dense_actuals(EffectContextOwner *owner,
         XrXirStatus status=effect_scalar_flow(&flow);
         if (status!=XR_XIR_OK) return status;
         for (uint32_t i=0;i<function->instruction_count;++i) {
-            if (!xir_compile_work(dense->terms.remaining,2)) return XR_XIR_BUDGET;
+
             if (before[i]!=function->instructions[i].type) *changed=true;
         }
     }
@@ -506,7 +503,7 @@ static XrXirStatus effect_context_dense_expand(EffectContextOwner *owner,
     XrXirStatus status=effect_context_dense_actuals(owner,source,index,storage,&fixed,changed);
     uint32_t count=source->functions[identity.declaration].instruction_count;
     for (uint32_t i=0;i<count && status==XR_XIR_OK;++i) {
-        if (!xir_compile_work(dense->terms.remaining,1)) { status=XR_XIR_BUDGET;break; }
+
         XrXirInstruction original=source->functions[identity.declaration].instructions[i];
         if (!effect_context_family(original.op)) continue;
         uint32_t ordinary=(uint32_t)owner->ordinary->functions[identity.ordinary].instructions[i].immediate;
@@ -542,20 +539,18 @@ static XrXirStatus effect_context_dense_expand(EffectContextOwner *owner,
 static XrXirStatus effect_context_dense_solve(EffectContextOwner *owner,
     const XrXirCompileContext *context, const XrXirModule *source) {
     EffectOrdinaryContexts *dense=owner->dense;
-    if (!xir_compile_work(context,(uint64_t)dense->uses.count*
-        (sizeof(XrXirFunctionEffectContract)+sizeof(XrXirRootEffects)+5*sizeof(XrXirRootEffectWitness))))
-        return XR_XIR_BUDGET;
+
     effect_context_summary_clear(dense);
     EffectGraph graph={0};EffectOrdinaryView view={0};dense->terms.remaining=context;
     XrXirStatus status=effect_ordinary_view(dense,source,&view);
-    if (status==XR_XIR_OK && !xir_compile_work(context,sizeof(view.input.basis))) status=XR_XIR_BUDGET;
+
     if (status==XR_XIR_OK) {
         view.input.basis=owner->ordinary;
         graph.ordinary=view.input;
         status=effect_parameters_derive(&view.module,&dense->uses,&graph,context);
     }
     xr_compile_resources_free(graph.flow_rows);
-    if (status==XR_XIR_OK && !xir_compile_work(context,2)) status=XR_XIR_BUDGET;
+
     graph.flow_rows=NULL;graph.flow_capacity=0;
     EffectInvocationDeclaredBounds *temporary=NULL;
     if (status==XR_XIR_OK) status=effect_ordinary_roots_prepare(context,source,dense,owner->declared,&temporary);
@@ -611,7 +606,7 @@ static XrXirStatus effect_context_owner_build(const XrXirCompileContext *context
         XrXirType *physical=count ? effect_terms_alloc(&dense->terms,count,sizeof(*physical)) : NULL;
         if (count && !physical) { status=dense->terms.status;break; }
         for (uint32_t p=0;p<count;++p) {
-            if (!xir_compile_work(context,1)) { status=XR_XIR_BUDGET;break; }
+
             physical[p]=owner->ordinary->functions[f].parameters[p];
         }
         dense->nodes[f].physical_types=physical;

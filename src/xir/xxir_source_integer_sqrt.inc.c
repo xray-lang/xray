@@ -43,7 +43,7 @@ static bool source_sqrt_loop_close(SourceContext *ctx,SourceSqrtLoop *loop,
     if (!source_bits_binary(ctx,XR_XIR_ADD_INT,loop->index,one,&next)) return false;
     uint32_t origin=body->current_block.identity,exit=body->block_count;
     if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{loop->head},0,{0}},NULL) ||
-        !begin_block(ctx) || !source_work_units(ctx,NULL,6)) return false;
+        !begin_block(ctx) || !((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     SourceValue values[]={root,remainder,next};
     for (unsigned i=0;i<3;++i) {
         uint32_t offset=loop->operands[i];

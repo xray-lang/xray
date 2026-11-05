@@ -30,7 +30,7 @@ static XrXirStatus effect_invocation_deferred_arguments(EffectInvocationFlow *fl
     if (words && !input) return status;
     XrXirTypeMatchScratch scratch={owner->work->resources,NULL};
     for (uint32_t p=0;p<signature->parameter_count && status==XR_XIR_OK;++p) {
-        if (!xir_compile_work(owner->work,2)) { status=XR_XIR_BUDGET;break; }
+
         const XrXirCallableParameter *parameter=&signature->parameters[p];
         uint32_t actual=flow->function->operands[op->args[0]+p];
         if (actual>=flow->values || !xr_xir_callable_parameter_storage_valid(flow->body.domain.types,parameter)) {
@@ -46,9 +46,7 @@ static XrXirStatus effect_invocation_deferred_arguments(EffectInvocationFlow *fl
         else if (xr_xir_type_is_class(flow->body.domain.types,parameter->type))
             status=effect_invocation_class_word(flow,actual,row+flow->basis.fn_words);
         else if (xr_xir_callable_signature(flow->body.domain.types,parameter->type)) {
-            if (!xir_compile_work(owner->work,(uint64_t)flow->basis.fn_words*sizeof(*row))) {
-                status=XR_XIR_BUDGET;break;
-            }
+
             const uint64_t *actual_row=effect_invocation_row(flow,actual);
             if (!actual_row) { status=XR_XIR_BAD_STRUCTURE;break; }
             memcpy(row,actual_row,
@@ -60,9 +58,7 @@ static XrXirStatus effect_invocation_deferred_arguments(EffectInvocationFlow *fl
                 status=effect_invocation_bounds_mask(owner->work,owner->declared,
                     owner->final->nodes[flow->node].body,actual,&mask);
                 if (status!=XR_XIR_OK) break;
-                if (!xir_compile_work(owner->work,(uint64_t)flow->basis.fn_words*sizeof(*row)+3)) {
-                    status=XR_XIR_BUDGET;break;
-                }
+
                 memset(row,0,(size_t)flow->basis.fn_words*sizeof(*row));
                 uint32_t opaque=owner->final->site_count+flow->basis.parameters;
                 row[opaque/64]|=UINT64_C(1)<<(opaque%64);
@@ -89,20 +85,19 @@ static XrXirStatus effect_invocation_deferred_record(EffectInvocationFlow *flow,
     if (status!=XR_XIR_OK) return status;
     uint64_t words=(uint64_t)signature->parameter_count*flow->basis.row_words;
     for (uint32_t d=0;d<owner->final->deferred_count;++d) {
-        if (!xir_compile_work(owner->work,3)) { status=XR_XIR_BUDGET;break; }
+
         EffectInvocationDeferred *record=&owner->final->deferred_calls[d];
         if (record->node!=flow->node || record->instruction!=instruction || record->parameter!=parameter)
             continue;
         if (record->count!=signature->parameter_count) { status=XR_XIR_BAD_STRUCTURE;break; }
         for (size_t w=0;w<(size_t)words;++w) {
-            if (!xir_compile_work(owner->work,1)) { status=XR_XIR_BUDGET;break; }
+
             if (flow->precision ? (record->arguments[w]&~input[w])!=0 : record->arguments[w]!=input[w]) {
                 status=XR_XIR_BAD_STRUCTURE;break;
             }
         }
         if (status==XR_XIR_OK && flow->precision) {
-            if (!xir_compile_work(owner->work,words*sizeof(*input))) status=XR_XIR_BUDGET;
-            else if (words) memcpy(record->arguments,input,(size_t)words*sizeof(*input));
+            if (words) memcpy(record->arguments,input,(size_t)words*sizeof(*input));
         }
         xr_compile_resources_free(input);return status;
     }
@@ -115,8 +110,7 @@ static XrXirStatus effect_invocation_deferred_record(EffectInvocationFlow *flow,
         EffectInvocationDeferred *records=status==XR_XIR_OK ? xir_compile_alloc(owner->work,
             (size_t)capacity*sizeof(*records),&status) : NULL;
         if (status==XR_XIR_OK && !records) status=XR_XIR_OUT_OF_MEMORY;
-        if (status==XR_XIR_OK && !xir_compile_work(owner->work,
-                (uint64_t)owner->final->deferred_count*sizeof(*records))) status=XR_XIR_BUDGET;
+
         if (status==XR_XIR_OK) {
             if (owner->final->deferred_count) memcpy(records,owner->final->deferred_calls,
                 (size_t)owner->final->deferred_count*sizeof(*records));
@@ -124,8 +118,7 @@ static XrXirStatus effect_invocation_deferred_record(EffectInvocationFlow *flow,
             flow->owner->final.deferred_capacity=capacity;
         } else xr_compile_resources_free(records);
     }
-    if (status==XR_XIR_OK && !xir_compile_work(owner->work,sizeof(EffectInvocationDeferred)+1))
-        status=XR_XIR_BUDGET;
+
     if (status!=XR_XIR_OK) { xr_compile_resources_free(input);return status; }
     owner->final->deferred_calls[owner->final->deferred_count]=(EffectInvocationDeferred){flow->node,instruction,
         parameter,signature->parameter_count,input};

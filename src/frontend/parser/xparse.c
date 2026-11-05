@@ -334,9 +334,7 @@ bool xr_parser_in_group(const Parser *parser) {
 XrParserStreamState xr_parser_stream_save(const Parser *parser) {
     if (!xr_parser_healthy(parser)) return (XrParserStreamState){0};
     XR_DCHECK(parser != NULL, "parser_stream_save: NULL parser");
-    if (xr_compile_state_work(parser->state, sizeof(Scanner) + 2 * sizeof(Token) +
-            sizeof(parser->bracket_bits) + sizeof(parser->bracket_depth)) != XR_COMPILE_RESOURCE_OK)
-        return (XrParserStreamState) {0};
+
     XrParserStreamState saved = {
         .scanner = parser->scanner,
         .current = parser->current,
@@ -351,8 +349,7 @@ void xr_parser_stream_restore(Parser *parser, const XrParserStreamState *saved) 
     if (!xr_parser_healthy(parser)) return;
     XR_DCHECK(parser != NULL, "parser_stream_restore: NULL parser");
     XR_DCHECK(saved != NULL, "parser_stream_restore: NULL state");
-    if (xr_compile_state_work(parser->state, sizeof(Scanner) + 2 * sizeof(Token) +
-            sizeof(parser->bracket_bits) + sizeof(parser->bracket_depth)) != XR_COMPILE_RESOURCE_OK) return;
+
     parser->scanner = saved->scanner;
     parser->current = saved->current;
     parser->previous = saved->previous;
@@ -945,7 +942,7 @@ static AstNode *parse_precedence_inner(Parser *parser, Precedence precedence) {
     }
 
     // Process infix expressions by precedence
-    for (; xr_parser_step(parser) && (true);) {
+    for (; xr_parser_healthy(parser) && (true);) {
         // L-04 statement boundary: a line break ends the expression when the
         // new line could just as well start a statement. Checked before the
         // generic-call probe below because `<` has no prefix role and is
@@ -1116,7 +1113,7 @@ AstNode *xr_parse_standalone_inc_dec(Parser *parser, bool for_step) {
     char *var_name = (char *) ast_alloc(parser->compiler_session, (size_t) name.length + 1);
     if (!xr_parser_healthy(parser)) return NULL;
     do { if (!ast_copy(parser->compiler_session, var_name, name.start, (size_t) name.length)) return NULL; } while (0);
-    do { if (!ast_work(parser->compiler_session, 1)) return NULL; var_name[name.length] = '\0'; } while (0);
+    do { var_name[name.length] = '\0'; } while (0);
 
     do {
         xr_parser_advance(parser);
@@ -1181,7 +1178,7 @@ AstNode *xr_parse_statement(Parser *parser) {
     int line=parser->current.line,column=parser->current.column;
     AstNode *node=parse_statement_body(parser);
     if (node) {
-        if (!ast_work(parser->compiler_session,sizeof(node->line)+sizeof(node->column))) return NULL;
+
         node->line=line;node->column=column;
     }
     return node;
@@ -1202,7 +1199,7 @@ static AstNode *parse_statement_body(Parser *parser) {
                     (char *) ast_alloc(parser->compiler_session, (size_t) label_tok.length + 1);
                 if (!xr_parser_healthy(parser)) return NULL;
                 do { if (!ast_copy(parser->compiler_session, label, label_tok.start, (size_t) label_tok.length)) return NULL; } while (0);
-                do { if (!ast_work(parser->compiler_session, 1)) return NULL; label[label_tok.length] = '\0'; } while (0);
+                do { label[label_tok.length] = '\0'; } while (0);
 
                 AstNode *stmt = xr_parse_statement(parser);
                 if (!xr_parser_healthy(parser)) return NULL;
@@ -1482,7 +1479,7 @@ rollback:
 // Supports generic call syntax: foo<int, string>(arg1, arg2)
 static AstNode *parse_variable_leaf(Parser *parser,const char *name,Token token) {
     if(token.column<=0||token.length<=0||token.length>INT_MAX-token.column) {
-        xr_compile_state_fail(parser->state,XR_COMPILE_RESOURCE_BUDGET);return NULL;
+        xr_compile_state_fail(parser->state,XR_COMPILE_RESOURCE_OVERFLOW);return NULL;
     }
     AstNode *node=xr_ast_variable(parser->compiler_session,name,token.line);
     if(!xr_parser_healthy(parser))return NULL;
@@ -1554,7 +1551,7 @@ AstNode *xr_parse_variable(Parser *parser) {
     char *name = (char *) ast_alloc(parser->compiler_session, (size_t) parser->previous.length + 1);
     if (!xr_parser_healthy(parser)) return NULL;
     do { if (!ast_copy(parser->compiler_session, name, parser->previous.start, parser->previous.length)) return NULL; } while (0);
-    do { if (!ast_work(parser->compiler_session, 1)) return NULL; name[parser->previous.length] = '\0'; } while (0);
+    do { name[parser->previous.length] = '\0'; } while (0);
     int line = parser->previous.line;
     int column = parser->previous.column;
 
@@ -1695,7 +1692,7 @@ AstNode *xr_parse_assignment(Parser *parser, AstNode *left) {
         if (!xr_parser_healthy(parser)) return NULL;
         AstNode *node = xr_ast_member_set(parser->compiler_session, object, member, value, line);
         if (!xr_parser_healthy(parser)) return NULL;
-        if (!ast_work(parser->compiler_session, sizeof(XrNameSpan))) return NULL;
+
         node->as.member_set.name_span = left->as.member_access.name_span;
 
         // Arena bulk-frees left/member; no individual free needed.
@@ -1773,7 +1770,7 @@ AstNode *xr_parse_compound_assignment(Parser *parser, AstNode *left) {
         AstNode *compound_assignment =
             xr_ast_compound_assignment(parser->compiler_session, var_name, op_token, right, line);
         if (!xr_parser_healthy(parser)) return NULL;
-        if (!ast_work(parser->compiler_session, sizeof(XrNameSpan))) return NULL;
+
         compound_assignment->as.compound_assignment.name_span = (XrNameSpan){left->line,left->column};
         return compound_assignment;
     } else if (left->type == AST_MEMBER_ACCESS) {
@@ -1787,7 +1784,7 @@ AstNode *xr_parse_compound_assignment(Parser *parser, AstNode *left) {
         AstNode *compound_assignment = xr_ast_member_compound_assignment(
             parser->compiler_session, object, member_name, op_token, right, line);
         if (!xr_parser_healthy(parser)) return NULL;
-        if (!ast_work(parser->compiler_session, sizeof(XrNameSpan))) return NULL;
+
         compound_assignment->as.compound_assignment.name_span = left->as.member_access.name_span;
         return compound_assignment;
     } else {
@@ -1849,7 +1846,7 @@ AstNode *xr_parse_single_var_declaration(Parser *parser, int is_const) {
     char *name = (char *) ast_alloc(parser->compiler_session, (size_t) parser->previous.length + 1);
     if (!xr_parser_healthy(parser)) return NULL;
     do { if (!ast_copy(parser->compiler_session, name, parser->previous.start, parser->previous.length)) return NULL; } while (0);
-    do { if (!ast_work(parser->compiler_session, 1)) return NULL; name[parser->previous.length] = '\0'; } while (0);
+    do { name[parser->previous.length] = '\0'; } while (0);
     int line = parser->previous.line;
     int column = parser->previous.column;
     int name_length = parser->previous.length;

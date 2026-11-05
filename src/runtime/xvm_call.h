@@ -48,6 +48,12 @@ struct XrClosure;
 XR_FUNC XrValue xr_vm_call_closure(struct XrVMRuntime *isolate, struct XrClosure *closure,
                                    XrValue *args, int nargs);
 
+/* Same synchronous VM call, with an explicit outcome for callers that must
+ * distinguish an ordinary returned Null from failure before/during execution.
+ * Optional status is initialized on every path; no caller state is cleared. */
+XR_FUNC XrValue xr_vm_call_closure_checked(struct XrVMRuntime *isolate, struct XrClosure *closure,
+    XrValue *args, int nargs, XrVMResult *status);
+
 /* ========== VM Interpreter Entry (coro → vm decoupling) ========== */
 
 struct XrVMContext;

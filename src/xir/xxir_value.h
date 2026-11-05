@@ -80,7 +80,8 @@ typedef struct XrXirValue {
 typedef enum XrXirValueStatus {
     XR_XIR_VALUE_OK, XR_XIR_VALUE_BAD_ARGUMENT, XR_XIR_VALUE_BAD_UTF8,
     XR_XIR_VALUE_OOM, XR_XIR_VALUE_LIMIT, XR_XIR_VALUE_REFCOUNT_LIMIT,
-    XR_XIR_VALUE_BOUNDS, XR_XIR_VALUE_UNSUPPORTED
+    XR_XIR_VALUE_BOUNDS, XR_XIR_VALUE_UNSUPPORTED,
+    XR_XIR_VALUE_MEMORY_LIMIT, XR_XIR_VALUE_OVERFLOW
 } XrXirValueStatus;
 typedef struct XrXirDomain XrXirDomain;
 typedef struct XrXirTypeArena XrXirTypeArena;
@@ -109,7 +110,7 @@ static inline XrXirValue xr_xir_value_load(const XrXirTypeArena *arena,XrXirType
 XR_FUNC const XrXirTypeArena *xr_xir_value_arena(const XrXirValue *value);
 /* Copy/new outputs must be canonical unit handles. Native pointers are trusted. */
 XR_FUNC XrXirValueStatus xr_xir_value_copy(const XrXirValue *source, XrXirValue *output);
-/* A prepaid handle transfer consumes the source and never relocates its body. */
+/* A handle transfer consumes the source and never relocates its body. */
 XR_FUNC XrXirValueStatus xr_xir_value_move(XrXirValue *source, XrXirValue *output);
 XR_FUNC void xr_xir_value_drop(XrXirValue *value);
 XR_FUNC XrXirValueStatus xr_xir_string_new(XrXirDomain *domain, const char *bytes,
@@ -141,16 +142,18 @@ typedef struct XrXirFunctionBinding {
 } XrXirFunctionBinding;
 /* The caller validates a live execution gate; pointer equality is not authority.
  * During this callback the admission arena names the actual function owner,
- * and work points to that same admission's work field. Context and Domain are
+ * and runtime_work points to that same execution admission's work field.
+ * A genuine compiler Domain supplies NULL; its callback must authenticate the
+ * current compiler execution and reject runtime work or foreign binding owners. Context and Domain are
  * unchanged; the receiving arena is restored before callback return escapes. */
 typedef XrXirValueStatus (*XrXirFunctionAdmission)(void *context,
-    const XrXirFunctionBinding *binding, XrXirType type, uint64_t *work);
+    const XrXirFunctionBinding *binding, XrXirType type, uint64_t *runtime_work);
 typedef struct XrXirValueAdmission {
     const XrXirTypeArena *arena;
     XrXirDomain *domain;
     XrXirFunctionAdmission function;
     void *context;
-    uint64_t work, scratch_bytes;
+    uint64_t work, scratch_bytes; /* work belongs only to execution Domains. */
 } XrXirValueAdmission;
 
 /* Owned immutable String operations publish only complete receiving values. */
@@ -163,7 +166,7 @@ XR_FUNC XrXirValueStatus xr_xir_string_replace(const XrXirValue *receiver,
 /* A derived String is charged to the receiving admission Domain. */
 XR_FUNC XrXirValueStatus xr_xir_string_slot_concat(void *frame, uint32_t offset,
     XrXirValueAdmission *admission, int64_t left, int64_t right);
-/* Admission consumes work before inspecting a value and never publishes it. */
+/* Admission validates every value; only execution admission consumes work. */
 XR_FUNC XrXirValueStatus xr_xir_value_admit(const XrXirValue *value, XrXirType type,
                                            XrXirValueAdmission *admission);
 /* Successful construction takes the binding lease; failures leave it with the caller. */

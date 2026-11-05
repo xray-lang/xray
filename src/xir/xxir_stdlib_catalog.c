@@ -24,7 +24,7 @@ XR_FUNC XrXirStatus xir_stdlib_library_catalog_new(const XrXirCompileContext *co
     if (!modules) { xr_compile_resources_free(inputs); return status; }
     for (size_t i = 0; i < count; ++i) {
         const XirStdlibCheckedComponent *component = &xir_stdlib_checked_components[i];
-        if (!xir_compile_work(context,1+sizeof(inputs[i].sha256))) { status = XR_XIR_BUDGET; break; }
+
         modules[i] = (XrXirLibraryModuleInput){{XR_MODULE_IDENTITY_STDLIB,
             component->namespace_id,physical_root},component->logical_path};
         inputs[i] = (XrXirLibraryInput){component->bytes,component->length,{0},&modules[i],1};

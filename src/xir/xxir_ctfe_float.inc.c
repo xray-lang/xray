@@ -8,7 +8,7 @@
  *
  * KEY CONCEPT:
  *   Existing integer-only numeric routines define results independently of
- *   the host FPU. A fixed-width worst-case reserve pays their bounded work.
+ *   the host FPU. Numeric range and division failures keep their original status.
  */
 #include "xxir_float.h"
 static bool ctfe_float_opcode(const ScalarRun *run,const XrXirInstruction *op) {
@@ -23,7 +23,6 @@ static XrXirCtfeStatus ctfe_float_step(ScalarRun *run,uint32_t *cursor) {
     const XrXirInstruction *op=&run->function->instructions[*cursor];int64_t result=0;
     /* Decode/pack, two normalizations, product carry scans and long division
      * are bounded by 64-bit formats. Reserve before entering any numeric API. */
-    if (!scalar_compile_work(run,1024)) return XR_XIR_CTFE_BUDGET;
     XrXirRunStatus status=XR_XIR_RUN_OK;
     if (op->op==XR_XIR_CONST_FLOAT) result=op->immediate;
     else {

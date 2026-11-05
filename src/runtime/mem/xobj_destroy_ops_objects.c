@@ -11,6 +11,7 @@
 #include "xobj_destroy_ops.h"
 #include "xobj_ops.h"
 #include "../core/xr_runtime_core.h"
+#include "../object/xtext_worker.h"
 
 void xr_runtime_core_enable_object_destroy_ops(struct XrRuntimeCore *core) {
     xr_runtime_core_set_destroy_op(core, XR_TARRAY, xr_obj_destroy_array);
@@ -21,4 +22,5 @@ void xr_runtime_core_enable_object_destroy_ops(struct XrRuntimeCore *core) {
     xr_runtime_core_set_destroy_op(core, XR_TENUM_CTOR, xr_obj_destroy_enum_ctor);
     xr_runtime_core_set_destroy_op(core, XR_TFUNCTION, xr_obj_destroy_closure);
     xr_runtime_core_set_destroy_op(core, XR_TCELL, xr_obj_destroy_cell);
+    xr_runtime_core_set_destroy_op(core, XR_TTEXT_WORKER, xr_obj_destroy_text_worker);
 }

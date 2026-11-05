@@ -65,8 +65,7 @@ static XrXirStatus effect_outcomes_publish(const XrXirCompileContext *work,
     if(status==XR_XIR_OK) status=effect_control_proof_check(work,effects->invocations,records);
     if (status==XR_XIR_OK) status=effect_invocation_current_input_match(work,source,effects->invocations->body);
     if (status!=XR_XIR_OK) return status;
-    if (!xir_compile_work(work,2*sizeof(*records)+sizeof(records->resources)+sizeof(records->count)))
-        return XR_XIR_BUDGET;
+
     EffectFinalOutcomes *final=effects->outcomes_owner;
     *final=*records;final->resources=effects->resources;final->count=effects->count;
     effects->invocations->final->outcomes=final;effects->outcomes_owner=NULL;
@@ -107,7 +106,7 @@ static XrXirStatus effect_public_root_match(const XrXirCompileContext *work,cons
             if(status!=XR_XIR_OK) return status;
             facts=&value.facts;root=&value.root;unknown=&value.unresolved;
         }
-        if (!xir_compile_work(work,24)) return XR_XIR_BUDGET;
+
         if (actual->root[f].requires_root!=facts->requires_root || actual->root[f].unresolved!=facts->unresolved ||
             !effect_invocation_witness_equal(&actual->root_witnesses[f],root) ||
             !effect_invocation_witness_equal(&actual->unresolved_witnesses[f],unknown)) return XR_XIR_BAD_STRUCTURE;

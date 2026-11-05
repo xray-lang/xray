@@ -1471,9 +1471,9 @@ static bool try_emit_time_resolve(EmitCtx *ctx, XiImportRef *ref) {
     XrOsIoStatus normalized = xr_realpath_owned(&policy, abs_path, &real);
     if (normalized != XR_OS_IO_OK && normalized != XR_OS_IO_NOT_FOUND) {
         xr_free(abs_path);
-        if (normalized == XR_OS_IO_BUDGET || normalized == XR_OS_IO_OUT_OF_MEMORY ||
+        if (normalized == XR_OS_IO_OVERFLOW || normalized == XR_OS_IO_OUT_OF_MEMORY ||
             normalized == XR_OS_IO_BAD_ARGUMENT) {
-            (void) xr_compile_state_fail(ctx->input.state, normalized == XR_OS_IO_BUDGET
+            (void) xr_compile_state_fail(ctx->input.state, normalized == XR_OS_IO_OVERFLOW
                 ? XR_COMPILE_RESOURCE_BUDGET : normalized == XR_OS_IO_OUT_OF_MEMORY
                 ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_BAD_ARGUMENT);
             emit_error(ctx, XI_EMIT_ERR_RESOURCE);

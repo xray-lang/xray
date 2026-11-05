@@ -20,13 +20,13 @@ static bool source_pattern_any(const SourceMatchPattern *pattern) {
 static bool source_pattern_cut(SourceContext *ctx, uint64_t *cuts, uint32_t *count, uint64_t key) {
     uint32_t at=0;
     while (at<*count) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (cuts[at]==key) return true;
         if (cuts[at]>key) break;
         ++at;
     }
     for (uint32_t i=*count;i>at;--i) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         cuts[i]=cuts[i-1];
     }
     cuts[at]=key; ++*count; return true;
@@ -39,7 +39,7 @@ static bool source_pattern_integer_cuts(SourceContext *ctx, SourcePatternMatrix 
     *count=1; cuts[0]=0;
     uint64_t maximum=xr_xir_type_is_array(&ctx->types,input.types[0]) ? INT64_MAX : source_pattern_integer_max(input.types[0]);
     for (uint32_t r=0;r<input.rows;++r) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         SourceMatchPattern *head=input.patterns[(size_t)r*input.width];
         if (source_pattern_any(head) || !head->interval || head->empty) continue;
         if (!source_pattern_cut(ctx,cuts,count,head->low) ||
@@ -52,21 +52,21 @@ static bool source_pattern_coverage(SourceContext *ctx, SourcePatternMatrix inpu
     SourceMatchPattern *const *matrix=input.patterns;
     uint32_t width=input.width, rows=input.rows;
     *complete=false;
-    if (!source_work(ctx,NULL)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (!rows) return true;
     if (!width) { *complete=true; return true; }
     if (depth>=128) return source_fail(ctx,NULL,XR_XIR_BUDGET,"pattern coverage depth exhausted");
     for (uint32_t r=0;r<rows;++r) {
         bool any=true;
         for (uint32_t c=0;c<width;++c) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (!source_pattern_any(matrix[(size_t)r*width+c])) {any=false;break;}
         }
         if (any) {*complete=true;return true;}
     }
     bool unconstrained_head=true;
     for (uint32_t r=0;r<rows;++r) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (!source_pattern_any(matrix[(size_t)r*width])) {unconstrained_head=false;break;}
     }
     /* An unrestricted column cannot affect correlations in the remaining row. */
@@ -78,7 +78,7 @@ static bool source_pattern_coverage(SourceContext *ctx, SourcePatternMatrix inpu
         if (next_width && !next) return false;
         for (uint32_t r=0;r<rows;++r)
             for (uint32_t c=0;c<next_width;++c) {
-                if (!source_work(ctx,NULL)) return false;
+                if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
                 next[(size_t)r*next_width+c]=matrix[(size_t)r*width+c+1];
             }
         return source_pattern_coverage(ctx,(SourcePatternMatrix){types+1,next,next_width,rows},depth+1,complete);
@@ -94,7 +94,7 @@ static bool source_pattern_coverage(SourceContext *ctx, SourcePatternMatrix inpu
     else if (boolean) constructors=2;
     else if ((integer || array) && !source_pattern_integer_cuts(ctx,input,&cuts,&constructors)) return false;
     for (uint32_t v=0;v<constructors;++v) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         uint32_t fields=0; XrXirType *field_types=NULL;
         if (enumeration && !source_pattern_field_types(ctx,types[0],v,&field_types,&fields)) return false;
         SourcePatternProduct *description=NULL;
@@ -110,11 +110,11 @@ static bool source_pattern_coverage(SourceContext *ctx, SourcePatternMatrix inpu
         SourceMatchPattern **next=next_width?source_alloc(ctx,(size_t)rows*next_width,sizeof(*next)):NULL;
         if (next_width && (!next_types || !next)) return false;
         for (uint32_t c=0;c<next_width;++c) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             next_types[c]=c<fields?(product?description->fields[c].type:field_types[c]):types[c-fields+1];
         }
         for (uint32_t r=0;r<rows;++r) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             SourceMatchPattern *head=matrix[(size_t)r*width]; bool any=source_pattern_any(head);
             bool selected=any;
             if (!any && enumeration) selected=head->selection.variant==v;
@@ -126,7 +126,7 @@ static bool source_pattern_coverage(SourceContext *ctx, SourcePatternMatrix inpu
             }
             if (!selected) continue;
             for (uint32_t c=0;c<next_width;++c) {
-                if (!source_work(ctx,NULL)) return false;
+                if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
                 next[(size_t)next_rows*next_width+c]=c<fields?(any?NULL:head->fields[c]):matrix[(size_t)r*width+c-fields+1];
             }
             ++next_rows;

@@ -30,9 +30,9 @@ XR_FUNC XrXirValueStatus xr_xir_cell_read_loan_prepare(const XrXirValue *value,
     if (!cell || cell->projection_count || cell->prepared_read_loan || cell->prepared_loan ||
         (parent ? parent->cell!=cell || !parent->previous || *parent->previous!=parent : !cell_access(cell,authority)) ||
         !admission_owner(admission,cell->object.arena,cell->object.domain)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (admission->work<XR_XIR_CELL_READ_LOAN_WORK) return XR_XIR_VALUE_LIMIT;
-    admission->work-=XR_XIR_CELL_READ_LOAN_WORK;
-    if (!xr_xir_domain_work(admission->domain,XR_XIR_CELL_READ_LOAN_WORK)) return XR_XIR_VALUE_LIMIT;
+    if (!admission_is_compile(admission) && (admission->work<XR_XIR_CELL_READ_LOAN_WORK)) return XR_XIR_VALUE_LIMIT;
+    if (!admission_is_compile(admission)) admission->work-=XR_XIR_CELL_READ_LOAN_WORK;
+    if (!xr_xir_domain_is_compile(admission->domain) && (!xr_xir_domain_work(admission->domain,XR_XIR_CELL_READ_LOAN_WORK))) return XR_XIR_VALUE_LIMIT;
     *output=(XrXirCellReadLoan){.cell=cell,.authority=*authority};
     cell->prepared_read_loan=output;
     return XR_XIR_VALUE_OK;

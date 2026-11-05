@@ -23,7 +23,7 @@ static bool source_array_call_signature(SourceContext *ctx,AstNode *node,
     XrXirSourceRange range=source_query_token_range(ctx,node);
     uint32_t selected=UINT32_MAX,target=0;
     for(uint32_t i=ctx->calls.count;i;i--) {
-        if(!source_work(ctx,node))return false;
+        if(!((ctx)->diagnostic.status == XR_XIR_OK))return false;
         XrXirSourceCall call=ctx->calls.items[i-1];
         if(call.reference>=ctx->query.reference_count||call.range.module!=range.module||call.range.line!=range.line||
             call.range.column!=range.column||call.range.end_line!=range.end_line||call.range.end_column!=range.end_column)continue;
@@ -39,7 +39,7 @@ static bool source_array_call_signature(SourceContext *ctx,AstNode *node,
     const XrNativeMemberDeclaration *member=NULL;
     uint32_t native_id=ctx->query.declarations[target-1].native_identity;
     for(uint32_t i=0;i<array->member_count;++i) {
-        if(!source_work(ctx,node))return false;
+        if(!((ctx)->diagnostic.status == XR_XIR_OK))return false;
         if(array->members[i].id==native_id){member=&array->members[i];break;}
     }
     if(!member||!member->is_method||member->operation==XR_NATIVE_OPERATION_NONE||shape->count!=member->parameter_count||
@@ -49,7 +49,7 @@ static bool source_array_call_signature(SourceContext *ctx,AstNode *node,
     uint32_t *flags=shape->count?source_alloc(ctx,shape->count,sizeof(*flags)):NULL;
     if(shape->count&&(!parameters||!flags))return false;
     for(uint32_t p=0;p<shape->count;++p) {
-        if(!source_work(ctx,node))return false;
+        if(!((ctx)->diagnostic.status == XR_XIR_OK))return false;
         parameters[p]=source_query_type(ctx,shape->parameters[p]);
         flags[p]=(member->parameters[p].optional?XR_XIR_SOURCE_CALL_OPTIONAL:0)|
             (member->parameters[p].variadic?XR_XIR_SOURCE_CALL_VARIADIC:0);

@@ -10,6 +10,7 @@
 #include "xxir_value_internal.h"
 #include "xxir_internal.h"
 #include "xxir_types.h"
+#include "xxir_compile_memory.h"
 #include "xxir_scalar_core.h"
 #include "xxir_instance_value.h"
 #include "xxir_vm_debug_calls_internal.h"

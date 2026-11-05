@@ -21,7 +21,7 @@ static bool source_method_conditions(SourceContext *ctx, SourceFunction *body,
         XrXirConstraint requirement = {0};
         if (!source_parameter_constraints(ctx,body->node,condition,&requirement)) return false;
         for (uint32_t p = 0; p < count; ++p) {
-            if (!source_work(ctx, body->node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (source_text_same(ctx, NULL, condition->name, parameters[p]->name)) { selected = p; break; }
         }
         if (selected == UINT32_MAX)
@@ -43,7 +43,7 @@ static bool source_method_scope(SourceContext *ctx, SourceName *owner, uint32_t 
     XrXirConstraint *constraints = source_alloc(ctx, count, sizeof(*constraints));
     if (!parameters || !constraints) return false;
     for (uint32_t p = 0; p < count; ++p) {
-        if (!source_work(ctx, body->node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (p < prefix) {
             parameters[p] = body->type_parameters[p]; constraints[p] = ctx->generics[index].constraints[p];
             continue;
@@ -52,7 +52,7 @@ static bool source_method_scope(SourceContext *ctx, SourceName *owner, uint32_t 
         if (!parameter || !parameter->name || !*parameter->name)
             return source_fail(ctx,body->node,XR_XIR_BAD_TYPE,"method type parameter is malformed");
         for (uint32_t earlier = 0; earlier < p; ++earlier) {
-            if (!source_work(ctx, body->node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (source_text_same(ctx, NULL, parameter->name, parameters[earlier]->name))
                 return source_fail(ctx, body->node, XR_XIR_BAD_TYPE, "method type parameter duplicates or shadows a parameter");
         }
@@ -85,7 +85,7 @@ static bool source_method_instantiation(SourceContext *ctx, AstNode *node, uint3
     if (generic->parameter_count && !types) return false;
     if (prefix && !source_copy_bytes(ctx, node, types, enclosing.types, prefix * sizeof(*types))) return false;
     for (uint32_t p = 0; p < own; ++p)
-        if (!source_work(ctx,node) || !source_type(ctx,arguments->refs[p],&types[prefix + p])) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_type(ctx,arguments->refs[p],&types[prefix + p])) return false;
     SourceSubstitution substitution = {types,generic->parameter_count};
     if (!source_instantiation_prove(ctx,node,(XrXirDeclarationContext){XR_XIR_CONTEXT_FUNCTION,index,0},substitution)) return false;
     arguments->substitution = substitution; return true;

@@ -58,7 +58,7 @@ static bool source_semantic_history(SourceContext *ctx,SourceSemanticEnvironment
     const uint32_t counts[]={owned->module_count,owned->function_count,owned->slot_count,owned->type_count};
     _Static_assert(sizeof(XrXirType)==sizeof(uint32_t),"history type ordinals use exact wire integers");
     for (unsigned i=0;i<4;++i) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (!counts[i]) continue;
         if (!inputs[i]) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"history receiving array is absent");
         void *copy=source_semantic_alloc(ctx,counts[i],sizeof(uint32_t));
@@ -78,7 +78,7 @@ static SourceName *source_semantic_binding(SourceContext *ctx,const SourceSemant
     uint32_t index=0;
     for (uint32_t m=0;m<environment->module_count;++m) {
         for (const SourceName *symbol=ctx->names[m];symbol;symbol=symbol->next) {
-            if (!source_work(ctx,NULL)) return NULL;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return NULL;
             if (symbol==source) return &environment->symbols[index];
             ++index;
         }
@@ -97,7 +97,7 @@ static bool source_semantic_capture(SourceContext *ctx,SourceSemanticEnvironment
     uint32_t modules=(uint32_t)ctx->graph->spec_count,count=0;
     for (uint32_t m=0;m<modules;++m) {
         for (const SourceName *symbol=ctx->names[m];symbol;symbol=symbol->next) {
-            if (!source_work(ctx,NULL)) goto failed;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto failed;
             if (count==UINT32_MAX) {source_fail(ctx,NULL,XR_XIR_BUDGET,"Source semantic binding inventory exhausted");goto failed;}
             ++count;
         }
@@ -121,7 +121,7 @@ static bool source_semantic_capture(SourceContext *ctx,SourceSemanticEnvironment
     for (uint32_t m=0;m<modules;++m) {
         SourceName **tail=&environment->names[m];
         for (const SourceName *symbol=ctx->names[m];symbol;symbol=symbol->next) {
-            if (!source_work(ctx,NULL)) goto failed;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto failed;
             SourceName *owned=&environment->symbols[environment->symbol_count++];
             SourceName copy=*symbol;
             copy.next=NULL;copy.name=NULL;copy.imported=NULL;copy.node=NULL;
@@ -155,12 +155,12 @@ static bool source_semantic_capture(SourceContext *ctx,SourceSemanticEnvironment
     }
     uint32_t entry=(uint32_t)ctx->graph->entry_index;
     for (SourceName *symbol=environment->names[entry];symbol;symbol=symbol->next) {
-        if (!source_work(ctx,NULL)) goto failed;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto failed;
         if (!symbol->hidden) environment->latest[environment->latest_count++]=symbol;
     }
     for (uint32_t i=0;ctx->history && i<ctx->history->latest_count;++i) {
         const SourceName *symbol=ctx->history->latest[i];
-        if (!source_work(ctx,NULL)) goto failed;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto failed;
         SourceName *shadow=find_name(ctx,ctx->names[entry],symbol->name);
         if (ctx->diagnostic.status!=XR_XIR_OK) goto failed;
         if (shadow) continue;

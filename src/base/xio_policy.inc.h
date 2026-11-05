@@ -17,14 +17,11 @@ typedef struct XrIoContext {
     XrOsIoStatus status;
 } XrIoContext;
 static inline bool io_policy_valid(const XrOsIoPolicy *policy) {
-    return policy && policy->context && policy->alloc && policy->free && policy->work;
+    return policy && policy->context && policy->alloc && policy->free;
 }
 static inline bool io_status(XrIoContext *io, XrOsIoStatus status) {
     if (io->status == XR_OS_IO_OK) io->status = status;
     return io->status == XR_OS_IO_OK;
-}
-static inline bool io_work(XrIoContext *io, uint64_t units) {
-    return io->status == XR_OS_IO_OK && io_status(io, io->policy->work(io->policy->context, units));
 }
 static inline void *io_alloc(XrIoContext *io, size_t bytes) {
     void *memory = NULL;
@@ -37,26 +34,26 @@ static inline void io_free(XrIoContext *io, void *memory) {
 static inline bool io_length(XrIoContext *io, const char *text, size_t *length) {
     size_t n = 0;
     if (!text) return io_status(io, XR_OS_IO_BAD_ARGUMENT);
-    while (io_work(io, 1)) {
+    while ((io)->status == XR_OS_IO_OK) {
         if (!text[n]) { *length = n; return true; }
-        if (n == SIZE_MAX - 1) return io_status(io, XR_OS_IO_BUDGET);
+        if (n == SIZE_MAX - 1) return io_status(io, XR_OS_IO_OVERFLOW);
         ++n;
     }
     return false;
 }
 static inline bool io_copy(XrIoContext *io, void *target, const void *source, size_t bytes) {
-    if (!io_work(io, bytes)) return false;
+    if (!((io)->status == XR_OS_IO_OK)) return false;
     if (bytes) memcpy(target, source, bytes);
     return true;
 }
 static inline bool io_clear(XrIoContext *io, void *target, size_t bytes) {
-    if (!io_work(io, bytes)) return false;
+    if (!((io)->status == XR_OS_IO_OK)) return false;
     if (bytes) memset(target, 0, bytes);
     return true;
 }
 static inline XrOsIoStatus io_errno_status(int error) {
     if (error == ENOMEM) return XR_OS_IO_OUT_OF_MEMORY;
-    if (error == ENAMETOOLONG || error == ERANGE) return XR_OS_IO_BUDGET;
+    if (error == ENAMETOOLONG || error == ERANGE) return XR_OS_IO_OVERFLOW;
     if (error == ENOENT || error == ENOTDIR) return XR_OS_IO_NOT_FOUND;
     if (error == EEXIST) return XR_OS_IO_EXISTS;
     if (error == EINVAL) return XR_OS_IO_BAD_ARGUMENT;

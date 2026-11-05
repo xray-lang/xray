@@ -16,7 +16,7 @@ static XrXirCtfeStatus ctfe_external_argument_admit(const XrXirArtifact *artifac
     if (ctfe_parameter_type(target))
         return xr_xir_value_argument(value,NULL,target)?XR_XIR_CTFE_OK:XR_XIR_CTFE_BAD_ARGUMENT;
     if (target==XR_XIR_UNIT) return XR_XIR_CTFE_NOT_SUPPORTED;
-    XrXirCtfeTypeShape shape={0};
+    CtfeTypeInfo shape={0};
     XrXirCtfeStatus status=ctfe_type_info(&artifact->context,artifact->module.types,target,false,&shape);
     if (status!=XR_XIR_CTFE_OK) return status;
     const XrXirTypeArena *arena=NULL;
@@ -42,12 +42,11 @@ typedef struct CtfeImportStack {
     uint32_t depth,capacity;
     uint64_t bytes,maximum;
 } CtfeImportStack;
-static XrXirCtfeStatus ctfe_import_source_work(ScalarRun *run,CtfeOwnedState *state,
+static XrXirCtfeStatus ctfe_import_source_admit(CtfeOwnedState *state,
     const XrXirTypeArena *arena,XrXirType type) {
-    XrXirCtfeTypeShape shape={0};
+    CtfeTypeInfo shape={0};
     XrXirCtfeStatus status=ctfe_type_info(state->context,xr_xir_compile_type_arena_types(arena),type,false,&shape);
     if (status!=XR_XIR_CTFE_OK) return status;
-    if (shape.work>(UINT64_MAX-64)/16 || !scalar_compile_work(run,64+shape.work*16)) return XR_XIR_CTFE_BUDGET;
     return XR_XIR_CTFE_OK;
 }
 static XrXirCtfeStatus ctfe_import_push(ScalarRun *run,CtfeImportStack *stack,CtfeImportFrame frame) {
@@ -76,7 +75,7 @@ static XrXirCtfeStatus ctfe_import_fields(ScalarRun *run,CtfeImportStack *stack,
 }
 static XrXirCtfeStatus ctfe_import_child(ScalarRun *run,CtfeOwnedState *state,
     const XrXirTypeArena *arena,CtfeImportFrame *frame,XrXirValue *output,XrXirType *target) {
-    XrXirCtfeStatus status=ctfe_import_source_work(run,state,arena,(XrXirType)frame->source.type);
+    XrXirCtfeStatus status=ctfe_import_source_admit(state,arena,(XrXirType)frame->source.type);
     if (status!=XR_XIR_CTFE_OK) return status;
     const XrXirTypeNode *node=xr_xir_type_node(run->module->types,frame->target);
     uint32_t index=(uint32_t)frame->next;
@@ -88,8 +87,8 @@ static XrXirCtfeStatus ctfe_import_child(ScalarRun *run,CtfeOwnedState *state,
 static XrXirCtfeStatus ctfe_import_finish(ScalarRun *run,CtfeOwnedState *state,
     CtfeImportFrame *frame,XrXirValue *output) {
     if (frame->array.type) { *output=frame->array;frame->array=(XrXirValue){0};return XR_XIR_CTFE_OK; }
-    XrXirCtfeStatus status=ctfe_validation_work(run,state,frame->target);
-    for (uint64_t i=0;status==XR_XIR_CTFE_OK && i<frame->count;++i) status=ctfe_admission_work(run,state,&frame->fields[i]);
+    XrXirCtfeStatus status=ctfe_value_type_admit(run,state,frame->target);
+    for (uint64_t i=0;status==XR_XIR_CTFE_OK && i<frame->count;++i) status=ctfe_value_graph_admit(run,state,&frame->fields[i]);
     if (status!=XR_XIR_CTFE_OK) return status;
     XrXirValueAdmission admission=ctfe_value_admission(state);
     const XrXirTypeNode *node=xr_xir_type_node(run->module->types,frame->target);
@@ -121,10 +120,14 @@ static XrXirCtfeStatus ctfe_external_argument_store(ScalarRun *run,uint32_t offs
     uint64_t import_spare=original_spare-fixed;state->frame_spare=import_spare;
     CtfeImportStack stack={.maximum=ctfe_frame_spare(state)};
     XrXirValue current=*input,result={0};bool current_owned=false;
+    uint32_t observations=0;
     for (;;) {
+        if (!(observations++ & 63u)) {
+            status=ctfe_control_poll(state->control);
+            if (status!=XR_XIR_CTFE_OK) break;
+        }
         state->frame_spare=import_spare-stack.bytes;
-        if (!scalar_compile_work(run,sizeof(CtfeImportFrame)+sizeof(result))) { status=XR_XIR_CTFE_BUDGET;break; }
-        status=ctfe_import_source_work(run,state,arena,(XrXirType)current.type);
+        status=ctfe_import_source_admit(state,arena,(XrXirType)current.type);
         if (status!=XR_XIR_CTFE_OK) break;
         if (target==XR_XIR_UNIT) {
             if (current.type || current.reserved || current.payload) { status=XR_XIR_CTFE_BAD_ARGUMENT;break; }
@@ -138,12 +141,10 @@ static XrXirCtfeStatus ctfe_external_argument_store(ScalarRun *run,uint32_t offs
         else if (target==XR_XIR_STRING) {
             const char *bytes=NULL;size_t length=0;
             if (!xr_xir_string_view(&current,&bytes,&length)) { status=XR_XIR_CTFE_BAD_ARGUMENT;break; }
-            if (!scalar_compile_work(run,(uint64_t)length)) { status=XR_XIR_CTFE_BUDGET;break; }
             status=ctfe_value_status(xr_xir_string_new(state->domain,bytes,length,&result));
             if (status!=XR_XIR_CTFE_OK) break;
         } else if (target!=XR_XIR_UNIT) {
             for (uint32_t i=0;i<stack.depth;++i) {
-                if (!scalar_compile_work(run,sizeof(XrXirValue))) { status=XR_XIR_CTFE_BUDGET;break; }
                 if (stack.frames[i].source.type==current.type && stack.frames[i].source.payload==current.payload) {
                     status=XR_XIR_CTFE_NOT_SUPPORTED;break;
                 }
@@ -159,7 +160,7 @@ static XrXirCtfeStatus ctfe_external_argument_store(ScalarRun *run,uint32_t offs
                 if (status==XR_XIR_CTFE_OK) status=ctfe_value_status(xr_xir_array_capacity(&current,&admission,&capacity));
                 if (status!=XR_XIR_CTFE_OK) break;
                 frame.count=(uint64_t)length;
-                status=ctfe_array_bytes_work(run,state,target,(uint64_t)capacity);
+                status=ctfe_array_capacity_admit(run,state,target,(uint64_t)capacity);
                 if (status!=XR_XIR_CTFE_OK) break;
                 admission=ctfe_value_admission(state);
                 status=ctfe_value_status(xr_xir_array_with_capacity(target,capacity,&admission,&frame.array));
@@ -197,8 +198,8 @@ static XrXirCtfeStatus ctfe_external_argument_store(ScalarRun *run,uint32_t offs
             state->frame_spare=import_spare-stack.bytes;
             CtfeImportFrame *frame=&stack.frames[stack.depth-1];
             if (frame->array.type) {
-                status=ctfe_admission_work(run,state,&frame->array);
-                if (status==XR_XIR_CTFE_OK) status=ctfe_admission_work(run,state,&result);
+                status=ctfe_value_graph_admit(run,state,&frame->array);
+                if (status==XR_XIR_CTFE_OK) status=ctfe_value_graph_admit(run,state,&result);
                 if (status!=XR_XIR_CTFE_OK) goto done;
                 XrXirValueAdmission admission=ctfe_value_admission(state);
                 XrXirValuePlace place={frame->target,&frame->array.payload};

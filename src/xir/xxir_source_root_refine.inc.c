@@ -18,7 +18,7 @@ static bool source_root_lock(SourceContext *ctx, uint32_t f) {
     SourceRootValue *flow = ctx->bodies[f].root_values;
     bool changed = true;
     for (uint32_t i = 0; i < body->instruction_count; ++i) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirInstruction *op = &body->instructions[i];
         if (flow[i].kind == 1 && !xr_xir_type_is_callable(&ctx->types,op->type) && source_root_type(ctx,op->type,0))
             flow[i].kind = 3;
@@ -38,14 +38,14 @@ static bool source_root_lock(SourceContext *ctx, uint32_t f) {
     while (changed) {
         changed = false;
         for (uint32_t i = 0; i < body->instruction_count; ++i) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (flow[i].kind != 3) continue;
             const XrXirInstruction *op = &body->instructions[i];
             bool table = xr_xir_op_uses_operand_table(op->op);
             uint32_t count = table ? op->args[1] : source_recipe_roles[op->op].values;
             if (op->op == XR_XIR_RETURN) count = body->result != XR_XIR_UNIT;
             for (uint32_t a = 0; a < count; ++a) {
-                if (!source_work(ctx,NULL)) return false;
+                if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
                 if (op->op == XR_XIR_PHI && !(a % 2)) continue;
                 uint32_t input = table ? body->operands[op->args[0] + a] : op->args[a];
                 if (input >= body->parameter_count && input - body->parameter_count < body->instruction_count &&
@@ -96,7 +96,7 @@ static bool source_root_tuple(SourceContext *ctx, uint32_t f, uint32_t i, bool *
     if (tuple.parameter_count && !fields) return false;
     uint32_t a = 0; bool differs = false;
     for (uint32_t p = 0; p < tuple.parameter_count; ++p) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         fields[p] = tuple.parameters[p];
         if (fields[p].type != XR_XIR_UNIT) fields[p].type = source_root_operand(ctx,f,body->operands[op->args[0] + a++]);
         if (fields[p].type != tuple.parameters[p].type) differs = true;
@@ -166,7 +166,7 @@ static bool source_root_results(SourceContext *ctx, uint32_t f, bool *changed) {
     if (!ctx->bodies[f].infer_result || body->result == XR_XIR_UNIT) return true;
     XrXirType result = XR_XIR_UNIT;
     for (uint32_t i = 0; i < body->instruction_count; ++i) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirInstruction *op = &body->instructions[i];
         if (op->op != XR_XIR_RETURN) continue;
         XrXirType type = source_root_operand(ctx,f,op->args[0]);
@@ -211,7 +211,7 @@ static bool source_root_prepare(SourceContext *ctx) {
     for (uint32_t f = 0; f < ctx->function_count; ++f) {
         if (ctx->bodies[f].root_values && !source_root_lock(ctx,f)) return false;
         for (uint32_t i = 0; i < ctx->functions[f].instruction_count; ++i) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (ctx->bodies[f].root_values && !source_root_value_bottom(ctx,f,i)) return false;
             const XrXirInstruction *op = &ctx->functions[f].instructions[i];
             if ((op->op == XR_XIR_FUNCTION_REF || op->op==XR_XIR_CLEANUP_REGISTER) && op->args[1]) {
@@ -224,7 +224,7 @@ static bool source_root_prepare(SourceContext *ctx) {
     flow->captures = count ? source_alloc(ctx,count,sizeof(*flow->captures)) : NULL;
     if (!flow->capture_heads || (count && !flow->captures)) return false;
     for (uint32_t f = 0; f < ctx->function_count; ++f) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         flow->capture_heads[f] = UINT32_MAX;
         XrXirType *parameters = (XrXirType *)ctx->functions[f].parameters;
         for (uint32_t p = 0; p < ctx->bodies[f].root_capture_count; ++p)
@@ -233,7 +233,7 @@ static bool source_root_prepare(SourceContext *ctx) {
     uint32_t at = 0;
     for (uint32_t f = 0; f < ctx->function_count; ++f)
         for (uint32_t i = 0; i < ctx->functions[f].instruction_count; ++i) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             const XrXirInstruction *op = &ctx->functions[f].instructions[i];
             if ((op->op != XR_XIR_FUNCTION_REF && op->op!=XR_XIR_CLEANUP_REGISTER) || !op->args[1]) continue;
             if (op->immediate<0 || (uint64_t)op->immediate>=ctx->function_count ||
@@ -248,14 +248,14 @@ static bool source_root_prepare(SourceContext *ctx) {
 static bool source_root_captures(SourceContext *ctx, bool *changed) {
     SourceRootFlow *flow = ctx->root_flow;
     for (uint32_t target = 0; target < ctx->function_count; ++target) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (!ctx->bodies[target].root_values) continue;
         XrXirType *parameters = (XrXirType *)ctx->functions[target].parameters;
         for (uint32_t p = 0; p < ctx->bodies[target].root_capture_count; ++p) {
             if (!ctx->bodies[target].root_captures[p]) continue;
             XrXirType common = XR_XIR_UNIT;
             for (uint32_t e = flow->capture_heads[target]; e != UINT32_MAX; e = flow->captures[e].next) {
-                if (!source_work(ctx,NULL)) return false;
+                if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
                 SourceRootCaptureEdge edge = flow->captures[e];
                 const XrXirFunction *caller = &ctx->functions[edge.function];
                 const XrXirInstruction *reference = &caller->instructions[edge.instruction];
@@ -270,7 +270,7 @@ static bool source_root_captures(SourceContext *ctx, bool *changed) {
 }
 static bool source_root_query_sync(SourceContext *ctx) {
     for (SourceRootQuery *query = ctx->root_queries; query; query = query->next) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         ctx->function = query->function; ctx->module = ctx->bodies[query->function].module;
         XrXirType type = source_root_operand(ctx,query->function,query->value);
         if (query->cell) type = xr_xir_cell_element(&ctx->types,type);
@@ -280,7 +280,7 @@ static bool source_root_query_sync(SourceContext *ctx) {
             ((XrXirSourceDeclaration *)ctx->query.declarations)[query->record].type = source_query_type(ctx,type);
     }
     for (uint32_t f = 0; f < ctx->function_count; ++f) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (!ctx->bodies[f].infer_result || !ctx->bodies[f].declaration) continue;
         ctx->function = f; ctx->module = ctx->bodies[f].module;
         ((XrXirSourceDeclaration *)ctx->query.declarations)[ctx->bodies[f].declaration - 1].type = source_query_type(ctx,ctx->functions[f].result);
@@ -303,11 +303,11 @@ static XrXirStatus source_root_refine(void *opaque, const XrXirEffects *effects,
     while (again) {
         again = false;
         for (uint32_t f = 0; f < ctx->function_count; ++f) {
-            if (!source_work(ctx,NULL)) goto failure;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto failure;
             if (!ctx->bodies[f].root_values) continue;
             ctx->function = f; ctx->module = ctx->bodies[f].module;
             for (uint32_t i = 0; i < ctx->functions[f].instruction_count; ++i)
-                if (!source_work(ctx,NULL) || !source_root_instruction(ctx,f,i,effects,&again)) goto failure;
+                if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_root_instruction(ctx,f,i,effects,&again)) goto failure;
             if (!source_root_results(ctx,f,&again)) goto failure;
         }
         if (!source_root_captures(ctx,&again) || !source_root_slots(ctx,&again)) goto failure;

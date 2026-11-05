@@ -43,7 +43,7 @@ def main():
     manifest = json.loads((sdk/'source_sdk_manifest.json').read_text(encoding='utf-8'))
     headers = {'xray_source.h', 'xray_export.h', 'xray_source_ast.h',
                'xray_source_value.h', 'xray_source_entry.h', 'xray_source_instance.h', 'xray_source_repl.h'}
-    assert manifest['api_version'] == 2 and manifest['crt'] == 'MD' and manifest['sanitizers'] == 0
+    assert manifest['api_version'] == 3 and manifest['crt'] == 'MD' and manifest['sanitizers'] == 0
     assert len(manifest['archives']) == 15
     assert {Path(r['path']).name for r in manifest['files'] if r['path'].startswith('include/')} == headers
     for row in manifest['files']:

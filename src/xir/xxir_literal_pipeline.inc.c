@@ -55,14 +55,19 @@ static XrXirStatus literal_receive(const XirLiteralRequest *request,const XrXirC
     if (queried!=XR_XIR_CTFE_OK) {
         xr_compile_resources_free(views);
         return literal_status(diagnostic,queried==XR_XIR_CTFE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
-            queried==XR_XIR_CTFE_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE);
+            queried==XR_XIR_CTFE_COMPLEXITY_LIMIT?XR_XIR_BUDGET:
+            queried==XR_XIR_CTFE_MEMORY_LIMIT?XR_XIR_MEMORY_LIMIT:
+            queried==XR_XIR_CTFE_OVERFLOW?XR_XIR_OVERFLOW:
+            queried==XR_XIR_CTFE_CANCELLED?XR_XIR_CANCELLED:
+            queried==XR_XIR_CTFE_DEADLINE?XR_XIR_DEADLINE:
+            queried==XR_XIR_CTFE_CLOCK_FAILURE?XR_XIR_CLOCK_FAILURE:XR_XIR_BAD_STRUCTURE);
     }
-    SourceContext ctx={0};ctx.compile=*context;XirLiteralDefinitions result={0};
+    SourceContext ctx={0};ctx.request=request->control;ctx.compile=*context;XirLiteralDefinitions result={0};
     const XrXirArtifact *original=views[0].definition;
-    status=literal_site_verify(context,&views[0],site);
+    status=literal_site_verify(&views[0],site);
     if (status!=XR_XIR_OK) goto done;
     for (uint32_t i=0;i<request->count;++i) {
-        if (!xir_compile_work(context,sizeof(*views))) { status=XR_XIR_BUDGET;goto done; }
+
         if (views[i].definition!=original || views[i].definition->context.resources!=context->resources) {
             status=XR_XIR_BAD_STRUCTURE;goto done;
         }

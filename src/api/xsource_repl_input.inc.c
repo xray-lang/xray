@@ -13,11 +13,12 @@ XRAY_API XrSourceStatus xray_source_repl_check_input(XrSourceRepl *owner,const c
     XrSourceStatus status=api_repl_admit(owner);if(status!=XR_SOURCE_OK)return status;
     if(owner->active)return XR_SOURCE_BUSY;
     if(!length){*output=XR_SOURCE_INPUT_COMPLETE;return XR_SOURCE_OK;}
-    owner->busy=true;char *source=NULL;XrCompileState *state=xr_source_compiler_state(owner->compiler);
-    status=api_resource(xr_compile_state_strndup(state,bytes,length,&source));
+    owner->busy=true;char *source=NULL;ApiBuildRequest request={0};
+    status=api_repl_request(owner,&request);
+    XrCompileState *state=status==XR_SOURCE_OK ? xr_source_compiler_state(request.compiler) : NULL;
+    if(status==XR_SOURCE_OK)status=api_resource(xr_compile_state_strndup(state,bytes,length,&source));
     for(size_t i=0;status==XR_SOURCE_OK && i<length;++i) {
-        status=api_resource(xr_compile_state_work(state,1));
-        if(status==XR_SOURCE_OK && !source[i])status=XR_SOURCE_INVALID;
+        if(!source[i])status=XR_SOURCE_INVALID;
     }
     XrArena arena={0};XrArenaBacking backing;
     Scanner scanner;int64_t depth[3]={0};XrSourceInputState complete=XR_SOURCE_INPUT_COMPLETE;
@@ -26,8 +27,11 @@ XRAY_API XrSourceStatus xray_source_repl_check_input(XrSourceRepl *owner,const c
         (void)xr_arena_open(&arena,XR_ARENA_SEGMENT_SIZE,&backing);
         status=api_resource(xr_compiler_arena_capture_status(&arena,state));
     }
-    if(status==XR_SOURCE_OK)status=api_resource(xr_compile_scanner_open(&scanner,state,&arena,source));
+    if(status==XR_SOURCE_OK)status=api_resource(xr_compile_scanner_open(&scanner,state,&arena,source,&request.control));
+    size_t tokens=0;
     while(status==XR_SOURCE_OK) {
+        if((tokens++&63u)==0)status=api_resource(xr_compile_request_control_poll(&request.control));
+        if(status!=XR_SOURCE_OK)break;
         Token token=xr_scanner_scan(&scanner);
         status=api_resource(xr_compile_state_status(state));if(status!=XR_SOURCE_OK)break;
         if(token.type==TK_EOF){if(depth[0]>0 || depth[1]>0 || depth[2]>0)complete=XR_SOURCE_INPUT_INCOMPLETE;break;}
@@ -45,10 +49,10 @@ XRAY_API XrSourceStatus xray_source_repl_check_input(XrSourceRepl *owner,const c
         case TK_RBRACE:axis=2;delta=-1;break;
         default:break;
         }
-        if((delta>0 && depth[axis]==INT64_MAX) || (delta<0 && depth[axis]==INT64_MIN))status=XR_SOURCE_BUDGET;
+        if((delta>0 && depth[axis]==INT64_MAX) || (delta<0 && depth[axis]==INT64_MIN))status=XR_SOURCE_OVERFLOW;
         else depth[axis]+=delta;
     }
     xr_arena_destroy(&arena);xr_compile_state_free(source);
     if(status==XR_SOURCE_OK)*output=complete;
-    status=api_repl_capture(owner,status);owner->busy=false;return status;
+    api_request_clear(&request);owner->busy=false;return status;
 }

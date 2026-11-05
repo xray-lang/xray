@@ -14,7 +14,7 @@ typedef struct SourceInstanceTypes {
 static bool source_instance_argument(SourceInstanceTypes *input,XrXirType argument,
     uint32_t depth,XrXirType *output) {
     SourceContext *ctx=input->ctx;
-    if (!source_work_units(ctx,NULL,sizeof(XrXirTypeNode)+4)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (depth==128) return source_fail(ctx,NULL,XR_XIR_BUDGET,"constructed type substitution depth exhausted");
     if ((uint32_t)argument<XR_XIR_CONSTRUCTED_TYPE_BASE) { *output=argument;return true; }
     const XrXirTypeNode *found=xr_xir_type_node(input->source,argument);
@@ -25,7 +25,7 @@ static bool source_instance_argument(SourceInstanceTypes *input,XrXirType argume
     if (input->mapped[index]) { *output=input->mapped[index];return true; }
     input->mapped[index]=(XrXirType)UINT32_MAX;XrXirTypeNode node=*found;
     if (node.kind==XR_XIR_TYPE_NOMINAL) {
-        if (!source_comptime_nominal_identities(ctx,NULL,input->source))
+        if (!source_comptime_nominal_identities(ctx,input->source))
             return source_fail(ctx,NULL,ctx->diagnostic.status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:ctx->diagnostic.status,
                 "instance argument changed its actual nominal declaration");
         XrXirType *arguments=node.nominal.argument_count?source_alloc(ctx,node.nominal.argument_count,sizeof(*arguments)):NULL;
@@ -37,7 +37,7 @@ static bool source_instance_argument(SourceInstanceTypes *input,XrXirType argume
         XrXirCallableParameter *parameters=node.parameter_count?source_alloc(ctx,node.parameter_count,sizeof(*parameters)):NULL;
         if (node.parameter_count && !parameters) return false;
         for (uint32_t p=0;p<node.parameter_count;++p) {
-            if (!source_work_units(ctx,NULL,sizeof(*parameters))) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             parameters[p].mode=node.parameters[p].mode;
             if (!source_instance_argument(input,node.parameters[p].type,depth+1,&parameters[p].type)) return false;
         }
@@ -57,7 +57,7 @@ static bool source_instance_argument(SourceInstanceTypes *input,XrXirType argume
         XrXirType *fields=count?source_alloc(ctx,count,sizeof(*fields)):NULL;
         if (count && !fields) return false;
         for (uint32_t f=0;f<count;++f) {
-            if (!source_work_units(ctx,NULL,sizeof(*fields)) ||
+            if (!((ctx)->diagnostic.status == XR_XIR_OK) ||
                 !source_instance_argument(input,found->nominal.fields[f],depth+1,&fields[f])) return false;
         }
         /* Receiving field types can move the mutable pool. */
@@ -93,7 +93,7 @@ static bool source_instance_literal(SourceContext *ctx,uint32_t index) {
     if (f>=ctx->compile.limits.functions)
         return source_fail(ctx,node,XR_XIR_BUDGET,"instance literal function inventory exhausted");
     if (!source_materialization_storage(ctx,f+1)) return false;
-    if (!source_work_units(ctx,node,sizeof(SourceFunction)+sizeof(XrXirFunction)+sizeof(XrXirFunctionIdentity)+4*sizeof(uint32_t))) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     char *name=source_alloc(ctx,40,1);
     if (!name || source_format(ctx,name,40,"$instanceconstant%u",f)!=XR_DIAG_OK)
         return source_fail(ctx,node,ctx->diagnostic.status==XR_XIR_OK?XR_XIR_BUDGET:ctx->diagnostic.status,"instance literal name failed");
@@ -127,7 +127,7 @@ static bool source_instance_literals_finish(SourceContext *ctx) {
     if (ctx->function_count>ctx->compile.limits.functions ||
         ctx->instance_constants->count>ctx->compile.limits.functions-ctx->function_count)
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"instance literal function inventory exhausted");
-    if (!source_work_units(ctx,NULL,sizeof(SourceComptimeScope)+sizeof(ctx->materialization_begin))) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     ctx->materialization_begin=ctx->function_count+ctx->instance_constants->count;
     SourceComptimeScope saved=source_comptime_scope(ctx);bool ok=true;
     for (uint32_t i=0;i<ctx->instance_constants->count;++i)

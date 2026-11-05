@@ -51,21 +51,21 @@ static void verify_counted_free(void *memory) {
 #pragma pop_macro("xr_malloc")
 static void verifier_owner_new(void) {
     VERIFY_CHECK(!verify_resources && !verify_live && !verify_physical);
-    const XrCompileResourceLimits limits={UINT64_C(2)*1024*1024,UINT64_C(1)*1024*1024,UINT64_C(2000000)};
+    const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,UINT64_C(1)*1024*1024,true};
     VERIFY_CHECK(xr_compile_resources_new(&limits,&verify_resources)==XR_COMPILE_RESOURCE_OK);
     VERIFY_CHECK(xr_compile_resources_stats(verify_resources,&verify_baseline)==XR_COMPILE_RESOURCE_OK);
-    VERIFY_CHECK(verify_live==1 && verify_physical==verify_baseline.live_bytes);
+    VERIFY_CHECK(verify_live==1 && verify_physical==verify_baseline.held_bytes);
 }
 static void verifier_owner_baseline(void) {
     XrCompileResourceStats current={0};
     VERIFY_CHECK(xr_compile_resources_stats(verify_resources,&current)==XR_COMPILE_RESOURCE_OK);
-    VERIFY_CHECK(current.live_bytes==verify_baseline.live_bytes && verify_live==1 && verify_physical==verify_baseline.live_bytes);
-    VERIFY_CHECK(current.allocated_bytes<=UINT64_C(2)*1024*1024 && current.peak_bytes<=UINT64_C(1)*1024*1024 && current.work<=UINT64_C(2000000));
+    VERIFY_CHECK(current.held_bytes==verify_baseline.held_bytes && verify_live==1 && verify_physical==verify_baseline.held_bytes);
+    VERIFY_CHECK(current.peak_bytes<=UINT64_C(1)*1024*1024);
 }
 static void verifier_owner_free(void) {
     verifier_owner_baseline();xr_compile_resources_release(verify_resources);verify_resources=NULL;
     VERIFY_CHECK(!verify_live && !verify_physical);
-    puts("CGen original output goldens: finite cumulative owner, actual physical blocks/bytes=0/0");
+    puts("CGen original output goldens: finite held-memory owner, actual physical blocks/bytes=0/0");
 }
 static XiCgenVerifyResult verify(const char *src) {
     XiCgenVerifyResult r;memset(&r,0,sizeof(r));

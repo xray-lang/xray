@@ -16,7 +16,7 @@ static XrXirStatus effect_program_range(const XrXirCompileContext *work,
     if (count > SIZE_MAX / element) return XR_XIR_BUDGET;
     XrCompileResourceStatus status = xr_compile_resources_extent(work->resources, memory, count * element);
     return status == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
-        status == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
+        XR_XIR_BAD_STRUCTURE;
 }
 
 #define PROGRAM_STORAGE(pointer, count, type) do { \
@@ -30,7 +30,7 @@ static XrXirStatus effect_program_types_storage(const XrXirCompileContext *work,
     if (types->interfaces) return XR_XIR_BAD_STRUCTURE;
     PROGRAM_STORAGE(types->nodes, types->count, XrXirTypeNode);
     for (uint32_t t = 0; t < types->count; ++t) {
-        if (!xir_compile_work(work, 4)) return XR_XIR_BUDGET;
+
         const XrXirTypeNode *node = &types->nodes[t];
         PROGRAM_STORAGE(node->parameters, node->parameter_count, XrXirCallableParameter);
         PROGRAM_STORAGE(node->nominal.arguments, node->nominal.argument_count, XrXirType);
@@ -42,18 +42,18 @@ static XrXirStatus effect_program_types_storage(const XrXirCompileContext *work,
     if (nominals->declarations) return XR_XIR_BAD_STRUCTURE;
     PROGRAM_STORAGE(nominals->identities, nominals->count, XrXirNominalIdentity);
     for (uint32_t n = 0; n < nominals->count; ++n) {
-        if (!xir_compile_work(work, 4)) return XR_XIR_BUDGET;
+
         const XrXirNominalIdentity *identity = &nominals->identities[n];
         PROGRAM_STORAGE(identity->module.bytes, identity->module.length, uint8_t);
         PROGRAM_STORAGE(identity->name.bytes, identity->name.length, uint8_t);
         PROGRAM_STORAGE(identity->variants, identity->variant_count, XrXirNominalVariant);
         PROGRAM_STORAGE(identity->fields, identity->field_count, XrXirNominalField);
         for (uint32_t v = 0; v < identity->variant_count; ++v) {
-            if (!xir_compile_work(work, 2)) return XR_XIR_BUDGET;
+
             PROGRAM_STORAGE(identity->variants[v].name.bytes, identity->variants[v].name.length, uint8_t);
         }
         for (uint32_t f = 0; f < identity->field_count; ++f) {
-            if (!xir_compile_work(work, 2)) return XR_XIR_BUDGET;
+
             PROGRAM_STORAGE(identity->fields[f].name.bytes, identity->fields[f].name.length, uint8_t);
         }
     }
@@ -69,13 +69,13 @@ static XrXirStatus effect_program_declarations_storage(const XrXirCompileContext
     PROGRAM_STORAGE(declarations->slots, declarations->slot_count, XrXirSlot);
     PROGRAM_STORAGE(declarations->literals, declarations->literal_count, XrXirLiteral);
     for (uint32_t m = 0; m < declarations->module_count; ++m) {
-        if (!xir_compile_work(work, 2)) return XR_XIR_BUDGET;
+
         const XrXirSourceModule *module = &declarations->modules[m];
         PROGRAM_STORAGE(module->name, module->name_length, char);
         PROGRAM_STORAGE(module->dependencies, module->dependency_count, uint32_t);
     }
     for (uint32_t l = 0; l < declarations->literal_count; ++l) {
-        if (!xir_compile_work(work, 2)) return XR_XIR_BUDGET;
+
         PROGRAM_STORAGE(declarations->literals[l].bytes, declarations->literals[l].length, uint8_t);
     }
     return XR_XIR_OK;
@@ -111,7 +111,7 @@ static XrXirStatus effect_program_metadata_storage(const XrXirCompileContext *wo
     XrXirStatus status = effect_program_body_storage(work, effects, &body);
     if (status != XR_XIR_OK) return status;
     for (uint32_t f = 0; f < effects->count; ++f) {
-        if (!xir_compile_work(work, 2)) return XR_XIR_BUDGET;
+
         PROGRAM_STORAGE(body->functions[f].parameters, body->functions[f].parameter_count, XrXirType);
     }
     status = effect_program_types_storage(work, body->domain.types);
@@ -128,7 +128,7 @@ static XrXirStatus effect_program_input_storage(const XrXirCompileContext *work,
     if (body->generics) return XR_XIR_BAD_STRUCTURE;
     PROGRAM_STORAGE(body->defaults.records, body->defaults.count, XrXirDefaultBinding);
     for (uint32_t f = 0; f < effects->count; ++f) {
-        if (!xir_compile_work(work, 4)) return XR_XIR_BUDGET;
+
         const EffectBodyFunction *function = &body->functions[f];
         if (function->run_count > function->run_capacity ||
             function->run_capacity > function->instruction_count) return XR_XIR_BAD_STRUCTURE;
@@ -148,7 +148,7 @@ static XrXirStatus effect_program_projection_storage(const XrXirCompileContext *
     if (module->stage != XR_XIR_LOWERED || module->generics) return XR_XIR_BAD_STRUCTURE;
     PROGRAM_STORAGE(module->functions, module->function_count, XrXirFunction);
     for (uint32_t f = 0; f < module->function_count; ++f) {
-        if (!xir_compile_work(work, 4)) return XR_XIR_BUDGET;
+
         const XrXirFunction *function = &module->functions[f];
         PROGRAM_STORAGE(function->name, function->name_length, char);
         PROGRAM_STORAGE(function->parameters, function->parameter_count, XrXirType);

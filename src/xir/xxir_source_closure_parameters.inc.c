@@ -18,7 +18,7 @@ static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCa
     for (int i = 0; i < decl->param_count; ++i) {
         XrParamNode *param = decl->params[i];
         XrXirType type;
-        if (!source_work(ctx, node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if ((param->passing_mode != XR_PARAM_READ && param->passing_mode != XR_PARAM_REF) ||
             param->default_value || param->pattern || param->is_rest || (!param->type && !context))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure parameter requires an annotation or complete callable context");

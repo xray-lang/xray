@@ -42,7 +42,7 @@ static XrXirStatus effect_dense_actual(const EffectDenseRequest *request,
     actual->present=parameter<request->instruction->args[1];
     actual->fixed=false;
     if (!actual->present) return XR_XIR_OK;
-    if (!xir_compile_work(request->execution->terms.remaining,2)) return XR_XIR_BUDGET;
+
     uint32_t value=request->caller->operands[request->instruction->args[0]+parameter];
     if (value>=request->value_count) return XR_XIR_BAD_VALUE;
     actual->fixed=request->fixed[value]!=0;
@@ -68,7 +68,7 @@ static XrXirStatus effect_dense_parameter(const EffectDenseRequest *request,
             &terms->types,&terms->types,NULL,0,declared,actual.type,scratch);
     }
     if (status!=XR_XIR_OK) return status;
-    if (!xir_compile_work(terms->remaining,3+sizeof(*output))) return XR_XIR_BUDGET;
+
     uint32_t kind=request->contexts->uses.outcomes_work.contracts[request->selected].parameters[parameter].kind;
     *output=callable && actual.present && !actual.fixed && kind==XR_XIR_EFFECT_PARAMETER_VARIABLE ?
         actual.type : declared;

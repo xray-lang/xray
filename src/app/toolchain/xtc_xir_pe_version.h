@@ -9,12 +9,14 @@
  */
 #ifndef XTC_XIR_PE_VERSION_H
 #define XTC_XIR_PE_VERSION_H
-#include "../../base/xcompile_resources.h"
+#include "../../base/xdefs.h"
+#include <stddef.h>
+#include <stdint.h>
 
 typedef enum XtcXirPeVersionStatus {
     XTC_XIR_PE_VERSION_OK,
     XTC_XIR_PE_VERSION_BAD_ARGUMENT,
-    XTC_XIR_PE_VERSION_BUDGET,
+    XTC_XIR_PE_VERSION_COMPLEXITY_LIMIT,
     XTC_XIR_PE_VERSION_INVALID,
     XTC_XIR_PE_VERSION_TRUNCATED,
     XTC_XIR_PE_VERSION_UNSUPPORTED,
@@ -35,17 +37,22 @@ typedef struct XtcXirPeImage {
 /* Decode bounded AMD64 PE32+ image facts using the same header/RVA reader.
  * The entry must have unique file-backed bytes. Version resources are not
  * required. This does not validate imports or implement the Windows loader.
- * No allocation or I/O occurs; failures preserve the entire output. */
-XR_FUNC XtcXirPeVersionStatus xtc_xir_pe_image_parse(XrCompileResources *resources,
-    const uint8_t *bytes, size_t length, XtcXirPeImage *output);
+ * No allocation or I/O occurs; failures preserve the entire output.
+ * Each parse permits at most length / 40 section-candidate visits across all
+ * RVA lookups. Repeated visits count again. Exceeding this local resource
+ * policy returns COMPLEXITY_LIMIT, independently of the PE format checks. */
+XR_FUNC XtcXirPeVersionStatus xtc_xir_pe_image_parse(const uint8_t *bytes, size_t length, XtcXirPeImage *output);
 
 /* Parse AMD64 PE32+ fixed version resources without allocation or I/O.
  * All RT_VERSION leaves must have identical fixed information. Strings are
  * not interpreted. Facts neither authenticate the provider nor authorize it.
- * Field reads, fixed-value comparisons, decimal conversion and publication
- * charge the supplied ledger. The caller keeps bytes and ledger alive during
- * the call; bounds checks do not read or charge rejected byte ranges.
+ * The caller keeps the read-only input bytes alive during this call. The
+ * reader follows at most three directory levels and rejects cycles, overlapping
+ * RVA mappings and out-of-range fields before reading their bytes. Directory
+ * traversal permits at most resource_size / 8 entry visits in total; aliased
+ * subdirectories count their entries again. RVA lookups use the same local
+ * section-candidate policy as image_parse. These input-extent bounds reject
+ * excessive repeated traversal with COMPLEXITY_LIMIT, rather than INVALID.
  * Output is a self-contained value and is unchanged on every failure. */
-XR_FUNC XtcXirPeVersionStatus xtc_xir_pe_version_parse(XrCompileResources *resources,
-    const uint8_t *bytes, size_t length, XtcXirPeVersion *output);
+XR_FUNC XtcXirPeVersionStatus xtc_xir_pe_version_parse(const uint8_t *bytes, size_t length, XtcXirPeVersion *output);
 #endif // XTC_XIR_PE_VERSION_H

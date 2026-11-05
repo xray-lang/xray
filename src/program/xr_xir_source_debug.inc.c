@@ -20,7 +20,7 @@ static XrXirStatus source_product_debug(XrXirSourceProduct *product,const XrXirS
         status=xr_xir_compile_checked_write(provenance->source,&verified,NULL);
         if (status==XR_XIR_OK && verified.length!=source_packet->length) status=XR_XIR_BAD_STRUCTURE;
         if (status==XR_XIR_OK)
-            status=source_product_compare(context,verified.bytes,source_packet->bytes,verified.length);
+            status=source_product_compare(verified.bytes,source_packet->bytes,verified.length);
         xr_xir_compile_checked_packet_free(&verified);
         if (status!=XR_XIR_OK) return status;
     } else if (source->function_count!=module->function_count) return XR_XIR_BAD_STRUCTURE;
@@ -28,7 +28,7 @@ static XrXirStatus source_product_debug(XrXirSourceProduct *product,const XrXirS
     if ((source->global_count && (!source->globals || !module->declarations || !module->declarations->slots || !module->declarations->modules)) ||
         !query || !module->declarations) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t g=0;g<source->global_count;++g) {
-        if (!xir_compile_work(context,sizeof(*source->globals))) return XR_XIR_BUDGET;
+
         const XrXirSourceDebugGlobal *global=&source->globals[g];
         if (global->slot>=module->declarations->slot_count || !global->declaration ||
             global->declaration>query->declaration_count) return XR_XIR_BAD_STRUCTURE;
@@ -40,14 +40,14 @@ static XrXirStatus source_product_debug(XrXirSourceProduct *product,const XrXirS
         const char *identity=query->modules[declaration->range.module].identity;
         if (!identity || !owner->name) return XR_XIR_BAD_STRUCTURE;
         size_t length=0;
-        while (identity[length]) { if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;++length; }
-        if (!xir_compile_work(context,length+1)) return XR_XIR_BUDGET;
+        while (identity[length]) { ++length; }
+
         if (length!=owner->name_length || memcmp(identity,owner->name,length)) return XR_XIR_BAD_STRUCTURE;
     }
     XrXirSourceDebugFunction *functions=xir_compile_calloc(context,module->function_count,sizeof(*functions),&status);
     if (module->function_count && !functions) return status;
     for (uint32_t f=0;f<module->function_count;++f) {
-        if (!xir_compile_work(context,sizeof(*functions))) { status=XR_XIR_BUDGET;break; }
+
         uint32_t origin=instances ? provenance->origins[f].function : f;
         if (origin>=source->function_count) { status=XR_XIR_BAD_STRUCTURE;break; }
         const XrXirSourceDebugFunction *original=&source->functions[origin];

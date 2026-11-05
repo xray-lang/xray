@@ -15,7 +15,7 @@
 static bool source_view_preparation_needed(SourceContext *ctx,bool *needed) {
     *needed=false;
     for (uint32_t i=0;i<ctx->types.count;++i) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         uint32_t kind=ctx->types.nodes[i].kind;
         if (kind==XR_XIR_TYPE_SLICE || kind==XR_XIR_TYPE_MUT_SLICE) {*needed=true;break;}
     }

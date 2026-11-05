@@ -11,7 +11,7 @@
 static XrXirStatus effect_invocation_iterator_parameters_select(EffectInvocationFlow *flow,bool *output) {
     *output=false;bool found=false;
     for (uint32_t r=0;r<flow->physical->count;++r) {
-        if (!xir_compile_work(flow->read->work,1)) return XR_XIR_BUDGET;
+
         const EffectPhysicalRecord record=flow->physical->records[r];
         if (!(record.mask&(EFFECT_PHYSICAL_TRANSFER|EFFECT_PHYSICAL_INVOCATION))) continue;
         if (record.value<flow->function->parameter_count || record.value>=flow->values) return XR_XIR_BAD_STRUCTURE;
@@ -31,7 +31,7 @@ static XrXirStatus effect_invocation_iterator_parameters_select(EffectInvocation
             op->op==XR_XIR_OWNED_LOCAL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE) &&
             op->args[0]<flow->function->parameter_count) return XR_XIR_OK;
         bool pending=false;
-        status=effect_invocation_iterator_call_candidate(flow->read,&flow->body,
+        status=effect_invocation_iterator_call_candidate(&flow->body,
             flow->read->final->nodes[flow->node].body,op,&pending);
         if (status!=XR_XIR_OK) return status;
         if (pending) return XR_XIR_OK;
@@ -44,7 +44,7 @@ static XrXirStatus effect_invocation_iterator_parameters_row(EffectInvocationFlo
     const EffectInvocationRead *owner=flow->read;
     const EffectInvocationNode *node=&owner->final->nodes[flow->node];uint32_t p=op->args[0];
     if (!effect_invocation_iterator_operation(op->op) || p>=node->parameter_count) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(owner->work,(uint64_t)flow->basis.fn_words*sizeof(*row))) return XR_XIR_BUDGET;
+
     memcpy(row,node->input+(size_t)p*flow->basis.row_words,(size_t)flow->basis.fn_words*sizeof(*row));
     bool complete=false;
     XrXirStatus status=effect_final_callable_complete(owner->work,owner->final,flow->node,p,&complete);
@@ -79,7 +79,7 @@ static XrXirStatus effect_invocation_iterator_parameters_read(const EffectInvoca
     if (!physical->parameters) return XR_XIR_OK;
     bool advance=false;
     for (uint32_t r=0;r<physical->count;++r) {
-        if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+
         advance|=(physical->records[r].mask&EFFECT_PHYSICAL_ITERATOR_ADVANCE)!=0;
     }
     if (!advance) return XR_XIR_OK;
@@ -94,7 +94,7 @@ static XrXirStatus effect_invocation_iterator_parameters_read(const EffectInvoca
     if (!memory) return status;
     uint64_t *row=memory;uint32_t *matches=(uint32_t *)((uint8_t *)memory+(size_t)row_bytes);
     for (uint32_t r=0;status==XR_XIR_OK && r<physical->count;++r) {
-        if (!xir_compile_work(owner->work,1)) {status=XR_XIR_BUDGET;break;}
+
         const EffectPhysicalRecord record=physical->records[r];
         if (!(record.mask&EFFECT_PHYSICAL_ITERATOR_ADVANCE)) continue;
         if (record.value<flow.function->parameter_count) {status=XR_XIR_BAD_STRUCTURE;break;}

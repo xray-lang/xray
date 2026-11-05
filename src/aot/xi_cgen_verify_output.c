@@ -39,26 +39,25 @@ static bool verify_resource(VerifyContext *ctx, XrCompileResourceStatus status) 
     if (ctx->status == XI_CGEN_VERIFY_PASSED) {
         switch (status) {
             case XR_COMPILE_RESOURCE_OK: break;
-            case XR_COMPILE_RESOURCE_BUDGET: ctx->status = XI_CGEN_VERIFY_BUDGET; break;
+            case XR_COMPILE_RESOURCE_MEMORY_LIMIT: ctx->status = XI_CGEN_VERIFY_MEMORY_LIMIT; break;
+            case XR_COMPILE_RESOURCE_OVERFLOW: ctx->status = XI_CGEN_VERIFY_OVERFLOW; break;
             case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: ctx->status = XI_CGEN_VERIFY_OUT_OF_MEMORY; break;
-            case XR_COMPILE_RESOURCE_CANCELLED:
+            case XR_COMPILE_RESOURCE_CANCELLED: ctx->status = XI_CGEN_VERIFY_CANCELLED; break;
+            case XR_COMPILE_RESOURCE_DEADLINE: ctx->status = XI_CGEN_VERIFY_DEADLINE; break;
+            case XR_COMPILE_RESOURCE_CLOCK_FAILURE: ctx->status = XI_CGEN_VERIFY_CLOCK_FAILURE; break;
             case XR_COMPILE_RESOURCE_BAD_ARGUMENT: ctx->status = XI_CGEN_VERIFY_BAD_ARGUMENT; break;
         }
     }
     return ctx->status == XI_CGEN_VERIFY_PASSED;
 }
 
-static bool verify_work(VerifyContext *ctx, uint64_t units) {
-    return ctx->status == XI_CGEN_VERIFY_PASSED &&
-        verify_resource(ctx, xr_compile_resources_work(ctx->resources, units));
-}
 
 static unsigned char verify_read(VerifyContext *ctx, const char *source, size_t at) {
-    return verify_work(ctx, 1) ? (unsigned char) source[at] : 0;
+    return ((ctx)->status == XI_CGEN_VERIFY_PASSED) ? (unsigned char) source[at] : 0;
 }
 
 static void verify_write(VerifyContext *ctx, char *target, size_t at, char value) {
-    if (verify_work(ctx, 1)) target[at] = value;
+    if ((ctx)->status == XI_CGEN_VERIFY_PASSED) target[at] = value;
 }
 
 /* Each mask bit is owned by this verification. The first lexical scan
@@ -67,13 +66,13 @@ static void verify_write(VerifyContext *ctx, char *target, size_t at, char value
 static void verify_mask_byte(VerifyContext *ctx, char *mask, size_t at, bool *line_masked) {
     unsigned char flags = verify_read(ctx, mask, at / 8);
     verify_write(ctx, mask, at / 8, (char)(flags | (1u << (at % 8))));
-    if (ctx->status == XI_CGEN_VERIFY_PASSED && !*line_masked && verify_work(ctx, 1)) *line_masked = true;
+    if (ctx->status == XI_CGEN_VERIFY_PASSED && !*line_masked && ((ctx)->status == XI_CGEN_VERIFY_PASSED)) *line_masked = true;
 }
 
 static bool verify_apply_mask(VerifyContext *ctx, char *code, const char *mask,
     size_t offset, size_t length) {
     for (size_t pos = 0; ctx->status == XI_CGEN_VERIFY_PASSED &&
-         pos < length && verify_work(ctx, 1);) {
+         pos < length && ((ctx)->status == XI_CGEN_VERIFY_PASSED);) {
         size_t global = offset + pos;
         unsigned shift = (unsigned)(global % 8);
         size_t span = 8 - shift;
@@ -81,7 +80,7 @@ static bool verify_apply_mask(VerifyContext *ctx, char *code, const char *mask,
         unsigned flags = verify_read(ctx, mask, global / 8) >> shift;
         if (flags) {
             for (size_t i = 0; ctx->status == XI_CGEN_VERIFY_PASSED &&
-                 i < span && verify_work(ctx, 1); ++i)
+                 i < span && ((ctx)->status == XI_CGEN_VERIFY_PASSED); ++i)
                 if (flags & (1u << i)) verify_write(ctx, code, pos + i, ' ');
         }
         pos += span;
@@ -90,16 +89,16 @@ static bool verify_apply_mask(VerifyContext *ctx, char *code, const char *mask,
 }
 
 static void verify_copy(VerifyContext *ctx, void *target, const void *source, size_t bytes) {
-    if (verify_work(ctx, bytes)) memcpy(target, source, bytes);
+    if ((ctx)->status == XI_CGEN_VERIFY_PASSED) memcpy(target, source, bytes);
 }
 
 static void verify_fill(VerifyContext *ctx, void *target, int value, size_t bytes) {
-    if (verify_work(ctx, bytes)) memset(target, value, bytes);
+    if ((ctx)->status == XI_CGEN_VERIFY_PASSED) memset(target, value, bytes);
 }
 
 static int verify_compare(VerifyContext *ctx, const char *a, const char *b, size_t bytes) {
     for (size_t i = 0; i < bytes; ++i) {
-        if (!verify_work(ctx, 1)) return 0;
+        if (!((ctx)->status == XI_CGEN_VERIFY_PASSED)) return 0;
         unsigned char av = (unsigned char) a[i], bv = (unsigned char) b[i];
         if (av != bv) return av < bv ? -1 : 1;
     }
@@ -125,8 +124,7 @@ static void verify_put(VerifyContext *ctx, char *target, size_t capacity, size_t
 }
 
 /* Diagnostics have only literals, strings and signed decimal arguments. This
- * writer charges the actual scan and output, including truncated input, rather
- * than asking libc to perform an unaccounted measuring pass. */
+ * writer tracks truncated output without allocating temporary strings. */
 static void verify_format_args(VerifyContext *ctx, char *target, size_t capacity,
                                const char *format, va_list args) {
     size_t position = 0, at = 0;
@@ -149,10 +147,10 @@ static void verify_format_args(VerifyContext *ctx, char *target, size_t capacity
             long value = wide ? va_arg(args, long) : va_arg(args, int);
             unsigned long magnitude = value < 0 ? 0UL - (unsigned long) value : (unsigned long) value;
             unsigned long divisor = 1;
-            while (magnitude / divisor >= 10 && verify_work(ctx, 1)) divisor *= 10;
+            while (magnitude / divisor >= 10 && ((ctx)->status == XI_CGEN_VERIFY_PASSED)) divisor *= 10;
             if (value < 0) verify_put(ctx, target, capacity, &position, '-');
             do {
-                if (!verify_work(ctx, 1)) break;
+                if (!((ctx)->status == XI_CGEN_VERIFY_PASSED)) break;
                 verify_put(ctx, target, capacity, &position, (char) ('0' + magnitude / divisor));
                 magnitude %= divisor; divisor /= 10;
             } while (divisor);
@@ -170,7 +168,7 @@ static void verify_format(VerifyContext *ctx, char *target, size_t capacity, con
 static void set_result(VerifyContext *ctx, XiCgenVerifyResult *out, XiCgenVerifyCategory category,
                        int line, const char *format, ...) {
     verify_fill(ctx, out, 0, sizeof(*out));
-    if (!verify_work(ctx, sizeof(out->category) + sizeof(out->line))) return;
+    if (!((ctx)->status == XI_CGEN_VERIFY_PASSED)) return;
     out->category = category; out->line = line;
     va_list args; va_start(args, format);
     verify_format_args(ctx, out->message, sizeof(out->message), format, args);
@@ -248,10 +246,10 @@ static bool file_scope_statement_shape(VerifyContext *ctx, const char *t, size_t
     if (first == 'v' || (n > 3 && first == 'p' && verify_read(ctx, t, 1) == 'h' && verify_read(ctx, t, 2) == 'i')) {
         size_t p = first == 'v' ? 1 : 3;
         if (p < n && isdigit((unsigned char) verify_read(ctx, t, p))) {
-            while (ctx->status == XI_CGEN_VERIFY_PASSED && (p < n && isdigit((unsigned char) verify_read(ctx, t, p))) && verify_work(ctx, 1))
+            while (ctx->status == XI_CGEN_VERIFY_PASSED && (p < n && isdigit((unsigned char) verify_read(ctx, t, p))) && ((ctx)->status == XI_CGEN_VERIFY_PASSED))
                 p++;
             /* Followed by an assignment or use, not a declarator like `vec x`. */
-            while (ctx->status == XI_CGEN_VERIFY_PASSED && (p < n && inline_space(verify_read(ctx, t, p), false)) && verify_work(ctx, 1))
+            while (ctx->status == XI_CGEN_VERIFY_PASSED && (p < n && inline_space(verify_read(ctx, t, p), false)) && ((ctx)->status == XI_CGEN_VERIFY_PASSED))
                 p++;
             if (p < n) {
                 unsigned char current = verify_read(ctx, t, p);
@@ -273,7 +271,7 @@ static bool file_scope_statement_shape(VerifyContext *ctx, const char *t, size_t
         {"break", sizeof("break") - 1},
         {"do", sizeof("do") - 1}
     };
-    for (size_t i = 0; ctx->status == XI_CGEN_VERIFY_PASSED && (i < sizeof(kws) / sizeof(kws[0])) && verify_work(ctx, 1); i++) {
+    for (size_t i = 0; ctx->status == XI_CGEN_VERIFY_PASSED && (i < sizeof(kws) / sizeof(kws[0])) && ((ctx)->status == XI_CGEN_VERIFY_PASSED); i++) {
         if (starts_with_kw(ctx, t, n, kws[i].text, kws[i].length))
             return true;
     }
@@ -291,11 +289,11 @@ static bool identifier_hygiene_at(VerifyContext *ctx, const char *s, size_t n,
     }
     if (current == '}') {
         long j = (long) i - 1;
-        while (ctx->status == XI_CGEN_VERIFY_PASSED && (j >= 0 && inline_space(verify_read(ctx, s, j), false)) && verify_work(ctx, 1))
+        while (ctx->status == XI_CGEN_VERIFY_PASSED && (j >= 0 && inline_space(verify_read(ctx, s, j), false)) && ((ctx)->status == XI_CGEN_VERIFY_PASSED))
             j--;
         if (j >= 0 && ident_char((unsigned char) verify_read(ctx, s, j))) {
             size_t k = i + 1;
-            while (ctx->status == XI_CGEN_VERIFY_PASSED && (k < n && inline_space(verify_read(ctx, s, k), false)) && verify_work(ctx, 1))
+            while (ctx->status == XI_CGEN_VERIFY_PASSED && (k < n && inline_space(verify_read(ctx, s, k), false)) && ((ctx)->status == XI_CGEN_VERIFY_PASSED))
                 k++;
             bool is_else = starts_with_kw(ctx, s + k, n - k, "else", sizeof("else") - 1);
             if (is_else || starts_with_kw(ctx, s + k, n - k, "return", sizeof("return") - 1)) {
@@ -329,7 +327,7 @@ static bool w4_mark_defined(VerifyContext *ctx, W4State *st, long n) {
         return true; /* out of range: ignore, do not crash */
     if ((size_t) n >= st->cap) {
         size_t newcap = st->cap ? st->cap * 2 : 1024;
-        while (ctx->status == XI_CGEN_VERIFY_PASSED && (newcap <= (size_t) n) && verify_work(ctx, 1))
+        while (ctx->status == XI_CGEN_VERIFY_PASSED && (newcap <= (size_t) n) && ((ctx)->status == XI_CGEN_VERIFY_PASSED))
             newcap *= 2;
         void *memory = st->seen;
         if (!verify_resize(ctx, &memory, newcap)) return false;
@@ -369,7 +367,7 @@ static bool is_control_kw(VerifyContext *ctx, const char *s, size_t len) {
         {"continue", sizeof("continue") - 1},
         {"default", sizeof("default") - 1}
     };
-    for (size_t i = 0; ctx->status == XI_CGEN_VERIFY_PASSED && (i < sizeof(kw) / sizeof(kw[0])) && verify_work(ctx, 1); i++)
+    for (size_t i = 0; ctx->status == XI_CGEN_VERIFY_PASSED && (i < sizeof(kw) / sizeof(kw[0])) && ((ctx)->status == XI_CGEN_VERIFY_PASSED); i++)
         if (len == kw[i].length && verify_compare(ctx, s, kw[i].text, len) == 0 &&
             ctx->status == XI_CGEN_VERIFY_PASSED)
             return true;
@@ -379,7 +377,7 @@ static bool is_control_kw(VerifyContext *ctx, const char *s, size_t len) {
 /* Parse the numeric id of a vN token [tok..end) (tok[0]=='v', rest digits). */
 static long vN_id(VerifyContext *ctx, const char *s, size_t tok, size_t end) {
     long id = 0;
-    for (size_t p = tok + 1; ctx->status == XI_CGEN_VERIFY_PASSED && (p < end) && verify_work(ctx, 1); p++) {
+    for (size_t p = tok + 1; ctx->status == XI_CGEN_VERIFY_PASSED && (p < end) && ((ctx)->status == XI_CGEN_VERIFY_PASSED); p++) {
         id = id * 10 + (verify_read(ctx, s, p) - '0');
         if (id > XI_CGEN_VERIFY_MAX_TEMP)
             return XI_CGEN_VERIFY_MAX_TEMP;
@@ -391,7 +389,7 @@ static long vN_id(VerifyContext *ctx, const char *s, size_t tok, size_t end) {
 static bool token_is_temp(VerifyContext *ctx, const char *s, size_t tok, size_t tend) {
     if (tend <= tok + 1 || verify_read(ctx, s, tok) != 'v')
         return false;
-    for (size_t d = tok + 1; ctx->status == XI_CGEN_VERIFY_PASSED && (d < tend) && verify_work(ctx, 1); d++)
+    for (size_t d = tok + 1; ctx->status == XI_CGEN_VERIFY_PASSED && (d < tend) && ((ctx)->status == XI_CGEN_VERIFY_PASSED); d++)
         if (!isdigit((unsigned char) verify_read(ctx, s, d)))
             return false;
     return true;
@@ -403,12 +401,12 @@ static bool token_is_temp(VerifyContext *ctx, const char *s, size_t tok, size_t 
  * precedes it). Coroutine frame fields `Type vN;` therefore count as defs. */
 static bool temp_is_def(VerifyContext *ctx, const char *s, size_t n, size_t tok, size_t tend) {
     size_t k = tend;
-    while (ctx->status == XI_CGEN_VERIFY_PASSED && (k < n && inline_space(verify_read(ctx, s, k), false)) && verify_work(ctx, 1))
+    while (ctx->status == XI_CGEN_VERIFY_PASSED && (k < n && inline_space(verify_read(ctx, s, k), false)) && ((ctx)->status == XI_CGEN_VERIFY_PASSED))
         k++;
     if (k < n && verify_read(ctx, s, k) == '=' && (k + 1 >= n || verify_read(ctx, s, k + 1) != '='))
         return true;
     long b = (long) tok - 1;
-    while (ctx->status == XI_CGEN_VERIFY_PASSED && (b >= 0 && inline_space(verify_read(ctx, s, b), false)) && verify_work(ctx, 1))
+    while (ctx->status == XI_CGEN_VERIFY_PASSED && (b >= 0 && inline_space(verify_read(ctx, s, b), false)) && ((ctx)->status == XI_CGEN_VERIFY_PASSED))
         b--;
     if (b < 0)
         return false;
@@ -417,7 +415,7 @@ static bool temp_is_def(VerifyContext *ctx, const char *s, size_t n, size_t tok,
     if (previous == '*') return true;
     if (ident_char(previous)) {
         long te = b + 1;
-        while (ctx->status == XI_CGEN_VERIFY_PASSED && (b >= 0 && ident_char((unsigned char) verify_read(ctx, s, b))) && verify_work(ctx, 1))
+        while (ctx->status == XI_CGEN_VERIFY_PASSED && (b >= 0 && ident_char((unsigned char) verify_read(ctx, s, b))) && ((ctx)->status == XI_CGEN_VERIFY_PASSED))
             b--;
         const char *pt = s + (b + 1);
         size_t plen = (size_t) (te - (b + 1));
@@ -430,7 +428,7 @@ static bool temp_is_def(VerifyContext *ctx, const char *s, size_t n, size_t tok,
 /* Is a temp token at [tok..tend) a struct-field / member access (foo.vN)? */
 static bool temp_is_field(VerifyContext *ctx, const char *s, size_t tok) {
     long b = (long) tok - 1;
-    while (ctx->status == XI_CGEN_VERIFY_PASSED && (b >= 0 && inline_space(verify_read(ctx, s, b), false)) && verify_work(ctx, 1))
+    while (ctx->status == XI_CGEN_VERIFY_PASSED && (b >= 0 && inline_space(verify_read(ctx, s, b), false)) && ((ctx)->status == XI_CGEN_VERIFY_PASSED))
         b--;
     if (b < 0) return false;
     unsigned char previous = verify_read(ctx, s, b);
@@ -447,7 +445,7 @@ static bool w4_record_token(VerifyContext *ctx, const char *s, size_t n,
     long id = vN_id(ctx, s, token, end);
     if (ctx->status != XI_CGEN_VERIFY_PASSED) return false;
     if (definition) {
-        if (!verify_work(ctx, 1)) return false;
+        if (!((ctx)->status == XI_CGEN_VERIFY_PASSED)) return false;
         st->line_defs[st->definition_count++] = id;
     } else {
         if (st->use_count == st->use_capacity) {
@@ -458,7 +456,7 @@ static bool w4_record_token(VerifyContext *ctx, const char *s, size_t n,
             if (!verify_resize(ctx, &memory, capacity * sizeof(*st->uses))) return false;
             st->uses = memory; st->use_capacity = capacity;
         }
-        if (!verify_work(ctx, 1)) return false;
+        if (!((ctx)->status == XI_CGEN_VERIFY_PASSED)) return false;
         st->uses[st->use_count++] = id;
     }
     return ctx->status == XI_CGEN_VERIFY_PASSED;
@@ -467,32 +465,32 @@ static bool w4_record_token(VerifyContext *ctx, const char *s, size_t n,
 /* Every use retains its source order until all same-line definitions are known.
  * The reusable vector belongs to this verification, never to borrowed input. */
 static bool w4_finish_line(VerifyContext *ctx, W4State *st, int lineno, XiCgenVerifyResult *out) {
-    for (size_t u = 0; ctx->status == XI_CGEN_VERIFY_PASSED && u < st->use_count && verify_work(ctx, 1); ++u) {
-        if (!verify_work(ctx, 1)) return false;
+    for (size_t u = 0; ctx->status == XI_CGEN_VERIFY_PASSED && u < st->use_count && ((ctx)->status == XI_CGEN_VERIFY_PASSED); ++u) {
+        if (!((ctx)->status == XI_CGEN_VERIFY_PASSED)) return false;
         long id = st->uses[u];
         bool same_line_def = false;
-        for (size_t d = 0; ctx->status == XI_CGEN_VERIFY_PASSED && d < st->definition_count && verify_work(ctx, 1); ++d)
-            if (verify_work(ctx, 1) && st->line_defs[d] == id) same_line_def = true;
+        for (size_t d = 0; ctx->status == XI_CGEN_VERIFY_PASSED && d < st->definition_count && ((ctx)->status == XI_CGEN_VERIFY_PASSED); ++d)
+            if (((ctx)->status == XI_CGEN_VERIFY_PASSED) && st->line_defs[d] == id) same_line_def = true;
         if (!same_line_def && !w4_is_defined(ctx, st, id)) {
             set_result(ctx, out, XI_CGEN_VERIFY_W4_FORWARD_REF, lineno,
                 "temporary v%ld used before it is defined", id);
             return true;
         }
     }
-    for (size_t d = 0; ctx->status == XI_CGEN_VERIFY_PASSED && d < st->definition_count && verify_work(ctx, 1); ++d)
-        if (verify_work(ctx, 1)) w4_mark_defined(ctx, st, st->line_defs[d]);
+    for (size_t d = 0; ctx->status == XI_CGEN_VERIFY_PASSED && d < st->definition_count && ((ctx)->status == XI_CGEN_VERIFY_PASSED); ++d)
+        if ((ctx)->status == XI_CGEN_VERIFY_PASSED) w4_mark_defined(ctx, st, st->line_defs[d]);
     return false;
 }
 
 /* If a line is `#define vN ...`, return the temp id it introduces, else -1. */
 static long pp_define_temp(VerifyContext *ctx, const char *s, size_t n) {
     size_t i = 0;
-    while (ctx->status == XI_CGEN_VERIFY_PASSED && (i < n && inline_space(verify_read(ctx, s, i), false)) && verify_work(ctx, 1))
+    while (ctx->status == XI_CGEN_VERIFY_PASSED && (i < n && inline_space(verify_read(ctx, s, i), false)) && ((ctx)->status == XI_CGEN_VERIFY_PASSED))
         i++;
     if (i >= n || verify_read(ctx, s, i) != '#')
         return -1;
     i++;
-    while (ctx->status == XI_CGEN_VERIFY_PASSED && (i < n && inline_space(verify_read(ctx, s, i), false)) && verify_work(ctx, 1))
+    while (ctx->status == XI_CGEN_VERIFY_PASSED && (i < n && inline_space(verify_read(ctx, s, i), false)) && ((ctx)->status == XI_CGEN_VERIFY_PASSED))
         i++;
     const char *def = "define";
     size_t dl = sizeof("define") - 1;
@@ -501,10 +499,10 @@ static long pp_define_temp(VerifyContext *ctx, const char *s, size_t n) {
     i += dl;
     if (i < n && ident_char((unsigned char) verify_read(ctx, s, i)))
         return -1; /* not the `define` keyword */
-    while (ctx->status == XI_CGEN_VERIFY_PASSED && (i < n && inline_space(verify_read(ctx, s, i), false)) && verify_work(ctx, 1))
+    while (ctx->status == XI_CGEN_VERIFY_PASSED && (i < n && inline_space(verify_read(ctx, s, i), false)) && ((ctx)->status == XI_CGEN_VERIFY_PASSED))
         i++;
     size_t tok = i;
-    while (ctx->status == XI_CGEN_VERIFY_PASSED && (i < n && ident_char((unsigned char) verify_read(ctx, s, i))) && verify_work(ctx, 1))
+    while (ctx->status == XI_CGEN_VERIFY_PASSED && (i < n && ident_char((unsigned char) verify_read(ctx, s, i))) && ((ctx)->status == XI_CGEN_VERIFY_PASSED))
         i++;
     if (token_is_temp(ctx, s, tok, i))
         return vN_id(ctx, s, tok, i);
@@ -515,15 +513,15 @@ static long pp_define_temp(VerifyContext *ctx, const char *s, size_t n) {
  * -1 closes (#endif), 0 otherwise. */
 static int pp_conditional_delta(VerifyContext *ctx, const char *s, size_t n) {
     size_t i = 0;
-    while (ctx->status == XI_CGEN_VERIFY_PASSED && (i < n && inline_space(verify_read(ctx, s, i), false)) && verify_work(ctx, 1))
+    while (ctx->status == XI_CGEN_VERIFY_PASSED && (i < n && inline_space(verify_read(ctx, s, i), false)) && ((ctx)->status == XI_CGEN_VERIFY_PASSED))
         i++;
     if (i >= n || verify_read(ctx, s, i) != '#')
         return 0;
     i++;
-    while (ctx->status == XI_CGEN_VERIFY_PASSED && (i < n && inline_space(verify_read(ctx, s, i), false)) && verify_work(ctx, 1))
+    while (ctx->status == XI_CGEN_VERIFY_PASSED && (i < n && inline_space(verify_read(ctx, s, i), false)) && ((ctx)->status == XI_CGEN_VERIFY_PASSED))
         i++;
     size_t tok = i;
-    while (ctx->status == XI_CGEN_VERIFY_PASSED && (i < n && ident_char((unsigned char) verify_read(ctx, s, i))) && verify_work(ctx, 1))
+    while (ctx->status == XI_CGEN_VERIFY_PASSED && (i < n && ident_char((unsigned char) verify_read(ctx, s, i))) && ((ctx)->status == XI_CGEN_VERIFY_PASSED))
         i++;
     size_t len = i - tok;
     const char *d = s + tok;
@@ -561,7 +559,7 @@ static bool verify_line_record(VerifyContext *ctx, VerifyLexState *lex, size_t e
         lex->line_ends = memory;
         lex->line_capacity = capacity;
     }
-    if (!verify_work(ctx, sizeof(*lex->line_ends) + 2)) return false;
+    if (!((ctx)->status == XI_CGEN_VERIFY_PASSED)) return false;
     lex->line_ends[lex->line_count++] = (uint32_t)end | (lex->line_masked ? VERIFY_LINE_MASKED : 0);
     lex->line_masked = false;
     return true;
@@ -580,7 +578,7 @@ static bool verify_neutralize(VerifyContext *ctx, const char *source, char *mask
      * Newlines remain unmasked, including escaped physical newlines. */
     VerifyLexMode state = lex->state;
     int line = lex->line, open_line = lex->open_line;
-    for (size_t i = 0; ctx->status == XI_CGEN_VERIFY_PASSED && (i < len) && verify_work(ctx, 1); i++) {
+    for (size_t i = 0; ctx->status == XI_CGEN_VERIFY_PASSED && (i < len) && ((ctx)->status == XI_CGEN_VERIFY_PASSED); i++) {
         char c = verify_read(ctx, source, i);
         if (ctx->status != XI_CGEN_VERIFY_PASSED) return false;
         if (c == '\n' && !verify_lex_newline(ctx, lex, lex->offset + i)) return false;
@@ -699,7 +697,7 @@ static bool verify_structure_bytes(VerifyContext *ctx, const char *lp, size_t ln
     bool check_w4 = !flow->have_w4 && flow->brace > 0;
     size_t token = 0; bool identifier = false, temporary = false;
     w4->definition_count = 0; w4->use_count = 0;
-    for (size_t i = 0; ctx->status == XI_CGEN_VERIFY_PASSED && i < ln && verify_work(ctx, 1); ++i) {
+    for (size_t i = 0; ctx->status == XI_CGEN_VERIFY_PASSED && i < ln && ((ctx)->status == XI_CGEN_VERIFY_PASSED); ++i) {
         unsigned char current = verify_read(ctx, lp, i);
         if (ctx->status != XI_CGEN_VERIFY_PASSED) return false;
         if (!flow->have_w2 && identifier_hygiene_at(ctx, lp, ln, i, current, scratch->detail)) {
@@ -743,10 +741,10 @@ static bool verify_structure_line(VerifyContext *ctx, const char *lp, size_t ln,
     VerifyScratch *scratch, VerifyStructureState *flow) {
     W4State *w4 = &scratch->w4;
     size_t t0 = 0;
-    while (ctx->status == XI_CGEN_VERIFY_PASSED && (t0 < ln && inline_space(verify_read(ctx, lp, t0), true)) && verify_work(ctx, 1))
+    while (ctx->status == XI_CGEN_VERIFY_PASSED && (t0 < ln && inline_space(verify_read(ctx, lp, t0), true)) && ((ctx)->status == XI_CGEN_VERIFY_PASSED))
         t0++;
     size_t tn = ln;
-    while (ctx->status == XI_CGEN_VERIFY_PASSED && (tn > t0 && inline_space(verify_read(ctx, lp, tn - 1), true)) && verify_work(ctx, 1))
+    while (ctx->status == XI_CGEN_VERIFY_PASSED && (tn > t0 && inline_space(verify_read(ctx, lp, tn - 1), true)) && ((ctx)->status == XI_CGEN_VERIFY_PASSED))
         tn--;
     const char *tp = lp + t0;
     size_t tlen = tn - t0;
@@ -821,8 +819,8 @@ XR_FUNC XiCgenVerifyStatus xr_compile_cgen_verify_output(XrCompileResources *res
         VerifyStructureState flow = {0}; flow.lineno = 1;
         size_t pos = 0;
         for (size_t line = 0; code && ctx->status == XI_CGEN_VERIFY_PASSED &&
-             line < first.line_count && verify_work(ctx, 1); ++line) {
-            if (!verify_work(ctx, sizeof(*first.line_ends))) break;
+             line < first.line_count && ((ctx)->status == XI_CGEN_VERIFY_PASSED); ++line) {
+            if (!((ctx)->status == XI_CGEN_VERIFY_PASSED)) break;
             uint32_t recorded = first.line_ends[line];
             size_t end = recorded & ~VERIFY_LINE_MASKED;
             if (end <= pos || end > len || end - pos > first.max_line) {
@@ -901,7 +899,7 @@ XR_FUNC XiCgenVerifyStatus xr_compile_cgen_verify_c90_output(XrCompileResources 
     if (!result) return ctx->status;
     XiCgenVerifyStatus status = XI_CGEN_VERIFY_PASSED;
 
-    for (size_t i = 0; ctx->status == XI_CGEN_VERIFY_PASSED && (i < len) && verify_work(ctx, 1); i++) {
+    for (size_t i = 0; ctx->status == XI_CGEN_VERIFY_PASSED && (i < len) && ((ctx)->status == XI_CGEN_VERIFY_PASSED); i++) {
         unsigned char c = (unsigned char) verify_read(ctx, c_src, i);
         unsigned char next = i + 1 < len ? (unsigned char) verify_read(ctx, c_src, i + 1) : 0;
         if (c == '\n')
@@ -947,7 +945,7 @@ XR_FUNC XiCgenVerifyStatus xr_compile_cgen_verify_c90_output(XrCompileResources 
             set_result(ctx, result, XI_CGEN_VERIFY_C90_RESTRICTED, line, "C99 inline residue");
             status = XI_CGEN_VERIFY_MALFORMED; goto finish;
         }
-        for (size_t t = 0; ctx->status == XI_CGEN_VERIFY_PASSED && (t < sizeof(forbidden) / sizeof(forbidden[0])) && verify_work(ctx, 1); t++) {
+        for (size_t t = 0; ctx->status == XI_CGEN_VERIFY_PASSED && (t < sizeof(forbidden) / sizeof(forbidden[0])) && ((ctx)->status == XI_CGEN_VERIFY_PASSED); t++) {
             size_t token_len = forbidden[t].length;
             if (i + token_len <= len && verify_compare(ctx, c_src + i, forbidden[t].token, token_len) == 0) {
                 set_result(ctx, result, XI_CGEN_VERIFY_C90_RESTRICTED, line, "%s", forbidden[t].detail);

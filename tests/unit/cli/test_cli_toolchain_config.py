@@ -33,6 +33,7 @@ cases = [
     ("wrong-target", 'schema = 1\n[target."not-a-real-target"]\nprovider = "auto"\n', "1"),
     ("valid-arm-msvc-target", 'schema = 1\n[target."aarch64-windows-msvc"]\nprovider = "msvc"\n', "0"),
     ("duplicate", 'schema = 1\nschema = 1\n', "1"),
+    ("depth-limit", 'schema = 1\nbogus = [[[[[[[[[1]]]]]]]]]\n', "2"),
 ]
 with tempfile.TemporaryDirectory(prefix="owned-中-", dir=parent) as directory:
     root = Path(directory)

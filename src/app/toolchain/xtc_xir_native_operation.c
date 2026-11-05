@@ -44,7 +44,8 @@ static XtcXirNativeOperationStatus native_fail(XtcXirNativeOperation *owner,
 static XtcXirNativeOperationStatus native_resource_status(XrCompileResourceStatus status) {
     switch (status) {
         case XR_COMPILE_RESOURCE_OK: return XTC_XIR_NATIVE_OK;
-        case XR_COMPILE_RESOURCE_BUDGET: return XTC_XIR_NATIVE_BUDGET;
+        case XR_COMPILE_RESOURCE_MEMORY_LIMIT: return XTC_XIR_NATIVE_MEMORY_LIMIT;
+        case XR_COMPILE_RESOURCE_OVERFLOW: return XTC_XIR_NATIVE_OVERFLOW;
         case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: return XTC_XIR_NATIVE_OUT_OF_MEMORY;
         default: return XTC_XIR_NATIVE_INVALID;
     }
@@ -52,9 +53,6 @@ static XtcXirNativeOperationStatus native_resource_status(XrCompileResourceStatu
 static bool native_resource(XtcXirNativeOperation *owner, XrCompileResourceStatus status) {
     if (status == XR_COMPILE_RESOURCE_OK) return true;
     native_fail(owner, native_resource_status(status), XTC_XIR_NATIVE_RESOURCE, status); return false;
-}
-static bool native_work(XtcXirNativeOperation *owner, uint64_t units) {
-    return native_resource(owner, xr_compile_resources_work(owner->resources, units));
 }
 static XtcXirNativeOperationStatus native_workspace_status(XtcXirWorkspaceStatus status) {
     switch (status) {
@@ -76,6 +74,8 @@ static XtcXirNativeOperationStatus native_invocation_status(XrXirInvocationStatu
         case XR_XIR_INVOCATION_UNSUPPORTED: return XTC_XIR_NATIVE_UNSUPPORTED;
         case XR_XIR_INVOCATION_BUDGET: return XTC_XIR_NATIVE_BUDGET;
         case XR_XIR_INVOCATION_OUT_OF_MEMORY: return XTC_XIR_NATIVE_OUT_OF_MEMORY;
+        case XR_XIR_INVOCATION_MEMORY_LIMIT: return XTC_XIR_NATIVE_MEMORY_LIMIT;
+        case XR_XIR_INVOCATION_OVERFLOW: return XTC_XIR_NATIVE_OVERFLOW;
         case XR_XIR_INVOCATION_IO: return XTC_XIR_NATIVE_IO;
         case XR_XIR_INVOCATION_TIMEOUT: return XTC_XIR_NATIVE_TIMEOUT;
         case XR_XIR_INVOCATION_CANCELLED: return XTC_XIR_NATIVE_CANCELLED;
@@ -126,6 +126,8 @@ static bool native_process(XtcXirNativeOperation *owner, XrProcessStatus status)
         case XTC_PROCESS_UNRESOLVED: mapped = XTC_XIR_NATIVE_UNRESOLVED; break;
         case XTC_PROCESS_BUDGET: mapped = XTC_XIR_NATIVE_BUDGET; break;
         case XTC_PROCESS_OUT_OF_MEMORY: mapped = XTC_XIR_NATIVE_OUT_OF_MEMORY; break;
+        case XTC_PROCESS_MEMORY_LIMIT: mapped = XTC_XIR_NATIVE_MEMORY_LIMIT; break;
+        case XTC_PROCESS_OVERFLOW: mapped = XTC_XIR_NATIVE_OVERFLOW; break;
         case XTC_PROCESS_IO: mapped = XTC_XIR_NATIVE_IO; break;
         case XTC_PROCESS_TIMEOUT: mapped = XTC_XIR_NATIVE_TIMEOUT; break;
         case XTC_PROCESS_CANCELLED: mapped = XTC_XIR_NATIVE_CANCELLED; break;
@@ -141,14 +143,15 @@ static bool native_path(XtcXirNativeOperation *owner, const char *directory, con
     XrOsIoPolicy policy = xr_compile_io_policy(owner->resources);
     XrOsIoStatus status = xr_path_join_owned(&policy, directory, leaf, out);
     if (status == XR_OS_IO_OK) { owner->strings[owner->string_count++] = *out; return true; }
-    XtcXirNativeOperationStatus mapped = status == XR_OS_IO_BUDGET ? XTC_XIR_NATIVE_BUDGET :
+    XtcXirNativeOperationStatus mapped = status == XR_OS_IO_MEMORY_LIMIT ? XTC_XIR_NATIVE_MEMORY_LIMIT :
+        status == XR_OS_IO_OVERFLOW ? XTC_XIR_NATIVE_OVERFLOW :
         status == XR_OS_IO_OUT_OF_MEMORY ? XTC_XIR_NATIVE_OUT_OF_MEMORY :
         status == XR_OS_IO_IO ? XTC_XIR_NATIVE_IO : XTC_XIR_NATIVE_INVALID;
     native_fail(owner, mapped, XTC_XIR_NATIVE_PATH, status); return false;
 }
 static bool native_length(XtcXirNativeOperation *owner, const char *text, size_t *length) {
     for (size_t i = 0;; ++i) {
-        if (!native_work(owner, 1)) return false;
+
         if (!text[i]) { *length = i; return true; }
         if (i == owner->path_limit) {
             native_fail(owner, XTC_XIR_NATIVE_BUDGET, XTC_XIR_NATIVE_SELF, 0); return false;
@@ -163,7 +166,7 @@ static bool native_join(XtcXirNativeOperation *owner, const char *a, const char 
     for (unsigned i = 0; i < 3; ++i) {
         if (!native_length(owner, parts[i], &lengths[i])) return false;
         if (lengths[i] > SIZE_MAX - total) {
-            native_fail(owner, XTC_XIR_NATIVE_BUDGET, XTC_XIR_NATIVE_SELF, 0); return false;
+            native_fail(owner, XTC_XIR_NATIVE_OVERFLOW, XTC_XIR_NATIVE_SELF, 0); return false;
         }
         total += lengths[i];
     }
@@ -172,15 +175,15 @@ static bool native_join(XtcXirNativeOperation *owner, const char *a, const char 
     owner->strings[owner->string_count++] = value;
     size_t offset = 0;
     for (unsigned i = 0; i < 3; ++i) {
-        if (!native_work(owner, lengths[i])) return false;
+
         memcpy(value + offset, parts[i], lengths[i]); offset += lengths[i];
     }
-    if (!native_work(owner, 1)) return false;
+
     value[offset] = 0; *out = value; return true;
 }
 static bool native_spec(XtcXirNativeOperation *owner, const XtcXirNativeOperationRequest *request,
     const char *executable, XrProcessSpec *spec) {
-    if (!native_work(owner, sizeof(*spec))) return false;
+
     xtc_process_spec_init(spec, executable, owner->limits.timeout_ms);
     const XtcXirWorkspacePaths *paths = xtc_xir_workspace_paths(owner->workspace);
     spec->completion_policy = XR_PROC_COMPLETE_ROOT;
@@ -251,7 +254,7 @@ static bool native_commands(XtcXirNativeOperation *owner, const XtcXirNativeOper
     for (unsigned i = 0; i < 5; ++i)
         if (!native_sdk(owner, xr_xir_runtime_sdk_file(request->sdk, archives[i], &spec.argv[9 + i]))) return false;
     for (uint32_t i = 0; i < request->library_count; ++i) {
-        if (!native_work(owner, sizeof(request->libraries[i]))) return false;
+
         if (!request->libraries[i].path || (request->libraries[i].kind != XR_XIR_INVOCATION_CRT &&
             request->libraries[i].kind != XR_XIR_INVOCATION_SYSTEM)) {
             native_fail(owner, XTC_XIR_NATIVE_INVALID, XTC_XIR_NATIVE_SELF, 0); return false;
@@ -285,7 +288,7 @@ XR_FUNC XtcXirNativeOperationStatus xtc_xir_native_operation_new(XrCompileResour
     owner->stage = XR_XIR_INVOCATION_NO_STAGE;
     owner->first = native_diagnostic(XTC_XIR_NATIVE_OK, XTC_XIR_NATIVE_SELF, 0, 0);
     owner->cleanup = owner->first;
-    if (!native_work(owner, sizeof(*limits))) { XtcXirNativeOperationStatus status = owner->first.status; xr_compile_resources_free(owner); return status; }
+
     owner->limits = *limits;
     XtcXirWorkspaceStatus created = xtc_xir_workspace_new(resources, workspace, &owner->workspace);
     if (created != XTC_XIR_WORKSPACE_OK) { xr_compile_resources_free(owner); return native_workspace_status(created); }

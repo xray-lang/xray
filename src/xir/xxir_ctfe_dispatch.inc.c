@@ -14,12 +14,10 @@ static XrXirCtfeStatus ctfe_call_step(CtfeCallExecution *execution,XirScalarCore
     CtfeCallFrame *frame=execution->top;ScalarRun *run=&frame->run;
     const XrXirInstruction *op=&run->function->instructions[frame->state.instruction];
     if (op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE || op->op==XR_XIR_INVOKE_INDIRECT) {
-        if (!scalar_compile_work(run,2)) return XR_XIR_CTFE_BUDGET;
         return ctfe_call_enter(execution,op,false);
     }
-    uint64_t work=0;if (!ctfe_opcode_work(op->op,&work)) return XR_XIR_CTFE_NOT_SUPPORTED;
-    if (!scalar_compile_work(run,work+1)) return XR_XIR_CTFE_BUDGET;
-    XrXirCtfeStatus flow=ctfe_tuple_flow_work(run,op,&execution->owned);if (flow!=XR_XIR_CTFE_OK) return flow;
+    if (!ctfe_opcode_admitted(op->op)) return XR_XIR_CTFE_NOT_SUPPORTED;
+    XrXirCtfeStatus flow=ctfe_tuple_flow_admit(run,op,&execution->owned);if (flow!=XR_XIR_CTFE_OK) return flow;
     if (op->op==XR_XIR_THROW || op->op==XR_XIR_CLEANUP_ERROR) {
         XrXirValue error=ctfe_nominal_operand(run,op->args[0]);
         return ctfe_error_begin(execution,&error,op->op==XR_XIR_THROW?CTFE_EXIT_ERROR:CTFE_EXIT_LOCAL_ERROR);
@@ -44,6 +42,6 @@ static XrXirCtfeStatus ctfe_call_step(CtfeCallExecution *execution,XirScalarCore
     if (ctfe_cell_opcode(op->op)) return ctfe_cell_step(run,&frame->state.instruction,&execution->owned);
     if (ctfe_string_opcode(run,op)) return ctfe_string_step(run,&frame->state.instruction,&execution->owned);
     XrXirRunStatus ran=xir_scalar_core_step(run,&frame->state.instruction,action);
-    return ran==XR_XIR_RUN_OK?XR_XIR_CTFE_OK:ran==XR_XIR_RUN_STEP_LIMIT?XR_XIR_CTFE_BUDGET:
+    return ran==XR_XIR_RUN_OK?XR_XIR_CTFE_OK:ran==XR_XIR_RUN_STEP_LIMIT?XR_XIR_CTFE_STEP_LIMIT:
         ran==XR_XIR_RUN_DIVIDE_BY_ZERO?XR_XIR_CTFE_DIVIDE_BY_ZERO:ran==XR_XIR_RUN_NUMERIC_RANGE?XR_XIR_CTFE_NUMERIC_RANGE:XR_XIR_CTFE_BAD_ARTIFACT;
 }

@@ -18,19 +18,14 @@
 #include "../base/xmalloc.h"
 #include <string.h>
 
-static bool interface_charge(XrXirCompileContext *b, uint64_t bytes, uint64_t work) {
-    if (bytes > SIZE_MAX ||!xir_compile_work(b, work)) return false;
-      return true;
-}
-static XrXirStatus interface_name(XrXirLiteral name, XrXirCompileContext *b) {
+static XrXirStatus interface_name(XrXirLiteral name) {
     if (!name.bytes || !name.length) return XR_XIR_BAD_STRUCTURE;
-    if (!interface_charge(b, (uint64_t)name.length + 1, name.length)) return XR_XIR_BUDGET;
+    if (!(((uint64_t)name.length + 1) <= SIZE_MAX)) return XR_XIR_BUDGET;
     return memchr(name.bytes, 0, name.length) ? XR_XIR_BAD_STRUCTURE : XR_XIR_OK;
 }
-static XrXirStatus interface_same_name(XrXirLiteral a, XrXirLiteral b,
-    XrXirCompileContext *budget, bool *same) {
+static XrXirStatus interface_same_name(XrXirLiteral a, XrXirLiteral b, bool *same) {
     *same = false;
-    if (!interface_charge(budget, 0, a.length == b.length ? (uint64_t)a.length + 1 : 1)) return XR_XIR_BUDGET;
+
     *same = a.length == b.length && !memcmp(a.bytes, b.bytes, a.length);
     return XR_XIR_OK;
 }
@@ -41,9 +36,9 @@ static XrXirStatus interface_method_shape(const XrXirInterfaceMethod *method,
         method->own_parameter_count > b->limits.parameters) return XR_XIR_BUDGET;
     uint32_t count = parent_count + method->own_parameter_count;
     uint64_t bytes = (uint64_t)method->own_parameter_count * sizeof(*method->constraints);
-    if (!interface_charge(b,bytes,method->own_parameter_count)) return XR_XIR_BUDGET;
+    if (!((bytes) <= SIZE_MAX)) return XR_XIR_BUDGET;
     b->limits.parameters -= method->own_parameter_count;
-    XrXirStatus status = interface_name(method->name,b);
+    XrXirStatus status = interface_name(method->name);
     if (status != XR_XIR_OK) return status;
     if (method->receiver || !xr_xir_callable_signature(types,method->signature)) return XR_XIR_BAD_TYPE;
     status = xr_xir_compile_type_expression_shape(b, types, method->signature, count);
@@ -58,10 +53,10 @@ static XrXirStatus interface_declaration(const XrXirInterfaceDeclaration *d,
     if (d->parameter_count > 65536 || d->parameter_count > b->limits.parameters) return XR_XIR_BUDGET;
     uint64_t bytes = (uint64_t)d->parameter_count * sizeof(*d->constraints) +
         (uint64_t)d->parent_count * sizeof(*d->parents) + (uint64_t)d->method_count * sizeof(*d->methods);
-    if (!interface_charge(b, bytes, (uint64_t)d->parameter_count + d->parent_count + d->method_count)) return XR_XIR_BUDGET;
+    if (!((bytes) <= SIZE_MAX)) return XR_XIR_BUDGET;
     b->limits.parameters -= d->parameter_count;
-    XrXirStatus status = interface_name(d->module, b);
-    if (status == XR_XIR_OK) status = interface_name(d->name, b);
+    XrXirStatus status = interface_name(d->module);
+    if (status == XR_XIR_OK) status = interface_name(d->name);
     if (status != XR_XIR_OK) return status;
     for (uint32_t p = 0; p < d->parameter_count; ++p) {
         status = xr_xir_compile_constraint_structure(b, types, d->constraints[p], d->parameter_count);
@@ -73,7 +68,7 @@ static XrXirStatus interface_declaration(const XrXirInterfaceDeclaration *d,
         if (status != XR_XIR_OK) return status;
         for (uint32_t earlier = 0; earlier < m; ++earlier) {
             bool same;
-            status = interface_same_name(method->name, d->methods[earlier].name, b, &same);
+            status = interface_same_name(method->name, d->methods[earlier].name, &same);
             if (status != XR_XIR_OK) return status;
             if (same) return XR_XIR_BAD_STRUCTURE;
         }
@@ -87,10 +82,10 @@ static XrXirStatus interface_parents(const XrXirInterfaceTable *table,
         if (app->declaration >= table->count || (!!app->arguments != !!app->argument_count)) return XR_XIR_BAD_STRUCTURE;
         const XrXirInterfaceDeclaration *parent = &table->declarations[app->declaration];
         if (app->argument_count != parent->parameter_count) return XR_XIR_BAD_TYPE;
-        if (!interface_charge(b, (uint64_t)app->argument_count * sizeof(*app->arguments), (uint64_t)app->argument_count + 1))
+        if (!(((uint64_t)app->argument_count * sizeof(*app->arguments)) <= SIZE_MAX))
             return XR_XIR_BUDGET;
         if (!parent->exported) {
-            bool same; XrXirStatus status = interface_same_name(d->module, parent->module, b, &same);
+            bool same; XrXirStatus status = interface_same_name(d->module, parent->module, &same);
             if (status != XR_XIR_OK) return status;
             if (!same) return XR_XIR_BAD_TYPE;
         }
@@ -114,11 +109,11 @@ static XrXirStatus interface_acyclic(const XrXirInterfaceTable *table, XrXirComp
     if (!color || !stack) { xr_compile_resources_free(color); xr_compile_resources_free(stack);  return allocation_status; }
     XrXirStatus status = XR_XIR_OK;
     for (uint32_t root = 0; root < table->count && status == XR_XIR_OK; ++root) {
-        if (!interface_charge(b, 0, 1)) { status = XR_XIR_BUDGET; break; }
+
         if (color[root]) continue;
         uint32_t depth = 1; stack[0] = (InterfaceWalk){root, 0}; color[root] = 1;
         while (depth) {
-            if (!interface_charge(b, 0, 1)) { status = XR_XIR_BUDGET; break; }
+
             InterfaceWalk *top = &stack[depth - 1];
             const XrXirInterfaceDeclaration *d = &table->declarations[top->declaration];
             if (top->next == d->parent_count) { color[top->declaration] = 2; --depth; continue; }
@@ -134,7 +129,7 @@ static XrXirStatus interface_structure(const XrXirInterfaceTable *table,
     const XrXirTypes *types, XrXirCompileContext *b) {
     if (!table) return XR_XIR_OK;
     if (!table->count || !table->declarations) return XR_XIR_BAD_STRUCTURE;
-    if (!interface_charge(b, sizeof(*table) + (uint64_t)table->count * sizeof(*table->declarations), table->count))
+    if (!((sizeof(*table) + (uint64_t)table->count * sizeof(*table->declarations)) <= SIZE_MAX))
         return XR_XIR_BUDGET;
     XrXirTypes descriptors = types ? *types : (XrXirTypes){0};
     descriptors.interfaces = table;
@@ -146,8 +141,8 @@ static XrXirStatus interface_structure(const XrXirInterfaceTable *table,
         if (status != XR_XIR_OK) return status;
         for (uint32_t j = 0; j < i; ++j) {
             bool module = false, name = false;
-            status = interface_same_name(d->module, table->declarations[j].module, b, &module);
-            if (status == XR_XIR_OK) status = interface_same_name(d->name, table->declarations[j].name, b, &name);
+            status = interface_same_name(d->module, table->declarations[j].module, &module);
+            if (status == XR_XIR_OK) status = interface_same_name(d->name, table->declarations[j].name, &name);
             if (status != XR_XIR_OK) return status;
             if (module && name) return XR_XIR_BAD_STRUCTURE;
         }
@@ -186,8 +181,7 @@ void xr_xir_compile_interfaces_free(XrXirInterfaceTable *table) {
     xr_compile_resources_free((void *)table->declarations); xr_compile_resources_free(table);
 }
 static bool interface_copy_name(const XrXirCompileContext *compile_context, XrXirLiteral source, XrXirLiteral *target, XrXirStatus *allocation_status) {
-    if ((uint64_t)source.length + 1 > SIZE_MAX ||
-        !xir_compile_work(compile_context, (uint64_t)source.length + 1)) {
+    if ((uint64_t)source.length + 1 > SIZE_MAX) {
         *allocation_status = XR_XIR_BUDGET; return false;
     }
     char *bytes = xir_compile_alloc(compile_context, (size_t)source.length + 1, allocation_status);
@@ -226,7 +220,7 @@ XrXirStatus xr_xir_compile_interfaces_copy_verified(const XrXirCompileContext *c
 
     if (!output) return XR_XIR_BAD_STRUCTURE;
     if (!table) { *output = NULL; return XR_XIR_OK; }
-    if (!xir_compile_work(compile_context, table->count)) return XR_XIR_BUDGET;
+
     XrXirInterfaceTable *copy = xir_compile_calloc(compile_context, 1, sizeof(*copy), &allocation_status);
     if (!copy) return allocation_status;
     XrXirInterfaceDeclaration *declarations = xir_compile_calloc(compile_context, table->count, sizeof(*declarations), &allocation_status);

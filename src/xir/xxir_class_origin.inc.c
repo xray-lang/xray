@@ -40,7 +40,7 @@ static XrXirValueStatus class_publication_grow(XrXirClassPublication *publicatio
     size_t capacity = publication->capacity ? publication->capacity * 2 : 4;
     size_t bytes = capacity * sizeof(*publication->values);
     if (bytes > admission->scratch_bytes ||
-        !class_publication_work(admission, publication->count * sizeof(*publication->values) + 2))
+        (!admission_is_compile(admission) && !class_publication_work(admission, publication->count * sizeof(*publication->values) + 2)))
         return XR_XIR_VALUE_LIMIT;
     XrXirValueStatus status = XR_XIR_VALUE_OK;
     XrXirValue *values = xr_xir_domain_allocate(admission->domain, bytes, &status);
@@ -59,7 +59,7 @@ static bool class_publication_edge(const XrXirValue *value, void *payload, void 
     ClassPublicationScan *scan = context;
     XrXirClassPublication *publication = scan->publication;
     XrXirValueAdmission *admission = publication->admission;
-    if (!class_publication_work(admission, 1)) { scan->status = XR_XIR_VALUE_LIMIT; return false; }
+    if ((!admission_is_compile(admission) && !class_publication_work(admission, 1))) { scan->status = XR_XIR_VALUE_LIMIT; return false; }
     if (!xr_xir_value_valid(value)) { scan->status = XR_XIR_VALUE_BAD_ARGUMENT; return false; }
     if (!owned_carrier_type((XrXirType)value->type)) return true;
     XirObject *object = object_pointer(value);
@@ -67,7 +67,7 @@ static bool class_publication_edge(const XrXirValue *value, void *payload, void 
         object->kind == XR_XIR_TYPE_CHANNEL)
         return true;
     for (size_t i = 0; i < publication->count; ++i) {
-        if (!class_publication_work(admission, 1)) { scan->status = XR_XIR_VALUE_LIMIT; return false; }
+        if ((!admission_is_compile(admission) && !class_publication_work(admission, 1))) { scan->status = XR_XIR_VALUE_LIMIT; return false; }
         if (object_pointer(&publication->values[i]) == object) return true;
     }
     bool identity = object->kind == XIR_OBJECT_CLASS;
@@ -82,7 +82,7 @@ static bool class_publication_edge(const XrXirValue *value, void *payload, void 
     /* Own-slot write, drop, commit classification and atomic write are prepaid;
      * Class additionally pays reservation CAS and possible rollback. The unused
      * rollback ticket stays charged. Retaining never grants a loan. */
-    if (!class_publication_work(admission, identity ? (object == publication->borrow_owner ? 16 : 6) : 3)) {
+    if ((!admission_is_compile(admission) && !class_publication_work(admission, identity ? (object == publication->borrow_owner ? 16 : 6) : 3))) {
         scan->status = XR_XIR_VALUE_LIMIT; return false;
     }
     if (publication->count == publication->capacity) {
@@ -163,18 +163,18 @@ static XrXirValueStatus class_publication_prepare_route(const XrXirValue *values
             return XR_XIR_VALUE_BAD_ARGUMENT;
         /* Prepay preparation, commit and drop checks even when the replacement
          * contains no owning object and the identity never enters the worklist. */
-        if (!class_publication_work(admission, 24)) return XR_XIR_VALUE_LIMIT;
+        if ((!admission_is_compile(admission) && !class_publication_work(admission, 24))) return XR_XIR_VALUE_LIMIT;
     }
     /* A legitimate empty preparation also pays its begin/publish/commit/drop
      * control work. Finite-prefix roots and occupied outputs are rejected first. */
-    if (!class_publication_work(admission, (uint64_t)count + 4)) return XR_XIR_VALUE_LIMIT;
+    if ((!admission_is_compile(admission) && !class_publication_work(admission, (uint64_t)count + 4))) return XR_XIR_VALUE_LIMIT;
     ClassPublicationScan scan = {&publication, XR_XIR_VALUE_OK};
     xr_xir_value_graph_begin();
     for (uint32_t i = 0; scan.status == XR_XIR_VALUE_OK && i < count; ++i)
         (void)class_publication_edge(&values[i], NULL, &scan);
     for (size_t i = 0; scan.status == XR_XIR_VALUE_OK && i < publication.count; ++i) {
         GraphEdgeBudget budget = {admission, XR_XIR_VALUE_OK};
-        if (!graph_edges_bounded(object_pointer(&publication.values[i]), class_publication_edge, &scan, &budget) &&
+        if (!graph_edges_bounded(object_pointer(&publication.values[i]), class_publication_edge, &scan, admission_is_compile(admission)?NULL:&budget) &&
             scan.status == XR_XIR_VALUE_OK)
             scan.status = budget.status == XR_XIR_VALUE_OK ? XR_XIR_VALUE_BAD_ARGUMENT : budget.status;
     }

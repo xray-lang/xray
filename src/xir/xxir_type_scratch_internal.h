@@ -33,35 +33,35 @@ static inline unsigned char *xir_type_scratch_pending(const XrXirCompileContext 
         if (!bytes) return NULL;
         xr_compile_resources_free(scratch->bytes);scratch->bytes=bytes;scratch->capacity=length;
     } else {
-        if (!xir_compile_work(context,length)) { *status=XR_XIR_BUDGET; return NULL; }
+
         memset(scratch->bytes,0,length);
     }
     return scratch->bytes;
 }
 /* A bitmap update reads one byte and writes that byte after charging both. */
-static inline XrXirStatus xir_type_pending_mark(const XrXirCompileContext *context,
+static inline XrXirStatus xir_type_pending_mark(
     unsigned char *pending, uint32_t index) {
-    if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
+
     pending[index/8] |= (unsigned char)(1u<<(index%8));
     return XR_XIR_OK;
 }
 /* Strict descending IDs preserve the existing first reachable error. Lower
  * children can update the current byte, so each pop reads fresh bitmap state. */
-static inline XrXirStatus xir_type_pending_next(const XrXirCompileContext *context,
+static inline XrXirStatus xir_type_pending_next(
     unsigned char *pending, uint32_t *ceiling, uint32_t *index, bool *found) {
     uint32_t at=*ceiling;
     while (at) {
         uint32_t byte=(at-1)/8;
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         unsigned value=pending[byte];
         if (!value) { at=byte*8; continue; }
         /* Three binary bit-selection steps, then one actual bitmap write. */
-        if (!xir_compile_work(context,3)) return XR_XIR_BUDGET;
+
         unsigned top=0, bits=value;
         if (bits>=16) { bits>>=4; top+=4; }
         if (bits>=4) { bits>>=2; top+=2; }
         if (bits>=2) ++top;
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         pending[byte]=(unsigned char)(value & ~(1u<<top));
         *index=byte*8+top; *ceiling=*index; *found=true;
         return XR_XIR_OK;

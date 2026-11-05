@@ -64,7 +64,7 @@ static XrXirStatus error_finite_lower(const EffectErrorFiniteRead *read,uint64_t
     const EffectErrorFinite *proof=read->proof;
     uint32_t lo=0,hi=proof->count;
     while(lo<hi) {
-        if(!xir_compile_work(read->work,4)) return XR_XIR_BUDGET;
+
         uint32_t mid=lo+(hi-lo)/2;
         if(proof->facts[mid].coordinate<coordinate) lo=mid+1;else hi=mid;
     }
@@ -76,9 +76,9 @@ static XrXirStatus error_finite_word(const EffectErrorFiniteRead *read,
     if(!output || !bits || bits>64 || coordinate>UINT64_MAX-bits) return XR_XIR_BAD_STRUCTURE;
     uint32_t at=0;uint64_t result=0;
     XrXirStatus status=error_finite_lower(read,coordinate,&at);if(status!=XR_XIR_OK) return status;
-    if(!xir_compile_work(read->work,1+sizeof(*output))) return XR_XIR_BUDGET;
+
     for(;at<proof->count && proof->facts[at].coordinate<coordinate+bits;++at) {
-        if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
+
         if(proof->facts[at].rank<read->limit)
             result|=UINT64_C(1)<<(proof->facts[at].coordinate-coordinate);
     }
@@ -102,7 +102,7 @@ static XrXirStatus error_finite_equation(const EffectErrorFiniteRead *read,
     uint32_t body=UINT32_MAX;
     XrXirStatus status=error_finite_context_read(read,function,&body);
     if(status!=XR_XIR_OK) return status;
-    if(!xir_compile_work(read->work,sizeof(output->predecessors))) return XR_XIR_BUDGET;
+
     *output=(EffectErrorEquationRead){.body=effect_body_owned_request(read->work,read->proof->material),
         .work=read->work,.atoms=read->proof->atoms,.context=function,.function=body,
         .atom_count=read->proof->atom_count,.words=read->proof->words,.owner=read,
@@ -131,7 +131,7 @@ static XrXirStatus error_finite_edge(const EffectErrorEquationRead *equation,
         EffectErrorFilterRead filter;status=error_equation_edge_possible(equation,edge,&filter,&possible);
         if(possible) result=1;
     } else {
-        if(!xir_compile_work(equation->work,sizeof(EffectErrorEdgeValueRead))) return XR_XIR_BUDGET;
+
         EffectErrorEdgeValueRead value={query->value,query->word,query->eligible};
         status=error_equation_edge_word_read(equation,edge,&value,&result,&possible);
     }
@@ -156,7 +156,7 @@ static XrXirStatus error_finite_successors(const EffectErrorEquationRead *equati
     }
     if(status!=XR_XIR_OK) return status;
     if(opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
-    if(!xir_compile_work(equation->work,1+sizeof(*count))) return XR_XIR_BUDGET;
+
     *count=opcode==XR_XIR_BRANCH || opcode==XR_XIR_INVOKE || opcode==XR_XIR_INVOKE_DEFAULT ||
         opcode==XR_XIR_INVOKE_INDIRECT || opcode==XR_XIR_TASK_AWAIT?2:
         opcode==XR_XIR_JUMP || opcode==XR_XIR_CLEANUP_REGISTER || opcode==XR_XIR_CLEANUP_LEAVE ||
@@ -164,7 +164,7 @@ static XrXirStatus error_finite_successors(const EffectErrorEquationRead *equati
     for(uint32_t side=0;side<*count;++side) {
         if(projected) status=effect_body_run_word(&body->read,ref,instruction,4+side,&targets[side]);
         else {
-            if(!xir_compile_work(equation->work,sizeof(targets[side]))) return XR_XIR_BUDGET;
+
             targets[side]=full.targets[side];
         }
         if(status!=XR_XIR_OK) return status;
@@ -200,31 +200,30 @@ static XrXirStatus error_finite_predecessor_index(const EffectErrorEquationRead 
     const EffectBodyFunctionHead *head=&equation->head;
     if (current->material!=equation->body.owner || current->input.material!=current->material ||
         current->input.work!=equation->work || head->block_count>64) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(equation->work,3)) return XR_XIR_BUDGET;
+
     if (index->ready && index->function==equation->function && index->blocks==head->block_count)
         return XR_XIR_OK;
-    if (!xir_compile_work(equation->work,sizeof(index->ready)+(uint64_t)head->block_count*sizeof(*index->rows)))
-        return XR_XIR_BUDGET;
+
     index->ready=false;
     memset(index->rows,0,(size_t)head->block_count*sizeof(*index->rows));
-    if(!xir_compile_work(equation->work,sizeof(index->local_writes))) return XR_XIR_BUDGET;
+
     index->local_writes=0;
     for (uint32_t b=0;b<head->block_count;++b) {
         const XrXirBlock *block=&head->blocks[b];
-        if (!xir_compile_work(equation->work,4)) return XR_XIR_BUDGET;
+
         if (!block->count || block->first>head->instruction_count ||
             block->count>head->instruction_count-block->first) return XR_XIR_BAD_STRUCTURE;
         /* Structural write positions expire with this callback-free view. No
          * Error, membership, rank or edge verdict is retained with them. */
         for(uint32_t i=block->first;i<block->first+block->count;++i) {
-            if(!xir_compile_work(equation->work,2)) return XR_XIR_BUDGET;
+
             XrXirOp opcode=XR_XIR_INVALID;
             XrXirStatus status=error_equation_current_opcode(equation,i,&opcode);
             if(status!=XR_XIR_OK) return status;
-            if(!xir_compile_work(equation->work,3)) return XR_XIR_BUDGET;
+
             if(opcode==XR_XIR_LOCAL_WRITE || opcode==XR_XIR_OWNED_LOCAL_WRITE ||
                 opcode==XR_XIR_SCALAR_LOCAL_WRITE) {
-                if(!xir_compile_work(equation->work,sizeof(index->local_writes))) return XR_XIR_BUDGET;
+
                 index->local_writes|=UINT64_C(1)<<b;
             }
         }
@@ -233,17 +232,16 @@ static XrXirStatus error_finite_predecessor_index(const EffectErrorEquationRead 
         if (status!=XR_XIR_OK) return status;
         if (block->panic) {
             if (block->panic>=head->block_count) return XR_XIR_BAD_STRUCTURE;
-            if (!xir_compile_work(equation->work,3)) return XR_XIR_BUDGET;
+
             index->rows[block->panic]|=UINT64_C(1)<<b;
         }
         for (uint32_t side=0;side<count;++side) {
             if (targets[side]>=head->block_count) return XR_XIR_BAD_STRUCTURE;
-            if (!xir_compile_work(equation->work,3)) return XR_XIR_BUDGET;
+
             index->rows[targets[side]]|=UINT64_C(1)<<b;
         }
     }
-    if (!xir_compile_work(equation->work,sizeof(index->function)+sizeof(index->blocks)+sizeof(index->ready)))
-        return XR_XIR_BUDGET;
+
     index->function=equation->function;index->blocks=head->block_count;index->ready=true;
     return XR_XIR_OK;
 }
@@ -266,17 +264,17 @@ static XrXirStatus error_finite_predecessors(const EffectErrorEquationRead *equa
     if(read->current->work!=read->work || read->current->proof!=proof ||
         equation->context>=proof->contexts) return XR_XIR_BAD_STRUCTURE;
     const EffectErrorFiniteRow *row=&proof->rows[equation->context];
-    if(!xir_compile_work(read->work,4)) return XR_XIR_BUDGET;
+
     if(row->blocks!=equation->head.block_count || row->first>UINT64_MAX-row->blocks)
         return XR_XIR_BAD_STRUCTURE;
     if (row->blocks<=64) {
         if (query->to>=row->blocks) return XR_XIR_BAD_STRUCTURE;
         XrXirStatus status=error_finite_predecessor_index(equation,read->current);
         if (status!=XR_XIR_OK) return status;
-        if (!xir_compile_work(read->work,sizeof(uint64_t))) return XR_XIR_BUDGET;
+
         uint64_t mask=read->current->predecessors.rows[query->to];
         while (mask) {
-            if (!xir_compile_work(read->work,sizeof(uint32_t)+4)) return XR_XIR_BUDGET;
+
             uint32_t b=(uint32_t)__builtin_ctzll(mask);mask&=mask-1;
             if (b>=row->blocks) return XR_XIR_BAD_STRUCTURE;
             bool reachable=false;status=error_finite_reachable(read,equation->context,b,&reachable);
@@ -288,12 +286,12 @@ static XrXirStatus error_finite_predecessors(const EffectErrorEquationRead *equa
     uint32_t at=0;XrXirStatus status=error_finite_lower(read,row->first,&at);
     if(status!=XR_XIR_OK) return status;
     for(;at<proof->count;++at) {
-        if(!xir_compile_work(read->work,4+sizeof(uint64_t)+sizeof(uint32_t))) return XR_XIR_BUDGET;
+
         const EffectErrorFiniteFact *fact=&proof->facts[at];
         if(fact->coordinate>=row->first+row->blocks) break;
         if(fact->coordinate<row->first) return XR_XIR_BAD_STRUCTURE;
         if(fact->rank>=read->limit) continue;
-        if(!xir_compile_work(read->work,sizeof(uint32_t))) return XR_XIR_BUDGET;
+
         uint32_t block=(uint32_t)(fact->coordinate-row->first);
         status=error_finite_predecessor_block(equation,query,block);
         if(status!=XR_XIR_OK) return status;
@@ -341,7 +339,7 @@ static XrXirStatus error_finite_rhs_equation(const EffectErrorFiniteRead *read,
     XrXirStatus status=XR_XIR_OK;
     uint64_t local=coordinate-row->first,summary=row->end-row->first-(uint64_t)proof->words*64;
     if(local<row->blocks) {
-        if(!xir_compile_work(read->work,sizeof(const EffectErrorEquationRead *))) return XR_XIR_BUDGET;
+
         EffectErrorFiniteEdgeQuery query={.to=(uint32_t)local,.reach=true,.result=local?0:1};
         status=error_finite_predecessors(equation,&query);*output=query.result;*bits=1;return status;
     }
@@ -352,7 +350,7 @@ static XrXirStatus error_finite_rhs_equation(const EffectErrorFiniteRead *read,
     bool reachable=false;status=error_finite_reachable(read,function,block,&reachable);
     if(status!=XR_XIR_OK) return status;
     if(!reachable) { *output=0;return XR_XIR_OK; }
-    if(!xir_compile_work(read->work,1+sizeof(const EffectErrorEquationRead *))) return XR_XIR_BUDGET;
+
     EffectErrorFiniteEdgeQuery query={.to=block,.value=value,.word=word,.eligible=eligible?equation:NULL};
     XrXirType type=XR_XIR_UNIT;
     if(!eligible) {
@@ -361,7 +359,7 @@ static XrXirStatus error_finite_rhs_equation(const EffectErrorFiniteRead *read,
         if(!active) { *output=0;return XR_XIR_OK; }
     } else if(!block && value<equation->head.parameter_count) {
         if(!equation->head.parameters) return XR_XIR_BAD_STRUCTURE;
-        if(!xir_compile_work(read->work,sizeof(type))) return XR_XIR_BUDGET;
+
         type=equation->head.parameters[value];
     }
     if(!block && value<equation->head.parameter_count) {
@@ -382,9 +380,9 @@ static XrXirStatus error_finite_rhs(const EffectErrorFiniteRead *read,
  * the independent reader above and never consumes this eligibility. */
 static XrXirStatus error_finite_rhs_walk(const EffectErrorFiniteRead *read,
     const EffectErrorEquationRead *equation,uint32_t function,uint64_t coordinate,uint64_t *output,uint32_t *bits) {
-    if(!xir_compile_work(read->work,1)) return XR_XIR_BUDGET;
+
     if(!read->current) return error_finite_rhs(read,function,coordinate,output,bits);
-    if(!xir_compile_work(read->work,11)) return XR_XIR_BUDGET;
+
     const EffectErrorFinite *proof=read->proof;
     if(equation->owner!=read || equation->work!=read->work || equation->context!=function ||
         equation->body.owner!=proof->material || equation->body.current!=&read->current->input ||
@@ -414,12 +412,12 @@ static XrXirStatus error_finite_atoms(const XrXirCompileContext *work,const Effe
         status=effect_role_range(work,proof->material->generics,proof->functions,sizeof(*proof->material->generics));
         if(status!=XR_XIR_OK) return status;
         for(uint32_t f=0;f<proof->functions;++f) {
-            if(!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+
             if(proof->material->generics[f].parameter_count>parameters) parameters=proof->material->generics[f].parameter_count;
         }
     }
     for(uint32_t t=0;t<source_types;++t) {
-        if(!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+
         const XrXirTypeNode *node=&types->nodes[t];if(node->kind!=XR_XIR_TYPE_NOMINAL) continue;
         if(!nominals || node->nominal.declaration>=nominals->count) return XR_XIR_BAD_STRUCTURE;
         uint32_t d=node->nominal.declaration;
@@ -428,7 +426,7 @@ static XrXirStatus error_finite_atoms(const XrXirCompileContext *work,const Effe
         uint32_t variants=nominals->declarations?nominals->declarations[d].variant_count:nominals->identities[d].variant_count;
         if(variants>proof->atom_count-at) return XR_XIR_BAD_STRUCTURE;
         for(uint32_t v=0;v<variants;++v) {
-            if(!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+
             if(proof->atoms[at].type!=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+t) || proof->atoms[at].variant!=v)
                 return XR_XIR_BAD_STRUCTURE;
             ++at;
@@ -436,20 +434,20 @@ static XrXirStatus error_finite_atoms(const XrXirCompileContext *work,const Effe
     }
     if(parameters>proof->atom_count-at) return XR_XIR_BAD_STRUCTURE;
     for(uint32_t p=0;p<parameters;++p,++at) {
-        if(!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+
         if(proof->atoms[at].type!=(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+p) ||
             proof->atoms[at].variant!=XR_XIR_ERROR_SYMBOLIC_VARIANT) return XR_XIR_BAD_STRUCTURE;
     }
     uint32_t seeded=at;
     for(;at<proof->atom_count;++at) {
-        if(!xir_compile_work(work,6)) return XR_XIR_BUDGET;
+
         const EffectErrorAtom *atom=&proof->atoms[at];uint32_t type=(uint32_t)atom->type;
         if(type<XR_XIR_CONSTRUCTED_TYPE_BASE || type>=XR_XIR_CONSTRUCTED_TYPE_LIMIT ||
             type-XR_XIR_CONSTRUCTED_TYPE_BASE<source_types ||
             type-XR_XIR_CONSTRUCTED_TYPE_BASE>=types->count || !xr_xir_type_is_enum(types,atom->type) ||
             atom->variant>=error_variant_count(types,type-XR_XIR_CONSTRUCTED_TYPE_BASE)) return XR_XIR_BAD_STRUCTURE;
         for(uint32_t prior=seeded;prior<at;++prior) {
-            if(!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+
             if(proof->atoms[prior].type==atom->type && proof->atoms[prior].variant==atom->variant)
                 return XR_XIR_BAD_STRUCTURE;
         }
@@ -501,7 +499,7 @@ static XrXirStatus error_finite_geometry(const XrXirCompileContext *work,const E
         first+=size;
     }
     for(uint32_t i=0;i<proof->count;++i) {
-        if(!xir_compile_work(work,4)) return XR_XIR_BUDGET;
+
         if(!proof->facts[i].rank || proof->facts[i].rank==UINT32_MAX || proof->facts[i].coordinate>=first ||
             (i && proof->facts[i-1].coordinate>=proof->facts[i].coordinate)) return XR_XIR_BAD_STRUCTURE;
     }
@@ -520,9 +518,7 @@ static XrXirStatus error_finite_view_open(const XrXirCompileContext *work,
     XrXirStatus status=error_finite_geometry(work,proof);if(status!=XR_XIR_OK) return status;
     EffectBodyCurrentRead input={0};
     status=effect_body_current_open(work,proof->material,&input);if(status!=XR_XIR_OK) return status;
-    uint64_t stores=sizeof(output->work)+sizeof(output->proof)+sizeof(output->material)+
-        sizeof(output->input)+sizeof(output->predecessors.ready);
-    if(!xir_compile_work(work,stores)) return XR_XIR_BUDGET;
+
     output->work=work;output->proof=proof;output->material=proof->material;
     output->input=input;output->predecessors.ready=false;
     return XR_XIR_OK;

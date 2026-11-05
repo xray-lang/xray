@@ -26,7 +26,7 @@ static XrXirStatus view_access_epoch_select(ViewAccessEpoch *q,uint32_t value,ui
 static XrXirStatus view_access_epoch_match(ViewAccessEpoch *q,uint32_t selection,bool *same) {
     *same=false;uint32_t index=0;
     for (uint32_t p=selection;p;p=q->selections.pairs[p-1u].second) {
-        if (!xir_compile_work(q->access->resolver->check.context,1)) return XR_XIR_BUDGET;
+
         if (index>=q->target->selection_count || q->selections.pairs[p-1u].first!=q->target->selection[index++])
             return XR_XIR_OK;
     }
@@ -39,7 +39,7 @@ static XrXirStatus view_access_epoch_tuple(ViewAccessEpoch *q,const XrXirInstruc
     if (context.first && selection.first>=tuple->parameter_count) return XR_XIR_BAD_STRUCTURE;
     uint32_t operand=0;
     for (uint32_t p=0;p<tuple->parameter_count;++p) {
-        if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;
+
         XrXirType type=tuple->parameters[p].type;if (type==XR_XIR_UNIT) continue;
         uint32_t value=body->operands[op->args[0]+operand++];
         if (!view_flags_at(c->module->types,c->flags,type) || (context.first && selection.first!=p)) continue;
@@ -52,19 +52,19 @@ static XrXirStatus view_access_epoch_phi(ViewAccessEpoch *q,uint32_t value,
     const XrXirInstruction *op,ViewOriginPair context) {
     ViewAccess *a=q->access;uint32_t instruction=value-a->body->parameter_count,block=UINT32_MAX,pred=UINT32_MAX;
     for (uint32_t b=0;b<a->body->block_count;++b) {
-        if (!xir_compile_work(a->resolver->check.context,1)) return XR_XIR_BUDGET;
+
         if (instruction>=a->body->blocks[b].first && instruction-a->body->blocks[b].first<a->body->blocks[b].count) block=b;
     }
     if (block==UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i=0;i<q->target->choice_count;++i) {
-        if (!xir_compile_work(a->resolver->check.context,1)) return XR_XIR_BUDGET;
+
         if (q->target->choices[i].block==block) pred=q->target->choices[i].predecessor;
     }
     /* An unobserved PHI belongs to another conditional origin. Cyclic choices
      * were already rejected before entering this value-flow query. */
     if (pred==UINT32_MAX) return XR_XIR_OK;
     for (uint32_t p=0;p<op->args[1];p+=2) {
-        if (!xir_compile_work(a->resolver->check.context,1)) return XR_XIR_BUDGET;
+
         if (a->body->operands[op->args[0]+p]==pred)
             return view_access_epoch_push(q,a->body->operands[op->args[0]+p+1u],context.first,context.second!=0);
     }
@@ -73,7 +73,7 @@ static XrXirStatus view_access_epoch_phi(ViewAccessEpoch *q,uint32_t value,
 static XrXirStatus view_access_scope_window(ViewAccess *a,const XrXirViewLoanOrigin *target,uint32_t value,bool *current);
 static XrXirStatus view_access_epoch_step(ViewAccessEpoch *q,ViewOriginPair task) {
     ViewAccess *a=q->access;uint32_t value=task.first;ViewOriginPair context=q->contexts.pairs[task.second];
-    if (!xir_compile_work(a->resolver->check.context,2)) return XR_XIR_BUDGET;
+
     if (value<a->body->parameter_count) return XR_XIR_OK;
     bool prefix=false;XrXirStatus status=view_access_scope_window(a,q->target,value,&prefix);if (status!=XR_XIR_OK) return status;
     context.second|=!prefix;
@@ -118,7 +118,7 @@ typedef struct ViewAccessRootFlow {
 } ViewAccessRootFlow;
 static XrXirStatus view_access_root_flow_push(ViewAccess *a,ViewAccessRootFlow *q,uint32_t block,uint8_t state) {
     if (block>=a->body->block_count) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(a->resolver->check.context,6)) return XR_XIR_BUDGET;
+
     uint8_t old=a->seen[block];if (!state || (old&state)==state) return XR_XIR_OK;
     a->seen[block]|=state;if (old&4u) return XR_XIR_OK;
     XR_CHECK(q->count<a->body->block_count,"each root-flow block occupies the existing queue at most once");
@@ -129,7 +129,7 @@ static XrXirStatus view_access_root_flow_block(ViewAccess *a,ViewAccessRootFlow 
     const XrXirBlock *body=a->body->blocks+block;
     uint8_t state=a->seen[block]&3u,panic=state;
     for (uint32_t i=body->first;i-body->first<body->count;++i) {
-        if (!xir_compile_work(a->resolver->check.context,4)) return XR_XIR_BUDGET;
+
         if (i==q->observer) q->observed|=state;
         if (i==q->target) state=1u;
         if (i==q->value) state=2u;
@@ -148,14 +148,14 @@ static XrXirStatus view_access_root_flow(ViewAccess *a,uint32_t value,uint32_t t
     *current=false;ViewRootCheck *c=&a->resolver->check;
     uint64_t before=c->reserved,fixed=sizeof(ViewAccessRootFlow);
     if (before>c->context->limits.frame_bytes || fixed>c->context->limits.frame_bytes-before) return XR_XIR_BUDGET;
-    if (!xir_compile_work(c->context,fixed+a->body->block_count)) return XR_XIR_BUDGET;
+
     c->reserved+=fixed;
     /* Graph construction has finished; these per-function buffers are idle. */
     memset(a->seen,0,a->body->block_count);
     ViewAccessRootFlow q={.value=value-a->body->parameter_count,.target=target-a->body->parameter_count,.observer=observer};
     XrXirStatus status=view_access_root_flow_push(a,&q,0,1u);
     while (q.count && status==XR_XIR_OK) {
-        if (!xir_compile_work(c->context,4)) {status=XR_XIR_BUDGET;break;}
+
         uint32_t block=a->queue[q.head];q.head=q.head+1u==a->body->block_count?0:q.head+1u;
         --q.count;a->seen[block]&=3u;status=view_access_root_flow_block(a,&q,block);
     }
@@ -169,7 +169,7 @@ static XrXirStatus view_access_root_window(ViewAccess *a,uint32_t value,uint32_t
     if (value<a->body->parameter_count) return XR_XIR_OK;
     uint32_t producer=value-a->body->parameter_count,root=target-a->body->parameter_count;
     for (uint32_t b=0;b<a->body->block_count;++b) {
-        if (!xir_compile_work(a->resolver->check.context,1)) return XR_XIR_BUDGET;
+
         const XrXirBlock *block=a->body->blocks+b;
         if (observer<block->first || observer-block->first>=block->count) continue;
         if (producer>=block->first && producer<observer) {
@@ -191,18 +191,18 @@ static XrXirStatus view_access_scope_window(ViewAccess *a,const XrXirViewLoanOri
 static XrXirStatus view_access_root_local(ViewAccess *a,uint32_t local,bool *unchanged) {
     *unchanged=true;
     for (uint32_t i=0;i<a->body->instruction_count;++i) {
-        if (!xir_compile_work(a->resolver->check.context,1)) return XR_XIR_BUDGET;
+
         const XrXirInstruction *op=a->body->instructions+i;
         if ((op->op==XR_XIR_LOCAL_WRITE || op->op==XR_XIR_OWNED_LOCAL_WRITE) && op->args[0]==local) *unchanged=false;
     }
     return XR_XIR_OK;
 }
 static XrXirStatus view_access_root_chain(ViewAccess *a,ViewAccessRootEpoch *q,bool *current,bool *phi) {
-    *current=false;*phi=false;ViewRootCheck *c=&a->resolver->check;
+    *current=false;*phi=false;
     XrXirStatus status=XR_XIR_OK;
     while (q->remaining) {
         --q->remaining;
-        if (!xir_compile_work(c->context,1)) {status=XR_XIR_BUDGET;break;}
+
         bool prefix=false;status=view_access_root_window(a,q->value,q->target,q->observer,&prefix);
         if (status!=XR_XIR_OK || !prefix || q->value<a->body->parameter_count) break;
         if (q->value==q->target) {*current=true;break;}
@@ -236,9 +236,9 @@ static XrXirStatus view_access_root_phi_push(ViewAccessRootPhi *q,uint32_t value
     return view_root_intern(&q->access->resolver->check,&q->tasks,(ViewOriginPair){value,observer},&ignored);
 }
 static XrXirStatus view_access_root_phi_edges(ViewAccessRootPhi *q,const ViewAccessRootEpoch *incoming) {
-    ViewAccess *a=q->access;ViewRootCheck *c=&a->resolver->check;uint32_t block=UINT32_MAX;
+    ViewAccess *a=q->access;uint32_t block=UINT32_MAX;
     for (uint32_t b=0;b<a->body->block_count;++b) {
-        if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;
+
         const XrXirBlock *candidate=a->body->blocks+b;
         if (incoming->observer>=candidate->first && incoming->observer-candidate->first<candidate->count) block=b;
     }
@@ -246,7 +246,7 @@ static XrXirStatus view_access_root_phi_edges(ViewAccessRootPhi *q,const ViewAcc
     const XrXirInstruction *op=a->body->instructions+incoming->observer;
     if (op->op!=XR_XIR_PHI || !op->args[1]) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t p=0;p<op->args[1];p+=2) {
-        if (!xir_compile_work(c->context,4)) return XR_XIR_BUDGET;
+
         uint32_t pred=a->body->operands[op->args[0]+p];
         if (pred>=a->body->block_count) return XR_XIR_BAD_STRUCTURE;
         const XrXirBlock *source=a->body->blocks+pred;
@@ -277,7 +277,7 @@ static XrXirStatus view_access_root_phi(ViewAccess *a,const ViewAccessRootEpoch 
     *current=false;ViewRootCheck *c=&a->resolver->check;
     uint64_t before=c->reserved,fixed=sizeof(ViewAccessRootPhi);
     if (before>c->context->limits.frame_bytes || fixed>c->context->limits.frame_bytes-before) return XR_XIR_BUDGET;
-    if (!xir_compile_work(c->context,fixed)) return XR_XIR_BUDGET;
+
     c->reserved+=fixed;ViewAccessRootPhi q={.access=a,.target=entry->target};
     XrXirStatus status=view_access_root_phi_edges(&q,entry);
     /* Every admitted edge preserves the newest root epoch while tracing an
@@ -300,7 +300,7 @@ static XrXirStatus view_access_root_epoch(ViewAccess *a,const XrXirViewRootEvent
     if (a->body->instructions[root->root_value-a->body->parameter_count].op!=XR_XIR_CELL_NEW) return XR_XIR_BAD_STRUCTURE;
     ViewRootCheck *c=&a->resolver->check;uint64_t before=c->reserved,fixed=2u*sizeof(ViewAccessRootEpoch);
     if (before>c->context->limits.frame_bytes || fixed>c->context->limits.frame_bytes-before) return XR_XIR_BUDGET;
-    if (!xir_compile_work(c->context,fixed)) return XR_XIR_BUDGET;
+
     uint64_t values=(uint64_t)a->body->parameter_count+a->body->instruction_count;
     if (values>UINT32_MAX) return XR_XIR_BUDGET;
     c->reserved+=fixed;ViewAccessRootEpoch q={queried,root->root_value,a->instruction,(uint32_t)values};
@@ -314,12 +314,12 @@ static XrXirStatus view_access_root_older(ViewAccess *a,uint32_t value,uint32_t 
     *older=false;ViewRootCheck *c=&a->resolver->check;
     uint64_t before=c->reserved,fixed=sizeof(ViewAccessRootEpoch);
     if (before>c->context->limits.frame_bytes || fixed>c->context->limits.frame_bytes-before) return XR_XIR_BUDGET;
-    if (!xir_compile_work(c->context,fixed)) return XR_XIR_BUDGET;
+
     c->reserved+=fixed;ViewAccessRootEpoch q={.value=value,.target=target,.remaining=a->body->instruction_count};
     XrXirStatus status=XR_XIR_OK;
     while (q.remaining && q.value>=a->body->parameter_count && q.value!=target) {
         --q.remaining;
-        if (!xir_compile_work(c->context,1)) {status=XR_XIR_BUDGET;break;}
+
         if (xr_xir_place_kind(a->body,q.value)!=XR_XIR_PLACE_NONE) break;
         const XrXirInstruction *op=a->body->instructions+q.value-a->body->parameter_count;
         /* Observe Cell identities directly. A PHI of view owners remains
@@ -349,7 +349,7 @@ static XrXirStatus view_access_epoch_separation(ViewAccess *a,const XrXirViewRoo
     for (uint32_t side=0;side<2;++side) {
         const XrXirViewRootEvent *root=side?right:left;
         for (uint32_t p=0;p<root->step_count;++p) {
-            if (!xir_compile_work(a->resolver->check.context,1)) return XR_XIR_BUDGET;
+
             if (xr_xir_type_is_class(a->resolver->check.module->types,root->steps[p].container)) return XR_XIR_OK;
         }
     }

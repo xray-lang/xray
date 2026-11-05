@@ -18,11 +18,13 @@ static void invocation_profile_free(InvocationProfile *profile) {
 static bool invocation_profile_suffix(XrXirInvocation *owner, const char *path, const char *suffix, char **output) {
     size_t a = 0, b = 0;
     if (!invocation_length(owner, path, &a) || !invocation_length(owner, suffix, &b)) return false;
-    if (a > SIZE_MAX - b - 1 || a + b > owner->limits.dependencies.path_bytes)
+    if (a > SIZE_MAX - b - 1)
+        return invocation_fail(owner, XR_XIR_INVOCATION_OVERFLOW, XR_XIR_INVOCATION_SELF, 0);
+    if (a + b > owner->limits.dependencies.path_bytes)
         return invocation_fail(owner, XR_XIR_INVOCATION_BUDGET, XR_XIR_INVOCATION_SELF, 0);
     char *text = NULL;
     bool okay = invocation_resource(owner, xr_compile_resources_alloc(owner->context.resources, a + b + 1, (void **)&text));
-    if (okay) okay = invocation_copy(owner, text, path, a) && invocation_copy(owner, text + a, suffix, b + 1);
+    if (okay) okay = invocation_copy(owner,  text, path, a) && invocation_copy(owner,  text + a, suffix, b + 1);
     if (okay) *output = text; else xr_compile_resources_free(text);
     return okay;
 }
@@ -68,7 +70,7 @@ static bool invocation_profile_configs(XrXirInvocation *owner) {
             okay = invocation_fail(owner, XR_XIR_INVOCATION_UNSUPPORTED, XR_XIR_INVOCATION_SELF, 0);
         if (okay) okay = invocation_target(owner, xtc_xir_file_lease_read(lease, sizeof(expected) - 1, &bytes, &length));
         for (size_t at = 0; okay && at < length; ++at) {
-            okay = invocation_work(owner, 2);
+
             if (okay && ((const char *)bytes)[at] != expected[at])
                 okay = invocation_fail(owner, XR_XIR_INVOCATION_UNSUPPORTED, XR_XIR_INVOCATION_SELF, 0);
         }
@@ -90,16 +92,15 @@ static bool invocation_profile_wide(XrXirInvocation *owner, const char *path,
     if (!invocation_io(owner, xr_win_utf8_path_owned(&owner->io, path, &wide))) return false;
     size_t count = 0;
     for (;;) {
-        if (!invocation_work(owner, sizeof(wchar_t))) break;
+
         wchar_t c = wide[count];
         if (!c) { *output = wide; *length = count; return true; }
         if (c == L'/') {
-            if (!invocation_work(owner, sizeof(wchar_t))) break;
+
             wide[count] = L'\\';
         }
         ++count;
     }
-    xr_compile_resources_free(wide); return false;
 }
 /* relation is equal, left ancestor, right ancestor, or disjoint. Both inputs
  * are already admitted absolute local paths, with normalized separators. */
@@ -108,14 +109,14 @@ static bool invocation_profile_relation(XrXirInvocation *owner, const wchar_t *l
     size_t common = a < b ? a : b;
     if (!common || common > INT_MAX)
         return invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0);
-    if (!invocation_work(owner, 2 * common * sizeof(wchar_t) + 1)) return false;
+
     int order = CompareStringOrdinal(left, (int)common, right, (int)common, TRUE);
     if (!order) return invocation_io(owner, io_windows_status(GetLastError()));
     *relation = 3;
     if (order != CSTR_EQUAL) return true;
     if (a == b) { *relation = 0; return true; }
     const wchar_t *longer = a < b ? right : left;
-    if (!invocation_work(owner, 2 * sizeof(wchar_t))) return false;
+
     if (longer[common - 1] == L'\\' || longer[common] == L'\\') *relation = a < b ? 1 : 2;
     return true;
 }
@@ -157,14 +158,14 @@ static bool invocation_profile_join_root(XrXirInvocation *owner, unsigned index,
     xr_compile_resources_free(path); return okay;
 }
 static bool invocation_profile_system_path(XrXirInvocation *owner, bool system, char **output) {
-    if (!invocation_work(owner, 1)) return false;
+
     UINT capacity = system ? GetSystemDirectoryW(NULL, 0) : GetWindowsDirectoryW(NULL, 0);
     if (!capacity) return invocation_io(owner, io_windows_status(GetLastError()));
     if (capacity > 32768) return invocation_fail(owner, XR_XIR_INVOCATION_BUDGET, XR_XIR_INVOCATION_SELF, 0);
     wchar_t *wide = NULL;
     if (!invocation_resource(owner, xr_compile_resources_alloc(owner->context.resources,
         (size_t)capacity * sizeof(wchar_t), (void **)&wide))) return false;
-    bool okay = invocation_work(owner, 1 + (uint64_t)capacity * sizeof(wchar_t));
+    bool okay = owner->status == XR_XIR_INVOCATION_OK;
     if (okay) {
         UINT count = system ? GetSystemDirectoryW(wide, capacity) : GetWindowsDirectoryW(wide, capacity);
         if (!count) okay = invocation_io(owner, io_windows_status(GetLastError()));
@@ -174,7 +175,7 @@ static bool invocation_profile_system_path(XrXirInvocation *owner, bool system, 
     xr_compile_resources_free(wide); return okay;
 }
 static bool invocation_profile_host(XrXirInvocation *owner) {
-    if (!invocation_work(owner, 1)) return false;
+
     SetLastError(ERROR_SUCCESS);
     DWORD length = GetDllDirectoryW(0, NULL), error = GetLastError();
     if (!length && error) return invocation_io(owner, io_windows_status(error));
@@ -183,7 +184,7 @@ static bool invocation_profile_host(XrXirInvocation *owner) {
         wchar_t *directory = NULL;
         if (!invocation_resource(owner, xr_compile_resources_alloc(owner->context.resources,
             (size_t)length * sizeof(wchar_t), (void **)&directory))) return false;
-        bool okay = invocation_work(owner, 1 + (uint64_t)length * sizeof(wchar_t));
+        bool okay = owner->status == XR_XIR_INVOCATION_OK;
         if (okay) {
             SetLastError(ERROR_SUCCESS);
             DWORD actual = GetDllDirectoryW(length, directory); error = GetLastError();
@@ -194,7 +195,7 @@ static bool invocation_profile_host(XrXirInvocation *owner) {
         xr_compile_resources_free(directory);
         if (!okay) return false;
     }
-    if (!invocation_work(owner, 1)) return false;
+
     UINT32 capacity = 0;
     LONG package = GetCurrentPackageFullName(&capacity, NULL);
     if (package == APPMODEL_ERROR_NO_PACKAGE) return true;
@@ -259,10 +260,10 @@ static bool invocation_profile_contains(XrXirInvocation *owner, const char *path
         found = true;
         if (i >= 9) {
             size_t at = owner->profile.lengths[i];
-            if (!invocation_work(owner, sizeof(wchar_t))) break;
+
             if (wide[at] == L'\\') ++at;
             for (; at < length; ++at) {
-                if (!invocation_work(owner, sizeof(wchar_t))) break;
+
                 if (wide[at] == L'\\') { found = false; break; }
             }
         }

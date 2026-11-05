@@ -31,7 +31,7 @@ static bool source_requirement_helper_body(SourceContext *ctx, AstNode *site,
     SourceValue *arguments = source_alloc(ctx,count,sizeof(*arguments));
     if (!arguments) return false;
     for (uint32_t p = 0; p < count; ++p) {
-        if (!source_work(ctx,site)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         arguments[p] = (SourceValue){p,function->parameters[p]};
     }
     XrXirInstruction call = {XR_XIR_CALL_REQUIREMENT,function->result,{0},
@@ -60,12 +60,12 @@ static bool source_requirement_helper(SourceContext *ctx, AstNode *site,
     char *name = source_alloc(ctx,40,sizeof(*name));
     if (!parameters || !name || (generic_count && !constraints)) return false;
     for (uint32_t p = 0; p < generic_count; ++p) {
-        if (!source_work(ctx,site)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         constraints[p] = ctx->generics[outer].constraints[p];
     }
     parameters[0] = request->receiver;
     for (uint32_t p = 0; p < signature.parameter_count; ++p) {
-        if (!source_work(ctx,site)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         parameters[p+1] = signature.parameters[p].type;
     }
     if (source_format(ctx, name, 40, "$requirement%u", index) != XR_DIAG_OK)
@@ -113,11 +113,11 @@ static bool source_requirement_value(SourceContext *ctx, AstNode *node,
     XrXirType *types = count ? source_alloc(ctx,count,sizeof(*types)) : NULL;
     if (count && !types) return false;
     for (uint32_t p = 0; p < parent; ++p) {
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         types[p] = application.arguments[p];
     }
     for (uint32_t p = 0; p < own; ++p)
-        if (!source_work(ctx,node) || !source_type(ctx,request->arguments->refs[p],&types[parent+p])) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_type(ctx,request->arguments->refs[p],&types[parent+p])) return false;
     helper.substitution = (SourceSubstitution){types,count};
     if (!source_requirement_prove(ctx,node,helper.selected.member,application,helper.substitution,&helper.signature)) return false;
     XrXirTypeNode callable = *xr_xir_callable_signature(&ctx->types,helper.signature);
@@ -134,7 +134,7 @@ static bool source_requirement_value(SourceContext *ctx, AstNode *node,
     XrXirType *arguments = ambient ? source_alloc(ctx,ambient,sizeof(*arguments)) : NULL;
     if (ambient && !arguments) return false;
     for (uint32_t p = 0; p < ambient; ++p) {
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         arguments[p] = (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+p);
     }
     XrXirInstruction op = {XR_XIR_FUNCTION_REF,type,{0},{0},function,{0}};

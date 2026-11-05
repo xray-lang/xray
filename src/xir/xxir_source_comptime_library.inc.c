@@ -16,7 +16,7 @@ static bool source_comptime_library_results(SourceContext *ctx,const SourceConte
     for (SourceComptimeSite *site=ctx->comptime_sites;site;site=site->next) {
         const SourceComptimeSite *matched=NULL;
         for (const SourceComptimeSite *candidate=program->comptime_sites;candidate;candidate=candidate->next) {
-            if (!source_work_units(ctx,site->syntax,sizeof(*candidate))) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (candidate->syntax!=site->syntax || candidate->module!=site->module) continue;
             const SourceFunction *a=&ctx->bodies[site->owner],*b=&program->bodies[candidate->owner];
             const XrXirFunctionIdentity *x=&ctx->identities[site->owner],*y=&program->identities[candidate->owner];
@@ -32,7 +32,7 @@ static bool source_comptime_library_results(SourceContext *ctx,const SourceConte
         XrXirType *arguments=count?source_alloc(ctx,count,sizeof(*arguments)):NULL;
         if (count && !arguments) return false;
         for (uint32_t a=0;a<count;++a) {
-            if (!source_work_units(ctx,site->syntax,sizeof(*arguments))) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             arguments[a]=(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+a);
         }
         if (matched->expected.present!=site->expected.present || matched->expected.infer_result!=site->expected.infer_result ||
@@ -47,23 +47,23 @@ static bool source_comptime_library_results(SourceContext *ctx,const SourceConte
             &program->types,&ctx->types,arguments,count,program->functions[matched->helper].result,ctx->functions[site->helper].result);
         if (status!=XR_XIR_OK) return source_fail(ctx,site->syntax,status,"library evaluation result type changed");
         if (count) continue;
-        if (!source_comptime_result_value(ctx,site->syntax,&matched->value,matched->result_arity,matched->result_work))
+        if (!source_comptime_result_value(ctx,site->syntax,&matched->value,matched->result_arity))
             return source_fail(ctx,site->syntax,ctx->diagnostic.status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:ctx->diagnostic.status,
                 "library evaluation result is not canonical");
-        if (!source_work_units(ctx,site->syntax,sizeof(site->value)+sizeof(site->result_arity)+sizeof(site->result_work))) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         XrXirValueStatus copied=xr_xir_value_copy(&matched->value,&site->value);
         if (copied!=XR_XIR_VALUE_OK) return source_fail(ctx,site->syntax,
             copied==XR_XIR_VALUE_REFCOUNT_LIMIT || copied==XR_XIR_VALUE_LIMIT?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE,
             "library evaluation value receiving failed");
-        site->result_arity=matched->result_arity;site->result_work=matched->result_work;
+        site->result_arity=matched->result_arity;
     }
     return true;
 }
 static bool source_comptime_evaluate_library(SourceContext *ctx,const XrXirArtifact *checked) {
     XrXirStatus status=xr_xir_compile_artifact_verify(checked,NULL);
     if (status!=XR_XIR_OK) return source_fail(ctx,NULL,status,"library CTFE input failed current checking");
-    if (!source_work_units(ctx,NULL,sizeof(SourceContext))) return false;
-    SourceContext program={0};program.compile=ctx->compile;program.graph=ctx->graph;program.linkage_kind=XR_XIR_PROGRAM;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
+    SourceContext program={0};program.request=ctx->request;program.compile=ctx->compile;program.graph=ctx->graph;program.linkage_kind=XR_XIR_PROGRAM;
     program.manifests=ctx->manifests;program.prelude_module=ctx->prelude_module;program.core_factory=ctx->core_factory;
     program.remaining_blocks=ctx->remaining_blocks;program.remaining_instructions=ctx->remaining_instructions;
     XrXirSourceResult output={0};source_construct(&program,&output);

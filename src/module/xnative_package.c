@@ -49,7 +49,7 @@ static bool native_valid_c_identifier(ManifestContext *ctx, const char *name);
 
 static uint64_t native_hash_bytes(ManifestContext *ctx, uint64_t hash, const void *data, size_t len) {
     const unsigned char *bytes = (const unsigned char *) data;
-    for (size_t i = 0; manifest_work(ctx, 1) && (i < len); i++) {
+    for (size_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < len); i++) {
         hash ^= bytes[i];
         hash *= XR_NATIVE_FNV_PRIME;
     }
@@ -77,7 +77,7 @@ static char *native_dup_string(ManifestContext *ctx, XrTomlValue *table, const c
 static bool native_key_is(ManifestContext *ctx, const char *key, const char *const *allowed, size_t count) {
     if (!key)
         return false;
-    for (size_t i = 0; manifest_work(ctx, 1) && (i < count); i++) {
+    for (size_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < count); i++) {
         if (manifest_compare(ctx, key, allowed[i]) == 0)
             return true;
     }
@@ -92,7 +92,7 @@ static bool native_validate_keys(ManifestContext *ctx, XrNativePackagePlan *plan
                                  const char *const *allowed, size_t allowed_count) {
     if (!table || table->type != XR_TOML_TABLE)
         return native_fail(ctx, plan, "E-NATIVE-SCHEMA: %s must be a table", where);
-    for (int i = 0; manifest_work(ctx, 1) && (i < table->as.table.count); i++) {
+    for (int i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < table->as.table.count); i++) {
         const char *key = table->as.table.members[i].key;
         if (!native_key_is(ctx, key, allowed, allowed_count))
             return native_fail(ctx, plan, "E-NATIVE-SCHEMA: unsupported field %s.%s", where,
@@ -128,7 +128,7 @@ static bool native_parse_string_array(ManifestContext *ctx, XrNativePackagePlan 
     char **items = (char **) manifest_calloc(ctx, (size_t) count, sizeof(char *));
     if (!items)
         return native_fail(ctx, plan, "E-NATIVE-RESOURCE: cannot allocate %s.%s", where, key);
-    for (int i = 0; manifest_work(ctx, 1) && (i < count); i++) {
+    for (int i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < count); i++) {
         XrTomlValue *item = xtoml_array_get(array, i);
         if (!item || item->type != XR_TOML_STRING || !item->as.string || !item->as.string[0]) {
             native_free_string_array(items, (uint32_t) count);
@@ -150,7 +150,7 @@ static bool native_safe_relative_path(ManifestContext *ctx, const char *path) {
     if (!path) return false;
     size_t segment_length=0;bool dots=true;unsigned char first=0;
     for (size_t i=0;;++i) {
-        if (!manifest_work(ctx,1))return false;
+        if (!((ctx)->status == XR_MANIFEST_OK))return false;
         unsigned char byte=(unsigned char)path[i];
         if (!i)first=byte;
         if (i==1&&isalpha(first)&&byte==':')return false;
@@ -167,7 +167,7 @@ static bool native_path_belongs_to_root(ManifestContext *ctx, const char *root, 
     if (!root || !path)
         return false;
     root_len = manifest_length(ctx, root);
-    if (manifest_compare_n(ctx,root,path,root_len)!=0||!manifest_work(ctx,2))return false;
+    if (manifest_compare_n(ctx,root,path,root_len)!=0||!((ctx)->status == XR_MANIFEST_OK))return false;
     char last=root_len?root[root_len-1]:0,next=path[root_len];
     return last=='/'||last=='\\'||!next||next=='/'||next=='\\';
 }
@@ -217,20 +217,20 @@ static char *native_resolve_output_path(ManifestContext *ctx, XrNativePackagePla
 static bool native_sha256_file(ManifestContext *ctx, const char *root, const char *logical, char output[65]) {
     XrFileBytes bytes={0};uint8_t digest[32];static const char hex[]="0123456789abcdef";
     if (!manifest_read_under_root(ctx,root,logical,SIZE_MAX-1,&bytes)) return false;
-    if (bytes.size>UINT64_MAX-sizeof(digest))manifest_status(ctx,XR_MANIFEST_BUDGET);
-    if (manifest_work(ctx,bytes.size+sizeof(digest)))xr_sha256((const uint8_t *)bytes.data,bytes.size,digest);
+    if (bytes.size>UINT64_MAX-sizeof(digest))manifest_status(ctx,XR_MANIFEST_OVERFLOW);
+    if ((ctx)->status == XR_MANIFEST_OK)xr_sha256((const uint8_t *)bytes.data,bytes.size,digest);
     manifest_free(bytes.data);
     for(size_t i=0;i<sizeof(digest);++i) {
-        if(!manifest_work(ctx,3))return false;
+        if(!((ctx)->status == XR_MANIFEST_OK))return false;
         uint8_t byte=digest[i];output[2*i]=hex[byte>>4];output[2*i+1]=hex[byte&15];
     }
-    if(!manifest_work(ctx,1))return false;output[64]=0;return true;
+    if(!((ctx)->status == XR_MANIFEST_OK))return false;output[64]=0;return true;
 }
 
 static bool native_valid_sha256(ManifestContext *ctx, const char *text) {
     if (!text || manifest_length(ctx, text) != 64)
         return false;
-    for (size_t i = 0; manifest_work(ctx, 1) && (i < 64); i++) {
+    for (size_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < 64); i++) {
         unsigned char byte=(unsigned char)text[i];
         if (!isdigit(byte) && !(byte >= 'a' && byte <= 'f'))
             return false;
@@ -239,12 +239,12 @@ static bool native_valid_sha256(ManifestContext *ctx, const char *text) {
 }
 
 static bool native_valid_define(ManifestContext *ctx, const char *text) {
-    if (!text||!manifest_work(ctx,1))return false;
+    if (!text||!((ctx)->status == XR_MANIFEST_OK))return false;
     unsigned char byte=(unsigned char)*text++;
     if (!isalpha(byte)&&byte!='_')return false;
     bool value=false;
     for (;;) {
-        if (!manifest_work(ctx,1))return false;
+        if (!((ctx)->status == XR_MANIFEST_OK))return false;
         byte=(unsigned char)*text++;
         if (!byte)return true;
         if (value) { if(byte<0x20)return false; }
@@ -363,7 +363,7 @@ static bool native_parse_units(ManifestContext *ctx, XrNativePackagePlan *plan, 
     if (!plan->units)
         return native_fail(ctx, plan, "E-NATIVE-RESOURCE: cannot allocate native units");
     plan->unit_count = (uint32_t) count;
-    for (int i = 0; manifest_work(ctx, 1) && (i < count); i++) {
+    for (int i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < count); i++) {
         char where[64]={0};
         manifest_format(ctx, where, sizeof(where), "native.unit[%d]", i);
         XrTomlValue *table = xtoml_array_get(array, i);
@@ -382,7 +382,7 @@ static bool native_parse_units(ManifestContext *ctx, XrNativePackagePlan *plan, 
         if (!unit->name || !unit->name[0] || !unit->kind || !unit->purpose || !unit->purpose[0])
             return native_fail(ctx,
                 plan, "E-NATIVE-SCHEMA: %s requires name, supported kind, and purpose", where);
-        for (int j = 0; manifest_work(ctx, 1) && (j < i); j++) {
+        for (int j = 0; ((ctx)->status == XR_MANIFEST_OK) && (j < i); j++) {
             if (manifest_compare(ctx, plan->units[j].name, unit->name) == 0)
                 return native_fail(ctx, plan, "E-NATIVE-SCHEMA: duplicate native unit '%s'", unit->name);
         }
@@ -402,7 +402,7 @@ static bool native_parse_units(ManifestContext *ctx, XrNativePackagePlan *plan, 
             if (!unit->sources)
                 return native_fail(ctx, plan, "E-NATIVE-RESOURCE: cannot allocate %s.sources", where);
             uint64_t fingerprint = XR_NATIVE_FNV_OFFSET;
-            for (uint32_t si = 0; manifest_work(ctx, 1) && (si < unit->source_count); si++) {
+            for (uint32_t si = 0; ((ctx)->status == XR_MANIFEST_OK) && (si < unit->source_count); si++) {
                 char source_where[96]={0};
                 char actual[65];
                 manifest_format(ctx, source_where, sizeof(source_where), "%s.sources[%u]", where, si);
@@ -440,7 +440,7 @@ static bool native_parse_units(ManifestContext *ctx, XrNativePackagePlan *plan, 
                 return native_fail(ctx, plan, "E-NATIVE-RESOURCE: cannot allocate include dirs");
             }
             unit->include_dir_count = rel_include_count;
-            for (uint32_t di = 0; manifest_work(ctx, 1) && (di < rel_include_count); di++) {
+            for (uint32_t di = 0; ((ctx)->status == XR_MANIFEST_OK) && (di < rel_include_count); di++) {
                 char include_where[96]={0};
                 manifest_format(ctx, include_where, sizeof(include_where), "%s.include_dirs[%u]", where, di);
                 unit->include_dirs[di] =
@@ -457,7 +457,7 @@ static bool native_parse_units(ManifestContext *ctx, XrNativePackagePlan *plan, 
             !native_parse_string_array(ctx, plan, table, "system_links", false, &unit->system_links,
                                        &unit->system_link_count, where))
             return false;
-        for (uint32_t di = 0; manifest_work(ctx, 1) && (di < unit->define_count); di++) {
+        for (uint32_t di = 0; ((ctx)->status == XR_MANIFEST_OK) && (di < unit->define_count); di++) {
             if (!native_valid_define(ctx, unit->defines[di]))
                 return native_fail(ctx, plan, "E-NATIVE-FLAG: unsafe define in %s: %s", where,
                                    unit->defines[di]);
@@ -505,11 +505,11 @@ static bool native_parse_units(ManifestContext *ctx, XrNativePackagePlan *plan, 
         {
             uint64_t fingerprint = unit->fingerprint ? unit->fingerprint : XR_NATIVE_FNV_OFFSET;
             fingerprint = native_hash_bytes(ctx, fingerprint, &unit->kind, sizeof(unit->kind));
-            for (uint32_t di = 0; manifest_work(ctx, 1) && (di < unit->include_dir_count); di++)
+            for (uint32_t di = 0; ((ctx)->status == XR_MANIFEST_OK) && (di < unit->include_dir_count); di++)
                 fingerprint = native_hash_text(ctx, fingerprint, unit->include_dirs[di]);
-            for (uint32_t di = 0; manifest_work(ctx, 1) && (di < unit->define_count); di++)
+            for (uint32_t di = 0; ((ctx)->status == XR_MANIFEST_OK) && (di < unit->define_count); di++)
                 fingerprint = native_hash_text(ctx, fingerprint, unit->defines[di]);
-            for (uint32_t li = 0; manifest_work(ctx, 1) && (li < unit->system_link_count); li++)
+            for (uint32_t li = 0; ((ctx)->status == XR_MANIFEST_OK) && (li < unit->system_link_count); li++)
                 fingerprint = native_hash_text(ctx, fingerprint, unit->system_links[li]);
             fingerprint = native_hash_text(ctx, fingerprint, unit->language_standard);
             fingerprint = native_hash_text(ctx, fingerprint, unit->optimization);
@@ -604,7 +604,7 @@ static bool native_parse_callback_contracts(ManifestContext *ctx, XrNativePackag
     if (!contract->callbacks)
         return native_fail(ctx, plan, "E-NATIVE-RESOURCE: cannot allocate %s.callbacks", where);
     contract->callback_count = (uint32_t) count;
-    for (int i = 0; manifest_work(ctx, 1) && (i < count); i++) {
+    for (int i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < count); i++) {
         XrTomlValue *entry = xtoml_array_get(array, i);
         XrNativeCallbackContract *callback = &contract->callbacks[i];
         char callback_where[128]={0};
@@ -683,14 +683,14 @@ static bool native_parse_symbol_contract(ManifestContext *ctx, XrNativePackagePl
             return native_fail(ctx, plan, "E-NATIVE-RESOURCE: cannot allocate %s.params", where);
         contract->param_count = (uint32_t) count;
     }
-    for (int i = 0; manifest_work(ctx, 1) && (i < count); i++) {
+    for (int i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < count); i++) {
         char param_where[112]={0};
         manifest_format(ctx, param_where, sizeof(param_where), "%s.params[%d]", where, i);
         if (!native_parse_param_contract(ctx, plan, xtoml_array_get(params, i), &contract->params[i],
                                          (uint32_t) i, param_where))
             return false;
     }
-    for (int i = 0; manifest_work(ctx, 1) && (i < count); i++) {
+    for (int i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < count); i++) {
         XrNativeParamContract *param = &contract->params[i];
         if (param->length_from >= count || param->length_from == i)
             return native_fail(ctx, plan,
@@ -721,7 +721,7 @@ static bool native_parse_symbol_contract(ManifestContext *ctx, XrNativePackagePl
     static const char *const allowed_effects[] = {
         "foreign", "alloc", "may_block", "suspend", "io", "sync", "panic", "abort",
     };
-    for (uint32_t i = 0; manifest_work(ctx, 1) && (i < contract->effect_count); i++) {
+    for (uint32_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < contract->effect_count); i++) {
         if (!native_text_is(ctx, contract->effects[i], allowed_effects,
                             sizeof(allowed_effects) / sizeof(allowed_effects[0])))
             return native_fail(ctx, plan, "E-NATIVE-CONTRACT: %s.effects[%u] is not a sealed effect",
@@ -782,7 +782,7 @@ static bool native_parse_symbols(ManifestContext *ctx, XrNativePackagePlan *plan
     if (!plan->symbols)
         return native_fail(ctx, plan, "E-NATIVE-RESOURCE: cannot allocate native symbols");
     plan->symbol_count = (uint32_t) count;
-    for (int i = 0; manifest_work(ctx, 1) && (i < count); i++) {
+    for (int i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < count); i++) {
         char where[64]={0};
         manifest_format(ctx, where, sizeof(where), "native.symbol[%d]", i);
         XrTomlValue *table = xtoml_array_get(array, i);
@@ -806,7 +806,7 @@ static bool native_parse_symbols(ManifestContext *ctx, XrNativePackagePlan *plan
         if (!symbol->unit)
             return native_fail(ctx, plan, "E-NATIVE-SCHEMA: %s references unknown unit '%s'", where,
                                symbol->unit_name);
-        for (int j = 0; manifest_work(ctx, 1) && (j < i); j++) {
+        for (int j = 0; ((ctx)->status == XR_MANIFEST_OK) && (j < i); j++) {
             if (manifest_compare(ctx, plan->symbols[j].xray_name, symbol->xray_name) == 0)
                 return native_fail(ctx, plan, "E-NATIVE-SCHEMA: duplicate Xray symbol '%s'",
                                    symbol->xray_name);
@@ -840,7 +840,7 @@ static bool native_parse_layouts(ManifestContext *ctx, XrNativePackagePlan *plan
     if (!plan->layouts)
         return native_fail(ctx, plan, "E-NATIVE-RESOURCE: cannot allocate native layouts");
     plan->layout_count = (uint32_t) count;
-    for (int i = 0; manifest_work(ctx, 1) && (i < count); i++) {
+    for (int i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < count); i++) {
         char where[64]={0};
         manifest_format(ctx, where, sizeof(where), "native.layout[%d]", i);
         XrTomlValue *table = xtoml_array_get(array, i);
@@ -885,7 +885,7 @@ static bool native_parse_capabilities(ManifestContext *ctx, XrNativePackagePlan 
     if (!plan->capabilities)
         return native_fail(ctx, plan, "E-NATIVE-RESOURCE: cannot allocate native capabilities");
     plan->capability_count = (uint32_t) count;
-    for (int i = 0; manifest_work(ctx, 1) && (i < count); i++) {
+    for (int i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < count); i++) {
         char where[72]={0};
         manifest_format(ctx, where, sizeof(where), "native.capability[%d]", i);
         XrTomlValue *table = xtoml_array_get(array, i);
@@ -915,7 +915,7 @@ static bool native_valid_target_triple(ManifestContext *ctx, const char *triple)
     if (!triple) return false;
     bool any=false;unsigned char previous=0;
     for (;;) {
-        if (!manifest_work(ctx,1)) return false;
+        if (!((ctx)->status == XR_MANIFEST_OK)) return false;
         unsigned char byte=(unsigned char)*triple++;
         if (!byte)return any;
         if (!isalnum(byte)&&byte!='_'&&byte!='-'&&byte!='.')return false;
@@ -925,11 +925,11 @@ static bool native_valid_target_triple(ManifestContext *ctx, const char *triple)
 }
 
 static bool native_valid_c_identifier(ManifestContext *ctx, const char *name) {
-    if (!name||!manifest_work(ctx,1))return false;
+    if (!name||!((ctx)->status == XR_MANIFEST_OK))return false;
     unsigned char byte=(unsigned char)*name++;
     if (!isalpha(byte)&&byte!='_')return false;
     for (;;) {
-        if (!manifest_work(ctx,1))return false;
+        if (!((ctx)->status == XR_MANIFEST_OK))return false;
         byte=(unsigned char)*name++;
         if (!byte)return true;
         if (!isalnum(byte)&&byte!='_')return false;
@@ -950,7 +950,7 @@ static bool native_parse_targets(ManifestContext *ctx, XrNativePackagePlan *plan
     if (!plan->targets)
         return native_fail(ctx, plan, "E-NATIVE-RESOURCE: cannot allocate native target plans");
     plan->target_count = (uint32_t) targets->as.table.count;
-    for (int i = 0; manifest_work(ctx, 1) && (i < targets->as.table.count); i++) {
+    for (int i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < targets->as.table.count); i++) {
         const char *triple = targets->as.table.members[i].key;
         XrTomlValue *table = targets->as.table.members[i].value;
         XrNativeTargetPlan *target = &plan->targets[i];
@@ -1013,7 +1013,7 @@ static bool native_parse_exports(ManifestContext *ctx, XrNativePackagePlan *plan
     if (!plan->exports)
         return native_fail(ctx, plan, "E-NATIVE-RESOURCE: cannot allocate C export plans");
     plan->export_count = (uint32_t) count;
-    for (int i = 0; manifest_work(ctx, 1) && (i < count); i++) {
+    for (int i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < count); i++) {
         char where[64]={0};
         manifest_format(ctx, where, sizeof(where), "export.c[%d]", i);
         XrTomlValue *table = xtoml_array_get(array, i);
@@ -1037,7 +1037,7 @@ static bool native_parse_exports(ManifestContext *ctx, XrNativePackagePlan *plan
             return native_fail(ctx, plan,
                                "E-EXPORT-SCHEMA: %s.abi must be native or hosted-vm-v1",
                                where);
-        for (int j = 0; manifest_work(ctx, 1) && (j < i); j++) {
+        for (int j = 0; ((ctx)->status == XR_MANIFEST_OK) && (j < i); j++) {
             if (manifest_compare(ctx, plan->exports[j].xray_name, item->xray_name) == 0 ||
                 manifest_compare(ctx, plan->exports[j].symbol, item->symbol) == 0)
                 return native_fail(ctx, plan, "E-EXPORT-SCHEMA: duplicate export '%s'", item->xray_name);
@@ -1059,7 +1059,7 @@ static bool native_parse_link_symbols(ManifestContext *ctx, XrNativePackagePlan 
     if (!plan->link_symbols)
         return native_fail(ctx, plan, "E-NATIVE-RESOURCE: cannot allocate link symbol plans");
     plan->link_symbol_count = (uint32_t) count;
-    for (int i = 0; manifest_work(ctx, 1) && (i < count); i++) {
+    for (int i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < count); i++) {
         char where[64]={0};
         manifest_format(ctx, where, sizeof(where), "link.symbol[%d]", i);
         XrTomlValue *table = xtoml_array_get(array, i);
@@ -1077,7 +1077,7 @@ static bool native_parse_link_symbols(ManifestContext *ctx, XrNativePackagePlan 
         if (!item->section && !item->used && !item->weak)
             return native_fail(ctx, plan, "E-LINK-SCHEMA: %s requires section, used=true, or weak=true",
                                where);
-        for (int j = 0; manifest_work(ctx, 1) && (j < i); j++)
+        for (int j = 0; ((ctx)->status == XR_MANIFEST_OK) && (j < i); j++)
             if (manifest_compare(ctx, plan->link_symbols[j].xray_name, item->xray_name) == 0)
                 return native_fail(ctx, plan, "E-LINK-SCHEMA: duplicate link symbol '%s'",
                                    item->xray_name);
@@ -1111,7 +1111,7 @@ static bool native_parse_entries(ManifestContext *ctx, XrNativePackagePlan *plan
     if (!plan->entries)
         return native_fail(ctx, plan, "E-NATIVE-RESOURCE: cannot allocate freestanding entry plans");
     plan->entry_count = (uint32_t) count;
-    for (int i = 0; manifest_work(ctx, 1) && (i < count); i++) {
+    for (int i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < count); i++) {
         char where[72]={0};
         manifest_format(ctx, where, sizeof(where), "freestanding.entry[%d]", i);
         XrTomlValue *table = xtoml_array_get(array, i);
@@ -1140,7 +1140,7 @@ static bool native_parse_entries(ManifestContext *ctx, XrNativePackagePlan *plan
              item->kind == XR_FREESTANDING_ENTRY_INTERRUPT) &&
             !item->stub)
             return native_fail(ctx, plan, "E-ENTRY-SCHEMA: %s requires an audited stub", where);
-        for (int j = 0; manifest_work(ctx, 1) && (j < i); j++)
+        for (int j = 0; ((ctx)->status == XR_MANIFEST_OK) && (j < i); j++)
             if (manifest_compare(ctx, plan->entries[j].xray_name, item->xray_name) == 0 ||
                 manifest_compare(ctx, plan->entries[j].symbol, item->symbol) == 0)
                 return native_fail(ctx, plan, "E-ENTRY-SCHEMA: duplicate entry '%s'", item->xray_name);
@@ -1156,26 +1156,26 @@ static void native_refresh_plan_fingerprint(ManifestContext *ctx, XrNativePackag
     fingerprint = native_hash_text(ctx, fingerprint, plan->source);
     fingerprint = native_hash_bytes(ctx, fingerprint, &plan->audit_mode, sizeof(plan->audit_mode));
     fingerprint = native_hash_bytes(ctx, fingerprint, &plan->vm_policy, sizeof(plan->vm_policy));
-    for (uint32_t i = 0; manifest_work(ctx, 1) && (i < plan->unit_count); i++) {
+    for (uint32_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < plan->unit_count); i++) {
         fingerprint = native_hash_text(ctx, fingerprint, plan->units[i].name);
         fingerprint = native_hash_bytes(ctx, fingerprint, &plan->units[i].fingerprint,
                                         sizeof(plan->units[i].fingerprint));
     }
-    for (uint32_t i = 0; manifest_work(ctx, 1) && (i < plan->symbol_count); i++) {
+    for (uint32_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < plan->symbol_count); i++) {
         fingerprint = native_hash_text(ctx, fingerprint, plan->symbols[i].xray_name);
         fingerprint = native_hash_text(ctx, fingerprint, plan->symbols[i].native_name);
     }
-    for (uint32_t i = 0; manifest_work(ctx, 1) && (i < plan->target_count); i++) {
+    for (uint32_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < plan->target_count); i++) {
         fingerprint = native_hash_text(ctx, fingerprint, plan->targets[i].triple);
         fingerprint = native_hash_text(ctx, fingerprint, plan->targets[i].profile);
         fingerprint = native_hash_text(ctx, fingerprint, plan->targets[i].visibility);
         fingerprint = native_hash_text(ctx, fingerprint, plan->targets[i].cpu_feature);
-        for (uint32_t j = 0; manifest_work(ctx, 1) && (j < plan->targets[i].system_link_count); j++)
+        for (uint32_t j = 0; ((ctx)->status == XR_MANIFEST_OK) && (j < plan->targets[i].system_link_count); j++)
             fingerprint = native_hash_text(ctx, fingerprint, plan->targets[i].system_links[j]);
         fingerprint = native_hash_bytes(ctx, fingerprint, &plan->targets[i].vm_policy,
                                         sizeof(plan->targets[i].vm_policy));
     }
-    for (uint32_t i = 0; manifest_work(ctx, 1) && (i < plan->export_count); i++) {
+    for (uint32_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < plan->export_count); i++) {
         fingerprint = native_hash_text(ctx, fingerprint, plan->exports[i].xray_name);
         fingerprint = native_hash_text(ctx, fingerprint, plan->exports[i].symbol);
         fingerprint = native_hash_text(ctx, fingerprint, plan->exports[i].visibility);
@@ -1183,7 +1183,7 @@ static void native_refresh_plan_fingerprint(ManifestContext *ctx, XrNativePackag
         fingerprint = native_hash_bytes(ctx, fingerprint, &plan->exports[i].header,
                                         sizeof(plan->exports[i].header));
     }
-    for (uint32_t i = 0; manifest_work(ctx, 1) && (i < plan->link_symbol_count); i++) {
+    for (uint32_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < plan->link_symbol_count); i++) {
         fingerprint = native_hash_text(ctx, fingerprint, plan->link_symbols[i].xray_name);
         fingerprint = native_hash_text(ctx, fingerprint, plan->link_symbols[i].section);
         fingerprint = native_hash_bytes(ctx, fingerprint, &plan->link_symbols[i].used,
@@ -1191,7 +1191,7 @@ static void native_refresh_plan_fingerprint(ManifestContext *ctx, XrNativePackag
         fingerprint = native_hash_bytes(ctx, fingerprint, &plan->link_symbols[i].weak,
                                         sizeof(plan->link_symbols[i].weak));
     }
-    for (uint32_t i = 0; manifest_work(ctx, 1) && (i < plan->entry_count); i++) {
+    for (uint32_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < plan->entry_count); i++) {
         fingerprint = native_hash_text(ctx, fingerprint, plan->entries[i].xray_name);
         fingerprint = native_hash_text(ctx, fingerprint, plan->entries[i].symbol);
         fingerprint =
@@ -1367,7 +1367,7 @@ XR_FUNC void xr_native_package_plan_free_owned(XrNativePackagePlan *plan) {
 static const XrNativeUnit *xr_native_package_find_unit_impl(ManifestContext *ctx, const XrNativePackagePlan *plan, const char *name) {
     if (!plan || !name)
         return NULL;
-    for (uint32_t i = 0; manifest_work(ctx, 1) && (i < plan->unit_count); i++) {
+    for (uint32_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < plan->unit_count); i++) {
         if (plan->units[i].name && manifest_compare(ctx, plan->units[i].name, name) == 0)
             return &plan->units[i];
     }
@@ -1384,7 +1384,7 @@ static const XrNativeSymbol *xr_native_package_find_symbol_impl(ManifestContext 
     const XrNativeSymbol *short_match = NULL;
     if (!plan || !plan->valid || !xray_name)
         return NULL;
-    for (uint32_t i = 0; manifest_work(ctx, 1) && (i < plan->symbol_count); i++) {
+    for (uint32_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < plan->symbol_count); i++) {
         const XrNativeSymbol *symbol = &plan->symbols[i];
         if (manifest_compare(ctx, symbol->xray_name, xray_name) == 0)
             return symbol;
@@ -1411,7 +1411,7 @@ static const XrCExportPlan *xr_native_package_find_export_impl(ManifestContext *
     const XrCExportPlan *found = NULL;
     if (!plan || !xray_name)
         return NULL;
-    for (uint32_t i = 0; manifest_work(ctx, 1) && (i < plan->export_count); i++) {
+    for (uint32_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < plan->export_count); i++) {
         if (!native_plan_name_matches(ctx, plan->exports[i].xray_name, xray_name))
             continue;
         if (found)
@@ -1426,7 +1426,7 @@ static bool native_csv_has_symbol(ManifestContext *ctx, const char *csv, const c
         return false;
     size_t symbol_len = manifest_length(ctx, symbol);
     const char *item = csv;
-    while (manifest_work(ctx, 1) && (*item)) {
+    while (((ctx)->status == XR_MANIFEST_OK) && (*item)) {
         const char *comma = manifest_find(ctx, item, ',', false);
         size_t item_len = comma ? (size_t) (comma - item) : manifest_length(ctx, item);
         if (item_len == symbol_len && manifest_compare_bytes(ctx, item, symbol, item_len) == 0)
@@ -1443,7 +1443,7 @@ static bool native_validate_export_excludes(ManifestContext *ctx, const XrNative
     if (!csv || !csv[0])
         return true;
     const char *item = csv;
-    while (manifest_work(ctx, 1) && (true)) {
+    while (((ctx)->status == XR_MANIFEST_OK) && (true)) {
         const char *comma = manifest_find(ctx, item, ',', false);
         size_t item_len = comma ? (size_t) (comma - item) : manifest_length(ctx, item);
         if (item_len == 0) {
@@ -1462,7 +1462,7 @@ static bool native_validate_export_excludes(ManifestContext *ctx, const XrNative
         bool valid = native_valid_c_identifier(ctx, symbol);
         bool found = false;
         if (valid) {
-            for (uint32_t i = 0; manifest_work(ctx, 1) && (i < plan->export_count); i++) {
+            for (uint32_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < plan->export_count); i++) {
                 if (manifest_compare(ctx, plan->exports[i].symbol, symbol) == 0) {
                     found = true;
                     break;
@@ -1513,12 +1513,12 @@ static bool xr_native_package_configure_c_exports_impl(ManifestContext *ctx, XrN
             return false;
         }
         size_t prefix_len = manifest_length(ctx, public_prefix);
-        for (uint32_t i = 0; manifest_work(ctx, 1) && (i < plan->export_count); i++) {
+        for (uint32_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < plan->export_count); i++) {
             XrCExportPlan *item = &plan->exports[i];
             if (item->visibility && manifest_compare(ctx, item->visibility, "hidden") == 0)
                 continue;
             size_t symbol_len = manifest_length(ctx, item->symbol);
-            if (prefix_len>SIZE_MAX-1 || symbol_len>SIZE_MAX-prefix_len-1) manifest_status(ctx,XR_MANIFEST_BUDGET);
+            if (prefix_len>SIZE_MAX-1 || symbol_len>SIZE_MAX-prefix_len-1) manifest_status(ctx,XR_MANIFEST_OVERFLOW);
             renamed[i] = (char *) manifest_alloc(ctx, prefix_len + symbol_len + 1);
             if (!renamed[i]) {
                 for (uint32_t j = 0; j < i; j++)
@@ -1534,7 +1534,7 @@ static bool xr_native_package_configure_c_exports_impl(ManifestContext *ctx, XrN
     }
 
     uint32_t write = 0;
-    for (uint32_t i = 0; manifest_work(ctx, 1) && (i < plan->export_count); i++) {
+    for (uint32_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < plan->export_count); i++) {
         XrCExportPlan *item = &plan->exports[i];
         bool excluded=native_csv_has_symbol(ctx, exclude_csv, item->symbol);
         if (ctx->status!=XR_MANIFEST_OK) break;
@@ -1567,7 +1567,7 @@ static const XrLinkSymbolPlan *xr_native_package_find_link_symbol_impl(ManifestC
     const XrLinkSymbolPlan *found = NULL;
     if (!plan || !xray_name)
         return NULL;
-    for (uint32_t i = 0; manifest_work(ctx, 1) && (i < plan->link_symbol_count); i++) {
+    for (uint32_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < plan->link_symbol_count); i++) {
         if (!native_plan_name_matches(ctx, plan->link_symbols[i].xray_name, xray_name))
             continue;
         if (found)
@@ -1582,7 +1582,7 @@ static const XrFreestandingEntryPlan *xr_native_package_find_entry_impl(Manifest
     const XrFreestandingEntryPlan *found = NULL;
     if (!plan || !xray_name)
         return NULL;
-    for (uint32_t i = 0; manifest_work(ctx, 1) && (i < plan->entry_count); i++) {
+    for (uint32_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < plan->entry_count); i++) {
         if (!native_plan_name_matches(ctx, plan->entries[i].xray_name, xray_name))
             continue;
         if (found)
@@ -1621,7 +1621,7 @@ static bool native_layout_assertion_names(ManifestContext *ctx, const XrNativeLa
 static void xr_native_package_note_layout_subject_impl(ManifestContext *ctx, XrNativePackagePlan *plan, const char *xray_type) {
     if (!plan || !xray_type)
         return;
-    for (uint32_t i = 0; manifest_work(ctx, 1) && (i < plan->layout_count); i++) {
+    for (uint32_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < plan->layout_count); i++) {
         if (native_layout_assertion_names(ctx, &plan->layouts[i], xray_type))
             plan->layouts[i].declared = true;
     }
@@ -1632,7 +1632,7 @@ static bool xr_native_package_resolve_layout_impl(ManifestContext *ctx, XrNative
     bool matched = false;
     if (!plan || !xray_type || !layout)
         return false;
-    for (uint32_t i = 0; manifest_work(ctx, 1) && (i < plan->layout_count); i++) {
+    for (uint32_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < plan->layout_count); i++) {
         XrNativeLayoutAssertion *assertion = &plan->layouts[i];
         if (!native_layout_assertion_names(ctx, assertion, xray_type))
             continue;
@@ -1656,7 +1656,7 @@ static bool xr_native_package_resolve_layout_impl(ManifestContext *ctx, XrNative
                 assertion->resolved = false;
                 return false;
             }
-            for (uint32_t fi = 0; manifest_work(ctx, 1) && (fi < layout->field_count); fi++) {
+            for (uint32_t fi = 0; ((ctx)->status == XR_MANIFEST_OK) && (fi < layout->field_count); fi++) {
                 assertion->field_names[fi] = manifest_duplicate(ctx,
                     layout->field_names && layout->field_names[fi] ? layout->field_names[fi] : "");
                 assertion->field_offsets[fi] = layout->fields[fi].offset;
@@ -1760,22 +1760,22 @@ static void xr_native_package_explain_impl(ManifestContext *ctx, const XrNativeP
         manifest_print(ctx, out, "error: %s\n", plan->error ? plan->error : "invalid native plan");
         return;
     }
-    for (uint32_t i = 0; manifest_work(ctx, 1) && (i < plan->unit_count); i++) {
+    for (uint32_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < plan->unit_count); i++) {
         const XrNativeUnit *unit = &plan->units[i];
         manifest_print(ctx, out, "unit %s kind=%s fingerprint=%016llx purpose=%s output=%s\n", unit->name,
                 xr_native_unit_kind_name(unit->kind), (unsigned long long) unit->fingerprint,
                 unit->purpose ? unit->purpose : "?", unit->output ? unit->output : "none");
-        for (uint32_t si = 0; manifest_work(ctx, 1) && (si < unit->source_count); si++)
+        for (uint32_t si = 0; ((ctx)->status == XR_MANIFEST_OK) && (si < unit->source_count); si++)
             manifest_print(ctx, out, "  source %s sha256=%s\n", unit->source_relpaths[si],
                     unit->source_hashes[si]);
     }
-    for (uint32_t i = 0; manifest_work(ctx, 1) && (i < plan->symbol_count); i++) {
+    for (uint32_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < plan->symbol_count); i++) {
         const XrNativeSymbol *symbol = &plan->symbols[i];
         manifest_print(ctx, out, "symbol %s -> %s unit=%s contract=%s params=%u\n", symbol->xray_name,
                 symbol->native_name, symbol->unit_name,
                 symbol->contract.complete ? "complete" : "exploratory",
                 symbol->contract.param_count);
-        for (uint32_t pi = 0; manifest_work(ctx, 1) && (pi < symbol->contract.param_count); pi++) {
+        for (uint32_t pi = 0; ((ctx)->status == XR_MANIFEST_OK) && (pi < symbol->contract.param_count); pi++) {
             const XrNativeParamContract *param = &symbol->contract.params[pi];
             manifest_print(ctx, out,
                     "  param %u access=%s nullable=%s length_from=%d escape=%u ownership=%u "
@@ -1786,7 +1786,7 @@ static void xr_native_package_explain_impl(ManifestContext *ctx, const XrNativeP
                     param->invalidates_views);
         }
     }
-    for (uint32_t i = 0; manifest_work(ctx, 1) && (i < plan->target_count); i++) {
+    for (uint32_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < plan->target_count); i++) {
         const XrNativeTargetPlan *target = &plan->targets[i];
         manifest_print(ctx, out, "target %s profile=%s visibility=%s vm=%s cpu=%s\n", target->triple,
                 target->profile, target->visibility ? target->visibility : "unit-default",
@@ -1794,18 +1794,18 @@ static void xr_native_package_explain_impl(ManifestContext *ctx, const XrNativeP
                                                                    : "unsupported",
                 target->cpu_feature ? target->cpu_feature : "baseline");
     }
-    for (uint32_t i = 0; manifest_work(ctx, 1) && (i < plan->export_count); i++)
+    for (uint32_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < plan->export_count); i++)
         manifest_print(ctx, out, "export.c %s -> %s visibility=%s abi=%s header=%s\n",
                 plan->exports[i].xray_name, plan->exports[i].symbol,
                 plan->exports[i].visibility ? plan->exports[i].visibility : "default",
                 plan->exports[i].abi ? plan->exports[i].abi : "native",
                 plan->exports[i].header ? "yes" : "no");
-    for (uint32_t i = 0; manifest_work(ctx, 1) && (i < plan->link_symbol_count); i++)
+    for (uint32_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < plan->link_symbol_count); i++)
         manifest_print(ctx, out, "link.symbol %s section=%s used=%s weak=%s\n", plan->link_symbols[i].xray_name,
                 plan->link_symbols[i].section ? plan->link_symbols[i].section : "none",
                 plan->link_symbols[i].used ? "yes" : "no",
                 plan->link_symbols[i].weak ? "yes" : "no");
-    for (uint32_t i = 0; manifest_work(ctx, 1) && (i < plan->entry_count); i++)
+    for (uint32_t i = 0; ((ctx)->status == XR_MANIFEST_OK) && (i < plan->entry_count); i++)
         manifest_print(ctx, out, "freestanding.entry %s -> %s kind=%u abi=%s section=%s stub=%s\n",
                 plan->entries[i].xray_name, plan->entries[i].symbol,
                 (unsigned) plan->entries[i].kind,
@@ -1826,7 +1826,7 @@ XR_FUNC XrManifestStatus xr_native_package_plan_parse_owned(const XrOsIoPolicy *
     XrNativePackagePlan *plan=xr_native_package_plan_parse_impl(&ctx,document,absolute_root);
     if (ctx.status==XR_MANIFEST_OK&&!plan) return XR_MANIFEST_NOT_FOUND;
     if (ctx.status==XR_MANIFEST_OK&&plan&&!plan->valid) manifest_status(&ctx,XR_MANIFEST_INVALID);
-    if (ctx.status==XR_MANIFEST_OK&&manifest_work(&ctx,1)) { *output=plan;plan=NULL; }
+    if (ctx.status==XR_MANIFEST_OK&&((&ctx)->status == XR_MANIFEST_OK)) { *output=plan;plan=NULL; }
     xr_native_package_plan_free_owned(plan);return ctx.status;
 }
 #define NATIVE_OWNED_FIND(name,type) \
@@ -1835,7 +1835,7 @@ XR_FUNC XrManifestStatus xr_native_package_find_##name##_owned(const XrNativePac
     if (!plan||!name_value||!output)return XR_MANIFEST_BAD_ARGUMENT; \
     ManifestContext ctx={*manifest_policy(plan),XR_MANIFEST_OK,NULL}; \
     const type *found=xr_native_package_find_##name##_impl(&ctx,plan,name_value); \
-    if (ctx.status==XR_MANIFEST_OK&&manifest_work(&ctx,1))*output=found; \
+    if (ctx.status==XR_MANIFEST_OK&&((&ctx)->status == XR_MANIFEST_OK))*output=found; \
     return ctx.status; \
 }
 NATIVE_OWNED_FIND(unit,XrNativeUnit)
@@ -1863,7 +1863,7 @@ XR_FUNC XrManifestStatus xr_native_package_configure_c_exports_owned(XrNativePac
     staged.exports=manifest_calloc(&ctx,plan->export_count,sizeof(*staged.exports));
     if (!staged.exports)return ctx.status;
     for (uint32_t i=0;i<plan->export_count;++i) {
-        if (!manifest_work(&ctx,1))break;
+        if (!((&ctx)->status == XR_MANIFEST_OK))break;
         const XrCExportPlan *old=&plan->exports[i];XrCExportPlan *item=&staged.exports[i];
         item->header=old->header;item->xray_name=native_copy_optional(&ctx,old->xray_name);
         item->symbol=native_copy_optional(&ctx,old->symbol);
@@ -1872,7 +1872,7 @@ XR_FUNC XrManifestStatus xr_native_package_configure_c_exports_owned(XrNativePac
     char error[256]={0};
     if (ctx.status==XR_MANIFEST_OK&&!xr_native_package_configure_c_exports_impl(&ctx,&staged,prefix,excludes,error,sizeof(error)))
         manifest_error(&ctx,error[0]?error:"invalid C export configuration");
-    if (ctx.status==XR_MANIFEST_OK&&manifest_work(&ctx,1)) {
+    if (ctx.status==XR_MANIFEST_OK&&((&ctx)->status == XR_MANIFEST_OK)) {
         native_exports_free(plan->exports,plan->export_count);
         plan->exports=staged.exports;plan->export_count=staged.export_count;plan->fingerprint=staged.fingerprint;
         staged.exports=NULL;
@@ -1891,7 +1891,7 @@ static XrNativeLayoutAssertion *native_layouts_copy(ManifestContext *ctx, const 
     XrNativeLayoutAssertion *items=manifest_calloc(ctx,plan->layout_count,sizeof(*items));
     if (!items)return NULL;
     for (uint32_t i=0;i<plan->layout_count;++i) {
-        if (!manifest_work(ctx,1))break;
+        if (!((ctx)->status == XR_MANIFEST_OK))break;
         const XrNativeLayoutAssertion *old=&plan->layouts[i];XrNativeLayoutAssertion *item=&items[i];
         *item=*old;item->field_names=NULL;item->field_offsets=NULL;
         if (old->field_count) {
@@ -1900,7 +1900,7 @@ static XrNativeLayoutAssertion *native_layouts_copy(ManifestContext *ctx, const 
             if (ctx->status!=XR_MANIFEST_OK)break;
             manifest_copy(ctx,item->field_offsets,old->field_offsets,(size_t)old->field_count*sizeof(uint32_t));
             for (uint32_t j=0;j<old->field_count;++j) {
-                if (!manifest_work(ctx,1))break;
+                if (!((ctx)->status == XR_MANIFEST_OK))break;
                 item->field_names[j]=native_copy_optional(ctx,old->field_names[j]);
             }
         }
@@ -1914,7 +1914,7 @@ XR_FUNC XrManifestStatus xr_native_package_note_layout_subject_owned(XrNativePac
     staged.layouts=native_layouts_copy(&ctx,plan);
     if (!staged.layouts)return ctx.status;
     xr_native_package_note_layout_subject_impl(&ctx,&staged,name);
-    if (ctx.status==XR_MANIFEST_OK&&manifest_work(&ctx,1)) {
+    if (ctx.status==XR_MANIFEST_OK&&((&ctx)->status == XR_MANIFEST_OK)) {
         native_layouts_free(plan->layouts,plan->layout_count);plan->layouts=staged.layouts;staged.layouts=NULL;
     }
     native_layouts_free(staged.layouts,staged.layout_count);return ctx.status;
@@ -1926,7 +1926,7 @@ XR_FUNC XrManifestStatus xr_native_package_resolve_layout_owned(XrNativePackageP
     staged.layouts=native_layouts_copy(&ctx,plan);
     if (!staged.layouts)return ctx.status;
     bool found=xr_native_package_resolve_layout_impl(&ctx,&staged,name,layout);
-    if (ctx.status==XR_MANIFEST_OK&&manifest_work(&ctx,1)) {
+    if (ctx.status==XR_MANIFEST_OK&&((&ctx)->status == XR_MANIFEST_OK)) {
         native_layouts_free(plan->layouts,plan->layout_count);plan->layouts=staged.layouts;staged.layouts=NULL;*output=found;
     }
     native_layouts_free(staged.layouts,staged.layout_count);return ctx.status;

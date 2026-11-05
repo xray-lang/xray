@@ -24,7 +24,7 @@ static XrXirStatus effect_invocation_current_input_match(const XrXirCompileConte
     XrXirStatus status=effect_body_source_types_match(work,material,module);
     for (uint32_t f=0;status==XR_XIR_OK && f<module->function_count;++f)
         status=effect_body_function_match(work,&material->functions[f],&module->functions[f]);
-    if (status==XR_XIR_OK) status=effect_body_metadata_match(work,&material->domain,module);
+    if (status==XR_XIR_OK) status=effect_body_metadata_match(&material->domain,module);
     return status;
 }
 
@@ -38,7 +38,7 @@ static XrXirStatus effect_invocation_collect(const XrXirCompileContext *work,
         !effect_body_request_empty(output) || !xir_effects_context_matches(work,effects,module->function_count) ||
         !effect_contracts_read(effects) || !declared || declared->resources!=work->resources ||
         declared->count!=module->function_count || !declared->functions) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,3+sizeof(bool))) return XR_XIR_BUDGET;
+
     bool local_bounds=graph->material && declared==graph->material->declared;
     XrXirStatus status=XR_XIR_OK;
     if (!graph->material || (graph->material!=effects->generation && !graph->physical_owned))
@@ -51,18 +51,18 @@ static XrXirStatus effect_invocation_collect(const XrXirCompileContext *work,
     /* Recollection retires the old owned bound child with its generation.
      * An independent caller-owned bound remains a live comparison input. */
     if (local_bounds) {
-        if (!xir_compile_work(work,sizeof(declared))) return XR_XIR_BUDGET;
+
         declared=material->declared;
     }
     if (status==XR_XIR_OK && declared!=material->declared) {
         EffectInvocationDeclaredBounds *copy=NULL;
         status=effect_invocation_bounds_copy_physical(work,declared,material->physical,&copy);
-        if (status==XR_XIR_OK && !xir_compile_work(work,2)) status=XR_XIR_BUDGET;
+
         if (status!=XR_XIR_OK) { effect_invocation_bounds_free(copy);return status; }
         effect_invocation_bounds_free(material->declared);material->declared=copy;
     }
     if (status!=XR_XIR_OK) return status;
-    if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=effect_body_owned_request(work,material);return XR_XIR_OK;
 }
 
@@ -72,7 +72,7 @@ static inline XrXirStatus effect_invocations_receive(const XrXirCompileContext *
     const XrXirModule *module,XrXirEffects *effects,EffectGraph *graph,
     const EffectInvocationDeclaredBounds *declared,EffectInvocationWorkspace **output) {
     if (!output || *output || !xir_compile_context_valid(work)) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,sizeof(EffectBodyRequest))) return XR_XIR_BUDGET;
+
     EffectBodyRequest input={0};
     XrXirStatus status=effect_invocation_collect(work,module,effects,graph,declared,&input);
     if (status==XR_XIR_OK) status=effect_invocation_current_input_match(work,module,graph->material);

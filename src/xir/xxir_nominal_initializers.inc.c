@@ -21,7 +21,7 @@ static XrXirStatus nominal_initializer_signature(const XrXirCompileContext *cont
     if (generic->parameter_count != owner->parameter_count) return XR_XIR_BAD_TYPE;
     uint32_t count = owner->parameter_count;
     for (uint32_t p = 0; p < count; ++p) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         if (xr_xir_binder_kind(generic,p) != XR_XIR_BINDER_TYPE) return XR_XIR_BAD_TYPE;
         XrXirStatus status = xr_xir_compile_constraint_records_match(context,m->types,
             owner->constraints[p],m->types,generic->constraints[p],count);
@@ -29,7 +29,7 @@ static XrXirStatus nominal_initializer_signature(const XrXirCompileContext *cont
     }
     if (!field) return xr_xir_compile_method_signature_verify(context,m,function);
     uint64_t bytes = (uint64_t)count * sizeof(XrXirType);
-    if (bytes > SIZE_MAX || !xir_compile_work(context,count)) return XR_XIR_BUDGET;
+    if (bytes > SIZE_MAX) return XR_XIR_BUDGET;
     XrXirStatus status = XR_XIR_OK;
     XrXirType *arguments = count ? xir_compile_alloc(context,(size_t)bytes,&status) : NULL;
     if (count && !arguments) return status;
@@ -61,37 +61,37 @@ static XrXirStatus nominal_initializer_target(const XrXirCompileContext *context
         !(field->flags & (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED)));
     if (identity->exported != visible) return XR_XIR_BAD_STRUCTURE;
     const XrXirSourceModule *module = &d->modules[identity->module];
-    if (!xir_compile_work(context,owner->module.length)) return XR_XIR_BUDGET;
+
     if (owner->module.length != module->name_length ||
         memcmp(owner->module.bytes,module->name,owner->module.length)) return XR_XIR_BAD_STRUCTURE;
     if (m->linkage_kind == XR_XIR_PROGRAM && function == d->entry_function) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i = 0; i < d->module_count; ++i) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         if (function == d->modules[i].initializer) return XR_XIR_BAD_STRUCTURE;
     }
     for (uint32_t i = 0; m->defaults && i < m->defaults->count; ++i) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         if (function == m->defaults->records[i].function) return XR_XIR_BAD_STRUCTURE;
     }
     const XrXirImplementationTable *implementations = d->implementations;
     for (uint32_t i = 0; implementations && i < implementations->count; ++i) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         const XrXirImplementation *implementation = &implementations->records[i];
         for (uint32_t b = 0; b < implementation->binding_count; ++b) {
-            if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
             if (implementation->bindings[b].function == function) return XR_XIR_BAD_STRUCTURE;
         }
     }
     return nominal_initializer_signature(context,m,owner,function,field);
 }
-static XrXirStatus construction_module_slots(const XrXirCompileContext *context,
+static XrXirStatus construction_module_slots(
     const XrXirModule *module,const XrXirSlotFacts *facts) {
     const XrXirDeclarations *d=module->declarations;
     uint32_t count=d?d->slot_count:0;
     if (!facts || facts->count!=count || (count && (!d->slots || !d->modules)))
         return XR_XIR_BAD_STRUCTURE;
     for (uint32_t s=0;s<count;++s) {
-        if (!xir_compile_work(context,sizeof(*d->slots)+1)) return XR_XIR_BUDGET;
+
         const XrXirSlot *slot=&d->slots[s];
         if (facts->rows[s].slot!=s || slot->module>=d->module_count || slot->mutable>1 ||
             (facts->rows[s].exported && slot->mutable)) return XR_XIR_BAD_STRUCTURE;
@@ -103,7 +103,7 @@ XR_FUNC XrXirStatus xir_construction_verify(
     if (!xir_compile_context_valid(context) || !m) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus shape = xir_construction_shape(context, m->types, construction);
     if (shape != XR_XIR_OK) return shape;
-    shape=construction_module_slots(context,m,&construction->slots);
+    shape=construction_module_slots(m,&construction->slots);
     if (shape!=XR_XIR_OK) return shape;
     shape=xir_materialization_verify(context,m,construction);
     if (shape!=XR_XIR_OK) return shape;
@@ -114,7 +114,7 @@ XR_FUNC XrXirStatus xir_construction_verify(
     if (table->count && !table->declarations) return XR_XIR_BAD_STRUCTURE;
     bool instance = xir_effect_evidence_is_closed(m);
     for (uint32_t n = 0; n < table->count; ++n) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         const XrXirNominalDeclaration *owner = &table->declarations[n];
         const XrXirConstructionRow *row = xr_xir_compile_construction_row(construction, n);
         XrXirStatus status = nominal_initializer_target(context,m,n,row->default_initializer,NULL);
@@ -123,7 +123,7 @@ XR_FUNC XrXirStatus xir_construction_verify(
          * INSTANCE may contain several concrete origins of the same template. */
         bool constructor = false;
         for (uint32_t f = 0; !instance && m->declarations && f < m->function_count; ++f) {
-            if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
             const XrXirFunctionIdentity *id = &m->declarations->functions[f];
             if (id->nominal_owner != n+1 || id->method_kind != XR_XIR_CONSTRUCTOR) continue;
             if (constructor || (row->default_initializer && row->default_initializer != f+1))
@@ -134,13 +134,13 @@ XR_FUNC XrXirStatus xir_construction_verify(
             !!(owner->flags & XR_XIR_NOMINAL_MODULE_LITERAL) != (constructor && !row->default_initializer))
             return XR_XIR_BAD_STRUCTURE;
         for (uint32_t f = 0; f < owner->field_count; ++f) {
-            if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
             const XrXirNominalField *field = &owner->fields[f];
             status = nominal_initializer_target(context,m,n,row->field_initializers[f],field);
             if (status != XR_XIR_OK) return status;
             if (!row->field_initializers[f]) continue;
             for (uint32_t prior = 0; prior < f; ++prior) {
-                if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
                 if (row->field_initializers[prior] == row->field_initializers[f]) return XR_XIR_BAD_STRUCTURE;
             }
         }

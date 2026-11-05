@@ -15,7 +15,7 @@
 static XrOsIoStatus proc_self_executable(wchar_t *buffer, DWORD capacity, DWORD *length) {
     DWORD count = GetModuleFileNameW(NULL, buffer, capacity);
     if (!count) return io_windows_status(GetLastError());
-    if (count >= capacity) return XR_OS_IO_BUDGET;
+    if (count >= capacity) return XR_OS_IO_OVERFLOW;
     *length = count;
     return XR_OS_IO_OK;
 }
@@ -34,8 +34,8 @@ XR_FUNC XrOsIoStatus xr_os_io_self_exe_path(const XrOsIoPolicy *policy, char **o
         wchar_t *wide = io_alloc(&io, bytes);
         DWORD length = 0;
         XrOsIoStatus queried = XR_OS_IO_OK;
-        if (wide && io_work(&io, 1 + bytes)) queried = proc_self_executable(wide, capacity, &length);
-        if (io.status == XR_OS_IO_OK && queried == XR_OS_IO_BUDGET && capacity < 32768) {
+        if (wide && ((&io)->status == XR_OS_IO_OK)) queried = proc_self_executable(wide, capacity, &length);
+        if (io.status == XR_OS_IO_OK && queried == XR_OS_IO_OVERFLOW && capacity < 32768) {
             io_free(&io, wide);
             continue;
         }
@@ -56,14 +56,14 @@ XR_FUNC XrOsIoStatus xr_os_io_environment_get(const XrOsIoPolicy *policy,
     if (!io_length(&io, name, &length)) return io.status;
     if (!length) return XR_OS_IO_BAD_ARGUMENT;
     for (size_t i = 0; i < length; ++i) {
-        if (!io_work(&io, 1)) return io.status;
+        if (!((&io)->status == XR_OS_IO_OK)) return io.status;
         if (name[i] == '=') return XR_OS_IO_BAD_ARGUMENT;
     }
     wchar_t *key = NULL, *value = NULL;
     char *result = NULL;
     io_status(&io, xr_win_utf8_text_owned(policy, name, &key));
     DWORD capacity = 0;
-    if (io_work(&io, 1)) {
+    if ((&io)->status == XR_OS_IO_OK) {
         SetLastError(ERROR_SUCCESS);
         capacity = GetEnvironmentVariableW(key, NULL, 0);
         DWORD error = GetLastError();
@@ -71,20 +71,20 @@ XR_FUNC XrOsIoStatus xr_os_io_environment_get(const XrOsIoPolicy *policy,
             io_status(&io, proc_environment_error(error));
     }
     if (io.status == XR_OS_IO_OK) {
-        if (capacity > 32768) io_status(&io, XR_OS_IO_BUDGET);
+        if (capacity > 32768) io_status(&io, XR_OS_IO_OVERFLOW);
         else {
             if (!capacity) capacity = 1;
             value = io_alloc(&io, (size_t)capacity * sizeof(wchar_t));
         }
     }
-    if (value && io_work(&io, 1 + (size_t)capacity * sizeof(wchar_t))) {
+    if (value && ((&io)->status == XR_OS_IO_OK)) {
         SetLastError(ERROR_SUCCESS);
         DWORD count = GetEnvironmentVariableW(key, value, capacity);
         DWORD error = GetLastError();
         if (!count && error != ERROR_SUCCESS)
             io_status(&io, proc_environment_error(error));
         else if (count >= capacity) io_status(&io, XR_OS_IO_IO);
-        else if (io_work(&io, sizeof(wchar_t))) value[count] = 0;
+        else if ((&io)->status == XR_OS_IO_OK) value[count] = 0;
     }
     if (io.status == XR_OS_IO_OK) io_status(&io, xr_win_utf16_text_owned(policy, value, &result));
     io_free(&io, value); io_free(&io, key);

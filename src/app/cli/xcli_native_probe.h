@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xcli_native_probe.h - Owned native capability selection on one caller ledger
+ * xcli_native_probe.h - Owned native capability selection on one caller memory owner
  */
 #ifndef XCLI_NATIVE_PROBE_H
 #define XCLI_NATIVE_PROBE_H
@@ -16,7 +16,8 @@ typedef enum XrCliNativeProbeStatus {
     XR_CLI_NATIVE_PROBE_OK, XR_CLI_NATIVE_PROBE_INVALID, XR_CLI_NATIVE_PROBE_UNAVAILABLE,
     XR_CLI_NATIVE_PROBE_UNSUPPORTED, XR_CLI_NATIVE_PROBE_BUDGET, XR_CLI_NATIVE_PROBE_OUT_OF_MEMORY,
     XR_CLI_NATIVE_PROBE_IO, XR_CLI_NATIVE_PROBE_INTEGRITY, XR_CLI_NATIVE_PROBE_CLEANUP,
-    XR_CLI_NATIVE_PROBE_PENDING
+    XR_CLI_NATIVE_PROBE_PENDING,
+    XR_CLI_NATIVE_PROBE_MEMORY_LIMIT, XR_CLI_NATIVE_PROBE_OVERFLOW
 } XrCliNativeProbeStatus;
 typedef struct XrCliNativeProbeRequest {
     XrToolchainSelector selector;
@@ -39,7 +40,7 @@ typedef struct XrCliNativeProbeReport {
     uint64_t duration_ms;
 } XrCliNativeProbeReport;
 
-/* New only allocates on the required original ledger and preserves output on
+/* New only allocates on the required original memory owner and preserves output on
  * failure. Run borrows request text for one synchronous capability selection.
  * Every attempt uses a real Source projection, locked compile/link replay,
  * native admission and exact native output. Explicit paths/providers,
@@ -52,8 +53,7 @@ XR_FUNC XrCliNativeProbeStatus xr_cli_native_probe_new(XrCompileResources *resou
 /* Resolve the same selector/path precedence for probe and build. The result
  * borrows only the live options/snapshot and must be consumed before they die.
  * Failure preserves all output bytes. This is configuration, not readiness. */
-XR_FUNC XrCliNativeProbeStatus xr_cli_native_probe_resolve(XrCompileResources *resources,
-    const XrCliNativeProbeOptions *options, XrCliNativeProbeRequest *output);
+XR_FUNC XrCliNativeProbeStatus xr_cli_native_probe_resolve(const XrCliNativeProbeOptions *options, XrCliNativeProbeRequest *output);
 XR_FUNC XrCliNativeProbeStatus xr_cli_native_probe_run(XrCliNativeProbe *owner,
     const XrCliNativeProbeRequest *request);
 /* Reports and local facts are immutable borrows until close. A local view is

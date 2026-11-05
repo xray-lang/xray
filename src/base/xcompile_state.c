@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xcompile_state.c - Sticky resource failure independent of producer lifetime
+ * xcompile_state.c - Request-local parser memory failure and session ownership
  */
 #include "xcompile_state.h"
 #include "xchecks.h"
@@ -40,7 +40,7 @@ XR_FUNC XrCompileResourceStatus xr_compile_state_status(const XrCompileState *st
 
 XR_FUNC XrCompileResourceStatus xr_compile_state_fail(XrCompileState *state, XrCompileResourceStatus status) {
     if (!state) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
-    if (status < XR_COMPILE_RESOURCE_OK || status > XR_COMPILE_RESOURCE_CANCELLED)
+    if (status < XR_COMPILE_RESOURCE_OK || status > XR_COMPILE_RESOURCE_CLOCK_FAILURE)
         status = XR_COMPILE_RESOURCE_BAD_ARGUMENT;
     if (status != XR_COMPILE_RESOURCE_OK) {
         int expected = XR_COMPILE_RESOURCE_OK;
@@ -54,7 +54,7 @@ XR_FUNC XrCompileResourceStatus xr_compile_state_retain(XrCompileState *state) {
     if (!state) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
     uint64_t current = atomic_load_explicit(&state->references, memory_order_relaxed);
     for (;;) {
-        if (current == UINT64_MAX) return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET);
+        if (current == UINT64_MAX) return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_OVERFLOW);
         if (atomic_compare_exchange_weak_explicit(&state->references, &current, current + 1,
                 memory_order_relaxed, memory_order_relaxed)) return XR_COMPILE_RESOURCE_OK;
     }
@@ -75,7 +75,7 @@ XR_FUNC XrCompileResourceStatus xr_compile_state_session_open(XrCompileState *st
     if (status!=XR_COMPILE_RESOURCE_OK) return status;
     uint64_t count=atomic_load_explicit(&state->sessions,memory_order_relaxed);
     for (;;) {
-        if (count==UINT64_MAX) return xr_compile_state_fail(state,XR_COMPILE_RESOURCE_BUDGET);
+        if (count==UINT64_MAX) return xr_compile_state_fail(state,XR_COMPILE_RESOURCE_OVERFLOW);
         if (atomic_compare_exchange_weak_explicit(&state->sessions,&count,count+1,
             memory_order_acq_rel,memory_order_relaxed)) return XR_COMPILE_RESOURCE_OK;
     }
@@ -87,12 +87,6 @@ XR_FUNC void xr_compile_state_session_close(XrCompileState *state) {
 }
 XR_FUNC bool xr_compile_state_has_sessions(const XrCompileState *state) {
     return state && atomic_load_explicit(&state->sessions,memory_order_acquire)!=0;
-}
-
-XR_FUNC XrCompileResourceStatus xr_compile_state_work(XrCompileState *state, uint64_t units) {
-    XrCompileResourceStatus status = xr_compile_state_status(state);
-    if (status != XR_COMPILE_RESOURCE_OK) return status;
-    return xr_compile_state_fail(state, xr_compile_resources_work(state->resources, units));
 }
 
 XR_FUNC XrCompileResourceStatus xr_compile_state_alloc(XrCompileState *state, size_t bytes, void **output) {
@@ -119,39 +113,38 @@ XR_FUNC void xr_compile_state_free(void *memory) {
 
 XR_FUNC XrCompileResourceStatus xr_compile_state_copy(XrCompileState *state, void *destination, const void *source, size_t bytes) {
     if (bytes && (!source || !destination)) return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
-    XrCompileResourceStatus status = xr_compile_state_work(state, bytes);
+    XrCompileResourceStatus status = xr_compile_state_status(state);
     if (status == XR_COMPILE_RESOURCE_OK && bytes) memcpy(destination, source, bytes);
     return status;
 }
 
 XR_FUNC XrCompileResourceStatus xr_compile_state_zero(XrCompileState *state, void *destination, size_t bytes) {
     if (bytes && !destination) return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
-    XrCompileResourceStatus status = xr_compile_state_work(state, bytes);
+    XrCompileResourceStatus status = xr_compile_state_status(state);
     if (status == XR_COMPILE_RESOURCE_OK && bytes) memset(destination, 0, bytes);
     return status;
 }
 
 XR_FUNC XrCompileResourceStatus xr_compile_state_string_length(XrCompileState *state, const char *text, size_t *output) {
     if (!text || !output) return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+    XrCompileResourceStatus status = xr_compile_state_status(state);
+    if (status != XR_COMPILE_RESOURCE_OK) return status;
     for (size_t length = 0;; ++length) {
-        XrCompileResourceStatus status = xr_compile_state_work(state, 1);
-        if (status != XR_COMPILE_RESOURCE_OK) return status;
         if (!text[length]) {
             *output = length;
             return XR_COMPILE_RESOURCE_OK;
         }
-        if (length == SIZE_MAX - 1) return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET);
+        if (length == SIZE_MAX - 1) return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_OVERFLOW);
     }
 }
 
 XR_FUNC XrCompileResourceStatus xr_compile_state_strndup(XrCompileState *state, const char *text, size_t length, char **output) {
     if (!output || *output || (!text && length)) return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
-    if (length == SIZE_MAX) return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET);
+    if (length == SIZE_MAX) return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_OVERFLOW);
     void *memory = NULL;
     XrCompileResourceStatus status = xr_compile_state_alloc(state, length + 1, &memory);
     if (status != XR_COMPILE_RESOURCE_OK) return status;
     status = xr_compile_state_copy(state, memory, text, length);
-    if (status == XR_COMPILE_RESOURCE_OK) status = xr_compile_state_work(state, 1);
     if (status != XR_COMPILE_RESOURCE_OK) {
         xr_compile_resources_free(memory);
         return status;

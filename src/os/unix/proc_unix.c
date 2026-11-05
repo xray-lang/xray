@@ -23,7 +23,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-
 #define PROC_GROUP_CAPACITY 64
 static atomic_int proc_groups[PROC_GROUP_CAPACITY];
 static int proc_group_slot(XrProcId pid) {
@@ -45,11 +44,8 @@ static XrOsProcStatus proc_system_alloc(void *context, size_t bytes, void **out)
     *out = p; return XR_PROC_OK;
 }
 static void proc_system_free(void *context, void *p) { (void) context; xr_free(p); }
-static XrOsProcStatus proc_system_work(void *context, uint64_t n) {
-    (void) context; (void) n; return XR_PROC_OK;
-}
 XR_FUNC XrProcMemory xr_proc_system_memory(void) {
-    XrProcMemory m = {NULL, proc_system_alloc, proc_system_free, proc_system_work}; return m;
+    XrProcMemory m = {NULL, proc_system_alloc, proc_system_free}; return m;
 }
 XR_FUNC XrOsProcStatus xr_proc_last_error(void) {
     if (errno == ENOMEM) return XR_PROC_OUT_OF_MEMORY;
@@ -64,7 +60,6 @@ static XrOsProcStatus proc_spawn_options_valid(const XrProcSpawnOptions *o) {
         const char *key = o->env_keys[i];
         if (!key || !*key || !o->env_values[i]) return XR_PROC_INVALID_ARGUMENT;
         for (size_t j = 0;; ++j) {
-            XrOsProcStatus s = o->memory.work(o->memory.context, 1); if (s != XR_PROC_OK) return s;
             if (!key[j]) break;
             if (key[j] == '=') return XR_PROC_INVALID_ARGUMENT;
         }
@@ -129,9 +124,8 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     if (o && o->image_mode != XR_PROC_IMAGES_NONE)
         return o->image_mode == XR_PROC_IMAGES_WINDOWS_TREE ? XR_PROC_UNSUPPORTED : XR_PROC_INVALID_ARGUMENT;
     if (o && o->image_observer.observe) return XR_PROC_INVALID_ARGUMENT;
-
     if (!prog || !*prog || !argv || !argv[0] || !o || !output || *output != XR_PROC_INVALID ||
-        !o->memory.alloc || !o->memory.free || !o->memory.work ||
+        !o->memory.alloc || !o->memory.free ||
         (o->detached && o->new_process_group)) return XR_PROC_INVALID_ARGUMENT;
     XrProcMemory m = o->memory;
     XrOsProcStatus status = proc_spawn_options_valid(o);
@@ -143,32 +137,27 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
         if (group_slot < 0) return XR_PROC_BUDGET;
     }
     if (o->complete_environment) {
-        if (o->env_count >= SIZE_MAX / sizeof(char *)) { status = XR_PROC_BUDGET; goto done; }
+        if (o->env_count >= SIZE_MAX / sizeof(char *)) { status = XR_PROC_OVERFLOW; goto done; }
         status = m.alloc(m.context, (o->env_count + 1) * sizeof(char *), (void **)&environment);
         if (status != XR_PROC_OK) goto done;
         for (; count < o->env_count; ++count) {
             size_t k = 0, v = 0;
-            for (;;) { status = m.work(m.context, 1); if (status != XR_PROC_OK) goto done; if (!o->env_keys[count][k]) break; ++k; }
-            for (;;) { status = m.work(m.context, 1); if (status != XR_PROC_OK) goto done; if (!o->env_values[count][v]) break; ++v; }
-            if (k > SIZE_MAX - v - 2) { status = XR_PROC_BUDGET; goto done; }
+            while (o->env_keys[count][k]) ++k;
+            while (o->env_values[count][v]) ++v;
+            if (v > SIZE_MAX - 2 || k > SIZE_MAX - v - 2) { status = XR_PROC_OVERFLOW; goto done; }
             char *pair = NULL; status = m.alloc(m.context, k + v + 2, (void **)&pair);
             if (status != XR_PROC_OK) goto done;
-            status = m.work(m.context, k + v + 2);
-            if (status != XR_PROC_OK) { m.free(m.context, pair); goto done; }
             memcpy(pair, o->env_keys[count], k); pair[k] = '=';
             memcpy(pair + k + 1, o->env_values[count], v + 1); environment[count] = pair;
         }
         environment[count] = NULL;
     }
-    status = m.work(m.context, 1); if (status != XR_PROC_OK) goto done;
     if (pipe(report) != 0) { status = xr_proc_last_error(); goto done; }
-    status = m.work(m.context, 1); if (status != XR_PROC_OK) goto done;
     if (fcntl(report[1], F_SETFD, FD_CLOEXEC) < 0) { status = xr_proc_last_error(); goto done; }
     if (o->detached) {
-        status = m.work(m.context, 1); if (status != XR_PROC_OK) goto done;
         if (pipe(detached_pipe) != 0) { status = xr_proc_last_error(); goto done; }
     }
-    status = m.work(m.context, 1); if (status != XR_PROC_OK) goto done;
+
     pid = fork(); if (pid < 0) { status = xr_proc_last_error(); goto done; }
     if (!pid) {
         close(report[0]);
@@ -219,9 +208,8 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
 }
 
 /* A group owner retains its unreaped leader until descendants are stopped. */
-XR_FUNC XrOsProcStatus xr_proc_release(XrProcId *owner, const XrProcMemory *memory) {
-    if (!owner || *owner<=0 || (XrProcId)(pid_t)*owner!=*owner || !memory ||
-        !memory->alloc || !memory->free || !memory->work) return XR_PROC_INVALID_ARGUMENT;
+XR_FUNC XrOsProcStatus xr_proc_release(XrProcId *owner) {
+    if (!owner || *owner<=0 || (XrProcId)(pid_t)*owner!=*owner) return XR_PROC_INVALID_ARGUMENT;
     /* Forgetting an unreaped child would leak a zombie. An explicit reaper
      * provider is required before a POSIX group may relinquish its owner. */
     return XR_PROC_UNSUPPORTED;
@@ -286,7 +274,6 @@ XrProcWaitResult xr_proc_try_wait(XrProcId pid, int *exit_code) {
         }
         return XR_PROC_WAIT_ERROR;
     }
-
     if (proc_group_slot(pid) >= 0) return proc_group_wait(pid, false, exit_code);
     int status = 0;
     pid_t r;
@@ -302,7 +289,6 @@ XrProcWaitResult xr_proc_try_wait(XrProcId pid, int *exit_code) {
         }
         return XR_PROC_WAIT_ERROR;
     }
-
     if (exit_code) {
         *exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
     }

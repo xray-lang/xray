@@ -22,7 +22,7 @@
 #include <string.h>
 
 static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     if (!ctx || !attr)
         return;
     switch (attr->kind) {
@@ -93,20 +93,20 @@ static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
 }
 
 static void xfmt_emit_method_conditions(XrFmtContext *ctx, const MethodDeclNode *method) {
-    if (!xfmt_step(ctx)) return;
-    for (int i = 0; xfmt_step(ctx) && (i < method->condition_count); ++i) {
+    if (!xfmt_healthy(ctx)) return;
+    for (int i = 0; xfmt_healthy(ctx) && (i < method->condition_count); ++i) {
         const XrGenericParam *condition = method->conditions[i];
         xfmt_write_str(ctx, i ? ", " : " where ");
         xfmt_write_str(ctx, condition->name); xfmt_write_str(ctx, ": ");
-        for (int c = 0; xfmt_step(ctx) && (c < condition->constraint_count); ++c) {
+        for (int c = 0; xfmt_healthy(ctx) && (c < condition->constraint_count); ++c) {
             if (c) xfmt_write_str(ctx, " & ");
             xfmt_emit_type(ctx, condition->constraints[c]);
         }
     }
 }
 static void xfmt_emit_attributes(XrFmtContext *ctx, XrAttribute **attrs, int count) {
-    if (!xfmt_step(ctx)) return;
-    for (int i = 0; xfmt_step(ctx) && (i < count); i++) {
+    if (!xfmt_healthy(ctx)) return;
+    for (int i = 0; xfmt_healthy(ctx) && (i < count); i++) {
         xfmt_write_indent(ctx);
         xfmt_emit_attribute(ctx, attrs[i]);
         xfmt_write_newline(ctx);
@@ -114,7 +114,7 @@ static void xfmt_emit_attributes(XrFmtContext *ctx, XrAttribute **attrs, int cou
 }
 
 XR_FUNC void xfmt_emit_var_decl(XrFmtContext *ctx, AstNode *node) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     VarDeclNode *decl = &node->as.var_decl;
     xfmt_emit_attributes(ctx, decl->attributes, decl->attr_count);
     xfmt_write_indent(ctx);
@@ -137,7 +137,7 @@ XR_FUNC void xfmt_emit_var_decl(XrFmtContext *ctx, AstNode *node) {
 }
 
 XR_FUNC void xfmt_emit_destructure_decl(XrFmtContext *ctx, AstNode *node) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     xfmt_write_indent(ctx);
     DestructureDeclNode *decl = &node->as.destructure_decl;
 
@@ -149,7 +149,7 @@ XR_FUNC void xfmt_emit_destructure_decl(XrFmtContext *ctx, AstNode *node) {
 }
 
 XR_FUNC void xfmt_emit_param(XrFmtContext *ctx, const XrParamNode *param) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     if (!param)
         return;
     if (param->is_rest)
@@ -167,11 +167,11 @@ XR_FUNC void xfmt_emit_param(XrFmtContext *ctx, const XrParamNode *param) {
 
 static void xfmt_emit_borrow_origins(XrFmtContext *ctx, XrBorrowOriginSyntaxState syntax,
                                      const AstBorrowOriginRef *origins, int count) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     if (syntax != XR_BORROW_ORIGIN_EXPLICIT_SET || !origins || count <= 0)
         return;
     xfmt_write_str(ctx, " from ");
-    for (int i = 0; xfmt_step(ctx) && (i < count); i++) {
+    for (int i = 0; xfmt_healthy(ctx) && (i < count); i++) {
         if (i > 0)
             xfmt_write_str(ctx, " | ");
         if (origins[i].kind == AST_BORROW_ORIGIN_RECEIVER)
@@ -184,7 +184,7 @@ static void xfmt_emit_borrow_origins(XrFmtContext *ctx, XrBorrowOriginSyntaxStat
 }
 
 XR_FUNC void xfmt_emit_function_decl(XrFmtContext *ctx, AstNode *node) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     FunctionDeclNode *fn = &node->as.function_decl;
     if (fn->is_extern) {
         xfmt_write_indent(ctx);
@@ -208,7 +208,7 @@ XR_FUNC void xfmt_emit_function_decl(XrFmtContext *ctx, AstNode *node) {
     xfmt_emit_generic_params(ctx, fn->type_params, fn->type_param_count);
 
     xfmt_write_char(ctx, '(');
-    for (int i = 0; xfmt_step(ctx) && (i < fn->param_count); i++) {
+    for (int i = 0; xfmt_healthy(ctx) && (i < fn->param_count); i++) {
         if (i > 0)
             xfmt_write_str(ctx, ", ");
         xfmt_emit_param(ctx, fn->params[i]);
@@ -237,7 +237,7 @@ XR_FUNC void xfmt_emit_function_decl(XrFmtContext *ctx, AstNode *node) {
 }
 
 XR_FUNC void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     bool is_struct = node && node->type == AST_STRUCT_DECL;
     bool is_union = node && node->type == AST_UNION_DECL;
     ClassDeclNode *cls = is_union    ? &node->as.union_decl
@@ -270,7 +270,7 @@ XR_FUNC void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
 
     if (!is_union && cls->interface_count > 0) {
         xfmt_write_str(ctx, " implements ");
-        for (int i = 0; xfmt_step(ctx) && (i < cls->interface_count); i++) {
+        for (int i = 0; xfmt_healthy(ctx) && (i < cls->interface_count); i++) {
             if (i > 0)
                 xfmt_write_str(ctx, ", ");
             xfmt_emit_type(ctx, cls->interfaces[i]);
@@ -288,7 +288,7 @@ XR_FUNC void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
     int max_field_prefix = 0;
     bool align_fields = ctx->config && ctx->config->align_struct_fields && cls->field_count > 1;
     if (align_fields) {
-        for (int i = 0; xfmt_step(ctx) && (i < cls->field_count); i++) {
+        for (int i = 0; xfmt_healthy(ctx) && (i < cls->field_count); i++) {
             FieldDeclNode *f = &cls->fields[i]->as.field_decl;
             if (!f->field_type)
                 continue;
@@ -303,7 +303,7 @@ XR_FUNC void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
     }
 
     // Fields
-    for (int i = 0; xfmt_step(ctx) && (i < cls->field_count); i++) {
+    for (int i = 0; xfmt_healthy(ctx) && (i < cls->field_count); i++) {
         AstNode *field = cls->fields[i];
         FieldDeclNode *f = &field->as.field_decl;
 
@@ -327,7 +327,7 @@ XR_FUNC void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
                 if (f->is_static)
                     prefix += 7;
                 int pad = max_field_prefix - prefix;
-                for (int j = 0; xfmt_step(ctx) && (j < pad); j++)
+                for (int j = 0; xfmt_healthy(ctx) && (j < pad); j++)
                     xfmt_write_char(ctx, ' ');
             }
             xfmt_write_str(ctx, ": ");
@@ -350,7 +350,7 @@ XR_FUNC void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
 
     // Methods — getter/setter pairs are emitted as property accessor syntax:
     //   propname: type { fn() { ... } fn(v: type) { ... } }
-    for (int i = 0; xfmt_step(ctx) && (!is_union && i < cls->method_count); i++) {
+    for (int i = 0; xfmt_healthy(ctx) && (!is_union && i < cls->method_count); i++) {
         AstNode *method = cls->methods[i];
         MethodDeclNode *m = &method->as.method_decl;
 
@@ -376,7 +376,7 @@ XR_FUNC void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
             MethodDeclNode *setter = m->is_setter ? m : NULL;
             int pair_idx = -1;
 
-            for (int j = i + 1; xfmt_step(ctx) && (j < cls->method_count); j++) {
+            for (int j = i + 1; xfmt_healthy(ctx) && (j < cls->method_count); j++) {
                 MethodDeclNode *other = &cls->methods[j]->as.method_decl;
                 if ((other->is_getter || other->is_setter) && other->name) {
                     const char *oname = other->name;
@@ -396,7 +396,7 @@ XR_FUNC void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
             // If this is a setter and its getter already emitted it, skip
             if (m->is_setter && i > 0) {
                 int already_emitted = 0;
-                for (int j = 0; xfmt_step(ctx) && (j < i); j++) {
+                for (int j = 0; xfmt_healthy(ctx) && (j < i); j++) {
                     MethodDeclNode *prev = &cls->methods[j]->as.method_decl;
                     if (prev->is_getter && prev->name) {
                         const char *pname = prev->name;
@@ -450,7 +450,7 @@ XR_FUNC void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
             if (setter && setter->body) {
                 xfmt_write_indent(ctx);
                 xfmt_write_str(ctx, "fn(");
-                for (int j = 0; xfmt_step(ctx) && (j < setter->param_count); j++) {
+                for (int j = 0; xfmt_healthy(ctx) && (j < setter->param_count); j++) {
                     if (j > 0)
                         xfmt_write_str(ctx, ", ");
                     xfmt_emit_param(ctx, setter->params[j]);
@@ -509,7 +509,7 @@ XR_FUNC void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
         xfmt_emit_generic_params(ctx, m->type_params, m->type_param_count);
 
         xfmt_write_char(ctx, '(');
-        for (int j = 0; xfmt_step(ctx) && (j < m->param_count); j++) {
+        for (int j = 0; xfmt_healthy(ctx) && (j < m->param_count); j++) {
             if (j > 0)
                 xfmt_write_str(ctx, ", ");
             xfmt_emit_param(ctx, m->params[j]);
@@ -545,7 +545,7 @@ XR_FUNC void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
 }
 
 XR_FUNC void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     xfmt_write_indent(ctx);
     InterfaceDeclNode *iface = &node->as.interface_decl;
 
@@ -557,7 +557,7 @@ XR_FUNC void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
 
     if (iface->extends_count > 0) {
         xfmt_write_str(ctx, " extends ");
-        for (int i = 0; xfmt_step(ctx) && (i < iface->extends_count); i++) {
+        for (int i = 0; xfmt_healthy(ctx) && (i < iface->extends_count); i++) {
             if (i > 0)
                 xfmt_write_str(ctx, ", ");
             xfmt_emit_type(ctx, iface->extends[i]);
@@ -573,7 +573,7 @@ XR_FUNC void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
     int max_prop_prefix = 0;
     bool align_props = ctx->config && ctx->config->align_struct_fields && iface->property_count > 1;
     if (align_props) {
-        for (int i = 0; xfmt_step(ctx) && (i < iface->property_count); i++) {
+        for (int i = 0; xfmt_healthy(ctx) && (i < iface->property_count); i++) {
             InterfacePropertyNode *p = &iface->properties[i]->as.interface_property;
             if (!p->prop_type)
                 continue;
@@ -587,7 +587,7 @@ XR_FUNC void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
 
     // Properties first, then methods — matches the canonical order class bodies
     // emit (fields before methods) and keeps parsed-order semantics stable.
-    for (int i = 0; xfmt_step(ctx) && (i < iface->property_count); i++) {
+    for (int i = 0; xfmt_healthy(ctx) && (i < iface->property_count); i++) {
         AstNode *prop = iface->properties[i];
         InterfacePropertyNode *p = &prop->as.interface_property;
         if (prop->leading_comments)
@@ -602,7 +602,7 @@ XR_FUNC void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
                 if (p->is_readonly)
                     prefix += 6;
                 int pad = max_prop_prefix - prefix;
-                for (int j = 0; xfmt_step(ctx) && (j < pad); j++)
+                for (int j = 0; xfmt_healthy(ctx) && (j < pad); j++)
                     xfmt_write_char(ctx, ' ');
             }
             xfmt_write_str(ctx, ": ");
@@ -613,7 +613,7 @@ XR_FUNC void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_trailing_comment(ctx, prop->trailing_comments);
     }
 
-    for (int i = 0; xfmt_step(ctx) && (i < iface->method_count); i++) {
+    for (int i = 0; xfmt_healthy(ctx) && (i < iface->method_count); i++) {
         AstNode *method = iface->methods[i];
         InterfaceMethodNode *m = &method->as.interface_method;
 
@@ -628,7 +628,7 @@ XR_FUNC void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
         xfmt_write_str(ctx, m->name);
         xfmt_emit_generic_params(ctx, m->type_params, m->type_param_count);
         xfmt_write_char(ctx, '(');
-        for (int j = 0; xfmt_step(ctx) && (j < m->param_count); j++) {
+        for (int j = 0; xfmt_healthy(ctx) && (j < m->param_count); j++) {
             if (j > 0)
                 xfmt_write_str(ctx, ", ");
             xfmt_emit_param(ctx, m->params[j]);
@@ -653,7 +653,7 @@ XR_FUNC void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
 }
 
 XR_FUNC void xfmt_emit_enum_decl(XrFmtContext *ctx, AstNode *node) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     EnumDeclNode *en = &node->as.enum_decl;
     xfmt_emit_attributes(ctx, en->attributes, en->attr_count);
     xfmt_write_indent(ctx);
@@ -667,7 +667,7 @@ XR_FUNC void xfmt_emit_enum_decl(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_newline(ctx);
     ctx->indent_level++;
 
-    for (int i = 0; xfmt_step(ctx) && (i < en->member_count); i++) {
+    for (int i = 0; xfmt_healthy(ctx) && (i < en->member_count); i++) {
         AstNode *member = en->members[i];
         EnumMemberNode *m = &member->as.enum_member;
 
@@ -675,7 +675,7 @@ XR_FUNC void xfmt_emit_enum_decl(XrFmtContext *ctx, AstNode *node) {
         xfmt_write_str(ctx, m->name);
         if (m->payload_count > 0) {
             xfmt_write_str(ctx, " { ");
-            for (int pi = 0; xfmt_step(ctx) && (pi < m->payload_count); pi++) {
+            for (int pi = 0; xfmt_healthy(ctx) && (pi < m->payload_count); pi++) {
                 if (pi > 0)
                     xfmt_write_str(ctx, ", ");
                 xfmt_write_str(ctx, m->payload_names[pi]);
@@ -693,7 +693,7 @@ XR_FUNC void xfmt_emit_enum_decl(XrFmtContext *ctx, AstNode *node) {
 
     if (en->member_count > 0 && en->method_count > 0)
         xfmt_write_newline(ctx);
-    for (int i = 0; xfmt_step(ctx) && (i < en->method_count); i++) {
+    for (int i = 0; xfmt_healthy(ctx) && (i < en->method_count); i++) {
         AstNode *method = en->methods[i];
         MethodDeclNode *m = &method->as.method_decl;
         if (method->leading_comments)
@@ -710,7 +710,7 @@ XR_FUNC void xfmt_emit_enum_decl(XrFmtContext *ctx, AstNode *node) {
         xfmt_write_str(ctx, m->name);
         xfmt_emit_generic_params(ctx, m->type_params, m->type_param_count);
         xfmt_write_char(ctx, '(');
-        for (int j = 0; xfmt_step(ctx) && (j < m->param_count); j++) {
+        for (int j = 0; xfmt_healthy(ctx) && (j < m->param_count); j++) {
             if (j > 0)
                 xfmt_write_str(ctx, ", ");
             xfmt_emit_param(ctx, m->params[j]);
@@ -740,7 +740,7 @@ XR_FUNC void xfmt_emit_enum_decl(XrFmtContext *ctx, AstNode *node) {
 }
 
 XR_FUNC void xfmt_emit_type_alias(XrFmtContext *ctx, AstNode *node) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     xfmt_write_indent(ctx);
     TypeAliasNode *ta = &node->as.type_alias;
 
@@ -762,7 +762,7 @@ XR_FUNC void xfmt_emit_type_alias(XrFmtContext *ctx, AstNode *node) {
 
     xfmt_write_str(ctx, "{ ");
 
-    for (int i = 0; xfmt_step(ctx) && (i < ta->field_count); i++) {
+    for (int i = 0; xfmt_healthy(ctx) && (i < ta->field_count); i++) {
         if (i > 0)
             xfmt_write_str(ctx, ", ");
         xfmt_write_str(ctx, ta->field_names[i]);

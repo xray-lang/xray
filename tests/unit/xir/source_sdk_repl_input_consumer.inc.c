@@ -7,12 +7,11 @@
  * source_sdk_repl_input_consumer.inc.c - Installed rooted and FILE authority
  */
 static XrSourceRepl *sdk_repl_open(const char *stdlib_path,SdkReplTrace *trace) {
-    XrSourceCompilerOptions compiler;XrSourceCallOptions runtime;
-    CHECK(xray_source_compiler_options_init(&compiler,sizeof(compiler))==XR_SOURCE_OK);
+    XrSourceCompileOptions compiler=xray_source_compile_options_default();XrSourceCallOptions runtime;
     CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
     compiler.stdlib_path=stdlib_path;runtime.write=sdk_repl_output;runtime.context=trace;
     runtime.output_byte_limit=sizeof(trace->bytes);XrSourceRepl *owner=NULL;
-    CHECK(xray_source_repl_new(&compiler,"installed-repl",&runtime,&owner)==XR_SOURCE_OK && owner);
+    CHECK(sdk_repl_new(&compiler,"installed-repl",&runtime,&owner)==XR_SOURCE_OK && owner);
     trace->owner=owner;return owner;
 }
 static void sdk_repl_path(char *path,size_t capacity,const char *root,const char *suffix) {

@@ -9,10 +9,6 @@
  * KEY CONCEPT:
  *   Compaction remaps all consumers before the artifact is published.
  */
-static bool lower_type_work(XrXirCompileContext *budget, uint64_t work) {
-    if (!xir_compile_work(budget, work)) return false;
-     return true;
-}
 static bool lower_type_id(XrXirType *type, const uint32_t *map, uint32_t count) {
     uint32_t id = (uint32_t) *type;
     if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT) return false;
@@ -41,11 +37,11 @@ static XrXirStatus lower_provenance(XrXirModule *module, const uint32_t *map,
     if (!xir_effect_kind_is_closed(proof->kind)) return XR_XIR_BAD_STAGE;
     for (uint32_t f = 0; f < proof->count; ++f) {
         XrXirOrigin *origin = &proof->origins[f];
-        if (!lower_type_work(budget, (uint64_t)origin->argument_count + 1)) return XR_XIR_BUDGET;
+
         XrXirType *arguments = (XrXirType *)origin->arguments;
         for (uint32_t a = 0; a < origin->argument_count; ++a)
             if (!lower_type_id(&arguments[a], map, count)) return XR_XIR_BAD_TYPE;
-        if (!lower_type_work(budget, origin->effect_argument_count)) return XR_XIR_BUDGET;
+
         XrXirEffectArgument *effects = (XrXirEffectArgument *)origin->effect_arguments;
         for (uint32_t a = 0; a < origin->effect_argument_count; ++a)
             if (!lower_type_id(&effects[a].type, map, count)) return XR_XIR_BAD_TYPE;
@@ -54,12 +50,11 @@ static XrXirStatus lower_provenance(XrXirModule *module, const uint32_t *map,
         /* Complete checking proved the default advertisement before remapping.
          * Its spelling stays unchanged; variant suffixes use the new type IDs.
          * The final provenance checker independently rebuilds both identities. */
-        if (!lower_type_work(budget, 2)) return XR_XIR_BUDGET;
+
         if (!origin->argument_count && function->name_length == source->name_length) continue;
         uint64_t capacity = (uint64_t)source->name_length + 32 +
             (uint64_t)origin->argument_count * 12 + (uint64_t)origin->effect_argument_count * 26;
-        if (capacity > UINT32_MAX || capacity > SIZE_MAX ||
-            !lower_type_work(budget, capacity)) return XR_XIR_BUDGET;
+        if ((capacity > UINT32_MAX) || (capacity > SIZE_MAX)) return XR_XIR_BUDGET;
 
         char *name = xir_compile_alloc(budget, (size_t)capacity, &allocation_status);
         if (!name) return allocation_status;
@@ -86,7 +81,7 @@ static XrXirStatus lower_type_uses(XrXirModule *module, const uint32_t *map, uin
     XrXirFunction *functions = (XrXirFunction *) module->functions;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         XrXirFunction *function = &functions[f];
-        if (!lower_type_work(budget, (uint64_t) function->parameter_count + function->instruction_count + 2)) return XR_XIR_BUDGET;
+
         if (!lower_type_id(&function->result, map, count)) return XR_XIR_BAD_TYPE;
         if (!lower_type_id(&function->error_type, map, count)) return XR_XIR_BAD_TYPE;
         XrXirType *parameters = (XrXirType *) function->parameters;
@@ -97,14 +92,14 @@ static XrXirStatus lower_type_uses(XrXirModule *module, const uint32_t *map, uin
             if (!lower_type_id(&ops[i].type, map, count)) return XR_XIR_BAD_TYPE;
             if (ops[i].op == XR_XIR_ERROR_IS) {
                 XrXirType target = (XrXirType) ops[i].immediate;
-                if (!lower_type_work(budget, 1)) return XR_XIR_BUDGET;
+
                 if (!lower_type_id(&target, map, count)) return XR_XIR_BAD_TYPE;
                 ops[i].immediate = target;
             }
         }
     }
     if (module->declarations) {
-        if (!lower_type_work(budget, module->declarations->slot_count)) return XR_XIR_BUDGET;
+
         XrXirSlot *slots = (XrXirSlot *) module->declarations->slots;
         for (uint32_t s = 0; s < module->declarations->slot_count; ++s)
             if (!lower_type_id(&slots[s].type, map, count)) return XR_XIR_BAD_TYPE;
@@ -118,7 +113,7 @@ static XrXirStatus lower_nominal_types(XrXirModule *module, XrXirCompileContext 
     const XrXirNominalTable *table = types->nominals;
     if (!table->declarations || table->identities) return XR_XIR_BAD_STAGE;
     uint32_t count = types->count;
-    if (!lower_type_work(budget, count)) return XR_XIR_BUDGET;
+
     for (uint32_t i = 0; i < count; ++i) {
         const XrXirTypeNode *node = &types->nodes[i];
         if (node->kind == XR_XIR_TYPE_NOMINAL && !node->parameter_span &&
@@ -140,17 +135,15 @@ static XrXirStatus lower_nominal_types(XrXirModule *module, XrXirCompileContext 
     for (uint32_t i = 0; i < count; ++i) {
         XrXirTypeNode *node = &nodes[i];
         if (map[i] == UINT32_MAX) {
-            if (!lower_type_work(budget, sizeof(*node))) { status = XR_XIR_BUDGET; break; }
+
             xr_compile_resources_free((void *) node->parameters); xr_compile_resources_free((void *) node->nominal.arguments); xr_compile_resources_free((void *) node->nominal.fields);
             memset(node, 0, sizeof(*node)); continue;
         }
-        if (!lower_type_work(budget, (uint64_t) node->parameter_count + node->nominal.argument_count + node->nominal.field_count + 1)) {
-            status = XR_XIR_BUDGET; break;
-        }
+
         if (!lower_type_node(node, map, count)) { status = XR_XIR_BAD_TYPE; break; }
         uint32_t target = map[i] - XR_XIR_CONSTRUCTED_TYPE_BASE;
         if (target != i) {
-            if (!lower_type_work(budget, sizeof(*node))) { status = XR_XIR_BUDGET; break; }
+
             nodes[target] = *node; memset(node, 0, sizeof(*node));
         }
     }

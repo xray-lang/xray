@@ -8,7 +8,7 @@
  * xlex.c - Lexical analyzer implementation
  *
  * KEY CONCEPT:
- *   Tokenizes source code with explicit arena lifetime and metered byte reads.
+ *   Tokenizes source code with explicit arena lifetime and cooperative request cancellation.
  */
 
 #include <assert.h>
@@ -64,26 +64,25 @@ static bool scanner_healthy(const Scanner *scanner) {
     return scanner && xr_compile_state_status(scanner->state) == XR_COMPILE_RESOURCE_OK;
 }
 
-static int scanner_read_utf8(void *context, const uint8_t *address, uint8_t *output) {
-    XrCompileState *state = context;
-    if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK) return 0;
-    *output = *address;
-    return 1;
-}
-
-static char scanner_read(Scanner *scanner, const char *address) {
-    uint8_t value = 0;
-    (void) scanner_read_utf8(scanner->state, (const uint8_t *) address, &value);
-    return (char) value;
-}
-
-static int scanner_compare(Scanner *scanner, const char *left, const char *right, size_t length) {
-    for (size_t i = 0; i < length; ++i) {
-        if (xr_compile_state_work(scanner->state, 2) != XR_COMPILE_RESOURCE_OK) return 0;
-        unsigned char a = (unsigned char) left[i], b = (unsigned char) right[i];
-        if (a != b) return a < b ? -1 : 1;
+static int scanner_read_utf8(void *context,const uint8_t *address,uint8_t *output) {
+    Scanner *scanner=context;
+    if(!scanner_healthy(scanner))return 0;
+    if(scanner->request && ++scanner->poll_bytes>=4096) {
+        scanner->poll_bytes=0;
+        XrCompileResourceStatus status=xr_compile_request_control_poll(scanner->request);
+        if(status!=XR_COMPILE_RESOURCE_OK) {
+            (void)xr_compile_state_fail(scanner->state,status);return 0;
+        }
     }
-    return 0;
+    *output=*address;return 1;
+}
+static char scanner_read(Scanner *scanner,const char *address) {
+    uint8_t value=0;
+    (void)scanner_read_utf8(scanner,(const uint8_t *)address,&value);return (char)value;
+}
+static int scanner_compare(Scanner *scanner,const char *left,const char *right,size_t length) {
+    if(!scanner_healthy(scanner))return 0;
+    return memcmp(left,right,length);
 }
 
 /* A source file may begin with a UTF-8 byte-order mark; it carries no token. */
@@ -97,27 +96,37 @@ static bool scanner_has_bom(Scanner *scanner, const char *source, size_t length)
     return true;
 }
 
-static XrCompileResourceStatus scanner_open(Scanner *scanner, XrCompileState *state, XrArena *arena,
-                                            const char *source, bool collect_trivia, bool whole_source) {
-    if (!scanner || !source || !xr_compiler_arena_matches_state(arena, state))
-        return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
-    size_t length = 0;
-    XrCompileResourceStatus status = xr_compile_state_string_length(state, source, &length);
-    if (status != XR_COMPILE_RESOURCE_OK) return status;
-    if (length >= INT_MAX) return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET);
-    Scanner local = {0};
-    local.state = state;
-    local.arena = arena;
-    local.end = source + length;
-    local.line = local.start_line = 1;
-    local.collect_trivia = collect_trivia;
+typedef struct ScannerInput {
+    const char *source;
+    XrCompileRequestControl *request;
+    bool collect_trivia, whole_source;
+} ScannerInput;
+static XrCompileResourceStatus scanner_open(Scanner *scanner,XrCompileState *state,XrArena *arena,
+    const ScannerInput *input) {
+    const char *source=input ? input->source : NULL;
+    if(!scanner || !source || !xr_compiler_arena_matches_state(arena,state))
+        return xr_compile_state_fail(state,XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+    Scanner local={0};local.state=state;local.arena=arena;
+    local.request=input->request;
+    if(local.request && xr_compile_request_control_poll(local.request)!=XR_COMPILE_RESOURCE_OK)
+        return xr_compile_state_fail(state,local.request->status);
+    size_t length=0;
+    for(;;) {
+        char byte=scanner_read(&local,source+length);
+        if(!scanner_healthy(&local))return xr_compile_state_status(state);
+        if(!byte)break;
+        if(length>=INT_MAX-1)return xr_compile_state_fail(state,XR_COMPILE_RESOURCE_OVERFLOW);
+        ++length;
+    }
+    local.end=source+length;local.line=local.start_line=1;
+    local.collect_trivia=input->collect_trivia;
     XrUtf8ScanResult scan;
-    if (!xr_utf8_scan_strict_read((const uint8_t *) source, length, scanner_read_utf8, state, &scan))
+    if(!xr_utf8_scan_strict_read((const uint8_t *)source,length,scanner_read_utf8,&local,&scan))
         return xr_compile_state_status(state);
     /* Skipping the mark moves the scanner's whole view: diagnostics measure
      * columns and print snippets as if the file had no BOM. */
     const char *text = source;
-    if (whole_source && scanner_has_bom(&local, source, length)) text = source + 3;
+    if (input->whole_source && scanner_has_bom(&local, source, length)) text = source + 3;
     if (!scanner_healthy(&local)) return xr_compile_state_status(state);
     local.source = local.start = local.current = local.line_start = local.start_line_start = text;
     if (scan.error != XR_UTF8_OK) {
@@ -136,15 +145,15 @@ static XrCompileResourceStatus scanner_open(Scanner *scanner, XrCompileState *st
     return xr_compile_state_copy(state, scanner, &local, sizeof(local));
 }
 
-XrCompileResourceStatus xr_compile_scanner_open(Scanner *scanner, XrCompileState *state, XrArena *arena,
-                                        const char *source) {
-    return scanner_open(scanner, state, arena, source, false, false);
+XR_FUNC XrCompileResourceStatus xr_compile_scanner_open(Scanner *scanner,XrCompileState *state,
+    XrArena *arena,const char *source,XrCompileRequestControl *request) {
+    const ScannerInput input={source,request,false,false};
+    return scanner_open(scanner,state,arena,&input);
 }
-
-XrCompileResourceStatus xr_compile_scanner_open_source(Scanner *scanner, XrCompileState *state,
-                                               XrArena *arena, const char *source,
-                                               bool collect_trivia) {
-    return scanner_open(scanner, state, arena, source, collect_trivia, true);
+XR_FUNC XrCompileResourceStatus xr_compile_scanner_open_source(Scanner *scanner,XrCompileState *state,
+    XrArena *arena,const char *source,bool collect_trivia,XrCompileRequestControl *request) {
+    const ScannerInput input={source,request,collect_trivia,true};
+    return scanner_open(scanner,state,arena,&input);
 }
 
 // Capture the start position of a new token. Must be called once per token,

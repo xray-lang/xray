@@ -25,7 +25,7 @@
 // ----------------------------------------------------------------------------
 
 static void fmt_literal(XrFmtContext *ctx, AstNode *node) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     xfmt_write_indent(ctx);
 
     switch (node->type) {
@@ -119,7 +119,7 @@ static void fmt_literal(XrFmtContext *ctx, AstNode *node) {
 }
 
 static void fmt_binary(XrFmtContext *ctx, AstNode *node) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     xfmt_emit_expression(ctx, node->as.binary.left);
     xfmt_write_space(ctx);
     xfmt_write_str(ctx, xfmt_binary_op(node->type));
@@ -128,7 +128,7 @@ static void fmt_binary(XrFmtContext *ctx, AstNode *node) {
 }
 
 static void fmt_unary(XrFmtContext *ctx, AstNode *node) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     xfmt_write_indent(ctx);
     switch (node->type) {
         case AST_UNARY_NEG:
@@ -148,7 +148,7 @@ static void fmt_unary(XrFmtContext *ctx, AstNode *node) {
 
 static void fmt_call_argument(XrFmtContext *ctx, AstNode *argument, XrCallArgAccess *accesses,
                               int index) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     XrCallArgAccess access = accesses ? accesses[index] : XR_CALL_ARG_PLAIN;
     if (access == XR_CALL_ARG_REF) {
         xfmt_write_str(ctx, "ref ");
@@ -164,7 +164,7 @@ static void fmt_call_argument(XrFmtContext *ctx, AstNode *argument, XrCallArgAcc
 static void fmt_call_like(XrFmtContext *ctx, AstNode *callee, XrTypeRef **type_args,
                           int type_arg_count, AstNode **arguments, XrCallArgAccess *arg_accesses,
                           int arg_count) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     bool saved_force_fn_expr = ctx->force_fn_expr;
     xfmt_emit_expression(ctx, callee);
     /* A grammar constraint from the surrounding expression applies to the
@@ -179,7 +179,7 @@ static void fmt_call_like(XrFmtContext *ctx, AstNode *callee, XrTypeRef **type_a
 
     // Try single-line: foo(a, b, c)
     xfmt_write_char(ctx, '(');
-    for (int i = 0; xfmt_step(ctx) && (i < arg_count); i++) {
+    for (int i = 0; xfmt_healthy(ctx) && (i < arg_count); i++) {
         if (i > 0)
             xfmt_write_str(ctx, ", ");
         fmt_call_argument(ctx, arguments[i], arg_accesses, i);
@@ -200,7 +200,7 @@ static void fmt_call_like(XrFmtContext *ctx, AstNode *callee, XrTypeRef **type_a
     xfmt_write_char(ctx, '(');
     xfmt_write_newline(ctx);
     ctx->indent_level++;
-    for (int i = 0; xfmt_step(ctx) && (i < arg_count); i++) {
+    for (int i = 0; xfmt_healthy(ctx) && (i < arg_count); i++) {
         xfmt_write_indent(ctx);
         fmt_call_argument(ctx, arguments[i], arg_accesses, i);
         if (ctx->config->multiline_trailing_comma || i < arg_count - 1)
@@ -214,14 +214,14 @@ static void fmt_call_like(XrFmtContext *ctx, AstNode *callee, XrTypeRef **type_a
 }
 
 static void fmt_call(XrFmtContext *ctx, AstNode *node) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     CallExprNode *call = &node->as.call_expr;
     fmt_call_like(ctx, call->callee, call->type_args, call->type_arg_count, call->arguments,
                   call->arg_accesses, call->arg_count);
 }
 
 static void fmt_new_expr(XrFmtContext *ctx, AstNode *node) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     xfmt_write_indent(ctx);
     NewExprNode *new_expr = &node->as.new_expr;
     if (new_expr->module_name) {
@@ -240,7 +240,7 @@ static void fmt_new_expr(XrFmtContext *ctx, AstNode *node) {
         xfmt_snapshot(ctx, &snap);
 
     xfmt_write_char(ctx, '(');
-    for (int i = 0; xfmt_step(ctx) && (i < new_expr->arg_count); i++) {
+    for (int i = 0; xfmt_healthy(ctx) && (i < new_expr->arg_count); i++) {
         if (i > 0)
             xfmt_write_str(ctx, ", ");
         fmt_call_argument(ctx, new_expr->arguments[i], new_expr->arg_accesses, i);
@@ -254,7 +254,7 @@ static void fmt_new_expr(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_char(ctx, '(');
     xfmt_write_newline(ctx);
     ctx->indent_level++;
-    for (int i = 0; xfmt_step(ctx) && (i < new_expr->arg_count); i++) {
+    for (int i = 0; xfmt_healthy(ctx) && (i < new_expr->arg_count); i++) {
         xfmt_write_indent(ctx);
         fmt_call_argument(ctx, new_expr->arguments[i], new_expr->arg_accesses, i);
         if (ctx->config->multiline_trailing_comma || i < new_expr->arg_count - 1)
@@ -267,7 +267,7 @@ static void fmt_new_expr(XrFmtContext *ctx, AstNode *node) {
 }
 
 static void fmt_template_string(XrFmtContext *ctx, AstNode *node) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     // Backticks were dropped from the lexer; emit a canonical
     // double-quoted template via xfmt_emit_template_string. The
     // helper escapes literal parts and `$` to keep round-trip safe.
@@ -279,7 +279,7 @@ static void fmt_template_string(XrFmtContext *ctx, AstNode *node) {
 // characters written after the indent prefix on the current line, or -1
 // if a newline was emitted (multi-line pattern -> cannot column-align).
 static int fmt_match_arm_head(XrFmtContext *ctx, MatchArmNode *ma) {
-    if (!xfmt_step(ctx)) return 0;
+    if (!xfmt_healthy(ctx)) return 0;
     size_t saved_len = ctx->length;
     int indent_chars =
         xfmt_indent_width(ctx);
@@ -292,7 +292,7 @@ static int fmt_match_arm_head(XrFmtContext *ctx, MatchArmNode *ma) {
         xfmt_write_char(ctx, ')');
     }
 
-    for (size_t k = saved_len; xfmt_step(ctx) && (k < ctx->length); k++) {
+    for (size_t k = saved_len; xfmt_healthy(ctx) && (k < ctx->length); k++) {
         if (ctx->output[k] == '\n')
             return -1;
     }
@@ -301,7 +301,7 @@ static int fmt_match_arm_head(XrFmtContext *ctx, MatchArmNode *ma) {
 }
 
 static void fmt_match_expr(XrFmtContext *ctx, AstNode *node) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     xfmt_write_indent(ctx);
     xfmt_write_str(ctx, "match (");
     xfmt_emit_expression(ctx, node->as.match_expr.expr);
@@ -325,7 +325,7 @@ static void fmt_match_expr(XrFmtContext *ctx, AstNode *node) {
         if (!widths) return;
     }
     if (align) {
-        for (int i = 0; xfmt_step(ctx) && (i < arm_count); i++) {
+        for (int i = 0; xfmt_healthy(ctx) && (i < arm_count); i++) {
             MatchArmNode *ma = &arms[i]->as.match_arm;
             size_t saved_len = ctx->length;
             int saved_col = ctx->column;
@@ -347,14 +347,14 @@ static void fmt_match_expr(XrFmtContext *ctx, AstNode *node) {
 
     // Pass 2: real emission. Pad each arm's head to max_width before
     // writing " -> body".
-    for (int i = 0; xfmt_step(ctx) && (i < arm_count); i++) {
+    for (int i = 0; xfmt_healthy(ctx) && (i < arm_count); i++) {
         MatchArmNode *ma = &arms[i]->as.match_arm;
 
         int w = fmt_match_arm_head(ctx, ma);
 
         if (align && widths && widths[i] >= 0 && w >= 0) {
             int pad = max_width - w;
-            for (int j = 0; xfmt_step(ctx) && (j < pad); j++)
+            for (int j = 0; xfmt_healthy(ctx) && (j < pad); j++)
                 xfmt_write_char(ctx, ' ');
         }
         xfmt_write_str(ctx, " -> ");
@@ -380,7 +380,7 @@ static void fmt_match_expr(XrFmtContext *ctx, AstNode *node) {
 // ----------------------------------------------------------------------------
 
 XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
-    if (!xfmt_step(ctx)) return;
+    if (!xfmt_healthy(ctx)) return;
     if (!node)
         return;
 
@@ -483,7 +483,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             if (sc_wrap)
                 xfmt_snapshot(ctx, &sc_snap);
             xfmt_write_char(ctx, '(');
-            for (int i = 0; xfmt_step(ctx) && (i < sc->arg_count); i++) {
+            for (int i = 0; xfmt_healthy(ctx) && (i < sc->arg_count); i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
                 fmt_call_argument(ctx, sc->arguments[i], sc->arg_accesses, i);
@@ -494,7 +494,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 xfmt_write_char(ctx, '(');
                 xfmt_write_newline(ctx);
                 ctx->indent_level++;
-                for (int i = 0; xfmt_step(ctx) && (i < sc->arg_count); i++) {
+                for (int i = 0; xfmt_healthy(ctx) && (i < sc->arg_count); i++) {
                     xfmt_write_indent(ctx);
                     fmt_call_argument(ctx, sc->arguments[i], sc->arg_accesses, i);
                     if (ctx->config->multiline_trailing_comma || i < sc->arg_count - 1)
@@ -525,7 +525,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             if (arr_wrap)
                 xfmt_snapshot(ctx, &arr_snap);
             xfmt_write_char(ctx, '[');
-            for (int i = 0; xfmt_step(ctx) && (i < arr->count); i++) {
+            for (int i = 0; xfmt_healthy(ctx) && (i < arr->count); i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
                 xfmt_emit_expression(ctx, arr->elements[i]);
@@ -536,7 +536,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 xfmt_write_char(ctx, '[');
                 xfmt_write_newline(ctx);
                 ctx->indent_level++;
-                for (int i = 0; xfmt_step(ctx) && (i < arr->count); i++) {
+                for (int i = 0; xfmt_healthy(ctx) && (i < arr->count); i++) {
                     xfmt_write_indent(ctx);
                     xfmt_emit_expression(ctx, arr->elements[i]);
                     if (ctx->config->multiline_trailing_comma || i < arr->count - 1)
@@ -561,7 +561,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             if (tup_wrap)
                 xfmt_snapshot(ctx, &tup_snap);
             xfmt_write_char(ctx, '(');
-            for (int i = 0; xfmt_step(ctx) && (i < tup->count); i++) {
+            for (int i = 0; xfmt_healthy(ctx) && (i < tup->count); i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
                 xfmt_emit_expression(ctx, tup->elements[i]);
@@ -574,7 +574,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 xfmt_write_char(ctx, '(');
                 xfmt_write_newline(ctx);
                 ctx->indent_level++;
-                for (int i = 0; xfmt_step(ctx) && (i < tup->count); i++) {
+                for (int i = 0; xfmt_healthy(ctx) && (i < tup->count); i++) {
                     xfmt_write_indent(ctx);
                     xfmt_emit_expression(ctx, tup->elements[i]);
                     // Tuples always need a trailing comma in multi-line form;
@@ -603,7 +603,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             if (obj_wrap)
                 xfmt_snapshot(ctx, &obj_snap);
             xfmt_write_str(ctx, "{ ");
-            for (int i = 0; xfmt_step(ctx) && (i < obj->count); i++) {
+            for (int i = 0; xfmt_healthy(ctx) && (i < obj->count); i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
                 xfmt_emit_expression(ctx, obj->keys[i]);
@@ -616,7 +616,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 xfmt_write_char(ctx, '{');
                 xfmt_write_newline(ctx);
                 ctx->indent_level++;
-                for (int i = 0; xfmt_step(ctx) && (i < obj->count); i++) {
+                for (int i = 0; xfmt_healthy(ctx) && (i < obj->count); i++) {
                     xfmt_write_indent(ctx);
                     xfmt_emit_expression(ctx, obj->keys[i]);
                     xfmt_write_str(ctx, ": ");
@@ -647,7 +647,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             if (map_wrap)
                 xfmt_snapshot(ctx, &map_snap);
             xfmt_write_str(ctx, "#{ ");
-            for (int i = 0; xfmt_step(ctx) && (i < map->count); i++) {
+            for (int i = 0; xfmt_healthy(ctx) && (i < map->count); i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
                 xfmt_emit_expression(ctx, map->keys[i]);
@@ -660,7 +660,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 xfmt_write_str(ctx, "#{");
                 xfmt_write_newline(ctx);
                 ctx->indent_level++;
-                for (int i = 0; xfmt_step(ctx) && (i < map->count); i++) {
+                for (int i = 0; xfmt_healthy(ctx) && (i < map->count); i++) {
                     xfmt_write_indent(ctx);
                     xfmt_emit_expression(ctx, map->keys[i]);
                     xfmt_write_str(ctx, ": ");
@@ -685,7 +685,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             if (set_wrap)
                 xfmt_snapshot(ctx, &set_snap);
             xfmt_write_str(ctx, "#[");
-            for (int i = 0; xfmt_step(ctx) && (i < set->count); i++) {
+            for (int i = 0; xfmt_healthy(ctx) && (i < set->count); i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
                 xfmt_emit_expression(ctx, set->elements[i]);
@@ -696,7 +696,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 xfmt_write_str(ctx, "#[");
                 xfmt_write_newline(ctx);
                 ctx->indent_level++;
-                for (int i = 0; xfmt_step(ctx) && (i < set->count); i++) {
+                for (int i = 0; xfmt_healthy(ctx) && (i < set->count); i++) {
                     xfmt_write_indent(ctx);
                     xfmt_emit_expression(ctx, set->elements[i]);
                     if (ctx->config->multiline_trailing_comma || i < set->count - 1)
@@ -882,7 +882,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             }
 
             bool has_param_metadata = false;
-            for (int i = 0; xfmt_step(ctx) && (i < fn->param_count); i++) {
+            for (int i = 0; xfmt_healthy(ctx) && (i < fn->param_count); i++) {
                 if (!fn->params[i])
                     continue;
                 if (fn->params[i]->type || fn->params[i]->passing_mode != XR_PARAM_READ)
@@ -899,7 +899,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 xfmt_write_str(ctx, "fn");
                 xfmt_emit_generic_params(ctx, fn->type_params, fn->type_param_count);
                 xfmt_write_char(ctx, '(');
-                for (int i = 0; xfmt_step(ctx) && (i < fn->param_count); i++) {
+                for (int i = 0; xfmt_healthy(ctx) && (i < fn->param_count); i++) {
                     if (i > 0)
                         xfmt_write_str(ctx, ", ");
                     xfmt_emit_param(ctx, fn->params[i]);
@@ -919,7 +919,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                     xfmt_write_str(ctx, fn->params[0]->name);
                 } else {
                     xfmt_write_char(ctx, '(');
-                    for (int i = 0; xfmt_step(ctx) && (i < fn->param_count); i++) {
+                    for (int i = 0; xfmt_healthy(ctx) && (i < fn->param_count); i++) {
                         if (i > 0)
                             xfmt_write_str(ctx, ", ");
                         xfmt_emit_param(ctx, fn->params[i]);
@@ -953,7 +953,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             EnumConstructNode *construct = &node->as.enum_construct;
             xfmt_emit_expression(ctx, construct->variant_path);
             xfmt_write_str(ctx, " { ");
-            for (int i = 0; xfmt_step(ctx) && (i < construct->field_count); i++) {
+            for (int i = 0; xfmt_healthy(ctx) && (i < construct->field_count); i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
                 xfmt_write_str(ctx, construct->field_names[i]);
@@ -1075,7 +1075,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
 
         case AST_PATTERN_MULTI: {
             PatternMultiNode *pm = &node->as.pattern_multi;
-            for (int i = 0; xfmt_step(ctx) && (i < pm->count); i++) {
+            for (int i = 0; xfmt_healthy(ctx) && (i < pm->count); i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
                 xfmt_emit_expression(ctx, pm->patterns[i]);
@@ -1088,7 +1088,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             PatternAdtNode *pa = &node->as.pattern_adt;
             xfmt_emit_expression(ctx, pa->variant);
             xfmt_write_str(ctx, " { ");
-            for (int i = 0; xfmt_step(ctx) && (i < pa->count); i++) {
+            for (int i = 0; xfmt_healthy(ctx) && (i < pa->count); i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
                 AstNode *sub = pa->patterns[i];
@@ -1111,7 +1111,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
         case AST_PATTERN_TUPLE: {
             PatternTupleNode *pt = &node->as.pattern_tuple;
             xfmt_write_char(ctx, '(');
-            for (int i = 0; xfmt_step(ctx) && (i < pt->count); i++) {
+            for (int i = 0; xfmt_healthy(ctx) && (i < pt->count); i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
                 xfmt_emit_expression(ctx, pt->patterns[i]);
@@ -1124,7 +1124,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
         case AST_PATTERN_OBJECT: {
             PatternObjectNode *po = &node->as.pattern_object;
             xfmt_write_str(ctx, "{ ");
-            for (int i = 0; xfmt_step(ctx) && (i < po->count); i++) {
+            for (int i = 0; xfmt_healthy(ctx) && (i < po->count); i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
                 AstNode *sub = po->patterns[i];
@@ -1147,7 +1147,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
         case AST_PATTERN_ARRAY: {
             PatternArrayNode *pa = &node->as.pattern_array;
             xfmt_write_char(ctx, '[');
-            for (int i = 0; xfmt_step(ctx) && (i < pa->count); i++) {
+            for (int i = 0; xfmt_healthy(ctx) && (i < pa->count); i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
                 xfmt_emit_expression(ctx, pa->patterns[i]);
@@ -1208,7 +1208,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             if (sl_wrap)
                 xfmt_snapshot(ctx, &sl_snap);
             xfmt_write_char(ctx, '{');
-            for (int i = 0; xfmt_step(ctx) && (i < sl->field_count); i++) {
+            for (int i = 0; xfmt_healthy(ctx) && (i < sl->field_count); i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
                 xfmt_write_str(ctx, sl->field_names[i]);
@@ -1221,7 +1221,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 xfmt_write_char(ctx, '{');
                 xfmt_write_newline(ctx);
                 ctx->indent_level++;
-                for (int i = 0; xfmt_step(ctx) && (i < sl->field_count); i++) {
+                for (int i = 0; xfmt_healthy(ctx) && (i < sl->field_count); i++) {
                     xfmt_write_indent(ctx);
                     xfmt_write_str(ctx, sl->field_names[i]);
                     xfmt_write_str(ctx, ": ");

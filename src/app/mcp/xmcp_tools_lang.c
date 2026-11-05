@@ -40,6 +40,28 @@ typedef struct {
     int count;
 } ErrorCapture;
 
+static bool request_shutdown(const void *context) {
+    const XmcpServer *server = context;
+    return server && server->shutdown;
+}
+XR_FUNC XrCompileResourceStatus xmcp_request_control_init(const XmcpServer *server,
+    uint64_t timeout_ns, XrCompileRequestControl *control) {
+    XrCompileRequestOptions options = {request_shutdown, server,
+        timeout_ns ? XR_COMPILE_DEADLINE_AFTER : XR_COMPILE_DEADLINE_NONE, timeout_ns};
+    return xr_compile_request_control_init(&options, control);
+}
+static XrParseStatus parse_resource_status(XrCompileResourceStatus status) {
+    switch (status) {
+    case XR_COMPILE_RESOURCE_OK: return XR_PARSE_OK;
+    case XR_COMPILE_RESOURCE_MEMORY_LIMIT: return XR_PARSE_MEMORY_LIMIT;
+    case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: return XR_PARSE_OUT_OF_MEMORY;
+    case XR_COMPILE_RESOURCE_OVERFLOW: return XR_PARSE_OVERFLOW;
+    case XR_COMPILE_RESOURCE_CANCELLED: return XR_PARSE_CANCELLED;
+    case XR_COMPILE_RESOURCE_DEADLINE: return XR_PARSE_DEADLINE;
+    case XR_COMPILE_RESOURCE_CLOCK_FAILURE: return XR_PARSE_CLOCK_FAILURE;
+    default: return XR_PARSE_BAD_ARGUMENT;
+    }
+}
 static XrJsonValue *make_diagnostic(int line, int column, int end_line, int end_column,
                                     const char *severity, int code, const char *message,
                                     const char *source) {
@@ -141,17 +163,21 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_analyze(XmcpServer *server, const XmcpCallCo
     XrJsonValue *items = xjson_new_array();
     if (!items) return NULL;
     bool ok = false, truncated = false;
+    XrCompileRequestControl control = {0};
+    XrCompileResourceStatus controlled = xmcp_request_control_init(server, 0, &control);
+    if (controlled == XR_COMPILE_RESOURCE_OK) controlled = xr_compile_request_control_poll(&control);
     if (!strcmp(mode, "syntax")) {
         XrCompileResources *resources = NULL;
         XrCompilerSession *session = NULL;
         AstNode *ast = NULL;
         XrCompileResourceLimits limits = xmcp_source_default_limits();
-        XrCompileResourceStatus created = xr_compile_resources_new(&limits, &resources);
-        XrCompilerSessionStatus opened = created == XR_COMPILE_RESOURCE_OK ?
-            xr_compile_session_new(resources, &session) : XR_COMPILER_SESSION_OUT_OF_MEMORY;
+        XrCompileResourceStatus created = controlled == XR_COMPILE_RESOURCE_OK ?
+            xr_compile_resources_new(&limits, &resources) : controlled;
+        XrCompileResourceStatus opened = created == XR_COMPILE_RESOURCE_OK ?
+            xr_compile_session_new(resources, &session) : created;
+        if (opened == XR_COMPILE_RESOURCE_OK) opened = xr_compile_session_bind_request(session, &control);
         ErrorCapture capture = {0};
-        XrParseStatus status = created == XR_COMPILE_RESOURCE_BUDGET || opened == XR_COMPILER_SESSION_BUDGET ?
-            XR_PARSE_BUDGET : opened == XR_COMPILER_SESSION_OK ? XR_PARSE_OK : XR_PARSE_OUT_OF_MEMORY;
+        XrParseStatus status = parse_resource_status(opened);
         if (status == XR_PARSE_OK && memchr(input->as.string, 0, input->string_len)) {
             analysis_failure(items, 0, 0, XR_PARSE_SYNTAX, "Source contains a NUL byte", "parser");
             status = XR_PARSE_SYNTAX;
@@ -173,16 +199,26 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_analyze(XmcpServer *server, const XmcpCallCo
         XmcpSourceOwner owner = {0};
         XrCompileResourceLimits limits = xmcp_source_default_limits();
         XrXirCompileContext context = {NULL, xr_xir_compile_default_limits()};
-        XrCompileResourceStatus created = xr_compile_resources_new(&limits, &context.resources);
-        XmcpSourceRequest request = {input->as.string, input->string_len, "mcp-analyze", &context};
+        XrCompileResourceStatus created = controlled == XR_COMPILE_RESOURCE_OK ?
+            xr_compile_resources_new(&limits, &context.resources) : controlled;
+        XmcpSourceRequest request = {input->as.string, input->string_len, "mcp-analyze", &context, &control};
         XrXirStatus status = created == XR_COMPILE_RESOURCE_OK ? xmcp_source_check(&request, &owner) :
-            created == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+            xmcp_source_resource_status(created);
         const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(owner.result.snapshot);
         ok = status == XR_XIR_OK && view && view->complete;
         if (!ok) analysis_failure(items, owner.diagnostic.line, owner.diagnostic.column,
             (int)status, owner.diagnostic.message, "source");
         xmcp_source_free(&owner);
         xr_compile_resources_release(context.resources);
+    }
+    if (ok) {
+        controlled = xr_compile_request_control_poll(&control);
+        if (controlled != XR_COMPILE_RESOURCE_OK) {
+            ok = false;
+            int code = !strcmp(mode,"syntax") ? (int)parse_resource_status(controlled) :
+                (int)xmcp_source_resource_status(controlled);
+            analysis_failure(items,0,0,code,"Request stopped before publication","request");
+        }
     }
     XrJsonValue *result = analysis_result(mode, ok, truncated, items);
     if (ctx->progress_token) xmcp_send_progress_notification(server, ctx->progress_token, 2, 2);
@@ -202,8 +238,7 @@ static void format_error_callback(void *data, int line, int column, int end_line
     if (xr_compile_state_string_length(format->state, message, &length) != XR_COMPILE_RESOURCE_OK) return;
     size_t copied = length < sizeof(capture->messages[0])-1 ? length : sizeof(capture->messages[0])-1;
     int i=capture->count;
-    if (xr_compile_state_copy(format->state,capture->messages[i],message,copied) != XR_COMPILE_RESOURCE_OK ||
-        xr_compile_state_work(format->state,1) != XR_COMPILE_RESOURCE_OK) return;
+    if (xr_compile_state_copy(format->state,capture->messages[i],message,copied) != XR_COMPILE_RESOURCE_OK) return;
     capture->messages[i][copied]=0;
     capture->lines[i]=line; capture->columns[i]=column;
     capture->end_lines[i]=end_line; capture->end_columns[i]=end_column;
@@ -218,7 +253,6 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_format(XmcpServer *server, const XmcpCallCon
     XR_DCHECK(ctx != NULL, "xmcp_tool_xray_format: NULL ctx");
     XR_DCHECK(arguments != NULL, "xmcp_tool_xray_format: NULL arguments");
     (void) ctx;
-    (void) server;
 
     XrJsonValue *input = xjson_get(arguments, "code");
     if (!xjson_is_string(input) || !input->string_len)
@@ -241,10 +275,20 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_format(XmcpServer *server, const XmcpCallCon
     XrFmtOutput output={0};
     XrJsonValue *result=NULL;
     unsigned stage=0, failure=0;
-    XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);
-    if(created!=XR_COMPILE_RESOURCE_OK) { stage=1; failure=(unsigned)created; goto cleanup; }
-    XrCompilerSessionStatus opened=xr_compile_session_new(resources,&session);
-    if(opened!=XR_COMPILER_SESSION_OK) { stage=2; failure=(unsigned)opened; goto cleanup; }
+    const char *failure_domain="resources";
+    XrCompileRequestControl control={0};
+    XrCompileResourceStatus controlled=xmcp_request_control_init(server,0,&control);
+    if(controlled==XR_COMPILE_RESOURCE_OK) controlled=xr_compile_request_control_poll(&control);
+    XrCompileResourceStatus created=controlled==XR_COMPILE_RESOURCE_OK ?
+        xr_compile_resources_new(&limits,&resources) : controlled;
+    if(created!=XR_COMPILE_RESOURCE_OK) {
+        stage=1; failure=(unsigned)created;
+        if(controlled!=XR_COMPILE_RESOURCE_OK) failure_domain="request";
+        goto cleanup;
+    }
+    XrCompileResourceStatus opened=xr_compile_session_new(resources,&session);
+    if(opened==XR_COMPILE_RESOURCE_OK) opened=xr_compile_session_bind_request(session,&control);
+    if(opened!=XR_COMPILE_RESOURCE_OK) { stage=2; failure=(unsigned)opened; goto cleanup; }
     XrCompileState *state=xr_compile_session_compile_state(session);
     ErrorCapture capture;
     if(xr_compile_state_zero(state,&capture,sizeof(capture))!=XR_COMPILE_RESOURCE_OK) {
@@ -262,14 +306,17 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_format(XmcpServer *server, const XmcpCallCon
         result=xmcp_make_text_structured_result(message,structured,true);
         goto cleanup;
     }
-    if(parsed!=XR_PARSE_OK) { stage=3; failure=(unsigned)parsed; goto cleanup; }
+    if(parsed!=XR_PARSE_OK) { stage=3; failure_domain="parser"; failure=(unsigned)parsed; goto cleanup; }
+    controlled=xr_compile_request_control_poll(&control);
+    if(controlled!=XR_COMPILE_RESOURCE_OK) { stage=4; failure_domain="request"; failure=(unsigned)controlled; goto cleanup; }
     XrFmtStatus formatted=xr_compile_format_ast(state,ast,&config,&output);
-    if(formatted!=XR_FMT_OK) { stage=4; failure=(unsigned)formatted; goto cleanup; }
+    if(formatted!=XR_FMT_OK) { stage=4; failure_domain="formatter"; failure=(unsigned)formatted; goto cleanup; }
     size_t length=0;
-    if(xr_compile_state_string_length(state,code,&length)!=XR_COMPILE_RESOURCE_OK ||
-        (length==output.length && xr_compile_state_work(state,length)!=XR_COMPILE_RESOURCE_OK)) {
+    if(xr_compile_state_string_length(state,code,&length)!=XR_COMPILE_RESOURCE_OK) {
         stage=5; failure=(unsigned)xr_compile_state_status(state); goto cleanup;
     }
+    controlled=xr_compile_request_control_poll(&control);
+    if(controlled!=XR_COMPILE_RESOURCE_OK) { stage=5; failure_domain="request"; failure=(unsigned)controlled; goto cleanup; }
     bool changed=length!=output.length || memcmp(code,output.text,length)!=0;
     XrJsonValue *structured=make_format_result_content(output.text,changed,config.indent_size,
         config.use_tabs!=0,true,false,xjson_new_array());
@@ -280,7 +327,7 @@ cleanup:
     xr_compile_resources_release(resources); xr_compile_format_output_free(&output);
     if(stage) {
         char message[128];
-        snprintf(message,sizeof(message),"Error: formatting failed (stage=%u status=%u)",stage,failure);
+        snprintf(message,sizeof(message),"Error: formatting failed (domain=%s stage=%u status=%u)",failure_domain,stage,failure);
         return xmcp_make_error_result(message);
     }
     return result;

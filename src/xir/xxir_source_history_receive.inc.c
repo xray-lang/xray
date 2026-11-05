@@ -8,7 +8,7 @@
  */
 static uint32_t source_history_target(SourceContext *ctx,uint32_t original) {
     for (uint32_t m=0;m<(uint32_t)ctx->graph->spec_count;++m) {
-        if (!source_work(ctx,NULL)) return UINT32_MAX;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return UINT32_MAX;
         const XrModuleSpec *spec=&ctx->graph->specs[m];
         if (spec->representation==XR_MODULE_CHECKED_HISTORY && spec->history==ctx->history_input &&
             spec->history_module==original) return m;
@@ -36,7 +36,7 @@ static bool source_history_begin(SourceContext *ctx) {
 static bool source_history_latest(SourceContext *ctx) {
     const SourceSemanticEnvironment *environment=ctx->history->unit->semantic;
     for (uint32_t i=0;i<environment->latest_count;++i) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const SourceName *original=environment->latest[i];
         size_t index=(size_t)(original-environment->symbols);
         if (index>=environment->symbol_count)
@@ -60,7 +60,7 @@ static bool source_history_bindings(SourceContext *ctx,bool types_only) {
         uint32_t module=source_history_target(ctx,m);
         if (module==UINT32_MAX) return false;
         for (const SourceName *source=environment->names[m];source;source=source->next) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             size_t ordinal=(size_t)(source-environment->symbols);
             if (ordinal>=environment->symbol_count)
                 return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"history symbol has no owned ordinal");
@@ -80,7 +80,7 @@ static bool source_history_bindings(SourceContext *ctx,bool types_only) {
                 if (!ctx->history->map || source->index>=ctx->history->map->function_count)
                     return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"history function binding is not relocated");
                 for (SourceName *candidate=ctx->names[module];candidate;candidate=candidate->next) {
-                    if (!source_work(ctx,NULL)) return false;
+                    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
                     if (candidate->kind==SOURCE_FUNCTION && candidate->index==ctx->history->map->functions[source->index]) {
                         binding=candidate;break;
                     }
@@ -130,7 +130,7 @@ static bool source_history_binding_accessor(SourceContext *ctx,const SourceName 
     bool write=mode==SOURCE_ACCESS_WRITE,push=mode==SOURCE_ACCESS_PUSH;
     const uint32_t *accessors=write ? environment->binding_writes : push ? environment->binding_pushes : environment->binding_reads;
     for (uint32_t s=0;accessors && s<map->slot_count && s<environment->slot_count;++s) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (map->slots[s]!=symbol->index) continue;
         uint32_t accessor=accessors[s];
         if (!accessor || accessor-1>=map->function_count) break;
@@ -177,7 +177,7 @@ static bool source_history_binding_accessors(SourceContext *ctx) {
         (map->slot_count && (!environment->binding_reads || !environment->binding_writes || !environment->binding_pushes)))
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"history binding accessors lost their complete slot owner");
     for (uint32_t s=0;s<map->slot_count;++s) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         uint32_t slot=map->slots[s],reader=environment->binding_reads[s],writer=environment->binding_writes[s],push=environment->binding_pushes[s];
         if (slot>=ctx->slot_count || (reader && reader-1>=map->function_count) ||
             (writer && writer-1>=map->function_count) || (push && push-1>=map->function_count))
@@ -201,7 +201,7 @@ static bool source_history_module_dependency(SourceContext *ctx,uint32_t from,ui
     XrXirSourceModule *module=&ctx->modules[from];
     if (!module->name) return true;
     for (uint32_t i=0;i<module->dependency_count;++i) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (module->dependencies[i]==to) return true;
     }
     if (module->dependency_count==UINT32_MAX)
@@ -214,7 +214,7 @@ static bool source_history_dependencies(SourceContext *ctx) {
     if (ctx->history_input) {
         const XrXirDeclarations *original=xr_xir_compile_artifact_module(ctx->history_input->checked)->declarations;
         for (uint32_t m=0;m<(uint32_t)ctx->graph->spec_count;++m) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             const XrModuleSpec *spec=&ctx->graph->specs[m];
             if (spec->representation!=XR_MODULE_CHECKED_HISTORY) continue;
             uint32_t scope=original->modules[spec->history_module].lexical_scope;
@@ -232,7 +232,7 @@ static bool source_history_dependencies(SourceContext *ctx) {
     }
     for (uint32_t i=0;ctx->history && i<ctx->history->edge_count;++i) {
         SourceHistoryEdge edge=ctx->history->edges[i];
-        if (!source_work(ctx,NULL) || !source_history_module_dependency(ctx,edge.from,edge.to)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_history_module_dependency(ctx,edge.from,edge.to)) return false;
     }
     return true;
 }
@@ -244,7 +244,7 @@ static SourceName *source_history_select(SourceContext *ctx,SourceName *binding)
     }
     bool known=false;
     for (uint32_t e=0;e<ctx->history->edge_count;++e) {
-        if (!source_work(ctx,NULL)) return NULL;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return NULL;
         known|=ctx->history->edges[e].from==ctx->module && ctx->history->edges[e].to==target;
     }
     if (!known) {
@@ -262,7 +262,7 @@ static SourceName *source_history_name(SourceContext *ctx,const char *name) {
         return source_history_select(ctx,ctx->history->implicit_result);
     for (uint32_t i=0;i<ctx->history->latest_count;++i) {
         SourceName *binding=ctx->history->latest[i];
-        if (!source_work(ctx,NULL)) return NULL;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return NULL;
         if (binding && source_text_same(ctx,NULL,binding->name,name)) return source_history_select(ctx,binding);
     }
     return NULL;

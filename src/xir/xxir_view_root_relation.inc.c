@@ -24,7 +24,7 @@ static XrXirStatus view_root_key_source(ViewRootCheck *c,ViewOriginPair *site,co
     const XrXirFunction *f=c->module->functions+site->first;*op=NULL;
     if (site->second>=(uint64_t)f->parameter_count+f->instruction_count) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t depth=0;depth<=f->instruction_count;++depth) {
-        if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;
+
         if (site->second<f->parameter_count) return XR_XIR_OK;
         *op=f->instructions+site->second-f->parameter_count;
         if ((*op)->op!=XR_XIR_COPY && (*op)->op!=XR_XIR_SCALAR_COPY && (*op)->op!=XR_XIR_OWNED_RETAIN)
@@ -55,7 +55,7 @@ static XrXirStatus view_root_key_scalar(ViewRootCheck *c,const XrXirInstruction 
             return XR_XIR_BAD_STRUCTURE;
         XrXirLiteral a=d->literals[left->immediate],b=d->literals[right->immediate];
         if (a.length==b.length) {
-            if (!xir_compile_work(c->context,a.length)) return XR_XIR_BUDGET;
+
             equal=!a.length || !memcmp(a.bytes,b.bytes,a.length);
         }
     } else if (kind==XR_XIR_CONST_FLOAT) {
@@ -86,14 +86,14 @@ static XrXirStatus view_root_class_suffix(ViewRootCheck *c,const XrXirViewRootEv
     uint32_t *start,bool *object) {
     *start=0;*object=event->dynamic_identity;
     for (uint32_t i=0;i<event->step_count;++i) {
-        if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;
+
         if (xr_xir_type_is_class(c->module->types,event->steps[i].container)) {*start=i;*object=true;}
     }
     return XR_XIR_OK;
 }
 static XrXirStatus view_root_path_pair(ViewRootCheck *c,const XrXirViewRootEvent *left,
     const XrXirViewRootEvent *right,bool *output) {
-    *output=false;if (!xir_compile_work(c->context,4)) return XR_XIR_BUDGET;
+    *output=false;
     if (left->kind==XR_XIR_VIEW_ROOT_ABSENT || right->kind==XR_XIR_VIEW_ROOT_ABSENT) {*output=true;return XR_XIR_OK;}
     if (left->opaque_suffix || right->opaque_suffix || left->kind==XR_XIR_VIEW_ROOT_UNRESOLVED ||
         right->kind==XR_XIR_VIEW_ROOT_UNRESOLVED) return XR_XIR_OK;
@@ -109,7 +109,7 @@ static XrXirStatus view_root_path_pair(ViewRootCheck *c,const XrXirViewRootEvent
         (!bo && right->kind==XR_XIR_VIEW_ROOT_CELL && ao)) {*output=true;return XR_XIR_OK;}
     if (!(same && !ao && !bo) && !(ao && bo)) return XR_XIR_OK;
     while (a<left->step_count && b<right->step_count) {
-        if (!xir_compile_work(c->context,2)) return XR_XIR_BUDGET;
+
         const XrXirViewRootStep *l=left->steps+a++,*r=right->steps+b++;
         if (l->operation!=r->operation || l->container!=r->container) return XR_XIR_OK;
         if (l->operation==XR_XIR_FIELD_PLACE) {
@@ -128,7 +128,7 @@ static XrXirStatus view_root_save(void *user,const XrXirCompileContext *context,
     uint64_t bytes=sizeof(ViewRootSaved)+steps+selected;
     if (bytes>SIZE_MAX || c->reserved>context->limits.frame_bytes || bytes>context->limits.frame_bytes-c->reserved)
         return XR_XIR_BUDGET;
-    if (!xir_compile_work(context,bytes)) return XR_XIR_BUDGET;
+
     XrXirStatus status=XR_XIR_OK;ViewRootSaved *saved=xir_compile_alloc(context,(size_t)bytes,&status);if (!saved) return status;
     c->reserved+=bytes;saved->next=comparison->left;saved->event=*event;saved->bytes=bytes;
     XrXirViewRootStep *path=(XrXirViewRootStep *)(saved+1);uint32_t *selection=(uint32_t *)((unsigned char *)path+steps);
@@ -137,9 +137,10 @@ static XrXirStatus view_root_save(void *user,const XrXirCompileContext *context,
     comparison->left=saved;return XR_XIR_OK;
 }
 static XrXirStatus view_root_compare(void *user,const XrXirCompileContext *context,const XrXirViewRootEvent *event) {
+    if (!xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
     ViewRootComparison *comparison=user;
     for (ViewRootSaved *p=comparison->left;p;p=p->next) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         bool disjoint=false;XrXirStatus status=view_root_path_pair(&comparison->resolver->check,&p->event,event,&disjoint);
         if (status!=XR_XIR_OK) return status;comparison->disjoint&=disjoint;
     }

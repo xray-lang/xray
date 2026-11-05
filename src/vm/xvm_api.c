@@ -13,6 +13,7 @@
  */
 
 #include "xvm_internal.h"
+#include "../runtime/object/xtext_worker.h"
 #include "xvm_coro_state.h"
 #include "xvm_worker_state.h"
 #include "../coro/xworker.h"
@@ -108,9 +109,17 @@ bool xr_vm_prepare_entry(XrVMContext *ctx, int extra_stack) {
 **                   If NULL, errors are logged via xr_log_warning.
 ** @return Return value (xr_null() on failure or when *out_result != XR_VM_OK)
 */
-XrValue xr_vm_call_closure(XrVMRuntime *isolate, XrClosure *closure, XrValue *args, int nargs) {
+XrValue xr_vm_call_closure_checked(XrVMRuntime *isolate, XrClosure *closure, XrValue *args,
+                                   int nargs, XrVMResult *status) {
+    if (status) *status = XR_VM_RUNTIME_ERROR;
     XR_DCHECK(isolate != NULL, "vm_call_closure: NULL isolate");
     XR_DCHECK(nargs >= 0, "vm_call_closure: negative nargs");
+
+    if (nargs < 0 || (nargs > 0 && !args))
+        return xr_null();
+    for (int arg = 0; arg < nargs; arg++)
+        if (xr_text_worker_is_private(args[arg]))
+            return xr_null();
 
     if (closure == NULL || closure->proto == NULL) {
         return xr_null();
@@ -133,6 +142,7 @@ XrValue xr_vm_call_closure(XrVMRuntime *isolate, XrClosure *closure, XrValue *ar
 
     // Single authoritative ctx resolver.
     XrVMContext *ctx = xr_vm_current_ctx(isolate);
+    bool had_pending_error = !XR_IS_NULL(ctx->pending_error);
 
     // Save current VM state
     int saved_frame_count = ctx->frame_count;
@@ -264,7 +274,14 @@ XrValue xr_vm_call_closure(XrVMRuntime *isolate, XrClosure *closure, XrValue *ar
     ctx->frame_count = saved_frame_count;
     ctx->stack_top = result_slot;
 
+    if (status)
+        *status = exec_result == XR_VM_OK && !had_pending_error && !XR_IS_NULL(ctx->pending_error)
+                      ? XR_VM_RUNTIME_ERROR : exec_result;
     return return_value;
+}
+
+XrValue xr_vm_call_closure(XrVMRuntime *isolate, XrClosure *closure, XrValue *args, int nargs) {
+    return xr_vm_call_closure_checked(isolate, closure, args, nargs, NULL);
 }
 
 /* ========== VM Execution API ========== */

@@ -16,7 +16,7 @@ static XrXirStatus effect_role_parameter_value(const EffectBodyRead *read,
         function>=effect_body_count(material) || !material->functions) return XR_XIR_BAD_STRUCTURE;
     const EffectBodyFunction *head=&material->functions[function];
     if (parameter>=head->parameter_count || !head->parameters) return XR_XIR_BAD_STRUCTURE;
-    if (!effect_body_read_work(read,12+sizeof(*output))) return XR_XIR_BUDGET;
+    if (!((read) && ((read)->execution ? effect_body_execution_work((read)->execution, 12+sizeof(*output)) : xir_compile_context_valid((read)->owner)))) return XR_XIR_BUDGET;
     uint32_t kind=XR_XIR_EFFECT_PARAMETER_FIXED;
     if (effect_body_variable_roles(material) &&
         xr_xir_callable_signature(material->domain.types,head->parameters[parameter])) {
@@ -60,7 +60,7 @@ static XrXirStatus effect_role_parameter_read(const XrXirCompileContext *work,
     }
     /* This read frames only the scalar's actual inputs. Complete closure remains
      * mandatory at admission and after the last allocator callback. */
-    EffectBodyRead read=effect_body_compile_read(work);
+    EffectBodyRead read=(EffectBodyRead){.owner=work};
     return effect_role_parameter_value(&read,material,proof,function,parameter,output);
 }
 static XrXirStatus effect_role_parameters_open(const XrXirCompileContext *work,
@@ -81,7 +81,7 @@ static XrXirStatus effect_role_parameters_open(const XrXirCompileContext *work,
     status=effect_role_range(work,types->nodes,types->count,sizeof(*types->nodes));
     if (status==XR_XIR_OK) status=effect_role_range(work,proof,1,sizeof(*proof));
     if (status!=XR_XIR_OK) return status;
-    if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+
     if (!xr_xir_callable_signature(types,head->parameters[callable_parameter])) return XR_XIR_BAD_STRUCTURE;
     if (effect_body_variable_roles(material)) {
         if (proof->resources!=work->resources || proof->functions!=functions || !proof->total)
@@ -94,14 +94,14 @@ static XrXirStatus effect_role_parameters_open(const XrXirCompileContext *work,
             row->count!=(uint64_t)head->parameter_count+head->instruction_count ||
             row->first>proof->total || row->count>proof->total-row->first) return XR_XIR_BAD_STRUCTURE;
     }
-    if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=(EffectRoleParametersRead){work,material,proof,function};return XR_XIR_OK;
 }
 static XrXirStatus effect_role_parameters_value(const EffectRoleParametersRead *source,
     uint32_t parameter,uint32_t *output) {
     if (!source || !xir_compile_context_valid(source->work) || !source->material || !source->proof)
         return XR_XIR_BAD_STRUCTURE;
-    EffectBodyRead read=effect_body_compile_read(source->work);
+    EffectBodyRead read=(EffectBodyRead){.owner=source->work};
     return effect_role_parameter_value(&read,source->material,source->proof,source->function,parameter,output);
 }
 
@@ -112,9 +112,9 @@ static XrXirStatus effect_role_contracts_match(const XrXirCompileContext *work,
     XrXirStatus status=effect_role_proof_geometry(&check);if (status!=XR_XIR_OK) return status;
     if (count!=check.functions) return XR_XIR_BAD_STRUCTURE;
     status=effect_role_range(work,contracts,count,sizeof(*contracts));if (status!=XR_XIR_OK) return status;
-    EffectBodyRead read=effect_body_compile_read(work);
+    EffectBodyRead read=(EffectBodyRead){.owner=work};
     for (uint32_t f=0;f<count;++f) {
-        if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
+
         uint32_t parameters=material->functions[f].parameter_count;
         const XrXirFunctionEffectContract *contract=&contracts[f];
         if (contract->parameter_count!=parameters || !!contract->parameters!=!!parameters) return XR_XIR_BAD_STRUCTURE;

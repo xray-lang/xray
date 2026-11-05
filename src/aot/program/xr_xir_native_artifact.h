@@ -33,18 +33,17 @@ typedef struct XrXirNativeArtifactView {
 } XrXirNativeArtifactView;
 
 /* Only independently validated product/SDK/target facts may supply admission.
- * This seal binds identities, not language authority. Context is mandatory;
- * input seal is allocation-free. Output bytes are preserved on every failure.
- * The artifact copies its context and bytes into one ledger allocation, which
- * outlives the producer's reference. byte_limit bounds native bytes only.
- * Work follows the toolchain identity primitives, plus actual owner allocation,
- * metadata/byte copies and clearing. Free consumes no work. */
-XR_FUNC XrXirStatus xr_compile_native_input_seal(const XrXirCompileContext *context,
+ * This seal binds identities, not language authority. Input seal allocates
+ * nothing. Output bytes are preserved on every failure. Artifact seal uses
+ * the context's real memory owner; its one retained allocation owns the copied
+ * bytes and metadata after the producer releases its reference. No request
+ * control is retained. byte_limit bounds native bytes only. */
+XR_FUNC XrXirStatus xr_compile_native_input_seal(
     const XrXirNativeInput *input, XrXirNativeInput *output);
 XR_FUNC XrXirStatus xr_compile_native_artifact_seal(const XrXirCompileContext *context,
     const XrXirNativeInput *input, const void *bytes, size_t size,
     size_t byte_limit, XrXirNativeArtifact **output);
-/* Verify charges the actual owner's retained ledger, never a caller replacement. */
+/* Verify checks the opaque owner's byte extent and all exact identities. */
 XR_FUNC XrXirStatus xr_compile_native_artifact_verify(const XrXirNativeArtifact *artifact,
     const XrXirNativeInput *expected, size_t byte_limit);
 /* Read-only facts borrow the owner lifetime; querying does not validate them. */

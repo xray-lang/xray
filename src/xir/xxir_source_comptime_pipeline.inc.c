@@ -12,7 +12,12 @@
  */
 static bool source_comptime_failure(SourceContext *ctx,AstNode *node,XrXirCtfeStatus status) {
     XrXirStatus mapped=status==XR_XIR_CTFE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
-        status==XR_XIR_CTFE_BUDGET || status==XR_XIR_CTFE_STEP_LIMIT || status==XR_XIR_CTFE_DEPTH_LIMIT ||
+        status==XR_XIR_CTFE_MEMORY_LIMIT?XR_XIR_MEMORY_LIMIT:
+        status==XR_XIR_CTFE_OVERFLOW?XR_XIR_OVERFLOW:
+        status==XR_XIR_CTFE_CANCELLED?XR_XIR_CANCELLED:
+        status==XR_XIR_CTFE_DEADLINE?XR_XIR_DEADLINE:
+        status==XR_XIR_CTFE_CLOCK_FAILURE?XR_XIR_CLOCK_FAILURE:
+        status==XR_XIR_CTFE_COMPLEXITY_LIMIT || status==XR_XIR_CTFE_STEP_LIMIT || status==XR_XIR_CTFE_DEPTH_LIMIT ||
         status==XR_XIR_CTFE_FRAME_LIMIT || status==XR_XIR_CTFE_OUTPUT_LIMIT?XR_XIR_BUDGET:
         status==XR_XIR_CTFE_BAD_ARTIFACT || status==XR_XIR_CTFE_IDENTITY?XR_XIR_BAD_STRUCTURE:XR_XIR_BAD_TYPE;
     const char *message=status==XR_XIR_CTFE_STEP_LIMIT?"comptime step limit exceeded":
@@ -21,7 +26,12 @@ static bool source_comptime_failure(SourceContext *ctx,AstNode *node,XrXirCtfeSt
         status==XR_XIR_CTFE_DEPTH_LIMIT?"comptime call depth exceeded":
         status==XR_XIR_CTFE_FRAME_LIMIT?"comptime whole-stack frame limit exceeded":
         status==XR_XIR_CTFE_OUT_OF_MEMORY?"comptime allocation failed":
-        status==XR_XIR_CTFE_BUDGET?"comptime compiler ledger exhausted":
+        status==XR_XIR_CTFE_COMPLEXITY_LIMIT?"comptime local complexity limit exceeded":
+        status==XR_XIR_CTFE_MEMORY_LIMIT?"comptime held-memory limit exceeded":
+        status==XR_XIR_CTFE_OVERFLOW?"comptime storage size overflow":
+        status==XR_XIR_CTFE_CANCELLED?"comptime compilation cancelled":
+        status==XR_XIR_CTFE_DEADLINE?"comptime compilation deadline exceeded":
+        status==XR_XIR_CTFE_CLOCK_FAILURE?"comptime deadline clock failed":
         status==XR_XIR_CTFE_DIVIDE_BY_ZERO?"comptime division by zero":
         status==XR_XIR_CTFE_NUMERIC_RANGE?"comptime value range violation":
         status==XR_XIR_CTFE_NULL_UNWRAP?"comptime null unwrap":
@@ -39,7 +49,7 @@ static bool source_comptime_helper(SourceContext *ctx,const XrXirArtifact *lower
     const XrXirFunction *original=&ctx->functions[site->helper];uint32_t found=UINT32_MAX;
     const XrXirFunctionIdentity *identity=&ctx->identities[site->helper];
     for (uint32_t f=0;f<module->function_count;++f) {
-        if (!source_work_units(ctx,site->syntax,7)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirFunction *body=&module->functions[f];
         if (module->declarations->functions[f].module!=site->module || body->name_length!=original->name_length ||
             !source_span_same(ctx,site->syntax,body->name,original->name,body->name_length)) continue;
@@ -60,19 +70,17 @@ static bool source_comptime_evaluate_library(SourceContext *ctx,const XrXirArtif
 static bool source_comptime_store(SourceContext *ctx,const XrXirModule *module,
     SourceComptimeSite *site,uint32_t function,XrXirValue *value) {
     XrXirType result=module->functions[function].result;
-    XrXirCtfeTypeShape shape={0};
-    XrXirCtfeStatus shaped=xr_xir_compile_ctfe_type_shape(&ctx->compile,module->types,result,&shape);
+    XrXirCtfeStatus shaped=xr_xir_compile_ctfe_type_admit(&ctx->compile,module->types,result);
     if (shaped!=XR_XIR_CTFE_OK) return source_comptime_failure(ctx,site->syntax,shaped);
-    if (!source_work_units(ctx,site->syntax,sizeof(site->result_work))) return false;
-    site->result_work=shape.work;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     const XrXirTypeNode *tuple=xr_xir_tuple_signature(module->types,result);
     site->result_arity=tuple?tuple->parameter_count:(xr_xir_type_is_nullable(module->types,result) ||
         xr_xir_type_is_array(module->types,result) || xr_xir_type_is_struct(module->types,result) ||
         xr_xir_type_is_enum(module->types,result))?1:0;
-    if (!source_comptime_result_value(ctx,site->syntax,value,site->result_arity,site->result_work))
+    if (!source_comptime_result_value(ctx,site->syntax,value,site->result_arity))
         return source_fail(ctx,site->syntax,ctx->diagnostic.status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:ctx->diagnostic.status,
             "comptime returned a noncanonical value");
-    if (!source_work_units(ctx,site->syntax,2*sizeof(*value)+1)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     site->value=*value;*value=(XrXirValue){0};return true;
 }
 /* All selected helpers belong to one private immutable Lowered owner. Batch
@@ -90,23 +98,23 @@ static bool source_comptime_batch(SourceContext *ctx,const XrXirArtifact *lowere
     }
     uint32_t selected=0;
     for (SourceComptimeSite *site=ctx->comptime_sites;site;site=site->next) {
-        if (!source_work_units(ctx,site->syntax,2)) goto done;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
         if (ctx->generics[site->helper].parameter_count) continue;
         ctx->module=site->module;uint32_t function=UINT32_MAX;
         if (selected==count) { source_fail(ctx,site->syntax,XR_XIR_BAD_STRUCTURE,"comptime batch inventory grew");goto done; }
         if (!source_comptime_helper(ctx,lowered,site,&function) ||
-            !source_work_units(ctx,site->syntax,sizeof(*functions)+sizeof(*sites)+sizeof(selected))) goto done;
+            !((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
         functions[selected]=function;sites[selected++]=site;
     }
     if (selected!=count) { source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"comptime batch inventory is incomplete");goto done; }
-    if (!source_work_units(ctx,NULL,sizeof(XirCtfeBatchRequest)+32+sizeof(uint32_t))) goto done;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
     XirCtfeBatchRequest request={.artifact=lowered,.functions=functions,.count=count,.target=*target,
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES},
         .call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
     /* Lowering already owns the canonical Checked packet and its digest. */
     memcpy(request.checked_identity,lowered->checked_identity,sizeof(request.checked_identity));
     uint32_t failed=UINT32_MAX;
-    XrXirCtfeStatus evaluated=xr_xir_compile_ctfe_batch_at(&request,values,&failed);
+    XrXirCtfeStatus evaluated=xr_xir_compile_ctfe_batch_at(&request,ctx->request,values,&failed);
     if (evaluated!=XR_XIR_CTFE_OK) {
         if (failed!=UINT32_MAX && failed>=count) source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"comptime failure ordinal is outside its inventory");
         else {
@@ -117,7 +125,7 @@ static bool source_comptime_batch(SourceContext *ctx,const XrXirArtifact *lowere
     }
     for (uint32_t i=0;i<count;++i) {
         ctx->module=sites[i]->module;
-        if (!source_work_units(ctx,sites[i]->syntax,sizeof(*sites)+sizeof(*functions)+sizeof(i)) ||
+        if (!((ctx)->diagnostic.status == XR_XIR_OK) ||
             !source_comptime_store(ctx,&lowered->module,sites[i],functions[i],&values[i])) goto done;
     }
     ok=true;
@@ -129,7 +137,7 @@ done:
 static bool source_comptime_evaluate(SourceContext *ctx,const XrXirArtifact *checked,bool defer_generic) {
     uint32_t expected=0;
     for (const SourceComptimeSite *site=ctx->comptime_sites;site;site=site->next) {
-        if (!source_work_units(ctx,site->syntax,2)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (ctx->generics[site->helper].parameter_count && !defer_generic) {
             ctx->module=site->module;
             return source_fail(ctx,site->syntax,XR_XIR_BAD_TYPE,"comptime requires per-instance Source result binding");
@@ -176,12 +184,12 @@ static void source_comptime_receive(SourceContext *ctx,XrXirSourceResult *output
     }
     if (!ctx->comptime_count) return;
     for (const SourceComptimeSite *site=ctx->comptime_sites;ctx->linkage_kind==XR_XIR_PROGRAM && site;site=site->next) {
-        if (!source_work_units(ctx,site->syntax,2)) { xr_xir_compile_source_result_free(output);source_comptime_values_free(ctx);return; }
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) { xr_xir_compile_source_result_free(output);source_comptime_values_free(ctx);return; }
         if (ctx->generics[site->helper].parameter_count) { source_program_comptime_receive(ctx,output);return; }
     }
     if (!source_comptime_evaluate(ctx,output->checked,ctx->linkage_kind==XR_XIR_LIBRARY)) { xr_xir_compile_source_result_free(output);source_comptime_values_free(ctx);return; }
-    if (!source_work_units(ctx,NULL,sizeof(SourceContext))) { xr_xir_compile_source_result_free(output);source_comptime_values_free(ctx);return; }
-    SourceContext received={0};received.compile=ctx->compile;received.graph=ctx->graph;received.linkage_kind=ctx->linkage_kind;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) { xr_xir_compile_source_result_free(output);source_comptime_values_free(ctx);return; }
+    SourceContext received={0};received.request=ctx->request;received.compile=ctx->compile;received.graph=ctx->graph;received.linkage_kind=ctx->linkage_kind;
     received.semantic_output=ctx->semantic_output;
     received.binding_readers=ctx->binding_readers;
     received.interactive=ctx->interactive;received.type_query=ctx->type_query;received.repl_tail=ctx->repl_tail;

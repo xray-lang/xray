@@ -8,8 +8,10 @@
  */
 static int toolchain_update_error(XrCliToolchainUpdateStatus status) {
     const char *reason=status==XR_CLI_TOOLCHAIN_UPDATE_INVALID ? "invalid preference request or configuration" :
-        status==XR_CLI_TOOLCHAIN_UPDATE_BUDGET ? "preference resource budget exhausted" :
+        status==XR_CLI_TOOLCHAIN_UPDATE_BUDGET ? "preference local limit exceeded" :
         status==XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY ? "preference allocation failed" :
+        status==XR_CLI_TOOLCHAIN_UPDATE_MEMORY_LIMIT ? "preference memory limit exceeded" :
+        status==XR_CLI_TOOLCHAIN_UPDATE_OVERFLOW ? "preference size overflow" :
         status==XR_CLI_TOOLCHAIN_UPDATE_UNRESOLVED ? "preference path is unresolved" :
         status==XR_CLI_TOOLCHAIN_UPDATE_UNSUPPORTED ? "preference operation is unsupported" : "preference I/O failed";
     xr_cli_error("toolchain","%s",reason);return XR_CLI_EXIT_FAIL;

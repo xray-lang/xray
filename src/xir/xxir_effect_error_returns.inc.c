@@ -19,7 +19,7 @@ static XrXirStatus error_invocation_return(ErrorFlow *flow,const XrXirInstructio
     if (row==UINT32_MAX) return XR_XIR_OK;
     if (row>=flow->summary_count) return XR_XIR_BAD_STRUCTURE;
     uint32_t words=flow->effects->outcomes_work.words;
-    if (!xir_compile_work(flow->remaining,words)) return XR_XIR_BUDGET;
+
     uint64_t *to=flow->effects->outcomes_work.errors+(size_t)row*words;
     flow->summary_changed|=error_join(to,error_read(flow,flow->work,op->args[0]),words);
     return XR_XIR_OK;
@@ -54,7 +54,7 @@ static XrXirStatus error_invocation_result(ErrorFlow *flow,const XrXirInstructio
     if (call->head==UINT32_MAX) { error_type(flow,value->type,set);return XR_XIR_OK; }
     uint32_t walked=0;
     for (uint32_t e=call->head;e!=UINT32_MAX;e=contexts->links[e].next) {
-        if (!xir_compile_work(flow->remaining,3)) return XR_XIR_BUDGET;
+
         if (e>=contexts->link_count || ++walked>contexts->link_count ||
             contexts->links[e].caller!=flow->invocation || contexts->links[e].target>=contexts->count)
             return XR_XIR_BAD_STRUCTURE;

@@ -21,7 +21,7 @@ static bool source_constant_default_error_bound(SourceContext *ctx) {
      * declaration, module initializer or implicit constructor is not this role. */
     if ((!ctx->bodies[function].default_expression && !field) || !ctx->bodies[function].count) return true;
     for (uint32_t i=0;i<ctx->bodies[function].count;++i) {
-        if (!source_work(ctx,ctx->bodies[function].node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         XrXirInstruction op=ctx->bodies[function].recipes[i].instruction;
         bool empty=false;
         if (!source_recipe_never(ctx,&op,i,&empty)) return false;

@@ -47,7 +47,7 @@ static bool source_history_input(SourceContext *ctx) {
     for (uint32_t m=0;m<count;++m) {
         const XrXirSourceModule *original=&module->declarations->modules[m];
         XrModuleSpec *spec=&specs[first+m];
-        if (!source_work(ctx,NULL)) goto failed;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto failed;
         char *name=source_semantic_alloc(ctx,(size_t)original->name_length+1,1);
         if (!name) goto failed;
         spec->canonical=name;
@@ -63,7 +63,7 @@ static bool source_history_input(SourceContext *ctx) {
         spec->dep_indices=spec->dep_count ? source_semantic_alloc(ctx,original->dependency_count,sizeof(*spec->dep_indices)) : NULL;
         if (spec->dep_count && !spec->dep_indices) goto failed;
         for (uint32_t d=0;d<original->dependency_count;++d) {
-            if (!source_work(ctx,NULL)) goto failed;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto failed;
             if (original->dependencies[d]>=count) {
                 source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"history dependency has a foreign module ordinal");goto failed;
             }

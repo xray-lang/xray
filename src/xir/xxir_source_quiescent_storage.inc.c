@@ -17,7 +17,7 @@ static void *source_compact_array(SourceContext *ctx,const void *array,uint32_t 
     if (!capacity || !size || count>*capacity || (!array && *capacity)) {
         source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source storage inventory is inconsistent");return NULL;
     }
-    if (!source_work_units(ctx,NULL,3+3*sizeof(void *)+2*sizeof(uint32_t))) return NULL;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return NULL;
     if (!count) {
         if (array) source_release_private((void *)array);
         *capacity=0;return NULL;
@@ -37,7 +37,7 @@ static bool source_quiescent_storage(SourceContext *ctx) {
     if (ctx->root_flow || ctx->function_count>ctx->function_capacity ||
         ctx->next_closure!=ctx->closure_limit)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source storage still has active construction readers");
-    if (!source_work_units(ctx,NULL,5*sizeof(uint32_t)+sizeof(void *)+4)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     uint32_t capacity=ctx->function_capacity;
 #define SOURCE_COMPACT(field,count,limit) do { \
     void *tight=source_compact_array(ctx,ctx->field,(count),&(limit),sizeof(*ctx->field)); \

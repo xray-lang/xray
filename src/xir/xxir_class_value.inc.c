@@ -31,8 +31,8 @@ static XrXirValueStatus xr_xir_class_new_graph_operation(XrXirType type, const X
         node->nominal.field_count != count || !layout || layout->field_count != count ||
         !layout->body.alignment || layout->body.alignment > _Alignof(XirClassObject))
         return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (count > admission->work) return XR_XIR_VALUE_LIMIT;
-    admission->work-=count;
+    if (!admission_is_compile(admission) && (count > admission->work)) return XR_XIR_VALUE_LIMIT;
+    if (!admission_is_compile(admission)) admission->work-=count;
     for (uint32_t i=0;i<count;++i) {
         XrXirValueStatus status=xr_xir_value_admit(&fields[i],node->nominal.fields[i],admission);
         if (status != XR_XIR_VALUE_OK) return status;
@@ -92,8 +92,8 @@ static XrXirValueStatus xr_xir_class_get_graph_operation(const XrXirValue *recei
         ((const XirClassObject *)object)->borrow_top ||
         field >= layout->field_count || admission->arena != object->arena)
         return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!admission->work) return XR_XIR_VALUE_LIMIT;
-    --admission->work;
+    if (!admission_is_compile(admission) && (!admission->work)) return XR_XIR_VALUE_LIMIT;
+    if (!admission_is_compile(admission)) --admission->work;
     const XrXirTypeNode *node=xr_xir_type_node(xr_xir_compile_type_arena_types(object->arena),object->type);
     const unsigned char *body=(const unsigned char *)((const XirClassObject *)object+1);
     StorageSpan span={node->nominal.fields[field],body+layout->field_offsets[field]};

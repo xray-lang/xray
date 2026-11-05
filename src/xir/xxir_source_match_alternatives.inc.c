@@ -19,7 +19,7 @@ static bool source_match_alternatives(SourceContext *ctx, SourceMatchArm *arm,
     if (!branches || !ends || !jumps || !inputs) return false;
     SourceFunction *body=&ctx->bodies[ctx->function]; uint32_t used=0;
     for (uint32_t i=0;i<arm->count;++i) {
-        if (!source_work(ctx,arm->patterns[i].node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         ctx->locals=saved; *failures=NULL;
         if (!source_match_payload(ctx,&arm->patterns[i],receiver,test || i+1<arm->count,failures,0)) return false;
         if (!i && !*failures) return true;
@@ -38,7 +38,7 @@ static bool source_match_alternatives(SourceContext *ctx, SourceMatchArm *arm,
         for (uint32_t i=0;i<used;++i) {
             SourceName *bound=branches[i];
             for (;bound!=saved;bound=bound->next) {
-                if (!source_work(ctx,symbol->node)) return false;
+                if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
                 if (source_text_same(ctx, NULL, bound->name, symbol->name)) break;
             }
             if (bound==saved || bound->type!=symbol->type)

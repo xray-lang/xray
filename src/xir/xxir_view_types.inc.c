@@ -28,7 +28,7 @@ static XrXirStatus view_flags_build(const XrXirCompileContext *context,
     if (!!types->count!=!!types->nodes) return XR_XIR_BAD_STRUCTURE;
     bool present=false;
     for (uint32_t i=0;i<types->count;++i) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         present|=types->nodes[i].kind==XR_XIR_TYPE_SLICE || types->nodes[i].kind==XR_XIR_TYPE_MUT_SLICE;
     }
     if (!present) return XR_XIR_OK;
@@ -37,7 +37,7 @@ static XrXirStatus view_flags_build(const XrXirCompileContext *context,
     uint8_t *flags=xir_compile_calloc(context,types->count,sizeof(*flags),&status);
     if (!flags) return status;
     for (uint32_t i=0;i<types->count && status==XR_XIR_OK;++i) {
-        if (!xir_compile_work(context,1)) {status=XR_XIR_BUDGET;break;}
+
         const XrXirTypeNode *node=&types->nodes[i];
         if (node->kind==XR_XIR_TYPE_SLICE) flags[i]=XR_XIR_VIEW_SHARED|4u;
         else if (node->kind==XR_XIR_TYPE_MUT_SLICE) flags[i]=XR_XIR_VIEW_MUTABLE|4u;
@@ -45,7 +45,7 @@ static XrXirStatus view_flags_build(const XrXirCompileContext *context,
             (view_leaves_at(types,flags,node->element)<<2));
         else if (node->kind==XR_XIR_TYPE_TUPLE)
             for (uint32_t p=0;p<node->parameter_count;++p) {
-                if (!xir_compile_work(context,1)) {status=XR_XIR_BUDGET;break;}
+
                 flags[i]|=(uint8_t)view_flags_at(types,flags,node->parameters[p].type);
                 uint32_t leaves=(flags[i]>>2)+view_leaves_at(types,flags,node->parameters[p].type);
                 flags[i]=(uint8_t)((flags[i]&3u)|((leaves>1?2u:leaves)<<2));
@@ -60,13 +60,13 @@ XR_FUNC XrXirStatus xir_compile_view_flags_new(const XrXirCompileContext *contex
     return view_flags_build(context,types,output);
 }
 
-static XrXirStatus view_return_candidate(const XrXirCompileContext *context,
+static XrXirStatus view_return_candidate(
     const XrXirTypes *types,const uint8_t *flags,const XrXirTypeNode *node,uint32_t *output) {
     uint32_t result=view_flags_at(types,flags,node->result),candidate=UINT32_MAX;
     if (result) {
         uint32_t candidates=0,permission=0;
         for (uint32_t p=0;p<node->parameter_count;++p) {
-            if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
             const XrXirCallableParameter *parameter=&node->parameters[p];
             uint32_t borrowed=view_flags_at(types,flags,parameter->type);
             if (parameter->mode!=XR_PARAM_REF && !borrowed) continue;
@@ -85,19 +85,17 @@ static XrXirStatus view_types_verify(const XrXirCompileContext *context,const Xr
     XrXirStatus status=view_flags_build(context,types,&flags);
     if (status!=XR_XIR_OK || !flags) return status;
     for (uint32_t i=0;i<types->count && status==XR_XIR_OK;++i) {
-        if (!xir_compile_work(context,1)) {status=XR_XIR_BUDGET;break;}
+
         const XrXirTypeNode *node=&types->nodes[i];
         if (node->kind==XR_XIR_TYPE_CALLABLE) {
             uint32_t candidate;
-            status=view_return_candidate(context,types,flags,node,&candidate);
+            status=view_return_candidate(types,flags,node,&candidate);
         } else if (node->kind==XR_XIR_TYPE_NOMINAL) {
             for (uint32_t a=0;a<node->nominal.argument_count && status==XR_XIR_OK;++a) {
-                if (!xir_compile_work(context,1)) status=XR_XIR_BUDGET;
-                else if (view_flags_at(types,flags,node->nominal.arguments[a])) status=XR_XIR_BAD_TYPE;
+                if (view_flags_at(types,flags,node->nominal.arguments[a])) status=XR_XIR_BAD_TYPE;
             }
             for (uint32_t f=0;f<node->nominal.field_count && status==XR_XIR_OK;++f) {
-                if (!xir_compile_work(context,1)) status=XR_XIR_BUDGET;
-                else if (view_flags_at(types,flags,node->nominal.fields[f])) status=XR_XIR_BAD_TYPE;
+                if (view_flags_at(types,flags,node->nominal.fields[f])) status=XR_XIR_BAD_TYPE;
             }
         } else if (node->kind!=XR_XIR_TYPE_TUPLE && node->kind!=XR_XIR_TYPE_NULLABLE) {
             if (view_flags_at(types,flags,node->element) || view_flags_at(types,flags,node->result))
@@ -110,7 +108,7 @@ static XrXirStatus view_types_verify(const XrXirCompileContext *context,const Xr
 XR_FUNC XrXirStatus xr_xir_compile_view_type_flags(const XrXirCompileContext *context,
     const XrXirTypes *types,XrXirType type,uint32_t *output) {
     if (!xir_compile_context_valid(context) || !output) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
     if (!node || (node->kind!=XR_XIR_TYPE_SLICE && node->kind!=XR_XIR_TYPE_MUT_SLICE &&
         node->kind!=XR_XIR_TYPE_TUPLE && node->kind!=XR_XIR_TYPE_NULLABLE)) {*output=0;return XR_XIR_OK;}
@@ -127,7 +125,7 @@ XR_FUNC XrXirStatus xr_xir_compile_view_return_candidate(const XrXirCompileConte
     if (!node) return XR_XIR_BAD_TYPE;
     uint8_t *flags=NULL;
     XrXirStatus status=view_flags_build(context,types,&flags);
-    if (status==XR_XIR_OK) status=view_return_candidate(context,types,flags,node,output);
+    if (status==XR_XIR_OK) status=view_return_candidate(types,flags,node,output);
     xr_compile_resources_free(flags);return status;
 }
 
@@ -152,19 +150,17 @@ XR_FUNC XrXirStatus xir_compile_view_module_boundary(const XrXirCompileContext *
     if (status==XR_XIR_OK) status=xir_compile_view_roots_verified(context,module,NULL,NULL,diagnostic);
     for (uint32_t f=0;f<module->function_count && status==XR_XIR_OK;++f) {
         const XrXirFunction *body=&module->functions[f];
-        if (!xir_compile_work(context,1)) {status=XR_XIR_BUDGET;break;}
+
         if (!view_boundary_supported(module->types,flags,body->result)) {
             status=XR_XIR_BAD_TYPE;
             if (diagnostic) *diagnostic=(XrXirDiagnostic){status,f,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
             break;
         }
         for (uint32_t p=0;p<body->parameter_count && status==XR_XIR_OK;++p) {
-            if (!xir_compile_work(context,1)) status=XR_XIR_BUDGET;
-            else if (!view_boundary_supported(module->types,flags,body->parameters[p])) status=XR_XIR_BAD_TYPE;
+            if (!view_boundary_supported(module->types,flags,body->parameters[p])) status=XR_XIR_BAD_TYPE;
         }
         for (uint32_t i=0;i<body->instruction_count && status==XR_XIR_OK;++i) {
-            if (!xir_compile_work(context,1)) status=XR_XIR_BUDGET;
-            else if (!view_boundary_supported(module->types,flags,body->instructions[i].type)) status=XR_XIR_BAD_TYPE;
+            if (!view_boundary_supported(module->types,flags,body->instructions[i].type)) status=XR_XIR_BAD_TYPE;
         }
     }
     xr_compile_resources_free(flags);

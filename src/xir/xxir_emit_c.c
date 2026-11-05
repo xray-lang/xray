@@ -76,7 +76,7 @@ static int emit_arithmetic_operation(XrXirOp op) {
 
 static uint32_t emit_block(CBuffer *buffer, const XrXirFunction *function, uint32_t instruction) {
     uint32_t low = 0, high = function->block_count;
-    while (low + 1 < high && emit_work(buffer, 1)) {
+    while (low + 1 < high && ((buffer)->status == XR_XIR_OK)) {
         uint32_t middle = low + (high - low) / 2;
         if (function->blocks[middle].first <= instruction) low = middle;
         else high = middle;
@@ -84,7 +84,7 @@ static uint32_t emit_block(CBuffer *buffer, const XrXirFunction *function, uint3
     return low;
 }
 static bool emit_has_cleanup(CBuffer *buffer, const XrXirFunction *function) {
-    for (uint32_t i = 0; i < function->instruction_count && emit_work(buffer, 1); ++i)
+    for (uint32_t i = 0; i < function->instruction_count && ((buffer)->status == XR_XIR_OK); ++i)
         if (function->instructions[i].op == XR_XIR_CLEANUP_REGISTER) return true;
     return false;
 }
@@ -172,7 +172,7 @@ static void emit_numeric_step(CBuffer *buffer, const XrXirFunction *function,
 static bool symbol_prefix_valid(CBuffer *buffer, const char *prefix) {
     if (!prefix)
         return false;
-    for (size_t i = 0; i < 65 && emit_work(buffer, 1); ++i) {
+    for (size_t i = 0; i < 65 && ((buffer)->status == XR_XIR_OK); ++i) {
         unsigned char c = (unsigned char) prefix[i];
         if (!c)
             return i != 0;
@@ -204,17 +204,17 @@ static void emit_edge(CBuffer *buffer, const XrXirFunction *function,
         emit_view_phi_edge(buffer,function,layout,instruction,target);return;
     }
     uint32_t low = 0, high = function->block_count;
-    while (low + 1 < high && emit_work(buffer, 1)) {
+    while (low + 1 < high && ((buffer)->status == XR_XIR_OK)) {
         uint32_t middle = low + (high - low) / 2;
         if (function->blocks[middle].first <= instruction) low = middle;
         else high = middle;
     }
     const char *frame = resumable ? "state->frame" : "frame";
     uint32_t first = function->blocks[target].first, end = first;
-    while (end < function->instruction_count && emit_work(buffer, 1) && function->instructions[end].op == XR_XIR_PHI) {
+    while (end < function->instruction_count && ((buffer)->status == XR_XIR_OK) && function->instructions[end].op == XR_XIR_PHI) {
         const XrXirInstruction *phi = &function->instructions[end];
         uint32_t source = UINT32_MAX;
-        for (uint32_t a = 0; a < phi->args[1] && emit_work(buffer, 1); a += 2)
+        for (uint32_t a = 0; a < phi->args[1] && ((buffer)->status == XR_XIR_OK); a += 2)
             if (function->operands[phi->args[0] + a] == low) {
                 source = function->operands[phi->args[0] + a + 1]; break;
             }
@@ -230,7 +230,7 @@ static void emit_edge(CBuffer *buffer, const XrXirFunction *function,
             frame, scratch, frame, layout->offsets[source]);
         ++end;
     }
-    for (uint32_t i = first; i < end && emit_work(buffer, 1); ++i) {
+    for (uint32_t i = first; i < end && ((buffer)->status == XR_XIR_OK); ++i) {
         const XrXirInstruction *phi = &function->instructions[i];
         uint32_t destination = layout->offsets[function->parameter_count + i];
         if (xr_xir_type_is_owned(buffer->types, phi->type))
@@ -325,19 +325,19 @@ static void emit_function(CBuffer *buffer, const XrXirArtifact *artifact,
            "    *result = (XrXirValue) {0, 0, 0};\n"
            "    if (!context || argument_count != %uu || (argument_count && !arguments)) "
            "return XR_XIR_RUN_BAD_ARGUMENT;\n", function->parameter_count);
-    for (uint32_t p = 0; p < function->parameter_count && emit_work(buffer, 1); ++p)
+    for (uint32_t p = 0; p < function->parameter_count && ((buffer)->status == XR_XIR_OK); ++p)
         EMIT_FORMAT(buffer, et_50bcb26b8b24bee2, "    if (!xr_xir_value_argument(&arguments[%u], NULL, (XrXirType) %u)) "
                "return XR_XIR_RUN_BAD_ARGUMENT;\n", p, (uint32_t) function->parameters[p]);
     EMIT_FORMAT(buffer, et_77b4ecd218358990, "    status = xr_xir_scalar_frame_begin(context, %uu, &frame);\n"
            "    if (status != XR_XIR_RUN_OK) return status;\n", layout->frame_bytes);
-    for (uint32_t p = 0; p < function->parameter_count && emit_work(buffer, 1); ++p)
+    for (uint32_t p = 0; p < function->parameter_count && ((buffer)->status == XR_XIR_OK); ++p)
         EMIT_FORMAT(buffer, et_796426ff07bb30a1, "    xr_xir_scalar_store(frame, %uu, arguments[%u].payload);\n",
                layout->offsets[p], p);
     EMIT_LITERAL(buffer, "    goto xr_block_0;\n");
-    for (uint32_t b = 0; b < function->block_count && emit_work(buffer, 1); ++b) {
+    for (uint32_t b = 0; b < function->block_count && ((buffer)->status == XR_XIR_OK); ++b) {
         EMIT_U_SHAPE(buffer, et_43fe9a6676ab318b, "xr_block_%u:\n", "xr_block_", ":\n", b);
         const XrXirBlock *block = &function->blocks[b];
-        for (uint32_t i = block->first; i < block->first + block->count && emit_work(buffer, 1); ++i)
+        for (uint32_t i = block->first; i < block->first + block->count && ((buffer)->status == XR_XIR_OK); ++i)
             emit_instruction(buffer, function, layout, i);
     }
     EMIT_FORMAT(buffer, et_1d7f7d3473089434, "xr_done:\n    xr_xir_scalar_frame_end(context, %uu, frame);\n"
@@ -359,13 +359,13 @@ XR_FUNC XrXirStatus xr_xir_compile_emit_leaf_c(const XrXirArtifact *artifact, co
     XrXirStatus status = xr_xir_compile_artifact_verify(artifact, NULL);
     if (status != XR_XIR_OK)
         return status;
-    for (uint32_t f = 0; f < module->function_count && emit_work(&buffer, 1); ++f) {
+    for (uint32_t f = 0; f < module->function_count && ((&buffer)->status == XR_XIR_OK); ++f) {
         const XrXirFunction *function = &module->functions[f];
         if (xr_xir_type_is_owned(module->types, function->result)) return XR_XIR_BAD_STAGE;
-        for (uint32_t p = 0; p < function->parameter_count && emit_work(&buffer, 1); ++p)
+        for (uint32_t p = 0; p < function->parameter_count && ((&buffer)->status == XR_XIR_OK); ++p)
             if (xr_xir_type_is_owned(module->types, function->parameters[p])) return XR_XIR_BAD_STAGE;
     }
-    if (module->declarations) for (uint32_t f = 0; f < module->function_count && emit_work(&buffer, 1); ++f)
+    if (module->declarations) for (uint32_t f = 0; f < module->function_count && ((&buffer)->status == XR_XIR_OK); ++f)
         if (module->declarations->functions[f].cleanup_owner) return XR_XIR_BAD_STAGE;
     emit_checked_identity(&buffer);
     append(&buffer, "#include \"xir/xxir_float.h\"\n"
@@ -375,7 +375,7 @@ XR_FUNC XrXirStatus xr_xir_compile_emit_leaf_c(const XrXirArtifact *artifact, co
            "_Static_assert(_Alignof(XrXirValue) == 8, \"XIR boundary alignment\");\n"
            "_Static_assert(offsetof(XrXirValue, payload) == 8, \"XIR payload offset\");\n",
            XR_XIR_VALUE_ABI_VERSION);
-    for (uint32_t f = 0; f < module->function_count && emit_work(&buffer, 1); ++f)
+    for (uint32_t f = 0; f < module->function_count && ((&buffer)->status == XR_XIR_OK); ++f)
         emit_function(&buffer, artifact, symbol_prefix, f);
     if (!emit_finalize(&buffer)) {
         xr_compile_resources_free(buffer.text);
@@ -385,6 +385,11 @@ XR_FUNC XrXirStatus xr_xir_compile_emit_leaf_c(const XrXirArtifact *artifact, co
     if (verified != XI_CGEN_VERIFY_PASSED) {
         xr_compile_resources_free(buffer.text);
         return verified == XI_CGEN_VERIFY_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
+            verified == XI_CGEN_VERIFY_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+            verified == XI_CGEN_VERIFY_OVERFLOW ? XR_XIR_OVERFLOW :
+            verified == XI_CGEN_VERIFY_CANCELLED ? XR_XIR_CANCELLED :
+            verified == XI_CGEN_VERIFY_DEADLINE ? XR_XIR_DEADLINE :
+            verified == XI_CGEN_VERIFY_CLOCK_FAILURE ? XR_XIR_CLOCK_FAILURE :
             verified == XI_CGEN_VERIFY_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
     }
     output->text = buffer.text;
@@ -444,7 +449,7 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
         EMIT_FORMAT(buffer, et_ab313a8fcb7dfd19, " status = xr_xir_instance_weaken_function(view, (XrXirType)%u, &input, &value);\n", (uint32_t)op->type);
         break;
     case XR_XIR_FUNCTION_REF:
-        for (uint32_t p = 0; p < op->args[1] && emit_work(buffer, 1); ++p) {
+        for (uint32_t p = 0; p < op->args[1] && ((buffer)->status == XR_XIR_OK); ++p) {
             uint32_t id = function->operands[op->args[0] + p];
             append(buffer, "state->arguments[%u] = xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(state->frame, %uu));\n",
                 p, (uint32_t) xr_xir_operand_type(function, id), layout->offsets[id]);
@@ -467,7 +472,7 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
             (uint32_t) op->immediate, op->op == XR_XIR_SLOT_INIT ? "true" : "false");
         break;
     case XR_XIR_SLOT_GROUP_INIT: {
-        for(uint32_t p=0;p<op->args[1] && emit_work(buffer,1);++p)
+        for(uint32_t p=0;p<op->args[1] && ((buffer)->status == XR_XIR_OK);++p)
             append(buffer, " state->arguments[%u] = xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(state->frame,%uu));\n",
                 p,(uint32_t)xr_xir_operand_type(function,function->operands[op->args[0]+p]),
                 layout->offsets[function->operands[op->args[0]+p]]);
@@ -531,7 +536,7 @@ static void emit_resume_call(CBuffer *buffer, const XrXirFunction *function,
     }
     EMIT_FORMAT(buffer, et_f6c0b7ca586cd2dd, " state->waiting = true; state->destination = %uu; state->expected = %uu;\n",
         destination, (uint32_t) op->type);
-    for (uint32_t p = 0; p < op->args[1] && emit_work(buffer, 1); ++p) {
+    for (uint32_t p = 0; p < op->args[1] && ((buffer)->status == XR_XIR_OK); ++p) {
         uint32_t id = function->operands[op->args[0] + p];
         append(buffer, " state->arguments[%u] = xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(state->frame, %uu));\n",
             p, (uint32_t) xr_xir_operand_type(function, id), layout->offsets[id]);
@@ -556,7 +561,7 @@ static void emit_resume_call(CBuffer *buffer, const XrXirFunction *function,
 static void emit_resume_go(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t destination) {
     EMIT_STATIC(buffer, es_ff1a07ada386851d, " { XrXirValue output = {0};\n");
-    for (uint32_t p = 0; p < op->args[1] && emit_work(buffer, 1); ++p) {
+    for (uint32_t p = 0; p < op->args[1] && ((buffer)->status == XR_XIR_OK); ++p) {
         uint32_t id = function->operands[op->args[0] + p];
         append(buffer, " state->arguments[%u] = xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(state->frame, %uu));\n",
             p, (uint32_t) xr_xir_operand_type(function, id), layout->offsets[id]);
@@ -573,7 +578,7 @@ static void emit_resume_go(CBuffer *buffer, const XrXirFunction *function,
 static void emit_resume_generator(CBuffer *buffer,const XrXirFunction *function,
     const XrXirInstruction *op,const XrXirFunctionLayout *layout,uint32_t index,uint32_t destination) {
     EMIT_STATIC(buffer, es_ff1a07ada386851d, " { XrXirValue output = {0};\n");
-    for(uint32_t p=0;p<op->args[1] && emit_work(buffer,1);++p) {
+    for(uint32_t p=0;p<op->args[1] && ((buffer)->status == XR_XIR_OK);++p) {
         uint32_t id=function->operands[op->args[0]+p];
         EMIT_FORMAT(buffer, et_700bb40b61790c72, " state->arguments[%u] = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
             p,(uint32_t)xr_xir_operand_type(function,id),layout->offsets[id]);
@@ -584,7 +589,7 @@ static void emit_resume_generator(CBuffer *buffer,const XrXirFunction *function,
 
 static void emit_resume_await(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t index) {
-    if (!emit_work(buffer, 1)) return;
+    if (!((buffer)->status == XR_XIR_OK)) return;
     XrXirType receiver=xr_xir_operand_type(function,op->args[0]);
     XrXirType expected=op->op==XR_XIR_TASK_AWAIT ? xr_xir_task_element(buffer->types,receiver) :
         op->op==XR_XIR_ITERATOR_HAS_NEXT ? XR_XIR_BOOL : op->op==XR_XIR_ITERATOR_CLOSE ? XR_XIR_UNIT : xr_xir_iterator_element(buffer->types,receiver);
@@ -661,7 +666,7 @@ static void emit_array_step(CBuffer *buffer, const XrXirFunction *function,
     EMIT_STATIC(buffer, es_0eecdf36a03e6314, " { XrXirCallStatus status; XrXirFaultDetail fault = {0};\n");
     if (op->type != XR_XIR_UNIT) EMIT_STATIC(buffer, es_2543e90d643759e3, " XrXirValue value = {0};\n");
     if (op->op == XR_XIR_ARRAY_NEW) {
-        for (uint32_t i = 0; i < op->args[1] && emit_work(buffer, 1); ++i) {
+        for (uint32_t i = 0; i < op->args[1] && ((buffer)->status == XR_XIR_OK); ++i) {
             EMIT_U_SHAPE(buffer, et_285705dd6fffa699, " state->arguments[%u] = ", " state->arguments[", "] = ", i);
             emit_value(buffer, function, layout, function->operands[op->args[0] + i]);
             EMIT_LITERAL(buffer, ";\n");
@@ -767,7 +772,7 @@ static void emit_tuple_step(CBuffer *buffer,const XrXirFunction *function,
     if (op->op==XR_XIR_TUPLE_NEW) {
         const XrXirTypeNode *tuple=xr_xir_tuple_signature(buffer->types,op->type);
         uint32_t payload=0;
-        for (uint32_t i=0;i<tuple->parameter_count && emit_work(buffer,1);++i) {
+        for (uint32_t i=0;i<tuple->parameter_count && ((buffer)->status == XR_XIR_OK);++i) {
             EMIT_U_SHAPE(buffer,et_285705dd6fffa699, " state->arguments[%u] = ", " state->arguments[", "] = ",i);
             if (tuple->parameters[i].type==XR_XIR_UNIT) EMIT_LITERAL(buffer,"(XrXirValue) {0}");
             else emit_value(buffer,function,layout,function->operands[op->args[0]+payload++]);
@@ -802,7 +807,7 @@ static void emit_nominal_step(CBuffer *buffer, const XrXirFunction *function,
     }
     EMIT_STATIC(buffer, es_74e4c9ff5e4a5422, " { XrXirValue value = {0}; XrXirValueStatus status;\n");
     if (op->op == XR_XIR_STRUCT_NEW || op->op == XR_XIR_ENUM_NEW) {
-        for (uint32_t i = 0; i < op->args[1] && emit_work(buffer, 1); ++i) {
+        for (uint32_t i = 0; i < op->args[1] && ((buffer)->status == XR_XIR_OK); ++i) {
             EMIT_U_SHAPE(buffer, et_285705dd6fffa699, " state->arguments[%u] = ", " state->arguments[", "] = ", i);
             emit_value(buffer, function, layout, function->operands[op->args[0] + i]);
             EMIT_LITERAL(buffer, ";\n");
@@ -911,7 +916,7 @@ static void emit_io_step(CBuffer *buffer, const XrXirFunction *function,
     case XR_XIR_WRITE_STREAM:
     case XR_XIR_PRINT: {
         uint32_t count = op->op == XR_XIR_PRINT ? op->args[1] : 1;
-        for (uint32_t p = 0; p < count && emit_work(buffer, 1); ++p) {
+        for (uint32_t p = 0; p < count && ((buffer)->status == XR_XIR_OK); ++p) {
             uint32_t id = op->op == XR_XIR_PRINT ? function->operands[op->args[0] + p] : op->args[p];
             XrXirType type = id < function->parameter_count ? function->parameters[id] :
                 function->instructions[id - function->parameter_count].type;
@@ -1382,19 +1387,19 @@ static void emit_resume_chunks(CBuffer *buffer, const XrXirArtifact *artifact,
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     const XrXirFunction *function = &module->functions[index];
     const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(artifact, index);
-    for (uint32_t first = 0; first < function->instruction_count && emit_work(buffer, 1);) {
+    for (uint32_t first = 0; first < function->instruction_count && ((buffer)->status == XR_XIR_OK);) {
         uint32_t count = function->instruction_count - first;
         if (count > EMIT_RESUME_CHUNK_INSTRUCTIONS) count = EMIT_RESUME_CHUNK_INSTRUCTIONS;
         uint32_t end = first + count;
         EMIT_FORMAT(buffer, et_b89ba653e368b165, "static XR_NOINLINE XrXirAction %s_step_%u_%u(XrXirCallView *view, %s_state_%u *state) {\n"
             "    (void) view;\n    switch (state->pc) {\n", prefix, index, first / EMIT_RESUME_CHUNK_INSTRUCTIONS, prefix, index);
-        if (!emit_work(buffer, 5)) return;
+        if (!((buffer)->status == XR_XIR_OK)) return;
         buffer->tracking = true;
         buffer->label_match[0] = buffer->label_match[1] = 0;
         buffer->label_used[0] = buffer->label_used[1] = false;
-        for (uint32_t i = first; i < end && emit_work(buffer, 1); ++i)
+        for (uint32_t i = first; i < end && ((buffer)->status == XR_XIR_OK); ++i)
             emit_resume_step(buffer, module, function, layout, i);
-        if (!emit_work(buffer, 3)) return;
+        if (!((buffer)->status == XR_XIR_OK)) return;
         bool invalid = buffer->label_used[0], limit = buffer->label_used[1];
         buffer->tracking = false;
         if (invalid) EMIT_STATIC(buffer, es_b4f4d495474c9095, "    default: goto invalid;\n    }\ninvalid:\n");
@@ -1505,9 +1510,9 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
            "    bool initialized, waiting, invoking, discard;\n"
            "    XrXirAtomicProgress atomic;\n", prefix, index);
     append(buffer,"    XrXirChannelCallState channel;\n");
-    if (!emit_work(buffer, 1)) return;
+    if (!((buffer)->status == XR_XIR_OK)) return;
     bool has_cleanup = emit_has_cleanup(buffer, function);
-    if (!emit_work(buffer, 1)) return;
+    if (!((buffer)->status == XR_XIR_OK)) return;
     if (has_cleanup) EMIT_STATIC(buffer, es_8f9ad1c699a7fc62,
         "    uint32_t frontier, cleanup_parent, exit_target, exit_pc, exit_destination, leave_instruction, panic_frontier;\n"
         "    bool cleanup_waiting, leaving;\n");
@@ -1515,18 +1520,18 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
     if (layout->path_count) EMIT_U_SHAPE(buffer, et_af7ab84c714b20c9, "    XrXirValuePathStep path_steps[%u];\n", "    XrXirValuePathStep path_steps[", "];\n", layout->path_count);
     append(buffer, "    unsigned char frame[%u];\n} %s_state_%u;\n",
            layout->frame_bytes ? layout->frame_bytes : 1, prefix, index);
-    if (!emit_work(buffer, 1)) return;
+    if (!((buffer)->status == XR_XIR_OK)) return;
     if (!has_cleanup) {
-        if (!emit_work(buffer, 1)) return;
+        if (!((buffer)->status == XR_XIR_OK)) return;
         if (!*waiting_helper_emitted) {
             emit_resume_waiting_helper(buffer, prefix);
-            if (!emit_work(buffer, 1)) return;
+            if (!((buffer)->status == XR_XIR_OK)) return;
             *waiting_helper_emitted = true;
         }
     }
     bool chunked = function->instruction_count > EMIT_RESUME_CHUNK_INSTRUCTIONS;
     if (chunked) emit_resume_chunks(buffer, artifact, prefix, index);
-    if (!emit_work(buffer, 5)) return;
+    if (!((buffer)->status == XR_XIR_OK)) return;
     buffer->tracking = true;
     buffer->label_match[0] = buffer->label_match[1] = 0;
     buffer->label_used[0] = buffer->label_used[1] = false;
@@ -1535,7 +1540,7 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
     emit_cleanup_entry(buffer, function, layout);
     EMIT_FORMAT(buffer, et_d394ea1cb9983755, "    if (!state->initialized) {\n"
            " if (view->argument_count != %uu) goto invalid;\n", function->parameter_count);
-    for (uint32_t p = 0; p < function->parameter_count && emit_work(buffer, 1); ++p) {
+    for (uint32_t p = 0; p < function->parameter_count && ((buffer)->status == XR_XIR_OK); ++p) {
         EMIT_FORMAT(buffer, et_f071ff59bedce009, " if (!xr_xir_value_argument(&view->arguments[%u], view->arena, (XrXirType) %u)) goto invalid;\n",
                p, (uint32_t) function->parameters[p]);
         uint32_t view_flags=0;
@@ -1554,7 +1559,7 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
                    layout->offsets[p], p);
     }
     EMIT_STATIC(buffer, es_24e6ebb65fe128b5, " state->initialized = true;\n    }\n");
-    if (!emit_work(buffer, 1)) return;
+    if (!((buffer)->status == XR_XIR_OK)) return;
     if (!has_cleanup) {
         append(buffer,
             "    if (state->waiting) {\n"
@@ -1588,14 +1593,14 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
     if (chunked) {
         EMIT_U_SHAPE(buffer, et_0e0214996c2baf94, "    switch (state->pc / %uu) {\n", "    switch (state->pc / ", "u) {\n", EMIT_RESUME_CHUNK_INSTRUCTIONS);
         uint32_t chunks = (function->instruction_count - 1) / EMIT_RESUME_CHUNK_INSTRUCTIONS + 1;
-        for (uint32_t chunk = 0; chunk < chunks && emit_work(buffer, 1); ++chunk)
+        for (uint32_t chunk = 0; chunk < chunks && ((buffer)->status == XR_XIR_OK); ++chunk)
             append(buffer, "    case %uu: return %s_step_%u_%u(view, state);\n", chunk, prefix, index, chunk);
     } else {
         EMIT_LITERAL(buffer, "    switch (state->pc) {\n");
-        for (uint32_t i = 0; i < function->instruction_count && emit_work(buffer, 1); ++i)
+        for (uint32_t i = 0; i < function->instruction_count && ((buffer)->status == XR_XIR_OK); ++i)
             emit_resume_step(buffer, module, function, layout, i);
     }
-    if (!emit_work(buffer, 2)) return;
+    if (!((buffer)->status == XR_XIR_OK)) return;
     bool limit = buffer->label_used[1];
     buffer->tracking = false;
     EMIT_STATIC(buffer, es_4065cf1c2dc9ace9, "    default: break;\n    }\ninvalid:\n"
@@ -1608,13 +1613,13 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
     EMIT_FORMAT(buffer, et_b9b491164d4d64de, "    %s_state_%u *state = view->state;\n"
         "    xr_xir_atomic_progress_clear(&state->atomic);\n", prefix, index);
     if (layout->owned_count) {
-        for (uint32_t i = layout->owned_count; i > 0 && emit_work(buffer, 1); --i)
+        for (uint32_t i = layout->owned_count; i > 0 && ((buffer)->status == XR_XIR_OK); --i)
             EMIT_FORMAT(buffer, et_6cf809afe252b96f, "    xr_xir_owned_slot_clear(state->frame, %uu);\n", layout->owned_offsets[i - 1]);
     }
     EMIT_LITERAL(buffer, "}\n");
     if (function->parameter_count) {
         append(buffer, "static const XrXirType %s_parameters_%u[] = {", prefix, index);
-        for (uint32_t p = 0; p < function->parameter_count && emit_work(buffer, 1); ++p)
+        for (uint32_t p = 0; p < function->parameter_count && ((buffer)->status == XR_XIR_OK); ++p)
             append(buffer, "%s(XrXirType) %u", p ? ", " : "", (uint32_t) function->parameters[p]);
         EMIT_LITERAL(buffer, "};\n");
     }
@@ -1625,7 +1630,7 @@ static void emit_bytes(CBuffer *buffer, const char *bytes, uint32_t length) {
      * static storage. Unsigned elements preserve all bytes without narrowing
      * warnings or the C11 minimum limit on concatenated string literals. */
     EMIT_LITERAL(buffer, "(const char *)(const unsigned char[]){");
-    for (uint32_t i = 0; i < length && emit_work(buffer, 1); ++i) {
+    for (uint32_t i = 0; i < length && ((buffer)->status == XR_XIR_OK); ++i) {
         unsigned int byte = (unsigned char) bytes[i];
         if (i % 16 == 0) EMIT_LITERAL(buffer, "\n    ");
         append(buffer, "0x%02x,", byte);
@@ -1634,21 +1639,21 @@ static void emit_bytes(CBuffer *buffer, const char *bytes, uint32_t length) {
 }
 static void emit_nominal_identities(CBuffer *buffer, const XrXirNominalTable *table, const char *prefix) {
     if (!table) return;
-    for (uint32_t i = 0; i < table->count && emit_work(buffer, 1); ++i) {
+    for (uint32_t i = 0; i < table->count && ((buffer)->status == XR_XIR_OK); ++i) {
         const XrXirNominalIdentity *d = &table->identities[i];
         if (!d->field_count) continue;
         EMIT_FORMAT(buffer, et_6b29872e8b1a2e7a, "static const XrXirNominalFieldIdentity %s_nominal_fields_%u[] = {\n", prefix, i);
-        for (uint32_t f = 0; f < d->field_count && emit_work(buffer, 1); ++f) {
+        for (uint32_t f = 0; f < d->field_count && ((buffer)->status == XR_XIR_OK); ++f) {
             EMIT_LITERAL(buffer, "    {{"); emit_bytes(buffer, d->fields[f].name.bytes, d->fields[f].name.length);
             append(buffer, ", %uu}, %uu},\n", d->fields[f].name.length, d->fields[f].flags);
         }
         EMIT_LITERAL(buffer, "};\n");
     }
-    for (uint32_t i = 0; i < table->count && emit_work(buffer, 1); ++i) {
+    for (uint32_t i = 0; i < table->count && ((buffer)->status == XR_XIR_OK); ++i) {
         const XrXirNominalIdentity *d = &table->identities[i];
         if (!d->variant_count) continue;
         EMIT_FORMAT(buffer, et_66dc3575b75f22a1, "static const XrXirNominalVariant %s_nominal_variants_%u[] = {\n", prefix, i);
-        for (uint32_t v = 0; v < d->variant_count && emit_work(buffer, 1); ++v) {
+        for (uint32_t v = 0; v < d->variant_count && ((buffer)->status == XR_XIR_OK); ++v) {
             const XrXirNominalVariant *variant = &d->variants[v];
             EMIT_LITERAL(buffer, "    {{"); emit_bytes(buffer, variant->name.bytes, variant->name.length);
             append(buffer, ", %uu}, %uu, %uu},\n", variant->name.length, variant->field_begin, variant->field_count);
@@ -1656,7 +1661,7 @@ static void emit_nominal_identities(CBuffer *buffer, const XrXirNominalTable *ta
         EMIT_LITERAL(buffer, "};\n");
     }
     EMIT_FORMAT(buffer, et_f4e1ed5b89969f2a, "static const XrXirNominalIdentity %s_nominal_identities[] = {\n", prefix);
-    for (uint32_t i = 0; i < table->count && emit_work(buffer, 1); ++i) {
+    for (uint32_t i = 0; i < table->count && ((buffer)->status == XR_XIR_OK); ++i) {
         const XrXirNominalIdentity *d = &table->identities[i];
         EMIT_LITERAL(buffer, "    {{"); emit_bytes(buffer, d->module.bytes, d->module.length);
         EMIT_U_SHAPE(buffer, et_5c9989e094692e1d, ", %uu}, {", ", ", "u}, {", d->module.length); emit_bytes(buffer, d->name.bytes, d->name.length);
@@ -1665,7 +1670,7 @@ static void emit_nominal_identities(CBuffer *buffer, const XrXirNominalTable *ta
         append(buffer, ", %uu, %uu, ", d->field_count, d->kind);
         if (d->variant_count) append(buffer, "%s_nominal_variants_%u", prefix, i); else EMIT_LITERAL(buffer, "NULL");
         append(buffer, ", %uu, %uu, {%uu, {", d->variant_count, d->flags, d->native.native_id);
-        for (uint32_t b = 0; b < 32 && emit_work(buffer, 1); ++b)
+        for (uint32_t b = 0; b < 32 && ((buffer)->status == XR_XIR_OK); ++b)
             append(buffer, "%s%uu", b ? "," : "", d->native.source_fingerprint[b]);
         EMIT_LITERAL(buffer, "}}},\n");
     }
@@ -1676,24 +1681,24 @@ static void emit_type_ids(CBuffer *buffer, const char *prefix, uint32_t index,
                           const char *name, const XrXirType *types, uint32_t count) {
     if (!count) return;
     append(buffer, "static const XrXirType %s_%s_%u[] = {", prefix, name, index);
-    for (uint32_t i = 0; i < count && emit_work(buffer, 1); ++i) append(buffer, "%s(XrXirType) %uu", i ? ", " : "", (uint32_t) types[i]);
+    for (uint32_t i = 0; i < count && ((buffer)->status == XR_XIR_OK); ++i) append(buffer, "%s(XrXirType) %uu", i ? ", " : "", (uint32_t) types[i]);
     EMIT_LITERAL(buffer, "};\n");
 }
 static void emit_types(CBuffer *buffer, const XrXirTypes *types, const char *prefix) {
     if (!types) return;
     emit_nominal_identities(buffer, types->nominals, prefix);
-    for (uint32_t i = 0; i < types->count && emit_work(buffer, 1); ++i) {
+    for (uint32_t i = 0; i < types->count && ((buffer)->status == XR_XIR_OK); ++i) {
         const XrXirTypeNode *node = &types->nodes[i];
         emit_type_ids(buffer, prefix, i, "nominal_arguments", node->nominal.arguments, node->nominal.argument_count);
         emit_type_ids(buffer, prefix, i, "nominal_types", node->nominal.fields, node->nominal.field_count);
         if (!node->parameter_count) continue;
         EMIT_FORMAT(buffer, et_952ab3861223aaad, "static const XrXirCallableParameter %s_type_parameters_%u[] = {", prefix, i);
-        for (uint32_t p = 0; p < node->parameter_count && emit_work(buffer, 1); ++p)
+        for (uint32_t p = 0; p < node->parameter_count && ((buffer)->status == XR_XIR_OK); ++p)
             append(buffer, "%s{(XrXirType) %u, %uu}", p ? ", " : "", (uint32_t) node->parameters[p].type, node->parameters[p].mode);
         EMIT_LITERAL(buffer, "};\n");
     }
     if (types->count) EMIT_FORMAT(buffer, et_ff2510f337f70134, "static const XrXirTypeNode %s_type_nodes[] = {\n", prefix);
-    for (uint32_t i = 0; i < types->count && emit_work(buffer, 1); ++i) {
+    for (uint32_t i = 0; i < types->count && ((buffer)->status == XR_XIR_OK); ++i) {
         const XrXirTypeNode *node = &types->nodes[i];
         append(buffer, "    {%uu, (XrXirType) %u, ", node->kind, (uint32_t) node->element);
         if (node->parameter_count) append(buffer, "%s_type_parameters_%u", prefix, i); else EMIT_LITERAL(buffer, "NULL");
@@ -1716,7 +1721,7 @@ static void emit_types(CBuffer *buffer, const XrXirTypes *types, const char *pre
  * their original proof indices; the declaration fixes the complete length. */
 static void emit_checked_packet_element(CBuffer *buffer, size_t *elements,
     size_t index, unsigned byte, bool designator) {
-    if (!emit_work(buffer, 1)) return;
+    if (!((buffer)->status == XR_XIR_OK)) return;
     if (!(*elements % 16)) EMIT_LITERAL(buffer, "\n    ");
     if (designator) {
         emit_byte(buffer, '[');
@@ -1736,7 +1741,7 @@ static void emit_checked_packet_bytes(CBuffer *buffer, const uint8_t *bytes,
     for (size_t i = 0; i < length;) {
         /* Both the real input-byte read and its scan iteration remain charged,
          * even when no C initializer token is needed for this zero. */
-        if (!emit_work(buffer, 2)) return;
+        if (!((buffer)->status == XR_XIR_OK)) return;
         unsigned byte = bytes[i++];
         if (!byte) { ++zeros; continue; }
         bool designator = false;
@@ -1744,16 +1749,16 @@ static void emit_checked_packet_bytes(CBuffer *buffer, const uint8_t *bytes,
             size_t position = i - 1, magnitude = position;
             unsigned digits = 0;
             do {
-                if (!emit_work(buffer, 1)) return;
+                if (!((buffer)->status == XR_XIR_OK)) return;
                 ++digits;
                 magnitude /= 10;
             } while (magnitude);
-            if (!emit_work(buffer, 1)) return;
+            if (!((buffer)->status == XR_XIR_OK)) return;
             /* A zero token has two bytes, while [index]= has digits+3.
              * Comparing a halved bound avoids overflowing a long zero run. */
             designator = zeros > (size_t)(digits + 3) / 2;
             if (!designator) {
-                for (size_t n = zeros; n && emit_work(buffer, 1); --n)
+                for (size_t n = zeros; n && ((buffer)->status == XR_XIR_OK); --n)
                     emit_checked_packet_element(buffer, &elements,
                         position - n, 0, false);
             }
@@ -1769,7 +1774,7 @@ static void emit_packet(CBuffer *buffer,const XrXirArtifact *artifact,const char
     XrXirProgramPacket packet=xir_program_packet_borrow(artifact);
     emit_checked_packet_bytes(buffer,packet.bytes,packet.length,prefix);
     append(buffer,"\n};\nstatic const uint8_t %s_identity[32] = {",prefix);
-    for(unsigned i=0;i<32 && emit_work(buffer,1);++i) {
+    for(unsigned i=0;i<32 && ((buffer)->status == XR_XIR_OK);++i) {
         emit_unsigned(buffer,(unsigned)packet.identity[i],10,0);
         emit_byte(buffer,',');
     }
@@ -1782,16 +1787,16 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
     if (!d) return;
     emit_types(buffer, module->types, prefix);
     emit_packet(buffer, artifact, prefix);
-    for (uint32_t m = 0; m < d->module_count && emit_work(buffer, 1); ++m) {
+    for (uint32_t m = 0; m < d->module_count && ((buffer)->status == XR_XIR_OK); ++m) {
         const XrXirSourceModule *source = &d->modules[m];
         if (!source->dependency_count) continue;
         append(buffer, "static const uint32_t %s_dependencies_%u[] = {", prefix, m);
-        for (uint32_t i = 0; i < source->dependency_count && emit_work(buffer, 1); ++i)
+        for (uint32_t i = 0; i < source->dependency_count && ((buffer)->status == XR_XIR_OK); ++i)
             append(buffer, "%s%uu", i ? ", " : "", source->dependencies[i]);
         EMIT_LITERAL(buffer, "};\n");
     }
     EMIT_FORMAT(buffer, et_ee2b6f6318fa9130, "static const XrXirSourceModule %s_modules[] = {\n", prefix);
-    for (uint32_t m = 0; m < d->module_count && emit_work(buffer, 1); ++m) {
+    for (uint32_t m = 0; m < d->module_count && ((buffer)->status == XR_XIR_OK); ++m) {
         const XrXirSourceModule *source = &d->modules[m];
         EMIT_LITERAL(buffer, "    {"); emit_bytes(buffer, source->name, source->name_length);
         EMIT_U_SHAPE(buffer, et_4c51538f4bdf2e07, ", %uu, ", ", ", "u, ", source->name_length);
@@ -1800,19 +1805,19 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
         append(buffer, ", %uu, %uu, %uu, %uu},\n", source->dependency_count, source->initializer, source->lexical_scope,source->storage);
     }
     EMIT_FORMAT(buffer, et_69a1907ec586c822, "};\nstatic const XrXirFunctionIdentity %s_identities[] = {\n", prefix);
-    for (uint32_t f = 0; f < module->function_count && emit_work(buffer, 1); ++f)
+    for (uint32_t f = 0; f < module->function_count && ((buffer)->status == XR_XIR_OK); ++f)
         append(buffer, "    {%uu, %uu, %uu, %uu, %uu, %uu, %uu, %uu, %uu},\n", d->functions[f].module, d->functions[f].exported, d->functions[f].nominal_owner, d->functions[f].member_access, d->functions[f].cleanup_owner, d->functions[f].promises, d->functions[f].method_kind, d->functions[f].test_role, d->functions[f].test_timeout_seconds);
     EMIT_LITERAL(buffer, "};\n");
     if (d->slot_count) {
         EMIT_FORMAT(buffer, et_f16c13d386d8e11f, "static const XrXirSlot %s_slots[] = {\n", prefix);
-        for (uint32_t i = 0; i < d->slot_count && emit_work(buffer, 1); ++i)
+        for (uint32_t i = 0; i < d->slot_count && ((buffer)->status == XR_XIR_OK); ++i)
             append(buffer, "    {%uu, (XrXirType) %u, %uu},\n", d->slots[i].module,
                 (uint32_t) d->slots[i].type, d->slots[i].mutable);
         EMIT_LITERAL(buffer, "};\n");
     }
     if (d->literal_count) {
         EMIT_FORMAT(buffer, et_abe253ab4327b1c2, "static const XrXirLiteral %s_literals[] = {\n", prefix);
-        for (uint32_t i = 0; i < d->literal_count && emit_work(buffer, 1); ++i) {
+        for (uint32_t i = 0; i < d->literal_count && ((buffer)->status == XR_XIR_OK); ++i) {
             EMIT_LITERAL(buffer, "    {"); emit_bytes(buffer, d->literals[i].bytes, d->literals[i].length);
             EMIT_U_SHAPE(buffer, et_d7cfa2452313d74a, ", %uu},\n", ", ", "u},\n", d->literals[i].length);
         }
@@ -1838,7 +1843,7 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
     append(buffer, ", {%s_checked, sizeof(%s_checked), %s_identity}};\n",
         prefix, prefix, prefix);
     append(buffer,"static const uint32_t %s_native_source_offsets[] = {\n",prefix);
-    for(uint32_t f=0;f<module->function_count && emit_work(buffer,1);++f)
+    for(uint32_t f=0;f<module->function_count && ((buffer)->status == XR_XIR_OK);++f)
         append(buffer,"    (uint32_t)offsetof(%s_state_%u,frame),\n",prefix,f);
     append(buffer,"};\nXR_DATADEF const XirCallNativeSourceCode %s_native_source = {\n"
         "    %uu,%uu,%s_entries,%s_native_source_offsets};\n",
@@ -1881,12 +1886,12 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
            "_Static_assert(offsetof(XrXirCallResult, value) == 8 && offsetof(XrXirCallResult, wake) == 24 && "
            "offsetof(XrXirCallResult, panic) == 32, \"XIR result offsets\");\n");
     if (module->function_count) emit_resume_inbox_helper(buffer, symbol_prefix);
-    if (!emit_work(buffer, 1)) return;
+    if (!((buffer)->status == XR_XIR_OK)) return;
     bool waiting_helper_emitted = false;
-    for (uint32_t f = 0; f < module->function_count && emit_work(buffer, 1); ++f)
+    for (uint32_t f = 0; f < module->function_count && ((buffer)->status == XR_XIR_OK); ++f)
         emit_resume_function(buffer, artifact, symbol_prefix, f, &waiting_helper_emitted);
     EMIT_FORMAT(buffer, et_e254dff0c908c9d7, "XR_DATADEF const XrXirCallEntry %s_entries[] = {\n", symbol_prefix);
-    for (uint32_t f = 0; f < module->function_count && emit_work(buffer, 1); ++f) {
+    for (uint32_t f = 0; f < module->function_count && ((buffer)->status == XR_XIR_OK); ++f) {
         const XrXirFunction *function = &module->functions[f];
         EMIT_LITERAL(buffer, "    {XR_XIR_CALL_ABI_VERSION, ");
         if (function->parameter_count) append(buffer, "%s_parameters_%u", symbol_prefix, f);
@@ -1895,7 +1900,7 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
         if (module->declarations) {
             owner = module->declarations->functions[f].cleanup_owner;
             if (xr_xir_function_is_generator(module,f)) flags|=XR_XIR_ENTRY_GENERATOR;
-            for (uint32_t child = f + 1; child < module->function_count && emit_work(buffer, 1); ++child)
+            for (uint32_t child = f + 1; child < module->function_count && ((buffer)->status == XR_XIR_OK); ++child)
                 if (module->declarations->functions[child].cleanup_owner == f + 1) flags |= XR_XIR_ENTRY_EXIT;
         }
         append(buffer, ", %uu, (XrXirType) %u, (uint32_t) sizeof(%s_state_%u), %s_f%u, %s_release_%u, NULL, %uu, %uu},\n",
@@ -1934,7 +1939,7 @@ XR_FUNC XrXirStatus xr_xir_compile_emit_c(const XrXirArtifact *artifact, const c
     buffer.capacity = planned + 1;
     emit_native_unit(&buffer, artifact, symbol_prefix);
     xr_compile_resources_free(borrowed_flags);buffer.borrowed_flags=NULL;
-    if (!emit_work(&buffer, 1) || buffer.length != planned) {
+    if (!((&buffer)->status == XR_XIR_OK) || buffer.length != planned) {
         if (buffer.status == XR_XIR_OK) buffer.status = XR_XIR_BAD_STRUCTURE;
     }
     if (!emit_finalize(&buffer)) {
@@ -1945,6 +1950,11 @@ XR_FUNC XrXirStatus xr_xir_compile_emit_c(const XrXirArtifact *artifact, const c
     if (verified != XI_CGEN_VERIFY_PASSED) {
         xr_compile_resources_free(buffer.text);
         return verified == XI_CGEN_VERIFY_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
+            verified == XI_CGEN_VERIFY_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+            verified == XI_CGEN_VERIFY_OVERFLOW ? XR_XIR_OVERFLOW :
+            verified == XI_CGEN_VERIFY_CANCELLED ? XR_XIR_CANCELLED :
+            verified == XI_CGEN_VERIFY_DEADLINE ? XR_XIR_DEADLINE :
+            verified == XI_CGEN_VERIFY_CLOCK_FAILURE ? XR_XIR_CLOCK_FAILURE :
             verified == XI_CGEN_VERIFY_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
     }
     *output = (XrXirCSource) {buffer.text, buffer.length};

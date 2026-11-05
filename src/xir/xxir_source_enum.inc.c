@@ -27,7 +27,7 @@ static bool source_enum_fields(SourceContext *ctx) {
         uint32_t count = 0;
         for (int v = 0; v < source->member_count; ++v) {
             AstNode *member = source->members[v];
-            if (!source_work(ctx, member)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (member->type == AST_ENUM_MEMBER && source_text_same(ctx, NULL, member->as.enum_member.name, "variants"))
                 return source_fail(ctx,member,XR_XIR_BAD_TYPE,"variant conflicts with enum type metadata member");
             if (member->type != AST_ENUM_MEMBER || member->as.enum_member.payload_count < 0 ||
@@ -48,14 +48,14 @@ static bool source_enum_fields(SourceContext *ctx) {
         uint32_t next = 0;
         for (uint32_t v = 0; v < record->variant_count; ++v) {
             AstNode *node = source->members[v]; EnumMemberNode *member = &node->as.enum_member;
-            if (!source_work(ctx, node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             variants[v] = (XrXirNominalVariant) {{member->name,(uint32_t)source_text_size(ctx, member->name)},next,(uint32_t)member->payload_count};
             SourceName variant = {0}; variant.name = source_owned_text(ctx, member->name); variant.node = node; variant.type = owner->type;
             if (!variant.name || !source_query_declare(ctx, &variant, XR_XIR_SOURCE_MEMBER, owner->declaration,
                 source_query_range(ctx, node, member->name))) return false;
             source_query_binding_type(ctx, &variant); variant_ids[v] = variant.declaration;
             for (int f = 0; f < member->payload_count; ++f, ++next) {
-                if (!source_work(ctx, node) || !source_type(ctx, member->payload_types[f], &types[next]) || types[next] == XR_XIR_UNIT)
+                if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_type(ctx, member->payload_types[f], &types[next]) || types[next] == XR_XIR_UNIT)
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "enum payload requires an admitted value type");
                 const char *name = member->payload_names[f];
                 fields[next] = (XrXirNominalField) {{name,(uint32_t)source_text_size(ctx, name)},types[next],0};
@@ -74,7 +74,7 @@ static bool source_enum_fields(SourceContext *ctx) {
         const char *text_names[] = {"name", "toString"};
         for (uint32_t intrinsic = 0; intrinsic < 2; ++intrinsic) {
             SourceName text = {0}; text.name = source_owned_text(ctx, text_names[intrinsic]); text.type = XR_XIR_STRING;
-            if (!source_work(ctx, owner->node) || !text.name ||
+            if (!((ctx)->diagnostic.status == XR_XIR_OK) || !text.name ||
                 !source_query_declare(ctx, &text, XR_XIR_SOURCE_INTRINSIC, owner->declaration,
                     (XrXirSourceRange) {ctx->module,0,0,0,0})) return false;
             source_query_binding_type(ctx, &text);
@@ -127,7 +127,7 @@ static bool source_enum_select(SourceContext *ctx, AstNode *node, SourceEnumSele
     if (!owner || owner->kind != SOURCE_NOMINAL || ctx->nominals.declarations[owner->index].kind != XR_XIR_NOMINAL_ENUM) return true;
     const XrXirNominalDeclaration *d = &ctx->nominals.declarations[owner->index];
     for (uint32_t v = 0; v < d->variant_count; ++v) {
-        if (!source_work(ctx, node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirLiteral name = d->variants[v].name;
         if (source_text_size(ctx, node->as.member_access.name) != name.length || !source_span_same(ctx, NULL, node->as.member_access.name, name.bytes, name.length)) continue;
         if (!source_nominal_apply(ctx, owner, arguments.refs, arguments.count, &selected->type)) return false;
@@ -156,7 +156,7 @@ static bool source_enum_construct(SourceContext *ctx, AstNode *node, SourceEnumS
     for (int i = 0; i < count; ++i) {
         uint32_t at = 0;
         for (; at < variant.field_count; ++at) {
-            if (!source_work(ctx,node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             XrXirLiteral name = d->fields[variant.field_begin + at].name;
             if (source_text_size(ctx, provided->names[i]) == name.length && source_span_same(ctx, NULL, provided->names[i], name.bytes, name.length)) break;
         }
@@ -175,7 +175,7 @@ static bool source_enum_construct(SourceContext *ctx, AstNode *node, SourceEnumS
     }
     uint32_t operands=(uint32_t)count;
     if (count==1 && fields[0].type==XR_XIR_UNIT) {
-        if (!source_work_units(ctx,node,40)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (!xr_xir_nominal_native_recv(&ctx->types,selected->type,XR_XIR_UNIT))
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Unit payload requires the governed Recv value variant");
         operands=0;

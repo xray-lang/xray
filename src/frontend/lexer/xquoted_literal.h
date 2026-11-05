@@ -23,9 +23,15 @@ typedef enum XrQuotedStatus {
     XR_QUOTED_OK,
     XR_QUOTED_SYNTAX,
     XR_QUOTED_BAD_ARGUMENT,
-    XR_QUOTED_BUDGET,
-    XR_QUOTED_OUT_OF_MEMORY
+    XR_QUOTED_OUT_OF_MEMORY,
+    XR_QUOTED_MEMORY_LIMIT, XR_QUOTED_OVERFLOW, XR_QUOTED_CANCELLED,
+    XR_QUOTED_DEADLINE, XR_QUOTED_CLOCK_FAILURE
 } XrQuotedStatus;
+
+typedef struct XrQuotedInput {
+    XrCompileState *state;
+    XrCompileRequestControl *request; /* Borrowed only for one decoding operation. */
+} XrQuotedInput;
 
 typedef struct XrQuotedPayload {
     uint8_t *bytes;
@@ -35,8 +41,8 @@ typedef struct XrQuotedPayload {
 // Extracts the semantic payload boundary, normalizes block CRLF to LF,
 // removes the closing-line margin, and optionally decodes escapes. The caller
 // supplies an empty output; all failures preserve it. Resource failures never
-// become syntax diagnostics. Payload storage keeps the ledger alive.
-XR_FUNC XrQuotedStatus xr_compile_quoted_payload_decode(XrCompileState *state, const Token *token, bool decode_escapes, XrQuotedPayload *out,
+// become syntax diagnostics. Payload storage keeps its memory owner alive; request control never escapes.
+XR_FUNC XrQuotedStatus xr_compile_quoted_payload_decode(const XrQuotedInput *input, const Token *token, bool decode_escapes, XrQuotedPayload *out,
                                       const char **error);
 XR_FUNC void xr_quoted_payload_free(XrQuotedPayload *payload);
 
@@ -45,7 +51,7 @@ XR_FUNC void xr_quoted_payload_free(XrQuotedPayload *payload);
 // length). Single escape decoder shared by plain literals and template-string
 // parts so both surfaces stay in sync. Syntax failure points
 // *error at a static message. Resource failure is retained in state.
-XR_FUNC XrQuotedStatus xr_compile_escaped_bytes_decode(XrCompileState *state, const uint8_t *src, size_t length, uint8_t *dst,
+XR_FUNC XrQuotedStatus xr_compile_escaped_bytes_decode(const XrQuotedInput *input, const uint8_t *src, size_t length, uint8_t *dst,
                                      size_t *out_length, const char **error);
 
 #endif  // XQUOTED_LITERAL_H

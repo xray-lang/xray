@@ -63,7 +63,7 @@ XrXirStatus xlsp_source_workspace_build(const XrXirCompileContext *context,
         XrManifestStatus admitted=xr_source_authority_open_input(context,&input,w->catalog,&limits,&w->authorities[i],NULL);
         xr_compile_resources_free(path);path=NULL;
         if(admitted!=XR_MANIFEST_OK) {
-            status=admitted==XR_MANIFEST_BUDGET?XR_XIR_BUDGET:
+            status=admitted==XR_MANIFEST_OVERFLOW?XR_XIR_BUDGET:
                 admitted==XR_MANIFEST_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
                 admitted==XR_MANIFEST_IO?XR_XIR_IO:XR_XIR_BAD_STRUCTURE;
             goto done;
@@ -73,10 +73,10 @@ XrXirStatus xlsp_source_workspace_build(const XrXirCompileContext *context,
         identities[i]=*xr_source_authority_entry(w->authorities[i]);
     }
     if(stage)*stage=5;
-    XrCompilerSessionStatus opened=xr_compile_session_new(context->resources,&w->session);
-    if(opened!=XR_COMPILER_SESSION_OK) {
+    XrCompileResourceStatus opened=xr_compile_session_new(context->resources,&w->session);
+    if(opened!=XR_COMPILE_RESOURCE_OK) {
         status=opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:
-            opened==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
+            opened==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
         goto done;
     }
     if(stage)*stage=6;

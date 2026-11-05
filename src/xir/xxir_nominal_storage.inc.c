@@ -30,7 +30,7 @@ static XrXirStatus nominal_storage_walk(const XrXirTypes *types, const XrXirTarg
     nodes[root_index].layout.size = types->nodes[root_index].kind == XR_XIR_TYPE_NULLABLE ? 1 : 0;
     nodes[root_index].depth = 1;
     while (depth && status == XR_XIR_OK) {
-        if (!xir_compile_work(budget, 1)) { status = XR_XIR_BUDGET; break; }
+
 
         uint32_t index = stack[depth - 1];
         NominalStorageNode *current = &nodes[index];
@@ -66,7 +66,7 @@ static XrXirStatus nominal_storage_walk(const XrXirTypes *types, const XrXirTarg
                 if (tag > current->layout.alignment) current->layout.alignment = tag;
                 if (current->offsets != NULL)
                     for (uint32_t f = 0; f < nominal->field_count; ++f) {
-                        if (!xir_compile_work(budget, 1)) { status = XR_XIR_BUDGET; break; }
+
                          current->offsets[f] += base;
                     }
                 if (status != XR_XIR_OK) break;
@@ -79,7 +79,7 @@ static XrXirStatus nominal_storage_walk(const XrXirTypes *types, const XrXirTarg
         if (is_enum) {
             while (current->variant < variant_count && current->next >=
                 variants[current->variant].field_begin + variants[current->variant].field_count) {
-                if (!xir_compile_work(budget, 1)) { status = XR_XIR_BUDGET; break; }
+
                  ++current->variant;
             }
             if (status != XR_XIR_OK) break;
@@ -143,7 +143,7 @@ static XrXirStatus inline_layout_query(const XrXirTypes *types, XrXirType type,
         root->nominal.field_count != field_count) return XR_XIR_BAD_LAYOUT;
     uint64_t bytes = (uint64_t) types->count * (sizeof(NominalStorageNode) + sizeof(uint32_t)) +
         (uint64_t) field_count * sizeof(uint32_t);
-    if (bytes > SIZE_MAX ||!xir_compile_work(&budget, types->count)) return XR_XIR_BUDGET;
+    if (bytes > SIZE_MAX) return XR_XIR_BUDGET;
 
     NominalStorageNode *nodes = xir_compile_calloc(remaining, 1, (size_t) bytes, &allocation_status);
     if (!nodes) return allocation_status;
@@ -151,8 +151,7 @@ static XrXirStatus inline_layout_query(const XrXirTypes *types, XrXirType type,
     uint32_t root_index = (uint32_t) type - XR_XIR_CONSTRUCTED_TYPE_BASE;
     nodes[root_index].offsets = field_count ? offsets : NULL;
     status = nominal_storage_walk(types, target, &budget, nodes, stack, root_index);
-    if (status == XR_XIR_OK && !xir_compile_work(remaining,
-        (uint64_t)field_count * sizeof(*offsets))) status = XR_XIR_BUDGET;
+
     if (status == XR_XIR_OK) {
         *layout = nodes[root_index].layout;
         if (field_count) memcpy(field_offsets, offsets, (size_t) field_count * sizeof(*offsets));
