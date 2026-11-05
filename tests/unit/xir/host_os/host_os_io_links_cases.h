@@ -41,7 +41,11 @@ static void host_io_links_execute(XrXirProgram *program,const uint32_t ids[6]){
  HANDLE handle=CreateFileW(wide_file,FILE_READ_ATTRIBUTES,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,NULL,OPEN_EXISTING,0,NULL);
  CHECK(handle!=INVALID_HANDLE_VALUE);wchar_t final[2048];
  DWORD count=GetFinalPathNameByHandleW(handle,final,2048,FILE_NAME_NORMALIZED|VOLUME_NAME_DOS);
- CHECK(count&&count<2048&&CloseHandle(handle)&&WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,final,-1,reference,sizeof(reference),NULL,NULL)>0);
+ CHECK(count&&count<2048&&CloseHandle(handle));const wchar_t *ordinary=final;
+ /* This fixture creates ordinary names; the independent query keeps casing. */
+ if(count>=7&&!wmemcmp(final,L"\\\\?\\",4)&&final[5]==L':'&&final[6]==L'\\')ordinary=final+4;
+ else {CHECK(count>=10&&!wmemcmp(final,L"\\\\?\\UNC\\",8));final[6]=L'\\';ordinary=final+6;}
+ CHECK(WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,ordinary,-1,reference,sizeof(reference),NULL,NULL)>0);
  CHECK(snprintf(target,sizeof(target),"\\\\?\\%s",root)>0);
  expected_symlink=CreateSymbolicLinkW(wide_reference,wide_file,SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE)!=0;
  if(!expected_symlink){DWORD error=GetLastError();fprintf(stderr,"symlink Win32 reference refused=%lu\n",(unsigned long)error);CHECK(error==ERROR_PRIVILEGE_NOT_HELD);}
@@ -69,6 +73,38 @@ static void host_io_links_execute(XrXirProgram *program,const uint32_t ids[6]){
  xr_xir_value_drop(&object);xr_xir_value_drop(&mount);xr_xir_value_drop(&destination);
  CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);host_active=NULL;
  host_links_text(&canonical,reference);host_links_text(&substitute,target);xr_xir_value_drop(&canonical);xr_xir_value_drop(&substitute);
+#if defined(XR_OS_WINDOWS)
+ /* Provider-text cases traverse the complete managed call, not a mirror helper. */
+ const struct {const char *raw,*expected;} final_texts[]={
+  {"\\\\?\\C:\\","C:\\"},
+  {"\\\\?\\C:\\\347\233\256\345\275\225 \347\251\272\351\227\264\\\346\225\260\346\215\256.bin","C:\\\347\233\256\345\275\225 \347\251\272\351\227\264\\\346\225\260\346\215\256.bin"},
+  {"\\\\?\\UNC\\server\\share\\\344\270\255\346\226\207.bin","\\\\server\\share\\\344\270\255\346\226\207.bin"},
+  {"\\\\?\\UNC\\host.example\\C$\\a","\\\\host.example\\C$\\a"},
+  {"\\\\?\\UNC\\127.0.0.1\\share","\\\\127.0.0.1\\share"},
+  {"\\\\?\\GLOBALROOT\\Device\\HarddiskVolume1\\file","\\\\?\\GLOBALROOT\\Device\\HarddiskVolume1\\file"},
+  {"\\\\?\\Volume{1234}\\file","\\\\?\\Volume{1234}\\file"},
+  {"\\\\.\\PhysicalDrive0","\\\\.\\PhysicalDrive0"},
+  {"\\??\\C:\\file","\\??\\C:\\file"},
+  {"\\\\?\\C:relative","\\\\?\\C:relative"},
+  {"\\\\?\\UNC\\server","\\\\?\\UNC\\server"},
+  {"\\\\?\\UNC\\server\\","\\\\?\\UNC\\server\\"},
+  {"\\\\?\\UNC\\server\\.","\\\\?\\UNC\\server\\."},
+  {"\\\\?\\UNC\\server\\..","\\\\?\\UNC\\server\\.."},
+  {"\\\\?\\C:\\trailing.","\\\\?\\C:\\trailing."},
+  {"\\\\?\\C:\\trailing ","\\\\?\\C:\\trailing "},
+  {"\\\\?\\C:\\NUL.txt","\\\\?\\C:\\NUL.txt"},
+  {"\\\\?\\C:\\COM\302\271","\\\\?\\C:\\COM\302\271"},
+  {"\\\\?\\C:\\dir\\..\\file","\\\\?\\C:\\dir\\..\\file"},
+ };
+ for(size_t n=0;n<sizeof(final_texts)/sizeof(final_texts[0]);++n){
+  instance=host_instance(program,ids[0]);host_active=instance;
+  object=host_io_object(instance,ids[1],file,strlen(file));links_final_override=final_texts[n].raw;
+  unsigned before=links_calls[2];canonical=host_invoke(instance,ids[4],&object,1);links_final_override=NULL;
+  CHECK(links_calls[2]==before+1);xr_xir_value_drop(&object);
+  CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);host_active=NULL;
+  host_links_text(&canonical,final_texts[n].expected);xr_xir_value_drop(&canonical);
+ }
+#endif
  for(unsigned path_index=0;path_index<2;++path_index){
   instance=host_instance(program,ids[0]);host_active=instance;
   object=host_io_object(instance,ids[1],file,strlen(file));const char nul[]={'x',0,'y'};

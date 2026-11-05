@@ -325,6 +325,9 @@ static XrOsIoStatus host_io_rename(const XrOsIoPolicy *p,XrOsPathSpan a,XrOsPath
 static XrOsIoStatus host_io_utime(const XrOsIoPolicy *p,XrOsPathSpan a,bool(*c)(void *),XrOsFileMetadataOwner *h,bool *o){return host_io_operation(p,a,(XrOsPathSpan){0},c,h,o,4);}
 enum { LINKS_NORMAL,LINKS_OOM,LINKS_CANCEL_BEFORE,LINKS_CANCEL_AFTER,LINKS_RESULT_OOM,LINKS_RETAIN_CLOSE };
 static unsigned links_mode,links_calls[3];
+#if defined(XR_OS_WINDOWS)
+static const char *links_final_override;
+#endif
 static XrOsIoStatus host_links_symlink(const XrOsIoPolicy *policy,XrOsPathSpan source,XrOsPathSpan name,
  bool(*current)(void *),bool *output){
  ++links_calls[0];CHECK(host_active&&current);
@@ -338,6 +341,16 @@ static XrOsIoStatus host_links_query(const XrOsIoPolicy *policy,XrOsPathSpan pat
  XrOsIoStatus status=following?xr_os_io_path_realpath(policy,path,current,owner,output):
   xr_os_io_path_readlink(policy,path,current,owner,output);
  runtime_fail_at=SIZE_MAX;
+#if defined(XR_OS_WINDOWS)
+ /* Replace only final text after the real query/close; this does not prove SMB. */
+ if(status==XR_OS_IO_OK&&following&&output->text&&links_final_override){
+  size_t length=strlen(links_final_override);void *replacement=NULL;
+  status=policy->alloc(policy->context,length+1,&replacement);
+  if(status==XR_OS_IO_OK){CHECK(replacement);memcpy(replacement,links_final_override,length+1);}
+  policy->free(policy->context,output->text);*output=(XrOsFileLinkText){0};
+  if(status==XR_OS_IO_OK)*output=(XrOsFileLinkText){replacement,length};
+ }
+#endif
  if(links_mode==LINKS_CANCEL_AFTER)CHECK(xr_xir_call_request_cancel(host_active->call)==XR_XIR_CALL_CANCEL_REQUESTED);
  if(status==XR_OS_IO_OK&&links_mode==LINKS_RESULT_OOM)runtime_fail_at=runtime_attempts;
 #if defined(XR_OS_WINDOWS)
