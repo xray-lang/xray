@@ -170,7 +170,7 @@ static bool instance_process_generation_close(XrXirInstance *instance);
 static bool instance_dylib_owners_close(XrXirInstance *root,bool all);
 static bool instance_dylib_generation_close(XrXirInstance *instance);
 static XrXirCallStatus instance_dylib_stage(XrXirCallView *,uint32_t,uint32_t,const XrXirValue *,uint32_t);
-static XrXirCallStatus instance_path_stage(XrXirCallView *,uint32_t,uint32_t);
+static XrXirCallStatus instance_path_stage(XrXirCallView *,uint32_t,uint32_t,const XrXirValue *,uint32_t);
 static XrXirCallStatus instance_process_stage(XrXirCallView *,uint32_t,uint32_t,const XrXirValue *,uint32_t);
 static XrXirCallStatus instance_pipe_stage(XrXirCallView *,uint32_t,uint32_t,const XrXirValue *,uint32_t);
 static XrXirCallStatus instance_exec_pipe_stage(XrXirCallView *,uint32_t,uint32_t,const XrXirValue *,uint32_t);
@@ -1957,7 +1957,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_call_at(XrXirCallView *view,uint32_t ins
     if (instance_signal_native_target(instance->program,entry))
         return instance_signal_stage(view,instruction,entry,arguments,count);
     if(entry<instance->program->entry_count&&xir_path_native_id(instance->program->declarations->functions[entry].native_callable))
-        return count?XR_XIR_CALL_BAD_ARGUMENT:instance_path_stage(view,instruction,entry);
+        return instance_path_stage(view,instruction,entry,arguments,count);
     if(entry<instance->program->entry_count&&xir_os_exec_close_id(instance->program->declarations->functions[entry].native_callable))
         return instance_exec_pipe_stage(view,instruction,entry,arguments,count);
     if(entry<instance->program->entry_count&&xir_os_exec_shell_id(instance->program->declarations->functions[entry].native_callable))
@@ -2665,7 +2665,7 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
 #endif
             if(status!=XR_XIR_CALL_READY)goto failed;
         } else if(id==XR_NATIVE_CALLABLE_OS_GETCWD) {
-            status=instance_current_directory(view,instance,false,value);
+            status=instance_current_directory(view,instance,value);
             if(status!=XR_XIR_CALL_READY)goto failed;
         } else if(id==XR_NATIVE_CALLABLE_OS_CPU_COUNT) {
             *value=(XrXirValue){XR_XIR_I64,0,(int64_t)xr_os_cpu_count()};

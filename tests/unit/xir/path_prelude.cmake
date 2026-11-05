@@ -21,6 +21,7 @@ add_custom_command(OUTPUT "${path_type_c}" "${path_import_c}" "${path_type_c}.ca
         "${CMAKE_CURRENT_LIST_DIR}/xir_path_complete_source.h"
         "${CMAKE_CURRENT_LIST_DIR}/xir_path_complete_runtime.h"
         "${PROJECT_SOURCE_DIR}/stdlib/path/path.xr"
+        "${PROJECT_SOURCE_DIR}/stdlib/path/_lexical.xr"
         "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_path_prelude/stdlib/path/path.xr"
         "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_path_prelude/cold-stdlib/path/path.xr"
         "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_path_prelude/custom.xr" VERBATIM)

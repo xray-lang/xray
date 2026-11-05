@@ -16,6 +16,7 @@
 #include "xir/xxir_ctfe.h"
 #include "xir/xxir_native_callable.h"
 #include "os/xcwd_owned.h"
+#include "os/xfullpath_owned.h"
 #include "os/os_time.h"
 #include "os/os_thread.h"
 #include <wchar.h>
@@ -30,13 +31,16 @@
 #endif
 #endif
 static XrOsIoStatus path_complete_observe_cwd(const XrOsIoPolicy *,char **);
+static XrOsIoStatus path_complete_observe_fullpath(const XrOsIoPolicy *,const char *,bool (*)(void *),char **);
 #define xr_os_io_getcwd_owned path_complete_observe_cwd
+#define xr_os_io_fullpath_owned path_complete_observe_fullpath
 #include "xir_runtime_allocations.h"
 #undef xr_os_io_getcwd_owned
+#undef xr_os_io_fullpath_owned
 enum {PATH_COMPLETE_ENTRY,PATH_COMPLETE_RESOLVE,PATH_COMPLETE_PAIR,PATH_COMPLETE_NORMALIZE,
-    PATH_COMPLETE_ALGORITHMS,PATH_COMPLETE_CWD,PATH_COMPLETE_COUNT};
+    PATH_COMPLETE_ALGORITHMS,PATH_COMPLETE_CWD,PATH_COMPLETE_FULLPATH,PATH_COMPLETE_COUNT};
 enum {PATH_COMPLETE_OS_ENTRY,PATH_COMPLETE_OS_CWD,PATH_COMPLETE_OS_COUNT};
-static unsigned path_complete_queries,path_complete_mode,path_complete_hits;
+static unsigned path_complete_queries,path_complete_full_queries,path_complete_mode,path_complete_hits;
 static size_t path_complete_failed_allocation;
 static XrXirInstance *path_complete_active;
 #if defined(XR_OS_WINDOWS)
@@ -66,6 +70,21 @@ static XrOsIoStatus path_complete_observe_cwd(const XrOsIoPolicy *policy,char **
     }
     return status;
 }
+static XrOsIoStatus path_complete_observe_fullpath(const XrOsIoPolicy *policy,const char *raw,
+    bool (*current)(void *),char **output){
+    ++path_complete_full_queries;
+    if(path_complete_mode==PATH_COMPLETE_OOM){
+        path_complete_mode=PATH_COMPLETE_NORMAL;++path_complete_hits;
+        path_complete_failed_allocation=runtime_attempts;runtime_fail_at=runtime_attempts;
+    }
+    XrOsIoStatus status=xr_os_io_fullpath_owned(policy,raw,current,output);
+    if(path_complete_mode==PATH_COMPLETE_CANCEL&&status==XR_OS_IO_OK){
+        path_complete_mode=PATH_COMPLETE_NORMAL;++path_complete_hits;
+        CHECK(path_complete_active&&xr_xir_call_request_cancel(path_complete_active->call)==XR_XIR_CALL_CANCEL_REQUESTED);
+    }
+    return status;
+}
+static unsigned path_complete_context_queries(void){return path_complete_queries+path_complete_full_queries;}
 static XrXirCallStatus path_complete_poll(XrXirInstance *instance){
     for(unsigned n=0;n<1000000;++n){
         XrXirCallStatus status=xr_xir_instance_poll_bounded(instance,64).outcome.status;
@@ -94,16 +113,23 @@ static void path_complete_bytes(const XrXirValue *value,const char *expected){
     CHECK(xr_xir_string_view(value,&bytes,&length)&&length==strlen(expected)&&!memcmp(bytes,expected,length));
 }
 static void path_complete_pure(XrXirInstance *instance,const uint32_t *ids){
-    unsigned before=path_complete_queries;
-    XrXirValue argument=path_complete_string(instance,"/a//b/../c/./"),result=path_complete_invoke(instance,ids[PATH_COMPLETE_NORMALIZE],&argument,1);
-    path_complete_bytes(&result,"/a/c");xr_xir_value_drop(&argument);xr_xir_value_drop(&result);
-    argument=path_complete_string(instance,"/a/../absolute");result=path_complete_invoke(instance,ids[PATH_COMPLETE_RESOLVE],&argument,1);
-    path_complete_bytes(&result,"/absolute");xr_xir_value_drop(&argument);xr_xir_value_drop(&result);
-    XrXirValue args[]={path_complete_string(instance,"ignored"),path_complete_string(instance,"/a/../right")};
-    result=path_complete_invoke(instance,ids[PATH_COMPLETE_PAIR],args,2);path_complete_bytes(&result,"/right");
+    unsigned before=path_complete_context_queries();
+#if defined(XR_OS_WINDOWS)
+    const char *input="C:/a//b/../c/./",*normalized="C:\\a\\c",*absolute="C:/a/../absolute",*resolved="C:\\absolute";
+    const char *right="C:/a/../right",*paired="C:\\right";
+#else
+    const char *input="/a//b/../c/./",*normalized="/a/c",*absolute="/a/../absolute",*resolved="/absolute";
+    const char *right="/a/../right",*paired="/right";
+#endif
+    XrXirValue argument=path_complete_string(instance,input),result=path_complete_invoke(instance,ids[PATH_COMPLETE_NORMALIZE],&argument,1);
+    path_complete_bytes(&result,normalized);xr_xir_value_drop(&argument);xr_xir_value_drop(&result);
+    argument=path_complete_string(instance,absolute);result=path_complete_invoke(instance,ids[PATH_COMPLETE_RESOLVE],&argument,1);
+    path_complete_bytes(&result,resolved);xr_xir_value_drop(&argument);xr_xir_value_drop(&result);
+    XrXirValue args[]={path_complete_string(instance,"ignored"),path_complete_string(instance,right)};
+    result=path_complete_invoke(instance,ids[PATH_COMPLETE_PAIR],args,2);path_complete_bytes(&result,paired);
     xr_xir_value_drop(&args[0]);xr_xir_value_drop(&args[1]);xr_xir_value_drop(&result);
-    result=path_complete_invoke(instance,ids[PATH_COMPLETE_ALGORITHMS],NULL,0);CHECK(result.type==XR_XIR_I64&&result.payload==42);
-    xr_xir_value_drop(&result);CHECK(path_complete_queries==before);
+    result=path_complete_invoke(instance,ids[PATH_COMPLETE_ALGORITHMS],NULL,0);CHECK(result.type==XR_XIR_I64&&result.payload==42);xr_xir_value_drop(&result);
+    CHECK(path_complete_context_queries()==before);
 }
 static unsigned path_complete_serial;
 #if defined(XR_OS_WINDOWS)
@@ -116,15 +142,12 @@ static char *path_complete_actual_cwd(void){
     wchar_t wide[32768];DWORD length=GetCurrentDirectoryW(32768,wide);CHECK(length&&length<32768);
     return path_complete_windows_text(wide);
 }
-static char *path_complete_expected_anchor(void){
-    wchar_t wide[32768];DWORD length=GetCurrentDirectoryW(32768,wide);CHECK(length&&length<32768);
-    /* This oracle works in OS WCHAR coordinates, independently of the native
-     * boundary's UTF-8 scan. The actual temporary directories are Win32 paths. */
-    wchar_t *anchor=wide;
-    if(length>=3&&wide[1]==L':'){CHECK(wide[2]==L'\\');anchor+=2;}
-    else CHECK(length>=5&&wide[0]==L'\\'&&wide[1]==L'\\');
-    for(wchar_t *p=anchor;*p;++p)if(*p==L'\\')*p=L'/';
-    return path_complete_windows_text(anchor);
+static char *path_complete_expected_anchor(void){return path_complete_actual_cwd();}
+static char *path_complete_expected_fullpath(const char *raw){
+    wchar_t input[32768],absolute[32768];
+    CHECK(MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,raw,-1,input,32768)>0);
+    DWORD count=GetFullPathNameW(input,32768,absolute,NULL);CHECK(count>0&&count<32768);
+    return path_complete_windows_text(absolute);
 }
 static void path_complete_directories_open(PathCompleteDirectories *directories){
     wchar_t temp[32768];DWORD old_length=GetCurrentDirectoryW(32768,directories->old),length=GetTempPathW(32768,temp);
@@ -177,15 +200,21 @@ static void path_complete_directories_close(PathCompleteDirectories *directories
 }
 #endif
 static void path_complete_relative(XrXirInstance *instance,const uint32_t *ids){
-    char *cwd=path_complete_expected_anchor();size_t length=strlen(cwd);CHECK(length<=SIZE_MAX-16);
-    const char *base=cwd+(length>1&&cwd[0]=='/'&&cwd[1]=='/');size_t base_length=strlen(base);
-    const char *inputs[]={"child/../leaf","child\\leaf","C:/x"},*tails[]={"/leaf","/child\\leaf","/C:/x"};
+    char *cwd=path_complete_expected_anchor();size_t length=strlen(cwd);CHECK(length<=SIZE_MAX-20);
+    const char *inputs[]={"child/../leaf","child\\leaf","C:child"};
     for(unsigned n=0;n<3;++n){
-        const char *tail=tails[n]+(base_length==1&&base[0]=='/');size_t extra=strlen(tail);
-        char *expected=xr_malloc(base_length+extra+1);CHECK(expected);memcpy(expected,base,base_length);memcpy(expected+base_length,tail,extra+1);
-        unsigned before=path_complete_queries;XrXirValue argument=path_complete_string(instance,inputs[n]);
+        char *expected=NULL;
+#if defined(XR_OS_WINDOWS)
+        expected=path_complete_expected_fullpath(inputs[n]);
+#else
+        const char *tails[]={"/leaf","/child\\leaf","/C:child"};
+        const char *tail=tails[n]+(length==1&&cwd[0]=='/');size_t extra=strlen(tail);
+        expected=xr_malloc(length+extra+1);CHECK(expected);memcpy(expected,cwd,length);memcpy(expected+length,tail,extra+1);
+#endif
+        unsigned before=path_complete_context_queries();XrXirValue argument=path_complete_string(instance,inputs[n]);
         XrXirValue value=path_complete_invoke(instance,ids[PATH_COMPLETE_RESOLVE],&argument,1);
-        path_complete_bytes(&value,expected);CHECK(path_complete_queries==before+1);xr_xir_value_drop(&value);xr_xir_value_drop(&argument);xr_free(expected);
+        path_complete_bytes(&value,expected);CHECK(path_complete_context_queries()==before+1);
+        xr_xir_value_drop(&value);xr_xir_value_drop(&argument);xr_free(expected);
     }
     unsigned before=path_complete_queries;XrXirValue value=path_complete_invoke(instance,ids[PATH_COMPLETE_CWD],NULL,0);
     path_complete_bytes(&value,cwd);CHECK(path_complete_queries==before+1);xr_xir_value_drop(&value);xr_free(cwd);
@@ -199,56 +228,58 @@ static void path_complete_raw_os(XrXirProgram *program,const uint32_t *ids,const
 #if defined(XR_OS_WINDOWS)
 static void path_complete_provider_cases(XrXirProgram *program,const uint32_t *ids,
     XrXirProgram *raw_program,const uint32_t *raw_ids){
-    static const struct {const wchar_t *raw;const char *anchor,*resolved;} valid[]={
-        {L"C:\\","/","/leaf"},
-        {L"Z:\\\u4e2d\\\u03b2","/\xe4\xb8\xad/\xce\xb2","/\xe4\xb8\xad/\xce\xb2/leaf"},
-        {L"\\\\srv-\u4e2d\\share-\u03b2\\dir","//srv-\xe4\xb8\xad/share-\xce\xb2/dir","/srv-\xe4\xb8\xad/share-\xce\xb2/dir/leaf"},
-        {L"\\\\server.example.com\\C$","//server.example.com/C$","/server.example.com/C$/leaf"},
-        {L"\\\\192.0.2.1\\share","//192.0.2.1/share","/192.0.2.1/share/leaf"},
-        {L"\\\\host-name-longer-than-fifteen\\share","//host-name-longer-than-fifteen/share","/host-name-longer-than-fifteen/share/leaf"},
-        {L"\\\\server\\share-longer-than-eighty-abcdefghijklmnopqrstuvwxyz-ABCDEFGHIJKLMNOPQRSTUVWXYZ-0123456789-abcdefghijklmnopqrstuvwxyz",
-            "//server/share-longer-than-eighty-abcdefghijklmnopqrstuvwxyz-ABCDEFGHIJKLMNOPQRSTUVWXYZ-0123456789-abcdefghijklmnopqrstuvwxyz",
-            "/server/share-longer-than-eighty-abcdefghijklmnopqrstuvwxyz-ABCDEFGHIJKLMNOPQRSTUVWXYZ-0123456789-abcdefghijklmnopqrstuvwxyz/leaf"}
+    static const wchar_t *const raw_cases[]={
+        L"C:\\",
+        L"Z:\\\u4e2d\\\u03b2",
+        L"\\\\srv-\u4e2d\\share-\u03b2\\dir",
+        L"\\\\server.example.com\\C$",
+        L"\\\\192.0.2.1\\share",
+        L"\\\\?\\C:\\x",
+        L"\\\\.\\PIPE\\x"
     };
-    static const wchar_t *const denied[]={L"",L"\\\\srv\\.",L"\\\\srv\\..",L"\\\\?\\C:\\x",L"\\\\.\\PIPE\\x",L"\\\\C:\\share",L"\\\\srv\\C:",
-        L"\\\\..\\share",L"\\\\??\\C:\\x",L"\\\\server",L"\\\\server\\",L"\\\\srv\\\\share",L"C:relative",L"relative\\path",L"\\\\srv\\bad\tname"};
-    /* These are synthetic provider facts after an actual owned query. They
-     * qualify defensive projection, never actual SMB access or host discovery. */
     CHECK(!path_complete_fixture_cwd&&path_complete_mode==PATH_COMPLETE_NORMAL);
-    for(unsigned n=0;n<sizeof(valid)/sizeof(*valid);++n){
+    for(unsigned n=0;n<sizeof(raw_cases)/sizeof(*raw_cases);++n){
         size_t live=runtime_live,bytes=runtime_bytes;XrXirInstance *instance=path_complete_instance(program,ids);
-        path_complete_fixture_cwd=valid[n].raw;path_complete_fixture_hits=0;unsigned before=path_complete_queries;
-        XrXirValue value=path_complete_invoke(instance,ids[PATH_COMPLETE_CWD],NULL,0);path_complete_bytes(&value,valid[n].anchor);xr_xir_value_drop(&value);
-        XrXirValue argument=path_complete_string(instance,"leaf");value=path_complete_invoke(instance,ids[PATH_COMPLETE_RESOLVE],&argument,1);
-        path_complete_bytes(&value,valid[n].resolved);xr_xir_value_drop(&value);xr_xir_value_drop(&argument);
-        CHECK(path_complete_queries==before+2&&path_complete_fixture_hits==2&&xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
-        char *raw=path_complete_windows_text(valid[n].raw);path_complete_raw_os(raw_program,raw_ids,raw);xr_free(raw);
-        CHECK(path_complete_fixture_hits==3);path_complete_fixture_cwd=NULL;CHECK(runtime_live==live&&runtime_bytes==bytes);
-    }
-    for(unsigned n=0;n<sizeof(denied)/sizeof(*denied);++n){
-        size_t live=runtime_live,bytes=runtime_bytes;XrXirInstance *instance=path_complete_instance(program,ids);
-        path_complete_fixture_cwd=denied[n];path_complete_fixture_hits=0;unsigned before=path_complete_queries;
-        CHECK(xr_xir_instance_start(instance,ids[PATH_COMPLETE_CWD],NULL,0)==XR_XIR_CALL_READY);
-        CHECK(path_complete_poll(instance)==XR_XIR_CALL_HOST_ERROR);XrXirValue value={0};
-        CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_HOST_ERROR&&!value.type&&!value.reserved&&!value.payload);
-        CHECK(path_complete_queries==before+1&&path_complete_fixture_hits==1&&xr_xir_instance_free(instance)==XR_XIR_CALL_HOST_ERROR);
-        char *raw=path_complete_windows_text(denied[n]);path_complete_raw_os(raw_program,raw_ids,raw);xr_free(raw);
+        path_complete_fixture_cwd=raw_cases[n];path_complete_fixture_hits=0;unsigned before=path_complete_queries;
+        char *raw=path_complete_windows_text(raw_cases[n]);
+        XrXirValue value=path_complete_invoke(instance,ids[PATH_COMPLETE_CWD],NULL,0);path_complete_bytes(&value,raw);
+        CHECK(path_complete_queries==before+1&&path_complete_fixture_hits==1&&xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+        path_complete_bytes(&value,raw);xr_xir_value_drop(&value);
+        path_complete_raw_os(raw_program,raw_ids,raw);xr_free(raw);
         CHECK(path_complete_fixture_hits==2);path_complete_fixture_cwd=NULL;CHECK(runtime_live==live&&runtime_bytes==bytes);
     }
+    size_t live=runtime_live,bytes=runtime_bytes;XrXirInstance *instance=path_complete_instance(program,ids);
+    path_complete_fixture_cwd=L"";path_complete_fixture_hits=0;unsigned before=path_complete_queries;
+    CHECK(xr_xir_instance_start(instance,ids[PATH_COMPLETE_CWD],NULL,0)==XR_XIR_CALL_READY);
+    CHECK(path_complete_poll(instance)==XR_XIR_CALL_HOST_ERROR);XrXirValue output={0};
+    CHECK(xr_xir_instance_take_result(instance,&output)==XR_XIR_CALL_HOST_ERROR&&!output.type&&!output.reserved&&!output.payload);
+    CHECK(path_complete_queries==before+1&&path_complete_fixture_hits==1&&xr_xir_instance_free(instance)==XR_XIR_CALL_HOST_ERROR);
+    path_complete_fixture_cwd=NULL;CHECK(runtime_live==live&&runtime_bytes==bytes);
 }
 #endif
 static void path_complete_fault(XrXirProgram *program,const uint32_t *ids,bool cancel){
     size_t live=runtime_live,bytes=runtime_bytes;CHECK(runtime_fail_at==SIZE_MAX&&path_complete_mode==PATH_COMPLETE_NORMAL);
     XrXirInstance *instance=path_complete_instance(program,ids);XrXirValue argument=path_complete_string(instance,"relative");
-    unsigned before=path_complete_queries;path_complete_hits=0;path_complete_active=instance;path_complete_mode=cancel?PATH_COMPLETE_CANCEL:PATH_COMPLETE_OOM;
+    unsigned before=path_complete_context_queries();path_complete_hits=0;path_complete_active=instance;path_complete_mode=cancel?PATH_COMPLETE_CANCEL:PATH_COMPLETE_OOM;
     CHECK(xr_xir_instance_start(instance,ids[PATH_COMPLETE_RESOLVE],&argument,1)==XR_XIR_CALL_READY);
     XrXirCallStatus status=path_complete_poll(instance);runtime_fail_at=SIZE_MAX;
     if(status!=(cancel?XR_XIR_CALL_CANCELLED:XR_XIR_CALL_OOM))fprintf(stderr,"complete Path fault cancel%u status%u\n",(unsigned)cancel,status);
-    CHECK(status==(cancel?XR_XIR_CALL_CANCELLED:XR_XIR_CALL_OOM)&&path_complete_queries==before+1&&path_complete_hits==1&&path_complete_mode==PATH_COMPLETE_NORMAL);
+    CHECK(status==(cancel?XR_XIR_CALL_CANCELLED:XR_XIR_CALL_OOM)&&path_complete_context_queries()==before+1&&path_complete_hits==1&&path_complete_mode==PATH_COMPLETE_NORMAL);
     if(!cancel)CHECK(runtime_attempts>path_complete_failed_allocation);
     XrXirValue output={0};CHECK(xr_xir_instance_take_result(instance,&output)==(cancel?XR_XIR_CALL_BAD_STATE:XR_XIR_CALL_OOM)&&!output.type&&!output.reserved&&!output.payload);
     xr_xir_value_drop(&argument);CHECK(xr_xir_instance_free(instance)==(cancel?XR_XIR_CALL_READY:XR_XIR_CALL_OOM));path_complete_active=NULL;
     CHECK(runtime_live==live&&runtime_bytes==bytes);
+}
+static void path_complete_nul(XrXirProgram *program,const uint32_t *ids){
+    size_t live=runtime_live,bytes=runtime_bytes;XrXirInstance *instance=path_complete_instance(program,ids);
+    const char raw[]={'.',0,'x'};XrXirValue input={0},output={0};
+    CHECK(xr_xir_string_new(instance->domain,raw,sizeof(raw),&input)==XR_XIR_VALUE_OK);
+    unsigned before=path_complete_context_queries();
+    CHECK(xr_xir_instance_start(instance,ids[PATH_COMPLETE_FULLPATH],&input,1)==XR_XIR_CALL_READY);
+    CHECK(path_complete_poll(instance)==XR_XIR_CALL_HOST_ERROR);
+    CHECK(xr_xir_instance_take_result(instance,&output)==XR_XIR_CALL_HOST_ERROR&&!output.type&&!output.reserved&&!output.payload);
+    CHECK(path_complete_context_queries()==before);xr_xir_value_drop(&input);
+    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_HOST_ERROR&&runtime_live==live&&runtime_bytes==bytes);
 }
 static void path_complete_execute(XrXirProgram *program,const uint32_t *ids,XrXirProgram *raw_program,const uint32_t *raw_ids){
     size_t live=runtime_live,bytes=runtime_bytes;PathCompleteDirectories directories;path_complete_directories_open(&directories);
@@ -261,7 +292,7 @@ static void path_complete_execute(XrXirProgram *program,const uint32_t *ids,XrXi
     CHECK(native!=UINT32_MAX&&xr_xir_instance_start(instance,native,NULL,0)==XR_XIR_CALL_BAD_ARGUMENT);
     XrXirValue retained=path_complete_invoke(instance,ids[PATH_COMPLETE_CWD],NULL,0);char *expected=path_complete_expected_anchor();
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);path_complete_bytes(&retained,expected);xr_free(expected);xr_xir_value_drop(&retained);
-    path_complete_fault(program,ids,false);path_complete_fault(program,ids,true);
+    path_complete_fault(program,ids,false);path_complete_fault(program,ids,true);path_complete_nul(program,ids);
 #if defined(XR_OS_WINDOWS)
     path_complete_provider_cases(program,ids,raw_program,raw_ids);
 #endif

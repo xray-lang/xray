@@ -1,0 +1,290 @@
+// Shared lexical rules. This module never queries the host or the filesystem.
+export class Root {
+    prefix: string
+    drive: string
+    end: i64
+    rooted: bool
+    absolute: bool
+    verbatim: bool
+    device: bool
+    valid: bool
+    init(prefix: string, drive: string, end: i64, rooted: bool,
+         absolute: bool, verbatim: bool, device: bool, valid: bool) {
+        this.prefix=prefix; this.drive=drive; this.end=end; this.rooted=rooted
+        this.absolute=absolute; this.verbatim=verbatim; this.device=device; this.valid=valid
+    }
+}
+
+export class Parts {
+    root: string
+    dir: string
+    base: string
+    name: string
+    ext: string
+    init(root: string, dir: string, base: string, name: string, ext: string) {
+        this.root=root; this.dir=dir; this.base=base; this.name=name; this.ext=ext
+    }
+}
+
+export fn separator(c: string, windows: bool, verbatim: bool) -> bool {
+    if (verbatim) { return c == "\\" }
+    return c == "/" || (windows && c == "\\")
+}
+
+fn _drive(raw: string, at: i64) -> bool {
+    if (len(raw) < at+2 || raw.slice(at+1,at+2) != ":") { return false }
+    return "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz".indexOf(raw.slice(at,at+1)) >= 0
+}
+
+fn _asciiLower(raw: string) -> string {
+    const upper="ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    const lower="abcdefghijklmnopqrstuvwxyz"
+    var out=""
+    for (var i=0; i<len(raw); i++) {
+        var c=raw.slice(i,i+1)
+        var at=upper.indexOf(c)
+        if (at>=0) { c=lower.slice(at,at+1) }
+        out=out+c
+    }
+    return out
+}
+
+fn _unc(raw: string, start: i64, verbatim: bool) -> Root {
+    var i=start
+    while (i<len(raw) && !separator(raw.slice(i,i+1),true,verbatim)) { i=i+1 }
+    if (i==start || i==len(raw)) { return Root(raw,"",len(raw),true,false,verbatim,false,false) }
+    const server=raw.slice(start,i)
+    var share=i+1
+    i=share
+    while (i<len(raw) && !separator(raw.slice(i,i+1),true,verbatim)) { i=i+1 }
+    if (i==share || server=="." || server==".." || server.indexOf("?")>=0) {
+        return Root(raw,"",len(raw),true,false,verbatim,false,false)
+    }
+    const name=raw.slice(share,i)
+    if (name=="." || name=="..") { return Root(raw,"",len(raw),true,false,verbatim,false,false) }
+    const drive=raw.slice(0,i)
+    if (i<len(raw)) { i=i+1 }
+    return Root(raw.slice(0,i),drive,i,true,true,verbatim,false,true)
+}
+
+export fn root(raw: string, windows: bool) -> Root {
+    const n=len(raw)
+    if (n==0) { return Root("","",0,false,false,false,false,true) }
+    if (!windows) {
+        if (raw.slice(0,1)=="/") { return Root("/","",1,true,true,false,false,true) }
+        return Root("","",0,false,false,false,false,true)
+    }
+    if (n>=4 && raw.slice(0,4)=="\\\\?\\") {
+        if (n==7 && _asciiLower(raw.slice(4,7))=="unc") { return Root(raw,"",n,true,false,true,false,false) }
+        if (n>=8 && _asciiLower(raw.slice(4,8))=="unc\\") { return _unc(raw,8,true) }
+        if (_drive(raw,4)) {
+            if (n>=7 && raw.slice(6,7)=="\\") {
+                return Root(raw.slice(0,7),raw.slice(0,6),7,true,true,true,false,true)
+            }
+            if (raw.slice(0,4)=="\\\\?\\") { return Root(raw,"",n,true,false,true,false,false) }
+        }
+        var end=4
+        while (end<n && raw.slice(end,end+1)!="\\") { end=end+1 }
+        if (end==4) { return Root(raw,"",n,true,false,true,false,false) }
+        const drive=raw.slice(0,end)
+        if (end<n) { end=end+1 }
+        return Root(raw.slice(0,end),drive,end,true,true,true,false,true)
+    }
+    if (n>=4 && raw.slice(0,4)=="\\\\.\\") {
+        var end=4
+        while (end<n && !separator(raw.slice(end,end+1),true,false)) { end=end+1 }
+        if (end==4) { return Root(raw,"",n,true,false,false,true,false) }
+        const drive=raw.slice(0,end)
+        if (end<n) { end=end+1 }
+        return Root(raw.slice(0,end),drive,end,true,true,false,true,true)
+    }
+    if (_drive(raw,0)) {
+        if (n>=3 && separator(raw.slice(2,3),true,false)) {
+            return Root(raw.slice(0,3),raw.slice(0,2),3,true,true,false,false,true)
+        }
+        return Root(raw.slice(0,2),raw.slice(0,2),2,false,false,false,false,true)
+    }
+    if (separator(raw.slice(0,1),true,false)) {
+        if (n>=2 && separator(raw.slice(1,2),true,false)) { return _unc(raw,2,false) }
+        return Root(raw.slice(0,1),"",1,true,false,false,false,true)
+    }
+    return Root("","",0,false,false,false,false,true)
+}
+
+fn _render(raw: string, windows: bool) -> string {
+    if (!windows) { return raw }
+    var out=""
+    for (var i=0; i<len(raw); i++) {
+        const c=raw.slice(i,i+1)
+        if (c=="/") { out=out+"\\" } else { out=out+c }
+    }
+    return out
+}
+
+fn _rootText(value: Root, windows: bool) -> string {
+    if (value.verbatim || value.device || !windows) { return value.prefix }
+    if (len(value.drive)>2 && value.absolute) { return _render(value.drive,true)+"\\" }
+    return _render(value.prefix,true)
+}
+
+fn _append(base: string, part: string, windows: bool, verbatim: bool) -> string {
+    if (len(part)==0) { return base }
+    if (len(base)==0) { return part }
+    const tail=base.slice(len(base)-1,len(base))
+    const prefix=root(base,windows)
+    if (separator(tail,windows,verbatim) || (windows && !prefix.rooted && len(base)==2 && _drive(base,0))) {
+        return base+part
+    }
+    if (windows) { return base+"\\"+part }
+    return base+"/"+part
+}
+
+export fn joinAll(parts: Array<string>, windows: bool) -> string {
+    var out=""
+    for (var i=0; i<len(parts); i++) {
+        var part=parts[i]
+        if (len(part)==0) { continue }
+        const next=root(part,windows)
+        const prior=root(out,windows)
+        if (!next.valid || next.absolute) { out=part; continue }
+        if (windows && len(next.drive)>0) {
+            if (len(prior.drive)==0 || _asciiLower(prior.drive)!=_asciiLower(next.drive)) {
+                out=part; continue
+            }
+            part=part.slice(next.end)
+        } else if (windows && next.rooted) {
+            if (prior.verbatim) { out=_rootText(prior,true)+part.slice(next.end) }
+            else if (len(prior.drive)>0) { out=prior.drive+part } else { out=part }
+            continue
+        }
+        out=_append(out,part,windows,prior.verbatim)
+    }
+    if (!root(out,windows).valid || root(out,windows).verbatim || root(out,windows).device) { return out }
+    return _render(out,windows)
+}
+
+fn _segments(raw: string, start: i64, windows: bool) -> Array<string> {
+    var out: Array<string> = []
+    var at=start
+    for (var i=start; i<=len(raw); i++) {
+        if (i==len(raw) || separator(raw.slice(i,i+1),windows,false)) {
+            if (i>at) { out.push(raw.slice(at,i)) }
+            at=i+1
+        }
+    }
+    return out
+}
+
+export fn normalize(raw: string, windows: bool) -> string {
+    const prefix=root(raw,windows)
+    if (prefix.verbatim || prefix.device || !prefix.valid) { return raw }
+    var parts=_segments(raw,prefix.end,windows)
+    var kept: Array<string> = []
+    for (var i=0; i<len(parts); i++) {
+        const value=parts[i]
+        if (value==".") { continue }
+        if (value=="..") {
+            if (len(kept)>0 && kept[len(kept)-1]!="..") { kept.pop() }
+            else if (!prefix.rooted) { kept.push(value) }
+        } else { kept.push(value) }
+    }
+    var body=""
+    if (windows) { body=kept.join("\\") } else { body=kept.join("/") }
+    const head=_rootText(prefix,windows)
+    if (len(body)==0) {
+        if (len(head)>0) { return head }
+        return "."
+    }
+    return head+body
+}
+
+export fn dirname(raw: string, windows: bool) -> string {
+    const prefix=root(raw,windows)
+    if (!prefix.valid) { return raw }
+    var end=len(raw)
+    while (end>prefix.end && separator(raw.slice(end-1,end),windows,prefix.verbatim)) { end=end-1 }
+    while (end>prefix.end && !separator(raw.slice(end-1,end),windows,prefix.verbatim)) { end=end-1 }
+    while (end>prefix.end && separator(raw.slice(end-1,end),windows,prefix.verbatim)) { end=end-1 }
+    if (end<=prefix.end) {
+        if (len(prefix.prefix)>0) { return _rootText(prefix,windows) }
+        return "."
+    }
+    const value=raw.slice(0,end)
+    if (prefix.verbatim || prefix.device) { return value }
+    return _render(value,windows)
+}
+
+export fn basename(raw: string, windows: bool) -> string {
+    const prefix=root(raw,windows)
+    if (!prefix.valid) { return "" }
+    var end=len(raw)
+    while (end>prefix.end && separator(raw.slice(end-1,end),windows,prefix.verbatim)) { end=end-1 }
+    var start=end
+    while (start>prefix.end && !separator(raw.slice(start-1,start),windows,prefix.verbatim)) { start=start-1 }
+    return raw.slice(start,end)
+}
+
+export fn extname(raw: string, windows: bool) -> string {
+    const base=basename(raw,windows)
+    if (base=="." || base=="..") { return "" }
+    var at=len(base)-1
+    while (at>0) {
+        if (base.slice(at,at+1)==".") { return base.slice(at) }
+        at=at-1
+    }
+    return ""
+}
+
+export fn parse(raw: string, windows: bool) -> Parts {
+    const prefix=root(raw,windows)
+    const base=basename(raw,windows)
+    const ext=extname(raw,windows)
+    return Parts(_rootText(prefix,windows),dirname(raw,windows),base,
+                 base.slice(0,len(base)-len(ext)),ext)
+}
+
+export fn format(rootText: string, dir: string, base: string, name: string,
+                 ext: string, windows: bool) -> string {
+    var body=base
+    if (len(body)==0) { body=name+ext }
+    var head=dir
+    if (len(head)==0) { head=rootText }
+    return _append(head,body,windows,root(head,windows).verbatim)
+}
+
+export fn relative(fromRaw: string, toRaw: string, windows: bool) -> string? {
+    const a=normalize(fromRaw,windows)
+    const b=normalize(toRaw,windows)
+    const ar=root(a,windows)
+    const br=root(b,windows)
+    if (!ar.valid || !br.valid) { return null }
+    if (ar.verbatim || ar.device || br.verbatim || br.device) {
+        if (a==b) { return "." }
+        return null
+    }
+    if (ar.absolute!=br.absolute || ar.rooted!=br.rooted) { return null }
+    if (windows && _asciiLower(ar.drive)!=_asciiLower(br.drive)) { return null }
+    const aa=_segments(a,ar.end,windows)
+    const bb=_segments(b,br.end,windows)
+    if (a==b) { return "." }
+    if ((len(aa)>0 && aa[0]=="..") || (len(bb)>0 && bb[0]=="..")) { return null }
+    var common=0
+    while (common<len(aa) && common<len(bb) && aa[common]==bb[common]) { common=common+1 }
+    var parts: Array<string> = []
+    for (var i=common; i<len(aa); i++) { parts.push("..") }
+    for (var i=common; i<len(bb); i++) { parts.push(bb[i]) }
+    if (len(parts)==0) { return "." }
+    if (windows) { return parts.join("\\") }
+    return parts.join("/")
+}
+
+export fn resolve(base: string, parts: Array<string>, windows: bool) -> string? {
+    const origin=root(base,windows)
+    if (!origin.valid || !origin.absolute) { return null }
+    var all: Array<string> = [base]
+    for (var i=0; i<len(parts); i++) { all.push(parts[i]) }
+    const joined=joinAll(all,windows)
+    const result=root(joined,windows)
+    if (!result.valid || !result.absolute) { return null }
+    return normalize(joined,windows)
+}

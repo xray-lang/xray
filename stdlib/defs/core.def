@@ -12,6 +12,31 @@ module path {
     visibility: "internal"
     return_ownership: "fresh"
   }
+  fn __isWindows {
+    signature: "(): bool"
+    doc: "Read the execution host path flavour"
+    vm: ""
+    aot: ""
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+    visibility: "internal"
+  }
+  fn __fullpath {
+    signature: "(raw: string): string"
+    doc: "Make a Windows locator absolute without requiring an existing file"
+    vm: ""
+    aot: ""
+    argc: 1
+    arg_spec: "s"
+    aot_direct: false
+    link_object: false
+    layer: "system"
+    visibility: "internal"
+    return_ownership: "fresh"
+  }
 }
 
 module time {

@@ -1,336 +1,69 @@
-// path — pure-Xray cross-platform path manipulation (POSIX semantics).
-//
-// Every operation here is a pure string algorithm; the sole runtime dependency
-// is a current-directory query used by `resolve` to anchor relative inputs.
-// Only this host anchor uses POSIX separators without a Windows drive prefix;
-// ordinary path arguments retain the POSIX parsing rules below.
-//
-// Semantics:
-//   * output always uses '/' as the separator;
-//   * parsing treats '/' as the separator (POSIX). Windows drive letters and
-//     backslash separators are out of scope for this module; `sep`/`delimiter`
-//     report the POSIX values.
-//
-// Char-indexed scanning is safe for separator logic because '/' and '.' are
-// single-byte ASCII scalars that never appear inside a multi-byte UTF-8 unit.
+// Filesystem paths use the execution host's lexical rules. Construction keeps
+// exact text; lexical normalization never resolves links or proves containment.
+import "std/path/_lexical" as lexical
 
-
-// Platform surface. POSIX values; see the module note above.
-export const sep = "/"
-export const delimiter = ":"
+const _windows: bool=__isWindows()
+fn _separator() -> string {
+    if (_windows) { return "\\" }
+    return "/"
+}
+fn _delimiter() -> string {
+    if (_windows) { return ";" }
+    return ":"
+}
+export const sep: string=_separator()
+export const delimiter: string=_delimiter()
 
 export class Path {
     raw: string
-
-    init(raw: string) {
-        this.raw = raw
-    }
-
-    toString() -> string {
-        return this.raw
-    }
+    init(raw: string) { this.raw=raw }
+    toString() -> string { return this.raw }
 }
 
-// PathInfo — the structured result of `parse`: a typed class so
-// `.root`/`.dir`/`.base`/`.name`/`.ext` are checked fields rather than dynamic
-// map lookups.
 export class PathInfo {
     root: string
     dir: Path
     base: string
     name: string
     ext: string
-
     init(root: string, dir: Path, base: string, name: string, ext: string) {
-        this.root = root
-        this.dir = dir
-        this.base = base
-        this.name = name
-        this.ext = ext
+        this.root=root; this.dir=dir; this.base=base; this.name=name; this.ext=ext
     }
 }
 
-fn _isSep(c: string) -> bool {
-    return c == "/"
-}
-
-// isAbsolute — POSIX: a leading '/'.
-fn _isAbsoluteRaw(p: string) -> bool {
-    if (len(p) == 0) { return false }
-    return _isSep(p.slice(0, (0) + 1))
-}
-
-// joinAll — join a segment array (POSIX). The last absolute segment resets the
-// accumulator; a single '/' separates segments that need one, and a leading
-// separator on a joined segment is dropped so joins never double up. `resolve`
-// builds its segment list dynamically and calls this directly; `join` is the
-// ergonomic variadic wrapper.
-fn _joinAllRaw(parts: Array<string>) -> string {
-    var n = len(parts)
-    var start = 0
-    for (var i = 0; i < n; i++) {
-        var p = parts[i]
-        if (len(p) > 0 && _isAbsoluteRaw(p)) { start = i }
-    }
-
-    var out = ""
-    for (var i = start; i < n; i++) {
-        var p = parts[i]
-        if (len(p) == 0) { continue }
-
-        if (len(out) > 0 && !_isSep(out.slice(len(out) - 1, (len(out) - 1) + 1)) && !_isSep(p.slice(0, (0) + 1))) {
-            out = out + "/"
-        }
-
-        var off = 0
-        if (len(out) > 0 && _isSep(p.slice(0, (0) + 1))) { off = 1 }
-        if (off < len(p)) {
-            out = out + p.slice(off)
-        }
-    }
-    return out
-}
-
-// join — variadic raw helper used by the public `Path` owner API.
-fn _joinRaw(...parts: string) -> string {
-    return _joinAllRaw(parts)
-}
-
-// dirname — the directory portion, or "." / "/" for the degenerate cases.
-fn _dirnameRaw(p: string) -> string {
-    if (len(p) == 0) { return "." }
-    var end = len(p)
-    while (end > 0 && _isSep(p.slice(end - 1, (end - 1) + 1))) { end = end - 1 }
-    while (end > 0 && !_isSep(p.slice(end - 1, (end - 1) + 1))) { end = end - 1 }
-    while (end > 1 && _isSep(p.slice(end - 1, (end - 1) + 1))) { end = end - 1 }
-    if (end == 0) {
-        if (_isSep(p.slice(0, (0) + 1))) { return "/" }
-        return "."
-    }
-    return p.slice(0, end)
-}
-
-// basename — the final path component, trailing separators stripped.
-fn _basenameRaw(p: string) -> string {
-    if (len(p) == 0) { return "" }
-    var end = len(p)
-    while (end > 0 && _isSep(p.slice(end - 1, (end - 1) + 1))) { end = end - 1 }
-    if (end == 0) { return "" }
-    var start = end
-    while (start > 0 && !_isSep(p.slice(start - 1, (start - 1) + 1))) { start = start - 1 }
-    return p.slice(start, end)
-}
-
-// extname — the extension including the leading dot, or "" when there is none.
-// A leading dot on the basename (dotfile) is not an extension.
-fn _extnameRaw(p: string) -> string {
-    if (len(p) == 0) { return "" }
-    var end = len(p)
-    while (end > 0 && _isSep(p.slice(end - 1, (end - 1) + 1))) { end = end - 1 }
-    var start = end
-    while (start > 0 && !_isSep(p.slice(start - 1, (start - 1) + 1))) { start = start - 1 }
-
-    var baseLen = end - start
-    var dotIdx = -1
-    var i = baseLen
-    while (i > 0) {
-        if (p.slice(start + i - 1, (start + i - 1) + 1) == ".") {
-            if (i > 1) { dotIdx = start + i - 1 }
-            break
-        }
-        i = i - 1
-    }
-    if (dotIdx < 0) { return "" }
-    return p.slice(dotIdx, end)
-}
-
-// normalize — collapse '.'/'..' and redundant separators.
-fn _normalizeRaw(p: string) -> string {
-    if (len(p) == 0) { return "." }
-    var isAbs = _isSep(p.slice(0, (0) + 1))
-
-    var segs: Array<string> = []
-    var parts = try! p.split("/")
-    for (var i = 0; i < len(parts); i++) {
-        var seg = parts[i]
-        if (len(seg) == 0) { continue }
-        if (seg == ".") { continue }
-        if (seg == "..") {
-            if (len(segs) > 0 && segs[len(segs) - 1] != "..") {
-                segs.pop()
-            } else if (!isAbs) {
-                segs.push("..")
-            }
-            continue
-        }
-        segs.push(seg)
-    }
-
-    var body = segs.join("/")
-    if (isAbs) {
-        return "/" + body
-    }
-    if (len(body) == 0) { return "." }
-    return body
-}
-
-// relative — the path from `fromRaw` to `toRaw`, both normalized first.
-fn _relativeRaw(fromRaw: string, toRaw: string) -> string {
-    var fromP = _normalizeRaw(fromRaw)
-    var toP = _normalizeRaw(toRaw)
-    var fromLen = len(fromP)
-    var toLen = len(toP)
-
-    var common = 0
-    var lastSep = 0
-    while (common < fromLen && common < toLen && fromP.slice(common, (common) + 1) == toP.slice(common, (common) + 1)) {
-        if (_isSep(fromP.slice(common, (common) + 1))) { lastSep = common }
-        common = common + 1
-    }
-
-    var atBoundary = false
-    if (common == fromLen && common == toLen) {
-        atBoundary = true
-    } else if (common == fromLen && common < toLen && _isSep(toP.slice(common, (common) + 1))) {
-        atBoundary = true
-    } else if (common == toLen && common < fromLen && _isSep(fromP.slice(common, (common) + 1))) {
-        atBoundary = true
-    }
-    if (!atBoundary) { common = lastSep }
-
-    var fromPos = common
-    while (fromPos < fromLen && _isSep(fromP.slice(fromPos, (fromPos) + 1))) { fromPos = fromPos + 1 }
-    var upCount = 0
-    if (fromPos < fromLen) {
-        upCount = 1
-        for (var i = fromPos; i < fromLen; i++) {
-            if (_isSep(fromP.slice(i, (i) + 1))) { upCount = upCount + 1 }
-        }
-    }
-
-    var toRestStart = common
-    while (toRestStart < toLen && _isSep(toP.slice(toRestStart, (toRestStart) + 1))) { toRestStart = toRestStart + 1 }
-    var toRest = toP.slice(toRestStart, toLen)
-
-    var out = ""
-    for (var i = 0; i < upCount; i++) {
-        if (len(out) > 0) { out = out + "/" }
-        out = out + ".."
-    }
-    if (len(toRest) > 0) {
-        if (len(out) > 0) { out = out + "/" }
-        out = out + toRest
-    }
-    if (len(out) == 0) { return "." }
-    return out
-}
-
-// resolve — join the inputs into an absolute, normalized path. When no input
-// is absolute, the current working directory anchors the result.
-fn _resolveRawArray(parts: Array<string>) -> string {
-    var hasAbs = false
-    for (var i = 0; i < len(parts); i++) {
-        if (len(parts[i]) > 0 && _isAbsoluteRaw(parts[i])) { hasAbs = true }
-    }
-
-    var all: Array<string> = []
-    if (!hasAbs) {
-        all.push(__getcwd())
-    }
-    for (var i = 0; i < len(parts); i++) {
-        all.push(parts[i])
-    }
-
-    return _normalizeRaw(_joinAllRaw(all))
-}
-
-// parse — split a path into its structured components.
-fn _parseRaw(p: string) -> PathInfo {
-    var dir = _dirnameRaw(p)
-    var base = _basenameRaw(p)
-    var ext = _extnameRaw(base)
-    var name = base
-    if (len(ext) > 0) {
-        name = base.slice(0, len(base) - len(ext))
-    }
-    var root = ""
-    if (len(p) > 0 && _isSep(p.slice(0, (0) + 1))) { root = "/" }
-    return PathInfo(root, Path(dir), base, name, ext)
-}
-
-// format — rebuild a path from PathInfo. `base` wins over `name`+`ext`; a
-// single separator joins a non-empty `dir` to the basename.
-fn _formatRaw(info: PathInfo) -> string {
-    var dir = info.dir.toString()
-    var base = info.base
-    if (len(base) == 0 && len(info.name) > 0) {
-        base = info.name + info.ext
-    }
-
-    var out = ""
-    if (len(dir) > 0) {
-        out = dir
-        if (!_isSep(dir.slice(len(dir) - 1, (len(dir) - 1) + 1))) { out = out + "/" }
-    }
-    return out + base
-}
-
-export fn from(raw: string) -> Path {
-    return Path(raw)
-}
-
-fn _pathRaw(p: Path) -> string {
-    return p.toString()
-}
-
-fn _pathRawArray(parts: Array<Path>) -> Array<string> {
+fn _strings(parts: Array<Path>) -> Array<string> {
     var out: Array<string> = []
-    for (var i = 0; i < len(parts); i++) {
-        out.push(_pathRaw(parts[i]))
-    }
+    for (var i=0; i<len(parts); i++) { out.push(parts[i].raw) }
     return out
 }
 
-export fn isAbsolute(p: Path) -> bool {
-    return _isAbsoluteRaw(_pathRaw(p))
+export fn from(raw: string) -> Path { return Path(raw) }
+export fn hasRoot(p: Path) -> bool { return lexical.root(p.raw,_windows).rooted }
+export fn isAbsolute(p: Path) -> bool { return lexical.root(p.raw,_windows).absolute }
+export fn joinAll(parts: Array<Path>) -> Path { return Path(lexical.joinAll(_strings(parts),_windows)) }
+export fn join(...parts: Path) -> Path { return joinAll(parts) }
+export fn dirname(p: Path) -> Path { return Path(lexical.dirname(p.raw,_windows)) }
+export fn basename(p: Path) -> string { return lexical.basename(p.raw,_windows) }
+export fn extname(p: Path) -> string { return lexical.extname(p.raw,_windows) }
+export fn normalize(p: Path) -> Path { return Path(lexical.normalize(p.raw,_windows)) }
+export fn relative(fromPath: Path, toPath: Path) -> Path? {
+    const value=lexical.relative(fromPath.raw,toPath.raw,_windows)
+    if (value==null) { return null }
+    return Path(value!)
 }
-
-export fn joinAll(parts: Array<Path>) -> Path {
-    return Path(_joinAllRaw(_pathRawArray(parts)))
-}
-
-export fn join(...parts: Path) -> Path {
-    return joinAll(parts)
-}
-
-export fn dirname(p: Path) -> Path {
-    return Path(_dirnameRaw(_pathRaw(p)))
-}
-
-export fn basename(p: Path) -> string {
-    return _basenameRaw(_pathRaw(p))
-}
-
-export fn extname(p: Path) -> string {
-    return _extnameRaw(_pathRaw(p))
-}
-
-export fn normalize(p: Path) -> Path {
-    return Path(_normalizeRaw(_pathRaw(p)))
-}
-
-export fn relative(fromPath: Path, toPath: Path) -> Path {
-    return Path(_relativeRaw(_pathRaw(fromPath), _pathRaw(toPath)))
-}
-
 export fn resolve(...parts: Path) -> Path {
-    return Path(_resolveRawArray(_pathRawArray(parts)))
+    const value=lexical.joinAll(_strings(parts),_windows)
+    if (lexical.root(value,_windows).absolute) { return Path(lexical.normalize(value,_windows)) }
+    if (_windows) {
+        if (len(value)==0) { return Path(__fullpath(".")) }
+        return Path(__fullpath(value))
+    }
+    return Path(lexical.normalize(lexical.joinAll([__getcwd(),value],false),false))
 }
-
 export fn parse(p: Path) -> PathInfo {
-    return _parseRaw(_pathRaw(p))
+    const value=lexical.parse(p.raw,_windows)
+    return PathInfo(value.root,Path(value.dir),value.base,value.name,value.ext)
 }
-
 export fn format(info: PathInfo) -> Path {
-    return Path(_formatRaw(info))
+    return Path(lexical.format(info.root,info.dir.raw,info.base,info.name,info.ext,_windows))
 }

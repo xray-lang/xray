@@ -8,26 +8,57 @@
  * xir_path_complete_source.h - Entire Path source through cold VM and same C
  *
  * KEY CONCEPT:
- *   All standard algorithms remain byte-for-byte inputs. Wrappers observe
+ *   The complete standard module and shared lexical module are inputs. Wrappers observe
  *   public results and the separately authenticated private cwd boundary.
  */
 #ifndef XIR_PATH_COMPLETE_SOURCE_H
 #define XIR_PATH_COMPLETE_SOURCE_H
-static const char *const path_complete_names[]={"","completeResolve","completePair","completeNormalize","completeAlgorithms","completeCwd"};
+static const char *const path_complete_names[]={"","completeResolve","completePair","completeNormalize","completeAlgorithms","completeCwd","completeFullpath"};
 static const char path_complete_wrappers[]=
-    "\nexport fn completeResolve(raw:string)->string{return resolve(Path(raw)).raw}\n"
+    "\n"
+    "export fn completeResolve(raw:string)->string{return resolve(Path(raw)).raw}\n"
     "export fn completePair(a:string,b:string)->string{return resolve(Path(a),Path(b)).raw}\n"
     "export fn completeNormalize(raw:string)->string{return normalize(Path(raw)).raw}\n"
     "export fn completeAlgorithms()->i64{\n"
-    " assert(isAbsolute(Path(\"/a\")));assert(!isAbsolute(Path(\"relative\")))\n"
-    " assert(!isAbsolute(Path(\"C:/x\")));assert(!isAbsolute(Path(\"C:\\\\x\")))\n"
-    " assert(normalize(Path(\"a\\\\b\")).raw==\"a\\\\b\")\n"
-    " assert(join(Path(\"a\"),Path(\"b\")).raw==\"a/b\")\n"
-    " assert(dirname(Path(\"/a/b.txt\")).raw==\"/a\")\n"
-    " assert(basename(Path(\"/a/b.txt\"))==\"b.txt\");assert(extname(Path(\"/a/b.txt\"))==\".txt\")\n"
-    " var info=parse(Path(\"/a/b.txt\"));assert(format(info).raw==\"/a/b.txt\")\n"
-    " assert(relative(Path(\"/a/b\"),Path(\"/a/c\")).raw==\"../c\");return 42}\n"
-    "export fn completeCwd()->string{return __getcwd()}\n";
+    " assert(lexical.root(\"/a\",false).absolute);assert(!lexical.root(\"relative\",false).absolute)\n"
+    " assert(!lexical.root(\"C:/x\",false).absolute);assert(!lexical.root(\"C:\\\\x\",false).absolute)\n"
+    " assert(lexical.normalize(\"a\\\\b\",false)==\"a\\\\b\")\n"
+    " assert(lexical.joinAll([\"a\",\"b\"],false)==\"a/b\")\n"
+    " assert(lexical.joinAll([\"a\",\"..\",\"b\"],false)==\"a/../b\")\n"
+    " assert(lexical.dirname(\"/a/b.txt\",false)==\"/a\")\n"
+    " assert(lexical.basename(\"/a/b.txt\",false)==\"b.txt\");assert(lexical.extname(\"/a/b.txt\",false)==\".txt\")\n"
+    " assert(lexical.relative(\"/a/b\",\"/a/c\",false)==\"../c\")\n"
+    " assert(lexical.root(\"C:/x\",true).absolute);assert(lexical.root(\"C:\\\\x\",true).absolute)\n"
+    " assert(!lexical.root(\"C:x\",true).rooted);assert(!lexical.root(\"C:x\",true).absolute)\n"
+    " assert(lexical.root(\"\\\\x\",true).rooted);assert(!lexical.root(\"\\\\x\",true).absolute)\n"
+    " assert(lexical.root(\"\\\\\\\\srv\\\\share\",true).absolute)\n"
+    " assert(!lexical.root(\"\\\\\\\\srv\",true).absolute);assert(!lexical.root(\"\\\\\\\\srv\\\\\",true).absolute)\n"
+    " assert(!lexical.root(\"\\\\\\\\?\\\\UNC\",true).absolute);assert(!lexical.root(\"\\\\\\\\?\\\\uNc\\\\\",true).absolute)\n"
+    " assert(!lexical.root(\"\\\\\\\\?\\\\C:\",true).absolute)\n"
+    " assert(lexical.normalize(\"C:/a/../../b\",true)==\"C:\\\\b\")\n"
+    " assert(lexical.joinAll([\"C:a\",\"b\"],true)==\"C:a\\\\b\")\n"
+    " assert(lexical.joinAll([\"C:\\\\a\",\"C:b\"],true)==\"C:\\\\a\\\\b\")\n"
+    " assert(lexical.joinAll([\"C:\\\\a\",\"D:b\"],true)==\"D:b\")\n"
+    " assert(lexical.joinAll([\"C:\\\\a\",\"\\\\b\"],true)==\"C:\\\\b\")\n"
+    " assert(lexical.joinAll([\"C:\\\\a\",\"..\",\"b\"],true)==\"C:\\\\a\\\\..\\\\b\")\n"
+    " assert(lexical.normalize(\"\\\\\\\\?\\\\C:\\\\a\\\\..\\\\b/.\",true)==\"\\\\\\\\?\\\\C:\\\\a\\\\..\\\\b/.\")\n"
+    " assert(lexical.normalize(\"\\\\\\\\.\\\\dev/a/../b\",true)==\"\\\\\\\\.\\\\dev/a/../b\")\n"
+    " assert(lexical.basename(\"\\\\\\\\.\\\\dev/a\",true)==\"a\")\n"
+    " assert(lexical.basename(\"\\\\\\\\?\\\\C:\\\\a/b\",true)==\"a/b\")\n"
+    " assert(lexical.joinAll([\"\\\\\\\\?\\\\C:\\\\base\",\"D:\\\\x\"],true)==\"D:\\\\x\")\n"
+    " assert(lexical.dirname(\"C:child\",true)==\"C:\");assert(lexical.basename(\"C:\",true)==\"\")\n"
+    " assert(lexical.extname(\".\",true)==\"\");assert(lexical.extname(\"..\",true)==\"\")\n"
+    " assert(lexical.relative(\"C:\\\\a\",\"D:\\\\b\",true)==null)\n"
+    " assert(lexical.relative(\"C:\\\\A\",\"c:\\\\a\",true)==\"..\\\\a\")\n"
+    " assert(lexical.relative(\"..\\\\a\",\"b\",true)==null)\n"
+    " assert(lexical.relative(\"\\\\\\\\?\\\\C:\\\\a\",\"\\\\\\\\?\\\\C:\\\\b\",true)==null)\n"
+    " if(_windows){assert(sep==\"\\\\\");assert(delimiter==\";\");assert(isAbsolute(Path(\"C:/x\")));assert(!isAbsolute(Path(\"/x\")))}\n"
+    " else{assert(sep==\"/\");assert(delimiter==\":\");assert(isAbsolute(Path(\"/x\")));assert(!isAbsolute(Path(\"C:/x\")))}\n"
+    " return 42\n"
+    "}\n"
+    "export fn completeCwd()->string{return __getcwd()}\n"
+    "export fn completeFullpath(raw:string)->string{return __fullpath(raw)}\n"
+    ;
 static uint32_t path_complete_named(const XrXirModule *module,const char *name){
     for(uint32_t f=0;f<module->function_count;++f)if(module->functions[f].name_length==strlen(name)&&!memcmp(module->functions[f].name,name,strlen(name)))return f;
     CHECK(false);return UINT32_MAX;
@@ -51,17 +82,48 @@ static XrXirStatus path_complete_check(const XrXirCompileContext *context,const 
 static void path_complete_contracts(const XrXirCompileContext *context,const XrXirArtifact *code){
     const XrXirModule *module=xr_xir_compile_artifact_module(code);uint32_t native=path_complete_named(module,"__getcwd");
     CHECK(module->declarations->functions[native].native_callable==108&&xir_native_callable_verify(module,native)==XR_XIR_OK);
+    static const char *const queries[]={"__getcwd","__isWindows","__fullpath"};
+    CHECK(module->function_count<=SIZE_MAX/sizeof(XrXirFunction));
+    XrXirFunction *functions=xr_malloc((size_t)module->function_count*sizeof(*functions));CHECK(functions);
+    memcpy(functions,module->functions,(size_t)module->function_count*sizeof(*functions));
+    XrXirModule wrong=*module;wrong.functions=functions;
+    for(unsigned n=0;n<3;++n){
+        uint32_t target=path_complete_named(module,queries[n]);
+        CHECK(xir_native_callable_verify(module,target)==XR_XIR_OK);
+        functions[target].result=n==1?XR_XIR_STRING:XR_XIR_BOOL;
+        CHECK(xir_native_callable_verify(&wrong,target)==XR_XIR_BAD_TYPE);
+        functions[target]=module->functions[target];
+    }
+    uint32_t full=path_complete_named(module,"__fullpath");const XrXirType integer=XR_XIR_I64;
+    functions[full].parameters=&integer;CHECK(xir_native_callable_verify(&wrong,full)==XR_XIR_BAD_TYPE);
+    xr_free(functions);
     XrXirCtfeCallRequest request={.evaluation={.artifact=code,.function=path_complete_named(module,"completeCwd"),.target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES}},.call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
     memcpy(request.evaluation.checked_identity,code->checked_identity,32);XrXirValue result={0};
     CHECK(xr_xir_compile_ctfe_calls(&request,&result)==XR_XIR_CTFE_NOT_SUPPORTED&&!result.type&&!result.reserved&&!result.payload);
-    static const char fref[]="\nexport fn forbiddenCwd()->string{var f=__getcwd;return f()}\n";
-    size_t length=0;char *body=path_complete_text(&length);CHECK(length<=SIZE_MAX-sizeof(fref));char *negative=xr_malloc(length+sizeof(fref));CHECK(negative);
-    memcpy(negative,body,length);memcpy(negative+length,fref,sizeof(fref));xr_free(body);XrXirSourceResult rejected={0};
-    CHECK(path_complete_check(context,negative,length+sizeof(fref)-1,true,&rejected)==XR_XIR_BAD_TYPE&&!rejected.checked&&!rejected.snapshot);
-    memset(negative,0xa5,length+sizeof(fref));xr_free(negative);xr_xir_compile_source_result_free(&rejected);
-    static const char fake[]="export fn fake()->string{return __getcwd()}\n";
-    CHECK(path_complete_check(context,fake,sizeof(fake)-1,false,&rejected)==XR_XIR_BAD_VALUE&&!rejected.checked&&!rejected.snapshot);xr_xir_compile_source_result_free(&rejected);
+    static const char *const frefs[]={
+        "\nexport fn forbiddenCwd()->string{var f=__getcwd;return f()}\n",
+        "\nexport fn forbiddenFlavour()->bool{var f=__isWindows;return f()}\n",
+        "\nexport fn forbiddenFullpath()->string{var f=__fullpath;return f(\".\")}\n"
+    };
+    for(unsigned n=0;n<3;++n){
+        size_t length=0;char *body=path_complete_text(&length);size_t suffix=strlen(frefs[n]);
+        CHECK(length<=SIZE_MAX-suffix-1);char *negative=xr_malloc(length+suffix+1);CHECK(negative);
+        memcpy(negative,body,length);memcpy(negative+length,frefs[n],suffix+1);xr_free(body);
+        XrXirSourceResult rejected={0};
+        CHECK(path_complete_check(context,negative,length+suffix,true,&rejected)==XR_XIR_BAD_TYPE&&!rejected.checked&&!rejected.snapshot);
+        memset(negative,0xa5,length+suffix+1);xr_free(negative);xr_xir_compile_source_result_free(&rejected);
+    }
+    static const char *const fake[]={
+        "export fn fake()->string{return __getcwd()}\n",
+        "export fn fake()->bool{return __isWindows()}\n",
+        "export fn fake()->string{return __fullpath(\".\")}\n"
+    };
+    for(unsigned n=0;n<3;++n){
+        XrXirSourceResult rejected={0};
+        CHECK(path_complete_check(context,fake[n],strlen(fake[n]),false,&rejected)==XR_XIR_BAD_VALUE&&!rejected.checked&&!rejected.snapshot);
+        xr_xir_compile_source_result_free(&rejected);
+    }
     XrXirModule changed=*module;XrXirDeclarations scope=*module->declarations;changed.declarations=&scope;
     size_t module_count=scope.module_count;CHECK(module_count&&module_count<=SIZE_MAX/sizeof(XrXirSourceModule));XrXirSourceModule *modules=xr_malloc(module_count*sizeof(*modules));CHECK(modules);
     memcpy(modules,scope.modules,(size_t)scope.module_count*sizeof(*modules));scope.modules=modules;uint32_t owner=scope.functions[native].module;CHECK(owner<scope.module_count);

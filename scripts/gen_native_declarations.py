@@ -1330,24 +1330,35 @@ def render_os_exec_pipe_close(declarations):
 
 
 def render_path_getcwd(declarations):
-    candidates = [r for r in declarations if r.module == 'path' and r.name == '__getcwd']
-    if len(candidates) != 1:
-        raise ValueError('Path query requires its sole governed declaration')
-    row = candidates[0]
-    if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
-            row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct, row.aot_kind,
-            row.link_object, row.vm_binding, row.vm_ifdef, row.define, row.ret,
-            row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
-            '(): string', '0', '', 'internal', '', '', 'fresh', 'system', '', '', False, '',
-            '', 'normal', '', '', 'value', False, None, (), ''):
-        raise ValueError('Path query differs from its complete source contract')
-    return [
-        'static const XrNativeMemberDeclaration xr_native_path_getcwd = {',
-        '    1, "__getcwd", "(): string", "string", 0, 0, XR_NATIVE_RECEIVER_READ,',
-        '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
-        '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_STRING,',
-        '};',
-    ], ['    {XR_NATIVE_CALLABLE_PATH_GETCWD, NULL, &xr_native_path_getcwd, NULL, false, "path", "stdlib/defs/core.def", FINGERPRINT}']
+    contracts = (
+        ('__getcwd', '(): string', 'PATH_GETCWD', (), 'STRING', 'string', 'fresh'),
+        ('__isWindows', '(): bool', 'PATH_IS_WINDOWS', (), 'BOOL', 'bool', ''),
+        ('__fullpath', '(raw: string): string', 'PATH_FULLPATH', ('raw',), 'STRING', 'string', 'fresh'),
+    )
+    lines, rows = [], []
+    for ordinal, (name, signature, identity, parameters, term, result, ownership) in enumerate(contracts, 1):
+        candidates = [r for r in declarations if r.module == 'path' and r.name == name]
+        if len(candidates) != 1:
+            raise ValueError('Path query requires its unique governed declaration: ' + name)
+        row = candidates[0]
+        if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+                row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct, row.aot_kind,
+                row.link_object, row.vm_binding, row.vm_ifdef, row.define, row.ret,
+                row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
+                signature, str(len(parameters)), 's' if parameters else '', 'internal', '', '',
+                ownership, 'system', '', '', False, '', '', 'normal', '', '', 'value', False, None, (), ''):
+            raise ValueError('Path query differs from its complete source contract: ' + name)
+        symbol = 'xr_native_' + identity.lower()
+        if parameters:
+            lines += [f'static const XrNativeParameter {symbol}_parameters[] = {{',
+                      '    {"raw", "string", XR_NATIVE_TERM_STRING, false, false},', '};']
+        args = symbol + '_parameters' if parameters else 'NULL'
+        lines += [f'static const XrNativeMemberDeclaration {symbol} = {{',
+                  f'    {ordinal}, "{name}", "{signature}", "{result}", 0, 0, XR_NATIVE_RECEIVER_READ,',
+                  '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
+                  f'    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, {args}, {len(parameters)}, XR_NATIVE_TERM_{term},', '};']
+        rows += [f'    {{XR_NATIVE_CALLABLE_{identity}, NULL, &{symbol}, NULL, false, "path", "stdlib/defs/core.def", FINGERPRINT}}']
+    return lines, rows
 
 
 def render_sys_dylibs(declarations):
