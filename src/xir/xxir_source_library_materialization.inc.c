@@ -27,7 +27,7 @@ static bool source_library_materializations(SourceContext *ctx,const SourceLibra
             !unit->library->types || !unit->library->types->nominals || from->nominal>=unit->library->types->nominals->count)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library literal edge has no mapped declaration");
         if (map->functions[from->caller]==UINT32_MAX) continue;
-        if (map->functions[from->function]==UINT32_MAX)
+        if (map->functions[from->function]==UINT32_MAX || unit->nominals[from->nominal]==UINT32_MAX)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library literal target is outside its selected closure");
         rows[next++]=(XrXirMaterializationBinding){map->functions[from->caller],from->instruction,
             map->functions[from->function],unit->nominals[from->nominal]};

@@ -250,6 +250,55 @@ static void path_prelude_range_contract(const XrXirCompileContext *context,const
     xr_free(instructions);xr_free(functions);xr_free(identities);xr_free(bindings);
     CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK&&before.held_bytes==after.held_bytes);
 }
+static void path_subset_contracts(const XrXirCompileContext *context,const XrXirLibraryCatalog *catalog,bool execute){
+    XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
+    static const char *const clients[]={
+        "import path\nfn check()->i64{if(path.basename(path.from(\"a/b\"))==\"b\"){return 42};return 0}\n",
+        "import \"std/path/posix\" as posix\nfn check()->i64{if(posix.basename(posix.from(\"a/b\"))==\"b\"){return 42};return 0}\n",
+        "import \"std/path/windows\" as windows\nfn check()->i64{if(windows.basename(windows.from(\"a/b\"))==\"b\"){return 42};return 0}\n",
+        "import \"std/path/logical\" as logical\nfn check()->i64{if(logical.from(\"a/b\")!=null){return 42};return 0}\n"
+    };
+    static const char *const paths[]={"path/path.xr","path/posix.xr","path/windows.xr","path/logical.xr"};
+    static const char *const hidden[]={"path.PosixPath","posix.WindowsPath","windows.LogicalPath","logical.WindowsPath"};
+    for(unsigned n=0;n<4;++n){
+        XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
+        XrXirStatus status=path_flavours_check(context,clients[n],catalog,&source,&diagnostic);
+        if(status!=XR_XIR_OK)fprintf(stderr,"Path subset%u status%u module%u %d:%d %s\n",n,status,diagnostic.module,diagnostic.line,diagnostic.column,diagnostic.message);
+        CHECK(status==XR_XIR_OK&&source.checked);
+        XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);
+        xr_xir_compile_source_result_free(&source);XrXirArtifact *cold=NULL,*closed=NULL,*lowered=NULL;
+        CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&cold,NULL)==XR_XIR_OK);
+        memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
+        const XrXirModule *module=xr_xir_compile_artifact_module(cold);bool selected=false;
+        for(uint32_t m=0;m<module->declarations->module_count;++m){
+            const XrXirSourceModule *row=module->declarations->modules+m;
+            char identity[160];int length=snprintf(identity,sizeof(identity),"stdlib-module-v1:module=4:path:path=%zu:%s",strlen(paths[n]),paths[n]);
+            CHECK(length>0&&(size_t)length<sizeof(identity));
+            if(row->name_length==(uint32_t)length&&!memcmp(row->name,identity,(size_t)length))selected=true;
+            for(unsigned other=1;other<4;++other)if(other!=n){
+                length=snprintf(identity,sizeof(identity),"stdlib-module-v1:module=4:path:path=%zu:%s",strlen(paths[other]),paths[other]);
+                CHECK(length>0&&(size_t)length<sizeof(identity));
+                CHECK(row->name_length!=(uint32_t)length||memcmp(row->name,identity,(size_t)length));
+            }
+        }
+        CHECK(selected);
+        if(execute){
+            CHECK(xr_xir_compile_specialize(cold,&closed,NULL,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(cold);cold=NULL;
+            CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},NULL,&lowered,NULL)==XR_XIR_OK);
+            xr_xir_compile_artifact_free(closed);module=xr_xir_compile_artifact_module(lowered);
+            uint32_t ids[]={module->declarations->entry_function,path_complete_named(module,"check")};XrXirProgram *program=NULL;
+            CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK&&!lowered);
+            path_flavours_execute(program,ids);xr_xir_compile_program_drop(program);
+        }
+        xr_xir_compile_artifact_free(cold);
+        char text[768];int length=snprintf(text,sizeof(text),"%sfn bad(value:%s){}\n",clients[n],hidden[n]);
+        CHECK(length>0&&(size_t)length<sizeof(text));
+        status=path_flavours_check(context,text,catalog,&source,&diagnostic);
+        if(status!=XR_XIR_BAD_TYPE||diagnostic.module||diagnostic.line!=3)fprintf(stderr,"Path subset visibility%u status%u module%u %d:%d %s\n",n,status,diagnostic.module,diagnostic.line,diagnostic.column,diagnostic.message);
+        CHECK(status==XR_XIR_BAD_TYPE&&!source.checked&&!source.snapshot&&!diagnostic.module&&diagnostic.line==3);xr_xir_compile_source_result_free(&source);
+    }
+    CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK&&before.held_bytes==after.held_bytes);
+}
 static void path_flavours_product(const XrXirCompileContext *context,const char *emit_base){
     path_previous134(context);path_previous135(context);
     FILE *file=fopen(XR_PATH_FIXTURES "/flavours.xr","rb");CHECK(file&&!fseek(file,0,SEEK_END));
@@ -259,6 +308,7 @@ static void path_flavours_product(const XrXirCompileContext *context,const char 
     XrXirLibraryCatalog *catalog=NULL;XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
     CHECK(xir_stdlib_library_catalog_new(context,XR_PATH_ROOT "/stdlib",&catalog)==XR_XIR_OK);
     path_prelude_range_contract(context,catalog);
+    path_subset_contracts(context,catalog,emit_base==NULL);
     XrXirStatus status=path_flavours_check(context,text,catalog,&source,&diagnostic);
     if(status!=XR_XIR_OK)fprintf(stderr,"Path checked import status%u module%u %d:%d %s\n",
         status,diagnostic.module,diagnostic.line,diagnostic.column,diagnostic.message);
