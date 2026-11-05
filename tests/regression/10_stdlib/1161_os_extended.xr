@@ -123,7 +123,7 @@ fn test_exec_echo() {
 
 @test
 fn test_exec_stderr() {
-    var result = os.exec("echo error_msg >&2")
+    var result = os.exec("echo error_msg>&2")
     assert(result != null)
     var expected = os.platform() == "windows" ? "error_msg\r\n" : "error_msg\n"
     const actual = execText(result!.stderr)
