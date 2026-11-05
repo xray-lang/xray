@@ -178,6 +178,11 @@ static void source_class_definition_cases(XrXirSourceRequest *request) {
     {"final class Array<T>{init(){}}\nfn typed(x:Array<i64>){}",0,""},
     {"final class Array<T>{init(){}}\nfn wrong(x:Array<i64>)->i64{return x.len()}",3,"unknown struct field"},
     {"class P {x:i64 init(){this.x=1}}\nclass C extends P {init(){}}",XR_XIR_BAD_TYPE,"class execution currently requires a root declaration without inheritance"},
+    {"final class C{x:Array<i64> init(){this.x=[1];this.x.reserve(8);this.x.push(2)}}",0,""},
+    {"final class C{x:Array<i64> init(){this.x.reserve(8);this.x=[1]}}",4,"read requires storage initialized on every incoming path"},
+    {"final class C{const x:Array<i64> init(){this.x=[1];this.x.reserve(8)}}",3,"field access is not permitted"},
+    {"fn edit(x:ref Array<i64>){}\nfinal class C{x:Array<i64> init(){this.x=[1];edit(ref this.x)}}",3,"ref requires a mutable stored binding"},
+    {"final class Other{private data:Array<i64> init(){this.data=[1]}}\nfinal class C{other:Other init(){this.other=Other();this.other.data.reserve(8)}}",3,"field access is not permitted"},
     {"final class C<T>{x:i64 init(x:i64){this.x=x}}\nfn make()->C<string>{return C<string>(41)}",0,""},
     {"final class C<T>{x:i64 init(x:i64){this.x=x}}\nconst left=C<string>(41)\nconst right=C<bool>(42)",0,""},
     };

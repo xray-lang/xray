@@ -16,6 +16,9 @@
 #include "xir/xxir_implementation.h"
 #include "xir/xxir_generic.h"
 #include "base/xresource_limits.h"
+#include "base/xsha256.h"
+#include "base/xmalloc.h"
+#include "xir/xxir_checked.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -268,8 +271,25 @@ static void stage_transition(StageFixture *f) {
     CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK && before.held_bytes==after.held_bytes);
     xr_compile_resources_release(context.resources);
 }
+static void stage_previous129_rejected(void) {
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==42 && XR_XIR_CHECKED_CONTRACT==130,"staged constructor acceptance identity");
+    FILE *file=fopen(XR_CLASS_STAGE_PREVIOUS "/old129.xrchk","rb");CHECK(file);
+    uint8_t packet[3228];CHECK(fread(packet,1,sizeof(packet),file)==sizeof(packet)&&fgetc(file)==EOF&&!ferror(file)&&!fclose(file));
+    CHECK(!memcmp(packet,"XRCHK\0\0\0",8)&&packet[8]==42&&!packet[9]&&!packet[10]&&!packet[11]&&
+        packet[12]==129&&!packet[13]&&!packet[14]&&!packet[15]);
+    static const uint8_t expected[32]={0x29,0x1f,0xa6,0x89,0xcf,0x58,0x73,0x0e,0x67,0x3e,0x59,0x0e,0xcb,0xee,0x57,0x33,0xaa,0xd5,0x7a,0x85,0x3d,0x23,0x74,0xc8,0x19,0x2d,0xf0,0xc0,0x46,0x2a,0x05,0x24};uint8_t digest[32];xr_sha256(packet,sizeof(packet),digest);CHECK(!memcmp(digest,expected,32));
+    XrSHA256Context sha;xr_sha256_init(&sha);xr_sha256_update(&sha,packet,32);xr_sha256_update(&sha,packet+64,sizeof(packet)-64);
+    xr_sha256_final(&sha,digest);CHECK(!memcmp(digest,packet+32,32));
+    XrCompileResourceLimits limits=XR_RESOURCE_DEFAULT_COMPILER_LIMITS;XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};
+    CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);XrCompileResourceStats before={0},after={0};
+    CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);XrXirArtifact *output=NULL;XrXirDiagnostic diagnostic={0};
+    CHECK(xr_xir_compile_checked_read(&context,packet,sizeof(packet),&output,&diagnostic)==XR_XIR_BAD_STRUCTURE&&!output);
+    CHECK(diagnostic.status==XR_XIR_BAD_STRUCTURE&&xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK&&
+        before.held_bytes==after.held_bytes&&before.allocation_count==after.allocation_count);xr_compile_resources_release(context.resources);
+}
 int main(int argc,char **argv) {
     CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--raw-only")));
+    stage_previous129_rejected();
     StageFixture f;stage_fixture(&f);stage_expect(&f,XR_XIR_OK);
     CHECK(xir_compile_class_stage_call(&f.module,BASE_CTOR,0,NULL)==XR_XIR_OK);
     CHECK(xir_compile_class_stage_call(&f.module,CHILD_HELPER,3,NULL)==XR_XIR_OK);

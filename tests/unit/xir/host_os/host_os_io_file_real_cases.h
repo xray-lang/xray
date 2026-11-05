@@ -17,7 +17,7 @@
 static bool host_file_stdio_child;
 enum { HOST_REAL_ENTRY,HOST_REAL_PATH,HOST_REAL_ROUNDTRIP,HOST_REAL_DEFER,HOST_REAL_STDIO,
  HOST_REAL_OPEN,HOST_REAL_READ,HOST_REAL_CLOSE,HOST_REAL_FLUSH,HOST_REAL_WRITE,HOST_REAL_WRITE_STR,
- HOST_REAL_LOSSY,HOST_REAL_LOSSY_CHECK,HOST_REAL_CONSTRUCTOR,HOST_REAL_EAGER,HOST_REAL_EMPTY,HOST_REAL_CTOR_HELPER,HOST_REAL_COUNT };
+ HOST_REAL_LOSSY,HOST_REAL_LOSSY_CHECK,HOST_REAL_CONSTRUCTOR,HOST_REAL_EAGER,HOST_REAL_EMPTY,HOST_REAL_FIELD_PLACES,HOST_REAL_CTOR_HELPER,HOST_REAL_COUNT };
 #if defined(XR_OS_WINDOWS)
 static const unsigned char host_file_real_input[]={0x41,0x0D,0x0A,0x1A,0,0xFF,0x42};
 /* The two-byte UTF-8 prefix makes offset two distinct from a rune index. */
@@ -95,6 +95,20 @@ static void host_file_lossy_execute(XrXirProgram *program,const uint32_t *ids){
  XrXirValue checked=host_file_real_invoke(instance,ids[HOST_REAL_LOSSY_CHECK],NULL,0);CHECK(checked.type==XR_XIR_BOOL&&checked.payload==1);xr_xir_value_drop(&checked);
  CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);const char *bytes=NULL;size_t length=0;
  CHECK(xr_xir_string_view(&held,&bytes,&length)&&length==9&&!memcmp(bytes,cases[7].text,length));xr_xir_value_drop(&held);
+ CHECK(runtime_live==live&&runtime_bytes==physical);
+}
+static void host_file_field_places_execute(XrXirProgram *program,const uint32_t *ids){
+ size_t live=runtime_live,physical=runtime_bytes;XrXirInstanceConfig config;XrXirInstance *instance=NULL;
+ CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY&&xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
+ XrXirValueAdmission admission={.arena=program->arena,.domain=instance->domain,.work=UINT64_MAX,.scratch_bytes=UINT64_MAX};
+ XrXirValue element={XR_XIR_I64,0,9},input={0};
+ CHECK(xr_xir_array_new(program->entries[ids[HOST_REAL_FIELD_PLACES]].parameters[0],&element,1,&admission,&input)==XR_XIR_VALUE_OK);
+ XrXirValue result=host_file_real_invoke(instance,ids[HOST_REAL_FIELD_PLACES],&input,1),value={0};XrXirFaultDetail fault={0};int64_t length=-1;
+ CHECK(xr_xir_array_len(&input,&admission,&length)==XR_XIR_VALUE_OK&&length==1);
+ CHECK(xr_xir_array_get(&input,0,&admission,&value,&fault)==XR_XIR_VALUE_OK&&value.type==XR_XIR_I64&&value.payload==9);xr_xir_value_drop(&value);
+ CHECK(xr_xir_array_len(&result,&admission,&length)==XR_XIR_VALUE_OK&&length==2);
+ for(int64_t n=0;n<2;++n){CHECK(xr_xir_array_get(&result,n,&admission,&value,&fault)==XR_XIR_VALUE_OK&&value.type==XR_XIR_I64&&value.payload==7+n);xr_xir_value_drop(&value);}
+ xr_xir_value_drop(&result);xr_xir_value_drop(&input);CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
  CHECK(runtime_live==live&&runtime_bytes==physical);
 }
 #if defined(XR_OS_WINDOWS)
@@ -180,7 +194,7 @@ static void host_file_constructor_execute(XrXirProgram *program,const uint32_t *
 }
 #endif
 static void host_file_real_execute(XrXirProgram *program,const uint32_t ids[HOST_REAL_COUNT]){
- host_file_lossy_execute(program,ids);
+ host_file_lossy_execute(program,ids);host_file_field_places_execute(program,ids);
 #if defined(XR_OS_WINDOWS)
  size_t live=runtime_live,bytes=runtime_bytes;HostFileRealFixture fixture={0};host_file_real_fixture(&fixture,0);
  XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);

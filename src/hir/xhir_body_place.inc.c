@@ -159,6 +159,7 @@ XR_FUNC XrXirStatus xr_hir_body_place(XrHirBody *body,const XrHirPlaceInput *inp
     default:return XR_XIR_BAD_STRUCTURE;
     }
     if(status!=XR_XIR_OK)return status;
+    if(input->kind==XR_HIR_PLACE_FIELD||input->kind==XR_HIR_PLACE_INDEX)row.constructor=false;
     if(input->kind==XR_HIR_PLACE_HINT_SHAPE){*output=action;return body_poll(control);}
     uint32_t parent_value=input->parent.owner?row.value:input->base;
     bool carrier=input->kind==XR_HIR_PLACE_TEMPORARY||input->kind==XR_HIR_PLACE_MEMBER||input->kind==XR_HIR_PLACE_CONSTRUCTOR;

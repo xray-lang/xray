@@ -58,7 +58,13 @@ static const char host_file_real_exports[]=
  "export fn fileEager(path:Path)->i64{const reader=BufReader.open(path,2);assert(reader!=null)\n"
  " const iterator=LineIterator(reader!);const rest=reader!.readLine();assert(rest!=null)\n"
  " assert(iterator.hasNext());const first=iterator.next();assert(first!=null&&first! == \"\");assert(!iterator.hasNext());return len(rest!)}\n"
- "export fn fileEmptyIterator(path:Path)->LineIterator{const reader=BufReader.open(path,2);assert(reader!=null);return LineIterator(reader!)}\n";
+ "export fn fileEmptyIterator(path:Path)->LineIterator{const reader=BufReader.open(path,2);assert(reader!=null);return LineIterator(reader!)}\n"
+ "final class FileFieldPlaces{data:Array<i64>;grid:Array<Array<i64>>;seen:i64\n"
+ " init(input:Array<i64>){this.data=input;this.data.push(10);this.seen=len(this.data)\n"
+ "  this.data.reserve(len(this.data=[7,8])+4);assert(this.data.capacity>=6)\n"
+ "  this.grid=[[3]];var count:i64=0;this.grid[(count=count+1)-1].push(4);this.seen+=count}\n"
+ " result()->Array<i64>{assert(this.seen==3);assert(len(this.grid[0])==2&&this.grid[0][1]==4);return this.data}}\n"
+ "export fn fileFieldPlaces(input:Array<i64>)->Array<i64>{return FileFieldPlaces(input).result()}\n";
 static XrXirArtifact *host_file_real_code(XrXirCompileContext *context){
  FILE *file=fopen(XR_HOST_OS_ROOT "/stdlib/io/io.xr","rb");CHECK(file&&!fseek(file,0,SEEK_END));long size=ftell(file);CHECK(size>0&&!fseek(file,0,SEEK_SET));
  CHECK((uint64_t)size<=SIZE_MAX-sizeof(host_file_real_exports));size_t length=(size_t)size+sizeof(host_file_real_exports)-1;
@@ -101,7 +107,7 @@ static void host_file_real_product(XrXirCompileContext *context,const char *dire
  if(!emit&&!host_file_stdio_child)host_file_contracts(context);
  XrXirArtifact *code=host_file_real_code(context);const XrXirModule *module=xr_xir_compile_artifact_module(code);
  uint32_t ids[HOST_REAL_COUNT]={module->declarations->entry_function};
- static const char *const names[]={"filePath","fileRoundtrip","fileDeferred","fileStdio","fileOpenRaw","fileReadRaw","fileCloseRaw","fileFlushRaw","fileWriteRaw","fileWriteTextRaw","fileLossy","fileLossyCheck","fileConstructorRaw","fileEager","fileEmptyIterator"};
+ static const char *const names[]={"filePath","fileRoundtrip","fileDeferred","fileStdio","fileOpenRaw","fileReadRaw","fileCloseRaw","fileFlushRaw","fileWriteRaw","fileWriteTextRaw","fileLossy","fileLossyCheck","fileConstructorRaw","fileEager","fileEmptyIterator","fileFieldPlaces"};
  for(unsigned n=0;n<HOST_REAL_COUNT-2;++n)ids[n+1]=host_named(module,names[n]);
  ids[HOST_REAL_CTOR_HELPER]=host_file_constructor_contracts(module,ids[HOST_REAL_CONSTRUCTOR]);
  uint32_t decoder=host_named(module,"fromUtf8Lossy");CHECK(module->declarations->functions[decoder].native_callable==118u&&

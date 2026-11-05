@@ -1249,6 +1249,7 @@ static bool source_literal_append(SourceContext *ctx, AstNode *node, const char 
 #include "xxir_source_scalar_methods.inc.c"
 static bool source_constructor_receiver(SourceContext *ctx, AstNode *node);
 static bool source_constructor_field(SourceContext *ctx, AstNode *node, const char *name, SourceValue *value, AstNode *incoming);
+static bool source_constructor_place(SourceContext *ctx,AstNode *node,const char *name,SourceValue *place);
 #include "xxir_source_nominal_contract.inc.c"
 #include "xxir_source_struct.inc.c"
 #include "xxir_source_path_prelude.inc.c"

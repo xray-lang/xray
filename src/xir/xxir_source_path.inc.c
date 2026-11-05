@@ -71,38 +71,45 @@ static bool source_value_place_mode(SourceContext *ctx, AstNode *node, SourceVal
     if (plan && (!reference || plan->owner != ctx->function || plan->syntax != node || !plan->count ||
         plan->count > count || ctx->bodies[ctx->function].region_sealed))
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"reference selector plan has no active owner");
-    /* An unrebindable class binding still lets its fields change: the identity roots the path. */
-    XrXirType root_type = root ? source_symbol_type(ctx,root) : XR_XIR_UNIT;
-    bool narrowed = root && root_type != root->type;
-    XrHirBodyBinding binding={0};
-    if(root&&!source_hir_binding_receive(ctx,root,&binding))return false;
-    XrHirPlaceAction root_action;
-    if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_ROOT,
-        .root=binding,.type=root_type,.reference=reference},&root_action))return false;
-    bool object_root=root_action.object_root;
-    SourceName saved = *root;
-    AstNode *base = count ? steps[count - 1] : node;
-    if (count) base = base->type == AST_MEMBER_ACCESS ? base->as.member_access.object : base->as.index_get.array;
-    if (!source_query_reference(ctx,base,root,root,object_root ? XR_XIR_SOURCE_READ : XR_XIR_SOURCE_READ_WRITE)) return false;
-    uint32_t root_before=ctx->bodies[ctx->function].count;
-    if (object_root) {
-        SourceValue handle;
-        if (!source_binding_read(ctx, &saved, &handle)) return false;
-        /* A binding narrowed to hold a value roots the path at that value. */
-        if (narrowed) {
-            uint32_t prefix=source_fact_depth(ctx,root);
-            for (uint32_t layer=0;layer<prefix;++layer)
-                if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_unwrap_value(ctx,node,handle,&handle)) return false;
-        }
-        if (!source_recipe_record(ctx,(XrXirInstruction){root_action.operation,root_action.type,{handle.id,0},{0},0,{0}},place)) return false;
+    if(root && root->construction && !reference) {
+        if(!count || steps[count-1]->type!=AST_MEMBER_ACCESS)
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"constructor mutation requires an actual field local");
+        AstNode *field=steps[--count];
+        if(!source_constructor_place(ctx,field,field->as.member_access.name,place))return false;
     } else {
-        SourceValue cell = {0};
-        if (!source_binding_cell(ctx, &saved, &cell) ||
-            !source_recipe_record(ctx,(XrXirInstruction){root_action.operation,
-                root_action.type,{cell.id,0},{0},0,{0}},place)) return false;
+        /* An unrebindable class binding still lets its fields change: the identity roots the path. */
+        XrXirType root_type = root ? source_symbol_type(ctx,root) : XR_XIR_UNIT;
+        bool narrowed = root && root_type != root->type;
+        XrHirBodyBinding binding={0};
+        if(root&&!source_hir_binding_receive(ctx,root,&binding))return false;
+        XrHirPlaceAction root_action;
+        if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_ROOT,
+            .root=binding,.type=root_type,.reference=reference},&root_action))return false;
+        bool object_root=root_action.object_root;
+        SourceName saved = *root;
+        AstNode *base = count ? steps[count - 1] : node;
+        if (count) base = base->type == AST_MEMBER_ACCESS ? base->as.member_access.object : base->as.index_get.array;
+        if (!source_query_reference(ctx,base,root,root,object_root ? XR_XIR_SOURCE_READ : XR_XIR_SOURCE_READ_WRITE)) return false;
+        uint32_t root_before=ctx->bodies[ctx->function].count;
+        if (object_root) {
+            SourceValue handle;
+            if (!source_binding_read(ctx, &saved, &handle)) return false;
+            /* A binding narrowed to hold a value roots the path at that value. */
+            if (narrowed) {
+                uint32_t prefix=source_fact_depth(ctx,root);
+                for (uint32_t layer=0;layer<prefix;++layer)
+                    if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_unwrap_value(ctx,node,handle,&handle)) return false;
+            }
+            if (!source_recipe_record(ctx,(XrXirInstruction){root_action.operation,root_action.type,{handle.id,0},{0},0,{0}},place)) return false;
+        } else {
+            SourceValue cell = {0};
+            if (!source_binding_cell(ctx, &saved, &cell) ||
+                !source_recipe_record(ctx,(XrXirInstruction){root_action.operation,
+                    root_action.type,{cell.id,0},{0},0,{0}},place)) return false;
+        }
+        if(!source_hir_place_emitted(ctx,&root_action,place,root_before))return false;
+        place->place=root_action.place;
     }
-    if(!source_hir_place_emitted(ctx,&root_action,place,root_before))return false;
-    place->place=root_action.place;
     while (count) {
         AstNode *step = steps[--count];
         if (step->type == AST_MEMBER_ACCESS) {

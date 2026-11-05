@@ -120,6 +120,27 @@ static bool source_constructor_field(SourceContext *ctx, AstNode *node, const ch
     uint32_t before=ctx->bodies[ctx->function].count;
     return source_constructor_store(ctx,action.field,*value)&&source_hir_place_emitted(ctx,&action,NULL,before);
 }
+static bool source_constructor_place(SourceContext *ctx,AstNode *node,const char *name,SourceValue *place) {
+    SourceName *self=visible_name(ctx,"this");uint32_t field;XrXirType type,storage;
+    if(!self || !self->construction || !ctx->bodies[ctx->function].constructor_places)
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"constructor field place has no active local owner");
+    XrXirType receiver=self->type;
+    if(!source_struct_field(ctx,node,receiver,name,3,&field,&type) ||
+        !source_constructor_storage_type(ctx,receiver,field,&storage))return false;
+    *place=(SourceValue){.id=ctx->bodies[ctx->function].constructor_places[field],.type=type};
+    if(xr_xir_type_is_cell(&ctx->types,storage)) {
+        SourceValue cell;
+        if(!source_constructor_storage(ctx,field,&cell) ||
+            !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_PLACE,type,{cell.id},{0},0,{0}},place))return false;
+    }
+    /* Ordinary mutation roots at the actual staged local, never unpublished
+     * this. Explicit ref continues to require its existing real Cell owner. */
+    XrHirPlaceAction action;uint32_t before=ctx->bodies[ctx->function].count;
+    if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_CONSTRUCTOR,
+        .value=receiver,.type=type,.field=field,.access=3,.base=place->id},&action) ||
+        !source_hir_place_emitted(ctx,&action,NULL,before))return false;
+    place->place=action.place;return source_query_expression(ctx,node,type);
+}
 static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, AstNode *node, uint32_t *next) {
     MethodDeclNode *method = &node->as.method_decl;
     if (source_hir_nominal_defaults(ctx,owner->index).constructor || *next >= ctx->first_closure || method->is_static ||

@@ -1,0 +1,33 @@
+{
+  "state": "IMMUTABLE_GENUINE_PREDECESSOR_PACKET",
+  "sourceCommit": "55ad647bc8abda74b4b06abb13bac14f592c43d4",
+  "schema": 42,
+  "common": 129,
+  "packetBytes": 3228,
+  "packetSha256": "291fa689cf58730e673e590ecbee5733aad57a853d2374c8192df0c0462a0524",
+  "sourceSha256": "7d913671514777c2cc8eab444010aff1252374d7eefceb190a6c91e932438dcb",
+  "sourcePath": "staged_ctor.xr",
+  "producerEvidence": {
+    "path": "D:\\xray-build\\coordinator\\20261029-resume\\r3-f13-host-complete-20261103\\root-common129-staged-ctor-producer-preparation-v1\\evidence.json",
+    "sha256": "40c96108111181fa9e801663bf417359c7a11958a8e1b68321b1c107edc04aaa"
+  },
+  "producerResult": {
+    "path": "D:\\xray-build\\coordinator\\20261029-resume\\r3-f13-host-complete-20261103\\root-common129-staged-ctor-producer-preparation-v1\\result.json",
+    "sha256": "75afd36171b001f16ae1f8f2f7d50f9bbb2bf2d3f1696dc9c2906a1ccabdfcd5"
+  },
+  "actualProvenance": "Old55ad engine actual Source check/write of complete Base/Derived field helpers. Producer/session/resources retired before oldreader cold-read PASS. No header/payload/digest edits. Current130 rejection is a separate pending regression, not supplied by the oldproducer PASS.",
+  "base": {
+    "helper": 5,
+    "constructor": 3,
+    "promises": 1,
+    "ArrayString": true
+  },
+  "derived": {
+    "helper": 6,
+    "constructor": 4,
+    "promises": 1,
+    "ArrayString": true,
+    "string": true,
+    "parent": 1
+  }
+}
