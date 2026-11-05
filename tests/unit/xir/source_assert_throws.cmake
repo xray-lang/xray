@@ -1,0 +1,2 @@
+add_executable(test_source_assert_throws "${CMAKE_CURRENT_LIST_DIR}/test_source_assert_throws.c")
+target_link_libraries(test_source_assert_throws PRIVATE xray_xir_source_product)
