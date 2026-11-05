@@ -300,9 +300,14 @@ def main():
     assert previous128[2].hex()=='812de1c1764b931c77a4a38c2a8601a7e8df051acf89be93d4a0c658e60d7acd'
     previous128_missing_advapi32=current_preimage(active_rows,128,31,38,42,37,('kernel32','bcrypt'))
     previous128_missing_userenv=current_preimage(active_rows,128,31,38,42,37,('kernel32','bcrypt','advapi32'))
-    current_missing_advapi32=current_preimage(active_rows,129,31,38,42,37,('kernel32','bcrypt'))
-    current_missing_userenv=current_preimage(active_rows,129,31,38,42,37,('kernel32','bcrypt','advapi32'))
-    image,file_digest,digest=current_preimage(active_rows,129,31,38,42,37,('kernel32','bcrypt','advapi32','userenv'))
+    previous129=current_preimage(active_rows,129,31,38,42,37,('kernel32','bcrypt','advapi32','userenv'))
+    previous130=current_preimage(active_rows,130,31,38,42,37,('kernel32','bcrypt','advapi32','userenv'))
+    previous131=current_preimage(active_rows,131,31,38,42,37,('kernel32','bcrypt','advapi32','userenv'))
+    previous132=current_preimage(active_rows,132,31,38,42,37,('kernel32','bcrypt','advapi32','userenv'))
+    previous133=current_preimage(active_rows,133,31,38,42,37,('kernel32','bcrypt','advapi32','userenv'))
+    current_missing_advapi32=current_preimage(active_rows,134,31,38,42,37,('kernel32','bcrypt'))
+    current_missing_userenv=current_preimage(active_rows,134,31,38,42,37,('kernel32','bcrypt','advapi32'))
+    image,file_digest,digest=current_preimage(active_rows,134,31,38,42,37,('kernel32','bcrypt','advapi32','userenv'))
     assert image[:-49]==current_missing_advapi32[0][:-26] and len(image)==len(current_missing_advapi32[0])+23
     assert image[:-49]==current_missing_userenv[0][:-38] and len(image)==len(current_missing_userenv[0])+11
     assert digest!=current_missing_advapi32[2] and digest!=current_missing_userenv[2] and digest!=previous126[2] and digest!=previous127[2] and digest!=previous128[2]
@@ -313,7 +318,7 @@ def main():
     assert image[:identity_offset]==previous_image[:identity_offset]
     old_current_image,_,_=current_preimage(old_rows,75,25)
     assert old_current_image[identity_offset+20:]==previous_image[identity_offset+20:]
-    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(42,129,31,38,37)
+    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(42,134,31,38,37)
     assert struct.unpack('<5I',previous_image[identity_offset:identity_offset+20])==(27,72,22,28,29)
     assert len(image)==3411 and len(historical_image)==3330 and len(previous_image)==len(value23_image)==3098
     assert file_digest==previous_file_digest and digest!=previous_digest
@@ -336,6 +341,12 @@ def main():
         output+='static const uint8_t '+name+'[] = {\n'
         for at in range(0,len(data),16):output+='    '+','.join('0x'+format(x,'02x') for x in data[at:at+16])+',\n'
         output+='};\n'
+    # These complete SDK frames use the unchanged declared layout and exact prior semantics.
+    for semantic,prior in ((129,previous129),(130,previous130),(131,previous131),(132,previous132),(133,previous133)):
+        for suffix,data in zip(('preimage','file_digest','digest'),prior):
+            output+='static const uint8_t previous42_'+str(semantic)+'_sdk_kat_'+suffix+'[] = {\n'
+            for at in range(0,len(data),16):output+='    '+','.join('0x'+format(x,'02x') for x in data[at:at+16])+',\n'
+            output+='};\n'
     # These predecessors share the same declared ABI layout; only semantic identity differs.
     for semantic in (106,107,109):
         prior_image,prior_file,prior_digest=current_preimage(prior_layout_rows,semantic,30,37,39,37)
