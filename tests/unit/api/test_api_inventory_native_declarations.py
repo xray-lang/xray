@@ -54,10 +54,10 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
             "pop", "shift", "unshift", "clear", "reserve", "resize", "concat",
             "indexOf", "contains", "join", "reverse", "sort", "map", "filter",
             "reduce", "forEach", "find", "findIndex", "every", "some", "fill",
-            "toString", "iterator", "entriesIterator", "entries",
+            "toString", "iterator", "entriesIterator", "entries", "appendFrom", "repeatFrom",
         }
         members = [entry for entry in self.items if entry["kind"] != "type"]
-        self.assertEqual(32, len(members))
+        self.assertEqual(34, len(members))
         self.assertEqual(expected, {entry["name"] for entry in members})
         declaration = next(entry for entry in self.items if entry["kind"] == "type")
         self.assertEqual("Array<T>", declaration["signature"])
@@ -85,6 +85,8 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
         ordinary = ["allocation", "retain", "limit"]
         callback = ordinary + ["callback"]
         expected = (
+            ("appendFrom", "ARRAY_BYTE_APPEND", "ref", "owned", ordinary),
+            ("repeatFrom", "ARRAY_BYTE_REPEAT", "ref", "owned", ["bounds"] + ordinary),
             ("capacity", "ARRAY_CAPACITY", "read", "owned", ["limit"]),
             ("withCapacity", "ARRAY_WITH_CAPACITY", "read", "owned", ordinary),
             ("reserve", "ARRAY_RESERVE", "ref", "owned", ordinary),
@@ -113,7 +115,7 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
             ("every", "ARRAY_EVERY", "read", "owned", callback),
             ("some", "ARRAY_SOME", "read", "owned", callback),
         )
-        self.assertEqual(27, len(admitted))
+        self.assertEqual(29, len(admitted))
         self.assertEqual({row[0] for row in expected}, set(admitted))
         for name, operation, receiver, ownership, failures in expected:
             with self.subTest(name=name):
@@ -150,7 +152,11 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
         self.assertEqual(14, actual["concat"]["native_member_id"])
         self.assertEqual(19, actual["sort"]["native_member_id"])
         self.assertEqual("(compareFn?: fn(a: T, b: T) -> i64): Array<T>", actual["sort"]["signature"])
-        self.assertEqual(32, actual["entries"]["native_member_id"])
+        self.assertEqual(34, actual["entries"]["native_member_id"])
+        self.assertEqual((29, "(src: Slice<u8>): Array<u8>"),
+                         (actual["appendFrom"]["native_member_id"], actual["appendFrom"]["signature"]))
+        self.assertEqual((30, "(distance: i64, count: i64): Array<u8>"),
+                         (actual["repeatFrom"]["native_member_id"], actual["repeatFrom"]["signature"]))
         for name, identity, result in (("ptr", 6, "Ptr<T>"), ("mutPtr", 7, "MutPtr<T>")):
             with self.subTest(name=name):
                 self.assertEqual(identity, actual[name]["native_member_id"])
