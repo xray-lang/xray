@@ -22,6 +22,7 @@ add_custom_command(OUTPUT ${host_os_c}
     DEPENDS test_host_os_source
         "${host_os_dir}/host_os_source_cases.h"
         "${host_os_dir}/host_os_runtime.h"
+        "${host_os_dir}/host_os_file_kernel_cases.h"
         "${host_os_dir}/host_os_path_cases.h"
         "${host_os_dir}/host_os_cpu_cases.h"
         "${host_os_dir}/host_os_system_cases.h"

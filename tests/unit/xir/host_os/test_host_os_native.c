@@ -17,6 +17,7 @@
 #include "host_os_io_directory_cases.h"
 #include "host_os_signal_frontier_cases.h"
 #include "host_os_thread_token_cases.h"
+#include "host_os_file_kernel_cases.h"
 extern const XrXirProgramSpec host_count_program,host_pin_program,host_path_program,host_system_program,host_stat_program,host_io_bool_program,host_signal_frontier_program,host_io_links_program,host_io_temp_program,host_thread_tokens_program,host_io_directory_program;
 extern const uint32_t host_count_ids[2],host_pin_ids[2],host_path_ids[5],host_system_ids[9],host_stat_ids[4],host_io_bool_ids[7],host_signal_frontier_ids[5],host_io_links_ids[6],host_io_temp_ids[4],host_thread_tokens_ids[HOST_TOKEN_COUNT],host_io_directory_ids[6];
 static XrXirProgram *host_replica(const XrXirCompileContext *context,const XrXirProgram *source){
@@ -31,7 +32,7 @@ int main(int argc,char **argv){
 #if defined(XR_OS_WINDOWS)
  CHECK(_setmode(_fileno(stdout),_O_BINARY)!=-1);
 #endif
- CHECK(argc==1);(void)argv;host_cpu_concurrency();XrCompileResourceLimits limits=XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
+ CHECK(argc==1);(void)argv;host_cpu_concurrency();host_file_kernel_execute();XrCompileResourceLimits limits=XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
  XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
  XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
  const XrXirProgramSpec *specs[]={&host_count_program,&host_pin_program,&host_path_program,&host_system_program,&host_stat_program,&host_io_bool_program,&host_signal_frontier_program,&host_io_links_program,&host_io_temp_program,&host_thread_tokens_program,&host_io_directory_program};const uint32_t *ids[]={host_count_ids,host_pin_ids,host_path_ids,host_system_ids,host_stat_ids,host_io_bool_ids,host_signal_frontier_ids,host_io_links_ids,host_io_temp_ids,host_thread_tokens_ids,host_io_directory_ids};

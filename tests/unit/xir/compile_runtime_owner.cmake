@@ -37,6 +37,7 @@ if(WIN32)
         "${XIR_OWNER_ROOT}/src/os/win/pipe_owned_win.c"
         "${XIR_OWNER_ROOT}/src/os/win/process_owned_win.c"
         "${XIR_OWNER_ROOT}/src/os/win/dylib_owned_win.c"
+        "${XIR_OWNER_ROOT}/src/os/win/file_owned_win.c"
         "${XIR_OWNER_ROOT}/src/os/win/signal_win.c")
     target_link_libraries(xir_compile_owner_runtime PRIVATE advapi32 userenv)
 else()
@@ -52,6 +53,7 @@ else()
         "${XIR_OWNER_ROOT}/src/os/unix/pipe_owned_unix.c"
         "${XIR_OWNER_ROOT}/src/os/unix/process_owned_unix.c"
         "${XIR_OWNER_ROOT}/src/os/unix/dylib_owned_unix.c"
+        "${XIR_OWNER_ROOT}/src/os/unix/file_owned_unix.c"
         "${XIR_OWNER_ROOT}/src/os/unix/signal_unix.c")
     target_compile_definitions(xir_compile_owner_runtime PRIVATE _POSIX_C_SOURCE=200809L _GNU_SOURCE)
     target_link_libraries(xir_compile_owner_runtime PRIVATE m pthread)

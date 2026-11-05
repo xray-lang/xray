@@ -164,6 +164,8 @@ class TierTests(unittest.TestCase):
                      "src/os/unix/signal_unix.c", "tests/unit/base/test_signal.c",
                      "src/os/os_file_mutation.h", "src/os/win/file_mutation_win.c",
                      "src/os/unix/file_mutation_unix.c", "tests/unit/base/test_file_mutation.c",
+                     "src/os/os_file_owned.h", "src/os/win/file_owned_win.c",
+                     "src/os/unix/file_owned_unix.c",
                      "src/os/os_file_metadata.h", "src/os/file_metadata_path.inc.h",
                      "src/os/win/file_metadata_win.c", "src/os/unix/file_metadata_unix.c",
                      "tests/unit/base/test_file_metadata.c",

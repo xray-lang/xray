@@ -19,6 +19,7 @@
 #include "host_os_io_directory_cases.h"
 #include "host_os_signal_frontier_cases.h"
 #include "host_os_thread_token_cases.h"
+#include "host_os_file_kernel_cases.h"
 static uint32_t host_named(const XrXirModule *module,const char *name){
  for(uint32_t f=0;f<module->function_count;++f)
   if(module->functions[f].name_length==strlen(name)&&!memcmp(module->functions[f].name,name,strlen(name)))return f;
@@ -282,7 +283,7 @@ int main(int argc,char **argv){
 #if defined(XR_OS_WINDOWS)
  CHECK(_setmode(_fileno(stdout),_O_BINARY)!=-1);
 #endif
- bool emit=argc==3&&!strcmp(argv[1],"--emit");CHECK(emit||argc==1);if(!emit)host_cpu_concurrency();
+ bool emit=argc==3&&!strcmp(argv[1],"--emit");CHECK(emit||argc==1);if(!emit){host_cpu_concurrency();host_file_kernel_execute();}
  XrCompileResourceLimits limits=XR_RESOURCE_DEFAULT_COMPILER_LIMITS;XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
  XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
  for(unsigned kind=0;kind<11;++kind)host_product(&context,kind,emit?argv[2]:XR_HOST_OS_GENERATED,emit);
