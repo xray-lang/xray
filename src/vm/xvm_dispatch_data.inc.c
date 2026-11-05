@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xvm_dispatch_data.inc.c — typed-storage box/unbox + StringBuilder
+ * xvm_dispatch_data.inc.c — typed-storage box/unbox + private text workers
  *
  * NOT a standalone translation unit. Included from inside the
  * dispatch switch in xvm.c; relies on locals (i, R, vmcase,
@@ -13,13 +13,13 @@
  * excludes *.inc.c from the VM_SRC glob.
  *
  * Owns the typed-payload boundary helpers and the inline
- * StringBuilder fast path that sit between the arithmetic and
+ * private text worker path that sit between the arithmetic and
  * bitwise blocks in source order:
  *
  *   OP_BOX_I64 / OP_BOX_F64           — raw payload -> tagged
  *   OP_UNBOX_I64 / OP_UNBOX_F64       — tagged -> raw payload
  *   OP_ARRAY_GET_NOCHECK              — checked-out array fetch
- *   OP_STRBUF_NEW / APPEND / FINISH   — StringBuilder hot path
+ *   OP_STRBUF_NEW / APPEND / FINISH   — private text accumulation
  */
 
 // Box/Unbox: typed storage (typed array / compact field) to tagged boundary
@@ -106,33 +106,43 @@ vmcase(OP_ARRAY_GET_NOCHECK) {
     vmbreak;
 }
 
-/* === StringBuilder Instructions === */
+/* === Private text accumulation === */
 
 vmcase(OP_STRBUF_NEW) {
     int a = GETARG_A(i);
 
-    XrStringBuilder *sb = xr_stringbuilder_new(VM_CURRENT_CORO);
-    R(a) = xr_stringbuilder_value(sb);
+    XrValue worker = xr_null();
+    VM_TEXT_WORKER_REQUIRE(xr_text_worker_new(isolate, XR_TEXT_WORKER_CONCAT, &worker),
+                           worker, XR_TEXT_WORKER_CONCAT);
+    R(a) = worker;
     vmbreak;
 }
 
 vmcase(OP_STRBUF_APPEND) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
-
-    XrStringBuilder *sb = xr_to_stringbuilder(R(a));
-
-    XrValue vb = R(b);
-    if (XR_IS_STRING(vb)) {
-        xr_stringbuilder_append_cstr(sb, xr_value_str_data(&vb), xr_value_str_len(&vb));
-    } else if (XR_IS_INT(vb)) {
-        xr_stringbuilder_append_int(sb, XR_TO_INT(vb));
-    } else if (XR_IS_FLOAT(vb)) {
-        xr_stringbuilder_append_float(sb, XR_TO_FLOAT(vb));
+    XrValue part = R(b);
+    XrTextWorkerStatus status;
+    if (xr_text_worker_is_private(part)) {
+        status = XR_TEXT_WORKER_INVALID;
+    } else if (XR_IS_STRING(part)) {
+        status = xr_text_worker_append_bytes(isolate, R(a), XR_TEXT_WORKER_CONCAT,
+                                             xr_value_str_data(&part), xr_value_str_len(&part));
+    } else if (XR_IS_INT(part)) {
+        status = xr_text_worker_append_int(isolate, R(a), XR_TEXT_WORKER_CONCAT, XR_TO_INT(part));
+    } else if (XR_IS_FLOAT(part)) {
+        status = xr_text_worker_append_float(isolate, R(a), XR_TEXT_WORKER_CONCAT, XR_TO_FLOAT(part));
     } else {
-        XrString *str = xr_value_to_string(isolate, vb);
-        xr_stringbuilder_append_str(sb, str);
+        savepc();
+        XrVMResult render_status;
+        XrString *text = xr_value_to_string_checked(isolate, part, &render_status);
+        if (render_status != XR_VM_OK) return render_status;
+        VM_REBIND_AFTER_NATIVE_CALL();
+        status = text ? xr_text_worker_append_bytes(isolate, R(a), XR_TEXT_WORKER_CONCAT,
+                                                    text->data, text->length)
+                      : XR_TEXT_WORKER_OUT_OF_MEMORY;
     }
+    VM_TEXT_WORKER_REQUIRE(status, R(a), XR_TEXT_WORKER_CONCAT);
     vmbreak;
 }
 
@@ -146,21 +156,27 @@ vmcase(OP_STR_CONCAT_N) {
 
     XrStringConcatPartCore cores[XR_STR_CONCAT_INLINE_PARTS];
     XrString *rendered[XR_STR_CONCAT_INLINE_PARTS];
-    for (int k = 0; k < count; k++) {
-        XrValue part = R(b + k);
+    for (int part_index = 0; part_index < count; part_index++) {
+        XrValue part = R(b + part_index);
+        VM_REJECT_TEXT_WORKER(part);
         if (XR_IS_STRING(part)) {
-            rendered[k] = NULL;
-            cores[k].a = xr_value_str_data(&part);
-            cores[k].alen = xr_value_str_len(&part);
+            rendered[part_index] = NULL;
+            cores[part_index].a = xr_value_str_data(&part);
+            cores[part_index].alen = xr_value_str_len(&part);
         } else {
-            XrString *text = xr_value_to_string(isolate, part);
-            rendered[k] = text;
-            cores[k].a = text ? text->data : "";
-            cores[k].alen = text ? (size_t) text->length : 0;
+            savepc();
+            XrVMResult render_status;
+            XrString *text = xr_value_to_string_checked(isolate, part, &render_status);
+            if (render_status != XR_VM_OK) return render_status;
+            VM_REBIND_AFTER_NATIVE_CALL();
+            if (!text) VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "%s", "out of memory rendering concatenation operand");
+            rendered[part_index] = text;
+            cores[part_index].a = text->data;
+            cores[part_index].alen = (size_t) text->length;
         }
-        cores[k].b = NULL;
-        cores[k].blen = 0;
-        cores[k].joins_with_dot = 0;
+        cores[part_index].b = NULL;
+        cores[part_index].blen = 0;
+        cores[part_index].joins_with_dot = 0;
     }
 
     XR_STRING_CONCAT_OWNER_GUARD(XR_SEM_OWNER_ID_SHARED_STRING_CONCAT_HI,
@@ -197,9 +213,6 @@ vmcase(OP_STR_CONCAT_N) {
 vmcase(OP_STRBUF_FINISH) {
     int a = GETARG_A(i);
 
-    XrStringBuilder *sb = xr_to_stringbuilder(R(a));
-    XrString *result = xr_stringbuilder_to_string(sb);
-
-    R(a) = xr_string_value(result);
+    VM_TEXT_WORKER_REQUIRE(xr_text_worker_finish(isolate, &R(a)), R(a), XR_TEXT_WORKER_CONCAT);
     vmbreak;
 }

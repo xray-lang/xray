@@ -171,6 +171,9 @@ typedef enum {
                              * payload-carrying construction crosses a tagged
                              * boundary. */
 
+    /* Compiler-only text accumulation, never a source-visible object type. */
+    XR_TTEXT_WORKER = 35,
+
     /* One past the last builtin. Per-type lookup tables size themselves off
      * this rather than off whichever member happened to be last when they were
      * written, so appending above breaks their pins instead of silently

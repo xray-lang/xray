@@ -157,36 +157,36 @@ struct XrGlobalStringPool *xr_isolate_get_string_pool(XrVMRuntime *X) {
 }
 
 XrClass *xr_isolate_get_native_type_class(XrVMRuntime *X, uint8_t type_id) {
-    if (!X || !X->core_rt || type_id >= XR_NATIVE_TYPE_MAX)
+    if (!X || !X->core_rt || type_id >= XR_NATIVE_TYPE_MAX || type_id == XR_TTEXT_WORKER)
         return NULL;
     return X->core_rt->native_type_classes[type_id];
 }
 
 void xr_isolate_set_native_type_class(XrVMRuntime *X, uint8_t type_id, XrClass *cls) {
-    if (X && X->core_rt && type_id < XR_NATIVE_TYPE_MAX)
+    if (X && X->core_rt && type_id < XR_NATIVE_TYPE_MAX && type_id != XR_TTEXT_WORKER)
         X->core_rt->native_type_classes[type_id] = cls;
 }
 
 uint64_t xr_isolate_get_ext_finalize_bitmap(XrVMRuntime *isolate) {
     XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
-    return core ? core->ext_finalize_bitmap : 0;
+    return core ? core->ext_finalize_bitmap & xr_runtime_core_extension_type_mask(core) : 0;
 }
 
 uint64_t xr_isolate_get_ext_has_refs_bitmap(XrVMRuntime *isolate) {
     XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
-    return core ? core->ext_has_refs_bitmap : 0;
+    return core ? core->ext_has_refs_bitmap & xr_runtime_core_extension_type_mask(core) : 0;
 }
 
 XrExtDestroyFn xr_isolate_get_ext_destroy(XrVMRuntime *isolate, uint8_t type_id) {
     XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
-    if (!core || type_id >= XR_OBJ_TYPE_MAX)
+    if (!xr_runtime_core_extension_type_allocated(core, type_id))
         return NULL;
     return (XrExtDestroyFn) core->ext_destroy_funcs[type_id];
 }
 
 XrExtTraverseFn xr_isolate_get_ext_traverse(XrVMRuntime *isolate, uint8_t type_id) {
     XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
-    if (!core || type_id >= XR_OBJ_TYPE_MAX)
+    if (!xr_runtime_core_extension_type_allocated(core, type_id))
         return NULL;
     return (XrExtTraverseFn) core->ext_traverse_funcs[type_id];
 }

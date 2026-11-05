@@ -136,7 +136,8 @@ static XrXirStatus view_fresh_call_body(ViewAccess *a,const XrXirInstruction *ca
         case XR_XIR_COPY:case XR_XIR_SCALAR_COPY:case XR_XIR_OWNED_RETAIN:
             if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;
             if (!view_fresh_plain(xr_xir_operand_type(body,op->args[0])) ||
-                xr_xir_place_kind(body,op->args[0])!=XR_XIR_PLACE_NONE) return XR_XIR_OK;break;
+                xr_xir_place_kind(body,op->args[0])!=XR_XIR_PLACE_NONE) return XR_XIR_OK;
+            break;
         default:return XR_XIR_OK;
         }
     }

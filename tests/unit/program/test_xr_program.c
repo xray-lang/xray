@@ -19,6 +19,7 @@
 #include "xr_program_assert_fixture.h"
 #include "xr_program_callable_fixture.h"
 #include "xr_program_array_fixture.h"
+#include "xr_program_identity_vectors.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -379,9 +380,9 @@ static void test_determinism_roundtrip_and_identity(void) {
 
     char id_hex[XR_PROGRAM_DIGEST_SIZE * 2u + 1u];
     xr_program_id_hex(first.id, id_hex);
-    /* Preserve all old identities from their fixed legacy wire. The new identity
-     * is independently derived by appending the f64 builtin row and updating offsets. */
-    CHECK(first.size == 505u);
+    /* Preserve historical identities and compare current output with a complete,
+     * independently framed wire containing the nineteen active builtin rows. */
+    CHECK(first.size == 501u);
     uint8_t previous_vector[497] = {
         0x58, 0x52, 0x50, 0x52, 0x4f, 0x47, 0x0d, 0x0a, 0x03, 0x00, 0x06, 0x00, 0x01, 0x32, 0x36, 0xb7,
         0x16, 0xd3, 0xb8, 0xca, 0x42, 0xa7, 0x24, 0x09, 0x5a, 0x7a, 0x6c, 0x10, 0x11, 0x62, 0x20, 0x2f,
@@ -416,7 +417,7 @@ static void test_determinism_roundtrip_and_identity(void) {
         0x03, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
         0x00,
     };
-    CHECK(first.bytes[10] == 11u && first.bytes[11] == 0u);
+    CHECK(first.bytes[10] == 12u && first.bytes[11] == 0u);
     previous_vector[10] = 4u;
     static const uint8_t previous_core_spec[32] = {
         0x0a, 0xcc, 0x9c, 0x76, 0x49, 0x58, 0xb4, 0xd0,
@@ -607,9 +608,10 @@ static void test_determinism_roundtrip_and_identity(void) {
     XrProgramDiagnostic obsolete_diagnostic;
     CHECK(xr_program_validate(byte_compare_vector, sizeof(byte_compare_vector), NULL,
                               &obsolete, &obsolete_diagnostic) ==
-          XR_PROGRAM_VERIFY_SEMANTIC_REJECTED);
+          XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED);
     CHECK(obsolete == NULL &&
-          obsolete_diagnostic.kind == XR_PROGRAM_DIAGNOSTIC_CORE_SPEC_IDENTITY);
+          obsolete_diagnostic.kind == XR_PROGRAM_DIAGNOSTIC_STRUCTURAL &&
+          obsolete_diagnostic.decode_status == XR_PROGRAM_DECODE_UNSUPPORTED_VERSION);
     /* The complete fixed wire retains its row and offset oracle. The new
      * current operation registry changes only its normative semantic binding. */
     static const uint8_t array_append_core[32] = {
@@ -625,8 +627,24 @@ static void test_determinism_roundtrip_and_identity(void) {
     xr_program_id_hex(previous_id, previous_hex);
     CHECK(strcmp(previous_hex,
                  "0a77e6663fd32349ac055cda9e291cd9411e19501f9c0dc192c7421eb518e12b") == 0);
-    CHECK(memcmp(first.bytes, array_append_vector, sizeof(array_append_vector)) == 0);
+    /* The old 3.11 identity remains fixed; it is not a current writer oracle. */
+    xr_program_compute_id(xr_identity_program_current_wire,
+                          sizeof(xr_identity_program_current_wire), &previous_id);
+    xr_program_id_hex(previous_id, previous_hex);
+    CHECK(strcmp(previous_hex,
+                 "d5e8286968c3f343f83995ad6cfeb022d7fe951ecd7705d38bff71178256d7d8") == 0);
+    CHECK(first.size == sizeof(xr_identity_program_current_wire));
+    CHECK(memcmp(first.bytes, xr_identity_program_current_wire,
+                 sizeof(xr_identity_program_current_wire)) == 0);
     CHECK(xr_program_id_equal(first.id, previous_id));
+    uint8_t obsolete_core_vector[sizeof(xr_identity_program_current_wire)];
+    memcpy(obsolete_core_vector, xr_identity_program_current_wire, sizeof(obsolete_core_vector));
+    memcpy(obsolete_core_vector + 13u, byte_compare_core, sizeof(byte_compare_core));
+    CHECK(xr_program_validate(obsolete_core_vector, sizeof(obsolete_core_vector), NULL,
+                              &obsolete, &obsolete_diagnostic) ==
+          XR_PROGRAM_VERIFY_SEMANTIC_REJECTED);
+    CHECK(obsolete == NULL &&
+          obsolete_diagnostic.kind == XR_PROGRAM_DIAGNOSTIC_CORE_SPEC_IDENTITY);
     printf("Canonical ProgramId: %s (%zu bytes)\n", id_hex, first.size);
 
 
@@ -670,7 +688,7 @@ static void test_hostile_structure_and_budget(void) {
                                       sizeof(diagnostic)) == XR_PROGRAM_DECODE_OK);
     /* Every builtin row has exact identity, kind and ownership.
      * Changing any field must not reinterpret a scalar as a dynamic type. */
-    for (size_t row = 0u; row < 20u; ++row) {
+    for (size_t row = 0u; row < 19u; ++row) {
         size_t row_offset =
             (size_t) valid_view.sections[XR_PROGRAM_SECTION_TYPES - 1u].offset + 1u + row * 4u;
         for (size_t field = 0u; field < 4u; ++field) {

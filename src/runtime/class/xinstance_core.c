@@ -92,6 +92,8 @@ XrValue xr_instance_get_field_by_index(XrObjectInstance *inst, int index) {
 }
 
 void xr_instance_set_field_by_index(XrObjectInstance *inst, int index, XrValue value) {
+    if (xr_text_worker_is_private(value))
+        return;
     XR_DCHECK(inst != NULL, "Instance must not be NULL");
     XrClass *klass = xr_instance_get_class(inst);
     XR_DCHECK_BOUNDS(index, klass->field_count, "field index out of bounds");
@@ -213,6 +215,8 @@ XrValue xr_instance_load_field(struct XrVMRuntime *X, XrObjectInstance *inst, in
 }
 
 bool xr_instance_set_decoded_field(XrObjectInstance *inst, int index, XrValue value) {
+    if (xr_text_worker_is_private(value))
+        return false;
     if (!inst || !inst->klass || index < 0 || index >= xr_class_instance_field_count(inst->klass))
         return false;
     XrAggregateLayout *layout = inst->klass->struct_layout;

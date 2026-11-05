@@ -209,19 +209,7 @@ XR_FUNC const char *xr_debug_local_name(XrProto *proto, int reg, int pc);
 
 /* ========== API Functions (in xvm_api.c) ========== */
 
-/*
-** Single authoritative VM context resolver.
-**
-** Resolution order:
-**   1. Current worker's current coroutine VM backend context
-**   2. Current worker's VM backend scratch context
-**   3. &isolate->vm_ctx (logical-root/direct-entry context)
-**
-** This is the ONLY supported way to obtain the live execution context inside
-** the VM module. Internal helpers must accept ctx as a parameter; they MUST
-** NOT re-resolve via isolate->vm.* fields.
-*/
-XR_FUNC XrVMContext *xr_vm_current_ctx(XrVMRuntime *isolate);
+
 
 /*
 ** Ensure the context can host a new entry frame with the given prototype.

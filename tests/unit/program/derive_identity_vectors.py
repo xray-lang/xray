@@ -174,6 +174,41 @@ def wire(sections: list[bytes], minor: int, core: bytes, profile: bytes, major: 
     return header + b"".join(sections)
 
 
+def scalar_provider_wire(minor: int, core: bytes, builder: bool) -> bytes:
+    # Two nullary i64 functions: helper computes 40 + 2, performs three
+    # provider calls, and returns; main calls helper and returns its value.
+    constants = numbers(2, 0, 2, 1, 4, 1, 2, 1, 80)
+    signature = numbers(1, 0, 0, 0, 0, 2, 0, 0, 0, 0, 69, 32)
+    functions = signature + numbers(2, 0, 0, 0, 1, 6, 0, 1, 0, 0, 1, 1, 1)
+    code = numbers(2, 0, 1, 0, 0, 7)
+    for operation in (
+        (1, 1, 2, 0, 0, 0, 4, 1, 0),
+        (1, 2, 2, 0, 0, 0, 4, 0, 0),
+        (16, 3, 2, 0, 0, 2, 0, 1, 2, 0, 0),
+        (136, 4, 2, 0, 0, 1, 2, 10, 1, 0, 0),
+        (136, 5, 2, 0, 0, 1, 3, 10, 1, 1, 0),
+        (136, 6, 2, 0, 0, 1, 4, 10, 0, 0, 0),
+        (35, 0, 0, 0, 0, 1, 5, 0, 0),
+    ):
+        code += numbers(*operation)
+    code += numbers(1, 1, 0, 0, 2)
+    code += numbers(36, 1, 2, 0, 0, 0, 5, 0, 0)
+    code += numbers(35, 0, 0, 0, 0, 1, 0, 0, 0)
+    logical = u32(1) + u32(8) + u32(31)
+    logical += bytes([1, 1, 3, 0, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 1])
+    imports = numbers(2)
+    for contract, operations in (
+        ("provider-contract:b", ("provider-operation:a",)),
+        ("provider-contract:a", ("provider-operation:a", "provider-operation:b")),
+    ):
+        imports += core_key(contract)[:16] + numbers(len(operations))
+        for operation in operations:
+            imports += core_key(operation)[:16] + numbers(len(logical)) + logical
+    metadata = numbers(0, 0, 2, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0)
+    return wire([builtin_types(builder), constants, functions, code,
+                 imports, numbers(0), metadata], minor, core, core_key("profile:checked"))
+
+
 def minimal_vm_wire(minor: int, core: bytes, builder: bool) -> bytes:
     # One nullary i64 function, one constant i64(42), const and return ops.
     signatures = numbers(1, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1, 0)
@@ -316,6 +351,7 @@ def main() -> None:
     print("PASS legacy closure v9: call, entry, helper, all framed rows, fingerprint, generation")
     program_text = (root / "tests/unit/program/test_xr_program.c").read_text(encoding="utf-8")
     old_program = bytearray(fixed_array(program_text, "builder_vector"))
+    assert scalar_provider_wire(11, old_program[13:45], True) == old_program
     old_program[13:45] = fixed_array(program_text, "byte_compare_core")
     assert program_id(old_program) == "1bc457be305a4ce40fd7c37814e57f06ea46f4333d1fc2d41738014c6476f411"
     print("PASS legacy Program byte-compare wire: fixed complete literal and ProgramId")
@@ -324,6 +360,9 @@ def main() -> None:
     retired_program[13:45] = retired_core
     assert program_id(retired_program) == "0a77e6663fd32349ac055cda9e291cd9411e19501f9c0dc192c7421eb518e12b"
     current_core, projected_core = core_projection(root)
+    current_program = scalar_provider_wire(12, current_core, False)
+    assert len(current_program) == 501
+    print("PASS current scalar Program format 3.12: all fields and 501 wire bytes independently framed")
     vm_text = (root / "tests/unit/vm/xr_program_vm_embedded_fixture.h").read_text(encoding="utf-8")
     legacy_name = "xr_program_vm_embedded_fixture_v3_9"
     if legacy_name not in vm_text:
@@ -346,6 +385,8 @@ def main() -> None:
               "program_byte_compare_id": program_id(old_program),
               "program_retired_3_11_id": program_id(retired_program),
               "program_retired_3_11_wire": retired_program.hex(),
+              "program_current_id": program_id(current_program),
+              "program_current_wire": current_program.hex(),
               "core_projection": projected_core,
               "vm_legacy_id": program_id(vm_legacy),
               "vm_current_id": program_id(minimal_vm_wire(12, current_core, False)),
@@ -408,7 +449,7 @@ def main() -> None:
 #define XR_PROGRAM_IDENTITY_VECTORS_H
 
 """
-        for name in ("execution_legacy", "execution_current", "boundary_legacy", "boundary_current"):
+        for name in ("program_current", "execution_legacy", "execution_current", "boundary_legacy", "boundary_current"):
             payload = bytes.fromhex(result[name + "_wire"])
             header += f"static const unsigned char xr_identity_{name}_wire[] = {{\n"
             for offset in range(0, len(payload), 16):
@@ -436,7 +477,7 @@ def main() -> None:
         size = re.search(r"xr_program_vm_embedded_fixture_size\s*=\s*(\d+)UL", vm_text)
         assert size and int(size.group(1)) == len(current_vm)
     fixture = (root / "tests/unit/program/xr_program_identity_vectors.h").read_text(encoding="utf-8")
-    for name in ("execution_legacy", "execution_current", "boundary_legacy", "boundary_current"):
+    for name in ("program_current", "execution_legacy", "execution_current", "boundary_legacy", "boundary_current"):
         assert fixed_array(fixture, "xr_identity_" + name + "_wire").hex() == result[name + "_wire"]
     print("PASS current fixed C wire fixtures: every byte matches independent field encoder")
     print(json.dumps({key: value for key, value in result.items() if not isinstance(value, dict) and not key.endswith("wire")}, indent=2))

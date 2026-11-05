@@ -25,6 +25,7 @@
 #include "../../base/xdefs.h"
 #include "xvalue.h"
 #include "../xstrbuf.h"
+#include "../xvm_call.h"
 
 struct XrVMRuntime;
 
@@ -32,8 +33,15 @@ struct XrVMRuntime;
 // Fast paths for primitives; containers/objects delegate to xr_value_to_strbuf.
 XR_FUNC XrString *xr_value_to_string(struct XrVMRuntime *isolate, XrValue val);
 
+// Reports callback execution separately from allocation failure (NULL with OK).
+// The caller retains the original VM exception and cancellation outcome.
+XR_FUNC XrString *xr_value_to_string_checked(struct XrVMRuntime *isolate, XrValue val,
+                                            XrVMResult *status);
+
 // Append `val`'s formatted form onto `sb`. `depth` tracks recursion to
-// break cycles and truncate deep structures.
-XR_FUNC void xr_value_to_strbuf(struct XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int depth);
+// break cycles and truncate deep structures. False leaves a possibly appended
+// prefix in caller-owned storage; discard it or explicitly resume using the
+// normal buffer API. It never marks the buffer permanently failed.
+XR_FUNC bool xr_value_to_strbuf(struct XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int depth, XrVMResult *status);
 
 #endif  // XVALUE_FORMAT_H

@@ -1014,64 +1014,6 @@ static void vm_backend_destroy(XrCoroutine *coro) {
     }
 }
 
-bool xr_coro_grow_stack(XrCoroutine *coro, int extra_slots) {
-    if (!coro)
-        return false;
-    XrVMContext *ctx = xr_coro_vm_ctx(coro);
-    if (!ctx->stack)
-        return false;
-    XR_DCHECK(extra_slots > 0, "grow_stack: non-positive extra_slots");
-    XR_DCHECK(ctx->stack_capacity > 0, "grow_stack: zero stack_capacity");
-
-    int new_capacity = ctx->stack_capacity + extra_slots;
-    if (new_capacity > 1024 * 1024)
-        return false;
-
-    char *stack_end = (char *) ctx->stack + sizeof(XrValue) * ctx->stack_capacity;
-    bool combined = ((char *) ctx->frames == stack_end);
-
-    if (combined) {
-        XrValue *new_stack = (XrValue *) xr_malloc(sizeof(XrValue) * new_capacity);
-        if (!new_stack)
-            return false;
-        memcpy(new_stack, ctx->stack, sizeof(XrValue) * ctx->stack_capacity);
-        memset(new_stack + ctx->stack_capacity, 0, sizeof(XrValue) * extra_slots);
-
-        XrBcCallFrame *new_frames =
-            (XrBcCallFrame *) xr_malloc(sizeof(XrBcCallFrame) * ctx->frame_capacity);
-        if (!new_frames) {
-            xr_free(new_stack);
-            return false;
-        }
-        memcpy(new_frames, ctx->frames, sizeof(XrBcCallFrame) * ctx->frame_count);
-
-        xr_free(ctx->stack);
-        ctx->stack = new_stack;
-        ctx->stack_capacity = new_capacity;
-        ctx->frames = new_frames;
-    } else {
-        XrValue *new_stack = (XrValue *) xr_realloc(ctx->stack, sizeof(XrValue) * new_capacity);
-        if (!new_stack)
-            return false;
-        memset(new_stack + ctx->stack_capacity, 0, sizeof(XrValue) * extra_slots);
-        ctx->stack = new_stack;
-        ctx->stack_capacity = new_capacity;
-    }
-
-    if (ctx->frame_count + 8 >= ctx->frame_capacity) {
-        int new_frame_cap = ctx->frame_capacity * 2;
-        XrBcCallFrame *new_frames =
-            (XrBcCallFrame *) xr_realloc(ctx->frames, sizeof(XrBcCallFrame) * new_frame_cap);
-        if (!new_frames)
-            return false;
-        ctx->frames = new_frames;
-
-        ctx->frame_capacity = new_frame_cap;
-    }
-
-    return true;
-}
-
 static XrCoroRunResult worker_run_result_from_vm(XrCoroutine *coro, XrVMResult result) {
     /* BLOCKED means the backend already published the coro to a wait queue;
      * another worker may be running — even completing — it right now, so its

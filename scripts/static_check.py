@@ -534,7 +534,6 @@ class StaticChecker:
             'TYPE_NAME_BIGINT': 'BigInt',
             'TYPE_NAME_REGEX': 'Regex',
             'TYPE_NAME_DATETIME': 'DateTime',
-            'TYPE_NAME_STRINGBUILDER': 'StringBuilder',
             'TYPE_NAME_CHANNEL': 'Channel',
             'TYPE_NAME_PANIC_INFO': 'PanicInfo',
             'TYPE_NAME_COROUTINE': 'Coroutine',

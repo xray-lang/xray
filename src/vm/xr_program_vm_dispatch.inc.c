@@ -1275,7 +1275,7 @@ static void vm_dispatch_aggregate_variant(XrVmDispatch *dispatch) {
                                array->field_capacity;
             XrVmContext allocation = *context;
             allocation.storage = owner_storage;
-            XrArrayAppendAllocator allocator = {&allocation, vm_array_backing_allocate, vm_builder_release};
+            XrArrayAppendAllocator allocator = {&allocation, vm_array_backing_allocate, vm_array_backing_release};
             XrArrayAppendStorage storage = {array->fields, array->field_count, array->field_capacity};
             /* The allocator budget is in value cells here, not payload bytes. */
             XrArrayAppendResult appended = xr_array_append_storage(&storage, sizeof(XrVmValue),

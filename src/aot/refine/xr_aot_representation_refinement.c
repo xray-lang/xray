@@ -110,7 +110,6 @@ static uint32_t live_builtin_type(const XrType *type) {
         const char *name;
         uint32_t id;
     } builtins[] = {
-        {"StringBuilder", XR_TID_STRINGBUILDER},
         {"Task", XR_TID_COROUTINE},
     };
     for (size_t index = 0; index < sizeof(builtins) / sizeof(builtins[0]); index++)

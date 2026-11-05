@@ -47,14 +47,13 @@ typedef struct XrSemanticFrozenBuiltin {
  * surface name; the two spellings denote one class, and nothing else may claim
  * either. */
 static const XrSemanticFrozenBuiltin xr_semantic_frozen_builtins[] = {
-    {"StringBuilder", XR_TID_STRINGBUILDER},
     {"Task", XR_TID_COROUTINE},
 };
 
 /* Resolve a live type to its frozen builtin id, or XR_TID_NULL when the type is
  * not a frozen builtin. A user class that reuses one of these names carries its
  * own class_ref and is deliberately not a match: builtin names are ordinary
- * identifiers, so `class StringBuilder { ... }` is legal source that must not
+ * identifiers, so `class Task { ... }` is legal source that must not
  * inherit the runtime class's storage or suspension rules. */
 static inline uint32_t xr_semantic_frozen_builtin_type(const XrType *type) {
     for (size_t i = 0;
@@ -86,8 +85,7 @@ typedef struct XrSemanticBuiltinYieldableMethod {
 /* The frozen builtin instance methods that can park the calling coroutine. The
  * argument counts are part of the identity: an arity outside the declared range
  * is a different method, and no overload of these names suspends. Argument
- * counts exclude the receiver. A frozen builtin absent from this table -- such
- * as StringBuilder -- has no suspending method at all.
+ * counts exclude the receiver. A builtin receiver has no suspending method unless this table lists it.
  *
  * This table states the same fact the Xi coroutine analysis states in
  * xi_value_is_blocking_*_method_call: the two must name the same selectors at

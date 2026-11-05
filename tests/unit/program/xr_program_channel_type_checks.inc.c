@@ -66,7 +66,7 @@ static void test_channel_types(void) {
     XrProgramView view = {0};
     CHECK(xr_program_decode_structure(artifact.bytes, artifact.size, NULL, &view, NULL, 0u) ==
           XR_PROGRAM_DECODE_OK);
-    size_t row = (size_t) view.sections[XR_PROGRAM_SECTION_TYPES - 1u].offset + 1u + 20u * 4u;
+    size_t row = (size_t) view.sections[XR_PROGRAM_SECTION_TYPES - 1u].offset + 1u + 19u * 4u;
     /* Fixed independent wire row: local resource 92 canonicalizes to 34. */
     const uint8_t expected[38] = {32u, 42u, 1u, 1u, 1u, [36] = 34u};
     CHECK(row + sizeof(expected) <= artifact.size);

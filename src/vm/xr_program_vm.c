@@ -453,6 +453,12 @@ static void *vm_array_backing_allocate(void *context, size_t size) {
     return xr_malloc(size);
 }
 
+static void vm_array_backing_release(void *context, void *pointer) {
+    (void) context;
+    xr_free(pointer);
+}
+
+
 static XrVmAggregateValue *allocate_aggregate(XrVmContext *context, uint16_t type_id,
                                               uint32_t variant_ordinal, uint32_t field_count) {
     XrVmValueStorage *storage = context->storage;

@@ -1359,8 +1359,6 @@ static inline XrTypeIdentityCoreKind xrt_type_identity_kind(XrValue v) {
             return XR_TYPE_IDENTITY_CORE_INSTANCE;
         case XR_TAG_CLOSURE:
             return XR_TYPE_IDENTITY_CORE_FUNCTION;
-        case XR_TAG_STRBUF:
-            return XR_TYPE_IDENTITY_CORE_STRINGBUILDER;
         case XR_TAG_RANGE:
             return XR_TYPE_IDENTITY_CORE_RANGE;
         case XR_TAG_ENUM:
@@ -1435,7 +1433,6 @@ static inline XrValue xrt_typename(XrValue v) {
     XRT_STR_LIT_DEF(xs_set, TYPE_NAME_SET);
     XRT_STR_LIT_DEF(xs_map, TYPE_NAME_MAP);
     XRT_STR_LIT_DEF(xs_function, TYPE_NAME_FUNCTION);
-    XRT_STR_LIT_DEF(xs_strbuf, TYPE_NAME_STRINGBUILDER);
     XRT_STR_LIT_DEF(xs_tuple, "tuple");
     XRT_STR_LIT_DEF(xs_range, TYPE_NAME_RANGE);
     XRT_STR_LIT_DEF(xs_bigint, TYPE_NAME_BIGINT);
@@ -1468,8 +1465,6 @@ static inline XrValue xrt_typename(XrValue v) {
         }
         case XR_TAG_CLOSURE:
             return xr_str_lit(&xs_function);
-        case XR_TAG_STRBUF:
-            return xr_str_lit(&xs_strbuf);
         case XR_TAG_TUPLE:
             return xr_str_lit(&xs_tuple);
         case XR_TAG_RANGE:

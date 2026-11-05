@@ -31,7 +31,7 @@
  *   Generic:
  *     - OP_INDEX_GET / OP_INDEX_SET / OP_SLICE
  *
- * Inlined ARRAY_GET_NOCHECK and StringBuilder helpers stay in
+ * Inlined ARRAY_GET_NOCHECK and private text helpers stay in
  * xvm.c next to the rest of the data-manipulation hot path.
  */
 
@@ -425,33 +425,7 @@ vmcase(OP_RANGE_UNPACK) {
 }
 
 vmcase(OP_NEWSTRINGBUILDER) {
-    /* OP_NEWSTRINGBUILDER: create StringBuilder
-    ** A = destination register
-    ** B = storage mode (0=normal, 1=shared, 2=owned)
-    */
-    int a = GETARG_A(i);
-    int storage_mode = vm_resolve_allocation_storage_mode(base, (uint8_t) GETARG_B(i));
-
-    XrStringBuilder *sb;
-    if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
-        // System storage: allocate on system heap
-        sb = (XrStringBuilder *) xr_sysheap_alloc_storage(
-            xr_isolate_get_sys_heap(isolate), sizeof(XrStringBuilder), XR_TINSTANCE, storage_mode);
-        if (sb) {
-            sb->klass = isolate->core->stringBuilderClass;
-            xr_stringbuilder_init_inplace(sb);
-            XR_OBJ_SET_STORAGE(&sb->hdr, storage_mode);
-            if (storage_mode == XR_OBJ_STORAGE_SHARED) {
-                xr_shared_set_refc(&sb->hdr, 1);
-            }
-        }
-    } else {
-        // normal: allocate on coroutine heap
-        sb = xr_stringbuilder_new(VM_CURRENT_CORO);
-    }
-
-    R(a) = xr_stringbuilder_value(sb);
-    vmbreak;
+    VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "%s", "retired public builder opcode");
 }
 
 /* ========================================================
@@ -997,10 +971,6 @@ vmcase(OP_LEN) {
     }
     if (xr_value_is_work_queue(value)) {
         R(a) = xr_int((xr_Integer) xr_work_queue_length(xr_value_to_work_queue(value)));
-        vmbreak;
-    }
-    if (xr_is_stringbuilder(value)) {
-        R(a) = xr_int((xr_Integer) xr_stringbuilder_length(xr_to_stringbuilder(value)));
         vmbreak;
     }
     XrRange *range = xr_value_get_range_body(isolate, value);

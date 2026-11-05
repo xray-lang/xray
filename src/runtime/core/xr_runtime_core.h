@@ -102,6 +102,22 @@ typedef struct XrRuntimeCore {
     XrAdaptiveMutex metadata_lock;
 } XrRuntimeCore;
 
+/* Extension callbacks belong only to ids allocated by this runtime core. */
+static inline bool xr_runtime_core_extension_type_allocated(const XrRuntimeCore *core,
+                                                            uint8_t type) {
+    return core && core->ext_type_next >= XR_OBJ_TYPE_BUILTIN_COUNT &&
+           core->ext_type_next <= XR_OBJ_TYPE_MAX && type >= XR_OBJ_TYPE_BUILTIN_COUNT &&
+           type < core->ext_type_next;
+}
+static inline uint64_t xr_runtime_core_extension_type_mask(const XrRuntimeCore *core) {
+    if (!core || core->ext_type_next < XR_OBJ_TYPE_BUILTIN_COUNT ||
+        core->ext_type_next > XR_OBJ_TYPE_MAX)
+        return 0;
+    uint64_t high = core->ext_type_next == XR_OBJ_TYPE_MAX
+                        ? UINT64_MAX : (UINT64_C(1) << core->ext_type_next) - 1u;
+    return high & ~((UINT64_C(1) << XR_OBJ_TYPE_BUILTIN_COUNT) - 1u);
+}
+
 XR_FUNC XrRuntimeCore *xr_runtime_core_new(const XrRuntimeCoreConfig *cfg);
 XR_FUNC void xr_runtime_core_delete(XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_free_tmp_strbuf(XrRuntimeCore *core);

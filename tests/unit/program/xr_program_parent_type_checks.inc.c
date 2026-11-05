@@ -65,7 +65,7 @@ static void test_parent_types(void) {
     CHECK(xr_program_decode_structure(artifact.bytes, artifact.size, NULL, &view, NULL, 0u) ==
           XR_PROGRAM_DECODE_OK);
     if (artifact.bytes) {
-        size_t row = (size_t) view.sections[XR_PROGRAM_SECTION_TYPES - 1u].offset + 1u + 20u * 4u;
+        size_t row = (size_t) view.sections[XR_PROGRAM_SECTION_TYPES - 1u].offset + 1u + 19u * 4u;
         const uint8_t first[41] = {32u, 37u, 1u, 1u, 1u,
                                   [36] = 2u, [37] = 2u, [38] = 12u, [39] = 33u};
         CHECK(row + sizeof(first) <= artifact.size);
@@ -139,7 +139,7 @@ static void test_parent_type_cycle_wire_and_allocations(void) {
     CHECK(xr_program_decode_structure(artifact.bytes, artifact.size, NULL, &view, NULL, 0u) ==
           XR_PROGRAM_DECODE_OK);
     if (artifact.bytes) {
-        size_t row = (size_t) view.sections[XR_PROGRAM_SECTION_TYPES - 1u].offset + 1u + 20u * 4u;
+        size_t row = (size_t) view.sections[XR_PROGRAM_SECTION_TYPES - 1u].offset + 1u + 19u * 4u;
         size_t parent_offset = row + 2u * 39u + 37u;
         CHECK(parent_offset < artifact.size);
         if (parent_offset < artifact.size) {
@@ -189,7 +189,7 @@ static void test_parent_type_requires_nominal_target_wire(void) {
     CHECK(xr_program_decode_structure(artifact.bytes, artifact.size, NULL, &view, NULL, 0u) ==
           XR_PROGRAM_DECODE_OK);
     size_t parent_offset = (size_t) view.sections[XR_PROGRAM_SECTION_TYPES - 1u].offset +
-                           1u + 20u * 4u + 39u;
+                           1u + 19u * 4u + 39u;
     CHECK(parent_offset < artifact.size);
     if (parent_offset < artifact.size) {
         CHECK(artifact.bytes[parent_offset] == XR_CORE_TYPE_VOID);

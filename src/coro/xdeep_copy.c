@@ -22,6 +22,7 @@
 #include "../runtime/object/xarray.h"
 #include "../runtime/object/xmap.h"
 #include "../runtime/object/xstring.h"
+#include "../runtime/object/xtext_worker.h"
 #include "../runtime/object/xset.h"
 #include "../runtime/object/xjson.h"
 #include "../runtime/class/xinstance.h"
@@ -90,6 +91,7 @@ static void copy_context_init_common(XrCopyContext *ctx, XrRuntimeCore *core,
     ctx->arena_head = NULL;
     ctx->depth = 0;
     ctx->depth_exceeded = false;
+    ctx->private_value_rejected = false;
 }
 
 void xr_copy_context_init_core(XrCopyContext *ctx, XrRuntimeCore *core,
@@ -629,6 +631,10 @@ XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     // Materialize flat upvals exactly as verified by the capture plan.
     for (int i = 0; i < closure->upval_count; i++) {
         XrValue upval = closure->upvals[i];
+        if (xr_text_worker_is_private(upval)) {
+            ctx->private_value_rejected = true;
+            return XR_NULL_VAL;
+        }
         uint8_t action = PROTO_UPVALUE(closure->proto, i).capture_action;
         if (action == XR_TRANSFER_EXPLICIT_COPY || action == XR_TRANSFER_REJECT) {
             if (XR_IS_ARRAY_REF(upval)) {
@@ -878,13 +884,17 @@ static inline XrValue deep_copy_dispatch_bounded(XrCopyContext *ctx, XrValue val
     ctx->depth++;
     XrValue result = fn ? fn(ctx, obj) : xr_deep_copy_array_ref_with_ctx(ctx, value);
     ctx->depth--;
-    if (ctx->depth == 0 && ctx->depth_exceeded)
+    if (ctx->depth == 0 && (ctx->depth_exceeded || ctx->private_value_rejected))
         return XR_NULL_VAL;  // never hand back a truncated graph
     return result;
 }
 
 XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
     XR_DCHECK(ctx != NULL, "deep_copy_with_ctx: NULL context");
+    if (ctx->private_value_rejected || xr_text_worker_is_private(value)) {
+        ctx->private_value_rejected = true;
+        return XR_NULL_VAL;
+    }
     if (value.tag == XR_AOT_VALUE_TAG_STR ||
         value.tag == XR_AOT_VALUE_TAG_STR_ARC) {
         if (!ctx->core || !value.ptr)
@@ -936,11 +946,15 @@ XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
         ctx->depth++;
         XrValue result = xr_deep_copy_string_with_ctx(ctx, string);
         ctx->depth--;
-        return ctx->depth == 0 && ctx->depth_exceeded ? XR_NULL_VAL : result;
+        return ctx->depth == 0 && (ctx->depth_exceeded || ctx->private_value_rejected) ? XR_NULL_VAL : result;
     }
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj)
         return value;
+    if (XR_OBJ_GET_TYPE(obj) == XR_TTEXT_WORKER) {
+        ctx->private_value_rejected = true;
+        return XR_NULL_VAL;
+    }
     /* Immortal fixed-heap singletons (enum value & type descriptors, classes —
      * allocated by xr_fixed_heap_alloc with MANAGED + sticky RC) are referenced by
      * every coroutine. Their identity and native C-struct members (e.g.
@@ -982,6 +996,8 @@ XrValue xr_deep_copy_core(XrRuntimeCore *core, XrValue value, XrFixedHeap *dst_f
     XrCopyContext ctx;
     xr_copy_context_init_core(&ctx, core, dst_fixed_heap);
     XrValue result = xr_deep_copy_with_ctx(&ctx, value);
+    if (ctx.private_value_rejected)
+        result = XR_NULL_VAL;
     xr_copy_context_cleanup(&ctx);
     return result;
 }
@@ -1000,6 +1016,8 @@ XrValue xr_deep_copy_to_transit_core(XrRuntimeCore *core, XrValue value) {
     xr_copy_context_init_core(&ctx, core, &core->fixed_heap);
     ctx.to_transit = true;
     XrValue result = xr_deep_copy_with_ctx(&ctx, value);
+    if (ctx.private_value_rejected)
+        result = XR_NULL_VAL;
     xr_copy_context_cleanup(&ctx);
     return result;
 }
@@ -1024,6 +1042,8 @@ XrValue xr_deep_copy_counted_core(XrRuntimeCore *core, XrValue value, XrFixedHea
     XrValue result = xr_deep_copy_with_ctx(&ctx, value);
     if (out_count)
         *out_count = ctx.objects_copied;
+    if (ctx.private_value_rejected)
+        result = XR_NULL_VAL;
     xr_copy_context_cleanup(&ctx);
     return result;
 }
@@ -1126,6 +1146,8 @@ explicit_copy_value:;
     if (dst_coro)
         ctx.dst_heap = xr_coro_ensure_heap(dst_coro);
     XrValue result = xr_deep_copy_with_ctx(&ctx, value);
+    if (ctx.private_value_rejected)
+        result = XR_NULL_VAL;
     xr_copy_context_cleanup(&ctx);
     return result;
 }
@@ -1162,6 +1184,8 @@ XrValue xr_deep_copy_explicit_to_storage_core(XrRuntimeCore *core, XrValue value
     ctx.explicit_copy = true;
     ctx.dst_storage_mode = storage_mode;
     XrValue result = xr_deep_copy_with_ctx(&ctx, value);
+    if (ctx.private_value_rejected)
+        result = XR_NULL_VAL;
     xr_copy_context_cleanup(&ctx);
     return result;
 }
@@ -1213,7 +1237,9 @@ XrValue xr_deep_copy_array(struct XrVMRuntime *X, struct XrArray *array,
     XrCopyContext ctx;
     xr_copy_context_init(&ctx, X, dst_fixed_heap);
     XrValue result = xr_deep_copy_array_with_ctx(&ctx, (XrObjHeader *) array);
-    if (ctx.depth_exceeded)
+    if (ctx.depth_exceeded || ctx.private_value_rejected)
+        result = XR_NULL_VAL;
+    if (ctx.private_value_rejected)
         result = XR_NULL_VAL;
     xr_copy_context_cleanup(&ctx);
     return result;
@@ -1229,7 +1255,9 @@ XrValue xr_deep_copy_map(struct XrVMRuntime *X, struct XrMap *map,
     XrCopyContext ctx;
     xr_copy_context_init(&ctx, X, dst_fixed_heap);
     XrValue result = xr_deep_copy_map_with_ctx(&ctx, (XrObjHeader *) map);
-    if (ctx.depth_exceeded)
+    if (ctx.depth_exceeded || ctx.private_value_rejected)
+        result = XR_NULL_VAL;
+    if (ctx.private_value_rejected)
         result = XR_NULL_VAL;
     xr_copy_context_cleanup(&ctx);
     return result;
@@ -1245,7 +1273,9 @@ XrValue xr_deep_copy_closure(struct XrVMRuntime *X, struct XrClosure *closure,
     XrCopyContext ctx;
     xr_copy_context_init(&ctx, X, dst_fixed_heap);
     XrValue result = xr_deep_copy_closure_with_ctx(&ctx, (XrObjHeader *) closure);
-    if (ctx.depth_exceeded)
+    if (ctx.depth_exceeded || ctx.private_value_rejected)
+        result = XR_NULL_VAL;
+    if (ctx.private_value_rejected)
         result = XR_NULL_VAL;
     xr_copy_context_cleanup(&ctx);
     return result;

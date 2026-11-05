@@ -59,18 +59,19 @@ XrValue xr_instance_get_field(XrVMRuntime *X, XrObjectInstance *inst, const char
 }
 
 XrValue xr_instance_source_provider_storage(XrValue wrapper) {
-    if (!XR_IS_INSTANCE(wrapper))
+    if (xr_text_worker_is_private(wrapper) || !XR_IS_INSTANCE(wrapper))
         return xr_null();
     XrObjectInstance *inst = XR_TO_INSTANCE(wrapper);
     XrClass *klass = inst ? inst->klass : NULL;
     int index = klass ? klass->source_provider_field_index : -1;
     if (index < 0 || index >= xr_class_instance_field_count(klass))
         return xr_null();
-    return inst->fields[index];
+    XrValue storage = inst->fields[index];
+    return xr_text_worker_is_private(storage) ? xr_null() : storage;
 }
 
 void xr_instance_set_field(XrVMRuntime *X, XrObjectInstance *inst, const char *name, XrValue value) {
-    if (!X || !inst || !name)
+    if (!X || !inst || !name || xr_text_worker_is_private(value))
         return;
 
     XrClass *klass = xr_instance_get_class(inst);
@@ -95,10 +96,13 @@ void xr_instance_set_field(XrVMRuntime *X, XrObjectInstance *inst, const char *n
     inst->fields[index] = value;
 }
 
-XrValue xr_instance_call_method(XrVMRuntime *X, XrObjectInstance *inst, const char *name, XrValue *args,
-                                int argc) {
-    if (!X || !inst || !name)
+XrValue xr_instance_call_method_checked(XrVMRuntime *X, XrObjectInstance *inst, const char *name,
+                                        XrValue *args, int argc, XrVMResult *status) {
+    if (status) *status = XR_VM_OK;
+    if (!X || !inst || !name || argc < 0 || (argc > 0 && !args)) {
+        if (status) *status = XR_VM_RUNTIME_ERROR;
         return xr_null();
+    }
 
     XrClass *klass = xr_instance_get_class(inst);
     if (!klass)
@@ -129,14 +133,23 @@ XrValue xr_instance_call_method(XrVMRuntime *X, XrObjectInstance *inst, const ch
 
     // Call method based on type
     XrValue result = xr_null();
-    if (method->type == XMETHOD_PRIMITIVE && method->as.primitive) {
-        result = method->as.primitive(X, this_value, args, argc);
-    } else if (method->as.closure) {
+    if (method->type == XMETHOD_PRIMITIVE) {
+        if (!method->as.primitive) {
+            if (status) *status = XR_VM_RUNTIME_ERROR;
+            return xr_null();
+        }
+        result = xr_vm_call_primitive_checked(X, method->as.primitive, this_value, args, argc, status);
+    } else if (method->type == XMETHOD_CLOSURE || method->type == XMETHOD_OPERATOR) {
+        if (!method->as.closure) {
+            if (status) *status = XR_VM_RUNTIME_ERROR;
+            return xr_null();
+        }
         // Closure calling convention still uses args[0]=self
         XrValue stack_buf[9];
         XrValue *full_args =
             (argc + 1 <= 9) ? stack_buf : (XrValue *) xr_malloc(sizeof(XrValue) * (argc + 1));
         if (!full_args) {
+            if (status) *status = XR_VM_RUNTIME_ERROR;
             xr_log_warning("instance", "failed to allocate argument array");
             return xr_null();
         }
@@ -144,11 +157,13 @@ XrValue xr_instance_call_method(XrVMRuntime *X, XrObjectInstance *inst, const ch
         for (int i = 0; i < argc; i++) {
             full_args[i + 1] = args[i];
         }
-        result = xr_vm_call_closure(X, method->as.closure, full_args, argc + 1);
+        result = xr_vm_call_closure_checked(X, method->as.closure, full_args, argc + 1, status);
         if (full_args != stack_buf)
             xr_free(full_args);
+    } else {
+        if (status) *status = XR_VM_RUNTIME_ERROR;
+        return xr_null();
     }
-
     return result;
 }
 

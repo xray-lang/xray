@@ -12,6 +12,7 @@
 #include "object/xstring.h"
 
 XrString *xr_strbuf_to_string(XrStrBuf *sb) {
+    if (!sb) return NULL;
     uint32_t hash = xr_string_hash(sb->data, sb->length);
     XrString *s = xr_string_intern(sb->X, sb->data, sb->length, hash);
     if (s)

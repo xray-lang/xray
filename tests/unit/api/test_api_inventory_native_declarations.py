@@ -176,7 +176,7 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
     def test_collector_uses_shared_parser_and_rejects_invalid_admission(self) -> None:
         with patch.object(declarations, "parse_source", wraps=declarations.parse_source) as parse:
             inventory.collect_native_types(ROOT)
-        self.assertEqual(parse.call_count, 9)
+        self.assertEqual(parse.call_count, 8)
         parse.assert_any_call(self.source, self.prelude)
         parse.assert_any_call((ROOT / "stdlib/types/string.xr").read_text(encoding="utf-8"), self.prelude)
         for source in (self.source.replace("struct Array", "class Array"),

@@ -72,7 +72,7 @@ static XrValue bound_method_stub(XrVMRuntime *isolate, XrValue receiver, XrValue
  * not found / not a primitive. */
 static MethodHandler resolve_native_handler(XrVMRuntime *isolate, XrObjType gc_type, int symbol) {
     XR_DCHECK(isolate != NULL, "resolve_native_handler: NULL isolate");
-    if ((int) gc_type >= XR_NATIVE_TYPE_MAX)
+    if ((int) gc_type >= XR_NATIVE_TYPE_MAX || gc_type == XR_TTEXT_WORKER)
         return NULL;
     XrClass *cls = isolate->core_rt->native_type_classes[gc_type];
     if (!cls)

@@ -2113,8 +2113,6 @@ static inline XrTypeIdentityCoreKind xrt_freestanding_type_identity_kind(XrValue
             return XR_TYPE_IDENTITY_CORE_INSTANCE;
         case XR_TAG_CLOSURE:
             return XR_TYPE_IDENTITY_CORE_FUNCTION;
-        case XR_TAG_STRBUF:
-            return XR_TYPE_IDENTITY_CORE_STRINGBUILDER;
         case XR_TAG_RANGE:
             return XR_TYPE_IDENTITY_CORE_RANGE;
         case XR_TAG_ENUM:

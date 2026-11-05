@@ -981,6 +981,12 @@ static bool bc_write_enum_type(BcWriter *w, XrValue val) {
 
 static bool bc_write_value(BcWriter *w, XrValue val, bool as_dynamic_shape,
                            bool as_class_descriptor) {
+    /* Private runtime workers and legacy extension slot 35 have no constant
+     * representation. Reject the tag before interpreting any payload. */
+    if (XR_IS_PTR(val) && XR_HEAP_TYPE(val) == XR_TTEXT_WORKER) {
+        w->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
+        return false;
+    }
     if (as_class_descriptor)
         return bc_write_class_descriptor(w, val);
     if (as_dynamic_shape)
@@ -1773,9 +1779,14 @@ static bool bc_collect_layouts_from_proto(BcWriter *w, XrProto *proto, uint32_t 
         return false;
     }
     for (uint32_t i = 0; i < const_count; i++) {
+        XrValue value = PROTO_CONSTANT(proto, i);
+        if (XR_IS_PTR(value) && XR_HEAP_TYPE(value) == XR_TTEXT_WORKER) {
+            xr_free(class_consts);
+            w->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
+            return false;
+        }
         if (!class_consts[i])
             continue;
-        XrValue value = PROTO_CONSTANT(proto, i);
         if (!XR_IS_PTR(value) || !XR_TO_PTR(value)) {
             xr_free(class_consts);
             w->error = XR_BOOTSTRAP_CONTAINER_ERR_METADATA;

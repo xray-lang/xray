@@ -138,6 +138,7 @@ vmcase(OP_MAP_SETKS) {
     XrObjectInstance *inst_obj = xr_value_to_instance(R(a));
     for (int j = 0; j < count; j++) {
         XrValue val = R(a + 1 + j);
+        VM_REJECT_TEXT_WORKER(val);
         if (inst_obj->klass && inst_obj->klass->struct_layout) {
             if (!xr_instance_struct_set_field(isolate, inst_obj, j, val)) {
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid value for struct field write");
@@ -188,6 +189,7 @@ vmcase(OP_SETFIELD) {
     XrValue inst_val = R(a);
     XrObjectInstance *inst_obj = xr_value_to_instance(inst_val);
     XrValue val = R(c);
+    VM_REJECT_TEXT_WORKER(val);
     if (xr_weak_instance_field_store(vm_weak_heap(vm_ctx), inst_obj, field_idx, val))
         vmbreak;
     if (inst_obj->klass && inst_obj->klass->struct_layout) {
@@ -348,6 +350,7 @@ vmcase(OP_OBJECT_SET) {
     int c = GETARG_C(i);
     XrObjectInstance *json = xr_value_to_object_instance(R(a));
     XrValue val = R(c);
+    VM_REJECT_TEXT_WORKER(val);
     xr_instance_set_dynamic_field(isolate, json, (uint16_t) b, val);
     vmbreak;
 }
@@ -406,6 +409,7 @@ vmcase(OP_OBJECT_INIT) {
     int c = GETARG_C(i);
     XrObjectInstance *object = xr_value_to_object_instance(R(a));
     XrValue val = R(c);
+    VM_REJECT_TEXT_WORKER(val);
     xr_instance_set_dynamic_field(isolate, object, (uint16_t) b, val);
     vmbreak;
 }
@@ -811,6 +815,7 @@ vmcase(OP_SETPROP) {
     XrValue obj = R(a);
     int prop_symbol = PROTO_SYMBOL(cl->proto, b);  // Dereference local index → global symbol
     XrValue value = R(c);
+    VM_REJECT_TEXT_WORKER(value);
 
     // JSON.Values are dynamic-layout instances; the per-type
     // dispatch returns XR_DISP_FALLTHROUGH for them and the regular
