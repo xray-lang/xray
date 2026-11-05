@@ -56,7 +56,7 @@ static const HostOriginalInput host_original_inputs[] = {
     {"tests/regression/10_stdlib/1191_io_edge.xr","host_original_io_1191","7152a2da6e15e44a8138afea5b1fc114caf7cbd1188be4d8e9d86a61d8534f79",host_original_names_3,14u},
     {"tests/regression/10_stdlib/1192_io_extended.xr","host_original_io_1192","d40ed9c06d78af71a22e7f4918258fcfa0109f5bdfadb31ad4c5dde2f7311005",host_original_names_4,7u},
     {"tests/regression/10_stdlib/1193_io_invalid_utf8.xr","host_original_io_1193_invalid_utf8","e39acbb15ff9db56c886c16b23005e325626ee1effcc2940b2c966052116fbe4",host_original_names_5,3u},
-    {"tests/regression/10_stdlib/1193_io_read_dir_recursive.xr","host_original_io_1193_read_dir_recursive","e3b208aad21c13ad8b4e4ab42ede19dce1dc36564b1078326fd7794e7f20d392",host_original_names_6,3u},
+    {"tests/regression/10_stdlib/1193_io_read_dir_recursive.xr","host_original_io_1193_read_dir_recursive","5ad5a54af2dafd02713643d6e73844905627281273fc76003a5e0451017d00db",host_original_names_6,3u},
     {"tests/regression/10_stdlib/1194_io_mkdirp.xr","host_original_io_1194","f776cad5600965504813335248dd63fd5581395643e54720c8ac9fdf93b477b5",host_original_names_7,7u},
     {"tests/regression/10_stdlib/1195_io_remove_all.xr","host_original_io_1195","2ec0647931785fe50b8be9a1bbc1a6a1fb2abf63120aff658fd9bca083b1c94f",host_original_names_8,5u},
     {"tests/regression/10_stdlib/1196_io_touch.xr","host_original_io_1196","85e0ac34e6e524d7f0f18a6aa60181549ed6a5e34e168c18e86c98934e2842fb",host_original_names_9,4u},
