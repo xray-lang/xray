@@ -47,10 +47,6 @@ static int report_source_failure(const XrSourceCompileDiagnostic *diagnostic,XrC
 
 XR_FUNC int cmd_run(const XrCliInvocation *inv) {
     if (!inv) return XR_CLI_EXIT_INTERNAL;
-#if XR_OS_WINDOWS
-    if (_setmode(_fileno(stdout), _O_BINARY) == -1 ||
-        _setmode(_fileno(stderr), _O_BINARY) == -1) return XR_CLI_EXIT_INTERNAL;
-#endif
     if (inv->positional_count != 1) {
         xr_cli_error("run", "exactly one source file is required");
         return XR_CLI_EXIT_USAGE;

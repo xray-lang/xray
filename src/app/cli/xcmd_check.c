@@ -244,10 +244,6 @@ static void check_directories(CheckWork *work, CheckDirectory **pending) {
 XR_FUNC int cmd_check(const XrCliInvocation *inv) {
     if (!inv || inv->positional_count < 0 || (inv->positional_count && !inv->positionals))
         return XR_CLI_EXIT_INTERNAL;
-#if XR_OS_WINDOWS
-    if (_setmode(_fileno(stdout), _O_BINARY) == -1 || _setmode(_fileno(stderr), _O_BINARY) == -1)
-        return XR_CLI_EXIT_INTERNAL;
-#endif
     CheckWork work = {0};
     work.syntax_only = xr_cli_opt_bool(&inv->options, "syntax-only");
     work.verbose = xr_cli_opt_bool(&inv->options, "verbose");

@@ -986,10 +986,6 @@ XR_FUNC int cmd_test(const XrCliInvocation *inv) {
     }
 
     /* Test output is program data: keep stdout/stderr byte exact. */
-#if XR_OS_WINDOWS
-    if (_setmode(_fileno(stdout), _O_BINARY) == -1 || _setmode(_fileno(stderr), _O_BINARY) == -1)
-        return XR_CLI_EXIT_INTERNAL;
-#endif
 
     /* Collect test files from all positional args */
     XrOsIoPolicy policy = xr_os_io_system_policy();

@@ -765,9 +765,6 @@ XR_FUNC int cmd_repl(const XrCliInvocation *inv) {
         xr_cli_error("repl","--module-id must be an explicit valid memory-module identity");return XR_CLI_EXIT_USAGE;
     }
     state.use_color=inv->ctx && inv->ctx->color && terminal_supports_color();
-#if XR_OS_WINDOWS
-    if(_setmode(_fileno(stdout),_O_BINARY)==-1 || _setmode(_fileno(stderr),_O_BINARY)==-1)return XR_CLI_EXIT_INTERNAL;
-#endif
     if(!repl_open(&state,&state.owner))return XR_CLI_EXIT_FAIL;
 
     /* Initialize buffer */

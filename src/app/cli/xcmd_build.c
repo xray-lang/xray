@@ -84,9 +84,6 @@ static int build_publication_close(XtcXirPublication **owner) {
 #endif
 XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     if (!inv || (inv->options.count && (!inv->options.spec || !inv->options.present))) return XR_CLI_EXIT_INTERNAL;
-#if XR_OS_WINDOWS
-    if (_setmode(_fileno(stdout),_O_BINARY)==-1 || _setmode(_fileno(stderr),_O_BINARY)==-1) return XR_CLI_EXIT_INTERNAL;
-#endif
     if (inv->positional_count!=1 || inv->passthrough_argc) {
         xr_cli_error("build","exactly one source file and no passthrough arguments are required"); return XR_CLI_EXIT_USAGE;
     }

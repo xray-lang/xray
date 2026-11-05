@@ -14,6 +14,7 @@
 #include "xr_xir_host_cli.h"
 #include "xr_xir_host_time.h"
 #include "../base/xresource_limits.h"
+#include "../base/xstdio_binary.h"
 #include "../xir/xxir_error.h"
 #include "../xir/xxir_format.h"
 #include "../xir/xxir_output.h"
@@ -87,14 +88,6 @@ static bool host_use_color(void) {
 #endif
 }
 
-static bool host_binary_streams(void) {
-#if XR_OS_WINDOWS
-    if (_setmode(_fileno(stdout), _O_BINARY) == -1) return false;
-    if (_setmode(_fileno(stderr), _O_BINARY) == -1) return false;
-#endif
-    return true;
-}
-
 static XrXirOutputStatus host_output_bytes(void *context, XrXirOutputStream stream,
     const char *bytes, size_t length) {
     (void)context;
@@ -143,7 +136,7 @@ XR_FUNC int xr_xir_host_program_main(XrXirProgram *owned_program,uint32_t entry,
     XrXirHostCall **pending_close) {
     if (!owned_program) return 4;
     if (!pending_close || *pending_close) {xr_xir_compile_program_drop(owned_program);return 4;}
-    if (!host_binary_streams()) {
+    if (!xr_stdio_binary_init()) {
         xr_xir_compile_program_drop(owned_program);
         return 4;
     }
@@ -175,13 +168,13 @@ XR_FUNC int xr_xir_host_main(const XrXirProgramSpec *spec,bool sandbox,XrXirHost
     XrXirCompileContext context = {NULL, xr_xir_compile_default_limits()};
     XrCompileResourceStatus opened = xr_compile_resources_new(&limits, &context.resources);
     if (opened != XR_COMPILE_RESOURCE_OK)
-        return host_binary_streams() ? host_failure("XR_RUN_6002: cannot initialize program admission\n",
+        return xr_stdio_binary_init() ? host_failure("XR_RUN_6002: cannot initialize program admission\n",
             opened == XR_COMPILE_RESOURCE_MEMORY_LIMIT || opened == XR_COMPILE_RESOURCE_OVERFLOW ? 1 : 4) : 4;
     XrXirProgram *program = NULL;
     XrXirStatus sealed = xr_xir_compile_program_seal(&context, spec, &program);
     xr_compile_resources_release(context.resources);
     if (sealed != XR_XIR_OK)
-        return host_binary_streams() ? host_failure("XR_RUN_6002: cannot admit generated program\n",
+        return xr_stdio_binary_init() ? host_failure("XR_RUN_6002: cannot admit generated program\n",
             sealed == XR_XIR_BUDGET ? 1 : 4) : 4;
     return xr_xir_host_program_main(program,spec->declarations->entry_function,sandbox,pending_close);
 }

@@ -63,10 +63,6 @@ static XrProviderCallStatus stdout_output_write(void *context, const uint8_t *by
     FILE *stream = context;
     if (!stream || (!bytes && size != 0u))
         return XR_PROVIDER_CALL_FAILED;
-#if XR_OS_WINDOWS
-    if (_setmode(_fileno(stream), _O_BINARY) == -1)
-        return XR_PROVIDER_CALL_FAILED;
-#endif
     return fwrite(bytes, 1u, size, stream) == size ? XR_PROVIDER_CALL_OK : XR_PROVIDER_CALL_FAILED;
 }
 

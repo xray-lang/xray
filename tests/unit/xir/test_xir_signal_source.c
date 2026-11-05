@@ -63,6 +63,73 @@ static void root_signal_canonical_owner(const XrXirCompileContext *context,const
     CHECK(effect_invocation_native_root(&invalid,selected,&native)==XR_XIR_BAD_TYPE && !native);
     effect_body_material_free(full);effect_ordinary_free(ordinary);effect_body_material_free(initial);effect_input_facts_free(facts);
 }
+/* These synchronous metadata views borrow the still-live complete owner.
+ * Interior self references belong to the view; no view is retained or freed. */
+static void root_signal_material_view(EffectBodyMaterial *view,const EffectBodyMaterial *owner) {
+    *view=*owner;view->domain.types=&view->terms.types;
+    if(view->domain.defaults)view->domain.defaults=&view->defaults;
+}
+static void root_signal_io_suspend(const XrXirCompileContext *context,const EffectBodyMaterial *body,
+    uint32_t function,XrXirStatus expected,bool expected_suspend,const char *phase) {
+    CHECK(effect_body_material_shape(body));EffectBodyRequest read=effect_body_owned_request(context,body);
+    CHECK(read.owner==body);bool suspend=false;
+    XrXirStatus status=effect_control_native_suspend(&read,function,&suspend);
+    if(status!=expected||suspend!=expected_suspend)
+        fprintf(stderr,"IO canonical %s status%u expected%u suspend%u expected%u\n",phase,status,expected,(unsigned)suspend,(unsigned)expected_suspend);
+    CHECK(status==expected&&suspend==expected_suspend);
+}
+static void root_signal_io_canonical_owner(const XrXirCompileContext *context) {
+    XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
+    static const char input[]="import {Path} from path\nexport fn flush(handle:i64)->bool{return __fileFlush(handle)}\n";
+    const char *root=XR_ROOT_SIGNAL_STDLIB;char path[2048];CHECK(snprintf(path,sizeof(path),"%s/io/io.xr",root)>0);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_STDLIB,"io",root};
+    XrXirSourceRequest request={session,path,&authority,context,root,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceText text={"io/io.xr",input,sizeof(input)-1};XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
+    XrXirStatus status=xr_xir_compile_source_check_text(&request,&text,&source,&diagnostic,NULL);
+    if(status!=XR_XIR_OK)fprintf(stderr,"IO canonical Source%u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);
+    CHECK(status==XR_XIR_OK);xr_compile_session_free(session);
+    const XrXirModule *module=xr_xir_compile_artifact_module(source.checked);
+    EffectInputFacts *facts=NULL;EffectBodyMaterial *initial=NULL,*full=NULL;EffectOrdinaryContexts *ordinary=NULL;
+    CHECK(effect_input_facts_new(context,(XirEffectInput){module,source.checked->construction,NULL},&facts)==XR_XIR_OK);
+    CHECK(effect_body_material_generation(context,module,NULL,facts,&initial)==XR_XIR_OK);
+    CHECK(effect_ordinary_build(context,module,initial,NULL,facts,&ordinary)==XR_XIR_OK);
+    const XrXirCompileContext *saved=ordinary->terms.remaining;ordinary->terms.remaining=context;
+    EffectOrdinaryView view={0};CHECK(effect_ordinary_view(ordinary,module,&view)==XR_XIR_OK);
+    view.input.initial=NULL;view.input.basis=NULL;view.input.record_source=NULL;
+    CHECK(effect_body_material_generation_input(context,&view.module,NULL,&view.input,ordinary->input_facts,&full)==XR_XIR_OK);
+    ordinary->terms.remaining=saved;
+    CHECK(full&&!full->backbone&&full->canonical_source&&effect_body_material_shape(full));
+    effect_ordinary_free(ordinary);effect_body_material_free(initial);effect_input_facts_free(facts);
+    xr_xir_compile_source_result_free(&source);
+    /* Only the complete owned copy survives the Source and all intermediate
+     * owners. The primitive must still find its actual canonical declaration. */
+    uint32_t selected=UINT32_MAX;
+    for(uint32_t f=0;f<effect_body_count(full);++f)if(full->declarations->functions[f].native_callable==112u){selected=f;break;}
+    CHECK(selected!=UINT32_MAX);root_signal_io_suspend(context,full,selected,XR_XIR_OK,true,"owned");
+    EffectBodyMaterial invalid;root_signal_material_view(&invalid,full);
+    root_signal_io_suspend(context,&invalid,selected,XR_XIR_OK,true,"legal view");
+    invalid.canonical_source=NULL;
+    root_signal_io_suspend(context,&invalid,selected,XR_XIR_BAD_STRUCTURE,false,"missing source");
+    EffectBodyOrdinaryIdentity identities[256];CHECK(effect_body_count(full)<256);
+    memcpy(identities,full->ordinary_identities,effect_body_count(full)*sizeof(*identities));
+    root_signal_material_view(&invalid,full);invalid.ordinary_identities=identities;
+    root_signal_io_suspend(context,&invalid,selected,XR_XIR_OK,true,"legal map copy");
+    identities[selected].declaration=full->canonical_source->declarations->entry_function;
+    CHECK(identities[selected].declaration<effect_body_count(full->canonical_source)&&
+        full->canonical_source->declarations->functions[identities[selected].declaration].native_callable!=112u);
+    root_signal_io_suspend(context,&invalid,selected,XR_XIR_BAD_STRUCTURE,false,"wrong declaration");
+    EffectBodyMaterial changed;root_signal_material_view(&changed,full->canonical_source);EffectBodyFunction heads[256];
+    CHECK(effect_body_count(&changed)<256);memcpy(heads,changed.functions,effect_body_count(&changed)*sizeof(*heads));
+    changed.functions=heads;uint32_t declaration=full->ordinary_identities[selected].declaration;
+    root_signal_io_suspend(context,&changed,declaration,XR_XIR_OK,true,"legal canonical copy");
+    root_signal_material_view(&invalid,full);invalid.canonical_source=&changed;
+    root_signal_io_suspend(context,&invalid,selected,XR_XIR_OK,true,"legal canonical view");
+    heads[declaration].result=XR_XIR_I64;
+    root_signal_io_suspend(context,&invalid,selected,XR_XIR_BAD_TYPE,false,"wrong canonical result");
+    effect_body_material_free(full);
+    CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK&&after.held_bytes==before.held_bytes);
+}
 static void root_signal_contracts(const XrXirCompileContext *context,const XrXirArtifact *code,const uint32_t ids[6]) {
     const XrXirModule *module=xr_xir_compile_artifact_module(code);uint32_t native=ids[4];
     CHECK(xir_native_callable_verify(module,native)==XR_XIR_OK);
@@ -178,7 +245,7 @@ int main(int argc,char **argv) {
     uint32_t ids[6];XrXirArtifact *code=root_signal_code(&context,ids);root_signal_emit(code,ids,emit?argv[2]:XR_ROOT_SIGNAL_GENERATED,emit);
     if (emit) xr_xir_compile_artifact_free(code);
     else {
-        root_signal_contracts(&context,code,ids);
+        root_signal_contracts(&context,code,ids);root_signal_io_canonical_owner(&context);
         XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&code,&program)==XR_XIR_OK && !code);
         if(detached)root_signal_detached(program,ids);
         else {root_signal_cases(program,ids);root_signal_owner_cases(program,ids,&context);root_signal_stop_cases(program,ids);root_signal_admission_cases(program,ids);}

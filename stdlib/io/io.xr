@@ -99,7 +99,7 @@ export final class File {
         if (!this._open) { return true }
         var ok = true
         if (this._owned) { ok = __fileClose(this._handle) }
-        this._open = false
+        if (ok) { this._open = false }
         return ok
     }
 }

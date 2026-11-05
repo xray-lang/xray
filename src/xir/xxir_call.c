@@ -882,7 +882,8 @@ XR_FUNC bool xir_call_retirement_pending(const XrXirCall *call) {
     return call_owner_current(call) && call && call->top &&
         (xir_instance_pipe_retirement_pending(call->config.instance,call,&call->config.admission)||
          xir_instance_process_retirement_pending(call->config.instance,call,&call->config.admission)||
-         xir_instance_dylib_retirement_pending(call->config.instance,call,&call->config.admission));
+         xir_instance_dylib_retirement_pending(call->config.instance,call,&call->config.admission)||
+         xir_instance_io_file_retirement_pending(call->config.instance,call,&call->config.admission));
 }
 static bool retire_frame(XrXirCall *call,XrXirCallStatus *failure) {
     XrXirCallView view=frame_view(call);
@@ -890,6 +891,7 @@ static bool retire_frame(XrXirCall *call,XrXirCallStatus *failure) {
     bool closed=xir_instance_pipe_retire(&view,failure);
     if(closed)closed=xir_instance_process_retire(&view,failure);
     if(closed)closed=xir_instance_dylib_retire(&view,failure);
+    if(closed)closed=xir_instance_io_file_retire(&view,failure);
     call->active_view=NULL;call->cleaning=false;
     return closed;
 }

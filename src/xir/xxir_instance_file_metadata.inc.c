@@ -12,6 +12,7 @@
 #include "../os/os_file_metadata.h"
 #include "../os/os_file_temp.h"
 #include "../os/os_directory_owned.h"
+#include "../os/os_file_owned.h"
 
 static XrOsIoStatus instance_temp_allocate(void *context,size_t bytes,void **output) {
     XrXirDomain *domain=context;
@@ -44,16 +45,20 @@ struct XirFileMetadataOwner {
     XrOsDirectoryText pending_name;
     uint64_t directory_token,directory_generation;
     bool directory_published,directory_closing,directory_end;
+    XrOsFileOwner file;
+    XirFileFrame *file_frames;
+    uint64_t file_token,file_generation;
+    bool file_published;
     uint32_t kind;
     XirFileMetadataOwner *next;
 };
-enum { XIR_FILE_METADATA_OWNER, XIR_FILE_TEMP_OWNER, XIR_DIRECTORY_OWNER };
+enum { XIR_FILE_METADATA_OWNER, XIR_FILE_TEMP_OWNER, XIR_DIRECTORY_OWNER, XIR_OWNED_FILE_OWNER };
 static void instance_directory_name_drop(XrXirInstance *root,XirFileMetadataOwner *owner) {
     instance_temp_free(root->domain,owner->pending_name.bytes);owner->pending_name=(XrOsDirectoryText){0};
 }
 static void instance_file_metadata_owner_unlink(XrXirInstance *root,XirFileMetadataOwner *owner) {
     XR_CHECK(!owner->owner.handle && !owner->temporary.state && !owner->directory.state &&
-        !owner->pending_name.bytes && !owner->pending_name.length,"only a discharged filesystem owner can retire");
+        !owner->pending_name.bytes && !owner->pending_name.length && !owner->file.state && !owner->file_frames,"only a discharged filesystem owner can retire");
     XirFileMetadataOwner **link=&root->file_metadata_owners;
     while(*link && *link!=owner)link=&(*link)->next;
     XR_CHECK(*link==owner,"filesystem close requires its root-owned node");
@@ -72,6 +77,10 @@ static bool instance_file_metadata_owners_close(XrXirInstance *root) {
         }else if(owner->kind==XIR_DIRECTORY_OWNER) {
             status=xr_os_io_directory_close(&owner->directory);
             if(status==XR_OS_IO_OK)instance_directory_name_drop(root,owner);
+        }
+        if(owner->kind==XIR_OWNED_FILE_OWNER) {
+            bool closed=false;status=instance_file_owner_close(owner,&closed);
+            if(status==XR_OS_IO_OK && !closed) {complete=false;owner=next;continue;}
         }
         if(status==XR_OS_IO_OK)
             instance_file_metadata_owner_unlink(root,owner);

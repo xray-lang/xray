@@ -20,6 +20,8 @@
 #include "host_os_signal_frontier_cases.h"
 #include "host_os_thread_token_cases.h"
 #include "host_os_file_kernel_cases.h"
+#include "host_os_io_file_real_cases.h"
+#include "base/xstdio_binary.h"
 static uint32_t host_named(const XrXirModule *module,const char *name){
  for(uint32_t f=0;f<module->function_count;++f)
   if(module->functions[f].name_length==strlen(name)&&!memcmp(module->functions[f].name,name,strlen(name)))return f;
@@ -81,6 +83,8 @@ static void host_ctfe(const XrXirArtifact *code,uint32_t function,const XrXirVal
  memcpy(request.evaluation.checked_identity,code->checked_identity,32);XrXirValue value={0};
  CHECK(xr_xir_compile_ctfe_calls(&request,&value)==XR_XIR_CTFE_NOT_SUPPORTED&&!value.type&&!value.payload);
 }
+#include "host_os_io_file_contracts.h"
+#include "host_os_io_file_real_source.h"
 static void host_io_contracts(XrXirCompileContext *context,const XrXirArtifact *code){
  const XrXirModule *m=xr_xir_compile_artifact_module(code);uint32_t f=host_named(m,"__chdir"),field=0;XrXirType path=m->functions[f].parameters[0];
  CHECK(xir_native_callable_verify(m,f)==XR_XIR_OK&&xir_native_callable_verify(m,host_named(m,"__chmod"))==XR_XIR_OK);
@@ -281,12 +285,16 @@ static void host_product(XrXirCompileContext *context,unsigned kind,const char *
 }
 int main(int argc,char **argv){
 #if defined(XR_OS_WINDOWS)
- CHECK(_setmode(_fileno(stdout),_O_BINARY)!=-1);
+ CHECK(xr_stdio_binary_init());
 #endif
- bool emit=argc==3&&!strcmp(argv[1],"--emit");CHECK(emit||argc==1);if(!emit){host_cpu_concurrency();host_file_kernel_execute();}
+ host_file_stdio_child=argc==2&&!strcmp(argv[1],"--file-stdio-child");
+ bool emit=argc==3&&!strcmp(argv[1],"--emit");CHECK(emit||argc==1||host_file_stdio_child);
+ if(host_file_stdio_child)CHECK(fgetc(stdin)==0x0d);
+ if(!emit&&!host_file_stdio_child){host_cpu_concurrency();host_file_kernel_execute();}
  XrCompileResourceLimits limits=XR_RESOURCE_DEFAULT_COMPILER_LIMITS;XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
  XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
- for(unsigned kind=0;kind<11;++kind)host_product(&context,kind,emit?argv[2]:XR_HOST_OS_GENERATED,emit);
+ if(!host_file_stdio_child)for(unsigned kind=0;kind<11;++kind)host_product(&context,kind,emit?argv[2]:XR_HOST_OS_GENERATED,emit);
+ host_file_real_product(&context,emit?argv[2]:XR_HOST_OS_GENERATED,emit);
  CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK&&before.held_bytes==after.held_bytes&&!runtime_live&&!runtime_bytes);
- xr_compile_resources_release(context.resources);if(!emit){CHECK(xr_os_io_thread_token_shutdown()==XR_OS_IO_OK);puts("42");}return 0;
+ xr_compile_resources_release(context.resources);if(!emit&&!host_file_stdio_child){host_file_stdio_parent();CHECK(xr_os_io_thread_token_shutdown()==XR_OS_IO_OK);puts("42");}return 0;
 }

@@ -14,6 +14,7 @@
  */
 
 #include "xcli_dispatch.h"
+#include "../../base/xstdio_binary.h"
 #if defined(XR_HAS_DAP) && defined(XR_OS_WINDOWS)
 #include "xcli_dap_worker.h"
 #endif
@@ -69,6 +70,7 @@ static void crash_handler(int sig) {
 #endif
 
 static int run_cli(int argc, char **argv) {
+    if(!xr_stdio_binary_init())return 1;
     /* MSVC's CRT (and most libc implementations) fully buffer stdout when
      * it is connected to a pipe — exactly the configuration the regression
      * runner uses. If a coroutine traps or aborts before the

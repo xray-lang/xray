@@ -22,6 +22,7 @@
 #include "xxir_format.h"
 #include "xxir_native_callable.h"
 #include "../os/os_thread.h"
+#include "../os/os_file_owned.h"
 #include "../os/os_proc.h"
 #include "../shared/xr_os_core.h"
 #include "xxir_from_utf8_internal.h"
@@ -100,6 +101,7 @@ typedef struct InstanceStorageRoute {
 typedef struct XirEnvironmentSnapshotOwner XirEnvironmentSnapshotOwner;
 typedef struct XirSystemOwner XirSystemOwner;
 typedef struct XirFileMetadataOwner XirFileMetadataOwner;
+typedef struct XirFileFrame XirFileFrame;
 typedef struct XirRootCallback XirRootCallback;
 typedef struct XirSignalRegistration XirSignalRegistration;
 typedef struct XirPipeOwner XirPipeOwner;
@@ -158,6 +160,9 @@ static bool instance_environment_snapshots_close(XrXirInstance *instance);
 #endif
 static bool instance_system_owners_close(XrXirInstance *root);
 static bool instance_file_metadata_owners_close(XrXirInstance *root);
+static XrOsIoStatus instance_file_owner_close(XirFileMetadataOwner *,bool *);
+static XrXirCallStatus instance_owned_tokens(uint32_t,int64_t *);
+static XrXirCallStatus instance_io_file_stage(XrXirCallView *,uint32_t,uint32_t,const XrXirValue *,uint32_t);
 static bool instance_signals_close(XrXirInstance *root);
 static bool instance_pipe_owners_close(XrXirInstance *root,bool all);
 static bool instance_process_owners_close(XrXirInstance *root,bool all);
@@ -1966,6 +1971,9 @@ XR_FUNC XrXirCallStatus xr_xir_instance_call_at(XrXirCallView *view,uint32_t ins
     if(entry<instance->program->entry_count &&
         xir_sys_pipe_id(instance->program->declarations->functions[entry].native_callable))
         return instance_pipe_stage(view,instruction,entry,arguments,count);
+    if(entry<instance->program->entry_count &&
+        xir_io_file_id(instance->program->declarations->functions[entry].native_callable))
+        return instance_io_file_stage(view,instruction,entry,arguments,count);
     if (!view_is_child(instance,view) && (entry>=instance->program->entry_count ||
         instance->program->declarations->functions[entry].method_kind!=XR_XIR_CONSTRUCTOR_FIELDS))
         return XR_XIR_CALL_READY;
@@ -2559,6 +2567,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_pointer(XrXirCallView *view,XrXirOp oper
 #include "xxir_instance_system.inc.c"
 #include "xxir_instance_sys_tokens.inc.c"
 #include "xxir_instance_file_metadata.inc.c"
+#include "xxir_instance_io_file_owner.inc.c"
 #include "xxir_instance_io.inc.c"
 #include "xxir_instance_pipe_owner.inc.c"
 #include "xxir_instance_pipe.inc.c"
@@ -2585,6 +2594,7 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
         !xir_native_callable_types(id,program->types,entry->parameters,entry->parameter_count,entry->result,error)) goto failed;
     for (uint32_t p=0;p<entry->parameter_count;++p)
         if (!xr_xir_value_argument(&view->arguments[p],view->arena,entry->parameters[p])) goto failed;
+    if(xir_io_file_id(id))return instance_io_file_resume(view,instance,id,entry);
     if(xir_sys_dylib_id(id))return instance_dylib_resume(view,instance,id,entry);
     if(xir_sys_process_id(id)||xir_os_exec_shell_id(id))return instance_process_resume(view,instance,id,entry);
     if(xir_sys_pipe_id(id))return instance_pipe_resume(view,instance,id,entry);
@@ -2728,6 +2738,7 @@ failed:
 }
 XR_FUNC void xr_xir_instance_native_callable_release(XrXirCallView *view,XrXirCallStatus reason) {
     (void)reason;
+    instance_file_frame_release(view);
     instance_dylib_frame_release(view);
     instance_process_frame_release(view);
     instance_pipe_frame_release(view);

@@ -174,9 +174,12 @@ static XrXirStatus instruction_direct_call_shape(const XrXirFunction *function,
     if (module->declarations && (xir_sys_direct_native_id(
         module->declarations->functions[op->immediate].native_callable)||xir_path_native_id(
         module->declarations->functions[op->immediate].native_callable)||xir_os_exec_native_id(
+        module->declarations->functions[op->immediate].native_callable)||xir_io_file_id(
         module->declarations->functions[op->immediate].native_callable)) && op->op!=XR_XIR_CALL) return XR_XIR_BAD_TYPE;
     if(module->declarations&&xir_os_exec_native_id(module->declarations->functions[op->immediate].native_callable)&&
         !xir_os_native_scope(module->declarations,caller_id,module->function_count))return XR_XIR_BAD_TYPE;
+    if(module->declarations && xir_io_file_id(module->declarations->functions[op->immediate].native_callable) &&
+        !xir_io_native_module_scope(module->declarations,caller_id,module->function_count))return XR_XIR_BAD_TYPE;
     if (xr_xir_function_is_generator(module,(uint32_t)op->immediate)!=
         (op->op==XR_XIR_GENERATOR_NEW)) return XR_XIR_BAD_TYPE;
     bool scoped_authorized=false;

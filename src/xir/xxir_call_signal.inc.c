@@ -50,7 +50,8 @@ XR_FUNC XrXirCallStatus xir_call_signal_origin(XrXirCallView *view,XirCallSignal
 XR_FUNC XrXirCallStatus xir_call_private_native_stage(XrXirCallView *view,uint32_t instruction,uint32_t target) {
     if(!xir_instance_pipe_nosuspend_transport(view,target)&&!xir_instance_process_nosuspend_transport(view,target)&&
         !xir_instance_dylib_nosuspend_transport(view,target)&&!xir_instance_path_nosuspend_transport(view,target)&&
-        !xir_instance_exec_pipe_nosuspend_transport(view,target))return XR_XIR_CALL_BAD_STATE;
+        !xir_instance_exec_pipe_nosuspend_transport(view,target)&&
+        !xir_instance_io_file_nosuspend_transport(view,target))return XR_XIR_CALL_BAD_STATE;
     return call_direct_origin_stage(view,instruction,target,true);
 }
 XR_FUNC XrXirCallStatus xir_call_private_native_origin(XrXirCallView *view,XirCallSignalOrigin *output) {
@@ -58,7 +59,8 @@ XR_FUNC XrXirCallStatus xir_call_private_native_origin(XrXirCallView *view,XirCa
         !xir_instance_process_nosuspend_transport(view,xr_xir_call_current_entry(view->activation))&&
         !xir_instance_dylib_nosuspend_transport(view,xr_xir_call_current_entry(view->activation))&&
         !xir_instance_path_nosuspend_transport(view,xr_xir_call_current_entry(view->activation))&&
-        !xir_instance_exec_pipe_nosuspend_transport(view,xr_xir_call_current_entry(view->activation))))
+        !xir_instance_exec_pipe_nosuspend_transport(view,xr_xir_call_current_entry(view->activation))&&
+        !xir_instance_io_file_nosuspend_transport(view,xr_xir_call_current_entry(view->activation))))
         return XR_XIR_CALL_BAD_STATE;
     return call_direct_origin_read(view,output,true);
 }

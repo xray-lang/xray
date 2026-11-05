@@ -22,6 +22,7 @@
 #include "os/os_thread.h"
 #include "os/os_system.h"
 #include "os/os_file_metadata.h"
+#include "os/os_file_owned.h"
 #include "os/os_file_mutation.h"
 #include "os/os_thread_token.h"
 #include "os/os_file_links.h"
@@ -70,6 +71,10 @@ static XrOsIoStatus host_temp_finish(const XrOsIoPolicy *,XrOsFileTempOwner *,bo
 static XrOsIoStatus host_directory_open(const XrOsDirectoryRequest *,XrOsDirectoryOwner *,bool *);
 static XrOsIoStatus host_directory_next(XrOsDirectoryOwner *,void *,bool(*)(void *),XrOsDirectoryText *);
 static XrOsIoStatus host_directory_close(XrOsDirectoryOwner *);
+static XrOsIoStatus host_file_open_begin(const XrOsIoPolicy *,const XrOsFileQuery *,const XrOsFileRequest *,XrOsFileOwner *,XrOsFileOperation *);
+static XrOsIoStatus host_file_begin(const XrOsIoPolicy *,const XrOsFileQuery *,const XrOsFileRequest *,XrOsFileOwner *,XrOsFileOperation *);
+static XrOsIoStatus host_file_poll(XrOsFileOperation *,XrOsFileProgress *);
+static XrOsIoStatus host_file_close(XrOsFileOwner *,bool *);
 static unsigned int host_count(void);
 static int host_pin(unsigned int);
 static XrOsIoStatus host_chmod(const XrOsIoPolicy *,const char *,int64_t,bool(*)(void *),bool *);
@@ -107,7 +112,15 @@ static XrOsIoStatus host_token_alive(const XrOsThreadTokenQuery *,int64_t,bool *
 #define xr_os_io_uptime host_system_uptime
 #define xr_os_io_loadavg host_system_loadavg
 #define xr_os_io_system_close host_system_close
+#define xr_os_io_file_open_begin host_file_open_begin
+#define xr_os_io_file_begin host_file_begin
+#define xr_os_io_file_poll host_file_poll
+#define xr_os_io_file_close host_file_close
 #include "../xir_runtime_allocations.h"
+#undef xr_os_io_file_open_begin
+#undef xr_os_io_file_begin
+#undef xr_os_io_file_poll
+#undef xr_os_io_file_close
 #undef xr_os_io_thread_token_current
 #undef xr_os_io_thread_token_alive
 #undef xr_os_io_uid
@@ -205,6 +218,38 @@ static XrOsIoStatus host_system_close(XrOsSystemOwner *o){
  return xr_os_io_system_close(o);
 }
 static XrOsIoStatus host_allocate_cancel(void *,size_t,void **);
+enum { FILE_NORMAL,FILE_READ_OOM,FILE_READ_CANCEL,FILE_CLOSE_ONCE };
+static unsigned file_mode,file_open_calls,file_read_calls,file_write_calls,file_close_calls,file_fault_hits;
+static size_t file_observed_count,file_oom_allocation;
+static unsigned char file_observed_bytes[4];
+static bool file_observing,file_read_observed;
+static XrXirInstance *file_fault_instance;
+static XrOsIoStatus host_file_open_begin(const XrOsIoPolicy *memory,const XrOsFileQuery *query,
+ const XrOsFileRequest *request,XrOsFileOwner *owner,XrOsFileOperation *operation){
+ if(file_observing)++file_open_calls;return xr_os_io_file_open_begin(memory,query,request,owner,operation);
+}
+static XrOsIoStatus host_file_begin(const XrOsIoPolicy *memory,const XrOsFileQuery *query,
+ const XrOsFileRequest *request,XrOsFileOwner *owner,XrOsFileOperation *operation){
+ if(file_observing){if(request->action==XR_OS_FILE_READ){++file_read_calls;file_read_observed=true;}
+  else if(request->action==XR_OS_FILE_WRITE)++file_write_calls;}
+ return xr_os_io_file_begin(memory,query,request,owner,operation);
+}
+static XrOsIoStatus host_file_poll(XrOsFileOperation *operation,XrOsFileProgress *output){
+ XrOsIoStatus status=xr_os_io_file_poll(operation,output);
+ if(file_observing&&file_read_observed&&status==XR_OS_IO_OK&&output->terminal&&output->success&&output->status==XR_OS_IO_OK&&output->count&&
+  (file_mode==FILE_READ_OOM||file_mode==FILE_READ_CANCEL)){
+  CHECK(output->bytes&&output->count<=sizeof(file_observed_bytes));
+  memcpy(file_observed_bytes,output->bytes,output->count);file_observed_count=output->count;file_read_observed=false;
+  unsigned mode=file_mode;file_mode=FILE_NORMAL;++file_fault_hits;
+  if(mode==FILE_READ_OOM){file_oom_allocation=runtime_attempts;runtime_fail_at=runtime_attempts;}
+  else CHECK(file_fault_instance&&xr_xir_call_request_cancel(file_fault_instance->call)==XR_XIR_CALL_CANCEL_REQUESTED);
+ }
+ return status;
+}
+static XrOsIoStatus host_file_close(XrOsFileOwner *owner,bool *closed){
+ if(file_observing){++file_close_calls;if(file_mode==FILE_CLOSE_ONCE){file_mode=FILE_NORMAL;++file_fault_hits;return XR_OS_IO_IO;}}
+ return xr_os_io_file_close(owner,closed);
+}
 enum { STAT_NORMAL,STAT_ZERO_IDS,STAT_OOM,STAT_CANCEL,STAT_CANCEL_CONVERT,STAT_CANCEL_AFTER,STAT_BAD_UTF,STAT_RETAIN_CLOSE };
 static unsigned stat_mode,stat_calls,stat_close_calls,stat_close_failures,stat_vector_flags;
 static bool stat_close_reentry;
