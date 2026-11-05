@@ -461,6 +461,79 @@ static void provenance_source_controls(void) {
 
 #include "xir_source_facts_cases.h"
 
+static uint32_t provenance_shape_blocks(const XrXirModule *module) {
+    uint64_t blocks=0;
+    for(uint32_t f=0;f<module->function_count;++f)blocks+=module->functions[f].block_count;
+    CHECK(blocks && blocks<=UINT32_MAX);return (uint32_t)blocks;
+}
+
+/* Source and its generic instance each fit this real per-module limit, while
+ * their sum does not. The packet and all bodies come from the public producer. */
+static void provenance_shape_contexts(void) {
+    static const char text[]="fn identity<T>(value:T)->T{return value}\n"
+        "export fn run()->i64{const text=identity<string>(\"x\");return identity<i64>(41)+len(text)}\nprint(run())\n";
+    LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"provenance-shape",NULL};
+    XrXirSourceRequest request={session,NULL,&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceText input={NULL,text,sizeof(text)-1};XrXirSourceResult source={0};
+    XrXirSourceDiagnostic source_diagnostic={0};XrXirSourceFailure failure={0};XrXirCheckedPacket packet={0};
+    CHECK(xr_xir_compile_source_check_text(&request,&input,&source,&source_diagnostic,&failure)==XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);
+    xr_xir_compile_source_result_free(&source);xr_xir_compile_source_failure_free(&failure);xr_compile_session_free(session);
+    XrXirArtifact *cold=NULL,*instance=NULL;XrXirDiagnostic diagnostic={0};
+    CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&cold,NULL)==XR_XIR_OK);
+    uint32_t source_blocks=provenance_shape_blocks(&cold->module);
+    CHECK(xr_xir_compile_specialize(cold,&instance,NULL,NULL)==XR_XIR_OK);
+    uint32_t instance_blocks=provenance_shape_blocks(&instance->module);
+    CHECK(source_blocks>1 && instance_blocks>source_blocks);
+    xr_xir_compile_artifact_free(instance);instance=NULL;xr_xir_compile_artifact_free(cold);cold=NULL;
+    uint64_t ceiling=(uint64_t)source_blocks+instance_blocks-1u;
+    CHECK(ceiling<=owner.context.limits.blocks);
+    XrXirCompileContext bounded=owner.context;bounded.limits.blocks=(uint32_t)ceiling;
+    CHECK(source_blocks<=bounded.limits.blocks && instance_blocks<=bounded.limits.blocks &&
+        bounded.limits.blocks<(uint64_t)source_blocks+instance_blocks);
+    XrCompileResourceStats baseline=library_compile_stats(&owner.context);
+    CHECK(xr_xir_compile_checked_read(&bounded,packet.bytes,packet.length,&cold,NULL)==XR_XIR_OK);
+    XrXirStatus status=xr_xir_compile_specialize(cold,&instance,&diagnostic,NULL);
+    if(status!=XR_XIR_OK)fprintf(stderr,"provenance separate shape status%u f%u/b%u/i%u Source%u Instance%u limit%u\n",
+        status,diagnostic.function,diagnostic.block,diagnostic.instruction,source_blocks,instance_blocks,bounded.limits.blocks);
+    CHECK(status==XR_XIR_OK && provenance_shape_blocks(&instance->module)==instance_blocks);
+    CHECK(instance->context.resources==owner.context.resources && instance->module.provenance &&
+        instance->module.provenance->source->context.resources==owner.context.resources &&
+        instance->module.provenance->source->context.limits.blocks==bounded.limits.blocks &&
+        cold->context.limits.blocks==bounded.limits.blocks);
+    xr_xir_compile_artifact_free(cold);cold=NULL;
+    CHECK(xr_xir_compile_artifact_verify(instance,NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(instance);instance=NULL;
+    CHECK(library_compile_stats(&owner.context).held_bytes==baseline.held_bytes);
+    /* Neither module's own shape admission is disabled by independent bounds. */
+    XrXirCompileContext too_small=owner.context;too_small.limits.blocks=source_blocks-1u;
+    CHECK(xr_xir_compile_checked_read(&too_small,packet.bytes,packet.length,&cold,NULL)==XR_XIR_BUDGET && !cold);
+    CHECK(library_compile_stats(&owner.context).held_bytes==baseline.held_bytes);
+    too_small.limits.blocks=instance_blocks-1u;
+    CHECK(too_small.limits.blocks>=source_blocks);
+    CHECK(xr_xir_compile_checked_read(&too_small,packet.bytes,packet.length,&cold,NULL)==XR_XIR_OK);
+    XrCompileResourceStats held=library_compile_stats(&owner.context);
+    CHECK(xr_xir_compile_specialize(cold,&instance,NULL,NULL)==XR_XIR_BUDGET && !instance);
+    CHECK(library_compile_stats(&owner.context).held_bytes==held.held_bytes);
+    xr_xir_compile_artifact_free(cold);cold=NULL;
+    CHECK(library_compile_stats(&owner.context).held_bytes==baseline.held_bytes);
+    /* A physical failure stays typed and releases temporary storage before a
+     * new request on this same Source and finite heap owner can succeed. */
+    CHECK(xr_xir_compile_checked_read(&bounded,packet.bytes,packet.length,&cold,NULL)==XR_XIR_OK);
+    held=library_compile_stats(&owner.context);size_t blocks=source_program_compile_live,bytes=source_program_compile_bytes;
+    source_program_compile_attempts=0;source_program_compile_fail_at=0;source_program_compile_injected=false;
+    status=xr_xir_compile_specialize(cold,&instance,NULL,NULL);
+    source_program_compile_fail_at=SIZE_MAX;
+    CHECK(status==XR_XIR_OUT_OF_MEMORY && !instance && source_program_compile_injected);
+    CHECK(library_compile_stats(&owner.context).held_bytes==held.held_bytes &&
+        source_program_compile_live==blocks && source_program_compile_bytes==bytes);
+    CHECK(xr_xir_compile_specialize(cold,&instance,NULL,NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(cold);xr_xir_compile_artifact_free(instance);
+    xr_xir_compile_checked_packet_free(&packet);library_compile_owner_drop(&owner);
+}
+
 static void provenance_take_controls(void) {
     source_facts_case_lifetime();
     provenance_source_types_controls();
@@ -483,6 +556,7 @@ static void provenance_take_controls(void) {
     XrCompileResourceStats after=library_compile_stats(&owner.context);
     CHECK(after.allocated_bytes>before.allocated_bytes && after.held_bytes==before.held_bytes);
     library_compile_owner_drop(&owner);
+    provenance_shape_contexts();
 }
 
 /* Representative physical faults release all temporary ownership before the

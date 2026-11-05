@@ -637,7 +637,8 @@ static XrXirStatus spec_nominal_fields(SpecContext *c) {
     }
     return XR_XIR_OK;
 }
-static XrXirStatus spec_provenance(SpecContext *c, XrXirProvenance **output) {
+static XrXirStatus spec_provenance(SpecContext *c, const XrXirCompileContext *source_context,
+    XrXirProvenance **output) {
     XrXirStatus allocation_status = XR_XIR_OK;
     uint64_t bytes = (uint64_t)c->count * sizeof(XrXirOrigin);
     if (bytes > SIZE_MAX) return XR_XIR_BUDGET;
@@ -656,9 +657,11 @@ static XrXirStatus spec_provenance(SpecContext *c, XrXirProvenance **output) {
         xr_compile_resources_free(origins);return c->diagnostic.status;
     }
     const XrXirEffects *source_read=c->effects?c->effects:c->verification_effects;
+    /* Source and instance are separately bounded complete modules. Re-reading
+     * Source keeps its original shape limits, shared heap owner and control. */
     XrXirStatus status = source_read ? xr_xir_compile_provenance_copy_source_effects(
-        &c->remaining,&evidence,source_read,output, c->control) :
-        xr_xir_compile_provenance_copy(&c->remaining,&evidence,output, c->control);
+        source_context,&evidence,source_read,output, c->control) :
+        xr_xir_compile_provenance_copy(source_context,&evidence,output, c->control);
     xr_compile_resources_free(origins);
     return status;
 }
@@ -752,7 +755,7 @@ static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
     if (c.diagnostic.status != XR_XIR_OK) goto done;
     XrXirModule specialized = {XR_XIR_CHECKED, c.functions, c.count, c.source->declarations ? &declarations : NULL, NULL, c.types.count || c.types.nominals ? &c.types : NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirProvenance *provenance = NULL;
-    c.diagnostic.status = spec_provenance(&c,&provenance);
+    c.diagnostic.status = spec_provenance(&c,&limits,&provenance);
     if (c.diagnostic.status != XR_XIR_OK) goto done;
     specialized.provenance = provenance;
     XrXirConstruction *projected = NULL;
