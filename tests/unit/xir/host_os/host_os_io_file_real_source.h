@@ -13,6 +13,7 @@
  */
 #ifndef HOST_OS_IO_FILE_REAL_SOURCE_H
 #define HOST_OS_IO_FILE_REAL_SOURCE_H
+#include "xir/xxir_class_stage_internal.h"
 static const char host_file_real_exports[]=
  "\nexport fn filePath(raw:string)->Path{return Path(raw)}\n"
  "export fn fileRoundtrip(path:Path,bytes:Array<u8>,text:string)->Array<u8>{\n"
@@ -49,7 +50,15 @@ static const char host_file_real_exports[]=
  "export fn fileWriteTextRaw(handle:i64,data:string,offset:i64)->i64{return __fileWriteStr(handle,data,offset)}\n"
  "export fn fileLossy(bytes:Array<u8>)->string{return string.fromUtf8Lossy(bytes[:])}\n"
  "export fn fileLossyCheck()->bool{const bytes:Array<u8> = [65 as u8,0 as u8,240 as u8,159 as u8,146 as u8]\n"
- " return string.fromUtf8Lossy(bytes[:])==\"A\\0\xEF\xBF\xBD\"}\n";
+ " return string.fromUtf8Lossy(bytes[:])==\"A\\0\xEF\xBF\xBD\"}\n"
+ "class FileConstructorStages{saved:Array<string>;first:i64\n"
+ " init(handle:i64){this.saved=[\"staged\",\"\xE4\xB8\xAD\"];const bytes=__fileRead(handle,4)\n"
+ " assert(bytes!=null&&len(bytes!)==4);this.first=bytes![0] as i64;assert(__fileClose(handle))}}\n"
+ "export fn fileConstructorRaw(handle:i64)->i64{const value=FileConstructorStages(handle);assert(len(value.saved)==2);return value.first}\n"
+ "export fn fileEager(path:Path)->i64{const reader=BufReader.open(path,2);assert(reader!=null)\n"
+ " const iterator=LineIterator(reader!);const rest=reader!.readLine();assert(rest!=null)\n"
+ " assert(iterator.hasNext());const first=iterator.next();assert(first!=null&&first! == \"\");assert(!iterator.hasNext());return len(rest!)}\n"
+ "export fn fileEmptyIterator(path:Path)->LineIterator{const reader=BufReader.open(path,2);assert(reader!=null);return LineIterator(reader!)}\n";
 static XrXirArtifact *host_file_real_code(XrXirCompileContext *context){
  FILE *file=fopen(XR_HOST_OS_ROOT "/stdlib/io/io.xr","rb");CHECK(file&&!fseek(file,0,SEEK_END));long size=ftell(file);CHECK(size>0&&!fseek(file,0,SEEK_SET));
  CHECK((uint64_t)size<=SIZE_MAX-sizeof(host_file_real_exports));size_t length=(size_t)size+sizeof(host_file_real_exports)-1;
@@ -68,12 +77,33 @@ static XrXirArtifact *host_file_real_code(XrXirCompileContext *context){
  CHECK(xr_xir_compile_specialize(cold,&closed,NULL,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(cold);
  CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},NULL,&code,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);return code;
 }
+static uint32_t host_file_constructor_contracts(const XrXirModule *module,uint32_t entry){
+ uint32_t constructor=UINT32_MAX,helper=UINT32_MAX;const XrXirFunction *body=module->functions+entry;
+ for(uint32_t i=0;i<body->instruction_count;++i){const XrXirInstruction *op=body->instructions+i;
+  if(op->op==XR_XIR_CALL&&op->immediate>=0&&(uint64_t)op->immediate<module->function_count&&
+   module->declarations->functions[op->immediate].method_kind==XR_XIR_CONSTRUCTOR)constructor=(uint32_t)op->immediate;}
+ CHECK(constructor!=UINT32_MAX);uint32_t owner=module->declarations->functions[constructor].nominal_owner;
+ for(uint32_t f=0;f<module->function_count;++f)if(module->declarations->functions[f].nominal_owner==owner&&
+  module->declarations->functions[f].method_kind==XR_XIR_CONSTRUCTOR_FIELDS)helper=f;
+ CHECK(helper!=UINT32_MAX&&!module->declarations->functions[constructor].promises&&!module->declarations->functions[helper].promises);
+ CHECK(xir_compile_class_stage_verify(module,NULL)==XR_XIR_OK);
+ CHECK(!module->function_count||sizeof(XrXirFunctionIdentity)<=SIZE_MAX/(size_t)module->function_count);
+ XrXirFunctionIdentity *identities=xr_malloc(module->function_count*sizeof(*identities));CHECK(identities);
+ memcpy(identities,module->declarations->functions,module->function_count*sizeof(*identities));
+ XrXirDeclarations declarations=*module->declarations;declarations.functions=identities;XrXirModule changed=*module;changed.declarations=&declarations;
+ CHECK(xir_compile_class_stage_verify(&changed,NULL)==XR_XIR_OK);
+ identities[helper].promises=XR_XIR_FUNCTION_NO_SUSPEND;CHECK(xir_compile_class_stage_verify(&changed,NULL)==XR_XIR_BAD_TYPE);identities[helper].promises=0;
+ identities[constructor].promises=XR_XIR_FUNCTION_NO_SUSPEND;CHECK(xir_compile_class_stage_verify(&changed,NULL)==XR_XIR_BAD_TYPE);
+ identities[constructor].promises=identities[helper].promises=XR_XIR_FUNCTION_OVERRIDE;
+ CHECK(xir_compile_class_stage_verify(&changed,NULL)==XR_XIR_BAD_TYPE);xr_free(identities);return helper;
+}
 static void host_file_real_product(XrXirCompileContext *context,const char *directory,bool emit){
  if(!emit&&!host_file_stdio_child)host_file_contracts(context);
  XrXirArtifact *code=host_file_real_code(context);const XrXirModule *module=xr_xir_compile_artifact_module(code);
  uint32_t ids[HOST_REAL_COUNT]={module->declarations->entry_function};
- static const char *const names[]={"filePath","fileRoundtrip","fileDeferred","fileStdio","fileOpenRaw","fileReadRaw","fileCloseRaw","fileFlushRaw","fileWriteRaw","fileWriteTextRaw","fileLossy","fileLossyCheck"};
- for(unsigned n=0;n<HOST_REAL_COUNT-1;++n)ids[n+1]=host_named(module,names[n]);
+ static const char *const names[]={"filePath","fileRoundtrip","fileDeferred","fileStdio","fileOpenRaw","fileReadRaw","fileCloseRaw","fileFlushRaw","fileWriteRaw","fileWriteTextRaw","fileLossy","fileLossyCheck","fileConstructorRaw","fileEager","fileEmptyIterator"};
+ for(unsigned n=0;n<HOST_REAL_COUNT-2;++n)ids[n+1]=host_named(module,names[n]);
+ ids[HOST_REAL_CTOR_HELPER]=host_file_constructor_contracts(module,ids[HOST_REAL_CONSTRUCTOR]);
  uint32_t decoder=host_named(module,"fromUtf8Lossy");CHECK(module->declarations->functions[decoder].native_callable==118u&&
   xir_native_callable_verify(module,decoder)==XR_XIR_OK);
  const XrXirFunction *head=module->functions+decoder;XrXirType wrong=XR_XIR_STRING;

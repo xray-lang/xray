@@ -47,7 +47,7 @@ static XrXirStatus class_stage_pair(const XrXirModule *module,uint32_t helper,
     XrXirLiteral name=table->declarations?table->declarations[owner].module:table->identities[owner].module;
     uint32_t exported=table->declarations?table->declarations[owner].exported:table->identities[owner].exported;
     if(identity->module>=d->module_count || !d->modules || identity->cleanup_owner || identity->test_role ||
-        identity->native_callable || identity->promises!=XR_XIR_FUNCTION_NO_SUSPEND ||
+        identity->native_callable || (identity->promises&~XR_XIR_FUNCTION_NO_SUSPEND) ||
         identity->exported!=exported || !name.bytes ||
         d->modules[identity->module].name_length!=name.length || !d->modules[identity->module].name ||
         memcmp(name.bytes,d->modules[identity->module].name,name.length))return XR_XIR_BAD_TYPE;

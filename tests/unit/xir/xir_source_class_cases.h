@@ -13,6 +13,7 @@
 #ifndef XIR_SOURCE_CLASS_CASES_H
 #define XIR_SOURCE_CLASS_CASES_H
 #include "xir/xxir_class.h"
+#include "xir/xxir_effects.h"
 static const XrXirNominalDeclaration *source_class_case_nominal(const XrXirSourceView *view, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(view->types, type);
     CHECK(node && node->kind == XR_XIR_TYPE_NOMINAL && view->types->nominals &&
@@ -81,7 +82,7 @@ static void source_class_supported_query_facts(const XrXirSourceResult *result, 
                 const XrXirFunctionIdentity *identity = &module->declarations->functions[f];
                 if (identity->nominal_owner != nominal_owner) continue;
                 if (identity->method_kind == XR_XIR_CONSTRUCTOR) {
-                    ++constructors; constructor = f; CHECK(identity->promises & XR_XIR_FUNCTION_NO_SUSPEND);
+                    ++constructors; constructor = f; CHECK(!identity->promises);
                     if (index == 18) CHECK(function->name_length == 8 && !memcmp(function->name, "$default", 8));
                 }
                 if (function->name_length == 14 && !memcmp(function->name, "$field_default", 14)) {
@@ -93,6 +94,9 @@ static void source_class_supported_query_facts(const XrXirSourceResult *result, 
                 }
             }
             CHECK(constructors == 1 && constructor != UINT32_MAX && source_class_case_ops(&module->functions[constructor], XR_XIR_CLASS_NEW) == 1);
+            XrXirEffects *effects=NULL;CHECK(xr_xir_compile_effects_analyze(result->checked,&effects)==XR_XIR_OK);
+            XrXirEffectFacts fact=xr_xir_effects_read(effects,constructor);
+            CHECK(fact.status==XR_XIR_OK&&fact.control.suspend==XR_XIR_EFFECT_NONE);xr_xir_compile_effects_free(effects);
             if (index == 18) CHECK(!defaults && !declaration(view, "init", owner->id));
             else {
                 CHECK(defaults == 1 && initializer != UINT32_MAX && declaration(view, "init", owner->id));
@@ -166,7 +170,8 @@ static void source_class_definition_cases(XrXirSourceRequest *request) {
     {"final class C{x:i64 init(){this.x=1} static bad()->i64{return this.x}}",4,"name is not an initialized value"},
     {"final class C{x:i64 private init(){this.x=1}}\nfn bad()->C{return C()}",3,"constructor arity or authority mismatch"},
     {"final class C<T>{x:i64 init(x:i64){this.x=x} get()->i64{return this.x}}\nfn read()->i64{return C<string>(41).get()}",0,""},
-    {"final class C{x:i64 init(){this.x=1;Coro.yield()}}",3,"declared no_suspend function may suspend or call an unqualified callable"},
+    {"final class C{x:i64 init(){this.x=1;Coro.yield()}}",0,""},
+    {"final class C{x:i64 init(){this.x=1;Coro.yield()}}\nfn bad(){defer{C()}}",3,"E0392: defer may suspend or create a task"},
     {"final class C{init(){}}\nfn bad(c:C){c=C()}",3,"assignment requires a mutable binding"},
     {"final class C{init(){}}\nfn missing<T>(value:T)->i64{return value.get()}",3,"receiver has no declared interface requirements"},
     {"final class C{x:i64 init(){this.x=1}}\nfn send<T:Sendable>(x:T){}\nfn bad(){send<C>(C())}",3,"type argument does not prove the declared constraint"},

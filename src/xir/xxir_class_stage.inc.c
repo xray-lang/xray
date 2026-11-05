@@ -20,7 +20,7 @@ XR_FUNC XrXirStatus xir_compile_class_stage_signature(const XrXirModule *module,
     if(identity->method_kind!=XR_XIR_CONSTRUCTOR_FIELDS || !identity->nominal_owner ||
         identity->nominal_owner>table->count || identity->member_access!=XR_XIR_MEMBER_PRIVATE ||
         identity->exported || identity->cleanup_owner || identity->native_callable || identity->test_role ||
-        identity->promises!=XR_XIR_FUNCTION_NO_SUSPEND)return XR_XIR_BAD_TYPE;
+        (identity->promises&~XR_XIR_FUNCTION_NO_SUSPEND))return XR_XIR_BAD_TYPE;
     uint32_t owner=identity->nominal_owner-1;
     uint32_t kind=table->declarations?table->declarations[owner].kind:table->identities[owner].kind;
     uint32_t arity=table->declarations?table->declarations[owner].parameter_count:table->identities[owner].arity;
@@ -38,7 +38,7 @@ XR_FUNC XrXirStatus xir_compile_class_stage_signature(const XrXirModule *module,
     const XrXirFunctionIdentity *declared=&module->declarations->functions[constructor];
     const XrXirFunction *a=&module->functions[helper],*b=&module->functions[constructor];
     if(identity->module!=declared->module || declared->member_access ||
-        !(declared->promises&XR_XIR_FUNCTION_NO_SUSPEND) || a->parameter_count!=b->parameter_count ||
+        declared->promises!=identity->promises || a->parameter_count!=b->parameter_count ||
         a->consume_parameter_count!=b->consume_parameter_count || a->error_type!=b->error_type ||
         (a->parameter_count && (!a->parameters || !b->parameters)) ||
         (a->consume_parameter_count && (!a->consume_parameters || !b->consume_parameters)) ||

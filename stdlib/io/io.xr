@@ -205,7 +205,11 @@ export final class LineIterator {
         this._reader = reader
         this._next = null
         this._done = false
-        this.advance()
+        this._next = reader.readLine()
+        if (this._next == null) {
+            this._done = true
+            reader.close()
+        }
     }
 
     private advance() {

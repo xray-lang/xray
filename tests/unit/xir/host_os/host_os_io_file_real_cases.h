@@ -17,7 +17,7 @@
 static bool host_file_stdio_child;
 enum { HOST_REAL_ENTRY,HOST_REAL_PATH,HOST_REAL_ROUNDTRIP,HOST_REAL_DEFER,HOST_REAL_STDIO,
  HOST_REAL_OPEN,HOST_REAL_READ,HOST_REAL_CLOSE,HOST_REAL_FLUSH,HOST_REAL_WRITE,HOST_REAL_WRITE_STR,
- HOST_REAL_LOSSY,HOST_REAL_LOSSY_CHECK,HOST_REAL_COUNT };
+ HOST_REAL_LOSSY,HOST_REAL_LOSSY_CHECK,HOST_REAL_CONSTRUCTOR,HOST_REAL_EAGER,HOST_REAL_EMPTY,HOST_REAL_CTOR_HELPER,HOST_REAL_COUNT };
 #if defined(XR_OS_WINDOWS)
 static const unsigned char host_file_real_input[]={0x41,0x0D,0x0A,0x1A,0,0xFF,0x42};
 /* The two-byte UTF-8 prefix makes offset two distinct from a rune index. */
@@ -138,16 +138,16 @@ static void host_file_real_authority(XrXirProgram *program,const uint32_t *ids,c
  xr_xir_value_drop(&object);xr_xir_value_drop(&other);xr_xir_value_drop(&token);
  host_file_real_retire(a,XR_XIR_CALL_READY);host_file_real_retire(b,XR_XIR_CALL_READY);CHECK(runtime_live==live&&runtime_bytes==bytes);
 }
-static void host_file_real_fault(XrXirProgram *program,const uint32_t *ids,const char *path,unsigned mode){
+static void host_file_real_fault(XrXirProgram *program,const uint32_t *ids,const char *path,unsigned mode,bool constructor){
  size_t live=runtime_live,bytes=runtime_bytes;XrXirInstance *instance=host_file_real_instance(program);
  XrXirValue object=host_file_real_path(instance,ids,path),token=host_file_real_invoke(instance,ids[HOST_REAL_OPEN],&object,1);
  CHECK(token.type==XR_XIR_I64&&token.payload>=3);file_observing=true;file_mode=mode;file_fault_instance=instance;
  unsigned reads=file_read_calls,closes=file_close_calls,hits=file_fault_hits;file_observed_count=0;
  XrXirValue args[]={token,{XR_XIR_I64,0,4}};bool closing=mode==FILE_CLOSE_ONCE;
- CHECK(xr_xir_instance_start(instance,ids[closing?HOST_REAL_CLOSE:HOST_REAL_READ],args,closing?1u:2u)==XR_XIR_CALL_READY);
+ CHECK(xr_xir_instance_start(instance,ids[closing?HOST_REAL_CLOSE:constructor?HOST_REAL_CONSTRUCTOR:HOST_REAL_READ],args,closing||constructor?1u:2u)==XR_XIR_CALL_READY);
  XrXirCallStatus expected=closing?XR_XIR_CALL_HOST_ERROR:mode==FILE_READ_OOM?XR_XIR_CALL_OOM:XR_XIR_CALL_CANCELLED;
  XrXirCallStatus status=host_file_real_drive(instance).outcome.status;runtime_fail_at=SIZE_MAX;
- if(status!=expected)fprintf(stderr,"File fault mode%u status%u expected%u\n",mode,status,expected);
+ if(status!=expected)fprintf(stderr,"File fault mode%u constructor%u status%u expected%u\n",mode,(unsigned)constructor,status,expected);
  CHECK(status==expected&&file_fault_hits==hits+1&&file_mode==FILE_NORMAL);
  XrXirValue output={0};CHECK(xr_xir_instance_take_result(instance,&output)==(expected==XR_XIR_CALL_CANCELLED?XR_XIR_CALL_BAD_STATE:expected)&&
   !output.type&&!output.reserved&&!output.payload);
@@ -156,6 +156,27 @@ static void host_file_real_fault(XrXirProgram *program,const uint32_t *ids,const
  xr_xir_value_drop(&object);xr_xir_value_drop(&token);host_file_real_retire(instance,expected);file_fault_instance=NULL;
  CHECK(file_read_calls==reads+(closing?0u:1u)&&file_close_calls==closes+(closing?2u:1u));
  file_observing=false;CHECK(runtime_live==live&&runtime_bytes==bytes);
+}
+static void host_file_constructor_execute(XrXirProgram *program,const uint32_t *ids,const char *path){
+ size_t live=runtime_live,bytes=runtime_bytes;XrXirInstance *instance=host_file_real_instance(program);
+ XrXirValue object=host_file_real_path(instance,ids,path),token=host_file_real_invoke(instance,ids[HOST_REAL_OPEN],&object,1);
+ CHECK(token.type==XR_XIR_I64&&token.payload>=3);
+ unsigned reads=file_read_calls;file_observing=true;
+ CHECK(xr_xir_instance_start(instance,ids[HOST_REAL_CTOR_HELPER],&token,1)==XR_XIR_CALL_BAD_ARGUMENT&&file_read_calls==reads);file_observing=false;
+ XrXirValue output=host_file_real_invoke(instance,ids[HOST_REAL_CONSTRUCTOR],&token,1);CHECK(output.type==XR_XIR_I64&&output.payload==13);xr_xir_value_drop(&output);
+ output=host_file_real_invoke(instance,ids[HOST_REAL_CLOSE],&token,1);CHECK(output.type==XR_XIR_BOOL&&!output.payload);xr_xir_value_drop(&output);
+ output=host_file_real_invoke(instance,ids[HOST_REAL_EAGER],&object,1);CHECK(output.type==XR_XIR_I64&&output.payload==6);xr_xir_value_drop(&output);
+ char empty[8192];wchar_t wide[8192];int size=snprintf(empty,sizeof(empty),"%s.empty",path);CHECK(size>0&&(size_t)size<sizeof(empty));
+ CHECK(MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,empty,-1,wide,8192)>0);
+ HANDLE file=CreateFileW(wide,GENERIC_WRITE,0,NULL,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,NULL);CHECK(file!=INVALID_HANDLE_VALUE&&CloseHandle(file));
+ XrXirValue empty_path=host_file_real_path(instance,ids,empty);
+ output=host_file_real_invoke(instance,ids[HOST_REAL_EMPTY],&empty_path,1);CHECK(output.type==(uint32_t)program->entries[ids[HOST_REAL_EMPTY]].result);
+ /* The returned iterator and its Instance remain live. Exclusive access here
+  * proves the eager empty read closed the File before construction returned. */
+ file=CreateFileW(wide,GENERIC_READ,0,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);CHECK(file!=INVALID_HANDLE_VALUE);
+ unsigned char byte=0;DWORD count=1;CHECK(ReadFile(file,&byte,1,&count,NULL)&&!count&&CloseHandle(file));
+ xr_xir_value_drop(&output);xr_xir_value_drop(&empty_path);xr_xir_value_drop(&object);xr_xir_value_drop(&token);
+ host_file_real_retire(instance,XR_XIR_CALL_READY);CHECK(DeleteFileW(wide)&&runtime_live==live&&runtime_bytes==bytes);
 }
 #endif
 static void host_file_real_execute(XrXirProgram *program,const uint32_t ids[HOST_REAL_COUNT]){
@@ -181,9 +202,12 @@ static void host_file_real_execute(XrXirProgram *program,const uint32_t ids[HOST
  host_file_real_fixture(&fixture,1);xr_xir_value_drop(&path);xr_xir_value_drop(&input);xr_xir_value_drop(&text);
  CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY&&runtime_live==live&&runtime_bytes==bytes);
  host_file_real_authority(program,ids,fixture.path);
- host_file_real_fault(program,ids,fixture.path,FILE_READ_OOM);host_file_real_fixture(&fixture,1);
- host_file_real_fault(program,ids,fixture.path,FILE_READ_CANCEL);host_file_real_fixture(&fixture,1);
- host_file_real_fault(program,ids,fixture.path,FILE_CLOSE_ONCE);host_file_real_fixture(&fixture,1);
+ host_file_real_fault(program,ids,fixture.path,FILE_READ_OOM,false);host_file_real_fixture(&fixture,1);
+ host_file_real_fault(program,ids,fixture.path,FILE_READ_CANCEL,false);host_file_real_fixture(&fixture,1);
+ host_file_real_fault(program,ids,fixture.path,FILE_CLOSE_ONCE,false);host_file_real_fixture(&fixture,1);
+ host_file_constructor_execute(program,ids,fixture.path);host_file_real_fixture(&fixture,1);
+ host_file_real_fault(program,ids,fixture.path,FILE_READ_CANCEL,true);host_file_real_fixture(&fixture,1);
+ host_file_real_fault(program,ids,fixture.path,FILE_READ_OOM,true);host_file_real_fixture(&fixture,1);
  host_file_real_fixture(&fixture,2);
 #else
  size_t live=runtime_live,bytes=runtime_bytes;XrXirInstanceConfig config;
