@@ -389,6 +389,8 @@ static XrXirStatus effect_invocation_intrinsics(EffectInvocationWorkspace *owner
 static XrXirStatus effect_invocation_root_input(EffectInvocationWorkspace *owner,
     uint32_t function,uint64_t **output) {
     if(!output || *output || function>=owner->read.body.domain.function_count) return XR_XIR_BAD_STRUCTURE;
+    const bool owned=effect_body_request_owned_matches(owner->read.work,
+        &owner->read.body,owner->final.material);
     EffectInvocationSeedRead read={0};
     XrXirStatus status=effect_invocation_seed_open(owner->read.work,&owner->read.body,&owner->final,function,&read);
     if(status!=XR_XIR_OK) return status;
@@ -397,7 +399,10 @@ static XrXirStatus effect_invocation_root_input(EffectInvocationWorkspace *owner
     if(words>SIZE_MAX/sizeof(uint64_t)) return XR_XIR_BUDGET;
     uint64_t *input=words?xir_compile_calloc(owner->read.work,(size_t)words,sizeof(*input),&status):NULL;
     if(words && !input) return status;
-    status=effect_invocation_seed_open(owner->read.work,&owner->read.body,&owner->final,function,&read);
+    /* The empty owned branch performs no allocation or callback after the
+     * successful read. Allocating or delegated reads need fresh validation. */
+    if(words || !owned)
+        status=effect_invocation_seed_open(owner->read.work,&owner->read.body,&owner->final,function,&read);
     const XrXirFunctionEffectContract *contracts=effect_contracts_read(owner->effects);
     if(status==XR_XIR_OK) status=effect_role_range(owner->read.work,contracts,
         owner->read.body.domain.function_count,sizeof(*contracts));
