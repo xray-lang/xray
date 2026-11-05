@@ -1317,6 +1317,8 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
                 return source_array_call(ctx, node, NULL, value);
             XrXirType path_type;
             if (!source_path_type(ctx,member->object,&path_type)) return false;
+            if (path_type==XR_XIR_STRING && source_text_same(ctx,callee,member->name,"bytes"))
+                return source_string_bytes_call(ctx,node,value);
             if (xr_xir_type_is_map(&ctx->types, path_type) || xr_xir_type_is_set(&ctx->types, path_type))
                 return source_hash_call(ctx, node, NULL, path_type, value);
             if (xr_xir_type_is_array(&ctx->types,path_type)) {

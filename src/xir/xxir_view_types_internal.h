@@ -12,6 +12,7 @@
 #ifndef XXIR_VIEW_TYPES_INTERNAL_H
 #define XXIR_VIEW_TYPES_INTERNAL_H
 #include "xxir.h"
+#include "xxir_intrinsic.h"
 
 #define XR_XIR_VIEW_SHARED 1u
 #define XR_XIR_VIEW_MUTABLE 2u

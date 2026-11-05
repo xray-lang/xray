@@ -599,6 +599,10 @@ static XrXirRunStatus vm_step_dispatch(ScalarRun *run,VmState *state,const XrXir
         if(status!=XR_XIR_CALL_READY)*action=(XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,status},{0},0};
         return XR_XIR_RUN_OK;
     }
+    if (xr_xir_instruction_is_string_bytes(op)) {
+        state->instruction=next;
+        return vm_view_step(run,state,op,run->layout->offsets[result_id],action);
+    }
     if (op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_STRING_LAST_INDEX_OF ||
         op->op == XR_XIR_CALL_INTRINSIC ||
         op->op == XR_XIR_STRING_LEN || op->op == XR_XIR_EQ_STRING || op->op == XR_XIR_NE_STRING ||

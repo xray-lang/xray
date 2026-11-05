@@ -1096,6 +1096,9 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
             " if (stopped) return (XrXirAction){.kind=XR_XIR_ACTION_CONTINUE}; }\n",index,layout->frame_bytes);
     }
     append(buffer," state->pc = %uu;\n",index+1);
+    if (xr_xir_instruction_is_string_bytes(op)) {
+        emit_view_step(buffer,function,op,layout,destination,index);return;
+    }
     if (op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_STRING_LAST_INDEX_OF ||
         op->op == XR_XIR_CALL_INTRINSIC ||
         op->op == XR_XIR_STRING_LEN || op->op == XR_XIR_EQ_STRING || op->op == XR_XIR_NE_STRING ||

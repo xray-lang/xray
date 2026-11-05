@@ -161,6 +161,7 @@ static XrXirStatus affine_instruction(AffineCheck *a,uint32_t i,bool check) {
     bool definition=op->op==XR_XIR_NULLABLE_NONE || op->op==XR_XIR_NULLABLE_SOME ||
         op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_PHI || call || op->op==XR_XIR_INVOKE_RESULT ||
         op->op==XR_XIR_VIEW_NEW || op->op==XR_XIR_VIEW_REBORROW ||
+        xr_xir_instruction_is_string_bytes(op) ||
         (shared_copy && !affine_mutable(a,f->parameter_count+i));
     if (check && result!=UINT32_MAX && !definition) return XR_XIR_BAD_VALUE;
     if (call) {

@@ -932,7 +932,8 @@ static bool cell_proof_sink(CellProofBuild *build, uint32_t f, uint32_t i,
     if (!(origin & (XR_XIR_CELL_ORIGIN_OWNED | XR_XIR_CELL_ORIGIN_SCOPED | XR_XIR_CELL_ORIGIN_MODULE)) ||
         (origin & XR_XIR_CELL_ORIGIN_UNKNOWN)) return cell_proof_error(build,f,i,XR_XIR_BAD_VALUE);
     if (cell_proof_identity_producer(op->op)) return true;
-    if (op->op==XR_XIR_VIEW_NEW && !ordinal) return cell_proof_view_root(build,f,i,source);
+    if ((op->op==XR_XIR_VIEW_NEW || xr_xir_instruction_is_string_bytes(op)) && !ordinal)
+        return cell_proof_view_root(build,f,i,source);
     if (op->op == XR_XIR_CELL_STRING_APPEND && !ordinal)
         return !(origin & XR_XIR_CELL_ORIGIN_SCOPED) || cell_proof_error(build,f,i,XR_XIR_BAD_VALUE);
     if ((op->op == XR_XIR_CELL_READ || op->op == XR_XIR_CELL_WRITE ||

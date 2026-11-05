@@ -134,17 +134,24 @@ def main():
     for symbol,data in [('current_sdk_kat_preimage',prior_slot_image),('current_sdk_kat_file_digest',prior_slot_file),('current_sdk_kat_digest',prior_slot_digest)]:
         match=re.search(r'static const uint8_t '+symbol+r'\[\] = \{(.*?)\};',prior_slot_text,re.S)
         assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete predecessor36/96 bytes changed'
-    image,file_digest,digest=current_preimage(current_rows,97,30,35,37,36)
+    prior_bytes_image,prior_bytes_file,prior_bytes_digest=current_preimage(current_rows,97,30,35,37,36)
+    assert prior_bytes_digest.hex()=='8bc0ef960bfb32df930e20c8fce81adad1248b4227ff7ba34056f68b60226b84'
+    prior_bytes_text=Path(__file__).with_name('sdk_current_identity_golden.h').read_text(encoding='utf-8')
+    for symbol,data in [('previous37_97_sdk_kat_preimage',prior_bytes_image),('previous37_97_sdk_kat_file_digest',prior_bytes_file),('previous37_97_sdk_kat_digest',prior_bytes_digest)]:
+        match=re.search(r'static const uint8_t '+symbol+r'\[\] = \{(.*?)\};',prior_bytes_text,re.S)
+        assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete predecessor37/97 bytes changed'
+    image,file_digest,digest=current_preimage(current_rows,98,30,35,37,36)
     identity_offset=len(b'xray:xir-runtime-sdk:v1')+4
     assert image[:identity_offset]==previous_image[:identity_offset]
     old_current_image,_,_=current_preimage(old_rows,75,25)
     assert old_current_image[identity_offset+20:]==previous_image[identity_offset+20:]
-    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(37,97,30,35,36)
+    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(37,98,30,35,36)
     assert struct.unpack('<5I',previous_image[identity_offset:identity_offset+20])==(27,72,22,28,29)
     assert len(image)==3338 and len(historical_image)==3330 and len(previous_image)==len(value23_image)==3098
     assert file_digest==previous_file_digest and digest!=previous_digest
     output='/* Independent current SDK framing and natural Windows C layout facts. */\n'
-    for name,data in (('current_sdk_kat_preimage',image),('current_sdk_kat_file_digest',file_digest),('current_sdk_kat_digest',digest)):
+    for name,data in (('current_sdk_kat_preimage',image),('current_sdk_kat_file_digest',file_digest),('current_sdk_kat_digest',digest),
+            ('previous37_97_sdk_kat_preimage',prior_bytes_image),('previous37_97_sdk_kat_file_digest',prior_bytes_file),('previous37_97_sdk_kat_digest',prior_bytes_digest)):
         output+='static const uint8_t '+name+'[] = {\n'
         for at in range(0,len(data),16):output+='    '+','.join('0x'+format(x,'02x') for x in data[at:at+16])+',\n'
         output+='};\n'

@@ -218,6 +218,10 @@ static XrXirStatus view_access_root_chain(ViewAccess *a,ViewAccessRootEpoch *q,b
         }
         case XR_XIR_VIEW_NEW:case XR_XIR_VIEW_REBORROW:
             q->value=a->body->operands[op->args[0]];break;
+        case XR_XIR_CALL_INTRINSIC:
+            if (xr_xir_instruction_is_string_bytes(op)) q->value=a->body->operands[op->args[0]];
+            else q->remaining=0;
+            break;
         case XR_XIR_PHI:*phi=true;q->remaining=0;break;
         default:q->remaining=0;break;
         }
@@ -331,8 +335,8 @@ static XrXirStatus view_access_root_older(ViewAccess *a,uint32_t value,uint32_t 
          * execution of its source. If even the newest source precedes the
          * fresh allocation, every identity it could forward precedes it too. */
         if (op->op==XR_XIR_COPY || op->op==XR_XIR_OWNED_RETAIN) q.value=op->args[0];
-        else if (op->op==XR_XIR_VIEW_NEW || op->op==XR_XIR_VIEW_REBORROW)
-            q.value=a->body->operands[op->args[0]];
+        else if (op->op==XR_XIR_VIEW_NEW || op->op==XR_XIR_VIEW_REBORROW ||
+            xr_xir_instruction_is_string_bytes(op)) q.value=a->body->operands[op->args[0]];
         else break;
     }
     XR_CHECK(c->reserved==before+fixed,"older root observations retire on their original compile owner");

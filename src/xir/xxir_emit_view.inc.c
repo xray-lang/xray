@@ -23,27 +23,30 @@ static void emit_view_return(CBuffer *buffer,const XrXirFunction *function,
 static void emit_view_step(CBuffer *buffer,const XrXirFunction *function,
     const XrXirInstruction *op,const XrXirFunctionLayout *layout,uint32_t destination,uint32_t index) {
     bool group=xr_xir_op_uses_operand_table(op->op),end=op->op==XR_XIR_VIEW_END;
+    bool bytes=xr_xir_instruction_is_string_bytes(op);
     const uint32_t *args=group ? function->operands+op->args[0] : op->args;
     append(buffer,"        { XrXirValue root = ");emit_value(buffer,function,layout,args[0]);
     append(buffer,"; XrXirFaultDetail fault = {0};\n"
         "        state->arguments[0] = state->arguments[1] = (XrXirValue){0};\n"
         "        XrXirCallViewOperation request = {.operation=(XrXirOp)%uu, .type=(XrXirType)%uu, .root=&root};\n"
-        "        XrXirValueStatus status = XR_XIR_VALUE_OK;\n",(uint32_t)op->op,(uint32_t)op->type);
-    if (op->op==XR_XIR_VIEW_NEW)
+        "        XrXirValueStatus status = XR_XIR_VALUE_OK;\n",
+        (uint32_t)(bytes?XR_XIR_VIEW_NEW:op->op),(uint32_t)op->type);
+    if (op->op==XR_XIR_VIEW_NEW || bytes)
         append(buffer,"        status = xr_xir_value_copy(&root, state->arguments);\n"
             "        request.root = state->arguments;\n");
     else if (end)
         append(buffer,"        state->arguments[0] = root;\n"
             "        xr_xir_scalar_store(state->frame, %uu, 0);\n"
             "        request.root = NULL; request.owned = state->arguments;\n",layout->offsets[args[0]]);
-    if (group || op->op==XR_XIR_VIEW_GET)
+    if ((group && !bytes) || op->op==XR_XIR_VIEW_GET)
         append(buffer,"        request.start = xr_xir_scalar_load(state->frame, %uu);\n",layout->offsets[args[1]]);
     if (op->op==XR_XIR_VIEW_SET) {
         append(buffer,"        XrXirValue element = ");emit_value(buffer,function,layout,args[2]);
         append(buffer,"; request.element = &element;\n");
-    } else if (group)
+    } else if (group && !bytes)
         append(buffer,"        request.end = xr_xir_scalar_load(state->frame, %uu); request.to_end = %s;\n",
             layout->offsets[args[2]],op->immediate ? "true" : "false");
+    if (bytes) append(buffer,"        request.to_end = true;\n");
     append(buffer,"        if (status == XR_XIR_VALUE_OK) status = xr_xir_call_view_operation(view, &request, state->arguments + 1, &fault);\n");
     if (end)
         append(buffer,"        if (status != XR_XIR_VALUE_OK) xr_xir_owned_slot_move(state->frame, %uu, state->arguments);\n"

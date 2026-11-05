@@ -135,6 +135,11 @@ static XrXirStatus view_root_step(ViewRootQuery *q,ViewOriginPair site,ViewOrigi
     if (!xir_compile_work(c->context,2)) return XR_XIR_BUDGET;
     if (site.second<body->parameter_count) return view_root_parameter(q,site,context);
     const XrXirInstruction *op=&body->instructions[site.second-body->parameter_count];
+    if (xr_xir_instruction_is_string_bytes(op)) {
+        if (context.second || op->args[1]!=1 || op->args[0]>=body->operand_count)
+            return XR_XIR_BAD_STRUCTURE;
+        return view_root_push(q,site.first,body->operands[op->args[0]],context.first,0);
+    }
     switch (op->op) {
     case XR_XIR_CELL_NEW:return context.second ? XR_XIR_BAD_TYPE : view_root_emit(q,site,context,XR_XIR_VIEW_ROOT_CELL);
     case XR_XIR_SLOT_LOAD:
@@ -214,7 +219,8 @@ static XrXirStatus view_root_walk(ViewRootCheck *c,bool captures) {
                     if (status==XR_XIR_OK) status=view_root_query(c,f,value,true);
                     if (status!=XR_XIR_OK) return status;
                 }
-            } else if (op->op==XR_XIR_VIEW_NEW || op->op==XR_XIR_VIEW_REBORROW) {
+            } else if (op->op==XR_XIR_VIEW_NEW || op->op==XR_XIR_VIEW_REBORROW ||
+                xr_xir_instruction_is_string_bytes(op)) {
                 XrXirStatus status=view_root_query(c,f,body->parameter_count+i,false);if (status!=XR_XIR_OK) return status;
             }
         }
@@ -227,7 +233,9 @@ XR_FUNC XrXirStatus xir_compile_view_roots_verified(const XrXirCompileContext *c
     bool needed=false;
     for (uint32_t f=0;f<module->function_count;++f) for (uint32_t i=0;i<module->functions[f].instruction_count;++i) {
         if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
-        XrXirOp op=module->functions[f].instructions[i].op;needed|=op==XR_XIR_VIEW_NEW || op==XR_XIR_VIEW_REBORROW;
+        const XrXirInstruction *op=&module->functions[f].instructions[i];
+        needed|=op->op==XR_XIR_VIEW_NEW || op->op==XR_XIR_VIEW_REBORROW ||
+            xr_xir_instruction_is_string_bytes(op);
     }
     if (!needed) return XR_XIR_OK;
     uint8_t *flags=NULL;XrXirStatus status=view_flags_build(context,module->types,&flags);
