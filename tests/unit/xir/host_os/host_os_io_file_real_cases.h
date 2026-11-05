@@ -194,7 +194,8 @@ static void host_file_real_fault(XrXirProgram *program,const uint32_t *ids,const
   !output.type&&!output.reserved&&!output.payload);
  if(!closing){CHECK(file_read_calls==reads+1&&file_observed_count==4&&!memcmp(file_observed_bytes,host_file_real_expected,4));
   if(mode==FILE_READ_OOM)CHECK(runtime_attempts>file_oom_allocation);}
- xr_xir_value_drop(&object);xr_xir_value_drop(&token);host_file_real_retire(instance,expected,closing?"close-fault":constructor?"constructor-fault":"read-fault",mode);file_fault_instance=NULL;
+ XrXirCallStatus retired=expected==XR_XIR_CALL_CANCELLED?XR_XIR_CALL_READY:expected;
+ xr_xir_value_drop(&object);xr_xir_value_drop(&token);host_file_real_retire(instance,retired,closing?"close-fault":constructor?"constructor-fault":"read-fault",mode);file_fault_instance=NULL;
  CHECK(file_read_calls==reads+(closing?0u:1u)&&file_close_calls==closes+(closing?2u:1u));
  file_observing=false;CHECK(runtime_live==live&&runtime_bytes==bytes);
 }
