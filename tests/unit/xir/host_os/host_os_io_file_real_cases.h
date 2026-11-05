@@ -153,10 +153,13 @@ static XrXirValue host_file_real_path(XrXirInstance *instance,const uint32_t *id
 static void host_file_real_none(const XrXirValue *value){
  bool some=true;const XrXirValue *payload=NULL;CHECK(xr_xir_nullable_view(value,&some,&payload)&&!some&&!payload);
 }
-static void host_file_real_retire(XrXirInstance *instance,XrXirCallStatus expected){
+static void host_file_real_retire(XrXirInstance *instance,XrXirCallStatus expected,const char *scenario,unsigned requested_mode){
  uint64_t start=xr_time_monotonic_ns();CHECK(start);
  for(;;){XrXirCallStatus status=xr_xir_instance_free(instance);
-  if(status!=XR_XIR_CALL_CLOSE_FAILED){CHECK(status==expected);return;}
+  if(status!=XR_XIR_CALL_CLOSE_FAILED){
+   if(status!=expected)fprintf(stderr,"real File retire scenario=%s actual=%u expected=%u requestedMode=%u armedMode=%u observing=%u reads=%u closes=%u faultHits=%u\n",
+    scenario,(unsigned)status,(unsigned)expected,requested_mode,file_mode,(unsigned)file_observing,file_read_calls,file_close_calls,file_fault_hits);
+   CHECK(status==expected);return;}
   uint64_t now=xr_time_monotonic_ns();CHECK(now&&now>=start&&now-start<UINT64_C(5000000000));xr_thread_yield();}
 }
 static void host_file_real_authority(XrXirProgram *program,const uint32_t *ids,const char *path){
@@ -174,7 +177,7 @@ static void host_file_real_authority(XrXirProgram *program,const uint32_t *ids,c
  args[0]=(XrXirValue){XR_XIR_I64,0,INT64_MAX};output=host_file_real_invoke(a,ids[HOST_REAL_READ],args,2);host_file_real_none(&output);xr_xir_value_drop(&output);
  CHECK(file_read_calls==reads&&file_close_calls==closes+1);file_observing=false;
  xr_xir_value_drop(&object);xr_xir_value_drop(&other);xr_xir_value_drop(&token);
- host_file_real_retire(a,XR_XIR_CALL_READY);host_file_real_retire(b,XR_XIR_CALL_READY);CHECK(runtime_live==live&&runtime_bytes==bytes);
+ host_file_real_retire(a,XR_XIR_CALL_READY,"authority-owner",FILE_NORMAL);host_file_real_retire(b,XR_XIR_CALL_READY,"authority-foreign",FILE_NORMAL);CHECK(runtime_live==live&&runtime_bytes==bytes);
 }
 static void host_file_real_fault(XrXirProgram *program,const uint32_t *ids,const char *path,unsigned mode,bool constructor){
  size_t live=runtime_live,bytes=runtime_bytes;XrXirInstance *instance=host_file_real_instance(program);
@@ -191,7 +194,7 @@ static void host_file_real_fault(XrXirProgram *program,const uint32_t *ids,const
   !output.type&&!output.reserved&&!output.payload);
  if(!closing){CHECK(file_read_calls==reads+1&&file_observed_count==4&&!memcmp(file_observed_bytes,host_file_real_expected,4));
   if(mode==FILE_READ_OOM)CHECK(runtime_attempts>file_oom_allocation);}
- xr_xir_value_drop(&object);xr_xir_value_drop(&token);host_file_real_retire(instance,expected);file_fault_instance=NULL;
+ xr_xir_value_drop(&object);xr_xir_value_drop(&token);host_file_real_retire(instance,expected,closing?"close-fault":constructor?"constructor-fault":"read-fault",mode);file_fault_instance=NULL;
  CHECK(file_read_calls==reads+(closing?0u:1u)&&file_close_calls==closes+(closing?2u:1u));
  file_observing=false;CHECK(runtime_live==live&&runtime_bytes==bytes);
 }
@@ -214,7 +217,7 @@ static void host_file_constructor_execute(XrXirProgram *program,const uint32_t *
  file=CreateFileW(wide,GENERIC_READ,0,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);CHECK(file!=INVALID_HANDLE_VALUE);
  unsigned char byte=0;DWORD count=1;CHECK(ReadFile(file,&byte,1,&count,NULL)&&!count&&CloseHandle(file));
  xr_xir_value_drop(&output);xr_xir_value_drop(&empty_path);xr_xir_value_drop(&object);xr_xir_value_drop(&token);
- host_file_real_retire(instance,XR_XIR_CALL_READY);CHECK(DeleteFileW(wide)&&runtime_live==live&&runtime_bytes==bytes);
+ host_file_real_retire(instance,XR_XIR_CALL_READY,"eager-constructor",FILE_NORMAL);CHECK(DeleteFileW(wide)&&runtime_live==live&&runtime_bytes==bytes);
 }
 #endif
 static void host_file_real_execute(XrXirProgram *program,const uint32_t ids[HOST_REAL_COUNT]){
