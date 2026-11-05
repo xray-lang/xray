@@ -63,6 +63,22 @@
 #include "../base/xmalloc.h"
 #include <stdio.h>
 #include <limits.h>
+#include <stdlib.h>
+
+/* This diagnostic-only checkout never grants production language admission. */
+static bool source_measurement_unmask(const char *gate) {
+    const char *value = getenv("XR_R3_UNMASK");
+    return value && ((value[0] == '1' && value[1] == '\0') || strcmp(value, gate) == 0);
+}
+static void source_measurement_note(const char *kind, const char *name,
+    uint32_t first, uint32_t second) {
+    const char *path = getenv("XR_R3_TRACE_PATH");
+    if (!path) return;
+    FILE *file = fopen(path, "ab");
+    if (!file) return;
+    fprintf(file, "%s name=%s first=%u second=%u\n", kind, name ? name : "<null>", first, second);
+    fclose(file);
+}
 
 #include "xxir_construction.h"
 
@@ -1849,8 +1865,11 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
         }
         if (symbol && (symbol->kind == SOURCE_FUNCTION || symbol->kind == SOURCE_IMPORT))
             return source_imported_value(ctx, node, symbol, symbol, context, value);
-        if (!source_name_ready(symbol))
+        if (!source_name_ready(symbol)) {
+            source_measurement_note("uninitialized", node->as.variable.name, ctx->module,
+                symbol ? (uint32_t)symbol->kind : UINT32_MAX);
             return source_fail(ctx, node, XR_XIR_BAD_VALUE, "name is not an initialized value");
+        }
         if (!source_query_reference(ctx, node, symbol, symbol, XR_XIR_SOURCE_READ)) return false;
         if (symbol->kind == SOURCE_UNIT_LOCAL)return source_binding_read(ctx,symbol,value);
         if (symbol->kind == SOURCE_LOCAL) {
@@ -2161,7 +2180,7 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
     for (int i = 0; i < decl->param_count; ++i) {
         XrParamNode *param = decl->params[i];
         bool by_reference = param->passing_mode == XR_PARAM_REF;
-        if (!param->type || (param->passing_mode != XR_PARAM_READ && !by_reference) || param->pattern || param->is_rest ||
+        if (!param->type || (param->passing_mode != XR_PARAM_READ && !by_reference) || param->pattern || (param->is_rest && !source_measurement_unmask("variadic")) ||
             (by_reference && param->default_value) ||
             !source_type(ctx, param->type, &body->parameters[i]) || (body->parameters[i] == XR_XIR_UNIT && !by_reference))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "parameter contract is not implemented in XIR");
@@ -2351,7 +2370,7 @@ static bool collect_declarations(SourceContext *ctx) {
             AstNode *node = spec->ast->as.program.statements[i];
             if (node->type == AST_FUNCTION_DECL) { if (!declare_function(ctx, node, function++)) return false; }
             else if (node->type == AST_VAR_DECL || node->type == AST_CONST_DECL) {
-                if (node->is_exported && !source_exported_const_syntax(ctx,node))
+                if (node->is_exported && !(node->type == AST_CONST_DECL && source_measurement_unmask("exported_const")) && !source_exported_const_syntax(ctx,node))
                     return ctx->diagnostic.status==XR_XIR_OK ? source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"exported state is not admitted") : false;
                 SourceName *symbol = add_name(ctx, &ctx->names[m], node->as.var_decl.name, node);
                 if (!symbol) return false;

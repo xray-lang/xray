@@ -53,11 +53,17 @@ static SourceName *source_nominal_name(SourceContext *ctx, const char *name) {
         if (!symbol) symbol = source_prelude_lookup(ctx, name);
         if (symbol && symbol->kind == SOURCE_IMPORT) symbol = imported_declaration(ctx, symbol, symbol->imported);
     }
+    if (!symbol || symbol->kind != SOURCE_NOMINAL)
+        source_measurement_note("nominal_lookup", name, ctx->module,
+            symbol ? (uint32_t)symbol->kind : UINT32_MAX);
     return symbol && symbol->kind == SOURCE_NOMINAL ? symbol : NULL;
 }
 static bool source_nominal_type(SourceContext *ctx, const char *name, XrXirType *type) {
     SourceName *symbol = source_nominal_name(ctx, name);
-    if (!symbol) return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "name does not resolve to an admitted nominal type");
+    if (!symbol) {
+        source_measurement_note("nominal_required", name, ctx->module, 0);
+        return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "name does not resolve to an admitted nominal type");
+    }
     if (ctx->nominals.declarations[symbol->index].parameter_count)
         return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "nominal type requires explicit arguments");
     *type = symbol->type; return true;
@@ -96,7 +102,9 @@ static bool source_nominal_apply(SourceContext *ctx, SourceName *symbol, XrTypeR
 }
 static bool source_nominal_arguments(SourceContext *ctx, const char *name, XrTypeRef **arguments,
     uint32_t count, XrXirType *type) {
-    return source_nominal_apply(ctx, source_nominal_name(ctx, name), arguments, count, type);
+    SourceName *symbol = source_nominal_name(ctx, name);
+    if (!symbol) source_measurement_note("nominal_application_required", name, ctx->module, count);
+    return source_nominal_apply(ctx, symbol, arguments, count, type);
 }
 static bool source_nominal_declare(SourceContext *ctx, AstNode *node, const char *name,
     XrGenericParam **parameters, uint32_t count, uint32_t kind) {
@@ -162,7 +170,7 @@ static bool source_nominal_constraints(SourceContext *ctx) {
 static bool source_struct_declare(SourceContext *ctx, AstNode *node) {
     ClassDeclNode *decl = &node->as.struct_decl;
     if (decl->type_param_count < 0 || decl->type_param_count > 65536 || decl->super_name ||
-        decl->is_packed || decl->explicit_align || decl->attr_count || decl->field_count < 0)
+        ((decl->is_packed || decl->explicit_align) && !source_measurement_unmask("layout_surface")) || decl->attr_count || decl->field_count < 0)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "struct declaration contract is not admitted");
     return source_nominal_declare(ctx, node, decl->name, decl->type_params,
         (uint32_t) decl->type_param_count, XR_XIR_NOMINAL_STRUCT);
@@ -173,7 +181,7 @@ static bool source_sendable_marker(SourceContext *ctx,const XrTypeRef *ref) {
 }
 static bool source_class_declare(SourceContext *ctx, AstNode *node) {
     ClassDeclNode *decl = &node->as.class_decl;
-    if (decl->super_name || decl->super_module || decl->is_packed ||
+    if (((decl->super_name || decl->super_module) && !source_measurement_unmask("inheritance_surface")) || decl->is_packed ||
         decl->explicit_align || decl->attr_count || decl->type_param_count < 0 ||
         decl->type_param_count > 65536 || decl->field_count < 0 || decl->interface_count<0 ||
         (decl->interface_count && !decl->interfaces))

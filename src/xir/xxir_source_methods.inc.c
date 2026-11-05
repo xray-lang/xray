@@ -235,7 +235,7 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
             bool by_reference = method->receiver_mode == XR_PARAM_REF && !method->is_static &&
                 owner->node->type != AST_CLASS_DECL;
             if ((method->is_private && method->is_protected) ||
-                method->is_override || method->is_getter || method->is_setter || method->is_static_constructor ||
+                ((method->is_override || method->is_getter || method->is_setter) && !source_measurement_unmask("method_surface")) || method->is_static_constructor ||
                 method->is_variadic || method->is_operator || (method->receiver_mode != XR_PARAM_READ && !by_reference) ||
                 method->attr_count || method->borrow_origin_count ||
                 method->borrow_origin_syntax || !method->body || method->param_count < 0 || method->param_count >= 65536)
