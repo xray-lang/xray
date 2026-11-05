@@ -89,7 +89,11 @@ static XrXirArtifact *host_file_real_code(XrXirCompileContext *context,bool cont
  XrXirArtifact *cold=NULL,*closed=NULL,*code=NULL;CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&cold,NULL)==XR_XIR_OK);
  memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
  if(controls)host_file_ctor_boundary_controls(context,cold);
- CHECK(xr_xir_compile_specialize(cold,&closed,NULL,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(cold);
+ XrXirDiagnostic specialize_diagnostic={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+ status=xr_xir_compile_specialize(cold,&closed,&specialize_diagnostic,NULL);
+ if(status!=XR_XIR_OK)fprintf(stderr,"complete io Specialize%u f%u b%u i%u kind%u\n",(unsigned)status,
+  specialize_diagnostic.function,specialize_diagnostic.block,specialize_diagnostic.instruction,(unsigned)specialize_diagnostic.reason);
+ CHECK(status==XR_XIR_OK);xr_xir_compile_artifact_free(cold);
  CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},NULL,&code,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);return code;
 }
 static uint32_t host_file_constructor_contracts(const XrXirModule *module,uint32_t entry){
