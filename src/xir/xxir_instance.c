@@ -33,6 +33,9 @@
 #include "xxir_cell_provenance_internal.h"
 #include "xxir_effect_runtime_internal.h"
 #include "xxir_task_internal.h"
+#include "xxir_task_result_internal.h"
+#include "xxir_task_result.h"
+#include "xxir_nullable.h"
 #include "xxir_generator_internal.h"
 #include "xxir_instance_generator_internal.h"
 #include "xxir_task_shapes.h"
@@ -1875,6 +1878,7 @@ XrXirCallStatus xr_xir_instance_function(XrXirCallView *view,XrXirType type,uint
 }
 #include "xxir_instance_function_producer.inc.c"
 #include "xxir_instance_generator.inc.c"
+#include "xxir_instance_task_result.inc.c"
 XR_FUNC XrXirCallStatus xr_xir_task_go(XrXirCallView *view, XrXirType task_type, uint32_t direct_entry,
     const XrXirValue *arguments, uint32_t count, XrXirValue *output) {
     if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;

@@ -18,6 +18,10 @@
 #include "xxir_call_observer_internal.h"
 #include "xxir_effects.h"
 #include "xxir_operand_roles.h"
+#include "xxir_task_result.h"
+#include "xxir_task_result_internal.h"
+#include "xxir_type_arena_internal.h"
+#include "xxir_enum.h"
 #include <string.h>
 
 struct XrXirTaskExecutor {
@@ -301,6 +305,7 @@ XR_FUNC bool xr_xir_task_executor_cleanup_active(const XrXirTaskExecutor *execut
     const XrXirExecutorBinding binding = {executor, (void *)activation, executor->generation, activation->ticket};
     return xr_xir_call_executor_member(activation->call, &binding) && xr_xir_call_cleanup_active(activation->call);
 }
+#include "xxir_task_result.inc.c"
 XR_FUNC XrXirCallStatus xr_xir_task_executor_new(const XrXirTaskExecutorConfig *config,
     XrXirTaskExecutor **output) {
     if (config && config->domain && !xr_xir_domain_current(config->domain)) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -703,12 +708,27 @@ static bool task_core_select_external(XrXirTaskExecutor *executor, XirTaskActiva
     executor->external = activation; executor->external_call_wake = state.wake; ++executor->host_wake;
     return true;
 }
+static bool task_core_root_yield_pending(XrXirTaskExecutor *executor) {
+    const XrXirExecutorBinding binding={executor,&executor->root,executor->generation,executor->root.ticket};
+    return xir_call_bound_yield_pending(executor->root.call,&binding);
+}
 XR_FUNC XrXirCallResult xr_xir_task_executor_poll_root(XrXirTaskExecutor *executor, uint64_t quantum) {
     if (!task_executor_owner_current(executor)) return (XrXirCallResult){.status = XR_XIR_CALL_BAD_ARGUMENT};
     if (!executor || !executor->root.call || !quantum) return (XrXirCallResult){.status = XR_XIR_CALL_BAD_ARGUMENT};
     XrXirCallStatus driven = xr_xir_task_executor_poll(executor, quantum);
     if (driven == XR_XIR_CALL_BUSY) return (XrXirCallResult){.status = driven};
-    if (executor->ready_head) return (XrXirCallResult){.status = XR_XIR_CALL_READY};
+    if (executor->ready_head) {
+        /* Root host yields remain observable beside runnable children. Keep
+         * an existing external lease and never resume a guest on observation. */
+        if (!task_core_root_yield_pending(executor))
+            return (XrXirCallResult){.status=XR_XIR_CALL_READY};
+        if (!task_core_external_pending(executor)) {
+            executor->external=NULL;executor->external_call_wake=0;
+            if (!task_core_select_external(executor,&executor->root))
+                return (XrXirCallResult){.status=XR_XIR_CALL_BAD_STATE};
+        }
+        return (XrXirCallResult){.status=XR_XIR_CALL_SUSPENDED,.wake=executor->host_wake};
+    }
     if (driven == XR_XIR_CALL_RETURNED) {
         XrXirCallStatus completed = xr_xir_task_executor_completion_status(executor);
         if (completed != XR_XIR_CALL_READY && completed!=XR_XIR_CALL_CLEANUP_FAILED)

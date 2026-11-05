@@ -32,7 +32,7 @@ int main(int argc,char **argv) {
     XrXirRuntimeSdkRequest request={argv[1],bytes,(size_t)length,resources};XrXirRuntimeSdk *sdk=NULL;
     XrXirRuntimeSdkStatus status=xr_xir_runtime_sdk_load(&request,&sdk);free(bytes);xr_compile_resources_release(resources);
     printf("%u",(unsigned)status);
-    if(sdk){const XrXirRuntimeSdkFacts *facts=xr_xir_runtime_sdk_facts(sdk);CHECK(facts && facts->call_abi==37 && facts->semantic==105);
+    if(sdk){const XrXirRuntimeSdkFacts *facts=xr_xir_runtime_sdk_facts(sdk);CHECK(facts && facts->call_abi==37 && facts->semantic==106);
         printf(" %u ",facts->file_count);for(size_t i=0;i<32;++i)printf("%02x",facts->identity[i]);}
     puts("");xr_xir_runtime_sdk_free(sdk);return 0;
 }
