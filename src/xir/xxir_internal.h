@@ -21,6 +21,16 @@
 #include "xxir_construction_internal.h"
 #include "xxir_effect_input_internal.h"
 
+struct XrXirLibraryCatalog;
+struct XrModuleResourceBinding;
+/* Borrow only an exact row and artifact owned by this immutable Catalog.
+ * Output must be empty; failure preserves it. The borrow ends with Catalog
+ * lifetime and grants no current-context admission. No names, packet digests
+ * or copied rows establish this provenance. */
+XR_FUNC XrXirStatus xir_library_catalog_borrow_artifact(
+    const struct XrXirLibraryCatalog *catalog, const struct XrModuleResourceBinding *binding,
+    const XrXirArtifact *candidate, XrCompileRequestControl *control, const XrXirArtifact **output);
+
 /* Structural admission precedes this synchronous declaration-local body check. */
 XR_FUNC XrXirStatus xir_compile_local_errors_verify(const XrXirCompileContext *context,
     const XrXirModule *module,XrXirDiagnostic *diagnostic);

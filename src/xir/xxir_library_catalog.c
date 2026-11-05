@@ -11,6 +11,7 @@
  */
 #include "xxir_library_catalog.h"
 #include "xxir_compile_memory.h"
+#include "xxir_internal.h"
 #include "xxir_effect_contract_internal.h"
 #include "../base/xsha256.h"
 #include "../base/xio_policy.h"
@@ -46,6 +47,30 @@ XR_FUNC const XrModuleResourceBinding *xr_xir_compile_library_catalog_resources_
 }
 XR_FUNC const XrXirCompileContext *xr_xir_compile_library_catalog_context(const XrXirLibraryCatalog *catalog) {
     return catalog ? &catalog->context : NULL;
+}
+XR_FUNC XrXirStatus xir_library_catalog_borrow_artifact(const XrXirLibraryCatalog *catalog,
+    const XrModuleResourceBinding *binding, const XrXirArtifact *candidate,
+    XrCompileRequestControl *control, const XrXirArtifact **output) {
+    if (!catalog || !binding || !candidate || !output || *output) return XR_XIR_BAD_STRUCTURE;
+    for (size_t r = 0; r < catalog->count; ++r) {
+        if (control && !(r & 63u)) {
+            XrXirStatus status = xir_compile_resource_status(xr_compile_request_control_poll(control));
+            if (status != XR_XIR_OK) return status;
+        }
+        if (&catalog->resources[r] != binding) continue;
+        if (binding->checked != candidate) return XR_XIR_BAD_STRUCTURE;
+        for (size_t a = 0; a < catalog->artifact_count; ++a) {
+            if (control && !(a & 63u)) {
+                XrXirStatus status = xir_compile_resource_status(xr_compile_request_control_poll(control));
+                if (status != XR_XIR_OK) return status;
+            }
+            if (catalog->artifacts[a] == candidate) {
+                *output = catalog->artifacts[a]; return XR_XIR_OK;
+            }
+        }
+        return XR_XIR_BAD_STRUCTURE;
+    }
+    return XR_XIR_BAD_STRUCTURE;
 }
 static XrXirStatus catalog_module_status(XrModuleStatus status) {
     switch (status) {

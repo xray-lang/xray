@@ -301,6 +301,97 @@ static void path_subset_contracts(const XrXirCompileContext *context,const XrXir
     }
     CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK&&before.held_bytes==after.held_bytes);
 }
+static void path_catalog_owner_contract(const XrXirCompileContext *context,const XrXirLibraryCatalog *catalog){
+    XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
+    size_t count=0;const XrModuleResourceBinding *rows=xr_xir_compile_library_catalog_resources_v2(catalog,&count);
+    CHECK(rows&&count);
+    for(size_t r=0;r<count;++r){
+        const XrXirArtifact *borrowed=NULL;
+        CHECK(xir_library_catalog_borrow_artifact(catalog,rows+r,rows[r].checked,NULL,&borrowed)==XR_XIR_OK);
+        CHECK(borrowed==rows[r].checked);
+        XrModuleResourceBinding copied=rows[r];borrowed=NULL;
+        CHECK(xir_library_catalog_borrow_artifact(catalog,&copied,copied.checked,NULL,&borrowed)==XR_XIR_BAD_STRUCTURE&&!borrowed);
+    }
+    CHECK(xir_stdlib_checked_component_count&&xir_stdlib_checked_components[0].module_count);
+    const XirStdlibCheckedComponent *component=xir_stdlib_checked_components;
+    CHECK(!strcmp(rows[0].canonical,component->modules[0].canonical)&&!rows[0].checked_module);
+    XrXirArtifact *independent=NULL;
+    CHECK(xr_xir_compile_checked_read(context,component->bytes,component->length,&independent,NULL)==XR_XIR_OK);
+    CHECK(independent&&independent!=rows[0].checked);
+    const XrXirArtifact *borrowed=NULL;
+    CHECK(xir_library_catalog_borrow_artifact(catalog,rows,independent,NULL,&borrowed)==XR_XIR_BAD_STRUCTURE&&!borrowed);
+    CHECK(xir_library_catalog_borrow_artifact(NULL,rows,rows[0].checked,NULL,&borrowed)==XR_XIR_BAD_STRUCTURE&&!borrowed);
+    xr_xir_compile_artifact_free(independent);
+    CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK&&before.held_bytes==after.held_bytes);
+}
+static const char path_catalog_decode_source[]=
+    "export fn decode(bytes:Slice<u8>) throws(Utf8Error)->string {return try string.fromUtf8(bytes)}\n";
+static void path_catalog_limits_contract(const XrXirCompileContext *context,const XrXirLibraryCatalog *catalog){
+    XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
+    size_t count=0;const XrModuleResourceBinding *rows=xr_xir_compile_library_catalog_resources_v2(catalog,&count);
+    static const char canonical[]="stdlib-module-v1:module=7:prelude:path=27:prelude/builtin_symbols.def";
+    const XrXirModule *owner=NULL;
+    for(size_t r=0;r<count;++r)if(!strcmp(rows[r].canonical,canonical)){
+        CHECK(!owner);owner=xr_xir_compile_artifact_module(rows[r].checked);
+    }
+    CHECK(owner&&owner->function_count>1);
+    XrXirSourceResult selected={0};XrXirSourceDiagnostic diagnostic={0};
+    CHECK(path_flavours_check(context,path_catalog_decode_source,catalog,&selected,&diagnostic)==XR_XIR_OK&&selected.checked);
+    const XrXirModule *module=xr_xir_compile_artifact_module(selected.checked);
+    XrXirCompileContext narrow=*context;narrow.limits.functions=owner->function_count-1;
+    CHECK(module->function_count<=narrow.limits.functions);
+    XrXirDiagnostic ordinary={0};
+    XrXirStatus admitted=xr_xir_compile_structure_verify_v2(&narrow,module,
+        xr_xir_compile_artifact_construction(selected.checked),&ordinary);
+    fprintf(stderr,"Path Catalog limits ownerFunctions=%u selectedFunctions=%u consumerFunctions=%u selectedOrdinary=%u\n",
+        owner->function_count,module->function_count,narrow.limits.functions,admitted);
+    CHECK(admitted==XR_XIR_OK);
+    XrXirSourceResult rejected={0};diagnostic=(XrXirSourceDiagnostic){0};
+    XrXirStatus status=path_flavours_check(&narrow,path_catalog_decode_source,catalog,&rejected,&diagnostic);
+    if(status!=XR_XIR_BUDGET||strcmp(diagnostic.message,"Checked library verification failed"))
+        fprintf(stderr,"Path Catalog narrow status%u module%u %d:%d %s\n",status,diagnostic.module,diagnostic.line,diagnostic.column,diagnostic.message);
+    CHECK(status==XR_XIR_BUDGET&&diagnostic.status==XR_XIR_BUDGET&&!rejected.checked&&!rejected.snapshot&&
+        !strcmp(diagnostic.message,"Checked library verification failed"));
+    xr_xir_compile_source_result_free(&rejected);xr_xir_compile_source_result_free(&selected);
+    /* Different admission limits retain verification, not unconditional rejection. */
+    XrXirCompileContext wider=*context;CHECK(wider.limits.functions<UINT32_MAX);++wider.limits.functions;
+    XrXirSourceResult different={0};
+    CHECK(path_flavours_check(&wider,path_catalog_decode_source,catalog,&different,&diagnostic)==XR_XIR_OK&&different.checked);
+    xr_xir_compile_source_result_free(&different);
+    XrXirSourceResult restored={0};
+    CHECK(path_flavours_check(context,path_catalog_decode_source,catalog,&restored,&diagnostic)==XR_XIR_OK&&restored.checked);
+    xr_xir_compile_source_result_free(&restored);
+    CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK&&before.held_bytes==after.held_bytes);
+}
+static bool path_catalog_cancel(const void *context){unsigned *polls=(unsigned *)context;++*polls;return true;}
+static void path_catalog_request_contract(const XrXirCompileContext *context,const XrXirLibraryCatalog *catalog){
+    XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
+    size_t count=0;const XrModuleResourceBinding *rows=xr_xir_compile_library_catalog_resources_v2(catalog,&count);CHECK(rows&&count);
+    for(unsigned mode=0;mode<2;++mode){
+        unsigned polls=0;XrCompileRequestControl control={0};
+        const XrCompileRequestOptions options={path_catalog_cancel,&polls,
+            mode?XR_COMPILE_DEADLINE_AFTER:XR_COMPILE_DEADLINE_NONE,0};
+        CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+        XrXirStatus expected=mode?XR_XIR_DEADLINE:XR_XIR_CANCELLED;const XrXirArtifact *borrowed=NULL;
+        CHECK(xir_library_catalog_borrow_artifact(catalog,rows,rows[0].checked,&control,&borrowed)==expected&&!borrowed);
+        CHECK(mode?!polls:polls>0);
+        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
+        CHECK(xr_compile_session_bind_request(session,&control)==XR_COMPILE_RESOURCE_OK);
+        XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_PROJECT,"path-shadow",XR_PATH_FIXTURES};
+        XrXirSourceRequest request={session,XR_PATH_FIXTURES "/client.xr",&authority,context,XR_PATH_ROOT "/stdlib",NULL,XR_XIR_PROGRAM,catalog};
+        XrXirSourceText input={"client.xr",path_catalog_decode_source,strlen(path_catalog_decode_source)};
+        XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
+        CHECK(xr_xir_compile_source_check_text(&request,&input,&result,&diagnostic,NULL)==expected&&
+            diagnostic.status==expected&&!result.checked&&!result.snapshot);
+        CHECK(control.status==(mode?XR_COMPILE_RESOURCE_DEADLINE:XR_COMPILE_RESOURCE_CANCELLED));
+        xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
+        CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK&&before.held_bytes==after.held_bytes);
+    }
+    XrXirSourceResult restored={0};XrXirSourceDiagnostic diagnostic={0};
+    CHECK(path_flavours_check(context,path_catalog_decode_source,catalog,&restored,&diagnostic)==XR_XIR_OK&&restored.checked);
+    xr_xir_compile_source_result_free(&restored);
+    CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK&&before.held_bytes==after.held_bytes);
+}
 static void path_flavours_product(const XrXirCompileContext *context,const char *emit_base){
     path_previous134(context);path_previous135(context);
     FILE *file=fopen(XR_PATH_FIXTURES "/flavours.xr","rb");CHECK(file&&!fseek(file,0,SEEK_END));
@@ -309,6 +400,9 @@ static void path_flavours_product(const XrXirCompileContext *context,const char 
     CHECK(fread(text,1,(size_t)bytes,file)==(size_t)bytes&&!fclose(file));text[bytes]=0;
     XrXirLibraryCatalog *catalog=NULL;XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
     CHECK(xir_stdlib_library_catalog_new(context,XR_PATH_ROOT "/stdlib",&catalog)==XR_XIR_OK);
+    path_catalog_owner_contract(context,catalog);
+    path_catalog_limits_contract(context,catalog);
+    path_catalog_request_contract(context,catalog);
     path_prelude_range_contract(context,catalog);
     path_subset_contracts(context,catalog,emit_base==NULL);
     XrXirStatus status=path_flavours_check(context,text,catalog,&source,&diagnostic);

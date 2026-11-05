@@ -25,6 +25,7 @@ static uint32_t source_owned_module(const XrModuleSpec *spec) {
 }
 static bool source_library_view(SourceContext *ctx,uint32_t module,
     const XrXirArtifact *artifact,const XrXirModule *library) {
+    if (!source_request_poll(ctx,NULL)) return false;
     const XrModuleResourceBinding *resource=ctx->graph->specs[module].resource;
     if(!resource || resource->checked!=artifact)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library resource is missing");
@@ -43,12 +44,14 @@ static bool source_library_view(SourceContext *ctx,uint32_t module,
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library module view disagrees with its declaration");
     }
     for (size_t byte = 0; byte < length; ++byte) {
+        if (!(byte & 63u) && !source_request_poll(ctx,NULL)) return false;
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (view->name[byte] != spec->canonical[byte]) {
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library module identity is invalid");
         }
     }
     for (uint32_t e = 0; e < view->dependency_count; ++e) {
+        if (!(e & 63u) && !source_request_poll(ctx,NULL)) return false;
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrModuleResourceBinding *edge = resource->dependencies[e];
         int target = spec->dep_indices[e];
@@ -57,26 +60,46 @@ static bool source_library_view(SourceContext *ctx,uint32_t module,
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library dependency view is invalid");
         }
     }
-    return true;
+    return source_request_poll(ctx,NULL);
+}
+/* Only the identical structural admission context can reuse Catalog checking.
+ * A narrower or otherwise different consumer retains its original full gate. */
+static bool source_library_context_same(const XrXirCompileContext *a,const XrXirCompileContext *b) {
+    return a && b && a->resources==b->resources &&
+        a->limits.functions==b->limits.functions && a->limits.parameters==b->limits.parameters &&
+        a->limits.blocks==b->limits.blocks && a->limits.instructions==b->limits.instructions &&
+        a->limits.frame_bytes==b->limits.frame_bytes;
 }
 static const XrXirModule *source_library_module(SourceContext *ctx,uint32_t module) {
+    if (!source_request_poll(ctx,NULL)) return NULL;
     const XrModuleResourceBinding *resource=ctx->graph->specs[module].resource;
     if(!resource||!resource->checked){source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library resource is missing");return NULL;}
-    const XrXirArtifact *artifact=resource->checked;
+    const XrXirLibraryCatalog *catalog=ctx->graph->resolver ? ctx->graph->resolver->config.catalog : NULL;
+    const XrXirCompileContext *admission=xr_xir_compile_library_catalog_context(catalog);
+    if (!admission || admission->resources!=ctx->compile.resources) {
+        source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library has a foreign Catalog owner");return NULL;
+    }
+    const XrXirArtifact *artifact=NULL;
+    XrXirStatus status=xir_library_catalog_borrow_artifact(catalog,resource,resource->checked,ctx->request,&artifact);
+    if(status!=XR_XIR_OK){source_fail(ctx,NULL,status,"Checked library has no exact Catalog provenance");return NULL;}
     const XrXirCompileContext *owner=xr_xir_compile_artifact_context(artifact);
     if (!owner || owner->resources!=ctx->compile.resources) {
         source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library has a foreign resource owner");return NULL;
     }
     const XrXirModule *library=xr_xir_compile_artifact_module(artifact);
-    if(library->linkage_kind!=XR_XIR_LIBRARY||!library->function_count){
+    if(library->stage!=XR_XIR_CHECKED||library->linkage_kind!=XR_XIR_LIBRARY||!library->function_count){
         source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"Checked library kind is required");return NULL;
     }
-    const XrXirConstruction *construction=xr_xir_compile_artifact_construction(artifact);
-    XrXirStatus status=xir_compile_verify_effects_input(&ctx->compile,(XirEffectInput){library,construction,ctx->request},NULL,NULL);
-    if(status!=XR_XIR_OK){source_fail(ctx,NULL,status,"Checked library verification failed");return NULL;}
-    status=library_catalog_shape(library,construction);
-    if(status!=XR_XIR_OK){source_fail(ctx,NULL,status,"Checked library import subset is not admitted");return NULL;}
-    return source_library_view(ctx,module,artifact,library)?library:NULL;
+    if (!source_library_context_same(&ctx->compile,admission)) {
+        const XrXirConstruction *construction=xr_xir_compile_artifact_construction(artifact);
+        status=xir_compile_verify_effects_input(&ctx->compile,(XirEffectInput){library,construction,ctx->request},NULL,NULL);
+        if(status!=XR_XIR_OK){source_fail(ctx,NULL,status,"Checked library verification failed");return NULL;}
+        status=library_catalog_shape(library,construction);
+        if(status!=XR_XIR_OK){source_fail(ctx,NULL,status,"Checked library import subset is not admitted");return NULL;}
+    }
+    if (!source_request_poll(ctx,NULL) || !source_library_view(ctx,module,artifact,library) ||
+        !source_request_poll(ctx,NULL)) return NULL;
+    return library;
 }
 static const XrXirModule *source_owned_module_view(SourceContext *ctx,uint32_t module) {
     const XrModuleSpec *spec=&ctx->graph->specs[module];
