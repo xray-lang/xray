@@ -253,10 +253,10 @@ static void path_prelude_range_contract(const XrXirCompileContext *context,const
 static void path_subset_contracts(const XrXirCompileContext *context,const XrXirLibraryCatalog *catalog,bool execute){
     XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
     static const char *const clients[]={
-        "import path\nfn check()->i64{if(path.basename(path.from(\"a/b\"))==\"b\"){return 42};return 0}\n",
-        "import \"std/path/posix\" as posix\nfn check()->i64{if(posix.basename(posix.from(\"a/b\"))==\"b\"){return 42};return 0}\n",
-        "import \"std/path/windows\" as windows\nfn check()->i64{if(windows.basename(windows.from(\"a/b\"))==\"b\"){return 42};return 0}\n",
-        "import \"std/path/logical\" as logical\nfn check()->i64{if(logical.from(\"a/b\")!=null){return 42};return 0}\n"
+        "import path\nexport fn check()->i64{if(path.basename(path.from(\"a/b\"))==\"b\"){return 42};return 0}\n",
+        "import \"std/path/posix\" as posix\nexport fn check()->i64{if(posix.basename(posix.from(\"a/b\"))==\"b\"){return 42};return 0}\n",
+        "import \"std/path/windows\" as windows\nexport fn check()->i64{if(windows.basename(windows.from(\"a/b\"))==\"b\"){return 42};return 0}\n",
+        "import \"std/path/logical\" as logical\nexport fn check()->i64{if(logical.from(\"a/b\")!=null){return 42};return 0}\n"
     };
     static const char *const paths[]={"path/path.xr","path/posix.xr","path/windows.xr","path/logical.xr"};
     static const char *const hidden[]={"path.PosixPath","posix.WindowsPath","windows.LogicalPath","logical.WindowsPath"};

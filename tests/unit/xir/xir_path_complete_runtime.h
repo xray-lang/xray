@@ -93,8 +93,10 @@ static XrXirCallStatus path_complete_poll(XrXirInstance *instance){
     CHECK(false);return XR_XIR_CALL_BAD_STATE;
 }
 static XrXirValue path_complete_invoke(XrXirInstance *instance,uint32_t entry,const XrXirValue *args,uint32_t count){
-    CHECK(xr_xir_instance_start(instance,entry,args,count)==XR_XIR_CALL_READY);
-    XrXirCallStatus status=path_complete_poll(instance);
+    XrXirCallStatus status=xr_xir_instance_start(instance,entry,args,count);
+    if(status!=XR_XIR_CALL_READY)fprintf(stderr,"complete Path start entry%u count%u status%u\n",entry,count,status);
+    CHECK(status==XR_XIR_CALL_READY);
+    status=path_complete_poll(instance);
     if(status!=XR_XIR_CALL_RETURNED)fprintf(stderr,"complete Path entry%u status%u\n",entry,status);
     CHECK(status==XR_XIR_CALL_RETURNED);XrXirValue value={0};
     CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);return value;
