@@ -87,7 +87,7 @@ static void host_file_kernel_execute(void) {
  runtime_fail_at=runtime_attempts;CHECK(xr_os_io_file_open_begin(&memory,&query,&request,&owner,&operation)==XR_OS_IO_OUT_OF_MEMORY);
  runtime_fail_at=SIZE_MAX;CHECK(!owner.state&&!operation.state);cancelled=true;
  CHECK(xr_os_io_file_open_begin(&memory,&query,&request,&owner,&operation)==XR_OS_IO_CANCELLED&&!owner.state&&!operation.state);cancelled=false;
- const char invalid[]={(char)0xff};request.path=invalid;request.path_length=sizeof(invalid);
+ char invalid[1];memset(invalid,0xff,sizeof(invalid));request.path=invalid;request.path_length=sizeof(invalid);
  CHECK(xr_os_io_file_open_begin(&memory,&query,&request,&owner,&operation)==XR_OS_IO_BAD_ARGUMENT);
  host_file_operation_done(&operation);host_file_owner_done(&owner);
  CHECK(DeleteFileW(wide)&&RemoveDirectoryW(directory));CHECK(runtime_live==live&&runtime_bytes==bytes);
