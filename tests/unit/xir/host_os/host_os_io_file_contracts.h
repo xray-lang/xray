@@ -179,7 +179,7 @@ static void host_file_byte_slice_refusals(XrXirCompileContext *context){
  for(unsigned n=0;n<sizeof(live)/sizeof(*live);++n)
   host_file_contract_rejected(context,live[n],false,XR_XIR_UNRESOLVED,"(ARRAY_PUSH)");
  const char *projected="fn edit(value:ref Array<u8>){}\nfinal class C{data:Array<u8> init(){this.data=[];edit(ref this.data)}}\n";
- host_file_contract_rejected(context,projected,false,XR_XIR_BAD_TYPE,"ref requires a mutable stored binding");
+ host_file_contract_rejected(context,projected,false,XR_XIR_BAD_TYPE,"ref argument requires a mutable stored binding");
 }
 static void host_file_contracts(XrXirCompileContext *context){
  host_file_byte_slice_refusals(context);
