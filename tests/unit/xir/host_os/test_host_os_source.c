@@ -7,6 +7,7 @@
  * test_host_os_source.c - Cold canonical host declarations and actual VM calls
  */
 #include "host_os_runtime.h"
+#include "host_os_original_suite_source.h"
 #include "../xir_genuine_sys_path.h"
 #include "host_os_source_cases.h"
 #include "host_os_path_cases.h"
@@ -287,8 +288,11 @@ int main(int argc,char **argv){
 #if defined(XR_OS_WINDOWS)
  CHECK(xr_stdio_binary_init());
 #endif
+ int original=host_original_suite_mode(argc,argv);
+ if(original!=-1)return original<0?2:host_original_source((unsigned)original,argv[3]);
  host_file_stdio_child=argc==2&&!strcmp(argv[1],"--file-stdio-child");
  bool emit=argc==3&&!strcmp(argv[1],"--emit");CHECK(emit||argc==1||host_file_stdio_child);
+ bool original_emit_ok=!emit||host_original_emit(argv[2]);
  if(host_file_stdio_child)CHECK(fgetc(stdin)==0x0d);
  if(!emit&&!host_file_stdio_child){host_cpu_concurrency();host_file_kernel_execute();}
  XrCompileResourceLimits limits=XR_RESOURCE_DEFAULT_COMPILER_LIMITS;XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
@@ -296,5 +300,5 @@ int main(int argc,char **argv){
  if(!host_file_stdio_child)for(unsigned kind=0;kind<11;++kind)host_product(&context,kind,emit?argv[2]:XR_HOST_OS_GENERATED,emit);
  host_file_real_product(&context,emit?argv[2]:XR_HOST_OS_GENERATED,emit);
  CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK&&before.held_bytes==after.held_bytes&&!runtime_live&&!runtime_bytes);
- xr_compile_resources_release(context.resources);if(!emit&&!host_file_stdio_child){host_file_stdio_parent();CHECK(xr_os_io_thread_token_shutdown()==XR_OS_IO_OK);puts("42");}return 0;
+ xr_compile_resources_release(context.resources);if(!emit&&!host_file_stdio_child){host_file_stdio_parent();CHECK(xr_os_io_thread_token_shutdown()==XR_OS_IO_OK);puts("42");}return original_emit_ok?0:1;
 }

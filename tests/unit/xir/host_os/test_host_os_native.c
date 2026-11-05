@@ -7,6 +7,7 @@
  * test_host_os_native.c - Identical generated entries with real host effects
  */
 #include "host_os_runtime.h"
+#include "host_os_original_suite_runtime.h"
 #include "host_os_path_cases.h"
 #include "host_os_cpu_cases.h"
 #include "host_os_system_cases.h"
@@ -36,6 +37,8 @@ int main(int argc,char **argv){
 #if defined(XR_OS_WINDOWS)
  CHECK(xr_stdio_binary_init());
 #endif
+ int original=host_original_suite_mode(argc,argv);
+ if(original!=-1)return original<0?2:host_original_native((unsigned)original,argv[3]);
  host_file_stdio_child=argc==2&&!strcmp(argv[1],"--file-stdio-child");CHECK(argc==1||host_file_stdio_child);
  if(host_file_stdio_child)CHECK(fgetc(stdin)==0x0d);else{host_cpu_concurrency();host_file_kernel_execute();}XrCompileResourceLimits limits=XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
  XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
