@@ -1,0 +1,43 @@
+{
+  "kind": "genuine_predecessor_checked_path",
+  "sourceCommit": "0987b2d18289b10ca0db3abfb78899ca3423801d",
+  "schema": 42,
+  "common": 135,
+  "packet": {
+    "path": "old135-path.chk",
+    "bytes": 102524,
+    "sha256": "4731bbb5bf81d34e0324c178881447110bb7a75fa55072e2bb5da2f2b5cdd5b9"
+  },
+  "sources": [
+    {
+      "path": "path.xr",
+      "bytes": 2742,
+      "sha256": "faecfe42e799b9da56ba98613a576ed6e497b8ff8a21291cf9a6781ec12de2ef"
+    },
+    {
+      "path": "_lexical.xr",
+      "bytes": 11402,
+      "sha256": "c17f13efb5077afc97e5cefbdc648255af8e430ff03b866b5c03d02f0f59bbd3"
+    }
+  ],
+  "canonical": "stdlib-module-v1:module=4:path:path=12:path/path.xr",
+  "producer": "D:/xray-build/r3-f10-records-rel/src/xir/xir_stdlib_checkedgen.exe",
+  "argv": [
+    "D:/xray-build/r3-f10-records-rel/src/xir/xir_stdlib_checkedgen.exe",
+    "D:/xray-build/coordinator/20261029-resume/r3-f13-host-complete-20261103/root-task337-array-site-observer-v1/stdlib",
+    "D:/xray-build/coordinator/20261029-resume/r3-f13-host-complete-20261103/root-task337-array-site-observer-v1/stdlib/path/path.xr",
+    "path",
+    "D:/xray-build/coordinator/20261029-resume/r3-f13-host-complete-20261103/root-common135-path-capture-v1/old135-path.chk"
+  ],
+  "facts": {
+    "realSourceCheckedWrite": true,
+    "sameProducerCheckedReadStatus": 0,
+    "producerHeldRestored": true,
+    "independentColdOwner": false
+  },
+  "captureEvidence": {
+    "path": "D:\\xray-build\\coordinator\\20261029-resume\\r3-f13-host-complete-20261103\\root-common135-path-capture-v1\\evidence.json",
+    "sha256": "390716406a7f219bd64ca0ab05885fcf4dfa30f937b54c334dd8e9d14c49bb38"
+  },
+  "newReaderQualification": "NOT_RUN"
+}

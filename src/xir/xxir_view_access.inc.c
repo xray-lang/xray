@@ -564,6 +564,13 @@ static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEve
         XrXirType type=xr_xir_operand_type(a->body,value);uint32_t borrowed=view_flags_at(types,flags,type);
         bool cell=xr_xir_type_is_cell(types,type),object=xr_xir_type_is_class(types,type);
         XrXirPlaceKind place=xr_xir_place_kind(a->body,value);XrXirOperandRole role=xr_xir_operand_role(op->op,p);
+        if (op->op==XR_XIR_ARRAY_NEW && !borrowed && object && place==XR_XIR_PLACE_NONE && role==XR_XIR_OPERAND_VALUE) {
+            const XrXirTypeNode *array=xr_xir_type_node(types,op->type);
+            /* Complete view-type verification already excludes borrowed descendants.
+             * Retaining an exact Class handle does not access its referent. */
+            if (array && array->kind==XR_XIR_TYPE_ARRAY && array->element==type &&
+                !view_flags_at(types,flags,op->type)) continue;
+        }
         if (borrowed) {
             if (!call && !pointer) return XR_XIR_UNRESOLVED;
             const XrXirTypeNode *node=xr_xir_type_node(types,type);

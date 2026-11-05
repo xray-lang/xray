@@ -5,7 +5,22 @@ import "std/path/windows" as windows
 import "std/path/logical" as logical
 import { LogicalPath } from "std/path/logical"
 
+final class ArrayTransportBox {
+    value: i64
+    init(value: i64) { this.value=value }
+}
+fn classArrayHandles(input: Slice<u8>) -> i64 {
+    const original=ArrayTransportBox(7)
+    const values=[original]
+    assert(len(input)==2)
+    const alias=values[0]
+    alias.value=9
+    assert(original.value==9)
+    return original.value
+}
+
 export fn check() -> i64 {
+    assert(classArrayHandles("ok".bytes())==9)
     // W01
     const valueW01=windows.join(windows.from("C:"),windows.from("child"))
     assert(valueW01.toString()=="C:child")

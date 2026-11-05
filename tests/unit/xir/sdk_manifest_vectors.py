@@ -39,7 +39,7 @@ def raw_error_abi_cases(original):
 
 
 def cleanup_abi_cases(original):
-    assert original['call_abi']==38 and original['semantic']==135
+    assert original['call_abi']==38 and original['semantic']==136
     rows=original['abi_measurements'];cases=[('cleanup-current',original,0)]
     for field,offset in ((305,56),(406,104),(407,176),(3014,124),(3113,108)):
         indexes=[i for i,row in enumerate(rows) if row['id']==field]
@@ -51,7 +51,7 @@ def cleanup_abi_cases(original):
             elif attack=='offset':value['abi_measurements'][index]['value']=offset+1
             else:value['abi_measurements'][index]['id']=999999
             cases.append((f'cleanup-{field}-{attack}',value,1))
-    for attack in ('old-call36','old-common102','old-common103','old-common104','old-common105','old-common106','old-common107','old-common108','old-common109','old-common110','old-common111','old-common112','old-common113','old-common114','old-common115','old-common116','old-common117','old-common118','old-common119','old-common120','old-common121','old-common122','old-common123','old-common124','old-common125','old-common126','old-common127','old-common128','old-common129','old-common130','old-common131','old-common132','old-common133','old-common134','extra','duplicate','order'):
+    for attack in ('old-call36','old-common102','old-common103','old-common104','old-common105','old-common106','old-common107','old-common108','old-common109','old-common110','old-common111','old-common112','old-common113','old-common114','old-common115','old-common116','old-common117','old-common118','old-common119','old-common120','old-common121','old-common122','old-common123','old-common124','old-common125','old-common126','old-common127','old-common128','old-common129','old-common130','old-common131','old-common132','old-common133','old-common134','old-common135','extra','duplicate','order'):
         value=json.loads(json.dumps(original))
         if attack=='old-call36':value['call_abi']=36
         elif attack=='old-common102':value['semantic']=102
@@ -87,6 +87,7 @@ def cleanup_abi_cases(original):
         elif attack=='old-common132':value['semantic']=132
         elif attack=='old-common133':value['semantic']=133
         elif attack=='old-common134':value['semantic']=134
+        elif attack=='old-common135':value['semantic']=135
         elif attack=='extra':value['abi_measurements'].append({'id':999999,'value':0})
         elif attack=='duplicate':value['abi_measurements'].append(value['abi_measurements'][-1])
         else:value['abi_measurements'][-1],value['abi_measurements'][-2]=value['abi_measurements'][-2],value['abi_measurements'][-1]

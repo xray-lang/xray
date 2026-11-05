@@ -23,6 +23,7 @@ add_custom_command(OUTPUT "${path_type_c}" "${path_import_c}" "${path_type_c}.ca
         "${CMAKE_CURRENT_LIST_DIR}/xir_path_flavours_source.h"
         "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_path_prelude/flavours.xr"
         "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_path_prelude/previous134-native-path/old134-path.xrchk"
+        "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_path_prelude/previous135-native-path/old135-path.chk"
         "${PROJECT_SOURCE_DIR}/stdlib/path/posix.xr"
         "${PROJECT_SOURCE_DIR}/stdlib/path/windows.xr"
         "${PROJECT_SOURCE_DIR}/stdlib/path/logical.xr"

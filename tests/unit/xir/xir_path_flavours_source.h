@@ -25,6 +25,22 @@ static void path_previous134(const XrXirCompileContext *context){
     CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK&&before.held_bytes==after.held_bytes);
     memset(packet,0xa5,length);xr_free(packet);
 }
+static void path_previous135(const XrXirCompileContext *context){
+    _Static_assert(XR_XIR_CHECKED_CONTRACT>135,"the Class transport reader excludes the stricter predecessor");
+    FILE *file=fopen(XR_PATH_FIXTURES "/previous135-native-path/old135-path.chk","rb");CHECK(file);
+    unsigned char *packet=xr_malloc(102525);CHECK(packet);size_t length=fread(packet,1,102525,file);
+    CHECK(length==102524&&feof(file)&&!ferror(file)&&!fclose(file));
+    static const uint8_t expected[32]={0x47,0x31,0xbb,0xb5,0xbf,0x81,0xd3,0x4e,0x03,0x24,0xc1,0x78,0x88,0x14,0x47,0x11,0x0b,0xb7,0xa7,0x5f,0xa5,0x50,0x72,0xe2,0xbb,0x5d,0xa2,0xf2,0xb5,0xcd,0xd5,0xb9};uint8_t digest[32];
+    xr_sha256(packet,length,digest);CHECK(!memcmp(digest,expected,sizeof(digest)));
+    CHECK(packet[8]==42&&packet[12]==135);
+    XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
+    XrXirArtifact *output=NULL;CHECK(xr_xir_compile_checked_read(context,packet,length,&output,NULL)==XR_XIR_BAD_STRUCTURE&&!output);
+    CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK&&before.held_bytes==after.held_bytes);
+    uint32_t future=XR_XIR_CHECKED_CONTRACT+1;for(unsigned i=0;i<4;++i)packet[12+i]=(uint8_t)(future>>(i*8));
+    CHECK(xr_xir_compile_checked_read(context,packet,length,&output,NULL)==XR_XIR_BAD_STRUCTURE&&!output);
+    CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK&&before.held_bytes==after.held_bytes);
+    memset(packet,0xa5,length);xr_free(packet);
+}
 static XrXirStatus path_flavours_check(const XrXirCompileContext *context,const char *text,
     XrXirSourceResult *output,XrXirSourceDiagnostic *diagnostic){
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
@@ -33,6 +49,44 @@ static XrXirStatus path_flavours_check(const XrXirCompileContext *context,const 
     XrXirSourceText input={"client.xr",text,strlen(text)};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,output,diagnostic,NULL);
     xr_compile_session_free(session);return status;
+}
+static void path_class_array_shape(const XrXirModule *module){
+    uint32_t function=path_complete_named(module,"classArrayHandles"),array=UINT32_MAX;
+    const XrXirFunction *body=module->functions+function;
+    const XrXirTypeNode *input=body->parameter_count==1?xr_xir_type_node(module->types,body->parameters[0]):NULL;
+    CHECK(input&&input->kind==XR_XIR_TYPE_SLICE&&input->element==XR_XIR_U8);
+    bool later_length=false,later_cleanup=false;
+    for(uint32_t i=0;i<body->instruction_count;++i){
+        const XrXirInstruction *op=body->instructions+i;
+        if(op->op==XR_XIR_ARRAY_NEW){
+            const XrXirTypeNode *type=xr_xir_type_node(module->types,op->type);
+            if(type&&type->kind==XR_XIR_TYPE_ARRAY&&xr_xir_type_is_class(module->types,type->element)){
+                CHECK(array==UINT32_MAX&&op->args[1]==1);array=i;
+            }
+        }
+        if(op->op==XR_XIR_VIEW_LEN&&op->args[0]==0){CHECK(array!=UINT32_MAX&&i>array);later_length=true;}
+        if(op->op==XR_XIR_VIEW_CLEANUP)for(uint32_t p=0;p<op->args[1];++p)
+            if(body->operands[op->args[0]+p]==0){CHECK(array!=UINT32_MAX&&i>array);later_cleanup=true;}
+    }
+    CHECK(array!=UINT32_MAX&&later_length&&later_cleanup);
+}
+static void path_class_array_refusals(const XrXirCompileContext *context){
+    static const char *const texts[]={
+        "final class BorrowedClass{data:Slice<u8> init(input:Slice<u8>){this.data=input}}\n",
+        "import {Buffer} from mem\nfn bad()->i64{const owner=Buffer(3,true);const refs=[owner];const alias=refs[0];"
+        "const view=owner.asBytes();alias.resize(4);return len(view)}\n"
+    };
+    for(unsigned n=0;n<2;++n){
+        XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
+        XrXirStatus status=path_flavours_check(context,texts[n],&result,&diagnostic);
+        XrXirStatus expected=n?XR_XIR_UNRESOLVED:XR_XIR_BAD_TYPE;
+        const char *reason=n?"(CALL)":"class field carrier is not implemented";
+        bool located=diagnostic.module==0&&diagnostic.line==(n?2:1)&&strstr(diagnostic.message,reason);
+        if(status!=expected||!located)fprintf(stderr,"Class array refusal%u status%u expected%u module%u %d:%d %s\n%s",
+            n,status,expected,diagnostic.module,diagnostic.line,diagnostic.column,diagnostic.message,texts[n]);
+        CHECK(status==expected&&!result.checked&&!result.snapshot&&located);
+        xr_xir_compile_source_result_free(&result);
+    }
 }
 static void path_flavours_contracts(const XrXirCompileContext *context){
     static const char *const modules[]={"posix","windows","logical","logical"};
@@ -56,7 +110,7 @@ static void path_flavours_contracts(const XrXirCompileContext *context){
     }
 }
 static void path_flavours_product(const XrXirCompileContext *context,const char *emit_base){
-    path_previous134(context);
+    path_previous134(context);path_previous135(context);
     FILE *file=fopen(XR_PATH_FIXTURES "/flavours.xr","rb");CHECK(file&&!fseek(file,0,SEEK_END));
     long bytes=ftell(file);CHECK(bytes>0&&!fseek(file,0,SEEK_SET));
     char *text=xr_malloc((size_t)bytes+1);CHECK(text);
@@ -68,6 +122,7 @@ static void path_flavours_product(const XrXirCompileContext *context,const char 
     XrXirArtifact *cold=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&cold,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
+    path_class_array_shape(xr_xir_compile_artifact_module(cold));
     CHECK(xr_xir_compile_specialize(cold,&closed,NULL,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(cold);
     CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
@@ -80,7 +135,7 @@ static void path_flavours_product(const XrXirCompileContext *context,const char 
         CHECK(fprintf(file,"\nconst uint32_t path_flavours_ids[2]={%u,%u};\n",ids[0],ids[1])>0&&!fclose(file));
         xr_xir_compile_c_source_free(&generated);xr_xir_compile_artifact_free(lowered);
     }else{
-        path_flavours_contracts(context);
+        path_flavours_contracts(context);path_class_array_refusals(context);
         XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK&&!lowered);
         path_flavours_execute(program,ids);xr_xir_compile_program_drop(program);
     }

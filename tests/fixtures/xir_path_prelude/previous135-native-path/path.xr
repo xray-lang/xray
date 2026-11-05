@@ -1,0 +1,69 @@
+// Filesystem paths use the execution host's lexical rules. Construction keeps
+// exact text; lexical normalization never resolves links or proves containment.
+import "std/path/_lexical" as lexical
+
+const _windows: bool=__isWindows()
+fn _separator() -> string {
+    if (_windows) { return "\\" }
+    return "/"
+}
+fn _delimiter() -> string {
+    if (_windows) { return ";" }
+    return ":"
+}
+export const sep: string=_separator()
+export const delimiter: string=_delimiter()
+
+export class Path {
+    raw: string
+    init(raw: string) { this.raw=raw }
+    toString() -> string { return this.raw }
+}
+
+export class PathInfo {
+    root: string
+    dir: Path
+    base: string
+    name: string
+    ext: string
+    init(root: string, dir: Path, base: string, name: string, ext: string) {
+        this.root=root; this.dir=dir; this.base=base; this.name=name; this.ext=ext
+    }
+}
+
+fn _strings(parts: Array<Path>) -> Array<string> {
+    var out: Array<string> = []
+    for (var i=0; i<len(parts); i++) { out.push(parts[i].raw) }
+    return out
+}
+
+export fn from(raw: string) -> Path { return Path(raw) }
+export fn hasRoot(p: Path) -> bool { return lexical.root(p.raw,_windows).rooted }
+export fn isAbsolute(p: Path) -> bool { return lexical.root(p.raw,_windows).absolute }
+export fn joinAll(parts: Array<Path>) -> Path { return Path(lexical.joinAll(_strings(parts),_windows)) }
+export fn join(...parts: Path) -> Path { return joinAll(parts) }
+export fn dirname(p: Path) -> Path { return Path(lexical.dirname(p.raw,_windows)) }
+export fn basename(p: Path) -> string { return lexical.basename(p.raw,_windows) }
+export fn extname(p: Path) -> string { return lexical.extname(p.raw,_windows) }
+export fn normalize(p: Path) -> Path { return Path(lexical.normalize(p.raw,_windows)) }
+export fn relative(fromPath: Path, toPath: Path) -> Path? {
+    const value=lexical.relative(fromPath.raw,toPath.raw,_windows)
+    if (value==null) { return null }
+    return Path(value!)
+}
+export fn resolve(...parts: Path) -> Path {
+    const value=lexical.joinAll(_strings(parts),_windows)
+    if (lexical.root(value,_windows).absolute) { return Path(lexical.normalize(value,_windows)) }
+    if (_windows) {
+        if (len(value)==0) { return Path(__fullpath(".")) }
+        return Path(__fullpath(value))
+    }
+    return Path(lexical.normalize(lexical.joinAll([__getcwd(),value],false),false))
+}
+export fn parse(p: Path) -> PathInfo {
+    const value=lexical.parse(p.raw,_windows)
+    return PathInfo(value.root,Path(value.dir),value.base,value.name,value.ext)
+}
+export fn format(info: PathInfo) -> Path {
+    return Path(lexical.format(info.root,info.dir.raw,info.base,info.name,info.ext,_windows))
+}
