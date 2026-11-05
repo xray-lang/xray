@@ -100,8 +100,8 @@ static void host_file_contract_rejected(XrXirCompileContext *context,const char 
  XrXirStatus expected,const char *reason){
  XrXirSourceResult output={0};XrXirSourceDiagnostic diagnostic={0};
  XrXirStatus status=host_check(context,"io",text,genuine,&output,&diagnostic);
- if(status!=expected){
-  fprintf(stderr,"file contract status%u expected%u %d:%d %s\n",status,expected,diagnostic.line,diagnostic.column,diagnostic.message);
+ if(status!=expected||(reason&&!strstr(diagnostic.message,reason))){
+  fprintf(stderr,"file contract status%u expected%u expectedReason=%s %d:%d %s\n",status,expected,reason?reason:"(none)",diagnostic.line,diagnostic.column,diagnostic.message);
   fprintf(stderr,"file refusal actual text begin\n%sfile refusal actual text end\n",text);
   if(status==XR_XIR_OK&&output.checked)host_file_refusal_ir(output.checked);
  }
