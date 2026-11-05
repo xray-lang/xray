@@ -8,7 +8,7 @@ import re
 import tempfile
 from pathlib import Path, PurePosixPath
 from build_xir_runtime_sdk import canonical_identity
-from xir_stdlib_publication import module_identity, validate_modules, validate_sources
+from xir_stdlib_publication import PRELUDE, module_identity, validate_modules, validate_sources
 
 FIELDS = {'schema', 'components'}
 
@@ -62,12 +62,12 @@ def verify_components(root, expected, sdk_root, expected_sdk):
     required = {module_identity(ns, path) for ns, path in (
         ('io', 'io/output.xr'), ('time', 'time/time.xr'), ('path', 'path/path.xr'),
         ('path', 'path/posix.xr'), ('path', 'path/windows.xr'), ('path', 'path/logical.xr'),
-        ('path', 'path/_lexical.xr'), ('path', 'path/_bundle.xr'))}
+        ('path', 'path/_lexical.xr'), ('path', 'path/_bundle.xr'))} | {PRELUDE}
     if identities != required:
         raise ValueError('incomplete or unexpected standard-library publication')
     expected_owners = {frozenset({module_identity('io', 'io/output.xr')}),
                        frozenset({module_identity('time', 'time/time.xr')}),
-                       frozenset(identity for identity in required if identity.startswith('stdlib-module-v1:module=4:path:'))}
+                       frozenset(identity for identity in required if identity == PRELUDE or identity.startswith('stdlib-module-v1:module=4:path:'))}
     if owners != expected_owners:
         raise ValueError('dependency closure split across Checked owners')
     sdk_identity = None

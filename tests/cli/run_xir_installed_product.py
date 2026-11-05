@@ -193,7 +193,8 @@ def main():
         cases = ('old-schema', 'unknown-schema', 'unknown-field', 'role', 'escape',
                  'module-identity', 'noncanonical-identity', 'empty', 'duplicate-identity',
                  'duplicate-path', 'digest', 'length', 'missing-ordinal', 'bad-ordinal',
-                 'bad-authority', 'bad-dependency', 'cyclic-dependency', 'source-bytes')
+                 'bad-authority', 'bad-dependency', 'cyclic-dependency', 'source-bytes',
+                 'prelude-as-source', 'prelude-fingerprint', 'prelude-inputs')
         for case in cases:
             record = json.loads(expected.read_bytes())
             if case == 'old-schema': record['schema'] = 2
@@ -214,6 +215,11 @@ def main():
             elif case == 'bad-dependency': record['components'][2]['modules'][0]['dependencies'] = [999999]
             elif case == 'cyclic-dependency': record['components'][2]['modules'][0]['dependencies'] = [0]
             elif case == 'source-bytes': record['components'][2]['sources'][0]['text'] += 'invalid'
+            elif case in ('prelude-as-source', 'prelude-fingerprint', 'prelude-inputs'):
+                prelude = next(row for row in record['components'][2]['sources'] if row['sourceKind'] == 'generated-prelude')
+                if case == 'prelude-as-source': prelude['sourceKind'] = 'source'
+                elif case == 'prelude-fingerprint': prelude['provenance']['normalizedInputSha256'] = '0' * 64
+                else: prelude['provenance']['inputs'].pop()
             trusted.write_text(json.dumps(record), encoding='utf-8')
             publication = checked/'stdlib-manifest.json'
             publication.write_bytes(old)

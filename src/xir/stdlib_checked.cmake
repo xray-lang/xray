@@ -24,6 +24,9 @@ add_custom_command(OUTPUT ${XIR_STDLIB_OUTPUT_CHECKED} ${XIR_STDLIB_TIME_CHECKED
         ${PROJECT_SOURCE_DIR}/stdlib/path/posix.xr
         ${PROJECT_SOURCE_DIR}/stdlib/path/windows.xr
         ${PROJECT_SOURCE_DIR}/stdlib/path/logical.xr
+        ${PROJECT_SOURCE_DIR}/stdlib/prelude/builtin_symbols.def
+        ${PROJECT_SOURCE_DIR}/stdlib/prelude/range.xr
+        ${PROJECT_SOURCE_DIR}/stdlib/prelude/stringable.xr
     VERBATIM)
 add_library(xray_xir_stdlib_catalog STATIC xxir_stdlib_catalog.c ${XIR_STDLIB_DATA})
 target_link_libraries(xray_xir_stdlib_catalog PUBLIC xray_xir_source)

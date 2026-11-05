@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from xir_stdlib_publication import decoded_modules, validate_sources
+from xir_stdlib_publication import PRELUDE, decoded_modules, generated_prelude_source, validate_sources
 
 SOURCES = (
     ('io', 'io/output.xr'), ('time', 'time/time.xr'),
@@ -70,8 +70,10 @@ def main() -> None:
             data = checked.read_bytes()
             if not data:
                 raise ValueError('empty Checked library: ' + logical)
-            modules = decoded_modules(json.loads(Path(str(checked) + '.modules.json').read_bytes()), sources)
-            producer_sources = [dict(namespace=row['namespace'], logical_path=row['logical_path'],
+            directory_record = json.loads(Path(str(checked) + '.modules.json').read_bytes())
+            modules = decoded_modules(directory_record, sources)
+            producer_sources = [generated_prelude_source(root, directory_record['generated_prelude']) if row['canonical'] == PRELUDE else
+                dict(namespace=row['namespace'], logical_path=row['logical_path'], sourceKind='source',
                 text=sources[row['namespace'], row['logical_path']].decode('utf-8'),
                 length=len(sources[row['namespace'], row['logical_path']]),
                 sha256=hashlib.sha256(sources[row['namespace'], row['logical_path']]).hexdigest()) for row in modules]
@@ -81,6 +83,8 @@ def main() -> None:
                 raise ValueError('overlapping Checked owners')
             identities |= names
             required = {(ns, path) for ns, path in sources if ns == namespace}
+            if symbol == 'path':
+                required.add(('prelude', 'prelude/builtin_symbols.def'))
             if {(row['namespace'], row['logical_path']) for row in modules} != required:
                 raise ValueError('incomplete or unexpected Source closure: ' + logical)
             digest = hashlib.sha256(data).digest()

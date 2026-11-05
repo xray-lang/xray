@@ -1284,6 +1284,39 @@ class PathCurrentDirectoryDeclarations(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_sources([], set(identities))
 
+    def test_exact_governed_prelude_keeps_generated_text_and_input_facts_separate(self):
+        import copy
+        import hashlib
+        import json
+        import re
+        from xir_stdlib_publication import PRELUDE, PRELUDE_INPUTS, decoded_modules, generated_prelude_source, parse_identity, validate_sources
+        raw = (ROOT / 'src/shared/xprelude_source.inc.c').read_text(encoding='utf-8')
+        literal = re.search(r'static const XirPreludeSource xir_prelude_source = \{\s*("(?:[^"\\]|\\.)*"),', raw)
+        self.assertIsNotNone(literal)
+        text = json.loads(literal[1])
+        fingerprints = [hashlib.sha256((ROOT / name).read_text(encoding='utf-8').encode('utf-8')).hexdigest()
+                        for name in PRELUDE_INPUTS]
+        generated = dict(canonical=PRELUDE, sourceKind='generated-prelude', text=text,
+                         normalizedInputSha256=fingerprints[0], normalizedRangeSha256=fingerprints[1])
+        record = dict(schema=1, stage=2, root_module=0xffffffff, modules=[
+            dict(ordinal=0, canonical=PRELUDE, dependencies=[])], generated_prelude=generated)
+        self.assertEqual(decoded_modules(record, {})[0]['logical_path'], 'prelude/builtin_symbols.def')
+        source = generated_prelude_source(ROOT, generated)
+        self.assertNotEqual(source['sha256'], fingerprints[0])
+        self.assertEqual([row['path'] for row in source['provenance']['inputs']], list(PRELUDE_INPUTS))
+        validate_sources([source], {PRELUDE})
+        for attack in ('kind', 'input-fingerprint', 'missing-input'):
+            bad = copy.deepcopy(source)
+            if attack == 'kind': bad['sourceKind'] = 'source'
+            elif attack == 'input-fingerprint': bad['provenance']['normalizedInputSha256'] = '0' * 64
+            else: bad['provenance']['inputs'].pop()
+            with self.subTest(attack=attack), self.assertRaises(ValueError):
+                validate_sources([bad], {PRELUDE})
+        with self.assertRaises(ValueError):
+            parse_identity('stdlib-module-v1:module=7:prelude:path=17:prelude/other.def')
+        with self.assertRaises(ValueError):
+            decoded_modules({key: value for key, value in record.items() if key != 'generated_prelude'}, {})
+
 
 if __name__ == '__main__':
     unittest.main()

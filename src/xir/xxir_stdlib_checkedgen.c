@@ -11,6 +11,7 @@
 #include "base/xresource_limits.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_checked.h"
+#include "xir/xxir_prelude_source_internal.h"
 #include "toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,8 +39,11 @@ static void write_modules(const XrXirCompileContext *context,const char *packet,
     FILE *file=fopen(path,"wb");CHECK(file);
     CHECK(fprintf(file,"{\"schema\":1,\"stage\":%u,\"root_module\":%u,\"modules\":[",
         (unsigned)module->stage,(unsigned)module->declarations->root_module)>0);
+    bool prelude=false;
     for(uint32_t m=0;m<module->declarations->module_count;++m){
         const XrXirSourceModule *row=module->declarations->modules+m;
+        if(row->name_length==sizeof(XIR_PRELUDE_CANONICAL)-1&&
+            !memcmp(row->name,XIR_PRELUDE_CANONICAL,sizeof(XIR_PRELUDE_CANONICAL)-1))prelude=true;
         CHECK(fprintf(file,"%s{\"ordinal\":%u,\"canonical\":",m?",":"",(unsigned)m)>0);
         write_json_text(file,row->name,row->name_length);
         CHECK(fputs(",\"dependencies\":[",file)!=EOF);
@@ -47,7 +51,18 @@ static void write_modules(const XrXirCompileContext *context,const char *packet,
             CHECK(fprintf(file,"%s%u",e?",":"",(unsigned)row->dependencies[e])>0);
         CHECK(fputs("]}",file)!=EOF);
     }
-    CHECK(fputs("]}\n",file)!=EOF&&!fclose(file));xr_compile_resources_free(path);
+    CHECK(fputc(']',file)!=EOF);
+    if(prelude){
+        CHECK(fputs(",\"generated_prelude\":{\"canonical\":\"" XIR_PRELUDE_CANONICAL "\",\"sourceKind\":\"generated-prelude\",\"text\":",file)!=EOF);
+        size_t text_length=strlen(xir_prelude_source.text);CHECK(text_length<=UINT32_MAX);
+        write_json_text(file,xir_prelude_source.text,(uint32_t)text_length);
+        CHECK(fputs(",\"normalizedInputSha256\":\"",file)!=EOF);
+        for(unsigned i=0;i<32;++i)CHECK(fprintf(file,"%02x",(unsigned)xir_prelude_source.input_sha256[i])==2);
+        CHECK(fputs("\",\"normalizedRangeSha256\":\"",file)!=EOF);
+        for(unsigned i=0;i<32;++i)CHECK(fprintf(file,"%02x",(unsigned)xir_prelude_source.range_input_sha256[i])==2);
+        CHECK(fputs("\"}",file)!=EOF);
+    }
+    CHECK(fputs("}\n",file)!=EOF&&!fclose(file));xr_compile_resources_free(path);
 }
 int main(int argc, char **argv) {
     CHECK(argc == 5);
