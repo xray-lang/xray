@@ -75,9 +75,17 @@ static void host_file_write_callee_controls(XrXirCompileContext *context,const X
  CHECK(ops[push].args[1]>=body->parameter_count&&ops[push].args[1]-body->parameter_count<push);
  const XrXirInstruction *get=body->instructions+ops[push].args[1]-body->parameter_count;
  CHECK(get->op==XR_XIR_VIEW_GET&&get->args[0]==1u);
- operands[body->operand_count]=ops[push].args[0];operands[body->operand_count+1u]=get->args[1];
- operands[body->operand_count+2u]=ops[push].args[1];
- ops[push]=(XrXirInstruction){.op=XR_XIR_ARRAY_SET,.type=XR_XIR_UNIT,.args={body->operand_count,3}};
+ /* Operand-table ranges follow instruction order, including the later cleanup. */
+ uint32_t prefix=0;
+ for(uint32_t i=0;i<push;++i)if(xr_xir_op_uses_operand_table(ops[i].op)&&ops[i].args[1]){
+  CHECK(ops[i].args[0]==prefix);prefix+=ops[i].args[1];}
+ CHECK(prefix<=body->operand_count);
+ memcpy(operands,body->operands,prefix*sizeof(*operands));
+ memcpy(operands+prefix+3u,body->operands+prefix,(body->operand_count-prefix)*sizeof(*operands));
+ operands[prefix]=ops[push].args[0];operands[prefix+1u]=get->args[1];operands[prefix+2u]=ops[push].args[1];
+ for(uint32_t i=push+1u;i<body->instruction_count;++i)
+  if(xr_xir_op_uses_operand_table(ops[i].op)&&ops[i].args[1])ops[i].args[0]+=3u;
+ ops[push]=(XrXirInstruction){.op=XR_XIR_ARRAY_SET,.type=XR_XIR_UNIT,.args={prefix,3}};
  host_file_write_rejected(context,&changed,construction,entry,site,"ARRAY_SET");
  xr_free(operands);xr_free(blocks);xr_free(ops);xr_free(functions);
 }
