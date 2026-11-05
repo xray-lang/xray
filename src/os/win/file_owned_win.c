@@ -20,7 +20,7 @@ typedef struct OwnedFileOp {
     OwnedFileState *file;
     XrOsIoPolicy memory;
     XrOsFileAction action;
-    HANDLE thread, duplicate;
+    HANDLE thread, duplicate, opened;
     FILE *stream;
     wchar_t *path;
     uint8_t *buffer;
@@ -33,6 +33,7 @@ struct OwnedFileState {
     XrOsFileOwner *anchor;
     XrOsIoPolicy memory;
     HANDLE handle;
+    bool opening;
     OwnedFileOp *operations;
 };
 typedef struct OwnedFileConversion {
@@ -110,10 +111,12 @@ static void owned_file_stream_io(OwnedFileOp *op) {
     if(op->action==XR_OS_FILE_READ) {count=fread(op->buffer,1,op->requested,op->stream);okay=!ferror(op->stream);}
     else if(op->action==XR_OS_FILE_WRITE) {count=fwrite(op->buffer,1,op->requested,op->stream);okay=!ferror(op->stream);}
     else okay=fflush(op->stream)==0;
-    if(okay) {op->result.success=true;op->result.count=count;return;}
+    op->result.count=count;
+    if(okay) {op->result.success=true;return;}
     unsigned long error=0;
     if(_get_doserrno(&error)!=0 || !error)error=GetLastError();
     owned_file_result_error(op,(DWORD)error,false);
+    if(op->result.status==XR_OS_IO_OK && count)op->result.success=true;
     /* A cancelled CRT read must not leave its error indicator poisoning the
      * next genuine read from the shared stream. Buffered bytes remain intact. */
     if(op->result.status==XR_OS_IO_CANCELLED)clearerr(op->stream);
@@ -126,17 +129,19 @@ static DWORD WINAPI owned_file_worker(void *context) {
         DWORD creation=op->action==XR_OS_FILE_OPEN_READ?OPEN_EXISTING:(op->append?OPEN_ALWAYS:CREATE_ALWAYS);
         HANDLE handle=CreateFileW(op->path,access,FILE_SHARE_READ|FILE_SHARE_WRITE,NULL,creation,FILE_ATTRIBUTE_NORMAL,NULL);
         if(handle==INVALID_HANDLE_VALUE)owned_file_result_error(op,GetLastError(),true);
-        else {op->file->handle=handle;op->result.success=true;}
+        else {op->opened=handle;op->result.success=true;}
     } else if(op->stream)owned_file_stream_io(op);
     else {
         DWORD count=0;BOOL okay=op->action==XR_OS_FILE_READ?
             ReadFile(op->duplicate,op->buffer,op->requested,&count,NULL):
             WriteFile(op->duplicate,op->buffer,op->requested,&count,NULL);
-        if(okay) {op->result.success=true;op->result.count=count;}
+        op->result.count=count;
+        if(okay)op->result.success=true;
         else {
             DWORD error=GetLastError();
             if(op->action==XR_OS_FILE_READ && (error==ERROR_HANDLE_EOF || error==ERROR_BROKEN_PIPE))op->result.success=true;
-            else owned_file_result_error(op,error,false);
+            else {owned_file_result_error(op,error,false);
+                if(op->result.status==XR_OS_IO_OK && count)op->result.success=true;}
         }
     }
     atomic_store_explicit(&op->complete,true,memory_order_release);return 0;
@@ -151,14 +156,23 @@ static XrOsIoStatus owned_file_request_cancel(OwnedFileOp *op) {
     DWORD error=GetLastError();return error==ERROR_NOT_FOUND?XR_OS_IO_OK:owned_file_error(error);
 }
 static XrOsIoStatus owned_file_probe(OwnedFileOp *op) {
-    if(op->terminal)return XR_OS_IO_OK;
-    if(atomic_load_explicit(&op->cancelled,memory_order_acquire)) {
-        XrOsIoStatus status=owned_file_request_cancel(op);if(status!=XR_OS_IO_OK)return status;
+    if(!op->terminal) {
+        if(atomic_load_explicit(&op->cancelled,memory_order_acquire)) {
+            XrOsIoStatus status=owned_file_request_cancel(op);if(status!=XR_OS_IO_OK)return status;
+        }
+        DWORD wait=WaitForSingleObject(op->thread,0);
+        if(wait==WAIT_TIMEOUT)return XR_OS_IO_OK;
+        if(wait!=WAIT_OBJECT_0 || !atomic_load_explicit(&op->complete,memory_order_acquire))return XR_OS_IO_IO;
+        op->terminal=true;
     }
-    DWORD wait=WaitForSingleObject(op->thread,0);
-    if(wait==WAIT_TIMEOUT)return XR_OS_IO_OK;
-    if(wait!=WAIT_OBJECT_0 || !atomic_load_explicit(&op->complete,memory_order_acquire))return XR_OS_IO_IO;
-    op->terminal=true;return XR_OS_IO_OK;
+    /* Only the serialized caller publishes the worker-owned opening result,
+     * after both thread termination and the complete release are observed. */
+    if(op->file && op->file->opening &&
+        (op->action==XR_OS_FILE_OPEN_READ || op->action==XR_OS_FILE_OPEN_WRITE)) {
+        if(op->file->handle || (op->result.success && !op->opened))return XR_OS_IO_IO;
+        op->file->handle=op->opened;op->opened=NULL;op->file->opening=false;
+    }
+    return XR_OS_IO_OK;
 }
 static XrOsIoStatus owned_file_op_new(const XrOsIoPolicy *memory,OwnedFileState *file,
     const XrOsFileRequest *request,XrOsFileOperation *operation,OwnedFileOp **output) {
@@ -193,7 +207,7 @@ XR_FUNC XrOsIoStatus xr_os_io_file_open_begin(const XrOsIoPolicy *memory,const X
     if(!owned_file_current(query))return XR_OS_IO_CANCELLED;
     owner->busy=operation->busy=true;OwnedFileState *file=NULL;OwnedFileOp *op=NULL;
     XrOsIoStatus status=owned_file_allocate(memory,sizeof(*file),_Alignof(OwnedFileState),(void **)&file);
-    if(status==XR_OS_IO_OK) {file->anchor=owner;file->memory=*memory;owner->state=file;
+    if(status==XR_OS_IO_OK) {file->anchor=owner;file->memory=*memory;file->opening=true;owner->state=file;
         status=owned_file_op_new(memory,file,request,operation,&op);}
     if(status==XR_OS_IO_OK) {
         bool refused=false;status=owned_file_path(memory,query,request,&op->path,&refused);
@@ -208,7 +222,7 @@ XR_FUNC XrOsIoStatus xr_os_io_file_begin(const XrOsIoPolicy *memory,const XrOsFi
     if(!owned_file_memory_valid(memory) || (query && !query->current) || !request ||
         request->action<XR_OS_FILE_READ || request->action>XR_OS_FILE_FLUSH ||
         !operation || operation->state || operation->busy ||
-        (owner?(!file || owner->busy || !file->handle || request->standard_stream!=-1):
+        (owner?(!file || owner->busy || file->opening || !file->handle || request->standard_stream!=-1):
             (request->standard_stream<0 || request->standard_stream>2)) ||
         (request->action==XR_OS_FILE_WRITE?(!request->bytes && request->length):request->bytes!=NULL))return XR_OS_IO_BAD_ARGUMENT;
     if(!owned_file_current(query))return XR_OS_IO_CANCELLED;

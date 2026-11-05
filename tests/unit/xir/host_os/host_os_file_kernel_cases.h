@@ -32,6 +32,8 @@ static void host_file_opened(const XrOsIoPolicy *memory,const XrOsFileQuery *que
  XrOsFileOperation operation={0};XrOsFileRequest request={.action=writing?XR_OS_FILE_OPEN_WRITE:XR_OS_FILE_OPEN_READ,
   .path=path,.path_length=strlen(path),.append=append,.standard_stream=-1};
  CHECK(xr_os_io_file_open_begin(memory,query,&request,owner,&operation)==XR_OS_IO_OK);
+ XrOsFileOperation premature={0};XrOsFileRequest read={.action=XR_OS_FILE_READ,.standard_stream=-1,.length=1};
+ CHECK(xr_os_io_file_begin(memory,query,&read,owner,&premature)==XR_OS_IO_BAD_ARGUMENT&&!premature.state);
  XrOsFileProgress result=host_file_terminal(&operation);CHECK(result.status==XR_OS_IO_OK&&result.success);
  bool closed=true;CHECK(xr_os_io_file_close(owner,&closed)==XR_OS_IO_OK&&!closed);
  XrOsFileOwner copied=*owner;closed=true;

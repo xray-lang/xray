@@ -27,6 +27,10 @@ typedef struct XrOsFileRequest {
     const uint8_t *bytes;
     size_t length;
 } XrOsFileRequest;
+/* Count always retains actual transferred bytes, including a typed failure.
+ * OK/success accepts a nonempty partial transfer even if CRT ferror is set;
+ * zero-byte ordinary failure is OK/false, while EOF is OK/true with count zero.
+ * Typed cancellation/resource failures take precedence and never request replay. */
 typedef struct XrOsFileProgress {
     bool terminal, success;
     XrOsIoStatus status;
@@ -46,9 +50,13 @@ XR_FUNC XrOsIoStatus xr_os_io_file_open_begin(const XrOsIoPolicy *memory,
     XrOsFileOwner *owner,XrOsFileOperation *operation);
 /* An owned operation requires owner and standard_stream==-1. A borrowed stream
  * requires owner==NULL and stream 0/1/2, and uses the caller's actual CRT FILE.
+ * A pending opener cannot be used by file_begin; poll must first observe its
+ * real terminal result. operation_close also acquires an unpublished open
+ * handle before releasing that operation, so late cancellation retains ownership.
  * Path and write spans are borrowed only during begin. Write input is
  * snapshotted before thread creation. Read bytes remain owned by the operation
- * until operation_close succeeds. A zero-byte operation does not read or write the OS. */
+ * until operation_close succeeds. A zero-byte operation does not read or write
+ * the OS. */
 XR_FUNC XrOsIoStatus xr_os_io_file_begin(const XrOsIoPolicy *memory,
     const XrOsFileQuery *query,const XrOsFileRequest *request,
     XrOsFileOwner *owner,XrOsFileOperation *operation);
