@@ -117,6 +117,40 @@ static void path_imported_index_contract(const XrXirCompileContext *context,cons
     operands[argument]=old;CHECK(xr_xir_compile_structure_verify_v2(context,&changed,construction,NULL)==XR_XIR_OK);
     xr_free(operands);xr_free(functions);
 }
+static void path_imported_append_contract(const XrXirCompileContext *context,const XrXirArtifact *cold){
+    const XrXirModule *module=xr_xir_compile_artifact_module(cold);
+    static const char canonical[]="stdlib-module-v1:module=4:path:path=16:path/_lexical.xr";
+    static const char name[]="normalize";uint32_t function=UINT32_MAX,site=UINT32_MAX;
+    for(uint32_t f=0;f<module->function_count;++f){
+        const XrXirFunction *body=module->functions+f;
+        const XrXirSourceModule *owner=module->declarations->modules+module->declarations->functions[f].module;
+        if(body->name_length==sizeof(name)-1&&!memcmp(body->name,name,sizeof(name)-1)&&
+            owner->name_length==sizeof(canonical)-1&&!memcmp(owner->name,canonical,sizeof(canonical)-1)){
+            CHECK(function==UINT32_MAX);function=f;
+        }
+    }
+    CHECK(function!=UINT32_MAX);const XrXirFunction *body=module->functions+function;
+    for(uint32_t i=0;i<body->instruction_count;++i)
+        if(body->instructions[i].op==XR_XIR_CELL_STRING_APPEND&&!body->instructions[i].immediate){site=i;break;}
+    CHECK(site!=UINT32_MAX);const XrXirInstruction *op=body->instructions+site;
+    XrXirType cell=xr_xir_operand_type(body,op->args[0]);
+    CHECK(op->type==XR_XIR_UNIT&&xr_xir_type_is_cell(module->types,cell)&&
+        xr_xir_cell_element(module->types,cell)==XR_XIR_STRING&&xr_xir_operand_type(body,op->args[1])==XR_XIR_STRING);
+    const XrXirConstruction *construction=xr_xir_compile_artifact_construction(cold);
+    CHECK(xr_xir_compile_structure_verify_v2(context,module,construction,NULL)==XR_XIR_OK);
+    XrXirFunction *functions=xr_malloc(module->function_count*sizeof(*functions));
+    XrXirInstruction *instructions=xr_malloc(body->instruction_count*sizeof(*instructions));CHECK(functions&&instructions);
+    memcpy(functions,module->functions,module->function_count*sizeof(*functions));
+    memcpy(instructions,body->instructions,body->instruction_count*sizeof(*instructions));
+    XrXirModule changed=*module;changed.functions=functions;functions[function].instructions=instructions;
+    uint32_t old=instructions[site].args[1];instructions[site].args[1]=instructions[site].args[0];
+    XrXirDiagnostic diagnostic={0};
+    CHECK(xr_xir_compile_structure_verify_v2(context,&changed,construction,&diagnostic)==XR_XIR_BAD_TYPE&&
+        diagnostic.function==function&&diagnostic.instruction==site);
+    instructions[site].args[1]=old;
+    CHECK(xr_xir_compile_structure_verify_v2(context,&changed,construction,NULL)==XR_XIR_OK);
+    xr_free(instructions);xr_free(functions);
+}
 static void path_flavours_contracts(const XrXirCompileContext *context){
     static const char *const modules[]={"posix","windows","logical","logical"};
     for(unsigned n=0;n<4;++n){
@@ -156,7 +190,7 @@ static void path_flavours_product(const XrXirCompileContext *context,const char 
     XrXirArtifact *cold=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&cold,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
-    path_class_array_shape(xr_xir_compile_artifact_module(cold));path_imported_index_contract(context,cold);
+    path_class_array_shape(xr_xir_compile_artifact_module(cold));path_imported_index_contract(context,cold);path_imported_append_contract(context,cold);
     CHECK(xr_xir_compile_specialize(cold,&closed,NULL,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(cold);
     CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
