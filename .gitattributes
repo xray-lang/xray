@@ -130,5 +130,5 @@ tests/fixtures/xir_path_prelude/previous134-native-path/path.xr -text
 
 # Preserve the genuine Class-transport predecessor and its exact source closure.
 tests/fixtures/xir_path_prelude/previous135-native-path/old135-path.chk -text
-tests/fixtures/xir_path_prelude/previous135-native-path/path.xr -text
-tests/fixtures/xir_path_prelude/previous135-native-path/_lexical.xr -text
+tests/fixtures/xir_path_prelude/previous135-native-path/path.xr -text whitespace=cr-at-eol
+tests/fixtures/xir_path_prelude/previous135-native-path/_lexical.xr -text whitespace=cr-at-eol
