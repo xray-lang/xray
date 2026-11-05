@@ -132,5 +132,7 @@ export fn check() -> i64 {
         assert(logical.toNative(path.from("C:\\root"),logical.from("x\u0001y")!)==null)
         assert(logical.toNative(path.from("C:\\root"),logical.from("a/中")!)!.toString()=="C:\\root\\a\\中")
     }else{assert(logical.toNative(path.from("/root"),logical.from("a/中")!)!.toString()=="/root/a/中")}
+    assert(logical.toNative(path.from("/root\u0000other"),logical.from("a")!)==null)
+    if(path.sep=="\\"){assert(logical.toNative(path.from("C:\\root\u0000other"),logical.from("a")!)==null)}
     return 42
 }

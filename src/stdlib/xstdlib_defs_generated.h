@@ -145,6 +145,8 @@ typedef struct XrStdlibClassFieldDefEntry {
 
 static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"path", "__getcwd", "(): string", "Read the current working directory for relative Path resolution", "", "normal", "", "", "", "value", "", "", "", "system", "", "fresh", "", "", "", 0, 0, false},
+    {"path", "__isWindows", "(): bool", "Read the execution host path flavour", "", "normal", "", "", "", "value", "", "", "", "system", "", "", "", "", "", 0, 0, false},
+    {"path", "__fullpath", "(raw: string): string", "Make a Windows locator absolute without requiring an existing file", "", "normal", "", "", "s", "value", "", "", "", "system", "", "fresh", "", "", "", 0, 1, false},
     {"time", "__realtimeNanos", "(): i64", "Nanoseconds since the Unix epoch on the wall clock", "time_realtimeNanos", "normal", "", "xrt_time_realtime_nanos", "", "value", "", "time.__realtimeNanos", "", "system", "method", "", "xray.runtime.provider.v1/clock", "xray.runtime.provider-operation.v1/clock/realtime-nanos", "", 0, 0, true},
     {"time", "__monotonicNanos", "(): i64", "Nanoseconds on the runtime monotonic clock", "time_monotonicNanos", "normal", "", "xrt_time_monotonic_nanos", "", "value", "", "time.__monotonicNanos", "", "system", "method", "", "xray.runtime.provider.v1/clock", "xray.runtime.provider-operation.v1/clock/monotonic-nanos", "", 0, 0, true},
     {"time", "__cpuNanos", "(): i64", "Nanoseconds of process CPU time consumed", "time_cpuNanos", "normal", "", "xrt_time_cpu_nanos", "", "value", "", "time.__cpuNanos", "", "system", "method", "", "xray.runtime.provider.v1/clock", "xray.runtime.provider-operation.v1/clock/process-cpu-nanos", "", 0, 0, true},
@@ -302,7 +304,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"net", "__udpFromHost", "(conn: NetConn): string", "Sender address of the last successful datagram receive; empty when none", "net_udp_from_host", "normal", "", "xrt_net_udp_from_host", "v", "value", "", "", "", "runtime", "method", "fresh", "", "", "", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 1, true},
     {"net", "__udpFromPort", "(conn: NetConn): i64", "Sender port of the last successful datagram receive; 0 when none", "net_udp_from_port", "normal", "", "xrt_net_udp_from_port", "v", "value", "", "", "", "runtime", "method", "", "", "", "", 0, 1, true},
 };
-#define XR_STDLIB_DEF_ENTRY_COUNT ((uint32_t) 157)
+#define XR_STDLIB_DEF_ENTRY_COUNT ((uint32_t) 159)
 
 static const XrStdlibConstDefEntry xr_stdlib_const_def_entries[1] = {0};
 #define XR_STDLIB_CONST_DEF_ENTRY_COUNT ((uint32_t) 0)

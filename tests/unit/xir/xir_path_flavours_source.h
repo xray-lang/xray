@@ -25,17 +25,34 @@ static void path_previous134(const XrXirCompileContext *context){
     CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK&&before.held_bytes==after.held_bytes);
     memset(packet,0xa5,length);xr_free(packet);
 }
+static XrXirStatus path_flavours_check(const XrXirCompileContext *context,const char *text,
+    XrXirSourceResult *output,XrXirSourceDiagnostic *diagnostic){
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_PROJECT,"path-shadow",XR_PATH_FIXTURES};
+    XrXirSourceRequest request={session,XR_PATH_FIXTURES "/client.xr",&authority,context,XR_PATH_ROOT "/stdlib",NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceText input={"client.xr",text,strlen(text)};
+    XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,output,diagnostic,NULL);
+    xr_compile_session_free(session);return status;
+}
 static void path_flavours_contracts(const XrXirCompileContext *context){
-    static const char *const rejected[]={
-        "import io\nimport \"std/path/posix\" as foreign\nfn bad(){io.exists(foreign.from(\"x\"))}\n",
-        "import io\nimport \"std/path/windows\" as foreign\nfn bad(){io.exists(foreign.from(\"x\"))}\n",
-        "import io\nimport \"std/path/logical\" as foreign\nfn bad(){io.exists(foreign.from(\"x\")!)}\n",
-        "import {LogicalPath} from \"std/path/logical\"\nfn bad(){LogicalPath(\"unchecked\")}\n"
-    };
-    for(unsigned n=0;n<sizeof(rejected)/sizeof(*rejected);++n){
-        XrXirSourceResult result={0};
-        CHECK(path_checked(context,rejected[n],XR_PATH_ROOT "/stdlib",NULL,&result)==XR_XIR_BAD_TYPE);
-        CHECK(!result.checked&&!result.snapshot);xr_xir_compile_source_result_free(&result);
+    static const char *const modules[]={"posix","windows","logical","logical"};
+    for(unsigned n=0;n<4;++n){
+        char text[1024];int count=snprintf(text,sizeof(text),
+            "import io\nimport path\nimport \"std/path/%s\" as foreign\nfn good(){io.exists(path.from(\"x\"))}\n",modules[n]);
+        CHECK(count>0&&(size_t)count<sizeof(text));
+        XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
+        CHECK(path_flavours_check(context,text,&result,&diagnostic)==XR_XIR_OK&&result.checked);
+        xr_xir_compile_source_result_free(&result);
+        const char *bad=n==3?"fn bad(){foreign.LogicalPath(\"unchecked\")}\n":
+            n==2?"fn bad(){io.exists(foreign.from(\"x\")!)}\n":"fn bad(){io.exists(foreign.from(\"x\"))}\n";
+        size_t suffix=strlen(bad);CHECK((size_t)count+suffix<sizeof(text));memcpy(text+count,bad,suffix+1);
+        XrXirStatus status=path_flavours_check(context,text,&result,&diagnostic);
+        const char *reason=n==3?"constructor arity or authority mismatch":"expression cannot satisfy its declared type";
+        if(status!=XR_XIR_BAD_TYPE||diagnostic.module||diagnostic.line!=5||strcmp(diagnostic.message,reason))
+            fprintf(stderr,"Path flavour refusal%u status%u module%u %d:%d %s\n",n,status,diagnostic.module,diagnostic.line,diagnostic.column,diagnostic.message);
+        CHECK(status==XR_XIR_BAD_TYPE&&!result.checked&&!result.snapshot);
+        CHECK(!diagnostic.module&&diagnostic.line==5&&!strcmp(diagnostic.message,reason));
+        xr_xir_compile_source_result_free(&result);
     }
 }
 static void path_flavours_product(const XrXirCompileContext *context,const char *emit_base){

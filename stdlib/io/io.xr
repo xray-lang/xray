@@ -5,6 +5,8 @@
 // live here so VM and AOT compile the same Xray semantics.
 import os
 import { Path } from path
+import path as pathutil
+import "std/path/_lexical" as pathlex
 
 const READ_CHUNK_SIZE: i64 = 131072
 const MAX_IN_MEMORY_READ_BYTES: i64 = 2147483647
@@ -386,37 +388,31 @@ export fn isSymlink(path: Path) -> bool {
     return raw != null && raw!.isSymlink
 }
 export fn mkdir(path: Path) -> bool { return __mkdir(path) }
-// Separators follow the Path type's own contract, which is POSIX: '/' only.
-// A backslash is an ordinary filename byte, which is what it is on the systems
-// Path describes. Creating each missing level in turn, and treating a level
-// that already exists as a directory as success, is the whole of the policy.
+// Each mutation uses an exact original prefix. Lexical normalization could
+// change the meaning of a parent traversal after a filesystem link.
 fn _ensureDir(dir: Path) -> bool {
     if (__mkdir(dir)) { return true }
     return isDir(dir)
 }
 
 export fn mkdirp(path: Path) -> bool {
-    var raw = path.toString()
-    if (len(raw) == 0) { return false }
-
-    var rootLen = 0
-    if (raw.slice(0, 1) == "/") { rootLen = 1 }
-
-    var end = len(raw)
-    while (end > rootLen + 1 && raw.slice(end - 1, end) == "/") { end = end - 1 }
-    var p = raw.slice(0, end)
-    if (end <= rootLen) { return isDir(Path(p)) }
-
-    var i = rootLen
-    while (i < len(p) && p.slice(i, i + 1) == "/") { i = i + 1 }
-    while (i < len(p)) {
-        if (p.slice(i, i + 1) == "/") {
-            if (i > rootLen && !_ensureDir(Path(p.slice(0, i)))) { return false }
-            while (i + 1 < len(p) && p.slice(i + 1, i + 2) == "/") { i = i + 1 }
+    const raw=path.toString()
+    if (len(raw)==0) { return false }
+    const windows=pathutil.sep=="\\"
+    const prefix=pathlex.root(raw,windows)
+    if (!prefix.valid || prefix.end==len(raw)) { return isDir(path) }
+    // A root, share or namespace is observed, never created as an ancestor.
+    if (prefix.end>0 && !isDir(Path(raw.slice(0,prefix.end)))) { return false }
+    var i=prefix.end
+    while (i<len(raw)) {
+        if (pathlex.separator(raw.slice(i,i+1),windows,prefix.verbatim)) {
+            if (i>prefix.end && !pathlex.separator(raw.slice(i-1,i),windows,prefix.verbatim)) {
+                if (!_ensureDir(Path(raw.slice(0,i)))) { return false }
+            }
         }
-        i = i + 1
+        i=i+1
     }
-    return _ensureDir(Path(p))
+    return _ensureDir(path)
 }
 export fn readFile(path: Path) -> string? {
     var bytes = _readPathBytes(path)
@@ -450,7 +446,7 @@ fn _removeTree(path: Path, depth: i64) -> bool {
     if (names == null) { return false }
     var ok = true
     for (var i = 0; i < len(names!); i++) {
-        var child = Path(path.toString() + "/" + names![i])
+        var child = pathutil.join(path, Path(names![i]))
         if (!_removeTree(child, depth + 1)) { ok = false }
     }
     return __rmdir(path) && ok
@@ -490,11 +486,14 @@ export fn stat(path: Path) -> FileStat? {
 // separator in every temporary path built on it. Only the unique-name
 // creation is left to the host, because it has to be atomic.
 fn _tempRoot() -> string {
-    var root = os.tmpdir()
-    while (len(root) > 1 && root.slice(len(root) - 1, len(root)) == "/") {
-        root = root.slice(0, len(root) - 1)
+    const root=os.tmpdir()
+    const windows=pathutil.sep=="\\"
+    const prefix=pathlex.root(root,windows)
+    var end=len(root)
+    while (end>prefix.end && pathlex.separator(root.slice(end-1,end),windows,prefix.verbatim)) {
+        end=end-1
     }
-    return root
+    return root.slice(0,end)
 }
 
 export fn tempDir() -> Path? {
@@ -549,8 +548,7 @@ export fn readDir(path: Path) -> Array<Path>? {
     return out
 }
 
-// Entries are reported relative to the listed directory with '/' as the only
-// separator, and the walk stops at 64 levels. A symlinked directory is listed
+// Entries use host-native relative paths; the walk stops at 64 levels. A symlinked directory is listed
 // but not descended into, so a cycle through one cannot make the walk repeat.
 fn _walkDir(full: string, rel: string, depth: i64, out: ref Array<string>) {
     if (depth >= 64) { return }
@@ -558,9 +556,8 @@ fn _walkDir(full: string, rel: string, depth: i64, out: ref Array<string>) {
     if (names == null) { return }
     for (var i = 0; i < len(names!); i++) {
         var name = names![i]
-        var childFull = full + "/" + name
-        var childRel = name
-        if (len(rel) > 0) { childRel = rel + "/" + name }
+        var childFull = pathutil.join(Path(full),Path(name)).raw
+        var childRel = pathutil.join(Path(rel),Path(name)).raw
         out.push(childRel)
         var child = Path(childFull)
         var metadata = __stat(child)

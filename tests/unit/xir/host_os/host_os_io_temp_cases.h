@@ -100,6 +100,24 @@ static void host_temp_remove(const char *path,bool directory){
  CHECK(directory?RemoveDirectoryW(wide):DeleteFileW(wide));
 }
 #endif
+#if defined(XR_OS_WINDOWS)
+static void host_temp_root_spelling(XrXirProgram *program,const uint32_t *ids,const char *directory){
+ size_t live=runtime_live,bytes=runtime_bytes;XrXirInstance *instance=host_instance(program,ids[0]);host_active=instance;
+ XrXirValue root={0},kept[2]={{0},{0}};char names[2][4096];io_temp_mode=IO_TEMP_NORMAL;
+ CHECK(xr_xir_string_new(instance->domain,directory,strlen(directory),&root)==XR_XIR_VALUE_OK);
+ for(unsigned operation=0;operation<2;++operation){
+  unsigned before=io_temp_creates;kept[operation]=host_invoke(instance,ids[operation+1],&root,1);
+  CHECK(io_temp_creates==before+1);host_temp_text(&kept[operation],names[operation],sizeof(names[operation]));
+  host_temp_check(names[operation],operation==0);
+ }
+ xr_xir_value_drop(&root);CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);host_active=NULL;
+ for(unsigned operation=0;operation<2;++operation){
+  char retained[4096];host_temp_text(&kept[operation],retained,sizeof(retained));CHECK(!strcmp(retained,names[operation]));
+  xr_xir_value_drop(&kept[operation]);host_temp_remove(names[operation],operation==0);
+ }
+ CHECK(runtime_live==live&&runtime_bytes==bytes);
+}
+#endif
 static void host_io_temp_execute(XrXirProgram *program,const uint32_t ids[4]){
  size_t live=runtime_live,bytes=runtime_bytes;XrXirInstance *instance=host_instance(program,ids[0]);host_active=instance;
  host_return_protocol(instance,program->entries[ids[3]].result);
@@ -134,6 +152,17 @@ static void host_io_temp_execute(XrXirProgram *program,const uint32_t ids[4]){
  for(unsigned operation=0;operation<2;++operation){char retained[4096];host_temp_text(&kept[operation],retained,sizeof(retained));
   CHECK(!strcmp(retained,names[operation]));xr_xir_value_drop(&kept[operation]);host_temp_remove(names[operation],operation==0);
  }
+ char extended[4096];int extended_length;
+ if(directory[0]=='\\'&&directory[1]=='\\')extended_length=snprintf(extended,sizeof(extended),"\\\\?\\UNC\\%s",directory+2);
+ else extended_length=snprintf(extended,sizeof(extended),"\\\\?\\%s",directory);
+ CHECK(extended_length>0&&(size_t)extended_length<sizeof(extended));
+ host_temp_root_spelling(program,ids,directory);host_temp_root_spelling(program,ids,extended);
+ wchar_t previous[32768];DWORD previous_length=GetCurrentDirectoryW(32768,previous);CHECK(previous_length>0&&previous_length<32768);
+ CHECK(SetCurrentDirectoryW(wide));
+ if(((wide[0]>=L'A'&&wide[0]<=L'Z')||(wide[0]>=L'a'&&wide[0]<=L'z'))&&wide[1]==L':'){
+  char drive[]={(char)wide[0],':',0};host_temp_root_spelling(program,ids,drive);
+ }
+ CHECK(SetCurrentDirectoryW(previous));
  /* These are provider-injected failures, not reported Windows close failures. */
  for(unsigned operation=0;operation<2;++operation)for(unsigned mode=IO_TEMP_PREPARE_OOM;mode<=IO_TEMP_AFTER_KEEP_OOM;++mode){
   instance=host_instance(program,ids[0]);host_active=instance;io_temp_mode=mode;io_temp_candidate[0]=0;

@@ -24,7 +24,7 @@
 #include <fcntl.h>
 #include <io.h>
 #endif
-#define HOST_ORIGINAL_FILE_COUNT 12u
+#define HOST_ORIGINAL_FILE_COUNT 13u
 #define HOST_ORIGINAL_FILE_NS UINT64_C(120000000000)
 #define HOST_ORIGINAL_WAIT_NS UINT64_C(10000000)
 /* Wire rows are fixture-private C constants, not execution authority. */
@@ -44,11 +44,12 @@ static const char *const host_original_names_3[] = {"test_read_nonexistent","tes
 static const char *const host_original_names_4[] = {"test_basic_file_ops","test_file_info","test_directory_ops","test_copy_and_move","test_touch_and_chmod","test_realpath","test_chdir"};
 static const char *const host_original_names_5[] = {"test_read_file_rejects_invalid_utf8","test_read_file_bytes_still_returns_the_raw_bytes","test_valid_utf8_is_unaffected"};
 static const char *const host_original_names_6[] = {"test_lists_every_level_relative_to_the_root","test_a_symlinked_directory_is_listed_but_not_entered","test_a_path_that_is_not_a_directory_answers_null"};
-static const char *const host_original_names_7[] = {"test_empty_path_is_rejected","test_creates_every_missing_level","test_existing_directory_succeeds","test_trailing_and_repeated_separators","test_root_path_succeeds","test_backslash_is_a_filename_byte_not_a_separator","test_fails_when_an_intermediate_level_is_a_file"};
+static const char *const host_original_names_7[] = {"test_empty_path_is_rejected","test_creates_every_missing_level","test_existing_directory_succeeds","test_trailing_and_repeated_separators","test_root_path_succeeds","test_backslash_follows_host_filesystem_rules","test_fails_when_an_intermediate_level_is_a_file"};
 static const char *const host_original_names_8[] = {"test_removes_a_whole_tree","test_removes_a_single_file","test_missing_path_is_reported_as_failure","test_a_symlink_is_removed_without_following_it","test_a_tree_deeper_than_the_ceiling_is_refused_whole"};
 static const char *const host_original_names_9[] = {"test_creates_a_missing_file_empty","test_does_not_truncate_an_existing_file","test_succeeds_on_a_directory","test_fails_when_the_parent_is_missing"};
 static const char *const host_original_names_10[] = {"test_temp_dir_is_created_and_is_a_directory","test_temp_file_is_created_and_is_a_file","test_a_trailing_separator_in_the_root_is_not_doubled","test_the_root_comes_from_the_environment","test_two_calls_do_not_collide"};
 static const char *const host_original_names_11[] = {"test_read_file_rejects_invalid_utf8","test_read_file_bytes_still_returns_the_raw_bytes","test_valid_utf8_is_unaffected"};
+static const char *const host_original_names_12[] = {"test_sep","test_delimiter","test_join_basic","test_join_multiple","test_join_with_slash","test_join_trailing_slash","test_join_long_prefix_absolute_reset","test_dirname_basic","test_dirname_file_only","test_dirname_root","test_basename_basic","test_basename_with_ext","test_basename_no_dir","test_extname_basic","test_extname_no_ext","test_extname_multiple_dots","test_extname_dotfile","test_extname_trailing_separator","test_normalize_dots","test_normalize_double_slash","test_is_absolute_true","test_is_absolute_false","test_resolve_absolute","test_resolve_absolute_reset_and_normalize","test_resolve_returns_absolute","test_relative_basic","test_relative_same","test_relative_prefix_mismatch","test_relative_child","test_relative_parent","test_relative_deep","test_normalize_relative_dotdot","test_normalize_absolute_dotdot_at_root","test_normalize_only_dot","test_parse_basic","test_parse_trailing_separator","test_format_basic","test_format_relative_parse_result"};
 static const HostOriginalInput host_original_inputs[] = {
     {"tests/regression/10_stdlib/1160_os_basic.xr","host_original_os_1160","79246554e3eae216a85e808e55e0d79e79d9c962a8c5907b413f431ea79ba859",host_original_names_0,15u},
     {"tests/regression/10_stdlib/1161_os_extended.xr","host_original_os_1161","38026b94413b4f2b3422dde61126d22353c2cab76484308c3b4ed097ed786fd2",host_original_names_1,20u},
@@ -56,12 +57,13 @@ static const HostOriginalInput host_original_inputs[] = {
     {"tests/regression/10_stdlib/1191_io_edge.xr","host_original_io_1191","7152a2da6e15e44a8138afea5b1fc114caf7cbd1188be4d8e9d86a61d8534f79",host_original_names_3,14u},
     {"tests/regression/10_stdlib/1192_io_extended.xr","host_original_io_1192","d40ed9c06d78af71a22e7f4918258fcfa0109f5bdfadb31ad4c5dde2f7311005",host_original_names_4,7u},
     {"tests/regression/10_stdlib/1193_io_invalid_utf8.xr","host_original_io_1193_invalid_utf8","e39acbb15ff9db56c886c16b23005e325626ee1effcc2940b2c966052116fbe4",host_original_names_5,3u},
-    {"tests/regression/10_stdlib/1193_io_read_dir_recursive.xr","host_original_io_1193_read_dir_recursive","5ad5a54af2dafd02713643d6e73844905627281273fc76003a5e0451017d00db",host_original_names_6,3u},
-    {"tests/regression/10_stdlib/1194_io_mkdirp.xr","host_original_io_1194","f776cad5600965504813335248dd63fd5581395643e54720c8ac9fdf93b477b5",host_original_names_7,7u},
+    {"tests/regression/10_stdlib/1193_io_read_dir_recursive.xr","host_original_io_1193_read_dir_recursive","e80b5b94d58d4ff8f1f2792d2d69b07ea1b55635206d861484e6e2a74a4304f8",host_original_names_6,3u},
+    {"tests/regression/10_stdlib/1194_io_mkdirp.xr","host_original_io_1194","951f73ce1d4ccba144107e3f8d557d3b480b6194a2bcbf46f9ab6258a06c87df",host_original_names_7,7u},
     {"tests/regression/10_stdlib/1195_io_remove_all.xr","host_original_io_1195","74e4638904e30b95c728986c1be46b27ad3720c27d6ccd7ebb866a16ccdfe8a8",host_original_names_8,5u},
     {"tests/regression/10_stdlib/1196_io_touch.xr","host_original_io_1196","85e0ac34e6e524d7f0f18a6aa60181549ed6a5e34e168c18e86c98934e2842fb",host_original_names_9,4u},
     {"tests/regression/10_stdlib/1197_io_temp.xr","host_original_io_1197","5351872976437f33dfc328b172748d9600869149596c72993ba6aa7d0ed402db",host_original_names_10,5u},
     {"tests/regression/10_stdlib/1198_io_invalid_utf8.xr","host_original_io_1198","e39acbb15ff9db56c886c16b23005e325626ee1effcc2940b2c966052116fbe4",host_original_names_11,3u},
+    {"tests/regression/10_stdlib/1170_path_basic.xr","host_original_path_1170","a4be31eaf6ba7019b3e71fbd5848675dcced2c59a70869c5fc98f6a693e6273c",host_original_names_12,38u},
 };
 typedef struct HostOriginalCatalog {
     HostOriginalWireRow *rows;
@@ -100,7 +102,7 @@ static int host_original_suite_mode(int argc, char **argv) {
     if (argc != 4 || !argv[2][0] || !argv[3][0]) return -2;
     unsigned value = 0;
     for (const unsigned char *p = (const unsigned char *)argv[2]; *p; ++p) {
-        if (*p < '0' || *p > '9' || value > 11u) return -2;
+        if (*p < '0' || *p > '9' || value >= HOST_ORIGINAL_FILE_COUNT) return -2;
         value = value * 10u + (unsigned)(*p - '0');
     }
     return value < HOST_ORIGINAL_FILE_COUNT ? (int)value : -2;
@@ -442,6 +444,10 @@ extern const XrXirProgramSpec host_original_io_1197_program;
 extern const HostOriginalWireRow host_original_io_1197_rows[];
 extern const uint32_t host_original_io_1197_count;
 extern const char host_original_io_1197_source_sha256[65];
+extern const XrXirProgramSpec host_original_path_1170_program;
+extern const HostOriginalWireRow host_original_path_1170_rows[];
+extern const uint32_t host_original_path_1170_count;
+extern const char host_original_path_1170_source_sha256[65];
 extern const XrXirProgramSpec host_original_io_1198_program;
 extern const HostOriginalWireRow host_original_io_1198_rows[];
 extern const uint32_t host_original_io_1198_count;
@@ -460,6 +466,7 @@ static const HostOriginalNativeData host_original_native_data[] = {
     {&host_original_io_1196_program,host_original_io_1196_rows,&host_original_io_1196_count,host_original_io_1196_source_sha256},
     {&host_original_io_1197_program,host_original_io_1197_rows,&host_original_io_1197_count,host_original_io_1197_source_sha256},
     {&host_original_io_1198_program,host_original_io_1198_rows,&host_original_io_1198_count,host_original_io_1198_source_sha256},
+    {&host_original_path_1170_program,host_original_path_1170_rows,&host_original_path_1170_count,host_original_path_1170_source_sha256},
 };
 static int host_original_native(unsigned index,const char *report_path){
     if(index>=HOST_ORIGINAL_FILE_COUNT)return 2;

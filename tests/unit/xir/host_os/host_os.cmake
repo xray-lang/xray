@@ -25,7 +25,8 @@ set(host_os_c
     "${host_os_generated}/host_original_io_1195.c"
     "${host_os_generated}/host_original_io_1196.c"
     "${host_os_generated}/host_original_io_1197.c"
-    "${host_os_generated}/host_original_io_1198.c")
+    "${host_os_generated}/host_original_io_1198.c"
+    "${host_os_generated}/host_original_path_1170.c")
 
 add_executable(test_host_os_source "${host_os_dir}/test_host_os_source.c")
 target_link_libraries(test_host_os_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen xray_source_compile xray_xir_runtime_host)
@@ -41,6 +42,7 @@ add_custom_command(OUTPUT ${host_os_c}
         "${host_os_dir}/host_os_original_suite_runtime.h"
         "${host_os_dir}/host_os_original_suite_source.h"
         ${host_original_stdlib_inputs}
+        "${PROJECT_SOURCE_DIR}/tests/regression/10_stdlib/1170_path_basic.xr"
         "${PROJECT_SOURCE_DIR}/tests/regression/10_stdlib/1160_os_basic.xr"
         "${PROJECT_SOURCE_DIR}/tests/regression/10_stdlib/1161_os_extended.xr"
         "${PROJECT_SOURCE_DIR}/tests/regression/10_stdlib/1190_io_basic.xr"

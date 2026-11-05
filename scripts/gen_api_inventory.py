@@ -958,8 +958,15 @@ def collect_pure_stdlib(root: Path) -> list[dict[str, Any]]:
     stdlib = root / "stdlib"
     for path in sorted(stdlib.glob("*/*.xr")):
         module = path.parent.name
-        if module == "types" or module.startswith("_") or path.stem != module:
+        if module == "types" or module.startswith("_"):
             continue
+        namespace = module
+        if path.stem != module:
+            quoted = path.relative_to(stdlib).with_suffix("").as_posix()
+            if quoted not in {"path/posix", "path/windows", "path/logical"}:
+                continue
+            namespace = quoted
+        first = len(out)
         text = path.read_text(encoding="utf-8")
         exports = parse_exported_names(text)
         if not exports:
@@ -973,7 +980,7 @@ def collect_pure_stdlib(root: Path) -> list[dict[str, Any]]:
             out.append(
                 item(
                     category="stdlib-module",
-                    namespace=module,
+                    namespace=namespace,
                     name=name,
                     kind="const",
                     signature=f": {infer_const_type(match.group(3), match.group(2))}",
@@ -990,7 +997,7 @@ def collect_pure_stdlib(root: Path) -> list[dict[str, Any]]:
             out.append(
                 item(
                     category="stdlib-module",
-                    namespace=module,
+                    namespace=namespace,
                     name=name,
                     kind="function",
                     signature=normalize_signature(params, ret, source_throws_clause(text, text.find("(", match.start(), match.end()))),
@@ -1020,6 +1027,18 @@ def collect_pure_stdlib(root: Path) -> list[dict[str, Any]]:
                 module,
             )
         )
+        if namespace != module:
+            # Shared documentation does not merge distinct quoted-module APIs.
+            for entry in out[first:]:
+                owner = entry["namespace"]
+                if owner == namespace:
+                    continue
+                if owner == module or (entry["kind"] == "type" and owner == entry["name"]):
+                    owner = namespace
+                else:
+                    owner = f"{namespace}.{owner}"
+                entry["namespace"] = owner
+                entry["qualified"] = f"{owner}.{entry['name']}"
     return out
 
 

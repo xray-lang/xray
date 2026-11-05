@@ -337,7 +337,13 @@
         "tests/unit/xir/xir_path_complete_runtime.h",
         "src/xir/xxir_path_native.h",
         "src/xir/xxir_instance_path_cwd.inc.c",
-        "stdlib/path/path.xr"
+        "stdlib/path/path.xr",
+        "stdlib/path/_lexical.xr",
+        "stdlib/path/posix.xr",
+        "stdlib/path/windows.xr",
+        "stdlib/path/logical.xr",
+        "src/os/xfullpath_owned.h",
+        "tests/unit/xir/xir_path_flavours_source.h"
       ],
       "reason": "HIR and complete Source language-family consumers.",
       "tests": [
@@ -996,6 +1002,12 @@
         "src/xir/xxir_instance_exec_shell.inc.c",
         "src/xir/xxir_sys_process_native.h",
         "stdlib/path/path.xr",
+        "stdlib/path/_lexical.xr",
+        "stdlib/path/posix.xr",
+        "stdlib/path/windows.xr",
+        "stdlib/path/logical.xr",
+        "src/os/xfullpath_owned.h",
+        "tests/regression/10_stdlib/1170_path_basic.xr",
         "src/os/os_dylib_owned.h",
         "src/os/win/dylib_owned_win.c",
         "src/os/unix/dylib_owned_unix.c",

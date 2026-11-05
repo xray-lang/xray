@@ -272,8 +272,10 @@ static const XaBuiltinMember g_gen_os_functions[] = {
 // path module functions
 static const XaBuiltinMember g_gen_path_functions[] = {
     {"__getcwd", "(): string", "Read the current working directory for relative Path resolution", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__isWindows", "(): bool", "Read the execution host path flavour", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__fullpath", "(raw: string): string", "Make a Windows locator absolute without requiring an existing file", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
 };
-#define GEN_PATH_FUNCTION_COUNT 1
+#define GEN_PATH_FUNCTION_COUNT 3
 
 // regex module functions
 static const XaBuiltinMember g_gen_regex_functions[] = {

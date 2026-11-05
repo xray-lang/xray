@@ -1196,33 +1196,65 @@ class PathCurrentDirectoryDeclarations(unittest.TestCase):
     def test_owned_path_query_has_no_legacy_provider(self):
         from stdlibgen import unique_vm_binding_entries, emit_aot_methods, emit_driver_metadata, emit_provider_aot_sources, parse_def_metadata
         lines, rows = schema.render_path_getcwd(self.declarations)
-        self.assertEqual(len(rows), 1)
-        self.assertIn('XR_NATIVE_CALLABLE_PATH_GETCWD', rows[0])
-        self.assertIn('XR_NATIVE_TERM_STRING', '\n'.join(lines))
-        row = next(r for r in self.declarations if r.module == 'path' and r.name == '__getcwd')
-        self.assertNotIn(row, unique_vm_binding_entries(self.declarations))
+        self.assertEqual(len(rows), 3)
+        for row, identity in zip(rows, ('PATH_GETCWD', 'PATH_IS_WINDOWS', 'PATH_FULLPATH')):
+            self.assertIn('XR_NATIVE_CALLABLE_' + identity, row)
+        self.assertIn('XR_NATIVE_TERM_BOOL', '\n'.join(lines))
+        self.assertIn('"raw", "string", XR_NATIVE_TERM_STRING', '\n'.join(lines))
+        names = {'__getcwd', '__isWindows', '__fullpath'}
+        queries = [r for r in self.declarations if r.module == 'path' and r.name in names]
+        self.assertEqual(len(queries), 3)
+        for row in queries:
+            self.assertNotIn(row, unique_vm_binding_entries(self.declarations))
         entries, constants, _, _, enums, _, native_classes, *_ = parse_def_metadata(ROOT)
-        without = [r for r in entries if not (r.module == 'path' and r.name == '__getcwd')]
+        without = [r for r in entries if not (r.module == 'path' and r.name in names)]
         self.assertEqual(emit_aot_methods(entries, constants, enums, native_classes),
                          emit_aot_methods(without, constants, enums, native_classes))
         self.assertEqual(emit_driver_metadata(entries, constants), emit_driver_metadata(without, constants))
         self.assertEqual(emit_provider_aot_sources(entries), emit_provider_aot_sources(without))
 
     def test_exact_path_query_mutations_are_rejected(self):
-        row = next(r for r in self.declarations if r.module == 'path' and r.name == '__getcwd')
-        for changed in ([r for r in self.declarations if r is not row], self.declarations + [row]):
-            with self.assertRaises(ValueError):
-                schema.render_path_getcwd(changed)
-        changes = [('module', 'os'), ('name', '__other'), ('signature', '(): string?'), ('argc', '1'),
-            ('arg_spec', 's'), ('visibility', 'public'), ('effect', 'other'), ('allocation', 'no_heap'),
-            ('return_ownership', 'borrowed'), ('layer', 'core'), ('vm', 'os_getcwd'), ('aot', 'xrt_os_getcwd'),
-            ('aot_direct', True), ('aot_kind', 'method'), ('link_object', 'other'), ('vm_binding', 'yieldable'),
-            ('vm_ifdef', 'OTHER'), ('define', 'OTHER'), ('ret', 'i64'), ('semantic_intrinsic', True),
-            ('provider_declaration', object()), ('caps', ('task',)), ('suspension_kind', 'task')]
-        for key, value in changes:
-            self.assertNotEqual(getattr(row, key), value)
-            with self.subTest(field=key), self.assertRaises(ValueError):
-                schema.render_path_getcwd([replace(r, **{key: value}) if r is row else r for r in self.declarations])
+        for name in ('__getcwd', '__isWindows', '__fullpath'):
+            row = next(r for r in self.declarations if r.module == 'path' and r.name == name)
+            for changed in ([r for r in self.declarations if r is not row], self.declarations + [row]):
+                with self.subTest(query=name), self.assertRaises(ValueError):
+                    schema.render_path_getcwd(changed)
+            changes = [('module', 'os'), ('name', '__other'), ('signature', '(): i64'),
+                ('argc', '0' if row.argc != '0' else '1'), ('arg_spec', '' if row.arg_spec else 's'),
+                ('visibility', 'public'), ('effect', 'other'), ('allocation', 'no_heap'),
+                ('return_ownership', 'borrowed'), ('layer', 'core'), ('vm', 'os_getcwd'), ('aot', 'xrt_os_getcwd'),
+                ('aot_direct', True), ('aot_kind', 'method'), ('link_object', 'other'), ('vm_binding', 'yieldable'),
+                ('vm_ifdef', 'OTHER'), ('define', 'OTHER'), ('ret', 'i64'), ('semantic_intrinsic', True),
+                ('provider_declaration', object()), ('caps', ('task',)), ('suspension_kind', 'task')]
+            for key, value in changes:
+                self.assertNotEqual(getattr(row, key), value)
+                with self.subTest(query=name, field=key), self.assertRaises(ValueError):
+                    schema.render_path_getcwd([replace(r, **{key: value}) if r is row else r for r in self.declarations])
+
+    def test_public_quoted_path_inventory_is_separate_from_its_shared_card(self):
+        import shutil
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = root / 'stdlib/path'
+            path.mkdir(parents=True)
+            for name in ('path', 'posix', 'windows', 'logical', '_lexical'):
+                shutil.copyfile(ROOT / 'stdlib/path' / (name + '.xr'), path / (name + '.xr'))
+            (path / 'unpublished.xr').write_text('export fn hidden() {}', encoding='utf-8')
+            rows = inventory.collect_pure_stdlib(root)
+        self.assertEqual({row['namespace'].split('.')[0] for row in rows
+                          if row['namespace'] not in ('Path', 'PathInfo')},
+                         {'path', 'path/posix', 'path/windows', 'path/logical'})
+        self.assertTrue(all(row['doc_module'] == 'path' for row in rows))
+        identities = [(row['namespace'], row['name'], row['kind'], row['signature']) for row in rows]
+        self.assertEqual(len(identities), len(set(identities)))
+        self.assertTrue(any(row['namespace'] == 'path/logical.LogicalPath' and row['name'] == 'from'
+                            and row['kind'] == 'static-method' for row in rows))
+        public = [row for row in rows if row['doc_surface'] == 'stdlib']
+        self.assertFalse(any(row['name'] == 'hidden' or
+                             (row['namespace'] == 'path/logical.LogicalPath' and row['name'] in ('init', 'raw'))
+                             for row in public))
+        for name in ('sep', 'delimiter'):
+            self.assertEqual(next(row['signature'] for row in rows if row['namespace'] == 'path' and row['name'] == name), ': string')
 
 
 if __name__ == '__main__':

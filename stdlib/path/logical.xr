@@ -44,7 +44,7 @@ fn _windowsComponent(part: string) -> bool {
     const bytes=part.bytes()
     for (var i=0; i<len(bytes); i++) {
         const c=bytes[i]
-        if (c<32 || c==127 || c==34 || c==42 || c==47 || c==58 || c==60 ||
+        if (c<32 || c==34 || c==42 || c==47 || c==58 || c==60 ||
             c==62 || c==63 || c==92 || c==124) { return false }
     }
     var stem=lexical.asciiLower(part)
@@ -60,13 +60,16 @@ fn _windowsComponent(part: string) -> bool {
 }
 
 export fn toNative(root: Path, value: LogicalPath) -> Path? {
-    if (!path.isAbsolute(root)) { return null }
+    const base=root.toString()
+    const bytes=base.bytes()
+    for (var i=0; i<len(bytes); i++) { if (bytes[i]==0) { return null } }
+    if (!path.isAbsolute(Path(base))) { return null }
     const raw=value.toString()
     if (!_valid(raw)) { return null }
-    if (len(raw)==0) { return root }
+    if (len(raw)==0) { return Path(base) }
     const parts=try! raw.split("/")
     const windows=path.sep=="\\"
-    var result=root
+    var result=Path(base)
     for (var i=0; i<len(parts); i++) {
         if (windows && !_windowsComponent(parts[i])) { return null }
         result=path.join(result,Path(parts[i]))

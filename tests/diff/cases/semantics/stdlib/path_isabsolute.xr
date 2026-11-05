@@ -1,5 +1,6 @@
+// Fixed POSIX lexical vectors are independent of the executing filesystem.
 // AOT path.isAbsolute direct-call must match the VM tagged dispatch.
-import path
+import "std/path/posix" as path
 
 print(path.isAbsolute(path.from("/usr/local")))
 print(path.isAbsolute(path.from("relative/dir")))

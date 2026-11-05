@@ -537,23 +537,24 @@ static const XlspSymbolInfo g_xlsp_stdlib_parallel_symbols[] = {
 // path module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_path_symbols[] = {
     {"from", XLSP_SYM_FUNCTION, "fn(raw: string): Path", "", NULL, 0},
-    {"isAbsolute", XLSP_SYM_FUNCTION, "fn(p: Path): bool", "POSIX: a leading '/'.", NULL, 0},
-    {"joinAll", XLSP_SYM_FUNCTION, "fn(parts: Array<Path>): Path", "join a segment array (POSIX). The last absolute segment resets the", NULL, 0},
-    {"join", XLSP_SYM_FUNCTION, "fn(...parts: Path): Path", "variadic raw helper used by the public `Path` owner API.", NULL, 0},
-    {"dirname", XLSP_SYM_FUNCTION, "fn(p: Path): Path", "the directory portion, or \".\" / \"/\" for the degenerate cases.", NULL, 0},
-    {"basename", XLSP_SYM_FUNCTION, "fn(p: Path): string", "the final path component, trailing separators stripped.", NULL, 0},
-    {"extname", XLSP_SYM_FUNCTION, "fn(p: Path): string", "the extension including the leading dot, or \"\" when there is none.", NULL, 0},
-    {"normalize", XLSP_SYM_FUNCTION, "fn(p: Path): Path", "collapse '.'/'..' and redundant separators.", NULL, 0},
-    {"relative", XLSP_SYM_FUNCTION, "fn(fromPath: Path, toPath: Path): Path", "the path from `fromRaw` to `toRaw`, both normalized first.", NULL, 0},
-    {"resolve", XLSP_SYM_FUNCTION, "fn(...parts: Path): Path", "join the inputs into an absolute, normalized path. When no input", NULL, 0},
-    {"parse", XLSP_SYM_FUNCTION, "fn(p: Path): PathInfo", "split a path into its structured components.", NULL, 0},
-    {"format", XLSP_SYM_FUNCTION, "fn(info: PathInfo): Path", "rebuild a path from PathInfo. `base` wins over `name`+`ext`; a", NULL, 0},
+    {"hasRoot", XLSP_SYM_FUNCTION, "fn(p: Path): bool", "", NULL, 0},
+    {"isAbsolute", XLSP_SYM_FUNCTION, "fn(p: Path): bool", "", NULL, 0},
+    {"joinAll", XLSP_SYM_FUNCTION, "fn(parts: Array<Path>): Path", "", NULL, 0},
+    {"join", XLSP_SYM_FUNCTION, "fn(...parts: Path): Path", "", NULL, 0},
+    {"dirname", XLSP_SYM_FUNCTION, "fn(p: Path): Path", "", NULL, 0},
+    {"basename", XLSP_SYM_FUNCTION, "fn(p: Path): string", "", NULL, 0},
+    {"extname", XLSP_SYM_FUNCTION, "fn(p: Path): string", "", NULL, 0},
+    {"normalize", XLSP_SYM_FUNCTION, "fn(p: Path): Path", "", NULL, 0},
+    {"relative", XLSP_SYM_FUNCTION, "fn(fromPath: Path, toPath: Path): Path?", "", NULL, 0},
+    {"resolve", XLSP_SYM_FUNCTION, "fn(...parts: Path): Path", "", NULL, 0},
+    {"parse", XLSP_SYM_FUNCTION, "fn(p: Path): PathInfo", "", NULL, 0},
+    {"format", XLSP_SYM_FUNCTION, "fn(info: PathInfo): Path", "", NULL, 0},
     {"sep", XLSP_SYM_CONSTANT, "string", "", NULL, 0},
     {"delimiter", XLSP_SYM_CONSTANT, "string", "", NULL, 0},
     {"Path", XLSP_SYM_CLASS, "type Path", "Class type", NULL, 0},
-    {"PathInfo", XLSP_SYM_CLASS, "type PathInfo", "the structured result of `parse`: a typed class so", NULL, 0},
+    {"PathInfo", XLSP_SYM_CLASS, "type PathInfo", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_PATH_SYMBOL_COUNT 16
+#define GEN_XLSP_STDLIB_PATH_SYMBOL_COUNT 17
 
 // regex module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_regex_symbols[] = {

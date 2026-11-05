@@ -1,8 +1,7 @@
-// mkdirp creates each missing level in turn. Separators follow the Path
-// type's own contract, which is POSIX: '/' only, so a backslash is an
-// ordinary filename byte and never splits a path.
+// mkdirp follows the execution host filesystem separators and protects roots.
 
 import io
+import os
 import path
 import { Path } from path
 
@@ -49,14 +48,27 @@ fn test_root_path_succeeds() {
 }
 
 @test
-fn test_backslash_is_a_filename_byte_not_a_separator() {
+fn test_backslash_follows_host_filesystem_rules() {
     var root = scratch("mkdirp_backslash")
-    assert(io.mkdirp(Path(root.toString() + "/back\\slash/deep")))
-    // The backslash segment is one directory name, so no separate "back"
-    // directory is created beside it.
-    assertEqual(io.exists(Path(root.toString() + "/back")), false)
-    assert(io.isDir(Path(root.toString() + "/back\\slash")))
-    io.removeAll(root)
+    assert(io.mkdirp(root))
+    defer { assert(io.removeAll(root)) }
+    var deep = Path(root.toString() + "/back\\slash/deep")
+    assert(io.mkdirp(deep))
+    assert(io.isDir(deep))
+    var names = io.readDir(root)!
+    assertEqual(len(names), 1)
+    if (os.platform() == "windows") {
+        assert(io.isDir(Path(root.toString() + "/back")))
+        assert(io.isDir(Path(root.toString() + "/back/slash")))
+        assertEqual(names[0].toString(), "back")
+        var nested = io.readDir(Path(root.toString() + "/back"))!
+        assertEqual(len(nested), 1)
+        assertEqual(nested[0].toString(), "slash")
+    } else {
+        assertEqual(io.exists(Path(root.toString() + "/back")), false)
+        assert(io.isDir(Path(root.toString() + "/back\\slash")))
+        assertEqual(names[0].toString(), "back\\slash")
+    }
 }
 
 @test

@@ -1,8 +1,7 @@
-// readDirRecursive reports entries relative to the listed directory with '/'
-// as the only separator. A symlinked directory is listed but not descended
-// into, so a link pointing outside the tree cannot pull unrelated entries in.
+// Recursive listings use host-native relative Path text and do not follow links.
 
 import io
+import os
 import path
 import { Path } from path
 
@@ -27,12 +26,21 @@ fn test_lists_every_level_relative_to_the_root() {
     var root = tree("rdr_tree")
     var names = sortedNames(io.readDirRecursive(root)!)
     assertEqual(len(names), 6)
-    assertEqual(names[0], "a")
-    assertEqual(names[1], "a/b")
-    assertEqual(names[2], "a/b/c")
-    assertEqual(names[3], "a/b/f2")
-    assertEqual(names[4], "a/f1")
-    assertEqual(names[5], "top")
+    if (os.platform() == "windows") {
+        assertEqual(names[0], "a")
+        assertEqual(names[1], "a\\b")
+        assertEqual(names[2], "a\\b\\c")
+        assertEqual(names[3], "a\\b\\f2")
+        assertEqual(names[4], "a\\f1")
+        assertEqual(names[5], "top")
+    } else {
+        assertEqual(names[0], "a")
+        assertEqual(names[1], "a/b")
+        assertEqual(names[2], "a/b/c")
+        assertEqual(names[3], "a/b/f2")
+        assertEqual(names[4], "a/f1")
+        assertEqual(names[5], "top")
+    }
     io.removeAll(root)
 }
 
@@ -49,9 +57,11 @@ fn test_a_symlinked_directory_is_listed_but_not_entered() {
     // The link itself appears; what it points at does not.
     var sawLink = false
     var sawHidden = false
+    var hiddenName = "link/hidden"
+    if (os.platform() == "windows") { hiddenName = "link\\hidden" }
     for (var i = 0; i < len(names); i++) {
         if (names[i] == "link") { sawLink = true }
-        if (names[i] == "link/hidden") { sawHidden = true }
+        if (names[i] == hiddenName) { sawHidden = true }
     }
     assert(sawLink)
     assertEqual(sawHidden, false)

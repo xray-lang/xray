@@ -23,7 +23,7 @@ order: 016
 | 模块 | 主题 | 关键 API |
 |--|--|--|
 | `io` | 文件 IO + 文件系统 | `readFile` `writeFile` `readFileBytes` `writeFileBytes` `exists` `mkdir` `mkdirp` `remove` `readDir` `stat` `readStdin` |
-| `path` | 路径操作 | `join` `dirname` `basename` `extname` `normalize` `isAbsolute` `resolve` `relative` `parse` `format` |
+| `path` | 路径操作 | `join` `dirname` `basename` `extname` `normalize` `hasRoot` `isAbsolute` `resolve` `relative` `parse` `format` |
 | `os` | 操作系统接口 | `platform()` `arch()` `sep()` `eol()` `getenv` `setenv` `environ` `exit` `getpid` `getcwd` `chdir` `hostname` `tmpdir` `homedir` `cpuCount` `sleep` `exec` |
 
 > xray **没有**独立的 `fs` 模块，文件系统操作在 `io` 中；进程参数 / 进程信息走全局 `process` 对象（`process.args` / `process.file` / `process.dir`，见 §16.5），不在 `os` 中。
@@ -137,6 +137,14 @@ TLS 客户端连接统一使用 `dial(host, port, DialOptions(timeoutMs, true, a
 这些功能或者归入其他模块（见上面各小节注），或者尚未实现。
 
 > **完整索引**：见[附录 D](#d-stdlib-模块索引)。
+
+### 15.14 路径域与文件系统定位
+
+默认`Path`及`path.*`采用执行宿主规则；构造及`toString`保留原文本。`sep`／`delimiter`仍是运行时初始化的字符串常量。`hasRoot`表示存在根，`isAbsolute`表示无需cwd的完整定位；Windows的`C:child`及单根`\child`并非完整绝对路径。`join`保留点段，`normalize`才词法整理；`relative`返回`Path?`，不同根或关系不确定时为null。默认`resolve`只做词法绝对化，可查询真实cwd／per-drive上下文，不要求目标存在；`io.realpath`查询真实对象，`readlink`保留链接目标文本。
+
+quoted导入`"std/path/posix"`／`"std/path/windows"`提供独立`PosixPath`／`WindowsPath`及各自Info，不能隐式传给IO。两者的纯`resolve(base,...parts)`要求明确的fully-qualified base，并返回可空结果，不读宿主cwd。普通Windows同时识别两种分隔；verbatim仅扫描反斜杠，device扫描两者；两类namespace的normalize保持原文本。根分类不能把残缺UNC、share或保留前缀当作完整路径；relative不以跨卷绝对fallback冒充相对结果。
+
+`"std/path/logical"`的`LogicalPath`由`logical.from`／`LogicalPath.from`验证创建，private const表示不可公开修改。空值合法，非空值拒绝根、空／点组件、反斜杠及NUL；冒号可作为逻辑文本。`logical.join`以空值为单位元；`toNative(root,value)`需要明确完整宿主root并逐组件验证宿主可表示性，失败为null，不改变字符或隐式取得IO权限。Windows拒绝drive／ADS注入、禁用字符、尾点／空格及保留设备组件。映射不检查文件存在，不证明符号链接／junction／重命名后的对象包含关系，不提供sandbox。
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -159,7 +167,7 @@ TLS 客户端连接统一使用 `dial(host, port, DialOptions(timeoutMs, true, a
 | Module | Topic | Key APIs |
 |--|--|--|
 | `io` | file I/O + filesystem | `readFile` `writeFile` `readFileBytes` `writeFileBytes` `exists` `mkdir` `mkdirp` `remove` `readDir` `stat` `readStdin` |
-| `path` | path manipulation | `join` `dirname` `basename` `extname` `normalize` `isAbsolute` `resolve` `relative` `parse` `format` |
+| `path` | path manipulation | `join` `dirname` `basename` `extname` `normalize` `hasRoot` `isAbsolute` `resolve` `relative` `parse` `format` |
 | `os` | OS interface | `platform()` `arch()` `sep()` `eol()` `getenv` `setenv` `environ` `exit` `getpid` `getcwd` `chdir` `hostname` `tmpdir` `homedir` `cpuCount` `sleep` `exec` |
 
 > Xray has **no** standalone `fs` module; filesystem operations live in `io`. Process arguments / process information are exposed through the global `process` object (`process.args` / `process.file` / `process.dir`, see §16.5), not `os`.
@@ -273,4 +281,12 @@ Modules that may have been referenced historically but are **not** part of the c
 Their functionality has either moved into other modules (see the per-section notes above) or has not yet been implemented.
 
 > **Full index**: see [Appendix D](#d-stdlib-module-index).
+
+### 15.14 Path Domains and Filesystem Locators
+
+Default `Path` and `path.*` follow the execution host. Construction and `toString` preserve exact text; `sep` and `delimiter` remain runtime-initialized string constants. `hasRoot` detects a root, while `isAbsolute` means fully qualified without cwd. Windows `C:child` and a single-root `\child` are not fully qualified. `join` preserves dot segments; `normalize` performs lexical cleanup. Nullable `relative` refuses incompatible or uncertain roots. Default `resolve` is lexical absolute resolution and may read real cwd/per-drive context; it does not require a target to exist. `io.realpath` queries a filesystem object, and `readlink` preserves target text.
+
+Quoted `"std/path/posix"` and `"std/path/windows"` expose independent `PosixPath`/`WindowsPath` and Info types without implicit IO conversion. Their pure nullable `resolve(base,...parts)` requires an explicit fully-qualified base and never reads host cwd. Ordinary Windows paths accept both separators; verbatim scans only backslash, while device paths scan both. Both namespace categories preserve raw text in normalize. Incomplete UNC/share/reserved prefixes are not fully qualified. Relative resolution never returns an absolute fallback across roots.
+
+`"std/path/logical"` exposes immutable `LogicalPath`, validated by `logical.from` or `LogicalPath.from`. Empty input is legal; nonempty input refuses roots, empty/dot components, backslash and NUL. A colon is permitted as logical text. Empty values are join identities. `toNative(root,value)` requires an explicit absolute host root and validates each component's host representability, returning null on refusal without character substitution or implicit IO authority. Windows refuses drive/ADS injection, forbidden characters, trailing dot/space and reserved device components. Mapping does not check existence or establish containment through symlinks, junctions or renames, and is not a sandbox.
 <!-- /xr-spec:en -->
