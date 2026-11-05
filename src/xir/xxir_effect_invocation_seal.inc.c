@@ -334,7 +334,7 @@ static XrXirStatus effect_invocation_local_result_match(const XrXirCompileContex
  * the relation empty; malformed Input and exhausted work always fail immediately.
  * No callback can invalidate an earlier comparison or a temporary stack value. */
 static XrXirStatus effect_invocation_local_certificate_match(const XrXirCompileContext *work,
-    const EffectInvocationCertificate *certificate,const EffectFinalFunctions *result,bool *local) {
+    const EffectInvocationCertificate *certificate,const EffectFinalFunctions *result,bool *local, XirReadOperation *read_operation) {
     if (!xir_compile_context_valid(work) || !certificate ||
         !local || !effect_body_material_shape(certificate->body) || certificate->body->resources!=work->resources)
         return XR_XIR_BAD_STRUCTURE;
@@ -347,7 +347,7 @@ static XrXirStatus effect_invocation_local_certificate_match(const XrXirCompileC
         EffectInvocationLocalInput input;bool empty=false;
         XrXirStatus status=effect_invocation_local_head(work,body,f,&empty);
         if (status==XR_XIR_OK && empty)
-            status=effect_invocation_local_input_body(&read,f,&input,&empty);
+            status=effect_invocation_local_input_body(&read,f,&input,&empty, read_operation);
         if (status!=XR_XIR_OK || !empty) return status;
         if (!f) {
             proof=effect_invocation_local_equations_shape(work,certificate->final);
@@ -367,17 +367,17 @@ static XrXirStatus effect_invocation_local_certificate_match(const XrXirCompileC
  * a receiving local row. Dynamic calls remain obligations of the complete
  * invocation relation. No equation generator supplies an expected result. */
 static XrXirStatus effect_invocation_input_seed(const XrXirCompileContext *work,
-    const EffectBodyMaterial *body,uint32_t function,XrXirRootEffects *output) {
+    const EffectBodyMaterial *body,uint32_t function,XrXirRootEffects *output, XirReadOperation *read_operation) {
     if(!output) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationPrimitive primitive={0};
-    XrXirStatus status=effect_invocation_primitive_read(work,body,function,&primitive);
+    XrXirStatus status=effect_invocation_primitive_read(work,body,function,&primitive, read_operation);
     if(status!=XR_XIR_OK) return status;
 
     *output=primitive.facts;return XR_XIR_OK;
 }
 
 static XrXirStatus effect_invocation_input_seeds_match(const XrXirCompileContext *work,
-    const EffectInvocationCertificate *certificate,const EffectFinalFunctions *summary) {
+    const EffectInvocationCertificate *certificate,const EffectFinalFunctions *summary, XirReadOperation *read_operation) {
     const EffectInvocationFinal *final=certificate->final;
     uint32_t count=effect_body_count(certificate->body);
     if (!final || !summary || summary->count!=count || summary->capacity!=count ||
@@ -388,7 +388,7 @@ static XrXirStatus effect_invocation_input_seeds_match(const XrXirCompileContext
         if (final->roots[f]>=final->count) return XR_XIR_BAD_STRUCTURE;
         const EffectInvocationNode *node=&final->nodes[final->roots[f]];
         if (node->body!=f) return XR_XIR_BAD_STRUCTURE;
-        XrXirRootEffects input={0};XrXirStatus status=effect_invocation_input_seed(work,certificate->body,f,&input);
+        XrXirRootEffects input={0};XrXirStatus status=effect_invocation_input_seed(work,certificate->body,f,&input, read_operation);
         if (status!=XR_XIR_OK) return status;
         uint32_t mask=(input.requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
             (input.unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);
@@ -404,7 +404,7 @@ static XrXirStatus effect_invocation_input_seeds_match(const XrXirCompileContext
         if (node->body>=count) return XR_XIR_BAD_STRUCTURE;
         if (final->roots[node->body]==n) continue;
         XrXirRootEffects input={0};
-        XrXirStatus status=effect_invocation_input_seed(work,certificate->body,node->body,&input);
+        XrXirStatus status=effect_invocation_input_seed(work,certificate->body,node->body,&input, read_operation);
         if (status!=XR_XIR_OK) return status;
         uint32_t mask=(input.requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
             (input.unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);
@@ -419,11 +419,12 @@ static XrXirStatus effect_invocation_input_seeds_match(const XrXirCompileContext
  * construction-only pointers are then removed from the published certificate. */
 static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
     const EffectInvocationSealRequest *request,EffectInvocationCertificate **output,
-    const EffectInvocationProjectionSink *sink) {
+    const EffectInvocationProjectionSink *sink, XirReadOperation *read_operation) {
     if (!xir_compile_context_valid(work) || !request || !output || *output || !request->equations ||
         !*request->equations || !request->result || !*request->result) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationWorkspace *owner=*request->equations;EffectFinalFunctions *result=*request->result;
     EffectFinalFunctions *staged=result;bool summary_moved=false;
+    const EffectFinalFunctions expected=*staged;
     if (!effect_body_request_owned_matches(owner->read.work,&owner->read.body,owner->final.material) ||
         owner->read.work->resources!=work->resources || result->resources!=work->resources ||
         result->count!=effect_body_count(owner->final.material) ||
@@ -431,7 +432,7 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
         return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=effect_body_physical_match(work,owner->final.physical,owner->final.material);
     EffectInvocationLocalInput *local_inputs=NULL;
-    if (status==XR_XIR_OK) status=effect_invocation_local_inputs(work,owner->final.material,&local_inputs);
+    if (status==XR_XIR_OK) status=effect_invocation_local_inputs(work,owner->final.material,&local_inputs, read_operation);
     if (status==XR_XIR_OK && local_inputs) {
         if (!owner->read.consumers || !owner->states || owner->pending || owner->front || owner->back ||
             owner->read.producer_enabled || owner->read.class_enabled || owner->edge_index || owner->edge_index_capacity ||
@@ -468,8 +469,14 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
         certificate->final=xir_compile_calloc(work,1,sizeof(*certificate->final),&status);
         if (status==XR_XIR_OK) *certificate->final=owner->final;
 
+        if (status==XR_XIR_OK && (staged->resources!=expected.resources || staged->count!=expected.count ||
+            staged->capacity!=expected.capacity || staged->term_count!=expected.term_count ||
+            staged->functions!=expected.functions || staged->witnesses!=expected.witnesses))
+            status=XR_XIR_BAD_STRUCTURE;
         if (status==XR_XIR_OK) {
-            certificate->final->summary=*staged;
+            /* Move the original owned rows, not a newly derived summary.
+             * Freeing the staged descriptor later cannot retire these rows. */
+            certificate->final->summary=expected;
             result=&certificate->final->summary;*request->result=result;summary_moved=true;
         }
         if (status==XR_XIR_OK) status=certificate->final->role_proof.resources ?
@@ -479,8 +486,8 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
             &certificate->final->role_proof,effect_contracts_read(owner->effects),owner->effects->count);
         if (status==XR_XIR_OK) effect_invocation_discovery_clear(owner);
         if (status==XR_XIR_OK) {
-            status=certificate->final->capture.facts ? effect_capture_match(work,certificate->final) :
-                effect_capture_build(work,certificate->final,owner);
+            status=certificate->final->capture.facts ? effect_capture_match(work,certificate->final, read_operation) :
+                effect_capture_build(work,certificate->final,owner, read_operation);
             effect_invocation_class_discovery_clear(owner);
         }
         if (status==XR_XIR_OK) status=effect_invocation_certificate_project(work,certificate,result,sink);
@@ -489,6 +496,8 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
     if (status==XR_XIR_OK && (!owner->graph || owner->graph->material!=certificate->body ||
         (!owner->graph->physical_owned && owner->effects->generation!=certificate->body)))
         status=XR_XIR_BAD_STRUCTURE;
+    if (status==XR_XIR_OK && (!effect_terms_storage_owned(work,&certificate->terms) ||
+        !effect_terms_storage_owned(work,&certificate->body->terms))) status=XR_XIR_BAD_STRUCTURE;
     if (status!=XR_XIR_OK) {
         if (summary_moved) { *staged=*result;*request->result=staged; }
         if (certificate) {
@@ -534,7 +543,7 @@ static inline XrXirStatus effect_invocation_result_read_new(const XrXirCompileCo
 }
 
 static XrXirStatus effect_invocation_certificate_result_match(const XrXirCompileContext *work,
-    const EffectInvocationCertificate *certificate,const EffectFinalFunctions *result) {
+    const EffectInvocationCertificate *certificate,const EffectFinalFunctions *result, XirReadOperation *read_operation) {
     if (!xir_compile_context_valid(work) || !certificate || !certificate->final ||
         certificate->resources!=work->resources ||
         certificate->final->material!=certificate->body) return XR_XIR_BAD_STRUCTURE;
@@ -542,7 +551,7 @@ static XrXirStatus effect_invocation_certificate_result_match(const XrXirCompile
     const EffectInvocationTermSource source={work,certificate->final,
         &certificate->final->role_proof,NULL};
     bool local=false;
-    XrXirStatus status=effect_invocation_local_certificate_match(work,certificate,result,&local);
-    if (status==XR_XIR_OK && !local) status=effect_invocation_input_seeds_match(work,certificate,result);
+    XrXirStatus status=effect_invocation_local_certificate_match(work,certificate,result,&local, read_operation);
+    if (status==XR_XIR_OK && !local) status=effect_invocation_input_seeds_match(work,certificate,result, read_operation);
     return status==XR_XIR_OK?effect_invocation_result_match_source(&source,result):status;
 }

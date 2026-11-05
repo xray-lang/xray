@@ -62,6 +62,8 @@ typedef struct SourceContext {
     XrXirCompileContext compile;
     /* Borrowed only by this synchronous construction, never semantic history. */
     XrCompileRequestControl *request;
+    /* Synchronous capacity borrower; the actual entry retains the sole owner. */
+    XirReadOperation *read_operation;
     uint32_t remaining_blocks, remaining_instructions;
     XrXirSourceDiagnostic diagnostic;
     SourceMemory *memory,*retired_arrays;

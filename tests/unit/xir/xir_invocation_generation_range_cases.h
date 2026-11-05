@@ -389,7 +389,7 @@ static void generation_range_origin_bindings(const XrXirCompileContext *context,
         (XrXirCompileContext *)context)==XR_XIR_OK);
     EffectInvocationWorkspace *owner=NULL;
     CHECK(effect_invocations_receive(context,source,&trial->effects,&trial->graph,
-        material->declared,&owner)==XR_XIR_OK && effect_invocations_solve(owner)==XR_XIR_OK);
+        material->declared,&owner, NULL)==XR_XIR_OK && effect_invocations_solve(owner, NULL)==XR_XIR_OK);
     CHECK(owner->final.material==material && owner->final.physical==material->physical);
     generation_range_literal_producers(owner,1);
     EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=owner->final.roots[0],.instruction=UINT32_MAX};
@@ -435,7 +435,7 @@ static void generation_range_dispatch_other(const XrXirCompileContext *context,
     CHECK(effect_graph_build_material(source,&trial->effects,&trial->graph,
         (XrXirCompileContext *)context)==XR_XIR_OK &&
         effect_invocations_receive(context,source,&trial->effects,&trial->graph,
-            material->declared,&owner)==XR_XIR_OK && effect_invocations_solve(owner)==XR_XIR_OK);
+            material->declared,&owner, NULL)==XR_XIR_OK && effect_invocations_solve(owner, NULL)==XR_XIR_OK);
     EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=owner->final.roots[0],.instruction=UINT32_MAX};
     CHECK(effect_invocation_discovery_origins(&flow)==XR_XIR_OK && !flow.changed &&
         flow.physical->count>1 && material->functions[0].run_count>1);
@@ -553,8 +553,8 @@ static void generation_sequence_producers(void) {
     CHECK(effect_invocation_bounds_new(&context,&bounds)==XR_XIR_OK);
     for (uint32_t f=0;f<source->function_count;++f)
         CHECK(effect_invocation_bounds_capture(&context,bounds,source->types,&source->functions[f],f,NULL)==XR_XIR_OK);
-    CHECK(effect_invocations_receive(&context,source,&effects,&graph,bounds,&owner)==XR_XIR_OK &&
-        effect_invocations_solve(owner)==XR_XIR_OK && owner->read.producer_enabled && !owner->pending);
+    CHECK(effect_invocations_receive(&context,source,&effects,&graph,bounds,&owner, NULL)==XR_XIR_OK &&
+        effect_invocations_solve(owner, NULL)==XR_XIR_OK && owner->read.producer_enabled && !owner->pending);
     uint32_t nodes=owner->final.count,edges=owner->final.edge_count;
     conditional_generation_instruction_refused=false;
     for (uint32_t n=0;n<nodes;++n) for (uint32_t mixed=0;mixed<2;++mixed) {

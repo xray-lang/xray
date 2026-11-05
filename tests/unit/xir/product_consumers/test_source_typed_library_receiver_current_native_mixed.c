@@ -308,7 +308,7 @@ static void construction_owner(ReceiverRun *run, const XrXirArtifact *artifact, 
         CHECK(!!row->field_initializers == !!row->field_count);
     }
     CHECK(!xr_xir_compile_construction_row(construction, count));
-    CHECK(completed(run, xr_xir_compile_verify_v2(context, module, construction, NULL), operation));
+    CHECK(completed(run, xr_xir_compile_verify_v2(context, module, construction, NULL, NULL), operation));
 }
 static bool literal_is(XrXirLiteral text, const char *expected) {
     size_t length = strlen(expected);
@@ -449,7 +449,7 @@ static void receiver_suspend_promise_reject(ReceiverRun *run) {
     run->control_identities[roles.child].promises |= XR_XIR_FUNCTION_NO_SUSPEND;
     XrXirDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_compile_verify_v2(run->context, &module,
-        xr_xir_compile_artifact_construction(artifact), &diagnostic);
+        xr_xir_compile_artifact_construction(artifact), &diagnostic, NULL);
     CHECK(status == XR_XIR_BAD_TYPE && diagnostic.reason == XR_XIR_DIAGNOSTIC_NO_SUSPEND && diagnostic.function == roles.child);
     xr_compile_resources_free(run->control_identities); run->control_identities = NULL;
     CHECK(completed(run, xr_xir_compile_artifact_verify(artifact, NULL), "original-Library-after-false-promise-reject"));

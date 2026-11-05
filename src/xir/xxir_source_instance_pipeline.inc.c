@@ -21,8 +21,11 @@ static bool source_instance_selected(SourceContext *ctx,const XrXirArtifact *clo
     *output=selection->function;return true;
 }
 static void source_instance_receive(SourceContext *ctx,XrXirSourceResult *output,
-    const XirSourceInstanceRequest *request,uint32_t *providers) {
+    const XirSourceInstanceRequest *request,uint32_t *providers,uint32_t capacity) {
     if (ctx->diagnostic.status!=XR_XIR_OK) return;
+    if(!request || request->count!=capacity || (capacity && (!request->selections || !providers))) {
+        source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"instance result extent changed before receiving");return;
+    }
     if (ctx->comptime_count || ctx->linkage_kind!=XR_XIR_PROGRAM) {
         source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"instance constant receiving requires an ordinary Program Source graph");return;
     }
@@ -40,12 +43,13 @@ static void source_instance_receive(SourceContext *ctx,XrXirSourceResult *output
     if (ctx->diagnostic.status==XR_XIR_OK && ((ctx)->diagnostic.status == XR_XIR_OK)) {
         XirCtfeInstanceBatchRequest evaluation={closed,functions,count,request->target,request->limits,request->call_depth};
         XrXirCtfeStatus evaluated=xr_xir_compile_ctfe_instance_batch(&evaluation,ctx->request,&owner);
-        if (evaluated==XR_XIR_CTFE_OK) evaluated=xr_xir_compile_ctfe_instance_batch_views(owner,views,count,ctx->request);
+        const XirReadRequest view_request={.operation=ctx->read_operation,.control=ctx->request};
+        if (evaluated==XR_XIR_CTFE_OK) evaluated=xir_ctfe_instance_batch_views_read(&ctx->compile,owner,views,count,&view_request);
         if (evaluated!=XR_XIR_CTFE_OK) source_comptime_failure(ctx,NULL,evaluated);
     }
     if (ctx->diagnostic.status==XR_XIR_OK && ((ctx)->diagnostic.status == XR_XIR_OK)) {
         SourceInstanceBatch batch={views,providers,count};SourceContext received={0};
-        received.request=ctx->request;received.compile=ctx->compile;received.graph=ctx->graph;received.linkage_kind=ctx->linkage_kind;
+        received.read_operation=ctx->read_operation;received.request=ctx->request;received.compile=ctx->compile;received.graph=ctx->graph;received.linkage_kind=ctx->linkage_kind;
         received.manifests=ctx->manifests;received.prelude_module=ctx->prelude_module;received.core_factory=ctx->core_factory;
         received.remaining_blocks=ctx->remaining_blocks;received.remaining_instructions=ctx->remaining_instructions;
         received.instance_constants=&batch;

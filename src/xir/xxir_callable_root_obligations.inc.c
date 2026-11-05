@@ -74,5 +74,5 @@ static XrXirStatus declaration_callable_root_verify(const XrXirModule *module,
 
     return xir_effects_context_available(remaining,effects) ?
         xir_effects_context_operation(remaining,effects,module,module->types,
-            declaration_callable_root_read,&check) : declaration_callable_root_read(&check,NULL);
+            declaration_callable_root_read,&check, NULL) : declaration_callable_root_read(&check,NULL);
 }

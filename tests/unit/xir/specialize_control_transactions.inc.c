@@ -89,7 +89,9 @@ static void specialize_pending_transactions(void) {
     held=library_compile_stats(&owner.context).held_bytes;
     for(unsigned mode=0;mode<3;++mode) {
         SpecializeControlProbe probe;XrCompileRequestControl control;XrXirArtifact *received=NULL;
-        specialize_begin(&probe,&control,owner.context.resources,"checked_read_mode",mode);probe.cut=2;
+        /* The final observation now precedes the complete callback-free
+         * packet/Artifact relation in the common decoder receiver. */
+        specialize_begin(&probe,&control,owner.context.resources,"checked_packet_final",mode);
         probe.artifact_slot=(const XrXirArtifact *const *)&received;
         XrXirStatus status=xir_evaluation_read(&owner.context,packet.bytes,packet.length,&received,NULL,&control);
         specialize_end(&probe,status);CHECK(!received&&library_compile_stats(&owner.context).held_bytes==held);
@@ -113,7 +115,7 @@ static void specialize_take_transactions(void) {
         XrXirProvenance *identity=owned;SpecializeControlProbe probe;XrCompileRequestControl control;
         XirProvenanceReceiving receiving={donor->construction,effects};
         specialize_begin(&probe,&control,owner.context.resources,
-            accepted?"lower_control_poll":"xr_xir_compile_recheck_provenance_take",mode);
+            accepted?"lower_control_poll":"xir_compile_recheck_provenance_take_read",mode);
         probe.artifact_slot=(const XrXirArtifact *const *)&received;
         XrXirStatus status=xr_xir_compile_recheck_provenance_take(&owner.context,&module,&receiving,&owned,&received,NULL,&control);
         specialize_end(&probe,status);CHECK(!received&&(accepted?!owned:owned==identity));
@@ -176,11 +178,11 @@ static void specialize_large_evaluation_controls(void) {
     XirCtfeInstanceBatch *batch=NULL;CHECK(xr_xir_compile_ctfe_instance_batch(&request,NULL,&batch)==XR_XIR_CTFE_OK);
     xr_xir_compile_artifact_free(received);held=library_compile_stats(&owner.context).held_bytes;
     XirCtfeInstanceView views[70]={0},empty[70]={0};SpecializeControlProbe probe;XrCompileRequestControl control;
-    specialize_begin(&probe,&control,owner.context.resources,"xr_xir_compile_ctfe_instance_batch_views",3);
+    specialize_begin(&probe,&control,owner.context.resources,"instance_batch_views_attempt",3);
     CHECK(xr_xir_compile_ctfe_instance_batch_views(batch,views,70,&control)==XR_XIR_CTFE_OK);
     size_t final_poll=probe.phase_hits;CHECK(final_poll>=3);specialize_end(&probe,XR_XIR_OK);memset(views,0,sizeof(views));
     for(unsigned mode=0;mode<3;++mode)for(unsigned point=0;point<3;++point) {
-        specialize_begin(&probe,&control,owner.context.resources,point==1?"compare-prefix":"xr_xir_compile_ctfe_instance_batch_views",mode);
+        specialize_begin(&probe,&control,owner.context.resources,point==1?"compare-prefix":"instance_batch_views_attempt",mode);
         if(point==2)probe.cut=final_poll;
         XrXirCtfeStatus status=xr_xir_compile_ctfe_instance_batch_views(batch,views,70,&control);
         CHECK(status==(mode==0?XR_XIR_CTFE_CANCELLED:mode==1?XR_XIR_CTFE_DEADLINE:XR_XIR_CTFE_CLOCK_FAILURE));

@@ -119,7 +119,7 @@ static XrXirStatus finite_build(const XrXirCompileContext *work,EffectErrorFinit
 static EffectErrorFinite *finite_prepare(const XrXirCompileContext *work,
     const XrXirModule *raw,const EffectErrorAtom *atoms,uint32_t count) {
     XrXirStatus status=XR_XIR_OK;XrXirEffects *owner=NULL;
-    CHECK(effect_infer_construct(work,raw,NULL,&owner)==XR_XIR_OK && owner && owner->invocations);
+    CHECK(effect_infer_construct(work,raw,NULL,&owner, NULL)==XR_XIR_OK && owner && owner->invocations);
     FiniteProposedProof *proposed=xir_compile_calloc(work,1,sizeof(*proposed),&status);
     CHECK(proposed && status==XR_XIR_OK);proposed->owner=owner;
     EffectErrorFinite *proof=&proposed->proof;

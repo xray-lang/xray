@@ -25,6 +25,12 @@ typedef struct XirTypeMatchRead {
     XrXirType expected,actual;
     XirReadScratch *memory;
 } XirTypeMatchRead;
+XR_FUNC XrXirStatus xir_error_union_read(const XrXirCompileContext *context,
+    const XrXirTypes *types,const XrXirType *members,uint32_t count,XrXirErrorUnion *output,
+    XirReadScratch *memory,XirReadClaim *claim);
+XR_FUNC void xir_type_match_scratch_release(XrXirTypeMatchScratch *scratch,XirReadScratch *memory);
+XR_FUNC XrXirStatus xir_type_match_with_scratch(const XrXirCompileContext *context,
+    const XirTypeMatchRead *request,XrXirTypeMatchScratch *scratch);
 XR_FUNC XrXirStatus xir_type_match_read(const XrXirCompileContext *context,const XirTypeMatchRead *request);
 /* The operation borrows its live ledger and excludes concurrent users. Active
  * invocations claim distinct blocks, including nested destination matching. */

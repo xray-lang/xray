@@ -9,7 +9,7 @@
 static void primitive_root_reject(const XrXirCompileContext *work,const EffectBodyMaterial *body,
     XrXirStatus status) {
     XrXirRootEffects output={true,true};
-    CHECK(effect_invocation_input_seed(work,body,0,&output)==status);
+    CHECK(effect_invocation_input_seed(work,body,0,&output, NULL)==status);
     CHECK(output.requires_root && output.unresolved);
 }
 
@@ -34,7 +34,7 @@ static void primitive_root_case(uint32_t mode,bool large) {
     EffectBodyMaterial *body=effects->invocations->body;
     for (uint32_t f=0;f<4;++f) {
         XrXirRootEffects facts={0};
-        CHECK(effect_invocation_input_seed(&context,body,f,&facts)==XR_XIR_OK);
+        CHECK(effect_invocation_input_seed(&context,body,f,&facts, NULL)==XR_XIR_OK);
         CHECK(facts.requires_root==(f==3 || (!f && mode && !large)) && !facts.unresolved);
     }
     if (large) {
@@ -46,7 +46,7 @@ static void primitive_root_case(uint32_t mode,bool large) {
         for (uint32_t w=1;w<EFFECT_BODY_WORDS;++w) {
             head->runs[0].mask=UINT32_C(1)<<w;head->runs[0].delta[w]=UINT32_MAX;
             XrXirRootEffects facts={true,true};
-            CHECK(effect_invocation_input_seed(&context,body,0,&facts)==XR_XIR_OK &&
+            CHECK(effect_invocation_input_seed(&context,body,0,&facts, NULL)==XR_XIR_OK &&
                 !facts.requires_root && !facts.unresolved);
             head->runs[0].delta[w]=0;primitive_root_reject(&context,body,XR_XIR_BAD_STRUCTURE);
             head->runs[0]=saved;
@@ -73,7 +73,7 @@ static void primitive_root_case(uint32_t mode,bool large) {
         head->runs[1].base=(XrXirInstruction){.op=XR_XIR_SLOT_LOAD,.type=(XrXirType)256};
         if (mode) {
             XrXirRootEffects facts={0};
-            CHECK(effect_invocation_input_seed(&context,body,0,&facts)==XR_XIR_OK &&
+            CHECK(effect_invocation_input_seed(&context,body,0,&facts, NULL)==XR_XIR_OK &&
                 facts.requires_root && !facts.unresolved);
         } else primitive_root_reject(&context,body,XR_XIR_BAD_STRUCTURE);
         head->runs[1]=tail;
@@ -81,13 +81,13 @@ static void primitive_root_case(uint32_t mode,bool large) {
         EffectBodyRun *storage=head->runs;
         head->instruction_count=head->run_count=head->run_capacity=0;head->runs=NULL;
         XrXirRootEffects facts={true,true};
-        CHECK(effect_invocation_input_seed(&context,body,0,&facts)==XR_XIR_OK &&
+        CHECK(effect_invocation_input_seed(&context,body,0,&facts, NULL)==XR_XIR_OK &&
             !facts.requires_root && !facts.unresolved);
         head->run_capacity=1;primitive_root_reject(&context,body,XR_XIR_BAD_STRUCTURE);head->run_capacity=0;
         head->runs=storage;primitive_root_reject(&context,body,XR_XIR_BAD_STRUCTURE);
         head->instruction_count=count;head->run_count=runs;head->run_capacity=capacity;
         XrCompileResourceStats before=rp_stats(&context);
-        CHECK(effect_invocation_input_seed(&context,body,0,&facts)==XR_XIR_OK &&
+        CHECK(effect_invocation_input_seed(&context,body,0,&facts, NULL)==XR_XIR_OK &&
             !facts.requires_root && !facts.unresolved);
         XrCompileResourceStats after=rp_stats(&context);
         CHECK(after.work>before.work && after.allocated_bytes==before.allocated_bytes &&

@@ -33,7 +33,7 @@ static XrXirStatus effect_body_advertisements_begin(const XrXirCompileContext *w
     const XrXirModule *source,EffectRefinementBounds *refinement,EffectBodyAdvertisementBuilder **output) {
     if (!xir_compile_context_valid(work) || !source || (!!source->functions!=!!source->function_count) ||
         !output || *output) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=refinement?effect_refinement_match(work,source,refinement):XR_XIR_OK;
+    XrXirStatus status=refinement?effect_refinement_match(work,source,refinement,NULL):XR_XIR_OK;
     if (status!=XR_XIR_OK) return status;
     EffectBodyAdvertisementBuilder *builder=xir_compile_calloc(work,1,sizeof(*builder),&status);
     if (!builder) return status;

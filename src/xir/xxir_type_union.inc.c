@@ -51,9 +51,10 @@ XR_FUNC bool xr_xir_error_bound_accepts(const XrXirTypes *types, XrXirType actua
     }
     return true;
 }
-XR_FUNC XrXirStatus xr_xir_compile_error_union(const XrXirCompileContext *context,
-    const XrXirTypes *types, const XrXirType *members, uint32_t count, XrXirErrorUnion *output) {
-    if (!xir_compile_context_valid(context) || !output || output->members || output->count ||
+XR_FUNC XrXirStatus xir_error_union_read(const XrXirCompileContext *context,
+    const XrXirTypes *types, const XrXirType *members, uint32_t count,XrXirErrorUnion *output,XirReadScratch *memory,XirReadClaim *claim) {
+    if(!xir_compile_context_valid(context) || !claim || claim->memory ||
+        (memory && memory->resources!=context->resources) || !output || output->members || output->count ||
         output->scalar || (count && !members)) return XR_XIR_BAD_STRUCTURE;
     uint64_t total = 0;
     bool erased = false;
@@ -72,7 +73,7 @@ XR_FUNC XrXirStatus xr_xir_compile_error_union(const XrXirCompileContext *contex
     }
     if (total > context->limits.parameters) return XR_XIR_BUDGET;
     XrXirStatus status = XR_XIR_OK;
-    XrXirCallableParameter *vector = xir_compile_calloc(context, (size_t)total, sizeof(*vector), &status);
+    XrXirCallableParameter *vector=xir_read_scratch_alloc(context,memory,(size_t)total*sizeof(*vector),false,claim,&status);
     if (!vector) return status;
     uint32_t used = 0;
     for (uint32_t i = 0; i < count; ++i) {
@@ -90,8 +91,13 @@ XR_FUNC XrXirStatus xr_xir_compile_error_union(const XrXirCompileContext *contex
     used = distinct;
     if (used == 1) {
         XrXirType scalar = vector[0].type;
-        xr_compile_resources_free(vector);
+        xir_read_scratch_release(memory,vector,claim);
         *output = (XrXirErrorUnion){.scalar = scalar};
     } else *output = (XrXirErrorUnion){.members = vector, .count = used};
     return XR_XIR_OK;
+}
+XR_FUNC XrXirStatus xr_xir_compile_error_union(const XrXirCompileContext *context,
+    const XrXirTypes *types,const XrXirType *members,uint32_t count,XrXirErrorUnion *output) {
+    XirReadClaim claim={0};
+    return xir_error_union_read(context,types,members,count,output,NULL,&claim);
 }

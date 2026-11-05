@@ -150,9 +150,13 @@ static XrXirStatus constraint_sendable_graph(const XrXirConstraintEnvironment *e
     uint64_t bytes = (uint64_t)types->count * (sizeof(SendableFrame) + sizeof(uint32_t));
     if ((types->count==UINT32_MAX) || (bytes > SIZE_MAX)) return XR_XIR_BUDGET;
     XrXirStatus status = XR_XIR_OK;
-    SendableFrame *frames = xir_read_scratch_alloc(work,read,(size_t)bytes,true,&status);
-    if (!frames) return status;
-    uint32_t *state = (uint32_t *)(frames + types->count);
+    /* A pushed frame is fully assigned. Only the independent visit-state
+     * vector needs prepared zero storage; frame bytes never need clearing. */
+    XirReadClaim frames_claim={0},state_claim={0};
+    SendableFrame *frames=xir_read_scratch_alloc(work,read,(size_t)types->count*sizeof(*frames),false,&frames_claim,&status);
+    if(!frames) return status;
+    uint32_t *state=xir_read_scratch_alloc(work,read,(size_t)types->count*sizeof(*state),true,&state_claim,&status);
+    if(!state) {xir_read_scratch_release(read,frames,&frames_claim);return status;}
     SendableWalk walk={state,frames,0,read};
     status = sendable_enter(environment, type, &walk, work,false);
     while (walk.depth && status == XR_XIR_OK) {
@@ -180,5 +184,6 @@ static XrXirStatus constraint_sendable_graph(const XrXirConstraintEnvironment *e
         }
         status = sendable_enter(environment, child, &walk, work,error_child);
     }
-    xir_read_scratch_release(read,frames); return status;
+    xir_read_scratch_release(read,state,&state_claim);
+    xir_read_scratch_release(read,frames,&frames_claim);return status;
 }

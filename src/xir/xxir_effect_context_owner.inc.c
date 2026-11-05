@@ -537,7 +537,7 @@ static XrXirStatus effect_context_dense_expand(EffectContextOwner *owner,
 }
 
 static XrXirStatus effect_context_dense_solve(EffectContextOwner *owner,
-    const XrXirCompileContext *context, const XrXirModule *source) {
+    const XrXirCompileContext *context, const XrXirModule *source, XirReadOperation *read_operation) {
     EffectOrdinaryContexts *dense=owner->dense;
 
     effect_context_summary_clear(dense);
@@ -555,7 +555,7 @@ static XrXirStatus effect_context_dense_solve(EffectContextOwner *owner,
     EffectInvocationDeclaredBounds *temporary=NULL;
     if (status==XR_XIR_OK) status=effect_ordinary_roots_prepare(context,source,dense,owner->declared,&temporary);
     if (status==XR_XIR_OK) status=effect_ordinary_roots_publish(context,dense,
-        owner->declared?owner->declared:temporary,&graph,&view);
+        owner->declared?owner->declared:temporary,&graph,&view, read_operation);
     effect_graph_free(&graph);effect_invocation_bounds_free(temporary);
     dense->terms.remaining=NULL;
     return status;
@@ -565,7 +565,7 @@ static XrXirStatus effect_context_dense_stable(const XrXirCompileContext *contex
     EffectContextOwner *owner,const XrXirModule *source);
 
 static XrXirStatus effect_context_owner_build(const XrXirCompileContext *context,
-    const XrXirModule *source,EffectRefinementBounds *bounds,EffectBodyMaterial *initial,EffectContextOwner **output) {
+    const XrXirModule *source,EffectRefinementBounds *bounds,EffectBodyMaterial *initial,EffectContextOwner **output, XirReadOperation *read_operation) {
     if (!xir_compile_context_valid(context) || !source || !source->declarations ||
         !source->declarations->functions || !output || *output ||
         (initial && (!effect_body_material_shape(initial) || initial->resources!=context->resources)))
@@ -624,13 +624,13 @@ static XrXirStatus effect_context_owner_build(const XrXirCompileContext *context
         effect_context_dense_scratch_free(&scratch);
         if (status==XR_XIR_OK) {
             if (!solved || changed || dense->count!=previous || dense->terms.types.count!=types)
-                status=effect_context_dense_solve(owner,context,source);
+                status=effect_context_dense_solve(owner,context,source, read_operation);
             else status=effect_context_dense_stable(context,owner,source);
         }
         if (!solved || dense->count!=previous) changed=true;
         solved=true;
     }
-    if (status==XR_XIR_OK) status=effect_context_forest_seal(context,source,dense,&owner->forest);
+    if (status==XR_XIR_OK) status=effect_context_forest_seal(context,source,dense,&owner->forest, read_operation);
     if (status!=XR_XIR_OK) { effect_context_owner_free(owner);return status; }
     owner->refinement=NULL;
     dense->terms.remaining=NULL;*output=owner;return XR_XIR_OK;

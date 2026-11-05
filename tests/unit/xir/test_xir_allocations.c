@@ -647,7 +647,7 @@ static void allocation_remaining_resources(void) {
         CHECK(live == checked_live);
     }
     fail_at = SIZE_MAX;
-    CHECK(xr_xir_compile_verify_v2(&compiler.context, xr_xir_compile_artifact_module(checked), xr_xir_compile_artifact_construction(checked), NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_verify_v2(&compiler.context, xr_xir_compile_artifact_module(checked), xr_xir_compile_artifact_construction(checked), NULL, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_lower(checked, &fixture_target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     size_t lowered_live = live;

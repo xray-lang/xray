@@ -114,7 +114,7 @@ static XrXirStatus conditional_invocation_lowered_context(const XrXirCompileCont
         status=effect_invocation_collect(context,module,&effects,&graph,bounds,&owned_input);
         if (status==XR_XIR_OK) status=effect_invocation_current_input_match(context,module,graph.material);
         EffectInvocationDriverInput input={context,&owned_input,&effects,&graph,graph.material->declared,NULL};
-        if (status==XR_XIR_OK) status=effect_invocation_derive(&input,&certificate,NULL,&receiving);
+        if (status==XR_XIR_OK) status=effect_invocation_derive(&input,&certificate,NULL,&receiving, NULL);
     }
     if (status==XR_XIR_OK) status=invocation_lowered_context_oracle(context,module,&effects,bounds,certificate,oracle);
     if (status==XR_XIR_OK && oracle) {

@@ -47,25 +47,43 @@ static XrXirStatus input_artifact_shape(const XrXirCompileContext *context,
     return status==XR_XIR_BAD_LAYOUT?XR_XIR_BAD_STRUCTURE:status;
 }
 static XrXirStatus input_artifact_verify(const XrXirCompileContext *context,
-    const XrXirArtifact *artifact) {
+    const XrXirArtifact *artifact,const XirReadRequest *read_request) {
     XrXirStatus status=input_artifact_storage(context,artifact);
-    if (status==XR_XIR_OK) status=xir_effects_program_final_verify(context,&artifact->module,artifact->program_final);
+    if (status==XR_XIR_OK) status=xir_effects_program_final_verify(context,&artifact->module,artifact->program_final,read_request);
     if (status==XR_XIR_OK) status=xir_compile_verify_program_effects(context,&artifact->module,
-        artifact->construction,artifact->program_final,NULL);
+        artifact->construction,artifact->program_final,NULL,read_request);
     if (status==XR_XIR_OK) status=xir_effects_program_layout_match(context,artifact->program_final,
         &artifact->target,artifact->layouts);
     if (status==XR_XIR_BAD_LAYOUT) status=XR_XIR_BAD_STRUCTURE;
     if (status==XR_XIR_OK) status=xir_effects_program_body_match(context,&artifact->module,artifact->program_final);
-    if (status==XR_XIR_OK) status=xir_effects_program_root_current(context,&artifact->module,artifact->program_final);
+    if (status==XR_XIR_OK) status=xir_effects_program_root_current(context,&artifact->module,artifact->program_final,read_request->operation);
     return status;
+}
+XR_FUNC XrXirStatus xir_program_input_verify_read(const XrXirCompileContext *context,
+    const XrXirProgramInput *input,const XirReadRequest *read_request) {
+    if(!xir_compile_context_valid(context) || !input || !read_request ||
+        !xir_read_request_matches(context,read_request)) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=input_storage(context,input,sizeof(*input),_Alignof(XrXirProgramInput));
+    if(status!=XR_XIR_OK) return status;
+    if(input->context.resources!=context->resources || !input->artifact) return XR_XIR_BAD_STRUCTURE;
+    if(read_request->attempt) return input_artifact_verify(context,input->artifact,read_request);
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        status=xir_read_begin(context,request.operation);
+        if(status==XR_XIR_OK) status=input_artifact_verify(context,input->artifact,&request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) return status;
+        status=xir_read_prepare(context,request.operation,request.control);
+        if(status!=XR_XIR_OK) return status;
+    }
 }
 XR_FUNC XrXirStatus xir_program_input_verify(const XrXirCompileContext *context,
     const XrXirProgramInput *input) {
-    if (!xir_compile_context_valid(context) || !input) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=input_storage(context,input,sizeof(*input),_Alignof(XrXirProgramInput));
-    if (status!=XR_XIR_OK) return status;
-    if (input->context.resources!=context->resources || !input->artifact) return XR_XIR_BAD_STRUCTURE;
-    return input_artifact_verify(context,input->artifact);
+    if(!xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
+    XirReadOperation operation={.capacity={.resources=context->resources}};
+    const XirReadRequest request={.operation=&operation};
+    XrXirStatus status=xir_program_input_verify_read(context,input,&request);
+    xir_read_operation_free(&operation);return status;
 }
 XR_FUNC void xir_program_input_free(XrXirProgramInput *input) {
     if (!input) return;

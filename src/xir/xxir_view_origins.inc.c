@@ -250,7 +250,7 @@ XR_FUNC XrXirStatus xir_compile_view_return_origins_verified(const XrXirCompileC
     const XrXirModule *module,XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(context) || !module) return XR_XIR_BAD_STRUCTURE;
     uint8_t *flags=NULL;
-    XrXirStatus status=view_flags_build(context,module->types,&flags);
+    XrXirStatus status=view_flags_build(context,module->types,&flags,NULL,NULL);
     if (status==XR_XIR_OK && flags) status=view_origins_verify(context,module,flags,diagnostic);
     xr_compile_resources_free(flags);return status;
 }

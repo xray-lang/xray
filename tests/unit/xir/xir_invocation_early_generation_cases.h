@@ -327,7 +327,7 @@ static XrXirStatus conditional_generation_publication_stage(const XrXirCompileCo
     EffectInvocationProjectionSink sink={work->resources,effect_body_count(certificate->body),
         &publication,effect_invocation_publication_write};
     if (status==XR_XIR_OK) status=effect_invocation_certificate_project(work,&probe,publication,&sink);
-    if (status==XR_XIR_OK) status=effect_invocation_publication_match(work,&probe,publication);
+    if (status==XR_XIR_OK) status=effect_invocation_publication_match(work,&probe,publication, NULL);
     *staged=final.summary;publication=staged;
     effect_terms_free(&probe.terms);
     if (status!=XR_XIR_OK) { effect_invocation_result_free(publication);return status; }
@@ -341,10 +341,10 @@ static void conditional_generation_reserved_controls(const XrXirCompileContext *
     CHECK(owner->primitives && owner->primitive_count==effect_body_count(owner->final.material) &&
         owner->final.count<owner->final.capacity);
     EffectInvocationPrimitive saved=owner->primitives[0],actual={0};
-    CHECK(effect_invocation_primitive_read(context,owner->final.material,0,&actual)==XR_XIR_OK);
+    CHECK(effect_invocation_primitive_read(context,owner->final.material,0,&actual, NULL)==XR_XIR_OK);
     owner->primitives[0]=(EffectInvocationPrimitive){.facts={true,true}};
     EffectInvocationPrimitive current={0};
-    CHECK(effect_invocation_primitive_read(context,owner->final.material,0,&current)==XR_XIR_OK &&
+    CHECK(effect_invocation_primitive_read(context,owner->final.material,0,&current, NULL)==XR_XIR_OK &&
         current.facts.requires_root==actual.facts.requires_root && current.facts.unresolved==actual.facts.unresolved &&
         effect_invocation_witness_equal(&current.witnesses[0],&actual.witnesses[0]) &&
         effect_invocation_witness_equal(&current.witnesses[1],&actual.witnesses[1]));
@@ -452,21 +452,21 @@ static void conditional_generation_result_rejections(const XrXirCompileContext *
     EffectInvocationCertificate *certificate) {
     EffectFinalFunctions *result=(&certificate->final->summary);
     CHECK(result && result->count && result->count==result->capacity &&
-        effect_invocation_publication_match(context,certificate,result)==XR_XIR_OK);
+        effect_invocation_publication_match(context,certificate,result, NULL)==XR_XIR_OK);
     uint32_t count=result->count,total=result->term_count;
     result->count=count+1;
-    CHECK(effect_invocation_publication_match(context,certificate,result)==XR_XIR_BAD_STRUCTURE);
+    CHECK(effect_invocation_publication_match(context,certificate,result, NULL)==XR_XIR_BAD_STRUCTURE);
     result->count=count;result->capacity=count+1;
-    CHECK(effect_invocation_publication_match(context,certificate,result)==XR_XIR_BAD_STRUCTURE);
+    CHECK(effect_invocation_publication_match(context,certificate,result, NULL)==XR_XIR_BAD_STRUCTURE);
     result->capacity=count;result->term_count=total+1;
-    CHECK(effect_invocation_publication_match(context,certificate,result)==XR_XIR_BAD_STRUCTURE);
+    CHECK(effect_invocation_publication_match(context,certificate,result, NULL)==XR_XIR_BAD_STRUCTURE);
     result->term_count=total;
     EffectFinalFunction *record=&result->functions[0];
     uint32_t capacity=record->capacity,mask=record->formula.constant_mask;
     record->capacity=capacity+1;
-    CHECK(effect_invocation_publication_match(context,certificate,result)==XR_XIR_BAD_STRUCTURE);
+    CHECK(effect_invocation_publication_match(context,certificate,result, NULL)==XR_XIR_BAD_STRUCTURE);
     record->capacity=capacity;record->formula.constant_mask=mask^XR_XIR_CALLABLE_ROOT_REQUIRED;
-    CHECK(effect_invocation_publication_match(context,certificate,result)==XR_XIR_BAD_STRUCTURE);
+    CHECK(effect_invocation_publication_match(context,certificate,result, NULL)==XR_XIR_BAD_STRUCTURE);
     record->formula.constant_mask=mask;
     for (uint32_t f=0;f<count;++f) {
         record=&result->functions[f];
@@ -474,28 +474,28 @@ static void conditional_generation_result_rejections(const XrXirCompileContext *
         if (!record->capacity) continue;
         const XrXirRootTerm *span=record->formula.terms;
         record->formula.terms=NULL;
-        CHECK(effect_invocation_publication_match(context,certificate,result)==XR_XIR_BAD_STRUCTURE);
+        CHECK(effect_invocation_publication_match(context,certificate,result, NULL)==XR_XIR_BAD_STRUCTURE);
         record->formula.terms=span;
         XrXirRootTerm *storage=record->storage;record->storage=NULL;
-        CHECK(effect_invocation_publication_match(context,certificate,result)==XR_XIR_BAD_STRUCTURE);
+        CHECK(effect_invocation_publication_match(context,certificate,result, NULL)==XR_XIR_BAD_STRUCTURE);
         record->storage=storage;
         uint32_t index=storage[0].index;storage[0].index^=UINT32_C(0x80000000);
-        CHECK(effect_invocation_publication_match(context,certificate,result)==XR_XIR_BAD_STRUCTURE);
+        CHECK(effect_invocation_publication_match(context,certificate,result, NULL)==XR_XIR_BAD_STRUCTURE);
         storage[0].index=index;
     }
     XrXirRootEffectWitness unknown=result->witnesses[count];
     result->witnesses[count].cause=unknown.cause==XR_XIR_ROOT_CAUSE_NONE?XR_XIR_ROOT_CAUSE_CALL:XR_XIR_ROOT_CAUSE_NONE;
-    CHECK(effect_invocation_publication_match(context,certificate,result)==XR_XIR_BAD_STRUCTURE);
+    CHECK(effect_invocation_publication_match(context,certificate,result, NULL)==XR_XIR_BAD_STRUCTURE);
     result->witnesses[count]=unknown;
     XrXirRootEffectWitness witness=result->witnesses[0];result->witnesses[0].distance^=1;
-    CHECK(effect_invocation_publication_match(context,certificate,result)==XR_XIR_BAD_STRUCTURE);
+    CHECK(effect_invocation_publication_match(context,certificate,result, NULL)==XR_XIR_BAD_STRUCTURE);
     result->witnesses[0]=witness;
     RootParameterMark physical=rp_mark();XrXirCompileContext foreign=rp_owner(rp_caps());
     uint64_t live=rp_stats(&foreign).live_bytes,work=rp_stats(&foreign).work;
-    CHECK(effect_invocation_publication_match(&foreign,certificate,result)==XR_XIR_BAD_STRUCTURE &&
+    CHECK(effect_invocation_publication_match(&foreign,certificate,result, NULL)==XR_XIR_BAD_STRUCTURE &&
         rp_stats(&foreign).live_bytes==live && rp_stats(&foreign).work==work);
     rp_owner_free(&foreign,live);rp_balanced(physical);
-    CHECK(effect_invocation_publication_match(context,certificate,result)==XR_XIR_OK);
+    CHECK(effect_invocation_publication_match(context,certificate,result, NULL)==XR_XIR_OK);
 }
 
 static void conditional_generation_paired_matches(const XrXirCompileContext *context,
@@ -535,10 +535,10 @@ static void conditional_generation_owned_input_controls(const XrXirCompileContex
         !partial.owner && partial.domain.function_count==1 && rp_attempts==attempts);
     EffectInvocationWorkspace *unchanged=NULL;EffectBodyRequest mixed=input;
     mixed.head=effect_body_raw_head;
-    CHECK(effect_invocations_create(context,&mixed,effects,graph,material->declared,&unchanged)==XR_XIR_BAD_STRUCTURE &&
+    CHECK(effect_invocations_create(context,&mixed,effects,graph,material->declared,&unchanged, NULL)==XR_XIR_BAD_STRUCTURE &&
         !unchanged && rp_attempts==attempts);
     mixed=input;mixed.domain.function_count=source->function_count-1;
-    CHECK(effect_invocations_create(context,&mixed,effects,graph,material->declared,&unchanged)==XR_XIR_BAD_STRUCTURE &&
+    CHECK(effect_invocations_create(context,&mixed,effects,graph,material->declared,&unchanged, NULL)==XR_XIR_BAD_STRUCTURE &&
         !unchanged && rp_attempts==attempts);
     XrXirInstruction *operations=(XrXirInstruction *)source->functions[0].instructions;
     XrXirOp opcode=operations[0].op;operations[0].op=XR_XIR_SUSPEND;
@@ -564,7 +564,7 @@ static void conditional_generation_owned_input_controls(const XrXirCompileContex
     CHECK(effect_body_physical_match(context,material->physical,material)==XR_XIR_OK);
     RootParameterMark retained=rp_mark();XrXirCompileContext foreign=rp_owner(rp_caps());
     uint64_t baseline=rp_stats(&foreign).live_bytes;
-    CHECK(effect_invocations_create(&foreign,&input,effects,graph,material->declared,&unchanged)==XR_XIR_BAD_STRUCTURE &&
+    CHECK(effect_invocations_create(&foreign,&input,effects,graph,material->declared,&unchanged, NULL)==XR_XIR_BAD_STRUCTURE &&
         !unchanged);
     rp_owner_free(&foreign,baseline);rp_balanced(retained);
 }
@@ -608,7 +608,7 @@ static void conditional_generation_raw_callback_controls(const XrXirCompileConte
     CHECK(effect_invocation_certificate_project(context,&probe,publication,&sink)==XR_XIR_OK);
     CHECK(operations[0].op==XR_XIR_SUSPEND &&
         effect_invocation_current_input_match(context,source,certificate->body)==XR_XIR_BAD_STRUCTURE);
-    CHECK(effect_invocation_publication_match(context,certificate,(&certificate->final->summary))==XR_XIR_OK);
+    CHECK(effect_invocation_publication_match(context,certificate,(&certificate->final->summary), NULL)==XR_XIR_OK);
     operations[0].op=opcode;
     CHECK(effect_invocation_current_input_match(context,source,certificate->body)==XR_XIR_OK);
     *staged=final.summary;publication=staged;
@@ -664,13 +664,13 @@ static XrXirStatus conditional_generation_case(const XrXirCompileContext *contex
     }
     if (status==XR_XIR_OK && oracle) conditional_generation_owned_input_controls(context,source,&effects,&graph);
     fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:47 status%u if (status==XR_XIR_OK && oracle) conditional_generation_owned_input_controls(context,source,&effects,&graph);\n",(unsigned)status);
-    if (status==XR_XIR_OK) status=effect_invocations_receive(context,source,&effects,&graph,material->declared,&owner);
+    if (status==XR_XIR_OK) status=effect_invocations_receive(context,source,&effects,&graph,material->declared,&owner, NULL);
     fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:49 status%u if (status==XR_XIR_OK) status=effect_invocations_receive(context,source,&effects,&graph,material->declared,&owner);\n",(unsigned)status);
     if (status==XR_XIR_OK && oracle) conditional_generation_reserved_controls(context,owner);
     fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:51 status%u if (status==XR_XIR_OK && oracle) conditional_generation_reserved_controls(context,owner);\n",(unsigned)status);
     if (status==XR_XIR_OK && oracle) status=conditional_generation_decoded_controls(context,owner);
     fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:53 status%u if (status==XR_XIR_OK && oracle) status=conditional_generation_decoded_controls(context,owner);\n",(unsigned)status);
-    if (status==XR_XIR_OK) status=effect_invocations_solve(owner);
+    if (status==XR_XIR_OK) status=effect_invocations_solve(owner, NULL);
     fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:55 status%u if (status==XR_XIR_OK) status=effect_invocations_solve(owner);\n",(unsigned)status);
     if (status==XR_XIR_OK && oracle) conditional_generation_projected_controls(context,owner);
     fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:57 status%u if (status==XR_XIR_OK && oracle) conditional_generation_projected_controls(context,owner);\n",(unsigned)status);
@@ -683,7 +683,7 @@ static XrXirStatus conditional_generation_case(const XrXirCompileContext *contex
     if (status==XR_XIR_OK) {
         sink=(EffectInvocationProjectionSink){context->resources,source->function_count,
             &solution,effect_invocation_publication_write};
-        status=effect_invocation_seal(context,&request,&certificate,&sink);
+        status=effect_invocation_seal(context,&request,&certificate,&sink, NULL);
     fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:68 status%u status=effect_invocation_seal(context,&request,&certificate,&sink);\n",(unsigned)status);
     }
     if (status==XR_XIR_OK && oracle) CHECK(!owner && !solution && certificate->body==material &&

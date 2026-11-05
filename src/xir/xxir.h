@@ -20,6 +20,9 @@
 #include "xxir_declarations.h"
 #include "../base/xcompile_request.h"
 
+typedef struct XirReadRequest XirReadRequest;
+typedef struct XirReadOperation XirReadOperation;
+
 typedef enum XrXirStage {
     XR_XIR_BUILT = 1,
     XR_XIR_CHECKED = 2,
@@ -264,7 +267,7 @@ typedef struct XrXirConstruction XrXirConstruction;
 XR_FUNC const char *xr_xir_op_name(XrXirOp op);
 XR_FUNC XrXirStatus xr_xir_compile_defaults_verify(const XrXirCompileContext *compile_context, const XrXirModule *module);
 XR_FUNC XrXirStatus xr_xir_compile_default_lookup(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t owner, uint32_t ordinal, const XrXirDefaultBinding **binding);
-XR_FUNC XrXirStatus xr_xir_compile_verify_v2(const XrXirCompileContext *compile_context, const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xr_xir_compile_verify_v2(const XrXirCompileContext *compile_context, const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic, const XirReadRequest *read_request);
 XR_FUNC XrXirStatus xr_xir_compile_check_v2(const XrXirCompileContext *compile_context, const XrXirModule *built, const XrXirConstruction *construction, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
 /* The optional control is borrowed only during this call; the output owns no request. */
 XR_FUNC XrXirStatus xr_xir_compile_lower(const XrXirArtifact *checked, const XrXirTarget *target, XrCompileRequestControl *control, XrXirArtifact **output, XrXirDiagnostic *diagnostic);

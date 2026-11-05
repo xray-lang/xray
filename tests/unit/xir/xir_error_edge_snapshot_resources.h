@@ -45,7 +45,7 @@ static void ee_occupied(void) {
     CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
     XrXirEffects sentinel={0},*occupied=&sentinel;memset(&sentinel,0x5a,sizeof(sentinel));
     XrXirEffects before=sentinel;XrCompileResourceStats a=ee_stats(&c);
-    CHECK(xr_xir_compile_effects_infer_verified(&c,&f.module,&occupied)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_effects_infer_verified(&c,&f.module,&occupied, NULL)==XR_XIR_BAD_STRUCTURE);
     XrCompileResourceStats b=ee_stats(&c);
     CHECK(occupied==&sentinel && !memcmp(&sentinel,&before,sizeof(before)));
     CHECK(a.work==b.work && a.allocated_bytes==b.allocated_bytes && a.live_bytes==b.live_bytes);

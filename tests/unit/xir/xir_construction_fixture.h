@@ -69,10 +69,10 @@ static inline XrXirStatus xir_fixture_check(const XrXirCompileContext *context,
 static inline XrXirStatus xir_fixture_verify(const XrXirCompileContext *context,
     const XrXirModule *module, XrXirDiagnostic *diagnostic) {
     if (xir_fixture_invalid_prefix(context,module))
-        return xr_xir_compile_verify_v2(context,module,NULL,diagnostic);
+        return xr_xir_compile_verify_v2(context,module,NULL,diagnostic, NULL);
     XrXirConstruction *facts = NULL;
     XrXirStatus status = xir_fixture_module_construction(context, module, &facts);
-    if (status == XR_XIR_OK) status = xr_xir_compile_verify_v2(context, module, facts, diagnostic);
+    if (status == XR_XIR_OK) status = xr_xir_compile_verify_v2(context, module, facts, diagnostic, NULL);
     else xir_fixture_preparation_diagnostic(status,diagnostic);
     xr_xir_compile_construction_free(facts);
     if (diagnostic) diagnostic->status = status;

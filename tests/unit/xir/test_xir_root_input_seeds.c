@@ -96,7 +96,7 @@ static uint32_t seed_source_once(unsigned shape,uint32_t cut,unsigned attack) {
         xr_xir_compile_artifact_construction(checked)},effects)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);memset(ops,0xDC,sizeof(ops));memset(functions,0xDC,sizeof(functions));
     size_t allocated=attempts;uint64_t physical=live_bytes;pc_allocate_hook=seed_forbid;pc_free_hook=seed_forbid;
-    CHECK(effect_final_inventories_match(&context,certificate,final->outcomes)==XR_XIR_OK);
+    CHECK(effect_final_inventories_match(&context,certificate,final->outcomes, NULL)==XR_XIR_OK);
     pc_allocate_hook=NULL;pc_free_hook=NULL;CHECK(attempts==allocated && live_bytes==physical);
     xr_xir_compile_effects_free(effects);pc_release(&context,baseline);
     CHECK(status==(attack?XR_XIR_BAD_STRUCTURE:XR_XIR_OK));return frees;

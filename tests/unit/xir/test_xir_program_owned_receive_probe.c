@@ -57,14 +57,14 @@ int main(void) {
         artifact->module.stage,(void *)certificate->terms.remaining,
         (void *)certificate->body->terms.remaining,(void *)effect_contexts_read(effects));
     XrXirStatus outcomes[6];
-    outcomes[0]=effect_source_relations(&context,certificate,effects);
+    outcomes[0]=effect_source_relations(&context,certificate,effects, NULL);
     fprintf(stderr,"independent_relations=%u\n",outcomes[0]);
     outcomes[1]=xir_fixture_effects_program_final(&context,
         (XirFixtureEffectInput){&artifact->module,artifact->construction},effects);
     fprintf(stderr,"current_lowered_receiver=%u\n",outcomes[1]);
     outcomes[2]=effect_source_publication_match(&context,&artifact->module,effects);
     fprintf(stderr,"public_projection=%u\n",outcomes[2]);
-    outcomes[3]=effect_program_semantics_current(&context,effects);
+    outcomes[3]=effect_program_semantics_current(&context,effects, NULL);
     fprintf(stderr,"independent_control_error=%u\n",outcomes[3]);
     outcomes[4]=program_fixture_current_input(&context,
         (XirFixtureEffectInput){&artifact->module,artifact->construction},certificate->body);

@@ -12,7 +12,7 @@ static void pc_outcome_metadata_literals(void) {
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&context,&fixture.edge.module,&checked,NULL)==XR_XIR_OK);
     const XrXirModule *input=xr_xir_compile_artifact_module(checked);
-    CHECK(effect_infer_construct(&context,input,NULL,&effects)==XR_XIR_OK && effects);
+    CHECK(effect_infer_construct(&context,input,NULL,&effects, NULL)==XR_XIR_OK && effects);
     XrXirFunctionEffectContract *contracts=effects->outcomes_work.contracts;
     XirEffectEntryRootView *entries=effects->outcomes_work.entry_roots;
     CHECK(contracts && entries && contracts[1].parameter_count==1 && contracts[1].parameters &&
@@ -26,7 +26,7 @@ static void pc_outcome_metadata_literals(void) {
     CHECK(xir_effects_entry_root(&context,effects,1,&untouched)==XR_XIR_BAD_STRUCTURE &&
         untouched.intrinsic_mask==UINT32_MAX && !untouched.parameter_count && !untouched.parameters &&
         pc_stats(&context).work==before.work && attempts==physical_before);
-    CHECK(effect_outcomes_publish(&context,input,effects)==XR_XIR_OK);
+    CHECK(effect_outcomes_publish(&context,input,effects, NULL)==XR_XIR_OK);
     const EffectFinalOutcomes *final=effect_final_outcomes(effects);
     CHECK(final && final->contracts==contracts && final->entry_roots==entries &&
         final->contracts[1].parameters==roles && final->entry_roots[1].parameters==parameters &&

@@ -68,7 +68,7 @@ static void program_collected_effects_cases(void) {
     CHECK(actual_effects && xir_program_input_verify(&context,actual)==XR_XIR_OK);
     CHECK(module->function_count==8 && module->stage==XR_XIR_LOWERED);
     XrXirEffects *independent=NULL;
-    CHECK(xr_xir_compile_effects_infer_verified(&context,module,&independent)==XR_XIR_OK);
+    CHECK(xr_xir_compile_effects_infer_verified(&context,module,&independent, NULL)==XR_XIR_OK);
     for (uint32_t f=0;f<8;++f) {
         XrXirEffectFacts a_read=xr_xir_effects_read(actual_effects,f);
         const XrXirFunctionEffects *a=(a_read.status==XR_XIR_OK?&a_read.control:NULL);XrXirEffectFacts b_read=xr_xir_effects_read(independent,f);

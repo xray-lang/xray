@@ -60,10 +60,16 @@ static bool source_comptime_library_results(SourceContext *ctx,const SourceConte
     return true;
 }
 static bool source_comptime_evaluate_library(SourceContext *ctx,const XrXirArtifact *checked) {
-    XrXirStatus status=xr_xir_compile_artifact_verify(checked,NULL);
+    if(!checked || !xir_compile_context_valid(&checked->context) ||
+        checked->context.resources!=ctx->compile.resources)
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library CTFE input has a foreign owner");
+    if(checked->module.stage!=XR_XIR_CHECKED)
+        return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"library CTFE requires current Checked input");
+    const XirReadRequest read_request={.operation=ctx->read_operation,.control=ctx->request};
+    XrXirStatus status=xir_artifact_verify(&ctx->compile, checked,NULL,ctx->request,&read_request);
     if (status!=XR_XIR_OK) return source_fail(ctx,NULL,status,"library CTFE input failed current checking");
     if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-    SourceContext program={0};program.request=ctx->request;program.compile=ctx->compile;program.graph=ctx->graph;program.linkage_kind=XR_XIR_PROGRAM;
+    SourceContext program={0};program.read_operation=ctx->read_operation;program.request=ctx->request;program.compile=ctx->compile;program.graph=ctx->graph;program.linkage_kind=XR_XIR_PROGRAM;
     program.manifests=ctx->manifests;program.prelude_module=ctx->prelude_module;program.core_factory=ctx->core_factory;
     program.remaining_blocks=ctx->remaining_blocks;program.remaining_instructions=ctx->remaining_instructions;
     XrXirSourceResult output={0};source_construct(&program,&output);

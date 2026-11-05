@@ -178,9 +178,9 @@ static XrXirStatus program_owned_storage(const XrXirCompileContext *context,
     }
     return XR_XIR_OK;
 }
-XR_FUNC XrXirStatus xir_program_receive(const XrXirCompileContext *context,
+static XrXirStatus program_receive_attempt(const XrXirCompileContext *context,
     const XrXirProgramSpec *spec,XrXirProgramInput **input,
-    XrXirCallEntry **owned_entries,XrXirProgram **output) {
+    XrXirCallEntry **owned_entries,XrXirProgram **output,const XirReadRequest *read_request) {
     if (!output || *output || !input || !*input || !xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
     XrXirProgramInput *original_input=*input;
     if ((uintptr_t)original_input%_Alignof(XrXirProgramInput)) return XR_XIR_BAD_STRUCTURE;
@@ -202,7 +202,7 @@ XR_FUNC XrXirStatus xir_program_receive(const XrXirCompileContext *context,
     const XrXirCodeLease code = physical.code;
     const XrXirProgramPacket packet=physical.packet;
     XrXirProgramPermissions *permissions = NULL;
-    status = xir_program_input_prepare(context,&physical,*input,&permissions);
+    status = xir_program_input_prepare_read(context,&physical,*input,&permissions,read_request);
     if (status != XR_XIR_OK) return status;
     const XrXirTypes *types = NULL;
     const XrXirDeclarations *declarations = NULL;
@@ -262,7 +262,7 @@ XR_FUNC XrXirStatus xir_program_receive(const XrXirCompileContext *context,
         spec->packet.identity!=packet.identity) {
         status=XR_XIR_BAD_STRUCTURE;goto failed;
     }
-    status=xir_program_input_verify(context,*input);
+    status=xir_program_input_verify_read(context,*input,read_request);
     if (status==XR_XIR_OK && (original_input->artifact!=original_artifact ||
         original_artifact->program_final!=permissions->effects || original_artifact->layouts!=permissions->layouts))
         status=XR_XIR_BAD_STRUCTURE;
@@ -296,6 +296,32 @@ failed:
     if (owned_entries) program->entries=NULL;
     program_dispose(program);
     return status;
+}
+/* This receiver owns the complete provisional Program. Preparation retries
+ * only after that whole candidate has released all temporary permissions. */
+XR_FUNC XrXirStatus xir_program_receive_read(const XrXirCompileContext *context,
+    const XrXirProgramSpec *spec,XrXirProgramInput **input,XrXirCallEntry **owned_entries,
+    XrXirProgram **output,const XirReadRequest *read_request) {
+    if(!read_request || !xir_read_request_matches(context,read_request)) return XR_XIR_BAD_STRUCTURE;
+    if(read_request->attempt) return program_receive_attempt(context,spec,input,owned_entries,output,read_request);
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(context,request.operation);
+        if(status==XR_XIR_OK) status=program_receive_attempt(context,spec,input,owned_entries,output,&request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) return status;
+        status=xir_read_prepare(context,request.operation,request.control);
+        if(status!=XR_XIR_OK) return status;
+    }
+}
+XR_FUNC XrXirStatus xir_program_receive(const XrXirCompileContext *context,
+    const XrXirProgramSpec *spec,XrXirProgramInput **input,
+    XrXirCallEntry **owned_entries,XrXirProgram **output) {
+    if(!xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
+    XirReadOperation operation={.capacity={.resources=context->resources}};
+    const XirReadRequest request={.operation=&operation};
+    XrXirStatus status=xir_program_receive_read(context,spec,input,owned_entries,output,&request);
+    xir_read_operation_free(&operation);return status;
 }
 XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *context,
     const XrXirProgramSpec *spec,XrXirProgram **output) {

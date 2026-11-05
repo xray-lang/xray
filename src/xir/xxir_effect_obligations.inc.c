@@ -12,7 +12,7 @@
 #include "xxir_constraints.h"
 #include "xxir_callable_root_obligations.inc.c"
 static XrXirStatus declaration_effects_verify(const XrXirModule *module,
-    XrXirCompileContext *remaining, XrXirDiagnostic *diagnostic, const XrXirEffects *prepared, XrXirEffects **output, bool require_owned) {
+    XrXirCompileContext *remaining, XrXirDiagnostic *diagnostic, const XrXirEffects *prepared, XrXirEffects **output, bool require_owned, const XirReadRequest *read_request) {
     XrXirStatus local=prepared?xir_effects_local_errors_verify(remaining,module,prepared,diagnostic):
         xir_compile_local_errors_verify(remaining,module,diagnostic);
     if (local!=XR_XIR_OK) return local;
@@ -22,7 +22,7 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
         if (!templated && (!output || !require_owned)) return XR_XIR_OK;
         XrXirEffects *owned = NULL;
         XrXirStatus status = prepared ? XR_XIR_OK :
-            xr_xir_compile_effects_infer_verified(remaining, module, &owned);
+            xr_xir_compile_effects_infer_verified(remaining, module, &owned, read_request);
         if (status == XR_XIR_OK && templated) status = xir_effects_parameters_match(remaining,
             module, prepared ? prepared : owned);
         if (status==XR_XIR_OK && output) { *output=owned;owned=NULL; }
@@ -54,9 +54,9 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
             }
         }
     }
-    if (!present) return output && require_owned ? xr_xir_compile_effects_infer_verified(remaining, module, output) : XR_XIR_OK;
+    if (!present) return output && require_owned ? xr_xir_compile_effects_infer_verified(remaining, module, output, read_request) : XR_XIR_OK;
     XrXirEffects *effects = NULL;
-    XrXirStatus status = prepared ? XR_XIR_OK : xr_xir_compile_effects_infer_verified(remaining, module, &effects);
+    XrXirStatus status = prepared ? XR_XIR_OK : xr_xir_compile_effects_infer_verified(remaining, module, &effects, read_request);
     const XrXirEffects *facts = prepared ? prepared : effects;
     if (status == XR_XIR_OK) status = xir_effects_parameters_match(remaining, module, facts);
     if (status == XR_XIR_OK) status = declaration_callable_root_verify(module, facts, remaining, diagnostic);

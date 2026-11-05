@@ -27,17 +27,15 @@ static XrXirStatus effect_terms_domain_type(EffectTerms *pool, const XrXirTypes 
 
         arguments[p]=(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+p);
     }
-    if (!pool->match.resources) pool->match.resources=pool->remaining->resources;
-    return xr_xir_compile_type_substitution_matches_between_scratch(pool->remaining,
-        &pool->types,source,arguments,scope,expected,actual,&pool->match);
+    return effect_terms_match(pool,&pool->types,source,arguments,scope,expected,actual);
 }
 
 static XrXirStatus effect_terms_domain_constraints(EffectTerms *pool, const XrXirTypes *source,
     const XrXirConstraint *expected, const XrXirConstraint *actual, uint32_t count) {
     for (uint32_t p=0;p<count;++p) {
         if (!expected || !actual) return XR_XIR_BAD_TYPE;
-        XrXirStatus status=xr_xir_compile_constraint_records_match(pool->remaining,
-            &pool->types,expected[p],source,actual[p],count);
+        XrXirStatus status=xir_constraint_records_read(pool->remaining,
+            &pool->types,expected[p],source,actual[p],count,pool->read);
         if (status!=XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
@@ -119,8 +117,8 @@ static XrXirStatus effect_terms_domain_match(EffectTerms *pool, const XrXirTypes
         const XrXirInterfaceDeclaration *a=&interfaces->declarations[i],*b=&source->interfaces->declarations[i];
         status=effect_terms_domain_constraints(pool,source,a->constraints,b->constraints,a->parameter_count);
         XrXirConstraint parents_a={0,a->parents,a->parent_count},parents_b={0,b->parents,b->parent_count};
-        if (status==XR_XIR_OK) status=xr_xir_compile_constraint_records_match(pool->remaining,
-            &pool->types,parents_a,source,parents_b,a->parameter_count);
+        if (status==XR_XIR_OK) status=xir_constraint_records_read(pool->remaining,
+            &pool->types,parents_a,source,parents_b,a->parameter_count,pool->read);
         for (uint32_t m=0;m<a->method_count && status==XR_XIR_OK;++m) {
             const XrXirInterfaceMethod *left=&a->methods[m],*right=&b->methods[m];
             uint32_t total=a->parameter_count+left->own_parameter_count;
@@ -209,7 +207,7 @@ static XrXirStatus effect_terms_projected_domain(EffectTerms *pool, const XrXirT
         }
         if (status!=XR_XIR_OK) return status;
     }
-    XrXirTypeMatchScratch scratch={pool->remaining->resources,NULL};XrXirStatus status=XR_XIR_OK;
+    XrXirStatus status=XR_XIR_OK;
     for (uint32_t n=0;n<actual->count && status==XR_XIR_OK;++n) {
 
         const XrXirTypeNode *node=&actual->nodes[n];
@@ -223,9 +221,8 @@ static XrXirStatus effect_terms_projected_domain(EffectTerms *pool, const XrXirT
         if (node->nominal.field_count!=declaration->field_count ||
             (!!node->nominal.fields!=!!node->nominal.field_count)) { status=XR_XIR_BAD_TYPE;break; }
         for (uint32_t f=0;f<declaration->field_count && status==XR_XIR_OK;++f)
-            status=xr_xir_compile_type_substitution_matches_between_scratch(pool->remaining,
-                &pool->types,actual,node->nominal.arguments,node->nominal.argument_count,
-                declaration->fields[f].type,node->nominal.fields[f],&scratch);
+            status=effect_terms_match(pool,&pool->types,actual,node->nominal.arguments,node->nominal.argument_count,
+                declaration->fields[f].type,node->nominal.fields[f]);
     }
-    xr_xir_type_match_scratch_free(&scratch);return status;
+    return status;
 }

@@ -124,9 +124,9 @@ static void malformed(const XrXirCompileContext *context,XrXirArtifact *closed,X
     checked_digest(packet->bytes,truncated.length,packet->bytes+32,NULL);reject_packet(context,&truncated,XR_XIR_BAD_STRUCTURE);memcpy(packet->bytes,header,sizeof(header));
     XrXirModule m=closed->module;XrXirProvenance p=*m.provenance;XrXirArtifact source=*p.source;m.provenance=&p;p.source=&source;
     uint64_t held=stats(context->resources).held_bytes;source.module.provenance=&p;
-    CHECK(xr_xir_compile_verify_v2(context,&m,closed->construction,NULL)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_verify_v2(context,&m,closed->construction,NULL, NULL)==XR_XIR_BAD_STRUCTURE);
     XrXirProvenance template=*closed->module.provenance->source->module.provenance;template.source=&source;source.module.provenance=&template;
-    CHECK(xr_xir_compile_verify_v2(context,&m,closed->construction,NULL)==XR_XIR_BAD_STRUCTURE&&stats(context->resources).held_bytes==held);
+    CHECK(xr_xir_compile_verify_v2(context,&m,closed->construction,NULL, NULL)==XR_XIR_BAD_STRUCTURE&&stats(context->resources).held_bytes==held);
     puts("Nested closed/cycle and signed packet nested-kind/physical-tail controls reject without owner changes");
 }
 typedef struct PublicControl {size_t polls;bool cancelled;} PublicControl;
@@ -137,7 +137,7 @@ static void child_limit(const XrXirCompileContext *context) {
     CHECK(closed->module.function_count<closed->module.provenance->source->module.function_count);
     XrXirCompileContext tight=*context;tight.limits.functions=closed->module.function_count;
     CHECK(xr_xir_compile_artifact_context(closed)->limits.functions>tight.limits.functions);
-    CHECK(xr_xir_compile_verify_v2(&tight,&closed->module,closed->construction,NULL)==XR_XIR_BUDGET);
+    CHECK(xr_xir_compile_verify_v2(&tight,&closed->module,closed->construction,NULL, NULL)==XR_XIR_BUDGET);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_OK);reject_packet(&tight,&packet,XR_XIR_BUDGET);
     xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(closed);CHECK(stats(context->resources).held_bytes==held);
     puts("Actual smaller Closed inventory cannot widen current caller limits for its larger Source owner");

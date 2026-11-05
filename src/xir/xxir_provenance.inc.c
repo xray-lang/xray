@@ -152,7 +152,8 @@ static bool provenance_origins_clone(const XrXirCompileContext *context,
 }
 
 static XrXirProvenance *provenance_clone(const XrXirCompileContext *context,
-    const XrXirProvenance *source, XrXirStatus *allocation_status, XrCompileRequestControl *control) {
+    const XrXirProvenance *source,XrXirStatus *allocation_status,XrCompileRequestControl *control,
+    const XirReadRequest *read_request) {
     *allocation_status = provenance_storage_shape(context, source,control);
     if (*allocation_status != XR_XIR_OK) return NULL;
     XrXirProvenance *copy = xir_type_copy_zero(context,1,sizeof(*copy),allocation_status,control);
@@ -175,7 +176,7 @@ static XrXirProvenance *provenance_clone(const XrXirCompileContext *context,
                 allocation_status, control)) goto failed;
         }
     } else {
-        copy->source = source_artifact_clone(context,source->source,allocation_status, control);
+        copy->source = source_artifact_clone(context,source->source,allocation_status,control,read_request);
         if (!copy->source || !provenance_origins_clone(context, source, copy, allocation_status, control)) goto failed;
         copy->bindings = lower_copy_bytes(context, source->bindings,
             (size_t)source->binding_count * sizeof(*source->bindings), allocation_status,control);
@@ -188,8 +189,8 @@ failed:
     return NULL;
 }
 
-static XrXirStatus provenance_copy_source(const XrXirCompileContext *context,
-    const XrXirProvenance *source, const XrXirEffects *source_effects, XrXirProvenance **output, XrCompileRequestControl *control) {
+static XrXirStatus provenance_copy_source_body(const XrXirCompileContext *context,
+    const XrXirProvenance *source, const XrXirEffects *source_effects, XrXirProvenance **output, XrCompileRequestControl *control, const XirReadRequest *read_request) {
     if (!xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
     if (!output || *output || !source) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = provenance_storage_shape(context, source,control);
@@ -198,10 +199,10 @@ static XrXirStatus provenance_copy_source(const XrXirCompileContext *context,
     if (xir_effect_kind_is_closed(source->kind)) {
         if(source_effects && !source->source->module.provenance)
             status=xir_compile_verify_raw_source_effects(context,&source->source->module,
-                source->source->construction,source_effects,NULL);
+                source->source->construction,source_effects,NULL, read_request);
         else status = source_effects ? xr_xir_compile_verify_source_effects_v2(context,
-            &source->source->module,source->source->construction,source_effects,NULL) :
-            xr_xir_compile_verify_v2(context,&source->source->module,source->source->construction,NULL);
+            &source->source->module,source->source->construction,source_effects,NULL, read_request) :
+            xr_xir_compile_verify_v2(context,&source->source->module,source->source->construction,NULL, read_request);
         if (status != XR_XIR_OK) return status;
         uint32_t progress=0;
         for (uint32_t f = 0; f < source->count; ++f) {
@@ -212,20 +213,43 @@ static XrXirStatus provenance_copy_source(const XrXirCompileContext *context,
             if (source->origins[f].argument_count != arity) return XR_XIR_BAD_STRUCTURE;
         }
     }
-    XrXirProvenance *copy = provenance_clone(context, source, &status, control);
+    XrXirProvenance *copy = provenance_clone(context,source,&status,control,read_request);
     if (!copy) return status;
     status=xir_receive_poll(control);
     if (status!=XR_XIR_OK) {xr_xir_compile_provenance_free(copy);return status;}
     *output = copy;
     return XR_XIR_OK;
 }
+XR_FUNC XrXirStatus xir_provenance_copy_source_read(const XrXirCompileContext *context,
+    const XrXirProvenance *source,const XrXirEffects *source_effects,XrXirProvenance **output,
+    XrCompileRequestControl *control,const XirReadRequest *read_request) {
+    if(!read_request || !xir_read_request_matches(context,read_request) || read_request->control!=control ||
+        !output || *output) return XR_XIR_BAD_STRUCTURE;
+    if(read_request->attempt) return provenance_copy_source_body(context,source,source_effects,output,control,read_request);
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(context,request.operation);
+        if(status==XR_XIR_OK) status=provenance_copy_source_body(context,source,source_effects,output,control,&request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) return status;
+        status=xir_read_prepare(context,request.operation,request.control);
+        if(status!=XR_XIR_OK) return status;
+    }
+}
 XR_FUNC XrXirStatus xr_xir_compile_provenance_copy(const XrXirCompileContext *context,
-    const XrXirProvenance *source, XrXirProvenance **output, XrCompileRequestControl *control) {
-    return provenance_copy_source(context,source,NULL,output, control);
+    const XrXirProvenance *source,XrXirProvenance **output,XrCompileRequestControl *control) {
+    if(!xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
+    XirReadOperation operation={.capacity={.resources=context->resources}};
+    const XirReadRequest request={.operation=&operation,.control=control};
+    XrXirStatus status=xir_provenance_copy_source_read(context,source,NULL,output,control,&request);
+    xir_read_operation_free(&operation);return status;
 }
 XR_FUNC XrXirStatus xr_xir_compile_provenance_copy_source_effects(const XrXirCompileContext *context,
-    const XrXirProvenance *source, const XrXirEffects *source_effects, XrXirProvenance **output, XrCompileRequestControl *control) {
-    if (!source_effects || !source || !xir_effect_kind_is_closed(source->kind))
+    const XrXirProvenance *source,const XrXirEffects *source_effects,XrXirProvenance **output,XrCompileRequestControl *control) {
+    if(!xir_compile_context_valid(context) || !source_effects || !source || !xir_effect_kind_is_closed(source->kind))
         return XR_XIR_BAD_STRUCTURE;
-    return provenance_copy_source(context,source,source_effects,output, control);
+    XirReadOperation operation={.capacity={.resources=context->resources}};
+    const XirReadRequest request={.operation=&operation,.control=control};
+    XrXirStatus status=xir_provenance_copy_source_read(context,source,source_effects,output,control,&request);
+    xir_read_operation_free(&operation);return status;
 }

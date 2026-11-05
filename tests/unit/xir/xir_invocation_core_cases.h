@@ -107,8 +107,8 @@ static XrXirStatus invocation_retired_seal(const EffectInvocationDriverInput *in
     EffectInvocationCertificate **output,EffectFinalFunctions **receiving) {
     EffectInvocationWorkspace *workspace=NULL;
     XrXirStatus status=effect_invocations_create(input->work,input->body,input->effects,
-        input->graph,input->declared,&workspace);
-    if (status==XR_XIR_OK) status=effect_invocations_solve(workspace);
+        input->graph,input->declared,&workspace, NULL);
+    if (status==XR_XIR_OK) status=effect_invocations_solve(workspace, NULL);
     if (status==XR_XIR_OK) status=effect_invocation_stage(workspace,receiving);
     if (status==XR_XIR_OK) {
         CHECK(!rp_release_observer && !rp_allocation_observer);
@@ -123,7 +123,7 @@ static XrXirStatus invocation_retired_seal(const EffectInvocationDriverInput *in
         rp_release_observer=invocation_retired_observe;
         rp_allocation_observer=invocation_discovery_allocated;
         EffectInvocationSealRequest request={&workspace,receiving,input->dense};
-        status=effect_invocation_seal(input->work,&request,output,NULL);
+        status=effect_invocation_seal(input->work,&request,output,NULL, NULL);
         rp_release_observer=NULL;
         rp_allocation_observer=NULL;
         if (status==XR_XIR_OK) {
@@ -161,14 +161,14 @@ static void invocation_final_initializer_erasure(const XrXirCompileContext *work
     for (uint32_t a=0;a<6;++a) node->causes[a]=(EffectInvocationCause){
         .next=UINT32_MAX,.edge=UINT32_MAX,.distance=UINT32_MAX};
     summary->functions[function].formula.constant_mask=0;
-    XrXirStatus status=effect_invocation_publication_match(work,certificate,summary);
+    XrXirStatus status=effect_invocation_publication_match(work,certificate,summary, NULL);
     fprintf(stderr,"general Input initializer erasure status%u declaration%u\n",status,
         certificate->body->declarations->modules[0].initializer);
     CHECK(status==XR_XIR_BAD_STRUCTURE);
     node->intrinsic_mask=intrinsic;node->local_mask=local;memcpy(node->causes,causes,sizeof(causes));
     summary->functions[function].formula.constant_mask=constant;
     for (uint32_t d=0;d<4;++d) summary->witnesses[(size_t)d*summary->count+function]=witnesses[d];
-    CHECK(effect_invocation_publication_match(work,certificate,summary)==XR_XIR_OK);
+    CHECK(effect_invocation_publication_match(work,certificate,summary, NULL)==XR_XIR_OK);
 }
 
 static EffectInvocationCertificate *invocation_trace_callback_target;
@@ -268,7 +268,7 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
         if (status==XR_XIR_OK) status=effect_invocation_current_input_match(context,module,graph.material);
         EffectInvocationDriverInput input={context,&owned_input,&effects,&graph,graph.material->declared,NULL};
         if (status==XR_XIR_OK) status=oracle?invocation_retired_seal(&input,&certificate,&receiving):
-            effect_invocation_derive(&input,&certificate,NULL,&receiving);
+            effect_invocation_derive(&input,&certificate,NULL,&receiving, NULL);
     }
     if (status!=XR_XIR_OK && oracle) fprintf(stderr,
         "INVOCATION_CORE mode=%u phase=%u status=%u f=%u b=%u i=%u\n",mode,phase,status,
@@ -329,7 +329,7 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
                 effect_root_trace_storage(root_trace)[0].cause==XR_XIR_ROOT_CAUSE_INITIALIZER);
             size_t attempts=rp_attempts;EffectInvocationCertificate *occupied=certificate;
             EffectInvocationDriverInput empty={.work=context};
-            CHECK(effect_invocation_derive(&empty,&occupied,NULL,&receiving)==XR_XIR_BAD_STRUCTURE &&
+            CHECK(effect_invocation_derive(&empty,&occupied,NULL,&receiving, NULL)==XR_XIR_BAD_STRUCTURE &&
                 occupied==certificate && rp_attempts==attempts);
             EffectInvocationCauseTrace *occupied_trace=trace;
             CHECK(effect_invocation_certificate_trace(context,certificate,1,&occupied_trace)==XR_XIR_BAD_STRUCTURE &&

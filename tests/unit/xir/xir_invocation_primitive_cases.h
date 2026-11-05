@@ -25,7 +25,7 @@ static void invocation_primitive_allocation_controls(const XrXirCompileContext *
             .read={.work=work,.body=effect_body_owned_request(work,body)}};
         primitive_callback_body=body;primitive_callback_kind=kind;primitive_callback_count=0;
         rp_allocation_observer=primitive_input_allocated;
-        XrXirStatus status=effect_invocation_intrinsics(&probe);rp_allocation_observer=NULL;
+        XrXirStatus status=effect_invocation_intrinsics(&probe, NULL);rp_allocation_observer=NULL;
         CHECK(status==XR_XIR_BAD_STRUCTURE && primitive_callback_count==1 && probe.primitives);
         body->domain.function_count=count;body->functions[0].instruction_count=instructions;
         effect_invocation_discovery_clear(&probe);
@@ -37,12 +37,12 @@ static void invocation_primitive_allocation_controls(const XrXirCompileContext *
         .read={.work=work,.body=effect_body_owned_request(work,body)}};
     size_t previous_fail=rp_fail_at;bool previous_injected=rp_injected;
     rp_fail_at=rp_attempts;rp_injected=false;
-    XrXirStatus status=effect_invocation_intrinsics(&probe);rp_fail_at=previous_fail;
+    XrXirStatus status=effect_invocation_intrinsics(&probe, NULL);rp_fail_at=previous_fail;
     CHECK(status==XR_XIR_OUT_OF_MEMORY && rp_injected && !probe.primitives && !probe.primitive_count);
     rp_injected=previous_injected;
     CHECK(rp_stats(work).live_bytes==baseline);rp_balanced(held);
-    CHECK(effect_invocation_intrinsics(&probe)==XR_XIR_OK && probe.primitives && probe.primitive_count==count);
-    EffectInvocationPrimitive actual={0};CHECK(effect_invocation_primitive_read(work,body,0,&actual)==XR_XIR_OK &&
+    CHECK(effect_invocation_intrinsics(&probe, NULL)==XR_XIR_OK && probe.primitives && probe.primitive_count==count);
+    EffectInvocationPrimitive actual={0};CHECK(effect_invocation_primitive_read(work,body,0,&actual, NULL)==XR_XIR_OK &&
         actual.facts.requires_root==probe.primitives[0].facts.requires_root &&
         actual.facts.unresolved==probe.primitives[0].facts.unresolved &&
         effect_invocation_witness_equal(&actual.witnesses[0],&probe.primitives[0].witnesses[0]) &&

@@ -80,12 +80,12 @@ static void pc_context_resurrection(const XrXirCompileContext *context,const XrX
         CHECK(!effect_final_outcomes(effects) && !xir_effects_contract(effects,0));
         CHECK(xir_effects_entry_root(context,effects,0,&untouched)==XR_XIR_BAD_STRUCTURE &&
             untouched.intrinsic_mask==UINT32_MAX && !untouched.parameter_count && !untouched.parameters);
-        CHECK(xir_effects_source_terminal(context,source,effects)==XR_XIR_BAD_STRUCTURE);
+        CHECK(xir_effects_source_terminal(context,source,effects, NULL)==XR_XIR_BAD_STRUCTURE);
         CHECK(attempts==calls && pc_stats(context).work==before.work);
         *uses=(XrXirEffects){0};ordinary->resources=context->resources;
         CHECK(effect_final_outcomes(effects));
     }
-    CHECK(xir_effects_source_terminal(context,source,effects)==XR_XIR_OK);
+    CHECK(xir_effects_source_terminal(context,source,effects, NULL)==XR_XIR_OK);
 }
 /* Actual callable roles have their own array. Ordinary intake has no
  * solved formula; publication retains the independent five-term public one. */
@@ -95,7 +95,7 @@ static void pc_ordinary_parameter_retirement(void) {
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&context,&fixture.module,&checked,NULL)==XR_XIR_OK);
     const XrXirModule *input=xr_xir_compile_artifact_module(checked);
-    CHECK(effect_infer_construct(&context,input,NULL,&effects)==XR_XIR_OK &&
+    CHECK(effect_infer_construct(&context,input,NULL,&effects, NULL)==XR_XIR_OK &&
         effects->outcomes_work.contexts && effects->outcomes_work.contexts->ordinary);
     EffectOrdinaryContexts *ordinary=effects->outcomes_work.contexts->ordinary;
     XrXirEffects *uses=&ordinary->uses;
@@ -115,7 +115,7 @@ static void pc_ordinary_parameter_retirement(void) {
     }
     CHECK(roles==5 && !terms && pc_ordinary_block_count==2 && !pc_free_hook);
     XrCompileResourceStats before=pc_stats(&context);pc_free_hook=pc_ordinary_observe_free;
-    CHECK(effect_outcomes_publish(&context,input,effects)==XR_XIR_OK);pc_free_hook=NULL;
+    CHECK(effect_outcomes_publish(&context,input,effects, NULL)==XR_XIR_OK);pc_free_hook=NULL;
     CHECK(effect_ordinary_work_empty(ordinary) && pc_stats(&context).live_bytes<before.live_bytes);
     for (uint32_t i=0;i<pc_ordinary_block_count;++i) CHECK(pc_ordinary_freed[i]==1);
     fprintf(stderr,"ordinary nonempty roles%u terms%u actual_freed%u before publication passed\n",
@@ -136,7 +136,7 @@ static void pc_ordinary_retirement_literals(void) {
         XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
         CHECK(xir_fixture_check(&context,&fixture.module,&checked,NULL)==XR_XIR_OK);
         const XrXirModule *input=xr_xir_compile_artifact_module(checked);
-        CHECK(effect_infer_construct(&context,input,NULL,&effects)==XR_XIR_OK);
+        CHECK(effect_infer_construct(&context,input,NULL,&effects, NULL)==XR_XIR_OK);
         EffectOrdinaryContexts *ordinary=effects->outcomes_work.contexts->ordinary;
         XrXirEffects *uses=&ordinary->uses;CHECK(uses->outcomes_work.contracts && uses->generation);
         pc_ordinary_block_count=0;
@@ -157,7 +157,7 @@ static void pc_ordinary_retirement_literals(void) {
         current.functions=functions;functions[2].instructions=rows;
         pc_ordinary_current=&rows[0];pc_ordinary_mutate=mutation!=0;pc_ordinary_callbacks=0;
         CHECK(!pc_free_hook);pc_free_hook=pc_ordinary_observe_free;
-        XrXirStatus status=effect_outcomes_publish(&context,&current,effects);
+        XrXirStatus status=effect_outcomes_publish(&context,&current,effects, NULL);
         pc_free_hook=NULL;pc_ordinary_current=NULL;pc_ordinary_contract_block=NULL;
         CHECK(status==(mutation?XR_XIR_BAD_STRUCTURE:XR_XIR_OK) && pc_ordinary_callbacks==1);
         CHECK(effect_ordinary_work_empty(ordinary));
@@ -169,8 +169,8 @@ static void pc_ordinary_retirement_literals(void) {
             mutation,pc_ordinary_block_count,pc_ordinary_callbacks,status);
         xr_xir_compile_effects_free(effects);effects=NULL;
         /* A rejected receiving candidate leaves the same real ledger usable. */
-        CHECK(effect_infer_construct(&context,input,NULL,&effects)==XR_XIR_OK);
-        CHECK(effect_outcomes_publish(&context,input,effects)==XR_XIR_OK);
+        CHECK(effect_infer_construct(&context,input,NULL,&effects, NULL)==XR_XIR_OK);
+        CHECK(effect_outcomes_publish(&context,input,effects, NULL)==XR_XIR_OK);
         xr_xir_compile_artifact_free(checked);memset(&fixture,0xCE,sizeof(fixture));
         memset(functions,0xCE,sizeof(functions));memset(rows,0xCE,sizeof(rows));
         CHECK(xir_effects_contract(effects,0));

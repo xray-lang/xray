@@ -68,7 +68,7 @@ static XrXirStatus ci_whole(const XrXirCompileContext *c,CellBoundary boundary,b
     XrXirStatus s=xir_fixture_verify(c, &f.module, &d);
     if(s!=XR_XIR_OK && s!=XR_XIR_OUT_OF_MEMORY && s!=XR_XIR_BUDGET)
         fprintf(stderr,"fixture boundary%u snapshot%u status%u function%u block%u instruction%u\n",(unsigned)boundary,(unsigned)snapshot,s,d.function,d.block,d.instruction);
-    if(s==XR_XIR_OK)s=xr_xir_compile_effects_infer_verified(c,&f.module,&e);
+    if(s==XR_XIR_OK)s=xr_xir_compile_effects_infer_verified(c,&f.module,&e, NULL);
     if(s==XR_XIR_OK)ci_golden(e,boundary,snapshot);else CHECK(!e);
     xr_xir_compile_effects_free(e);return s;
 }
@@ -93,7 +93,7 @@ static void ci_erased_error(void){
         f.blocks[0].count=8;f.functions[1].instruction_count=8;
         XrXirCompileContext c=ci_owner(ci_caps());uint64_t baseline=ci_stats(&c).live_bytes;XrXirEffects *e=NULL;
         CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
-        CHECK(xr_xir_compile_effects_infer_verified(&c,&f.module,&e)==XR_XIR_OK);
+        CHECK(xr_xir_compile_effects_infer_verified(&c,&f.module,&e, NULL)==XR_XIR_OK);
         CHECK(e && effect_final_outcomes(e)->errors[1]==(snapshot?UINT64_C(4):UINT64_C(2)));
         CHECK(xr_xir_effects_error_unidentified(e,1)==(snapshot==0) && !xr_xir_effects_error_unknown(e,1));
         CHECK(xr_xir_effects_error(e,1,(XrXirType)CI_ENUM,0)==(snapshot!=0));

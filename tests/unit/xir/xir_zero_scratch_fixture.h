@@ -33,7 +33,7 @@ static XrXirArtifact *zero_scratch_cleanup_lowered(const XrXirCompileContext *co
     XrXirDiagnostic diagnostic={0};XrXirStatus status=xir_fixture_check(context,&module,&checked,&diagnostic);
     if (status!=XR_XIR_OK) {
         XrXirEffects *effects=NULL;
-        XrXirStatus inferred=xr_xir_compile_effects_infer_verified(context,&module,&effects);
+        XrXirStatus inferred=xr_xir_compile_effects_infer_verified(context,&module,&effects, NULL);
         XrXirStatus matched=inferred==XR_XIR_OK?xir_effects_parameters_match(context,&module,effects):inferred;
         fprintf(stderr,"zero cleanup status=%u f=%u b=%u i=%u inferred=%u matched=%u\n",
             status,diagnostic.function,diagnostic.block,diagnostic.instruction,inferred,matched);

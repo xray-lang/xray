@@ -188,18 +188,18 @@ static void edges_capture_faults(const XrXirCompileContext *work,EffectInvocatio
     CHECK(proposal->states && allocated_status==XR_XIR_OK);
     EffectInvocationFinal *staged=&proposal->final;staged->capture=(EffectCaptureProof){0};
     uint64_t baseline=pc_stats(work).live_bytes;size_t physical=live_bytes,blocks=live,before=attempts;
-    CHECK(effect_capture_build(work,staged,proposal)==XR_XIR_OK);
+    CHECK(effect_capture_build(work,staged,proposal, NULL)==XR_XIR_OK);
     size_t sites=attempts-before;CHECK(sites && sites<=UINT32_MAX);
     edges_capture_equal(staged,final);
     xr_compile_resources_free(staged->capture.facts);staged->capture=(EffectCaptureProof){0};
     CHECK(pc_stats(work).live_bytes==baseline && live_bytes==physical && live==blocks);
     for(size_t cut=0;cut<sites;++cut) {
         fail_at=attempts+cut;injected=false;
-        XrXirStatus status=effect_capture_build(work,staged,proposal);
+        XrXirStatus status=effect_capture_build(work,staged,proposal, NULL);
         fail_at=SIZE_MAX;CHECK(injected && status==XR_XIR_OUT_OF_MEMORY);
         xr_compile_resources_free(staged->capture.facts);staged->capture=(EffectCaptureProof){0};
         CHECK(pc_stats(work).live_bytes==baseline && live_bytes==physical && live==blocks);
-        CHECK(effect_capture_build(work,staged,proposal)==XR_XIR_OK);
+        CHECK(effect_capture_build(work,staged,proposal, NULL)==XR_XIR_OK);
         edges_capture_equal(staged,final);
         xr_compile_resources_free(staged->capture.facts);staged->capture=(EffectCaptureProof){0};
         CHECK(pc_stats(work).live_bytes==baseline && live_bytes==physical && live==blocks);
@@ -318,7 +318,7 @@ static uint32_t edges_source_once(uint32_t cut,unsigned mode) {
     memset(operands,0xDC,sizeof(operands));memset(actuals,0xDC,sizeof(actuals));memset(loop_operands,0xDC,sizeof(loop_operands));
     memset(contracts,0xDC,sizeof(contracts));size_t allocated=attempts;uint64_t physical=live_bytes;
     pc_allocate_hook=edges_forbid;pc_free_hook=edges_forbid;
-    CHECK(effect_final_inventories_match(&context,effects->invocations,final->outcomes)==XR_XIR_OK);
+    CHECK(effect_final_inventories_match(&context,effects->invocations,final->outcomes, NULL)==XR_XIR_OK);
     pc_allocate_hook=NULL;pc_free_hook=NULL;CHECK(attempts==allocated && live_bytes==physical);
     xr_xir_compile_effects_free(effects);pc_release(&context,baseline);
     CHECK(status==(mode?XR_XIR_BAD_STRUCTURE:XR_XIR_OK));return frees;

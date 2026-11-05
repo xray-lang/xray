@@ -215,7 +215,7 @@ static void specialize_shape_controls(void) {
         status=xir_construction_clone(&owner.context,&types,&construction,&copy,&control);
         specialize_end(&probe,status);CHECK(!copy);
         specialize_begin(&probe,&control,owner.context.resources,"provenance_storage_shape",mode);
-        XrXirProvenance *cloned=provenance_clone(&owner.context,&proof,&status,&control);
+        XrXirProvenance *cloned=provenance_clone(&owner.context,&proof,&status,&control,NULL);
         specialize_end(&probe,status);CHECK(!cloned);
     }
     char name[12300];memset(name,'x',sizeof(name));

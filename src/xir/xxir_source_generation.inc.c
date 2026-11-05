@@ -129,25 +129,26 @@ static bool generation_root_declaration(SourceContext *compare,const SourceGener
     const SourceName *symbol=find_name(compare,semantic->names[module],declaration->name);
     return symbol && symbol->declaration==index+1;
 }
-static XrXirStatus generation_bindings(XrXirSourceGenerations *owner,SourceGenerationRecord *record) {
+static XrXirStatus generation_bindings_capacity(XrXirSourceGenerations *owner,
+    const SourceGenerationRecord *record,size_t *capacity) {
     const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(record->result.snapshot);
+    if(!view) return XR_XIR_BAD_STRUCTURE;
     size_t added=0;SourceContext compare={0};compare.compile=owner->config.context;
-    for (uint32_t i=0;i<view->declaration_count;++i) {
-
-        if (generation_root_declaration(&compare,record,i)) ++added;
-        if (compare.diagnostic.status!=XR_XIR_OK) return compare.diagnostic.status;
+    for(uint32_t i=0;i<view->declaration_count;++i) {
+        if(generation_root_declaration(&compare,record,i)) ++added;
+        if(compare.diagnostic.status!=XR_XIR_OK) return compare.diagnostic.status;
     }
-    if (added>SIZE_MAX-owner->binding_count) return XR_XIR_BUDGET;
-    size_t capacity=owner->binding_count+added;
-    XrXirStatus status=capacity ? generation_allocate(&owner->config.context,capacity,
-        sizeof(*record->bindings),(void **)&record->bindings) : XR_XIR_OK;
-    if (status!=XR_XIR_OK) return status;
-    if (owner->binding_count) {
-        size_t bytes=owner->binding_count*sizeof(*owner->bindings);
-
-        memcpy(record->bindings,owner->bindings,bytes);
-    }
-    record->binding_count=owner->binding_count;
+    if(added>SIZE_MAX-owner->binding_count) return XR_XIR_OVERFLOW;
+    *capacity=owner->binding_count+added;return XR_XIR_OK;
+}
+static XrXirStatus generation_bindings_rows(XrXirSourceGenerations *owner,const SourceGenerationRecord *record,
+    XrXirSourceGenerationBinding *rows,size_t capacity,size_t *count) {
+    if(owner->binding_count>capacity || (capacity && !rows)) return XR_XIR_BAD_STRUCTURE;
+    const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(record->result.snapshot);
+    if(!view) return XR_XIR_BAD_STRUCTURE;
+    SourceContext compare={0};compare.compile=owner->config.context;
+    if(owner->binding_count) memcpy(rows,owner->bindings,owner->binding_count*sizeof(*rows));
+    *count=owner->binding_count;
     for (uint32_t i=0;i<view->declaration_count;++i) {
 
         const XrXirSourceDeclaration *declaration=&view->declarations[i];
@@ -156,17 +157,27 @@ static XrXirStatus generation_bindings(XrXirSourceGenerations *owner,SourceGener
             continue;
         }
         size_t index=0;
-        while (index<record->binding_count &&
-            !source_text_same(&compare,NULL,record->bindings[index].declaration->name,declaration->name)) {
+        while (index<*count &&
+            !source_text_same(&compare,NULL,rows[index].declaration->name,declaration->name)) {
             if (compare.diagnostic.status!=XR_XIR_OK) return compare.diagnostic.status;
             ++index;
         }
         if (compare.diagnostic.status!=XR_XIR_OK) return compare.diagnostic.status;
-        if (index==record->binding_count) ++record->binding_count;
+        if(index==*count) {
+            if(*count>=capacity) return XR_XIR_BAD_STRUCTURE;
+            ++(*count);
+        }
 
-        record->bindings[index]=(XrXirSourceGenerationBinding){record->view.serial,declaration};
+        rows[index]=(XrXirSourceGenerationBinding){record->view.serial,declaration};
     }
     return XR_XIR_OK;
+}
+static XrXirStatus generation_bindings(XrXirSourceGenerations *owner,SourceGenerationRecord *record) {
+    size_t capacity=0;XrXirStatus status=generation_bindings_capacity(owner,record,&capacity);
+    if(status==XR_XIR_OK && capacity) status=generation_allocate(&owner->config.context,capacity,
+        sizeof(*record->bindings),(void **)&record->bindings);
+    if(status!=XR_XIR_OK) return status;
+    return generation_bindings_rows(owner,record,record->bindings,capacity,&record->binding_count);
 }
 static XrXirStatus generation_identity(XrXirSourceGenerations *owner,SourceGenerationRecord *record) {
     if (owner->namespace_length>SIZE_MAX-(sizeof("gen---")+40)) return XR_XIR_BUDGET;
@@ -192,14 +203,14 @@ static XrXirStatus generation_source(XrXirSourceGenerations *owner,const XrXirSo
     record->view.source=record->source;record->view.length=text->length;
     return generation_identity(owner,record);
 }
-static XrXirStatus generation_result_binding(XrXirSourceGenerations *owner,SourceGenerationRecord *record,
-    const XrXirSourceView *view) {
+static XrXirStatus generation_result_binding_value(XrXirSourceGenerations *owner,SourceGenerationRecord *record,
+    const XrXirSourceView *view,XrXirSourceGenerationBinding *output) {
     if(!record->unit.interactive)return XR_XIR_OK;
     const SourceName *implicit=record->capture.semantic->implicit_result;
     if(!implicit)return XR_XIR_OK;
     if(implicit->module!=record->capture.module) {
         if(!owner->published || !owner->published->implicit_result.declaration)return XR_XIR_BAD_STRUCTURE;
-        record->implicit_result=owner->published->implicit_result;return XR_XIR_OK;
+        *output=owner->published->implicit_result;return XR_XIR_OK;
     }
     if(!implicit->declaration || implicit->declaration>view->declaration_count ||
         implicit->kind!=SOURCE_SLOT || implicit->mutable)return XR_XIR_BAD_STRUCTURE;
@@ -207,8 +218,18 @@ static XrXirStatus generation_result_binding(XrXirSourceGenerations *owner,Sourc
     bool registered=generation_root_declaration(&compare,record,implicit->declaration-1);
     if(compare.diagnostic.status!=XR_XIR_OK)return compare.diagnostic.status;
     if(!registered)return XR_XIR_BAD_STRUCTURE;
-    record->implicit_result=(XrXirSourceGenerationBinding){record->view.serial,&view->declarations[implicit->declaration-1]};
-    record->view.repl_result=record->implicit_result.declaration;return XR_XIR_OK;
+    *output=(XrXirSourceGenerationBinding){record->view.serial,&view->declarations[implicit->declaration-1]};
+    return XR_XIR_OK;
+}
+static XrXirStatus generation_result_binding(XrXirSourceGenerations *owner,SourceGenerationRecord *record,
+    const XrXirSourceView *view) {
+    XrXirSourceGenerationBinding value={0};
+    XrXirStatus status=generation_result_binding_value(owner,record,view,&value);
+    if(status==XR_XIR_OK) {
+        record->implicit_result=value;
+        record->view.repl_result=value.generation==record->view.serial?value.declaration:NULL;
+    }
+    return status;
 }
 #include "xxir_source_generation_names.inc.c"
 typedef struct GenerationInput {
@@ -217,6 +238,103 @@ typedef struct GenerationInput {
     const XrXirSourceReplInput *repl;
     bool readers, interactive, type_query;
 } GenerationInput;
+static bool generation_binding_equal(const XrXirSourceGenerationBinding *a,
+    const XrXirSourceGenerationBinding *b) {
+    return a->generation==b->generation && a->declaration==b->declaration;
+}
+static XrXirStatus generation_pending_frame(XrXirSourceGenerations *owner,const SourceGenerationRecord *record,
+    const SourceGenerationRecord *parent,uint64_t reserved,const GenerationInput *input,const uint64_t *serial) {
+    if(!owner || !record || !input || !serial || *serial || owner->pending || owner->serial!=reserved ||
+        owner->published!=parent || record->unit.owner!=owner || record->unit.serial!=reserved ||
+        record->view.serial!=reserved || record->view.parent!=(parent?parent->view.serial:0) ||
+        record->unit.published || record->view.published || record->unit.interactive!=input->interactive ||
+        record->view.interactive!=input->interactive || record->view.type_query!=input->type_query ||
+        record->unit.checked!=record->result.checked || record->unit.semantic!=record->capture.semantic ||
+        !record->capture.semantic || !record->capture.ast || record->view.ast!=record->capture.ast ||
+        record->view.result!=&record->result || record->unit.entry_module!=record->capture.module)
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(record->result.snapshot);
+    if(!view || !view->complete || record->capture.module>=view->module_count ||
+        record->view.identity!=view->modules[record->capture.module].identity ||
+        memcmp(&record->view.fingerprint,&view->modules[record->capture.module].fingerprint,sizeof(record->view.fingerprint)))
+        return XR_XIR_BAD_STRUCTURE;
+    if(parent && (!parent->unit.published || parent->unit.owner!=owner || !parent->unit.serial ||
+        parent->unit.serial>=reserved || parent->unit.interactive!=input->interactive)) return XR_XIR_BAD_STAGE;
+    return XR_XIR_OK;
+}
+static XrXirStatus generation_pending_bindings(XrXirSourceGenerations *owner,SourceGenerationRecord *record,
+    const XirReadRequest *request) {
+    const XrXirCompileContext *work=&owner->config.context;size_t capacity=0,count=0;
+    XrXirStatus status=generation_bindings_capacity(owner,record,&capacity);XirReadClaim claim={0};
+    XrXirSourceGenerationBinding *rows=NULL;
+    if(status==XR_XIR_OK && capacity) {
+        if(capacity>SIZE_MAX/sizeof(*rows)) return XR_XIR_OVERFLOW;
+        rows=xir_read_scratch_alloc(work,&request->operation->capacity,capacity*sizeof(*rows),false,&claim,&status);
+    }
+    if(status==XR_XIR_OK) status=generation_bindings_rows(owner,record,rows,capacity,&count);
+    if(status==XR_XIR_OK && count!=record->binding_count) status=XR_XIR_BAD_STRUCTURE;
+    for(size_t i=0;status==XR_XIR_OK && i<count;++i)
+        if(!generation_binding_equal(&rows[i],&record->bindings[i])) status=XR_XIR_BAD_STRUCTURE;
+    const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(record->result.snapshot);
+    XrXirSourceGenerationBinding implicit={0};
+    if(status==XR_XIR_OK) status=generation_result_binding_value(owner,record,view,&implicit);
+    if(status==XR_XIR_OK && (!generation_binding_equal(&implicit,&record->implicit_result) ||
+        record->view.repl_result!=(implicit.generation==record->view.serial?implicit.declaration:NULL)))
+        status=XR_XIR_BAD_STRUCTURE;
+    const SourceSemanticEnvironment *environment=record->capture.semantic;
+    size_t names=record->view.interactive && !record->view.type_query?
+        (size_t)environment->latest_count+(implicit.declaration?1u:0u):0;
+    if(status==XR_XIR_OK && names!=record->name_count) status=XR_XIR_BAD_STRUCTURE;
+    SourceContext compare={0};compare.compile=*work;
+    for(size_t i=0;status==XR_XIR_OK && i<names;++i) {
+        XrXirSourceGenerationBinding binding={0};const char *name=NULL;bool result=i==environment->latest_count;
+        if(result) {binding=implicit;name="it";}
+        else {
+            name=environment->latest[i]->name;
+            for(size_t b=0;b<count;++b) {
+                if(source_text_same(&compare,NULL,name,rows[b].declaration->name)) {binding=rows[b];break;}
+                if(compare.diagnostic.status!=XR_XIR_OK) break;
+            }
+        }
+        const SourceGenerationRecord *birth=NULL;
+        if(compare.diagnostic.status!=XR_XIR_OK) status=compare.diagnostic.status;
+        if(status==XR_XIR_OK && (!binding.declaration ||
+            !generation_binding_equal(&binding,&record->names[i].binding) || record->names[i].implicit_result!=result ||
+            !source_text_same(&compare,NULL,name,record->names[i].name))) status=XR_XIR_BAD_STRUCTURE;
+        if(status==XR_XIR_OK) status=generation_birth(owner,record,binding.generation,&birth);
+        if(status==XR_XIR_OK) {
+            const XrXirSourceView *born=xr_xir_compile_source_snapshot_view(birth->result.snapshot);
+            uintptr_t start=born?(uintptr_t)born->declarations:0,address=(uintptr_t)binding.declaration;
+            if(!born || !start || address<start || (address-start)%sizeof(*binding.declaration) ||
+                (address-start)/sizeof(*binding.declaration)>=born->declaration_count) status=XR_XIR_BAD_STRUCTURE;
+        }
+    }
+    xir_read_scratch_release(&request->operation->capacity,rows,&claim);return status;
+}
+static XrXirStatus generation_pending_read(XrXirSourceGenerations *owner,SourceGenerationRecord *record,
+    const SourceGenerationRecord *parent,uint64_t reserved,const GenerationInput *input,const uint64_t *serial,
+    XirReadOperation *operation,XrCompileRequestControl *control) {
+    XirReadAttempt attempt={true};const XirReadRequest request={.operation=operation,.control=control,.attempt=&attempt};
+    for(;;) {
+        XrXirStatus status=xir_read_begin(&owner->config.context,operation);
+        if(status==XR_XIR_OK) status=generation_pending_frame(owner,record,parent,reserved,input,serial);
+        if(status==XR_XIR_OK) status=xir_receive_poll(control);
+        if(status==XR_XIR_OK) status=generation_pending_frame(owner,record,parent,reserved,input,serial);
+        XirReadRequest fresh=request;fresh.control=NULL;
+        if(status==XR_XIR_OK) status=xir_artifact_verify(&owner->config.context,record->result.checked,NULL,NULL,&fresh);
+        if(status==XR_XIR_OK && parent) {
+            SourceContext history={0};history.compile=owner->config.context;history.self_unit=&record->unit;
+            if(!source_history_shape(&history,&parent->unit)) status=history.diagnostic.status;
+            if(status==XR_XIR_OK) status=xir_artifact_verify(&owner->config.context,parent->unit.checked,NULL,NULL,&fresh);
+        }
+        if(status==XR_XIR_OK) status=generation_pending_bindings(owner,record,&fresh);
+        if(status==XR_XIR_OK) status=generation_pending_frame(owner,record,parent,reserved,input,serial);
+        XirReadStep step=xir_read_step(operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) return status;
+        status=xir_read_prepare(&owner->config.context,operation,control);
+        if(status!=XR_XIR_OK) return status;
+    }
+}
 static XrXirStatus source_generation_prepare(XrXirSourceGenerations *owner,
     const GenerationInput *input,uint64_t *serial,XrXirSourceDiagnostic *diagnostic) {
     if (!owner || !input || ((input->text==NULL)==(input->ast==NULL)) || !serial || *serial)
@@ -238,6 +356,9 @@ static XrXirStatus source_generation_prepare(XrXirSourceGenerations *owner,
         return XR_XIR_BAD_STAGE;
     if (owner->serial==UINT64_MAX) return XR_XIR_BUDGET;
     uint64_t reserved=++owner->serial;
+    const SourceGenerationRecord *parent=owner->published;
+    XrCompileRequestControl *control=repl?repl->request:NULL;
+    XirReadOperation read_operation={.capacity={.resources=owner->config.context.resources}};
     SourceGenerationRecord *record=NULL;
     XrXirStatus status=generation_allocate(&owner->config.context,1,sizeof(*record),(void **)&record);
     XrXirSourceDiagnostic location={0};XrCompilerSession *session=NULL;
@@ -263,7 +384,7 @@ static XrXirStatus source_generation_prepare(XrXirSourceGenerations *owner,
     XrXirSourceRequest request={session,rooted?repl->absolute_path:NULL,rooted?repl->authority:&authority,
         &owner->config.context,owner->config.stdlib_path,rooted?repl->lockfile:owner->config.lockfile,
         XR_XIR_PROGRAM,owner->config.libraries};
-    SourceInput source={.supplied=text!=NULL || (ast && ast->input.source.text),
+    SourceInput source={.read_operation=&read_operation,.supplied=text!=NULL || (ast && ast->input.source.text),
         .text={rooted?repl->logical_path:NULL,ast?ast->input.source.text:record->source,ast?ast->input.source.length:(text?text->length:0)},
         .ast=ast?ast->input.program:NULL,.ast_input=ast!=NULL,.ast_owner=ast?&record->ast_owner:NULL,
         .capture=&record->capture,.binding_readers=input->readers,.interactive=input->interactive,.type_query=input->type_query,
@@ -284,10 +405,11 @@ static XrXirStatus source_generation_prepare(XrXirSourceGenerations *owner,
     if (status==XR_XIR_OK) status=generation_result_binding(owner,record,view);
     if (status==XR_XIR_OK) status=generation_names(owner,record);
 done:
-    xr_compile_session_free(session);
+    xr_compile_session_free(session);session=NULL;
+    if(status==XR_XIR_OK) status=generation_pending_read(owner,record,parent,reserved,input,serial,&read_operation,control);
     if (diagnostic) { *diagnostic=location;diagnostic->status=status; }
-    if (status!=XR_XIR_OK) { generation_record_free(record);return status; }
-    owner->pending=record;*serial=reserved;return XR_XIR_OK;
+    if (status!=XR_XIR_OK) { generation_record_free(record);xir_read_operation_free(&read_operation);return status; }
+    owner->pending=record;*serial=reserved;xir_read_operation_free(&read_operation);return XR_XIR_OK;
 }
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare(XrXirSourceGenerations *owner,
     const XrXirSourceText *text,uint64_t *serial,XrXirSourceDiagnostic *diagnostic) {

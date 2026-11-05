@@ -56,7 +56,7 @@ XR_FUNC XrXirStatus xir_compile_view_root_resolver_new(const XrXirCompileContext
     XirViewRootResolver *r=xir_compile_calloc(context,1,sizeof(*r),&status);if (!r) return status;
     r->check=(ViewRootCheck){.context=context,.module=module,.reserved=sizeof(*r),.symbolic_parameters=true,
         .location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE}};
-    status=view_flags_build(context,module->types,&r->flags);r->check.flags=r->flags;
+    status=view_flags_build(context,module->types,&r->flags,NULL,NULL);r->check.flags=r->flags;
     if (status==XR_XIR_OK) status=view_root_graph(&r->check);
     if (status==XR_XIR_OK) status=view_root_walk(&r->check,true);
     if (status==XR_XIR_OK) {*output=r;return XR_XIR_OK;}

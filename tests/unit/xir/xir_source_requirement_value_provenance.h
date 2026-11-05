@@ -77,7 +77,7 @@ static void requirement_value_poison(XrXirArtifact *artifact) {
      * Its retained immutable Input and every derived implementation must reject
      * the changed member until the original physical instruction is restored. */
     CHECK(xr_xir_compile_verify_v2(&proof->source->context,source,
-        proof->source->construction,NULL)==XR_XIR_OK);
+        proof->source->construction,NULL, NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_verify(proof->source, NULL)==XR_XIR_BAD_STRUCTURE);
     witness_reject_derived(artifact); requirement->targets[1]=member;
     CHECK(xr_xir_compile_artifact_verify(artifact, NULL)==XR_XIR_OK);
@@ -85,7 +85,7 @@ static void requirement_value_poison(XrXirArtifact *artifact) {
     /* A and U happen to close to i64, but only U has a definition-site Sendable
      * premise. Concrete equality cannot repair the poisoned symbolic origin. */
     CHECK(xr_xir_compile_verify_v2(&proof->source->context,source,
-        proof->source->construction,NULL)==XR_XIR_BAD_TYPE);
+        proof->source->construction,NULL, NULL)==XR_XIR_BAD_TYPE);
     CHECK(xr_xir_compile_artifact_verify(proof->source, NULL)==XR_XIR_BAD_TYPE);
     witness_reject_derived(artifact); application[1]=own;
     CHECK(xr_xir_compile_artifact_verify(artifact, NULL)==XR_XIR_OK);

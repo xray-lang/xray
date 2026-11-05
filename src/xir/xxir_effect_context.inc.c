@@ -99,7 +99,7 @@ static XrXirStatus effect_context_target_constraints(EffectContextResolved *reso
     if (resolved->argument_count!=count) return XR_XIR_BAD_STRUCTURE;
     XirConstraintArguments use={request->source,{XR_XIR_CONTEXT_FUNCTION,resolved->target,0},
         resolved->arguments,count};
-    return xr_xir_compile_constraint_arguments_prove(resolved->terms.remaining,proof,&use);
+    return xir_constraint_arguments_read(resolved->terms.remaining,proof,&use,resolved->terms.read);
 }
 
 static XrXirStatus effect_context_requirement(EffectContextResolved *resolved,
@@ -131,13 +131,13 @@ static XrXirStatus effect_context_requirement(EffectContextResolved *resolved,
     for (uint32_t a=0;a<own;++a) {
         XrXirConstraintUse use={source,{XR_XIR_CONTEXT_INTERFACE_METHOD,op->targets[0],op->targets[1]},
             parent+a,call->arguments,call->argument_count};
-        status=xr_xir_compile_constraints_prove(resolved->terms.remaining,&proof,&use);
+        status=xir_constraints_read(resolved->terms.remaining,&proof,&use,resolved->terms.read);
         if (status!=XR_XIR_OK) return status;
     }
     XrXirWitnessRequest witness_request={source,receiver,
         {op->targets[0],parent ? call->arguments : NULL,parent},op->targets[1]};
     XrXirWitness witness={0};
-    status=xr_xir_compile_witness_resolve(resolved->terms.remaining,&proof,&witness_request,&witness);
+    status=xir_witness_resolve_read(resolved->terms.remaining,&proof,&witness_request,&witness,resolved->terms.read);
     if (status!=XR_XIR_OK) return status;
     if (witness.function>=source->function_count || witness.argument_count>65536 ||
         own>65536-witness.argument_count) return XR_XIR_BAD_STRUCTURE;

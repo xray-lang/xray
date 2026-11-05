@@ -81,10 +81,16 @@ XR_FUNC XrXirStatus xr_xir_compile_program_descriptor_match(const XrXirCompileCo
     const XrXirProgramSpec *spec, const XrXirProgramPermissions *permissions);
 /* Both transports prepare the same real input. Every reception repeats
  * current semantic, metadata and layout proof before the ownership move. */
+XR_FUNC XrXirStatus xir_program_input_prepare_read(const XrXirCompileContext *context,
+    const XrXirProgramSpec *spec,const XrXirProgramInput *input,XrXirProgramPermissions **permissions,
+    const XirReadRequest *read_request);
 XR_FUNC XrXirStatus xir_program_input_prepare(const XrXirCompileContext *context,
     const XrXirProgramSpec *spec,const XrXirProgramInput *input,XrXirProgramPermissions **permissions);
 /* An owning entry slot remains caller-owned during preparation. Failure
  * preserves its table and parameters; success moves it with the Input. */
+XR_FUNC XrXirStatus xir_program_receive_read(const XrXirCompileContext *context,
+    const XrXirProgramSpec *spec,XrXirProgramInput **input,XrXirCallEntry **owned_entries,
+    XrXirProgram **output,const XirReadRequest *read_request);
 XR_FUNC XrXirStatus xir_program_receive(const XrXirCompileContext *context,
     const XrXirProgramSpec *spec,XrXirProgramInput **input,
     XrXirCallEntry **owned_entries,XrXirProgram **output);

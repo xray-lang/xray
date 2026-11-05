@@ -102,7 +102,7 @@ static void golden(const XrXirEffects *e){
 }
 static XrXirStatus whole(const XrXirCompileContext *context){
     ErrorFixture f;fixture(&f);XrXirStatus status=xir_fixture_verify(context, &f.module, NULL);XrXirEffects *effects=NULL;
-    if(status==XR_XIR_OK)status=xr_xir_compile_effects_infer_verified(context,&f.module,&effects);
+    if(status==XR_XIR_OK)status=xr_xir_compile_effects_infer_verified(context,&f.module,&effects, NULL);
     if(status==XR_XIR_OK){CHECK(effects);golden(effects);}else CHECK(!effects);
     xr_xir_compile_effects_free(effects);return status;
 }

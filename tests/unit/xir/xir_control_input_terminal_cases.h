@@ -79,13 +79,13 @@ static void control_late_signature_case(bool no_suspend) {
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&context,&module,&checked,NULL)==XR_XIR_OK);
     uint64_t held=pc_stats(&context).live_bytes;const XrXirModule *source=xr_xir_compile_artifact_module(checked);
-    CHECK(source && effect_infer_construct(&context,source,NULL,&effects)==XR_XIR_OK);
+    CHECK(source && effect_infer_construct(&context,source,NULL,&effects, NULL)==XR_XIR_OK);
     const EffectBodyMaterial *body=effects->invocations->body;
     control_late_source=(XrXirTypeNode *)&source->types->nodes[0];
     control_late_input=(XrXirTypeNode *)&body->terms.types.nodes[0];
     uint32_t raw_flags=control_late_source->flags,owned_flags=control_late_input->flags;
     control_late_callbacks=0;pc_allocate_hook=control_late_signature;
-    XrXirStatus status=effect_outcomes_publish(&context,source,effects);pc_allocate_hook=NULL;
+    XrXirStatus status=effect_outcomes_publish(&context,source,effects, NULL);pc_allocate_hook=NULL;
     CHECK(status==XR_XIR_BAD_STRUCTURE && control_late_callbacks==1 && !effects->invocations->final->outcomes);
     CHECK(effect_invocation_current_input_match(&context,source,body)==XR_XIR_OK);
     control_late_source->flags=raw_flags;control_late_input->flags=owned_flags;

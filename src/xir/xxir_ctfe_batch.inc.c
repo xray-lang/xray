@@ -6,7 +6,7 @@
  *
  * xxir_ctfe_batch.inc.c - Atomic results from one current immutable artifact
  */
-static XrXirCtfeStatus ctfe_batch_received(const XirCtfeBatchRequest *request,XrCompileRequestControl *control,
+static XrXirCtfeStatus ctfe_batch_read_prefix(const XirCtfeBatchRequest *request,
     XrXirValue *output,uint32_t *failed_index) {
     if (!request || !request->artifact || !request->functions || !request->count || !output ||
         request->limits.steps>XR_XIR_CTFE_MAX_STEPS || request->limits.frame_bytes>XR_XIR_CTFE_MAX_FRAME_BYTES ||
@@ -20,10 +20,20 @@ static XrXirCtfeStatus ctfe_batch_received(const XirCtfeBatchRequest *request,Xr
     if (bytes>SIZE_MAX) return XR_XIR_CTFE_OVERFLOW;
     for (uint32_t i=0;i<request->count;++i)
         if (output[i].type || output[i].reserved || output[i].payload) return XR_XIR_CTFE_BAD_ARGUMENT;
+    return XR_XIR_CTFE_OK;
+}
+static XrXirCtfeStatus ctfe_batch_read_body(const XirCtfeBatchRequest *request,XrCompileRequestControl *control,
+    XrXirValue *output,uint32_t *failed_index,const XirReadRequest *read_request) {
+    XrXirCtfeStatus prefix=ctfe_batch_read_prefix(request,output,failed_index);
+    if(prefix!=XR_XIR_CTFE_OK) return prefix;
+    const XrXirArtifact *artifact=request->artifact;
     XrXirCtfeStatus status=ctfe_control_poll(control);
     if (status!=XR_XIR_CTFE_OK) return status;
-    status=ctfe_compile_status(xr_xir_compile_artifact_verify(artifact,NULL));
+    status=ctfe_compile_status(xir_artifact_verify(&artifact->context, artifact,NULL,control,read_request));
     if (status!=XR_XIR_CTFE_OK) return status;
+    if(request->artifact!=artifact) return XR_XIR_CTFE_BAD_ARTIFACT;
+    status=ctfe_batch_read_prefix(request,output,failed_index);
+    if(status!=XR_XIR_CTFE_OK) return status;
     for (uint32_t i=0;i<request->count;++i) {
 
         XrXirCtfeCallRequest call={.evaluation={.artifact=artifact,.function=request->functions[i],
@@ -43,6 +53,17 @@ static XrXirCtfeStatus ctfe_batch_received(const XirCtfeBatchRequest *request,Xr
     if (status!=XR_XIR_CTFE_OK)
         for (uint32_t i=0;i<request->count;++i) xr_xir_value_drop(&output[i]);
     return status;
+}
+static XrXirCtfeStatus ctfe_batch_received(const XirCtfeBatchRequest *request,XrCompileRequestControl *control,
+    XrXirValue *output,uint32_t *failed_index) {
+    XrXirCtfeStatus status=ctfe_batch_read_prefix(request,output,failed_index);
+    if(status!=XR_XIR_CTFE_OK) return status;
+    const XrXirArtifact *artifact=request->artifact;
+    if(!xir_compile_context_valid(&artifact->context)) return XR_XIR_CTFE_BAD_ARTIFACT;
+    XirReadOperation operation={.capacity={.resources=artifact->context.resources}};
+    const XirReadRequest read_request={.operation=&operation,.control=control};
+    status=ctfe_batch_read_body(request,control,output,failed_index,&read_request);
+    xir_read_operation_free(&operation);return status;
 }
 XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_batch(const XirCtfeBatchRequest *request,XrCompileRequestControl *control,XrXirValue *output) {
     return ctfe_batch_received(request,control,output,NULL);

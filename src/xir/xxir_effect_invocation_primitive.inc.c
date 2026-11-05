@@ -65,33 +65,11 @@ static XrXirStatus effect_invocation_primitive_attempt(const XrXirCompileContext
     *output=(EffectInvocationPrimitive){facts,{witnesses[0],witnesses[1]}};return XR_XIR_OK;
 }
 
-/* A missing buffer unwinds all head/run/type borrows before actual allocation.
- * Every retry derives facts anew; capacity never carries a prior proof result. */
+/* A primitive borrows its complete parent's prepared capacity. It cannot
+ * allocate, poll, retire that capacity or publish a locally retried prefix. */
 static XrXirStatus effect_invocation_primitive_read(const XrXirCompileContext *work,
-    const EffectBodyMaterial *body,uint32_t function,EffectInvocationPrimitive *output) {
-    if(!xir_compile_context_valid(work)) return XR_XIR_BAD_STRUCTURE;
-    XirReadScratch memory={.resources=work->resources};
-    XrXirStatus status=effect_invocation_primitive_attempt(work,body,function,output,&memory);
-    if(!memory.required) return status;
-    if(status!=XR_XIR_BUDGET) return XR_XIR_BAD_STRUCTURE;
-    uint32_t functions=effect_body_count(body);EffectInvocationPrimitive candidate={0};
-    for(;;) {
-        status=xir_read_scratch_grow(work,&memory);if(status!=XR_XIR_OK) break;
-        status=effect_invocation_primitive_frame(work,body);
-        if(status!=XR_XIR_OK || effect_body_count(body)!=functions) {
-            if(status==XR_XIR_OK) status=XR_XIR_BAD_STRUCTURE;
-            break;
-        }
-        status=xir_read_scratch_begin(work,&memory);if(status!=XR_XIR_OK) break;
-        status=effect_invocation_primitive_attempt(work,body,function,&candidate,&memory);
-        if(status!=XR_XIR_BUDGET || !memory.required) break;
-    }
-    xir_read_scratch_free(&memory);
-    if(status==XR_XIR_OK) status=effect_invocation_primitive_frame(work,body);
-    if(status==XR_XIR_OK && effect_body_count(body)!=functions) status=XR_XIR_BAD_STRUCTURE;
-    if(status==XR_XIR_OK) {
-
-        *output=candidate;
-    }
-    return status;
+    const EffectBodyMaterial *body,uint32_t function,EffectInvocationPrimitive *output, XirReadOperation *read_operation) {
+    if(!xir_compile_context_valid(work) || !read_operation ||
+        read_operation->capacity.resources!=work->resources) return XR_XIR_BAD_STRUCTURE;
+    return effect_invocation_primitive_attempt(work,body,function,output,&read_operation->capacity);
 }

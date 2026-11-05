@@ -74,8 +74,8 @@ typedef struct LifetimeBorrow {
 static XrXirStatus lifetime_borrowed_refresh(void *opaque,XirEffectContextScope *scope) {
     LifetimeBorrow *borrow=opaque;LifetimeOperation *op=borrow->operation;CHECK(scope);
     size_t attempts=rp_attempts;XrCompileResourceStats before=rp_stats(op->context);
-    CHECK(xir_effects_context_refresh(op->context,&op->source,borrow->effects)==XR_XIR_BAD_STRUCTURE);
-    CHECK(effect_context_owner_refresh(op->context,&op->source,borrow->effects,NULL)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xir_effects_context_refresh(op->context,&op->source,borrow->effects, NULL)==XR_XIR_BAD_STRUCTURE);
+    CHECK(effect_context_owner_refresh(op->context,&op->source,borrow->effects,NULL, NULL)==XR_XIR_BAD_STRUCTURE);
     uint32_t mask=UINT32_MAX;
     CHECK(xir_effects_source_reference_root(op->context,borrow->effects,&op->source,
         op->fixture->function,op->fixture->instruction,&mask)==XR_XIR_BAD_STRUCTURE && mask==UINT32_MAX);
@@ -85,11 +85,11 @@ static XrXirStatus lifetime_borrowed_refresh(void *opaque,XirEffectContextScope 
 static void lifetime_controls(LifetimeOperation *op,XrXirEffects *effects) {
     LifetimeBorrow borrow={op,effects};size_t attempts=rp_attempts;
     CHECK(xir_effects_context_operation(op->context,effects,&op->source,op->source.types,
-        lifetime_borrowed_refresh,&borrow)==XR_XIR_BAD_STRUCTURE && rp_attempts==attempts);
+        lifetime_borrowed_refresh,&borrow, NULL)==XR_XIR_BAD_STRUCTURE && rp_attempts==attempts);
     CHECK(xir_effects_context_available(op->context,effects));
     XrXirCompileContext foreign=rp_owner(rp_caps());uint64_t live=rp_stats(&foreign).live_bytes;
     attempts=rp_attempts;XrCompileResourceStats before=rp_stats(&foreign);
-    CHECK(xir_effects_context_refresh(&foreign,&op->source,effects)==XR_XIR_BAD_STRUCTURE &&
+    CHECK(xir_effects_context_refresh(&foreign,&op->source,effects, NULL)==XR_XIR_BAD_STRUCTURE &&
         rp_attempts==attempts && rp_stats(&foreign).work==before.work);
     uint32_t rejected=UINT32_MAX;
     CHECK(xir_effects_source_reference_root(&foreign,effects,&op->source,op->fixture->function,
@@ -111,7 +111,7 @@ static void lifetime_controls(LifetimeOperation *op,XrXirEffects *effects) {
         else if (kind==1) wrong.provenance=&wrong_kind;
         else wrong.declarations=&missing;
         size_t header_attempts=rp_attempts;XrCompileResourceStats paid=rp_stats(op->context);
-        XrXirStatus status=xir_effects_context_refresh(op->context,&wrong,effects);
+        XrXirStatus status=xir_effects_context_refresh(op->context,&wrong,effects, NULL);
         if (status!=XR_XIR_BAD_STRUCTURE) fprintf(stderr,"WRITER_HEADER mode%u kind%u status%u context_available%u\n",
             op->refined,kind,status,(unsigned)xir_effects_context_available(op->context,effects));
         CHECK(status==XR_XIR_BAD_STRUCTURE && xir_effects_context_available(op->context,effects) &&
@@ -127,7 +127,7 @@ static void lifetime_controls(LifetimeOperation *op,XrXirEffects *effects) {
     XrXirDeclarations declarations=*op->source.declarations;declarations.functions=identities;
     XrXirModule wrong=op->source;wrong.declarations=&declarations;
     identities[op->fixture->function].cleanup_owner=op->fixture->function+1;
-    CHECK(xir_effects_context_refresh(op->context,&wrong,effects)==XR_XIR_BAD_STRUCTURE &&
+    CHECK(xir_effects_context_refresh(op->context,&wrong,effects, NULL)==XR_XIR_BAD_STRUCTURE &&
         xir_effects_context_available(op->context,effects));
 }
 
@@ -147,7 +147,7 @@ static XrXirStatus lifetime_reference_cost(LifetimeOperation *op,XrXirEffects *e
     uint64_t strict=rp_stats(op->context).work-before;
     if (status!=XR_XIR_OK) return status;CHECK(!mask);
     before=rp_stats(op->context).work;
-    if (effects->refinement) status=effect_refinement_match(op->context,&op->source,effects->refinement);
+    if (effects->refinement) status=effect_refinement_match(op->context,&op->source,effects->refinement,NULL);
     uint64_t bounds=rp_stats(op->context).work-before;
     if (status!=XR_XIR_OK) return status;
     /* One complete admission plus bounds leaves a fixed scope/output allowance. */
@@ -178,7 +178,7 @@ static XrXirStatus lifetime_refresh(LifetimeOperation *op,XrXirEffects *effects)
     if (op->fail!=SIZE_MAX) rp_fail_at=before+op->fail;
     uint32_t mask=UINT32_MAX;
     XrXirStatus status=op->compound?lifetime_source_read(op,effects,&mask):
-        xir_effects_context_refresh(op->context,&op->source,effects);
+        xir_effects_context_refresh(op->context,&op->source,effects, NULL);
     if (op->compound) CHECK(status==XR_XIR_OK?!mask:mask==UINT32_MAX);
     op->sites=rp_attempts-before;op->injected=rp_injected;rp_fail_at=SIZE_MAX;
     op->retired=!effects->contexts;
@@ -210,8 +210,8 @@ static XrXirStatus lifetime_operation(const XrXirCompileContext *context,const L
         op.source.functions=functions;functions[fixture->function].instructions=instructions;
         instructions[fixture->instruction].type=fixture->wide;
         XrXirEffects *effects=NULL;XrXirRootRefiner refiner={&op,lifetime_refine};
-        status=mode!=1?xr_xir_compile_effects_refine_verified(context,&op.source,&refiner,&effects):
-            xr_xir_compile_effects_infer_verified(context,&op.source,&effects);
+        status=mode!=1?xr_xir_compile_effects_refine_verified(context,&op.source,&refiner,&effects, NULL):
+            xr_xir_compile_effects_infer_verified(context,&op.source,&effects, NULL);
         if (status==XR_XIR_OK && mode==1) status=lifetime_refresh(&op,effects);
         if (status==XR_XIR_OK) CHECK(effects && op.certificate_intact);
         else if (mode!=1) CHECK(!effects);

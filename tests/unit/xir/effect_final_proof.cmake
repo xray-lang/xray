@@ -15,7 +15,7 @@ foreach(proof_kind IN ITEMS control_finite_proof effect_input_selector error_car
 endforeach()
 
 set(final_proof_tests)
-foreach(mode RANGE 0 3)
+foreach(mode RANGE 0 7)
     add_test(NAME test_xir_root_marker_read_${mode} COMMAND test_xir_root_marker_read ${mode})
     list(APPEND final_proof_tests test_xir_root_marker_read_${mode})
 endforeach()

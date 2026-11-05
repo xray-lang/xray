@@ -477,7 +477,7 @@ XR_FUNC XrXirStatus xr_xir_compile_lower_take(XrXirArtifact **input,const XrXirT
 }
 XR_FUNC XrXirStatus xr_xir_compile_check_refined_v2(const XrXirCompileContext *context,
     const XrXirModule *built,const XrXirConstruction *construction,const XrXirRootRefiner *refiner,
-    XrCompileRequestControl *control,XrXirArtifact **output,XrXirDiagnostic *diagnostic) {
+    XrCompileRequestControl *control,XrXirArtifact **output,XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
     DefaultsCopyProbe *probe=defaults_copy_probe;
     bool observed=probe && built && built->defaults && built->defaults->count==302;
     XrXirDefaultBinding original[302];
@@ -488,7 +488,7 @@ XR_FUNC XrXirStatus xr_xir_compile_check_refined_v2(const XrXirCompileContext *c
         probe->held_before=sdk_stats(context->resources).held_bytes;
         probe->bytes=sizeof(original);probe->control=control;memcpy(original,probe->records,sizeof(original));
     }
-    XrXirStatus status=defaults_actual_check(context,built,construction,refiner,control,output,diagnostic);
+    XrXirStatus status=defaults_actual_check(context,built,construction,refiner,control,output,diagnostic,read_request);
     if (observed) {
         probe->held_after=sdk_stats(context->resources).held_bytes;
         if(status!=XR_XIR_OK)CHECK(!*output && diagnostic->status==status);

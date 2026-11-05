@@ -15,9 +15,11 @@ static XrXirStatus effect_invocation_forest_types(const XrXirCompileContext *wor
         contexts->uses.resources!=work->resources || output->remaining!=work ||
         output->status!=XR_XIR_OK || output->types.count || output->types.nodes ||
         output->types.nominals || output->types.interfaces || output->owned_nominals ||
-        output->owned_interfaces) return XR_XIR_BAD_STRUCTURE;
+        output->owned_interfaces || !effect_terms_storage_owned(work,output) ||
+        !effect_terms_storage_owned(work,&contexts->terms)) return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationCertificate *certificate=contexts->uses.invocations;
-    if (!certificate || !effect_body_material_shape(certificate->body) ||
+    if (!certificate || !effect_terms_storage_owned(work,&certificate->terms) ||
+        !effect_body_material_shape(certificate->body) ||
         certificate->body->resources!=certificate->resources || certificate->resources!=work->resources || certificate->terms.remaining ||
         certificate->body->domain.types!=&certificate->body->terms.types || !certificate->final ||
         effect_body_count(certificate->body)!=contexts->count ||
@@ -90,7 +92,8 @@ static XrXirStatus effect_invocation_forest_record(const XrXirCompileContext *wo
 /* Admission consumes every actual domain and retains no projection copy. */
 static XrXirStatus effect_invocation_forest_admit(const XrXirCompileContext *work,
     const EffectContextForest *forest,const EffectInvocationCertificate *certificate) {
-    if (!certificate || !effect_body_material_shape(certificate->body) ||
+    if (!certificate || !effect_terms_storage_owned(work,&certificate->terms) ||
+        !effect_body_material_shape(certificate->body) ||
         certificate->body->resources!=certificate->resources || certificate->resources!=work->resources ||
         effect_body_count(certificate->body)!=forest->count) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t f=0;f<forest->count;++f) {
@@ -161,16 +164,18 @@ static XrXirStatus effect_invocation_forest_values(const XrXirCompileContext *wo
  * complete physical identities and selected causes, rather than following a
  * different declaration-only forest for an environment-dependent equation. */
 static XrXirStatus effect_invocation_forest_match(const XrXirCompileContext *work,
-    const EffectContextForest *forest) {
+    const EffectContextForest *forest,XirReadScratch *memory) {
     const EffectInvocationCertificate *certificate=forest->invocations;
-    if (!certificate || !effect_body_material_shape(certificate->body) ||
+    if (!certificate || !effect_terms_storage_owned(work,&certificate->terms) ||
+        !effect_body_material_shape(certificate->body) ||
         certificate->body->resources!=certificate->resources || certificate->resources!=work->resources || effect_body_count(certificate->body)!=forest->count ||
         !forest->nodes || !forest->requirements)
         return XR_XIR_BAD_STRUCTURE;
-    if (forest->terms.types.count!=certificate->terms.types.count) return XR_XIR_BAD_STRUCTURE;
+    if (forest->terms.types.count!=certificate->terms.types.count ||
+        !effect_terms_storage_owned(work,&forest->terms)) return XR_XIR_BAD_STRUCTURE;
     /* Open base bodies retain their verified declaration scope. Compare both
      * complete owned domains before binding the same symbolic parameters. */
-    EffectTerms comparison={.types=forest->terms.types,.remaining=work};
+    EffectTerms comparison={.types=forest->terms.types,.remaining=work,.read=memory};
     XrXirStatus status=effect_terms_snapshot_match(&comparison,&certificate->terms.types,
         certificate->terms.types.count);
     for (uint32_t f=0;f<forest->count && status==XR_XIR_OK;++f) {
@@ -201,7 +206,7 @@ static XrXirStatus effect_invocation_forest_trace(const XrXirCompileContext *wor
     const EffectContextForest *forest,uint32_t function,XrXirRootCauseTrace **output) {
     if (!xir_compile_context_valid(work) || !forest || forest->resources!=work->resources ||
         !output || *output || function>=forest->count) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_invocation_forest_match(work,forest);
+    XrXirStatus status=effect_invocation_forest_match(work,forest,NULL);
     if (status!=XR_XIR_OK) return status;
     XrXirRootCauseTrace *trace=NULL;
     EffectContextRootValue value;

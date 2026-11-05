@@ -65,11 +65,11 @@ static void invocation_parameter_insert(EffectInvocationFinal *final,EffectCaptu
 /* Complete-source clauses and key rows are checked at each mutation. Full
  * origin closure is checked before and after this allocation-free component. */
 static XrXirStatus invocation_parameter_current(const XrXirCompileContext *work,EffectInvocationFinal *final) {
-    EffectCaptureRead read={.work=work,.final=final};XrXirStatus status=effect_capture_frame(&read);
+    EffectCaptureRead read={.work=work,.final=final};XrXirStatus status=effect_capture_frame(&read, NULL);
     EffectBodyCurrentRead current={0};
     if(status==XR_XIR_OK) status=effect_body_current_open(work,final->material,&current);
     if(status!=XR_XIR_OK) return status;
-    read.body.current=&current;status=effect_capture_complete_clauses(&read);
+    read.body.current=&current;status=effect_capture_complete_clauses(&read, NULL);
     return status==XR_XIR_OK?effect_capture_inputs_match(&read):status;
 }
 
@@ -88,7 +88,7 @@ static void invocation_parameter_rejections(const XrXirCompileContext *work,
     bool complete=false;CHECK(effect_final_callable_complete(work,final,n,0,&complete)==XR_XIR_OK);
     CHECK(complete==(mode<2));if(mode<2) CHECK(n!=formal);
     CHECK(effect_final_callable_complete(work,final,formal,0,&complete)==XR_XIR_OK && !complete);
-    CHECK(effect_capture_match(work,final)==XR_XIR_OK);
+    CHECK(effect_capture_match(work,final, NULL)==XR_XIR_OK);
     EffectCaptureProof saved=final->capture;XrXirStatus status=XR_XIR_OK;
     EffectCaptureFact *facts=xir_compile_alloc(work,((size_t)saved.count+2)*sizeof(*facts),&status);CHECK(facts);
     final->capture=(EffectCaptureProof){facts,saved.count,saved.count+2};
@@ -141,7 +141,7 @@ static void invocation_parameter_rejections(const XrXirCompileContext *work,
         memmove(facts+factory,facts+factory+1,(size_t)(final->capture.count-factory)*sizeof(*facts));
         invocation_parameter_expect_rejection(work,final,mode,"removed-factory-return");PARAMETER_RESET();
     }
-    CHECK(effect_capture_match(work,final)==XR_XIR_OK);
+    CHECK(effect_capture_match(work,final, NULL)==XR_XIR_OK);
     final->capture=saved;xr_compile_resources_free(facts);
 #undef PARAMETER_RESET
 }
@@ -163,17 +163,17 @@ static XrXirStatus conditional_parameter_case(const XrXirCompileContext *context
     if (status==XR_XIR_OK) status=effect_invocation_bounds_new(context,&bounds);
     for (uint32_t f=0;status==XR_XIR_OK && f<module->function_count;++f)
         status=effect_invocation_bounds_capture(context,bounds,module->types,&module->functions[f],f,NULL);
-    if (status==XR_XIR_OK) status=effect_invocations_receive(context,module,&effects,&graph,bounds,&owner);
-    if (status==XR_XIR_OK) status=effect_invocations_solve(owner);
+    if (status==XR_XIR_OK) status=effect_invocations_receive(context,module,&effects,&graph,bounds,&owner, NULL);
+    if (status==XR_XIR_OK) status=effect_invocations_solve(owner, NULL);
     if (status==XR_XIR_OK) status=effect_invocation_stage(owner,&solution);
     if (status==XR_XIR_OK) {
         EffectInvocationSealRequest request={&owner,&solution,NULL};
-        status=effect_invocation_seal(context,&request,&certificate,NULL);
+        status=effect_invocation_seal(context,&request,&certificate,NULL, NULL);
     }
     effect_invocation_result_free(solution);effect_invocation_free(owner);
     effect_invocation_bounds_free(bounds);effect_graph_free(&graph);invocation_core_storage_free(&effects);
     xr_xir_compile_artifact_free(checked);memset(&fixture,0,sizeof(fixture));
-    if(status==XR_XIR_OK) status=effect_capture_match(context,certificate->final);
+    if(status==XR_XIR_OK) status=effect_capture_match(context,certificate->final, NULL);
     if (status==XR_XIR_OK && oracle) {
         CHECK(xr_xir_effects_error_unknown(published,0)==(mode>=2));
         CHECK(xr_xir_effects_error_unknown(published,5));

@@ -50,9 +50,7 @@ static XrXirStatus effect_ordinary_op_match(const EffectOrdinaryContexts *contex
         expected.targets[0]!=actual.targets[0] || expected.targets[1]!=actual.targets[1] ||
         expected.type_arguments[0]!=actual.type_arguments[0] ||
         expected.type_arguments[1]!=actual.type_arguments[1]) return XR_XIR_BAD_STRUCTURE;
-    XrXirTypeMatchScratch *scratch=effect_terms_type_scratch(terms);
-    status=xr_xir_compile_type_substitution_matches_between_scratch(terms->remaining,
-        &terms->types,&terms->types,NULL,0,expected.type,actual.type,scratch);
+    status=effect_terms_match(terms,&terms->types,&terms->types,NULL,0,expected.type,actual.type);
     return status==XR_XIR_BAD_TYPE ? XR_XIR_BAD_STRUCTURE : status;
 }
 
@@ -62,7 +60,6 @@ static XrXirStatus effect_ordinary_signature_match(const EffectOrdinaryContexts 
     const XrXirFunction *original=&source->functions[identity.declaration];
     const XrXirFunction *actual=&contexts->functions[function];
     XrXirGeneric environment={.arguments=identity.arguments,.argument_count=identity.argument_count};
-    XrXirTypeMatchScratch *scratch=effect_terms_type_scratch(terms);
     XrXirStatus status=XR_XIR_OK;
     for (uint32_t p=0;p<=actual->parameter_count && status==XR_XIR_OK;++p) {
         XrXirType expected=p==actual->parameter_count ? original->result : original->parameters[p];
@@ -71,8 +68,7 @@ static XrXirStatus effect_ordinary_signature_match(const EffectOrdinaryContexts 
         if (function>=contexts->base_count)
             status=effect_terms_substitute(terms,expected,&environment,&expected);
         if (status==XR_XIR_OK)
-            status=xr_xir_compile_type_substitution_matches_between_scratch(terms->remaining,
-                &terms->types,&terms->types,NULL,0,expected,type,scratch);
+            status=effect_terms_match(terms,&terms->types,&terms->types,NULL,0,expected,type);
     }
     return status==XR_XIR_BAD_TYPE ? XR_XIR_BAD_STRUCTURE : status;
 }
@@ -239,7 +235,7 @@ static XrXirStatus effect_ordinary_roots_prepare(const XrXirCompileContext *cont
  * reads its owned generation; publication transfers that same complete owner. */
 static XrXirStatus effect_ordinary_roots_publish(const XrXirCompileContext *context,
     EffectOrdinaryContexts *contexts,const EffectInvocationDeclaredBounds *declared,
-    EffectGraph *graph,EffectOrdinaryView *view) {
+    EffectGraph *graph,EffectOrdinaryView *view, XirReadOperation *read_operation) {
     if (!xir_compile_context_valid(context) || !contexts || !graph || !view ||
         contexts->uses.resources!=context->resources || view->input.contexts!=contexts || !view->input.source ||
         view->module.functions!=contexts->functions || view->module.function_count!=contexts->count ||
@@ -256,25 +252,25 @@ static XrXirStatus effect_ordinary_roots_publish(const XrXirCompileContext *cont
     XrXirCompileContext remaining=*context;
     if (status==XR_XIR_OK) status=effect_graph_build_material(&view->module,&contexts->uses,graph,&remaining);
     if (status==XR_XIR_OK) status=effect_invocation_publish(context,&view->module,&contexts->uses,
-        graph,declared,contexts);
+        graph,declared,contexts, read_operation);
     return status;
 }
 
 static XrXirStatus effect_ordinary_roots_with_bounds(const XrXirCompileContext *context,
     const XrXirModule *source,EffectOrdinaryContexts *contexts,
-    const EffectInvocationDeclaredBounds *declared) {
+    const EffectInvocationDeclaredBounds *declared, XirReadOperation *read_operation) {
     EffectInvocationDeclaredBounds *temporary=NULL;
     XrXirStatus status=effect_ordinary_roots_prepare(context,source,contexts,declared,&temporary);
     EffectGraph graph={0};EffectOrdinaryView view={0};
     if (status==XR_XIR_OK) status=effect_ordinary_view(contexts,source,&view);
     if (status==XR_XIR_OK) status=effect_ordinary_roots_publish(context,contexts,
-        declared?declared:temporary,&graph,&view);
+        declared?declared:temporary,&graph,&view, read_operation);
     effect_graph_free(&graph);effect_invocation_bounds_free(temporary);
     if (contexts) contexts->terms.remaining=NULL;
     return status;
 }
 
 static XrXirStatus effect_ordinary_roots(const XrXirCompileContext *context,
-    const XrXirModule *source,EffectOrdinaryContexts *contexts) {
-    return effect_ordinary_roots_with_bounds(context,source,contexts,NULL);
+    const XrXirModule *source,EffectOrdinaryContexts *contexts, XirReadOperation *read_operation) {
+    return effect_ordinary_roots_with_bounds(context,source,contexts,NULL, read_operation);
 }

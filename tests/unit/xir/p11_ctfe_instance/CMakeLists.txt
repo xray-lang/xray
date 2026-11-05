@@ -146,3 +146,7 @@ set_tests_properties(test_xir_p11_library_comptime_controls PROPERTIES TIMEOUT 3
 
 add_test(NAME test_xir_p11_library_comptime_site_controls COMMAND test_xir_p11_ctfe_instance library-site-controls)
 set_tests_properties(test_xir_p11_library_comptime_site_controls PROPERTIES TIMEOUT 30)
+
+add_test(NAME test_xir_p11_prepared_read_workspace COMMAND test_xir_p11_ctfe_instance prepared-workspace)
+set_tests_properties(test_xir_p11_prepared_read_workspace PROPERTIES TIMEOUT 30
+    LABELS "unit;xir;ctfe;ownership;metadata;read-workspace")

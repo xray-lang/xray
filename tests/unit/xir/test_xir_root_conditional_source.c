@@ -74,7 +74,7 @@ static void conditional_collector_controls(const XrXirArtifact *artifact,XrXirEf
     CHECK(xr_xir_compile_artifact_verify_owned_effects(NULL,&output,NULL)==XR_XIR_BAD_STRUCTURE && !output);
     CHECK(xr_xir_compile_artifact_verify_owned_effects(artifact,NULL,NULL)==XR_XIR_BAD_STRUCTURE);
     CHECK(xr_xir_compile_artifact_verify_owned_effects(artifact,&sentinel,NULL)==XR_XIR_BAD_STRUCTURE && sentinel==occupied);
-    CHECK(xr_xir_compile_verify_owned_effects_v2(context,&artifact->module,artifact->construction,&sentinel,NULL)==XR_XIR_BAD_STRUCTURE && sentinel==occupied);
+    CHECK(xr_xir_compile_verify_owned_effects_v2(context,&artifact->module,artifact->construction,&sentinel,NULL, NULL)==XR_XIR_BAD_STRUCTURE && sentinel==occupied);
     XrCompileResourceStats early=library_compile_stats(context);
     CHECK(early.allocated_bytes==before.allocated_bytes && early.work==before.work && source_program_compile_attempts==attempts);
     size_t blocks=source_program_compile_live,bytes=source_program_compile_bytes;
@@ -104,7 +104,7 @@ static void conditional_collector_controls(const XrXirArtifact *artifact,XrXirEf
     CHECK(source_program_compile_attempts==attempts && source_program_compile_live==hidden_blocks &&
         source_program_compile_bytes==hidden_bytes && library_compile_stats(context).live_bytes==hidden_live);
     /* Independent complete derivation still rejects the semantic contradiction. */
-    CHECK(xr_xir_compile_verify_owned_effects_v2(context,&invalid.module,invalid.construction,&output,NULL)==XR_XIR_BAD_TYPE && !output);
+    CHECK(xr_xir_compile_verify_owned_effects_v2(context,&invalid.module,invalid.construction,&output,NULL, NULL)==XR_XIR_BAD_TYPE && !output);
     CHECK(source_program_compile_attempts>attempts && source_program_compile_live==hidden_blocks && source_program_compile_bytes==hidden_bytes);
     CHECK(library_compile_stats(context).live_bytes==hidden_live);
     xr_compile_resources_free(contracts);invalid=*artifact;

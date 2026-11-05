@@ -50,7 +50,7 @@ static void source_enum_identity_run(XrXirSourceRequest *request, const char *so
         CHECK(xr_xir_compile_nominal_structure_verify(request->context,table,&private_types)==XR_XIR_OK);
         ((XrXirNominalField *)record->fields)[0].flags|=XR_XIR_FIELD_PRIVATE;
         CHECK(xr_xir_compile_nominal_structure_verify(request->context,table,&private_types)==XR_XIR_BAD_STRUCTURE);
-        CHECK(xr_xir_compile_verify_v2(request->context,&private_view,xr_xir_compile_artifact_construction(result.checked), NULL)==XR_XIR_BAD_STRUCTURE);
+        CHECK(xr_xir_compile_verify_v2(request->context,&private_view,xr_xir_compile_artifact_construction(result.checked), NULL, NULL)==XR_XIR_BAD_STRUCTURE);
         xr_xir_compile_nominal_free(table);
     }
     XrXirCheckedPacket packet={0};

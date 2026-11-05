@@ -183,7 +183,7 @@ static inline bool effect_body_backbone_shape(const EffectBodyMaterial *body) {
 /* Ownership consistency is only a storage precondition. Semantic callers
  * still prove complete external correspondence and actual equation closure. */
 static inline bool effect_body_material_shape(const EffectBodyMaterial *body) {
-    return body && body->resources && body->references && effect_body_backbone_shape(body) &&
+    return body && body->resources && body->references && !body->terms.read && effect_body_backbone_shape(body) &&
         body->domain.types==&body->terms.types &&
         (!!body->domain.function_count==!!body->functions) &&
         body->domain.declarations==body->declarations && body->domain.generics==body->generics &&

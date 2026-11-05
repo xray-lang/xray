@@ -173,7 +173,7 @@ XR_FUNC bool xir_effects_context_available(const XrXirCompileContext *context,
 /* Only a genuine unpublished Source constructor can refresh contexts.
  * A completed Final rejects the call without work or output changes. */
 XR_FUNC XrXirStatus xir_effects_context_refresh(const XrXirCompileContext *context,
-    const XrXirModule *source, const struct XrXirEffects *effects);
+    const XrXirModule *source, const struct XrXirEffects *effects, const XirReadRequest *read_request);
 XR_FUNC XrXirStatus xir_effects_context_select(const XrXirCompileContext *context,
     const struct XrXirEffects *effects, const XirEffectContextInput *input, XirEffectContextView *output);
 /* This private lexical scope belongs to one read-only correspondence call.
@@ -187,7 +187,7 @@ typedef struct XirEffectContextScope XirEffectContextScope;
 typedef XrXirStatus (*XirEffectContextOperation)(void *data,XirEffectContextScope *scope);
 XR_FUNC XrXirStatus xir_effects_context_operation(const XrXirCompileContext *context,
     const struct XrXirEffects *effects,const XrXirModule *source,const XrXirTypes *types,
-    XirEffectContextOperation operation,void *data);
+    XirEffectContextOperation operation,void *data, const XirReadRequest *read_request);
 XR_FUNC XrXirStatus xir_effects_context_select_scoped(XirEffectContextScope *scope,
     const XirEffectContextInput *input,XirEffectContextView *output);
 /* The Source producer may advance before this call. Complete current matching

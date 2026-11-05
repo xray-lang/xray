@@ -373,7 +373,8 @@ static XrXirStatus effect_body_source_match(const XrXirCompileContext *work,
  * introduce a second body traversal after that write. */
 static XrXirStatus effect_body_type_domain_match(const XrXirCompileContext *work,
     const EffectBodyMaterial *body,const XrXirModule *source) {
-    if (!xir_compile_context_valid(work) || !effect_body_material_shape(body) || !source ||
+    if (!xir_compile_context_valid(work) || !effect_body_material_shape(body) ||
+        !effect_terms_storage_owned(work,&body->terms) || !source ||
         body->resources!=work->resources || source->stage!=body->stage ||
         source->linkage_kind!=body->linkage_kind ||
         source->function_count!=effect_body_count(body) ||
@@ -396,7 +397,8 @@ static XrXirStatus effect_body_type_domain_match(const XrXirCompileContext *work
  * Lowered identity projection still uses its independent semantic matcher. */
 static XrXirStatus effect_body_source_types_compare(const XrXirCompileContext *work,
     const EffectBodyMaterial *body,const XrXirModule *source,bool checked_copy) {
-    if (!xir_compile_context_valid(work) || !effect_body_material_shape(body) || !source ||
+    if (!xir_compile_context_valid(work) || !effect_body_material_shape(body) ||
+        !effect_terms_storage_owned(work,&body->terms) || !source ||
         body->resources!=work->resources ||
         (checked_copy?(body->stage!=XR_XIR_BUILT || source->stage!=XR_XIR_CHECKED):source->stage!=body->stage) ||
         source->linkage_kind!=body->linkage_kind ||

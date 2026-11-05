@@ -64,7 +64,7 @@ static XrXirStatus effect_source_body_retired(const XrXirCompileContext *work,co
     for (;body;body=body->backbone) {
 
         if (depth++==3 || !effect_body_material_shape(body) || body->resources!=work->resources ||
-            !effect_terms_scratch_retired(&body->terms)) return XR_XIR_BAD_STRUCTURE;
+            (!effect_terms_scratch_retired(&body->terms) || !effect_terms_storage_owned(work,&body->terms))) return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
 }
@@ -150,11 +150,11 @@ static XrXirStatus effect_source_atoms(const XrXirCompileContext *work,
 }
 
 static XrXirStatus effect_source_projections(const XrXirCompileContext *work,
-    const EffectInvocationCertificate *certificate) {
+    const EffectInvocationCertificate *certificate, const XirReadRequest *read_request) {
     const EffectFinalFunctions *result=(&certificate->final->summary);
     /* This same independent receiving core checks all canonical terms,
      * selected atoms, current causes and final transformed witnesses. */
-    XrXirStatus status=effect_invocation_publication_match(work,certificate,result);
+    XrXirStatus status=effect_invocation_publication_match(work,certificate,result, read_request ? read_request->operation : NULL);
     if (status!=XR_XIR_OK) return status;
     return effect_invocation_public_gate(work,certificate);
 }
@@ -165,10 +165,11 @@ static XrXirStatus effect_source_projections(const XrXirCompileContext *work,
 /* Constructor relations grant no final admission. The terminal inventory
  * pass checks the sole finite source relation after all cleanup callbacks. */
 static XrXirStatus effect_source_relations(const XrXirCompileContext *work,
-    const EffectInvocationCertificate *certificate,const XrXirEffects *summary) {
+    const EffectInvocationCertificate *certificate,const XrXirEffects *summary, const XirReadRequest *read_request) {
     if (!certificate) return XR_XIR_BAD_STRUCTURE;
 
-    if (!effect_terms_scratch_retired(&certificate->terms)) return XR_XIR_BAD_STRUCTURE;
+    if (!effect_terms_scratch_retired(&certificate->terms) ||
+        !effect_terms_storage_owned(work,&certificate->terms)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus retired=effect_source_body_retired(work,certificate->body);
     if (retired!=XR_XIR_OK) return retired;
 
@@ -216,12 +217,12 @@ static XrXirStatus effect_source_relations(const XrXirCompileContext *work,
     if (status==XR_XIR_OK) status=effect_invocation_deferred_verify(&owner);
     if (status==XR_XIR_OK) status=effect_invocation_bind_bounds(&local,certificate->declared,owner.final->physical);
     if (status==XR_XIR_OK) status=effect_source_atoms(work,&local);
-    if (status==XR_XIR_OK) status=effect_source_projections(work,&local);
+    if (status==XR_XIR_OK) status=effect_source_projections(work,&local, read_request);
     effect_invocation_read_close(&owner);return status;
 }
 
 static XrXirStatus effect_source_contexts(const XrXirCompileContext *work,
-    const XrXirModule *source,const XrXirEffects *effects) {
+    const XrXirModule *source,const XrXirEffects *effects,const XirReadRequest *read_request) {
     if(!source->provenance || source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE) {
 
         return effect_contexts_read(effects)?XR_XIR_BAD_STRUCTURE:XR_XIR_OK;
@@ -243,15 +244,18 @@ static XrXirStatus effect_source_contexts(const XrXirCompileContext *work,
         return XR_XIR_BAD_STRUCTURE;
 
     if (!effect_terms_scratch_retired(&owner->ordinary->terms) ||
-        !effect_terms_scratch_retired(&owner->dense->terms) || !effect_terms_scratch_retired(&owner->forest->terms))
+        !effect_terms_scratch_retired(&owner->dense->terms) || !effect_terms_scratch_retired(&owner->forest->terms) ||
+        !effect_terms_storage_owned(work,&owner->ordinary->terms) ||
+        !effect_terms_storage_owned(work,&owner->dense->terms) || !effect_terms_storage_owned(work,&owner->forest->terms))
         return XR_XIR_BAD_STRUCTURE;
 
-    EffectTerms ordinary={.types=owner->ordinary->terms.types,.remaining=work};
-    EffectTerms dense={.types=owner->dense->terms.types,.remaining=work};
+    EffectTerms ordinary={.types=owner->ordinary->terms.types,.remaining=work,
+        .read=read_request?&read_request->operation->capacity:NULL};
+    EffectTerms dense={.types=owner->dense->terms.types,.remaining=work,.read=ordinary.read};
     const EffectInvocationCertificate *certificate=owner->forest->invocations;
     XrXirStatus status=effect_context_dense_stable_read(work,owner,source,certificate,&ordinary,&dense);
-    if (status==XR_XIR_OK) status=effect_source_relations(work,certificate,NULL);
-    if (status==XR_XIR_OK) status=effect_invocation_forest_match(work,owner->forest);
+    if (status==XR_XIR_OK) status=effect_source_relations(work,certificate,NULL,read_request);
+    if (status==XR_XIR_OK) status=effect_invocation_forest_match(work,owner->forest,ordinary.read);
     effect_terms_free(&dense);effect_terms_free(&ordinary);return status;
 }
 
@@ -301,17 +305,17 @@ static XrXirStatus effect_source_outcomes(const XrXirCompileContext *work,const 
 /* This terminal role pass follows every receiving free callback. It has
  * no mutable graph or scratch allocation and cannot retain a passed receipt. */
 static XrXirStatus effect_source_role_certificate(const XrXirCompileContext *work,
-    const EffectInvocationCertificate *certificate) {
+    const EffectInvocationCertificate *certificate, XirReadOperation *read_operation) {
     XrXirStatus status=effect_role_range(work,certificate,1,sizeof(*certificate));
     if (status!=XR_XIR_OK) return status;
     if (certificate->resources!=work->resources) return XR_XIR_BAD_STRUCTURE;
     status=effect_role_range(work,certificate->final,1,sizeof(*certificate->final));
     if (status!=XR_XIR_OK) return status;
     if (certificate->final->material!=certificate->body) return XR_XIR_BAD_STRUCTURE;
-    return effect_final_inventory_match(work,certificate->body,certificate->final);
+    return effect_final_inventory_match(work,certificate->body,certificate->final, read_operation);
 }
-static XrXirStatus effect_source_terminal_roles(const XrXirCompileContext *work,const XrXirEffects *effects) {
-    XrXirStatus status=effect_source_role_certificate(work,effects->invocations);
+static XrXirStatus effect_source_terminal_roles(const XrXirCompileContext *work,const XrXirEffects *effects, XirReadOperation *read_operation) {
+    XrXirStatus status=effect_source_role_certificate(work,effects->invocations, read_operation);
     if (status!=XR_XIR_OK) return status;
     const EffectInvocationCertificate *certificate=effects->invocations;
     const EffectFinalOutcomes *outcomes=certificate->final->outcomes;
@@ -325,21 +329,21 @@ static XrXirStatus effect_source_terminal_roles(const XrXirCompileContext *work,
     const EffectContextForest *forest=outcomes->contexts->forest;
     status=effect_role_range(work,forest,1,sizeof(*forest));if (status!=XR_XIR_OK) return status;
     if (forest->resources!=work->resources) return XR_XIR_BAD_STRUCTURE;
-    status=effect_source_role_certificate(work,forest->invocations);if (status!=XR_XIR_OK) return status;
+    status=effect_source_role_certificate(work,forest->invocations, read_operation);if (status!=XR_XIR_OK) return status;
     const EffectInvocationCertificate *nested=forest->invocations;
     if (forest->count!=effect_body_count(nested->body)) return XR_XIR_BAD_STRUCTURE;
     return XR_XIR_OK;
 }
 
 static XrXirStatus effect_source_terminal_current(const XrXirCompileContext *work,
-    const XrXirModule *source,const XrXirEffects *effects,bool checked_copy) {
+    const XrXirModule *source,const XrXirEffects *effects,bool checked_copy, const XirReadRequest *read_request) {
     if (!xir_effects_context_matches(work,effects,source?source->function_count:0) ||
         !effect_final_outcomes(effects) || !source || source->stage!=XR_XIR_CHECKED || !effects->invocations ||
         effects->generation || effects->refinement) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_source_relations(work,effects->invocations,effects);
-    if (status==XR_XIR_OK) status=effect_source_contexts(work,source,effects);
+    XrXirStatus status=effect_source_relations(work,effects->invocations,effects, read_request);
+    if (status==XR_XIR_OK) status=effect_source_contexts(work,source,effects,read_request);
     if (status==XR_XIR_OK) status=local_errors_owned(work,effects->invocations->body,NULL);
-    if (status==XR_XIR_OK) status=effect_source_terminal_roles(work,effects);
+    if (status==XR_XIR_OK) status=effect_source_terminal_roles(work,effects, read_request ? read_request->operation : NULL);
     if (status==XR_XIR_OK) status=effect_source_publication_match(work,source,effects);
     if (status==XR_XIR_OK) status=effect_source_outcomes(work,effects);
     if (status==XR_XIR_OK) status=local_error_outcomes(work,effects->invocations->body,effect_final_outcomes(effects)->functions,true);
@@ -349,23 +353,83 @@ static XrXirStatus effect_source_terminal_current(const XrXirCompileContext *wor
     return status;
 }
 
-XR_FUNC XrXirStatus xir_effects_source_terminal(const XrXirCompileContext *work,
-    const XrXirModule *source,const XrXirEffects *effects) {
+XR_FUNC XrXirStatus xir_effects_source_terminal_attempt_body(const XrXirCompileContext *work,
+    const XrXirModule *source,const XrXirEffects *effects, const XirReadRequest *read_request) {
     if(!source || !source->provenance || source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE) return XR_XIR_BAD_STRUCTURE;
-    return effect_source_terminal_current(work,source,effects,false);
+    return effect_source_terminal_current(work,source,effects,false, read_request);
 }
-XR_FUNC XrXirStatus xir_effects_raw_source_terminal(const XrXirCompileContext *work,
-    const XrXirModule *source,const XrXirEffects *effects) {
-    if(!source || source->provenance) return XR_XIR_BAD_STRUCTURE;
-    return effect_source_terminal_current(work,source,effects,false);
+/* Nested readers propagate preparation to the complete pure parent. Only
+ * this lexical boundary may retire its derived prefix and call the client. */
+XR_FUNC XrXirStatus xir_effects_source_terminal(const XrXirCompileContext *work,
+    const XrXirModule *source,const XrXirEffects *effects, const XirReadRequest *read_request) {
+    if(read_request && !xir_read_request_matches(work,read_request)) return XR_XIR_BAD_STRUCTURE;
+    if(!read_request || read_request->attempt)
+        return xir_effects_source_terminal_attempt_body(work, source, effects, read_request);
+    if(!read_request->operation || !xir_compile_context_valid(work) ||
+        read_request->operation->capacity.resources!=(work)->resources) return XR_XIR_BAD_STRUCTURE;
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(work,request.operation);
+        if(status==XR_XIR_OK) status=xir_effects_source_terminal_attempt_body(work, source, effects, &request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) return status;
+        status=xir_read_prepare(work,request.operation,request.control);
+        if(status!=XR_XIR_OK) return status;
+    }
 }
 
-XR_FUNC XrXirStatus xir_effects_receiving_terminal(const XrXirCompileContext *work,
-    const XrXirModule *module,const XrXirEffects *effects) {
+XR_FUNC XrXirStatus xir_effects_raw_source_terminal_attempt_body(const XrXirCompileContext *work,
+    const XrXirModule *source,const XrXirEffects *effects, const XirReadRequest *read_request) {
+    if(!source || source->provenance) return XR_XIR_BAD_STRUCTURE;
+    return effect_source_terminal_current(work,source,effects,false, read_request);
+}
+/* Nested readers propagate preparation to the complete pure parent. Only
+ * this lexical boundary may retire its derived prefix and call the client. */
+XR_FUNC XrXirStatus xir_effects_raw_source_terminal(const XrXirCompileContext *work,
+    const XrXirModule *source,const XrXirEffects *effects, const XirReadRequest *read_request) {
+    if(read_request && !xir_read_request_matches(work,read_request)) return XR_XIR_BAD_STRUCTURE;
+    if(!read_request || read_request->attempt)
+        return xir_effects_raw_source_terminal_attempt_body(work, source, effects, read_request);
+    if(!read_request->operation || !xir_compile_context_valid(work) ||
+        read_request->operation->capacity.resources!=(work)->resources) return XR_XIR_BAD_STRUCTURE;
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(work,request.operation);
+        if(status==XR_XIR_OK) status=xir_effects_raw_source_terminal_attempt_body(work, source, effects, &request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) return status;
+        status=xir_read_prepare(work,request.operation,request.control);
+        if(status!=XR_XIR_OK) return status;
+    }
+}
+
+
+XR_FUNC XrXirStatus xir_effects_receiving_terminal_attempt_body(const XrXirCompileContext *work,
+    const XrXirModule *module,const XrXirEffects *effects, const XirReadRequest *read_request) {
     if(!module || !module->provenance || !xir_effect_kind_is_closed(module->provenance->kind))
         return XR_XIR_BAD_STRUCTURE;
-    return effect_source_terminal_current(work,module,effects,false);
+    return effect_source_terminal_current(work,module,effects,false, read_request);
 }
+/* Nested readers propagate preparation to the complete pure parent. Only
+ * this lexical boundary may retire its derived prefix and call the client. */
+XR_FUNC XrXirStatus xir_effects_receiving_terminal(const XrXirCompileContext *work,
+    const XrXirModule *module,const XrXirEffects *effects, const XirReadRequest *read_request) {
+    if(read_request && !xir_read_request_matches(work,read_request)) return XR_XIR_BAD_STRUCTURE;
+    if(!read_request || read_request->attempt)
+        return xir_effects_receiving_terminal_attempt_body(work, module, effects, read_request);
+    if(!read_request->operation || !xir_compile_context_valid(work) ||
+        read_request->operation->capacity.resources!=(work)->resources) return XR_XIR_BAD_STRUCTURE;
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(work,request.operation);
+        if(status==XR_XIR_OK) status=xir_effects_receiving_terminal_attempt_body(work, module, effects, &request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) return status;
+        status=xir_read_prepare(work,request.operation,request.control);
+        if(status!=XR_XIR_OK) return status;
+    }
+}
+
 
 XR_FUNC XrXirStatus xir_effects_built_copy_match(const XrXirCompileContext *work,
     const XrXirModule *module,const XrXirEffects *effects) {
@@ -373,8 +437,27 @@ XR_FUNC XrXirStatus xir_effects_built_copy_match(const XrXirCompileContext *work
         !effects->invocations) return XR_XIR_BAD_STRUCTURE;
     return effect_body_checked_copy_match(work,effects->invocations->body,module);
 }
-XR_FUNC XrXirStatus xir_effects_built_copy_terminal(const XrXirCompileContext *work,
-    const XrXirModule *module,const XrXirEffects *effects) {
+XR_FUNC XrXirStatus xir_effects_built_copy_terminal_attempt_body(const XrXirCompileContext *work,
+    const XrXirModule *module,const XrXirEffects *effects, const XirReadRequest *read_request) {
     if(!module || module->provenance) return XR_XIR_BAD_STRUCTURE;
-    return effect_source_terminal_current(work,module,effects,true);
+    return effect_source_terminal_current(work,module,effects,true, read_request);
+}
+/* Nested readers propagate preparation to the complete pure parent. Only
+ * this lexical boundary may retire its derived prefix and call the client. */
+XR_FUNC XrXirStatus xir_effects_built_copy_terminal(const XrXirCompileContext *work,
+    const XrXirModule *module,const XrXirEffects *effects, const XirReadRequest *read_request) {
+    if(read_request && !xir_read_request_matches(work,read_request)) return XR_XIR_BAD_STRUCTURE;
+    if(!read_request || read_request->attempt)
+        return xir_effects_built_copy_terminal_attempt_body(work, module, effects, read_request);
+    if(!read_request->operation || !xir_compile_context_valid(work) ||
+        read_request->operation->capacity.resources!=(work)->resources) return XR_XIR_BAD_STRUCTURE;
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(work,request.operation);
+        if(status==XR_XIR_OK) status=xir_effects_built_copy_terminal_attempt_body(work, module, effects, &request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) return status;
+        status=xir_read_prepare(work,request.operation,request.control);
+        if(status!=XR_XIR_OK) return status;
+    }
 }

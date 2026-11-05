@@ -47,8 +47,13 @@ static XrXirStatus resolution_bind(const XirLiteralDefinitions *literal,const Xr
     return status;
 }
 
+typedef struct SourceReadParent {
+    SourceContext *source;
+    XirReadOperation *operation;
+} SourceReadParent;
+
 static XrXirStatus resolution_execute(const XirComptimeResolveRequest *request,const XirComptimePending *pending,
-    XrXirArtifact **output,XirComptimeResolveFailure *failure,XrXirDiagnostic *diagnostic,SourceContext *source_owner) {
+    XrXirArtifact **output,XirComptimeResolveFailure *failure,XrXirDiagnostic *diagnostic,const SourceReadParent *parent) {
     XrXirArtifact *checked=NULL;XirCtfeInstanceBatch *batch=NULL;XirLiteralDefinitions literal={0};
     XrXirStatus status=xr_xir_compile_comptime_pending_specialize(pending,&checked,diagnostic,request->control);
     XrXirComptimeSite site={0};
@@ -67,35 +72,39 @@ static XrXirStatus resolution_execute(const XirComptimeResolveRequest *request,c
     }
     if (status==XR_XIR_OK) {
         XirLiteralRequest receiving={&checked->context,batch,1,request->control};
-        status=literal_receive(&receiving,&site,&literal,diagnostic,source_owner);
+        status=literal_receive(&receiving,&site,&literal,diagnostic,parent->source,parent->operation);
     }
     if (status==XR_XIR_OK) status=resolution_bind(&literal,&site,output,diagnostic,request->control);
     xr_xir_compile_instance_literals_free(&literal);xr_xir_compile_ctfe_instance_batch_free(batch);
     xr_xir_compile_artifact_free(checked);return status;
 }
 static XrXirStatus source_comptime_resolve(const XirComptimeResolveRequest *request,
-    XrXirArtifact **output,XirComptimeResolveFailure *failure,XrXirDiagnostic *diagnostic,SourceContext *source_owner) {
-    if (!request || !request->definition || !output || *output ||
+    XrXirArtifact **output,XirComptimeResolveFailure *failure,XrXirDiagnostic *diagnostic,SourceContext *source_owner,XirReadOperation *read_operation) {
+    if (!read_operation || !request || !request->definition || !output || *output ||
         !xir_compile_context_valid(&request->definition->context) ||
         (failure && (failure->status || failure->root_local || failure->site.caller || failure->site.instruction || failure->site.helper)) ||
         request->limits.steps>XR_XIR_CTFE_MAX_STEPS || request->limits.frame_bytes>XR_XIR_CTFE_MAX_FRAME_BYTES ||
         request->limits.output_bytes>XR_XIR_CTFE_MAX_OUTPUT_BYTES || request->call_depth>XR_XIR_CTFE_MAX_CALL_DEPTH)
         return resolution_status(diagnostic,XR_XIR_BAD_STRUCTURE);
     const XrXirArtifact *input=request->definition;
+    if(read_operation->capacity.resources!=input->context.resources)
+        return resolution_status(diagnostic,XR_XIR_BAD_STRUCTURE);
+    const SourceReadParent parent={source_owner,read_operation};
     if (input->module.stage!=XR_XIR_CHECKED || input->module.linkage_kind!=XR_XIR_PROGRAM ||
         xir_effect_evidence_is_closed(&input->module) || xir_artifact_is_evaluation(input))
         return resolution_status(diagnostic,XR_XIR_BAD_STAGE);
     if (request->target.architecture!=XR_XIR_ARCH_X86_64 || request->target.abi_version!=XR_XIR_VALUE_ABI_VERSION)
         return resolution_status(diagnostic,XR_XIR_BAD_LAYOUT);
     XrXirCheckedPacket packet={0};XrXirArtifact *current=NULL;
-    XrXirStatus status=xir_checked_write(input,&packet,diagnostic,request->control);
+    const XirReadRequest read_request={.operation=read_operation,.control=request->control};
+    XrXirStatus status=xir_checked_write_borrowed(&input->context,input,false,&packet,diagnostic,&read_request);
     if (status==XR_XIR_OK) status=xir_checked_read(&input->context,packet.bytes,packet.length,&current,diagnostic,request->control);
     xr_xir_compile_checked_packet_free(&packet);
     while (status==XR_XIR_OK) {
         XirComptimePending *pending=NULL;XrXirArtifact *next=NULL;
         status=xr_xir_compile_comptime_pending(current,&pending,diagnostic,request->control);
         if (status==XR_XIR_OK && !pending) break;
-        if (status==XR_XIR_OK) status=resolution_execute(request,pending,&next,failure,diagnostic,source_owner);
+        if (status==XR_XIR_OK) status=resolution_execute(request,pending,&next,failure,diagnostic,&parent);
         xr_xir_compile_comptime_pending_free(pending);
         if (status==XR_XIR_OK) { xr_xir_compile_artifact_free(current);current=next; }
         else xr_xir_compile_artifact_free(next);
@@ -107,5 +116,7 @@ static XrXirStatus source_comptime_resolve(const XirComptimeResolveRequest *requ
 }
 XR_FUNC XrXirStatus xr_xir_compile_comptime_resolve(const XirComptimeResolveRequest *request,
     XrXirArtifact **output,XirComptimeResolveFailure *failure,XrXirDiagnostic *diagnostic) {
-    return source_comptime_resolve(request,output,failure,diagnostic,NULL);
+    XirReadOperation read_operation={.capacity={.resources=request && request->definition?request->definition->context.resources:NULL}};
+    XrXirStatus status=source_comptime_resolve(request,output,failure,diagnostic,NULL,&read_operation);
+    xir_read_operation_free(&read_operation);return status;
 }

@@ -787,58 +787,79 @@ static XrXirStatus checked_error(XrXirStatus status, XrXirDiagnostic *diagnostic
     if (diagnostic) *diagnostic = (XrXirDiagnostic) {status, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
     return status;
 }
-static XrXirStatus checked_encode_mode(const XrXirArtifact *artifact,XrXirCheckedPacket *output,
-    XrXirDiagnostic *diagnostic,bool evaluation,XrCompileRequestControl *control) {
-    XrXirStatus allocation_status = XR_XIR_OK;
-    if (!artifact) return XR_XIR_BAD_STRUCTURE;
-    XrXirCompileContext compile_state = artifact->context;
-    XrXirCompileContext *budget = &compile_state;
-    if (!output) return checked_error(XR_XIR_BAD_STRUCTURE, diagnostic);
-
-    if (!artifact || artifact->module.stage != XR_XIR_CHECKED)
-        return checked_error(XR_XIR_BAD_STAGE, diagnostic);
-    if (evaluation?(!artifact->evaluation_only || !xir_effect_evidence_is_evaluation(&artifact->module)):
+static XrXirStatus checked_encode_shape(const XrXirArtifact *artifact,bool evaluation,
+    XrXirDiagnostic *diagnostic) {
+    if(!artifact || !xir_compile_context_valid(&artifact->context)) return checked_error(XR_XIR_BAD_STRUCTURE,diagnostic);
+    if(artifact->module.stage!=XR_XIR_CHECKED) return checked_error(XR_XIR_BAD_STAGE,diagnostic);
+    if(evaluation?(!artifact->evaluation_only || !xir_effect_evidence_is_evaluation(&artifact->module)):
         xir_artifact_is_evaluation(artifact)) return checked_error(XR_XIR_BAD_STAGE,diagnostic);
-    XrXirCompileContext limits = *budget;
-    size_t capacity = SIZE_MAX;
-    CheckedCursor c = {NULL, NULL, evaluation?76u:64u, capacity, limits.limits, limits, XR_XIR_OK, false, control, 0};
-    XrXirModule module = artifact->module;
-    XrXirConstruction *construction = artifact->construction;
+    return XR_XIR_OK;
+}
+static XrXirStatus checked_encode_measure(const XrXirCompileContext *context,const XrXirArtifact *artifact,size_t *output,
+    XrXirDiagnostic *diagnostic,bool evaluation,XrCompileRequestControl *control) {
+    if(!output || !xir_compile_context_valid(context) || !artifact || context->resources!=artifact->context.resources)
+        return checked_error(XR_XIR_BAD_STRUCTURE,diagnostic);
+    XrXirStatus status=checked_encode_shape(artifact,evaluation,diagnostic);
+    if(status!=XR_XIR_OK) return status;
+    XrXirCompileContext limits=*context;
+    CheckedCursor c={NULL,NULL,evaluation?76u:64u,SIZE_MAX,limits.limits,limits,XR_XIR_OK,false,control,0};
+    XrXirModule module=artifact->module;XrXirConstruction *construction=artifact->construction;
     checked_module(&c,&module,&construction,evaluation?XR_XIR_EVIDENCE_EVALUATION:XR_XIR_EVIDENCE_INSTANCE);
-    if (c.status != XR_XIR_OK) return checked_error(c.status, diagnostic);
-    size_t size = c.position;
-    uint8_t *bytes = xir_type_copy_zero(&artifact->context,size,1,&allocation_status,control);
-    if (!bytes) return checked_error(allocation_status, diagnostic);
-
+    if(c.status!=XR_XIR_OK) return checked_error(c.status,diagnostic);
+    *output=c.position;return XR_XIR_OK;
+}
+/* This is the sole write traversal. The ordinary owning writer and a final
+ * prepared read use the same header/module/digest body. Every byte is written;
+ * digest bytes are excluded from the hash and overwritten by finalization. */
+static XrXirStatus checked_encode_buffer(const XrXirCompileContext *context,const XrXirArtifact *artifact,uint8_t *bytes,size_t size,
+    XrXirDiagnostic *diagnostic,bool evaluation,XrCompileRequestControl *control) {
+    if(!xir_compile_context_valid(context) || !artifact || context->resources!=artifact->context.resources)
+        return checked_error(XR_XIR_BAD_STRUCTURE,diagnostic);
+    XrXirStatus shape=checked_encode_shape(artifact,evaluation,diagnostic);
+    if(shape!=XR_XIR_OK) return shape;
+    if(!bytes || size<(evaluation?76u:64u)) return checked_error(XR_XIR_BAD_STRUCTURE,diagnostic);
+    XrXirCompileContext limits=*context;
     memcpy(bytes,evaluation?"XRCEV\0\0\0":"XRCHK\0\0\0",8);
-    c = (CheckedCursor) {NULL, bytes, 8, size, limits.limits, limits, XR_XIR_OK, false, control, 0};
+    CheckedCursor c = (CheckedCursor) {NULL, bytes, 8, size, limits.limits, limits, XR_XIR_OK, false, control, 0};
     checked_u32(&c,evaluation?1u:XR_XIR_CHECKED_SCHEMA); checked_u32(&c, XR_XIR_CHECKED_CONTRACT);
     checked_u32(&c, XR_XIR_CHECKED); checked_u32(&c, 0);
     checked_integer(&c, size - 64, 8);
-    c.position = 64; module = artifact->module;
+    c.position = 64; XrXirModule module = artifact->module;
+    XrXirConstruction *construction=artifact->construction;
     if (evaluation) {
         const XirEvaluationRoot *root=&artifact->module.provenance->evaluation;
         checked_u32(&c,root->caller);checked_u32(&c,root->instruction);checked_u32(&c,root->callee);
     }
     checked_module(&c,&module,&construction,evaluation?XR_XIR_EVIDENCE_EVALUATION:XR_XIR_EVIDENCE_INSTANCE);
     if (c.status != XR_XIR_OK || c.position != size) {
-        xr_compile_resources_free(bytes); return checked_error(c.status != XR_XIR_OK ? c.status : XR_XIR_BAD_STRUCTURE, diagnostic);
+        return checked_error(c.status != XR_XIR_OK ? c.status : XR_XIR_BAD_STRUCTURE, diagnostic);
     }
 
     XrXirStatus status=checked_digest(bytes,size,bytes+32,control);
     if (status==XR_XIR_OK && control)
         status=xir_compile_resource_status(xr_compile_request_control_poll(control));
-    if (status!=XR_XIR_OK) {xr_compile_resources_free(bytes);return checked_error(status,diagnostic);}
-    *output = (XrXirCheckedPacket) {bytes, size};
+    if (status!=XR_XIR_OK) return checked_error(status,diagnostic);
     return XR_XIR_OK;
 }
-static XrXirStatus checked_encode(const XrXirArtifact *artifact,XrXirCheckedPacket *output,
+static XrXirStatus checked_encode_mode(const XrXirCompileContext *context,const XrXirArtifact *artifact,XrXirCheckedPacket *output,
+    XrXirDiagnostic *diagnostic,bool evaluation,XrCompileRequestControl *control) {
+    if(!output) return checked_error(XR_XIR_BAD_STRUCTURE,diagnostic);
+    if(!artifact) return checked_error(XR_XIR_BAD_STRUCTURE,diagnostic);
+    size_t size=0;XrXirStatus status=checked_encode_measure(context,artifact,&size,diagnostic,evaluation,control);
+    if(status!=XR_XIR_OK) return status;
+    uint8_t *bytes=xir_type_copy_zero(context,size,1,&status,control);
+    if(!bytes) return checked_error(status,diagnostic);
+    status=checked_encode_buffer(context,artifact,bytes,size,diagnostic,evaluation,control);
+    if(status!=XR_XIR_OK) {xr_compile_resources_free(bytes);return status;}
+    *output=(XrXirCheckedPacket){bytes,size};return XR_XIR_OK;
+}
+static inline XrXirStatus checked_encode(const XrXirArtifact *artifact,XrXirCheckedPacket *output,
     XrXirDiagnostic *diagnostic,XrCompileRequestControl *control) {
-    return checked_encode_mode(artifact,output,diagnostic,false,control);
+    return checked_encode_mode(artifact?&artifact->context:NULL,artifact,output,diagnostic,false,control);
 }
 static inline XrXirStatus checked_evaluation_encode(const XrXirArtifact *artifact,XrXirCheckedPacket *output,
     XrXirDiagnostic *diagnostic,XrCompileRequestControl *control) {
-    return checked_encode_mode(artifact,output,diagnostic,true,control);
+    return checked_encode_mode(artifact?&artifact->context:NULL,artifact,output,diagnostic,true,control);
 }
 
 #endif // XXIR_CHECKED_CODEC_INC_C

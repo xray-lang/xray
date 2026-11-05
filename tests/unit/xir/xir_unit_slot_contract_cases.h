@@ -18,7 +18,7 @@
 static XrXirStatus unit_slot_verify(const XrXirArtifact *artifact,const XrXirModule *module) {
  size_t live=effects_compile_live,bytes=effects_compile_bytes;
  XrXirStatus status=xr_xir_compile_verify_v2(xr_xir_compile_artifact_context(artifact),module,
-  xr_xir_compile_artifact_construction(artifact),NULL);
+  xr_xir_compile_artifact_construction(artifact),NULL, NULL);
  CHECK(effects_compile_live==live&&effects_compile_bytes==bytes);return status;
 }
 static bool unit_cell_contract(const XrXirArtifact *artifact,XrXirModule *module,uint32_t f,uint32_t i,

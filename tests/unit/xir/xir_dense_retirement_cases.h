@@ -6,7 +6,7 @@ static void pc_dense_retirement_literals(void) {
         XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
         CHECK(xir_fixture_check(&context,&fixture.module,&checked,NULL)==XR_XIR_OK);
         const XrXirModule *input=xr_xir_compile_artifact_module(checked);
-        CHECK(effect_infer_construct(&context,input,NULL,&effects)==XR_XIR_OK && effects->outcomes_work.contexts);
+        CHECK(effect_infer_construct(&context,input,NULL,&effects, NULL)==XR_XIR_OK && effects->outcomes_work.contexts);
         EffectContextOwner *owner=effects->outcomes_work.contexts;
         EffectOrdinaryContexts *dense=owner->dense;XrXirEffects *uses=&dense->uses;
         const EffectFinalFunctions *result=&owner->forest->invocations->final->summary;
@@ -32,7 +32,7 @@ static void pc_dense_retirement_literals(void) {
         current.functions=functions;functions[2].instructions=rows;
         pc_ordinary_current=&rows[0];pc_ordinary_mutate=mutation!=0;pc_ordinary_callbacks=0;
         XrCompileResourceStats before=pc_stats(&context);CHECK(!pc_free_hook);pc_free_hook=pc_ordinary_observe_free;
-        XrXirStatus status=effect_outcomes_publish(&context,&current,effects);
+        XrXirStatus status=effect_outcomes_publish(&context,&current,effects, NULL);
         pc_free_hook=NULL;pc_ordinary_current=NULL;pc_ordinary_contract_block=NULL;
         CHECK(status==(mutation?XR_XIR_BAD_STRUCTURE:XR_XIR_OK) && pc_ordinary_callbacks==1 &&
             effect_ordinary_work_empty(dense) && effect_ordinary_work_empty(owner->ordinary) &&
@@ -43,13 +43,13 @@ static void pc_dense_retirement_literals(void) {
         for (uint32_t p=0;p<5;++p) CHECK(terms[p].kind==XR_XIR_ROOT_TERM_PARAMETER && terms[p].index==p);
         if (!mutation) {
             pc_context_resurrection(&context,&current,effects,true);
-            CHECK(xir_effects_source_terminal(&context,&current,effects)==XR_XIR_OK);
+            CHECK(xir_effects_source_terminal(&context,&current,effects, NULL)==XR_XIR_OK);
         } else CHECK(!effect_final_outcomes(effects) && !effects->invocations->final->outcomes);
         fprintf(stderr,"dense retirement mutation%u actual_freed%u roles%u callback%u status%u borrowed five terms live\n",
             mutation,pc_ordinary_block_count,roles,pc_ordinary_callbacks,status);
         rows[0].type=XR_XIR_I64;xr_xir_compile_effects_free(effects);effects=NULL;
-        CHECK(effect_infer_construct(&context,input,NULL,&effects)==XR_XIR_OK);
-        CHECK(effect_outcomes_publish(&context,input,effects)==XR_XIR_OK);
+        CHECK(effect_infer_construct(&context,input,NULL,&effects, NULL)==XR_XIR_OK);
+        CHECK(effect_outcomes_publish(&context,input,effects, NULL)==XR_XIR_OK);
         xr_xir_compile_artifact_free(checked);memset(&fixture,0xCE,sizeof(fixture));
         memset(functions,0xCE,sizeof(functions));memset(rows,0xCE,sizeof(rows));
         owner=effects->invocations->final->outcomes->contexts;

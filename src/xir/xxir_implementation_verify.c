@@ -14,7 +14,7 @@
 #include "xxir_compile_memory.h"
 #include "xxir_constraint_proof_internal.h"
 #include "xxir_interface_members.h"
-#include "xxir_types.h"
+#include "xxir_type_match_internal.h"
 #include "../base/xmalloc.h"
 #include <string.h>
 static XrXirStatus implementation_identity_arguments(uint32_t count, XrXirCompileContext *budget, XrXirType **output) {
@@ -34,12 +34,14 @@ static void implementation_arguments_free(XrXirType *arguments) {
 }
 static XrXirStatus implementation_application_equal(const XrXirTypes *from, const XrXirTypes *to,
     const XrXirInterfaceApplication *expected, const XrXirInterfaceApplication *actual,
-    const XrXirInterfaceApplication *substitution, XrXirCompileContext *budget) {
+    const XrXirInterfaceApplication *substitution,XrXirCompileContext *budget,XirReadScratch *read) {
 
     if (expected->declaration != actual->declaration || expected->argument_count != actual->argument_count)
         return XR_XIR_BAD_TYPE;
     for (uint32_t a = 0; a < expected->argument_count; ++a) {
-        XrXirStatus status = xr_xir_compile_type_substitution_matches_between(budget, from, to, substitution->arguments, substitution->argument_count, expected->arguments[a], actual->arguments[a]);
+        const XirTypeMatchRead request={from,to,substitution->arguments,substitution->argument_count,
+            expected->arguments[a],actual->arguments[a],read};
+        XrXirStatus status=xir_type_match_read(budget,&request);
         if (status != XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
@@ -101,7 +103,7 @@ static XrXirStatus implementation_bindings(const XrXirModule *module, const XrXi
             const XrXirImplementationBinding *binding = &record->bindings[b];
             if (binding->member != requirement->member) continue;
             XrXirStatus match = implementation_application_equal(module->types,xr_xir_interface_closure_types(closure),
-                &binding->requirement,app,&substitution,budget);
+                &binding->requirement,app,&substitution,budget,NULL);
             if (match != XR_XIR_OK && match != XR_XIR_BAD_TYPE) { status = match; break; }
             if (match != XR_XIR_OK) continue;
             if (found != UINT32_MAX) { status = XR_XIR_BAD_STRUCTURE; break; }
@@ -227,7 +229,7 @@ static XrXirStatus implementation_nominal_roots(const XrXirModule *module,
     XrXirInterfaceApplication substitution = {0,arguments,parameters};
     for (uint32_t i = 0; status == XR_XIR_OK && i < count; ++i) {
         for (uint32_t j = 0; j < i; ++j) {
-            XrXirStatus match = implementation_application_equal(module->types,module->types,&roots[i],&roots[j],&substitution,budget);
+            XrXirStatus match = implementation_application_equal(module->types,module->types,&roots[i],&roots[j],&substitution,budget,NULL);
             if (match == XR_XIR_OK) { status = XR_XIR_BAD_STRUCTURE; break; }
             if (match != XR_XIR_BAD_TYPE) { status = match; break; }
         }
@@ -265,15 +267,15 @@ XrXirStatus xr_xir_compile_implementations_verify(const XrXirCompileContext *com
     }
     return XR_XIR_OK;
 }
-XrXirStatus xr_xir_compile_witness_resolve(const XrXirCompileContext *compile_context, const XrXirProofContext *context, const XrXirWitnessRequest *request, XrXirWitness *output) {
-    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+XR_FUNC XrXirStatus xir_witness_resolve_read(const XrXirCompileContext *compile_context, const XrXirProofContext *context, const XrXirWitnessRequest *request,XrXirWitness *output,XirReadScratch *read) {
+    if(!xir_compile_context_valid(compile_context) || (read && read->resources!=compile_context->resources)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *budget = &compile_state;
     if (!context || !context->module || !request || !request->declaration_module || !budget || !output)
         return XR_XIR_BAD_STRUCTURE;
     const XrXirTypeNode *node = xr_xir_type_node(context->module->types,request->receiver);
     if (!node || node->kind != XR_XIR_TYPE_NOMINAL) return XR_XIR_BAD_TYPE;
-    XrXirStatus status = xr_xir_compile_interface_prove(budget, context, request->declaration_module, request->receiver, request->application);
+    XrXirStatus status = xir_interface_prove_read(budget,context,request->declaration_module,request->receiver,request->application,read);
     if (status != XR_XIR_OK) return status;
     const XrXirDeclarations *declarations = request->declaration_module->declarations;
     const XrXirImplementationTable *table = declarations ? declarations->implementations : NULL;
@@ -288,7 +290,7 @@ XrXirStatus xr_xir_compile_witness_resolve(const XrXirCompileContext *compile_co
             const XrXirImplementationBinding *binding = &record->bindings[b];
             if (binding->member != request->member) continue;
             status = implementation_application_equal(request->declaration_module->types,context->module->types,
-                &binding->requirement,&request->application,&substitution,budget);
+                &binding->requirement,&request->application,&substitution,budget,read);
             if (status == XR_XIR_BAD_TYPE) continue;
             if (status != XR_XIR_OK) return status;
             if (function != UINT32_MAX && function != binding->function) return XR_XIR_BAD_TYPE;
@@ -298,4 +300,8 @@ XrXirStatus xr_xir_compile_witness_resolve(const XrXirCompileContext *compile_co
     if (function == UINT32_MAX) return XR_XIR_BAD_TYPE;
     *output = (XrXirWitness){function,node->nominal.arguments,node->nominal.argument_count};
     return XR_XIR_OK;
+}
+XR_FUNC XrXirStatus xr_xir_compile_witness_resolve(const XrXirCompileContext *context,
+    const XrXirProofContext *proof,const XrXirWitnessRequest *request,XrXirWitness *output) {
+    return xir_witness_resolve_read(context,proof,request,output,NULL);
 }

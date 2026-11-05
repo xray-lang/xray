@@ -146,7 +146,7 @@ static XrXirStatus ordinary_material_owner_operation(const XrXirCompileContext *
         f.operations[1].args[0]=1;
     }
     EffectContextOwner *owner=NULL;
-    XrXirStatus status=effect_context_owner_build(context,&f.source,NULL,NULL,&owner);
+    XrXirStatus status=effect_context_owner_build(context,&f.source,NULL,NULL,&owner, NULL);
     EffectContextForest *forest=NULL;
     if (status==XR_XIR_OK) {
         EffectBodyMaterial *basis=owner->ordinary->uses.generation;

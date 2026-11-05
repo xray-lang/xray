@@ -11,7 +11,7 @@
 #include "xir_class_physical_scalar_cases.h"
 static XrXirStatus class_physical_finite_receive(const EffectInvocationRead *read,const EffectBodyRequest *body) {
     XrXirStatus status=effect_invocation_class_cells_match(read,body);
-    return status==XR_XIR_OK?effect_capture_match(read->work,read->final):status;
+    return status==XR_XIR_OK?effect_capture_match(read->work,read->final, NULL):status;
 }
 static XrXirStatus conditional_class_physical_trial(const XrXirCompileContext *context,uint32_t mode,size_t fail,bool compare,size_t *sites){
  InvocationClassCellFixture fixture;invocation_class_cell_fixture(&fixture,mode);

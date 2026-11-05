@@ -69,5 +69,6 @@ static XrXirStatus literal_check(SourceContext *ctx,const XrXirArtifact *origina
     built.functions=ctx->functions;built.function_count=ctx->function_count;built.declarations=&declarations;
     built.generics=ctx->generics;
     built.types=ctx->types.count || ctx->types.nominals || ctx->types.interfaces?&ctx->types:NULL;
-    return xir_check(&ctx->compile,&built,ctx->construction,output,diagnostic,ctx->request);
+    const XirReadRequest read_request={.operation=ctx->read_operation,.control=ctx->request};
+    return xir_check(&ctx->compile,&built,ctx->construction,output,diagnostic,ctx->request,&read_request);
 }

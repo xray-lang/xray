@@ -10,7 +10,7 @@
  *   History views borrow a real record from this owner. They are not source
  *   reparses or Catalog libraries, and their identity is not a storage proof.
  */
-static const XrXirModule *source_history_module(SourceContext *ctx,const SourceHistoryUnit *unit) {
+static const XrXirModule *source_history_shape(SourceContext *ctx,const SourceHistoryUnit *unit) {
     if (!unit || !ctx->self_unit || !unit->published || !unit->owner ||
         unit->owner!=ctx->self_unit->owner || !unit->serial || unit->serial>=ctx->self_unit->serial ||
         !unit->checked || !unit->semantic || !unit->semantic->graph) {
@@ -25,9 +25,15 @@ static const XrXirModule *source_history_module(SourceContext *ctx,const SourceH
         unit->entry_module!=module->declarations->root_module) {
         source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"history Checked owner, stage or module closure disagrees");return NULL;
     }
-    XrXirStatus status=xr_xir_compile_artifact_verify(unit->checked,NULL);
-    if (status!=XR_XIR_OK) {source_fail(ctx,NULL,status,"history Checked verification failed");return NULL;}
     return module;
+}
+static const XrXirModule *source_history_module(SourceContext *ctx,const SourceHistoryUnit *unit) {
+    if(!source_history_shape(ctx,unit)) return NULL;
+    const XirReadRequest read_request={.operation=ctx->read_operation,.control=ctx->request};
+    XrXirStatus status=xir_artifact_verify(&ctx->compile, unit->checked,NULL,ctx->request,&read_request);
+    if (status!=XR_XIR_OK) {source_fail(ctx,NULL,status,"history Checked verification failed");return NULL;}
+    /* The callback may have invalidated every earlier owner/module prefix. */
+    return source_history_shape(ctx,unit);
 }
 static void source_history_spec_free(XrModuleSpec *spec) {
     xr_compile_resources_free(spec->canonical);

@@ -24,11 +24,11 @@ static XrXirStatus effect_context_owner_project(const XrXirCompileContext *conte
 }
 
 static XrXirStatus effect_context_owner_refresh(const XrXirCompileContext *context,
-    const XrXirModule *source, XrXirEffects *effects,EffectBodyMaterial *initial) {
+    const XrXirModule *source, XrXirEffects *effects,EffectBodyMaterial *initial, XirReadOperation *read_operation) {
     if (!source->provenance || source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE ||
         !source->declarations || !source->declarations->functions) return XR_XIR_OK;
     EffectContextOwner *fresh=NULL;
-    XrXirStatus status=effect_context_owner_build(context,source,effects->refinement,initial,&fresh);
+    XrXirStatus status=effect_context_owner_build(context,source,effects->refinement,initial,&fresh, read_operation);
     if (status!=XR_XIR_OK) return status;
     status=effect_context_owner_project(context,source,effects,fresh);
     if (status!=XR_XIR_OK) { effect_context_owner_free(fresh);return status; }
@@ -42,8 +42,8 @@ XR_FUNC bool xir_effects_context_available(const XrXirCompileContext *context,
         effect_contexts_read(effects)!=NULL;
 }
 
-XR_FUNC XrXirStatus xir_effects_context_refresh(const XrXirCompileContext *context,
-    const XrXirModule *source, const XrXirEffects *effects) {
+XR_FUNC XrXirStatus xir_effects_context_refresh_attempt_body(const XrXirCompileContext *context,
+    const XrXirModule *source, const XrXirEffects *effects, const XirReadRequest *read_request) {
     if (!xir_effects_context_matches(context,effects,source ? source->function_count : 0) ||
         !source || !effects->outcomes_owner || effects->root_input) return XR_XIR_BAD_STRUCTURE;
     XrXirModule normalized=*source;
@@ -51,11 +51,12 @@ XR_FUNC XrXirStatus xir_effects_context_refresh(const XrXirCompileContext *conte
     source=&normalized;
     if (!effect_contexts_read(effects)) return XR_XIR_OK;
     if (effects->refinement) {
-        XrXirStatus bound_status=effect_refinement_match(context,source,effects->refinement);
+        XrXirStatus bound_status=effect_refinement_match(context,source,effects->refinement,read_request?&read_request->operation->capacity:NULL);
         if (bound_status!=XR_XIR_OK) return bound_status;
     }
     const EffectOrdinaryContexts *ordinary=effect_contexts_read(effects)->ordinary;
-    EffectTerms terms={.types=ordinary->terms.types,.remaining=context};
+    EffectTerms terms={.types=ordinary->terms.types,.remaining=context,
+        .read=read_request?&read_request->operation->capacity:NULL};
 
     XrXirStatus status=effect_terms_snapshot_match(&terms,source->types,ordinary->source_type_count);
     if (status==XR_XIR_OK) status=effect_ordinary_bodies_match(ordinary,source,&terms);
@@ -63,9 +64,29 @@ XR_FUNC XrXirStatus xir_effects_context_refresh(const XrXirCompileContext *conte
     if (status==XR_XIR_BAD_TYPE || status==XR_XIR_BAD_STRUCTURE)
         /* Source may have advanced inside the refiner before the next outer
          * invocation publication. Its changed view needs the original writer. */
-        return effect_context_owner_refresh(context,source,(XrXirEffects *)effects,NULL);
+        return effect_context_owner_refresh(context,source,(XrXirEffects *)effects,NULL, read_request ? read_request->operation : NULL);
     return status;
 }
+/* Nested readers propagate preparation to the complete pure parent. Only
+ * this lexical boundary may retire its derived prefix and call the client. */
+XR_FUNC XrXirStatus xir_effects_context_refresh(const XrXirCompileContext *context,
+    const XrXirModule *source, const XrXirEffects *effects, const XirReadRequest *read_request) {
+    if(read_request && !xir_read_request_matches(context,read_request)) return XR_XIR_BAD_STRUCTURE;
+    if(!read_request || read_request->attempt)
+        return xir_effects_context_refresh_attempt_body(context, source, effects, read_request);
+    if(!read_request->operation || !xir_compile_context_valid(context) ||
+        read_request->operation->capacity.resources!=(context)->resources) return XR_XIR_BAD_STRUCTURE;
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(context,request.operation);
+        if(status==XR_XIR_OK) status=xir_effects_context_refresh_attempt_body(context, source, effects, &request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) return status;
+        status=xir_read_prepare(context,request.operation,request.control);
+        if(status!=XR_XIR_OK) return status;
+    }
+}
+
 
 static XrXirStatus effect_context_origin_match(const XrXirCompileContext *context,
     const EffectOrdinaryContexts *dense, const XirEffectContextInput *input,
@@ -237,10 +258,10 @@ static XrXirStatus effect_context_scope_failure(XirEffectContextScope *scope,XrX
 /* This operation never borrows a dynamic-array element or memoizes a query.
  * Source and actual pools stay immutable for this lexical call; only private
  * derived storage may grow. A new call must repeat the complete admission. */
-XR_FUNC XrXirStatus xir_effects_context_operation(const XrXirCompileContext *context,
+XR_FUNC XrXirStatus xir_effects_context_operation_attempt_body(const XrXirCompileContext *context,
     const XrXirEffects *effects,const XrXirModule *source,const XrXirTypes *types,
-    XirEffectContextOperation operation,void *data) {
-    if (!xir_compile_context_valid(context) || !effects || effects->resources!=context->resources ||
+    XirEffectContextOperation operation,void *data, const XirReadRequest *read_request) {
+    if (!xir_read_request_matches(context,read_request) || !effects || effects->resources!=context->resources ||
         !effect_contexts_read(effects) || !source || !source->functions || !source->function_count ||
         !operation || effects->count!=source->function_count) return XR_XIR_BAD_STRUCTURE;
     XirEffectContextScope selection_scope={context,effects,source,types,XR_XIR_OK,
@@ -249,6 +270,27 @@ XR_FUNC XrXirStatus xir_effects_context_operation(const XrXirCompileContext *con
     XrXirStatus status=operation(data,&selection_scope);
     return selection_scope.status!=XR_XIR_OK ? selection_scope.status : status;
 }
+/* Nested readers propagate preparation to the complete pure parent. Only
+ * this lexical boundary may retire its derived prefix and call the client. */
+XR_FUNC XrXirStatus xir_effects_context_operation(const XrXirCompileContext *context,
+    const XrXirEffects *effects,const XrXirModule *source,const XrXirTypes *types,
+    XirEffectContextOperation operation,void *data, const XirReadRequest *read_request) {
+    if(read_request && !xir_read_request_matches(context,read_request)) return XR_XIR_BAD_STRUCTURE;
+    if(!read_request || read_request->attempt)
+        return xir_effects_context_operation_attempt_body(context, effects, source, types, operation, data, read_request);
+    if(!read_request->operation || !xir_compile_context_valid(context) ||
+        read_request->operation->capacity.resources!=(context)->resources) return XR_XIR_BAD_STRUCTURE;
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(context,request.operation);
+        if(status==XR_XIR_OK) status=xir_effects_context_operation_attempt_body(context, effects, source, types, operation, data, &request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) return status;
+        status=xir_read_prepare(context,request.operation,request.control);
+        if(status!=XR_XIR_OK) return status;
+    }
+}
+
 
 XR_FUNC XrXirStatus xir_effects_context_select_scoped(XirEffectContextScope *scope,
     const XirEffectContextInput *input,XirEffectContextView *output) {

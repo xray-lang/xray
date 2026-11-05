@@ -11,7 +11,7 @@ static XrXirStatus initial_ordinary_effects(const XrXirCompileContext *context,
     XrXirConstruction *construction=NULL;
     XrXirStatus status=xir_fixture_construction(context,source->types,&construction);
     if (status==XR_XIR_OK) status=xr_xir_compile_verify_analyzed_effects_v2(context,
-        source,construction,output,NULL);
+        source,construction,output,NULL, NULL);
     xr_xir_compile_construction_free(construction);return status;
 }
 
@@ -37,7 +37,7 @@ static XrXirStatus initial_ordinary_owner(const XrXirCompileContext *context,
     const XrXirModule *source,EffectBodyMaterial *initial,bool tracked) {
     uint32_t references=initial->references;
     EffectContextOwner *owner=NULL;EffectContextForest *forest=NULL;
-    XrXirStatus status=effect_context_owner_build(context,source,NULL,initial,&owner);
+    XrXirStatus status=effect_context_owner_build(context,source,NULL,initial,&owner, NULL);
     if (status==XR_XIR_OK) {
         EffectBodyMaterial *ordinary=owner->ordinary->uses.generation;
         EffectBodyMaterial *dense=owner->forest->invocations->body;
@@ -64,7 +64,7 @@ static XrXirStatus initial_ordinary_owner(const XrXirCompileContext *context,
         CHECK(ordinary->references==1 && initial->references==references+1);
         status=ordinary_material_cell_match(context,dense,tracked);
         if (status==XR_XIR_OK) status=effect_invocation_public_gate(context,forest->invocations);
-        if (status==XR_XIR_OK) status=effect_invocation_forest_match(context,forest);
+        if (status==XR_XIR_OK) status=effect_invocation_forest_match(context,forest,NULL);
     }
     effect_context_forest_free(forest);effect_context_owner_free(owner);return status;
 }
@@ -247,14 +247,14 @@ static void initial_ordinary_refresh_controls(void) {
     EffectInvocationFinal *published=effects->invocations->final;
     XrCompileResourceStats before_refresh=rp_stats(&context);
     RootParameterMark retained=rp_mark();
-    CHECK(xir_effects_context_refresh(&context,original,effects)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xir_effects_context_refresh(&context,original,effects, NULL)==XR_XIR_BAD_STRUCTURE);
     XrCompileResourceStats after_refresh=rp_stats(&context);
     CHECK(!memcmp(&before_refresh,&after_refresh,sizeof(before_refresh)) &&
         effects->invocations->final==published && effect_outcomes_empty(&effects->outcomes_work));
     rp_balanced(retained);xr_xir_compile_effects_free(effects);effects=NULL;
     /* This actual constructor remains private while Source refines its body.
      * It is released without publishing facts for a changed Source input. */
-    CHECK(effect_infer_construct(&context,original,NULL,&effects)==XR_XIR_OK && effects &&
+    CHECK(effect_infer_construct(&context,original,NULL,&effects, NULL)==XR_XIR_OK && effects &&
         effects->outcomes_owner && !effects->invocations->final->outcomes);
 
     CHECK(effect_contexts_read(effects) && !effects->refinement &&
@@ -286,7 +286,7 @@ static void initial_ordinary_refresh_controls(void) {
         bool restored=pass==1 && site==1;
         XrXirStatus expected=restored?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
         CHECK(effect_body_source_match(&context,initial,&current)==expected);
-        CHECK(xir_effects_context_refresh(&context,&current,effects)==XR_XIR_OK);
+        CHECK(xir_effects_context_refresh(&context,&current,effects, NULL)==XR_XIR_OK);
         CHECK(effects->invocations==certificate && effects->result_borrow==(&certificate->final->summary) &&
             effect_contexts_read(effects)->dense->uses.result_borrow==(&effect_contexts_read(effects)->forest->invocations->final->summary) &&
             !memcmp(certificate,&saved_certificate,sizeof(saved_certificate)) &&
@@ -316,7 +316,7 @@ static void initial_ordinary_refresh_controls(void) {
 static void initial_ordinary_forest_literals(const XrXirCompileContext *context,
     EffectContextForest *forest) {
     CHECK(forest->count==2 && forest->nodes[0].parameter_count==1 &&
-        forest->invocations && effect_invocation_forest_match(context,forest)==XR_XIR_OK);
+        forest->invocations && effect_invocation_forest_match(context,forest,NULL)==XR_XIR_OK);
     EffectForestNode node=forest->nodes[0];
     EffectFinalFunctions *summary=&forest->invocations->final->summary;
     XrXirRootEffects facts;CHECK(effect_invocation_certificate_facts(context,forest->invocations,0,&facts)==XR_XIR_OK);
@@ -350,16 +350,16 @@ static void initial_ordinary_forest_literals(const XrXirCompileContext *context,
             case 13: summary->witnesses[forest->count].cause=
                 (XrXirRootEffectCause)((uint32_t)unknown.cause^1u);break;
         }
-        CHECK(effect_invocation_forest_match(context,forest)==XR_XIR_BAD_STRUCTURE &&
+        CHECK(effect_invocation_forest_match(context,forest,NULL)==XR_XIR_BAD_STRUCTURE &&
             rp_stats(context).live_bytes==live);
         forest->nodes[0]=node;root_node->intrinsic_mask=intrinsic;
         forest->invocations->final->role_proof=role_proof;
         summary->witnesses[0]=witness;summary->witnesses[forest->count]=unknown;
-        CHECK(effect_invocation_forest_match(context,forest)==XR_XIR_OK &&
+        CHECK(effect_invocation_forest_match(context,forest,NULL)==XR_XIR_OK &&
             rp_stats(context).live_bytes==live);
     }
     EffectForestNode target=forest->nodes[1];forest->nodes[1].owner=target.owner?0:UINT32_MAX;
-    CHECK(effect_invocation_forest_match(context,forest)==XR_XIR_BAD_STRUCTURE);
+    CHECK(effect_invocation_forest_match(context,forest,NULL)==XR_XIR_BAD_STRUCTURE);
     forest->nodes[1]=target;
     XrXirRootCauseTrace *occupied=(XrXirRootCauseTrace *)(uintptr_t)1;
     XrCompileResourceStats prepared=rp_stats(context);size_t attempts=rp_attempts;
@@ -381,7 +381,7 @@ static void initial_ordinary_forest_controls(void) {
     OrdinaryMaterialFixture fixture;initial_ordinary_fixture(&fixture,1);
     XrXirEffects *effects=NULL;EffectContextOwner *owner=NULL;
     CHECK(initial_ordinary_effects(&context,&fixture.source,&effects)==XR_XIR_OK);
-    CHECK(effect_context_owner_build(&context,&fixture.source,NULL,effects->invocations->body,&owner)==XR_XIR_OK);
+    CHECK(effect_context_owner_build(&context,&fixture.source,NULL,effects->invocations->body,&owner, NULL)==XR_XIR_OK);
     EffectContextForest *forest=owner->forest;owner->forest=NULL;
     effect_context_owner_free(owner);xr_xir_compile_effects_free(effects);
     memset(&fixture,0xCE,sizeof(fixture));

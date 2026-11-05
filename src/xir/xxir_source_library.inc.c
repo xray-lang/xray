@@ -72,7 +72,7 @@ static const XrXirModule *source_library_module(SourceContext *ctx,uint32_t modu
         source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"Checked library kind is required");return NULL;
     }
     const XrXirConstruction *construction=xr_xir_compile_artifact_construction(artifact);
-    XrXirStatus status=xr_xir_compile_verify_v2(&ctx->compile, library, construction, NULL);
+    XrXirStatus status=xr_xir_compile_verify_v2(&ctx->compile, library, construction, NULL, NULL);
     if(status!=XR_XIR_OK){source_fail(ctx,NULL,status,"Checked library verification failed");return NULL;}
     status=library_catalog_shape(library,construction);
     if(status!=XR_XIR_OK){source_fail(ctx,NULL,status,"Checked library import subset is not admitted");return NULL;}

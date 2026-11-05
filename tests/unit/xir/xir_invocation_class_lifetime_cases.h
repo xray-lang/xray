@@ -54,7 +54,7 @@ static XrXirStatus conditional_class_discovery_lifetime(const XrXirCompileContex
             CHECK(rp_attempts==query_attempts);
             effect_invocation_read_close(&read);
         }
-        if(status==XR_XIR_OK) status=effect_invocation_publication_match(work,certificate,&certificate->final->summary);
+        if(status==XR_XIR_OK) status=effect_invocation_publication_match(work,certificate,&certificate->final->summary, NULL);
     }
     effect_invocation_result_free(receiving);effect_invocation_certificate_free(certificate);return status;
 }

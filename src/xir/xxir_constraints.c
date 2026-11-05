@@ -9,7 +9,7 @@
 #include "xxir_constraints.h"
 #include "xxir_compile_memory.h"
 #include "xxir_type_copy_control.h"
-#include "xxir_types.h"
+#include "xxir_type_match_internal.h"
 #include "../base/xmalloc.h"
 #include <string.h>
 
@@ -97,9 +97,10 @@ static XrXirStatus constraint_record_identity(const XrXirTypes *from_types,
     XrXirStatus status = constraint_record_name(a->module,b->module);
     return status == XR_XIR_OK ? constraint_record_name(a->name,b->name) : status;
 }
-XrXirStatus xr_xir_compile_constraint_records_match(const XrXirCompileContext *compile_context, const XrXirTypes *from_types, XrXirConstraint from, const XrXirTypes *to_types, XrXirConstraint to, uint32_t parameter_count) {
+XR_FUNC XrXirStatus xir_constraint_records_read(const XrXirCompileContext *compile_context, const XrXirTypes *from_types, XrXirConstraint from, const XrXirTypes *to_types, XrXirConstraint to,uint32_t parameter_count,XirReadScratch *memory) {
     XrXirStatus allocation_status = XR_XIR_OK;
-    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    if(!xir_compile_context_valid(compile_context) ||
+        (memory && memory->resources!=compile_context->resources)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *budget = &compile_state;
     if (!budget || (!!from.interfaces != !!from.interface_count) || (!!to.interfaces != !!to.interface_count))
@@ -112,7 +113,8 @@ XrXirStatus xr_xir_compile_constraint_records_match(const XrXirCompileContext *c
     uint64_t bytes = (uint64_t)parameter_count * sizeof(XrXirType);
     if (bytes > SIZE_MAX) return XR_XIR_BUDGET;
 
-    XrXirType *parameters = parameter_count ? xir_compile_alloc(compile_context, (size_t)bytes, &allocation_status) : NULL;
+    XirReadClaim claim={0};
+    XrXirType *parameters=parameter_count?xir_read_scratch_alloc(compile_context,memory,(size_t)bytes,false,&claim,&allocation_status):NULL;
     if (parameter_count && !parameters) {  return allocation_status; }
     for (uint32_t p = 0; p < parameter_count; ++p) parameters[p] = (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE + p);
     XrXirStatus status = XR_XIR_OK;
@@ -121,8 +123,14 @@ XrXirStatus xr_xir_compile_constraint_records_match(const XrXirCompileContext *c
 
         const XrXirInterfaceApplication *a = &from.interfaces[i], *b = &to.interfaces[i];
         status = constraint_record_identity(from_types,a,to_types,b);
-        for (uint32_t p = 0; p < a->argument_count && status == XR_XIR_OK; ++p)
-            status = xr_xir_compile_type_substitution_matches_between(budget, from_types, to_types, parameters, parameter_count, a->arguments[p], b->arguments[p]);
+        for(uint32_t p=0;p<a->argument_count && status==XR_XIR_OK;++p) {
+            const XirTypeMatchRead read={from_types,to_types,parameters,parameter_count,a->arguments[p],b->arguments[p],memory};
+            status=xir_type_match_read(budget,&read);
+        }
     }
-    xr_compile_resources_free(parameters);  return status;
+    xir_read_scratch_release(memory,parameters,&claim);return status;
+}
+XR_FUNC XrXirStatus xr_xir_compile_constraint_records_match(const XrXirCompileContext *context,
+    const XrXirTypes *from_types,XrXirConstraint from,const XrXirTypes *to_types,XrXirConstraint to,uint32_t count) {
+    return xir_constraint_records_read(context,from_types,from,to_types,to,count,NULL);
 }

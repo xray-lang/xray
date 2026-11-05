@@ -68,8 +68,8 @@ static void last_release_attack(void) {
 }
 static XrXirStatus terminal(const XrXirCompileContext *context,XrXirArtifact *artifact,XrXirEffects *effects,bool source) {
     (void)artifact;
-    return source?effect_source_terminal_roles(context,effects):
-        effect_final_inventories_match(context,effects->invocations,effects->invocations->final->outcomes);
+    return source?effect_source_terminal_roles(context,effects, NULL):
+        effect_final_inventories_match(context,effects->invocations,effects->invocations->final->outcomes, NULL);
 }
 static void fixture(bool source) {
     XrXirTypeNode type={.kind=XR_XIR_TYPE_CALLABLE,.flags=XR_XIR_CALLABLE_ROOT_NONE,.element=XR_XIR_NEVER};
@@ -123,7 +123,7 @@ static void fixture(bool source) {
     if(status!=XR_XIR_OK)fprintf(stderr,"fixture status%u f%u b%u i%u\n",status,diagnostic.function,diagnostic.block,diagnostic.instruction);
     CHECK(status==XR_XIR_OK&&artifact);
     CHECK(xr_xir_compile_effects_analyze(artifact,&effects)==XR_XIR_OK&&effects);
-    CHECK(effect_source_terminal_roles(&context,effects)==XR_XIR_OK);
+    CHECK(effect_source_terminal_roles(&context,effects, NULL)==XR_XIR_OK);
     EffectInvocationFinal *outer=effects->invocations->final;
     CHECK(outer->outcomes->contexts && outer->outcomes->contexts->forest);
     EffectInvocationFinal *targets[2]={outer,outer->outcomes->contexts->forest->invocations->final};
@@ -154,32 +154,32 @@ static void fixture(bool source) {
             CHECK(attacks==1&&!release_hook);
             if(mutation<3) {
                 EffectCaptureRead frame={.work=&context,.final=final,.fallback=true,.fixed_only=true,.class_results=true};
-                CHECK(effect_capture_frame(&frame)==XR_XIR_OK);
+                CHECK(effect_capture_frame(&frame, NULL)==XR_XIR_OK);
             }
             a=allocations;f=releases;
             status=terminal(&context,artifact,effects,source);
             CHECK(status==XR_XIR_BAD_STRUCTURE);
             CHECK(allocations==a&&releases==f);
-            XrXirStatus public_status=xir_effects_source_terminal(&context,xr_xir_compile_artifact_module(artifact),effects);
+            XrXirStatus public_status=xir_effects_source_terminal(&context,xr_xir_compile_artifact_module(artifact),effects, NULL);
             CHECK(public_status==XR_XIR_BAD_STRUCTURE);
             final->capture.count=count;memcpy(replacement,saved,(size_t)count*sizeof(*saved));
             run->base=original_input;final->edges[0]=original_edge;
             CHECK(terminal(&context,artifact,effects,source)==XR_XIR_OK);
-            CHECK(xir_effects_source_terminal(&context,xr_xir_compile_artifact_module(artifact),effects)==XR_XIR_OK);
+            CHECK(xir_effects_source_terminal(&context,xr_xir_compile_artifact_module(artifact),effects, NULL)==XR_XIR_OK);
             fprintf(stderr,"terminal%u target%u mutation%u: cleanup observed, rejected status%u, restored PASS\n",
                 source,target,mutation,status);
         }
         f=releases;
-        CHECK(xir_effects_source_terminal(&context,xr_xir_compile_artifact_module(artifact),effects)==XR_XIR_OK);
+        CHECK(xir_effects_source_terminal(&context,xr_xir_compile_artifact_module(artifact),effects, NULL)==XR_XIR_OK);
         size_t prefix_frees=releases-f;CHECK(prefix_frees);
         attack_final=final;mutation_kind=0;attack_cut=prefix_frees;
         seen_releases=attacks=0;release_hook=last_release_attack;
-        status=xir_effects_source_terminal(&context,xr_xir_compile_artifact_module(artifact),effects);
+        status=xir_effects_source_terminal(&context,xr_xir_compile_artifact_module(artifact),effects, NULL);
         release_hook=NULL;
         CHECK(attacks==1 && seen_releases==prefix_frees && final->capture.count==count+1);
         CHECK(status==XR_XIR_BAD_STRUCTURE);
         final->capture.count=count;memcpy(replacement,saved,(size_t)count*sizeof(*saved));
-        CHECK(xir_effects_source_terminal(&context,xr_xir_compile_artifact_module(artifact),effects)==XR_XIR_OK);
+        CHECK(xir_effects_source_terminal(&context,xr_xir_compile_artifact_module(artifact),effects, NULL)==XR_XIR_OK);
         fprintf(stderr,"terminal%u target%u: public Source prefix last release%zu changed sorted capture, final rejected, restored PASS\n",
             source,target,prefix_frees);
         xr_free(saved);attack_final=NULL;

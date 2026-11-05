@@ -50,7 +50,7 @@ static XrXirStatus pc_outcome_late_operation(const XrXirCompileContext *context,
         CHECK(rows[4].type==XR_XIR_I64);
         pc_outcome_row=&rows[4];pc_outcome_mutation=mutation;pc_outcome_callbacks=0;
         pc_allocate_hook=pc_outcome_late_allocate;
-        status=xr_xir_compile_effects_infer_verified(context,&candidate,&effects);
+        status=xr_xir_compile_effects_infer_verified(context,&candidate,&effects, NULL);
         pc_allocate_hook=NULL;pc_outcome_candidate=NULL;pc_outcome_row=NULL;
         if (oracle) fprintf(stderr,"late whole Input mutation%u callbacks%u status%u output%u\n",
             mutation,pc_outcome_callbacks,status,effects!=NULL);
@@ -118,10 +118,10 @@ static void pc_outcome_owner_literals(void) {
     EffectInvocationCertificate *again=effects->invocations;EffectGraph graph={0};
     XrCompileResourceStats published=pc_stats(&context);size_t published_attempts=attempts;
     const XrXirModule *source=xr_xir_compile_artifact_module(checked);
-    CHECK(effect_invocation_publication_commit(&context,effects,&again)==XR_XIR_BAD_STRUCTURE &&
+    CHECK(effect_invocation_publication_commit(&context,effects,&again, NULL)==XR_XIR_BAD_STRUCTURE &&
         again==effects->invocations &&
-        effect_invocation_publish(&context,source,effects,&graph,NULL,NULL)==XR_XIR_BAD_STRUCTURE &&
-        effect_outcomes_publish(&context,source,effects)==XR_XIR_BAD_STRUCTURE &&
+        effect_invocation_publish(&context,source,effects,&graph,NULL,NULL, NULL)==XR_XIR_BAD_STRUCTURE &&
+        effect_outcomes_publish(&context,source,effects, NULL)==XR_XIR_BAD_STRUCTURE &&
         pc_stats(&context).work==published.work && attempts==published_attempts &&
         effect_final_outcomes(effects)==final);
     xr_xir_compile_artifact_free(checked);memset(&fixture,0xCE,sizeof(fixture));

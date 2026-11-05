@@ -112,7 +112,7 @@ static XrXirStatus sg_whole(const XrXirCompileContext *context,SgFixture *f,uint
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;XrXirDiagnostic diagnostic={0};
     XrXirStatus status=xir_fixture_check(context,&f->base.module,&checked,&diagnostic);
     if(status==XR_XIR_OK)
-        status=xr_xir_compile_effects_infer_verified(context,xr_xir_compile_artifact_module(checked),&effects);
+        status=xr_xir_compile_effects_infer_verified(context,xr_xir_compile_artifact_module(checked),&effects, NULL);
     if(status==XR_XIR_OK) {
         CHECK(effects && !xr_xir_effects_error_unknown(effects,1) && !xr_xir_effects_error_unidentified(effects,1));
         for(uint32_t a=0;a<width;++a) {

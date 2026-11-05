@@ -416,7 +416,7 @@ static XrXirCtfeStatus ctfe_call_run_received(const XrXirCtfeCallRequest *reques
     if (status==XR_XIR_CTFE_OK) status=ctfe_call_execute(&execution,output);
     ctfe_call_frames_free(&execution);ctfe_owned_free(&execution.owned);return status;
 }
-XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_calls(const XrXirCtfeCallRequest *request,
+static XrXirCtfeStatus ctfe_calls_read_prefix(const XrXirCtfeCallRequest *request,
     XrXirValue *output) {
     if (!request || !output || output->type || output->reserved || output->payload ||
         !request->evaluation.artifact || (request->evaluation.argument_count && !request->evaluation.arguments) ||
@@ -424,15 +424,36 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_calls(const XrXirCtfeCallRequest *re
         request->evaluation.limits.frame_bytes>XR_XIR_CTFE_MAX_FRAME_BYTES ||
         request->evaluation.limits.output_bytes>XR_XIR_CTFE_MAX_OUTPUT_BYTES ||
         request->call_depth>XR_XIR_CTFE_MAX_CALL_DEPTH) return XR_XIR_CTFE_BAD_ARGUMENT;
+    return XR_XIR_CTFE_OK;
+}
+static XrXirCtfeStatus ctfe_calls_read_body(const XrXirCtfeCallRequest *request,
+    XrXirValue *output,const XirReadRequest *read_request) {
+    XrXirCtfeStatus prefix=ctfe_calls_read_prefix(request,output);
+    if(prefix!=XR_XIR_CTFE_OK) return prefix;
+    const XrXirArtifact *artifact=request->evaluation.artifact;
     XrXirCtfeStatus status=ctfe_control_poll(request->evaluation.control);
     if (status!=XR_XIR_CTFE_OK) return status;
-    status=ctfe_compile_status(xr_xir_compile_artifact_verify(request->evaluation.artifact,NULL));
+    status=ctfe_compile_status(xir_artifact_verify(&artifact->context, artifact,NULL,request->evaluation.control,read_request));
     if (status!=XR_XIR_CTFE_OK) return status;
+    if(request->evaluation.artifact!=artifact) return XR_XIR_CTFE_BAD_ARTIFACT;
+    status=ctfe_calls_read_prefix(request,output);
+    if(status!=XR_XIR_CTFE_OK) return status;
     bool owned=false;XrXirCellProvenance *cells=NULL;void *closure=NULL;
     status=ctfe_call_prepare_received(request,&owned,&cells,&closure);
     if (status!=XR_XIR_CTFE_OK) {
         xr_xir_compile_cell_provenance_free(cells);xr_compile_resources_free(closure);return status;
     }
     return ctfe_call_run_received(request,output,owned,cells,closure);
+}
+XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_calls(const XrXirCtfeCallRequest *request,
+    XrXirValue *output) {
+    XrXirCtfeStatus status=ctfe_calls_read_prefix(request,output);
+    if(status!=XR_XIR_CTFE_OK) return status;
+    const XrXirArtifact *artifact=request->evaluation.artifact;
+    if(!xir_compile_context_valid(&artifact->context)) return XR_XIR_CTFE_BAD_ARTIFACT;
+    XirReadOperation operation={.capacity={.resources=artifact->context.resources}};
+    const XirReadRequest read_request={.operation=&operation,.control=request->evaluation.control};
+    status=ctfe_calls_read_body(request,output,&read_request);
+    xir_read_operation_free(&operation);return status;
 }
 #include "xxir_ctfe_batch.inc.c"

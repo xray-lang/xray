@@ -62,7 +62,7 @@ static void mr_generic_fixture(MarkerGenericFixture *f,bool projected) {
     f->types=(XrXirTypes){.nodes=f->nodes,.count=last+1,.nominals=&f->table,
         .interfaces=projected?NULL:&f->interfaces};
     f->instruction=(XrXirInstruction){.op=XR_XIR_RETURN};f->block=(XrXirBlock){.count=1};
-    f->function=(XrXirFunction){.name="init",.name_length=4,.instructions=&f->instruction,
+    f->function=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="init",.name_length=4,.instructions=&f->instruction,
         .instruction_count=1,.blocks=&f->block,.block_count=1};
     f->source=(XrXirSourceModule){.name="marker",.name_length=6};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=&f->identity,
@@ -86,12 +86,12 @@ static XrXirStatus mr_marker_loop(const XrXirCompileContext *work,const XrXirMod
     for(unsigned retry=0;retry<64;++retry) {
         XrXirStatus status=mr_marker_attempt(work,module,type,memory);
         if(status!=XR_XIR_BUDGET || !memory->required) return status;
-        status=xir_read_scratch_grow(work,memory);if(status!=XR_XIR_OK) return status;
+        status=xir_read_scratch_prepare(work,memory,NULL);if(status!=XR_XIR_OK) return status;
     }
     CHECK(false);return XR_XIR_BAD_STRUCTURE;
 }
 static void mr_generic_cases(bool projected) {
-    XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+    XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).held_bytes;
     MarkerGenericFixture f;mr_generic_fixture(&f,projected);XrXirArtifact *checked=NULL;
     XrXirStatus status=xir_fixture_check(&context,&f.module,&checked,NULL);
     if(status!=XR_XIR_OK) fprintf(stderr,"generic fixture projected%u status%u\n",projected,status);
@@ -103,24 +103,24 @@ static void mr_generic_cases(bool projected) {
     CHECK(xir_metadata_type_markers_prove(&context,&proof,type,XR_XIR_CONSTRAINT_SENDABLE)==XR_XIR_OK);
     XirReadScratch memory={.resources=context.resources};size_t start=attempts;
     CHECK(mr_marker_loop(&context,module,type,&memory)==XR_XIR_OK);size_t sites=attempts-start;CHECK(sites && sites<64);
-    CHECK(mr_marker_attempt(&context,module,type,&memory)==XR_XIR_OK);
+    CHECK(mr_marker_loop(&context,module,type,&memory)==XR_XIR_OK);
     if(projected) {
         XrXirType *field=(XrXirType *)module->types->nodes[4].nominal.fields;XrXirType saved=*field;*field=XR_XIR_BOOL;
-        CHECK(mr_marker_attempt(&context,module,type,&memory)==XR_XIR_BAD_TYPE);*field=saved;
+        CHECK(mr_marker_loop(&context,module,type,&memory)==XR_XIR_BAD_TYPE);*field=saved;
     } else {
         XrXirImplementation *impl=(XrXirImplementation *)module->declarations->implementations->records;
-        impl->interface.declaration=1;CHECK(mr_marker_attempt(&context,module,type,&memory)==XR_XIR_BAD_STRUCTURE);
+        impl->interface.declaration=1;CHECK(mr_marker_loop(&context,module,type,&memory)==XR_XIR_BAD_STRUCTURE);
         impl->interface.declaration=0;
     }
-    CHECK(mr_marker_attempt(&context,module,type,&memory)==XR_XIR_OK);xir_read_scratch_free(&memory);
-    uint64_t held=pc_stats(&context).live_bytes;
+    CHECK(mr_marker_loop(&context,module,type,&memory)==XR_XIR_OK);xir_read_scratch_free(&memory);
+    uint64_t held=pc_stats(&context).held_bytes;
     for(size_t site=0;site<sites;++site) {
         memory=(XirReadScratch){.resources=context.resources};fail_at=attempts+site;injected=false;
         status=mr_marker_loop(&context,module,type,&memory);fail_at=SIZE_MAX;
         CHECK(status==XR_XIR_OUT_OF_MEMORY && injected);xir_read_scratch_free(&memory);
-        CHECK(pc_stats(&context).live_bytes==held);memory=(XirReadScratch){.resources=context.resources};
+        CHECK(pc_stats(&context).held_bytes==held);memory=(XirReadScratch){.resources=context.resources};
         CHECK(mr_marker_loop(&context,module,type,&memory)==XR_XIR_OK);xir_read_scratch_free(&memory);
-        CHECK(pc_stats(&context).live_bytes==held);
+        CHECK(pc_stats(&context).held_bytes==held);
     }
     xr_xir_compile_artifact_free(checked);pc_release(&context,baseline);
     printf("generic marker projected%u: full admission, zero-callback attempts, %zu allocation failures, reused-capacity mutation rejection, physical0\n",projected,sites);

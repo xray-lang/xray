@@ -17,6 +17,9 @@
 /* Borrowed only during the composite verifier call. The opaque owner and
  * reader come from the common Cell producer for this exact immutable module,
  * never from caller-provided role bits. No fact escapes as entry authority. */
+struct XirReadScratch;
+XR_FUNC XrXirStatus xir_view_type_flags_read(const XrXirCompileContext *context,
+    const XrXirTypes *types,XrXirType type,uint32_t *output,struct XirReadScratch *memory);
 typedef struct XirViewAccessCells {
     const XrXirCellProvenance *owner;
     XrXirCellProofRole (*role)(const XrXirCellProvenance *,uint32_t,uint32_t);

@@ -30,7 +30,7 @@ static void conditional_sparse_physical_bound_rejections(EffectInvocationWorkspa
     uint32_t original_mask=physical->records[0].mask;
     XrCompileResourceStats before=rp_stats(context);RootParameterMark retained=rp_mark();
     physical->records[0].mask&=~EFFECT_PHYSICAL_CALLABLE;
-    CHECK(effect_invocation_seal(context,&request,&output,NULL)==XR_XIR_BAD_STRUCTURE && !output &&
+    CHECK(effect_invocation_seal(context,&request,&output,NULL, NULL)==XR_XIR_BAD_STRUCTURE && !output &&
         held==owner && staged==solution && rp_stats(context).live_bytes==before.live_bytes &&
         rp_stats(context).allocation_count==before.allocation_count);
     physical->records[0].mask=original_mask;rp_balanced(retained);
@@ -171,12 +171,12 @@ static XrXirStatus conditional_sparse_case(const XrXirCompileContext *context,ui
     if (status==XR_XIR_OK) { phase=5;status=effect_invocation_bounds_new(context,&bounds); }
     for (uint32_t f=0;status==XR_XIR_OK && f<module->function_count;++f)
         status=effect_invocation_bounds_capture(context,bounds,module->types,&module->functions[f],f,NULL);
-    if (status==XR_XIR_OK) { phase=6;status=effect_invocations_receive(context,module,&effects,&graph,bounds,&owner); }
-    if (status==XR_XIR_OK) { phase=7;status=effect_invocations_solve(owner); }
+    if (status==XR_XIR_OK) { phase=6;status=effect_invocations_receive(context,module,&effects,&graph,bounds,&owner, NULL); }
+    if (status==XR_XIR_OK) { phase=7;status=effect_invocations_solve(owner, NULL); }
     if (status==XR_XIR_OK) { phase=8;status=effect_invocation_stage(owner,&solution); }
     if (status==XR_XIR_OK && oracle) conditional_sparse_rejections(owner,solution,mode);
     EffectInvocationSealRequest request={&owner,&solution,NULL};
-    if (status==XR_XIR_OK) { phase=9;status=effect_invocation_seal(context,&request,&certificate,NULL); }
+    if (status==XR_XIR_OK) { phase=9;status=effect_invocation_seal(context,&request,&certificate,NULL, NULL); }
     if (status!=XR_XIR_OK && oracle) fprintf(stderr,
         "INVOCATION_SPARSE mode=%u phase=%u status=%u f=%u b=%u i=%u\n",mode,phase,status,
         diagnostic.function,diagnostic.block,diagnostic.instruction);

@@ -826,7 +826,7 @@ static XrXirStatus provenance_match_scoped(void *data,XirEffectContextScope *sco
 
 static XrXirStatus provenance_functions_match_owned(const XrXirCompileContext *compile_context,
     const XrXirModule *source, const XrXirModule *destination, const XrXirProvenance *instance,
-    const XrXirEffects *effects, XrXirDiagnostic *diagnostic) {
+    const XrXirEffects *effects, XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *remaining = &compile_state;
@@ -859,12 +859,12 @@ static XrXirStatus provenance_functions_match_owned(const XrXirCompileContext *c
                 {remaining->resources, NULL},instance,effects,NULL};
             XrXirEffects *inferred=NULL;
             if (!effects && source->provenance && source->provenance->kind==XR_XIR_EVIDENCE_TEMPLATE) {
-                status=xr_xir_compile_effects_infer_verified(remaining,source,&inferred);
+                status=xr_xir_compile_effects_infer_verified(remaining,source,&inferred, read_request);
                 context.effects=inferred;
             }
             if (status==XR_XIR_OK) status=xir_effects_context_available(remaining,context.effects) ?
                 xir_effects_context_operation(remaining,context.effects,source,destination->types,
-                    provenance_match_scoped,&context) : provenance_match_scoped(&context,NULL);
+                    provenance_match_scoped,&context, read_request) : provenance_match_scoped(&context,NULL);
             xr_xir_type_match_scratch_free(&context.scratch);
             xr_xir_compile_effects_free(inferred);
         }
@@ -874,18 +874,41 @@ static XrXirStatus provenance_functions_match_owned(const XrXirCompileContext *c
     return status;
 }
 
-XrXirStatus xr_xir_compile_provenance_functions_match(const XrXirCompileContext *context,
+XrXirStatus xr_xir_compile_provenance_functions_match_attempt_body(const XrXirCompileContext *context,
     const XrXirModule *source, const XrXirModule *destination, const XrXirProvenance *instance,
-    XrXirDiagnostic *diagnostic) {
-    return provenance_functions_match_owned(context,source,destination,instance,NULL,diagnostic);
+    XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
+    return provenance_functions_match_owned(context,source,destination,instance,NULL,diagnostic, read_request);
 }
+/* Nested readers propagate preparation to the complete pure parent. Only
+ * this lexical boundary may retire its derived prefix and call the client. */
+XR_FUNC XrXirStatus xr_xir_compile_provenance_functions_match(const XrXirCompileContext *context,
+    const XrXirModule *source, const XrXirModule *destination, const XrXirProvenance *instance,
+    XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
+    if(read_request && !xir_read_request_matches(context,read_request)) return XR_XIR_BAD_STRUCTURE;
+    if(!read_request || read_request->attempt)
+        return xr_xir_compile_provenance_functions_match_attempt_body(context, source, destination, instance, diagnostic, read_request);
+    if(!read_request->operation || !xir_compile_context_valid(context) ||
+        read_request->operation->capacity.resources!=(context)->resources) return XR_XIR_BAD_STRUCTURE;
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(context,request.operation);
+        if(status==XR_XIR_OK) status=xr_xir_compile_provenance_functions_match_attempt_body(context, source, destination, instance, diagnostic, &request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) {
+            if(diagnostic && status!=XR_XIR_OK) diagnostic->status=status;return status;
+        }
+        status=xir_read_prepare(context,request.operation,request.control);
+        if(status!=XR_XIR_OK) {if(diagnostic) diagnostic->status=status;return status;}
+    }
+}
+
 
 /* Raw verification creates and retires its fresh Source derivation.
  * The unique producer may borrow this call's existing owner, but full current
  * Source, permissions and destination correspondence still run every time. */
-XR_FUNC XrXirStatus xr_xir_compile_provenance_verify(const XrXirCompileContext *context,
+XR_FUNC XrXirStatus xr_xir_compile_provenance_verify_attempt_body(const XrXirCompileContext *context,
     const XrXirModule *destination, const XrXirProvenance *instance,
-    const XrXirEffects *source_effects, XrXirDiagnostic *diagnostic) {
+    const XrXirEffects *source_effects, XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
     if (!xir_compile_context_valid(context) || !instance ||
         !xir_effect_kind_is_closed(instance->kind) || !instance->source) {
         if (diagnostic) *diagnostic=(XrXirDiagnostic){XR_XIR_BAD_STRUCTURE,
@@ -897,13 +920,35 @@ XR_FUNC XrXirStatus xr_xir_compile_provenance_verify(const XrXirCompileContext *
         source->module.provenance->kind==XR_XIR_EVIDENCE_TEMPLATE;
     XrXirEffects *effects=NULL;
     XrXirStatus status=source_effects && !source->module.provenance ?
-        xir_compile_verify_raw_source_effects(context,&source->module,source->construction,source_effects,diagnostic) : source_effects ?
-        xr_xir_compile_verify_source_effects_v2(context,&source->module,source->construction,source_effects,diagnostic) :
-        templated ? xr_xir_compile_verify_owned_effects_v2(context,&source->module,source->construction,&effects,diagnostic) :
-        xr_xir_compile_verify_v2(context,&source->module,source->construction,diagnostic);
+        xir_compile_verify_raw_source_effects(context,&source->module,source->construction,source_effects,diagnostic, read_request) : source_effects ?
+        xr_xir_compile_verify_source_effects_v2(context,&source->module,source->construction,source_effects,diagnostic, read_request) :
+        templated ? xr_xir_compile_verify_owned_effects_v2(context,&source->module,source->construction,&effects,diagnostic, read_request) :
+        xr_xir_compile_verify_v2(context,&source->module,source->construction,diagnostic, read_request);
     if (status==XR_XIR_OK)
         status=provenance_functions_match_owned(context,&source->module,destination,instance,
-            templated ? (source_effects ? source_effects : effects) : NULL,diagnostic);
+            templated ? (source_effects ? source_effects : effects) : NULL,diagnostic, read_request);
     xr_xir_compile_effects_free(effects);
     return status;
+}
+/* Nested readers propagate preparation to the complete pure parent. Only
+ * this lexical boundary may retire its derived prefix and call the client. */
+XR_FUNC XrXirStatus xr_xir_compile_provenance_verify(const XrXirCompileContext *context,
+    const XrXirModule *destination, const XrXirProvenance *instance,
+    const XrXirEffects *source_effects, XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
+    if(read_request && !xir_read_request_matches(context,read_request)) return XR_XIR_BAD_STRUCTURE;
+    if(!read_request || read_request->attempt)
+        return xr_xir_compile_provenance_verify_attempt_body(context, destination, instance, source_effects, diagnostic, read_request);
+    if(!read_request->operation || !xir_compile_context_valid(context) ||
+        read_request->operation->capacity.resources!=(context)->resources) return XR_XIR_BAD_STRUCTURE;
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(context,request.operation);
+        if(status==XR_XIR_OK) status=xr_xir_compile_provenance_verify_attempt_body(context, destination, instance, source_effects, diagnostic, &request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) {
+            if(diagnostic && status!=XR_XIR_OK) diagnostic->status=status;return status;
+        }
+        status=xir_read_prepare(context,request.operation,request.control);
+        if(status!=XR_XIR_OK) {if(diagnostic) diagnostic->status=status;return status;}
+    }
 }

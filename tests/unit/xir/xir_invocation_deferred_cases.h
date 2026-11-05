@@ -99,31 +99,31 @@ static void invocation_deferred_rejections(const XrXirCompileContext *context,
     EffectInvocationSealRequest request={owner,solution,NULL};EffectInvocationCertificate *out=NULL;
     uint64_t actual=record->arguments[basis.fn_words];
     record->arguments[basis.fn_words]|=UINT64_C(1)<<basis.parameters;
-    CHECK(effect_invocation_seal(context,&request,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out &&
+    CHECK(effect_invocation_seal(context,&request,&out,NULL, NULL)==XR_XIR_BAD_STRUCTURE && !out &&
         *owner==original && *solution==staged && original->effects &&
         effect_body_request_owned_matches(context,&original->read.body,original->final.material));
     record->arguments[basis.fn_words]=actual;
     original->final.deferred_count=0;
-    CHECK(effect_invocation_seal(context,&request,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out &&
+    CHECK(effect_invocation_seal(context,&request,&out,NULL, NULL)==XR_XIR_BAD_STRUCTURE && !out &&
         *owner==original && *solution==staged);
     original->final.deferred_count=1;
     original->final.deferred_calls[1]=*record;original->final.deferred_count=2;
-    CHECK(effect_invocation_seal(context,&request,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out &&
+    CHECK(effect_invocation_seal(context,&request,&out,NULL, NULL)==XR_XIR_BAD_STRUCTURE && !out &&
         *owner==original && *solution==staged);
     original->final.deferred_count=1;
     record->parameter=1;
-    CHECK(effect_invocation_seal(context,&request,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out &&
+    CHECK(effect_invocation_seal(context,&request,&out,NULL, NULL)==XR_XIR_BAD_STRUCTURE && !out &&
         *owner==original && *solution==staged);
     record->parameter=0;
     uint32_t constant=staged->functions[0].formula.constant_mask;
     staged->functions[0].formula.constant_mask^=XR_XIR_CALLABLE_ROOT_REQUIRED;
-    CHECK(effect_invocation_seal(context,&request,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out &&
+    CHECK(effect_invocation_seal(context,&request,&out,NULL, NULL)==XR_XIR_BAD_STRUCTURE && !out &&
         *owner==original && *solution==staged);
     staged->functions[0].formula.constant_mask=constant;
     XrXirRootTerm *term=(XrXirRootTerm *)staged->functions[1].formula.terms;
     CHECK(staged->functions[1].formula.term_count==1 && term && term->kind==XR_XIR_ROOT_TERM_CONTEXT_CALL);
     term->kind=XR_XIR_ROOT_TERM_PARAMETER;
-    CHECK(effect_invocation_seal(context,&request,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out &&
+    CHECK(effect_invocation_seal(context,&request,&out,NULL, NULL)==XR_XIR_BAD_STRUCTURE && !out &&
         *owner==original && *solution==staged);
     term->kind=XR_XIR_ROOT_TERM_CONTEXT_CALL;
 }
@@ -145,12 +145,12 @@ static XrXirStatus conditional_invocation_deferred(const XrXirCompileContext *co
     if (status==XR_XIR_OK) { phase=5;status=effect_invocation_bounds_new(context,&bounds); }
     for (uint32_t f=0;status==XR_XIR_OK && f<module->function_count;++f)
         status=effect_invocation_bounds_capture(context,bounds,module->types,&module->functions[f],f,NULL);
-    if (status==XR_XIR_OK) { phase=6;status=effect_invocations_receive(context,module,&effects,&graph,bounds,&owner); }
-    if (status==XR_XIR_OK) { phase=7;status=effect_invocations_solve(owner); }
+    if (status==XR_XIR_OK) { phase=6;status=effect_invocations_receive(context,module,&effects,&graph,bounds,&owner, NULL); }
+    if (status==XR_XIR_OK) { phase=7;status=effect_invocations_solve(owner, NULL); }
     if (status==XR_XIR_OK) { phase=8;status=effect_invocation_stage(owner,&solution); }
     if (status==XR_XIR_OK && oracle) invocation_deferred_rejections(context,&owner,&solution);
     EffectInvocationSealRequest request={&owner,&solution,NULL};
-    if (status==XR_XIR_OK) { phase=9;status=effect_invocation_seal(context,&request,&certificate,NULL); }
+    if (status==XR_XIR_OK) { phase=9;status=effect_invocation_seal(context,&request,&certificate,NULL, NULL); }
     if (status!=XR_XIR_OK && oracle) fprintf(stderr,
         "INVOCATION_DEFERRED mode=%u phase=%u status=%u f=%u b=%u i=%u\n",mode,phase,status,
         diagnostic.function,diagnostic.block,diagnostic.instruction);

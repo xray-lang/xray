@@ -69,5 +69,11 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance_batch_at(
  * initially be zero; a failure publishes none. No validation hint survives. */
 XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance_batch_views(
     const XirCtfeInstanceBatch *owner,XirCtfeInstanceView *output,uint32_t count, XrCompileRequestControl *control);
+/* A Source-owned consumer borrows its actual current policy and physical
+ * operation. A nested attempt propagates preparation to its whole parent. */
+XR_FUNC XrXirCtfeStatus xir_ctfe_instance_batch_views_prepared(const XrXirCompileContext *context,
+    const XirCtfeInstanceBatch *owner,XirCtfeInstanceView *output,uint32_t count,const XirReadRequest *request);
+XR_FUNC XrXirCtfeStatus xir_ctfe_instance_batch_views_read(const XrXirCompileContext *context,
+    const XirCtfeInstanceBatch *owner,XirCtfeInstanceView *output,uint32_t count,const XirReadRequest *request);
 XR_FUNC void xr_xir_compile_ctfe_instance_batch_free(XirCtfeInstanceBatch *owner);
 #endif // XXIR_CTFE_INSTANCE_INTERNAL_H

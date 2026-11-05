@@ -83,7 +83,7 @@ static void provenance_binding_raw_status(const XrXirCompileContext *context,
     XrCompileResourceStats before=library_compile_stats(context);
     size_t calls_before=source_program_compile_attempts;
     CHECK(xr_xir_compile_provenance_functions_match(context,&instance->source->module,
-        module,instance,NULL)==expected);
+        module,instance,NULL, NULL)==expected);
     XrCompileResourceStats after=library_compile_stats(context);
     CHECK(after.held_bytes==before.held_bytes && after.allocated_bytes>=before.allocated_bytes);
     if(early)CHECK(source_program_compile_attempts==calls_before &&
@@ -205,13 +205,13 @@ static void provenance_source_fields(const XrXirCompileContext *context,
     /* A different legal constant has no new permissions, but it is still a
      * different Source and must not consume the old owning derivation. */
     CHECK(xr_xir_compile_structure_verify_v2(context,&changed,source->construction,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_verify_source_effects_v2(context,&changed,source->construction,effects,NULL)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_verify_source_effects_v2(context,&changed,source->construction,effects,NULL, NULL)==XR_XIR_BAD_STRUCTURE);
     operations[row]=original->instructions[row];
     XrXirBlock blocks[16];memcpy(blocks,original->blocks,original->block_count*sizeof(*blocks));
     functions[body].blocks=blocks;blocks[0].count^=1;
     CHECK(xir_effects_source_body_match(context,&changed,effects)==XR_XIR_BAD_STRUCTURE);
     blocks[0]=original->blocks[0];
-    CHECK(xr_xir_compile_verify_source_effects_v2(context,&changed,source->construction,effects,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_verify_source_effects_v2(context,&changed,source->construction,effects,NULL, NULL)==XR_XIR_OK);
 }
 
 static void provenance_source_contracts(const XrXirCompileContext *context,
@@ -226,9 +226,9 @@ static void provenance_source_contracts(const XrXirCompileContext *context,
     /* The bit is shape-valid. The original full permission checker, rather
      * than the body matcher, rejects its false advertised ROOT formula. */
     CHECK(xr_xir_compile_structure_verify_v2(context,&changed,source->construction,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_verify_source_effects_v2(context,&changed,source->construction,effects,NULL)==XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_verify_source_effects_v2(context,&changed,source->construction,effects,NULL, NULL)==XR_XIR_BAD_TYPE);
     contracts[0]=template->contracts[0];
-    CHECK(xr_xir_compile_verify_source_effects_v2(context,&changed,source->construction,effects,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_verify_source_effects_v2(context,&changed,source->construction,effects,NULL, NULL)==XR_XIR_OK);
 }
 
 static void provenance_source_requests(const XrXirCompileContext *context,
@@ -263,7 +263,7 @@ static void provenance_source_death(const XrXirCompileContext *context,
     CHECK(xr_xir_compile_recheck_v2(context,&(*donor)->module,(*donor)->construction,&peer,NULL, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(*donor);*donor=NULL;
     const XrXirArtifact *source=peer->module.provenance->source;
-    CHECK(xr_xir_compile_verify_source_effects_v2(context,&source->module,source->construction,*effects,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_verify_source_effects_v2(context,&source->module,source->construction,*effects,NULL, NULL)==XR_XIR_OK);
     XrXirModule view=peer->module;XrXirProvenance *owned=(XrXirProvenance *)view.provenance;
     peer->module.provenance=NULL;
     CHECK(xr_xir_compile_recheck_provenance_take(context,&view,
@@ -296,7 +296,7 @@ static void provenance_source_mismatched(void) {
     memcpy(operations,functions[body].instructions,functions[body].instruction_count*sizeof(*operations));
     functions[body].instructions=operations;operations[row].immediate^=1;
     XrXirModule changed=source->module;changed.functions=functions;
-    CHECK(xr_xir_compile_verify_owned_effects_v2(&owner.context,&changed,source->construction,&different,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_verify_owned_effects_v2(&owner.context,&changed,source->construction,&different,NULL, NULL)==XR_XIR_OK);
     XrXirModule view=donor->module;XrXirProvenance *owned=(XrXirProvenance *)view.provenance;
     donor->module.provenance=NULL;
     CHECK(xr_xir_compile_recheck_provenance_take(&owner.context,&view,
@@ -428,7 +428,7 @@ static void provenance_source_types_controls(void) {
     provenance_source_type_status(&owner.context,&changed,effects,XR_XIR_OK);
     provenance_source_node_fields(&owner.context,&changed,effects,types);
     provenance_source_table_fields(&owner.context,&changed,effects,types);
-    CHECK(xr_xir_compile_verify_source_effects_v2(&owner.context,&changed,result.checked->construction,effects,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_verify_source_effects_v2(&owner.context,&changed,result.checked->construction,effects,NULL, NULL)==XR_XIR_OK);
     size_t attempts=source_program_compile_attempts;
     source_program_compile_fail_at=attempts;source_program_compile_injected=false;
     provenance_source_type_status(&owner.context,&changed,effects,XR_XIR_OK);

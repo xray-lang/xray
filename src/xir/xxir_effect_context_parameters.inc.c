@@ -152,11 +152,9 @@ static XrXirStatus effect_ordinary_function(EffectOrdinaryContexts *contexts,
 static XrXirStatus effect_ordinary_environment_same(EffectTerms *terms,
     const EffectOrdinaryNode *node,const EffectContextResolved *target,bool *equal) {
     *equal=node->declaration==target->target && node->argument_count==target->argument_count;
-    XrXirTypeMatchScratch *scratch=effect_terms_type_scratch(terms);
     XrXirStatus status=XR_XIR_OK;
     for (uint32_t a=0;*equal && a<target->argument_count && status==XR_XIR_OK;++a) {
-        status=xr_xir_compile_type_substitution_matches_between_scratch(terms->remaining,
-            &terms->types,&target->terms.types,NULL,0,node->arguments[a],target->arguments[a],scratch);
+        status=effect_terms_match(terms,&terms->types,&target->terms.types,NULL,0,node->arguments[a],target->arguments[a]);
         if (status==XR_XIR_BAD_TYPE) { *equal=false;status=XR_XIR_OK; }
     }
     return status;

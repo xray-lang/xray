@@ -107,7 +107,7 @@ static void collector_occupied(const XrXirArtifact *artifact) {
     XrXirEffects *sentinel=(XrXirEffects *)(uintptr_t)1;
     CHECK(xr_xir_compile_effects_analyze(artifact,&sentinel)==XR_XIR_BAD_STRUCTURE && sentinel==(XrXirEffects *)(uintptr_t)1);
     CHECK(xr_xir_compile_verify_analyzed_effects_v2(&effect_context,&artifact->module,artifact->construction,
-        &sentinel,NULL)==XR_XIR_BAD_STRUCTURE && sentinel==(XrXirEffects *)(uintptr_t)1);
+        &sentinel,NULL, NULL)==XR_XIR_BAD_STRUCTURE && sentinel==(XrXirEffects *)(uintptr_t)1);
     XrCompileResourceStats after=effect_stats(&effect_context);
     CHECK(before.work==after.work && before.allocation_count==after.allocation_count &&
         before.allocated_bytes==after.allocated_bytes && before.live_bytes==after.live_bytes && before.peak_bytes==after.peak_bytes);
@@ -117,7 +117,7 @@ static void collector_bare_case(bool suspend) {
     XrXirArtifact *artifact=collector_bare_fixture(suspend);XrXirEffects *summary=NULL;XrXirDiagnostic diagnostic={0};
     EffectMark mark=effect_mark();
     CHECK(xr_xir_compile_verify_owned_effects_v2(&effect_context,&artifact->module,artifact->construction,
-        &summary,&diagnostic)==XR_XIR_BAD_STRUCTURE && !summary);effect_mark_check(mark);
+        &summary,&diagnostic, NULL)==XR_XIR_BAD_STRUCTURE && !summary);effect_mark_check(mark);
     collector_occupied(artifact);collector_faults(artifact,COLLECTOR_NONE,XR_XIR_OK);
     effect_budget_boundaries(artifact);
     XrXirArtifact *lowered=NULL;XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
@@ -137,7 +137,7 @@ static void collector_declaration_cases(void) {
         CHECK(effect_reproduce(base,&effect_context,&copy)==XR_XIR_OK);collector_attack(copy,(CollectorAttack)attack);
         EffectMark mark=effect_mark();XrXirEffects *summary=NULL;XrXirDiagnostic diagnostic={0};
         CHECK(xr_xir_compile_verify_analyzed_effects_v2(&effect_context,&copy->module,copy->construction,
-            &summary,&diagnostic)==XR_XIR_BAD_TYPE && !summary);
+            &summary,&diagnostic, NULL)==XR_XIR_BAD_TYPE && !summary);
         CHECK(diagnostic.reason==(attack==COLLECTOR_PROMISE?XR_XIR_DIAGNOSTIC_NO_SUSPEND:
             attack==COLLECTOR_CLEANUP?XR_XIR_DIAGNOSTIC_CLEANUP_SUSPEND:XR_XIR_DIAGNOSTIC_GO_ROOT_REQUIRED));
         effect_mark_check(mark);effect_artifact_free(copy);

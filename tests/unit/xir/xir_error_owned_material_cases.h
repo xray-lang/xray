@@ -472,7 +472,7 @@ static XrXirStatus conditional_owned_error_cells(const XrXirCompileContext *cont
     CellIndexFixture fixture;ci_fixture(&fixture,CI_CALL,mode!=0,false);
     XrXirEffects *effects=NULL;
     XrXirStatus status=xir_fixture_verify(context,&fixture.module,NULL);
-    if (status==XR_XIR_OK) status=xr_xir_compile_effects_infer_verified(context,&fixture.module,&effects);
+    if (status==XR_XIR_OK) status=xr_xir_compile_effects_infer_verified(context,&fixture.module,&effects, NULL);
     if (status==XR_XIR_OK && oracle) {
         CHECK(effect_body_source_match(context,effects->invocations->body,&fixture.module)==XR_XIR_OK);
         XrXirInstruction saved=fixture.subject[1];fixture.subject[1].type=XR_XIR_I64;

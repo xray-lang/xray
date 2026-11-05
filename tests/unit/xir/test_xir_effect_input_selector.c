@@ -23,14 +23,14 @@ static void selector_scalar_domain(void) {
     XrXirModule module={.stage=XR_XIR_BUILT,.types=&types,.functions=functions,.function_count=2,
         .declarations=&declarations,.linkage_kind=XR_XIR_LIBRARY};
     XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
-    XrXirEffects *effects=NULL;CHECK(xr_xir_compile_effects_infer_verified(&context,&module,&effects)==XR_XIR_OK);
+    XrXirEffects *effects=NULL;CHECK(xr_xir_compile_effects_infer_verified(&context,&module,&effects, NULL)==XR_XIR_OK);
     EffectInvocationFinal *final=effects->invocations->final;EffectBodyMaterial *material=final->material;
     EffectCaptureRead read={.work=&context,.final=final,.body=effect_body_owned_request(&context,material)};
     memset(functions,0xDC,sizeof(functions));memset(ops,0xDC,sizeof(ops));memset(nodes,0xDC,sizeof(nodes));
     size_t allocated=attempts;uint64_t physical=live_bytes;bool scalar=false;
     pc_allocate_hook=selector_no_callback;pc_free_hook=selector_no_callback;
     CHECK(effect_capture_scalar_domain(&read,&scalar)==XR_XIR_OK && scalar);
-    CHECK(effect_capture_match(&context,final)==XR_XIR_OK);
+    CHECK(effect_capture_match(&context,final, NULL)==XR_XIR_OK);
     EffectBodyFunction *head=&material->functions[1];XrXirType *formal=(XrXirType *)head->parameters;
     XrXirType saved_type=formal[0];formal[0]=(XrXirType)256;
     CHECK(effect_capture_scalar_domain(&read,&scalar)==XR_XIR_OK && !scalar);formal[0]=(XrXirType)4;
@@ -52,9 +52,9 @@ static void selector_scalar_domain(void) {
     first->base.op=XR_XIR_OP_COUNT;
     CHECK(effect_capture_scalar_domain(&read,&scalar)==XR_XIR_BAD_STRUCTURE && !scalar);first->base.op=saved_opcode;
     EffectInvocationNode *root=&final->nodes[final->roots[1]];CHECK(root->input && !root->input[0]);
-    root->input[0]=1;CHECK(effect_capture_match(&context,final)==XR_XIR_BAD_STRUCTURE);root->input[0]=0;
+    root->input[0]=1;CHECK(effect_capture_match(&context,final, NULL)==XR_XIR_BAD_STRUCTURE);root->input[0]=0;
     CHECK(effect_capture_scalar_domain(&read,&scalar)==XR_XIR_OK && scalar);
-    CHECK(effect_capture_match(&context,final)==XR_XIR_OK && attempts==allocated && live_bytes==physical);
+    CHECK(effect_capture_match(&context,final, NULL)==XR_XIR_OK && attempts==allocated && live_bytes==physical);
     pc_allocate_hook=NULL;pc_free_hook=NULL;xr_xir_compile_effects_free(effects);pc_release(&context,baseline);
     puts("primitive capture domain: unused Cell/callable types, live formal and affine type/opcode changes, invalid opcode, false scalar input, dead producer and physical0");
 }
@@ -102,21 +102,21 @@ static void selector_raw_source_replay(bool resources) {
         uint64_t held=pc_stats(&context).live_bytes;XrCompileResources *identity=context.resources;
         attempts=0;fail_at=pass?pass-1:SIZE_MAX;injected=false;
         XrXirEffects *effects=NULL;
-        XrXirStatus status=xir_artifact_verify_raw_source_effects(checked,&effects,NULL);
+        XrXirStatus status=xir_artifact_verify_raw_source_effects(checked,&effects,NULL, NULL);
         if(!pass) { CHECK(status==XR_XIR_OK && effects);sites=attempts; }
         else {
             if(status!=XR_XIR_OUT_OF_MEMORY) fprintf(stderr,"raw replay allocation%zu status%u work%llu\n",
                 pass-1,status,(unsigned long long)pc_stats(&context).work);
             CHECK(status==XR_XIR_OUT_OF_MEMORY && injected && !effects && pc_stats(&context).live_bytes==held);
             fail_at=SIZE_MAX;
-            CHECK(xir_artifact_verify_raw_source_effects(checked,&effects,NULL)==XR_XIR_OK && effects);
+            CHECK(xir_artifact_verify_raw_source_effects(checked,&effects,NULL, NULL)==XR_XIR_OK && effects);
         }
         fail_at=SIZE_MAX;uint64_t retained=pc_stats(&context).live_bytes;
         const XrXirModule *module=xr_xir_compile_artifact_module(checked);
         if(!pass) {
             XrCompileResourceStats before=pc_stats(&context);
             pc_allocate_hook=selector_no_callback;pc_free_hook=selector_no_callback;
-            CHECK(effect_capture_match(&context,effects->invocations->final)==XR_XIR_OK);
+            CHECK(effect_capture_match(&context,effects->invocations->final, NULL)==XR_XIR_OK);
             pc_allocate_hook=NULL;pc_free_hook=NULL;
             XrCompileResourceStats after=pc_stats(&context);
             CHECK(after.work>before.work && after.allocated_bytes==before.allocated_bytes &&
@@ -127,7 +127,7 @@ static void selector_raw_source_replay(bool resources) {
         }
         for(uint32_t read=0;read<2;++read) {
             uint64_t before=pc_stats(&context).work;
-            CHECK(xir_compile_verify_raw_source_effects(&context,module,checked->construction,effects,NULL)==XR_XIR_OK);
+            CHECK(xir_compile_verify_raw_source_effects(&context,module,checked->construction,effects,NULL, NULL)==XR_XIR_OK);
             CHECK(pc_stats(&context).work>before && pc_stats(&context).live_bytes==retained && context.resources==identity);
         }
         XrCompileResourceStats stats=pc_stats(&context);
@@ -189,7 +189,7 @@ static void selector_complete_chain(void) {
         XrXirModule module={.stage=XR_XIR_BUILT,.types=&types,.functions=functions,.function_count=3,
             .declarations=&declarations,.linkage_kind=XR_XIR_LIBRARY};
         XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
-        XrXirEffects *effects=NULL;CHECK(xr_xir_compile_effects_infer_verified(&context,&module,&effects)==XR_XIR_OK && effects);
+        XrXirEffects *effects=NULL;CHECK(xr_xir_compile_effects_infer_verified(&context,&module,&effects, NULL)==XR_XIR_OK && effects);
         EffectInvocationFinal *final=effects->invocations->final;
         CHECK(final->site_count==1 && !final->binding_count && final->sites[0].function==2 &&
             !final->sites[0].instruction && final->sites[0].target==1 && !final->sites[0].captures);
@@ -207,10 +207,10 @@ static void selector_complete_chain(void) {
         memset(ops,0xDC,sizeof(ops));memset(functions,0xDC,sizeof(functions));
         size_t allocated=attempts;uint64_t physical=live_bytes;
         pc_allocate_hook=selector_no_callback;pc_free_hook=selector_no_callback;
-        CHECK(effect_capture_match(&context,final)==XR_XIR_OK);
+        CHECK(effect_capture_match(&context,final, NULL)==XR_XIR_OK);
         uint64_t rank=last->rank;last->rank=rank+1;
-        CHECK(effect_capture_match(&context,final)==XR_XIR_BAD_STRUCTURE);last->rank=rank;
-        CHECK(effect_capture_match(&context,final)==XR_XIR_OK && attempts==allocated && live_bytes==physical);
+        CHECK(effect_capture_match(&context,final, NULL)==XR_XIR_BAD_STRUCTURE);last->rank=rank;
+        CHECK(effect_capture_match(&context,final, NULL)==XR_XIR_OK && attempts==allocated && live_bytes==physical);
         pc_allocate_hook=NULL;pc_free_hook=NULL;
         xr_xir_compile_effects_free(effects);pc_release(&context,baseline);
     }
@@ -227,7 +227,7 @@ static void selector_current_handoff(void) {
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&context,&fixture.raw.module,&checked,NULL)==XR_XIR_OK && checked);
     memset(&fixture,0xDC,sizeof(fixture));
-    CHECK(xir_artifact_verify_raw_source_effects(checked,&effects,NULL)==XR_XIR_OK && effects);
+    CHECK(xir_artifact_verify_raw_source_effects(checked,&effects,NULL, NULL)==XR_XIR_OK && effects);
     EffectInvocationFinal *final=effects->invocations->final;
     SelectorCurrentPoll poll={0};
     CHECK(xr_compile_resources_begin_cancel(context.resources,selector_current_poll,&poll)==XR_COMPILE_RESOURCE_OK);
@@ -235,15 +235,15 @@ static void selector_current_handoff(void) {
         EffectBodyCurrentRead current={0};CHECK(effect_body_current_open(&context,final->material,&current)==XR_XIR_OK);
         size_t allocated=attempts;uint64_t physical=live_bytes;uint32_t calls=poll.calls;
         pc_allocate_hook=selector_no_callback;pc_free_hook=selector_no_callback;
-        CHECK(effect_capture_current_match(&context,final,&current)==XR_XIR_OK && poll.calls>calls);
+        CHECK(effect_capture_current_match(&context,final,&current, NULL)==XR_XIR_OK && poll.calls>calls);
         poll.requested=true;
-        CHECK(effect_capture_current_match(&context,final,&current)==XR_XIR_BAD_STRUCTURE);
+        CHECK(effect_capture_current_match(&context,final,&current, NULL)==XR_XIR_BAD_STRUCTURE);
         CHECK(xr_compile_resources_end_cancel(context.resources,selector_current_poll,&poll)==XR_COMPILE_RESOURCE_CANCELLED);
         CHECK(attempts==allocated && live_bytes==physical);
         current=(EffectBodyCurrentRead){0};
         pc_allocate_hook=NULL;pc_free_hook=NULL;
     }
-    CHECK(effect_capture_match(&context,final)==XR_XIR_OK);
+    CHECK(effect_capture_match(&context,final, NULL)==XR_XIR_OK);
     xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);pc_release(&context,baseline);
     puts("current handoff: owned parent scope, independent receiving, cancellation polling/latch/recovery, no allocator callbacks and physical0 PASS");
 }
@@ -281,7 +281,7 @@ static void selector_invocation_projection(void) {
     context.limits.functions=32;context.limits.parameters=16;context.limits.instructions=128;
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&context,&fixture.raw.module,&checked,NULL)==XR_XIR_OK && checked);
-    CHECK(xir_artifact_verify_raw_source_effects(checked,&effects,NULL)==XR_XIR_OK && effects);
+    CHECK(xir_artifact_verify_raw_source_effects(checked,&effects,NULL, NULL)==XR_XIR_OK && effects);
     memset(&fixture,0xDC,sizeof(fixture));
     EffectInvocationFinal *final=effects->invocations->final;EffectBodyMaterial *material=final->material;
     uint32_t selected=UINT32_MAX;
@@ -319,7 +319,7 @@ static void selector_invocation_projection(void) {
         *head=saved;
         CHECK(effect_final_inventory_sites(&context,material,final)==XR_XIR_OK);
     }
-    CHECK(effect_final_inventory_match(&foreign,material,final)==XR_XIR_BAD_STRUCTURE);
+    CHECK(effect_final_inventory_match(&foreign,material,final, NULL)==XR_XIR_BAD_STRUCTURE);
     SelectorCurrentPoll poll={.requested=true};
     CHECK(xr_compile_resources_begin_cancel(context.resources,selector_current_poll,&poll)==XR_COMPILE_RESOURCE_OK);
     selector_head_projection=(SelectorHeadProjection){0};
@@ -327,7 +327,7 @@ static void selector_invocation_projection(void) {
     CHECK(xr_compile_resources_end_cancel(context.resources,selector_current_poll,&poll)==XR_COMPILE_RESOURCE_CANCELLED);
     selector_head_projection=(SelectorHeadProjection){0};
     CHECK(effect_final_edge_payload(&context,&body,final,selected)==XR_XIR_OK);
-    CHECK(effect_final_inventory_match(&context,material,final)==XR_XIR_OK);
+    CHECK(effect_final_inventory_match(&context,material,final, NULL)==XR_XIR_OK);
     CHECK(attempts==allocated && live_bytes==physical);
     pc_allocate_hook=NULL;pc_free_hook=NULL;xr_compile_resources_release(foreign.resources);
     xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);pc_release(&context,baseline);
@@ -357,7 +357,7 @@ static void selector_capture_signature(void) {
     context.limits.functions=32;context.limits.parameters=16;context.limits.instructions=128;
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&context,&fixture.raw.module,&checked,NULL)==XR_XIR_OK && checked);
-    CHECK(xir_artifact_verify_raw_source_effects(checked,&effects,NULL)==XR_XIR_OK && effects);
+    CHECK(xir_artifact_verify_raw_source_effects(checked,&effects,NULL, NULL)==XR_XIR_OK && effects);
     memset(&fixture,0xDC,sizeof(fixture));
     EffectInvocationFinal *final=effects->invocations->final;EffectBodyMaterial *material=final->material;
     CHECK(final->site_count==1 && final->binding_count==2);
@@ -405,7 +405,7 @@ static void selector_capture_signature(void) {
     CHECK(xr_compile_resources_end_cancel(context.resources,selector_current_poll,&poll)==XR_COMPILE_RESOURCE_CANCELLED);
     selector_signature_trace=(SelectorSignatureTrace){0};
     CHECK(effect_capture_reference_seed(&read,0,&seeded)==XR_XIR_OK && seeded);
-    CHECK(effect_capture_match(&context,final)==XR_XIR_OK);
+    CHECK(effect_capture_match(&context,final, NULL)==XR_XIR_OK);
     CHECK(attempts==allocated && live_bytes==physical);
     pc_allocate_hook=NULL;pc_free_hook=NULL;
     xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);pc_release(&context,baseline);

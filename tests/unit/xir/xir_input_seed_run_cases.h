@@ -17,7 +17,7 @@ static void input_seed_run_roots(void) {
     EffectBodyMaterial *material=NULL;
     CHECK(effect_body_material_create(&context,&fixture.module,&material)==XR_XIR_OK);
     XrXirRootEffects facts={true,true};
-    CHECK(effect_invocation_input_seed(&context,material,1,&facts)==XR_XIR_OK &&
+    CHECK(effect_invocation_input_seed(&context,material,1,&facts, NULL)==XR_XIR_OK &&
         !facts.requires_root && !facts.unresolved);
     EffectBodyRead read=effect_body_compile_read(&context);const EffectBodyRun *borrowed=NULL;
     CHECK(effect_body_record_ref(&read,&material->functions[1],4,&borrowed)==XR_XIR_OK);
@@ -32,20 +32,20 @@ static void input_seed_run_roots(void) {
             run->delta[0]=(uint32_t)XR_XIR_SLOT_LOAD-(uint32_t)opcode;
         }
         facts=(XrXirRootEffects){true,true};
-        CHECK(effect_invocation_input_seed(&context,material,1,&facts)==XR_XIR_BAD_STRUCTURE &&
+        CHECK(effect_invocation_input_seed(&context,material,1,&facts, NULL)==XR_XIR_BAD_STRUCTURE &&
             facts.requires_root && facts.unresolved);
         run->base.op=opcode;run->mask=mask;
-        CHECK(effect_invocation_input_seed(&context,material,1,&facts)==XR_XIR_OK &&
+        CHECK(effect_invocation_input_seed(&context,material,1,&facts, NULL)==XR_XIR_OK &&
             !facts.requires_root && !facts.unresolved);
     }
     uint32_t unused=run->base.targets[1];run->base.targets[1]^=UINT32_C(0x12345678);
-    CHECK(effect_invocation_input_seed(&context,material,1,&facts)==XR_XIR_OK &&
+    CHECK(effect_invocation_input_seed(&context,material,1,&facts, NULL)==XR_XIR_OK &&
         !facts.requires_root && !facts.unresolved);
     CHECK(effect_body_source_match(&context,material,&fixture.module)==XR_XIR_BAD_STRUCTURE);
     run->base.targets[1]=unused;
     CHECK(effect_body_source_match(&context,material,&fixture.module)==XR_XIR_OK);
     memset(&fixture,0xCE,sizeof(fixture));
-    CHECK(effect_invocation_input_seed(&context,material,1,&facts)==XR_XIR_OK &&
+    CHECK(effect_invocation_input_seed(&context,material,1,&facts, NULL)==XR_XIR_OK &&
         !facts.requires_root && !facts.unresolved);
     effect_body_material_free(material);rp_owner_free(&context,baseline);rp_balanced(physical);
 }

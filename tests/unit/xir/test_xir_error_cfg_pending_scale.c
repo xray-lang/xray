@@ -209,9 +209,9 @@ static void pm_run(const PmCase *input) {
     PmPoint admitted=pm_point(&context); pm_phase(input,"check",&owner,&admitted);
     const XrXirModule *current=xr_xir_compile_artifact_module(checked);
     CHECK(current && current->stage==XR_XIR_CHECKED);
-    CHECK(xr_xir_compile_verify_v2(&context,current,xr_xir_compile_artifact_construction(checked),NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_verify_v2(&context,current,xr_xir_compile_artifact_construction(checked),NULL, NULL)==XR_XIR_OK);
     PmPoint verified=pm_point(&context); pm_phase(input,"verify",&admitted,&verified);
-    CHECK(xr_xir_compile_effects_infer_verified(&context,current,&effects)==XR_XIR_OK);
+    CHECK(xr_xir_compile_effects_infer_verified(&context,current,&effects, NULL)==XR_XIR_OK);
     pm_golden(effects,input);
     PmPoint inferred=pm_point(&context); pm_phase(input,"infer",&verified,&inferred);
     xr_xir_compile_effects_free(effects); xr_xir_compile_artifact_free(checked);

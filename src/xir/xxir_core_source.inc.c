@@ -71,6 +71,7 @@ static bool source_core_contract(SourceContext *ctx) {
 #include "xxir_source_construct.inc.c"
 
 static void source_core_dispose(SourceContext *ctx,SourceContext *parent) {
+    ctx->read_operation=NULL;
     if(ctx->diagnostic.status!=XR_XIR_OK && parent && !parent->report && !xr_hir_items_has_report(parent->items)) {
         parent->report=ctx->report?ctx->report:xr_hir_items_take_report(ctx->items);ctx->report=NULL;
     }
@@ -350,7 +351,7 @@ static bool source_core_install(SourceContext *ctx, const SourceContext *core,
  * ordinary checking then qualifies the internally bound executable body. */
 static bool source_core_load(SourceContext *ctx, AstNode *site) {
     SourceContext core={0};
-    core.compile=ctx->compile; core.request=ctx->request; core.linkage_kind=XR_XIR_LIBRARY; core.core_factory=true;
+    core.compile=ctx->compile;core.read_operation=ctx->read_operation; core.request=ctx->request; core.linkage_kind=XR_XIR_LIBRARY; core.core_factory=true;
     core.remaining_blocks=core.compile.limits.blocks;
     core.remaining_instructions=core.compile.limits.instructions;
     XrCompilerSession *session=NULL;

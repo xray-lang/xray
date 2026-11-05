@@ -42,7 +42,7 @@ static XrXirStatus pc_current_input_operation(const XrXirCompileContext *context
     XrXirModule source={0};XrXirFunction functions[3];XrXirInstruction rows[EE_MAX_OPS];
     XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,NULL);
     fprintf(stderr,"DIAG xir_current_input_callback_cases.h:7 status%u XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,NULL);\n",(unsigned)status);
-    if (status==XR_XIR_OK) status=effect_infer_construct(context,xr_xir_compile_artifact_module(checked),NULL,&effects);
+    if (status==XR_XIR_OK) status=effect_infer_construct(context,xr_xir_compile_artifact_module(checked),NULL,&effects, NULL);
     fprintf(stderr,"DIAG xir_current_input_callback_cases.h:9 status%u if (status==XR_XIR_OK) status=effect_infer_construct(context,xr_xir_compile_artifact_module(checked),NULL,&effects);\n",(unsigned)status);
     if (status==XR_XIR_OK) {
         const XrXirModule *original=xr_xir_compile_artifact_module(checked);
@@ -66,7 +66,7 @@ static XrXirStatus pc_current_input_operation(const XrXirCompileContext *context
         XrCompileResourceStats before=pc_stats(context);
         pc_current_input_row=&rows[4];pc_current_input_mutation=mutation;pc_current_input_calls=0;
         if (mutation) pc_allocate_hook=pc_current_input_mutate;
-        status=effect_invocation_publish(context,&source,effects,&graph,NULL,NULL);
+        status=effect_invocation_publish(context,&source,effects,&graph,NULL,NULL, NULL);
     fprintf(stderr,"DIAG xir_current_input_callback_cases.h:33 status%u status=effect_invocation_publish(context,&source,effects,&graph,NULL,NULL);\n",(unsigned)status);
         pc_allocate_hook=NULL;pc_current_input_row=NULL;rows[4]=saved;
         if (oracle) fprintf(stderr,"current raw publication mutation%u callbacks%u status%u retained%u\n",
@@ -89,7 +89,7 @@ static XrXirStatus pc_current_input_operation(const XrXirCompileContext *context
             XrXirCompileContext copy=*context;status=effect_graph_build(&source,effects,&graph,&copy);
     fprintf(stderr,"DIAG xir_current_input_callback_cases.h:53 status%u XrXirCompileContext copy=*context;status=effect_graph_build(&source,effects,&graph,&copy);\n",(unsigned)status);
         }
-        if (status==XR_XIR_OK) status=effect_invocation_publish(context,&source,effects,&graph,NULL,NULL);
+        if (status==XR_XIR_OK) status=effect_invocation_publish(context,&source,effects,&graph,NULL,NULL, NULL);
     fprintf(stderr,"DIAG xir_current_input_callback_cases.h:56 status%u if (status==XR_XIR_OK) status=effect_invocation_publish(context,&source,effects,&graph,NULL,NULL);\n",(unsigned)status);
         if (status==XR_XIR_OK) CHECK(effect_roots_read(effects)->root[0].requires_root &&
             pc_stats(context).work>before.work && pc_stats(context).allocated_bytes>before.allocated_bytes);
@@ -121,7 +121,7 @@ static XrXirStatus pc_current_input_operation(const XrXirCompileContext *context
 
     }
     effect_graph_free(&graph);
-    if (status==XR_XIR_OK) status=effect_outcomes_publish(context,&source,effects);
+    if (status==XR_XIR_OK) status=effect_outcomes_publish(context,&source,effects, NULL);
     fprintf(stderr,"DIAG xir_current_input_callback_cases.h:62 status%u if (status==XR_XIR_OK) status=effect_outcomes_publish(context,&source,effects);\n",(unsigned)status);
     if (status==XR_XIR_OK) pc_empty_golden(effects,0);
     fprintf(stderr,"DIAG xir_current_input_callback_cases.h:64 status%u if (status==XR_XIR_OK) pc_empty_golden(effects,0);\n",(unsigned)status);

@@ -15,15 +15,22 @@ XR_FUNC XrXirStatus xr_xir_compile_source_comptime_instances(const XirSourceComp
         if (diagnostic) *diagnostic=(XrXirSourceDiagnostic){.status=XR_XIR_BAD_STRUCTURE};
         return XR_XIR_BAD_STRUCTURE;
     }
+    XirReadOperation read_operation={.capacity={.resources=request->source->context->resources}};
     XirSourceComptimeInstances result={0};SourceComptimeInstancesOperation operation={request,&result};
-    SourceInput input={.supplied=request->text!=NULL,.text=request->text?*request->text:(XrXirSourceText){0},.overlays=request->overlays,.overlay_count=request->overlay_count,.comptime_instances=&operation};
+    SourceInput input={.read_operation=&read_operation,.supplied=request->text!=NULL,.text=request->text?*request->text:(XrXirSourceText){0},.overlays=request->overlays,.overlay_count=request->overlay_count,.comptime_instances=&operation};
     XrXirSourceResult ignored={0};
     XrXirStatus status=source_check_input(request->source,input,&ignored,diagnostic,NULL);
 
+    if(status==XR_XIR_OK) {
+        XrCompileRequestControl *control=xr_compile_session_request(request->source->session);
+        const XirReadRequest read_request={.operation=&read_operation,.control=control};
+        XrXirCtfeStatus detail=XR_XIR_CTFE_OK;
+        status=source_comptime_result_read(request->source->context,&result,NULL,NULL,result.count,&read_request,&detail);
+    }
     if (status!=XR_XIR_OK) {
-        xr_xir_compile_source_comptime_instances_free(&result);
+        xr_xir_compile_source_comptime_instances_free(&result);xir_read_operation_free(&read_operation);
         if (diagnostic) diagnostic->status=status;
         return status;
     }
-    *output=result;return XR_XIR_OK;
+    *output=result;xir_read_operation_free(&read_operation);return XR_XIR_OK;
 }

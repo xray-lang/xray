@@ -19,7 +19,7 @@
 static XrXirStatus class_physical_scalar_receive(const EffectInvocationRead *owner,
     const EffectBodyRequest *request) {
     XrXirStatus status=effect_body_physical_match(owner->work,owner->final->physical,owner->final->material);
-    if(status==XR_XIR_OK) status=effect_capture_match(owner->work,owner->final);
+    if(status==XR_XIR_OK) status=effect_capture_match(owner->work,owner->final, NULL);
     for(uint32_t n=0;status==XR_XIR_OK && n<owner->final->count;++n) {
         const EffectInvocationNode *node=&owner->final->nodes[n];EffectBodyFunctionHead head={0};
         status=effect_body_request_head(request,node->body,&head);EffectInvocationBasis basis={0};

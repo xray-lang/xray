@@ -80,7 +80,7 @@ static void ed_literals(const XrXirEffects *e,ErrorDependencyMode mode){
 static XrXirStatus ed_whole(const XrXirCompileContext *c,ErrorDependencyMode mode,bool large){
     ErrorDependencyFixture f;ed_fixture(&f,mode,large);XrXirDiagnostic d={0};
     XrXirStatus status=xir_fixture_verify(c, &f.module, &d);XrXirEffects *e=NULL;
-    if(status==XR_XIR_OK)status=xr_xir_compile_effects_infer_verified(c,&f.module,&e);
+    if(status==XR_XIR_OK)status=xr_xir_compile_effects_infer_verified(c,&f.module,&e, NULL);
     if(status==XR_XIR_OK)ed_literals(e,mode);else CHECK(!e);
     if(status!=XR_XIR_OK && fail_at==SIZE_MAX)fprintf(stderr,"dependency mode%u status%u f%u b%u i%u\n",
         (unsigned)mode,(unsigned)status,d.function,d.block,d.instruction);
@@ -90,7 +90,7 @@ static void ed_cost(void){
     ErrorDependencyFixture f;ed_fixture(&f,ED_DIRECT,true);XrXirCompileContext c=ed_owner(ed_caps());
     uint64_t baseline=ed_stats(&c).live_bytes;CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
     uint64_t before=ed_stats(&c).work;XrXirEffects *e=NULL;
-    CHECK(xr_xir_compile_effects_infer_verified(&c,&f.module,&e)==XR_XIR_OK);ed_literals(e,ED_DIRECT);
+    CHECK(xr_xir_compile_effects_infer_verified(&c,&f.module,&e, NULL)==XR_XIR_OK);ed_literals(e,ED_DIRECT);
     uint64_t work=ed_stats(&c).work-before;
     CHECK(work<UINT64_C(400000));
     _Static_assert(UINT64_C(32)*513*4*8>UINT64_C(400000),"old global storage copies exceed literal ceiling");
@@ -100,7 +100,7 @@ static void ed_cost(void){
 static void ed_graph_isolation(void){
     ErrorDependencyFixture f;ed_fixture(&f,ED_GO,false);XrXirCompileContext c=ed_owner(ed_caps());uint64_t baseline=ed_stats(&c).live_bytes;
     CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
-    XrXirEffects *e=NULL;CHECK(xr_xir_compile_effects_infer_verified(&c,&f.module,&e)==XR_XIR_OK);ed_literals(e,ED_GO);
+    XrXirEffects *e=NULL;CHECK(xr_xir_compile_effects_infer_verified(&c,&f.module,&e, NULL)==XR_XIR_OK);ed_literals(e,ED_GO);
     /* Inference has retired construction rows. Fresh receiving scratch reads
      * the actual Final and moves only its incoming IDs into this local graph. */
     EffectControlCheck input={0};
@@ -163,7 +163,7 @@ static XrXirStatus ed_restart_case(const XrXirCompileContext *c,bool payload,boo
     XrXirModule module={.stage=XR_XIR_CHECKED,.functions=functions,.function_count=3,.declarations=&declarations,
         .generics=generics,.types=&types,.linkage_kind=XR_XIR_LIBRARY};
     XrXirDiagnostic d={0};XrXirStatus status=xir_fixture_verify(c, &module, &d);XrXirEffects *e=NULL;
-    if(status==XR_XIR_OK)status=xr_xir_compile_effects_infer_verified(c,&module,&e);
+    if(status==XR_XIR_OK)status=xr_xir_compile_effects_infer_verified(c,&module,&e, NULL);
     if(status==XR_XIR_OK){
         CHECK(e && e->count==3 && effect_final_outcomes(e)->atom_count==63 && effect_final_outcomes(e)->words==2 && effect_final_outcomes(e)->source_type_count==1);
         CHECK(effect_final_outcomes(e)->errors[0]==0 && effect_final_outcomes(e)->errors[1]==0 && effect_final_outcomes(e)->errors[2]==0 && effect_final_outcomes(e)->errors[3]==1);
@@ -218,7 +218,7 @@ static XrXirStatus ed_restart_case(const XrXirCompileContext *c,bool payload,boo
         module.generics=NULL;
         call[0].type_arguments[0]=call[0].type_arguments[1]=0;
         status=xir_fixture_verify(c,&module,&d);
-        if(status==XR_XIR_OK)status=xr_xir_compile_effects_infer_verified(c,&module,&e);
+        if(status==XR_XIR_OK)status=xr_xir_compile_effects_infer_verified(c,&module,&e, NULL);
     }
     if(status==XR_XIR_OK){
         CHECK(e && e->count==3 && effect_final_outcomes(e)->source_type_count==1 && effect_final_outcomes(e)->atom_count==61 && effect_final_outcomes(e)->words==1);

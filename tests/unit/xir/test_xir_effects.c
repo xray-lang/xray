@@ -312,7 +312,7 @@ static void effect_growing_cycle(void) {
     uint64_t baseline=effect_stats(&probe).live_bytes; XrXirArtifact *copy=NULL;
     CHECK(effect_reproduce(artifact,&probe,&copy)==XR_XIR_OK);
     uint64_t setup=effect_stats(&probe).work;
-    CHECK(xr_xir_compile_verify_v2(&probe, xr_xir_compile_artifact_module(copy), xr_xir_compile_artifact_construction(copy), NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_verify_v2(&probe, xr_xir_compile_artifact_module(copy), xr_xir_compile_artifact_construction(copy), NULL, NULL)==XR_XIR_OK);
     CHECK(effect_stats(&probe).work-setup<=200000);
     xr_xir_compile_artifact_free(copy); effect_owner_free(&probe,baseline); effect_mark_check(mark);
     XrCompileResourceLimits caps=effect_caps(); CHECK(setup<=caps.work-200000); caps.work=setup+200000;

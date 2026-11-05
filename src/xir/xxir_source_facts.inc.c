@@ -124,76 +124,139 @@ static XrXirStatus source_facts_input_match(const XrXirCompileContext *context,
  * owner itself retains the real heap ledger, so it cannot be destroyed and
  * reused while immutable facts remain live. A pointer comparison is only a
  * rejection boundary; input fields and the complete proof still decide use. */
-static XrXirStatus source_facts_match(const XrXirCompileContext *context,
-    const XrXirArtifact *artifact,XrXirDiagnostic *diagnostic, XrCompileRequestControl *control) {
+static XrXirStatus source_facts_match_attempt_body(const XrXirCompileContext *context,
+    const XrXirArtifact *artifact,XrXirDiagnostic *diagnostic, XrCompileRequestControl *control, const XirReadRequest *read_request) {
     if (!artifact) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=source_facts_input_match(context,artifact,artifact->source_facts, control);
     if (status==XR_XIR_OK) status=xr_xir_compile_verify_source_effects_v2(context,
-        &artifact->module,artifact->construction,artifact->source_facts->effects,diagnostic);
+        &artifact->module,artifact->construction,artifact->source_facts->effects,diagnostic, read_request);
+    if(status==XR_XIR_OK) status=source_facts_input_match(context,artifact,artifact->source_facts,NULL);
     if (status==XR_XIR_OK) status=xir_effects_source_terminal(context,
-        &artifact->module,artifact->source_facts->effects);
+        &artifact->module,artifact->source_facts->effects, read_request);
     if (status==XR_XIR_OK) status=xr_xir_compile_layout_match_verified(artifact);
-    if (status==XR_XIR_OK) status=xir_receive_poll(control);
     return status;
 }
+/* Nested readers propagate preparation to the complete pure parent. Only
+ * this lexical boundary may retire its derived prefix and call the client. */
+XR_FUNC XrXirStatus source_facts_match(const XrXirCompileContext *context,
+    const XrXirArtifact *artifact,XrXirDiagnostic *diagnostic, XrCompileRequestControl *control, const XirReadRequest *read_request) {
+    if(!artifact) return XR_XIR_BAD_STRUCTURE;
+    if(read_request && !xir_read_request_matches(context,read_request)) return XR_XIR_BAD_STRUCTURE;
+    if(!xir_compile_context_valid(context) || artifact->context.resources!=context->resources ||
+        artifact->module.stage!=XR_XIR_CHECKED || !artifact->source_facts || !artifact->module.provenance ||
+        artifact->module.provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus observed=xir_receive_poll(control);
+    if(observed!=XR_XIR_OK) return observed;
+    if(!read_request || read_request->attempt)
+        return source_facts_match_attempt_body(context, artifact, diagnostic, control, read_request);
+    if(!read_request->operation || !xir_compile_context_valid(context) ||
+        read_request->operation->capacity.resources!=(context)->resources) return XR_XIR_BAD_STRUCTURE;
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(context,request.operation);
+        if(status==XR_XIR_OK) status=source_facts_match_attempt_body(context, artifact, diagnostic, control, &request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) {
+            if(diagnostic && status!=XR_XIR_OK) diagnostic->status=status;return status;
+        }
+        status=xir_read_prepare(context,request.operation,request.control);
+        if(status!=XR_XIR_OK) {if(diagnostic) diagnostic->status=status;return status;}
+    }
+}
+
 
 /* This entry is called only while the receiving Artifact is unpublished.
  * The fresh collector sees the actual final Checked body, not Built facts. */
-static XrXirStatus source_facts_build(XrXirArtifact *artifact,XrXirDiagnostic *diagnostic, XrCompileRequestControl *control) {
+static XrXirStatus source_facts_build_attempt_body(XrXirArtifact *artifact,XrXirDiagnostic *diagnostic, XrCompileRequestControl *control, const XirReadRequest *read_request) {
     if (!artifact || artifact->source_facts || artifact->module.stage!=XR_XIR_CHECKED ||
         !artifact->module.provenance || artifact->module.provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE)
         return XR_XIR_BAD_STRUCTURE;
     const XrXirCompileContext *context=&artifact->context;
     XrXirEffects *effects=NULL;
     XrXirStatus status=xr_xir_compile_verify_owned_effects_v2(context,&artifact->module,
-        artifact->construction,&effects,diagnostic);
+        artifact->construction,&effects,diagnostic, read_request);
     XirSourceFacts *facts=status==XR_XIR_OK?xir_type_copy_zero(context,1,sizeof(*facts),&status,control):NULL;
     if (status==XR_XIR_OK && !facts) status=XR_XIR_OUT_OF_MEMORY;
 
     if (facts) {
         atomic_init(&facts->references,1);
         facts->context=*context;facts->effects=effects;effects=NULL;
-        if (status==XR_XIR_OK) facts->input=provenance_clone(context,artifact->module.provenance,&status, control);
+        if (status==XR_XIR_OK) facts->input=provenance_clone(context,artifact->module.provenance,&status,control,read_request);
         if (status==XR_XIR_OK) status=xir_construction_clone(context,artifact->module.types,
             artifact->construction,&facts->construction,control);
         if (status==XR_XIR_OK) status=source_facts_input_match(context,artifact,facts, control);
-        if (status==XR_XIR_OK) status=xir_effects_source_terminal(context,&artifact->module,facts->effects);
+        if (status==XR_XIR_OK) status=xir_receive_poll(control);
+        if (status==XR_XIR_OK) status=source_facts_input_match(context,artifact,facts,NULL);
+        if (status==XR_XIR_OK) status=xir_effects_source_terminal(context,&artifact->module,facts->effects, read_request);
     }
     xr_xir_compile_effects_free(effects);
     if (status!=XR_XIR_OK) { xir_source_facts_release(facts);return status; }
 
-    status=xir_receive_poll(control);
-    if (status!=XR_XIR_OK) {xir_source_facts_release(facts);return status;}
     artifact->source_facts=facts;return XR_XIR_OK;
 }
+/* Nested readers propagate preparation to the complete pure parent. Only
+ * this lexical boundary may retire its derived prefix and call the client. */
+XR_FUNC XrXirStatus source_facts_build(XrXirArtifact *artifact,XrXirDiagnostic *diagnostic, XrCompileRequestControl *control, const XirReadRequest *read_request) {
+    if(!artifact) return XR_XIR_BAD_STRUCTURE;
+    if(read_request && !xir_read_request_matches(&artifact->context,read_request)) return XR_XIR_BAD_STRUCTURE;
+    if(!read_request || read_request->attempt)
+        return source_facts_build_attempt_body(artifact, diagnostic, control, read_request);
+    if(!read_request->operation || !xir_compile_context_valid(&artifact->context) ||
+        read_request->operation->capacity.resources!=(&artifact->context)->resources) return XR_XIR_BAD_STRUCTURE;
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(&artifact->context,request.operation);
+        if(status==XR_XIR_OK) status=source_facts_build_attempt_body(artifact, diagnostic, control, &request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) {
+            if(diagnostic && status!=XR_XIR_OK) diagnostic->status=status;return status;
+        }
+        status=xir_read_prepare(&artifact->context,request.operation,request.control);
+        if(status!=XR_XIR_OK) {if(diagnostic) diagnostic->status=status;return status;}
+    }
+}
+
 
 /* Complete EOF and structure admission precede decoded facts. A partial
  * packet never publishes either its outer Artifact or its nested Source. */
-static XrXirStatus source_facts_prepare(XrXirArtifact *artifact,XrXirDiagnostic *diagnostic, XrCompileRequestControl *control) {
+static XrXirStatus source_facts_prepare(XrXirArtifact *artifact,XrXirDiagnostic *diagnostic, XrCompileRequestControl *control, const XirReadRequest *read_request) {
     if (!artifact || !xir_compile_context_valid(&artifact->context)) return XR_XIR_BAD_STRUCTURE;
     const XrXirProvenance *provenance=artifact->module.provenance;
     if (!provenance) return artifact->source_facts?XR_XIR_BAD_STRUCTURE:XR_XIR_OK;
-    if (provenance->kind==XR_XIR_EVIDENCE_TEMPLATE) return source_facts_build(artifact,diagnostic, control);
+    if (provenance->kind==XR_XIR_EVIDENCE_TEMPLATE) return source_facts_build(artifact,diagnostic, control, read_request);
     if (!xir_effect_kind_is_closed(provenance->kind) || !provenance->source || artifact->source_facts)
         return XR_XIR_BAD_STRUCTURE;
     XrXirArtifact *source=provenance->source;
     if (!source->module.provenance) return source->source_facts?XR_XIR_BAD_STRUCTURE:XR_XIR_OK;
     if (source->module.provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE) return XR_XIR_BAD_STRUCTURE;
-    return source->source_facts?source_facts_match(&artifact->context,source,diagnostic, control):
-        source_facts_build(source,diagnostic, control);
+    return source->source_facts?source_facts_match(&artifact->context,source,diagnostic, control, read_request):
+        source_facts_build(source,diagnostic, control, read_request);
 }
 
 XR_FUNC XrXirStatus xir_source_facts_prepare_decoded(XrXirArtifact *artifact,
-    XrXirDiagnostic *diagnostic, XrCompileRequestControl *control) {
-    return source_facts_prepare(artifact,diagnostic, control);
+    XrXirDiagnostic *diagnostic,XrCompileRequestControl *control,const XirReadRequest *read_request) {
+    return source_facts_prepare(artifact,diagnostic,control,read_request);
 }
 
+XR_FUNC XrXirStatus xir_source_facts_acquire_read(const XrXirCompileContext *work,
+    const XrXirArtifact *artifact,XirSourceFacts **output,XrXirDiagnostic *diagnostic,
+    XrCompileRequestControl *control,const XirReadRequest *read_request) {
+    if(!artifact || !output || *output || !read_request || !xir_read_request_matches(work,read_request) ||
+        read_request->control!=control || work->resources!=artifact->context.resources) return XR_XIR_BAD_STRUCTURE;
+    XirSourceFacts *retained=NULL;
+    XrXirStatus status=source_facts_match(work,artifact,diagnostic,control,read_request);
+    if(status==XR_XIR_OK) status=source_facts_retain(work,artifact->source_facts,&retained,control);
+    if(status==XR_XIR_OK) status=source_facts_match(work,artifact,diagnostic,control,read_request);
+    if(status!=XR_XIR_OK) {xir_source_facts_release(retained);return status;}
+    *output=retained;return XR_XIR_OK;
+}
 XR_FUNC XrXirStatus xir_source_facts_acquire(const XrXirArtifact *artifact,
-    XirSourceFacts **output,XrXirDiagnostic *diagnostic, XrCompileRequestControl *control) {
-    if (!artifact || !output || *output) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=source_facts_match(&artifact->context,artifact,diagnostic, control);
-    if (status==XR_XIR_OK) status=source_facts_retain(&artifact->context,artifact->source_facts,output, control);
-    return status;
+    XirSourceFacts **output,XrXirDiagnostic *diagnostic,XrCompileRequestControl *control) {
+    if(!artifact) return XR_XIR_BAD_STRUCTURE;
+    XirReadOperation operation={.capacity={.resources=artifact->context.resources}};
+    const XirReadRequest request={.operation=&operation,.control=control};
+    XrXirStatus status=xir_source_facts_acquire_read(&artifact->context,artifact,output,diagnostic,control,&request);
+    xir_read_operation_free(&operation);return status;
 }
 
 XR_FUNC const XrXirEffects *xir_source_facts_effects(const XirSourceFacts *facts) {
@@ -201,19 +264,20 @@ XR_FUNC const XrXirEffects *xir_source_facts_effects(const XirSourceFacts *facts
 }
 
 static XrXirArtifact *source_artifact_clone(const XrXirCompileContext *context,
-    const XrXirArtifact *source,XrXirStatus *status, XrCompileRequestControl *control) {
+    const XrXirArtifact *source,XrXirStatus *status,XrCompileRequestControl *control,
+    const XirReadRequest *read_request) {
     if (!source || source->module.stage!=XR_XIR_CHECKED) { *status=XR_XIR_BAD_STAGE;return NULL; }
-    XrXirArtifact *copy=clone_module_receiving(context,&source->module,source->construction,status,NULL,control);
+    XrXirArtifact *copy=clone_module_receiving(context,&source->module,source->construction,status,NULL,control,read_request);
     if (!copy) return NULL;
     if (source->module.provenance && source->module.provenance->kind==XR_XIR_EVIDENCE_TEMPLATE) {
         if (!source->source_facts) { *status=XR_XIR_BAD_STRUCTURE;goto failed; }
         if (source->context.resources==context->resources) {
-            *status=source_facts_match(context,source,NULL, control);
+            *status=source_facts_match(context,source,NULL,control,read_request);
             if (*status==XR_XIR_OK) *status=source_facts_input_match(context,copy,source->source_facts, control);
             if (*status==XR_XIR_OK) *status=source_facts_retain(context,source->source_facts,&copy->source_facts, control);
-            if (*status==XR_XIR_OK) *status=source_facts_match(context,copy,NULL, control);
+            if (*status==XR_XIR_OK) *status=source_facts_match(context,copy,NULL,control,read_request);
         } else {
-            *status=source_facts_build(copy,NULL, control);
+            *status=source_facts_build(copy,NULL,control,read_request);
         }
     } else if (source->source_facts) *status=XR_XIR_BAD_STRUCTURE;
 failed:

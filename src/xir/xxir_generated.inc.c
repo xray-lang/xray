@@ -102,8 +102,8 @@ static XrXirStatus generated_receive_shape(const XrXirCompileContext *context,
     if (status==XR_XIR_OK) status=xir_construction_verify(context,module,request->construction);
     return status;
 }
-XR_FUNC XrXirStatus xr_xir_compile_generated_receive(const XrXirCompileContext *context,
-    const XrXirGeneratedReceive *request,XrXirGeneratedBuilt **output) {
+static XrXirStatus generated_receive_attempt(const XrXirCompileContext *context,
+    const XrXirGeneratedReceive *request,XrXirGeneratedBuilt **output,const XirReadRequest *read_request) {
     if (!xir_compile_context_valid(context) || !request || !output || *output)
         return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=generated_receive_shape(context,request);
@@ -123,10 +123,26 @@ XR_FUNC XrXirStatus xr_xir_compile_generated_receive(const XrXirCompileContext *
         for (uint32_t i=0; status==XR_XIR_OK && i<to->instruction_count; ++i)
             status=generated_origin_copy(context,&from->instructions[i],&rows[i]);
     }
-    if (status==XR_XIR_OK) owner->storage=clone_module_receiving(context,request->built,request->construction,&status,NULL,NULL);
+    if (status==XR_XIR_OK) owner->storage=clone_module_receiving(context,request->built,request->construction,&status,NULL,NULL,read_request);
     if (status!=XR_XIR_OK) { xr_xir_compile_generated_free(owner); return status; }
     *output=owner;
     return XR_XIR_OK;
+}
+XR_FUNC XrXirStatus xr_xir_compile_generated_receive(const XrXirCompileContext *context,
+    const XrXirGeneratedReceive *input,XrXirGeneratedBuilt **output) {
+    if(!xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
+    XirReadOperation operation={.capacity={.resources=context->resources}};
+    XirReadAttempt attempt={true};const XirReadRequest request={.operation=&operation,.attempt=&attempt};
+    XrXirStatus status=XR_XIR_OK;
+    for(;;) {
+        status=xir_read_begin(context,&operation);
+        if(status==XR_XIR_OK) status=generated_receive_attempt(context,input,output,&request);
+        XirReadStep step=xir_read_step(&operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) break;
+        status=xir_read_prepare(context,&operation,NULL);
+        if(status!=XR_XIR_OK) break;
+    }
+    xir_read_operation_free(&operation);return status;
 }
 XR_FUNC XrXirStatus xr_xir_compile_generated_check(const XrXirGeneratedBuilt *owner,
     XrXirArtifact **output,XrXirGeneratedDiagnostic *diagnostic) {

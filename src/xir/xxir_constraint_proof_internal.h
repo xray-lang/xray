@@ -49,8 +49,15 @@ XR_FUNC XrXirStatus xir_metadata_type_markers_read(const XrXirCompileContext *co
  * the ordinary marker query independently; only temporary capacity is reused.
  * Output belongs to an unpublished owner and has exactly types->count bytes. */
 XR_FUNC XrXirStatus xir_compile_enum_sendable_flags(const XrXirCompileContext *context,
-    const XrXirTypes *types,uint8_t *output,uint32_t count);
+    const XrXirTypes *types,uint8_t *output,uint32_t count, const XirReadRequest *read_request);
 XR_FUNC XrXirStatus xir_metadata_constraint_arguments_prove(const XrXirCompileContext *context,
     const XirMetadataProofContext *proof,const XirMetadataArguments *use);
+XR_FUNC XrXirStatus xir_constraints_read(const XrXirCompileContext *context,
+    const XrXirProofContext *proof,const XrXirConstraintUse *use,XirReadScratch *memory);
+XR_FUNC XrXirStatus xir_constraint_arguments_read(const XrXirCompileContext *context,
+    const XrXirProofContext *proof,const XirConstraintArguments *use,XirReadScratch *memory);
+XR_FUNC XrXirStatus xir_interface_prove_read(const XrXirCompileContext *context,
+    const XrXirProofContext *proof,const XrXirModule *declaration,XrXirType subject,
+    XrXirInterfaceApplication application,XirReadScratch *memory);
 XR_FUNC void xr_xir_constraint_scratch_free(XirConstraintScratch *scratch);
 #endif // XXIR_CONSTRAINT_PROOF_INTERNAL_H

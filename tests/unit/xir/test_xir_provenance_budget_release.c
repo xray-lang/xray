@@ -116,12 +116,12 @@ static void public_work_cuts(ProvenanceFixture *f) {
     XrXirCompileContext c=owner_new(100000);size_t physical=live;uint64_t bytes=live_bytes;
     CHECK(xir_fixture_verify(&c, &module, NULL)==XR_XIR_OK);owner_free(&c,physical,bytes);
     c=owner_new(100000);physical=live;bytes=live_bytes;source.context=c;
-    CHECK(xr_xir_compile_provenance_functions_match(&c,&module,&module,&instance,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_provenance_functions_match(&c,&module,&module,&instance,NULL, NULL)==XR_XIR_OK);
     XrCompileResourceStats required=stats(&c);
     uint64_t exact=required.work;CHECK(exact>4);owner_free(&c,physical,bytes);
     for(uint64_t work=1;work<=exact;++work) {
         c=owner_new(work);physical=live;bytes=live_bytes;source.context=c;
-        XrXirStatus status=xr_xir_compile_provenance_functions_match(&c,&module,&module,&instance,NULL);
+        XrXirStatus status=xr_xir_compile_provenance_functions_match(&c,&module,&module,&instance,NULL, NULL);
         CHECK(status==(work==exact?XR_XIR_OK:XR_XIR_BUDGET));owner_free(&c,physical,bytes);
     }
     printf("public provenance census: allocated=%llu peak=%llu work=%llu\n",
@@ -202,27 +202,27 @@ static void scope_owner_control(ProvenanceFixture *f) {
     module.declarations=&declarations;module.linkage_kind=XR_XIR_PROGRAM;module.provenance=&evidence;
     XrXirConstruction *construction=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_construction(&context,module.types,&construction)==XR_XIR_OK);
-    CHECK(xr_xir_compile_verify_owned_effects_v2(&context,&module,construction,&effects,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_verify_owned_effects_v2(&context,&module,construction,&effects,NULL, NULL)==XR_XIR_OK);
     xr_xir_compile_construction_free(construction);
     CHECK(effects && xir_effects_context_available(&context,effects));
     XrXirOrigin origin={.function=1};
     ScopeFailureControl control={.context=&context,
         .input={&module,module.types,&origin,UINT32_MAX,NULL,0},.limit=limits.work};
     CHECK(xir_effects_context_operation(&context,effects,&module,module.types,
-        scope_valid_control,&control)==XR_XIR_OK && control.calls==1);
+        scope_valid_control,&control, NULL)==XR_XIR_OK && control.calls==1);
     for (uint32_t mode=0;mode<3;++mode) {
         control.mode=mode;control.calls=0;control.expected=XR_XIR_BAD_STRUCTURE;
         if (mode==2) ++entry_ops[0].immediate;
         CHECK(xir_effects_context_operation(&context,effects,&module,module.types,
-            scope_ignored_failure,&control)==XR_XIR_BAD_STRUCTURE && control.calls==1);
+            scope_ignored_failure,&control, NULL)==XR_XIR_BAD_STRUCTURE && control.calls==1);
         if (mode==2) --entry_ops[0].immediate;
         control.calls=0;
         CHECK(xir_effects_context_operation(&context,effects,&module,module.types,
-            scope_valid_control,&control)==XR_XIR_OK && control.calls==1);
+            scope_valid_control,&control, NULL)==XR_XIR_OK && control.calls==1);
     }
     control.mode=3;control.calls=0;control.expected=XR_XIR_BUDGET;
     CHECK(xir_effects_context_operation(&context,effects,&module,module.types,
-        scope_ignored_failure,&control)==XR_XIR_BUDGET && control.calls==1);
+        scope_ignored_failure,&control, NULL)==XR_XIR_BUDGET && control.calls==1);
     CHECK(stats(&context).work==limits.work);
     xr_xir_compile_effects_free(effects);owner_free(&context,physical,bytes);
     puts("private provenance scope ignores no failure; repeated rejected queries charge zero and preserve output; physical=0/0 PASS");
@@ -297,7 +297,7 @@ static void scope_generic_owner_control(void) {
         .declarations=&declarations,.generics=generics,.provenance=&evidence,.linkage_kind=XR_XIR_PROGRAM};
     XrXirConstruction *construction=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_construction(&context,module.types,&construction)==XR_XIR_OK);
-    CHECK(xr_xir_compile_verify_owned_effects_v2(&context,&module,construction,&effects,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_verify_owned_effects_v2(&context,&module,construction,&effects,NULL, NULL)==XR_XIR_OK);
     xr_xir_compile_construction_free(construction);
     CHECK(effects && xir_effects_context_available(&context,effects));
     XrXirOrigin nested={.function=2,.arguments=&ordinary[0],.argument_count=1};
@@ -313,10 +313,10 @@ static void scope_generic_owner_control(void) {
         CHECK(!memcmp(&rejected,&sentinel,sizeof(rejected)));
         ScopeGenericOwnerControl control={.context=&context,.input=input,.parent=&parents[owner],.arguments=&ordinary[0]};
         CHECK(xir_effects_context_operation(&context,effects,&module,module.types,
-            scope_generic_ignored_owner,&control)==XR_XIR_BAD_STRUCTURE && control.calls==1);
+            scope_generic_ignored_owner,&control, NULL)==XR_XIR_BAD_STRUCTURE && control.calls==1);
         control.calls=0;
         CHECK(xir_effects_context_operation(&context,effects,&module,module.types,
-            scope_generic_valid_owner,&control)==XR_XIR_OK && control.calls==1);
+            scope_generic_valid_owner,&control, NULL)==XR_XIR_OK && control.calls==1);
         CHECK(xir_effects_context_select(&context,effects,&input,&selected)==XR_XIR_OK);
     }
     nested.arguments=parents[0].arguments=parents[1].arguments=&ordinary[1];
@@ -361,7 +361,7 @@ static void origin_index_scales(void) {
             n,(unsigned long long)(after.work-before.work),(unsigned long long)(after.allocated_bytes-before.allocated_bytes),
             (unsigned long long)after.peak_bytes,attempts-start,(unsigned long long)n*(n-1)/2);
         CHECK(after.live_bytes==before.live_bytes);before=after;start=attempts;
-        CHECK(xr_xir_compile_provenance_functions_match(&c,&source,&destination,&evidence,NULL)==XR_XIR_OK);
+        CHECK(xr_xir_compile_provenance_functions_match(&c,&source,&destination,&evidence,NULL, NULL)==XR_XIR_OK);
         after=stats(&c);
         printf("ORIGIN_SCALE N=%u edges=0 key_words=4 key_elements=0 phase=public-functions work=%llu allocated=%llu peak=%llu sites=%zu\n",
             n,(unsigned long long)(after.work-before.work),(unsigned long long)(after.allocated_bytes-before.allocated_bytes),

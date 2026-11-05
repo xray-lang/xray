@@ -18,6 +18,8 @@
 #include "xir/xxir_emit_c.h"
 #include "xir/xxir_nominal.h"
 #include "xir/xxir_construction.h"
+#include "xir/xxir_interface.h"
+#include "xir/xxir_types.h"
 #include "toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -64,10 +66,10 @@ static void initialization_authority(SourceFixtureOwner *owner, const XrXirArtif
     XrXirTypes types = *module->types; types.nominals = &table;
     XrXirModule forged = *module; forged.types = &types;
     records[box].flags = 0;
-    CHECK(xr_xir_compile_verify_v2(&owner->context, &forged, xr_xir_compile_artifact_construction(artifact), NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_verify_v2(&owner->context, &forged, xr_xir_compile_artifact_construction(artifact), NULL, NULL) == XR_XIR_BAD_STRUCTURE);
     records[box].flags = XR_XIR_NOMINAL_MODULE_LITERAL;
     records[plain].flags = XR_XIR_NOMINAL_MODULE_LITERAL;
-    CHECK(xr_xir_compile_verify_v2(&owner->context, &forged, xr_xir_compile_artifact_construction(artifact), NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_verify_v2(&owner->context, &forged, xr_xir_compile_artifact_construction(artifact), NULL, NULL) == XR_XIR_BAD_STRUCTURE);
     CHECK(original->declarations[box].flags == XR_XIR_NOMINAL_MODULE_LITERAL && !original->declarations[plain].flags);
 }
 
@@ -102,13 +104,50 @@ static void execute_answer(XrXirProgram *program, uint32_t entry, int64_t expect
     }
 }
 
-static void accept_packet(SourceFixtureOwner *owner, XrXirSourceResult *source, XrCompilerSession *session, int64_t expected, const char *output, unsigned suspensions) {
+static void parent_method_shape(const XrXirArtifact *artifact) {
+    const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
+    const XrXirInterfaceTable *table=module->types->interfaces;uint32_t mapper=UINT32_MAX,member=UINT32_MAX;
+    CHECK(table && table->declarations);
+    for(uint32_t i=0;i<table->count;++i) {
+        const XrXirInterfaceDeclaration *declaration=&table->declarations[i];
+        if(declaration->name.length!=6 || memcmp(declaration->name.bytes,"Mapper",6)) continue;
+        CHECK(mapper==UINT32_MAX && declaration->parameter_count==1 && declaration->constraints &&
+            (declaration->constraints[0].markers&XR_XIR_CONSTRAINT_SENDABLE));mapper=i;
+        for(uint32_t m=0;m<declaration->method_count;++m) {
+            const XrXirInterfaceMethod *method=&declaration->methods[m];
+            if(method->name.length!=3 || memcmp(method->name.bytes,"map",3)) continue;
+            CHECK(member==UINT32_MAX && method->own_parameter_count==1 && method->constraints &&
+                (method->constraints[0].markers&XR_XIR_CONSTRAINT_SENDABLE));member=m;
+            CHECK(xr_xir_type_span(module->types,method->signature)==2);
+        }
+    }
+    CHECK(mapper!=UINT32_MAX && member!=UINT32_MAX);uint32_t requirements=0;
+    for(uint32_t f=0;f<module->function_count;++f) for(uint32_t i=0;i<module->functions[f].instruction_count;++i) {
+        const XrXirInstruction *op=&module->functions[f].instructions[i];
+        if(op->op==XR_XIR_CALL_REQUIREMENT && op->targets[0]==mapper && op->targets[1]==member) {
+            CHECK(op->type_arguments[1]==2);++requirements;
+        }
+    }
+    CHECK(requirements);
+}
+static void accept_packet(SourceFixtureOwner *owner, XrXirSourceResult *source, XrCompilerSession *session, int64_t expected, const char *output, unsigned suspensions, const char *case_name) {
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(source->checked, &packet, NULL) == XR_XIR_OK);
     /* No source arena, AST or session may supply the reconstructed consumer. */
     xr_xir_compile_source_result_free(source); xr_compile_session_free(session);
     XrXirArtifact *decoded = NULL, *specialized = NULL, *lowered = NULL;
     CHECK(xr_xir_compile_checked_read(&owner->context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
+    if(!strcmp(case_name,"generic_parent_method_value")) {
+        XrXirArtifact *independent=NULL;XrXirCheckedPacket same={0};
+        CHECK(xr_xir_compile_checked_read(&owner->context,packet.bytes,packet.length,&independent,NULL)==XR_XIR_OK);
+        parent_method_shape(decoded);parent_method_shape(independent);
+        const XrXirTypes *a=xr_xir_compile_artifact_module(decoded)->types,*b=xr_xir_compile_artifact_module(independent)->types;
+        CHECK(a!=b && a->nodes!=b->nodes && a->interfaces!=b->interfaces &&
+            a->interfaces->declarations!=b->interfaces->declarations);
+        CHECK(xr_xir_compile_checked_write(independent,&same,NULL)==XR_XIR_OK && same.length==packet.length &&
+            !memcmp(same.bytes,packet.bytes,packet.length));
+        xr_xir_compile_checked_packet_free(&same);xr_xir_compile_artifact_free(independent);
+    }
     xr_xir_compile_checked_packet_free(&packet);
     XrXirDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_compile_specialize(decoded, &specialized, &diagnostic, NULL);
@@ -147,7 +186,7 @@ int main(int argc, char **argv) {
     CHECK(length > 0 && (size_t)length < sizeof(path));
     SourceFixtureOwner owner = {0}; source_fixture_owner_new(&owner);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(owner.context.resources, &session) == XR_COMPILER_SESSION_OK && session);
+    CHECK(xr_compile_session_new(owner.context.resources, &session) == XR_COMPILE_RESOURCE_OK && session);
     const XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_LANGUAGE_FIXTURES};
     const XrXirSourceRequest request = {session, path, &authority, &owner.context, XR_LANGUAGE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
@@ -164,7 +203,7 @@ int main(int argc, char **argv) {
     } else {
         CHECK(status == XR_XIR_OK && result.checked && result.snapshot);
         if (!strcmp(argv[2], "init_module_authority")) initialization_authority(&owner, result.checked);
-        accept_packet(&owner, &result, session, expected, emit ? argv[4] : NULL, suspensions);
+        accept_packet(&owner, &result, session, expected, emit ? argv[4] : NULL, suspensions, argv[2]);
     }
     source_fixture_owner_free(&owner);
     printf("%s independent expectation passed; compiler ledger restored\n", argv[2]); return 0;

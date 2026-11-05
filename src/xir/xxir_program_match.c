@@ -367,10 +367,11 @@ static XrXirStatus program_permissions(const XrXirCompileContext *context,
     *output = permissions;
     return XR_XIR_OK;
 }
-XR_FUNC XrXirStatus xir_program_input_prepare(const XrXirCompileContext *context,
-    const XrXirProgramSpec *spec,const XrXirProgramInput *input,XrXirProgramPermissions **permissions) {
+XR_FUNC XrXirStatus xir_program_input_prepare_read(const XrXirCompileContext *context,
+    const XrXirProgramSpec *spec,const XrXirProgramInput *input,XrXirProgramPermissions **permissions,
+    const XirReadRequest *read_request) {
     if (!spec || !permissions || *permissions) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=xir_program_input_verify(context,input);
+    XrXirStatus status=xir_program_input_verify_read(context,input,read_request);
     if (status==XR_XIR_OK) status=xr_xir_compile_program_match(context,spec,
         input->artifact->layouts,input->artifact);
     if (status==XR_XIR_OK) status=program_permissions(context,input->artifact,
@@ -381,4 +382,13 @@ XR_FUNC XrXirStatus xir_program_input_prepare(const XrXirCompileContext *context
         memcpy((*permissions)->packet_identity,input->artifact->checked_identity,32);
     }
     return status;
+}
+
+XR_FUNC XrXirStatus xir_program_input_prepare(const XrXirCompileContext *context,
+    const XrXirProgramSpec *spec,const XrXirProgramInput *input,XrXirProgramPermissions **permissions) {
+    if(!xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
+    XirReadOperation operation={.capacity={.resources=context->resources}};
+    const XirReadRequest request={.operation=&operation};
+    XrXirStatus status=xir_program_input_prepare_read(context,spec,input,permissions,&request);
+    xir_read_operation_free(&operation);return status;
 }

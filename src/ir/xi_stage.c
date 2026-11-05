@@ -99,7 +99,7 @@ static bool verify_tree(const XiFunc *func, XiStage stage, char *error, size_t e
 }
 
 static XiStageHandle *transition(XiStageHandle *handle, XiStage from, XiStage to, char *error,
-                                 size_t error_size) {
+                                 size_t error_size, const XirReadRequest *read_request) {
     if (!handle || handle->released || !handle->graph || handle->stage != from) {
         set_error(error, error_size, "consumed or wrong-stage Xi handle");
         return NULL;
@@ -181,7 +181,7 @@ XiReppedProgram *xi_stage_adopt_repped(XiFunc *graph, char *error, size_t error_
 #define XI_DEFINE_TRANSITION(function_name, input_type, output_type, from_stage, to_stage)         \
     output_type *function_name(input_type *input, char *error, size_t error_size) {                \
         return (output_type *) transition((XiStageHandle *) input, from_stage, to_stage, error,    \
-                                          error_size);                                             \
+                                          error_size, NULL);                                             \
     }
 
 XI_DEFINE_TRANSITION(xi_program_canonicalize, XiRawProgram, XiCanonicalProgram, XI_STAGE_RAW,

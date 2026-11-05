@@ -304,9 +304,9 @@ static XrXirStatus effect_invocation_shape(const EffectInvocationRead *owner,uin
     return effect_body_request_shape(&request,function,instruction,output);
 }
 
-static XrXirStatus effect_capture_match(const XrXirCompileContext *work,const EffectInvocationFinal *final);
+static XrXirStatus effect_capture_match(const XrXirCompileContext *work,const EffectInvocationFinal *final, XirReadOperation *read_operation);
 static XrXirStatus effect_capture_build(const XrXirCompileContext *work,EffectInvocationFinal *final,
-    const EffectInvocationWorkspace *discovery);
+    const EffectInvocationWorkspace *discovery, XirReadOperation *read_operation);
 static void effect_invocation_result_clear(EffectFinalFunctions *result);
 static void effect_invocation_result_free(EffectFinalFunctions *result);
 static bool effect_invocation_witness_equal(const XrXirRootEffectWitness *a,

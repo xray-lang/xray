@@ -30,5 +30,9 @@ typedef struct XrXirWitness {
 XR_FUNC XrXirStatus xr_xir_compile_implementations_verify(const XrXirCompileContext *compile_context, const XrXirModule *module);
 /* Output arguments borrow the receiver pool; function belongs to the request's
  * declaration module. No scratch type IDs escape this operation. */
+struct XirReadScratch;
+XR_FUNC XrXirStatus xir_witness_resolve_read(const XrXirCompileContext *context,
+    const XrXirProofContext *proof,const XrXirWitnessRequest *request,XrXirWitness *output,
+    struct XirReadScratch *memory);
 XR_FUNC XrXirStatus xr_xir_compile_witness_resolve(const XrXirCompileContext *compile_context, const XrXirProofContext *context, const XrXirWitnessRequest *request, XrXirWitness *output);
 #endif // XXIR_IMPLEMENTATION_VERIFY_H

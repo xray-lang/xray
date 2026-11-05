@@ -37,7 +37,7 @@ static XrXirStatus root_operation_ignore_error(void *data,XirEffectContextScope 
     CHECK(!memcmp(&before,&after,sizeof(before)) && rp_attempts==attempts);return XR_XIR_OK;
 }
 static XrXirStatus root_operation_run(const XrXirCompileContext *context,RootOperationCase *c) {
-    return xir_effects_context_operation(context,c->effects,c->module,c->module->types,root_operation_read,c);
+    return xir_effects_context_operation(context,c->effects,c->module,c->module->types,root_operation_read,c, NULL);
 }
 static void root_operation_case(uint32_t generic,uint32_t repeats,uint32_t less) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());uint64_t baseline=rp_stats(&context).live_bytes;
@@ -88,7 +88,7 @@ static void root_operation_case(uint32_t generic,uint32_t repeats,uint32_t less)
     XrXirArtifact *checked=NULL;EffectContextOwner *owner=NULL;XrXirDiagnostic diagnostic={0};
     CHECK(xir_fixture_check(&context,&module,&checked,&diagnostic)==XR_XIR_OK);
     const XrXirModule *owned=xr_xir_compile_artifact_module(checked);
-    CHECK(effect_context_owner_build(&context,owned,NULL,NULL,&owner)==XR_XIR_OK);
+    CHECK(effect_context_owner_build(&context,owned,NULL,NULL,&owner, NULL)==XR_XIR_OK);
     XrXirEffects *root_effects=NULL;CHECK(xr_xir_compile_effects_analyze(checked,&root_effects)==XR_XIR_OK);
     XrXirEffects effects={.resources=context.resources,.count=module.function_count,
         .outcomes_work={.contexts=owner,.root=effect_roots_read(root_effects)->root}};
@@ -110,7 +110,7 @@ static void root_operation_case(uint32_t generic,uint32_t repeats,uint32_t less)
         CHECK(root_operation_run(&context,&c)==XR_XIR_OUT_OF_MEMORY && rp_injected);
         rp_fail_at=SIZE_MAX;CHECK(rp_stats(&context).live_bytes==live && rp_live==blocks && rp_live_bytes==bytes);
     }
-    CHECK(xir_effects_context_operation(&context,&effects,owned,owned->types,root_operation_ignore_error,&c)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xir_effects_context_operation(&context,&effects,owned,owned->types,root_operation_ignore_error,&c, NULL)==XR_XIR_BAD_STRUCTURE);
     XrXirInstruction *changed=(XrXirInstruction *)owned->functions[3].instructions;
     int64_t immediate=changed[0].immediate;changed[0].immediate^=1;
     CHECK(root_operation_run(&context,&c)==XR_XIR_BAD_STRUCTURE);changed[0].immediate=immediate;

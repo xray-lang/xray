@@ -39,7 +39,7 @@ static XrXirStatus conditional_invocation_publish(const XrXirCompileContext *con
         EffectInvocationCertificate *saved=effects->invocations;XrXirRootFormula prior=*formula;
         XrXirRootEffects fact=effect_roots_read(effects)->root[0];EffectGraph graph={0};
         EffectInvocationDeclaredBounds malformed={.resources=context->resources};
-        CHECK(effect_invocation_publish(context,module,effects,&graph,&malformed,NULL)==XR_XIR_BAD_STRUCTURE &&
+        CHECK(effect_invocation_publish(context,module,effects,&graph,&malformed,NULL, NULL)==XR_XIR_BAD_STRUCTURE &&
             effects->invocations==saved && effect_roots_read(effects)->contracts[1].formula.terms==prior.terms &&
             effect_roots_read(effects)->root[0].requires_root==fact.requires_root && effect_roots_read(effects)->root[0].unresolved==fact.unresolved &&
             effects->result_borrow==result);

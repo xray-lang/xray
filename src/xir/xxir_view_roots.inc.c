@@ -229,7 +229,7 @@ XR_FUNC XrXirStatus xir_compile_view_roots_verified(const XrXirCompileContext *c
         XrXirOp op=module->functions[f].instructions[i].op;needed|=op==XR_XIR_VIEW_NEW || op==XR_XIR_VIEW_REBORROW;
     }
     if (!needed) return XR_XIR_OK;
-    uint8_t *flags=NULL;XrXirStatus status=view_flags_build(context,module->types,&flags);
+    uint8_t *flags=NULL;XrXirStatus status=view_flags_build(context,module->types,&flags,NULL,NULL);
     if (status!=XR_XIR_OK || !flags) return status==XR_XIR_OK ? XR_XIR_BAD_TYPE : status;
     ViewRootCheck c={.context=context,.module=module,.flags=flags,.visitor=visitor,.user=user,
         .location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE}};

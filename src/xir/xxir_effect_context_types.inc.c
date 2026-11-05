@@ -24,6 +24,7 @@ static XrXirTypeMatchScratch *effect_terms_type_scratch(EffectTerms *pool) {
 /* Declaration metadata keeps its original source IDs during resolution. Each
  * descriptor and declaration child is copied; executable layout is excluded. */
 static XrXirStatus effect_terms_seed(EffectTerms *pool, const XrXirTypes *source) {
+    if(pool->read) return XR_XIR_BAD_STRUCTURE;
     if (!source || !!source->nodes != !!source->count || pool->types.count || pool->owned_nominals || pool->owned_interfaces)
         return XR_XIR_BAD_STRUCTURE;
     XrXirTypeNode *nodes = source->count ? effect_terms_alloc(pool,source->count,sizeof(*nodes)) : NULL;

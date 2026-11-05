@@ -41,7 +41,7 @@ static void ed_occupied(void){
     ErrorDependencyFixture f;ed_fixture(&f,ED_GO,false);XrXirCompileContext c=ed_owner(ed_caps());uint64_t baseline=ed_stats(&c).live_bytes;
     XrXirEffects sentinel={0},*occupied=&sentinel;memset(&sentinel,0x5a,sizeof(sentinel));
     XrXirEffects before=sentinel;XrCompileResourceStats a=ed_stats(&c);
-    CHECK(xr_xir_compile_effects_infer_verified(&c,&f.module,&occupied)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_effects_infer_verified(&c,&f.module,&occupied, NULL)==XR_XIR_BAD_STRUCTURE);
     XrCompileResourceStats b=ed_stats(&c);
     CHECK(occupied==&sentinel && !memcmp(&sentinel,&before,sizeof(before)) && a.work==b.work && a.allocated_bytes==b.allocated_bytes);
     ed_release(&c,baseline);

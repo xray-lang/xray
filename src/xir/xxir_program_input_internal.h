@@ -25,6 +25,8 @@ XR_FUNC XrXirStatus xir_program_input_take(const XrXirCompileContext *context,
     XrXirArtifact **artifact,XrXirProgramInput **output);
 XR_FUNC XrXirStatus xir_program_input_read(const XrXirCompileContext *context,
     const XrXirProgramPacket *packet,const XrXirTarget *target,XrXirProgramInput **output);
+XR_FUNC XrXirStatus xir_program_input_verify_read(const XrXirCompileContext *context,
+    const XrXirProgramInput *input,const XirReadRequest *read_request);
 XR_FUNC XrXirStatus xir_program_input_verify(const XrXirCompileContext *context,
     const XrXirProgramInput *input);
 XR_FUNC void xir_program_input_free(XrXirProgramInput *input);

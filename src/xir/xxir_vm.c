@@ -1181,6 +1181,8 @@ XR_FUNC XrXirStatus xr_xir_compile_vm_program_take(XrXirArtifact **artifact,
     if (!module->declarations) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext current_context=*xr_xir_compile_artifact_context(*artifact);
     const XrXirCompileContext *context=&current_context;
+    XirReadOperation operation={.capacity={.resources=context->resources}};
+    const XirReadRequest read_request={.operation=&operation};
     XrXirArtifact *original=*artifact;
     XrXirProgramInput *input=NULL;XrXirArtifact *owned=original;
     XrXirProgram *program=NULL;
@@ -1205,7 +1207,7 @@ XR_FUNC XrXirStatus xr_xir_compile_vm_program_take(XrXirArtifact **artifact,
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, *xr_xir_compile_artifact_target(*artifact),
         entries, entry_count, module->declarations, {owner, vm_program_release}, module->types,
         {0}};
-    status = xir_program_receive(context,&spec,&input,&entries,&program);
+    status = xir_program_receive_read(context,&spec,&input,&entries,&program,&read_request);
 finish:
     if (entries) for (uint32_t i=0;i<entry_count;++i)
         xr_compile_resources_free((void *)entries[i].parameters);
@@ -1214,6 +1216,7 @@ finish:
 
     /* No allocating or releasing operation follows successful correspondence.
      * The original artifact remains caller-owned on every failed preparation. */
+    if(status==XR_XIR_OK) status=xir_program_input_verify_read(context,program->permissions->input,&read_request);
     if (status==XR_XIR_OK) status=vm_program_match(context,*artifact,owner,program);
     if (status!=XR_XIR_OK) {
         if (program) {
@@ -1223,10 +1226,10 @@ finish:
             if (input) { input->artifact=NULL;xir_program_input_free(input); }
             vm_program_release(owner);
         }
-        return status;
+        xir_read_operation_free(&operation);return status;
     }
     owner->artifact=*artifact;*artifact=NULL;*output=program;
-    return XR_XIR_OK;
+    xir_read_operation_free(&operation);return XR_XIR_OK;
 }
 typedef struct DebugVmProgramOwner {
     XrXirArtifact *artifact;
@@ -1283,10 +1286,10 @@ static XrXirStatus debug_native_match(const XrXirArtifact *artifact,const XrXirV
     return natives?XR_XIR_OK:XR_XIR_UNSUPPORTED;
 }
 static XrXirStatus debug_native_admit(const XrXirCompileContext *context,
-    const XrXirProgramInput *owned,const XrXirVmDebugNative *native) {
+    const XrXirProgramInput *owned,const XrXirVmDebugNative *native,const XirReadRequest *read_request) {
     XrXirStatus status=debug_native_match(owned->artifact,native);
     XrXirProgramPermissions *permissions=NULL;
-    if (status==XR_XIR_OK) status=xir_program_input_prepare(context,native->program,owned,&permissions);
+    if (status==XR_XIR_OK) status=xir_program_input_prepare_read(context,native->program,owned,&permissions,read_request);
     xir_program_permissions_free(permissions);return status;
 }
 /* All allocating preparation and temporary retirement precede this comparison.
@@ -1346,20 +1349,22 @@ static XrXirStatus debug_program_take(XrXirArtifact **artifact,XrXirVmDebug *deb
     if (!module->declarations) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext current_context=*xr_xir_compile_artifact_context(*artifact);
     const XrXirCompileContext *context=&current_context;
+    XirReadOperation operation={.capacity={.resources=context->resources}};
+    const XirReadRequest read_request={.operation=&operation};
     DebugProgramAdmission request={native,native?native->program->code:(XrXirCodeLease){0}};
 
     XrXirArtifact *original=*artifact,*moved=original;XrXirProgramInput *input=NULL;
     XrXirStatus status=xir_program_input_take(context,&moved,&input);
     if (status!=XR_XIR_OK) return status;
     if (native) {
-        status=debug_native_admit(context,input,native);
-        if (status!=XR_XIR_OK) { input->artifact=NULL;xir_program_input_free(input);return status; }
+        status=debug_native_admit(context,input,native,&read_request);
+        if (status!=XR_XIR_OK) { input->artifact=NULL;xir_program_input_free(input);xir_read_operation_free(&operation);return status; }
     }
     uint32_t count=module->function_count;XrXirProgram *program=NULL;
     DebugVmProgramOwner *owner=xir_compile_calloc(context,1,sizeof(*owner),&status);
-    if (!owner) { input->artifact=NULL;xir_program_input_free(input);return status; }
+    if (!owner) { input->artifact=NULL;xir_program_input_free(input);xir_read_operation_free(&operation);return status; }
     if (!xir_vm_debug_retain(debug)) {
-        input->artifact=NULL;xir_program_input_free(input);xr_compile_resources_free(owner);return XR_XIR_BAD_STRUCTURE;
+        input->artifact=NULL;xir_program_input_free(input);xr_compile_resources_free(owner);xir_read_operation_free(&operation);return XR_XIR_BAD_STRUCTURE;
     }
     owner->debug=debug;
     owner->bindings=xir_compile_calloc(context,count,sizeof(*owner->bindings),&status);
@@ -1394,21 +1399,23 @@ static XrXirStatus debug_program_take(XrXirArtifact **artifact,XrXirVmDebug *deb
     owner->bound=true;
     XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,*xr_xir_compile_artifact_target(original),
         entries,count,module->declarations,{owner,debug_vm_program_release},module->types,{0}};
-    status=xir_program_receive(context,&spec,&input,&entries,&program);
+    status=xir_program_receive_read(context,&spec,&input,&entries,&program,&read_request);
 finish:
     if (entries) for (uint32_t f=0;f<count;++f) xr_compile_resources_free((void *)entries[f].parameters);
     xr_compile_resources_free(entries);
     if (status==XR_XIR_OK && (*output || *artifact!=original)) status=XR_XIR_BAD_STRUCTURE;
+    if(status==XR_XIR_OK) status=xir_program_input_verify_read(context,program->permissions->input,&read_request);
     if (status==XR_XIR_OK) status=debug_program_match(context,original,owner,program,&request);
     if (status!=XR_XIR_OK) {
         if (program) { program->permissions->input->artifact=NULL;xr_xir_compile_program_drop(program); }
         else { if (input) { input->artifact=NULL;xir_program_input_free(input); }debug_vm_program_release(owner); }
-        return status;
+        xir_read_operation_free(&operation);return status;
     }
     owner->artifact=original;*artifact=NULL;
     if (native) { owner->native=request.lease;native->program->code=(XrXirCodeLease){0}; }
     owner->native_code.entries=program->entries;
-    *output=program;xir_vm_debug_program(debug,program,native?&owner->native_code:NULL);return XR_XIR_OK;
+    *output=program;xir_vm_debug_program(debug,program,native?&owner->native_code:NULL);
+    xir_read_operation_free(&operation);return XR_XIR_OK;
 }
 XR_FUNC XrXirStatus xr_xir_compile_vm_debug_program_take(XrXirArtifact **artifact,
     XrXirVmDebug *debug,XrXirProgram **output) {

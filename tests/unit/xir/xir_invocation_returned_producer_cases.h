@@ -214,7 +214,7 @@ static void invocation_returned_environment_owned(const XrXirCompileContext *con
     CHECK(replay.final==certificate->final && replay.body.owner==certificate->body &&
         replay.body.read.owner==context && !certificate->body->terms.remaining &&
         !replay.discovery && !effect_invocation_discovery_read(&replay,0) &&
-        effect_capture_match(context,owner)==XR_XIR_OK);
+        effect_capture_match(context,owner, NULL)==XR_XIR_OK);
     uint32_t factory=owner->roots[1],entry=owner->roots[0];
     InvocationReturnedLedger ledger={context};
     XirEffectRuntimeRead read={.owner=&ledger,.work=invocation_returned_work};
@@ -238,8 +238,8 @@ static void invocation_returned_environment_owned(const XrXirCompileContext *con
     const EffectCaptureFact *identity=invocation_returned_final_fact(context,owner,factory,4,0,0);
     CHECK(identity);EffectCaptureFact *fact=(EffectCaptureFact *)identity;
     uint32_t bit=fact->bit;fact->bit=UINT32_MAX;
-    CHECK(effect_capture_match(context,owner)==XR_XIR_BAD_STRUCTURE);fact->bit=bit;
-    CHECK(effect_capture_match(context,owner)==XR_XIR_OK);
+    CHECK(effect_capture_match(context,owner, NULL)==XR_XIR_BAD_STRUCTURE);fact->bit=bit;
+    CHECK(effect_capture_match(context,owner, NULL)==XR_XIR_OK);
     const EffectInvocationFinal *public_owner=published->invocations->final;
     CHECK(invocation_returned_final_fact(context,public_owner,public_owner->roots[0],0,0,known));
     effect_invocation_read_close(&replay);
@@ -358,8 +358,8 @@ static XrXirStatus conditional_invocation_returned(const XrXirCompileContext *co
     if (status==XR_XIR_OK) status=effect_invocation_bounds_new(context,&bounds);
     for (uint32_t f=0;status==XR_XIR_OK && f<module->function_count;++f)
         status=effect_invocation_bounds_capture(context,bounds,module->types,&module->functions[f],f,NULL);
-    if (status==XR_XIR_OK) { phase=4;status=effect_invocations_receive(context,module,&effects,&graph,bounds,&owner); }
-    if (status==XR_XIR_OK) status=effect_invocations_solve(owner);
+    if (status==XR_XIR_OK) { phase=4;status=effect_invocations_receive(context,module,&effects,&graph,bounds,&owner, NULL); }
+    if (status==XR_XIR_OK) status=effect_invocations_solve(owner, NULL);
     if (status==XR_XIR_OK && oracle) invocation_returned_rejections(owner,mode);
     if (status==XR_XIR_OK) status=effect_invocation_stage(owner,&solution);
     if (status==XR_XIR_OK) {
@@ -370,7 +370,7 @@ static XrXirStatus conditional_invocation_returned(const XrXirCompileContext *co
             rp_release_observer=invocation_discovery_observe;
             rp_allocation_observer=invocation_discovery_allocated;
         }
-        status=effect_invocation_seal(context,&request,&certificate,NULL);
+        status=effect_invocation_seal(context,&request,&certificate,NULL, NULL);
         if(oracle) {
             rp_release_observer=NULL;
             rp_allocation_observer=NULL;

@@ -10,8 +10,9 @@
  *   Both actual Source constructions use the original finite ledger. Only the
  *   final independent Built checking and query publication become output.
  */
-static bool source_comptime_failure(SourceContext *ctx,AstNode *node,XrXirCtfeStatus status) {
-    XrXirStatus mapped=status==XR_XIR_CTFE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
+static XrXirStatus source_comptime_read_status(XrXirCtfeStatus status) {
+    if(status==XR_XIR_CTFE_OK) return XR_XIR_OK;
+    return status==XR_XIR_CTFE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
         status==XR_XIR_CTFE_MEMORY_LIMIT?XR_XIR_MEMORY_LIMIT:
         status==XR_XIR_CTFE_OVERFLOW?XR_XIR_OVERFLOW:
         status==XR_XIR_CTFE_CANCELLED?XR_XIR_CANCELLED:
@@ -20,6 +21,9 @@ static bool source_comptime_failure(SourceContext *ctx,AstNode *node,XrXirCtfeSt
         status==XR_XIR_CTFE_COMPLEXITY_LIMIT || status==XR_XIR_CTFE_STEP_LIMIT || status==XR_XIR_CTFE_DEPTH_LIMIT ||
         status==XR_XIR_CTFE_FRAME_LIMIT || status==XR_XIR_CTFE_OUTPUT_LIMIT?XR_XIR_BUDGET:
         status==XR_XIR_CTFE_BAD_ARTIFACT || status==XR_XIR_CTFE_IDENTITY?XR_XIR_BAD_STRUCTURE:XR_XIR_BAD_TYPE;
+}
+static bool source_comptime_failure(SourceContext *ctx,AstNode *node,XrXirCtfeStatus status) {
+    XrXirStatus mapped=source_comptime_read_status(status);
     const char *message=status==XR_XIR_CTFE_STEP_LIMIT?"comptime step limit exceeded":
         status==XR_XIR_CTFE_OUTPUT_LIMIT?"comptime logical output limit exceeded":
         status==XR_XIR_CTFE_PROFILE?"comptime target profile is unsupported":
@@ -170,6 +174,7 @@ static void source_comptime_values_free(SourceContext *ctx) {
     for (SourceMaterialization *site=ctx->materializations;site;site=site->next) xr_xir_value_drop(&site->value);
 }
 static void source_comptime_context_free(SourceContext *ctx,SourceContext *parent) {
+    ctx->read_operation=NULL;
     if(ctx->diagnostic.status!=XR_XIR_OK && parent && !parent->report && !xr_hir_items_has_report(parent->items)) {
         parent->report=ctx->report?ctx->report:xr_hir_items_take_report(ctx->items);ctx->report=NULL;
     }
@@ -196,7 +201,7 @@ static void source_comptime_receive(SourceContext *ctx,XrXirSourceResult *output
     }
     if (!source_comptime_evaluate(ctx,output->checked,ctx->linkage_kind==XR_XIR_LIBRARY)) { xr_xir_compile_source_result_free(output);source_comptime_values_free(ctx);return; }
     if (!((ctx)->diagnostic.status == XR_XIR_OK)) { xr_xir_compile_source_result_free(output);source_comptime_values_free(ctx);return; }
-    SourceContext received={0};received.request=ctx->request;received.compile=ctx->compile;received.graph=ctx->graph;received.linkage_kind=ctx->linkage_kind;
+    SourceContext received={0};received.read_operation=ctx->read_operation;received.request=ctx->request;received.compile=ctx->compile;received.graph=ctx->graph;received.linkage_kind=ctx->linkage_kind;
     received.semantic_output=ctx->semantic_output;
     received.binding_readers=ctx->binding_readers;
     received.interactive=ctx->interactive;received.type_query=ctx->type_query;received.repl_tail=ctx->repl_tail;

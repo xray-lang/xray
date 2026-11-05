@@ -194,7 +194,7 @@ static XrOwnershipAudit *new_audit(size_t event_capacity) {
 
 static XrOwnershipAuditTransitionManifest transition(
     uint8_t id, uint8_t kind, uint32_t flags, int16_t logical_delta,
-    uint32_t state_before_mask, uint8_t state_after) {
+    uint32_t state_before_mask, uint8_t state_after, const XirReadRequest *read_request) {
     XrOwnershipAuditTransitionManifest manifest = {
         .transition_id = make_id(id),
         .owner_id = make_id(ID_OWNER),
@@ -244,40 +244,40 @@ static void register_manifests(XrOwnershipAudit *audit, const Fixture *fixture) 
     register_transition(audit, transition(ID_ALLOC, XR_OWN_EVENT_ALLOC,
                                           XR_OWN_AUDIT_TRANSITION_OPENS_INSTANCE, 1,
                                           XR_OWN_STATE_MASK(XR_OWN_UNINITIALIZED),
-                                          XR_OWN_OWNED_LOCAL));
+                                          XR_OWN_OWNED_LOCAL, NULL));
     register_transition(audit, transition(ID_BORROW, XR_OWN_EVENT_BORROW, 0, 0,
                                           XR_OWN_STATE_MASK(XR_OWN_OWNED_LOCAL),
-                                          XR_OWN_BORROWED));
+                                          XR_OWN_BORROWED, NULL));
     register_transition(audit, transition(ID_END_BORROW, XR_OWN_EVENT_END_BORROW, 0, 0,
                                           XR_OWN_STATE_MASK(XR_OWN_BORROWED),
-                                          XR_OWN_OWNED_LOCAL));
+                                          XR_OWN_OWNED_LOCAL, NULL));
     register_transition(audit, transition(ID_SUSPEND, XR_OWN_EVENT_SUSPEND, 0, 0,
                                           XR_OWN_STATE_MASK(XR_OWN_OWNED_LOCAL),
-                                          XR_OWN_FRAME_OWNED));
+                                          XR_OWN_FRAME_OWNED, NULL));
     register_transition(audit, transition(ID_RESUME, XR_OWN_EVENT_RESUME, 0, 0,
                                           XR_OWN_STATE_MASK(XR_OWN_FRAME_OWNED),
-                                          XR_OWN_OWNED_LOCAL));
+                                          XR_OWN_OWNED_LOCAL, NULL));
     register_transition(audit, transition(ID_DETACH, XR_OWN_EVENT_DETACH,
                                           XR_OWN_AUDIT_TRANSITION_CHANGES_DOMAIN, 0,
                                           XR_OWN_STATE_MASK(XR_OWN_OWNED_LOCAL),
-                                          XR_OWN_OWNED_LOCAL));
+                                          XR_OWN_OWNED_LOCAL, NULL));
     register_transition(audit, transition(ID_RETAIN, XR_OWN_EVENT_RETAIN, 0, 1,
                                           XR_OWN_STATE_MASK(XR_OWN_OWNED_LOCAL),
-                                          XR_OWN_OWNED_LOCAL));
+                                          XR_OWN_OWNED_LOCAL, NULL));
     register_transition(audit, transition(ID_RELEASE_ONE, XR_OWN_EVENT_RELEASE, 0, -1,
                                           XR_OWN_STATE_MASK(XR_OWN_OWNED_LOCAL),
-                                          XR_OWN_OWNED_LOCAL));
+                                          XR_OWN_OWNED_LOCAL, NULL));
     register_transition(audit, transition(ID_RELEASE_ZERO, XR_OWN_EVENT_RELEASE, 0, -1,
                                           XR_OWN_STATE_MASK(XR_OWN_OWNED_LOCAL),
-                                          XR_OWN_RELEASED));
+                                          XR_OWN_RELEASED, NULL));
     register_transition(audit, transition(ID_DESTROY, XR_OWN_EVENT_DESTROY,
                                           XR_OWN_AUDIT_TRANSITION_TERMINAL, 0,
                                           XR_OWN_STATE_MASK(XR_OWN_RELEASED),
-                                          XR_OWN_RELEASED));
+                                          XR_OWN_RELEASED, NULL));
     register_transition(audit, transition(ID_CANCEL, XR_OWN_EVENT_CANCEL,
                                           XR_OWN_AUDIT_TRANSITION_TERMINAL, -1,
                                           XR_OWN_STATE_MASK(XR_OWN_OWNED_LOCAL),
-                                          XR_OWN_RELEASED));
+                                          XR_OWN_RELEASED, NULL));
     XrOwnershipAuditTransitionManifest unpin = pin;
     unpin.transition_id = make_id(ID_UNPIN);
     unpin.operation_id = make_id((uint8_t) (ID_UNPIN + 80));
@@ -664,7 +664,7 @@ static void test_seeded_lifecycle_failures(void) {
     register_manifests(audit, &fixture);
     XrOwnershipAuditTransitionManifest local_release = transition(
         ID_RELEASE_LOCAL_MODE, XR_OWN_EVENT_RELEASE, 0, -1,
-        XR_OWN_STATE_MASK(XR_OWN_OWNED_LOCAL), XR_OWN_OWNED_LOCAL);
+        XR_OWN_STATE_MASK(XR_OWN_OWNED_LOCAL), XR_OWN_OWNED_LOCAL, NULL);
     local_release.physical_rc_mode = XR_OWN_AUDIT_RC_LOCAL;
     register_transition(audit, local_release);
     CHECK(record(audit, pin_event(ID_PIN, XR_OWN_EVENT_PIN)) == XR_OWN_AUDIT_OK,

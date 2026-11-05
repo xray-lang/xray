@@ -118,7 +118,7 @@ XR_FUNC XrXirValueStatus xr_xir_compile_type_arena_new(const XrXirCompileContext
     value_status=arena_status(xir_compile_view_flags_new(context,&arena->types,&arena->borrowed));
     if (value_status!=XR_XIR_VALUE_OK) goto failed;
     value_status=arena_status(xir_compile_enum_sendable_flags(context,&arena->types,
-        arena->enum_sendable,arena->types.count));
+        arena->enum_sendable,arena->types.count, NULL));
     if (value_status!=XR_XIR_VALUE_OK) goto failed;
     *output = arena;
     return XR_XIR_VALUE_OK;

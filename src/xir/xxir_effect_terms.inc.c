@@ -17,12 +17,14 @@ typedef struct EffectTermMemory {
     struct EffectTermMemory *next;
     size_t capacity, used;
     uint64_t alignment;
+    XirReadClaim claim;
 } EffectTermMemory;
 typedef struct EffectTermFrame {
     XrXirTypeNode node;
     uint32_t index, next;
     void *children;
     size_t child_capacity;
+    XirReadClaim child_claim;
 } EffectTermFrame;
 typedef struct EffectTerms {
     XrXirTypes types;
@@ -38,6 +40,10 @@ typedef struct EffectTerms {
     uint32_t stack_capacity,cache_count;
     bool stack_claimed;
     XrXirTypeMatchScratch match;
+    /* Only lexical query Terms borrow read storage. Published owners must
+     * retain actual ordinary allocations and reject every borrowed claim. */
+    XirReadScratch *read;
+    XirReadClaim stack_claim;
 } EffectTerms;
 
 _Static_assert(_Alignof(EffectTermMemory)>=_Alignof(XrXirTypeNode) &&
@@ -71,9 +77,10 @@ static void *effect_terms_reserve(EffectTerms *pool, uint64_t count, size_t size
             pool->status=XR_XIR_BUDGET;return NULL;
         }
         XrXirStatus status=XR_XIR_OK;
-        memory=xir_compile_alloc(pool->remaining,sizeof(*memory)+capacity,&status);
+        XirReadClaim claim={0};
+        memory=xir_read_scratch_alloc(pool->remaining,pool->read,sizeof(*memory)+capacity,false,&claim,&status);
         if (!memory) { pool->status=status;return NULL; }
-        *memory=(EffectTermMemory){.next=pool->memory,.capacity=capacity};
+        *memory=(EffectTermMemory){.next=pool->memory,.capacity=capacity,.claim=claim};
         pool->memory=memory;
         if (rounded<=4096) { pool->slice=memory;pool->slice_capacity=capacity; }
     }
@@ -95,25 +102,36 @@ static void *effect_terms_alloc(EffectTerms *pool, uint64_t count, size_t size) 
  * arena survive publication; type frames and matching stacks do not. */
 static void effect_terms_scratch_free(EffectTerms *pool) {
     if (pool->match.memory || pool->match.resources) {
-        xr_xir_type_match_scratch_free(&pool->match);pool->match.resources=NULL;
+        xir_type_match_scratch_release(&pool->match,pool->read);pool->match.resources=NULL;
     }
     for (uint32_t i=0;i<pool->stack_capacity;++i)
-        xr_compile_resources_free(pool->stack[i].children);
-    if (pool->stack) { xr_compile_resources_free(pool->stack);pool->stack=NULL; }
+        xir_read_scratch_release(pool->read,pool->stack[i].children,&pool->stack[i].child_claim);
+    if(pool->stack) {xir_read_scratch_release(pool->read,pool->stack,&pool->stack_claim);pool->stack=NULL;}
     if (pool->cache) pool->cache=NULL;
     if (pool->stack_capacity) pool->stack_capacity=0;
     if (pool->stack_claimed) pool->stack_claimed=false;
 }
 
 static inline bool effect_terms_scratch_retired(const EffectTerms *pool) {
-    return pool && !pool->remaining && !pool->stack && !pool->cache &&
+    return pool && !pool->read && !pool->remaining && !pool->stack && !pool->cache &&
         !pool->stack_capacity && !pool->stack_claimed && !pool->match.memory && !pool->match.resources;
+}
+
+static bool effect_terms_storage_owned(const XrXirCompileContext *work,const EffectTerms *pool) {
+    if(!xir_compile_context_valid(work) || !pool || pool->read) return false;
+    for(const EffectTermMemory *m=pool->memory;m;m=m->next) {
+        if(xr_compile_resources_allocation(work->resources,m,sizeof(*m))!=XR_COMPILE_RESOURCE_OK ||
+            m->claim.owner || m->claim.block || m->claim.memory!=m || m->used>m->capacity ||
+            m->capacity>SIZE_MAX-sizeof(*m) || xr_compile_resources_allocation(work->resources,m,
+            sizeof(*m)+m->capacity)!=XR_COMPILE_RESOURCE_OK) return false;
+    }
+    return true;
 }
 
 /* Backbone holders borrow the original arena and its constructor pointers.
  * They drop those pointer views; only the actual root frees the allocations. */
 static inline XrXirStatus effect_terms_retire(const XrXirCompileContext *work,EffectTerms *pool,bool owns_scratch) {
-    if (!xir_compile_context_valid(work) || !pool ||
+    if(!effect_terms_storage_owned(work,pool) ||
         (owns_scratch && (pool->stack_claimed || !!pool->stack!=!!pool->stack_capacity ||
             (!!pool->cache!=!!pool->stack)))) return XR_XIR_BAD_STRUCTURE;
 
@@ -136,10 +154,18 @@ static void effect_terms_free(EffectTerms *pool) {
     effect_terms_scratch_free(pool);
     while (pool->memory) {
         EffectTermMemory *memory=pool->memory;pool->memory=memory->next;
-        xr_compile_resources_free(memory);
+        xir_read_scratch_release(pool->read,memory,&memory->claim);
     }
-    pool->slice=NULL;pool->slice_capacity=0;
+    pool->slice=NULL;pool->slice_capacity=0;pool->read=NULL;
 }
+static XrXirStatus effect_terms_match(EffectTerms *pool,const XrXirTypes *from,const XrXirTypes *to,
+    const XrXirType *arguments,uint32_t count,XrXirType expected,XrXirType actual) {
+    if(!pool || !pool->remaining) return XR_XIR_BAD_STRUCTURE;
+    if(!pool->match.resources) pool->match.resources=pool->remaining->resources;
+    const XirTypeMatchRead request={from,to,arguments,count,expected,actual,pool->read};
+    return xir_type_match_with_scratch(pool->remaining,&request,&pool->match);
+}
+
 /* Shape equality intentionally excludes executable field/layout projections. */
 static bool effect_term_same( const XrXirTypeNode *a, const XrXirTypeNode *b) {
 
@@ -188,12 +214,15 @@ static XrXirType effect_term_intern_raw(EffectTerms *pool, XrXirTypeNode node) {
 static XrXirType effect_term_intern(EffectTerms *pool,XrXirTypeNode node) {
     if (node.kind!=XR_XIR_TYPE_UNION) return effect_term_intern_raw(pool,node);
     XrXirStatus status=XR_XIR_OK;
-    XrXirType *members=xir_compile_calloc(pool->remaining,node.parameter_count,sizeof(*members),&status);
+    XirReadClaim members_claim={0},normal_claim={0};
+    uint64_t bytes=(uint64_t)node.parameter_count*sizeof(XrXirType);
+    if(bytes>SIZE_MAX) {pool->status=XR_XIR_OVERFLOW;return XR_XIR_UNIT;}
+    XrXirType *members=bytes?xir_read_scratch_alloc(pool->remaining,pool->read,(size_t)bytes,false,&members_claim,&status):NULL;
     if (node.parameter_count && !members) {pool->status=status;return XR_XIR_UNIT;}
     for (uint32_t p=0;p<node.parameter_count;++p) members[p]=node.parameters[p].type;
     XrXirErrorUnion normalized={0};
-    status=xr_xir_compile_error_union(pool->remaining,&pool->types,members,node.parameter_count,&normalized);
-    xr_compile_resources_free(members);
+    status=xir_error_union_read(pool->remaining,&pool->types,members,node.parameter_count,&normalized,pool->read,&normal_claim);
+    xir_read_scratch_release(pool->read,members,&members_claim);
     if (status!=XR_XIR_OK) {pool->status=status;return XR_XIR_UNIT;}
     if (!normalized.count) return normalized.scalar;
     node=(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,.parameters=normalized.members,.parameter_count=normalized.count};
@@ -202,7 +231,7 @@ static XrXirType effect_term_intern(EffectTerms *pool,XrXirTypeNode node) {
         if (span>node.parameter_span) node.parameter_span=span;
     }
     XrXirType result=effect_term_intern_raw(pool,node);
-    xr_compile_resources_free(normalized.members);
+    xir_read_scratch_release(pool->read,normalized.members,&normal_claim);
     return result;
 }
 static bool effect_term_ready(EffectTerms *pool, XrXirType type, const XrXirGeneric *arguments,
@@ -228,14 +257,16 @@ static XrXirStatus effect_term_stack(EffectTerms *pool,uint32_t size) {
         return XR_XIR_BUDGET;
     if (size>pool->stack_capacity) {
         XrXirStatus status=XR_XIR_OK;
-        EffectTermFrame *stack=xir_compile_alloc(pool->remaining,(size_t)bytes,&status);
+        XirReadClaim claim={0};
+        EffectTermFrame *stack=xir_read_scratch_alloc(pool->remaining,pool->read,(size_t)bytes,false,&claim,&status);
         if (!stack) return status;
         size_t frame_bytes=(size_t)size*sizeof(*stack),cache_bytes=(size_t)size*sizeof(XrXirType);
         uint64_t copy=(uint64_t)pool->stack_capacity*sizeof(*stack);
 
         memset(stack,0,frame_bytes+cache_bytes);
         if (copy) memcpy(stack,pool->stack,(size_t)copy);
-        xr_compile_resources_free(pool->stack);
+        xir_read_scratch_release(pool->read,pool->stack,&pool->stack_claim);
+        pool->stack_claim=claim;
         pool->stack=stack;pool->cache=(XrXirType *)(stack+size);
         pool->stack_capacity=size;
     }
@@ -243,9 +274,9 @@ static XrXirStatus effect_term_stack(EffectTerms *pool,uint32_t size) {
 }
 
 static bool effect_term_push(EffectTerms *pool,EffectTermFrame *frame,uint32_t index) {
-    void *children=frame->children;size_t capacity=frame->child_capacity;
+    void *children=frame->children;size_t capacity=frame->child_capacity;XirReadClaim prior=frame->child_claim;
     *frame=(EffectTermFrame){.node=pool->types.nodes[index],.index=index,
-        .children=children,.child_capacity=capacity};
+        .children=children,.child_capacity=capacity,.child_claim=prior};
     frame->node.parameter_span=0;
     uint64_t bytes=(uint64_t)frame->node.nominal.argument_count*sizeof(XrXirType)+
         (uint64_t)frame->node.parameter_count*sizeof(XrXirCallableParameter);
@@ -254,9 +285,11 @@ static bool effect_term_push(EffectTerms *pool,EffectTermFrame *frame,uint32_t i
     }
     if (bytes>capacity) {
         XrXirStatus status=XR_XIR_OK;
-        children=xir_compile_alloc(pool->remaining,(size_t)bytes,&status);
+        XirReadClaim claim={0};
+        children=xir_read_scratch_alloc(pool->remaining,pool->read,(size_t)bytes,false,&claim,&status);
         if (!children) { pool->status=status;return false; }
-        xr_compile_resources_free(frame->children);
+        xir_read_scratch_release(pool->read,frame->children,&frame->child_claim);
+        frame->child_claim=claim;
         frame->children=children;frame->child_capacity=(size_t)bytes;
     }
 

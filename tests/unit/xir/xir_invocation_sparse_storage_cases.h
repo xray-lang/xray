@@ -164,13 +164,13 @@ static XrXirStatus conditional_storage_case(const XrXirCompileContext *context,u
     for (uint32_t f=0;status==XR_XIR_OK && f<module->function_count;++f)
         status=effect_invocation_bounds_capture(context,bounds,module->types,&module->functions[f],f,NULL);
     if (status==XR_XIR_OK && oracle) invocation_storage_rejections(context,module,bounds);
-    if (status==XR_XIR_OK) { phase=6;status=effect_invocations_receive(context,module,&effects,&graph,bounds,&owner); }
-    if (status==XR_XIR_OK) { phase=7;status=effect_invocations_solve(owner); }
+    if (status==XR_XIR_OK) { phase=6;status=effect_invocations_receive(context,module,&effects,&graph,bounds,&owner, NULL); }
+    if (status==XR_XIR_OK) { phase=7;status=effect_invocations_solve(owner, NULL); }
     for (uint32_t n=0;status==XR_XIR_OK && n<owner->final.count;++n)
         status=invocation_storage_rows(owner,n,mode,oracle);
     if (status==XR_XIR_OK) { phase=8;status=effect_invocation_stage(owner,&solution); }
     EffectInvocationSealRequest request={&owner,&solution,NULL};
-    if (status==XR_XIR_OK) { phase=9;status=effect_invocation_seal(context,&request,&certificate,NULL); }
+    if (status==XR_XIR_OK) { phase=9;status=effect_invocation_seal(context,&request,&certificate,NULL, NULL); }
     if (status!=XR_XIR_OK && oracle) fprintf(stderr,
         "INVOCATION_STORAGE mode=%u phase=%u status=%u f=%u b=%u i=%u\n",mode,phase,status,
         diagnostic.function,diagnostic.block,diagnostic.instruction);

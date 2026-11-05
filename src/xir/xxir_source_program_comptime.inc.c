@@ -18,7 +18,7 @@ static bool source_program_complete(SourceContext *ctx,const XrXirArtifact *sour
     XirComptimeResolveRequest request={sealed,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
         {XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES},XR_XIR_CTFE_MAX_CALL_DEPTH,ctx->request};
     XirComptimeResolveFailure failure={0};XrXirDiagnostic diagnostic={0};
-    XrXirStatus status=source_comptime_resolve(&request,output,&failure,&diagnostic,ctx);
+    XrXirStatus status=source_comptime_resolve(&request,output,&failure,&diagnostic,ctx,ctx->read_operation);
     xr_xir_compile_artifact_free(sealed);
     if (status==XR_XIR_OK) return true;
     if (failure.root_local) return source_program_failure(ctx,failure.site.helper,failure.status);
@@ -47,7 +47,7 @@ static void source_program_comptime_receive(SourceContext *ctx,XrXirSourceResult
     if (!ok || !((ctx)->diagnostic.status == XR_XIR_OK)) {
         xr_xir_compile_source_result_free(output);source_comptime_values_free(ctx);return;
     }
-    SourceContext received={0};received.request=ctx->request;received.compile=ctx->compile;received.graph=ctx->graph;received.linkage_kind=ctx->linkage_kind;
+    SourceContext received={0};received.read_operation=ctx->read_operation;received.request=ctx->request;received.compile=ctx->compile;received.graph=ctx->graph;received.linkage_kind=ctx->linkage_kind;
     received.manifests=ctx->manifests;received.prelude_module=ctx->prelude_module;received.core_factory=ctx->core_factory;
     received.remaining_blocks=ctx->remaining_blocks;received.remaining_instructions=ctx->remaining_instructions;
     received.comptime_input=ctx->comptime_sites;received.comptime_input_types=&ctx->types;

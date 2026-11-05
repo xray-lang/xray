@@ -11,6 +11,7 @@
  */
 typedef struct TypeMatchTerm { XrXirType type; bool substituted; } TypeMatchTerm;
 typedef struct TypeMatchUnion {
+    XirReadClaim claim;
     TypeMatchTerm *terms[2];
     uint32_t count[2];
     bool erased[2],subset;
@@ -24,6 +25,7 @@ typedef struct TypeMatchFrame {
     bool awaiting;
 } TypeMatchFrame;
 typedef struct TypeMatchMemory {
+    XirReadClaim claim;
     struct TypeMatchMemory *next;
     TypeMatchFrame *frames;
     uint32_t capacity;
@@ -34,10 +36,13 @@ static void type_match_scratch_free(XrXirTypeMatchScratch *scratch,XirReadScratc
     TypeMatchMemory *memory = scratch->memory;
     while (memory) {
         TypeMatchMemory *next = memory->next;
-        xir_read_scratch_release(read,memory);
+        xir_read_scratch_release(read,memory,&memory->claim);
         memory = next;
     }
     *scratch = (XrXirTypeMatchScratch) {0};
+}
+XR_FUNC void xir_type_match_scratch_release(XrXirTypeMatchScratch *scratch,XirReadScratch *memory) {
+    type_match_scratch_free(scratch,memory);
 }
 XR_FUNC void xr_xir_type_match_scratch_free(XrXirTypeMatchScratch *scratch) {
     type_match_scratch_free(scratch,NULL);
@@ -55,9 +60,10 @@ static XrXirStatus type_match_stack_claim(const XrXirCompileContext *context,
     uint64_t bytes = sizeof(TypeMatchMemory) + (uint64_t) count * sizeof(TypeMatchFrame);
     if (!count || bytes > SIZE_MAX) return XR_XIR_BUDGET;
     XrXirStatus status = XR_XIR_OK;
-    TypeMatchMemory *memory = xir_read_scratch_alloc(context,read,(size_t)bytes,false,&status);
+    XirReadClaim claim={0};
+    TypeMatchMemory *memory = xir_read_scratch_alloc(context,read,(size_t)bytes,false,&claim,&status);
     if (!memory) return status;
-    *memory = (TypeMatchMemory) {scratch->memory, (TypeMatchFrame *) (memory + 1), count, true};
+    *memory = (TypeMatchMemory) {.claim=claim,.next=scratch->memory,.frames=(TypeMatchFrame *)(memory+1),.capacity=count,.claimed=true};
     scratch->memory = memory;
     *output = memory;
     return XR_XIR_OK;
@@ -136,13 +142,15 @@ static XrXirStatus type_match_union(TypeMatchContext *c,XrXirType expected,
     if (subset && !counts[1]) return XR_XIR_OK;
     uint64_t bytes=sizeof(TypeMatchUnion)+((uint64_t)counts[0]+counts[1])*sizeof(TypeMatchTerm);
     if (bytes>SIZE_MAX) return XR_XIR_OVERFLOW;
-    TypeMatchUnion *memory=xir_read_scratch_alloc(c->remaining,c->read,(size_t)bytes,true,&status);
+    /* The header and both exact term vectors are overwritten before any read. */
+    XirReadClaim claim={0};
+    TypeMatchUnion *memory=xir_read_scratch_alloc(c->remaining,c->read,(size_t)bytes,false,&claim,&status);
     if (!memory) return status;
-    *memory=(TypeMatchUnion){.terms={(TypeMatchTerm *)(memory+1),(TypeMatchTerm *)(memory+1)+counts[0]},
+    *memory=(TypeMatchUnion){.claim=claim,.terms={(TypeMatchTerm *)(memory+1),(TypeMatchTerm *)(memory+1)+counts[0]},
         .count={counts[0],counts[1]},.subset=subset};
     status=type_match_terms(c,expected,true,memory->terms[0],&memory->count[0],&memory->erased[0]);
     if (status==XR_XIR_OK) status=type_match_terms(c,actual,false,memory->terms[1],&memory->count[1],&memory->erased[1]);
-    if (status!=XR_XIR_OK) {xir_read_scratch_release(c->read,memory);return status;}
+    if (status!=XR_XIR_OK) {xir_read_scratch_release(c->read,memory,&memory->claim);return status;}
     *frame=(TypeMatchFrame){.source_types=c->source_types,.arguments=c->arguments,.argument_count=c->count,
         .side=subset?1u:0u,.errors=memory};
     return XR_XIR_OK;
@@ -182,7 +190,7 @@ static XrXirStatus type_match_pair(TypeMatchContext *c,XrXirType expected,
 }
 static void type_match_pop(TypeMatchFrame *stack,uint32_t *depth,XirReadScratch *read,bool success) {
     TypeMatchFrame *frame=&stack[--*depth];
-    xir_read_scratch_release(read,frame->errors);*frame=(TypeMatchFrame){0};
+    xir_read_scratch_release(read,frame->errors,frame->errors?&frame->errors->claim:NULL);*frame=(TypeMatchFrame){0};
     if (success && *depth) {
         TypeMatchFrame *parent=&stack[*depth-1];
         if (parent->errors && parent->awaiting) {
@@ -249,10 +257,10 @@ static XrXirStatus type_match_run_mode(const XrXirCompileContext *context,
         type_match_pair(&c,request->expected,request->actual,&root);
     if (status!=XR_XIR_OK || (!root.from && !root.errors)) return status;
     uint64_t maximum=(uint64_t)(c.source_types?c.source_types->count:0)+(c.types?c.types->count:0)+2;
-    if (maximum>UINT32_MAX) {xir_read_scratch_release(c.read,root.errors);return XR_XIR_OVERFLOW;}
+    if (maximum>UINT32_MAX) {xir_read_scratch_release(c.read,root.errors,root.errors?&root.errors->claim:NULL);return XR_XIR_OVERFLOW;}
     TypeMatchMemory *claimed=NULL;
     status=type_match_stack_claim(&remaining,scratch,maximum<8?(uint32_t)maximum:8,&claimed,c.read);
-    if (status!=XR_XIR_OK) {xir_read_scratch_release(c.read,root.errors);return status;}
+    if (status!=XR_XIR_OK) {xir_read_scratch_release(c.read,root.errors,root.errors?&root.errors->claim:NULL);return status;}
     TypeMatchFrame *stack=claimed->frames;uint32_t depth=1;stack[0]=root;
     while (depth) {
         if (status==XR_XIR_BAD_TYPE) {
@@ -267,11 +275,11 @@ static XrXirStatus type_match_run_mode(const XrXirCompileContext *context,
         if (status!=XR_XIR_OK) continue;
         if (done) {type_match_pop(stack,&depth,c.read,true);continue;}
         if (!child.from && !child.errors) continue;
-        if (depth>=maximum) {xir_read_scratch_release(c.read,child.errors);status=XR_XIR_BAD_TYPE;continue;}
+        if (depth>=maximum) {xir_read_scratch_release(c.read,child.errors,child.errors?&child.errors->claim:NULL);status=XR_XIR_BAD_TYPE;continue;}
         if (depth==claimed->capacity) {
             uint32_t capacity=claimed->capacity>maximum/2?(uint32_t)maximum:claimed->capacity*2;
             status=type_match_stack_grow(&remaining,scratch,&claimed,capacity,depth,c.read);
-            if (status!=XR_XIR_OK) {xir_read_scratch_release(c.read,child.errors);break;}
+            if (status!=XR_XIR_OK) {xir_read_scratch_release(c.read,child.errors,child.errors?&child.errors->claim:NULL);break;}
             stack=claimed->frames;
         }
         stack[depth++]=child;
@@ -303,6 +311,10 @@ XR_FUNC XrXirStatus xr_xir_compile_type_substitution_matches_between(const XrXir
         compile_context, source_types, types, arguments, count, expected, actual, &scratch);
     xr_xir_type_match_scratch_free(&scratch);
     return status;
+}
+XR_FUNC XrXirStatus xir_type_match_with_scratch(const XrXirCompileContext *context,
+    const XirTypeMatchRead *request,XrXirTypeMatchScratch *scratch) {
+    return type_match_run(context,request,scratch);
 }
 XR_FUNC XrXirStatus xir_type_match_read(const XrXirCompileContext *context,const XirTypeMatchRead *request) {
     if(!xir_compile_context_valid(context) || !request) return XR_XIR_BAD_STRUCTURE;

@@ -22,7 +22,10 @@ static uint32_t view_leaves_at(const XrXirTypes *types,const uint8_t *flags,XrXi
 /* The descriptor pass has already checked every edge and payload. A single
  * ascending walk visits each physical Tuple edge once, including shared DAGs. */
 static XrXirStatus view_flags_build(const XrXirCompileContext *context,
-    const XrXirTypes *types,uint8_t **output) {
+    const XrXirTypes *types,uint8_t **output,XirReadScratch *memory,XirReadClaim *claim) {
+    XirReadClaim owned={0};
+    if(memory && (!claim || memory->resources!=context->resources)) return XR_XIR_BAD_STRUCTURE;
+    if(!claim) claim=&owned;
     *output=NULL;
     if (!types) return XR_XIR_OK;
     if (!!types->count!=!!types->nodes) return XR_XIR_BAD_STRUCTURE;
@@ -34,7 +37,7 @@ static XrXirStatus view_flags_build(const XrXirCompileContext *context,
     if (!present) return XR_XIR_OK;
     if (types->count>context->limits.frame_bytes) return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
-    uint8_t *flags=xir_compile_calloc(context,types->count,sizeof(*flags),&status);
+    uint8_t *flags=xir_read_scratch_alloc(context,memory,types->count,true,claim,&status);
     if (!flags) return status;
     for (uint32_t i=0;i<types->count && status==XR_XIR_OK;++i) {
 
@@ -51,13 +54,13 @@ static XrXirStatus view_flags_build(const XrXirCompileContext *context,
                 flags[i]=(uint8_t)((flags[i]&3u)|((leaves>1?2u:leaves)<<2));
             }
     }
-    if (status==XR_XIR_OK) *output=flags;else xr_compile_resources_free(flags);
+    if (status==XR_XIR_OK) *output=flags;else xir_read_scratch_release(memory,flags,claim);
     return status;
 }
 XR_FUNC XrXirStatus xir_compile_view_flags_new(const XrXirCompileContext *context,
     const XrXirTypes *types,uint8_t **output) {
     if (!xir_compile_context_valid(context) || !output || *output) return XR_XIR_BAD_STRUCTURE;
-    return view_flags_build(context,types,output);
+    return view_flags_build(context,types,output,NULL,NULL);
 }
 
 static XrXirStatus view_return_candidate(
@@ -82,7 +85,7 @@ static XrXirStatus view_return_candidate(
 
 static XrXirStatus view_types_verify(const XrXirCompileContext *context,const XrXirTypes *types) {
     uint8_t *flags=NULL;
-    XrXirStatus status=view_flags_build(context,types,&flags);
+    XrXirStatus status=view_flags_build(context,types,&flags,NULL,NULL);
     if (status!=XR_XIR_OK || !flags) return status;
     for (uint32_t i=0;i<types->count && status==XR_XIR_OK;++i) {
 
@@ -105,17 +108,22 @@ static XrXirStatus view_types_verify(const XrXirCompileContext *context,const Xr
     xr_compile_resources_free(flags);return status;
 }
 
-XR_FUNC XrXirStatus xr_xir_compile_view_type_flags(const XrXirCompileContext *context,
-    const XrXirTypes *types,XrXirType type,uint32_t *output) {
-    if (!xir_compile_context_valid(context) || !output) return XR_XIR_BAD_STRUCTURE;
+XR_FUNC XrXirStatus xir_view_type_flags_read(const XrXirCompileContext *context,
+    const XrXirTypes *types,XrXirType type,uint32_t *output,XirReadScratch *memory) {
+    if(!xir_compile_context_valid(context) || !output || (memory && memory->resources!=context->resources)) return XR_XIR_BAD_STRUCTURE;
 
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
     if (!node || (node->kind!=XR_XIR_TYPE_SLICE && node->kind!=XR_XIR_TYPE_MUT_SLICE &&
         node->kind!=XR_XIR_TYPE_TUPLE && node->kind!=XR_XIR_TYPE_NULLABLE)) {*output=0;return XR_XIR_OK;}
-    uint8_t *flags=NULL;
-    XrXirStatus status=view_flags_build(context,types,&flags);
+    uint8_t *flags=NULL;XirReadClaim claim={0};
+    XrXirStatus status=view_flags_build(context,types,&flags,memory,&claim);
     if (status==XR_XIR_OK) *output=view_flags_at(types,flags,type);
-    xr_compile_resources_free(flags);return status;
+    xir_read_scratch_release(memory,flags,&claim);return status;
+}
+
+XR_FUNC XrXirStatus xr_xir_compile_view_type_flags(const XrXirCompileContext *context,
+    const XrXirTypes *types,XrXirType type,uint32_t *output) {
+    return xir_view_type_flags_read(context,types,type,output,NULL);
 }
 
 XR_FUNC XrXirStatus xr_xir_compile_view_return_candidate(const XrXirCompileContext *context,
@@ -124,7 +132,7 @@ XR_FUNC XrXirStatus xr_xir_compile_view_return_candidate(const XrXirCompileConte
     const XrXirTypeNode *node=xr_xir_callable_signature(types,callable);
     if (!node) return XR_XIR_BAD_TYPE;
     uint8_t *flags=NULL;
-    XrXirStatus status=view_flags_build(context,types,&flags);
+    XrXirStatus status=view_flags_build(context,types,&flags,NULL,NULL);
     if (status==XR_XIR_OK) status=view_return_candidate(types,flags,node,output);
     xr_compile_resources_free(flags);return status;
 }
@@ -142,7 +150,7 @@ XR_FUNC XrXirStatus xir_compile_view_module_boundary(const XrXirCompileContext *
     const XrXirModule *module,XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(context) || !module) return XR_XIR_BAD_STRUCTURE;
     uint8_t *flags=NULL;
-    XrXirStatus status=view_flags_build(context,module->types,&flags);
+    XrXirStatus status=view_flags_build(context,module->types,&flags,NULL,NULL);
     if (status!=XR_XIR_OK || !flags) return status;
     status=view_origins_verify(context,module,flags,diagnostic);
     if (status==XR_XIR_OK) status=xir_compile_view_affine_verified(context,module,diagnostic);

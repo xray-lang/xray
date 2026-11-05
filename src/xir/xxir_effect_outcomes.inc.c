@@ -38,7 +38,7 @@ static const EffectFinalOutcomes *effect_final_outcomes(const XrXirEffects *effe
 /* All fallible work precedes the ownership move. No allocation or callback
  * separates the last current-input comparison from the only public owner. */
 static XrXirStatus effect_outcomes_publish(const XrXirCompileContext *work,
-    const XrXirModule *source,XrXirEffects *effects) {
+    const XrXirModule *source,XrXirEffects *effects, XirReadOperation *read_operation) {
     if (!xir_effects_context_matches(work,effects,source?source->function_count:0) ||
         !effects->invocations || !effects->invocations->final ||
         effects->invocations->final->outcomes || !effects->outcomes_owner || effects->root_input) return XR_XIR_BAD_STRUCTURE;
@@ -51,7 +51,7 @@ static XrXirStatus effect_outcomes_publish(const XrXirCompileContext *work,
     XrXirStatus status=local_errors_owned(work,effects->invocations->body,NULL);
     if(status==XR_XIR_OK) status=effect_control_proof_build(work,effects->invocations,records,&records->control_proof);
     if(status==XR_XIR_OK) status=effect_final_retire_construction(work,effects);
-    if(status==XR_XIR_OK) status=effect_final_inventories_match(work,effects->invocations,records);
+    if(status==XR_XIR_OK) status=effect_final_inventories_match(work,effects->invocations,records, read_operation);
     if(status==XR_XIR_OK) status=local_error_outcomes(work,effects->invocations->body,records->functions,true);
     if(status==XR_XIR_OK) status=effect_control_proof_check(work,effects->invocations,records);
     if (status==XR_XIR_OK) status=effect_invocation_current_input_match(work,source,effects->invocations->body);

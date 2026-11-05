@@ -59,12 +59,19 @@ static bool source_root_lock(SourceContext *ctx, uint32_t f) {
 }
 static bool source_root_reference(SourceContext *ctx, uint32_t f, uint32_t i,
     const XrXirEffects *effects, bool *changed) {
-    const XrXirInstruction *op = &ctx->functions[f].instructions[i];
-    uint32_t target = (uint32_t)op->immediate;
     XrXirRootEffects copied={0};const XrXirRootEffects *facts=&copied;
     XrXirRootEffects contextual={0};
     XrXirDeclarations declarations;XrXirModule view=source_module_view(ctx,&declarations);
-    XrXirStatus status=xir_effects_context_refresh(&ctx->compile,&view,effects);
+    const XirReadRequest read_request={.operation=ctx->read_operation,.control=ctx->request};
+    XrXirStatus status=xir_effects_context_refresh(&ctx->compile,&view,effects,&read_request);
+    if(status!=XR_XIR_OK) return source_fail(ctx,NULL,status,"context generation rebuild failed");
+    if(f>=ctx->function_count || i>=ctx->functions[f].instruction_count)
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"reference location changed during context rebuild");
+    const XrXirInstruction *op=&ctx->functions[f].instructions[i];
+    if(op->op!=XR_XIR_FUNCTION_REF || op->immediate<0 || (uint64_t)op->immediate>=ctx->function_count)
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"reference target changed during context rebuild");
+    uint32_t target=(uint32_t)op->immediate;
+    view=source_module_view(ctx,&declarations);
     if (status==XR_XIR_OK) status=xir_effects_construction_root(&ctx->compile,effects,target,&copied);
     if (status!=XR_XIR_OK) return source_fail(ctx,NULL,status,"context generation rebuild failed");
     if (xir_effects_context_available(&ctx->compile,effects) &&

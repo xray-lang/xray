@@ -177,18 +177,27 @@ static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t select
     }
     return XR_XIR_CTFE_OK;
 }
-XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request,
+static XrXirCtfeStatus ctfe_leaf_read_prefix(const XrXirCtfeRequest *request,
     XrXirValue *output) {
     if (!request || !output || output->type || output->reserved || output->payload ||
         !request->artifact || (request->argument_count && !request->arguments) ||
         request->limits.steps > XR_XIR_CTFE_MAX_STEPS ||
         request->limits.frame_bytes > XR_XIR_CTFE_MAX_FRAME_BYTES ||
         request->limits.output_bytes > XR_XIR_CTFE_MAX_OUTPUT_BYTES) return XR_XIR_CTFE_BAD_ARGUMENT;
-    const XrXirArtifact *artifact = request->artifact;
+    return XR_XIR_CTFE_OK;
+}
+static XrXirCtfeStatus ctfe_leaf_read_body(const XrXirCtfeRequest *request,
+    XrXirValue *output,const XirReadRequest *read_request) {
+    XrXirCtfeStatus prefix=ctfe_leaf_read_prefix(request,output);
+    if(prefix!=XR_XIR_CTFE_OK) return prefix;
+    const XrXirArtifact *artifact=request->artifact;
     XrXirCtfeStatus status=ctfe_control_poll(request->control);
     if (status!=XR_XIR_CTFE_OK) return status;
-    status = ctfe_compile_status(xr_xir_compile_artifact_verify(artifact, NULL));
+    status = ctfe_compile_status(xir_artifact_verify(&artifact->context, artifact,NULL,request->control,read_request));
     if (status != XR_XIR_CTFE_OK) return status;
+    if(request->artifact!=artifact) return XR_XIR_CTFE_BAD_ARTIFACT;
+    status=ctfe_leaf_read_prefix(request,output);
+    if(status!=XR_XIR_CTFE_OK) return status;
     if (artifact->module.stage != XR_XIR_LOWERED || request->function >= artifact->module.function_count)
         return XR_XIR_CTFE_BAD_ARTIFACT;
     if (artifact->evaluation_only && request->function!=artifact->module.provenance->evaluation.callee)
@@ -321,6 +330,17 @@ done:
     }
     xr_compile_resources_free(activation);ctfe_owned_free(&owned);
     return status;
+}
+XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request,
+    XrXirValue *output) {
+    XrXirCtfeStatus status=ctfe_leaf_read_prefix(request,output);
+    if(status!=XR_XIR_CTFE_OK) return status;
+    const XrXirArtifact *artifact=request->artifact;
+    if(!xir_compile_context_valid(&artifact->context)) return XR_XIR_CTFE_BAD_ARTIFACT;
+    XirReadOperation operation={.capacity={.resources=artifact->context.resources}};
+    const XirReadRequest read_request={.operation=&operation,.control=request->control};
+    status=ctfe_leaf_read_body(request,output,&read_request);
+    xir_read_operation_free(&operation);return status;
 }
 
 #include "xxir_ctfe_calls.inc.c"

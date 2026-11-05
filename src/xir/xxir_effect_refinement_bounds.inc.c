@@ -115,22 +115,24 @@ XR_FUNC XrXirStatus xir_effects_refinement_capture(const XrXirCompileContext *co
             .name_length=body->name_length,.name=name,.identity=source->declarations->functions[f]};
         status=effect_refinement_copies(bounds,source,f,&bounds->functions[f]);
     }
+    if (status==XR_XIR_OK && !effect_terms_storage_owned(context,&bounds->terms)) status=XR_XIR_BAD_STRUCTURE;
     if (status!=XR_XIR_OK) { effect_refinement_free(bounds);return status; }
     bounds->terms.remaining=NULL;((XrXirEffects *)effects)->refinement=bounds;
     return XR_XIR_OK;
 }
 
 static XrXirStatus effect_refinement_match(const XrXirCompileContext *context,
-    const XrXirModule *source, EffectRefinementBounds *bounds) {
+    const XrXirModule *source, EffectRefinementBounds *bounds,XirReadScratch *memory) {
     XrXirModule normalized=*source;
     if (!normalized.types) normalized.types=&effect_empty_types;
     source=&normalized;
-    if (bounds->resources!=context->resources || source->function_count!=bounds->count ||
+    if (bounds->resources!=context->resources || !effect_terms_storage_owned(context,&bounds->terms) ||
+        source->function_count!=bounds->count ||
         source->types->count<bounds->source_type_count || !source->declarations ||
         !source->declarations->functions || !!bounds->generics!=!!source->generics)
         return XR_XIR_BAD_STRUCTURE;
-    bounds->terms.remaining=context;
-    XrXirStatus status=effect_terms_domain_match(&bounds->terms,source->types);
+    EffectTerms terms={.types=bounds->terms.types,.remaining=context,.read=memory};
+    XrXirStatus status=effect_terms_domain_match(&terms,source->types);
     for (uint32_t t=0;t<bounds->source_type_count && status==XR_XIR_OK;++t) {
         const XrXirTypeNode *owned=&bounds->terms.types.nodes[t],*current=&source->types->nodes[t];
         if (owned->parameter_span!=current->parameter_span || !effect_term_same(owned,current))
@@ -149,7 +151,7 @@ static XrXirStatus effect_refinement_match(const XrXirCompileContext *context,
         if (bounds->generics) {
             const XrXirGeneric *left=&bounds->generics[f],*right=&source->generics[f];
             if (left->parameter_count!=right->parameter_count) { status=XR_XIR_BAD_STRUCTURE;break; }
-            status=effect_terms_domain_constraints(&bounds->terms,source->types,left->constraints,
+            status=effect_terms_domain_constraints(&terms,source->types,left->constraints,
                 right->constraints,left->parameter_count);
             for (uint32_t p=0;p<left->parameter_count && status==XR_XIR_OK;++p) {
 
@@ -157,13 +159,13 @@ static XrXirStatus effect_refinement_match(const XrXirCompileContext *context,
             }
         }
     }
-    bounds->terms.remaining=NULL;return status;
+    effect_terms_free(&terms);return status;
 }
 
 static XrXirStatus effect_refinement_apply(EffectOrdinaryContexts *ordinary,
     const XrXirModule *source, EffectRefinementBounds *bounds) {
     const XrXirCompileContext *context=ordinary->terms.remaining;
-    XrXirStatus status=effect_refinement_match(context,source,bounds);
+    XrXirStatus status=effect_refinement_match(context,source,bounds,NULL);
     const XrXirType *cache=NULL;
     if (status==XR_XIR_OK) status=effect_terms_import(&ordinary->terms,&bounds->terms.types,&cache);
     for (uint32_t f=0;f<ordinary->count && status==XR_XIR_OK;++f) {

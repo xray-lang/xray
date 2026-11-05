@@ -218,6 +218,8 @@ add_test(NAME test_xir_p10_reference_witness_diamond COMMAND test_xir_p10_refere
 set_tests_properties(test_xir_p10_reference_witness_diamond PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept")
 add_test(NAME test_xir_p10_reference_generic_method_value COMMAND test_xir_p10_reference --accept generic_method_value 69)
 set_tests_properties(test_xir_p10_reference_generic_method_value PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept")
+add_test(NAME test_xir_p10_reference_generic_parent_method_value COMMAND test_xir_p10_reference --accept generic_parent_method_value 69)
+set_tests_properties(test_xir_p10_reference_generic_parent_method_value PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept")
 add_test(NAME test_xir_p10_reference_optional_layers COMMAND test_xir_p10_reference --accept optional_layers 12)
 set_tests_properties(test_xir_p10_reference_optional_layers PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept")
 add_test(NAME test_xir_p10_reference_optional_lazy_absent COMMAND test_xir_p10_reference --accept optional_lazy_absent 10109)
@@ -379,6 +381,24 @@ target_compile_definitions(test_xir_p10_reference_mixed_generic_method_value PRI
 list(APPEND reference_native_targets test_xir_p10_reference_mixed_generic_method_value)
 add_test(NAME test_xir_p10_reference_mixed_generic_method_value COMMAND test_xir_p10_reference_mixed_generic_method_value 69)
 set_tests_properties(test_xir_p10_reference_mixed_generic_method_value PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;mixed")
+set(native_generic_parent_method_value "${CMAKE_CURRENT_BINARY_DIR}/generated_native/generic_parent_method_value.c")
+add_custom_command(OUTPUT ${native_generic_parent_method_value}
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated_native"
+    COMMAND $<TARGET_FILE:test_xir_p10_reference> --emit generic_parent_method_value 69 ${native_generic_parent_method_value}
+    DEPENDS test_xir_p10_reference "${CMAKE_CURRENT_LIST_DIR}/fixtures/generic_parent_method_value.xr"
+    VERBATIM)
+add_executable(test_xir_p10_reference_native_generic_parent_method_value "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" ${native_generic_parent_method_value})
+target_link_libraries(test_xir_p10_reference_native_generic_parent_method_value PRIVATE xray_xir_vm)
+target_compile_definitions(test_xir_p10_reference_native_generic_parent_method_value PRIVATE XR_LANGUAGE_MIXED=0)
+list(APPEND reference_native_targets test_xir_p10_reference_native_generic_parent_method_value)
+add_test(NAME test_xir_p10_reference_native_generic_parent_method_value COMMAND test_xir_p10_reference_native_generic_parent_method_value 69)
+set_tests_properties(test_xir_p10_reference_native_generic_parent_method_value PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;native")
+add_executable(test_xir_p10_reference_mixed_generic_parent_method_value "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" ${native_generic_parent_method_value})
+target_link_libraries(test_xir_p10_reference_mixed_generic_parent_method_value PRIVATE xray_xir_vm)
+target_compile_definitions(test_xir_p10_reference_mixed_generic_parent_method_value PRIVATE XR_LANGUAGE_MIXED=1)
+list(APPEND reference_native_targets test_xir_p10_reference_mixed_generic_parent_method_value)
+add_test(NAME test_xir_p10_reference_mixed_generic_parent_method_value COMMAND test_xir_p10_reference_mixed_generic_parent_method_value 69)
+set_tests_properties(test_xir_p10_reference_mixed_generic_parent_method_value PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;mixed")
 set(native_optional_layers "${CMAKE_CURRENT_BINARY_DIR}/generated_native/optional_layers.c")
 add_custom_command(OUTPUT ${native_optional_layers}
     COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated_native"

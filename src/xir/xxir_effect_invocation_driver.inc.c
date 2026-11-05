@@ -70,14 +70,14 @@ static XrXirStatus effect_invocation_collect(const XrXirCompileContext *work,
  * failed collection status is converted to a structural error or retried. */
 static inline XrXirStatus effect_invocations_receive(const XrXirCompileContext *work,
     const XrXirModule *module,XrXirEffects *effects,EffectGraph *graph,
-    const EffectInvocationDeclaredBounds *declared,EffectInvocationWorkspace **output) {
+    const EffectInvocationDeclaredBounds *declared,EffectInvocationWorkspace **output, XirReadOperation *read_operation) {
     if (!output || *output || !xir_compile_context_valid(work)) return XR_XIR_BAD_STRUCTURE;
 
     EffectBodyRequest input={0};
     XrXirStatus status=effect_invocation_collect(work,module,effects,graph,declared,&input);
     if (status==XR_XIR_OK) status=effect_invocation_current_input_match(work,module,graph->material);
     if (status==XR_XIR_OK) status=effect_invocations_create(work,&input,effects,graph,
-        graph->material->declared,output);
+        graph->material->declared,output, read_operation);
     return status;
 }
 
@@ -86,17 +86,37 @@ static inline XrXirStatus effect_invocations_receive(const XrXirCompileContext *
  * a completely sealed computation; publication belongs to the common caller. */
 static inline XrXirStatus effect_invocation_derive(const EffectInvocationDriverInput *input,
     EffectInvocationCertificate **output,const EffectInvocationProjectionSink *sink,
-    EffectFinalFunctions **receiving) {
+    EffectFinalFunctions **receiving, XirReadOperation *read_operation) {
     if (!input || !output || *output || !receiving || *receiving || !xir_compile_context_valid(input->work) || !input->body ||
         !effect_invocation_projection_sink_matches(input->work,sink,input->body->domain.function_count))
         return XR_XIR_BAD_STRUCTURE;
-    EffectInvocationWorkspace *equations=NULL;
+    if(!read_operation || read_operation->capacity.resources!=input->work->resources)
+        return XR_XIR_BAD_STRUCTURE;
+    EffectInvocationWorkspace *equations=NULL;EffectInvocationCertificate *certificate=NULL;
     XrXirStatus status=effect_invocations_create(input->work,input->body,input->effects,
-        input->graph,input->declared,&equations);
-    if (status==XR_XIR_OK) status=effect_invocations_solve(equations);
+        input->graph,input->declared,&equations, read_operation);
+    if (status==XR_XIR_OK) status=effect_invocations_solve(equations, read_operation);
     if (status==XR_XIR_OK) status=effect_invocation_stage(equations,receiving);
+    /* Stage owns these original formula rows. Seal transfers their owner to
+     * the certificate; this descriptor borrows no solver or staged header. */
+    EffectFinalFunctions expected={0};
+    if(status==XR_XIR_OK) expected=**receiving;
     EffectInvocationSealRequest request={&equations,receiving,input->dense};
-    if (status==XR_XIR_OK) status=effect_invocation_seal(input->work,&request,output,sink);
+    if (status==XR_XIR_OK) status=effect_invocation_seal(input->work,&request,&certificate,sink, read_operation);
     effect_invocation_free(equations);
-    return status;
+    /* All constructor storage has retired. Compare the original receiving
+     * claim to current Input; never infer a replacement expected result. */
+    if(status==XR_XIR_OK)
+        status=effect_invocation_certificate_result_match(input->work,certificate,&expected,read_operation);
+    if(status!=XR_XIR_OK) {
+        if(certificate) {
+            if(input->effects->cells==certificate->body->cells) input->effects->cells=NULL;
+            if(input->graph->material==certificate->body) {
+                input->graph->material=NULL;input->graph->physical=NULL;input->graph->physical_owned=false;
+            }
+            effect_invocation_certificate_free(certificate);
+        }
+        return status;
+    }
+    *output=certificate;return XR_XIR_OK;
 }

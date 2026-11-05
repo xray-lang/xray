@@ -1254,7 +1254,7 @@ static XrXirStatus verify_nominal_modules(const XrXirModule *module, XrXirCompil
 }
 
 static XrXirStatus verify_provenance(const XrXirModule *module, const XrXirCompileContext *remaining,
-    const XrXirEffects *source_effects, XrXirDiagnostic *diagnostic) {
+    const XrXirEffects *source_effects, XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
     const XrXirProvenance *p = module->provenance;
     XrXirStatus shape = xir_effect_contract_shape_verify(remaining, module);
     if (shape != XR_XIR_OK) return shape;
@@ -1268,7 +1268,7 @@ static XrXirStatus verify_provenance(const XrXirModule *module, const XrXirCompi
         bytes = (uint64_t)p->origins[i].argument_count * sizeof(XrXirType);
         if (!(bytes <= SIZE_MAX)) return XR_XIR_BUDGET;
     }
-    return xr_xir_compile_provenance_verify(remaining, module, p, source_effects, diagnostic);
+    return xr_xir_compile_provenance_verify(remaining, module, p, source_effects, diagnostic, read_request);
 }
 
 static XrXirStatus verify_signature_structure(const XrXirModule *module, XrXirCompileContext *remaining) {
@@ -1442,7 +1442,7 @@ XR_FUNC XrXirStatus xir_compile_view_cell_access_verified(const XrXirCompileCont
 static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_context,
     const XrXirModule *module, const XrXirConstruction *construction,
     const XrXirEffects *source_effects,const XrXirEffects *program_effects,
-    XrXirDiagnostic *diagnostic) {
+    XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *remaining = &compile_state;
@@ -1468,7 +1468,7 @@ static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_co
      * Both use this caller's limits and ledger, never the retained owner's
      * former limits. Provenance shape rejects a nested closed Source first. */
     if (status == XR_XIR_OK && module->provenance)
-        status = verify_provenance(module, compile_context, source_effects, &context.location);
+        status = verify_provenance(module, compile_context, source_effects, &context.location, read_request);
     context.location.status = status;
     *remaining = context.remaining;
     if (diagnostic)
@@ -1480,202 +1480,499 @@ static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_co
 
 XrXirStatus xr_xir_compile_structure_verify_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic) {
-    return structure_verify_source(context,module,construction,NULL,NULL,diagnostic);
+    return structure_verify_source(context,module,construction,NULL,NULL,diagnostic, NULL);
 }
 
 /* Every use repeats complete current Source admission before consuming this
  * call's retained derivation. No stored address authorizes an input field. */
-XR_FUNC XrXirStatus xr_xir_compile_verify_source_effects_v2(const XrXirCompileContext *context,
+XR_FUNC XrXirStatus xr_xir_compile_verify_source_effects_v2_attempt_body(const XrXirCompileContext *context,
     const XrXirModule *source, const XrXirConstruction *construction,
-    const XrXirEffects *effects, XrXirDiagnostic *diagnostic) {
+    const XrXirEffects *effects, XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
     if (!xir_compile_context_valid(context) || !effects || !source || !source->provenance ||
         source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
-    XrXirStatus status=structure_verify_source(context,source,construction,NULL,NULL,&location);
+    XrXirStatus status=structure_verify_source(context,source,construction,NULL,NULL,&location, read_request);
     if (status==XR_XIR_OK) status=xir_effects_source_body_match(context,source,effects);
     if (status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
-        status=declaration_effects_verify(source,&remaining,&location,effects,NULL,true);
+        status=declaration_effects_verify(source,&remaining,&location,effects,NULL,true, read_request);
     }
     location.status=status;if (diagnostic) *diagnostic=location;
     return status;
 }
+/* Nested readers propagate preparation to the complete pure parent. Only
+ * this lexical boundary may retire its derived prefix and call the client. */
+XR_FUNC XrXirStatus xr_xir_compile_verify_source_effects_v2(const XrXirCompileContext *context,
+    const XrXirModule *source, const XrXirConstruction *construction,
+    const XrXirEffects *effects, XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
+    if(read_request && !xir_read_request_matches(context,read_request)) return XR_XIR_BAD_STRUCTURE;
+    if(!read_request || read_request->attempt)
+        return xr_xir_compile_verify_source_effects_v2_attempt_body(context, source, construction, effects, diagnostic, read_request);
+    if(!read_request->operation || !xir_compile_context_valid(context) ||
+        read_request->operation->capacity.resources!=(context)->resources) return XR_XIR_BAD_STRUCTURE;
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(context,request.operation);
+        if(status==XR_XIR_OK) status=xr_xir_compile_verify_source_effects_v2_attempt_body(context, source, construction, effects, diagnostic, &request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) {
+            if(diagnostic && status!=XR_XIR_OK) diagnostic->status=status;return status;
+        }
+        status=xir_read_prepare(context,request.operation,request.control);
+        if(status!=XR_XIR_OK) {if(diagnostic) diagnostic->status=status;return status;}
+    }
+}
+
 
 /* Reusing an owned derivation never substitutes for a current proof. The
  * terminal replays all finite relations after any declaration-read callbacks. */
-XR_FUNC XrXirStatus xir_compile_verify_raw_source_effects(const XrXirCompileContext *context,
+XR_FUNC XrXirStatus xir_compile_verify_raw_source_effects_attempt_body(const XrXirCompileContext *context,
     const XrXirModule *source,const XrXirConstruction *construction,
-    const XrXirEffects *effects,XrXirDiagnostic *diagnostic) {
+    const XrXirEffects *effects,XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
     if(!xir_compile_context_valid(context) || !source || source->provenance || !effects) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
-    XrXirStatus status=structure_verify_source(context,source,construction,NULL,NULL,&location);
+    XrXirStatus status=structure_verify_source(context,source,construction,NULL,NULL,&location, read_request);
     if(status==XR_XIR_OK) status=xir_effects_source_body_match(context,source,effects);
     if(status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
-        status=declaration_effects_verify(source,&remaining,&location,effects,NULL,true);
+        status=declaration_effects_verify(source,&remaining,&location,effects,NULL,true, read_request);
     }
-    if(status==XR_XIR_OK) status=xir_effects_raw_source_terminal(context,source,effects);
+    if(status==XR_XIR_OK) status=xir_effects_raw_source_terminal(context,source,effects, read_request);
     location.status=status;if(diagnostic) *diagnostic=location;
     return status;
 }
+/* Nested readers propagate preparation to the complete pure parent. Only
+ * this lexical boundary may retire its derived prefix and call the client. */
+XR_FUNC XrXirStatus xir_compile_verify_raw_source_effects(const XrXirCompileContext *context,
+    const XrXirModule *source,const XrXirConstruction *construction,
+    const XrXirEffects *effects,XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
+    if(read_request && !xir_read_request_matches(context,read_request)) return XR_XIR_BAD_STRUCTURE;
+    if(!read_request || read_request->attempt)
+        return xir_compile_verify_raw_source_effects_attempt_body(context, source, construction, effects, diagnostic, read_request);
+    if(!read_request->operation || !xir_compile_context_valid(context) ||
+        read_request->operation->capacity.resources!=(context)->resources) return XR_XIR_BAD_STRUCTURE;
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(context,request.operation);
+        if(status==XR_XIR_OK) status=xir_compile_verify_raw_source_effects_attempt_body(context, source, construction, effects, diagnostic, &request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) {
+            if(diagnostic && status!=XR_XIR_OK) diagnostic->status=status;return status;
+        }
+        status=xir_read_prepare(context,request.operation,request.control);
+        if(status!=XR_XIR_OK) {if(diagnostic) diagnostic->status=status;return status;}
+    }
+}
+
 
 /* Receiving facts are independently derived from the destination. Only the
  * immutable Source derivation is borrowed through full fresh correspondence. */
-XR_FUNC XrXirStatus xr_xir_compile_verify_provenance_effects_v2(const XrXirCompileContext *context,
+XR_FUNC XrXirStatus xr_xir_compile_verify_provenance_effects_v2_attempt_body(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction,
-    const XrXirEffects *source_effects, XrXirDiagnostic *diagnostic) {
-    if (!source_effects) return xr_xir_compile_verify_v2(context,module,construction,diagnostic);
+    const XrXirEffects *source_effects, XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
+    if (!source_effects) return xr_xir_compile_verify_v2(context,module,construction,diagnostic, read_request);
     if (!xir_compile_context_valid(context) || !module || !module->provenance ||
         !xir_effect_kind_is_closed(module->provenance->kind)) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
-    XrXirStatus status=structure_verify_source(context,module,construction,source_effects,NULL,&location);
+    XrXirStatus status=structure_verify_source(context,module,construction,source_effects,NULL,&location, read_request);
     if (status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
-        status=declaration_effects_verify(module,&remaining,&location,NULL,NULL,true);
+        status=declaration_effects_verify(module,&remaining,&location,NULL,NULL,true, read_request);
     }
     location.status=status;if (diagnostic) *diagnostic=location;
     return status;
 }
+/* Nested readers propagate preparation to the complete pure parent. Only
+ * this lexical boundary may retire its derived prefix and call the client. */
+XR_FUNC XrXirStatus xr_xir_compile_verify_provenance_effects_v2(const XrXirCompileContext *context,
+    const XrXirModule *module, const XrXirConstruction *construction,
+    const XrXirEffects *source_effects, XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
+    if(read_request && !xir_read_request_matches(context,read_request)) return XR_XIR_BAD_STRUCTURE;
+    if(!read_request || read_request->attempt)
+        return xr_xir_compile_verify_provenance_effects_v2_attempt_body(context, module, construction, source_effects, diagnostic, read_request);
+    if(!read_request->operation || !xir_compile_context_valid(context) ||
+        read_request->operation->capacity.resources!=(context)->resources) return XR_XIR_BAD_STRUCTURE;
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(context,request.operation);
+        if(status==XR_XIR_OK) status=xr_xir_compile_verify_provenance_effects_v2_attempt_body(context, module, construction, source_effects, diagnostic, &request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) {
+            if(diagnostic && status!=XR_XIR_OK) diagnostic->status=status;return status;
+        }
+        status=xir_read_prepare(context,request.operation,request.control);
+        if(status!=XR_XIR_OK) {if(diagnostic) diagnostic->status=status;return status;}
+    }
+}
+
 
 /* The same complete checker consumes either freshly inferred facts or the
  * private prepared owner; neither path omits declarations or permissions. */
 static XrXirStatus verify_effects_body(const XrXirCompileContext *context,
     const XrXirModule *module,const XrXirConstruction *construction,
-    const XrXirEffects *effects,const XrXirEffects *program_effects,XrXirDiagnostic *diagnostic) {
+    const XrXirEffects *effects,const XrXirEffects *program_effects,XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
     if (!xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location = {XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
-    XrXirStatus status = structure_verify_source(context,module,construction,NULL,program_effects,&location);
+    XrXirStatus status = structure_verify_source(context,module,construction,NULL,program_effects,&location, read_request);
     if (status==XR_XIR_OK && program_effects)
         status=xir_effects_program_body_match(context,module,program_effects);
     if (status == XR_XIR_OK) {
         XrXirCompileContext remaining = *context;
-        status = declaration_effects_verify(module,&remaining,&location,effects,NULL,true);
+        status = declaration_effects_verify(module,&remaining,&location,effects,NULL,true, read_request);
     }
     location.status = status;
     if (diagnostic) *diagnostic = location;
     return status;
 }
+XR_FUNC XrXirStatus xr_xir_compile_verify_effects_v2_attempt_body(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirConstruction *construction,
+    const XrXirEffects *effects,XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
+    return verify_effects_body(context,module,construction,effects,NULL,diagnostic, read_request);
+}
+/* Nested readers propagate preparation to the complete pure parent. Only
+ * this lexical boundary may retire its derived prefix and call the client. */
 XR_FUNC XrXirStatus xr_xir_compile_verify_effects_v2(const XrXirCompileContext *context,
     const XrXirModule *module,const XrXirConstruction *construction,
-    const XrXirEffects *effects,XrXirDiagnostic *diagnostic) {
-    return verify_effects_body(context,module,construction,effects,NULL,diagnostic);
+    const XrXirEffects *effects,XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
+    if(read_request && !xir_read_request_matches(context,read_request)) return XR_XIR_BAD_STRUCTURE;
+    if(!read_request || read_request->attempt)
+        return xr_xir_compile_verify_effects_v2_attempt_body(context, module, construction, effects, diagnostic, read_request);
+    if(!read_request->operation || !xir_compile_context_valid(context) ||
+        read_request->operation->capacity.resources!=(context)->resources) return XR_XIR_BAD_STRUCTURE;
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(context,request.operation);
+        if(status==XR_XIR_OK) status=xr_xir_compile_verify_effects_v2_attempt_body(context, module, construction, effects, diagnostic, &request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) {
+            if(diagnostic && status!=XR_XIR_OK) diagnostic->status=status;return status;
+        }
+        status=xir_read_prepare(context,request.operation,request.control);
+        if(status!=XR_XIR_OK) {if(diagnostic) diagnostic->status=status;return status;}
+    }
 }
+
+XR_FUNC XrXirStatus xir_compile_verify_program_effects_attempt_body(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirConstruction *construction,
+    const XrXirEffects *effects,XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
+    if (!effects) return XR_XIR_BAD_STRUCTURE;
+    return verify_effects_body(context,module,construction,effects,effects,diagnostic, read_request);
+}
+/* Nested readers propagate preparation to the complete pure parent. Only
+ * this lexical boundary may retire its derived prefix and call the client. */
 XR_FUNC XrXirStatus xir_compile_verify_program_effects(const XrXirCompileContext *context,
     const XrXirModule *module,const XrXirConstruction *construction,
-    const XrXirEffects *effects,XrXirDiagnostic *diagnostic) {
-    if (!effects) return XR_XIR_BAD_STRUCTURE;
-    return verify_effects_body(context,module,construction,effects,effects,diagnostic);
+    const XrXirEffects *effects,XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
+    if(read_request && !xir_read_request_matches(context,read_request)) return XR_XIR_BAD_STRUCTURE;
+    if(!read_request || read_request->attempt)
+        return xir_compile_verify_program_effects_attempt_body(context, module, construction, effects, diagnostic, read_request);
+    if(!read_request->operation || !xir_compile_context_valid(context) ||
+        read_request->operation->capacity.resources!=(context)->resources) return XR_XIR_BAD_STRUCTURE;
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(context,request.operation);
+        if(status==XR_XIR_OK) status=xir_compile_verify_program_effects_attempt_body(context, module, construction, effects, diagnostic, &request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) {
+            if(diagnostic && status!=XR_XIR_OK) diagnostic->status=status;return status;
+        }
+        status=xir_read_prepare(context,request.operation,request.control);
+        if(status!=XR_XIR_OK) {if(diagnostic) diagnostic->status=status;return status;}
+    }
 }
+
 /* Structural, source and permission checks finish before the fresh owner
  * becomes observable. Only the Template consumer restricts this collector's
  * domain; ordinary verification never requests otherwise unused facts. */
 static XrXirStatus verify_collected_effects(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction,
-    const XrXirEffects *source_effects,XrXirEffects **output, XrXirDiagnostic *diagnostic) {
+    const XrXirEffects *source_effects,XrXirEffects **output, XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
     if (!xir_compile_context_valid(context) || !output || *output) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     XrXirEffects *owned=NULL;
-    XrXirStatus status=structure_verify_source(context,module,construction,source_effects,NULL,&location);
+    XrXirStatus status=structure_verify_source(context,module,construction,source_effects,NULL,&location, read_request);
     if (status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
-        status=declaration_effects_verify(module,&remaining,&location,NULL,&owned,true);
+        status=declaration_effects_verify(module,&remaining,&location,NULL,&owned,true, read_request);
     }
     if (status==XR_XIR_OK && !owned) status=XR_XIR_BAD_STRUCTURE;
     location.status=status;if (diagnostic) *diagnostic=location;
     if (status!=XR_XIR_OK) { xr_xir_compile_effects_free(owned);return status; }
     *output=owned;return XR_XIR_OK;
 }
-XR_FUNC XrXirStatus xr_xir_compile_verify_owned_effects_v2(const XrXirCompileContext *context,
+XR_FUNC XrXirStatus xr_xir_compile_verify_owned_effects_v2_attempt_body(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction,
-    XrXirEffects **output, XrXirDiagnostic *diagnostic) {
+    XrXirEffects **output, XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
     if (!module || !module->provenance || module->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE)
         return XR_XIR_BAD_STRUCTURE;
-    return verify_collected_effects(context,module,construction,NULL,output,diagnostic);
+    return verify_collected_effects(context,module,construction,NULL,output,diagnostic, read_request);
 }
+/* Nested readers propagate preparation to the complete pure parent. Only
+ * this lexical boundary may retire its derived prefix and call the client. */
+XR_FUNC XrXirStatus xr_xir_compile_verify_owned_effects_v2(const XrXirCompileContext *context,
+    const XrXirModule *module, const XrXirConstruction *construction,
+    XrXirEffects **output, XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
+    if(read_request && !xir_read_request_matches(context,read_request)) return XR_XIR_BAD_STRUCTURE;
+    if(!read_request || read_request->attempt)
+        return xr_xir_compile_verify_owned_effects_v2_attempt_body(context, module, construction, output, diagnostic, read_request);
+    if(!read_request->operation || !xir_compile_context_valid(context) ||
+        read_request->operation->capacity.resources!=(context)->resources) return XR_XIR_BAD_STRUCTURE;
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(context,request.operation);
+        if(status==XR_XIR_OK) status=xr_xir_compile_verify_owned_effects_v2_attempt_body(context, module, construction, output, diagnostic, &request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) {
+            if(diagnostic && status!=XR_XIR_OK) diagnostic->status=status;return status;
+        }
+        status=xir_read_prepare(context,request.operation,request.control);
+        if(status!=XR_XIR_OK) {if(diagnostic) diagnostic->status=status;return status;}
+    }
+}
+
+XR_FUNC XrXirStatus xr_xir_compile_verify_analyzed_effects_v2_attempt_body(const XrXirCompileContext *context,
+    const XrXirModule *module, const XrXirConstruction *construction,
+    XrXirEffects **output, XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
+    return verify_collected_effects(context,module,construction,NULL,output,diagnostic, read_request);
+}
+/* Nested readers propagate preparation to the complete pure parent. Only
+ * this lexical boundary may retire its derived prefix and call the client. */
 XR_FUNC XrXirStatus xr_xir_compile_verify_analyzed_effects_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction,
-    XrXirEffects **output, XrXirDiagnostic *diagnostic) {
-    return verify_collected_effects(context,module,construction,NULL,output,diagnostic);
+    XrXirEffects **output, XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
+    if(read_request && !xir_read_request_matches(context,read_request)) return XR_XIR_BAD_STRUCTURE;
+    if(!read_request || read_request->attempt)
+        return xr_xir_compile_verify_analyzed_effects_v2_attempt_body(context, module, construction, output, diagnostic, read_request);
+    if(!read_request->operation || !xir_compile_context_valid(context) ||
+        read_request->operation->capacity.resources!=(context)->resources) return XR_XIR_BAD_STRUCTURE;
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(context,request.operation);
+        if(status==XR_XIR_OK) status=xr_xir_compile_verify_analyzed_effects_v2_attempt_body(context, module, construction, output, diagnostic, &request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) {
+            if(diagnostic && status!=XR_XIR_OK) diagnostic->status=status;return status;
+        }
+        status=xir_read_prepare(context,request.operation,request.control);
+        if(status!=XR_XIR_OK) {if(diagnostic) diagnostic->status=status;return status;}
+    }
 }
+
 /* The destination collector still reconstructs all receiving facts. Its
  * genuine Source owner must already have passed full current input admission. */
-XR_FUNC XrXirStatus xr_xir_compile_verify_receiving_effects_v2(const XrXirCompileContext *context,
+XR_FUNC XrXirStatus xr_xir_compile_verify_receiving_effects_v2_attempt_body(const XrXirCompileContext *context,
     const XrXirModule *module,const XrXirConstruction *construction,
-    const XrXirEffects *source_effects,XrXirEffects **output,XrXirDiagnostic *diagnostic) {
+    const XrXirEffects *source_effects,XrXirEffects **output,XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
     if (source_effects && (!module || !module->provenance ||
         !xir_effect_kind_is_closed(module->provenance->kind))) return XR_XIR_BAD_STRUCTURE;
-    return verify_collected_effects(context,module,construction,source_effects,output,diagnostic);
+    return verify_collected_effects(context,module,construction,source_effects,output,diagnostic, read_request);
 }
-XrXirStatus xr_xir_compile_verify_v2(const XrXirCompileContext *context,
-    const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic) {
-    return xr_xir_compile_verify_effects_v2(context,module,construction,NULL,diagnostic);
+/* Nested readers propagate preparation to the complete pure parent. Only
+ * this lexical boundary may retire its derived prefix and call the client. */
+XR_FUNC XrXirStatus xr_xir_compile_verify_receiving_effects_v2(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirConstruction *construction,
+    const XrXirEffects *source_effects,XrXirEffects **output,XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
+    if(read_request && !xir_read_request_matches(context,read_request)) return XR_XIR_BAD_STRUCTURE;
+    if(!read_request || read_request->attempt)
+        return xr_xir_compile_verify_receiving_effects_v2_attempt_body(context, module, construction, source_effects, output, diagnostic, read_request);
+    if(!read_request->operation || !xir_compile_context_valid(context) ||
+        read_request->operation->capacity.resources!=(context)->resources) return XR_XIR_BAD_STRUCTURE;
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(context,request.operation);
+        if(status==XR_XIR_OK) status=xr_xir_compile_verify_receiving_effects_v2_attempt_body(context, module, construction, source_effects, output, diagnostic, &request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) {
+            if(diagnostic && status!=XR_XIR_OK) diagnostic->status=status;return status;
+        }
+        status=xir_read_prepare(context,request.operation,request.control);
+        if(status!=XR_XIR_OK) {if(diagnostic) diagnostic->status=status;return status;}
+    }
 }
+
+XrXirStatus xr_xir_compile_verify_v2_attempt_body(const XrXirCompileContext *context,
+    const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
+    return xr_xir_compile_verify_effects_v2(context,module,construction,NULL,diagnostic, read_request);
+}
+/* Nested readers propagate preparation to the complete pure parent. Only
+ * this lexical boundary may retire its derived prefix and call the client. */
+XR_FUNC XrXirStatus xr_xir_compile_verify_v2(const XrXirCompileContext *context,
+    const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
+    if(read_request && !xir_read_request_matches(context,read_request)) return XR_XIR_BAD_STRUCTURE;
+    if(!read_request || read_request->attempt)
+        return xr_xir_compile_verify_v2_attempt_body(context, module, construction, diagnostic, read_request);
+    if(!read_request->operation || !xir_compile_context_valid(context) ||
+        read_request->operation->capacity.resources!=(context)->resources) return XR_XIR_BAD_STRUCTURE;
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(context,request.operation);
+        if(status==XR_XIR_OK) status=xr_xir_compile_verify_v2_attempt_body(context, module, construction, diagnostic, &request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) {
+            if(diagnostic && status!=XR_XIR_OK) diagnostic->status=status;return status;
+        }
+        status=xir_read_prepare(context,request.operation,request.control);
+        if(status!=XR_XIR_OK) {if(diagnostic) diagnostic->status=status;return status;}
+    }
+}
+
 
 /* Keep an already required destination derivation only for this operation.
  * Inputs without effect obligations retain their original no-inference path. */
 static XrXirStatus verify_optional_effects(const XrXirCompileContext *context,
     const XrXirModule *module,const XrXirConstruction *construction,
-    const XrXirEffects *source_effects,XrXirEffects **output,XrXirDiagnostic *diagnostic) {
+    const XrXirEffects *source_effects,XrXirEffects **output,XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
     if(!xir_compile_context_valid(context) || !output || *output || !module) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     XrXirEffects *owned=NULL;
-    XrXirStatus status=structure_verify_source(context,module,construction,source_effects,NULL,&location);
+    XrXirStatus status=structure_verify_source(context,module,construction,source_effects,NULL,&location, read_request);
     if(status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
-        status=declaration_effects_verify(module,&remaining,&location,NULL,&owned,false);
+        status=declaration_effects_verify(module,&remaining,&location,NULL,&owned,false, read_request);
     }
     location.status=status;if(diagnostic) *diagnostic=location;
     if(status!=XR_XIR_OK) { xr_xir_compile_effects_free(owned);return status; }
     *output=owned;return XR_XIR_OK;
 }
 
-XR_FUNC XrXirStatus xir_compile_verify_receiving_collect(const XrXirCompileContext *context,
+XR_FUNC XrXirStatus xir_compile_verify_receiving_collect_attempt_body(const XrXirCompileContext *context,
     const XrXirModule *module,const XrXirConstruction *construction,
-    const XrXirEffects *source_effects,XrXirEffects **output,XrXirDiagnostic *diagnostic) {
+    const XrXirEffects *source_effects,XrXirEffects **output,XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
     if(!module || module->stage!=XR_XIR_CHECKED || !module->provenance ||
         !xir_effect_kind_is_closed(module->provenance->kind)) return XR_XIR_BAD_STRUCTURE;
-    return verify_optional_effects(context,module,construction,source_effects,output,diagnostic);
+    return verify_optional_effects(context,module,construction,source_effects,output,diagnostic, read_request);
 }
+/* Nested readers propagate preparation to the complete pure parent. Only
+ * this lexical boundary may retire its derived prefix and call the client. */
+XR_FUNC XrXirStatus xir_compile_verify_receiving_collect(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirConstruction *construction,
+    const XrXirEffects *source_effects,XrXirEffects **output,XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
+    if(read_request && !xir_read_request_matches(context,read_request)) return XR_XIR_BAD_STRUCTURE;
+    if(!read_request || read_request->attempt)
+        return xir_compile_verify_receiving_collect_attempt_body(context, module, construction, source_effects, output, diagnostic, read_request);
+    if(!read_request->operation || !xir_compile_context_valid(context) ||
+        read_request->operation->capacity.resources!=(context)->resources) return XR_XIR_BAD_STRUCTURE;
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(context,request.operation);
+        if(status==XR_XIR_OK) status=xir_compile_verify_receiving_collect_attempt_body(context, module, construction, source_effects, output, diagnostic, &request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) {
+            if(diagnostic && status!=XR_XIR_OK) diagnostic->status=status;return status;
+        }
+        status=xir_read_prepare(context,request.operation,request.control);
+        if(status!=XR_XIR_OK) {if(diagnostic) diagnostic->status=status;return status;}
+    }
+}
+
+XR_FUNC XrXirStatus xir_compile_verify_built_collect_attempt_body(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirConstruction *construction,
+    XrXirEffects **output,XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
+    if(!module || module->stage!=XR_XIR_BUILT || module->provenance) return XR_XIR_BAD_STRUCTURE;
+    return verify_optional_effects(context,module,construction,NULL,output,diagnostic, read_request);
+}
+/* Nested readers propagate preparation to the complete pure parent. Only
+ * this lexical boundary may retire its derived prefix and call the client. */
 XR_FUNC XrXirStatus xir_compile_verify_built_collect(const XrXirCompileContext *context,
     const XrXirModule *module,const XrXirConstruction *construction,
-    XrXirEffects **output,XrXirDiagnostic *diagnostic) {
-    if(!module || module->stage!=XR_XIR_BUILT || module->provenance) return XR_XIR_BAD_STRUCTURE;
-    return verify_optional_effects(context,module,construction,NULL,output,diagnostic);
+    XrXirEffects **output,XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
+    if(read_request && !xir_read_request_matches(context,read_request)) return XR_XIR_BAD_STRUCTURE;
+    if(!read_request || read_request->attempt)
+        return xir_compile_verify_built_collect_attempt_body(context, module, construction, output, diagnostic, read_request);
+    if(!read_request->operation || !xir_compile_context_valid(context) ||
+        read_request->operation->capacity.resources!=(context)->resources) return XR_XIR_BAD_STRUCTURE;
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(context,request.operation);
+        if(status==XR_XIR_OK) status=xir_compile_verify_built_collect_attempt_body(context, module, construction, output, diagnostic, &request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) {
+            if(diagnostic && status!=XR_XIR_OK) diagnostic->status=status;return status;
+        }
+        status=xir_read_prepare(context,request.operation,request.control);
+        if(status!=XR_XIR_OK) {if(diagnostic) diagnostic->status=status;return status;}
+    }
 }
+
 
 /* The copy is a new current input. The owned relation supplies data only;
  * structure, provenance, permissions and every finite equation are replayed. */
-XR_FUNC XrXirStatus xir_compile_verify_receiving_replay(const XrXirCompileContext *context,
+XR_FUNC XrXirStatus xir_compile_verify_receiving_replay_attempt_body(const XrXirCompileContext *context,
     const XrXirModule *module,const XrXirConstruction *construction,
-    const XrXirEffects *source_effects,const XrXirEffects *effects,XrXirDiagnostic *diagnostic) {
+    const XrXirEffects *source_effects,const XrXirEffects *effects,XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
     if(!xir_compile_context_valid(context) || !module || module->stage!=XR_XIR_CHECKED ||
         !module->provenance || !xir_effect_kind_is_closed(module->provenance->kind) || !effects)
         return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
-    XrXirStatus status=structure_verify_source(context,module,construction,source_effects,NULL,&location);
+    XrXirStatus status=structure_verify_source(context,module,construction,source_effects,NULL,&location, read_request);
     if(status==XR_XIR_OK) status=xir_effects_source_body_match(context,module,effects);
     if(status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
-        status=declaration_effects_verify(module,&remaining,&location,effects,NULL,true);
+        status=declaration_effects_verify(module,&remaining,&location,effects,NULL,true, read_request);
     }
-    if(status==XR_XIR_OK) status=xir_effects_receiving_terminal(context,module,effects);
+    if(status==XR_XIR_OK) status=xir_effects_receiving_terminal(context,module,effects, read_request);
     location.status=status;if(diagnostic) *diagnostic=location;
     return status;
 }
-
-XR_FUNC XrXirStatus xir_compile_verify_built_replay(const XrXirCompileContext *context,
+/* Nested readers propagate preparation to the complete pure parent. Only
+ * this lexical boundary may retire its derived prefix and call the client. */
+XR_FUNC XrXirStatus xir_compile_verify_receiving_replay(const XrXirCompileContext *context,
     const XrXirModule *module,const XrXirConstruction *construction,
-    const XrXirEffects *effects,XrXirDiagnostic *diagnostic) {
+    const XrXirEffects *source_effects,const XrXirEffects *effects,XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
+    if(read_request && !xir_read_request_matches(context,read_request)) return XR_XIR_BAD_STRUCTURE;
+    if(!read_request || read_request->attempt)
+        return xir_compile_verify_receiving_replay_attempt_body(context, module, construction, source_effects, effects, diagnostic, read_request);
+    if(!read_request->operation || !xir_compile_context_valid(context) ||
+        read_request->operation->capacity.resources!=(context)->resources) return XR_XIR_BAD_STRUCTURE;
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(context,request.operation);
+        if(status==XR_XIR_OK) status=xir_compile_verify_receiving_replay_attempt_body(context, module, construction, source_effects, effects, diagnostic, &request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) {
+            if(diagnostic && status!=XR_XIR_OK) diagnostic->status=status;return status;
+        }
+        status=xir_read_prepare(context,request.operation,request.control);
+        if(status!=XR_XIR_OK) {if(diagnostic) diagnostic->status=status;return status;}
+    }
+}
+
+
+XR_FUNC XrXirStatus xir_compile_verify_built_replay_attempt_body(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirConstruction *construction,
+    const XrXirEffects *effects,XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
     if(!xir_compile_context_valid(context) || !module || module->stage!=XR_XIR_CHECKED ||
         module->provenance || !effects) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
-    XrXirStatus status=structure_verify_source(context,module,construction,NULL,NULL,&location);
+    XrXirStatus status=structure_verify_source(context,module,construction,NULL,NULL,&location, read_request);
     if(status==XR_XIR_OK) status=xir_effects_built_copy_match(context,module,effects);
     if(status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
-        status=declaration_effects_verify(module,&remaining,&location,effects,NULL,true);
+        status=declaration_effects_verify(module,&remaining,&location,effects,NULL,true, read_request);
     }
-    if(status==XR_XIR_OK) status=xir_effects_built_copy_terminal(context,module,effects);
+    if(status==XR_XIR_OK) status=xir_effects_built_copy_terminal(context,module,effects, read_request);
     location.status=status;if(diagnostic) *diagnostic=location;
     return status;
+}
+/* Nested readers propagate preparation to the complete pure parent. Only
+ * this lexical boundary may retire its derived prefix and call the client. */
+XR_FUNC XrXirStatus xir_compile_verify_built_replay(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirConstruction *construction,
+    const XrXirEffects *effects,XrXirDiagnostic *diagnostic, const XirReadRequest *read_request) {
+    if(read_request && !xir_read_request_matches(context,read_request)) return XR_XIR_BAD_STRUCTURE;
+    if(!read_request || read_request->attempt)
+        return xir_compile_verify_built_replay_attempt_body(context, module, construction, effects, diagnostic, read_request);
+    if(!read_request->operation || !xir_compile_context_valid(context) ||
+        read_request->operation->capacity.resources!=(context)->resources) return XR_XIR_BAD_STRUCTURE;
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(context,request.operation);
+        if(status==XR_XIR_OK) status=xir_compile_verify_built_replay_attempt_body(context, module, construction, effects, diagnostic, &request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) {
+            if(diagnostic && status!=XR_XIR_OK) diagnostic->status=status;return status;
+        }
+        status=xir_read_prepare(context,request.operation,request.control);
+        if(status!=XR_XIR_OK) {if(diagnostic) diagnostic->status=status;return status;}
+    }
 }

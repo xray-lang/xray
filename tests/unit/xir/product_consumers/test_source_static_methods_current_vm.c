@@ -45,7 +45,7 @@ static void construction_owner(const XrXirArtifact *artifact, const XrXirCompile
         CHECK(!!row->field_initializers == !!row->field_count);
     }
     CHECK(!xr_xir_compile_construction_row(construction, count));
-    CHECK(xr_xir_compile_verify_v2(context, module, construction, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_verify_v2(context, module, construction, NULL, NULL) == XR_XIR_OK);
 }
 
 /* Retain the complete authentic producer packet while its borrowed view lives. */

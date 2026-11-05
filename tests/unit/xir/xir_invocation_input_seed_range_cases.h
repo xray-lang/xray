@@ -38,7 +38,7 @@ static void invocation_seed_compare(const XrXirCompileContext *work,
     const EffectBodyMaterial *body,XrXirStatus expected,bool required) {
     XrXirRootEffects scalar={true,true},ranges=scalar;
     CHECK(invocation_seed_scalar_reference(work,body,&scalar)==expected);
-    CHECK(effect_invocation_input_seed(work,body,0,&ranges)==expected);
+    CHECK(effect_invocation_input_seed(work,body,0,&ranges, NULL)==expected);
     CHECK(scalar.requires_root==ranges.requires_root && scalar.unresolved==ranges.unresolved);
     CHECK(expected!=XR_XIR_OK || (ranges.requires_root==required && !ranges.unresolved));
 }
@@ -88,23 +88,23 @@ static void invocation_seed_range_literals(void) {
         else if (mode==12) run.count=0;
         else run.count=2;
         XrXirRootEffects failed={true,true};
-        CHECK(effect_invocation_input_seed(&work,&body,0,&failed)==XR_XIR_BAD_STRUCTURE &&
+        CHECK(effect_invocation_input_seed(&work,&body,0,&failed, NULL)==XR_XIR_BAD_STRUCTURE &&
             failed.requires_root && failed.unresolved);
     }
     run.first=0;
     run.base.op=XR_XIR_CONST_INT;run.count=function.instruction_count=512;run.mask=64;run.delta[6]=1;
     XrXirRootEffects output={true,true};uint64_t before=rp_stats(&work).work;
-    CHECK(effect_invocation_input_seed(&work,&body,0,&output)==XR_XIR_OK && !output.requires_root && !output.unresolved);
+    CHECK(effect_invocation_input_seed(&work,&body,0,&output, NULL)==XR_XIR_OK && !output.requires_root && !output.unresolved);
     uint64_t cost=rp_stats(&work).work-before;
     run.count=function.instruction_count=1024;before=rp_stats(&work).work;
-    CHECK(effect_invocation_input_seed(&work,&body,0,&output)==XR_XIR_OK && rp_stats(&work).work-before==cost);
+    CHECK(effect_invocation_input_seed(&work,&body,0,&output, NULL)==XR_XIR_OK && rp_stats(&work).work-before==cost);
     CHECK(rp_attempts==allocations);rp_owner_free(&work,baseline);rp_balanced(physical);
     for (uint32_t exact=0;exact<2;++exact) {
         work=rp_owner(rp_caps());baseline=rp_stats(&work).live_bytes;body.resources=work.resources;
         uint64_t available=cost-(exact?0u:1u),used=rp_stats(&work).work;
         CHECK(xr_compile_resources_work(work.resources,rp_caps().work-used-available)==XR_COMPILE_RESOURCE_OK);
         allocations=rp_attempts;output=(XrXirRootEffects){true,true};before=rp_stats(&work).work;
-        CHECK(effect_invocation_input_seed(&work,&body,0,&output)==(exact?XR_XIR_OK:XR_XIR_BUDGET));
+        CHECK(effect_invocation_input_seed(&work,&body,0,&output, NULL)==(exact?XR_XIR_OK:XR_XIR_BUDGET));
         CHECK(exact?(!output.requires_root && !output.unresolved):(output.requires_root && output.unresolved));
         CHECK(rp_stats(&work).work-before==cost-(exact?0u:sizeof(output)) && rp_attempts==allocations);
         rp_owner_free(&work,baseline);rp_balanced(physical);

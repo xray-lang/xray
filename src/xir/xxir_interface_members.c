@@ -17,7 +17,13 @@
 #include "../base/xmalloc.h"
 #include <string.h>
 
-typedef struct MemberMemory { struct MemberMemory *next; } MemberMemory;
+typedef struct MemberMemory {
+    struct MemberMemory *next;
+    size_t capacity,used;
+    XirReadClaim claim;
+} MemberMemory;
+_Static_assert(_Alignof(MemberMemory)>=_Alignof(XrXirTypeNode) &&
+    sizeof(MemberMemory)%_Alignof(MemberMemory)==0,"Member slices preserve type metadata alignment");
 typedef struct MemberApplication {
     struct MemberApplication *next;
     uint32_t declaration, count, index;
@@ -45,6 +51,8 @@ typedef struct MemberContext {
     bool nodes_owned;
     XrXirType *root_arguments;
     MemberMemory *memory;
+    MemberMemory *slice;
+    size_t slice_capacity;
     XirReadScratch *read;
     MemberApplication *applications, *tail;
     MemberRequirement *requirements;
@@ -64,21 +72,42 @@ struct XrXirInterfaceClosure {
 static void *member_reserve(MemberContext *c, uint64_t count, size_t size, bool clear) {
     XrXirStatus allocation_status = XR_XIR_OK;
     if (!count || c->status != XR_XIR_OK) return NULL;
-    if (count > (SIZE_MAX - sizeof(MemberMemory)) / size ||
-(sizeof(MemberMemory) + count * size > SIZE_MAX)) {
+    if (!size || count>SIZE_MAX/size) {
         c->status = XR_XIR_BUDGET; return NULL;
     }
-    size_t bytes = sizeof(MemberMemory) + (size_t)count * size;
-    MemberMemory *memory = xir_read_scratch_alloc(&c->remaining,c->read,bytes,clear,&allocation_status);
-    if (!memory) { c->status = allocation_status; return NULL; }
-
-    memory->next = c->memory; c->memory = memory; return memory + 1;
+    size_t alignment=_Alignof(MemberMemory),bytes=(size_t)count*size;
+    if(bytes>SIZE_MAX-(alignment-1)) {c->status=XR_XIR_BUDGET;return NULL;}
+    size_t rounded=(bytes+alignment-1)/alignment*alignment;
+    MemberMemory *memory=c->slice;
+    if(rounded>4096 || !memory || rounded>memory->capacity-memory->used) {
+        size_t capacity=rounded;
+        if(rounded<=4096) {
+            capacity=c->slice_capacity?c->slice_capacity:256;
+            while(capacity<rounded) capacity*=2;
+            if(c->slice && capacity<4096) capacity*=2;
+            if(capacity>4096) capacity=4096;
+        }
+        if(capacity>SIZE_MAX-sizeof(*memory)) {c->status=XR_XIR_BUDGET;return NULL;}
+        XirReadClaim claim={0};
+        /* Large zero-dependent arrays still consume prepared clear storage.
+         * Small objects initialize at most one bounded slice without callbacks. */
+        bool prepared_clear=clear && rounded>4096;
+        memory=xir_read_scratch_alloc(&c->remaining,c->read,sizeof(*memory)+capacity,
+            prepared_clear,&claim,&allocation_status);
+        if(!memory) {c->status=allocation_status;return NULL;}
+        *memory=(MemberMemory){.next=c->memory,.capacity=capacity,.claim=claim};c->memory=memory;
+        if(rounded<=4096) {c->slice=memory;c->slice_capacity=capacity;}
+    }
+    void *output=(unsigned char *)(memory+1)+memory->used;memory->used+=rounded;
+    if(clear && rounded<=4096) memset(output,0,bytes);
+    return output;
 }
 static void *member_alloc(MemberContext *c, uint64_t count, size_t size) {
     return member_reserve(c, count, size, true);
 }
 static void member_dispose(MemberContext *c) {
-    while (c->memory) { MemberMemory *next = c->memory->next; xir_read_scratch_release(c->read,c->memory); c->memory = next; }
+    while (c->memory) { MemberMemory *next = c->memory->next; xir_read_scratch_release(c->read,c->memory,&c->memory->claim); c->memory = next; }
+    c->slice=NULL;c->slice_capacity=0;
 }
 static bool member_identity(MemberContext *c, uint32_t count) {
     if (count > XR_XIR_TYPE_PARAMETER_LIMIT-XR_XIR_TYPE_PARAMETER_BASE) {
@@ -155,13 +184,13 @@ static XrXirType member_node(MemberContext *c,XrXirTypeNode node) {
     XrXirType *members=member_alloc(c,node.parameter_count,sizeof(*members));
     if (node.parameter_count && !members) return XR_XIR_UNIT;
     for (uint32_t p=0;p<node.parameter_count;++p) members[p]=node.parameters[p].type;
-    XrXirErrorUnion normalized={0};
-    c->status=xr_xir_compile_error_union(&c->remaining,&c->types,members,node.parameter_count,&normalized);
+    XrXirErrorUnion normalized={0};XirReadClaim claim={0};
+    c->status=xir_error_union_read(&c->remaining,&c->types,members,node.parameter_count,&normalized,c->read,&claim);
     if (c->status!=XR_XIR_OK) return XR_XIR_UNIT;
     if (normalized.scalar) return normalized.scalar;
     XrXirCallableParameter *parameters=member_alloc(c,normalized.count,sizeof(*parameters));
     if (parameters) memcpy(parameters,normalized.members,(size_t)normalized.count*sizeof(*parameters));
-    xr_compile_resources_free(normalized.members);
+    xir_read_scratch_release(c->read,normalized.members,&claim);
     if (!parameters) return XR_XIR_UNIT;
     node.parameters=parameters;node.parameter_count=normalized.count;node.parameter_span=0;
     for (uint32_t p=0;p<node.parameter_count;++p) member_span(c,&node,parameters[p].type);
@@ -516,7 +545,7 @@ XR_FUNC const XrXirInterfaceRequirement *xr_xir_interface_closure_requirement(
 XR_FUNC void xr_xir_compile_interface_closure_free(XrXirInterfaceClosure *closure) {
     MemberMemory *memory = closure ? closure->memory : NULL;
     XirReadScratch *read=closure?closure->read:NULL;
-    while (memory) { MemberMemory *next = memory->next; xir_read_scratch_release(read,memory); memory = next; }
+    while (memory) { MemberMemory *next = memory->next; xir_read_scratch_release(read,memory,&memory->claim); memory = next; }
 }
 XR_FUNC XrXirStatus xr_xir_compile_interfaces_verify_members_verified(const XrXirCompileContext *compile_context, const XrXirInterfaceTable *table, const XrXirTypes *types) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;

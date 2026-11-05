@@ -38,7 +38,7 @@ static void pc_occupied(void) {
     CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
     XrXirEffects sentinel={0},*occupied=&sentinel;memset(&sentinel,0x5a,sizeof(sentinel));
     XrXirEffects copy=sentinel;XrCompileResourceStats before=pc_stats(&c);
-    CHECK(xr_xir_compile_effects_infer_verified(&c,&f.module,&occupied)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_effects_infer_verified(&c,&f.module,&occupied, NULL)==XR_XIR_BAD_STRUCTURE);
     XrCompileResourceStats after=pc_stats(&c);
     CHECK(occupied==&sentinel && !memcmp(&copy,&sentinel,sizeof(copy)));
     CHECK(before.work==after.work && before.allocated_bytes==after.allocated_bytes && before.live_bytes==after.live_bytes);

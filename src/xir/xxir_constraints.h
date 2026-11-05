@@ -20,5 +20,9 @@ XR_FUNC void xr_xir_compile_constraint_array_free(XrXirConstraint *constraints, 
 /* Requires verified pools sharing nominal declaration identities. Ordered record
  * equality preserves canonical interface identity and declaration-local parameter
  * ordinals while matching argument structure across those type pools. */
+struct XirReadScratch;
+XR_FUNC XrXirStatus xir_constraint_records_read(const XrXirCompileContext *context,
+    const XrXirTypes *from_types,XrXirConstraint from,const XrXirTypes *to_types,XrXirConstraint to,
+    uint32_t count,struct XirReadScratch *memory);
 XR_FUNC XrXirStatus xr_xir_compile_constraint_records_match(const XrXirCompileContext *compile_context, const XrXirTypes *from_types, XrXirConstraint from, const XrXirTypes *to_types, XrXirConstraint to, uint32_t parameter_count);
 #endif // XXIR_CONSTRAINTS_H

@@ -178,8 +178,12 @@ static void instance_limits(void) {
 #include "library_resources.h"
 #include "library_controls.h"
 #include "library_emit.h"
+#include "prepared_read_cases.h"
 int main(int argc,char **argv) {
     CHECK(argc>=2 && argc<=4);
+    if(!strcmp(argv[1],"prepared-workspace")) {
+        CHECK(argc==2);prepared_packet_mode(false);prepared_packet_mode(true);prepared_current_views();return 0;
+    }
     if (!strcmp(argv[1],"library-emit")) { CHECK(argc==4);library_comptime_emit(argv[2],argv[3]);return 0; }
     if (!strcmp(argv[1],"library-site-controls")) { CHECK(argc==2);library_comptime_site_controls();return 0; }
     if (!strcmp(argv[1],"library-controls")) { CHECK(argc==2);library_comptime_controls();return 0; }

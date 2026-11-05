@@ -185,7 +185,7 @@ static XrXirStatus invocation_edge_operation(const XrXirCompileContext *context,
     if (mode==2) { invocation_edge_phi_fixture(&phi);module=&phi.module; }
     else { ci_fixture(&cells,mode?CI_GO:CI_CALL,mode!=0,true);module=&cells.module; }
     XrXirEffects *effects=NULL;XrXirStatus status=xir_fixture_verify(context,module,NULL);
-    if (status==XR_XIR_OK) status=xr_xir_compile_effects_infer_verified(context,module,&effects);
+    if (status==XR_XIR_OK) status=xr_xir_compile_effects_infer_verified(context,module,&effects, NULL);
     if (status==XR_XIR_OK) {
         invocation_edge_published_keys(effects->invocations->final,mode);
         CHECK(effect_final_outcomes(effects)->words==1 && effect_final_outcomes(effects)->errors[1]==(mode==2?UINT64_C(0):mode?UINT64_C(4):UINT64_C(12)));

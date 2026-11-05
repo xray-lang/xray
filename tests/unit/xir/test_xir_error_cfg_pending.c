@@ -392,9 +392,9 @@ static void pc_local_final_mutations(const XrXirCompileContext *c,
      * mutable receiving rows are made mutually consistent after a callback. */
     EffectInvocationNode init=equations->nodes[0];equations->nodes[0].intrinsic_mask=0;
     equations->nodes[0].local_mask=0;function->formula.constant_mask=0;
-    CHECK(effect_invocation_certificate_result_match(c,certificate,(&certificate->final->summary))==XR_XIR_BAD_STRUCTURE);
+    CHECK(effect_invocation_certificate_result_match(c,certificate,(&certificate->final->summary), NULL)==XR_XIR_BAD_STRUCTURE);
     equations->nodes[0]=init;function->formula=formula;
-    CHECK(effect_invocation_certificate_result_match(c,certificate,(&certificate->final->summary))==XR_XIR_OK);
+    CHECK(effect_invocation_certificate_result_match(c,certificate,(&certificate->final->summary), NULL)==XR_XIR_OK);
 }
 
 static void pc_local_source_fields(const XrXirCompileContext *c,
@@ -439,7 +439,7 @@ static void pc_local_transfer_positive(void) {
     CHECK(effect_physical_opcode(actual->functions[1].instructions[1].op)&EFFECT_PHYSICAL_TRANSFER);
     CHECK(xr_xir_compile_effects_analyze(checked,&effects)==XR_XIR_OK);pc_empty_golden(effects,0);
     EffectInvocationLocalInput *inputs=NULL;
-    CHECK(effect_invocation_local_inputs(&c,effects->invocations->body,&inputs)==XR_XIR_OK && !inputs);
+    CHECK(effect_invocation_local_inputs(&c,effects->invocations->body,&inputs, NULL)==XR_XIR_OK && !inputs);
     CHECK(effect_invocation_public_gate(&c,effects->invocations)==XR_XIR_OK);
     xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);pc_release(&c,baseline);
 }
@@ -481,17 +481,17 @@ static void pc_local_callback_boundary(void) {
     EdgeFixture fixture;pc_empty_fixture(&fixture,0);
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&c,&fixture.module,&checked,NULL)==XR_XIR_OK);
-    CHECK(effect_infer_construct(&c,xr_xir_compile_artifact_module(checked),NULL,&effects)==XR_XIR_OK);pc_empty_constructed(effects,0);
+    CHECK(effect_infer_construct(&c,xr_xir_compile_artifact_module(checked),NULL,&effects, NULL)==XR_XIR_OK);pc_empty_constructed(effects,0);
     const XrXirModule *source=xr_xir_compile_artifact_module(checked);EffectGraph graph={0};
     CHECK(effect_graph_build(source,effects,&graph,&c)==XR_XIR_OK && graph.physical_owned);
     EffectBodyRequest body=effect_body_owned_request(&c,graph.material);
     EffectInvocationDriverInput input={&c,&body,effects,&graph,graph.material->declared,NULL};
     PcLocalCallback probe={0};EffectInvocationCertificate *certificate=NULL,*old=effects->invocations;
     EffectInvocationProjectionSink sink={c.resources,effects->count,&probe,pc_local_callback_write};
-    CHECK(effect_invocation_derive(&input,&certificate,&sink,&probe.receiving)==XR_XIR_OK &&
+    CHECK(effect_invocation_derive(&input,&certificate,&sink,&probe.receiving, NULL)==XR_XIR_OK &&
         certificate && !probe.receiving && probe.calls==3 && !graph.physical_owned);
     CHECK(effect_invocation_current_input_match(&c,source,certificate->body)==XR_XIR_OK);
-    CHECK(effect_invocation_publication_commit(&c,effects,&certificate)==XR_XIR_BAD_STRUCTURE &&
+    CHECK(effect_invocation_publication_commit(&c,effects,&certificate, NULL)==XR_XIR_BAD_STRUCTURE &&
         certificate && effects->invocations==old && effect_roots_read(effects)->root[0].requires_root);
     pc_empty_constructed(effects,0);effect_invocation_certificate_free(certificate);effect_graph_free(&graph);
     xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);pc_release(&c,baseline);
@@ -518,19 +518,19 @@ static void pc_local_release_boundary(void) {
     EdgeFixture fixture;pc_empty_fixture(&fixture,0);
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&c,&fixture.module,&checked,NULL)==XR_XIR_OK);
-    CHECK(effect_infer_construct(&c,xr_xir_compile_artifact_module(checked),NULL,&effects)==XR_XIR_OK);pc_empty_constructed(effects,0);
+    CHECK(effect_infer_construct(&c,xr_xir_compile_artifact_module(checked),NULL,&effects, NULL)==XR_XIR_OK);pc_empty_constructed(effects,0);
     const XrXirModule *source=xr_xir_compile_artifact_module(checked);EffectGraph graph={0};
     CHECK(effect_graph_build(source,effects,&graph,&c)==XR_XIR_OK && graph.physical_owned);
     EffectBodyRequest body=effect_body_owned_request(&c,graph.material);
     EffectInvocationDriverInput input={&c,&body,effects,&graph,graph.material->declared,NULL};
     EffectInvocationCertificate *certificate=NULL,*old=effects->invocations;
     EffectFinalFunctions *receiving=NULL;
-    CHECK(effect_invocation_derive(&input,&certificate,NULL,&receiving)==XR_XIR_OK &&
+    CHECK(effect_invocation_derive(&input,&certificate,NULL,&receiving, NULL)==XR_XIR_OK &&
         certificate && !receiving && !graph.physical_owned);
     CHECK(effect_invocation_current_input_match(&c,source,certificate->body)==XR_XIR_OK);
-    CHECK(effect_invocation_publication_match(&c,certificate,(&certificate->final->summary))==XR_XIR_OK);
+    CHECK(effect_invocation_publication_match(&c,certificate,(&certificate->final->summary), NULL)==XR_XIR_OK);
     pc_release_target=certificate;pc_release_poison_calls=0;pc_free_hook=pc_local_release_poison;
-    XrXirStatus status=effect_invocation_publication_commit(&c,effects,&certificate);
+    XrXirStatus status=effect_invocation_publication_commit(&c,effects,&certificate, NULL);
     pc_free_hook=NULL;pc_release_target=NULL;
     printf("allocator release ROOT pollution: callbacks%u status%u publishedRoot%u\n",
         pc_release_poison_calls,(unsigned)status,(unsigned)effect_roots_read(effects)->root[0].requires_root);
@@ -569,7 +569,7 @@ static void pc_local_formal_preflight(const XrXirCompileContext *c) {
     XrCompileResourceStats before=pc_stats(c);size_t allocations=attempts;
     size_t saved_failure=fail_at;bool saved_injected=injected;
     fail_at=attempts;injected=false;
-    CHECK(effect_invocation_local_inputs(c,body,&input)==XR_XIR_OK && !input && !injected);
+    CHECK(effect_invocation_local_inputs(c,body,&input, NULL)==XR_XIR_OK && !input && !injected);
     fail_at=saved_failure;injected=saved_injected;
     XrCompileResourceStats after=pc_stats(c);
     CHECK(attempts==allocations && after.allocation_count==before.allocation_count &&
@@ -582,18 +582,18 @@ static void pc_local_formal_preflight(const XrXirCompileContext *c) {
         if (mode==2) head->runs=NULL;
         if (mode==3) head->run_capacity=head->instruction_count+1;
         before=pc_stats(c);allocations=attempts;
-        CHECK(effect_invocation_local_inputs(c,body,&input)==XR_XIR_BAD_STRUCTURE && !input &&
+        CHECK(effect_invocation_local_inputs(c,body,&input, NULL)==XR_XIR_BAD_STRUCTURE && !input &&
             attempts==allocations && pc_stats(c).allocated_bytes==before.allocated_bytes &&
             pc_stats(c).live_bytes==before.live_bytes);
         *head=saved;
-        CHECK(effect_invocation_local_inputs(c,body,&input)==XR_XIR_OK && !input);
+        CHECK(effect_invocation_local_inputs(c,body,&input, NULL)==XR_XIR_OK && !input);
     }
     xr_xir_compile_artifact_free(checked);memset(functions,0xa5,sizeof(functions));
     memset(identities,0xa5,sizeof(identities));memset(&module,0xa5,sizeof(module));
     memset(&operation,0xa5,sizeof(operation));memset(&initializer,0xa5,sizeof(initializer));
     parameter=XR_XIR_BOOL;
     before=pc_stats(c);allocations=attempts;
-    CHECK(effect_invocation_local_inputs(c,body,&input)==XR_XIR_OK && !input &&
+    CHECK(effect_invocation_local_inputs(c,body,&input, NULL)==XR_XIR_OK && !input &&
         attempts==allocations && pc_stats(c).live_bytes==before.live_bytes &&
         pc_stats(c).work-before.work==13);
     effect_body_material_free(body);
@@ -633,7 +633,7 @@ static void pc_local_equation_controls(void) {
     EffectInvocationCertificate *certificate=effects->invocations;EffectInvocationLocalInput *inputs=NULL;
     CHECK(certificate && certificate->final && certificate->body->domain.types->count==2 &&
         xr_xir_type_is_cell(certificate->body->domain.types,(XrXirType)EE_CELL));
-    CHECK(effect_invocation_local_inputs(&c,certificate->body,&inputs)==XR_XIR_OK && inputs);
+    CHECK(effect_invocation_local_inputs(&c,certificate->body,&inputs, NULL)==XR_XIR_OK && inputs);
     CHECK(inputs[0].facts.requires_root && !inputs[0].facts.unresolved &&
         inputs[0].witnesses[0].cause==XR_XIR_ROOT_CAUSE_INITIALIZER &&
         !inputs[1].facts.requires_root && !inputs[2].facts.requires_root && effect_final_outcomes(effects)->errors[2]==8);
@@ -645,15 +645,15 @@ static void pc_local_equation_controls(void) {
     CHECK(xr_compile_resources_new(&caps,&foreign.resources)==XR_COMPILE_RESOURCE_OK);
     foreign.limits=c.limits;EffectInvocationLocalInput *occupied=inputs,*missing=NULL;
     size_t allocations=attempts;XrCompileResourceStats before=pc_stats(&c);
-    CHECK(effect_invocation_local_inputs(&c,certificate->body,&occupied)==XR_XIR_BAD_STRUCTURE && occupied==inputs);
-    CHECK(effect_invocation_local_inputs(&foreign,certificate->body,&missing)==XR_XIR_BAD_STRUCTURE && !missing);
-    CHECK(effect_invocation_local_inputs(NULL,certificate->body,&missing)==XR_XIR_BAD_STRUCTURE && !missing &&
+    CHECK(effect_invocation_local_inputs(&c,certificate->body,&occupied, NULL)==XR_XIR_BAD_STRUCTURE && occupied==inputs);
+    CHECK(effect_invocation_local_inputs(&foreign,certificate->body,&missing, NULL)==XR_XIR_BAD_STRUCTURE && !missing);
+    CHECK(effect_invocation_local_inputs(NULL,certificate->body,&missing, NULL)==XR_XIR_BAD_STRUCTURE && !missing &&
         attempts==allocations && pc_stats(&c).work==before.work);
     xr_compile_resources_release(foreign.resources);xr_compile_resources_free(inputs);inputs=NULL;
     xr_xir_compile_artifact_free(checked);checked=NULL;memset(&fixture,0xa5,sizeof(fixture));
-    CHECK(effect_invocation_local_inputs(&c,certificate->body,&inputs)==XR_XIR_OK && inputs);
+    CHECK(effect_invocation_local_inputs(&c,certificate->body,&inputs, NULL)==XR_XIR_OK && inputs);
     CHECK(effect_invocation_local_equations_match(&c,certificate->final,inputs)==XR_XIR_OK);
-    CHECK(effect_invocation_certificate_result_match(&c,certificate,(&certificate->final->summary))==XR_XIR_OK);
+    CHECK(effect_invocation_certificate_result_match(&c,certificate,(&certificate->final->summary), NULL)==XR_XIR_OK);
     CHECK(effect_invocation_public_gate(&c,certificate)==XR_XIR_OK);pc_empty_golden(effects,0);
     xr_compile_resources_free(inputs);xr_xir_compile_effects_free(effects);
     pc_local_formal_preflight(&c);pc_release(&c,baseline);
@@ -669,9 +669,9 @@ static void pc_empty_cost(void) {
         XrXirArtifact *checked=NULL;XrXirEffects *e=NULL;
         CHECK(xir_fixture_check(&c, &f.module, &checked, NULL)==XR_XIR_OK);
         const XrXirModule *owned=xr_xir_compile_artifact_module(checked);
-        CHECK(owned && owned->stage==XR_XIR_CHECKED && xr_xir_compile_verify_v2(&c,owned,xr_xir_compile_artifact_construction(checked), NULL)==XR_XIR_OK);
+        CHECK(owned && owned->stage==XR_XIR_CHECKED && xr_xir_compile_verify_v2(&c,owned,xr_xir_compile_artifact_construction(checked), NULL, NULL)==XR_XIR_OK);
         uint64_t before=pc_stats(&c).work;
-        CHECK(xr_xir_compile_effects_infer_verified(&c,owned,&e)==XR_XIR_OK);
+        CHECK(xr_xir_compile_effects_infer_verified(&c,owned,&e, NULL)==XR_XIR_OK);
         pc_empty_golden(e,reverse);uint64_t cost=pc_stats(&c).work-before;
         printf("empty inference actual reverse%u work%llu frozen_limit20000\n",reverse,(unsigned long long)cost);
         fflush(stdout);

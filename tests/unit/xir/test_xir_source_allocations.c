@@ -47,7 +47,7 @@ static XrXirStatus allocation_transition_refine(const XrXirCompileContext *conte
     const XrXirModule *module, const XrXirRootRefiner *refiner, XrXirEffects **output) {
     XrCompileResourceStats before, after;
     CHECK(xr_compile_resources_stats(context->resources, &before) == XR_COMPILE_RESOURCE_OK);
-    XrXirStatus status = xr_xir_compile_effects_refine_verified(context, module, refiner, output);
+    XrXirStatus status = xr_xir_compile_effects_refine_verified(context, module, refiner, output, NULL);
     CHECK(xr_compile_resources_stats(context->resources, &after) == XR_COMPILE_RESOURCE_OK);
     if (allocation_transition_observed)
         fprintf(stderr, "Source transition refine_return status=%u before=%llu after=%llu\n",
@@ -58,7 +58,7 @@ static XrXirStatus allocation_transition_verify(const XrXirCompileContext *conte
     const XrXirModule *module, const XrXirConstruction *construction, const XrXirEffects *effects, XrXirDiagnostic *diagnostic) {
     XrCompileResourceStats before, after;
     CHECK(xr_compile_resources_stats(context->resources, &before) == XR_COMPILE_RESOURCE_OK);
-    XrXirStatus status = xr_xir_compile_verify_effects_v2(context, module, construction, effects, diagnostic);
+    XrXirStatus status = xr_xir_compile_verify_effects_v2(context, module, construction, effects, diagnostic, NULL);
     CHECK(xr_compile_resources_stats(context->resources, &after) == XR_COMPILE_RESOURCE_OK);
     if (allocation_transition_observed)
         fprintf(stderr, "Source transition verify stage=%u status=%u before=%llu after=%llu\n",
@@ -138,7 +138,7 @@ static XrXirStatus allocation_refinement_check(const XrXirCompileContext *contex
     if (allocation_transition_observed) {
         allocation_effect_work_totals = (AllocationEffectWork){0};
     }
-    XrXirStatus status = xr_xir_compile_check_refined_v2(context, built, construction, &observed, control, output, diagnostic);
+    XrXirStatus status = xr_xir_compile_check_refined_v2(context, built, construction, &observed, control, output, diagnostic, NULL);
     if (allocation_transition_observed) allocation_effect_work_report();
     allocation_transition_observed = prior;
     CHECK(xr_compile_resources_stats(context->resources, &after) == XR_COMPILE_RESOURCE_OK);

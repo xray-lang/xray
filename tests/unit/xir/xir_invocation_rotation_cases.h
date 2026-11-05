@@ -34,7 +34,7 @@ static XrXirStatus invocation_rotation_derive(const XrXirCompileContext *context
         status=effect_invocation_collect(context,module,&effects,&graph,bounds,&owned_input);
         if (status==XR_XIR_OK) status=effect_invocation_current_input_match(context,module,graph.material);
         EffectInvocationDriverInput input={context,&owned_input,&effects,&graph,graph.material->declared,NULL};
-        if (status==XR_XIR_OK) status=effect_invocation_derive(&input,output,NULL,&receiving);
+        if (status==XR_XIR_OK) status=effect_invocation_derive(&input,output,NULL,&receiving, NULL);
     }
     effect_invocation_result_free(receiving);
     effect_graph_free(&graph);invocation_core_storage_free(&effects);

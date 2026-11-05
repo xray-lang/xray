@@ -9,7 +9,7 @@
 static void complete_verify(const XrXirCompileContext *work,const EffectInvocationFinal *final,XrXirStatus expected) {
     size_t before=attempts;uint64_t physical=live_bytes;
     pc_allocate_hook=edges_forbid;pc_free_hook=edges_forbid;
-    XrXirStatus status=effect_capture_match(work,final);
+    XrXirStatus status=effect_capture_match(work,final, NULL);
     pc_allocate_hook=NULL;pc_free_hook=NULL;
     CHECK(status==expected && attempts==before && live_bytes==physical);
 }
@@ -70,10 +70,10 @@ static void complete_growth_boundary(const XrXirCompileContext *work,EffectInvoc
             if(saved.facts[p].word!=EFFECT_CAPTURE_FLAGS || saved.facts[p].bit<EFFECT_CAPTURE_COMPLETE) facts[at++]=saved.facts[p];
         final->capture=(EffectCaptureProof){.facts=facts,.count=count,.capacity=count};
         EffectCaptureRead read={.work=work,.final=final};
-        CHECK(effect_capture_frame(&read)==XR_XIR_OK);
+        CHECK(effect_capture_frame(&read, NULL)==XR_XIR_OK);
         read.builder=&final->capture;complete_growth_facts=facts;
         complete_growth_callbacks=0;complete_growth_attack=attack!=0;pc_free_hook=complete_growth_free;
-        do { read.changed=false;status=effect_capture_complete_clauses(&read); } while(status==XR_XIR_OK && read.changed);
+        do { read.changed=false;status=effect_capture_complete_clauses(&read, NULL); } while(status==XR_XIR_OK && read.changed);
         pc_free_hook=NULL;
         CHECK(complete_growth_callbacks==1 && !read.body.current && !read.node_view);
         CHECK(status==(attack?XR_XIR_BAD_STRUCTURE:XR_XIR_OK));

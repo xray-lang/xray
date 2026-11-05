@@ -65,44 +65,64 @@ static XrXirStatus effect_program_parameter_domains(const XrXirCompileContext *w
 /* Pure final projections follow every temporary CFG release. Root and
  * suspension evidence retain their independent receiving checks. */
 static XrXirStatus effect_program_semantics_current(const XrXirCompileContext *work,
-    const XrXirEffects *effects) {
-    XrXirStatus status=effect_source_terminal_roles(work,effects);
+    const XrXirEffects *effects, XirReadOperation *read_operation) {
+    XrXirStatus status=effect_source_terminal_roles(work,effects, read_operation);
     if (status==XR_XIR_OK) status=effect_source_outcomes(work,effects);
     if (status==XR_XIR_OK) status=local_error_outcomes(work,effects->invocations->body,
         effect_final_outcomes(effects)->functions,true);
     return status;
 }
 
-XR_FUNC XrXirStatus xir_effects_program_final_verify(const XrXirCompileContext *work,
-    const XrXirModule *source,const XrXirEffects *effects) {
+XR_FUNC XrXirStatus xir_effects_program_final_verify_attempt_body(const XrXirCompileContext *work,
+    const XrXirModule *source,const XrXirEffects *effects, const XirReadRequest *read_request) {
     XrXirStatus status=xir_effects_program_body_match(work,source,effects);
     if (status==XR_XIR_OK) status=effect_program_final_storage(work,effects);
     if (status!=XR_XIR_OK) return status;
     const EffectInvocationCertificate *certificate=effects->invocations;
     const EffectFinalOutcomes *final=effect_final_outcomes(effects);
     if (!final || effects->generation || effects->refinement) return XR_XIR_BAD_STRUCTURE;
-    status=effect_source_relations(work,certificate,effects);
+    status=effect_source_relations(work,certificate,effects, read_request);
     if(status==XR_XIR_OK) status=effect_program_parameter_domains(work,effects);
     bool contexts=source->provenance && source->provenance->kind==XR_XIR_EVIDENCE_TEMPLATE &&
         source->declarations && source->declarations->functions;
     if (status==XR_XIR_OK) {
-        if (contexts) status=effect_source_contexts(work,source,effects);
+        if (contexts) status=effect_source_contexts(work,source,effects,read_request);
         else if (final->contexts) status=XR_XIR_BAD_STRUCTURE;
     }
     if (status==XR_XIR_OK) status=local_errors_owned(work,certificate->body,NULL);
     if (status==XR_XIR_OK) status=effect_program_final_storage(work,effects);
     if (status==XR_XIR_OK) status=effect_source_publication_match(work,source,effects);
-    if (status==XR_XIR_OK) status=effect_program_semantics_current(work,effects);
+    if (status==XR_XIR_OK) status=effect_program_semantics_current(work,effects, read_request ? read_request->operation : NULL);
     if (status==XR_XIR_OK) status=xir_effects_program_body_match(work,source,effects);
     if (status==XR_XIR_OK) status=effect_invocation_current_input_match(work,source,certificate->body);
     return status;
 }
+/* Nested readers propagate preparation to the complete pure parent. Only
+ * this lexical boundary may retire its derived prefix and call the client. */
+XR_FUNC XrXirStatus xir_effects_program_final_verify(const XrXirCompileContext *work,
+    const XrXirModule *source,const XrXirEffects *effects, const XirReadRequest *read_request) {
+    if(read_request && !xir_read_request_matches(work,read_request)) return XR_XIR_BAD_STRUCTURE;
+    if(!read_request || read_request->attempt)
+        return xir_effects_program_final_verify_attempt_body(work, source, effects, read_request);
+    if(!read_request->operation || !xir_compile_context_valid(work) ||
+        read_request->operation->capacity.resources!=(work)->resources) return XR_XIR_BAD_STRUCTURE;
+    XirReadAttempt attempt={true};XirReadRequest request=*read_request;request.attempt=&attempt;
+    for(;;) {
+        XrXirStatus status=xir_read_begin(work,request.operation);
+        if(status==XR_XIR_OK) status=xir_effects_program_final_verify_attempt_body(work, source, effects, &request);
+        XirReadStep step=xir_read_step(request.operation,status);
+        if(step.kind!=XIR_READ_NEED_PREPARE) return status;
+        status=xir_read_prepare(work,request.operation,request.control);
+        if(status!=XR_XIR_OK) return status;
+    }
+}
+
 
 /* No allocation or release occurs in this current ROOT replay. The complete
  * receiving proof still precedes it; this closes later preparation callbacks
  * over the actual equations, causes, formulas and published ROOT records. */
 XR_FUNC XrXirStatus xir_effects_program_root_current(const XrXirCompileContext *work,
-    const XrXirModule *source,const XrXirEffects *effects) {
+    const XrXirModule *source,const XrXirEffects *effects, XirReadOperation *read_operation) {
     XrXirStatus status=xir_effects_program_body_match(work,source,effects);
     if (status==XR_XIR_OK) status=effect_program_final_storage(work,effects);
     if (status!=XR_XIR_OK) return status;
@@ -111,9 +131,12 @@ XR_FUNC XrXirStatus xir_effects_program_root_current(const XrXirCompileContext *
     if (status==XR_XIR_OK) status=effect_source_result_views(certificate,effects);
     if (status==XR_XIR_OK) status=effect_program_parameter_domains(work,effects);
     if (status==XR_XIR_OK) status=effect_source_atoms(work,certificate);
-    if (status==XR_XIR_OK) status=effect_source_projections(work,certificate);
+    const XirReadRequest request={.operation=read_operation};
+    if(status==XR_XIR_OK && (!read_operation || read_operation->capacity.resources!=work->resources))
+        status=XR_XIR_BAD_STRUCTURE;
+    if (status==XR_XIR_OK) status=effect_source_projections(work,certificate,&request);
     if (status==XR_XIR_OK) status=effect_source_publication_match(work,source,effects);
-    if (status==XR_XIR_OK) status=effect_program_semantics_current(work,effects);
+    if (status==XR_XIR_OK) status=effect_program_semantics_current(work,effects, read_operation);
     return status;
 }
 

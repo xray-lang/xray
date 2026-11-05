@@ -135,7 +135,7 @@ static XrXirStatus conditional_class_rows_replay(const XrXirCompileContext *cont
     replay.work=context;replay.roles=(EffectInvocationRoles){.sealed=certificate};
     replay.declared=certificate->declared;
     EffectBodyRequest body=effect_body_owned_request(context,certificate->body);
-    XrXirStatus status=effect_capture_match(context,certificate->final);
+    XrXirStatus status=effect_capture_match(context,certificate->final, NULL);
     if(status==XR_XIR_OK) status=effect_invocation_cell_terminals_read(&replay,&body);
     effect_invocation_read_close(&replay);return status;
 }

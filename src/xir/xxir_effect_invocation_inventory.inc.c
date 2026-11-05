@@ -151,7 +151,7 @@ static XrXirStatus effect_final_inventory_seeds(const XrXirCompileContext *work,
     return XR_XIR_OK;
 }
 static XrXirStatus effect_final_inventory_match(const XrXirCompileContext *work,
-    const EffectBodyMaterial *material,const EffectInvocationFinal *final) {
+    const EffectBodyMaterial *material,const EffectInvocationFinal *final, XirReadOperation *read_operation) {
     XrXirStatus status=effect_role_range(work,final,1,sizeof(*final));if(status!=XR_XIR_OK) return status;
     status=effect_role_proof_match(work,material,&final->role_proof);if(status!=XR_XIR_OK) return status;
     uint32_t functions=effect_body_count(material);
@@ -163,14 +163,14 @@ static XrXirStatus effect_final_inventory_match(const XrXirCompileContext *work,
     if(status==XR_XIR_OK) status=effect_final_inventory_keys(work,material,final);
     if(status==XR_XIR_OK) status=effect_final_inventory_seeds(work,material,final);
     if(status==XR_XIR_OK) status=effect_final_inventory_edges(work,material,final);
-    if(status==XR_XIR_OK) status=effect_capture_match(work,final);
+    if(status==XR_XIR_OK) status=effect_capture_match(work,final, read_operation);
     return status;
 }
 static XrXirStatus effect_final_inventories_match(const XrXirCompileContext *work,
-    const EffectInvocationCertificate *certificate,const EffectFinalOutcomes *outcomes) {
+    const EffectInvocationCertificate *certificate,const EffectFinalOutcomes *outcomes, XirReadOperation *read_operation) {
     XrXirStatus status=effect_role_range(work,certificate,1,sizeof(*certificate));if(status!=XR_XIR_OK) return status;
     if(certificate->resources!=work->resources) return XR_XIR_BAD_STRUCTURE;
-    status=effect_final_inventory_match(work,certificate->body,certificate->final);if(status!=XR_XIR_OK) return status;
+    status=effect_final_inventory_match(work,certificate->body,certificate->final, read_operation);if(status!=XR_XIR_OK) return status;
     status=effect_role_range(work,outcomes,1,sizeof(*outcomes));if(status!=XR_XIR_OK) return status;
     status=effect_role_contracts_match(work,certificate->body,&certificate->final->role_proof,
         outcomes->contracts,effect_body_count(certificate->body));
@@ -181,5 +181,5 @@ static XrXirStatus effect_final_inventories_match(const XrXirCompileContext *wor
     const EffectInvocationCertificate *nested=contexts->forest->invocations;
     status=effect_role_range(work,nested,1,sizeof(*nested));if(status!=XR_XIR_OK) return status;
     if(nested->resources!=work->resources) return XR_XIR_BAD_STRUCTURE;
-    return effect_final_inventory_match(work,nested->body,nested->final);
+    return effect_final_inventory_match(work,nested->body,nested->final, read_operation);
 }

@@ -39,6 +39,15 @@
       ]
     },
     {
+      "name": "generic_parent_method_value",
+      "kind": "accept",
+      "expected_result": 69,
+      "rules": [
+        "319.2.4.11",
+        "319.2.5.5"
+      ]
+    },
+    {
       "name": "optional_layers",
       "kind": "accept",
       "expected_result": 12,

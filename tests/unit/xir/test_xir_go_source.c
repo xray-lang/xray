@@ -107,13 +107,13 @@ static XrXirStatus source_task_graph(const XrXirCompileContext *context, void *o
     memset(packet.bytes, 0xa5, packet.length);
     xr_xir_compile_checked_packet_free(&packet);
     source_task_shape(xr_xir_compile_artifact_module(read), fixture);
-    status = xr_xir_compile_verify_v2(context, xr_xir_compile_artifact_module(read), xr_xir_compile_artifact_construction(read), NULL);
+    status = xr_xir_compile_verify_v2(context, xr_xir_compile_artifact_module(read), xr_xir_compile_artifact_construction(read), NULL, NULL);
     if (status != XR_XIR_OK) goto done;
     status = xr_xir_compile_specialize(read, &specialized, NULL, NULL);
     if (status != XR_XIR_OK) { CHECK(!specialized); goto done; }
     xr_xir_compile_artifact_free(read); read = NULL;
     xr_xir_compile_source_result_free(&result);
-    status = xr_xir_compile_verify_v2(context, xr_xir_compile_artifact_module(specialized), xr_xir_compile_artifact_construction(specialized), NULL);
+    status = xr_xir_compile_verify_v2(context, xr_xir_compile_artifact_module(specialized), xr_xir_compile_artifact_construction(specialized), NULL, NULL);
 done:
     xr_xir_compile_source_failure_free(&failure);
     xr_xir_compile_source_result_free(&result);

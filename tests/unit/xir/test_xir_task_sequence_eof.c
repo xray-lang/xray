@@ -25,7 +25,7 @@ int main(void) {
     EffectBodyMaterial *body=effects->invocations->body;
     CHECK(effect_body_material_shape(body) && body->domain.function_count==4);
     XrXirRootEffects root={0};
-    CHECK(effect_invocation_input_seed(&context,body,3,&root)==XR_XIR_OK);
+    CHECK(effect_invocation_input_seed(&context,body,3,&root, NULL)==XR_XIR_OK);
     CHECK(root.requires_root && !root.unresolved);
     EffectBodyFunction *function=&body->functions[3];
     CHECK(function->run_count && function->runs);
@@ -37,11 +37,11 @@ int main(void) {
         else if (damage==1) ++function->instruction_count;
         else tail->base.op=XR_XIR_INVALID;
         XrXirRootEffects output={false,true};
-        CHECK(effect_invocation_input_seed(&context,body,3,&output)==XR_XIR_BAD_STRUCTURE);
+        CHECK(effect_invocation_input_seed(&context,body,3,&output, NULL)==XR_XIR_BAD_STRUCTURE);
         CHECK(!output.requires_root && output.unresolved);
         tail->count=count;tail->base.op=opcode;
         if (damage==1) --function->instruction_count;
-        CHECK(effect_invocation_input_seed(&context,body,3,&root)==XR_XIR_OK && root.requires_root && !root.unresolved);
+        CHECK(effect_invocation_input_seed(&context,body,3,&root, NULL)==XR_XIR_OK && root.requires_root && !root.unresolved);
     }
     xr_xir_compile_effects_free(effects);rp_owner_free(&context,baseline);rp_balanced(physical);
     CHECK(!rp_live && !rp_live_bytes && !rp_allocation_observer);

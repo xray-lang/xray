@@ -328,7 +328,7 @@ static XrXirStatus effect_capture_complete_open(EffectCaptureRead *read,
  * preserve the current body and origin projections used by the next job. */
 static XrXirStatus effect_capture_complete_put(EffectCaptureRead *read,
     EffectBodyCurrentRead *current,EffectCaptureNode *borrowed,
-    EffectCaptureCompleteCoordinate coordinate,const EffectCaptureComplete *result) {
+    EffectCaptureCompleteCoordinate coordinate,const EffectCaptureComplete *result, XirReadOperation *read_operation) {
     EffectCaptureFact key={coordinate.node,coordinate.value,EFFECT_CAPTURE_FLAGS,
         EFFECT_CAPTURE_COMPLETE+coordinate.column,result->rank};
     const EffectCaptureFact *stored=NULL;XrXirStatus status=effect_capture_find(read,key,&stored);
@@ -346,12 +346,12 @@ static XrXirStatus effect_capture_complete_put(EffectCaptureRead *read,
         *borrowed=(EffectCaptureNode){0};*current=(EffectBodyCurrentRead){0};
     }
     status=effect_capture_emit(read,key);if(status!=XR_XIR_OK) return status;
-    return growing?effect_capture_frame(read):XR_XIR_OK;
+    return growing?effect_capture_frame(read, read_operation):XR_XIR_OK;
 }
 
 static XrXirStatus effect_capture_complete_walk(EffectCaptureRead *read,
     EffectBodyCurrentRead *current,EffectCaptureNode *borrowed,
-    EffectCaptureNode *views,EffectCaptureActualRead *actuals,EffectCaptureCompleteJobs *jobs) {
+    EffectCaptureNode *views,EffectCaptureActualRead *actuals,EffectCaptureCompleteJobs *jobs, XirReadOperation *read_operation) {
     if(read->final->binding_count>UINT32_MAX-EFFECT_CAPTURE_COMPLETE) return XR_XIR_BAD_STRUCTURE;
     for(uint32_t n=0;n<read->final->count;++n) for(uint32_t value=0;;++value) {
         uint32_t column=0;bool present=false;
@@ -404,7 +404,7 @@ static XrXirStatus effect_capture_complete_walk(EffectCaptureRead *read,
                     jobs->values[jobs->count++]=coordinate;
                 }
             }
-            status=effect_capture_complete_put(read,current,borrowed,coordinate,&result);
+            status=effect_capture_complete_put(read,current,borrowed,coordinate,&result, read_operation);
             if(status!=XR_XIR_OK) return status;
             if(column==read->final->binding_count) break;
             ++column;
@@ -421,7 +421,7 @@ static XrXirStatus effect_capture_complete_walk(EffectCaptureRead *read,
  * entire actual domain, independently of these constructor proposals. */
 static XrXirStatus effect_capture_complete_jobs(EffectCaptureRead *read,
     EffectBodyCurrentRead *current,EffectCaptureNode *borrowed,
-    EffectCaptureNode *views,EffectCaptureActualRead *actuals,const EffectCaptureCompleteJobs *jobs) {
+    EffectCaptureNode *views,EffectCaptureActualRead *actuals,const EffectCaptureCompleteJobs *jobs, XirReadOperation *read_operation) {
     if(!read->builder || !read->complete_scope || !jobs || jobs->overflow) return XR_XIR_BAD_STRUCTURE;
     for(uint32_t j=0;j<jobs->count;++j) {
 
@@ -435,7 +435,7 @@ static XrXirStatus effect_capture_complete_jobs(EffectCaptureRead *read,
             if(status!=XR_XIR_OK) return status;
             status=effect_capture_complete_value(read,node,coordinate.value,coordinate.column,&result);
         }
-        if(status==XR_XIR_OK) status=effect_capture_complete_put(read,current,borrowed,coordinate,&result);
+        if(status==XR_XIR_OK) status=effect_capture_complete_put(read,current,borrowed,coordinate,&result, read_operation);
         if(status!=XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
@@ -460,7 +460,7 @@ static XrXirStatus effect_capture_complete_empty(const EffectCaptureRead *read,b
     }
     *empty=true;return XR_XIR_OK;
 }
-static XrXirStatus effect_capture_complete_clauses(EffectCaptureRead *read) {
+static XrXirStatus effect_capture_complete_clauses(EffectCaptureRead *read, XirReadOperation *read_operation) {
     bool empty=false;XrXirStatus status=effect_capture_complete_empty(read,&empty);
     if(status!=XR_XIR_OK || empty) return status;
     const EffectBodyCurrentRead *saved_current=read->body.current;
@@ -473,7 +473,7 @@ static XrXirStatus effect_capture_complete_clauses(EffectCaptureRead *read) {
         status=effect_capture_complete_types_open(read);
     }
     read->node_view=NULL;
-    if(status==XR_XIR_OK) status=effect_capture_complete_walk(read,&current,&borrowed,NULL,NULL,NULL);
+    if(status==XR_XIR_OK) status=effect_capture_complete_walk(read,&current,&borrowed,NULL,NULL,NULL, read_operation);
     read->body.current=saved_current;read->node_view=saved_node;read->complete_types=NULL;
     return status;
 }
@@ -481,7 +481,7 @@ static XrXirStatus effect_capture_complete_clauses(EffectCaptureRead *read) {
 /* Only Complete flags change during this construction interval. Source
  * descriptors therefore remain current until a growing emit invokes a
  * callback; the walk drops every projection first and rebuilds afterwards. */
-static XrXirStatus effect_capture_complete_construct(EffectCaptureRead *read,EffectBodyCurrentRead *current) {
+static XrXirStatus effect_capture_complete_construct(EffectCaptureRead *read,EffectBodyCurrentRead *current, XirReadOperation *read_operation) {
     if(!current || current->work || current->material || !read->builder || read->complete_scope || read->body.current ||
         read->node_view || read->node_views || read->actuals || read->complete_types)
         return XR_XIR_BAD_STRUCTURE;
@@ -497,11 +497,11 @@ static XrXirStatus effect_capture_complete_construct(EffectCaptureRead *read,Eff
         types.count=0;read->complete_types=&types;
     }
     read->complete_scope=true;read->changed=false;
-    status=effect_capture_complete_walk(read,current,&borrowed,views,&actuals,&jobs);
+    status=effect_capture_complete_walk(read,current,&borrowed,views,&actuals,&jobs, read_operation);
     while(status==XR_XIR_OK && read->changed) {
         read->changed=false;
-        status=jobs.overflow?effect_capture_complete_walk(read,current,&borrowed,views,&actuals,NULL):
-            effect_capture_complete_jobs(read,current,&borrowed,views,&actuals,&jobs);
+        status=jobs.overflow?effect_capture_complete_walk(read,current,&borrowed,views,&actuals,NULL, read_operation):
+            effect_capture_complete_jobs(read,current,&borrowed,views,&actuals,&jobs, read_operation);
     }
     /* Only the parent's actual current descriptor may outlive this traversal.
      * A final growth or any failure leaves no loan for receiving or cleanup. */

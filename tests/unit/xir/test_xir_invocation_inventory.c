@@ -80,7 +80,7 @@ static uint32_t inventory_source_once(uint32_t cut,unsigned mode) {
     xr_xir_compile_artifact_free(checked);memset(ops,0xDC,sizeof(ops));memset(functions,0xDC,sizeof(functions));
     CHECK(error_finite_outcomes_match(&context,effects->invocations->body,final->outcomes)==XR_XIR_OK);
     size_t allocated=attempts;uint64_t physical=live_bytes;pc_allocate_hook=inventory_no_callback;pc_free_hook=inventory_no_callback;
-    CHECK(effect_final_inventories_match(&context,effects->invocations,final->outcomes)==XR_XIR_OK);
+    CHECK(effect_final_inventories_match(&context,effects->invocations,final->outcomes, NULL)==XR_XIR_OK);
     pc_allocate_hook=NULL;pc_free_hook=NULL;CHECK(attempts==allocated && live_bytes==physical);
     xr_xir_compile_effects_free(effects);pc_release(&context,baseline);
     CHECK(status==(mode?XR_XIR_BAD_STRUCTURE:XR_XIR_OK));return frees;

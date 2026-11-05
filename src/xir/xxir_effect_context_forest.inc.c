@@ -119,10 +119,10 @@ static XrXirStatus effect_invocation_context_edge_mask(const XrXirCompileContext
 /* Dense ordinals identify public declarations. An executing cause can visit
  * one body in several distinct invocation environments before its terminal. */
 static XrXirStatus effect_context_forest_seal(const XrXirCompileContext *context,
-    const XrXirModule *source,EffectOrdinaryContexts *contexts,EffectContextForest **output) {
+    const XrXirModule *source,EffectOrdinaryContexts *contexts,EffectContextForest **output, XirReadOperation *read_operation) {
     if (!xir_compile_context_valid(context) || !source || !contexts || !output || *output ||
         contexts->uses.resources!=context->resources) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=contexts->uses.outcomes_work.root?XR_XIR_OK:effect_ordinary_roots(context,source,contexts);
+    XrXirStatus status=contexts->uses.outcomes_work.root?XR_XIR_OK:effect_ordinary_roots(context,source,contexts, read_operation);
     if (status==XR_XIR_OK) status=effect_invocation_public_gate(context,contexts->uses.invocations);
     if (status!=XR_XIR_OK) return status;
     EffectContextForest *forest=xir_compile_calloc(context,1,sizeof(*forest),&status);
@@ -138,6 +138,7 @@ static XrXirStatus effect_context_forest_seal(const XrXirCompileContext *context
         status=effect_context_forest_node(forest,contexts,f);
     if (status==XR_XIR_OK) status=effect_context_forest_requirements(source,contexts,forest);
     if (status==XR_XIR_OK) status=effect_invocation_forest_admit(context,forest,contexts->uses.invocations);
+    if (status==XR_XIR_OK && !effect_terms_storage_owned(context,&forest->terms)) status=XR_XIR_BAD_STRUCTURE;
     if (status!=XR_XIR_OK) { effect_context_forest_free(forest);return status; }
     /* No fallible step follows the actual transfer. The type view stays
      * live until this same retained owner is released by forest_free. */
