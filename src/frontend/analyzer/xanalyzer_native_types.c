@@ -652,7 +652,7 @@ static bool xa_native_protocol_intrinsic_method(XrTypeId tid, const char *name, 
     }
     if (tid == XR_TID_COROUTINE) {
         static const char *task_methods[] = {
-            "cancel", "poll", "awaitResult", "awaitTimeout", NULL,
+            "cancel", NULL,
         };
         for (int i = 0; task_methods[i]; i++) {
             if (strcmp(name, task_methods[i]) == 0)

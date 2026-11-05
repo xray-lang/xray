@@ -7869,21 +7869,6 @@ static bool xicgen_emit_task_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
         if (cg_value_plan_storage_rep(ctx, v) == XR_REP_I64 ||
             cg_value_plan_storage_rep(ctx, v) == XR_REP_F64)
             fprintf(out, ")");
-    } else if (nargs == 0 && method && strcmp(method, "poll") == 0) {
-        if (cg_value_plan_storage_rep(ctx, v) == XR_REP_I64)
-            fprintf(out, "XR_TO_INT(");
-        else if (cg_value_plan_storage_rep(ctx, v) == XR_REP_F64)
-            fprintf(out, "XR_TO_FLOAT(");
-        if (cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED)
-            fprintf(out, "xr_aot_bridge_value_to_xrt(");
-        fprintf(out, "xr_aot_task_poll(%s, ", aot_ctx);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ")");
-        if (cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED)
-            fprintf(out, ")");
-        if (cg_value_plan_storage_rep(ctx, v) == XR_REP_I64 ||
-            cg_value_plan_storage_rep(ctx, v) == XR_REP_F64)
-            fprintf(out, ")");
     } else {
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT Task method '%s'\n",

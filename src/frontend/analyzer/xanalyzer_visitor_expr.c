@@ -216,7 +216,7 @@ static void xa_report_view_member_error(XaInferContext *ctx, AstNode *node, XrTy
  * even without a variant schema. */
 static bool xa_enum_name_is_builtin_adt(const char *name) {
     return name && (strcmp(name, "Recv") == 0 || strcmp(name, "TaskResult") == 0 ||
-                    strcmp(name, "SendResult") == 0 || strcmp(name, "TaskStatus") == 0);
+                    strcmp(name, "SendResult") == 0);
 }
 
 /* Closed value-side surface for a schema-less builtin ADT. Returns NULL when
@@ -2463,7 +2463,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         /* Schema-less prelude ADT on the value side: the member surface is
          * still closed, so an unknown field is rejected here instead of
          * typing as unknown and reading null at runtime. Namespace uses
-         * (TaskStatus.Running) keep the permissive path until the loader
+         * (external metadata) keep the permissive path until the loader
          * ingests the native enum declarations. */
         if (xa_enum_name_is_builtin_adt(obj_type->enum_type.enum_name) && ma->name &&
             !member_object_is_enum_namespace(ctx, ma->object, obj_type->enum_type.enum_name) &&

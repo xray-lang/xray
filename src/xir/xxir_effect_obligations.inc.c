@@ -37,7 +37,7 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
         for (uint32_t i = 0; i < module->functions[f].instruction_count; ++i) {
 
             XrXirOp op = module->functions[f].instructions[i].op;
-            if (op == XR_XIR_GO || op == XR_XIR_TASK_AWAIT || op == XR_XIR_FUNCTION_REF ||
+            if (op == XR_XIR_GO || op == XR_XIR_TASK_AWAIT || op==XR_XIR_TASK_AWAIT_RESULT || op == XR_XIR_FUNCTION_REF ||
                 op==XR_XIR_GENERATOR_NEW || op==XR_XIR_ITERATOR_HAS_NEXT || (op==XR_XIR_ITERATOR_NEXT || op==XR_XIR_ITERATOR_NTH || op==XR_XIR_ITERATOR_CLOSE)) present = true;
         }
         if (!owner) continue;

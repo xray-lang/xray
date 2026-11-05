@@ -17,8 +17,6 @@ static const char *cg_task_field_helper(const char *field) {
         return NULL;
     if (strcmp(field, "done") == 0)
         return "xr_aot_task_done";
-    if (strcmp(field, "status") == 0)
-        return "xr_aot_task_status";
     return NULL;
 }
 

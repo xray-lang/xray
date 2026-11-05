@@ -513,13 +513,12 @@ enum_failed:
     }
 }
 
-/* Prelude enum registry, generated from builtin_symbols.def. A variant payload
- * is either absent, typed as the enum's first type parameter, or an error
- * value; those three shapes cover every prelude enum. */
+/* The prelude registry describes payload names and their concrete carriers. */
 typedef enum {
     XA_PRELUDE_PAYLOAD_NONE,
     XA_PRELUDE_PAYLOAD_TYPE_PARAM_0,
     XA_PRELUDE_PAYLOAD_ERROR,
+    XA_PRELUDE_PAYLOAD_PANIC_INFO,
 } XaPreludePayloadKind;
 
 typedef struct {
@@ -543,6 +542,7 @@ static const XaPreludeVariantDesc g_prelude_enum_variants[] = {
 #define XA_PRELUDE_PAYLOAD_NAME_NONE NULL
 #define XA_PRELUDE_PAYLOAD_NAME_TYPE_PARAM_0 "value"
 #define XA_PRELUDE_PAYLOAD_NAME_ERROR "error"
+#define XA_PRELUDE_PAYLOAD_NAME_PANIC_INFO "info"
 #include "../../../stdlib/prelude/builtin_symbols.def"
 };
 
@@ -558,6 +558,7 @@ static const XaPreludeEnumDesc g_prelude_enums[] = {
 #undef XA_PRELUDE_PAYLOAD_NAME_NONE
 #undef XA_PRELUDE_PAYLOAD_NAME_TYPE_PARAM_0
 #undef XA_PRELUDE_PAYLOAD_NAME_ERROR
+#undef XA_PRELUDE_PAYLOAD_NAME_PANIC_INFO
 
 #define XA_PRELUDE_ENUM_COUNT (sizeof(g_prelude_enums) / sizeof(g_prelude_enums[0]))
 /* Widest prelude enum; sizes the per-enum scratch arrays below. */
@@ -567,7 +568,7 @@ static const XaPreludeEnumDesc g_prelude_enums[] = {
 // per-module declaration.  The runtime binds the matching canonical
 // XrEnumType into builtin VM slots.
 static void xa_register_prelude_enums(XaAnalyzer *analyzer) {
-    static const char *const type_param_names[] = {"T"};
+    static const char *const type_param_names[] = {"T","E"};
     int variant_base = 0;
 
     for (size_t e = 0; e < XA_PRELUDE_ENUM_COUNT; e++) {
@@ -603,6 +604,9 @@ static void xa_register_prelude_enums(XaAnalyzer *analyzer) {
                         (XrType *) xa_scope_resolve_type_alias(analyzer->global_scope, "Error");
                     XR_DCHECK(payload_slots[v] != NULL,
                               "prelude ERROR payload before the Error interface is registered");
+                    break;
+                case XA_PRELUDE_PAYLOAD_PANIC_INFO:
+                    payload_slots[v] = xr_type_new_named_instance(analyzer->isolate,"PanicInfo");
                     break;
                 case XA_PRELUDE_PAYLOAD_NONE:
                 default:

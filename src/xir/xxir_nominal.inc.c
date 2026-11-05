@@ -98,6 +98,18 @@ static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
         status=nominal_native_name(d->fields[0].name,"value");
         if (status!=XR_XIR_OK) return status;
     }
+    if (d->native.native_id==XR_NATIVE_DECLARATION_TASK_RESULT) {
+        if (d->fields[0].type!=(XrXirType)XR_XIR_TYPE_PARAMETER_BASE ||
+            d->fields[1].type!=XR_XIR_ERROR || d->fields[2].type!=XR_XIR_PANIC_INFO ||
+            d->constraints[0].markers || d->constraints[0].interface_count ||
+            d->constraints[1].markers!=XR_XIR_CONSTRAINT_ERROR || d->constraints[1].interface_count)
+            return XR_XIR_BAD_TYPE;
+        const char *names[]={"value","error","info"};
+        for (uint32_t f=0;f<3;++f) {
+            status=nominal_native_name(d->fields[f].name,names[f]);
+            if (status!=XR_XIR_OK) return status;
+        }
+    }
     status = nominal_variants(d->kind, d->variants, d->variant_count, d->field_count);
     if (status != XR_XIR_OK) return status;
     for (uint32_t p = 0; p < d->parameter_count; ++p) {
@@ -278,9 +290,16 @@ static XrXirStatus nominal_nodes_verify(const XrXirTypes *types, XrXirCompileCon
                 return XR_XIR_BAD_TYPE;
             if (identity->native.native_id==XR_NATIVE_DECLARATION_RECV &&
                 node->nominal.fields[0]!=node->nominal.arguments[0]) return XR_XIR_BAD_TYPE;
+            if (identity->native.native_id==XR_NATIVE_DECLARATION_TASK_RESULT) {
+                XrXirTaskResultType result={0};
+                if (!xr_xir_task_result_type_info(types,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+i),&result))
+                    return XR_XIR_BAD_TYPE;
+            }
             for (uint32_t f = 0; f < node->nominal.field_count; ++f) {
 
-                if (!nominal_field_type(types, node->nominal.fields[f], 0,identity->native.native_id==XR_NATIVE_DECLARATION_RECV && !f)) return XR_XIR_BAD_TYPE;
+                if (!nominal_field_type(types, node->nominal.fields[f], 0,!f &&
+                    (identity->native.native_id==XR_NATIVE_DECLARATION_RECV ||
+                     identity->native.native_id==XR_NATIVE_DECLARATION_TASK_RESULT))) return XR_XIR_BAD_TYPE;
             }
             continue;
         }
@@ -288,7 +307,9 @@ static XrXirStatus nominal_nodes_verify(const XrXirTypes *types, XrXirCompileCon
         if (node->nominal.argument_count != d->parameter_count) return XR_XIR_BAD_TYPE;
         if (node->nominal.field_count && node->nominal.field_count != d->field_count) return XR_XIR_BAD_TYPE;
         for (uint32_t f = 0; f < node->nominal.field_count; ++f) {
-            if (!nominal_field_type(types, node->nominal.fields[f], node->parameter_span,d->native.native_id==XR_NATIVE_DECLARATION_RECV && !f)) return XR_XIR_BAD_TYPE;
+            if (!nominal_field_type(types, node->nominal.fields[f], node->parameter_span,!f &&
+                (d->native.native_id==XR_NATIVE_DECLARATION_RECV ||
+                 d->native.native_id==XR_NATIVE_DECLARATION_TASK_RESULT))) return XR_XIR_BAD_TYPE;
             XrXirStatus status = xr_xir_compile_type_substitution_matches(budget, types, node->nominal.arguments, node->nominal.argument_count, d->fields[f].type, node->nominal.fields[f]);
             if (status != XR_XIR_OK) return status;
         }

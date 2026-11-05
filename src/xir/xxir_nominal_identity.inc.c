@@ -37,6 +37,7 @@ static XrXirNominalFieldIdentity nominal_identity_field(const XrXirNominalTable 
     const XrXirNominalField *field = &table->declarations[i].fields[f];
     return (XrXirNominalFieldIdentity) {field->name, field->flags};
 }
+#include "xxir_task_result_type.inc.c"
 static XrXirStatus nominal_identities_verify(const XrXirNominalTable *table, XrXirCompileContext *budget) {
     XrXirCompileContext b = *budget;
     if (!((sizeof(*table) + (uint64_t) table->count * sizeof(*table->identities)) <= SIZE_MAX))

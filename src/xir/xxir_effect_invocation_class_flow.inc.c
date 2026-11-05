@@ -143,7 +143,7 @@ static XrXirStatus effect_invocation_class_call(EffectInvocationFlow *flow,
     }
     /* Await returns a retained identity but does not prove its complete
      * publication history. Keep unknown authority on the common graph. */
-    if (op->op==XR_XIR_TASK_AWAIT || op->op==XR_XIR_ITERATOR_HAS_NEXT || op->op==XR_XIR_ITERATOR_NEXT || op->op==XR_XIR_ITERATOR_NTH || op->op==XR_XIR_ITERATOR_CLOSE) {
+    if (op->op==XR_XIR_TASK_AWAIT || op->op==XR_XIR_TASK_AWAIT_RESULT || op->op==XR_XIR_ITERATOR_HAS_NEXT || op->op==XR_XIR_ITERATOR_NEXT || op->op==XR_XIR_ITERATOR_NTH || op->op==XR_XIR_ITERATOR_CLOSE) {
         sources->mask=EFFECT_CLASS_KNOWN|EFFECT_CLASS_UNKNOWN;return XR_XIR_OK;
     }
     if (op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT) {

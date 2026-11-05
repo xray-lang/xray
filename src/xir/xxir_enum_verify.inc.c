@@ -24,10 +24,14 @@ static XrXirStatus enum_uses(const Graph *graph, const XrXirFunction *function,
     if (!tag && (op->immediate < 0 || (uint64_t) op->immediate >= variant_count)) return XR_XIR_BAD_STRUCTURE;
     const XrXirNominalVariant *variant = tag ? NULL : &variants[(uint32_t) op->immediate];
     bool unit_payload=false;
-    if (construct && variant->field_count==1 && instance->argument_count==1 && instance->arguments[0]==XR_XIR_UNIT) {
-
-        unit_payload=xr_xir_nominal_native_recv(types,type,XR_XIR_UNIT);
+    XrXirTaskResultType outcome={0};
+    bool task_result=xr_xir_task_result_type_info(types,type,&outcome);
+    if (construct && variant->field_count==1 && instance->argument_count && instance->arguments[0]==XR_XIR_UNIT) {
+        unit_payload=xr_xir_nominal_native_recv(types,type,XR_XIR_UNIT) ||
+            (task_result && op->immediate==XR_XIR_TASK_RESULT_SUCCESS);
     }
+    if (construct && task_result && op->immediate==XR_XIR_TASK_RESULT_ERROR && outcome.error==XR_XIR_NEVER)
+        return XR_XIR_BAD_TYPE;
     if (!tag && (construct ? op->args[1] != (unit_payload ? 0u : variant->field_count) : op->args[1] >= variant->field_count))
         return XR_XIR_BAD_STRUCTURE;
     uint32_t first = tag || construct ? 0 : variant->field_begin + op->args[1];
@@ -36,10 +40,12 @@ static XrXirStatus enum_uses(const Graph *graph, const XrXirFunction *function,
     if (unit_payload) {
         if (d) return xr_xir_compile_type_substitution_matches(&context->remaining,types,
             instance->arguments,instance->argument_count,d->fields[variant->field_begin].type,XR_XIR_UNIT);
-        return instance->field_count==1 && instance->fields && instance->fields[0]==XR_XIR_UNIT ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+        return (instance->field_count==1 || (task_result && instance->field_count==3)) &&
+            instance->fields && instance->fields[0]==XR_XIR_UNIT ? XR_XIR_OK : XR_XIR_BAD_TYPE;
     }
     if (!construct) {
-        if (!tag && op->type==XR_XIR_UNIT && !xr_xir_nominal_native_recv(types,type,XR_XIR_UNIT)) return XR_XIR_BAD_TYPE;
+        if (!tag && op->type==XR_XIR_UNIT && !xr_xir_nominal_native_recv(types,type,XR_XIR_UNIT) &&
+            !(task_result && op->immediate==XR_XIR_TASK_RESULT_SUCCESS && outcome.element==XR_XIR_UNIT)) return XR_XIR_BAD_TYPE;
         status = local_operand(types, function, op, op->args[0], 0);
         if (status == XR_XIR_OK) status = value_use(function, graph, instruction, op->args[0], type);
         if (status != XR_XIR_OK || tag) return status;

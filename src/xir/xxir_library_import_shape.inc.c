@@ -25,7 +25,8 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     /* Suspension has only local body state; common verification retains
      * control obligations and the copied function preserves its effects. */
     case XR_XIR_SUSPEND:
-    case XR_XIR_TASK_AWAIT: case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_ITERATOR_CLOSE:
+    case XR_XIR_TASK_AWAIT: case XR_XIR_TASK_AWAIT_RESULT: case XR_XIR_TASK_POLL: case XR_XIR_TASK_CANCEL:
+    case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_ITERATOR_CLOSE:
     case XR_XIR_INVOKE_RESULT:
     case XR_XIR_INVOKE_ERROR:
     case XR_XIR_ERROR_ERASE:
@@ -181,7 +182,8 @@ static XrXirStatus library_catalog_closed_types(const XrXirModule *m) {
             (record->native.native_id && record->native.native_id!=XR_NATIVE_DECLARATION_ORDERING &&
              record->native.native_id!=XR_NATIVE_DECLARATION_RECV && record->native.native_id!=XR_NATIVE_DECLARATION_SEND_RESULT &&
              record->native.native_id!=XR_NATIVE_DECLARATION_UTF8_ERROR &&
-             record->native.native_id!=XR_NATIVE_DECLARATION_CANCELLED))
+             record->native.native_id!=XR_NATIVE_DECLARATION_CANCELLED &&
+             record->native.native_id!=XR_NATIVE_DECLARATION_TASK_RESULT))
             return XR_XIR_BAD_STAGE;
         for (uint32_t f=0; f<record->field_count; ++f) {
 

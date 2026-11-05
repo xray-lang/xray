@@ -11,6 +11,12 @@
  *   the actual field projection has matched its owning declaration.
  */
 typedef struct SendableFrame { uint32_t index, next, identities; } SendableFrame;
+static bool sendable_task_result(const XrXirConstraintEnvironment *environment,
+    const XrXirTypeNode *node,XrXirTaskResultType *info) {
+    uint32_t index=(uint32_t)(node-environment->types->nodes);
+    return xr_xir_task_result_type_info(environment->types,
+        (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+index),info);
+}
 static XrXirStatus sendable_nominal_shape(const XrXirConstraintEnvironment *environment,
     const XrXirTypeNode *node, const XrXirCompileContext *work,XirReadScratch *read,bool *identity_edge) {
     *identity_edge=false;
@@ -61,18 +67,22 @@ static XrXirStatus sendable_nominal_shape(const XrXirConstraintEnvironment *envi
 }
 static uint32_t sendable_child_count(const XrXirConstraintEnvironment *environment,
     const XrXirTypeNode *node) {
-    if (node->kind == XR_XIR_TYPE_TUPLE) return node->parameter_count;
+    if (node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_UNION) return node->parameter_count;
     if (node->kind == XR_XIR_TYPE_MAP) return 2;
     if (node->kind != XR_XIR_TYPE_NOMINAL) return 1;
+    XrXirTaskResultType info={0};
+    if (sendable_task_result(environment,node,&info)) return 2;
     if (node->nominal.field_count) return node->nominal.field_count;
     const XrXirNominalTable *table = environment->types->nominals;
     return table->declarations ? table->declarations[node->nominal.declaration].field_count : 0;
 }
 static XrXirType sendable_child(const XrXirConstraintEnvironment *environment,
     const XrXirTypeNode *node, uint32_t at) {
-    if (node->kind == XR_XIR_TYPE_TUPLE) return node->parameters[at].type;
+    if (node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_UNION) return node->parameters[at].type;
     if (node->kind == XR_XIR_TYPE_MAP) return at ? node->result : node->element;
     if (node->kind != XR_XIR_TYPE_NOMINAL) return node->element;
+    XrXirTaskResultType info={0};
+    if (sendable_task_result(environment,node,&info)) return at ? info.error : info.element;
     return node->nominal.field_count ? node->nominal.fields[at] :
         environment->types->nominals->declarations[node->nominal.declaration].fields[at].type;
 }
@@ -84,8 +94,15 @@ typedef struct SendableWalk {
 } SendableWalk;
 static XrXirStatus sendable_enter(const XrXirConstraintEnvironment *environment,
     XrXirType type, SendableWalk *walk,
-    const XrXirCompileContext *work) {
-
+    const XrXirCompileContext *work,bool error_edge) {
+    const XrXirTypeNode *node = xr_xir_type_node(environment->types, type);
+    if (node && node->kind == XR_XIR_TYPE_UNION) {
+        if (!error_edge || node->parameter_count < 2 || !node->parameters) return XR_XIR_BAD_TYPE;
+    } else if (error_edge) {
+        XrXirStatus status=constraint_markers(environment,type,XR_XIR_CONSTRAINT_ERROR,work,walk->read);
+        if (status!=XR_XIR_OK) return status;
+        if (type==XR_XIR_NEVER) return XR_XIR_OK;
+    }
     if (type == XR_XIR_UNIT || type == XR_XIR_BOOL || type == XR_XIR_RUNE ||
         xr_xir_type_is_number(type) || type == XR_XIR_STRING) return XR_XIR_OK;
     uint32_t id = (uint32_t)type;
@@ -94,7 +111,6 @@ static XrXirStatus sendable_enter(const XrXirConstraintEnvironment *environment,
         return fact && (constraint_marker_closure(fact->markers) & XR_XIR_CONSTRAINT_SENDABLE) ?
             XR_XIR_OK : XR_XIR_BAD_TYPE;
     }
-    const XrXirTypeNode *node = xr_xir_type_node(environment->types, type);
     if (!node || node->parameter_span > environment->parameter_count) return XR_XIR_BAD_TYPE;
     uint32_t index = id - XR_XIR_CONSTRUCTED_TYPE_BASE;
     if (walk->state[index] == UINT32_MAX) return XR_XIR_OK;
@@ -112,9 +128,13 @@ static XrXirStatus sendable_enter(const XrXirConstraintEnvironment *environment,
         return constraint_atomic(environment, node->element, XR_XIR_CONSTRAINT_ATOMIC_VALUE);
     bool identity_edge=false;
     if (node->kind == XR_XIR_TYPE_NOMINAL) {
-        XrXirStatus status = sendable_nominal_shape(environment, node, work,walk->read,&identity_edge);
+        XrXirTaskResultType info={0};
+        /* The family admits complete PanicInfo graphs at every value boundary.
+         * Its logical T and E edges must share this walk's active cycle state. */
+        XrXirStatus status=sendable_task_result(environment,node,&info) ? XR_XIR_OK :
+            sendable_nominal_shape(environment,node,work,walk->read,&identity_edge);
         if (status != XR_XIR_OK) return status;
-    } else if (node->kind == XR_XIR_TYPE_TUPLE) {
+    } else if (node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_UNION) {
         if (!node->parameter_count || !node->parameters) return XR_XIR_BAD_STRUCTURE;
     } else if (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_MAP &&
                node->kind != XR_XIR_TYPE_SET && node->kind != XR_XIR_TYPE_NULLABLE &&
@@ -134,7 +154,7 @@ static XrXirStatus constraint_sendable_graph(const XrXirConstraintEnvironment *e
     if (!frames) return status;
     uint32_t *state = (uint32_t *)(frames + types->count);
     SendableWalk walk={state,frames,0,read};
-    status = sendable_enter(environment, type, &walk, work);
+    status = sendable_enter(environment, type, &walk, work,false);
     while (walk.depth && status == XR_XIR_OK) {
 
         SendableFrame *frame = &frames[walk.depth - 1];
@@ -142,9 +162,14 @@ static XrXirStatus constraint_sendable_graph(const XrXirConstraintEnvironment *e
         if (frame->next == sendable_child_count(environment, node)) {
             state[frame->index] = UINT32_MAX; --walk.depth; continue;
         }
-        if (node->kind == XR_XIR_TYPE_TUPLE && node->parameters[frame->next].mode) {
+        if ((node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_UNION) &&
+            node->parameters[frame->next].mode) {
             status = XR_XIR_BAD_TYPE; break;
         }
+        XrXirTaskResultType outcome={0};
+        bool error_child=node->kind==XR_XIR_TYPE_UNION ||
+            (node->kind==XR_XIR_TYPE_NOMINAL && frame->next==1 &&
+                sendable_task_result(environment,node,&outcome));
         XrXirType child = sendable_child(environment, node, frame->next++);
         /* Nominal projections can name later descriptors. All structural
          * edges retain their strict DAG order; value-only cycles reject. */
@@ -153,7 +178,7 @@ static XrXirStatus constraint_sendable_graph(const XrXirConstraintEnvironment *e
             (uint32_t)child - XR_XIR_CONSTRUCTED_TYPE_BASE >= frame->index) {
             status = XR_XIR_BAD_TYPE; break;
         }
-        status = sendable_enter(environment, child, &walk, work);
+        status = sendable_enter(environment, child, &walk, work,error_child);
     }
     xir_read_scratch_release(read,frames); return status;
 }

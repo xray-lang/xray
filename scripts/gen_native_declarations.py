@@ -709,13 +709,13 @@ def render_task_identity(root):
         output.append('    {' + ', '.join([str(index + 1), c_string(name), c_string(signature),
             c_string(result_text), str(number), str(len(raw[:raw.index(name)].encode('utf-8')) + 1),
             'XR_NATIVE_RECEIVER_' + receiver, 'false', str(method).lower(),
-            str(name == 'cancel').lower(), 'true',
-            'XR_NATIVE_OPERATION_TASK_CANCEL' if name == 'cancel' else 'XR_NATIVE_OPERATION_NONE',
-            'XR_NATIVE_ALLOCATION_NO_HEAP' if name == 'cancel' else 'XR_NATIVE_ALLOCATION_UNKNOWN',
-            '"Never"' if name == 'cancel' else '""',
-            'XR_NATIVE_RESULT_OWNERSHIP_UNIT' if name == 'cancel' else 'XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN',
+            'true', 'true',
+            'XR_NATIVE_OPERATION_'+{'cancel':'TASK_CANCEL', 'poll':'TASK_POLL', 'awaitResult':'TASK_AWAIT_RESULT'}[name],
+            'XR_NATIVE_ALLOCATION_NO_HEAP' if name == 'cancel' else 'XR_NATIVE_ALLOCATION_MAY_HEAP',
+            '"Never"' if name == 'cancel' else '"allocation,retain,limit"',
+            'XR_NATIVE_RESULT_OWNERSHIP_UNIT' if name == 'cancel' else 'XR_NATIVE_RESULT_OWNERSHIP_OWNED',
             params, str(len(parameters)),
-            'XR_NATIVE_TERM_UNIT' if name == 'cancel' else 'XR_NATIVE_TERM_UNADMITTED']) + '},')
+            'XR_NATIVE_TERM_'+{'cancel':'UNIT', 'poll':'NULLABLE_TASK_RESULT', 'awaitResult':'TASK_RESULT'}[name]]) + '},')
     number, raw = rows[6]
     digest = hashlib.sha256(source.encode('utf-8')).digest()
     output += ['};', 'static const char *const xr_native_task_type_parameters[] = {"T", "E"};',
@@ -870,7 +870,8 @@ def channel_result_rows(root):
             ('Recv', 'RECV', [('Value','TYPE_PARAM_0'),('Empty','NONE'),('Timeout','NONE'),('Closed','NONE')], 7, 1),
             ('SendResult', 'SEND_RESULT', [('Sent','NONE'),('Full','NONE'),('Timeout','NONE'),('Closed','NONE')], 8, 0),
             ('Endian', 'ENDIAN', [('Native','NONE'),('LE','NONE'),('BE','NONE')], 0, 0),
-            ('Cancelled', 'CANCELLED', [('Cancelled','NONE')], 18, 0)]
+            ('Cancelled', 'CANCELLED', [('Cancelled','NONE')], 18, 0),
+            ('TaskResult', 'TASK_RESULT', [('Success','TYPE_PARAM_0'),('Error','ERROR'),('Panic','PANIC_INFO'),('Cancelled','NONE')], 19, 2)]
     for name, kind, variants, _, arity in rows:
         registrations = re.findall(r'^\s*XR_BUILTIN_ENUM\(\s*"'+name+r'"', prelude, re.M)
         matches = list(re.finditer(r'XR_BUILTIN_ENUM\("'+name+r'",\s*'+str(arity)+r',\s*'+kind+r',', prelude))
@@ -889,23 +890,29 @@ def channel_result_rows(root):
 def render_channel_result_identities(root):
     prelude, rows = channel_result_rows(root);digest=hashlib.sha256(prelude.encode('utf-8')).digest();lines=[]
     for name, _, variants, native_id, arity in rows:
-        if native_id not in (7,8,17,18):continue
-        variable={7:'recv', 8:'send_result', 17:'utf8_error', 18:'cancelled'}[native_id]
+        if native_id not in (7,8,17,18,19):continue
+        variable={7:'recv', 8:'send_result', 17:'utf8_error', 18:'cancelled', 19:'task_result'}[native_id]
         line,raw=next((number,raw) for number,raw in enumerate(prelude.splitlines(),1) if 'XR_BUILTIN_ENUM("'+name+'",' in raw)
-        if arity:
+        if native_id==19:
+            for index,(field,spelling,term) in enumerate((('value','T','ELEMENT'),('error','E','UNADMITTED'),('info','PanicInfo','UNADMITTED'))):
+                lines += ['static const XrNativeParameter xr_native_task_result_parameters_'+str(index)+'[] = {',
+                          '    {'+c_string(field)+', '+c_string(spelling)+', XR_NATIVE_TERM_'+term+', false, false}', '};']
+        elif arity:
             lines += ['static const XrNativeParameter xr_native_recv_value_parameters[] = {',
                       '    {"value", "T", XR_NATIVE_TERM_ELEMENT, false, false}', '};']
         lines.append('static const XrNativeMemberDeclaration xr_native_'+variable+'_members[] = {')
         for index,(variant,payload) in enumerate(variants):
             member_line,member_raw=next((number,raw) for number,raw in enumerate(prelude.splitlines(),1)
                                        if 'XR_BUILTIN_ENUM_VARIANT("'+variant+'", '+payload+')' in raw and number>=line)
-            count=1 if payload=='TYPE_PARAM_0' else 0
-            lines.append('    {'+', '.join([str(index+1),c_string(variant),c_string(variant),c_string(name+('<T>' if arity else '')),
+            count=1 if payload!='NONE' else 0
+            parameters=('xr_native_task_result_parameters_'+str(index) if native_id==19 else 'xr_native_recv_value_parameters') if count else 'NULL'
+            suffix='<T, E>' if arity==2 else '<T>' if arity else ''
+            lines.append('    {'+', '.join([str(index+1),c_string(variant),c_string(variant),c_string(name+suffix),
                 str(member_line),str(member_raw.index(variant)+1),'XR_NATIVE_RECEIVER_READ','true','false','false','true',
                 'XR_NATIVE_OPERATION_NONE','XR_NATIVE_ALLOCATION_UNKNOWN','""','XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN',
-                'xr_native_recv_value_parameters' if count else 'NULL',str(count),'XR_NATIVE_TERM_UNADMITTED'])+'},')
+                parameters,str(count),'XR_NATIVE_TERM_UNADMITTED'])+'},')
         lines.append('};')
-        if arity: lines.append('static const char *const xr_native_'+variable+'_type_parameters[] = {"T"};')
+        if arity: lines.append('static const char *const xr_native_'+variable+'_type_parameters[] = {'+('"T", "E"' if arity==2 else '"T"')+'};')
         lines += ['static const XrNativeTypeDeclaration xr_native_'+variable+' = {',
                   '    '+str(native_id)+', XR_NATIVE_DECLARATION_VALUE, '+c_string(name)+', '+
                   ('xr_native_'+variable+'_type_parameters' if arity else 'NULL')+', '+str(arity)+',',
@@ -919,8 +926,10 @@ def render_prelude_source(root):
     prelude,rows=channel_result_rows(root);digest=hashlib.sha256(prelude.encode('utf-8')).digest()
     text='// builtin_symbols.def sha256 '+digest.hex()+'\n'
     for name, _, variants, _, arity in rows:
-        values=[variant+(' { value: T }' if payload=='TYPE_PARAM_0' else '') for variant,payload in variants]
-        text+='export enum '+name+('<T>' if arity else '')+' { '+', '.join(values)+' }\n'
+        payloads={'TYPE_PARAM_0':' { value: T }', 'ERROR':' { error: E }', 'PANIC_INFO':' { info: PanicInfo }', 'NONE':''}
+        values=[variant+payloads[payload] for variant,payload in variants]
+        suffix='<T, E: Error>' if arity==2 else '<T>' if arity else ''
+        text+='export enum '+name+suffix+' { '+', '.join(values)+' }\n'
     range_source=(root/'stdlib/prelude/range.xr').read_text(encoding='utf-8').replace('\r\n','\n')
     range_digest=hashlib.sha256(range_source.encode('utf-8')).digest()
     text+='// range.xr sha256 '+range_digest.hex()+'\n'+range_source
