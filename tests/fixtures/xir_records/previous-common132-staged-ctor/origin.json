@@ -1,0 +1,21 @@
+{
+  "state": "IMMUTABLE_GENUINE_PREDECESSOR_PACKET",
+  "sourceCommit": "23cffab82c183aef0cc93b9bf7120b2349ffcafc",
+  "capturedWorkspaceHead": "23cffab82c183aef0cc93b9bf7120b2349ffcafc",
+  "engineBoundary": "Actual normal v5 common132 Source and Checked members with the current ten archives; no whole-B or File product qualification.",
+  "schema": 42,
+  "common": 132,
+  "packetBytes": 3228,
+  "packetSha256": "96a98cdbe1333ec4cacce0329f91572a63daeb6f7a04d58622f80545dc38088c",
+  "sourceSha256": "7d913671514777c2cc8eab444010aff1252374d7eefceb190a6c91e932438dcb",
+  "sourcePath": "staged_ctor.xr",
+  "producerEvidence": {
+    "path": "D:\\xray-build\\coordinator\\20261029-resume\\r3-f13-host-complete-20261103\\root-common132-staged-ctor-producer-preparation-v1\\evidence.json",
+    "sha256": "3721d59422e5db01ecd5f3553d5f6573ec4d4e77cf2344ce36d64b7b54c7c0dc"
+  },
+  "producerResult": {
+    "path": "D:\\xray-build\\coordinator\\20261029-resume\\r3-f13-host-complete-20261103\\root-common132-staged-ctor-producer-preparation-v1\\result.json",
+    "sha256": "394a3c8db4efc152134e1d4b66d6dd8d711d4a778972561314b3380bebe9ca2d"
+  },
+  "actualProvenance": "The original370LF Source created Base/Derived nonfinal classes with inherited Array<string> and string fields and matching zero constructor/helper promises. Actual checked_write was followed by producer/session/resources retirement, then a new owner cold-read the unmodified disk packet successfully with held restoration. Current133 rejection is a separate unrun receiving regression. No packet/header/payload/digest edits."
+}
