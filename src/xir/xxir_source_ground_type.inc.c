@@ -6,11 +6,39 @@
  *
  * xxir_source_ground_type.inc.c - Declaration type facts without evaluating values
  */
+/* Explicit force operators first claim the already narrowed layers of this
+ * binding read. Type collection never evaluates or establishes a new fact. */
+static bool source_ground_force_read(SourceContext *ctx,AstNode *node,uint32_t depth,
+    SourceExpectedType *output,uint32_t *claims) {
+    if (!node || ctx->diagnostic.status!=XR_XIR_OK) return source_ground_type(ctx,node,depth,output);
+    if (depth>=128) return source_fail(ctx,node,XR_XIR_BUDGET,"ground type collection depth exhausted");
+    if (node->type==AST_GROUPING)
+        return source_ground_force_read(ctx,node->as.grouping,depth+1,output,claims);
+    if (node->type==AST_FORCE_UNWRAP) {
+        if (!source_ground_force_read(ctx,node->as.unary.operand,depth+1,output,claims)) return false;
+        if (output->present) {
+            if (*claims) --*claims;
+            else output->type=xr_hir_nullable_force_hint(&ctx->types,output->type);
+        }
+        return true;
+    }
+    *claims=0;
+    if (!source_ground_type(ctx,node,depth,output)) return false;
+    if (output->present && (node->type==AST_VARIABLE || node->type==AST_THIS_EXPR)) {
+        SourceName *binding=visible_name(ctx,node->type==AST_VARIABLE?node->as.variable.name:"this");
+        if (binding && binding->kind==SOURCE_LOCAL) *claims=source_fact_depth(ctx,binding);
+    }
+    return ctx->diagnostic.status==XR_XIR_OK;
+}
 static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,SourceExpectedType *output) {
     *output=(SourceExpectedType){false,XR_XIR_UNIT, false, false};
     if (!node || !((ctx)->diagnostic.status == XR_XIR_OK)) return node==NULL;
     if (depth>=128) return source_fail(ctx,node,XR_XIR_BUDGET,"ground type collection depth exhausted");
     if (node->type==AST_GROUPING) return source_ground_type(ctx,node->as.grouping,depth+1,output);
+    if (node->type==AST_FORCE_UNWRAP) {
+        uint32_t claims=0;
+        return source_ground_force_read(ctx,node,depth,output,&claims);
+    }
     if(node->type==AST_FIXED_BYTES_LITERAL) {
         if(!source_fixed_literal_type(ctx,node,&output->type))return false;
         output->present=true;return true;

@@ -181,7 +181,31 @@ static void host_file_byte_slice_refusals(XrXirCompileContext *context){
  const char *projected="fn edit(value:ref Array<u8>){}\nfinal class C{data:Array<u8> init(){this.data=[];edit(ref this.data)}}\n";
  host_file_contract_rejected(context,projected,false,XR_XIR_BAD_TYPE,"ref argument requires a mutable stored binding");
 }
+static void host_file_unwrap_ground_controls(XrXirCompileContext *context){
+ static const char *const admitted[]={
+  "fn exact(raw:Array<u8>?){assertEqual(raw![0],255)}\n",
+  "fn exact(raw:Array<u8>?){if(raw!=null){assertEqual((raw!)[0],255)}}\n",
+  "fn exact(raw:Array<u8>??){assertEqual(raw!![0],255)}\n",
+  "fn exact(raw:Array<u8>??){if(raw!=null){assertEqual((raw!)![0],255)}}\n",
+  "fn exact(raw:Array<u8>??){if(raw!=null){const present:Array<u8>?=raw!;assertEqual(present![0],255)}}\n"};
+ for(unsigned n=0;n<sizeof(admitted)/sizeof(*admitted);++n){
+  XrXirSourceResult output={0};XrXirSourceDiagnostic diagnostic={0};
+  XrXirStatus status=host_check(context,"io",admitted[n],false,&output,&diagnostic);
+  if(status!=XR_XIR_OK)fprintf(stderr,"unwrap ground positive%u status%u %d:%d %s\n%s",
+   n,status,diagnostic.line,diagnostic.column,diagnostic.message,admitted[n]);
+  CHECK(status==XR_XIR_OK&&output.checked);xr_xir_compile_source_result_free(&output);
+ }
+ static const char *const rejected[]={
+  "fn exact(raw:Array<u8>?){assertEqual(raw![0],256)}\n",
+  "fn exact(raw:Array<u8>?){const n:i64=255;assertEqual(raw![0],n)}\n",
+  "fn exact(raw:Array<u8>?){assertEqual(raw[0],255)}\n",
+  "fn exact(raw:Array<u8>??){if(raw!=null){assertEqual(raw![0],255)}}\n",
+  "fn exact(raw:Array<u8>??){var value:Array<u8>??=raw;if(value!=null){value=null;assertEqual(value![0],255)}}\n"};
+ for(unsigned n=0;n<sizeof(rejected)/sizeof(*rejected);++n)
+  host_file_contract_rejected(context,rejected[n],false,XR_XIR_BAD_TYPE,NULL);
+}
 static void host_file_contracts(XrXirCompileContext *context){
+ host_file_unwrap_ground_controls(context);
  host_file_byte_slice_refusals(context);
  XrXirArtifact *code=host_code(context,"io",host_file_contract_text);
  host_file_contract_raw_references(context);
