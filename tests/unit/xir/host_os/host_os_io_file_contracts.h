@@ -76,6 +76,14 @@ static void host_file_refusal_ir(const XrXirArtifact *checked){
   fprintf(stderr,"file refusal function%u name=%.*s nameTruncated=%u parameters=%u parametersTruncated=%u result=%u error=%u instructions=%u shown=%u instructionTruncated=%u\n",
    f,(int)(body->name_length>200u?200u:body->name_length),(body->name?body->name:""),(unsigned)(body->name_length>200u),
    body->parameter_count,(unsigned)(parameters<body->parameter_count),body->result,body->error_type,body->instruction_count,count,(unsigned)(count<body->instruction_count));
+  const XrXirTypeNode *receiver=body->parameter_count?xr_xir_type_node(module->types,body->parameters[0]):NULL;
+  uint32_t declaration_parameters=UINT32_MAX;
+  if(receiver&&receiver->kind==XR_XIR_TYPE_NOMINAL&&module->types->nominals&&module->types->nominals->declarations&&
+   receiver->nominal.declaration<module->types->nominals->count)
+   declaration_parameters=module->types->nominals->declarations[receiver->nominal.declaration].parameter_count;
+  fprintf(stderr,"file refusal genericCount=%u receiverParameterSpan=%u receiverArguments=%u declarationParameters=%u\n",
+   module->generics?module->generics[f].parameter_count:0u,receiver?receiver->parameter_span:UINT32_MAX,
+   receiver?receiver->nominal.argument_count:UINT32_MAX,declaration_parameters);
   for(uint32_t p=0;p<parameters;++p)fprintf(stderr,"file refusal parameter%u type%u\n",p,body->parameters[p]);
   for(uint32_t i=0;i<count;++i){const XrXirInstruction *op=body->instructions+i;const char *name=xr_xir_op_name(op->op);
    fprintf(stderr,"file refusal i%u value%u op=%s type%u args=%u,%u targets=%u,%u immediate=%lld typeargs=%u,%u\n",
@@ -99,6 +107,34 @@ static void host_file_contract_rejected(XrXirCompileContext *context,const char 
  }
  CHECK(status==expected&&!output.checked&&!output.snapshot&&diagnostic.status==expected);
  if(reason)CHECK(strstr(diagnostic.message,reason));
+ xr_xir_compile_source_result_free(&output);
+}
+static void host_file_view_ended_before_push(XrXirCompileContext *context,const char *text,unsigned example){
+ XrXirSourceResult output={0};XrXirSourceDiagnostic diagnostic={0};
+ XrXirStatus status=host_check(context,"io",text,false,&output,&diagnostic);
+ if(status!=XR_XIR_OK)fprintf(stderr,"ended view positive%u status%u %d:%d %s\n%s",
+  example,status,diagnostic.line,diagnostic.column,diagnostic.message,text);
+ CHECK(status==XR_XIR_OK&&output.checked);
+ const XrXirModule *module=xr_xir_compile_artifact_module(output.checked);
+ uint32_t function=host_named(module,"append"),formal=UINT32_MAX,get=UINT32_MAX,cleanup=UINT32_MAX,push=UINT32_MAX,pushes=0;
+ const XrXirFunction *body=module->functions+function;
+ for(uint32_t p=0;p<body->parameter_count;++p){const XrXirTypeNode *type=xr_xir_type_node(module->types,body->parameters[p]);
+  if(type&&type->kind==XR_XIR_TYPE_SLICE&&type->element==XR_XIR_U8){CHECK(formal==UINT32_MAX);formal=p;}}
+ CHECK(formal!=UINT32_MAX);
+ for(uint32_t i=0;i<body->instruction_count;++i){const XrXirInstruction *op=body->instructions+i;
+  if(op->op==XR_XIR_VIEW_GET&&op->args[0]==formal)get=i;
+  if(op->op==XR_XIR_VIEW_CLEANUP)for(uint32_t p=0;p<op->args[1];++p)
+   if(body->operands[op->args[0]+p]==formal){CHECK(cleanup==UINT32_MAX);cleanup=i;}
+  if(op->op==XR_XIR_ARRAY_PUSH){push=i;++pushes;}
+ }
+ bool same_block=false;
+ for(uint32_t b=0;b<body->block_count;++b){const XrXirBlock *block=body->blocks+b;
+  if(get>=block->first&&(uint64_t)push<(uint64_t)block->first+block->count)same_block=true;}
+ if(pushes!=1||get>=cleanup||cleanup>=push||!same_block){
+  fprintf(stderr,"ended view positive%u formal%u get%u cleanup%u push%u pushes%u sameBlock%u\n%s",
+   example,formal,get,cleanup,push,pushes,(unsigned)same_block,text);host_file_refusal_ir(output.checked);
+ }
+ CHECK(pushes==1&&get<cleanup&&cleanup<push&&same_block);
  xr_xir_compile_source_result_free(&output);
 }
 static void host_file_refusal_signature_positives(XrXirCompileContext *context){
@@ -125,16 +161,23 @@ static void host_file_byte_slice_refusals(XrXirCompileContext *context){
   "final class C{data:Array<Array<u8>> init(){this.data=[[0 as u8]]} append(input:Slice<u8>){this.data[0].push(input[0])}}\n",
   "final class C{data:Array<u8> init(){this.data=[]} append(input:(Slice<u8>,i64)){this.data.push(input.0[0])}}\n",
   "final class C{data:Array<u8> init(){this.data=[]}}\nfn append<T>(value:C,input:Slice<u8>){value.data.push(input[0])}\n"};
- static const XrXirStatus expected[]={XR_XIR_BAD_TYPE,XR_XIR_UNRESOLVED,XR_XIR_BAD_TYPE,
-  XR_XIR_UNRESOLVED,XR_XIR_BAD_TYPE,XR_XIR_UNRESOLVED};
- _Static_assert(sizeof(expected)/sizeof(*expected)==sizeof(rejected)/sizeof(*rejected),"each original refusal keeps its own boundary");
- for(unsigned n=0;n<sizeof(rejected)/sizeof(*rejected);++n)
-  host_file_contract_rejected(context,rejected[n],false,expected[n],
-   expected[n]==XR_XIR_BAD_TYPE?"constructed XIR failed checking":"(ARRAY_PUSH)");
- /* Keep a genuine byte-Slice entry so the nonbyte field rejection reaches
-  * the Array mutation boundary rather than an unsupported input signature. */
- host_file_contract_rejected(context,"final class C{data:Array<i64> init(){this.data=[1]} append(input:Slice<u8>)->i64{this.data.push(input[0] as i64);return 0}}\n",
-  false,XR_XIR_UNRESOLVED,"(ARRAY_PUSH)");
+ static const XrXirStatus expected[]={XR_XIR_BAD_TYPE,XR_XIR_OK,XR_XIR_BAD_TYPE,
+  XR_XIR_OK,XR_XIR_BAD_TYPE,XR_XIR_OK};
+ _Static_assert(sizeof(expected)/sizeof(*expected)==sizeof(rejected)/sizeof(*rejected),"each original example keeps its own boundary");
+ for(unsigned n=0;n<sizeof(rejected)/sizeof(*rejected);++n){
+  if(expected[n]==XR_XIR_OK)host_file_view_ended_before_push(context,rejected[n],n);
+  else host_file_contract_rejected(context,rejected[n],false,expected[n],"constructed XIR failed checking");
+ }
+ host_file_view_ended_before_push(context,
+  "final class C{data:Array<i64> init(){this.data=[1]} append(input:Slice<u8>)->i64{this.data.push(input[0] as i64);return 0}}\n",6);
+ /* Reading the formal after mutation keeps its loan live at ARRAY_PUSH. */
+ static const char *const live[]={
+  "final class C<T>{data:Array<u8> init(){this.data=[]} append(input:Slice<u8>)->i64{this.data.push(input[0]);return len(input)}}\n",
+  "final class C{data:Array<Array<u8>> init(){this.data=[[0 as u8]]} append(input:Slice<u8>)->i64{this.data[0].push(input[0]);return len(input)}}\n",
+  "final class C{data:Array<u8> init(){this.data=[]}}\nfn append<T>(value:C,input:Slice<u8>)->i64{value.data.push(input[0]);return len(input)}\n",
+  "final class C{data:Array<i64> init(){this.data=[1]} append(input:Slice<u8>)->i64{this.data.push(input[0] as i64);return len(input)}}\n"};
+ for(unsigned n=0;n<sizeof(live)/sizeof(*live);++n)
+  host_file_contract_rejected(context,live[n],false,XR_XIR_UNRESOLVED,"(ARRAY_PUSH)");
  const char *projected="fn edit(value:ref Array<u8>){}\nfinal class C{data:Array<u8> init(){this.data=[];edit(ref this.data)}}\n";
  host_file_contract_rejected(context,projected,false,XR_XIR_BAD_TYPE,"ref requires a mutable stored binding");
 }
