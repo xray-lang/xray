@@ -294,8 +294,10 @@ static void path_subset_contracts(const XrXirCompileContext *context,const XrXir
         char text[768];int length=snprintf(text,sizeof(text),"%sfn bad(value:%s){}\n",clients[n],hidden[n]);
         CHECK(length>0&&(size_t)length<sizeof(text));
         status=path_flavours_check(context,text,catalog,&source,&diagnostic);
-        if(status!=XR_XIR_BAD_TYPE||diagnostic.module||diagnostic.line!=3)fprintf(stderr,"Path subset visibility%u status%u module%u %d:%d %s\n",n,status,diagnostic.module,diagnostic.line,diagnostic.column,diagnostic.message);
-        CHECK(status==XR_XIR_BAD_TYPE&&!source.checked&&!source.snapshot&&!diagnostic.module&&diagnostic.line==3);xr_xir_compile_source_result_free(&source);
+        bool refused=status==XR_XIR_BAD_STRUCTURE&&!source.checked&&!source.snapshot&&!diagnostic.module&&
+            diagnostic.line==1&&diagnostic.column==1&&!strcmp(diagnostic.message,"import requires an exported declaration");
+        if(!refused)fprintf(stderr,"Path subset visibility%u status%u module%u %d:%d %s\n",n,status,diagnostic.module,diagnostic.line,diagnostic.column,diagnostic.message);
+        CHECK(refused);xr_xir_compile_source_result_free(&source);
     }
     CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK&&before.held_bytes==after.held_bytes);
 }
