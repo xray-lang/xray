@@ -298,4 +298,15 @@ static void path_complete_execute(XrXirProgram *program,const uint32_t *ids,XrXi
 #endif
     path_complete_directories_close(&directories);CHECK(runtime_live==live&&runtime_bytes==bytes);
 }
+static void path_flavours_execute(XrXirProgram *program,const uint32_t ids[2]){
+    size_t live=runtime_live,bytes=runtime_bytes;unsigned before=path_complete_context_queries();
+    XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
+    XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
+    XrXirValue value=path_complete_invoke(instance,ids[0],NULL,0);
+    CHECK(value.type==XR_XIR_I64&&!value.payload);xr_xir_value_drop(&value);
+    value=path_complete_invoke(instance,ids[1],NULL,0);
+    CHECK(value.type==XR_XIR_I64&&value.payload==42);xr_xir_value_drop(&value);
+    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+    CHECK(path_complete_context_queries()==before&&runtime_live==live&&runtime_bytes==bytes);
+}
 #endif // XIR_PATH_COMPLETE_RUNTIME_H

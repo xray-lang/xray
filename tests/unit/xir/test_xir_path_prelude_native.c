@@ -20,6 +20,8 @@
 XR_DATA const XrXirProgramSpec path_0_program,path_1_program,path_2_program;
 XR_DATA const uint32_t path_0_main,path_1_main,path_2_main;
 XR_DATA const XrXirProgramSpec path_complete_program;
+XR_DATA const XrXirProgramSpec path_flavours_program;
+XR_DATA const uint32_t path_flavours_ids[2];
 XR_DATA const uint32_t path_complete_ids[PATH_COMPLETE_COUNT];
 XR_DATA const XrXirProgramSpec path_complete_os_raw_program;
 XR_DATA const uint32_t path_complete_os_raw_ids[PATH_COMPLETE_OS_COUNT];
@@ -33,6 +35,8 @@ int main(void) {
     XrXirProgram *complete=NULL;CHECK(xr_xir_compile_program_seal(&context,&path_complete_program,&complete)==XR_XIR_OK);
     XrXirProgram *raw=NULL;CHECK(xr_xir_compile_program_seal(&context,&path_complete_os_raw_program,&raw)==XR_XIR_OK);
     path_complete_execute(complete,path_complete_ids,raw,path_complete_os_raw_ids);xr_xir_compile_program_drop(raw);xr_xir_compile_program_drop(complete);
+    XrXirProgram *flavours=NULL;CHECK(xr_xir_compile_program_seal(&context,&path_flavours_program,&flavours)==XR_XIR_OK);
+    path_flavours_execute(flavours,path_flavours_ids);xr_xir_compile_program_drop(flavours);
     CHECK(!runtime_live&&!runtime_bytes);
     xr_compile_resources_release(context.resources);puts("Path declaration-only access and lexical shadow controls passed");return 0;
 }

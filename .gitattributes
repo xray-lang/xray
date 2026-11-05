@@ -123,3 +123,7 @@ tests/fixtures/xir_records/previous-common130-staged-ctor/staged_ctor.xr text eo
 tests/fixtures/xir_records/previous-common131-staged-ctor/staged_ctor.xr text eol=lf
 tests/fixtures/xir_records/previous-common132-staged-ctor/staged_ctor.xr text eol=lf
 tests/fixtures/xir_records/previous-common133-staged-ctor/staged_ctor.xr text eol=lf
+
+# Preserve the genuine native-path predecessor and its exact producer text.
+tests/fixtures/xir_path_prelude/previous134-native-path/old134-path.xrchk -text
+tests/fixtures/xir_path_prelude/previous134-native-path/path.xr -text

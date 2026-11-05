@@ -47,6 +47,7 @@ static XrXirStatus checked(const XrXirCompileContext *context,const char *text) 
     XrXirSourceResult result={0};XrXirStatus status=path_checked(context,text,XR_PATH_ROOT "/stdlib",NULL,&result);
     xr_xir_compile_source_result_free(&result);return status;
 }
+#include "xir_path_flavours_source.h"
 static bool path_cancelled(const void *unused){(void)unused;return true;}
 static void path_finite_controls(const XrXirCompileContext *context) {
     XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
@@ -222,7 +223,7 @@ int main(int argc,char **argv) {
     if(argc==3&&!strcmp(argv[1],"--previous123")) {
         unsigned char packet[8192];FILE *file=fopen(argv[2],"rb");CHECK(file);
         size_t length=fread(packet,1,sizeof(packet),file);CHECK(length&&feof(file)&&!ferror(file)&&!fclose(file));
-        CHECK(packet[8]==41&&packet[12]==123&&XR_XIR_CHECKED_CONTRACT==129);XrXirArtifact *rejected=NULL;
+        CHECK(packet[8]==41&&packet[12]==123&&XR_XIR_CHECKED_CONTRACT>123);XrXirArtifact *rejected=NULL;
         CHECK(xr_xir_compile_checked_read(&context,packet,length,&rejected,NULL)==XR_XIR_BAD_STRUCTURE&&!rejected);
         CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK&&before.held_bytes==after.held_bytes);
         xr_compile_resources_release(context.resources);return 0;
@@ -256,6 +257,7 @@ int main(int argc,char **argv) {
         }
     }
     path_complete_product(&context,argc==4?argv[2]:NULL);
+    path_flavours_product(&context,argc==4?argv[2]:NULL);
     CHECK(checked(&context,"class Path{value:i64 init(value:i64){this.value=value}}\nfn keep(value:Path)->Path{return value}")==XR_XIR_OK);
     CHECK(checked(&context,"fn keep<Path>(value:Path)->Path{return value}")==XR_XIR_OK);
     CHECK(checked(&context,"import {Path} from \"./custom\"\nfn keep(value:Path)->Path{return value}")==XR_XIR_OK);

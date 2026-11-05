@@ -1,0 +1,136 @@
+// Exact public-flavour and logical-component checks. No filesystem operation occurs.
+import path
+import "std/path/posix" as posix
+import "std/path/windows" as windows
+import "std/path/logical" as logical
+import { LogicalPath } from "std/path/logical"
+
+export fn check() -> i64 {
+    // W01
+    const valueW01=windows.join(windows.from("C:"),windows.from("child"))
+    assert(valueW01.toString()=="C:child")
+    // W02
+    const valueW02=windows.join(windows.from("C:\\base"),windows.from("C:child"))
+    assert(valueW02.toString()=="C:\\base\\child")
+    // W03
+    const valueW03=windows.join(windows.from("C:\\base"),windows.from("D:child"))
+    assert(valueW03.toString()=="D:child")
+    // W04
+    const valueW04=windows.join(windows.from("C:\\base"),windows.from("\\child"))
+    assert(valueW04.toString()=="C:\\child")
+    // W05
+    const valueW05=windows.join(windows.from("\\\\server\\share\\base"),windows.from("\\child"))
+    assert(valueW05.toString()=="\\\\server\\share\\child")
+    // W06
+    const valueW06=windows.join(windows.from("\\\\?\\C:\\base"),windows.from("D:\\x"))
+    assert(valueW06.toString()=="D:\\x")
+    // W07
+    const valueW07=windows.join(windows.from("\\\\.\\C:\\base"),windows.from("D:\\x"))
+    assert(valueW07.toString()=="D:\\x")
+    // W08
+    const valueW08=windows.join(windows.from("C:\\a"),windows.from("..\\b"))
+    assert(valueW08.toString()=="C:\\a\\..\\b")
+    // W09
+    const valueW09=windows.basename(windows.from("\\\\?\\C:\\a/b"))
+    assert(valueW09=="a/b")
+    // W10
+    const valueW10=windows.basename(windows.from("\\\\.\\C:\\a/b"))
+    assert(valueW10=="b")
+    // W11
+    const valueW11=windows.normalize(windows.from("\\\\?\\C:\\a\\..\\b. "))
+    assert(valueW11.toString()=="\\\\?\\C:\\a\\..\\b. ")
+    // W12
+    const valueW12=windows.normalize(windows.from("\\\\.\\C:\\a\\..\\b. "))
+    assert(valueW12.toString()=="\\\\.\\C:\\a\\..\\b. ")
+    // R01
+    const valueR01=windows.relative(windows.from("C:\\a"),windows.from("D:\\a"))
+    assert(valueR01==null)
+    // R02
+    const valueR02=windows.relative(windows.from("\\\\server\\one\\a"),windows.from("\\\\server\\two\\a"))
+    assert(valueR02==null)
+    // R03
+    const valueR03=windows.relative(windows.from("..\\a"),windows.from("..\\b"))
+    assert(valueR03==null)
+    // R04
+    const valueR04=windows.relative(windows.from("\\\\?\\C:\\a"),windows.from("\\\\?\\C:\\a"))
+    assert(valueR04!=null)
+    assert(valueR04!.toString()==".")
+    // R05
+    const valueR05=windows.relative(windows.from("\\\\?\\C:\\a"),windows.from("\\\\?\\C:\\a\\b"))
+    assert(valueR05==null)
+    // P01
+    const valueP01=posix.basename(posix.from("a\\b"))
+    assert(valueP01=="a\\b")
+    // P02
+    const valueP02=posix.normalize(posix.from("a\\b/./c/../d"))
+    assert(valueP02.toString()=="a\\b/d")
+    // L01
+    const valueL01=logical.from("")
+    assert(valueL01!=null)
+    assert(valueL01!.toString()=="")
+    // L02
+    const valueL02=logical.join(logical.from("")!,logical.from("α/b")!)
+    assert(valueL02.toString()=="α/b")
+    // L03
+    const valueL03=logical.from("C:x")
+    assert(valueL03!=null)
+    assert(valueL03!.toString()=="C:x")
+    if (path.sep=="\\") {
+        // L04
+        const valueL04=logical.toNative(path.from("C:\\root"),logical.from("C:x")!)
+        assert(valueL04==null)
+    }
+    if (path.sep=="/") {
+        // L05
+        const valueL05=logical.toNative(path.from("/root"),logical.from("C:x")!)
+        assert(valueL05!=null)
+        assert(valueL05!.toString()=="/root/C:x")
+    }
+    assert(posix.relative(posix.from("."),posix.from("a"))!.toString()=="a")
+    assert(posix.relative(posix.from("a"),posix.from("."))!.toString()=="..")
+    assert(posix.relative(posix.from(""),posix.from("a"))!.toString()=="a")
+    assert(windows.relative(windows.from("."),windows.from("a"))!.toString()=="a")
+    assert(windows.relative(windows.from("a"),windows.from("."))!.toString()=="..")
+    assert(windows.relative(windows.from("a/.."),windows.from("b"))!.toString()=="b")
+    assert(posix.resolve(posix.from("relative"),posix.from("a"))==null)
+    assert(posix.resolve(posix.from("/base"),posix.from("a/../b"))!.toString()=="/base/b")
+    assert(windows.resolve(windows.from("C:\\base"),windows.from("D:child"))==null)
+    assert(windows.resolve(windows.from("C:\\base"),windows.from("C:child"))!.toString()=="C:\\base\\child")
+    assert(logical.from("/root")==null)
+    assert(LogicalPath.from("/root")==null)
+    assert(logical.from("a/")==null)
+    assert(LogicalPath.from("a/")==null)
+    assert(logical.from("a//b")==null)
+    assert(LogicalPath.from("a//b")==null)
+    assert(logical.from(".")==null)
+    assert(LogicalPath.from(".")==null)
+    assert(logical.from("..")==null)
+    assert(LogicalPath.from("..")==null)
+    assert(logical.from("a/../b")==null)
+    assert(LogicalPath.from("a/../b")==null)
+    assert(logical.from("a\\b")==null)
+    assert(LogicalPath.from("a\\b")==null)
+    assert(logical.from("a\u0000b")==null)
+    assert(LogicalPath.from("a\u0000b")==null)
+    assert(LogicalPath.from("")!.toString()=="")
+    assert(logical.toNative(path.from("relative"),logical.from("a")!)==null)
+    assert(logical.join(logical.from("a")!,logical.from("")!).toString()=="a")
+    assert(logical.join(logical.from("")!,logical.from("")!).toString()=="")
+    if(path.sep=="\\"){
+        assert(logical.toNative(path.from("C:\\root"),logical.from("C:x")!)==null)
+        assert(logical.toNative(path.from("C:\\root"),logical.from("con")!)==null)
+        assert(logical.toNative(path.from("C:\\root"),logical.from("NuL.txt")!)==null)
+        assert(logical.toNative(path.from("C:\\root"),logical.from("COM1")!)==null)
+        assert(logical.toNative(path.from("C:\\root"),logical.from("lpt¹.bin")!)==null)
+        assert(logical.toNative(path.from("C:\\root"),logical.from("COM²")!)==null)
+        assert(logical.toNative(path.from("C:\\root"),logical.from("LPT³")!)==null)
+        assert(logical.toNative(path.from("C:\\root"),logical.from("x.")!)==null)
+        assert(logical.toNative(path.from("C:\\root"),logical.from("x ")!)==null)
+        assert(logical.toNative(path.from("C:\\root"),logical.from("x<y")!)==null)
+        assert(logical.toNative(path.from("C:\\root"),logical.from("x?y")!)==null)
+        assert(logical.toNative(path.from("C:\\root"),logical.from("x|y")!)==null)
+        assert(logical.toNative(path.from("C:\\root"),logical.from("x\u0001y")!)==null)
+        assert(logical.toNative(path.from("C:\\root"),logical.from("a/中")!)!.toString()=="C:\\root\\a\\中")
+    }else{assert(logical.toNative(path.from("/root"),logical.from("a/中")!)!.toString()=="/root/a/中")}
+    return 42
+}

@@ -12,6 +12,11 @@ from pathlib import Path
 LIBRARIES = (
     ('output', 'io', 'io/output.xr', 'io/output/io-output.chk'),
     ('time', 'time', 'time/time.xr', 'time/time.chk'),
+    ('path_lexical', 'path', 'path/_lexical.xr', 'path/_lexical.chk'),
+    ('path', 'path', 'path/path.xr', 'path/path.chk'),
+    ('path_posix', 'path', 'path/posix.xr', 'path/posix.chk'),
+    ('path_windows', 'path', 'path/windows.xr', 'path/windows.chk'),
+    ('path_logical', 'path', 'path/logical.xr', 'path/logical.chk'),
 )
 
 
@@ -40,10 +45,13 @@ def main() -> None:
     components, rows, packets = [], [], []
     with tempfile.TemporaryDirectory(prefix='xir-stdlib-checked-') as temporary:
         input_root = Path(temporary).resolve()
-        for symbol, namespace, logical, published in LIBRARIES:
+        # Dependencies enter the same exact source root before any producer runs.
+        for _, _, logical, _ in LIBRARIES:
             entry = input_root / logical
             entry.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(root / 'stdlib' / logical, entry)
+        for symbol, namespace, logical, published in LIBRARIES:
+            entry = input_root / logical
             checked = input_root / (symbol + '.chk')
             subprocess.run([str(args.producer.resolve()), str(input_root), str(entry),
                             namespace, str(checked)], check=True)

@@ -1,0 +1,55 @@
+// Fixed Windows lexical paths never query the execution host or filesystem.
+import "std/path/_lexical" as lexical
+
+export const sep: string="\\"
+export const delimiter: string=";"
+
+export class WindowsPath {
+    raw: string
+    init(raw: string) { this.raw=raw }
+    toString() -> string { return this.raw }
+}
+
+export class WindowsPathInfo {
+    root: string
+    dir: WindowsPath
+    base: string
+    name: string
+    ext: string
+    init(root: string, dir: WindowsPath, base: string, name: string, ext: string) {
+        this.root=root; this.dir=dir; this.base=base; this.name=name; this.ext=ext
+    }
+}
+
+fn _strings(parts: Array<WindowsPath>) -> Array<string> {
+    var out: Array<string> = []
+    for (var i=0; i<len(parts); i++) { out.push(parts[i].raw) }
+    return out
+}
+
+export fn from(raw: string) -> WindowsPath { return WindowsPath(raw) }
+export fn hasRoot(p: WindowsPath) -> bool { return lexical.root(p.raw,true).rooted }
+export fn isAbsolute(p: WindowsPath) -> bool { return lexical.root(p.raw,true).absolute }
+export fn joinAll(parts: Array<WindowsPath>) -> WindowsPath { return WindowsPath(lexical.joinAll(_strings(parts),true)) }
+export fn join(...parts: WindowsPath) -> WindowsPath { return joinAll(parts) }
+export fn dirname(p: WindowsPath) -> WindowsPath { return WindowsPath(lexical.dirname(p.raw,true)) }
+export fn basename(p: WindowsPath) -> string { return lexical.basename(p.raw,true) }
+export fn extname(p: WindowsPath) -> string { return lexical.extname(p.raw,true) }
+export fn normalize(p: WindowsPath) -> WindowsPath { return WindowsPath(lexical.normalize(p.raw,true)) }
+export fn relative(fromPath: WindowsPath, toPath: WindowsPath) -> WindowsPath? {
+    const value=lexical.relative(fromPath.raw,toPath.raw,true)
+    if (value==null) { return null }
+    return WindowsPath(value!)
+}
+export fn resolve(base: WindowsPath, ...parts: WindowsPath) -> WindowsPath? {
+    const value=lexical.resolve(base.raw,_strings(parts),true)
+    if (value==null) { return null }
+    return WindowsPath(value!)
+}
+export fn parse(p: WindowsPath) -> WindowsPathInfo {
+    const value=lexical.parse(p.raw,true)
+    return WindowsPathInfo(value.root,WindowsPath(value.dir),value.base,value.name,value.ext)
+}
+export fn format(info: WindowsPathInfo) -> WindowsPath {
+    return WindowsPath(lexical.format(info.root,info.dir.raw,info.base,info.name,info.ext,true))
+}

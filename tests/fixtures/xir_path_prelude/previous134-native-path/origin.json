@@ -1,0 +1,37 @@
+{
+  "kind": "genuine_predecessor_checked_path",
+  "sourceCommit": "bb86a3769d1b37e12ff5ce8c423f7913371bab55",
+  "schema": 42,
+  "common": 134,
+  "packet": {
+    "path": "old134-path.xrchk",
+    "bytes": 69633,
+    "sha256": "4164f16db59c3736a8ae84381681a6fd74b7d2121543148138a1adba04f38e93"
+  },
+  "source": {
+    "path": "path.xr",
+    "bytes": 9984,
+    "sha256": "06bb9bc2431133463529a45b2ee4f2c8c68ab8f45c9bbdd250e9825a3574a57b"
+  },
+  "facts": {
+    "canonical": "stdlib-module-v1:module=4:path:path=12:path/path.xr",
+    "PathOrdinal": 0,
+    "functionCount": 40,
+    "nativeFunction": 38,
+    "nativeID": 108,
+    "parameters": 0,
+    "result": "String",
+    "error": "Never",
+    "resolveFunction": 11,
+    "directCalls108": 1,
+    "producerRetiredBeforeColdRead": true,
+    "coldReadStatus": 0,
+    "producerHeldRestored": true,
+    "receiverHeldRestored": true
+  },
+  "captureEvidence": {
+    "path": "D:\\xray-build\\coordinator\\20261029-resume\\r3-f13-host-complete-20261103\\root-common134-path-producer-preparation-v1\\evidence.json",
+    "sha256": "0c3ddb5e8448d75ed06101eea3fb9b86b06333044317467e4790ddcbea870290"
+  },
+  "newReaderQualification": "NOT_RUN"
+}

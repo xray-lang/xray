@@ -36,7 +36,7 @@ fn _drive(raw: string, at: i64) -> bool {
     return "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz".indexOf(raw.slice(at,at+1)) >= 0
 }
 
-fn _asciiLower(raw: string) -> string {
+export fn asciiLower(raw: string) -> string {
     const upper="ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     const lower="abcdefghijklmnopqrstuvwxyz"
     var out=""
@@ -75,8 +75,8 @@ export fn root(raw: string, windows: bool) -> Root {
         return Root("","",0,false,false,false,false,true)
     }
     if (n>=4 && raw.slice(0,4)=="\\\\?\\") {
-        if (n==7 && _asciiLower(raw.slice(4,7))=="unc") { return Root(raw,"",n,true,false,true,false,false) }
-        if (n>=8 && _asciiLower(raw.slice(4,8))=="unc\\") { return _unc(raw,8,true) }
+        if (n==7 && asciiLower(raw.slice(4,7))=="unc") { return Root(raw,"",n,true,false,true,false,false) }
+        if (n>=8 && asciiLower(raw.slice(4,8))=="unc\\") { return _unc(raw,8,true) }
         if (_drive(raw,4)) {
             if (n>=7 && raw.slice(6,7)=="\\") {
                 return Root(raw.slice(0,7),raw.slice(0,6),7,true,true,true,false,true)
@@ -148,7 +148,7 @@ export fn joinAll(parts: Array<string>, windows: bool) -> string {
         const prior=root(out,windows)
         if (!next.valid || next.absolute) { out=part; continue }
         if (windows && len(next.drive)>0) {
-            if (len(prior.drive)==0 || _asciiLower(prior.drive)!=_asciiLower(next.drive)) {
+            if (len(prior.drive)==0 || asciiLower(prior.drive)!=asciiLower(next.drive)) {
                 out=part; continue
             }
             part=part.slice(next.end)
@@ -263,9 +263,11 @@ export fn relative(fromRaw: string, toRaw: string, windows: bool) -> string? {
         return null
     }
     if (ar.absolute!=br.absolute || ar.rooted!=br.rooted) { return null }
-    if (windows && _asciiLower(ar.drive)!=_asciiLower(br.drive)) { return null }
-    const aa=_segments(a,ar.end,windows)
-    const bb=_segments(b,br.end,windows)
+    if (windows && asciiLower(ar.drive)!=asciiLower(br.drive)) { return null }
+    var aa=_segments(a,ar.end,windows)
+    var bb=_segments(b,br.end,windows)
+    if (a==".") { aa=[] }
+    if (b==".") { bb=[] }
     if (a==b) { return "." }
     if ((len(aa)>0 && aa[0]=="..") || (len(bb)>0 && bb[0]=="..")) { return null }
     var common=0
