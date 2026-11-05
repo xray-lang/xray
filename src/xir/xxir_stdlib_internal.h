@@ -14,12 +14,17 @@
 XR_DATA const uint8_t xir_stdlib_output_checked[];
 XR_DATA const size_t xir_stdlib_output_checked_length;
 XR_DATA const uint8_t xir_stdlib_output_checked_sha256[32];
+typedef struct XirStdlibCheckedModule {
+    const char *namespace_id,*logical_path,*canonical;
+    const uint32_t *dependencies;
+    uint32_t dependency_count;
+} XirStdlibCheckedModule;
 typedef struct XirStdlibCheckedComponent {
     const uint8_t *bytes;
     size_t length;
     const uint8_t *sha256;
-    const char *namespace_id;
-    const char *logical_path;
+    const XirStdlibCheckedModule *modules;
+    size_t module_count;
 } XirStdlibCheckedComponent;
 XR_DATA const XirStdlibCheckedComponent xir_stdlib_checked_components[];
 XR_DATA const size_t xir_stdlib_checked_component_count;

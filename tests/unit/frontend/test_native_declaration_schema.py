@@ -1256,6 +1256,34 @@ class PathCurrentDirectoryDeclarations(unittest.TestCase):
         for name in ('sep', 'delimiter'):
             self.assertEqual(next(row['signature'] for row in rows if row['namespace'] == 'path' and row['name'] == name), ': string')
 
+    def test_checked_owner_metadata_rejects_wrong_ordinals_and_dependencies(self):
+        import copy
+        from xir_stdlib_publication import decoded_modules, validate_modules, validate_sources
+        identities = ('stdlib-module-v1:module=4:path:path=15:path/_bundle.xr',
+                      'stdlib-module-v1:module=4:path:path=12:path/path.xr')
+        record = dict(schema=1, stage=2, root_module=0xffffffff, modules=[
+            dict(ordinal=0, canonical=identities[0], dependencies=[1]),
+            dict(ordinal=1, canonical=identities[1], dependencies=[])])
+        sources = {('path', 'path/_bundle.xr'): b'import path\n', ('path', 'path/path.xr'): b'export fn from() {}\n'}
+        rows = decoded_modules(record, sources)
+        self.assertEqual([row['canonical'] for row in rows], list(identities))
+        mutations = []
+        for field, value in (('ordinal', 1), ('authority', 'memory'), ('namespace', 'other'),
+                             ('canonical', identities[1]), ('dependencies', [2]), ('dependencies', [0])):
+            bad = copy.deepcopy(rows)
+            bad[0][field] = value
+            mutations.append(bad)
+        mutations.append(rows[1:])
+        for bad in mutations:
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                validate_modules(bad)
+        with self.assertRaises(ValueError):
+            decoded_modules(dict(record, root_module=0), sources)
+        with self.assertRaises(ValueError):
+            decoded_modules(record, {('path', 'path/path.xr'): b''})
+        with self.assertRaises(ValueError):
+            validate_sources([], set(identities))
+
 
 if __name__ == '__main__':
     unittest.main()

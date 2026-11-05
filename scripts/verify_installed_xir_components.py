@@ -8,6 +8,7 @@ import re
 import tempfile
 from pathlib import Path, PurePosixPath
 from build_xir_runtime_sdk import canonical_identity
+from xir_stdlib_publication import module_identity, validate_modules, validate_sources
 
 FIELDS = {'schema', 'components'}
 
@@ -41,24 +42,34 @@ def file_matches(root, row):
 def verify_components(root, expected, sdk_root, expected_sdk):
     raw = expected.read_bytes()
     record = json.loads(raw)
-    if set(record) != FIELDS or type(record['schema']) is not int or record['schema'] != 2:
+    if set(record) != FIELDS or type(record['schema']) is not int or record['schema'] != 3:
         raise ValueError('unknown publication schema or fields')
     rows = record['components']
     if not isinstance(rows, list) or not rows:
         raise ValueError('empty or invalid component inventory')
-    identities, paths = set(), set()
+    identities, paths, owners = set(), set(), set()
     for row in rows:
-        if set(row) != {'role', 'path', 'module_identity', 'length', 'sha256'} or row['role'] != 'checked':
+        if set(row) != {'role', 'path', 'modules', 'sources', 'length', 'sha256'} or row['role'] != 'checked':
             raise ValueError('unknown component fields or role')
-        identity = row['module_identity']
-        match = re.fullmatch(r'stdlib-module-v1:module=([1-9][0-9]*):([A-Za-z_][A-Za-z_0-9]*):path=([1-9][0-9]*):([A-Za-z_][A-Za-z_0-9]*(?:/[A-Za-z_][A-Za-z_0-9]*)+\.xr)', identity)
-        if not match or int(match[1]) != len(match[2]) or int(match[3]) != len(match[4]) or not match[4].startswith(match[2]+'/'):
-            raise ValueError('wrong stdlib module identity')
-        if identity in identities or row['path'] in paths:
+        names = validate_modules(row['modules'])
+        validate_sources(row['sources'], names)
+        if identities & names or row['path'] in paths:
             raise ValueError('duplicate component identity or path')
-        identities.add(identity)
+        identities |= names
         paths.add(row['path'])
+        owners.add(frozenset(names))
         file_matches(root, row)
+    required = {module_identity(ns, path) for ns, path in (
+        ('io', 'io/output.xr'), ('time', 'time/time.xr'), ('path', 'path/path.xr'),
+        ('path', 'path/posix.xr'), ('path', 'path/windows.xr'), ('path', 'path/logical.xr'),
+        ('path', 'path/_lexical.xr'), ('path', 'path/_bundle.xr'))}
+    if identities != required:
+        raise ValueError('incomplete or unexpected standard-library publication')
+    expected_owners = {frozenset({module_identity('io', 'io/output.xr')}),
+                       frozenset({module_identity('time', 'time/time.xr')}),
+                       frozenset(identity for identity in required if identity.startswith('stdlib-module-v1:module=4:path:'))}
+    if owners != expected_owners:
+        raise ValueError('dependency closure split across Checked owners')
     sdk_identity = None
     if sdk_root is not None and (sdk_root.exists() or sdk_root.is_symlink()):
         sdk_identity = verify_sdk(sdk_root, expected_sdk)

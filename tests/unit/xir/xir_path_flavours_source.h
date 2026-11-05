@@ -9,6 +9,7 @@
 #ifndef XIR_PATH_FLAVOURS_SOURCE_H
 #define XIR_PATH_FLAVOURS_SOURCE_H
 #include "base/xsha256.h"
+#include "xir/xxir_stdlib_internal.h"
 static void path_previous134(const XrXirCompileContext *context){
     _Static_assert(XR_XIR_CHECKED_CONTRACT>134,"the native Path reader excludes the projected-cwd contract");
     FILE *file=fopen(XR_PATH_FIXTURES "/previous134-native-path/old134-path.xrchk","rb");CHECK(file);
@@ -42,10 +43,10 @@ static void path_previous135(const XrXirCompileContext *context){
     memset(packet,0xa5,length);xr_free(packet);
 }
 static XrXirStatus path_flavours_check(const XrXirCompileContext *context,const char *text,
-    XrXirSourceResult *output,XrXirSourceDiagnostic *diagnostic){
+    const XrXirLibraryCatalog *libraries,XrXirSourceResult *output,XrXirSourceDiagnostic *diagnostic){
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_PROJECT,"path-shadow",XR_PATH_FIXTURES};
-    XrXirSourceRequest request={session,XR_PATH_FIXTURES "/client.xr",&authority,context,XR_PATH_ROOT "/stdlib",NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,XR_PATH_FIXTURES "/client.xr",&authority,context,XR_PATH_ROOT "/stdlib",NULL,XR_XIR_PROGRAM,libraries};
     XrXirSourceText input={"client.xr",text,strlen(text)};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,output,diagnostic,NULL);
     xr_compile_session_free(session);return status;
@@ -78,7 +79,7 @@ static void path_class_array_refusals(const XrXirCompileContext *context){
     };
     for(unsigned n=0;n<2;++n){
         XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
-        XrXirStatus status=path_flavours_check(context,texts[n],&result,&diagnostic);
+        XrXirStatus status=path_flavours_check(context,texts[n],NULL,&result,&diagnostic);
         XrXirStatus expected=n?XR_XIR_UNRESOLVED:XR_XIR_BAD_TYPE;
         const char *reason=n?"(CALL)":"class field carrier is not implemented";
         bool located=diagnostic.module==0&&diagnostic.line==(n?2:1)&&strstr(diagnostic.message,reason);
@@ -88,6 +89,34 @@ static void path_class_array_refusals(const XrXirCompileContext *context){
         xr_xir_compile_source_result_free(&result);
     }
 }
+static void path_imported_index_contract(const XrXirCompileContext *context,const XrXirArtifact *cold){
+    const XrXirModule *module=xr_xir_compile_artifact_module(cold);
+    uint32_t function=path_complete_named(module,"_drive"),site=UINT32_MAX;
+    const XrXirFunction *body=module->functions+function;
+    const XrXirSourceModule *owner=module->declarations->modules+module->declarations->functions[function].module;
+    static const char canonical[]="stdlib-module-v1:module=4:path:path=16:path/_lexical.xr";
+    CHECK(owner->name_length==sizeof(canonical)-1&&!memcmp(owner->name,canonical,sizeof(canonical)-1));
+    for(uint32_t i=0;i<body->instruction_count;++i)if(body->instructions[i].op==XR_XIR_STRING_INDEX_OF){
+        CHECK(site==UINT32_MAX);site=i;
+    }
+    CHECK(site!=UINT32_MAX&&body->instructions[site].args[1]==3&&!body->instructions[site].immediate);
+    const uint32_t *args=body->operands+body->instructions[site].args[0];
+    CHECK(xr_xir_operand_type(body,args[0])==XR_XIR_STRING&&xr_xir_operand_type(body,args[1])==XR_XIR_STRING&&
+        xr_xir_operand_type(body,args[2])==XR_XIR_I64&&body->instructions[site].type==XR_XIR_I64);
+    const XrXirConstruction *construction=xr_xir_compile_artifact_construction(cold);
+    CHECK(xr_xir_compile_structure_verify_v2(context,module,construction,NULL)==XR_XIR_OK);
+    XrXirFunction *functions=xr_malloc(module->function_count*sizeof(*functions));
+    uint32_t *operands=xr_malloc(body->operand_count*sizeof(*operands));CHECK(functions&&operands);
+    memcpy(functions,module->functions,module->function_count*sizeof(*functions));
+    memcpy(operands,body->operands,body->operand_count*sizeof(*operands));
+    XrXirModule changed=*module;changed.functions=functions;functions[function].operands=operands;
+    uint32_t argument=body->instructions[site].args[0]+2,old=operands[argument];operands[argument]=args[0];
+    XrXirDiagnostic diagnostic={0};
+    CHECK(xr_xir_compile_structure_verify_v2(context,&changed,construction,&diagnostic)==XR_XIR_BAD_TYPE&&
+        diagnostic.function==function&&diagnostic.instruction==site);
+    operands[argument]=old;CHECK(xr_xir_compile_structure_verify_v2(context,&changed,construction,NULL)==XR_XIR_OK);
+    xr_free(operands);xr_free(functions);
+}
 static void path_flavours_contracts(const XrXirCompileContext *context){
     static const char *const modules[]={"posix","windows","logical","logical"};
     for(unsigned n=0;n<4;++n){
@@ -95,12 +124,12 @@ static void path_flavours_contracts(const XrXirCompileContext *context){
             "import io\nimport path\nimport \"std/path/%s\" as foreign\nfn good(){io.exists(path.from(\"x\"))}\n",modules[n]);
         CHECK(count>0&&(size_t)count<sizeof(text));
         XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
-        CHECK(path_flavours_check(context,text,&result,&diagnostic)==XR_XIR_OK&&result.checked);
+        CHECK(path_flavours_check(context,text,NULL,&result,&diagnostic)==XR_XIR_OK&&result.checked);
         xr_xir_compile_source_result_free(&result);
         const char *bad=n==3?"fn bad(){foreign.LogicalPath(\"unchecked\")}\n":
             n==2?"fn bad(){io.exists(foreign.from(\"x\")!)}\n":"fn bad(){io.exists(foreign.from(\"x\"))}\n";
         size_t suffix=strlen(bad);CHECK((size_t)count+suffix<sizeof(text));memcpy(text+count,bad,suffix+1);
-        XrXirStatus status=path_flavours_check(context,text,&result,&diagnostic);
+        XrXirStatus status=path_flavours_check(context,text,NULL,&result,&diagnostic);
         const char *reason=n==3?"constructor arity or authority mismatch":"expression cannot satisfy its declared type";
         if(status!=XR_XIR_BAD_TYPE||diagnostic.module||diagnostic.line!=5||strcmp(diagnostic.message,reason))
             fprintf(stderr,"Path flavour refusal%u status%u module%u %d:%d %s\n",n,status,diagnostic.module,diagnostic.line,diagnostic.column,diagnostic.message);
@@ -115,14 +144,19 @@ static void path_flavours_product(const XrXirCompileContext *context,const char 
     long bytes=ftell(file);CHECK(bytes>0&&!fseek(file,0,SEEK_SET));
     char *text=xr_malloc((size_t)bytes+1);CHECK(text);
     CHECK(fread(text,1,(size_t)bytes,file)==(size_t)bytes&&!fclose(file));text[bytes]=0;
-    XrXirSourceResult source={0};CHECK(path_checked(context,text,XR_PATH_ROOT "/stdlib",NULL,&source)==XR_XIR_OK);
+    XrXirLibraryCatalog *catalog=NULL;XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
+    CHECK(xir_stdlib_library_catalog_new(context,XR_PATH_ROOT "/stdlib",&catalog)==XR_XIR_OK);
+    XrXirStatus status=path_flavours_check(context,text,catalog,&source,&diagnostic);
+    if(status!=XR_XIR_OK)fprintf(stderr,"Path checked import status%u module%u %d:%d %s\n",
+        status,diagnostic.module,diagnostic.line,diagnostic.column,diagnostic.message);
+    CHECK(status==XR_XIR_OK&&source.checked);xr_xir_compile_library_catalog_free(catalog);
     memset(text,0xa5,(size_t)bytes+1);xr_free(text);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&source);
     XrXirArtifact *cold=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&cold,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
-    path_class_array_shape(xr_xir_compile_artifact_module(cold));
+    path_class_array_shape(xr_xir_compile_artifact_module(cold));path_imported_index_contract(context,cold);
     CHECK(xr_xir_compile_specialize(cold,&closed,NULL,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(cold);
     CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);

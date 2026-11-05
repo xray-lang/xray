@@ -105,10 +105,16 @@ def main():
         source = program/'main.xr'
         source.write_text(source.read_text(encoding='utf-8') +
             '\nimport time as Clock\nconst initial=Clock.nanos()\nClock.sleep(1)\n'
-            'print(Clock.nanos()-initial>=1000000)\n', encoding='utf-8')
+            'print(Clock.nanos()-initial>=1000000)\n'
+            'import path as NativePath\nimport "std/path/posix" as PosixPath\n'
+            'import "std/path/windows" as WindowsPath\nimport "std/path/logical" as LogicalPath\n'
+            'print(NativePath.normalize(NativePath.from("a/../b")).toString()=="b")\n'
+            'print(PosixPath.normalize(PosixPath.from("a/../b")).toString()=="b")\n'
+            'print(WindowsPath.isAbsolute(WindowsPath.from("C:/x")))\n'
+            'print(LogicalPath.from("a/b")!.toString()=="a/b")\n', encoding='utf-8')
         relocated = output/'relocated'
         shutil.copytree(prefixes['full'], relocated)
-        expected_stdout, expected_stderr = b'A\0B41 42 42 true true 1.5\ntrue\n', b'E\0R'
+        expected_stdout, expected_stderr = b'A\0B41 42 42 true true 1.5\ntrue\ntrue\ntrue\ntrue\ntrue\n', b'E\0R'
         for name, prefix in (('core', prefixes['core']), ('relocated', relocated)):
             binary = prefix/'bin/xray.exe'
             version, errors = run(name+'-version', [binary, '--version', '--json'])
@@ -118,13 +124,20 @@ def main():
             time_source = prefix/'lib/xray/stdlib/time/time.xr'
             original = output_source.read_bytes()
             original_time = time_source.read_bytes()
+            path_sources = [prefix/'lib/xray/stdlib/path'/name for name in
+                            ('path.xr', 'posix.xr', 'windows.xr', 'logical.xr', '_lexical.xr', '_bundle.xr')]
+            path_originals = [file.read_bytes() for file in path_sources]
             for scenario in ('source-absent', 'source-poisoned'):
                 if scenario == 'source-absent':
                     output_source.unlink()
                     time_source.unlink()
+                    for file in path_sources:
+                        file.unlink()
                 else:
                     output_source.write_bytes(b'invalid Xray; Checked input must own this declaration\n')
                     time_source.write_bytes(b'invalid time source; Checked input must own the clock closure\n')
+                    for file in path_sources:
+                        file.write_bytes(b'invalid Path source; the exact Checked owner must supply every view\n')
                 out, err = run(name+'-'+scenario+'-vm', [binary, 'run', source])
                 assert (out, err) == (expected_stdout, expected_stderr)
                 generated = output/(name+'-'+scenario+'.c')
@@ -142,6 +155,8 @@ def main():
                 assert (prefix/checked_relative/'stdlib-manifest.json').read_bytes() == publication
             output_source.write_bytes(original)
             time_source.write_bytes(original_time)
+            for file, data in zip(path_sources, path_originals):
+                file.write_bytes(data)
             sentinel = output/(name+'-preserved.exe')
             sentinel.write_bytes(b'existing executable publication')
             invalid_env = dict(environment, XRAY_STDLIB_PATH=str(output/'missing-stdlib'))
@@ -177,21 +192,28 @@ def main():
         trusted = output/'invalid-trusted-record.json'
         cases = ('old-schema', 'unknown-schema', 'unknown-field', 'role', 'escape',
                  'module-identity', 'noncanonical-identity', 'empty', 'duplicate-identity',
-                 'duplicate-path', 'digest', 'length')
+                 'duplicate-path', 'digest', 'length', 'missing-ordinal', 'bad-ordinal',
+                 'bad-authority', 'bad-dependency', 'cyclic-dependency', 'source-bytes')
         for case in cases:
             record = json.loads(expected.read_bytes())
-            if case == 'old-schema': record['schema'] = 1
-            elif case == 'unknown-schema': record['schema'] = 3
+            if case == 'old-schema': record['schema'] = 2
+            elif case == 'unknown-schema': record['schema'] = 4
             elif case == 'unknown-field': record['unknown'] = 1
             elif case == 'role': record['components'][0]['role'] = 'source'
             elif case == 'escape': record['components'][0]['path'] = '../io-output.chk'
-            elif case == 'module-identity': record['components'][0]['module_identity'] = 'untrusted'
-            elif case == 'noncanonical-identity': record['components'][0]['module_identity'] = 'stdlib-module-v1:module=2:io:path=13:io//output.xr'
+            elif case == 'module-identity': record['components'][0]['modules'][0]['canonical'] = 'untrusted'
+            elif case == 'noncanonical-identity': record['components'][0]['modules'][0]['canonical'] = 'stdlib-module-v1:module=2:io:path=13:io//output.xr'
             elif case == 'empty': record['components'] = []
             elif case == 'duplicate-identity': record['components'].append(dict(record['components'][0]))
             elif case == 'duplicate-path': record['components'][1]['path'] = record['components'][0]['path']
             elif case == 'digest': record['components'][0]['sha256'] = '0'*64
             elif case == 'length': record['components'][0]['length'] += 1
+            elif case == 'missing-ordinal': record['components'][2]['modules'].pop()
+            elif case == 'bad-ordinal': record['components'][2]['modules'][0]['ordinal'] = 99
+            elif case == 'bad-authority': record['components'][2]['modules'][0]['authority'] = 'memory'
+            elif case == 'bad-dependency': record['components'][2]['modules'][0]['dependencies'] = [999999]
+            elif case == 'cyclic-dependency': record['components'][2]['modules'][0]['dependencies'] = [0]
+            elif case == 'source-bytes': record['components'][2]['sources'][0]['text'] += 'invalid'
             trusted.write_text(json.dumps(record), encoding='utf-8')
             publication = checked/'stdlib-manifest.json'
             publication.write_bytes(old)

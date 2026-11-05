@@ -85,6 +85,17 @@ class TierTests(unittest.TestCase):
         self.assertNotIn("native_runtime_installed", plan["tests"])
         self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
 
+    def test_checked_publication_inputs_keep_the_real_install_consumer(self):
+        for path in ("scripts/gen_xir_stdlib_checked.py", "scripts/xir_stdlib_publication.py",
+                     "scripts/verify_installed_xir_components.py", "tests/cli/run_xir_installed_product.py",
+                     "tests/cli/xir_public_cli_product.cmake", "src/xir/xxir_stdlib_catalog.c"):
+            with self.subTest(path=path):
+                plan = xray_l1.tier_plan(ROOT, "L2", changed=[path])
+                self.assertIn("checked-sdk", plan["groups"])
+                self.assertIn("test_xir_installed_product", plan["tests"])
+                self.assertIn("xray", plan["targets"])
+        self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
+
     def test_compression_sources_and_oracles_select_their_runtime_gates(self):
         paths = (
             "stdlib/compress/compress.xr",

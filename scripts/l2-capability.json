@@ -49,6 +49,11 @@
       "tier": "L2",
       "match": [
         "src/xir/*",
+        "scripts/gen_xir_stdlib_checked.py",
+        "scripts/xir_stdlib_publication.py",
+        "scripts/verify_installed_xir_components.py",
+        "tests/cli/run_xir_installed_product.py",
+        "tests/cli/xir_public_cli_product.cmake",
         "include/xray_xir*",
         "src/runtime/*",
         "tests/unit/xir/*sdk*",
@@ -59,6 +64,7 @@
       "reason": "Installed Checked-to-C runtime SDK and previous-contract/cleanup ABI rejection.",
       "tests": [
         "test_xir_cleanup_replaced_sdk_manifest",
+        "test_xir_installed_product",
         "sdk_installed_native_msvc",
         "xir_checked_previous111",
         "xir_checked_previous112",

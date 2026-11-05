@@ -8,16 +8,23 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from xir_stdlib_publication import decoded_modules, validate_sources
 
-LIBRARIES = (
-    ('output', 'io', 'io/output.xr', 'io/output/io-output.chk'),
-    ('time', 'time', 'time/time.xr', 'time/time.chk'),
-    ('path_lexical', 'path', 'path/_lexical.xr', 'path/_lexical.chk'),
-    ('path', 'path', 'path/path.xr', 'path/path.chk'),
-    ('path_posix', 'path', 'path/posix.xr', 'path/posix.chk'),
-    ('path_windows', 'path', 'path/windows.xr', 'path/windows.chk'),
-    ('path_logical', 'path', 'path/logical.xr', 'path/logical.chk'),
+SOURCES = (
+    ('io', 'io/output.xr'), ('time', 'time/time.xr'),
+    ('path', 'path/_lexical.xr'), ('path', 'path/path.xr'),
+    ('path', 'path/posix.xr'), ('path', 'path/windows.xr'), ('path', 'path/logical.xr'),
 )
+BUNDLE_PATH = 'path/_bundle.xr'
+BUNDLE_SOURCE = ('// One real Source owner retains the complete Path dependency closure.\n'
+                 'import path as _path\n'
+                 'import "std/path/_lexical" as _lexical\n'
+                 'import "std/path/posix" as _posix\n'
+                 'import "std/path/windows" as _windows\n'
+                 'import "std/path/logical" as _logical\n').encode('utf-8')
+OWNERS = (('output', 'io', 'io/output.xr', 'io/output/io-output.chk'),
+          ('time', 'time', 'time/time.xr', 'time/time.chk'),
+          ('path', 'path', BUNDLE_PATH, 'path/path.chk'))
 
 
 def atomic_write(path: Path, data: bytes) -> None:
@@ -46,11 +53,16 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix='xir-stdlib-checked-') as temporary:
         input_root = Path(temporary).resolve()
         # Dependencies enter the same exact source root before any producer runs.
-        for _, _, logical, _ in LIBRARIES:
+        sources = {}
+        for namespace, logical in SOURCES:
             entry = input_root / logical
             entry.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(root / 'stdlib' / logical, entry)
-        for symbol, namespace, logical, published in LIBRARIES:
+            sources[namespace, logical] = entry.read_bytes()
+        (input_root / BUNDLE_PATH).write_bytes(BUNDLE_SOURCE)
+        sources['path', BUNDLE_PATH] = BUNDLE_SOURCE
+        identities = set()
+        for symbol, namespace, logical, published in OWNERS:
             entry = input_root / logical
             checked = input_root / (symbol + '.chk')
             subprocess.run([str(args.producer.resolve()), str(input_root), str(entry),
@@ -58,6 +70,19 @@ def main() -> None:
             data = checked.read_bytes()
             if not data:
                 raise ValueError('empty Checked library: ' + logical)
+            modules = decoded_modules(json.loads(Path(str(checked) + '.modules.json').read_bytes()), sources)
+            producer_sources = [dict(namespace=row['namespace'], logical_path=row['logical_path'],
+                text=sources[row['namespace'], row['logical_path']].decode('utf-8'),
+                length=len(sources[row['namespace'], row['logical_path']]),
+                sha256=hashlib.sha256(sources[row['namespace'], row['logical_path']]).hexdigest()) for row in modules]
+            names = {row['canonical'] for row in modules}
+            validate_sources(producer_sources, names)
+            if identities & names:
+                raise ValueError('overlapping Checked owners')
+            identities |= names
+            required = {(ns, path) for ns, path in sources if ns == namespace}
+            if {(row['namespace'], row['logical_path']) for row in modules} != required:
+                raise ValueError('incomplete or unexpected Source closure: ' + logical)
             digest = hashlib.sha256(data).digest()
             prefix = 'xir_stdlib_' + symbol + '_checked'
             visibility = 'XR_DATADEF' if symbol == 'output' else 'static'
@@ -68,10 +93,19 @@ def main() -> None:
                            ','.join(str(v) for v in digest) + '};'])
             if symbol == 'output':
                 source.append('XR_DATADEF const size_t ' + prefix + '_length = ' + str(len(data)) + 'u;')
-            rows.append('    {' + prefix + ',sizeof(' + prefix + '),' + prefix + '_sha256,"' +
-                        namespace + '","' + logical + '"},')
-            identity = 'stdlib-module-v1:module=' + str(len(namespace)) + ':' + namespace + ':path=' + str(len(logical)) + ':' + logical
-            components.append(dict(role='checked', path=published, module_identity=identity,
+            for row in modules:
+                if row['dependencies']:
+                    source.append('static const uint32_t ' + prefix + '_dependencies_' + str(row['ordinal']) + '[]={' +
+                                  ','.join(str(edge) for edge in row['dependencies']) + '};')
+            source.append('static const XirStdlibCheckedModule ' + prefix + '_modules[]={')
+            for row in modules:
+                edges = prefix + '_dependencies_' + str(row['ordinal']) if row['dependencies'] else 'NULL'
+                source.append('    {' + ','.join(json.dumps(row[key]) for key in ('namespace', 'logical_path', 'canonical')) +
+                              ',' + edges + ',' + str(len(row['dependencies'])) + '},')
+            source.append('};')
+            rows.append('    {' + prefix + ',sizeof(' + prefix + '),' + prefix + '_sha256,' +
+                        prefix + '_modules,sizeof(' + prefix + '_modules)/sizeof(' + prefix + '_modules[0])},')
+            components.append(dict(role='checked', path=published, modules=modules, sources=producer_sources,
                                    length=len(data), sha256=digest.hex()))
             packets.append((published, data))
     source.extend(['XR_DATADEF const XirStdlibCheckedComponent xir_stdlib_checked_components[] = {',
@@ -79,8 +113,9 @@ def main() -> None:
     # The complete set is built before any publication is replaced.
     for name, data in packets:
         atomic_write(directory / name, data)
+    atomic_write(directory / BUNDLE_PATH, BUNDLE_SOURCE)
     atomic_write(directory / 'stdlib-checked-data.c', '\n'.join(source).encode('utf-8'))
-    manifest = dict(schema=2, components=components)
+    manifest = dict(schema=3, components=components)
     atomic_write(directory / 'stdlib-manifest.json', (json.dumps(manifest, indent=2)+'\n').encode('utf-8'))
 
 

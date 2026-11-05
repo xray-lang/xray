@@ -135,6 +135,7 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     case XR_XIR_DIV_INT:
     case XR_XIR_REM_INT:
     case XR_XIR_STRING_LEN:
+    case XR_XIR_STRING_INDEX_OF:
     case XR_XIR_EQ_STRING:
     case XR_XIR_NE_STRING:
     case XR_XIR_EQUAL:

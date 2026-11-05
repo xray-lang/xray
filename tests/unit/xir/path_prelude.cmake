@@ -1,5 +1,5 @@
 add_executable(test_xir_path_prelude xir/test_xir_path_prelude.c)
-target_link_libraries(test_xir_path_prelude PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen xray_xir_ctfe)
+target_link_libraries(test_xir_path_prelude PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen xray_xir_ctfe xray_xir_stdlib_catalog)
 target_include_directories(test_xir_path_prelude PRIVATE "${PROJECT_SOURCE_DIR}/src")
 target_compile_definitions(test_xir_path_prelude PRIVATE XR_PATH_ROOT="${PROJECT_SOURCE_DIR}" XR_PATH_FIXTURES="${PROJECT_SOURCE_DIR}/tests/fixtures/xir_path_prelude")
 set_target_properties(test_xir_path_prelude PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
