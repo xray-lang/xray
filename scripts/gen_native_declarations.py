@@ -471,6 +471,7 @@ def parse_source(source, prelude):
             'STRING_STARTS_WITH': ('startsWith', 'READ', ('STRING',), 'BOOL', 'no_heap', 'none', 'owned'),
             'STRING_ENDS_WITH': ('endsWith', 'READ', ('STRING',), 'BOOL', 'no_heap', 'none', 'owned'),
             'STRING_FROM_UTF8': ('fromUtf8', 'READ', ('SLICE_U8',), 'STRING', 'may_heap', 'utf8,allocation,retain,limit', 'owned'),
+            'STRING_FROM_UTF8_LOSSY': ('fromUtf8Lossy', 'READ', ('SLICE_U8',), 'STRING', 'may_heap', 'allocation,retain,limit', 'owned'),
             'STRING_SLICE': ('slice', 'READ', ('I64', 'I64'), 'STRING', 'may_heap', 'bounds,allocation,retain,limit', 'owned'),
             'STRING_TO_STRING': ('toString', 'READ', (), 'STRING', 'no_heap', 'retain', 'owned'),
             'STRING_REPEAT': ('repeat', 'READ', ('I64',), 'STRING', 'may_heap', 'allocation,retain,limit', 'owned'),
@@ -482,7 +483,7 @@ def parse_source(source, prelude):
         }.get(member.operation)
         optional = tuple(p[3] for p in member.parameters)
         expected_optional = (False, True) if member.operation in ('STRING_INDEX_OF', 'STRING_SLICE') else (False,) * len(member.parameters)
-        expected_static = member.operation in ('ARRAY_WITH_CAPACITY', 'STRING_FROM_UTF8')
+        expected_static = member.operation in ('ARRAY_WITH_CAPACITY', 'STRING_FROM_UTF8', 'STRING_FROM_UTF8_LOSSY')
         if member.error != ('Utf8Error' if member.operation == 'STRING_FROM_UTF8' else
                             'StringPatternError' if member.operation == 'STRING_SPLIT' else 'Never'):
             raise ValueError('native operation error type disagrees with its declaration')
@@ -491,7 +492,7 @@ def parse_source(source, prelude):
             raise ValueError('operation declaration disagrees with its semantic contract: ' + member.operation)
     required = {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH', 'ARRAY_CAPACITY', 'ARRAY_WITH_CAPACITY', 'ARRAY_RESERVE', 'ARRAY_BYTE_APPEND', 'ARRAY_BYTE_REPEAT'} | set(recipes) if header[0] == 1 else {
         'STRING_CONTAINS', 'STRING_STARTS_WITH', 'STRING_ENDS_WITH', 'STRING_INDEX_OF', 'STRING_LAST_INDEX_OF',
-        'STRING_TO_STRING', 'STRING_REPEAT', 'STRING_COPY_BYTES', 'STRING_REPLACE', 'STRING_REPLACE_ALL', 'STRING_SLICE', 'STRING_FROM_UTF8', 'STRING_RUNES', 'STRING_SPLIT'}
+        'STRING_TO_STRING', 'STRING_REPEAT', 'STRING_COPY_BYTES', 'STRING_REPLACE', 'STRING_REPLACE_ALL', 'STRING_SLICE', 'STRING_FROM_UTF8', 'STRING_FROM_UTF8_LOSSY', 'STRING_RUNES', 'STRING_SPLIT'}
     if used != required:
         raise ValueError('incorrect admitted native operation set')
     return header, members
@@ -1664,7 +1665,7 @@ def render_os_callables(declarations):
 
 
 
-def render_unicode_callable(root, decoder):
+def render_unicode_callable(root, decoder, lossy_decoder):
     import sys
     sys.path.insert(0, str(root / 'tools' / 'stdlibgen'))
     from stdlibgen import parse_defs
@@ -1831,6 +1832,7 @@ def render_unicode_callable(root, decoder):
         '    "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_unicode_has_property_parameters, 2, XR_NATIVE_TERM_BOOL', '};',
         'static const XrNativeCallableDeclaration xr_native_callables[] = {',
         '    {XR_NATIVE_CALLABLE_STRING_FROM_UTF8, &xr_native_string, &xr_native_string_members[' + str(decoder) + '], &xr_native_utf8_error, false, NULL, NULL, {{0}}},',
+        '    {XR_NATIVE_CALLABLE_STRING_FROM_UTF8_LOSSY, &xr_native_string, &xr_native_string_members[' + str(lossy_decoder) + '], NULL, true, NULL, NULL, {{0}}},',
         '    {XR_NATIVE_CALLABLE_TASK_ALL_BEGIN, &xr_native_task, &xr_native_task_members[3], NULL, false, NULL, NULL, {{0}}},',
         '    {XR_NATIVE_CALLABLE_TASK_FIRST_BEGIN, &xr_native_task, &xr_native_task_members[4], NULL, false, NULL, NULL, {{0}}},',
         '    {XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID, NULL, &xr_native_unicode_property, NULL, true, "regex", "stdlib/defs/core.def", ' + fingerprint + '},',
@@ -1851,7 +1853,8 @@ def render(root):
     lines += render_intrinsics(root)
     _, _, string_members = render_type(root, 'string')
     decoder = next(i for i, m in enumerate(string_members) if m.operation == 'STRING_FROM_UTF8')
-    lines += render_unicode_callable(root, decoder)
+    lossy_decoder = next(i for i, m in enumerate(string_members) if m.operation == 'STRING_FROM_UTF8_LOSSY')
+    lines += render_unicode_callable(root, decoder, lossy_decoder)
     binder = header[2]
     receiver = {}
     for operation in ('ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'):

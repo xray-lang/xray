@@ -41,7 +41,8 @@ static XrXirCtfeStatus ctfe_native_callable_step(CtfeCallExecution *execution,
     XrXirValue second=id==XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY ? ctfe_nominal_operand(&frame->run,1) : (XrXirValue){0};
     XrXirValueStatus converted=id==XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID ?
         xir_unicode_property_id(&argument,&result) : id==XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY ?
-        xir_unicode_has_property(&argument,&second,&result) : xir_from_utf8(&argument,&access,&result);
+        xir_unicode_has_property(&argument,&second,&result) : id==XR_NATIVE_CALLABLE_STRING_FROM_UTF8_LOSSY ?
+        xir_from_utf8_lossy(&argument,&access,&result) : xir_from_utf8(&argument,&access,&result);
     bool thrown=converted==XR_XIR_VALUE_BAD_UTF8;
     if (context.failure!=XR_XIR_CTFE_OK) status=context.failure;
     else {

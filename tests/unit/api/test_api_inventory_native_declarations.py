@@ -181,10 +181,10 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
             self.assertEqual(entry["operation"], member.operation)
             self.assertEqual(entry["xir_admitted"], member.name in {
                 "contains", "startsWith", "endsWith", "indexOf", "lastIndexOf", "toString", "repeat",
-                "copyBytes", "replace", "replaceAll", "fromUtf8", "slice", "split", "runes"})
+                "copyBytes", "replace", "replaceAll", "fromUtf8", "fromUtf8Lossy", "slice", "split", "runes"})
             if entry["xir_admitted"]:
                 self.assertEqual(entry["allocation"], "may_heap" if member.name in {
-                    "repeat", "copyBytes", "replace", "replaceAll", "fromUtf8", "slice", "split", "runes"} else "no_heap")
+                    "repeat", "copyBytes", "replace", "replaceAll", "fromUtf8", "fromUtf8Lossy", "slice", "split", "runes"} else "no_heap")
                 failures = {"indexOf": ["bounds", "limit"], "lastIndexOf": ["limit"],
                             "toString": ["retain"], "repeat": ["allocation", "retain", "limit"],
                             "copyBytes": ["allocation", "retain", "limit"],
@@ -193,10 +193,13 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
                             "split": ["allocation", "retain", "limit"],
                             "runes": ["allocation", "retain", "limit"],
                             "fromUtf8": ["utf8", "allocation", "retain", "limit"],
+                            "fromUtf8Lossy": ["allocation", "retain", "limit"],
                             "slice": ["bounds", "allocation", "retain", "limit"]}
                 self.assertEqual(entry["failures"], failures.get(member.name, []))
                 self.assertEqual(entry["ownership"], "owned")
         self.assertEqual(actual["fromUtf8"]["operation"], "STRING_FROM_UTF8")
+        self.assertEqual(actual["fromUtf8Lossy"]["operation"], "STRING_FROM_UTF8_LOSSY")
+        self.assertEqual(actual["fromUtf8Lossy"]["signature"], "(bytes: Slice<u8>): string")
         self.assertEqual(actual["fromUtf8"]["signature"], "(bytes: Slice<u8>) throws(Utf8Error): string")
         self.assertEqual(actual["slice"]["operation"], "STRING_SLICE")
         self.assertEqual((actual["split"]["native_member_id"], actual["split"]["operation"],
@@ -208,7 +211,7 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
                           actual["runes"]["signature"]),
                          (19, "STRING_RUNES", "(): Iterator<rune>"))
         unadmitted = {entry["name"] for entry in actual.values() if not entry["xir_admitted"]}
-        self.assertEqual({"fromUtf8Lossy", "fromRune", "join", "sliceBytes", "bytes"}, unadmitted)
+        self.assertEqual({"fromRune", "join", "sliceBytes", "bytes"}, unadmitted)
         self.assertEqual((actual["bytes"]["native_member_id"], actual["bytes"]["signature"],
                           actual["bytes"]["operation"], actual["bytes"]["allocation"],
                           actual["bytes"]["ownership"]),

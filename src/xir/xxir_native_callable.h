@@ -90,14 +90,21 @@ static inline bool xir_native_callable_types(uint32_t id,const XrXirTypes *types
             count==1 && parameters && parameters[0]==XR_XIR_STRING && result==XR_XIR_I64 && error==XR_XIR_NEVER;
     }
     const XrXirTypeNode *slice=count==1 && parameters ? xr_xir_type_node(types,parameters[0]) : NULL;
-    return canonical && canonical->owner && canonical->error_e_type && canonical->owner->id==XR_NATIVE_DECLARATION_STRING &&
-        canonical->member->operation==XR_NATIVE_OPERATION_STRING_FROM_UTF8 &&
+    bool lossy=id==XR_NATIVE_CALLABLE_STRING_FROM_UTF8_LOSSY;
+    return (lossy || id==XR_NATIVE_CALLABLE_STRING_FROM_UTF8) && canonical && canonical->owner &&
+        canonical->owner->id==XR_NATIVE_DECLARATION_STRING && canonical->member &&
+        canonical->member->operation==(lossy?XR_NATIVE_OPERATION_STRING_FROM_UTF8_LOSSY:XR_NATIVE_OPERATION_STRING_FROM_UTF8) &&
+        !strcmp(canonical->member->name,lossy?"fromUtf8Lossy":"fromUtf8") &&
+        canonical->ctfe==lossy && (lossy?!canonical->error_e_type:canonical->error_e_type!=NULL) &&
         canonical->member->is_static && canonical->member->is_method &&
-        canonical->member->parameter_count==1 && canonical->member->parameters[0].type==XR_NATIVE_TERM_SLICE_U8 &&
+        canonical->member->is_public && canonical->member->allocation==XR_NATIVE_ALLOCATION_MAY_HEAP &&
+        canonical->member->parameter_count==1 && canonical->member->parameters &&
+        canonical->member->parameters[0].type==XR_NATIVE_TERM_SLICE_U8 &&
+        !canonical->member->parameters[0].optional && !canonical->member->parameters[0].variadic &&
         canonical->member->result==XR_NATIVE_TERM_STRING &&
         canonical->member->ownership==XR_NATIVE_RESULT_OWNERSHIP_OWNED &&
         slice && slice->kind==XR_XIR_TYPE_SLICE && slice->element==XR_XIR_U8 &&
-        result==XR_XIR_STRING && xir_native_error_type(types,error,canonical->error_e_type->id);
+        result==XR_XIR_STRING && (lossy?error==XR_XIR_NEVER:xir_native_error_type(types,error,canonical->error_e_type->id));
 }
 static inline XrXirType xir_native_callable_error(const XrXirTypes *types,uint32_t id) {
     const XrNativeCallableDeclaration *native=xr_native_callable_by_id(id);

@@ -2711,7 +2711,8 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
         converted=xr_xir_call_view_access(view,&access);
         if (converted==XR_XIR_VALUE_OK) converted=id==XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID ?
         xir_unicode_property_id(&view->arguments[0],value) : id==XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY ?
-        xir_unicode_has_property(&view->arguments[0],&view->arguments[1],value) : xir_from_utf8(&view->arguments[0],&access,value);
+        xir_unicode_has_property(&view->arguments[0],&view->arguments[1],value) : id==XR_NATIVE_CALLABLE_STRING_FROM_UTF8_LOSSY ?
+        xir_from_utf8_lossy(&view->arguments[0],&access,value) : xir_from_utf8(&view->arguments[0],&access,value);
     }
     if (converted==XR_XIR_VALUE_BAD_UTF8) {
         converted=xr_xir_enum_new(error,0,NULL,0,xr_xir_call_admission(view),value);thrown=true;

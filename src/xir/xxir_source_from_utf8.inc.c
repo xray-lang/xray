@@ -4,13 +4,14 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_source_from_utf8.inc.c - Strict decoding through an ordinary throwing callee
+ * xxir_source_from_utf8.inc.c - Canonical static UTF-8 decoding callees
  */
 static bool source_from_utf8_receiver(SourceContext *ctx,AstNode *callee) {
     MemberAccessNode *member=&callee->as.member_access;
     return member->object && member->object->type==AST_VARIABLE &&
         source_text_same(ctx,callee,member->object->as.variable.name,"string") &&
-        !source_native_type_shadowed(ctx,"string") && source_text_same(ctx,callee,member->name,"fromUtf8");
+        !source_native_type_shadowed(ctx,"string") &&
+        (source_text_same(ctx,callee,member->name,"fromUtf8") || source_text_same(ctx,callee,member->name,"fromUtf8Lossy"));
 }
 static bool source_from_utf8_reference(SourceContext *ctx,AstNode *node,
     const XrNativeMemberDeclaration *member,XrXirType slice) {
@@ -40,14 +41,15 @@ static bool source_from_utf8_reference(SourceContext *ctx,AstNode *node,
 }
 static bool source_from_utf8_call(SourceContext *ctx,AstNode *node,SourceValue *output) {
     CallExprNode *call=&node->as.call_expr;
-    const XrNativeCallableDeclaration *native=xr_native_callable_by_id(1);
-    if (!native || !source_native_admit(ctx,native->owner) || !source_native_admit(ctx,native->error_e_type) ||
+    bool lossy=source_text_same(ctx,call->callee,call->callee->as.member_access.name,"fromUtf8Lossy");
+    const XrNativeCallableDeclaration *native=xr_native_callable_by_id(lossy?XR_NATIVE_CALLABLE_STRING_FROM_UTF8_LOSSY:XR_NATIVE_CALLABLE_STRING_FROM_UTF8);
+    if (!native || !source_native_admit(ctx,native->owner) || (!lossy && !source_native_admit(ctx,native->error_e_type)) ||
         call->arg_count!=1 || !call->arguments || call->type_arg_count || call->default_arg_count ||
         (call->arg_accesses && call->arg_accesses[0]!=XR_CALL_ARG_PLAIN))
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"strict UTF-8 conversion requires its canonical static signature");
-    SourceName *error=source_prelude_name(ctx,native->error_e_type->name);
-    if (!error || error->kind!=SOURCE_NOMINAL || error->index>=ctx->nominals.count ||
-        ctx->nominals.declarations[error->index].native.native_id!=native->error_e_type->id)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"UTF-8 conversion requires its canonical static signature");
+    SourceName *error=lossy?NULL:source_prelude_name(ctx,native->error_e_type->name);
+    if (!lossy && (!error || error->kind!=SOURCE_NOMINAL || error->index>=ctx->nominals.count ||
+        ctx->nominals.declarations[error->index].native.native_id!=native->error_e_type->id))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"strict UTF-8 conversion requires the canonical error owner");
     XrXirType slice;
     if (!source_intern_type(ctx,(XrXirTypeNode){XR_XIR_TYPE_SLICE,XR_XIR_U8,NULL,0,XR_XIR_UNIT,0,0,{0}},&slice)) return false;
@@ -64,7 +66,7 @@ static bool source_from_utf8_call(SourceContext *ctx,AstNode *node,SourceValue *
         if (!parameters || !name) return false;
         *parameters=slice;target=ctx->function_count++;
         ctx->functions[target]=(XrXirFunction){.name=name,.name_length=(uint32_t)strlen(name),
-            .parameters=parameters,.parameter_count=1,.result=XR_XIR_STRING,.error_type=error->type};
+            .parameters=parameters,.parameter_count=1,.result=XR_XIR_STRING,.error_type=lossy?XR_XIR_NEVER:error->type};
         ctx->identities[target]=(XrXirFunctionIdentity){.module=ctx->module,
             .promises=XR_XIR_FUNCTION_NO_SUSPEND,.native_callable=native->id};
         ctx->bodies[target].module=ctx->module;

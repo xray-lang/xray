@@ -46,7 +46,10 @@ static const char host_file_real_exports[]=
  "export fn fileCloseRaw(handle:i64)->bool{return __fileClose(handle)}\n"
  "export fn fileFlushRaw(handle:i64)->bool{return __fileFlush(handle)}\n"
  "export fn fileWriteRaw(handle:i64,data:Array<u8>,offset:i64)->i64{return __fileWrite(handle,data,offset)}\n"
- "export fn fileWriteTextRaw(handle:i64,data:string,offset:i64)->i64{return __fileWriteStr(handle,data,offset)}\n";
+ "export fn fileWriteTextRaw(handle:i64,data:string,offset:i64)->i64{return __fileWriteStr(handle,data,offset)}\n"
+ "export fn fileLossy(bytes:Array<u8>)->string{return string.fromUtf8Lossy(bytes[:])}\n"
+ "export fn fileLossyCheck()->bool{const bytes:Array<u8> = [65 as u8,0 as u8,240 as u8,159 as u8,146 as u8]\n"
+ " return string.fromUtf8Lossy(bytes[:])==\"A\\0\xEF\xBF\xBD\"}\n";
 static XrXirArtifact *host_file_real_code(XrXirCompileContext *context){
  FILE *file=fopen(XR_HOST_OS_ROOT "/stdlib/io/io.xr","rb");CHECK(file&&!fseek(file,0,SEEK_END));long size=ftell(file);CHECK(size>0&&!fseek(file,0,SEEK_SET));
  CHECK((uint64_t)size<=SIZE_MAX-sizeof(host_file_real_exports));size_t length=(size_t)size+sizeof(host_file_real_exports)-1;
@@ -69,8 +72,21 @@ static void host_file_real_product(XrXirCompileContext *context,const char *dire
  if(!emit&&!host_file_stdio_child)host_file_contracts(context);
  XrXirArtifact *code=host_file_real_code(context);const XrXirModule *module=xr_xir_compile_artifact_module(code);
  uint32_t ids[HOST_REAL_COUNT]={module->declarations->entry_function};
- static const char *const names[]={"filePath","fileRoundtrip","fileDeferred","fileStdio","fileOpenRaw","fileReadRaw","fileCloseRaw","fileFlushRaw","fileWriteRaw","fileWriteTextRaw"};
+ static const char *const names[]={"filePath","fileRoundtrip","fileDeferred","fileStdio","fileOpenRaw","fileReadRaw","fileCloseRaw","fileFlushRaw","fileWriteRaw","fileWriteTextRaw","fileLossy","fileLossyCheck"};
  for(unsigned n=0;n<HOST_REAL_COUNT-1;++n)ids[n+1]=host_named(module,names[n]);
+ uint32_t decoder=host_named(module,"fromUtf8Lossy");CHECK(module->declarations->functions[decoder].native_callable==118u&&
+  xir_native_callable_verify(module,decoder)==XR_XIR_OK);
+ const XrXirFunction *head=module->functions+decoder;XrXirType wrong=XR_XIR_STRING;
+ CHECK(!xir_native_callable_types(118u,module->types,head->parameters,1,XR_XIR_I64,XR_XIR_NEVER)&&
+  !xir_native_callable_types(118u,module->types,head->parameters,1,XR_XIR_STRING,XR_XIR_UNIT)&&
+  !xir_native_callable_types(118u,module->types,&wrong,1,XR_XIR_STRING,XR_XIR_NEVER));
+ if(!emit&&!host_file_stdio_child){
+  XrXirCtfeCallRequest request={.evaluation={.artifact=code,.function=ids[HOST_REAL_LOSSY_CHECK],
+   .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
+   .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES}},.call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
+  memcpy(request.evaluation.checked_identity,code->checked_identity,32);XrXirValue result={0};
+  CHECK(xr_xir_compile_ctfe_calls(&request,&result)==XR_XIR_CTFE_OK&&result.type==XR_XIR_BOOL&&result.payload==1);xr_xir_value_drop(&result);
+ }
  host_emit(code,"host_io_file_real",ids,HOST_REAL_COUNT,directory,emit);
  if(emit)xr_xir_compile_artifact_free(code);
  else{XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&code,&program)==XR_XIR_OK&&!code);if(host_file_stdio_child)host_file_stdio_execute(program,ids);else host_file_real_execute(program,ids);xr_xir_compile_program_drop(program);}

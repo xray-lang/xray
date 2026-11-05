@@ -9,6 +9,7 @@ enum StringSliceError {
 struct string {
     // @native-operation STRING_FROM_UTF8 allocation=may_heap failures=utf8,allocation,retain,limit ownership=owned
     static fromUtf8(bytes: Slice<u8>) throws(Utf8Error) -> string
+    // @native-operation STRING_FROM_UTF8_LOSSY allocation=may_heap failures=allocation,retain,limit ownership=owned
     static fromUtf8Lossy(bytes: Slice<u8>) -> string
     static fromRune(value: rune) -> string
     static join(parts: Array<string>, separator?: string) -> string

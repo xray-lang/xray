@@ -256,12 +256,12 @@ class NativeDeclarations(unittest.TestCase):
         for member in members:
             self.assertTrue(rows[member.line - 1][member.column - 1:].startswith(member.name))
         admitted = [m for m in members if m.operation != 'NONE']
-        self.assertEqual({m.name for m in admitted}, {'contains', 'startsWith', 'endsWith', 'indexOf', 'lastIndexOf', 'toString', 'repeat', 'copyBytes', 'replace', 'replaceAll', 'slice', 'fromUtf8', 'split', 'runes'})
+        self.assertEqual({m.name for m in admitted}, {'contains', 'startsWith', 'endsWith', 'indexOf', 'lastIndexOf', 'toString', 'repeat', 'copyBytes', 'replace', 'replaceAll', 'slice', 'fromUtf8', 'fromUtf8Lossy', 'split', 'runes'})
         for member in admitted:
-            self.assertEqual(schema.simple_term(member.result, ''), 'I64' if member.name in {'indexOf', 'lastIndexOf'} else 'ARRAY_U8' if member.name=='copyBytes' else 'ARRAY_STRING' if member.name=='split' else 'ITERATOR_RUNE' if member.name=='runes' else 'STRING' if member.name in {'toString','repeat','replace','replaceAll','slice','fromUtf8'} else 'BOOL')
-            self.assertEqual(member.allocation, 'may_heap' if member.name in {'repeat','copyBytes','replace','replaceAll','slice','fromUtf8','split','runes'} else 'no_heap')
-            self.assertEqual(member.failures, {'indexOf':'bounds,limit','lastIndexOf':'limit','toString':'retain','repeat':'allocation,retain,limit','copyBytes':'allocation,retain,limit','replace':'allocation,retain,limit','replaceAll':'allocation,retain,limit','slice':'bounds,allocation,retain,limit','fromUtf8':'utf8,allocation,retain,limit','split':'allocation,retain,limit','runes':'allocation,retain,limit'}.get(member.name,'none'))
-            self.assertEqual(member.static, member.name == 'fromUtf8')
+            self.assertEqual(schema.simple_term(member.result, ''), 'I64' if member.name in {'indexOf', 'lastIndexOf'} else 'ARRAY_U8' if member.name=='copyBytes' else 'ARRAY_STRING' if member.name=='split' else 'ITERATOR_RUNE' if member.name=='runes' else 'STRING' if member.name in {'toString','repeat','replace','replaceAll','slice','fromUtf8','fromUtf8Lossy'} else 'BOOL')
+            self.assertEqual(member.allocation, 'may_heap' if member.name in {'repeat','copyBytes','replace','replaceAll','slice','fromUtf8','fromUtf8Lossy','split','runes'} else 'no_heap')
+            self.assertEqual(member.failures, {'indexOf':'bounds,limit','lastIndexOf':'limit','toString':'retain','repeat':'allocation,retain,limit','copyBytes':'allocation,retain,limit','replace':'allocation,retain,limit','replaceAll':'allocation,retain,limit','slice':'bounds,allocation,retain,limit','fromUtf8':'utf8,allocation,retain,limit','fromUtf8Lossy':'allocation,retain,limit','split':'allocation,retain,limit','runes':'allocation,retain,limit'}.get(member.name,'none'))
+            self.assertEqual(member.static, member.name in {'fromUtf8','fromUtf8Lossy'})
             self.assertEqual(member.error, {'fromUtf8':'Utf8Error','split':'StringPatternError'}.get(member.name,'Never'))
         self.assertNotIn('xr_native_def_string[]', embed.render(ROOT / 'stdlib/types'))
         for before, after in [('struct string', 'class string'), ('id=2', 'id=1'),
@@ -286,6 +286,10 @@ class NativeDeclarations(unittest.TestCase):
                                'STRING_SLICE allocation=may_heap failures=allocation,retain,limit'),
                               ('static fromUtf8', 'fromUtf8'),
                               ('fromUtf8(bytes: Slice<u8>)', 'fromUtf8(bytes: Slice<i64>)'),
+                              ('static fromUtf8Lossy', 'fromUtf8Lossy'),
+                              ('fromUtf8Lossy(bytes: Slice<u8>)', 'fromUtf8Lossy(bytes: Slice<i64>)'),
+                              ('STRING_FROM_UTF8_LOSSY allocation=may_heap', 'STRING_FROM_UTF8_LOSSY allocation=no_heap'),
+                              ('STRING_FROM_UTF8_LOSSY allocation=may_heap failures=allocation,retain,limit', 'STRING_FROM_UTF8_LOSSY allocation=may_heap failures=utf8,allocation,retain,limit'),
                               ('throws(Utf8Error)', 'throws(StringPatternError)'),
                               ('runes() -> Iterator<rune>', 'runes() -> Iterator<i64>'),
                               ('split(separator: string)', 'split(separator: i64)'),

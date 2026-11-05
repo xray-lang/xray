@@ -171,6 +171,7 @@ typedef enum XrNativeOperation {
     XR_NATIVE_OPERATION_TASK_TIMEOUT,
     XR_NATIVE_OPERATION_ARRAY_BYTE_APPEND,
     XR_NATIVE_OPERATION_ARRAY_BYTE_REPEAT,
+    XR_NATIVE_OPERATION_STRING_FROM_UTF8_LOSSY,
     XR_NATIVE_OPERATION_COUNT
 } XrNativeOperation;
 typedef enum XrNativeAllocation {
@@ -329,7 +330,8 @@ typedef enum XrNativeCallableId {
     XR_NATIVE_CALLABLE_IO_FILE_OPEN_WRITE = 114,
     XR_NATIVE_CALLABLE_IO_FILE_READ = 115,
     XR_NATIVE_CALLABLE_IO_FILE_WRITE = 116,
-    XR_NATIVE_CALLABLE_IO_FILE_WRITE_STR = 117
+    XR_NATIVE_CALLABLE_IO_FILE_WRITE_STR = 117,
+    XR_NATIVE_CALLABLE_STRING_FROM_UTF8_LOSSY = 118
 } XrNativeCallableId;
 
 /* Callable IDs authenticate ordinary function bodies, independently of inline intrinsics. */

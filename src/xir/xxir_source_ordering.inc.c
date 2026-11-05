@@ -127,6 +127,7 @@ static bool source_prelude_scan(AstNode *node,void *pointer) {
     if (!scan->path_only && (node->type==AST_RANGE || node->type==AST_AWAIT_EXPR)) scan->needed=true;
     if (!scan->path_only && node->type==AST_MEMBER_ACCESS &&
         (source_text_same(scan->ctx,node,node->as.member_access.name,"fromUtf8") ||
+         source_text_same(scan->ctx,node,node->as.member_access.name,"fromUtf8Lossy") ||
          source_text_same(scan->ctx,node,node->as.member_access.name,"split")))
         scan->needed=true;
     ++scan->depth;

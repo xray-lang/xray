@@ -13,4 +13,8 @@
  * copy. BAD_UTF8 alone denotes malformed input; failure preserves Unit output. */
 XR_FUNC XrXirValueStatus xir_from_utf8(const XrXirValue *input,
     const XrXirViewAccess *access,XrXirValue *output);
+/* Lossy conversion snapshots the authorized byte span before allocating the
+ * result. Invalid maximal subparts become U+FFFD; resources remain typed. */
+XR_FUNC XrXirValueStatus xir_from_utf8_lossy(const XrXirValue *input,
+    const XrXirViewAccess *access,XrXirValue *output);
 #endif

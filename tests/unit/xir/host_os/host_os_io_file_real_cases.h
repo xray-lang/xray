@@ -16,7 +16,8 @@
 #include "os/os_time.h"
 static bool host_file_stdio_child;
 enum { HOST_REAL_ENTRY,HOST_REAL_PATH,HOST_REAL_ROUNDTRIP,HOST_REAL_DEFER,HOST_REAL_STDIO,
- HOST_REAL_OPEN,HOST_REAL_READ,HOST_REAL_CLOSE,HOST_REAL_FLUSH,HOST_REAL_WRITE,HOST_REAL_WRITE_STR,HOST_REAL_COUNT };
+ HOST_REAL_OPEN,HOST_REAL_READ,HOST_REAL_CLOSE,HOST_REAL_FLUSH,HOST_REAL_WRITE,HOST_REAL_WRITE_STR,
+ HOST_REAL_LOSSY,HOST_REAL_LOSSY_CHECK,HOST_REAL_COUNT };
 #if defined(XR_OS_WINDOWS)
 static const unsigned char host_file_real_input[]={0x41,0x0D,0x0A,0x1A,0,0xFF,0x42};
 /* The two-byte UTF-8 prefix makes offset two distinct from a rune index. */
@@ -65,6 +66,36 @@ static XrXirValue host_file_real_invoke(XrXirInstance *instance,uint32_t functio
  XrXirCallStatus status=host_file_real_drive(instance).outcome.status;
  if(status!=XR_XIR_CALL_RETURNED)fprintf(stderr,"real File function%u status%u\n",function,status);
  CHECK(status==XR_XIR_CALL_RETURNED);XrXirValue output={0};CHECK(xr_xir_instance_take_result(instance,&output)==XR_XIR_CALL_RETURNED);return output;
+}
+static void host_file_lossy_execute(XrXirProgram *program,const uint32_t *ids){
+ static const struct {unsigned char bytes[12];size_t length;const char *text;size_t size;int64_t runes;} cases[]={
+  {{0},0,"",0,0},
+  {{65,0,0xC3,0xA9,0xE4,0xB8,0xAD,0xF0,0x9F,0x98,0x80},11,"A\0\xC3\xA9\xE4\xB8\xAD\xF0\x9F\x98\x80",11,5},
+  {{0xFF},1,"\xEF\xBF\xBD",3,1},
+  {{0xE2,0x28,0xA1},3,"\xEF\xBF\xBD(\xEF\xBF\xBD",7,3},
+  {{0xF0,0x9F,0x92},3,"\xEF\xBF\xBD",3,1},
+  {{0xF4,0x90,0x80,0x80},4,"\xEF\xBF\xBD\xEF\xBF\xBD\xEF\xBF\xBD\xEF\xBF\xBD",12,4},
+  {{0xC0,0xAF},2,"\xEF\xBF\xBD\xEF\xBF\xBD",6,2},
+  {{0xED,0xA0,0x80},3,"\xEF\xBF\xBD\xEF\xBF\xBD\xEF\xBF\xBD",9,3}
+ };
+ size_t live=runtime_live,physical=runtime_bytes;XrXirInstanceConfig config;XrXirInstance *instance=NULL;
+ CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY&&xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
+ XrXirValueAdmission admission={.arena=program->arena,.domain=instance->domain,.work=UINT64_MAX,.scratch_bytes=UINT64_MAX};
+ XrXirValue held={0};
+ for(unsigned n=0;n<sizeof(cases)/sizeof(*cases);++n){
+  XrXirValue elements[12]={0},input={0};for(size_t b=0;b<cases[n].length;++b)elements[b]=(XrXirValue){XR_XIR_U8,0,cases[n].bytes[b]};
+  CHECK(xr_xir_array_new(program->entries[ids[HOST_REAL_LOSSY]].parameters[0],elements,(int64_t)cases[n].length,&admission,&input)==XR_XIR_VALUE_OK);
+  XrXirValue output=host_file_real_invoke(instance,ids[HOST_REAL_LOSSY],&input,1);const char *text=NULL;size_t size=0;int64_t runes=-1;
+  CHECK(xr_xir_string_view(&output,&text,&size)&&size==cases[n].size&&!memcmp(text,cases[n].text,size)&&
+   xr_xir_string_length(&output,&runes)==XR_XIR_VALUE_OK&&runes==cases[n].runes);
+  for(size_t b=0;b<cases[n].length;++b){XrXirValue byte={0};XrXirFaultDetail fault={0};
+   CHECK(xr_xir_array_get(&input,(int64_t)b,&admission,&byte,&fault)==XR_XIR_VALUE_OK&&byte.payload==cases[n].bytes[b]);xr_xir_value_drop(&byte);}
+  xr_xir_value_drop(&input);xr_xir_value_drop(&held);held=output;
+ }
+ XrXirValue checked=host_file_real_invoke(instance,ids[HOST_REAL_LOSSY_CHECK],NULL,0);CHECK(checked.type==XR_XIR_BOOL&&checked.payload==1);xr_xir_value_drop(&checked);
+ CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);const char *bytes=NULL;size_t length=0;
+ CHECK(xr_xir_string_view(&held,&bytes,&length)&&length==9&&!memcmp(bytes,cases[7].text,length));xr_xir_value_drop(&held);
+ CHECK(runtime_live==live&&runtime_bytes==physical);
 }
 #if defined(XR_OS_WINDOWS)
 static void host_file_real_array(const XrXirValue *value,const unsigned char *expected,size_t count,XrXirValueAdmission *admission){
@@ -128,6 +159,7 @@ static void host_file_real_fault(XrXirProgram *program,const uint32_t *ids,const
 }
 #endif
 static void host_file_real_execute(XrXirProgram *program,const uint32_t ids[HOST_REAL_COUNT]){
+ host_file_lossy_execute(program,ids);
 #if defined(XR_OS_WINDOWS)
  size_t live=runtime_live,bytes=runtime_bytes;HostFileRealFixture fixture={0};host_file_real_fixture(&fixture,0);
  XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);

@@ -2532,7 +2532,9 @@ static bool collect_declarations(SourceContext *ctx) {
     if (closures.helpers > UINT32_MAX - capacity)
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"synthetic helper capacity exhausted");
     capacity += closures.helpers;
-    /* Each source module can own one canonical decoder body. */
+    /* Each source module can own the two canonical decoder bodies. */
+    if (count>UINT32_MAX-capacity) return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"native callable capacity overflow");
+    capacity+=count;
     if (count>UINT32_MAX-capacity) return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"native callable capacity overflow");
     capacity+=count;
     if (count>UINT32_MAX-capacity) return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"split producer capacity overflow");

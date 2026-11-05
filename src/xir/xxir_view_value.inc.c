@@ -413,3 +413,64 @@ XR_FUNC XrXirValueStatus xir_from_utf8(const XrXirValue *input,
     }
     xr_xir_value_graph_end();return status;
 }
+static XrXirValueStatus view_utf8_snapshot(const XrXirValue *input,
+    const XrXirViewAccess *access,uint8_t **output,size_t *length) {
+    XrXirCellAuthority authority={0};
+    XrXirValueStatus status=view_value_permission(input,access,false,&authority);
+    if(status!=XR_XIR_VALUE_OK)return status;
+    const XrXirViewStorage *view=&((const XirView *)object_pointer(input))->storage;
+    if(view->kind!=XR_XIR_TYPE_SLICE || view->element!=XR_XIR_U8 || view->length<0 ||
+        (uint64_t)view->length>SIZE_MAX)return XR_XIR_VALUE_BAD_ARGUMENT;
+    size_t count=(size_t)view->length;
+    if(!view_storage_work(access->values,(uint64_t)count+1u))return XR_XIR_VALUE_LIMIT;
+    uint8_t *bytes=xr_xir_domain_allocate(access->values->domain,count?count:1,&status);
+    if(!bytes)return status;
+    /* Allocation and authorization may call the host. Reacquire the actual
+     * live range before copying; only the owned snapshot crosses later calls. */
+    status=view_value_permission(input,access,false,&authority);
+    if(status==XR_XIR_VALUE_OK) {
+        view=&((const XirView *)object_pointer(input))->storage;
+        if(view->kind!=XR_XIR_TYPE_SLICE || view->element!=XR_XIR_U8 ||
+            view->length<0 || (uint64_t)view->length!=count)status=XR_XIR_VALUE_BAD_ARGUMENT;
+        else if(view->buffer_origin) {
+            const XirBufferStorage *buffer=view_storage_buffer_access(view,&authority,access->values);
+            if(!buffer)status=XR_XIR_VALUE_BAD_ARGUMENT;
+            else if(count)memcpy(bytes,(const uint8_t *)buffer->data+(size_t)view->offset,count);
+        } else {
+            XirCell *cell=view_storage_access(view,&authority,access->values);
+            const uint8_t *source=NULL;
+            if(!cell)status=XR_XIR_VALUE_BAD_ARGUMENT;
+            else if(cell->value.type==XR_XIR_STRING)source=(const uint8_t *)((const XirString *)object_pointer(&cell->value))->bytes;
+            else {
+                const XirArray *array=(const XirArray *)object_pointer(&cell->value);
+                if(array->element!=XR_XIR_U8 || array->stride!=1)status=XR_XIR_VALUE_BAD_ARGUMENT;
+                else source=array->data;
+            }
+            if(status==XR_XIR_VALUE_OK && count)memcpy(bytes,source+(size_t)view->offset,count);
+        }
+    }
+    if(status!=XR_XIR_VALUE_OK)xr_xir_domain_deallocate(access->values->domain,bytes,count?count:1);
+    else {*output=bytes;*length=count;}
+    return status;
+}
+XR_FUNC XrXirValueStatus xir_from_utf8_lossy(const XrXirValue *input,
+    const XrXirViewAccess *access,XrXirValue *output) {
+    if(!unit_value(output))return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();uint8_t *bytes=NULL;size_t length=0;
+    XrXirValueStatus status=view_utf8_snapshot(input,access,&bytes,&length);
+    if(status==XR_XIR_VALUE_OK) {
+        XrUtf8LossyPlan plan=xr_utf8_core_lossy_plan(bytes,length);
+        if(plan.overflow || plan.output_length>INT64_MAX || plan.rune_count>INT64_MAX)status=XR_XIR_VALUE_LIMIT;
+        else if(!view_storage_work(access->values,(uint64_t)length+(uint64_t)plan.output_length+1u))status=XR_XIR_VALUE_LIMIT;
+        else {
+            XirString *text=NULL;status=string_allocate(access->values->domain,plan.output_length,&text);
+            if(status==XR_XIR_VALUE_OK) {
+                size_t written=xr_utf8_core_lossy_write(text->bytes,bytes,length);
+                XR_CHECK(written==plan.output_length,"lossy UTF-8 sizing and writing use the same owned byte snapshot");
+                text->runes=plan.rune_count;*output=string_value(text);
+            }
+        }
+        xr_xir_domain_deallocate(access->values->domain,bytes,length?length:1);
+    }
+    xr_xir_value_graph_end();return status;
+}
