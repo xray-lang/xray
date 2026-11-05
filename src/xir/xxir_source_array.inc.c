@@ -9,14 +9,47 @@
  * KEY CONCEPT:
  *   Mutation binds the root before operands and reads its current value at commit.
  */
+static bool source_array_emit_action(SourceContext *ctx,const XrHirArrayAction *action,
+    const SourceValue *arguments,uint32_t count,SourceValue *value) {
+    uint32_t before=ctx->bodies[ctx->function].count;
+    XrXirInstruction instruction={.op=action->operation,.type=action->type};
+    if(xr_xir_op_uses_operand_table(action->operation)) {
+        if(!source_recipe_group(ctx,instruction,arguments,count,value))return false;
+    } else {
+        for(uint32_t p=0;p<count;++p)instruction.args[p]=arguments[p].id;
+        if(!source_recipe_record(ctx,instruction,value))return false;
+    }
+    return source_hir_binding_emitted(ctx,&(XrHirBindingAction){.use=action->use},value,before);
+}
+static bool source_array_primitive(SourceContext *ctx,AstNode *node,XrXirType array,
+    XrXirOp operation,const SourceValue *arguments,uint32_t count,SourceValue *value) {
+    XrHirArrayShape shape={0};XrHirBodyScope scope={0};const char *reason=NULL;
+    XrXirStatus status=xr_hir_body_array_receive(ctx->typed_body,&ctx->types,array,ctx->request,&shape,&reason);
+    if(status!=XR_XIR_OK)return source_fail(ctx,node,status,reason?reason:"Array shape receive failed");
+    if(!source_hir_current_scope(ctx,&scope))return false;
+    XrHirArrayValue *values=count?source_alloc(ctx,count,sizeof(*values)):NULL;
+    if(count&&!values)return false;
+    for(uint32_t p=0;p<count;++p) {
+        if(!(p%64)&&!source_request_poll(ctx,node))return false;
+        if(ctx->diagnostic.status!=XR_XIR_OK)return false;
+        values[p]=(XrHirArrayValue){arguments[p].type,arguments[p].id};
+    }
+    XrHirArrayPrimitiveInput input={.types=&ctx->types,.scope=scope,.origin=source_hir_origin(ctx,node,0),
+        .shape=shape,.operation=operation,.values=values,.count=count};
+    XrHirArrayAction action={0};status=xr_hir_body_array_primitive(ctx->typed_body,&input,ctx->request,&action,&reason);
+    if(status!=XR_XIR_OK)return source_fail(ctx,node,status,reason?reason:"Array primitive contract failed");
+    return source_array_emit_action(ctx,&action,arguments,count,value);
+}
 static const XrNativeMemberDeclaration *source_array_member(SourceContext *ctx,
     AstNode *node, const char *name) {
     if (!source_native_array_declaration(ctx)) return NULL;
     const XrNativeTypeDeclaration *array = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_ARRAY);
     const XrNativeMemberDeclaration *member = source_native_member(ctx,array,name);
     if (!((ctx)->diagnostic.status == XR_XIR_OK)) return NULL;
-    if (!member || !member->is_public || member->operation == XR_NATIVE_OPERATION_NONE) {
-        source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array member has no admitted value-operation contract");
+    XrHirArrayMemberInfo info={0};const char *reason=NULL;
+    XrXirStatus status=xr_hir_array_member_view(member,ctx->request,&info,&reason);
+    if (status!=XR_XIR_OK) {
+        source_fail(ctx, node, status, reason?reason:"Array member receiving failed");
         return NULL;
     }
     return member;
@@ -158,23 +191,31 @@ static bool source_array_literal(SourceContext *ctx, AstNode *node, SourceExpect
         if (literal->elements[i] && literal->elements[i]->type == AST_SPREAD_EXPR)
             return source_array_spread_literal(ctx,node,expected,value);
     }
-    SourceExpectedType element = {expected.present,XR_XIR_UNIT, false, expected.inferred};
-    if (expected.present) element.type = xr_xir_array_element(&ctx->types,expected.type);
-    if (!literal->count && !element.present)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "empty Array literal needs an element context");
+    XrHirBodyScope scope={0};if(!source_hir_current_scope(ctx,&scope))return false;
+    XrHirArrayLiteralInput input={.types=&ctx->types,.scope=scope,.origin=source_hir_origin(ctx,node,0),
+        .expected=expected.type,.has_expected=expected.present,.inferred=expected.inferred,.count=(uint32_t)literal->count};
+    XrHirArrayLiteral context={0};const char *reason=NULL;
+    XrXirStatus status=xr_hir_body_array_literal(ctx->typed_body,&input,ctx->request,&context,&reason);
+    if(status!=XR_XIR_OK)return source_fail(ctx,node,status,reason?reason:"Array literal context receive failed");
     SourceValue *elements = literal->count ? source_alloc(ctx, (size_t) literal->count, sizeof(*elements)) : NULL;
     if (literal->count && !elements) return false;
     for (int i = 0; i < literal->count; ++i) {
-        if (!source_plan_expression(ctx, literal->elements[i], element, &elements[i])) return false;
-        if (!i && !element.present) element = (SourceExpectedType){true,elements[i].type, false, true};
+        XrHirArrayExpected next={0};
+        if(!xr_hir_body_array_expected(ctx->typed_body,context,&next))return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Array literal context has no owner");
+        if (!source_plan_expression(ctx, literal->elements[i], (SourceExpectedType){next.present,next.type,false,next.inferred}, &elements[i])) return false;
         if ((!expected.present || expected.inferred) && !source_root_join_record(ctx,&elements[i])) return false;
-        if (elements[i].type != element.type)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array literal elements require one exact type");
+        status=xr_hir_body_array_append(ctx->typed_body,context,(uint32_t)i,(XrHirArrayValue){elements[i].type,elements[i].id},ctx->request,&reason);
+        if(status!=XR_XIR_OK)return source_fail(ctx,node,status,reason?reason:"Array literal element receive failed");
     }
+    XrHirArrayExpected element={0};
+    if(!xr_hir_body_array_expected(ctx->typed_body,context,&element))return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Array literal context has no owner");
     XrXirType array = XR_XIR_UNIT;
     if (!source_array_element_type(ctx, element.type, &array) || !source_native_array_declaration(ctx)) return false;
-    if (!source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_ARRAY_NEW, array, {0}, {0}, 0, {0}},
-        elements, (uint32_t) literal->count, value)) return false;
+    XrHirArrayShape shape={0};XrHirArrayAction action={0};
+    status=xr_hir_body_array_receive(ctx->typed_body,&ctx->types,array,ctx->request,&shape,&reason);
+    if(status==XR_XIR_OK)status=xr_hir_body_array_literal_finish(ctx->typed_body,context,shape,ctx->request,&action,&reason);
+    if(status!=XR_XIR_OK)return source_fail(ctx,node,status,reason?reason:"Array literal construction receive failed");
+    if(!source_array_emit_action(ctx,&action,elements,(uint32_t)literal->count,value))return false;
     return source_query_target_token_reference(ctx,node,
         ctx->array_declaration, XR_XIR_SOURCE_TYPE_USE);
 }
@@ -201,7 +242,7 @@ static bool source_array_construct(SourceContext *ctx, AstNode *node, SourceValu
         return true;
     }
     bool ok;
-    if (!call->arg_count) ok = source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_ARRAY_NEW, array, {0}, {0}, 0, {0}}, NULL, 0, value);
+    if (!call->arg_count) ok = source_array_primitive(ctx,node,array,XR_XIR_ARRAY_NEW,NULL,0,value);
     else {
         SourceValue length, fill;
         if (!source_plan_expression(ctx, call->arguments[0], (SourceExpectedType){true, XR_XIR_I64, false, false}, &length)) return false;
@@ -251,12 +292,13 @@ static bool source_array_call(SourceContext *ctx, AstNode *node, const SourceVal
     MemberAccessNode *access = &call->callee->as.member_access;
     const XrNativeMemberDeclaration *member = source_array_member(ctx, call->callee, access->name);
     if (!member) return false;
-    if (member->is_static || !member->is_method)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array call requires an instance method");
-    SourceArrayRecipe recipe = source_array_recipe(member->operation);
-    if (recipe != SOURCE_ARRAY_NONE)
+    XrHirArrayMember binding={0};XrHirArrayMemberInfo contract={0};const char *reason=NULL;
+    XrXirStatus status=xr_hir_body_array_member(ctx->typed_body,&ctx->types,member,XR_HIR_ARRAY_INSTANCE,
+        ctx->request,&binding,&contract,&reason);
+    if(status!=XR_XIR_OK)return source_fail(ctx,node,status,reason?reason:"Array member receiving failed");
+    if (contract.recipe != XR_HIR_ARRAY_NONE)
         return source_array_member_reference(ctx, node, member) &&
-            source_array_recipe_call(ctx, node, recipe, evaluated, value);
+            source_array_recipe_call(ctx, node, binding, evaluated, value);
     if (call->type_arg_count || call->default_arg_count || call->arg_count<0 ||
         (call->arg_count && !call->arguments))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array method requires its declared arguments");

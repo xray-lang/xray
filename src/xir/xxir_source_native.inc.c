@@ -67,7 +67,7 @@ static bool source_native_array_declaration(SourceContext *ctx) {
 static bool source_array_element_type(SourceContext *ctx, XrXirType element, XrXirType *type) {
     XrXirDeclarations declarations;
     XrXirModule module = source_module_view(ctx,&declarations);
-    XrXirStatus status;
+    XrHirArrayTypeInput input={.scope=XR_HIR_ARRAY_FUNCTION_BODY,.element=element,.function=ctx->function};
     if (ctx->type_scope.active) {
         AstNode *node = ctx->type_scope.node;
         const char *name = node->type == AST_INTERFACE_DECL ? node->as.interface_decl.name :
@@ -79,6 +79,8 @@ static bool source_array_element_type(SourceContext *ctx, XrXirType element, XrX
             return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"type scope has no authentic declaration owner");
         uint32_t count = owner->kind == SOURCE_INTERFACE ? ctx->interfaces.declarations[owner->index].parameter_count :
             ctx->nominals.declarations[owner->index].parameter_count;
+        input.scope=owner->kind==SOURCE_INTERFACE?XR_HIR_ARRAY_INTERFACE_DECLARATION:XR_HIR_ARRAY_NOMINAL_DECLARATION;
+        input.declaration=owner->index;
         if (ctx->type_scope.interface_member) {
             uint32_t member = ctx->type_scope.interface_member - 1;
             if (owner->kind != SOURCE_INTERFACE || member >= (uint32_t)node->as.interface_decl.method_count)
@@ -87,28 +89,22 @@ static bool source_array_element_type(SourceContext *ctx, XrXirType element, XrX
             if (!method || method->type != AST_INTERFACE_METHOD || method->as.interface_method.type_param_count < 0 ||
                 (uint32_t)method->as.interface_method.type_param_count > 65536 - count)
                 return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"type scope method parameters are invalid");
-            count += (uint32_t)method->as.interface_method.type_param_count;
+            input.extra_parameters=(uint32_t)method->as.interface_method.type_param_count;
         }
-        status = element != XR_XIR_UNIT && !xr_xir_type_is_cell(&ctx->types,element) &&
-            xr_xir_type_span(&ctx->types,element) <= count ? XR_XIR_OK : XR_XIR_BAD_TYPE;
         /* This is declaration construction only. The complete module discharges
          * nested type obligations after all explicit implementations are bound. */
     } else if (ctx->declarations_building) {
         if (ctx->function >= ctx->function_count || !ctx->generics)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"function type declaration context is missing");
-        uint32_t count = ctx->generics[ctx->function].parameter_count;
-        status = element == XR_XIR_UNIT || xr_xir_type_is_cell(&ctx->types,element) ? XR_XIR_BAD_TYPE :
-            xr_xir_compile_type_expression_shape(&ctx->compile, &ctx->types, element, count);
+        input.scope=XR_HIR_ARRAY_FUNCTION_SIGNATURE;
         /* Explicit implementations are bound after every signature exists.
          * Module constraint verification must discharge this use before bodies. */
-    } else {
-        XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
-        status = xr_xir_compile_type_use_verify(&ctx->compile, &context, element);
-        if (status == XR_XIR_OK) status = xr_xir_compile_type_access(&ctx->compile, &module, ctx->function, element);
     }
+    XrHirArrayPool pool={&ctx->compile,&ctx->types,&module,ctx->request,ctx,source_hir_array_intern};
+    const char *reason=NULL;XrXirStatus status=xr_hir_array_type(&pool,&input,type,&reason);
     if (status != XR_XIR_OK)
-        return source_fail(ctx, NULL, status, "Array element must be a copyable storable type in this declaration");
-    return source_intern_type(ctx, (XrXirTypeNode) {XR_XIR_TYPE_ARRAY, element, NULL, 0, XR_XIR_UNIT, 0, 0, {0}}, type);
+        return source_fail(ctx, NULL, status, reason?reason:"Array element receiving failed");
+    return true;
 }
 static bool source_native_type_shadowed(SourceContext *ctx, const char *name) {
     if (find_name(ctx, ctx->locals, name) || find_name(ctx, ctx->names[ctx->module], name) ||

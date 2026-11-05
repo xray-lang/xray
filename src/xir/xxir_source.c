@@ -13,6 +13,7 @@
 #include "../hir/xhir_items.h"
 #include "../hir/xhir_body.h"
 #include "../hir/xhir_tuple.h"
+#include "../hir/xhir_array.h"
 #include "../hir/xhir_nominal.h"
 #include "../hir/xhir_nominal_source.h"
 #include "xxir_source_corpus.h"
@@ -625,6 +626,10 @@ static bool source_hir_tuple_type(SourceContext *ctx,const XrXirCallableParamete
     XrXirStatus status=xr_hir_tuple_type(&pool,fields,count,out,&reason);
     return status==XR_XIR_OK||source_fail(ctx,NULL,status,reason?reason:"Tuple receiving type is invalid");
 }
+static XrXirStatus source_hir_array_intern(void *owner,const XrXirTypeNode *node,XrXirType *out) {
+    SourceContext *ctx=owner;
+    return source_intern_type(ctx,*node,out)?XR_XIR_OK:ctx->diagnostic.status;
+}
 #include "xxir_source_native.inc.c"
 #include "xxir_source_hash_type.inc.c"
 #include "xxir_source_atomic.inc.c"
@@ -1142,15 +1147,7 @@ static bool source_instantiation(SourceContext *ctx, AstNode *node, XrXirDeclara
 #include "xxir_source_indirect_call.inc.c"
 #include "xxir_source_native_read_arguments.inc.c"
 static bool source_value_place(SourceContext *ctx, AstNode *node, SourceValue *place);
-typedef enum SourceArrayRecipe {
-    SOURCE_ARRAY_NONE, SOURCE_ARRAY_MAP, SOURCE_ARRAY_FILTER, SOURCE_ARRAY_REDUCE, SOURCE_ARRAY_FOR_EACH,
-    SOURCE_ARRAY_FIND, SOURCE_ARRAY_FIND_INDEX, SOURCE_ARRAY_EVERY, SOURCE_ARRAY_SOME,
-    SOURCE_ARRAY_CONTAINS, SOURCE_ARRAY_INDEX_OF, SOURCE_ARRAY_JOIN, SOURCE_ARRAY_CLEAR,
-    SOURCE_ARRAY_REVERSE, SOURCE_ARRAY_UNSHIFT, SOURCE_ARRAY_POP, SOURCE_ARRAY_SHIFT, SOURCE_ARRAY_RESIZE,
-    SOURCE_ARRAY_ENTRIES, SOURCE_ARRAY_FILL, SOURCE_ARRAY_CONCAT
-} SourceArrayRecipe;
-static SourceArrayRecipe source_array_recipe(XrNativeOperation operation);
-static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceArrayRecipe recipe,
+static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, XrHirArrayMember member,
     const SourceValue *evaluated, SourceValue *value);
 static bool source_range_is(SourceContext *ctx,XrXirType type);
 static bool source_range_length(SourceContext *ctx,AstNode *node,SourceValue receiver,SourceValue *value);

@@ -11,10 +11,12 @@
  */
 #include "xhir_body.h"
 #include "xhir_tuple.h"
+#include "xhir_array.h"
 #include "xhir_nominal.h"
 #include "xhir_nominal_source.h"
 #include "../xir/xxir_construction.h"
 #include "../xir/xxir_types.h"
+#include "../xir/xxir_operand_roles.h"
 #include "../xir/xxir_map.h"
 #include "../xir/xxir_interface.h"
 #include "../xir/xxir_compile_memory.h"
@@ -37,6 +39,11 @@ typedef struct HirBodyUse {
     uint32_t *tuple_arguments;
     uint32_t tuple_argument_count;
     bool tuple_construct;
+    XrHirArrayShape array;
+    XrHirArrayValue *array_arguments;
+    uint32_t array_argument_count;
+    uint32_t array_result;
+    bool array_emitted;
     XrHirNominalShape nominal;
     XrHirNominalValue *nominal_values;
     uint32_t nominal_count,nominal_variant,nominal_field,nominal_function;
@@ -89,6 +96,14 @@ typedef struct HirBodyTupleContext {
     uint32_t count;
     XrHirTupleContextKind kind;
 } HirBodyTupleContext;
+typedef struct HirBodyArrayLiteral {
+    XrHirBodyScope scope;
+    XrHirBodyOrigin origin;
+    XrHirArrayValue *values;
+    XrXirType element;
+    uint32_t count,received;
+    bool present,inferred,complete;
+} HirBodyArrayLiteral;
 typedef struct HirBodyNominalDeclaration {
     XrHirNominalField *fields;
     XrXirNominalVariant *variants;
@@ -124,6 +139,9 @@ struct XrHirBody {
     uint32_t *binding_map;
     HirBodyVector scopes,places,signatures;
     HirBodyVector tuples,tuple_contexts;
+    HirBodyVector arrays,array_literals,array_members;
+    uint32_t *array_map;
+    uint32_t array_map_capacity;
     uint32_t *tuple_map;
     uint32_t tuple_map_capacity;
     XrXirSourceModule *const *nominal_modules;
@@ -133,7 +151,7 @@ struct XrHirBody {
     uint32_t nominal_map_capacity;
     unsigned char *nominal_available;
     XrHirBodyDeclarations declarations;
-    bool ended,nominal_sealed,nominal_shape_only;
+    bool ended,nominal_sealed,nominal_shape_only,array_sealed;
 };
 static void body_nominal_free(XrHirBody *);
 static XrXirStatus body_poll(XrCompileRequestControl *control) {
@@ -207,7 +225,15 @@ XR_FUNC XrXirStatus xr_hir_body_new(XrCompileResources *resources,const XrXirTyp
 XR_FUNC void xr_hir_body_free(XrHirBody *body) {
     if(!body)return;
     body_nominal_free(body);
-    for(uint32_t i=0;i<body->count;++i)xr_compile_resources_free(body->uses[i].tuple_arguments);
+    for(uint32_t i=0;i<body->count;++i) {
+        xr_compile_resources_free(body->uses[i].tuple_arguments);
+        xr_compile_resources_free(body->uses[i].array_arguments);
+    }
+    xr_compile_resources_free(body->arrays.items);xr_compile_resources_free(body->array_map);
+    for(uint32_t i=0;i<body->array_literals.count;++i)
+        xr_compile_resources_free(((HirBodyArrayLiteral *)body->array_literals.items)[i].values);
+    xr_compile_resources_free(body->array_literals.items);
+    xr_compile_resources_free(body->array_members.items);
     for(uint32_t i=0;i<body->tuples.count;++i)xr_compile_resources_free(((HirBodyTuple *)body->tuples.items)[i].fields);
     for(uint32_t i=0;i<body->tuple_contexts.count;++i)xr_compile_resources_free(((HirBodyTupleContext *)body->tuple_contexts.items)[i].fields);
     xr_compile_resources_free(body->tuples.items);xr_compile_resources_free(body->tuple_contexts.items);xr_compile_resources_free(body->tuple_map);
@@ -237,6 +263,10 @@ XR_FUNC XrXirStatus xr_hir_body_emit(XrHirBody *body,XrHirBodyUse handle,XrXirTy
     if(!body||body->ended||handle.owner!=body||handle.index>=body->count)return XR_XIR_BAD_STRUCTURE;
     HirBodyUse *use=&body->uses[handle.index];
     if(!use->consumed||use->retired||use->projected||use->action.target!=type)return XR_XIR_BAD_STRUCTURE;
+    if(use->array.owner) {
+        if(use->array_emitted)return XR_XIR_BAD_STRUCTURE;
+        use->array_result=value;use->array_emitted=true;
+    }
     if(use->nominal_helper) {
         if(use->nominal_emitted)return XR_XIR_BAD_STRUCTURE;use->nominal_emitted=true;
         if(type!=XR_XIR_UNIT){use->nominal_result=value;use->nominal_has_result=true;}
@@ -278,7 +308,13 @@ XR_FUNC XrXirStatus xr_hir_body_finish(XrHirBody *body,XrCompileRequestControl *
         if(!(i%64)){XrXirStatus status=body_poll(control);if(status!=XR_XIR_OK)return status;}
         if(!((HirBodyNominalPlan *)body->nominal_plans.items)[i].complete)return XR_XIR_BAD_STRUCTURE;
     }
-    XrXirStatus status=body_poll(control);if(status==XR_XIR_OK)body->nominal_sealed=true;return status;
+    for(uint32_t i=0;i<body->array_literals.count;++i) {
+        if(!(i%64)){XrXirStatus status=body_poll(control);if(status!=XR_XIR_OK)return status;}
+        if(!((HirBodyArrayLiteral *)body->array_literals.items)[i].complete)return XR_XIR_BAD_STRUCTURE;
+    }
+    XrXirStatus status=body_poll(control);
+    if(status==XR_XIR_OK){body->nominal_sealed=true;body->array_sealed=true;}
+    return status;
 }
 XR_FUNC XrXirStatus xr_hir_body_retire(XrHirBody *body,XrHirBodyUse handle) {
     if(!body||body->ended||handle.owner!=body||handle.index>=body->count)return XR_XIR_BAD_STRUCTURE;
@@ -355,6 +391,8 @@ static XrXirStatus body_narrowing(const XrHirBody *body,XrXirType original,XrXir
 #include "xhir_body_place.inc.c"
 #include "xhir_body_default.inc.c"
 #include "xhir_body_tuple.inc.c"
+#include "xhir_body_array.inc.c"
+#include "xhir_body_array_members.inc.c"
 #include "xhir_body_nominal.inc.c"
 #include "xhir_body_call.inc.c"
 XR_FUNC XrXirStatus xr_hir_body_check(XrHirBody *body,const XrXirTypes *types,
@@ -381,6 +419,7 @@ XR_FUNC XrXirStatus xr_hir_body_consume(XrHirBody *body,XrHirBodyUse handle,XrHi
     if(handle.owner!=body)return XR_XIR_BAD_STRUCTURE;
 
     if(!body||body->ended||use>=body->count||!output)return XR_XIR_BAD_STRUCTURE;
+    if(body->uses[use].array.owner&&body->uses[use].consumed)return XR_XIR_BAD_STRUCTURE;
     body->uses[use].consumed=true;*output=body->uses[use].action;return XR_XIR_OK;
 }
 static XrXirStatus body_projection_failure(const char **reason,const char *message) {
@@ -397,6 +436,9 @@ XR_FUNC XrXirStatus xr_hir_body_project(XrHirBody *body,XrHirBodyUse handle,cons
     HirBodyUse *row=&body->uses[use];
     if(row->tuple.owner) {
         XrXirStatus status=body_tuple_project(body,row,projection,control);if(status!=XR_XIR_OK)return status;
+    }
+    if(row->array.owner) {
+        XrXirStatus status=body_array_project(body,row,projection,control);if(status!=XR_XIR_OK)return status;
     }
     if(row->nominal.owner) {
         XrXirStatus status=body_nominal_project(body,row,projection,control);if(status!=XR_XIR_OK)return status;

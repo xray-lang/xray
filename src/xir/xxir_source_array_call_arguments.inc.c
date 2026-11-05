@@ -32,8 +32,8 @@ static bool source_array_callback_context(SourceContext *ctx,AstNode *node,
     *output=(SourceExpectedType){true,expected,!shape->has_result,false};return true;
 }
 static bool source_array_callback_arguments(SourceContext *ctx,AstNode *node,
-    SourceArrayRecipe recipe,SourceValue array,SourceArrayCallback *callback,SourceValue *initial) {
-    uint32_t count=recipe==SOURCE_ARRAY_REDUCE ? 2 : 1;
+    XrHirArrayRecipe recipe,SourceValue array,SourceArrayCallback *callback,SourceValue *initial) {
+    uint32_t count=recipe==XR_HIR_ARRAY_REDUCE ? 2 : 1;
     XrXirType parameters[2]={XR_XIR_UNIT,XR_XIR_UNIT};
     SourceExpectedType contexts[2]={{0},{0}};SourceValue values[2]={{0}, {0}};
     SourceCallPlan plan={.family=SOURCE_CALL_ARRAY,.prefix={0},.substitution={0},.function_parameters=parameters,.requirement_parameters=NULL,.result=XR_XIR_UNIT,
@@ -45,7 +45,7 @@ static bool source_array_callback_arguments(SourceContext *ctx,AstNode *node,
     if (!source_call_expand(ctx,node,&syntax,&plan,count)) return false;
     if ((uint32_t)syntax.arg_count!=count || !syntax.expanded)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Array method requires its declared arguments");
-    if (recipe==SOURCE_ARRAY_REDUCE) {
+    if (recipe==XR_HIR_ARRAY_REDUCE) {
         SourceExpressionPlan *argument=source_call_argument_value_plan(syntax.expanded->entries[1].plan.value);
         if (!source_plan_binary_prepare(ctx,argument,(SourceExpectedType){0},true) ||
             !source_plan_numeric_prepare(ctx,argument,(SourceExpectedType){0},true)) return false;
@@ -62,7 +62,7 @@ static bool source_array_callback_arguments(SourceContext *ctx,AstNode *node,
     }
     const XrNativeTypeDeclaration *native=xr_native_declaration_by_id(XR_NATIVE_DECLARATION_ARRAY);
     const XrNativeMemberDeclaration *member=source_array_member(ctx,node,node->as.call_expr.callee->as.member_access.name);
-    if (!member || source_array_recipe(member->operation)!=recipe ||
+    if (!member || xr_hir_array_recipe(member)!=recipe ||
         !source_native_callback_error(ctx,node,native,member,&plan.declaration.callback_error)) return false;
     plan.declaration.array=array.type;plan.declaration.array_value=array.id;
     plan.declaration.accumulator=parameters[1];plan.declaration.array_member=member;
