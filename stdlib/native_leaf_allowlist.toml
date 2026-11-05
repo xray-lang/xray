@@ -1020,11 +1020,11 @@ deletion_trigger = "when Xray source can issue the kill(2) call itself; the leaf
 module = "os"
 symbol = "__loadavg"
 class = "host_abi_leaf"
-abi = "getloadavg(3) on the VM for every non-Windows platform; on AOT, getloadavg(3) except on Linux, where it reads sysinfo(2) si.loads scaled by 65536"
+abi = "The current owned system provider uses Linux sysinfo(2) fixed-point samples or macOS getloadavg(3); an unavailable provider result is absent, never fabricated samples"
 ownership = "fresh"
 effect = "nothrow"
-provider = "libc on the VM (stdlib/os/os.c os_loadavg) and, on Linux, the kernel directly on AOT (src/aot/xrt_os.h xrt_os_loadavg). The two cross different ABIs on Linux"
-deletion_trigger = "when the two backends agree on one entry point for the load average and Xray source can issue it; until then the leaf has two meanings on Linux"
+provider = "Current XIR VM and Checked-to-C use xr_os_io_loadavg plus owned nullable materialization. Frozen stdlib/os/os.c and src/aot/xrt_os.h are unmigrated legacy providers and do not establish this result contract"
+deletion_trigger = "when Xray source can issue the same typed system query; no old raw provider is a current fallback"
 
 [[leaf]]
 module = "os"

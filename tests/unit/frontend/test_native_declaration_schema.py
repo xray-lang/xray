@@ -968,10 +968,17 @@ class OsSystemDeclarations(unittest.TestCase):
         self.assertEqual(text.count('XR_NATIVE_ALLOCATION_UNKNOWN'), 8)
         self.assertEqual(text.count('XR_NATIVE_RESULT_OWNERSHIP_OWNED'), 8)
         self.assertEqual(text.count('XR_NATIVE_TERM_NULLABLE_I64'), 2)
-        self.assertIn('XR_NATIVE_TERM_ARRAY_F64', text)
+        self.assertIn('XR_NATIVE_TERM_NULLABLE_ARRAY_F64', text)
+        self.assertNotIn('XR_NATIVE_TERM_ARRAY_F64', text)
+        self.assertIn('"(): Array<f64>?", "Array<f64>?"', text)
         self.assertIn('{"pid", "i64", XR_NATIVE_TERM_I64, false, false}', text)
         self.assertIn('{"signal", "i64", XR_NATIVE_TERM_I64, false, false}', text)
         self.assertEqual(schema.simple_term(schema.TypeParser('Array<f64>').type(), ''), 'ARRAY_F64')
+        self.assertEqual(schema.simple_term(schema.TypeParser('Array<f64>?').type(), ''), 'NULLABLE_ARRAY_F64')
+        load = next(item for item in self.declarations if item.module == 'os' and item.name == '__loadavg')
+        with self.assertRaises(ValueError):
+            schema.render_os_system_callables([replace(item, signature='(): Array<f64>') if item is load else item
+                                               for item in self.declarations])
         for name in ('__uid', '__gid'):
             row = next(item for item in self.declarations if item.module == 'os' and item.name == name)
             self.assertEqual(row.signature, '(): i64?')

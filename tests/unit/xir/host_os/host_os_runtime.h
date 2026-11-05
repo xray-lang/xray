@@ -51,9 +51,7 @@ static XrOsIoStatus host_system_kill(XrOsSystemOwner *,int64_t,int64_t,void *,bo
 static XrOsIoStatus host_system_total(int64_t *);
 static XrOsIoStatus host_system_free(XrOsSystemOwner *,int64_t *);
 static XrOsIoStatus host_system_uptime(double *);
-#if !defined(XR_OS_WINDOWS)
 static XrOsIoStatus host_system_loadavg(XrOsLoadAverages *);
-#endif
 static XrOsIoStatus host_system_close(XrOsSystemOwner *);
 static XrOsIoStatus host_metadata(const XrOsIoPolicy *,const char *,size_t,bool(*)(void *),XrOsFileMetadataOwner *,XrOsFileMetadata *);
 static XrOsIoStatus host_metadata_close(XrOsFileMetadataOwner *);
@@ -162,6 +160,8 @@ static XrOsIoPolicy host_policy;
 enum { SYSTEM_NORMAL, SYSTEM_OOM_AFTER, SYSTEM_CANCEL_AFTER, SYSTEM_IO_AFTER,
  SYSTEM_CLOSE_ONCE, SYSTEM_CLOSE_PERSISTENT, SYSTEM_CANCEL_BEFORE, SYSTEM_SOME_ZERO };
 static unsigned system_mode,system_calls[8],system_close_calls;
+enum { SYSTEM_LOAD_HOST,SYSTEM_LOAD_NONE,SYSTEM_LOAD_SOME,SYSTEM_LOAD_INVALID };
+static unsigned system_load_mode;
 static uint64_t system_provider_work;
 static unsigned system_current_calls,system_current_failures,system_current_failure_at;
 typedef struct HostSystemCurrent {void *context;bool(*current)(void *);} HostSystemCurrent;
@@ -206,9 +206,15 @@ static XrOsIoStatus host_system_kill(XrOsSystemOwner *o,int64_t pid,int64_t sign
 static XrOsIoStatus host_system_total(int64_t *o){++system_calls[4];return host_system_after(xr_os_io_total_memory(o));}
 static XrOsIoStatus host_system_free(XrOsSystemOwner *owner,int64_t *o){++system_calls[5];return host_system_after(xr_os_io_free_memory(owner,o));}
 static XrOsIoStatus host_system_uptime(double *o){++system_calls[6];return host_system_after(xr_os_io_uptime(o));}
-#if !defined(XR_OS_WINDOWS)
-static XrOsIoStatus host_system_loadavg(XrOsLoadAverages *o){++system_calls[7];return host_system_after(xr_os_io_loadavg(o));}
-#endif
+static XrOsIoStatus host_system_loadavg(XrOsLoadAverages *o){
+ ++system_calls[7];XrOsIoStatus status=xr_os_io_loadavg(o);
+ /* Explicit result injections exercise materialization, not host observations. */
+ if(status==XR_OS_IO_OK&&system_load_mode!=SYSTEM_LOAD_HOST){
+  *o=(XrOsLoadAverages){system_load_mode!=SYSTEM_LOAD_NONE,{0.0,1.25,2.5}};
+  if(system_load_mode==SYSTEM_LOAD_INVALID)o->values[0]=-1.0;
+ }
+ return host_system_after(status);
+}
 static XrOsIoStatus host_system_close(XrOsSystemOwner *o){
  ++system_close_calls;
 #if defined(XR_OS_WINDOWS)

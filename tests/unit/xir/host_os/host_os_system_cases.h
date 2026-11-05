@@ -26,6 +26,43 @@ static int64_t host_parent_reference(void){
 #endif
 }
 static double host_double(XrXirValue value){double result=0;CHECK(value.type==XR_XIR_F64);memcpy(&result,&value.payload,sizeof(result));return result;}
+static void host_loadavg_value(const XrXirValue *value,XrXirDomain *domain,bool expected,const double *exact){
+ bool some=false;const XrXirValue *array=NULL;CHECK(xr_xir_nullable_view(value,&some,&array)&&some==expected);
+ if(!some){CHECK(!array);return;}CHECK(array);
+ XrXirValueAdmission admission={.domain=domain,.arena=xr_xir_value_arena(array),.work=100000,.scratch_bytes=65536};
+ int64_t count=-1;CHECK(xr_xir_array_len(array,&admission,&count)==XR_XIR_VALUE_OK&&count==3);
+ for(int64_t n=0;n<3;++n){XrXirValue item={0};XrXirFaultDetail fault={0};
+  CHECK(xr_xir_array_get(array,n,&admission,&item,&fault)==XR_XIR_VALUE_OK);
+  double number=host_double(item);CHECK(number>=0.0&&number<=1.7976931348623157e308&&(!exact||number==exact[n]));xr_xir_value_drop(&item);
+ }
+}
+static void host_loadavg_controls(XrXirProgram *program,const uint32_t ids[9]){
+ const double exact[]={0.0,1.25,2.5};size_t live=runtime_live,bytes=runtime_bytes;
+ for(unsigned shape=SYSTEM_LOAD_NONE;shape<=SYSTEM_LOAD_SOME;++shape){
+  XrXirInstance *instance=host_instance(program,ids[0]);host_active=instance;system_mode=SYSTEM_NORMAL;system_load_mode=shape;
+  unsigned before=system_calls[7];XrXirValue value=host_invoke(instance,ids[8],NULL,0);XrXirDomain *domain=instance->domain;
+  CHECK(system_calls[7]==before+1);host_loadavg_value(&value,domain,shape==SYSTEM_LOAD_SOME,exact);
+  CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);host_active=NULL;
+  /* The owned result keeps its actual Domain and arena alive after the Call owner. */
+  host_loadavg_value(&value,domain,shape==SYSTEM_LOAD_SOME,exact);xr_xir_value_drop(&value);
+  CHECK(runtime_live==live&&runtime_bytes==bytes);
+  const unsigned modes[]={SYSTEM_OOM_AFTER,SYSTEM_CANCEL_AFTER,SYSTEM_IO_AFTER};
+  const XrXirCallStatus statuses[]={XR_XIR_CALL_OOM,XR_XIR_CALL_CANCELLED,XR_XIR_CALL_HOST_ERROR};
+  for(unsigned n=0;n<3;++n){
+   instance=host_instance(program,ids[0]);host_active=instance;system_mode=modes[n];before=system_calls[7];
+   CHECK(xr_xir_instance_start(instance,ids[8],NULL,0)==XR_XIR_CALL_READY);XrXirCallStatus status=host_poll(instance);
+   runtime_fail_at=SIZE_MAX;system_mode=SYSTEM_NORMAL;CHECK(status==statuses[n]&&system_calls[7]==before+1);
+   value=(XrXirValue){0};CHECK(xr_xir_instance_take_result(instance,&value)==(n==1?XR_XIR_CALL_BAD_STATE:statuses[n])&&!value.type&&!value.reserved&&!value.payload);
+   CHECK(xr_xir_instance_free(instance)==(n==1?XR_XIR_CALL_READY:statuses[n]));host_active=NULL;
+   CHECK(runtime_live==live&&runtime_bytes==bytes);
+  }
+ }
+ XrXirInstance *instance=host_instance(program,ids[0]);host_active=instance;system_load_mode=SYSTEM_LOAD_INVALID;system_mode=SYSTEM_NORMAL;
+ unsigned before=system_calls[7];CHECK(xr_xir_instance_start(instance,ids[8],NULL,0)==XR_XIR_CALL_READY&&host_poll(instance)==XR_XIR_CALL_HOST_ERROR);
+ XrXirValue value={0};CHECK(system_calls[7]==before+1&&xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_HOST_ERROR&&!value.type&&!value.reserved&&!value.payload);
+ CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_HOST_ERROR);host_active=NULL;system_load_mode=SYSTEM_LOAD_HOST;
+ CHECK(runtime_live==live&&runtime_bytes==bytes);
+}
 static void host_system_limit(XrXirProgram *program,const uint32_t ids[9]){
  size_t live=runtime_live,bytes=runtime_bytes;uint64_t limit=0;
  for(unsigned pass=0;pass<3;++pass){
@@ -87,7 +124,7 @@ static void host_system_failures(XrXirProgram *program,const uint32_t ids[9]){
 }
 static void host_system_execute(XrXirProgram *program,const uint32_t ids[9]){
  size_t live=runtime_live,bytes=runtime_bytes;XrXirInstance *instance=host_instance(program,ids[0]);host_active=instance;system_mode=SYSTEM_NORMAL;
- XrXirValue kept[2]={{0}};
+ XrXirValue kept[3]={{0}};
  for(unsigned kind=0;kind<2;++kind){
   unsigned before=system_calls[kind];kept[kind]=host_invoke(instance,ids[kind+1],NULL,0);
   bool present=true;const XrXirValue *payload=NULL;CHECK(xr_xir_nullable_view(kept+kind,&present,&payload)&&system_calls[kind]==before+1);
@@ -111,7 +148,14 @@ static void host_system_execute(XrXirProgram *program,const uint32_t ids[9]){
  CHECK(value.type==XR_XIR_I64&&value.payload>=0&&value.payload<=total&&system_calls[5]==before+1);xr_xir_value_drop(&value);
  double low=0,high=0;CHECK(xr_os_io_uptime(&low)==XR_OS_IO_OK);before=system_calls[6];value=host_invoke(instance,ids[7],NULL,0);
  CHECK(xr_os_io_uptime(&high)==XR_OS_IO_OK&&host_double(value)>=low&&host_double(value)<=high&&system_calls[6]==before+1);xr_xir_value_drop(&value);
+ before=system_calls[7];kept[2]=host_invoke(instance,ids[8],NULL,0);CHECK(system_calls[7]==before+1);
+ bool loads_available=false;
+#if defined(XR_OS_LINUX) || defined(XR_OS_MACOS)
+ loads_available=true;
+#endif
+ XrXirDomain *loads_domain=instance->domain;host_loadavg_value(kept+2,loads_domain,loads_available,NULL);
  CHECK(!instance->system_owners&&xr_xir_instance_free(instance)==XR_XIR_CALL_READY);host_active=NULL;
+ host_loadavg_value(kept+2,loads_domain,loads_available,NULL);xr_xir_value_drop(kept+2);
  /* These actual Optional values retain their metadata after the producer dies. */
  for(unsigned kind=0;kind<2;++kind){bool present=false;const XrXirValue *payload=NULL;CHECK(xr_xir_nullable_view(kept+kind,&present,&payload));xr_xir_value_drop(kept+kind);}
  CHECK(runtime_live==live&&runtime_bytes==bytes);
@@ -121,6 +165,7 @@ static void host_system_execute(XrXirProgram *program,const uint32_t ids[9]){
  CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);host_active=NULL;system_mode=SYSTEM_NORMAL;
  CHECK(xr_xir_nullable_view(&zero,&present,&payload)&&present&&payload&&!payload->payload);xr_xir_value_drop(&zero);
  CHECK(runtime_live==live&&runtime_bytes==bytes);
+ host_loadavg_controls(program,ids);
  host_system_limit(program,ids);
  host_system_failures(program,ids);
  instance=host_instance(program,ids[0]);host_active=instance;system_mode=SYSTEM_CANCEL_BEFORE;

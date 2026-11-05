@@ -29,7 +29,7 @@ static const XirOsSystemContract xir_os_system_contracts[]={
     {XR_NATIVE_CALLABLE_OS_TOTAL_MEMORY,"__totalMemory","(): i64","i64",XR_NATIVE_TERM_I64,XR_XIR_I64,XR_XIR_UNIT,0},
     {XR_NATIVE_CALLABLE_OS_FREE_MEMORY,"__freeMemory","(): i64","i64",XR_NATIVE_TERM_I64,XR_XIR_I64,XR_XIR_UNIT,0},
     {XR_NATIVE_CALLABLE_OS_UPTIME,"__uptime","(): f64","f64",XR_NATIVE_TERM_F64,XR_XIR_F64,XR_XIR_UNIT,0},
-    {XR_NATIVE_CALLABLE_OS_LOADAVG,"__loadavg","(): Array<f64>","Array<f64>",XR_NATIVE_TERM_ARRAY_F64,XR_XIR_UNIT,XR_XIR_F64,0}
+    {XR_NATIVE_CALLABLE_OS_LOADAVG,"__loadavg","(): Array<f64>?","Array<f64>?",XR_NATIVE_TERM_NULLABLE_ARRAY_F64,XR_XIR_UNIT,XR_XIR_F64,0}
 };
 static inline const XirOsSystemContract *xir_os_system_contract(uint32_t id) {
     for(size_t i=0;i<sizeof(xir_os_system_contracts)/sizeof(*xir_os_system_contracts);++i)
@@ -56,8 +56,10 @@ static inline bool xir_os_system_signature(const XirOsSystemContract *contract,
     }
     if(contract->element==XR_XIR_UNIT)return result==contract->result;
     const XrXirTypeNode *node=xr_xir_type_node(types,result);
-    uint32_t kind=contract->term==XR_NATIVE_TERM_ARRAY_F64?XR_XIR_TYPE_ARRAY:XR_XIR_TYPE_NULLABLE;
-    return node && node->kind==kind &&
-        node->element==contract->element && !node->parameter_span;
+    if(!node || node->kind!=XR_XIR_TYPE_NULLABLE || node->parameter_span)return false;
+    if(contract->term!=XR_NATIVE_TERM_NULLABLE_ARRAY_F64)return node->element==contract->element;
+    const XrXirTypeNode *array=xr_xir_type_node(types,node->element);
+    return array && array->kind==XR_XIR_TYPE_ARRAY &&
+        array->element==XR_XIR_F64 && !array->parameter_span;
 }
 #endif

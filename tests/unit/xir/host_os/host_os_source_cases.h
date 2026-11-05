@@ -98,7 +98,7 @@ static const char host_system_text[]=
  "export fn total()->i64{return __totalMemory()}\n"
  "export fn available()->i64{return __freeMemory()}\n"
  "export fn elapsed()->f64{return __uptime()}\n"
- "export fn load()->Array<f64>{return __loadavg()}\n";
+ "export fn load()->Array<f64>?{return __loadavg()}\n";
 static const char *const host_io_controls[]={
  "import {Path} from path\nclass Wrong{raw:string\ninit(raw:string){this.raw=raw}}\nexport fn wrong(p:Wrong)->bool{return __chdir(p)}\n",
  "import {Path} from path\nexport fn conflict(v:Slice<u8>,p:Path)->i64{const changed=__chdir(p);return len(v)}\n",

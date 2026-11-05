@@ -1148,8 +1148,8 @@ module os {
   }
 
   fn __loadavg {
-    signature: "(): Array<f64>"
-    doc: "Get system load averages (1, 5, 15 min)"
+    signature: "(): Array<f64>?"
+    doc: "Get actual system load averages (1, 5, 15 min), or null when unavailable"
     vm: "os_loadavg"
     aot: "xrt_os_loadavg"
     argc: 0

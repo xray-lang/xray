@@ -136,7 +136,7 @@ static void host_system_contracts(XrXirCompileContext *context,const XrXirArtifa
  const char *shadows[]={"fn __uid()->i64?{return null}","fn __gid()->i64?{return null}",
   "fn __ppid()->i64{return 7}","fn __kill(pid:i64,signal:i64)->bool{return false}",
   "fn __totalMemory()->i64{return 7}","fn __freeMemory()->i64{return 7}",
-  "fn __uptime()->f64{return 0.0}","fn __loadavg()->Array<f64>{return []}"};
+  "fn __uptime()->f64{return 0.0}","fn __loadavg()->Array<f64>?{return null}"};
  const XrXirModule *m=xr_xir_compile_artifact_module(code);
  for(unsigned n=0;n<8;++n){
   uint32_t f=host_named(m,names[n]);CHECK(xir_native_callable_verify(m,f)==XR_XIR_OK);
@@ -158,6 +158,16 @@ static void host_system_contracts(XrXirCompileContext *context,const XrXirArtifa
   memcpy(identities,scope.functions,m->function_count*sizeof(*identities));scope.functions=identities;
   memcpy(modules,scope.modules,scope.module_count*sizeof(*modules));scope.modules=modules;changed.declarations=&scope;
   functions[f].result=XR_XIR_STRING;CHECK(xir_native_callable_verify(&changed,f)==XR_XIR_BAD_TYPE);functions[f]=m->functions[f];
+  if(n==7){
+   const XrXirTypeNode *optional=xr_xir_type_node(m->types,functions[f].result);CHECK(optional&&optional->kind==XR_XIR_TYPE_NULLABLE);
+   functions[f].result=optional->element;CHECK(xir_native_callable_verify(&changed,f)==XR_XIR_BAD_TYPE);functions[f]=m->functions[f];
+   XrXirTypeNode nodes[128];XrXirTypes types=*m->types;CHECK(types.count<128);
+   memcpy(nodes,types.nodes,types.count*sizeof(*nodes));types.nodes=nodes;changed.types=&types;
+   uint32_t inner=(uint32_t)optional->element-XR_XIR_CONSTRUCTED_TYPE_BASE;
+   CHECK(inner<types.count&&nodes[inner].kind==XR_XIR_TYPE_ARRAY&&nodes[inner].element==XR_XIR_F64);
+   nodes[inner].element=XR_XIR_I64;CHECK(xir_native_callable_verify(&changed,f)==XR_XIR_BAD_TYPE);changed.types=m->types;
+   CHECK(xir_native_callable_verify(&changed,f)==XR_XIR_OK);
+  }
   uint32_t owner=identities[f].module;modules[owner].name="os";modules[owner].name_length=2;
   CHECK(xir_native_callable_verify(&changed,f)==XR_XIR_BAD_TYPE);modules[owner]=m->declarations->modules[owner];
   identities[f].promises=0;CHECK(xir_native_callable_verify(&changed,f)==XR_XIR_BAD_STRUCTURE);

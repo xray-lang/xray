@@ -220,7 +220,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"os", "__totalMemory", "(): i64", "Get total system memory in bytes", "os_totalMemory", "normal", "", "xrt_os_total_memory", "", "value", "", "", "", "system", "method", "", "", "", "", 0, 0, true},
     {"os", "__freeMemory", "(): i64", "Get available system memory in bytes", "os_freeMemory", "normal", "", "xrt_os_free_memory", "", "value", "", "", "", "system", "method", "", "", "", "", 0, 0, true},
     {"os", "__uptime", "(): f64", "Get system uptime in seconds", "os_uptime", "normal", "", "xrt_os_uptime", "", "value", "", "", "", "system", "method", "", "", "", "", 0, 0, true},
-    {"os", "__loadavg", "(): Array<f64>", "Get system load averages (1, 5, 15 min)", "os_loadavg", "normal", "", "xrt_os_loadavg", "", "value", "", "", "", "system", "method", "fresh", "", "", "", 0, 0, true},
+    {"os", "__loadavg", "(): Array<f64>?", "Get actual system load averages (1, 5, 15 min), or null when unavailable", "os_loadavg", "normal", "", "xrt_os_loadavg", "", "value", "", "", "", "system", "method", "fresh", "", "", "", 0, 0, true},
     {"io", "__chmod", "(path: Path, mode: i64): bool", "Change file permissions", "io_chmod", "normal", "", "xrt_io_chmod_value", "pv", "value", "", "", "", "system", "method", "", "", "", "", 0, 2, true},
     {"io", "__chdir", "(path: Path): bool", "Change working directory", "io_chdir", "normal", "", "xrt_io_chdir", "p", "value", "", "", "", "system", "method", "", "", "", "", 0, 1, true},
     {"io", "__fileClose", "(handle: i64): bool", "Close an owned file descriptor; 0, 1 and 2 are refused", "io_fileClose", "normal", "", "xrt_io_file_close", "i", "value", "", "", "", "system", "method", "", "", "", "", 0, 1, true},

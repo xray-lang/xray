@@ -265,7 +265,7 @@ static const XaBuiltinMember g_gen_os_functions[] = {
     {"__totalMemory", "(): i64", "Get total system memory in bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__freeMemory", "(): i64", "Get available system memory in bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__uptime", "(): f64", "Get system uptime in seconds", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__loadavg", "(): Array<f64>", "Get system load averages (1, 5, 15 min)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__loadavg", "(): Array<f64>?", "Get actual system load averages (1, 5, 15 min), or null when unavailable", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
 };
 #define GEN_OS_FUNCTION_COUNT 23
 

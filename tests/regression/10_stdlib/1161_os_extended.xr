@@ -87,11 +87,19 @@ fn test_uptime() {
 @test
 fn test_loadavg() {
     var avg = os.loadavg()
-    assertEqual(len(avg), 3)
-    // Load averages should be non-negative
-    assert(avg[0] >= 0.0)
-    assert(avg[1] >= 0.0)
-    assert(avg[2] >= 0.0)
+    if (os.platform() == "windows") {
+        assert(avg == null)
+    } else if (os.platform() == "linux" || os.platform() == "darwin") {
+        assert(avg != null)
+        var samples = avg!
+        assertEqual(len(samples), 3)
+        // Actual load averages should be non-negative.
+        assert(samples[0] >= 0.0)
+        assert(samples[1] >= 0.0)
+        assert(samples[2] >= 0.0)
+    } else {
+        assert(avg == null)
+    }
 }
 
 // ===== Process & Signal =====

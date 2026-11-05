@@ -44,7 +44,7 @@ static XrXirCallStatus instance_system_query(XrXirCallView *view,XrXirInstance *
     XirEnvironmentQuery query={view,instance->domain,XR_XIR_CALL_READY};
     if(!instance_system_current(&query))return query.status;
     XrOsIoStatus observed=XR_OS_IO_UNSUPPORTED;
-    XrOsOptionalI64 identity={0};int64_t integer=0;double seconds=0;bool changed=false;
+    XrOsOptionalI64 identity={0};XrOsLoadAverages loads={0};int64_t integer=0;double seconds=0;bool changed=false;
     XrXirInstance *root=instance_root(instance);XirSystemOwner *owner=NULL;
     if(id==XR_NATIVE_CALLABLE_OS_PPID || id==XR_NATIVE_CALLABLE_OS_KILL ||
         id==XR_NATIVE_CALLABLE_OS_FREE_MEMORY) {
@@ -65,6 +65,7 @@ static XrXirCallStatus instance_system_query(XrXirCallView *view,XrXirInstance *
     case XR_NATIVE_CALLABLE_OS_TOTAL_MEMORY:observed=xr_os_io_total_memory(&integer);break;
     case XR_NATIVE_CALLABLE_OS_FREE_MEMORY:observed=xr_os_io_free_memory(&owner->owner,&integer);break;
     case XR_NATIVE_CALLABLE_OS_UPTIME:observed=xr_os_io_uptime(&seconds);break;
+    case XR_NATIVE_CALLABLE_OS_LOADAVG:observed=xr_os_io_loadavg(&loads);break;
     default:break;
     }
     /* A provider already made its one close attempt. Retain a failed handle
@@ -80,6 +81,22 @@ static XrXirCallStatus instance_system_query(XrXirCallView *view,XrXirInstance *
             XrXirValue payload={XR_XIR_I64,0,identity.value};
             status=value_call_status(xr_xir_nullable_new(type,identity.present?&payload:NULL,
                 xr_xir_call_admission(view),&result));
+        } else if(id==XR_NATIVE_CALLABLE_OS_LOADAVG) {
+            XrXirValue array={0},values[3]={{0}};
+            if(loads.available) {
+                for(uint32_t n=0;n<3;++n) {
+                    if(!(loads.values[n]>=0.0) || loads.values[n]>1.7976931348623157e308) {
+                        status=XR_XIR_CALL_HOST_ERROR;break;
+                    }
+                    int64_t bits=0;memcpy(&bits,loads.values+n,sizeof(bits));
+                    values[n]=(XrXirValue){XR_XIR_F64,0,bits};
+                }
+                if(status==XR_XIR_CALL_READY)status=value_call_status(xr_xir_array_new(
+                    xr_xir_nullable_element(instance->program->types,type),values,3,xr_xir_call_admission(view),&array));
+            }
+            if(status==XR_XIR_CALL_READY)status=value_call_status(xr_xir_nullable_new(type,
+                loads.available?&array:NULL,xr_xir_call_admission(view),&result));
+            xr_xir_value_drop(&array);
         } else if(id==XR_NATIVE_CALLABLE_OS_KILL)result=(XrXirValue){XR_XIR_BOOL,0,changed};
         else if(id==XR_NATIVE_CALLABLE_OS_UPTIME) {
             int64_t bits=0;memcpy(&bits,&seconds,sizeof(bits));result=(XrXirValue){XR_XIR_F64,0,bits};

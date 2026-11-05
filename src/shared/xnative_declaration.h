@@ -59,7 +59,8 @@ typedef enum XrNativeTypeTerm {
     /* Nullary Unit/Never only; no NoSuspend, NoRoot or Sendable guarantee. */
     XR_NATIVE_TERM_UNIT_CALLBACK,
     XR_NATIVE_TERM_NULLABLE_I64_PAIR, XR_NATIVE_TERM_NULLABLE_ARRAY_U8,
-    XR_NATIVE_TERM_NULLABLE_ARRAY_STRING, XR_NATIVE_TERM_NULLABLE_PTR_U8
+    XR_NATIVE_TERM_NULLABLE_ARRAY_STRING, XR_NATIVE_TERM_NULLABLE_PTR_U8,
+    XR_NATIVE_TERM_NULLABLE_ARRAY_F64
 } XrNativeTypeTerm;
 /* RESULT_VARIABLE and the callback terms require an admitted recipe's exact
  * signature. They never grant authority to an arbitrary unparsed signature. */

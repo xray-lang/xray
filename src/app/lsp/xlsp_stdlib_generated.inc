@@ -516,7 +516,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_os_symbols[] = {
     {"totalMemory", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
     {"freeMemory", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
     {"uptime", XLSP_SYM_FUNCTION, "fn(): f64", "", NULL, 0},
-    {"loadavg", XLSP_SYM_FUNCTION, "fn(): Array<f64>", "", NULL, 0},
+    {"loadavg", XLSP_SYM_FUNCTION, "fn(): Array<f64>?", "", NULL, 0},
     {"exec", XLSP_SYM_FUNCTION, "fn(command: string, maxStdoutBytes?: i64, maxStderrBytes?: i64): ExecResult?", "", NULL, 0},
     {"ExecResult", XLSP_SYM_CLASS, "type ExecResult", "Class type", NULL, 0},
 };

@@ -2462,7 +2462,7 @@
     },
     {
       "symbol": "os.__loadavg",
-      "signature": "(): Array<f64>",
+      "signature": "(): Array<f64>?",
       "declared": false,
       "admitted": false,
       "blocking_reasons": [
