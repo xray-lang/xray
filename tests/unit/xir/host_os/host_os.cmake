@@ -26,6 +26,7 @@ add_custom_command(OUTPUT ${host_os_c}
         "${host_os_dir}/host_os_file_kernel_cases.h"
         "${host_os_dir}/host_os_io_file_real_cases.h"
         "${host_os_dir}/host_os_io_file_real_source.h"
+        "${host_os_dir}/host_os_io_file_ctor_contracts.h"
         "${host_os_dir}/host_os_io_file_contracts.h"
         "${PROJECT_SOURCE_DIR}/stdlib/io/io.xr"
         "${PROJECT_SOURCE_DIR}/stdlib/mem/mem.xr"

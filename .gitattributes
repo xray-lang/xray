@@ -120,3 +120,4 @@ tests/fixtures/xir_class_inheritance/classes.expected.txt text eol=lf
 # The genuine predecessor producer source is bound to its original raw digest.
 tests/fixtures/xir_records/previous-common129-staged-ctor/staged_ctor.xr text eol=lf
 tests/fixtures/xir_records/previous-common130-staged-ctor/staged_ctor.xr text eol=lf
+tests/fixtures/xir_records/previous-common131-staged-ctor/staged_ctor.xr text eol=lf

@@ -72,7 +72,8 @@ static const char host_file_real_exports[]=
  " const text=\"A\\0\xE4\xB8\xAD\";assert(writer.write(text.bytes())==5)\n"
  " const storage=Buffer(3,true);assert(writer.write(storage.asBytes())==3);assert(storage.resize(4))\n"
  " assert(writer.writeString(text)==5);const result=writer.bytes();writer.reset();assert(writer.size()==0);return result}\n";
-static XrXirArtifact *host_file_real_code(XrXirCompileContext *context){
+#include "host_os_io_file_ctor_contracts.h"
+static XrXirArtifact *host_file_real_code(XrXirCompileContext *context,bool controls){
  FILE *file=fopen(XR_HOST_OS_ROOT "/stdlib/io/io.xr","rb");CHECK(file&&!fseek(file,0,SEEK_END));long size=ftell(file);CHECK(size>0&&!fseek(file,0,SEEK_SET));
  CHECK((uint64_t)size<=SIZE_MAX-sizeof(host_file_real_exports));size_t length=(size_t)size+sizeof(host_file_real_exports)-1;
  char *text=xr_malloc(length+1);CHECK(text&&fread(text,1,(size_t)size,file)==(size_t)size&&!fclose(file));
@@ -87,6 +88,7 @@ static XrXirArtifact *host_file_real_code(XrXirCompileContext *context){
  xr_xir_compile_source_result_free(&source);xr_compile_session_free(session);memset(text,0xa5,length);xr_free(text);
  XrXirArtifact *cold=NULL,*closed=NULL,*code=NULL;CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&cold,NULL)==XR_XIR_OK);
  memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
+ if(controls)host_file_ctor_boundary_controls(context,cold);
  CHECK(xr_xir_compile_specialize(cold,&closed,NULL,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(cold);
  CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},NULL,&code,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);return code;
 }
@@ -112,7 +114,7 @@ static uint32_t host_file_constructor_contracts(const XrXirModule *module,uint32
 }
 static void host_file_real_product(XrXirCompileContext *context,const char *directory,bool emit){
  if(!emit&&!host_file_stdio_child)host_file_contracts(context);
- XrXirArtifact *code=host_file_real_code(context);const XrXirModule *module=xr_xir_compile_artifact_module(code);
+ XrXirArtifact *code=host_file_real_code(context,!emit&&!host_file_stdio_child);const XrXirModule *module=xr_xir_compile_artifact_module(code);
  uint32_t ids[HOST_REAL_COUNT]={module->declarations->entry_function};
  static const char *const names[]={"filePath","fileRoundtrip","fileDeferred","fileStdio","fileOpenRaw","fileReadRaw","fileCloseRaw","fileFlushRaw","fileWriteRaw","fileWriteTextRaw","fileLossy","fileLossyCheck","fileConstructorRaw","fileEager","fileEmptyIterator","fileFieldPlaces","fileBuffered"};
  for(unsigned n=0;n<HOST_REAL_COUNT-2;++n)ids[n+1]=host_named(module,names[n]);

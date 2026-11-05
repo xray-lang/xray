@@ -1,0 +1,19 @@
+{
+  "state": "IMMUTABLE_GENUINE_PREDECESSOR_PACKET",
+  "sourceCommit": "910b2996838d2342f4c10b8ce24001cf9b47fc92",
+  "schema": 42,
+  "common": 131,
+  "packetBytes": 3228,
+  "packetSha256": "00780eb16898ce8a5aca3c8b365cad886914a75376b58ecee909bdbc141866d8",
+  "sourceSha256": "7d913671514777c2cc8eab444010aff1252374d7eefceb190a6c91e932438dcb",
+  "sourcePath": "staged_ctor.xr",
+  "producerEvidence": {
+    "path": "D:\\xray-build\\coordinator\\20261029-resume\\r3-f13-host-complete-20261103\\root-common131-staged-ctor-producer-preparation-v1\\evidence.json",
+    "sha256": "2db3dacceb1242881e8a088b2999d62ecd60835f81d0c6a6ecf29e0bc39c86c7"
+  },
+  "producerResult": {
+    "path": "D:\\xray-build\\coordinator\\20261029-resume\\r3-f13-host-complete-20261103\\root-common131-staged-ctor-producer-preparation-v1\\result.json",
+    "sha256": "60b0b9f6a3d5d2fd1a4bb105f623194276b93f0ab1903bb704dccde32f965ae9"
+  },
+  "actualProvenance": "Actual frozen910 Source engine and ten archives wrote the packet. Base/Derived nonfinal field helpers and constructors have matching zero promises. Producer, session and resources retired before a new owner cold-read the unmodified disk packet successfully with held-memory restoration. Current132 refusal is a separate unrun regression. No header, payload or digest edits."
+}

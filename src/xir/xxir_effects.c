@@ -253,9 +253,10 @@ typedef struct EffectGraph {
 struct XirEffectDefaultAccessScope {
     XrXirCompileContext work,remaining;
     const XrXirModule *module;
+    XrCompileRequestControl *control;
     EffectGraph graph;
     XrXirStatus status;
-    bool active;
+    bool active,ordinary_verified;
 };
 
 static XrXirStatus effect_graph_physical_refresh(const XrXirCompileContext *work,
@@ -1084,6 +1085,7 @@ typedef struct EffectClassCallAccessQuery {
     EffectBodyFunctionHead source,target;
     uint32_t callee;
 } EffectClassCallAccessQuery;
+#include "xxir_effect_constructor_boundary.inc.c"
 XR_FUNC XrXirStatus xir_effects_class_call_access_site(XirEffectDefaultAccessScope *scope,
     const XrXirCompileContext *remaining,const XrXirModule *module,
     uint32_t caller,uint32_t instruction,XrXirType result) {
@@ -1123,7 +1125,9 @@ XR_FUNC XrXirStatus xir_effects_class_call_access_site(XirEffectDefaultAccessSco
          * including when its helper belongs to the caller's own module. */
         else if (op->op==XR_XIR_INVOKE || d->functions[caller].module!=d->functions[query.callee].module) {
             bool declared_default=false;
-            if (xir_effect_evidence_is_instance(module))
+            if (op->op==XR_XIR_CALL && d->functions[caller].module!=d->functions[query.callee].module)
+                status=effect_class_constructor_boundary(scope,&query,module,caller,&declared_default);
+            if (status==XR_XIR_OK && !declared_default && xir_effect_evidence_is_instance(module))
                 status=xir_compile_default_call_origin(&query.work,module,caller,instruction,
                     query.callee,&declared_default);
             if (status==XR_XIR_OK && !declared_default) status=XR_XIR_UNRESOLVED;
@@ -1139,7 +1143,7 @@ XR_FUNC XrXirStatus xir_effects_default_access_operation_input(const XrXirCompil
     const XrXirModule *module=input.module;
     if (!xir_compile_context_valid(context) || !module || !module->functions ||
         !module->function_count || !operation) return XR_XIR_BAD_STRUCTURE;
-    XirEffectDefaultAccessScope scope={.work=*context,.module=module};
+    XirEffectDefaultAccessScope scope={.work=*context,.module=module,.control=input.control};
     if (sizeof(scope)>context->limits.frame_bytes) return XR_XIR_BUDGET;
     scope.work.limits.frame_bytes-=sizeof(scope);
     EffectInputFacts *input_facts=NULL;
