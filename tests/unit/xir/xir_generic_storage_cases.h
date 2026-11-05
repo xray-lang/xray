@@ -38,7 +38,7 @@ static void generic_storage_cases(void) {
     CHECK(xr_xir_compile_type_storage_prove(&owner.context, &context, p1)==XR_XIR_OK);
     CHECK(!memcmp(&owner.context, &original, sizeof(original)));
     CHECK(xr_compile_resources_stats(owner.context.resources, &stats) == XR_COMPILE_RESOURCE_OK);
-    CHECK(stats.live_bytes == owner.baseline.live_bytes);
+    CHECK(stats.held_bytes == owner.baseline.held_bytes);
     CHECK(xr_xir_compile_type_markers_prove(&owner.context, &context, p1, XR_XIR_CONSTRAINT_SENDABLE)==XR_XIR_BAD_TYPE);
     CHECK(xr_xir_compile_type_storage_prove(&owner.context, &context, XR_XIR_CONSTRUCTED_TYPE_BASE)==XR_XIR_OK);
     CHECK(xr_xir_compile_type_storage_prove(&owner.context, &context, XR_XIR_CONSTRUCTED_TYPE_BASE+1)==XR_XIR_OK);
@@ -46,7 +46,7 @@ static void generic_storage_cases(void) {
     CHECK(xr_xir_compile_type_storage_prove(&owner.context, &context, XR_XIR_CONSTRUCTED_TYPE_BASE+1)==XR_XIR_BAD_TYPE);
     CHECK(!memcmp(&owner.context, &original, sizeof(original)));
     CHECK(xr_compile_resources_stats(owner.context.resources, &stats) == XR_COMPILE_RESOURCE_OK);
-    CHECK(stats.live_bytes == owner.baseline.live_bytes);
+    CHECK(stats.held_bytes == owner.baseline.held_bytes);
     context.owner=(XrXirDeclarationContext){XR_XIR_CONTEXT_NOMINAL,0,0};
     CHECK(xr_xir_compile_type_storage_prove(&owner.context, &context, p1)==XR_XIR_OK);
     context.owner.declaration=2;
@@ -61,22 +61,19 @@ static void generic_storage_cases(void) {
     CHECK(xr_xir_compile_type_markers_prove(&owner.context, &context, XR_XIR_UNIT, XR_XIR_CONSTRAINT_SENDABLE)==XR_XIR_OK);
     CHECK(xr_xir_compile_type_markers_prove(&owner.context, &context, XR_XIR_UNIT, XR_XIR_CONSTRAINT_ERROR)==XR_XIR_BAD_TYPE);
     XrCompileResourceStats baseline = owner.baseline; source_fixture_owner_free(&owner);
-    /* A zero work allowance rejects even a scalar proof. No scratch room
-     * still admits scalar proof, but rejects the constructed obligation. */
-    for (unsigned mode = 0; mode < 2; ++mode) {
-        const XrCompileResourceLimits limits = {
-            UINT64_C(64) * 1024 * 1024,
-            mode ? baseline.live_bytes : UINT64_C(8) * 1024 * 1024,
-            mode ? UINT64_C(128000000) : baseline.work};
-        XrXirCompileContext limited = {0}; limited.limits = xr_xir_compile_default_limits();
-        CHECK(xr_compile_resources_new(&limits, &limited.resources) == XR_COMPILE_RESOURCE_OK);
-        XrCompileResourceStats before = {0}, after = {0};
-        CHECK(xr_compile_resources_stats(limited.resources, &before) == XR_COMPILE_RESOURCE_OK);
-        CHECK(xr_xir_compile_type_storage_prove(&limited, &context, p1) == (mode ? XR_XIR_OK : XR_XIR_BUDGET));
-        if (mode) CHECK(xr_xir_compile_type_storage_prove(&limited, &context, XR_XIR_CONSTRUCTED_TYPE_BASE) == XR_XIR_BUDGET);
-        CHECK(xr_compile_resources_stats(limited.resources, &after) == XR_COMPILE_RESOURCE_OK);
-        CHECK(after.live_bytes == before.live_bytes && after.allocated_bytes == before.allocated_bytes);
-        xr_compile_resources_release(limited.resources);
-    }
+    /* Scalar proof needs no allocation; constructed proof needs owned scratch. */
+    const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE, baseline.held_bytes, true};
+    XrXirCompileContext limited = {0}; limited.limits = xr_xir_compile_default_limits();
+    CHECK(xr_compile_resources_new(&limits, &limited.resources) == XR_COMPILE_RESOURCE_OK);
+    XrCompileResourceStats before = {0}, after = {0};
+    CHECK(xr_compile_resources_stats(limited.resources, &before) == XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_xir_compile_type_storage_prove(&limited, &context, p1) == XR_XIR_OK);
+    CHECK(xr_xir_compile_type_storage_prove(&limited, &context, XR_XIR_CONSTRUCTED_TYPE_BASE) == XR_XIR_MEMORY_LIMIT);
+    CHECK(xr_compile_resources_stats(limited.resources, &after) == XR_COMPILE_RESOURCE_OK);
+    CHECK(after.held_bytes == before.held_bytes);
+    xr_compile_resources_release(limited.resources);
+    source_fixture_owner_new(&owner);
+    CHECK(xr_xir_compile_type_storage_prove(&owner.context, &context, XR_XIR_CONSTRUCTED_TYPE_BASE) == XR_XIR_OK);
+    source_fixture_owner_free(&owner);
 }
 #endif /* XIR_GENERIC_STORAGE_CASES_H */

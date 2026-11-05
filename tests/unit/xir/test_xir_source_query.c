@@ -21,7 +21,60 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
-#include "xir_stage_context_owner.h"
+#include "xir_source_fixture_owner.h"
+
+/* Track physical ledger retirement independently of retained snapshot owners. */
+typedef struct QueryPhysicalAllocation { void *pointer; size_t bytes; } QueryPhysicalAllocation;
+static QueryPhysicalAllocation query_physical[32768];
+static size_t stage_physical_count, stage_physical_bytes;
+static void *query_physical_malloc(size_t bytes) {
+    void *pointer = xr_malloc(bytes);
+    if (pointer) {
+        CHECK(stage_physical_count < 32768 && bytes <= SIZE_MAX - stage_physical_bytes);
+        query_physical[stage_physical_count++] = (QueryPhysicalAllocation){pointer, bytes};
+        stage_physical_bytes += bytes;
+    }
+    return pointer;
+}
+static void query_physical_free(void *pointer) {
+    if (pointer) {
+        size_t i = 0;
+        while (i < stage_physical_count && query_physical[i].pointer != pointer) ++i;
+        CHECK(i < stage_physical_count && query_physical[i].bytes <= stage_physical_bytes);
+        stage_physical_bytes -= query_physical[i].bytes;
+        query_physical[i] = query_physical[--stage_physical_count];
+    }
+    xr_free(pointer);
+}
+#undef xr_malloc
+#undef xr_free
+#define xr_malloc(bytes) query_physical_malloc(bytes)
+#define xr_free(pointer) query_physical_free(pointer)
+#include "base/xcompile_resources.c"
+#undef xr_malloc
+#undef xr_free
+static SourceFixtureOwner query_owners[1024];
+static size_t query_owner_count;
+static XrCompileResourceStats stage_owner_baseline;
+static XrXirCompileContext stage_context;
+static XrCompileResourceStats stage_stats(const XrXirCompileContext *context) {
+    XrCompileResourceStats stats = {0};
+    CHECK(xr_compile_resources_stats(context->resources, &stats) == XR_COMPILE_RESOURCE_OK);
+    return stats;
+}
+static XrXirCompileContext stage_context_default(void) {
+    CHECK(query_owner_count < 1024);
+    SourceFixtureOwner *owner = &query_owners[query_owner_count++];
+    source_fixture_owner_new(owner);
+    if (query_owner_count == 1) stage_owner_baseline = owner->baseline;
+    CHECK(owner->baseline.held_bytes == stage_owner_baseline.held_bytes);
+    return owner->context;
+}
+static void stage_contexts_free(void) {
+    for (size_t i = 0; i < query_owner_count; ++i) source_fixture_owner_free(&query_owners[i]);
+    CHECK(!stage_physical_count && !stage_physical_bytes);
+    fprintf(stderr, "query compiler owners: %zu; physical blocks/bytes=0/0\n", query_owner_count);
+}
 
 static void write_source(const char *path, const char *source) {
     FILE *file = fopen(path, "wb"); CHECK(file);
@@ -211,22 +264,13 @@ static XrXirSourceResult accepted(const XrXirSourceRequest *request) {
     }
     return result;
 }
-/* A local owner is released per copy probe; it consumes no delayed stage-owner slot. */
-static XrXirCompileContext publication_copy_context(unsigned mode, uint64_t allowance) {
-    CHECK(mode < 2 && allowance <= (mode ? STAGE_WORK : STAGE_ALLOCATED_BYTES));
-    XrCompileResourceLimits limits = {STAGE_ALLOCATED_BYTES, STAGE_LIVE_BYTES, STAGE_WORK};
-    if (mode) {
-        CHECK(allowance <= STAGE_WORK - stage_owner_baseline.work);
-        limits.work = stage_owner_baseline.work + allowance;
-    } else {
-        CHECK(allowance <= STAGE_ALLOCATED_BYTES - stage_owner_baseline.allocated_bytes);
-        limits.allocated_bytes = stage_owner_baseline.allocated_bytes + allowance;
-    }
+/* A finite cap is an absolute held-byte bound, including the owner and headers. */
+static XrXirCompileContext publication_context(uint64_t memory_limit) {
+    const XrCompileResourceLimits limits = {
+        memory_limit ? XR_COMPILE_MEMORY_FINITE : XR_COMPILE_MEMORY_ORDINARY, memory_limit, true};
     XrXirCompileContext context = {0}; context.limits = xr_xir_compile_default_limits();
     CHECK(xr_compile_resources_new(&limits, &context.resources) == XR_COMPILE_RESOURCE_OK);
-    XrCompileResourceStats baseline = stage_stats(&context);
-    CHECK(baseline.allocated_bytes == stage_owner_baseline.allocated_bytes &&
-        baseline.live_bytes == stage_owner_baseline.live_bytes && baseline.work == stage_owner_baseline.work);
+    CHECK(stage_stats(&context).held_bytes == stage_owner_baseline.held_bytes);
     return context;
 }
 static void publication_copy_facts(const XrXirSourceView *view, const char *name) {
@@ -247,19 +291,19 @@ static void publication_copy_facts(const XrXirSourceView *view, const char *name
     CHECK(references(view, local->id, local->id) == 1 && references(view, identity->id, identity->id) == 1);
 }
 static XrCompileResourceStats publication_copy_probe(const XrXirSourceView *view, const XrXirConstruction *construction, const char *name,
-    unsigned mode, uint64_t allowance, XrXirStatus expected) {
+    uint64_t memory_limit, XrXirStatus expected) {
     size_t physical_count = stage_physical_count, physical_bytes = stage_physical_bytes;
-    XrXirCompileContext context = publication_copy_context(mode, allowance);
+    XrXirCompileContext context = publication_context(memory_limit);
     XrCompileResourceStats baseline = stage_stats(&context);
     XrXirSourceSnapshot *copy = NULL;
     XrXirStatus status = xr_xir_compile_source_snapshot_copy_v2(&context, view, construction, &copy);
+    if (status != expected) fprintf(stderr, "snapshot-copy memory=%llu status=%u expected=%u\n",
+        (unsigned long long)memory_limit, status, expected);
     CHECK(status == expected);
     XrCompileResourceStats used = stage_stats(&context);
-    CHECK(used.allocated_bytes >= baseline.allocated_bytes && used.work >= baseline.work &&
-        used.allocated_bytes <= STAGE_ALLOCATED_BYTES && used.work <= STAGE_WORK && used.peak_bytes <= STAGE_LIVE_BYTES);
-    CHECK(mode ? used.work <= baseline.work + allowance : used.allocated_bytes <= baseline.allocated_bytes + allowance);
+    if (memory_limit) CHECK(used.peak_bytes <= memory_limit);
     if (expected == XR_XIR_OK) {
-        CHECK(copy && used.live_bytes > baseline.live_bytes);
+        CHECK(copy && used.held_bytes > baseline.held_bytes);
         const XrXirSourceView *copied = xr_xir_compile_source_snapshot_view(copy);
         publication_copy_facts(copied, name);
         CHECK(copied != view && copied->declarations != view->declarations &&
@@ -270,18 +314,18 @@ static XrCompileResourceStats publication_copy_probe(const XrXirSourceView *view
         CHECK(cloned->name != original->name && cloned->parameters != original->parameters);
         CHECK(copied->declaration_count == view->declaration_count && copied->reference_count == view->reference_count &&
             copied->expression_count == view->expression_count && copied->types->count == view->types->count);
-    } else CHECK(expected == XR_XIR_BUDGET && !copy && used.live_bytes == baseline.live_bytes);
+    } else CHECK(expected == XR_XIR_MEMORY_LIMIT && !copy && used.held_bytes == baseline.held_bytes);
     xr_xir_compile_source_snapshot_free(copy);
-    CHECK(stage_stats(&context).live_bytes == baseline.live_bytes);
+    CHECK(stage_stats(&context).held_bytes == baseline.held_bytes);
     xr_compile_resources_release(context.resources);
     CHECK(stage_physical_count == physical_count && stage_physical_bytes == physical_bytes);
     return used;
 }
-static void publication_copy_budgets(const XrXirSourceRequest *request, const char *name) {
+static void publication_copy_ownership(const XrXirSourceRequest *request, const char *name) {
     size_t physical_count = stage_physical_count, physical_bytes = stage_physical_bytes;
     SourceFixtureOwner producer = {0}; source_fixture_owner_new(&producer);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(producer.context.resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(producer.context.resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest probe = *request; probe.context = &producer.context; probe.session = session;
     XrXirSourceResult result = {0};
     CHECK(xr_xir_compile_source_check(&probe, &result, NULL, NULL) == XR_XIR_OK && result.checked && result.snapshot);
@@ -290,84 +334,102 @@ static void publication_copy_budgets(const XrXirSourceRequest *request, const ch
     /* The original snapshot alone pins the producer ledger after its initial owner dies. */
     xr_compile_resources_release(producer.context.resources); producer = (SourceFixtureOwner){0};
     const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(result.snapshot);
+    const XrXirConstruction *construction = xr_xir_compile_source_snapshot_construction(result.snapshot);
     publication_copy_facts(view, name);
-    XrCompileResourceStats measured = publication_copy_probe(view, xr_xir_compile_source_snapshot_construction(result.snapshot), name, 0,
-        STAGE_ALLOCATED_BYTES - stage_owner_baseline.allocated_bytes, XR_XIR_OK);
-    uint64_t allocated = measured.allocated_bytes - stage_owner_baseline.allocated_bytes;
-    uint64_t work = measured.work - stage_owner_baseline.work;
-    CHECK(allocated && work);
-    for (unsigned mode = 0; mode < 2; ++mode) {
-        uint64_t required = mode ? work : allocated;
-        XrCompileResourceStats exact = publication_copy_probe(view, xr_xir_compile_source_snapshot_construction(result.snapshot), name, mode, required, XR_XIR_OK);
-        CHECK((mode ? exact.work - stage_owner_baseline.work :
-            exact.allocated_bytes - stage_owner_baseline.allocated_bytes) == required);
-        publication_copy_probe(view, xr_xir_compile_source_snapshot_construction(result.snapshot), name, mode, required - 1, XR_XIR_BUDGET);
-        fprintf(stderr, "snapshot-copy boundary mode=%u name=%zu fail=%llu pass=%llu\n", mode, strlen(name),
-            (unsigned long long)(required - 1), (unsigned long long)required);
-    }
+    XrCompileResourceStats measured = publication_copy_probe(view, construction, name, 0, XR_XIR_OK);
+    CHECK(measured.peak_bytes > stage_owner_baseline.held_bytes);
+    publication_copy_probe(view, construction, name, measured.peak_bytes - 1, XR_XIR_MEMORY_LIMIT);
+    publication_copy_probe(view, construction, name, measured.peak_bytes, XR_XIR_OK);
+    fprintf(stderr, "snapshot-copy held boundary name=%zu cap=%llu allocated=%llu\n", strlen(name),
+        (unsigned long long)measured.peak_bytes, (unsigned long long)measured.allocated_bytes);
     /* A second snapshot owns its ledger and all copied facts after the first snapshot dies. */
-    XrXirCompileContext escaped_context = publication_copy_context(0,
-        STAGE_ALLOCATED_BYTES - stage_owner_baseline.allocated_bytes);
+    XrXirCompileContext escaped_context = publication_context(0);
     XrXirSourceSnapshot *escaped = NULL;
-    CHECK(xr_xir_compile_source_snapshot_copy_v2(&escaped_context, view, xr_xir_compile_source_snapshot_construction(result.snapshot), &escaped) == XR_XIR_OK && escaped);
+    CHECK(xr_xir_compile_source_snapshot_copy_v2(&escaped_context, view, construction, &escaped) == XR_XIR_OK && escaped);
     xr_compile_resources_release(escaped_context.resources); escaped_context.resources = NULL;
     xr_xir_compile_source_result_free(&result);
     publication_copy_facts(xr_xir_compile_source_snapshot_view(escaped), name);
     xr_xir_compile_source_snapshot_free(escaped);
     CHECK(stage_physical_count == physical_count && stage_physical_bytes == physical_bytes);
 }
-/* Each actual allocation/work boundary owns a fresh ledger and parser state. */
-static XrXirStatus publication_probe(const XrXirSourceRequest *request, unsigned mode,
-    uint64_t allowance, XrXirSourceDiagnostic *diagnostic) {
-    XrXirCompileContext context = stage_context_limited(mode ? STAGE_ALLOCATED_BYTES : allowance,
-        STAGE_LIVE_BYTES, mode ? allowance : STAGE_WORK);
+/* Each Source probe owns its memory admission and parser state. */
+static XrCompileResourceStats publication_probe(const XrXirSourceRequest *request,
+    uint64_t memory_limit, XrXirStatus expected) {
+    size_t physical_count = stage_physical_count, physical_bytes = stage_physical_bytes;
+    XrXirCompileContext context = publication_context(memory_limit);
+    XrCompileResourceStats baseline = stage_stats(&context);
     XrCompilerSession *session = NULL;
-    XrCompilerSessionStatus created = xr_compile_session_new(context.resources, &session);
-    XrXirStatus status = XR_XIR_BUDGET;
-    *diagnostic = (XrXirSourceDiagnostic){0};
-    if (created == XR_COMPILER_SESSION_OK) {
+    XrCompileResourceStatus created = xr_compile_session_new(context.resources, &session);
+    XrXirStatus status = XR_XIR_MEMORY_LIMIT;
+    XrXirSourceDiagnostic diagnostic = {0};
+    if (created == XR_COMPILE_RESOURCE_OK) {
         XrXirSourceRequest probe = *request; probe.context = &context; probe.session = session;
         XrXirSourceResult result = {0};
-        status = xr_xir_compile_source_check(&probe, &result, diagnostic, NULL);
-        CHECK(status == XR_XIR_OK || status == XR_XIR_BUDGET);
-        CHECK(diagnostic->status == status);
+        status = xr_xir_compile_source_check(&probe, &result, &diagnostic, NULL);
+        CHECK(diagnostic.status == status);
         if (status == XR_XIR_OK) CHECK(result.checked && result.snapshot &&
             xr_xir_compile_source_snapshot_view(result.snapshot)->complete);
-        else CHECK(!result.checked && !result.snapshot && !diagnostic->message[0]);
+        else CHECK(status == XR_XIR_MEMORY_LIMIT && !result.checked && !result.snapshot);
         xr_xir_compile_source_result_free(&result);
         xr_compile_session_free(session);
-    } else {
-        CHECK(created == XR_COMPILER_SESSION_BUDGET && !session);
-        diagnostic->status = XR_XIR_BUDGET;
-    }
-    CHECK(stage_stats(&context).live_bytes == stage_owner_baseline.live_bytes);
-    return status;
+    } else CHECK(created == XR_COMPILE_RESOURCE_MEMORY_LIMIT && !session);
+    if (status != expected) fprintf(stderr, "whole-source memory=%llu status=%u expected=%u %s\n",
+        (unsigned long long)memory_limit, status, expected, diagnostic.message);
+    CHECK(status == expected);
+    XrCompileResourceStats used = stage_stats(&context);
+    CHECK(used.held_bytes == baseline.held_bytes);
+    if (memory_limit) CHECK(used.peak_bytes <= memory_limit);
+    xr_compile_resources_release(context.resources);
+    CHECK(stage_physical_count == physical_count && stage_physical_bytes == physical_bytes);
+    return used;
 }
-static void publication_budgets(XrXirSourceRequest *request) {
-    /* Preserve every whole-Source name/axis boundary independently of failure text. */
-    for (unsigned mode = 0; mode < 2; ++mode) {
-        for (size_t length = 32; length <= 2048; length *= 4) {
-            char name[2049], source[4352]; memset(name, 'q', length); name[length] = 0;
-            int written = snprintf(source, sizeof(source),
-                "fn identity(value:i64)->i64 { var %s=value; return %s }\nconst callback=identity\n", name, name);
-            CHECK(written > 0 && (size_t)written < sizeof(source)); write_source(request->entry_path, source);
-            uint64_t low = 0, high = mode ? STAGE_WORK : STAGE_ALLOCATED_BYTES;
-            XrXirSourceDiagnostic diagnostic = {0};
-            CHECK(publication_probe(request, mode, high, &diagnostic) == XR_XIR_OK);
-            while (low + 1 < high) {
-                uint64_t middle = low + (high - low) / 2;
-                XrXirStatus status = publication_probe(request, mode, middle, &diagnostic);
-                if (status == XR_XIR_OK) high = middle; else low = middle;
-            }
-            CHECK(high == low + 1);
-            CHECK(publication_probe(request, mode, high, &diagnostic) == XR_XIR_OK);
-            CHECK(publication_probe(request, mode, low, &diagnostic) == XR_XIR_BUDGET);
-            CHECK(diagnostic.status == XR_XIR_BUDGET && !diagnostic.message[0]);
-            fprintf(stderr, "whole-source boundary mode=%u name=%zu fail=%llu pass=%llu\n",
-                mode, length, (unsigned long long)low, (unsigned long long)high);
-            if (!mode) publication_copy_budgets(request, name);
-        }
+static void publication_ownership(XrXirSourceRequest *request) {
+    /* Preserve whole-Source name coverage without cumulative turnover quotas. */
+    for (size_t length = 32; length <= 2048; length *= 4) {
+        char name[2049], source[4352]; memset(name, 'q', length); name[length] = 0;
+        int written = snprintf(source, sizeof(source),
+            "fn identity(value:i64)->i64 { var %s=value; return %s }\nconst callback=identity\n", name, name);
+        CHECK(written > 0 && (size_t)written < sizeof(source)); write_source(request->entry_path, source);
+        XrCompileResourceStats measured = publication_probe(request, 0, XR_XIR_OK);
+        CHECK(measured.peak_bytes > stage_owner_baseline.held_bytes);
+        publication_probe(request, measured.peak_bytes - 1, XR_XIR_MEMORY_LIMIT);
+        publication_probe(request, measured.peak_bytes, XR_XIR_OK);
+        fprintf(stderr, "whole-source held boundary name=%zu cap=%llu allocated=%llu\n", length,
+            (unsigned long long)measured.peak_bytes, (unsigned long long)measured.allocated_bytes);
+        publication_copy_ownership(request, name);
     }
+}
+static bool publication_cancel(const void *context) {
+    unsigned *polls = (unsigned *)context; ++*polls; return true;
+}
+static void publication_controls(const XrXirSourceRequest *request) {
+    write_source(request->entry_path, "const controlled=1\n");
+    for (unsigned mode = 0; mode < 2; ++mode) {
+        size_t physical_count = stage_physical_count, physical_bytes = stage_physical_bytes;
+        SourceFixtureOwner owner = {0}; source_fixture_owner_new(&owner);
+        XrCompilerSession *session = NULL;
+        CHECK(xr_compile_session_new(owner.context.resources, &session) == XR_COMPILE_RESOURCE_OK);
+        unsigned polls = 0;
+        const XrCompileRequestOptions options = {publication_cancel, &polls,
+            mode ? XR_COMPILE_DEADLINE_AFTER : XR_COMPILE_DEADLINE_NONE, 0};
+        XrCompileRequestControl control = {0};
+        CHECK(xr_compile_request_control_init(&options, &control) == XR_COMPILE_RESOURCE_OK);
+        CHECK(xr_compile_session_bind_request(session, &control) == XR_COMPILE_RESOURCE_OK);
+        XrXirSourceRequest probe = *request; probe.context = &owner.context; probe.session = session;
+        XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
+        XrXirStatus expected = mode ? XR_XIR_DEADLINE : XR_XIR_CANCELLED;
+        XrXirStatus status = xr_xir_compile_source_check(&probe, &result, &diagnostic, NULL);
+        if (status != expected) fprintf(stderr, "source request mode=%u status=%u expected=%u %s\n",
+            mode, status, expected, diagnostic.message);
+        CHECK(status == expected && diagnostic.status == expected && !result.checked && !result.snapshot);
+        CHECK(control.status == (mode ? XR_COMPILE_RESOURCE_DEADLINE : XR_COMPILE_RESOURCE_CANCELLED));
+        CHECK(mode ? !polls : polls > 0);
+        xr_xir_compile_source_result_free(&result);
+        xr_compile_session_free(session);
+        source_fixture_owner_free(&owner);
+        CHECK(stage_physical_count == physical_count && stage_physical_bytes == physical_bytes);
+    }
+    publication_probe(request, 0, XR_XIR_OK);
 }
 static void multiline_declaration(const XrXirSourceRequest *request) {
     write_source(request->entry_path, "fn\r\nname(value:i64)->i64 { return value }\r\n");
@@ -415,10 +477,7 @@ static void failures(XrXirSourceRequest *request) {
     CHECK(view->declarations[0].kind == XR_XIR_SOURCE_IMPORT && view->declarations[0].target);
     xr_xir_compile_source_result_free(&result);
     write_source(request->entry_path, "const ok=1\n");
-    for (unsigned mode = 0; mode < 2; ++mode) {
-        CHECK(publication_probe(request, mode, mode ? 0 : 1, &diagnostic) == XR_XIR_BUDGET);
-        CHECK(diagnostic.status == XR_XIR_BUDGET);
-    }
+    publication_probe(request, stage_owner_baseline.held_bytes, XR_XIR_MEMORY_LIMIT);
     CHECK(xr_xir_compile_source_check(request, &result, &diagnostic, NULL) == XR_XIR_OK);
     view = xr_xir_compile_source_snapshot_view(result.snapshot);
     CHECK(view && view->complete && view->declaration_count == 1 && !strcmp(view->declarations[0].name, "ok"));
@@ -567,7 +626,7 @@ static void nominal_query_boundary(const XrXirCompileContext *context) {
     snapshot = NULL;
     CHECK(xr_xir_compile_source_snapshot_copy_v2(context, &view, NULL, &snapshot) == XR_XIR_BAD_STAGE && !snapshot);
     XrCompileResourceStats after = stage_stats(context);
-    CHECK(after.work == before.work + 1 && after.allocated_bytes == before.allocated_bytes && after.live_bytes == before.live_bytes);
+    CHECK(after.allocated_bytes == before.allocated_bytes && after.held_bytes == before.held_bytes);
     CHECK(!memcmp(context, &original, sizeof(original)));
 }
 static void source_method_generic_facts(XrXirSourceRequest *request) {
@@ -960,13 +1019,13 @@ static void unreachable_pattern_facts(XrXirSourceRequest *request) {
 static void query_next_scope(XrXirSourceRequest *request, XrCompilerSession **session) {
     xr_compile_session_free(*session); *session = NULL;
     stage_context = stage_context_default(); request->context = &stage_context;
-    CHECK(xr_compile_session_new(stage_context.resources, session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(stage_context.resources, session) == XR_COMPILE_RESOURCE_OK);
     request->session = *session;
 }
 int main(int argc, char **argv) {
     CHECK(argc == 1 || (argc == 2 && (!strcmp(argv[1], "--interface-name-spans") ||
         !strcmp(argv[1], "--core-syntax") || !strcmp(argv[1], "--requirement-capacity") ||
-        !strcmp(argv[1], "--requirement-provenance") || !strcmp(argv[1], "--enum-ref-next") || !strcmp(argv[1], "--enum-ref-permission") || !strcmp(argv[1], "--class-definitions"))));
+        !strcmp(argv[1], "--requirement-provenance") || !strcmp(argv[1], "--enum-ref-next") || !strcmp(argv[1], "--enum-ref-permission") || !strcmp(argv[1], "--class-definitions") || !strcmp(argv[1], "--resource-ownership"))));
     stage_context = stage_context_default(); generic_storage_cases();
     nominal_query_boundary(&stage_context);
     char directory[XR_TEST_PATH_MAX] = "xir-source-query-XXXXXX", absolute[XR_TEST_PATH_MAX];
@@ -976,11 +1035,15 @@ int main(int argc, char **argv) {
     CHECK(snprintf(library, sizeof(library), "%s/lib.xr", absolute) > 0);
     write_source(library, "export fn visible(value:i64)->i64 { return value }\nfn hidden(value:i64)->i64 { return value }\n");
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(stage_context.resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(stage_context.resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
     XrXirSourceRequest request = {session, root, &authority, &stage_context, NULL, NULL, XR_XIR_PROGRAM, NULL};
     if (argc == 2) {
-        if (!strcmp(argv[1], "--enum-ref-next")) source_enum_ref_place_cases(&request);
+        if (!strcmp(argv[1], "--resource-ownership")) {
+            publication_ownership(&request);
+            publication_controls(&request);
+            failures(&request);
+        } else if (!strcmp(argv[1], "--enum-ref-next")) source_enum_ref_place_cases(&request);
         else if (!strcmp(argv[1], "--core-syntax")) source_core_syntax_facts(&request);
         else if (!strcmp(argv[1], "--requirement-capacity")) source_requirement_value_boundaries(&request);
         else if (!strcmp(argv[1], "--requirement-provenance")) source_requirement_value_provenance(&request);
@@ -1075,7 +1138,7 @@ int main(int argc, char **argv) {
     query_next_scope(&request, &session);
     failures(&request);
     query_next_scope(&request, &session);
-    publication_budgets(&request);
+    publication_ownership(&request);
     query_next_scope(&request, &session);
     multiline_declaration(&request);
     query_next_scope(&request, &session);

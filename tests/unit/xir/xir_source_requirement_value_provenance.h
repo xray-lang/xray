@@ -109,7 +109,7 @@ static void source_requirement_value_alternates(const XrXirSourceRequest *reques
             alternates[mode],call+strlen("receiver.map<U>"));
         CHECK(length>0 && (size_t)length<sizeof(text));write_source(request->entry_path,text);
         XrXirCompileContext context=stage_context_default();XrCompilerSession *session=NULL;
-        CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
+        CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
         XrXirSourceRequest input=*request;input.context=&context;input.session=session;
         XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
         CHECK(xr_xir_compile_source_check(&input,&result,&diagnostic,NULL)==(mode?XR_XIR_BAD_TYPE:XR_XIR_OK));
@@ -120,7 +120,7 @@ static void source_requirement_value_alternates(const XrXirSourceRequest *reques
             CHECK(xr_xir_compile_artifact_verify(closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
         }
         xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
-        CHECK(stage_stats(&context).live_bytes==stage_owner_baseline.live_bytes);
+        CHECK(stage_stats(&context).held_bytes==stage_owner_baseline.held_bytes);
     }
 }
 static void source_requirement_value_provenance(XrXirSourceRequest *request) {

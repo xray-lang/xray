@@ -52,8 +52,7 @@ static void source_requirement_value_boundaries(XrXirSourceRequest *request) {
         CHECK(status == XR_XIR_OK || (!result.checked && !result.snapshot));
         xr_xir_compile_source_result_free(&result);
         const XrCompileResourceStats after = stage_stats(&context);
-        CHECK(after.live_bytes == before.live_bytes && after.work > before.work &&
-            after.allocated_bytes > before.allocated_bytes);
+        CHECK(after.held_bytes == before.held_bytes);
         CHECK(!memcmp(&context, &frozen, sizeof(context)) &&
             !memcmp(request->context, &original, sizeof(original)));
     }
