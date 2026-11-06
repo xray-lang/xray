@@ -19,7 +19,7 @@
 #undef xr_compile_resources_new
 static size_t alias_ledgers;
 XR_FUNC XrCompileResourceStatus xr_compile_resources_new(const XrCompileResourceLimits *b,XrCompileResources **out) {
-    CHECK(b&&b->allocated_bytes<=UINT64_C(64)*1024*1024&&b->live_bytes<=UINT64_C(8)*1024*1024&&b->work<=UINT64_C(128000000));
+    CHECK(b&&b->memory_mode==XR_COMPILE_MEMORY_FINITE&&b->memory_limit<=UINT64_C(8)*1024*1024&&b->profile_allocations);
     ++alias_ledgers;return alias_resource_new_impl(b,out);
 }
 #include "lsp_open_json_owner.h"
