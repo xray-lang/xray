@@ -35,7 +35,9 @@ static DWORD observed_full(LPCWSTR input, DWORD capacity, LPWSTR output, LPWSTR 
 #ifndef WINDOWS_PATH_PRODUCTION
 #undef GetFullPathNameW
 #endif
-static const XrCompileResourceLimits unlimited = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+static const XrCompileResourceLimits unlimited = {
+    .memory_mode = XR_COMPILE_MEMORY_ORDINARY, .profile_allocations = true
+};
 static XrCompileResources *ledger(const XrCompileResourceLimits *limits) {
     XrCompileResources *r = NULL;
     CHECK(xr_compile_resources_new(limits, &r) == XR_COMPILE_RESOURCE_OK); return r;
@@ -46,7 +48,7 @@ static XrCompileResourceStats convert(const char *path, XrCompileResourceLimits 
     XrCompileResourceStatus made = xr_compile_resources_new(&limits, &r);
     if (made != XR_COMPILE_RESOURCE_OK) {
         CHECK((made == XR_COMPILE_RESOURCE_OUT_OF_MEMORY && expected == XR_OS_IO_OUT_OF_MEMORY) ||
-            (made == XR_COMPILE_RESOURCE_BUDGET && expected == XR_OS_IO_BUDGET));
+            (made == XR_COMPILE_RESOURCE_MEMORY_LIMIT && expected == XR_OS_IO_MEMORY_LIMIT));
         CHECK(!r && !live); return (XrCompileResourceStats){0};
     }
     XrOsIoPolicy policy = xr_compile_io_policy(r);
@@ -57,43 +59,35 @@ static XrCompileResourceStats convert(const char *path, XrCompileResourceLimits 
     if (status != XR_OS_IO_OK) CHECK(out == (wchar_t *)1);
     XrCompileResourceStats stats;
     CHECK(xr_compile_resources_stats(r, &stats) == XR_COMPILE_RESOURCE_OK);
-    CHECK(stats.live_bytes == live && stats.allocated_bytes == total && stats.peak_bytes == peak);
+    CHECK(stats.held_bytes == live && stats.allocated_bytes == total && stats.peak_bytes == peak);
     xr_compile_resources_release(r);
     if (status == XR_OS_IO_OK) { CHECK(!wcsncmp(out, L"\\\\?\\", 4)); xr_compile_resources_free(out); }
     CHECK(!live); return stats;
 }
 static void matrix(const char *path) {
-    attempts = edge_count = 0; record_edges = true;
+    attempts = 0;
     XrCompileResourceStats stats = convert(path, unlimited, XR_OS_IO_OK);
-    record_edges = false; size_t mallocs = attempts, count = edge_count;
-    uint64_t *points = physical_malloc(count * sizeof(*points)); CHECK(points);
-    memcpy(points, edges, count * sizeof(*points));
+    size_t mallocs = attempts;
     for (size_t i = 0; i < mallocs; ++i) {
         fail_at = i; attempts = 0; convert(path, unlimited, XR_OS_IO_OUT_OF_MEMORY);
     }
     fail_at = SIZE_MAX;
-    XrCompileResourceLimits exact = {stats.allocated_bytes, stats.peak_bytes, stats.work};
-    convert(path, exact, XR_OS_IO_OK);
-    for (unsigned i = 0; i < 3; ++i) {
-        XrCompileResourceLimits limits = unlimited;
-        if (i == 0) limits.allocated_bytes = stats.allocated_bytes - 1;
-        if (i == 1) limits.live_bytes = stats.peak_bytes - 1;
-        if (i == 2) limits.work = stats.work - 1;
-        convert(path, limits, XR_OS_IO_BUDGET);
-    }
-    for (size_t i = 0; i < count; ++i) {
-        XrCompileResourceLimits limits = unlimited; limits.work = points[i] - 1;
-        convert(path, limits, XR_OS_IO_BUDGET);
-    }
-    physical_free(points);
-    XrCompileResourceLimits shared_limits = unlimited; shared_limits.work = 2 * stats.work - 2;
-    XrCompileResources *r = ledger(&shared_limits); XrOsIoPolicy policy = xr_compile_io_policy(r);
-    wchar_t *first = NULL, *second = (wchar_t *)2;
+    XrCompileResourceLimits finite = unlimited;
+    finite.memory_mode = XR_COMPILE_MEMORY_FINITE; finite.memory_limit = stats.peak_bytes;
+    convert(path, finite, XR_OS_IO_OK);
+    CHECK(finite.memory_limit > 0); --finite.memory_limit;
+    convert(path, finite, XR_OS_IO_MEMORY_LIMIT);
+    convert(path, unlimited, XR_OS_IO_OK);
+    XrCompileResources *r = ledger(&unlimited); XrOsIoPolicy policy = xr_compile_io_policy(r);
+    wchar_t *first = NULL, *second = NULL;
     CHECK(xr_win_utf8_path_owned(&policy, path, &first) == XR_OS_IO_OK);
-    CHECK(xr_win_utf8_path_owned(&policy, path, &second) == XR_OS_IO_BUDGET && second == (wchar_t *)2);
-    xr_compile_resources_free(first); xr_compile_resources_release(r); CHECK(!live);
-    printf("long locator malloc=%zu work_edges=%zu bytes=%llu peak=%llu work=%llu; all OOM/cutoffs/exact/minus1/cumulative/producer lifetime PASS\n",
-        mallocs,count,(unsigned long long)stats.allocated_bytes,(unsigned long long)stats.peak_bytes,(unsigned long long)stats.work);
+    CHECK(xr_win_utf8_path_owned(&policy, path, &second) == XR_OS_IO_OK);
+    CHECK(first != second && !wcscmp(first, second));
+    xr_compile_resources_release(r); CHECK(!wcscmp(first, second));
+    xr_compile_resources_free(first); CHECK(second[0]);
+    xr_compile_resources_free(second); CHECK(!live);
+    printf("long locator malloc=%zu bytes=%llu peak=%llu; OOM/finite exact/minus1/recovery/independent lifetime PASS\n",
+        mallocs, (unsigned long long)stats.allocated_bytes, (unsigned long long)stats.peak_bytes);
 }
 static void semantics(const char *file, const char *directory) {
     XrCompileResources *r = ledger(&unlimited); XrOsIoPolicy policy = xr_compile_io_policy(r);
@@ -133,7 +127,7 @@ static void forms_and_limit(const char *root,const char *file) {
     char *huge=physical_malloc(32769);CHECK(huge);huge[0]=file[0];huge[1]=':';huge[2]='\\';
     for(size_t i=3;i<32767;++i)huge[i]=i%2?'a':'\\';huge[32767]=0;
     wchar_t *sentinel=(wchar_t *)1;
-    CHECK(xr_win_utf8_path_owned(&policy,huge,&sentinel)==XR_OS_IO_BUDGET&&sentinel==(wchar_t *)1);
+    CHECK(xr_win_utf8_path_owned(&policy,huge,&sentinel)==XR_OS_IO_OVERFLOW&&sentinel==(wchar_t *)1);
     physical_free(huge);xr_compile_resources_release(r);CHECK(!live);
     puts("relative/rooted/drive-relative long locators find actual bytes; prefix-inclusive limit rejects PASS");
 }
@@ -170,7 +164,7 @@ int wmain(int argc,wchar_t **argv) {
 #ifndef WINDOWS_PATH_PRODUCTION
     const DWORD failures[]={ERROR_ACCESS_DENIED,ERROR_NOT_ENOUGH_MEMORY,ERROR_OUTOFMEMORY};
     for(unsigned i=0;i<3;++i){full_error=failures[i];convert(args[2],unlimited,i?XR_OS_IO_OUT_OF_MEMORY:XR_OS_IO_IO);}
-    full_error=0;full_overflow=true;convert(args[2],unlimited,XR_OS_IO_BUDGET);full_overflow=false;
+    full_error=0;full_overflow=true;convert(args[2],unlimited,XR_OS_IO_OVERFLOW);full_overflow=false;
     XrCompileResources *r=ledger(&unlimited);XrOsIoPolicy policy=xr_compile_io_policy(r);wchar_t *slot=NULL;
     CHECK(xr_win_utf8_text_owned(&policy,args[2],&slot)==XR_OS_IO_OK);wchar_t *original=slot;
     full_error=ERROR_ACCESS_DENIED;

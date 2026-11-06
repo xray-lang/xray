@@ -14,8 +14,9 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s error=%lu\n", __LINE__, #c, GetLastError()); exit(1); } } while (0)
 #include "source_paths_faults.inc.h"
-static const XrCompileResourceLimits public_limits = {UINT64_C(1)<<30, UINT64_C(256)<<20, UINT64_C(8)<<30};
-static const XrCompileResourceLimits unlimited = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+static const XrCompileResourceLimits public_limits = {
+    .memory_mode = XR_COMPILE_MEMORY_ORDINARY, .profile_allocations = true
+};
 static void reset(size_t failure) { CHECK(!live); attempts = total = peak = 0; fail_at = failure; }
 static DWORD handles(void) { DWORD n; CHECK(GetProcessHandleCount(GetCurrentProcess(), &n)); return n; }
 static void expected_path(const char *actual, const char *expected) {
@@ -41,13 +42,15 @@ static XrSourceCompileStatus run_paths(const char *entry, const XrCompileResourc
     reset(failure); XrCompileResources *r = NULL;
     XrCompileResourceStatus opened = xr_compile_resources_new(limits, &r);
     if (opened != XR_COMPILE_RESOURCE_OK) {
-        CHECK(!r && !live); return opened == XR_COMPILE_RESOURCE_BUDGET ? XR_SOURCE_COMPILE_BUDGET : XR_SOURCE_COMPILE_OUT_OF_MEMORY;
+        CHECK(!r && !live);
+        CHECK(opened == XR_COMPILE_RESOURCE_MEMORY_LIMIT || opened == XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+        return opened == XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_SOURCE_COMPILE_MEMORY_LIMIT : XR_SOURCE_COMPILE_OUT_OF_MEMORY;
     }
     XrSourcePaths paths = {0}; XrSourcePathsDiagnostic diagnostic = {0};
     XrSourceCompileStatus status = xr_source_paths(r, entry, &paths, &diagnostic);
     CHECK(status == diagnostic.status);
     CHECK(xr_compile_resources_stats(r, stats) == XR_COMPILE_RESOURCE_OK);
-    CHECK(stats->allocated_bytes == total && stats->live_bytes == live && stats->peak_bytes == peak);
+    CHECK(stats->allocated_bytes == total && stats->held_bytes == live && stats->peak_bytes == peak);
     xr_compile_resources_release(r);
     if (status == XR_SOURCE_COMPILE_OK) {
         expected_path(paths.stdlib, stdlib); CHECK((unsigned)paths.stdlib_origin == origin);
@@ -59,26 +62,18 @@ static XrSourceCompileStatus run_paths(const char *entry, const XrCompileResourc
 }
 static void path_matrix(const char *entry, const char *stdlib, unsigned origin) {
     XrCompileResourceStats baseline = {0}, stats = {0};
-    record_edges = true; edge_count = 0;
     CHECK(run_paths(entry, &public_limits, SIZE_MAX, &baseline, stdlib, origin, NULL) == XR_SOURCE_COMPILE_OK);
-    record_edges = false;
-    size_t points = attempts, cuts = edge_count;
+    size_t points = attempts;
     for (size_t i = 0; i < points; ++i)
         CHECK(run_paths(entry, &public_limits, i, &stats, stdlib, origin, NULL) == XR_SOURCE_COMPILE_OUT_OF_MEMORY);
-    for (size_t i = 0; i < cuts; ++i) {
-        XrCompileResourceLimits limits = public_limits; limits.work = edges[i] - 1;
-        CHECK(run_paths(entry, &limits, SIZE_MAX, &stats, stdlib, origin, NULL) == XR_SOURCE_COMPILE_BUDGET);
-    }
-    for (unsigned axis = 0; axis < 3; ++axis) for (unsigned minus = 0; minus < 2; ++minus) {
-        XrCompileResourceLimits limits = public_limits;
-        if (axis == 0) limits.allocated_bytes = baseline.allocated_bytes - minus;
-        if (axis == 1) limits.live_bytes = baseline.peak_bytes - minus;
-        if (axis == 2) limits.work = baseline.work - minus;
-        CHECK(run_paths(entry, &limits, SIZE_MAX, &stats, stdlib, origin, NULL) ==
-            (minus ? XR_SOURCE_COMPILE_BUDGET : XR_SOURCE_COMPILE_OK));
-    }
-    printf("paths public defaults; %zu malloc %zu work cuts; total=%llu peak=%llu work=%llu exact/minus1 physical zero PASS\n",
-        points, cuts, (unsigned long long)baseline.allocated_bytes, (unsigned long long)baseline.peak_bytes, (unsigned long long)baseline.work);
+    XrCompileResourceLimits limits = public_limits;
+    limits.memory_mode = XR_COMPILE_MEMORY_FINITE; limits.memory_limit = baseline.peak_bytes;
+    CHECK(run_paths(entry, &limits, SIZE_MAX, &stats, stdlib, origin, NULL) == XR_SOURCE_COMPILE_OK);
+    CHECK(limits.memory_limit > 0); --limits.memory_limit;
+    CHECK(run_paths(entry, &limits, SIZE_MAX, &stats, stdlib, origin, NULL) == XR_SOURCE_COMPILE_MEMORY_LIMIT);
+    CHECK(run_paths(entry, &public_limits, SIZE_MAX, &stats, stdlib, origin, NULL) == XR_SOURCE_COMPILE_OK);
+    printf("paths ordinary profile; %zu malloc points; total=%llu peak=%llu finite exact/minus1/recovery physical zero PASS\n",
+        points, (unsigned long long)baseline.allocated_bytes, (unsigned long long)baseline.peak_bytes);
 }
 #include "stdlib_selection_cases.h"
 static void query_once(bool executable, const char *expected, XrOsIoStatus expected_status) {
@@ -98,7 +93,7 @@ static void queries(const char *exe, const char *value, bool absent) {
     query_once(true, exe, XR_OS_IO_OK);
     query_once(false, value, absent ? XR_OS_IO_NOT_FOUND : XR_OS_IO_OK);
     reset(SIZE_MAX); XrCompileResources *r = NULL;
-    CHECK(xr_compile_resources_new(&unlimited, &r) == XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_compile_resources_new(&public_limits, &r) == XR_COMPILE_RESOURCE_OK);
     XrOsIoPolicy p = xr_compile_io_policy(r); char *canary = (char *)(uintptr_t)1;
     CHECK(xr_os_io_self_exe_path(&p, &canary) == XR_OS_IO_BAD_ARGUMENT && canary == (char *)(uintptr_t)1);
     CHECK(xr_os_io_environment_get(&p, "XRAY_TEST_VALUE", &canary) == XR_OS_IO_BAD_ARGUMENT && canary == (char *)(uintptr_t)1);
@@ -125,30 +120,22 @@ static void queries(const char *exe, const char *value, bool absent) {
     if (!absent) {
         environment_grows = true; query_once(false, NULL, XR_OS_IO_IO); environment_grows = false;
     }
-    module_truncates = true; query_once(true, NULL, XR_OS_IO_BUDGET); module_truncates = false;
+    module_truncates = true; query_once(true, NULL, XR_OS_IO_OVERFLOW); module_truncates = false;
     puts("injected size-change and repeated truncation preserve output PASS");
 #endif
 }
-static void independent_query_work(void) {
-    /* A 17-byte ASCII key and three-byte ASCII value require 166 submitted
-     * work units: key validation/conversion 126, query/read 13, value conversion
-     * 27. The already-existing ledger contributes one allocation work unit. */
+static void independent_query_ownership(void) {
     reset(SIZE_MAX); XrCompileResources *r = NULL;
-    XrCompileResourceLimits limits = public_limits; limits.work = 167;
-    CHECK(xr_compile_resources_new(&limits, &r) == XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_compile_resources_new(&public_limits, &r) == XR_COMPILE_RESOURCE_OK);
     XrOsIoPolicy p = xr_compile_io_policy(r); char *first = NULL, *second = NULL;
     CHECK(xr_os_io_environment_get(&p, "XRAY_TEST_FORMULA", &first) == XR_OS_IO_OK);
-    CHECK(!strcmp(first, "abc"));
-    XrCompileResourceStats stats; CHECK(xr_compile_resources_stats(r, &stats) == XR_COMPILE_RESOURCE_OK && stats.work == 167);
-    size_t count = attempts;
-    CHECK(xr_os_io_environment_get(&p, "XRAY_TEST_FORMULA", &second) == XR_OS_IO_BUDGET && !second && attempts == count);
-    xr_compile_resources_release(r); CHECK(!strcmp(first, "abc")); xr_compile_resources_free(first); CHECK(!live);
-    reset(SIZE_MAX); limits.work = 166; r = NULL;
-    CHECK(xr_compile_resources_new(&limits, &r) == XR_COMPILE_RESOURCE_OK);
-    p = xr_compile_io_policy(r);
-    CHECK(xr_os_io_environment_get(&p, "XRAY_TEST_FORMULA", &second) == XR_OS_IO_BUDGET && !second);
-    xr_compile_resources_release(r); CHECK(!live);
-    puts("independent environment formula work167/exact,166/rejected; second query same ledger exhausted PASS");
+    CHECK(xr_os_io_environment_get(&p, "XRAY_TEST_FORMULA", &second) == XR_OS_IO_OK);
+    CHECK(first != second && !strcmp(first, "abc") && !strcmp(second, "abc"));
+    xr_compile_resources_release(r);
+    CHECK(!strcmp(first, "abc") && !strcmp(second, "abc"));
+    xr_compile_resources_free(first); CHECK(!strcmp(second, "abc"));
+    xr_compile_resources_free(second); CHECK(!live);
+    puts("independent environment results survive producer and sibling retirement PASS");
 }
 static void rejected_outputs(const char *entry) {
     reset(SIZE_MAX); XrCompileResources *r = NULL;
@@ -183,7 +170,7 @@ int wmain(int argc, wchar_t **wide) {
     }
     DWORD baseline = handles();
     queries(argv[7], argv[6], !strcmp(argv[1], "absent"));
-    independent_query_work();
+    independent_query_ownership();
     rejected_outputs(argv[2]);
     unsigned origin = (unsigned)strtoul(argv[4], NULL, 10);
     XrSourceCompileStatus expected = (XrSourceCompileStatus)strtoul(argv[5], NULL, 10);

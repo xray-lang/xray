@@ -1,4 +1,4 @@
-/* Physical allocator and submitted-work observations at the real ledger. */
+/* Physical allocation observations at the real ledger. */
 #ifndef SOURCE_PATHS_FAULTS_H
 #define SOURCE_PATHS_FAULTS_H
 #include "base/xmalloc.h"
@@ -7,9 +7,6 @@ static void physical_free(void *p) { xr_free(p); }
 typedef struct TestBlock { void *pointer; size_t bytes; } TestBlock;
 static TestBlock blocks[512];
 static size_t attempts, fail_at = SIZE_MAX, live, total, peak;
-static uint64_t edges[65536];
-static size_t edge_count;
-static bool record_edges;
 static void *observed_malloc(size_t n) {
     if (attempts++ == fail_at) return NULL;
     void *p = physical_malloc(n); if (!p) return NULL;
@@ -31,30 +28,11 @@ static void observed_free(void *p) {
 #undef xr_free
 #define xr_malloc observed_malloc
 #define xr_free observed_free
-#define xr_compile_resources_work paths_real_work
-#define xr_compile_resources_alloc paths_real_alloc
 #include "base/xcompile_resources.c"
-#undef xr_compile_resources_work
-#undef xr_compile_resources_alloc
 #undef xr_malloc
 #undef xr_free
 #define xr_malloc physical_malloc
 #define xr_free physical_free
-static XrCompileResourceStatus record_status(XrCompileResources *r, XrCompileResourceStatus s) {
-    if (record_edges && s == XR_COMPILE_RESOURCE_OK) {
-        XrCompileResourceStats stats; CHECK(xr_compile_resources_stats(r, &stats) == XR_COMPILE_RESOURCE_OK);
-        if (!edge_count || edges[edge_count - 1] != stats.work) {
-            CHECK(edge_count < 65536); edges[edge_count++] = stats.work;
-        }
-    }
-    return s;
-}
-XR_FUNC XrCompileResourceStatus xr_compile_resources_work(XrCompileResources *r, uint64_t n) {
-    return record_status(r, paths_real_work(r, n));
-}
-XR_FUNC XrCompileResourceStatus xr_compile_resources_alloc(XrCompileResources *r, size_t n, void **out) {
-    return record_status(r, paths_real_alloc(r, n, out));
-}
 #ifndef SOURCE_PATHS_PRODUCTION
 static size_t io_attempts, io_fail_at = SIZE_MAX;
 static DWORD io_error = ERROR_ACCESS_DENIED;
