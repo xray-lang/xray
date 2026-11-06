@@ -32,12 +32,14 @@ static void digest_packet(XrXirCheckedPacket *p) {
 static void put32(uint8_t *p, uint32_t n) {
     for (unsigned i = 0; i < 4; ++i) p[i] = (uint8_t) (n >> (i * 8));
 }
-static void rejected(const void *bytes, size_t length) {
+static void checked_packet_rejected(const void *bytes,size_t length,const char *caller,unsigned line) {
     XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true});
     XrCompileResourceStats baseline=consumer_context_stats(&probe);
     XrXirArtifact *artifact = NULL;
     XrXirDiagnostic diagnostic = {0};
-    CHECK(xr_xir_compile_checked_read(&probe, bytes, length, &artifact, &diagnostic) != XR_XIR_OK);
+    XrXirStatus status=xr_xir_compile_checked_read(&probe,bytes,length,&artifact,&diagnostic);
+    if(status==XR_XIR_OK)fprintf(stderr,"packet attack accepted at %s:%u (%zu bytes)\n",caller,line,length);
+    CHECK(status != XR_XIR_OK);
     CHECK(!artifact && diagnostic.status != XR_XIR_OK);
     /* Occupied output is a separate preservation check, not the malformed oracle. */
     artifact=(XrXirArtifact *)(uintptr_t)1;
@@ -45,6 +47,7 @@ static void rejected(const void *bytes, size_t length) {
     CHECK(artifact==(XrXirArtifact *)(uintptr_t)1);
     consumer_context_ephemeral_free(&probe,baseline);
 }
+#define rejected(bytes,length) checked_packet_rejected(bytes,length,__func__,__LINE__)
 static void checked_current_callable_rejected(const void *bytes, size_t length) {
     XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true});
     const XrCompileResourceStats baseline=consumer_context_stats(&probe);
