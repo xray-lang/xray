@@ -44,7 +44,7 @@ static void rejected_final(const XrXirCompileContext *context,XrXirArtifact *art
 }
 
 int main(void) {
-    const XrCompileResourceLimits limits={67108864,8388608,128000000};
+    const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,true};
     XrXirCompileContext context={0};context.limits=xr_xir_compile_default_limits();
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats baseline={0},after={0};
@@ -88,7 +88,7 @@ int main(void) {
     CHECK(xr_xir_compile_vm_program_take(&artifact,&program)==XR_XIR_OK && !artifact);
     result42(program);xr_xir_compile_program_drop(program);
     CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
-    CHECK(after.live_bytes==baseline.live_bytes);
+    CHECK(after.held_bytes==baseline.held_bytes);
     xr_compile_resources_release(context.resources);
     for(unsigned i=0;i<6;++i) CHECK(outcomes[i]==XR_XIR_OK);
     puts("Lowered independent receiving kernels and producer-death result42 PASS");
