@@ -179,9 +179,9 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 字面量默认 `f64`。
 
-浮点 `+ - * /` 每次在操作数的共同精度按 round-to-nearest, ties-to-even 舍入；`f32` 与 `f64` 混合时先无损加宽到 `f64`。保留次正规数并渐进下溢，溢出为带符号无穷大。除零遵循 IEEE 规则，不触发整数除零错误；无效操作与 NaN 结果统一为正 canonical quiet NaN。禁止隐式融合或重排操作，不依赖或改变宿主浮点舍入状态与异常标志。浮点 `%` 与位运算不成立，已定型整数与浮点混合仍须显式转换。
+浮点 `+ - * /` 每次在操作数的共同精度按 round-to-nearest, ties-to-even 舍入；`f32` 与 `f64` 混合时先无损加宽到 `f64`。保留次正规数并渐进下溢，溢出为带符号无穷大。除零遵循 IEEE 规则，不触发整数除零错误；算术 NaN 结果的符号和载荷不保证；转成位串、打印、哈希和原子比较等可观察边界统一 NaN。禁止隐式融合或重排操作。程序在默认浮点环境（round-to-nearest, ties-to-even，保留次正规数）下运行；嵌入入口负责保证该前提。执行器不主动改变舍入和 FTZ/DAZ 控制，硬件自然产生的 sticky 异常标志不保证保持；非默认舍入或 flush 模式不属于合法执行前提。浮点 `%` 与位运算不成立，已定型整数与浮点混合仍须显式转换。
 
-运行 `f64` 值允许全部 binary64 payload，包括带符号/载荷的 quiet 和 signaling NaN；合法值的复制、保存、参数、返回及已准入容器保留精确位型。这个载体合同不把 NaN 改成普通相等值，也不改变 `f32` 高32位为零且只准正 canonical quiet NaN 的运行值规则。CONST_FLOAT 的 wire 编码仍只准 canonical NaN；四则、转换（包括同宽转换）和负号的 NaN 结果仍 canonical，不能把运行值搬运当作数值运算。§17.24/§17.27 规定同一 VM/native/typed output 边界；不新增 raw-bit 字面量或编译器反射后门。
+运行 `f64` 值允许全部 binary64 payload，包括带符号/载荷的 quiet 和 signaling NaN；合法值的复制、保存、参数、返回及已准入容器保留精确位型。这个载体合同不把 NaN 改成普通相等值，也不改变 `f32` 高32位为零且只准正 canonical quiet NaN 的运行值规则。CONST_FLOAT 的 wire 编码仍只准 canonical NaN；四则、浮点转换和负号产生的 NaN 不保证符号或载荷，只在上述可观察边界统一为正 canonical quiet NaN；复制、参数、返回和 spill 的内部位型不得为此逐次改写。§17.24/§17.27 规定同一 VM/native/typed output 边界；不新增 raw-bit 字面量或编译器反射后门。
 
 #### 2.3.3 `bool`
 
@@ -844,7 +844,7 @@ var n = x as i64?       // 失败返回 null（安全转换）
 - `JSON.Value` 到标量类型的运行期检查；复合 typed 解码使用 `JSON.decode<T>` / `JSON.decodeObject<T>`。
 - 父类 → 子类（向下转）。
 
-数值 `as` 的结果与主机 C 编译器、优化级别和 VM/AOT 后端无关：整数到整数按目标位宽取模，并按目标有符号性解释同一位型；整数到浮点以及 `f64 → f32` 使用 IEEE-754 round-to-nearest, ties-to-even，溢出产生带原符号的无穷大，NaN 规范化为 Xray 的 canonical quiet NaN；浮点到整数向零截断，NaN、无穷大或超出目标范围时抛 `XR_ERR_OVERFLOW` (E0422)，消息为 `numeric conversion is out of range`。
+数值 `as` 的结果与主机 C 编译器、优化级别和 VM/AOT 后端无关：整数到整数按目标位宽取模，并按目标有符号性解释同一位型；整数到浮点以及 `f64 → f32` 使用 IEEE-754 round-to-nearest, ties-to-even，溢出产生带原符号的无穷大，NaN 的符号或载荷不保证，可观察边界按 §2.3.2 统一；浮点到整数向零截断，NaN、无穷大或超出目标范围时抛 `XR_ERR_OVERFLOW` (E0422)，消息为 `numeric conversion is out of range`。
 
 整数as操作数独立于目标定型；直接正字面量（允许括号）超过i64最大值但不超过u64最大值时，保留u64源幅度后再按目标取模。`18446744073709551615 as i8`为-1；`200 as i8`仍按显式转换环绕，不要求字面量先满足i8范围。
 
@@ -1307,12 +1307,16 @@ Floating `+ - * /` rounds each operation at the common operand precision,
 nearest with ties to even; a mixed f32/f64 pair first widens f32 exactly to
 f64. Subnormals use gradual underflow and overflow produces signed infinity.
 Division by zero follows IEEE rules rather than raising an integer division
-fault. Invalid operations and NaN results produce the positive canonical quiet
-NaN. Operations are not implicitly fused or reassociated and neither depend on
-nor alter host rounding state or exception flags. Floating remainder and bitwise
+fault. The sign and payload of an arithmetic NaN result are unspecified; bit-string,
+printing, hashing and atomic-comparison observations normalize NaNs. Operations
+are not implicitly fused or reassociated. Programs run in the default floating
+environment: round-to-nearest, ties-to-even with gradual underflow. An embedding
+entry must establish that precondition. Executors do not actively change rounding
+or FTZ/DAZ controls; naturally raised sticky exception flags need not be preserved.
+Nondefault rounding or flushing modes are outside the admitted execution precondition. Floating remainder and bitwise
 operations reject; already typed integer/float mixing still requires an explicit cast.
 
-Runtime `f64` values admit every binary64 payload, including signed, payload-bearing quiet and signaling NaNs. Copying, storage, parameters, returns and admitted containers preserve exact bits. This carrier rule neither makes NaN ordinarily equal nor changes runtime `f32`: its high 32 bits remain zero and its only NaN is the positive canonical quiet NaN. CONST_FLOAT wire encoding still requires canonical NaN. Arithmetic, conversions including same-width conversion, and negation still canonicalize NaN results; transporting a value is not a numeric operation. §17.24/§17.27 govern the common VM/native/typed-output boundary. No raw-bit literal or reflection bypass is introduced.
+Runtime `f64` values admit every binary64 payload, including signed, payload-bearing quiet and signaling NaNs. Copying, storage, parameters, returns and admitted containers preserve exact bits. This carrier rule neither makes NaN ordinarily equal nor changes runtime `f32`: its high 32 bits remain zero and its only NaN is the positive canonical quiet NaN. CONST_FLOAT wire encoding still requires canonical NaN. Arithmetic, floating conversions and negation do not promise NaN sign or payload. Only the observable boundaries above normalize to positive canonical quiet NaN; internal copying, parameters, returns and spills do not canonicalize each value. §17.24/§17.27 govern the common VM/native/typed-output boundary. No raw-bit literal or reflection bypass is introduced.
 
 #### 2.3.3 `bool`
 
@@ -1991,7 +1995,7 @@ Applies to:
 - Runtime checks from `JSON.Value` to scalar types; composite typed decoding uses `JSON.decode<T>` / `JSON.decodeObject<T>`.
 - Parent → child (downcast).
 
-Numeric `as` is independent of the host C compiler, optimization level, and VM/AOT backend: integer-to-integer conversion reduces modulo the target width and interprets the same bit pattern with the target signedness; integer-to-f64 and `f64 → f32` use IEEE-754 round-to-nearest, ties-to-even, overflow produces signed infinity, and NaN is normalized to Xray's canonical quiet NaN; f64-to-integer truncates toward zero and throws `XR_ERR_OVERFLOW` (E0422), with message `numeric conversion is out of range`, for NaN, infinity, or a value outside the target range.
+Numeric `as` is independent of the host C compiler, optimization level, and VM/AOT backend: integer-to-integer conversion reduces modulo the target width and interprets the same bit pattern with the target signedness; integer-to-f64 and `f64 → f32` use IEEE-754 round-to-nearest, ties-to-even, overflow produces signed infinity, and NaN sign/payload are unspecified until the observable boundaries of §2.3.2; f64-to-integer truncates toward zero and throws `XR_ERR_OVERFLOW` (E0422), with message `numeric conversion is out of range`, for NaN, infinity, or a value outside the target range.
 
 An integer as operand is typed independently of the target. A direct positive literal (parentheses allowed) above the i64 maximum and at most the u64 maximum retains its u64 source magnitude before reducing to the target width. `18446744073709551615 as i8` is -1; `200 as i8` still wraps explicitly rather than first range-checking the literal as i8.
 

@@ -72,8 +72,8 @@ int main(int argc, char **argv) {{
 '''
 
 
-_F64_MACROS = ('_MSC_VER', '_M_X64', '_M_ARM64EC', '_M_FP_FAST', '__FAST_MATH__', '__FINITE_MATH_ONLY__')
-_ABI_ERROR = 'F64_TRANSPORT_REQUIRES_VALIDATED_MICROSOFT_X64_ABI'
+_F64_MACROS = ('CHAR_BIT', 'FLT_RADIX', 'DBL_MANT_DIG', 'DBL_MIN_EXP', 'DBL_MAX_EXP', '_M_FP_FAST', '__FAST_MATH__', '__FINITE_MATH_ONLY__')
+_ABI_ERROR = 'F64_TRANSPORT_REQUIRES_BINARY64'
 _FP_ERROR = 'F64_TRANSPORT_REQUIRES_NONFAST_FLOATING_POINT_MODE'
 _F64_INPUTS = ['0000000000000000', '8000000000000000', '3ff0000000000000', 'bff0000000000000',
                '0000000000000001', '8000000000000001', '000fffffffffffff', '0010000000000000',
@@ -84,7 +84,7 @@ _F64_INPUTS = ['0000000000000000', '8000000000000000', '3ff0000000000000', 'bff0
 def _f64_profile(compiler, kind, options, work):
     """Read independent compiler facts; a failed query is never a target denial."""
     source = work / 'target-facts.c'
-    text = '#define F64_STR1(x) #x\n#define F64_STR(x) F64_STR1(x)\n'
+    text = '#include <limits.h>\n#include <float.h>\n#define F64_STR1(x) #x\n#define F64_STR(x) F64_STR1(x)\n'
     for i, name in enumerate(_F64_MACROS):
         text += (f'#ifdef {name}\nconst int f64_d{i} = 1;\nconst char *f64_v{i} = F64_STR({name});\n'
                  f'#else\nconst int f64_d{i} = 0;\nconst char *f64_v{i} = "UNDEFINED";\n#endif\n')
@@ -103,13 +103,20 @@ def _f64_profile(compiler, kind, options, work):
         assert len(defined) == len(value) == 1, (name, output)
         present = defined[0] == '1'
         assert (value[0] != 'UNDEFINED') == present
-        assert not present or value[0].isdigit(), (name, value)
-        facts[name] = {'defined': present, 'value': int(value[0]) if present else None}
-    abi = facts['_MSC_VER']['defined'] and facts['_M_X64']['defined'] and not facts['_M_ARM64EC']['defined']
+        assert not present or re.fullmatch(r'\(?-?\d+\)?', value[0]), (name, value)
+        facts[name] = {'defined': present, 'value': int(value[0].strip('()')) if present else None}
+    abi = all(facts[key]['value'] == value for key, value in
+              dict(CHAR_BIT=8, FLT_RADIX=2, DBL_MANT_DIG=53, DBL_MIN_EXP=-1021, DBL_MAX_EXP=1024).items())
     fast = facts['_M_FP_FAST']['defined'] or facts['__FAST_MATH__']['defined'] or (
         facts['__FINITE_MATH_ONLY__']['defined'] and facts['__FINITE_MATH_ONLY__']['value'] > 0)
     return {'facts': facts, 'query': record, 'abiSupported': abi, 'fastMode': bool(fast),
             'supported': abi and not fast, 'expectedGuard': _ABI_ERROR if not abi else _FP_ERROR if fast else None}
+
+
+def _f64_options(compiler, kind):
+    if kind != 'msvc':
+        return ['-ffp-contract=off']
+    return ['/clang:-ffp-contract=off'] if 'clang' in compiler.name.lower() else ['/fp:precise']
 
 
 def _f64_reject(command, work, marker, product):
@@ -146,14 +153,14 @@ int main(int argc, char **argv) {
         uint64_t expected = strtoull(argv[i], &end, 16);
         if (errno || end == argv[i] || *end) return 4;
         for (int mode = 0; mode < 2; ++mode) {
-            int rounding = mode ? FE_UPWARD : FE_TONEAREST;
+            int rounding = FE_TONEAREST;
             if (fesetround(rounding) || feclearexcept(FE_ALL_EXCEPT)) return 5;
             if (mode && feraiseexcept(FE_INEXACT)) return 6;
-            int flags = fetestexcept(FE_ALL_EXCEPT), round = fegetround();
+            int round=fegetround();
             double input; memcpy(&input, &expected, 8);
             double result = call(input); uint64_t actual; memcpy(&actual, &result, 8);
-            int after_flags = fetestexcept(FE_ALL_EXCEPT), after_round = fegetround();
-            if (actual != expected || after_flags != flags || after_round != round) return 7;
+            int after_round=fegetround();
+            if (actual != expected || after_round != round) return 7;
             printf("%016" PRIx64 "\n", actual);
         }
     }
@@ -174,7 +181,7 @@ def _f64_cases(args, root, results):
         for output in (False, True):
             case = base + ('-output' if output else '')
             for mode in ('before', 'after'):
-                for fp in (('default', 'precise', 'strict') if args.kind == 'msvc' else ('default',)):
+                for fp in ('default',):
                     work = root / (case + '-' + mode + '-' + fp); work.mkdir()
                     generated, gateway, host = [work / x for x in ('generated.c', 'gateway.c', 'adapter.c')]
                     producer = run([args.driver, case, mode, generated], work)
@@ -183,7 +190,7 @@ def _f64_cases(args, root, results):
                     a, b, _ = observation['parameters']
                     assert observation['backedgeArguments'][:2] == [b, a] and observation['returned'] == b
                     text = generated.read_text(encoding='ascii')
-                    assert 'double' in text and 'memcpy' in text and _ABI_ERROR in text and _FP_ERROR in text
+                    assert 'double' in text and 'memcpy' in text and 'binary64 precision' in text and _FP_ERROR in text
                     if output:
                         assert '*(double *)context = xrl_f1();' in text and 'xrt_run_standalone(' in text
                     else:
@@ -203,7 +210,7 @@ def _f64_cases(args, root, results):
                                'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd'}[args.msvc_runtime]
                         flags = ['/nologo', '/std:c11', '/W4', '/WX', '/O2', '/utf-8', crt]
                         flags += ['/clang:-fno-lto'] if 'clang' in args.compiler.name.lower() else ['/GL-']
-                        if fp != 'default': flags += ['/fp:' + fp]
+                        flags += _f64_options(args.compiler, args.kind)
                         if args.asan:
                             flags += ['/fsanitize=address', '/Zi']
                             if 'clang' in args.compiler.name.lower(): flags += ['/clang:-fsanitize=undefined']
@@ -216,6 +223,7 @@ def _f64_cases(args, root, results):
                         executable = work / 'run.exe'
                     else:
                         flags = ['-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic', '-O2', '-fno-lto']
+                        flags += _f64_options(args.compiler, args.kind)
                         if args.asan: flags += ['-fsanitize=address,undefined', '-g']
                         flags += ['-I' + str(args.include)] if output else []
                         objects = [work / 'gateway.o', work / 'adapter.o']
@@ -243,18 +251,9 @@ def _f64_cases(args, root, results):
                                       payloadVectorsExecuted=len(inputs) * 2,
                                       objects=[{'path': str(obj), 'sha256': digest(obj)} for obj in objects])
                     if base == 'f64' and not output and mode == 'before' and fp == 'default':
-                        negative_flags = [x for x in flags if not str(x).startswith(('/fsanitize=', '/clang:-fsanitize=', '-fsanitize=')) and x != '/Zi']
+                        negative_flags = [x for x in flags if not str(x).startswith(('/fsanitize=', '/clang:-fsanitize=', '-fsanitize=')) and x != '/Zi' and x not in _f64_options(args.compiler, args.kind)]
                         fast = ['/fp:fast'] if args.kind == 'msvc' else ['-ffast-math']
                         variants = [('fast', args.compiler, fast)]
-                        if 'clang-cl' in args.compiler.name.lower():
-                            variants += [(arch, args.compiler, ['/clang:--target=' + arch + '-pc-windows-msvc'])
-                                         for arch in ('aarch64', 'arm64ec')]
-                        if args.kind == 'msvc' and args.compiler.name.lower() == 'cl.exe':
-                            x86 = args.compiler.parent.parent / 'x86' / args.compiler.name
-                            record['x86Control'] = {'compiler': str(x86), 'available': x86.is_file(),
-                                                    'qualification': 'compile-only negative, no execution'}
-                            if x86.is_file():
-                                variants += [('x86-default', x86, []), ('x86-fast', x86, fast)]
                         record['guardRejections'] = []
                         for label, compiler, options in variants:
                             control = work / ('control-' + label); control.mkdir()
@@ -324,20 +323,28 @@ int main(int argc, char **argv) {
         uint64_t expected = strtoull(next, &end, 16);
         if (errno || end == next || *end) return 5;
         for (int mode = 0; mode < 2; ++mode) {
-            if (fesetround(mode ? FE_UPWARD : FE_TONEAREST) || feclearexcept(FE_ALL_EXCEPT)) return 6;
+            if (fesetround(FE_TONEAREST) || feclearexcept(FE_ALL_EXCEPT)) return 6;
             if (mode && feraiseexcept(FE_INEXACT)) return 7;
-            int flags = fetestexcept(FE_ALL_EXCEPT), rounding = fegetround();
+            int rounding=fegetround();
             double value; memcpy(&value, &input, 8);
             double answer = call(value);
-            int after_flags = fetestexcept(FE_ALL_EXCEPT), after_rounding = fegetround();
+            int after_rounding=fegetround();
             uint64_t actual; memcpy(&actual, &answer, 8);
-            if (actual != expected || flags != after_flags || rounding != after_rounding) return 8;
+            if ((expected & UINT64_C(0x7fffffffffffffff)) > UINT64_C(0x7ff0000000000000)) {
+                if ((actual & UINT64_C(0x7fffffffffffffff)) <= UINT64_C(0x7ff0000000000000)) return 8;
+                actual = UINT64_C(0x7ff8000000000000);
+            } else if (actual != expected) return 8;
+            if (rounding != after_rounding) return 8;
             if (fesetenv(&original)) return 9;
             printf("%016" PRIx64 "\n", actual);
         }
     }
     if (fflush(stdout)) return 10;
     double value = root(); uint64_t bits; memcpy(&bits, &value, 8);
+    if ((bits & UINT64_C(0x7fffffffffffffff)) > UINT64_C(0x7ff0000000000000))
+        bits = UINT64_C(0x7ff8000000000000);
+    if ((bits & UINT64_C(0x7fffffffffffffff)) > UINT64_C(0x7ff0000000000000))
+        bits = UINT64_C(0x7ff8000000000000);
     printf("%016" PRIx64 "\n", bits); return fflush(stdout) ? 11 : 0;
 }
 '''
@@ -350,7 +357,7 @@ def _fneg_commands(args, work, output, fp):
                'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd'}[args.msvc_runtime]
         flags = ['/nologo', '/std:c11', '/W4', '/WX', '/O2', '/utf-8', crt]
         flags += ['/clang:-fno-lto'] if 'clang' in args.compiler.name.lower() else ['/GL-']
-        if fp != 'default': flags += ['/fp:' + fp]
+        flags += _f64_options(args.compiler, args.kind)
         if args.asan:
             flags += ['/fsanitize=address', '/Zi']
             if 'clang' in args.compiler.name.lower(): flags += ['/clang:-fsanitize=undefined']
@@ -363,6 +370,7 @@ def _fneg_commands(args, work, output, fp):
                 '/Fe:' + str(executable), '/link', '/INCREMENTAL:NO']
     else:
         flags = ['-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic', '-O2', '-fno-lto']
+        flags += _f64_options(args.compiler, args.kind)
         if args.asan: flags += ['-fsanitize=address,undefined', '-g']
         if output: flags += ['-I' + str(args.include)]
         objects = [work / 'gateway.o', work / 'adapter.o']
@@ -374,15 +382,9 @@ def _fneg_commands(args, work, output, fp):
 
 def _fneg_controls(args, flags, generated, work):
     flags = [x for x in flags if not str(x).startswith(('/fsanitize=', '/clang:-fsanitize=', '-fsanitize='))
-             and x != '/Zi']
+             and x != '/Zi' and x not in _f64_options(args.compiler, args.kind)]
     fast = ['/fp:fast'] if args.kind == 'msvc' else ['-ffast-math']
     variants = [('fast', args.compiler, fast)]
-    if 'clang-cl' in args.compiler.name.lower():
-        variants += [(arch, args.compiler, ['/clang:--target=' + arch + '-pc-windows-msvc'])
-                     for arch in ('aarch64', 'arm64ec')]
-    if args.kind == 'msvc' and args.compiler.name.lower() == 'cl.exe':
-        x86 = args.compiler.parent.parent / 'x86' / args.compiler.name
-        if x86.is_file(): variants += [('x86-default', x86, []), ('x86-fast', x86, fast)]
     rejected = []
     for label, compiler, options in variants:
         control = work / ('control-' + label); control.mkdir()
@@ -408,7 +410,7 @@ def _fneg_cases(args, root, results):
         for output in (False, True):
             case = base + ('-output' if output else '')
             for mode in ('before', 'after'):
-                for fp in (('default', 'precise', 'strict') if args.kind == 'msvc' else ('default',)):
+                for fp in ('default',):
                     work = root / (case + '-' + mode + '-' + fp); work.mkdir()
                     generated = work / 'generated.c'
                     producer = run([args.driver, case, mode, generated], work)
@@ -418,10 +420,8 @@ def _fneg_cases(args, root, results):
                     assert observation['parameter'] == observation['operand']
                     assert observation['line'] == 7 and observation['column'] == 5
                     text = generated.read_text(encoding='ascii')
-                    policy = text.index('#pragma STDC FENV_ACCESS ON')
-                    assert text.rfind('#include ') < policy < text.index('double ')
-                    assert '#pragma fenv_access(on)' in text and '0x7ff8000000000000' in text
-                    assert _ABI_ERROR in text and _FP_ERROR in text
+                    assert ' = -' in text and 'FENV_ACCESS' not in text
+                    assert 'binary64 precision' in text and _FP_ERROR in text
                     if not output: assert 'xrt_' not in text and 'xray_native_runtime.h' not in text
                     (work / 'carrier.h').write_text('typedef double Scalar;\ntypedef Scalar (*Carrier)(Scalar);\n'
                         'typedef double (*Root)(void);\nCarrier carrier_get(void);\nRoot root_get(void);\n', encoding='ascii')
@@ -447,7 +447,7 @@ def _fneg_cases(args, root, results):
                         expected += answer.encode('ascii') + newline
                         assert native['stdoutHex'] == expected.hex() and not native['stderrHex']
                         record.update(native=native, expectedHex=expected.hex(), status='PASS',
-                            payloadVectorsExecuted=len(_FNEG_VECTORS) * 2, observerDeclaresFenv=True,
+                            payloadVectorsExecuted=len(_FNEG_VECTORS) * 2, defaultEnvironmentOnly=True,
                             immediateFenvCapture=True, rootProbeDefaultEnv=True,
                             objects=[{'path': str(obj), 'sha256': digest(obj)} for obj in objects])
                     if base == 'fneg-zero' and not output and mode == 'before' and fp == 'default':

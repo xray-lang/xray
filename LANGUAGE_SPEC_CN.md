@@ -775,9 +775,9 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 字面量默认 `f64`。
 
-浮点 `+ - * /` 每次在操作数的共同精度按 round-to-nearest, ties-to-even 舍入；`f32` 与 `f64` 混合时先无损加宽到 `f64`。保留次正规数并渐进下溢，溢出为带符号无穷大。除零遵循 IEEE 规则，不触发整数除零错误；无效操作与 NaN 结果统一为正 canonical quiet NaN。禁止隐式融合或重排操作，不依赖或改变宿主浮点舍入状态与异常标志。浮点 `%` 与位运算不成立，已定型整数与浮点混合仍须显式转换。
+浮点 `+ - * /` 每次在操作数的共同精度按 round-to-nearest, ties-to-even 舍入；`f32` 与 `f64` 混合时先无损加宽到 `f64`。保留次正规数并渐进下溢，溢出为带符号无穷大。除零遵循 IEEE 规则，不触发整数除零错误；算术 NaN 结果的符号和载荷不保证；转成位串、打印、哈希和原子比较等可观察边界统一 NaN。禁止隐式融合或重排操作。程序在默认浮点环境（round-to-nearest, ties-to-even，保留次正规数）下运行；嵌入入口负责保证该前提。执行器不主动改变舍入和 FTZ/DAZ 控制，硬件自然产生的 sticky 异常标志不保证保持；非默认舍入或 flush 模式不属于合法执行前提。浮点 `%` 与位运算不成立，已定型整数与浮点混合仍须显式转换。
 
-运行 `f64` 值允许全部 binary64 payload，包括带符号/载荷的 quiet 和 signaling NaN；合法值的复制、保存、参数、返回及已准入容器保留精确位型。这个载体合同不把 NaN 改成普通相等值，也不改变 `f32` 高32位为零且只准正 canonical quiet NaN 的运行值规则。CONST_FLOAT 的 wire 编码仍只准 canonical NaN；四则、转换（包括同宽转换）和负号的 NaN 结果仍 canonical，不能把运行值搬运当作数值运算。§17.24/§17.27 规定同一 VM/native/typed output 边界；不新增 raw-bit 字面量或编译器反射后门。
+运行 `f64` 值允许全部 binary64 payload，包括带符号/载荷的 quiet 和 signaling NaN；合法值的复制、保存、参数、返回及已准入容器保留精确位型。这个载体合同不把 NaN 改成普通相等值，也不改变 `f32` 高32位为零且只准正 canonical quiet NaN 的运行值规则。CONST_FLOAT 的 wire 编码仍只准 canonical NaN；四则、浮点转换和负号产生的 NaN 不保证符号或载荷，只在上述可观察边界统一为正 canonical quiet NaN；复制、参数、返回和 spill 的内部位型不得为此逐次改写。§17.24/§17.27 规定同一 VM/native/typed output 边界；不新增 raw-bit 字面量或编译器反射后门。
 
 #### 2.3.3 `bool`
 
@@ -1440,7 +1440,7 @@ var n = x as i64?       // 失败返回 null（安全转换）
 - `JSON.Value` 到标量类型的运行期检查；复合 typed 解码使用 `JSON.decode<T>` / `JSON.decodeObject<T>`。
 - 父类 → 子类（向下转）。
 
-数值 `as` 的结果与主机 C 编译器、优化级别和 VM/AOT 后端无关：整数到整数按目标位宽取模，并按目标有符号性解释同一位型；整数到浮点以及 `f64 → f32` 使用 IEEE-754 round-to-nearest, ties-to-even，溢出产生带原符号的无穷大，NaN 规范化为 Xray 的 canonical quiet NaN；浮点到整数向零截断，NaN、无穷大或超出目标范围时抛 `XR_ERR_OVERFLOW` (E0422)，消息为 `numeric conversion is out of range`。
+数值 `as` 的结果与主机 C 编译器、优化级别和 VM/AOT 后端无关：整数到整数按目标位宽取模，并按目标有符号性解释同一位型；整数到浮点以及 `f64 → f32` 使用 IEEE-754 round-to-nearest, ties-to-even，溢出产生带原符号的无穷大，NaN 的符号或载荷不保证，可观察边界按 §2.3.2 统一；浮点到整数向零截断，NaN、无穷大或超出目标范围时抛 `XR_ERR_OVERFLOW` (E0422)，消息为 `numeric conversion is out of range`。
 
 整数as操作数独立于目标定型；直接正字面量（允许括号）超过i64最大值但不超过u64最大值时，保留u64源幅度后再按目标取模。`18446744073709551615 as i8`为-1；`200 as i8`仍按显式转换环绕，不要求字面量先满足i8范围。
 
@@ -5945,7 +5945,7 @@ compareExchange 是 strong CAS，公开结果 `(T, bool)` 是真正 Tuple，不�
 
 失败时返回实际观察到的旧值且不写入；成功时返回写入前的旧值。CAS 成功之后才发生的失败或取消不回滚这次写入。
 
-i64 的加减按 §2.3.1 模 2^64 环绕。f64 的构造、load、store、swap 和 compareExchange 保留完整 binary64 位型；compareExchange 按位比较：正零与负零不同，载荷相同的 NaN 可以匹配，载荷不同的不匹配。这不改变普通浮点 `==` 的规则。f64 的加减按 §2.3.2 的舍入规则计算，与其他写入竞争时按最新值重算直到成功。`toString()` 读取一次 `SeqCst` 快照。
+i64 的加减按 §2.3.1 模 2^64 环绕。f64 的构造、load、store、swap 和 compareExchange 保留完整 binary64 位型；compareExchange 在观察比较时先规范化 NaN 再比较位型：正零与负零不同，任意 NaN 符号和载荷按同一正 canonical quiet NaN 匹配。该观察规则不要求普通复制、参数和存储逐次规范化。这不改变普通浮点 `==` 的规则。f64 的加减按 §2.3.2 的舍入规则计算，与其他写入竞争时按最新值重算直到成功。`toString()` 读取一次 `SeqCst` 快照。
 
 目标平台不能为所需宽度提供无锁原子操作时，含 `Atomic` 的程序在构建或加载时被明确拒绝，不退化为加锁实现。
 
@@ -7637,7 +7637,7 @@ Checked与Program、值和调用边界使用§17.6的现行版本，不接受先
 
 ### 17.23 二进制浮点转换基础
 
-共同运行时浮点核心显式接收IEEE binary32/binary64位型（binary32高32位必须为零），整数侧沿用位宽/符号与规范payload。整数到浮点、f64到f32采用round-to-nearest ties-to-even，溢出为带符号无穷，保留subnormal渐进下溢和负零；f32到f64精确。任意NaN位型统一为正canonical quiet NaN（f32为0x7fc00000，f64为0x7ff8000000000000）。同宽转换也规范化NaN。
+CTFE 的整数位浮点核心显式接收IEEE binary32/binary64位型（binary32高32位必须为零），整数侧沿用位宽/符号与规范payload。整数到浮点、f64到f32采用round-to-nearest ties-to-even，溢出为带符号无穷，保留subnormal渐进下溢和负零；f32到f64精确。任意NaN位型统一为正canonical quiet NaN（f32为0x7fc00000，f64为0x7ff8000000000000）。同宽转换也规范化NaN。
 
 浮点到整数先向零截断再检查目标完整范围；(-1,0)可转unsigned零。NaN、无穷或截断后越界返回RANGE；非法宽度/编码返回BAD_ARGUMENT，失败清零输出。比较返回less/equal/greater/unordered，任一NaN为unordered，正负零相等；负号翻转非NaN符号并规范化NaN。全部通过整数位运算实现，不分配、不执行宿主浮点运算/转换、不更改宿主舍入模式或异常标志，也不依赖旧scalar标签/生成元数据。
 
@@ -7651,9 +7651,9 @@ CONST_FLOAT 是独立 wire 编码边界：两精度的 NaN 常量仍必须正 ca
 存储为4/8字节，SSA/frame 为8字节，boxed/参数/结果为16字节且对齐8。
 CONST_FLOAT、NEG_FLOAT、六种浮点比较与唯一 CONVERT_NUMBER 经同一 Checked/Lowered 管线执行。
 CONVERT_NUMBER 原子替换先前仅限整数的转换指令；浮点转整数先截断再检查完整范围，失败为 NUMERIC_RANGE，清理后结果为 unit。
-NaN 的 EQ 为 false、NE 为 true，其余关系均为 false；正负零相等。所有转换遵循17.23且不改变宿主浮点环境。
+NaN 的 EQ 为 false、NE 为 true，其余关系均为 false；正负零相等。数值范围和转换遵循17.23；现役硬件 F64 执行遵循 §2.3.2 的默认浮点环境前提，不保证保存自然产生的异常标志。
 源码接受显式数值 cast、浮点负号/比较、f32 到 f64 隐式宽化及条件合流；整数/浮点混合必须显式 cast。
-拷贝、槽、cell、闭包、泛型实例、参数/返回、Tuple/Array/Nullable/已准入名义存储与挂起保留合法值的精确位型；跨界仍核 exact 类型、arena、owner 和既有执行权限。浮点比较遇任一 NaN 为 unordered（EQ 为 false、NE 为 true、有序关系为 false）；整数 payload 搬运不能暗中 canonicalize。十进制字面量及精确整数上下文准入见§17.25；四则、转换和负号的 NaN 结果仍 canonical，浮点输出见§17.27。
+拷贝、槽、cell、闭包、泛型实例、参数/返回、Tuple/Array/Nullable/已准入名义存储与挂起保留合法值的精确位型；跨界仍核 exact 类型、arena、owner 和既有执行权限。浮点比较遇任一 NaN 为 unordered（EQ 为 false、NE 为 true、有序关系为 false）；整数 payload 搬运不能暗中 canonicalize。十进制字面量及精确整数上下文准入见§17.25；算术、浮点转换和负号的 NaN 符号和载荷不保证；位串、打印、哈希和原子比较观察统一 NaN，浮点输出见§17.27。内部 payload accessor 不得在没有 F64 类型事实时把整数位型当作 NaN 规范化。
 唯一协议版本遵循§17.6，旧版本拒绝，无兼容路径。
 
 ### 17.25 精确十进制字面量
@@ -7705,7 +7705,7 @@ assert、assertEqual及assertPanics的已检查调用观察保留INTRINSIC声明
 
 ADD/SUB/MUL/DIV_FLOAT 在历史引入时编号70–73、OP_COUNT为74；现行opcode编号以唯一实现表为准。stage mask为7，两个输入及结果为同一具体f32/f64，其他字段为零。唯一Checked语义、schema及值/调用/Program版本由§17.6的实现常量定义；新增准入规则拒绝旧语义包，既有值与调用布局不变。普通泛型必须在定义处取得具体数值证明，特化与复验不授予额外权限。源码四则和复合赋值沿既有求值/提交顺序，f32/f64混合先精确宽化，typed整数与浮点混合、浮点余数和位运算拒绝。
 
-每次算术按原宽度round-to-nearest ties-to-even，不融合或重排，不使用宿主浮点状态。完整宽乘和除法余数保留最终舍入依据，逐次保留subnormal与负零，溢出为带符号无穷；零除零、无穷除无穷、零乘无穷、异号无穷相加和NaN输入得到canonical NaN。有限非零数除零为带符号无穷，不是整数除零fault。
+现役 F64 的 LIR→C 直接生成 double 四则、比较和负号，寄存器 VM 执行同样的硬件运算；两端禁止 FMA 或重排，程序入口须为 nearest-even 且保留次正规数。执行器不主动改舍入/FTZ/DAZ 控制，不逐运算保存或恢复异常标志，也不逐运算规范化 NaN。有限结果、subnormal、负零和溢出无穷按原精度舍入；零除零、无穷除无穷、零乘无穷、异号无穷相加和 NaN 输入产生 NaN，但其符号和载荷未指定。有限非零数除零为带符号无穷，不是整数除零 fault。CTFE 在硬件浮点合同之外继续使用整数位内核，保留其 canonical NaN 黄金数据；这不恢复运行热路的软件运算。
 
 PRINT/OUTPUT按§17.24接受合法运行f32/f64值，包括全部f64 NaN payload；所有NaN文本仍为`nan`，不会修改输入位型。有限非零数使用原精度最少有效数字往返十进制：同长度候选选最接近者，精确中点取末位偶数，不通过先宽化f32决定格式。最短系数无尾零；十进制指数k在[-4,16)时用普通形式，整数结果加`.0`；其他值用一位整数部分、小写`e`、显式指数正负号且无冗余指数零。特殊值固定`nan`、`inf`、`-inf`、`0.0`、`-0.0`。全部ASCII、固定整数空间、无堆分配；单值32字节缓冲包含终止符足够。宿主locale、舍入模式及异常标志不影响结果。
 

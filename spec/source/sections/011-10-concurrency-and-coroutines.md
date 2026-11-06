@@ -416,7 +416,7 @@ compareExchange 是 strong CAS，公开结果 `(T, bool)` 是真正 Tuple，不�
 
 失败时返回实际观察到的旧值且不写入；成功时返回写入前的旧值。CAS 成功之后才发生的失败或取消不回滚这次写入。
 
-i64 的加减按 §2.3.1 模 2^64 环绕。f64 的构造、load、store、swap 和 compareExchange 保留完整 binary64 位型；compareExchange 按位比较：正零与负零不同，载荷相同的 NaN 可以匹配，载荷不同的不匹配。这不改变普通浮点 `==` 的规则。f64 的加减按 §2.3.2 的舍入规则计算，与其他写入竞争时按最新值重算直到成功。`toString()` 读取一次 `SeqCst` 快照。
+i64 的加减按 §2.3.1 模 2^64 环绕。f64 的构造、load、store、swap 和 compareExchange 保留完整 binary64 位型；compareExchange 在观察比较时先规范化 NaN 再比较位型：正零与负零不同，任意 NaN 符号和载荷按同一正 canonical quiet NaN 匹配。该观察规则不要求普通复制、参数和存储逐次规范化。这不改变普通浮点 `==` 的规则。f64 的加减按 §2.3.2 的舍入规则计算，与其他写入竞争时按最新值重算直到成功。`toString()` 读取一次 `SeqCst` 快照。
 
 目标平台不能为所需宽度提供无锁原子操作时，含 `Atomic` 的程序在构建或加载时被明确拒绝，不退化为加锁实现。
 
@@ -907,7 +907,7 @@ compareExchange is strong CAS and returns a real `(T, bool)` Tuple without visib
 
 On failure the operation returns the value actually observed and writes nothing; on success it returns the value before the write. A failure or cancellation that happens after a successful CAS does not roll the write back.
 
-i64 addition and subtraction wrap modulo 2^64 as in §2.3.1. f64 construction, load, store, swap and compareExchange preserve all binary64 bits; compareExchange compares bits, so positive and negative zero differ, NaNs with the same payload match and NaNs with different payloads do not. This does not change ordinary floating-point `==`. f64 addition and subtraction round as in §2.3.2 and, when racing other writes, recompute from the latest value until they succeed. `toString()` reads one `SeqCst` snapshot.
+i64 addition and subtraction wrap modulo 2^64 as in §2.3.1. f64 construction, load, store, swap and compareExchange preserve all binary64 bits; compareExchange normalizes NaNs at the observed comparison before comparing bits: positive and negative zero differ, while every NaN sign/payload matches the same positive canonical quiet NaN. This observation rule does not canonicalize ordinary copying, parameters or storage on every step. This does not change ordinary floating-point `==`. f64 addition and subtraction round as in §2.3.2 and, when racing other writes, recompute from the latest value until they succeed. `toString()` reads one `SeqCst` snapshot.
 
 When the target cannot provide lock-free atomics of the required width, a program that uses `Atomic` is rejected at build or load time; it never falls back to a locking implementation.
 

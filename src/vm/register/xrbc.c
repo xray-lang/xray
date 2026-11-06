@@ -15,7 +15,27 @@
 #include "xrbc_internal.h"
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
-#include "xir/xxir_float.h"
+#include <float.h>
+#include <limits.h>
+#include <string.h>
+
+#if defined(_M_FP_FAST) || defined(__FAST_MATH__) || \
+    (defined(__FINITE_MATH_ONLY__) && __FINITE_MATH_ONLY__ > 0)
+#error HARDWARE_F64_REQUIRES_NONFAST_FLOATING_POINT_MODE
+#endif
+XR_STATIC_ASSERT(CHAR_BIT == 8 && sizeof(double) == 8 && sizeof(uint64_t) == 8 && FLT_RADIX == 2 &&
+    DBL_MANT_DIG == 53 && DBL_MIN_EXP == -1021 && DBL_MAX_EXP == 1024,
+    "The register interpreter requires binary64 double");
+static double xr_rbc_float(uint64_t bits) {
+    double value;
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+static uint64_t xr_rbc_float_bits(double value) {
+    uint64_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
 
 typedef union {
     uint64_t bits;
