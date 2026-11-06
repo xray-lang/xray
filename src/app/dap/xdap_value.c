@@ -30,7 +30,7 @@ XR_FUNC XrXirValueStatus xdap_value_shape(const XdapValueView *view,XdapValueSha
     if (!view) return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrXirValue *value=view->value;XrXirDomain *domain=view->domain;
     if (!value || !output || !xr_xir_domain_current(domain) || !xr_xir_value_valid(value)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!xr_xir_domain_work(domain,1)) return XR_XIR_VALUE_LIMIT;
+    if (!xr_xir_domain_is_compile(domain) && !xr_xir_domain_work(domain,1)) return XR_XIR_VALUE_LIMIT;
     XdapValueShape shape={0};const XrXirTypeArena *arena=xr_xir_value_arena(value);
     const XrXirTypes *types=xr_xir_compile_type_arena_types(arena);
     const XrXirTypeNode *tuple=xr_xir_tuple_signature(types,(XrXirType)value->type);
@@ -42,7 +42,7 @@ XR_FUNC XrXirValueStatus xdap_value_shape(const XdapValueView *view,XdapValueSha
     } else if (tuple) shape=(XdapValueShape){tuple->parameter_count,true};
     else if (value_nominal(value,types)) {
         const XrXirNominalIdentity *identity=value_nominal(value,types);
-        if (!xr_xir_domain_work(domain,identity->field_count)) return XR_XIR_VALUE_LIMIT;
+        if (!xr_xir_domain_is_compile(domain) && !xr_xir_domain_work(domain,identity->field_count)) return XR_XIR_VALUE_LIMIT;
         for (uint32_t i=0;i<identity->field_count;++i) {
             bool allowed=false;XrXirValueStatus status=xr_xir_vm_debug_snapshot_member(view->snapshot,view->frame,value,i,&allowed);
             if (status!=XR_XIR_VALUE_OK) return status;
@@ -81,7 +81,7 @@ XR_FUNC XrXirValueStatus xdap_value_child(const XdapValueView *view,uint64_t ind
     }
     else if (value_nominal(value,types)) {
         const XrXirNominalIdentity *identity=value_nominal(value,types);uint64_t ordinal=0;uint32_t field=UINT32_MAX;
-        if (!xr_xir_domain_work(domain,identity->field_count)) return XR_XIR_VALUE_LIMIT;
+        if (!xr_xir_domain_is_compile(domain) && !xr_xir_domain_work(domain,identity->field_count)) return XR_XIR_VALUE_LIMIT;
         for (uint32_t i=0;i<identity->field_count;++i) {
             bool allowed=false;status=xr_xir_vm_debug_snapshot_member(view->snapshot,view->frame,value,i,&allowed);
             if (status!=XR_XIR_VALUE_OK) return status;
@@ -122,13 +122,13 @@ XR_FUNC XrXirValueStatus xdap_value_member(const XdapValueView *view,const char 
     const XrXirNominalIdentity *identity=value_nominal(value,types);
     if (!identity) return XR_XIR_VALUE_UNSUPPORTED;
     for (uint32_t f=0;f<identity->field_count;++f) {
-        if (!xr_xir_domain_work(view->domain,1)) return XR_XIR_VALUE_LIMIT;
+        if (!xr_xir_domain_is_compile(view->domain) && !xr_xir_domain_work(view->domain,1)) return XR_XIR_VALUE_LIMIT;
         bool allowed=false;
         XrXirValueStatus status=xr_xir_vm_debug_snapshot_member(view->snapshot,view->frame,value,f,&allowed);
         if (status!=XR_XIR_VALUE_OK) return status;
         if (!allowed) continue;
         const XrXirLiteral *candidate=&identity->fields[f].name;
-        if (!xr_xir_domain_work(view->domain,(uint64_t)candidate->length+1)) return XR_XIR_VALUE_LIMIT;
+        if (!xr_xir_domain_is_compile(view->domain) && !xr_xir_domain_work(view->domain,(uint64_t)candidate->length+1)) return XR_XIR_VALUE_LIMIT;
         if (candidate->length!=length || memcmp(candidate->bytes,name,length)) continue;
         XrXirValueAdmission admission=value_admission(value,view->domain);
         XrXirValuePathStep selector={XR_XIR_PATH_FIELD,(XrXirType)value->type,f};XrXirFaultDetail fault={0};

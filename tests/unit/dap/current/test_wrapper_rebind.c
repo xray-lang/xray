@@ -12,6 +12,7 @@
 #include "xir/xxir_tuple.h"
 #include "xir/xxir_nullable.h"
 #include "xir/xxir_enum.h"
+#include "xir/xxir_compile_domain.h"
 static XrXirValue rebind_owned(XdapAdapter *adapter,const XrXirVmDebugSnapshot *snapshot,const char *name,uint32_t *operand) {
     XdapLexicalView lexical={0};CHECK(xdap_lexical_open(adapter->launch,snapshot,0,&lexical)==XR_XIR_OK);
     for (uint32_t b=lexical.environment;b;b=lexical.function->bindings[b-1].parent) {
@@ -22,6 +23,31 @@ static XrXirValue rebind_owned(XdapAdapter *adapter,const XrXirVmDebugSnapshot *
         if (operand) *operand=binding->value;return value;
     }
     CHECK(false);return (XrXirValue){0};
+}
+static void rebind_observation_owners(WriteFixture *fixture,const XrXirValue *pair,const XrXirValue *optional) {
+    XrCompileResourceStats before={0};CHECK(xr_compile_resources_stats(fixture->ledger,&before)==XR_COMPILE_RESOURCE_OK);
+    size_t blocks=runtime_live,bytes=runtime_bytes;XrXirDomain *compiler=NULL;
+    CHECK(xr_xir_compile_domain_new(fixture->ledger,16384,&compiler)==XR_XIR_VALUE_OK && xr_xir_domain_is_compile(compiler));
+    const XrXirValue *values[]={pair,optional};
+    for (uint32_t i=0;i<2;++i) {
+        XdapValueView view={values[i],compiler,NULL,0};XdapValueShape shape={0};
+        CHECK(xdap_value_shape(&view,&shape)==XR_XIR_VALUE_OK && shape.children==(i ? 1u : 2u) && shape.indexed==(i==0));
+        XrXirValue child={0};XdapValueChildInfo info={0};
+        CHECK(xdap_value_child(&view,0,&child,&info)==XR_XIR_VALUE_OK && child.type==XR_XIR_I64 && child.payload==11 && info.selected);
+        xr_xir_value_drop(&child);
+    }
+    xr_xir_domain_drop(compiler);
+    XrXirDomainBudgetControls budget={16384,16384,1,16384,16384};XrXirDomain *limited=NULL;
+    CHECK(xr_xir_domain_new_budgeted(16384,&budget,&limited)==XR_XIR_VALUE_OK && !xr_xir_domain_is_compile(limited));
+    XrXirDomainBudgetStats spent=xr_xir_domain_budget_stats(limited);CHECK(spent.work==spent.work_limit);
+    XdapValueView view={pair,limited,NULL,0};XdapValueShape shape={77,true};
+    CHECK(xdap_value_shape(&view,&shape)==XR_XIR_VALUE_LIMIT && shape.children==77 && shape.indexed);
+    XrXirValue child={0};const char *name="kept";XdapValueChildInfo info={.name=name,.name_length=4};
+    CHECK(xdap_value_child(&view,0,&child,&info)==XR_XIR_VALUE_LIMIT && !child.type && !child.reserved && !child.payload);
+    CHECK(info.name==name && info.name_length==4 && !info.selected && xr_xir_domain_budget_stats(limited).work==spent.work);
+    xr_xir_domain_drop(limited);
+    XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(fixture->ledger,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes==before.held_bytes);
+    CHECK(runtime_live==blocks && runtime_bytes==bytes);
 }
 static void rebind_pair(const XrXirValue *value,bool changed) {
     XrXirValue number={0},text={0};CHECK(xr_xir_tuple_get(value,0,&number)==XR_XIR_VALUE_OK && number.type==XR_XIR_I64 && number.payload==(changed?99:11));
@@ -66,14 +92,16 @@ static size_t rebind_case(bool child,unsigned end,size_t fail) {
     XrXirVmDebugSnapshot *old=NULL;CHECK(xdap_current_snapshot(adapter->launch->control,&old)==XR_XIR_VALUE_OK);
     const char *names[]={"pair","optional","choice"};uint32_t operands[3];XrXirValue originals[3];
     for (uint32_t i=0;i<3;++i) originals[i]=rebind_owned(adapter,old,names[i],&operands[i]);
+    if (!end && fail==SIZE_MAX) rebind_observation_owners(&fixture,&originals[0],&originals[1]);
     XrXirVmDebugFrameInfo frame=write_frame(old);CHECK(child==(frame.thread!=1));uint32_t scope=adapter->frames[0].scope;
     const char *targets[]={"pair","optional","optional","choice","choice","choice","choice"};
     const char *sources[]={"incomingPair","absent","incomingOptional","incomingChoice","textChoice","emptyChoice","incomingChoice"};
     uint64_t initial=adapter->stop_epoch;size_t sites=0;uint32_t previous=0;
+    XrXirVmDebugSnapshot *initial_snapshot=adapter->snapshot;uint32_t initial_refs=adapter->value_count,initial_next=adapter->next_handle;
     child_set(adapter,scope,"beforePair","incomingPair",false);child_set(adapter,scope,"pair","incomingOptional",false);
     child_set(adapter,scope,"beforeOptional","incomingOptional",false);child_set(adapter,scope,"beforeChoice","incomingChoice",false);
     child_set(adapter,scope,"optional","incomingPair",false);child_set(adapter,scope,"choice","incomingOptional",false);
-    CHECK(adapter->stop_epoch==initial);rebind_state(adapter,-1);
+    CHECK(adapter->stop_epoch==initial && adapter->snapshot==initial_snapshot && adapter->value_count==initial_refs && adapter->next_handle==initial_next);rebind_state(adapter,-1);
     for (unsigned stage=0;stage<=end;++stage) {
         XrXirVmDebugSnapshot *snapshot=adapter->snapshot;uint64_t epoch=adapter->stop_epoch;uint32_t refs=adapter->value_count,next=adapter->next_handle;
         CHECK(refs<=1);XdapValueRef kept={0};if (refs) memcpy(&kept,&adapter->values[0],sizeof(kept));
