@@ -184,10 +184,12 @@ static XrXirStatus inspect_reference(XdapAdapter *s,const XrXirValue *value,uint
     s->values[s->value_count++]=candidate;*handle=candidate.handle;return XR_XIR_OK;
 }
 static bool inspect_variable(XdapAdapter *s,XdapJsonWriter *body,const char *name,size_t length,const XrXirValue *value,uint32_t frame,const XdapValueOrigin *origin) {
+    if (body->status!=XR_XIR_OK) return false;
     uint32_t handle=0;XdapValueShape shape={0};XrXirStatus status=inspect_reference(s,value,frame,origin,&handle,&shape);
     if (status!=XR_XIR_OK) { body->status=status;return false; }
     XDAP_TEXT(body,"{\"name\":");xdap_json_quote(body,name,length);XDAP_TEXT(body,",\"value\":");
     if (!inspect_value(body,value) && body->status==XR_XIR_OK) body->status=XR_XIR_BAD_STRUCTURE;
+    if (body->status!=XR_XIR_OK) return false;
     if (s->variable_types) {
         XdapValueView view={value,s->config.observer_metadata,s->snapshot,frame};XdapTypeText type={0};
         XrXirValueStatus formatted=xdap_value_type_text(&view,&type);
@@ -210,8 +212,8 @@ static XrXirStatus inspect_children(XdapAdapter *s,const XdapRequest *r,const Xd
     XDAP_TEXT(&body,"{\"variables\":[");uint32_t shown=0;
     uint64_t available=start<ref->shape.children ? ref->shape.children-start : 0;
     if (count && available>count) available=count;
-    if (available>256) { xdap_json_writer_free(&body);return xdap_dispatch_response(s,r,false,NULL,"Request a bounded child page"); }
-    for (uint64_t i=0;i<available;++i) {
+    if (body.status==XR_XIR_OK && available>256) { xdap_json_writer_free(&body);return xdap_dispatch_response(s,r,false,NULL,"Request a bounded child page"); }
+    for (uint64_t i=0;body.status==XR_XIR_OK && i<available;++i) {
         XrXirValue value={0};XdapValueChildInfo child={0};
         XdapValueView view={&ref->value,s->config.observer_metadata,s->snapshot,ref->frame};
         XrXirValueStatus status=xdap_value_child(&view,start+i,&value,&child);
@@ -225,8 +227,8 @@ static XrXirStatus inspect_children(XdapAdapter *s,const XdapRequest *r,const Xd
         status==XR_XIR_VALUE_OVERFLOW ? XR_XIR_OVERFLOW : XR_XIR_BUDGET;break;
         }
         XrXirValuePathStep steps[128];XdapValueOrigin origin={0};
-        body.status=inspect_origin_child(s,ref,&child,steps,&origin);
-        if (body.status!=XR_XIR_OK) { xr_xir_value_drop(&value);break; }
+        XrXirStatus selected=inspect_origin_child(s,ref,&child,steps,&origin);
+        if (selected!=XR_XIR_OK) { body.status=selected;xr_xir_value_drop(&value);break; }
         char index[32];if (!child.name) { int bytes=snprintf(index,sizeof(index),"[%llu]",(unsigned long long)(start+i));child.name=index;child.name_length=(size_t)bytes; }
         if (shown++)
             XDAP_TEXT(&body, ",");
