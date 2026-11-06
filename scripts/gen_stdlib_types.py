@@ -41,7 +41,6 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 
 # Output files (embed mode)
-OUTPUT_FILE = PROJECT_ROOT / "src" / "frontend" / "analyzer" / "xanalyzer_builtins_generated.h"
 LSP_OUTPUT_FILE = PROJECT_ROOT / "src" / "app" / "lsp" / "xlsp_stdlib_generated.inc"
 STDLIBGEN_TOOL_DIR = PROJECT_ROOT / "tools" / "stdlibgen"
 STDLIB_DIR = PROJECT_ROOT / "stdlib"
@@ -1440,11 +1439,8 @@ def check_file(path, content, label):
     return 1
 
 
-def check_outputs(analyzer_content, lsp_content):
-    status = 0
-    status |= check_file(OUTPUT_FILE, analyzer_content, "analyzer builtins")
-    status |= check_file(LSP_OUTPUT_FILE, lsp_content, "LSP stdlib table")
-    return status
+def check_outputs(lsp_content):
+    return check_file(LSP_OUTPUT_FILE, lsp_content, "LSP stdlib table")
 
 
 def main():
@@ -1527,17 +1523,14 @@ def main():
           f"from stdlib/*/*.xr", file=sys.stderr)
 
     # Generate embed outputs
-    analyzer_content = generate_header(type_results, module_results)
     lsp_content = generate_lsp_include(lsp_module_results)
 
     if args.check:
-        return check_outputs(analyzer_content, lsp_content)
+        return check_outputs(lsp_content)
 
     # Write outputs
-    write_if_changed(OUTPUT_FILE, analyzer_content)
     write_if_changed(LSP_OUTPUT_FILE, lsp_content)
 
-    print(f"\nGenerated: {OUTPUT_FILE}", file=sys.stderr)
     print(f"Generated: {LSP_OUTPUT_FILE}", file=sys.stderr)
     return 0
 

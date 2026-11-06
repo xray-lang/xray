@@ -2936,40 +2936,9 @@ def output_paths(root: Path) -> dict[Path, str]:
     ) = parse_def_metadata(root)
     validate_provider_source_owners(root, entries)
     declarations = parse_module_declarations(root)
-    return {
-        root / "src/runtime/abi/xr_stdlib_provider_keys_gen.h": emit_provider_keys(entries),
-        root / "src/runtime/abi/xr_stdlib_provider_descriptors_gen.inc.c":
-            emit_provider_descriptors(entries),
-        root / "src/execution/xr_stdlib_provider_bindings_gen.inc.c": emit_provider_bindings(entries),
-        root / "src/aot/program/xr_provider_aot_sources_gen.inc.c": emit_provider_aot_sources(entries),
-        root / "stdlib" / "provider_inventory.generated.json": json.dumps(
-            declaration_inventory(entries), ensure_ascii=False, indent=2
-        ) + "\n",
-        root / "src" / "aot" / "xstdlib_aot_methods_generated.inc.c": emit_aot_methods(
-            entries, constants, enums, native_classes
-        ),
-        root / "src" / "aot" / "xaot_stdlib_generated.inc.c": emit_driver_metadata(
-            entries, constants
-        ),
-        root / "src" / "stdlib" / "xstdlib_vm_bindings_generated.inc.c": emit_vm_bindings(
-            entries, constants, declarations
-        ),
-        root / "src" / "stdlib" / "xstdlib_class_bindings_generated.inc.c": emit_class_bindings(
-            native_classes, classes, class_methods, class_fields
-        ),
-        root / "src" / "stdlib" / "xstdlib_defs_generated.h": emit_defs_header(
-            entries,
-            constants,
-            handles,
-            object_shapes,
-            enums,
-            type_methods,
-            native_classes,
-            classes,
-            class_methods,
-            class_fields,
-        ),
-    }
+    return {root / "stdlib" / "provider_inventory.generated.json": json.dumps(
+        declaration_inventory(entries), ensure_ascii=False, indent=2) + "\n"}
+
 
 
 def write_if_changed(path: Path, content: str) -> bool:

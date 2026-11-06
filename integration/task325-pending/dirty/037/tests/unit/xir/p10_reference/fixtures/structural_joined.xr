@@ -1,2 +1,0 @@
-fn read<T: {n:i64} & {name:string}>(value:T)->i64 { return value.n + len(value.name) }
-export fn referenceAnswer()->i64 { return read({extra:true,name:"hi",n:40}) }

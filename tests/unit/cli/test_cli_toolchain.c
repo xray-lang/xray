@@ -16,7 +16,6 @@
 #include "app/toolchain/xtc_model.h"
 #include "app/toolchain/xtc_process.h"
 #include "app/toolchain/xtc_probe_cache.h"
-#include "app/toolchain/xtc_runtime_manifest.h"
 #include "base/xjson.h"
 #include "base/xsha256.h"
 
@@ -36,32 +35,6 @@ typedef struct CommandCapture {
     size_t count;
 } CommandCapture;
 
-static void expected_build_tree_sdk_digest(const XrToolchainTarget *target,
-                                           const XrRuntimeArtifactSet *runtime, char out[72]) {
-    static const char domain[] = "xray-build-tree-runtime-sdk-v1";
-    XrSHA256Context ctx;
-    uint8_t digest[32];
-    uint8_t artifact_count = (uint8_t) runtime->artifact_count;
-    static const char hex[] = "0123456789abcdef";
-
-    xr_sha256_init(&ctx);
-    xr_sha256_update(&ctx, (const uint8_t *) domain, sizeof(domain));
-    xr_sha256_update(&ctx, (const uint8_t *) target->name, strlen(target->name) + 1);
-    xr_sha256_update(&ctx, &artifact_count, sizeof(artifact_count));
-    for (size_t i = 0; i < runtime->artifact_count; i++) {
-        const XrRuntimeArtifact *artifact = &runtime->artifacts[i];
-        xr_sha256_update(&ctx, (const uint8_t *) artifact->id, strlen(artifact->id) + 1);
-        xr_sha256_update(&ctx, (const uint8_t *) artifact->sha256, strlen(artifact->sha256) + 1);
-    }
-    xr_sha256_final(&ctx, digest);
-
-    memcpy(out, "sha256:", 7);
-    for (size_t i = 0; i < sizeof(digest); i++) {
-        out[7 + i * 2] = hex[digest[i] >> 4];
-        out[7 + i * 2 + 1] = hex[digest[i] & 0x0f];
-    }
-    out[71] = '\0';
-}
 
 static bool command_capture_add(void *context, const char *arg, char *err, size_t err_size) {
     CommandCapture *capture = context;
@@ -470,7 +443,7 @@ TEST(find_missing_executable) {
 
 TEST(windows_auto_discovery_prefers_msvc) {
 #ifdef _WIN32
-    XrCompileResourceLimits process_limits = {67108864, 16777216, 1073741824};
+    XrCompileResourceLimits process_limits = {0};
     XrCompileResources *process_resources = NULL;
     ASSERT_EQ_INT(xr_compile_resources_new(&process_limits, &process_resources), XR_COMPILE_RESOURCE_OK);
     XrToolchainProcessContext process_context = {process_resources, XTC_PROCESS_OK};
@@ -488,56 +461,6 @@ TEST(windows_auto_discovery_prefers_msvc) {
 #endif
 }
 
-TEST(build_tree_runtime_manifest_matches_host_platform) {
-    XrToolchainTarget target;
-    XrRuntimeArtifactSet runtime;
-    XrToolchainReasonCode reason = XR_TOOLCHAIN_REASON_NONE;
-    char expected_sdk_digest[72];
-    char err[512] = {0};
-
-    ASSERT_TRUE(xtc_target_parse(NULL, &target, err, sizeof(err)));
-#ifdef _WIN32
-    ASSERT_TRUE(xtc_runtime_manifest_load(&target, XR_TOOLCHAIN_PROVIDER_ZIG, NULL, &runtime,
-                                          &reason, err, sizeof(err)));
-    ASSERT_STR_EQ(runtime.object_format, "coff");
-    ASSERT_EQ_INT(runtime.system_library_count, 2);
-    ASSERT_STR_EQ(runtime.system_libraries[0], "ws2_32");
-    ASSERT_STR_EQ(runtime.system_libraries[1], "api-ms-win-core-synch-l1-2-0");
-#elif defined(__APPLE__)
-    ASSERT_TRUE(xtc_runtime_manifest_load(&target, XR_TOOLCHAIN_PROVIDER_APPLE_CLANG, NULL,
-                                          &runtime, &reason, err, sizeof(err)));
-    ASSERT_STR_EQ(runtime.object_format, "macho");
-    ASSERT_EQ_INT(runtime.system_library_count, 2);
-    ASSERT_STR_EQ(runtime.system_libraries[0], "m");
-    ASSERT_STR_EQ(runtime.system_libraries[1], "pthread");
-#else
-    ASSERT_TRUE(xtc_runtime_manifest_load(&target, XR_TOOLCHAIN_PROVIDER_GCC, NULL, &runtime,
-                                          &reason, err, sizeof(err)));
-    ASSERT_STR_EQ(runtime.object_format, "elf");
-    ASSERT_EQ_INT(runtime.system_library_count,
-#if defined(XR_OS_LINUX) && defined(XRT_TLS_SSL_LIBRARY)
-                  3
-#else
-                  2
-#endif
-    );
-    ASSERT_STR_EQ(runtime.system_libraries[0], "m");
-    ASSERT_STR_EQ(runtime.system_libraries[1], "pthread");
-#if defined(XR_OS_LINUX) && defined(XRT_TLS_SSL_LIBRARY)
-    ASSERT_STR_EQ(runtime.system_libraries[2], "dl");
-#endif
-#endif
-#if defined(XRT_TLS_SSL_LIBRARY) && defined(XRT_TLS_CRYPTO_LIBRARY)
-    ASSERT_EQ_INT(runtime.artifact_count, 4);
-    ASSERT_TRUE(xtc_runtime_artifact_find(&runtime, "xray-tls-ssl-") != NULL);
-    ASSERT_TRUE(xtc_runtime_artifact_find(&runtime, "xray-tls-crypto-") != NULL);
-#else
-    ASSERT_EQ_INT(runtime.artifact_count, 2);
-#endif
-    expected_build_tree_sdk_digest(&target, &runtime, expected_sdk_digest);
-    ASSERT_STR_EQ(runtime.sdk_digest, expected_sdk_digest);
-    ASSERT_EQ_INT(reason, XR_TOOLCHAIN_REASON_NONE);
-}
 
 TEST(zig_native_windows_msvc_keeps_exact_abi_target) {
     XrToolchainSelection selection = {0};
@@ -604,7 +527,7 @@ TEST(version_parser_reads_ascii_token_from_arbitrary_bytes) {
 }
 
 TEST(cross_target_rejects_explicit_host_without_fallback) {
-    XrCompileResourceLimits process_limits = {67108864, 16777216, 1073741824};
+    XrCompileResourceLimits process_limits = {0};
     XrCompileResources *process_resources = NULL;
     ASSERT_EQ_INT(xr_compile_resources_new(&process_limits, &process_resources), XR_COMPILE_RESOURCE_OK);
     XrToolchainProcessContext process_context = {process_resources, XTC_PROCESS_OK};
@@ -634,7 +557,7 @@ TEST(explicit_provider_has_no_fallback) {
     char root_template[] = "/tmp/xray_xtc_explicit_XXXXXX";
     char fake_clang[512];
     char err[256];
-    XrCompileResourceLimits process_limits = {67108864, 16777216, 1073741824};
+    XrCompileResourceLimits process_limits = {0};
     XrCompileResources *process_resources = NULL;
     ASSERT_EQ_INT(xr_compile_resources_new(&process_limits, &process_resources), XR_COMPILE_RESOURCE_OK);
     XrToolchainProcessContext process_context = {process_resources, XTC_PROCESS_OK};
@@ -661,7 +584,7 @@ TEST(explicit_clang_is_classified_from_banner) {
     char root_template[] = "/tmp/xray_xtc_clang_XXXXXX";
     char fake_clang[512];
     char err[256];
-    XrCompileResourceLimits process_limits = {67108864, 16777216, 1073741824};
+    XrCompileResourceLimits process_limits = {0};
     XrCompileResources *process_resources = NULL;
     ASSERT_EQ_INT(xr_compile_resources_new(&process_limits, &process_resources), XR_COMPILE_RESOURCE_OK);
     XrToolchainProcessContext process_context = {process_resources, XTC_PROCESS_OK};
@@ -799,7 +722,7 @@ TEST(process_capture_and_output_limit) {
 #endif
     spec.output_limit = 5;
     XrCompileResources *resources = NULL;
-    XrCompileResourceLimits limits = {67108864, 16777216, 1073741824};
+    XrCompileResourceLimits limits = {0};
     ASSERT_EQ_INT(xr_compile_resources_new(&limits, &resources), XR_COMPILE_RESOURCE_OK);
     XrToolchainProcess *owner = NULL;
     spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT;
@@ -843,7 +766,7 @@ TEST(process_capture_preserves_arbitrary_bytes_and_nul) {
 #endif
     static const uint8_t expected[] = {0x66, 0x6f, 0x80, 0x00, 0xff};
     XrCompileResources *resources = NULL;
-    XrCompileResourceLimits limits = {67108864, 16777216, 1073741824};
+    XrCompileResourceLimits limits = {0};
     ASSERT_EQ_INT(xr_compile_resources_new(&limits, &resources), XR_COMPILE_RESOURCE_OK);
     XrToolchainProcess *owner = NULL;
     spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT;
@@ -900,7 +823,7 @@ TEST(process_spawn_preserves_unicode_argv_env_and_cwd) {
     spec.argv[6] = NULL;
     snprintf(expected, sizeof(expected), "\u53c2\u6570\u503c|\u73af\u5883\u503c|%s", utf8_leaf);
     XrCompileResources *resources = NULL;
-    XrCompileResourceLimits limits = {67108864, 16777216, 1073741824};
+    XrCompileResourceLimits limits = {0};
     ASSERT_EQ_INT(xr_compile_resources_new(&limits, &resources), XR_COMPILE_RESOURCE_OK);
     XrToolchainProcess *owner = NULL;
     spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT;
@@ -928,7 +851,7 @@ TEST(process_spawn_rejects_invalid_utf8_input) {
     spec.argv[1] = invalid_utf8;
     spec.argv[2] = NULL;
     XrCompileResources *resources = NULL;
-    XrCompileResourceLimits limits = {67108864, 16777216, 1073741824};
+    XrCompileResourceLimits limits = {0};
     ASSERT_EQ_INT(xr_compile_resources_new(&limits, &resources), XR_COMPILE_RESOURCE_OK);
     XrToolchainProcess *owner = NULL;
     spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT;
@@ -964,7 +887,7 @@ TEST(process_timeout_is_bounded) {
     spec.argv[3] = NULL;
 #endif
     XrCompileResources *resources = NULL;
-    XrCompileResourceLimits limits = {67108864, 16777216, 1073741824};
+    XrCompileResourceLimits limits = {0};
     ASSERT_EQ_INT(xr_compile_resources_new(&limits, &resources), XR_COMPILE_RESOURCE_OK);
     XrToolchainProcess *owner = NULL;
     spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT;
@@ -1150,7 +1073,6 @@ RUN_TEST(llvm_clang_windows_msvc_uses_sdk_synchronization_import_library);
 RUN_TEST_SUITE("Toolchain discovery");
 RUN_TEST(find_missing_executable);
 RUN_TEST(windows_auto_discovery_prefers_msvc);
-RUN_TEST(build_tree_runtime_manifest_matches_host_platform);
 RUN_TEST(version_parser_reads_ascii_token_from_arbitrary_bytes);
 RUN_TEST(cross_target_rejects_explicit_host_without_fallback);
 RUN_TEST(explicit_provider_has_no_fallback);

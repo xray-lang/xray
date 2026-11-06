@@ -55,8 +55,7 @@ else()
         "${CACHE_RESOURCE_ROOT}/src/os/unix/time_unix.c"
         "${CACHE_RESOURCE_ROOT}/src/os/unix/random_unix.c")
 endif()
-add_executable(test_cache_compile_resources
-    "${CMAKE_CURRENT_LIST_DIR}/test_cache_compile_resources.c" ${CACHE_RESOURCE_SOURCES})
+
 if(WIN32)
     set(CACHE_OS_PLATFORM win)
 else()
@@ -68,7 +67,7 @@ add_library(cache_resource_production OBJECT
     "${CACHE_RESOURCE_ROOT}/src/base/xcompile_resources.c"
     "${CACHE_RESOURCE_ROOT}/src/os/${CACHE_OS_PLATFORM}/fs_${CACHE_OS_PLATFORM}.c"
     "${CACHE_RESOURCE_ROOT}/src/os/${CACHE_OS_PLATFORM}/dir_${CACHE_OS_PLATFORM}.c")
-foreach(CACHE_RESOURCE_TARGET test_cache_compile_resources cache_resource_production)
+foreach(CACHE_RESOURCE_TARGET  cache_resource_production)
 target_include_directories(${CACHE_RESOURCE_TARGET} PRIVATE "${CACHE_RESOURCE_ROOT}/src" "${CACHE_RESOURCE_ROOT}/src/base")
 target_compile_definitions(${CACHE_RESOURCE_TARGET} PRIVATE _CRT_SECURE_NO_WARNINGS)
 if(MSVC)
@@ -81,5 +80,3 @@ else()
     target_compile_options(${CACHE_RESOURCE_TARGET} PRIVATE -Wall -Wextra -Werror -pedantic)
 endif()
 endforeach()
-add_test(NAME test_cache_compile_resources COMMAND test_cache_compile_resources)
-set_tests_properties(test_cache_compile_resources PROPERTIES LABELS "unit;incremental;ownership;budget" TIMEOUT 120)

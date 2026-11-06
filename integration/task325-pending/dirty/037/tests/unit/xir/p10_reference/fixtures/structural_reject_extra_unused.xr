@@ -1,2 +1,0 @@
-fn read<T:{n:i64}>(value:T)->i64 { return value.extra }
-export fn referenceAnswer()->i64 { return 42 }

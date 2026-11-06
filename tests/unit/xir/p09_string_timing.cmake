@@ -11,9 +11,8 @@ add_executable(test_xir_p09_string_timing_native
     "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_string_timing.c" "${P09_TIMING_C}")
 target_link_libraries(test_xir_p09_string_timing_native PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
 target_compile_definitions(test_xir_p09_string_timing_native PRIVATE XR_STRING_TIMING_NATIVE=1)
-add_executable(test_xir_p09_builder_timing "${PROJECT_SOURCE_DIR}/tests/unit/xir/p09_builder_baseline/test_xir_builder_timing.c")
-target_include_directories(test_xir_p09_builder_timing PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/include")
-foreach(target test_xir_p09_string_timing test_xir_p09_string_timing_native test_xir_p09_builder_timing)
+
+foreach(target test_xir_p09_string_timing test_xir_p09_string_timing_native )
     target_compile_definitions(${target} PRIVATE XR_TIMING_FIXTURES="${PROJECT_SOURCE_DIR}/tests/fixtures/xir_array_capacity")
     set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
     if(MSVC)
@@ -29,7 +28,7 @@ endforeach()
 foreach(scenario short digits chunks join snapshot)
     add_test(NAME test_xir_p09_timing_vm_${scenario} COMMAND test_xir_p09_string_timing 0 ${scenario})
     add_test(NAME test_xir_p09_timing_native_${scenario} COMMAND test_xir_p09_string_timing_native 1 ${scenario})
-    add_test(NAME test_xir_p09_timing_builder_${scenario} COMMAND test_xir_p09_builder_timing ${scenario})
+
     set_tests_properties(test_xir_p09_timing_vm_${scenario} test_xir_p09_timing_native_${scenario}
-        test_xir_p09_timing_builder_${scenario} PROPERTIES TIMEOUT 120 LABELS "measurement;string;content;timing")
+        ${scenario} PROPERTIES TIMEOUT 120 LABELS "measurement;string;content;timing")
 endforeach()

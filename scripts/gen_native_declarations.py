@@ -1814,26 +1814,8 @@ def render(root):
     _, _, string_members = render_type(root, 'string')
     decoder = next(i for i, m in enumerate(string_members) if m.operation == 'STRING_FROM_UTF8')
     lines += render_unicode_callable(root, decoder)
-    binder = header[2]
-    receiver = {}
-    for operation in ('ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'):
-        member = next(m for m in members if m.operation == operation)
-        kinds = {'UNIT': 'UNIT', 'I64': 'INT', 'ELEMENT': 'RECEIVER_ELEM'}
-        params = [kinds[simple_term(p[1], binder)] for p in member.parameters] + ['NONE'] * 3
-        args = [operation, c_string(member.name), 'XA_BUILTIN_RECEIVER_ARRAY',
-                'XA_BUILTIN_TYPE_' + kinds[simple_term(member.result, binder)],
-                *['XA_BUILTIN_TYPE_' + p for p in params[:3]], str(len(member.parameters)),
-                str(len(member.parameters)), 'XA_BUILTIN_TYPE_PARAMS_NONE',
-                'XA_BUILTIN_EFFECT_' + ('READS_RECEIVER' if member.receiver == 'READ' else 'MUTATES_RECEIVER'),
-                'XR_PARAM_' + member.receiver, 'XA_BUILTIN_ALLOCATION_' + member.allocation.upper(),
-                'XA_BUILTIN_UNSAFE_NONE', c_string(operation.lower().replace('_', '.'))]
-        receiver[operation] = 'XB_RECEIVER_METHOD(' + ', '.join(args) + ')'
-    comment = '/* Generated from the same native declaration rows; do not edit. */\n'
     return {'src/shared/xprelude_source.inc.c': render_prelude_source(root),
-            'src/shared/xnative_declarations.inc.c': '\n'.join(lines),
-            'src/frontend/analyzer/xnative_array_index_methods.def':
-                comment + receiver['ARRAY_GET'] + '\n' + receiver['ARRAY_SET'] + '\n',
-            'src/frontend/analyzer/xnative_array_push_method.def': comment + receiver['ARRAY_PUSH'] + '\n'}
+            'src/shared/xnative_declarations.inc.c': '\n'.join(lines)}
 
 
 def main():

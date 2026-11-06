@@ -1,7 +1,5 @@
-# Include after the existing test_cli_toolchain target in the full build.
-if(TARGET test_cli_toolchain)
-    target_link_libraries(test_cli_toolchain PRIVATE xray_compile_resources)
-endif()
+# Process-owner coverage shares the production process library.
+
 if(NOT WIN32)
     return()
 endif()

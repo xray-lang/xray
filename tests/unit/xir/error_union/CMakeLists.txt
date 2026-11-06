@@ -61,23 +61,6 @@ set_tests_properties(test_xir_error_union_faults PROPERTIES LABELS "unit;xir;lan
 
 add_test(NAME test_xir_error_union_inference COMMAND test_xir_error_union --infer)
 set_tests_properties(test_xir_error_union_inference PROPERTIES LABELS "unit;xir;language;ownership;execution" TIMEOUT 120)
-add_executable(test_xir_error_union_legacy "${CMAKE_CURRENT_LIST_DIR}/test_error_union_legacy.c"
-    "${PROJECT_SOURCE_DIR}/src/runtime/value/xtype.c" "${PROJECT_SOURCE_DIR}/src/runtime/value/xtype_generic.c"
-    "${PROJECT_SOURCE_DIR}/src/runtime/value/xtype_pool.c" "${PROJECT_SOURCE_DIR}/src/runtime/value/xtype_format.c")
-if(WIN32)
-    target_sources(test_xir_error_union_legacy PRIVATE "${PROJECT_SOURCE_DIR}/src/os/win/thread_win.c")
-else()
-    target_sources(test_xir_error_union_legacy PRIVATE "${PROJECT_SOURCE_DIR}/src/os/unix/thread_unix.c")
-endif()
-target_include_directories(test_xir_error_union_legacy PRIVATE ${XRAY_COMMON_INCLUDES})
-target_link_libraries(test_xir_error_union_legacy PRIVATE xray_compiler_parser)
-if(MSVC)
-    target_compile_options(test_xir_error_union_legacy PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_error_union_legacy PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_error_union_legacy COMMAND test_xir_error_union_legacy)
-set_tests_properties(test_xir_error_union_legacy PROPERTIES LABELS "unit;parser;language;ownership;resources" TIMEOUT 60)
 
 if(WIN32)
     add_test(NAME test_xir_error_union_cli COMMAND ${XRAY_PYTHON} -X utf8

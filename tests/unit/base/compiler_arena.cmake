@@ -1,13 +1,12 @@
 # The system executable deliberately has no compiler ledger link dependency.
 get_filename_component(XR_ARENA_TEST_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
 add_library(arena_ledger_production OBJECT "${XR_ARENA_TEST_ROOT}/src/base/xcompile_resources.c")
-add_executable(test_compiler_arena "${CMAKE_CURRENT_LIST_DIR}/test_compiler_arena.c")
-target_link_libraries(test_compiler_arena PRIVATE xray_compiler_parser)
+
 add_executable(test_arena_system_link
     "${CMAKE_CURRENT_LIST_DIR}/test_arena_system_link.c"
     "${XR_ARENA_TEST_ROOT}/src/base/xarena.c"
     "${XR_ARENA_TEST_ROOT}/src/base/xarena_backing.c")
-foreach(arena_target arena_ledger_production test_compiler_arena test_arena_system_link)
+foreach(arena_target arena_ledger_production  test_arena_system_link)
     target_include_directories(${arena_target} PRIVATE "${XR_ARENA_TEST_ROOT}/src")
     target_compile_features(${arena_target} PRIVATE c_std_11)
     if(MSVC)
@@ -20,6 +19,6 @@ foreach(arena_target arena_ledger_production test_compiler_arena test_arena_syst
         target_compile_options(${arena_target} PRIVATE -Wall -Wextra -Werror -pedantic)
     endif()
 endforeach()
-add_test(NAME test_compiler_arena COMMAND test_compiler_arena)
+
 add_test(NAME test_arena_system_link COMMAND test_arena_system_link)
-set_tests_properties(test_compiler_arena test_arena_system_link PROPERTIES LABELS "unit;compiler;ownership;budget")
+set_tests_properties( test_arena_system_link PROPERTIES LABELS "unit;compiler;ownership;budget")

@@ -7789,8 +7789,6 @@ def cmd_semantic_ops(args: list[str]):
         source, ops, owners, args[0])
     output_root = args[1]
     outputs = {
-        'src/plan/semantic/xr_semantic_ops_gen.h':
-            generate_xi_semantic_ops_header(ops, owners, observable_rows),
         'src/shared/xr_semantic_owner_ids_gen.h':
             generate_semantic_owner_ids_header(explicit_owners, observable_rows),
     }

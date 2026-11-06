@@ -277,228 +277,33 @@ configure_file(
 
 set(XISAGEN ${CMAKE_SOURCE_DIR}/tools/xisagen/xisagen.py)
 set(CORESPECGEN ${CMAKE_SOURCE_DIR}/tools/corespecgen/corespecgen.py)
-set(PROGRAMGEN ${CMAKE_SOURCE_DIR}/tools/programgen/programgen.py)
 set(TARGETQUERYGEN ${CMAKE_SOURCE_DIR}/tools/targetquerygen/targetquerygen.py)
 set(STDLIBGEN ${CMAKE_SOURCE_DIR}/tools/stdlibgen/stdlibgen.py)
 set(GEN_STDLIB_TYPES ${CMAKE_SOURCE_DIR}/scripts/gen_stdlib_types.py)
-set(NATIVE_TYPE_EMBEDDER ${CMAKE_SOURCE_DIR}/scripts/embed_native_types.py)
-file(GLOB XRAY_STDLIB_DEF_FILES CONFIGURE_DEPENDS
-    "${CMAKE_SOURCE_DIR}/stdlib/defs/*.def"
-)
-file(GLOB XRAY_NATIVE_TYPE_SOURCE_FILES CONFIGURE_DEPENDS
-    "${CMAKE_SOURCE_DIR}/stdlib/types/*.xr"
-)
-file(GLOB_RECURSE XRAY_STDLIB_METADATA_SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_SOURCE_DIR}/stdlib/*/*.c"
-    "${CMAKE_SOURCE_DIR}/stdlib/*/*.xr"
-)
-
-set(XRAY_GEN_XI_OPS_DEPS
-    ${CMAKE_SOURCE_DIR}/src/ir/xi_ops_gen.h
-    ${CMAKE_SOURCE_DIR}/src/plan/semantic/xr_semantic_ops_gen.h
-    ${CMAKE_SOURCE_DIR}/src/plan/target/xr_target_instruction_gen.h
-    ${CMAKE_SOURCE_DIR}/src/shared/xr_semantic_owner_ids_gen.h
-    ${CMAKE_SOURCE_DIR}/src/vm/xr_vm_ops.def
-)
-
-set(XRAY_GEN_XI_VERIFY_DEPS
-    ${CMAKE_SOURCE_DIR}/src/ir/xi_verify_gen.h
-)
-
-set(XRAY_GEN_XI_LOWERING_DEPS
-    ${CMAKE_SOURCE_DIR}/src/ir/xi_lowering_coverage_gen.h
-    ${CMAKE_SOURCE_DIR}/src/ir/xi_emit_vm_gen.h
-    ${CMAKE_SOURCE_DIR}/src/vm/xvm_template_width_gen.inc.c
-    ${CMAKE_SOURCE_DIR}/src/vm/xvm_template_bitwise_binary_gen.inc.c
-    ${CMAKE_SOURCE_DIR}/src/vm/xvm_template_bitwise_unary_gen.inc.c
-    ${CMAKE_SOURCE_DIR}/src/vm/xvm_template_unary_gen.inc.c
-    ${CMAKE_SOURCE_DIR}/src/vm/xvm_template_arith_binary_gen.inc.c
-    ${CMAKE_SOURCE_DIR}/src/vm/xvm_template_shift_gen.inc.c
-    ${CMAKE_SOURCE_DIR}/src/vm/xvm_template_compare_gen.inc.c
-    ${CMAKE_SOURCE_DIR}/src/aot/xi_to_c_dispatch_gen.h
-    ${CMAKE_SOURCE_DIR}/src/aot/xi_to_c_stmt_dispatch_gen.h
-    ${CMAKE_SOURCE_DIR}/tests/unit/ir/test_xi_lowering_gen.c
-)
-
-set(XRAY_XI_LOWERING_VERIFICATION_STAMP
-    ${CMAKE_CURRENT_BINARY_DIR}/generated/xi_lowering.verified
-)
-set(XRAY_XI_LOWERING_VALIDATION_DEPFILE
-    ${CMAKE_CURRENT_BINARY_DIR}/generated/xi_lowering_sources.d
-)
-set(XRAY_XI_LOWERING_INPUT_FINGERPRINT
-    ${CMAKE_CURRENT_BINARY_DIR}/generated/xi_lowering_inputs.fingerprint
-)
-set(XRAY_XI_LOWERING_INPUT_DEPFILE
-    ${CMAKE_CURRENT_BINARY_DIR}/generated/xi_lowering_inputs.d
-)
-set(XRAY_XI_LOWERING_INPUT_SCAN_STAMP
-    ${CMAKE_CURRENT_BINARY_DIR}/generated/xi_lowering_inputs.scanned
-)
-set(XRAY_XI_LOWERING_NAMESPACE_CENSUS
-    ${CMAKE_CURRENT_BINARY_DIR}/generated/xi_lowering_namespace.txt
-)
-
-set(XRAY_GEN_AOT_METADATA_DEPS
-    ${CMAKE_SOURCE_DIR}/src/aot/xaot_rep_gen.h
-    ${CMAKE_SOURCE_DIR}/src/aot/xaot_abi_gen.h
-    ${CMAKE_SOURCE_DIR}/src/aot/xaot_layout_gen.h
-    ${CMAKE_SOURCE_DIR}/src/aot/emit_c/xr_c_emission_rule_ids_gen.h
-    ${CMAKE_SOURCE_DIR}/src/aot/emit_c/xr_c_emission_rule_build_gen.inc.c
-    ${CMAKE_SOURCE_DIR}/src/aot/emit_c/xr_c_emission_rule_verify_gen.inc.c
-)
-
-set(XRAY_GEN_STDLIB_METADATA_DEPS
-    ${CMAKE_SOURCE_DIR}/src/aot/program/xr_provider_aot_sources_gen.inc.c
-    ${CMAKE_SOURCE_DIR}/src/execution/xr_stdlib_provider_bindings_gen.inc.c
-    ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_stdlib_provider_keys_gen.h
-    ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_stdlib_provider_descriptors_gen.inc.c
-    ${CMAKE_SOURCE_DIR}/stdlib/provider_inventory.generated.json
-    ${CMAKE_SOURCE_DIR}/src/aot/xstdlib_aot_methods_generated.inc.c
-    ${CMAKE_SOURCE_DIR}/src/aot/xaot_stdlib_generated.inc.c
-    ${CMAKE_SOURCE_DIR}/src/stdlib/xstdlib_vm_bindings_generated.inc.c
-    ${CMAKE_SOURCE_DIR}/src/stdlib/xstdlib_class_bindings_generated.inc.c
-    ${CMAKE_SOURCE_DIR}/src/stdlib/xstdlib_defs_generated.h
-    ${CMAKE_SOURCE_DIR}/src/frontend/analyzer/xanalyzer_builtins_generated.h
-    ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_stdlib_generated.inc
-)
-
-# The Xi lowering validator snapshots the compiler-visible AOT translation
-# closure.  Some members of that closure are checked-in projections produced
-# by other build edges.  Order those producers before the snapshot so a cold
-# parallel build cannot validate while a projection is being replaced.
-set(XRAY_XI_LOWERING_GENERATED_CLOSURE_DEPS
-    ${CMAKE_SOURCE_DIR}/src/ir/xi_ops_gen.h
-    ${CMAKE_SOURCE_DIR}/src/plan/target/xr_target_instruction_gen.h
-    ${CMAKE_SOURCE_DIR}/src/shared/xr_semantic_owner_ids_gen.h
-    ${CMAKE_SOURCE_DIR}/src/aot/xaot_rep_gen.h
-    ${CMAKE_SOURCE_DIR}/src/aot/xaot_abi_gen.h
-    ${CMAKE_SOURCE_DIR}/src/aot/xaot_layout_gen.h
-    ${CMAKE_SOURCE_DIR}/src/aot/emit_c/xr_c_emission_rule_ids_gen.h
-    ${CMAKE_SOURCE_DIR}/src/aot/emit_c/xr_c_emission_rule_build_gen.inc.c
-    ${CMAKE_SOURCE_DIR}/src/aot/emit_c/xr_c_emission_rule_verify_gen.inc.c
-    ${CMAKE_SOURCE_DIR}/src/aot/xstdlib_aot_methods_generated.inc.c
-    ${CMAKE_SOURCE_DIR}/src/aot/xaot_stdlib_generated.inc.c
-    ${CMAKE_SOURCE_DIR}/src/stdlib/xstdlib_defs_generated.h
-)
-
-add_custom_command(
-    OUTPUT  ${CMAKE_SOURCE_DIR}/src/ir/xi_ops_gen.h
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} xi-ops
-            ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
-            ${CMAKE_SOURCE_DIR}/src/ir/xi_ops_gen.h
-    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
-    COMMENT "xisagen: generating xi_ops_gen.h from ops.def"
-)
-
-add_custom_command(
-    OUTPUT  ${CMAKE_SOURCE_DIR}/src/plan/semantic/xr_semantic_ops_gen.h
-            ${CMAKE_SOURCE_DIR}/src/shared/xr_semantic_owner_ids_gen.h
+file(GLOB XRAY_STDLIB_DEF_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/stdlib/defs/*.def")
+file(GLOB_RECURSE XRAY_STDLIB_METADATA_SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/stdlib/*/*.xr")
+add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/src/shared/xr_semantic_owner_ids_gen.h
     COMMAND ${XRAY_PYTHON} ${XISAGEN} semantic-ops
-            ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
-            ${CMAKE_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def ${CMAKE_SOURCE_DIR}
     DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
-    COMMENT "xisagen: generating target-neutral semantic owner registry"
-)
-
-add_custom_command(
-    OUTPUT  ${CMAKE_SOURCE_DIR}/src/plan/target/xr_target_instruction_gen.h
-            ${CMAKE_SOURCE_DIR}/src/vm/xr_vm_ops.def
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} target-vm-ops
-            ${CMAKE_SOURCE_DIR}/xisa/target/vm_ops.def
-            ${CMAKE_SOURCE_DIR}
-    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/target/vm_ops.def
-    COMMENT "xisagen: generating typed target instruction contract"
-)
-
-add_custom_command(
-    OUTPUT  ${CMAKE_SOURCE_DIR}/src/ir/xi_verify_gen.h
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} xi-verify
-            ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
-            ${CMAKE_SOURCE_DIR}/xisa/xi/verifier.def
-            ${CMAKE_SOURCE_DIR}/src/ir/xi_verify_gen.h
-    DEPENDS ${XISAGEN}
-            ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
-            ${CMAKE_SOURCE_DIR}/xisa/xi/verifier.def
-    COMMENT "xisagen: generating xi_verify_gen.h from verifier.def"
-)
-
-add_custom_command(
-    OUTPUT  ${CMAKE_SOURCE_DIR}/src/aot/xaot_rep_gen.h
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} aot-rep
-            ${CMAKE_SOURCE_DIR}/xisa/aot/rep.def
-            ${CMAKE_SOURCE_DIR}/src/aot/xaot_rep_gen.h
-    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/aot/rep.def
-    COMMENT "xisagen: generating xaot_rep_gen.h from rep.def"
-)
-
-add_custom_command(
-    OUTPUT  ${CMAKE_SOURCE_DIR}/src/aot/xaot_abi_gen.h
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} aot-abi
-            ${CMAKE_SOURCE_DIR}/xisa/aot/rep.def
-            ${CMAKE_SOURCE_DIR}/xisa/aot/abi.def
-            ${CMAKE_SOURCE_DIR}/src/aot/xaot_abi_gen.h
-    DEPENDS ${XISAGEN}
-            ${CMAKE_SOURCE_DIR}/xisa/aot/rep.def
-            ${CMAKE_SOURCE_DIR}/xisa/aot/abi.def
-    COMMENT "xisagen: generating xaot_abi_gen.h from abi.def"
-)
-
-add_custom_command(
-    OUTPUT  ${CMAKE_SOURCE_DIR}/src/aot/xaot_layout_gen.h
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} aot-layout
-            ${CMAKE_SOURCE_DIR}/xisa/aot/rep.def
-            ${CMAKE_SOURCE_DIR}/xisa/aot/layout.def
-            ${CMAKE_SOURCE_DIR}/src/aot/xaot_layout_gen.h
-    DEPENDS ${XISAGEN}
-            ${CMAKE_SOURCE_DIR}/xisa/aot/rep.def
-            ${CMAKE_SOURCE_DIR}/xisa/aot/layout.def
-    COMMENT "xisagen: generating xaot_layout_gen.h from layout.def"
-)
-
-add_custom_command(
-    OUTPUT  ${CMAKE_SOURCE_DIR}/src/aot/emit_c/xr_c_emission_rule_ids_gen.h
-            ${CMAKE_SOURCE_DIR}/src/aot/emit_c/xr_c_emission_rule_build_gen.inc.c
-            ${CMAKE_SOURCE_DIR}/src/aot/emit_c/xr_c_emission_rule_verify_gen.inc.c
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} aot-c-emission-rules
-            ${CMAKE_SOURCE_DIR}/xisa/aot/c_emission_rules.def
-            ${CMAKE_SOURCE_DIR}
-    DEPENDS ${XISAGEN}
-            ${CMAKE_SOURCE_DIR}/tools/xisagen/c_emission_rules.py
-            ${CMAKE_SOURCE_DIR}/xisa/aot/c_emission_rules.def
-    COMMENT "xisagen: generating typed C emission rules"
-)
-
-add_custom_command(
-    OUTPUT  ${XRAY_GEN_STDLIB_METADATA_DEPS}
-    COMMAND ${XRAY_PYTHON} ${STDLIBGEN}
-            --root ${CMAKE_SOURCE_DIR}
+    COMMENT "Projecting shared semantic owner identifiers")
+add_custom_target(gen-semantic-owners DEPENDS ${CMAKE_SOURCE_DIR}/src/shared/xr_semantic_owner_ids_gen.h)
+set(XRAY_GEN_STDLIB_METADATA_DEPS
+    ${CMAKE_SOURCE_DIR}/stdlib/provider_inventory.generated.json
+    ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_stdlib_generated.inc)
+add_custom_command(OUTPUT ${XRAY_GEN_STDLIB_METADATA_DEPS}
+    COMMAND ${XRAY_PYTHON} ${STDLIBGEN} --root ${CMAKE_SOURCE_DIR}
     COMMAND ${XRAY_PYTHON} ${GEN_STDLIB_TYPES}
-    DEPENDS ${STDLIBGEN}
-            ${CMAKE_SOURCE_DIR}/tools/stdlibgen/provider_declarations.py
-            ${CMAKE_SOURCE_DIR}/tools/stdlibgen/provider_types.py
-            ${CMAKE_SOURCE_DIR}/tools/stdlibgen/provider_codegen.py
-            ${GEN_STDLIB_TYPES}
-            ${XRAY_STDLIB_DEF_FILES}
-            ${XRAY_STDLIB_METADATA_SOURCES}
-    COMMENT "stdlibgen: generating stdlib metadata from stdlib/defs/*.def"
-)
-
-add_custom_command(
-    OUTPUT  ${CMAKE_SOURCE_DIR}/src/frontend/analyzer/xnative_type_defs.inc.c
-    COMMAND ${XRAY_PYTHON} ${NATIVE_TYPE_EMBEDDER}
-            ${CMAKE_SOURCE_DIR}/stdlib/types
-            --output ${CMAKE_SOURCE_DIR}/src/frontend/analyzer/xnative_type_defs.inc.c
-    DEPENDS ${NATIVE_TYPE_EMBEDDER}
-            ${XRAY_NATIVE_TYPE_SOURCE_FILES}
-    COMMENT "embedding stdlib native type declarations"
-)
-
+    DEPENDS ${STDLIBGEN} ${GEN_STDLIB_TYPES}
+        ${CMAKE_SOURCE_DIR}/tools/stdlibgen/provider_declarations.py
+        ${CMAKE_SOURCE_DIR}/tools/stdlibgen/provider_types.py
+        ${CMAKE_SOURCE_DIR}/tools/stdlibgen/provider_codegen.py
+        ${XRAY_STDLIB_DEF_FILES} ${XRAY_STDLIB_METADATA_SOURCES}
+    COMMENT "Projecting current standard-library tooling metadata")
+add_custom_target(gen-stdlib-metadata DEPENDS ${XRAY_GEN_STDLIB_METADATA_DEPS})
 add_custom_command(
     OUTPUT ${CMAKE_SOURCE_DIR}/src/shared/xnative_declarations.inc.c
            ${CMAKE_SOURCE_DIR}/src/shared/xprelude_source.inc.c
-           ${CMAKE_SOURCE_DIR}/src/frontend/analyzer/xnative_array_index_methods.def
-           ${CMAKE_SOURCE_DIR}/src/frontend/analyzer/xnative_array_push_method.def
     COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/gen_native_declarations.py
             --root ${CMAKE_SOURCE_DIR}
     DEPENDS ${CMAKE_SOURCE_DIR}/scripts/gen_native_declarations.py
@@ -516,90 +321,13 @@ add_custom_command(
             ${CMAKE_SOURCE_DIR}/stdlib/types/rune.xr
             ${CMAKE_SOURCE_DIR}/stdlib/prelude/builtin_symbols.def
             ${CMAKE_SOURCE_DIR}/stdlib/prelude/range.xr
+            ${CMAKE_SOURCE_DIR}/stdlib/prelude/stringable.xr
     COMMENT "projecting governed native value declarations"
 )
 
-add_custom_target(gen-xi-ops DEPENDS
-    ${XRAY_GEN_XI_OPS_DEPS}
-)
-
-add_custom_target(gen-xi-verify DEPENDS
-    ${XRAY_GEN_XI_VERIFY_DEPS}
-)
-
-# Directory and file changes first refresh this exact content key. The command
-# preserves the output mtime when the compile closure, AOT discovery sources,
-# and namespace membership are unchanged, so Ninja can keep the costly semantic
-# proof while still rejecting additions, removals, path substitution, and
-# actual consumer changes before compilation. The generated depfile deliberately
-# owns the broad directory watches; the full proof depends only on this key and
-# its exact file inputs.
-add_custom_command(
-    OUTPUT ${XRAY_XI_LOWERING_INPUT_SCAN_STAMP}
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} xi-lowering-input-fingerprint
-            ${CMAKE_SOURCE_DIR}
-            ${XRAY_XI_LOWERING_INPUT_FINGERPRINT}
-            ${XRAY_XI_LOWERING_INPUT_SCAN_STAMP}
-            ${XRAY_XI_LOWERING_INPUT_DEPFILE}
-    BYPRODUCTS ${XRAY_XI_LOWERING_INPUT_FINGERPRINT}
-               ${XRAY_XI_LOWERING_INPUT_DEPFILE}
-    DEPENDS ${XISAGEN}
-            ${CMAKE_SOURCE_DIR}/CMakeLists.txt
-            ${XRAY_XI_LOWERING_GENERATED_CLOSURE_DEPS}
-            ${XRAY_GEN_XI_LOWERING_DEPS}
-            ${XRAY_XI_LOWERING_NAMESPACE_CENSUS}
-    DEPFILE ${XRAY_XI_LOWERING_INPUT_DEPFILE}
-    COMMENT "xisagen: refreshing exact Xi lowering input fingerprint"
-    VERBATIM
-)
-add_custom_target(refresh-xi-lowering-input-fingerprint
-    DEPENDS ${XRAY_XI_LOWERING_INPUT_SCAN_STAMP})
-
-add_custom_command(
-    OUTPUT ${XRAY_XI_LOWERING_VERIFICATION_STAMP}
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} xi-lowering-verify
-            ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
-            ${CMAKE_SOURCE_DIR}/xisa/xi/lowering.def
-            ${CMAKE_SOURCE_DIR}
-            ${XRAY_XI_LOWERING_VERIFICATION_STAMP}
-            ${XRAY_XI_LOWERING_VALIDATION_DEPFILE}
-    BYPRODUCTS ${XRAY_XI_LOWERING_VALIDATION_DEPFILE}
-    DEPENDS refresh-xi-lowering-input-fingerprint
-            ${XISAGEN}
-            ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
-            ${CMAKE_SOURCE_DIR}/xisa/xi/lowering.def
-            ${XRAY_XI_LOWERING_GENERATED_CLOSURE_DEPS}
-            ${XRAY_GEN_XI_LOWERING_DEPS}
-            ${XRAY_XI_LOWERING_NAMESPACE_CENSUS}
-            ${XRAY_XI_LOWERING_INPUT_FINGERPRINT}
-    DEPFILE ${XRAY_XI_LOWERING_VALIDATION_DEPFILE}
-    COMMENT "xisagen: verifying source-current Xi lowering consumers and projections"
-    VERBATIM
-)
-add_custom_target(gen-xi-lowering DEPENDS ${XRAY_XI_LOWERING_VERIFICATION_STAMP})
-
-add_custom_target(gen-aot-metadata DEPENDS
-    ${XRAY_GEN_AOT_METADATA_DEPS}
-)
-
-add_custom_target(gen-c-emission-rules DEPENDS
-    ${CMAKE_SOURCE_DIR}/src/aot/emit_c/xr_c_emission_rule_ids_gen.h
-    ${CMAKE_SOURCE_DIR}/src/aot/emit_c/xr_c_emission_rule_build_gen.inc.c
-    ${CMAKE_SOURCE_DIR}/src/aot/emit_c/xr_c_emission_rule_verify_gen.inc.c
-)
-
-add_custom_target(gen-stdlib-metadata DEPENDS
-    ${XRAY_GEN_STDLIB_METADATA_DEPS}
-)
-
 add_custom_target(gen-native-type-defs DEPENDS
-    ${CMAKE_SOURCE_DIR}/src/frontend/analyzer/xnative_type_defs.inc.c
     ${CMAKE_SOURCE_DIR}/src/shared/xnative_declarations.inc.c
-    ${CMAKE_SOURCE_DIR}/src/shared/xprelude_source.inc.c
-    ${CMAKE_SOURCE_DIR}/src/frontend/analyzer/xnative_array_index_methods.def
-    ${CMAKE_SOURCE_DIR}/src/frontend/analyzer/xnative_array_push_method.def
-)
-
+    ${CMAKE_SOURCE_DIR}/src/shared/xprelude_source.inc.c)
 # CoreSpec is the target-neutral semantic registry introduced by Task 295.
 # Checked-in projections make reviews explicit; this build edge only verifies
 # that the registry, KAT oracle and C metadata are an exact deterministic set.
@@ -644,31 +372,6 @@ add_custom_command(
     VERBATIM
 )
 add_custom_target(gen-target-query-registry DEPENDS ${XRAY_TARGET_QUERY_CHECK_STAMP})
-
-# XrProgram v1 has one checked-in wire schema and generated C constants. The
-# build verifies projections and never rewrites the source tree.
-set(XRAY_PROGRAM_SCHEMA_CHECK_STAMP
-    "${CMAKE_CURRENT_BINARY_DIR}/generated/checks/xr-program-schema.check.stamp")
-add_custom_command(
-    OUTPUT ${XRAY_PROGRAM_SCHEMA_CHECK_STAMP}
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-            "${CMAKE_CURRENT_BINARY_DIR}/generated/checks"
-    COMMAND ${XRAY_PYTHON} ${PROGRAMGEN}
-            --root ${CMAKE_SOURCE_DIR}
-            --check
-    COMMAND ${CMAKE_COMMAND} -E touch ${XRAY_PROGRAM_SCHEMA_CHECK_STAMP}
-    DEPENDS ${PROGRAMGEN}
-            ${CMAKE_SOURCE_DIR}/xisa/program/schema.json
-            ${CMAKE_SOURCE_DIR}/xisa/program/xi-source-projection.json
-            ${CMAKE_SOURCE_DIR}/xisa/core/registry.json
-            ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
-            ${CMAKE_SOURCE_DIR}/src/program/xr_program_schema_gen.h
-            ${CMAKE_SOURCE_DIR}/src/program/xr_program_xi_projection_gen.h
-            ${CMAKE_SOURCE_DIR}/src/program/xr_program_xi_projection_gen.c
-    COMMENT "programgen: verifying canonical XrProgram schema projections"
-    VERBATIM
-)
-add_custom_target(gen-xr-program-schema DEPENDS ${XRAY_PROGRAM_SCHEMA_CHECK_STAMP})
 
 # Linux: expose POSIX/GNU extensions (CLOCK_MONOTONIC, CPU_SET, pthread_setaffinity_np, etc.)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -1212,29 +915,14 @@ set(XRAY_COMMON_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/base
     ${CMAKE_CURRENT_SOURCE_DIR}/src/os
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/core
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/value
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/mem
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/object
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/object/builtins
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/class
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/closure
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/symbol
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/coro
     ${CMAKE_CURRENT_SOURCE_DIR}/src/io
     ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend
     ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/lexer
     ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/parser
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/codegen
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/analyzer
     ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/canonical
     ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/format
     ${CMAKE_CURRENT_SOURCE_DIR}/src/toolchain
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/vm
     ${CMAKE_CURRENT_SOURCE_DIR}/src/module
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/analysis
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/aot
     ${CMAKE_CURRENT_SOURCE_DIR}/src/api
     ${CMAKE_CURRENT_SOURCE_DIR}/src/app/cli
     ${CMAKE_CURRENT_SOURCE_DIR}/src/app/toolchain
@@ -1244,266 +932,25 @@ set(XRAY_COMMON_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/net
 )
 
-# Directory timestamps alone can hide immediate additions from Ninja on Windows.
-# This namespace census only invalidates the verifier; Python still captures and
-# validates every compiler-visible input and every AOT discovery source itself.
-function(xray_configure_xi_lowering_namespace_census output)
-    set(_roots)
-    foreach(_include IN LISTS ARGN)
-        get_filename_component(_root "${_include}" ABSOLUTE
-            BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
-        file(TO_CMAKE_PATH "${_root}" _root)
-        list(APPEND _roots "${_root}")
-    endforeach()
-    list(REMOVE_DUPLICATES _roots)
-    list(SORT _roots)
-    set(_patterns)
-    set(_retained_roots)
-    foreach(_root IN LISTS _roots)
-        set(_covered FALSE)
-        foreach(_ancestor IN LISTS _retained_roots)
-            string(FIND "${_root}/" "${_ancestor}/" _prefix)
-            if(_prefix EQUAL 0)
-                set(_covered TRUE)
-                break()
-            endif()
-        endforeach()
-        if(NOT _covered)
-            list(APPEND _retained_roots "${_root}")
-            list(APPEND _patterns "${_root}/*")
-        endif()
-    endforeach()
-    file(GLOB_RECURSE _entries LIST_DIRECTORIES TRUE CONFIGURE_DEPENDS ${_patterns})
-    list(REMOVE_DUPLICATES _entries)
-    list(SORT _entries)
-    set(_content "xi-lowering-namespace/1\n")
-    foreach(_entry IN LISTS _retained_roots _entries)
-        string(HEX "${_entry}" _encoded)
-        string(LENGTH "${_entry}" _length)
-        string(APPEND _content "${_length}:${_encoded}\n")
-    endforeach()
-    file(CONFIGURE OUTPUT "${output}" CONTENT "${_content}" @ONLY NEWLINE_STYLE UNIX)
-endfunction()
-
-xray_configure_xi_lowering_namespace_census(
-    "${XRAY_XI_LOWERING_NAMESPACE_CENSUS}" ${XRAY_COMMON_INCLUDES})
-
-set_source_files_properties(
-    src/plan/format/xr_xtp_instruction_stream.c
-    PROPERTIES INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/xisa/target"
-)
-
-# ============================================================================
-# Source File Collection
-# ============================================================================
-
-function(xray_exclude_include_fragments source_list_name)
-    if(DEFINED ${source_list_name})
-        list(FILTER ${source_list_name} EXCLUDE REGEX "\\.inc\\.c$")
-        set(${source_list_name} "${${source_list_name}}" PARENT_SCOPE)
-    endif()
-endfunction()
-
-file(GLOB BASE_SRC CONFIGURE_DEPENDS "src/base/*.c")
-list(REMOVE_ITEM BASE_SRC "${CMAKE_SOURCE_DIR}/src/base/xcompile_resources.c")
-list(APPEND BASE_SRC
-    "src/shared/xr_crypto_core.c"
-    "src/shared/xr_unicode_grapheme_data.c"
-    "src/shared/xr_unicode_grapheme.c"
-    "src/shared/xr_http_url.c"
-    # Not a stdlib module: compress.xr states the language's compressor, while
-    # this coder serves the package client and the AOT runtime.
-    "src/shared/xr_compress_engine.c"
-)
-# Cross-platform abstraction layer. Each impl file is exclusive to
-# its platform — no body guards, only the right subtree is built.
-if(WIN32)
-    file(GLOB OS_SRC CONFIGURE_DEPENDS "src/os/win/*.c")
-    set(AOT_RANDOM_SRC "src/os/win/random_win.c")
-    set(AOT_TIME_SRC "src/os/win/time_win.c")
-else()
-    file(GLOB OS_SRC CONFIGURE_DEPENDS "src/os/unix/*.c")
-    set(AOT_RANDOM_SRC "src/os/unix/random_unix.c")
-    set(AOT_TIME_SRC "src/os/unix/time_unix.c")
-endif()
-file(GLOB RUNTIME_TOP_SRC CONFIGURE_DEPENDS "src/runtime/*.c")
-file(GLOB RUNTIME_ABI_SRC CONFIGURE_DEPENDS "src/runtime/abi/*.c")
-set(RUNTIME_OWNERSHIP_AUDIT_SRC
-    "src/runtime/ownership/xr_ownership_audit.c"
-    "src/vm/audit/xr_typed_lifecycle_audit.c"
-)
-list(APPEND RUNTIME_TOP_SRC ${RUNTIME_ABI_SRC})
-file(GLOB RUNTIME_CORE_SRC CONFIGURE_DEPENDS "src/runtime/core/*.c")
-file(GLOB RUNTIME_VALUE_SRC CONFIGURE_DEPENDS "src/runtime/value/*.c")
-file(GLOB RUNTIME_MEM_SRC CONFIGURE_DEPENDS "src/runtime/mem/*.c")
-file(GLOB RUNTIME_OBJECT_SRC CONFIGURE_DEPENDS "src/runtime/object/*.c")
-file(GLOB RUNTIME_OBJECT_BUILTINS_SRC CONFIGURE_DEPENDS "src/runtime/object/builtins/*.c")
-list(APPEND RUNTIME_OBJECT_SRC
-    ${RUNTIME_OBJECT_BUILTINS_SRC}
-    "src/runtime/object/xarray_vm.c"
-    "src/runtime/object/xmap_vm.c"
-)
-list(REMOVE_DUPLICATES RUNTIME_OBJECT_SRC)
-file(GLOB RUNTIME_CLASS_SRC CONFIGURE_DEPENDS "src/runtime/class/*.c")
-list(APPEND RUNTIME_CLASS_SRC
-    "src/runtime/class/xinstance_core.c"
-    "src/runtime/class/xinstance_dynamic.c"
-    "src/runtime/class/xinstance_destroy.c"
-)
-list(REMOVE_DUPLICATES RUNTIME_CLASS_SRC)
-file(GLOB RUNTIME_CLOSURE_SRC CONFIGURE_DEPENDS "src/runtime/closure/*.c")
-file(GLOB RUNTIME_SYMBOL_SRC CONFIGURE_DEPENDS "src/runtime/symbol/*.c")
-file(GLOB CORO_SRC CONFIGURE_DEPENDS "src/coro/*.c")
-list(APPEND CORO_SRC
-    "src/coro/xaot_runtime.c"
-    "src/coro/xresult_group_destroy.c"
-    "src/coro/xresult_group_native.c"
-    "src/coro/xresult_group_wait.c"
-    "src/coro/xwork_queue_destroy.c"
-    "src/coro/xwork_queue_native.c"
-    "src/coro/xwork_queue_wait.c"
-)
-list(REMOVE_DUPLICATES CORO_SRC)
-file(GLOB IO_SRC CONFIGURE_DEPENDS "src/io/*.c")
-
-# Stackful coroutine context switch removed — fully stackless now
-file(GLOB FRONTEND_LEXER_SRC CONFIGURE_DEPENDS "src/frontend/lexer/*.c")
-file(GLOB FRONTEND_PARSER_SRC CONFIGURE_DEPENDS "src/frontend/parser/*.c")
-file(GLOB FRONTEND_CODEGEN_SRC CONFIGURE_DEPENDS "src/frontend/codegen/*.c")
-file(GLOB FRONTEND_ANALYZER_SRC CONFIGURE_DEPENDS "src/frontend/analyzer/*.c")
-file(GLOB FRONTEND_CANONICAL_SRC CONFIGURE_DEPENDS "src/frontend/canonical/*.c")
-set(FRONTEND_FORMAT_SRC) # The owned formatter has one production library.
-file(GLOB TOOLCHAIN_SRC CONFIGURE_DEPENDS "src/toolchain/*.c")
-list(REMOVE_ITEM TOOLCHAIN_SRC "${CMAKE_SOURCE_DIR}/src/toolchain/xr_xir_runtime_sdk.c")
-file(GLOB VM_SRC CONFIGURE_DEPENDS "src/vm/*.c")
-file(GLOB VM_DEBUG_SRC CONFIGURE_DEPENDS "src/vm/debug/*.c")
-file(GLOB IR_SRC CONFIGURE_DEPENDS "src/ir/*.c")
-file(GLOB CORE_SPEC_SRC CONFIGURE_DEPENDS "src/core/*.c")
-file(GLOB PROGRAM_SRC CONFIGURE_DEPENDS "src/program/*.c")
-# The source bridge depends on XIR projections and has one separate owner.
-# Keeping it in the frontend aggregate would duplicate that implementation.
-list(REMOVE_ITEM PROGRAM_SRC "${CMAKE_SOURCE_DIR}/src/program/xr_xir_source_product.c")
-file(GLOB EXECUTION_SRC CONFIGURE_DEPENDS "src/execution/*.c")
-list(REMOVE_ITEM EXECUTION_SRC "${CMAKE_SOURCE_DIR}/src/execution/xr_xir_host_execution.c")
-file(GLOB PLAN_SEMANTIC_SRC CONFIGURE_DEPENDS "src/plan/semantic/*.c")
-file(GLOB PLAN_OWNERSHIP_SRC CONFIGURE_DEPENDS "src/plan/ownership/*.c")
-file(GLOB PLAN_FORMAT_SRC CONFIGURE_DEPENDS "src/plan/format/*.c")
-file(GLOB PLAN_TARGET_SRC CONFIGURE_DEPENDS "src/plan/target/*.c")
-file(GLOB INCREMENTAL_SRC CONFIGURE_DEPENDS "src/incremental/*.c")
-file(GLOB MODULE_SRC CONFIGURE_DEPENDS "src/module/*.c")
-file(GLOB ANALYSIS_SRC CONFIGURE_DEPENDS "src/analysis/*.c")
-file(GLOB AOT_SRC CONFIGURE_DEPENDS "src/aot/*.c")
-file(GLOB AOT_REFINE_SRC CONFIGURE_DEPENDS "src/aot/refine/*.c")
-file(GLOB AOT_EMIT_C_SRC CONFIGURE_DEPENDS "src/aot/emit_c/*.c")
-file(GLOB AOT_PROGRAM_SRC CONFIGURE_DEPENDS "src/aot/program/*.c")
-list(APPEND AOT_SRC ${AOT_REFINE_SRC} ${AOT_EMIT_C_SRC} ${AOT_PROGRAM_SRC})
-list(REMOVE_ITEM AOT_SRC
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/aot/xrt_gen_iter.c"
-    "src/aot/xrt_gen_iter.c")
-file(GLOB API_SRC CONFIGURE_DEPENDS "src/api/*.c")
-# Source compilation has one production owner shared by API and application consumers.
-list(REMOVE_ITEM API_SRC
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/api/xsource_api.c"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/api/xsource_compiler.c"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/api/xsource_compile.c"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/api/xsource_paths.c"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/api/xsource_authority.c")
-file(GLOB NEW_CLI_SRC CONFIGURE_DEPENDS "src/app/cli/*.c")
-file(GLOB APP_TOOLCHAIN_SRC CONFIGURE_DEPENDS "src/app/toolchain/*.c")
-# Native operation components are owned by their explicit production libraries.
-list(REMOVE_ITEM APP_TOOLCHAIN_SRC
-    "${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_xir_invocation.c"
-    "${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_xir_workspace.c"
-    "${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_xir_native_admission.c"
-    "${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_xir_local_toolchain.c")
-
-# Standard Library (Native modules) - modular conditional compilation
-# Core standard-library modules: time, math, log, regex, path, datetime,
-# encoding, base64, and url. The implicit language-core registry is compiled
-# from stdlib/prelude/builtin_symbols.def, but it is not a loadable module.
-file(GLOB STDLIB_CORE_SRC CONFIGURE_DEPENDS
-    "stdlib/_probe/*.c"
-    "stdlib/time/*.c"
-    "stdlib/math/*.c"
-    "stdlib/log/*.c"
-    "stdlib/mem/*.c"
-    "stdlib/runtime/*.c"
-    "stdlib/sync/*.c"
-    "stdlib/parallel/*.c"
-    "stdlib/simd/*.c"
-    "stdlib/codegen/*.c"
-    "stdlib/sys/*.c"
-    "stdlib/regex/*.c"
-    "stdlib/path/*.c"
-    "stdlib/datetime/*.c"
-    "stdlib/encoding/*.c"
-    "stdlib/base64/*.c"
-    "stdlib/url/*.c"
-    "stdlib/text/*.c"
-)
-set(STDLIB_SRC ${STDLIB_CORE_SRC})
-
+# Source-module selection retains the existing modular feature semantics.
 if(XR_STDLIB_FULL)
-    # Full stdlib includes every built-in module. Group switches apply only to
-    # modular builds, so "full" has one exact, fail-closed meaning. Source-only
-    # modules do not contribute C translation units.
-    file(GLOB_RECURSE STDLIB_ALL_SRC CONFIGURE_DEPENDS "stdlib/*/*.c")
-    list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*sqlite.*\\.c$")
-    if(NOT XR_BUILD_TEST_MODULES)
-        list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*/stdlib/test_yield/.*\\.c$")
-    endif()
-    set(STDLIB_SRC ${STDLIB_ALL_SRC})
-    # Full mode: define XR_HAS_* for modules actually included,
-    # so xmodule.c guards work the same as modular mode.
-    add_compile_definitions(XR_HAS_FILESYSTEM=1)
-    add_compile_definitions(XR_HAS_NETWORK=1)
-    add_compile_definitions(XR_HAS_DATA_FORMATS=1)
-    add_compile_definitions(XR_HAS_CRYPTO=1)
-    add_compile_definitions(XR_HAS_WS=1)
-    message(STATUS "Stdlib: full")
+    add_compile_definitions(XR_HAS_FILESYSTEM=1 XR_HAS_NETWORK=1 XR_HAS_DATA_FORMATS=1 XR_HAS_CRYPTO=1 XR_HAS_WS=1)
 else()
-    # Modular compilation - define XR_STDLIB_MODULAR to indicate modular build
     add_compile_definitions(XR_STDLIB_MODULAR=1)
-    message(STATUS "Stdlib: modular build")
     if(XR_STDLIB_FILESYSTEM)
-        file(GLOB STDLIB_FS_SRC CONFIGURE_DEPENDS "stdlib/io/*.c" "stdlib/os/*.c")
-        list(APPEND STDLIB_SRC ${STDLIB_FS_SRC})
         add_compile_definitions(XR_HAS_FILESYSTEM=1)
-        message(STATUS "Stdlib: +filesystem (io, os)")
     endif()
-
     if(XR_STDLIB_NET)
-        file(GLOB STDLIB_NET_SRC CONFIGURE_DEPENDS "stdlib/net/*.c" "stdlib/http/*.c")
-        list(APPEND STDLIB_SRC ${STDLIB_NET_SRC})
         add_compile_definitions(XR_HAS_NETWORK=1)
-        message(STATUS "Stdlib: +network (net, http, http2, cluster)")
     endif()
-
     if(XR_STDLIB_DATA)
-        file(GLOB STDLIB_DATA_SRC CONFIGURE_DEPENDS "stdlib/csv/*.c" "stdlib/toml/*.c" "stdlib/yaml/*.c" "stdlib/xml/*.c")
-        list(APPEND STDLIB_SRC ${STDLIB_DATA_SRC})
         add_compile_definitions(XR_HAS_DATA_FORMATS=1)
-        message(STATUS "Stdlib: +data formats (csv, toml, yaml, xml)")
     endif()
-
     if(XR_STDLIB_CRYPTO)
-        file(GLOB STDLIB_CRYPTO_SRC CONFIGURE_DEPENDS "stdlib/crypto/*.c")
-        list(APPEND STDLIB_SRC ${STDLIB_CRYPTO_SRC})
         add_compile_definitions(XR_HAS_CRYPTO=1)
-        message(STATUS "Stdlib: +crypto")
     endif()
-
     if(XR_STDLIB_WS)
-        file(GLOB STDLIB_WS_SRC CONFIGURE_DEPENDS "stdlib/ws/*.c")
-        list(APPEND STDLIB_SRC ${STDLIB_WS_SRC})
         add_compile_definitions(XR_HAS_WS=1)
-        message(STATUS "Stdlib: +ws")
-    endif()
-
-    if(XR_BUILD_TEST_MODULES)
-        file(GLOB STDLIB_TEST_SRC CONFIGURE_DEPENDS "stdlib/test_yield/*.c")
-        list(APPEND STDLIB_SRC ${STDLIB_TEST_SRC})
-        message(STATUS "Stdlib: +test modules")
     endif()
 endif()
 
@@ -1556,8 +1003,6 @@ foreach(XRAY_SOURCELESS_MODULE ${XRAY_STDLIB_SOURCELESS_MODULES})
 endforeach()
 set(XRAY_STDLIB_EMBEDDED_SOURCE_INC
     "${CMAKE_CURRENT_BINARY_DIR}/generated/stdlib_embedded_sources.inc")
-set(XRAY_STDLIB_EMBEDDED_RUNTIME_INC
-    "${CMAKE_CURRENT_BINARY_DIR}/generated/stdlib_embedded_runtime.inc")
 set(XRAY_STDLIB_EMBED_GENERATOR
     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_stdlib_embedded.py")
 # Match the embedded generator's metadata imports without unrelated tools.
@@ -1569,13 +1014,11 @@ set(XRAY_STDLIB_EMBED_GENERATOR_MODULES
 add_custom_command(
     OUTPUT
         ${XRAY_STDLIB_EMBEDDED_SOURCE_INC}
-        ${XRAY_STDLIB_EMBEDDED_RUNTIME_INC}
     COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
     COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 ${XRAY_PYTHON}
             ${XRAY_STDLIB_EMBED_GENERATOR}
             --root ${CMAKE_CURRENT_SOURCE_DIR}
             --source-output ${XRAY_STDLIB_EMBEDDED_SOURCE_INC}
-            --runtime-output ${XRAY_STDLIB_EMBEDDED_RUNTIME_INC}
             ${XRAY_STDLIB_SOURCELESS_MODULE_ARGS}
             ${XRAY_STDLIB_SCRIPT_SOURCES}
     DEPENDS
@@ -1588,553 +1031,7 @@ add_custom_command(
     VERBATIM
 )
 add_custom_target(gen-stdlib-embedded-sources
-    DEPENDS ${XRAY_STDLIB_EMBEDDED_SOURCE_INC} ${XRAY_STDLIB_EMBEDDED_RUNTIME_INC})
-
-# C include fragments use *.inc.c for editor support, but they are included
-# from owning .c files and must never be compiled as standalone translation units.
-foreach(XRAY_SRC_LIST
-        BASE_SRC OS_SRC RUNTIME_TOP_SRC RUNTIME_ABI_SRC RUNTIME_CORE_SRC RUNTIME_VALUE_SRC RUNTIME_MEM_SRC
-        RUNTIME_OBJECT_SRC RUNTIME_OBJECT_BUILTINS_SRC RUNTIME_CLASS_SRC
-        RUNTIME_CLOSURE_SRC RUNTIME_SYMBOL_SRC CORO_SRC IO_SRC
-        FRONTEND_LEXER_SRC FRONTEND_PARSER_SRC FRONTEND_CODEGEN_SRC
-        FRONTEND_ANALYZER_SRC FRONTEND_CANONICAL_SRC FRONTEND_FORMAT_SRC TOOLCHAIN_SRC
-        VM_SRC VM_DEBUG_SRC IR_SRC CORE_SPEC_SRC PROGRAM_SRC EXECUTION_SRC PLAN_SEMANTIC_SRC PLAN_OWNERSHIP_SRC PLAN_FORMAT_SRC PLAN_TARGET_SRC
-        MODULE_SRC ANALYSIS_SRC AOT_SRC API_SRC NEW_CLI_SRC APP_TOOLCHAIN_SRC
-        STDLIB_CORE_SRC STDLIB_SRC)
-    xray_exclude_include_fragments(${XRAY_SRC_LIST})
-endforeach()
-
-# ============================================================================
-# Build Target - Core Library (all core components)
-# ============================================================================
-
-set(CORE_ALL_SOURCES
-    ${BASE_SRC}
-    ${OS_SRC}
-    ${RUNTIME_TOP_SRC}
-    ${RUNTIME_CORE_SRC}
-    ${RUNTIME_VALUE_SRC}
-    ${RUNTIME_MEM_SRC}
-    ${RUNTIME_OBJECT_SRC}
-    ${RUNTIME_CLASS_SRC}
-    ${RUNTIME_CLOSURE_SRC}
-    ${RUNTIME_SYMBOL_SRC}
-    ${CORO_SRC}
-    ${IO_SRC}
-    ${FRONTEND_LEXER_SRC}
-    ${FRONTEND_PARSER_SRC}
-    ${FRONTEND_CODEGEN_SRC}
-    ${FRONTEND_ANALYZER_SRC}
-    ${FRONTEND_CANONICAL_SRC}
-    ${FRONTEND_FORMAT_SRC}
-    ${TOOLCHAIN_SRC}
-    ${VM_SRC}
-    ${VM_DEBUG_SRC}
-    ${IR_SRC}
-    ${CORE_SPEC_SRC}
-    ${PROGRAM_SRC}
-    ${EXECUTION_SRC}
-    ${PLAN_SEMANTIC_SRC}
-    ${PLAN_OWNERSHIP_SRC}
-    ${PLAN_FORMAT_SRC}
-    ${PLAN_TARGET_SRC}
-    ${INCREMENTAL_SRC}
-    ${MODULE_SRC}
-    ${ANALYSIS_SRC}
-    ${AOT_SRC}
-    ${API_SRC}
-    ${STDLIB_SRC}
-)
-
-# Legacy compiler fixtures share the generated native-entry registry object.
-# The immutable core-intrinsic registry is shared compiler/runtime metadata.
-# Keep it in the common object closure after moving it out of the mutable
-# frontend analyzer directory; the backend/install source lists below also
-# name the same source in their intentionally separate static archives.
-list(APPEND CORE_ALL_SOURCES
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xr_core_intrinsic_registry.c"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xnative_declaration.c"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/lir/xi_cgen_verify_output.c")
-set(CORE_COMMON_SOURCES ${CORE_ALL_SOURCES})
-list(REMOVE_ITEM CORE_COMMON_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/module/xstdlib_embedded_runtime.c")
-list(LENGTH CORE_ALL_SOURCES _core_all_count)
-list(LENGTH CORE_COMMON_SOURCES _core_common_count)
-math(EXPR _core_removed "${_core_all_count} - ${_core_common_count}")
-if(NOT _core_removed EQUAL 1)
-    message(FATAL_ERROR
-        "CORE_COMMON_SOURCES must differ from CORE_ALL_SOURCES by exactly "
-        "src/module/xstdlib_embedded_runtime.c (removed ${_core_removed}). The shared "
-        "native-entry registry must remain outside the common object aggregate.")
-endif()
-
-# Common objects remain shared by legacy fixture aggregates.
-add_library(xray_core_objs OBJECT ${CORE_COMMON_SOURCES})
-add_dependencies(xray_core_objs
-    gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
-    gen-native-type-defs gen-core-spec gen-target-query-registry gen-xr-program-schema)
-
-# Keep the registry object consumed by existing legacy compiler fixtures.
-add_library(xray_stdlib_bootstrap_core OBJECT src/module/xstdlib_embedded_runtime.c)
-add_dependencies(xray_stdlib_bootstrap_core
-    gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
-    gen-native-type-defs gen-target-query-registry gen-stdlib-embedded-sources)
-
-# The legacy core archive retains the same generated native-entry registry.
-add_library(xray_core STATIC src/module/xstdlib_embedded_runtime.c $<TARGET_OBJECTS:xray_core_objs>)
-add_dependencies(xray_core
-    gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
-    gen-native-type-defs gen-core-spec gen-target-query-registry gen-xr-program-schema)
-
-# The installed compiler product is the exact backend authority surface, not
-# the CLI's xray_core development aggregate.  Keep source/Xi inputs opaque at
-# this boundary while retaining the complete immutable SemanticPlan ->
-# TargetPlan -> XSM/XTP/CEmission construction and verification closure. Xi ->
-# SemanticPlan construction remains an internal frontend boundary because it
-# depends on mutable compiler IR ownership analysis.
-set(XRAY_COMPILER_BACKEND_SOURCES
-    src/base/xarena.c
-    src/base/xarena_backing.c
-    src/base/xlog.c
-    src/base/xsha256.c
-    src/base/xtarget_data_layout.c
-    # Assertion SemanticPlan verification consumes the stable core-intrinsic
-    # registry.  This registry is immutable shared compiler metadata, not a
-    # mutable analyzer-owned frontend graph.
-    src/shared/xr_core_intrinsic_registry.c
-    # Frozen stdlib identity slicing is a dependency-free compiler authority;
-    # filesystem-based module identity construction remains outside this archive.
-    src/module/xmodule_identity_view.c
-    ${PLAN_SEMANTIC_SRC}
-    ${PLAN_OWNERSHIP_SRC}
-    src/plan/format/xr_artifact_kind.c
-    src/plan/format/xr_xsm_encode.c
-    src/plan/format/xr_xtp_artifact.c
-    src/plan/format/xr_xtp_encode.c
-    src/plan/format/xr_xtp_instruction_stream.c
-    src/plan/format/xr_xtp_rows.c
-    src/plan/target/xr_target_builder.c
-    src/plan/target/xr_scalar_call_decision.c
-    src/plan/target/xr_scalar_call_decision_verify.c
-    src/plan/target/xr_i64_overflow_decision.c
-    src/plan/target/xr_i64_overflow_decision_verify.c
-    src/plan/target/xr_i64_overflow_target_instruction.c
-    src/plan/target/xr_i64_overflow_target_instruction_verify.c
-    src/plan/target/xr_target_entry_abi.c
-    src/plan/target/xr_target_instruction_verify.c
-    src/plan/target/xr_target_plan.c
-    src/plan/target/xr_target_profile.c
-    src/plan/target/xr_target_profile_verify.c
-    src/plan/target/xr_target_program_reachability.c
-    src/plan/target/xr_target_verify.c
-    src/aot/emit_c/xr_c_emission_plan.c
-    src/aot/emit_c/xr_c_scalar_ref_projection.c
-    src/aot/refine/xr_aot_scalar_ref_v1.c
-    src/aot/xr_target_aggregate_c_projection.c
-    src/runtime/abi/xr_runtime_contract.c
-    src/runtime/abi/xr_provider_logical_contract.c
-    src/runtime/abi/xr_runtime_descriptor.c
-    src/runtime/abi/xr_runtime_object_header.c
-    src/runtime/abi/xr_runtime_string_object.c
-)
-list(FILTER XRAY_COMPILER_BACKEND_SOURCES EXCLUDE REGEX
-    "(^|.*/)src/plan/semantic/xr_semantic_builder\\.c$")
-list(REMOVE_DUPLICATES XRAY_COMPILER_BACKEND_SOURCES)
-
-add_library(xray_compiler STATIC ${XRAY_COMPILER_BACKEND_SOURCES})
-add_dependencies(xray_compiler
-    gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
-    gen-native-type-defs)
-target_include_directories(xray_compiler PRIVATE
-    ${XRAY_COMMON_INCLUDES}
-    ${CMAKE_CURRENT_BINARY_DIR}/generated
-)
-
-add_library(xray_aot_core STATIC
-    ${AOT_RANDOM_SRC}
-    ${AOT_TIME_SRC}
-    src/base/xarena.c
-    src/base/xlog.c
-    src/base/xsha256.c
-    src/base/xunicode.c
-    src/shared/xr_compress_engine.c
-    src/shared/xr_crypto_core.c
-)
-target_compile_definitions(xray_aot_core PRIVATE XR_COMPRESS_CORE_ONLY=1)
-target_include_directories(xray_aot_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-
-set(XRAY_RT_CORO_SOURCES
-    ${BASE_SRC}
-    ${OS_SRC}
-    ${RUNTIME_TOP_SRC}
-    ${RUNTIME_CORE_SRC}
-    ${RUNTIME_VALUE_SRC}
-    ${RUNTIME_MEM_SRC}
-    ${RUNTIME_OBJECT_SRC}
-    ${RUNTIME_CLASS_SRC}
-    ${RUNTIME_CLOSURE_SRC}
-    ${RUNTIME_SYMBOL_SRC}
-    ${CORO_SRC}
-    ${IO_SRC}
-    src/aot/xrt_gen_iter.c
-)
-list(REMOVE_DUPLICATES XRAY_RT_CORO_SOURCES)
-list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/xisolate_api\\.c$")
-list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/value/xchunk\\.c$")
-list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/value/xopcode_info\\.c$")
-list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/object/(xatomic|xarray_vm|xmap_vm)\\.c$")
-list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/class/xinstance\\.c$")
-list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/coro/(xcoro_monitor|xthread_obj)\\.c$")
-
-add_library(xray_rt_coro STATIC ${XRAY_RT_CORO_SOURCES})
-add_dependencies(xray_rt_coro gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata
-    gen-stdlib-metadata)
-
-# Canonical XrProgram execution is a self-contained embeddable product. It owns
-# only format admission, immutable target binding, generation lifecycle, and
-# private typed execution. The native frame adapter only invokes loaded code.
-# Source/frontend builders, the reference evaluator, the legacy Proto VM,
-# TargetPlan, and the AOT compiler are deliberately absent.
-set(XRAY_PROGRAM_VM_RUNTIME_SOURCES
-    src/runtime/abi/xr_provider_logical_contract.c
-    src/base/xsha256.c
-    src/base/xtarget_data_layout.c
-    src/core/xr_core_spec_gen.c
-    src/plan/semantic/xr_semantic_ids.c
-    src/runtime/abi/xr_runtime_contract.c
-    src/runtime/abi/xr_runtime_descriptor.c
-    src/runtime/abi/xr_runtime_object_header.c
-    src/runtime/abi/xr_runtime_string_object.c
-    src/plan/target/xr_target_profile.c
-    src/plan/target/xr_target_profile_verify.c
-    src/program/xr_program_diagnostic.c
-    src/program/xr_program_identity.c
-    src/program/xr_program_decode.c
-    src/program/xr_program_verify.c
-    src/execution/xr_execution_identity.c
-    src/execution/xr_execution.c
-    src/execution/xr_native_execution.c
-    src/execution/xr_boundary_materialization.c
-    src/vm/xr_program_vm.c
-)
-add_library(xray_program_vm_runtime STATIC ${XRAY_PROGRAM_VM_RUNTIME_SOURCES})
-add_dependencies(xray_program_vm_runtime
-    gen-core-spec gen-xr-program-schema)
-target_include_directories(xray_program_vm_runtime PRIVATE
-    ${XRAY_COMMON_INCLUDES}
-    ${CMAKE_CURRENT_BINARY_DIR}/generated
-)
-if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
-        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
-            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
-    target_compile_options(xray_program_vm_runtime PRIVATE /W4 /WX)
-else()
-    target_compile_options(xray_program_vm_runtime PRIVATE -Wall -Wextra -Werror)
-endif()
-
-# Native provider programs reuse the OS implementation without linking any
-# compiler, Program loader, VM, or legacy tagged runtime.
-if(WIN32)
-    set(XRAY_NATIVE_PROVIDER_OS_SOURCES src/os/win/time_win.c src/os/win/pipe_win.c src/os/win/random_win.c)
-else()
-    set(XRAY_NATIVE_PROVIDER_OS_SOURCES src/os/unix/time_unix.c src/os/unix/pipe_unix.c src/os/unix/random_unix.c)
-endif()
-add_library(xray_native_provider_runtime STATIC ${XRAY_NATIVE_PROVIDER_OS_SOURCES})
-target_include_directories(xray_native_provider_runtime PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_compile_features(xray_native_provider_runtime PUBLIC c_std_11)
-if(WIN32)
-    target_link_libraries(xray_native_provider_runtime PUBLIC bcrypt)
-endif()
-if(NOT WIN32)
-    target_compile_definitions(xray_native_provider_runtime PRIVATE _POSIX_C_SOURCE=200809L)
-endif()
-
-# Generated C embeds the shared text kernel verbatim, so the emitter carries
-# the header's bytes rather than a second copy of the string semantics.
-set(XRAY_TEXT_KERNEL_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xr_text_kernel.h)
-set(XRAY_TEXT_KERNEL_EMBED ${CMAKE_CURRENT_BINARY_DIR}/generated/xr_text_kernel_embedded.inc.c)
-add_custom_command(
-    OUTPUT ${XRAY_TEXT_KERNEL_EMBED}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND ${CMAKE_COMMAND}
-            -DINPUT=${XRAY_TEXT_KERNEL_HEADER}
-            -DOUTPUT=${XRAY_TEXT_KERNEL_EMBED}
-            -DSYMBOL=xr_text_kernel_source
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
-    DEPENDS ${XRAY_TEXT_KERNEL_HEADER} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
-    COMMENT "Embedding the shared text kernel for generated C"
-    VERBATIM
-)
-add_custom_target(gen-text-kernel-embed DEPENDS ${XRAY_TEXT_KERNEL_EMBED})
-set(XRAY_FLOAT_FORMAT_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xr_float_fmt.h)
-set(XRAY_FLOAT_FORMAT_EMBED ${CMAKE_CURRENT_BINARY_DIR}/generated/xr_float_format_embedded.inc.c)
-add_custom_command(
-    OUTPUT ${XRAY_FLOAT_FORMAT_EMBED}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND ${CMAKE_COMMAND}
-            -DINPUT=${XRAY_FLOAT_FORMAT_HEADER}
-            -DOUTPUT=${XRAY_FLOAT_FORMAT_EMBED}
-            -DSYMBOL=xr_float_format_source
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
-    DEPENDS ${XRAY_FLOAT_FORMAT_HEADER} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
-    COMMENT "Embedding the shared float formatter for generated C"
-    VERBATIM)
-add_custom_target(gen-float-format-embed DEPENDS ${XRAY_FLOAT_FORMAT_EMBED})
-set(XRAY_INTEGER_KERNEL_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xr_integer_conversion_core.h)
-set(XRAY_INTEGER_KERNEL_EMBED ${CMAKE_CURRENT_BINARY_DIR}/generated/xr_integer_kernel_embedded.inc.c)
-add_custom_command(
-    OUTPUT ${XRAY_INTEGER_KERNEL_EMBED}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND ${CMAKE_COMMAND}
-            -DINPUT=${XRAY_INTEGER_KERNEL_HEADER}
-            -DOUTPUT=${XRAY_INTEGER_KERNEL_EMBED}
-            -DSYMBOL=xr_integer_kernel_source
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
-    DEPENDS ${XRAY_INTEGER_KERNEL_HEADER} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
-    COMMENT "Embedding the shared integer conversion kernel for generated C"
-    VERBATIM)
-add_custom_target(gen-integer-kernel-embed DEPENDS ${XRAY_INTEGER_KERNEL_EMBED})
-set(XRAY_INTEGER_DIVISION_KERNEL_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xr_integer_division_core.h)
-set(XRAY_INTEGER_DIVISION_KERNEL_EMBED ${CMAKE_CURRENT_BINARY_DIR}/generated/xr_integer_division_kernel_embedded.inc.c)
-add_custom_command(
-    OUTPUT ${XRAY_INTEGER_DIVISION_KERNEL_EMBED}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND ${CMAKE_COMMAND}
-            -DINPUT=${XRAY_INTEGER_DIVISION_KERNEL_HEADER}
-            -DOUTPUT=${XRAY_INTEGER_DIVISION_KERNEL_EMBED}
-            -DSYMBOL=xr_integer_division_kernel_source
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
-    DEPENDS ${XRAY_INTEGER_DIVISION_KERNEL_HEADER} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
-    COMMENT "Embedding the shared integer division kernel for generated C"
-    VERBATIM)
-add_custom_target(gen-integer-division-kernel-embed DEPENDS ${XRAY_INTEGER_DIVISION_KERNEL_EMBED})
-set(XRAY_INTEGER_BITWISE_KERNEL_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xr_integer_bitwise_core.h)
-set(XRAY_INTEGER_BITWISE_KERNEL_EMBED ${CMAKE_CURRENT_BINARY_DIR}/generated/xr_integer_bitwise_kernel_embedded.inc.c)
-add_custom_command(
-    OUTPUT ${XRAY_INTEGER_BITWISE_KERNEL_EMBED}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND ${CMAKE_COMMAND}
-            -DINPUT=${XRAY_INTEGER_BITWISE_KERNEL_HEADER}
-            -DOUTPUT=${XRAY_INTEGER_BITWISE_KERNEL_EMBED}
-            -DSYMBOL=xr_integer_bitwise_kernel_source
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
-    DEPENDS ${XRAY_INTEGER_BITWISE_KERNEL_HEADER} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
-    COMMENT "Embedding the shared integer bitwise kernel for generated C"
-    VERBATIM)
-add_custom_target(gen-integer-bitwise-kernel-embed DEPENDS ${XRAY_INTEGER_BITWISE_KERNEL_EMBED})
-set(XRAY_ARRAY_ALLOCATION_KERNEL_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/core/xr_array_allocation_plan.h)
-set(XRAY_ARRAY_ALLOCATION_KERNEL_EMBED ${CMAKE_CURRENT_BINARY_DIR}/generated/xr_array_allocation_kernel_embedded.inc.c)
-add_custom_command(
-    OUTPUT ${XRAY_ARRAY_ALLOCATION_KERNEL_EMBED}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND ${CMAKE_COMMAND}
-            -DINPUT=${XRAY_ARRAY_ALLOCATION_KERNEL_HEADER}
-            -DOUTPUT=${XRAY_ARRAY_ALLOCATION_KERNEL_EMBED}
-            -DSYMBOL=xr_array_allocation_kernel_source
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
-    DEPENDS ${XRAY_ARRAY_ALLOCATION_KERNEL_HEADER} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
-    COMMENT "Embedding the shared array allocation planner for generated C"
-    VERBATIM)
-add_custom_target(gen-array-allocation-kernel-embed DEPENDS ${XRAY_ARRAY_ALLOCATION_KERNEL_EMBED})
-set(XRAY_ARRAY_APPEND_KERNEL_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/core/xr_array_append_storage.h)
-set(XRAY_ARRAY_APPEND_KERNEL_EMBED ${CMAKE_CURRENT_BINARY_DIR}/generated/xr_array_append_kernel_embedded.inc.c)
-add_custom_command(
-    OUTPUT ${XRAY_ARRAY_APPEND_KERNEL_EMBED}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND ${CMAKE_COMMAND}
-            -DINPUT=${XRAY_ARRAY_APPEND_KERNEL_HEADER}
-            -DOUTPUT=${XRAY_ARRAY_APPEND_KERNEL_EMBED}
-            -DSYMBOL=xr_array_append_kernel_source
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
-    DEPENDS ${XRAY_ARRAY_APPEND_KERNEL_HEADER} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
-    COMMENT "Embedding the shared array append storage for generated C"
-    VERBATIM)
-add_custom_target(gen-array-append-kernel-embed DEPENDS ${XRAY_ARRAY_APPEND_KERNEL_EMBED})
-set(XRAY_VALUE_FORMAT_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xr_value_format_core.h)
-set(XRAY_VALUE_FORMAT_EMBED ${CMAKE_CURRENT_BINARY_DIR}/generated/xr_value_format_embedded.inc.c)
-add_custom_command(
-    OUTPUT ${XRAY_VALUE_FORMAT_EMBED}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND ${CMAKE_COMMAND}
-            -DINPUT=${XRAY_VALUE_FORMAT_HEADER}
-            -DOUTPUT=${XRAY_VALUE_FORMAT_EMBED}
-            -DSYMBOL=xr_value_format_source
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
-    DEPENDS ${XRAY_VALUE_FORMAT_HEADER} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
-    COMMENT "Embedding the shared value formatter for generated C"
-    VERBATIM)
-set(XRAY_SYNC_KERNEL_EMBEDS)
-foreach(XR_SYNC_PART atomic_compat semantic_owner_ids_gen sync_core)
-    set(XR_SYNC_INPUT ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xr_${XR_SYNC_PART}.h)
-    set(XR_SYNC_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/generated/xr_${XR_SYNC_PART}_embedded.inc.c)
-    add_custom_command(
-        OUTPUT ${XR_SYNC_OUTPUT}
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-        COMMAND ${CMAKE_COMMAND} -DINPUT=${XR_SYNC_INPUT} -DOUTPUT=${XR_SYNC_OUTPUT}
-                -DSYMBOL=xr_${XR_SYNC_PART}_source
-                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
-        DEPENDS ${XR_SYNC_INPUT} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
-        COMMENT "Embedding the shared ${XR_SYNC_PART} kernel for generated C"
-        VERBATIM)
-    list(APPEND XRAY_SYNC_KERNEL_EMBEDS ${XR_SYNC_OUTPUT})
-endforeach()
-foreach(XR_CHANNEL_PART buffer storage)
-    if(XR_CHANNEL_PART STREQUAL "buffer")
-        set(XR_CHANNEL_INPUT ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xr_channel_buffer.h)
-    else()
-        set(XR_CHANNEL_INPUT ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/core/xr_channel_${XR_CHANNEL_PART}.h)
-    endif()
-    set(XR_CHANNEL_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/generated/xr_channel_${XR_CHANNEL_PART}_embedded.inc.c)
-    add_custom_command(OUTPUT ${XR_CHANNEL_OUTPUT}
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-        COMMAND ${CMAKE_COMMAND} -DINPUT=${XR_CHANNEL_INPUT} -DOUTPUT=${XR_CHANNEL_OUTPUT}
-                -DSYMBOL=xr_channel_${XR_CHANNEL_PART}_source
-                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
-        DEPENDS ${XR_CHANNEL_INPUT} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
-        COMMENT "Embedding the shared channel ${XR_CHANNEL_PART} for generated C"
-        VERBATIM)
-    list(APPEND XRAY_SYNC_KERNEL_EMBEDS ${XR_CHANNEL_OUTPUT})
-endforeach()
-add_custom_target(gen-sync-kernel-embed DEPENDS ${XRAY_SYNC_KERNEL_EMBEDS})
-set(XRAY_TEXT_SUPPORT_EMBEDS)
-foreach(XR_TEXT_SUPPORT_INPUT IN ITEMS shared/xr_byte_compare_core.h shared/xr_buffer_capacity_core.h)
-    get_filename_component(XR_TEXT_SUPPORT_NAME "${XR_TEXT_SUPPORT_INPUT}" NAME_WE)
-    set(XR_TEXT_SUPPORT_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/${XR_TEXT_SUPPORT_NAME}_embedded.inc.c")
-    add_custom_command(OUTPUT "${XR_TEXT_SUPPORT_OUTPUT}"
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-        COMMAND ${CMAKE_COMMAND} -DINPUT=${CMAKE_CURRENT_SOURCE_DIR}/src/${XR_TEXT_SUPPORT_INPUT}
-                -DOUTPUT=${XR_TEXT_SUPPORT_OUTPUT} -DSYMBOL=${XR_TEXT_SUPPORT_NAME}_source
-                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
-        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/${XR_TEXT_SUPPORT_INPUT}
-                ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
-        VERBATIM)
-    list(APPEND XRAY_TEXT_SUPPORT_EMBEDS "${XR_TEXT_SUPPORT_OUTPUT}")
-endforeach()
-set(XRAY_PROVIDER_VALUE_EMBEDS)
-foreach(XR_PROVIDER_INPUT IN ITEMS base/xstable_id.h execution/xr_provider_value.h)
-    get_filename_component(XR_PROVIDER_NAME "${XR_PROVIDER_INPUT}" NAME_WE)
-    set(XR_PROVIDER_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/${XR_PROVIDER_NAME}_embedded.inc.c")
-    add_custom_command(OUTPUT "${XR_PROVIDER_OUTPUT}"
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-        COMMAND ${CMAKE_COMMAND} -DINPUT=${CMAKE_CURRENT_SOURCE_DIR}/src/${XR_PROVIDER_INPUT}
-                -DOUTPUT=${XR_PROVIDER_OUTPUT} -DSYMBOL=${XR_PROVIDER_NAME}_source
-                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
-        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/${XR_PROVIDER_INPUT}
-                ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
-        VERBATIM)
-    list(APPEND XRAY_PROVIDER_VALUE_EMBEDS "${XR_PROVIDER_OUTPUT}")
-endforeach()
-set_source_files_properties(src/aot/program/xr_backend_ir_emit_c.c PROPERTIES
-    OBJECT_DEPENDS "${XRAY_TEXT_KERNEL_EMBED};${XRAY_FLOAT_FORMAT_EMBED};${XRAY_INTEGER_KERNEL_EMBED};${XRAY_INTEGER_DIVISION_KERNEL_EMBED};${XRAY_INTEGER_BITWISE_KERNEL_EMBED};${XRAY_ARRAY_ALLOCATION_KERNEL_EMBED};${XRAY_ARRAY_APPEND_KERNEL_EMBED};${XRAY_TEXT_SUPPORT_EMBEDS};${XRAY_VALUE_FORMAT_EMBED};${XRAY_SYNC_KERNEL_EMBEDS};${XRAY_PROVIDER_VALUE_EMBEDS}")
-
-# The canonical-program AOT compiler is a private build product. This narrow
-# target keeps its warning contract independent from the legacy Xi/TargetPlan
-# backend while unresolved verifier/runtime services remain link-time inputs.
-set(XRAY_PROGRAM_AOT_COMPILER_SOURCES
-    src/runtime/abi/xr_stdlib_provider_contract.c
-    src/aot/program/xr_backend_ir.c
-    src/aot/program/xr_backend_ir_verify.c
-    src/aot/program/xr_backend_ir_emit_c.c
-    src/aot/program/xr_native_artifact.c
-    src/lir/xi_cgen_verify_output.c
-)
-add_library(xray_program_aot_compiler STATIC
-    ${XRAY_PROGRAM_AOT_COMPILER_SOURCES})
-target_link_libraries(xray_program_aot_compiler PUBLIC xray_compile_resources)
-add_dependencies(xray_program_aot_compiler
-    gen-stdlib-metadata
-    gen-core-spec gen-xr-program-schema gen-text-kernel-embed gen-float-format-embed gen-integer-kernel-embed)
-target_include_directories(xray_program_aot_compiler PRIVATE
-    ${XRAY_COMMON_INCLUDES}
-    ${CMAKE_CURRENT_BINARY_DIR}/generated
-)
-if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
-        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
-            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
-    target_compile_options(xray_program_aot_compiler PRIVATE /W4 /WX)
-else()
-    target_compile_options(xray_program_aot_compiler PRIVATE -Wall -Wextra -Werror)
-endif()
-if(WIN32)
-    target_link_libraries(xray_program_vm_runtime PUBLIC synchronization)
-else()
-    target_link_libraries(xray_program_vm_runtime PUBLIC pthread)
-endif()
-
-# Runtime loading owns a deliberately narrow verifier closure. Encoders and
-# compiler-side builders stay in xray_core. The installed execution archive
-# contains only exact artifact verification, generation lifecycle, and typed
-# dispatch. Source, bytecode, and legacy VM entry points are not linkable from
-# this product boundary.
-set(XRAY_VM_TARGET_PLAN_LOAD_SOURCES
-    # Semantic assertion verification consumes the same machine-readable core
-    # intrinsic registry as analyzer lowering.  The runtime archive links this
-    # owner directly; it does not reconstruct assertion names or plan rules.
-    src/shared/xr_core_intrinsic_registry.c
-    src/module/xmodule_identity_view.c
-    src/plan/format/xr_artifact_kind.c
-    src/plan/format/xr_xsm_decode.c
-    src/plan/format/xr_xtp_artifact.c
-    src/plan/format/xr_xtp_decode.c
-    src/plan/format/xr_xtp_instruction_stream.c
-    src/plan/format/xr_xtp_rows.c
-    src/plan/semantic/xr_i64_overflow_predicate_semantics.c
-    src/plan/semantic/xr_semantic_graph.c
-    src/plan/semantic/xr_semantic_ids.c
-    src/plan/semantic/xr_semantic_ops.c
-    src/plan/semantic/xr_semantic_plan.c
-    src/plan/semantic/xr_semantic_verify.c
-    src/plan/ownership/xr_ownership_certificate.c
-    src/plan/ownership/xr_ownership_check.c
-    src/plan/ownership/xr_ownership_replay.c
-    src/plan/target/xr_i64_overflow_target_instruction.c
-    src/plan/target/xr_i64_overflow_target_instruction_verify.c
-    src/plan/target/xr_target_plan.c
-    src/plan/target/xr_target_entry_abi.c
-    src/plan/target/xr_target_instruction_verify.c
-    src/plan/target/xr_target_profile.c
-    src/plan/target/xr_target_profile_verify.c
-    src/plan/target/xr_target_program_reachability.c
-    src/plan/target/xr_target_verify.c
-    src/plan/target/xr_xtp_materialize.c
-)
-
-set(XRAY_VM_RUNTIME_SOURCES
-    ${BASE_SRC}
-    ${OS_SRC}
-    ${RUNTIME_ABI_SRC}
-    ${XRAY_VM_TARGET_PLAN_LOAD_SOURCES}
-    src/runtime/xr_dynamic_entry_runtime.c
-    src/runtime/xr_entry_cell.c
-    src/runtime/xr_module_generation.c
-    src/runtime/xr_module_generation_verify.c
-    src/runtime/xr_runtime_api.c
-    src/runtime/xr_runtime_artifact_authority.c
-    src/runtime/xr_runtime_artifact_verify.c
-    src/runtime/xr_target_plan_load.c
-    ${VM_DEBUG_SRC}
-    src/vm/xr_typed_dispatch.c
-    src/vm/xr_typed_frame.c
-    src/vm/xr_typed_lifecycle.c
-    src/vm/xr_vm_decoded_cache.c
-    src/vm/xr_vm_entry_adapter.c
-)
-list(REMOVE_DUPLICATES XRAY_VM_RUNTIME_SOURCES)
-
-add_library(xray_vm STATIC ${XRAY_VM_RUNTIME_SOURCES})
-add_dependencies(xray_vm gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata)
-
-# The ownership audit heap is diagnostic instrumentation, not release runtime
-# behavior. Keep it out of core, coroutine, and VM archives; developers and
-# audit runners opt in by naming this excluded target or its focused test.
-add_library(xray_ownership_audit STATIC EXCLUDE_FROM_ALL ${RUNTIME_OWNERSHIP_AUDIT_SRC})
-target_include_directories(xray_ownership_audit PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
-
-if(CMAKE_BUILD_TYPE STREQUAL "Release" AND MSVC)
-    set_source_files_properties(
-        src/vm/xvm.c
-        PROPERTIES COMPILE_OPTIONS "/Od;/Ob0"
-    )
-endif()
+    DEPENDS ${XRAY_STDLIB_EMBEDDED_SOURCE_INC})
 
 # Expose development-tree paths for cmd_build's C compiler. Multi-config
 # generators place static archives under the active configuration directory.
@@ -2151,188 +1048,6 @@ add_compile_definitions(
     XTC_STATIC_LIBRARY_PREFIX="${CMAKE_STATIC_LIBRARY_PREFIX}"
     XTC_STATIC_LIBRARY_SUFFIX="${CMAKE_STATIC_LIBRARY_SUFFIX}"
 )
-
-
-# Core library include paths (detailed configuration).
-# The legacy object aggregates share ordinary generated metadata. The native
-# entry registry has no separate bytecode include directory.
-target_include_directories(xray_core_objs PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
-
-target_include_directories(xray_core_objs PRIVATE
-    ${XRAY_COMMON_INCLUDES}
-    ${CMAKE_CURRENT_BINARY_DIR}/generated
-)
-
-target_include_directories(xray_stdlib_bootstrap_core PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
-
-target_include_directories(xray_stdlib_bootstrap_core PRIVATE
-    ${XRAY_COMMON_INCLUDES}
-    ${CMAKE_CURRENT_BINARY_DIR}/generated
-)
-
-target_include_directories(xray_core PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
-
-target_include_directories(xray_core PRIVATE
-    ${XRAY_COMMON_INCLUDES}
-    ${CMAKE_CURRENT_BINARY_DIR}/generated
-)
-
-target_include_directories(xray_rt_coro PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
-
-target_include_directories(xray_rt_coro PRIVATE
-    ${XRAY_COMMON_INCLUDES}
-)
-
-target_include_directories(xray_vm PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
-
-target_include_directories(xray_vm PRIVATE
-    ${XRAY_COMMON_INCLUDES}
-    ${CMAKE_CURRENT_BINARY_DIR}/generated
-)
-
-# Link libraries
-if(WIN32)
-    # Math library is part of the MSVC runtime; ws2_32 for sockets,
-    # synchronization for WaitOnAddress/WakeByAddressSingle
-    target_link_libraries(xray_core_objs PUBLIC ws2_32 synchronization)
-    target_link_libraries(xray_stdlib_bootstrap_core PUBLIC ws2_32 synchronization)
-    target_link_libraries(xray_core PUBLIC ws2_32 synchronization)
-    target_link_libraries(xray_rt_coro PUBLIC ws2_32 synchronization)
-    target_link_libraries(xray_vm PUBLIC synchronization)
-else()
-    target_link_libraries(xray_core_objs PUBLIC m pthread)
-    target_link_libraries(xray_stdlib_bootstrap_core PUBLIC m pthread)
-    target_link_libraries(xray_core PUBLIC m pthread)
-    target_link_libraries(xray_rt_coro PUBLIC m pthread)
-    target_link_libraries(xray_vm PUBLIC pthread)
-endif()
-
-# libffi: FFI / C interop. The bytecode VM marshals extern calls through
-# libffi; the AOT backend emits direct C calls and does not need it. Optional —
-# when absent, extern calls raise a clean runtime error in the VM (AOT still
-# works). dlopen/dlsym (POSIX) is provided by libdl / libc.
-find_package(PkgConfig QUIET)
-if(PkgConfig_FOUND)
-    pkg_check_modules(LIBFFI libffi)
-endif()
-if(NOT LIBFFI_FOUND)
-    find_library(LIBFFI_LIBRARIES ffi)
-    find_path(LIBFFI_INCLUDE_DIRS ffi.h)
-    if(LIBFFI_LIBRARIES AND LIBFFI_INCLUDE_DIRS)
-        set(LIBFFI_FOUND TRUE)
-    endif()
-endif()
-if(LIBFFI_FOUND)
-    message(STATUS "libffi: found (VM FFI enabled)")
-    target_include_directories(xray_core_objs PRIVATE ${LIBFFI_INCLUDE_DIRS})
-    target_include_directories(xray_stdlib_bootstrap_core PRIVATE ${LIBFFI_INCLUDE_DIRS})
-    target_include_directories(xray_core PRIVATE ${LIBFFI_INCLUDE_DIRS})
-    target_link_libraries(xray_core_objs PUBLIC ${LIBFFI_LIBRARIES})
-    target_link_libraries(xray_stdlib_bootstrap_core PUBLIC ${LIBFFI_LIBRARIES})
-    target_link_libraries(xray_core PUBLIC ${LIBFFI_LIBRARIES})
-    # PUBLIC: the CLI target builds AOT link commands by hand (invoke_cc) and
-    # must know xray_core embeds the libffi-based extern invoker, so a runtime
-    # program links -lffi too.
-    target_compile_definitions(xray_core_objs PUBLIC XRAY_HAVE_LIBFFI=1)
-    target_compile_definitions(xray_stdlib_bootstrap_core PUBLIC XRAY_HAVE_LIBFFI=1)
-    target_compile_definitions(xray_core PUBLIC XRAY_HAVE_LIBFFI=1)
-else()
-    message(STATUS "libffi: not found (extern calls limited to the AOT backend)")
-endif()
-if(NOT WIN32)
-    target_link_libraries(xray_core_objs PUBLIC ${CMAKE_DL_LIBS})
-    target_link_libraries(xray_stdlib_bootstrap_core PUBLIC ${CMAKE_DL_LIBS})
-    target_link_libraries(xray_core PUBLIC ${CMAKE_DL_LIBS})
-endif()
-
-# OpenSSL support
-# - WebSocket stdlib needs libcrypto (SHA1 for handshake) even without TLS
-# - Full TLS needs both libssl and libcrypto
-set(XRAY_RUNTIME_TLS_ENABLED OFF)
-# The installed AOT SDK carries verified TLS archives beside xray_rt_coro;
-# selecting shared provider libraries here would make native output depend on
-# the build machine's prefix or loader configuration.
-set(OPENSSL_USE_STATIC_LIBS TRUE)
-if(APPLE)
-    # Respect a release/toolchain-provided root first, then cover both native
-    # Homebrew layouts for developer builds. Do not force the arm64 prefix on
-    # Intel builders.
-    if(NOT OPENSSL_ROOT_DIR)
-        foreach(_xray_openssl_root "/opt/homebrew/opt/openssl@3" "/usr/local/opt/openssl@3")
-            if(EXISTS "${_xray_openssl_root}")
-                set(OPENSSL_ROOT_DIR "${_xray_openssl_root}")
-                break()
-            endif()
-        endforeach()
-    endif()
-endif()
-find_package(OpenSSL QUIET)
-# FindOpenSSL reports "optimized;<release>;debug;<debug>" on installs that ship
-# both variants. The runtime SDK bundles one archive, and a list would split the
-# quoted compile definition into several command-line arguments.
-function(xray_release_library input output)
-    set(selected "${input}")
-    list(FIND input optimized position)
-    if(NOT position EQUAL -1)
-        math(EXPR position "${position} + 1")
-        list(GET input ${position} selected)
-    endif()
-    list(LENGTH selected count)
-    if(NOT count EQUAL 1)
-        message(FATAL_ERROR "OpenSSL must resolve to one release archive: ${input}")
-    endif()
-    string(REPLACE "\\" "/" selected "${selected}")
-    set(${output} "${selected}" PARENT_SCOPE)
-endfunction()
-if(OpenSSL_FOUND)
-    message(STATUS "OpenSSL version: ${OPENSSL_VERSION}")
-    target_include_directories(xray_core_objs PRIVATE ${OPENSSL_INCLUDE_DIR})
-    target_include_directories(xray_stdlib_bootstrap_core PRIVATE ${OPENSSL_INCLUDE_DIR})
-    target_include_directories(xray_core PRIVATE ${OPENSSL_INCLUDE_DIR})
-    # Always link libcrypto (needed by ws module for SHA1)
-    target_link_libraries(xray_core_objs PUBLIC OpenSSL::Crypto)
-    target_link_libraries(xray_stdlib_bootstrap_core PUBLIC OpenSSL::Crypto)
-    target_link_libraries(xray_core PUBLIC OpenSSL::Crypto)
-    if(ENABLE_TLS)
-        set(XRAY_RUNTIME_TLS_ENABLED ON)
-        set(XRAY_RUNTIME_TLS_SSL_FILE
-            "${CMAKE_STATIC_LIBRARY_PREFIX}xray_tls_ssl${CMAKE_STATIC_LIBRARY_SUFFIX}")
-        set(XRAY_RUNTIME_TLS_CRYPTO_FILE
-            "${CMAKE_STATIC_LIBRARY_PREFIX}xray_tls_crypto${CMAKE_STATIC_LIBRARY_SUFFIX}")
-        xray_release_library("${OPENSSL_SSL_LIBRARY}" XRAY_RUNTIME_TLS_SSL_SOURCE)
-        xray_release_library("${OPENSSL_CRYPTO_LIBRARY}" XRAY_RUNTIME_TLS_CRYPTO_SOURCE)
-        add_compile_definitions(
-            XRT_TLS_SSL_LIBRARY="${XRAY_RUNTIME_TLS_SSL_SOURCE}"
-            XRT_TLS_CRYPTO_LIBRARY="${XRAY_RUNTIME_TLS_CRYPTO_SOURCE}"
-        )
-        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-            string(APPEND XRAY_RUNTIME_SYSTEM_LIBRARIES_JSON ",\"dl\"")
-        endif()
-        target_link_libraries(xray_core_objs PUBLIC OpenSSL::SSL)
-        target_link_libraries(xray_stdlib_bootstrap_core PUBLIC OpenSSL::SSL)
-        target_link_libraries(xray_core PUBLIC OpenSSL::SSL)
-        target_include_directories(xray_rt_coro PRIVATE ${OPENSSL_INCLUDE_DIR})
-        target_link_libraries(xray_rt_coro PUBLIC OpenSSL::SSL OpenSSL::Crypto)
-        target_compile_definitions(xray_core_objs PUBLIC XR_ENABLE_TLS=1)
-        target_compile_definitions(xray_stdlib_bootstrap_core PUBLIC XR_ENABLE_TLS=1)
-        target_compile_definitions(xray_core PUBLIC XR_ENABLE_TLS=1)
-        target_compile_definitions(xray_rt_coro PRIVATE XR_ENABLE_TLS=1)
-    endif()
-else()
-    message(STATUS "OpenSSL: not found (ws/crypto modules may be limited)")
-endif()
-
-add_dependencies(xray_core gen-stdlib-embedded-sources)
 
 # ============================================================================
 # Build Target - Main Executable (optional LSP and DAP)
@@ -2652,24 +1367,6 @@ if(BUILD_TESTS)
             TIMEOUT 30
         )
 
-        add_test(
-            NAME aot_private_leaf_public_native_msvc
-            COMMAND ${XRAY_PYTHON}
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_private_leaf_public_native.py
-                    --root ${CMAKE_CURRENT_SOURCE_DIR}
-                    --build-dir ${CMAKE_BINARY_DIR}
-                    --xray $<TARGET_FILE:xray>
-                    --source ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/cases/semantics/stdlib/os_private_leaf_generic_module.xr
-                    --compiler ${CMAKE_C_COMPILER}
-                    --core $<TARGET_FILE:xray_core>
-            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        )
-        set_tests_properties(aot_private_leaf_public_native_msvc PROPERTIES
-            LABELS "aot;cgen;native;msvc;target-machine;stdlib"
-            PROCESSORS 1
-            RUN_SERIAL TRUE
-            TIMEOUT 120
-        )
     endif()
 
     # No Bash is required to run the test suite: every registered gate is a
@@ -2712,15 +1409,6 @@ if(BUILD_TESTS)
 
     # All unit tests are managed by tests/unit/CMakeLists.txt
     add_subdirectory(tests/unit)
-    add_dependencies(test_xi_lowering_gen gen-xi-lowering)
-
-    add_executable(xray_package_payload_fixture
-        tests/benchmarks/compiler/global_evidence_cache/package_payload_fixture.c
-    )
-    target_include_directories(xray_package_payload_fixture PRIVATE
-        ${XRAY_COMMON_INCLUDES}
-    )
-    target_link_libraries(xray_package_payload_fixture PRIVATE xray_core)
 
     if(LIBFFI_FOUND)
         add_test(
@@ -2932,31 +1620,6 @@ if(BUILD_TESTS)
     )
     set_tests_properties(stdlib_metadata_sync PROPERTIES
         LABELS "stdlib;metadata;generated"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    add_test(
-        NAME stdlib_analyzer_builtins_sync
-        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_stdlib_types.py
-                --check
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(stdlib_analyzer_builtins_sync PROPERTIES
-        LABELS "stdlib;metadata;generated;analyzer"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    add_test(
-        NAME stdlib_native_type_defs_sync
-        COMMAND ${XRAY_PYTHON} ${NATIVE_TYPE_EMBEDDER}
-                ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/types
-                --check ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/analyzer/xnative_type_defs.inc.c
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(stdlib_native_type_defs_sync PROPERTIES
-        LABELS "stdlib;metadata;generated;analyzer"
         PROCESSORS 1
         TIMEOUT 30
     )
@@ -3437,23 +2100,6 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
-    if(XR_BUILD_LSP AND NOT WIN32)
-        add_test(
-            NAME byte_u8_canonical_audit
-            COMMAND ${CMAKE_COMMAND} -E env
-                    XRAY_BIN=$<TARGET_FILE:xray>
-                    XRAY_TEST_LSP_DOCUMENT=$<TARGET_FILE:test_lsp_document>
-                    XRAY_TEST_XGLOBAL_SUMMARY=$<TARGET_FILE:test_xglobal_summary>
-                    ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_byte_u8_canonical_audit.py
-            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        )
-        set_tests_properties(byte_u8_canonical_audit PROPERTIES
-            LABELS "frontend;types;lsp;analysis"
-            PROCESSORS 1
-            TIMEOUT 120
-        )
-    endif()
-
     if(NOT WIN32)
         add_test(
             NAME byte_receiver_effect_audit
@@ -3931,21 +2577,6 @@ if(BUILD_TESTS)
         endforeach()
     endif()
 
-    add_test(
-        NAME global_evidence_cache_package_benchmark
-        COMMAND ${CMAKE_COMMAND} -E env
-                XRAY_GLOBAL_EVIDENCE_BENCH_CASES=package
-                XRAY_PACKAGE_PAYLOAD_FIXTURE=$<TARGET_FILE:xray_package_payload_fixture>
-                ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/benchmarks/compiler/global_evidence_cache/run_benchmark.py
-                $<TARGET_FILE:xray>
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(global_evidence_cache_package_benchmark PROPERTIES
-        LABELS "aot;cache;benchmark"
-        PROCESSORS 2
-        TIMEOUT 120
-    )
-
     # The benchmark always enforces build/run/output-parity correctness; --gate
     # additionally fails on the perf ratio and strict codegen-shape audit.
     # Sanitizer instrumentation makes the AOT binary 5-9x slower (observed ratio
@@ -4218,23 +2849,8 @@ if(BUILD_TESTS)
         TIMEOUT 120
     )
 
-    add_test(
-        NAME installed_runtime_symbol_inventory
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/install/run_installed_runtime_symbol_tests.py
-                --project-root ${CMAKE_CURRENT_SOURCE_DIR}
-                --build-dir ${CMAKE_BINARY_DIR}
-                --binary $<TARGET_FILE:xray>
-                --cc ${CMAKE_C_COMPILER}
-                --program-fixture-writer
-                $<TARGET_FILE:test_xa_program_semantic_closure>
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(installed_runtime_symbol_inventory PROPERTIES
-        LABELS "install;runtime;symbols;target-machine"
-        PROCESSORS 1
-        TIMEOUT 120
-    )
+
+
 
     # FFI runtime/link diagnostics: missing libraries and symbols must fail
     # with stable, user-facing messages instead of cascading or opaque errors.
@@ -4454,23 +3070,6 @@ if(BUILD_TESTS)
     # cache is the only producer of target plan artifacts today and it frames
     # its entries, so the inspection commands need an unframed pair written
     # straight from the builders.
-    add_executable(plan_fixture_writer
-        ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/plan_fixture_writer.c)
-    target_include_directories(plan_fixture_writer PRIVATE ${XRAY_COMMON_INCLUDES})
-    target_link_libraries(plan_fixture_writer PRIVATE xray_core)
-
-    add_test(
-        NAME plan_command_cli
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_plan_command_tests.py
-                --binary $<TARGET_FILE:xray>
-                --fixture-writer $<TARGET_FILE:plan_fixture_writer>
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(plan_command_cli PROPERTIES
-        LABELS "cli;artifact;target-machine"
-        TIMEOUT 120
-    )
 
     add_test(
         NAME canonical_program_test_cli
@@ -5181,32 +3780,6 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
-    add_test(
-        NAME xr_program_schema
-        COMMAND ${XRAY_PYTHON} ${PROGRAMGEN}
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-                --check
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(xr_program_schema PROPERTIES
-        LABELS "meta;contracts;canonical-program;program-format;task-296"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    add_test(
-        NAME xr_program_schema_self_test
-        COMMAND ${XRAY_PYTHON} ${PROGRAMGEN}
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(xr_program_schema_self_test PROPERTIES
-        LABELS "meta;contracts;canonical-program;program-format;mutation;task-296"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
     if(CMAKE_NM)
         set(XRAY_RUNTIME_SYMBOL_READER "${CMAKE_NM}")
     else()
@@ -5306,34 +3879,8 @@ if(BUILD_TESTS)
         TIMEOUT 300
     )
 
-    add_test(
-        NAME runtime_archive_cache_symbol_lint
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_runtime_archive_cache_symbols.py
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-                --archive $<TARGET_FILE:xray_vm>
-                --archive $<TARGET_FILE:xray_rt_coro>
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(runtime_archive_cache_symbol_lint PROPERTIES
-        LABELS "meta;runtime;cache;target-machine"
-        PROCESSORS 1
-        SKIP_RETURN_CODE 77
-        TIMEOUT 60
-    )
 
-    add_test(
-        NAME runtime_archive_cache_symbol_lint_self_test
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_runtime_archive_cache_symbols.py
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(runtime_archive_cache_symbol_lint_self_test PROPERTIES
-        LABELS "meta;runtime;cache;target-machine"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
+
 
     add_test(
         NAME runtime_header_dependency_lint_self_test
