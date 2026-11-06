@@ -1,76 +1,40 @@
-/* The unique profile derivation uses live Source/SDK/process owners.
- * No command is executed here. */
-static void profile_domain_matrix(const XrXirInvocationRequest *request) {
-    XrCompileResources *resources = xr_compile_native_projection_context(request->projection)->resources;
-    size_t live = runtime_live, bytes = runtime_bytes;
-    XrXirInvocation derived = {0}; derived.context.resources = resources;
-    derived.io = xr_compile_io_policy(resources); derived.limits.dependencies.path_bytes = 32768;
-    for (unsigned i = 0; i < 3; ++i) CHECK(xtc_process_view(i < 2 ? request->compile[i].process : request->link,
-        &derived.commands[i]) == XTC_PROCESS_OK);
-    CHECK(invocation_profile_derive(&derived, request));
-    const char *leaves[] = {"kernel32.dll", "drivers/etc/hosts"};
-    for (unsigned i = 0; i < 3; ++i) {
-        char *path = NULL; XtcXirFileLease *lease = NULL;
-        if (i < 2) CHECK(xr_path_join_owned(&derived.io, derived.profile.paths[9], leaves[i], &path) == XR_OS_IO_OK);
-        CHECK(xtc_xir_file_lease_open(resources, i < 2 ? path : derived.commands[0].executable, &lease) == XR_XIR_TARGET_OK);
-        const char *canonical = xtc_xir_file_lease_facts(lease)->path;
-        /* Each independent decision borrows the one live derived root set. */
-        XrXirInvocation image = derived, header = derived;
-        CHECK(invocation_profile_contains(&image, canonical, true) == (i != 1));
-        if (i == 1) CHECK(image.status == XR_XIR_INVOCATION_UNSUPPORTED);
-        CHECK(!invocation_profile_contains(&header, canonical, false) && header.status == XR_XIR_INVOCATION_UNSUPPORTED);
-        xtc_xir_file_lease_free(lease); xr_compile_resources_free(path);
-    }
-    invocation_profile_free(&derived.profile);
-    CHECK(runtime_live == live && runtime_bytes == bytes);
-    puts("real leased provider/system files: direct images allowed, nested system image and out-of-root headers rejected PASS");
+/* Finite held-memory admission uses charged absolute peaks, not turnover. */
+static bool owner_record_transaction(const char *path,const XrCompileResourceLimits *limits,XrCompileResourceStats *stats) {
+    XrCompileResources *resources=sdk_ledger(limits);XrXirInvocation owner={0};owner.context.resources=resources;owner.io=xr_compile_io_policy(resources);owner.limits.files=16;
+    XtcXirFileLease *lease=NULL;bool okay=invocation_target(&owner,xtc_xir_file_lease_open(resources,path,&lease));
+    if(okay)okay=invocation_file_add(&owner,XR_XIR_INVOCATION_GENERATED,XR_XIR_INVOCATION_SOURCE,&lease);
+    CHECK(xr_compile_resources_stats(resources,stats)==XR_COMPILE_RESOURCE_OK);
+    if(okay)CHECK(owner.facts.file_count==1 && !lease);else CHECK(owner.status==XR_XIR_INVOCATION_MEMORY_LIMIT && !owner.facts.file_count);
+    for(uint32_t i=0;i<owner.facts.file_count;++i)xtc_xir_file_lease_free(owner.files[i].lease);
+    xtc_xir_file_lease_free(lease);xr_compile_resources_free(owner.files);xr_compile_resources_release(resources);CHECK(!runtime_live && !runtime_bytes);return okay;
 }
-/* Exercise the one production derivation without executing a child. */
-static XrXirInvocationStatus profile_derive_status(const XrXirInvocationRequest *request) {
-    XrXirInvocation derived = {0};
-    derived.context = *xr_compile_native_projection_context(request->projection);
-    derived.io = xr_compile_io_policy(derived.context.resources); derived.limits = request->limits;
-    for (unsigned i = 0; i < 3; ++i) CHECK(xtc_process_view(i < 2 ? request->compile[i].process : request->link,
-        &derived.commands[i]) == XTC_PROCESS_OK);
-    bool okay = invocation_profile_derive(&derived, request);
-    CHECK(okay == (derived.status == XR_XIR_INVOCATION_OK));
-    invocation_profile_free(&derived.profile); return derived.status;
+static void owner_record_boundaries(const char *path) {
+    XrCompileResourceStats baseline;CHECK(owner_record_transaction(path,&sdk_unlimited,&baseline));CHECK(baseline.peak_bytes>sizeof(XrCompileResources));
+    for(unsigned minus=0;minus<2;++minus) {
+        XrCompileResourceLimits limits={.memory_mode=XR_COMPILE_MEMORY_FINITE,.memory_limit=baseline.peak_bytes-minus,.profile_allocations=true};XrCompileResourceStats actual;
+        CHECK(owner_record_transaction(path,&limits,&actual)==!minus);CHECK(actual.peak_bytes<=limits.memory_limit);
+    }
+    XrCompileResourceStats restored;CHECK(owner_record_transaction(path,&sdk_unlimited,&restored));
+    printf("real file record finite charged peak=%llu exact/minus1 typed MEMORY_LIMIT, ordinary recovery, physical zero PASS\n",(unsigned long long)baseline.peak_bytes);
 }
-static void profile_derivation_matrix(const XrXirInvocationRequest *request) {
-    XrCompileResources *resources = xr_compile_native_projection_context(request->projection)->resources;
-    XrCompileResourceStats baseline, after;
-    CHECK(xr_compile_resources_stats(resources, &baseline) == XR_COMPILE_RESOURCE_OK);
-    size_t live = runtime_live, bytes = runtime_bytes, first = runtime_attempts;
-    DWORD handles = 0; CHECK(GetProcessHandleCount(GetCurrentProcess(), &handles));
-    profile_os_calls = 0;
-    CHECK(profile_derive_status(request) == XR_XIR_INVOCATION_OK);
-    size_t allocations = runtime_attempts - first, calls = profile_os_calls;
-    for (size_t i = 0; i < allocations; ++i) {
-        first = runtime_attempts; runtime_fail_at = first + i;
-        CHECK(profile_derive_status(request) == XR_XIR_INVOCATION_OUT_OF_MEMORY);
-        CHECK(runtime_attempts == first + i + 1); runtime_fail_at = SIZE_MAX;
-        CHECK(runtime_live == live && runtime_bytes == bytes);
-        CHECK(xr_compile_resources_stats(resources, &after) == XR_COMPILE_RESOURCE_OK && after.live_bytes == baseline.live_bytes);
+/* These are explicit executable leases and bounded PE facts, not loaded images. */
+static bool owner_provider_transaction(const char *compiler,const char *linker,const XrCompileResourceLimits *limits,XrCompileResourceStats *stats) {
+    XrCompileResources *resources=sdk_ledger(limits);XtcXirFileLease *leases[2]={NULL,NULL};const char *paths[2]={compiler,linker};bool okay=true;
+    for(unsigned i=0;i<2 && okay;++i) {
+        void *bytes=NULL;size_t length=0;XrXirTargetStatus status=xtc_xir_file_lease_open(resources,paths[i],&leases[i]);
+        if(status==XR_XIR_TARGET_OK)status=xtc_xir_file_lease_read(leases[i],64u*1024u*1024u,&bytes,&length);
+        if(status!=XR_XIR_TARGET_OK) {CHECK(status==XR_XIR_TARGET_MEMORY_LIMIT);okay=false;}
+        else {XtcXirPeVersion version={0};CHECK(xtc_xir_pe_version_parse(bytes,length,&version)==XTC_XIR_PE_VERSION_OK && version.file_text[0]);}
+        xr_compile_resources_free(bytes);
     }
-    const DWORD errors[] = {ERROR_ACCESS_DENIED, ERROR_NOT_ENOUGH_MEMORY, ERROR_OUTOFMEMORY};
-    for (unsigned error = 0; error < 3; ++error) for (size_t point = 0; point < calls; ++point) {
-        profile_os_calls = 0; profile_os_failure = point; profile_os_error = errors[error];
-        XrXirInvocationStatus expected = error ? XR_XIR_INVOCATION_OUT_OF_MEMORY : XR_XIR_INVOCATION_IO;
-        CHECK(profile_derive_status(request) == expected);
-        CHECK(profile_os_calls == point + 1 && runtime_live == live && runtime_bytes == bytes);
-    }
-    profile_os_failure = SIZE_MAX; profile_packaged = true;
-    CHECK(profile_derive_status(request) == XR_XIR_INVOCATION_UNSUPPORTED);
-    profile_packaged = false;
-    CHECK(SetDllDirectoryW(L"C:\\Windows"));
-    CHECK(profile_derive_status(request) == XR_XIR_INVOCATION_UNSUPPORTED);
-    CHECK(SetDllDirectoryW(L""));
-    CHECK(profile_derive_status(request) == XR_XIR_INVOCATION_OK);
-    CHECK(SetDllDirectoryW(NULL));
-    profile_domain_matrix(request);
-    XrXirInvocationRequest overlap = *request; overlap.output_directory = request->msvc.vc_include;
-    CHECK(profile_derive_status(&overlap) == XR_XIR_INVOCATION_UNSUPPORTED);
-    DWORD final_handles = 0; CHECK(GetProcessHandleCount(GetCurrentProcess(), &final_handles));
-    CHECK(final_handles == handles && runtime_live == live && runtime_bytes == bytes);
-    printf("profile derivation %zu actual OOM, %zu host calls x IO/two OOM, package/DLL overrides, exact physical baseline PASS\n", allocations, calls);
+    CHECK(xr_compile_resources_stats(resources,stats)==XR_COMPILE_RESOURCE_OK);xr_compile_resources_release(resources);
+    for(unsigned i=0;i<2;++i)if(leases[i]) {CHECK(xtc_xir_file_lease_facts(leases[i])->path[0]);xtc_xir_file_lease_free(leases[i]);}
+    CHECK(!runtime_live && !runtime_bytes);return okay;
+}
+static int owner_provider_suite(const char *compiler,const char *linker) {
+    DWORD before=0,after=0;CHECK(GetProcessHandleCount(GetCurrentProcess(),&before));XrCompileResourceStats baseline;
+    CHECK(owner_provider_transaction(compiler,linker,&sdk_unlimited,&baseline));CHECK(baseline.peak_bytes>sizeof(XrCompileResources));
+    for(unsigned minus=0;minus<2;++minus) {XrCompileResourceLimits limits={.memory_mode=XR_COMPILE_MEMORY_FINITE,.memory_limit=baseline.peak_bytes-minus,.profile_allocations=true};XrCompileResourceStats actual;CHECK(owner_provider_transaction(compiler,linker,&limits,&actual)==!minus);CHECK(actual.peak_bytes<=limits.memory_limit);}
+    XrCompileResourceStats restored;CHECK(owner_provider_transaction(compiler,linker,&sdk_unlimited,&restored));
+    CHECK(GetProcessHandleCount(GetCurrentProcess(),&after) && after==before);puts("two explicit provider PE leases, finite held exact/minus1, ledger retirement, physical/handles restored PASS");return 0;
 }
