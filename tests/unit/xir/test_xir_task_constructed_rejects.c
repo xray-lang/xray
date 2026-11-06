@@ -23,13 +23,15 @@ int main(int argc, char **argv) {
     char path[1024]; CHECK(snprintf(path, sizeof(path), "%s/rejected/%s.xr", XR_TASK_CONSTRUCTED_FIXTURES, argv[1]) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_TASK_CONSTRUCTED_FIXTURES};
     XrXirSourceRequest request = {session, path, &authority, context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
-    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; char *failure = NULL;
+    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; XrXirSourceFailure failure = {0};
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, &failure);
     xr_compile_session_free(session);
     if (status!=expected) fprintf(stderr,"Task reject status=%u expected=%u %s\n",status,expected,diagnostic.message);
     CHECK(status == expected && !result.checked && !result.snapshot);
     CHECK(diagnostic.message[0]);
     printf("TASK_CONSTRUCTED_REJECT %s status=%u noArtifact %s\n", argv[1], status, diagnostic.message);
-    xr_compile_resources_free(failure); xr_xir_compile_source_result_free(&result);
+    xr_xir_compile_source_failure_free(&failure);
+    CHECK(xr_xir_compile_source_failure_empty(&failure));
+    xr_xir_compile_source_result_free(&result);
     effects_source_owners_free(); CHECK(!effects_compile_live && !effects_compile_bytes); return 0;
 }

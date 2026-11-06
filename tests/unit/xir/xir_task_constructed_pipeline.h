@@ -27,12 +27,15 @@ static XrXirArtifact *constructed_lower(const XrXirCompileContext *context,
     XrXirSourceRequest request = {session, XR_TASK_CONSTRUCTED_FIXTURES "/root.xr", &authority,
         context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic source_diagnostic = {0};
-    XrXirDiagnostic diagnostic = {0}; char *failure = NULL;
+    XrXirDiagnostic diagnostic = {0}; XrXirSourceFailure failure = {0};
     XrXirArtifact *decoded = NULL, *closed = NULL, *lowered = NULL; XrXirCheckedPacket packet = {0};
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &source_diagnostic, &failure);
     xr_compile_session_free(session);
     if (status != XR_XIR_OK) fprintf(stderr, "Task constructed Source status=%u %s\n", status, source_diagnostic.message);
-    CHECK(status == XR_XIR_OK && result.checked && !failure);
+    const bool empty_failure = xr_xir_compile_source_failure_empty(&failure);
+    xr_xir_compile_source_failure_free(&failure);
+    CHECK(status == XR_XIR_OK && result.checked && empty_failure &&
+        xr_xir_compile_source_failure_empty(&failure));
     CHECK(xr_xir_compile_checked_write(result.checked, &packet, &diagnostic) == XR_XIR_OK);
     xr_xir_compile_source_result_free(&result);
     CHECK(xr_xir_compile_checked_read(context, packet.bytes, packet.length, &decoded, &diagnostic) == XR_XIR_OK);
