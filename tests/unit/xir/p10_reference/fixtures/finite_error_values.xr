@@ -9,8 +9,8 @@ fn make(value:i64=0)->RouteError {
     }
     return identity<RouteError>(error)
 }
-fn raiseLeft()->i64 { throw make() }
-fn raiseRight()->i64 {
+fn raiseLeft()->i64 throws RouteError { throw make() }
+fn raiseRight()->i64 throws RouteError {
     const choose=make
     throw choose(1)
 }

@@ -1,5 +1,5 @@
 enum StepError { Stop }
-fn step(value:i64)->i64 {
+fn step(value:i64)->i64 throws StepError {
     if(value==3) { throw StepError.Stop }
     return value
 }

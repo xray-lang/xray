@@ -1,6 +1,6 @@
 enum RouteError { Left, Right }
-fn fail(depth:i64)->i64 {
-    if(depth>0) { return fail(depth-1) }
+fn fail(depth:i64)->i64 throws RouteError {
+    if(depth>0) { return try fail(depth-1) }
     throw RouteError.Left
 }
 export fn referenceAnswer()->i64 {
