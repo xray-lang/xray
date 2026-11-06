@@ -63,8 +63,11 @@ static void enum_wrong_variant_cases(XrXirProgram *program) {
     XrXirExecutorBinding wrong = binding; wrong.ticket ^= 1u;
     failure = XR_XIR_CALL_LIMIT;
     CHECK(!xr_xir_call_driver_failure(call,&wrong,&failure) && failure == XR_XIR_CALL_LIMIT);
+    XrXirValue empty = {0};
+    CHECK(xr_xir_instance_take_result(instance,&empty) == XR_XIR_CALL_BAD_STATE &&
+        !empty.type && !empty.reserved && !empty.payload);
     XrXirValue sentinel = {XR_XIR_I64,0,41};
-    CHECK(xr_xir_instance_take_result(instance,&sentinel) == XR_XIR_CALL_BAD_STATE &&
+    CHECK(xr_xir_instance_take_result(instance,&sentinel) == XR_XIR_CALL_BAD_ARGUMENT &&
         sentinel.type == XR_XIR_I64 && !sentinel.reserved && sentinel.payload == 41);
     XrXirInstanceResult repeated = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
     CHECK(repeated.epoch == epoch && repeated.outcome.status == XR_XIR_CALL_BAD_STATE &&
