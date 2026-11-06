@@ -10,7 +10,7 @@ static const char edit_format_text[]="fn value()->string{return \"\xf0\x9f\x98\x
 static const char edit_indent_text[]="/* \xf0\x9f\x98\x80 } */fn run(){\r\n";
 static bool edit_before_limits_seen;
 static XrCompileResourceStatus edit_before_resources(const XrCompileResourceLimits *limits,XrCompileResources **out) {
-    CHECK(limits->allocated_bytes==UINT64_C(1)<<30&&limits->live_bytes==UINT64_C(256)<<20&&limits->work==UINT64_C(8)<<30);
+    CHECK(limits&&limits->memory_mode==XR_COMPILE_MEMORY_ORDINARY&&!limits->memory_limit);
     edit_before_limits_seen=true;return task_resource_new_impl(limits,out);
 }
 /* The selected handlers only need the real store lookup, not its document owner. */
@@ -149,10 +149,10 @@ static void edit_cache(EditFixture *f,const char *uri,bool before) {
         lsp_json_free(text);xjson_free(result);edit_close(f);
         fprintf(stderr,"EDIT_BEFORE method=%u duplicate_options_accepted=1 original_CLI_limits=1 physical0/0 JSON0/0 app0/0\n",f->method);return;
     }
-    const XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+    const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true};
     XrCompileResources *resources=NULL;XrCompilerSession *session=NULL;
     CHECK(task_resource_new_impl(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
-    CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(resources,&session)==XR_COMPILE_RESOURCE_OK);
     const char cached[]="fn cached(){}\n";XlspSourceDocument input={doc->uri,cached,strlen(doc->uri),sizeof(cached)-1,0};
     CHECK(xlsp_source_syntax_build(session,&input,&doc->syntax_snapshot)==XR_PARSE_OK);
     doc->ast=(AstNode *)xlsp_source_syntax_ast(doc->syntax_snapshot);uintptr_t owner=(uintptr_t)doc->syntax_snapshot,ast=(uintptr_t)doc->ast;
@@ -160,7 +160,7 @@ static void edit_cache(EditFixture *f,const char *uri,bool before) {
     XrJsonValue *result=f->method?xlsp_on_type_handle(&f->server,f->params):xlsp_format_handle(&f->server,f->params);
     CHECK(result&&f->server.source_failure.status==XR_XIR_OK&&(uintptr_t)doc->ast==ast&&(uintptr_t)doc->syntax_snapshot==owner);
     XrCompileResourceStats after=sdk_stats(resources);
-    CHECK(old.allocated_bytes==after.allocated_bytes&&old.live_bytes==after.live_bytes&&old.work==after.work);
+    CHECK(old.held_bytes==after.held_bytes&&old.peak_bytes==after.peak_bytes);
     size_t length=0;char *text=xjson_stringify(result,&length);CHECK(text&&length);puts(text);
     lsp_json_free(text);xjson_free(result);doc->ast=NULL;xlsp_source_syntax_free(doc->syntax_snapshot);doc->syntax_snapshot=NULL;
     xr_compile_resources_release(resources);edit_close(f);
@@ -176,7 +176,7 @@ static int edit_once(const EditOptions *options,EditMetrics *metrics) {
     lsp_json_calls=0;lsp_json_fail=options->json_fault;lsp_json_injected=false;
     XrXirStatus status=xlsp_source_task_submit(&f.server,&f.id,f.params,edit_mode(&f));
     bool fault=options->source_fault!=SIZE_MAX||options->json_fault!=SIZE_MAX;
-    if(options->budget)CHECK(status==XR_XIR_OK||status==XR_XIR_BUDGET);
+    if(options->budget)CHECK(status==XR_XIR_OK||status==XR_XIR_MEMORY_LIMIT);
     else if(fault)CHECK(status==XR_XIR_OK||status==XR_XIR_OUT_OF_MEMORY);else CHECK(status==XR_XIR_OK);
     XrCompileResources *ledger=task_last_created_resources;
     if(options->scenario==18) {
@@ -218,9 +218,9 @@ static int edit_once(const EditOptions *options,EditMetrics *metrics) {
     if(options->scenario==6)CHECK(xlsp_pending_request_find(&f.server.pending_requests,&f.id)->source_task_id==UINT64_MAX-1);
     else if(status==XR_XIR_OK)CHECK(!f.server.pending_requests.count);
     unsigned stopped=f.server.exit_received?1u:0u;edit_close(&f);
-    if(options->report)fprintf(stderr,"EDIT source=%zu json=%zu source_hit=%u json_hit=%u exit=%u allocated=%llu peak=%llu work=%llu created=%zu producer_dead=1 physical0/0 JSON0/0 app0/0\n",
+    if(options->report)fprintf(stderr,"EDIT source=%zu json=%zu source_hit=%u json_hit=%u exit=%u allocated=%llu peak=%llu held=%llu created=%zu producer_dead=1 physical0/0 JSON0/0 app0/0\n",
         metrics->source,metrics->json,metrics->source_hit?1u:0u,metrics->json_hit?1u:0u,stopped,
-        (unsigned long long)metrics->stats.allocated_bytes,(unsigned long long)metrics->stats.peak_bytes,(unsigned long long)metrics->stats.work,task_resource_created_count);
+        (unsigned long long)metrics->stats.allocated_bytes,(unsigned long long)metrics->stats.peak_bytes,(unsigned long long)metrics->stats.held_bytes,task_resource_created_count);
     return options->scenario==2?task_cancel_check(20u+options->method):0;
 }
 static bool edit_resource_scenario(unsigned scenario) {return scenario==0||scenario==9||scenario==10||scenario==11;}
@@ -242,15 +242,15 @@ static int edit_main(int argc,char **argv) {
         fprintf(stderr,"EDIT_CHUNK domain=%s start=%zu count=%zu total=%zu checked=%zu physical0/0 JSON0/0 app0/0\n",
             argv[6],start,count,total,count);return 0;
     }
-    if(!strcmp(argv[5],"--axes")) {
-        CHECK(argc==10);options.report=false;options.scenario=(unsigned)strtoul(argv[9],NULL,10);
-        CHECK(edit_resource_scenario(options.scenario));
-        XrCompileResourceLimits baseline={(uint64_t)strtoull(argv[6],NULL,10),(uint64_t)strtoull(argv[7],NULL,10),(uint64_t)strtoull(argv[8],NULL,10)};
-        CHECK(baseline.allocated_bytes<=UINT64_C(64)*1024*1024&&baseline.live_bytes<=UINT64_C(8)*1024*1024&&baseline.work<=UINT64_C(128000000));
-        for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits cut=baseline;
-            uint64_t *bound=axis==0?&cut.allocated_bytes:axis==1?&cut.live_bytes:&cut.work;CHECK(*bound&&*bound<INT64_MAX);
-            *bound=(uint64_t)((int64_t)*bound+delta);options.limits=&cut;options.budget=delta<0;CHECK(!edit_once(&options,&metrics));}
-        fprintf(stderr,"EDIT_AXES checked=9 producer_dead=1 physical0/0 JSON0/0 app0/0\n");return 0;
+    if(!strcmp(argv[5],"--memory")) {
+        CHECK(argc==8);options.report=false;
+        options.scenario=(unsigned)strtoul(argv[7],NULL,10);CHECK(edit_resource_scenario(options.scenario));
+        uint64_t peak=(uint64_t)strtoull(argv[6],NULL,10);CHECK(peak&&peak<=UINT64_C(8)*1024*1024);
+        for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits cut={XR_COMPILE_MEMORY_FINITE,
+            delta<0?peak-1:peak+(unsigned)delta,true};options.limits=&cut;options.budget=delta<0;
+            CHECK(!edit_once(&options,&metrics));}
+        options.limits=NULL;options.budget=false;CHECK(!edit_once(&options,&metrics));
+        fprintf(stderr,"EDIT_MEMORY checked=3 recovered=1 producer_dead=1 physical0/0 JSON0/0 app0/0\n");return 0;
     }
     CHECK(argc==6);options.scenario=(unsigned)strtoul(argv[5],NULL,10);CHECK(options.scenario<=18);
     return edit_once(&options,&metrics);

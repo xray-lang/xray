@@ -5,7 +5,7 @@
 #include "app/lsp/xlsp_source_index_store.h"
 static const char workspace_root_text[]="/* \xf0\x9f\x98\x80 */ export fn first()->i64{return 1}\nfn second(){}\nstruct Thing{}\n";
 static const char workspace_library_text[]="export fn shared(){}\nconst hidden:i64=1\n";
-XR_FUNC XrXirStatus before_xlsp_source_index_store_visit(XlspSourceIndexStore *,XlspIndexVisitor,void *);
+XR_FUNC XrXirStatus before_xlsp_source_index_store_visit(const XlspSourceIndexStore *,XlspIndexVisitor,void *);
 XR_FUNC XrLspDocument *xlsp_document_get(XrLspServer *server,const char *uri) {
     return server?xlsp_document_store_get(server->doc_table,uri):NULL;
 }
@@ -42,7 +42,7 @@ static void workspace_fixture(WorkspaceFixture *f,const WorkspaceOptions *option
     f->server.transport=f->transport=xlsp_transport_stdio();CHECK(f->transport);
     f->server.doc_table=xlsp_document_store_new(destroy_document);CHECK(f->server.doc_table);
     f->server.config.ignore_pattern_count=-1;f->server.workspace_folder_count=-1;
-    const XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+    const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true};
     f->server.index_resources=sdk_ledger(&limits);CHECK(xlsp_source_index_store_new(f->server.index_resources,&f->server.source_index)==XR_XIR_OK);
     add_document(&f->server,options->uri,"\xff",7);
     xlsp_document_store_get(f->server.doc_table,options->uri)->sem_token_result_id=UINT32_MAX;
@@ -97,7 +97,7 @@ static void workspace_reject(WorkspaceFixture *f,XrJsonValue *params) {
     CHECK(xlsp_workspace_symbols_capture(&f->server,params,&request)==XR_XIR_BAD_STRUCTURE&&!request);
     CHECK(xlsp_source_task_submit(&f->server,&f->id,params,22)==XR_XIR_BAD_STRUCTURE);
     CHECK(!memcmp(&pending,&f->server.pending_requests,sizeof(pending))&&runtime_live==blocks&&runtime_bytes==bytes);
-    XrCompileResourceStats after=sdk_stats(f->server.index_resources);CHECK(before.allocated_bytes==after.allocated_bytes&&before.live_bytes==after.live_bytes&&before.peak_bytes==after.peak_bytes&&before.work==after.work);
+    XrCompileResourceStats after=sdk_stats(f->server.index_resources);CHECK(before.held_bytes==after.held_bytes&&before.peak_bytes==after.peak_bytes);
 }
 static void workspace_admission(WorkspaceFixture *f) {
     XrJsonValue *duplicate=xjson_clone(f->params);CHECK(duplicate);CHECK(index_json_member(duplicate,"query",xjson_new_string("different")));
@@ -130,10 +130,9 @@ static void workspace_cache(WorkspaceFixture *f,const char *uri,bool before) {
         lsp_json_free(first);lsp_json_free(next);xjson_free(again);
     }
     XrCompileResourceStats after=sdk_stats(f->server.index_resources);
-    CHECK(initial.allocated_bytes==after.allocated_bytes&&initial.live_bytes==after.live_bytes);
-    if(before)CHECK(after.work>initial.work);else CHECK(after.work==initial.work);
+    CHECK(initial.held_bytes==after.held_bytes&&initial.peak_bytes==after.peak_bytes);
     size_t length=0;char *text=xjson_stringify(result,&length);CHECK(text&&length);puts(text);lsp_json_free(text);xjson_free(result);workspace_close(f);
-    fprintf(stderr,"WORKSPACE_CACHE before=%u index_ledger_work_delta=%llu store_and_producer_death=1 physical0/0 JSON0/0 app0/0\n",before?1u:0u,(unsigned long long)(after.work-initial.work));
+    fprintf(stderr,"WORKSPACE_CACHE before=%u index_held_preserved=1 store_and_producer_death=1 physical0/0 JSON0/0 app0/0\n",before?1u:0u);
 }
 static int workspace_once(const WorkspaceOptions *options,WorkspaceMetrics *metrics) {
     WorkspaceFixture f;workspace_fixture(&f,options);
@@ -145,7 +144,7 @@ static int workspace_once(const WorkspaceOptions *options,WorkspaceMetrics *metr
     lsp_json_calls=0;lsp_json_fail=options->json_fault;lsp_json_injected=false;
     XrXirStatus status=xlsp_source_task_submit(&f.server,&f.id,f.params,workspace_mode(&f));
     bool fault=options->source_fault!=SIZE_MAX||options->json_fault!=SIZE_MAX;
-    if(options->budget)CHECK(status==XR_XIR_OK||status==XR_XIR_BUDGET);
+    if(options->budget)CHECK(status==XR_XIR_OK||status==XR_XIR_MEMORY_LIMIT);
     else if(fault)CHECK(status==XR_XIR_OK||status==XR_XIR_OUT_OF_MEMORY);else CHECK(status==XR_XIR_OK);
     XrCompileResources *ledger=task_last_created_resources;
     if(options->scenario==18)xjson_object_set(f.params,"query",xjson_new_string("absent"));
@@ -185,9 +184,9 @@ static int workspace_once(const WorkspaceOptions *options,WorkspaceMetrics *metr
     if(options->scenario==6)CHECK(xlsp_pending_request_find(&f.server.pending_requests,&f.id)->source_task_id==UINT64_MAX-1);
     else if(status==XR_XIR_OK)CHECK(!f.server.pending_requests.count);
     unsigned stopped=f.server.exit_received?1u:0u;workspace_close(&f);
-    if(options->report)fprintf(stderr,"WORKSPACE source=%zu json=%zu source_hit=%u json_hit=%u exit=%u allocated=%llu peak=%llu work=%llu created=%zu producer_dead=1 physical0/0 JSON0/0 app0/0\n",
+    if(options->report)fprintf(stderr,"WORKSPACE source=%zu json=%zu source_hit=%u json_hit=%u exit=%u allocated=%llu peak=%llu held=%llu created=%zu producer_dead=1 physical0/0 JSON0/0 app0/0\n",
         metrics->source,metrics->json,metrics->source_hit?1u:0u,metrics->json_hit?1u:0u,stopped,
-        (unsigned long long)metrics->stats.allocated_bytes,(unsigned long long)metrics->stats.peak_bytes,(unsigned long long)metrics->stats.work,task_resource_created_count);
+        (unsigned long long)metrics->stats.allocated_bytes,(unsigned long long)metrics->stats.peak_bytes,(unsigned long long)metrics->stats.held_bytes,task_resource_created_count);
     return options->scenario==2?task_cancel_check(22):0;
 }
 static bool workspace_resource_scenario(unsigned scenario) {return scenario==0||scenario==9||scenario==10||scenario==11;}
@@ -209,15 +208,15 @@ static int workspace_main(int argc,char **argv) {
         fprintf(stderr,"WORKSPACE_CHUNK domain=%s start=%zu count=%zu total=%zu checked=%zu physical0/0 JSON0/0 app0/0\n",
             argv[6],start,count,total,count);return 0;
     }
-    if(!strcmp(argv[5],"--axes")) {
-        CHECK(argc==10);options.report=false;options.scenario=(unsigned)strtoul(argv[9],NULL,10);
-        CHECK(workspace_resource_scenario(options.scenario));
-        XrCompileResourceLimits baseline={(uint64_t)strtoull(argv[6],NULL,10),(uint64_t)strtoull(argv[7],NULL,10),(uint64_t)strtoull(argv[8],NULL,10)};
-        CHECK(baseline.allocated_bytes<=UINT64_C(64)*1024*1024&&baseline.live_bytes<=UINT64_C(8)*1024*1024&&baseline.work<=UINT64_C(128000000));
-        for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits cut=baseline;
-            uint64_t *bound=axis==0?&cut.allocated_bytes:axis==1?&cut.live_bytes:&cut.work;CHECK(*bound&&*bound<INT64_MAX);
-            *bound=(uint64_t)((int64_t)*bound+delta);options.limits=&cut;options.budget=delta<0;CHECK(!workspace_once(&options,&metrics));}
-        fprintf(stderr,"WORKSPACE_AXES checked=9 producer_dead=1 physical0/0 JSON0/0 app0/0\n");return 0;
+    if(!strcmp(argv[5],"--memory")) {
+        CHECK(argc==8);options.report=false;
+        options.scenario=(unsigned)strtoul(argv[7],NULL,10);CHECK(workspace_resource_scenario(options.scenario));
+        uint64_t peak=(uint64_t)strtoull(argv[6],NULL,10);CHECK(peak&&peak<=UINT64_C(8)*1024*1024);
+        for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits cut={XR_COMPILE_MEMORY_FINITE,
+            delta<0?peak-1:peak+(unsigned)delta,true};options.limits=&cut;options.budget=delta<0;
+            CHECK(!workspace_once(&options,&metrics));}
+        options.limits=NULL;options.budget=false;CHECK(!workspace_once(&options,&metrics));
+        fprintf(stderr,"WORKSPACE_MEMORY checked=3 recovered=1 producer_dead=1 physical0/0 JSON0/0 app0/0\n");return 0;
     }
     CHECK(argc==6);options.scenario=(unsigned)strtoul(argv[5],NULL,10);CHECK(options.scenario<=18);
     return workspace_once(&options,&metrics);

@@ -4,7 +4,7 @@ import hashlib,json,os,re,subprocess,sys,tempfile
 exe,stdlib=map(Path,sys.argv[1:3]);mode=sys.argv[3]
 assert mode in ('--normal','--resources','--counterfactual')
 env={**os.environ,'XRAY_STDLIB_PATH':str(stdlib.resolve())};maximum=str((1<<64)-1)
-stats_re=re.compile(rb'EDIT source=(\d+) json=(\d+) source_hit=(\d+) json_hit=(\d+) exit=(\d+) allocated=(\d+) peak=(\d+) work=(\d+) created=1 producer_dead=1 physical0/0 JSON0/0 app0/0')
+stats_re=re.compile(rb'EDIT source=(\d+) json=(\d+) source_hit=(\d+) json_hit=(\d+) exit=(\d+) allocated=(\d+) peak=(\d+) held=(\d+) created=1 producer_dead=1 physical0/0 JSON0/0 app0/0')
 def unpack(data):
     values=[]
     while data:
@@ -61,9 +61,9 @@ with tempfile.TemporaryDirectory(prefix='edit-😀-#-',dir=os.getcwd()) as folde
     for method in (0,1):
         for variant in (0,9,10,11):
             r=invoke(method,'--resource',maximum,maximum,variant);m=stats_re.search(r.stderr)
-            assert m and all(int(m[n])>0 for n in (1,2,6,7,8)) and all(int(m[n])==0 for n in (3,4,5)),r.stderr
+            assert m and all(int(m[n])>0 for n in (1,2,7,8)) and all(int(m[n])==0 for n in (3,4,5)),r.stderr
             values=unpack(r.stdout);assert len(values)==1 and 'result' in values[0],values;check(values[0]['result'],method,variant)
-            measured.append(dict(method=method,variant=variant,source=int(m[1]),json=int(m[2]),allocated=int(m[6]),peak=int(m[7]),work=int(m[8])))
+            measured.append(dict(method=method,variant=variant,source=int(m[1]),json=int(m[2]),allocated=int(m[6]),peak=int(m[7]),held=int(m[8])))
     if mode=='--normal':
         for method in (0,1):
             for source,js in ((0,maximum),(maximum,0)):
@@ -78,9 +78,11 @@ with tempfile.TemporaryDirectory(prefix='edit-😀-#-',dir=os.getcwd()) as folde
             return dict(method=method,variant=variant,domain=domain,start=start,count=count)
         with ThreadPoolExecutor(max_workers=8) as pool:rows.extend(f.result() for f in as_completed([pool.submit(run_chunk,c) for c in chunks]))
         for m in measured:
-            r=invoke(m['method'],'--axes',m['allocated'],m['peak'],m['work'],m['variant'])
-            assert b'EDIT_AXES checked=9 producer_dead=1 physical0/0 JSON0/0 app0/0' in r.stderr
-            messages=unpack(r.stdout);assert sum('result' in v for v in messages)==6,messages
+            r=invoke(m['method'],'--memory',m['peak'],m['variant'])
+            assert b'EDIT_MEMORY checked=3 recovered=1 producer_dead=1 physical0/0 JSON0/0 app0/0' in r.stderr
+            messages=unpack(r.stdout);assert len(messages)==4 and sum('result' in v for v in messages)==3,messages
+            assert sum('error' in message for message in messages)==1,messages
+            assert all(re.search(r'status=12\)$',message['error']['message']) for message in messages if 'error' in message),messages
             for value in messages:
                 if 'result' in value:check(value['result'],m['method'],m['variant'])
                 else:assert value['error']['code']==-32603

@@ -35,7 +35,7 @@ static XrXirStatus xlsp_workspace_symbol_collect(const XlspIndexedSymbol *view,v
     if(ctx->added>=XLSP_WORKSPACE_SYMBOL_LIMIT)return XR_XIR_OK;
     XrLspDocument *open=xlsp_document_get(ctx->server,view->uri);
     if(open&&open->version!=view->version)return XR_XIR_OK;
-    bool matches=false;XrXirStatus status=index_json_contains(ctx->server->index_resources,view->symbol->name,ctx->query,ctx->query_length,&matches);
+    bool matches=false;XrXirStatus status=index_json_contains(view->symbol->name,ctx->query,ctx->query_length,&matches);
     if(status!=XR_XIR_OK||!matches)return status;
     XrJsonValue *symbol=xjson_new_object(),*location=NULL;
     if(!symbol)return XR_XIR_OUT_OF_MEMORY;

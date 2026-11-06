@@ -1,4 +1,5 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
+#include "xir/xxir_compile_memory.h"
 #include "xlsp_folding.h"
 #include "xlsp_source_syntax.h"
 #include "../../api/xsource_compile.h"
@@ -14,9 +15,9 @@ XrJsonValue *xlsp_handle_folding_range(XrLspServer *server,XrJsonValue *params) 
     XrCompileResources *resources=NULL;XrCompilerSession *session=NULL;XlspSyntaxSnapshot *fresh=NULL;
     XrJsonValue *result=NULL;XrXirStatus status=XR_XIR_OK;
     XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);
-    if(created!=XR_COMPILE_RESOURCE_OK) {status=created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;goto done;}
-    XrCompilerSessionStatus opened=xr_compile_session_new(resources,&session);
-    if(opened!=XR_COMPILER_SESSION_OK) {status=opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;goto done;}
+    if(created!=XR_COMPILE_RESOURCE_OK) {status=xir_compile_resource_status(created);goto done;}
+    XrCompileResourceStatus opened=xr_compile_session_new(resources,&session);
+    if(opened!=XR_COMPILE_RESOURCE_OK) {status=xir_compile_resource_status(opened);goto done;}
     XlspSourceDocument input={uri->as.string,doc->content,uri->string_len,doc->length,doc->version};
     XrParseStatus parsed=xlsp_source_syntax_build(session,&input,&fresh);
     if(parsed!=XR_PARSE_OK&&parsed!=XR_PARSE_RECOVERED) {

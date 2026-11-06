@@ -131,7 +131,7 @@ static int links_once(const LinksRun *options,LinksMetrics *metrics) {
         CHECK(status==XR_XIR_BAD_STRUCTURE);atomic_store(&f.gate.release,true);links_cleanup(&f);
         fprintf(stderr,"BEFORE actual SourceTask rejected documentLink mode=14 status=1 physical0/0 JSON0/0 app0/0\n");return 1;
     }
-    if(options->budget)CHECK(status==XR_XIR_OK||status==XR_XIR_BUDGET);
+    if(options->budget)CHECK(status==XR_XIR_OK||status==XR_XIR_MEMORY_LIMIT);
     else if(options->source_fault==SIZE_MAX)CHECK(status==XR_XIR_OK);
     else CHECK(status==XR_XIR_OK||status==XR_XIR_OUT_OF_MEMORY);
     xjson_free(f.params);f.params=NULL;
@@ -149,9 +149,9 @@ static int links_once(const LinksRun *options,LinksMetrics *metrics) {
     CHECK(!doc||(!doc->source_tokens&&doc->sem_token_result_id==UINT32_MAX));
     CHECK(f.server.next_request_id==71&&!f.server.source_workspace);unsigned stopped=f.server.exit_received?1u:0u;
     links_cleanup(&f);
-    if(options->report)fprintf(stderr,"LINKS source=%zu json=%zu source_hit=%u json_hit=%u exit=%u allocated=%llu peak=%llu work=%llu physical0/0 JSON0/0 app0/0\n",
+    if(options->report)fprintf(stderr,"LINKS source=%zu json=%zu source_hit=%u json_hit=%u exit=%u allocated=%llu peak=%llu held=%llu physical0/0 JSON0/0 app0/0\n",
         metrics->source,metrics->json,metrics->source_hit?1u:0u,metrics->json_hit?1u:0u,stopped,
-        (unsigned long long)metrics->stats.allocated_bytes,(unsigned long long)metrics->stats.peak_bytes,(unsigned long long)metrics->stats.work);
+        (unsigned long long)metrics->stats.allocated_bytes,(unsigned long long)metrics->stats.peak_bytes,(unsigned long long)metrics->stats.held_bytes);
     return options->scenario==2?task_cancel_check(14):0;
 }
 static int links_main(int argc,char **argv) {
@@ -170,15 +170,14 @@ static int links_main(int argc,char **argv) {
         fprintf(stderr,"LINKS_CHUNK domain=%s start=%zu count=%zu total=%zu checked=%zu physical0/0 JSON0/0 app0/0\n",
             argv[5],start,count,total,count);return 0;
     }
-    if(!strcmp(argv[4],"--axes")){
-        CHECK(argc==8);XrCompileResourceLimits baseline={(uint64_t)strtoull(argv[5],NULL,10),
-            (uint64_t)strtoull(argv[6],NULL,10),(uint64_t)strtoull(argv[7],NULL,10)};options.report=false;
-        CHECK(baseline.allocated_bytes<=UINT64_C(64)*1024*1024&&baseline.live_bytes<=UINT64_C(8)*1024*1024&&baseline.work<=UINT64_C(128000000));
-        for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta){
-            XrCompileResourceLimits limits=baseline;uint64_t *bound=axis==0?&limits.allocated_bytes:axis==1?&limits.live_bytes:&limits.work;
-            CHECK(*bound&&*bound<INT64_MAX);*bound=(uint64_t)((int64_t)*bound+delta);options.limits=&limits;options.budget=delta<0;
+    if(!strcmp(argv[4],"--memory")) {
+        CHECK(argc==6);options.report=false;
+        uint64_t peak=(uint64_t)strtoull(argv[5],NULL,10);CHECK(peak&&peak<=UINT64_C(8)*1024*1024);
+        for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits cut={XR_COMPILE_MEMORY_FINITE,
+            delta<0?peak-1:peak+(unsigned)delta,true};options.limits=&cut;options.budget=delta<0;
             CHECK(!links_once(&options,&metrics));}
-        fprintf(stderr,"LINKS_AXES checked=9 physical0/0 JSON0/0 app0/0\n");return 0;
+        options.limits=NULL;options.budget=false;CHECK(!links_once(&options,&metrics));
+        fprintf(stderr,"LINKS_MEMORY checked=3 recovered=1 physical0/0 JSON0/0 app0/0\n");return 0;
     }
     options.scenario=(unsigned)strtoul(argv[4],NULL,10);CHECK(options.scenario<=15);
     CHECK(argc==5||(argc==6&&options.scenario==15));

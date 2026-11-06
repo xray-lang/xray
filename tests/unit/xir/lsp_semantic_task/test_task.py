@@ -14,7 +14,7 @@ assert mode in ('--normal', '--resources', '--counterfactual')
 digest = hashlib.sha256(exe.read_bytes()).hexdigest()
 env = {**os.environ, 'XRAY_STDLIB_PATH': str(stdlib.resolve())}
 maximum = str((1 << 64) - 1)
-stats_re = re.compile(rb'SEM method=(\d+) scenario=(\d+) source=(\d+) json=(\d+) source_hit=(\d+) json_hit=(\d+) exit=(\d+) allocated=(\d+) peak=(\d+) work=(\d+) physical0/0 JSON0/0 app0/0')
+stats_re = re.compile(rb'SEM method=(\d+) scenario=(\d+) source=(\d+) json=(\d+) source_hit=(\d+) json_hit=(\d+) exit=(\d+) allocated=(\d+) peak=(\d+) held=(\d+) physical0/0 JSON0/0 app0/0')
 
 
 def unpack(data):
@@ -49,9 +49,9 @@ def probe(uri, method):
     match = stats_re.search(result.stderr)
     assert match and int(match[1]) == method and int(match[2]) == 0
     assert int(match[3]) > 0 and int(match[4]) > 0 and all(int(match[n]) == 0 for n in (5, 6, 7))
-    assert all(int(match[n]) > 0 for n in (8, 9, 10))
+    assert all(int(match[n]) > 0 for n in (9, 10))
     return dict(method=method, source=int(match[3]), json=int(match[4]),
-                allocated=int(match[8]), peak=int(match[9]), work=int(match[10]), full_FI=False)
+                allocated=int(match[8]), peak=int(match[9]), held=int(match[10]), full_FI=False)
 
 
 def check_value(value, original, method, scenario, changed=None):
@@ -158,17 +158,19 @@ with tempfile.TemporaryDirectory(prefix='semantic-task-😀-#-', dir=os.getcwd()
     else:
         for measurement in measured:
             method = measurement['method']
-            result = invoke(uri, method, '--axes', measurement['allocated'], measurement['peak'], measurement['work'])
-            assert result.returncode == 0, (method, 'axes', result.returncode, result.stderr[-3500:])
-            marker = re.search(rb'SEM_AXES method=(\d+) checked=9 budget=(\d+) physical0/0 JSON0/0 app0/0', result.stderr)
-            assert marker and int(marker[1]) == method
+            result = invoke(uri, method, '--memory', measurement['peak'])
+            assert result.returncode == 0, (method, 'memory', result.returncode, result.stderr[-3500:])
+            marker = re.search(rb'SEM_MEMORY method=(\d+) checked=3 recovered=1 memory_status=(\d+) physical0/0 JSON0/0 app0/0', result.stderr)
+            assert marker and int(marker[1]) == method and int(marker[2]) == 12
             messages = unpack(result.stdout)
-            assert sum('result' in message for message in messages) == 6, messages
+            assert len(messages)==4 and sum('result' in message for message in messages) == 3, messages
+            assert sum('error' in message for message in messages)==1,messages
+            assert all(re.search(r'status=12\)$',message['error']['message']) for message in messages if 'error' in message),messages
             for message in messages:
                 if 'error' in message:
                     assert message['error']['code'] == -32603
                     assert re.search(rf'status={int(marker[2])}\)$', message['error']['message']), message
-            rows.append(dict(method=method, resource_axes_checked=9, successful_boundaries=6))
+            rows.append(dict(method=method, held_boundaries_checked=3, successful_boundaries=2, recovered=True))
         jobs = []
         for measurement in measured:
             for domain in ('source', 'json'):
@@ -190,7 +192,7 @@ with tempfile.TemporaryDirectory(prefix='semantic-task-😀-#-', dir=os.getcwd()
             for future in as_completed([pool.submit(chunk, job) for job in jobs]):
                 rows.append(future.result())
         assert sum(row.get('count', 0) for row in rows) == sum(row['source'] + row['json'] for row in measured)
-        assert len([row for row in rows if 'resource_axes_checked' in row]) == 3
+        assert len([row for row in rows if 'held_boundaries_checked' in row]) == 3
 assert hashlib.sha256(exe.read_bytes()).hexdigest() == digest
 print(json.dumps(dict(mode=mode, image_sha256=digest, measured=measured, rows=rows,
                       full_FI=mode == '--resources', fresh_public_server=False)))

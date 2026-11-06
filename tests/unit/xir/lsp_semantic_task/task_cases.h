@@ -268,7 +268,7 @@ static int semantic_once(const SemanticRun *options,SemanticMetrics *metrics) {
     }
     bool admission_rejected=(options->scenario==10&&options->method!=13)||options->scenario==12;
     if(admission_rejected)CHECK(status==(options->scenario==10?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE));
-    else if(options->budget_expected)CHECK(status==XR_XIR_OK||status==XR_XIR_BUDGET);
+    else if(options->budget_expected)CHECK(status==XR_XIR_OK||status==XR_XIR_MEMORY_LIMIT);
     else if(options->source_fault==SIZE_MAX)CHECK(status==XR_XIR_OK);
     else CHECK(status==XR_XIR_OK||status==XR_XIR_OUT_OF_MEMORY);
     xjson_free(f.params);f.params=NULL;
@@ -289,10 +289,10 @@ static int semantic_once(const SemanticRun *options,SemanticMetrics *metrics) {
     }else if(status==XR_XIR_OK)CHECK(!f.server.pending_requests.count);
     CHECK(f.server.next_request_id==71&&!f.server.source_workspace);
     unsigned stopped=f.server.exit_received?1u:0u;semantic_cleanup(&f);
-    if(options->report)fprintf(stderr,"SEM method=%u scenario=%u source=%zu json=%zu source_hit=%u json_hit=%u exit=%u allocated=%llu peak=%llu work=%llu physical0/0 JSON0/0 app0/0\n",
+    if(options->report)fprintf(stderr,"SEM method=%u scenario=%u source=%zu json=%zu source_hit=%u json_hit=%u exit=%u allocated=%llu peak=%llu held=%llu physical0/0 JSON0/0 app0/0\n",
         options->method,options->scenario,metrics->source,metrics->json,metrics->source_hit?1u:0u,metrics->json_hit?1u:0u,stopped,
         (unsigned long long)metrics->stats.allocated_bytes,(unsigned long long)metrics->stats.peak_bytes,
-        (unsigned long long)metrics->stats.work);
+        (unsigned long long)metrics->stats.held_bytes);
     if(options->scenario==2)return task_cancel_check(options->method);
     return 0;
 }
@@ -301,20 +301,15 @@ static int semantic_main(int argc,char **argv) {
         .source_fault=SIZE_MAX,.json_fault=SIZE_MAX,.report=true};
     CHECK(options.method>=11&&options.method<=13);
     SemanticMetrics metrics={0};
-    if(!strcmp(argv[4],"--axes")){
-        CHECK(argc==8);XrCompileResourceLimits baseline={(uint64_t)strtoull(argv[5],NULL,10),
-            (uint64_t)strtoull(argv[6],NULL,10),(uint64_t)strtoull(argv[7],NULL,10)};
-        CHECK(baseline.allocated_bytes<=UINT64_C(64)*1024*1024&&baseline.live_bytes<=UINT64_C(8)*1024*1024&&
-            baseline.work<=UINT64_C(128000000));
-        options.report=false;
-        for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta){
-            XrCompileResourceLimits limits=baseline;
-            uint64_t *bound=axis==0?&limits.allocated_bytes:axis==1?&limits.live_bytes:&limits.work;
-            CHECK(*bound&&*bound<INT64_MAX);*bound=(uint64_t)((int64_t)*bound+delta);
-            options.limits=&limits;options.budget_expected=delta<0;CHECK(!semantic_once(&options,&metrics));
-        }
-        fprintf(stderr,"SEM_AXES method=%u checked=9 budget=%u physical0/0 JSON0/0 app0/0\n",
-            options.method,(unsigned)XR_XIR_BUDGET);return 0;
+    if(!strcmp(argv[4],"--memory")) {
+        CHECK(argc==6);options.report=false;
+        uint64_t peak=(uint64_t)strtoull(argv[5],NULL,10);CHECK(peak&&peak<=UINT64_C(8)*1024*1024);
+        for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits cut={XR_COMPILE_MEMORY_FINITE,
+            delta<0?peak-1:peak+(unsigned)delta,true};options.limits=&cut;options.budget_expected=delta<0;
+            CHECK(!semantic_once(&options,&metrics));}
+        options.limits=NULL;options.budget_expected=false;CHECK(!semantic_once(&options,&metrics));
+        fprintf(stderr,"SEM_MEMORY method=%u checked=3 recovered=1 memory_status=%u physical0/0 JSON0/0 app0/0\n",
+            options.method,(unsigned)XR_XIR_MEMORY_LIMIT);return 0;
     }
     if(!strcmp(argv[4],"--resource")){
         CHECK(argc==7);options.source_fault=(size_t)strtoull(argv[5],NULL,10);options.json_fault=(size_t)strtoull(argv[6],NULL,10);

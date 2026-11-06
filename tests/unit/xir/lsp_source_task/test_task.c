@@ -8,6 +8,7 @@
 #include "app/lsp/xlsp_index_json.h"
 #include "app/lsp/xlsp_async.h"
 #include "api/xsource_compile.h"
+#include "xir/xxir_compile_memory.h"
 #ifdef XR_OS_WINDOWS
 #include "base/xwindows_utf8.h"
 #endif

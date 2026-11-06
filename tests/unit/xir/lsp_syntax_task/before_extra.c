@@ -8,6 +8,7 @@
  *
  * xlsp_extra_handlers.c - Additional LSP handlers
  */
+#include "xir/xxir_compile_memory.h"
 
 #include "xlsp_extra_handlers.h"
 #include "xlsp_links.h"
@@ -35,7 +36,7 @@ static XrXirStatus xlsp_workspace_symbol_collect(const XlspIndexedSymbol *view,v
     if(ctx->added>=XLSP_WORKSPACE_SYMBOL_LIMIT)return XR_XIR_OK;
     XrLspDocument *open=xlsp_document_get(ctx->server,view->uri);
     if(open&&open->version!=view->version)return XR_XIR_OK;
-    bool matches=false;XrXirStatus status=index_json_contains(ctx->server->index_resources,view->symbol->name,ctx->query,ctx->query_length,&matches);
+    bool matches=false;XrXirStatus status=index_json_contains(view->symbol->name,ctx->query,ctx->query_length,&matches);
     if(status!=XR_XIR_OK||!matches)return status;
     XrJsonValue *symbol=xjson_new_object(),*location=NULL;
     if(!symbol)return XR_XIR_OUT_OF_MEMORY;
@@ -87,7 +88,7 @@ XrJsonValue *xlsp_handle_selection_range(XrLspServer *server,XrJsonValue *params
     if(!doc||doc->server!=server||!doc->content)return NULL;
     XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();XrCompileResources *resources=NULL;
     XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);XrJsonValue *result=NULL;
-    XrXirStatus status=created==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrXirStatus status=xir_compile_resource_status(created);
     if(status==XR_XIR_OK)status=xlsp_source_selection_json(resources,doc->content,doc->length,xjson_get(params,"positions"),&result);
     xr_compile_resources_release(resources);server->source_failure.status=(unsigned)status;
     if(status==XR_XIR_OK)server->source_failure.stage=0;return result;

@@ -17,7 +17,7 @@ typedef struct XlspIndexedSymbol {
 } XlspIndexedSymbol;
 typedef XrXirStatus (*XlspIndexVisitor)(const XlspIndexedSymbol *,void *);
 /* The store owns transferred immutable indexes, never AST/type authority.
- * Its receiving allocations and scans use the supplied cumulative ledger.
+ * Its receiving allocations retain the supplied memory owner.
  * Failure preserves the store and input owner. Views remain valid until their
  * file is removed/replaced or the store dies. Calls require caller exclusion;
  * visitor callbacks must not mutate or destroy the store. */
@@ -29,6 +29,6 @@ XR_FUNC XrXirStatus xlsp_source_index_store_remove(XlspSourceIndexStore *,const 
  * The caller converts filesystem paths to URIs before invoking this operation. */
 XR_FUNC XrXirStatus xlsp_source_index_store_remove_prefix(XlspSourceIndexStore *,const char *);
 XR_FUNC XrXirStatus xlsp_source_index_store_find(XlspSourceIndexStore *,const char *,XlspIndexedSymbol *);
-XR_FUNC XrXirStatus xlsp_source_index_store_visit(XlspSourceIndexStore *,XlspIndexVisitor,void *);
+XR_FUNC XrXirStatus xlsp_source_index_store_visit(const XlspSourceIndexStore *,XlspIndexVisitor,void *);
 XR_FUNC size_t xlsp_source_index_store_count(const XlspSourceIndexStore *);
 #endif // XLSP_SOURCE_INDEX_STORE_H

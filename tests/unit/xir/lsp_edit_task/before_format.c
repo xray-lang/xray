@@ -1,4 +1,5 @@
 /* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
+#include "xir/xxir_compile_memory.h"
 #include "xlsp_format.h"
 #include "xlsp_server.h"
 #include "xlsp_source_format.h"
@@ -21,7 +22,7 @@ XR_FUNC XrJsonValue *xlsp_format_handle(XrLspServer *server,XrJsonValue *params)
     config.wrap_long_lines=settings->format_wrap_long_lines?1:0;config.multiline_trailing_comma=settings->format_multiline_trailing_comma?1:0;
     XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();XrCompileResources *resources=NULL;XrJsonValue *result=NULL;
     XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);
-    XrXirStatus status=created==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrXirStatus status=xir_compile_resource_status(created);
     XlspSourceDocument input={uri->as.string,doc->content,uri->string_len,doc->length,doc->version};
     if(status==XR_XIR_OK)status=xlsp_source_format_json(resources,&input,&config,&result,NULL);
     xr_compile_resources_release(resources);server->formatting_failure.status=(unsigned)status;

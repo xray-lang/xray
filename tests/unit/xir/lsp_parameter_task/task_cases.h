@@ -123,7 +123,7 @@ static int parameter_once(const ParameterOptions *options,ParameterMetrics *metr
     if(options->scenario==13){CHECK(status==XR_XIR_BAD_STRUCTURE);atomic_store(&f.gate.release,true);parameter_close(&f);
         fprintf(stderr,"PARAMETER_BEFORE mode16_rejected=1 physical0/0\n");return 0;}
     bool fault=options->source_fault!=SIZE_MAX||options->json_fault!=SIZE_MAX;
-    if(options->budget)CHECK(status==XR_XIR_OK||status==XR_XIR_BUDGET);
+    if(options->budget)CHECK(status==XR_XIR_OK||status==XR_XIR_MEMORY_LIMIT);
     else if(fault)CHECK(status==XR_XIR_OK||status==XR_XIR_OUT_OF_MEMORY);else CHECK(status==XR_XIR_OK);
     XrCompileResources *ledger=task_last_created_resources;
     xjson_free(f.params);f.params=NULL;xlsp_document_store_free(f.server.doc_table);f.server.doc_table=NULL;
@@ -162,9 +162,9 @@ static int parameter_once(const ParameterOptions *options,ParameterMetrics *metr
     if(options->scenario==6)CHECK(xlsp_pending_request_find(&f.server.pending_requests,&f.id)->source_task_id==UINT64_MAX-1);
     else if(status==XR_XIR_OK)CHECK(!f.server.pending_requests.count);
     unsigned stopped=f.server.exit_received?1u:0u;parameter_close(&f);
-    if(options->report)fprintf(stderr,"PARAMETER source=%zu json=%zu source_hit=%u json_hit=%u exit=%u allocated=%llu peak=%llu work=%llu created=1 producer_dead=1 physical0/0 JSON0/0 app0/0\n",
+    if(options->report)fprintf(stderr,"PARAMETER source=%zu json=%zu source_hit=%u json_hit=%u exit=%u allocated=%llu peak=%llu held=%llu created=1 producer_dead=1 physical0/0 JSON0/0 app0/0\n",
         metrics->source,metrics->json,metrics->source_hit?1u:0u,metrics->json_hit?1u:0u,stopped,
-        (unsigned long long)metrics->stats.allocated_bytes,(unsigned long long)metrics->stats.peak_bytes,(unsigned long long)metrics->stats.work);
+        (unsigned long long)metrics->stats.allocated_bytes,(unsigned long long)metrics->stats.peak_bytes,(unsigned long long)metrics->stats.held_bytes);
     return options->scenario==2?task_cancel_check(16):0;
 }
 static bool parameter_resource_scenario(unsigned scenario) {return scenario==0||scenario==9||scenario==10||scenario==16||scenario==17;}
@@ -184,15 +184,15 @@ static int parameter_main(int argc,char **argv) {
         fprintf(stderr,"PARAMETER_CHUNK domain=%s start=%zu count=%zu total=%zu checked=%zu physical0/0 JSON0/0 app0/0\n",
             argv[5],start,count,total,count);return 0;
     }
-    if(!strcmp(argv[4],"--axes")) {
-        CHECK(argc==9);options.report=false;options.scenario=(unsigned)strtoul(argv[8],NULL,10);
-        CHECK(parameter_resource_scenario(options.scenario));
-        XrCompileResourceLimits baseline={(uint64_t)strtoull(argv[5],NULL,10),(uint64_t)strtoull(argv[6],NULL,10),(uint64_t)strtoull(argv[7],NULL,10)};
-        CHECK(baseline.allocated_bytes<=UINT64_C(64)*1024*1024&&baseline.live_bytes<=UINT64_C(8)*1024*1024&&baseline.work<=UINT64_C(128000000));
-        for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits cut=baseline;
-            uint64_t *bound=axis==0?&cut.allocated_bytes:axis==1?&cut.live_bytes:&cut.work;CHECK(*bound&&*bound<INT64_MAX);
-            *bound=(uint64_t)((int64_t)*bound+delta);options.limits=&cut;options.budget=delta<0;CHECK(!parameter_once(&options,&metrics));}
-        fprintf(stderr,"PARAMETER_AXES checked=9 producer_dead=1 physical0/0 JSON0/0 app0/0\n");return 0;
+    if(!strcmp(argv[4],"--memory")) {
+        CHECK(argc==7);options.report=false;
+        options.scenario=(unsigned)strtoul(argv[6],NULL,10);CHECK(parameter_resource_scenario(options.scenario));
+        uint64_t peak=(uint64_t)strtoull(argv[5],NULL,10);CHECK(peak&&peak<=UINT64_C(8)*1024*1024);
+        for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits cut={XR_COMPILE_MEMORY_FINITE,
+            delta<0?peak-1:peak+(unsigned)delta,true};options.limits=&cut;options.budget=delta<0;
+            CHECK(!parameter_once(&options,&metrics));}
+        options.limits=NULL;options.budget=false;CHECK(!parameter_once(&options,&metrics));
+        fprintf(stderr,"PARAMETER_MEMORY checked=3 recovered=1 producer_dead=1 physical0/0 JSON0/0 app0/0\n");return 0;
     }
     CHECK(argc==5);options.scenario=(unsigned)strtoul(argv[4],NULL,10);CHECK(options.scenario<=20);
     return parameter_once(&options,&metrics);

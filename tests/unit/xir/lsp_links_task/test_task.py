@@ -13,7 +13,7 @@ mode = sys.argv[3]
 assert mode in ('--normal', '--resources', '--counterfactual')
 env = {**os.environ, 'XRAY_STDLIB_PATH': str(stdlib.resolve())}
 maximum = str((1 << 64) - 1)
-stats_re = re.compile(rb'LINKS source=(\d+) json=(\d+) source_hit=(\d+) json_hit=(\d+) exit=(\d+) allocated=(\d+) peak=(\d+) work=(\d+) physical0/0 JSON0/0 app0/0')
+stats_re = re.compile(rb'LINKS source=(\d+) json=(\d+) source_hit=(\d+) json_hit=(\d+) exit=(\d+) allocated=(\d+) peak=(\d+) held=(\d+) physical0/0 JSON0/0 app0/0')
 
 
 def unpack(data):
@@ -57,11 +57,11 @@ with tempfile.TemporaryDirectory(prefix='links-task-😀-#-', dir=os.getcwd()) a
         result = invoke(uri, library, '--resource', maximum, maximum)
         assert result.returncode == 0, result.stderr[-3000:]
         match = stats_re.search(result.stderr)
-        assert match and all(int(match[n]) > 0 for n in (1, 2, 6, 7, 8)) and all(int(match[n]) == 0 for n in (3, 4, 5)), result.stderr[-3000:]
+        assert match and all(int(match[n]) > 0 for n in (1, 2, 7, 8)) and all(int(match[n]) == 0 for n in (3, 4, 5)), result.stderr[-3000:]
         messages = unpack(result.stdout)
         assert len(messages) == 1 and messages[0]['id'] == 'source\0λ'
         check_links(messages[0]['result'], library, disk)
-        measurement = dict(source=int(match[1]), json=int(match[2]), allocated=int(match[6]), peak=int(match[7]), work=int(match[8]))
+        measurement = dict(source=int(match[1]), json=int(match[2]), allocated=int(match[6]), peak=int(match[7]), held=int(match[8]))
     if mode == '--normal':
         for scenario in [*range(14), 15]:
             result = invoke(uri, library, scenario, *([measurement['json'] - 1] if scenario == 15 else []))
@@ -112,15 +112,17 @@ with tempfile.TemporaryDirectory(prefix='links-task-😀-#-', dir=os.getcwd()) a
 
         with ThreadPoolExecutor(max_workers=8) as pool:
             rows += [future.result() for future in as_completed([pool.submit(check_chunk, chunk) for chunk in chunks])]
-        result = invoke(uri, library, '--axes', measurement['allocated'], measurement['peak'], measurement['work'])
-        assert result.returncode == 0 and b'LINKS_AXES checked=9 physical0/0 JSON0/0 app0/0' in result.stderr, result.stderr[-3000:]
+        result = invoke(uri, library, '--memory', measurement['peak'])
+        assert result.returncode == 0 and b'LINKS_MEMORY checked=3 recovered=1 physical0/0 JSON0/0 app0/0' in result.stderr, result.stderr[-3000:]
         messages = unpack(result.stdout)
-        assert sum('result' in value for value in messages) == 6, messages
+        assert len(messages)==4 and sum('result' in value for value in messages) == 3, messages
+        assert sum('error' in message for message in messages)==1,messages
+        assert all(re.search(r'status=12\)$',message['error']['message']) for message in messages if 'error' in message),messages
         for value in messages:
             if 'result' in value:
                 check_links(value['result'], library, disk)
             else:
                 assert value['error']['code'] == -32603, value
-        rows.append(dict(resource_axes=9))
+        rows.append(dict(held_boundaries_checked=3,recovered=True))
     print(json.dumps(dict(image_sha256=hashlib.sha256(exe.read_bytes()).hexdigest(), mode=mode,
                           measured=measurement, cases=len(rows), complete_FI=mode == '--resources', rows=rows), ensure_ascii=False))

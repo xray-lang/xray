@@ -10,6 +10,7 @@
  * KEY CONCEPT:
  *   Reject malformed editor positions and publish only complete owned edits.
  */
+#include "xir/xxir_compile_memory.h"
 #include "xlsp_on_type.h"
 #include "xlsp_source_on_type.h"
 #include "xlsp_server.h"
@@ -32,7 +33,7 @@ XR_FUNC XrJsonValue *xlsp_on_type_handle(XrLspServer *server,XrJsonValue *params
     XlspSourceOnTypeInput settings={{(uint32_t)line->as.integer,(uint32_t)column->as.integer},(uint32_t)tabs->as.integer,spaces->as.boolean,trigger->as.string[0]};
     XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();XrCompileResources *resources=NULL;XrJsonValue *result=NULL;
     XrCompileResourceStatus made=xr_compile_resources_new(&limits,&resources);
-    XrXirStatus status=made==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:made==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrXirStatus status=xir_compile_resource_status(made);
     if(status==XR_XIR_OK)status=xlsp_source_on_type_json(resources,&input,&settings,&result,NULL);
     xr_compile_resources_release(resources);server->source_failure.status=(unsigned)status;if(status==XR_XIR_OK)server->source_failure.stage=0;return result;
 }
