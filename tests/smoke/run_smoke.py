@@ -20,6 +20,9 @@ from xray_crypto_suite import CryptoCommands, expected_catalog as expected_crypt
 from trace_oracle import ChannelTrace, expected_channels, expected_traces, verify_pairs
 
 
+SLOW_COMMAND_SECONDS = 20.0
+
+
 @dataclass(frozen=True)
 class Source:
     path: str
@@ -201,14 +204,30 @@ def execute(case: dict, spec: Source, binary: Path, root: Path, work: Path,
         source = work / "source.xr"
         source.write_text(spec.text, encoding="utf-8", newline="\n")
     environment = dict(os.environ, XRAY_STDLIB_PATH=str(root / "stdlib"), NO_COLOR="1")
-    commands = []
+    commands, warnings = [], []
 
     def invoke(stage: str, command: list) -> proc.ProcResult:
+        command_started = time.monotonic()
         result = proc.run(command, cwd=root, env=environment, timeout=timeout)
+        elapsed = time.monotonic() - command_started
+        timing_scope = ({"build": "native_compile_link", "check": "source_check",
+                         "run": "native_execute" if case["mode"] == "build-run" else "vm_compile_execute"}
+                        .get(stage, "suite_driver"))
         (logs / f"{stage}.stdout").write_bytes(result.stdout)
         (logs / f"{stage}.stderr").write_bytes(result.stderr)
         commands.append({"stage": stage, "argv": [str(arg) for arg in command],
-                         "exit_code": result.returncode, "timed_out": result.timed_out})
+                         "exit_code": result.returncode, "timed_out": result.timed_out,
+                         "seconds": round(elapsed, 6), "timing_scope": timing_scope})
+        if elapsed > SLOW_COMMAND_SECONDS:
+            warning = {"kind": "slow_command", "stage": stage, "seconds": round(elapsed, 6),
+                       "threshold_seconds": SLOW_COMMAND_SECONDS, "timing_scope": timing_scope}
+            warnings.append(warning)
+            print(f"SMOKE_WARN {case['id']} stage={stage} seconds={elapsed:.6f} "
+                  f"scope={timing_scope} threshold={SLOW_COMMAND_SECONDS:g}", flush=True)
+        progress = logs / "commands.json.tmp"
+        progress.write_text(json.dumps({"schema": 1, "id": case["id"], "commands": commands,
+                                       "warnings": warnings}, indent=2) + "\n", encoding="utf-8")
+        progress.replace(logs / "commands.json")
         return result
 
     started = time.monotonic()
@@ -221,7 +240,8 @@ def execute(case: dict, spec: Source, binary: Path, root: Path, work: Path,
             result = invoke(stage, [executable])
         elif result.ok:
             return {"id": case["id"], "group": "native", "status": "fail",
-                    "reason": "successful build produced no executable", "commands": commands}
+                    "reason": "successful build produced no executable", "commands": commands,
+                    "warnings": warnings, "seconds": round(time.monotonic() - started, 3)}
     else:
         stage = case["mode"]
         result = invoke(stage, [binary, stage, source])
@@ -237,7 +257,7 @@ def execute(case: dict, spec: Source, binary: Path, root: Path, work: Path,
             suite = {"status": "fail", "reason": reason, "executed": False}
     row = {"id": case["id"], "group": "native" if case["mode"] == "build-run" else spec.group,
             "status": status, "reason": reason, "executed": True, "exit_code": result.returncode,
-            "first_diagnostic": diagnostic, "commands": commands,
+            "first_diagnostic": diagnostic, "commands": commands, "warnings": warnings,
             "seconds": round(time.monotonic() - started, 3)}
     if suite is not None:
         row["suite"] = suite
@@ -306,6 +326,8 @@ def main() -> int:
         results.append(row)
         row["log_directory"] = str(logs)
         print(f"{row['status'].upper()} {row['id']}: {row['reason']}", flush=True)
+        if row.get("executed") is True:
+            print(f"SMOKE_TIME {row['id']} module_seconds={row['seconds']:.3f}", flush=True)
     for row in verify_pairs(cases, results):
         print(f"FAIL {row['id']}: {row['reason']}", flush=True)
     metrics = fixed_metrics(baseline, cases, results)

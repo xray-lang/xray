@@ -1,5 +1,7 @@
 """Regression tests for a smoke gate that must never hide a product failure."""
 import json
+import io
+from contextlib import redirect_stdout
 import tempfile
 import unittest
 from pathlib import Path
@@ -166,6 +168,74 @@ class NativeExecutionTests(unittest.TestCase):
                 row = smoke.execute(case, spec, root / "xray", root, root, root, 1)
             self.assertEqual(row["status"], "fail")
             self.assertIn("no executable", row["reason"])
+
+
+class CommandTimingTests(unittest.TestCase):
+    def execute_timed(self, mode="run", durations=(1.0,), timed_out=False, suite=False):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "one.txt").write_bytes(b"1\n")
+            case = {"id": "example", "path": "example.xr", "mode": mode,
+                    "expect": "pass", "exit_code": 0, "stdout": "one.txt"}
+            if suite:
+                case["suite"] = {"schema": 1, "catalog": "unused.json"}
+            spec = smoke.Source("example.xr", "stdlib", "run", "print(1)\n")
+            now, remaining, calls = [0.0], iter(durations), []
+            def run(command, **kwargs):
+                calls.append((command, kwargs))
+                now[0] += next(remaining)
+                if len(command) > 1 and command[1] == "build":
+                    Path(command[-1]).write_bytes(b"fake executable")
+                    return result(stdout=b"Generated\n")
+                return result(1, b"", b"timeout diagnostic\n", True) if timed_out else result()
+            class Suite:
+                def execute(self, case, root, logs, invoke):
+                    invoke("suite-vm", [root / "fixture"])
+                    return {"status": "pass", "executed": True}
+            console = io.StringIO()
+            with patch.object(smoke.proc, "run", side_effect=run), patch.object(smoke.time, "monotonic", side_effect=lambda: now[0]), redirect_stdout(console):
+                row = smoke.execute(case, spec, root / "xray", root, root, root, 30,
+                                    suites=Suite() if suite else None)
+            progress = json.loads((root / "commands.json").read_text(encoding="utf-8"))
+            stderr = (root / "run.stderr").read_bytes()
+            return row, progress, console.getvalue(), stderr, calls
+
+    def test_vm_threshold_is_strict_and_warning_preserves_streams_and_verdict(self):
+        for duration, count in ((20.0, 0), (20.0001, 1)):
+            with self.subTest(duration=duration):
+                row, progress, console, stderr, calls = self.execute_timed(durations=(duration,))
+                self.assertEqual(row["status"], "pass")
+                self.assertEqual(row["commands"][0]["seconds"], duration)
+                self.assertEqual(row["commands"][0]["timing_scope"], "vm_compile_execute")
+                self.assertEqual(len(row["warnings"]), count)
+                self.assertEqual(progress["commands"], row["commands"])
+                self.assertEqual(progress["warnings"], row["warnings"])
+                self.assertEqual(console.count("SMOKE_WARN"), count)
+                self.assertEqual(stderr, b"")
+                self.assertEqual(len(calls), 1)
+                self.assertEqual(calls[0][1]["timeout"], 30)
+
+    def test_native_compile_and_execute_have_separate_command_times(self):
+        row, _, _, stderr, calls = self.execute_timed("build-run", (25.0, 1.0))
+        self.assertEqual(row["status"], "pass")
+        self.assertEqual([r["seconds"] for r in row["commands"]], [25.0, 1.0])
+        self.assertEqual([r["timing_scope"] for r in row["commands"]], ["native_compile_link", "native_execute"])
+        self.assertEqual([r["stage"] for r in row["warnings"]], ["build"])
+        self.assertEqual(stderr, b"")
+        self.assertEqual(len(calls), 2)
+
+    def test_timeout_stays_failure_and_suite_uses_the_same_command_timer(self):
+        row, _, _, stderr, _ = self.execute_timed(durations=(30.5,), timed_out=True)
+        self.assertEqual(row["status"], "fail")
+        self.assertTrue(row["commands"][0]["timed_out"])
+        self.assertEqual(stderr, b"timeout diagnostic\n")
+        self.assertEqual(len(row["warnings"]), 1)
+        row, progress, _, _, calls = self.execute_timed(durations=(1.0, 21.0), suite=True)
+        self.assertEqual(row["status"], "pass")
+        self.assertEqual(row["commands"][-1]["timing_scope"], "suite_driver")
+        self.assertEqual(row["commands"][-1]["seconds"], 21.0)
+        self.assertEqual(progress["commands"], row["commands"])
+        self.assertEqual(len(calls), 2)
 
 
 class SuiteTests(unittest.TestCase):
