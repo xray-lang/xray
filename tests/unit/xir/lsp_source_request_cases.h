@@ -1,6 +1,7 @@
 /* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
 #ifndef LSP_SOURCE_REQUEST_CASES_H
 #define LSP_SOURCE_REQUEST_CASES_H
+#include "xir/xxir_compile_memory.h"
 #include "app/lsp/xlsp_source_request.h"
 static void request_facts(XrJsonValue *json,const char *root_uri,const char *lib_uri,unsigned mode) {
     CHECK(json);
@@ -24,7 +25,7 @@ static XrXirStatus request_once(const char *root_uri,const char *lib_uri,unsigne
     XrCompileResourceLimits limits,XrCompileResourceStats *stats) {
     XrCompileResources *resources=NULL;XlspSourceRequest *request=NULL;XlspSourceRequestResult result={0};bool caller_lease=true;
     XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);
-    if(created!=XR_COMPILE_RESOURCE_OK)return created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    if(created!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(created);
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     char root[sizeof(open_root)],lib[sizeof(open_library)];memcpy(root,open_root,sizeof(root));memcpy(lib,open_library,sizeof(lib));
     char *first=xr_strdup(root_uri),*second=xr_strdup(lib_uri);CHECK(first&&second);
@@ -77,12 +78,13 @@ static void source_request_cases(const char *root_uri,const char *lib_uri,bool f
             lsp_json_fail=SIZE_MAX;lsp_json_injected=false;
             printf("LSP owned Source request mode=%u actual JSON sites=%zu, atomic output, physical=0/0\n",mode,json_sites);
         }
-        if(faults)for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta) {
-            XrCompileResourceLimits exact={stats.allocated_bytes,stats.peak_bytes,stats.work};
-            uint64_t *n=axis==0?&exact.allocated_bytes:axis==1?&exact.live_bytes:&exact.work;CHECK(*n&&*n<INT64_MAX);
-            *n=(uint64_t)((int64_t)*n+delta);
-            CHECK(request_once(root_uri,lib_uri,mode,false,exact,NULL)==(delta<0?XR_XIR_BUDGET:XR_XIR_OK));
+        if(faults)for(int delta=-1;delta<=1;++delta) {
+            CHECK(stats.peak_bytes>1&&stats.peak_bytes<INT64_MAX);
+            XrCompileResourceLimits exact={.memory_mode=XR_COMPILE_MEMORY_FINITE,
+                .memory_limit=(uint64_t)((int64_t)stats.peak_bytes+delta),.profile_allocations=true};
+            CHECK(request_once(root_uri,lib_uri,mode,false,exact,NULL)==(delta<0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
         }
+        if(faults)CHECK(request_once(root_uri,lib_uri,mode,false,limits,NULL)==XR_XIR_OK);
         CHECK(request_once(root_uri,lib_uri,mode,true,limits,NULL)==XR_XIR_OK);
         printf("LSP owned Source request mode=%u sites=%zu, one-shot/cancel/producer death, physical=0/0\n",mode,sites);
     }

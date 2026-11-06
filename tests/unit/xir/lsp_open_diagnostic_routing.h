@@ -1,4 +1,5 @@
 /* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
+#include "xir/xxir_compile_memory.h"
 #ifndef LSP_OPEN_DIAGNOSTIC_ROUTING_H
 #define LSP_OPEN_DIAGNOSTIC_ROUTING_H
 static const char routing_bad_type[]=
@@ -32,7 +33,7 @@ static XrXirStatus routing_once(const char *root_uri,const char *lib_uri,unsigne
     bool caller_lease=true;
     XlspSourceBuffer *buffer=NULL;XlspSyntaxSnapshot *syntax=NULL;XrJsonValue *params=NULL;
     XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);
-    if(created!=XR_COMPILE_RESOURCE_OK)return created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    if(created!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(created);
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     char root[sizeof(open_root)],library[sizeof(routing_bad_type)];
     const char *root_text=mode==2?open_bad_syntax:open_root;
@@ -103,12 +104,13 @@ static void routing_run(const char *root_uri,const char *lib_uri,bool faults) {
             }
         }
         runtime_fail_at=SIZE_MAX;
-        if(faults)for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta) {
-            XrCompileResourceLimits exact={stats.allocated_bytes,stats.peak_bytes,stats.work};
-            uint64_t *n=axis==0?&exact.allocated_bytes:axis==1?&exact.live_bytes:&exact.work;
-            CHECK(*n&&*n<INT64_MAX);*n=(uint64_t)((int64_t)*n+delta);
-            CHECK(routing_once(root_uri,lib_uri,mode,exact,NULL)==(delta<0?XR_XIR_BUDGET:expected));
+        if(faults)for(int delta=-1;delta<=1;++delta) {
+            CHECK(stats.peak_bytes>1&&stats.peak_bytes<INT64_MAX);
+            XrCompileResourceLimits exact={.memory_mode=XR_COMPILE_MEMORY_FINITE,
+                .memory_limit=(uint64_t)((int64_t)stats.peak_bytes+delta),.profile_allocations=true};
+            CHECK(routing_once(root_uri,lib_uri,mode,exact,NULL)==(delta<0?XR_XIR_MEMORY_LIMIT:expected));
         }
+        if(faults)CHECK(routing_once(root_uri,lib_uri,mode,limits,NULL)==expected);
         printf("LSP routed diagnostic mode=%u compiler sites=%zu, owned params, physical=0/0\n",mode,sites);
     }
     routing_json_cases(root_uri,lib_uri);

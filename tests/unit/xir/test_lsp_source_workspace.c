@@ -1,4 +1,5 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
+#include "xir/xxir_compile_memory.h"
 #include "app/lsp/xlsp_source_workspace.h"
 #include "api/xsource_compile.h"
 #include "base/xwindows_utf8.h"
@@ -19,7 +20,7 @@ static void facts(XrJsonValue *out,const char *uri) {
 static XrXirStatus once(const char *root_uri,const char *lib_uri,XrCompileResourceLimits limits,XrCompileResourceStats *stats) {
     XrCompileResources *resources=NULL;XlspSourceWorkspace *workspace=NULL;XrJsonValue *out=NULL;
     XrCompileResourceStatus made=xr_compile_resources_new(&limits,&resources);
-    if(made!=XR_COMPILE_RESOURCE_OK)return made==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    if(made!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(made);
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};unsigned stage=0;
     char root[512],lib[sizeof(lib_text)];int root_length=snprintf(root,sizeof(root),root_text,workspace_specifier);
     CHECK(root_length>0&&(size_t)root_length<sizeof(root));memcpy(lib,lib_text,sizeof(lib));
@@ -50,12 +51,13 @@ static int run(int argc,char **argv) {
         CHECK(!runtime_live&&!runtime_bytes);
     }
     runtime_fail_at=SIZE_MAX;
-    for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta) {
-        XrCompileResourceLimits exact={stats.allocated_bytes,stats.peak_bytes,stats.work};
-        uint64_t *n=axis==0?&exact.allocated_bytes:axis==1?&exact.live_bytes:&exact.work;
-        CHECK(*n&&*n<INT64_MAX);*n=(uint64_t)((int64_t)*n+delta);
-        CHECK(once(argv[1],argv[2],exact,NULL)==(delta<0?XR_XIR_BUDGET:XR_XIR_OK));
+    for(int delta=-1;delta<=1;++delta) {
+        CHECK(stats.peak_bytes>1&&stats.peak_bytes<INT64_MAX);
+        XrCompileResourceLimits exact={.memory_mode=XR_COMPILE_MEMORY_FINITE,
+            .memory_limit=(uint64_t)((int64_t)stats.peak_bytes+delta),.profile_allocations=true};
+        CHECK(once(argv[1],argv[2],exact,NULL)==(delta<0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
     }
+    CHECK(once(argv[1],argv[2],limits,NULL)==XR_XIR_OK);
     printf("LSP actual stdlib/Catalog/TEXT authority/Session/overlay/query fresh sites=%zu, ledger physical=0/0\n",sites);
     return 0;
 }

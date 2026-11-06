@@ -1,4 +1,5 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
+#include "xir/xxir_compile_memory.h"
 #include "app/lsp/xlsp_source_open.h"
 #include "api/xsource_compile.h"
 #include "base/xwindows_utf8.h"
@@ -31,7 +32,7 @@ static XrXirStatus open_once(const char *root_uri,const char *lib_uri,unsigned m
     bool caller_lease=true;
     XlspSyntaxSnapshot *syntax=NULL;XlspSourceWorkspace *workspace=NULL;XrJsonValue *diagnostics=NULL,*definition=NULL;
     XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);
-    if(created!=XR_COMPILE_RESOURCE_OK)return created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    if(created!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(created);
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     char root[sizeof(open_root)],lib[sizeof(open_library)];
     const char *source=mode==0?open_root:mode==1?open_bad_syntax:open_bad_type;
@@ -126,13 +127,14 @@ static int open_run(int argc,char **argv) {
             CHECK(!runtime_live&&!runtime_bytes);
         }
         runtime_fail_at=SIZE_MAX;
-        for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta) {
-            XrCompileResourceLimits exact={stats.allocated_bytes,stats.peak_bytes,stats.work};
-            uint64_t *n=axis==0?&exact.allocated_bytes:axis==1?&exact.live_bytes:&exact.work;
-            CHECK(*n&&*n<INT64_MAX);*n=(uint64_t)((int64_t)*n+delta);
-            CHECK(open_once(argv[1],argv[2],mode,exact,NULL)==(delta<0?XR_XIR_BUDGET:XR_XIR_OK));
+        for(int delta=-1;delta<=1;++delta) {
+            CHECK(stats.peak_bytes>1&&stats.peak_bytes<INT64_MAX);
+            XrCompileResourceLimits exact={.memory_mode=XR_COMPILE_MEMORY_FINITE,
+                .memory_limit=(uint64_t)((int64_t)stats.peak_bytes+delta),.profile_allocations=true};
+            CHECK(open_once(argv[1],argv[2],mode,exact,NULL)==(delta<0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
         }
-        printf("LSP open mode=%u actual compiler sites=%zu, three axes, producer death, physical=0/0\n",mode,sites);
+        CHECK(open_once(argv[1],argv[2],mode,limits,NULL)==XR_XIR_OK);
+        printf("LSP open mode=%u actual compiler sites=%zu, charged held-memory boundary, producer death, physical=0/0\n",mode,sites);
     }
     open_json_cases(argv[1],argv[2]);routing_run(argv[1],argv[2],false);return 0;
 }
