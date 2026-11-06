@@ -63,12 +63,12 @@ static void rp_free(void *memory) {
 #pragma pop_macro("xr_malloc")
 
 static inline XrCompileResourceLimits rp_caps(void) {
-    return (XrCompileResourceLimits){UINT64_C(8388608),UINT64_C(4194304),UINT64_C(4000000)};
+    return (XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,UINT64_C(4194304),true};
 }
 static inline XrXirCompileContext rp_owner(XrCompileResourceLimits caps) {
     XrCompileResourceLimits maximum = rp_caps();
-    CHECK(caps.allocated_bytes <= maximum.allocated_bytes && caps.live_bytes <= maximum.live_bytes &&
-        caps.work <= maximum.work);
+    CHECK(caps.memory_mode == XR_COMPILE_MEMORY_FINITE && caps.memory_limit <= maximum.memory_limit &&
+        caps.profile_allocations);
     XrXirCompileContext context = {0};
     CHECK(xr_compile_resources_new(&caps,&context.resources) == XR_COMPILE_RESOURCE_OK);
     context.limits = xr_xir_compile_default_limits();
@@ -83,7 +83,7 @@ static inline XrCompileResourceStats rp_stats(const XrXirCompileContext *context
     return result;
 }
 static inline void rp_owner_free(XrXirCompileContext *context, uint64_t baseline) {
-    CHECK(rp_stats(context).live_bytes == baseline);
+    CHECK(rp_stats(context).held_bytes == baseline);
     xr_compile_resources_release(context->resources);
     *context = (XrXirCompileContext){0};
 }
