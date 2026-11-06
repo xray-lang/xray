@@ -32,10 +32,10 @@ static void default_invoke_case(unsigned mode,bool generic) {
     XrXirBlock one={0,1,0,0},two={0,2,0,0},blocks[]={{0,1,0,0},{1,2,0,0},{3,3,0,0}};
     XrXirType i64=XR_XIR_I64;
     XrXirFunction functions[]={
-        {"init",4,NULL,0,XR_XIR_UNIT,&one,1,&ret,1,NULL,0},
-        {"entry",5,NULL,0,XR_XIR_I64,blocks,3,entry,6,NULL,0},
-        {"owner",5,&i64,1,XR_XIR_I64,&one,1,&ret,1,NULL,0},
-        {"default",7,NULL,0,XR_XIR_I64,&two,1,helper,2,NULL,0}};
+        {"init",4,NULL,0,XR_XIR_UNIT,&one,1,&ret,1,NULL,0,.error_type=XR_XIR_NEVER},
+        {"entry",5,NULL,0,XR_XIR_I64,blocks,3,entry,6,NULL,0,.error_type=mode==15?XR_XIR_ERROR:XR_XIR_NEVER},
+        {"owner",5,&i64,1,XR_XIR_I64,&one,1,&ret,1,NULL,0,.error_type=XR_XIR_NEVER},
+        {"default",7,NULL,0,XR_XIR_I64,&two,1,helper,2,NULL,0,.error_type=XR_XIR_CONSTRUCTED_TYPE_BASE}};
     XrXirSourceModule source={"root",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity ids[4]={{0},{0},{0},{0}};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=ids,.entry_function=1};
@@ -76,9 +76,12 @@ static void default_invoke_case(unsigned mode,bool generic) {
     CHECK(status==expected && ((checked!=NULL)==(expected==XR_XIR_OK)));
     if(!checked)return;
     XrXirEffects *effects=NULL;CHECK(xr_xir_compile_effects_analyze(checked, &effects)==XR_XIR_OK);
-    CHECK(xr_xir_effects_error(effects,3,XR_XIR_CONSTRUCTED_TYPE_BASE,0));
-    CHECK(xr_xir_effects_error(effects,1,XR_XIR_CONSTRUCTED_TYPE_BASE,0)==(mode==15));
-    CHECK(!xr_xir_effects_error_unknown(effects,1));xr_xir_compile_effects_free(effects);
+    XrXirEffectFacts helper_facts=xr_xir_effects_read(effects,3),entry_facts=xr_xir_effects_read(effects,1);
+    CHECK(helper_facts.status==XR_XIR_OK && helper_facts.control.throws==XR_XIR_EFFECT_MAY);
+    CHECK(entry_facts.status==XR_XIR_OK && entry_facts.control.throws==(mode==15?XR_XIR_EFFECT_MAY:XR_XIR_EFFECT_NONE));
+    CHECK(checked->module.functions[3].error_type==XR_XIR_CONSTRUCTED_TYPE_BASE &&
+        checked->module.functions[1].error_type==(mode==15?XR_XIR_ERROR:XR_XIR_NEVER));
+    xr_xir_compile_effects_free(effects);
     XrXirArtifact *special=NULL,*read=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_specialize(checked, &special, NULL, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
@@ -102,6 +105,6 @@ static void default_invoke_case(unsigned mode,bool generic) {
 }
 static void default_invoke_cases(void){
     for(unsigned mode=0;mode<16;++mode){default_invoke_case(mode,false);default_invoke_case(mode,true);}
-    puts("default invoke: 32 CFG/authority cases; caught/rethrow error sets and provenance PASS");
+    puts("default invoke: 32 CFG/authority cases; caught/rethrow declarations and provenance PASS");
 }
 #endif // XIR_DEFAULT_INVOKE_CASES_H

@@ -48,10 +48,10 @@ static void default_tuple_case(bool constructor,unsigned mode) {
     uint32_t operands[]={0,1};
     XrXirBlock one={0,1,0,0},two={0,2,0,0},four={0,4,0,0};
     XrXirFunction functions[]={
-        {"init",4,NULL,0,XR_XIR_UNIT,&one,1,&ret,1,NULL,0},
-        {"entry",5,NULL,0,XR_XIR_I64,&four,1,entry,4,operands,2},
-        {"owner",5,parameters,2,XR_XIR_I64,&two,1,owner_ops,2,NULL,0},
-        {"default",7,NULL,0,XR_XIR_I64,&two,1,helper_ops,2,NULL,0}};
+        {"init",4,NULL,0,XR_XIR_UNIT,&one,1,&ret,1,NULL,0,.error_type=XR_XIR_NEVER},
+        {"entry",5,NULL,0,XR_XIR_I64,&four,1,entry,4,operands,2,.error_type=XR_XIR_NEVER},
+        {"owner",5,parameters,2,XR_XIR_I64,&two,1,owner_ops,2,NULL,0,.error_type=XR_XIR_NEVER},
+        {"default",7,NULL,0,XR_XIR_I64,&two,1,helper_ops,2,NULL,0,.error_type=XR_XIR_NEVER}};
     XrXirFunctionIdentity ids[4]={{0},{0},{.nominal_owner=1,.method_kind=XR_XIR_READ_METHOD},
         {.nominal_owner=1,.method_kind=XR_XIR_MEMBER_HELPER}};
     XrXirSourceModule source={"root",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};

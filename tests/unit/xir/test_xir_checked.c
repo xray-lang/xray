@@ -288,6 +288,7 @@ static void generic_callable_depth(void) {
     for (uint32_t i = 0; i < 129; ++i) {
         signatures[i].kind = XR_XIR_TYPE_CALLABLE;
         signatures[129+i].kind = XR_XIR_TYPE_CALLABLE;
+        signatures[i].element=signatures[129+i].element=XR_XIR_NEVER;
         signatures[i].flags = signatures[129+i].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED;
         signatures[i].result = (XrXirType) (i ? XR_XIR_CONSTRUCTED_TYPE_BASE+i-1 : XR_XIR_TYPE_PARAMETER_BASE);
         signatures[i].parameter_span = 1;
