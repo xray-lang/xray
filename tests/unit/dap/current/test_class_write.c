@@ -256,7 +256,14 @@ static void class_projection_aliases(void) {
 }
 #include "test_class_wrapper_write.h"
 int main(int argc,char **argv) {
-    xr_test_suppress_dialogs();bool resources=argc==2 && !strcmp(argv[1],"--resources");CHECK(argc==1 || resources);
+    xr_test_suppress_dialogs();
+    if (argc==2 && !strcmp(argv[1],"--observer-fault-2")) {
+        size_t sites=class_observer_fault(SIZE_MAX);CHECK(sites>2);
+        class_observer_fault(2);
+        puts("Focused Class observer: ordinal2 OOM/rollback/healthy retry/physical0 PASS");
+        return 0;
+    }
+    bool resources=argc==2 && !strcmp(argv[1],"--resources");CHECK(argc==1 || resources);
     for (uint32_t kind=0;kind<4;++kind) {
         size_t sites=class_case(kind,SIZE_MAX,0);CHECK(sites);
         for (uint32_t invalid=1;invalid<=5;++invalid) class_case(kind,SIZE_MAX,invalid);
