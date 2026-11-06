@@ -1,11 +1,11 @@
-fn make(n: i64) -> i64 {
+fn make(n: i64) throws(CryptoError) -> i64 {
   if (n < -1) { throw CryptoError.InvalidLength }
   var bytes = Array<u8>(n)
   return len(bytes)
 }
-fn answer() -> i64 {
-  var result = make(32)
+fn answer() throws(CryptoError) -> i64 {
+  var result = try make(32)
   try { result = make(-2) } catch (e: CryptoError) { result = result + 10 }
   return result
 }
-export fn consumerAnswer() -> i64 { return answer() }
+export fn consumerAnswer() throws(CryptoError) -> i64 { return try answer() }

@@ -59,17 +59,20 @@ static void library_state_atomic_i64_bad_slots(const XrXirCompileContext *contex
         else if (mode==2) slots[0].mutable=0;
         else {
             XrXirTypes types=*module->types;XrXirNominalTable table=*types.nominals;
-            CHECK(table.count && table.count<=8);XrXirNominalDeclaration records[8];
-            memcpy(records,table.declarations,table.count*sizeof(*records));uint32_t owner=UINT32_MAX;
+            CHECK(table.count && table.declarations);XrXirNominalDeclaration *records=NULL;
+            size_t live=source_program_compile_live,bytes=source_program_compile_bytes;
+            CHECK(xr_compile_resources_calloc(context->resources,table.count,sizeof(*records),(void **)&records)==XR_COMPILE_RESOURCE_OK && records);
+            memcpy(records,table.declarations,(size_t)table.count*sizeof(*records));uint32_t owner=UINT32_MAX;
             for (uint32_t n=0;n<table.count;++n) if (records[n].native.native_id==XR_NATIVE_DECLARATION_ORDERING) {
                 CHECK(owner==UINT32_MAX);owner=n;
             }
             CHECK(owner<table.count);
             if (mode==3) records[owner].native.source_fingerprint[0]^=1;else records[owner].native.native_id=XR_NATIVE_DECLARATION_ATOMIC;
             table.declarations=records;types.nominals=&table;malformed.types=&types;
-            XrXirArtifact *output=NULL;size_t live=source_program_compile_live,bytes=source_program_compile_bytes;
+            XrXirArtifact *output=NULL;
             CHECK(xr_xir_compile_check_v2(context,&malformed,xr_xir_compile_artifact_construction(artifact),&output,NULL)==XR_XIR_BAD_STRUCTURE);
-            CHECK(!output && source_program_compile_live==live && source_program_compile_bytes==bytes);continue;
+            CHECK(!output);xr_compile_resources_free(records);
+            CHECK(source_program_compile_live==live && source_program_compile_bytes==bytes);continue;
         }
         XrXirArtifact *output=NULL;
         size_t live=source_program_compile_live,bytes=source_program_compile_bytes;
