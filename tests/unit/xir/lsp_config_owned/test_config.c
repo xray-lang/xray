@@ -63,8 +63,7 @@ static char *config_app_strdup(const char *text) {
 #include "app/lsp/xlsp_source_config.c"
 #include "app/lsp/xlsp_config.c"
 
-static const XrCompileResourceLimits config_limits = {
-    UINT64_C(64) * 1024 * 1024, UINT64_C(8) * 1024 * 1024, UINT64_C(128000000)};
+static const XrCompileResourceLimits config_limits = {XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true};
 static const XrTomlParseLimits parse_limits = {1024 * 1024, 64};
 static void initial(XlspConfig *config) {
     *config = (XlspConfig){0};
@@ -112,7 +111,7 @@ static XrXirStatus transaction(const char *root, unsigned mode, const XrCompileR
     runtime_attempts = 0; runtime_fail_at = physical_fail;
     XrCompileResources *resources = NULL;
     XrCompileResourceStatus opened = xr_compile_resources_new(limits, &resources);
-    XrXirStatus status = config_resource(opened);
+    XrXirStatus status = xir_compile_resource_status(opened);
     XlspSourceConfig *owner = NULL;
     if (status == XR_XIR_OK) status = xlsp_source_config_read(resources, root, &target, &parse_limits, &owner);
     if (status == XR_XIR_OK) {
@@ -158,7 +157,7 @@ static void rejected_limits(const char *root) {
     XrTomlParseLimits low[] = {{1, 64}, {1024 * 1024, 1}};
     for (unsigned i = 0; i < 2; ++i) {
         XlspSourceConfig *owner = NULL;
-        CHECK(xlsp_source_config_read(resources, root, &target, &low[i], &owner) == XR_XIR_BUDGET);
+        CHECK(xlsp_source_config_read(resources, root, &target, &low[i], &owner) == (i == 0 ? XR_XIR_OVERFLOW : XR_XIR_BUDGET));
         CHECK(!owner); unchanged(&target, &before);
     }
     XlspSourceConfig *sentinel = NULL;
@@ -234,20 +233,19 @@ int main(int argc, char **argv) {
                 CHECK(transaction(argv[1], mode, &config_limits, SIZE_MAX, i, NULL) == XR_XIR_OUT_OF_MEMORY);
                 adapter_failure(argv[1], SIZE_MAX, i);
             }
-            uint64_t used[] = {stats.allocated_bytes, stats.peak_bytes, stats.work};
-            for (unsigned axis = 0; axis < 3; ++axis) for (int delta = -1; delta <= 1; ++delta) {
+            CHECK(stats.peak_bytes && stats.peak_bytes < UINT64_MAX);
+            for (int delta = -1; delta <= 1; ++delta) {
                 XrCompileResourceLimits limits = config_limits;
-                uint64_t value = delta < 0 ? used[axis] - 1 : used[axis] + (unsigned)delta;
-                if (axis == 0) limits.allocated_bytes = value;
-                else if (axis == 1) limits.live_bytes = value; else limits.work = value;
+                limits.memory_limit = delta < 0 ? stats.peak_bytes - 1 : stats.peak_bytes + (unsigned)delta;
                 XrXirStatus status = transaction(argv[1], mode, &limits, SIZE_MAX, SIZE_MAX, NULL);
-                CHECK(status == (delta < 0 ? XR_XIR_BUDGET : XR_XIR_OK));
+                CHECK(status == (delta < 0 ? XR_XIR_MEMORY_LIMIT : XR_XIR_OK));
             }
+            CHECK(transaction(argv[1], mode, &config_limits, SIZE_MAX, SIZE_MAX, NULL) == XR_XIR_OK);
         }
     }
     CHECK(!runtime_live && !runtime_bytes && !app_live && !app_bytes);
-    printf("mode=%u Source=%zu app=%zu full=%d allocated=%llu peak=%llu work=%llu\n", mode,
+    printf("mode=%u Source=%zu app=%zu full=%d allocated=%llu peak=%llu held=%llu\n", mode,
         physical_count, receiving_count, full, (unsigned long long)stats.allocated_bytes,
-        (unsigned long long)stats.peak_bytes, (unsigned long long)stats.work);
+        (unsigned long long)stats.peak_bytes, (unsigned long long)stats.held_bytes);
     return 0;
 }

@@ -40,7 +40,7 @@ static void app_free(void *p){
 #include "app/lsp/xlsp_semantic_tokens.c"
 #include "app/lsp/xlsp_initialize_result.c"
 #include "app/lsp/xlsp_source_initialize.c"
-static const XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+static const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true};
 static const char *const cases[]={
     "{\"workspaceFolders\":[{\"uri\":\"file:///C:/init/a%20%CE%BB\",\"name\":\"A \\u03bb\\ud83d\\ude00\"},{\"uri\":\"file:///C:/init/b\",\"name\":\"B\"}]}",
     "{\"rootUri\":\"file:///C:/init/uri\"}",
@@ -142,7 +142,7 @@ static XrXirStatus once(unsigned mode,const XrCompileResourceLimits *caps,size_t
     XrLspServer server={0};capabilities(&server,flags(mode));server.source_revision=10;XrJsonValue *params=input(mode);
     runtime_attempts=0;runtime_fail_at=fail;app_attempts=0;app_fail_at=app_fail;lsp_json_calls=0;lsp_json_fail=json_fail;lsp_json_injected=false;
     XrCompileResources *r=NULL;XrCompileResourceStatus opened=xr_compile_resources_new(caps,&r);
-    XrXirStatus status=opened==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:opened==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrXirStatus status=xir_compile_resource_status(opened);
     server.index_resources=r;if(status==XR_XIR_OK)status=xlsp_source_index_store_new(r,&server.source_index);XrLspServer before=server;
     XlspSourceInitialize *owner=NULL;XrJsonValue *result=NULL;
     if(status==XR_XIR_OK)status=xlsp_source_initialize_prepare(r,&server,params,&owner);xjson_free(params);
@@ -175,7 +175,7 @@ static void lifetime(void){
     xlsp_source_initialize_free(owner);cleanup(&server);CHECK(!runtime_live&&!runtime_bytes&&!app_live&&!app_bytes);response(kept,127,3);xjson_free(kept);CHECK(!lsp_json_live&&!lsp_json_bytes);
     for(unsigned mode=1;mode<=2;++mode){server=(XrLspServer){0};r=sdk_ledger(&limits);server.index_resources=r;CHECK(xlsp_source_index_store_new(r,&server.source_index)==XR_XIR_OK);server.source_revision=UINT64_MAX;params=input(mode==1?1:7);owner=NULL;
         CHECK(xlsp_source_initialize_prepare(r,&server,params,&owner)==XR_XIR_OK);xjson_free(params);before=server;result=NULL;
-        CHECK(xlsp_source_initialize_commit(owner,&server,&result)==(mode==1?XR_XIR_BUDGET:XR_XIR_OK));if(mode==1)CHECK(!result&&!memcmp(&server,&before,sizeof(server)));else CHECK(result&&server.initialized&&server.source_revision==UINT64_MAX);
+        CHECK(xlsp_source_initialize_commit(owner,&server,&result)==(mode==1?XR_XIR_OVERFLOW:XR_XIR_OK));if(mode==1)CHECK(!result&&!memcmp(&server,&before,sizeof(server)));else CHECK(result&&server.initialized&&server.source_revision==UINT64_MAX);
         xlsp_source_initialize_free(owner);cleanup(&server);xr_compile_resources_release(r);xjson_free(result);CHECK(!runtime_live&&!runtime_bytes&&!app_live&&!app_bytes&&!lsp_json_live&&!lsp_json_bytes);}
 }
 static void admission(void){
@@ -184,10 +184,10 @@ static void admission(void){
     server.index_resources=r;CHECK(xlsp_source_index_store_new(r,&server.source_index)==XR_XIR_OK);calls=runtime_attempts;
     server.shutdown_received=true;CHECK(xlsp_source_initialize_prepare(r,&server,NULL,&owner)==XR_XIR_BAD_STAGE&&!owner&&runtime_attempts==calls);
     server.shutdown_received=false;server.exit_received=true;CHECK(xlsp_source_initialize_prepare(r,&server,NULL,&owner)==XR_XIR_BAD_STAGE&&!owner&&runtime_attempts==calls);server.exit_received=false;
-    XrCompileResourceLimits closed={sizeof(XrCompileResources),sizeof(XrCompileResources),UINT64_MAX};XrCompileResources *receiver=sdk_ledger(&closed);server.index_resources=receiver;
+    XrCompileResourceLimits closed={XR_COMPILE_MEMORY_FINITE,sizeof(XrCompileResources),true};XrCompileResources *receiver=sdk_ledger(&closed);server.index_resources=receiver;
     XrJsonValue *params=input(1);CHECK(xlsp_source_initialize_prepare(r,&server,params,&owner)==XR_XIR_OK);xjson_free(params);
     XrLspServer before=server;XrJsonValue *result=NULL;size_t live=app_live,bytes=app_bytes;
-    CHECK(xlsp_source_initialize_commit(owner,&server,&result)==XR_XIR_BUDGET&&!result&&!memcmp(&before,&server,sizeof(server))&&app_live==live&&app_bytes==bytes);
+    CHECK(xlsp_source_initialize_commit(owner,&server,&result)==XR_XIR_MEMORY_LIMIT&&!result&&!memcmp(&before,&server,sizeof(server))&&app_live==live&&app_bytes==bytes);
     xlsp_source_initialize_free(owner);cleanup(&server);xr_compile_resources_release(receiver);xr_compile_resources_release(r);
     CHECK(!runtime_live&&!runtime_bytes&&!app_live&&!app_bytes&&!lsp_json_live&&!lsp_json_bytes);
 }
@@ -197,8 +197,13 @@ int main(void){
         if(full){for(size_t i=0;i<source;++i)CHECK(once(mode,&limits,i,SIZE_MAX,SIZE_MAX,NULL)==XR_XIR_OUT_OF_MEMORY);
             for(size_t i=0;i<json;++i){CHECK(once(mode,&limits,SIZE_MAX,i,SIZE_MAX,NULL)==XR_XIR_OUT_OF_MEMORY);CHECK(lsp_json_injected);}
             for(size_t i=0;i<app;++i)CHECK(once(mode,&limits,SIZE_MAX,SIZE_MAX,i,NULL)==XR_XIR_OUT_OF_MEMORY);
-            if(expected(mode)==XR_XIR_OK)for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits caps=limits;uint64_t value=axis==0?stats.allocated_bytes:axis==1?stats.peak_bytes:stats.work;value=delta<0?value-1:value+(unsigned)delta;
-                if(!axis)caps.allocated_bytes=value;else if(axis==1)caps.live_bytes=value;else caps.work=value;CHECK(once(mode,&caps,SIZE_MAX,SIZE_MAX,SIZE_MAX,NULL)==(delta<0?XR_XIR_BUDGET:XR_XIR_OK));}}
+            if(expected(mode)==XR_XIR_OK){
+                CHECK(stats.peak_bytes&&stats.peak_bytes<UINT64_MAX);
+                for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits caps=limits;
+                    caps.memory_limit=delta<0?stats.peak_bytes-1:stats.peak_bytes+(unsigned)delta;
+                    CHECK(once(mode,&caps,SIZE_MAX,SIZE_MAX,SIZE_MAX,NULL)==(delta<0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));}
+                CHECK(once(mode,&limits,SIZE_MAX,SIZE_MAX,SIZE_MAX,NULL)==XR_XIR_OK);
+            }}
         printf("Initialize mode=%u SourceFI=%zu JSONFI=%zu appFI=%zu full=%u atomic response/roots/initialized physical0/0\n",mode,source,json,app,full?1u:0u);}
     for(unsigned bits=0;bits<128;++bits)for(unsigned choice=0;choice<4;++choice){XrLspServer server={0};capabilities(&server,bits);XlspInitializeOptions options={(choice&1)!=0,(choice&2)!=0};XrJsonValue *result=xlsp_initialize_result(&server,&options);response(result,bits,choice);xjson_free(result);CHECK(!lsp_json_live&&!lsp_json_bytes);}
     lifetime();admission();return 0;

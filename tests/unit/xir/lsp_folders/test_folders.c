@@ -37,7 +37,7 @@ static void app_free(void *p){
 #define xr_free app_free
 #define xr_malloc app_malloc
 #include "app/lsp/xlsp_source_folders.c"
-static const XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+static const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true};
 #define FOLDER_A "{\"uri\":\"file:///C:/roots/a\",\"name\":\"A\"}"
 #define FOLDER_B "{\"uri\":\"file:///C:/roots/b\",\"name\":\"B\"}"
 #define FOLDER_C "{\"uri\":\"file:///C:/roots/c%20%CE%BB\",\"name\":\"C λ😀\"}"
@@ -89,7 +89,7 @@ static XrXirStatus once(unsigned mode,const XrCompileResourceLimits *caps,size_t
     XrLspServer server={0};initial(&server,mode);app_attempts=0;app_fail_at=app_fail;
     XrJsonValue *json=input(mode);size_t json_calls=lsp_json_calls;runtime_attempts=0;runtime_fail_at=fail;
     XrCompileResources *r=NULL;XrCompileResourceStatus opened=xr_compile_resources_new(caps,&r);
-    XrXirStatus status=opened==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:opened==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrXirStatus status=xir_compile_resource_status(opened);
     server.index_resources=r;if(status==XR_XIR_OK)status=xlsp_source_index_store_new(r,&server.source_index);
     XrLspServer before=server;bool changed=false;XlspSourceFolders *owner=NULL;
     if(status==XR_XIR_OK)status=xlsp_source_folders_read(r,&server,json,&owner);xjson_free(json);
@@ -135,7 +135,7 @@ static void lifetime(const char *entry){
     xlsp_source_folders_free(owner);cleanup(&server);CHECK(!runtime_live&&!runtime_bytes&&!app_live&&!app_bytes);
     server=(XrLspServer){0};initial(&server,0);r=sdk_ledger(&limits);server.index_resources=r;CHECK(xlsp_source_index_store_new(r,&server.source_index)==XR_XIR_OK);
     server.source_revision=UINT64_MAX;owner=NULL;CHECK(xlsp_source_folders_single(r,&server,"file:///C:/roots/z","z",true,&owner)==XR_XIR_OK);
-    before=server;changed=false;CHECK(xlsp_source_folders_commit(owner,&server,&changed)==XR_XIR_BUDGET&&!memcmp(&server,&before,sizeof(server))&&!changed);
+    before=server;changed=false;CHECK(xlsp_source_folders_commit(owner,&server,&changed)==XR_XIR_OVERFLOW&&!memcmp(&server,&before,sizeof(server))&&!changed);
     xlsp_source_folders_free(owner);owner=NULL;CHECK(xlsp_source_folders_single(r,&server,"file:///C:/roots/z","",false,&owner)==XR_XIR_OK);
     CHECK(xlsp_source_folders_commit(owner,&server,&changed)==XR_XIR_OK&&!changed&&!memcmp(&server,&before,sizeof(server)));
     xlsp_source_folders_free(owner);cleanup(&server);xr_compile_resources_release(r);CHECK(!runtime_live&&!runtime_bytes&&!app_live&&!app_bytes);
@@ -144,10 +144,10 @@ static void receiver_budget(void){
     XrLspServer server={0};initial(&server,0);XrCompileResources *r=sdk_ledger(&limits);server.index_resources=r;
     CHECK(xlsp_source_index_store_new(r,&server.source_index)==XR_XIR_OK);XlspSourceFolders *owner=NULL;
     CHECK(xlsp_source_folders_single(r,&server,"file:///C:/roots/z","Z",true,&owner)==XR_XIR_OK);
-    XrCompileResourceLimits closed={sizeof(XrCompileResources),sizeof(XrCompileResources),UINT64_MAX};XrCompileResources *receiver=sdk_ledger(&closed);server.index_resources=receiver;
+    XrCompileResourceLimits closed={XR_COMPILE_MEMORY_FINITE,sizeof(XrCompileResources),true};XrCompileResources *receiver=sdk_ledger(&closed);server.index_resources=receiver;
     XrLspServer before=server;bool changed=false;size_t live=app_live,bytes=app_bytes;
-    CHECK(xlsp_source_folders_commit(owner,&server,&changed)==XR_XIR_BUDGET&&!changed&&!memcmp(&server,&before,sizeof(server))&&app_live==live&&app_bytes==bytes);
-    XrCompileResourceStats stats=sdk_stats(receiver);CHECK(stats.allocated_bytes==closed.allocated_bytes&&stats.live_bytes==closed.live_bytes);
+    CHECK(xlsp_source_folders_commit(owner,&server,&changed)==XR_XIR_MEMORY_LIMIT&&!changed&&!memcmp(&server,&before,sizeof(server))&&app_live==live&&app_bytes==bytes);
+    XrCompileResourceStats stats=sdk_stats(receiver);CHECK(stats.held_bytes==closed.memory_limit&&stats.peak_bytes==closed.memory_limit);
     server.index_resources=r;CHECK(xlsp_source_folders_commit(owner,&server,&changed)==XR_XIR_OK&&changed&&server.workspace_folder_count==3);
     xlsp_source_folders_free(owner);cleanup(&server);xr_compile_resources_release(receiver);xr_compile_resources_release(r);
     CHECK(!runtime_live&&!runtime_bytes&&!app_live&&!app_bytes);
@@ -157,8 +157,13 @@ int main(int argc,char **argv){
     for(unsigned mode=0;mode<sizeof(cases)/sizeof(*cases);++mode){XrCompileResourceStats stats={0};CHECK(once(mode,&limits,SIZE_MAX,SIZE_MAX,&stats)==expected(mode));size_t sites=runtime_attempts,app_sites=app_attempts;
         if(full){for(size_t i=0;i<sites;++i)CHECK(once(mode,&limits,i,SIZE_MAX,NULL)==XR_XIR_OUT_OF_MEMORY);
             for(size_t i=0;i<app_sites;++i)CHECK(once(mode,&limits,SIZE_MAX,i,NULL)==XR_XIR_OUT_OF_MEMORY);
-            if(expected(mode)==XR_XIR_OK)for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits caps=limits;uint64_t value=axis==0?stats.allocated_bytes:axis==1?stats.peak_bytes:stats.work;value=delta<0?value-1:value+(unsigned)delta;
-                if(!axis)caps.allocated_bytes=value;else if(axis==1)caps.live_bytes=value;else caps.work=value;CHECK(once(mode,&caps,SIZE_MAX,SIZE_MAX,NULL)==(delta<0?XR_XIR_BUDGET:XR_XIR_OK));}}
+            if(expected(mode)==XR_XIR_OK){
+                CHECK(stats.peak_bytes&&stats.peak_bytes<UINT64_MAX);
+                for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits caps=limits;
+                    caps.memory_limit=delta<0?stats.peak_bytes-1:stats.peak_bytes+(unsigned)delta;
+                    CHECK(once(mode,&caps,SIZE_MAX,SIZE_MAX,NULL)==(delta<0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));}
+                CHECK(once(mode,&limits,SIZE_MAX,SIZE_MAX,NULL)==XR_XIR_OK);
+            }}
         printf("Folders mode=%u SourceFI=%zu appFI=%zu JSONallocations=0 full=%u atomic count/owners/revision physical0/0\n",mode,sites,app_sites,full?1u:0u);}
     lifetime(argv[1]);receiver_budget();return 0;
 }
