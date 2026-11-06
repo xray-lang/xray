@@ -354,12 +354,12 @@ static void forwarding(void) {
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(valid, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(valid); valid=NULL;
-    /* Only the callee has one binder and no concrete call arguments. */
-    const uint8_t callee_row[]={1,0,0,0,0,0,0,0,XR_XIR_CONSTRAINT_SENDABLE,0,0,0,
-        0,0,0,0,0,0,0,0};
+    /* Remove the caller proof while the callee still requires Sendable. */
+    const uint8_t caller_row[]={1,0,0,0,0,0,0,0,XR_XIR_CONSTRAINT_SENDABLE,0,0,0,
+        0,0,0,0,3,0,0,0,0,0,1,0,0,0,1,0,0,0,1,0};
     size_t marker=0;unsigned matches=0;
-    for(size_t i=64;i+sizeof(callee_row)<=packet.length;++i) {
-        if(!memcmp(packet.bytes+i,callee_row,sizeof(callee_row))) {marker=i+8;++matches;}
+    for(size_t i=64;i+sizeof(caller_row)<=packet.length;++i) {
+        if(!memcmp(packet.bytes+i,caller_row,sizeof(caller_row))) {marker=i+8;++matches;}
     }
     CHECK(matches==1);
     CHECK(xr_xir_compile_checked_read(suite_context,packet.bytes,packet.length,&forged,NULL)==XR_XIR_OK && forged);
