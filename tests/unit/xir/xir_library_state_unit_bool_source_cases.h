@@ -20,11 +20,11 @@ static XrXirStatus library_state_unit_bool_map_operation(const XrXirCompileConte
     CHECK((uint64_t)output.immediate==((UINT64_C(2)<<32)|2));
     XrXirInstruction sentinel=output;group.immediate=(INT64_C(0)<<32)|2;
     bool accepted=source_library_instruction(&ctx,&map,0,&group,&output);
-    if (ctx.diagnostic.status==XR_XIR_BUDGET) {xr_compile_resources_free(map.slots);return XR_XIR_BUDGET;}
+    if (ctx.diagnostic.status==XR_XIR_MEMORY_LIMIT) {xr_compile_resources_free(map.slots);return XR_XIR_MEMORY_LIMIT;}
     CHECK(!accepted && ctx.diagnostic.status==XR_XIR_BAD_STRUCTURE && !memcmp(&sentinel,&output,sizeof(output)));
     ctx.diagnostic=(XrXirSourceDiagnostic){0};group.immediate=(INT64_C(1)<<32)|2;map.slots[2]=4;
     accepted=source_library_instruction(&ctx,&map,0,&group,&output);
-    if (ctx.diagnostic.status==XR_XIR_BUDGET) {xr_compile_resources_free(map.slots);return XR_XIR_BUDGET;}
+    if (ctx.diagnostic.status==XR_XIR_MEMORY_LIMIT) {xr_compile_resources_free(map.slots);return XR_XIR_MEMORY_LIMIT;}
     CHECK(!accepted && ctx.diagnostic.status==XR_XIR_BAD_STRUCTURE && !memcmp(&sentinel,&output,sizeof(output)));
     xr_compile_resources_free(map.slots);return XR_XIR_OK;
 }
@@ -51,7 +51,10 @@ static void library_state_unit_bool_source_negatives(const XrXirSourceRequest *r
 static void library_state_unit_bool_bad_slots(const XrXirCompileContext *context,const XrXirArtifact *artifact) {
     const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
     CHECK(module->declarations->slot_count==2 && module->declarations->slots[0].mutable &&
-        module->declarations->slots[0].type==XR_XIR_UNIT && module->declarations->slots[1].type==XR_XIR_BOOL);
+        xr_xir_type_is_cell(module->types,module->declarations->slots[0].type) &&
+        xr_xir_cell_element(module->types,module->declarations->slots[0].type)==XR_XIR_UNIT &&
+        xr_xir_type_is_cell(module->types,module->declarations->slots[1].type) &&
+        xr_xir_cell_element(module->types,module->declarations->slots[1].type)==XR_XIR_BOOL);
     for (uint32_t mode=0;mode<3;++mode) {
         XrXirModule malformed=*module;malformed.stage=XR_XIR_BUILT;
         XrXirDeclarations declarations=*module->declarations;XrXirSlot slots[2];

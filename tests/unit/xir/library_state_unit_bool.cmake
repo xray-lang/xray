@@ -13,7 +13,7 @@ file(GLOB XIR_LIBRARY_STATE_UNIT_BOOL_FIXTURES CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/tests/fixtures/xir_library_state_unit_bool/*.xr")
 add_custom_command(OUTPUT ${XIR_LIBRARY_STATE_UNIT_BOOL_SOURCE} ${XIR_LIBRARY_STATE_UNIT_BOOL_CATALOG}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND $<TARGET_FILE:test_xir_library_state_unit_bool_source> ${XIR_LIBRARY_STATE_UNIT_BOOL_SOURCE} ${XIR_LIBRARY_STATE_UNIT_BOOL_CATALOG}
+    COMMAND $<TARGET_FILE:test_xir_library_state_unit_bool_source> --write-packets ${XIR_LIBRARY_STATE_UNIT_BOOL_SOURCE} ${XIR_LIBRARY_STATE_UNIT_BOOL_CATALOG}
     DEPENDS test_xir_library_state_unit_bool_source ${XIR_LIBRARY_STATE_UNIT_BOOL_FIXTURES}
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_library_state_unit_bool_runtime.h
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_library_state_unit_bool_source_cases.h
