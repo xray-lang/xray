@@ -102,20 +102,25 @@ static void invocation_class_rows_fixture(InvocationClassRowsFixture *f,uint32_t
     f->init_block=(XrXirBlock){0,1,0,0};f->constructor_block=(XrXirBlock){0,2,0,0};
     f->forward_block=(XrXirBlock){0,forward_count,0,0};
     if (block_count==1) f->entry_blocks[0]=(XrXirBlock){0,entry_count,0,0};
-    f->functions[0]=(XrXirFunction){"init",4,NULL,0,XR_XIR_UNIT,&f->init_block,1,f->init,1,NULL,0};
-    f->functions[1]=(XrXirFunction){"new",3,&f->constructor_parameter,1,object,
-        &f->constructor_block,1,f->constructor,2,f->constructor_operands,1};
-    f->functions[2]=(XrXirFunction){"forward",7,&f->forward_parameter,1,object,
-        &f->forward_block,1,f->forward,forward_count,mode==5?f->forward_operands:NULL,mode==5?1u:0u};
-    f->functions[3]=(XrXirFunction){"entry",5,NULL,0,object,f->entry_blocks,block_count,
-        f->entry,entry_count,f->entry_operands,operand_count};
+    f->functions[0]=(XrXirFunction){.name="init",.name_length=4,.result=XR_XIR_UNIT,.error_type=XR_XIR_NEVER,
+        .blocks=&f->init_block,.block_count=1,.instructions=f->init,.instruction_count=1};
+    f->functions[1]=(XrXirFunction){.name="new",.name_length=3,.parameters=&f->constructor_parameter,
+        .parameter_count=1,.result=object,.error_type=XR_XIR_NEVER,.blocks=&f->constructor_block,.block_count=1,
+        .instructions=f->constructor,.instruction_count=2,.operands=f->constructor_operands,.operand_count=1};
+    f->functions[2]=(XrXirFunction){.name="forward",.name_length=7,.parameters=&f->forward_parameter,
+        .parameter_count=1,.result=object,.error_type=XR_XIR_NEVER,.blocks=&f->forward_block,.block_count=1,
+        .instructions=f->forward,.instruction_count=forward_count,
+        .operands=mode==5?f->forward_operands:NULL,.operand_count=mode==5?1u:0u};
+    f->functions[3]=(XrXirFunction){.name="entry",.name_length=5,.result=object,.error_type=XR_XIR_NEVER,
+        .blocks=f->entry_blocks,.block_count=block_count,.instructions=f->entry,.instruction_count=entry_count,
+        .operands=f->entry_operands,.operand_count=operand_count};
     /* The Class graph is an ordinary function; a Program entry returns I64. */
     f->main[0]=(XrXirInstruction){.op=XR_XIR_CALL,.type=object,.immediate=3};
     f->main[1]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64};
     f->main[2]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={1}};
     f->main_block=(XrXirBlock){0,3,0,0};
-    f->functions[4]=(XrXirFunction){"main",4,NULL,0,XR_XIR_I64,
-        &f->main_block,1,f->main,3,NULL,0};
+    f->functions[4]=(XrXirFunction){.name="main",.name_length=4,.result=XR_XIR_I64,.error_type=XR_XIR_NEVER,
+        .blocks=&f->main_block,.block_count=1,.instructions=f->main,.instruction_count=3};
     f->identities[1]=(XrXirFunctionIdentity){.nominal_owner=1,.method_kind=XR_XIR_CONSTRUCTOR};
     f->source=(XrXirSourceModule){"root",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=f->identities,.entry_function=4};

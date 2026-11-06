@@ -34,7 +34,9 @@ static void conditional_compact_signatures(const XrXirCompileContext *context,co
         if (f==1) CHECK(signature.parameters[0]==(XrXirType)257 && signature.parameters[1]==(XrXirType)256);
         if (f==2) CHECK(signature.parameters[0]==(XrXirType)256);
     }
-    EffectBodyFunctionSignature sentinel={(const XrXirType *)(uintptr_t)1,77,XR_XIR_BOOL},output=sentinel;
+    EffectBodyFunctionSignature sentinel={.parameters=(const XrXirType *)(uintptr_t)1,
+        .parameter_count=77,.result=XR_XIR_BOOL,.consume_parameter_count=55,
+        .consume_parameters=(const uint32_t *)(uintptr_t)2},output=sentinel;
     EffectBodyRequest rejected=*request;rejected.head=NULL;
     CHECK(effect_body_request_signature(&rejected,0,&output)==XR_XIR_BAD_STRUCTURE &&
         !memcmp(&output,&sentinel,sizeof(output)));
@@ -97,9 +99,12 @@ static void conditional_compact_dimension_damage(const XrXirCompileContext *cont
         CHECK(effect_body_request_dimensions(&request,0,&dimensions)==XR_XIR_BAD_STRUCTURE &&
             dimensions.parameter_count==77 && dimensions.instruction_count==78);
         CHECK(effect_body_request_head(&request,0,&head)==XR_XIR_BAD_STRUCTURE && !head.name && !head.instruction_count);
-        EffectBodyFunctionSignature signature={(const XrXirType *)(uintptr_t)1,77,XR_XIR_BOOL};
+        EffectBodyFunctionSignature signature={.parameters=(const XrXirType *)(uintptr_t)1,
+            .parameter_count=77,.result=XR_XIR_BOOL,.consume_parameter_count=55,
+            .consume_parameters=(const uint32_t *)(uintptr_t)2};
         CHECK(effect_body_request_signature(&request,0,&signature)==XR_XIR_BAD_STRUCTURE &&
-            signature.parameters==(const XrXirType *)(uintptr_t)1 && signature.parameter_count==77 && signature.result==XR_XIR_BOOL);
+            signature.parameters==(const XrXirType *)(uintptr_t)1 && signature.parameter_count==77 && signature.result==XR_XIR_BOOL &&
+            signature.consume_parameter_count==55 && signature.consume_parameters==(const uint32_t *)(uintptr_t)2);
         *function=saved;conditional_compact_dimensions(context,&request);
     }
 }

@@ -50,7 +50,9 @@ static void invocation_class_cell_fixture(InvocationClassCellFixture *f,uint32_t
     f->read[0]=(XrXirInstruction){.op=XR_XIR_CELL_READ,.type=XR_XIR_I64};
     f->read[1]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={1}};
     f->read_block=(XrXirBlock){0,2,0,0};
-    f->functions[5]=(XrXirFunction){"read",4,&f->cell,1,XR_XIR_I64,&f->read_block,1,f->read,2,NULL,0};
+    f->functions[5]=(XrXirFunction){.name="read",.name_length=4,.parameters=&f->cell,.parameter_count=1,
+        .result=XR_XIR_I64,.error_type=XR_XIR_NEVER,.blocks=&f->read_block,.block_count=1,
+        .instructions=f->read,.instruction_count=2};
     s->declarations.functions=f->identities;s->module.functions=f->functions;s->module.function_count=6;
 }
 

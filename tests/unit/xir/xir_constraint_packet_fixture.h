@@ -20,8 +20,8 @@ static XrXirStatus constraint_packet_fixture(const XrXirCompileContext *context,
         {{"alpha",5},{"Base",4},1,&unconstrained,1,NULL,0,NULL,0},
         {{"alpha",5},{"Needs",5},1,&constraint,1,NULL,0,NULL,0}};
     XrXirInterfaceTable interface_table = {interfaces,2};
-    XrXirNominalDeclaration nominal = {
-        {"alpha",5},{"Box",3},1,&constraint,1,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0, 0, {0}};
+    XrXirNominalDeclaration nominal = {.module={"alpha",5},.name={"Box",3},.exported=1,
+        .constraints=&constraint,.parameter_count=1,.kind=XR_XIR_NOMINAL_STRUCT};
     XrXirNominalTable nominal_table = {&nominal,1,NULL};
     XrXirTypes types = {NULL,0,&nominal_table,&interface_table};
     XrXirInstruction init = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
