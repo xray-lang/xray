@@ -90,6 +90,12 @@ static void core_init32(_Atomic(uint32_t) *cell, uint32_t value) { atomic_init(c
 static void core_init64(_Atomic(uint64_t) *cell, uint64_t value) {
     ++bits_initializations; atomic_init(cell, value);
 }
+static void core_init_i64(_Atomic(int64_t) *cell, int64_t value) { atomic_init(cell, value); }
+static bool core_signed_cas(_Atomic(int64_t) *cell, int64_t *expected, int64_t desired,
+    memory_order success, memory_order failure) {
+    CHECK(failure != memory_order_release && failure != memory_order_acq_rel);
+    return atomic_compare_exchange_strong_explicit(cell, expected, desired, success, failure);
+}
 static size_t cell_cas_attempts;
 static bool force_collision;
 static uint64_t collision_value;
@@ -108,10 +114,10 @@ static bool core_cell_cas(_Atomic(uint64_t) *cell, uint64_t *expected, uint64_t 
     _Atomic(bool) *: channel_lock_free, _Atomic(uint32_t) *: lock_free32, _Atomic(uint64_t) *: lock_free64)(cell)
 #undef atomic_compare_exchange_strong_explicit
 #define atomic_compare_exchange_strong_explicit(cell, expected, desired, success, failure) \
-    _Generic((cell), _Atomic(bool) *: channel_lock_cas, _Atomic(uint32_t) *: class_origin_cas, default: core_cell_cas)(cell, expected, desired, success, failure)
+    _Generic((cell), _Atomic(bool) *: channel_lock_cas, _Atomic(uint32_t) *: class_origin_cas, _Atomic(int64_t) *: core_signed_cas, _Atomic(uint64_t) *: core_cell_cas)(cell, expected, desired, success, failure)
 #undef atomic_init
 #define atomic_init(cell, value) _Generic((cell), _Atomic(bool) *: core_init_bool, \
-    _Atomic(uint32_t) *: core_init32, _Atomic(uint64_t) *: core_init64)(cell, value)
+    _Atomic(uint32_t) *: core_init32, _Atomic(uint64_t) *: core_init64, _Atomic(int64_t) *: core_init_i64)(cell, value)
 #include "xir/xxir_value.c"
 #undef xr_calloc
 #define xr_calloc(count, bytes) runtime_calloc(count, bytes)

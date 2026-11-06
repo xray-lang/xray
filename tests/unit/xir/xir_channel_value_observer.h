@@ -36,6 +36,12 @@ static bool channel_observed_cas64(_Atomic(uint64_t) *cell, uint64_t *expected, 
     CHECK(failure!=memory_order_release && failure!=memory_order_acq_rel);
     return atomic_compare_exchange_strong_explicit(cell,expected,desired,success,failure);
 }
+static bool channel_observed_cas_i64(_Atomic(int64_t) *cell, int64_t *expected, int64_t desired,
+    memory_order success, memory_order failure) {
+    CHECK(failure!=memory_order_release && failure!=memory_order_acq_rel);
+    return atomic_compare_exchange_strong_explicit(cell,expected,desired,success,failure);
+}
+
 typedef struct ChannelBlock { void *pointer; size_t bytes; } ChannelBlock;
 typedef struct ChannelObserver {
     ChannelBlock blocks[2048];
@@ -98,7 +104,7 @@ static void *channel_runtime_realloc(void *pointer, size_t bytes) {
 #undef atomic_compare_exchange_strong_explicit
 #define atomic_compare_exchange_strong_explicit(cell, expected, desired, success, failure) \
     _Generic((cell), _Atomic(bool) *: channel_observed_cas_bool, _Atomic(uint32_t) *: channel_observed_cas32, \
-        _Atomic(uint64_t) *: channel_observed_cas64)(cell, expected, desired, success, failure)
+        _Atomic(uint64_t) *: channel_observed_cas64, _Atomic(int64_t) *: channel_observed_cas_i64)(cell, expected, desired, success, failure)
 #include "xir/xxir_value.c"
 #pragma pop_macro("atomic_compare_exchange_strong_explicit")
 #pragma pop_macro("xr_free")
