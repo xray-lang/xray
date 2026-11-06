@@ -51,8 +51,8 @@ static void capacity_core_free(CapacityCore *f) {
 }
 static int64_t capacity_core_capacity(CapacityCore *f, const XrXirValue *array) {
     XrXirValueAdmission read = {f->arena, f->reading, NULL, NULL, 65536, 65536};
-    int64_t result = -1; size_t allocations = calls;
-    CHECK(xr_xir_array_capacity(array, &read, &result) == XR_XIR_VALUE_OK && calls == allocations);
+    int64_t result = -1; size_t allocations = value_allocation_calls;
+    CHECK(xr_xir_array_capacity(array, &read, &result) == XR_XIR_VALUE_OK && value_allocation_calls == allocations);
     return result;
 }
 static void capacity_core_i64(CapacityCore *f, const XrXirValue *array, const int64_t *values, size_t count) {
@@ -124,9 +124,9 @@ static void capacity_core_empty_element(void) {
     int64_t bound = SIZE_MAX < (uint64_t)INT64_MAX ? (int64_t)SIZE_MAX : INT64_MAX;
     XrXirType stored = XR_XIR_UNIT; uint32_t stride = UINT32_MAX;
     CHECK(array_layout(f.arena, (XrXirType)262, &stored, &stride) && stored == (XrXirType)261 && stride > 1);
-    XrXirValue rejected = {0}; size_t allocations = calls;
+    XrXirValue rejected = {0}; size_t allocations = value_allocation_calls;
     CHECK(xr_xir_array_with_capacity((XrXirType)262, bound, &f.admission, &rejected) == XR_XIR_VALUE_LIMIT);
-    CHECK(calls == allocations && !rejected.type && !rejected.reserved && !rejected.payload);
+    CHECK(value_allocation_calls == allocations && !rejected.type && !rejected.reserved && !rejected.payload);
     CHECK(array_layout(f.arena, (XrXirType)260, &stored, &stride) && stored == (XrXirType)259 && stride == 0);
     CHECK(xr_xir_array_with_capacity((XrXirType)260, bound, &f.admission, &array) == XR_XIR_VALUE_OK);
     CHECK(capacity_core_capacity(&f, &array) >= bound);
@@ -142,16 +142,16 @@ static void capacity_core_empty_element(void) {
 static void capacity_core_rejections(void) {
     CapacityCore f = capacity_core_new(65536, 65536, 65536); XrXirValue array = {0}, out = {0};
     CHECK(xr_xir_array_with_capacity((XrXirType)256, 3, &f.admission, &array) == XR_XIR_VALUE_OK);
-    size_t before = calls;
+    size_t before = value_allocation_calls;
     CHECK(xr_xir_array_with_capacity((XrXirType)256, -1, &f.admission, &out) == XR_XIR_VALUE_BAD_ARGUMENT);
     CHECK(xr_xir_array_reserve(&array, -1, &f.admission, &out) == XR_XIR_VALUE_BAD_ARGUMENT);
     CHECK(xr_xir_array_with_capacity((XrXirType)256, INT64_MAX, &f.admission, &out) == XR_XIR_VALUE_LIMIT);
     CHECK(xr_xir_array_reserve(&array, INT64_MAX, &f.admission, &out) == XR_XIR_VALUE_LIMIT);
-    CHECK(calls == before && !out.type && !out.reserved && !out.payload);
+    CHECK(value_allocation_calls == before && !out.type && !out.reserved && !out.payload);
     out = (XrXirValue){XR_XIR_I64, 0, 71}; XrXirValue preserved = out;
     CHECK(xr_xir_array_with_capacity((XrXirType)256, 1, &f.admission, &out) == XR_XIR_VALUE_BAD_ARGUMENT);
     CHECK(xr_xir_array_reserve(&array, 1, &f.admission, &out) == XR_XIR_VALUE_BAD_ARGUMENT);
-    CHECK(!memcmp(&out, &preserved, sizeof(out)) && calls == before);
+    CHECK(!memcmp(&out, &preserved, sizeof(out)) && value_allocation_calls == before);
     f.admission.work = 0; int64_t capacity = 71;
     CHECK(xr_xir_array_capacity(&array, &f.admission, &capacity) == XR_XIR_VALUE_LIMIT && capacity == 71);
     xr_xir_value_drop(&out); xr_xir_value_drop(&array); capacity_core_free(&f);
@@ -164,18 +164,18 @@ static void capacity_core_no_growth(void) {
     int64_t capacity = capacity_core_capacity(&f, &source);
     XrXirDomainStats before = xr_xir_domain_stats(f.domain);
     XrXirDomainBudgetStats charged = xr_xir_domain_budget_stats(f.domain);
-    size_t allocations = calls; fail_at = calls;
+    size_t allocations = value_allocation_calls; fail_at = value_allocation_calls;
     CHECK(xr_xir_array_reserve(&source, capacity, &f.admission, &copy) == XR_XIR_VALUE_OK);
     fail_at = SIZE_MAX;
-    CHECK(copy.payload == source.payload && calls == allocations);
+    CHECK(copy.payload == source.payload && value_allocation_calls == allocations);
     CHECK(xr_xir_domain_stats(f.domain).live_bytes == before.live_bytes);
     CHECK(xr_xir_domain_budget_stats(f.domain).requested_bytes == charged.requested_bytes);
     XrXirValuePlace place = {(XrXirType)256, &copy.payload};
     XrXirValue nine = {XR_XIR_I64, 0, 9}; XrXirFaultDetail fault = {0};
-    allocations = calls; fail_at = calls;
+    allocations = value_allocation_calls; fail_at = value_allocation_calls;
     CHECK(xr_xir_array_set(&place, 0, &nine, &f.admission, &fault) == XR_XIR_VALUE_OOM);
     fail_at = SIZE_MAX;
-    CHECK(copy.payload == source.payload && calls > allocations);
+    CHECK(copy.payload == source.payload && value_allocation_calls > allocations);
     const int64_t original[] = {1, 2}, changed[] = {9, 2};
     capacity_core_i64(&f, &source, original, 2); capacity_core_i64(&f, &copy, original, 2);
     CHECK(xr_xir_array_set(&place, 0, &nine, &f.admission, &fault) == XR_XIR_VALUE_OK);
@@ -205,12 +205,12 @@ static void capacity_core_no_growth_admission(void) {
         CHECK(xr_xir_array_new((XrXirType)257, &text, 1, &f.admission, &source) == XR_XIR_VALUE_OK);
         XirObject *root = object_pointer(&source), *element = object_pointer(&text);
         uint32_t root_refs = atomic_load(&root->references), element_refs = atomic_load(&element->references);
-        size_t allocations = calls;
+        size_t allocations = value_allocation_calls;
         if (mode == 1) f.admission.work = 0;
         if (mode == 2) atomic_store(&root->references, UINT32_MAX);
         XrXirValueStatus status = xr_xir_array_reserve(&source, 0, &f.admission, &copy);
         CHECK(status == (mode == 1 ? XR_XIR_VALUE_LIMIT : mode == 2 ? XR_XIR_VALUE_REFCOUNT_LIMIT : XR_XIR_VALUE_OK));
-        CHECK(calls == allocations && atomic_load(&element->references) == element_refs);
+        CHECK(value_allocation_calls == allocations && atomic_load(&element->references) == element_refs);
         if (!mode) { CHECK(copy.payload == source.payload); xr_xir_value_drop(&copy); }
         else CHECK(!copy.type && !copy.reserved && !copy.payload);
         if (mode == 2) atomic_store(&root->references, root_refs);
@@ -227,14 +227,14 @@ static size_t capacity_core_fault(unsigned mode, size_t offset) {
     XirObject *identity = object_pointer(&source); int64_t old_capacity = capacity_core_capacity(&f, &source);
     uint32_t references = atomic_load(&object_pointer(&text)->references);
     if (mode == 3) f.admission.domain = f.reading;
-    size_t start = calls, physical = live;
+    size_t start = value_allocation_calls, physical = live;
     uint64_t bytes = xr_xir_domain_stats(f.domain).live_bytes;
     uint64_t reader_bytes = xr_xir_domain_stats(f.reading).live_bytes;
     fail_at = offset == SIZE_MAX ? SIZE_MAX : start + offset;
     XrXirValueStatus status = mode == 0 ?
         xr_xir_array_with_capacity((XrXirType)257, 31, &f.admission, &out) :
         xr_xir_array_reserve(&source, mode == 1 ? 31 : 0, &f.admission, &out);
-    size_t count = calls - start; fail_at = SIZE_MAX;
+    size_t count = value_allocation_calls - start; fail_at = SIZE_MAX;
     if (offset == SIZE_MAX) CHECK(status == XR_XIR_VALUE_OK && out.type == 257);
     else {
         CHECK(status == XR_XIR_VALUE_OOM && !out.type && !out.reserved && !out.payload);
@@ -277,11 +277,11 @@ static void capacity_core_ledgers(void) {
         uint64_t work = base.work + 3 - (test == 2 ? 1u : 0u);
         uint64_t limit = sizeof(XrXirDomain) + bytes - (test == 3 ? 1u : 0u);
         CapacityCore f = capacity_core_new(limit, requested, work); XrXirValue out = {0};
-        size_t start = calls; fail_at = test == 4 ? calls + 1 : SIZE_MAX;
+        size_t start = value_allocation_calls; fail_at = test == 4 ? value_allocation_calls + 1 : SIZE_MAX;
         XrXirValueStatus status = xr_xir_array_with_capacity((XrXirType)256, 7, &f.admission, &out);
         fail_at = SIZE_MAX;
         if (!test) {
-            CHECK(status == XR_XIR_VALUE_OK && calls == start + 2);
+            CHECK(status == XR_XIR_VALUE_OK && value_allocation_calls == start + 2);
             CHECK(capacity_core_capacity(&f, &out) >= 7);
             XrXirDomainBudgetStats spent = xr_xir_domain_budget_stats(f.domain);
             CHECK(spent.requested_bytes == requested && spent.work == work);
@@ -291,9 +291,9 @@ static void capacity_core_ledgers(void) {
             if (test == 4) {
                 XrXirDomainBudgetStats spent = xr_xir_domain_budget_stats(f.domain);
                 CHECK(spent.requested_bytes == requested && spent.work == work);
-                size_t attempts = calls;
+                size_t attempts = value_allocation_calls;
                 CHECK(xr_xir_array_with_capacity((XrXirType)256, 7, &f.admission, &out) == XR_XIR_VALUE_LIMIT);
-                CHECK(calls == attempts && xr_xir_domain_budget_stats(f.domain).requested_bytes == requested);
+                CHECK(value_allocation_calls == attempts && xr_xir_domain_budget_stats(f.domain).requested_bytes == requested);
             }
         }
         xr_xir_value_drop(&out); capacity_core_free(&f);
