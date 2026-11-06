@@ -29,60 +29,6 @@ static bool conditional_compact_same(const XrXirInstruction *a,const XrXirInstru
         a->type_arguments[0]==b->type_arguments[0] && a->type_arguments[1]==b->type_arguments[1];
 }
 
-/* A read refusal is injected only into this finite decoder request. Every
- * accepted read still consumes the original receiving ledger; neither the
- * owner nor its accumulated resources are reset for a second decode. */
-typedef struct ConditionalCompactRead {
-    const XrXirCompileContext *context;
-    uint64_t calls,reject;
-} ConditionalCompactRead;
-static bool conditional_compact_read_work(const void *owner,uint64_t units) {
-    ConditionalCompactRead *read=(ConditionalCompactRead *)owner;
-    return read->calls++!=read->reject && xir_compile_work(read->context,units);
-}
-static void conditional_compact_read_failures(const XrXirCompileContext *context,
-    const EffectBodyFunction *body,uint32_t instruction,const XrXirInstruction *expected) {
-    ConditionalCompactRead observation={context,0,UINT64_MAX};
-    EffectBodyRead read={&observation,conditional_compact_read_work};
-    XrXirInstruction decoded={0};
-    CHECK(effect_body_instruction_get(&read,body,instruction,&decoded)==XR_XIR_OK &&
-        conditional_compact_same(&decoded,expected));
-    uint64_t points=observation.calls;
-    CHECK(points);
-    for (uint64_t at=0;at<points;++at) {
-        observation.calls=0;observation.reject=at;
-        XrXirInstruction sentinel={.op=XR_XIR_RETURN,.type=XR_XIR_BOOL,
-            .args={11,12},.targets={13,14},.immediate=INT64_MIN,.type_arguments={15,16}};
-        decoded=sentinel;
-        CHECK(effect_body_instruction_get(&read,body,instruction,&decoded)==XR_XIR_BUDGET &&
-            conditional_compact_same(&decoded,&sentinel) && observation.calls==at+1);
-    }
-    observation.calls=0;observation.reject=UINT64_MAX;
-    CHECK(effect_body_instruction_get(&read,body,instruction,&decoded)==XR_XIR_OK &&
-        conditional_compact_same(&decoded,expected));
-}
-
-/* Narrow output retains every original decoder refusal. Partial words
- * never escape when any canonical read or output charge fails. */
-static void conditional_compact_fields_failures(const XrXirCompileContext *context,
-    const EffectBodyFunction *body,uint32_t instruction,const XrXirInstruction *expected) {
-    ConditionalCompactRead observation={context,0,UINT64_MAX};
-    EffectBodyRead read={&observation,conditional_compact_read_work};
-    EffectBodyInstructionFields fields;
-    CHECK(effect_body_instruction_fields_get(&read,body,instruction,&fields)==XR_XIR_OK &&
-        fields.op==expected->op && fields.type==expected->type && fields.source==expected->args[0]);
-    uint64_t points=observation.calls;CHECK(points);
-    for (uint64_t at=0;at<points;++at) {
-        observation.calls=0;observation.reject=at;
-        EffectBodyInstructionFields sentinel={XR_XIR_RETURN,XR_XIR_BOOL,UINT32_MAX};fields=sentinel;
-        CHECK(effect_body_instruction_fields_get(&read,body,instruction,&fields)==XR_XIR_BUDGET &&
-            !memcmp(&fields,&sentinel,sizeof(fields)) && observation.calls==at+1);
-    }
-    observation.calls=0;observation.reject=UINT64_MAX;
-    CHECK(effect_body_instruction_fields_get(&read,body,instruction,&fields)==XR_XIR_OK &&
-        fields.op==expected->op && fields.type==expected->type && fields.source==expected->args[0]);
-}
-
 /* Each field is changed independently in a fresh source value. No expected
  * value is obtained from the writer's word selector or run decoder. */
 static void conditional_compact_change(XrXirInstruction *op,uint32_t field) {
@@ -103,7 +49,7 @@ static void conditional_compact_change(XrXirInstruction *op,uint32_t field) {
 
 static void conditional_compact_malformed(const XrXirCompileContext *context,
     EffectBodyFunction *function,const XrXirFunction *expected) {
-    EffectBodyRead read=effect_body_compile_read(context);
+    EffectBodyRead read=(EffectBodyRead){.owner=context,.execution=NULL};
     CHECK(function->runs && function->run_count==2 && function->run_capacity==2);
     EffectBodyRun *first=&function->runs[0],*second=&function->runs[1];
     uint32_t column=0;while (!(first->mask&(UINT32_C(1)<<column))) ++column;
@@ -140,26 +86,26 @@ static void conditional_compact_malformed(const XrXirCompileContext *context,
  * base word, including signed and unused bits, still round-trips independently. */
 static void conditional_compact_pending_state(const XrXirCompileContext *context,
     const XrXirInstruction *expected) {
-    uint64_t held_bytes=rp_stats(context).live_bytes;
+    uint64_t held_bytes=rp_stats(context).held_bytes;
     EffectBodyRun run;memset(&run,0xA5,sizeof(run));
     EffectBodyFunction body={.instruction_count=1};
     CHECK(effect_body_run_seed(context,&run,expected,0)==XR_XIR_OK && run.first==0 && run.count==1 && !run.mask);
     CHECK(effect_body_run_append(context,&body,&run)==XR_XIR_OK && body.run_count==1 && body.run_capacity==1);
-    EffectBodyRead read=effect_body_compile_read(context);XrXirInstruction decoded;
+    EffectBodyRead read=(EffectBodyRead){.owner=context,.execution=NULL};XrXirInstruction decoded;
     CHECK(effect_body_instruction_get(&read,&body,0,&decoded)==XR_XIR_OK && conditional_compact_same(&decoded,expected));
     uint32_t capacity=body.run_capacity,runs=body.run_count;
     /* The ledger includes its allocation header. Alias refusal preserves the
      * actual charged owner, without treating payload size as total live bytes. */
-    uint64_t retained_bytes=rp_stats(context).live_bytes;size_t retained_attempts=rp_attempts;
+    uint64_t retained_bytes=rp_stats(context).held_bytes;size_t retained_attempts=rp_attempts;
     CHECK(retained_bytes>held_bytes);
     CHECK(effect_body_run_append(context,&body,&body.runs[0])==XR_XIR_BAD_STRUCTURE &&
         body.run_capacity==capacity && body.run_count==runs &&
-        rp_stats(context).live_bytes==retained_bytes && rp_attempts==retained_attempts);
+        rp_stats(context).held_bytes==retained_bytes && rp_attempts==retained_attempts);
     run.mask=1;
     CHECK(effect_body_run_append(context,&body,&run)==XR_XIR_BAD_STRUCTURE && body.run_capacity==capacity && body.run_count==runs);
     run.count=2;run.delta[0]=0;body.instruction_count=2;
     CHECK(effect_body_run_append(context,&body,&run)==XR_XIR_BAD_STRUCTURE && body.run_capacity==capacity && body.run_count==runs);
-    effect_body_runs_release(body.runs);CHECK(rp_stats(context).live_bytes==held_bytes);
+    effect_body_runs_release(body.runs);CHECK(rp_stats(context).held_bytes==held_bytes);
 }
 
 #include "xir_invocation_single_column_cases.h"
@@ -174,7 +120,7 @@ static XrXirStatus conditional_compact_codec(const XrXirCompileContext *context,
     XrXirFunction input={.instructions=source,.instruction_count=8};
     EffectBodyFunction body={.instruction_count=8};
     XrXirStatus status=effect_body_records_copy(context,&input,&body);
-    memset(source,0xCE,sizeof(source));EffectBodyRead read=effect_body_compile_read(context);
+    memset(source,0xCE,sizeof(source));EffectBodyRead read=(EffectBodyRead){.owner=context,.execution=NULL};
     for (uint32_t i=0;i<8 && status==XR_XIR_OK;++i) {
         XrXirInstruction decoded;status=effect_body_instruction_get(&read,&body,i,&decoded);
         if (status==XR_XIR_OK && oracle) {
@@ -187,10 +133,6 @@ static XrXirStatus conditional_compact_codec(const XrXirCompileContext *context,
     if (status==XR_XIR_OK) status=effect_body_records_match(&read,&body,&expected);
     if (status==XR_XIR_OK && oracle) {
         CHECK(body.run_count>=2 && body.run_count<=body.run_capacity);
-        conditional_compact_read_failures(context,&body,2,&original[2]);
-        conditional_compact_read_failures(context,&body,7,&original[7]);
-        conditional_compact_fields_failures(context,&body,2,&original[2]);
-        conditional_compact_fields_failures(context,&body,7,&original[7]);
         for (uint32_t field=0;field<10;++field) {
             XrXirInstruction saved=original[2];conditional_compact_change(&original[2],field);
             CHECK(effect_body_records_match(&read,&body,&expected)==XR_XIR_BAD_STRUCTURE);
@@ -214,7 +156,7 @@ static void conditional_compact_null_body(const XrXirCompileContext *context,XrX
     uint32_t mask=UINT32_C(0x6a6a);
     CHECK(effect_invocation_certificate_edge_mask(context,certificate,0,3,1,&mask)==XR_XIR_BAD_STRUCTURE &&
         mask==UINT32_C(0x6a6a));
-    InvocationDirectRead read={context,effects,2,false};
+    InvocationDirectRead read={context,effects,2,false,{.remaining=UINT64_MAX}};
     XirEffectInvocationRequest request={.caller=0,.instruction=3,.target=1,.producer=UINT32_MAX,
         .node=UINT32_MAX,.count=2,.read={.owner=&read,.work=invocation_direct_work,
         .cell=invocation_direct_cell,.value=invocation_direct_value}};
@@ -312,18 +254,8 @@ static void conditional_compact_edge_reads(const XrXirCompileContext *context,
         XR_XIR_BAD_STRUCTURE && opcode==XR_XIR_RETURN);
     edge->target=target;
     EffectBodyRequest request=effect_body_owned_request(context,certificate->body);
-    ConditionalCompactRead refusal={context,0,UINT64_MAX};
-    request.read=(EffectBodyRead){&refusal,conditional_compact_read_work};
+    request.read=(EffectBodyRead){.owner=context,.execution=NULL};
     EffectInvocationEdgeRead read={edge->caller,chosen,&opcode};
-    CHECK(effect_invocation_edge_read_selected(context,equations,&request,&certificate->terms.types,&read,NULL)==XR_XIR_OK &&
-        opcode==XR_XIR_CALL && refusal.calls);
-    uint64_t calls=refusal.calls;
-    for (uint64_t at=0;at<calls;++at) {
-        refusal.calls=0;refusal.reject=at;opcode=XR_XIR_RETURN;
-        CHECK(effect_invocation_edge_read_selected(context,equations,&request,&certificate->terms.types,&read,NULL)==
-            XR_XIR_BUDGET && opcode==XR_XIR_RETURN && refusal.calls==at+1);
-    }
-    refusal.calls=0;refusal.reject=UINT64_MAX;
     CHECK(effect_invocation_edge_read_selected(context,equations,&request,&certificate->terms.types,&read,NULL)==XR_XIR_OK &&
         opcode==XR_XIR_CALL);
 }
@@ -340,7 +272,7 @@ static void conditional_compact_builder_rows(const XrXirCompileContext *context,
     CHECK(request->instruction(context,request->owner,0,0,&actual,&operation)==XR_XIR_OK && operation==&actual &&
         operation->op==XR_XIR_CONST_INT && operation->type==XR_XIR_I64);
     for (uint32_t mode=0;mode<4;++mode) {
-        uint64_t held_bytes=rp_stats(context).live_bytes;
+        uint64_t held_bytes=rp_stats(context).held_bytes;
         XrXirCellProofBuilder *builder=NULL;XrXirCellProvenance *output=NULL;
         CHECK(xir_cell_proof_builder_begin(context,request,&builder)==XR_XIR_OK && builder);
         CHECK(xir_cell_proof_builder_head(builder,0,&head)==XR_XIR_OK);
@@ -355,7 +287,7 @@ static void conditional_compact_builder_rows(const XrXirCompileContext *context,
         CHECK(xir_cell_proof_builder_instruction(builder,0,0,operation->type,operation->op,operation->type)==expected);
         XrCompileResourceStats after=rp_stats(context);CHECK(!memcmp(&before,&after,sizeof(before)));
         CHECK(xir_cell_proof_builder_finish(&builder,&output)==expected && !builder && !output);
-        CHECK(rp_stats(context).live_bytes==held_bytes);
+        CHECK(rp_stats(context).held_bytes==held_bytes);
     }
 }
 
@@ -374,7 +306,7 @@ static void conditional_compact_builder_spans(const XrXirCompileContext *context
         !memcmp(&cursor,&sentinel,sizeof(cursor)));
     /* A zero supplied head has no scalar row. It must still be rejected
      * against the genuine nonempty owned head before any provider escapes. */
-    uint64_t empty_held=rp_stats(context).live_bytes;
+    uint64_t empty_held=rp_stats(context).held_bytes;
     XrXirCellProofBodyHead empty={0};
     CHECK(request->head(context,request->owner,0,&empty)==XR_XIR_OK);
     empty.instruction_count=0;
@@ -387,9 +319,9 @@ static void conditional_compact_builder_spans(const XrXirCompileContext *context
     XrCompileResourceStats empty_after=rp_stats(context);
     CHECK(!memcmp(&empty_retry,&empty_after,sizeof(empty_retry)));
     CHECK(xir_cell_proof_builder_finish(&empty_builder,&empty_output)==XR_XIR_BAD_STRUCTURE &&
-        !empty_builder && !empty_output && rp_stats(context).live_bytes==empty_held);
+        !empty_builder && !empty_output && rp_stats(context).held_bytes==empty_held);
     for (uint32_t mode=0;mode<9;++mode) {
-        uint64_t held_bytes=rp_stats(context).live_bytes;
+        uint64_t held_bytes=rp_stats(context).held_bytes;
         XrXirCellProofBuilder *builder=NULL;XrXirCellProvenance *output=NULL;
         CHECK(xir_cell_proof_builder_begin(context,request,&builder)==XR_XIR_OK && builder);
         for (uint32_t f=0;f<3;++f) {
@@ -405,10 +337,7 @@ static void conditional_compact_builder_spans(const XrXirCompileContext *context
                 CHECK(xir_cell_proof_builder_instruction(builder,f,head.parameter_count+i,
                     operation->type,operation->op,operation->type)==XR_XIR_OK);
             }
-            XrCompileResourceStats scalar_end=rp_stats(context);
             CHECK(xir_cell_proof_builder_function(builder,f)==XR_XIR_OK);
-            CHECK(rp_stats(context).work-scalar_end.work==
-                2+8+sizeof(uint64_t)+sizeof(uint32_t)+sizeof(bool));
         }
         XrXirCellProofBodyHead head={0};
         CHECK(request->head(context,request->owner,3,&head)==XR_XIR_OK && !head.parameter_count && head.instruction_count==3);
@@ -449,7 +378,7 @@ static void conditional_compact_builder_spans(const XrXirCompileContext *context
             else CHECK(output && xr_xir_compile_cell_provenance_body_matches(context,output,request,NULL)==XR_XIR_OK);
             xr_xir_compile_cell_provenance_free(output);
         }
-        CHECK(rp_stats(context).live_bytes==held_bytes);
+        CHECK(rp_stats(context).held_bytes==held_bytes);
     }
 }
 
@@ -490,7 +419,7 @@ static void conditional_compact_cell_attacks(const XrXirCompileContext *context,
     EffectCellBodyAdapter destination={0};XrXirCellProofBodyRead occupied=*request;
     CHECK(effect_cell_body_owned(&foreign,effects->invocations->body,&destination,&occupied)==XR_XIR_BAD_STRUCTURE &&
         !destination.work && !destination.request.owner && !memcmp(&occupied,request,sizeof(occupied)));
-    rp_owner_free(&foreign,before.live_bytes);
+    rp_owner_free(&foreign,before.held_bytes);
     EffectBodyRequest mixed=adapter->request;mixed.instruction=effect_body_raw_instruction;
     CHECK(effect_cell_body_request(context,&mixed,&destination,&occupied)==XR_XIR_BAD_STRUCTURE &&
         !destination.work && !destination.request.owner && !memcmp(&occupied,request,sizeof(occupied)));
@@ -537,8 +466,7 @@ static XrXirStatus conditional_compact_owned(const XrXirCompileContext *context,
         XrCompileResourceStats raw_before=rp_stats(context);
         CHECK(effect_body_request_fields(&raw,0,0,&raw_storage,&raw_operation,&raw_fields)==XR_XIR_OK &&
             raw_operation==&original->functions[0].instructions[0] && !memcmp(&raw_fields,&raw_sentinel,sizeof(raw_fields)));
-        CHECK(rp_stats(context).work-raw_before.work==2+sizeof(raw_operation) &&
-            rp_stats(context).allocation_count==raw_before.allocation_count && rp_stats(context).live_bytes==raw_before.live_bytes);
+        CHECK(rp_stats(context).allocation_count==raw_before.allocation_count && rp_stats(context).held_bytes==raw_before.held_bytes);
         conditional_compact_dimensions(context,&raw);conditional_compact_signatures(context,&raw);CHECK(!body_read.span);
         conditional_compact_refinement_span(context,original);
         XrXirModule changed=*original;XrXirFunction functions[4];XrXirInstruction entry[5];
@@ -576,7 +504,7 @@ static XrXirStatus conditional_compact_owned(const XrXirCompileContext *context,
             !narrow_operation && fields.op==XR_XIR_CONST_INT && fields.type==XR_XIR_I64 && !fields.source &&
             conditional_compact_same(&narrow_storage,&untouched));
         CHECK(rp_stats(context).allocation_count==narrow_before.allocation_count &&
-            rp_stats(context).live_bytes==narrow_before.live_bytes);
+            rp_stats(context).held_bytes==narrow_before.held_bytes);
         fields=fields_sentinel;
         CHECK(effect_body_request_fields(&request,0,head.instruction_count,&narrow_storage,&narrow_operation,&fields)==
             XR_XIR_BAD_STRUCTURE && !narrow_operation && !memcmp(&fields,&fields_sentinel,sizeof(fields)) &&
@@ -629,7 +557,7 @@ static XrXirStatus conditional_compact_advertisements(const XrXirCompileContext 
 }
 static void conditional_compact_advertisement_pair(const XrXirCompileContext *context,
     const XrXirModule *source,EffectRefinementBounds *refinement) {
-    uint64_t held_bytes=rp_stats(context).live_bytes;
+    uint64_t held_bytes=rp_stats(context).held_bytes;
     EffectInvocationDeclaredBounds *scalar=NULL,*span=NULL;
     CHECK(conditional_compact_advertisements(context,source,refinement,false,&scalar)==XR_XIR_OK && scalar);
     CHECK(conditional_compact_advertisements(context,source,refinement,true,&span)==XR_XIR_OK && span);
@@ -641,11 +569,11 @@ static void conditional_compact_advertisement_pair(const XrXirCompileContext *co
             a->bounds[v].mask==b->bounds[v].mask && a->bounds[v].callable==b->bounds[v].callable);
     }
     effect_invocation_bounds_free(scalar);effect_invocation_bounds_free(span);
-    CHECK(rp_stats(context).live_bytes==held_bytes);
+    CHECK(rp_stats(context).held_bytes==held_bytes);
 }
 static void conditional_compact_refinement_span(const XrXirCompileContext *context,
     const XrXirModule *source) {
-    uint64_t held_bytes=rp_stats(context).live_bytes;
+    uint64_t held_bytes=rp_stats(context).held_bytes;
     XrXirEffects captured={.resources=context->resources,.count=source->function_count};
     CHECK(xir_effects_refinement_capture(context,source,&captured)==XR_XIR_OK && captured.refinement);
     conditional_compact_advertisement_pair(context,source,captured.refinement);
@@ -657,21 +585,21 @@ static void conditional_compact_refinement_span(const XrXirCompileContext *conte
     CHECK(source->functions[3].instruction_count==3 && declared[0]==XR_XIR_I64 && declared[1]==XR_XIR_I64);
     XrXirType saved=declared[1];declared[1]=(XrXirType)257;
     CHECK(xr_xir_callable_signature(source->types,declared[1]));
-    uint64_t retained=rp_stats(context).live_bytes;
+    uint64_t retained=rp_stats(context).held_bytes;
     for (uint32_t spans=0;spans<2;++spans) {
         EffectInvocationDeclaredBounds *output=NULL;
         CHECK(conditional_compact_advertisements(context,source,captured.refinement,spans!=0,&output)==
-            XR_XIR_BAD_TYPE && !output && rp_stats(context).live_bytes==retained);
+            XR_XIR_BAD_TYPE && !output && rp_stats(context).held_bytes==retained);
     }
     declared[1]=saved;conditional_compact_advertisement_pair(context,source,captured.refinement);
-    effect_refinement_free(captured.refinement);CHECK(rp_stats(context).live_bytes==held_bytes);
+    effect_refinement_free(captured.refinement);CHECK(rp_stats(context).held_bytes==held_bytes);
 }
 /* The open forward definition has a real interface constraint, and specialize
  * supplies real INSTANCE origins/arguments. No phantom generic or fake evidence
  * selects this path. The two constants precede its original requirement call. */
 static void conditional_compact_instance_span(void) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-    uint64_t held_bytes=rp_stats(&context).live_bytes;
+    uint64_t held_bytes=rp_stats(&context).held_bytes;
     ConditionalRawFixture fixture;conditional_raw_fixture(&fixture,2);
     XrXirInstruction forward[4]={
         {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=1},
@@ -687,7 +615,7 @@ static void conditional_compact_instance_span(void) {
     memcpy(functions,fixture.functions,sizeof(fixture.functions));
     memcpy(generics,fixture.generics,sizeof(fixture.generics));
     memcpy(identities,fixture.identities,sizeof(fixture.identities));
-    functions[4]=(XrXirFunction){.name="entry",.name_length=5,.result=XR_XIR_I64,
+    functions[4]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="entry",.name_length=5,.result=XR_XIR_I64,
         .instructions=entry,.instruction_count=2};
     for (uint32_t f=0;f<5;++f) {
         blocks[f]=(XrXirBlock){.first=0,.count=functions[f].instruction_count};
@@ -702,16 +630,16 @@ static void conditional_compact_instance_span(void) {
     CHECK(source->generics && source->generics[1].parameter_count==1);
     conditional_compact_advertisement_pair(&context,source,NULL);
     EffectBodyMaterial *generic_material=NULL;
-    CHECK(effect_body_material_create(&context,source,&generic_material)==XR_XIR_OK && generic_material);
+    CHECK(conditional_owned_body_from_raw(&context,source,&generic_material)==XR_XIR_OK && generic_material);
     CHECK(effect_body_source_match(&context,generic_material,source)==XR_XIR_OK);
     effect_body_material_free(generic_material);
-    uint64_t before_specialization=rp_stats(&context).live_bytes;
+    uint64_t before_specialization=rp_stats(&context).held_bytes;
     XrXirDiagnostic specialized_diagnostic={0};
     XrXirStatus specialized=xr_xir_compile_specialize(checked,&instance,&specialized_diagnostic, NULL);
-    if(specialized!=XR_XIR_OK) fprintf(stderr,"compact instance specialization status%u reason%u f%u i%u work%llu\n",
+    if(specialized!=XR_XIR_OK) fprintf(stderr,"compact instance specialization status%u reason%u f%u i%u held%llu\n",
         specialized,specialized_diagnostic.reason,specialized_diagnostic.function,specialized_diagnostic.instruction,
-        (unsigned long long)rp_stats(&context).work);
-    if(specialized!=XR_XIR_OK) CHECK(!instance && rp_stats(&context).live_bytes==before_specialization);
+        (unsigned long long)rp_stats(&context).held_bytes);
+    if(specialized!=XR_XIR_OK) CHECK(!instance && rp_stats(&context).held_bytes==before_specialization);
     CHECK(specialized==XR_XIR_OK && instance);
     const XrXirModule *module=xr_xir_compile_artifact_module(instance);
     CHECK(module->provenance && module->provenance->kind==XR_XIR_EVIDENCE_INSTANCE && module->provenance->source);
@@ -722,18 +650,18 @@ static void conditional_compact_instance_span(void) {
         module->provenance->origins[selected].arguments);
     conditional_compact_advertisement_pair(&context,module,NULL);
     EffectBodyMaterial *material=NULL;
-    CHECK(effect_body_material_create(&context,module,&material)==XR_XIR_OK && material);
+    CHECK(conditional_owned_body_from_raw(&context,module,&material)==XR_XIR_OK && material);
     CHECK(effect_body_source_match(&context,material,module)==XR_XIR_OK);
     effect_body_material_free(material);
     const XrXirModule *original=&module->provenance->source->module;
     XrXirInstruction *instructions=(XrXirInstruction *)original->functions[1].instructions;
     XrXirType saved=instructions[1].type;CHECK(saved==XR_XIR_I64);
     instructions[1].type=(XrXirType)257;CHECK(xr_xir_callable_signature(original->types,instructions[1].type));
-    uint64_t retained=rp_stats(&context).live_bytes;
+    uint64_t retained=rp_stats(&context).held_bytes;
     for (uint32_t spans=0;spans<2;++spans) {
         EffectInvocationDeclaredBounds *output=NULL;
         CHECK(conditional_compact_advertisements(&context,module,NULL,spans!=0,&output)==XR_XIR_BAD_TYPE &&
-            !output && rp_stats(&context).live_bytes==retained);
+            !output && rp_stats(&context).held_bytes==retained);
     }
     instructions[1].type=saved;conditional_compact_advertisement_pair(&context,module,NULL);
     xr_xir_compile_artifact_free(instance);xr_xir_compile_artifact_free(checked);
@@ -749,7 +677,7 @@ static XrXirStatus conditional_compact_case(const XrXirCompileContext *context,u
 static void conditional_compact_literals(void) {
     for (uint32_t mode=0;mode<3;++mode) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-        uint64_t baseline=rp_stats(&context).live_bytes;
+        uint64_t baseline=rp_stats(&context).held_bytes;
         CHECK(conditional_compact_case(&context,mode,true)==XR_XIR_OK);
         rp_owner_free(&context,baseline);rp_balanced(physical);
     }
@@ -761,14 +689,14 @@ static void conditional_compact_resources(void) {
         for (size_t pass=0;pass<=sites;++pass) {
             RootParameterMark physical=rp_mark();rp_fail_at=SIZE_MAX;rp_attempts=0;rp_injected=false;
             XrXirCompileContext context=rp_owner(rp_caps());XrCompileResourceStats entry=rp_stats(&context);
-            uint64_t baseline=entry.live_bytes;RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
+            uint64_t baseline=entry.held_bytes;RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
             rp_attempts=0;rp_fail_at=pass?pass-1:SIZE_MAX;
             XrXirStatus status=conditional_compact_case(&context,mode,false);
             if (!pass) {
                 CHECK(status==XR_XIR_OK);sites=rp_attempts;single=rp_stats(&context);
-                printf("compact material mode%u census sites%zu work%llu allocated%llu live%llu peak%llu\n",
-                    mode,sites,(unsigned long long)single.work,(unsigned long long)single.allocated_bytes,
-                    (unsigned long long)single.live_bytes,(unsigned long long)single.peak_bytes);
+                printf("compact material mode%u census sites%zu allocated%llu held%llu peak%llu\n",
+                    mode,sites,(unsigned long long)single.allocated_bytes,
+                    (unsigned long long)single.held_bytes,(unsigned long long)single.peak_bytes);
             }
             else {
                 CHECK(rp_injected && status==XR_XIR_OUT_OF_MEMORY);
@@ -779,19 +707,18 @@ static void conditional_compact_resources(void) {
             rp_fail_at=SIZE_MAX;rp_owner_free(&context,baseline);rp_balanced(physical);
         }
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-        XrCompileResourceStats entry=rp_stats(&context);uint64_t baseline=entry.live_bytes;
+        XrCompileResourceStats entry=rp_stats(&context);uint64_t baseline=entry.held_bytes;
         size_t before=rp_attempts;CHECK(conditional_compact_case(&context,mode,false)==XR_XIR_OK);
         XrCompileResourceStats census=rp_stats(&context);size_t census_sites=rp_attempts-before;
         rp_owner_free(&context,baseline);rp_balanced(physical);
-        uint64_t measured[3]={census.allocated_bytes,census.peak_bytes,census.work};
-        for (uint32_t axis=0;axis<3;++axis) for (uint32_t pass=0;pass<2;++pass) {
-            XrCompileResourceLimits limits=rp_caps();uint64_t value=measured[axis]-(pass?0:1);
-            if (!axis) limits.allocated_bytes=value;else if (axis==1) limits.live_bytes=value;else limits.work=value;
-            physical=rp_mark();context=rp_owner(limits);entry=rp_stats(&context);baseline=entry.live_bytes;
+        for (uint32_t pass=0;pass<2;++pass) {
+            XrCompileResourceLimits limits=rp_caps();uint64_t value=census.peak_bytes-(pass?0:1);
+            limits.memory_limit=value;
+            physical=rp_mark();context=rp_owner(limits);entry=rp_stats(&context);baseline=entry.held_bytes;
             RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
-            CHECK(conditional_compact_case(&context,mode,false)==(pass?XR_XIR_OK:XR_XIR_BUDGET));
+            CHECK(conditional_compact_case(&context,mode,false)==(pass?XR_XIR_OK:XR_XIR_MEMORY_LIMIT));
             ConditionalRetryTrial retry={.which=mode+87,.ordinal=SIZE_MAX,.sites=census_sites,
-                .resources=identity,.initial=entry,.single=census,.retained=retained,.first=pass?XR_XIR_OK:XR_XIR_BUDGET};
+                .resources=identity,.initial=entry,.single=census,.retained=retained,.first=pass?XR_XIR_OK:XR_XIR_MEMORY_LIMIT};
             conditional_retry_operation(&context,&retry);rp_owner_free(&context,baseline);rp_balanced(physical);
         }
     }

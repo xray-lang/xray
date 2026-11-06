@@ -25,7 +25,7 @@ typedef struct InvocationRotationFixture {
 
 static inline void invocation_rotation_fixture(InvocationRotationFixture *f) {
     memset(f,0,sizeof(*f));
-    f->nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,
+    f->nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.element=XR_XIR_NEVER,
         .flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     f->nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64};
     f->types=(XrXirTypes){.nodes=f->nodes,.count=2};
@@ -55,18 +55,18 @@ static inline void invocation_rotation_fixture(InvocationRotationFixture *f) {
     f->blocks[0]=(XrXirBlock){.count=4};f->blocks[1]=(XrXirBlock){.count=3};
     f->blocks[2]=(XrXirBlock){.count=2};f->blocks[3]=(XrXirBlock){.count=3};
     f->blocks[4]=(XrXirBlock){.count=4};
-    f->functions[0]=(XrXirFunction){.name="run",.name_length=3,.result=XR_XIR_I64,
+    f->functions[0]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="run",.name_length=3,.result=XR_XIR_I64,
         .instructions=f->run,.instruction_count=4,.operands=f->run_operands,.operand_count=5};
-    f->functions[1]=(XrXirFunction){.name="rotate",.name_length=6,.result=XR_XIR_I64,
+    f->functions[1]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="rotate",.name_length=6,.result=XR_XIR_I64,
         .parameters=f->parameters,.parameter_count=5,.instructions=f->rotate,.instruction_count=3,
         .operands=f->rotate_operands,.operand_count=5};
-    f->functions[2]=(XrXirFunction){.name="pure",.name_length=4,.result=XR_XIR_I64,
+    f->functions[2]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="pure",.name_length=4,.result=XR_XIR_I64,
         .instructions=f->pure,.instruction_count=2};
-    f->functions[3]=(XrXirFunction){.name="root",.name_length=4,.result=XR_XIR_I64,
+    f->functions[3]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="root",.name_length=4,.result=XR_XIR_I64,
         .instructions=f->root,.instruction_count=3};
-    f->functions[4]=(XrXirFunction){.name="init",.name_length=4,.result=XR_XIR_UNIT,
+    f->functions[4]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="init",.name_length=4,.result=XR_XIR_UNIT,
         .instructions=f->init,.instruction_count=4};
-    for (uint32_t i=0;i<5;++i) { f->functions[i].blocks=&f->blocks[i];f->functions[i].block_count=1; }
+    for (uint32_t i=0;i<5;++i) { f->functions[i].blocks=&f->blocks[i];f->functions[i].block_count=1;f->functions[i].error_type=XR_XIR_NEVER; }
     f->values[0]=(XrXirRootValueIdentity){0,XR_XIR_EFFECT_VALUE_AUTHENTIC_REF,(XrXirType)256};
     f->values[1]=(XrXirRootValueIdentity){1,XR_XIR_EFFECT_VALUE_AUTHENTIC_REF,(XrXirType)256};
     f->contracts[0]=(XrXirFunctionEffectContract){.formula={.constant_mask=XR_XIR_CALLABLE_ROOT_REQUIRED},

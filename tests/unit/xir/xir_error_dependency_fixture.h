@@ -39,24 +39,24 @@ static void ed_fixture(ErrorDependencyFixture *f, ErrorDependencyMode mode, bool
         .exported=1,.kind=XR_XIR_NOMINAL_ENUM,.variants=f->variants,.variant_count=2};
     f->nominals=(XrXirNominalTable){.declarations=&f->nominal,.count=1};
     f->nodes[0].kind=XR_XIR_TYPE_NOMINAL;
-    f->nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_TASK,.element=XR_XIR_UNIT};
-    f->nodes[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
+    f->nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_TASK,.element=XR_XIR_UNIT,.result=(XrXirType)ED_ENUM};
+    f->nodes[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,.element=(XrXirType)ED_ENUM,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     f->types=(XrXirTypes){.nodes=f->nodes,.count=3,.nominals=&f->nominals};
     f->parameter=(XrXirType)ED_ENUM;
     f->dynamic_parameters[0]=f->parameter;f->dynamic_parameters[1]=(XrXirType)ED_FN;
     f->init=(XrXirInstruction){.op=XR_XIR_RETURN};f->one=(XrXirBlock){.count=1};
-    f->functions[0]=(XrXirFunction){.name="init",.name_length=4,.result=XR_XIR_UNIT,
+    f->functions[0]=(XrXirFunction){.name="init",.name_length=4,.result=XR_XIR_UNIT,.error_type=XR_XIR_NEVER,
         .blocks=&f->one,.block_count=1,.instructions=&f->init,.instruction_count=1};
     uint32_t scalars=large?ED_SCALARS:8;
     for(uint32_t i=0;i<scalars;++i)f->scalar[i]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=i};
     f->scalar[scalars]=f->init;f->scalar_block=(XrXirBlock){.count=scalars+1};
-    f->functions[1]=(XrXirFunction){.name="independent",.name_length=11,.result=XR_XIR_UNIT,
+    f->functions[1]=(XrXirFunction){.name="independent",.name_length=11,.result=XR_XIR_UNIT,.error_type=XR_XIR_NEVER,
         .blocks=&f->scalar_block,.block_count=1,.instructions=f->scalar,.instruction_count=scalars+1};
     for(uint32_t i=2;i<ED_COUNT;++i){
         f->ops[i][0]=(XrXirInstruction){.op=XR_XIR_CALL,.args={0,1},.immediate=i+1};
         f->ops[i][1]=f->init;f->blocks[i]=(XrXirBlock){.count=2};
         f->functions[i]=(XrXirFunction){.name="chain",.name_length=5,.parameters=&f->parameter,.parameter_count=1,
-            .result=XR_XIR_UNIT,.blocks=&f->blocks[i],.block_count=1,.instructions=f->ops[i],.instruction_count=2,
+            .result=XR_XIR_UNIT,.error_type=(XrXirType)ED_ENUM,.blocks=&f->blocks[i],.block_count=1,.instructions=f->ops[i],.instruction_count=2,
             .operands=&f->operand,.operand_count=1};
     }
     f->ops[ED_COUNT-1][0]=(XrXirInstruction){.op=XR_XIR_THROW,.args={0}};
@@ -69,6 +69,7 @@ static void ed_fixture(ErrorDependencyFixture *f, ErrorDependencyMode mode, bool
         f->functions[ED_COUNT-1].operands=&f->operand;f->functions[ED_COUNT-1].operand_count=1;
     }
     if(mode==ED_GO){
+        f->functions[2].error_type=XR_XIR_ERROR;
         f->ops[2][0]=(XrXirInstruction){.op=XR_XIR_GO,.type=(XrXirType)ED_TASK,.args={0,1},.immediate=3};
         f->ops[2][1]=(XrXirInstruction){.op=XR_XIR_TASK_AWAIT,.args={1},.targets={1,2}};
         f->ops[2][2]=f->init;

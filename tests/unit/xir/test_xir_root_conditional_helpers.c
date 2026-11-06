@@ -18,6 +18,7 @@
 #include "xir_conditional_retry_cases.h"
 #define XR_XIR_EFFECT_CONTEXT_TESTS 1
 #include "xir/xxir_effects.c"
+#include "xir_conditional_effect_input.h"
 #include "xir_legacy_error_oracle.h"
 #include "xir_invocation_cause_order_cases.h"
 #include "xir_sequence_borrow_cases.h"
@@ -61,6 +62,7 @@
 #include "xir_context_constraint_vector_cases.h"
 #include "xir_parameter_schedule_cases.h"
 #include "xir_single_run_reader_cases.h"
+#include "xir_final_input_controls.h"
 
 static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint32_t mode, bool oracle) {
     ConditionalRawFixture f;conditional_raw_fixture(&f,mode);
@@ -86,8 +88,8 @@ static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint
                 repeated==selected && contexts->count==count && contexts->nodes[selected].arguments==arguments);
         }
         XrCompileResourceStats after=rp_stats(context);
-        CHECK(after.allocated_bytes==before.allocated_bytes && after.live_bytes==before.live_bytes &&
-            after.allocation_count==before.allocation_count && after.work>before.work);
+        CHECK(after.allocated_bytes==before.allocated_bytes && after.held_bytes==before.held_bytes &&
+            after.allocation_count==before.allocation_count);
         contexts->terms.remaining=NULL;
     }
     if (status==XR_XIR_OK) {
@@ -100,7 +102,7 @@ static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint
         XrXirType parameters[2]={(XrXirType)256,(XrXirType)259};uint32_t operands[2]={0,1};
         XrXirInstruction actual_ops[2]={{.op=XR_XIR_CALL,.type=XR_XIR_I64,.args={0,2},.immediate=2},
             {.op=XR_XIR_RETURN,.args={2,0}}};
-        functions[4]=(XrXirFunction){.name="precise",.name_length=7,.parameters=parameters,.parameter_count=2,
+        functions[4]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="precise",.name_length=7,.parameters=parameters,.parameter_count=2,
             .result=XR_XIR_I64,.instructions=actual_ops,.instruction_count=2,.operands=operands,.operand_count=2};
         XrXirDeclarations declarations=f.declarations;declarations.functions=identities;
         XrXirModule module=f.module;module.functions=functions;module.function_count=5;
@@ -177,10 +179,10 @@ static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint
 
 static XrXirStatus conditional_scalar(const XrXirCompileContext *context, bool oracle) {
     XrXirTypeNode nodes[4]={
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=8},
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=2},
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=4},
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=12}};
+        {.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=8},
+        {.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=2},
+        {.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=4},
+        {.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=12}};
     XrXirTypes types={nodes,4,NULL,NULL};EffectTerms terms={.remaining=context};
     XrXirStatus status=effect_terms_seed(&terms,&types);
     XrXirInstruction ops[6]={
@@ -272,10 +274,9 @@ static XrXirStatus conditional_forest(const XrXirCompileContext *context, bool o
     xr_xir_compile_root_cause_trace_free(trace);
     if (oracle && status!=XR_XIR_OK) {
         XrCompileResourceStats end=rp_stats(context);
-        fprintf(stderr,"CONDITIONAL_FOREST phase=%u status=%u allocated=%llu/%llu work=%llu/%llu live=%llu peak=%llu\n",
+        fprintf(stderr,"CONDITIONAL_FOREST phase=%u status=%u allocated=%llu/%llu held=%llu peak=%llu\n",
             phase,(uint32_t)status,(unsigned long long)begin.allocated_bytes,(unsigned long long)end.allocated_bytes,
-            (unsigned long long)begin.work,(unsigned long long)end.work,
-            (unsigned long long)end.live_bytes,(unsigned long long)end.peak_bytes);
+            (unsigned long long)end.held_bytes,(unsigned long long)end.peak_bytes);
     }
     return status;
 }
@@ -340,7 +341,7 @@ static XrXirStatus conditional_dense_owner(const XrXirCompileContext *context,
     XrXirType parameters[2]={(XrXirType)256,(XrXirType)259};uint32_t operands[2]={0,1};
     XrXirInstruction ops[2]={{.op=XR_XIR_CALL,.type=XR_XIR_I64,.args={0,2},.immediate=2},
         {.op=XR_XIR_RETURN,.args={2,0}}};
-    functions[4]=(XrXirFunction){.name="entry",.name_length=5,.parameters=parameters,.parameter_count=2,
+    functions[4]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="entry",.name_length=5,.parameters=parameters,.parameter_count=2,
         .result=XR_XIR_I64,.instructions=ops,.instruction_count=2,.operands=operands,.operand_count=2};
     f.declarations.functions=identities;f.declarations.entry_function=4;
     f.module.functions=functions;f.module.function_count=5;f.module.generics=generics;
@@ -462,9 +463,9 @@ static void conditional_projection_rejections(const XrXirCompileContext *context
  * capture operands select separate contexts when their complete bounds differ. */
 static XrXirStatus conditional_cleanup_owner(const XrXirCompileContext *context, bool oracle) {
     XrXirTypeNode nodes[3]={
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=9},
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=3},
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=5}};
+        {.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=9},
+        {.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=3},
+        {.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=5}};
     XrXirTypes types={nodes,3,NULL,NULL};
     XrXirType declared[2]={(XrXirType)256,(XrXirType)256};
     XrXirType actual[2]={(XrXirType)257,(XrXirType)258};uint32_t operands[2]={0,1};
@@ -482,15 +483,15 @@ static XrXirStatus conditional_cleanup_owner(const XrXirCompileContext *context,
     XrXirBlock owner_block={.count=3},entry_block={.count=2},init_block={.count=1};
     XrXirBlock branches[3]={{.count=1},{.first=1,.count=1},{.first=2,.count=2}};
     XrXirFunction functions[4]={
-        {.name="owner",.name_length=5,.parameters=declared,.parameter_count=2,.result=XR_XIR_UNIT,
+        {.error_type=XR_XIR_NEVER,.name="owner",.name_length=5,.parameters=declared,.parameter_count=2,.result=XR_XIR_UNIT,
          .blocks=&owner_block,.block_count=1,.instructions=registrations,.instruction_count=3,
          .operands=operands,.operand_count=2},
-        {.name="cleanup",.name_length=7,.parameters=declared,.parameter_count=1,.result=XR_XIR_UNIT,
+        {.error_type=XR_XIR_NEVER,.name="cleanup",.name_length=7,.parameters=declared,.parameter_count=1,.result=XR_XIR_UNIT,
          .blocks=branches,.block_count=3,.instructions=cleanup,.instruction_count=4},
-        {.name="entry",.name_length=5,.parameters=actual,.parameter_count=2,.result=XR_XIR_UNIT,
+        {.error_type=XR_XIR_NEVER,.name="entry",.name_length=5,.parameters=actual,.parameter_count=2,.result=XR_XIR_UNIT,
          .blocks=&entry_block,.block_count=1,.instructions=entry,.instruction_count=2,
          .operands=operands,.operand_count=2},
-        {.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&init_block,.block_count=1,
+        {.error_type=XR_XIR_NEVER,.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&init_block,.block_count=1,
          .instructions=&done,.instruction_count=1}};
     XrXirFunctionIdentity identities[4]={0};identities[1].cleanup_owner=1;
     XrXirSourceModule source={"cleanup-context",15,NULL,0,3, 0,XR_XIR_MODULE_FRESH_STORAGE};
@@ -547,17 +548,17 @@ static XrXirStatus conditional_cell_owner(const XrXirCompileContext *context, bo
     uint32_t local_operand=1,shared_operand=0;
     XrXirBlock blocks[6]={{.count=2},{.count=4},{.count=3},{.count=3},{.count=2},{.count=3}};
     XrXirFunction functions[6]={
-        {.name="read",.name_length=4,.parameters=&cell,.parameter_count=1,.result=XR_XIR_I64,
+        {.error_type=XR_XIR_NEVER,.name="read",.name_length=4,.parameters=&cell,.parameter_count=1,.result=XR_XIR_I64,
          .blocks=&blocks[0],.block_count=1,.instructions=read,.instruction_count=2},
-        {.name="local",.name_length=5,.result=XR_XIR_I64,.blocks=&blocks[1],.block_count=1,
+        {.error_type=XR_XIR_NEVER,.name="local",.name_length=5,.result=XR_XIR_I64,.blocks=&blocks[1],.block_count=1,
          .instructions=local,.instruction_count=4,.operands=&local_operand,.operand_count=1},
-        {.name="shared",.name_length=6,.result=XR_XIR_I64,.blocks=&blocks[2],.block_count=1,
+        {.error_type=XR_XIR_NEVER,.name="shared",.name_length=6,.result=XR_XIR_I64,.blocks=&blocks[2],.block_count=1,
          .instructions=shared,.instruction_count=3,.operands=&shared_operand,.operand_count=1},
-        {.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&blocks[3],.block_count=1,
+        {.error_type=XR_XIR_NEVER,.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&blocks[3],.block_count=1,
          .instructions=initialize,.instruction_count=3},
-        {.name="readUnit",.name_length=8,.parameters=&unit_cell,.parameter_count=1,.result=XR_XIR_UNIT,
+        {.error_type=XR_XIR_NEVER,.name="readUnit",.name_length=8,.parameters=&unit_cell,.parameter_count=1,.result=XR_XIR_UNIT,
          .blocks=&blocks[4],.block_count=1,.instructions=read_unit,.instruction_count=2},
-        {.name="localUnit",.name_length=9,.result=XR_XIR_UNIT,.blocks=&blocks[5],.block_count=1,
+        {.error_type=XR_XIR_NEVER,.name="localUnit",.name_length=9,.result=XR_XIR_UNIT,.blocks=&blocks[5],.block_count=1,
          .instructions=local_unit,.instruction_count=3,.operands=&shared_operand,.operand_count=1}};
     XrXirFunctionIdentity identities[6]={0};XrXirSourceModule source={"cell-effects",12,NULL,0,3, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirSlot slot={0,(XrXirType)256,1};
@@ -566,7 +567,7 @@ static XrXirStatus conditional_cell_owner(const XrXirCompileContext *context, bo
     XrXirModule module={.stage=XR_XIR_CHECKED,.functions=functions,.function_count=6,
         .declarations=&declarations,.types=&types,.linkage_kind=XR_XIR_PROGRAM};
     XrXirEffects *effects=NULL;XrXirRootCauseTrace *trace=NULL;EffectContextOwner *owner=NULL;
-    XrXirStatus status=xr_xir_compile_effects_infer_verified(context,&module,&effects);
+    XrXirStatus status=conditional_effects_from_raw(context,&module,&effects);
     XrXirProvenance template={.kind=XR_XIR_EVIDENCE_TEMPLATE};module.provenance=&template;
     if (status==XR_XIR_OK) status=effect_context_owner_build(context,&module,NULL,NULL,&owner);
     if (status==XR_XIR_OK && oracle) {
@@ -617,7 +618,7 @@ static XrXirStatus conditional_cell_owner(const XrXirCompileContext *context, bo
 }
 
 static XrXirStatus conditional_cell_payload(const XrXirCompileContext *context, bool oracle) {
-    XrXirTypeNode nodes[2]={{.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=2},
+    XrXirTypeNode nodes[2]={{.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=2},
         {.kind=XR_XIR_TYPE_CELL,.element=(XrXirType)256}};
     XrXirTypes types={nodes,2,NULL,NULL};
     XrXirInstruction local[5]={{.op=XR_XIR_FUNCTION_REF,.type=(XrXirType)256,.immediate=2},
@@ -633,13 +634,13 @@ static XrXirStatus conditional_cell_payload(const XrXirCompileContext *context, 
         {.op=XR_XIR_SLOT_INIT}, {.op=XR_XIR_RETURN}};
     XrXirBlock blocks[4]={{.count=5},{.count=4},{.count=2},{.count=3}};
     XrXirFunction functions[4]={
-        {.name="local",.name_length=5,.result=XR_XIR_I64,.blocks=&blocks[0],.block_count=1,
+        {.error_type=XR_XIR_NEVER,.name="local",.name_length=5,.result=XR_XIR_I64,.blocks=&blocks[0],.block_count=1,
          .instructions=local,.instruction_count=5},
-        {.name="shared",.name_length=6,.result=XR_XIR_I64,.blocks=&blocks[1],.block_count=1,
+        {.error_type=XR_XIR_NEVER,.name="shared",.name_length=6,.result=XR_XIR_I64,.blocks=&blocks[1],.block_count=1,
          .instructions=shared,.instruction_count=4},
-        {.name="pure",.name_length=4,.result=XR_XIR_I64,.blocks=&blocks[2],.block_count=1,
+        {.error_type=XR_XIR_NEVER,.name="pure",.name_length=4,.result=XR_XIR_I64,.blocks=&blocks[2],.block_count=1,
          .instructions=pure,.instruction_count=2},
-        {.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&blocks[3],.block_count=1,
+        {.error_type=XR_XIR_NEVER,.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&blocks[3],.block_count=1,
          .instructions=initialize,.instruction_count=3}};
     XrXirFunctionIdentity identities[4]={0};XrXirSourceModule source={"cell-payload",12,NULL,0,3, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirSlot slot={0,(XrXirType)257,1};
@@ -647,7 +648,7 @@ static XrXirStatus conditional_cell_payload(const XrXirCompileContext *context, 
         .slots=&slot,.slot_count=1,.entry_function=0};
     XrXirModule module={.stage=XR_XIR_CHECKED,.functions=functions,.function_count=4,
         .declarations=&declarations,.types=&types,.linkage_kind=XR_XIR_PROGRAM};
-    XrXirEffects *effects=NULL;XrXirStatus status=xr_xir_compile_effects_infer_verified(context,&module,&effects);
+    XrXirEffects *effects=NULL;XrXirStatus status=conditional_effects_from_raw(context,&module,&effects);
     if (status==XR_XIR_OK && oracle) {
         CHECK(!effect_roots_read(effects)->root[0].requires_root && !effect_roots_read(effects)->root[0].unresolved);
         CHECK(effect_roots_read(effects)->root[1].requires_root && !effect_roots_read(effects)->root[1].unresolved);
@@ -659,7 +660,6 @@ static XrXirStatus conditional_cell_payload(const XrXirCompileContext *context, 
     }
     xr_xir_compile_effects_free(effects);return status;
 }
-
 
 /* Empty descriptor pools and zero-sized payload tables are real domains. The
  * same consumers must still reject nonempty data without its authentic owner. */
@@ -682,11 +682,11 @@ static void conditional_empty_domains(const XrXirCompileContext *context) {
     XrXirInstruction done={.op=XR_XIR_RETURN};
     XrXirBlock blocks[3]={{.count=2},{.count=2},{.count=1}};
     XrXirFunction functions[3]={
-        {.name="read",.name_length=4,.result=XR_XIR_I64,.blocks=&blocks[0],.block_count=1,
+        {.error_type=XR_XIR_NEVER,.name="read",.name_length=4,.result=XR_XIR_I64,.blocks=&blocks[0],.block_count=1,
          .instructions=read,.instruction_count=2},
-        {.name="entry",.name_length=5,.result=XR_XIR_I64,.blocks=&blocks[1],.block_count=1,
+        {.error_type=XR_XIR_NEVER,.name="entry",.name_length=5,.result=XR_XIR_I64,.blocks=&blocks[1],.block_count=1,
          .instructions=call,.instruction_count=2},
-        {.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&blocks[2],.block_count=1,
+        {.error_type=XR_XIR_NEVER,.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&blocks[2],.block_count=1,
          .instructions=&done,.instruction_count=1}};
     XrXirFunctionIdentity identities[3]={0};XrXirSourceModule module_identity={"empty",5,NULL,0,2, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirDeclarations declarations={.modules=&module_identity,.module_count=1,
@@ -725,7 +725,7 @@ static XrXirStatus conditional_zero_checked(const XrXirCompileContext *context,
     const XrXirModule *owned=xr_xir_compile_artifact_module(checked);
     if (status==XR_XIR_OK) status=xr_xir_compile_verify_v2(context,owned,
         xr_xir_compile_artifact_construction(checked),NULL);
-    if (status==XR_XIR_OK) status=xr_xir_compile_effects_infer_verified(context,owned,output);
+    if (status==XR_XIR_OK) status=conditional_effects_from_raw(context,owned,output);
     xr_xir_compile_artifact_free(checked);return status;
 }
 
@@ -735,9 +735,9 @@ static XrXirStatus conditional_zero_carrier(const XrXirCompileContext *context,
     uint32_t mode, bool oracle) {
     XrXirCallableParameter field={(XrXirType)256,0};
     XrXirTypeNode nodes[6]={
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,
+        {.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,
          .flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED|XR_XIR_CALLABLE_NO_SUSPEND},
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,
+        {.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,
          .flags=XR_XIR_CALLABLE_ROOT_NONE|XR_XIR_CALLABLE_NO_SUSPEND},
         {.kind=XR_XIR_TYPE_NULLABLE,.element=(XrXirType)256},
         {.kind=XR_XIR_TYPE_ARRAY,.element=(XrXirType)256},
@@ -752,7 +752,7 @@ static XrXirStatus conditional_zero_carrier(const XrXirCompileContext *context,
         {.op=XR_XIR_CALL_INDIRECT,.type=XR_XIR_I64,.immediate=2},
         {.op=XR_XIR_RETURN,.args={3,0}}};
     XrXirBlock block={.count=4};
-    XrXirFunction function={.name="extract",.name_length=7,.parameters=&parameter,
+    XrXirFunction function={.error_type=XR_XIR_NEVER,.name="extract",.name_length=7,.parameters=&parameter,
         .parameter_count=1,.result=XR_XIR_I64,.instructions=ops,.instruction_count=4,
         .blocks=&block,.block_count=1};
     XrXirModule module={.stage=XR_XIR_CHECKED,.types=&types,.functions=&function,
@@ -780,17 +780,17 @@ static XrXirStatus conditional_zero_carrier(const XrXirCompileContext *context,
     XrXirOp invalid[3]={XR_XIR_INVALID,XR_XIR_OP_COUNT,(XrXirOp)(XR_XIR_OP_COUNT+19)};
     for (uint32_t i=0;i<3;++i) {
         ops[1].op=invalid[i];
-        CHECK(xr_xir_compile_effects_infer_verified(context,&module,&effects)==XR_XIR_BAD_STRUCTURE && !effects);
+        CHECK(conditional_effects_from_raw(context,&module,&effects)==XR_XIR_BAD_STRUCTURE && !effects);
     }
     ops[1].op=extract;
     ops[2]=(XrXirInstruction){.op=XR_XIR_CALL_INDIRECT,.type=XR_XIR_I64,.immediate=0};
-    CHECK(xr_xir_compile_effects_infer_verified(context,&module,&effects)==XR_XIR_BAD_STRUCTURE && !effects);
+    CHECK(conditional_effects_from_raw(context,&module,&effects)==XR_XIR_BAD_STRUCTURE && !effects);
     return XR_XIR_OK;
 }
 
 static XrXirStatus conditional_zero_module_fn(const XrXirCompileContext *context,bool oracle) {
     XrXirTypeNode nodes[2]={
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,
+        {.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,
          .flags=XR_XIR_CALLABLE_ROOT_NONE|XR_XIR_CALLABLE_NO_SUSPEND},
         {.kind=XR_XIR_TYPE_CELL,.element=(XrXirType)256}};
     XrXirTypes types={nodes,2,NULL,NULL};
@@ -801,11 +801,11 @@ static XrXirStatus conditional_zero_module_fn(const XrXirCompileContext *context
         {.op=XR_XIR_SLOT_INIT,.args={1,0}}, {.op=XR_XIR_RETURN}};
     XrXirBlock blocks[3]={{.count=2},{.count=2},{.count=4}};
     XrXirFunction functions[3]={
-        {.name="load",.name_length=4,.result=XR_XIR_UNIT,.instructions=load,.instruction_count=2,
+        {.error_type=XR_XIR_NEVER,.name="load",.name_length=4,.result=XR_XIR_UNIT,.instructions=load,.instruction_count=2,
          .blocks=&blocks[0],.block_count=1},
-        {.name="pure",.name_length=4,.result=XR_XIR_I64,.instructions=pure,.instruction_count=2,
+        {.error_type=XR_XIR_NEVER,.name="pure",.name_length=4,.result=XR_XIR_I64,.instructions=pure,.instruction_count=2,
          .blocks=&blocks[1],.block_count=1},
-        {.name="init",.name_length=4,.result=XR_XIR_UNIT,.instructions=init,.instruction_count=4,
+        {.error_type=XR_XIR_NEVER,.name="init",.name_length=4,.result=XR_XIR_UNIT,.instructions=init,.instruction_count=4,
          .blocks=&blocks[2],.block_count=1}};
     XrXirFunctionIdentity identities[3]={[1]={.promises=XR_XIR_FUNCTION_NO_SUSPEND}};
     XrXirSourceModule source={"zero-module-fn",14,NULL,0,2, 0,XR_XIR_MODULE_FRESH_STORAGE};
@@ -848,11 +848,11 @@ static XrXirStatus conditional_zero_arity(const XrXirCompileContext *context,boo
     XrXirInstruction done={.op=XR_XIR_RETURN};
     XrXirBlock blocks[3]={{.count=2},{.count=3},{.count=1}};
     XrXirFunction functions[3]={
-        {.name="zero",.name_length=4,.result=XR_XIR_I64,.blocks=&blocks[0],.block_count=1,
+        {.error_type=XR_XIR_NEVER,.name="zero",.name_length=4,.result=XR_XIR_I64,.blocks=&blocks[0],.block_count=1,
          .instructions=read,.instruction_count=2},
-        {.name="entry",.name_length=5,.result=XR_XIR_I64,.blocks=&blocks[1],.block_count=1,
+        {.error_type=XR_XIR_NEVER,.name="entry",.name_length=5,.result=XR_XIR_I64,.blocks=&blocks[1],.block_count=1,
          .instructions=calls,.instruction_count=3},
-        {.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&blocks[2],.block_count=1,
+        {.error_type=XR_XIR_NEVER,.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&blocks[2],.block_count=1,
          .instructions=&done,.instruction_count=1}};
     XrXirType ordinary[2]={XR_XIR_I64,XR_XIR_F64};XrXirConstraint constraint={0};
     XrXirGeneric generics[3]={{.constraints=&constraint,.parameter_count=1},
@@ -928,12 +928,12 @@ static XrXirStatus conditional_zero_arity_cleanup(const XrXirCompileContext *con
         {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64},{.op=XR_XIR_RETURN,.args={2,0}}};
     XrXirBlock split[2]={{.count=1},{.first=1,.count=1,.frontier=1}},one={.count=1},four={.count=4};
     XrXirFunction functions[5]={
-        {.name="outer",.name_length=5,.blocks=split,.block_count=2,.instructions=outer,.instruction_count=2},
-        {.name="child",.name_length=5,.blocks=split,.block_count=2,.instructions=child,.instruction_count=2},
-        {.name="nested",.name_length=6,.blocks=&one,.block_count=1,.instructions=&done[0],.instruction_count=1},
-        {.name="entry",.name_length=5,.result=XR_XIR_I64,.blocks=&four,.block_count=1,
+        {.error_type=XR_XIR_NEVER,.name="outer",.name_length=5,.blocks=split,.block_count=2,.instructions=outer,.instruction_count=2},
+        {.error_type=XR_XIR_NEVER,.name="child",.name_length=5,.blocks=split,.block_count=2,.instructions=child,.instruction_count=2},
+        {.error_type=XR_XIR_NEVER,.name="nested",.name_length=6,.blocks=&one,.block_count=1,.instructions=&done[0],.instruction_count=1},
+        {.error_type=XR_XIR_NEVER,.name="entry",.name_length=5,.result=XR_XIR_I64,.blocks=&four,.block_count=1,
          .instructions=entry,.instruction_count=4},
-        {.name="init",.name_length=4,.blocks=&one,.block_count=1,.instructions=&done[1],.instruction_count=1}};
+        {.error_type=XR_XIR_NEVER,.name="init",.name_length=4,.blocks=&one,.block_count=1,.instructions=&done[1],.instruction_count=1}};
     XrXirType binder=XR_XIR_TYPE_PARAMETER_BASE,ordinary[2]={XR_XIR_I64,XR_XIR_F64};
     XrXirConstraint constraints[3]={0};
     XrXirGeneric generics[5]={
@@ -1001,7 +1001,7 @@ static XrXirStatus conditional_base_without_declarations(const XrXirCompileConte
     XrXirInstruction ops[2]={{.op=XR_XIR_CONST_INT,.type=XR_XIR_I64},
         {.op=XR_XIR_RETURN,.args={0,0}}};
     XrXirBlock block={.count=2};
-    XrXirFunction function={.name="plain",.name_length=5,.result=XR_XIR_I64,
+    XrXirFunction function={.error_type=XR_XIR_NEVER,.name="plain",.name_length=5,.result=XR_XIR_I64,
         .blocks=&block,.block_count=1,.instructions=ops,.instruction_count=2};
     XrXirModule module={.stage=XR_XIR_BUILT,.functions=&function,.function_count=1,.linkage_kind=XR_XIR_PROGRAM};
     XrXirArtifact *checked=NULL;XrXirStatus status=xir_fixture_check(context,&module,&checked,NULL);
@@ -1020,7 +1020,7 @@ static XrXirStatus conditional_base_cleanup_reference(const XrXirCompileContext 
     XrXirStatus plain=conditional_base_without_declarations(context,oracle);
     if (plain!=XR_XIR_OK) return plain;
     XrXirTypeNode nodes[2]={
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,
+        {.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,
          .flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED|XR_XIR_CALLABLE_NO_SUSPEND},
         {.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_UNIT}};
     XrXirTypes types={nodes,2,NULL,NULL};
@@ -1039,14 +1039,14 @@ static XrXirStatus conditional_base_cleanup_reference(const XrXirCompileContext 
         {.op=XR_XIR_SLOT_INIT},{.op=XR_XIR_RETURN}};
     XrXirBlock split[2]={{.count=1},{.first=1,.count=1,.frontier=1}},one={.count=1},two={.count=2},three={.count=3},four={.count=4};
     XrXirFunction functions[7]={
-        {.name="outer",.name_length=5,.blocks=split,.block_count=2,.instructions=outer,.instruction_count=2},
-        {.name="child",.name_length=5,.blocks=split,.block_count=2,.instructions=child,.instruction_count=2},
-        {.name="nested",.name_length=6,.blocks=&three,.block_count=1,.instructions=nested,.instruction_count=3},
-        {.name="pure",.name_length=4,.blocks=&one,.block_count=1,.instructions=&pure,.instruction_count=1},
-        {.name="shared",.name_length=6,.blocks=&two,.block_count=1,.instructions=shared,.instruction_count=2},
-        {.name="entry",.name_length=5,.result=XR_XIR_I64,.blocks=&four,.block_count=1,
+        {.error_type=XR_XIR_NEVER,.name="outer",.name_length=5,.blocks=split,.block_count=2,.instructions=outer,.instruction_count=2},
+        {.error_type=XR_XIR_NEVER,.name="child",.name_length=5,.blocks=split,.block_count=2,.instructions=child,.instruction_count=2},
+        {.error_type=XR_XIR_NEVER,.name="nested",.name_length=6,.blocks=&three,.block_count=1,.instructions=nested,.instruction_count=3},
+        {.error_type=XR_XIR_NEVER,.name="pure",.name_length=4,.blocks=&one,.block_count=1,.instructions=&pure,.instruction_count=1},
+        {.error_type=XR_XIR_NEVER,.name="shared",.name_length=6,.blocks=&two,.block_count=1,.instructions=shared,.instruction_count=2},
+        {.error_type=XR_XIR_NEVER,.name="entry",.name_length=5,.result=XR_XIR_I64,.blocks=&four,.block_count=1,
          .instructions=entry,.instruction_count=4},
-        {.name="init",.name_length=4,.blocks=&three,.block_count=1,.instructions=init,.instruction_count=3}};
+        {.error_type=XR_XIR_NEVER,.name="init",.name_length=4,.blocks=&three,.block_count=1,.instructions=init,.instruction_count=3}};
     XrXirFunctionIdentity identities[7]={[1]={.cleanup_owner=1},[2]={.cleanup_owner=2},
         [3]={.promises=XR_XIR_FUNCTION_NO_SUSPEND},[4]={.promises=XR_XIR_FUNCTION_NO_SUSPEND}};
     XrXirSourceModule identity={"nested-reference",16,NULL,0,6, 0,XR_XIR_MODULE_FRESH_STORAGE};
@@ -1128,7 +1128,7 @@ static XrXirStatus conditional_base_cleanup_reference(const XrXirCompileContext 
 static void conditional_zero_flow_gate(const XrXirCompileContext *context) {
     XrXirCallableParameter field={(XrXirType)256,0};
     XrXirTypeNode nodes[5]={
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind=XR_XIR_TYPE_NULLABLE,.element=(XrXirType)256},
         {.kind=XR_XIR_TYPE_ARRAY,.element=(XrXirType)256},
         {.kind=XR_XIR_TYPE_TUPLE,.parameters=&field,.parameter_count=1},
@@ -1136,14 +1136,13 @@ static void conditional_zero_flow_gate(const XrXirCompileContext *context) {
     XrXirTypes types={nodes,5,NULL,NULL};
     XrXirType parameter=XR_XIR_I64;
     XrXirInstruction ops[2]={{.op=XR_XIR_CONST_INT,.type=XR_XIR_I64},{.op=XR_XIR_RETURN}};
-    XrXirFunction function={.parameters=&parameter,.parameter_count=1,
+    XrXirFunction function={.error_type=XR_XIR_NEVER,.parameters=&parameter,.parameter_count=1,
         .instructions=ops,.instruction_count=2,.result=XR_XIR_UNIT};
     XrXirModule module={.types=&types,.functions=&function,.function_count=1};
     EffectParameterFlow flow={.work=context};flow.body=effect_body_raw_request(context,&module);
     CHECK(effect_body_request_head(&flow.body,0,&flow.head)==XR_XIR_OK);flow.function=&flow.head;
-    bool needed=true;uint64_t before=rp_stats(context).work;
+    bool needed=true;
     CHECK(effect_formula_needs_value_flow(&flow,&needed)==XR_XIR_OK && !needed);
-    CHECK(rp_stats(context).work-before==27);
     parameter=(XrXirType)256;needed=false;
     CHECK(effect_formula_needs_value_flow(&flow,&needed)==XR_XIR_OK && needed);
     for (uint32_t container=257;container<=260;++container) {
@@ -1164,21 +1163,16 @@ static void conditional_zero_flow_gate(const XrXirCompileContext *context) {
         ops[1]=(XrXirInstruction){.op=calls[i],.type=XR_XIR_UNIT};needed=false;
         CHECK(effect_formula_needs_value_flow(&flow,&needed)==XR_XIR_OK && needed);
     }
-    RootParameterMark physical=rp_mark();XrCompileResourceLimits caps=rp_caps();caps.work=1;
-    XrXirCompileContext limited=rp_owner(caps);uint64_t baseline=rp_stats(&limited).live_bytes;
-    flow.work=&limited;flow.body=effect_body_raw_request(&limited,&module);needed=false;
-    CHECK(effect_formula_needs_value_flow(&flow,&needed)==XR_XIR_BUDGET && needed);
-    rp_owner_free(&limited,baseline);rp_balanced(physical);
-}
 
+}
 
 /* This private storage probe does not create a module permission. A complete
  * execution owner below exercises the real capture hook and final proof. */
 static XrXirStatus conditional_invocation_bounds(const XrXirCompileContext *context, bool oracle) {
     XrXirTypeNode nodes[3]={
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,.flags=XR_XIR_CALLABLE_ROOT_REQUIRED},
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,.flags=XR_XIR_CALLABLE_ROOT_NONE}};
+        {.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,.flags=XR_XIR_CALLABLE_ROOT_REQUIRED},
+        {.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,.flags=XR_XIR_CALLABLE_ROOT_NONE}};
     XrXirTypes types={nodes,3,NULL,NULL};
     XrXirType parameters[3]={(XrXirType)256,(XrXirType)257,(XrXirType)258};
     XrXirInstruction ops[2]={{.op=XR_XIR_FUNCTION_REF,.type=(XrXirType)256},
@@ -1211,7 +1205,7 @@ static XrXirStatus conditional_invocation_bounds(const XrXirCompileContext *cont
         CHECK(effect_invocation_bounds_mask(context,bounds,0,5,&unchanged)==XR_XIR_BAD_STRUCTURE &&
             unchanged==UINT32_C(0x12345678));
         RootParameterMark physical=rp_mark();XrXirCompileContext foreign=rp_owner(rp_caps());
-        uint64_t baseline=rp_stats(&foreign).live_bytes;
+        uint64_t baseline=rp_stats(&foreign).held_bytes;
         CHECK(effect_invocation_bounds_mask(&foreign,bounds,0,0,&unchanged)==XR_XIR_BAD_STRUCTURE &&
             unchanged==UINT32_C(0x12345678));
         rp_owner_free(&foreign,baseline);rp_balanced(physical);
@@ -1231,7 +1225,6 @@ static XrXirStatus conditional_invocation_bounds(const XrXirCompileContext *cont
     }
     effect_context_owner_free(execution);return status;
 }
-
 
 static XrXirStatus conditional_invocation_refinement(const XrXirCompileContext *context, bool oracle) {
     ConditionalRawFixture fixture;conditional_raw_fixture(&fixture,2);
@@ -1260,11 +1253,11 @@ static XrXirStatus conditional_invocation_generic_bounds(const XrXirCompileConte
     XrXirCallableParameter parameters[3]={{XR_XIR_TYPE_PARAMETER_BASE,XR_PARAM_READ},
         {XR_XIR_TYPE_PARAMETER_BASE,XR_PARAM_READ},{XR_XIR_I64,XR_PARAM_READ}};
     XrXirTypeNode nodes[3]={
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_TYPE_PARAMETER_BASE,.parameters=&parameters[0],
+        {.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_TYPE_PARAMETER_BASE,.parameters=&parameters[0],
          .parameter_count=1,.parameter_span=1,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_TYPE_PARAMETER_BASE,.parameters=&parameters[1],
+        {.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_TYPE_PARAMETER_BASE,.parameters=&parameters[1],
          .parameter_count=1,.parameter_span=1,.flags=XR_XIR_CALLABLE_ROOT_NONE},
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.parameters=&parameters[2],
+        {.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.parameters=&parameters[2],
          .parameter_count=1,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED}};
     XrXirTypes types={nodes,3,NULL,NULL};
     XrXirType parameter=XR_XIR_TYPE_PARAMETER_BASE,arguments[2]={XR_XIR_TYPE_PARAMETER_BASE,XR_XIR_I64};
@@ -1280,13 +1273,13 @@ static XrXirStatus conditional_invocation_generic_bounds(const XrXirCompileConte
     XrXirBlock blocks[4]={{.first=0,.count=1},{.first=0,.count=2},
         {.first=0,.count=4},{.first=0,.count=1}};
     XrXirFunction functions[4]={
-        {.name="target",.name_length=6,.parameters=&parameter,.parameter_count=1,
+        {.error_type=XR_XIR_NEVER,.name="target",.name_length=6,.parameters=&parameter,.parameter_count=1,
          .result=XR_XIR_TYPE_PARAMETER_BASE,.instructions=&target,.instruction_count=1,.blocks=&blocks[0],.block_count=1},
-        {.name="maker",.name_length=5,.result=(XrXirType)256,.instructions=maker,.instruction_count=2,
+        {.error_type=XR_XIR_NEVER,.name="maker",.name_length=5,.result=(XrXirType)256,.instructions=maker,.instruction_count=2,
          .blocks=&blocks[1],.block_count=1},
-        {.name="entry",.name_length=5,.result=XR_XIR_I64,.instructions=entry,.instruction_count=4,
+        {.error_type=XR_XIR_NEVER,.name="entry",.name_length=5,.result=XR_XIR_I64,.instructions=entry,.instruction_count=4,
          .operands=&operand,.operand_count=1,.blocks=&blocks[2],.block_count=1},
-        {.name="init",.name_length=4,.result=XR_XIR_UNIT,.instructions=&initializer,.instruction_count=1,
+        {.error_type=XR_XIR_NEVER,.name="init",.name_length=4,.result=XR_XIR_UNIT,.instructions=&initializer,.instruction_count=1,
          .blocks=&blocks[3],.block_count=1}};
     XrXirConstraint constraints[2]={0};
     XrXirGeneric generics[4]={{.constraints=&constraints[0],.parameter_count=1},
@@ -1334,7 +1327,7 @@ static XrXirStatus conditional_invocation_generic_bounds(const XrXirCompileConte
  * definitions to any original graph or split an original shared ledger. */
 static void conditional_dense_scratch_literals(void) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-    uint64_t baseline=rp_stats(&context).live_bytes;
+    uint64_t baseline=rp_stats(&context).held_bytes;
     EffectDenseScratch scratch={.remaining=&context};EffectDenseArrays arrays={0};
     size_t attempts=rp_attempts;
     CHECK(effect_context_dense_scratch_arrays(&context,&scratch,0,0,&arrays)==XR_XIR_OK &&
@@ -1352,7 +1345,7 @@ static void conditional_dense_scratch_literals(void) {
     CHECK(effect_context_dense_scratch_arrays(&context,&scratch,1,1,&arrays)==XR_XIR_OK &&
         scratch.memory==memory && scratch.capacity==capacity && rp_attempts==attempts);
     XrCompileResourceStats reused=rp_stats(&context);
-    CHECK(reused.allocated_bytes==filled.allocated_bytes && reused.allocation_count==filled.allocation_count && reused.work>filled.work);
+    CHECK(reused.allocated_bytes==filled.allocated_bytes && reused.allocation_count==filled.allocation_count && reused.held_bytes==filled.held_bytes);
     for (uint32_t v=0;v<2;++v) CHECK(!arrays.declared[v] && !arrays.values[v] && !arrays.fixed[v]);
     CHECK(!arrays.before[0]);effect_context_dense_scratch_finish(&scratch);
     arrays=(EffectDenseArrays){.declared=memory};attempts=rp_attempts;
@@ -1371,7 +1364,7 @@ static void conditional_dense_scratch_literals(void) {
      * limit. Exercise large transient storage and release at the definition. */
     CHECK(effect_context_dense_scratch_arrays(&context,&scratch,0,400,&arrays)==XR_XIR_OK && scratch.capacity>4096);
     effect_context_dense_scratch_finish(&scratch);
-    CHECK(!scratch.memory && !scratch.capacity && rp_stats(&context).live_bytes==baseline);
+    CHECK(!scratch.memory && !scratch.capacity && rp_stats(&context).held_bytes==baseline);
     arrays=(EffectDenseArrays){0};attempts=rp_attempts;
     CHECK(effect_context_dense_scratch_arrays(&context,&scratch,UINT32_MAX,1,&arrays)==XR_XIR_BUDGET &&
         !arrays.declared && !arrays.values && !arrays.before && !arrays.fixed && rp_attempts==attempts);
@@ -1383,12 +1376,12 @@ static void conditional_dense_scratch_literals(void) {
 static void conditional_dense_scratch_failures(void) {
     for (uint32_t mode=0;mode<2;++mode) {
         RootParameterMark physical=rp_mark();XrCompileResourceLimits limits=rp_caps();
-        if (mode) limits.work=1;
-        XrXirCompileContext context=rp_owner(limits);uint64_t baseline=rp_stats(&context).live_bytes;
+        if (mode) limits.memory_limit=sizeof(XrCompileResources);
+        XrXirCompileContext context=rp_owner(limits);uint64_t baseline=rp_stats(&context).held_bytes;
         EffectDenseScratch scratch={.remaining=&context};EffectDenseArrays arrays={0};
         size_t attempts=rp_attempts;rp_injected=false;
         if (!mode) rp_fail_at=attempts;
-        XrXirStatus expected=mode?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+        XrXirStatus expected=mode?XR_XIR_MEMORY_LIMIT:XR_XIR_OUT_OF_MEMORY;
         CHECK(effect_context_dense_scratch_arrays(&context,&scratch,1,1,&arrays)==expected &&
             !arrays.declared && !arrays.values && !arrays.before && !arrays.fixed && !scratch.memory);
         CHECK(mode ? rp_attempts==attempts && !rp_injected : rp_attempts==attempts+1 && rp_injected);
@@ -1415,8 +1408,8 @@ static XrXirStatus conditional_descriptor_grow(EffectOrdinaryContexts *records, 
         if (status!=XR_XIR_OK) return status;
         if (oracle) {
             XrCompileResourceStats after=rp_stats(context);
-            CHECK(records->capacity>old && after.allocated_bytes>before.allocated_bytes && after.work>before.work);
-            CHECK(after.live_bytes-before.live_bytes==(uint64_t)(records->capacity-old)*
+            CHECK(records->capacity>old && after.allocated_bytes>before.allocated_bytes);
+            CHECK(after.held_bytes-before.held_bytes==(uint64_t)(records->capacity-old)*
                 (sizeof(*records->nodes)+sizeof(*records->functions)));
             CHECK(rp_live==retained.blocks);
             CHECK(!memcmp(nodes,records->nodes,(size_t)records->count*sizeof(*nodes)) &&
@@ -1432,7 +1425,7 @@ static XrXirStatus conditional_descriptor_grow(EffectOrdinaryContexts *records, 
     size_t attempts=rp_attempts;XrCompileResourceStats before=rp_stats(context);
     XrXirStatus status=effect_ordinary_capacity(records,records->count);
     if (oracle) CHECK(status==XR_XIR_OK && rp_attempts==attempts &&
-        rp_stats(context).work==before.work && rp_stats(context).allocated_bytes==before.allocated_bytes);
+        conditional_memory_unchanged(context,before));
     return status;
 }
 
@@ -1451,7 +1444,7 @@ static XrXirStatus conditional_descriptor_case(const XrXirCompileContext *contex
     if (status==XR_XIR_OK) {
         storage->count=1;
         storage->nodes[0]=(EffectOrdinaryNode){.owner=UINT32_MAX,.physical_types=&parameter,.source_parameters=&parameter};
-        storage->functions[0]=(XrXirFunction){.name="descriptor",.name_length=10,
+        storage->functions[0]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="descriptor",.name_length=10,
             .parameters=&parameter,.parameter_count=1,.result=XR_XIR_I64,.blocks=&block,.block_count=1,
             .instructions=&instruction,.instruction_count=1};
         status=conditional_descriptor_grow(storage,oracle);
@@ -1487,14 +1480,14 @@ static XrXirStatus conditional_descriptor_case(const XrXirCompileContext *contex
 static void conditional_descriptor_failures(void) {
     for (uint32_t mode=0;mode<4;++mode) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-        uint64_t baseline=rp_stats(&context).live_bytes;XrXirStatus status=XR_XIR_OK;
+        uint64_t baseline=rp_stats(&context).held_bytes;XrXirStatus status=XR_XIR_OK;
         EffectOrdinaryContexts *storage=xir_compile_calloc(&context,1,sizeof(*storage),&status);
         CHECK(storage);storage->terms.remaining=&context;
         CHECK(effect_ordinary_capacity(storage,1)==XR_XIR_OK);storage->count=1;
         storage->nodes[0].declaration=7;storage->functions[0].name="retained";
         EffectOrdinaryNode node=storage->nodes[0];XrXirFunction function=storage->functions[0];
         void *nodes=storage->nodes,*functions=storage->functions;uint32_t capacity=storage->capacity;
-        RootParameterMark retained=rp_mark();uint64_t live=rp_stats(&context).live_bytes;
+        RootParameterMark retained=rp_mark();uint64_t live=rp_stats(&context).held_bytes;
         size_t attempts=rp_attempts;rp_injected=false;
         if (mode<2) rp_fail_at=attempts+mode;
         XrXirStatus expected=mode<2?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
@@ -1503,11 +1496,11 @@ static void conditional_descriptor_failures(void) {
         CHECK(storage->terms.status==expected &&
             storage->nodes==nodes && storage->functions==functions && storage->count==1 && storage->capacity==capacity);
         CHECK(!memcmp(&node,&storage->nodes[0],sizeof(node)) && !memcmp(&function,&storage->functions[0],sizeof(function)));
-        CHECK(rp_stats(&context).live_bytes==live);rp_balanced(retained);
+        CHECK(rp_stats(&context).held_bytes==live);rp_balanced(retained);
         CHECK(mode<2 ? rp_injected && rp_attempts==attempts+mode+1 : !rp_injected && rp_attempts==attempts);
         attempts=rp_attempts;XrCompileResourceStats rejected=rp_stats(&context);rp_fail_at=SIZE_MAX;
         CHECK(effect_ordinary_capacity(storage,capacity+1)==expected && effect_ordinary_capacity(storage,1)==expected &&
-            rp_attempts==attempts && rp_stats(&context).work==rejected.work);
+            rp_attempts==attempts && conditional_memory_unchanged(&context,rejected));
         effect_ordinary_free(storage);rp_owner_free(&context,baseline);rp_balanced(physical);
     }
 }
@@ -1522,38 +1515,34 @@ static void conditional_descriptor_resources(void) {
         XrXirStatus status=conditional_descriptor_case(&context,false);
         if (!pass) {
             CHECK(status==XR_XIR_OK);sites=rp_attempts;single=rp_stats(&context);
-            fprintf(stderr,"CONDITIONAL_DESCRIPTOR_CENSUS sites=%zu allocated=%llu peak=%llu work=%llu\n",sites,
-                (unsigned long long)single.allocated_bytes,(unsigned long long)single.peak_bytes,
-                (unsigned long long)single.work);
+            fprintf(stderr,"CONDITIONAL_DESCRIPTOR_CENSUS sites=%zu allocated=%llu peak=%llu\n",sites,
+                (unsigned long long)single.allocated_bytes,(unsigned long long)single.peak_bytes);
         } else {
             CHECK(rp_injected && status==XR_XIR_OUT_OF_MEMORY);
             ConditionalRetryTrial trial={.which=74,.ordinal=pass-1,.sites=sites,.resources=identity,
                 .initial=entry,.single=single,.retained=retained,.first=status};
             conditional_retry_operation(&context,&trial);
         }
-        rp_fail_at=SIZE_MAX;rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
+        rp_fail_at=SIZE_MAX;rp_owner_free(&context,entry.held_bytes);rp_balanced(physical);
     }
-    uint64_t measured[3]={single.allocated_bytes,single.peak_bytes,single.work};
-    for (uint32_t axis=0;axis<3;++axis) for (uint32_t pass=0;pass<2;++pass) {
+    for (uint32_t pass=0;pass<2;++pass) {
         RootParameterMark physical=rp_mark();XrCompileResourceLimits limits=rp_caps();
-        CHECK(measured[axis]>0);uint64_t value=measured[axis]-(pass?0:1);
-        if (!axis) limits.allocated_bytes=value;
-        else if (axis==1) limits.live_bytes=value;
-        else limits.work=value;
+        CHECK(single.peak_bytes>0);uint64_t value=single.peak_bytes-(pass?0:1);
+        limits.memory_limit=value;
         XrXirCompileContext context=rp_owner(limits);XrCompileResourceStats entry=rp_stats(&context);
         RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
-        XrXirStatus expected=pass?XR_XIR_OK:XR_XIR_BUDGET;
+        XrXirStatus expected=pass?XR_XIR_OK:XR_XIR_MEMORY_LIMIT;
         CHECK(conditional_descriptor_case(&context,false)==expected);
         ConditionalRetryTrial trial={.which=74,.ordinal=SIZE_MAX,.sites=sites,.resources=identity,
             .initial=entry,.single=single,.retained=retained,.first=expected};
         conditional_retry_operation(&context,&trial);
-        rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
+        rp_owner_free(&context,entry.held_bytes);rp_balanced(physical);
     }
 }
 
 static void conditional_descriptor_literals(void) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-    uint64_t baseline=rp_stats(&context).live_bytes;
+    uint64_t baseline=rp_stats(&context).held_bytes;
     CHECK(conditional_descriptor_case(&context,true)==XR_XIR_OK);
     rp_owner_free(&context,baseline);rp_balanced(physical);conditional_descriptor_failures();
 }
@@ -1562,7 +1551,7 @@ static void conditional_new_literals(void) {
     /* Independent graphs own independent finite ledgers; each pipeline keeps its ledger. */
     for (uint32_t which=25;which<61;++which) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-        uint64_t baseline=rp_stats(&context).live_bytes;
+        uint64_t baseline=rp_stats(&context).held_bytes;
         XrXirStatus status=which<29 ? conditional_invocation_core(&context,which-25,true,false) :
             which==29 ? conditional_invocation_rotation(&context,false,true) :
             which<32 ? conditional_invocation_deferred(&context,which-30,true) :
@@ -1585,7 +1574,7 @@ static void conditional_new_literals(void) {
 
 static void conditional_literals(void) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-    uint64_t baseline=rp_stats(&context).live_bytes;
+    uint64_t baseline=rp_stats(&context).held_bytes;
     conditional_shape_candidates(&context);conditional_domain_rejections(&context);conditional_empty_domains(&context);
     conditional_zero_flow_gate(&context);
     for (uint32_t mode=0;mode<3;++mode) CHECK(conditional_zero_carrier(&context,mode,true)==XR_XIR_OK);
@@ -1600,11 +1589,10 @@ static void conditional_literals(void) {
     CHECK(conditional_scalar(&context,true)==XR_XIR_OK);
     CHECK(conditional_forest(&context,true)==XR_XIR_OK);
     for (uint32_t mode=0;mode<5;++mode) {
-        uint64_t before=rp_stats(&context).work;
         XrXirStatus dense_status=conditional_dense_owner(&context,mode,true);
-        uint64_t after=rp_stats(&context).work;
-        printf("conditional dense mode%u status%u work_before%llu work_after%llu delta%llu owner_limit4000000\n",
-            mode,(uint32_t)dense_status,(unsigned long long)before,(unsigned long long)after,(unsigned long long)(after-before));
+        XrCompileResourceStats stats=rp_stats(&context);
+        printf("conditional dense mode%u status%u held%llu peak%llu\n",
+            mode,(uint32_t)dense_status,(unsigned long long)stats.held_bytes,(unsigned long long)stats.peak_bytes);
         if (dense_status!=XR_XIR_OK) fprintf(stderr,"dense owner mode%u status%u\n",mode,(uint32_t)dense_status);
         CHECK(dense_status==XR_XIR_OK);
     }
@@ -1667,7 +1655,7 @@ static void conditional_oom(void) {
         for (size_t pass=0;pass<=sites;++pass) {
             RootParameterMark physical=rp_mark();rp_fail_at=SIZE_MAX;rp_attempts=0;rp_injected=false;
             XrXirCompileContext context=rp_owner(rp_caps());XrCompileResourceStats entry=rp_stats(&context);
-            uint64_t baseline=entry.live_bytes;RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
+            uint64_t baseline=entry.held_bytes;RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
             rp_attempts=0;rp_fail_at=pass ? pass-1 : SIZE_MAX;
             XrXirStatus status=conditional_resource_case(&context,which);
             if (!pass) { CHECK(status==XR_XIR_OK);sites=rp_attempts;single=rp_stats(&context); }
@@ -1685,28 +1673,22 @@ static void conditional_oom(void) {
 static void conditional_axes(void) {
     for (uint32_t which=0;which<61;++which) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-        uint64_t baseline=rp_stats(&context).live_bytes;
+        uint64_t baseline=rp_stats(&context).held_bytes;
         size_t census_attempts=rp_attempts;
         CHECK(conditional_resource_case(&context,which)==XR_XIR_OK);
         XrCompileResourceStats census=rp_stats(&context);size_t census_sites=rp_attempts-census_attempts;
         rp_owner_free(&context,baseline);rp_balanced(physical);
-        uint64_t measured[3]={census.allocated_bytes,census.peak_bytes,census.work};
-        for (uint32_t axis=0;axis<3;++axis) {
-            CHECK(measured[axis]>0);
-            for (uint32_t pass=0;pass<2;++pass) {
-                XrCompileResourceLimits limits=rp_caps();
-                uint64_t value=measured[axis]-(pass ? 0 : 1);
-                if (axis==0) limits.allocated_bytes=value;
-                else if (axis==1) limits.live_bytes=value;
-                else limits.work=value;
-                physical=rp_mark();context=rp_owner(limits);XrCompileResourceStats entry=rp_stats(&context);
-                baseline=entry.live_bytes;RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
-                CHECK(conditional_resource_case(&context,which)==(pass ? XR_XIR_OK : XR_XIR_BUDGET));
-        ConditionalRetryTrial retry={.which=which,.ordinal=SIZE_MAX,.sites=census_sites,
-            .resources=identity,.initial=entry,.single=census,.retained=retained,.first=pass?XR_XIR_OK:XR_XIR_BUDGET};
-        conditional_retry_operation(&context,&retry);
-                rp_owner_free(&context,baseline);rp_balanced(physical);
-            }
+        for (uint32_t pass=0;pass<2;++pass) {
+            XrCompileResourceLimits limits=rp_caps();
+            uint64_t value=census.peak_bytes-(pass ? 0 : 1);
+            limits.memory_limit=value;
+            physical=rp_mark();context=rp_owner(limits);XrCompileResourceStats entry=rp_stats(&context);
+            baseline=entry.held_bytes;RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
+            CHECK(conditional_resource_case(&context,which)==(pass ? XR_XIR_OK : XR_XIR_MEMORY_LIMIT));
+    ConditionalRetryTrial retry={.which=which,.ordinal=SIZE_MAX,.sites=census_sites,
+        .resources=identity,.initial=entry,.single=census,.retained=retained,.first=pass?XR_XIR_OK:XR_XIR_MEMORY_LIMIT};
+    conditional_retry_operation(&context,&retry);
+            rp_owner_free(&context,baseline);rp_balanced(physical);
         }
     }
 }
@@ -1727,27 +1709,25 @@ static void conditional_nonroot_seed_resources(void) {
             ConditionalRetryTrial retry={.which=which,.ordinal=pass?pass-1:SIZE_MAX,.sites=sites,
                 .resources=identity,.initial=entry,.single=single,.retained=retained,.first=status};
             if (pass) conditional_retry_operation(&context,&retry);
-            rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
+            rp_owner_free(&context,entry.held_bytes);rp_balanced(physical);
         }
         printf("nonroot primitive mode%u complete allocation census %zu\n",which-100,sites);
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
         XrCompileResourceStats entry=rp_stats(&context);size_t attempts=rp_attempts;
         CHECK(conditional_retry_case(&context,which)==XR_XIR_OK);
         size_t measured=rp_attempts-attempts;XrCompileResourceStats census=rp_stats(&context);
-        rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
-        for (uint32_t axis=0;axis<3;++axis) for (uint32_t minus=0;minus<2;++minus) {
+        rp_owner_free(&context,entry.held_bytes);rp_balanced(physical);
+        for (uint32_t minus=0;minus<2;++minus) {
             XrCompileResourceLimits caps=rp_caps();
-            if (!axis) caps.allocated_bytes=census.allocated_bytes-minus;
-            else if (axis==1) caps.live_bytes=census.peak_bytes-minus;
-            else caps.work=census.work-minus;
+            caps.memory_limit=census.peak_bytes-minus;
             physical=rp_mark();context=rp_owner(caps);entry=rp_stats(&context);
             RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
             XrXirStatus status=conditional_retry_case(&context,which);
-            CHECK(status==(minus?XR_XIR_BUDGET:XR_XIR_OK));
+            CHECK(status==(minus?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
             ConditionalRetryTrial retry={.which=which,.ordinal=SIZE_MAX,.sites=measured,
                 .resources=identity,.initial=entry,.single=census,.retained=retained,.first=status};
             conditional_retry_operation(&context,&retry);
-            rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
+            rp_owner_free(&context,entry.held_bytes);rp_balanced(physical);
         }
     }
 }
@@ -1758,7 +1738,7 @@ static void conditional_ordinary_environment_keys(void) {
     for (uint32_t mode=0;mode<4;++mode) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
         context.limits.functions=5;
-        uint64_t baseline=rp_stats(&context).live_bytes;
+        uint64_t baseline=rp_stats(&context).held_bytes;
         CHECK(conditional_classify(&context,mode,true)==XR_XIR_OK);
         rp_owner_free(&context,baseline);rp_balanced(physical);
         size_t sites=0;XrCompileResourceStats single={0};
@@ -1773,7 +1753,7 @@ static void conditional_ordinary_environment_keys(void) {
             ConditionalRetryTrial retry={.which=mode,.ordinal=pass?pass-1:SIZE_MAX,.sites=sites,
                 .resources=identity,.initial=entry,.single=single,.retained=retained,.first=status};
             if (pass) conditional_retry_operation(&context,&retry);
-            rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
+            rp_owner_free(&context,entry.held_bytes);rp_balanced(physical);
         }
         printf("ordinary environment mode%u complete allocation census %zu\n",mode,sites);
     }
@@ -1783,6 +1763,28 @@ static void conditional_ordinary_environment_keys(void) {
 #include "xir_reference_root_operation_cases.h"
 
 int main(int argc, char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--current-input-callback")) {
+        pc_empty_cases();pc_local_equation_controls();
+        CHECK(!rp_live && !rp_live_bytes && !rp_allocation_observer && !rp_release_observer);return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--current-input-resources")) {
+        pc_current_input_resources();CHECK(!rp_live && !rp_live_bytes);return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--outcomes-literals")) {
+        pc_outcome_late_literals();pc_outcome_owner_literals();pc_outcome_metadata_literals();
+        CHECK(!rp_live && !rp_live_bytes);return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--outcomes-resources")) {
+        pc_outcome_resources();CHECK(!rp_live && !rp_live_bytes);return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--control-proof-literals")) {
+        pc_control_proof_literals();pc_control_graph_isolation();
+        CHECK(!rp_live && !rp_live_bytes);return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--source-terminal-callback")) {
+        pc_source_terminal_literals();CHECK(!rp_live && !rp_live_bytes);return 0;
+    }
+
     invocation_cause_order_cases();sequence_borrow_cases();
     if (argc==2 && !strcmp(argv[1],"--class-physical-replay")) {
         conditional_class_physical_tests();CHECK(!rp_live && !rp_live_bytes);return 0;
@@ -1797,38 +1799,38 @@ int main(int argc, char **argv) {
     if(argc==3 && !strcmp(argv[1],"--class-discovery-lifetime")) {
         uint32_t mode=(uint32_t)strtoul(argv[2],NULL,10);CHECK(mode<4);
         RootParameterMark held=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-        uint64_t baseline=rp_stats(&context).live_bytes;
+        uint64_t baseline=rp_stats(&context).held_bytes;
         XrXirStatus status=conditional_class_discovery_lifetime(&context,mode);
-        fprintf(stderr,"Class discovery lifetime mode%u status%u work%llu\n",mode,status,
-            (unsigned long long)rp_stats(&context).work);
+        fprintf(stderr,"Class discovery lifetime mode%u status%u held%llu\n",mode,status,
+            (unsigned long long)rp_stats(&context).held_bytes);
         rp_owner_free(&context,baseline);rp_balanced(held);return status==XR_XIR_OK?0:1;
     }
     if(argc==3 && (!strcmp(argv[1],"--class-case") || !strcmp(argv[1],"--class-cell-case"))) {
         uint32_t mode=(uint32_t)strtoul(argv[2],NULL,10);CHECK(mode<7);
         RootParameterMark held=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-        uint64_t baseline=rp_stats(&context).live_bytes;
+        uint64_t baseline=rp_stats(&context).held_bytes;
         XrXirStatus status=!strcmp(argv[1],"--class-case")?conditional_class_rows_case(&context,mode,true):
             conditional_class_cell_case(&context,mode,true);
-        fprintf(stderr,"%s mode%u status%u work%llu\n",argv[1],mode,status,
-            (unsigned long long)rp_stats(&context).work);
+        fprintf(stderr,"%s mode%u status%u held%llu\n",argv[1],mode,status,
+            (unsigned long long)rp_stats(&context).held_bytes);
         rp_owner_free(&context,baseline);rp_balanced(held);return status==XR_XIR_OK?0:1;
     }
     if(argc==3 && !strcmp(argv[1],"--returned-case")) {
         uint32_t mode=(uint32_t)strtoul(argv[2],NULL,10);CHECK(mode<8);
         RootParameterMark held=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-        uint64_t baseline=rp_stats(&context).live_bytes;
+        uint64_t baseline=rp_stats(&context).held_bytes;
         XrXirStatus status=conditional_invocation_returned(&context,mode,true,false);
-        fprintf(stderr,"returned case mode%u status%u work%llu\n",mode,status,
-            (unsigned long long)rp_stats(&context).work);
+        fprintf(stderr,"returned case mode%u status%u held%llu\n",mode,status,
+            (unsigned long long)rp_stats(&context).held_bytes);
         rp_owner_free(&context,baseline);rp_balanced(held);return status==XR_XIR_OK?0:1;
     }
     if(argc==3 && !strcmp(argv[1],"--parameter-case")) {
         uint32_t mode=(uint32_t)strtoul(argv[2],NULL,10);CHECK(mode<5);
         RootParameterMark held=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-        uint64_t baseline=rp_stats(&context).live_bytes;
+        uint64_t baseline=rp_stats(&context).held_bytes;
         XrXirStatus status=conditional_parameter_case(&context,mode,true);
-        fprintf(stderr,"parameter case mode%u status%u work%llu\n",mode,status,
-            (unsigned long long)rp_stats(&context).work);
+        fprintf(stderr,"parameter case mode%u status%u held%llu\n",mode,status,
+            (unsigned long long)rp_stats(&context).held_bytes);
         rp_owner_free(&context,baseline);rp_balanced(held);return status==XR_XIR_OK?0:1;
     }
     input_seed_run_literals();
@@ -1840,7 +1842,7 @@ int main(int argc, char **argv) {
     }
     if (argc==2 && !strcmp(argv[1],"--read-allocation-bounds")) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-        uint64_t baseline=rp_stats(&context).live_bytes;
+        uint64_t baseline=rp_stats(&context).held_bytes;
         CHECK(conditional_invocation_returned(&context,0,true,true)==XR_XIR_OK);
         rp_owner_free(&context,baseline);rp_balanced(physical);
         CHECK(!rp_live && !rp_live_bytes && !rp_allocation_observer);return 0;
@@ -1852,7 +1854,7 @@ int main(int argc, char **argv) {
         invocation_seed_range_literals();
         for (uint32_t mode=0;mode<4;++mode) {
             RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-            uint64_t baseline=rp_stats(&context).live_bytes;
+            uint64_t baseline=rp_stats(&context).held_bytes;
             CHECK(conditional_invocation_core(&context,mode,true,true)==XR_XIR_OK);
             rp_owner_free(&context,baseline);rp_balanced(physical);
         }
@@ -1865,7 +1867,7 @@ int main(int argc, char **argv) {
     if (argc==2 && !strcmp(argv[1],"--ordinary-environment-literals")) {
         for (uint32_t mode=0;mode<4;++mode) {
             RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-            context.limits.functions=5;uint64_t baseline=rp_stats(&context).live_bytes;
+            context.limits.functions=5;uint64_t baseline=rp_stats(&context).held_bytes;
             CHECK(conditional_classify(&context,mode,true)==XR_XIR_OK);
             rp_owner_free(&context,baseline);rp_balanced(physical);
         }
@@ -1912,7 +1914,7 @@ int main(int argc, char **argv) {
     }
     ordinary_material_controls();
     conditional_ordinary_instruction_resources();
-    /* Independent storage and receiving controls run before cumulative budget probes. */
+    /* Independent storage and receiving controls run before finite-memory probes. */
     conditional_compact_literals();conditional_generation_literals();
     if (argc==2 && !strcmp(argv[1],"--compiler")) { conditional_oom();conditional_axes();conditional_sparse_resources();conditional_storage_resources();conditional_copy_resources();conditional_metadata_resources();conditional_physical_resources();conditional_descriptor_resources();conditional_class_rows_resources();conditional_parameter_resources();conditional_compact_resources();conditional_class_cell_resources();conditional_generation_resources();conditional_retry_complete(); }
     else if (argc==2 && !strcmp(argv[1],"--class-cells")) conditional_class_cell_literals();

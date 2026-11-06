@@ -51,7 +51,7 @@ static XrXirStatus invocation_storage_copy_bounds(const XrXirCompileContext *con
     const XrXirModule *module,const EffectInvocationDeclaredBounds *bounds) {
     EffectBodyMaterial *material=NULL;
     EffectInvocationDeclaredBounds *selected=NULL;
-    XrXirStatus status=effect_body_material_create(context,module,&material);
+    XrXirStatus status=conditional_owned_body_from_raw(context,module,&material);
     if (status==XR_XIR_OK) status=invocation_raw_physical_match(context,material->physical,module);
     if (status==XR_XIR_OK) status=effect_invocation_bounds_copy_physical(context,bounds,
         material->physical,&selected);
@@ -95,7 +95,6 @@ static void invocation_storage_rejections(const XrXirCompileContext *context,
     }
     CHECK(invocation_storage_copy_bounds(context,module,bounds)==XR_XIR_OK);
 }
-
 
 static bool invocation_storage_fixed(EffectInvocationFlow *flow,uint32_t value) {
     bool fixed=false;CHECK(effect_invocation_flag_get(flow,value,false,&fixed)==XR_XIR_OK);return fixed;
@@ -215,10 +214,9 @@ static uint64_t invocation_storage_geometry(const XrXirCompileContext *context,
     EffectBodyFunctionHead head={.instruction_count=values};
     EffectInvocationFlow flow={.read=&read,.function=&head,.basis={.fn_words=2}};
     flow.local_flags[0]=UINT64_MAX;flow.local_flags[1]=UINT64_MAX;
-    uint64_t before=rp_stats(context).work,allocated=rp_stats(context).allocated_bytes;
+    uint64_t allocated=rp_stats(context).allocated_bytes;
     size_t attempts=rp_attempts;
     XrXirStatus status=effect_invocation_flow_storage(&flow,NULL);
-    uint64_t used=rp_stats(context).work-before;
     CHECK(status==expected);
     if (status==XR_XIR_OK && check_bits) {
         bool local=!rows && values && values<=64;
@@ -258,46 +256,47 @@ static uint64_t invocation_storage_geometry(const XrXirCompileContext *context,
             flow.memory=NULL;
         }
     }
-    xr_compile_resources_free(flow.memory);return used;
+    xr_compile_resources_free(flow.memory);return rp_stats(context).peak_bytes;
 }
 
 static void invocation_storage_geometry_literals(void) {
     const uint32_t sizes[]={0,1,2,63,64,65,127,128,129};
-    unsigned cases=0,real_budget_cuts=0,actual_oom_retries=0;
+    unsigned cases=0,real_memory_cuts=0,actual_oom_retries=0;
     for (uint32_t row=0;row<2;++row) for (size_t i=0;i<sizeof(sizes)/sizeof(sizes[0]);++i) {
         uint32_t values=sizes[i];if (row && !values) continue;
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-        uint64_t baseline=rp_stats(&context).live_bytes;
-        uint64_t work=invocation_storage_geometry(&context,values,row,true,XR_XIR_OK);
+        uint64_t baseline=rp_stats(&context).held_bytes;
+        uint64_t peak=invocation_storage_geometry(&context,values,row,true,XR_XIR_OK);
         rp_owner_free(&context,baseline);rp_balanced(physical);++cases;
-        for (unsigned minus=0;minus<2;++minus) {
-            XrCompileResourceLimits limits=rp_caps();limits.work=work+1-minus;
-            physical=rp_mark();context=rp_owner(limits);baseline=rp_stats(&context).live_bytes;
-            invocation_storage_geometry(&context,values,row,false,minus?XR_XIR_BUDGET:XR_XIR_OK);
-            rp_owner_free(&context,baseline);rp_balanced(physical);++real_budget_cuts;
+        /* Inline flags need only the owner itself. A smaller cap would reject
+         * owner construction, not the storage operation under test. */
+        for (unsigned minus=0;minus<(peak>baseline?2u:1u);++minus) {
+            XrCompileResourceLimits limits=rp_caps();limits.memory_limit=peak-minus;
+            physical=rp_mark();context=rp_owner(limits);baseline=rp_stats(&context).held_bytes;
+            invocation_storage_geometry(&context,values,row,false,minus?XR_XIR_MEMORY_LIMIT:XR_XIR_OK);
+            rp_owner_free(&context,baseline);rp_balanced(physical);++real_memory_cuts;
         }
         if (values && (row || values>64)) {
-            physical=rp_mark();context=rp_owner(rp_caps());baseline=rp_stats(&context).live_bytes;
+            physical=rp_mark();context=rp_owner(rp_caps());baseline=rp_stats(&context).held_bytes;
             XrCompileResources *identity=context.resources;
             rp_fail_at=rp_attempts;rp_injected=false;
             invocation_storage_geometry(&context,values,row,false,XR_XIR_OUT_OF_MEMORY);
-            CHECK(rp_injected);uint64_t failed_work=rp_stats(&context).work;
+            CHECK(rp_injected && rp_stats(&context).held_bytes==baseline);size_t failed_attempts=rp_attempts;
             rp_fail_at=SIZE_MAX;
             invocation_storage_geometry(&context,values,row,true,XR_XIR_OK);
-            CHECK(context.resources==identity && rp_stats(&context).work>failed_work);
+            CHECK(context.resources==identity && rp_attempts>failed_attempts && rp_stats(&context).held_bytes==baseline);
             rp_owner_free(&context,baseline);rp_balanced(physical);++actual_oom_retries;
         }
     }
-    printf("local flag component %u geometry/Boolean cases, %u real exact/minus work cuts, %u actual OOM same-owner retries PASS\n",
-        cases,real_budget_cuts,actual_oom_retries);
+    printf("local flag component %u geometry/Boolean cases, %u held-memory boundaries, %u actual OOM same-owner retries PASS\n",
+        cases,real_memory_cuts,actual_oom_retries);
 }
-
 
 static void conditional_storage_literals(void) {
     invocation_storage_geometry_literals();
     for (uint32_t mode=0;mode<3;++mode) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-        uint64_t baseline=rp_stats(&context).live_bytes;
+        uint64_t baseline=rp_stats(&context).held_bytes;
         CHECK(conditional_storage_case(&context,mode,true)==XR_XIR_OK);
         rp_owner_free(&context,baseline);rp_balanced(physical);
     }
@@ -309,7 +308,7 @@ static void conditional_storage_resources(void) {
         for (size_t pass=0;pass<=sites;++pass) {
             RootParameterMark physical=rp_mark();rp_fail_at=SIZE_MAX;rp_attempts=0;rp_injected=false;
             XrXirCompileContext context=rp_owner(rp_caps());XrCompileResourceStats entry=rp_stats(&context);
-            uint64_t baseline=entry.live_bytes;RootParameterMark retained=rp_mark();
+            uint64_t baseline=entry.held_bytes;RootParameterMark retained=rp_mark();
             XrCompileResources *identity=context.resources;
             rp_attempts=0;rp_fail_at=pass?pass-1:SIZE_MAX;
             XrXirStatus status=conditional_storage_case(&context,mode,false);
@@ -323,27 +322,21 @@ static void conditional_storage_resources(void) {
             rp_fail_at=SIZE_MAX;rp_owner_free(&context,baseline);rp_balanced(physical);
         }
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-        uint64_t baseline=rp_stats(&context).live_bytes;
+        uint64_t baseline=rp_stats(&context).held_bytes;
         size_t census_attempts=rp_attempts;
         CHECK(conditional_storage_case(&context,mode,false)==XR_XIR_OK);
         XrCompileResourceStats census=rp_stats(&context);size_t census_sites=rp_attempts-census_attempts;
         rp_owner_free(&context,baseline);rp_balanced(physical);
-        uint64_t measured[3]={census.allocated_bytes,census.peak_bytes,census.work};
-        for (uint32_t axis=0;axis<3;++axis) {
-            CHECK(measured[axis]>0);
-            for (uint32_t pass=0;pass<2;++pass) {
-                XrCompileResourceLimits limits=rp_caps();uint64_t value=measured[axis]-(pass?0:1);
-                if (axis==0) limits.allocated_bytes=value;
-                else if (axis==1) limits.live_bytes=value;
-                else limits.work=value;
-                physical=rp_mark();context=rp_owner(limits);XrCompileResourceStats entry=rp_stats(&context);
-                baseline=entry.live_bytes;RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
-                CHECK(conditional_storage_case(&context,mode,false)==(pass?XR_XIR_OK:XR_XIR_BUDGET));
-        ConditionalRetryTrial retry={.which=mode+66,.ordinal=SIZE_MAX,.sites=census_sites,
-            .resources=identity,.initial=entry,.single=census,.retained=retained,.first=pass?XR_XIR_OK:XR_XIR_BUDGET};
-        conditional_retry_operation(&context,&retry);
-                rp_owner_free(&context,baseline);rp_balanced(physical);
-            }
+        for (uint32_t pass=0;pass<2;++pass) {
+            XrCompileResourceLimits limits=rp_caps();uint64_t value=census.peak_bytes-(pass?0:1);
+            limits.memory_limit=value;
+            physical=rp_mark();context=rp_owner(limits);XrCompileResourceStats entry=rp_stats(&context);
+            baseline=entry.held_bytes;RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
+            CHECK(conditional_storage_case(&context,mode,false)==(pass?XR_XIR_OK:XR_XIR_MEMORY_LIMIT));
+    ConditionalRetryTrial retry={.which=mode+66,.ordinal=SIZE_MAX,.sites=census_sites,
+        .resources=identity,.initial=entry,.single=census,.retained=retained,.first=pass?XR_XIR_OK:XR_XIR_MEMORY_LIMIT};
+    conditional_retry_operation(&context,&retry);
+            rp_owner_free(&context,baseline);rp_balanced(physical);
         }
     }
 }

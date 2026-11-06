@@ -23,7 +23,7 @@ static void initial_ordinary_fixture(OrdinaryMaterialFixture *fixture,uint32_t m
     fixture->source.linkage_kind=XR_XIR_LIBRARY;
     fixture->declarations.root_module=fixture->declarations.entry_function=UINT32_MAX;
     if (mode==4) {
-        fixture->nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,
+        fixture->nodes[1]=(XrXirTypeNode){.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,
             .flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
         fixture->types.count=2;fixture->parameter=(XrXirType)257;
         fixture->functions[0].parameters=&fixture->parameter;fixture->functions[0].parameter_count=1;
@@ -134,7 +134,7 @@ static XrXirStatus initial_ordinary_expansion(const XrXirCompileContext *context
     memcpy(functions,fixture.functions,sizeof(fixture.functions));
     memcpy(generics,fixture.generics,sizeof(fixture.generics));
     memcpy(identities,fixture.identities,sizeof(fixture.identities));
-    functions[4]=(XrXirFunction){.name="entry",.name_length=5,.result=XR_XIR_I64,
+    functions[4]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="entry",.name_length=5,.result=XR_XIR_I64,
         .instructions=entry,.instruction_count=2};
     for (uint32_t f=0;f<5;++f) {
         blocks[f]=(XrXirBlock){.first=0,.count=functions[f].instruction_count};
@@ -170,7 +170,7 @@ static void initial_ordinary_source(const XrXirCompileContext *context,XrXirSour
         "export fn references()->i64{const first=answer;const second=answer;return 0}\n"
         "print(references())\n";
     XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"reference-refresh",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,text,sizeof(text)-1};
@@ -183,11 +183,10 @@ static void initial_ordinary_source(const XrXirCompileContext *context,XrXirSour
     CHECK(status==XR_XIR_OK && output->checked);
 }
 
-static uint32_t initial_ordinary_reference_body(const XrXirCompileContext *context,
-    const XrXirModule *source,uint32_t sites[2]) {
+static uint32_t initial_ordinary_reference_body(const XrXirModule *source,uint32_t sites[2]) {
     uint32_t selected=UINT32_MAX,count=0;
     for (uint32_t f=0;f<source->function_count;++f) {
-        CHECK(xir_compile_work(context,1));
+
         const XrXirFunction *body=&source->functions[f];
         if (body->name_length==10 && !memcmp(body->name,"references",10)) {
             CHECK(selected==UINT32_MAX);selected=f;
@@ -196,7 +195,7 @@ static uint32_t initial_ordinary_reference_body(const XrXirCompileContext *conte
     CHECK(selected!=UINT32_MAX);
     const XrXirFunction *body=&source->functions[selected];
     for (uint32_t i=0;i<body->instruction_count;++i) {
-        CHECK(xir_compile_work(context,1));
+
         const XrXirInstruction *op=&body->instructions[i];
         if (op->op!=XR_XIR_FUNCTION_REF) continue;
         CHECK(count<2 && op->immediate>=0 && (uint64_t)op->immediate<source->function_count);
@@ -214,7 +213,7 @@ static XrXirType initial_ordinary_wide(const XrXirCompileContext *context,
     CHECK(original && original->result==XR_XIR_I64 && !original->parameter_count &&
         (original->flags&XR_XIR_CALLABLE_ROOT_MASK)==XR_XIR_CALLABLE_ROOT_NONE);
     for (uint32_t t=0;t<types->count;++t) {
-        CHECK(xir_compile_work(context,1));
+
         const XrXirTypeNode *candidate=&types->nodes[t];
         if (candidate->kind!=XR_XIR_TYPE_CALLABLE || candidate->parameter_count ||
             candidate->result!=original->result ||
@@ -233,7 +232,7 @@ static XrXirType initial_ordinary_wide(const XrXirCompileContext *context,
  * the original certificate remains an independent immutable proof. */
 static void initial_ordinary_refresh_controls(void) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-    uint64_t baseline=rp_stats(&context).live_bytes;XrXirSourceResult result={0};
+    uint64_t baseline=rp_stats(&context).held_bytes;XrXirSourceResult result={0};
     initial_ordinary_source(&context,&result);
     const XrXirModule *original=xr_xir_compile_artifact_module(result.checked);
     CHECK(original && original->provenance && original->provenance->kind==XR_XIR_EVIDENCE_TEMPLATE &&
@@ -254,7 +253,7 @@ static void initial_ordinary_refresh_controls(void) {
     rp_balanced(retained);xr_xir_compile_effects_free(effects);effects=NULL;
     /* This actual constructor remains private while Source refines its body.
      * It is released without publishing facts for a changed Source input. */
-    CHECK(effect_infer_construct(&context,original,NULL,&effects)==XR_XIR_OK && effects &&
+    CHECK(effect_infer_construct(&context,(XirEffectInput){original,xr_xir_compile_artifact_construction(checked),NULL},NULL,&effects)==XR_XIR_OK && effects &&
         effects->outcomes_owner && !effects->invocations->final->outcomes);
 
     CHECK(effect_contexts_read(effects) && !effects->refinement &&
@@ -263,7 +262,7 @@ static void initial_ordinary_refresh_controls(void) {
     CHECK(effects->invocations && !effects->invocations->body->backbone);
     EffectInvocationCertificate *certificate=effects->invocations,saved_certificate=*certificate;
     EffectBodyMaterial *initial=certificate->body;uint32_t sites[2]={0};
-    uint32_t selected=initial_ordinary_reference_body(&context,original,sites);
+    uint32_t selected=initial_ordinary_reference_body(original,sites);
     uint64_t function_bytes=(uint64_t)original->function_count*sizeof(*original->functions);
     uint64_t instruction_bytes=(uint64_t)original->functions[selected].instruction_count*sizeof(XrXirInstruction);
     CHECK(function_bytes<=SIZE_MAX && instruction_bytes<=SIZE_MAX);
@@ -331,7 +330,7 @@ static void initial_ordinary_forest_literals(const XrXirCompileContext *context,
     XrXirType wrong_type=XR_XIR_I64;
     EffectRoleProof role_proof=forest->invocations->final->role_proof;
     for (uint32_t attack=0;attack<14;++attack) {
-        uint64_t live=rp_stats(context).live_bytes;
+        uint64_t live=rp_stats(context).held_bytes;
         switch (attack) {
             case 0: forest->nodes[0].declaration=UINT32_MAX;break;
             case 1: forest->nodes[0].owner=node.owner?0:UINT32_MAX;break;
@@ -351,12 +350,12 @@ static void initial_ordinary_forest_literals(const XrXirCompileContext *context,
                 (XrXirRootEffectCause)((uint32_t)unknown.cause^1u);break;
         }
         CHECK(effect_invocation_forest_match(context,forest)==XR_XIR_BAD_STRUCTURE &&
-            rp_stats(context).live_bytes==live);
+            rp_stats(context).held_bytes==live);
         forest->nodes[0]=node;root_node->intrinsic_mask=intrinsic;
         forest->invocations->final->role_proof=role_proof;
         summary->witnesses[0]=witness;summary->witnesses[forest->count]=unknown;
         CHECK(effect_invocation_forest_match(context,forest)==XR_XIR_OK &&
-            rp_stats(context).live_bytes==live);
+            rp_stats(context).held_bytes==live);
     }
     EffectForestNode target=forest->nodes[1];forest->nodes[1].owner=target.owner?0:UINT32_MAX;
     CHECK(effect_invocation_forest_match(context,forest)==XR_XIR_BAD_STRUCTURE);
@@ -364,11 +363,11 @@ static void initial_ordinary_forest_literals(const XrXirCompileContext *context,
     XrXirRootCauseTrace *occupied=(XrXirRootCauseTrace *)(uintptr_t)1;
     XrCompileResourceStats prepared=rp_stats(context);size_t attempts=rp_attempts;
     CHECK(effect_context_forest_trace(context,forest,0,&occupied)==XR_XIR_BAD_STRUCTURE &&
-        occupied==(XrXirRootCauseTrace *)(uintptr_t)1 && rp_stats(context).work==prepared.work && rp_attempts==attempts);
+        occupied==(XrXirRootCauseTrace *)(uintptr_t)1 && conditional_memory_unchanged(context,prepared) && rp_attempts==attempts);
     XrXirCompileContext foreign=rp_owner(rp_caps());prepared=rp_stats(&foreign);occupied=NULL;
     CHECK(effect_context_forest_trace(&foreign,forest,0,&occupied)==XR_XIR_BAD_STRUCTURE && !occupied &&
-        rp_stats(&foreign).work==prepared.work && rp_stats(&foreign).live_bytes==prepared.live_bytes);
-    rp_owner_free(&foreign,prepared.live_bytes);
+        conditional_memory_unchanged(&foreign,prepared) && rp_stats(&foreign).held_bytes==prepared.held_bytes);
+    rp_owner_free(&foreign,prepared.held_bytes);
     CHECK(effect_context_forest_trace(context,forest,0,&occupied)==XR_XIR_OK && occupied);
     xr_xir_compile_root_cause_trace_free(occupied);
 }
@@ -377,7 +376,7 @@ static void initial_ordinary_forest_literals(const XrXirCompileContext *context,
  * reconstruction. The genuine retained forest owns all remaining inputs. */
 static void initial_ordinary_forest_controls(void) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-    uint64_t baseline=rp_stats(&context).live_bytes;
+    uint64_t baseline=rp_stats(&context).held_bytes;
     OrdinaryMaterialFixture fixture;initial_ordinary_fixture(&fixture,1);
     XrXirEffects *effects=NULL;EffectContextOwner *owner=NULL;
     CHECK(initial_ordinary_effects(&context,&fixture.source,&effects)==XR_XIR_OK);
@@ -399,18 +398,18 @@ static void initial_ordinary_controls(void) {
     initial_ordinary_forest_controls();
     initial_ordinary_refresh_controls();
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-    uint64_t baseline=rp_stats(&context).live_bytes;OrdinaryMaterialFixture fixture;initial_ordinary_fixture(&fixture,0);
+    uint64_t baseline=rp_stats(&context).held_bytes;OrdinaryMaterialFixture fixture;initial_ordinary_fixture(&fixture,0);
     XrXirEffects *effects=NULL;EffectOrdinaryContexts *ordinary=NULL;
     CHECK(initial_ordinary_effects(&context,&fixture.source,&effects)==XR_XIR_OK);
     EffectBodyMaterial *initial=effects->invocations->body;
     XrCompileResourceStats prepared=rp_stats(&context);size_t attempts=rp_attempts;
     ordinary=(EffectOrdinaryContexts *)(uintptr_t)1;
     CHECK(effect_ordinary_build(&context,&fixture.source,initial,NULL,&ordinary)==XR_XIR_BAD_STRUCTURE &&
-        ordinary==(EffectOrdinaryContexts *)(uintptr_t)1 && rp_stats(&context).work==prepared.work && rp_attempts==attempts);
+        ordinary==(EffectOrdinaryContexts *)(uintptr_t)1 && conditional_memory_unchanged(&context,prepared) && rp_attempts==attempts);
     ordinary=NULL;XrXirCompileContext foreign=rp_owner(rp_caps());XrCompileResourceStats foreign_before=rp_stats(&foreign);
     CHECK(effect_ordinary_build(&foreign,&fixture.source,initial,NULL,&ordinary)==XR_XIR_BAD_STRUCTURE && !ordinary);
-    CHECK(rp_stats(&foreign).work==foreign_before.work && rp_stats(&foreign).live_bytes==foreign_before.live_bytes);
-    rp_owner_free(&foreign,foreign_before.live_bytes);
+    CHECK(conditional_memory_unchanged(&foreign,foreign_before) && rp_stats(&foreign).held_bytes==foreign_before.held_bytes);
+    rp_owner_free(&foreign,foreign_before.held_bytes);
     CHECK(effect_ordinary_build(&context,&fixture.source,initial,NULL,&ordinary)==XR_XIR_OK);
     EffectBodyMaterial *holder=ordinary->uses.generation;
     CHECK(holder->backbone==initial && holder->overlay && initial->references==2);
@@ -438,9 +437,9 @@ static void initial_ordinary_controls(void) {
             case 8: fixture.operations[0].type_arguments[0]=17;break;
             case 9: fixture.operations[0].type_arguments[1]=17;break;
         }
-        EffectBodyMaterial *empty=NULL;uint64_t live=rp_stats(&context).live_bytes;
+        EffectBodyMaterial *empty=NULL;uint64_t live=rp_stats(&context).held_bytes;
         CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,&empty)==XR_XIR_BAD_STRUCTURE &&
-            !empty && initial->references==2 && rp_stats(&context).live_bytes==live);
+            !empty && initial->references==2 && rp_stats(&context).held_bytes==live);
         fixture.operations[0]=original;
     }
     uint32_t block_count=fixture.blocks[0].count;fixture.blocks[0].count=1;
@@ -460,34 +459,32 @@ static void conditional_initial_ordinary_resources(void) {
         size_t sites=0;XrCompileResourceStats census={0};
         for (size_t pass=0;pass<=sites;++pass) {
             RootParameterMark physical=rp_mark();rp_fail_at=SIZE_MAX;rp_injected=false;
-            XrXirCompileContext context=rp_owner(rp_caps());uint64_t baseline=rp_stats(&context).live_bytes;
+            XrXirCompileContext context=rp_owner(rp_caps());uint64_t baseline=rp_stats(&context).held_bytes;
             size_t start=rp_attempts;rp_fail_at=pass?start+pass-1:SIZE_MAX;
             XrXirStatus status=initial_ordinary_resource_operation(&context,mode);
             if (!pass) {
                 CHECK(status==XR_XIR_OK);sites=rp_attempts-start;census=rp_stats(&context);
                 CHECK(sites && sites<512);
-                printf("INITIAL_ORDINARY_CENSUS mode=%u sites=%zu work=%llu allocated=%llu peak=%llu\n",mode,sites,
-                    (unsigned long long)census.work,(unsigned long long)census.allocated_bytes,(unsigned long long)census.peak_bytes);
+                printf("INITIAL_ORDINARY_CENSUS mode=%u sites=%zu held=%llu allocated=%llu peak=%llu\n",mode,sites,
+                    (unsigned long long)census.held_bytes,(unsigned long long)census.allocated_bytes,(unsigned long long)census.peak_bytes);
             } else CHECK(status==XR_XIR_OUT_OF_MEMORY && rp_injected);
-            CHECK(rp_stats(&context).live_bytes==baseline);
+            CHECK(rp_stats(&context).held_bytes==baseline);
             rp_fail_at=SIZE_MAX;CHECK(initial_ordinary_resource_operation(&context,mode)==XR_XIR_OK);
             rp_owner_free(&context,baseline);rp_balanced(physical);
         }
-        for (uint32_t axis=0;axis<3;++axis) {
+
             RootParameterMark physical=rp_mark();XrCompileResourceLimits caps=rp_caps();
-            if (axis==0) caps.allocated_bytes=census.allocated_bytes;
-            if (axis==1) caps.live_bytes=census.peak_bytes;
-            if (axis==2) caps.work=census.work;
+            caps.memory_limit=census.peak_bytes;
             for (uint32_t minus=0;minus<2;++minus) {
                 XrCompileResourceLimits trial=caps;
-                if (minus) { if (axis==0) --trial.allocated_bytes;if (axis==1) --trial.live_bytes;if (axis==2) --trial.work; }
+                if (minus) --trial.memory_limit;
                 rp_fail_at=SIZE_MAX;rp_injected=false;XrXirCompileContext context=rp_owner(trial);
-                uint64_t baseline=rp_stats(&context).live_bytes;
-                CHECK(initial_ordinary_resource_operation(&context,mode)==(minus?XR_XIR_BUDGET:XR_XIR_OK));
+                uint64_t baseline=rp_stats(&context).held_bytes;
+                CHECK(initial_ordinary_resource_operation(&context,mode)==(minus?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
                 rp_owner_free(&context,baseline);
             }
             rp_balanced(physical);
-        }
+
     }
 }
 #endif // XIR_INITIAL_ORDINARY_MATERIAL_CASES_H

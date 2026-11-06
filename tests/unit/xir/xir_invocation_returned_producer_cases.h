@@ -43,7 +43,7 @@ static void invocation_returned_capture_fixture(InvocationReturnedFixture *f,
  * non-producing recursive factory remain distinct from genuine return data. */
 static void invocation_returned_fixture(InvocationReturnedFixture *f,uint32_t mode) {
     memset(f,0,sizeof(*f));
-    f->nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,
+    f->nodes[0]=(XrXirTypeNode){.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,
         .flags=XR_XIR_CALLABLE_ROOT_NONE};
     f->nodes[1]=f->nodes[0];f->nodes[1].flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     f->nodes[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64};
@@ -74,19 +74,19 @@ static void invocation_returned_fixture(InvocationReturnedFixture *f,uint32_t mo
     }
     if (mode>=5) invocation_returned_capture_fixture(f,mode,result);
     f->init=(XrXirInstruction){.op=XR_XIR_RETURN};
-    f->functions[0]=(XrXirFunction){.name="entry",.name_length=5,.result=XR_XIR_I64,
+    f->functions[0]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="entry",.name_length=5,.result=XR_XIR_I64,
         .instructions=f->entry,.instruction_count=f->entry_block.count,.blocks=&f->entry_block,.block_count=1};
-    f->functions[1]=(XrXirFunction){.name="factory",.name_length=7,.result=result,
+    f->functions[1]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="factory",.name_length=7,.result=result,
         .instructions=f->factory,.instruction_count=f->factory_block.count,
         .blocks=&f->factory_block,.block_count=1,.operands=mode>=5?&f->capture:NULL,
         .operand_count=mode>=5?1:0};
-    f->functions[2]=(XrXirFunction){.name="pure",.name_length=4,.result=XR_XIR_I64,
+    f->functions[2]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="pure",.name_length=4,.result=XR_XIR_I64,
         .parameters=mode>=5?&f->capture_type:NULL,.parameter_count=mode>=5?1:0,
         .instructions=f->pure,.instruction_count=f->pure_block.count,
         .blocks=&f->pure_block,.block_count=1};
-    f->functions[3]=(XrXirFunction){.name="relay",.name_length=5,.result=result,
+    f->functions[3]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="relay",.name_length=5,.result=result,
         .instructions=f->relay,.instruction_count=2,.blocks=&f->two,.block_count=1};
-    f->functions[4]=(XrXirFunction){.name="init",.name_length=4,.result=XR_XIR_UNIT,
+    f->functions[4]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="init",.name_length=4,.result=XR_XIR_UNIT,
         .instructions=&f->init,.instruction_count=1,.blocks=&f->one,.block_count=1};
     f->source=(XrXirSourceModule){.name="returned",.name_length=8,.initializer=4};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,
@@ -132,9 +132,9 @@ static void invocation_returned_rejection_status(EffectInvocationWorkspace *owne
     XrXirStatus status=effect_invocation_producers_verify(owner);
     if (status!=XR_XIR_BAD_STRUCTURE) {
         XrCompileResourceStats stats=rp_stats(owner->read.work);
-        fprintf(stderr,"INVOCATION_RETURNED_REJECT mode=%u mutation=%s status=%u nodes=%u work=%llu allocated=%llu live=%llu\n",
-            mode,mutation,status,owner->final.count,(unsigned long long)stats.work,
-            (unsigned long long)stats.allocated_bytes,(unsigned long long)stats.live_bytes);
+        fprintf(stderr,"INVOCATION_RETURNED_REJECT mode=%u mutation=%s status=%u nodes=%u held=%llu allocated=%llu live=%llu\n",
+            mode,mutation,status,owner->final.count,(unsigned long long)stats.held_bytes,
+            (unsigned long long)stats.allocated_bytes,(unsigned long long)stats.held_bytes);
     }
     CHECK(status==XR_XIR_BAD_STRUCTURE);
 }
@@ -181,10 +181,10 @@ static void invocation_returned_rejections(EffectInvocationWorkspace *owner,uint
 }
 
 typedef struct InvocationReturnedLedger {
-    const XrXirCompileContext *context;
+    ConditionalExecutionPolicy policy;
 } InvocationReturnedLedger;
 static bool invocation_returned_work(void *owner,uint64_t units) {
-    return xir_compile_work(((InvocationReturnedLedger *)owner)->context,units);
+    return conditional_execution_take(&((InvocationReturnedLedger *)owner)->policy,units);
 }
 
 /* The expected site and Cell atom come from fixture literals. This lookup
@@ -216,7 +216,7 @@ static void invocation_returned_environment_owned(const XrXirCompileContext *con
         !replay.discovery && !effect_invocation_discovery_read(&replay,0) &&
         effect_capture_match(context,owner)==XR_XIR_OK);
     uint32_t factory=owner->roots[1],entry=owner->roots[0];
-    InvocationReturnedLedger ledger={context};
+    InvocationReturnedLedger ledger={{.remaining=UINT64_MAX}};
     XirEffectRuntimeRead read={.owner=&ledger,.work=invocation_returned_work};
     CHECK(effect_runtime_basis(certificate,owner->nodes[entry].root,&basis,&read)==XR_XIR_OK);
     uint32_t known=1+owner->sites[0].binding*(basis.parameters+3)+basis.parameters+2;
@@ -314,7 +314,7 @@ static XrXirStatus invocation_returned_lowered(const XrXirCompileContext *contex
             CHECK(edge->producer<owner->site_count && owner->sites[edge->producer].captures==1);
             const EffectInvocationSite *site=&owner->sites[edge->producer];
             const EffectBodyFunction *factory=&certificate->body->functions[site->function];
-            EffectBodyRead read=effect_body_compile_read(context);XrXirOp opcode;
+            EffectBodyRead read=(EffectBodyRead){.owner=context,.execution=NULL};XrXirOp opcode;
             CHECK(site->instruction<factory->instruction_count &&
                 effect_body_instruction_op(&read,factory,site->instruction,&opcode)==XR_XIR_OK &&
                 opcode==XR_XIR_FUNCTION_REF);

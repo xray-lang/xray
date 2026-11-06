@@ -7,14 +7,14 @@
  * xir_invocation_final_retirement_cases.h - Physical solver retirement and owned Final reads
  *
  * KEY CONCEPT: A free callback observes real retired storage before any final
- * node, formula or cause query; all original allocation faults retain charges.
+ * node, formula or cause query; all original allocation faults preserve held-memory accounting.
  */
 #ifndef XIR_INVOCATION_FINAL_RETIREMENT_CASES_H
 #define XIR_INVOCATION_FINAL_RETIREMENT_CASES_H
 static void invocation_final_retirement_literals(void) {
     for (uint32_t mode=0;mode<4;++mode) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-        uint64_t baseline=rp_stats(&context).live_bytes;
+        uint64_t baseline=rp_stats(&context).held_bytes;
         CHECK(conditional_invocation_core(&context,mode,true,false)==XR_XIR_OK);
         CHECK(!rp_release_observer);
         rp_owner_free(&context,baseline);rp_balanced(physical);
@@ -36,7 +36,7 @@ static void invocation_final_retirement_resources(void) {
             ConditionalRetryTrial retry={.which=which,.ordinal=pass?pass-1:SIZE_MAX,.sites=sites,
                 .resources=identity,.initial=entry,.single=single,.retained=retained,.first=status};
             if (pass) conditional_retry_operation(&context,&retry);
-            rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
+            rp_owner_free(&context,entry.held_bytes);rp_balanced(physical);
         }
         printf("Final retirement case%u complete allocation census %zu\n",which-25,sites);
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
@@ -45,20 +45,18 @@ static void invocation_final_retirement_resources(void) {
         CHECK(conditional_resource_case(&context,which)==XR_XIR_OK);
         size_t census_sites=rp_attempts-census_attempts;
         XrCompileResourceStats census=rp_stats(&context);
-        rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
-        for (uint32_t axis=0;axis<3;++axis) for (uint32_t minus=0;minus<2;++minus) {
+        rp_owner_free(&context,entry.held_bytes);rp_balanced(physical);
+        for (uint32_t minus=0;minus<2;++minus) {
             XrCompileResourceLimits caps=rp_caps();
-            if (!axis) caps.allocated_bytes=census.allocated_bytes-minus;
-            else if (axis==1) caps.live_bytes=census.peak_bytes-minus;
-            else caps.work=census.work-minus;
+            caps.memory_limit=census.peak_bytes-minus;
             physical=rp_mark();context=rp_owner(caps);entry=rp_stats(&context);
             RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
             XrXirStatus status=conditional_resource_case(&context,which);
-            CHECK(status==(minus?XR_XIR_BUDGET:XR_XIR_OK));
+            CHECK(status==(minus?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
             ConditionalRetryTrial retry={.which=which,.ordinal=SIZE_MAX,.sites=census_sites,
                 .resources=identity,.initial=entry,.single=census,.retained=retained,.first=status};
             conditional_retry_operation(&context,&retry);
-            rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
+            rp_owner_free(&context,entry.held_bytes);rp_balanced(physical);
         }
     }
 }

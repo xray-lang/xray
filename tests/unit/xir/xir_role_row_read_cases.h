@@ -4,28 +4,27 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xir_role_row_read_cases.h - Scoped live row reads without allocator callbacks
+ * xir_role_row_read_cases.h - Scoped rp_live row reads without allocator callbacks
  */
 static uint32_t pc_role_row_frees;
-static void pc_role_row_free(void *memory,size_t bytes) {
+static void pc_role_row_free(void *memory) {
+    size_t bytes=pc_final_physical_size(memory);
     CHECK(memory && bytes);++pc_role_row_frees;
 }
 static void pc_role_row_literals(const XrXirCompileContext *work,EffectInvocationCertificate *certificate) {
     EffectBodyMaterial *body=certificate->body;EffectRoleProof *proof=&certificate->final->role_proof;
     CHECK(body->functions[1].parameter_count==5);
-    size_t before_attempts=attempts;XrCompileResourceStats before=pc_stats(work);
-    CHECK(!pc_free_hook);pc_role_row_frees=0;pc_free_hook=pc_role_row_free;
+    size_t before_attempts=rp_attempts;XrCompileResourceStats before=rp_stats(work);
+    CHECK(!rp_release_observer);pc_role_row_frees=0;rp_release_observer=pc_role_row_free;
     EffectRoleParametersRead row={0};CHECK(effect_role_parameters_open(work,body,proof,1,0,&row)==XR_XIR_OK);
-    XrCompileResourceStats opened=pc_stats(work);
     for (uint32_t p=0;p<5;++p) {
         uint32_t kind=UINT32_MAX;CHECK(effect_role_parameters_value(&row,p,&kind)==XR_XIR_OK);
         CHECK(kind==XR_XIR_EFFECT_PARAMETER_VARIABLE);
     }
-    CHECK(pc_stats(work).work-opened.work==5*(12+sizeof(uint32_t)));
     uint32_t unchanged=UINT32_MAX;
     CHECK(effect_role_parameters_value(&row,5,&unchanged)==XR_XIR_BAD_STRUCTURE && unchanged==UINT32_MAX);
-    uint64_t paid=pc_stats(work).work;
-    CHECK(effect_role_parameters_open(work,body,proof,1,0,&row)==XR_XIR_BAD_STRUCTURE && pc_stats(work).work==paid);
+    XrCompileResourceStats paid=rp_stats(work);
+    CHECK(effect_role_parameters_open(work,body,proof,1,0,&row)==XR_XIR_BAD_STRUCTURE && conditional_memory_unchanged(work,paid));
     row=(EffectRoleParametersRead){0};
     CHECK(effect_role_parameters_open(work,body,proof,1,5,&row)==XR_XIR_BAD_STRUCTURE);
     CHECK(!row.work && !row.material && !row.proof && !row.function);
@@ -55,8 +54,8 @@ static void pc_role_row_literals(const XrXirCompileContext *work,EffectInvocatio
         uint32_t kind=UINT32_MAX;CHECK(effect_role_parameters_value(&row,4,&kind)==XR_XIR_OK && kind==XR_XIR_EFFECT_PARAMETER_VARIABLE);
         row=(EffectRoleParametersRead){0};
     }
-    pc_free_hook=NULL;XrCompileResourceStats after=pc_stats(work);
-    CHECK(attempts==before_attempts && !pc_role_row_frees && after.allocation_count==before.allocation_count &&
-        after.allocated_bytes==before.allocated_bytes && after.live_bytes==before.live_bytes && after.work>before.work);
-    fputs("scoped actual role row: five literal values/80work, ten geometry/two callable-entry refusals, unchanged outputs, reopen, allocation0/free0 passed\n",stderr);
+    rp_release_observer=NULL;XrCompileResourceStats after=rp_stats(work);
+    CHECK(rp_attempts==before_attempts && !pc_role_row_frees && after.allocation_count==before.allocation_count &&
+        after.allocated_bytes==before.allocated_bytes && after.held_bytes==before.held_bytes);
+    fputs("scoped actual role row: five literal values, ten geometry/two callable-entry refusals, unchanged outputs, reopen, allocation0/free0 passed\n",stderr);
 }

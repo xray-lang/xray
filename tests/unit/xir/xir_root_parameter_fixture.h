@@ -108,14 +108,14 @@ typedef struct RootParameterFixture {
 
 static inline void rp_fixture(RootParameterFixture *fixture, const XrXirCompileContext *context) {
     memset(fixture,0,sizeof(*fixture));
-    fixture->callable = (XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,
+    fixture->callable = (XrXirTypeNode){.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,
         .flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     fixture->types = (XrXirTypes){.nodes=&fixture->callable,.count=1};
     fixture->parameter = (XrXirType)256;
     fixture->instructions[0] = (XrXirInstruction){.op=XR_XIR_CALL_INDIRECT,.type=XR_XIR_I64,.immediate=0};
     fixture->instructions[1] = (XrXirInstruction){.op=XR_XIR_RETURN,.args={1,0}};
     fixture->block = (XrXirBlock){.count=2};
-    fixture->function = (XrXirFunction){.name="apply",.name_length=5,.parameters=&fixture->parameter,
+    fixture->function = (XrXirFunction){.error_type=XR_XIR_NEVER,.name="apply",.name_length=5,.parameters=&fixture->parameter,
         .parameter_count=1,.result=XR_XIR_I64,.blocks=&fixture->block,.block_count=1,
         .instructions=fixture->instructions,.instruction_count=2};
     fixture->effect_parameter = (XrXirEffectParameter){.kind=XR_XIR_EFFECT_PARAMETER_VARIABLE,
@@ -164,7 +164,7 @@ static inline void rp_binding_fixture(RootParameterBindingFixture *f,
     f->pure_ops[0]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=7};
     f->pure_ops[1]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={0,0}};
     f->pure_block=(XrXirBlock){.count=2};
-    f->functions[2]=(XrXirFunction){.name="pure",.name_length=4,.result=XR_XIR_I64,
+    f->functions[2]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="pure",.name_length=4,.result=XR_XIR_I64,
         .blocks=&f->pure_block,.block_count=1,.instructions=f->pure_ops,.instruction_count=2};
     f->functions[1]=f->apply.function;
     f->caller_ops[0]=(XrXirInstruction){.op=XR_XIR_FUNCTION_REF,.type=(XrXirType)257,.immediate=2};
@@ -173,7 +173,7 @@ static inline void rp_binding_fixture(RootParameterBindingFixture *f,
         .type=capture?(XrXirType)256:XR_XIR_I64,.args={0,1},.immediate=1};
     f->caller_ops[3]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={2,0}};
     f->caller_block=(XrXirBlock){.count=4};f->operand=1;
-    f->functions[0]=(XrXirFunction){.name="run",.name_length=3,
+    f->functions[0]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="run",.name_length=3,
         .result=capture?(XrXirType)256:XR_XIR_I64,.blocks=&f->caller_block,.block_count=1,
         .instructions=f->caller_ops,.instruction_count=4,.operands=&f->operand,.operand_count=1};
     f->values[0]=(XrXirRootValueIdentity){0,4,(XrXirType)257};
@@ -184,7 +184,7 @@ static inline void rp_binding_fixture(RootParameterBindingFixture *f,
     f->contracts[1]=f->apply.contract;
     f->initializer=(XrXirInstruction){.op=XR_XIR_RETURN};
     f->initializer_block=(XrXirBlock){.count=1};
-    f->functions[3]=(XrXirFunction){.name="init",.name_length=4,.result=XR_XIR_UNIT,
+    f->functions[3]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="init",.name_length=4,.result=XR_XIR_UNIT,
         .blocks=&f->initializer_block,.block_count=1,.instructions=&f->initializer,.instruction_count=1};
     f->source_module=(XrXirSourceModule){"probe",5,NULL,0,3, 0,XR_XIR_MODULE_FRESH_STORAGE};
     f->declarations=(XrXirDeclarations){.modules=&f->source_module,.module_count=1,

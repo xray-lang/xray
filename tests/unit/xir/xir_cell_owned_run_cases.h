@@ -27,7 +27,7 @@ static void cell_owned_run_boundary(const XrXirCompileContext *context,
     CHECK(read->range(&foreign,read,&cursor,&out)==XR_XIR_BAD_STRUCTURE &&
         !memcmp(&cursor,&held,sizeof(cursor)) && !memcmp(&out,&sentinel,sizeof(out)));
     XrCompileResourceStats after=rp_stats(&foreign);CHECK(!memcmp(&before,&after,sizeof(before)));
-    rp_owner_free(&foreign,before.live_bytes);
+    rp_owner_free(&foreign,before.held_bytes);
     XrXirCellProofBodyRead mixed=*read;mixed.instruction=NULL;
     CHECK(mixed.range(context,&mixed,&cursor,&out)==XR_XIR_BAD_STRUCTURE &&
         !memcmp(&cursor,&held,sizeof(cursor)) && !memcmp(&out,&sentinel,sizeof(out)));
@@ -38,10 +38,10 @@ static void cell_owned_run_boundary(const XrXirCompileContext *context,
     CHECK(read->range(context,read,&cursor,&out)==XR_XIR_BAD_STRUCTURE &&
         !memcmp(&cursor,&held,sizeof(cursor)) && !memcmp(&out,&sentinel,sizeof(out)));
     mixed=*read;mixed.range=cell_owned_run_refuse;cell_owned_run_refusals=0;
-    XrXirDiagnostic diagnostic={0};uint64_t live=rp_stats(context).live_bytes;
+    XrXirDiagnostic diagnostic={0};uint64_t live=rp_stats(context).held_bytes;
     CHECK(xr_xir_compile_cell_provenance_body_matches(context,proof,&mixed,&diagnostic)==XR_XIR_IO &&
         cell_owned_run_refusals==1 && diagnostic.status==XR_XIR_IO &&
-        diagnostic.function==0 && diagnostic.instruction==0 && rp_stats(context).live_bytes==live);
+        diagnostic.function==0 && diagnostic.instruction==0 && rp_stats(context).held_bytes==live);
     CHECK(xr_xir_compile_cell_provenance_body_matches(context,proof,read,NULL)==XR_XIR_OK);
 }
 
@@ -49,7 +49,7 @@ static void cell_owned_run_boundary(const XrXirCompileContext *context,
  * operand-table bounds must still reject before any proof can be accepted. */
 static void cell_owned_run_semantics(const XrXirCompileContext *context,
     const EffectBodyMaterial *material,const XrXirCellProofBodyRead *read) {
-    EffectBodyRead physical=effect_body_compile_read(context);const EffectBodyRun *ref=NULL;
+    EffectBodyRead physical=(EffectBodyRead){.owner=context,.execution=NULL};const EffectBodyRun *ref=NULL;
     const EffectBodyFunction *function=&material->functions[1];
     CHECK(effect_body_record_ref(&physical,function,516,&ref)==XR_XIR_OK &&
         ref->first==516 && ref->count==256 && !ref->mask);
@@ -82,7 +82,7 @@ static void cell_owned_run_instruction_reference(const XrXirCompileContext *cont
     const XrXirInstruction *held=output;size_t attempts=rp_attempts;XrCompileResourceStats before=rp_stats(context);
     CHECK(read.instruction(context,read.owner,1,4,NULL,&output)==XR_XIR_BAD_STRUCTURE && output==held);
     CHECK(sealed.instruction(context,sealed.owner,1,4,NULL,&output)==XR_XIR_BAD_STRUCTURE && output==held &&
-        rp_attempts==attempts && rp_stats(context).work==before.work);
+        rp_attempts==attempts && conditional_memory_unchanged(context,before));
 }
 
 static void cell_owned_run_source(const XrXirCompileContext *context,
@@ -167,7 +167,7 @@ static XrXirStatus cell_owned_run_operation(const XrXirCompileContext *context,u
     XrXirCellProvenance *independent=NULL;EffectBodyMaterial *material=NULL;
     XrXirStatus status=xir_fixture_verify(context,&fixture.module,NULL);
     if (status==XR_XIR_OK) status=xr_xir_compile_cell_provenance_verified(context,&fixture.module,&independent,NULL);
-    if (status==XR_XIR_OK) status=effect_body_material_create(context,&fixture.module,&material);
+    if (status==XR_XIR_OK) status=conditional_owned_body_from_raw(context,&fixture.module,&material);
     if (status==XR_XIR_OK && oracle && !mode) cell_owned_run_source(context,material,&fixture);
     memset(&fixture,0xCE,sizeof(fixture));
     EffectCellBodyAdapter adapter={0};XrXirCellProofBodyRead read={0};
@@ -194,7 +194,7 @@ static XrXirStatus cell_owned_run_operation(const XrXirCompileContext *context,u
 static void cell_owned_run_literals(void) {
     for (uint32_t mode=0;mode<5;++mode) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-        context.limits.instructions=CI_MAX_OPS;uint64_t baseline=rp_stats(&context).live_bytes;
+        context.limits.instructions=CI_MAX_OPS;uint64_t baseline=rp_stats(&context).held_bytes;
         CHECK(cell_owned_run_operation(&context,mode,true)==XR_XIR_OK);
         rp_owner_free(&context,baseline);rp_balanced(physical);
     }
@@ -213,37 +213,33 @@ static void cell_owned_run_resources(void) {
             XrXirStatus status=cell_owned_run_operation(&context,mode,false);
             if (!pass) {
                 CHECK(status==XR_XIR_OK);sites=rp_attempts-first;census=rp_stats(&context);CHECK(sites);
-                printf("CELL_OWNED_RUN_CENSUS mode%u sites%zu work%llu allocated%llu peak%llu\n",mode,sites,
-                    (unsigned long long)(census.work-entry.work),
-                    (unsigned long long)(census.allocated_bytes-entry.allocated_bytes),
+                printf("CELL_OWNED_RUN_CENSUS mode=%u sites=%zu allocations=%llu bytes=%llu held=%llu peak=%llu\n",
+                    mode,sites,(unsigned long long)census.allocation_count,
+                    (unsigned long long)census.allocated_bytes,(unsigned long long)census.held_bytes,
                     (unsigned long long)census.peak_bytes);
             } else {
                 CHECK(status==XR_XIR_OUT_OF_MEMORY && rp_injected && rp_attempts-first==pass);
-                CHECK(rp_stats(&context).live_bytes==entry.live_bytes);rp_balanced(retained);
+                CHECK(rp_stats(&context).held_bytes==entry.held_bytes);rp_balanced(retained);
                 XrCompileResourceStats consumed=rp_stats(&context);
-                uint64_t work=census.work-entry.work,bytes=census.allocated_bytes-entry.allocated_bytes;
-                bool fits=work<=context.resources->limits.work-consumed.work &&
-                    bytes<=context.resources->limits.allocated_bytes-consumed.allocated_bytes;
+                uint64_t bytes=census.allocated_bytes-entry.allocated_bytes;
+                bool fits=census.peak_bytes<=context.resources->limits.memory_limit;
                 rp_fail_at=SIZE_MAX;size_t retry=rp_attempts;
                 status=cell_owned_run_operation(&context,mode,false);
-                CHECK(status==(fits?XR_XIR_OK:XR_XIR_BUDGET));
-                CHECK(rp_stats(&context).live_bytes==entry.live_bytes);rp_balanced(retained);
-                if (fits) CHECK(rp_stats(&context).work-consumed.work==work &&
-                    rp_stats(&context).allocated_bytes-consumed.allocated_bytes==bytes &&
+                CHECK(status==(fits?XR_XIR_OK:XR_XIR_MEMORY_LIMIT));
+                CHECK(rp_stats(&context).held_bytes==entry.held_bytes);rp_balanced(retained);
+                if (fits) CHECK(rp_stats(&context).allocated_bytes-consumed.allocated_bytes==bytes &&
                     rp_stats(&context).allocation_count-consumed.allocation_count==census.allocation_count-entry.allocation_count &&
                     rp_attempts-retry==sites);
             }
-            rp_fail_at=SIZE_MAX;rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
+            rp_fail_at=SIZE_MAX;rp_owner_free(&context,entry.held_bytes);rp_balanced(physical);
         }
-        uint64_t measured[3]={census.allocated_bytes,census.peak_bytes,census.work};
-        for (uint32_t axis=0;axis<3;++axis) for (uint32_t minus=0;minus<2;++minus) {
-            XrCompileResourceLimits limits=rp_caps();uint64_t limit=measured[axis]-minus;
-            if (axis==0) limits.allocated_bytes=limit;
-            else if (axis==1) limits.live_bytes=limit;
-            else limits.work=limit;
+
+        for (uint32_t minus=0;minus<2;++minus) {
+            XrCompileResourceLimits limits=rp_caps();uint64_t limit=census.peak_bytes-minus;
+            limits.memory_limit=limit;
             RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(limits);
-            context.limits.instructions=CI_MAX_OPS;uint64_t baseline=rp_stats(&context).live_bytes;
-            CHECK(cell_owned_run_operation(&context,mode,false)==(minus?XR_XIR_BUDGET:XR_XIR_OK));
+            context.limits.instructions=CI_MAX_OPS;uint64_t baseline=rp_stats(&context).held_bytes;
+            CHECK(cell_owned_run_operation(&context,mode,false)==(minus?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
             rp_owner_free(&context,baseline);rp_balanced(physical);
         }
     }

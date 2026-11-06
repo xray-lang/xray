@@ -19,11 +19,11 @@ static XrXirStatus conditional_ordinary_instruction_copy(const XrXirCompileConte
     for (uint32_t i=0;i<count;++i) ops[i]=ordinary_copy_literal(i,input);
     if (mode==3) ops[count-1].type=(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+1);
     for (size_t i=0;i<sizeof(name);++i) name[i]=(char)('A'+i%23);
-    XrXirFunction source={.name=name,.name_length=(uint32_t)sizeof(name),
+    XrXirFunction source={.error_type=XR_XIR_NEVER,.name=name,.name_length=(uint32_t)sizeof(name),
         .parameters=parameters,.parameter_count=2,.result=input,.blocks=&block,.block_count=1,
         .instructions=count?ops:NULL,.instruction_count=count,.operands=operands,.operand_count=3};
     XrXirModule module={.stage=XR_XIR_BUILT,.functions=&source,.function_count=1};
-    XrXirFunction output={.name="untouched",.name_length=9,.parameters=&argument,.parameter_count=1,
+    XrXirFunction output={.error_type=XR_XIR_NEVER,.name="untouched",.name_length=9,.parameters=&argument,.parameter_count=1,
         .result=XR_XIR_BOOL,.blocks=&block,.block_count=1,.instructions=ops,.instruction_count=99,
         .operands=operands,.operand_count=1};
     EffectOrdinaryNode node={.declaration=0,.arguments=generic?&argument:NULL,
@@ -62,38 +62,36 @@ static void conditional_ordinary_instruction_resources(void) {
         size_t sites=0;XrCompileResourceStats census={0};
         for (size_t pass=0;pass<=sites;++pass) {
             RootParameterMark physical=rp_mark();rp_fail_at=SIZE_MAX;rp_injected=false;
-            XrXirCompileContext context=rp_owner(rp_caps());uint64_t baseline=rp_stats(&context).live_bytes;
+            XrXirCompileContext context=rp_owner(rp_caps());uint64_t baseline=rp_stats(&context).held_bytes;
             XrCompileResources *identity=context.resources;RootParameterMark retained=rp_mark();
             size_t first=rp_attempts;rp_fail_at=pass?first+pass-1:SIZE_MAX;
             XrXirStatus status=conditional_ordinary_instruction_copy(&context,mode);
             if (!pass) {
                 CHECK(status==XR_XIR_OK);sites=rp_attempts-first;census=rp_stats(&context);CHECK(sites);
-                printf("ORDINARY_INSTRUCTION_COPY mode=%u sites=%zu allocated=%llu live=%llu peak=%llu work=%llu\n",
-                    mode,sites,(unsigned long long)census.allocated_bytes,(unsigned long long)census.live_bytes,
-                    (unsigned long long)census.peak_bytes,(unsigned long long)census.work);
+                printf("ORDINARY_INSTRUCTION_COPY mode=%u sites=%zu allocated=%llu live=%llu peak=%llu held=%llu\n",
+                    mode,sites,(unsigned long long)census.allocated_bytes,(unsigned long long)census.held_bytes,
+                    (unsigned long long)census.peak_bytes,(unsigned long long)census.held_bytes);
             } else {
                 CHECK(status==XR_XIR_OUT_OF_MEMORY && rp_injected && rp_attempts-first==pass);
-                CHECK(context.resources==identity && rp_stats(&context).live_bytes==baseline);rp_balanced(retained);
+                CHECK(context.resources==identity && rp_stats(&context).held_bytes==baseline);rp_balanced(retained);
                 rp_fail_at=SIZE_MAX;size_t retry=rp_attempts;
                 CHECK(conditional_ordinary_instruction_copy(&context,mode)==XR_XIR_OK && context.resources==identity);
                 CHECK(rp_attempts-retry==sites);
             }
             rp_fail_at=SIZE_MAX;rp_owner_free(&context,baseline);rp_balanced(physical);
         }
-        uint64_t measured[3]={census.allocated_bytes,census.peak_bytes,census.work};
-        for (uint32_t axis=0;axis<3;++axis) for (uint32_t minus=0;minus<2;++minus) {
-            XrCompileResourceLimits limits=rp_caps();uint64_t limit=measured[axis]-minus;
-            if (axis==0) limits.allocated_bytes=limit;
-            else if (axis==1) limits.live_bytes=limit;
-            else limits.work=limit;
+
+        for (uint32_t minus=0;minus<2;++minus) {
+            XrCompileResourceLimits limits=rp_caps();uint64_t limit=census.peak_bytes-minus;
+            limits.memory_limit=limit;
             RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(limits);
-            uint64_t baseline=rp_stats(&context).live_bytes;
-            CHECK(conditional_ordinary_instruction_copy(&context,mode)==(minus?XR_XIR_BUDGET:XR_XIR_OK));
+            uint64_t baseline=rp_stats(&context).held_bytes;
+            CHECK(conditional_ordinary_instruction_copy(&context,mode)==(minus?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
             rp_owner_free(&context,baseline);rp_balanced(physical);
         }
     }
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-    uint64_t baseline=rp_stats(&context).live_bytes;
+    uint64_t baseline=rp_stats(&context).held_bytes;
     CHECK(conditional_ordinary_instruction_copy(&context,3)==XR_XIR_BAD_TYPE);
     CHECK(conditional_ordinary_instruction_copy(&context,1)==XR_XIR_OK);
     rp_owner_free(&context,baseline);rp_balanced(physical);

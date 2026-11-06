@@ -58,7 +58,7 @@ static XrXirStatus conditional_invocation_publish(const XrXirCompileContext *con
         CHECK(xr_xir_compile_root_cause_trace_copy(context,effects,1,&occupied)==XR_XIR_BAD_STRUCTURE &&
             occupied==trace && rp_attempts==attempts);
         RootParameterMark physical=rp_mark();XrXirCompileContext foreign=rp_owner(rp_caps());
-        uint64_t baseline=rp_stats(&foreign).live_bytes;XrXirRootCauseTrace *untouched=NULL;
+        uint64_t baseline=rp_stats(&foreign).held_bytes;XrXirRootCauseTrace *untouched=NULL;
         CHECK(xr_xir_compile_root_cause_trace_copy(&foreign,effects,1,&untouched)==XR_XIR_BAD_STRUCTURE && !untouched);
         rp_owner_free(&foreign,baseline);rp_balanced(physical);
         XrXirRootFormula *published=&effect_roots_read(effects)->contracts[1].formula;

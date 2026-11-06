@@ -23,7 +23,7 @@ static XrXirStatus conditional_metadata_proof(const XrXirCompileContext *context
     if (status==XR_XIR_OK) status=xir_metadata_context_constraints_verify(context,&metadata);
     XrCompileResourceStats c=rp_stats(context);
     if (status==XR_XIR_OK && oracle) {
-        CHECK(c.work-b.work==b.work-a.work && c.allocated_bytes-b.allocated_bytes==b.allocated_bytes-a.allocated_bytes);
+        CHECK(c.allocated_bytes-b.allocated_bytes==b.allocated_bytes-a.allocated_bytes);
         CHECK(c.allocation_count-b.allocation_count==b.allocation_count-a.allocation_count);
     }
     XirConstraintScratch scratch={context->resources,NULL};
@@ -91,11 +91,11 @@ static XrXirStatus conditional_metadata_default(const XrXirCompileContext *conte
     XrXirInstruction done={.op=XR_XIR_RETURN};XrXirType parameter=XR_XIR_I64;
     XrXirBlock two={.count=2},one={.count=1};
     XrXirFunction functions[4]={
-        {.name="entry",.name_length=5,.result=XR_XIR_I64,.blocks=&two,.block_count=1,.instructions=call,.instruction_count=2},
-        {.name="owner",.name_length=5,.parameters=&parameter,.parameter_count=1,.result=XR_XIR_I64,
+        {.error_type=XR_XIR_NEVER,.name="entry",.name_length=5,.result=XR_XIR_I64,.blocks=&two,.block_count=1,.instructions=call,.instruction_count=2},
+        {.error_type=XR_XIR_NEVER,.name="owner",.name_length=5,.parameters=&parameter,.parameter_count=1,.result=XR_XIR_I64,
          .blocks=&one,.block_count=1,.instructions=&done,.instruction_count=1},
-        {.name="default",.name_length=7,.result=XR_XIR_I64,.blocks=&two,.block_count=1,.instructions=value,.instruction_count=2},
-        {.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&one,.block_count=1,.instructions=&done,.instruction_count=1}};
+        {.error_type=XR_XIR_NEVER,.name="default",.name_length=7,.result=XR_XIR_I64,.blocks=&two,.block_count=1,.instructions=value,.instruction_count=2},
+        {.error_type=XR_XIR_NEVER,.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&one,.block_count=1,.instructions=&done,.instruction_count=1}};
     XrXirFunctionIdentity identities[4]={0};XrXirSourceModule source={"metadata",8,NULL,0,3, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities};
     XrXirDefaultBinding binding={XR_XIR_DEFAULT_PARAMETER,1,0,2};
@@ -143,7 +143,7 @@ static void conditional_metadata_snapshot(const XrXirCompileContext *context,
             body->instruction_count==(f?1u:2u) && body->blocks && body->runs);
         const XrXirBlock block={.count=f?1u:2u};
         CHECK(!memcmp(body->blocks,&block,sizeof(block)));
-        EffectBodyRead read=effect_body_compile_read(context);
+        EffectBodyRead read=(EffectBodyRead){.owner=context,.execution=NULL};
         for (uint32_t i=0;i<body->instruction_count;++i) {
             XrXirInstruction actual;
             CHECK(effect_body_instruction_get(&read,body,i,&actual)==XR_XIR_OK);
@@ -238,7 +238,7 @@ static XrXirStatus conditional_metadata_case(const XrXirCompileContext *context,
     if (status==XR_XIR_OK && oracle) constraint_packet_owned(checked,XR_XIR_CONSTRAINT_SENDABLE);
     EffectBodyMaterial *copy=NULL;
     if (status==XR_XIR_OK)
-        status=effect_body_material_create(context,xr_xir_compile_artifact_module(checked),&copy);
+        status=conditional_owned_body_from_raw(context,xr_xir_compile_artifact_module(checked),&copy);
     EffectTerms comparison={.remaining=context};
     if (status==XR_XIR_OK) comparison.types=copy->terms.types;
     if (status==XR_XIR_OK) status=effect_terms_snapshot_match(&comparison,
@@ -262,7 +262,7 @@ static XrXirStatus conditional_metadata_case(const XrXirCompileContext *context,
 
 static void conditional_metadata_literals(void) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-    uint64_t baseline=rp_stats(&context).live_bytes;
+    uint64_t baseline=rp_stats(&context).held_bytes;
     CHECK(conditional_metadata_case(&context,true)==XR_XIR_OK);
     rp_owner_free(&context,baseline);rp_balanced(physical);
 }
@@ -282,25 +282,24 @@ static void conditional_metadata_resources(void) {
                 .initial=entry,.single=single,.retained=retained,.first=status};
             conditional_retry_operation(&context,&retry);
         }
-        rp_fail_at=SIZE_MAX;rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
+        rp_fail_at=SIZE_MAX;rp_owner_free(&context,entry.held_bytes);rp_balanced(physical);
     }
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-    uint64_t baseline=rp_stats(&context).live_bytes;size_t attempts=rp_attempts;
+    uint64_t baseline=rp_stats(&context).held_bytes;size_t attempts=rp_attempts;
     CHECK(conditional_metadata_case(&context,false)==XR_XIR_OK);
     XrCompileResourceStats census=rp_stats(&context);size_t census_sites=rp_attempts-attempts;
     rp_owner_free(&context,baseline);rp_balanced(physical);
-    uint64_t measured[3]={census.allocated_bytes,census.peak_bytes,census.work};
-    for (uint32_t axis=0;axis<3;++axis) for (uint32_t pass=0;pass<2;++pass) {
-        XrCompileResourceLimits limits=rp_caps();uint64_t value=measured[axis]-(pass?0:1);
-        if (!axis) limits.allocated_bytes=value;else if (axis==1) limits.live_bytes=value;else limits.work=value;
+    for (uint32_t pass=0;pass<2;++pass) {
+        XrCompileResourceLimits limits=rp_caps();uint64_t value=census.peak_bytes-(pass?0:1);
+        limits.memory_limit=value;
         physical=rp_mark();context=rp_owner(limits);XrCompileResourceStats entry=rp_stats(&context);
         RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
         XrXirStatus status=conditional_metadata_case(&context,false);
-        CHECK(status==(pass?XR_XIR_OK:XR_XIR_BUDGET));
+        CHECK(status==(pass?XR_XIR_OK:XR_XIR_MEMORY_LIMIT));
         ConditionalRetryTrial retry={.which=72,.ordinal=SIZE_MAX,.sites=census_sites,.resources=identity,
             .initial=entry,.single=census,.retained=retained,.first=status};
         conditional_retry_operation(&context,&retry);
-        rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
+        rp_owner_free(&context,entry.held_bytes);rp_balanced(physical);
     }
 }
 #endif // XIR_METADATA_DOMAIN_BRIDGE_CASES_H

@@ -8,10 +8,11 @@
  */
 static EffectInvocationCertificate *rc_certificate;
 static uint32_t rc_frees,rc_cut,rc_mutations,rc_mode;
-static void role_source_free(void *memory,size_t bytes) {
+static void role_source_free(void *memory) {
+    size_t bytes=pc_final_physical_size(memory);
     CHECK(memory && bytes);++rc_frees;
     if (rc_frees!=rc_cut || !rc_certificate) return;
-    pc_free_hook=NULL;++rc_mutations;
+    rp_release_observer=NULL;++rc_mutations;
     if (!rc_mode) {
         XrXirEffectParameter *parameters=(XrXirEffectParameter *)rc_certificate->final->outcomes->contracts[1].parameters;
         parameters[0].kind=XR_XIR_EFFECT_PARAMETER_FIXED;
@@ -34,16 +35,16 @@ static void role_source_free(void *memory,size_t bytes) {
     else CHECK(false);
 }
 static void role_source_noalloc(const XrXirCompileContext *context,EffectInvocationCertificate *certificate) {
-    size_t before_attempts=attempts;XrCompileResourceStats before=pc_stats(context);
-    rc_frees=0;rc_cut=UINT32_MAX;rc_certificate=NULL;CHECK(!pc_free_hook);pc_free_hook=role_source_free;
+    size_t before_attempts=rp_attempts;XrCompileResourceStats before=rp_stats(context);
+    rc_frees=0;rc_cut=UINT32_MAX;rc_certificate=NULL;CHECK(!rp_release_observer);rp_release_observer=role_source_free;
     CHECK(effect_role_proof_match(context,certificate->body,&certificate->final->role_proof)==XR_XIR_OK);
-    pc_free_hook=NULL;XrCompileResourceStats after=pc_stats(context);
-    CHECK(attempts==before_attempts && !rc_frees && after.allocation_count==before.allocation_count &&
-        after.allocated_bytes==before.allocated_bytes && after.live_bytes==before.live_bytes && after.work>before.work);
-    fprintf(stderr,"role terminal V allocation0 free0 work%llu\n",(unsigned long long)(after.work-before.work));
+    rp_release_observer=NULL;XrCompileResourceStats after=rp_stats(context);
+    CHECK(rp_attempts==before_attempts && !rc_frees && after.allocation_count==before.allocation_count &&
+        after.allocated_bytes==before.allocated_bytes && after.held_bytes==before.held_bytes);
+    fputs("role terminal V allocation0 free0\n",stderr);
 }
 static uint32_t role_source_once(uint32_t cut,uint32_t mode,bool attack,XrXirStatus *returned) {
-    XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+    XrXirCompileContext context=rp_owner(rp_caps());context.limits=xr_xir_compile_default_limits();uint64_t baseline=rp_stats(&context).held_bytes;
     InvocationRotationFixture fixture;invocation_rotation_fixture(&fixture);XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&context,&fixture.module,&checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_effects_analyze(checked,&effects)==XR_XIR_OK && effects->invocations);
@@ -54,19 +55,18 @@ static uint32_t role_source_once(uint32_t cut,uint32_t mode,bool attack,XrXirSta
     CHECK(proof.rows && proof.facts && proof.rows[1].count==8 && proof.total==8);
     memcpy(facts,proof.facts,sizeof(facts));role_source_noalloc(&context,certificate);
     rc_frees=0;rc_cut=cut;rc_mode=mode;rc_mutations=0;rc_certificate=attack?certificate:NULL;
-    CHECK(!pc_free_hook);pc_free_hook=role_source_free;
+    CHECK(!rp_release_observer);rp_release_observer=role_source_free;
     XrXirStatus status=xir_fixture_effects_terminal(&context,(XirFixtureEffectInput){xr_xir_compile_artifact_module(checked),
         xr_xir_compile_artifact_construction(checked)},effects);
-    pc_free_hook=NULL;rc_certificate=NULL;uint32_t frees=rc_frees;
+    rp_release_observer=NULL;rc_certificate=NULL;uint32_t frees=rc_frees;
     CHECK(!attack || rc_mutations==1);
     certificate->final->role_proof=proof;memcpy(proof.facts,facts,sizeof(facts));
     memcpy(parameters,saved_parameters,sizeof(saved_parameters));
-    fprintf(stderr,"role Source attack%u mode%u cut%u frees%u mutation%u status%u expected%u work%llu\n",
-        attack,mode,cut,frees,rc_mutations,status,attack?XR_XIR_BAD_STRUCTURE:XR_XIR_OK,
-        (unsigned long long)pc_stats(&context).work);
+    fprintf(stderr,"role Source attack%u mode%u cut%u frees%u mutation%u status%u expected%u\n",
+        attack,mode,cut,frees,rc_mutations,status,attack?XR_XIR_BAD_STRUCTURE:XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);memset(&fixture,0xCE,sizeof(fixture));
     role_source_noalloc(&context,certificate);
-    xr_xir_compile_effects_free(effects);pc_release(&context,baseline);*returned=status;return frees;
+    xr_xir_compile_effects_free(effects);rp_owner_free(&context,baseline);CHECK(!rp_live && !rp_live_bytes);*returned=status;return frees;
 }
 static void pc_role_source_final_literals(void) {
     XrXirStatus control=XR_XIR_BAD_STRUCTURE;uint32_t frees=role_source_once(UINT32_MAX,0,false,&control);

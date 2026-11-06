@@ -13,7 +13,7 @@
  * independent field changes must remain distinct even in colliding buckets. */
 static void invocation_edge_key_literals(void) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-    uint64_t baseline=rp_stats(&context).live_bytes;
+    uint64_t baseline=rp_stats(&context).held_bytes;
     const EffectInvocationEdgeKey keys[6]={{1,2,3,4,0},{2,2,3,4,0},{1,3,3,4,0},
         {1,2,4,4,0},{1,2,3,5,0},{1,2,3,4,1}};
     EffectInvocationEdge edges[6];EffectInvocationWorkspace owner={.read={.work=&context,.final=&owner.final},.final={.edges=edges}};
@@ -21,7 +21,7 @@ static void invocation_edge_key_literals(void) {
     for (uint32_t e=0;e<6;++e) {
         size_t at=SIZE_MAX;CHECK(effect_invocation_edge_slot(&owner,owner.edge_index,
             owner.edge_index_capacity,&keys[e],&at)==XR_XIR_OK && !owner.edge_index[at]);
-        CHECK(xir_compile_work(&context,sizeof(*edges)+sizeof(uint32_t)));
+
         edges[e]=(EffectInvocationEdge){keys[e].caller,keys[e].target,keys[e].instruction,
             keys[e].producer,UINT32_MAX,UINT32_MAX,keys[e].latent!=0};
         owner.edge_index[at]=e+1;++owner.final.edge_count;
@@ -45,7 +45,7 @@ static void invocation_edge_key_literals(void) {
  * remains distinct, and malformed scratch cannot publish a numeric answer. */
 static void invocation_node_key_literals(void) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-    uint64_t baseline=rp_stats(&context).live_bytes;
+    uint64_t baseline=rp_stats(&context).held_bytes;
     uint64_t inputs[6][2]={{1,3},{2,3},{1,4},{1,8},{1,3},{1,3}};
     EffectInvocationNode nodes[6]={0};EffectInvocationState states[6]={0};
     for (uint32_t n=0;n<6;++n) nodes[n]=(EffectInvocationNode){.root=n==4?2:1,
@@ -89,7 +89,7 @@ typedef struct InvocationEdgePhiFixture {
 
 static void invocation_edge_phi_fixture(InvocationEdgePhiFixture *f) {
     memset(f,0,sizeof(*f));
-    f->callable=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,
+    f->callable=(XrXirTypeNode){.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,
         .flags=XR_XIR_CALLABLE_ROOT_NONE};
     f->types=(XrXirTypes){.nodes=&f->callable,.count=1};f->parameter=XR_XIR_BOOL;
     f->subject[0]=(XrXirInstruction){.op=XR_XIR_BRANCH,.args={0},.targets={1,2}};
@@ -103,9 +103,9 @@ static void invocation_edge_phi_fixture(InvocationEdgePhiFixture *f) {
     f->blocks[0]=(XrXirBlock){.count=1};f->blocks[1]=(XrXirBlock){.first=1,.count=2};
     f->blocks[2]=(XrXirBlock){.first=3,.count=2};f->blocks[3]=(XrXirBlock){.first=5,.count=3};
     f->pure=f->subject[7];f->one=(XrXirBlock){.count=1};
-    f->functions[0]=(XrXirFunction){.name="init",.name_length=4,.result=XR_XIR_UNIT,
+    f->functions[0]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="init",.name_length=4,.result=XR_XIR_UNIT,
         .blocks=&f->one,.block_count=1,.instructions=&f->pure,.instruction_count=1};
-    f->functions[1]=(XrXirFunction){.name="subject",.name_length=7,.result=XR_XIR_UNIT,
+    f->functions[1]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="subject",.name_length=7,.result=XR_XIR_UNIT,
         .parameters=&f->parameter,.parameter_count=1,.blocks=f->blocks,.block_count=4,
         .instructions=f->subject,.instruction_count=8,.operands=f->operands,.operand_count=4};
     f->functions[2]=f->functions[0];f->functions[2].name="pure";
@@ -163,7 +163,7 @@ static void invocation_edge_dimension_controls(const XrXirCompileContext *contex
         if (node->body==2) pure=n;
     }
     CHECK(pure<owner->count);EffectInvocationNode *node=&owner->nodes[pure];
-    InvocationDirectRead delegated={context,effects,UINT32_MAX,false};
+    InvocationDirectRead delegated={context,effects,UINT32_MAX,false,{.remaining=UINT64_MAX}};
     XirEffectRuntimeRead read={.owner=&delegated,.work=invocation_direct_work};
     CHECK(effect_runtime_closed(certificate,pure,&read)==XR_XIR_OK);
     uint32_t held=node->instruction_count;CHECK(held && held<UINT32_MAX);
@@ -174,8 +174,8 @@ static void invocation_edge_dimension_controls(const XrXirCompileContext *contex
     node->instruction_count=held;CHECK(effect_runtime_closed(certificate,pure,&read)==XR_XIR_OK);
 }
 
-/* Both public admission and the infer remain genuine. Error summaries are
- * independently recomputed from owned input after every producer is dead. */
+/* Public admission and inference remain genuine. Published keys and
+ * owned source correspondence survive the retirement of the raw producer. */
 static XrXirStatus invocation_edge_operation(const XrXirCompileContext *context,
     uint32_t mode,bool oracle) {
     CHECK(mode<4);
@@ -185,10 +185,9 @@ static XrXirStatus invocation_edge_operation(const XrXirCompileContext *context,
     if (mode==2) { invocation_edge_phi_fixture(&phi);module=&phi.module; }
     else { ci_fixture(&cells,mode?CI_GO:CI_CALL,mode!=0,true);module=&cells.module; }
     XrXirEffects *effects=NULL;XrXirStatus status=xir_fixture_verify(context,module,NULL);
-    if (status==XR_XIR_OK) status=xr_xir_compile_effects_infer_verified(context,module,&effects);
+    if (status==XR_XIR_OK) status=conditional_effects_from_raw(context,module,&effects);
     if (status==XR_XIR_OK) {
         invocation_edge_published_keys(effects->invocations->final,mode);
-        CHECK(effect_final_outcomes(effects)->words==1 && effect_final_outcomes(effects)->errors[1]==(mode==2?UINT64_C(0):mode?UINT64_C(4):UINT64_C(12)));
     }
     if (status==XR_XIR_OK && oracle) {
         CHECK(effect_body_source_match(context,effects->invocations->body,module)==XR_XIR_OK);
@@ -201,25 +200,7 @@ static XrXirStatus invocation_edge_operation(const XrXirCompileContext *context,
     }
     memset(&cells,0xCE,sizeof(cells));memset(&phi,0xCE,sizeof(phi));
     if (status==XR_XIR_OK && oracle) invocation_edge_dimension_controls(context,effects);
-    EffectTerms terms={0};terms.remaining=context;ErrorFlow flow={0};XrXirEffects replay={0};
-    if (status==XR_XIR_OK) status=owned_error_replay_begin(context,effects,&replay);
-    if (status==XR_XIR_OK) {
-        flow.body=effect_body_owned_request(context,effects->invocations->body);
-        terms.types=*flow.body.domain.types;flow.effects=&replay;
-        flow.remaining=(XrXirCompileContext *)context;flow.terms=&terms;
-        flow.summary_count=effects->count;flow.invocation=UINT32_MAX;
-        status=error_invocation_contexts_new(&flow,&flow.invocations);
-    }
-    if (status==XR_XIR_OK && mode==2) {
-        CHECK(flow.invocations);status=error_invocation_summaries(&flow);
-        if (status==XR_XIR_OK) status=error_invocation_functions(&flow);
-    } else if (status==XR_XIR_OK) {
-        CHECK(!flow.invocations);status=error_function(&flow,1);
-    }
-    if (status==XR_XIR_OK) CHECK(replay.outcomes_work.errors[1]==
-        (mode==2?UINT64_C(0):mode?UINT64_C(4):UINT64_C(12)));
-    error_storage_free(&flow);error_invocation_contexts_free(flow.invocations);
-    effect_terms_free(&terms);effect_legacy_error_oracle_free(&replay);xr_xir_compile_effects_free(effects);return status;
+    xr_xir_compile_effects_free(effects);return status;
 }
 
 static void invocation_edge_poison_allocation(void *memory) {
@@ -234,7 +215,7 @@ static void invocation_edge_literals(void) {
     invocation_edge_key_literals();invocation_node_key_literals();
     for (uint32_t mode=0;mode<4;++mode) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-        context.limits.instructions=CI_MAX_OPS;uint64_t baseline=rp_stats(&context).live_bytes;
+        context.limits.instructions=CI_MAX_OPS;uint64_t baseline=rp_stats(&context).held_bytes;
         CHECK(invocation_edge_operation(&context,mode,true)==XR_XIR_OK);
         CHECK(!rp_allocation_observer);
         rp_allocation_observer=invocation_edge_poison_allocation;
@@ -255,38 +236,33 @@ static void invocation_edge_resources(void) {
             XrXirStatus status=invocation_edge_operation(&context,mode,false);
             if (!pass) {
                 CHECK(status==XR_XIR_OK);sites=rp_attempts-first;census=rp_stats(&context);CHECK(sites);
-                printf("INVOCATION_EDGE_CENSUS mode=%u sites=%zu work=%llu allocated=%llu peak=%llu node_bytes=%zu actual_bytes=%zu head_bytes=%zu\n",
-                    mode,sites,(unsigned long long)(census.work-entry.work),
-                    (unsigned long long)(census.allocated_bytes-entry.allocated_bytes),
-                    (unsigned long long)census.peak_bytes,sizeof(EffectInvocationNode),
-                    sizeof(EffectInvocationActual),sizeof(EffectBodyFunctionHead));
+                printf("INVOCATION_EDGE_CENSUS mode=%u sites=%zu allocations=%llu bytes=%llu held=%llu peak=%llu\n",
+                    mode,sites,(unsigned long long)census.allocation_count,
+                    (unsigned long long)census.allocated_bytes,(unsigned long long)census.held_bytes,
+                    (unsigned long long)census.peak_bytes);
             } else {
                 CHECK(status==XR_XIR_OUT_OF_MEMORY && rp_injected && rp_attempts-first==pass);
-                CHECK(rp_stats(&context).live_bytes==entry.live_bytes);rp_balanced(retained);
+                CHECK(rp_stats(&context).held_bytes==entry.held_bytes);rp_balanced(retained);
                 XrCompileResourceStats consumed=rp_stats(&context);
-                uint64_t work=census.work-entry.work,bytes=census.allocated_bytes-entry.allocated_bytes;
-                bool fits=work<=context.resources->limits.work-consumed.work &&
-                    bytes<=context.resources->limits.allocated_bytes-consumed.allocated_bytes;
+                uint64_t bytes=census.allocated_bytes-entry.allocated_bytes;
+                bool fits=census.peak_bytes<=context.resources->limits.memory_limit;
                 rp_fail_at=SIZE_MAX;size_t retry=rp_attempts;
                 status=invocation_edge_operation(&context,mode,false);
-                CHECK(status==(fits?XR_XIR_OK:XR_XIR_BUDGET));
-                CHECK(rp_stats(&context).live_bytes==entry.live_bytes);rp_balanced(retained);
-                if (fits) CHECK(rp_stats(&context).work-consumed.work==work &&
-                    rp_stats(&context).allocated_bytes-consumed.allocated_bytes==bytes &&
+                CHECK(status==(fits?XR_XIR_OK:XR_XIR_MEMORY_LIMIT));
+                CHECK(rp_stats(&context).held_bytes==entry.held_bytes);rp_balanced(retained);
+                if (fits) CHECK(rp_stats(&context).allocated_bytes-consumed.allocated_bytes==bytes &&
                     rp_stats(&context).allocation_count-consumed.allocation_count==census.allocation_count-entry.allocation_count &&
                     rp_attempts-retry==sites);
             }
-            rp_fail_at=SIZE_MAX;rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
+            rp_fail_at=SIZE_MAX;rp_owner_free(&context,entry.held_bytes);rp_balanced(physical);
         }
-        uint64_t measured[3]={census.allocated_bytes,census.peak_bytes,census.work};
-        for (uint32_t axis=0;axis<3;++axis) for (uint32_t minus=0;minus<2;++minus) {
-            XrCompileResourceLimits limits=rp_caps();uint64_t limit=measured[axis]-minus;
-            if (axis==0) limits.allocated_bytes=limit;
-            else if (axis==1) limits.live_bytes=limit;
-            else limits.work=limit;
+
+        for (uint32_t minus=0;minus<2;++minus) {
+            XrCompileResourceLimits limits=rp_caps();uint64_t limit=census.peak_bytes-minus;
+            limits.memory_limit=limit;
             RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(limits);
-            context.limits.instructions=CI_MAX_OPS;uint64_t baseline=rp_stats(&context).live_bytes;
-            CHECK(invocation_edge_operation(&context,mode,false)==(minus?XR_XIR_BUDGET:XR_XIR_OK));
+            context.limits.instructions=CI_MAX_OPS;uint64_t baseline=rp_stats(&context).held_bytes;
+            CHECK(invocation_edge_operation(&context,mode,false)==(minus?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
             rp_owner_free(&context,baseline);rp_balanced(physical);
         }
     }

@@ -7,14 +7,15 @@
  * test_xir_invocation_inventory.c - Current callable basis after the last receiving free
  */
 #define main inventory_pending_entry
-#include "test_xir_error_cfg_pending.c"
+#include "test_xir_root_conditional_helpers.c"
 #undef main
 static EffectInvocationFinal *inventory_final;
 static uint32_t inventory_frees,inventory_cut,inventory_mode,inventory_attacks;
-static void inventory_free(void *memory,size_t bytes) {
+static void inventory_free(void *memory) {
+    size_t bytes=pc_final_physical_size(memory);
     CHECK(memory && bytes);++inventory_frees;
     if(inventory_frees!=inventory_cut || !inventory_final) return;
-    pc_free_hook=NULL;++inventory_attacks;EffectInvocationFinal *final=inventory_final;
+    rp_release_observer=NULL;++inventory_attacks;EffectInvocationFinal *final=inventory_final;
     switch(inventory_mode) {
     case 1: final->sites[0].target=1;break;
     case 2: final->sites[0].function=0;break;
@@ -32,9 +33,10 @@ static void inventory_free(void *memory,size_t bytes) {
     default: CHECK(false);
     }
 }
-static void inventory_no_callback(void *memory,size_t bytes) { (void)memory;(void)bytes;CHECK(false); }
+static void inventory_no_callback(void *memory) {
+    size_t bytes=pc_final_physical_size(memory); (void)memory;(void)bytes;CHECK(false); }
 static uint32_t inventory_source_once(uint32_t cut,unsigned mode) {
-    XrXirTypeNode type={.kind=XR_XIR_TYPE_CALLABLE,.flags=XR_XIR_CALLABLE_ROOT_NONE};
+    XrXirTypeNode type={.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.flags=XR_XIR_CALLABLE_ROOT_NONE};
     XrXirTypes types={.nodes=&type,.count=1};XrXirType scalar=XR_XIR_I64;
     XrXirInstruction ret={.op=XR_XIR_RETURN};
     XrXirInstruction ops[4]={{.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=41},
@@ -42,9 +44,9 @@ static uint32_t inventory_source_once(uint32_t cut,unsigned mode) {
         {.op=XR_XIR_FUNCTION_REF,.type=(XrXirType)256,.args={1,1},.immediate=2},
         {.op=XR_XIR_RETURN,.args={1}}};uint32_t operands[2]={0,0};
     XrXirBlock blocks[3]={{.count=1},{.count=4},{.count=1}};
-    XrXirFunction functions[3]={{.name="init",.name_length=4,.instructions=&ret,.instruction_count=1,.blocks=&blocks[0],.block_count=1},
-        {.name="factory",.name_length=7,.result=(XrXirType)256,.instructions=ops,.instruction_count=4,.blocks=&blocks[1],.block_count=1,.operands=operands,.operand_count=2},
-        {.name="target",.name_length=6,.parameters=&scalar,.parameter_count=1,.instructions=&ret,.instruction_count=1,.blocks=&blocks[2],.block_count=1}};
+    XrXirFunction functions[3]={{.error_type=XR_XIR_NEVER,.name="init",.name_length=4,.instructions=&ret,.instruction_count=1,.blocks=&blocks[0],.block_count=1},
+        {.error_type=XR_XIR_NEVER,.name="factory",.name_length=7,.result=(XrXirType)256,.instructions=ops,.instruction_count=4,.blocks=&blocks[1],.block_count=1,.operands=operands,.operand_count=2},
+        {.error_type=XR_XIR_NEVER,.name="target",.name_length=6,.parameters=&scalar,.parameter_count=1,.instructions=&ret,.instruction_count=1,.blocks=&blocks[2],.block_count=1}};
     const XrXirSourceModule source={.name="inventory",.name_length=9,.dependencies=NULL,
         .dependency_count=0,.initializer=0,.lexical_scope=0,.storage=0};
     const XrXirFunctionIdentity identities[3]={{.method_kind=XR_XIR_NON_MEMBER},{.method_kind=XR_XIR_NON_MEMBER},{.method_kind=XR_XIR_NON_MEMBER}};
@@ -53,7 +55,7 @@ static uint32_t inventory_source_once(uint32_t cut,unsigned mode) {
     XrXirFunctionEffectContract contracts[3]={{.formula={.constant_mask=XR_XIR_CALLABLE_ROOT_REQUIRED}},{0},{.parameter_count=1,.parameters=&scalar_effect}};
     const XrXirProvenance provenance={.kind=XR_XIR_EVIDENCE_TEMPLATE,.contracts=contracts,.contract_count=3};
     const XrXirModule module={.stage=XR_XIR_BUILT,.linkage_kind=XR_XIR_LIBRARY,.functions=functions,.function_count=3,.types=&types,.declarations=&declarations,.provenance=&provenance};
-    XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+    XrXirCompileContext context=rp_owner(rp_caps());context.limits=xr_xir_compile_default_limits();uint64_t baseline=rp_stats(&context).held_bytes;
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;XrXirDiagnostic diagnostic={0};
     XrXirStatus status=xir_fixture_check(&context,&module,&checked,&diagnostic);
     if(status!=XR_XIR_OK) fprintf(stderr,"inventory admission%u f%u i%u reason%u\n",status,diagnostic.function,diagnostic.instruction,diagnostic.reason);
@@ -66,10 +68,10 @@ static uint32_t inventory_source_once(uint32_t cut,unsigned mode) {
     uint64_t saved_input=final->nodes[final->roots[2]].input[0];
     uint32_t saved_count=final->count,saved_space=final->root_spaces[1];EffectInvocationNode saved_node=final->nodes[final->roots[1]];
     inventory_final=mode?final:NULL;inventory_frees=0;inventory_cut=cut;inventory_attacks=0;inventory_mode=mode;
-    CHECK(!pc_free_hook);pc_free_hook=inventory_free;
+    CHECK(!rp_release_observer);rp_release_observer=inventory_free;
     status=xir_fixture_effects_terminal(&context,(XirFixtureEffectInput){xr_xir_compile_artifact_module(checked),
         xr_xir_compile_artifact_construction(checked)},effects);
-    pc_free_hook=NULL;inventory_final=NULL;uint32_t frees=inventory_frees;
+    rp_release_observer=NULL;inventory_final=NULL;uint32_t frees=inventory_frees;
     CHECK(!mode || inventory_attacks==1);
     fprintf(stderr,"actual Source inventory mode%u cut%u frees%u status%u expected%u\n",mode,cut,frees,status,mode?XR_XIR_BAD_STRUCTURE:XR_XIR_OK);
     final->sites=sites;final->site_count=2;final->binding_count=2;memcpy(sites,saved_sites,sizeof(saved_sites));
@@ -78,11 +80,11 @@ static uint32_t inventory_source_once(uint32_t cut,unsigned mode) {
     CHECK(xir_fixture_effects_terminal(&context,(XirFixtureEffectInput){xr_xir_compile_artifact_module(checked),
         xr_xir_compile_artifact_construction(checked)},effects)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);memset(ops,0xDC,sizeof(ops));memset(functions,0xDC,sizeof(functions));
-    CHECK(error_finite_outcomes_match(&context,effects->invocations->body,final->outcomes)==XR_XIR_OK);
-    size_t allocated=attempts;uint64_t physical=live_bytes;pc_allocate_hook=inventory_no_callback;pc_free_hook=inventory_no_callback;
+    CHECK(local_error_outcomes(&context,effects->invocations->body,final->outcomes->functions,true)==XR_XIR_OK);
+    size_t allocated=rp_attempts;uint64_t physical=rp_live_bytes;rp_allocation_observer=inventory_no_callback;rp_release_observer=inventory_no_callback;
     CHECK(effect_final_inventories_match(&context,effects->invocations,final->outcomes)==XR_XIR_OK);
-    pc_allocate_hook=NULL;pc_free_hook=NULL;CHECK(attempts==allocated && live_bytes==physical);
-    xr_xir_compile_effects_free(effects);pc_release(&context,baseline);
+    rp_allocation_observer=NULL;rp_release_observer=NULL;CHECK(rp_attempts==allocated && rp_live_bytes==physical);
+    xr_xir_compile_effects_free(effects);rp_owner_free(&context,baseline);CHECK(!rp_live && !rp_live_bytes);
     CHECK(status==(mode?XR_XIR_BAD_STRUCTURE:XR_XIR_OK));return frees;
 }
 int main(int argc,char **argv) {

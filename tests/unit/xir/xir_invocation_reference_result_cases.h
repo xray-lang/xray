@@ -3,10 +3,10 @@
  * independent. Producer death cannot change either receiving fact. */
 static XrXirStatus conditional_invocation_reference_result(const XrXirCompileContext *context,bool oracle) {
     XrXirTypeNode nodes[4]={
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=(XrXirType)256,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_NONE},
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=(XrXirType)258,.flags=XR_XIR_CALLABLE_ROOT_NONE}};
+        {.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=(XrXirType)256,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_NONE},
+        {.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=(XrXirType)258,.flags=XR_XIR_CALLABLE_ROOT_NONE}};
     XrXirTypes types={nodes,4,NULL,NULL};XrXirType capture=XR_XIR_I64;uint32_t operand=0;
     XrXirInstruction entry[5]={{.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=40},
         {.op=XR_XIR_FUNCTION_REF,.type=(XrXirType)257,.immediate=1,.args={0,1}},
@@ -21,14 +21,14 @@ static XrXirStatus conditional_invocation_reference_result(const XrXirCompileCon
     XrXirInstruction init={.op=XR_XIR_RETURN};
     XrXirBlock blocks[4]={{.first=0,.count=5},{.first=0,.count=2},{.first=0,.count=3},{.first=0,.count=1}};
     XrXirFunction functions[4]={
-        {.name="entry",.name_length=5,.result=XR_XIR_I64,.instructions=entry,.instruction_count=5,
+        {.error_type=XR_XIR_NEVER,.name="entry",.name_length=5,.result=XR_XIR_I64,.instructions=entry,.instruction_count=5,
          .operands=&operand,.operand_count=1,.blocks=&blocks[0],.block_count=1},
-        {.name="factory",.name_length=7,.parameters=&capture,.parameter_count=1,
+        {.error_type=XR_XIR_NEVER,.name="factory",.name_length=7,.parameters=&capture,.parameter_count=1,
          .result=(XrXirType)256,.instructions=factory,.instruction_count=2,
          .operands=&operand,.operand_count=1,.blocks=&blocks[1],.block_count=1},
-        {.name="callback",.name_length=8,.parameters=&capture,.parameter_count=1,.result=XR_XIR_I64,
+        {.error_type=XR_XIR_NEVER,.name="callback",.name_length=8,.parameters=&capture,.parameter_count=1,.result=XR_XIR_I64,
          .instructions=callback,.instruction_count=3,.blocks=&blocks[2],.block_count=1},
-        {.name="init",.name_length=4,.instructions=&init,.instruction_count=1,.blocks=&blocks[3],.block_count=1}};
+        {.error_type=XR_XIR_NEVER,.name="init",.name_length=4,.instructions=&init,.instruction_count=1,.blocks=&blocks[3],.block_count=1}};
     XrXirFunctionIdentity identities[4]={0};
     XrXirSourceModule source={.name="reference_result",.name_length=16,.initializer=3};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.entry_function=0};
@@ -95,7 +95,7 @@ static XrXirStatus conditional_invocation_reference_result(const XrXirCompileCon
         CHECK(effect_invocation_context_reference_result(dense,&module,0,1,&bound)==XR_XIR_BAD_TYPE && bound==unchanged);
         XrXirType cell=effect_term_intern(&dense->terms,(XrXirTypeNode){.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64});
         XrXirCallableParameter ref={cell,XR_PARAM_REF};
-        XrXirTypeNode ref_shape={.kind=XR_XIR_TYPE_CALLABLE,.result=(XrXirType)258,
+        XrXirTypeNode ref_shape={.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=(XrXirType)258,
             .parameters=&ref,.parameter_count=1,.flags=XR_XIR_CALLABLE_ROOT_NONE};
         XrXirType actual_ref=effect_term_intern(&dense->terms,ref_shape);
         ref_shape.result=(XrXirType)256;ref_shape.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED;

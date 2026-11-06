@@ -52,11 +52,11 @@ static XrXirStatus context_constraint_vector_request(const XrXirCompileContext *
 
 static void context_constraint_vector_controls(void) {
     for (unsigned cv_attack=0;cv_attack<5;++cv_attack) {
-        XrXirCompileContext cv_work=rp_owner(rp_caps());uint64_t cv_live=rp_stats(&cv_work).live_bytes;
+        XrXirCompileContext cv_work=rp_owner(rp_caps());uint64_t cv_live=rp_stats(&cv_work).held_bytes;
         XrXirStatus cv_expected=cv_attack>=1 && cv_attack<=3 ? XR_XIR_BAD_TYPE :
             cv_attack ? XR_XIR_BAD_STRUCTURE : XR_XIR_OK;
         CHECK(context_constraint_vector_request(&cv_work,cv_attack)==cv_expected);
-        CHECK(rp_stats(&cv_work).live_bytes==cv_live);
+        CHECK(rp_stats(&cv_work).held_bytes==cv_live);
         CHECK(context_constraint_vector_request(&cv_work,0)==XR_XIR_OK);
         rp_owner_free(&cv_work,cv_live);
     }

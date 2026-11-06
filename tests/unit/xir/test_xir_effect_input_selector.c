@@ -1,9 +1,10 @@
 /* An empty opcode result must still reject impossible owned storage. */
 #define main selector_original_pending_entry
-#include "test_xir_error_cfg_pending.c"
+#include "test_xir_root_conditional_helpers.c"
 #undef main
 #include "xir_root_conditional_raw_fixture.h"
-static void selector_no_callback(void *memory,size_t bytes) { (void)memory;(void)bytes;CHECK(false); }
+static void selector_no_callback(void *memory) {
+    size_t bytes=pc_final_physical_size(memory); (void)memory;(void)bytes;CHECK(false); }
 static void selector_scalar_domain(void) {
     XrXirTypeNode nodes[2]={{.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64},
         {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_NONE}};
@@ -22,13 +23,13 @@ static void selector_scalar_domain(void) {
         .root_module=UINT32_MAX,.entry_function=UINT32_MAX};
     XrXirModule module={.stage=XR_XIR_BUILT,.types=&types,.functions=functions,.function_count=2,
         .declarations=&declarations,.linkage_kind=XR_XIR_LIBRARY};
-    XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
-    XrXirEffects *effects=NULL;CHECK(xr_xir_compile_effects_infer_verified(&context,&module,&effects)==XR_XIR_OK);
+    XrXirCompileContext context=rp_owner(rp_caps());context.limits=xr_xir_compile_default_limits();uint64_t baseline=rp_stats(&context).held_bytes;
+    XrXirEffects *effects=NULL;CHECK(conditional_effects_from_raw(&context,&module,&effects)==XR_XIR_OK);
     EffectInvocationFinal *final=effects->invocations->final;EffectBodyMaterial *material=final->material;
     EffectCaptureRead read={.work=&context,.final=final,.body=effect_body_owned_request(&context,material)};
     memset(functions,0xDC,sizeof(functions));memset(ops,0xDC,sizeof(ops));memset(nodes,0xDC,sizeof(nodes));
-    size_t allocated=attempts;uint64_t physical=live_bytes;bool scalar=false;
-    pc_allocate_hook=selector_no_callback;pc_free_hook=selector_no_callback;
+    size_t allocated=rp_attempts;uint64_t physical=rp_live_bytes;bool scalar=false;
+    rp_allocation_observer=selector_no_callback;rp_release_observer=selector_no_callback;
     CHECK(effect_capture_scalar_domain(&read,&scalar)==XR_XIR_OK && scalar);
     CHECK(effect_capture_match(&context,final)==XR_XIR_OK);
     EffectBodyFunction *head=&material->functions[1];XrXirType *formal=(XrXirType *)head->parameters;
@@ -54,9 +55,9 @@ static void selector_scalar_domain(void) {
     EffectInvocationNode *root=&final->nodes[final->roots[1]];CHECK(root->input && !root->input[0]);
     root->input[0]=1;CHECK(effect_capture_match(&context,final)==XR_XIR_BAD_STRUCTURE);root->input[0]=0;
     CHECK(effect_capture_scalar_domain(&read,&scalar)==XR_XIR_OK && scalar);
-    CHECK(effect_capture_match(&context,final)==XR_XIR_OK && attempts==allocated && live_bytes==physical);
-    pc_allocate_hook=NULL;pc_free_hook=NULL;xr_xir_compile_effects_free(effects);pc_release(&context,baseline);
-    puts("primitive capture domain: unused Cell/callable types, live formal and affine type/opcode changes, invalid opcode, false scalar input, dead producer and physical0");
+    CHECK(effect_capture_match(&context,final)==XR_XIR_OK && rp_attempts==allocated && rp_live_bytes==physical);
+    rp_allocation_observer=NULL;rp_release_observer=NULL;xr_xir_compile_effects_free(effects);rp_owner_free(&context,baseline);CHECK(!rp_live && !rp_live_bytes);
+    puts("primitive capture domain: unused Cell/callable types, rp_live formal and affine type/opcode changes, invalid opcode, false scalar input, dead producer and physical0");
 }
 typedef struct SelectorRawSource {
     ConditionalRawFixture raw;
@@ -89,63 +90,63 @@ static void selector_raw_source_fixture(SelectorRawSource *f) {
     f->raw.module.functions=f->functions;f->raw.module.function_count=5;f->raw.module.generics=f->generics;
 }
 static void selector_raw_source_replay(bool resources) {
-    size_t sites=0;uint64_t peak=0,maximum=0;
+    size_t sites=0;uint64_t peak=0;
     for(size_t pass=0;pass<=(resources?sites:0);++pass) {
         SelectorRawSource fixture;selector_raw_source_fixture(&fixture);
-        XrCompileResourceLimits caps=pc_caps();caps.work=4000000;
-        XrXirCompileContext context=pc_owner(caps);context.limits.functions=32;
+        XrCompileResourceLimits caps=rp_caps();
+        XrXirCompileContext context=rp_owner(caps);context.limits=xr_xir_compile_default_limits();context.limits.functions=32;
         context.limits.parameters=16;context.limits.instructions=128;
-        uint64_t baseline=pc_stats(&context).live_bytes;
+        uint64_t baseline=rp_stats(&context).held_bytes;
         XrXirArtifact *checked=NULL;
         CHECK(xir_fixture_check(&context,&fixture.raw.module,&checked,NULL)==XR_XIR_OK && checked);
         memset(&fixture,0xDC,sizeof(fixture));
-        uint64_t held=pc_stats(&context).live_bytes;XrCompileResources *identity=context.resources;
-        attempts=0;fail_at=pass?pass-1:SIZE_MAX;injected=false;
+        uint64_t held=rp_stats(&context).held_bytes;XrCompileResources *identity=context.resources;
+        rp_attempts=0;rp_fail_at=pass?pass-1:SIZE_MAX;rp_injected=false;
         XrXirEffects *effects=NULL;
         XrXirStatus status=xir_artifact_verify_raw_source_effects(checked,&effects,NULL);
-        if(!pass) { CHECK(status==XR_XIR_OK && effects);sites=attempts; }
+        if(!pass) { CHECK(status==XR_XIR_OK && effects);sites=rp_attempts; }
         else {
-            if(status!=XR_XIR_OUT_OF_MEMORY) fprintf(stderr,"raw replay allocation%zu status%u work%llu\n",
-                pass-1,status,(unsigned long long)pc_stats(&context).work);
-            CHECK(status==XR_XIR_OUT_OF_MEMORY && injected && !effects && pc_stats(&context).live_bytes==held);
-            fail_at=SIZE_MAX;
+            if(status!=XR_XIR_OUT_OF_MEMORY) fprintf(stderr,"raw replay allocation%zu status%u\n",
+                pass-1,status);
+            CHECK(status==XR_XIR_OUT_OF_MEMORY && rp_injected && !effects && rp_stats(&context).held_bytes==held);
+            rp_fail_at=SIZE_MAX;
             CHECK(xir_artifact_verify_raw_source_effects(checked,&effects,NULL)==XR_XIR_OK && effects);
         }
-        fail_at=SIZE_MAX;uint64_t retained=pc_stats(&context).live_bytes;
+        rp_fail_at=SIZE_MAX;uint64_t retained=rp_stats(&context).held_bytes;
         const XrXirModule *module=xr_xir_compile_artifact_module(checked);
         if(!pass) {
-            XrCompileResourceStats before=pc_stats(&context);
-            pc_allocate_hook=selector_no_callback;pc_free_hook=selector_no_callback;
+            XrCompileResourceStats before=rp_stats(&context);
+            rp_allocation_observer=selector_no_callback;rp_release_observer=selector_no_callback;
             CHECK(effect_capture_match(&context,effects->invocations->final)==XR_XIR_OK);
-            pc_allocate_hook=NULL;pc_free_hook=NULL;
-            XrCompileResourceStats after=pc_stats(&context);
-            CHECK(after.work>before.work && after.allocated_bytes==before.allocated_bytes &&
-                after.live_bytes==retained && after.allocation_count==before.allocation_count && context.resources==identity);
-            printf("capture current support: original5-function input facts%u work%llu allocated%llu live%llu peak%llu no callbacks\n",
-                effects->invocations->final->capture.count,(unsigned long long)(after.work-before.work),
-                (unsigned long long)after.allocated_bytes,(unsigned long long)after.live_bytes,(unsigned long long)after.peak_bytes);
+            rp_allocation_observer=NULL;rp_release_observer=NULL;
+            XrCompileResourceStats after=rp_stats(&context);
+            CHECK(after.allocated_bytes==before.allocated_bytes &&
+                after.held_bytes==retained && after.allocation_count==before.allocation_count && context.resources==identity);
+            printf("capture current support: original5-function input facts%u allocated%llu held%llu peak%llu no callbacks\n",
+                effects->invocations->final->capture.count,
+                (unsigned long long)after.allocated_bytes,(unsigned long long)after.held_bytes,(unsigned long long)after.peak_bytes);
         }
         for(uint32_t read=0;read<2;++read) {
-            uint64_t before=pc_stats(&context).work;
+            XrCompileResourceStats before=rp_stats(&context);
             CHECK(xir_compile_verify_raw_source_effects(&context,module,checked->construction,effects,NULL)==XR_XIR_OK);
-            CHECK(pc_stats(&context).work>before && pc_stats(&context).live_bytes==retained && context.resources==identity);
+            CHECK(conditional_memory_unchanged(&context,before) && rp_stats(&context).held_bytes==retained && context.resources==identity);
         }
-        XrCompileResourceStats stats=pc_stats(&context);
+        XrCompileResourceStats stats=rp_stats(&context);
         if(stats.peak_bytes>peak) peak=stats.peak_bytes;
-        if(stats.work>maximum) maximum=stats.work;
-        xr_xir_compile_effects_free(effects);CHECK(pc_stats(&context).live_bytes==held);
-        xr_xir_compile_artifact_free(checked);pc_release(&context,baseline);
+
+        xr_xir_compile_effects_free(effects);CHECK(rp_stats(&context).held_bytes==held);
+        xr_xir_compile_artifact_free(checked);rp_owner_free(&context,baseline);CHECK(!rp_live && !rp_live_bytes);
     }
-    printf("raw source replay: original5-function captured generic input, 4M owner, dead producer, twice current proof, FI%zu same-owner retries, maxwork%llu peak%llu physical0\n",
-        resources?sites:0,(unsigned long long)maximum,(unsigned long long)peak);
+    printf("raw source replay: original5-function captured generic input, finite held-memory owner, dead producer, twice current proof, FI%zu same-owner retries, peak%llu physical0\n",
+        resources?sites:0,(unsigned long long)peak);
 }
 static void selector_capture_support(void) {
-    XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+    XrXirCompileContext context=rp_owner(rp_caps());context.limits=xr_xir_compile_default_limits();uint64_t baseline=rp_stats(&context).held_bytes;
     EffectCaptureFact facts[64];
     for(uint32_t p=0;p<64;++p) facts[p]=(EffectCaptureFact){2,3,p/32,p%32,p+3};
     EffectCaptureRead read={.work=&context,.selected=facts,.selected_count=64};
-    size_t allocated=attempts;uint64_t physical=live_bytes;
-    pc_allocate_hook=selector_no_callback;pc_free_hook=selector_no_callback;
+    size_t allocated=rp_attempts;uint64_t physical=rp_live_bytes;
+    rp_allocation_observer=selector_no_callback;rp_release_observer=selector_no_callback;
     for(uint32_t p=63;p>0;--p) CHECK(effect_capture_emit(&read,facts[p])==XR_XIR_OK && !read.supported);
     CHECK(read.selected_mask==UINT64_MAX-1);
     EffectCaptureFact cause=facts[0];++cause.rank;
@@ -158,8 +159,8 @@ static void selector_capture_support(void) {
     read.selected=flags;read.selected_count=2;read.selected_mask=0;read.supported=false;
     CHECK(effect_capture_emit(&read,flags[1])==XR_XIR_OK && !read.supported && read.selected_mask==2);
     CHECK(effect_capture_emit(&read,flags[0])==XR_XIR_OK && read.supported && read.selected_mask==3);
-    CHECK(attempts==allocated && live_bytes==physical);
-    pc_allocate_hook=NULL;pc_free_hook=NULL;pc_release(&context,baseline);
+    CHECK(rp_attempts==allocated && rp_live_bytes==physical);
+    rp_allocation_observer=NULL;rp_release_observer=NULL;rp_owner_free(&context,baseline);CHECK(!rp_live && !rp_live_bytes);
     puts("capture support: all64 obligations across words, individual ranks, fixed/raw flags, no callbacks and physical0");
 }
 /* A reference followed by k copies has exactly k+1 finite origins and
@@ -188,8 +189,8 @@ static void selector_complete_chain(void) {
             .root_module=UINT32_MAX,.entry_function=2};
         XrXirModule module={.stage=XR_XIR_BUILT,.types=&types,.functions=functions,.function_count=3,
             .declarations=&declarations,.linkage_kind=XR_XIR_LIBRARY};
-        XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
-        XrXirEffects *effects=NULL;CHECK(xr_xir_compile_effects_infer_verified(&context,&module,&effects)==XR_XIR_OK && effects);
+        XrXirCompileContext context=rp_owner(rp_caps());context.limits=xr_xir_compile_default_limits();uint64_t baseline=rp_stats(&context).held_bytes;
+        XrXirEffects *effects=NULL;CHECK(conditional_effects_from_raw(&context,&module,&effects)==XR_XIR_OK && effects);
         EffectInvocationFinal *final=effects->invocations->final;
         CHECK(final->site_count==1 && !final->binding_count && final->sites[0].function==2 &&
             !final->sites[0].instruction && final->sites[0].target==1 && !final->sites[0].captures);
@@ -205,14 +206,14 @@ static void selector_complete_chain(void) {
         }
         CHECK(origins==copies+1 && raw==copies+1 && complete==copies+1 && last);
         memset(ops,0xDC,sizeof(ops));memset(functions,0xDC,sizeof(functions));
-        size_t allocated=attempts;uint64_t physical=live_bytes;
-        pc_allocate_hook=selector_no_callback;pc_free_hook=selector_no_callback;
+        size_t allocated=rp_attempts;uint64_t physical=rp_live_bytes;
+        rp_allocation_observer=selector_no_callback;rp_release_observer=selector_no_callback;
         CHECK(effect_capture_match(&context,final)==XR_XIR_OK);
         uint64_t rank=last->rank;last->rank=rank+1;
         CHECK(effect_capture_match(&context,final)==XR_XIR_BAD_STRUCTURE);last->rank=rank;
-        CHECK(effect_capture_match(&context,final)==XR_XIR_OK && attempts==allocated && live_bytes==physical);
-        pc_allocate_hook=NULL;pc_free_hook=NULL;
-        xr_xir_compile_effects_free(effects);pc_release(&context,baseline);
+        CHECK(effect_capture_match(&context,final)==XR_XIR_OK && rp_attempts==allocated && rp_live_bytes==physical);
+        rp_allocation_observer=NULL;rp_release_observer=NULL;
+        xr_xir_compile_effects_free(effects);rp_owner_free(&context,baseline);CHECK(!rp_live && !rp_live_bytes);
     }
     puts("Complete constructor:127/128/129 literal copy-chain witnesses, exact identities/ranks, exhaustive receiving and physical0 PASS");
 }
@@ -222,7 +223,7 @@ static bool selector_current_poll(const void *context) {
 }
 static void selector_current_handoff(void) {
     SelectorRawSource fixture;selector_raw_source_fixture(&fixture);
-    XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+    XrXirCompileContext context=rp_owner(rp_caps());context.limits=xr_xir_compile_default_limits();uint64_t baseline=rp_stats(&context).held_bytes;
     context.limits.functions=32;context.limits.parameters=16;context.limits.instructions=128;
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&context,&fixture.raw.module,&checked,NULL)==XR_XIR_OK && checked);
@@ -233,24 +234,24 @@ static void selector_current_handoff(void) {
     CHECK(xr_compile_resources_begin_cancel(context.resources,selector_current_poll,&poll)==XR_COMPILE_RESOURCE_OK);
     {
         EffectBodyCurrentRead current={0};CHECK(effect_body_current_open(&context,final->material,&current)==XR_XIR_OK);
-        size_t allocated=attempts;uint64_t physical=live_bytes;uint32_t calls=poll.calls;
-        pc_allocate_hook=selector_no_callback;pc_free_hook=selector_no_callback;
+        size_t allocated=rp_attempts;uint64_t physical=rp_live_bytes;uint32_t calls=poll.calls;
+        rp_allocation_observer=selector_no_callback;rp_release_observer=selector_no_callback;
         CHECK(effect_capture_current_match(&context,final,&current)==XR_XIR_OK && poll.calls>calls);
         poll.requested=true;
         CHECK(effect_capture_current_match(&context,final,&current)==XR_XIR_BAD_STRUCTURE);
         CHECK(xr_compile_resources_end_cancel(context.resources,selector_current_poll,&poll)==XR_COMPILE_RESOURCE_CANCELLED);
-        CHECK(attempts==allocated && live_bytes==physical);
+        CHECK(rp_attempts==allocated && rp_live_bytes==physical);
         current=(EffectBodyCurrentRead){0};
-        pc_allocate_hook=NULL;pc_free_hook=NULL;
+        rp_allocation_observer=NULL;rp_release_observer=NULL;
     }
     CHECK(effect_capture_match(&context,final)==XR_XIR_OK);
-    xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);pc_release(&context,baseline);
+    xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);rp_owner_free(&context,baseline);CHECK(!rp_live && !rp_live_bytes);
     puts("current handoff: owned parent scope, independent receiving, cancellation polling/latch/recovery, no allocator callbacks and physical0 PASS");
 }
 
 typedef struct SelectorHeadProjection {
     uint32_t calls,deny,function[2];
-    bool dimensions[2];uint64_t fee[2];
+    bool dimensions[2];
 } SelectorHeadProjection;
 static SelectorHeadProjection selector_head_projection;
 static XrXirStatus selector_projection_head(const EffectBodyRequest *request,uint32_t f,
@@ -259,9 +260,8 @@ static XrXirStatus selector_projection_head(const EffectBodyRequest *request,uin
     CHECK(call<2 && !signature && (!!full+!!dimensions)==1);
     trace->function[call]=f;trace->dimensions[call]=dimensions!=NULL;
     if(trace->calls==trace->deny) return XR_XIR_BAD_STRUCTURE;
-    const XrXirCompileContext *work=request->read.owner;uint64_t before=pc_stats(work).work;
     XrXirStatus status=effect_body_owned_head(request,f,full,dimensions,signature);
-    trace->fee[call]=pc_stats(work).work-before;return status;
+    return status;
 }
 static void selector_projection_storage(EffectBodyFunction *head,uint32_t mode) {
     switch(mode) {
@@ -277,7 +277,7 @@ static void selector_projection_storage(EffectBodyFunction *head,uint32_t mode) 
  * still supplies operands, while the target supplies only its formal count. */
 static void selector_invocation_projection(void) {
     SelectorRawSource fixture;selector_raw_source_fixture(&fixture);
-    XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+    XrXirCompileContext context=rp_owner(rp_caps());context.limits=xr_xir_compile_default_limits();uint64_t baseline=rp_stats(&context).held_bytes;
     context.limits.functions=32;context.limits.parameters=16;context.limits.instructions=128;
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&context,&fixture.raw.module,&checked,NULL)==XR_XIR_OK && checked);
@@ -295,18 +295,16 @@ static void selector_invocation_projection(void) {
     const EffectInvocationEdge *edge=&final->edges[selected];
     uint32_t source=final->nodes[edge->caller].body,target=final->nodes[edge->target].body;
     EffectBodyRequest body=effect_body_owned_request(&context,material);body.head=selector_projection_head;
-    XrXirCompileContext foreign=context;foreign.resources=NULL;XrCompileResourceLimits caps=pc_caps();
+    XrXirCompileContext foreign=context;foreign.resources=NULL;XrCompileResourceLimits caps=rp_caps();
     CHECK(xr_compile_resources_new(&caps,&foreign.resources)==XR_COMPILE_RESOURCE_OK);
-    size_t allocated=attempts;uint64_t physical=live_bytes;
-    pc_allocate_hook=selector_no_callback;pc_free_hook=selector_no_callback;
+    size_t allocated=rp_attempts;uint64_t physical=rp_live_bytes;
+    rp_allocation_observer=selector_no_callback;rp_release_observer=selector_no_callback;
     for(uint32_t deny=0;deny<=2;++deny) {
         selector_head_projection=(SelectorHeadProjection){.deny=deny};
         CHECK(effect_final_edge_payload(&context,&body,final,selected)==(deny?XR_XIR_BAD_STRUCTURE:XR_XIR_OK));
         CHECK(selector_head_projection.calls==(deny?deny:2));
         CHECK(selector_head_projection.function[0]==source && !selector_head_projection.dimensions[0]);
         if(deny!=1) CHECK(selector_head_projection.function[1]==target && selector_head_projection.dimensions[1]);
-        if(!deny) CHECK(selector_head_projection.fee[0]==12+sizeof(EffectBodyFunctionHead) &&
-            selector_head_projection.fee[1]==11+sizeof(EffectBodyFunctionDimensions));
     }
     for(uint32_t f=0;f<effect_body_count(material);++f) for(uint32_t mode=0;mode<6;++mode) {
         EffectBodyFunction *head=&material->functions[f];EffectBodyFunction saved=*head;
@@ -323,20 +321,20 @@ static void selector_invocation_projection(void) {
     SelectorCurrentPoll poll={.requested=true};
     CHECK(xr_compile_resources_begin_cancel(context.resources,selector_current_poll,&poll)==XR_COMPILE_RESOURCE_OK);
     selector_head_projection=(SelectorHeadProjection){0};
-    CHECK(effect_final_edge_payload(&context,&body,final,selected)==XR_XIR_BUDGET && poll.calls);
+    CHECK(effect_final_edge_payload(&context,&body,final,selected)==XR_XIR_CANCELLED && poll.calls);
     CHECK(xr_compile_resources_end_cancel(context.resources,selector_current_poll,&poll)==XR_COMPILE_RESOURCE_CANCELLED);
     selector_head_projection=(SelectorHeadProjection){0};
     CHECK(effect_final_edge_payload(&context,&body,final,selected)==XR_XIR_OK);
     CHECK(effect_final_inventory_match(&context,material,final)==XR_XIR_OK);
-    CHECK(attempts==allocated && live_bytes==physical);
-    pc_allocate_hook=NULL;pc_free_hook=NULL;xr_compile_resources_release(foreign.resources);
-    xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);pc_release(&context,baseline);
-    puts("invocation projections: source full/target dimensions, exact fees, both callback refusals, all head storage preconditions, foreign ledger, cancellation/recovery and physical0 PASS");
+    CHECK(rp_attempts==allocated && rp_live_bytes==physical);
+    rp_allocation_observer=NULL;rp_release_observer=NULL;xr_compile_resources_release(foreign.resources);
+    xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);rp_owner_free(&context,baseline);CHECK(!rp_live && !rp_live_bytes);
+    puts("invocation projections: source full/target dimensions, both callback refusals, all head storage preconditions, foreign ledger, cancellation/recovery and physical0 PASS");
 }
 
 
 typedef struct SelectorSignatureTrace {
-    uint32_t calls,deny,kind[4],function[4];uint64_t fee[4];
+    uint32_t calls,deny,kind[4],function[4];
 } SelectorSignatureTrace;
 static SelectorSignatureTrace selector_signature_trace;
 static XrXirStatus selector_signature_head(const EffectBodyRequest *request,uint32_t f,
@@ -345,15 +343,14 @@ static XrXirStatus selector_signature_head(const EffectBodyRequest *request,uint
     CHECK(call<4 && (!!full+!!dimensions+!!signature)==1);
     trace->kind[call]=signature?3:dimensions?2:1;trace->function[call]=f;
     if(trace->calls==trace->deny) return XR_XIR_BAD_STRUCTURE;
-    const XrXirCompileContext *work=request->read.owner;uint64_t before=pc_stats(work).work;
     XrXirStatus status=effect_body_owned_head(request,f,full,dimensions,signature);
-    trace->fee[call]=pc_stats(work).work-before;return status;
+    return status;
 }
 /* The literal REF captures a receiver and callback. Its target signature is
  * enough for identity typing; the source still provides the complete operands. */
 static void selector_capture_signature(void) {
     SelectorRawSource fixture;selector_raw_source_fixture(&fixture);
-    XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+    XrXirCompileContext context=rp_owner(rp_caps());context.limits=xr_xir_compile_default_limits();uint64_t baseline=rp_stats(&context).held_bytes;
     context.limits.functions=32;context.limits.parameters=16;context.limits.instructions=128;
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&context,&fixture.raw.module,&checked,NULL)==XR_XIR_OK && checked);
@@ -366,16 +363,14 @@ static void selector_capture_signature(void) {
     EffectCaptureRead read={.work=&context,.final=final,.body=effect_body_owned_request(&context,material)};
     EffectCaptureNode node={0};CHECK(effect_capture_node(&read,final->roots[0],&node)==XR_XIR_OK);
     read.body.head=selector_signature_head;
-    size_t allocated=attempts;uint64_t physical=live_bytes;
-    pc_allocate_hook=selector_no_callback;pc_free_hook=selector_no_callback;
+    size_t allocated=rp_attempts;uint64_t physical=rp_live_bytes;
+    rp_allocation_observer=selector_no_callback;rp_release_observer=selector_no_callback;
     for(uint32_t deny=0;deny<=2;++deny) {
         selector_signature_trace=(SelectorSignatureTrace){.deny=deny};bool seeded=false;
         CHECK(effect_capture_reference_seed(&read,0,&seeded)==(deny?XR_XIR_BAD_STRUCTURE:XR_XIR_OK));
         CHECK(seeded==!deny && selector_signature_trace.calls==(deny?deny:2));
         CHECK(selector_signature_trace.kind[0]==3 && selector_signature_trace.function[0]==2);
         if(deny!=1) CHECK(selector_signature_trace.kind[1]==1 && selector_signature_trace.function[1]==0);
-        if(!deny) CHECK(selector_signature_trace.fee[0]==11+sizeof(EffectBodyFunctionSignature) &&
-            selector_signature_trace.fee[1]==12+sizeof(EffectBodyFunctionHead));
     }
     for(uint32_t deny=0;deny<=1;++deny) {
         selector_signature_trace=(SelectorSignatureTrace){.deny=deny};XrXirType type=(XrXirType)UINT32_MAX;
@@ -401,17 +396,17 @@ static void selector_capture_signature(void) {
     SelectorCurrentPoll poll={.requested=true};
     CHECK(xr_compile_resources_begin_cancel(context.resources,selector_current_poll,&poll)==XR_COMPILE_RESOURCE_OK);
     selector_signature_trace=(SelectorSignatureTrace){0};bool seeded=false;
-    CHECK(effect_capture_reference_seed(&read,0,&seeded)==XR_XIR_BUDGET && !seeded && poll.calls);
+    CHECK(effect_capture_reference_seed(&read,0,&seeded)==XR_XIR_CANCELLED && !seeded && poll.calls);
     CHECK(xr_compile_resources_end_cancel(context.resources,selector_current_poll,&poll)==XR_COMPILE_RESOURCE_CANCELLED);
     selector_signature_trace=(SelectorSignatureTrace){0};
     CHECK(effect_capture_reference_seed(&read,0,&seeded)==XR_XIR_OK && seeded);
     CHECK(effect_capture_match(&context,final)==XR_XIR_OK);
-    CHECK(attempts==allocated && live_bytes==physical);
-    pc_allocate_hook=NULL;pc_free_hook=NULL;
-    xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);pc_release(&context,baseline);
+    CHECK(rp_attempts==allocated && rp_live_bytes==physical);
+    rp_allocation_observer=NULL;rp_release_observer=NULL;
+    xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);rp_owner_free(&context,baseline);CHECK(!rp_live && !rp_live_bytes);
     printf("capture signature layout full%zu signature%zu saving%zu\n",sizeof(EffectBodyFunctionHead),
         sizeof(EffectBodyFunctionSignature),sizeof(EffectBodyFunctionHead)-sizeof(EffectBodyFunctionSignature));
-    puts("capture signatures: literal REF identity, source full head, exact fees, all three callback refusals, unchanged outputs, full storage checks, cancellation/recovery and physical0 PASS");
+    puts("capture signatures: literal REF identity, source full head, all three callback refusals, unchanged outputs, full storage checks, cancellation/recovery and physical0 PASS");
 }
 
 int main(int argc,char **argv) {
@@ -427,13 +422,13 @@ int main(int argc,char **argv) {
     selector_raw_source_replay(false);
     selector_scalar_domain();
     EdgeFixture fixture;pc_empty_fixture(&fixture,4);
-    XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
-    EffectBodyMaterial *material=NULL;CHECK(effect_body_material_create(&context,&fixture.module,&material)==XR_XIR_OK);
+    XrXirCompileContext context=rp_owner(rp_caps());context.limits=xr_xir_compile_default_limits();uint64_t baseline=rp_stats(&context).held_bytes;
+    EffectBodyMaterial *material=NULL;CHECK(conditional_owned_body_from_raw(&context,&fixture.module,&material)==XR_XIR_OK);
     EffectBodyRequest body=effect_body_owned_request(&context,material);
     EffectBodyFunction *head=&material->functions[1];EffectBodyFunction saved=*head;
     CHECK(head->instruction_count==1 && head->run_count && head->run_capacity && head->runs);
-    size_t allocated=attempts;uint64_t physical=live_bytes;
-    pc_allocate_hook=selector_no_callback;pc_free_hook=selector_no_callback;
+    size_t allocated=rp_attempts;uint64_t physical=rp_live_bytes;
+    rp_allocation_observer=selector_no_callback;rp_release_observer=selector_no_callback;
     for(unsigned mode=0;mode<3;++mode) {
         if(mode==1) { head->instruction_count=0;head->run_count=0; }
         if(mode==2) *head=saved;
@@ -450,7 +445,7 @@ int main(int argc,char **argv) {
     memset(&fixture,0xDC,sizeof(fixture));EffectFinalInputSelect selected;XrXirInstruction op;uint32_t ordinal=0;bool found=true;
     CHECK(effect_final_input_select_begin(&body,EFFECT_FINAL_SELECT_REFERENCE,&selected)==XR_XIR_OK);
     CHECK(effect_final_input_select_next(&body,1,&selected,&ordinal,&op,&found)==XR_XIR_OK && !found);
-    pc_allocate_hook=NULL;pc_free_hook=NULL;CHECK(attempts==allocated && physical==live_bytes);
-    effect_body_material_free(material);pc_release(&context,baseline);
+    rp_allocation_observer=NULL;rp_release_observer=NULL;CHECK(rp_attempts==allocated && physical==rp_live_bytes);
+    effect_body_material_free(material);rp_owner_free(&context,baseline);CHECK(!rp_live && !rp_live_bytes);
     puts("actual opcode selector: zero instruction/storage inconsistency rejected; restoration, producer death, no callbacks and physical0");return 0;
 }

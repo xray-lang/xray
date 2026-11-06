@@ -27,7 +27,7 @@ static void conditional_compact_directory_rows(XrXirInstruction *source,uint32_t
  * last rows of all groups are therefore full ten-field receiving cases. */
 static void conditional_compact_directory_values(const XrXirCompileContext *context,
     const EffectBodyFunction *body,const XrXirInstruction *expected) {
-    EffectBodyRead read=effect_body_compile_read(context);
+    EffectBodyRead read=(EffectBodyRead){.owner=context,.execution=NULL};
     for (uint32_t order=0;order<body->instruction_count;++order) {
         uint32_t i=(order*2+7)%body->instruction_count;
         XrXirInstruction decoded;
@@ -45,7 +45,7 @@ static void conditional_compact_directory_values(const XrXirCompileContext *cont
  * internal group is always rejected by the full current source correspondence. */
 static void conditional_compact_directory_damage(const XrXirCompileContext *context,
     EffectBodyFunction *body,const XrXirFunction *expected) {
-    EffectBodyRead read=effect_body_compile_read(context);
+    EffectBodyRead read=(EffectBodyRead){.owner=context,.execution=NULL};
     uint32_t index=body->run_count/2;EffectBodyRun *middle=&body->runs[index];
     uint32_t first=middle->first,count=middle->count,mask=middle->mask;
     uint32_t word=0;while (!(mask&(UINT32_C(1)<<word))) ++word;
@@ -100,7 +100,7 @@ static void conditional_compact_tiny_rows(XrXirInstruction *rows,uint32_t mask) 
  * directory, including the unselected second run. Output remains untouched. */
 static void conditional_compact_tiny_damage(const XrXirCompileContext *context,
     EffectBodyFunction *body,const XrXirInstruction *expected) {
-    EffectBodyRead read=effect_body_compile_read(context);
+    EffectBodyRead read=(EffectBodyRead){.owner=context,.execution=NULL};
     for (uint32_t r=0;r<body->run_count;++r) {
         EffectBodyRun *run=&body->runs[r];
         uint32_t first=run->first,count=run->count,mask=run->mask;
@@ -132,7 +132,7 @@ static void conditional_compact_tiny_masks(void) {
     _Static_assert(XR_XIR_CONST_INT+2<XR_XIR_OP_COUNT,"Physical test opcodes must be representable");
     for (uint32_t mask=0;mask<1024;++mask) for (uint32_t tail=0;tail<2;++tail) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-        uint64_t baseline=rp_stats(&context).live_bytes;
+        uint64_t baseline=rp_stats(&context).held_bytes;
         XrXirInstruction source[4],expected[4];conditional_compact_tiny_rows(source,mask);
         memcpy(expected,source,sizeof(expected));
         XrXirFunction raw={.instructions=source,.instruction_count=3+tail};
@@ -140,7 +140,7 @@ static void conditional_compact_tiny_masks(void) {
         CHECK(effect_body_records_copy(&context,&raw,&body)==XR_XIR_OK &&
             body.run_count==1+tail && body.runs[0].mask==mask);
         memset(source,0xCE,sizeof(source));raw.instructions=expected;
-        EffectBodyRead read=effect_body_compile_read(&context);
+        EffectBodyRead read=(EffectBodyRead){.owner=&context,.execution=NULL};
         for (uint32_t order=0;order<body.instruction_count;++order) {
             uint32_t i=body.instruction_count-order-1;XrXirInstruction out;
             CHECK(effect_body_instruction_get(&read,&body,i,&out)==XR_XIR_OK &&
@@ -163,7 +163,7 @@ static void conditional_compact_directory_literals(void) {
     const uint32_t sizes[3]={5,9,17};
     for (uint32_t mode=0;mode<3;++mode) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-        uint64_t held=rp_stats(&context).live_bytes;uint32_t count=sizes[mode]*3;
+        uint64_t held=rp_stats(&context).held_bytes;uint32_t count=sizes[mode]*3;
         XrXirInstruction source[51],expected[51];
         conditional_compact_directory_rows(source,count);memcpy(expected,source,count*sizeof(*source));
         XrXirFunction raw={.instructions=source,.instruction_count=count};

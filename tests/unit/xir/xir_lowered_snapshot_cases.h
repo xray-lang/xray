@@ -31,7 +31,7 @@ static void lowered_snapshot_fixture(LoweredSnapshotFixture *f) {
         .nominal = {.arguments = &f->argument, .argument_count = 1,
             .fields = &f->payload, .field_count = 1}};
     f->nodes[1] = (XrXirTypeNode){.kind = XR_XIR_TYPE_CELL, .element = (XrXirType)256};
-    f->nodes[2] = (XrXirTypeNode){.kind = XR_XIR_TYPE_CALLABLE, .parameters = &f->parameter,
+    f->nodes[2] = (XrXirTypeNode){.element=XR_XIR_NEVER,.kind = XR_XIR_TYPE_CALLABLE, .parameters = &f->parameter,
         .parameter_count = 1, .result = XR_XIR_I64,
         .flags = XR_XIR_CALLABLE_ROOT_NONE | XR_XIR_CALLABLE_NO_SUSPEND};
     f->types = (XrXirTypes){.nodes = f->nodes, .count = 3, .nominals = &f->table};
@@ -99,12 +99,12 @@ static XrXirStatus lowered_snapshot_empty_copy(const XrXirCompileContext *contex
     XrXirTypes empty = {0};
     XrXirInstruction instruction = {.op = XR_XIR_RETURN};
     XrXirBlock block = {.count = 1};
-    XrXirFunction function = {.name = "empty", .name_length = 5, .instructions = &instruction,
+    XrXirFunction function = {.error_type=XR_XIR_NEVER,.name = "empty", .name_length = 5, .instructions = &instruction,
         .instruction_count = 1, .blocks = &block, .block_count = 1};
     XrXirModule module = {.stage = XR_XIR_LOWERED, .functions = &function,
         .function_count = 1, .types = &empty};
     EffectBodyMaterial *body = NULL;
-    XrXirStatus status = effect_body_material_create(context, &module, &body);
+    XrXirStatus status = conditional_owned_body_from_raw(context, &module, &body);
     if (status == XR_XIR_OK) status = effect_lowered_snapshot_match(context, &body->terms.types, &empty);
     if (status == XR_XIR_OK && oracle) {
         CHECK(effect_body_material_shape(body) && !body->owned_types &&
@@ -114,17 +114,17 @@ static XrXirStatus lowered_snapshot_empty_copy(const XrXirCompileContext *contex
             (const void *)body->functions[0].runs != (const void *)&instruction &&
             body->functions[0].blocks != &block &&
             body->functions[0].name != function.name);
-        EffectBodyRead read = effect_body_compile_read(context);XrXirInstruction decoded;
+        EffectBodyRead read = (EffectBodyRead){.owner=context,.execution=NULL};XrXirInstruction decoded;
         CHECK(effect_body_instruction_get(&read, &body->functions[0], 0, &decoded) == XR_XIR_OK &&
             decoded.op == XR_XIR_RETURN && decoded.type == XR_XIR_UNIT && !decoded.immediate &&
             !decoded.args[0] && !decoded.args[1] && !decoded.targets[0] && !decoded.targets[1] &&
             !decoded.type_arguments[0] && !decoded.type_arguments[1]);
         EffectBodyMaterial *rejected = NULL;
         XrXirTypes missing = {.count = 1};module.types = &missing;
-        CHECK(effect_body_material_create(context, &module, &rejected) == XR_XIR_BAD_STRUCTURE);
+        CHECK(conditional_owned_body_from_raw(context, &module, &rejected) == XR_XIR_BAD_STRUCTURE);
         XrXirNominalTable malformed = {.count = 1};
         missing = (XrXirTypes){.nominals = &malformed};
-        CHECK(effect_body_material_create(context, &module, &rejected) == XR_XIR_BAD_STRUCTURE);
+        CHECK(conditional_owned_body_from_raw(context, &module, &rejected) == XR_XIR_BAD_STRUCTURE);
         CHECK(!rejected);
     }
     effect_body_material_free(body);return status;

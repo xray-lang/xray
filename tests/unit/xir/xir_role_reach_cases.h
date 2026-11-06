@@ -11,7 +11,7 @@ static void pc_role_reach_fixture(InvocationRotationFixture *fixture,uint32_t mo
 }
 static void pc_role_reach_literals(void) {
     for (uint32_t mode=0;mode<2;++mode) {
-        XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+        XrXirCompileContext context=rp_owner(rp_caps());context.limits=xr_xir_compile_default_limits();uint64_t baseline=rp_stats(&context).held_bytes;
         InvocationRotationFixture fixture;pc_role_reach_fixture(&fixture,mode);
         XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
         CHECK(xir_fixture_check(&context,&fixture.module,&checked,NULL)==XR_XIR_OK);
@@ -43,6 +43,6 @@ static void pc_role_reach_literals(void) {
         CHECK(effect_role_proof_match(&context,certificate->body,
             &certificate->final->role_proof)==XR_XIR_OK);
         fprintf(stderr,"physical role reachability mode%u five variable roles; ten false kinds and unsupported fixed cycle rejected; producer death passed\n",mode);
-        xr_xir_compile_effects_free(effects);pc_release(&context,baseline);
+        xr_xir_compile_effects_free(effects);rp_owner_free(&context,baseline);CHECK(!rp_live && !rp_live_bytes);
     }
 }

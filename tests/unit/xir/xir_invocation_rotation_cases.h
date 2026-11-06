@@ -199,11 +199,11 @@ static XrXirStatus conditional_invocation_rotation(const XrXirCompileContext *co
             public_facts?public_facts->requires_root:0,public_facts?public_facts->unresolved:0,root_count,unknown_count,
             trace?trace->counts[0]:0,trace?trace->counts[1]:0);
         XrCompileResourceStats end=rp_stats(context);
-        fprintf(stderr,"INVOCATION_ROTATION_RESOURCES allocated=%llu/%llu/%llu work=%llu/%llu/%llu "
+        fprintf(stderr,"INVOCATION_ROTATION_RESOURCES allocated=%llu/%llu/%llu held=%llu/%llu/%llu "
             "live=%llu peak=%llu\n",(unsigned long long)begin.allocated_bytes,
             (unsigned long long)admitted.allocated_bytes,(unsigned long long)end.allocated_bytes,
-            (unsigned long long)begin.work,(unsigned long long)admitted.work,(unsigned long long)end.work,
-            (unsigned long long)end.live_bytes,(unsigned long long)end.peak_bytes);
+            (unsigned long long)begin.held_bytes,(unsigned long long)admitted.held_bytes,(unsigned long long)end.held_bytes,
+            (unsigned long long)end.held_bytes,(unsigned long long)end.peak_bytes);
     }
     effect_invocation_certificate_free(certificate);
     if (status==XR_XIR_OK && oracle) CHECK(trace && trace->counts[0]==7 &&
@@ -213,7 +213,7 @@ static XrXirStatus conditional_invocation_rotation(const XrXirCompileContext *co
 
 static void conditional_invocation_rotation_run(bool pipeline) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-    uint64_t baseline=rp_stats(&context).live_bytes;
+    uint64_t baseline=rp_stats(&context).held_bytes;
     XrXirStatus status=conditional_invocation_rotation(&context,pipeline,true);
     rp_owner_free(&context,baseline);rp_balanced(physical);
     CHECK(status==XR_XIR_OK);

@@ -7,11 +7,11 @@
  * xir_invocation_runtime_edges_cases.h - Literal owned execution edge matching
  */
 typedef struct InvocationRuntimeProbe {
-    const XrXirCompileContext *context;
     uint32_t cell;
+    ConditionalExecutionPolicy policy;
 } InvocationRuntimeProbe;
 static bool invocation_runtime_work(void *owner,uint64_t work) {
-    return xir_compile_work(((InvocationRuntimeProbe *)owner)->context,work);
+    return conditional_execution_take(&((InvocationRuntimeProbe *)owner)->policy,work);
 }
 static uint32_t invocation_runtime_cell(void *owner,uint32_t parameter) {
     CHECK(parameter==0);return ((InvocationRuntimeProbe *)owner)->cell;
@@ -35,7 +35,7 @@ static XrXirStatus conditional_invocation_runtime_edge(const XrXirCompileContext
         instructions[2].immediate=1;instructions[3]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={2,0}};
         actual=0;block.count=4;producer_instruction=1;call_instruction=2;
     }
-    functions[4]=(XrXirFunction){.name="runtime",.name_length=7,.result=XR_XIR_I64,.blocks=&block,
+    functions[4]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="runtime",.name_length=7,.result=XR_XIR_I64,.blocks=&block,
         .block_count=1,.instructions=instructions,.instruction_count=block.count,.operands=&actual,.operand_count=1};
     fixture.declarations.functions=identities;fixture.module.functions=functions;fixture.module.function_count=5;
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
@@ -46,7 +46,7 @@ static XrXirStatus conditional_invocation_runtime_edge(const XrXirCompileContext
         !effect_roots_read(effects)->root[4].unresolved && effect_roots_read(effects)->root[2].unresolved);
     XirEffectProducerView producer={0};
     if (status==XR_XIR_OK) status=xir_effects_producer(context,effects,4,producer_instruction,&producer);
-    InvocationRuntimeProbe read={context,mode};
+    InvocationRuntimeProbe read={mode,{.remaining=UINT64_MAX}};
     XirEffectInvocationRequest request={.caller=4,.instruction=call_instruction,.target=2,
         .producer=producer.site,.node=UINT32_MAX,.count=1,
         .read={.owner=&read,.work=invocation_runtime_work,.cell=invocation_runtime_cell,.value=NULL}};

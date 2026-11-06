@@ -7,12 +7,12 @@
  * xir_final_metadata_cases.h - Owned conditional metadata after producer retirement
  */
 static void pc_outcome_metadata_literals(void) {
-    XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+    XrXirCompileContext context=rp_owner(rp_caps());context.limits=xr_xir_compile_default_limits();uint64_t baseline=rp_stats(&context).held_bytes;
     ClosedCarrierFixture fixture;cc_fixture(&fixture,8);fixture.edge.module.stage=XR_XIR_BUILT;
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&context,&fixture.edge.module,&checked,NULL)==XR_XIR_OK);
     const XrXirModule *input=xr_xir_compile_artifact_module(checked);
-    CHECK(effect_infer_construct(&context,input,NULL,&effects)==XR_XIR_OK && effects);
+    CHECK(effect_infer_construct(&context,(XirEffectInput){input,xr_xir_compile_artifact_construction(checked),NULL},NULL,&effects)==XR_XIR_OK && effects);
     XrXirFunctionEffectContract *contracts=effects->outcomes_work.contracts;
     XirEffectEntryRootView *entries=effects->outcomes_work.entry_roots;
     CHECK(contracts && entries && contracts[1].parameter_count==1 && contracts[1].parameters &&
@@ -22,10 +22,10 @@ static void pc_outcome_metadata_literals(void) {
     const XrXirEffectParameter *roles=contracts[1].parameters;
     const uint32_t *parameters=entries[1].parameters;
     XirEffectEntryRootView untouched={.intrinsic_mask=UINT32_MAX};
-    XrCompileResourceStats before=pc_stats(&context);size_t physical_before=attempts;
+    XrCompileResourceStats before=rp_stats(&context);size_t physical_before=rp_attempts;
     CHECK(xir_effects_entry_root(&context,effects,1,&untouched)==XR_XIR_BAD_STRUCTURE &&
         untouched.intrinsic_mask==UINT32_MAX && !untouched.parameter_count && !untouched.parameters &&
-        pc_stats(&context).work==before.work && attempts==physical_before);
+        conditional_memory_unchanged(&context,before) && rp_attempts==physical_before);
     CHECK(effect_outcomes_publish(&context,input,effects)==XR_XIR_OK);
     const EffectFinalOutcomes *final=effect_final_outcomes(effects);
     CHECK(final && final->contracts==contracts && final->entry_roots==entries &&
@@ -40,9 +40,10 @@ static void pc_outcome_metadata_literals(void) {
     CHECK(xir_effects_contract(effects,1)==&final->contracts[1] &&
         final->contracts[1].parameter_count==1 && final->contracts[1].parameters==roles &&
         final->contracts[1].formula.term_count==1 && final->contracts[1].formula.terms[0].kind==XR_XIR_ROOT_TERM_CELL_PARAMETER);
-    XrXirEffects fresh={0};CHECK(effect_legacy_error_oracle_prepare(&context,effects,&fresh)==XR_XIR_OK);
+    XrCompileResourceStats borrow_before=rp_stats(&context);size_t borrow_attempts=rp_attempts;
+    XrXirEffects fresh={.resources=context.resources,.count=effects->count,.root_input=final};
     CHECK(fresh.root_input==final && !fresh.outcomes_work.contracts &&
         effect_contracts_read(&fresh)==final->contracts && !fresh.outcomes_work.entry_roots);
-    effect_legacy_error_oracle_free(&fresh);
-    xr_xir_compile_effects_free(effects);pc_release(&context,baseline);
+    CHECK(rp_attempts==borrow_attempts && conditional_memory_unchanged(&context,borrow_before));
+    xr_xir_compile_effects_free(effects);rp_owner_free(&context,baseline);CHECK(!rp_live && !rp_live_bytes);
 }

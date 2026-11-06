@@ -19,7 +19,7 @@ static XrXirStatus invocation_raw_physical_match(const XrXirCompileContext *work
     for (uint32_t f=0;f<domain->count;++f) {
         const EffectPhysicalFunction *body=&domain->functions[f];
         const XrXirFunction *function=&module->functions[f];
-        if (!xir_compile_work(work,7)) return XR_XIR_BUDGET;
+
         if (body->parameters!=function->parameter_count || body->instructions!=function->instruction_count ||
             body->values!=(uint64_t)function->parameter_count+function->instruction_count ||
             body->rows>body->values || body->classes>body->values || body->count>body->capacity || body->capacity>body->values ||
@@ -28,7 +28,7 @@ static XrXirStatus invocation_raw_physical_match(const XrXirCompileContext *work
             (function->instruction_count && !function->instructions)) return XR_XIR_BAD_STRUCTURE;
         uint32_t row=0,classes=0,at=0;
         for (uint32_t v=0;v<body->values;++v) {
-            if (!xir_compile_work(work,v<body->parameters?2:3)) return XR_XIR_BUDGET;
+
             uint32_t mask=0;
             if (v>=body->parameters) {
                 XrXirOp op=function->instructions[v-body->parameters].op;
@@ -37,13 +37,13 @@ static XrXirStatus invocation_raw_physical_match(const XrXirCompileContext *work
             }
             if (xr_xir_callable_signature(module->types,xr_xir_operand_type(function,v)))
                 mask|=EFFECT_PHYSICAL_CALLABLE;
-            if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+
             if (xr_xir_type_is_class(module->types,xr_xir_operand_type(function,v))) {
                 mask|=EFFECT_PHYSICAL_CLASS; ++classes;
             }
             if (mask&EFFECT_PHYSICAL_CALLABLE) ++row;
             if (!mask) continue;
-            if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+
             if (at>=body->count || body->records[at].value!=v || body->records[at].mask!=mask)
                 return XR_XIR_BAD_STRUCTURE;
             ++at;

@@ -55,7 +55,7 @@ static void invocation_nonroot_slot_erasure(const XrXirCompileContext *work,
     status=effect_invocation_publication_match(work,certificate,summary);
     if(status!=XR_XIR_OK) {
         XrCompileResourceStats stats=rp_stats(work);
-        fprintf(stderr,"nonroot restored status%u work%llu\n",status,(unsigned long long)stats.work);
+        fprintf(stderr,"nonroot restored status%u held%llu\n",status,(unsigned long long)stats.held_bytes);
     }
     CHECK(status==XR_XIR_OK);
 }

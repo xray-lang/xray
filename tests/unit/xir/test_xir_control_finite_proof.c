@@ -8,22 +8,23 @@
  * test_xir_control_finite_proof.c - Actual finite control evidence counterfacts
  */
 #define main pending_control_fixture_entry
-#include "test_xir_error_cfg_pending.c"
+#include "test_xir_root_conditional_helpers.c"
 #undef main
 
-static void control_no_callback(void *memory,size_t bytes) {
+static void control_no_callback(void *memory) {
+    size_t bytes=pc_final_physical_size(memory);
     (void)memory;(void)bytes;CHECK(false);
 }
 static void control_verify(const XrXirCompileContext *context,const XrXirEffects *effects,XrXirStatus expected) {
-    size_t before=attempts;uint64_t physical=live_bytes;
-    CHECK(!pc_allocate_hook && !pc_free_hook);pc_allocate_hook=control_no_callback;pc_free_hook=control_no_callback;
+    size_t before=rp_attempts;uint64_t physical=rp_live_bytes;
+    CHECK(!rp_allocation_observer && !rp_release_observer);rp_allocation_observer=control_no_callback;rp_release_observer=control_no_callback;
     XrXirStatus status=effect_final_control_verify(context,effects);
-    pc_allocate_hook=NULL;pc_free_hook=NULL;
+    rp_allocation_observer=NULL;rp_release_observer=NULL;
     if(status!=expected) fprintf(stderr,"control status%u expected%u\n",status,expected);
-    CHECK(status==expected && attempts==before && physical==live_bytes);
+    CHECK(status==expected && rp_attempts==before && physical==rp_live_bytes);
 }
 static void control_counterfacts(void) {
-    XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+    XrXirCompileContext context=rp_owner(rp_caps());context.limits=xr_xir_compile_default_limits();uint64_t baseline=rp_stats(&context).held_bytes;
     PcControlFixture fixture;pc_control_fixture(&fixture,true);
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&context,&fixture.module,&checked,NULL)==XR_XIR_OK);
@@ -56,14 +57,14 @@ static void control_counterfacts(void) {
         control_verify(&context,effects,XR_XIR_BAD_STRUCTURE);memcpy(proof,saved,(size_t)bytes);final->go_safe[0]=XR_XIR_OK;
         control_verify(&context,effects,XR_XIR_OK);
     }
-    XrXirCompileContext foreign=context;foreign.resources=NULL;XrCompileResourceLimits caps=pc_caps();
+    XrXirCompileContext foreign=context;foreign.resources=NULL;XrCompileResourceLimits caps=rp_caps();
     CHECK(xr_compile_resources_new(&caps,&foreign.resources)==XR_COMPILE_RESOURCE_OK);
     control_verify(&foreign,effects,XR_XIR_BAD_STRUCTURE);xr_compile_resources_release(foreign.resources);
-    xr_xir_compile_effects_free(effects);pc_release(&context,baseline);
+    xr_xir_compile_effects_free(effects);rp_owner_free(&context,baseline);CHECK(!rp_live && !rp_live_bytes);
     puts("finite Control: 14 malformed/joint counterfacts, foreign owner, producer death, no callbacks");
 }
 static void control_unseeded_cycle(void) {
-    XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+    XrXirCompileContext context=rp_owner(rp_caps());context.limits=xr_xir_compile_default_limits();uint64_t baseline=rp_stats(&context).held_bytes;
     PcControlFixture fixture;pc_control_fixture(&fixture,false);XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&context,&fixture.module,&checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_effects_analyze(checked,&effects)==XR_XIR_OK);
@@ -87,17 +88,17 @@ static void control_unseeded_cycle(void) {
         }
         control_verify(&context,effects,XR_XIR_OK);
     }
-    xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);pc_release(&context,baseline);
+    xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);rp_owner_free(&context,baseline);CHECK(!rp_live && !rp_live_bytes);
     puts("finite Control: jointly invented suspend/Task/shape cycles rejected");
 }
 static XrCompileResourceStats control_boundary(XrCompileResourceLimits caps,XrXirStatus expected) {
-    XrXirCompileContext context=pc_owner(caps);uint64_t baseline=pc_stats(&context).live_bytes;
+    XrXirCompileContext context=rp_owner(caps);context.limits=xr_xir_compile_default_limits();uint64_t baseline=rp_stats(&context).held_bytes;
     PcControlFixture fixture;pc_control_fixture(&fixture,true);XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&context,&fixture.module,&checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_effects_analyze(checked,&effects)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);memset(&fixture,0xDD,sizeof(fixture));
-    control_verify(&context,effects,expected);XrCompileResourceStats measured=pc_stats(&context);
-    xr_xir_compile_effects_free(effects);pc_release(&context,baseline);return measured;
+    control_verify(&context,effects,expected);XrCompileResourceStats measured=rp_stats(&context);
+    xr_xir_compile_effects_free(effects);rp_owner_free(&context,baseline);CHECK(!rp_live && !rp_live_bytes);return measured;
 }
 static XrXirStatus control_whole(const XrXirCompileContext *context) {
     PcControlFixture fixture;pc_control_fixture(&fixture,true);XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
@@ -105,36 +106,35 @@ static XrXirStatus control_whole(const XrXirCompileContext *context) {
     if(status==XR_XIR_OK) status=xr_xir_compile_effects_analyze(checked,&effects);
     xr_xir_compile_artifact_free(checked);memset(&fixture,0xCE,sizeof(fixture));
     if(status==XR_XIR_OK) {
-        size_t before=attempts;uint64_t physical=live_bytes;
-        pc_allocate_hook=control_no_callback;pc_free_hook=control_no_callback;
-        status=effect_final_control_verify(context,effects);pc_allocate_hook=NULL;pc_free_hook=NULL;
-        CHECK(attempts==before && live_bytes==physical);
+        size_t before=rp_attempts;uint64_t physical=rp_live_bytes;
+        rp_allocation_observer=control_no_callback;rp_release_observer=control_no_callback;
+        status=effect_final_control_verify(context,effects);rp_allocation_observer=NULL;rp_release_observer=NULL;
+        CHECK(rp_attempts==before && rp_live_bytes==physical);
     }
     xr_xir_compile_effects_free(effects);return status;
 }
 static XrCompileResourceStats control_measured(XrCompileResourceLimits caps,XrXirStatus expected) {
-    XrXirCompileContext context=pc_owner(caps);uint64_t baseline=pc_stats(&context).live_bytes;
-    CHECK(control_whole(&context)==expected);XrCompileResourceStats measured=pc_stats(&context);
-    pc_release(&context,baseline);return measured;
+    XrXirCompileContext context=rp_owner(caps);context.limits=xr_xir_compile_default_limits();uint64_t baseline=rp_stats(&context).held_bytes;
+    CHECK(control_whole(&context)==expected);XrCompileResourceStats measured=rp_stats(&context);
+    rp_owner_free(&context,baseline);CHECK(!rp_live && !rp_live_bytes);return measured;
 }
 static void control_resources(void) {
     size_t sites=0;
     for(size_t pass=0;pass<=sites;++pass) {
-        XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
-        attempts=0;injected=false;fail_at=pass?pass-1:SIZE_MAX;
-        XrXirStatus status=control_whole(&context);size_t actual=attempts;fail_at=SIZE_MAX;
+        XrXirCompileContext context=rp_owner(rp_caps());context.limits=xr_xir_compile_default_limits();uint64_t baseline=rp_stats(&context).held_bytes;
+        rp_attempts=0;rp_injected=false;rp_fail_at=pass?pass-1:SIZE_MAX;
+        XrXirStatus status=control_whole(&context);size_t actual=rp_attempts;rp_fail_at=SIZE_MAX;
         if(!pass) { CHECK(status==XR_XIR_OK && actual && actual<2048);sites=actual; }
-        else CHECK(injected && actual>=pass && status==XR_XIR_OUT_OF_MEMORY);
-        CHECK(pc_stats(&context).live_bytes==baseline && control_whole(&context)==XR_XIR_OK);
-        pc_release(&context,baseline);
+        else CHECK(rp_injected && actual>=pass && status==XR_XIR_OUT_OF_MEMORY);
+        CHECK(rp_stats(&context).held_bytes==baseline && control_whole(&context)==XR_XIR_OK);
+        rp_owner_free(&context,baseline);CHECK(!rp_live && !rp_live_bytes);
     }
-    XrCompileResourceStats measured=control_measured(pc_caps(),XR_XIR_OK);
-    XrCompileResourceLimits exact={measured.allocated_bytes,measured.peak_bytes,measured.work};
+    XrCompileResourceStats measured=control_measured(rp_caps(),XR_XIR_OK);
+    XrCompileResourceLimits exact={XR_COMPILE_MEMORY_FINITE,measured.peak_bytes,true};
     (void)control_measured(exact,XR_XIR_OK);
-    XrCompileResourceLimits less=exact;--less.allocated_bytes;(void)control_measured(less,XR_XIR_BUDGET);
-    less=exact;--less.live_bytes;(void)control_measured(less,XR_XIR_BUDGET);
-    less=exact;--less.work;(void)control_measured(less,XR_XIR_BUDGET);
-    printf("finite Control whole OOM sites%zu; same-owner retry; three exact/minus-one resource axes\n",sites);
+    XrCompileResourceLimits less=exact;CHECK(less.memory_limit>1);--less.memory_limit;
+    (void)control_measured(less,XR_XIR_MEMORY_LIMIT);
+    printf("finite Control whole OOM sites%zu; same-owner retry; held-memory exact/minus-one boundary\n",sites);
 }
 #include "xir_control_input_terminal_cases.h"
 int main(int argc,char **argv) {
@@ -142,8 +142,6 @@ int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"resources")) { control_resources();return 0; }
     CHECK(argc==1);
     pc_control_proof_literals();control_counterfacts();control_unseeded_cycle();
-    XrCompileResourceStats measured=control_boundary(pc_caps(),XR_XIR_OK);XrCompileResourceLimits exact=pc_caps();
-    exact.work=measured.work;CHECK(control_boundary(exact,XR_XIR_OK).work==measured.work);
-    --exact.work;(void)control_boundary(exact,XR_XIR_BUDGET);
-    puts("finite Control: exact/minus-one work boundary, no refund or physical allocation");return 0;
+    (void)control_boundary(rp_caps(),XR_XIR_OK);
+    puts("finite Control: producer death, exact receiving evidence and no physical allocation");return 0;
 }

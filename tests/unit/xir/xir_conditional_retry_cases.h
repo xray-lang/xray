@@ -20,56 +20,89 @@ typedef struct ConditionalRetryTrial {
 
 static XrXirStatus conditional_retry_case(const XrXirCompileContext *context,uint32_t which);
 /* The original census owns cases 0..99; nonroot Input proofs own 100..103. */
-static bool conditional_retry_reported[104];
-static uint64_t conditional_retry_counts[104];
+/* This is the test host's execution read policy, not compiler admission. */
+typedef struct ConditionalExecutionPolicy {
+    uint64_t remaining,calls;
+    bool refused;
+} ConditionalExecutionPolicy;
+static bool conditional_execution_take(ConditionalExecutionPolicy *policy,uint64_t units) {
+    if (!policy) return false;
+    if (policy->calls==UINT64_MAX) { policy->refused=true;return false; }
+    ++policy->calls;
+    if (units>policy->remaining) { policy->refused=true;return false; }
+    policy->remaining-=units;return true;
+}
 
-/* The original single successful operation supplies the minimum complete
- * cost. Nothing resets the retained ledger or resumes a successful substage. */
+/* Refused input and cached reads cannot allocate or retain memory. */
+static bool conditional_memory_unchanged(const XrXirCompileContext *context,
+    XrCompileResourceStats before) {
+    XrCompileResourceStats after=rp_stats(context);
+    return after.held_bytes==before.held_bytes && after.allocated_bytes==before.allocated_bytes &&
+        after.allocation_count==before.allocation_count;
+}
+
+static bool conditional_retry_reported[104];
+static uint64_t conditional_retry_counts[104],conditional_retry_oom_counts[104];
+static size_t conditional_retry_sites[104];
+static bool conditional_retry_exact[104],conditional_retry_short[104];
+
+/* The complete successful operation supplies its held peak. Turnover and
+ * allocation counts are reported statistics, never admission allowances. */
 static void conditional_retry_operation(const XrXirCompileContext *context,
     const ConditionalRetryTrial *trial) {
     CHECK(trial->which<104 && context->resources==trial->resources);
     XrCompileResourceStats consumed=rp_stats(context),initial=trial->initial,single=trial->single;
-    CHECK(consumed.live_bytes==initial.live_bytes && single.live_bytes==initial.live_bytes);
-    CHECK(single.work>=initial.work && single.allocated_bytes>=initial.allocated_bytes &&
-        single.allocation_count>=initial.allocation_count);
+    CHECK(consumed.held_bytes==initial.held_bytes && single.held_bytes==initial.held_bytes);
+    CHECK(single.allocated_bytes>=initial.allocated_bytes && single.allocation_count>=initial.allocation_count);
     rp_balanced(trial->retained);
     XrCompileResourceLimits limits=context->resources->limits;
-    CHECK(consumed.work<=limits.work && consumed.allocated_bytes<=limits.allocated_bytes);
-    uint64_t work=single.work-initial.work,bytes=single.allocated_bytes-initial.allocated_bytes;
+    CHECK(limits.memory_mode==XR_COMPILE_MEMORY_FINITE && limits.profile_allocations);
+    uint64_t bytes=single.allocated_bytes-initial.allocated_bytes;
     uint64_t allocations=single.allocation_count-initial.allocation_count;
-    uint64_t work_left=limits.work-consumed.work,bytes_left=limits.allocated_bytes-consumed.allocated_bytes;
-    bool fits=work<=work_left && bytes<=bytes_left && single.peak_bytes<=limits.live_bytes;
-    if (trial->first==XR_XIR_BUDGET) CHECK(!fits);
+    bool fits=single.peak_bytes<=limits.memory_limit;
+    if (trial->first==XR_XIR_OUT_OF_MEMORY) {
+        CHECK(rp_injected && trial->ordinal<trial->sites && fits);
+        ++conditional_retry_oom_counts[trial->which];
+    } else if (trial->first==XR_XIR_MEMORY_LIMIT) {
+        CHECK(!fits && single.peak_bytes-limits.memory_limit==1);
+        conditional_retry_short[trial->which]=true;
+    } else {
+        CHECK(trial->first==XR_XIR_OK && fits && limits.memory_limit==single.peak_bytes);
+        conditional_retry_exact[trial->which]=true;
+    }
+    if (trial->sites>conditional_retry_sites[trial->which]) conditional_retry_sites[trial->which]=trial->sites;
     size_t attempts=rp_attempts;rp_fail_at=SIZE_MAX;
     XrXirStatus status=conditional_retry_case(context,trial->which);
     XrCompileResourceStats retried=rp_stats(context);
-    CHECK(context->resources==trial->resources && retried.live_bytes==initial.live_bytes &&
-        retried.work>=consumed.work && retried.allocated_bytes>=consumed.allocated_bytes &&
+    CHECK(context->resources==trial->resources && retried.held_bytes==initial.held_bytes &&
+        retried.allocated_bytes>=consumed.allocated_bytes &&
         retried.allocation_count>=consumed.allocation_count && rp_attempts>=attempts);
     rp_balanced(trial->retained);
     if (!fits && !conditional_retry_reported[trial->which]) {
-        fprintf(stderr,"CONDITIONAL_RETRY_REMAINDER case=%u ordinal=%zu first=%u result=%u "
-            "required_work=%llu remaining_work=%llu required_bytes=%llu remaining_bytes=%llu "
-            "required_peak=%llu live_limit=%llu consumed_work=%llu retry_work=%llu\n",
+        fprintf(stderr,"CONDITIONAL_RETRY_MEMORY case=%u ordinal=%zu first=%u result=%u "
+            "required_peak=%llu memory_limit=%llu held=%llu allocated=%llu/%llu\n",
             trial->which,trial->ordinal,(uint32_t)trial->first,(uint32_t)status,
-            (unsigned long long)work,(unsigned long long)work_left,(unsigned long long)bytes,
-            (unsigned long long)bytes_left,(unsigned long long)single.peak_bytes,
-            (unsigned long long)limits.live_bytes,(unsigned long long)consumed.work,
-            (unsigned long long)retried.work);
+            (unsigned long long)single.peak_bytes,(unsigned long long)limits.memory_limit,
+            (unsigned long long)retried.held_bytes,(unsigned long long)consumed.allocated_bytes,
+            (unsigned long long)retried.allocated_bytes);
         conditional_retry_reported[trial->which]=true;
     }
-    if (status!=(fits?XR_XIR_OK:XR_XIR_BUDGET)) fprintf(stderr,
-        "CONDITIONAL_RETRY_FIRST case=%u ordinal=%zu first=%u result=%u fits=%u "
-        "single_work=%llu consumed_work=%llu retried_work=%llu\n",trial->which,trial->ordinal,
-        (uint32_t)trial->first,(uint32_t)status,(uint32_t)fits,(unsigned long long)work,
-        (unsigned long long)consumed.work,(unsigned long long)retried.work);
-    CHECK(status==(fits?XR_XIR_OK:XR_XIR_BUDGET));
+    if (status!=(fits?XR_XIR_OK:XR_XIR_MEMORY_LIMIT)) fprintf(stderr,
+        "CONDITIONAL_RETRY_FIRST case=%u ordinal=%zu first=%u result=%u fits=%u\n",
+        trial->which,trial->ordinal,(uint32_t)trial->first,(uint32_t)status,(uint32_t)fits);
+    CHECK(status==(fits?XR_XIR_OK:XR_XIR_MEMORY_LIMIT));
     if (fits) {
-        CHECK(retried.work-consumed.work==work && retried.allocated_bytes-consumed.allocated_bytes==bytes &&
+        CHECK(retried.allocated_bytes-consumed.allocated_bytes==bytes &&
             retried.allocation_count-consumed.allocation_count==allocations);
         CHECK(rp_attempts-attempts==trial->sites);
     }
     ++conditional_retry_counts[trial->which];
+}
+
+static void conditional_retry_coverage(uint32_t which) {
+    CHECK(which<104 && conditional_retry_exact[which] && conditional_retry_short[which]);
+    CHECK(conditional_retry_oom_counts[which]>=conditional_retry_sites[which] &&
+        conditional_retry_counts[which]>=(uint64_t)conditional_retry_sites[which]+2);
 }
 
 /* Every case runs once before any retry. This short observer cannot
@@ -82,17 +115,16 @@ static void conditional_retry_census(void) {
         XrXirStatus status=conditional_retry_case(&context,which);XrCompileResourceStats single=rp_stats(&context);
         fprintf(stderr,"CONDITIONAL_RETRY_CENSUS case=%u status=%u sites=%zu "
             "initial_allocations=%llu allocations=%llu initial_bytes=%llu bytes=%llu "
-            "initial_work=%llu work=%llu live=%llu peak=%llu\n",which,(uint32_t)status,rp_attempts-attempts,
+            "held=%llu peak=%llu\n",which,(uint32_t)status,rp_attempts-attempts,
             (unsigned long long)initial.allocation_count,(unsigned long long)single.allocation_count,
             (unsigned long long)initial.allocated_bytes,(unsigned long long)single.allocated_bytes,
-            (unsigned long long)initial.work,(unsigned long long)single.work,
-            (unsigned long long)single.live_bytes,(unsigned long long)single.peak_bytes);
-        CHECK(status==XR_XIR_OK && single.live_bytes==initial.live_bytes);rp_balanced(retained);
-        rp_owner_free(&context,initial.live_bytes);rp_balanced(physical);
+            (unsigned long long)single.held_bytes,(unsigned long long)single.peak_bytes);
+        CHECK(status==XR_XIR_OK && single.held_bytes==initial.held_bytes);rp_balanced(retained);
+        rp_owner_free(&context,initial.held_bytes);rp_balanced(physical);
     }
 }
 
 static void conditional_retry_complete(void) {
-    for (uint32_t which=0;which<100;++which) CHECK(conditional_retry_counts[which]>=6);
+    for (uint32_t which=0;which<100;++which) conditional_retry_coverage(which);
 }
 #endif // XIR_CONDITIONAL_RETRY_CASES_H

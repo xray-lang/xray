@@ -53,7 +53,7 @@ static XrXirStatus conditional_projection_length_reference(const XrXirCompileCon
     XrXirStatus status=effect_invocation_trace_walk_selected(work,certificate,request,&count,&selection,NULL);
     if (status!=XR_XIR_OK) return status;
     bool symbolic=false;
-    if (!xir_compile_work(work,sizeof(EffectInvocationProjectedCause))) return XR_XIR_BUDGET;
+
     const EffectInvocationProjectedCause projected={selection.atom,&selection.witness};
     XrXirRootEffectWitness terminal={0};
     status=effect_invocation_public_transform(work,certificate,request->function,&projected,
@@ -67,7 +67,7 @@ static XrXirStatus conditional_projection_length_reference(const XrXirCompileCon
     if (!count) { *length=0;return XR_XIR_OK; }
     if (symbolic) {
         if (output) {
-            if (!xir_compile_work(work,sizeof(*output->steps))) return XR_XIR_BUDGET;
+
             output->steps[0]=(XrXirRootCauseStep){certificate->origins[request->function].function,
                 terminal.instruction,terminal.callee,terminal.slot,terminal.distance,terminal.cause};
         }
@@ -77,14 +77,14 @@ static XrXirStatus conditional_projection_length_reference(const XrXirCompileCon
     uint32_t atom=selection.atom;
     uint32_t current=equations->roots[request->function];
     for (uint32_t at=0;at<count;++at) {
-        if (!xir_compile_work(work,8)) return XR_XIR_BUDGET;
+
         const EffectInvocationNode *node=&equations->nodes[current];
         const EffectInvocationCause *cause=&node->causes[atom];
         XrXirRootEffectWitness witness=effect_invocation_public_witness(certificate,node,cause);
         if (!witness.cause || witness.distance>=limit || witness.distance!=count-at-1)
             return XR_XIR_BAD_STRUCTURE;
         if (output) {
-            if (!xir_compile_work(work,sizeof(*output->steps))) return XR_XIR_BUDGET;
+
             output->steps[at]=(XrXirRootCauseStep){certificate->origins[node->body].function,
                 witness.instruction,witness.callee,witness.slot,witness.distance,witness.cause};
         }

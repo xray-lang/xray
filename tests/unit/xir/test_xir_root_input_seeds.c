@@ -7,15 +7,16 @@
  * test_xir_root_input_seeds.c - Actual public environment seeds at final Source reception
  */
 #define main root_seed_pending_entry
-#include "test_xir_error_cfg_pending.c"
+#include "test_xir_root_conditional_helpers.c"
 #undef main
 static EffectInvocationCertificate *seed_certificate;
 static uint32_t seed_cut,seed_frees,seed_attacks,seed_attack,seed_shape;
 static const uint64_t seed_words[16]={8,4,4,4,8,28,4,28,8,24,40,56,8,24,4,28};
-static void seed_free(void *memory,size_t bytes) {
+static void seed_free(void *memory) {
+    size_t bytes=pc_final_physical_size(memory);
     CHECK(memory && bytes);++seed_frees;
     if(!seed_certificate || seed_frees!=seed_cut) return;
-    pc_free_hook=NULL;++seed_attacks;EffectInvocationFinal *final=seed_certificate->final;
+    rp_release_observer=NULL;++seed_attacks;EffectInvocationFinal *final=seed_certificate->final;
     uint32_t function=seed_attack==2?4:seed_attack==3?5:3;
     EffectInvocationNode *node=&final->nodes[final->roots[function]];
     if(seed_attack<=3) {
@@ -28,16 +29,17 @@ static void seed_free(void *memory,size_t bytes) {
         node->input[0]=seed_words[(seed_shape&12)|other];
     } else CHECK(false);
 }
-static void seed_forbid(void *memory,size_t bytes) { (void)memory;(void)bytes;CHECK(false); }
+static void seed_forbid(void *memory) {
+    size_t bytes=pc_final_physical_size(memory); (void)memory;(void)bytes;CHECK(false); }
 static uint32_t seed_source_once(unsigned shape,uint32_t cut,unsigned attack) {
     const uint32_t flags[4]={XR_XIR_CALLABLE_ROOT_NONE,XR_XIR_CALLABLE_ROOT_REQUIRED,XR_XIR_CALLABLE_ROOT_UNRESOLVED,XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     uint32_t advertised=flags[shape&3],mask=advertised&(XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED);bool ref=(shape&4)!=0,fixed=(shape&8)!=0;
     XrXirCallableParameter reference={(XrXirType)257,XR_PARAM_REF};
     XrXirNominalDeclaration declaration={.module={"inventory",9},.name={"Local",5},.kind=XR_XIR_NOMINAL_CLASS,.flags=XR_XIR_NOMINAL_FINAL};
     XrXirNominalTable table={.declarations=&declaration,.count=1};
-    XrXirTypeNode nodes[4]={{.kind=XR_XIR_TYPE_CALLABLE,.flags=XR_XIR_CALLABLE_ROOT_NONE},
+    XrXirTypeNode nodes[4]={{.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.flags=XR_XIR_CALLABLE_ROOT_NONE},
         {.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64},{.kind=XR_XIR_TYPE_NOMINAL},
-        {.kind=XR_XIR_TYPE_CALLABLE,.flags=advertised,.parameters=ref?&reference:NULL,.parameter_count=ref?1u:0u}};
+        {.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.flags=advertised,.parameters=ref?&reference:NULL,.parameter_count=ref?1u:0u}};
     XrXirTypes types={.nodes=nodes,.count=mask || ref?4u:3u,.nominals=&table};
     XrXirType scalar=XR_XIR_I64,callable=(XrXirType)(mask || ref?259:256),cell=(XrXirType)257,object=(XrXirType)258;
     XrXirInstruction ret={.op=XR_XIR_RETURN},escape[2]={{.op=XR_XIR_FUNCTION_WEAKEN,.type=callable},{.op=XR_XIR_RETURN}};
@@ -47,12 +49,12 @@ static uint32_t seed_source_once(unsigned shape,uint32_t cut,unsigned attack) {
         {.op=XR_XIR_RETURN,.args={1}}};uint32_t operands[2]={0,0};
     XrXirBlock blocks[6]={{.count=1},{.count=4},{.count=1},{.count=fixed?2u:1u},{.count=1},{.count=1}};
     XrXirFunction functions[6]={
-        {.name="init",.name_length=4,.instructions=&ret,.instruction_count=1,.blocks=&blocks[0],.block_count=1},
-        {.name="factory",.name_length=7,.result=(XrXirType)256,.instructions=ops,.instruction_count=4,.blocks=&blocks[1],.block_count=1,.operands=operands,.operand_count=2},
-        {.name="scalar",.name_length=6,.parameters=&scalar,.parameter_count=1,.instructions=&ret,.instruction_count=1,.blocks=&blocks[2],.block_count=1},
-        {.name="callback",.name_length=8,.parameters=&callable,.parameter_count=1,.result=XR_XIR_UNIT,.instructions=fixed?escape:&ret,.instruction_count=fixed?2u:1u,.blocks=&blocks[3],.block_count=1},
-        {.name="cell",.name_length=4,.parameters=&cell,.parameter_count=1,.instructions=&ret,.instruction_count=1,.blocks=&blocks[4],.block_count=1},
-        {.name="object",.name_length=6,.parameters=&object,.parameter_count=1,.instructions=&ret,.instruction_count=1,.blocks=&blocks[5],.block_count=1}};
+        {.error_type=XR_XIR_NEVER,.name="init",.name_length=4,.instructions=&ret,.instruction_count=1,.blocks=&blocks[0],.block_count=1},
+        {.error_type=XR_XIR_NEVER,.name="factory",.name_length=7,.result=(XrXirType)256,.instructions=ops,.instruction_count=4,.blocks=&blocks[1],.block_count=1,.operands=operands,.operand_count=2},
+        {.error_type=XR_XIR_NEVER,.name="scalar",.name_length=6,.parameters=&scalar,.parameter_count=1,.instructions=&ret,.instruction_count=1,.blocks=&blocks[2],.block_count=1},
+        {.error_type=XR_XIR_NEVER,.name="callback",.name_length=8,.parameters=&callable,.parameter_count=1,.result=XR_XIR_UNIT,.instructions=fixed?escape:&ret,.instruction_count=fixed?2u:1u,.blocks=&blocks[3],.block_count=1},
+        {.error_type=XR_XIR_NEVER,.name="cell",.name_length=4,.parameters=&cell,.parameter_count=1,.instructions=&ret,.instruction_count=1,.blocks=&blocks[4],.block_count=1},
+        {.error_type=XR_XIR_NEVER,.name="object",.name_length=6,.parameters=&object,.parameter_count=1,.instructions=&ret,.instruction_count=1,.blocks=&blocks[5],.block_count=1}};
     const XrXirSourceModule source={.name="inventory",.name_length=9,.dependencies=NULL,.dependency_count=0,
         .initializer=0,.lexical_scope=0,.storage=XR_XIR_MODULE_FRESH_STORAGE};XrXirFunctionIdentity identities[6]={0};
     const XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.root_module=UINT32_MAX,.entry_function=UINT32_MAX};
@@ -63,7 +65,7 @@ static uint32_t seed_source_once(unsigned shape,uint32_t cut,unsigned attack) {
         {.parameter_count=1,.parameters=&plain},{.parameter_count=1,.parameters=&plain}};
     const XrXirProvenance provenance={.kind=XR_XIR_EVIDENCE_TEMPLATE,.contracts=contracts,.contract_count=6};
     const XrXirModule module={.stage=XR_XIR_BUILT,.linkage_kind=XR_XIR_LIBRARY,.functions=functions,.function_count=6,.types=&types,.declarations=&declarations,.provenance=&provenance};
-    XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+    XrXirCompileContext context=rp_owner(rp_caps());context.limits=xr_xir_compile_default_limits();uint64_t baseline=rp_stats(&context).held_bytes;
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;XrXirDiagnostic diagnostic={0};
     XrXirStatus status=xir_fixture_check(&context,&module,&checked,&diagnostic);
     if(status!=XR_XIR_OK) fprintf(stderr,"seed admission%u shape%u f%u i%u reason%u\n",status,shape,diagnostic.function,diagnostic.instruction,diagnostic.reason);
@@ -85,20 +87,20 @@ static uint32_t seed_source_once(unsigned shape,uint32_t cut,unsigned attack) {
     CHECK(certificate->declared->functions[3].count>=1 && certificate->declared->functions[3].bounds[0].value==0);
     CHECK(certificate->declared->functions[3].bounds[0].mask==mask);
     seed_certificate=attack?certificate:NULL;seed_cut=cut;seed_frees=0;seed_attacks=0;seed_attack=attack;seed_shape=shape;
-    CHECK(!pc_free_hook);pc_free_hook=seed_free;
+    CHECK(!rp_release_observer);rp_release_observer=seed_free;
     status=xir_fixture_effects_terminal(&context,(XirFixtureEffectInput){xr_xir_compile_artifact_module(checked),
         xr_xir_compile_artifact_construction(checked)},effects);
-    pc_free_hook=NULL;seed_certificate=NULL;uint32_t frees=seed_frees;CHECK(!attack || seed_attacks==1);
+    rp_release_observer=NULL;seed_certificate=NULL;uint32_t frees=seed_frees;CHECK(!attack || seed_attacks==1);
     fprintf(stderr,"actual Source root seed shape%u attack%u cut%u frees%u status%u expected%u\n",shape,attack,cut,frees,status,attack?XR_XIR_BAD_STRUCTURE:XR_XIR_OK);
     for(uint32_t f=3;f<6;++f) memcpy(final->nodes[final->roots[f]].input,saved[f-3],(size_t)basis.row_words*sizeof(uint64_t));
     certificate->declared->functions[3].bounds[0].mask=mask;
     CHECK(xir_fixture_effects_terminal(&context,(XirFixtureEffectInput){xr_xir_compile_artifact_module(checked),
         xr_xir_compile_artifact_construction(checked)},effects)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);memset(ops,0xDC,sizeof(ops));memset(functions,0xDC,sizeof(functions));
-    size_t allocated=attempts;uint64_t physical=live_bytes;pc_allocate_hook=seed_forbid;pc_free_hook=seed_forbid;
+    size_t allocated=rp_attempts;uint64_t physical=rp_live_bytes;rp_allocation_observer=seed_forbid;rp_release_observer=seed_forbid;
     CHECK(effect_final_inventories_match(&context,certificate,final->outcomes)==XR_XIR_OK);
-    pc_allocate_hook=NULL;pc_free_hook=NULL;CHECK(attempts==allocated && live_bytes==physical);
-    xr_xir_compile_effects_free(effects);pc_release(&context,baseline);
+    rp_allocation_observer=NULL;rp_release_observer=NULL;CHECK(rp_attempts==allocated && rp_live_bytes==physical);
+    xr_xir_compile_effects_free(effects);rp_owner_free(&context,baseline);CHECK(!rp_live && !rp_live_bytes);
     CHECK(status==(attack?XR_XIR_BAD_STRUCTURE:XR_XIR_OK));return frees;
 }
 int main(int argc,char **argv) {

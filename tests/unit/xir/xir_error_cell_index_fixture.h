@@ -64,8 +64,8 @@ static void ci_fixture(CellIndexFixture *f, CellBoundary boundary, bool snapshot
     f->nominals=(XrXirNominalTable){.declarations=&f->nominal,.count=1};
     f->nodes[0].kind=XR_XIR_TYPE_NOMINAL;
     f->nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CELL,.element=(XrXirType)CI_ENUM};
-    f->nodes[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_TASK,.element=XR_XIR_UNIT};
-    f->nodes[3]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,
+    f->nodes[2]=(XrXirTypeNode){.result=XR_XIR_NEVER,.kind=XR_XIR_TYPE_TASK,.element=XR_XIR_UNIT};
+    f->nodes[3]=(XrXirTypeNode){.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,
         .flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     f->types=(XrXirTypes){.nodes=f->nodes,.count=4,.nominals=&f->nominals};
     f->parameters[0]=(XrXirType)CI_CELL; f->parameters[1]=(XrXirType)CI_FN;
@@ -76,7 +76,7 @@ static void ci_fixture(CellIndexFixture *f, CellBoundary boundary, bool snapshot
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,
         .functions=f->identities,.literals=&f->literal,.literal_count=1,
         .root_module=UINT32_MAX,.entry_function=UINT32_MAX};
-    f->functions[0]=(XrXirFunction){.name="init",.name_length=4,.result=XR_XIR_UNIT,
+    f->functions[0]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="init",.name_length=4,.result=XR_XIR_UNIT,
         .blocks=&f->one,.block_count=1,.instructions=&f->init,.instruction_count=1};
     f->functions[2]=f->functions[0];f->functions[2].name="pure";
     f->module=(XrXirModule){.stage=XR_XIR_CHECKED,.functions=f->functions,.function_count=3,
@@ -111,7 +111,7 @@ static void ci_fixture(CellIndexFixture *f, CellBoundary boundary, bool snapshot
     f->subject[n++]=(XrXirInstruction){.op=XR_XIR_CELL_READ,.type=(XrXirType)CI_ENUM,.args={f->new_cell}};
     f->subject[n++]=(XrXirInstruction){.op=XR_XIR_THROW,.args={snapshot?f->snapshot:f->read_after}};
     f->blocks[0]=(XrXirBlock){.count=n};
-    f->functions[1]=(XrXirFunction){.name="subject",.name_length=7,.parameters=f->parameters,
+    f->functions[1]=(XrXirFunction){.error_type=(XrXirType)CI_ENUM,.name="subject",.name_length=7,.parameters=f->parameters,
         .parameter_count=p,.result=XR_XIR_UNIT,.blocks=f->blocks,.block_count=1,
         .instructions=f->subject,.instruction_count=n};
     if(boundary==CI_PRINT){f->operands[0]=2;f->functions[1].operands=f->operands;f->functions[1].operand_count=1;}
@@ -120,7 +120,7 @@ static void ci_fixture(CellIndexFixture *f, CellBoundary boundary, bool snapshot
         f->cleanup[0]=(XrXirInstruction){.op=XR_XIR_ENUM_NEW,.type=(XrXirType)CI_ENUM,.immediate=1};
         f->cleanup[1]=(XrXirInstruction){.op=XR_XIR_CELL_WRITE,.args={0,1}};
         f->cleanup[2]=f->init;f->cleanup_block=(XrXirBlock){.count=3};
-        f->functions[3]=(XrXirFunction){.name="cleanup",.name_length=7,.parameters=&f->cleanup_parameter,
+        f->functions[3]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="cleanup",.name_length=7,.parameters=&f->cleanup_parameter,
             .parameter_count=1,.result=XR_XIR_UNIT,.blocks=&f->cleanup_block,.block_count=1,
             .instructions=f->cleanup,.instruction_count=3};
         f->identities[3].cleanup_owner=2;f->module.function_count=4;

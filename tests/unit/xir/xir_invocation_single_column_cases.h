@@ -24,7 +24,7 @@ static XrXirStatus conditional_compact_writer_boundary(const XrXirCompileContext
     XrXirFunction original={.instructions=expected,.instruction_count=6};
     EffectBodyFunction body={.instruction_count=6};
     XrXirStatus status=effect_body_records_copy(context,&input,&body);
-    memset(source,0xCD,sizeof(source));EffectBodyRead read=effect_body_compile_read(context);
+    memset(source,0xCD,sizeof(source));EffectBodyRead read=(EffectBodyRead){.owner=context,.execution=NULL};
     if (status==XR_XIR_OK) status=effect_body_records_match(&read,&body,&original);
     for (uint32_t i=0;i<6 && status==XR_XIR_OK;++i) {
         XrXirInstruction decoded;status=effect_body_instruction_get(&read,&body,i,&decoded);
@@ -33,7 +33,7 @@ static XrXirStatus conditional_compact_writer_boundary(const XrXirCompileContext
     if (status==XR_XIR_OK && oracle) CHECK(body.run_count==2);
     effect_body_runs_release(body.runs);
     if (status!=XR_XIR_OK || !oracle) return status;
-    uint64_t held_bytes=rp_stats(context).live_bytes;
+    uint64_t held_bytes=rp_stats(context).held_bytes;
     const XrXirOp invalid[]={XR_XIR_INVALID,XR_XIR_OP_COUNT,(XrXirOp)UINT32_MAX};
     for (uint32_t i=0;i<4;++i) for (uint32_t bad=0;bad<3;++bad) {
         for (uint32_t row=0;row<4;++row)
@@ -43,7 +43,7 @@ static XrXirStatus conditional_compact_writer_boundary(const XrXirCompileContext
         CHECK(effect_body_records_copy(context,&input,&body)==XR_XIR_BAD_STRUCTURE &&
             body.run_count<=body.run_capacity && rp_attempts>=allocations);
         effect_body_runs_release(body.runs);body.runs=NULL;
-        CHECK(rp_stats(context).live_bytes==held_bytes);
+        CHECK(rp_stats(context).held_bytes==held_bytes);
     }
     /* A real affine opcode column can reach an invalid ordinal. Its actual
      * third value is checked even when every encoded delta predicts it. */
@@ -53,7 +53,7 @@ static XrXirStatus conditional_compact_writer_boundary(const XrXirCompileContext
     CHECK(effect_body_records_copy(context,&input,&body)==XR_XIR_BAD_STRUCTURE &&
         body.run_count<=body.run_capacity && rp_attempts>=allocations);
     effect_body_runs_release(body.runs);body.runs=NULL;
-    CHECK(rp_stats(context).live_bytes==held_bytes);
+    CHECK(rp_stats(context).held_bytes==held_bytes);
     return XR_XIR_OK;
 }
 
@@ -75,7 +75,7 @@ static XrXirStatus conditional_compact_sparse_codec(const XrXirCompileContext *c
     XrXirFunction original={.instructions=expected,.instruction_count=8};
     EffectBodyFunction body={.instruction_count=8};
     XrXirStatus status=effect_body_records_copy(context,&input,&body);
-    memset(source,0xCD,sizeof(source));EffectBodyRead read=effect_body_compile_read(context);
+    memset(source,0xCD,sizeof(source));EffectBodyRead read=(EffectBodyRead){.owner=context,.execution=NULL};
     if (status==XR_XIR_OK) status=effect_body_records_match(&read,&body,&original);
     for (uint32_t i=0;i<8 && status==XR_XIR_OK;++i) {
         XrXirInstruction decoded;status=effect_body_instruction_get(&read,&body,i,&decoded);
@@ -88,16 +88,8 @@ static XrXirStatus conditional_compact_sparse_codec(const XrXirCompileContext *c
             CHECK(effect_body_records_match(&read,&body,&original)==XR_XIR_BAD_STRUCTURE);
             expected[i]=saved;CHECK(effect_body_records_match(&read,&body,&original)==XR_XIR_OK);
         }
-        ConditionalCompactRead observation={context,0,UINT64_MAX};
-        EffectBodyRead finite={&observation,conditional_compact_read_work};uint32_t column=123;
+        EffectBodyRead finite={.owner=context,.execution=NULL};uint32_t column=123;
         CHECK(effect_body_single_column(&finite,UINT32_C(64),&column)==XR_XIR_OK && column==6);
-        uint64_t points=observation.calls;
-        for (uint64_t at=0;at<points;++at) {
-            observation.calls=0;observation.reject=at;column=123;
-            CHECK(effect_body_single_column(&finite,UINT32_C(64),&column)==XR_XIR_BUDGET &&
-                column==123 && observation.calls==at+1);
-        }
-        observation.calls=0;observation.reject=UINT64_MAX;
         for (uint32_t word=0;word<10;++word) {
             column=123;CHECK(effect_body_single_column(&finite,UINT32_C(1)<<word,&column)==XR_XIR_OK && column==word);
         }
@@ -111,34 +103,21 @@ static XrXirStatus conditional_compact_sparse_codec(const XrXirCompileContext *c
         CHECK(effect_body_column_match(&read,second,&original,10,NULL)==XR_XIR_BAD_STRUCTURE);
         XrXirFunction short_source=original;short_source.instruction_count=7;
         CHECK(effect_body_column_match(&read,second,&short_source,6,NULL)==XR_XIR_BAD_STRUCTURE);
-        uint64_t held_bytes=rp_stats(context).live_bytes;
-        observation.calls=0;observation.reject=UINT64_MAX;
-        CHECK(effect_body_records_match(&finite,&body,&original)==XR_XIR_OK);
-        points=observation.calls;
-        for (uint64_t at=0;at<points;++at) {
-            observation.calls=0;observation.reject=at;
-            CHECK(effect_body_records_match(&finite,&body,&original)==XR_XIR_BUDGET &&
-                observation.calls==at+1 && rp_stats(context).live_bytes==held_bytes);
-        }
-        observation.calls=0;observation.reject=UINT64_MAX;
+        uint64_t held_bytes=rp_stats(context).held_bytes;
         CHECK(effect_body_records_match(&finite,&body,&original)==XR_XIR_OK);
         /* Continuation comparison records data changes but still completes
-         * every physical field and EOF. A later fee failure is never a match. */
+         * every physical field and EOF. */
         XrXirInstruction held=expected[2];conditional_compact_change(&expected[2],2);
-        bool same=true;observation.calls=0;observation.reject=UINT64_MAX;
+        bool same=true;
         CHECK(effect_body_records_compare(&finite,&body,&original,&same)==XR_XIR_OK && !same);
-        points=observation.calls;CHECK(points>1);
-        same=true;observation.calls=0;observation.reject=points-1;
-        CHECK(effect_body_records_compare(&finite,&body,&original,&same)==XR_XIR_BUDGET &&
-            !same && observation.calls==points);
-        expected[2]=held;observation.calls=0;observation.reject=UINT64_MAX;same=true;
+        expected[2]=held;same=true;
         CHECK(effect_body_records_compare(&finite,&body,&original,&same)==XR_XIR_OK && same);
         same=false;CHECK(effect_body_records_compare(&finite,&body,&original,&same)==XR_XIR_OK && !same);
         uint32_t run_count=body.run_count;--body.run_count;same=true;
         CHECK(effect_body_records_compare(&finite,&body,&original,&same)==XR_XIR_BAD_STRUCTURE);
         body.run_count=run_count;
         CHECK(effect_body_records_match(&read,&body,&original)==XR_XIR_OK &&
-            rp_stats(context).live_bytes==held_bytes);
+            rp_stats(context).held_bytes==held_bytes);
     }
     effect_body_runs_release(body.runs);return status;
 }

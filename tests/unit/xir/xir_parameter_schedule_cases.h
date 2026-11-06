@@ -15,7 +15,7 @@ static void parameter_schedule_rows(void) {
     const uint32_t sizes[5]={4,16,64,2,32};
     for (uint32_t order=0;order<3;++order) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-        uint64_t baseline=rp_stats(&context).live_bytes;EffectGraph graph={0};
+        uint64_t baseline=rp_stats(&context).held_bytes;EffectGraph graph={0};
         for (uint32_t scale=0;scale<5;++scale) {
             uint32_t count=sizes[scale],map[64],inputs[64][2],operands[256];
             uint64_t expected[66]={1,2};XrXirInstruction ops[64]={0};
@@ -38,7 +38,7 @@ static void parameter_schedule_rows(void) {
                     expected[2+i]=joined;
                 }
             }
-            XrXirTypeNode callable={.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,
+            XrXirTypeNode callable={.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,
                 .flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
             XrXirTypes types={&callable,1,NULL,NULL};XrXirType parameters[2]={256,256};
             XrXirFunction function={.parameters=parameters,.parameter_count=2,.instructions=ops,
@@ -65,7 +65,7 @@ static void parameter_schedule_functions(void) {
     const uint32_t sizes[4]={8,2,16,4};
     for (uint32_t order=0;order<3;++order) for (uint32_t split=0;split<2;++split) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-        uint64_t baseline=rp_stats(&context).live_bytes;
+        uint64_t baseline=rp_stats(&context).held_bytes;
         EffectGraph graph={0};XrXirEffects effects={.resources=context.resources};
         for (uint32_t scale=0;scale<4;++scale) {
             uint32_t count=sizes[scale],map[16],targets[16],operand=0;bool fixed[16]={0};
@@ -73,7 +73,7 @@ static void parameter_schedule_functions(void) {
             XrXirBlock blocks[16]={0};XrXirFunctionEffectContract contracts[16]={0};
             XrXirEffectParameter declared[16]={0};
             XrXirType parameter=(XrXirType)256;
-            XrXirTypeNode nodes[2]={{.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,
+            XrXirTypeNode nodes[2]={{.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,
                 .flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},{.kind=XR_XIR_TYPE_NULLABLE,.element=(XrXirType)256}};
             XrXirTypes types={nodes,2,NULL,NULL};
             for (uint32_t i=0;i<count;++i) map[i]=order==0?i:order==1?count-1-i:(i*5+1)%count;
@@ -87,7 +87,7 @@ static void parameter_schedule_functions(void) {
                 ops[at][1]=at==seed?(XrXirInstruction){.op=XR_XIR_NULLABLE_SOME,.type=(XrXirType)257}:
                     (XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=42};
                 ops[at][2]=(XrXirInstruction){.op=XR_XIR_RETURN};blocks[at].count=3;
-                functions[at]=(XrXirFunction){.name="flow",.name_length=4,.parameters=&parameter,
+                functions[at]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="flow",.name_length=4,.parameters=&parameter,
                     .parameter_count=1,.result=XR_XIR_UNIT,.instructions=ops[at],.instruction_count=3,
                     .blocks=&blocks[at],.block_count=1,.operands=&operand,.operand_count=1};
                 declared[at].kind=XR_XIR_EFFECT_PARAMETER_VARIABLE;
@@ -106,8 +106,8 @@ static void parameter_schedule_functions(void) {
                 .linkage_kind=XR_XIR_PROGRAM};
             effects.count=count;
             XrXirStatus status=effect_parameters_derive(&module,&effects,&graph,&context);
-            if (status!=XR_XIR_OK) fprintf(stderr,"parameter schedule order%u split%u count%u status%u work%llu\n",
-                order,split,count,(uint32_t)status,(unsigned long long)rp_stats(&context).work);
+            if (status!=XR_XIR_OK) fprintf(stderr,"parameter schedule order%u split%u count%u status%u held%llu\n",
+                order,split,count,(uint32_t)status,(unsigned long long)rp_stats(&context).held_bytes);
             CHECK(status==XR_XIR_OK);
             for (uint32_t f=0;f<count;++f) {
                 XrXirEffectParameter actual=effects.outcomes_work.contracts[f].parameters[0];
@@ -127,8 +127,8 @@ static void parameter_schedule_functions(void) {
 }
 static void parameter_schedule_local_write(void) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-    uint64_t baseline=rp_stats(&context).live_bytes;EffectGraph graph={0};
-    XrXirTypeNode callable={.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,
+    uint64_t baseline=rp_stats(&context).held_bytes;EffectGraph graph={0};
+    XrXirTypeNode callable={.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,
         .flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     XrXirTypes types={&callable,1,NULL,NULL};XrXirType parameters[2]={256,256};
     XrXirInstruction ops[3]={{.op=XR_XIR_COPY,.type=(XrXirType)256},

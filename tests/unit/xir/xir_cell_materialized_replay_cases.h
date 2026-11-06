@@ -20,7 +20,7 @@ static XrXirStatus conditional_materialized_case(const XrXirCompileContext *cont
  XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;EffectInvocationRead owner={0};
  XrXirStatus status=xir_fixture_verify(context,&fixture.module,NULL);
  if(status==XR_XIR_OK)status=xr_xir_compile_cell_provenance_verified(context,&fixture.module,&independent,NULL);
- if(status==XR_XIR_OK)status=effect_body_material_create(context,&fixture.module,&material);
+ if(status==XR_XIR_OK)status=conditional_owned_body_from_raw(context,&fixture.module,&material);
  if(status==XR_XIR_OK)status=xir_fixture_check(context,&fixture.module,&checked,NULL);
  if(status==XR_XIR_OK)status=xr_xir_compile_effects_analyze(checked,&effects);
  xr_xir_compile_artifact_free(checked);
@@ -32,11 +32,11 @@ static XrXirStatus conditional_materialized_case(const XrXirCompileContext *cont
   CHECK(xir_cell_provenance_module_matches(context,independent,&missing,NULL)==XR_XIR_BAD_STRUCTURE);
   EffectBodyRequest body=effect_body_owned_request(context,material);
   if(oracle) CHECK(conditional_materialized_original(&owner,&body)==XR_XIR_OK);
-  RootParameterMark held=rp_mark();uint64_t live=rp_stats(context).live_bytes;size_t start=rp_attempts;rp_injected=false;
+  RootParameterMark held=rp_mark();uint64_t live=rp_stats(context).held_bytes;size_t start=rp_attempts;rp_injected=false;
   rp_fail_at=fail==SIZE_MAX?SIZE_MAX:start+fail;
   status=effect_invocation_class_cells_match(&owner,&body);
   rp_fail_at=SIZE_MAX;if(sites)*sites=rp_attempts-start;
-  CHECK(rp_stats(context).live_bytes==live);rp_balanced(held);
+  CHECK(rp_stats(context).held_bytes==live);rp_balanced(held);
   if(fail!=SIZE_MAX) CHECK(status==XR_XIR_OUT_OF_MEMORY && rp_injected && rp_attempts-start==fail+1);
   if(oracle && status==XR_XIR_OK){
    EffectBodyRequest changed=body;changed.domain.function_count=0;CHECK(conditional_materialized_original(&owner,&changed)==XR_XIR_BAD_STRUCTURE && effect_invocation_class_cells_match(&owner,&changed)==XR_XIR_BAD_STRUCTURE);
@@ -51,14 +51,14 @@ static XrXirStatus conditional_materialized_case(const XrXirCompileContext *cont
 }
 static void conditional_materialized_replay_tests(void){
  for(uint32_t mode=0;mode<4;++mode){
-  RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());context.limits.instructions=CI_MAX_OPS;uint64_t baseline=rp_stats(&context).live_bytes;size_t sites=0;
+  RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());context.limits.instructions=CI_MAX_OPS;uint64_t baseline=rp_stats(&context).held_bytes;size_t sites=0;
   CHECK(conditional_materialized_case(&context,mode,SIZE_MAX,true,&sites)==XR_XIR_OK);
   rp_owner_free(&context,baseline);rp_balanced(physical);CHECK(sites);
   printf("MATERIALIZED mode%u operation_sites%zu raw_oracle/poisonedproducer/guards/delta/EOF PASS\n",mode,sites);
-  for(size_t fail=0;fail<sites;++fail){context=rp_owner(rp_caps());context.limits.instructions=CI_MAX_OPS;baseline=rp_stats(&context).live_bytes;CHECK(conditional_materialized_case(&context,mode,fail,false,NULL)==XR_XIR_OUT_OF_MEMORY);rp_owner_free(&context,baseline);rp_balanced(physical);}
-  context=rp_owner(rp_caps());context.limits.instructions=CI_MAX_OPS;baseline=rp_stats(&context).live_bytes;CHECK(conditional_materialized_case(&context,mode,SIZE_MAX,false,NULL)==XR_XIR_OK);XrCompileResourceStats stats=rp_stats(&context);rp_owner_free(&context,baseline);rp_balanced(physical);
-  uint64_t measured[3]={stats.allocated_bytes,stats.peak_bytes,stats.work};
-  for(uint32_t axis=0;axis<3;++axis)for(uint32_t minus=0;minus<2;++minus){XrCompileResourceLimits caps=rp_caps();uint64_t limit=measured[axis]-minus;if(!axis)caps.allocated_bytes=limit;else if(axis==1)caps.live_bytes=limit;else caps.work=limit;context=rp_owner(caps);context.limits.instructions=CI_MAX_OPS;baseline=rp_stats(&context).live_bytes;CHECK(conditional_materialized_case(&context,mode,SIZE_MAX,false,NULL)==(minus?XR_XIR_BUDGET:XR_XIR_OK));rp_owner_free(&context,baseline);rp_balanced(physical);}
+  for(size_t fail=0;fail<sites;++fail){context=rp_owner(rp_caps());context.limits.instructions=CI_MAX_OPS;baseline=rp_stats(&context).held_bytes;CHECK(conditional_materialized_case(&context,mode,fail,false,NULL)==XR_XIR_OUT_OF_MEMORY);rp_owner_free(&context,baseline);rp_balanced(physical);}
+  context=rp_owner(rp_caps());context.limits.instructions=CI_MAX_OPS;baseline=rp_stats(&context).held_bytes;CHECK(conditional_materialized_case(&context,mode,SIZE_MAX,false,NULL)==XR_XIR_OK);XrCompileResourceStats stats=rp_stats(&context);rp_owner_free(&context,baseline);rp_balanced(physical);
+
+  for(uint32_t minus=0;minus<2;++minus){XrCompileResourceLimits caps=rp_caps();uint64_t limit=stats.peak_bytes-minus;caps.memory_limit=limit;context=rp_owner(caps);context.limits.instructions=CI_MAX_OPS;baseline=rp_stats(&context).held_bytes;CHECK(conditional_materialized_case(&context,mode,SIZE_MAX,false,NULL)==(minus?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));rp_owner_free(&context,baseline);rp_balanced(physical);}
  }
  CHECK(!rp_live&&!rp_live_bytes);puts("Materialized complete Cell replay all operation OOM and exact/minus1 axes PASS");
 }

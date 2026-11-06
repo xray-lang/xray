@@ -48,7 +48,7 @@ static XrXirStatus conditional_class_discovery_lifetime(const XrXirCompileContex
             size_t query_attempts=rp_attempts;
             status=effect_final_class_mask(work,certificate->final,selected,subject,&mask);
             if(status==XR_XIR_OK) CHECK(mask==expected);
-            InvocationReturnedLedger ledger={work};XirEffectRuntimeRead runtime={.owner=&ledger,.work=invocation_returned_work};
+            InvocationReturnedLedger ledger={{.remaining=UINT64_MAX}};XirEffectRuntimeRead runtime={.owner=&ledger,.work=invocation_returned_work};
             mask=0;if(status==XR_XIR_OK) status=effect_runtime_class_mask(certificate,&runtime,selected,subject,&mask);
             if(status==XR_XIR_OK) CHECK(mask==expected);
             CHECK(rp_attempts==query_attempts);

@@ -30,8 +30,7 @@ static void conditional_compact_signatures(const XrXirCompileContext *context,co
         CHECK(effect_body_request_signature(request,f,&signature)==XR_XIR_OK &&
             signature.parameter_count==counts[f] && signature.result==results[f] &&
             (!!signature.parameters==!!counts[f]));
-        CHECK(rp_stats(context).work-before.work==11+sizeof(signature) &&
-            rp_stats(context).allocation_count==before.allocation_count && rp_stats(context).live_bytes==before.live_bytes);
+        CHECK(rp_stats(context).allocation_count==before.allocation_count && rp_stats(context).held_bytes==before.held_bytes);
         if (f==1) CHECK(signature.parameters[0]==(XrXirType)257 && signature.parameters[1]==(XrXirType)256);
         if (f==2) CHECK(signature.parameters[0]==(XrXirType)256);
     }
@@ -44,10 +43,6 @@ static void conditional_compact_signatures(const XrXirCompileContext *context,co
     CHECK(effect_body_request_signature(NULL,0,&output)==XR_XIR_BAD_STRUCTURE &&
         !memcmp(&output,&sentinel,sizeof(output)));
     CHECK(effect_body_request_signature(request,0,NULL)==XR_XIR_BAD_STRUCTURE);
-    ConditionalCompactRead refusal={context,0,0};rejected=*request;
-    rejected.read=(EffectBodyRead){&refusal,conditional_compact_read_work};
-    CHECK(effect_body_request_signature(&rejected,0,&output)==XR_XIR_BUDGET && refusal.calls==1 &&
-        !memcmp(&output,&sentinel,sizeof(output)));
     for (uint32_t mask=0;mask<8;++mask) {
         if (mask==1 || mask==2 || mask==4) continue;
         EffectBodyFunctionHead head={0};EffectBodyFunctionDimensions dimensions={77,78};
@@ -55,7 +50,7 @@ static void conditional_compact_signatures(const XrXirCompileContext *context,co
         CHECK(request->head(request,0,mask&1?&head:NULL,mask&2?&dimensions:NULL,mask&4?&output:NULL)==
             XR_XIR_BAD_STRUCTURE && !head.name && !head.instruction_count &&
             dimensions.parameter_count==77 && dimensions.instruction_count==78 && !memcmp(&output,&sentinel,sizeof(output)));
-        CHECK(rp_stats(context).work==before.work && rp_stats(context).allocation_count==before.allocation_count);
+        CHECK(conditional_memory_unchanged(context,before) && rp_stats(context).allocation_count==before.allocation_count);
     }
     rejected=*request;conditional_signature_reader=request->head;rejected.head=conditional_signature_delegate;
     conditional_signature_calls=0;conditional_signature_refused=false;
@@ -71,6 +66,7 @@ static void conditional_compact_signatures(const XrXirCompileContext *context,co
  * callbacks. Partial requests retain every original owned head refusal. */
 static void conditional_compact_dimensions(const XrXirCompileContext *context,
     const EffectBodyRequest *request) {
+    CHECK(request && request->read.owner==context && !request->read.execution);
     const uint32_t parameters[4]={0,2,1,0},instructions[4]={5,2,2,3};
     for (uint32_t f=0;f<4;++f) {
         EffectBodyFunctionDimensions dimensions={77,78};
@@ -83,10 +79,6 @@ static void conditional_compact_dimensions(const XrXirCompileContext *context,
     EffectBodyRequest rejected=*request;rejected.head=NULL;
     CHECK(effect_body_request_dimensions(&rejected,0,&dimensions)==XR_XIR_BAD_STRUCTURE &&
         dimensions.parameter_count==77 && dimensions.instruction_count==78);
-    ConditionalCompactRead refusal={context,0,0};rejected=*request;
-    rejected.read=(EffectBodyRead){&refusal,conditional_compact_read_work};
-    CHECK(effect_body_request_dimensions(&rejected,0,&dimensions)==XR_XIR_BUDGET &&
-        dimensions.parameter_count==77 && dimensions.instruction_count==78 && refusal.calls==1);
 }
 
 static void conditional_compact_dimension_damage(const XrXirCompileContext *context,

@@ -11,9 +11,10 @@ typedef struct InvocationDirectRead {
     const XrXirEffects *effects;
     uint32_t instruction;
     bool unknown;
+    ConditionalExecutionPolicy policy;
 } InvocationDirectRead;
 static bool invocation_direct_work(void *owner,uint64_t work) {
-    return xir_compile_work(((InvocationDirectRead *)owner)->context,work);
+    return conditional_execution_take(&((InvocationDirectRead *)owner)->policy,work);
 }
 static uint32_t invocation_direct_cell(void *owner,uint32_t parameter) {
     (void)owner;CHECK(parameter<=1);return 0;
@@ -53,7 +54,7 @@ static XrXirStatus conditional_invocation_runtime_direct(const XrXirCompileConte
     XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,NULL);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(checked,NULL);
     if (status==XR_XIR_OK) status=xr_xir_compile_effects_analyze(checked,&effects);
-    InvocationDirectRead read={context,effects,2,false};
+    InvocationDirectRead read={context,effects,2,false,{.remaining=UINT64_MAX}};
     XirEffectInvocationRequest direct={.caller=0,.instruction=3,.target=1,.producer=UINT32_MAX,
         .node=UINT32_MAX,.count=2,
         .read={.owner=&read,.work=invocation_direct_work,.cell=invocation_direct_cell,.value=invocation_direct_value}};
@@ -90,6 +91,23 @@ static XrXirStatus conditional_invocation_runtime_direct(const XrXirCompileConte
                 (node->input[producer.site/64]&(UINT64_C(1)<<(producer.site%64))) &&
                 (node->input[opaque/64]&(UINT64_C(1)<<(opaque%64))));
         }
+        CHECK(read.policy.calls && !read.policy.refused);
+        InvocationDirectRead exhausted=read;
+        exhausted.policy=(ConditionalExecutionPolicy){0};
+        XirEffectInvocationRequest refused=direct;refused.read.owner=&exhausted;
+        XirEffectInvocationSelection unchanged=selected;
+        CHECK(xir_effects_execution_edge(effects,&refused,&unchanged)==XR_XIR_BUDGET &&
+            exhausted.policy.calls && exhausted.policy.refused && !exhausted.policy.remaining &&
+            !memcmp(&unchanged,&selected,sizeof(unchanged)));
+        InvocationDirectRead boundary=read;
+        boundary.policy=(ConditionalExecutionPolicy){.remaining=UINT64_MAX};
+        CHECK(invocation_direct_work(&boundary,UINT64_MAX) && !boundary.policy.remaining &&
+            boundary.policy.calls==1 && !boundary.policy.refused);
+        CHECK(!invocation_direct_work(&boundary,1) && !boundary.policy.remaining &&
+            boundary.policy.calls==2 && boundary.policy.refused);
+        boundary.policy=(ConditionalExecutionPolicy){.remaining=UINT64_MAX,.calls=UINT64_MAX};
+        CHECK(!invocation_direct_work(&boundary,1) && boundary.policy.remaining==UINT64_MAX &&
+            boundary.policy.calls==UINT64_MAX && boundary.policy.refused);
         XirEffectInvocationSelection masked=child;
         indirect.contextual=false;indirect.node=UINT32_MAX;
         CHECK(xir_effects_execution_edge(effects,&indirect,&masked)==XR_XIR_BAD_TYPE &&

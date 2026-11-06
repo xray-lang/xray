@@ -19,11 +19,11 @@ static void conditional_physical_generations(const XrXirCompileContext *context,
     EffectPhysicalDomain *initial=graph.physical;
     CHECK(initial && initial!=certificate->final->physical &&
         invocation_raw_physical_match(context,initial,module)==XR_XIR_OK);
-    size_t first_attempt=rp_attempts;uint64_t first_live=rp_stats(context).live_bytes;
+    size_t first_attempt=rp_attempts;uint64_t first_live=rp_stats(context).held_bytes;
     rp_fail_at=first_attempt;rp_injected=false;
     CHECK(effect_graph_physical_refresh(context,module,&graph,NULL)==XR_XIR_OUT_OF_MEMORY &&
         rp_injected && graph.physical==initial && graph.physical_owned &&
-        rp_stats(context).live_bytes==first_live);
+        rp_stats(context).held_bytes==first_live);
     rp_fail_at=SIZE_MAX;rp_injected=false;
     CHECK(invocation_raw_physical_match(context,initial,module)==XR_XIR_OK);
     XrXirInstruction *ops=(XrXirInstruction *)module->functions[1].instructions;
@@ -50,14 +50,6 @@ static void conditional_physical_generations(const XrXirCompileContext *context,
     graph.material=taken;graph.physical=taken->physical;graph.physical_owned=false;effect_graph_free(&graph);
     CHECK(invocation_raw_physical_match(context,taken->physical,module)==XR_XIR_OK);
     graph.material=taken;graph.physical=taken->physical;graph.physical_owned=false;
-    const bool escaping_empty[4]={false,false,true,true};
-    for (uint32_t f=0;f<4;++f) {
-        bool raw=!escaping_empty[f],shared=!escaping_empty[f];
-        CHECK(error_empty_escaping(&module->functions[f],context,&raw)==XR_XIR_OK &&
-            raw==escaping_empty[f]);
-        CHECK(error_empty_escaping_graph(f,&graph,context,&shared)==XR_XIR_OK &&
-            shared==escaping_empty[f]);
-    }
     effect_graph_free(&graph);
     effect_body_material_free(taken);
     CHECK(invocation_raw_physical_match(context,certificate->final->physical,module)==XR_XIR_OK);
@@ -112,7 +104,7 @@ static void conditional_physical_rejections(const XrXirCompileContext *context,
     EffectInvocationFlow flow={.read=&replay,.node=damaged.roots[1]};
     CHECK(effect_invocation_final_view(&flow)==XR_XIR_BAD_STRUCTURE && !flow.memory);
     RootParameterMark physical=rp_mark();XrXirCompileContext foreign=rp_owner(rp_caps());
-    uint64_t baseline=rp_stats(&foreign).live_bytes;
+    uint64_t baseline=rp_stats(&foreign).held_bytes;
     CHECK(invocation_raw_physical_match(&foreign,domain,module)==XR_XIR_BAD_STRUCTURE);
     rp_owner_free(&foreign,baseline);rp_balanced(physical);
 }
@@ -161,7 +153,7 @@ static XrXirStatus conditional_physical_case(const XrXirCompileContext *context,
 
 static void conditional_physical_literals(void) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-    uint64_t baseline=rp_stats(&context).live_bytes;
+    uint64_t baseline=rp_stats(&context).held_bytes;
     CHECK(conditional_physical_case(&context,true)==XR_XIR_OK);
     rp_owner_free(&context,baseline);rp_balanced(physical);
 }
@@ -181,25 +173,24 @@ static void conditional_physical_resources(void) {
                 .initial=entry,.single=single,.retained=retained,.first=status};
             conditional_retry_operation(&context,&retry);
         }
-        rp_fail_at=SIZE_MAX;rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
+        rp_fail_at=SIZE_MAX;rp_owner_free(&context,entry.held_bytes);rp_balanced(physical);
     }
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-    uint64_t baseline=rp_stats(&context).live_bytes;size_t attempts=rp_attempts;
+    uint64_t baseline=rp_stats(&context).held_bytes;size_t attempts=rp_attempts;
     CHECK(conditional_physical_case(&context,false)==XR_XIR_OK);
     XrCompileResourceStats census=rp_stats(&context);size_t census_sites=rp_attempts-attempts;
     rp_owner_free(&context,baseline);rp_balanced(physical);
-    uint64_t measured[3]={census.allocated_bytes,census.peak_bytes,census.work};
-    for (uint32_t axis=0;axis<3;++axis) for (uint32_t pass=0;pass<2;++pass) {
-        XrCompileResourceLimits limits=rp_caps();uint64_t value=measured[axis]-(pass?0:1);
-        if (!axis) limits.allocated_bytes=value;else if (axis==1) limits.live_bytes=value;else limits.work=value;
+    for (uint32_t pass=0;pass<2;++pass) {
+        XrCompileResourceLimits limits=rp_caps();uint64_t value=census.peak_bytes-(pass?0:1);
+        limits.memory_limit=value;
         physical=rp_mark();context=rp_owner(limits);XrCompileResourceStats entry=rp_stats(&context);
         RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
         XrXirStatus status=conditional_physical_case(&context,false);
-        CHECK(status==(pass?XR_XIR_OK:XR_XIR_BUDGET));
+        CHECK(status==(pass?XR_XIR_OK:XR_XIR_MEMORY_LIMIT));
         ConditionalRetryTrial retry={.which=73,.ordinal=SIZE_MAX,.sites=census_sites,.resources=identity,
             .initial=entry,.single=census,.retained=retained,.first=status};
         conditional_retry_operation(&context,&retry);
-        rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
+        rp_owner_free(&context,entry.held_bytes);rp_balanced(physical);
     }
 }
 #endif // XIR_INVOCATION_PHYSICAL_CLASSIFICATION_CASES_H

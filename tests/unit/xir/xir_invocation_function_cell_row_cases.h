@@ -11,9 +11,10 @@ typedef struct InvocationFunctionCellRead {
     const XrXirEffects *effects;
     uint32_t instruction,origin;
     bool unknown,wrong_site;
+    ConditionalExecutionPolicy policy;
 } InvocationFunctionCellRead;
 static bool invocation_function_cell_work(void *owner,uint64_t units) {
-    return xir_compile_work(((InvocationFunctionCellRead *)owner)->context,units);
+    return conditional_execution_take(&((InvocationFunctionCellRead *)owner)->policy,units);
 }
 static uint32_t invocation_function_cell_actual(void *owner,uint32_t parameter) {
     InvocationFunctionCellRead *read=owner;CHECK(parameter==0);return read->origin;
@@ -54,7 +55,7 @@ static XrXirStatus conditional_invocation_function_cell_row(const XrXirCompileCo
     XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,&diagnostic);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(checked,&diagnostic);
     if (status==XR_XIR_OK) status=xr_xir_compile_effects_analyze(checked,&effects);
-    InvocationFunctionCellRead read={context,effects,mode?1u:2u,0,false,false};
+    InvocationFunctionCellRead read={context,effects,mode?1u:2u,0,false,false,{.remaining=UINT64_MAX}};
     XirEffectInvocationRequest direct={.caller=0,.instruction=1,.target=3,.producer=UINT32_MAX,
         .node=UINT32_MAX,.count=1,
         .read={.owner=&read,.work=invocation_function_cell_work,.cell=invocation_function_cell_actual,

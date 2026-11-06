@@ -664,18 +664,6 @@ add_test(NAME test_xir_generator_consumption_proof COMMAND test_xir_generator_co
 set_tests_properties(test_xir_generator_consumption_proof PROPERTIES
     LABELS "unit;xir;generator;metadata;ownership;compiler-fault" TIMEOUT 120 PROCESSORS 1)
 
-add_executable(test_xir_generator_error_context_replay xir/test_xir_generator_error_context_replay.c)
-target_link_libraries(test_xir_generator_error_context_replay PRIVATE xray_xir)
-if(MSVC)
-    target_compile_options(test_xir_generator_error_context_replay PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_generator_error_context_replay PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_generator_error_context_replay COMMAND test_xir_generator_error_context_replay)
-add_test(NAME test_xir_generator_error_context_resources COMMAND test_xir_generator_error_context_replay --resources)
-set_tests_properties(test_xir_generator_error_context_replay test_xir_generator_error_context_resources PROPERTIES
-    LABELS "unit;xir;generator;metadata;ownership;compiler-fault" TIMEOUT 120 PROCESSORS 1)
-
 add_executable(test_xir_generator_capture_source xir/test_xir_generator_capture_source.c)
 target_link_libraries(test_xir_generator_capture_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
 target_compile_definitions(test_xir_generator_capture_source PRIVATE XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")

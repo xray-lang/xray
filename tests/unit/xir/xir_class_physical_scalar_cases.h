@@ -34,7 +34,7 @@ static XrXirStatus class_physical_scalar_receive(const EffectInvocationRead *own
             if(!xr_xir_type_is_class(request->domain.types,type)) continue;
             uint32_t literal=0;
             for(uint32_t p=0;p<owner->final->capture.count;++p) {
-                if(!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
+
                 EffectCaptureFact fact=owner->final->capture.facts[p];
                 if(fact.node!=n || fact.value!=v) continue;
                 for(uint32_t bit=0;bit<3;++bit) {

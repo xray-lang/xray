@@ -50,11 +50,11 @@ static void final_read_allocation_bounds(const XrXirCompileContext *context,
         CHECK(final_read_extent_callbacks==1 && status==XR_XIR_BAD_STRUCTURE && !read.consumers);
         rp_balanced(physical);
         XrCompileResourceStats paid=rp_stats(context);
-        CHECK(paid.work>before.work && paid.allocated_bytes>before.allocated_bytes && paid.live_bytes==before.live_bytes);
+        CHECK(paid.allocated_bytes>before.allocated_bytes && paid.held_bytes==before.held_bytes);
         read=(EffectInvocationRead){0};
         CHECK(effect_invocation_read_open(context,certificate,final,&read)==XR_XIR_OK && read.consumers);
         effect_invocation_read_close(&read);rp_balanced(physical);
-        CHECK(rp_stats(context).work>paid.work && rp_stats(context).allocated_bytes>paid.allocated_bytes);
+        CHECK(rp_stats(context).allocated_bytes>paid.allocated_bytes);
     }
 }
 #endif // XIR_FINAL_READ_ALLOCATION_BOUNDS_H

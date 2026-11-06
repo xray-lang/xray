@@ -23,9 +23,9 @@ static void ordinary_material_fixture(OrdinaryMaterialFixture *f) {
     f->initializer=(XrXirInstruction){.op=XR_XIR_RETURN};
     f->blocks[0]=(XrXirBlock){.first=0,.count=2};
     f->blocks[1]=(XrXirBlock){.first=0,.count=1};
-    f->functions[0]=(XrXirFunction){.name="answer",.name_length=6,.result=XR_XIR_I64,
+    f->functions[0]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="answer",.name_length=6,.result=XR_XIR_I64,
         .instructions=f->operations,.instruction_count=2,.blocks=&f->blocks[0],.block_count=1};
-    f->functions[1]=(XrXirFunction){.name="init",.name_length=4,.result=XR_XIR_UNIT,
+    f->functions[1]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="init",.name_length=4,.result=XR_XIR_UNIT,
         .instructions=&f->initializer,.instruction_count=1,.blocks=&f->blocks[1],.block_count=1};
     f->source_module=(XrXirSourceModule){"same",4,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE};
     f->declarations=(XrXirDeclarations){.modules=&f->source_module,.module_count=1,.functions=f->identities};
@@ -55,7 +55,7 @@ static XrXirStatus ordinary_material_dense(const XrXirCompileContext *context,
     for (uint32_t f=0;f<2 && status==XR_XIR_OK;++f) {
         dense->nodes[f]=ordinary->nodes[f];dense->count=f+1;
         status=effect_ordinary_function(dense,&fixture->source,f);
-        if (status==XR_XIR_OK && !xir_compile_work(context,sizeof(const XrXirType *))) status=XR_XIR_BUDGET;
+
         if (status==XR_XIR_OK) dense->nodes[f].physical_types=dense->nodes[f].source_parameters;
     }
     if (status!=XR_XIR_OK) { effect_ordinary_free(dense);return status; }
@@ -139,7 +139,7 @@ static XrXirStatus ordinary_material_owner_operation(const XrXirCompileContext *
     OrdinaryMaterialFixture f;
     if (mode==2) ordinary_material_cell_fixture(&f);else ordinary_material_fixture(&f);
     if (mode==1) {
-        f.nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,
+        f.nodes[1]=(XrXirTypeNode){.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,
             .flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
         f.types.count=2;f.parameter=(XrXirType)257;
         f.functions[0].parameters=&f.parameter;f.functions[0].parameter_count=1;
@@ -247,7 +247,7 @@ static void ordinary_material_metadata_controls(const XrXirCompileContext *conte
 
 static void ordinary_material_controls(void) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-    uint64_t baseline=rp_stats(&context).live_bytes;OrdinaryMaterialFixture f;ordinary_material_fixture(&f);
+    uint64_t baseline=rp_stats(&context).held_bytes;OrdinaryMaterialFixture f;ordinary_material_fixture(&f);
     EffectOrdinaryContexts *ordinary=NULL,*dense=NULL;
     CHECK(effect_ordinary_build(&context,&f.source,NULL,NULL,&ordinary)==XR_XIR_OK);
     CHECK(ordinary_material_dense(&context,&f,ordinary,&dense)==XR_XIR_OK);
@@ -255,7 +255,7 @@ static void ordinary_material_controls(void) {
     view.input.basis=ordinary;EffectBodyMaterial *basis=ordinary->uses.generation,*empty=NULL,*occupied=basis;
     XrCompileResourceStats initial=rp_stats(&context);size_t attempts=rp_attempts;
     CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,&occupied)==XR_XIR_BAD_STRUCTURE && occupied==basis);
-    CHECK(rp_stats(&context).work==initial.work && rp_attempts==attempts && basis->references==1);
+    CHECK(conditional_memory_unchanged(&context,initial) && rp_attempts==attempts && basis->references==1);
     const XrXirInstruction *instructions=dense->functions[0].instructions;
     dense->functions[0].instructions=NULL;
     CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,&empty)==XR_XIR_BAD_STRUCTURE && !empty && basis->references==1);
@@ -265,8 +265,8 @@ static void ordinary_material_controls(void) {
     dense->nodes[0].declaration=declaration;
     XrXirCompileContext foreign=rp_owner(rp_caps());XrCompileResourceStats foreign_before=rp_stats(&foreign);
     CHECK(effect_body_material_generation_input(&foreign,&view.module,NULL,&view.input,&empty)==XR_XIR_BAD_STRUCTURE && !empty);
-    CHECK(rp_stats(&foreign).work==foreign_before.work && rp_stats(&foreign).live_bytes==foreign_before.live_bytes);
-    rp_owner_free(&foreign,foreign_before.live_bytes);
+    CHECK(conditional_memory_unchanged(&foreign,foreign_before) && rp_stats(&foreign).held_bytes==foreign_before.held_bytes);
+    rp_owner_free(&foreign,foreign_before.held_bytes);
     ordinary_material_word_controls(&context,&view,basis);
     ordinary_material_metadata_controls(&context,&view,basis);
     f.operations[0].immediate=99;
@@ -277,50 +277,44 @@ static void ordinary_material_controls(void) {
         empty!=basis && empty->backbone==basis && basis->references==2 &&
         empty->declared!=basis->declared && empty->functions==basis->functions);
     effect_body_material_free(empty);CHECK(basis->references==1);
-    uint64_t remaining=rp_caps().work-rp_stats(&context).work;
-    uint64_t retain_work=5*sizeof(basis->references)+sizeof(basis)+2;
-    CHECK(remaining>retain_work && xir_compile_work(&context,remaining-retain_work+1));
-    CHECK(effect_body_material_retain(&context,basis)==XR_XIR_BUDGET && basis->references==1);
     effect_ordinary_free(dense);effect_ordinary_free(ordinary);
     rp_owner_free(&context,baseline);rp_balanced(physical);
 }
 
 /* A real full operation is measured afresh, every allocation ordinal is
- * injected and each trial retries on its unchanged cumulative resource owner. */
+ * injected and each trial retries on its unchanged memory owner. */
 static void conditional_ordinary_material_resources(void) {
     ordinary_material_controls();
     for (uint32_t mode=0;mode<7;++mode) {
         size_t sites=0;XrCompileResourceStats census={0};
         for (size_t pass=0;pass<=sites;++pass) {
             RootParameterMark physical=rp_mark();rp_fail_at=SIZE_MAX;rp_injected=false;
-            XrXirCompileContext context=rp_owner(rp_caps());uint64_t baseline=rp_stats(&context).live_bytes;
+            XrXirCompileContext context=rp_owner(rp_caps());uint64_t baseline=rp_stats(&context).held_bytes;
             size_t start=rp_attempts;rp_fail_at=pass?start+pass-1:SIZE_MAX;
             XrXirStatus status=ordinary_material_resource_operation(&context,mode);
             if (!pass) {
                 CHECK(status==XR_XIR_OK);sites=rp_attempts-start;census=rp_stats(&context);
                 CHECK(sites && sites<512);
-                printf("ORDINARY_MATERIAL_CENSUS mode=%u sites=%zu work=%llu allocated=%llu peak=%llu\n",mode,sites,
-                    (unsigned long long)census.work,(unsigned long long)census.allocated_bytes,(unsigned long long)census.peak_bytes);
+                printf("ORDINARY_MATERIAL_CENSUS mode=%u sites=%zu held=%llu allocated=%llu peak=%llu\n",mode,sites,
+                    (unsigned long long)census.held_bytes,(unsigned long long)census.allocated_bytes,(unsigned long long)census.peak_bytes);
             } else CHECK(status==XR_XIR_OUT_OF_MEMORY && rp_injected);
-            CHECK(rp_stats(&context).live_bytes==baseline);
+            CHECK(rp_stats(&context).held_bytes==baseline);
             rp_fail_at=SIZE_MAX;CHECK(ordinary_material_resource_operation(&context,mode)==XR_XIR_OK);
             rp_owner_free(&context,baseline);rp_balanced(physical);
         }
-        for (uint32_t axis=0;axis<3;++axis) {
+
             RootParameterMark physical=rp_mark();XrCompileResourceLimits caps=rp_caps();
-            if (axis==0) caps.allocated_bytes=census.allocated_bytes;
-            if (axis==1) caps.live_bytes=census.peak_bytes;
-            if (axis==2) caps.work=census.work;
+            caps.memory_limit=census.peak_bytes;
             for (uint32_t minus=0;minus<2;++minus) {
                 XrCompileResourceLimits trial=caps;
-                if (minus) { if (axis==0) --trial.allocated_bytes;if (axis==1) --trial.live_bytes;if (axis==2) --trial.work; }
+                if (minus) --trial.memory_limit;
                 rp_fail_at=SIZE_MAX;rp_injected=false;XrXirCompileContext context=rp_owner(trial);
-                uint64_t baseline=rp_stats(&context).live_bytes;
-                CHECK(ordinary_material_resource_operation(&context,mode)==(minus?XR_XIR_BUDGET:XR_XIR_OK));
+                uint64_t baseline=rp_stats(&context).held_bytes;
+                CHECK(ordinary_material_resource_operation(&context,mode)==(minus?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
                 rp_owner_free(&context,baseline);
             }
             rp_balanced(physical);
-        }
+
     }
 }
 #endif // XIR_ORDINARY_MATERIAL_CONTINUATION_CASES_H

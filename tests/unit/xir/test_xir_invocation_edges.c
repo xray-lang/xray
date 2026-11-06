@@ -7,7 +7,7 @@
  * test_xir_invocation_edges.c - Actual edge identity after the final receiving free
  */
 #define main edges_pending_entry
-#include "test_xir_error_cfg_pending.c"
+#include "test_xir_root_conditional_helpers.c"
 #undef main
 static EffectInvocationFinal *edges_final;
 static bool edges_no_return,edges_opaque,edges_large,edges_faults;
@@ -39,10 +39,11 @@ static void edges_capture_fake(EffectInvocationFinal *final,EffectCaptureFact fa
         (size_t)(final->capture.count-at)*sizeof(*final->capture.facts));
     final->capture.facts[at]=fact;++final->capture.count;
 }
-static void edges_free(void *memory,size_t bytes) {
+static void edges_free(void *memory) {
+    size_t bytes=pc_final_physical_size(memory);
     CHECK(memory && bytes);++edges_frees;
     if(edges_frees!=edges_cut || !edges_final) return;
-    pc_free_hook=NULL;++edges_attacks;EffectInvocationFinal *final=edges_final;
+    rp_release_observer=NULL;++edges_attacks;EffectInvocationFinal *final=edges_final;
     EffectInvocationEdge *direct=&final->edges[edges_direct],*reference=&final->edges[edges_reference];
     switch(edges_mode) {
     case 1: direct->caller=0;break;
@@ -170,7 +171,8 @@ static void edges_free(void *memory,size_t bytes) {
     default: CHECK(false);
     }
 }
-static void edges_forbid(void *memory,size_t bytes) { (void)memory;(void)bytes;CHECK(false); }
+static void edges_forbid(void *memory) {
+    size_t bytes=pc_final_physical_size(memory); (void)memory;(void)bytes;CHECK(false); }
 static void edges_capture_equal(const EffectInvocationFinal *actual,const EffectInvocationFinal *expected) {
     CHECK(actual->capture.count==expected->capture.count);
     for(uint32_t p=0;p<actual->capture.count;++p) {
@@ -179,7 +181,7 @@ static void edges_capture_equal(const EffectInvocationFinal *actual,const Effect
     }
 }
 static void edges_capture_faults(const XrXirCompileContext *work,EffectInvocationFinal *final) {
-    uint64_t outer_live=pc_stats(work).live_bytes;size_t outer_physical=live_bytes,outer_blocks=live;
+    uint64_t outer_live=rp_stats(work).held_bytes;size_t outer_physical=rp_live_bytes,outer_blocks=rp_live;
     XrXirStatus allocated_status=XR_XIR_OK;
     EffectInvocationWorkspace *proposal=xir_compile_calloc(work,1,sizeof(*proposal),&allocated_status);
     CHECK(proposal && allocated_status==XR_XIR_OK);proposal->final=*final;
@@ -187,30 +189,30 @@ static void edges_capture_faults(const XrXirCompileContext *work,EffectInvocatio
     proposal->states=xir_compile_calloc(work,final->capacity,sizeof(*proposal->states),&allocated_status);
     CHECK(proposal->states && allocated_status==XR_XIR_OK);
     EffectInvocationFinal *staged=&proposal->final;staged->capture=(EffectCaptureProof){0};
-    uint64_t baseline=pc_stats(work).live_bytes;size_t physical=live_bytes,blocks=live,before=attempts;
+    uint64_t baseline=rp_stats(work).held_bytes;size_t physical=rp_live_bytes,blocks=rp_live,before=rp_attempts;
     CHECK(effect_capture_build(work,staged,proposal)==XR_XIR_OK);
-    size_t sites=attempts-before;CHECK(sites && sites<=UINT32_MAX);
+    size_t sites=rp_attempts-before;CHECK(sites && sites<=UINT32_MAX);
     edges_capture_equal(staged,final);
     xr_compile_resources_free(staged->capture.facts);staged->capture=(EffectCaptureProof){0};
-    CHECK(pc_stats(work).live_bytes==baseline && live_bytes==physical && live==blocks);
+    CHECK(rp_stats(work).held_bytes==baseline && rp_live_bytes==physical && rp_live==blocks);
     for(size_t cut=0;cut<sites;++cut) {
-        fail_at=attempts+cut;injected=false;
+        rp_fail_at=rp_attempts+cut;rp_injected=false;
         XrXirStatus status=effect_capture_build(work,staged,proposal);
-        fail_at=SIZE_MAX;CHECK(injected && status==XR_XIR_OUT_OF_MEMORY);
+        rp_fail_at=SIZE_MAX;CHECK(rp_injected && status==XR_XIR_OUT_OF_MEMORY);
         xr_compile_resources_free(staged->capture.facts);staged->capture=(EffectCaptureProof){0};
-        CHECK(pc_stats(work).live_bytes==baseline && live_bytes==physical && live==blocks);
+        CHECK(rp_stats(work).held_bytes==baseline && rp_live_bytes==physical && rp_live==blocks);
         CHECK(effect_capture_build(work,staged,proposal)==XR_XIR_OK);
         edges_capture_equal(staged,final);
         xr_compile_resources_free(staged->capture.facts);staged->capture=(EffectCaptureProof){0};
-        CHECK(pc_stats(work).live_bytes==baseline && live_bytes==physical && live==blocks);
+        CHECK(rp_stats(work).held_bytes==baseline && rp_live_bytes==physical && rp_live==blocks);
     }
     fprintf(stderr,"actual global capture builder all%zu allocation faults and same-owner retry passed (focused only)\n",sites);
     xr_compile_resources_free(proposal->states);xr_compile_resources_free(proposal);
-    CHECK(pc_stats(work).live_bytes==outer_live && live_bytes==outer_physical && live==outer_blocks);
+    CHECK(rp_stats(work).held_bytes==outer_live && rp_live_bytes==outer_physical && rp_live==outer_blocks);
 }
 static uint32_t edges_source_once(uint32_t cut,unsigned mode) {
-    XrXirTypeNode type[2]={{.kind=XR_XIR_TYPE_CALLABLE,.flags=XR_XIR_CALLABLE_ROOT_NONE},
-        {.kind=XR_XIR_TYPE_CALLABLE,.flags=edges_mask}};
+    XrXirTypeNode type[2]={{.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.flags=XR_XIR_CALLABLE_ROOT_NONE},
+        {.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.flags=edges_mask}};
     XrXirTypes types={.nodes=type,.count=edges_opaque?2u:1u};
     XrXirType scalar=XR_XIR_I64,callback=(XrXirType)256,receiver=(XrXirType)(edges_opaque?257:256);
     XrXirInstruction ret={.op=XR_XIR_RETURN};uint32_t operands[2]={0,0},actuals[2]={0,edges_opaque?2u:1u};
@@ -236,16 +238,16 @@ static uint32_t edges_source_once(uint32_t cut,unsigned mode) {
         loop[12]=(XrXirInstruction){.op=XR_XIR_RETURN};blocks[7].count=9;
     }
     XrXirFunction functions[6]={
-        {.name="init",.name_length=4,.instructions=&ret,.instruction_count=1,.blocks=&blocks[0],.block_count=1},
-        {.name="factory",.name_length=7,.result=edges_no_return?XR_XIR_UNIT:(XrXirType)256,.instructions=ops,.instruction_count=4,
+        {.error_type=XR_XIR_NEVER,.name="init",.name_length=4,.instructions=&ret,.instruction_count=1,.blocks=&blocks[0],.block_count=1},
+        {.error_type=XR_XIR_NEVER,.name="factory",.name_length=7,.result=edges_no_return?XR_XIR_UNIT:(XrXirType)256,.instructions=ops,.instruction_count=4,
             .blocks=&blocks[1],.block_count=1,.operands=operands,.operand_count=2},
-        {.name="scalar",.name_length=6,.parameters=&scalar,.parameter_count=1,.instructions=&ret,
+        {.error_type=XR_XIR_NEVER,.name="scalar",.name_length=6,.parameters=&scalar,.parameter_count=1,.instructions=&ret,
             .instruction_count=1,.blocks=&blocks[2],.block_count=1},
-        {.name="callback",.name_length=8,.parameters=&receiver,.parameter_count=1,.instructions=&ret,
+        {.error_type=XR_XIR_NEVER,.name="callback",.name_length=8,.parameters=&receiver,.parameter_count=1,.instructions=&ret,
             .instruction_count=1,.blocks=&blocks[3],.block_count=1},
-        {.name="caller",.name_length=6,.instructions=caller,.instruction_count=edges_opaque?5u:4u,
+        {.error_type=XR_XIR_NEVER,.name="caller",.name_length=6,.instructions=caller,.instruction_count=edges_opaque?5u:4u,
             .blocks=&blocks[4],.block_count=1,.operands=actuals,.operand_count=2},
-        {.name="cycle",.name_length=5,.parameters=&callback,.parameter_count=1,.instructions=loop,
+        {.error_type=XR_XIR_NEVER,.name="cycle",.name_length=5,.parameters=&callback,.parameter_count=1,.instructions=loop,
             .instruction_count=edges_large?13u:5u,.blocks=&blocks[5],.block_count=3,.operands=loop_operands,.operand_count=4}};
     const XrXirSourceModule source={.name="edges",.name_length=5,.dependencies=NULL,.dependency_count=0,
         .initializer=0,.lexical_scope=0,.storage=XR_XIR_MODULE_FRESH_STORAGE};const XrXirFunctionIdentity identities[6]={0};
@@ -258,13 +260,13 @@ static uint32_t edges_source_once(uint32_t cut,unsigned mode) {
     const XrXirProvenance provenance={.kind=XR_XIR_EVIDENCE_TEMPLATE,.contracts=contracts,.contract_count=6};
     const XrXirModule module={.stage=XR_XIR_BUILT,.linkage_kind=XR_XIR_LIBRARY,.functions=functions,
         .function_count=6,.types=&types,.declarations=&declarations,.provenance=&provenance};
-    XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+    XrXirCompileContext context=rp_owner(rp_caps());context.limits=xr_xir_compile_default_limits();uint64_t baseline=rp_stats(&context).held_bytes;
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;XrXirDiagnostic diagnostic={0};
     XrXirStatus status=xir_fixture_check(&context,&module,&checked,&diagnostic);
     if(status!=XR_XIR_OK) fprintf(stderr,"edge admission%u f%u i%u reason%u\n",status,
         diagnostic.function,diagnostic.instruction,diagnostic.reason);
     CHECK(status==XR_XIR_OK);status=xr_xir_compile_effects_analyze(checked,&effects);
-    if(status!=XR_XIR_OK) fprintf(stderr,"actual effects analysis status%u work%llu large%u\n",status,(unsigned long long)pc_stats(&context).work,(unsigned)edges_large);
+    if(status!=XR_XIR_OK) fprintf(stderr,"actual effects analysis status%u large%u\n",status,(unsigned)edges_large);
     CHECK(status==XR_XIR_OK);
     EffectInvocationFinal *final=effects->invocations->final;
     if(edges_faults) edges_capture_faults(&context,final);
@@ -300,10 +302,10 @@ static uint32_t edges_source_once(uint32_t cut,unsigned mode) {
     uint64_t saved_inputs[32]={0};
     for(uint32_t n=0;n<final->count;++n) if(final->nodes[n].input) saved_inputs[n]=final->nodes[n].input[0];
     edges_final=mode?final:NULL;edges_cut=cut;edges_frees=0;edges_attacks=0;edges_mode=mode;
-    CHECK(!pc_free_hook);pc_free_hook=edges_free;
+    CHECK(!rp_release_observer);rp_release_observer=edges_free;
     status=xir_fixture_effects_terminal(&context,(XirFixtureEffectInput){xr_xir_compile_artifact_module(checked),
         xr_xir_compile_artifact_construction(checked)},effects);
-    pc_free_hook=NULL;edges_final=NULL;uint32_t frees=edges_frees;CHECK(!mode || edges_attacks==1);
+    rp_release_observer=NULL;edges_final=NULL;uint32_t frees=edges_frees;CHECK(!mode || edges_attacks==1);
     fprintf(stderr,"actual Source edges mode%u cut%u frees%u status%u expected%u no_return%u opaque%u\n",mode,cut,frees,status,
         mode?XR_XIR_BAD_STRUCTURE:XR_XIR_OK,(unsigned)edges_no_return,(unsigned)edges_opaque);
     *final=saved;memcpy(final->edges,saved_edges,final->edge_count*sizeof(*final->edges));
@@ -316,11 +318,11 @@ static uint32_t edges_source_once(uint32_t cut,unsigned mode) {
     xr_xir_compile_artifact_free(checked);memset(ops,0xDC,sizeof(ops));memset(caller,0xDC,sizeof(caller));
     memset(functions,0xDC,sizeof(functions));memset(loop,0xDC,sizeof(loop));memset(type,0xDC,sizeof(type));
     memset(operands,0xDC,sizeof(operands));memset(actuals,0xDC,sizeof(actuals));memset(loop_operands,0xDC,sizeof(loop_operands));
-    memset(contracts,0xDC,sizeof(contracts));size_t allocated=attempts;uint64_t physical=live_bytes;
-    pc_allocate_hook=edges_forbid;pc_free_hook=edges_forbid;
+    memset(contracts,0xDC,sizeof(contracts));size_t allocated=rp_attempts;uint64_t physical=rp_live_bytes;
+    rp_allocation_observer=edges_forbid;rp_release_observer=edges_forbid;
     CHECK(effect_final_inventories_match(&context,effects->invocations,final->outcomes)==XR_XIR_OK);
-    pc_allocate_hook=NULL;pc_free_hook=NULL;CHECK(attempts==allocated && live_bytes==physical);
-    xr_xir_compile_effects_free(effects);pc_release(&context,baseline);
+    rp_allocation_observer=NULL;rp_release_observer=NULL;CHECK(rp_attempts==allocated && rp_live_bytes==physical);
+    xr_xir_compile_effects_free(effects);rp_owner_free(&context,baseline);CHECK(!rp_live && !rp_live_bytes);
     CHECK(status==(mode?XR_XIR_BAD_STRUCTURE:XR_XIR_OK));return frees;
 }
 #include "xir_capture_complete_cases.h"

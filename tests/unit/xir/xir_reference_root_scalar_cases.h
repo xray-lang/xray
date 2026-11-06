@@ -38,7 +38,7 @@ static XrXirStatus root_scalar_reference(const XrXirCompileContext *context,
         mask=(facts->requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
             (facts->unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);
     }
-    if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
     *output=mask;return XR_XIR_OK;
 }
 
@@ -47,7 +47,7 @@ static XrXirStatus root_scalar_declaration(const XrXirModule *module,
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
-            if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
+
             const XrXirInstruction *op = &function->instructions[i];
             if (op->op != XR_XIR_FUNCTION_REF) continue;
             const XrXirTypeNode *signature = xr_xir_callable_signature(module->types, op->type);
@@ -66,7 +66,7 @@ static XrXirStatus root_scalar_declaration(const XrXirModule *module,
     for (uint32_t r = 0; table && r < table->count; ++r) {
         const XrXirImplementation *record = &table->records[r];
         for (uint32_t b = 0; b < record->binding_count; ++b) {
-            if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
+
             const XrXirImplementationBinding *binding = &record->bindings[b];
             const XrXirInterfaceTable *interfaces = module->types ? module->types->interfaces : NULL;
             if (!interfaces || binding->requirement.declaration >= interfaces->count ||

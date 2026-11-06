@@ -1,12 +1,12 @@
 /* The forest retains actual Final output while every dense staging array dies. */
 static void pc_dense_retirement_literals(void) {
     for (uint32_t mutation=0;mutation<2;++mutation) {
-        XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+        XrXirCompileContext context=rp_owner(rp_caps());context.limits=xr_xir_compile_default_limits();uint64_t baseline=rp_stats(&context).held_bytes;
         InvocationRotationFixture fixture;invocation_rotation_fixture(&fixture);
         XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
         CHECK(xir_fixture_check(&context,&fixture.module,&checked,NULL)==XR_XIR_OK);
         const XrXirModule *input=xr_xir_compile_artifact_module(checked);
-        CHECK(effect_infer_construct(&context,input,NULL,&effects)==XR_XIR_OK && effects->outcomes_work.contexts);
+        CHECK(effect_infer_construct(&context,(XirEffectInput){input,xr_xir_compile_artifact_construction(checked),NULL},NULL,&effects)==XR_XIR_OK && effects->outcomes_work.contexts);
         EffectContextOwner *owner=effects->outcomes_work.contexts;
         EffectOrdinaryContexts *dense=owner->dense;XrXirEffects *uses=&dense->uses;
         const EffectFinalFunctions *result=&owner->forest->invocations->final->summary;
@@ -31,24 +31,24 @@ static void pc_dense_retirement_literals(void) {
         memcpy(functions,input->functions,sizeof(functions));memcpy(rows,functions[2].instructions,sizeof(rows));
         current.functions=functions;functions[2].instructions=rows;
         pc_ordinary_current=&rows[0];pc_ordinary_mutate=mutation!=0;pc_ordinary_callbacks=0;
-        XrCompileResourceStats before=pc_stats(&context);CHECK(!pc_free_hook);pc_free_hook=pc_ordinary_observe_free;
+        XrCompileResourceStats before=rp_stats(&context);CHECK(!rp_release_observer);rp_release_observer=pc_ordinary_observe_free;
         XrXirStatus status=effect_outcomes_publish(&context,&current,effects);
-        pc_free_hook=NULL;pc_ordinary_current=NULL;pc_ordinary_contract_block=NULL;
+        rp_release_observer=NULL;pc_ordinary_current=NULL;pc_ordinary_contract_block=NULL;
         CHECK(status==(mutation?XR_XIR_BAD_STRUCTURE:XR_XIR_OK) && pc_ordinary_callbacks==1 &&
             effect_ordinary_work_empty(dense) && effect_ordinary_work_empty(owner->ordinary) &&
-            pc_stats(&context).live_bytes<before.live_bytes);
+            rp_stats(&context).held_bytes<before.held_bytes);
         for (uint32_t i=0;i<pc_ordinary_block_count;++i) CHECK(pc_ordinary_freed[i]==1);
         CHECK(result==&owner->forest->invocations->final->summary &&
             result->functions[1].formula.terms==terms && result->functions[1].formula.term_count==5);
         for (uint32_t p=0;p<5;++p) CHECK(terms[p].kind==XR_XIR_ROOT_TERM_PARAMETER && terms[p].index==p);
         if (!mutation) {
-            pc_context_resurrection(&context,&current,effects,true);
-            CHECK(xir_effects_source_terminal(&context,&current,effects)==XR_XIR_OK);
+            pc_context_resurrection(&context,&current,effects,xr_xir_compile_artifact_construction(checked),true);
+            CHECK(xir_fixture_effects_terminal(&context,(XirFixtureEffectInput){&current,xr_xir_compile_artifact_construction(checked)},effects)==XR_XIR_OK);
         } else CHECK(!effect_final_outcomes(effects) && !effects->invocations->final->outcomes);
-        fprintf(stderr,"dense retirement mutation%u actual_freed%u roles%u callback%u status%u borrowed five terms live\n",
+        fprintf(stderr,"dense retirement mutation%u actual_freed%u roles%u callback%u status%u borrowed five terms rp_live\n",
             mutation,pc_ordinary_block_count,roles,pc_ordinary_callbacks,status);
         rows[0].type=XR_XIR_I64;xr_xir_compile_effects_free(effects);effects=NULL;
-        CHECK(effect_infer_construct(&context,input,NULL,&effects)==XR_XIR_OK);
+        CHECK(effect_infer_construct(&context,(XirEffectInput){input,xr_xir_compile_artifact_construction(checked),NULL},NULL,&effects)==XR_XIR_OK);
         CHECK(effect_outcomes_publish(&context,input,effects)==XR_XIR_OK);
         xr_xir_compile_artifact_free(checked);memset(&fixture,0xCE,sizeof(fixture));
         memset(functions,0xCE,sizeof(functions));memset(rows,0xCE,sizeof(rows));
@@ -56,7 +56,7 @@ static void pc_dense_retirement_literals(void) {
         result=&owner->forest->invocations->final->summary;
         CHECK(effect_ordinary_work_empty(owner->ordinary) && effect_ordinary_work_empty(owner->dense) &&
             result->functions[1].formula.term_count==5);
-        xr_xir_compile_effects_free(effects);pc_release(&context,baseline);
+        xr_xir_compile_effects_free(effects);rp_owner_free(&context,baseline);CHECK(!rp_live && !rp_live_bytes);
     }
-    fprintf(stderr,"dense retirement: physical arrays,32resurrections,current input callback,producer death,sameowner and physical0 passed\n");
+    fprintf(stderr,"dense retirement: physical arrays,24resurrections,current input callback,producer death,sameowner and physical0 passed\n");
 }

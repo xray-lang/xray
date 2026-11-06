@@ -29,12 +29,12 @@ static void generation_range_fixture(GenerationRangeTrial *trial,uint32_t mode) 
     memcpy(trial->nodes,fixture->nodes,sizeof(fixture->nodes));
     trial->worker[0]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=7};
     trial->worker[1]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={0}};
-    trial->functions[4]=(XrXirFunction){.name="alternate",.name_length=9,.result=XR_XIR_I64,
+    trial->functions[4]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="alternate",.name_length=9,.result=XR_XIR_I64,
         .blocks=&fixture->two,.block_count=1,.instructions=trial->worker,.instruction_count=2};
     fixture->module.functions=trial->functions;fixture->module.function_count=5;
     fixture->declarations.functions=trial->identities;
     if (mode==1) {
-        trial->nodes[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_TASK,.element=XR_XIR_I64};
+        trial->nodes[2]=(XrXirTypeNode){.result=XR_XIR_NEVER,.kind=XR_XIR_TYPE_TASK,.element=XR_XIR_I64};
         fixture->types.nodes=trial->nodes;fixture->types.count=3;
         trial->entry[6]=trial->entry[5];
         trial->entry[5]=(XrXirInstruction){.op=XR_XIR_GO,.type=(XrXirType)258,.immediate=4};
@@ -46,7 +46,7 @@ static void generation_range_fixture(GenerationRangeTrial *trial,uint32_t mode) 
     fixture->entry_block.count=trial->functions[0].instruction_count=3;
     trial->functions[0].operands=NULL;trial->functions[0].operand_count=0;
     fixture->parameters[0]=XR_XIR_I64;
-    trial->functions[1]=(XrXirFunction){.name="owner",.name_length=5,.result=XR_XIR_I64,
+    trial->functions[1]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="owner",.name_length=5,.result=XR_XIR_I64,
         .parameters=fixture->parameters,.parameter_count=1,.blocks=&fixture->init_block,
         .block_count=1,.instructions=fixture->init,.instruction_count=1};
     trial->functions[2]=trial->functions[4];trial->functions[2].name="default";
@@ -72,7 +72,7 @@ static void generation_range_build(const XrXirCompileContext *context,
     const XrXirModule *source=xr_xir_compile_artifact_module(trial->checked);
     EffectBodyMaterial *material=trial->effects.generation;
     CHECK(material==trial->graph.material && !trial->graph.physical_owned);
-    RootParameterMark held=rp_mark();uint64_t held_live=rp_stats(context).live_bytes;
+    RootParameterMark held=rp_mark();uint64_t held_live=rp_stats(context).held_bytes;
     XrXirStatus status=effect_graph_build_material(source,&trial->effects,&trial->graph,
         (XrXirCompileContext *)context);
     CHECK(status==expected);
@@ -87,7 +87,7 @@ static void generation_range_build(const XrXirCompileContext *context,
     }
     effect_graph_free(&trial->graph);
     trial->graph=(EffectGraph){.material=material,.physical=material->physical};
-    CHECK(rp_stats(context).live_bytes==held_live);rp_balanced(held);
+    CHECK(rp_stats(context).held_bytes==held_live);rp_balanced(held);
 }
 
 /* Both independent walks start at zero. A malformed last record must leave
@@ -96,7 +96,7 @@ static void generation_range_build(const XrXirCompileContext *context,
 static void generation_range_eof(const XrXirCompileContext *context,EffectBodyMaterial *material) {
     EffectBodyFunction *function=&material->functions[0];
     CHECK(function->run_count && function->run_capacity==function->run_count);
-    uint32_t count=function->run_count;EffectBodyRead read=effect_body_compile_read(context);
+    uint32_t count=function->run_count;EffectBodyRead read=(EffectBodyRead){.owner=context,.execution=NULL};
     for (uint32_t pass=0;pass<2;++pass) for (uint32_t extra=0;extra<2;++extra) {
         if (extra) function->run_count=count+1;
         else function->run_capacity=count-1;
@@ -143,15 +143,11 @@ static void generation_range_physical(const XrXirCompileContext *context,Generat
     generation_range_build(context,trial,XR_XIR_OK,false,UINT32_MAX);
 }
 
-static uint32_t generation_range_type_reads,generation_range_consume_reads;
+static uint32_t generation_range_type_reads;
 
 static XrXirStatus generation_range_counted_type(const EffectBodyRequest *request,
     uint32_t function,uint32_t value,XrXirType *output) {
     ++generation_range_type_reads;return effect_body_owned_type(request,function,value,output);
-}
-
-static bool generation_range_consume(const void *owner,uint64_t units) {
-    ++generation_range_consume_reads;return effect_body_compile_consume(owner,units);
 }
 
 /* This calls the pass directly, after a genuine complete origin replay. A
@@ -163,13 +159,13 @@ static void generation_range_origins_refused(EffectInvocationFlow *flow) {
     void *memory=flow->memory;bool changed=flow->changed;
     CHECK(effect_invocation_origins_pass(flow)==XR_XIR_BAD_STRUCTURE &&
         flow->owner->final.count==count && flow->owner->pending==pending && flow->memory==memory &&
-        flow->changed==changed && rp_attempts==attempts && rp_stats(context).work==before.work &&
-        rp_stats(context).live_bytes==before.live_bytes);
+        flow->changed==changed && rp_attempts==attempts && conditional_memory_unchanged(context,before) &&
+        rp_stats(context).held_bytes==before.held_bytes);
     bool dispatched=false;
     CHECK(effect_invocation_dispatch(flow,&dispatched)==XR_XIR_BAD_STRUCTURE && !dispatched &&
         flow->owner->final.count==count && flow->owner->pending==pending && flow->memory==memory &&
-        rp_attempts==attempts && rp_stats(context).work==before.work &&
-        rp_stats(context).live_bytes==before.live_bytes);
+        rp_attempts==attempts && conditional_memory_unchanged(context,before) &&
+        rp_stats(context).held_bytes==before.held_bytes);
 }
 
 /* Site identities follow the four literal recipes: REF/COPY/apply in the
@@ -218,7 +214,7 @@ static void generation_range_literal_producers(const EffectInvocationWorkspace *
 
 /* Each delegated callback changes only request dispatch. The reference pass
  * uses the counted instruction reader; all other mixed passes must preserve
- * the original scalar pass's real fees and settled origin rows. */
+ * the original scalar pass's settled origin rows. */
 static void generation_range_mixed_origins(EffectInvocationFlow *flow) {
     EffectBodyRequest original=flow->body;uint32_t transfers=0;
     for (uint32_t r=0;r<flow->physical->count;++r) {
@@ -227,35 +223,33 @@ static void generation_range_mixed_origins(EffectInvocationFlow *flow) {
     }
     CHECK(transfers==3 && !flow->changed);
     generation_range_literal_producers(flow->owner,1);
-    uint64_t scalar_work=0;conditional_generation_instruction_refused=false;
+    conditional_generation_instruction_refused=false;
     conditional_generation_shape_refused=conditional_generation_dimensions_refused=false;
-    for (uint32_t mixed=0;mixed<5;++mixed) {
+    for (uint32_t mixed=0;mixed<4;++mixed) {
         flow->body=original;conditional_generation_instruction_reads=0;
-        generation_range_type_reads=generation_range_consume_reads=0;
+        generation_range_type_reads=0;
         conditional_generation_full_heads=conditional_generation_dimension_heads=conditional_generation_signature_heads=0;
         conditional_generation_shape_reads=0;
         if (!mixed) flow->body.instruction=conditional_generation_counted_instruction;
         else if (mixed==1) flow->body.head=conditional_generation_counted_head;
         else if (mixed==2) flow->body.type=generation_range_counted_type;
         else if (mixed==3) flow->body.shape=conditional_generation_counted_shape;
-        else flow->body.read.consume=generation_range_consume;
+
         if (mixed==2) {
             XrXirType actual=XR_XIR_UNIT;
             CHECK(flow->body.type!=effect_body_owned_type &&
                 effect_body_request_type(&flow->body,flow->owner->final.nodes[flow->node].body,0,&actual)==XR_XIR_OK &&
                 actual==XR_XIR_I64 && generation_range_type_reads==1);
-        } else if (mixed==4) CHECK(flow->body.read.consume!=effect_body_compile_consume);
+        }
         XrCompileResourceStats before=rp_stats(flow->read->work);size_t attempts=rp_attempts;
         CHECK(effect_invocation_origins_pass(flow)==XR_XIR_OK && !flow->changed &&
-            rp_attempts==attempts && rp_stats(flow->read->work).live_bytes==before.live_bytes);
-        uint64_t cost=rp_stats(flow->read->work).work-before.work;
-        if (!mixed) {
-            CHECK(conditional_generation_instruction_reads==transfers && cost);scalar_work=cost;
-        } else CHECK(cost==scalar_work);
+            rp_attempts==attempts && rp_stats(flow->read->work).held_bytes==before.held_bytes);
+
+        if (!mixed) CHECK(conditional_generation_instruction_reads==transfers);
         if (mixed==1) CHECK(!conditional_generation_full_heads && !conditional_generation_dimension_heads &&
             conditional_generation_signature_heads==1);
         CHECK(generation_range_type_reads==(mixed==2?1u:0u) && !conditional_generation_shape_reads);
-        if (mixed==4) CHECK(generation_range_consume_reads);
+
         generation_range_literal_producers(flow->owner,1);
     }
     flow->body=original;
@@ -276,36 +270,32 @@ static void generation_range_dispatch_same(EffectInvocationFlow *flow,const XrXi
     conditional_generation_instruction_refused=false;
     conditional_generation_shape_refused=conditional_generation_dimensions_refused=false;
     for (uint32_t precision=0;precision<2;++precision) {
-        flow->precision=precision!=0;uint64_t scalar_work=0;
+        flow->precision=precision!=0;
         for (uint32_t mixed=0;mixed<7;++mixed) {
+            if (mixed==4) continue;
             flow->body=original;conditional_generation_instruction_reads=0;
-            generation_range_type_reads=generation_range_consume_reads=0;
+            generation_range_type_reads=0;
             if (!mixed) flow->body.instruction=conditional_generation_counted_instruction;
             else if (mixed==1) flow->body.head=conditional_generation_counted_head;
             else if (mixed==2) flow->body.type=generation_range_counted_type;
             else if (mixed==3) flow->body.shape=conditional_generation_counted_shape;
-            else if (mixed==4) flow->body.read.consume=generation_range_consume;
+
             else if (mixed==6) flow->body=effect_body_raw_request(owner->read.work,source);
             if (mixed==2) {
                 XrXirType actual=XR_XIR_UNIT;
                 CHECK(flow->body.type!=effect_body_owned_type &&
                     effect_body_request_type(&flow->body,owner->final.nodes[flow->node].body,0,&actual)==XR_XIR_OK &&
                     actual==XR_XIR_I64 && generation_range_type_reads==1);
-            } else if (mixed==4) CHECK(flow->body.read.consume!=effect_body_compile_consume);
+            }
             XrCompileResourceStats before=rp_stats(owner->read.work);bool changed=false;
             CHECK(effect_invocation_dispatch(flow,&changed)==XR_XIR_OK && !changed &&
                 owner->final.count==count && owner->final.edge_count==edges && !owner->pending &&
                 owner->final.nodes[flow->node].intrinsic_mask==mask &&
                 owner->final.nodes[flow->node].deferred==deferred &&
-                rp_stats(owner->read.work).live_bytes==before.live_bytes);
-            uint64_t cost=rp_stats(owner->read.work).work-before.work;
-            if (!mixed) {
-                CHECK(conditional_generation_instruction_reads==selected && cost);scalar_work=cost;
-            } else if (mixed<5) CHECK(cost==scalar_work);
-            if (mixed==4) CHECK(generation_range_consume_reads);
-            if (mixed==5) printf("generation dispatch body%u precision%u selected%u scalar%llu canonical%llu\n",
-                owner->final.nodes[flow->node].body,precision,selected,(unsigned long long)scalar_work,
-                (unsigned long long)cost);
+                rp_stats(owner->read.work).held_bytes==before.held_bytes);
+
+            if (!mixed) CHECK(conditional_generation_instruction_reads==selected);
+
         }
     }
     flow->body=original;flow->precision=false;
@@ -324,7 +314,7 @@ static void generation_range_dispatch_faults(EffectInvocationFlow *flow) {
         body->run_capacity=body->run_count-1;
         CHECK(effect_invocation_dispatch(flow,&changed)==XR_XIR_BAD_STRUCTURE && !changed &&
             owner->final.count==count && owner->final.edge_count==edges && !owner->pending &&
-            rp_stats(owner->read.work).live_bytes==before.live_bytes);
+            rp_stats(owner->read.work).held_bytes==before.held_bytes);
         body->run_capacity=capacity;
     }
     flow->precision=false;
@@ -354,14 +344,14 @@ static void generation_range_dispatch_faults(EffectInvocationFlow *flow) {
         XrCompileResourceStats before=rp_stats(owner->read.work);bool changed=false;
         CHECK(effect_invocation_dispatch(flow,&changed)==XR_XIR_BAD_STRUCTURE && !changed &&
             flow->instruction==call && owner->final.count==count && owner->final.edge_count==edges &&
-            !owner->pending && rp_stats(owner->read.work).live_bytes==before.live_bytes);
+            !owner->pending && rp_stats(owner->read.work).held_bytes==before.held_bytes);
     }
     base->immediate=saved;flow->precision=false;bool changed=false;
     CHECK(effect_invocation_dispatch(flow,&changed)==XR_XIR_OK && !changed);
 }
 
 /* A genuine one-row initializer retains the complete scalar path and its
- * original cost. Its declaration is neither empty-body permission nor NONE. */
+ * complete operation. Its declaration is neither empty-body permission nor NONE. */
 static void generation_range_dispatch_singleton(EffectInvocationWorkspace *owner) {
     EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=owner->final.roots[3],.instruction=UINT32_MAX};
     CHECK(effect_invocation_discovery_origins(&flow)==XR_XIR_OK && !flow.changed &&
@@ -370,12 +360,11 @@ static void generation_range_dispatch_singleton(EffectInvocationWorkspace *owner
     for (uint32_t precision=0;precision<2;++precision) {
         flow.precision=precision!=0;bool changed=false;XrCompileResourceStats before=rp_stats(owner->read.work);
         CHECK(effect_invocation_dispatch(&flow,&changed)==XR_XIR_OK && !changed);
-        uint64_t canonical=rp_stats(owner->read.work).work-before.work;
+
         flow.body.instruction=conditional_generation_counted_instruction;
         before=rp_stats(owner->read.work);
         CHECK(effect_invocation_dispatch(&flow,&changed)==XR_XIR_OK && !changed &&
-            rp_stats(owner->read.work).work-before.work==canonical &&
-            rp_stats(owner->read.work).live_bytes==before.live_bytes);
+            rp_stats(owner->read.work).held_bytes==before.held_bytes);
         flow.body=original;
     }
     xr_compile_resources_free(flow.memory);
@@ -397,7 +386,7 @@ static void generation_range_origin_bindings(const XrXirCompileContext *context,
     uint32_t function=owner->final.nodes[flow.node].body;
     CHECK(function==0 && flow.physical==&material->physical->functions[function] &&
         effect_invocation_origins_pass(&flow)==XR_XIR_OK && !flow.changed);
-    CHECK(effect_body_material_create(context,source,&other)==XR_XIR_OK && other!=material &&
+    CHECK(conditional_owned_body_from_raw(context,source,&other)==XR_XIR_OK && other!=material &&
         other->resources==material->resources && effect_body_count(other)==effect_body_count(material));
     for (uint32_t f=0;f<effect_body_count(material);++f)
         CHECK(other->functions[f].parameter_count==material->functions[f].parameter_count &&
@@ -414,10 +403,10 @@ static void generation_range_origin_bindings(const XrXirCompileContext *context,
     XrXirCompileContext foreign=rp_owner(rp_caps());XrCompileResourceStats foreign_entry=rp_stats(&foreign);
     size_t foreign_attempts=rp_attempts;
     flow.body.read.owner=&foreign;generation_range_origins_refused(&flow);flow.body=original;
-    CHECK(rp_stats(&foreign).live_bytes==foreign_entry.live_bytes &&
+    CHECK(rp_stats(&foreign).held_bytes==foreign_entry.held_bytes &&
         rp_stats(&foreign).allocated_bytes==foreign_entry.allocated_bytes &&
-        rp_stats(&foreign).work==foreign_entry.work && rp_attempts==foreign_attempts);
-    rp_owner_free(&foreign,foreign_entry.live_bytes);
+        conditional_memory_unchanged(&foreign,foreign_entry) && rp_attempts==foreign_attempts);
+    rp_owner_free(&foreign,foreign_entry.held_bytes);
     generation_range_mixed_origins(&flow);
     generation_range_dispatch_same(&flow,source);generation_range_dispatch_faults(&flow);
     generation_range_dispatch_singleton(owner);
@@ -469,38 +458,39 @@ static void generation_sequence_refused(const XrXirCompileContext *context,
     const XrXirInstruction *output=&sentinel;
     CHECK(effect_body_request_sequence_instruction(request,f,0,&cursor,&storage,&output)==XR_XIR_BAD_STRUCTURE &&
         output==&sentinel && !memcmp(&cursor,&old,sizeof(cursor)));
-    CHECK(rp_stats(context).work==before.work && rp_stats(context).live_bytes==before.live_bytes &&
+    CHECK(conditional_memory_unchanged(context,before) && rp_stats(context).held_bytes==before.held_bytes &&
         rp_stats(context).allocated_bytes==before.allocated_bytes && rp_attempts==attempts);
 }
 
 /* All five mixed adapters must execute the original scalar read, including
- * its callback and exact ledger cost. Delegates have real counter writes so
+ * its actual callback. Delegates have real counter writes so
  * optimized identical-code folding cannot turn them into canonical readers. */
 static void generation_sequence_mixed(const XrXirCompileContext *context,
     const EffectBodyRequest *original,const XrXirModule *source) {
     conditional_generation_instruction_refused=false;
     conditional_generation_shape_refused=conditional_generation_dimensions_refused=false;
     for (uint32_t mixed=0;mixed<6;++mixed) {
+        if (mixed==4) continue;
         EffectBodyRequest request=mixed==5?effect_body_raw_request(context,source):*original;
-        conditional_generation_instruction_reads=0;generation_range_consume_reads=0;
+        conditional_generation_instruction_reads=0;
         if (!mixed) request.instruction=conditional_generation_counted_instruction;
         else if (mixed==1) request.head=conditional_generation_counted_head;
         else if (mixed==2) request.type=generation_range_counted_type;
         else if (mixed==3) request.shape=conditional_generation_counted_shape;
-        else if (mixed==4) request.read.consume=generation_range_consume;
+
         CHECK(!effect_body_request_sequence_owned(&request));
         XrCompileResourceStats before=rp_stats(context);size_t attempts=rp_attempts;
         for (uint32_t i=0;i<source->functions[0].instruction_count;++i) {
             XrXirInstruction storage;const XrXirInstruction *operation=NULL;
             CHECK(effect_body_request_instruction(&request,0,i,&storage,&operation)==XR_XIR_OK && operation);
         }
-        uint64_t scalar=rp_stats(context).work-before.work;
+
         before=rp_stats(context);generation_sequence_walk(&request,source,0);
-        CHECK(rp_stats(context).work-before.work==scalar && rp_attempts==attempts &&
-            rp_stats(context).live_bytes==before.live_bytes &&
+        CHECK(rp_attempts==attempts &&
+            rp_stats(context).held_bytes==before.held_bytes &&
             rp_stats(context).allocated_bytes==before.allocated_bytes);
         if (!mixed) CHECK(conditional_generation_instruction_reads==2*source->functions[0].instruction_count);
-        if (mixed==4) CHECK(generation_range_consume_reads);
+
     }
 }
 
@@ -540,7 +530,7 @@ static void generation_sequence_eof(const XrXirCompileContext *context,
  * complete stored input and settled producer causes. */
 static void generation_sequence_producers(void) {
     RootParameterMark held=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-    uint64_t baseline=rp_stats(&context).live_bytes;
+    uint64_t baseline=rp_stats(&context).held_bytes;
     InvocationParameterFixture fixture;invocation_parameter_fixture(&fixture,0);
     XrXirArtifact *checked=NULL;XrXirEffects effects={0};EffectGraph graph={0};
     CHECK(xir_fixture_check(&context,&fixture.returned.module,&checked,NULL)==XR_XIR_OK &&
@@ -579,7 +569,7 @@ static void generation_sequence_controls(const XrXirCompileContext *context,Gene
     EffectBodyRequest request=effect_body_owned_request(context,material);
     XrCompileResourceStats before=rp_stats(context);size_t attempts=rp_attempts;
     for (uint32_t f=0;f<source->function_count;++f) generation_sequence_walk(&request,source,f);
-    CHECK(rp_attempts==attempts && rp_stats(context).live_bytes==before.live_bytes &&
+    CHECK(rp_attempts==attempts && rp_stats(context).held_bytes==before.held_bytes &&
         rp_stats(context).allocated_bytes==before.allocated_bytes);
     generation_sequence_mixed(context,&request,source);generation_sequence_eof(context,material,&request);
     EffectBodyRecordCursor cursor;CHECK(effect_body_request_sequence_begin(&request,&cursor)==XR_XIR_OK);
@@ -599,7 +589,7 @@ static void generation_sequence_controls(const XrXirCompileContext *context,Gene
     else { changed.domain.function_count++;generation_sequence_refused(context,&changed,0); }
     XrXirCompileContext foreign=rp_owner(rp_caps());XrCompileResourceStats foreign_entry=rp_stats(&foreign);
     changed=request;changed.read.owner=&foreign;generation_sequence_refused(&foreign,&changed,0);
-    rp_owner_free(&foreign,foreign_entry.live_bytes);
+    rp_owner_free(&foreign,foreign_entry.held_bytes);
     XrXirInstruction *raw=(XrXirInstruction *)source->functions[0].instructions;
     XrXirInstruction saved=raw[0];raw[0].targets[1]^=1;
     CHECK(effect_body_source_match(context,material,source)==XR_XIR_BAD_STRUCTURE);
@@ -626,7 +616,7 @@ static void generation_sequence_controls(const XrXirCompileContext *context,Gene
 static void generation_range_controls(void) {
     for (uint32_t mode=0;mode<4;++mode) {
         RootParameterMark held=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-        uint64_t baseline=rp_stats(&context).live_bytes;GenerationRangeTrial trial;
+        uint64_t baseline=rp_stats(&context).held_bytes;GenerationRangeTrial trial;
         generation_range_fixture(&trial,mode);CHECK(generation_range_prepare(&context,&trial)==XR_XIR_OK);
         EffectBodyMaterial *material=trial.effects.generation;
         generation_range_build(&context,&trial,XR_XIR_OK,false,mode<2?UINT32_MAX:mode==2?2u:4u);

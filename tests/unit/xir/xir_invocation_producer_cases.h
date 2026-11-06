@@ -33,7 +33,7 @@ static XrXirStatus conditional_invocation_producer(const XrXirCompileContext *co
             !memcmp(&untouched,&frozen,sizeof(frozen)));
         site->target=target;
         RootParameterMark mark=rp_mark();
-        XrXirCompileContext foreign=rp_owner(rp_caps());uint64_t baseline=rp_stats(&foreign).live_bytes;
+        XrXirCompileContext foreign=rp_owner(rp_caps());uint64_t baseline=rp_stats(&foreign).held_bytes;
         CHECK(xir_effects_producer(&foreign,effects,0,instruction,&untouched)==XR_XIR_BAD_STRUCTURE &&
             !memcmp(&untouched,&frozen,sizeof(frozen)));
         rp_owner_free(&foreign,baseline);rp_balanced(mark);

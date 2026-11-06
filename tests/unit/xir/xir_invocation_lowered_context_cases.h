@@ -123,7 +123,7 @@ static XrXirStatus conditional_invocation_lowered_context(const XrXirCompileCont
         CHECK(effect_invocation_instance_bounds(context,module,&occupied)==XR_XIR_BAD_STRUCTURE &&
             occupied==bounds && rp_attempts==attempts);
         RootParameterMark mark=rp_mark();XrXirCompileContext foreign=rp_owner(rp_caps());
-        uint64_t baseline=rp_stats(&foreign).live_bytes;
+        uint64_t baseline=rp_stats(&foreign).held_bytes;
         EffectInvocationDeclaredBounds *untouched=NULL;attempts=rp_attempts;
         CHECK(effect_invocation_instance_bounds(&foreign,module,&untouched)==XR_XIR_BAD_STRUCTURE &&
             !untouched && rp_attempts==attempts);

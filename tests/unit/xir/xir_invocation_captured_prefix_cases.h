@@ -7,11 +7,11 @@
  * xir_invocation_captured_prefix_cases.h - Real scalar and owned Cell prefixes
  */
 typedef struct InvocationCaptureRead {
-    const XrXirCompileContext *context;
     uint32_t cell;
+    ConditionalExecutionPolicy policy;
 } InvocationCaptureRead;
 static bool invocation_capture_work(void *owner,uint64_t work) {
-    return xir_compile_work(((InvocationCaptureRead *)owner)->context,work);
+    return conditional_execution_take(&((InvocationCaptureRead *)owner)->policy,work);
 }
 static uint32_t invocation_capture_cell(void *owner,uint32_t parameter) {
     InvocationCaptureRead *read=owner;CHECK(parameter==0);return read->cell;
@@ -44,7 +44,7 @@ static XrXirStatus conditional_invocation_captured_prefix(const XrXirCompileCont
     if (status==XR_XIR_OK) status=xr_xir_compile_effects_analyze(checked,&effects);
     XirEffectProducerView producer={0};
     if (status==XR_XIR_OK) status=xir_effects_producer(context,effects,0,2,&producer);
-    InvocationCaptureRead read={context,0};
+    InvocationCaptureRead read={0,{.remaining=UINT64_MAX}};
     XirEffectInvocationRequest request={.caller=0,.instruction=3,.target=2,.producer=producer.site,
         .node=UINT32_MAX,.count=1,.captures=1,
         .read={.owner=&read,.work=invocation_capture_work,.cell=invocation_capture_cell,.value=NULL}};

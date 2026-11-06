@@ -24,9 +24,9 @@ static XrXirStatus sequence_borrow_delegate(const EffectBodyRequest *request,
 
 /* These literal words include unused fields and a negative immediate.
  * Poisoned inactive deltas must never affect either complete reader. */
-static void sequence_borrow_mask(uint32_t mask,uint32_t less) {
+static void sequence_borrow_mask(uint32_t mask) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-    uint64_t baseline=rp_stats(&context).live_bytes;size_t attempts=rp_attempts;
+    uint64_t baseline=rp_stats(&context).held_bytes;size_t attempts=rp_attempts;
     EffectBodyRun run;memset(&run,0xCE,sizeof(run));run.first=0;run.count=2;run.mask=mask;
     run.base=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=17,.args={31,41},.targets={51,61},
         .type_arguments={81,91}};
@@ -40,7 +40,7 @@ static void sequence_borrow_mask(uint32_t mask,uint32_t less) {
     CHECK(effect_body_request_sequence_begin(&request,&borrowed)==XR_XIR_OK &&
         effect_body_request_sequence_begin(&request,&copied)==XR_XIR_OK);
     XrXirInstruction sentinel={.op=XR_XIR_RETURN,.type=XR_XIR_F64,.immediate=INT64_MIN};
-    XrXirInstruction expected_tail={0};uint64_t required=0;
+    XrXirInstruction expected_tail={0};
     for(uint32_t i=0;i<2;++i) {
         uint32_t selected=i?mask:0;
         XrXirInstruction expected={.op=(XrXirOp)(XR_XIR_CONST_INT+((selected&1)?1:0)),
@@ -51,15 +51,13 @@ static void sequence_borrow_mask(uint32_t mask,uint32_t less) {
             ((UINT64_C(0x80000001)+((selected&128)?8:0))<<32);
         memcpy(&expected.immediate,&immediate,sizeof(immediate));
         XrXirInstruction storage=sentinel,copy=sentinel;const XrXirInstruction *op=NULL,*old=NULL;
-        uint64_t work=rp_stats(&context).work;if(i)before_tail=borrowed;
+        if(i)before_tail=borrowed;
         CHECK(effect_body_request_sequence_operation(&request,0,i,&borrowed,&storage,&op)==XR_XIR_OK &&
             op==(selected?&storage:&run.base) && !memcmp(op,&expected,sizeof(expected)));
-        uint64_t used=rp_stats(&context).work-work;work=rp_stats(&context).work;
         CHECK(effect_body_request_sequence_instruction(&request,0,i,&copied,&copy,&old)==XR_XIR_OK &&
             old==&copy && !memcmp(old,&expected,sizeof(expected)));
-        if(selected) CHECK(used==rp_stats(&context).work-work);
-        else CHECK(used<rp_stats(&context).work-work && !memcmp(&storage,&sentinel,sizeof(storage)));
-        if(i){required=used;expected_tail=expected;}
+        if(!selected) CHECK(!memcmp(&storage,&sentinel,sizeof(storage)));
+        if(i) expected_tail=expected;
     }
     CHECK(effect_body_request_sequence_finish(&request,0,&borrowed)==XR_XIR_OK &&
         effect_body_request_sequence_finish(&request,0,&copied)==XR_XIR_OK);
@@ -68,22 +66,18 @@ static void sequence_borrow_mask(uint32_t mask,uint32_t less) {
     CHECK(effect_body_request_sequence_operation(&request,0,2,&borrowed,&storage,&op)==XR_XIR_BAD_STRUCTURE &&
         op==(const XrXirInstruction *)&function && !memcmp(&storage,&sentinel,sizeof(storage)) &&
         !memcmp(&borrowed,&held,sizeof(held)));
-    uint64_t work=rp_stats(&context).work;
-    CHECK(required && work+required-less<rp_caps().work && xr_compile_resources_work(context.resources,
-        rp_caps().work-work-required+less)==XR_COMPILE_RESOURCE_OK);
     borrowed=before_tail;storage=sentinel;op=(const XrXirInstruction *)&function;
     CHECK(effect_body_request_sequence_operation(&request,0,1,&borrowed,&storage,&op)==
-        (less?XR_XIR_BUDGET:XR_XIR_OK));
-    if(less) CHECK(op==(const XrXirInstruction *)&function);
-    else CHECK(!memcmp(op,&expected_tail,sizeof(expected_tail)));
+        XR_XIR_OK);
+    CHECK(!memcmp(op,&expected_tail,sizeof(expected_tail)));
     if(!mask) CHECK(!memcmp(&storage,&sentinel,sizeof(storage)));
-    CHECK(rp_attempts==attempts && rp_stats(&context).live_bytes==baseline);
+    CHECK(rp_attempts==attempts && rp_stats(&context).held_bytes==baseline);
     rp_owner_free(&context,baseline);rp_balanced(physical);CHECK(!rp_live && !rp_live_bytes);
 }
 
 static void sequence_borrow_binding(void) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-    uint64_t baseline=rp_stats(&context).live_bytes;size_t attempts=rp_attempts;
+    uint64_t baseline=rp_stats(&context).held_bytes;size_t attempts=rp_attempts;
     EffectBodyRun run={.count=2,.base={.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=42}};
     EffectBodyFunction function={.instruction_count=2,.runs=&run,.run_count=1,.run_capacity=1};
     EffectBodyMaterial material={.resources=context.resources,.references=1,.functions=&function};
@@ -117,23 +111,22 @@ static void sequence_borrow_binding(void) {
     }
     EffectBodyRequest delegated=request;delegated.instruction=sequence_borrow_delegate;
     EffectBodyRecordCursor cursor={99,99,99},held=cursor;XrXirInstruction storage={0};
-    const XrXirInstruction *op=NULL;uint64_t before=rp_stats(&context).work;sequence_borrow_delegate_calls=0;
+    const XrXirInstruction *op=NULL;sequence_borrow_delegate_calls=0;
     CHECK(effect_body_request_sequence_operation(&delegated,0,1,&cursor,&storage,&op)==XR_XIR_OK &&
         op==&storage && op->immediate==42 && sequence_borrow_delegate_calls==1 && !memcmp(&cursor,&held,sizeof(held)));
-    uint64_t work=rp_stats(&context).work-before;before=rp_stats(&context).work;
     CHECK(effect_body_request_sequence_instruction(&delegated,0,1,&cursor,&storage,&op)==XR_XIR_OK &&
-        sequence_borrow_delegate_calls==2 && rp_stats(&context).work-before==work);
+        sequence_borrow_delegate_calls==2);
     XrXirFunction raw_function={.instructions=&run.base,.instruction_count=1};
     XrXirModule module={.functions=&raw_function,.function_count=1};
-    EffectBodyRequest raw=effect_body_raw_request(&context,&module);before=rp_stats(&context).work;
+    EffectBodyRequest raw=effect_body_raw_request(&context,&module);
     CHECK(effect_body_request_sequence_operation(&raw,0,0,&cursor,&storage,&op)==XR_XIR_OK &&
-        op==&run.base && rp_stats(&context).work-before==2+sizeof(op) && !memcmp(&cursor,&held,sizeof(held)));
+        op==&run.base && !memcmp(&cursor,&held,sizeof(held)));
     CHECK(rp_attempts==attempts);rp_owner_free(&context,baseline);rp_balanced(physical);
 }
 
 static void sequence_borrow_cases(void) {
-    for(uint32_t mask=0;mask<1024;++mask)for(uint32_t less=0;less<2;++less)sequence_borrow_mask(mask,less);
+    for(uint32_t mask=0;mask<1024;++mask)sequence_borrow_mask(mask);
     sequence_borrow_binding();
-    puts("SEQUENCE_BORROW all1024 literal complete rows,copy identity,exact/minus1,current binding/cursor/EOF,delegated/raw fees,physical0 PASS");
+    puts("SEQUENCE_BORROW all1024 literal complete rows,copy identity,current binding/cursor/EOF,delegated/raw reads,physical0 PASS");
 }
 #endif // XIR_SEQUENCE_BORROW_CASES_H

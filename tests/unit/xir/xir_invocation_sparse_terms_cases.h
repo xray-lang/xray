@@ -31,7 +31,7 @@ static void conditional_sparse_physical_bound_rejections(EffectInvocationWorkspa
     XrCompileResourceStats before=rp_stats(context);RootParameterMark retained=rp_mark();
     physical->records[0].mask&=~EFFECT_PHYSICAL_CALLABLE;
     CHECK(effect_invocation_seal(context,&request,&output,NULL)==XR_XIR_BAD_STRUCTURE && !output &&
-        held==owner && staged==solution && rp_stats(context).live_bytes==before.live_bytes &&
+        held==owner && staged==solution && rp_stats(context).held_bytes==before.held_bytes &&
         rp_stats(context).allocation_count==before.allocation_count);
     physical->records[0].mask=original_mask;rp_balanced(retained);
     CHECK(effect_body_physical_match(context,owner->final.physical,owner->final.material)==XR_XIR_OK);
@@ -72,7 +72,7 @@ static void conditional_sparse_receiver_rejections(EffectInvocationWorkspace *ow
     CHECK(effect_invocation_result_match(owner,solution)==XR_XIR_BAD_STRUCTURE && rp_attempts==attempts);
     owner->final.roots[1]=root;
     CHECK(effect_invocation_result_match(owner,solution)==XR_XIR_OK && rp_attempts==attempts &&
-        rp_stats(context).live_bytes==before.live_bytes &&
+        rp_stats(context).held_bytes==before.held_bytes &&
         rp_stats(context).allocated_bytes==before.allocated_bytes);
     for (uint32_t t=0;t<limit;++t)
         CHECK(terms[t].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL && terms[t].index==sparse_indices[mode][t]);
@@ -210,7 +210,7 @@ static XrXirStatus conditional_sparse_case(const XrXirCompileContext *context,ui
 static void conditional_sparse_literals(void) {
     for (uint32_t mode=0;mode<5;++mode) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-        uint64_t baseline=rp_stats(&context).live_bytes;
+        uint64_t baseline=rp_stats(&context).held_bytes;
         CHECK(conditional_sparse_case(&context,mode,true)==XR_XIR_OK);
         rp_owner_free(&context,baseline);rp_balanced(physical);
     }
@@ -222,7 +222,7 @@ static void conditional_sparse_resources(void) {
         for (size_t pass=0;pass<=sites;++pass) {
             RootParameterMark physical=rp_mark();rp_fail_at=SIZE_MAX;rp_attempts=0;rp_injected=false;
             XrXirCompileContext context=rp_owner(rp_caps());XrCompileResourceStats entry=rp_stats(&context);
-            uint64_t baseline=entry.live_bytes;RootParameterMark retained=rp_mark();
+            uint64_t baseline=entry.held_bytes;RootParameterMark retained=rp_mark();
             XrCompileResources *identity=context.resources;
             rp_attempts=0;rp_fail_at=pass?pass-1:SIZE_MAX;
             XrXirStatus status=conditional_sparse_case(&context,mode,false);
@@ -236,27 +236,21 @@ static void conditional_sparse_resources(void) {
             rp_fail_at=SIZE_MAX;rp_owner_free(&context,baseline);rp_balanced(physical);
         }
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-        uint64_t baseline=rp_stats(&context).live_bytes;
+        uint64_t baseline=rp_stats(&context).held_bytes;
         size_t census_attempts=rp_attempts;
         CHECK(conditional_sparse_case(&context,mode,false)==XR_XIR_OK);
         XrCompileResourceStats census=rp_stats(&context);size_t census_sites=rp_attempts-census_attempts;
         rp_owner_free(&context,baseline);rp_balanced(physical);
-        uint64_t measured[3]={census.allocated_bytes,census.peak_bytes,census.work};
-        for (uint32_t axis=0;axis<3;++axis) {
-            CHECK(measured[axis]>0);
-            for (uint32_t pass=0;pass<2;++pass) {
-                XrCompileResourceLimits limits=rp_caps();uint64_t value=measured[axis]-(pass?0:1);
-                if (axis==0) limits.allocated_bytes=value;
-                else if (axis==1) limits.live_bytes=value;
-                else limits.work=value;
-                physical=rp_mark();context=rp_owner(limits);XrCompileResourceStats entry=rp_stats(&context);
-                baseline=entry.live_bytes;RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
-                CHECK(conditional_sparse_case(&context,mode,false)==(pass?XR_XIR_OK:XR_XIR_BUDGET));
-        ConditionalRetryTrial retry={.which=mode+61,.ordinal=SIZE_MAX,.sites=census_sites,
-            .resources=identity,.initial=entry,.single=census,.retained=retained,.first=pass?XR_XIR_OK:XR_XIR_BUDGET};
-        conditional_retry_operation(&context,&retry);
-                rp_owner_free(&context,baseline);rp_balanced(physical);
-            }
+        for (uint32_t pass=0;pass<2;++pass) {
+            XrCompileResourceLimits limits=rp_caps();uint64_t value=census.peak_bytes-(pass?0:1);
+            limits.memory_limit=value;
+            physical=rp_mark();context=rp_owner(limits);XrCompileResourceStats entry=rp_stats(&context);
+            baseline=entry.held_bytes;RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
+            CHECK(conditional_sparse_case(&context,mode,false)==(pass?XR_XIR_OK:XR_XIR_MEMORY_LIMIT));
+    ConditionalRetryTrial retry={.which=mode+61,.ordinal=SIZE_MAX,.sites=census_sites,
+        .resources=identity,.initial=entry,.single=census,.retained=retained,.first=pass?XR_XIR_OK:XR_XIR_MEMORY_LIMIT};
+    conditional_retry_operation(&context,&retry);
+            rp_owner_free(&context,baseline);rp_balanced(physical);
         }
     }
 }

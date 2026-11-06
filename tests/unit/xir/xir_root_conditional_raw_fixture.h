@@ -40,9 +40,9 @@ static void conditional_raw_fixture(ConditionalRawFixture *f, uint32_t mode) {
     memset(f,0,sizeof(*f));
     f->receiver=(XrXirType)256;
     f->nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NOMINAL};
-    f->nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=8};
+    f->nodes[1]=(XrXirTypeNode){.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=8};
     f->callback=(XrXirCallableParameter){(XrXirType)257,0};
-    f->nodes[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,
+    f->nodes[2]=(XrXirTypeNode){.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,
         .parameters=&f->callback,.parameter_count=1,.flags=8};
     f->nodes[3]=f->nodes[1];f->nodes[3].flags=2;
     f->nodes[4]=f->nodes[1];f->nodes[4].flags=4;
@@ -88,16 +88,16 @@ static void conditional_raw_fixture(ConditionalRawFixture *f, uint32_t mode) {
     f->caller_ops[0]=(XrXirInstruction){.op=XR_XIR_CALL,.type=result,.args={0,2},.immediate=1,.type_arguments={0,1}};
     f->caller_ops[1]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={2,0}};
     f->init_op=(XrXirInstruction){.op=XR_XIR_RETURN};
-    f->functions[0]=(XrXirFunction){.name="apply",.name_length=5,.parameters=f->method_parameters,
+    f->functions[0]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="apply",.name_length=5,.parameters=f->method_parameters,
         .parameter_count=2,.result=result,.instructions=f->method_ops,.instruction_count=method_count,
         .operands=f->method_operands,.operand_count=mode>=2 ? 2 : 1};
-    f->functions[1]=(XrXirFunction){.name="forward",.name_length=7,.parameters=f->forward_parameters,
+    f->functions[1]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="forward",.name_length=7,.parameters=f->forward_parameters,
         .parameter_count=2,.result=result,.instructions=f->forward_ops,.instruction_count=2,
         .operands=f->forward_operands,.operand_count=2};
-    f->functions[2]=(XrXirFunction){.name="caller",.name_length=6,.parameters=f->method_parameters,
+    f->functions[2]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="caller",.name_length=6,.parameters=f->method_parameters,
         .parameter_count=2,.result=result,.instructions=f->caller_ops,.instruction_count=2,
         .operands=f->caller_operands,.operand_count=2};
-    f->functions[3]=(XrXirFunction){.name="init",.name_length=4,.result=XR_XIR_UNIT,
+    f->functions[3]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="init",.name_length=4,.result=XR_XIR_UNIT,
         .instructions=&f->init_op,.instruction_count=1};
     f->generics[1]=(XrXirGeneric){.constraints=&f->bound,.parameter_count=1};
     f->generics[2]=(XrXirGeneric){.arguments=&f->receiver,.argument_count=1};

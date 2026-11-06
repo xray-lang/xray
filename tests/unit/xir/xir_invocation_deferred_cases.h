@@ -24,7 +24,7 @@ static void invocation_deferred_fixture(InvocationDeferredFixture *f,uint32_t mo
     memset(f,0,sizeof(*f));f->cell=(XrXirType)256;
     f->nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64};
     f->ref=(XrXirCallableParameter){f->cell,XR_PARAM_REF};
-    f->nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,
+    f->nodes[1]=(XrXirTypeNode){.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,
         .parameters=&f->ref,.parameter_count=1,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     f->types=(XrXirTypes){f->nodes,2,NULL,NULL};
     f->parameters[0]=(XrXirType)257;f->parameters[1]=f->cell;
@@ -53,15 +53,15 @@ static void invocation_deferred_fixture(InvocationDeferredFixture *f,uint32_t mo
         f->init[2]=(XrXirInstruction){.op=XR_XIR_SLOT_INIT,.args={1,0}};
         f->init[3]=(XrXirInstruction){.op=XR_XIR_RETURN};f->init_block.count=4;
     }
-    f->functions[0]=(XrXirFunction){.name="entry",.name_length=5,.result=XR_XIR_I64,
+    f->functions[0]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="entry",.name_length=5,.result=XR_XIR_I64,
         .blocks=&f->entry_block,.block_count=1,.instructions=f->entry,.instruction_count=f->entry_block.count,
         .operands=f->actuals,.operand_count=2};
-    f->functions[1]=(XrXirFunction){.name="apply",.name_length=5,.parameters=f->parameters,.parameter_count=2,
+    f->functions[1]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="apply",.name_length=5,.parameters=f->parameters,.parameter_count=2,
         .result=XR_XIR_I64,.blocks=&f->two,.block_count=1,.instructions=f->apply,.instruction_count=2,
         .operands=&f->reference,.operand_count=1};
-    f->functions[2]=(XrXirFunction){.name="read",.name_length=4,.parameters=&f->cell,.parameter_count=1,
+    f->functions[2]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="read",.name_length=4,.parameters=&f->cell,.parameter_count=1,
         .result=XR_XIR_I64,.blocks=&f->two,.block_count=1,.instructions=f->read,.instruction_count=2};
-    f->functions[3]=(XrXirFunction){.name="init",.name_length=4,.result=XR_XIR_UNIT,
+    f->functions[3]=(XrXirFunction){.error_type=XR_XIR_NEVER,.name="init",.name_length=4,.result=XR_XIR_UNIT,
         .blocks=&f->init_block,.block_count=1,.instructions=f->init,.instruction_count=f->init_block.count};
     f->source=(XrXirSourceModule){"deferred",8,NULL,0,3, 0,XR_XIR_MODULE_FRESH_STORAGE};f->slot=(XrXirSlot){0,f->cell,1};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=f->identities,

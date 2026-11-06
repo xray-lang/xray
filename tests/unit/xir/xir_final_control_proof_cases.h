@@ -23,7 +23,7 @@ static void pc_control_fixture(PcControlFixture *fixture,bool diamond) {
             fixture->rows[f][1]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={0,0}};
             fixture->blocks[f].count=2;
         }
-        fixture->functions[f]=(XrXirFunction){.name="f",.name_length=1,.result=XR_XIR_I64,
+        fixture->functions[f]=(XrXirFunction){.name="f",.name_length=1,.result=XR_XIR_I64,.error_type=XR_XIR_NEVER,
             .instructions=fixture->rows[f],.instruction_count=fixture->blocks[f].count,
             .blocks=&fixture->blocks[f],.block_count=1};
     }
@@ -36,7 +36,7 @@ static void pc_control_fixture(PcControlFixture *fixture,bool diamond) {
 }
 
 static void pc_control_cycle_literals(bool diamond) {
-    XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+    XrXirCompileContext context=rp_owner(rp_caps());context.limits=xr_xir_compile_default_limits();uint64_t baseline=rp_stats(&context).held_bytes;
     PcControlFixture fixture;pc_control_fixture(&fixture,diamond);
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&context,&fixture.module,&checked,NULL)==XR_XIR_OK);
@@ -67,11 +67,11 @@ static void pc_control_cycle_literals(bool diamond) {
         for (uint32_t f=0;f<2;++f) final->task_creation[f]=XR_XIR_EFFECT_NONE;
         CHECK(effect_final_control_verify(&context,effects)==XR_XIR_OK);
     }
-    xr_xir_compile_effects_free(effects);pc_release(&context,baseline);
+    xr_xir_compile_effects_free(effects);rp_owner_free(&context,baseline);CHECK(!rp_live && !rp_live_bytes);
 }
 
 static void pc_control_owned_literals(void) {
-    XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+    XrXirCompileContext context=rp_owner(rp_caps());context.limits=xr_xir_compile_default_limits();uint64_t baseline=rp_stats(&context).held_bytes;
     ClosedCarrierFixture fixture;cc_fixture(&fixture,8);fixture.edge.module.stage=XR_XIR_BUILT;
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&context,&fixture.edge.module,&checked,NULL)==XR_XIR_OK);
@@ -89,9 +89,30 @@ static void pc_control_owned_literals(void) {
     XrXirEffectWitness witness=final->witnesses[1];final->witnesses[1].instruction=1;
     CHECK(effect_final_control_verify(&context,effects)==XR_XIR_BAD_STRUCTURE);final->witnesses[1]=witness;
     CHECK(effect_final_control_verify(&context,effects)==XR_XIR_OK && effect_outcomes_empty(&effects->outcomes_work));
-    xr_xir_compile_effects_free(effects);pc_release(&context,baseline);
+    xr_xir_compile_effects_free(effects);rp_owner_free(&context,baseline);CHECK(!rp_live && !rp_live_bytes);
 }
 
 static void pc_control_proof_literals(void) {
     pc_control_cycle_literals(false);pc_control_cycle_literals(true);pc_control_owned_literals();
+}
+
+#include "xir_error_dependency_fixture.h"
+static void pc_control_graph_isolation(void) {
+    XrXirCompileContext context=rp_owner(rp_caps());context.limits=xr_xir_compile_default_limits();
+    uint64_t baseline=rp_stats(&context).held_bytes;
+    ErrorDependencyFixture fixture;ed_fixture(&fixture,ED_GO,false);fixture.module.stage=XR_XIR_BUILT;
+    XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
+    CHECK(xir_fixture_check(&context,&fixture.module,&checked,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_effects_analyze(checked,&effects)==XR_XIR_OK);
+    EffectControlCheck input={0};
+    EffectGraph graph={.material=effects->invocations->body,.physical=effects->invocations->body->physical};
+    CHECK(effect_legacy_control_prepare(&context,effects,&input)==XR_XIR_OK);
+    CHECK(effect_legacy_error_dependencies_move(&context,&input,&graph)==XR_XIR_OK);
+    for (uint32_t edge=graph.heads[3];edge!=UINT32_MAX;edge=graph.edges[edge].next)
+        CHECK(graph.edges[edge].caller!=2);
+    CHECK(!effect_roots_read(effects)->root[2].requires_root && !effect_roots_read(effects)->root[2].unresolved);
+    effect_graph_free(&graph);effect_control_check_free(&input);
+    xr_xir_compile_artifact_free(checked);memset(&fixture,0xCE,sizeof(fixture));
+    CHECK(!effect_roots_read(effects)->root[2].requires_root && !effect_roots_read(effects)->root[2].unresolved);
+    xr_xir_compile_effects_free(effects);rp_owner_free(&context,baseline);CHECK(!rp_live && !rp_live_bytes);
 }

@@ -202,14 +202,14 @@ static void conditional_class_rows_rejections(const XrXirCompileContext *context
     CHECK(conditional_class_rows_replay(context,effects)==XR_XIR_BAD_STRUCTURE);
     final->capture=saved;xr_compile_resources_free(facts);
     CHECK(conditional_class_rows_replay(context,effects)==XR_XIR_OK);
-    uint32_t output=7;uint64_t work=rp_stats(context).work;size_t attempts=rp_attempts;
+    uint32_t output=7;size_t attempts=rp_attempts;
     CHECK(xir_effects_class_value(context,effects,node,3,value,&output)==XR_XIR_BAD_STRUCTURE &&
-        output==7 && rp_stats(context).work==work && rp_attempts==attempts);
+        output==7 && rp_attempts==attempts);
     output=0;CHECK(xir_effects_class_value(context,effects,node,2,value,&output)==XR_XIR_BAD_STRUCTURE && !output);
     CHECK(xir_effects_class_value(context,effects,node,3,0,&output)==XR_XIR_BAD_STRUCTURE && !output);
     CHECK(xir_effects_class_value(context,effects,node,3,UINT32_MAX,&output)==XR_XIR_BAD_STRUCTURE && !output);
     RootParameterMark physical=rp_mark();XrXirCompileContext foreign=rp_owner(rp_caps());
-    uint64_t baseline=rp_stats(&foreign).live_bytes;
+    uint64_t baseline=rp_stats(&foreign).held_bytes;
     CHECK(xir_effects_class_value(&foreign,effects,node,3,value,&output)==XR_XIR_BAD_STRUCTURE && !output);
     rp_owner_free(&foreign,baseline);rp_balanced(physical);
 }
@@ -246,7 +246,7 @@ static XrXirStatus conditional_class_rows_case(const XrXirCompileContext *contex
         CHECK(owner->capture.count);
         size_t query_attempts=rp_attempts;
         CHECK(xir_effects_class_value(context,effects,selected,3,values[mode],&output)==XR_XIR_OK && output==masks[mode]);
-        InvocationReturnedLedger ledger={context};
+        InvocationReturnedLedger ledger={{.remaining=UINT64_MAX}};
         XirEffectRuntimeRead runtime={.owner=&ledger,.work=invocation_returned_work};
         output=0;CHECK(effect_runtime_class_mask(certificate,&runtime,selected,values[mode],&output)==XR_XIR_OK && output==masks[mode]);
         CHECK(rp_attempts==query_attempts);
@@ -268,7 +268,7 @@ static XrXirStatus conditional_class_rows_case(const XrXirCompileContext *contex
 static void conditional_class_rows_literals(void) {
     for (uint32_t mode=0;mode<7;++mode) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-        uint64_t baseline=rp_stats(&context).live_bytes;
+        uint64_t baseline=rp_stats(&context).held_bytes;
         CHECK(conditional_class_rows_case(&context,mode,true)==XR_XIR_OK);
         rp_owner_free(&context,baseline);rp_balanced(physical);
     }
@@ -285,30 +285,29 @@ static void conditional_class_rows_resources(void) {
             XrXirStatus status=conditional_class_rows_case(&context,mode,false);
             if (!pass) {
                 CHECK(status==XR_XIR_OK);sites=rp_attempts;single=rp_stats(&context);
-                fprintf(stderr,"INVOCATION_CLASS_ROWS_CENSUS mode=%u sites=%zu allocated=%llu live=%llu peak=%llu work=%llu\n",
-                    mode,sites,(unsigned long long)single.allocated_bytes,(unsigned long long)single.live_bytes,
-                    (unsigned long long)single.peak_bytes,(unsigned long long)single.work);
+                fprintf(stderr,"INVOCATION_CLASS_ROWS_CENSUS mode=%u sites=%zu allocated=%llu held=%llu peak=%llu\n",
+                    mode,sites,(unsigned long long)single.allocated_bytes,(unsigned long long)single.held_bytes,
+                    (unsigned long long)single.peak_bytes);
             } else {
                 CHECK(rp_injected && status==XR_XIR_OUT_OF_MEMORY);
                 ConditionalRetryTrial retry={.which=75+mode,.ordinal=pass-1,.sites=sites,.resources=identity,
                     .initial=entry,.single=single,.retained=retained,.first=status};
                 conditional_retry_operation(&context,&retry);
             }
-            rp_fail_at=SIZE_MAX;rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
+            rp_fail_at=SIZE_MAX;rp_owner_free(&context,entry.held_bytes);rp_balanced(physical);
         }
-        uint64_t measured[3]={single.allocated_bytes,single.peak_bytes,single.work};
-        for (uint32_t axis=0;axis<3;++axis) for (uint32_t pass=0;pass<2;++pass) {
-            CHECK(measured[axis]);RootParameterMark physical=rp_mark();XrCompileResourceLimits limits=rp_caps();
-            uint64_t value=measured[axis]-(pass?0:1);
-            if (!axis) limits.allocated_bytes=value;else if (axis==1) limits.live_bytes=value;else limits.work=value;
+        for (uint32_t pass=0;pass<2;++pass) {
+            CHECK(single.peak_bytes);RootParameterMark physical=rp_mark();XrCompileResourceLimits limits=rp_caps();
+            uint64_t value=single.peak_bytes-(pass?0:1);
+            limits.memory_limit=value;
             XrXirCompileContext context=rp_owner(limits);XrCompileResourceStats entry=rp_stats(&context);
             RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
             XrXirStatus status=conditional_class_rows_case(&context,mode,false);
-            CHECK(status==(pass?XR_XIR_OK:XR_XIR_BUDGET));
+            CHECK(status==(pass?XR_XIR_OK:XR_XIR_MEMORY_LIMIT));
             ConditionalRetryTrial retry={.which=75+mode,.ordinal=SIZE_MAX,.sites=sites,.resources=identity,
                 .initial=entry,.single=single,.retained=retained,.first=status};
             conditional_retry_operation(&context,&retry);
-            rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
+            rp_owner_free(&context,entry.held_bytes);rp_balanced(physical);
         }
     }
 }

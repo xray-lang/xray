@@ -60,15 +60,17 @@ static XrXirInstruction *pc_source_terminal_row;
 static size_t pc_source_terminal_skip,pc_source_terminal_observed,pc_source_terminal_free_count;
 static uint32_t pc_source_terminal_mutation,pc_source_terminal_calls;
 
-static void pc_source_terminal_trigger(void *memory,size_t bytes) {
+static void pc_source_terminal_trigger(void *memory) {
+    size_t bytes=pc_final_physical_size(memory);
     CHECK(memory && bytes && pc_source_terminal_row);
     if (pc_source_terminal_observed++<pc_source_terminal_skip) return;
-    CHECK(!pc_source_terminal_calls);++pc_source_terminal_calls;pc_allocate_hook=NULL;pc_free_hook=NULL;
+    CHECK(!pc_source_terminal_calls);++pc_source_terminal_calls;rp_allocation_observer=NULL;rp_release_observer=NULL;
     CHECK(pc_source_terminal_row->op==XR_XIR_CONST_INT && pc_source_terminal_row->type==XR_XIR_I64);
     if (pc_source_terminal_mutation) pc_source_terminal_row->type=XR_XIR_BOOL;
 }
 
-static void pc_source_terminal_count_free(void *memory,size_t bytes) {
+static void pc_source_terminal_count_free(void *memory) {
+    size_t bytes=pc_final_physical_size(memory);
     CHECK(memory && bytes);++pc_source_terminal_free_count;
 }
 
@@ -83,11 +85,11 @@ static XrXirStatus pc_source_terminal_operation(const XrXirCompileContext *conte
     CHECK(published && published->contexts && !effects->outcomes_work.contexts &&
         effect_contexts_read(effects)==published->contexts);
     const EffectContextOwner *original=published->contexts;
-    size_t calls=attempts;uint64_t observed_work=pc_stats(context).work;
+    size_t calls=rp_attempts;XrCompileResourceStats observed=rp_stats(context);
     CHECK(xir_fixture_effects_refresh(context,
         (XirFixtureEffectInput){xr_xir_compile_artifact_module(checked),
         xr_xir_compile_artifact_construction(checked)},effects)==XR_XIR_BAD_STRUCTURE);
-    CHECK(attempts==calls && pc_stats(context).work==observed_work);
+    CHECK(rp_attempts==calls && conditional_memory_unchanged(context,observed));
     CHECK(effect_contexts_read(effects)==original);
     const XrXirModule *input=xr_xir_compile_artifact_module(checked);
     if (!mutation) pc_final_retired_terms_rejections(context,
@@ -96,20 +98,20 @@ static XrXirStatus pc_source_terminal_operation(const XrXirCompileContext *conte
     CHECK(input->function_count==5 && input->functions[2].instruction_count==2);
     memcpy(functions,input->functions,sizeof(functions));memcpy(rows,functions[2].instructions,sizeof(rows));
     current.functions=functions;functions[2].instructions=rows;
-    CHECK(!pc_free_hook);pc_source_terminal_free_count=0;pc_free_hook=pc_source_terminal_count_free;
-    size_t before=attempts;
+    CHECK(!rp_release_observer);pc_source_terminal_free_count=0;rp_release_observer=pc_source_terminal_count_free;
+    size_t before=rp_attempts;
     CHECK(effect_source_relations(context,effects->invocations,effects)==XR_XIR_OK);
     CHECK(effect_source_contexts(context,&current,effects)==XR_XIR_OK);
     CHECK(effect_source_publication_match(context,&current,effects)==XR_XIR_OK);
-    size_t prefix_allocations=attempts-before,prefix_frees=pc_source_terminal_free_count;pc_free_hook=NULL;
+    size_t prefix_allocations=rp_attempts-before,prefix_frees=pc_source_terminal_free_count;rp_release_observer=NULL;
     size_t prefix=mutation==2?prefix_frees:prefix_allocations;
-    CHECK(!pc_allocate_hook && !pc_source_terminal_row && mutation<3);
+    CHECK(!rp_allocation_observer && !pc_source_terminal_row && mutation<3);
     CHECK(prefix);pc_source_terminal_skip=prefix-1;pc_source_terminal_observed=0;pc_source_terminal_calls=0;
     pc_source_terminal_mutation=mutation;pc_source_terminal_row=&rows[0];
-    if (mutation==2) pc_free_hook=pc_source_terminal_trigger;else pc_allocate_hook=pc_source_terminal_trigger;
+    if (mutation==2) rp_release_observer=pc_source_terminal_trigger;else rp_allocation_observer=pc_source_terminal_trigger;
     XrXirStatus status=xir_fixture_effects_terminal(context,
         (XirFixtureEffectInput){&current,xr_xir_compile_artifact_construction(checked)},effects);
-    pc_allocate_hook=NULL;pc_free_hook=NULL;pc_source_terminal_row=NULL;
+    rp_allocation_observer=NULL;rp_release_observer=NULL;pc_source_terminal_row=NULL;
     CHECK(pc_source_terminal_calls==1 && pc_source_terminal_observed==prefix);
     rows[0].type=XR_XIR_I64;
     CHECK(xir_fixture_effects_terminal(context,
@@ -122,9 +124,9 @@ static XrXirStatus pc_source_terminal_operation(const XrXirCompileContext *conte
 }
 
 static void pc_source_terminal_literal(uint32_t mutation) {
-    XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+    XrXirCompileContext context=rp_owner(rp_caps());context.limits=xr_xir_compile_default_limits();uint64_t baseline=rp_stats(&context).held_bytes;
     XrXirStatus status=pc_source_terminal_operation(&context,mutation,true);
-    pc_release(&context,baseline);
+    rp_owner_free(&context,baseline);CHECK(!rp_live && !rp_live_bytes);
     CHECK(status==(mutation?XR_XIR_BAD_STRUCTURE:XR_XIR_OK));
 }
 

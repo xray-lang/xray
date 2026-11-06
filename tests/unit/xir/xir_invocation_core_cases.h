@@ -204,13 +204,13 @@ static void invocation_final_trace_callback(const XrXirCompileContext *work,
     CHECK(effect_invocation_public_trace(work,certificate,3,&facts,&output)==XR_XIR_BAD_STRUCTURE &&
         !output && !rp_allocation_observer && invocation_trace_callback_count==1);
     invocation_trace_callback_target=NULL;rp_balanced(retained);
-    XrCompileResourceStats paid=rp_stats(work);CHECK(paid.work>before.work && paid.allocated_bytes>before.allocated_bytes);
+    XrCompileResourceStats paid=rp_stats(work);CHECK(paid.allocated_bytes>before.allocated_bytes);
     *node=saved;memcpy(node->causes,causes,sizeof(causes));
     summary->functions[3].formula.constant_mask=constant;
     for (uint32_t d=0;d<4;++d) summary->witnesses[(size_t)d*summary->count+3]=witnesses[d];
     CHECK(effect_invocation_public_trace(work,certificate,3,&facts,&output)==XR_XIR_OK && output);
     CHECK(output->counts[0]==1 && !output->counts[1] && output->facts.requires_root);
-    CHECK(rp_stats(work).allocated_bytes>paid.allocated_bytes && rp_stats(work).work>paid.work);
+    CHECK(rp_stats(work).allocated_bytes>paid.allocated_bytes);
     xr_xir_compile_root_cause_trace_free(output);rp_balanced(retained);
 }
 
@@ -302,11 +302,11 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
             EffectInvocationFinal *saved_final=certificate->final;certificate->final=&damaged;
             CHECK(effect_invocation_read_open(context,certificate,&damaged,&refused)==XR_XIR_BAD_STRUCTURE &&
                 !refused.work && !refused.consumers && !refused.final && rp_attempts==admission_attempts &&
-                rp_stats(context).work==before.work);
+                conditional_memory_unchanged(context,before));
             certificate->final=saved_final;refused.work=context;
             CHECK(effect_invocation_read_open(context,certificate,certificate->final,&refused)==XR_XIR_BAD_STRUCTURE &&
                 refused.work==context && !refused.consumers && rp_attempts==admission_attempts &&
-                rp_stats(context).work==before.work);
+                conditional_memory_unchanged(context,before));
             CHECK(caller_mask==(primitive_slot && !(mode&1)?XR_XIR_CALLABLE_ROOT_REQUIRED:0) &&
                 formal_mask==(XR_XIR_CALLABLE_ROOT_UNRESOLVED|(primitive_slot?XR_XIR_CALLABLE_ROOT_REQUIRED:0)) &&
                 edge_mask==(primitive_slot?XR_XIR_CALLABLE_ROOT_REQUIRED:0));
@@ -341,7 +341,7 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
                 untouched==UINT32_C(0x12345678));
             certificate->final->nodes[n].intrinsic_mask&=~XR_XIR_CALLABLE_ROOT_UNRESOLVED;
             RootParameterMark physical=rp_mark();XrXirCompileContext foreign=rp_owner(rp_caps());
-            uint64_t baseline=rp_stats(&foreign).live_bytes;
+            uint64_t baseline=rp_stats(&foreign).held_bytes;
             CHECK(effect_invocation_certificate_node_mask(&foreign,certificate,n,&untouched)==XR_XIR_BAD_STRUCTURE &&
                 untouched==UINT32_C(0x12345678));
             rp_owner_free(&foreign,baseline);rp_balanced(physical);
