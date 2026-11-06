@@ -62,7 +62,8 @@ static XrXirStatus effect_class_method_target(const XrXirCompileContext *work,co
     EffectClassMethodTargetMatch match={target,0,XR_XIR_UNIT};
     XrXirStatus status=effect_class_method_candidates(work,material,function,instruction,effect_class_method_target_match,&match);
     if(status==XR_XIR_OK && match.count!=1)status=XR_XIR_BAD_STRUCTURE;
-    if(status==XR_XIR_OK)*output=(XirClassMethodTarget){target,match.receiver};return status;
+    if(status==XR_XIR_OK)*output=(XirClassMethodTarget){target,match.receiver};
+    return status;
 }
 
 static uint32_t effect_reference_captures(const XrXirInstruction *op) {

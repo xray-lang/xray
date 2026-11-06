@@ -465,5 +465,6 @@ static XrXirStatus effect_class_reference_mask(const XrXirCompileContext *work,
     EffectClassReferenceMask read={work,effects,function,instruction,0,0};
     XrXirStatus status=effect_class_method_candidates(work,certificate->body,function,instruction,effect_class_reference_mask_target,&read);
     if(status==XR_XIR_OK && !read.count)status=XR_XIR_BAD_STRUCTURE;
-    if(status==XR_XIR_OK)*output=read.mask;return status;
+    if(status==XR_XIR_OK)*output=read.mask;
+    return status;
 }

@@ -51,7 +51,8 @@ static XrXirStatus view_pointer_indirect(const XrXirModule *module,uint32_t func
             ViewPointerTargets query={module,candidates,false,UINT32_MAX};
             status=xir_compile_class_method_candidates(module,receiver,(uint32_t)producer->immediate,
                 view_pointer_target,&query,control);
-            if(status==XR_XIR_OK && query.present)*output=query.candidate;return status;
+            if(status==XR_XIR_OK && query.present)*output=query.candidate;
+            return status;
         }
         if(producer->op!=XR_XIR_COPY && producer->op!=XR_XIR_OWNED_RETAIN &&
             producer->op!=XR_XIR_FUNCTION_WEAKEN)return XR_XIR_OK;

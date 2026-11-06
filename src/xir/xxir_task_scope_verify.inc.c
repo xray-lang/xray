@@ -126,7 +126,8 @@ static XrXirStatus task_scope_exit_closed(const Graph *graph,const XrXirFunction
                 if(status!=XR_XIR_OK)return status;
             }
         uint32_t parent=function->blocks[graph->owner[frontier-1]].frontier;
-        if(parent>=frontier)return XR_XIR_BAD_STRUCTURE;frontier=parent;
+        if(parent>=frontier)return XR_XIR_BAD_STRUCTURE;
+        frontier=parent;
     }
     return XR_XIR_OK;
 }

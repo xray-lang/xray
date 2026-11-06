@@ -61,7 +61,8 @@ static XrXirStatus local_error_cleanup(LocalErrorCfg *cfg,uint32_t producer,uint
                 local_error_type(cfg,group->result,out);
             }
         }
-        if(parent>=frontier)return XR_XIR_BAD_STRUCTURE;frontier=parent;
+        if(parent>=frontier)return XR_XIR_BAD_STRUCTURE;
+        frontier=parent;
     }
     return frontier==(uint64_t)op->immediate?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
 }

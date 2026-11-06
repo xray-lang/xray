@@ -65,7 +65,7 @@ static XrXirStatus effect_invocation_sites(EffectInvocationWorkspace *owner) {
         if(status!=XR_XIR_OK)break;
         if(!pass) {
             rows.capacity=rows.at;
-            if((uint64_t)rows.capacity>SIZE_MAX/sizeof(*rows.rows)) {status=XR_XIR_BUDGET;break;}
+            if(rows.capacity && sizeof(*rows.rows)>SIZE_MAX/(uint64_t)rows.capacity) {status=XR_XIR_BUDGET;break;}
             rows.rows=rows.capacity?xir_compile_alloc(owner->read.work,(size_t)rows.capacity*sizeof(*rows.rows),&status):NULL;
             if(rows.capacity && !rows.rows)break;
         }
