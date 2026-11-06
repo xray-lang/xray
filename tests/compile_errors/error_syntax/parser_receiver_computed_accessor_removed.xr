@@ -1,0 +1,6 @@
+class Meter {
+  value: i64 {
+    fn() -> i64 { return 0 }
+    fn(v: i64) {}
+  }
+}

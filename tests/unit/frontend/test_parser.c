@@ -15,7 +15,6 @@
 
 #include "../test_framework.h"
 #include <string.h>
-#include <assert.h>
 
 #include "frontend/parser/xparse.h"
 #include "frontend/parser/xast_api.h"
@@ -86,14 +85,14 @@ static AstNode *parse_program(XrCompilerSession *session, const char *source) {
 /* Helper: parse source and assert success */
 static AstNode *parse_ok(const char *source) {
     AstNode *ast = parse_program(X_session, source);
-    assert(ast != NULL && "parse_ok: parse failed");
-    assert(ast->type == AST_PROGRAM);
+    owner_check(ast != NULL && "parse_ok: parse failed");
+    owner_check(ast->type == AST_PROGRAM);
     return ast;
 }
 
 /* Helper: get first statement from program */
 static AstNode *first_stmt(AstNode *program) {
-    assert(program->as.program.count > 0 && "first_stmt: empty program");
+    owner_check(program->as.program.count > 0 && "first_stmt: empty program");
     return program->as.program.statements[0];
 }
 
@@ -113,9 +112,9 @@ static AstNode *parse_expr(const char *expr) {
     char source[512];
     snprintf(source, sizeof(source), "var __probe = %s", expr);
     AstNode *stmt = parse_first(source);
-    assert(stmt->type == AST_VAR_DECL && "parse_expr: expected a var declaration");
+    owner_check(stmt->type == AST_VAR_DECL && "parse_expr: expected a var declaration");
     AstNode *init = stmt->as.var_decl.initializer;
-    assert(init != NULL && "parse_expr: missing initializer");
+    owner_check(init != NULL && "parse_expr: missing initializer");
     return init;
 }
 
@@ -655,10 +654,8 @@ TEST(parser_receiver_modes_are_explicit_method_contracts) {
                   XR_PARAM_MOVE);
 
     AstNode *property_node = parse_first("class Meter {\n"
-                                         "  value: i64 {\n"
-                                         "    fn() -> i64 { return 0 }\n"
-                                         "    fn(v: i64) {}\n"
-                                         "  }\n"
+                                         "  value() -> i64 { return 0 }\n"
+                                         "  ref setValue(v: i64) {}\n"
                                          "}");
     ASSERT_EQ_INT(property_node->as.class_decl.method_count, 2);
     ASSERT_EQ_INT(property_node->as.class_decl.methods[0]->as.method_decl.receiver_mode,
