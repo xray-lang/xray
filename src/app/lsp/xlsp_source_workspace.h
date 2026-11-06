@@ -3,6 +3,7 @@
 #define XLSP_SOURCE_WORKSPACE_H
 #include "xlsp_source_navigation.h"
 #include "xlsp_source_inlay.h"
+#include "../../base/xcompile_request.h"
 typedef struct XlspSourceWorkspace XlspSourceWorkspace;
 typedef struct XlspSourceWorkspaceFailure {
     bool present;
@@ -12,9 +13,11 @@ typedef struct XlspSourceWorkspaceFailure {
 XR_FUNC void xlsp_source_workspace_failure_free(XlspSourceWorkspaceFailure *);
 /* One synchronous transaction and one ledger for real stdlib selection,
  * Catalog, authorities, Session, all overlays and root query snapshots.
- * Failure preserves output. No global Session or old analyzer participates. */
+ * Failure preserves output. No global Session or old analyzer participates.
+ * Optional request control is borrowed through workspace destruction, including
+ * its parser Session; snapshots retain only memory, never this callback. */
 XR_FUNC XrXirStatus xlsp_source_workspace_build(const XrXirCompileContext *,
-    const XlspSourceDocument *,size_t,XlspSourceWorkspace **,unsigned *stage,XlspSourceWorkspaceFailure *);
+    const XlspSourceDocument *,size_t,XlspSourceWorkspace **,unsigned *stage,XlspSourceWorkspaceFailure *,XrCompileRequestControl *);
 XR_FUNC void xlsp_source_workspace_free(XlspSourceWorkspace *);
 /* mode 0 definition, 1 references, 2 document highlights, 3 typed hover, 4 signature help. JSON owns all text. */
 XR_FUNC XrXirStatus xlsp_source_workspace_navigation(XlspSourceWorkspace *,

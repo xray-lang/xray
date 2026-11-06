@@ -112,7 +112,7 @@ static void lifetime(const char *entry){
     CHECK(xlsp_source_index_store_new(r,&server.source_index)==XR_XIR_OK);
     const char text[]="fn kept()->i64{return 1}\n";XlspSourceDocument doc={entry,text,strlen(entry),sizeof(text)-1,1};
     XrXirCompileContext context={r,xr_xir_compile_default_limits()};
-    CHECK(xlsp_source_workspace_build(&context,&doc,1,&server.source_workspace,NULL,NULL)==XR_XIR_OK);
+    CHECK(xlsp_source_workspace_build(&context,&doc,1,&server.source_workspace,NULL,NULL,NULL)==XR_XIR_OK);
     XrJsonValue *json=input(0);XlspSourceFolders *owner=NULL;CHECK(xlsp_source_folders_read(r,&server,json,&owner)==XR_XIR_OK);
     xjson_free(json);xr_compile_resources_release(r);
     XlspIndexPoolOptions options={r,50u*1024u*1024u,2};CHECK(xlsp_index_pool_new(&options,&server.index_pool)==XR_XIR_OK);

@@ -23,9 +23,10 @@ typedef struct XlspSourceRequestResult {
 } XlspSourceRequestResult;
 /* Capture owns every URI, text and version on the original ledger. Only capture
  * borrows editor state; the one-shot worker run never accesses the document table.
- * Cancellation is checked at admission, inside the original ledger's work and
- * allocation admissions, and before publication. The task token is borrowed
- * only during run and detached before return; it never escapes into results.
+ * Cancellation is checked at admission, explicit build stage boundaries,
+ * the actual parser Session's safe points and before publication. The task
+ * token and stack control remain live until workspace/Session destruction
+ * inside run; neither callback nor Session escapes into query snapshots.
  * A cancelled result's flag takes precedence over its underlying stage status. */
 XR_FUNC XrXirStatus xlsp_source_request_new(const XlspSourceRequestInput *,XlspSourceRequest **);
 XR_FUNC void xlsp_source_request_free(XlspSourceRequest *);

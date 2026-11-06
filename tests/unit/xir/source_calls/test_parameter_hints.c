@@ -26,7 +26,7 @@ static XlspSourceSnapshot *parameter_producer(XrCompileResources *resources,cons
     memcpy(text,program,length+1);memcpy(name,uri,uri_length+1);XlspSourceDocument input={name,text,uri_length,length,9};
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};XlspSourceWorkspace *workspace=NULL;
     unsigned stage=0;XlspSourceWorkspaceFailure failure={0};
-    XrXirStatus status=xlsp_source_workspace_build(&context,&input,1,&workspace,&stage,&failure);
+    XrXirStatus status=xlsp_source_workspace_build(&context,&input,1,&workspace,&stage,&failure,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"parameter stage=%u status=%u %s\n%s",stage,status,failure.diagnostic.message,program);
     CHECK(status==XR_XIR_OK);*arguments=parameter_syntax(resources,name,text,9);
     XlspSourceSnapshot *snapshot=workspace->snapshots[0];workspace->snapshots[0]=NULL;

@@ -62,7 +62,7 @@ static void import_semantic(const char *uri,const char *library,const char *prog
     XlspSourceDocument documents[]={{uri,program,strlen(uri),strlen(program),7},
         {library,import_child,strlen(library),sizeof(import_child)-1,9}};
     XlspSourceWorkspace *workspace=NULL;XlspSourceWorkspaceFailure failure={0};unsigned stage=0;
-    XrXirStatus status=xlsp_source_workspace_build(&context,documents,2,&workspace,&stage,&failure);
+    XrXirStatus status=xlsp_source_workspace_build(&context,documents,2,&workspace,&stage,&failure,NULL);
     XlspSourceTokens *tokens=NULL;
     if(status==XR_XIR_OK)status=xlsp_source_workspace_tokens(workspace,uri,strlen(uri),NULL,&tokens);
     if(status!=XR_XIR_OK)fprintf(stderr,"Import semantic mode=%u status=%u stage=%u %s\n",mode,(unsigned)status,stage,failure.diagnostic.message);

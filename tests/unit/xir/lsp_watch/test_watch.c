@@ -65,7 +65,7 @@ static void lifetime(const char *entry){
     XlspSourceWatch *occupied=owner;size_t calls=runtime_attempts;CHECK(xlsp_source_watch_read(r,json,&occupied)==XR_XIR_BAD_STRUCTURE&&occupied==owner&&runtime_attempts==calls);
     const char text[]="fn kept()->i64{return 1}\n";XlspSourceDocument document={entry,text,strlen(entry),sizeof(text)-1,1};
     XrLspServer server={0};XrXirCompileContext context={r,xr_xir_compile_default_limits()};
-    CHECK(xlsp_source_workspace_build(&context,&document,1,&server.source_workspace,NULL,NULL)==XR_XIR_OK);
+    CHECK(xlsp_source_workspace_build(&context,&document,1,&server.source_workspace,NULL,NULL,NULL)==XR_XIR_OK);
     XlspSourceWorkspace *kept=server.source_workspace;size_t live=runtime_live,bytes=runtime_bytes;
     xjson_free(json);xr_compile_resources_release(r);CHECK(facts(owner,0)==XR_XIR_OK);
     server.source_revision=UINT64_MAX;CHECK(xlsp_source_watch_commit(owner,&server)==XR_XIR_BUDGET);
@@ -74,7 +74,7 @@ static void lifetime(const char *entry){
     xlsp_source_watch_free(owner);CHECK(!runtime_live&&!runtime_bytes&&!lsp_json_live&&!lsp_json_bytes);
     json=input(2);r=sdk_ledger(&limits);owner=NULL;CHECK(xlsp_source_watch_read(r,json,&owner)==XR_XIR_OK);
     context=(XrXirCompileContext){r,xr_xir_compile_default_limits()};server=(XrLspServer){0};
-    CHECK(xlsp_source_workspace_build(&context,&document,1,&server.source_workspace,NULL,NULL)==XR_XIR_OK);kept=server.source_workspace;
+    CHECK(xlsp_source_workspace_build(&context,&document,1,&server.source_workspace,NULL,NULL,NULL)==XR_XIR_OK);kept=server.source_workspace;
     xjson_free(json);xr_compile_resources_release(r);server.source_revision=UINT64_MAX;
     CHECK(xlsp_source_watch_commit(owner,&server)==XR_XIR_OK&&server.source_revision==UINT64_MAX&&server.source_workspace==kept);
     xlsp_source_workspace_free(server.source_workspace);server.source_workspace=NULL;

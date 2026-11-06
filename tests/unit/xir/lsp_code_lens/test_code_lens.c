@@ -63,7 +63,7 @@ static XrXirStatus once(const char *root_uri,const char *lib_uri,unsigned mode,
     char library[sizeof(lib_text)];memcpy(library,lib_text,sizeof(library));
     XlspSourceDocument documents[2]={{root_copy,owned,strlen(root_uri),length,4},
         {lib_copy,library,strlen(lib_uri),sizeof(library)-1,9}};
-    XrXirStatus status=xlsp_source_workspace_build(&context,documents,mode?1:2,&workspace,&stage,NULL);
+    XrXirStatus status=xlsp_source_workspace_build(&context,documents,mode?1:2,&workspace,&stage,NULL,NULL);
     memset(owned,'?',length+1);memset(root_copy,'?',strlen(root_uri)+1);memset(lib_copy,'?',strlen(lib_uri)+1);
     sdk_fixture_free(owned);sdk_fixture_free(root_copy);sdk_fixture_free(lib_copy);
     memset(library,'?',sizeof(library));memset(documents,0,sizeof(documents));

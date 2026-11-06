@@ -63,7 +63,7 @@ XR_FUNC XrXirStatus xlsp_source_request_run(XlspSourceRequest *request,const _At
     request->started=true;
     XlspSourceRequestResult result={0};XlspSourceWorkspace *workspace=NULL;
     if(request_cancelled(cancel)){result.cancelled=true;goto done;}
-    result.status=xlsp_source_workspace_build(&request->context,request->documents,request->count,&workspace,&result.stage,NULL);
+    result.status=xlsp_source_workspace_build(&request->context,request->documents,request->count,&workspace,&result.stage,NULL,NULL);
     if(request_cancelled(cancel)){result.cancelled=true;goto done;}
     if(result.status==XR_XIR_OK) {
         const XlspSourceDocument *entry=&request->documents[request->entry];result.stage=7;

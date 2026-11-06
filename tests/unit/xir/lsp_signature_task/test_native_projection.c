@@ -114,7 +114,7 @@ static void run(const char *uri,const char *library,unsigned scenario) {
     CHECK(limits.work<sdk_unlimited.work);XrCompileResources *r=sdk_ledger(&limits);uint64_t baseline=sdk_stats(r).live_bytes;
     XrXirCompileContext context={r,xr_xir_compile_default_limits()};XlspSourceWorkspace *w=NULL;
     unsigned stage=0;XlspSourceWorkspaceFailure failure={0};
-    XrXirStatus status=xlsp_source_workspace_build(&context,documents,2,&w,&stage,&failure);
+    XrXirStatus status=xlsp_source_workspace_build(&context,documents,2,&w,&stage,&failure,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"workspace scenario=%u stage=%u status=%u %s\n",scenario,stage,status,failure.diagnostic.message);
     CHECK(status==XR_XIR_OK);
     if(scenario>=59)target_identity(w,documents,scenario,row,column);

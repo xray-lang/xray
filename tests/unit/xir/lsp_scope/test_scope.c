@@ -124,7 +124,7 @@ static XrXirStatus lens_once(const Inputs *in,size_t physical_fault,size_t json_
     XrJsonValue *params=xjson_new_object(),*document=xjson_new_object();CHECK(params&&document);xjson_object_set_new(document,"uri",xjson_new_string(lib_uri));xjson_object_set_new(params,"textDocument",document);
     XrCompileResources *previous_resources=sdk_ledger(&limits);XrXirCompileContext previous_context={previous_resources,xr_xir_compile_default_limits()};
     XlspSourceDocument previous_documents[]={{in->uri,root_text,strlen(in->uri),sizeof(root_text)-1,7},{lib_uri,library,strlen(lib_uri),sizeof(library)-1,7}};
-    CHECK(xlsp_source_workspace_build(&previous_context,previous_documents,2,&server.source_workspace,NULL,NULL)==XR_XIR_OK);xr_compile_resources_release(previous_resources);XlspSourceWorkspace *old=server.source_workspace;CHECK(old);
+    CHECK(xlsp_source_workspace_build(&previous_context,previous_documents,2,&server.source_workspace,NULL,NULL,NULL)==XR_XIR_OK);xr_compile_resources_release(previous_resources);XlspSourceWorkspace *old=server.source_workspace;CHECK(old);
     XrJsonValue *previous=xlsp_code_lens_handle(&server,params);if(server.source_failure.stage)fprintf(stderr,"Closed CodeLens baseline stage=%u status=%u\n",server.source_failure.stage,server.source_failure.status);CHECK(server.source_failure.stage==0&&server.source_workspace==old);lens_facts(previous);xjson_free(previous);
     runtime_attempts=0;runtime_fail_at=physical_fault;lsp_json_calls=0;lsp_json_fail=json_fault;lsp_json_injected=false;
     XrJsonValue *result=xlsp_code_lens_handle(&server,params);XrXirStatus status=server.source_failure.stage?(XrXirStatus)server.source_failure.status:XR_XIR_OK;
@@ -171,7 +171,7 @@ static XrXirStatus binding_lenses_once(const Inputs *in,unsigned mode,XrCompileR
 static void token_dependency_control(const Inputs *in) {
     char library_uri[2048];size_t length=strlen(in->uri);CHECK(length>=7&&length<sizeof(library_uri));memcpy(library_uri,in->uri,length-7);memcpy(library_uri+length-7,"lib.xr",7);
     const char library[]="export fn target(value:i64)->i64{return value}\n";XlspSourceDocument documents[]={{in->uri,root_text,strlen(in->uri),sizeof(root_text)-1,7},{library_uri,library,strlen(library_uri),sizeof(library)-1,7}};
-    XrCompileResources *r=sdk_ledger(&limits);XrXirCompileContext context={r,xr_xir_compile_default_limits()};XlspSourceWorkspace *workspace=NULL;CHECK(xlsp_source_workspace_build(&context,documents,2,&workspace,NULL,NULL)==XR_XIR_OK);
+    XrCompileResources *r=sdk_ledger(&limits);XrXirCompileContext context={r,xr_xir_compile_default_limits()};XlspSourceWorkspace *workspace=NULL;CHECK(xlsp_source_workspace_build(&context,documents,2,&workspace,NULL,NULL,NULL)==XR_XIR_OK);
     XrJsonValue *legacy=NULL,*references=NULL;XrXirStatus status=xlsp_source_code_lens_json(r,workspace,library_uri,strlen(library_uri),&legacy);
     XrXirStatus reference_status=xlsp_source_workspace_navigation(workspace,library_uri,strlen(library_uri),(XrLspPosition){0,11},1,false,&references);
     printf("Original qualified-module CodeLens token dependency status=%u output=%s; Source refs status=%u count=%d\n",(unsigned)status,legacy?"JSON":"NULL",(unsigned)reference_status,references?references->as.array.count:-1);

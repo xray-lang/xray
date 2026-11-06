@@ -14,7 +14,7 @@ static XlspSourceSnapshot *hints_producer(XrCompileResources *resources,const ch
     XlspSourceDocument input={owned_uri,text,uri_length,length,9};
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};XlspSourceWorkspace *workspace=NULL;
     unsigned stage=0;XlspSourceWorkspaceFailure failure={0};
-    XrXirStatus status=xlsp_source_workspace_build(&context,&input,1,&workspace,&stage,&failure);
+    XrXirStatus status=xlsp_source_workspace_build(&context,&input,1,&workspace,&stage,&failure,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"hints stage=%u status=%u %s\n%s",stage,status,failure.diagnostic.message,program);
     CHECK(status==XR_XIR_OK&&workspace);
     XlspSourceSnapshot *snapshot=workspace->snapshots[0];workspace->snapshots[0]=NULL;

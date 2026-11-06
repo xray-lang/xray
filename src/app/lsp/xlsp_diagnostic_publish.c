@@ -11,7 +11,7 @@ static XrXirStatus diagnostic_clear_previous(XrLspServer *server,XlspSourceOpen 
     const XrJsonValue *old=xlsp_source_open_published_clear(open);
     if(!old)return XR_XIR_UNRESOLVED;
     const XrJsonValue *uri=diagnostic_uri(old);if(!uri)return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=diagnostic_survey(server,open,uri);if(status!=XR_XIR_OK)return status;
+    XrXirStatus status=diagnostic_survey(server);if(status!=XR_XIR_OK)return status;
     XrJsonValue *clear=xjson_clone((XrJsonValue *)old);if(!clear)return XR_XIR_OUT_OF_MEMORY;
     status=xlsp_protocol_send_notification_pair(server,"textDocument/publishDiagnostics",clear,NULL);
     if(status!=XR_XIR_OK)return status;
@@ -32,7 +32,7 @@ XR_FUNC void xlsp_publish_diagnostics(XrLspServer *server,XrLspDocument *doc) {
     if(version->type==XR_JSON_NULL) {
         if(target)goto done;
     }else if(version->type!=XR_JSON_NUMBER||!target||target->version!=xjson_get_int(params,"version"))goto done;
-    status=diagnostic_survey(server,open,uri);if(status!=XR_XIR_OK)goto done;
+    status=diagnostic_survey(server);if(status!=XR_XIR_OK)goto done;
     clear=diagnostic_clear_new(uri);if(!clear){status=XR_XIR_OUT_OF_MEMORY;goto done;}
     const XrJsonValue *old=xlsp_source_open_published_clear(open);
     if(old&&!diagnostic_equal(diagnostic_uri(old),uri)) {

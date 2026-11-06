@@ -49,7 +49,7 @@ static int run(int argc, char **argv) {
     XrXirStatus status = xlsp_source_bindings_build(&context, &document, 1, &owner);
     if (status != XR_XIR_OK) {
         XlspSourceWorkspace *control = NULL; XlspSourceWorkspaceFailure failure = {0}; unsigned stage = 0;
-        XrXirStatus observed = xlsp_source_workspace_build(&context, &document, 1, &control, &stage, &failure);
+        XrXirStatus observed = xlsp_source_workspace_build(&context, &document, 1, &control, &stage, &failure,NULL);
         printf("Independent same-input Source workspace status=%u stage=%u diagnostic=%s\n",
             (unsigned)observed, stage, failure.diagnostic.message);
         CHECK(observed == status && !control);

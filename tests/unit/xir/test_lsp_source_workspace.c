@@ -25,7 +25,7 @@ static XrXirStatus once(const char *root_uri,const char *lib_uri,XrCompileResour
     CHECK(root_length>0&&(size_t)root_length<sizeof(root));memcpy(lib,lib_text,sizeof(lib));
     XlspSourceDocument documents[2]={{root_uri,root,strlen(root_uri),(size_t)root_length,1},
         {lib_uri,lib,strlen(lib_uri),sizeof(lib)-1,7}};
-    XrXirStatus status=xlsp_source_workspace_build(&context,documents,2,&workspace,&stage,NULL);
+    XrXirStatus status=xlsp_source_workspace_build(&context,documents,2,&workspace,&stage,NULL,NULL);
     memset(root,'?',sizeof(root));memset(lib,'?',sizeof(lib));memset(documents,0,sizeof(documents));
     if(status==XR_XIR_OK) {
         CHECK(workspace&&stage==0);

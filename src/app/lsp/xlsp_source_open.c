@@ -2,6 +2,7 @@
 #include "xlsp_source_open.h"
 #include "xlsp_diagnostic_owner.h"
 #include "../../base/xchecks.h"
+#include "../../xir/xxir_compile_memory.h"
 #include <limits.h>
 #include <string.h>
 struct XlspSourceOpen {
@@ -21,10 +22,6 @@ struct XlspSourceOpen {
     XrJsonValue *published_clear;
     uint64_t diagnostic_revision;
 };
-static XrXirStatus open_status(XrCompileResourceStatus s) {
-    return s==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:s==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:
-        s==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
-}
 void xlsp_source_open_free(XlspSourceOpen *o) {
     if(!o)return;
     xjson_free(o->published_clear);
@@ -39,11 +36,9 @@ const XlspSourceWorkspaceFailure *xlsp_source_open_failure(const XlspSourceOpen 
 XlspSourceBuffer *xlsp_source_open_take_buffer(XlspSourceOpen *o){if(!o)return NULL;XlspSourceBuffer *p=o->buffer;o->buffer=NULL;return p;}
 XlspSyntaxSnapshot *xlsp_source_open_take_syntax(XlspSourceOpen *o){if(!o)return NULL;XlspSyntaxSnapshot *p=o->syntax;o->syntax=NULL;return p;}
 XlspSourceWorkspace *xlsp_source_open_take_workspace(XlspSourceOpen *o){if(!o)return NULL;XlspSourceWorkspace *p=o->workspace;o->workspace=NULL;return p;}
-static XrXirStatus open_path_equal(XrCompileResources *resources,const char *a,const char *b,bool *equal) {
+static XrXirStatus open_path_equal(const char *a,const char *b,bool *equal) {
     *equal=false;
     for(size_t i=0;;++i) {
-        XrXirStatus status=open_status(xr_compile_resources_work(resources,2));
-        if(status!=XR_XIR_OK)return status;
         char first=a[i],second=b[i];
 #if defined(XR_OS_WINDOWS)
         if(first=='\\')first='/';if(second=='\\')second='/';
@@ -57,7 +52,7 @@ static XrXirStatus open_capture_diagnostic(XlspSourceOpen *o,const XlspSourceDoc
     for(size_t i=0;i<count;++i) {
         bool equal=false;char *path=NULL;
         XrXirStatus status=xlsp_source_uri_path(o->resources,documents[i].uri,documents[i].uri_length,&path);
-        if(status==XR_XIR_OK)status=open_path_equal(o->resources,path,o->failure.source.path,&equal);
+        if(status==XR_XIR_OK)status=open_path_equal(path,o->failure.source.path,&equal);
         xr_compile_resources_free(path);
         if(status!=XR_XIR_OK)return status;
         if(!equal)continue;
@@ -68,9 +63,7 @@ static XrXirStatus open_capture_diagnostic(XlspSourceOpen *o,const XlspSourceDoc
             o->diagnostic_uri_length=input->uri_length;
             status=xlsp_source_buffer_new(o->resources,input->text,input->length,o->diagnostic_version,&o->diagnostic_buffer);
             if(status!=XR_XIR_OK)return status;
-            status=open_status(xr_compile_resources_alloc(o->resources,input->uri_length+1,(void **)&o->diagnostic_uri));
-            if(status!=XR_XIR_OK)return status;
-            status=open_status(xr_compile_resources_work(o->resources,input->uri_length+1));
+            status=xir_compile_resource_status(xr_compile_resources_alloc(o->resources,input->uri_length+1,(void **)&o->diagnostic_uri));
             if(status!=XR_XIR_OK)return status;
             memcpy(o->diagnostic_uri,input->uri,input->uri_length);o->diagnostic_uri[input->uri_length]=0;
         }
@@ -82,7 +75,6 @@ static XrXirStatus open_capture_diagnostic(XlspSourceOpen *o,const XlspSourceDoc
         XrXirStatus status=xlsp_index_file_uri(o->resources,o->failure.source.path,&o->diagnostic_uri);
         if(status!=XR_XIR_OK)return status;
         for(size_t length=0;;++length) {
-            status=open_status(xr_compile_resources_work(o->resources,1));if(status!=XR_XIR_OK)return status;
             if(!o->diagnostic_uri[length]){o->diagnostic_uri_length=length;break;}
         }
         /* The graph projected the actual read before freeing it. No second
@@ -96,24 +88,34 @@ XrXirStatus xlsp_source_open_prepare(const XrXirCompileContext *context,const Xl
     const XlspSourceDocument *input=&documents[entry];
     if(!input->uri||input->uri_length==SIZE_MAX||input->version<INT32_MIN||input->version>INT32_MAX)return XR_XIR_BAD_STRUCTURE;
     XlspSourceOpen *o=NULL;XrCompilerSession *session=NULL;
-    XrXirStatus status=open_status(xr_compile_resources_calloc(context->resources,1,sizeof(*o),(void **)&o));
+    XrXirStatus status=xir_compile_resource_status(xr_compile_resources_calloc(context->resources,1,sizeof(*o),(void **)&o));
     if(status!=XR_XIR_OK)return status;
     o->resources=context->resources;o->uri_length=input->uri_length;o->diagnostic_version=(int)input->version;
     status=xlsp_source_buffer_new(context->resources,input->text,input->length,(int)input->version,&o->buffer);
     if(status!=XR_XIR_OK)goto done;
     XrCompileResourceStatus opened=xr_compile_session_new(context->resources,&session);
-    if(opened!=XR_COMPILE_RESOURCE_OK){status=opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:opened==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;}
+    status=xir_compile_resource_status(opened);if(status!=XR_XIR_OK)goto done;
     XrParseStatus parsed=xlsp_source_syntax_build(session,input,&o->syntax);
-    if(parsed!=XR_PARSE_OK&&parsed!=XR_PARSE_RECOVERED){status=parsed==XR_PARSE_BUDGET?XR_XIR_BUDGET:parsed==XR_PARSE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;}
+    if(parsed!=XR_PARSE_OK&&parsed!=XR_PARSE_RECOVERED){
+        switch(parsed) {
+        case XR_PARSE_BUDGET: status=XR_XIR_BUDGET;break;
+        case XR_PARSE_MEMORY_LIMIT: status=XR_XIR_MEMORY_LIMIT;break;
+        case XR_PARSE_OVERFLOW: status=XR_XIR_OVERFLOW;break;
+        case XR_PARSE_CANCELLED: status=XR_XIR_CANCELLED;break;
+        case XR_PARSE_DEADLINE: status=XR_XIR_DEADLINE;break;
+        case XR_PARSE_CLOCK_FAILURE: status=XR_XIR_CLOCK_FAILURE;break;
+        case XR_PARSE_OUT_OF_MEMORY: status=XR_XIR_OUT_OF_MEMORY;break;
+        default: status=XR_XIR_BAD_STRUCTURE;break;
+        }
+        goto done;
+    }
     xr_compile_session_free(session);session=NULL;
     /* The syntax admission already validated the bounded URI, including NUL. */
-    status=open_status(xr_compile_resources_alloc(context->resources,input->uri_length+1,(void **)&o->uri));
-    if(status!=XR_XIR_OK)goto done;
-    status=open_status(xr_compile_resources_work(context->resources,input->uri_length+1));
+    status=xir_compile_resource_status(xr_compile_resources_alloc(context->resources,input->uri_length+1,(void **)&o->uri));
     if(status!=XR_XIR_OK)goto done;
     memcpy(o->uri,input->uri,input->uri_length);o->uri[input->uri_length]=0;
     unsigned stage=0;
-    o->query_status=xlsp_source_workspace_build(context,documents,count,&o->workspace,&stage,&o->failure);
+    o->query_status=xlsp_source_workspace_build(context,documents,count,&o->workspace,&stage,&o->failure,NULL);
     status=o->query_status;
     if(status!=XR_XIR_OK) {
         bool language_status=status==XR_XIR_BAD_STRUCTURE||status==XR_XIR_BAD_TYPE||status==XR_XIR_BAD_VALUE||status==XR_XIR_UNRESOLVED||status==XR_XIR_UNSUPPORTED;
@@ -188,11 +190,8 @@ done:
 XR_FUNC XrXirStatus xlsp_source_open_diagnostics_params_json(const XlspSourceOpen *o,const XlspSourceBuffer *buffer,const XlspSyntaxSnapshot *syntax,XrJsonValue **out) {
     if(!o||!buffer||!syntax||!out||*out)return XR_XIR_BAD_STRUCTURE;
     bool imported=o->diagnostic_uri&&!xlsp_source_syntax_diagnostics(syntax);
-    XrXirStatus status=open_status(xr_compile_resources_work(o->resources,imported?o->diagnostic_uri_length:o->uri_length));
-    if(status==XR_XIR_OK)status=open_status(xr_compile_resources_work(o->resources,3*sizeof(XrJsonMember)+sizeof(XrJsonValue)));
-    if(status!=XR_XIR_OK)return status;
     XrJsonValue *diagnostics=NULL;
-    status=xlsp_source_open_diagnostics_json(o,buffer,syntax,&diagnostics);
+    XrXirStatus status=xlsp_source_open_diagnostics_json(o,buffer,syntax,&diagnostics);
     if(status!=XR_XIR_OK)return status;
     XrJsonValue *params=xjson_new_object();
     if(!params){xjson_free(diagnostics);return XR_XIR_OUT_OF_MEMORY;}
@@ -210,9 +209,6 @@ XR_FUNC const XrJsonValue *xlsp_source_open_published_clear(const XlspSourceOpen
 }
 XR_FUNC uint64_t xlsp_source_open_diagnostic_revision(const XlspSourceOpen *open) {
     return open?open->diagnostic_revision:0;
-}
-XR_FUNC XrXirStatus xlsp_source_open_diagnostic_work(const XlspSourceOpen *open,uint64_t amount) {
-    return open?open_status(xr_compile_resources_work(open->resources,amount)):XR_XIR_BAD_STRUCTURE;
 }
 XR_FUNC void xlsp_source_open_rebind_publication(XlspSourceOpen *fresh,XlspSourceOpen *old,uint64_t revision) {
     XR_CHECK(fresh&&fresh!=old&&!fresh->published_clear,"Publication rebind requires an empty new Source owner");

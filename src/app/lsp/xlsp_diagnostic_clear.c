@@ -42,7 +42,7 @@ XR_FUNC XrXirStatus xlsp_diagnostic_document_close(XrLspServer *server,XrLspDocu
     if(server->exit_received||!doc->source_open)return XR_XIR_OK;
     XrLspDocTable *table=server->doc_table;
     XrJsonValue uri={.type=XR_JSON_STRING,.string_len=strlen(doc->uri),.as.string=doc->uri};
-    XrXirStatus status=diagnostic_survey(server,doc->source_open,&uri);
+    XrXirStatus status=diagnostic_survey(server);
     if(status!=XR_XIR_OK)return status;
     XlspSourceOpen *owners[2]={0};XrJsonValue *params[2]={0};unsigned count=0;
     for(int i=0;i<table->bucket_count;++i)for(XrLspDocBucket *bucket=table->buckets[i];bucket;bucket=bucket->next) {

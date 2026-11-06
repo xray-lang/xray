@@ -14,7 +14,6 @@
  * publication commit or free. Rebind and commit allocate and charge no work. */
 XR_FUNC const XrJsonValue *xlsp_source_open_published_clear(const XlspSourceOpen *);
 XR_FUNC uint64_t xlsp_source_open_diagnostic_revision(const XlspSourceOpen *);
-XR_FUNC XrXirStatus xlsp_source_open_diagnostic_work(const XlspSourceOpen *,uint64_t);
 XR_FUNC void xlsp_source_open_rebind_publication(XlspSourceOpen *,XlspSourceOpen *,uint64_t);
 XR_FUNC void xlsp_source_open_publication_commit(XlspSourceOpen *,XrJsonValue **);
 XR_FUNC XrXirStatus xlsp_diagnostic_document_close(XrLspServer *,XrLspDocument *);

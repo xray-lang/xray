@@ -27,7 +27,7 @@ static XlspSourceWorkspace *json_workspace(XrCompileResources *resources,char **
     if(reorder){XlspSourceDocument first=documents[0];documents[0]=documents[2];documents[2]=documents[1];documents[1]=first;}
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};XlspSourceWorkspace *workspace=NULL;
     unsigned stage=0;XlspSourceWorkspaceFailure failure={0};
-    XrXirStatus status=xlsp_source_workspace_build(&context,documents,3,&workspace,&stage,&failure);
+    XrXirStatus status=xlsp_source_workspace_build(&context,documents,3,&workspace,&stage,&failure,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"type JSON workspace stage=%u status=%u %s\n",stage,status,failure.diagnostic.message);
     CHECK(status==XR_XIR_OK);xlsp_source_workspace_failure_free(&failure);return workspace;
 }

@@ -29,7 +29,7 @@ static XlspSourceWorkspace *parameter_workspace_pair(XrCompileResources *resourc
         {library,dependency,strlen(library),strlen(dependency),7}};
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};XlspSourceWorkspace *workspace=NULL;
     unsigned stage=0;XlspSourceWorkspaceFailure failure={0};
-    XrXirStatus status=xlsp_source_workspace_build(&context,documents,2,&workspace,&stage,&failure);
+    XrXirStatus status=xlsp_source_workspace_build(&context,documents,2,&workspace,&stage,&failure,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"parameter paired stage=%u status=%u %s\n",stage,status,failure.diagnostic.message);
     CHECK(status==XR_XIR_OK);xlsp_source_workspace_failure_free(&failure);return workspace;
 }

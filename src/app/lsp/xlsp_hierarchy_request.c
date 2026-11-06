@@ -426,7 +426,7 @@ static XrXirStatus hierarchy_semantic(XlspHierarchyRequest *request,XlspSourceRe
     XlspSourceWorkspace *workspace=NULL;XlspSourceTokens *tokens=NULL;
     const XrLspRange *range=request->kind==XLSP_SOURCE_SEMANTIC_RANGE?&request->range:NULL;
     XrXirStatus status=xlsp_source_workspace_build(&request->context,request->documents,
-        request->count,&workspace,&result->stage,NULL);
+        request->count,&workspace,&result->stage,NULL,NULL);
     if(status!=XR_XIR_OK)goto done;
     result->stage=11;
     status=xlsp_source_workspace_tokens(workspace,request->uri,request->uri_length,range,&tokens);
@@ -483,7 +483,7 @@ static XrXirStatus hierarchy_parameters(XlspHierarchyRequest *request,XrJsonValu
         XrJsonValue *empty=xjson_new_array();if(!empty)return XR_XIR_OUT_OF_MEMORY;*out=empty;return XR_XIR_OK;
     }
     XlspSourceWorkspace *workspace=NULL;
-    status=xlsp_source_workspace_build(&request->context,request->documents,request->count,&workspace,NULL,NULL);
+    status=xlsp_source_workspace_build(&request->context,request->documents,request->count,&workspace,NULL,NULL,NULL);
     XlspSourceInlayOptions options={request->range,request->config.inlay_hints_type_annotations,request->config.inlay_hints_parameter_names};
     if(status==XR_XIR_OK)status=xlsp_source_workspace_inlay_bindings(workspace,request->uri,request->uri_length,&options,out);
     xlsp_source_workspace_free(workspace);return status;

@@ -23,7 +23,7 @@ static int run(int argc,char **argv) {
     XrCompileResources *resources=NULL;CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};XlspSourceWorkspace *workspace=NULL;XlspSourceTokens *owner=NULL;XlspSourceWorkspaceFailure failure={0};unsigned stage=0;
     XlspSourceDocument doc={argv[1],texts[mode],strlen(argv[1]),strlen(texts[mode]),1};
-    XrXirStatus status=xlsp_source_workspace_build(&context,&doc,1,&workspace,&stage,&failure);
+    XrXirStatus status=xlsp_source_workspace_build(&context,&doc,1,&workspace,&stage,&failure,NULL);
     if(status==XR_XIR_OK)status=xlsp_source_workspace_tokens(workspace,argv[1],strlen(argv[1]),NULL,&owner);
     size_t count=0;const XlspSourceToken *items=xlsp_source_tokens_items(owner,&count);bool matches=status==XR_XIR_OK;int row=0,col=0;
     if(matches&&mode==0){const char *words[]={"ref","move","ref","move"};for(unsigned n=0;n<4;++n){position(texts[mode],words[n],n<2?1:2,&row,&col);matches=token(items,count,row,col,(int)strlen(words[n]),16)&&matches;}}

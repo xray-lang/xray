@@ -119,7 +119,7 @@ static XrJsonValue *navigation_request(XrLspServer *server,XrLspDocument *doc,
     if(!selected||used!=count){status=XR_XIR_BAD_STRUCTURE;goto done;}
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     const XlspSourceDocument *inputs=documents;size_t input_count=count;
-    status=xlsp_source_workspace_build(&context,inputs,input_count,&fresh,&server->source_failure.stage,NULL);
+    status=xlsp_source_workspace_build(&context,inputs,input_count,&fresh,&server->source_failure.stage,NULL,NULL);
     if(status!=XR_XIR_OK)goto done;
     server->source_failure.stage=7;
     status=xlsp_source_workspace_navigation(fresh,doc->uri,selected_length,position,mode,include_declaration,&result);
