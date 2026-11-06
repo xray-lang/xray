@@ -889,7 +889,11 @@ static void string_query_contracts(void) {
     XrXirFunction function = {"queries",7,parameters,2,XR_XIR_BOOL,&block,1,ops,7,operands,2,.error_type=XR_XIR_NEVER};
     XrXirModule built = {XR_XIR_BUILT,&function,1,NULL,NULL,NULL,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *decoded = NULL;
-    CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
+    XrXirDiagnostic diagnostic={0};
+    XrXirStatus status=xir_fixture_check(suite_context,&built,&checked,&diagnostic);
+    if(status!=XR_XIR_OK)fprintf(stderr,"query fixture status=%u f=%u b=%u i=%u reason=%u\n",
+        status,diagnostic.function,diagnostic.block,diagnostic.instruction,diagnostic.reason);
+    CHECK(status==XR_XIR_OK);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     for (unsigned i = 0; i < 6; ++i) {
@@ -903,7 +907,7 @@ static void string_query_contracts(void) {
             if (!memcmp(packet.bytes+at,pattern,sizeof(pattern))) { found=at; ++matches; }
         CHECK(matches == 1);
         const unsigned offsets[] = {4,8,16,24};
-        const uint32_t corrupt[] = {XR_XIR_STRING,2,1,1};
+        const uint32_t corrupt[] = {XR_XIR_STRING,2,1,i>=3?UINT32_MAX:1};
         for (unsigned n = 0; n < 4; ++n) {
             put32(packet.bytes+found+offsets[n],corrupt[n]); digest_packet(&packet);
             rejected(packet.bytes,packet.length);
