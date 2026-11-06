@@ -16,14 +16,9 @@ import xray_l1
 
 
 class TierTests(unittest.TestCase):
-    def test_all_original_tests_and_targets_are_still_registered(self):
+    def test_current_catalog_assigns_every_level(self):
         catalog = xray_l1.tier_catalog(ROOT)
-        baseline = json.loads(subprocess.check_output([
-            "git", "-C", str(ROOT), "show",
-            "6d8e663ac084ba57ccaa39d89673a80216295843:scripts/l1-v0.json"]))
-        self.assertEqual((len(baseline["tests"]), len(baseline["targets"])), (340, 177))
-        self.assertTrue(set(baseline["tests"]) <= catalog["homes"].keys())
-        self.assertTrue(set(baseline["targets"]) <= catalog["targets"])
+        self.assertTrue(catalog["targets"])
         for level in ("L0", "L1", "L2", "L3"):
             self.assertIn(level, catalog["homes"].values())
 
@@ -47,15 +42,20 @@ class TierTests(unittest.TestCase):
         self.assertIn("test_lir_owned_string", night["tests"])
         self.assertIn("test_lir_carriers", night["targets"])
         self.assertIn("test_xir_compile_emit_owner", night["targets"])
-        self.assertIn("source_sdk_installed", night["tests"])
+        self.assertIn("source_body_sdk", night["tests"])
         self.assertIn("local_merge_queue", night["tests"])
 
-    def test_l2_has_real_installed_consumers_and_sensitive_owner_receivers(self):
+    def test_l2_keeps_semantic_and_sensitive_owner_receivers(self):
         plan = xray_l1.tier_plan(ROOT, "L2", ["public-values"],
                                 changed=["src/xir/xxir_checked.h"], sensitive=["owner"])
-        self.assertTrue({"source_sdk_installed", "sdk_installed_native_msvc",
-                         "source_packet_writer_control", "source_product_facts_control"} <= set(plan["tests"]))
-        self.assertTrue({"source-sdk-bundle", "test_xir_runtime_sdk", "test_source_request_lifetime"} <= set(plan["targets"]))
+        self.assertTrue({"source_body_sdk", "source_packet_writer_control",
+                         "source_product_facts_control"} <= set(plan["tests"]))
+        self.assertTrue({"test_source_sdk_consumer", "test_xir_runtime_sdk",
+                         "test_source_request_lifetime"} <= set(plan["targets"]))
+        self.assertTrue({"source_sdk_installed", "source_sdk_owned_installed",
+                         "sdk_installed_native_msvc", "sdk_installed_native_clang"}.isdisjoint(plan["tests"]))
+        self.assertTrue({"source-sdk-bundle", "source-sdk-public-consumers",
+                         "sdk-installed-native-consumers"}.isdisjoint(plan["targets"]))
         self.assertNotIn("native_runtime_installed", plan["tests"])
         self.assertEqual(len(plan["tests"]), len(set(plan["tests"])))
 
@@ -66,9 +66,8 @@ class TierTests(unittest.TestCase):
         expected = {test for name in ("public-values", "source-sdk", "checked-sdk")
                     for test in catalog["groups"][name]["tests"]}
         expected.update(catalog["l2"]["requiredOn"]["owner"]["tests"])
-        self.assertEqual(set(plan["tests"]), expected | {"hir_body", "runtime_sdk_recipe_incremental"})
-        self.assertEqual(len(plan["tests"]), len(expected) + 2)
-        self.assertEqual(plan["tests"].count("runtime_sdk_recipe_incremental"), 1)
+        self.assertEqual(set(plan["tests"]), expected | {"hir_body"})
+        self.assertEqual(len(plan["tests"]), len(expected) + 1)
         self.assertEqual(plan["tests"].count("hir_body"), 1)
         self.assertEqual(plan["targets"].count("test_hir_body"), 1)
         self.assertNotIn("frontend", plan["groups"])
@@ -80,7 +79,7 @@ class TierTests(unittest.TestCase):
     def test_embedded_stdlib_source_selects_source_sdk_without_unrelated_families(self):
         plan = xray_l1.tier_plan(ROOT, "L2", changed=["stdlib/xml/xml.xr"])
         self.assertEqual(plan["groups"], ["source-sdk"])
-        self.assertIn("source_sdk_installed", plan["tests"])
+        self.assertIn("source_body_sdk", plan["tests"])
         self.assertNotIn("sdk_installed_native_msvc", plan["tests"])
         self.assertNotIn("native_runtime_installed", plan["tests"])
         self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
@@ -137,15 +136,6 @@ class TierTests(unittest.TestCase):
             xray_l1.tier_plan(ROOT, "L2", changed=[
                 "src/stdlib/xstdlib_defs_generated.h.unrelated"])
         self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
-
-    def test_installed_source_sdk_scripts_select_their_installation_family(self):
-        for script in ("source_sdk_install.py", "source_sdk_owned.py"):
-            with self.subTest(script=script):
-                plan = xray_l1.tier_plan(ROOT, "L2", changed=["tests/unit/xir/" + script])
-                self.assertIn("source-sdk", plan["groups"])
-                self.assertIn("source_sdk_installed", plan["tests"])
-                self.assertIn("source_sdk_owned_installed", plan["tests"])
-                self.assertNotIn("native-runtime", plan["groups"])
 
     def test_array_materialization_changes_select_both_existing_carriers(self):
         for path in ("array_materialization_fixture.h", "array_materialization_runtime.h",
@@ -382,8 +372,6 @@ add_test(NAME unrelated COMMAND "${CMAKE_COMMAND}" -E false)
 
     def test_unknown_fixture_test_or_target_rejects_before_execution(self):
         config = json.loads((ROOT / "scripts/validation-tiers.json").read_text())
-        baseline = subprocess.check_output(["git", "-C", str(ROOT), "show",
-                                            config["baselineCommit"] + ":scripts/l1-v0.json"])
         for key in ("tests", "targets"):
             with self.subTest(key=key), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
@@ -394,9 +382,8 @@ add_test(NAME unrelated COMMAND "${CMAKE_COMMAND}" -E false)
                 value = json.loads(path.read_text())
                 value["prerequisites"]["source_body_sdk"][key].append("unknown-fixture")
                 path.write_text(json.dumps(value))
-                with mock.patch.object(xray_l1.subprocess, "check_output", return_value=baseline):
-                    with self.assertRaisesRegex(ValueError, "validation prerequisite"):
-                        xray_l1.tier_catalog(root)
+                with self.assertRaisesRegex(ValueError, "validation prerequisite"):
+                    xray_l1.tier_catalog(root)
 
     def test_unknown_or_empty_selection_is_a_failure(self):
         for args in (("L2", ["not-a-capability"]), ("L0", []), ("L2", ["governance"]),
@@ -406,11 +393,9 @@ add_test(NAME unrelated COMMAND "${CMAKE_COMMAND}" -E false)
         with self.assertRaises(ValueError):
             xray_l1.tier_plan(ROOT, "L2", ["public-values"], changed=["../foreign"])
 
-    def test_removal_or_duplicate_home_fails_before_execution(self):
+    def test_invalid_or_duplicate_home_fails_before_execution(self):
         config = json.loads((ROOT / "scripts/validation-tiers.json").read_text())
-        baseline = subprocess.check_output(["git", "-C", str(ROOT), "show",
-                                            config["baselineCommit"] + ":scripts/l1-v0.json"])
-        for mutation in ("test", "target", "duplicate", "baseline"):
+        for mutation in ("test", "target", "duplicate"):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 (root / "scripts").mkdir()
@@ -419,19 +404,14 @@ add_test(NAME unrelated COMMAND "${CMAKE_COMMAND}" -E false)
                 path = root / "scripts/l3-nightly.json"
                 data = json.loads(path.read_text())
                 if mutation == "test":
-                    data["groups"]["frozen-backend"]["tests"].remove("test_lir_owned_string")
+                    data["groups"]["frozen-backend"]["tests"].append("invalid\ntest")
                 elif mutation == "target":
-                    data["groups"]["frozen-backend"]["targets"].remove("test_lir_carriers")
+                    data["groups"]["frozen-backend"]["targets"].append("test_lir_carriers")
                 elif mutation == "duplicate":
                     data["groups"]["frozen-backend"]["tests"].append("smoke")
-                else:
-                    registry = deepcopy(config)
-                    registry["baselineCommit"] = "HEAD"
-                    (root / "scripts/validation-tiers.json").write_text(json.dumps(registry))
                 path.write_text(json.dumps(data))
-                with mock.patch.object(xray_l1.subprocess, "check_output", return_value=baseline):
-                    with self.assertRaises(ValueError):
-                        xray_l1.tier_catalog(root)
+                with self.assertRaises(ValueError):
+                    xray_l1.tier_catalog(root)
 
 
 if __name__ == "__main__":

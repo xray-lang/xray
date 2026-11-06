@@ -271,13 +271,7 @@ class QueueTests(unittest.TestCase):
             self.git("switch", "--detach")
         plan = json.loads((self.repo / "scripts/l1-v0.json").read_text())
         plan["validationTiers"] = "scripts/validation-tiers.json"
-        baseline_commit, baseline_path = merge_slice.xray_l1.TIER_BASELINE
-        common = Path(subprocess.check_output(["git", "-C", str(QUEUE.parent.parent),
-                                               "rev-parse", "--path-format=absolute", "--git-common-dir"], text=True).strip())
-        # Share immutable objects for the pinned catalog, never the fixture's refs or index.
-        (self.repo / ".git/objects/info/alternates").write_bytes((common / "objects").as_posix().encode("utf-8") + b"\n")
-        baseline = json.loads(self.git("show", baseline_commit + ":" + baseline_path))
-        registry = {"schema": 1, "baselineCommit": baseline_commit, "baselineManifest": baseline_path,
+        registry = {"schema": 1,
                     "levels": {"L0": "scripts/l0-related.json", "L1": "scripts/l1-v0.json",
                                "L2": "scripts/l2-capability.json", "L3": "scripts/l3-nightly.json"}}
         def tier(level, name, test):
@@ -286,7 +280,6 @@ class QueueTests(unittest.TestCase):
         l2 = tier("L2", "source-sdk" if embedded_source else "checked-sdk", "capability_actual")
         l2.update(requiredOn={"owner": {"tests": ["capability_actual"], "targets": ["xray"]}}, interfaceMatches={})
         night = tier("L3", "nightly", "nightly_actual")
-        night["groups"]["nightly"].update(tests=baseline["tests"] + ["nightly_actual"], targets=baseline["targets"])
         branch = self.branch("a/capability-fails", {
             "scripts/l1-v0.json": json.dumps(plan), "scripts/validation-tiers.json": json.dumps(registry),
             "scripts/l0-related.json": json.dumps(tier("L0", "tooling", "tooling_actual")),

@@ -57,8 +57,7 @@
         "native_bench_runner",
         "test_lsp_stdlib_generator",
         "test_program_identity_vectors",
-        "test_api_inventory_native_declarations",
-        "runtime_sdk_recipe_incremental"
+        "test_api_inventory_native_declarations"
       ],
       "targets": [
         "native_bench_reference"

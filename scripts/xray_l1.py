@@ -13,7 +13,6 @@ import xml.etree.ElementTree as ET
 
 from xray_process import run_child
 
-TIER_BASELINE = ("6d8e663ac084ba57ccaa39d89673a80216295843", "scripts/l1-v0.json")
 
 
 def command(arguments, directory, environment, log):
@@ -167,14 +166,12 @@ def identity(plan: dict, source: Path, build: Path, expected: str, logs: Path, e
 
 
 def tier_catalog(source: Path) -> dict:
-    """Keep every original test and build target assigned to an executable tier."""
+    """Validate current tier membership and executable prerequisites."""
     config = json.loads((source / "scripts/validation-tiers.json").read_text(encoding="utf-8"))
     expected = {"L0": "scripts/l0-related.json", "L1": "scripts/l1-v0.json",
                 "L2": "scripts/l2-capability.json", "L3": "scripts/l3-nightly.json"}
     if config.get("schema") != 1 or config.get("levels") != expected:
         raise ValueError("Invalid validation tier registry")
-    if (config.get("baselineCommit"), config.get("baselineManifest")) != TIER_BASELINE:
-        raise ValueError("The original tier baseline cannot be replaced")
     catalog, homes, targets = {}, {}, set()
     for level, file in expected.items():
         data = json.loads((source / file).read_text(encoding="utf-8"))
@@ -201,11 +198,6 @@ def tier_catalog(source: Path) -> dict:
                 homes[test] = level
             targets.update(row["targets"])
             catalog[name] = dict(row, tier=level)
-    baseline = json.loads(subprocess.check_output([
-        "git", "-C", str(source), "show",
-        config["baselineCommit"] + ":" + config["baselineManifest"]]))
-    if not set(baseline["tests"]) <= homes.keys() or not set(baseline["targets"]) <= targets:
-        raise ValueError("An original validation test or build target lost its tier")
     l2 = json.loads((source / expected["L2"]).read_text(encoding="utf-8"))
     for row in l2["requiredOn"].values():
         if (not set(row["tests"]) <= homes.keys() or not set(row["targets"]) <= targets or

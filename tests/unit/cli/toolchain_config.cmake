@@ -17,6 +17,17 @@ add_test(NAME cli_toolchain_config_normal COMMAND "${XRAY_PYTHON}" -X utf8
     "${CMAKE_CURRENT_BINARY_DIR}/toolchain-config-normal" --normal)
 set_tests_properties(cli_toolchain_config_normal PROPERTIES TIMEOUT 120
     LABELS "unit;cli;toolchain;ownership")
+if(WIN32 AND CMAKE_C_COMPILER_ID STREQUAL "MSVC"
+    AND NOT ENABLE_ASAN AND NOT ENABLE_SANITIZERS AND NOT ENABLE_UBSAN
+    AND NOT ENABLE_TSAN AND NOT ENABLE_MSAN)
+    add_test(NAME cli_toolchain_probe_repaired COMMAND ${XRAY_PYTHON} -X utf8 -B
+        "${PROJECT_SOURCE_DIR}/tests/unit/cli/test_cli_toolchain_probe.py"
+        $<TARGET_FILE:xray> "${CMAKE_C_COMPILER}"
+        "${CMAKE_CURRENT_BINARY_DIR}/toolchain-probe-repaired")
+    set_tests_properties(cli_toolchain_probe_repaired PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE COST 10
+        LABELS "unit;cli;source;sdk;native;probe"
+        ENVIRONMENT "XRAY_STDLIB_PATH=${PROJECT_SOURCE_DIR}/stdlib")
+endif()
 if(WIN32)
     add_executable(test_cli_toolchain_command "${CMAKE_CURRENT_LIST_DIR}/test_cli_toolchain_command.c"
         "${PROJECT_SOURCE_DIR}/src/app/cli/xcmd_toolchain.c"
