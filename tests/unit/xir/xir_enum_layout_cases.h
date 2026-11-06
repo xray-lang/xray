@@ -14,8 +14,8 @@ static void enum_storage_layout(void) {
     const XrXirNominalFieldIdentity fields[] = {{{"a", 1}, 0}, {{"b", 1}, 0}, {{"text", 4}, 0}};
     const XrXirNominalFieldIdentity outer_fields[] = {{{"flag", 4}, 0}, {{"choice", 6}, 0}, {{"end", 3}, 0}};
     XrXirNominalIdentity identities[] = {
-        {{"alpha", 5}, {"Choice", 6}, 1, 0, fields, 3, XR_XIR_NOMINAL_ENUM, variants, 4, 0, {0}},
-        {{"alpha", 5}, {"Outer", 5}, 1, 0, outer_fields, 3, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0, {0}}};
+        {{"alpha", 5}, {"Choice", 6}, 1, 0, fields, 3, XR_XIR_NOMINAL_ENUM, variants, 4, 0, {0},.parent=0},
+        {{"alpha", 5}, {"Outer", 5}, 1, 0, outer_fields, 3, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0, {0},.parent=0}};
     XrXirNominalTable table = {NULL, 2, identities};
     XrXirType inner_types[] = {XR_XIR_I8, XR_XIR_BOOL, XR_XIR_STRING};
     XrXirType outer_types[] = {XR_XIR_BOOL, (XrXirType)256, XR_XIR_I16};
@@ -33,18 +33,19 @@ static void enum_storage_layout(void) {
     budget = consumer_context_default();
     CHECK(xr_xir_compile_nominal_layout(&budget, &types, (XrXirType)257, &target, &layout, offsets, 3) == XR_XIR_OK);
     CHECK(layout.size == 32 && layout.alignment == 8 && offsets[0] == 0 && offsets[1] == 8 && offsets[2] == 24);
-    budget = consumer_context_limits((XrCompileResourceLimits){67108864,8388608,2}); XrXirCompileContext saved = budget;
+    budget = consumer_context_limits((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,consumer_context_stats(&budget).held_bytes,true});
+    XrXirCompileContext saved = budget;
     XrXirLayout occupied=layout;
     layout=(XrXirLayout){0};offsets[0] = offsets[1] = offsets[2] = 99;
-    CHECK(xr_xir_compile_nominal_layout(&budget, &types, (XrXirType)256, &target, &layout, offsets, 3) == XR_XIR_BUDGET);
+    CHECK(xr_xir_compile_nominal_layout(&budget, &types, (XrXirType)256, &target, &layout, offsets, 3) == XR_XIR_MEMORY_LIMIT);
     CHECK(!layout.size && !layout.alignment && offsets[0] == 99 && offsets[1] == 99 && offsets[2] == 99);
     CHECK(!memcmp(&budget, &saved, sizeof(budget)));
     layout=occupied;
-    CHECK(xr_xir_compile_nominal_layout(&budget,&types,(XrXirType)256,&target,&layout,offsets,3)==XR_XIR_BUDGET);
+    CHECK(xr_xir_compile_nominal_layout(&budget,&types,(XrXirType)256,&target,&layout,offsets,3)==XR_XIR_MEMORY_LIMIT);
     CHECK(!memcmp(&layout,&occupied,sizeof(layout)) && offsets[0]==99 && offsets[1]==99 && offsets[2]==99);
     XrXirNominalField declarations[3] = {{{"a", 1}, XR_XIR_I8, 0}, {{"b", 1}, XR_XIR_BOOL, 0}, {{"text", 4}, XR_XIR_STRING, 0}};
     XrXirNominalDeclaration declaration = {{"alpha", 5}, {"Choice", 6}, 1, NULL, 0,
-        declarations, 3, XR_XIR_NOMINAL_ENUM, variants, 4, 0, {0}};
+        declarations, 3, XR_XIR_NOMINAL_ENUM, variants, 4, 0, {0},.parent=0};
     table.declarations = &declaration; table.identities = NULL; table.count = 1; types.count = 1;
     budget = consumer_context_default();
     CHECK(xr_xir_compile_nominal_layout(&budget, &types, (XrXirType)256, &target, &layout, offsets, 3) == XR_XIR_OK);
@@ -57,7 +58,7 @@ static void enum_tag_widths(void) {
         CHECK(length > 0 && length < 8);
         variants[i] = (XrXirNominalVariant) {{names[i], (uint32_t) length}, 0, 0};
     }
-    XrXirNominalIdentity identity = {{"alpha", 5}, {"Unit", 4}, 1, 0, NULL, 0, XR_XIR_NOMINAL_ENUM, variants, 1, 0, {0}};
+    XrXirNominalIdentity identity = {{"alpha", 5}, {"Unit", 4}, 1, 0, NULL, 0, XR_XIR_NOMINAL_ENUM, variants, 1, 0, {0},.parent=0};
     XrXirNominalTable table = {NULL, 1, &identity};
     XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_NOMINAL;
     XrXirTypes types = {&node, 1, &table, NULL};
