@@ -145,8 +145,11 @@ static ResizeCompile resize_build(size_t failure, XrCompileResourceLimits limits
         const XrXirSourceDeclaration *declaration = &view->declarations[d];
         if (array_parent && declaration->kind == XR_XIR_SOURCE_MEMBER && declaration->parent == array_parent &&
             declaration->native_identity == native_member->id) {
-            if (strcmp(declaration->name, "resize") || !(declaration->mutable) || declaration->parameter_count != 2 ||
-                !declaration->exported || declaration->type.known || !declaration->signature ||
+            const XrXirTypeNode *schema = declaration->type.known ? xr_xir_type_node(view->types, declaration->type.type) : NULL;
+            if (strcmp(declaration->name, "resize") || !declaration->mutable || declaration->parameter_count != 2 ||
+                !declaration->exported || !declaration->type.known || declaration->type.generic_owner != array_parent ||
+                !schema || schema->kind != XR_XIR_TYPE_ARRAY || schema->element != XR_XIR_TYPE_PARAMETER_BASE ||
+                schema->parameter_span != 1 || !declaration->signature ||
                 strcmp(declaration->signature, "(length: i64, fill: T) -> Array<T>"))
                 fprintf(stderr, "resize member owner=Array parent%u id%u name=%s known%u type%u arity%u mutable%u exported%u signature=%s\n",
                     array_parent, declaration->native_identity, declaration->name, declaration->type.known,
@@ -154,8 +157,10 @@ static ResizeCompile resize_build(size_t failure, XrCompileResourceLimits limits
                     declaration->signature ? declaration->signature : "<null>");
             CHECK(!strcmp(declaration->name, "resize"));
             CHECK(declaration->mutable && declaration->parameter_count == 2 && declaration->exported);
-            CHECK(!declaration->type.known && declaration->signature &&
-                !strcmp(declaration->signature, "(length: i64, fill: T) -> Array<T>"));
+            CHECK(declaration->type.known && declaration->type.generic_owner == array_parent && schema &&
+                schema->kind == XR_XIR_TYPE_ARRAY && schema->element == XR_XIR_TYPE_PARAMETER_BASE &&
+                schema->parameter_span == 1);
+            CHECK(declaration->signature && !strcmp(declaration->signature, "(length: i64, fill: T) -> Array<T>"));
             ++resize_members;
         }
     }
