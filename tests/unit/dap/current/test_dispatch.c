@@ -41,7 +41,11 @@ static XrJsonValue *last_response(const char *command,bool success) {
     CHECK(false);return NULL;
 }
 static void request(XdapAdapter *adapter,const char *text) {
-    CHECK(xdap_adapter_request(adapter,text,strlen(text))==XR_XIR_OK);
+    const size_t length=strlen(text);
+    const XrXirStatus status=xdap_adapter_request(adapter,text,length);
+    if(status!=XR_XIR_OK)
+        fprintf(stderr,"DAP request status%u expected%u bytes%zu request=%s\n",(unsigned)status,(unsigned)XR_XIR_OK,length,text);
+    CHECK(status==XR_XIR_OK);
 }
 static uint32_t event_count(const char *event) {
     uint32_t count=0;
