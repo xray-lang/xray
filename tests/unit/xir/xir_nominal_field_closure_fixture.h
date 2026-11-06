@@ -18,8 +18,10 @@ static XrXirArtifact *nominal_field_closure_fixture(const XrXirCompileContext *c
     XrXirConstraint constraint = {0};
     XrXirNominalField fields[] = {{{"value",5},t,0}, {{"inner",5},(XrXirType)256,0}};
     XrXirNominalDeclaration definitions[] = {
-        {{"alpha",5},{"Box",3},1,&constraint,1,fields,1, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0, {0}},
-        {{"alpha",5},{"Outer",5},1,&constraint,1,fields+1,1, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0, {0}}};
+        {.module={"alpha",5},.name={"Box",3},.exported=1,.constraints=&constraint,
+            .parameter_count=1,.fields=fields,.field_count=1,.kind=XR_XIR_NOMINAL_STRUCT},
+        {.module={"alpha",5},.name={"Outer",5},.exported=1,.constraints=&constraint,
+            .parameter_count=1,.fields=fields+1,.field_count=1,.kind=XR_XIR_NOMINAL_STRUCT}};
     XrXirNominalTable table = {definitions,2,NULL};
     XrXirType arguments[] = {(XrXirType)256,(XrXirType)257};
     XrXirTypeNode nodes[4] = {0};

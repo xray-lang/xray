@@ -93,7 +93,7 @@ static XrXirArtifact *checked_fixture(const XrXirCompileContext *context) {
         .error_type=XR_XIR_NEVER};
     XrXirFunctionIdentity identities[9];
     memcpy(identities, built.declarations->functions, 8 * sizeof(*identities));
-    identities[8] = (XrXirFunctionIdentity) {0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0};
+    identities[8] = (XrXirFunctionIdentity) {0};
     XrXirDeclarations declarations = *built.declarations;
     declarations.functions = identities;
     built.functions = functions; built.function_count = 9; built.declarations = &declarations;
