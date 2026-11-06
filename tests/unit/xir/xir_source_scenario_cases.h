@@ -43,11 +43,19 @@ static void source_scenario_open(SourceScenario *pair, XrXirProgram *program, ui
         XrXirInstanceResult result = xr_xir_instance_poll_bounded(pair->instances[i], UINT64_MAX);
         if (step < 13) {
             uint32_t expected_calls = step >= 12 ? 53u : step >= 11 ? 50u : step >= 10 ? 49u : step >= 9 ? 48u : step >= 8 ? 47u : step >= 4 ? 40u : step >= 2 ? 25u + step : 0u;
-            if (xr_xir_instance_state(pair->instances[i]) != XR_XIR_INSTANCE_INITIALIZING || pair->outputs[i].calls != expected_calls)
+            if (xr_xir_instance_state(pair->instances[i]) != XR_XIR_INSTANCE_INITIALIZING || pair->outputs[i].calls != expected_calls) {
                 fprintf(stderr,"Source init boundary step=%u instance=%u state=%u status=%u calls=%u expected=%u resumes=%llu exhausted=%u\n",
                     step,i,(unsigned)xr_xir_instance_state(pair->instances[i]),(unsigned)result.outcome.status,
                     pair->outputs[i].calls,expected_calls,(unsigned long long)pair->instances[i]->budget.resumes,
                     (unsigned)pair->instances[i]->budget.exhausted);
+                XrXirDomainBudgetStats stats=xr_xir_domain_budget_stats(pair->domains[i]);
+                fprintf(stderr,"Source init ledger: valueRequests=%llu/%llu callRequests=%llu/%llu work=%llu/%llu metadataPeak=%llu/%llu callPeak=%llu/%llu\n",
+                    (unsigned long long)stats.requested_bytes,(unsigned long long)stats.requested_limit,
+                    (unsigned long long)stats.requested_call_bytes,(unsigned long long)stats.requested_call_limit,
+                    (unsigned long long)stats.work,(unsigned long long)stats.work_limit,
+                    (unsigned long long)stats.metadata_peak,(unsigned long long)stats.metadata_limit,
+                    (unsigned long long)stats.call_peak,(unsigned long long)stats.call_limit);
+            }
             CHECK(xr_xir_instance_state(pair->instances[i]) == XR_XIR_INSTANCE_INITIALIZING && pair->outputs[i].calls == expected_calls);
             source_resume_once(pair->instances[i], result);
         } else {
