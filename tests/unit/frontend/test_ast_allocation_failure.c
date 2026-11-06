@@ -25,7 +25,7 @@
 
 static void check_stats(const XrCompileResources *resources, XrCompileResourceStats *stats) {
     OK(xr_compile_resources_stats(resources, stats));
-    CHECK(stats->allocated_bytes == physical_total && stats->live_bytes == physical_live);
+    CHECK(stats->allocated_bytes == physical_total && stats->held_bytes == physical_live);
     CHECK(stats->peak_bytes == physical_peak);
 }
 
@@ -38,13 +38,13 @@ static void check_sticky_retry(XrCompilerSession *session, XrArena *arena,
     size_t attempts = attempt_count;
     CHECK(xr_compile_state_status(state) == expected);
     CHECK(xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT) == expected);
-    CHECK(xr_compile_state_fail(state, expected == XR_COMPILE_RESOURCE_BUDGET ?
-        XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_BUDGET) == expected);
+    CHECK(xr_compile_state_fail(state, expected == XR_COMPILE_RESOURCE_OVERFLOW ?
+        XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_OVERFLOW) == expected);
     CHECK(ast_alloc(session, 16) == NULL);
     CHECK(ast_alloc_array(session, 0, 1) == NULL);
     CHECK(xr_ast_literal_int(session, 42, 1) == NULL);
     CHECK(xr_ast_program(session) == NULL);
-    XrParseStatus parsed = expected == XR_COMPILE_RESOURCE_BUDGET ? XR_PARSE_BUDGET : XR_PARSE_OUT_OF_MEMORY;
+    XrParseStatus parsed = expected == XR_COMPILE_RESOURCE_OVERFLOW ? XR_PARSE_OVERFLOW : XR_PARSE_OUT_OF_MEMORY;
     AstNode *output = NULL;
     CHECK(xr_compile_parse(session, (const char *) (uintptr_t) 1, &output) == parsed);
     CHECK(!output);
@@ -54,12 +54,12 @@ static void check_sticky_retry(XrCompilerSession *session, XrArena *arena,
     CHECK(xr_compile_state_status(state) == expected && attempt_count == attempts);
     check_stats(resources, &after);
     CHECK(after.allocation_count == before.allocation_count && after.allocated_bytes == before.allocated_bytes);
-    CHECK(after.live_bytes == before.live_bytes && after.peak_bytes == before.peak_bytes && after.work == before.work);
+    CHECK(after.held_bytes == before.held_bytes && after.peak_bytes == before.peak_bytes);
 }
 
 static void ast_failure_case(bool oom) {
     /* This independent operation has one fixed finite ledger, including setup. */
-    const XrCompileResourceLimits limits = {1024 * 1024, 512 * 1024, 1024 * 1024};
+    const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE, 512 * 1024, true};
     reset();
     XrCompileResources *resources = NULL;
     XrCompilerSession *session = NULL;
@@ -93,15 +93,14 @@ static void ast_failure_case(bool oom) {
     size_t attempts = attempt_count;
     if (oom) fail_at = attempts;
     void *allocation = oom ? ast_alloc(session, 16) : ast_alloc_array(session, SIZE_MAX / 2 + 1, 2);
-    XrCompileResourceStatus expected = oom ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_BUDGET;
+    XrCompileResourceStatus expected = oom ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_OVERFLOW;
     CHECK(!allocation && xr_compile_session_resource_status(session) == expected);
     CHECK(xr_compile_session_compile_state(session) == state && xr_compiler_arena_matches_state(&arena, state));
     CHECK(attempt_count == attempts + (oom ? 1 : 0));
     CHECK(xr_arena_status(&arena) == (oom ? XR_ARENA_OUT_OF_MEMORY : XR_ARENA_OK));
     check_stats(resources, &failed);
     CHECK(failed.allocation_count == before.allocation_count && failed.allocated_bytes == before.allocated_bytes);
-    CHECK(failed.live_bytes == before.live_bytes && failed.peak_bytes == before.peak_bytes);
-    CHECK(failed.work == before.work + (oom ? 1 : 0));
+    CHECK(failed.held_bytes == before.held_bytes && failed.peak_bytes == before.peak_bytes);
     check_sticky_retry(session, &arena, expected);
     CHECK(xr_compile_session_pop_arena(&scope) == expected);
     CHECK(!scope.active && !xr_compile_session_current_arena(session) && !xr_compile_session_string_pool(session));
@@ -110,11 +109,11 @@ static void ast_failure_case(bool oom) {
     CHECK(!arena.retained && !arena.head);
     xr_compile_session_free(session);
     check_stats(resources, &released);
-    CHECK(released.live_bytes == baseline.live_bytes && allocation_count == 1);
-    CHECK(released.allocated_bytes == failed.allocated_bytes && released.work == failed.work);
-    printf("AST root: allocated=%llu peak=%llu work=%llu attempts=%zu\n",
+    CHECK(released.held_bytes == baseline.held_bytes && allocation_count == 1);
+    CHECK(released.allocated_bytes == failed.allocated_bytes);
+    printf("AST root: allocated=%llu peak=%llu attempts=%zu\n",
         (unsigned long long) released.allocated_bytes, (unsigned long long) released.peak_bytes,
-        (unsigned long long) released.work, attempt_count);
+        attempt_count);
     xr_compile_resources_release(resources);
     CHECK(!physical_live && !allocation_count);
 }
@@ -126,7 +125,7 @@ int main(int argc, char **argv) {
         puts("AST oom: OUT_OF_MEMORY NULL sticky no-publication physical-zero");
     } else if (!strcmp(argv[1], "overflow")) {
         ast_failure_case(false);
-        puts("AST overflow: BUDGET NULL sticky no-publication physical-zero");
+        puts("AST overflow: OVERFLOW NULL sticky no-publication physical-zero");
     } else return 5;
     return 0;
 }

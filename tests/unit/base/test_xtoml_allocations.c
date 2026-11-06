@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_xtoml_allocations.c - Observe actual TOML policy allocations and work
+ * test_xtoml_allocations.c - Observe actual TOML policy allocations and held memory
  */
 #include "base/xtoml.h"
 #include "base/xmalloc.h"
@@ -45,14 +45,14 @@ static void observe_free(void *memory) {
 static XrCompileResourceStats stats(XrCompileResources *owner) {
     XrCompileResourceStats s;
     CHECK(xr_compile_resources_stats(owner, &s) == XR_COMPILE_RESOURCE_OK);
-    CHECK(s.live_bytes == live && s.allocated_bytes == allocated_total && s.peak_bytes == peak);
+    CHECK(s.held_bytes == live && s.allocated_bytes == allocated_total && s.peak_bytes == peak);
     return s;
 }
 static void reset(size_t failure) {
     CHECK(!live && !live_count);
     attempts = allocated_total = peak = 0; fail_at = failure;
 }
-static const XrCompileResourceLimits unlimited = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+static const XrCompileResourceLimits unlimited = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
 
 #include "../../../src/base/xtoml.c"
 #define REQUIRE CHECK
@@ -64,14 +64,14 @@ static size_t run_limits(const char *source, size_t failure, const XrCompileReso
     XrCompileResources *owner = NULL;
     XrCompileResourceStatus created = xr_compile_resources_new(limits,&owner);
     if (created != XR_COMPILE_RESOURCE_OK) {
-        CHECK(expected == (created == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_TOML_PARSE_OUT_OF_MEMORY : XR_TOML_PARSE_BUDGET));
+        CHECK(expected == (created == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_TOML_PARSE_OUT_OF_MEMORY : XR_TOML_PARSE_MEMORY_LIMIT));
         CHECK(!owner && !live); measured = (XrCompileResourceStats){0}; return attempts;
     }
     XrOsIoPolicy policy = xr_compile_io_policy(owner);
     XrTomlValue *output = (void *)&canary;
     XrTomlParseStatus status = xtoml_parse_owned(&policy,source,strlen(source),&shape,&output);
-    if (status != expected) fprintf(stderr,"failure=%zu work=%llu expected=%d got=%d source=%.80s\n",
-        failure,(unsigned long long)limits->work,expected,status,source);
+    if (status != expected) fprintf(stderr,"failure=%zu held-limit=%llu expected=%d got=%d source=%.80s\n",
+        failure,(unsigned long long)limits->memory_limit,expected,status,source);
     CHECK(status == expected);
     if (status != XR_TOML_PARSE_OK) CHECK(output == (void *)&canary);
     else { CHECK(output != (void *)&canary); xtoml_owned_free(output); }
@@ -90,16 +90,13 @@ static void budget_boundaries(void) {
     const char *source = "a.b=[1,2,3]\nx=\"owned\\u0000suffix\"\n";
     size_t sites = run(source,0,true); XrCompileResourceStats baseline = measured;
     for (size_t failure = 1; failure <= sites; ++failure) run(source,failure,true);
-    for (unsigned axis = 0; axis < 3; ++axis) for (unsigned below = 0; below < 2; ++below) {
-        XrCompileResourceLimits limits = unlimited;
-        if (!axis) limits.allocated_bytes = baseline.allocated_bytes-below;
-        else if (axis == 1) limits.live_bytes = baseline.peak_bytes-below;
-        else limits.work = baseline.work-below;
-        run_limits(source,0,&limits,(XrTomlParseLimits){65536,128},below ? XR_TOML_PARSE_BUDGET : XR_TOML_PARSE_OK);
+    for (unsigned below = 0; below < 2; ++below) {
+        XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE, baseline.peak_bytes-below, true};
+        run_limits(source,0,&limits,(XrTomlParseLimits){65536,128},below ? XR_TOML_PARSE_MEMORY_LIMIT : XR_TOML_PARSE_OK);
     }
     run_limits(source,0,&unlimited,(XrTomlParseLimits){strlen(source)-1,128},XR_TOML_PARSE_LIMIT);
     CHECK(attempts == 1);
-    printf("TOML physical allocation sites=%zu allocated=%llu peak=%llu; all three exact/minus1 PASS\n",
+    printf("TOML physical allocation sites=%zu allocated=%llu peak=%llu; held exact/minus1 PASS\n",
         sites,(unsigned long long)baseline.allocated_bytes,(unsigned long long)baseline.peak_bytes);
 }
 static void require_depth(const char *source, uint32_t depth, bool valid) {
@@ -124,23 +121,15 @@ static void depth_boundaries(void) {
     memcpy(deep,"a=",2); for (unsigned i = 0; i < 5000; ++i) memcpy(deep+2+i*3,"{a=",3);
     deep[15002] = '0'; memset(deep+15003,'}',5000); deep[20003] = 0; require_depth(deep,128,false);
 }
-static void work_boundaries(void) {
-    const char *source = "same_prefix_aaaa=1\nsame_prefix_aaab=2\nsame_prefix_aaac=3\n";
-    run(source,0,true); XrCompileResourceStats baseline = measured;
-    for (uint64_t work = 1; work < baseline.work; ++work) {
-        XrCompileResourceLimits limits = unlimited; limits.work = work;
-        run_limits(source,0,&limits,(XrTomlParseLimits){65536,128},XR_TOML_PARSE_BUDGET);
+static void numeric_allocations(void) {
+    const char *sources[] = {
+        "same_prefix_aaaa=1\nsame_prefix_aaab=2\nsame_prefix_aaac=3\n",
+        "a=[0.1,1e-308,1e309,2.2250738585072014e-308,9007199254740993.0,0x7fff_ffff_ffff_ffff]\n"
+    };
+    for (unsigned i = 0; i < XR_COUNTOF(sources); ++i) {
+        size_t sites = run(sources[i],0,true);
+        for (size_t failure = 1; failure <= sites; ++failure) run(sources[i],failure,true);
     }
-    printf("TOML all work limits 1..%llu rejected with physical zero\n",(unsigned long long)baseline.work-1);
-    const char *numbers = "a=[0.1,1e-308,1e309,2.2250738585072014e-308,9007199254740993.0,0x7fff_ffff_ffff_ffff]\n";
-    run(numbers,0,true); baseline = measured;
-    for (unsigned i = 1; i <= 128; ++i) {
-        XrCompileResourceLimits limits = unlimited; limits.work = (baseline.work*i)/129;
-        run_limits(numbers,0,&limits,(XrTomlParseLimits){65536,128},XR_TOML_PARSE_BUDGET);
-    }
-    XrCompileResourceLimits exact = unlimited; exact.work = baseline.work;
-    run_limits(numbers,0,&exact,(XrTomlParseLimits){65536,128},XR_TOML_PARSE_OK);
-    --exact.work; run_limits(numbers,0,&exact,(XrTomlParseLimits){65536,128},XR_TOML_PARSE_BUDGET);
 }
 static void ownership_and_query(void) {
     reset(SIZE_MAX); XrCompileResources *owner = NULL;
@@ -152,19 +141,19 @@ static void ownership_and_query(void) {
     XrCompileResourceStats before = stats(owner);
     CHECK(xtoml_owned_get(root,"same_prefix_aaab",&value) == XR_TOML_PARSE_OK && value->as.integer == 42);
     XrCompileResourceStats after = stats(owner);
-    CHECK(after.work-before.work == 17+1+16);
+    CHECK(after.allocation_count == before.allocation_count && after.held_bytes == before.held_bytes);
     memset(source,0,sizeof(source)); xr_compile_resources_release(owner);
     CHECK(xtoml_owned_get(root,"absent",&value) == XR_TOML_PARSE_OK && !value);
     CHECK(xtoml_owned_get(root,"same_prefix_aaab",&value) == XR_TOML_PARSE_OK && value->as.integer == 42);
     xtoml_owned_free(root); CHECK(!live && !live_count);
-    run("x=1\n",0,true); XrCompileResourceLimits capped = unlimited; capped.work = measured.work;
+    run("x=1\n",0,true); XrCompileResourceLimits capped = unlimited; capped.memory_mode = XR_COMPILE_MEMORY_FINITE; capped.memory_limit = measured.peak_bytes;
     reset(SIZE_MAX); owner = NULL; root = NULL;
     CHECK(xr_compile_resources_new(&capped,&owner) == XR_COMPILE_RESOURCE_OK); policy = xr_compile_io_policy(owner);
     CHECK(xtoml_parse_owned(&policy,"x=1\n",4,&limits,&root) == XR_TOML_PARSE_OK);
     value = (void *)&canary;
-    CHECK(xtoml_owned_get(root,"x",&value) == XR_TOML_PARSE_BUDGET && value == (void *)&canary);
+    CHECK(xtoml_owned_get(root,"x",&value) == XR_TOML_PARSE_OK && value->as.integer == 1);
     XrTomlValue *other = (void *)&canary;
-    CHECK(xtoml_parse_owned(&policy,"x=1\n",4,&limits,&other) == XR_TOML_PARSE_BUDGET && other == (void *)&canary);
+    CHECK(xtoml_parse_owned(&policy,"x=1\n",4,&limits,&other) == XR_TOML_PARSE_MEMORY_LIMIT && other == (void *)&canary);
     xr_compile_resources_release(owner); xtoml_owned_free(root); CHECK(!live && !live_count);
 }
 typedef struct RejectPolicy {
@@ -173,24 +162,22 @@ typedef struct RejectPolicy {
     size_t calls, fail_at;
 } RejectPolicy;
 static XrOsIoStatus reject_alloc(void *context, size_t bytes, void **output) {
-    RejectPolicy *state = context; XrOsIoPolicy policy = xr_compile_io_policy(state->owner);
+    RejectPolicy *state = context;
+    if (++state->calls == state->fail_at) return state->failure;
+    XrOsIoPolicy policy = xr_compile_io_policy(state->owner);
     return policy.alloc(policy.context,bytes,output);
 }
 static void reject_free(void *context, void *memory) { (void)context; xr_compile_resources_free(memory); }
-static XrOsIoStatus reject_work(void *context, uint64_t units) {
-    RejectPolicy *state = context;
-    if (++state->calls == state->fail_at) return state->failure;
-    XrOsIoPolicy policy = xr_compile_io_policy(state->owner); return policy.work(policy.context,units);
-}
 static void policy_failures(void) {
     const char *source = "x={a=[1,2,3],b=\"long\\u0041 value\"}\n";
-    const XrOsIoStatus errors[] = {XR_OS_IO_BUDGET,XR_OS_IO_OUT_OF_MEMORY,XR_OS_IO_IO,XR_OS_IO_BAD_ARGUMENT};
-    const XrTomlParseStatus expected[] = {XR_TOML_PARSE_BUDGET,XR_TOML_PARSE_OUT_OF_MEMORY,XR_TOML_PARSE_IO,XR_TOML_PARSE_BAD_ARGUMENT};
-    for (unsigned kind = 0; kind < 4; ++kind) for (size_t point = 1; point < 256; ++point) {
+    const XrOsIoStatus errors[] = {XR_OS_IO_MEMORY_LIMIT,XR_OS_IO_OUT_OF_MEMORY,XR_OS_IO_IO,XR_OS_IO_BAD_ARGUMENT};
+    const XrTomlParseStatus expected[] = {XR_TOML_PARSE_MEMORY_LIMIT,XR_TOML_PARSE_OUT_OF_MEMORY,XR_TOML_PARSE_IO,XR_TOML_PARSE_BAD_ARGUMENT};
+    size_t sites = run(source,0,true)-1; CHECK(sites);
+    for (unsigned kind = 0; kind < 4; ++kind) for (size_t point = 1; point <= sites; ++point) {
         reset(SIZE_MAX); XrCompileResources *owner = NULL;
         CHECK(xr_compile_resources_new(&unlimited,&owner) == XR_COMPILE_RESOURCE_OK);
         RejectPolicy state = {owner,errors[kind],0,point};
-        XrOsIoPolicy policy = {&state,reject_alloc,reject_free,reject_work};
+        XrOsIoPolicy policy = {&state,reject_alloc,reject_free};
         const XrTomlParseLimits limits = {1024,128}; XrTomlValue *root = (void *)&canary;
         XrTomlParseStatus status = xtoml_parse_owned(&policy,source,strlen(source),&limits,&root);
         CHECK(status == expected[kind] && root == (void *)&canary && state.calls == point);
@@ -203,7 +190,7 @@ static void policy_failures(void) {
     CHECK(xtoml_parse_owned(NULL,"",0,&limits,&root) == XR_TOML_PARSE_BAD_ARGUMENT && root == (void *)&canary);
     CHECK(xtoml_parse_owned(&policy,"",0,NULL,&root) == XR_TOML_PARSE_BAD_ARGUMENT && root == (void *)&canary);
     TomlCtx context = {0}; context.policy = policy;
-    CHECK(!toml_allocate(&context,SIZE_MAX,false) && context.status == XR_TOML_PARSE_BUDGET && attempts == 1);
+    CHECK(!toml_allocate(&context,SIZE_MAX,false) && context.status == XR_TOML_PARSE_OVERFLOW && attempts == 1);
     context = (TomlCtx){0}; context.policy = policy;
     CHECK(!grown_capacity(&context,INT_MAX,sizeof(XrTomlMember)) && context.status == XR_TOML_PARSE_LIMIT);
     context = (TomlCtx){0}; context.policy = policy;
@@ -213,21 +200,15 @@ static void policy_failures(void) {
     CHECK(live == prior_live && !memcmp(memory,"abc",4)); fail_at = SIZE_MAX;
     toml_release(memory); xr_compile_resources_release(owner); CHECK(!live && !live_count);
 }
-static void utf8_read_work(void) {
-    /* The shared decoder reads E0/80, then diagnostics read E0/80/BF. */
+static void utf8_rejection(void) {
     const char invalid[] = "\xe0\x80\xbf";
-    run(invalid,0,false); CHECK(measured.work == 6 && attempts == 1);
-    for (uint64_t work = 1; work < 6; ++work) {
-        XrCompileResourceLimits limits = unlimited; limits.work = work;
-        run_limits(invalid,0,&limits,(XrTomlParseLimits){1024,128},XR_TOML_PARSE_BUDGET);
-        CHECK(attempts == 1);
-    }
+    run(invalid,0,false); CHECK(attempts == 1);
 }
 int main(void) {
-    policy_failures(); utf8_read_work();
+    policy_failures(); utf8_rejection();
     ownership_and_query();
     depth_boundaries();
-    work_boundaries();
+    numeric_allocations();
     budget_boundaries();
     static const char source[] =
         "title=\"abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz\"\n"
