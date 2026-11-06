@@ -139,7 +139,20 @@ static void matrix_faults(RemoveCompile *run, uint32_t function) {
                 value.type, (long long)value.payload);
         }
         CHECK(taken == expected_take && !value.type && !value.payload);
-        CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY && runtime_live == live && runtime_bytes == bytes);
+        XrXirCallStatus expected_free = XR_XIR_CALL_READY;
+        if (result_instance->epoch != previous_epoch) {
+            CHECK(expected_take == XR_XIR_CALL_OOM); expected_free = XR_XIR_CALL_OOM;
+        }
+        const unsigned retire_state = (unsigned)result_instance->state;
+        const uint64_t retire_epoch = result_instance->epoch;
+        const unsigned retire_completion = result_instance->executor ?
+            (unsigned)xr_xir_task_executor_completion_status(result_instance->executor) : UINT32_MAX;
+        const XrXirCallStatus freed = xr_xir_instance_free(instance);
+        if (freed != expected_free)
+            fprintf(stderr, "remove matrix retirement failure%zu free%u expected%u epochBefore%llu epochAfter%llu preFreeState%u preFreeCompletion%u blocks%zu bytes%zu\n",
+                failure, freed, expected_free, (unsigned long long)previous_epoch, (unsigned long long)retire_epoch,
+                retire_state, retire_completion, runtime_live, runtime_bytes);
+        CHECK(freed == expected_free && runtime_live == live && runtime_bytes == bytes);
     }
     printf("matrix%d entry%u runtimeOOM%zu physical0\n", XR_REMOVE_MATRIX, function, sites);
 }

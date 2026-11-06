@@ -22,19 +22,29 @@ static void resize_initialization_faults(ResizeCompile *run) {
     for(size_t failure=0;failure<sites;++failure) {
         runtime_attempts=0;runtime_fail_at=failure;instance=NULL;
         XrXirCallStatus status=xr_xir_instance_new(run->program,&config,&instance);
+        const XrXirCallStatus made=status;unsigned started=UINT32_MAX,polled=0;
         if(status==XR_XIR_CALL_READY) {
             status=xr_xir_instance_start(instance,run->program->declarations->entry_function,NULL,0);
-            while(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status;
+            started=(unsigned)status;
+            while(status==XR_XIR_CALL_READY) { status=xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status;++polled; }
         }
         CHECK(status==XR_XIR_CALL_OOM&&runtime_attempts>failure);runtime_fail_at=SIZE_MAX;
         if(instance) {
+            XrXirCallStatus expected_free=XR_XIR_CALL_READY;
             result=(XrXirValue){0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_BAD_STATE&&!result.type&&!result.payload);
             if(instance->state==XR_XIR_INSTANCE_FAILED) {
                 XrXirCallResult copy={0};CHECK(xr_xir_instance_copy_failure(instance,&copy)==XR_XIR_CALL_OOM);
                 CHECK(copy.status==XR_XIR_CALL_OOM);xr_xir_call_result_drop(&copy);
-                CHECK(xr_xir_instance_start(instance,run->program->declarations->entry_function,NULL,0)==XR_XIR_CALL_OOM);++latched;
+                CHECK(xr_xir_instance_start(instance,run->program->declarations->entry_function,NULL,0)==XR_XIR_CALL_OOM);expected_free=XR_XIR_CALL_OOM;++latched;
             } else ++prepared;
-            CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+            const unsigned state=(unsigned)instance->state;const bool has_call=instance->call!=NULL;
+            const bool idle=instance->executor && xr_xir_task_executor_root_idle(instance->executor);
+            const unsigned completion=instance->executor ? (unsigned)xr_xir_task_executor_completion_status(instance->executor) : UINT32_MAX;
+            const XrXirCallStatus freed=xr_xir_instance_free(instance);
+            if(freed!=expected_free)
+                fprintf(stderr,"resize initialization failure%zu new%u start%u polled%u terminal%u free%u expected%u preFreeState%u preFreeCall%u preFreeIdle%u preFreeCompletion%u\n",
+                    failure,made,started,polled,status,freed,expected_free,state,has_call,idle,completion);
+            CHECK(freed==expected_free);
         } else ++creation;
         CHECK(!runtime_live&&!runtime_bytes);
     }
