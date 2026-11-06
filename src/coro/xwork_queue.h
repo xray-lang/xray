@@ -17,8 +17,8 @@
 
 #include "../base/xdefs.h"
 #include "../base/xmutex.h"
-#include "../runtime/mem/xobj_header.h"
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xobj_header.h"
+#include "../frontend/types/xvalue.h"
 
 #define XR_WORK_QUEUE_DEFAULT_SHARDS 1u
 #define XR_WORK_QUEUE_DEFAULT_CAPACITY 64u

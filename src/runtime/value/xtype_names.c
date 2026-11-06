@@ -11,7 +11,7 @@
  *   Maps type name strings to XrObjType enum values.
  */
 
-#include "xtype_names.h"
+#include "../../frontend/types/xtype_names.h"
 #include "../../base/xchecks.h"
 #include "../../shared/xr_exact_scalar_registry.h"
 #include <string.h>

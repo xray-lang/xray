@@ -65,7 +65,7 @@
 #define XVM_H
 
 #include "../runtime/value/xchunk.h"
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include "../base/xhashmap.h"
 #include "../runtime/xexec_frame.h"
 #include "../base/xconstants.h"

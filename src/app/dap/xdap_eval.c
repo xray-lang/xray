@@ -17,7 +17,7 @@
 #include "../../runtime/xisolate_api.h"
 #include "../../runtime/xexec_state.h"
 #include "../../runtime/xexec_frame.h"
-#include "../../runtime/value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "../../runtime/value/xchunk.h"
 #include "../../runtime/object/xstring.h"
 #include "../../runtime/object/xarray.h"

@@ -12,7 +12,7 @@
  */
 
 #include "../test_framework.h"
-#include "shared/xi_cgen_verify_output.h"
+#include "lir/xi_cgen_verify_output.h"
 #include <string.h>
 
 #include "base/xmalloc.h"

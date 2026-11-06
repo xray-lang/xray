@@ -8,7 +8,7 @@
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_op_name.h"
 #include "../../../src/ir/xi_verify.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 #include "../../../src/base/xmalloc.h"
 
 #include <stdio.h>

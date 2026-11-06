@@ -27,11 +27,11 @@
 #include <string.h>
 
 #include "../../../src/runtime/mem/xcycle_detector.h"
-#include "../../../src/runtime/mem/xobj_header.h"
+#include "../../../src/frontend/types/xobj_header.h"
 #include "../../../src/runtime/mem/xsystem_heap.h"
 #include "../../../src/runtime/xshared.h"
 #include "../../../src/runtime/closure/xcell.h"
-#include "../../../src/runtime/value/xvalue.h"
+#include "../../../src/frontend/types/xvalue.h"
 #include "../test_win_compat.h"
 
 static int g_passed = 0;

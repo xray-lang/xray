@@ -8,7 +8,7 @@
  * test_provider_logical_contract.c - Logical identity and hostile wire checks
  */
 
-#include "runtime/abi/xr_provider_logical_contract.h"
+#include "frontend/types/xr_provider_logical_contract.h"
 
 #include <stdio.h>
 #include <string.h>

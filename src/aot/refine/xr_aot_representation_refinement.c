@@ -65,8 +65,8 @@
 #include "../../plan/semantic/xr_semantic_number_parse_error_shape.h"
 #include "../../plan/semantic/xr_semantic_scalar_copy_shape.h"
 #include "../../plan/target/xr_target_program_reachability.h"
-#include "../../runtime/value/xtype.h"
-#include "../../runtime/value/xtype_names.h"
+#include "../../frontend/types/xtype.h"
+#include "../../frontend/types/xtype_names.h"
 #include "../../stdlib/xstdlib_metadata.h"
 #include <stdio.h>
 #include <stdlib.h>

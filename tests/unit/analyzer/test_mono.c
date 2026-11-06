@@ -14,7 +14,7 @@
 #include "../../../src/frontend/analyzer/xanalyzer_capability.h"
 #include "../../../src/frontend/parser/xtype_ref.h"
 #include "../../../src/runtime/class/xclass_info.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/base/xarena.h"
 #include "../../../src/frontend/parser/xast_api.h"

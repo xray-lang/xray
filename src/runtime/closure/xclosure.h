@@ -20,9 +20,9 @@
 
 #include <stdint.h>
 #include "../../base/xdefs.h"
-#include "../value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "../value/xchunk.h"
-#include "../mem/xobj_header.h"
+#include "../../frontend/types/xobj_header.h"
 
 struct XrVMRuntime;
 struct XrCoroutine;

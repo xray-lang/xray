@@ -33,7 +33,7 @@
 #include "../module/xmodule_graph.h"
 #include "../module/xmodule_identity.h"
 #include "../module/xmodule_resolver.h"
-#include "../runtime/xerror_codes.h"
+#include "../shared/xerror_codes.h"
 #include "../toolchain/xcompiler_session.h"
 
 #include <stdarg.h>

@@ -19,7 +19,7 @@
 #include "../plan/semantic/xr_semantic_verify.h"
 #include "../plan/target/xr_scalar_call_decision.h"
 #include "../plan/target/xr_target_profile.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include <stdio.h>
 #include <string.h>
 

@@ -17,7 +17,7 @@
 #define XJSON_BUILTINS_H
 
 #include "xisolate_api.h"
-#include "xvalue.h"
+#include "frontend/types/xvalue.h"
 #include "xdefs.h"
 
 XR_FUNC void xr_json_api_init(XrVMRuntime *X);

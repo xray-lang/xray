@@ -14,7 +14,7 @@
 #include "ir/xi_module.h"
 #include "plan/format/xr_xsm_schema.h"
 #include "plan/semantic/xr_semantic_builder.h"
-#include "runtime/value/xtype.h"
+#include "frontend/types/xtype.h"
 
 static XrType integer_type = {.kind = XR_KIND_INT, .id = 1, .frozen = true,
                                .scalar_rep = XR_NATIVE_I64};

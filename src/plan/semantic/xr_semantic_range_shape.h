@@ -15,7 +15,7 @@
 #include "xr_semantic_shared_read_shape.h"
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
-#include "../../runtime/value/xtype.h"
+#include "../../frontend/types/xtype.h"
 #include <stdio.h>
 #include <string.h>
 

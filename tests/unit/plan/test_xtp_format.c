@@ -21,7 +21,7 @@
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/base/xsha256.h"
 #include "../../../src/os/os_thread.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 #include "target_profile_test_fixture.h"
 #include <stdio.h>
 #include <stdlib.h>

@@ -12,7 +12,7 @@
 #define XVM_INTERNAL_H
 
 #include "xvm.h"
-#include "../runtime/mem/xobj_header.h"
+#include "../frontend/types/xobj_header.h"
 #include <stdatomic.h>
 #include "../runtime/class/xclass.h"
 #include "../runtime/class/xmethod.h"
@@ -34,7 +34,7 @@
 #include "../runtime/class/xenum.h"
 #include "../runtime/object/xpanic_info.h"
 #include "../runtime/object/xbigint.h"
-#include "../runtime/value/xstruct_layout.h"
+#include "../frontend/types/xstruct_layout.h"
 #include "../runtime/value/xenum_descriptor.h"
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../shared/xr_assertion_plan.h"

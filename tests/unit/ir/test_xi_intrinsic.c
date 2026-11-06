@@ -20,7 +20,7 @@
 #include "../../src/frontend/analyzer/xbuiltin_receiver_registry.h"
 #include "../../src/frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../src/runtime/symbol/xsymbol_table.h"
-#include "../../src/runtime/value/xtype.h"
+#include "../../src/frontend/types/xtype.h"
 #include "../../src/shared/xr_core_intrinsic.h"
 #include "../../src/shared/xr_assertion_plan.h"
 #include "../../src/shared/xr_print_plan.h"

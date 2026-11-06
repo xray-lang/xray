@@ -6,7 +6,7 @@
  *
  * test_xir_source_nested_nullable.c - Whole Source optional-layer execution and failure owners
  */
-#include "xir/xr_xir_source_product.h"
+#include "program/xr_xir_source_product.h"
 #include "toolchain/xcompiler_session.h"
 #include "xir/xxir_vm.h"
 #include <stdio.h>

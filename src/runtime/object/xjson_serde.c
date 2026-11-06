@@ -39,7 +39,7 @@
 #include "xjson.h"
 #include "../symbol/xsymbol_table.h"
 #include "../xisolate_internal.h"
-#include "../value/xtype_names.h"
+#include "../../frontend/types/xtype_names.h"
 
 /* ========== JSON Parser ========== */
 

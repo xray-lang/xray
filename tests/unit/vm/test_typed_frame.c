@@ -11,7 +11,7 @@
 #include "../../../src/plan/target/xr_target_builder.h"
 #include "../../../src/plan/target/xr_target_plan_internal.h"
 #include "../../../src/runtime/abi/xr_runtime_target_authority.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 #include "../../../src/vm/xr_typed_frame.h"
 #include "../../../src/vm/xr_typed_lifecycle.h"
 #include "../plan/target_profile_test_fixture.h"

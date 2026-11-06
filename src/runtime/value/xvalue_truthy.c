@@ -8,7 +8,7 @@
  * xvalue_truthy.c - Runtime truthiness checks.
  */
 
-#include "xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "../../shared/xr_truthy_core.h"
 
 bool xr_value_is_truthy(XrValue value) {

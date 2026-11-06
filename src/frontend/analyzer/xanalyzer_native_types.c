@@ -20,7 +20,7 @@
 #include "xanalyzer_xrd.h"
 #include "../../base/xchecks.h"
 #include "../../base/xmalloc.h"
-#include "../../runtime/value/xtype_names.h"
+#include "../types/xtype_names.h"
 #include "../../runtime/object/xnative_type.h"
 #include "../../runtime/class/xclass.h"
 #include "../../runtime/class/xclass_system.h"

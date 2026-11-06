@@ -12,7 +12,7 @@
 #define XCORO_MONITOR_FORWARD_H
 
 #include "../base/xdefs.h"
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 
 #include <stdbool.h>
 

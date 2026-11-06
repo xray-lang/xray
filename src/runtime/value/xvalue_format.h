@@ -23,7 +23,7 @@
 #define XVALUE_FORMAT_H
 
 #include "../../base/xdefs.h"
-#include "xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "../xstrbuf.h"
 
 struct XrVMRuntime;

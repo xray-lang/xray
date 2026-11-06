@@ -22,7 +22,7 @@
 #include "xi_range.h"
 #include "xi_effect.h"
 #include "../plan/semantic/xr_semantic_plan.h"
-#include "../runtime/value/xtype.h" /* XR_REP_TAGGED */
+#include "../frontend/types/xtype.h" /* XR_REP_TAGGED */
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
 #include "../module/xmodule_identity.h"

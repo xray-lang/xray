@@ -1,7 +1,7 @@
 #include "xi_lower_expr_helpers.h"
 #include "xi_lower_internal.h"
-#include "../runtime/value/xtype.h"
-#include "../runtime/value/xstruct_layout.h"
+#include "../frontend/types/xtype.h"
+#include "../frontend/types/xstruct_layout.h"
 #include "../runtime/class/xclass.h"
 #include "../runtime/class/xclass_info.h"
 #include <string.h>

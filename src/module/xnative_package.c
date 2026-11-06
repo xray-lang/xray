@@ -14,7 +14,7 @@
 #include "../base/xsha256.h"
 #include "../os/os_fs.h"
 
-#include "../runtime/value/xstruct_layout.h"
+#include "../frontend/types/xstruct_layout.h"
 #include <ctype.h>
 #include <stdarg.h>
 #include <stdio.h>

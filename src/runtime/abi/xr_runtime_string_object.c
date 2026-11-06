@@ -8,7 +8,7 @@
  * xr_runtime_string_object.c - Canonical string object contract
  */
 
-#include "xr_runtime_string_object.h"
+#include "../../frontend/types/xr_runtime_string_object.h"
 #include "../../base/xsha256.h"
 #include <string.h>
 

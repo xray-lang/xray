@@ -30,7 +30,7 @@
 #include "program/xr_validated_program_internal.h"
 #include "runtime/abi/xr_builtin_provider_contract.h"
 #include "runtime/abi/xr_runtime_target_profile.h"
-#include "runtime/xerror_codes.h"
+#include "shared/xerror_codes.h"
 #include "plan/semantic/xr_semantic_ids.h"
 #include "toolchain/xcompiler_session.h"
 #include "vm/xr_program_vm.h"

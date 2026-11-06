@@ -12,7 +12,7 @@
 #include "../../base/xhash.h"
 #include "../../base/xmalloc.h"
 #include "../../runtime/class/xclass_info.h"
-#include "../../runtime/value/xtype.h"
+#include "../types/xtype.h"
 #include "../../shared/xr_hash_core.h"
 #include <stdio.h>
 #include <stdlib.h>

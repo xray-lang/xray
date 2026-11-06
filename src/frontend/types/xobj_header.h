@@ -25,7 +25,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include "../value/xtype_names.h"
+#include "xtype_names.h"
 #include "../../base/xchecks.h"
 #include "../../os/os_time.h"
 #include "../../shared/xr_obj_header.h" /* unified XrObjHeader + shared flags */

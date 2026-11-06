@@ -15,7 +15,7 @@
 #define XI_BUILTIN_MAP_ENTRY_ITERATOR_SHAPE_H
 
 #include "xi.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 
 static inline XiMethodSymbolId xi_call_method_symbol_id(const XiValue *value) {
     if (!value || (value->op != XI_CALL_METHOD && value->op != XI_CALL_METHOD_DIRECT) ||

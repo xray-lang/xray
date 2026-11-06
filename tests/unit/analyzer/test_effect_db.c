@@ -5,8 +5,8 @@
 #include "xa_effect_db.h"
 #include "xa_memory_effect_db.h"
 #include "xclass_info.h"
-#include "xenum_layout.h"
-#include "xtype.h"
+#include "frontend/types/xenum_layout.h"
+#include "frontend/types/xtype.h"
 #include "xmalloc.h"
 #include <stdio.h>
 #include <string.h>

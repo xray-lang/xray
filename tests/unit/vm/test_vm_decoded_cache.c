@@ -9,7 +9,7 @@
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/target/xr_target_builder.h"
 #include "../../../src/plan/target/xr_target_plan_internal.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 #include "../../../src/vm/xr_typed_dispatch.h"
 #include "../../../src/vm/xr_vm_decoded_cache.h"
 #include "../plan/target_profile_test_fixture.h"

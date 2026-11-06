@@ -11,7 +11,7 @@
 #define XANALYZER_CAPABILITY_H
 
 #include "../../base/xdefs.h"
-#include "../../runtime/value/xtype.h"
+#include "../types/xtype.h"
 
 #include <stdbool.h>
 #include <stdint.h>

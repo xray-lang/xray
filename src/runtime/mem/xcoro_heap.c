@@ -13,8 +13,8 @@
 #include "xweak_handle.h"
 #include "../../coro/xcoroutine.h"
 #include "../../coro/xworker.h"
-#include "../value/xvalue.h"
-#include "../value/xslot_type.h"
+#include "../../frontend/types/xvalue.h"
+#include "../../frontend/types/xslot_type.h"
 #include "../object/xmap.h"
 #include "../object/xset.h"
 #include "../object/xnative_type.h"  // XR_NATIVE_TYPE_MAX
@@ -28,7 +28,7 @@
 #include "../xisolate_internal.h"
 #include "../../runtime/xexec_state.h"
 #include "../../runtime/xglobal_dict.h"
-#include "../value/xstruct_layout.h"
+#include "../../frontend/types/xstruct_layout.h"
 #include "../class/xclass.h"
 #include <stdlib.h>
 #include <string.h>

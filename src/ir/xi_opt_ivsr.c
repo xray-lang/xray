@@ -37,7 +37,7 @@
 #include "xi_loop.h"
 #include "xi_analysis.h"
 #include "../base/xchecks.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 
 /* ========== Eligibility ========== */
 

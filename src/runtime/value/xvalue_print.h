@@ -15,7 +15,7 @@
 #ifndef XVALUE_PRINT_H
 #define XVALUE_PRINT_H
 
-#include "xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include <stdio.h>
 
 typedef struct XrVMRuntime XrVMRuntime;

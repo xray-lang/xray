@@ -29,7 +29,7 @@
 #ifndef XANALYZER_BUILTIN_INTERFACES_H
 #define XANALYZER_BUILTIN_INTERFACES_H
 
-#include "../../runtime/value/xtype.h"
+#include "../types/xtype.h"
 #include "xanalyzer_symbol.h"
 #include "../../base/xdefs.h"
 

@@ -8,7 +8,7 @@
  * xtype.c - Static type system implementation
  */
 
-#include "xtype.h"
+#include "../../frontend/types/xtype.h"
 #include "../class/xclass_info.h"
 #include "xtype_pool.h"
 #include "../../base/xmalloc.h"
@@ -16,7 +16,7 @@
 #include "../../base/xhash.h"
 #include "../../shared/xr_derive_flags.h"
 #include "../../os/os_thread.h"
-#include "xtype_names.h"
+#include "../../frontend/types/xtype_names.h"
 #include <stdint.h>
 #include <limits.h>
 #include <stdlib.h>

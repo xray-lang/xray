@@ -16,7 +16,7 @@
 #include "../object/xarray.h"
 #include "../xisolate_api.h"
 #include "../xisolate_internal.h"
-#include "../value/xstruct_layout.h"
+#include "../../frontend/types/xstruct_layout.h"
 #include "../../base/xchecks.h"
 #include "../../base/xlog.h"
 

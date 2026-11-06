@@ -22,7 +22,7 @@
 #ifndef XANALYZER_H
 #define XANALYZER_H
 
-#include "../../runtime/value/xtype.h"
+#include "../types/xtype.h"
 #include "../../base/xtarget_data_layout.h"
 #include "xanalyzer_symbol.h"
 #include "xanalyzer_member_list.h"

@@ -8,7 +8,7 @@
  */
 #include "frontend/parser/xparse.h"
 #include "frontend/parser/xtype_ref.h"
-#include "runtime/value/xtype.h"
+#include "frontend/types/xtype.h"
 #include "runtime/value/xtype_pool.h"
 #include "toolchain/xcompiler_session.h"
 #include "base/xmalloc.h"

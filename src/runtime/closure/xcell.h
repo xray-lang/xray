@@ -21,8 +21,8 @@
 #define XCELL_H
 
 #include "../../base/xdefs.h"
-#include "../mem/xobj_header.h"
-#include "../value/xvalue.h"
+#include "../../frontend/types/xobj_header.h"
+#include "../../frontend/types/xvalue.h"
 #include "../../shared/xr_cell_access_core.h"
 
 /* ========== XrCell: single-slot mutable capture cell (32 bytes) ========== */

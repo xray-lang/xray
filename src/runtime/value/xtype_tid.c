@@ -6,8 +6,8 @@
  *
  * xtype_tid.c - Semantic type to public value tag mapping
  */
-#include "xtype.h"
-#include "xtype_names.h"
+#include "../../frontend/types/xtype.h"
+#include "../../frontend/types/xtype_names.h"
 #include "../../base/xchecks.h"
 
 XR_FUNC uint8_t xr_type_to_tid(const XrType *type) {

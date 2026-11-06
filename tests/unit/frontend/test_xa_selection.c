@@ -10,7 +10,7 @@
 
 #include "../../../src/frontend/analyzer/xa_selection.h"
 #include "../../../src/frontend/parser/xast_nodes.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 #include "../../../src/base/xchecks.h"
 #include <stdio.h>
 #include <string.h>

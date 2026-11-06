@@ -42,7 +42,7 @@
 
 typedef int XrErrorCode;
 
-#include "xerror_codes.h"
+#include "../shared/xerror_codes.h"
 
 /* ========== Forward Declarations ========== */
 

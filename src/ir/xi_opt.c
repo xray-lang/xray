@@ -62,7 +62,7 @@
 #include "../frontend/analyzer/xbuiltin_receiver_registry.h"
 #include "../os/os_time.h"
 #include "../runtime/symbol/xsymbol_table.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include "../runtime/class/xclass_info.h"
 #include "../runtime/class/xenum.h"
 #include "../frontend/analyzer/xanalyzer_symbol.h"

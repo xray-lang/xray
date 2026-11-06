@@ -8,11 +8,11 @@
  * xvalue_deep_eq.c - Deep value equality.
  */
 
-#include "xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "xvalue_hash.h"
 #include "../class/xclass.h"
 #include "../class/xinstance.h"
-#include "../mem/xobj_header.h"
+#include "../../frontend/types/xobj_header.h"
 #include "../object/xarray.h"
 #include "../object/xjson.h"
 #include "../object/xmap.h"

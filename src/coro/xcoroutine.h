@@ -63,7 +63,7 @@
 #include <stdatomic.h>
 #include "../base/xconstants.h"
 #include "../base/xchecks.h"
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include "../runtime/core/xr_exec_context.h"
 #include "xcoro_abi.h"
 #include "xcoro_flags.h"

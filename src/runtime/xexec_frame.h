@@ -22,7 +22,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdatomic.h>
-#include "value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include "value/xchunk.h"
 #include "closure/xclosure.h"
 #include "../../include/xray_yieldable_abi.h"

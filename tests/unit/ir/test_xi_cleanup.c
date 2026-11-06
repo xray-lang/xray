@@ -10,7 +10,7 @@
 
 #include "../test_framework.h"
 #include "ir/xi_cleanup.h"
-#include "runtime/value/xtype.h"
+#include "frontend/types/xtype.h"
 
 #include <stdint.h>
 #include <string.h>

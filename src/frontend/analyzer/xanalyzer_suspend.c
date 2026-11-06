@@ -41,8 +41,8 @@
 #include "../parser/xast_nodes.h"
 #include "../../base/xchecks.h"
 #include "../../base/xmalloc.h"
-#include "../../runtime/value/xtype.h"
-#include "../../runtime/xerror_codes.h"
+#include "../types/xtype.h"
+#include "../../shared/xerror_codes.h"
 #include "../../stdlib/xstdlib_metadata.h"
 #include <stdio.h>
 #include <string.h>

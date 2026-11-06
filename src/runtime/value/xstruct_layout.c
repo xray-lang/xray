@@ -8,8 +8,8 @@
  * xstruct_layout.c - Struct layout computation
  */
 
-#include "xstruct_layout.h"
-#include "xtype.h"
+#include "../../frontend/types/xstruct_layout.h"
+#include "../../frontend/types/xtype.h"
 #include "../../base/xmalloc.h"
 #include "../class/xclass_info.h"
 

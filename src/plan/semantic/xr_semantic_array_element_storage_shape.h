@@ -28,7 +28,7 @@
 #define XR_SEMANTIC_ARRAY_ELEMENT_STORAGE_SHAPE_H
 
 #include "xr_semantic_plan.h"
-#include "../../runtime/value/xtype.h"
+#include "../../frontend/types/xtype.h"
 #include "../../shared/xr_elem_type.h"
 #include <stdint.h>
 

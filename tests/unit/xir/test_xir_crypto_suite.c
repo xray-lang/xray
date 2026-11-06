@@ -10,7 +10,7 @@
  *   The same received SourceProduct supplies catalog IDs, VM code and native C.
  *   Session and Source owners retire before any original test body executes.
  */
-#include "xir/xr_xir_source_product.h"
+#include "program/xr_xir_source_product.h"
 #include "base/xresource_limits.h"
 #include "toolchain/xcompiler_session.h"
 #include "base/xsha256.h"

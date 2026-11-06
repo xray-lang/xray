@@ -13,9 +13,9 @@
  *   Split from xtype.c for maintainability.
  */
 
-#include "xtype.h"
+#include "../../frontend/types/xtype.h"
 #include "xtype_internal.h"
-#include "xtype_names.h"
+#include "../../frontend/types/xtype_names.h"
 #include "../../base/xchecks.h"
 #include <string.h>
 #include <stdio.h>

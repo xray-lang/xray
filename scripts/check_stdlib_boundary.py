@@ -575,7 +575,7 @@ def check_hosted_abi(root: Path) -> list[str]:
                 errors.append(f"hosted-fragment ABI is missing {required_symbol}")
     value_consumers = (
         "include/runtime.h",
-        "src/runtime/value/xvalue.h",
+        "src/frontend/types/xvalue.h",
         "src/aot/xrt_value.h",
         "src/aot/xrt_core_freestanding.h",
     )

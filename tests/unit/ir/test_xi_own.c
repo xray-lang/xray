@@ -16,7 +16,7 @@
 #include "../../../src/ir/xi_module.h"
 #include "../../../src/ir/xi_own.h"
 #include "../../../src/frontend/analyzer/xa_intrinsic_registry.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 #include "../../../src/base/xmalloc.h"
 #include <stdio.h>
 #include <string.h>

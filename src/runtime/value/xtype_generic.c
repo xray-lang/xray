@@ -13,7 +13,7 @@
  *   Split from xtype.c for maintainability.
  */
 
-#include "xtype.h"
+#include "../../frontend/types/xtype.h"
 #include "xtype_internal.h"
 #include "../class/xclass_info.h"
 #include "../../base/xmalloc.h"

@@ -15,7 +15,7 @@
 #include "xlsp_builtins.h"
 #include "../../frontend/analyzer/xanalyzer_builtins.h"
 #include "../../frontend/analyzer/xbuiltin_receiver_registry.h"
-#include "../../runtime/value/xtype.h"
+#include "../../frontend/types/xtype.h"
 #include <string.h>
 #include <stdio.h>
 

@@ -27,7 +27,7 @@
 #include "../analyzer/xanalyzer.h"
 #include "../analyzer/xanalyzer_mono.h"
 #include "../analyzer/xa_selection.h"
-#include "../../runtime/value/xtype.h"
+#include "../types/xtype.h"
 
 #include <stdio.h>
 #include <string.h>

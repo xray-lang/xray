@@ -10,7 +10,7 @@
  * KEY CONCEPT:
  *   Text, authority and parser owners die before product queries and execution.
  */
-#include "xir/xr_xir_source_product.h"
+#include "program/xr_xir_source_product.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_output.h"
 #include "toolchain/xcompiler_session.h"
@@ -24,7 +24,7 @@
 #include "xir/xir_runtime_allocations.h"
 #include "base/xcompile_resources.c"
 #include "xir/xxir_vm.c"
-#include "xir/xr_xir_source_product.c"
+#include "program/xr_xir_source_product.c"
 
 typedef struct TextWorld {
     XrCompileResources *resources;

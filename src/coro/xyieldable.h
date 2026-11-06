@@ -27,7 +27,7 @@
 #include "../os/os_net.h"
 
 // XrValue type (needed for continuation return value)
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include "../../include/xray_yieldable_abi.h"
 
 // Forward declarations

@@ -26,7 +26,7 @@
 #include "runtime/object/xstring.h"
 #include "runtime/xexec_frame.h"
 #include "runtime/value/xchunk.h"
-#include "runtime/value/xtype.h"
+#include "frontend/types/xtype.h"
 #include "module/xmodule_identity.h"
 #include "toolchain/xcompiler_session.h"
 #include "ir/xi.h"

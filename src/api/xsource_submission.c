@@ -8,7 +8,7 @@
  */
 #include "xsource_submission.h"
 #include "../base/xchecks.h"
-#include "../xir/xr_xir_source_product.h"
+#include "../program/xr_xir_source_product.h"
 #include "../xir/xxir_generic.h"
 #include "../xir/xxir_specialization_bindings.h"
 #include "../xir/xxir_receive_control.h"

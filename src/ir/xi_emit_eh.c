@@ -10,7 +10,7 @@
  */
 
 #include "xi_emit_internal.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include "../shared/xr_elem_type.h"
 #include "../shared/xr_owner_forward_core.h"
 #include "../shared/xr_reference_count_core.h"

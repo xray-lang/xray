@@ -11,7 +11,7 @@
 #include "xdeep_copy.h"
 #include "../base/xchecks.h"
 #include "../runtime/xshared.h"
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include "../runtime/value/xenum_descriptor.h"
 #include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/mem/xheap.h"

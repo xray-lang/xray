@@ -8,7 +8,7 @@
  * xr_runtime_descriptor.c - Canonical runtime layout and extent validation
  */
 
-#include "xr_runtime_descriptor.h"
+#include "../../frontend/types/xr_runtime_descriptor.h"
 #include "../../base/xsha256.h"
 #include <limits.h>
 #include <string.h>

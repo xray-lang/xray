@@ -20,7 +20,7 @@
 #include "../../../src/ir/xi_verify.h"
 #include "../../../src/ir/xi_analysis.h"
 #include "../../../src/base/xmalloc.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 
 #include <stdio.h>
 #include <stdlib.h>

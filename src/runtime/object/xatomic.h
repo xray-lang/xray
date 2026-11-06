@@ -28,9 +28,9 @@
 #include <stdatomic.h>
 #include <string.h>
 
-#include "../mem/xobj_header.h"
+#include "../../frontend/types/xobj_header.h"
 #include "../../shared/xr_sync_core.h"
-#include "../value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "../../base/xdefs.h"
 
 /* ========== Atomic Kind ========== */

@@ -16,8 +16,8 @@
 #define XLSP_BUILTINS_H
 
 #include "../../base/xjson.h"
-#include "../../runtime/value/xtype.h"
-#include "../../runtime/value/xtype_names.h"
+#include "../../frontend/types/xtype.h"
+#include "../../frontend/types/xtype_names.h"
 
 // Runtime categories use XrTypeId directly. Json is a compiler-only semantic
 // surface, so LSP gives it a private slot outside the public TypeId range.

@@ -13,9 +13,9 @@
 #include "../base/xlog.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/class/xclass_system.h"
-#include "../runtime/value/xtype_names.h"
+#include "../frontend/types/xtype_names.h"
 #include "../base/xhashmap.h"
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>

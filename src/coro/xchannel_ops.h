@@ -23,7 +23,7 @@
 #include "xchannel.h"
 #include "xdeep_copy.h"
 #include "../base/xchecks.h"
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include "../runtime/value/xtransfer_mode.h"
 #include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/xisolate_api.h"

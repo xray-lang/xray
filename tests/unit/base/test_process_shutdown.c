@@ -10,7 +10,7 @@
  */
 
 #include "../test_framework.h"
-#include "runtime/value/xtype.h"
+#include "frontend/types/xtype.h"
 #include "runtime/xr_process_shutdown.h"
 #include <stdint.h>
 

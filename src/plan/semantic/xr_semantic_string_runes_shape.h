@@ -20,7 +20,7 @@
 #include "../../ir/xi.h"
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
-#include "../../runtime/value/xtype.h"
+#include "../../frontend/types/xtype.h"
 #include <string.h>
 
 static inline bool xr_semantic_string_runes_result_type_is_exact(const XrSemanticPlan *plan,

@@ -12,7 +12,7 @@
 #include "../../../src/plan/target/xr_target_instruction_verify.h"
 #include "../../../src/plan/target/xr_target_plan_internal.h"
 #include "../../../src/plan/target/xr_target_verify.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 #include "../../../src/vm/debug/xr_vm_debug_control.h"
 #include "../../../src/vm/debug/xr_vm_debug_control_internal.h"
 #include "../../../src/vm/debug/xr_vm_materialize.h"

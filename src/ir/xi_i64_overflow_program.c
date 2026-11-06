@@ -14,7 +14,7 @@
 #include "xi_effect.h"
 #include "../plan/semantic/xr_semantic_plan.h"
 #include "../plan/target/xr_target_profile.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include "../shared/xr_exact_scalar_registry.h"
 #include "../base/xmalloc.h"
 #include <stdio.h>

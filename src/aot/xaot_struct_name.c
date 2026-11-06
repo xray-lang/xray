@@ -11,7 +11,7 @@
 #include "xaot_struct_name.h"
 #include "xaot_layout_gen.h"
 #include "../ir/xi_module.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include <inttypes.h>
 #include <stdio.h>
 #include <string.h>

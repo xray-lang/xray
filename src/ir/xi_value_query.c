@@ -13,7 +13,7 @@
 #include "xi_module.h"
 #include "xi_range.h"
 #include "xi_receiver_alias.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include "../runtime/class/xclass_info.h"
 #include "../stdlib/xstdlib_metadata.h"
 #include "../plan/semantic/xr_semantic_builder.h"

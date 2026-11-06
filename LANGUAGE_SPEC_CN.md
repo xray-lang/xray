@@ -108,7 +108,7 @@ Xray 是一个**轻量级静态类型脚本语言，原生支持并发**。设�
 
 #### 0.4.4 错误码引用
 
-错误码使用 `E0xxx` 格式（如 `E0101`），完整列表见 [第 18 章](#18-错误码参考-error-code-reference)。源码定义在 `src/runtime/xerror_codes.h` 与 `src/runtime/xerror.h`。
+错误码使用 `E0xxx` 格式（如 `E0101`），完整列表见 [第 18 章](#18-错误码参考-error-code-reference)。源码定义在 `src/shared/xerror_codes.h` 与 `src/runtime/xerror.h`。
 
 ---
 
@@ -6205,7 +6205,7 @@ main()
 
 ## 12. 测试系统 (Testing)
 
-> 声明真值源：`src/frontend/parser/xparse_decl.c`、`src/xir/xxir_source.c`、`src/xir/xxir_declarations.h`、`src/xir/xr_xir_source_product.c` 与 `src/xir/xxir_instance.c`。下述公共 runner 调度、超时及异步行为仍是完整测试系统的要求；仅声明目录与受限启动实现不代表公共 runner 已完成。
+> 声明真值源：`src/frontend/parser/xparse_decl.c`、`src/xir/xxir_source.c`、`src/xir/xxir_declarations.h`、`src/program/xr_xir_source_product.c` 与 `src/xir/xxir_instance.c`。下述公共 runner 调度、超时及异步行为仍是完整测试系统的要求；仅声明目录与受限启动实现不代表公共 runner 已完成。
 
 ### 12.1 测试声明：`@test` 注解
 
@@ -8446,7 +8446,7 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 
 ## 18. 错误码 (Error Codes)
 
-> 唯一真值源：`src/runtime/xerror_codes.h`。`XrErrorCode` 在 `src/runtime/xerror.h` 中是 `i64`；用户可见格式为 `Exxxx`。编号可保留空洞，不得用文档中不存在的名称补齐。
+> 唯一真值源：`src/shared/xerror_codes.h`。`XrErrorCode` 在 `src/runtime/xerror.h` 中是 `i64`；用户可见格式为 `Exxxx`。编号可保留空洞，不得用文档中不存在的名称补齐。
 
 本章普通表项以头文件为准；下列错误签名编号已登记，但发射点与语义检查仍待接通。旧 defer 错误兜底已从目标运行时表移除，实际执行路径的删除仍属于 Task329 P2，必须保留 §8.2.5 的独立 panic 清理边界。
 

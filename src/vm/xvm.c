@@ -49,7 +49,7 @@
 #include "xdebug.h"
 #include "../runtime/xray_debug_hooks.h"
 #include "../runtime/mem/xheap.h"
-#include "../runtime/xerror_codes.h"
+#include "../shared/xerror_codes.h"
 #include "../runtime/xshared.h"
 #include "../shared/xr_print_plan.h"
 #include "../runtime/xglobal_dict.h"
@@ -102,10 +102,10 @@
 #include "../runtime/object/xrange.h"
 #include "../base/xutf8.h"  // XR_UNICODE_MAX
 #include "../base/xunicode.h"
-#include "../runtime/value/xslot_type.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xslot_type.h"
+#include "../frontend/types/xtype.h"
 #include "../shared/xr_string_core.h"
-#include "../runtime/value/xstruct_layout.h"
+#include "../frontend/types/xstruct_layout.h"
 
 #include "../runtime/xray_debug.h"
 #include "../runtime/xisolate_api.h"

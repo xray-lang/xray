@@ -12,7 +12,7 @@
 
 #include <stdint.h>
 
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include "xcoroutine.h"
 
 XrValue *xr_slot_value_address(XrSlotRef slot) {

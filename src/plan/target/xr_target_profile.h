@@ -17,9 +17,9 @@
 #define XR_TARGET_PROFILE_H
 
 #include "../semantic/xr_semantic_ids.h"
-#include "../../runtime/abi/xr_runtime_contract.h"
-#include "../../runtime/abi/xr_runtime_object_header.h"
-#include "../../runtime/abi/xr_runtime_string_object.h"
+#include "../../frontend/types/xr_runtime_contract.h"
+#include "../../frontend/types/xr_runtime_object_header.h"
+#include "../../frontend/types/xr_runtime_string_object.h"
 #include "../../runtime/abi/xr_target_machine_facts.h"
 #include <stdbool.h>
 #include <stddef.h>

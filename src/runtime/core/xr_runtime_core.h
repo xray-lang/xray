@@ -18,7 +18,7 @@
 #include "../mem/xcoro_heap.h"
 #include "../mem/xheap.h"
 #include "../object/xnative_type.h"
-#include "../value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "xr_script_info.h"
 #include "xr_exec_context.h"
 #include <stdbool.h>

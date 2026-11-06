@@ -8,9 +8,9 @@
  * xvalue_typeid.c - XrValue/XrType to public type id mapping.
  */
 
-#include "xvalue.h"
-#include "xtype.h"
-#include "xtype_names.h"
+#include "../../frontend/types/xvalue.h"
+#include "../../frontend/types/xtype.h"
+#include "../../frontend/types/xtype_names.h"
 #include "../../shared/xr_numeric_conversion_core.h"
 #include "../../shared/xr_type_identity_core.h"
 #include "../../base/xchecks.h"

@@ -17,7 +17,7 @@
 
 #include <stdbool.h>
 
-#include "../../src/runtime/value/xvalue.h"
+#include "../../src/frontend/types/xvalue.h"
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/base/xunicode.h"
 

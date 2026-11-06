@@ -15,7 +15,7 @@
 #include "xir/xxir_value_place.h"
 #include "base/xmalloc.h"
 #include "base/xsha256.h"
-#include "xir/xr_xir_source_product.h"
+#include "program/xr_xir_source_product.h"
 #include "toolchain/xcompiler_session.h"
 #include "xir/xxir_vm.h"
 #include "source_product_consumer.h"

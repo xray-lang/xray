@@ -32,7 +32,7 @@
 #include "../../src/runtime/class/xclass_builder.h"
 #include "../../src/runtime/class/xclass_system.h"
 #include "../../src/runtime/class/xinstance.h"
-#include "../../src/runtime/value/xstruct_layout.h"
+#include "../../src/frontend/types/xstruct_layout.h"
 #include "../../src/runtime/mem/xalloc_unified.h"
 #include "../../src/shared/xr_sync_core.h"
 #include "../../src/os/os_mem.h"

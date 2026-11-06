@@ -17,7 +17,7 @@
 #include "../frontend/analyzer/xanalyzer_builtins.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xmalloc.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include <string.h>
 
 /* Machine representation set by xi_opt_select_rep (an IR field); mirrors the

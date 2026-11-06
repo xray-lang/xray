@@ -8,7 +8,7 @@
  * xr_runtime_object_header.c - Canonical object-header materialization
  */
 
-#include "xr_runtime_object_header.h"
+#include "../../frontend/types/xr_runtime_object_header.h"
 #include <string.h>
 
 /* This table is the production identity/encoding source. Stable IDs are the

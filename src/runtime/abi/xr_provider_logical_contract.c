@@ -13,7 +13,7 @@
  *   a host ABI, implementation name or compiler data structure.
  */
 
-#include "xr_provider_logical_contract.h"
+#include "../../frontend/types/xr_provider_logical_contract.h"
 #include "../../base/xsha256.h"
 
 #include <string.h>

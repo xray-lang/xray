@@ -17,7 +17,7 @@
 #include "ir/xi.h"
 #include "plan/semantic/xr_semantic_builder.h"
 #include "plan/target/xr_target_builder.h"
-#include "runtime/value/xtype.h"
+#include "frontend/types/xtype.h"
 #include "vm/debug/xr_vm_trace.h"
 #include "vm/xr_typed_dispatch.h"
 #include "plan/target_profile_test_fixture.h"

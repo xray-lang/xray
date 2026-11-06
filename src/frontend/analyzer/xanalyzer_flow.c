@@ -14,7 +14,7 @@
 #include "../parser/xast.h"
 #include "xanalyzer_ast_visitor.h"
 #include "../parser/xtype_ref.h"
-#include "../../runtime/value/xtype_names.h"
+#include "../types/xtype_names.h"
 #include "../../base/xmalloc.h"
 #include <string.h>
 

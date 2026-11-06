@@ -3,7 +3,7 @@
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_source_move_verify.h"
 #include "../../../src/frontend/analyzer/xa_ownership.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 
 #include <assert.h>
 #include <stdio.h>

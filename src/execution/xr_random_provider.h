@@ -9,7 +9,7 @@
 #ifndef XR_RANDOM_PROVIDER_H
 #define XR_RANDOM_PROVIDER_H
 #include "xr_provider_value.h"
-#include "../runtime/abi/xr_provider_logical_contract.h"
+#include "../frontend/types/xr_provider_logical_contract.h"
 #include "../os/os_random.h"
 
 static inline XrProviderCallStatus xr_random_provider_fill(

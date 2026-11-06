@@ -40,8 +40,8 @@
 #include "../base/xdefs.h"
 #include "../base/xconstants.h"
 #include "../os/os_thread.h"
-#include "../runtime/mem/xobj_header.h"
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xobj_header.h"
+#include "../frontend/types/xvalue.h"
 
 struct XrVMRuntime;
 struct XrCoroutine;

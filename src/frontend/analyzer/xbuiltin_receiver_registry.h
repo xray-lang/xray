@@ -16,7 +16,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "../../runtime/value/xtype.h"
+#include "../types/xtype.h"
 #include "../../ir/xi_method_symbol.h"
 
 typedef enum {

@@ -23,7 +23,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "xmethod.h"
-#include "../value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "../../shared/xr_json_type.h"
 
 /* ========== Field Descriptor Entry ========== */

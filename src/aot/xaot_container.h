@@ -13,7 +13,7 @@
 
 #include "xaot_rep.h"
 #include "../base/xdefs.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include <stdbool.h>
 #include <stdint.h>
 

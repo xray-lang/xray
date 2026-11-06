@@ -15,10 +15,10 @@
 #ifndef XANALYZER_BUILTINS_H
 #define XANALYZER_BUILTINS_H
 
-#include "../../runtime/value/xtype.h"
+#include "../types/xtype.h"
 #include "xanalyzer_symbol.h"
 #include "xanalyzer_member_list.h"
-#include "../../runtime/value/xtype_names.h"
+#include "../types/xtype_names.h"
 #include "../../base/xdefs.h"
 
 struct XaAnalyzer;

@@ -15,7 +15,7 @@
 #ifndef XBUILTIN_ENUM_ERROR_H
 #define XBUILTIN_ENUM_ERROR_H
 
-#include "../value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include <stdint.h>
 
 struct XrRuntimeCore;

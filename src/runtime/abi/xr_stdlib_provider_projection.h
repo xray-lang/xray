@@ -12,7 +12,7 @@
 #define XR_STDLIB_PROVIDER_PROJECTION_H
 
 #include "xr_stdlib_provider_contract.h"
-#include "xr_runtime_contract.h"
+#include "../../frontend/types/xr_runtime_contract.h"
 #include "xr_target_machine_facts.h"
 
 typedef enum XrStdlibProviderProjectionStatus {

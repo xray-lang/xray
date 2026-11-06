@@ -15,7 +15,7 @@
 #ifndef XR_STDLIB_PROVIDER_CONTRACT_H
 #define XR_STDLIB_PROVIDER_CONTRACT_H
 
-#include "xr_provider_logical_contract.h"
+#include "../../frontend/types/xr_provider_logical_contract.h"
 
 typedef enum XrStdlibProviderAdapter {
     XR_STDLIB_PROVIDER_I64_NULLARY_U64 = 1,

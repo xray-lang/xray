@@ -7,7 +7,7 @@
  * test_native_provider_producer.c - Emit the canonical SourceCompiler native consumer
  */
 #include "api/xsource_compiler.h"
-#include "xir/xr_xir_source_product.h"
+#include "program/xr_xir_source_product.h"
 #include "xir/xxir_internal.h"
 #include <stdio.h>
 #include <stdlib.h>

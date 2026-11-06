@@ -22,7 +22,7 @@
 #endif
 
 #ifndef XRT_VALUE_H
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #endif
 #include "../runtime/value/xtransfer_mode.h"
 

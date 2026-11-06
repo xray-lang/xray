@@ -16,7 +16,7 @@
 #include "../base/xmalloc.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/mem/xcoro_heap.h"
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/xshared.h"
 #include <string.h>

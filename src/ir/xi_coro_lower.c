@@ -12,7 +12,7 @@
 #include "xi_cleanup.h"
 #include "xi_edit.h"
 #include "../base/xmalloc.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include <string.h>
 
 #define CORO_FNV_OFFSET UINT64_C(1469598103934665603)

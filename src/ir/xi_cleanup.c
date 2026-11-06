@@ -18,7 +18,7 @@
 #include "../analysis/xglobal_summary.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 
 #include <stdio.h>
 #include <string.h>

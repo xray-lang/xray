@@ -14,7 +14,7 @@
 #ifndef XARRAY_BUILTINS_H
 #define XARRAY_BUILTINS_H
 
-#include "xvalue.h"
+#include "frontend/types/xvalue.h"
 #include "xdefs.h"
 
 // Global Array constructor (self = class value, ignored)

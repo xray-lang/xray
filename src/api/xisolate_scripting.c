@@ -26,7 +26,7 @@
 #include "../module/xmodule_identity.h"
 #include "../module/xmodule_resolver.h"
 #include "../ir/xi_module.h"
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include "../vm/xic_method.h"
 #include "../vm/xvm_internal.h"
 #include <stdio.h>

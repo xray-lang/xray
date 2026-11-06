@@ -343,7 +343,7 @@ static XrCompileResourceStatus product_facts_observe_copy(XrCompileRequestContro
 #define xr_sha256_update(hash,bytes,length) product_facts_observe_sha((hash),(bytes),(length),__func__)
 #define xir_compile_calloc(context,count,size,status) product_facts_observe_calloc((context),(count),(size),(status),__func__)
 #define xir_lower_copy_span(control,destination,source,bytes) product_facts_observe_copy((control),(destination),(source),(bytes),__func__)
-#include "xir/xr_xir_source_product.c"
+#include "program/xr_xir_source_product.c"
 #undef xir_lower_copy_span
 #undef xir_compile_calloc
 #undef xr_sha256_update

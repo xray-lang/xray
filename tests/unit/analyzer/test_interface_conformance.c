@@ -19,7 +19,7 @@
 #include "xanalyzer.h"
 #include "xanalyzer_symbol.h"
 #include "xparse.h"
-#include "xtype.h"
+#include "frontend/types/xtype.h"
 #include "xray_vm.h"
 #include "xerror.h"
 #include "toolchain/xcompiler_session.h"

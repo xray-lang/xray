@@ -32,7 +32,7 @@
 #include "xa_resolved_call.h"
 #include "xa_selection.h"
 #include "../../runtime/value/xtype_internal.h"
-#include "../../runtime/value/xenum_layout.h"
+#include "../types/xenum_layout.h"
 #include "../../shared/xr_exact_scalar_registry.h"
 #include "../../shared/xr_core_intrinsic.h"
 #include "../../shared/xr_target_query_registry_gen.h"

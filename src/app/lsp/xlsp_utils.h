@@ -14,7 +14,7 @@
 #ifndef XLSP_UTILS_H
 #define XLSP_UTILS_H
 
-#include "../../runtime/value/xtype.h"
+#include "../../frontend/types/xtype.h"
 #include "../../shared/xr_param_mode.h"
 #include <stddef.h>
 #include <stdio.h>

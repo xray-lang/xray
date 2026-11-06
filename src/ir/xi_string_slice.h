@@ -10,7 +10,7 @@
 #ifndef XI_STRING_SLICE_H
 #define XI_STRING_SLICE_H
 #include "xi.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 
 static inline bool xi_value_is_string_slice(const XiValue *value) {
     if (!value || value->op != XI_CALL_METHOD ||

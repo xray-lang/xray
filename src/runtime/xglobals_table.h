@@ -28,7 +28,7 @@
 #ifndef XGLOBALS_TABLE_H
 #define XGLOBALS_TABLE_H
 
-#include "value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include <stddef.h>
 #include <stdbool.h>
 

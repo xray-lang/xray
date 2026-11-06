@@ -54,7 +54,7 @@ XR_FUNC XrXirCallStatus xir_cleanup_actual_call_free(XrXirCall *call);
 #undef xr_xir_host_wait_begin
 #endif
 #include "xray_source_entry.h"
-#include "xir/xr_xir_source_product.h"
+#include "program/xr_xir_source_product.h"
 #include "toolchain/xcompiler_session.h"
 #include "xir/xxir_program_internal.h"
 #include "xir/xxir_call_internal.h"

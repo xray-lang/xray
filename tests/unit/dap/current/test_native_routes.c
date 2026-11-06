@@ -15,7 +15,7 @@
 #include "xir/xxir_call_native_source_internal.h"
 #include "xir/xxir_enum.h"
 #include "toolchain/xcompiler_session.h"
-#include "xir/xr_xir_source_product.h"
+#include "program/xr_xir_source_product.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

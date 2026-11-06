@@ -10,7 +10,7 @@
 #ifndef XR_PROVIDER_TRANSPORT_H
 #define XR_PROVIDER_TRANSPORT_H
 #include "xr_provider_value.h"
-#include "../runtime/abi/xr_provider_logical_contract.h"
+#include "../frontend/types/xr_provider_logical_contract.h"
 #include <string.h>
 
 typedef struct XrProviderResourceAccess {

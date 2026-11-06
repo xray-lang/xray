@@ -22,8 +22,8 @@
 #ifndef XSET_H
 #define XSET_H
 
-#include "../value/xvalue.h"
-#include "../mem/xobj_header.h"
+#include "../../frontend/types/xvalue.h"
+#include "../../frontend/types/xobj_header.h"
 #include "xarray.h"
 #include "../../shared/xr_map_set_abi.h"
 #include <stdint.h>

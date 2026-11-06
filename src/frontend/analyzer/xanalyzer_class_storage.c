@@ -10,7 +10,7 @@
 #include "xanalyzer_vtable.h"
 #include "../../base/xcompile_state.h"
 #include "../../base/xmalloc.h"
-#include "../../runtime/value/xstruct_layout.h"
+#include "../types/xstruct_layout.h"
 #include <limits.h>
 #include <stddef.h>
 

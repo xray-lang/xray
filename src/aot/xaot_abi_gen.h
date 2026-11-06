@@ -7,7 +7,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include "xaot_rep_gen.h"
 
 typedef enum {

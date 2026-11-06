@@ -18,7 +18,6 @@
 #include "../../base/xchecks.h"
 #include "../../base/xarena.h"
 #include "../../base/xutf8.h"
-#include "../../runtime/xisolate_api.h"
 #include "../xdiag_fmt.h"
 #include "../lexer/xquoted_literal.h"
 #include "../../shared/xr_decimal_float.h"

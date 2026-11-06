@@ -12,7 +12,7 @@
 #include "../test_framework.h"
 #include "../test_helper.h"
 #include "runtime/object/xtuple.h"
-#include "runtime/value/xtype.h"
+#include "frontend/types/xtype.h"
 #include "runtime/value/xtype_pool.h"
 
 static XrVMRuntime *X = NULL;

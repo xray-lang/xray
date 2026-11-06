@@ -19,7 +19,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include "../../include/xray_yieldable_abi.h"
 
 typedef struct XrCoroutine XrCoroutine;

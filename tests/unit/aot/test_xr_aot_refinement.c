@@ -74,7 +74,7 @@
 #include "../../../src/plan/target/xr_target_plan_internal.h"
 #include "../../../src/plan/target/xr_target_verify.h"
 #include "../../../src/runtime/class/xclass_info.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 #include "../plan/target_profile_test_fixture.h"
 #include <stdio.h>
 #include <stdlib.h>

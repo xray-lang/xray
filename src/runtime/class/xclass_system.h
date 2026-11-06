@@ -16,7 +16,7 @@
 #ifndef XCLASS_SYSTEM_H
 #define XCLASS_SYSTEM_H
 
-#include "../value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "../../shared/xr_builtin_schema.h"
 
 // Forward declarations via xforward_decl.h

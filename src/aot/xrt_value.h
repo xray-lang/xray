@@ -73,7 +73,7 @@
     XR_COMPARE_OWNER_APPLY_NATIVE(XR_SEM_OWNER_ID_SHARED_COMPARE_HI,                               \
                                   XR_SEM_OWNER_ID_SHARED_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,   \
                                   relation, (a), (b))
-#include "../runtime/abi/xr_runtime_string_object.h"
+#include "../frontend/types/xr_runtime_string_object.h"
 
 #if defined(__GNUC__) || defined(__clang__)
 typedef uint8_t xr_v16u8 __attribute__((vector_size(16)));

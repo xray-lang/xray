@@ -27,7 +27,7 @@
 #include "../class/xinstance.h"
 #include "../core/xr_exec_context.h"
 #include "../mem/xsystem_heap.h"
-#include "../value/xtype_names.h"
+#include "../../frontend/types/xtype_names.h"
 #include "../../coro/xcoroutine.h"
 #include <stdio.h>
 #include <stdarg.h>

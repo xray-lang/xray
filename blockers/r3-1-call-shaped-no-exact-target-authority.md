@@ -173,7 +173,7 @@ call target，也没有目标层的家族识别器**。语义层只为"能命名
 ## How the 114 cases split
 
 opcode 数值经编译 `src/ir/xi.h` 的 `XiOp` 枚举确认；receiver 类型 kind 经编译
-`src/runtime/value/xtype.h` 的 `XR_KIND_*` 枚举确认（`type-v3:` 规范键的第一个字段就是 kind）。
+`src/frontend/types/xtype.h` 的 `XR_KIND_*` 枚举确认（`type-v3:` 规范键的第一个字段就是 kind）。
 分组键取 **opcode × receiver 顶层类型**——`selector` 单独看是 42 个值的长尾，没有结构意义；
 opcode × receiver 才对应"要写哪个家族识别器"。
 

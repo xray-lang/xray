@@ -36,7 +36,7 @@
 #include "frontend/analyzer/xanalyzer.h"
 #include "frontend/parser/xast_nodes.h"
 #include "frontend/parser/xtype_ref.h"
-#include "runtime/value/xtype.h"
+#include "frontend/types/xtype.h"
 #include "toolchain/xcompiler_session.h"
 #include "xray_vm.h"
 

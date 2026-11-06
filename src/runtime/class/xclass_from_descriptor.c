@@ -22,7 +22,7 @@
 #include "../xisolate_api.h"
 #include "xclass_system.h"
 #include "../../base/xmalloc.h"
-#include "../value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "../object/xstring.h"
 #include "../value/xchunk.h"
 #include "../mem/xheap.h"
@@ -33,7 +33,7 @@
 #include "../symbol/xsymbol_table.h"
 #include "../xglobals_table.h"
 #include "xclass_lookup.h"
-#include "../value/xstruct_layout.h"
+#include "../../frontend/types/xstruct_layout.h"
 #include <stdio.h>
 #include <string.h>
 

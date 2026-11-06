@@ -42,7 +42,7 @@
 #include "xi_analysis.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 
 #define UNROLL_FULL_MAX_TRIP 16
 #define UNROLL_MAX_BODY_VALUES 20

@@ -27,10 +27,10 @@ function(cgen_reject_missing_resources)
     cmake_pop_check_state()
 endfunction()
 cgen_reject_missing_resources()
-add_library(cgen_compile_resources_production OBJECT "${CGEN_RESOURCE_ROOT}/src/shared/xi_cgen_verify_output.c")
+add_library(cgen_compile_resources_production OBJECT "${CGEN_RESOURCE_ROOT}/src/lir/xi_cgen_verify_output.c")
 add_executable(test_cgen_compile_resources
     "${CMAKE_CURRENT_LIST_DIR}/test_cgen_compile_resources.c"
-    "${CGEN_RESOURCE_ROOT}/src/shared/xi_cgen_verify_output.c")
+    "${CGEN_RESOURCE_ROOT}/src/lir/xi_cgen_verify_output.c")
 foreach(target cgen_compile_resources_production test_cgen_compile_resources)
     target_include_directories(${target} PRIVATE "${CGEN_RESOURCE_ROOT}/src")
     target_compile_features(${target} PRIVATE c_std_11)

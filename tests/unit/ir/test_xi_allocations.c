@@ -9,7 +9,7 @@
  */
 
 #include "ir/xi.h"
-#include "runtime/value/xtype.h"
+#include "frontend/types/xtype.h"
 #include "../program/xr_program_allocation_probe.h"
 #include <stdio.h>
 #include <stdlib.h>

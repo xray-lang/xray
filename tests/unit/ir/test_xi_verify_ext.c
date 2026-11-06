@@ -15,7 +15,7 @@
 #include "../../../src/ir/xi_semantic_snapshot.h"
 #include "../../../src/ir/xi.h"
 #include "../../../src/runtime/class/xclass_info.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 #include "../../../src/runtime/value/xffi_sig.h"
 #include "../../../src/shared/xr_array_core.h"
 #include "../../../src/base/xmalloc.h"

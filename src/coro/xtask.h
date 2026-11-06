@@ -45,8 +45,8 @@
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include "../runtime/mem/xobj_header.h"
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xobj_header.h"
+#include "../frontend/types/xvalue.h"
 #include "xwait_state.h"
 
 /* ========== Forward Declarations ========== */
@@ -85,10 +85,7 @@ typedef enum {
 
 /* ========== Link Mode (go prefix modifier) ========== */
 
-typedef enum {
-    XR_LINK_NONE = 0,    // go fn()        — independent (default)
-    XR_LINK_LINKED = 1,  // linked go fn() — bidirectional error propagation
-} XrLinkMode;
+#include "../shared/xr_link_mode.h"
 
 typedef enum {
     XR_TASK_PAYLOAD_NONE = 0,

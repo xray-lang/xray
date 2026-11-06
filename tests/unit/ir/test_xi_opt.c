@@ -19,7 +19,7 @@
 #include "../../../src/plan/semantic/xr_semantic_plan_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_verify.h"
 #include "../../../src/ir/xi_module.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/base/xglobal_indices.h"
 

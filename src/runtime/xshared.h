@@ -28,7 +28,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdatomic.h>
-#include "mem/xobj_header.h"
+#include "../frontend/types/xobj_header.h"
 
 struct XrRuntimeCore;
 

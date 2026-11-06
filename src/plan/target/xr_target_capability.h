@@ -13,7 +13,7 @@
 
 #include "xr_target_plan.h"
 #include "../semantic/xr_semantic_plan.h"
-#include "../../runtime/value/xtype.h"
+#include "../../frontend/types/xtype.h"
 
 /* The built-in freestanding assertion adapter is allocation-free and has no
  * hosted object registry.  Target planning therefore admits only the frozen

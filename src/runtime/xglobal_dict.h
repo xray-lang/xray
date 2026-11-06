@@ -39,7 +39,7 @@
 #ifndef XGLOBAL_DICT_H
 #define XGLOBAL_DICT_H
 
-#include "value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include "object/xstring.h"
 #include "object/xmap.h"
 #include "../base/xdefs.h"

@@ -17,9 +17,9 @@
 #define XR_TYPED_LIFECYCLE_H
 
 #include "xr_typed_frame.h"
-#include "../runtime/abi/xr_runtime_contract.h"
-#include "../runtime/abi/xr_runtime_object_header.h"
-#include "../runtime/abi/xr_runtime_string_object.h"
+#include "../frontend/types/xr_runtime_contract.h"
+#include "../frontend/types/xr_runtime_object_header.h"
+#include "../frontend/types/xr_runtime_string_object.h"
 
 #define XR_TYPED_LIFECYCLE_CONTEXT_SCHEMA_VERSION UINT32_C(2)
 

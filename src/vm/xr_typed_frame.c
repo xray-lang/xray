@@ -16,7 +16,7 @@
 #include "../base/xmalloc.h"
 #include "../ir/xi_ops_gen.h"
 #include "../plan/target/xr_target_profile.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include <stdint.h>
 #include <string.h>
 

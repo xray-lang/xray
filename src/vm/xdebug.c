@@ -15,8 +15,8 @@
 #include "../base/xchecks.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/value/xvalue_print.h"
-#include "../runtime/value/xtype.h"
-#include "../runtime/value/xslot_type.h"
+#include "../frontend/types/xtype.h"
+#include "../frontend/types/xslot_type.h"
 #include "../runtime/value/xopcode_info.h"
 #include <stdio.h>
 

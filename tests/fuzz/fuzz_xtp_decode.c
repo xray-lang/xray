@@ -11,7 +11,7 @@
 #include "../../src/base/xmalloc.h"
 #include "../../src/base/xsha256.h"
 #include "../../src/runtime/xr_runtime_artifact_authority_internal.h"
-#include "../../src/runtime/value/xtype.h"
+#include "../../src/frontend/types/xtype.h"
 #include "../../include/xray_runtime_api.h"
 #include "../unit/plan/target_profile_test_fixture.h"
 #include <stdint.h>

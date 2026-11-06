@@ -15,7 +15,7 @@
 #ifndef XBUFFER_H
 #define XBUFFER_H
 
-#include "../value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 
 struct XrAggregateLayout;
 struct XrNativeBodyDesc;

@@ -41,7 +41,7 @@
 #include <stddef.h>
 #include <string.h>
 
-#include "../src/runtime/value/xvalue.h"
+#include "../src/frontend/types/xvalue.h"
 #include "../src/runtime/object/xstring.h"
 #include "../src/runtime/object/xarray.h"
 #include "../src/runtime/object/xmap.h"

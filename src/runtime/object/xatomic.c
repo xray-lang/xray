@@ -16,7 +16,7 @@
 
 #include "xatomic.h"
 #include "xnative_type.h"
-#include "../xerror_codes.h"
+#include "../../shared/xerror_codes.h"
 #include "xpanic_info.h"
 #include "../value/xvalue_format.h"
 #include "../../base/xchecks.h"

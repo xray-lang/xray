@@ -20,7 +20,7 @@
 #include "../coro/xworker.h"
 #include "../runtime/closure/xclosure.h"
 #include "../runtime/value/xchunk.h"
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include "../runtime/xglobal_dict.h"
 #include "../vm/xvm.h"
 #include "../vm/xvm_coro_api.h"

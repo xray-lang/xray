@@ -16,7 +16,7 @@
 #include "crypto.h"
 #include "../../stdlib/common.h"
 #include "../../src/os/os_random.h"
-#include "../../src/runtime/value/xvalue.h"
+#include "../../src/frontend/types/xvalue.h"
 
 /* ========== Module Bindings ========== */
 

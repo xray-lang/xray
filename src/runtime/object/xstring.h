@@ -18,8 +18,8 @@
 #ifndef XSTRING_H
 #define XSTRING_H
 
-#include "../value/xvalue.h"
-#include "../abi/xr_runtime_string_object.h"
+#include "../../frontend/types/xvalue.h"
+#include "../../frontend/types/xr_runtime_string_object.h"
 #include "xarray.h"
 #include <stdint.h>
 #include <stdbool.h>

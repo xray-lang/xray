@@ -34,7 +34,7 @@
 #include "xa_suspend_point.h"
 #include "../../base/xdefs.h"
 #include "../../shared/xr_conversion.h"
-#include "../../runtime/value/xtype.h"
+#include "../types/xtype.h"
 #include <stdbool.h>
 #include <stdint.h>
 

@@ -16,7 +16,7 @@
  * measured/rendered group sizes of hostile operand lists.
  */
 
-#include "runtime/core/xr_text_kernel.h"
+#include "shared/xr_text_kernel.h"
 
 #include <stdio.h>
 #include <stdlib.h>

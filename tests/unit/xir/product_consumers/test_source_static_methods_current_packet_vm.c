@@ -13,7 +13,7 @@
  */
 #if defined(XR_SOURCE_STATIC_PACKET_WRITER)
 #include "xir/xxir_program_packet_internal.h"
-#include "xir/xr_xir_source_product.h"
+#include "program/xr_xir_source_product.h"
 #include "toolchain/xcompiler_session.h"
 #endif
 #include "xir/xxir_construction.h"

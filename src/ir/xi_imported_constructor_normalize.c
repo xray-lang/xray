@@ -20,7 +20,7 @@
 #include "../frontend/analyzer/xa_node_table.h"
 #include "../plan/semantic/xr_semantic_builder.h"
 #include "../runtime/class/xclass_info.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 
 #include <string.h>
 

@@ -27,7 +27,7 @@
 
 #include "xray_vm.h"
 #include "../base/xforward_decl.h"  // Forward declarations
-#include "value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include "class/xclass.h"
 #include "mem/xheap.h"  // heap allocation definitions
 // Instance/Json pools removed, using per-coroutine heap

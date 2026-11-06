@@ -20,7 +20,7 @@
 #include "../../../src/frontend/parser/xparse.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
 #include "../../../src/runtime/value/xchunk.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/toolchain/xcompiler_session.h"
 #include "../../../include/xray_vm.h"

@@ -13,7 +13,7 @@
 #include "../base/xmalloc.h"
 #include "../core/xr_core_spec_gen.h"
 #include "../runtime/abi/xr_target_machine_facts.h"
-#include "../runtime/core/xr_text_kernel.h"
+#include "../shared/xr_text_kernel.h"
 #include "xr_validated_program_internal.h"
 
 #include <limits.h>

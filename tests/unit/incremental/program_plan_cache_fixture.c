@@ -19,7 +19,7 @@
 #include "plan/format/xr_xtp_schema.h"
 #include "plan/semantic/xr_semantic_builder.h"
 #include "plan/target/xr_target_plan.h"
-#include "runtime/value/xtype.h"
+#include "frontend/types/xtype.h"
 #include "test_framework.h"
 #include <stdio.h>
 #include <string.h>

@@ -9,7 +9,7 @@
  * KEY CONCEPT:
  *   Original nominal cycles survive producer destruction and verified lowering.
  */
-#include "xir/xr_xir_source_product.h"
+#include "program/xr_xir_source_product.h"
 #include "toolchain/xcompiler_session.h"
 #include "xir/xxir_types.h"
 #include "source_product_nominal_graphs.h"

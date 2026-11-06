@@ -12,7 +12,7 @@
 #define XR_PROGRAM_PROVIDER_FIXTURE_H
 
 #include "plan/semantic/xr_semantic_ids.h"
-#include "runtime/abi/xr_provider_logical_contract.h"
+#include "frontend/types/xr_provider_logical_contract.h"
 
 static inline XrProviderLogicalContract xr_program_fixture_provider_contract(void) {
     XrProviderLogicalContract contract = {

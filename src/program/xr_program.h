@@ -13,7 +13,7 @@
 
 #include "../base/xdefs.h"
 #include "../base/xstable_id.h"
-#include "../runtime/abi/xr_provider_logical_contract.h"
+#include "../frontend/types/xr_provider_logical_contract.h"
 #include "../shared/xr_param_mode.h"
 #include "../shared/xr_view_origin.h"
 

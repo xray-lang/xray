@@ -15,7 +15,7 @@
 #include "xvm_internal.h"
 #include "../base/xchecks.h"
 #include "../shared/xr_compare_core.h"
-#include "../runtime/value/xstruct_layout.h"
+#include "../frontend/types/xstruct_layout.h"
 #include "../runtime/value/xvalue_format.h"
 #include <inttypes.h>
 #include "../coro/xchannel.h"

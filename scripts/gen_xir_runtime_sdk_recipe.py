@@ -62,7 +62,7 @@ def recipe(root: Path, platform: str | None = None) -> dict:
         relative = path.relative_to(root).as_posix()
         if relative in entries:
             continue
-        if relative != 'src/runtime/core/xr_text_kernel.h' and relative.startswith((
+        if relative.startswith((
                 'src/frontend/', 'src/vm/', 'src/program/', 'src/aot/',
                 'src/api/', 'src/runtime/', 'src/coro/')):
             raise ValueError(f'compiler or legacy runtime dependency: {relative}')

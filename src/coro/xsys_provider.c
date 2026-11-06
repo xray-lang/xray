@@ -11,7 +11,7 @@
 #include "../../src/os/os_thread.h"
 #include "../../src/runtime/object/xarray.h"
 #include "../../src/runtime/object/xpanic_info.h"
-#include "../../src/runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include "../../src/runtime/xisolate_api.h"
 #include "../../src/runtime/mem/xalloc_unified.h"
 #include "../../src/runtime/mem/xcoro_heap.h"

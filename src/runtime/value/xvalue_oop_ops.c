@@ -8,7 +8,7 @@
  * xvalue_oop_ops.c - Class and instance XrValue helpers.
  */
 
-#include "xvalue.h"
+#include "../../frontend/types/xvalue.h"
 
 #define DEFINE_VALUE_OPS_WITH_TYPE(name, type_enum, cast_type)                                     \
     XrValue xr_value_from_##name(cast_type *obj) {                                                 \

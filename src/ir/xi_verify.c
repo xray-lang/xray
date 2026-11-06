@@ -31,7 +31,7 @@
 #include "xi_own.h"
 #include "xi_tbaa.h"
 #include "../analysis/xglobal_summary.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include "../runtime/class/xclass_info.h"
 #include "../runtime/value/xffi_sig.h"
 #include "../frontend/analyzer/xa_effect_db.h"

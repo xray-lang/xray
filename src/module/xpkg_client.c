@@ -28,7 +28,7 @@
 #include "../runtime/xisolate_api.h"
 #include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/core/xr_exec_context.h"
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include "../runtime/value/xvalue_format.h"
 #include "../runtime/class/xinstance.h"
 #include "../runtime/object/xarray.h"

@@ -13,7 +13,7 @@
 #include "xir/xxir_type_arena.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_emit_c.h"
-#include "xir/xr_xir_source_product.h"
+#include "program/xr_xir_source_product.h"
 #include <stddef.h>
 
 typedef XrXirStatus (*Check)(const XrXirCompileContext *,const XrXirModule *,const XrXirConstruction *,XrXirArtifact **,XrXirDiagnostic *);

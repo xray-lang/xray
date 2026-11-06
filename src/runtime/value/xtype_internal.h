@@ -15,7 +15,7 @@
 #ifndef XTYPE_INTERNAL_H
 #define XTYPE_INTERNAL_H
 
-#include "xtype.h"
+#include "../../frontend/types/xtype.h"
 #include "xtype_pool.h"
 
 // Internal: get current thread-local type pool

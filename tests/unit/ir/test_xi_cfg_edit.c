@@ -1,6 +1,6 @@
 #include "../../../src/ir/xi_cfg_edit.h"
 #include "../../../src/ir/xi.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 
 #include <stdio.h>
 

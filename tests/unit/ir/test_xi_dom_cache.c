@@ -13,7 +13,7 @@
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_analysis.h"
 #include "../../../src/ir/xi_loop.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 
 #include <assert.h>
 #include <stdio.h>

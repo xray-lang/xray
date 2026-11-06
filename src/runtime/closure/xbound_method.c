@@ -14,7 +14,7 @@
 #include "../mem/xheap.h"
 #include "../object/xnative_type.h"
 #include "../symbol/xsymbol_table.h"
-#include "../value/xtype_names.h"
+#include "../../frontend/types/xtype_names.h"
 #include "../xisolate_internal.h"
 #include "../xisolate_api.h"
 

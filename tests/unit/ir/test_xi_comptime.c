@@ -9,7 +9,7 @@
 #include "../../../src/ir/xi_opt_comptime.h"
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_core_api.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 #include <stdio.h>
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};

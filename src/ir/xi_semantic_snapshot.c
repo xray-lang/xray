@@ -16,9 +16,9 @@
 #include "xi_module.h"
 #include "../base/xmalloc.h"
 #include "../runtime/class/xclass_info.h"
-#include "../runtime/value/xenum_layout.h"
-#include "../runtime/value/xstruct_layout.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xenum_layout.h"
+#include "../frontend/types/xstruct_layout.h"
+#include "../frontend/types/xtype.h"
 
 #include <limits.h>
 #include <stdint.h>

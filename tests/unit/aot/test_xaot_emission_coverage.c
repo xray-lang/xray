@@ -28,7 +28,7 @@
 #include "plan/semantic/xr_semantic_builder.h"
 #include "plan/target/xr_target_builder.h"
 #include "plan/target/xr_target_plan_internal.h"
-#include "runtime/value/xtype.h"
+#include "frontend/types/xtype.h"
 #include "../plan/target_profile_test_fixture.h"
 #include <stdio.h>
 #include <stdlib.h>

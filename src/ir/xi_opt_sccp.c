@@ -33,7 +33,7 @@
 #include "../shared/xr_numeric_core.h"
 #include "../shared/xr_null_test_core.h"
 #include "../shared/xr_compare_core.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include <string.h>
 #include <stdio.h>

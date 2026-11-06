@@ -26,7 +26,7 @@
 #include "../../../src/plan/target/xr_target_builder.h"
 #include "../../../src/plan/target/xr_target_profile_internal.h"
 #include "../../../src/runtime/abi/xr_runtime_target_authority.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 #include "../../../src/runtime/xr_entry_cell.h"
 #include "../../../src/runtime/xr_module_generation_internal.h"
 

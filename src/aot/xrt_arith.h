@@ -12,7 +12,7 @@
 #define XRT_ARITH_H
 
 #include "xrt_value.h"
-#include "../runtime/value/xtype_names.h" /* XrTypeId + scalar-rep mapping */
+#include "../frontend/types/xtype_names.h" /* XrTypeId + scalar-rep mapping */
 #include "xrt_arc.h"                      // xrt_str_concat_value used by xrt_add
 #include "xrt_range.h"
 #include "xrt_coll.h"  // forward-declares xrt_throw_exc (div/mod by zero); the

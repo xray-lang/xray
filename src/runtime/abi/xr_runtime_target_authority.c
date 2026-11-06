@@ -11,7 +11,7 @@
 #include "xr_runtime_target_authority.h"
 #include "xr_builtin_provider_contract.h"
 #include "xr_stdlib_provider_projection.h"
-#include "../value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "../../plan/semantic/xr_semantic_ids.h"
 
 #include <float.h>

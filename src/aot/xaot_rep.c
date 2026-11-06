@@ -13,7 +13,7 @@
 #include "xaot_layout_gen.h"
 #include "../ir/xi.h"
 #include "../ir/xi_ops_gen.h"
-#include "../runtime/value/xstruct_layout.h"
+#include "../frontend/types/xstruct_layout.h"
 #include "../base/xmalloc.h"
 #include <string.h>
 

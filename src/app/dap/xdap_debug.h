@@ -23,7 +23,7 @@
 typedef struct XrProto XrProto;
 
 // Value type
-#include "../../runtime/value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 
 // XrDebugAction is defined in xray_debug_hooks.h
 

@@ -17,7 +17,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include "xobj_header.h"
+#include "../../frontend/types/xobj_header.h"
 #include "xcoro_heap.h"
 
 /* ========== Forward Declarations ========== */

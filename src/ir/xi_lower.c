@@ -19,7 +19,7 @@
 #include "xi_program_semantic.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xast_types.h"
 #include "../frontend/analyzer/xanalyzer.h"

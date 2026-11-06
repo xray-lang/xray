@@ -21,8 +21,8 @@
 #ifndef XTUPLE_H
 #define XTUPLE_H
 
-#include "../value/xvalue.h"
-#include "../mem/xobj_header.h"
+#include "../../frontend/types/xvalue.h"
+#include "../../frontend/types/xobj_header.h"
 #include "../class/xclass.h"
 #include "../class/xinstance.h"
 #include "../../base/xdefs.h"

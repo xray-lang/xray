@@ -12,8 +12,8 @@
 #include "xi_emit_internal.h"
 #include "xi_emit_vm_gen.h"
 #include "../frontend/analyzer/xa_intrinsic_registry.h"
-#include "../runtime/value/xtype.h"
-#include "../runtime/value/xtype_names.h"
+#include "../frontend/types/xtype.h"
+#include "../frontend/types/xtype_names.h"
 
 /* Binary arithmetic / bitwise with instruction fusion for constant operands.
  * ADDI/SUBI/MULI use signed 16-bit immediate (int16_t, -32768..32767).

@@ -21,7 +21,7 @@
 #include "../../../src/execution/xr_execution.h"
 #include "../../../src/frontend/canonical/xcanon.h"
 #include "../../../src/runtime/value/xchunk.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 #include "../../../src/runtime/xisolate_api.h"
 #include "../../../src/frontend/parser/xparse.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"

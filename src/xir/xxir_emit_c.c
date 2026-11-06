@@ -31,7 +31,7 @@
 #include "xxir_view_types_internal.h"
 #include "xxir_scalar.h"
 #include "xxir_compile_memory.h"
-#include "../shared/xi_cgen_verify_output.h"
+#include "../lir/xi_cgen_verify_output.h"
 #include <stdarg.h>
 #include <limits.h>
 

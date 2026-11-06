@@ -10,7 +10,7 @@
 
 #include "xr_process_shutdown.h"
 
-#include "value/xtype.h"
+#include "../frontend/types/xtype.h"
 
 #define XR_PROCESS_SHUTDOWN_CALLBACK_CAP 16
 

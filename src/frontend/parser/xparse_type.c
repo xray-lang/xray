@@ -16,7 +16,7 @@
 #include "xparse_internal.h"
 #include "xtype_ref.h"
 #include "xtype_scope.h"
-#include "../../runtime/xerror_codes.h"
+#include "../../shared/xerror_codes.h"
 #include "../../base/xchecks.h"
 #include "../../base/xarena.h"
 #include <limits.h>

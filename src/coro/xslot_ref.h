@@ -25,7 +25,7 @@
 #define XR_REP_COUNT 7
 #endif
 #else
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #endif
 
 typedef enum {

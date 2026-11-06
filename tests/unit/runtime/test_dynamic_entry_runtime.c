@@ -16,7 +16,7 @@
 #include "../../../src/plan/target/xr_target_profile_internal.h"
 #include "../../../src/runtime/abi/xr_runtime_target_authority.h"
 #include "../../../src/shared/xr_assertion_plan.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 #include "../../../src/runtime/xr_dynamic_entry_runtime.h"
 #include "../../../src/runtime/xr_module_generation_internal.h"
 #include "../../../src/vm/debug/xr_vm_debug_control.h"

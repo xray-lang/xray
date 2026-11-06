@@ -13,7 +13,7 @@
 #include "ir/xi_module.h"
 #include "ir/xi_semantic_snapshot.h"
 #include "runtime/class/xclass_info.h"
-#include "runtime/value/xtype.h"
+#include "frontend/types/xtype.h"
 #include "../program/xr_program_allocation_probe.h"
 
 #include <stdio.h>

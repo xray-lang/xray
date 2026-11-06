@@ -11,7 +11,7 @@
 #include "../mem/xcoro_heap.h"
 #include "../mem/xfixed_heap.h"
 #include "../mem/xsystem_heap.h"
-#include "../value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include <string.h>
 
 static _Thread_local XrExecutionContext *xr_tls_exec_context;

@@ -19,14 +19,14 @@
 #ifndef XCLASS_H
 #define XCLASS_H
 
-#include "../value/xvalue.h"
-#include "../value/xtype.h"
+#include "../../frontend/types/xvalue.h"
+#include "../../frontend/types/xtype.h"
 #include "../../base/xhash.h"
 #include "../../base/xhashmap.h"
 #include "../../shared/xr_derive_flags.h"
 #include "../../shared/xr_json_type.h"
 #include "../../shared/xobject_shape.h"
-#include "../mem/xobj_header.h"
+#include "../../frontend/types/xobj_header.h"
 #include <stdatomic.h>
 #include <stdbool.h>
 

@@ -9,7 +9,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 FILES = (
-    "src/runtime/abi/xr_runtime_object_header.h",
+    "src/frontend/types/xr_runtime_object_header.h",
     "src/runtime/abi/xr_runtime_object_header.c",
     "tests/unit/runtime/test_runtime_object_header.c",
 )

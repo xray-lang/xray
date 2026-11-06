@@ -10,7 +10,7 @@
  * allocation uses the ordinary Domain and typed Array storage, with no view.
  */
 #include "xxir_string_owned_cost.h"
-#include "../runtime/core/xr_text_kernel.h"
+#include "../shared/xr_text_kernel.h"
 typedef struct XirOwnedStringInputs {
     const XirString *text,*search,*replacement;
     bool all;

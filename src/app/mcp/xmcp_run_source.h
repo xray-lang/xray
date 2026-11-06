@@ -12,7 +12,7 @@
 #ifndef XMCP_RUN_SOURCE_H
 #define XMCP_RUN_SOURCE_H
 #include "xmcp_source.h"
-#include "../../xir/xr_xir_source_product.h"
+#include "../../program/xr_xir_source_product.h"
 
 /* Synchronous input borrow. Output must be empty; failures never publish code.
  * Product/diagnostic ownership is exactly the ordinary SourceProduct contract. */

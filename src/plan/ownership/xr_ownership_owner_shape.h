@@ -24,7 +24,7 @@
 #include "../semantic/xr_semantic_plan_internal.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_ops_gen.h"
-#include "../../runtime/value/xtype.h"
+#include "../../frontend/types/xtype.h"
 
 static inline bool xr_ownership_type_is_root(const XrSemanticPlan *plan, uint32_t type_index) {
     return plan && type_index < plan->type_count &&

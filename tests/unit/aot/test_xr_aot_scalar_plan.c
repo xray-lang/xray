@@ -35,8 +35,8 @@
 #include "../../../src/plan/target/xr_target_verify.h"
 #include "../../../src/frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../../src/base/xmalloc.h"
-#include "../../../src/runtime/value/xtype.h"
-#include "../../../src/runtime/value/xenum_layout.h"
+#include "../../../src/frontend/types/xtype.h"
+#include "../../../src/frontend/types/xenum_layout.h"
 #include "../plan/target_profile_test_fixture.h"
 #include <stdio.h>
 #include <stdlib.h>

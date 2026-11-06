@@ -21,7 +21,7 @@
 #include "xarray_vm.h"
 #include "xiterator.h"
 #include "xpanic_info.h"
-#include "../value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "../value/xvalue_format.h"
 #include "../symbol/xsymbol_table.h"
 #include "../class/xbuiltin_enum_error.h"
@@ -35,7 +35,7 @@
 #include "../../base/xmalloc.h"
 #include "../../base/xutf8.h"
 #include "../../vm/xvm.h"
-#include "../xerror_codes.h"
+#include "../../shared/xerror_codes.h"
 #include <string.h>
 
 static inline XrString *str_self(XrValue self) {

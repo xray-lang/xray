@@ -8,7 +8,7 @@
  * xvalue_builtin_kind.c - Builtin-kind based instance predicates.
  */
 
-#include "xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "../class/xinstance.h"
 
 bool xr_value_is_enum_type(XrValue v) {

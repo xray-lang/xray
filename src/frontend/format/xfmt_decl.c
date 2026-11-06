@@ -17,7 +17,7 @@
 #include "xfmt_internal.h"
 #include "xfmt_literal.h"
 #include "../parser/xattribute_registry.h"
-#include "../../runtime/value/xtype_names.h"
+#include "../types/xtype_names.h"
 #include "../../shared/xr_derive_flags.h"
 #include <string.h>
 

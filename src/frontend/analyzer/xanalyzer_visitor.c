@@ -34,7 +34,7 @@
 #include "../../base/xhashmap.h"
 #include "../../base/xstorage.h"
 #include "../../module/xmodule_graph.h"
-#include "../../runtime/value/xstruct_layout.h"
+#include "../types/xstruct_layout.h"
 #include "../../runtime/value/xtype_internal.h"
 #include "../../shared/xr_derive_flags.h"
 #include "../../toolchain/xcompiler_session.h"

@@ -17,7 +17,7 @@
 #include "../class/xclass_builder.h"
 #include "../class/xclass_system.h"
 #include "../class/xinstance.h"
-#include "../xerror_codes.h"
+#include "../../shared/xerror_codes.h"
 #include "../xisolate_api.h"
 #include "../../base/xchecks.h"
 #include "../../coro/xcoroutine.h"

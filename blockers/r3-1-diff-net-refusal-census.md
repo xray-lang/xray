@@ -139,7 +139,7 @@ tests/diff/cases/semantics/types/object_optional_sparse_fields.xr
 
 写阻塞单时把这 114 条按**首次拒绝消息里的机器操作数**再切了一刀。`selector=` 单看是
 42 个值的长尾、没有结构；真正的分组轴是 **opcode × receiver 顶层类型**
-（opcode 对 `src/ir/xi.h` 的 `XiOp` 枚举、receiver kind 对 `src/runtime/value/xtype.h`
+（opcode 对 `src/ir/xi.h` 的 `XiOp` 枚举、receiver kind 对 `src/frontend/types/xtype.h`
 的 `XR_KIND_*` 逐一核对过），切出 21 组：
 
 | opcode / receiver | 条数 |

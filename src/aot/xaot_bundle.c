@@ -20,8 +20,8 @@
 #include "../ir/xi_op_name.h"
 #include "../ir/xi_program_semantic_plan.h"
 #include "../plan/target/xr_target_verify.h"
-#include "../runtime/value/xvalue.h"
-#include "../runtime/value/xenum_layout.h"
+#include "../frontend/types/xvalue.h"
+#include "../frontend/types/xenum_layout.h"
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>

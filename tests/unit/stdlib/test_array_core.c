@@ -9,7 +9,7 @@
  */
 
 #include "../test_framework.h"
-#include "runtime/value/xvalue.h"
+#include "frontend/types/xvalue.h"
 #include "shared/xr_array_core.h"
 #include "shared/xr_pod_slice_core.h"
 #include "shared/xr_sort_core.h"

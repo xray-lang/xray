@@ -10,7 +10,7 @@
 #include "xi_analysis.h"
 #include "../base/xmalloc.h"
 #include "../frontend/analyzer/xa_ownership.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include <stdio.h>
 #include <string.h>
 

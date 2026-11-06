@@ -8,7 +8,7 @@
  * xvalue_tuple_ops.c - Tuple XrValue helpers.
  */
 
-#include "xvalue.h"
+#include "../../frontend/types/xvalue.h"
 
 XrValue xr_value_from_tuple(struct XrTuple *obj) {
     return XR_FROM_PTR(obj);

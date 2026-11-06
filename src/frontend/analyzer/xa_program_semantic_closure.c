@@ -24,7 +24,7 @@
 #include "../../module/xmodule_graph.h"
 #include "../../module/xmodule_identity.h"
 #include "../../runtime/class/xclass_info.h"
-#include "../../runtime/value/xtype.h"
+#include "../types/xtype.h"
 #include "../../shared/xr_exact_scalar_registry.h"
 #include "../../plan/semantic/xr_scalar_call_semantics.h"
 #include "../../plan/semantic/xr_semantic_ids.h"

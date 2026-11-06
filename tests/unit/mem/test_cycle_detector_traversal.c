@@ -25,8 +25,8 @@
 
 #include "../../../src/runtime/mem/xcoro_heap.h"
 #include "../../../src/runtime/mem/xcycle_detector.h"
-#include "../../../src/runtime/mem/xobj_header.h"
-#include "../../../src/runtime/value/xvalue.h"
+#include "../../../src/frontend/types/xobj_header.h"
+#include "../../../src/frontend/types/xvalue.h"
 #include "../../../src/runtime/xisolate_api.h"
 #include "../../../src/runtime/xisolate_internal.h"
 #include "../../../src/coro/xcoroutine.h"

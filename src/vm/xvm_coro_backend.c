@@ -25,7 +25,7 @@
 #include "../runtime/xshared.h"
 #include "../runtime/mem/xcoro_heap.h"
 #include "../runtime/mem/xsystem_heap.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include "../runtime/value/xvalue_format.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"

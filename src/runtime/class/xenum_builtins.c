@@ -11,7 +11,7 @@
 #include "xenum_builtins.h"
 #include "../../base/xchecks.h"
 #include "../xisolate_api.h"
-#include "../value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "../object/xstring.h"
 #include "xenum.h"
 #include <string.h>

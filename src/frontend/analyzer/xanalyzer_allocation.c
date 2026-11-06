@@ -21,7 +21,7 @@
 #include "../parser/xast_nodes.h"
 #include "../../base/xchecks.h"
 #include "../../base/xmalloc.h"
-#include "../../runtime/xerror_codes.h"
+#include "../../shared/xerror_codes.h"
 #include <stdio.h>
 #include <string.h>
 

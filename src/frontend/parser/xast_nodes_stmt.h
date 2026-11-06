@@ -17,9 +17,7 @@
 
 #include "xast_nodes_common.h"
 
-// xtask.h pulls in coroutine-related enums (XR_LINK_*, XR_SCOPE_*) used
-// directly by GoExprNode / ScopeBlockNode below.
-#include "../../coro/xtask.h"
+#include "../../shared/xr_link_mode.h"
 
 /* ========== Binding Declarations (statement form) ========== */
 

@@ -39,7 +39,7 @@
 #include "../xisolate_internal.h"
 #include "../../base/xutf8.h"
 #include "../../shared/xr_float_fmt.h"
-#include "xtype_names.h"
+#include "../../frontend/types/xtype_names.h"
 
 #include <inttypes.h>
 #include <stdio.h>

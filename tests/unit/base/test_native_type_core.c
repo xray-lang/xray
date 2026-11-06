@@ -9,7 +9,7 @@
  */
 
 #include "../test_framework.h"
-#include "runtime/value/xstruct_layout.h"
+#include "frontend/types/xstruct_layout.h"
 #include "shared/xr_native_type_core.h"
 
 #include <string.h>

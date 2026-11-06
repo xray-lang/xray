@@ -12,7 +12,7 @@
 #include "../../../src/ir/xi_opt_gvn_pre.h"
 #include "../../../src/ir/xi_tbaa.h"
 #include "../../../src/ir/xi_verify.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 
 #include <assert.h>
 #include <stdio.h>

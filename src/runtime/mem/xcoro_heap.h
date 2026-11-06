@@ -30,7 +30,7 @@
 #include <string.h>
 #include "../../base/xdefs.h"
 #include "../../base/xmalloc.h"
-#include "../value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "xregion.h"
 #include "xobj_ops.h"
 #include "xruntime_object_heap.h"

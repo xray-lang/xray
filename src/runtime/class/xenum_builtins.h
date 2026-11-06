@@ -15,7 +15,7 @@
 #ifndef XENUM_BUILTINS_H
 #define XENUM_BUILTINS_H
 
-#include "../value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 
 /* ========== Enum Constructor Metadata Helpers ========== */
 

@@ -25,7 +25,7 @@
 
 #include "xclass_builder.h"
 #include "xmethod.h"
-#include "../value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include <stdbool.h>
 #include <stdint.h>
 

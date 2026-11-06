@@ -26,13 +26,13 @@
 
 static const uint8_t xr_bootstrap_container_magic[XR_BOOTSTRAP_CONTAINER_MAGIC_SIZE] = {'X', 'R',
                                                                                         'A', 'Y'};
-#include "../runtime/value/xslot_type.h"
+#include "../frontend/types/xslot_type.h"
 #include "../runtime/value/xffi_sig.h"
-#include "../runtime/value/xtype.h"
-#include "../runtime/value/xstruct_layout.h"
+#include "../frontend/types/xtype.h"
+#include "../frontend/types/xstruct_layout.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/object/xbigint.h"
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include "../runtime/class/xclass.h"
 #include "../runtime/class/xclass_system.h"
 #include "../runtime/class/xclass_descriptor.h"

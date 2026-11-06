@@ -13,7 +13,7 @@
 
 #include <stdint.h>
 #include "../../base/xdefs.h"
-#include "xobj_header.h"
+#include "../../frontend/types/xobj_header.h"
 
 #ifndef XR_VALUE_DEFINED
 typedef struct XrValue XrValue;

@@ -4,7 +4,7 @@
 #define XVM_GRAPHEME_ITERATOR_H
 
 #include "../runtime/object/xstring.h"
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include "../shared/xr_unicode_grapheme.h"
 
 typedef struct XrVmGraphemeIterator {

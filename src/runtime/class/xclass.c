@@ -26,7 +26,7 @@
 #include "../object/xnative_type.h"
 #include "../mem/xsystem_heap.h"
 #include "xclass_system.h"
-#include "../value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "../symbol/xsymbol_table.h"
 #include <stdio.h>
 #include <string.h>

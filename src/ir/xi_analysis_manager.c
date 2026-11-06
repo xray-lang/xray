@@ -15,7 +15,7 @@
 #include "xi_tbaa.h"
 #include "../frontend/analyzer/xa_alloc_effect.h"
 #include "../os/os_time.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include <stdio.h>
 #include <string.h>
 

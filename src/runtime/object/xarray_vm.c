@@ -16,7 +16,7 @@
 #include "../../coro/xcoroutine.h"
 #include "../closure/xclosure.h"
 #include "../mem/xalloc_unified.h"
-#include "../value/xtype_names.h"
+#include "../../frontend/types/xtype_names.h"
 #include "../value/xvalue_format.h"
 #include "../xisolate_api.h"
 #include "../../shared/xr_sort_core.h"

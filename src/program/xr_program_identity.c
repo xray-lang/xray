@@ -13,7 +13,7 @@
 
 #include "../base/xsha256.h"
 #include "../core/xr_core_spec_gen.h"
-#include "../runtime/core/xr_text_kernel.h"
+#include "../shared/xr_text_kernel.h"
 
 #include <string.h>
 

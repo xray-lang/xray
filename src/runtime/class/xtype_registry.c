@@ -15,7 +15,7 @@
 #include "xclass_system.h"
 #include "../xisolate_api.h"
 #include "../../base/xmalloc.h"
-#include "../value/xtype_names.h"
+#include "../../frontend/types/xtype_names.h"
 #include "../symbol/xsymbol_table.h"
 #include "../../base/xhashmap.h"
 #include <stdlib.h>
@@ -456,7 +456,7 @@ void xr_registry_get_stats(XrVMRuntime *X, int *total, int *classes, int *interf
 
 /* ========== Static Analyzer Type Integration ========== */
 
-#include "../value/xtype.h"
+#include "../../frontend/types/xtype.h"
 
 const char *xr_xr_type_kind_name(struct XrType *xa_type) {
     if (!xa_type)

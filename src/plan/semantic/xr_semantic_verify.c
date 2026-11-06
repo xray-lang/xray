@@ -52,7 +52,7 @@
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
 #include "../../module/xmodule_identity.h"
-#include "../../runtime/value/xtype.h"
+#include "../../frontend/types/xtype.h"
 #include "../../shared/xr_hash_core.h"
 #include "../../shared/xr_exact_scalar_registry.h"
 #include "../../stdlib/xstdlib_metadata.h"

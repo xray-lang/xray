@@ -8,7 +8,7 @@
  * test_runtime_abi_contract.c - Structured runtime ABI fingerprint tests
  */
 
-#include "runtime/abi/xr_runtime_contract.h"
+#include "frontend/types/xr_runtime_contract.h"
 #include "../program/xr_program_provider_fixture.h"
 #include <stddef.h>
 #include <stdint.h>

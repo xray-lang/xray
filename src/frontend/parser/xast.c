@@ -21,7 +21,7 @@
 #include "../../base/xmalloc.h"
 #include "../../base/xarena.h"
 #include "../../base/xutf8.h"
-#include "../../runtime/value/xtype.h"
+#include "../types/xtype.h"
 #include "xstring_pool.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../../toolchain/xcompiler_arena_backing.h"

@@ -30,11 +30,11 @@
 #include "../coro/xyieldable.h"
 #include "../runtime/closure/xclosure.h"
 #include "../runtime/core/xr_runtime_core.h"
-#include "../runtime/mem/xobj_header.h"
+#include "../frontend/types/xobj_header.h"
 #include "../runtime/mem/xsystem_heap.h"
 #include "../runtime/object/xpanic_info.h"
 #include "../runtime/object/xarray.h"
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/xshared.h"
 

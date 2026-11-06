@@ -19,7 +19,7 @@
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"
 #include "../../shared/xr_exact_scalar_registry.h"
-#include "../../runtime/value/xtype.h"
+#include "../../frontend/types/xtype.h"
 #include "../../frontend/parser/xast_types.h"
 #include <limits.h>
 #include <stdio.h>

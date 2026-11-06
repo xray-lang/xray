@@ -17,7 +17,7 @@
 #include "../../../src/module/xprelude_runtime.h"
 #include "../../../src/runtime/class/xenum.h"
 #include "../../../src/runtime/core/xr_runtime_core.h"
-#include "../../../src/runtime/value/xvalue.h"
+#include "../../../src/frontend/types/xvalue.h"
 
 /* ========== Helpers ========== */
 

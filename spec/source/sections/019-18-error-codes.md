@@ -8,7 +8,7 @@ order: 019
 
 ## 18. 错误码 (Error Codes)
 
-> 唯一真值源：`src/runtime/xerror_codes.h`。`XrErrorCode` 在 `src/runtime/xerror.h` 中是 `i64`；用户可见格式为 `Exxxx`。编号可保留空洞，不得用文档中不存在的名称补齐。
+> 唯一真值源：`src/shared/xerror_codes.h`。`XrErrorCode` 在 `src/runtime/xerror.h` 中是 `i64`；用户可见格式为 `Exxxx`。编号可保留空洞，不得用文档中不存在的名称补齐。
 
 本章普通表项以头文件为准；下列错误签名编号已登记，但发射点与语义检查仍待接通。旧 defer 错误兜底已从目标运行时表移除，实际执行路径的删除仍属于 Task329 P2，必须保留 §8.2.5 的独立 panic 清理边界。
 
@@ -211,7 +211,7 @@ order: 019
 
 ## 18. Error Codes
 
-> The single source of truth is `src/runtime/xerror_codes.h`. `XrErrorCode` is an `i64` in `src/runtime/xerror.h`; user-facing rendering is `Exxxx`. Gaps are allowed and must not be filled with names absent from the header.
+> The single source of truth is `src/shared/xerror_codes.h`. `XrErrorCode` is an `i64` in `src/runtime/xerror.h`; user-facing rendering is `Exxxx`. Gaps are allowed and must not be filled with names absent from the header.
 
 Ordinary entries follow the header; the error-signature numbers below are registered, while emitters and semantic checking remain pending. The old defer-error fallback is removed from the target runtime table. Removing its execution path remains Task329 P2 work and must preserve the independent cleanup-panic boundary in §8.2.5.
 

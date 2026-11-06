@@ -16,7 +16,7 @@
 #ifndef XI64_METHODS_H
 #define XI64_METHODS_H
 
-#include "xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "../object/xstring.h"
 #include "../object/xbigint.h"
 #include "../symbol/xsymbol_table.h"

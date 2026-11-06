@@ -8,7 +8,7 @@
 
 #include "xi_semantic_intrinsic.h"
 #include "xi_effect.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 
 #include <stdarg.h>
 #include <stdio.h>

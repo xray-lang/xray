@@ -14,7 +14,7 @@
 #include "xanalyzer.h"
 #include "xanalyzer_native_types.h"
 #include "../../base/xchecks.h"
-#include "../../runtime/value/xtype_names.h"
+#include "../types/xtype_names.h"
 #include "../../runtime/symbol/xsymbol_table.h"
 #include "../../shared/xr_target_query_registry_gen.h"
 #include "../../base/xmalloc.h"

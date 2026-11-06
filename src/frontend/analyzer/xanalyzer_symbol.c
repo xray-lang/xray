@@ -16,7 +16,7 @@
 #include "../../base/xchecks.h"
 #include "../../base/xhashmap.h"
 #include "../../base/xmalloc.h"
-#include "../../runtime/value/xstruct_layout.h"
+#include "../types/xstruct_layout.h"
 #include <string.h>
 
 int xa_enum_info_find_variant(const XaEnumInfo *info, const char *name) {

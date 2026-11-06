@@ -22,7 +22,7 @@
 #include "../xshared.h"
 #include "../../coro/xcoro_pool.h"
 #include "../../coro/xcoroutine.h"
-#include "xobj_header.h"        // XR_TCOROUTINE
+#include "../../frontend/types/xobj_header.h"        // XR_TCOROUTINE
 #include <string.h>
 #include <stdio.h>
 #include "../../os/os_mem.h"

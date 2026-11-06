@@ -8,8 +8,8 @@
  * xenum_layout.c - Compile-time enum tagged aggregate layout descriptor
  */
 
-#include "xenum_layout.h"
-#include "xvalue.h"
+#include "../../frontend/types/xenum_layout.h"
+#include "../../frontend/types/xvalue.h"
 #include "../../base/xio_policy.inc.h"
 #include <stddef.h>
 #include "../../shared/xr_hash_core.h"

@@ -8,7 +8,7 @@
  * test_runtime_string_object.c - Canonical string-object contract tests
  */
 
-#include "runtime/abi/xr_runtime_string_object.h"
+#include "frontend/types/xr_runtime_string_object.h"
 #include "plan/semantic/xr_semantic_ids.h"
 #include <stdio.h>
 #include <stdlib.h>

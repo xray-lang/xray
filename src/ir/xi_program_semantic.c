@@ -13,7 +13,7 @@
 #include "../frontend/analyzer/xanalyzer_symbol.h"
 #include "../base/xmalloc.h"
 #include "../runtime/class/xclass_info.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include "../shared/xr_exact_scalar_registry.h"
 #include "../plan/semantic/xr_source_semantic_identity.h"
 #include <stdio.h>

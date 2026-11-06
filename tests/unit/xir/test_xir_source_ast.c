@@ -6,7 +6,7 @@
  *
  * test_xir_source_ast.c - Actual AST semantics and independent Program ownership
  */
-#include "xir/xr_xir_source_product.h"
+#include "program/xr_xir_source_product.h"
 #include "frontend/parser/xparse.h"
 #include "frontend/parser/xast.h"
 #include "toolchain/xcompiler_session.h"

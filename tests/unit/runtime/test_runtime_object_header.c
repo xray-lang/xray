@@ -8,7 +8,7 @@
  * test_runtime_object_header.c - Canonical object-header ABI tests
  */
 
-#include "runtime/abi/xr_runtime_object_header.h"
+#include "frontend/types/xr_runtime_object_header.h"
 #include "base/xsha256.h"
 #include <stdio.h>
 #include <stdlib.h>

@@ -27,7 +27,7 @@
 
 #include "../../base/xdefs.h"
 #include "../../base/xlocation.h"
-#include "../value/xtype.h"  // XrType* (runtime/value is lower than runtime/class)
+#include "../../frontend/types/xtype.h"  // XrType* (runtime/value is lower than runtime/class)
 
 #include <stdbool.h>
 #include <stdint.h>

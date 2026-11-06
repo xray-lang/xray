@@ -14,7 +14,7 @@
 #include "../xir/xir_execution_fixture.h"
 #include "../xir/xir_call_fixture.h"
 #include "xir/xxir_emit_c.h"
-#include "shared/xi_cgen_verify_output.h"
+#include "lir/xi_cgen_verify_output.h"
 #include <stdint.h>
 #ifdef XR_OS_WINDOWS
 #include <windows.h>
@@ -79,7 +79,7 @@ static XrCompileResourceStatus verifier_resize(XrCompileResources *resources,
 #define xr_compile_resources_alloc verifier_alloc
 #define xr_compile_resources_calloc verifier_calloc
 #define xr_compile_resources_resize verifier_resize
-#include "../../../src/shared/xi_cgen_verify_output.c"
+#include "../../../src/lir/xi_cgen_verify_output.c"
 #undef xr_compile_resources_alloc
 #undef xr_compile_resources_calloc
 #undef xr_compile_resources_resize

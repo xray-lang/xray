@@ -19,7 +19,7 @@
 #ifndef XF64_METHODS_H
 #define XF64_METHODS_H
 
-#include "xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "../object/xstring.h"
 #include "../symbol/xsymbol_table.h"
 #include "../../base/xconstants.h"

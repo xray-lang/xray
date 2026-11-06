@@ -10,7 +10,7 @@
 
 #include "xi_opt_strength.h"
 #include "../base/xchecks.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 
 /* ========== Helpers ========== */
 

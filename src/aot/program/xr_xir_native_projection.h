@@ -9,7 +9,7 @@
 #ifndef XR_XIR_NATIVE_PROJECTION_H
 #define XR_XIR_NATIVE_PROJECTION_H
 #include "xr_xir_native_artifact.h"
-#include "../../xir/xr_xir_source_product.h"
+#include "../../program/xr_xir_source_product.h"
 
 typedef struct XrXirNativeProjectionRequest {
     const XrXirSourceProduct *product;

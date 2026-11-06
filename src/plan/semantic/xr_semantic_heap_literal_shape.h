@@ -21,7 +21,7 @@
 #include "xr_semantic_plan.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_ops_gen.h"
-#include "../../runtime/value/xtype.h"
+#include "../../frontend/types/xtype.h"
 
 /* Everything a heap literal must satisfy apart from which payload it carries:
  * a no-operand constant that owns its result, allocates nothing, and whose

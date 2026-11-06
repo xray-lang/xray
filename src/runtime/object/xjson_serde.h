@@ -17,7 +17,7 @@
 #ifndef XJSON_SERDE_H
 #define XJSON_SERDE_H
 
-#include "../value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 
 typedef struct XrJsonDecodeSchema XrJsonDecodeSchema;
 

@@ -39,7 +39,7 @@
 
 // Heap implementation
 #include "xfixed_heap.h"
-#include "../value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 
 /* ========== Unified Allocation Interface ========== */
 

@@ -79,7 +79,7 @@
 #include "../semantic/xr_program_semantic_closure.h"
 #include "../semantic/xr_semantic_value_aggregate_shape.h"
 #include "../ownership/xr_ownership_certificate.h"
-#include "../../runtime/value/xtype.h"
+#include "../../frontend/types/xtype.h"
 #include "../../stdlib/xstdlib_metadata.h"
 #include "../semantic/xr_semantic_array_member_shape.h"
 #include "xr_target_array_storage_shape.h"

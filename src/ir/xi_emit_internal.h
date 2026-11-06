@@ -22,8 +22,8 @@
 #include "../base/xmalloc.h"
 #include "../base/xtarget_data_layout.h"
 #include "../runtime/value/xchunk.h"
-#include "../runtime/value/xvalue.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xvalue.h"
+#include "../frontend/types/xtype.h"
 #include <string.h>
 
 struct XrAggregateLayout;

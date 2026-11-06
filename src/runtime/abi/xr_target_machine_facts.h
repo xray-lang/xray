@@ -18,7 +18,7 @@
 
 #include "../../base/xtarget_data_layout.h"
 #include "../../shared/xr_target_query_values_gen.h"
-#include "xr_target_runtime_profile.h"
+#include "../../frontend/types/xr_target_runtime_profile.h"
 #include <stdint.h>
 
 typedef enum XrTargetArchitecture {

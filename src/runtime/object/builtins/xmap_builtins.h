@@ -11,7 +11,7 @@
 #ifndef XMAP_BUILTINS_H
 #define XMAP_BUILTINS_H
 
-#include "xvalue.h"
+#include "frontend/types/xvalue.h"
 #include "xdefs.h"
 
 // Global Map constructor (self = class value, ignored)

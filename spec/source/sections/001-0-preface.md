@@ -79,7 +79,7 @@ Xray 是一个**轻量级静态类型脚本语言，原生支持并发**。设�
 
 #### 0.4.4 错误码引用
 
-错误码使用 `E0xxx` 格式（如 `E0101`），完整列表见 [第 18 章](#18-错误码参考-error-code-reference)。源码定义在 `src/runtime/xerror_codes.h` 与 `src/runtime/xerror.h`。
+错误码使用 `E0xxx` 格式（如 `E0101`），完整列表见 [第 18 章](#18-错误码参考-error-code-reference)。源码定义在 `src/shared/xerror_codes.h` 与 `src/runtime/xerror.h`。
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -158,5 +158,5 @@ Examples: `src/frontend/lexer/xkeywords.def`, `src/frontend/parser/xast_types.h:
 
 #### 0.4.4 Error-Code References
 
-Error codes use the `E0xxx` format (e.g., `E0101`); the full list is in [Chapter 18](#18-error-code-reference). Source-level definitions are in `src/runtime/xerror_codes.h` and `src/runtime/xerror.h`.
+Error codes use the `E0xxx` format (e.g., `E0101`); the full list is in [Chapter 18](#18-error-code-reference). Source-level definitions are in `src/shared/xerror_codes.h` and `src/runtime/xerror.h`.
 <!-- /xr-spec:en -->

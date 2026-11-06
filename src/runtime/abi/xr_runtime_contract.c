@@ -8,7 +8,7 @@
  * xr_runtime_contract.c - Structured runtime ABI validation and fingerprints
  */
 
-#include "xr_runtime_contract.h"
+#include "../../frontend/types/xr_runtime_contract.h"
 #include "xr_builtin_provider_contract.h"
 #include "../../base/xsha256.h"
 #include <limits.h>

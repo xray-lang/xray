@@ -9,7 +9,7 @@
  */
 
 #include "../test_framework.h"
-#include "runtime/value/xvalue.h"
+#include "frontend/types/xvalue.h"
 #include "shared/xr_map_set_abi.h"
 
 TEST(map_set_indices_size_uses_two_thirds_budget) {

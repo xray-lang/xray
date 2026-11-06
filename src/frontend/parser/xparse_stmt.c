@@ -15,7 +15,7 @@
 
 #include "xparse_internal.h"
 #include "../../base/xchecks.h"
-#include "../../runtime/xerror_codes.h"
+#include "../../shared/xerror_codes.h"
 
 /* ========== Effectless Expression Statements (E0208) ==========
  *

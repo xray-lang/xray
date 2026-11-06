@@ -29,8 +29,8 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "../runtime/mem/xobj_header.h"
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xobj_header.h"
+#include "../frontend/types/xvalue.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -30,7 +30,7 @@
 #include <stdint.h>
 #include <string.h>
 #ifndef XR_FLOAT_FMT_H
-#include "../../shared/xr_float_fmt.h"
+#include "xr_float_fmt.h"
 #endif
 
 /* Generated C compiles this text in its main translation unit with every

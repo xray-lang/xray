@@ -11,7 +11,7 @@
 
 #include "xi_emit_internal.h"
 #include "../frontend/analyzer/xa_intrinsic_registry.h"
-#include "../runtime/mem/xobj_header.h"
+#include "../frontend/types/xobj_header.h"
 #include "../shared/xr_string_concat_core.h"
 #include "../shared/xr_sync_core.h"
 #include "../shared/xr_target_simd_core.h"

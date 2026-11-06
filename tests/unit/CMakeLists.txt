@@ -336,7 +336,7 @@ set_tests_properties(test_xir_stages PROPERTIES LABELS "unit;xir;metadata;owners
 add_test(NAME l3_xir_array_frame_limits COMMAND test_xir_stages --legacy-array-frame-limits)
 set_tests_properties(l3_xir_array_frame_limits PROPERTIES LABELS "l3;xir;legacy-resource;redlist" TIMEOUT 60)
 add_executable(test_xir_allocations xir/test_xir_allocations.c
-    ${CMAKE_SOURCE_DIR}/src/shared/xi_cgen_verify_output.c
+    ${CMAKE_SOURCE_DIR}/src/lir/xi_cgen_verify_output.c
     ${CMAKE_SOURCE_DIR}/src/shared/xnative_declaration.c)
 target_link_libraries(test_xir_allocations PRIVATE xray_xir_scalar)
 target_include_directories(test_xir_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src)

@@ -12,7 +12,7 @@
 
 #include "../base/xmalloc.h"
 #include "../core/xr_core_spec_gen.h"
-#include "../runtime/core/xr_text_kernel.h"
+#include "../shared/xr_text_kernel.h"
 #include "../shared/xr_assertion_plan.h"
 #include "../shared/xr_target_query_registry_gen.h"
 #include "xr_validated_program_internal.h"

@@ -20,7 +20,7 @@
 #ifndef XANALYZER_FLOW_H
 #define XANALYZER_FLOW_H
 
-#include "../../runtime/value/xtype.h"
+#include "../types/xtype.h"
 #include "../../shared/xr_core_intrinsic.h"
 #include "xa_ownership.h"
 #include <stdint.h>

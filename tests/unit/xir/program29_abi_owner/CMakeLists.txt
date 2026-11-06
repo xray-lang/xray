@@ -37,7 +37,7 @@ if(NOT XIR_SDK_LIBRARY_COUNT EQUAL 2 OR NOT XIR_SDK_LIBRARY_FIRST STREQUAL "kern
 endif()
 set(XIR_SDK_SYSTEM_LIBRARIES ${XIR_SDK_LIBRARY_FIRST} ${XIR_SDK_LIBRARY_SECOND})
 add_executable(program29_generator producer.c "${ABI_ROOT}/src/xir/xxir_specialize.c"
-    "${ABI_ROOT}/src/xir/xxir_emit_c.c" "${ABI_ROOT}/src/shared/xi_cgen_verify_output.c")
+    "${ABI_ROOT}/src/xir/xxir_emit_c.c" "${ABI_ROOT}/src/lir/xi_cgen_verify_output.c")
 set(current_code "${CMAKE_CURRENT_BINARY_DIR}/current29.c")
 add_custom_command(OUTPUT "${current_code}" COMMAND program29_generator "${current_code}" current29
     DEPENDS program29_generator VERBATIM)

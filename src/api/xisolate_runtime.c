@@ -14,7 +14,7 @@
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/class/xenum.h"
 #include "../runtime/core/xr_runtime_core.h"
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include "../runtime/xisolate_api.h"
 #include "../base/xnumber_parse_error.h"
 #include "../base/xbuiltin_enum.h"

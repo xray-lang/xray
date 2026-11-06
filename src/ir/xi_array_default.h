@@ -9,7 +9,7 @@
 #ifndef XI_ARRAY_DEFAULT_H
 #define XI_ARRAY_DEFAULT_H
 #include "xi.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 
 static inline bool xi_value_is_scalar_array_default(const XiValue *value) {
     if (!value || value->op != XI_ARRAY_NEW || !value->array_default_construct ||

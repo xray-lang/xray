@@ -42,7 +42,7 @@
 #include "../../ir/xi_ops_gen.h"
 #include "../../ir/xi_own.h"
 #include "../../frontend/analyzer/xa_intrinsic_registry.h"
-#include "../../runtime/value/xtype.h"
+#include "../../frontend/types/xtype.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

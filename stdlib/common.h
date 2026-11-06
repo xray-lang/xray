@@ -45,7 +45,7 @@
 
 #include <string.h>
 
-#include "../src/runtime/value/xvalue.h"
+#include "../src/frontend/types/xvalue.h"
 #include "../src/runtime/class/xclass.h"
 #include "../src/runtime/class/xclass_system.h"
 #include "../src/runtime/class/xinstance.h"

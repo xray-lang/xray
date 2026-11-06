@@ -16,7 +16,7 @@
 #define XR_BUILTIN_PROVIDER_CONTRACT_H
 
 #include "xr_stdlib_provider_keys_gen.h"
-#include "xr_provider_logical_contract.h"
+#include "../../frontend/types/xr_provider_logical_contract.h"
 
 #define XR_PROVIDER_IO_OUTPUT_WRITE_OPERATION_KEY                                               \
     "xray.runtime.provider-operation.v1/io/output-write"

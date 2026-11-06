@@ -1,4 +1,4 @@
-#include "runtime/abi/xr_runtime_descriptor.h"
+#include "frontend/types/xr_runtime_descriptor.h"
 
 #include <limits.h>
 #include <stddef.h>

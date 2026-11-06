@@ -20,7 +20,7 @@
 #ifndef XVALUE_HASH_H
 #define XVALUE_HASH_H
 
-#include "xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "../../base/xhash.h"
 
 // Forward declaration

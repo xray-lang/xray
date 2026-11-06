@@ -62,7 +62,7 @@
 #include "../ownership/xr_ownership_certificate.h"
 #include "../semantic/xr_semantic_graph.h"
 #include "../../base/xmalloc.h"
-#include "../../runtime/value/xtype.h"
+#include "../../frontend/types/xtype.h"
 #include "../semantic/xr_semantic_array_member_shape.h"
 #include "../semantic/xr_semantic_container_copy_shape.h"
 #include "../semantic/xr_semantic_identity_copy_shape.h"

@@ -9,7 +9,7 @@
  * KEY CONCEPT:
  *   Source definitions, direct substitutions and transitive substitutions agree.
  */
-#include "xir/xr_xir_source_product.h"
+#include "program/xr_xir_source_product.h"
 #include "xir/xxir_types.h"
 #include "xir/xxir_generic.h"
 #include "toolchain/xcompiler_session.h"

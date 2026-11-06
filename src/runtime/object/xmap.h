@@ -24,9 +24,9 @@
 #ifndef XMAP_H
 #define XMAP_H
 
-#include "../value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "xstring.h"
-#include "../mem/xobj_header.h"
+#include "../../frontend/types/xobj_header.h"
 #include "../mem/xalloc_unified.h"
 #include "xarray.h"
 #include "../../shared/xr_map_set_abi.h"

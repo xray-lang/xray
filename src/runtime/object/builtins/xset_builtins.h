@@ -11,7 +11,7 @@
 #ifndef XSET_BUILTINS_H
 #define XSET_BUILTINS_H
 
-#include "xvalue.h"
+#include "frontend/types/xvalue.h"
 #include "xdefs.h"
 
 // Global Set constructor (self = class value, ignored)

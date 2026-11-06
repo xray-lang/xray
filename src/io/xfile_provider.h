@@ -16,7 +16,7 @@
 #include <stdint.h>
 
 #include "../base/xdefs.h"
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include "../../include/xray_yieldable_abi.h"
 
 struct XrVMRuntime;

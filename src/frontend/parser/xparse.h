@@ -41,7 +41,7 @@
 
 #include "../lexer/xlex.h"
 #include "xast.h"
-#include "../../runtime/value/xtype.h"
+#include "../types/xtype.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../../base/xdefs.h"
 

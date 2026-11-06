@@ -14,7 +14,7 @@
 
 #include "xi_emit_internal.h"
 #include "xi_own.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include "../module/xmodule.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/symbol/xsymbol_table.h"

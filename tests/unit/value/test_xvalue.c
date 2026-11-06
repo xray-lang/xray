@@ -9,7 +9,7 @@
  */
 
 #include "../test_framework.h"
-#include "runtime/value/xvalue.h"
+#include "frontend/types/xvalue.h"
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include <float.h>

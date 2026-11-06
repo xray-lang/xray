@@ -22,7 +22,7 @@
 #include "xrt_range.h"
 #include "xrt_class.h"
 #include "xrt_sys.h"
-#include "../runtime/xerror_codes.h"
+#include "../shared/xerror_codes.h"
 #include "../shared/xr_array_abi.h"
 #include "../shared/xr_array_core.h"
 #include "../shared/xr_builtin_schema.h"

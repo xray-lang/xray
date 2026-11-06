@@ -27,8 +27,8 @@
 #include "../ir/xi_escape.h"
 #include "../ir/xi_program_semantic_plan.h"
 #include "../plan/target/xr_target_verify.h"
-#include "../runtime/value/xstruct_layout.h"
-#include "../runtime/value/xenum_layout.h"
+#include "../frontend/types/xstruct_layout.h"
+#include "../frontend/types/xenum_layout.h"
 #include "../shared/xr_derive_flags.h"
 #include "../stdlib/xstdlib_metadata.h"
 #include <stdio.h>

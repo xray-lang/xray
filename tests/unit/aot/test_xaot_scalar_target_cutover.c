@@ -19,8 +19,8 @@
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/target/xr_target_builder.h"
 #include "../../../src/plan/target/xr_target_plan_internal.h"
-#include "../../../src/runtime/value/xenum_layout.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xenum_layout.h"
+#include "../../../src/frontend/types/xtype.h"
 #include "../plan/target_profile_test_fixture.h"
 #include <inttypes.h>
 #include <stdio.h>

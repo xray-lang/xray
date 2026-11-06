@@ -14,7 +14,7 @@
 #include "plan/target/xr_target_plan_internal.h"
 #include "plan/target_profile_test_fixture.h"
 #include "runtime/abi/xr_runtime_target_authority.h"
-#include "runtime/value/xtype.h"
+#include "frontend/types/xtype.h"
 #include "vm/audit/xr_typed_lifecycle_audit.h"
 #include "vm/xr_typed_frame.h"
 #include "vm/xr_typed_lifecycle.h"

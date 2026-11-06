@@ -24,7 +24,7 @@
 #ifndef XBIGINT_METHODS_H
 #define XBIGINT_METHODS_H
 
-#include "../value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "../symbol/xsymbol_table.h"
 #include "xbigint.h"
 #include "xstring.h"

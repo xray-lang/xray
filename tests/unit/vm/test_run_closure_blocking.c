@@ -19,7 +19,7 @@
 #include "xray_vm.h"
 #include "module/xmodule.h"
 #include "vm/xvm_coro_api.h"
-#include "runtime/value/xvalue.h"
+#include "frontend/types/xvalue.h"
 #include "runtime/xisolate_api.h"
 #include "runtime/core/xr_runtime_core.h"
 #include "runtime/core/xr_exec_context.h"

@@ -14,7 +14,7 @@
  *   - FNV-1a hash cached at creation time
  */
 
-#include "../value/xtype.h"
+#include "../../frontend/types/xtype.h"
 #include "../../base/xmalloc.h"
 #include "../../shared/xr_float_fmt.h"
 #include "../../base/xlog.h"

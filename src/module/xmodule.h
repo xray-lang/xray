@@ -18,7 +18,7 @@
 #define XMODULE_H
 
 #include "../base/xforward_decl.h"
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include <stdatomic.h>
 #include "../base/xhashmap.h"
 #include "../runtime/symbol/xsymbol_table.h"

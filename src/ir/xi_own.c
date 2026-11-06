@@ -34,7 +34,7 @@
 #include "../frontend/analyzer/xanalyzer_builtins.h"
 #include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../frontend/analyzer/xbuiltin_receiver_registry.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include "../shared/xr_exact_scalar_registry.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"

@@ -16,7 +16,7 @@
 #define CHECK(c) do { if(!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while(0)
 #include "xir_array_program_compile_owner.h"
 #include "xir_runtime_allocations.h"
-#include "xir/xr_xir_source_product.h"
+#include "program/xr_xir_source_product.h"
 #include "toolchain/xcompiler_session.h"
 #include "xir_array_generated_cases.h"
 static ArrayProgramEntries array_entries(const XrXirModule *module) {

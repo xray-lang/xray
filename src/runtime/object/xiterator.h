@@ -25,8 +25,8 @@
 #ifndef XITERATOR_H
 #define XITERATOR_H
 
-#include "../value/xvalue.h"
-#include "../mem/xobj_header.h"
+#include "../../frontend/types/xvalue.h"
+#include "../../frontend/types/xobj_header.h"
 #include "xarray.h"
 #include <stdint.h>
 #include <stdbool.h>

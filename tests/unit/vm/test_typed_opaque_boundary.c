@@ -15,7 +15,7 @@
 #include "../../../src/plan/target/xr_target_verify.h"
 #include "../../../src/runtime/abi/xr_runtime_target_authority.h"
 #include "../../../src/runtime/abi/xr_runtime_target_profile.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 #include "../../../src/runtime/class/xclass_info.h"
 #include "../../../src/stdlib/xstdlib_metadata.h"
 #include "../../../src/vm/xr_typed_frame.h"

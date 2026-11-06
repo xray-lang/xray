@@ -21,7 +21,7 @@
 #ifndef XTYPE_POOL_H
 #define XTYPE_POOL_H
 
-#include "xtype.h"
+#include "../../frontend/types/xtype.h"
 #include "../../base/xarena.h"
 #include "../../base/xcompile_state.h"
 #include <stdbool.h>

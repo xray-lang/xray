@@ -20,7 +20,7 @@
 
 #include "xdap_controller.h"
 #include "../../base/xjson.h"
-#include "../../runtime/value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 
 // Forward declarations
 typedef struct XrCoroutine XrCoroutine;

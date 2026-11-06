@@ -9,7 +9,7 @@
 #include "api/xsource_authority.h"
 #include "app/cli/xcli_fs.h"
 #include "xir/xxir_library_catalog.h"
-#include "runtime/value/xstruct_layout.h"
+#include "frontend/types/xstruct_layout.h"
 #include "base/xcompile_resources.h"
 #include "base/xmalloc.h"
 #include "base/xsha256.h"

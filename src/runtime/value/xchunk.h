@@ -39,7 +39,7 @@
 #ifndef XCHUNK_H
 #define XCHUNK_H
 
-#include "xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "../../base/xdynarray.h"
 #include <stdint.h>
 #include "../../base/xdefs.h"

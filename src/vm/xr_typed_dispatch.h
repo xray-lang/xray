@@ -12,7 +12,7 @@
 #define XR_TYPED_DISPATCH_H
 
 #include "../plan/target/xr_target_plan.h"
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include "../shared/xr_array_push_status.h"
 #include "debug/xr_vm_trace.h"
 #include "xr_vm_dynamic_entry.h"

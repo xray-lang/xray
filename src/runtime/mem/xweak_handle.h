@@ -52,9 +52,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "xobj_header.h"
+#include "../../frontend/types/xobj_header.h"
 #include "../class/xinstance.h"
-#include "../value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "xalloc_unified.h"
 #include "xcoro_heap.h"
 

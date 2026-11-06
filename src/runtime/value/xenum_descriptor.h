@@ -11,7 +11,7 @@
 #ifndef XENUM_DESCRIPTOR_H
 #define XENUM_DESCRIPTOR_H
 
-#include "xvalue.h"
+#include "../../frontend/types/xvalue.h"
 
 struct XrCoroutine;
 

@@ -41,7 +41,7 @@
 #include "../../base/xchecks.h"
 #include "../../shared/xr_int_arith_core.h"
 #include "../../shared/xr_bits_core.h"
-#include "../abi/xr_runtime_string_object.h"
+#include "xr_runtime_string_object.h"
 
 // Internal base types
 typedef int64_t xr_Integer;
@@ -51,7 +51,7 @@ typedef double xr_Number;
 #include "../../base/xforward_decl.h"
 
 // Object header
-#include "../mem/xobj_header.h"
+#include "xobj_header.h"
 
 /* ========== Platform Detection ========== */
 

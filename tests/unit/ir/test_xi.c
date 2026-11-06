@@ -8,7 +8,7 @@
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_import_resolve.h"
 #include "../../../src/module/xmodule_graph.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/module/xnative_package.h"
 #include "../../../src/toolchain/xcompiler_session.h"

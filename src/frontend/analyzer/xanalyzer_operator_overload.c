@@ -13,7 +13,7 @@
 #include "xanalyzer_symbol.h"
 #include "../../base/xchecks.h"
 #include "../../runtime/class/xclass_info.h"
-#include "../../runtime/value/xtype.h"
+#include "../types/xtype.h"
 #include "../parser/xast_nodes.h"
 
 #include <stdio.h>

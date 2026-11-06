@@ -8,7 +8,7 @@
 
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_opt_strength.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 
 #include <assert.h>
 #include <stdio.h>

@@ -16,7 +16,7 @@
 #include "xi_i64_overflow_program.h"
 #include "../frontend/analyzer/xanalyzer_symbol.h"
 #include "../plan/target/xr_target_profile.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include "../runtime/class/xclass_info.h"
 #include "../shared/xr_exact_scalar_registry.h"
 #include "../plan/semantic/xr_source_semantic_identity.h"

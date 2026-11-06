@@ -16,7 +16,7 @@
 #define XERROR_IMPL_H
 
 #include "xerror.h"
-#include "value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 
 // XrError is a GC-managed object (can be passed as XrValue)
 struct XrError {

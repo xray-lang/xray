@@ -18,7 +18,7 @@
 #include "../plan/target/xr_i64_overflow_decision.h"
 #include "../plan/target/xr_target_profile.h"
 #include "../base/xmalloc.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include "../shared/xr_exact_scalar_registry.h"
 #include <stdio.h>
 #include <string.h>

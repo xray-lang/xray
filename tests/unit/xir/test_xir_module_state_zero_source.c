@@ -16,7 +16,7 @@
 #define CHECK(c) do { if(!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c); exit(1); } } while(0)
 #include "xir_source_program_compile_owner.h"
 #include "xir_runtime_allocations.h"
-#include "xir/xr_xir_source_product.h"
+#include "program/xr_xir_source_product.h"
 #include "toolchain/xcompiler_session.h"
 #include "xir_module_state_zero_cases.h"
 static uint32_t state_zero_select(const XrXirModule *module) {

@@ -13,7 +13,7 @@
 
 #include "xrt_coll.h"
 #include "../runtime/mem/xobj_destroy_ops.h"
-#include "../runtime/mem/xobj_header.h"
+#include "../frontend/types/xobj_header.h"
 #include "../coro/xaot_await.h"
 #include "../coro/xaot_coro.h"
 #include "../coro/xaot_task.h"

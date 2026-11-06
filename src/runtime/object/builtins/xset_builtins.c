@@ -18,7 +18,7 @@
 #include "xset.h"
 #include "xarray.h"
 #include "xstring.h"
-#include "xvalue.h"
+#include "frontend/types/xvalue.h"
 #include <stdio.h>
 
 // Set() or Set(array) - create empty set or from array

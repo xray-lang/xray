@@ -19,7 +19,7 @@
 #include "../../ir/xi.h"
 #include "../../ir/xi_ops_gen.h"
 #include "../../ir/xi_own.h"
-#include "../../runtime/value/xtype.h"
+#include "../../frontend/types/xtype.h"
 
 /* A borrow view over one exact scalar element. The view itself is a pointer and
  * a length whatever the element is, but the element still has to be exact: its

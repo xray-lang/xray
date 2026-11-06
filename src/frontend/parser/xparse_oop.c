@@ -15,8 +15,8 @@
 #include "../../base/xchecks.h"
 #include "xast.h"
 #include "xtype_ref.h"
-#include "../../runtime/value/xtype_names.h"
-#include "../../runtime/value/xtype.h"
+#include "../types/xtype_names.h"
+#include "../types/xtype.h"
 #include "xtype_scope.h"
 #include <string.h>
 #include <stdlib.h>

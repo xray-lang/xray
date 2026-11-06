@@ -28,7 +28,7 @@
 
 #include "../parser/xast_nodes.h"
 #include "../parser/xtype_ref.h"
-#include "../../runtime/value/xtype.h"
+#include "../types/xtype.h"
 #include "../../base/xforward_decl.h"
 #include "../../base/xdefs.h"
 #include "../../base/xlocation.h"

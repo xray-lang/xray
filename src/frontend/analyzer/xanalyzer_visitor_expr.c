@@ -28,7 +28,7 @@
 #include "../../base/xchecks.h"
 #include "../../base/xhashmap.h"
 #include "../../module/xprelude_runtime.h"
-#include "../../runtime/value/xtype_names.h"
+#include "../types/xtype_names.h"
 #include "../../shared/xr_accessor_name.h"
 #include "../../shared/xr_target_query_registry_gen.h"
 #include <limits.h>

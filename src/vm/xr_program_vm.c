@@ -11,7 +11,7 @@
 #include "../runtime/core/xr_array_append_storage.h"
 #include "../shared/xr_sync_core.h"
 #include "xr_program_vm.h"
-#include "../runtime/core/xr_text_kernel.h"
+#include "../shared/xr_text_kernel.h"
 #include "../runtime/core/xr_array_allocation_plan.h"
 #include "../runtime/core/xr_channel_storage.h"
 #include "../shared/xr_integer_division_core.h"

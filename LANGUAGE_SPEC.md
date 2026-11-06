@@ -107,7 +107,7 @@ Examples: `src/frontend/lexer/xkeywords.def`, `src/frontend/parser/xast_types.h:
 
 #### 0.4.4 Error-Code References
 
-Error codes use the `E0xxx` format (e.g., `E0101`); the full list is in [Chapter 18](#18-error-code-reference). Source-level definitions are in `src/runtime/xerror_codes.h` and `src/runtime/xerror.h`.
+Error codes use the `E0xxx` format (e.g., `E0101`); the full list is in [Chapter 18](#18-error-code-reference). Source-level definitions are in `src/shared/xerror_codes.h` and `src/runtime/xerror.h`.
 
 ---
 
@@ -6249,7 +6249,7 @@ main()
 
 ## 12. Testing
 
-> Declaration sources of truth: `src/frontend/parser/xparse_decl.c`, `src/xir/xxir_source.c`, `src/xir/xxir_declarations.h`, `src/xir/xr_xir_source_product.c`, and `src/xir/xxir_instance.c`. Public runner scheduling, timeouts, and asynchronous behavior below remain requirements of the complete test system; declaration discovery and restricted starts alone do not complete the public runner.
+> Declaration sources of truth: `src/frontend/parser/xparse_decl.c`, `src/xir/xxir_source.c`, `src/xir/xxir_declarations.h`, `src/program/xr_xir_source_product.c`, and `src/xir/xxir_instance.c`. Public runner scheduling, timeouts, and asynchronous behavior below remain requirements of the complete test system; declaration discovery and restricted starts alone do not complete the public runner.
 
 ### 12.1 Declaring Tests: the `@test` Attribute
 
@@ -8667,7 +8667,7 @@ Mutable local callback captures retain actual Cell/loan, cleanup and CTFE closur
 
 ## 18. Error Codes
 
-> The single source of truth is `src/runtime/xerror_codes.h`. `XrErrorCode` is an `i64` in `src/runtime/xerror.h`; user-facing rendering is `Exxxx`. Gaps are allowed and must not be filled with names absent from the header.
+> The single source of truth is `src/shared/xerror_codes.h`. `XrErrorCode` is an `i64` in `src/runtime/xerror.h`; user-facing rendering is `Exxxx`. Gaps are allowed and must not be filled with names absent from the header.
 
 Ordinary entries follow the header; the error-signature numbers below are registered, while emitters and semantic checking remain pending. The old defer-error fallback is removed from the target runtime table. Removing its execution path remains Task329 P2 work and must preserve the independent cleanup-panic boundary in §8.2.5.
 

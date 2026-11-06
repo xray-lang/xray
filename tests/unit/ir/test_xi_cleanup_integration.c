@@ -13,7 +13,7 @@
 #include "ir/xi_edit.h"
 #include "ir/xi_evidence.h"
 #include "ir/xi_verify.h"
-#include "runtime/value/xtype.h"
+#include "frontend/types/xtype.h"
 
 static XrType cleanup_unit = {.kind = XR_KIND_UNIT, .id = 1u, .frozen = true};
 static XrType cleanup_int = {.kind = XR_KIND_INT, .id = 2u, .frozen = true};

@@ -1,6 +1,6 @@
 #include "../../../src/aot/xaot_prepare.h"
 #include "../../../src/frontend/analyzer/xa_ownership.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 
 #include <stdio.h>
 #include <stdlib.h>

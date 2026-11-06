@@ -30,7 +30,7 @@
 #ifndef XBIGINT_H
 #define XBIGINT_H
 
-#include "../mem/xobj_header.h"
+#include "../../frontend/types/xobj_header.h"
 #include "../../base/xdefs.h"
 #include "../../shared/xr_bits_core.h"
 #include "../../shared/xr_numeric_core.h"

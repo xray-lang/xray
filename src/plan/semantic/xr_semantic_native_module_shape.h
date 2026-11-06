@@ -12,7 +12,7 @@
 #define XR_SEMANTIC_NATIVE_MODULE_SHAPE_H
 
 #include "xr_semantic_plan.h"
-#include "../../runtime/value/xtype.h"
+#include "../../frontend/types/xtype.h"
 #include <stdio.h>
 #include <string.h>
 

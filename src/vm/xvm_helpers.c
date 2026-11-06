@@ -16,8 +16,8 @@
 #include "../coro/xworker.h"
 #include "../runtime/mem/xheap.h"
 #include "../runtime/mem/xcoro_heap.h"
-#include "../runtime/xerror_codes.h"
-#include "../runtime/value/xstruct_layout.h"
+#include "../shared/xerror_codes.h"
+#include "../frontend/types/xstruct_layout.h"
 #include "../base/xsource_cache.h"
 
 #include <stddef.h>

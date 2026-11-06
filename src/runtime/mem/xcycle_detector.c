@@ -13,7 +13,7 @@
 #include "xcycle_detector.h"
 #include "xcoro_heap.h"
 #include "xobj_graph.h"
-#include "xobj_header.h"
+#include "../../frontend/types/xobj_header.h"
 #include "xregion.h"
 #include "../class/xclass.h"
 #include "../xshared.h"

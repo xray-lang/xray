@@ -15,7 +15,7 @@
 #define XAST_API_H
 
 #include "xast_nodes.h"
-#include "../../runtime/value/xvalue.h"
+#include "../types/xvalue.h"
 #include "../../base/xforward_decl.h"
 #include "../../base/xdefs.h"
 

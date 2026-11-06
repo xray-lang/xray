@@ -15,7 +15,7 @@
 #ifndef XMETHOD_H
 #define XMETHOD_H
 
-#include "../value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "../../../include/xray_yieldable_abi.h"
 #include <stdbool.h>
 

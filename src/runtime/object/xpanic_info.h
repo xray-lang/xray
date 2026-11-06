@@ -24,7 +24,7 @@
 #ifndef XPANIC_INFO_H
 #define XPANIC_INFO_H
 
-#include "../value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "xstring.h"
 #include "xarray.h"
 #include "../xerror.h"

@@ -11,7 +11,7 @@
  */
 #ifndef XSOURCE_COMPILE_H
 #define XSOURCE_COMPILE_H
-#include "../xir/xr_xir_source_product.h"
+#include "../program/xr_xir_source_product.h"
 #include "../module/xnative_package.h"
 #include "../toolchain/xcompiler_session.h"
 

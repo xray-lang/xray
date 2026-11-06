@@ -19,7 +19,7 @@
 
 /* Include only the tag constants header, not the full xrt_value.h
  * (which would redefine the XrValue struct). */
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include <stddef.h>
 
 /* Verify struct size */

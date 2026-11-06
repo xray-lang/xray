@@ -87,7 +87,7 @@ _Static_assert(sizeof(XrObjHeader) == 16, "XrObjHeader must be 16 bytes");
  * Only the bits the AOT runtime references live here so xrt_arc.h can adopt the
  * unified header standalone. The remaining `extra` bits (storage/mmap, REGION/
  * ATOMIC/WEAKABLE, DEAD/MANAGED, cycle-collector color, TRANSIT) are layered on
- * in src/runtime/mem/xobj_header.h and share this same bit space.
+ * in src/frontend/types/xobj_header.h and share this same bit space.
  *
  *   bit 3  HAS_DTOR      - object's type has a destructor to run at rc==0.
  *   bit 7  AOT_EXECUTION - AOT object owned by the current execution arena.

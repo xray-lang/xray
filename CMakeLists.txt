@@ -1380,6 +1380,9 @@ file(GLOB VM_DEBUG_SRC CONFIGURE_DEPENDS "src/vm/debug/*.c")
 file(GLOB IR_SRC CONFIGURE_DEPENDS "src/ir/*.c")
 file(GLOB CORE_SPEC_SRC CONFIGURE_DEPENDS "src/core/*.c")
 file(GLOB PROGRAM_SRC CONFIGURE_DEPENDS "src/program/*.c")
+# The source bridge depends on XIR projections and has one separate owner.
+# Keeping it in the frontend aggregate would duplicate that implementation.
+list(REMOVE_ITEM PROGRAM_SRC "${CMAKE_SOURCE_DIR}/src/program/xr_xir_source_product.c")
 file(GLOB EXECUTION_SRC CONFIGURE_DEPENDS "src/execution/*.c")
 list(REMOVE_ITEM EXECUTION_SRC "${CMAKE_SOURCE_DIR}/src/execution/xr_xir_host_execution.c")
 file(GLOB PLAN_SEMANTIC_SRC CONFIGURE_DEPENDS "src/plan/semantic/*.c")
@@ -1651,7 +1654,7 @@ set(CORE_ALL_SOURCES
 list(APPEND CORE_ALL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xr_core_intrinsic_registry.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xnative_declaration.c"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xi_cgen_verify_output.c")
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/lir/xi_cgen_verify_output.c")
 set(CORE_COMMON_SOURCES ${CORE_ALL_SOURCES})
 list(REMOVE_ITEM CORE_COMMON_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/module/xstdlib_embedded_runtime.c")
 list(LENGTH CORE_ALL_SOURCES _core_all_count)
@@ -1847,7 +1850,7 @@ endif()
 
 # Generated C embeds the shared text kernel verbatim, so the emitter carries
 # the header's bytes rather than a second copy of the string semantics.
-set(XRAY_TEXT_KERNEL_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/core/xr_text_kernel.h)
+set(XRAY_TEXT_KERNEL_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xr_text_kernel.h)
 set(XRAY_TEXT_KERNEL_EMBED ${CMAKE_CURRENT_BINARY_DIR}/generated/xr_text_kernel_embedded.inc.c)
 add_custom_command(
     OUTPUT ${XRAY_TEXT_KERNEL_EMBED}
@@ -2032,7 +2035,7 @@ set(XRAY_PROGRAM_AOT_COMPILER_SOURCES
     src/aot/program/xr_backend_ir_verify.c
     src/aot/program/xr_backend_ir_emit_c.c
     src/aot/program/xr_native_artifact.c
-    src/shared/xi_cgen_verify_output.c
+    src/lir/xi_cgen_verify_output.c
 )
 add_library(xray_program_aot_compiler STATIC
     ${XRAY_PROGRAM_AOT_COMPILER_SOURCES})

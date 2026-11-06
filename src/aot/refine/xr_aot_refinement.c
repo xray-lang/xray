@@ -16,7 +16,7 @@
 #include "../../plan/target/xr_target_verify.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_own.h"
-#include "../../runtime/value/xtype.h"
+#include "../../frontend/types/xtype.h"
 #include "../../shared/xr_param_mode.h"
 #include <stdarg.h>
 #include <stdio.h>

@@ -11,9 +11,9 @@
 #ifndef XR_RUNTIME_TARGET_AUTHORITY_H
 #define XR_RUNTIME_TARGET_AUTHORITY_H
 
-#include "xr_runtime_contract.h"
-#include "xr_runtime_object_header.h"
-#include "xr_runtime_string_object.h"
+#include "../../frontend/types/xr_runtime_contract.h"
+#include "../../frontend/types/xr_runtime_object_header.h"
+#include "../../frontend/types/xr_runtime_string_object.h"
 #include "xr_target_machine_facts.h"
 
 /* Owned, pointer-free snapshot. The native runtime constructs this from its

@@ -15,7 +15,7 @@
 #define XR_SEMANTIC_TYPE_ADMISSION_SHAPE_H
 
 #include "xr_semantic_plan.h"
-#include "../../runtime/value/xtype.h"
+#include "../../frontend/types/xtype.h"
 #include <stdbool.h>
 #include <string.h>
 

@@ -32,7 +32,7 @@
 #include "../runtime/class/xclass_system.h"
 #include "../runtime/class/xinstance.h"
 #include "../runtime/class/xenum.h"
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/object/xarray.h"
 #include "../runtime/object/xjson.h"

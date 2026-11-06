@@ -20,7 +20,7 @@
 #include "xi_analysis.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include <string.h>
 
 /* ========== Helpers ========== */

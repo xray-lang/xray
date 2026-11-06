@@ -19,7 +19,7 @@
 #ifndef XBOOL_METHODS_H
 #define XBOOL_METHODS_H
 
-#include "xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "../object/xstring.h"
 #include "../symbol/xsymbol_table.h"
 

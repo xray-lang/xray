@@ -30,7 +30,7 @@
 #include "../runtime/mem/xcoro_heap.h"
 #include "../runtime/mem/xalloc_unified.h"
 #include "../runtime/mem/xsystem_heap.h"
-#include "../runtime/xerror_codes.h"
+#include "../shared/xerror_codes.h"
 #include "../runtime/xshared.h"
 #include "../runtime/value/xtransfer_mode.h"
 #include "../coro/xtimer_wheel.h"

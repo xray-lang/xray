@@ -12,7 +12,7 @@
 #define XAOT_REP_H
 
 #include "xaot_rep_gen.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include "../base/xdefs.h"
 #include <stdint.h>
 

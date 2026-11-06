@@ -8,7 +8,7 @@
  * xvalue_container_ops.c - Container and module XrValue helpers.
  */
 
-#include "xvalue.h"
+#include "../../frontend/types/xvalue.h"
 
 #define DEFINE_VALUE_OPS_WITH_MACRO(name, check_macro, cast_type)                                  \
     XrValue xr_value_from_##name(cast_type *obj) {                                                 \

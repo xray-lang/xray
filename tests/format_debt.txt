@@ -217,13 +217,13 @@ src/plan/target/xr_target_instruction_verify.h
 src/plan/target/xr_target_plan_internal.h
 src/plan/target/xr_target_profile_internal.h
 src/plan/target/xr_xtp_materialize.c
-src/runtime/abi/xr_runtime_contract.h
+src/frontend/types/xr_runtime_contract.h
 src/runtime/abi/xr_runtime_descriptor.c
-src/runtime/abi/xr_runtime_descriptor.h
+src/frontend/types/xr_runtime_descriptor.h
 src/runtime/abi/xr_runtime_object_header.c
-src/runtime/abi/xr_runtime_object_header.h
+src/frontend/types/xr_runtime_object_header.h
 src/runtime/abi/xr_runtime_string_object.c
-src/runtime/abi/xr_runtime_string_object.h
+src/frontend/types/xr_runtime_string_object.h
 src/runtime/abi/xr_runtime_target_authority.h
 src/runtime/abi/xr_runtime_target_profile.c
 src/runtime/abi/xr_runtime_target_profile.h
@@ -251,7 +251,7 @@ src/runtime/ownership/xr_ownership_audit.c
 src/runtime/ownership/xr_ownership_audit.h
 src/runtime/value/xchunk.c
 src/runtime/value/xchunk.h
-src/runtime/value/xenum_layout.h
+src/frontend/types/xenum_layout.h
 src/runtime/value/xf64_methods.h
 src/runtime/value/xvalue_deep_eq.c
 src/runtime/value/xvalue_truthy.c

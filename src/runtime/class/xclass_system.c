@@ -20,9 +20,9 @@
 #include "../xisolate_internal.h"
 #include "../xisolate_api.h"
 #include "../../base/xmalloc.h"
-#include "../value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "xenum.h"
-#include "../value/xtype_names.h"
+#include "../../frontend/types/xtype_names.h"
 #include "../object/xpanic_info.h"
 #include "../object/xstring.h"
 

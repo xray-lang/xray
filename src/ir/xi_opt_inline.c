@@ -34,7 +34,7 @@
 #include "xi_tbaa.h"
 #include "xi_ops_gen.h"
 #include "xi_own.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include "../runtime/value/xffi_sig.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"

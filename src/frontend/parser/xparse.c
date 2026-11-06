@@ -22,7 +22,7 @@
 #include "xtype_scope.h"
 #include "xstring_pool.h"
 #include "../xdiag_fmt.h"
-#include "../../runtime/xerror_codes.h"
+#include "../../shared/xerror_codes.h"
 #include "../../toolchain/xcompiler_session.h"
 
 /* ========== Forward Declarations ========== */

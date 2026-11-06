@@ -33,7 +33,7 @@
 #include "xbuiltin_receiver_registry.h"
 #include "xtype_ref_resolve.h"
 #include "../../runtime/class/xclass_info.h"
-#include "../../runtime/value/xtype.h"
+#include "../types/xtype.h"
 #include "../../base/xhash.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xarena.h"

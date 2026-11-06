@@ -14,7 +14,7 @@
 #include "../../plan/semantic/xr_semantic_local_addr_shape.h"
 #include "../../plan/semantic/xr_semantic_plan.h"
 #include "../../plan/semantic/xr_semantic_range_slice_shape.h"
-#include "../../runtime/value/xtype.h"
+#include "../../frontend/types/xtype.h"
 
 #include <string.h>
 #include <stdio.h>

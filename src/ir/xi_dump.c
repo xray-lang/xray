@@ -17,8 +17,8 @@
 
 #include "xi.h"
 #include "xi_op_name.h"
-#include "../runtime/value/xtype.h" /* XrTypeKind, XR_KIND_* */
-#include "../runtime/value/xstruct_layout.h"
+#include "../frontend/types/xtype.h" /* XrTypeKind, XR_KIND_* */
+#include "../frontend/types/xstruct_layout.h"
 #include "../shared/xr_exact_scalar_registry.h"
 #include "../base/xmalloc.h"
 

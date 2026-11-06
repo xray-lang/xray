@@ -6,7 +6,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 
 typedef enum {
     XAOT_REP_I8 = 0,

@@ -13,7 +13,7 @@
 #include "xir/xxir.h"
 #include "xir_library_compile_owner.h"
 #include "xir_runtime_allocations.h"
-#include "xir/xr_xir_source_product.h"
+#include "program/xr_xir_source_product.h"
 #include "toolchain/xcompiler_session.h"
 #include "tuple_runtime_cases.h"
 typedef struct WholeSourceResult { XrXirProgram *program; uint32_t entry; bool keep; } WholeSourceResult;

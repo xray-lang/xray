@@ -18,7 +18,7 @@
 #ifndef XR_OBJ_GRAPH_H
 #define XR_OBJ_GRAPH_H
 
-#include "xobj_header.h"
+#include "../../frontend/types/xobj_header.h"
 #include "../class/xinstance.h"
 #include "../class/xenum.h"
 #include "../class/xclass.h"

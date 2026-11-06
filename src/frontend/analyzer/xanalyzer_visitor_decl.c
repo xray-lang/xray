@@ -53,7 +53,7 @@
 #include "../parser/xtype_ref.h"
 #include "../../base/xchecks.h"
 #include "../../runtime/xisolate_api.h"
-#include "../../runtime/value/xstruct_layout.h"
+#include "../types/xstruct_layout.h"
 #include <limits.h>
 #include "../../module/xmodule_graph.h"
 #include "../../module/xnative_package.h"

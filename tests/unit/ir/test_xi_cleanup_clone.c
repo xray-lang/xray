@@ -20,7 +20,7 @@
 #include "ir/xi_opt_loop_inv_branch.h"
 #include "ir/xi_opt_loop_unroll.h"
 #include "ir/xi_verify.h"
-#include "runtime/value/xtype.h"
+#include "frontend/types/xtype.h"
 
 static XrType clone_int = {.kind = XR_KIND_INT, .id = 1u, .frozen = true};
 static XrType clone_bool = {.kind = XR_KIND_BOOL, .id = 2u, .frozen = true};

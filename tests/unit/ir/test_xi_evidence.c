@@ -18,7 +18,7 @@
 #include "ir/xi_edit.h"
 #include "ir/xi_lower_internal.h"
 #include "ir/xi_range.h"
-#include "runtime/value/xtype.h"
+#include "frontend/types/xtype.h"
 #include <assert.h>
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};

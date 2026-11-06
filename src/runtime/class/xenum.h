@@ -16,8 +16,8 @@
 #ifndef XENUM_H
 #define XENUM_H
 
-#include "../value/xvalue.h"
-#include "../value/xenum_layout.h"
+#include "../../frontend/types/xvalue.h"
+#include "../../frontend/types/xenum_layout.h"
 #include "../../shared/xr_derive_flags.h"
 #include <stdatomic.h>
 #include <stdint.h>

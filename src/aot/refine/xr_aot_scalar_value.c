@@ -16,7 +16,7 @@
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_program_semantic_plan.h"
 #include "../../runtime/class/xclass_info.h"
-#include "../../runtime/value/xtype.h"
+#include "../../frontend/types/xtype.h"
 #include <stdio.h>
 
 static bool fail(char *error, size_t error_size, const char *detail) {

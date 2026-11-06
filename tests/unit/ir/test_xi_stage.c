@@ -24,7 +24,7 @@
 #include "../../../src/shared/xr_print_plan.h"
 #include "../../../src/frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../../src/ir/xi_module.h"
-#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/types/xtype.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/base/xchecks.h"
 

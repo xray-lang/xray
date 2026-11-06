@@ -11,7 +11,7 @@
 #ifndef XAOT_STRUCT_NAME_H
 #define XAOT_STRUCT_NAME_H
 
-#include "../runtime/value/xstruct_layout.h"
+#include "../frontend/types/xstruct_layout.h"
 #include "../base/xdefs.h"
 #include <stdint.h>
 #include <stddef.h>

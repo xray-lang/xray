@@ -21,7 +21,7 @@
 #ifndef XIC_METHOD_H
 #define XIC_METHOD_H
 
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 #include "../runtime/class/xclass.h"
 #include "../runtime/class/xmethod.h"
 #include "../base/xmalloc.h"

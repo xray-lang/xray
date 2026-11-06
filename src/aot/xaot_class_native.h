@@ -12,7 +12,7 @@
 #define XAOT_CLASS_NATIVE_H
 
 #include "xaot_bundle.h"
-#include "../runtime/value/xstruct_layout.h"
+#include "../frontend/types/xstruct_layout.h"
 
 typedef struct XaotClassNativeFunc {
     const XiClassData *class_data;

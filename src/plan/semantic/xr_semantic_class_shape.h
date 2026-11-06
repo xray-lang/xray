@@ -27,7 +27,7 @@
 #include "../../ir/xi.h"
 #include "../../ir/xi_ops_gen.h"
 #include "../../ir/xi_own.h"
-#include "../../runtime/value/xtype.h"
+#include "../../frontend/types/xtype.h"
 #include <string.h>
 
 /* The class object value is a freshly owned module-level allocation. Its type

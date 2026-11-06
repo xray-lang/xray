@@ -16,7 +16,7 @@
 #ifndef XR_OWNERSHIP_AUDIT_H
 #define XR_OWNERSHIP_AUDIT_H
 
-#include "../abi/xr_runtime_descriptor.h"
+#include "../../frontend/types/xr_runtime_descriptor.h"
 #include "../../shared/xr_ownership_event.h"
 #include <stdbool.h>
 #include <stddef.h>

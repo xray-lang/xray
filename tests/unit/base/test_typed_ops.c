@@ -9,7 +9,7 @@
  */
 
 #include "../test_framework.h"
-#include "runtime/value/xvalue.h"
+#include "frontend/types/xvalue.h"
 #include "shared/xr_typed_ops.h"
 
 static uint64_t bits_f64(double value) {

@@ -9,8 +9,8 @@
  */
 
 #include "xffi_sig.h"
-#include "xtype.h"
-#include "xstruct_layout.h"
+#include "../../frontend/types/xtype.h"
+#include "../../frontend/types/xstruct_layout.h"
 #include "../../base/xmalloc.h"
 
 #include <string.h>

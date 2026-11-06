@@ -19,7 +19,7 @@
 #include "xi_backend.h"
 #include "xi_effect.h"
 #include "xi_vec_scalar_lower.h"
-#include "../runtime/value/xtype.h"
+#include "../frontend/types/xtype.h"
 #include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"

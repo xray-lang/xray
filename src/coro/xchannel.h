@@ -55,8 +55,8 @@
 #include <stdbool.h>
 #include <stdatomic.h>
 
-#include "../runtime/value/xvalue.h"
-#include "../runtime/mem/xobj_header.h"
+#include "../frontend/types/xvalue.h"
+#include "../frontend/types/xobj_header.h"
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
 #include "xslot_ref.h"

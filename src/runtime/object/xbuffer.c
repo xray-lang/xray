@@ -21,7 +21,7 @@
 #include "../core/xr_runtime_core.h"
 #include "../mem/xalloc_unified.h"
 #include "../mem/xcoro_heap.h"
-#include "../value/xstruct_layout.h"
+#include "../../frontend/types/xstruct_layout.h"
 #include "../xisolate_api.h"
 #include "../xisolate_internal.h"
 #include "../../base/xchecks.h"

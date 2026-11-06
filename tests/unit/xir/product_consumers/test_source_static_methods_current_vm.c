@@ -13,7 +13,7 @@
  *   exported scalar call keeps the original independent result.
  */
 #include "xir/xxir_program_packet_internal.h"
-#include "xir/xr_xir_source_product.h"
+#include "program/xr_xir_source_product.h"
 #include "toolchain/xcompiler_session.h"
 #include "xir/xxir_construction.h"
 #include "xir/xxir_generic.h"

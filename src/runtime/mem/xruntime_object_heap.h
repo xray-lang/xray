@@ -11,7 +11,7 @@
 #ifndef XR_RUNTIME_OBJECT_HEAP_H
 #define XR_RUNTIME_OBJECT_HEAP_H
 
-#include "../abi/xr_runtime_object_header.h"
+#include "../../frontend/types/xr_runtime_object_header.h"
 #include <stddef.h>
 #include <stdint.h>
 

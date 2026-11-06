@@ -31,7 +31,7 @@
 #ifndef XR_SEMANTIC_BUILTIN_IDENTITY_SHAPE_H
 #define XR_SEMANTIC_BUILTIN_IDENTITY_SHAPE_H
 
-#include "../../runtime/value/xtype.h"
+#include "../../frontend/types/xtype.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>

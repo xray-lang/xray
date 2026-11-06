@@ -13,7 +13,7 @@ else()
 endif()
 
 # Reuse the existing verifier implementation without the legacy C generator.
-add_library(xray_lir_c STATIC xlir_c.c "${PROJECT_SOURCE_DIR}/src/shared/xi_cgen_verify_output.c")
+add_library(xray_lir_c STATIC xlir_c.c "${PROJECT_SOURCE_DIR}/src/lir/xi_cgen_verify_output.c")
 target_link_libraries(xray_lir_c PUBLIC xray_lir xray_compile_resources)
 target_compile_features(xray_lir_c PUBLIC c_std_11)
 set_target_properties(xray_lir_c PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)

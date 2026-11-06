@@ -7,7 +7,7 @@
  */
 
 #include "xa_intrinsic_registry.h"
-#include "../../runtime/value/xtype.h"
+#include "../types/xtype.h"
 #include "../../shared/xr_exact_scalar_registry.h"
 
 #include <stdio.h>

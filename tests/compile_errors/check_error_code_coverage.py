@@ -5,7 +5,7 @@ An error code is a promise printed in front of a user: `error[E0359]`. Three
 places have to agree about that promise, and nothing kept them in sync:
 
   A  spec/source/sections/019-18-error-codes.md   what the language documents
-  B  src/runtime/xerror_codes.h                   what the compiler can emit
+  B  src/shared/xerror_codes.h                   what the compiler can emit
   C  tests/compile_errors/**/*.expected           what a case actually demands
 
 A code in B with nothing in C is a diagnostic no test would notice losing. A

@@ -8,7 +8,7 @@
  * xvalue_string_ops.c - String XrValue conversion helpers.
  */
 
-#include "xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "../../base/xchecks.h"
 #include "../object/xstring.h"
 

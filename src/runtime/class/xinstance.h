@@ -52,9 +52,9 @@
 #ifndef XINSTANCE_H
 #define XINSTANCE_H
 
-#include "../value/xvalue.h"
+#include "../../frontend/types/xvalue.h"
 #include "xclass.h"
-#include "../mem/xobj_header.h"
+#include "../../frontend/types/xobj_header.h"
 
 struct XrObjectInstance {
     XrObjHeader hdr;

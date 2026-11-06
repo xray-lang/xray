@@ -20,7 +20,7 @@
 #ifndef XANALYZER_INCREMENTAL_H
 #define XANALYZER_INCREMENTAL_H
 
-#include "../../runtime/value/xtype.h"
+#include "../types/xtype.h"
 #include "xanalyzer_symbol.h"
 #include <stdint.h>
 #include <stdbool.h>

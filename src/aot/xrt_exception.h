@@ -34,8 +34,8 @@
 #include "xrt_arith.h" /* xrt_value_to_string, for the uncaught-error diagnostic */
 #include "xrt_coll.h"
 #include "xrt_value.h"
-#include "../runtime/xerror_codes.h"
-#include "../runtime/value/xtype_names.h" /* XrTypeId + xr_typeid_name (shared with VM) */
+#include "../shared/xerror_codes.h"
+#include "../frontend/types/xtype_names.h" /* XrTypeId + xr_typeid_name (shared with VM) */
 #include "../base/xentry_plan.h"
 #include "../shared/xr_builtin_schema.h"
 #include "../shared/xr_error_core.h"

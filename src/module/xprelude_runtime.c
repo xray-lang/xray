@@ -76,7 +76,7 @@ extern void xr_net_listener_storage_register_class(XrVMRuntime *isolate);
 #include "../runtime/class/xclass_system.h"
 #include "../runtime/class/xenum.h"
 #include "../runtime/core/xr_runtime_core.h"
-#include "../runtime/value/xvalue.h"
+#include "../frontend/types/xvalue.h"
 
 static void bind_builtin_value(XrVMRuntime *X, int global_index, XrValue value) {
     if (!X || (size_t) global_index >= (size_t) XR_USER_GLOBALS_START)

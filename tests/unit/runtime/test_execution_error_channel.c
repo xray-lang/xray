@@ -5,7 +5,7 @@
 #include "../test_framework.h"
 #include "runtime/core/xr_exec_context.h"
 #include "runtime/core/xr_runtime_core.h"
-#include "runtime/value/xvalue.h"
+#include "frontend/types/xvalue.h"
 
 static XrRuntimeCore core_a;
 static XrRuntimeCore core_b;

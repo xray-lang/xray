@@ -16,7 +16,7 @@
 #define XR_SEMANTIC_CALLABLE_KEY_SHAPE_H
 
 #include "xr_semantic_plan.h"
-#include "../../runtime/value/xtype.h"
+#include "../../frontend/types/xtype.h"
 #include <limits.h>
 #include <string.h>
 

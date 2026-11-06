@@ -17,7 +17,7 @@
 #include "xlir_c.h"
 #include "xlir_verify.h"
 #include "xlir_internal.h"
-#include "../shared/xi_cgen_verify_output.h"
+#include "xi_cgen_verify_output.h"
 #include "../base/xchecks.h"
 #include <inttypes.h>
 #include <stdarg.h>
