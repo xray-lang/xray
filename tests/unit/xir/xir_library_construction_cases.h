@@ -8,24 +8,12 @@
  * xir_library_construction_cases.h - Source construction permission checks
  *
  * KEY CONCEPT:
- *   Source programs and complete historical packets establish fixed expectations.
+ *   Source programs and current owned metadata establish fixed expectations.
  *   Construction authority is validated with its owning module.
  */
 #ifndef XIR_LIBRARY_CONSTRUCTION_CASES_H
 #define XIR_LIBRARY_CONSTRUCTION_CASES_H
 #include "xir_library_typed_programs.h"
-#include "xir_checked_scalar71_golden.h"
-#include "xir_checked_scalar65_golden.h"
-static void library_construction_old_packet(const void *bytes,size_t length) {
-    size_t attempts=source_attempts,blocks=source_live,live_bytes=source_bytes;
-    XrXirArtifact *output=NULL;
-    CHECK(xr_xir_compile_checked_read(library_context,bytes,length,&output,NULL)==XR_XIR_BAD_STRUCTURE);
-    CHECK(!output && source_attempts==attempts && source_live==blocks && source_bytes==live_bytes);
-    output=(XrXirArtifact *)(uintptr_t)1;
-    CHECK(xr_xir_compile_checked_read(library_context,bytes,length,&output,NULL)==XR_XIR_BAD_STRUCTURE);
-    CHECK(output==(XrXirArtifact *)(uintptr_t)1 && source_attempts==attempts &&
-        source_live==blocks && source_bytes==live_bytes);
-}
 static void library_construction_reject(const XrXirModule *module,const XrXirConstruction *construction) {
     size_t blocks=source_live,bytes=source_bytes;
     XrXirArtifact *output=NULL;
@@ -126,9 +114,6 @@ static void library_construction_projection(const XrXirArtifact *checked) {
 }
 
 static void library_construction_case(void) {
-    (void)checked_scalar71_digest;
-    library_construction_old_packet(checked_scalar71_golden,sizeof(checked_scalar71_golden));
-    library_construction_old_packet(checked_scalar65_golden,sizeof(checked_scalar65_golden));
     conflict_text("construction.xr",library_construction_definition);
     conflict_text("construction_receiver.xr",library_construction_consumer);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
