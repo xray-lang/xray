@@ -128,16 +128,19 @@ static XrXirStatus effect_body_raw_shape(const EffectBodyRequest *request,uint32
     if (!(((&request->read)->execution ? effect_body_execution_work((&request->read)->execution, sizeof(*output)) : xir_compile_context_valid((&request->read)->owner)))) return XR_XIR_BUDGET;
     *output=(EffectBodyInstructionShape){opcode,type};return XR_XIR_OK;
 }
-static const EffectBodyFunction *effect_body_owned_function(const EffectBodyRequest *request,uint32_t f) {
-    const EffectBodyMaterial *material=request->owner;
-    if(!effect_body_material_shape(material) || f>=effect_body_count(material)) return NULL;
-    const EffectBodyFunction *a=&material->functions[f];
-    if ((a->name_length && !a->name) || (a->parameter_count && !a->parameters) ||
+static bool effect_body_function_storage_valid(const EffectBodyFunction *a) {
+    return !((a->name_length && !a->name) || (a->parameter_count && !a->parameters) ||
         a->consume_parameter_count>a->parameter_count ||
         (a->consume_parameter_count==0)!=(a->consume_parameters==NULL) ||
         (a->block_count && !a->blocks) || (a->operand_count && !a->operands) ||
         (a->instruction_count && (!a->runs || !a->run_count)) ||
-        a->run_count>a->run_capacity) return NULL;
+        a->run_count>a->run_capacity);
+}
+static const EffectBodyFunction *effect_body_owned_function(const EffectBodyRequest *request,uint32_t f) {
+    const EffectBodyMaterial *material=request->owner;
+    if(!effect_body_material_shape(material) || f>=effect_body_count(material)) return NULL;
+    const EffectBodyFunction *a=&material->functions[f];
+    if(!effect_body_function_storage_valid(a)) return NULL;
     return a;
 }
 static XrXirStatus effect_body_owned_head(const EffectBodyRequest *request,uint32_t f,
