@@ -155,16 +155,28 @@ static void remove_runtime_faults(RemoveCompile *run, bool shift) {
         XrXirValue alias = remove_run(instance, remove_find(run->module, shift ? "savedHead" : "savedTail"));
         runtime_attempts = 0; runtime_fail_at = failure;
         XrXirCallStatus status = xr_xir_instance_start(instance, function, NULL, 0);
+        const XrXirCallStatus started = status; unsigned polled = 0;
         size_t tick = 0, failed = runtime_attempts > failure ? 0 : SIZE_MAX;
         while (status == XR_XIR_CALL_READY) {
             CHECK(++tick < 2048); size_t first = runtime_attempts;
-            status = xr_xir_instance_poll_bounded(instance, 1).outcome.status;
+            status = xr_xir_instance_poll_bounded(instance, 1).outcome.status; ++polled;
             if (first <= failure && failure < runtime_attempts) { CHECK(failed == SIZE_MAX); failed = tick; }
         }
         if (status != XR_XIR_CALL_OOM) fprintf(stderr,"fault%zu status%u tick%zu expected%zu\n", failure, status, failed, line.allocation_ticks[failure]);
         CHECK(runtime_attempts > failure && status == XR_XIR_CALL_OOM && failed == line.allocation_ticks[failure]);
         runtime_fail_at = SIZE_MAX;
-        XrXirValue untouched = {0}; CHECK(xr_xir_instance_take_result(instance, &untouched) == XR_XIR_CALL_BAD_STATE && !untouched.type && !untouched.payload);
+        XrXirValue untouched = {0};
+        const XrXirCallStatus taken = xr_xir_instance_take_result(instance, &untouched);
+        if (taken != XR_XIR_CALL_BAD_STATE || untouched.type || untouched.payload) {
+            const XrXirInstance *take_instance = instance_current(instance);
+            fprintf(stderr, "remove take cases shift%u failure%zu start%u polled%u terminal%u take%u state%u call%u rootidle%u completion%u valueType%u valuePayload%lld\n",
+                (unsigned)shift, failure, started, polled, status, taken, take_instance ? (unsigned)take_instance->state : UINT32_MAX,
+                take_instance && take_instance->call, take_instance && take_instance->executor ?
+                    xr_xir_task_executor_root_idle(take_instance->executor) : 0,
+                take_instance && take_instance->executor ? xr_xir_task_executor_completion_status(take_instance->executor) : UINT32_MAX,
+                untouched.type, (long long)untouched.payload);
+        }
+        CHECK(taken == XR_XIR_CALL_BAD_STATE && !untouched.type && !untouched.payload);
         bool committed = failed > line.commit; remove_state(instance, run, shift, committed);
         if (committed) ++after; else ++before;
         static const int64_t old[] = {1, 0, 3}; remove_array(&alias, old, 3, true, 1); xr_xir_value_drop(&alias);

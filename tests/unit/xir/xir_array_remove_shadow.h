@@ -29,9 +29,21 @@ static void remove_goldens(RemoveCompile *run) {
         for (size_t failure = 0; failure < sites; ++failure) {
             instance = shadow_open(run); runtime_attempts = 0; runtime_fail_at = failure;
             XrXirCallStatus status = xr_xir_instance_start(instance, function, NULL, 0);
-            while (status == XR_XIR_CALL_READY) status = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
+            const XrXirCallStatus started = status; unsigned polled = 0;
+            while (status == XR_XIR_CALL_READY) { status = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status; ++polled; }
             CHECK(status == XR_XIR_CALL_OOM && runtime_attempts > failure); runtime_fail_at = SIZE_MAX;
-            result = (XrXirValue){0}; CHECK(xr_xir_instance_take_result(instance, &result) == XR_XIR_CALL_BAD_STATE && !result.type && !result.payload);
+            result = (XrXirValue){0};
+            const XrXirCallStatus taken = xr_xir_instance_take_result(instance, &result);
+            if (taken != XR_XIR_CALL_BAD_STATE || result.type || result.payload) {
+                const XrXirInstance *take_instance = instance_current(instance);
+                fprintf(stderr, "remove take shadow group%u row%u failure%zu start%u polled%u terminal%u take%u state%u call%u rootidle%u completion%u valueType%u valuePayload%lld\n",
+                    (unsigned)XR_REMOVE_MATRIX, row, failure, started, polled, status, taken, take_instance ? (unsigned)take_instance->state : UINT32_MAX,
+                    take_instance && take_instance->call, take_instance && take_instance->executor ?
+                        xr_xir_task_executor_root_idle(take_instance->executor) : 0,
+                    take_instance && take_instance->executor ? xr_xir_task_executor_completion_status(take_instance->executor) : UINT32_MAX,
+                    result.type, (long long)result.payload);
+            }
+            CHECK(taken == XR_XIR_CALL_BAD_STATE && !result.type && !result.payload);
             CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY && !runtime_live && !runtime_bytes);
         }
         printf("user Array ordinary read-pop/read-shift case%u runtimeOOM%zu physical0\n", row, sites);

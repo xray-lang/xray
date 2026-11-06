@@ -29,12 +29,24 @@ static void remove_runtime_limits(RemoveCompile *run) {
                 else atomic_store(references, UINT32_MAX);
                 XrXirCallStatus status = xr_xir_instance_start(instance, remove_find(run->module, method), NULL, 0);
                 const XrXirCallStatus started = status;
-                if (status == XR_XIR_CALL_READY) status = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
+                unsigned polled = 0;
+                if (status == XR_XIR_CALL_READY) { status = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status; ++polled; }
                 instance->domain->limit = limit;
                 if (mode) atomic_store(references, original);
                 if (status != XR_XIR_CALL_LIMIT) fprintf(stderr, "remove limit empty%u shift%u mode%u start%u status%u\n", empty, shift, mode, started, status);
                 CHECK(status == XR_XIR_CALL_LIMIT);
-                XrXirValue absent = {0}; CHECK(xr_xir_instance_take_result(instance, &absent) == XR_XIR_CALL_BAD_STATE && !absent.type && !absent.payload);
+                XrXirValue absent = {0};
+                const XrXirCallStatus taken = xr_xir_instance_take_result(instance, &absent);
+                if (taken != XR_XIR_CALL_BAD_STATE || absent.type || absent.payload) {
+                    const XrXirInstance *take_instance = instance_current(instance);
+                    fprintf(stderr, "remove take limits empty%u shift%u mode%u start%u polled%u terminal%u take%u state%u call%u rootidle%u completion%u valueType%u valuePayload%lld\n",
+                        empty, shift, mode, started, polled, status, taken, take_instance ? (unsigned)take_instance->state : UINT32_MAX,
+                        take_instance && take_instance->call, take_instance && take_instance->executor ?
+                            xr_xir_task_executor_root_idle(take_instance->executor) : 0,
+                        take_instance && take_instance->executor ? xr_xir_task_executor_completion_status(take_instance->executor) : UINT32_MAX,
+                        absent.type, (long long)absent.payload);
+                }
+                CHECK(taken == XR_XIR_CALL_BAD_STATE && !absent.type && !absent.payload);
                 if (empty) {
                     XrXirValue root = remove_run(instance, remove_find(run->module, saved));
                     CHECK(root.type == alias.type && root.payload == alias.payload); xr_xir_value_drop(&root);
