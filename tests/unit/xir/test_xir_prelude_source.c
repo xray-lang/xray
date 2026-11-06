@@ -12,6 +12,7 @@
 #include "xir/xxir_checked.h"
 #include "xir/xxir_library_catalog.h"
 #include "toolchain/xcompiler_session.h"
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,12 +24,12 @@
 #include "xir_library_source_owner.h"
 #include "xir_prelude_runtime.h"
 #include "xir_prelude_source_cases.h"
-static uint32_t prelude_enum_line(const char *name) {
+static int prelude_enum_line(const char *name) {
     char spelling[64];int length=snprintf(spelling,sizeof(spelling),"export enum %s ",name);
     CHECK(length>0 && (size_t)length<sizeof(spelling));
     const char *found=strstr(xir_prelude_source.text,spelling);
-    CHECK(found && !strstr(found+1,spelling));uint32_t line=1;
-    for (const char *p=xir_prelude_source.text;p<found;++p) if (*p=='\n') ++line;
+    CHECK(found && !strstr(found+1,spelling));int line=1;
+    for (const char *p=xir_prelude_source.text;p<found;++p) if (*p=='\n') {CHECK(line<INT_MAX);++line;}
     return line;
 }
 static void prelude_query(const XrXirSourceResult *result,bool generated) {
