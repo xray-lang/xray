@@ -1,4 +1,5 @@
 /* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
+#include "../../xir/xxir_compile_memory.h"
 #include "xlsp_source_index.h"
 #include "xlsp_source_buffer.h"
 #include "../../frontend/parser/xast_nodes.h"
@@ -13,17 +14,10 @@ struct XlspSourceIndex {
     XrParseStatus parse_status;
 };
 typedef struct IndexFrame {const AstNode *node;bool allow_export;} IndexFrame;
-static XrXirStatus index_resource(XrCompileResourceStatus status) {
-    return status==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:status==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:
-        status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
-}
-static XrXirStatus index_work(XlspSourceIndex *index,size_t bytes) {
-    return index_resource(xr_compile_resources_work(index->resources,bytes));
-}
 static XrXirStatus index_copy(XlspSourceIndex *index,const char *text,size_t length,char **out) {
     if(!text||length==SIZE_MAX)return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=index_work(index,length+1);if(status!=XR_XIR_OK)return status;
-    char *copy=NULL;status=index_resource(xr_compile_resources_alloc(index->resources,length+1,(void **)&copy));
+    XrXirStatus status;
+    char *copy=NULL;status=xir_compile_resource_status(xr_compile_resources_alloc(index->resources,length+1,(void **)&copy));
     if(status==XR_XIR_OK){memcpy(copy,text,length);copy[length]=0;*out=copy;}return status;
 }
 XR_FUNC void xlsp_source_index_free(XlspSourceIndex *index) {
@@ -39,11 +33,11 @@ XR_FUNC int64_t xlsp_source_index_version(const XlspSourceIndex *index){return i
 XR_FUNC XrParseStatus xlsp_source_index_parse_status(const XlspSourceIndex *index){return index?index->parse_status:XR_PARSE_BAD_ARGUMENT;}
 static XrXirStatus index_push(XlspSourceIndex *index,IndexFrame **stack,size_t *count,size_t *capacity,const AstNode *node,bool exported) {
     if(!node)return XR_XIR_OK;
-    XrXirStatus status=index_work(index,sizeof(IndexFrame));if(status!=XR_XIR_OK)return status;
+    XrXirStatus status;
     if(*count==*capacity) {
         size_t next=*capacity?*capacity*2:16;
         if(next<*capacity||next>SIZE_MAX/sizeof(**stack))return XR_XIR_BUDGET;
-        status=index_resource(xr_compile_resources_resize(index->resources,(void **)stack,next*sizeof(**stack)));
+        status=xir_compile_resource_status(xr_compile_resources_resize(index->resources,(void **)stack,next*sizeof(**stack)));
         if(status!=XR_XIR_OK)return status;*capacity=next;
     }
     (*stack)[(*count)++]=(IndexFrame){node,exported};return XR_XIR_OK;
@@ -66,7 +60,6 @@ static XrXirStatus index_append(XlspSourceIndex *index,const XlspSourceDocument 
     XrLspSymbolKind kind=0;const char *name=index_name(frame.node,&kind);if(!name)return XR_XIR_OK;
     size_t length=0;
     for(;;) {
-        XrXirStatus paid=index_work(index,1);if(paid!=XR_XIR_OK)return paid;
         if(!name[length])break;if(length==SIZE_MAX-1)return XR_XIR_BUDGET;++length;
     }
     if(!length||frame.node->line<=0||frame.node->column<=0||length>(size_t)(INT_MAX-frame.node->column))return XR_XIR_BAD_STRUCTURE;
@@ -77,11 +70,10 @@ static XrXirStatus index_append(XlspSourceIndex *index,const XlspSourceDocument 
     if(index->count>=INT_MAX)return XR_XIR_BUDGET;
     if(index->count==index->capacity) {
         size_t next=index->capacity?index->capacity*2:16;if(next<index->capacity||next>SIZE_MAX/sizeof(*index->items))return XR_XIR_BUDGET;
-        status=index_resource(xr_compile_resources_resize(index->resources,(void **)&index->items,next*sizeof(*index->items)));
+        status=xir_compile_resource_status(xr_compile_resources_resize(index->resources,(void **)&index->items,next*sizeof(*index->items)));
         if(status!=XR_XIR_OK)return status;index->capacity=next;
     }
     char *copy=NULL;status=index_copy(index,name,length,&copy);if(status!=XR_XIR_OK)return status;
-    status=index_work(index,sizeof(symbol));if(status!=XR_XIR_OK){xr_compile_resources_free(copy);return status;}
     symbol.name=copy;index->items[index->count++]=symbol;return XR_XIR_OK;
 }
 static XrXirStatus index_children(XlspSourceIndex *index,IndexFrame frame,IndexFrame **stack,size_t *count,size_t *capacity) {
@@ -106,7 +98,6 @@ static XrXirStatus index_project(XlspSourceIndex *index,const XlspSourceDocument
     IndexFrame *stack=NULL;size_t count=0,capacity=0;
     XrXirStatus status=index_push(index,&stack,&count,&capacity,ast,false);
     while(count&&status==XR_XIR_OK) {
-        status=index_work(index,sizeof(AstNode));if(status!=XR_XIR_OK)break;
         IndexFrame frame=stack[--count];status=index_append(index,document,frame);
         if(status==XR_XIR_OK)status=index_children(index,frame,&stack,&count,&capacity);
     }
@@ -115,15 +106,25 @@ static XrXirStatus index_project(XlspSourceIndex *index,const XlspSourceDocument
 XR_FUNC XrXirStatus xlsp_source_index_build(XrCompileResources *resources,const XlspSourceDocument *document,XlspSourceIndex **out) {
     if(!resources||!document||!out||*out||!document->uri||document->uri_length==SIZE_MAX||document->version<INT32_MIN||document->version>INT32_MAX)return XR_XIR_BAD_STRUCTURE;
     XlspSourceIndex *index=NULL;XlspSyntaxSnapshot *syntax=NULL;XlspSourceBuffer *buffer=NULL;XrCompilerSession *session=NULL;
-    XrXirStatus status=index_resource(xr_compile_resources_calloc(resources,1,sizeof(*index),(void **)&index));if(status!=XR_XIR_OK)return status;
+    XrXirStatus status=xir_compile_resource_status(xr_compile_resources_calloc(resources,1,sizeof(*index),(void **)&index));if(status!=XR_XIR_OK)return status;
     index->resources=resources;index->version=document->version;
     status=xlsp_source_buffer_new(resources,document->text,document->length,(int)document->version,&buffer);if(status!=XR_XIR_OK)goto done;
     XrCompileResourceStatus opened=xr_compile_session_new(resources,&session);
-    if(opened!=XR_COMPILE_RESOURCE_OK){status=opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:opened==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;}
+    if(opened!=XR_COMPILE_RESOURCE_OK){status=xir_compile_resource_status(opened);goto done;}
     XlspSourceDocument captured=*document;captured.text=xlsp_source_buffer_text(buffer);
     index->parse_status=xlsp_source_syntax_build(session,&captured,&syntax);
     if(index->parse_status!=XR_PARSE_OK&&index->parse_status!=XR_PARSE_RECOVERED) {
-        status=index->parse_status==XR_PARSE_BUDGET?XR_XIR_BUDGET:index->parse_status==XR_PARSE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;
+        switch(index->parse_status) {
+        case XR_PARSE_BUDGET: status=XR_XIR_BUDGET; break;
+        case XR_PARSE_OUT_OF_MEMORY: status=XR_XIR_OUT_OF_MEMORY; break;
+        case XR_PARSE_MEMORY_LIMIT: status=XR_XIR_MEMORY_LIMIT; break;
+        case XR_PARSE_OVERFLOW: status=XR_XIR_OVERFLOW; break;
+        case XR_PARSE_CANCELLED: status=XR_XIR_CANCELLED; break;
+        case XR_PARSE_DEADLINE: status=XR_XIR_DEADLINE; break;
+        case XR_PARSE_CLOCK_FAILURE: status=XR_XIR_CLOCK_FAILURE; break;
+        default: status=XR_XIR_BAD_STRUCTURE; break;
+        }
+        goto done;
     }
     status=index_copy(index,document->uri,document->uri_length,&index->uri);
     if(status==XR_XIR_OK)status=index_project(index,&captured,xlsp_source_syntax_ast(syntax));

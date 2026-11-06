@@ -121,7 +121,7 @@ static XrXirStatus workspace_symbols_json(XlspWorkspaceSymbolRequest *request,Xr
     for(const WorkspaceDisplay *node=request->head;node;node=node->next) {
         status=workspace_work(request,sizeof(*node));if(status!=XR_XIR_OK)goto done;
         if(!node->kind||array->as.array.count>=WORKSPACE_SYMBOL_LIMIT)continue;
-        bool matches=false;status=index_json_contains(request->resources,node->name,request->query->as.string,request->query->string_len,&matches);
+        bool matches=false;status=index_json_contains(node->name,request->query->as.string,request->query->string_len,&matches);
         if(status!=XR_XIR_OK)goto done;if(!matches)continue;
         status=workspace_work(request,node->name_length+node->uri_length);if(status!=XR_XIR_OK)goto done;
         XrJsonValue *symbol=workspace_symbol_json(node);if(!symbol){status=XR_XIR_OUT_OF_MEMORY;goto done;}

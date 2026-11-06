@@ -24,14 +24,12 @@ static inline XrJsonValue *index_json_range(XrLspRange range) {
        !index_json_member(value,"end",index_json_position(range.end))){xjson_free(value);return NULL;}
     return value;
 }
-static inline XrXirStatus index_json_contains(XrCompileResources *resources,const char *name,const char *query,size_t length,bool *out) {
+static inline XrXirStatus index_json_contains(const char *name,const char *query,size_t length,bool *out) {
     if(!length){*out=true;return XR_XIR_OK;}
     for(size_t i=0;;++i) {
-        if(xr_compile_resources_work(resources,1)!=XR_COMPILE_RESOURCE_OK)return XR_XIR_BUDGET;
         if(!name[i]){*out=false;return XR_XIR_OK;}
         size_t j=0;
         for(;j<length;++j) {
-            if(xr_compile_resources_work(resources,2)!=XR_COMPILE_RESOURCE_OK)return XR_XIR_BUDGET;
             unsigned char c=(unsigned char)name[i+j];if(!c||c!=(unsigned char)query[j])break;
         }
         if(j==length){*out=true;return XR_XIR_OK;}

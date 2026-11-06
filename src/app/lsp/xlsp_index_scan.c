@@ -1,34 +1,37 @@
 /* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
+#include "../../xir/xxir_compile_memory.h"
 #include "xlsp_index_scan.h"
 #include "../../os/os_fs.h"
 #include "../../os/os_dir.h"
 #include <string.h>
-static XrXirStatus scan_resource(XrCompileResourceStatus status) {
-    return status==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:status==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:
-        status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
-}
 static XrXirStatus scan_io(XrOsIoStatus status) {
+    switch (status) {
+    case XR_OS_IO_MEMORY_LIMIT: return XR_XIR_MEMORY_LIMIT;
+    case XR_OS_IO_CANCELLED: return XR_XIR_CANCELLED;
+    case XR_OS_IO_DEADLINE: return XR_XIR_DEADLINE;
+    case XR_OS_IO_CLOCK_FAILURE: return XR_XIR_CLOCK_FAILURE;
+    default: break;
+    }
     return status==XR_OS_IO_OK?XR_XIR_OK:status==XR_OS_IO_OVERFLOW?XR_XIR_BUDGET:
         status==XR_OS_IO_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:status==XR_OS_IO_BAD_ARGUMENT?XR_XIR_BAD_STRUCTURE:XR_XIR_IO;
 }
-static XrXirStatus scan_length(XrCompileResources *resources,const char *text,size_t *out) {
+static XrXirStatus scan_length(const char *text,size_t *out) {
     if(!text)return XR_XIR_BAD_STRUCTURE;
-    for(size_t i=0;;++i){XrXirStatus s=scan_resource(xr_compile_resources_work(resources,1));if(s!=XR_XIR_OK)return s;
+    for(size_t i=0;;++i){
         if(!text[i]){*out=i;return XR_XIR_OK;}if(i==SIZE_MAX-1)return XR_XIR_BUDGET;}
 }
 static XrXirStatus scan_join(XrCompileResources *resources,const char *parent,const char *name,char **out) {
-    size_t a=0,b=0;XrXirStatus s=scan_length(resources,parent,&a);if(s==XR_XIR_OK&&name)s=scan_length(resources,name,&b);
+    size_t a=0,b=0;XrXirStatus s=scan_length(parent,&a);if(s==XR_XIR_OK&&name)s=scan_length(name,&b);
     if(s!=XR_XIR_OK)return s;size_t separator=name?1:0;
     if(b>SIZE_MAX-separator-1||a>SIZE_MAX-b-separator-1)return XR_XIR_BUDGET;
-    s=scan_resource(xr_compile_resources_work(resources,a+b+separator+1));if(s!=XR_XIR_OK)return s;
-    char *path=NULL;s=scan_resource(xr_compile_resources_alloc(resources,a+b+separator+1,(void **)&path));
+    char *path=NULL;s=xir_compile_resource_status(xr_compile_resources_alloc(resources,a+b+separator+1,(void **)&path));
     if(s==XR_XIR_OK){memcpy(path,parent,a);if(name){path[a++]='/';memcpy(path+a,name,b);}path[a+b]=0;*out=path;}return s;
 }
 static XrXirStatus scan_push(XrCompileResources *resources,XlspIndexPaths *list,char **path) {
-    XrXirStatus s=scan_resource(xr_compile_resources_work(resources,sizeof(*path)));if(s!=XR_XIR_OK)return s;
+    XrXirStatus s;
     if(list->count==list->capacity){size_t next=list->capacity?list->capacity*2:16;
         if(next<list->capacity||next>SIZE_MAX/sizeof(*list->values))return XR_XIR_BUDGET;
-        s=scan_resource(xr_compile_resources_resize(resources,(void **)&list->values,next*sizeof(*list->values)));
+        s=xir_compile_resource_status(xr_compile_resources_resize(resources,(void **)&list->values,next*sizeof(*list->values)));
         if(s!=XR_XIR_OK)return s;list->capacity=next;}
     list->values[list->count++]=*path;*path=NULL;return XR_XIR_OK;
 }
@@ -43,9 +46,8 @@ static XrXirStatus scan_directory(const XlspIndexScanOptions *options,const char
     XrDirIter *iterator=NULL;status=scan_io(xr_os_io_dir_open(&policy,path,&iterator));if(status!=XR_XIR_OK)return status;
     for(;;){XrDirEntry entry;XrOsIoStatus read=xr_os_io_dir_next(iterator,&entry);if(read==XR_OS_IO_END)break;
         status=scan_io(read);if(status!=XR_XIR_OK)break;
-        status=scan_resource(xr_compile_resources_work(options->resources,sizeof(entry)));if(status!=XR_XIR_OK)break;
         if(options->ignore&&options->ignore(entry.name,entry.is_dir,options->context))continue;
-        size_t length=0;status=scan_length(options->resources,entry.name,&length);if(status!=XR_XIR_OK)break;
+        size_t length=0;status=scan_length(entry.name,&length);if(status!=XR_XIR_OK)break;
         if(!entry.is_dir&&(length<3||memcmp(entry.name+length-3,".xr",3)))continue;
         char *child=NULL;status=scan_join(options->resources,path,entry.name,&child);
         if(status==XR_XIR_OK)status=scan_push(options->resources,entry.is_dir?stack:files,&child);

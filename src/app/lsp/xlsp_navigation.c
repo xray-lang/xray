@@ -1,5 +1,6 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
 #include "../../base/xresource_limits.h"
+#include "../../xir/xxir_compile_memory.h"
 #include "xlsp_navigation.h"
 #include "xlsp_handlers_textdoc.h"
 #include "xlsp_server.h"
@@ -10,17 +11,15 @@
 
 static const XrCompileResourceLimits navigation_limits=XR_RESOURCE_TOOL_COMPILER_LIMITS;
 
-static XrXirStatus navigation_member(XrCompileResources *resources,const XrJsonValue *object,
+static XrXirStatus navigation_member(const XrJsonValue *object,
     const char *key,const XrJsonValue **out) {
     if(!object||object->type!=XR_JSON_OBJECT||object->as.object.count<0||
         (object->as.object.count&&!object->as.object.members))return XR_XIR_BAD_STRUCTURE;
     size_t length=strlen(key);
     for(int i=0;i<object->as.object.count;++i){
-        if(xr_compile_resources_work(resources,sizeof(XrJsonMember))!=XR_COMPILE_RESOURCE_OK)return XR_XIR_BUDGET;
         const XrJsonMember *member=&object->as.object.members[i];
         if(member->key_len!=length)continue;
         if(!member->key)return XR_XIR_BAD_STRUCTURE;
-        if(xr_compile_resources_work(resources,length)!=XR_COMPILE_RESOURCE_OK)return XR_XIR_BUDGET;
         if(!memcmp(member->key,key,length)){
             if(*out||!member->value)return XR_XIR_BAD_STRUCTURE;
             *out=member->value;
@@ -28,22 +27,21 @@ static XrXirStatus navigation_member(XrCompileResources *resources,const XrJsonV
     }
     return *out?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
 }
-static XrXirStatus navigation_params(XrCompileResources *resources,const XrJsonValue *params,unsigned mode) {
+static XrXirStatus navigation_params(const XrJsonValue *params,unsigned mode) {
     const XrJsonValue *document=NULL,*uri=NULL,*position=NULL,*line=NULL,*column=NULL,*context=NULL,*include=NULL;
-    XrXirStatus status=navigation_member(resources,params,"textDocument",&document);
-    if(status==XR_XIR_OK)status=navigation_member(resources,document,"uri",&uri);
-    if(status==XR_XIR_OK)status=navigation_member(resources,params,"position",&position);
-    if(status==XR_XIR_OK)status=navigation_member(resources,position,"line",&line);
-    if(status==XR_XIR_OK)status=navigation_member(resources,position,"character",&column);
-    if(status==XR_XIR_OK&&mode==1)status=navigation_member(resources,params,"context",&context);
-    if(status==XR_XIR_OK&&mode==1)status=navigation_member(resources,context,"includeDeclaration",&include);
+    XrXirStatus status=navigation_member(params,"textDocument",&document);
+    if(status==XR_XIR_OK)status=navigation_member(document,"uri",&uri);
+    if(status==XR_XIR_OK)status=navigation_member(params,"position",&position);
+    if(status==XR_XIR_OK)status=navigation_member(position,"line",&line);
+    if(status==XR_XIR_OK)status=navigation_member(position,"character",&column);
+    if(status==XR_XIR_OK&&mode==1)status=navigation_member(params,"context",&context);
+    if(status==XR_XIR_OK&&mode==1)status=navigation_member(context,"includeDeclaration",&include);
     return status;
 }
-static XrXirStatus navigation_length(XrCompileResources *r,const char *text,size_t *out) {
+static XrXirStatus navigation_length(const char *text,size_t *out) {
     if(!text)return XR_XIR_BAD_STRUCTURE;
     size_t n=0;
     for(;;) {
-        if(xr_compile_resources_work(r,1)!=XR_COMPILE_RESOURCE_OK)return XR_XIR_BUDGET;
         if(!text[n]){*out=n;return XR_XIR_OK;}
         if(n==SIZE_MAX-1)return XR_XIR_BUDGET;
         ++n;
@@ -65,18 +63,17 @@ XR_FUNC XrXirStatus xlsp_navigation_capture(XrLspServer *server,XrJsonValue *par
     XrCompileResources *resources=NULL;
     XlspSourceDocument *documents=NULL;size_t count=(size_t)table->doc_count,used=0,entry=SIZE_MAX;
     XrCompileResourceStatus created=xr_compile_resources_new(&navigation_limits,&resources);
-    XrXirStatus status=created==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrXirStatus status=xir_compile_resource_status(created);
     if(status!=XR_XIR_OK)goto done;
-    status=navigation_params(resources,params,mode);if(status!=XR_XIR_OK)goto done;
+    status=navigation_params(params,mode);if(status!=XR_XIR_OK)goto done;
     if(count>SIZE_MAX/sizeof(*documents)){status=XR_XIR_BUDGET;goto done;}
     created=xr_compile_resources_calloc(resources,count,sizeof(*documents),(void **)&documents);
-    if(created!=XR_COMPILE_RESOURCE_OK){status=created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;goto done;}
+    if(created!=XR_COMPILE_RESOURCE_OK){status=xir_compile_resource_status(created);goto done;}
     for(int i=0;i<table->bucket_count;++i) {
-        if(xr_compile_resources_work(resources,1)!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;goto done;}
         for(XrLspDocBucket *bucket=table->buckets[i];bucket;bucket=bucket->next) {
             XrLspDocument *doc=bucket->doc;size_t length=0;
             if(used==count||!doc||doc->server!=server||!doc->uri||!doc->content){status=XR_XIR_BAD_STRUCTURE;goto done;}
-            status=navigation_length(resources,doc->uri,&length);if(status!=XR_XIR_OK)goto done;
+            status=navigation_length(doc->uri,&length);if(status!=XR_XIR_OK)goto done;
             if(doc==selected)entry=used;
             documents[used++]=(XlspSourceDocument){doc->uri,doc->content,length,doc->length,doc->version};
         }
@@ -102,22 +99,19 @@ static XrJsonValue *navigation_request(XrLspServer *server,XrLspDocument *doc,
     XrCompileResources *resources=NULL;XlspSourceDocument *documents=NULL;
     XlspSourceWorkspace *fresh=NULL;XrJsonValue *result=NULL;
     XrCompileResourceStatus created=xr_compile_resources_new(&navigation_limits,&resources);
-    XrXirStatus status=created==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:
-        created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrXirStatus status=xir_compile_resource_status(created);
     if(status!=XR_XIR_OK)goto done;
-    if(params){status=navigation_params(resources,params,mode);if(status!=XR_XIR_OK)goto done;}
+    if(params){status=navigation_params(params,mode);if(status!=XR_XIR_OK)goto done;}
     size_t count=(size_t)server->doc_table->doc_count,used=0,selected_length=0;bool selected=false;
     if(count>SIZE_MAX/sizeof(*documents)){status=XR_XIR_BUDGET;goto done;}
     created=xr_compile_resources_calloc(resources,count,sizeof(*documents),(void **)&documents);
-    if(created!=XR_COMPILE_RESOURCE_OK){status=created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;goto done;}
+    if(created!=XR_COMPILE_RESOURCE_OK){status=xir_compile_resource_status(created);goto done;}
     for(int i=0;i<server->doc_table->bucket_count;++i) {
-        if(xr_compile_resources_work(resources,1)!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;goto done;}
         for(XrLspDocBucket *bucket=server->doc_table->buckets[i];bucket;bucket=bucket->next) {
             XrLspDocument *item=bucket->doc;
             if(!item||item->server!=server||!item->content||used==count){status=XR_XIR_BAD_STRUCTURE;goto done;}
-            size_t length=0;status=navigation_length(resources,item->uri,&length);
+            size_t length=0;status=navigation_length(item->uri,&length);
             if(status!=XR_XIR_OK)goto done;
-            if(xr_compile_resources_work(resources,sizeof(*documents))!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;goto done;}
             documents[used++]=(XlspSourceDocument){item->uri,item->content,length,item->length,item->version};
             if(item==doc){selected=true;selected_length=length;}
         }
