@@ -315,7 +315,7 @@ static void syntax_boundaries(void) {
         "@test(timeout: 0x20)\nfn test_value() { assert(true) }\n",
         "struct Word align(0x10) {\n  @deprecated(\"use rotateLeft\")\n  rotate(n: i64) -> u32 { return 0 }\n}\n",
         "fn id<T>(value: T) -> T { return value }\nconst n = id<i64>(42)\n",
-        "const fraction = 0.125\nconst code = '\\u{41}'\nconst pattern = /a+/i\n",
+        "const fraction = 0.125\nconst code = '\\u{41}'\nconst pattern = re\"(?i)a+\"\n",
         nul_source
     };
     for (size_t index = 0; index < sizeof(fixtures) / sizeof(*fixtures); ++index) {
