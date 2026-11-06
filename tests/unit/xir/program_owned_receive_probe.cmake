@@ -118,7 +118,10 @@ endif()
 if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(test_xir_program_owned_final_storage PRIVATE /experimental:c11atomics)
 endif()
-foreach(final_storage_attack RANGE 0 38)
+# Error bitmaps no longer exist; keep the original IDs of current storage cases.
+foreach(final_storage_attack IN ITEMS
+        0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22
+        24 25 26 27 28 29 30 31 32 34 35 36 38)
     add_test(NAME test_xir_program_owned_final_storage_${final_storage_attack}
         COMMAND test_xir_program_owned_final_storage ${final_storage_attack})
     set_tests_properties(test_xir_program_owned_final_storage_${final_storage_attack} PROPERTIES TIMEOUT 60)

@@ -17,15 +17,16 @@ static void rejected_final(const XrXirCompileContext *context,XrXirArtifact *art
     EffectRoleProof saved_roles=*roles;
     XrXirRootEffects root=final->root[1];
     XrXirFunctionEffects control=final->functions[1];
-    XrXirStatus worker=final->go_safe[1],errors=final->task_errors[1];
+    XrXirStatus worker=final->go_safe[1];
     uint32_t intrinsic=final->entry_roots[1].intrinsic_mask;
     XrXirEffectParameter *parameter=(XrXirEffectParameter *)final->contracts[2].parameters;
     XrXirEffectParameter saved=*parameter;
-    for(unsigned attack=0;attack<6;++attack) {
+    const unsigned attacks[]={0,1,2,4,5};
+    for(size_t i=0;i<sizeof(attacks)/sizeof(attacks[0]);++i) {
+        unsigned attack=attacks[i];
         if(attack==0)final->root[1].requires_root=true;
         if(attack==1)final->functions[1].suspend=true;
         if(attack==2)final->go_safe[1]=XR_XIR_BAD_TYPE;
-        if(attack==3)final->task_errors[1]=XR_XIR_BAD_TYPE;
         if(attack==4)final->entry_roots[1].intrinsic_mask=XR_XIR_CALLABLE_ROOT_REQUIRED;
         if(attack==5) {
             parameter->kind=XR_XIR_EFFECT_PARAMETER_VARIABLE;
@@ -35,7 +36,7 @@ static void rejected_final(const XrXirCompileContext *context,XrXirArtifact *art
         (XirFixtureEffectInput){&artifact->module,artifact->construction},effects);
         fprintf(stderr,"received Final attack%u status%u\n",attack,status);
         final->root[1]=root;final->functions[1]=control;final->go_safe[1]=worker;
-        final->task_errors[1]=errors;final->entry_roots[1].intrinsic_mask=intrinsic;
+        final->entry_roots[1].intrinsic_mask=intrinsic;
         *parameter=saved;*roles=saved_roles;
         CHECK(status==XR_XIR_BAD_STRUCTURE);
         CHECK(xir_fixture_effects_program_final(context,

@@ -6,7 +6,7 @@
 int main(int argc,char **argv) {
     CHECK(argc==2);
     unsigned attack=(unsigned)strtoul(argv[1],NULL,10);
-    CHECK(attack<39);
+    CHECK(attack<39 && attack!=23 && attack!=33 && attack!=37);
     const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,true};
     XrXirCompileContext context={0};context.limits=xr_xir_compile_default_limits();
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
@@ -54,7 +54,6 @@ int main(int argc,char **argv) {
     if(attack==20) outcomes->functions=(XrXirFunctionEffects *)(uintptr_t)1;
     if(attack==21) outcomes->contracts=(XrXirFunctionEffectContract *)(uintptr_t)1;
     if(attack==22) outcomes->contracts[2].parameters=(XrXirEffectParameter *)(uintptr_t)1;
-    if(attack==23) { outcomes->errors=(uint64_t *)(uintptr_t)1;outcomes->words=1;outcomes->error_rows=1; }
     if(attack==24) { outcomes->entry_roots[2].parameters=(uint32_t *)(uintptr_t)1;outcomes->entry_roots[2].parameter_count=1; }
     if(attack==25) graph->summary.functions=(EffectFinalFunction *)(uintptr_t)1;
     if(attack==26) graph->summary.witnesses=(XrXirRootEffectWitness *)(uintptr_t)1;
@@ -64,11 +63,9 @@ int main(int argc,char **argv) {
     if(attack==30) { graph->role_proof.rows=(EffectRoleFunction *)(uintptr_t)1;graph->role_proof.functions=3; }
     if(attack==31) graph->count=graph->capacity+1;
     if(attack==32) graph->nodes=(EffectInvocationNode *)((uint8_t *)graph->nodes+1);
-    if(attack==33) outcomes->error_proof=(EffectErrorFinite *)(uintptr_t)1;
     if(attack==34) outcomes->control_proof=(EffectControlProof *)(uintptr_t)1;
     if(attack==35) { graph->role_proof.facts=(EffectRoleFact *)(uintptr_t)1;graph->role_proof.total=1; }
     if(attack==36) { graph->capture.facts=(EffectCaptureFact *)(uintptr_t)1;graph->capture.capacity=1; }
-    if(attack==37) outcomes->error_proof=(EffectErrorFinite *)((uint8_t *)outcomes->error_proof+_Alignof(EffectErrorFinite));
     if(attack==38) outcomes->control_proof=(EffectControlProof *)((uint8_t *)outcomes->control_proof+_Alignof(EffectControlProof));
     XrXirStatus status=xir_fixture_effects_program_final(&context,
         (XirFixtureEffectInput){&artifact->module,artifact->construction},effects);
