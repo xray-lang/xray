@@ -1,0 +1,7 @@
+struct CatchConstruct {
+    const value:string
+    init(flag:bool) {
+        try {} catch(e) { if(flag){this.value="unused"}else{this.value="also-unused"} }
+        this.value="constructed"
+    }
+}

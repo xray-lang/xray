@@ -52,7 +52,7 @@ static XrXirArtifact *source_packet_lower(const XrXirCompileContext *context,con
 }
 int main(int argc, char **argv) {
     CHECK(argc >= 1 && argc <= 3);
-    const XrXirCompileContext context=*source_fixture_source_owner((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true});
+    const XrXirCompileContext context=*source_fixture_source_owner((XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true});
     const char *packet_path=argc==3 ? argv[2] : XR_CHECKED_FIXTURE;
     XrXirArtifact *lowered=source_packet_lower(&context,packet_path);
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
     uint32_t entry = module->declarations->entry_function;
     XrXirCSource source={0};
     size_t negative_physical_blocks=source_fixture_compile_live,negative_physical_bytes=source_fixture_compile_bytes;
-    const XrXirCompileContext negative=*source_fixture_source_owner((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true});
+    const XrXirCompileContext negative=*source_fixture_source_owner((XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true});
     XrXirArtifact *negative_lowered=source_packet_lower(&negative,packet_path);
     XrXirProgramPacket normal_proof=xir_program_packet_borrow(lowered),negative_proof=xir_program_packet_borrow(negative_lowered);
     CHECK(normal_proof.length==negative_proof.length && !memcmp(normal_proof.bytes,negative_proof.bytes,normal_proof.length));

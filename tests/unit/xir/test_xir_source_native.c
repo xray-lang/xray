@@ -36,7 +36,7 @@ int main(void) {
         fixture_source_inference_values[2],fixture_source_inference_values[3],fixture_source_inference_values[4],
         fixture_source_inference_values[5]},fixture_source_inference_count};
     size_t physical_blocks=source_fixture_compile_live,physical_bytes=source_fixture_compile_bytes;
-    const XrXirCompileContext *measured_context=source_fixture_source_owner((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true});
+    const XrXirCompileContext *measured_context=source_fixture_source_owner((XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true});
     XrXirProgram *measured_program=NULL;XrCompileResourceStats measured={0};
     CHECK(xr_xir_compile_program_seal(measured_context,&fixture_source_program,&measured_program)==XR_XIR_OK);
     CHECK(xr_compile_resources_stats(measured_context->resources,&measured)==XR_COMPILE_RESOURCE_OK && measured.peak_bytes>1);

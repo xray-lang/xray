@@ -30,7 +30,7 @@
 #include "xir_source_cases.h"
 #include "xir_source_default_runtime_gaps.h"
 static int source_checked_fixture_generate(const char *path) {
-    const XrXirCompileContext context=*source_fixture_source_owner((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true});
+    const XrXirCompileContext context=*source_fixture_source_owner((XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true});
     XrXirArtifact *lowered=source_fixture_lower(&context,path);
     CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(lowered);
@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
     if(argc==3 && !strcmp(argv[1],"--write-checked")) return source_checked_fixture_generate(argv[2]);
     CHECK(argc==1);
     source_default_runtime_gaps();
-    const XrXirCompileContext context=*source_fixture_source_owner((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true});
+    const XrXirCompileContext context=*source_fixture_source_owner((XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true});
     XrXirArtifact *lowered=source_fixture_lower(&context,NULL);
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
     SourceMethodValueEntries method_value_entries = source_method_value_select(module);
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
     uint32_t entry = module->declarations->entry_function;
     XrXirProgram *program = NULL;
     size_t negative_physical_blocks=source_fixture_compile_live,negative_physical_bytes=source_fixture_compile_bytes;
-    const XrXirCompileContext negative=*source_fixture_source_owner((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true});
+    const XrXirCompileContext negative=*source_fixture_source_owner((XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true});
     XrXirArtifact *negative_lowered=source_fixture_lower(&negative,NULL);
     XrCompileResourceStats before_failure={0},after_failure={0};
     CHECK(xr_compile_resources_stats(negative.resources,&before_failure)==XR_COMPILE_RESOURCE_OK);

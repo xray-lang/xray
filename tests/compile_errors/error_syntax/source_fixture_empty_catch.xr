@@ -1,0 +1,2 @@
+enum CatchFailure { Bad { text:string } }
+fn catchEmpty()->i64 { try { } catch(e) { return 99 }; return 2 }

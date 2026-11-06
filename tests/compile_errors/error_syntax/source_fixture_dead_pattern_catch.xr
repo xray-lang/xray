@@ -1,0 +1,6 @@
+enum PatternInner { Leaf { code:i64 }, Empty }
+enum PatternFailure { Plain, Coded { code:i64, text:string }, Wrapped { inner:PatternInner } }
+fn patternDead()->i64 {
+    try { } catch (PatternFailure.Coded { code }) { return code }
+    return 113
+}

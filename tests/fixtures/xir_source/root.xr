@@ -81,8 +81,8 @@ export fn update(value: i64, up: bool) -> i64 {
     return copy
 }
 
-export fn calculate(kind:i64, left:i64, right:i64)->i64 {
-    if (kind == 32) { return alpha.failEvent<string>("error"+" payload") }
+export fn calculate(kind:i64, left:i64, right:i64) throws(Error)->i64 {
+    if (kind == 32) { return try alpha.failEvent<string>("error"+" payload") }
     if (kind == 33) {
         try { patternFail(left) }
         catch (PatternFailure.Wrapped { inner:PatternInner.Leaf { code } }) { return code+right }
@@ -136,7 +136,7 @@ export fn calculate(kind:i64, left:i64, right:i64)->i64 {
     return hits
 }
 fn operand()->i64 { hits++; return hits }
-print(operand() - operand(), hits, calculate(3, -7, 3), calculate(4, -7, 3), -(-7))
+print(operand() - operand(), hits, try calculate(3, -7, 3), try calculate(4, -7, 3), -(-7))
 
 fn bitControl()->i64 {
     var bits = 85
@@ -203,7 +203,7 @@ fn resumedNative(flag:bool)->string {
 
 fn searchStartPause()->i64 { Coro.yield(); predicateText="after"; return 1 }
 fn predicatePause(expected:string)->string { Coro.yield(); predicateText="after"; return expected }
-export fn resumeText(flag:bool)->string {
+export fn resumeText(flag:bool) throws(Error)->string {
     const expected=flag ? "ry!" : "rn!"
     if (expected != resumedNative(flag) || len(expected)!=3) { return "bad" }
     predicateText=expected
@@ -218,8 +218,8 @@ export fn resumeText(flag:bool)->string {
     if (predicateText.lastIndexOf(predicatePause(expected)) != 0) { return "bad" }
     predicateText=expected
     if (predicateText.indexOf("!",searchStartPause()) != 2) { return "bad" }
-    if (typedResumedText(expected) != expected) { return "bad" }
-    return patternResumedText(expected)
+    if ((try typedResumedText(expected)) != expected) { return "bad" }
+    return try patternResumedText(expected)
 }
 
 export fn stackDepth(n:i64)->string {
@@ -717,9 +717,9 @@ print(match(true){true->"bool",false->"wrong"},match(-128 as i8){-128..0->1,0..=
 
 
 enum CatchFailure { Bad { text:string } }
-fn catchEmpty()->i64 { try { } catch(e) { return 99 }; return 2 }
+fn catchEmpty()->i64 { return 2 }
 fn catchDirect()->i64 { try { throw CatchFailure.Bad{text:"direct"} } catch(e) { return 7 } }
-fn catchMaybe(fail:bool)->i64 { if(fail){throw CatchFailure.Bad{text:"call"}}; return 11 }
+fn catchMaybe(fail:bool) throws(CatchFailure)->i64 { if(fail){throw CatchFailure.Bad{text:"call"}}; return 11 }
 fn catchCall(fail:bool)->i64 { try { return catchMaybe(fail) } catch(e) { return 17 } }
 fn catchRethrow()->i64 {
     try { try { throw CatchFailure.Bad{text:"nested"} } catch(e) { throw e } }
@@ -729,7 +729,7 @@ fn catchClosure()->i64 {
     const fail=fn()->i64 {throw CatchFailure.Bad{text:"closure"}}
     try {return fail()} catch(e) {return 23}
 }
-fn catchUnitFail() {throw CatchFailure.Bad{text:"unit"}}
+fn catchUnitFail() throws(CatchFailure) {throw CatchFailure.Bad{text:"unit"}}
 fn catchUnit()->i64 {try {catchUnitFail(); return 99} catch(e) {return 29}}
 fn catchEdges(flag:bool)->i64 {
     try {if(flag){throw CatchFailure.Bad{text:"first"}}; throw CatchFailure.Bad{text:"second"}}
@@ -741,7 +741,6 @@ print(catchEmpty(),catchDirect(),catchCall(false),catchCall(true),catchRethrow()
 struct CatchConstruct {
     const value:string
     init(flag:bool) {
-        try {} catch(e) { if(flag){this.value="unused"}else{this.value="also-unused"} }
         this.value="constructed"
     }
 }
@@ -763,7 +762,7 @@ fn catchParameterResult()->i64 {
 
 enum TypedOther { Bad }
 enum TypedFailure<T> { Value { item:T } }
-fn typedErrorValue<T>(value:T)->T {
+fn typedErrorValue<T>(value:T) throws(TypedOther)->T {
     try {throw TypedFailure<T>.Value{item:value}}
     catch(wrong:TypedOther) {throw wrong}
     catch(e:TypedFailure<T>) {return match(e){TypedFailure.Value{item:x}->x}}
@@ -788,10 +787,10 @@ fn typedFallthrough()->i64 {
     try {throw TypedOther.Bad} catch(e:TypedOther) {value=59}
     return value
 }
-print(typedErrorValue<string>("typed"),typedSecond(),typedOrder(),typedUnmatched(),typedFallthrough())
+print(try typedErrorValue<string>("typed"),typedSecond(),typedOrder(),typedUnmatched(),typedFallthrough())
 
 
-fn typedResumedText(text:string)->string {
+fn typedResumedText(text:string) throws(Error)->string {
     try {alpha.failEvent<string>(text)}
     catch(wrong:CatchFailure) {return "bad"}
     catch(e:alpha.Event<string>) {
@@ -808,16 +807,16 @@ enum PatternFailure { Plain, Coded { code:i64, text:string }, Wrapped { inner:Pa
 enum PatternOther { Bad { code:i64 } }
 enum PatternPair { Left { value:i64 }, Right { value:i64 }, Neither }
 enum PatternBox<T> { Item { value:T }, None }
-fn patternFail(kind:i64) {
+fn patternFail(kind:i64) throws(PatternFailure) {
     if (kind==3) { throw PatternFailure.Wrapped { inner:PatternInner.Leaf { code:83 } } }
     if (kind==4) { throw PatternFailure.Wrapped { inner:PatternInner.Empty } }
 }
-fn patternUnit()->i64 {
+fn patternUnit() throws(PatternFailure)->i64 {
     try { throw PatternFailure.Plain }
     catch (PatternFailure.Coded {}) { return 0 }
     catch (PatternFailure.Plain) { return 61 }
 }
-fn patternRange(code:i64)->i64 {
+fn patternRange(code:i64) throws(PatternFailure)->i64 {
     try { throw PatternFailure.Coded { code:code, text:"t" } }
     catch (PatternFailure.Coded { code:1..=9 }) { return 1 }
     catch (PatternFailure.Coded { code:10..=99, text:"t" }) { return 2 }
@@ -832,7 +831,7 @@ fn patternAlternative(which:i64)->i64 {
     catch (PatternPair.Left { value }, PatternPair.Right { value }) { return value }
     catch (PatternPair.Neither) { return 73 }
 }
-fn patternNested(kind:i64)->i64 {
+fn patternNested(kind:i64) throws(PatternFailure)->i64 {
     try { patternFail(kind) }
     catch (PatternFailure.Wrapped { inner:PatternInner.Leaf { code } }) { return code }
     catch (PatternFailure.Wrapped { inner:PatternInner.Empty }) { return 79 }
@@ -845,7 +844,7 @@ fn patternUnmatched()->i64 {
         catch (PatternOther.Bad { code:1..=9 }) { return 0 }
     } catch (outer:PatternOther) { return match(outer) { PatternOther.Bad { code } -> code } }
 }
-fn patternRethrow()->i64 {
+fn patternRethrow() throws(PatternFailure)->i64 {
     try {
         try { throw PatternFailure.Coded { code:97, text:"x" } }
         catch (PatternFailure.Coded { code }) { throw PatternOther.Bad { code:code+4 } }
@@ -860,31 +859,30 @@ fn patternGenericTag<T>(value:T)->i64 {
     try { throw PatternBox<T>.Item { value:value } }
     catch (PatternBox<T>.None, PatternBox.Item {}) { return 107 }
 }
-fn patternModule()->string {
+fn patternModule() throws(alpha.Event<string>)->string {
     try { throw alpha.event<string>("module") }
     catch (alpha.Event<string>.Empty) { return "empty" }
     catch (alpha.Event<string>.Data { value, label:"owned" }) { return value }
 }
-fn patternCapture()->fn()->string {
+fn patternCapture() throws(PatternFailure)->fn()->string {
     try { throw PatternFailure.Coded { code:109, text:"captured" } }
     catch (PatternFailure.Coded { text }) { return fn()->string { return text } }
 }
 fn patternDead()->i64 {
-    try { } catch (PatternFailure.Coded { code }) { return code }
     return 113
 }
-fn patternFallthrough()->i64 {
+fn patternFallthrough() throws(PatternFailure)->i64 {
     var value=0
     try { throw PatternFailure.Coded { code:127, text:"x" } } catch (PatternFailure.Coded { code }) { value=code }
     return value
 }
-const patternCaptured=patternCapture()
-print(patternUnit(),patternRange(7),patternRange(42),patternRange(500),patternAlternative(0),patternAlternative(1),
-    patternAlternative(2),patternNested(3),patternNested(4),patternUnmatched(),patternRethrow(),
+const patternCaptured=try patternCapture()
+print(try patternUnit(),try patternRange(7),try patternRange(42),try patternRange(500),patternAlternative(0),patternAlternative(1),
+    patternAlternative(2),try patternNested(3),try patternNested(4),patternUnmatched(),try patternRethrow(),
     patternGeneric<string>("generic","bad"),patternGeneric<i64>(103,0),patternGenericTag<string>("tag"),
-    patternModule(),patternCaptured(),patternDead(),patternFallthrough())
+    try patternModule(),patternCaptured(),patternDead(),try patternFallthrough())
 
-fn patternResumedText(text:string)->string {
+fn patternResumedText(text:string) throws(Error)->string {
     try { alpha.failEvent<string>(text) }
     catch (alpha.Event<string>.Empty) { return "bad" }
     catch (alpha.Event<string>.Data { value, label:"owned" }) {
@@ -899,7 +897,7 @@ fn conditionalForward<T:Sendable>(box:alpha.ConditionalBox<T>)->T {
     const read=box.checked
     return read()
 }
-fn conditionalError()->i64 {
+fn conditionalError() throws(PatternFailure)->i64 {
     try { return alpha.ConditionalBox<PatternFailure>{value:PatternFailure.Coded { code:137,text:"condition" }}.raise() }
     catch (PatternFailure.Coded { code }) { return code }
 }
@@ -907,7 +905,7 @@ const conditionalBox=alpha.ConditionalBox<string>{value:"conditional"}
 const conditionalRead=conditionalBox.captured()
 const conditionalStatic=alpha.ConditionalBox<i64>.forward<string>
 print(conditionalForward<string>(conditionalBox),conditionalRead(),conditionalStatic("static",fn(item:string)->string{return "explicit"}),
-    alpha.ConditionalBox<i64>.forward<string>("default"),conditionalError())
+    alpha.ConditionalBox<i64>.forward<string>("default"),try conditionalError())
 
 import { readMeasure } from "./measure_reader"
 import { Meter, MeasureBox, Reading, ReadingBox } from "./measure_value"

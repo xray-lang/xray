@@ -54,7 +54,7 @@ int main(void) {
     SourceInferenceEntries inference_entries = {{fixture_source_inference_values[0],fixture_source_inference_values[1],
         fixture_source_inference_values[2],fixture_source_inference_values[3],fixture_source_inference_values[4],
         fixture_source_inference_values[5]},fixture_source_inference_count};
-    const XrXirCompileContext context=*source_fixture_source_owner((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true});
+    const XrXirCompileContext context=*source_fixture_source_owner((XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true});
     MixedSource *owner=NULL;CHECK(xr_compile_resources_calloc(context.resources,1,sizeof(*owner),(void **)&owner)==XR_COMPILE_RESOURCE_OK);
     owner->artifact=source_fixture_lower(&context,NULL);
     XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
