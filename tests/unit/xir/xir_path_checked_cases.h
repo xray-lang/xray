@@ -65,7 +65,7 @@ static void path_array_checked_cases(void) {
         {XR_XIR_PLACE_READ,XR_XIR_I64,{5},{0},0,{0}},
         {XR_XIR_RETURN,XR_XIR_UNIT,{8},{0},0,{0}}};
     XrXirInstruction ops[9]; XrXirBlock block = {0,9,0,0};
-    XrXirFunction function = {"paths",5,&parameter,1,XR_XIR_I64,&block,1,ops,9,NULL,0};
+    XrXirFunction function = {"paths",5,&parameter,1,XR_XIR_I64,&block,1,ops,9,NULL,0,.error_type=XR_XIR_NEVER};
     XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};
     for (unsigned mode = 0; mode < 8; ++mode) {
         memcpy(ops,original,sizeof(ops));
@@ -153,9 +153,9 @@ static void path_ancestor_checked_cases(void) {
         {XR_XIR_RETURN,XR_XIR_UNIT,{7},{0},0,{0}}};
     XrXirBlock blocks[] = {{0,1,0,0},{0,2,0,0},{0,8,0,0}};
     XrXirFunction functions[] = {
-        {"init",4,NULL,0,XR_XIR_UNIT,&blocks[0],1,init,1,NULL,0},
-        {"main",4,NULL,0,XR_XIR_I64,&blocks[1],1,main,2,NULL,0},
-        {"path",4,&pair,1,XR_XIR_I64,&blocks[2],1,path,8,NULL,0}};
+        {"init",4,NULL,0,XR_XIR_UNIT,&blocks[0],1,init,1,NULL,0,.error_type=XR_XIR_NEVER},
+        {"main",4,NULL,0,XR_XIR_I64,&blocks[1],1,main,2,NULL,0,.error_type=XR_XIR_NEVER},
+        {"path",4,&pair,1,XR_XIR_I64,&blocks[2],1,path,8,NULL,0,.error_type=XR_XIR_NEVER}};
     XrXirSourceModule source = {"alpha",5,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[3] = {{0}};
     XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,1, NULL};

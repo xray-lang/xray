@@ -8,9 +8,9 @@ static XrXirStatus implementation_packet_fixture(const XrXirCompileContext *cont
     XrXirType receiver = (XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE, argument = XR_XIR_I64;
     XrXirTypeNode nodes[2] = {0};
     nodes[0].kind = XR_XIR_TYPE_NOMINAL;
-    nodes[1].kind = XR_XIR_TYPE_CALLABLE; nodes[1].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED;
+    nodes[1].kind = XR_XIR_TYPE_CALLABLE;nodes[1].element=XR_XIR_NEVER;nodes[1].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     nodes[1].result = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE; nodes[1].parameter_span = 1;
-    XrXirNominalDeclaration nominal = {{"alpha",5},{"Meter",5},1,NULL,0,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0, 0, {0}};
+    XrXirNominalDeclaration nominal = {.module={"alpha",5},.name={"Meter",5},.exported=1,.kind=XR_XIR_NOMINAL_STRUCT};
     XrXirNominalTable nominals = {&nominal,1,NULL};
     XrXirConstraint constraint = {0};
     XrXirInterfaceMethod method = {{"measure",7},(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1),0,0,NULL};
@@ -24,11 +24,11 @@ static XrXirStatus implementation_packet_fixture(const XrXirCompileContext *cont
         {XR_XIR_RETURN,XR_XIR_UNIT,{1},{0},0,{0}}};
     XrXirBlock one = {0,1,0,0}, two = {0,2,0,0};
     XrXirFunction functions[] = {
-        {"entry",5,NULL,0,XR_XIR_I64,&two,1,answer,2,NULL,0},
-        {"init",4,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0},
-        {"measure",7,&receiver,1,XR_XIR_I64,&two,1,measure,2,NULL,0}};
+        {"entry",5,NULL,0,XR_XIR_I64,&two,1,answer,2,NULL,0,.error_type=XR_XIR_NEVER},
+        {"init",4,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0,.error_type=XR_XIR_NEVER},
+        {"measure",7,&receiver,1,XR_XIR_I64,&two,1,measure,2,NULL,0,.error_type=XR_XIR_NEVER}};
     XrXirSourceModule module = {"alpha",5,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE};
-    XrXirFunctionIdentity identities[] = {{0},{0},{0,1,1,0,0,0,XR_XIR_READ_METHOD, 0, 0}};
+    XrXirFunctionIdentity identities[] = {{0},{0},{.exported=1,.nominal_owner=1,.method_kind=XR_XIR_READ_METHOD}};
     XrXirImplementationBinding binding = {{0,&argument,1},0,2};
     XrXirImplementation implementation = {0,{0,&argument,1},&binding,1};
     XrXirImplementationTable table = {&implementation,1};

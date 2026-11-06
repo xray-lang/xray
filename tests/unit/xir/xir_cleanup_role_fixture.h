@@ -25,11 +25,11 @@ static XrXirArtifact *cleanup_role_fixture(const XrXirCompileContext *context) {
         {XR_XIR_CLEANUP_REGISTER, XR_XIR_UNIT, {0}, {1}, 4, {0, 1}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
     XrXirFunction functions[] = {
-        {"init", 4, NULL, 0, XR_XIR_UNIT, &one, 1, &done, 1, NULL, 0},
-        {"main", 4, NULL, 0, XR_XIR_I64, &four, 1, main_ops, 4, NULL, 0},
-        {"owner", 5, NULL, 0, XR_XIR_UNIT, registration_blocks, 2, owner_ops, 2, NULL, 0},
-        {"cleanup", 7, NULL, 0, XR_XIR_UNIT, registration_blocks, 2, cleanup_ops, 2, NULL, 0},
-        {"nested", 6, NULL, 0, XR_XIR_UNIT, &one, 1, &done, 1, NULL, 0}};
+        {"init", 4, NULL, 0, XR_XIR_UNIT, &one, 1, &done, 1, NULL, 0,.error_type=XR_XIR_NEVER},
+        {"main", 4, NULL, 0, XR_XIR_I64, &four, 1, main_ops, 4, NULL, 0,.error_type=XR_XIR_NEVER},
+        {"owner", 5, NULL, 0, XR_XIR_UNIT, registration_blocks, 2, owner_ops, 2, NULL, 0,.error_type=XR_XIR_NEVER},
+        {"cleanup", 7, NULL, 0, XR_XIR_UNIT, registration_blocks, 2, cleanup_ops, 2, NULL, 0,.error_type=XR_XIR_NEVER},
+        {"nested", 6, NULL, 0, XR_XIR_UNIT, &one, 1, &done, 1, NULL, 0,.error_type=XR_XIR_NEVER}};
     XrXirFunctionIdentity identities[5] = {{0}};
     identities[3].cleanup_owner = 3; identities[4].cleanup_owner = 4;
     XrXirSourceModule source = {"root", 4, NULL, 0, 0, 0,XR_XIR_MODULE_FRESH_STORAGE};

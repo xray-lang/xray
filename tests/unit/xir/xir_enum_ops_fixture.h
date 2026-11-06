@@ -35,9 +35,9 @@ static XrXirArtifact *enum_ops_checked(const XrXirCompileContext *context, unsig
     uint32_t operands[] = {0,1,3,4,7,5};
     XrXirInstruction main_ops[] = {{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0, {0}},{XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}}};
     XrXirBlock one = {0,1, 0, 0}, two = {0,2, 0, 0}, block = {0,11, 0, 0};
-    XrXirFunction functions[] = {{"init",4,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0},
-        {"entry",5,NULL,0,XR_XIR_I64,&two,1,main_ops,2,NULL,0},
-        {"make",4,NULL,0,(XrXirType)256,&block,1,entry,11,operands,6}};
+    XrXirFunction functions[] = {{"init",4,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0,.error_type=XR_XIR_NEVER},
+        {"entry",5,NULL,0,XR_XIR_I64,&two,1,main_ops,2,NULL,0,.error_type=XR_XIR_NEVER},
+        {"make",4,NULL,0,(XrXirType)256,&block,1,entry,11,operands,6,.error_type=XR_XIR_NEVER}};
     XrXirSourceModule source = {"alpha",5,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[] = {{0,0,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
     XrXirLiteral literal = {"constructed",11};

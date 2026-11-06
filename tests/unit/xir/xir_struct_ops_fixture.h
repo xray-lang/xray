@@ -43,9 +43,9 @@ static XrXirArtifact *struct_ops_checked(const XrXirCompileContext *context, uns
     uint32_t operands[] = {0,1};
     XrXirBlock one = {0,1, 0, 0}, five = {0,5, 0, 0}, six = {0,6, 0, 0};
     XrXirFunction functions[] = {
-        {"init",4,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0},
-        {"entry",5,NULL,0,XR_XIR_I64,&five,1,entry,5,operands,2},
-        {"make",4,parameters,2,pair,&six,1,make,6,operands,2}};
+        {"init",4,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0,.error_type=XR_XIR_NEVER},
+        {"entry",5,NULL,0,XR_XIR_I64,&five,1,entry,5,operands,2,.error_type=XR_XIR_NEVER},
+        {"make",4,parameters,2,pair,&six,1,make,6,operands,2,.error_type=XR_XIR_NEVER}};
     XrXirSourceModule source = {"alpha",5,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[] = {{0,0,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,1, 0, 0, 0, XR_XIR_CONSTRUCTOR, 0, 0}};
     XrXirLiteral literal = {"constructed",11};

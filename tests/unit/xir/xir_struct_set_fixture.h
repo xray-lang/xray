@@ -70,9 +70,9 @@ static XrXirArtifact *struct_set_checked(const XrXirCompileContext *context, uns
     uint32_t printed[] = {13,15,17,20,22};
     XrXirBlock seven = {0,7, 0, 0}, all = {0,29, 0, 0};
     XrXirFunction functions[] = {
-        {"init",4,NULL,0,XR_XIR_UNIT,&seven,1,init,7,init_values,2},
-        {"entry",5,NULL,0,XR_XIR_I64,&all,1,entry,29,printed,5},
-        {"replace",7,NULL,0,XR_XIR_I64,&seven,1,replace,7,replace_values,2}};
+        {"init",4,NULL,0,XR_XIR_UNIT,&seven,1,init,7,init_values,2,.error_type=XR_XIR_NEVER},
+        {"entry",5,NULL,0,XR_XIR_I64,&all,1,entry,29,printed,5,.error_type=XR_XIR_NEVER},
+        {"replace",7,NULL,0,XR_XIR_I64,&seven,1,replace,7,replace_values,2,.error_type=XR_XIR_NEVER}};
     XrXirSourceModule source = {"alpha",5,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[] = {{0,0,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,0,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
     XrXirLiteral literals[] = {{"roots",5},{"replacement",11}};

@@ -34,10 +34,10 @@ static XrXirArtifact *enum_generic_checked(const XrXirCompileContext *context, u
     XrXirBlock one = {0,1, 0, 0}, four = {0,4, 0, 0}, two = {0,2, 0, 0};
     XrXirType parameter = t;
     XrXirFunction functions[] = {
-        {"initA",5,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0},
-        {"entry",5,NULL,0,XR_XIR_I64,&four,1,entry,4,&operand,1},
-        {"make",4,&parameter,1,(XrXirType)256,&two,1,make,2,&operand,1},
-        {"initB",5,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0}};
+        {"initA",5,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0,.error_type=XR_XIR_NEVER},
+        {"entry",5,NULL,0,XR_XIR_I64,&four,1,entry,4,&operand,1,.error_type=XR_XIR_NEVER},
+        {"make",4,&parameter,1,(XrXirType)256,&two,1,make,2,&operand,1,.error_type=XR_XIR_NEVER},
+        {"initB",5,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0,.error_type=XR_XIR_NEVER}};
     XrXirSourceModule modules[] = {{"alpha",5,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE},{"beta",4,&dependency,1,3, 0,XR_XIR_MODULE_FRESH_STORAGE}};
     XrXirFunctionIdentity identities[] = {{0,0,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{1,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{1,0,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
     XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,1,1, NULL};
