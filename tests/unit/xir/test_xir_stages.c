@@ -68,7 +68,7 @@ static void expect(Fixture *fixture, XrXirStatus status) {
     CHECK(diagnostic.status == status);
 }
 
-static void cumulative_verification_budget(void) {
+static void repeated_verification_memory(void) {
     Fixture fixture; fixture_init(&fixture);
     XrXirCompileContext probe = stage_context_default(), initial = probe;
     XrCompileResourceStats before = stage_stats(&probe);
@@ -76,31 +76,21 @@ static void cumulative_verification_budget(void) {
     CHECK(xir_fixture_verify(&probe, &fixture.module, &diagnostic) == XR_XIR_OK);
     CHECK(!memcmp(&probe, &initial, sizeof(probe)));
     XrCompileResourceStats after = stage_stats(&probe);
-    uint64_t bytes = after.allocated_bytes - before.allocated_bytes;
-    uint64_t work = after.work - before.work;
-    CHECK(bytes && work && after.live_bytes == before.live_bytes);
+    CHECK(after.peak_bytes > before.held_bytes && after.held_bytes == before.held_bytes);
+    uint64_t peak = after.peak_bytes - before.held_bytes;
     for (unsigned mode = 0; mode < 4; ++mode) {
-        XrXirCompileContext context = stage_context_limited(bytes * 2 - (mode == 2),
-            STAGE_LIVE_BYTES, work * 2 - (mode == 3));
-        context.limits.functions = mode == 1 ? 0 : 1;
+        XrXirCompileContext context = stage_context_limited(peak - (mode == 1) + (mode == 2));
+        context.limits.functions = mode == 3 ? 0 : 1;
         XrXirCompileContext unchanged = context;
-        XrXirStatus first = xir_fixture_verify(&context, &fixture.module, NULL);
-        CHECK(first == (mode == 1 ? XR_XIR_BUDGET : XR_XIR_OK));
-        if (mode != 1) {
-            CHECK(xir_fixture_verify(&context, &fixture.module, &diagnostic) ==
-                (mode ? XR_XIR_BUDGET : XR_XIR_OK));
-            CHECK(diagnostic.status == (mode ? XR_XIR_BUDGET : XR_XIR_OK));
+        XrXirStatus expected = mode == 1 ? XR_XIR_MEMORY_LIMIT : mode == 3 ? XR_XIR_BUDGET : XR_XIR_OK;
+        CHECK(xir_fixture_verify(&context, &fixture.module, NULL) == expected);
+        for (unsigned repeat = 0; repeat < 2; ++repeat) {
+            CHECK(xir_fixture_verify(&context, &fixture.module, &diagnostic) == expected);
+            CHECK(diagnostic.status == expected);
         }
         CHECK(!memcmp(&context, &unchanged, sizeof(context)));
         XrCompileResourceStats final = stage_stats(&context);
-        CHECK(final.live_bytes == stage_owner_baseline.live_bytes);
-        if (!mode) {
-            CHECK(final.allocated_bytes == stage_owner_baseline.allocated_bytes + bytes * 2);
-            CHECK(final.work == stage_owner_baseline.work + work * 2);
-            CHECK(xir_fixture_verify(&context, &fixture.module, NULL) == XR_XIR_BUDGET);
-            XrCompileResourceStats rejected = stage_stats(&context);
-            CHECK(rejected.allocated_bytes >= final.allocated_bytes && rejected.work >= final.work);
-        }
+        CHECK(final.held_bytes == stage_owner_baseline.held_bytes);
     }
     XrXirDiagnostic unchanged_diagnostic = diagnostic;
     CHECK(xir_fixture_verify(NULL, &fixture.module, &diagnostic) == XR_XIR_BAD_STRUCTURE);
@@ -134,27 +124,27 @@ static void graph_scratch_function_boundaries(void) {
     XrXirModule module = fixtures[0].module;
     module.functions = functions; module.function_count = 4;
     XrXirCompileContext context = stage_context_default();
-    uint64_t baseline = stage_stats(&context).live_bytes;
+    uint64_t baseline = stage_stats(&context).held_bytes;
     size_t physical_count = stage_physical_count, physical_bytes = stage_physical_bytes;
     XrXirDiagnostic diagnostic = {0};
     CHECK(xir_fixture_verify(&context, &module, &diagnostic) == XR_XIR_OK);
-    CHECK(stage_stats(&context).live_bytes == baseline);
+    CHECK(stage_stats(&context).held_bytes == baseline);
     CHECK(stage_physical_count == physical_count && stage_physical_bytes == physical_bytes);
     fixtures[3].instructions[2].args[0] = 6;
     CHECK(xir_fixture_verify(&context, &module, &diagnostic) == XR_XIR_BAD_DOMINANCE);
     CHECK(diagnostic.status == XR_XIR_BAD_DOMINANCE && diagnostic.function == 3 &&
         diagnostic.block == 1 && diagnostic.instruction == 2);
-    CHECK(stage_stats(&context).live_bytes == baseline);
+    CHECK(stage_stats(&context).held_bytes == baseline);
     CHECK(stage_physical_count == physical_count && stage_physical_bytes == physical_bytes);
     XrXirArtifact *rejected = NULL;
     CHECK(xir_fixture_check(&context, &module, &rejected, &diagnostic) == XR_XIR_BAD_DOMINANCE && !rejected);
     CHECK(diagnostic.status == XR_XIR_BAD_DOMINANCE && diagnostic.function == 3 &&
         diagnostic.block == 1 && diagnostic.instruction == 2);
-    CHECK(stage_stats(&context).live_bytes == baseline);
+    CHECK(stage_stats(&context).held_bytes == baseline);
     CHECK(stage_physical_count == physical_count && stage_physical_bytes == physical_bytes);
     fixtures[3].instructions[2].args[0] = 2;
     CHECK(xir_fixture_verify(&context, &module, &diagnostic) == XR_XIR_OK);
-    CHECK(stage_stats(&context).live_bytes == baseline);
+    CHECK(stage_stats(&context).held_bytes == baseline);
     CHECK(stage_physical_count == physical_count && stage_physical_bytes == physical_bytes);
 }
 
@@ -278,12 +268,8 @@ static void malformed_inputs(void) {
 static void budgets(void) {
     Fixture f;
     fixture_init(&f);
-    XrXirCompileContext limits = stage_context_limited(STAGE_ALLOCATED_BYTES, STAGE_LIVE_BYTES, (1));
-    CHECK(xir_fixture_verify(&limits, &f.module, NULL) == XR_XIR_BUDGET);
-    limits = stage_context_limited(STAGE_ALLOCATED_BYTES, (1), STAGE_WORK);
-    CHECK(xir_fixture_verify(&limits, &f.module, NULL) == XR_XIR_BUDGET);
-    limits = stage_context_limited((1), STAGE_LIVE_BYTES, STAGE_WORK);
-    CHECK(xir_fixture_verify(&limits, &f.module, NULL) == XR_XIR_BUDGET);
+    XrXirCompileContext limits = stage_context_limited(1);
+    CHECK(xir_fixture_verify(&limits, &f.module, NULL) == XR_XIR_MEMORY_LIMIT);
     limits = stage_context_default();
     limits.limits.functions = 0;
     CHECK(xir_fixture_verify(&limits, &f.module, NULL) == XR_XIR_BUDGET);
@@ -325,10 +311,8 @@ static void loops_and_storage_order(void) {
     ops[0].immediate = 1;
     ops[3].args[0] = 3;
     CHECK(xir_fixture_verify(&stage_context, &module, NULL) == XR_XIR_BAD_VALUE);
-    XrXirCompileContext limits = stage_context_default();
     ops[3].args[0] = 0;
-    limits = stage_context_limited(STAGE_ALLOCATED_BYTES, STAGE_LIVE_BYTES, 32);
-    CHECK(xir_fixture_verify(&limits, &module, NULL) == XR_XIR_BUDGET);
+    CHECK(xir_fixture_verify(&stage_context, &module, NULL) == XR_XIR_OK);
 }
 
 static void dominance_word_boundary(void) {
@@ -422,8 +406,6 @@ static void constructed_metadata(void) {
     XrXirProofContext marker_context = {&marker_module,{XR_XIR_CONTEXT_CLOSED,0,0}};
     CHECK(xr_xir_compile_type_markers_prove(&budget, &marker_context, (XrXirType)256, XR_XIR_CONSTRAINT_SENDABLE) == XR_XIR_OK);
     CHECK(xr_xir_compile_type_markers_prove(&budget, &marker_context, (XrXirType)259, XR_XIR_CONSTRAINT_SENDABLE) == XR_XIR_BAD_TYPE);
-    budget = stage_context_limited(STAGE_ALLOCATED_BYTES, STAGE_LIVE_BYTES, 0);
-    CHECK(xr_xir_compile_type_markers_prove(&budget, &marker_context, (XrXirType)256, XR_XIR_CONSTRAINT_SENDABLE) == XR_XIR_BUDGET);
     XrXirLayout layout;
     CHECK(xr_xir_compile_layout(&stage_context, &types, (XrXirType)256, &fixture_target, XR_XIR_LAYOUT_STORAGE, &layout) == XR_XIR_OK);
     CHECK(layout.size == 8 && layout.alignment == 8);
@@ -469,12 +451,10 @@ static void constructed_metadata(void) {
     CHECK(!xr_xir_type_in_context(&context,0,(XrXirType)260));
     budget = stage_context_default();
     CHECK(xr_xir_compile_type_satisfies(&budget, &context, 0, (XrXirType)257, (XrXirConstraint){0}) == XR_XIR_BAD_TYPE);
-    budget = stage_context_limited(1, STAGE_LIVE_BYTES, STAGE_WORK);
+    budget = stage_context_limited(1);
     CHECK(xr_xir_compile_types_structure_verify(&budget, &types) == XR_XIR_OK);
     XrXirTypes *denied_copy = NULL;
-    CHECK(xr_xir_compile_types_clone(&budget, &types, NULL, &denied_copy) == XR_XIR_BUDGET && !denied_copy);
-    budget = stage_context_limited(STAGE_ALLOCATED_BYTES, STAGE_LIVE_BYTES, (types.count));
-    CHECK(xr_xir_compile_types_structure_verify(&budget, &types) == XR_XIR_BUDGET);
+    CHECK(xr_xir_compile_types_clone(&budget, &types, NULL, &denied_copy) == XR_XIR_MEMORY_LIMIT && !denied_copy);
     XrXirTypes *copy = NULL;
     CHECK(xr_xir_compile_types_clone(&stage_context, &types, NULL, &copy) == XR_XIR_OK && copy && copy->nodes != nodes);
     CHECK(copy->nodes[2].parameters != &input);
@@ -526,12 +506,10 @@ static void nominal_metadata_cases(void) {
     node.kind = XR_XIR_TYPE_CELL;
     b = stage_context_default();
     CHECK(xr_xir_compile_nominal_structure_verify(&b, &f.table, &types) == XR_XIR_BAD_TYPE);
-    nominal_fixture(&f); b = stage_context_limited(STAGE_ALLOCATED_BYTES, STAGE_LIVE_BYTES, (1));
-    CHECK(xr_xir_compile_nominal_structure_verify(&b, &f.table, NULL) == XR_XIR_BUDGET && stage_stats(&b).work == stage_owner_baseline.work);
-    b = stage_context_limited(1, STAGE_LIVE_BYTES, STAGE_WORK);
+    nominal_fixture(&f); b = stage_context_limited(1);
     CHECK(xr_xir_compile_nominal_structure_verify(&b, &f.table, NULL) == XR_XIR_OK);
     XrXirNominalTable *denied_copy = NULL;
-    CHECK(xr_xir_compile_nominal_clone(&b, &f.table, NULL, &denied_copy) == XR_XIR_BUDGET && !denied_copy);
+    CHECK(xr_xir_compile_nominal_clone(&b, &f.table, NULL, &denied_copy) == XR_XIR_MEMORY_LIMIT && !denied_copy);
     b = stage_context_default();
     XrXirNominalTable *copy = NULL;
     CHECK(xr_xir_compile_nominal_clone(&b, &f.table, NULL, &copy) == XR_XIR_OK && copy);
@@ -682,19 +660,19 @@ static void nominal_context_proofs(void) {
     XrCompileResourceStats before = stage_stats(&budget);
     CHECK(nominal_context_use(&types, nominal, allowed, 2, &budget) == XR_XIR_OK);
     XrCompileResourceStats after = stage_stats(&budget);
-    uint64_t bytes = after.allocated_bytes - before.allocated_bytes, work = after.work - before.work;
-    CHECK(bytes > 0 && work > 0 && before.live_bytes == after.live_bytes);
+    CHECK(after.peak_bytes > before.held_bytes && before.held_bytes == after.held_bytes);
+    uint64_t held = after.peak_bytes - before.held_bytes;
     budget = stage_context_default();
     CHECK(nominal_context_use(&types, nominal, denied, 2, &budget) == XR_XIR_BAD_TYPE);
     budget = stage_context_default();
     CHECK(nominal_context_use(&types, nominal, allowed, 1, &budget) == XR_XIR_BAD_TYPE);
     for (unsigned mode = 0; mode < 3; ++mode) {
-        budget = stage_context_limited(bytes - (mode == 1), STAGE_LIVE_BYTES, work - (mode == 2));
+        budget = stage_context_limited(held - (mode == 1) + (mode == 2));
         XrXirCompileContext unchanged = budget;
         XrXirStatus status = nominal_context_use(&types, nominal, allowed, 2, &budget);
-        CHECK(status == (mode ? XR_XIR_BUDGET : XR_XIR_OK));
+        CHECK(status == (mode == 1 ? XR_XIR_MEMORY_LIMIT : XR_XIR_OK));
         CHECK(!memcmp(&budget, &unchanged, sizeof(budget)));
-        CHECK(stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes);
+        CHECK(stage_stats(&budget).held_bytes == stage_owner_baseline.held_bytes);
     }
     argument = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE; budget = stage_context_default();
     CHECK(nominal_context_use(&types, nominal, allowed, 2, &budget) == XR_XIR_OK);
@@ -780,8 +758,8 @@ static void enum_metadata_cases(void) {
     CHECK(!memcmp(second->identities[0].variants[2].name.bytes, "Right", 5));
     CHECK(second->identities[0].variants[2].field_begin == 1);
     xr_xir_compile_nominal_free(second);
-    enum_metadata_fixture(&f); b = stage_context_limited(STAGE_ALLOCATED_BYTES, STAGE_LIVE_BYTES, (1));
-    CHECK(xr_xir_compile_nominal_clone(&b, &f.table, NULL, &copy) == XR_XIR_BUDGET && !copy && stage_stats(&b).work > stage_owner_baseline.work);
+    enum_metadata_fixture(&f); b = stage_context_limited(0);
+    CHECK(xr_xir_compile_nominal_clone(&b, &f.table, NULL, &copy) == XR_XIR_MEMORY_LIMIT && !copy);
     XrXirType fields[] = {XR_XIR_I64, XR_XIR_STRING};
     XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_NOMINAL; node.nominal.fields = fields; node.nominal.field_count = 2;
     XrXirTypes types = {&node, 1, &f.table, NULL}; b = stage_context_default();
@@ -991,7 +969,7 @@ int main(int argc, char **argv) {
     error_filter_guards();
     nominal_kind_boundaries();
     enum_metadata_cases();
-    cumulative_verification_budget();
+    repeated_verification_memory();
     graph_scratch_function_boundaries();
     nominal_context_proofs();
     nominal_argument_identity();

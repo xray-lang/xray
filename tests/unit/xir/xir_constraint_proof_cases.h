@@ -54,7 +54,7 @@ static void constraint_proof_fixture(ConstraintProofFixture *f) {
 static XrXirStatus constraint_proof_status(ConstraintProofFixture *f) {
     XrXirCompileContext budget = interface_context_default();
     XrXirStatus status = xr_xir_compile_constraints_prove(&budget, &f->context, &f->use);
-    CHECK(stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes && interface_live == stage_owner_count); return status;
+    CHECK(stage_stats(&budget).held_bytes == stage_owner_baseline.held_bytes && interface_live == stage_owner_count); return status;
 }
 static void constraint_proof_vectors(void) {
     ConstraintProofFixture f; constraint_proof_fixture(&f);
@@ -195,9 +195,9 @@ static void constraint_proof_resources(void) {
     CHECK(xr_xir_compile_constraints_prove(&measured,&f.context,&f.use)==XR_XIR_OK);
     XrCompileResourceStats stats = stage_stats(&measured);
     interface_temporary_clean(&measured);
-    for (unsigned boundary = 0; boundary < 4; ++boundary) {
+    for (unsigned boundary = 0; boundary < 3; ++boundary) {
         XrXirCompileContext context = interface_exact_context(stats,boundary);
-        CHECK(xr_xir_compile_constraints_prove(&context,&f.context,&f.use)==(boundary ? XR_XIR_BUDGET : XR_XIR_OK));
+        CHECK(xr_xir_compile_constraints_prove(&context,&f.context,&f.use)==(boundary == 1 ? XR_XIR_MEMORY_LIMIT : XR_XIR_OK));
         interface_temporary_clean(&context);
     }
     printf("Contextual interface proofs: %zu allocation failure sites\n",sites);
@@ -243,15 +243,15 @@ static void constraint_proof_shared_type_walk(void) {
     XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,0,0}};
     XrXirCompileContext structure = interface_context_default();
     CHECK(xr_xir_compile_types_structure_verify(&structure, &types)==XR_XIR_OK);
-    XrXirCompileContext budget = interface_context_limited(STAGE_ALLOCATED_BYTES,STAGE_LIVE_BYTES,1600);
+    XrXirCompileContext budget = interface_context_default();
     CHECK(xr_xir_compile_type_use_verify(&budget, &context, member_case_type(DEPTH-1))==XR_XIR_OK);
     CHECK(interface_live == stage_owner_count);
     context.owner = (XrXirDeclarationContext){XR_XIR_CONTEXT_CLOSED,0,0};
-    budget = interface_context_limited(STAGE_ALLOCATED_BYTES,STAGE_LIVE_BYTES,1600);
+    budget = interface_context_default();
     CHECK(xr_xir_compile_type_use_verify(&budget, &context, member_case_type(DEPTH-1))==XR_XIR_BAD_TYPE);
     CHECK(interface_live == stage_owner_count);
 }
-static void constraint_proof_interface_identity_work(void) {
+static void constraint_proof_interface_identity_cases(void) {
     enum { COUNT = 16 };
     XrXirTypeNode signature = {0}; signature.kind = XR_XIR_TYPE_CALLABLE; signature.flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; signature.result = XR_XIR_I64;
     XrXirInterfaceMethod method = {{"measure",7},member_case_type(0),0,0,NULL};
@@ -266,15 +266,12 @@ static void constraint_proof_interface_identity_work(void) {
     XrXirCompileContext structure = interface_context_default();
     CHECK(xr_xir_compile_types_structure_verify(&structure, &types)==XR_XIR_OK);
     CHECK(xr_xir_compile_generics_structure_verify(&structure, &module)==XR_XIR_OK);
-    XrXirCompileContext budget = interface_context_limited(STAGE_ALLOCATED_BYTES,STAGE_LIVE_BYTES,COUNT-1); size_t before = attempts;
-    CHECK(xr_xir_compile_interface_prove(&budget, &context, &module, (XrXirType)XR_XIR_TYPE_PARAMETER_BASE, application)==XR_XIR_BUDGET);
-    CHECK(interface_work(&budget)==0 && stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes && attempts==before && interface_live == stage_owner_count);
-    budget = interface_context_default();
+    XrXirCompileContext budget = interface_context_default();
     CHECK(xr_xir_compile_interface_prove(&budget, &context, &module, (XrXirType)XR_XIR_TYPE_PARAMETER_BASE, application)==XR_XIR_OK);
-    CHECK(interface_work(&budget)>=COUNT && stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes && interface_live == stage_owner_count);
+    CHECK(stage_stats(&budget).held_bytes == stage_owner_baseline.held_bytes && interface_live == stage_owner_count);
     budget = interface_context_default(); attempts = 0; fail_at = 0;
     CHECK(xr_xir_compile_interface_prove(&budget, &context, &module, (XrXirType)XR_XIR_TYPE_PARAMETER_BASE, application)==XR_XIR_OUT_OF_MEMORY);
-    CHECK(interface_work(&budget)>=COUNT && stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes && interface_live == stage_owner_count);
+    CHECK(stage_stats(&budget).held_bytes == stage_owner_baseline.held_bytes && interface_live == stage_owner_count);
     fail_at = SIZE_MAX;
 }
 static void constraint_proof_scalar_signatures(void) {
@@ -344,14 +341,14 @@ static void constraint_proof_scalar_slot_sharing(void) {
             CHECK(xr_xir_compile_type_expression_shape(&budget, NULL, functions[f].result, 0)==XR_XIR_OK);
         CHECK(xr_xir_compile_module_constraints_verify(&budget, &module)==
             (owner == 1 || type == 2 ? XR_XIR_OK : XR_XIR_BAD_TYPE));
-        CHECK(stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes && interface_live == stage_owner_count);
+        CHECK(stage_stats(&budget).held_bytes == stage_owner_baseline.held_bytes && interface_live == stage_owner_count);
     }
 }
 static void constraint_proof_cases(void) {
     constraint_proof_vectors(); constraint_proof_owners(); constraint_proof_inheritance();
     constraint_proof_conflicts_and_concrete(); constraint_proof_resources(); constraint_proof_malformed();
     constraint_proof_hidden_nominal_bounds(); constraint_proof_shared_type_walk();
-    constraint_proof_interface_identity_work();
+    constraint_proof_interface_identity_cases();
     constraint_proof_scalar_signatures(); constraint_proof_scalar_generic_forwarding();
     constraint_proof_scalar_slot_sharing();
 }

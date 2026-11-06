@@ -73,7 +73,7 @@ static void implementation_semantic_fixture(ImplementationSemanticFixture *f) {
 static XrXirStatus implementation_semantic_status(ImplementationSemanticFixture *f) {
     XrXirCompileContext budget = interface_context_default();
     XrXirStatus status = xr_xir_compile_implementations_verify(&budget, &f->module);
-    CHECK(stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes && interface_live == stage_owner_count); return status;
+    CHECK(stage_stats(&budget).held_bytes == stage_owner_baseline.held_bytes && interface_live == stage_owner_count); return status;
 }
 static void implementation_semantic_bindings(void) {
     for (unsigned attack = 0; attack < 10; ++attack) {
@@ -163,10 +163,8 @@ static void implementation_semantic_resources(void) {
     }
     fail_at = SIZE_MAX;
     ImplementationSemanticFixture f; implementation_semantic_fixture(&f);
-    XrXirCompileContext budget = interface_context_limited(STAGE_ALLOCATED_BYTES,STAGE_LIVE_BYTES,0);
-    CHECK(xr_xir_compile_implementations_verify(&budget, &f.module)==XR_XIR_BUDGET);
-    budget = interface_context_default(); budget = interface_context_limited(STAGE_ALLOCATED_BYTES,0,STAGE_WORK);
-    CHECK(xr_xir_compile_implementations_verify(&budget, &f.module)==XR_XIR_BUDGET);
+    XrXirCompileContext budget = interface_context_limited(0);
+    CHECK(xr_xir_compile_implementations_verify(&budget, &f.module)==XR_XIR_MEMORY_LIMIT);
     CHECK(interface_live == stage_owner_count);
     printf("Implementation semantic proofs: %zu allocation failure sites\n",sites);
 }

@@ -155,14 +155,11 @@ static void method_owner_cases(void) {
     generic[2].parameter_count = 2; generic[2].constraints = constraints;
     identities[2].method_kind = XR_XIR_READ_METHOD;
     functions[2].parameters = &receiver; functions[2].parameter_count = 1; member_code[1].args[0] = 1;
-    XrXirCompileContext budget = stage_context_limited(STAGE_ALLOCATED_BYTES, STAGE_LIVE_BYTES, 1);
-    CHECK(xr_xir_compile_method_signature_verify(&budget, &module, 2) == XR_XIR_BUDGET);
-    budget = stage_context_limited(STAGE_ALLOCATED_BYTES, STAGE_LIVE_BYTES, 2);
+    XrXirCompileContext budget = stage_context_default();
     XrXirCompileContext unchanged = budget;
     XrCompileResourceStats baseline = stage_stats(&budget);
     CHECK(xr_xir_compile_method_signature_verify(&budget, &module, 2) == XR_XIR_OK);
-    CHECK(stage_stats(&budget).work == baseline.work + 2);
-    CHECK(stage_stats(&budget).live_bytes == baseline.live_bytes);
+    CHECK(stage_stats(&budget).held_bytes == baseline.held_bytes);
     CHECK(!memcmp(&budget, &unchanged, sizeof(budget)));
 }
 #endif // XIR_METHOD_OWNER_CASES_H

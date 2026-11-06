@@ -133,16 +133,16 @@ static void rejection_and_budget(void) {
     XrCompileResourceStats stats = stage_stats(&measured);
     xr_xir_compile_interfaces_free(copy); copy = NULL;
     interface_temporary_clean(&measured);
-    for (unsigned boundary = 0; boundary < 5; ++boundary) {
-        XrXirCompileContext context = interface_exact_context(stats,boundary);
-        if (boundary == 4) context.limits.parameters = 1;
-        CHECK(xr_xir_compile_interfaces_clone(&context,&f.table,&f.types,&copy)==(boundary ? XR_XIR_BUDGET : XR_XIR_OK));
-        CHECK((copy!=NULL)==!boundary);
+    for (unsigned boundary = 0; boundary < 4; ++boundary) {
+        XrXirCompileContext context = interface_exact_context(stats,boundary < 3 ? boundary : 0);
+        if (boundary == 3) context.limits.parameters = 1;
+        CHECK(xr_xir_compile_interfaces_clone(&context,&f.table,&f.types,&copy)==(boundary == 1 ? XR_XIR_MEMORY_LIMIT : boundary == 3 ? XR_XIR_BUDGET : XR_XIR_OK));
+        CHECK((copy!=NULL)==(boundary==0 || boundary==2));
         xr_xir_compile_interfaces_free(copy); copy = NULL;
         interface_temporary_clean(&context);
     }
-    XrXirCompileContext no_storage = interface_context_limited(STAGE_ALLOCATED_BYTES,0,STAGE_WORK);
-    CHECK(xr_xir_compile_interfaces_verify_structure(&no_storage,&f.table,&f.types)==XR_XIR_BUDGET);
+    XrXirCompileContext no_storage = interface_context_limited(0);
+    CHECK(xr_xir_compile_interfaces_verify_structure(&no_storage,&f.table,&f.types)==XR_XIR_MEMORY_LIMIT);
     interface_temporary_clean(&no_storage);
 }
 static XrXirStatus check_interface_module(const XrXirCompileContext *context, const XrXirTypes *types, XrXirFunction function,
@@ -263,7 +263,7 @@ static void interface_parameters_remain_declaration_scoped(void) {
 
 static void checked_owner_outlives_producer(void) {
     size_t blocks_before = stage_physical_count, bytes_before = stage_physical_bytes;
-    XrCompileResourceLimits limits = {STAGE_ALLOCATED_BYTES,STAGE_LIVE_BYTES,STAGE_WORK};
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY,0,true};
     XrXirCompileContext context = {0};
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits = xr_xir_compile_default_limits();

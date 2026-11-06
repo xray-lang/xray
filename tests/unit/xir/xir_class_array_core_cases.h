@@ -66,8 +66,8 @@ static void class_array_core_cases(void){
  XrXirNominalIdentity *identity=(XrXirNominalIdentity *)xr_xir_compile_artifact_module(lowered)->types->nominals->identities;
  identity[0].flags=0;CLASS_CHECK(xr_xir_compile_verify_v2(&stage_context, xr_xir_compile_artifact_module(lowered), xr_xir_compile_artifact_construction(lowered), &d)==XR_XIR_OK);
  identity[0].flags=XR_XIR_NOMINAL_SENDABLE<<1;CLASS_CHECK(xr_xir_compile_verify_v2(&stage_context, xr_xir_compile_artifact_module(lowered), xr_xir_compile_artifact_construction(lowered), &d)==XR_XIR_BAD_STRUCTURE);identity[0].flags=XR_XIR_NOMINAL_FINAL;
- XrXirCompileContext denied = stage_context_limited(STAGE_ALLOCATED_BYTES, (0), STAGE_WORK);XrXirArtifact *rejected=NULL;
- CLASS_CHECK(xir_fixture_check(&denied, &m, &rejected, &d)==XR_XIR_BUDGET && rejected==NULL);
+ XrXirCompileContext denied = stage_context_limited(0);XrXirArtifact *rejected=NULL;
+ CLASS_CHECK(xir_fixture_check(&denied, &m, &rejected, &d)==XR_XIR_MEMORY_LIMIT && rejected==NULL);
  xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(special);xr_xir_compile_artifact_free(read);xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(checked);
 }
 

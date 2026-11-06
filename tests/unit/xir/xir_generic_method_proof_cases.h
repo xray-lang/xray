@@ -48,11 +48,11 @@ static void generic_method_proof_authority(void) {
     XrXirConstraintUse use = {&f->module,{XR_XIR_CONTEXT_FUNCTION,1,0},1,g.arguments,2};
     XrXirCompileContext budget = interface_context_default();
     CHECK(xr_xir_compile_constraints_prove(&budget, &context, &use)==XR_XIR_OK);
-    CHECK(stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes && interface_live == stage_owner_count);
+    CHECK(stage_stats(&budget).held_bytes == stage_owner_baseline.held_bytes && interface_live == stage_owner_count);
     g.function_constraints[1].markers |= XR_XIR_CONSTRAINT_ERROR;
     budget = interface_context_default();
     CHECK(xr_xir_compile_constraints_prove(&budget, &context, &use)==XR_XIR_BAD_TYPE);
-    CHECK(stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes && interface_live == stage_owner_count);
+    CHECK(stage_stats(&budget).held_bytes == stage_owner_baseline.held_bytes && interface_live == stage_owner_count);
     CHECK(implementation_semantic_status(f)==XR_XIR_BAD_TYPE);
     g.function_constraints[1] = g.own;
     /* A real body has only its own declaration constraints, not hidden seed facts. */
@@ -67,7 +67,7 @@ static void generic_method_proof_authority(void) {
     own_use.declaration = context.owner;
     budget = interface_context_default();
     CHECK(xr_xir_compile_constraints_prove(&budget, &context, &own_use)==XR_XIR_BAD_STRUCTURE);
-    CHECK(stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes && interface_live == stage_owner_count);
+    CHECK(stage_stats(&budget).held_bytes == stage_owner_baseline.held_bytes && interface_live == stage_owner_count);
     context.owner.member = 1; budget = interface_context_default();
     CHECK(xr_xir_compile_type_use_verify(&budget, &context, XR_XIR_I64)==XR_XIR_BAD_STRUCTURE);
     context.owner = (XrXirDeclarationContext){XR_XIR_CONTEXT_FUNCTION,1,1};
@@ -88,18 +88,17 @@ static void generic_method_proof_resources(void) {
         attempts = 0; fail_at = site ? site-1 : SIZE_MAX;
         XrXirStatus status = xr_xir_compile_constraints_prove(&budget, &context, &use);
         CHECK(status==(site ? XR_XIR_OUT_OF_MEMORY : XR_XIR_OK));
-        CHECK(interface_live == stage_owner_count && stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes);
+        CHECK(interface_live == stage_owner_count && stage_stats(&budget).held_bytes == stage_owner_baseline.held_bytes);
         if (!site) sites = attempts;
     }
     fail_at = SIZE_MAX; printf("Generic method proofs: %zu allocation failure sites\n",sites);
-    for (uint32_t mode = 0; mode < 2; ++mode) {
+    {
         GenericMethodProofFixture g; generic_method_proof_fixture(&g);
         XrXirProofContext context = {&g.base.module,{XR_XIR_CONTEXT_CONFORMANCE_METHOD,1,0}};
         XrXirConstraintUse use = {&g.base.module,{XR_XIR_CONTEXT_FUNCTION,1,0},1,g.arguments,2};
-        XrXirCompileContext budget = interface_context_default();
-        if (mode) budget = interface_context_limited(STAGE_ALLOCATED_BYTES,0,STAGE_WORK); else budget = interface_context_limited(STAGE_ALLOCATED_BYTES,STAGE_LIVE_BYTES,0);
-        CHECK(xr_xir_compile_constraints_prove(&budget, &context, &use)==XR_XIR_BUDGET);
-        CHECK(interface_live == stage_owner_count && stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes);
+        XrXirCompileContext budget = interface_context_limited(0);
+        CHECK(xr_xir_compile_constraints_prove(&budget, &context, &use)==XR_XIR_MEMORY_LIMIT);
+        CHECK(interface_live == stage_owner_count && stage_stats(&budget).held_bytes == stage_owner_baseline.held_bytes);
     }
 }
 static void generic_method_proof_alpha(void) {

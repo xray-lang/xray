@@ -49,7 +49,7 @@ static void type_inference_scalar_cases(void) {
         CHECK(inference_test_run(&request,&budget,output,2)==expected);
         if (expected==XR_XIR_OK) CHECK(output[0]==XR_XIR_STRING && output[1]==(mode==3 ? p0 : XR_XIR_I64));
         else CHECK(output[0]==XR_XIR_BOOL && output[1]==XR_XIR_BOOL);
-        CHECK(interface_live == stage_owner_count && stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes);
+        CHECK(interface_live == stage_owner_count && stage_stats(&budget).held_bytes == stage_owner_baseline.held_bytes);
     }
     request.pair_count = 1; pairs[0].actual = XR_XIR_STRING;
     XrXirCompileContext budget = interface_context_default();
@@ -77,14 +77,14 @@ static void type_inference_nested_cases(void) {
         output = XR_XIR_BOOL; budget = interface_context_default();
         CHECK(inference_test_run(&request,&budget,&output,1)==(site ? XR_XIR_OUT_OF_MEMORY : XR_XIR_OK));
         if (site) CHECK(output==XR_XIR_BOOL); else sites = attempts;
-        CHECK(interface_live == stage_owner_count && stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes);
+        CHECK(interface_live == stage_owner_count && stage_stats(&budget).held_bytes == stage_owner_baseline.held_bytes);
     }
     fail_at = SIZE_MAX; printf("Nested type inference: %zu allocation failure sites\n",sites);
-    for (uint32_t mode = 0; mode < 3; ++mode) {
-        budget = interface_context_default(); output = XR_XIR_BOOL;
-        if (!mode) budget = interface_context_limited(STAGE_ALLOCATED_BYTES,STAGE_LIVE_BYTES,0); else if (mode==1) budget = interface_context_limited(STAGE_ALLOCATED_BYTES,0,STAGE_WORK); else budget.limits.frame_bytes = 0;
-        CHECK(inference_test_run(&request,&budget,&output,1)==XR_XIR_BUDGET);
-        CHECK(interface_live == stage_owner_count && stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes && output==XR_XIR_BOOL);
+    for (uint32_t mode = 0; mode < 2; ++mode) {
+        budget = mode ? interface_context_default() : interface_context_limited(0); output = XR_XIR_BOOL;
+        if (mode) budget.limits.frame_bytes = 0;
+        CHECK(inference_test_run(&request,&budget,&output,1)==(mode ? XR_XIR_BUDGET : XR_XIR_MEMORY_LIMIT));
+        CHECK(interface_live == stage_owner_count && stage_stats(&budget).held_bytes == stage_owner_baseline.held_bytes && output==XR_XIR_BOOL);
     }
 }
 static void type_inference_callable_cases(void) {
@@ -119,7 +119,7 @@ static void type_inference_nominal_cases(void) {
     CHECK(inference_test_run(&request,&budget,&output,1)==XR_XIR_BAD_TYPE);
     CHECK(output==XR_XIR_BOOL && interface_live == stage_owner_count);
 }
-static void type_inference_symbol_and_work_cases(void) {
+static void type_inference_symbol_and_memory_cases(void) {
     XrXirType p0 = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     XrXirTypeNode nodes[2] = {0};
     for (uint32_t n = 0; n < 2; ++n) {
@@ -133,10 +133,10 @@ static void type_inference_symbol_and_work_cases(void) {
     CHECK(inference_test_run(&request,&measured,&output,1)==XR_XIR_OK && output==member_case_type(0));
     XrCompileResourceStats stats = stage_stats(&measured);
     interface_temporary_clean(&measured);
-    for (unsigned boundary = 0; boundary < 4; ++boundary) {
+    for (unsigned boundary = 0; boundary < 3; ++boundary) {
         XrXirCompileContext context = interface_exact_context(stats,boundary); output = XR_XIR_BOOL;
-        CHECK(inference_test_run(&request,&context,&output,1)==(boundary ? XR_XIR_BUDGET : XR_XIR_OK));
-        CHECK(output==(boundary ? XR_XIR_BOOL : member_case_type(0)));
+        CHECK(inference_test_run(&request,&context,&output,1)==(boundary == 1 ? XR_XIR_MEMORY_LIMIT : XR_XIR_OK));
+        CHECK(output==(boundary == 1 ? XR_XIR_BOOL : member_case_type(0)));
         interface_temporary_clean(&context);
     }
     request.caller_parameter_count = 0;
@@ -154,7 +154,7 @@ static void type_inference_maximum_parameter_cases(void) {
     InferenceTestBatch request = {NULL,prefix,count-1,1,count,&pair,1};
     XrXirCompileContext budget = interface_context_default();
     CHECK(inference_test_run(&request,&budget,output,count)==XR_XIR_OK);
-    CHECK(output[0]==XR_XIR_I64 && output[count-1]==last && stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes);
+    CHECK(output[0]==XR_XIR_I64 && output[count-1]==last && stage_stats(&budget).held_bytes == stage_owner_baseline.held_bytes);
     request.own_count = 2; budget = interface_context_default();
     CHECK(inference_test_run(&request,&budget,output,count)==XR_XIR_BAD_STRUCTURE);
     request.own_count = 1; request.caller_parameter_count = count-1; budget = interface_context_default();
@@ -190,7 +190,7 @@ static void type_inference_partial_cases(void) {
         attempts = 0; fail_at = site ? site-1 : SIZE_MAX;
         XrXirCompileContext budget = interface_context_default();
         CHECK(inference_partial_run(&budget)==(site ? XR_XIR_OUT_OF_MEMORY : XR_XIR_OK));
-        CHECK(interface_live == stage_owner_count && stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes);
+        CHECK(interface_live == stage_owner_count && stage_stats(&budget).held_bytes == stage_owner_baseline.held_bytes);
         if (!site) sites = attempts;
     }
     fail_at = SIZE_MAX; printf("Partial type inference: %zu allocation failure sites\n",sites);
@@ -202,7 +202,7 @@ static void type_inference_empty_prefix_cases(void) {
     CHECK(xr_xir_compile_inference_begin(&budget, &empty, &state)==XR_XIR_OK);
     CHECK(xr_xir_compile_inference_finalize(state, NULL, NULL, 0)==XR_XIR_OK);
     CHECK(xr_xir_compile_inference_finalize(state, NULL, NULL, 0)==XR_XIR_BAD_STRUCTURE);
-    xr_xir_compile_inference_dispose(state); CHECK(interface_live == stage_owner_count && stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes);
+    xr_xir_compile_inference_dispose(state); CHECK(interface_live == stage_owner_count && stage_stats(&budget).held_bytes == stage_owner_baseline.held_bytes);
     XrXirType prefix = XR_XIR_STRING;
     XrXirInferencePair pair = {(XrXirType)XR_XIR_TYPE_PARAMETER_BASE,XR_XIR_STRING};
     InferenceTestBatch fixed = {NULL,&prefix,1,0,0,&pair,1};
@@ -211,28 +211,27 @@ static void type_inference_empty_prefix_cases(void) {
         XrXirType output = XR_XIR_BOOL; budget = interface_context_default();
         CHECK(inference_test_run(&fixed,&budget,&output,1)==(conflict ? XR_XIR_BAD_TYPE : XR_XIR_OK));
         CHECK(output==(conflict ? XR_XIR_BOOL : XR_XIR_STRING));
-        CHECK(interface_live == stage_owner_count && stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes);
+        CHECK(interface_live == stage_owner_count && stage_stats(&budget).held_bytes == stage_owner_baseline.held_bytes);
     }
     fixed.pair_count = 0; XrXirType output = XR_XIR_BOOL; budget = interface_context_default();
     CHECK(inference_test_run(&fixed,&budget,&output,1)==XR_XIR_OK && output==prefix);
-    CHECK(interface_live == stage_owner_count && stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes);
+    CHECK(interface_live == stage_owner_count && stage_stats(&budget).held_bytes == stage_owner_baseline.held_bytes);
 }
 static void type_inference_failed_finalize_cases(void) {
     XrXirType p0 = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     XrXirInferenceRequest request = {.types=NULL,.own_count=1,.union_owner={0}};
-    for (uint32_t mode = 0; mode < 3; ++mode) {
+    for (uint32_t mode = 0; mode < 2; ++mode) {
         XrXirCompileContext budget = interface_context_default();
         XrXirInferenceState *state = NULL;
         CHECK(xr_xir_compile_inference_begin(&budget, &request, &state)==XR_XIR_OK);
         CHECK(xr_xir_compile_inference_observe(state, NULL, (XrXirInferencePair){p0,XR_XIR_I64})==XR_XIR_OK);
-        if (mode==1) interface_exhaust_work(&budget);
-        if (mode==2) fail_at = attempts; /* First allocation in this observation. */
-        XrXirStatus expected = mode==0 ? XR_XIR_BAD_TYPE : mode==1 ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+        if (mode) fail_at = attempts; /* First allocation in this observation. */
+        XrXirStatus expected = mode ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BAD_TYPE;
         CHECK(xr_xir_compile_inference_observe(state, NULL, (XrXirInferencePair){p0,XR_XIR_STRING})==expected);
         fail_at = SIZE_MAX;
         XrXirType output = XR_XIR_BOOL;
         CHECK(xr_xir_compile_inference_finalize(state, NULL, &output, 1)==expected && output==XR_XIR_BOOL);
-        xr_xir_compile_inference_dispose(state); CHECK(interface_live == stage_owner_count && stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes);
+        xr_xir_compile_inference_dispose(state); CHECK(interface_live == stage_owner_count && stage_stats(&budget).held_bytes == stage_owner_baseline.held_bytes);
     }
 }
 /* Fixed small shape, capped search: no private allocation sizes or post-return
@@ -240,11 +239,11 @@ static void type_inference_failed_finalize_cases(void) {
 static XrXirStatus inference_boundary_probe(const InferenceTestBatch *batch,
     uint32_t dimension, uint64_t cap) {
     XrXirCompileContext context = dimension ? interface_context_default() :
-        interface_context_limited(STAGE_ALLOCATED_BYTES,cap,STAGE_WORK);
+        interface_context_limited(cap);
     if (dimension) context.limits.frame_bytes = cap;
     XrXirType output = XR_XIR_BOOL;
     XrXirStatus status = inference_test_run(batch,&context,&output,1);
-    CHECK(status==XR_XIR_OK || status==XR_XIR_BUDGET);
+    CHECK(status==XR_XIR_OK || status==(dimension ? XR_XIR_BUDGET : XR_XIR_MEMORY_LIMIT));
     CHECK(output==(status==XR_XIR_OK ? XR_XIR_STRING : XR_XIR_BOOL));
     interface_temporary_clean(&context); return status;
 }
@@ -257,9 +256,16 @@ static void type_inference_exact_capacity_cases(void) {
     XrXirTypes types = {nodes,4,NULL,NULL};
     XrXirInferencePair pair = {member_case_type(1),member_case_type(3)};
     InferenceTestBatch batch = {&types,NULL,0,1,0,&pair,1};
+    XrXirCompileContext measured = interface_context_default(); XrXirType output = XR_XIR_BOOL;
+    CHECK(inference_test_run(&batch,&measured,&output,1)==XR_XIR_OK && output==XR_XIR_STRING);
+    XrCompileResourceStats stats = stage_stats(&measured);
+    CHECK(stats.peak_bytes > stage_owner_baseline.held_bytes);
+    uint64_t held_peak = stats.peak_bytes - stage_owner_baseline.held_bytes;
+    interface_temporary_clean(&measured);
     for (uint32_t dimension = 0; dimension < 2; ++dimension) {
-        uint64_t low = 0, high = 4096;
-        CHECK(inference_boundary_probe(&batch,dimension,low)==XR_XIR_BUDGET);
+        uint64_t low = 0, high = dimension ? 4096 : held_peak;
+        XrXirStatus denied = dimension ? XR_XIR_BUDGET : XR_XIR_MEMORY_LIMIT;
+        CHECK(inference_boundary_probe(&batch,dimension,low)==denied);
         CHECK(inference_boundary_probe(&batch,dimension,high)==XR_XIR_OK);
         for (uint32_t step = 0; step < 12 && high-low > 1; ++step) {
             uint64_t middle = low+(high-low)/2;
@@ -268,7 +274,7 @@ static void type_inference_exact_capacity_cases(void) {
         }
         CHECK(high==low+1 && high>0);
         CHECK(inference_boundary_probe(&batch,dimension,high)==XR_XIR_OK);
-        CHECK(inference_boundary_probe(&batch,dimension,high-1)==XR_XIR_BUDGET);
+        CHECK(inference_boundary_probe(&batch,dimension,high-1)==denied);
     }
 }
 static void type_inference_relocated_ids_case(void) {
@@ -289,7 +295,7 @@ static void type_inference_relocated_ids_case(void) {
     XrXirType output = XR_XIR_BOOL;
     CHECK(xr_xir_compile_inference_finalize(state, &current, &output, 1)==XR_XIR_OK);
     CHECK(output==member_case_type(0));
-    xr_xir_compile_inference_dispose(state); CHECK(interface_live == stage_owner_count && stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes);
+    xr_xir_compile_inference_dispose(state); CHECK(interface_live == stage_owner_count && stage_stats(&budget).held_bytes == stage_owner_baseline.held_bytes);
 }
 static void type_inference_callable_mode_admission_case(void) {
     XrXirType p0 = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
@@ -319,7 +325,7 @@ static void type_inference_callable_mode_admission_case(void) {
 static void type_inference_cases(void) {
     type_inference_scalar_cases(); type_inference_nested_cases();
     type_inference_callable_cases(); type_inference_nominal_cases();
-    type_inference_symbol_and_work_cases(); type_inference_maximum_parameter_cases();
+    type_inference_symbol_and_memory_cases(); type_inference_maximum_parameter_cases();
     type_inference_partial_cases();
     type_inference_empty_prefix_cases(); type_inference_failed_finalize_cases();
     type_inference_exact_capacity_cases(); type_inference_relocated_ids_case();

@@ -107,11 +107,11 @@ static void interface_closure_resources(void) {
     XrCompileResourceStats stats = stage_stats(&measured);
     xr_xir_compile_interface_closure_free(closure); closure = NULL;
     interface_temporary_clean(&measured);
-    for (unsigned boundary = 0; boundary < 4; ++boundary) {
+    for (unsigned boundary = 0; boundary < 3; ++boundary) {
         XrXirCompileContext context = interface_exact_context(stats,boundary);
         CHECK(xr_xir_compile_interface_closure_build(&context,&request,&closure)==
-            (boundary ? XR_XIR_BUDGET : XR_XIR_OK));
-        if (boundary) CHECK(!closure);
+            (boundary == 1 ? XR_XIR_MEMORY_LIMIT : XR_XIR_OK));
+        if (boundary == 1) CHECK(!closure);
         xr_xir_compile_interface_closure_free(closure); closure = NULL;
         interface_temporary_clean(&context);
     }
@@ -150,9 +150,6 @@ static void interface_closure_deep(void) {
     CHECK(xr_xir_interface_closure_application_count(closure)==DEPTH);
     CHECK(xr_xir_interface_closure_requirement_count(closure)==1);
     xr_xir_compile_interface_closure_free(closure); closure = NULL; CHECK(interface_live == stage_owner_count);
-    budget = interface_context_limited(STAGE_ALLOCATED_BYTES,STAGE_LIVE_BYTES,128);
-    CHECK(xr_xir_compile_interface_closure_build(&budget, &(XrXirInterfaceClosureRoots){&table,&f.types,&root,1,0}, &closure)==XR_XIR_BUDGET);
-    CHECK(!closure && interface_live == stage_owner_count);
 }
 static void interface_closure_cases(void) {
     interface_closure_multiple_roots(); interface_closure_distinct_applications();

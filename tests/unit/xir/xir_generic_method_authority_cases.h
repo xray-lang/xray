@@ -24,14 +24,14 @@ static void generic_method_self_bound_cases(void) {
     XrXirConstraintUse use = {&f->module,{XR_XIR_CONTEXT_FUNCTION,1,0},1,g.arguments,2};
     XrXirCompileContext budget = interface_context_default();
     CHECK(xr_xir_compile_constraints_prove(&budget, &context, &use)==XR_XIR_OK);
-    CHECK(interface_live == stage_owner_count && stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes);
+    CHECK(interface_live == stage_owner_count && stage_stats(&budget).held_bytes == stage_owner_baseline.held_bytes);
     /* No scalar implementation exists; the requirement's self bound is no fact. */
     XrXirType scalar = XR_XIR_I64;
     context.owner = (XrXirDeclarationContext){XR_XIR_CONTEXT_CLOSED,0,0};
     use = (XrXirConstraintUse){&f->module,{XR_XIR_CONTEXT_INTERFACE_METHOD,0,0},0,&scalar,1};
     budget = interface_context_default();
     CHECK(xr_xir_compile_constraints_prove(&budget, &context, &use)==XR_XIR_BAD_TYPE);
-    CHECK(interface_live == stage_owner_count && stage_stats(&budget).live_bytes == stage_owner_baseline.live_bytes);
+    CHECK(interface_live == stage_owner_count && stage_stats(&budget).held_bytes == stage_owner_baseline.held_bytes);
     /* Candidate-only marker cannot be inferred from a declared interface fact. */
     g.function_constraints[1].markers = XR_XIR_CONSTRAINT_SENDABLE;
     CHECK(implementation_semantic_status(f)==XR_XIR_BAD_TYPE);
@@ -54,7 +54,7 @@ static void generic_method_sibling_cases(void) {
     CHECK(xr_xir_compile_constraints_prove(&budget, &context, &use)==XR_XIR_BAD_TYPE);
     CHECK(interface_live == stage_owner_count);
 }
-static void generic_method_work_boundary_cases(void) {
+static void generic_method_held_boundary_cases(void) {
     GenericMethodProofFixture g; generic_method_proof_fixture(&g);
     XrXirProofContext context = {&g.base.module,{XR_XIR_CONTEXT_CONFORMANCE_METHOD,1,0}};
     XrXirConstraintUse use = {&g.base.module,{XR_XIR_CONTEXT_FUNCTION,1,0},1,g.arguments,2};
@@ -62,15 +62,14 @@ static void generic_method_work_boundary_cases(void) {
     CHECK(xr_xir_compile_constraints_prove(&measured,&context,&use)==XR_XIR_OK);
     XrCompileResourceStats stats = stage_stats(&measured);
     interface_temporary_clean(&measured);
-    for (unsigned boundary = 0; boundary < 4; ++boundary) {
+    for (unsigned boundary = 0; boundary < 3; ++boundary) {
         XrXirCompileContext compile = interface_exact_context(stats,boundary);
-        CHECK(xr_xir_compile_constraints_prove(&compile,&context,&use)==(boundary ? XR_XIR_BUDGET : XR_XIR_OK));
-        if (!boundary) CHECK(interface_work(&compile)==stats.work-stage_owner_baseline.work);
+        CHECK(xr_xir_compile_constraints_prove(&compile,&context,&use)==(boundary == 1 ? XR_XIR_MEMORY_LIMIT : XR_XIR_OK));
         interface_temporary_clean(&compile);
     }
 }
 static void generic_method_authority_cases(void) {
     generic_method_self_bound_cases(); generic_method_sibling_cases();
-    generic_method_work_boundary_cases();
+    generic_method_held_boundary_cases();
 }
 #endif // XIR_GENERIC_METHOD_AUTHORITY_CASES_H

@@ -108,10 +108,10 @@ static void interface_member_resources(void) {
     CHECK(xr_xir_compile_interfaces_verify_members_verified(&measured,&f.table,&f.types)==XR_XIR_OK);
     XrCompileResourceStats stats = stage_stats(&measured);
     interface_temporary_clean(&measured);
-    for (unsigned boundary = 0; boundary < 4; ++boundary) {
+    for (unsigned boundary = 0; boundary < 3; ++boundary) {
         XrXirCompileContext context = interface_exact_context(stats,boundary);
         CHECK(xr_xir_compile_interfaces_verify_members_verified(&context,&f.table,&f.types)==
-            (boundary ? XR_XIR_BUDGET : XR_XIR_OK));
+            (boundary == 1 ? XR_XIR_MEMORY_LIMIT : XR_XIR_OK));
         interface_temporary_clean(&context);
     }
     printf("Interface member composition: %zu allocation failure sites\n",sites);
