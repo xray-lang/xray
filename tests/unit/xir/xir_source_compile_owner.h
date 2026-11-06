@@ -9,30 +9,58 @@
 #ifndef XIR_SOURCE_COMPILE_OWNER_H
 #define XIR_SOURCE_COMPILE_OWNER_H
 #include "base/xmalloc.h"
+#include "base/xhash.h"
 #include "xir/xxir_compile_context.h"
 #include <string.h>
 typedef struct SourceFixtureCompileAllocation { void *pointer; size_t bytes; } SourceFixtureCompileAllocation;
-static SourceFixtureCompileAllocation source_fixture_compile_allocations[65536];
+static SourceFixtureCompileAllocation *source_fixture_compile_allocations;
+static size_t source_fixture_compile_capacity;
 static size_t source_fixture_compile_live, source_fixture_compile_bytes, source_fixture_compile_attempts;
 static size_t source_fixture_compile_peak_blocks,source_fixture_compile_peak_bytes;
 static const char *source_fixture_compile_phase="ledger",*source_fixture_compile_peak_phase="ledger";
 static size_t source_fixture_compile_fail_at=SIZE_MAX;
 static bool source_fixture_compile_injected;
-static size_t source_fixture_compile_slot(const void *pointer) {
-    uint64_t key = (uint64_t)(uintptr_t)pointer;
-    key ^= key >> 33; key *= UINT64_C(0xff51afd7ed558ccd); key ^= key >> 33;
-    return (size_t)key & 65535;
+static size_t source_fixture_compile_slot(const void *pointer,size_t capacity) {
+    const uintptr_t key=(uintptr_t)pointer;
+    return (size_t)xr_hash_bytes64(&key,sizeof(key)) & (capacity-1);
+}
+/* Observer storage stays outside the compiler ledger and fault ordinals. */
+static void source_fixture_compile_reserve(void) {
+    if (source_fixture_compile_live<source_fixture_compile_capacity/2) return;
+    CHECK(source_fixture_compile_capacity<=SIZE_MAX/2);
+    size_t capacity=source_fixture_compile_capacity ? source_fixture_compile_capacity*2 : 1024;
+    CHECK(capacity<=SIZE_MAX/sizeof(*source_fixture_compile_allocations));
+    SourceFixtureCompileAllocation *allocations=xr_malloc(capacity*sizeof(*allocations));
+    CHECK(allocations);
+    memset(allocations,0,capacity*sizeof(*allocations));
+    for (size_t i=0;i<source_fixture_compile_capacity;++i) {
+        SourceFixtureCompileAllocation entry=source_fixture_compile_allocations[i];
+        if (!entry.pointer) continue;
+        size_t slot=source_fixture_compile_slot(entry.pointer,capacity);
+        while (allocations[slot].pointer) slot=(slot+1)&(capacity-1);
+        allocations[slot]=entry;
+    }
+    xr_free(source_fixture_compile_allocations);
+    source_fixture_compile_allocations=allocations;
+    source_fixture_compile_capacity=capacity;
 }
 static void *source_fixture_compile_malloc(size_t bytes) {
     if (source_fixture_compile_attempts++==source_fixture_compile_fail_at) {
         source_fixture_compile_injected=true; return NULL;
     }
+    source_fixture_compile_reserve();
     void *pointer = xr_malloc(bytes);
-    if (!pointer) return NULL;
-    if(source_fixture_compile_live>=32768)fprintf(stderr,"Source compiler observer full: blocks=%zu bytes=%zu attempts=%zu\n",source_fixture_compile_live,source_fixture_compile_bytes,source_fixture_compile_attempts);
-    CHECK(source_fixture_compile_live < 32768 && bytes <= SIZE_MAX - source_fixture_compile_bytes);
-    size_t slot = source_fixture_compile_slot(pointer);
-    while (source_fixture_compile_allocations[slot].pointer) slot = (slot + 1) & 65535;
+    if (!pointer) {
+        if (!source_fixture_compile_live) {
+            xr_free(source_fixture_compile_allocations);
+            source_fixture_compile_allocations=NULL;
+            source_fixture_compile_capacity=0;
+        }
+        return NULL;
+    }
+    CHECK(bytes<=SIZE_MAX-source_fixture_compile_bytes);
+    size_t slot = source_fixture_compile_slot(pointer,source_fixture_compile_capacity);
+    while (source_fixture_compile_allocations[slot].pointer) slot = (slot + 1) & (source_fixture_compile_capacity-1);
     source_fixture_compile_allocations[slot] = (SourceFixtureCompileAllocation){pointer, bytes};
     ++source_fixture_compile_live; source_fixture_compile_bytes += bytes;
     if(source_fixture_compile_live>source_fixture_compile_peak_blocks){source_fixture_compile_peak_blocks=source_fixture_compile_live;source_fixture_compile_peak_phase=source_fixture_compile_phase;}
@@ -41,18 +69,26 @@ static void *source_fixture_compile_malloc(size_t bytes) {
 }
 static void source_fixture_compile_free(void *pointer) {
     if (!pointer) return;
-    size_t hole = source_fixture_compile_slot(pointer);
+    CHECK(source_fixture_compile_capacity && source_fixture_compile_allocations);
+    size_t mask=source_fixture_compile_capacity-1;
+    size_t hole = source_fixture_compile_slot(pointer,source_fixture_compile_capacity);
     while (source_fixture_compile_allocations[hole].pointer != pointer) {
-        CHECK(source_fixture_compile_allocations[hole].pointer); hole = (hole + 1) & 65535;
+        CHECK(source_fixture_compile_allocations[hole].pointer); hole = (hole + 1) & mask;
     }
     CHECK(source_fixture_compile_live && source_fixture_compile_bytes >= source_fixture_compile_allocations[hole].bytes);
     --source_fixture_compile_live; source_fixture_compile_bytes -= source_fixture_compile_allocations[hole].bytes;
-    for (size_t next = (hole + 1) & 65535; source_fixture_compile_allocations[next].pointer; next = (next + 1) & 65535) {
-        size_t home = source_fixture_compile_slot(source_fixture_compile_allocations[next].pointer);
+    for (size_t next = (hole + 1) & mask; source_fixture_compile_allocations[next].pointer; next = (next + 1) & mask) {
+        size_t home = source_fixture_compile_slot(source_fixture_compile_allocations[next].pointer,source_fixture_compile_capacity);
         bool stays = hole <= next ? hole < home && home <= next : hole < home || home <= next;
         if (!stays) { source_fixture_compile_allocations[hole] = source_fixture_compile_allocations[next]; hole = next; }
     }
     source_fixture_compile_allocations[hole] = (SourceFixtureCompileAllocation){0}; xr_free(pointer);
+    if (!source_fixture_compile_live) {
+        CHECK(!source_fixture_compile_bytes);
+        xr_free(source_fixture_compile_allocations);
+        source_fixture_compile_allocations=NULL;
+        source_fixture_compile_capacity=0;
+    }
 }
 #pragma push_macro("xr_malloc")
 #pragma push_macro("xr_free")
