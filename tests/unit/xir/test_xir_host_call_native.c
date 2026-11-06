@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
     CHECK(argc == 1 || (argc == 2 && !strcmp(argv[1], "--fatal-drop")));
     XrXirProgram *program = NULL;
     XrCompileResources *resources=NULL;
-    XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};
+    XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY, 0, true};
     CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     CHECK(xr_xir_compile_program_seal(&context,&host_call_source_program,&program) == XR_XIR_OK);

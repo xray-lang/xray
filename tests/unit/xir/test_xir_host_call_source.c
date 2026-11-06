@@ -27,7 +27,7 @@
 #include "xir_persistent_host_faults.h"
 static XrXirArtifact *host_source(void) {
     XrCompileResources *resources=NULL;
-    XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};
+    XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY, 0, true};
     CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     XrCompilerSession *session=NULL;

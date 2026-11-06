@@ -34,7 +34,7 @@ static XrXirCallStatus finish_test(XrXirInstance *instance) {
 }
 int main(int argc, char **argv) {
     CHECK(argc == 3 || argc == 4);
-    XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
     XrCompileResources *resources = NULL;
     CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
     XrXirCompileContext context = {resources, xr_xir_compile_default_limits()};

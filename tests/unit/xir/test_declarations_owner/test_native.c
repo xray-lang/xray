@@ -32,7 +32,7 @@ static XrXirCallStatus finish_test(XrXirInstance *instance) {
     return result.outcome.status;
 }
 int main(void) {
-    XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};
+    XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY, 0, true};
     XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     XrXirProgram *program=NULL;
