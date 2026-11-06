@@ -14,8 +14,8 @@
 static XrXirTypeArena *deep_arena(XrXirDomain *domain,bool writable) {
  XrXirNominalFieldIdentity cf[]={{{"count",5},writable?XR_XIR_FIELD_MUTABLE:0},{{"text",4},XR_XIR_FIELD_MUTABLE}};
  XrXirNominalFieldIdentity sf[]={{{"object",6},0},{{"label",5},0}};
- XrXirNominalIdentity ids[]={{{"deep",4},{"Counter",7},1,0,cf,2,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL,{0}},
- {{"deep",4},{"Holder",6},1,0,sf,2,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}}};
+ XrXirNominalIdentity ids[]={{{"deep",4},{"Counter",7},1,0,cf,2,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL,{0},.parent=0},
+ {{"deep",4},{"Holder",6},1,0,sf,2,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0},.parent=0}};
  XrXirNominalTable table={NULL,2,ids};XrXirType cfields[]={XR_XIR_I64,XR_XIR_STRING},sfields[]={(XrXirType)256,XR_XIR_STRING};
  XrXirTypeNode nodes[]={
  {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,NULL,0,cfields,2}},
@@ -44,7 +44,7 @@ static XrXirValueStatus deep_sequence(XrXirTypeArena *arena,XrXirDomain *domain,
  STEP(xr_xir_array_len(&v[1],&a,&n));CHECK(n==1);
  STEP(xr_xir_array_get(&v[4],1,&a,&v[5],&fault));CHECK(v[5].payload==v[0].payload);
  XrXirValue forty_one={XR_XIR_I64,0,41};size_t setter_calls=runtime_attempts;
- STEP(xr_xir_class_set(&v[5],0,&forty_one,&a));CHECK(runtime_attempts==setter_calls+1);
+ STEP(xr_xir_class_set(&v[5],0,&forty_one,&a));CHECK(runtime_attempts==setter_calls);
  XrXirValue result={0};STEP(xr_xir_class_get(&v[0],0,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&v[0]),.work=10000},&result));CHECK(result.type==XR_XIR_I64&&result.payload==41);xr_xir_value_drop(&result);
  XrXirValue holder_fields[]={v[0],text};STEP(xr_xir_struct_new((XrXirType)259,holder_fields,2,&a,&v[6]));
  STEP(xr_xir_array_new((XrXirType)260,&v[6],1,&a,&v[7]));STEP(xr_xir_value_copy(&v[7],&v[8]));
@@ -82,17 +82,19 @@ static void class_cross_arena_cases(void) {
  bad=a;bad.domain=other;CHECK(xr_xir_class_set(&object,0,&fields[0],&bad)==XR_XIR_VALUE_BAD_ARGUMENT);
  bad=a;bad.domain=NULL;CHECK(xr_xir_class_set(&object,0,&fields[0],&bad)==XR_XIR_VALUE_BAD_ARGUMENT);
  CHECK(xr_xir_class_get(&object,2,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&object),.work=10000},&out)==XR_XIR_VALUE_BAD_ARGUMENT && !out.type);
- size_t before=runtime_attempts;CHECK(xr_xir_class_set(&object,1,&text,&a)==XR_XIR_VALUE_OK);CHECK(runtime_attempts==before+1);
- /* This fixed class graph requires one receiver traversal frame before commit. */
+ size_t before=runtime_attempts;CHECK(xr_xir_class_set(&object,1,&text,&a)==XR_XIR_VALUE_OK);CHECK(runtime_attempts==before);
+ /* The shallow receiver reserves its first traversal frame on the stack.
+  * Heap failure cannot affect it; work and scratch refusal remain below. */
  size_t base_live=runtime_live,base_bytes=runtime_bytes;
  XrXirValue replacement={XR_XIR_I64,0,41},scalar={0};
  runtime_attempts=0;runtime_fail_at=0;
- CHECK(xr_xir_class_set(&object,0,&replacement,&a)==XR_XIR_VALUE_OOM && runtime_attempts==1);
+ CHECK(xr_xir_class_set(&object,0,&replacement,&a)==XR_XIR_VALUE_OK && runtime_attempts==0);
  runtime_fail_at=SIZE_MAX;CHECK(runtime_live==base_live && runtime_bytes==base_bytes);
  CHECK(xr_xir_class_get(&object,0,&(XrXirValueAdmission){.arena=arena,.work=10000},&scalar)==XR_XIR_VALUE_OK);
- CHECK(scalar.type==XR_XIR_I64 && scalar.payload==40);xr_xir_value_drop(&scalar);
+ CHECK(scalar.type==XR_XIR_I64 && scalar.payload==41);xr_xir_value_drop(&scalar);
+ CHECK(xr_xir_class_set(&object,0,&fields[0],&a)==XR_XIR_VALUE_OK);
  runtime_attempts=0;runtime_fail_at=0;
- CHECK(xr_xir_class_set(&object,1,&text,&a)==XR_XIR_VALUE_OOM && runtime_attempts==1);
+ CHECK(xr_xir_class_set(&object,1,&text,&a)==XR_XIR_VALUE_OK && runtime_attempts==0);
  runtime_fail_at=SIZE_MAX;CHECK(runtime_live==base_live && runtime_bytes==base_bytes);
  XrXirValue stable={0};CHECK(xr_xir_class_get(&object,1,&(XrXirValueAdmission){.arena=arena,.work=10000},&stable)==XR_XIR_VALUE_OK);
  CHECK(stable.type==text.type && stable.payload==text.payload);xr_xir_value_drop(&stable);

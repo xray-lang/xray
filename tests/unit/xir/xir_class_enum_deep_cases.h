@@ -17,9 +17,9 @@ static XrXirTypeArena *class_enum_arena(XrXirDomain *domain) {
  XrXirNominalFieldIdentity ef[]={{{"object",6},0},{{"text",4},0},{{"holder",6},0}};
  XrXirNominalVariant variants[]={{{"Empty",5},0,0},{{"Object",6},0,1},{{"Text",4},1,1},{{"Aggregate",9},2,1}};
  XrXirNominalIdentity ids[]={
- {{"deep",4},{"Counter",7},1,0,cf,2,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL,{0}},
- {{"deep",4},{"Holder",6},1,0,sf,2,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}},
- {{"deep",4},{"Choice",6},1,0,ef,3,XR_XIR_NOMINAL_ENUM,variants,4,0,{0}}};
+ {{"deep",4},{"Counter",7},1,0,cf,2,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL,{0},.parent=0},
+ {{"deep",4},{"Holder",6},1,0,sf,2,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0},.parent=0},
+ {{"deep",4},{"Choice",6},1,0,ef,3,XR_XIR_NOMINAL_ENUM,variants,4,0,{0},.parent=0}};
  XrXirNominalTable table={NULL,3,ids};
  XrXirType cf_types[]={XR_XIR_I64,XR_XIR_STRING},sf_types[]={(XrXirType)256,XR_XIR_STRING};
  XrXirType ef_types[]={(XrXirType)256,XR_XIR_STRING,(XrXirType)257};
