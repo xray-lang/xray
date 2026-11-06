@@ -47,7 +47,7 @@ static void go_bool_closed_outcome(const XrXirValue *task) {
 }
 int main(void) {
     CHECK(!runtime_live && !runtime_bytes && !effects_compile_live && !effects_compile_bytes);
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     XrXirProgram *program = NULL;
     CHECK(xr_xir_compile_program_seal(context, &go_bool_native_program, &program) == XR_XIR_OK);
     XrXirInstance *instances[2] = {0}; GoBoolOutput logs[2] = {0};

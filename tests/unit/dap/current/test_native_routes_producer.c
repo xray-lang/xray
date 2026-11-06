@@ -19,9 +19,9 @@
 
 int main(int argc,char **argv) {
     CHECK(argc==2);
-    const XrXirCompileContext *context=effects_source_owner(67108864,128000000);
+    const XrXirCompileContext *context=effects_source_owner();
     XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_NATIVE_TASK_FIXTURE_DIR};
     XrXirSourceRequest request={session,XR_NATIVE_TASK_FIXTURE_DIR "/native_task_throw.xr",&authority,
         context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
@@ -42,8 +42,8 @@ int main(int argc,char **argv) {
     status=xr_xir_compile_lower(closed,&target, NULL,&lowered,&lower_diagnostic);
     if(status!=XR_XIR_OK) {
         XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(context->resources,&stats)==XR_COMPILE_RESOURCE_OK);
-        fprintf(stderr,"native route Lower: status=%u function=%u instruction=%u reason=%u work=%llu\n",
-            status,lower_diagnostic.function,lower_diagnostic.instruction,lower_diagnostic.reason,(unsigned long long)stats.work);
+        fprintf(stderr,"native route Lower: status=%u function=%u instruction=%u reason=%u peak=%llu\n",
+            status,lower_diagnostic.function,lower_diagnostic.instruction,lower_diagnostic.reason,(unsigned long long)stats.peak_bytes);
     }
     CHECK(status==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);

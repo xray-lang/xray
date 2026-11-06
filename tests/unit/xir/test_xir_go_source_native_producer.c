@@ -11,7 +11,7 @@
 #include "xir_go_source_native_pipeline.h"
 int main(int argc, char **argv) {
     CHECK(argc == 3);
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     uint32_t entry = UINT32_MAX;
     XrXirArtifact *lowered = source17_lower(context, argv[2], &entry);
     char symbol[256]; CHECK(snprintf(symbol, sizeof(symbol), "source17_%s", argv[2]) > 0);

@@ -33,7 +33,7 @@ static XrXirArtifact *stdlib_program(const XrXirCompileContext *context,
     const char *root, const char *entry, uint32_t ids[6]) {
     XrXirLibraryCatalog *catalog = NULL;
     CHECK(xir_stdlib_library_catalog_new(context,root,&catalog) == XR_XIR_OK);
-    XrCompilerSession *session = NULL; CHECK(xr_compile_session_new(context->resources,&session) == XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session = NULL; CHECK(xr_compile_session_new(context->resources,&session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,root};
     XrXirSourceRequest request = {session,entry,&authority,context,root,NULL,XR_XIR_PROGRAM,catalog};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
@@ -137,7 +137,7 @@ static void stdlib_escape(XrXirProgram *program, uint32_t writer) {
 }
 int main(int argc, char **argv) {
     CHECK(argc == 3);
-    XrCompileResourceLimits caps = {UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+    XrCompileResourceLimits caps = {XR_COMPILE_MEMORY_FINITE,UINT64_C(8388608),true};
     XrXirCompileContext context = {0}; context.limits = xr_xir_compile_default_limits();
     CHECK(xr_compile_resources_new(&caps,&context.resources) == XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats initial = {0}; CHECK(xr_compile_resources_stats(context.resources,&initial) == XR_COMPILE_RESOURCE_OK);
@@ -151,9 +151,9 @@ int main(int argc, char **argv) {
         printf("stdlib mode=%u twoInstances provider4 vector3 owns producer-death baseline\n",mode);
     }
     XrCompileResourceStats final = {0}; CHECK(xr_compile_resources_stats(context.resources,&final) == XR_COMPILE_RESOURCE_OK);
-    CHECK(final.live_bytes == initial.live_bytes); xr_compile_resources_release(context.resources); context.resources = NULL;
+    CHECK(final.held_bytes == initial.held_bytes); xr_compile_resources_release(context.resources); context.resources = NULL;
     CHECK(!effects_compile_live && !effects_compile_bytes && !runtime_live && !runtime_bytes);
-    printf("stdlib normal allocated=%llu peak=%llu work=%llu ledger baseline\n",(unsigned long long)final.allocated_bytes,
-        (unsigned long long)final.peak_bytes,(unsigned long long)final.work);
+    printf("stdlib normal allocated=%llu peak=%llu ledger baseline\n",(unsigned long long)final.allocated_bytes,
+        (unsigned long long)final.peak_bytes);
     return 0;
 }

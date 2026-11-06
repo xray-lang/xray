@@ -102,7 +102,7 @@ static void request(const char *text,const char *command,bool success) {
 }
 static void setup(unsigned mode) {
     memset(&fixture,0,sizeof(fixture));fixture.mode=mode;
-    const XrXirCompileContext *context=effects_source_owner(67108864,128000000);
+    const XrXirCompileContext *context=effects_source_owner();
     XrSourceCompilerConfig compiler_config={*context,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},XR_SOURCE_STDLIB,
         xr_source_compile_default_manifest_limits()};XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};
     CHECK(xr_source_compiler_new(&compiler_config,NULL,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);

@@ -74,7 +74,7 @@ static SourceNativeCost source_native_operation(unsigned index, size_t fault,
     CHECK(!runtime_live && !runtime_bytes && !effects_compile_live && !effects_compile_bytes);
     SourceNativeCost cost = {0}; XrXirProgram *program = NULL;
     const SourceTaskOracle *oracle = &source_task_oracles[index];
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     CHECK(xr_xir_compile_program_seal(context, source17_specs[index], &program) == XR_XIR_OK);
     XrXirInstanceConfig config;
     CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);

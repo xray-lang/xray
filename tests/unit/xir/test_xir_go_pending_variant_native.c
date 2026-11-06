@@ -102,7 +102,7 @@ static XrXirProgram *variant_vm(const XrXirCompileContext *context, unsigned mod
 static void variant_case(unsigned kind, bool vm) {
     CHECK(kind < 10 && !runtime_live && !runtime_bytes && !effects_compile_live && !effects_compile_bytes);
     unsigned mode = kind == 1 || kind == 5 || kind == 6 ? 1 : kind == 2 ? 2 : 0;
-    const XrCompileResourceLimits limits = {UINT64_C(67108864), UINT64_C(8388608), UINT64_C(128000000)};
+    const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE,UINT64_C(8388608),true};
     XrXirCompileContext context = {.limits = xr_xir_compile_default_limits()};
     CHECK(xr_compile_resources_new(&limits, &context.resources) == XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats baseline, final;
@@ -139,7 +139,7 @@ static void variant_case(unsigned kind, bool vm) {
     XrXirCallStatus freed = xr_xir_instance_free(log.instance);
     CHECK(!runtime_live && !runtime_bytes);
     CHECK(xr_compile_resources_stats(context.resources, &final) == XR_COMPILE_RESOURCE_OK);
-    CHECK(final.live_bytes == baseline.live_bytes);
+    CHECK(final.held_bytes == baseline.held_bytes);
     xr_compile_resources_release(context.resources);
     CHECK(!effects_compile_live && !effects_compile_bytes);
     printf("variant vm=%u kind=%u primary=%u first_count=%u incomplete=%u request=%u restart=%u second=%u free=%u physical=0/0\n",

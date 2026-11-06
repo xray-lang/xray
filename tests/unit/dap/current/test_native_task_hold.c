@@ -126,7 +126,7 @@ static XrXirOutputStatus task_output(void *owner,const XrXirOutputGroup *group) 
     return XR_XIR_OUTPUT_OK;
 }
 static void task_fixture(NativeTaskFixture *f,unsigned count,bool observed,unsigned backend) {
-    memset(f,0,sizeof(*f));native_tasks=f;f->context=effects_source_owner(67108864,128000000);
+    memset(f,0,sizeof(*f));native_tasks=f;f->context=effects_source_owner();
     f->backend=backend;
     CHECK(native_task_program.entry_count==NT_FUNCTIONS);
     CHECK(xr_compile_resources_calloc(f->context->resources,NT_FUNCTIONS,sizeof(*f->entries),(void **)&f->entries)==XR_COMPILE_RESOURCE_OK);
@@ -152,8 +152,8 @@ static void task_fixture(NativeTaskFixture *f,unsigned count,bool observed,unsig
     XrXirProgram *program=NULL;XrXirStatus status=xr_xir_compile_program_seal(f->context,&spec,&program);
     if(status!=XR_XIR_OK) {
         XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(f->context->resources,&stats)==XR_COMPILE_RESOURCE_OK);
-        fprintf(stderr,"native Task receive: backend=%u status=%u allocated=%llu live=%llu work=%llu\n",
-            backend,status,(unsigned long long)stats.allocated_bytes,(unsigned long long)stats.live_bytes,(unsigned long long)stats.work);
+        fprintf(stderr,"native Task receive: backend=%u status=%u allocated=%llu held=%llu peak=%llu\n",
+            backend,status,(unsigned long long)stats.allocated_bytes,(unsigned long long)stats.held_bytes,(unsigned long long)stats.peak_bytes);
     }
     CHECK(status==XR_XIR_OK);
     for(unsigned i=0;i<count;++i) {

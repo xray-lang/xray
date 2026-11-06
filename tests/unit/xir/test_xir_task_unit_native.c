@@ -49,7 +49,7 @@ static void unit_native_escape(const XrXirValue *value, bool error) {
 }
 static void unit_native_execute(unsigned index) {
     const UnitNativeOracle *oracle = &unit_native_oracles[index];
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     XrXirProgram *program = NULL;
     CHECK(xr_xir_compile_program_seal(context, task_unit_native_specs[index], &program) == XR_XIR_OK);
     XrXirInstance *instances[2] = {0}; XrXirValue values[2] = {{0}}; unsigned outputs[2] = {0};

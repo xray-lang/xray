@@ -94,7 +94,7 @@ static PendingFacts pending_execute(XrXirInstance *instance, PendingLog *output)
 }
 static void pending_case(unsigned mode, bool vm) {
     CHECK(!runtime_live && !runtime_bytes && !effects_compile_live && !effects_compile_bytes);
-    const XrCompileResourceLimits limits = {UINT64_C(67108864), UINT64_C(8388608), UINT64_C(128000000)};
+    const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE,UINT64_C(8388608),true};
     XrXirCompileContext context = {.limits = xr_xir_compile_default_limits()};
     CHECK(xr_compile_resources_new(&limits, &context.resources) == XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats baseline, final;
@@ -116,7 +116,7 @@ static void pending_case(unsigned mode, bool vm) {
     for (unsigned i = 0; i < 2; ++i) facts[i] = pending_execute(instances[i], &outputs[i]);
     CHECK(!runtime_live && !runtime_bytes);
     CHECK(xr_compile_resources_stats(context.resources, &final) == XR_COMPILE_RESOURCE_OK);
-    CHECK(final.live_bytes == baseline.live_bytes);
+    CHECK(final.held_bytes == baseline.held_bytes);
     xr_compile_resources_release(context.resources);
     CHECK(!effects_compile_live && !effects_compile_bytes);
     for (unsigned i = 0; i < 2; ++i) {

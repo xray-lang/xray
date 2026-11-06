@@ -16,7 +16,7 @@
 #include "../../xir/xir_go_source_native_compile_owner.h"
 int main(int argc,char **argv) {
     CHECK(argc==2);
-    const XrXirCompileContext *context=effects_source_owner(67108864,128000000);
+    const XrXirCompileContext *context=effects_source_owner();
     XrSourceCompilerConfig config={*context,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},XR_SOURCE_STDLIB,
         xr_source_compile_default_manifest_limits()};
     XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};

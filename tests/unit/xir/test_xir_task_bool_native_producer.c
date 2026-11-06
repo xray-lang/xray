@@ -12,7 +12,7 @@
 #include "xir_task_bool_source_pipeline.h"
 int main(int argc, char **argv) {
     CHECK(argc == 3);
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     uint32_t entries[3] = {UINT32_MAX, UINT32_MAX, UINT32_MAX};
     XrXirArtifact *lowered = go_bool_source_lower(context, entries);
     XrXirCSource output = {0};

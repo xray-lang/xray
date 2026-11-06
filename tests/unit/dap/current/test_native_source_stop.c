@@ -53,8 +53,8 @@ static void source_exception(XrXirVmDebugSnapshot *snapshot) {
 }
 static void source_new(NativeSourceFixture *f,unsigned backend,bool mapped) {
     memset(f,0,sizeof(*f));f->child_native=backend!=2;
-    const XrXirCompileContext *context=effects_source_owner(67108864,128000000);
-    XrCompilerSession *compiler=NULL;CHECK(xr_compile_session_new(context->resources,&compiler)==XR_COMPILER_SESSION_OK);
+    const XrXirCompileContext *context=effects_source_owner();
+    XrCompilerSession *compiler=NULL;CHECK(xr_compile_session_new(context->resources,&compiler)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_NATIVE_TASK_FIXTURE_DIR};
     XrXirSourceRequest request={compiler,XR_NATIVE_TASK_FIXTURE_DIR "/native_task_throw.xr",&authority,context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceProductRequest product_request={request,native_task_program.target};

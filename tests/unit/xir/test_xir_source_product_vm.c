@@ -34,7 +34,7 @@ static XrXirSourceProduct *product_vm_build(const XrXirCompileContext *context,
         CHECK(xr_xir_compile_library_catalog_new_v2(context,&input,1,&catalog) == XR_XIR_OK);
     }
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context->resources,&session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources,&session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,root};
     XrXirSourceProductRequest request = {{session,entry,&authority,context,stdlib,NULL,XR_XIR_PROGRAM,catalog},
         {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
@@ -109,7 +109,7 @@ static void product_vm_drive(XrXirProgram *program, uint32_t entry, const uint32
 }
 int main(int argc, char **argv) {
     CHECK(argc == 5);
-    XrCompileResourceLimits limits = {UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE,UINT64_C(8388608),true};
     XrXirCompileContext context = {0}; context.limits = xr_xir_compile_default_limits();
     CHECK(xr_compile_resources_new(&limits,&context.resources) == XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats baseline = {0}, after = {0};
@@ -142,7 +142,7 @@ int main(int argc, char **argv) {
         XrXirProgram *repeated = NULL; CHECK(xr_xir_compile_source_product_vm_take(product,&repeated) == XR_XIR_BAD_STAGE && !repeated);
         xr_xir_compile_source_product_free(product);
         product_vm_drive(program,entry,ids,with_library);
-        CHECK(xr_compile_resources_stats(context.resources,&after) == XR_COMPILE_RESOURCE_OK && after.live_bytes == baseline.live_bytes);
+        CHECK(xr_compile_resources_stats(context.resources,&after) == XR_COMPILE_RESOURCE_OK && after.held_bytes == baseline.held_bytes);
     }
     xr_compile_resources_release(context.resources);
     CHECK(!effects_compile_live && !effects_compile_bytes && !runtime_live && !runtime_bytes);

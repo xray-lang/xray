@@ -68,12 +68,12 @@ static XrCompileResourceStats catalog_stats(const XrXirCompileContext *context) 
     return stats;
 }
 static void catalog_release(XrXirCompileContext *context) {
-    CHECK(catalog_stats(context).live_bytes == catalog_initial_live);
+    CHECK(catalog_stats(context).held_bytes == catalog_initial_live);
     xr_compile_resources_release(context->resources); context->resources = NULL;
     CHECK(!effects_compile_live && !effects_compile_bytes);
 }
 static void catalog_rejections(const char *root) {
-    const XrCompileResourceLimits limits = {UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+    const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE,UINT64_C(8388608),true};
     XrXirCompileContext context = catalog_context(&limits);
     XrCompileResourceStats initial = catalog_stats(&context);
     uint8_t *bytes = NULL;
@@ -103,18 +103,18 @@ static void catalog_rejections(const char *root) {
         CHECK(!rejected);
     }
     xr_compile_resources_free(bytes);
-    CHECK(catalog_stats(&context).live_bytes == initial.live_bytes);
+    CHECK(catalog_stats(&context).held_bytes == initial.held_bytes);
     xr_compile_resources_release(context.resources);
     CHECK(!effects_compile_live && !effects_compile_bytes);
 }
 int main(int argc, char **argv) {
     CHECK(argc == 2 && strlen(argv[1]) < 4096);
     catalog_rejections(argv[1]);
-    const XrCompileResourceLimits generous = {UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+    const XrCompileResourceLimits generous = {XR_COMPILE_MEMORY_FINITE,UINT64_C(8388608),true};
     XrXirCompileContext context = catalog_context(&generous);
     XrXirLibraryCatalog *occupied = (XrXirLibraryCatalog *)(uintptr_t)17;
     XrCompileResourceStats before = catalog_stats(&context), after;
-    catalog_initial_live = before.live_bytes;
+    catalog_initial_live = before.held_bytes;
     size_t attempts = effects_compile_attempts;
     CHECK(xir_stdlib_library_catalog_new(&context,argv[1],&occupied) == XR_XIR_BAD_STRUCTURE);
     CHECK(occupied == (XrXirLibraryCatalog *)(uintptr_t)17);
@@ -156,7 +156,7 @@ int main(int argc, char **argv) {
     /* The catalog pins its original resources after the caller's reference dies. */
     xr_compile_resources_release(context.resources);
     CHECK(xr_xir_compile_library_catalog_context(catalog)->resources == context.resources);
-    CHECK(catalog_stats(&context).live_bytes == measured.live_bytes);
+    CHECK(catalog_stats(&context).held_bytes == measured.held_bytes);
     xr_xir_compile_library_catalog_free(catalog); catalog = NULL; context.resources = NULL;
     CHECK(!effects_compile_live && !effects_compile_bytes);
     for (size_t site = 0; site < sites; ++site) {
@@ -168,27 +168,25 @@ int main(int argc, char **argv) {
         catalog_release(&context);
         printf("catalog OOM %zu/%zu hit1 outputNULL compilerphysical0\n",site,sites);
     }
-    uint64_t fees[3] = {measured.allocated_bytes,measured.peak_bytes,measured.work};
-    for (unsigned axis = 0; axis < 3; ++axis) for (unsigned minus = 0; minus < 2; ++minus) {
+    CHECK(measured.peak_bytes > 1);
+    for (unsigned minus = 0; minus < 2; ++minus) {
         XrCompileResourceLimits limits = generous;
-        uint64_t bound = fees[axis]-minus;
-        if (axis == 0) limits.allocated_bytes = bound;
-        else if (axis == 1) limits.live_bytes = bound;
-        else limits.work = bound;
+        uint64_t bound = measured.peak_bytes-minus;
+        limits.memory_limit = bound;
         context = catalog_context(&limits);
         XrXirStatus status = xir_stdlib_library_catalog_new(&context,argv[1],&catalog);
-        CHECK(status == (minus ? XR_XIR_BUDGET : XR_XIR_OK));
+        CHECK(status == (minus ? XR_XIR_MEMORY_LIMIT : XR_XIR_OK));
         CHECK(minus ? !catalog : !!catalog);
         xr_xir_compile_library_catalog_free(catalog); catalog = NULL;
         catalog_release(&context);
-        printf("catalog axis%u minus%u bound%llu status%u compilerphysical0\n",axis,minus,(unsigned long long)bound,status);
+        printf("catalog held-memory minus%u bound%llu status%u compilerphysical0\n",minus,(unsigned long long)bound,status);
     }
     effects_compile_fail_at = effects_compile_attempts; effects_compile_injected = false;
     XrCompileResources *resources = NULL;
     CHECK(xr_compile_resources_new(&generous,&resources) == XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
     CHECK(!resources && effects_compile_injected && !effects_compile_live && !effects_compile_bytes);
     effects_compile_fail_at = SIZE_MAX;
-    printf("trusted stdlib Catalog sites%zu allocated%llu peak%llu work%llu, deep root and caller death PASS\n",
-        sites,(unsigned long long)fees[0],(unsigned long long)fees[1],(unsigned long long)fees[2]);
+    printf("trusted stdlib Catalog sites%zu allocated%llu peak%llu, deep root and caller death PASS\n",
+        sites,(unsigned long long)measured.allocated_bytes,(unsigned long long)measured.peak_bytes);
     return 0;
 }
