@@ -682,7 +682,7 @@ add_executable(test_xir_packet_vm xir/test_xir_packet_vm.c ${XIR_CHECKED_GENERAT
 target_link_libraries(test_xir_packet_vm PRIVATE xray_xir_vm xray_xir_cgen)
 target_compile_definitions(test_xir_packet_vm PRIVATE XR_CHECKED_FIXTURE="${XIR_CHECKED_GENERATED}")
 add_custom_command(OUTPUT ${XIR_SOURCE_GENERATED}
-    COMMAND $<TARGET_FILE:test_xir_packet_vm> ${XIR_SOURCE_GENERATED}
+    COMMAND $<TARGET_FILE:test_xir_packet_vm> --write-c ${XIR_SOURCE_GENERATED}
     DEPENDS test_xir_packet_vm ${XIR_CHECKED_GENERATED}
     VERBATIM)
 add_executable(test_xir_source_native xir/test_xir_source_native.c ${XIR_SOURCE_GENERATED})
