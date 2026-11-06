@@ -29,9 +29,7 @@ static void params_value_free(XrJsonValue *value) {
 static XrCompileResourceStatus params_bytes(XrCompileResources *resources,
     const char *bytes, size_t length, char **out) {
     if (!bytes || length == SIZE_MAX) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
-    XrCompileResourceStatus status = xr_compile_resources_work(resources, length + 1);
-    if (status != XR_COMPILE_RESOURCE_OK) return status;
-    status = xr_compile_resources_alloc(resources, length + 1, (void **)out);
+    XrCompileResourceStatus status = xr_compile_resources_alloc(resources, length + 1, (void **)out);
     if (status == XR_COMPILE_RESOURCE_OK) {
         memcpy(*out, bytes, length); (*out)[length] = 0;
     }
@@ -44,7 +42,7 @@ static XrCompileResourceStatus params_array(XrCompileResources *resources,
     int count = input->as.array.count;
     if (count < 0 || input->as.array.capacity < count || (count && !input->as.array.items))
         return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
-    if ((size_t)count > SIZE_MAX / sizeof(*value->as.array.items)) return XR_COMPILE_RESOURCE_BUDGET;
+    if ((size_t)count > SIZE_MAX / sizeof(*value->as.array.items)) return XR_COMPILE_RESOURCE_OVERFLOW;
     XrCompileResourceStatus status = XR_COMPILE_RESOURCE_OK;
     if (count) status = xr_compile_resources_calloc(resources, (size_t)count,
         sizeof(*value->as.array.items), (void **)&value->as.array.items);
@@ -62,7 +60,7 @@ static XrCompileResourceStatus params_object(XrCompileResources *resources,
     int count = input->as.object.count;
     if (count < 0 || input->as.object.capacity < count || (count && !input->as.object.members))
         return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
-    if ((size_t)count > SIZE_MAX / sizeof(*value->as.object.members)) return XR_COMPILE_RESOURCE_BUDGET;
+    if ((size_t)count > SIZE_MAX / sizeof(*value->as.object.members)) return XR_COMPILE_RESOURCE_OVERFLOW;
     XrCompileResourceStatus status = XR_COMPILE_RESOURCE_OK;
     if (count) status = xr_compile_resources_calloc(resources, (size_t)count,
         sizeof(*value->as.object.members), (void **)&value->as.object.members);
@@ -85,10 +83,8 @@ static XrCompileResourceStatus params_value(XrCompileResources *resources,
     const XrJsonValue *input, unsigned depth, XrJsonValue **out) {
     if (!input || depth >= XJSON_MAX_DEPTH || input->type < XR_JSON_NULL || input->type > XR_JSON_OBJECT)
         return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
-    XrCompileResourceStatus status = xr_compile_resources_work(resources, 1);
-    if (status != XR_COMPILE_RESOURCE_OK) return status;
     XrJsonValue *value = NULL;
-    status = xr_compile_resources_calloc(resources, 1, sizeof(*value), (void **)&value);
+    XrCompileResourceStatus status = xr_compile_resources_calloc(resources, 1, sizeof(*value), (void **)&value);
     if (status != XR_COMPILE_RESOURCE_OK) return status;
     value->type = input->type; value->is_integer = input->is_integer; value->string_len = input->string_len;
     switch (input->type) {

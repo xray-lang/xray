@@ -7,6 +7,7 @@
  * xlsp_document_owner.c - Atomic editor transactions and document ownership
  */
 #include "../../base/xresource_limits.h"
+#include "../../xir/xxir_compile_memory.h"
 #include "xlsp_document_owner.h"
 #include "xlsp_source_open.h"
 #include "xlsp_diagnostic_owner.h"
@@ -61,20 +62,17 @@ static XrXirStatus document_prepare(XrLspServer *server,const XlspSourceDocument
     if(!count||count>SIZE_MAX/sizeof(XlspSourceDocument))return XR_XIR_BUDGET;
     XlspSourceDocument *documents=NULL;
     XrCompileResourceStatus allocated=xr_compile_resources_calloc(resources,count,sizeof(*documents),(void **)&documents);
-    if(allocated!=XR_COMPILE_RESOURCE_OK)return allocated==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    if(allocated!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(allocated);
     XrXirStatus status=XR_XIR_OK;
     if(table->bucket_count<=0||!table->buckets){status=XR_XIR_BAD_STRUCTURE;goto done;}
-    if(xr_compile_resources_work(resources,(uint64_t)table->bucket_count)!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;goto done;}
     for(int i=0;i<table->bucket_count;++i)for(XrLspDocBucket *bucket=table->buckets[i];bucket;bucket=bucket->next) {
         XrLspDocument *doc=bucket->doc;
         if(used==count||!doc||!doc->content||!doc->uri){status=XR_XIR_BAD_STRUCTURE;goto done;}
         size_t length=0;
         do {
-            if(xr_compile_resources_work(resources,1)!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;goto done;}
             if(!doc->uri[length])break;
             if(length==SIZE_MAX-1){status=XR_XIR_BUDGET;goto done;}++length;
         } while(true);
-        if(xr_compile_resources_work(resources,sizeof(*documents))!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;goto done;}
         if(doc==replaced){entry=used;documents[used++]=*input;}
         else documents[used++]=(XlspSourceDocument){doc->uri,doc->content,length,doc->length,doc->version};
     }
@@ -135,12 +133,11 @@ XR_FUNC XrXirStatus xlsp_document_apply_changes(XrLspDocument *doc,const XrJsonV
     XrCompileResourceLimits limits=document_limits;
     XrCompileResources *resources=NULL;XlspSourceBuffer *buffer=NULL;XlspSourceOpen *fresh=NULL;
     XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);
-    if(created!=XR_COMPILE_RESOURCE_OK)return created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    if(created!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(created);
     XrXirStatus status=xlsp_source_buffer_edit_json(resources,doc->content,doc->length,doc->version,changes,version,&buffer);
     if(status!=XR_XIR_OK)goto done;
     size_t length=0;
-    do {if(xr_compile_resources_work(resources,1)!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;goto done;}
-        if(!doc->uri[length])break;if(length==SIZE_MAX-1){status=XR_XIR_BUDGET;goto done;}++length;} while(true);
+    do {if(!doc->uri[length])break;if(length==SIZE_MAX-1){status=XR_XIR_BUDGET;goto done;}++length;} while(true);
     XlspSourceDocument input={doc->uri,xlsp_source_buffer_text(buffer),length,xlsp_source_buffer_length(buffer),version};
     status=document_prepare(doc->server,&input,doc,resources,&fresh);
     if(status==XR_XIR_OK){document_commit_owner(doc,fresh);fresh=NULL;}

@@ -8,6 +8,7 @@
  */
 #include "xlsp_token_update.h"
 #include "xlsp_source_query.h"
+#include "../../xir/xxir_compile_memory.h"
 #include <string.h>
 struct XlspTokenUpdate {
     char *uri;
@@ -15,24 +16,15 @@ struct XlspTokenUpdate {
     uint32_t previous_result_id;
     XlspSourceTokens *tokens;
 };
-static XrXirStatus token_update_resource(XrCompileResourceStatus status) {
-    return status == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
-        status == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET :
-        status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BAD_STRUCTURE;
-}
 XR_FUNC XrXirStatus xlsp_token_update_new(const XlspTokenUpdateInput *input, XlspTokenUpdate **out) {
     if (!input || !input->resources || !input->uri || !input->tokens || !*input->tokens ||
         !out || *out || input->uri_length == SIZE_MAX || input->previous_result_id == UINT32_MAX)
         return XR_XIR_BAD_STRUCTURE;
     XlspTokenUpdate *update = NULL;
-    XrXirStatus status = token_update_resource(xr_compile_resources_calloc(input->resources, 1, sizeof(*update), (void **)&update));
+    XrXirStatus status = xir_compile_resource_status(xr_compile_resources_calloc(input->resources, 1, sizeof(*update), (void **)&update));
     if (status != XR_XIR_OK) return status;
-    status = token_update_resource(xr_compile_resources_work(input->resources, input->uri_length));
-    if (status != XR_XIR_OK) goto failed;
     if (memchr(input->uri, 0, input->uri_length)) { status = XR_XIR_BAD_STRUCTURE; goto failed; }
-    status = token_update_resource(xr_compile_resources_alloc(input->resources, input->uri_length + 1, (void **)&update->uri));
-    if (status != XR_XIR_OK) goto failed;
-    status = token_update_resource(xr_compile_resources_work(input->resources, input->uri_length + 1));
+    status = xir_compile_resource_status(xr_compile_resources_alloc(input->resources, input->uri_length + 1, (void **)&update->uri));
     if (status != XR_XIR_OK) goto failed;
     memcpy(update->uri, input->uri, input->uri_length); update->uri[input->uri_length] = 0;
     update->version = input->version; update->previous_result_id = input->previous_result_id;
