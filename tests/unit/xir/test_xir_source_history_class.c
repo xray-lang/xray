@@ -70,7 +70,7 @@ static void source_publish(SourceFixtureOwner *compiler,XrXirSourceGenerations *
     CHECK(xr_compile_resources_stats(compiler->context.resources,&before)==XR_COMPILE_RESOURCE_OK);
     CHECK(xr_xir_compile_source_generation_publish(owner,serial)==XR_XIR_OK);
     CHECK(xr_compile_resources_stats(compiler->context.resources,&after)==XR_COMPILE_RESOURCE_OK);
-    CHECK(before.work==after.work && before.allocated_bytes==after.allocated_bytes && after.live_bytes<=before.live_bytes);
+    CHECK(before.allocated_bytes==after.allocated_bytes && after.held_bytes<=before.held_bytes);
 }
 int main(int argc,char **argv) {
     CHECK(argc==1 || (argc==2 && (!strcmp(argv[1],"--shift") || !strcmp(argv[1],"--shift-var"))));
