@@ -7,14 +7,15 @@
  * test_xir_compile_domain.c - Owned values on one finite compiler ledger
  *
  * KEY CONCEPT:
- *   Actual allocator failures, cumulative limits and late owners stay together.
+ *   Actual allocator failures, held-memory limits and late owners stay together.
  */
 #define main original_value_allocation_main
 #include "test_xir_value_allocations.c"
 #undef main
 #include "xir/xxir_compile_domain.h"
 
-#define TRY_VALUE(call) do { status = (call); if (status != XR_XIR_VALUE_OK) goto done; } while (0)
+static const char *compile_domain_phase;
+#define TRY_VALUE(call) do { compile_domain_phase = #call; status = (call); if (status != XR_XIR_VALUE_OK) goto done; } while (0)
 static XrCompileResourceLimits compile_domain_limits(void) {
     return (XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE, UINT64_C(1048576), true};
 }
@@ -28,7 +29,6 @@ static XrXirValueStatus compile_domain_sequence(XrCompileResources *resources, X
     XrXirDomain *domain = NULL;
     XrXirTypeArena *arena = NULL;
     XrXirValue values[7] = {{0}};
-    void *metadata = NULL, *activation = NULL;
     XrXirValueStatus status = XR_XIR_VALUE_OK;
     XrXirCallableParameter fields[] = {{XR_XIR_STRING, 0}, {(XrXirType)257, 0}};
     XrXirTypeNode nodes[] = {
@@ -42,7 +42,20 @@ static XrXirValueStatus compile_domain_sequence(XrCompileResources *resources, X
     TRY_VALUE(xr_xir_compile_domain_new(resources, 65536, &domain));
     CHECK(domain->compile_resources == resources);
     XrXirDomainBudgetControls controls = {65536, 65536, 1048576, 65536, 65536};
-    TRY_VALUE(xr_xir_domain_budget_bind(domain, &controls));
+    /* Compiler storage cannot acquire execution budgets or activation blocks. */
+    XrCompileResourceStats before_rejection = compile_domain_stats(resources);
+    size_t compiler_calls = value_compile_calls, runtime_calls = value_allocation_calls;
+    CHECK(xr_xir_domain_budget_bind(domain, &controls) == XR_XIR_VALUE_BAD_ARGUMENT);
+    XrXirValueStatus rejected = XR_XIR_VALUE_OK;
+    CHECK(!xr_xir_domain_metadata_allocate(domain, 17, &rejected) && rejected == XR_XIR_VALUE_BAD_ARGUMENT);
+    rejected = XR_XIR_VALUE_OK;
+    CHECK(!xr_xir_domain_call_allocate(domain, 31, &rejected) && rejected == XR_XIR_VALUE_BAD_ARGUMENT);
+    XrCompileResourceStats after_rejection = compile_domain_stats(resources);
+    CHECK(value_compile_calls == compiler_calls && value_allocation_calls == runtime_calls &&
+        !xr_xir_domain_budget_stats(domain).bound && after_rejection.held_bytes == before_rejection.held_bytes &&
+        after_rejection.peak_bytes == before_rejection.peak_bytes &&
+        after_rejection.allocated_bytes == before_rejection.allocated_bytes &&
+        after_rejection.allocation_count == before_rejection.allocation_count);
     TRY_VALUE(xr_xir_compile_type_arena_new(&context, &types, &arena));
     XrXirValueAdmission admission = {arena, domain, NULL, NULL, 100000, 65536};
     XrXirValue scalar = {XR_XIR_I64, 0, 37}, read = {0};
@@ -70,17 +83,9 @@ static XrXirValueStatus compile_domain_sequence(XrCompileResources *resources, X
     TRY_VALUE(xr_xir_array_new((XrXirType)257, &values[1], 1, &admission, &values[4]));
     XrXirValue tuple_fields[] = {values[1], values[4]};
     TRY_VALUE(xr_xir_tuple_new((XrXirType)258, tuple_fields, 2, &admission, &values[5]));
-    metadata = xr_xir_domain_metadata_allocate(domain, 17, &status);
-    if (!metadata) goto done;
-    activation = xr_xir_domain_call_allocate(domain, 31, &status);
-    if (!activation) goto done;
-    CHECK(!memcmp(metadata, (unsigned char[17]){0}, 17));
-    CHECK(!memcmp(activation, (unsigned char[31]){0}, 31));
     TRY_VALUE(xr_xir_value_copy(&values[5], &values[6]));
     *output = values[6]; values[6] = (XrXirValue){0};
 done:
-    if (activation) xr_xir_domain_call_deallocate(domain, activation, 31);
-    if (metadata) xr_xir_domain_metadata_deallocate(domain, metadata, 17);
     for (unsigned n = 7; n > 0; --n) xr_xir_value_drop(&values[n - 1]);
     xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
     CHECK(!live);
@@ -106,7 +111,15 @@ static XrCompileResourceStats compile_domain_baseline(size_t *sites) {
     value_compile_calls = 0;
     CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
     const uint64_t initial_live = compile_domain_stats(resources).held_bytes;
-    XrXirValue value = {0}; CHECK(compile_domain_sequence(resources, &value) == XR_XIR_VALUE_OK);
+    XrXirValue value = {0}; XrXirValueStatus status = compile_domain_sequence(resources, &value);
+    if (status != XR_XIR_VALUE_OK) {
+        XrCompileResourceStats failed = compile_domain_stats(resources);
+        fprintf(stderr, "COMPILE_DOMAIN_BASELINE status=%u phase=%s held=%llu peak=%llu memoryMode=%u memoryLimit=%llu allocatorCalls=%zu\n",
+            (unsigned)status, compile_domain_phase, (unsigned long long)failed.held_bytes,
+            (unsigned long long)failed.peak_bytes, (unsigned)resources->limits.memory_mode,
+            (unsigned long long)resources->limits.memory_limit, value_compile_calls);
+    }
+    CHECK(status == XR_XIR_VALUE_OK);
     *sites = value_compile_calls;
     const XrCompileResourceStats baseline = compile_domain_stats(resources);
     compile_domain_read(&value);
@@ -141,7 +154,7 @@ static void compile_domain_faults(size_t sites) {
         xr_compile_resources_release(resources);
         CHECK(!value_compile_live && !value_compile_bytes && !live);
     }
-    printf("compile Domain physical OOM sites=%zu; same-owner retry, cumulative charges, physical=0/0\n", sites);
+    printf("compile Domain physical OOM sites=%zu; same-owner retry, reported allocations, physical=0/0\n", sites);
 }
 static void compile_domain_axes(const XrCompileResourceStats *baseline) {
     const uint64_t exact = baseline->peak_bytes;
@@ -151,12 +164,12 @@ static void compile_domain_axes(const XrCompileResourceStats *baseline) {
         XrCompileResources *resources = NULL;
         CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
         XrXirValue value = {0}; XrXirValueStatus status = compile_domain_sequence(resources, &value);
-        CHECK(status == (shortfall ? XR_XIR_VALUE_LIMIT : XR_XIR_VALUE_OK));
+        CHECK(status == (shortfall ? XR_XIR_VALUE_MEMORY_LIMIT : XR_XIR_VALUE_OK));
         if (!shortfall) xr_xir_value_drop(&value);
         else {
             CHECK(!value.type && !value.reserved && !value.payload);
             XrCompileResourceStats failed = compile_domain_stats(resources);
-            CHECK(compile_domain_sequence(resources, &value) == XR_XIR_VALUE_LIMIT);
+            CHECK(compile_domain_sequence(resources, &value) == XR_XIR_VALUE_MEMORY_LIMIT);
             XrCompileResourceStats retried = compile_domain_stats(resources);
             CHECK(retried.allocated_bytes >= failed.allocated_bytes);
         }
@@ -238,5 +251,5 @@ int XR_COMPILE_DOMAIN_ENTRY(void) {
     compile_domain_faults(sites); compile_domain_axes(&baseline); compile_domain_late_owner();
     compile_domain_failed_growth();
     CHECK(value_allocation_calls == 0 && !live);
-    puts("compile Domain Cell/string/Array/Tuple/metadata/call/resize PASS"); return 0;
+    puts("compile Domain Cell/string/Array/Tuple/resize; execution-only APIs rejected PASS"); return 0;
 }
