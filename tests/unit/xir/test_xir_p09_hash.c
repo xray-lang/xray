@@ -20,7 +20,7 @@ static XrXirTypeArena *hash_test_arena(void) {
         {.kind = XR_XIR_TYPE_SET, .element = XR_XIR_STRING}
     };
     XrXirTypes types = {nodes, 7, NULL, NULL}; XrXirTypeArena *arena = NULL;
-    CHECK(value_compile_arena(&types, 65536, value_compile_limits(65536, 1048576, 100), &arena) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&types, 65536, value_compile_limits(), &arena) == XR_XIR_VALUE_OK);
     return arena;
 }
 static XrXirValue integer(int64_t value) { return (XrXirValue){XR_XIR_I64, 0, value}; }

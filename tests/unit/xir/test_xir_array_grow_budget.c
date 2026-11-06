@@ -29,7 +29,7 @@ static GrowFixture grow_fixture(uint64_t requested_limit, uint64_t work_limit) {
     CHECK(xr_xir_domain_new(65536, &fixture.receiving) == XR_XIR_VALUE_OK);
     XrXirTypeNode node = {.kind = XR_XIR_TYPE_ARRAY, .element = XR_XIR_I64};
     XrXirTypes types = {&node, 1, NULL, NULL};
-    CHECK(value_compile_arena(&types, 65536, value_compile_limits(65536, 0, 10000),
+    CHECK(value_compile_arena(&types, 65536, value_compile_limits(),
         &fixture.arena) == XR_XIR_VALUE_OK);
     fixture.admission = (XrXirValueAdmission){fixture.arena, fixture.domain, NULL, NULL, 65536, 65536};
     XrXirValue values[] = {{XR_XIR_I64, 0, 1}, {XR_XIR_I64, 0, 2},

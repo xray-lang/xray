@@ -23,7 +23,7 @@ static XrXirTypeArena *key_path_arena(void) {
         {.kind=XR_XIR_TYPE_CELL, .element=(XrXirType)261}
     };
     XrXirTypes types={nodes,7,NULL,NULL}; XrXirTypeArena *arena=NULL;
-    CHECK(value_compile_arena(&types,65536,value_compile_limits(1048576,1048576,100000),&arena)==XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&types,65536,value_compile_limits(),&arena)==XR_XIR_VALUE_OK);
     return arena;
 }
 static XrXirValue key_path_map(XrXirType type, const XrXirValue *key, XrXirValueAdmission *admission) {

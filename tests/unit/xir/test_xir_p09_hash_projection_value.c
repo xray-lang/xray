@@ -21,7 +21,7 @@ static XrXirTypeArena *projection_value_arena(void) {
         {.kind = XR_XIR_TYPE_ARRAY, .element = XR_XIR_F64}
     };
     XrXirTypes types = {nodes, 7, NULL, NULL}; XrXirTypeArena *arena = NULL;
-    CHECK(value_compile_arena(&types, 65536, value_compile_limits(1048576, 1048576, 100000), &arena) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&types, 65536, value_compile_limits(), &arena) == XR_XIR_VALUE_OK);
     return arena;
 }
 static XrXirValueStatus projection_value_op(unsigned operation, const XrXirValue *source,

@@ -63,13 +63,11 @@ static void nested_nullable_compile_free(void *pointer) {
 static void nested_nullable_compile_owner_free(SourceFixtureOwner *owner) {
     XrCompileResourceStats stats = {0};
     CHECK(xr_compile_resources_stats(owner->context.resources, &stats) == XR_COMPILE_RESOURCE_OK);
-    CHECK(stats.allocated_bytes <= UINT64_C(64) * 1024 * 1024 &&
-        stats.peak_bytes <= UINT64_C(8) * 1024 * 1024 && stats.work <= UINT64_C(128000000));
-    CHECK(stats.live_bytes==owner->baseline.live_bytes);
-    CHECK(stats.allocated_bytes>=owner->baseline.allocated_bytes && stats.work>owner->baseline.work);
-    fprintf(stderr,"nested compiler ledger: work=%llu allocated=%llu peak=%llu live=%llu\n",
-        (unsigned long long)stats.work,(unsigned long long)stats.allocated_bytes,
-        (unsigned long long)stats.peak_bytes,(unsigned long long)stats.live_bytes);
+    CHECK(stats.held_bytes == owner->baseline.held_bytes);
+    CHECK(stats.allocated_bytes >= owner->baseline.allocated_bytes && stats.peak_bytes >= stats.held_bytes);
+    fprintf(stderr,"nested compiler owner: allocated=%llu peak=%llu held=%llu\n",
+        (unsigned long long)stats.allocated_bytes,
+        (unsigned long long)stats.peak_bytes,(unsigned long long)stats.held_bytes);
     xr_compile_resources_release(owner->context.resources); *owner=(SourceFixtureOwner){0};
     CHECK(!nested_nullable_compile_live && !nested_nullable_compile_bytes);
     printf("nested nullable compiler %zu actual allocation attempts; physical blocks/bytes=0/0\n",

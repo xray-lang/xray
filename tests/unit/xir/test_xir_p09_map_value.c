@@ -21,7 +21,7 @@ static XrXirTypeArena *map_value_arena(void) {
         {.kind=XR_XIR_TYPE_MAP,.element=XR_XIR_I64,.result=(XrXirType)262}
     };
     XrXirTypes types={nodes,8,NULL,NULL}; XrXirTypeArena *arena=NULL;
-    CHECK(value_compile_arena(&types,65536,value_compile_limits(1048576,1048576,100000),&arena)==XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&types,65536,value_compile_limits(),&arena)==XR_XIR_VALUE_OK);
     return arena;
 }
 static void map_value_probe(unsigned id,const XrXirValue *map,const XrXirValue *query,

@@ -55,7 +55,7 @@ int main(int argc,char **argv) {
         {.kind=XR_XIR_TYPE_MAP,.element=XR_XIR_I64,.result=(XrXirType)258}
     };
     XrXirTypes types={nodes,4,NULL,NULL};XrXirTypeArena *arena=NULL;XrXirDomain *domain=NULL,*producer=NULL;
-    CHECK(value_compile_arena(&types,65536,value_compile_limits(1048576,1048576,100000),&arena)==XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&types,65536,value_compile_limits(),&arena)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_domain_new(1048576,&domain)==XR_XIR_VALUE_OK && xr_xir_domain_new(65536,&producer)==XR_XIR_VALUE_OK);
     XrXirValueAdmission admission={arena,domain,NULL,NULL,1000000,65536};XrXirValue strings[3]={{0}};
     for(unsigned i=0;i<3;++i)CHECK(xr_xir_string_new(producer,i==0?"first":i==1?"second":"third",i==0?5:i==1?6:5,strings+i)==XR_XIR_VALUE_OK);

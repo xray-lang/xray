@@ -19,7 +19,7 @@ static XrXirTypeArena *hash_graph_arena(void) {
         {.kind = XR_XIR_TYPE_NULLABLE, .element = (XrXirType)257}
     };
     XrXirTypes types = {nodes, 3, &table, NULL}; XrXirTypeArena *arena = NULL;
-    CHECK(value_compile_arena(&types, 65536, value_compile_limits(1048576, 1048576, 1000000), &arena) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&types, 65536, value_compile_limits(), &arena) == XR_XIR_VALUE_OK);
     return arena;
 }
 static void hash_graph_cases(void) {

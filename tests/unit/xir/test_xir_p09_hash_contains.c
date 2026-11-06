@@ -20,7 +20,7 @@ static XrXirTypeArena *contains_arena(void) {
         {.kind = XR_XIR_TYPE_MAP, .element = XR_XIR_F64, .result = (XrXirType)256}
     };
     XrXirTypes types = {nodes, 5, NULL, NULL}; XrXirTypeArena *arena = NULL;
-    CHECK(value_compile_arena(&types, 65536, value_compile_limits(65536, 1048576, 100), &arena) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&types, 65536, value_compile_limits(), &arena) == XR_XIR_VALUE_OK);
     return arena;
 }
 static void contains_bad_admission(const XrXirValue *map, const XrXirValue *set,
@@ -131,7 +131,7 @@ static void contains_function_authority(void) {
         {.kind = XR_XIR_TYPE_MAP, .element = XR_XIR_I64, .result = (XrXirType)257}
     };
     XrXirTypes types = {nodes, 3, NULL, NULL}; XrXirTypeArena *arena = NULL;
-    CHECK(value_compile_arena(&types, 65536, value_compile_limits(65536, 1048576, 100), &arena) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&types, 65536, value_compile_limits(), &arena) == XR_XIR_VALUE_OK);
     XrXirDomain *domain = NULL; CHECK(xr_xir_domain_new(1048576, &domain) == XR_XIR_VALUE_OK);
     size_t releases = 0, wrong_owner = 0;
     XrXirValueAdmission admission = {arena, domain, capture_admit, &releases, 1000000, 65536};
@@ -164,7 +164,7 @@ static void contains_class_authority(void) {
         {.kind = XR_XIR_TYPE_MAP, .element = XR_XIR_I64, .result = (XrXirType)257}
     };
     XrXirTypes types = {nodes, 3, &table, NULL}; XrXirTypeArena *arena = NULL;
-    CHECK(value_compile_arena(&types, 65536, value_compile_limits(65536, 1048576, 100), &arena) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&types, 65536, value_compile_limits(), &arena) == XR_XIR_VALUE_OK);
     XrXirDomain *domain = NULL, *foreign = NULL;
     CHECK(xr_xir_domain_new(1048576, &domain) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_domain_new(1048576, &foreign) == XR_XIR_VALUE_OK);

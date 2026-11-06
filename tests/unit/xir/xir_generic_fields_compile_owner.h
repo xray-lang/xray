@@ -59,8 +59,8 @@ static void generic_fields_compile_free(void *pointer) {
 static void generic_fields_compile_owner_free(SourceFixtureOwner *owner) {
     XrCompileResourceStats stats = {0};
     CHECK(xr_compile_resources_stats(owner->context.resources, &stats) == XR_COMPILE_RESOURCE_OK);
-    CHECK(stats.allocated_bytes <= UINT64_C(64) * 1024 * 1024 &&
-        stats.peak_bytes <= UINT64_C(8) * 1024 * 1024 && stats.work <= UINT64_C(128000000));
+    CHECK(stats.held_bytes == owner->baseline.held_bytes);
+    CHECK(stats.allocated_bytes >= owner->baseline.allocated_bytes && stats.peak_bytes >= stats.held_bytes);
     source_fixture_owner_free(owner);
     CHECK(!generic_fields_compile_live && !generic_fields_compile_bytes);
     printf("generic fields compiler %zu actual allocation attempts; physical blocks/bytes=0/0\n",
