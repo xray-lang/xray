@@ -1,4 +1,5 @@
 /* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
+#include "xir/xxir_compile_memory.h"
 #include "app/lsp/xlsp_source_index.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,7 +32,7 @@ static void index_facts(const XlspSourceIndex *index,unsigned mode) {
 static XrXirStatus index_once(unsigned mode,XrCompileResourceLimits limits,XrCompileResourceStats *stats) {
     XrCompileResources *resources=NULL;XlspSourceIndex *index=NULL;
     XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);
-    if(created!=XR_COMPILE_RESOURCE_OK)return created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    if(created!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(created);
     char text[sizeof(index_text)],uri[sizeof(index_uri)];strcpy(text,mode?index_recovered:index_text);memcpy(uri,index_uri,sizeof(uri));
     XlspSourceDocument input={uri,text,sizeof(uri)-1,strlen(text),19};
     XrXirStatus status=xlsp_source_index_build(resources,&input,&index);
@@ -46,7 +47,7 @@ static XrXirStatus index_once(unsigned mode,XrCompileResourceLimits limits,XrCom
 int main(int argc,char **argv) {
     (void)sdk_fixture_malloc;(void)sdk_fixture_free;(void)sdk_ledger;(void)sdk_unlimited;
     CHECK(argc==1||(argc==2&&!strcmp(argv[1],"--normal")));bool faults=argc==1;
-    XrCompileResourceLimits limits={UINT64_C(1073741824),UINT64_C(268435456),UINT64_C(8589934592)};
+    XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,UINT64_C(256)*1024*1024,true};
     for(unsigned mode=0;mode<2;++mode) {
         size_t sites=0;XrCompileResourceStats needed={0};
         for(size_t probe=0;probe<=sites;++probe) {
@@ -56,11 +57,12 @@ int main(int argc,char **argv) {
             else CHECK(status==XR_XIR_OUT_OF_MEMORY&&runtime_attempts>=probe);
         }
         runtime_fail_at=SIZE_MAX;
-        if(faults)for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta) {
-            XrCompileResourceLimits exact={needed.allocated_bytes,needed.peak_bytes,needed.work};
-            uint64_t *bound=axis==0?&exact.allocated_bytes:axis==1?&exact.live_bytes:&exact.work;CHECK(*bound&&*bound<INT64_MAX);
-            *bound=(uint64_t)((int64_t)*bound+delta);CHECK(index_once(mode,exact,NULL)==(delta<0?XR_XIR_BUDGET:XR_XIR_OK));
+        if(faults)for(int delta=-1;delta<=1;++delta) {
+            CHECK(needed.peak_bytes&&needed.peak_bytes<INT64_MAX);
+            XrCompileResourceLimits exact={XR_COMPILE_MEMORY_FINITE,delta<0?needed.peak_bytes-1:needed.peak_bytes+(unsigned)delta,true};
+            CHECK(index_once(mode,exact,NULL)==(delta<0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
         }
+        CHECK(index_once(mode,limits,NULL)==XR_XIR_OK);
         printf("LSP real syntax index mode=%u Source FI=%zu, exact metadata/export/UTF16, complete owner death, physical=0/0\n",mode,sites);
     }
     return 0;

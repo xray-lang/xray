@@ -12,12 +12,12 @@ static void alias_resources(unsigned method,unsigned mode,bool full) {
             CHECK(runtime_attempts>prefix&&status==XR_XIR_OUT_OF_MEMORY);}
         for(size_t prefix=0;prefix<json;++prefix){alias_reset(SIZE_MAX,prefix);status=alias_once(method,mode,limits,NULL);
             CHECK(lsp_json_injected&&status==XR_XIR_OUT_OF_MEMORY);}
-        for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta){alias_reset(SIZE_MAX,SIZE_MAX);
-            XrCompileResourceLimits exact={needed.allocated_bytes,needed.peak_bytes,needed.work};
-            uint64_t *bound=axis==0?&exact.allocated_bytes:axis==1?&exact.live_bytes:&exact.work;CHECK(*bound&&*bound<INT64_MAX);
-            *bound=(uint64_t)((int64_t)*bound+delta);CHECK(alias_once(method,mode,exact,NULL)==(delta<0?XR_XIR_BUDGET:XR_XIR_OK));}
+        for(int delta=-1;delta<=1;++delta){alias_reset(SIZE_MAX,SIZE_MAX);
+            CHECK(needed.peak_bytes&&needed.peak_bytes<INT64_MAX);
+            XrCompileResourceLimits exact={XR_COMPILE_MEMORY_FINITE,delta<0?needed.peak_bytes-1:needed.peak_bytes+(unsigned)delta,true};
+            CHECK(alias_once(method,mode,exact,NULL)==(delta<0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));}
     }
-    alias_reset(SIZE_MAX,SIZE_MAX);
-    printf("{\"method\":%u,\"mode\":%u,\"source\":%zu,\"json\":%zu,\"full\":%s,\"boundaries\":%u,\"allocated\":%llu,\"peak\":%llu,\"work\":%llu,\"ledgers\":1,\"physical_live\":0,\"physical_bytes\":0,\"json_live\":0,\"json_bytes\":0}\n",
-        method,mode,source,json,full?"true":"false",full?9u:0u,(unsigned long long)needed.allocated_bytes,(unsigned long long)needed.peak_bytes,(unsigned long long)needed.work);
+    alias_reset(SIZE_MAX,SIZE_MAX);CHECK(alias_once(method,mode,limits,NULL)==XR_XIR_OK);
+    printf("{\"method\":%u,\"mode\":%u,\"source\":%zu,\"json\":%zu,\"full\":%s,\"boundaries\":%u,\"allocated\":%llu,\"peak\":%llu,\"held\":%llu,\"ledgers\":1,\"physical_live\":0,\"physical_bytes\":0,\"json_live\":0,\"json_bytes\":0}\n",
+        method,mode,source,json,full?"true":"false",full?3u:0u,(unsigned long long)needed.allocated_bytes,(unsigned long long)needed.peak_bytes,(unsigned long long)needed.held_bytes);
 }

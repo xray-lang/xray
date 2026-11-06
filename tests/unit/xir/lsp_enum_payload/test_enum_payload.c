@@ -1,4 +1,5 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
+#include "xir/xxir_compile_memory.h"
 #include "app/lsp/xlsp_server.h"
 #include "app/lsp/xlsp_source_syntax.h"
 #include "app/lsp/xlsp_completion.h"
@@ -28,6 +29,19 @@ XR_FUNC XrLspDocument *xlsp_document_get(XrLspServer *server,const char *uri) {
 #include "enum_response_actual.inc.c"
 #include "test_lsp_rename_params.h"
 XR_FUNC void lsp_log(const char *format,...) {(void)format;}
+static XrXirStatus fixture_parse_status(XrParseStatus status) {
+    switch(status) {
+    case XR_PARSE_OK: case XR_PARSE_RECOVERED: return XR_XIR_OK;
+    case XR_PARSE_BUDGET: return XR_XIR_BUDGET;
+    case XR_PARSE_MEMORY_LIMIT: return XR_XIR_MEMORY_LIMIT;
+    case XR_PARSE_OVERFLOW: return XR_XIR_OVERFLOW;
+    case XR_PARSE_CANCELLED: return XR_XIR_CANCELLED;
+    case XR_PARSE_DEADLINE: return XR_XIR_DEADLINE;
+    case XR_PARSE_CLOCK_FAILURE: return XR_XIR_CLOCK_FAILURE;
+    case XR_PARSE_OUT_OF_MEMORY: return XR_XIR_OUT_OF_MEMORY;
+    default: return XR_XIR_BAD_STRUCTURE;
+    }
+}
 static const char constructor_text[]=
     "enum Result { Ok { value:i64, code:Array<i64> }, Err { value:string } }\nResult.\n";
 static const char pattern_text[]=
@@ -55,14 +69,14 @@ static XrXirStatus once(unsigned mode,XrCompileResourceLimits limits,XrCompileRe
     XrCompileResources *resources=NULL;XrCompilerSession *session=NULL;XlspSyntaxSnapshot *syntax=NULL;XrJsonValue *result=NULL,*params=NULL;
     size_t requested_json_fail=lsp_json_fail;lsp_json_fail=SIZE_MAX;
     XrCompileResourceStatus made=xr_compile_resources_new(&limits,&resources);
-    XrXirStatus status=made==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:made==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrXirStatus status=xir_compile_resource_status(made);
     XrCompileState *original=NULL;
-    if(status==XR_XIR_OK){XrCompilerSessionStatus opened=xr_compile_session_new(resources,&session);status=opened==XR_COMPILER_SESSION_OK?XR_XIR_OK:opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;}
+    if(status==XR_XIR_OK){XrCompileResourceStatus opened=xr_compile_session_new(resources,&session);status=xir_compile_resource_status(opened);}
     if(status==XR_XIR_OK) {
         original=xr_compile_session_compile_state(session);
         XlspSourceDocument document={"file:///D:/enum-payload.xr",input,strlen("file:///D:/enum-payload.xr"),length,7};
         XrParseStatus parsed=xlsp_source_syntax_build(session,&document,&syntax);
-        status=parsed==XR_PARSE_OK||parsed==XR_PARSE_RECOVERED?XR_XIR_OK:parsed==XR_PARSE_BUDGET?XR_XIR_BUDGET:parsed==XR_PARSE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
+        status=fixture_parse_status(parsed);
     }
     xr_compile_session_free(session);memset(input,'?',length);sdk_fixture_free(input);
     if(status==XR_XIR_OK) {
@@ -72,7 +86,7 @@ static XrXirStatus once(unsigned mode,XrCompileResourceLimits limits,XrCompileRe
         document.uri="file:///D:/enum-payload.xr";
         document.line_offsets=offsets;document.line_count=count;document.syntax_snapshot=syntax;document.ast=(AstNode *)xlsp_source_syntax_ast(syntax);
         if(mode==2)document.ast=(AstNode *)(uintptr_t)1;
-        if(mode==3)CHECK(xr_compile_state_fail(original,XR_COMPILE_RESOURCE_BUDGET)==XR_COMPILE_RESOURCE_BUDGET);
+        if(mode==3)CHECK(xr_compile_state_fail(original,XR_COMPILE_RESOURCE_MEMORY_LIMIT)==XR_COMPILE_RESOURCE_MEMORY_LIMIT);
         if(mode==4)document.syntax_snapshot=NULL;
         XrLspPosition position={pattern?2u:1u,pattern?8u:7u};
         if(mode>=5){params=rename_test_params(document.uri,position,NULL);CHECK(params);selected_document=&document;}
@@ -100,24 +114,25 @@ static XrXirStatus once(unsigned mode,XrCompileResourceLimits limits,XrCompileRe
     xjson_free(result);CHECK(!lsp_json_live&&!lsp_json_bytes);return status;
 }
 static void matrix(unsigned mode) {
-    XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+    XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true};
     XrCompileResourceStats required={0};size_t source=0;runtime_attempts=0;runtime_fail_at=SIZE_MAX;lsp_json_calls=0;
     CHECK(once(mode,limits,&required,&source)==XR_XIR_OK);size_t json=lsp_json_calls;CHECK(source&&json);
     for(size_t i=0;i<source;++i){runtime_attempts=0;runtime_fail_at=i;CHECK(once(mode,limits,NULL,NULL)==XR_XIR_OUT_OF_MEMORY&&runtime_attempts>i);}
     runtime_fail_at=SIZE_MAX;
     for(size_t i=0;i<json;++i){lsp_json_calls=0;lsp_json_fail=i;lsp_json_injected=false;CHECK(once(mode,limits,NULL,NULL)==XR_XIR_OUT_OF_MEMORY&&lsp_json_injected);}
     lsp_json_fail=SIZE_MAX;
-    for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta){
-        XrCompileResourceLimits bounds={required.allocated_bytes,required.peak_bytes,required.work};uint64_t *value=axis==0?&bounds.allocated_bytes:axis==1?&bounds.live_bytes:&bounds.work;
-        CHECK(*value&&*value<UINT64_MAX);*value=(uint64_t)((int64_t)*value+delta);
-        CHECK(once(mode,bounds,NULL,NULL)==(delta<0?XR_XIR_BUDGET:XR_XIR_OK));
+    for(int delta=-1;delta<=1;++delta){
+        CHECK(required.peak_bytes&&required.peak_bytes<INT64_MAX);
+        XrCompileResourceLimits bounds={XR_COMPILE_MEMORY_FINITE,delta<0?required.peak_bytes-1:required.peak_bytes+(unsigned)delta,true};
+        CHECK(once(mode,bounds,NULL,NULL)==(delta<0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
     }
-    printf("ENUM_PAYLOAD mode%u Source%zu JSON%zu shared_original_state=1 producer_death=1 axes=9 physical0/0\n",mode,source,json);
+    CHECK(once(mode,limits,NULL,NULL)==XR_XIR_OK);
+    printf("ENUM_PAYLOAD mode%u Source%zu JSON%zu shared_original_state=1 producer_death=1 held_boundaries=3 physical0/0\n",mode,source,json);
 }
 int main(void) {
     (void)sdk_unlimited;(void)sdk_ledger;matrix(0);matrix(1);matrix(5);matrix(6);
-    XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
-    CHECK(once(2,limits,NULL,NULL)==XR_XIR_BAD_STRUCTURE);CHECK(once(3,limits,NULL,NULL)==XR_XIR_BUDGET);CHECK(once(4,limits,NULL,NULL)==XR_XIR_BAD_STRUCTURE);
+    XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true};
+    CHECK(once(2,limits,NULL,NULL)==XR_XIR_BAD_STRUCTURE);CHECK(once(3,limits,NULL,NULL)==XR_XIR_MEMORY_LIMIT);CHECK(once(4,limits,NULL,NULL)==XR_XIR_BAD_STRUCTURE);
     CHECK(once(7,limits,NULL,NULL)==XR_XIR_OK);
-    puts("Enum strategy: original state, payload syntax, complete JSON, foreign AST reject, sticky budget and ownership verified; full completion/server process not run");return 0;
+    puts("Enum strategy: original state, payload syntax, complete JSON, foreign AST reject, sticky memory failure and ownership verified; full completion/server process not run");return 0;
 }

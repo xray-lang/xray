@@ -1,4 +1,5 @@
 /* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
+#include "xir/xxir_compile_memory.h"
 #include "app/lsp/xlsp_index_pool.h"
 #include "app/lsp/xlsp_index_scan.h"
 #include "os/os_thread.h"
@@ -45,7 +46,7 @@ _Static_assert(_Alignof(PoolBlock)>=_Alignof(XrLspIndexPool),"Physical prefix mu
 static bool ignore_file(const char *name,bool directory,void *context) {
     (void)directory;(void)context;return !strcmp(name,".ignored");
 }
-static const XrCompileResourceLimits default_limits={UINT64_C(1073741824),UINT64_C(268435456),UINT64_C(8589934592)};
+static const XrCompileResourceLimits default_limits={XR_COMPILE_MEMORY_FINITE,UINT64_C(256)*1024*1024,true};
 static void result_facts(const XrLspIndexResult *list) {
     unsigned flags=0;size_t total=0;
     for(const XrLspIndexResult *n=list;n;n=n->next){CHECK(n->status==XR_XIR_OK&&!atomic_load(&n->cancel_requested)&&n->index&&n->revision==71);
@@ -59,7 +60,7 @@ static void result_facts(const XrLspIndexResult *list) {
 static XrXirStatus trace(const char *root,XrCompileResourceLimits limits,unsigned workers,unsigned cancel,XrCompileResourceStats *stats) {
     XrCompileResources *resources=NULL;XrLspIndexPool *pool=NULL;XrLspIndexResult *results=NULL,*tail=NULL;XlspIndexPaths paths={0};bool external=true;char cancel_path[1024]={0};
     XrCompileResourceStatus made=xr_compile_resources_new(&limits,&resources);
-    if(made!=XR_COMPILE_RESOURCE_OK)return made==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    if(made!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(made);
     const char *roots[]={root};XlspIndexScanOptions scan={resources,roots,1,ignore_file,NULL};
     XrXirStatus status=xlsp_index_scan(&scan,&paths);if(status!=XR_XIR_OK)goto done;CHECK(paths.count==3);
     XlspIndexPoolOptions options={resources,1024,workers};status=xlsp_index_pool_new(&options,&pool);if(status!=XR_XIR_OK)goto done;
@@ -81,7 +82,7 @@ static XrXirStatus trace(const char *root,XrCompileResourceLimits limits,unsigne
     {size_t count=0,cancelled=0;unsigned healthy=0;for(XrLspIndexResult *n=results;n;n=n->next){++count;
         if(cancel==1)CHECK(atomic_load(&n->cancel_requested)&&!n->index);
         else if(cancel>=2&&atomic_load(&n->cancel_requested)){CHECK((cancel==4?n->index!=NULL:n->index==NULL)&&strstr(n->path,cancel==3?"emoji-":"alpha.xr"));++cancelled;}
-        else if(n->status!=XR_XIR_OK){CHECK(n->status==XR_XIR_OUT_OF_MEMORY||n->status==XR_XIR_BUDGET);status=n->status;}
+        else if(n->status!=XR_XIR_OK){CHECK(n->status==XR_XIR_OUT_OF_MEMORY||n->status==XR_XIR_MEMORY_LIMIT);status=n->status;}
         else if(cancel>=2){size_t total=0;const XlspSourceIndexSymbol *items=xlsp_source_index_symbols(n->index,&total);CHECK(total==1);if(!strcmp(items[0].name,"alpha"))healthy|=1;else if(!strcmp(items[0].name,"kept"))healthy|=2;else{CHECK(!strcmp(items[0].name,"third"));healthy|=4;}}}
      CHECK(count==3);if(cancel>=2)CHECK(cancelled==1&&healthy==(cancel==3?3u:6u));}
 done:
@@ -121,9 +122,11 @@ int main(int argc,char **argv) {
     if(faults)for(size_t site=0;site<sites;++site){atomic_store(&physical_calls,0);physical_fail=site;XrXirStatus s=trace(argv[1],default_limits,1,false,NULL);
         CHECK((s==XR_XIR_OUT_OF_MEMORY||s==XR_XIR_IO)&&atomic_load(&physical_calls)>site);}
     physical_fail=SIZE_MAX;
-    if(faults)for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta){
-        XrCompileResourceLimits exact={needed.allocated_bytes,needed.peak_bytes,needed.work};uint64_t *bound=axis==0?&exact.allocated_bytes:axis==1?&exact.live_bytes:&exact.work;
-        CHECK(*bound&&*bound<INT64_MAX);*bound=(uint64_t)((int64_t)*bound+delta);CHECK(trace(argv[1],exact,1,false,NULL)==(delta<0?XR_XIR_BUDGET:XR_XIR_OK));}
+    if(faults)for(int delta=-1;delta<=1;++delta){
+        CHECK(needed.peak_bytes&&needed.peak_bytes<INT64_MAX);
+        XrCompileResourceLimits exact={XR_COMPILE_MEMORY_FINITE,delta<0?needed.peak_bytes-1:needed.peak_bytes+(unsigned)delta,true};
+            CHECK(trace(argv[1],exact,1,false,NULL)==(delta<0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));}
+    CHECK(trace(argv[1],default_limits,1,false,NULL)==XR_XIR_OK);
     CHECK(trace(argv[1],default_limits,2,false,NULL)==XR_XIR_OK);CHECK(trace(argv[1],default_limits,2,1,NULL)==XR_XIR_OK);CHECK(trace(argv[1],default_limits,2,2,NULL)==XR_XIR_OK);CHECK(trace(argv[1],default_limits,2,3,NULL)==XR_XIR_OK);CHECK(trace(argv[1],default_limits,2,4,NULL)==XR_XIR_OK);atomic_admission(argv[1]);
     constructor_faults(1,faults);constructor_faults(2,faults);constructor_faults(64,faults);
     printf("LSP actual parallel index/scan Source+OS starter FI=%zu full=%d;2 real read entrants, cancellation, atomic batch, pool/Session/input death, physical=0/0\n",sites,faults?1:0);return 0;

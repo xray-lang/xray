@@ -1,4 +1,5 @@
 /* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
+#include "xir/xxir_compile_memory.h"
 #include "app/lsp/xlsp_source_workspace.h"
 #include "api/xsource_compile.h"
 #include "base/xwindows_utf8.h"
@@ -19,7 +20,7 @@ static void position(const char *text,const char *needle,unsigned nth,int *row,i
 static int run(int argc,char **argv) {
     (void)sdk_fixture_malloc;(void)sdk_fixture_free;(void)sdk_ledger;(void)sdk_unlimited;
     CHECK(argc==3&&argv[2][0]>='0'&&argv[2][0]<='2'&&!argv[2][1]);unsigned mode=(unsigned)(argv[2][0]-'0');
-    XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+    XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true};
     XrCompileResources *resources=NULL;CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};XlspSourceWorkspace *workspace=NULL;XlspSourceTokens *owner=NULL;XlspSourceWorkspaceFailure failure={0};unsigned stage=0;
     XlspSourceDocument doc={argv[1],texts[mode],strlen(argv[1]),strlen(texts[mode]),1};
@@ -31,8 +32,8 @@ static int run(int argc,char **argv) {
     if(matches&&mode==2){unsigned properties=0;for(size_t n=0;n<count;++n)properties+=items[n].type==9&&items[n].length==5;matches=properties>=5;for(unsigned nth=1;nth<=4;nth+=(nth==1?2:1)){position(texts[mode],"value",nth,&row,&col);matches=token(items,count,row,col,5,9)&&matches;}}
     printf("Original semantic assertions mode=%u status=%u stage=%u tokens=%zu matched=%u diagnostic=%s\n",mode,(unsigned)status,stage,count,matches?1u:0u,failure.diagnostic.message);
     XrCompileResourceStats stats=sdk_stats(resources);
-    printf("Original semantic ledger allocated=%llu peak=%llu work=%llu\n",
-        (unsigned long long)stats.allocated_bytes,(unsigned long long)stats.peak_bytes,(unsigned long long)stats.work);
+    printf("Original semantic ledger allocated=%llu peak=%llu held=%llu\n",
+        (unsigned long long)stats.allocated_bytes,(unsigned long long)stats.peak_bytes,(unsigned long long)stats.held_bytes);
     xlsp_source_tokens_free(owner);xlsp_source_workspace_free(workspace);xlsp_source_workspace_failure_free(&failure);xr_compile_resources_release(resources);CHECK(!runtime_live&&!runtime_bytes);
     printf("Original semantic Source owner physical=0/0; failing Source facts remain a failing test\n");
     return matches?0:1;

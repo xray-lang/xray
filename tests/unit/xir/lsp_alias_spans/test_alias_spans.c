@@ -6,6 +6,7 @@
  *
  * test_alias_spans.c - Real alias tokens survive parser and display owner death
  */
+#include "xir/xxir_compile_memory.h"
 #include "app/lsp/xlsp_source_index.h"
 #include "toolchain/xcompiler_session.h"
 #include "frontend/parser/xast_nodes.h"
@@ -41,14 +42,22 @@ static const AliasCase cases[]={
     {"// alias\rtype Count=i64\r",NULL,0,0,0,0,0,0,false,false,false,0,0}
 };
 static const char alias_uri[]="file:///E:/alias-source-owner/sample.xr";
-static const XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+static const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true};
 static XrXirStatus resource_status(XrCompileResourceStatus s) {
-    return s==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:s==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:
-        s==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
+    return xir_compile_resource_status(s);
 }
-static XrXirStatus parse_status(XrParseStatus s) {
-    return s==XR_PARSE_OK||s==XR_PARSE_RECOVERED?XR_XIR_OK:s==XR_PARSE_BUDGET?XR_XIR_BUDGET:
-        s==XR_PARSE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
+static XrXirStatus parse_status(XrParseStatus status) {
+    switch(status) {
+    case XR_PARSE_OK: case XR_PARSE_RECOVERED: return XR_XIR_OK;
+    case XR_PARSE_BUDGET: return XR_XIR_BUDGET;
+    case XR_PARSE_MEMORY_LIMIT: return XR_XIR_MEMORY_LIMIT;
+    case XR_PARSE_OVERFLOW: return XR_XIR_OVERFLOW;
+    case XR_PARSE_CANCELLED: return XR_XIR_CANCELLED;
+    case XR_PARSE_DEADLINE: return XR_XIR_DEADLINE;
+    case XR_PARSE_CLOCK_FAILURE: return XR_XIR_CLOCK_FAILURE;
+    case XR_PARSE_OUT_OF_MEMORY: return XR_XIR_OUT_OF_MEMORY;
+    default: return XR_XIR_BAD_STRUCTURE;
+    }
 }
 static void syntax_facts(const XlspSyntaxSnapshot *syntax,const AliasCase *c) {
     CHECK(xlsp_source_syntax_status(syntax)==(c->recovered?XR_PARSE_RECOVERED:XR_PARSE_OK));
@@ -92,9 +101,8 @@ static XrXirStatus alias_once(unsigned method,unsigned mode,XrCompileResourceLim
     if(s!=XR_XIR_OK)goto done;
     if(!method)s=xlsp_source_index_build(r,&input,&index);
     else{
-        XrCompilerSessionStatus opened=xr_compile_session_new(r,&session);
-        s=opened==XR_COMPILER_SESSION_OK?XR_XIR_OK:opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:
-            opened==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
+        XrCompileResourceStatus opened=xr_compile_session_new(r,&session);
+        s=xir_compile_resource_status(opened);
         if(s==XR_XIR_OK)s=parse_status(xlsp_source_syntax_build(session,&input,&syntax));
         if(s==XR_XIR_OK){syntax_facts(syntax,c);s=xlsp_source_syntax_outline(syntax,&outline);}
         xlsp_source_syntax_free(syntax);syntax=NULL;xr_compile_session_free(session);session=NULL;
@@ -116,9 +124,8 @@ static XrXirStatus rejected_once(unsigned mode,XrCompileResourceLimits bounds,Xr
     const char *messages[]={"duplicate type parameter","do not support constraints","circular type alias","function types are written"};
     CHECK(mode<4);XrCompileResources *r=NULL;XrCompilerSession *session=NULL;XlspSyntaxSnapshot *syntax=NULL;
     XrXirStatus s=resource_status(xr_compile_resources_new(&bounds,&r));
-    if(s==XR_XIR_OK){XrCompilerSessionStatus opened=xr_compile_session_new(r,&session);
-        s=opened==XR_COMPILER_SESSION_OK?XR_XIR_OK:opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:
-            opened==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;}
+    if(s==XR_XIR_OK){XrCompileResourceStatus opened=xr_compile_session_new(r,&session);
+        s=xir_compile_resource_status(opened);}
     if(s==XR_XIR_OK){XlspSourceDocument input={alias_uri,texts[mode],sizeof(alias_uri)-1,strlen(texts[mode]),19};
         XrParseStatus parsed=xlsp_source_syntax_build(session,&input,&syntax);s=parse_status(parsed);
         if(s==XR_XIR_OK)CHECK(parsed==XR_PARSE_RECOVERED);}
@@ -134,11 +141,11 @@ static void rejected_aliases(bool full) {
         CHECK(rejected_once(mode,limits,&needed)==XR_XIR_OK);size_t source=runtime_attempts;
         if(full){for(size_t prefix=0;prefix<source;++prefix){alias_reset(prefix,SIZE_MAX);
                 CHECK(rejected_once(mode,limits,NULL)==XR_XIR_OUT_OF_MEMORY&&runtime_attempts>prefix);}
-            for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta){alias_reset(SIZE_MAX,SIZE_MAX);
-                XrCompileResourceLimits exact={needed.allocated_bytes,needed.peak_bytes,needed.work};
-                uint64_t *bound=axis==0?&exact.allocated_bytes:axis==1?&exact.live_bytes:&exact.work;CHECK(*bound&&*bound<INT64_MAX);
-                *bound=(uint64_t)((int64_t)*bound+delta);CHECK(rejected_once(mode,exact,NULL)==(delta<0?XR_XIR_BUDGET:XR_XIR_OK));}}
-        alias_reset(SIZE_MAX,SIZE_MAX);printf("{\"method\":2,\"mode\":%u,\"source\":%zu,\"json\":0,\"full\":%s,\"boundaries\":%u,\"ledgers\":1,\"physical_live\":0,\"physical_bytes\":0}\n",mode,source,full?"true":"false",full?9u:0u);
+            for(int delta=-1;delta<=1;++delta){alias_reset(SIZE_MAX,SIZE_MAX);
+                CHECK(needed.peak_bytes&&needed.peak_bytes<INT64_MAX);
+                XrCompileResourceLimits exact={XR_COMPILE_MEMORY_FINITE,delta<0?needed.peak_bytes-1:needed.peak_bytes+(unsigned)delta,true};
+            CHECK(rejected_once(mode,exact,NULL)==(delta<0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));}}
+        alias_reset(SIZE_MAX,SIZE_MAX);CHECK(rejected_once(mode,limits,NULL)==XR_XIR_OK);printf("{\"method\":2,\"mode\":%u,\"source\":%zu,\"json\":0,\"full\":%s,\"boundaries\":%u,\"ledgers\":1,\"physical_live\":0,\"physical_bytes\":0}\n",mode,source,full?"true":"false",full?3u:0u);
     }
 }
 int main(int argc,char **argv) {

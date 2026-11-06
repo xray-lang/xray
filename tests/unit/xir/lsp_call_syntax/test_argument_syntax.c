@@ -1,4 +1,5 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
+#include "xir/xxir_compile_memory.h"
 #include "app/lsp/xlsp_source_syntax.h"
 #include "module/xmodule_fingerprint.h"
 #include <stdio.h>
@@ -6,6 +7,19 @@
 #include <string.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}} while(0)
 #include "xir_sdk_resource_test.h"
+static XrXirStatus fixture_parse_status(XrParseStatus status) {
+    switch(status) {
+    case XR_PARSE_OK: case XR_PARSE_RECOVERED: return XR_XIR_OK;
+    case XR_PARSE_BUDGET: return XR_XIR_BUDGET;
+    case XR_PARSE_MEMORY_LIMIT: return XR_XIR_MEMORY_LIMIT;
+    case XR_PARSE_OVERFLOW: return XR_XIR_OVERFLOW;
+    case XR_PARSE_CANCELLED: return XR_XIR_CANCELLED;
+    case XR_PARSE_DEADLINE: return XR_XIR_DEADLINE;
+    case XR_PARSE_CLOCK_FAILURE: return XR_XIR_CLOCK_FAILURE;
+    case XR_PARSE_OUT_OF_MEMORY: return XR_XIR_OUT_OF_MEMORY;
+    default: return XR_XIR_BAD_STRUCTURE;
+    }
+}
 static const char argument_text[]="call( /*,*/ ref value,\n (other), \"\xf0\x9f\x98\x80\", inner(1, 2), ...items, )\n";
 static const XrLspRange outer_ranges[]={{{0,12},{0,21}},{{1,1},{1,8}},{{1,10},{1,14}},{{1,16},{1,27}},{{1,29},{1,37}}};
 static const char *argument_program(unsigned variant) {
@@ -53,7 +67,7 @@ static XlspSyntaxSnapshot *argument_producer(XrCompileResources *resources,unsig
     const char *program=argument_program(variant);
     size_t length=strlen(program);char *text=xr_malloc(length+1);CHECK(text);memcpy(text,program,length+1);
     char uri[]="file:///arguments.xr";XlspSourceDocument input={uri,text,sizeof(uri)-1,length,11};
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(resources,&session)==XR_COMPILE_RESOURCE_OK);
     XlspSyntaxSnapshot *syntax=NULL;XrParseStatus status=xlsp_source_syntax_build(session,&input,&syntax);
     CHECK(status==(variant==2||variant==3||variant==6?XR_PARSE_RECOVERED:XR_PARSE_OK));
     xr_compile_session_free(session);memset(uri,'?',sizeof(uri));memset(text,'?',length);xr_free(text);return syntax;
@@ -62,12 +76,12 @@ static size_t argument_attachment(XrCompileResources *resources,const XlspSyntax
     size_t sites=0;
     for(size_t probe=0;probe<=sites;++probe) {
         if(probe&&!failures)break;
-        size_t blocks=runtime_live,bytes=runtime_bytes,start=runtime_attempts;uint64_t live=sdk_stats(resources).live_bytes;
+        size_t blocks=runtime_live,bytes=runtime_bytes,start=runtime_attempts;uint64_t live=sdk_stats(resources).held_bytes;
         XlspSourceCallArguments *owner=NULL;runtime_fail_at=probe?start+probe-1:SIZE_MAX;
         XrXirStatus status=xlsp_source_syntax_arguments(syntax,&owner);runtime_fail_at=SIZE_MAX;
         if(!probe){CHECK(status==XR_XIR_OK);sites=runtime_attempts-start;CHECK(sites);argument_facts(owner,0);}
         else CHECK(status==XR_XIR_OUT_OF_MEMORY&&!owner);
-        xlsp_source_call_arguments_free(owner);CHECK(runtime_live==blocks&&runtime_bytes==bytes&&sdk_stats(resources).live_bytes==live);
+        xlsp_source_call_arguments_free(owner);CHECK(runtime_live==blocks&&runtime_bytes==bytes&&sdk_stats(resources).held_bytes==live);
         if(probe){CHECK(xlsp_source_syntax_arguments(syntax,&owner)==XR_XIR_OK);argument_facts(owner,0);xlsp_source_call_arguments_free(owner);}
     }
     return sites;
@@ -75,13 +89,13 @@ static size_t argument_attachment(XrCompileResources *resources,const XlspSyntax
 static XrXirStatus argument_once(unsigned variant,XrCompileResourceLimits limits,XrCompileResourceStats *stats) {
     XrCompileResources *resources=NULL;XrCompilerSession *session=NULL;XlspSyntaxSnapshot *syntax=NULL;XlspSourceCallArguments *owner=NULL;
     XrCompileResourceStatus made=xr_compile_resources_new(&limits,&resources);
-    if(made!=XR_COMPILE_RESOURCE_OK)return made==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
-    XrCompilerSessionStatus opened=xr_compile_session_new(resources,&session);XrXirStatus status=XR_XIR_OK;
-    if(opened!=XR_COMPILER_SESSION_OK){status=opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;goto done;}
+    if(made!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(made);
+    XrCompileResourceStatus opened=xr_compile_session_new(resources,&session);XrXirStatus status=XR_XIR_OK;
+    if(opened!=XR_COMPILE_RESOURCE_OK){status=xir_compile_resource_status(opened);goto done;}
     const char *program=argument_program(variant);XlspSourceDocument input={"file:///arguments.xr",program,20,strlen(program),11};
     XrParseStatus parsed=xlsp_source_syntax_build(session,&input,&syntax);
     if(parsed!=XR_PARSE_OK&&parsed!=XR_PARSE_RECOVERED) {
-        status=parsed==XR_PARSE_BUDGET?XR_XIR_BUDGET:parsed==XR_PARSE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;
+        status=fixture_parse_status(parsed);goto done;
     }
     CHECK(parsed==(variant==2||variant==3||variant==6?XR_PARSE_RECOVERED:XR_PARSE_OK));
     status=xlsp_source_syntax_arguments(syntax,&owner);if(status==XR_XIR_OK&&stats)*stats=sdk_stats(resources);
@@ -93,7 +107,7 @@ done:
 int main(int argc,char **argv) {
     CHECK(argc==1||(argc==2&&!strcmp(argv[1],"--resources")));bool failures=argc==2;size_t sites=0;
     CHECK(!xlsp_source_call_arguments_view(NULL));xlsp_source_call_arguments_free(NULL);
-    const XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+    const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true};
     for(unsigned variant=0;variant<7;++variant) {
         XrCompileResources *resources=sdk_ledger(&sdk_unlimited);XlspSyntaxSnapshot *syntax=argument_producer(resources,variant);
         if(!variant)sites=argument_attachment(resources,syntax,failures);
@@ -106,16 +120,17 @@ int main(int argc,char **argv) {
         xlsp_source_syntax_free(syntax);xr_compile_resources_release(resources);argument_facts(owner,variant);
         xlsp_source_call_arguments_free(owner);CHECK(!runtime_live&&!runtime_bytes);
         XrCompileResourceStats required={0};runtime_attempts=0;CHECK(argument_once(variant,limits,&required)==XR_XIR_OK);size_t prefixes=runtime_attempts;
-        printf("Argument producer variant=%u prefixes=%zu allocated=%llu peak=%llu work=%llu\n",variant,prefixes,
-            (unsigned long long)required.allocated_bytes,(unsigned long long)required.peak_bytes,(unsigned long long)required.work);
+        printf("Argument producer variant=%u prefixes=%zu allocated=%llu peak=%llu held=%llu\n",variant,prefixes,
+            (unsigned long long)required.allocated_bytes,(unsigned long long)required.peak_bytes,(unsigned long long)required.held_bytes);
         if(failures) {
             for(size_t p=0;p<prefixes;++p){runtime_attempts=0;runtime_fail_at=p;CHECK(argument_once(variant,limits,NULL)==XR_XIR_OUT_OF_MEMORY&&runtime_attempts>p);}
             runtime_fail_at=SIZE_MAX;
-            for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta) {
-                XrCompileResourceLimits cut={required.allocated_bytes,required.peak_bytes,required.work};
-                uint64_t *bound=axis==0?&cut.allocated_bytes:axis==1?&cut.live_bytes:&cut.work;CHECK(*bound&&*bound<INT64_MAX);
-                *bound=(uint64_t)((int64_t)*bound+delta);CHECK(argument_once(variant,cut,NULL)==(delta<0?XR_XIR_BUDGET:XR_XIR_OK));
+            for(int delta=-1;delta<=1;++delta) {
+                CHECK(required.peak_bytes&&required.peak_bytes<INT64_MAX);
+                XrCompileResourceLimits cut={XR_COMPILE_MEMORY_FINITE,delta<0?required.peak_bytes-1:required.peak_bytes+(unsigned)delta,true};
+            CHECK(argument_once(variant,cut,NULL)==(delta<0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
             }
+            CHECK(argument_once(variant,limits,NULL)==XR_XIR_OK);
         }
     }
     printf("Argument syntax sites=%zu full_FI=%u exact_tokens=1 unicode=1 recovery=1 producer_dead=1 physical0/0\n",sites,failures?1u:0u);return 0;

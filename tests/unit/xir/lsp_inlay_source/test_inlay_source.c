@@ -1,4 +1,5 @@
 /* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
+#include "xir/xxir_compile_memory.h"
 #include "app/lsp/xlsp_source_bindings.h"
 #include "app/lsp/xlsp_source_workspace.h"
 #include "xir/xxir_types.h"
@@ -39,7 +40,7 @@ static int run(int argc, char **argv) {
     (void)sdk_unlimited;
     CHECK(argc == 3);
     unsigned mode = (unsigned)strtoul(argv[2], NULL, 10); CHECK(mode < 2);
-    const XrCompileResourceLimits limits = {UINT64_C(64) * 1024 * 1024, UINT64_C(8) * 1024 * 1024, UINT64_C(128000000)};
+    const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true};
     XrCompileResources *resources = sdk_ledger(&limits);
     XrXirCompileContext context = {resources, xr_xir_compile_default_limits()};
     size_t length = strlen(original_inlay_inputs[mode]), uri_length = strlen(argv[1]);
@@ -58,9 +59,9 @@ static int run(int argc, char **argv) {
     XrCompileResourceStats stats = sdk_stats(resources);
     memset(text, '?', length); memset(uri, '?', uri_length); sdk_fixture_free(text); sdk_fixture_free(uri);
     xr_compile_resources_release(resources);
-    printf("Original inlay Source admission case=%s status=%u output=%s SourceCalls=%zu allocated=%llu peak=%llu work=%llu\n",
+    printf("Original inlay Source admission case=%s status=%u output=%s SourceCalls=%zu allocated=%llu peak=%llu held=%llu\n",
         original_inlay_names[mode], (unsigned)status, owner ? "owned" : "NULL", runtime_attempts,
-        (unsigned long long)stats.allocated_bytes, (unsigned long long)stats.peak_bytes, (unsigned long long)stats.work);
+        (unsigned long long)stats.allocated_bytes, (unsigned long long)stats.peak_bytes, (unsigned long long)stats.held_bytes);
     if (status == XR_XIR_OK) observations(owner); else CHECK(!owner);
     xlsp_source_bindings_free(owner); CHECK(!runtime_live && !runtime_bytes);
     printf("Original inlay canonical Source producers dead; physical0/0. Public inlay labels/effects NOT_TESTED\n");

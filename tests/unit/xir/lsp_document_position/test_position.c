@@ -1,4 +1,5 @@
 /* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
+#include "xir/xxir_compile_memory.h"
 #include "app/lsp/xlsp_server.h"
 #include "app/lsp/xlsp_source_buffer.h"
 #include <stdio.h>
@@ -79,10 +80,10 @@ int main(int argc,char **argv) {
     else if (argc == 2 && !strcmp(argv[1],"--crlf")) crlf(resources);
     else { CHECK(argc == 1); crlf(resources); high_lines(resources); controls(resources); }
     XrCompileResourceStats final = sdk_stats(resources);
-    CHECK(final.live_bytes == initial.live_bytes); xr_compile_resources_release(resources);
+    CHECK(final.held_bytes == initial.held_bytes); xr_compile_resources_release(resources);
     CHECK(runtime_live == 0 && runtime_bytes == 0);
-    printf("position display PASS allocated=%llu work=%llu physical=%zu/%zu\n",
-        (unsigned long long)final.allocated_bytes,(unsigned long long)final.work,
+    printf("position display PASS allocated=%llu held=%llu physical=%zu/%zu\n",
+        (unsigned long long)final.allocated_bytes,(unsigned long long)final.held_bytes,
         runtime_live,runtime_bytes);
     return 0;
 }

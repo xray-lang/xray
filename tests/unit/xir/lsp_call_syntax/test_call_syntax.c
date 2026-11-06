@@ -6,12 +6,26 @@
  *
  * test_call_syntax.c - Exact parser separators survive producer death
  */
+#include "xir/xxir_compile_memory.h"
 #include "app/lsp/xlsp_source_syntax.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}}while(0)
 #include "xir_sdk_resource_test.h"
+static XrXirStatus fixture_parse_status(XrParseStatus status) {
+    switch(status) {
+    case XR_PARSE_OK: case XR_PARSE_RECOVERED: return XR_XIR_OK;
+    case XR_PARSE_BUDGET: return XR_XIR_BUDGET;
+    case XR_PARSE_MEMORY_LIMIT: return XR_XIR_MEMORY_LIMIT;
+    case XR_PARSE_OVERFLOW: return XR_XIR_OVERFLOW;
+    case XR_PARSE_CANCELLED: return XR_XIR_CANCELLED;
+    case XR_PARSE_DEADLINE: return XR_XIR_DEADLINE;
+    case XR_PARSE_CLOCK_FAILURE: return XR_XIR_CLOCK_FAILURE;
+    case XR_PARSE_OUT_OF_MEMORY: return XR_XIR_OUT_OF_MEMORY;
+    default: return XR_XIR_BAD_STRUCTURE;
+    }
+}
 static const char source_text[]=
     "fn host() {\n"
     " call(\n"
@@ -93,10 +107,10 @@ static XrXirStatus once(size_t mode,XrCompileResourceLimits limits,XrCompileReso
     XrCompileResourceStatus made=XR_COMPILE_RESOURCE_OK;
     if(runtime_fail_at==SIZE_MAX)resources=sdk_ledger(&limits);
     else made=xr_compile_resources_new(&limits,&resources);
-    if(made!=XR_COMPILE_RESOURCE_OK)return made==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    if(made!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(made);
     XrXirStatus status=XR_XIR_OK;bool released=false;
-    XrCompilerSessionStatus opened=xr_compile_session_new(resources,&session);
-    if(opened!=XR_COMPILER_SESSION_OK){status=opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;goto done;}
+    XrCompileResourceStatus opened=xr_compile_session_new(resources,&session);
+    if(opened!=XR_COMPILE_RESOURCE_OK){status=xir_compile_resource_status(opened);goto done;}
     const OtherCase *other=mode?&other_cases[mode-1]:NULL;
     const char *source=other?other->text:source_text;
     char uri[]="file:///call.xr";size_t length=strlen(source);
@@ -107,7 +121,7 @@ static XrXirStatus once(size_t mode,XrCompileResourceLimits limits,XrCompileReso
     if(parsed!=XR_PARSE_OK&&parsed!=XR_PARSE_RECOVERED) {
         CHECK(!snapshot);
         if(parsed!=XR_PARSE_BUDGET&&parsed!=XR_PARSE_OUT_OF_MEMORY)fprintf(stderr,"parse status %d\n",(int)parsed);
-        status=parsed==XR_PARSE_BUDGET?XR_XIR_BUDGET:parsed==XR_PARSE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
+        status=fixture_parse_status(parsed);
         goto done;
     }
     CHECK(parsed==(other?other->parsed:XR_PARSE_OK));
@@ -121,27 +135,27 @@ done:
     CHECK(!runtime_live&&!runtime_bytes);return status;
 }
 int main(int argc,char **argv) {
-    XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
-    CHECK(limits.work<sdk_unlimited.work);size_t total=0;
+    XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true};
+    CHECK(limits.memory_mode==XR_COMPILE_MEMORY_FINITE);size_t total=0;
     CHECK(argc==1||(argc==2&&!strcmp(argv[1],"--resources")));
     for(size_t mode=0;mode<=sizeof(other_cases)/sizeof(*other_cases);++mode) {
     XrCompileResourceStats required={0};
     runtime_attempts=0;CHECK(once(mode,limits,&required)==XR_XIR_OK);size_t sites=runtime_attempts;total+=sites;
-    printf("call syntax mode=%zu sites=%zu allocated=%llu peak=%llu work=%llu; physical=0/0\n",mode,sites,
-        (unsigned long long)required.allocated_bytes,(unsigned long long)required.peak_bytes,(unsigned long long)required.work);
+    printf("call syntax mode=%zu sites=%zu allocated=%llu peak=%llu held=%llu; physical=0/0\n",mode,sites,
+        (unsigned long long)required.allocated_bytes,(unsigned long long)required.peak_bytes,(unsigned long long)required.held_bytes);
     if(argc==2&&!strcmp(argv[1],"--resources")) {
         for(size_t i=0;i<sites;++i) {
             runtime_attempts=0;runtime_fail_at=i;
             CHECK(once(mode,limits,NULL)==XR_XIR_OUT_OF_MEMORY&&runtime_attempts>i);
         }
         runtime_fail_at=SIZE_MAX;
-        for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta) {
-            XrCompileResourceLimits cut={required.allocated_bytes,required.peak_bytes,required.work};
-            uint64_t *bound=axis==0?&cut.allocated_bytes:axis==1?&cut.live_bytes:&cut.work;
-            CHECK(*bound>0&&*bound<UINT64_MAX);*bound=(uint64_t)((int64_t)*bound+delta);
-            CHECK(once(mode,cut,NULL)==(delta<0?XR_XIR_BUDGET:XR_XIR_OK));
+        for(int delta=-1;delta<=1;++delta) {
+            CHECK(required.peak_bytes&&required.peak_bytes<INT64_MAX);
+            XrCompileResourceLimits cut={XR_COMPILE_MEMORY_FINITE,delta<0?required.peak_bytes-1:required.peak_bytes+(unsigned)delta,true};
+            CHECK(once(mode,cut,NULL)==(delta<0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
         }
-        printf("all %zu allocation prefixes and 9 budget cuts passed; physical=0/0\n",sites);
+        CHECK(once(mode,limits,NULL)==XR_XIR_OK);
+        printf("all %zu allocation prefixes and 3 held-memory boundaries passed; physical=0/0\n",sites);
     }
     }
     printf("call syntax total allocation sites=%zu; modes=%zu; physical=0/0\n",total,

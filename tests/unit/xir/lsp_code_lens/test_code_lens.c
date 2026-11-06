@@ -1,4 +1,5 @@
 /* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
+#include "xir/xxir_compile_memory.h"
 #include "app/lsp/xlsp_source_code_lens.h"
 #include "api/xsource_compile.h"
 #include "base/xwindows_utf8.h"
@@ -22,8 +23,7 @@ static const char struct_text[]=
     "}\n"
     "fn outer()->i64 { return 1 }\n";
 static const char class_text[]="/* \xf0\x9f\x98\x80 */ final class C {}\n";
-static const XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,
-    UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+static const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true};
 
 static char *input_copy(const char *text) {
     size_t length=strlen(text)+1;char *copy=sdk_fixture_malloc(length);CHECK(copy);
@@ -56,7 +56,7 @@ static XrXirStatus once(const char *root_uri,const char *lib_uri,unsigned mode,
     XrCompileResourceLimits caps,XrCompileResourceStats *stats,size_t json_fault,bool *injected) {
     XrCompileResources *resources=NULL;XlspSourceWorkspace *workspace=NULL;XrJsonValue *root=NULL,*lib=NULL;
     XrCompileResourceStatus made=xr_compile_resources_new(&caps,&resources);
-    if(made!=XR_COMPILE_RESOURCE_OK)return made==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    if(made!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(made);
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};unsigned stage=0;
     const char *selected=mode==0?root_text:mode==1?struct_text:class_text;
     size_t length=strlen(selected);char *owned=input_copy(selected),*root_copy=input_copy(root_uri),*lib_copy=input_copy(lib_uri);
@@ -101,13 +101,13 @@ static int run(int argc,char **argv) {
                 bool injected=false;
                 CHECK(once(argv[1],argv[2],mode,limits,NULL,fault,&injected)==XR_XIR_OUT_OF_MEMORY&&injected);
             }
-            for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta) {
-                XrCompileResourceLimits exact={measured.allocated_bytes,measured.peak_bytes,measured.work};
-                uint64_t *bound=axis==0?&exact.allocated_bytes:axis==1?&exact.live_bytes:&exact.work;
-                CHECK(*bound&&*bound<INT64_MAX);*bound=(uint64_t)((int64_t)*bound+delta);
-                CHECK(once(argv[1],argv[2],mode,exact,NULL,SIZE_MAX,NULL)==(delta<0?XR_XIR_BUDGET:XR_XIR_OK));
+            for(int delta=-1;delta<=1;++delta) {
+                CHECK(measured.peak_bytes&&measured.peak_bytes<INT64_MAX);
+                XrCompileResourceLimits exact={XR_COMPILE_MEMORY_FINITE,delta<0?measured.peak_bytes-1:measured.peak_bytes+(unsigned)delta,true};
+                CHECK(once(argv[1],argv[2],mode,exact,NULL,SIZE_MAX,NULL)==(delta<0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
             }
         }
+        CHECK(once(argv[1],argv[2],mode,limits,NULL,SIZE_MAX,NULL)==XR_XIR_OK);
         printf("Source CodeLens mode=%u SourceFI=%zu JSONFI=%zu full=%u; binding counts, exactUTF16, producer death, physical=0/0\n",
             mode,source_sites,json_sites,full?1u:0u);
     }
