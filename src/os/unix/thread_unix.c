@@ -13,6 +13,10 @@
  * wait is immune to wall-clock (CLOCK_REALTIME) jumps.
  */
 
+/* Strict POSIX mode hides Darwin extension declarations; other hosts ignore this macro. */
+#ifndef _DARWIN_C_SOURCE
+#define _DARWIN_C_SOURCE
+#endif
 #include "../os_thread.h"
 
 #include <errno.h>

@@ -6,6 +6,10 @@
  *
  * system_unix.c - Typed POSIX identities, signals and system information
  */
+/* Strict POSIX mode hides Darwin extension declarations; other hosts ignore this macro. */
+#ifndef _DARWIN_C_SOURCE
+#define _DARWIN_C_SOURCE
+#endif
 #include "../os_system.h"
 #include "../../base/xio_policy.inc.h"
 #include <limits.h>
