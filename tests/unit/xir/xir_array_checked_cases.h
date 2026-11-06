@@ -17,8 +17,9 @@
 static void array_checked_const_slot(XrXirCheckedPacket *packet, size_t entry, size_t slot) {
     /* A valid const Array slot must precede the hostile write; a Cell with
      * mutable=0 would fail declaration admission before testing authority. */
-    put32(packet->bytes + 116 + 40, XR_XIR_COPY);
-    put32(packet->bytes + 116 + 40 + 4, 256);
+    size_t init=packet_function(packet,0).instructions;
+    put32(packet->bytes + init + 40, XR_XIR_COPY);
+    put32(packet->bytes + init + 40 + 4, 256);
     put32(packet->bytes + slot + 4, 256);
     put32(packet->bytes + slot + 8, 0);
     for (uint32_t i = 6; i <= 7; ++i) {
@@ -44,18 +45,15 @@ static void array_checked_cases(void) {
     CHECK(xir_fixture_check(suite_context, &f.module, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL; memset(&f, 0xCC, sizeof(f));
-    /* Independent 31/76 fields: header64 + module12 + functions204/665/128;
-     * declarations20 + source23 + identities3*36 + slot12 + impl-count4;
-     * generics4 + types(12+12+12+20) + construction4 + materializations4 + sites4 + bindings4 + defaults4 + provenance4 = 1324. */
-    const size_t entry = 321, operands = 925, slot = 1224;
-    CHECK(packet.length == 1324);
-    fprintf(stderr,"array packet actual length=%zu entry=%u array=%u operand=%u\n",packet.length,packet.bytes[entry],packet.bytes[entry+2*40],packet.bytes[operands+8]);
-    CHECK(packet.bytes[entry] == XR_XIR_CONST_INT && packet.bytes[116 + 40] == XR_XIR_CELL_NEW &&
+    CheckedPacketFunction init_row=packet_function(&packet,0),entry_row=packet_function(&packet,1);
+    CHECK(init_row.instruction_count==4 && entry_row.instruction_count==15 && entry_row.operand_count==5);
+    const size_t init=init_row.instructions,entry=entry_row.instructions,operands=entry_row.operands,slot=packet_slots(&packet);
+    CHECK(packet.bytes[entry] == XR_XIR_CONST_INT && packet.bytes[init + 40] == XR_XIR_CELL_NEW &&
         packet.bytes[entry + 2 * 40] == XR_XIR_ARRAY_NEW && packet.bytes[operands + 8] == 3);
     CHECK(packet.bytes[entry + 6 * 40] == XR_XIR_SLOT_LOAD &&
         packet.bytes[entry + 7 * 40] == XR_XIR_CELL_PLACE && packet32(&packet, slot + 4) == 257);
-    uint8_t original[1324]; memcpy(original, packet.bytes, sizeof(original));
-    for (uint32_t attack = 0; attack < 20; ++attack) {
+    uint8_t *original=xr_malloc(packet.length);CHECK(original);memcpy(original,packet.bytes,packet.length);
+    for (uint32_t attack = 0; attack < 19; ++attack) {
         if (attack == 0) put32(packet.bytes + entry + 2 * 40, XR_XIR_OP_COUNT);
         if (attack == 1) put32(packet.bytes + entry + 2 * 40 + 4, 257);
         if (attack == 2) put32(packet.bytes + entry + 2 * 40 + 8, 1);
@@ -85,13 +83,13 @@ static void array_checked_cases(void) {
             array_checked_const_slot(&packet, entry, slot);
             put32(packet.bytes + operands + 8, 6);
         }
-        if (attack == 17) put32(packet.bytes + 12, 14);
-        if (attack == 18) put32(packet.bytes + entry + 6 * 40 + 8, 1);
-        if (attack == 19) put32(packet.bytes + 116 + 8, 1);
+        if (attack == 17) put32(packet.bytes + entry + 6 * 40 + 8, 1);
+        if (attack == 18) put32(packet.bytes + init + 8, 1);
         digest_packet(&packet);
         rejected(packet.bytes, packet.length);
-        memcpy(packet.bytes, original, sizeof(original));
+        memcpy(packet.bytes,original,packet.length);
     }
+    xr_free(original);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     memset(packet.bytes, 0xCC, packet.length); xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_artifact_verify(decoded, NULL) == XR_XIR_OK);

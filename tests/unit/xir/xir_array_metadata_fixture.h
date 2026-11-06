@@ -62,9 +62,9 @@ static void xir_array_metadata_init(XirArrayMetadataFixture *f) {
     f->blocks[0] = (XrXirBlock) {0, 4, 0, 0};
     f->blocks[1] = (XrXirBlock) {0, 15, 0, 0};
     f->blocks[2] = (XrXirBlock) {0, 2, 0, 0};
-    f->functions[0] = (XrXirFunction) {"init", 4, NULL, 0, XR_XIR_UNIT, &f->blocks[0], 1, f->init, 4, NULL, 0, XR_XIR_NEVER,.error_type=XR_XIR_NEVER};
-    f->functions[1] = (XrXirFunction) {"entry", 5, NULL, 0, XR_XIR_I64, &f->blocks[1], 1, f->ops, 15, f->operands, 5, XR_XIR_NEVER,.error_type=XR_XIR_NEVER};
-    f->functions[2] = (XrXirFunction) {"read", 4, &f->worker_parameter, 1, XR_XIR_I64, &f->blocks[2], 1, f->worker, 2, NULL, 0, XR_XIR_NEVER,.error_type=XR_XIR_NEVER};
+    f->functions[0] = (XrXirFunction) {"init", 4, NULL, 0, XR_XIR_UNIT, &f->blocks[0], 1, f->init, 4, NULL, 0, XR_XIR_NEVER};
+    f->functions[1] = (XrXirFunction) {"entry", 5, NULL, 0, XR_XIR_I64, &f->blocks[1], 1, f->ops, 15, f->operands, 5, XR_XIR_NEVER};
+    f->functions[2] = (XrXirFunction) {"read", 4, &f->worker_parameter, 1, XR_XIR_I64, &f->blocks[2], 1, f->worker, 2, NULL, 0, XR_XIR_NEVER};
     f->source = (XrXirSourceModule) {"app", 3, NULL, 0, 0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     f->slot = (XrXirSlot) {0, cell, 1};
     f->declarations = (XrXirDeclarations) {&f->source, 1, f->identities, &f->slot, 1, NULL, 0, 0, 1, NULL};

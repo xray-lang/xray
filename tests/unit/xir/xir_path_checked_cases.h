@@ -12,12 +12,8 @@
 #include "xir/xxir_value_place.h"
 static void path_array_packet_attacks(XrXirCheckedPacket *packet) {
     CHECK(packet32(packet,64) == 0 && packet32(packet,68) == 1);
-    size_t at = 76;
-    at += 4 + packet32(packet,at);
-    at += 4 + (size_t)packet32(packet,at) * 4;
-    at += 4;
-    at += 4 + (size_t)packet32(packet,at) * 16;
-    CHECK(packet32(packet,at) == 9); at += 4;
+    CheckedPacketFunction row=packet_function(packet,0);
+    CHECK(row.instruction_count==9);size_t at=row.instructions;
     CHECK(packet32(packet,at + 3 * 40) == XR_XIR_INDEX_PLACE);
     const uint32_t fields[] = {3*40+8,3*40+12,3*40+4,3*40+8,7*40+8,6*40+12,24,8*40+8,3*40+32};
     const uint32_t values[] = {0,0,XR_XIR_I64,4,0,0,1,5,1};

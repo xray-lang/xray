@@ -100,18 +100,55 @@ static uint32_t packet32(const XrXirCheckedPacket *packet, size_t offset) {
     CHECK(offset <= packet->length && packet->length - offset >= 4);
     return wire32(packet->bytes + offset);
 }
+typedef struct CheckedPacketFunction {
+    size_t result,blocks,instructions,operands,end;
+    uint32_t block_count,instruction_count,operand_count;
+} CheckedPacketFunction;
+static size_t packet_span(const XrXirCheckedPacket *packet,size_t at,size_t count,size_t width) {
+    CHECK(width && at<=packet->length && count<=(packet->length-at)/width);
+    return at+count*width;
+}
+static CheckedPacketFunction packet_function(const XrXirCheckedPacket *packet,uint32_t index) {
+    CHECK(index<packet32(packet,68));size_t at=76;
+    CheckedPacketFunction row={0};
+    for(uint32_t f=0;f<=index;++f) {
+        at=packet_span(packet,at+4,packet32(packet,at),1);
+        at=packet_span(packet,at+4,packet32(packet,at),4);
+        at=packet_span(packet,at+4,packet32(packet,at),4);
+        row.result=at;at=packet_span(packet,at,2,4);
+        row.block_count=packet32(packet,at);row.blocks=at+4;
+        at=packet_span(packet,row.blocks,row.block_count,16);
+        row.instruction_count=packet32(packet,at);row.instructions=at+4;
+        at=packet_span(packet,row.instructions,row.instruction_count,40);
+        row.operand_count=packet32(packet,at);row.operands=at+4;
+        at=packet_span(packet,row.operands,row.operand_count,4);row.end=at;
+    }
+    return row;
+}
+static size_t packet_slots(const XrXirCheckedPacket *packet) {
+    uint32_t functions=packet32(packet,68);CHECK(functions && packet32(packet,72)==1);
+    size_t at=packet_function(packet,functions-1).end;
+    uint32_t modules=packet32(packet,at);at=packet_span(packet,at,5,4);
+    for(uint32_t m=0;m<modules;++m) {
+        at=packet_span(packet,at+4,packet32(packet,at),1);
+        at=packet_span(packet,at+4,packet32(packet,at),4);
+        at=packet_span(packet,at,3,4);
+    }
+    return packet_span(packet,at,functions,40);
+}
+static size_t packet_find_fields(const XrXirCheckedPacket *packet,const uint32_t *fields,size_t count) {
+    uint8_t expected[256];CHECK(count && count<=sizeof(expected)/4);
+    for(size_t i=0;i<count;++i)put32(expected+i*4,fields[i]);
+    size_t found=0,length=count*4;unsigned matches=0;
+    for(size_t at=64;at+length<=packet->length;++at) {
+        if(!memcmp(packet->bytes+at,expected,length)){found=at;++matches;}
+    }
+    CHECK(matches==1);return found;
+}
 static void declaration_attacks(XrXirCheckedPacket *packet) {
-    size_t at = 76;
     CHECK(packet32(packet, 64) == 0);
     uint32_t functions = packet32(packet, 68);
-    for (uint32_t f = 0; f < functions; ++f) {
-        at += 4 + packet32(packet, at);
-        at += 4 + (size_t) packet32(packet, at) * 4;
-        at += 4;
-        at += 4 + (size_t) packet32(packet, at) * 16;
-        at += 4 + (size_t) packet32(packet, at) * 40;
-        at += 4 + (size_t) packet32(packet, at) * 4;
-    }
+    CHECK(functions);size_t at=packet_function(packet,functions-1).end;
     size_t declarations = at, dependencies = 0, initializer = 0;
     uint32_t modules = packet32(packet, at), slots = packet32(packet, at + 4);
     at += 20;
@@ -123,7 +160,7 @@ static void declaration_attacks(XrXirCheckedPacket *packet) {
         if (!m) initializer = at;
         at += 12; /* Initializer, lexical scope and storage requirement. */
     }
-    size_t identities = at, slot_data = at + (size_t) functions * 36;
+    size_t identities = at, slot_data = packet_slots(packet);
     size_t literal_data = slot_data + (size_t) slots * 12;
     const size_t offsets[] = {declarations, declarations + 12, declarations + 16,
         dependencies + 4, initializer, identities + 4 * 36 + 4, slot_data, literal_data + 4, identities + 4 * 36 + 8};
@@ -137,8 +174,13 @@ static void declaration_attacks(XrXirCheckedPacket *packet) {
     }
 }
 static void semantic_attacks(XrXirCheckedPacket *packet) {
-    /* First function: name 9 bytes, no parameters, one block, four instructions. */
-    const size_t offsets[] = {93, 101, 105, 117, 121, 125, 129, 137, 161, 169, 249};
+    CheckedPacketFunction row=packet_function(packet,0);
+    CHECK(row.block_count==1 && row.instruction_count==5 &&
+        packet32(packet,row.instructions)==XR_XIR_CONST_STRING &&
+        packet32(packet,row.instructions+40)==XR_XIR_CELL_NEW);
+    const size_t offsets[] = {row.result,row.blocks,row.blocks+4,row.instructions-4,
+        row.instructions,row.instructions+4,row.instructions+8,row.instructions+16,
+        row.instructions+40,row.instructions+48,row.instructions+128};
     const uint32_t values[] = {99, 1, 3, UINT32_MAX, XR_XIR_SCALAR_COPY, 99, 9, 1, XR_XIR_CONST_INT, 4, 99};
     for (unsigned i = 0; i < sizeof(offsets) / sizeof(offsets[0]); ++i) {
         uint8_t saved[4]; memcpy(saved, packet->bytes + offsets[i], 4);
@@ -198,15 +240,11 @@ static void callable_contracts(void) {
     XrXirArtifact *checked = callable_fixture(suite_context), *decoded = NULL, *closed = NULL, *lowered = NULL;
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
-    const uint32_t signature_wire[] = {3, 0, 0,
-        1, 0, 1, 2, 0, 3, 8,
-        1, 0, 1, 256, 0, 256, 8,
-        1, 0, 0, 0, 8};
-    CHECK(packet.length >= sizeof(signature_wire) + 24);
-    for (size_t i = 0; i < sizeof(signature_wire) / sizeof(signature_wire[0]); ++i)
-        for (unsigned byte = 0; byte < 4; ++byte)
-            CHECK(packet.bytes[packet.length - 24 - sizeof(signature_wire) + i * 4 + byte] ==
-                (uint8_t) (signature_wire[i] >> (byte * 8)));
+    const uint32_t signature_wire[] = {3,0,0,
+        XR_XIR_TYPE_CALLABLE,0,1,XR_XIR_I64,0,XR_XIR_STRING,XR_XIR_NEVER,XR_XIR_CALLABLE_ROOT_UNRESOLVED,
+        XR_XIR_TYPE_CALLABLE,0,1,256,0,256,XR_XIR_NEVER,XR_XIR_CALLABLE_ROOT_UNRESOLVED,
+        XR_XIR_TYPE_CALLABLE,0,0,XR_XIR_UNIT,XR_XIR_NEVER,XR_XIR_CALLABLE_ROOT_UNRESOLVED};
+    (void)packet_find_fields(&packet,signature_wire,sizeof(signature_wire)/sizeof(*signature_wire));
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL; memset(packet.bytes, 0xCC, packet.length); xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(decoded, &closed, NULL, NULL) == XR_XIR_OK);
@@ -324,11 +362,12 @@ static void generic_callable_contracts(void) {
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
-    /* Two one-parameter signatures; the first span is independently forged. */
-    CHECK(packet.length > 76 && wire32(packet.bytes + packet.length - 76) == 1);
-    put32(packet.bytes + packet.length - 76,0); digest_packet(&packet);
+    const uint32_t row[]={XR_XIR_TYPE_CALLABLE,1,1,XR_XIR_TYPE_PARAMETER_BASE,0,
+        XR_XIR_TYPE_PARAMETER_BASE,XR_XIR_NEVER,XR_XIR_CALLABLE_ROOT_UNRESOLVED};
+    size_t span=packet_find_fields(&packet,row,sizeof(row)/sizeof(*row))+4;
+    put32(packet.bytes+span,0);digest_packet(&packet);
     rejected(packet.bytes,packet.length);
-    put32(packet.bytes + packet.length - 76,1); digest_packet(&packet);
+    put32(packet.bytes+span,1);digest_packet(&packet);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
     XrXirModule module = *xr_xir_compile_artifact_module(decoded);
