@@ -42,24 +42,7 @@ static void counted_free(void *memory) {
 #pragma pop_macro("xr_free")
 #pragma pop_macro("xr_malloc")
 
-/* Independent layout arithmetic for the two-pointer allocation prefix and
- * aligned ledger root; never derive expected work from verifier statistics. */
-typedef union OracleAlignment {
-    long double floating; uint64_t integer; void *pointer;
-} OracleAlignment;
-typedef union OracleHeader {
-    struct { void *owner; size_t bytes; } fields;
-#ifdef XR_COMPILER_MSVC
-    OracleAlignment alignment;
-#else
-    max_align_t alignment;
-#endif
-} OracleHeader;
-typedef struct OracleLedger {
-    uint64_t limits[3], stats[5], references;
-    atomic_bool locked;
-} OracleLedger;
-static const XrCompileResourceLimits unlimited = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+static const XrCompileResourceLimits unlimited = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
 static XrCompileResources *ledger(XrCompileResourceLimits limits) {
     XrCompileResources *resources = NULL;
     CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
@@ -127,7 +110,7 @@ static int64_t checked_pid(void) { return fail_pid ? 0 : xr_proc_self_pid(); }
 #undef xr_proc_self_pid
 static XrOsIoPolicy system_policy;
 static char directory[96], archive[128], path[128];
-static size_t formulas, oom_points, work_cutoffs, residual_cases;
+static size_t memory_boundaries, oom_points, residual_cases;
 static const char expected_checksum[] = "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 static const char expected_text[] =
     "# xray.lock - Auto-generated, do not edit manually\n# Format version: 1\n\n"
@@ -190,53 +173,44 @@ static void constructors(void) {
     CHECK(xr_lockfile_remove_owned(loaded, "a/b") == XR_OS_IO_OK && loaded->package_count == 0);
     xr_lockfile_free_owned(loaded); xr_lockfile_free_owned(lock); released(resources);
 }
-static void owner_formulas(void) {
-    uint64_t bytes = sizeof(OracleLedger) + 2 * sizeof(OracleHeader) + sizeof(XrLockfile) + 16 * sizeof(XrLockedPackage);
-    uint64_t work = 3 + sizeof(XrLockfile) + 16 * sizeof(XrLockedPackage) + sizeof(XrLockfile *);
-    for (unsigned dimension = 0; dimension < 3; ++dimension) for (unsigned minus = 0; minus < 2; ++minus) {
-        XrCompileResourceLimits limits = unlimited;
-        if (!dimension) limits.allocated_bytes = bytes - minus;
-        if (dimension == 1) limits.live_bytes = bytes - minus;
-        if (dimension == 2) limits.work = work - minus;
-        XrCompileResources *resources = ledger(limits); XrOsIoPolicy policy = xr_compile_io_policy(resources); XrLockfile *output = (XrLockfile *)(uintptr_t)1;
-        CHECK(xr_lockfile_new_owned(&policy, &output) == (minus ? XR_OS_IO_BUDGET : XR_OS_IO_OK));
-        if (minus) CHECK(output == (XrLockfile *)(uintptr_t)1);
-        else { XrCompileResourceStats stats = statistics(resources); CHECK(stats.work == work && stats.allocated_bytes == bytes && stats.peak_bytes == bytes); xr_lockfile_free_owned(output); }
-        released(resources); ++formulas;
-    }
-    XrCompileResources *resources = ledger(unlimited); XrOsIoPolicy policy = xr_compile_io_policy(resources); XrLockfile *lock = fixture_lock(&policy);
-    uint64_t prefix = statistics(resources).work; xr_lockfile_free_owned(lock); released(resources);
+static void owner_memory(void) {
+    XrCompileResources *resources = ledger(unlimited); XrOsIoPolicy policy = xr_compile_io_policy(resources);
+    XrLockfile *output = NULL;
+    CHECK(xr_lockfile_new_owned(&policy, &output) == XR_OS_IO_OK && output);
+    XrCompileResourceStats exact = statistics(resources);
+    CHECK(exact.held_bytes == physical && exact.peak_bytes == physical);
+    xr_lockfile_free_owned(output); released(resources);
     for (unsigned minus = 0; minus < 2; ++minus) {
-        XrCompileResourceLimits limits = unlimited; limits.work = prefix + 13 + sizeof(void *) - minus;
-        resources = ledger(limits); policy = xr_compile_io_policy(resources); lock = fixture_lock(&policy);
-        const XrLockedPackage *output = (const XrLockedPackage *)(uintptr_t)1;
-        CHECK(xr_lockfile_find_owned(&policy, lock, "a/b", &output) == (minus ? XR_OS_IO_BUDGET : XR_OS_IO_OK));
-        if (minus) CHECK(output == (const XrLockedPackage *)(uintptr_t)1); else CHECK(output == &lock->packages[0]);
-        xr_lockfile_free_owned(lock); released(resources); ++formulas;
+        XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE, exact.peak_bytes - minus, true};
+        resources = ledger(limits); policy = xr_compile_io_policy(resources); output = (XrLockfile *)(uintptr_t)1;
+        CHECK(xr_lockfile_new_owned(&policy, &output) == (minus ? XR_OS_IO_MEMORY_LIMIT : XR_OS_IO_OK));
+        if (minus) CHECK(output == (XrLockfile *)(uintptr_t)1);
+        else {
+            xr_lockfile_free_owned(output); output = NULL;
+            CHECK(xr_lockfile_new_owned(&policy, &output) == XR_OS_IO_OK && output);
+            xr_lockfile_free_owned(output);
+        }
+        released(resources); ++memory_boundaries;
     }
 }
-static void checksum_formula(bool verify) {
+static void checksum_memory(bool verify) {
 #ifdef XR_OS_WINDOWS
-    uint64_t n = strlen(archive);
-    uint64_t bytes = sizeof(OracleLedger) + 2 * sizeof(OracleHeader) + 2 * (n + 1) + 3;
-    uint64_t peak = sizeof(OracleLedger) + sizeof(OracleHeader) + 2 * (n + 1);
-    uint64_t work = 5 * n + (verify ? 445 : 228);
-    for (unsigned dimension = 0; dimension < 3; ++dimension) for (unsigned minus = 0; minus < 2; ++minus) {
-        XrCompileResourceLimits limits = unlimited;
-        if (!dimension) limits.allocated_bytes = bytes - minus;
-        if (dimension == 1) limits.live_bytes = peak - minus;
-        if (dimension == 2) limits.work = work - minus;
-        XrCompileResources *resources = ledger(limits); XrOsIoPolicy policy = xr_compile_io_policy(resources);
-        char checksum[72], saved[72]; memset(checksum, 0xA5, sizeof(checksum)); memcpy(saved, checksum, sizeof(saved)); bool same = false;
+    XrCompileResources *resources = ledger(unlimited); XrOsIoPolicy policy = xr_compile_io_policy(resources);
+    char checksum[72]; bool same = false;
+    CHECK((verify ? xr_lockfile_verify_checksum_owned(&policy, archive, expected_checksum, &same) :
+        xr_lockfile_checksum_file_owned(&policy, archive, checksum, sizeof(checksum))) == XR_OS_IO_OK);
+    CHECK(verify ? same : !strcmp(checksum, expected_checksum));
+    XrCompileResourceStats exact = statistics(resources); released(resources);
+    for (unsigned minus = 0; minus < 2; ++minus) {
+        XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE, exact.peak_bytes - minus, true};
+        resources = ledger(limits); policy = xr_compile_io_policy(resources);
+        char saved[72]; memset(checksum, 0xA5, sizeof(checksum)); memcpy(saved, checksum, sizeof(saved)); same = false;
         XrOsIoStatus status = verify ? xr_lockfile_verify_checksum_owned(&policy, archive, expected_checksum, &same) :
             xr_lockfile_checksum_file_owned(&policy, archive, checksum, sizeof(checksum));
-        CHECK(status == (minus ? XR_OS_IO_BUDGET : XR_OS_IO_OK));
+        CHECK(status == (minus ? XR_OS_IO_MEMORY_LIMIT : XR_OS_IO_OK));
         if (minus) CHECK(!same && !memcmp(checksum, saved, sizeof(checksum)));
-        else {
-            CHECK(verify ? same : !strcmp(checksum, expected_checksum)); XrCompileResourceStats stats = statistics(resources);
-            CHECK(stats.work == work && stats.allocated_bytes == bytes && stats.peak_bytes == peak);
-        }
-        released(resources); ++formulas;
+        else CHECK(verify ? same : !strcmp(checksum, expected_checksum));
+        released(resources); ++memory_boundaries;
     }
 #else
     (void)verify;
@@ -283,8 +257,8 @@ static void faults(void) {
     for (unsigned op = 0; op < 10; ++op) {
         write_fixture(path, op == 2 ? "original\n" : expected_text);
         XrCompileResources *resources = ledger(unlimited); XrOsIoPolicy policy = xr_compile_io_policy(resources); XrLockfile *lock = operation_input(op, &policy);
-        size_t begin = calls; uint64_t prefix = statistics(resources).work;
-        CHECK(operation(op, &policy, &lock) == XR_OS_IO_OK); size_t points = calls - begin; uint64_t work = statistics(resources).work - prefix;
+        size_t begin = calls;
+        CHECK(operation(op, &policy, &lock) == XR_OS_IO_OK); size_t points = calls - begin;
         xr_lockfile_free_owned(lock); released(resources);
         for (size_t i = 0; i < points; ++i) {
             write_fixture(path, op == 2 ? "original\n" : expected_text);
@@ -296,18 +270,7 @@ static void faults(void) {
             if (op == 2) { assert_text(path, "original\n"); if (cleanup_temporaries(false)) ++residual_cases; }
             ++oom_points;
         }
-        for (uint64_t offset = 0; offset < work; ++offset) {
-            write_fixture(path, op == 2 ? "original\n" : expected_text);
-            XrCompileResourceLimits limits = unlimited; limits.work = prefix + offset;
-            resources = ledger(limits); policy = xr_compile_io_policy(resources); lock = operation_input(op, &policy);
-            if (op < 2) lock = (XrLockfile *)(uintptr_t)1;
-            CHECK(operation(op, &policy, &lock) == XR_OS_IO_BUDGET);
-            if (op < 2) CHECK(lock == (XrLockfile *)(uintptr_t)1); else xr_lockfile_free_owned(lock);
-            released(resources);
-            if (op == 2) { assert_text(path, "original\n"); if (cleanup_temporaries(false)) ++residual_cases; }
-            ++work_cutoffs;
-        }
-        printf("lock operation %u: %zu malloc points, %llu complete work cutoffs\n", op, points, (unsigned long long)work);
+        printf("lock operation %u: %zu actual malloc points\n", op, points);
     }
     write_fixture(path, expected_text);
 }
@@ -316,7 +279,7 @@ static void error_states(void) {
     bool same = true; CHECK(xr_lockfile_verify_checksum_owned(&policy, archive, "sha256:wrong", &same) == XR_OS_IO_OK && !same);
     same = true; CHECK(xr_lockfile_verify_checksum_owned(&policy, "missing-lockfile-archive", expected_checksum, &same) == XR_OS_IO_NOT_FOUND && same);
     char short_buffer[65], saved[65]; memset(short_buffer, 0xA5, sizeof(short_buffer)); memcpy(saved, short_buffer, sizeof(saved));
-    CHECK(xr_lockfile_checksum_file_owned(&policy, archive, short_buffer, sizeof(short_buffer)) == XR_OS_IO_BUDGET && !memcmp(short_buffer, saved, sizeof(saved)));
+    CHECK(xr_lockfile_checksum_file_owned(&policy, archive, short_buffer, sizeof(short_buffer)) == XR_OS_IO_OVERFLOW && !memcmp(short_buffer, saved, sizeof(saved)));
 #ifdef XR_OS_WINDOWS
     fail_read = true; same = true;
     CHECK(xr_lockfile_verify_checksum_owned(&policy, archive, expected_checksum, &same) == XR_OS_IO_IO && same); fail_read = false;
@@ -327,7 +290,7 @@ static void error_states(void) {
     fail_pid = true; CHECK(xr_lockfile_save_owned(&policy, lock, path) == XR_OS_IO_IO); fail_pid = false;
     assert_text(path, "original\n"); CHECK(cleanup_temporaries(false) == 0);
     uint_fast64_t sequence = atomic_load(&temporary_sequence); atomic_store(&temporary_sequence, UINT64_MAX);
-    CHECK(xr_lockfile_save_owned(&policy, lock, path) == XR_OS_IO_BUDGET); atomic_store(&temporary_sequence, sequence);
+    CHECK(xr_lockfile_save_owned(&policy, lock, path) == XR_OS_IO_OVERFLOW); atomic_store(&temporary_sequence, sequence);
     assert_text(path, "original\n"); CHECK(cleanup_temporaries(false) == 0);
     force_collision = true; CHECK(xr_lockfile_save_owned(&policy, lock, path) == XR_OS_IO_EXISTS); force_collision = false;
     CHECK(collision_files == 16); assert_text(path, "original\n"); CHECK(cleanup_temporaries(true) == 16);
@@ -351,18 +314,16 @@ static void lifetime_and_growth(void) {
     xr_compile_resources_release(resources); CHECK(!strcmp(lock->packages[0].version, "1.2.3"));
     CHECK(!strcmp(lock->packages[20].name, "pkg/19")); xr_lockfile_free_owned(lock); CHECK(!live && !physical && !handles);
 }
-static XrOsIoStatus wrong_work(void *context, uint64_t units) { (void)context; (void)units; CHECK(false); return XR_OS_IO_IO; }
 static XrOsIoStatus wrong_alloc(void *context, size_t bytes, void **out) { (void)context; (void)bytes; (void)out; CHECK(false); return XR_OS_IO_IO; }
 static void wrong_free(void *context, void *memory) { (void)context; (void)memory; CHECK(false); }
 static void policy_identity(void) {
     XrCompileResources *a = ledger(unlimited), *b = ledger(unlimited);
     XrOsIoPolicy ap = xr_compile_io_policy(a), bp = xr_compile_io_policy(b); XrLockfile *lock = fixture_lock(&ap);
     CHECK(xr_lockfile_uses_policy(lock, &ap) && !xr_lockfile_uses_policy(lock, &bp));
-    for (unsigned i = 0; i < 4; ++i) {
+    for (unsigned i = 0; i < 3; ++i) {
         XrOsIoPolicy impostor = i ? ap : bp;
-        if (i == 1) impostor.work = wrong_work;
-        if (i == 2) impostor.alloc = wrong_alloc;
-        if (i == 3) impostor.free = wrong_free;
+        if (i == 1) impostor.alloc = wrong_alloc;
+        if (i == 2) impostor.free = wrong_free;
         CHECK(!xr_lockfile_uses_policy(lock, &impostor));
         const XrLockedPackage *output = (const XrLockedPackage *)(uintptr_t)1; bool exists = true;
         CHECK(xr_lockfile_find_owned(&impostor, lock, "a/b", &output) == XR_OS_IO_BAD_ARGUMENT && output == (const XrLockedPackage *)(uintptr_t)1);
@@ -372,13 +333,13 @@ static void policy_identity(void) {
     xr_lockfile_free_owned(lock); xr_compile_resources_release(a); released(b);
 }
 int main(void) {
-    setup(); constructors(); policy_identity(); owner_formulas(); checksum_formula(false); checksum_formula(true); error_states(); faults(); lifetime_and_growth();
+    setup(); constructors(); policy_identity(); owner_memory(); checksum_memory(false); checksum_memory(true); error_states(); faults(); lifetime_and_growth();
     CHECK(xr_os_io_remove(&system_policy, archive) == XR_OS_IO_OK); CHECK(xr_os_io_remove(&system_policy, path) == XR_OS_IO_OK);
 #ifdef XR_OS_WINDOWS
     CHECK(RemoveDirectoryA(directory));
 #else
     CHECK(!rmdir(directory));
 #endif
-    printf("lockfile resources passed: %zu formula boundaries, %zu malloc OOM points, %zu work cutoffs, %zu owned temporary residual cases; physical zero\n",
-        formulas, oom_points, work_cutoffs, residual_cases); return 0;
+    printf("lockfile resources passed: %zu held boundaries, %zu malloc OOM points, %zu owned temporary residual cases; physical zero\n",
+        memory_boundaries, oom_points, residual_cases); return 0;
 }
