@@ -89,8 +89,8 @@ with tempfile.TemporaryDirectory(prefix='links-task-😀-#-', dir=os.getcwd()) a
                     check_links(value['result'], library, disk)
             assert int(match[5]) == (1 if scenario in (5, 6, 15) else 0), result.stderr[-3000:]
             if scenario == 2:
-                interior = re.search(rb'INTERIOR mode=14 trigger=(\d+) calls=(\d+)', result.stderr)
-                assert interior and int(interior[1]) <= int(interior[2]) <= int(interior[1]) + 64
+                interior = re.search(rb'INTERIOR mode=14 trigger=(\d+) calls=(\d+) rejected=1', result.stderr)
+                assert interior and int(interior[2]) >= int(interior[1])
             if scenario == 12:
                 assert b'LINKS_ADMISSION checks=6' in result.stderr
             if scenario == 15:

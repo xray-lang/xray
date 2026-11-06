@@ -14,6 +14,6 @@ static void check_sync_navigation(XrLspServer *server,XrJsonValue *params,const 
         else CHECK(strstr(xjson_get_string(xjson_get_object(out,"contents"),"value"),"value"));
         xjson_free(out);CHECK(lsp_json_live==json&&lsp_json_bytes==bytes);
     }
-    fprintf(stderr,"Actual synchronous Source navigation4 modes strict64Mi8Mi128000000 and output owner death PASS\n");
+    fprintf(stderr,"Actual synchronous Source navigation4 modes held8Mi and output owner death PASS\n");
 }
 #endif

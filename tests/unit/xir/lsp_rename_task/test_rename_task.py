@@ -82,8 +82,8 @@ with tempfile.TemporaryDirectory(prefix="rename-task-😀-#-",dir=exe.parent) as
                         elif scenario in (16,17):assert values[0]["error"]["code"]==-32603,values
                         else:check(values[0]["result"],method,scenario)
                     if scenario==2:
-                        match=re.search(fr"INTERIOR mode={23+method} trigger=4096 calls=(\d+)".encode(),r.stderr)
-                        assert match and 4096<=int(match[1])<=4160,r.stderr
+                        match=re.search(fr"INTERIOR mode={23+method} trigger=2 calls=(\d+) rejected=1".encode(),r.stderr)
+                        assert match and int(match[1])>=2,r.stderr
                     rows.append(dict(method=method,scenario=scenario))
                     print(json.dumps(dict(method=method,scenario=scenario,stderr=r.stderr.decode("utf-8"),stdout=r.stdout.decode("utf-8")),ensure_ascii=False))
         baselines=[]

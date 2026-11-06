@@ -6,14 +6,14 @@
 #include "xlsp_source_scope.h"
 #include "xlsp_source_binding_lenses.h"
 #include "../../api/xsource_compile.h"
+#include "xir/xxir_compile_memory.h"
 #include <string.h>
 #include <stdio.h>
 
-static XrXirStatus navigation_length(XrCompileResources *r,const char *text,size_t *out) {
+static XrXirStatus navigation_length(const char *text,size_t *out) {
     if(!text)return XR_XIR_BAD_STRUCTURE;
     size_t n=0;
     for(;;) {
-        if(xr_compile_resources_work(r,1)!=XR_COMPILE_RESOURCE_OK)return XR_XIR_BUDGET;
         if(!text[n]){*out=n;return XR_XIR_OK;}
         if(n==SIZE_MAX-1)return XR_XIR_BUDGET;
         ++n;
@@ -35,17 +35,16 @@ XR_FUNC XrXirStatus xlsp_navigation_capture(XrLspServer *server,XrJsonValue *par
     XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();XrCompileResources *resources=NULL;
     XlspSourceDocument *documents=NULL;size_t count=(size_t)table->doc_count,used=0,entry=SIZE_MAX;
     XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);
-    XrXirStatus status=created==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrXirStatus status=xir_compile_resource_status(created);
     if(status!=XR_XIR_OK)goto done;
     if(count>SIZE_MAX/sizeof(*documents)){status=XR_XIR_BUDGET;goto done;}
     created=xr_compile_resources_calloc(resources,count,sizeof(*documents),(void **)&documents);
-    if(created!=XR_COMPILE_RESOURCE_OK){status=created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;goto done;}
+    if(created!=XR_COMPILE_RESOURCE_OK){status=xir_compile_resource_status(created);goto done;}
     for(int i=0;i<table->bucket_count;++i) {
-        if(xr_compile_resources_work(resources,1)!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;goto done;}
         for(XrLspDocBucket *bucket=table->buckets[i];bucket;bucket=bucket->next) {
             XrLspDocument *doc=bucket->doc;size_t length=0;
             if(used==count||!doc||!doc->uri||!doc->content){status=XR_XIR_BAD_STRUCTURE;goto done;}
-            status=navigation_length(resources,doc->uri,&length);if(status!=XR_XIR_OK)goto done;
+            status=navigation_length(doc->uri,&length);if(status!=XR_XIR_OK)goto done;
             if(doc==selected)entry=used;
             documents[used++]=(XlspSourceDocument){doc->uri,doc->content,length,doc->length,doc->version};
         }
@@ -71,21 +70,19 @@ static XrJsonValue *navigation_request(XrLspServer *server,XrLspDocument *doc,
     XrCompileResources *resources=NULL;XlspSourceDocument *documents=NULL;
     XlspSourceWorkspace *fresh=NULL;XrJsonValue *result=NULL;XlspSourceTokens *tokens=NULL;XlspSourceScope *scope=NULL;
     XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);
-    XrXirStatus status=created==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:
-        created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrXirStatus status=xir_compile_resource_status(created);
     if(status!=XR_XIR_OK)goto done;
     size_t count=(size_t)server->doc_table->doc_count,used=0,selected_length=0;bool selected=false;
     if(count>SIZE_MAX/sizeof(*documents)){status=XR_XIR_BUDGET;goto done;}
     created=xr_compile_resources_calloc(resources,count,sizeof(*documents),(void **)&documents);
-    if(created!=XR_COMPILE_RESOURCE_OK){status=created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;goto done;}
+    if(created!=XR_COMPILE_RESOURCE_OK){status=xir_compile_resource_status(created);goto done;}
     for(int i=0;i<server->doc_table->bucket_count;++i) {
-        if(xr_compile_resources_work(resources,1)!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;goto done;}
         for(XrLspDocBucket *bucket=server->doc_table->buckets[i];bucket;bucket=bucket->next) {
             XrLspDocument *item=bucket->doc;
             if(!item||!item->content||used==count){status=XR_XIR_BAD_STRUCTURE;goto done;}
-            size_t length=0;status=navigation_length(resources,item->uri,&length);
+            size_t length=0;status=navigation_length(item->uri,&length);
             if(status!=XR_XIR_OK)goto done;
-            if(xr_compile_resources_work(resources,sizeof(*documents))!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;goto done;}
+
             documents[used++]=(XlspSourceDocument){item->uri,item->content,length,item->length,item->version};
             if(item==doc){selected=true;selected_length=length;}
         }
@@ -97,7 +94,6 @@ static XrJsonValue *navigation_request(XrLspServer *server,XrLspDocument *doc,
         if(server->workspace_folder_count<0||server->workspace_folder_count>MAX_WORKSPACE_FOLDERS){status=XR_XIR_BAD_STRUCTURE;goto done;}
         const char *roots[MAX_WORKSPACE_FOLDERS];size_t root_count=(size_t)server->workspace_folder_count;
         for(size_t i=0;i<root_count;++i) {
-            if(xr_compile_resources_work(resources,sizeof(*roots))!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;goto done;}
             roots[i]=server->workspace_folders[i].path;if(!roots[i]){status=XR_XIR_BAD_STRUCTURE;goto done;}
         }
         XlspSourceScopeOptions capture={&context,documents,count,roots,root_count,UINT32_C(50)*1024*1024,&server->config};
@@ -118,7 +114,7 @@ static XrJsonValue *navigation_request(XrLspServer *server,XrLspDocument *doc,
         if(mode==5&&previous_id&&doc->source_tokens) {
             char id[16];int n=snprintf(id,sizeof(id),"%u",doc->sem_token_result_id);
             if(n<=0||(size_t)n>=sizeof(id)){status=XR_XIR_BAD_STRUCTURE;goto done;}
-            if(xr_compile_resources_work(resources,(size_t)n)!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;goto done;}
+
             matches=previous_id->string_len==(size_t)n&&!memcmp(previous_id->as.string,id,(size_t)n);
         }
         status=xlsp_source_tokens_json(resources,tokens,matches?doc->source_tokens:NULL,

@@ -91,9 +91,9 @@ with tempfile.TemporaryDirectory(prefix='hierarchy-task-', dir=os.getcwd()) as f
                         assert version is None if scenario == 3 else version == '7', item
             row = dict(method=method, scenario=scenario, wire_messages=len(messages), all_producers_destroyed=True)
             if scenario == 2:
-                interior = re.search(rb'INTERIOR mode=(\d+) trigger=(\d+) calls=(\d+)', result.stderr)
-                assert interior and int(interior[1]) == method and int(interior[2]) <= int(interior[3]) <= int(interior[2]) + 64
-                row.update(cancel_trigger=int(interior[2]), work_calls=int(interior[3]))
+                interior = re.search(rb'INTERIOR mode=(\d+) trigger=(\d+) calls=(\d+) rejected=1', result.stderr)
+                assert interior and int(interior[1]) == method and int(interior[3]) >= int(interior[2])
+                row.update(cancel_trigger=int(interior[2]), poll_calls=int(interior[3]))
             if scenario == 10:
                 prefix = re.search(rb'HIERARCHY_CAPTURE method=(\d+) prefixes=(\d+) app_prefixes=3 physical0/0', result.stderr)
                 assert prefix and int(prefix[1]) == method and int(prefix[2]) > 0, result.stderr

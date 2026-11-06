@@ -70,8 +70,8 @@ with tempfile.TemporaryDirectory(prefix="folding-😀-#-", dir=os.getcwd()) as f
                     assert "result" in messages[0],(scenario,messages)
                     check_folding(messages[0]["result"],scenario)
             if scenario==2:
-                interior=re.search(rb"INTERIOR mode=17 trigger=4096 calls=(\d+)",result.stderr)
-                assert interior and 4096<=int(interior[1])<=4160,result.stderr
+                interior=re.search(rb"INTERIOR mode=17 trigger=2 calls=(\d+) rejected=1",result.stderr)
+                assert interior and int(interior[1])>=2,result.stderr
             print(json.dumps(dict(case=scenario,stderr=result.stderr.decode("utf-8"),stdout=result.stdout.decode("utf-8")),ensure_ascii=False))
             rows.append({"scenario":scenario,"passed":True})
     measured = []

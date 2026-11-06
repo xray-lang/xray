@@ -138,9 +138,9 @@ with tempfile.TemporaryDirectory(prefix='semantic-task-😀-#-', dir=os.getcwd()
                 row = dict(method=method, scenario=scenario, wire_messages=len(messages),
                            cache_and_three_domains_checked=True)
                 if scenario == 2:
-                    interior = re.search(rb'INTERIOR mode=(\d+) trigger=(\d+) calls=(\d+)', result.stderr)
-                    assert interior and int(interior[1]) == method and int(interior[2]) <= int(interior[3]) <= int(interior[2]) + 64
-                    row.update(cancel_trigger=int(interior[2]), work_calls=int(interior[3]))
+                    interior = re.search(rb'INTERIOR mode=(\d+) trigger=(\d+) calls=(\d+) rejected=1', result.stderr)
+                    assert interior and int(interior[1]) == method and int(interior[3]) >= int(interior[2])
+                    row.update(cancel_trigger=int(interior[2]), poll_calls=int(interior[3]))
                 if scenario == 14:
                     checks = re.search(rb'SEM_ADMISSION method=(\d+) checks=(\d+)', result.stderr)
                     assert checks and int(checks[1]) == method and int(checks[2]) >= 5

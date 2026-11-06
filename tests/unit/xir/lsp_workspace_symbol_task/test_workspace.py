@@ -54,7 +54,7 @@ with tempfile.TemporaryDirectory(prefix='workspace-😀-#-',dir=os.getcwd()) as 
                     elif scenario in (16,17):assert messages[0]['error']['code']==-32603,messages
                     else:check(messages[0]['result'],method,scenario)
                 if scenario==2:
-                    m=re.search(fr'INTERIOR mode=22 trigger=4096 calls=(\d+)'.encode(),r.stderr);assert m and 4096<=int(m[1])<=4160,r.stderr
+                    m=re.search(fr'INTERIOR mode=22 trigger=2 calls=(\d+) rejected=1'.encode(),r.stderr);assert m and int(m[1])>=2,r.stderr
                 print(json.dumps(dict(method=method,case=scenario,stderr=r.stderr.decode('utf-8'),stdout=r.stdout.decode('utf-8')),ensure_ascii=False))
                 rows.append(dict(method=method,scenario=scenario,passed=True))
     measured=[]

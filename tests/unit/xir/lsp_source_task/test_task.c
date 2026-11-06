@@ -17,12 +17,16 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d:%s\n", __LINE__, #c); exit(1); } } while (0)
 #define xr_compile_resources_new task_resource_new_impl
-#define xr_compile_resources_work task_work_impl
 #define xr_compile_resources_release task_resource_release_impl
 #include "xir_sdk_resource_test.h"
-#undef xr_compile_resources_work
 #undef xr_compile_resources_new
 #undef xr_compile_resources_release
+#define xr_compile_request_control_poll task_request_poll_impl
+#include "base/xcompile_request.c"
+#undef xr_compile_request_control_poll
+#define xr_compile_session_poll task_session_poll_impl
+#include "toolchain/xcompiler_session.c"
+#undef xr_compile_session_poll
 #include "task_cancel.h"
 #ifdef XLSP_WORKSPACE_SYMBOL_TASK
 #include "../lsp_workspace_symbol_task/workspace_json_owner.h"

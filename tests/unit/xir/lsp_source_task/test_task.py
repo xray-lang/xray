@@ -38,9 +38,9 @@ with tempfile.TemporaryDirectory(prefix='xray-actual-task-', dir=os.getcwd()) as
         result = subprocess.run([str(exe.resolve()), entry.as_uri(), library.as_uri(), str(mode)],
                                 input=b'', stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, timeout=20)
         if budget_before:
-            limits = re.search(rb'Task capture limits allocated=(\d+) live=(\d+) work=(\d+)', result.stderr)
-            assert result.returncode == 1 and limits and tuple(map(int, limits.groups())) == (1 << 30, 256 << 20, 8 << 30), (result.returncode, result.stderr[-2500:])
-            assert b'limits&&limits->allocated_bytes' in result.stderr and not result.stdout, result.stderr
+            limits = re.search(rb'Task capture limits mode=(\d+) memory=(\d+)', result.stderr)
+            assert result.returncode == 1 and limits and tuple(map(int, limits.groups())) == (0,0), (result.returncode, result.stderr[-2500:])
+            assert b'limits&&limits->memory_mode' in result.stderr and not result.stdout, result.stderr
             rows.append({'mode': 0, 'old_CLI_limits': list(map(int, limits.groups())), 'strict_constructor_rejected': True})
             continue
         if before:
@@ -74,13 +74,13 @@ with tempfile.TemporaryDirectory(prefix='xray-actual-task-', dir=os.getcwd()) as
         rows.append({'mode': mode, 'captured_blocks': int(match[2]), 'exit': int(match[7]),
                      'wire_messages': len(messages), 'admission_checks': int(match[10])})
         if mode == 0:
-            assert result.stderr.count(b'Actual synchronous Source navigation4 modes strict64Mi8Mi128000000 and output owner death PASS') == 1, result.stderr
+            assert result.stderr.count(b'Actual synchronous Source navigation4 modes held8Mi and output owner death PASS') == 1, result.stderr
             rows[-1]['synchronous_modes'] = 4
         if mode >= 12:
-            interior = re.search(rb'INTERIOR mode=(\d+) trigger=(\d+) calls=(\d+) strict64Mi8Mi128000000 physical0/0 JSON0/0 app0/0', result.stderr)
+            interior = re.search(rb'INTERIOR mode=(\d+) trigger=(\d+) calls=(\d+) rejected=(\d+) point=(request|session) held8Mi physical0/0 JSON0/0 app0/0', result.stderr)
             assert interior and int(interior[1]) == mode, result.stderr
-            assert (int(interior[3]) > int(interior[2]) + 64) if before else (int(interior[2]) <= int(interior[3]) <= int(interior[2]) + 64), result.stderr
-            rows[-1].update(trigger=int(interior[2]), work_calls=int(interior[3]), interior_cancel=True)
+            assert int(interior[3])>=int(interior[2]) and int(interior[4])==(0 if before else 1), result.stderr
+            rows[-1].update(trigger=int(interior[2]), poll_calls=int(interior[3]), interior_cancel=True)
 assert hashlib.sha256(exe.read_bytes()).hexdigest() == image_sha256
 print(json.dumps({'cases': rows, 'actual_Source_request_run': not budget_before, 'editor_table_destroyed_before_run': not budget_before,
                   'compiler_and_JSON_live_zero': not budget_before, 'counterfactual': before or budget_before,
