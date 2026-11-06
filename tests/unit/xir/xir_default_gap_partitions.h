@@ -26,14 +26,14 @@ static void gap_compiler_report(const DefaultCompilerFaultEvent *event) {
     CHECK(fprintf(gap_compiler_report_file,
         "{\"kind\":\"%s\",\"mode\":%u,\"sites\":%zu,\"ordinal\":%zu,\"axis\":%u,"
         "\"status\":%u,\"attempts\":%zu,\"injected\":%s,\"empty_output\":%s,\"ledger_oom\":%s,"
-        "\"allocated\":%llu,\"peak\":%llu,\"work\":%llu,"
-        "\"allocated_cap\":%llu,\"live_cap\":%llu,\"work_cap\":%llu,"
+        "\"allocated\":%llu,\"peak\":%llu,\"held\":%llu,"
+        "\"memory_mode\":%u,\"memory_limit\":%llu,\"profile_allocations\":%s,"
         "\"compiler_blocks\":%zu,\"compiler_bytes\":%zu,\"runtime_blocks\":%zu,\"runtime_bytes\":%zu,\"runtime_owned\":%u}\n",
         kind,DEFAULT_MODE,event->sites,event->ordinal,event->axis,(unsigned)event->status,event->attempts,
         event->injected?"true":"false",event->empty_output?"true":"false",event->ledger_oom?"true":"false",
         (unsigned long long)event->exact.allocated_bytes,(unsigned long long)event->exact.peak_bytes,
-        (unsigned long long)event->exact.work,(unsigned long long)caps.allocated_bytes,
-        (unsigned long long)caps.live_bytes,(unsigned long long)caps.work,instance_compile_live,
+        (unsigned long long)event->exact.held_bytes,(unsigned)caps.memory_mode,
+        (unsigned long long)caps.memory_limit,caps.profile_allocations?"true":"false",instance_compile_live,
         instance_compile_bytes,runtime_live,runtime_bytes,(unsigned)(runtime_owned!=NULL))>0);
     CHECK(!fflush(gap_compiler_report_file));
 }

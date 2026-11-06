@@ -16,9 +16,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
 from xraytest.windows_owned_job import establish_job
 
 WORKERS = 8
-# The original registrations have no TIMEOUT property; this is CTest's effective default.
+# Explicit exhaustive runs retain the existing overall infrastructure bound.
 TIMEOUT = 10000000
-CAPS = (33554432, 8388608, 64000000)
 PHYSICAL = ("compiler_blocks", "compiler_bytes", "runtime_blocks", "runtime_bytes", "runtime_owned")
 
 
@@ -39,8 +38,9 @@ def zero(record):
 def common(record, first):
     zero(record)
     checked(record.get("mode") == first["mode"] and record.get("sites") == first["sites"], "Wrong mode/denominator")
-    checked(tuple(record.get(k) for k in ("allocated_cap", "live_cap", "work_cap")) == CAPS, "Original caps changed")
-    checked(all(record.get(k) == first[k] for k in ("allocated", "peak", "work")), "Whole-graph baseline changed")
+    checked(record.get("memory_mode") == 0 and record.get("memory_limit") == 0 and
+            record.get("profile_allocations") is True, "Expected ordinary profiled compiler memory")
+    checked(all(record.get(k) == first[k] for k in ("allocated", "peak", "held")), "Whole-graph baseline changed")
 
 
 def baseline(record, mode):
@@ -50,8 +50,9 @@ def baseline(record, mode):
     checked(record.get("attempts") == record["sites"] and record.get("status") == 0 and
             record.get("injected") is False and record.get("empty_output") is False and
             record.get("ledger_oom") is True, "Baseline/new-ledger OOM contract changed")
-    checked(all(type(record.get(k)) is int and 1 < record[k] <= cap
-                for k, cap in zip(("allocated", "peak", "work"), CAPS)), "Invalid baseline resources")
+    checked(all(type(record.get(k)) is int and 0 < record[k] <= (1 << 64) - 1
+                for k in ("allocated", "peak", "held")) and
+            record["allocated"] >= record["peak"] >= record["held"], "Invalid baseline resources")
     return record["sites"]
 
 
@@ -91,13 +92,13 @@ def verify_union(partitions, sites):
 
 
 def verify_bounds(rows, first):
-    checked(len(rows) == 6 and rows[0] == first, "Bounds baseline differs")
-    complete(rows[-1], first["mode"], 0, 1, first["sites"], 0, 4)
+    checked(len(rows) == 5 and rows[0] == first, "Bounds baseline differs")
+    complete(rows[-1], first["mode"], 0, 1, first["sites"], 0, 3)
     for axis, row in enumerate(rows[1:-1]):
         common(row, first)
         checked(row.get("kind") == "axis" and row.get("axis") == axis and
-                row.get("status") == (6 if axis else 0) and
-                row.get("empty_output") is bool(axis), "Exact/three-minus-one responsibility changed")
+                row.get("status") == (12 if axis == 1 else 0) and
+                row.get("empty_output") is (axis == 1), "Held exact/minus-one/plus-one responsibility changed")
 
 
 def sanitizer_report(data):
@@ -238,7 +239,7 @@ def main():
         manifest.update(qualified=True, seconds=time.monotonic() - started,
                         cpu_seconds=sum(p["cpu_seconds"] for p in manifest["commands"]))
         publish()
-        print(f"Default gap mode{args.mode}: all {sites} compiler OOM ordinals, runtime48, exact/three-minus-one, physical0; {root}")
+        print(f"Default gap mode{args.mode}: all {sites} compiler OOM ordinals, runtime faults, held exact/minus/plus, physical0; {root}")
         return 0
     except (Exception, KeyboardInterrupt) as error:
         manifest.update(failure=str(error), seconds=time.monotonic() - started)

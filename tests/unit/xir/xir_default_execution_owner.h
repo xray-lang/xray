@@ -12,9 +12,10 @@
 #ifndef XIR_DEFAULT_EXECUTION_OWNER_H
 #define XIR_DEFAULT_EXECUTION_OWNER_H
 #include "xir/xxir_compile_context.h"
+#include "xir/xxir_compile_memory.h"
 typedef XrXirStatus (*DefaultBuild)(const XrXirCompileContext *, unsigned, XrXirProgram **);
 static inline XrCompileResourceLimits default_limits(void) {
-    return (XrCompileResourceLimits){33554432,8388608,64000000};
+    return (XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true};
 }
 static inline XrXirCompileContext default_context(XrCompileResourceLimits limits) {
     XrXirCompileContext context={0};
@@ -27,15 +28,15 @@ static inline XrCompileResourceStats default_stats(const XrXirCompileContext *co
 }
 static inline void default_owner_free(XrXirCompileContext *context,XrCompileResourceStats baseline) {
     XrCompileResourceStats stats=default_stats(context);
-    CHECK(stats.live_bytes==baseline.live_bytes);
+    CHECK(stats.held_bytes==baseline.held_bytes);
     xr_compile_resources_release(context->resources);*context=(XrXirCompileContext){0};
     instance_compile_zero();CHECK(!runtime_live && !runtime_bytes && !runtime_owned);
 }
 static inline void default_pipeline_report(const XrXirCompileContext *context,const char *name) {
     XrCompileResourceStats stats=default_stats(context);
-    printf("default graph %s compiler allocated=%llu live=%llu peak=%llu work=%llu attempts=%zu\n",
-        name,(unsigned long long)stats.allocated_bytes,(unsigned long long)stats.live_bytes,
-        (unsigned long long)stats.peak_bytes,(unsigned long long)stats.work,instance_compile_attempts);
+    printf("default graph %s compiler allocated=%llu held=%llu peak=%llu attempts=%zu\n",
+        name,(unsigned long long)stats.allocated_bytes,(unsigned long long)stats.held_bytes,
+        (unsigned long long)stats.peak_bytes,instance_compile_attempts);
 }
 
 typedef struct DefaultCompilerFaultEvent {
@@ -45,8 +46,8 @@ typedef struct DefaultCompilerFaultEvent {
     bool injected,empty_output,ledger_oom;
     XrCompileResourceStats exact;
 } DefaultCompilerFaultEvent;
-/* The ordinary caller leaves selection disabled and retains its full serial
- * sweep. A partition still compiles each selected ordinal on a fresh ledger. */
+/* Ordinary regression checks the first and last actual compiler fault. Explicit
+ * sweeps and partitions compile every selected ordinal on a fresh owner. */
 typedef struct DefaultCompilerPartition {
     bool enabled;
     unsigned phase;
@@ -54,13 +55,15 @@ typedef struct DefaultCompilerPartition {
     void (*report)(const DefaultCompilerFaultEvent *);
 } DefaultCompilerPartition;
 static DefaultCompilerPartition default_compiler_partition;
+static bool default_compiler_exhaustive;
 static inline void default_compiler_faults(DefaultBuild build,unsigned variant) {
-    XrCompileResourceStats exact={0};size_t sites=0;bool ledger_oom=false;
+    XrCompileResourceStats exact={0};size_t sites=0,tested=0;bool ledger_oom=false;
     if(default_compiler_partition.enabled)CHECK(default_compiler_partition.workers>0 &&
         default_compiler_partition.workers<=8 && default_compiler_partition.index<default_compiler_partition.workers);
     for(size_t pass=0;pass<=sites;++pass) {
         if(pass && default_compiler_partition.enabled && (default_compiler_partition.phase!=1 ||
             (pass-1)%default_compiler_partition.workers!=default_compiler_partition.index))continue;
+        if(pass && !default_compiler_partition.enabled && !default_compiler_exhaustive && pass!=1 && pass!=sites)continue;
         instance_compile_attempts=0;instance_compile_fail_at=0;instance_compile_injected=false;
         if(!pass) {
             XrCompileResources *rejected=NULL;XrCompileResourceLimits limits=default_limits();
@@ -74,7 +77,7 @@ static inline void default_compiler_faults(DefaultBuild build,unsigned variant) 
         XrXirStatus status=build(&context,variant,&program);
         if(!pass) {CHECK(status==XR_XIR_OK && program);sites=instance_compile_attempts;CHECK(sites>0 && sites<20000);exact=default_stats(&context);}
         else {if(status!=XR_XIR_OUT_OF_MEMORY)fprintf(stderr,"default compiler ordinal%zu status%u\n",pass-1,status);
-            CHECK(status==XR_XIR_OUT_OF_MEMORY && !program && instance_compile_injected && instance_compile_attempts>pass-1);}
+            CHECK(status==XR_XIR_OUT_OF_MEMORY && !program && instance_compile_injected && instance_compile_attempts>pass-1);++tested;}
         DefaultCompilerFaultEvent event={.kind=pass?1u:0u,.variant=variant,.ordinal=pass?pass-1:0,
             .sites=sites,.attempts=instance_compile_attempts,.status=status,.injected=instance_compile_injected,
             .empty_output=program==NULL,.ledger_oom=ledger_oom,.exact=exact};
@@ -84,17 +87,19 @@ static inline void default_compiler_faults(DefaultBuild build,unsigned variant) 
         if(default_compiler_partition.report)default_compiler_partition.report(&event);
     }
     if(!default_compiler_partition.enabled || default_compiler_partition.phase==2)
-    for(unsigned axis=0;axis<4;++axis) {
-        XrCompileResourceLimits limits={exact.allocated_bytes,exact.peak_bytes,exact.work};
-        if(axis==1)--limits.allocated_bytes;if(axis==2)--limits.live_bytes;if(axis==3)--limits.work;
+    for(unsigned axis=0;axis<3;++axis) {
+        CHECK(exact.peak_bytes>0 && exact.peak_bytes<UINT64_MAX);
+        XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,exact.peak_bytes,true};
+        if(axis==1)--limits.memory_limit;if(axis==2)++limits.memory_limit;
         XrXirCompileContext context=default_context(limits);XrCompileResourceStats baseline=default_stats(&context);
         XrXirProgram *program=NULL;XrXirStatus status=build(&context,variant,&program);
-        CHECK(axis?(status==XR_XIR_BUDGET && !program):(status==XR_XIR_OK && program));
+        CHECK(axis==1?(status==XR_XIR_MEMORY_LIMIT && !program):(status==XR_XIR_OK && program));
         DefaultCompilerFaultEvent event={.kind=2,.variant=variant,.axis=axis,.sites=sites,
             .status=status,.empty_output=program==NULL,.exact=exact};
         xr_xir_compile_program_drop(program);default_owner_free(&context,baseline);
         if(default_compiler_partition.report)default_compiler_partition.report(&event);
     }
-    if(!default_compiler_partition.enabled)printf("default graph compiler variant%u: %zu actual OOM; exact/three minus-one; both physical0\n",variant,sites);
+    if(!default_compiler_partition.enabled)printf("default graph compiler variant%u: tested=%zu sites=%zu mode=%s; held exact/minus/plus; both physical0\n",
+        variant,tested,sites,default_compiler_exhaustive?"all":"first-last");
 }
 #endif // XIR_DEFAULT_EXECUTION_OWNER_H

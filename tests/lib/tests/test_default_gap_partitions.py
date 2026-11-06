@@ -12,8 +12,8 @@ spec.loader.exec_module(runner)
 
 def baseline():
     return dict(kind="baseline", mode=0, sites=3, ordinal=0, axis=0, status=0, attempts=3,
-                injected=False, empty_output=False, ledger_oom=True, allocated=1024, peak=512, work=2048,
-                allocated_cap=33554432, live_cap=8388608, work_cap=64000000,
+                injected=False, empty_output=False, ledger_oom=True, allocated=1024, peak=512, held=256,
+                memory_mode=0, memory_limit=0, profile_allocations=True,
                 **{key: 0 for key in runner.PHYSICAL})
 
 
@@ -49,9 +49,10 @@ class Protocol(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 runner.verify_union(parts, 3)
 
-    def test_denominator_cap_or_fresh_baseline_changes(self):
-        for key, value in (("sites", 4), ("sites", 20000), ("allocated_cap", 67108864),
-                           ("work_cap", 128000000), ("ledger_oom", False), ("attempts", 2)):
+    def test_denominator_memory_mode_or_fresh_baseline_changes(self):
+        for key, value in (("sites", 4), ("sites", 20000), ("memory_mode", 1),
+                           ("memory_limit", 1), ("profile_allocations", False),
+                           ("ledger_oom", False), ("attempts", 2), ("held", 1025)):
             row = baseline()
             row[key] = value
             with self.assertRaises(RuntimeError):
@@ -77,15 +78,15 @@ class Protocol(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 runner.verify_shard(rows, baseline(), 0, 2)
 
-    def test_exact_and_all_three_minus_one_axes(self):
+    def test_held_exact_minus_one_and_plus_one(self):
         first = baseline()
-        rows = [first, *(dict(first, kind="axis", axis=n, status=6 if n else 0,
-                              empty_output=bool(n), injected=False, ledger_oom=False) for n in range(4)),
-                complete(axes=4)]
+        rows = [first, *(dict(first, kind="axis", axis=n, status=12 if n == 1 else 0,
+                              empty_output=n == 1, injected=False, ledger_oom=False) for n in range(3)),
+                complete(axes=3)]
         runner.verify_bounds(rows, first)
-        for axis in range(4):
+        for axis in range(3):
             damaged = copy.deepcopy(rows)
-            damaged[axis+1]["status"] = 0 if axis else 6
+            damaged[axis+1]["status"] = 0 if axis == 1 else 12
             with self.assertRaises(RuntimeError):
                 runner.verify_bounds(damaged, first)
 

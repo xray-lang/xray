@@ -39,7 +39,7 @@ static XrXirStatus default_owned_retry(const XrXirCompileContext *context,
     CHECK(!memcmp(saved_owner,owner,sizeof(*owner)) && !memcmp(saved_entries,owner->entries,entries));
     CHECK(!memcmp(saved_bindings,owner->bindings,bindings));
     XrCompileResourceStats after=default_stats(context);
-    CHECK(after.live_bytes==before.live_bytes && after.work>=before.work);
+    CHECK(after.held_bytes==before.held_bytes);
     spec->abi_version=abi;
     return xir_program_receive(context,spec,input,NULL,output);
 }

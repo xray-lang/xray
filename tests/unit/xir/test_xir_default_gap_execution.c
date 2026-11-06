@@ -58,7 +58,7 @@ static inline void default_mixed_release(void *pointer) {
 #if DEFAULT_MODE==3
 static XrXirStatus default_allocate(const XrXirCompileContext *context,size_t count,size_t bytes,void **output) {
     XrCompileResourceStatus status=xr_compile_resources_calloc(context->resources,count,bytes,output);
-    return status==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
+    return xir_compile_resource_status(status);
 }
 #endif
 #include "xir_default_gap_owned.h"
@@ -72,12 +72,12 @@ static XrXirStatus default_input(const XrXirCompileContext *context,XrXirArtifac
 #if DEFAULT_MODE==0
     XrCompilerSession *session=NULL;XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrCompileResourceStatus setup=xr_compile_session_new(context->resources,&session);
-    XrXirStatus status=setup==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:setup==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
+    XrXirStatus status=xir_compile_resource_status(setup);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
     XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     if(status==XR_XIR_OK)status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
     if(status==XR_XIR_OK){CHECK(result.checked && result.snapshot);*output=result.checked;result.checked=NULL;}
-    else if(status!=XR_XIR_OUT_OF_MEMORY && status!=XR_XIR_BUDGET)fprintf(stderr,"source %u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);
+    else if(status!=XR_XIR_OUT_OF_MEMORY && status!=XR_XIR_MEMORY_LIMIT)fprintf(stderr,"source %u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);
     if(status!=XR_XIR_OK)CHECK(!result.checked && !result.snapshot);
     xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);return status;
 #else
@@ -190,7 +190,7 @@ static uint8_t *default_gap_inputs(const char *packet_path,const char *c_path) {
 int main(int argc,char **argv) {
 #if DEFAULT_MODE==2
     if(argc==2 && !strcmp(argv[1],"--serial-compiler-control")){
-        (void)default_gap_inputs(NULL,NULL);gap_seal_faults(default_build);return 0;
+        default_compiler_exhaustive=true;(void)default_gap_inputs(NULL,NULL);gap_seal_faults(default_build);return 0;
     }
 #endif
     if(argc>1 && !strncmp(argv[1],"--compiler-",11))return default_gap_compiler_command(argc,argv);
