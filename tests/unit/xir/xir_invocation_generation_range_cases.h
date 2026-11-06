@@ -60,7 +60,7 @@ static XrXirStatus generation_range_prepare(const XrXirCompileContext *context,
     XrXirStatus status=xir_fixture_check(context,&trial->fixture.module,&trial->checked,NULL);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(trial->checked,NULL);
     const XrXirModule *source=trial->checked?xr_xir_compile_artifact_module(trial->checked):NULL;
-    if (status==XR_XIR_OK) status=invocation_core_storage(context,source,&trial->effects);
+    if (status==XR_XIR_OK) status=invocation_core_storage(context,trial->checked,&trial->effects);
     if (status==XR_XIR_OK) status=effect_parameters_derive(source,&trial->effects,&trial->graph,context);
     return status;
 }
@@ -536,7 +536,7 @@ static void generation_sequence_producers(void) {
     CHECK(xir_fixture_check(&context,&fixture.returned.module,&checked,NULL)==XR_XIR_OK &&
         xr_xir_compile_artifact_verify(checked,NULL)==XR_XIR_OK);
     const XrXirModule *source=xr_xir_compile_artifact_module(checked);
-    CHECK(invocation_core_storage(&context,source,&effects)==XR_XIR_OK &&
+    CHECK(invocation_core_storage(&context,checked,&effects)==XR_XIR_OK &&
         effect_parameters_derive(source,&effects,&graph,&context)==XR_XIR_OK &&
         effect_graph_build_material(source,&effects,&graph,&context)==XR_XIR_OK);
     EffectInvocationWorkspace *owner=NULL;EffectInvocationDeclaredBounds *bounds=NULL;

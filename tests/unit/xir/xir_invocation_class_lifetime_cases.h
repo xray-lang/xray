@@ -26,7 +26,7 @@ static XrXirStatus conditional_class_discovery_lifetime(const XrXirCompileContex
     const XrXirModule *module=checked?xr_xir_compile_artifact_module(checked):NULL;
     XrXirEffects effects={0};EffectGraph graph={0};EffectInvocationDeclaredBounds *bounds=NULL;
     EffectInvocationCertificate *certificate=NULL;EffectFinalFunctions *receiving=NULL;
-    if(status==XR_XIR_OK) status=invocation_core_storage(work,module,&effects);
+    if(status==XR_XIR_OK) status=invocation_core_storage(work,checked,&effects);
     if(status==XR_XIR_OK) status=effect_graph_build(module,&effects,&graph,(XrXirCompileContext *)work);
     if(status==XR_XIR_OK) status=effect_parameters_derive(module,&effects,&graph,work);
     if(status==XR_XIR_OK) status=effect_invocation_bounds_new(work,&bounds);

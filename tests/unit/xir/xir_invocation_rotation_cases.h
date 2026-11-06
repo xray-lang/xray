@@ -20,10 +20,11 @@
 /* The old public formula retains the Fn8 advertisements. The new private
  * equation certificate derives executing origins without publishing them. */
 static XrXirStatus invocation_rotation_derive(const XrXirCompileContext *context,
-    const XrXirModule *module,EffectInvocationCertificate **output) {
+    const XrXirArtifact *artifact,EffectInvocationCertificate **output) {
+    const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
     XrXirEffects effects={0};EffectGraph graph={0};EffectInvocationDeclaredBounds *bounds=NULL;
     EffectFinalFunctions *receiving=NULL;
-    XrXirStatus status=invocation_core_storage(context,module,&effects);
+    XrXirStatus status=invocation_core_storage(context,artifact,&effects);
     if (status==XR_XIR_OK) status=effect_graph_build(module,&effects,&graph,(XrXirCompileContext *)context);
     if (status==XR_XIR_OK) status=effect_parameters_derive(module,&effects,&graph,context);
     if (status==XR_XIR_OK) status=effect_invocation_bounds_new(context,&bounds);
@@ -155,7 +156,7 @@ static XrXirStatus conditional_invocation_rotation(const XrXirCompileContext *co
         run.phase=3;status=xr_xir_compile_root_cause_trace_copy(context,public_effects,0,&public_trace);
     }
     if (status==XR_XIR_OK) {
-        run.phase=4;status=invocation_rotation_derive(context,xr_xir_compile_artifact_module(run.checked),&certificate);
+        run.phase=4;status=invocation_rotation_derive(context,run.checked,&certificate);
     }
     if (status==XR_XIR_OK && pipeline) status=invocation_rotation_pipeline(&run);
     xr_xir_compile_effects_free(public_effects);

@@ -627,7 +627,7 @@ static XrXirStatus conditional_generation_case(const XrXirCompileContext *contex
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(checked,NULL);
     fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:10 status%u if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(checked,NULL);\n",(unsigned)status);
     const XrXirModule *source=checked?xr_xir_compile_artifact_module(checked):NULL;
-    if (status==XR_XIR_OK) status=invocation_core_storage(context,source,&effects);
+    if (status==XR_XIR_OK) status=invocation_core_storage(context,checked,&effects);
     fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:13 status%u if (status==XR_XIR_OK) status=invocation_core_storage(context,source,&effects);\n",(unsigned)status);
     if (status==XR_XIR_OK) status=effect_parameters_derive(source,&effects,&graph,context);
     fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:15 status%u if (status==XR_XIR_OK) status=effect_parameters_derive(source,&effects,&graph,context);\n",(unsigned)status);

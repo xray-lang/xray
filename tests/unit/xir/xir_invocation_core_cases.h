@@ -8,10 +8,14 @@
  * xir_invocation_core_cases.h - Authentic owned invocation certificate probes
  */
 static XrXirStatus invocation_core_storage(const XrXirCompileContext *context,
-    const XrXirModule *module,XrXirEffects *effects) {
+    const XrXirArtifact *artifact,XrXirEffects *effects) {
+    const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
+    if (!module || !effects) return XR_XIR_BAD_STRUCTURE;
     *effects=(XrXirEffects){.resources=context->resources,.count=module->function_count};
-    XrXirStatus status=XR_XIR_OK;uint32_t count=effects->count;
-    effects->outcomes_work.functions=xir_compile_calloc(context,count,sizeof(*effects->outcomes_work.functions),&status);
+    XrXirStatus status=effect_input_facts_new(context,
+        (XirEffectInput){module,xr_xir_compile_artifact_construction(artifact),NULL},&effects->input_facts);
+    uint32_t count=effects->count;
+    if (status==XR_XIR_OK) effects->outcomes_work.functions=xir_compile_calloc(context,count,sizeof(*effects->outcomes_work.functions),&status);
     if (status==XR_XIR_OK) effects->outcomes_work.task_creation=xir_compile_calloc(context,count,sizeof(*effects->outcomes_work.task_creation),&status);
     if (status==XR_XIR_OK) effects->outcomes_work.root=xir_compile_calloc(context,count,sizeof(*effects->outcomes_work.root),&status);
     if (status==XR_XIR_OK) effects->outcomes_work.root_witnesses=xir_compile_calloc(context,count,sizeof(*effects->outcomes_work.root_witnesses),&status);
@@ -23,7 +27,8 @@ static void invocation_core_storage_free(XrXirEffects *effects) {
     effect_parameters_free(effects);
     xr_compile_resources_free(effects->outcomes_work.functions);xr_compile_resources_free(effects->outcomes_work.task_creation);
     xr_compile_resources_free(effects->outcomes_work.root);xr_compile_resources_free(effects->outcomes_work.root_witnesses);
-    xr_compile_resources_free(effects->outcomes_work.unresolved_witnesses);*effects=(XrXirEffects){0};
+    xr_compile_resources_free(effects->outcomes_work.unresolved_witnesses);
+    effect_input_facts_free(effects->input_facts);*effects=(XrXirEffects){0};
 }
 
 /* Full construction and Artifact checking precede the same-owner equation
@@ -256,7 +261,7 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
     XrXirEffects effects={0};EffectGraph graph={0};EffectInvocationDeclaredBounds *bounds=NULL;
     EffectFinalFunctions *receiving=NULL;
     EffectInvocationCertificate *certificate=NULL;
-    if (status==XR_XIR_OK) { phase=2;status=invocation_core_storage(context,module,&effects); }
+    if (status==XR_XIR_OK) { phase=2;status=invocation_core_storage(context,checked,&effects); }
     if (status==XR_XIR_OK) { phase=3;status=effect_graph_build(module,&effects,&graph,(XrXirCompileContext *)context); }
     if (status==XR_XIR_OK) { phase=4;status=effect_parameters_derive(module,&effects,&graph,context); }
     if (status==XR_XIR_OK) { phase=5;status=effect_invocation_bounds_new(context,&bounds); }

@@ -105,7 +105,7 @@ static XrXirStatus conditional_invocation_lowered_context(const XrXirCompileCont
     if (status==XR_XIR_OK) { phase=4;status=xr_xir_compile_lower(specialized,&target, NULL,&lowered,&diagnostic); }
     if (status==XR_XIR_OK) { phase=5;status=xr_xir_compile_artifact_verify(lowered,&diagnostic); }
     const XrXirModule *module=lowered?xr_xir_compile_artifact_module(lowered):NULL;
-    if (status==XR_XIR_OK) { phase=6;status=invocation_core_storage(context,module,&effects); }
+    if (status==XR_XIR_OK) { phase=6;status=invocation_core_storage(context,lowered,&effects); }
     if (status==XR_XIR_OK) status=effect_graph_build(module,&effects,&graph,(XrXirCompileContext *)context);
     if (status==XR_XIR_OK) status=effect_parameters_derive(module,&effects,&graph,context);
     if (status==XR_XIR_OK) { phase=7;status=effect_invocation_instance_bounds(context,module,&bounds); }

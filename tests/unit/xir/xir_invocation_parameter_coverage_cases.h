@@ -157,7 +157,7 @@ static XrXirStatus conditional_parameter_case(const XrXirCompileContext *context
     XrXirEffects effects={0};EffectGraph graph={0};EffectInvocationDeclaredBounds *bounds=NULL;
     EffectInvocationWorkspace *owner=NULL;EffectFinalFunctions *solution=NULL;
     EffectInvocationCertificate *certificate=NULL;
-    if (status==XR_XIR_OK) status=invocation_core_storage(context,module,&effects);
+    if (status==XR_XIR_OK) status=invocation_core_storage(context,checked,&effects);
     if (status==XR_XIR_OK) status=effect_graph_build(module,&effects,&graph,(XrXirCompileContext *)context);
     if (status==XR_XIR_OK) status=effect_parameters_derive(module,&effects,&graph,context);
     if (status==XR_XIR_OK) status=effect_invocation_bounds_new(context,&bounds);

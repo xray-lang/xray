@@ -352,7 +352,7 @@ static XrXirStatus conditional_invocation_returned(const XrXirCompileContext *co
     XrXirEffects effects={0};EffectGraph graph={0};EffectInvocationDeclaredBounds *bounds=NULL;
     EffectInvocationWorkspace *owner=NULL;EffectFinalFunctions *solution=NULL;
     EffectInvocationCertificate *certificate=NULL;
-    if (status==XR_XIR_OK) { phase=3;status=invocation_core_storage(context,module,&effects); }
+    if (status==XR_XIR_OK) { phase=3;status=invocation_core_storage(context,checked,&effects); }
     if (status==XR_XIR_OK) status=effect_graph_build(module,&effects,&graph,(XrXirCompileContext *)context);
     if (status==XR_XIR_OK) status=effect_parameters_derive(module,&effects,&graph,context);
     if (status==XR_XIR_OK) status=effect_invocation_bounds_new(context,&bounds);
