@@ -16,13 +16,11 @@ static void hover_bytes(LspHoverBuilder *b,const char *text,size_t length) {
     if(needed>b->capacity) {
         size_t next=b->capacity?b->capacity:64;
         while(next<needed) {
-            b->status=lsp_work(b->snapshot,1);if(b->status!=XR_XIR_OK)return;
             if(next>SIZE_MAX/2){next=needed;break;}next*=2;
         }
-        b->status=lsp_resource_status(xr_compile_resources_resize(b->snapshot->resources,(void **)&b->text,next));
+        b->status=xir_compile_resource_status(xr_compile_resources_resize(b->snapshot->resources,(void **)&b->text,next));
         if(b->status!=XR_XIR_OK)return;b->capacity=next;
     }
-    b->status=lsp_work(b->snapshot,length+1);
     if(b->status==XR_XIR_OK){memcpy(b->text+b->length,text,length);b->length+=length;b->text[b->length]=0;}
 }
 static void hover_text(LspHoverBuilder *b,const char *text) {
@@ -30,7 +28,6 @@ static void hover_text(LspHoverBuilder *b,const char *text) {
     if(!text){b->status=XR_XIR_BAD_STRUCTURE;return;}
     size_t length=0;
     for(;;) {
-        b->status=lsp_work(b->snapshot,1);if(b->status!=XR_XIR_OK)return;
         if(!text[length])break;
         if(length==SIZE_MAX-1){b->status=XR_XIR_BUDGET;return;}++length;
     }
@@ -67,16 +64,14 @@ static void hover_type_named(LspHoverBuilder *b,const XrXirSourceView *v,XrXirSo
     LspHoverTypeFrame *stack=NULL;size_t count=0,capacity=0;
     XrXirType next=source.type;bool push=true;
     while((push||count)&&b->status==XR_XIR_OK) {
-        b->status=lsp_work(b->snapshot,1);if(b->status!=XR_XIR_OK)break;
         if(push) {
             if(v->types&&count>(size_t)v->types->count){b->status=XR_XIR_BAD_TYPE;break;}
             if(count==capacity) {
                 size_t cap=capacity?capacity*2:8;
                 if(cap<capacity||cap>SIZE_MAX/sizeof(*stack)){b->status=XR_XIR_BUDGET;break;}
-                b->status=lsp_resource_status(xr_compile_resources_resize(b->snapshot->resources,(void **)&stack,cap*sizeof(*stack)));
+                b->status=xir_compile_resource_status(xr_compile_resources_resize(b->snapshot->resources,(void **)&stack,cap*sizeof(*stack)));
                 if(b->status!=XR_XIR_OK)break;capacity=cap;
             }
-            b->status=lsp_work(b->snapshot,sizeof(*stack));if(b->status!=XR_XIR_OK)break;
             stack[count++]=(LspHoverTypeFrame){next,0,0};push=false;
         }
         LspHoverTypeFrame *f=&stack[count-1];
@@ -166,7 +161,6 @@ static void hover_qualified_name(LspHoverBuilder *b,const XrXirSourceView *v,con
      * in an unaccounted temporary allocation or using recursive stack depth. */
     uint32_t owner=d->parent,depth=0;
     while(owner&&b->status==XR_XIR_OK) {
-        b->status=lsp_work(b->snapshot,1);if(b->status!=XR_XIR_OK)return;
         if(owner>v->declaration_count||depth>=v->declaration_count){b->status=XR_XIR_BAD_STRUCTURE;return;}
         const XrXirSourceDeclaration *parent=&v->declarations[owner-1];
         ++depth;
@@ -178,7 +172,6 @@ static void hover_qualified_name(LspHoverBuilder *b,const XrXirSourceView *v,con
     while(depth&&b->status==XR_XIR_OK) {
         owner=d->parent;
         for(uint32_t i=1;i<depth;++i) {
-            b->status=lsp_work(b->snapshot,1);if(b->status!=XR_XIR_OK)return;
             owner=v->declarations[owner-1].parent;
         }
         hover_text(b,v->declarations[owner-1].name);hover_text(b,".");--depth;
@@ -200,7 +193,6 @@ static void hover_declaration(LspHoverBuilder *b,const XrXirSourceView *v,const 
     if(fact->role==XR_XIR_SOURCE_SYNTAX_METHOD) {
         if(fact->flags&XR_XIR_SOURCE_SYNTAX_STATIC)hover_text(b,"static ");
         for(uint32_t i=0;i<syntax->marker_count&&b->status==XR_XIR_OK;++i) {
-            b->status=lsp_work(b->snapshot,1);if(b->status!=XR_XIR_OK)break;
             const XrXirSourceMarker *marker=&syntax->markers[i];
             if(marker->declaration!=d->id||marker->role==XR_XIR_SOURCE_MARKER_REF_ARGUMENT)continue;
             hover_mode(b,marker->role==XR_XIR_SOURCE_MARKER_REF?XR_PARAM_REF:XR_PARAM_MOVE);
@@ -211,7 +203,6 @@ static void hover_declaration(LspHoverBuilder *b,const XrXirSourceView *v,const 
         else {hover_text(b,"fn ");hover_qualified_name(b,v,d);}
         hover_text(b,"(");uint32_t index=0,shown=0;
         for(uint32_t i=0;i<v->declaration_count&&b->status==XR_XIR_OK;++i) {
-            b->status=lsp_work(b->snapshot,1);if(b->status!=XR_XIR_OK)break;
             const XrXirSourceDeclaration *p=&v->declarations[i];
             if(p->kind!=XR_XIR_SOURCE_PARAMETER||p->parent!=d->id)continue;
             if(index>=d->parameter_count||!d->parameters||!p->type.known||!d->parameters[index].known||
@@ -234,17 +225,16 @@ static void hover_declaration(LspHoverBuilder *b,const XrXirSourceView *v,const 
         bool own=false;
         if(nominal) {
             size_t length=0;for(;;) {
-                b->status=lsp_work(b->snapshot,1);if(b->status!=XR_XIR_OK)return;
                 if(!d->name[length])break;++length;
             }
-            if(length==nominal->name.length){b->status=lsp_equal(b->snapshot,d->name,nominal->name.bytes,length,&own);if(b->status!=XR_XIR_OK)return;}
+            if(length==nominal->name.length){b->status=lsp_equal(d->name,nominal->name.bytes,length,&own);if(b->status!=XR_XIR_OK)return;}
             if(own) {
                 if(d->range.module>=v->module_count){b->status=XR_XIR_BAD_STRUCTURE;return;}
                 const char *identity=v->modules[d->range.module].identity;length=0;
                 if(!identity){b->status=XR_XIR_BAD_STRUCTURE;return;}
-                for(;;){b->status=lsp_work(b->snapshot,1);if(b->status!=XR_XIR_OK)return;if(!identity[length])break;++length;}
+                for(;;){if(!identity[length])break;++length;}
                 own=false;
-                if(length==nominal->module.length){b->status=lsp_equal(b->snapshot,identity,nominal->module.bytes,length,&own);if(b->status!=XR_XIR_OK)return;}
+                if(length==nominal->module.length){b->status=lsp_equal(identity,nominal->module.bytes,length,&own);if(b->status!=XR_XIR_OK)return;}
             }
         }
         if(own) {

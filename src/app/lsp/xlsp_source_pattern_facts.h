@@ -18,12 +18,10 @@ typedef struct XlspSourcePatternBinding {uint32_t binding,field;} XlspSourcePatt
 static bool xlsp_source_pattern_range(XrXirSourceRange a,XrXirSourceRange b) {
     return a.module==b.module&&a.line==b.line&&a.column==b.column&&a.end_line==b.end_line&&a.end_column==b.end_column;
 }
-static XrXirStatus xlsp_source_pattern_binding(XrCompileResources *resources,const XrXirSourceView *view,
+static XrXirStatus xlsp_source_pattern_binding(const XrXirSourceView *view,
     const XrXirSourceSyntaxView *syntax,XrXirSourceRange range,XlspSourcePatternBinding *out) {
     *out=(XlspSourcePatternBinding){0};
     for(uint32_t i=0;i<syntax->marker_count;++i) {
-        XrCompileResourceStatus work=xr_compile_resources_work(resources,sizeof(syntax->markers[i]));
-        if(work!=XR_COMPILE_RESOURCE_OK)return work==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
         const XrXirSourceMarker *marker=&syntax->markers[i];
         if(marker->role!=XR_XIR_SOURCE_MARKER_PATTERN_FIELD_BINDING||!xlsp_source_pattern_range(marker->range,range))continue;
         if(!marker->declaration||marker->declaration>view->declaration_count||
@@ -33,8 +31,6 @@ static XrXirStatus xlsp_source_pattern_binding(XrCompileResources *resources,con
     }
     if(!out->binding)return XR_XIR_OK;
     for(uint32_t i=0;i<view->reference_count;++i) {
-        XrCompileResourceStatus work=xr_compile_resources_work(resources,sizeof(view->references[i])+sizeof(syntax->references[i]));
-        if(work!=XR_COMPILE_RESOURCE_OK)return work==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
         const XrXirSourceReference *ref=&view->references[i];
         if(!xlsp_source_pattern_range(syntax->references[i],range)||!ref->declaration||ref->declaration>view->declaration_count||
             ref->declaration!=ref->target||view->declarations[ref->declaration-1].kind!=XR_XIR_SOURCE_MEMBER)continue;

@@ -11,7 +11,6 @@ static void type_identity_text(LspHoverBuilder *b,const char *text) {
     if(!text){type_identity_number(b,UINT64_MAX);return;}
     size_t length=0;
     while(b->status==XR_XIR_OK) {
-        b->status=lsp_work(b->snapshot,1);if(b->status!=XR_XIR_OK)return;
         if(!text[length])break;if(length==SIZE_MAX-1){b->status=XR_XIR_BUDGET;return;}++length;
     }
     type_identity_bytes(b,text,length);
@@ -23,7 +22,7 @@ static void type_identity_module(LspHoverBuilder *b,const XrXirSourceView *view,
     type_identity_bytes(b,&source->fingerprint,sizeof(source->fingerprint));
     const XlspSourceSnapshot *snapshot=b->snapshot;const LspSourceText *selected=NULL;
     for(size_t i=0;i<snapshot->count&&b->status==XR_XIR_OK;++i) {
-        bool contains=false;b->status=lsp_text_has_module(snapshot,&snapshot->texts[i],module,&contains);
+        bool contains=false;b->status=lsp_text_has_module(&snapshot->texts[i],module,&contains);
         if(contains){selected=&snapshot->texts[i];break;}
     }
     type_identity_number(b,selected?1:0);
@@ -60,10 +59,9 @@ static void type_identity_nominal(LspHoverBuilder *b,const XrXirSourceView *view
         const char *name=view->modules[i].identity;size_t length=0;
         if(!name){b->status=XR_XIR_BAD_STRUCTURE;break;}
         while(b->status==XR_XIR_OK) {
-            b->status=lsp_work(b->snapshot,1);if(b->status!=XR_XIR_OK||!name[length])break;++length;
+            if(!name[length])break;++length;
         }
         if(length!=declaration->module.length)continue;
-        b->status=lsp_work(b->snapshot,length);if(b->status!=XR_XIR_OK)break;
         if(memcmp(name,declaration->module.bytes,length))continue;
         type_identity_module(b,view,i);found=true;break;
     }
@@ -100,11 +98,9 @@ static bool type_identity_child(const XrXirTypeNode *node,uint64_t index,XrXirTy
 static void type_identity_graph(LspHoverBuilder *b,const XrXirSourceView *view,XrXirSourceType source) {
     TypeIdentityFrame *stack=NULL;size_t count=0,capacity=0;XrXirType next=source.type;bool push=true;
     while((push||count)&&b->status==XR_XIR_OK) {
-        b->status=lsp_work(b->snapshot,1);if(b->status!=XR_XIR_OK)break;
         if(push) {
             bool active=false;
             for(size_t i=0;i<count;++i) {
-                b->status=lsp_work(b->snapshot,1);if(b->status!=XR_XIR_OK)break;
                 if(stack[i].type==next){type_identity_number(b,4);type_identity_number(b,count-i);active=true;break;}
             }
             push=false;if(active||b->status!=XR_XIR_OK)continue;
@@ -112,10 +108,9 @@ static void type_identity_graph(LspHoverBuilder *b,const XrXirSourceView *view,X
             if(count==capacity) {
                 size_t cap=capacity?capacity*2:8;
                 if(cap<capacity||cap>SIZE_MAX/sizeof(*stack)){b->status=XR_XIR_BUDGET;break;}
-                b->status=lsp_resource_status(xr_compile_resources_resize(b->snapshot->resources,(void **)&stack,cap*sizeof(*stack)));
+                b->status=xir_compile_resource_status(xr_compile_resources_resize(b->snapshot->resources,(void **)&stack,cap*sizeof(*stack)));
                 if(b->status!=XR_XIR_OK)break;capacity=cap;
             }
-            b->status=lsp_work(b->snapshot,sizeof(*stack));if(b->status!=XR_XIR_OK)break;
             stack[count++]=(TypeIdentityFrame){next,0,false};
         }
         TypeIdentityFrame *frame=&stack[count-1];uint32_t raw=(uint32_t)frame->type;

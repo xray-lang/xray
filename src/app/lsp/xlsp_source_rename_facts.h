@@ -85,7 +85,7 @@ static XrXirStatus rename_choose(RenameWork *w,const XlspSourceBindings *queries
 }
 static XrXirStatus rename_pattern_edit(RenameWork *w,const XrXirSourceView *view,const XrXirSourceSyntaxView *syntax,
     XrXirSourceRange span,uint32_t selected,RenameEdit *edit) {
-    XlspSourcePatternBinding pattern={0};XrXirStatus status=xlsp_source_pattern_binding(w->resources,view,syntax,span,&pattern);
+    XlspSourcePatternBinding pattern={0};XrXirStatus status=xlsp_source_pattern_binding(view,syntax,span,&pattern);
     if(status!=XR_XIR_OK)return status;
     if(!pattern.binding)return rename_import_edit(w,view,syntax,span,selected,edit);
     if(selected==pattern.binding){edit->preserved=view->declarations[pattern.field-1].name;edit->prefix=true;}
@@ -104,7 +104,7 @@ static XrXirStatus rename_symbol_at(RenameWork *w,const XlspSourceBindings *quer
             if(span.line<=0||span.column<=0)continue;
             RenameEdit occurrence={0};status=rename_fact_range(w,queries,documents,view,(RenameSpelling){span,NULL},&occurrence);if(status!=XR_XIR_OK)return status;
             if(rename_contains(occurrence.range,input->position)) {
-                XlspSourcePatternBinding pattern={0};status=xlsp_source_pattern_binding(w->resources,view,syntax,span,&pattern);if(status!=XR_XIR_OK)return status;
+                XlspSourcePatternBinding pattern={0};status=xlsp_source_pattern_binding(view,syntax,span,&pattern);if(status!=XR_XIR_OK)return status;
                 if(pattern.binding==i+1)continue;
                 uint32_t imported=0;status=rename_import_binding(w,syntax,span,&imported);if(status!=XR_XIR_OK)return status;
                 if(imported==i+1&&view->declarations[i].kind==XR_XIR_SOURCE_IMPORT)continue;
@@ -119,7 +119,7 @@ static XrXirStatus rename_symbol_at(RenameWork *w,const XlspSourceBindings *quer
             /* Preserve the direct declaration. A callable's navigation target
              * is not the identity of the variable or import that names it. */
             if(rename_contains(occurrence.range,input->position)) {
-                XlspSourcePatternBinding pattern={0};status=xlsp_source_pattern_binding(w->resources,view,syntax,span,&pattern);if(status!=XR_XIR_OK)return status;
+                XlspSourcePatternBinding pattern={0};status=xlsp_source_pattern_binding(view,syntax,span,&pattern);if(status!=XR_XIR_OK)return status;
                 if(pattern.binding==id)continue;
                 status=rename_choose(w,queries,documents,root,id,&chosen);if(status!=XR_XIR_OK)return status;
             }

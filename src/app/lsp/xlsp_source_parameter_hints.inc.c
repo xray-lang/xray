@@ -37,9 +37,9 @@ static XrXirStatus parameter_hint_same_variable(ParameterHintsContext *ctx,const
     if(status==XR_XIR_OK)status=xlsp_source_cursor(s->resources,ctx->text->text,ctx->text->length,argument->variable.end,&last);
     if(status!=XR_XIR_OK)return status;if(first.offset>=last.offset)return XR_XIR_BAD_STRUCTURE;
     size_t length=0;if(!name)return XR_XIR_BAD_STRUCTURE;
-    while(name[length]){status=lsp_work(s,1);if(status!=XR_XIR_OK)return status;++length;}
+    while(name[length]){++length;}
     if(length!=last.offset-first.offset)return XR_XIR_OK;
-    return lsp_equal(s,ctx->text->text+first.offset,name,length,same);
+    return lsp_equal(ctx->text->text+first.offset,name,length,same);
 }
 static XrXirStatus parameter_hint_emit(ParameterHintsContext *ctx,const XrXirSourceDeclaration *target,
     const XrXirSourceDeclaration *parameter,const XlspSourceArgumentSyntax *argument,uint32_t mode) {
@@ -60,10 +60,9 @@ static XrXirStatus parameter_hint_emit(ParameterHintsContext *ctx,const XrXirSou
     if(ctx->hints.count==ctx->capacity) {
         size_t capacity=ctx->capacity?ctx->capacity*2:8;
         if(capacity<ctx->capacity||capacity>SIZE_MAX/sizeof(*ctx->hints.items)){status=XR_XIR_BUDGET;goto hint_done;}
-        status=lsp_resource_status(xr_compile_resources_resize(s->resources,(void **)&ctx->hints.items,capacity*sizeof(*ctx->hints.items)));
+        status=xir_compile_resource_status(xr_compile_resources_resize(s->resources,(void **)&ctx->hints.items,capacity*sizeof(*ctx->hints.items)));
         if(status!=XR_XIR_OK)goto hint_done;ctx->capacity=capacity;
     }
-    status=lsp_work(s,sizeof(hint));if(status!=XR_XIR_OK)goto hint_done;
     ctx->hints.items[ctx->hints.count++]=hint;hint=(XlspSourceParameterHint){0};
 hint_done:
     parameter_hint_free(&hint);
@@ -75,7 +74,7 @@ static XrXirStatus parameter_hint_parameters(ParameterHintsContext *ctx,const Xr
     uint32_t index=0;size_t explicit_count=0;bool variadic=false;
     if(signature->parameter_count!=target->parameter_count)return XR_XIR_BAD_STRUCTURE;
     for(uint32_t i=0;i<ctx->view->declaration_count;++i) {
-        XrXirStatus status=lsp_work(ctx->snapshot,sizeof(XrXirSourceDeclaration));if(status!=XR_XIR_OK)return status;
+        XrXirStatus status;
         const XrXirSourceDeclaration *parameter=&ctx->view->declarations[i];
         if(parameter->kind!=XR_XIR_SOURCE_PARAMETER||parameter->parent!=target->id)continue;
         if(index>=target->parameter_count||!target->parameters||!signature->parameters[index].known||
@@ -88,7 +87,7 @@ static XrXirStatus parameter_hint_parameters(ParameterHintsContext *ctx,const Xr
         if(receiver)continue;
         bool governed=fact->role==XR_XIR_SOURCE_SYNTAX_NONE&&target->kind==XR_XIR_SOURCE_MEMBER&&target->native_identity;
         if(fact->role!=XR_XIR_SOURCE_SYNTAX_NAME&&!governed)return XR_XIR_UNSUPPORTED;
-        uint32_t mode=0;status=signature_parameter_mode(ctx->snapshot,ctx->syntax,parameter,&mode);if(status!=XR_XIR_OK)return status;
+        uint32_t mode=0;status=signature_parameter_mode(ctx->syntax,parameter,&mode);if(status!=XR_XIR_OK)return status;
         size_t end=explicit_count<call->call.argument_count?explicit_count+1:explicit_count;
         if(flags&XR_XIR_SOURCE_CALL_VARIADIC) {
             if(index!=target->parameter_count)return XR_XIR_BAD_STRUCTURE;
@@ -105,7 +104,6 @@ static XrXirStatus parameter_hint_parameters(ParameterHintsContext *ctx,const Xr
 static XrXirStatus parameter_hint_call(ParameterHintsContext *ctx,const XlspSourceArgumentCall *call) {
     bool selected=false;
     for(size_t i=0;i<call->call.argument_count;++i) {
-        XrXirStatus status=lsp_work(ctx->snapshot,sizeof(*call->arguments));if(status!=XR_XIR_OK)return status;
         XrLspPosition position=call->arguments[i].range.start;
         if(!type_hint_position_before(position,ctx->range.start)&&type_hint_position_before(position,ctx->range.end))selected=true;
     }
@@ -123,7 +121,6 @@ static XrXirStatus parameter_hints_sort(ParameterHintsContext *ctx) {
     for(size_t i=1;i<ctx->hints.count;++i) {
         size_t at=i;
         while(at) {
-            XrXirStatus status=lsp_work(ctx->snapshot,sizeof(*ctx->hints.items));if(status!=XR_XIR_OK)return status;
             if(!type_hint_position_before(ctx->hints.items[at].position,ctx->hints.items[at-1].position))break;
             XlspSourceParameterHint swap=ctx->hints.items[at];ctx->hints.items[at]=ctx->hints.items[at-1];ctx->hints.items[--at]=swap;
         }
@@ -138,13 +135,12 @@ XR_FUNC XrXirStatus xlsp_source_parameter_hints(const XlspSourceSnapshot *s,cons
     ParameterHintsContext ctx={0};ctx.snapshot=s;ctx.range=range;ctx.view=xr_xir_compile_source_snapshot_view(s->query);
     ctx.syntax=ctx.view?lsp_syntax(s,ctx.view):NULL;if(!ctx.syntax)return XR_XIR_UNRESOLVED;
     for(size_t i=0;i<s->count;++i) {
-        status=lsp_work(s,1);if(status!=XR_XIR_OK)return status;if(s->texts[i].uri_length!=input->uri_length)continue;
-        bool same=false;status=lsp_equal(s,s->texts[i].uri,input->uri,input->uri_length,&same);if(status!=XR_XIR_OK)return status;
+        if(s->texts[i].uri_length!=input->uri_length)continue;
+        bool same=false;status=lsp_equal(s->texts[i].uri,input->uri,input->uri_length,&same);if(status!=XR_XIR_OK)return status;
         if(same){ctx.text=&s->texts[i];break;}
     }
     if(!ctx.text||ctx.text->version!=input->version||ctx.text->length!=input->source_length)return XR_XIR_BAD_STRUCTURE;
     XrFingerprint fingerprint={{0}};xr_module_source_fingerprint(ctx.text->text,&fingerprint);
-    status=lsp_work(s,sizeof(fingerprint));if(status!=XR_XIR_OK)return status;
     if(memcmp(&fingerprint,&input->fingerprint,sizeof(fingerprint)))return XR_XIR_BAD_STRUCTURE;
     for(size_t i=0;i<input->count;++i){status=parameter_hint_call(&ctx,&input->calls[i]);if(status!=XR_XIR_OK)goto done;}
     status=parameter_hints_sort(&ctx);
