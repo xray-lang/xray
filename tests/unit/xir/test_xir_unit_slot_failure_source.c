@@ -45,7 +45,7 @@ int main(int argc,char **argv){
   xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
   if(!pass){
    retained_owner=owner;retained_live=effects_compile_live;retained_bytes=effects_compile_bytes;
-   CHECK(retained_live>1&&retained_bytes>owner.baseline.live_bytes);
+   CHECK(retained_live>1&&retained_bytes>owner.baseline.held_bytes);
   }else unit_compile_owner_free(&owner);
   CHECK(effects_compile_live==retained_live&&effects_compile_bytes==retained_bytes);
   CHECK(!xr_test_unit_slot_failure_runtime_live()&&!xr_test_unit_slot_failure_runtime_bytes());
