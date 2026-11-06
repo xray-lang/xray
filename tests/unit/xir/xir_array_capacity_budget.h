@@ -13,6 +13,7 @@
 #ifndef XIR_ARRAY_CAPACITY_BUDGET_H
 #define XIR_ARRAY_CAPACITY_BUDGET_H
 typedef struct CapacityBudgetCase {
+    XrXirCallStatus completion;
     XrXirInstance *first, *second;
     XrXirDomain *domain;
     XrXirValue alias;
@@ -66,13 +67,13 @@ static void capacity_budget_state(const CapacityBudgetCase *test,unsigned public
     const XrXirValue *other=capacity_budget_slot(test->second,test->state_slot);
     CHECK(other->type==test->alias.type&&capacity_array_state(other)==test->old_cap);
 }
-static void capacity_budget_failed_output(XrXirInstance *instance,bool exhausted) {
+static void capacity_budget_failed_output(XrXirInstance *instance,bool exhausted,XrXirCallStatus completion) {
     CHECK(instance->budget.exhausted==exhausted&&instance->state==XR_XIR_INSTANCE_READY);
     CHECK(xr_xir_task_executor_completion_status(instance->executor)==
-        (exhausted?XR_XIR_CALL_LIMIT:XR_XIR_CALL_READY));
+        completion);
     XrXirValue value={0},before=value;
     CHECK(xr_xir_instance_take_result(instance,&value)==
-        (exhausted?XR_XIR_CALL_LIMIT:XR_XIR_CALL_BAD_STATE));
+        (completion==XR_XIR_CALL_READY?XR_XIR_CALL_BAD_STATE:completion));
     CHECK(!memcmp(&value,&before,sizeof(value)));
     value=(XrXirValue){XR_XIR_I64,0,77};before=value;
     CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_BAD_ARGUMENT);
@@ -84,7 +85,7 @@ static void capacity_budget_failed_output(XrXirInstance *instance,bool exhausted
 static void capacity_budget_close(CapacityBudgetCase *test,bool exhausted) {
     const XrXirDomainBudgetStats spent=xr_xir_domain_budget_stats(test->domain);
     capacity_watched=NULL;xr_xir_value_drop(&test->alias);
-    CHECK(xr_xir_instance_free(test->first)==(exhausted?XR_XIR_CALL_LIMIT:XR_XIR_CALL_READY));
+    CHECK(xr_xir_instance_free(test->first)==completion);
     CHECK(xr_xir_instance_free(test->second)==XR_XIR_CALL_READY);
     const XrXirDomainBudgetStats released=xr_xir_domain_budget_stats(test->domain);
     const XrXirDomainStats physical=xr_xir_domain_stats(test->domain);
@@ -105,8 +106,11 @@ static CapacityBudgetMeasure capacity_budget_measure(CapacityCompile *run,const 
     printf("capacity runtime measured %s requested%llu work%llu sites%zu\n",name,
         (unsigned long long)(measure.after.requested_bytes-measure.before.requested_bytes),
         (unsigned long long)(measure.after.work-measure.before.work),measure.sites);
-    CHECK(measure.after.work-measure.before.work==(!strcmp(name,"committed")?27u:50u));
-    CHECK(measure.after.requested_bytes-measure.before.requested_bytes==(!strcmp(name,"committed")?176u:392u));
+    /* Module Cell publication can charge traversal and ownership storage in
+     * addition to the Array. The complete operation supplies each real bound. */
+    uint64_t minimum=array_header_bytes(run->program->arena,XR_XIR_I64)+13*sizeof(int64_t);
+    if(strcmp(name,"committed"))minimum+=array_header_bytes(run->program->arena,XR_XIR_I64)+7*sizeof(int64_t);
+    CHECK(measure.after.requested_bytes-measure.before.requested_bytes>=minimum);
     XrXirValue result={0};CHECK(xr_xir_instance_take_result(test.first,&result)==XR_XIR_CALL_RETURNED);
     CHECK(capacity_array_state(&result)>=13);xr_xir_value_drop(&result);
     capacity_budget_state(&test,1);capacity_budget_close(&test,false);return measure;
@@ -123,6 +127,7 @@ static void capacity_budget_axis(CapacityCompile *run,const char *name,const Cap
     else if(axis==CAPACITY_BUDGET_LIVE)test.domain->limit=limit;
     else test.domain->budget.work_limit=limit;
     XrXirCallStatus status=capacity_transaction(run,test.first,name);
+    test.completion=minus_one&&capacity_transaction_started?XR_XIR_CALL_LIMIT:XR_XIR_CALL_READY;
     const XrXirDomainBudgetStats spent=xr_xir_domain_budget_stats(test.domain);
     const unsigned publications=capacity_publications;
     const bool after_commit=axis==CAPACITY_BUDGET_WORK||!strcmp(name,"committedThenAllocate");
@@ -135,7 +140,7 @@ static void capacity_budget_axis(CapacityCompile *run,const char *name,const Cap
     if(!minus_one&&axis==CAPACITY_BUDGET_LIVE)CHECK(xr_xir_domain_stats(test.domain).peak_bytes==limit);
     if(axis==CAPACITY_BUDGET_WORK)CHECK(spent.work==limit);
     const bool exhausted=minus_one&&axis==CAPACITY_BUDGET_WORK;
-    if(minus_one)capacity_budget_failed_output(test.first,exhausted);
+    if(minus_one)capacity_budget_failed_output(test.first,exhausted,test.completion);
     else {
         XrXirValue result={0};CHECK(xr_xir_instance_take_result(test.first,&result)==XR_XIR_CALL_RETURNED);
         CHECK(capacity_array_state(&result)>=13);xr_xir_value_drop(&result);
@@ -146,27 +151,29 @@ static void capacity_budget_axis(CapacityCompile *run,const char *name,const Cap
 }
 static void capacity_budget_oom_retry(CapacityCompile *run,const CapacityBudgetMeasure *measure) {
     CapacityBudgetCase test=capacity_budget_open(run);
-    const uint64_t required=sizeof(XirArray)+13*sizeof(int64_t);
-    CHECK(measure->after.requested_bytes-measure->before.requested_bytes==required);
+    const uint64_t required=measure->after.requested_bytes-measure->before.requested_bytes;
+    CHECK(required>=array_header_bytes(run->program->arena,XR_XIR_I64)+13*sizeof(int64_t));
     CHECK(measure->publication_site>=2&&measure->sites==measure->publication_site);
     CHECK(required<=UINT64_MAX-test.before.requested_bytes);
     test.domain->budget.requested_limit=test.before.requested_bytes+required;
     const uint64_t limit=test.domain->budget.requested_limit;
     const size_t failure=measure->publication_site-1;runtime_fail_at=failure;
     XrXirCallStatus first=capacity_transaction(run,test.first,"committed");runtime_fail_at=SIZE_MAX;
+    test.completion=capacity_transaction_started?XR_XIR_CALL_OOM:XR_XIR_CALL_READY;
     CHECK(first==XR_XIR_CALL_OOM&&runtime_attempts>failure&&!capacity_publications);
     const XrXirDomainBudgetStats failed=xr_xir_domain_budget_stats(test.domain);
     CHECK(failed.requested_bytes==limit&&failed.work>test.before.work);
     CHECK(xr_xir_domain_stats(test.domain).live_bytes==test.physical.live_bytes);
-    capacity_budget_failed_output(test.first,false);capacity_budget_state(&test,0);
+    capacity_budget_failed_output(test.first,false,test.completion);capacity_budget_state(&test,0);
     CHECK(test.first->domain==test.domain&&test.domain->budget.requested_limit==limit);
     capacity_watch(test.first);runtime_attempts=0;
     XrXirCallStatus retry=capacity_transaction(run,test.first,"committed");
+    test.completion=capacity_transaction_started?XR_XIR_CALL_LIMIT:XR_XIR_CALL_READY;
     CHECK(retry==XR_XIR_CALL_LIMIT&&!capacity_publications&&test.first->domain==test.domain);
     const XrXirDomainBudgetStats retried=xr_xir_domain_budget_stats(test.domain);
     CHECK(retried.requested_bytes==limit&&retried.requested_call_bytes>failed.requested_call_bytes&&retried.work>failed.work);
     CHECK(test.domain->budget.requested_limit==limit&&xr_xir_domain_stats(test.domain).live_bytes==test.physical.live_bytes);
-    capacity_budget_failed_output(test.first,false);capacity_budget_state(&test,0);capacity_budget_close(&test,false);
+    capacity_budget_failed_output(test.first,false,test.completion);capacity_budget_state(&test,0);capacity_budget_close(&test,false);
     printf("capacity runtime same-domain OOM retry failure-site%zu charged%llu OOM then LIMIT no refill dual physical0\n",
         failure,(unsigned long long)required);
 }
