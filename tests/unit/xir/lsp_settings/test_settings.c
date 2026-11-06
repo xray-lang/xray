@@ -7,8 +7,9 @@
 #include <string.h>
 #define CHECK(c) do {if (!(c)) {fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1);}} while (0)
 #include "xir_sdk_resource_test.h"
+#include "xir/xxir_compile_memory.h"
 #include "lsp_open_json_owner.h"
-static const XrCompileResourceLimits limits = {UINT64_C(64)*1024*1024, UINT64_C(8)*1024*1024, UINT64_C(128000000)};
+static const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true};
 static char kept_log[] = "kept.log", kept_pattern[] = "kept";
 static XlspIgnorePattern kept_ignores[] = {{kept_pattern, false, true}};
 static const char *const cases[] = {
@@ -100,7 +101,7 @@ static XrXirStatus once(unsigned mode, const XrCompileResourceLimits *caps, size
     initial(&server, &a, &b, pending); memcpy(&before, &server, sizeof(before)); bool clear = true;
     size_t json_calls = lsp_json_calls; runtime_attempts = 0; runtime_fail_at = fail;
     XrCompileResources *resources = NULL; XrCompileResourceStatus opened = xr_compile_resources_new(caps, &resources);
-    XrXirStatus status = opened == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK : opened == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+    XrXirStatus status = xir_compile_resource_status(opened);
     XlspSourceSettings *owner = NULL;
     if (status == XR_XIR_OK) status = xlsp_source_settings_read(resources, json, &owner);
     if (mode == 15) xjson_get_object(xjson_get_object(json, "xray"), "format")->as.object.count = 0;
@@ -140,11 +141,14 @@ int main(void) {
         XrCompileResourceStats stats = {0}; CHECK(once(mode, &limits, SIZE_MAX, &stats) == wanted(mode)); size_t sites = runtime_attempts;
         if (full) {
             for (size_t i = 0; i < sites; ++i) CHECK(once(mode, &limits, i, NULL) == XR_XIR_OUT_OF_MEMORY);
-            if (wanted(mode) == XR_XIR_OK) for (unsigned axis = 0; axis < 3; ++axis) for (int delta = -1; delta <= 1; ++delta) {
-                XrCompileResourceLimits exact = limits; uint64_t amount = axis == 0 ? stats.allocated_bytes : axis == 1 ? stats.peak_bytes : stats.work;
-                uint64_t value = delta < 0 ? amount - 1 : amount + (unsigned)delta;
-                if (!axis) exact.allocated_bytes = value; else if (axis == 1) exact.live_bytes = value; else exact.work = value;
-                CHECK(once(mode, &exact, SIZE_MAX, NULL) == (delta < 0 ? XR_XIR_BUDGET : XR_XIR_OK));
+            if (wanted(mode) == XR_XIR_OK) {
+                CHECK(stats.peak_bytes && stats.peak_bytes < UINT64_MAX);
+                for (int delta = -1; delta <= 1; ++delta) {
+                    XrCompileResourceLimits exact = limits;
+                    exact.memory_limit = delta < 0 ? stats.peak_bytes - 1 : stats.peak_bytes + (unsigned)delta;
+                    CHECK(once(mode, &exact, SIZE_MAX, NULL) == (delta < 0 ? XR_XIR_MEMORY_LIMIT : XR_XIR_OK));
+                }
+                CHECK(once(mode, &limits, SIZE_MAX, NULL) == XR_XIR_OK);
             }
         }
         printf("Settings mode=%u SourceFI=%zu JSONallocations=0 full=%u all-or-none state/queue physical0/0\n", mode, sites, full ? 1u : 0u);

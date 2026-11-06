@@ -6,8 +6,9 @@
 #include <string.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}}while(0)
 #include "xir_sdk_resource_test.h"
+#include "xir/xxir_compile_memory.h"
 
-static const XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+static const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true};
 static const char *const sources[]={
     "import \"./util\" as u\n",
     "// import \"./fake\"\nfn text()->string{return \"import \\\"./fake\\\"\"}\nimport { value as x } from \"./u\xf0\x9f\x98\x80til\"\n",
@@ -50,7 +51,7 @@ static void facts(const XlspSourceImports *owner,unsigned mode) {
 static XrXirStatus once(unsigned mode,XrCompileResourceLimits caps,XrCompileResourceStats *stats) {
     XrCompileResources *r=NULL;XlspSourceImports *owner=NULL;
     XrCompileResourceStatus made=xr_compile_resources_new(&caps,&r);
-    if(made!=XR_COMPILE_RESOURCE_OK)return made==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    if(made!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(made);
     char text[256],uri[]="file:///imports.xr";size_t length=strlen(sources[mode]);CHECK(length<sizeof(text));memcpy(text,sources[mode],length+1);
     XlspSourceDocument document={uri,text,sizeof(uri)-1,length,1};XrXirStatus status=xlsp_source_imports_build(r,&document,&owner);
     if(stats&&status!=XR_XIR_OK)fprintf(stderr,"Import observation mode=%u status=%u\n",mode,(unsigned)status);
@@ -84,11 +85,13 @@ int main(int argc,char **argv) {
         if(full) {
             for(size_t i=0;i<sites;++i){runtime_attempts=0;runtime_fail_at=i;CHECK(once(mode,limits,NULL)==XR_XIR_OUT_OF_MEMORY&&runtime_attempts>i);}
             runtime_fail_at=SIZE_MAX;
-            for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta) {
-                XrCompileResourceLimits exact={stats.allocated_bytes,stats.peak_bytes,stats.work};
-                uint64_t *bound=axis==0?&exact.allocated_bytes:axis==1?&exact.live_bytes:&exact.work;CHECK(*bound&&*bound<INT64_MAX);*bound=(uint64_t)((int64_t)*bound+delta);
-                CHECK(once(mode,exact,NULL)==(delta<0?XR_XIR_BUDGET:XR_XIR_OK));
+            CHECK(stats.peak_bytes&&stats.peak_bytes<UINT64_MAX);
+            for(int delta=-1;delta<=1;++delta) {
+                XrCompileResourceLimits exact=limits;
+                exact.memory_limit=delta<0?stats.peak_bytes-1:stats.peak_bytes+(unsigned)delta;
+                CHECK(once(mode,exact,NULL)==(delta<0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
             }
+            CHECK(once(mode,limits,NULL)==XR_XIR_OK);
         }
         printf("Source imports mode=%u SourceFI=%zu full=%u exactToken/UTF16, producer death, physical0/0\n",mode,sites,full?1u:0u);
     }

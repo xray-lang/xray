@@ -7,8 +7,9 @@
 #include <math.h>
 #define CHECK(c) do {if (!(c)) {fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}} while (0)
 #include "xir_sdk_resource_test.h"
+#include "xir/xxir_compile_memory.h"
 #include "lsp_open_json_owner.h"
-static const XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+static const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true};
 static const char *const cases[]={
     "{\"changes\":[{\"uri\":\"file:///C:/watch/a%20b.xr\",\"type\":1},{\"uri\":\"file:///C:/watch/a%20b.xr\",\"type\":2},{\"uri\":\"file:///C:/watch/a%20b.xr\",\"type\":3}]}",
     "{\"changes\":[{\"uri\":\"file:///C:/watch/%CE%BB%F0%9F%98%80.xr\",\"type\":2}]}",
@@ -54,7 +55,7 @@ static XrXirStatus facts(const XlspSourceWatch *owner,unsigned mode){
 static XrXirStatus once(unsigned mode,const XrCompileResourceLimits *caps,size_t fail,XrCompileResourceStats *stats){
     XrJsonValue *json=input(mode);size_t json_calls=lsp_json_calls;runtime_attempts=0;runtime_fail_at=fail;
     XrCompileResources *r=NULL;XrCompileResourceStatus opened=xr_compile_resources_new(caps,&r);
-    XrXirStatus status=opened==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:opened==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrXirStatus status=xir_compile_resource_status(opened);
     XlspSourceWatch *owner=NULL;if(status==XR_XIR_OK)status=xlsp_source_watch_read(r,json,&owner);xjson_free(json);
     if(status==XR_XIR_OK)status=facts(owner,mode);else CHECK(!owner);
     CHECK(lsp_json_calls==json_calls&&!lsp_json_live&&!lsp_json_bytes);
@@ -68,7 +69,7 @@ static void lifetime(const char *entry){
     CHECK(xlsp_source_workspace_build(&context,&document,1,&server.source_workspace,NULL,NULL,NULL)==XR_XIR_OK);
     XlspSourceWorkspace *kept=server.source_workspace;size_t live=runtime_live,bytes=runtime_bytes;
     xjson_free(json);xr_compile_resources_release(r);CHECK(facts(owner,0)==XR_XIR_OK);
-    server.source_revision=UINT64_MAX;CHECK(xlsp_source_watch_commit(owner,&server)==XR_XIR_BUDGET);
+    server.source_revision=UINT64_MAX;CHECK(xlsp_source_watch_commit(owner,&server)==XR_XIR_OVERFLOW);
     CHECK(server.source_revision==UINT64_MAX&&server.source_workspace==kept&&runtime_live==live&&runtime_bytes==bytes);
     server.source_revision=UINT64_MAX-3;CHECK(xlsp_source_watch_commit(owner,&server)==XR_XIR_OK&&server.source_revision==UINT64_MAX&&!server.source_workspace);
     xlsp_source_watch_free(owner);CHECK(!runtime_live&&!runtime_bytes&&!lsp_json_live&&!lsp_json_bytes);
@@ -85,8 +86,13 @@ int main(int argc,char **argv){
     (void)sdk_unlimited;bool full=getenv("XR_LSP_WATCH_NORMAL_ONLY")==NULL;
     for(unsigned mode=0;mode<sizeof(cases)/sizeof(*cases);++mode){XrCompileResourceStats stats={0};CHECK(once(mode,&limits,SIZE_MAX,&stats)==(valid(mode)?XR_XIR_OK:XR_XIR_BAD_STRUCTURE));size_t sites=runtime_attempts;
         if(full){for(size_t i=0;i<sites;++i)CHECK(once(mode,&limits,i,NULL)==XR_XIR_OUT_OF_MEMORY);
-            if(valid(mode))for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits caps=limits;uint64_t value=axis==0?stats.allocated_bytes:axis==1?stats.peak_bytes:stats.work;value=delta<0?value-1:value+(unsigned)delta;
-                if(!axis)caps.allocated_bytes=value;else if(axis==1)caps.live_bytes=value;else caps.work=value;CHECK(once(mode,&caps,SIZE_MAX,NULL)==(delta<0?XR_XIR_BUDGET:XR_XIR_OK));}}
+            if(valid(mode)){
+                CHECK(stats.peak_bytes&&stats.peak_bytes<UINT64_MAX);
+                for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits caps=limits;
+                    caps.memory_limit=delta<0?stats.peak_bytes-1:stats.peak_bytes+(unsigned)delta;
+                    CHECK(once(mode,&caps,SIZE_MAX,NULL)==(delta<0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));}
+                CHECK(once(mode,&limits,SIZE_MAX,NULL)==XR_XIR_OK);
+            }}
         printf("Watch mode=%u SourceFI=%zu JSONallocations=0 full=%u ordered owned URI/path/revision physical0/0\n",mode,sites,full?1u:0u);}
     lifetime(argv[1]);return 0;
 }
