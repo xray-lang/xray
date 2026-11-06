@@ -83,14 +83,20 @@ static XrXirArtifact *program_fixture_checked(const XrXirCompileContext *context
     };
     const XrXirBlock blocks[] = {{0, 5, 0, 0}, {0, 10, 0, 0}, {0, 12, 0, 0}, {0, 6, 0, 0}, {0, 3, 0, 0}, {0, 4, 0, 0}};
     const XrXirFunction functions[] = {
-        {"init_root", 9, NULL, 0, XR_XIR_UNIT, &blocks[0], 1, init, 5, NULL, 0},
-        {"init_beta", 9, NULL, 0, XR_XIR_UNIT, &blocks[1], 1, beta, 10, NULL, 0},
-        {"init_alpha", 10, NULL, 0, XR_XIR_UNIT, &blocks[1], 1, alpha, 10, mode == 2 ? &error_operand : NULL, mode == 2 ? 1u : 0u},
-        {"main", 4, NULL, 0, XR_XIR_I64, &blocks[2], 1, root, 12, NULL, 0},
-        {"alpha_next", 10, NULL, 0, XR_XIR_I64, &blocks[3], 1, get_alpha, 6, atomic_operands, 2},
-        {"beta_next", 9, NULL, 0, XR_XIR_I64, &blocks[3], 1, get_beta, 6, atomic_operands, 2},
-        {"root_string", 11, NULL, 0, XR_XIR_STRING, &blocks[4], 1, get_string, 3, NULL, 0},
-        {"alpha_cell", 10, NULL, 0, atomic, &blocks[5], 1, get_atomic, 4, atomic_operands, 1}
+        {"init_root", 9, NULL, 0, XR_XIR_UNIT, &blocks[0], 1, init, 5, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"init_beta", 9, NULL, 0, XR_XIR_UNIT, &blocks[1], 1, beta, 10, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"init_alpha", 10, NULL, 0, XR_XIR_UNIT, &blocks[1], 1, alpha, 10,
+            mode == 2 ? &error_operand : NULL, mode == 2 ? 1u : 0u,
+            .error_type=mode == 2 ? (XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE : XR_XIR_NEVER},
+        {"main", 4, NULL, 0, XR_XIR_I64, &blocks[2], 1, root, 12, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"alpha_next", 10, NULL, 0, XR_XIR_I64, &blocks[3], 1, get_alpha, 6, atomic_operands, 2,
+            .error_type=XR_XIR_NEVER},
+        {"beta_next", 9, NULL, 0, XR_XIR_I64, &blocks[3], 1, get_beta, 6, atomic_operands, 2,
+            .error_type=XR_XIR_NEVER},
+        {"root_string", 11, NULL, 0, XR_XIR_STRING, &blocks[4], 1, get_string, 3, NULL, 0,
+            .error_type=XR_XIR_NEVER},
+        {"alpha_cell", 10, NULL, 0, atomic, &blocks[5], 1, get_atomic, 4, atomic_operands, 1,
+            .error_type=XR_XIR_NEVER}
     };
     const uint32_t imports[] = {1, 2};
     const XrXirSourceModule modules[] = {

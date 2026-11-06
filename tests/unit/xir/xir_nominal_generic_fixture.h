@@ -21,7 +21,8 @@ static XrXirArtifact *nominal_generic_fixture(const XrXirCompileContext *context
     XrXirGeneric generics[4] = {0}; memcpy(generics, built.generics, 3 * sizeof(*generics));
     XrXirInstruction init = {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}};
     XrXirBlock block = {0, 1, 0, 0};
-    functions[3] = (XrXirFunction) {"init", 4, NULL, 0, XR_XIR_UNIT, &block, 1, &init, 1, NULL, 0};
+    functions[3] = (XrXirFunction) {"init", 4, NULL, 0, XR_XIR_UNIT, &block, 1, &init, 1, NULL, 0,
+        .error_type=XR_XIR_NEVER};
     XrXirSourceModule module = {"alpha", 5, NULL, 0, 3, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[4] = {{0, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
     identities[1].nominal_owner = 1; identities[1].method_kind = XR_XIR_MEMBER_HELPER;

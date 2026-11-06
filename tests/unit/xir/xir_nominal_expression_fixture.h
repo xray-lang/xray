@@ -47,10 +47,11 @@ static XrXirArtifact *nominal_expression_fixture(const XrXirCompileContext *cont
     uint32_t operands[] = {0, 2, 4, 1, 3, 5}, body_operands[] = {0, 1}, escape_operand = 0;
     XrXirBlock blocks[] = {{0, 8, 0, 0}, {0, 5, 0, 0}, {0, 1, 0, 0}, {0, 3, 0, 0}};
     XrXirFunction functions[] = {
-        {"root", 4, NULL, 0, XR_XIR_I64, blocks, 1, entry, 8, operands, 6},
-        {"wrap", 4, &t, 1, t, blocks + 1, 1, body, 5, body_operands, 2},
-        {"init", 4, NULL, 0, XR_XIR_UNIT, blocks + 2, 1, &init, 1, NULL, 0},
-        {"escape", 6, NULL, 0, XR_XIR_STRING, blocks + 3, 1, escape, 3, &escape_operand, 1}};
+        {"root", 4, NULL, 0, XR_XIR_I64, blocks, 1, entry, 8, operands, 6, .error_type=XR_XIR_NEVER},
+        {"wrap", 4, &t, 1, t, blocks + 1, 1, body, 5, body_operands, 2, .error_type=XR_XIR_NEVER},
+        {"init", 4, NULL, 0, XR_XIR_UNIT, blocks + 2, 1, &init, 1, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"escape", 6, NULL, 0, XR_XIR_STRING, blocks + 3, 1, escape, 3, &escape_operand, 1,
+            .error_type=XR_XIR_NEVER}};
     XrXirType arguments[] = {XR_XIR_I64, XR_XIR_U8, XR_XIR_STRING};
     XrXirGeneric generics[] = {{NULL, 0, arguments, 3, NULL}, {&constraint, 1, NULL, 0, NULL}, {0}, {NULL,0,arguments+2,1, NULL}};
     XrXirSourceModule source = {"alpha", 5, NULL, 0, 2, 0,XR_XIR_MODULE_FRESH_STORAGE};
@@ -83,7 +84,8 @@ static inline XrXirArtifact *nominal_forwarding_checked(const XrXirCompileContex
     functions[1].blocks = &block; functions[1].operands = operands; functions[1].operand_count = 3;
     generics[1].arguments = &outer; generics[1].argument_count = 1;
     XrXirInstruction identity[] = {{XR_XIR_COPY,t,{0},{0},0, {0}}, {XR_XIR_RETURN,XR_XIR_UNIT,{1},{0},0, {0}}};
-    functions[4] = (XrXirFunction) {"identity",8,&t,1,t,&identity_block,1,identity,2,NULL,0};
+    functions[4] = (XrXirFunction) {"identity",8,&t,1,t,&identity_block,1,identity,2,NULL,0,
+        .error_type=XR_XIR_NEVER};
     generics[4] = (XrXirGeneric) {&constraint,1,NULL,0, NULL};
     built.functions = functions; built.function_count = 5; built.generics = generics; built.declarations = &declarations;
     CHECK(xir_fixture_check(context, &built, &checked, NULL) == XR_XIR_OK);

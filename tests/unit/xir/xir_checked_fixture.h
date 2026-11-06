@@ -89,7 +89,8 @@ static XrXirArtifact *checked_fixture(const XrXirCompileContext *context) {
         {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}
     };
     const XrXirBlock block = {0, 3, 0, 0};
-    functions[8] = (XrXirFunction) {"args", 4, parameters, 2, XR_XIR_I64, &block, 1, ops, 3, operands, 2};
+    functions[8] = (XrXirFunction) {"args", 4, parameters, 2, XR_XIR_I64, &block, 1, ops, 3, operands, 2,
+        .error_type=XR_XIR_NEVER};
     XrXirFunctionIdentity identities[9];
     memcpy(identities, built.declarations->functions, 8 * sizeof(*identities));
     identities[8] = (XrXirFunctionIdentity) {0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0};

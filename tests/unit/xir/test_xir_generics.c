@@ -227,7 +227,8 @@ static void error_erasure_packet(void) {
     XrXirInstruction ops[] = {{XR_XIR_ERROR_ERASE, XR_XIR_ERROR, {0}, {0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {1}, {0}, 0, {0}}};
     XrXirBlock block = {0, 2, 0, 0};
-    XrXirFunction function = {"erase", 5, &parameter, 1, XR_XIR_ERROR, &block, 1, ops, 2, NULL, 0};
+    XrXirFunction function = {"erase", 5, &parameter, 1, XR_XIR_ERROR, &block, 1, ops, 2, NULL, 0,
+        .error_type=XR_XIR_NEVER};
     XrXirModule built = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *decoded = NULL;
     CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
@@ -381,13 +382,13 @@ static XrXirProgram *generic_result_program(XrXirArtifact *original) {
     XrXirFunction functions[5]; memcpy(functions, source->functions, 3 * sizeof(*functions));
     const XrXirInstruction finish = {.op = XR_XIR_RETURN, .type = XR_XIR_UNIT};
     const XrXirBlock block = {.first = 0, .count = 1};
-    functions[3] = (XrXirFunction) {.name = "init", .name_length = 4, .result = XR_XIR_UNIT,
+    functions[3] = (XrXirFunction) {.name = "init", .name_length = 4, .result = XR_XIR_UNIT,.error_type=XR_XIR_NEVER,
         .blocks = &block, .block_count = 1, .instructions = &finish, .instruction_count = 1};
     const XrXirInstruction entry_body[] = {
         {.op = XR_XIR_CONST_INT, .type = XR_XIR_I64},
         {.op = XR_XIR_RETURN, .type = XR_XIR_UNIT, .args = {0}}};
     const XrXirBlock entry_block = {.first = 0, .count = 2};
-    functions[4] = (XrXirFunction) {.name = "entry", .name_length = 5, .result = XR_XIR_I64,
+    functions[4] = (XrXirFunction) {.name = "entry", .name_length = 5, .result = XR_XIR_I64,.error_type=XR_XIR_NEVER,
         .blocks = &entry_block, .block_count = 1, .instructions = entry_body, .instruction_count = 2};
     const XrXirSourceModule module = {.name = "generic", .name_length = 7, .initializer = 3};
     const XrXirFunctionIdentity identities[5] = {{.exported = 1}, {0}, {0}, {0}, {0}};

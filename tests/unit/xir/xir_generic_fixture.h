@@ -29,8 +29,8 @@ static XrXirArtifact *generic_fixture(const XrXirCompileContext *context) {
         {XR_XIR_RETURN, XR_XIR_UNIT, {1}, {0}, 0, {0}}};
     const XrXirBlock blocks[] = {{0, 4, 0, 0}, {0, 2, 0, 0}};
     const XrXirFunction functions[] = {
-        {"caller", 6, parameters, 2, XR_XIR_STRING, blocks, 1, caller, 4, operands, 3},
-        {"id", 2, &t, 1, t, blocks + 1, 1, body, 2, NULL, 0}
+        {"caller", 6, parameters, 2, XR_XIR_STRING, blocks, 1, caller, 4, operands, 3, .error_type=XR_XIR_NEVER},
+        {"id", 2, &t, 1, t, blocks + 1, 1, body, 2, NULL, 0, .error_type=XR_XIR_NEVER}
     };
     const XrXirGeneric generics[] = {{NULL, 0, types, 3, NULL}, {&sendable, 1, NULL, 0, NULL}};
     const XrXirModule built = {XR_XIR_BUILT, functions, 2, NULL, generics, NULL, NULL, XR_XIR_PROGRAM, NULL};
