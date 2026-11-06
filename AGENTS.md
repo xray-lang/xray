@@ -41,24 +41,35 @@ matching its measured wall time so a cold run (no `CTestCostData.txt`) schedules
 it first instead of stranding it at the tail. Keep `PROCESSORS` honest about the
 cores a lane actually consumes.
 
-**The sanitizer lanes are most of a full run.** `tsan_focused` and
-`asan_focused` are `RUN_SERIAL` and each builds its own instrumented tree, so
-together they are roughly two thirds of the wall time of `ctest -j4`; the other
-~344 tests total a few minutes. `ctest -LE sanitizer` is the iteration loop.
-Both lanes decide for themselves whether to build, by comparing the binary
-against `src`, `include`, `stdlib`, `tests`, and `CMakeLists.txt`, so an
-unchanged tree reuses the build and a changed one rebuilds without being asked.
-Neither lane is optional before handing off a completed capability or deletion
-batch in the directories above. During a batch use the existing impact tests;
-do not rerun the same full qualification after each local edit. A failing lane
-remains a failure until its cause is fixed and rerun.
+**Validation follows the direct-cutover verification policy.** Use the current
+numbered roadmap and `rules/verification-policy.md` as the gate boundary:
 
-Changes under `src/ir/`, `src/aot/`, `src/analysis/`, `src/lir/`, or `src/hir/` must preserve the Task 218 compiler-memory-safety defenses:
+- L0: incremental builds and affected `.xr` positive and negative cases.
+- L1: Windows and macOS builds, smoke `run` and `build-run`, valid LIR and
+  register-bytecode tests, and W1-W4 with real host C compilers before main.
+- L2: affected ASan, UBSan and `XR_XIR_PARANOID` coverage, plus an independent
+  runtime ownership review when runtime, RC or code generation changes.
+- L3: the full `.xr` corpus, performance gates, Linux and complete sanitizers
+  in the nightly lane.
 
-- Run `ctest --test-dir build -R meta_ownership_inventory` after compiler metadata changes.
-- Run `ctest --test-dir build -R asan_focused` before handing off a completed change in those directories.
-- Strings and metadata crossing AST, analyzer, IR, plan, evidence, or CGen stage boundaries must be copied into the receiving arena/pool or transferred explicitly. Do not retain dynamic-array element pointers across operations that can grow the array.
-- The generated-C W1-W4 verifier is always on. Do not add a bypass, downgrade its ICE behavior, or hand malformed output to the host C compiler.
+Run the affected coverage for the change. Reuse passed results only when the
+source, effective dependencies, configuration and products are unchanged.
+Do not require a full sanitizer matrix or an independent review for every
+ordinary leaf edit. A failed or unavailable gate remains FAIL or NOT_RUN;
+removing an obsolete target does not turn its old result into a pass.
+
+**Compiler memory safety remains mandatory.** Strings and metadata crossing
+AST, HIR, XIR, LIR, plan or generated-C boundaries must be copied into the
+receiving owner or transferred explicitly. Never retain a dynamic-array
+member pointer across an operation that can grow the array. Preserve the
+allocation and owned-lifetime checks in the affected metadata/runtime tests.
+External input still receives complete validation. Same-process revalidation
+moves to the paranoid build at the execution cutover; do not silently remove
+checks ahead of that change. The generated-C W1-W4 verifier remains enabled:
+never add a bypass, downgrade its failure, or send malformed C to a compiler.
+Keep `.xr` language inputs and their oracles when retiring an old C harness.
+The smoke ratchet, exact first diagnostics and each product command's
+30-second limit remain in force.
 
 **Generated C is portable C11 first.** The AOT backend and its runtime headers
 must compile with supported MSVC, Clang, GCC, and Zig C providers for the
