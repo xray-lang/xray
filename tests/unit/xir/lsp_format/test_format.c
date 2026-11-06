@@ -1,5 +1,6 @@
 /* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
 #include "app/lsp/xlsp_source_format.h"
+#include "xir/xxir_compile_memory.h"
 #include "base/xmalloc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,7 +14,7 @@ static const char *const expected[]={"fn value() -> string {\n    return \"\xf0\
     "fn value() -> string {\n  return \"\xf0\x9f\x98\x80\"\n}\n",
     "fn value() -> string {\n\treturn \"\xf0\x9f\x98\x80\"\n}\n",
     "fn value() -> i64 {\n    return 1\n}\n"};
-static const XrCompileResourceLimits limits={UINT64_C(1073741824),UINT64_C(268435456),UINT64_C(8589934592)};
+static const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,UINT64_C(268435456),true};
 static void facts(XrJsonValue *result,unsigned mode) {
     CHECK(result&&result->type==XR_JSON_ARRAY&&result->as.array.count==((mode<4||mode==7)?1:0));if(mode>=4&&mode!=7)return;
     XrJsonValue *edit=xjson_array_get(result,0),*range=xjson_get_object(edit,"range"),*start=xjson_get_object(range,"start"),*end=xjson_get_object(range,"end");
@@ -24,7 +25,7 @@ static void facts(XrJsonValue *result,unsigned mode) {
 static XrXirStatus once(unsigned mode,XrCompileResourceLimits caps,XrCompileResourceStats *stats,size_t fault,bool *injected) {
     XrCompileResources *resources=NULL;XrJsonValue *result=NULL,*again=NULL;
     XrCompileResourceStatus made=xr_compile_resources_new(&caps,&resources);
-    if(made!=XR_COMPILE_RESOURCE_OK)return made==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    if(made!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(made);
     const char *literal=mode<3?emoji_source:mode==3?"fn value()->i64{\r\nreturn 1\r\n}\r\n":mode==4?expected[0]:mode==5?"":mode==7?"fn value()->i64{\rreturn 1\r}\r":"fn broken(";
     char text[256],uri[]="file:///format.xr";size_t length=strlen(literal);CHECK(length<sizeof(text));memcpy(text,literal,length+1);
     XlspSourceDocument input={uri,text,sizeof(uri)-1,length,7};XrFmtConfig config=xfmt_default_config;
@@ -66,10 +67,13 @@ int main(int argc,char **argv) {
             for(size_t i=0;i<sites;++i){runtime_attempts=0;runtime_fail_at=i;CHECK(once(mode,limits,NULL,SIZE_MAX,NULL)==XR_XIR_OUT_OF_MEMORY&&runtime_attempts>i);}
             runtime_fail_at=SIZE_MAX;
             for(size_t i=0;i<json_sites;++i){bool injected=false;CHECK(once(mode,limits,NULL,i,&injected)==XR_XIR_OUT_OF_MEMORY&&injected);}
-            for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta) {
-                XrCompileResourceLimits exact={stats.allocated_bytes,stats.peak_bytes,stats.work};uint64_t *n=axis==0?&exact.allocated_bytes:axis==1?&exact.live_bytes:&exact.work;
-                CHECK(*n&&*n<INT64_MAX);*n=(uint64_t)((int64_t)*n+delta);CHECK(once(mode,exact,NULL,SIZE_MAX,NULL)==(delta<0?XR_XIR_BUDGET:XR_XIR_OK));
+            for(int delta=-1;delta<=1;++delta) {
+                CHECK(stats.peak_bytes>1&&stats.peak_bytes<INT64_MAX);
+                XrCompileResourceLimits exact={XR_COMPILE_MEMORY_FINITE,
+                    (uint64_t)((int64_t)stats.peak_bytes+delta),true};
+                CHECK(once(mode,exact,NULL,SIZE_MAX,NULL)==(delta<0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
             }
+            CHECK(once(mode,limits,NULL,SIZE_MAX,NULL)==XR_XIR_OK);
         }
         printf("Source formatting mode=%u SourceFI=%zu JSONFI=%zu full=%u actualUTF16EOF/idempotence/producer death physical=0/0\n",mode,sites,json_sites,full?1u:0u);
     }
