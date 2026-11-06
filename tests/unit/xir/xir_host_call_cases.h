@@ -50,7 +50,8 @@ static void host_fatal_cleanup(XrXirProgram *program, uint32_t entry) {
     CHECK(xr_xir_host_call_begin(&request, &call) == XR_XIR_CALL_READY);
     xr_xir_compile_program_drop(program);
     CHECK(xr_xir_host_call_step_bounded(call, UINT64_MAX).outcome.status == XR_XIR_CALL_SUSPENDED);
-    (void)xr_xir_host_call_drop(call);
+    XrXirCallStatus dropped=xr_xir_host_call_drop(call);
+    fprintf(stderr,"cleanup drop returned status%u\n",dropped);
     fputs("fatal cleanup incorrectly returned to the host\n", stderr);
     exit(99);
 }
