@@ -332,6 +332,15 @@ static void observe_negation(XrLirModule *m, bool report) {
         "\"operand\":%u,\"returned\":%u,\"line\":7,\"column\":5}\n",
         fv.parameters[0], v.operands[0], v.result);
 }
+static void check_negation_vm(XrRbcProgram *program, uint64_t input, uint64_t expected) {
+    XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_program_prepare(program, &input, 1, &execution) == XR_RBC_OK);
+    XrRbcOutcome *outcome = xr_rbc_execution_run(execution); uint64_t bits = 0;
+    CHECK(outcome && xr_rbc_outcome_status(outcome) == XR_RBC_OK && xr_rbc_outcome_bits(outcome, &bits));
+    const uint64_t magnitude = UINT64_C(0x7fffffffffffffff), infinity = UINT64_C(0x7ff0000000000000);
+    CHECK((expected & magnitude) > infinity ? (bits & magnitude) > infinity : bits == expected);
+    xr_rbc_execution_free(&execution); xr_rbc_outcome_free(&outcome);
+}
 // Both backends consume the dynamic operand after the input module retires.
 static void emit_negation(XrLirModule *m, const char *path, bool output) {
     observe_negation(m, path != NULL);
@@ -352,14 +361,14 @@ static void emit_negation(XrLirModule *m, const char *path, bool output) {
 #undef XR_FNEG
     };
     for (unsigned n=0;n<sizeof(vectors)/sizeof(*vectors);++n)
-        check_vm(programs[1],&vectors[n][0],1,vectors[n][1]);
+        check_negation_vm(programs[1],vectors[n][0],vectors[n][1]);
     xr_rbc_program_destroy(programs[0]); xr_rbc_program_destroy(programs[1]);
-    const char *policy = strstr(out.bytes, "#pragma STDC FENV_ACCESS ON");
     const char *definitions = strstr(out.bytes, "double ");
-    CHECK(policy && definitions && policy < definitions && strstr(out.bytes, "#pragma fenv_access(on)"));
+    CHECK(definitions && strstr(out.bytes, " = -") && !strstr(out.bytes, "FENV_ACCESS") &&
+        !strstr(out.bytes, "fenv_access"));
     const char *header = strstr(out.bytes, "#include \"xray_native_runtime.h\"");
-    CHECK(output ? header && header < policy : !header);
-    CHECK(!strstr(policy, "#include "));
+    CHECK(output ? header && header < definitions : !header);
+    CHECK(!strstr(definitions, "#include "));
     if (path) {
         FILE *file = fopen(path, "wb"); CHECK(file);
         CHECK(fwrite(out.bytes, 1, out.length, file) == out.length && fclose(file) == 0);
