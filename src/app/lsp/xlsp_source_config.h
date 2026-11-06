@@ -23,9 +23,9 @@ XR_FUNC XrXirStatus xlsp_source_config_read(XrCompileResources *resources,
     const char *root_path, const XlspConfig *current,
     const XrTomlParseLimits *limits, XlspSourceConfig **output);
 XR_FUNC const XlspConfig *xlsp_source_config_view(const XlspSourceConfig *owner);
-/* Caller exclusion is required. Stale bases and all allocation/work failures
+/* Caller exclusion is required. Stale bases and all allocation failures
  * preserve the receiver, including its existing pointers. Receiver allocations
- * use the application heap; all scans and copies use the original work ledger. */
+ * use the application heap; captured configurations retain their memory owner. */
 XR_FUNC XrXirStatus xlsp_source_config_apply(const XlspSourceConfig *owner,
     XlspConfig *target);
 XR_FUNC void xlsp_source_config_free(XlspSourceConfig *owner);

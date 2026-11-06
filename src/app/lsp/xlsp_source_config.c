@@ -15,6 +15,7 @@
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include "../../os/os_fs.h"
+#include "../../xir/xxir_compile_memory.h"
 #include <limits.h>
 #include <string.h>
 
@@ -33,13 +34,12 @@ struct XlspSourceConfig {
     XlspConfig base, next;
 };
 
-static XrXirStatus config_resource(XrCompileResourceStatus status) {
-    return status == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
-        status == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET :
-        status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BAD_STRUCTURE;
-}
 static XrXirStatus config_io(XrOsIoStatus status) {
-    return status == XR_OS_IO_OK ? XR_XIR_OK : status == XR_OS_IO_OVERFLOW ? XR_XIR_BUDGET :
+    return status == XR_OS_IO_OK ? XR_XIR_OK : status == XR_OS_IO_OVERFLOW ? XR_XIR_OVERFLOW :
+        status == XR_OS_IO_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        status == XR_OS_IO_CANCELLED ? XR_XIR_CANCELLED :
+        status == XR_OS_IO_DEADLINE ? XR_XIR_DEADLINE :
+        status == XR_OS_IO_CLOCK_FAILURE ? XR_XIR_CLOCK_FAILURE :
         status == XR_OS_IO_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
         status == XR_OS_IO_NOT_FOUND ? XR_XIR_UNRESOLVED :
         status == XR_OS_IO_UNSUPPORTED ? XR_XIR_UNSUPPORTED :
@@ -47,19 +47,16 @@ static XrXirStatus config_io(XrOsIoStatus status) {
 }
 static XrXirStatus config_toml(XrTomlParseStatus status) {
     return status == XR_TOML_PARSE_OK ? XR_XIR_OK :
-        status == XR_TOML_PARSE_OVERFLOW || status == XR_TOML_PARSE_LIMIT ? XR_XIR_BUDGET :
+        status == XR_TOML_PARSE_OVERFLOW ? XR_XIR_OVERFLOW :
+        status == XR_TOML_PARSE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        status == XR_TOML_PARSE_LIMIT ? XR_XIR_BUDGET :
         status == XR_TOML_PARSE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
         status == XR_TOML_PARSE_IO ? XR_XIR_IO : XR_XIR_BAD_STRUCTURE;
 }
-static XrXirStatus config_work(XrCompileResources *resources, uint64_t bytes) {
-    return config_resource(xr_compile_resources_work(resources, bytes));
-}
-static XrXirStatus config_length(XrCompileResources *resources, const char *text, size_t *length) {
+static XrXirStatus config_length(const char *text, size_t *length) {
     for (size_t i = 0;; ++i) {
-        XrXirStatus status = config_work(resources, 1);
-        if (status != XR_XIR_OK) return status;
         if (!text[i]) { *length = i; return XR_XIR_OK; }
-        if (i == SIZE_MAX - 1) return XR_XIR_BUDGET;
+        if (i == SIZE_MAX - 1) return XR_XIR_OVERFLOW;
     }
 }
 static void config_release(void *pointer, bool application) {
@@ -76,9 +73,7 @@ static void config_clear(XlspConfig *config, bool application) {
 }
 static XrXirStatus config_allocate(XrCompileResources *resources, size_t bytes,
     bool application, void **output) {
-    if (!application) return config_resource(xr_compile_resources_alloc(resources, bytes, output));
-    XrXirStatus status = config_work(resources, 1);
-    if (status != XR_XIR_OK) return status;
+    if (!application) return xir_compile_resource_status(xr_compile_resources_alloc(resources, bytes, output));
     void *block = xr_malloc(bytes);
     if (!block) return XR_XIR_OUT_OF_MEMORY;
     *output = block;
@@ -86,12 +81,10 @@ static XrXirStatus config_allocate(XrCompileResources *resources, size_t bytes,
 }
 static XrXirStatus config_string(XrCompileResources *resources, const char *text,
     size_t length, bool application, char **output) {
-    if (length == SIZE_MAX) return XR_XIR_BUDGET;
+    if (length == SIZE_MAX) return XR_XIR_OVERFLOW;
     char *copy = NULL;
     XrXirStatus status = config_allocate(resources, length + 1, application, (void **)&copy);
     if (status != XR_XIR_OK) return status;
-    status = config_work(resources, length + 1);
-    if (status != XR_XIR_OK) { config_release(copy, application); return status; }
     memcpy(copy, text, length);
     copy[length] = 0;
     *output = copy;
@@ -104,21 +97,20 @@ static bool config_valid(const XlspConfig *config) {
 }
 static XrXirStatus config_clone(XrCompileResources *resources, const XlspConfig *source,
     bool application, XlspConfig *output) {
-    XrXirStatus status = config_work(resources, sizeof(*source));
-    if (status != XR_XIR_OK) return status;
+    XrXirStatus status = XR_XIR_OK;
     XlspConfig copy = *source;
     copy.ignore_patterns = NULL;
     copy.ignore_pattern_count = copy.ignore_pattern_capacity = 0;
     copy.log_path = NULL;
     size_t length = 0;
     if (source->log_path) {
-        status = config_length(resources, source->log_path, &length);
+        status = config_length(source->log_path, &length);
         if (status == XR_XIR_OK)
             status = config_string(resources, source->log_path, length, application, &copy.log_path);
         if (status != XR_XIR_OK) goto done;
     }
     if ((size_t)source->ignore_pattern_count > SIZE_MAX / sizeof(*copy.ignore_patterns)) {
-        status = XR_XIR_BUDGET; goto done;
+        status = XR_XIR_OVERFLOW; goto done;
     }
     size_t bytes = (size_t)source->ignore_pattern_count * sizeof(*copy.ignore_patterns);
     if (bytes) {
@@ -131,12 +123,10 @@ static XrXirStatus config_clone(XrCompileResources *resources, const XlspConfig 
         const XlspIgnorePattern *pattern = &source->ignore_patterns[i];
         if (!pattern->pattern) { status = XR_XIR_BAD_STRUCTURE; goto done; }
         char *text = NULL;
-        status = config_length(resources, pattern->pattern, &length);
+        status = config_length(pattern->pattern, &length);
         if (status == XR_XIR_OK)
             status = config_string(resources, pattern->pattern, length, application, &text);
         if (status != XR_XIR_OK) goto done;
-        status = config_work(resources, sizeof(*pattern));
-        if (status != XR_XIR_OK) { config_release(text, application); goto done; }
         copy.ignore_patterns[i] = (XlspIgnorePattern){text, pattern->is_glob, pattern->is_dir_only};
         ++copy.ignore_pattern_count;
     }
@@ -146,10 +136,8 @@ done:
     config_clear(&copy, application);
     return status;
 }
-static XrXirStatus config_dom_string(XrCompileResources *resources, XrTomlValue *value) {
+static XrXirStatus config_dom_string(XrTomlValue *value) {
     if (!xtoml_is_string(value)) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status = config_work(resources, value->string_length);
-    if (status != XR_XIR_OK) return status;
     return memchr(value->as.string, 0, value->string_length) ? XR_XIR_BAD_STRUCTURE : XR_XIR_OK;
 }
 static XrXirStatus config_ignore(XlspSourceConfig *owner, XrTomlValue *array) {
@@ -157,30 +145,25 @@ static XrXirStatus config_ignore(XlspSourceConfig *owner, XrTomlValue *array) {
     XlspConfig *config = &owner->next;
     for (int i = 0; i < xtoml_array_len(array); ++i) {
         XrTomlValue *value = xtoml_array_get(array, i);
-        XrXirStatus status = config_dom_string(owner->resources, value);
+        XrXirStatus status = config_dom_string(value);
         if (status != XR_XIR_OK) return status;
         size_t length = value->string_length;
         if (!length) continue;
-        if (length > UINT64_MAX / 3) return XR_XIR_BUDGET;
-        status = config_work(owner->resources, length * UINT64_C(3));
-        if (status != XR_XIR_OK) return status;
         const char *text = value->as.string;
         bool glob = memchr(text, '*', length) || memchr(text, '?', length);
         bool directory = (!memchr(text, '.', length) && !memchr(text, '*', length)) || text[length - 1] == '/';
         if (directory && text[length - 1] == '/') --length;
         if (config->ignore_pattern_count == INT_MAX ||
             (size_t)config->ignore_pattern_count + 1 > SIZE_MAX / sizeof(*config->ignore_patterns))
-            return XR_XIR_BUDGET;
+            return XR_XIR_OVERFLOW;
         char *copy = NULL;
         status = config_string(owner->resources, text, length, false, &copy);
         if (status != XR_XIR_OK) return status;
         void *patterns = config->ignore_patterns;
-        status = config_resource(xr_compile_resources_resize(owner->resources, &patterns,
+        status = xir_compile_resource_status(xr_compile_resources_resize(owner->resources, &patterns,
             ((size_t)config->ignore_pattern_count + 1) * sizeof(*config->ignore_patterns)));
         if (status != XR_XIR_OK) { xr_compile_resources_free(copy); return status; }
         config->ignore_patterns = patterns;
-        status = config_work(owner->resources, sizeof(XlspIgnorePattern));
-        if (status != XR_XIR_OK) { xr_compile_resources_free(copy); return status; }
         config->ignore_patterns[config->ignore_pattern_count++] = (XlspIgnorePattern){copy, glob, directory};
         config->ignore_pattern_capacity = config->ignore_pattern_count;
     }
@@ -209,7 +192,7 @@ static XrXirStatus config_parse(XlspSourceConfig *owner, XrTomlValue *table) {
     status = config_toml(xtoml_owned_get(table, "log_path", &value));
     if (status != XR_XIR_OK) return status;
     if (value) {
-        status = config_dom_string(owner->resources, value);
+        status = config_dom_string(value);
         if (status != XR_XIR_OK) return status;
         char *copy = NULL;
         status = config_string(owner->resources, value->as.string, value->string_length, false, &copy);
@@ -240,7 +223,7 @@ XR_FUNC XrXirStatus xlsp_source_config_read(XrCompileResources *resources,
     size_t length = 0;
     XrTomlValue *root = NULL, *table = NULL;
     XrOsIoPolicy policy = xr_compile_io_policy(resources);
-    XrXirStatus status = config_resource(xr_compile_resources_calloc(resources, 1, sizeof(*owner), (void **)&owner));
+    XrXirStatus status = xir_compile_resource_status(xr_compile_resources_calloc(resources, 1, sizeof(*owner), (void **)&owner));
     if (status != XR_XIR_OK) goto done;
     owner->resources = resources;
     status = config_clone(resources, current, false, &owner->base);
@@ -266,22 +249,18 @@ done:
     xlsp_source_config_free(owner);
     return status;
 }
-static XrXirStatus config_same_string(XrCompileResources *resources, const char *left,
+static XrXirStatus config_same_string(const char *left,
     const char *right, bool *same) {
     *same = left == NULL && right == NULL;
     if (!left || !right) return XR_XIR_OK;
     for (size_t i = 0;; ++i) {
-        XrXirStatus status = config_work(resources, 2);
-        if (status != XR_XIR_OK) return status;
         if (left[i] != right[i]) return XR_XIR_OK;
         if (!left[i]) { *same = true; return XR_XIR_OK; }
-        if (i == SIZE_MAX - 1) return XR_XIR_BUDGET;
+        if (i == SIZE_MAX - 1) return XR_XIR_OVERFLOW;
     }
 }
 static XrXirStatus config_matches(const XlspSourceConfig *owner, const XlspConfig *target) {
     const XlspConfig *base = &owner->base;
-    XrXirStatus status = config_work(owner->resources, sizeof(*target));
-    if (status != XR_XIR_OK) return status;
 #define SAME_INT(field, minimum) if (base->field != target->field) return XR_XIR_UNRESOLVED;
     CONFIG_INTS(SAME_INT)
 #undef SAME_INT
@@ -290,15 +269,13 @@ static XrXirStatus config_matches(const XlspSourceConfig *owner, const XlspConfi
 #undef SAME_BOOL
     if (base->ignore_pattern_count != target->ignore_pattern_count) return XR_XIR_UNRESOLVED;
     bool same = false;
-    status = config_same_string(owner->resources, base->log_path, target->log_path, &same);
+    XrXirStatus status = config_same_string(base->log_path, target->log_path, &same);
     if (status != XR_XIR_OK || !same) return status != XR_XIR_OK ? status : XR_XIR_UNRESOLVED;
     for (int i = 0; i < base->ignore_pattern_count; ++i) {
-        status = config_work(owner->resources, sizeof(XlspIgnorePattern));
-        if (status != XR_XIR_OK) return status;
         const XlspIgnorePattern *a = &base->ignore_patterns[i], *b = &target->ignore_patterns[i];
         if (!b->pattern || a->is_glob != b->is_glob || a->is_dir_only != b->is_dir_only)
             return XR_XIR_UNRESOLVED;
-        status = config_same_string(owner->resources, a->pattern, b->pattern, &same);
+        status = config_same_string(a->pattern, b->pattern, &same);
         if (status != XR_XIR_OK || !same) return status != XR_XIR_OK ? status : XR_XIR_UNRESOLVED;
     }
     return XR_XIR_OK;
@@ -310,8 +287,6 @@ XR_FUNC XrXirStatus xlsp_source_config_apply(const XlspSourceConfig *owner, Xlsp
     XlspConfig candidate = {0};
     status = config_clone(owner->resources, &owner->next, true, &candidate);
     if (status != XR_XIR_OK) return status;
-    status = config_work(owner->resources, sizeof(candidate));
-    if (status != XR_XIR_OK) { config_clear(&candidate, true); return status; }
     XR_DCHECK(candidate.ignore_pattern_count == owner->next.ignore_pattern_count, "complete configuration candidate");
     XlspConfig old = *target;
     *target = candidate;

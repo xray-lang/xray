@@ -15,6 +15,7 @@
 #include "xlsp_source_index_store.h"
 #include "xlsp_source_workspace.h"
 #include "../../shared/xr_utf8_core.h"
+#include "../../xir/xxir_compile_memory.h"
 #include "../../base/xmalloc.h"
 #include <string.h>
 
@@ -27,39 +28,24 @@ struct XlspSourceFolders {
     size_t base_count, added_count, removed_count, count;
     bool changed;
 };
-static XrXirStatus folders_status(XrCompileResourceStatus s) {
-    return s == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK : s == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET :
-        s == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BAD_STRUCTURE;
-}
-static XrXirStatus folders_work(XrCompileResources *r, uint64_t units) {
-    return folders_status(xr_compile_resources_work(r, units));
-}
-static int folders_byte(void *context, const uint8_t *address, uint8_t *out) {
-    if (folders_work(context, 1) != XR_XIR_OK) return 0;
-    *out = *address; return 1;
-}
-static XrXirStatus folders_text(XrCompileResources *r, const char *text, size_t length) {
+static XrXirStatus folders_text(const char *text, size_t length) {
     if (!text || length == SIZE_MAX) return XR_XIR_BAD_STRUCTURE;
     for (size_t at = 0; at < length;) {
-        XrUtf8Step step;
-        if (!xr_utf8_core_decode_step_read((const uint8_t *)text + at, length - at,
-                folders_byte, r, &step)) return XR_XIR_BUDGET;
+        XrUtf8Step step = xr_utf8_core_decode_step((const uint8_t *)text + at, length - at);
         if (step.error != XR_UTF8_OK || !step.scalar) return XR_XIR_BAD_STRUCTURE;
         at += step.consumed;
     }
     return XR_XIR_OK;
 }
-static XrXirStatus folders_member(XrCompileResources *r, const XrJsonValue *object,
+static XrXirStatus folders_member(const XrJsonValue *object,
     const char *key, const XrJsonValue **out) {
     if (!object || object->type != XR_JSON_OBJECT || object->as.object.count < 0 ||
         object->as.object.capacity < object->as.object.count ||
         (object->as.object.count && !object->as.object.members)) return XR_XIR_BAD_STRUCTURE;
     size_t length = strlen(key); const XrJsonValue *found = NULL;
     for (int i = 0; i < object->as.object.count; ++i) {
-        XrXirStatus s = folders_work(r, sizeof(XrJsonMember)); if (s != XR_XIR_OK) return s;
         const XrJsonMember *m = &object->as.object.members[i]; if (!m->value) return XR_XIR_BAD_STRUCTURE;
-        s = folders_text(r, m->key, m->key_len); if (s != XR_XIR_OK) return s;
-        s = folders_work(r, length + 1); if (s != XR_XIR_OK) return s;
+        XrXirStatus s = folders_text(m->key, m->key_len); if (s != XR_XIR_OK) return s;
         if (m->key_len == length && !memcmp(m->key, key, length)) {
             if (found) return XR_XIR_BAD_STRUCTURE;
             found = m->value;
@@ -67,28 +53,26 @@ static XrXirStatus folders_member(XrCompileResources *r, const XrJsonValue *obje
     }
     *out = found; return XR_XIR_OK;
 }
-static XrXirStatus folders_length(XrCompileResources *r, const char *text, size_t *out) {
+static XrXirStatus folders_length(const char *text, size_t *out) {
     if (!text) return XR_XIR_BAD_STRUCTURE;
     for (size_t i = 0;; ++i) {
-        XrXirStatus s = folders_work(r, 1); if (s != XR_XIR_OK) return s;
         if (!text[i]) { *out = i; return XR_XIR_OK; }
-        if (i == SIZE_MAX - 1) return XR_XIR_BUDGET;
+        if (i == SIZE_MAX - 1) return XR_XIR_OVERFLOW;
     }
 }
 static XrXirStatus folders_copy(XrCompileResources *r, const char *text, size_t length, char **out) {
-    if (length == SIZE_MAX) return XR_XIR_BUDGET;
-    XrXirStatus s = folders_work(r, length + 1); if (s != XR_XIR_OK) return s;
-    char *copy = NULL; s = folders_status(xr_compile_resources_alloc(r, length + 1, (void **)&copy));
+    if (length == SIZE_MAX) return XR_XIR_OVERFLOW;
+    char *copy = NULL;
+    XrXirStatus s = xir_compile_resource_status(xr_compile_resources_alloc(r, length + 1, (void **)&copy));
     if (s == XR_XIR_OK) { memcpy(copy, text, length); copy[length] = 0; *out = copy; }
     return s;
 }
-static XrXirStatus folders_equal(XrCompileResources *r, const char *a, const char *b, bool *out) {
+static XrXirStatus folders_equal(const char *a, const char *b, bool *out) {
     if (!a || !b) return XR_XIR_BAD_STRUCTURE;
     for (size_t i = 0;; ++i) {
-        XrXirStatus s = folders_work(r, 2); if (s != XR_XIR_OK) return s;
         if (a[i] != b[i]) { *out = false; return XR_XIR_OK; }
         if (!a[i]) { *out = true; return XR_XIR_OK; }
-        if (i == SIZE_MAX - 1) return XR_XIR_BUDGET;
+        if (i == SIZE_MAX - 1) return XR_XIR_OVERFLOW;
     }
 }
 static void folders_release(XlspWorkspaceFolder *folder, bool receiving) {
@@ -106,17 +90,16 @@ static XrXirStatus folders_capture(XrCompileResources *r, const XrLspServer *ser
     if (!r || !server || !out || *out || server->workspace_folder_count < 0 ||
         server->workspace_folder_count > MAX_WORKSPACE_FOLDERS) return XR_XIR_BAD_STRUCTURE;
     XlspSourceFolders *owner = NULL;
-    XrXirStatus s = folders_status(xr_compile_resources_calloc(r, 1, sizeof(*owner), (void **)&owner));
+    XrXirStatus s = xir_compile_resource_status(xr_compile_resources_calloc(r, 1, sizeof(*owner), (void **)&owner));
     if (s != XR_XIR_OK) return s;
     owner->resources = r; owner->revision = server->source_revision;
     owner->count = owner->base_count = (size_t)server->workspace_folder_count;
     for (size_t i = 0; i < owner->base_count && s == XR_XIR_OK; ++i) {
         const XlspWorkspaceFolder *src = &server->workspace_folders[i]; XlspWorkspaceFolder *dst = &owner->base[i];
-        s = folders_work(r, sizeof(*src)); if (s != XR_XIR_OK) break;
         dst->config_loaded = src->config_loaded; dst->index_requested = src->index_requested; dst->index_completed = src->index_completed;
         const char *strings[] = {src->uri, src->name, src->path}; char **copies[] = {&dst->uri, &dst->name, &dst->path};
         for (size_t j = 0; j < 3 && s == XR_XIR_OK; ++j) {
-            size_t length = 0; s = folders_length(r, strings[j], &length);
+            size_t length = 0; s = folders_length(strings[j], &length);
             if (s == XR_XIR_OK) s = folders_copy(r, strings[j], length, copies[j]);
         }
         owner->next[i] = dst;
@@ -125,11 +108,11 @@ static XrXirStatus folders_capture(XrCompileResources *r, const XrLspServer *ser
     return s;
 }
 static XrXirStatus folders_decode(XrCompileResources *r, const XrJsonValue *value, XlspWorkspaceFolder *folder) {
-    const XrJsonValue *uri = NULL, *name = NULL; XrXirStatus s = folders_member(r, value, "uri", &uri);
-    if (s == XR_XIR_OK) s = folders_member(r, value, "name", &name);
+    const XrJsonValue *uri = NULL, *name = NULL; XrXirStatus s = folders_member(value, "uri", &uri);
+    if (s == XR_XIR_OK) s = folders_member(value, "name", &name);
     if (s != XR_XIR_OK) return s;
     if (!uri || uri->type != XR_JSON_STRING || !name || name->type != XR_JSON_STRING) return XR_XIR_BAD_STRUCTURE;
-    s = folders_text(r, name->as.string, name->string_len);
+    s = folders_text(name->as.string, name->string_len);
     if (s == XR_XIR_OK) s = xlsp_source_uri_path(r, uri->as.string, uri->string_len, &folder->path);
     if (s == XR_XIR_OK) s = folders_copy(r, uri->as.string, uri->string_len, &folder->uri);
     if (s == XR_XIR_OK) s = folders_copy(r, name->as.string, name->string_len, &folder->name);
@@ -140,16 +123,15 @@ static XrXirStatus folders_array(XlspSourceFolders *owner, const XrJsonValue *ar
         array->as.array.capacity < array->as.array.count ||
         (array->as.array.count && !array->as.array.items)) return XR_XIR_BAD_STRUCTURE;
     size_t count = (size_t)array->as.array.count;
-    if (count > SIZE_MAX / sizeof(XlspWorkspaceFolder)) return XR_XIR_BUDGET;
+    if (count > SIZE_MAX / sizeof(XlspWorkspaceFolder)) return XR_XIR_OVERFLOW;
     XlspWorkspaceFolder **rows = add ? &owner->added : &owner->removed;
     if (add) owner->added_count = count; else owner->removed_count = count;
     XrXirStatus s = XR_XIR_OK;
-    if (count) s = folders_status(xr_compile_resources_calloc(owner->resources, count, sizeof(**rows), (void **)rows));
+    if (count) s = xir_compile_resource_status(xr_compile_resources_calloc(owner->resources, count, sizeof(**rows), (void **)rows));
     for (size_t i = 0; i < count && s == XR_XIR_OK; ++i) {
-        s = folders_work(owner->resources, sizeof(XrJsonValue *));
-        if (s == XR_XIR_OK) s = folders_decode(owner->resources, array->as.array.items[i], &(*rows)[i]);
+        s = folders_decode(owner->resources, array->as.array.items[i], &(*rows)[i]);
         for (size_t j = 0; j < i && s == XR_XIR_OK; ++j) {
-            bool same = false; s = folders_equal(owner->resources, (*rows)[i].uri, (*rows)[j].uri, &same);
+            bool same = false; s = folders_equal((*rows)[i].uri, (*rows)[j].uri, &same);
             if (s == XR_XIR_OK && same) s = XR_XIR_BAD_STRUCTURE;
         }
     }
@@ -157,21 +139,19 @@ static XrXirStatus folders_array(XlspSourceFolders *owner, const XrJsonValue *ar
 }
 static XrXirStatus folders_plan(XlspSourceFolders *owner) {
     for (size_t i = 0; i < owner->removed_count; ++i) for (size_t j = 0; j < owner->count; ++j) {
-        bool same = false; XrXirStatus s = folders_equal(owner->resources, owner->removed[i].uri, owner->next[j]->uri, &same);
+        bool same = false; XrXirStatus s = folders_equal(owner->removed[i].uri, owner->next[j]->uri, &same);
         if (s != XR_XIR_OK) return s;
         if (!same) continue;
-        s = folders_work(owner->resources, (owner->count - j - 1) * sizeof(*owner->next)); if (s != XR_XIR_OK) return s;
         memmove(owner->next + j, owner->next + j + 1, (owner->count - j - 1) * sizeof(*owner->next));
         --owner->count; owner->changed = true; break;
     }
     for (size_t i = 0; i < owner->added_count; ++i) {
         for (size_t j = 0; j < owner->count; ++j) {
-            bool same = false; XrXirStatus s = folders_equal(owner->resources, owner->added[i].uri, owner->next[j]->uri, &same);
+            bool same = false; XrXirStatus s = folders_equal(owner->added[i].uri, owner->next[j]->uri, &same);
             if (s != XR_XIR_OK) return s;
             if (same) return XR_XIR_BAD_STRUCTURE;
         }
         if (owner->count == MAX_WORKSPACE_FOLDERS) return XR_XIR_BUDGET;
-        XrXirStatus s = folders_work(owner->resources, sizeof(*owner->next)); if (s != XR_XIR_OK) return s;
         owner->next[owner->count++] = &owner->added[i]; owner->changed = true;
     }
     return XR_XIR_OK;
@@ -181,9 +161,9 @@ XR_FUNC XrXirStatus xlsp_source_folders_read(XrCompileResources *r, const XrLspS
     if (!out || *out) return XR_XIR_BAD_STRUCTURE;
     XlspSourceFolders *owner = NULL; XrXirStatus s = folders_capture(r, server, &owner);
     const XrJsonValue *event = NULL, *removed = NULL, *added = NULL;
-    if (s == XR_XIR_OK) s = folders_member(r, params, "event", &event);
-    if (s == XR_XIR_OK) s = folders_member(r, event, "removed", &removed);
-    if (s == XR_XIR_OK) s = folders_member(r, event, "added", &added);
+    if (s == XR_XIR_OK) s = folders_member(params, "event", &event);
+    if (s == XR_XIR_OK) s = folders_member(event, "removed", &removed);
+    if (s == XR_XIR_OK) s = folders_member(event, "added", &added);
     if (s == XR_XIR_OK) s = folders_array(owner, removed, false);
     if (s == XR_XIR_OK) s = folders_array(owner, added, true);
     if (s == XR_XIR_OK) s = folders_plan(owner);
@@ -197,12 +177,12 @@ XR_FUNC XrXirStatus xlsp_source_folders_single(XrCompileResources *r, const XrLs
     XlspWorkspaceFolder **row = owner ? (add ? &owner->added : &owner->removed) : NULL;
     if (s == XR_XIR_OK) {
         if (add) owner->added_count = 1; else owner->removed_count = 1;
-        s = folders_status(xr_compile_resources_calloc(r, 1, sizeof(**row), (void **)row));
+        s = xir_compile_resource_status(xr_compile_resources_calloc(r, 1, sizeof(**row), (void **)row));
     }
     size_t uri_length = 0, name_length = 0;
-    if (s == XR_XIR_OK) s = folders_length(r, uri, &uri_length);
-    if (s == XR_XIR_OK) s = folders_length(r, name, &name_length);
-    if (s == XR_XIR_OK) s = folders_text(r, name, name_length);
+    if (s == XR_XIR_OK) s = folders_length(uri, &uri_length);
+    if (s == XR_XIR_OK) s = folders_length(name, &name_length);
+    if (s == XR_XIR_OK) s = folders_text(name, name_length);
     if (s == XR_XIR_OK) s = xlsp_source_uri_path(r, uri, uri_length, &(*row)->path);
     if (s == XR_XIR_OK) s = folders_copy(r, uri, uri_length, &(*row)->uri);
     if (s == XR_XIR_OK) s = folders_copy(r, name, name_length, &(*row)->name);
@@ -215,23 +195,22 @@ static XrXirStatus folders_current(const XlspSourceFolders *owner, const XrLspSe
         server->source_revision != owner->revision) return XR_XIR_UNRESOLVED;
     for (size_t i = 0; i < owner->base_count; ++i) {
         const XlspWorkspaceFolder *a = &owner->base[i], *b = &server->workspace_folders[i];
-        XrXirStatus s = folders_work(owner->resources, sizeof(*b)); if (s != XR_XIR_OK) return s;
         if (a->config_loaded != b->config_loaded || a->index_requested != b->index_requested ||
             a->index_completed != b->index_completed) return XR_XIR_UNRESOLVED;
         const char *left[] = {a->uri, a->name, a->path}, *right[] = {b->uri, b->name, b->path};
         for (size_t j = 0; j < 3; ++j) {
-            bool same = false; s = folders_equal(owner->resources, left[j], right[j], &same);
+            bool same = false; XrXirStatus s = folders_equal(left[j], right[j], &same);
             if (s != XR_XIR_OK) return s;
             if (!same) return XR_XIR_UNRESOLVED;
         }
     }
     return XR_XIR_OK;
 }
-static XrXirStatus folders_receive(XrCompileResources *r, const XlspWorkspaceFolder *src, XlspWorkspaceFolder *dst) {
+static XrXirStatus folders_receive(const XlspWorkspaceFolder *src, XlspWorkspaceFolder *dst) {
     const char *strings[] = {src->uri, src->name, src->path}; char **copies[] = {&dst->uri, &dst->name, &dst->path};
     for (size_t i = 0; i < 3; ++i) {
-        size_t length = 0; XrXirStatus s = folders_length(r, strings[i], &length);
-        if (s == XR_XIR_OK) s = folders_work(r, length + 1); if (s != XR_XIR_OK) return s;
+        size_t length = 0; XrXirStatus s = folders_length(strings[i], &length);
+        if (s != XR_XIR_OK) return s;
         *copies[i] = xr_malloc(length + 1); if (!*copies[i]) return XR_XIR_OUT_OF_MEMORY;
         memcpy(*copies[i], strings[i], length + 1);
     }
@@ -242,12 +221,11 @@ XR_FUNC XrXirStatus xlsp_source_folders_commit(const XlspSourceFolders *owner, X
     if (!owner || !server || !changed) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus s = folders_current(owner, server); if (s != XR_XIR_OK) return s;
     if (!owner->changed) { *changed = false; return XR_XIR_OK; }
-    if (server->source_revision == UINT64_MAX) return XR_XIR_BUDGET;
+    if (server->source_revision == UINT64_MAX) return XR_XIR_OVERFLOW;
     if (!server->index_resources || !server->source_index) return XR_XIR_BAD_STRUCTURE;
     XlspWorkspaceFolder incoming[MAX_WORKSPACE_FOLDERS] = {0}; XlspSourceIndexStore *index = NULL;
-    for (size_t i = 0; i < owner->count && s == XR_XIR_OK; ++i) s = folders_receive(owner->resources, owner->next[i], &incoming[i]);
+    for (size_t i = 0; i < owner->count && s == XR_XIR_OK; ++i) s = folders_receive(owner->next[i], &incoming[i]);
     if (s == XR_XIR_OK) s = xlsp_source_index_store_new(server->index_resources, &index);
-    if (s == XR_XIR_OK) s = folders_work(owner->resources, sizeof(incoming) * 2 + sizeof(uint64_t) + 8 * sizeof(void *));
     if (s != XR_XIR_OK) {
         for (size_t i = 0; i < owner->count; ++i) folders_release(&incoming[i], true);
         xlsp_source_index_store_free(index); return s;
