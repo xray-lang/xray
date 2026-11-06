@@ -60,7 +60,7 @@ with tempfile.TemporaryDirectory(prefix='xray-native-admission-') as temporary:
         libraries=[vc/'lib/x64'/name for name in ('msvcrt.lib','oldnames.lib','vcruntime.lib')]
         libraries += [kit/'Lib'/version/'ucrt/x64/ucrt.lib',kit/'Lib'/version/'um/x64/kernel32.Lib']
         command=[exe,'--seal',authority,source,root/'stdlib',sdk,compiler,linker,parent,*libraries,vc/'include',
-            kit/'Include'/version/'ucrt',kit/'Include'/version/'shared',kit/'Include'/version/'um',os.environ['SystemRoot'],exported,facts,kit/'Lib'/version/'um/x64/bcrypt.lib']
+            kit/'Include'/version/'ucrt',kit/'Include'/version/'shared',kit/'Include'/version/'um',os.environ['SystemRoot'],exported,facts,kit/'Lib'/version/'um/x64/bcrypt.lib',kit/'Lib'/version/'um/x64/advapi32.lib',kit/'Lib'/version/'um/x64/userenv.lib']
         for path in [source,authority/'counter.xr',authority/'label.xr',sdk/'sdk_manifest.json',sdk/'src/execution/xr_xir_native_main.inc.c']:
             print('input',path,'sha256='+hashlib.sha256(path.read_bytes()).hexdigest(),flush=True)
     print('argv='+json.dumps(list(map(str,command)),ensure_ascii=False),flush=True)

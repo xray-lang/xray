@@ -9,6 +9,30 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c); exit(1); } } while (0)
 #include "../native_invocation_owner/invocation_allocator.h"
+static void json_text(FILE *file,const char *text);
+/* Encode by length so embedded NUL and CRT newline translation lose no bytes. */
+static void admission_failed_bytes(const char *name,const XrProcessByteBuffer *bytes) {
+    static const char hex[]="0123456789abcdef";
+    fprintf(stderr,"admission-child-%s length=%zu truncated=%u hex=",name,bytes->length,(unsigned)bytes->truncated);
+    for(size_t i=0;i<bytes->length;++i){unsigned byte=bytes->data[i];fputc(hex[byte>>4],stderr);fputc(hex[byte&15],stderr);}
+    fputc('\n',stderr);
+}
+static XrProcessStatus admission_observed_run(const XrToolchainProcess *process,
+    XrProcessCancelled cancelled,void *context,XrProcessResult *result) {
+    XrProcessStatus status=xtc_process_run(process,cancelled,context,result);
+    if(status!=XTC_PROCESS_OK || result->exit_code){
+        XrProcessView view={0};XrProcessStatus viewed=xtc_process_view(process,&view);
+        fprintf(stderr,"admission-child-failure status=%u exit=%d view=%u command=",(unsigned)status,result->exit_code,(unsigned)viewed);
+        if(viewed==XTC_PROCESS_OK){fputs("{\"executable\":",stderr);json_text(stderr,view.executable);
+            fputs(",\"cwd\":",stderr);json_text(stderr,view.cwd);fputs(",\"argv\":[",stderr);
+            for(size_t i=0;i<view.argc;++i){if(i)fputc(',',stderr);json_text(stderr,view.argv[i]);}
+            fputs("]}",stderr);
+        }else fputs("null",stderr);
+        fputc('\n',stderr);admission_failed_bytes("stdout",&result->stdout_bytes);admission_failed_bytes("stderr",&result->stderr_bytes);
+        fprintf(stderr,"admission-child-capture-complete=%u\n",(unsigned)(viewed==XTC_PROCESS_OK&&!result->stdout_bytes.truncated&&!result->stderr_bytes.truncated&&!ferror(stderr)));fflush(stderr);
+    }
+    return status;
+}
 #ifdef ADMISSION_INJECTED
 static unsigned utf_calls, utf_fail;
 static DWORD utf_error;
@@ -19,7 +43,11 @@ static int WINAPI test_utf(UINT page,DWORD flags,LPCCH input,int length,LPWSTR o
 #define MultiByteToWideChar test_utf
 #include "toolchain/xr_xir_runtime_sdk.c"
 #include "aot/program/xr_xir_native_projection.c"
+#endif
+#define xtc_process_run admission_observed_run
 #include "app/toolchain/xtc_xir_invocation.c"
+#undef xtc_process_run
+#ifdef ADMISSION_INJECTED
 #include "app/toolchain/xtc_xir_native_operation.c"
 static unsigned compare_calls, compare_fail;
 static DWORD compare_error;
@@ -112,14 +140,16 @@ static int run_test(int argc,char **argv) {
 #ifdef ADMISSION_INJECTED
     if(argc==5 && !strcmp(argv[1],"unit")) return admission_unit(argv[2],argv[3],argv[4]);
 #endif
-    CHECK(argc==22 && !strcmp(argv[1],"--seal"));
+    CHECK(argc==24 && !strcmp(argv[1],"--seal"));
     const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,8*1024*1024,true};
     XrCompileResources *r=sdk_ledger(&limits);
     XrXirNativeProjection *projection=real_projection(r,argv[2],argv[3],argv[4]);
     XrXirRuntimeSdk *sdk=real_sdk(r,argv[5]);
-    XrXirInvocationLibrary libraries[6];for(unsigned i=0;i<5;++i)libraries[i]=(XrXirInvocationLibrary){argv[9+i],i==4?XR_XIR_INVOCATION_SYSTEM:XR_XIR_INVOCATION_CRT};
+    XrXirInvocationLibrary libraries[8];for(unsigned i=0;i<5;++i)libraries[i]=(XrXirInvocationLibrary){argv[9+i],i==4?XR_XIR_INVOCATION_SYSTEM:XR_XIR_INVOCATION_CRT};
     libraries[5]=(XrXirInvocationLibrary){argv[21],XR_XIR_INVOCATION_SYSTEM};
-    XtcXirNativeOperationRequest request={projection,sdk,argv[6],argv[7],{argv[14],argv[15],argv[16],argv[17],argv[18]},libraries,6,NULL,NULL,{0}};
+    libraries[6]=(XrXirInvocationLibrary){argv[22],XR_XIR_INVOCATION_SYSTEM};
+    libraries[7]=(XrXirInvocationLibrary){argv[23],XR_XIR_INVOCATION_SYSTEM};
+    XtcXirNativeOperationRequest request={projection,sdk,argv[6],argv[7],{argv[14],argv[15],argv[16],argv[17],argv[18]},libraries,8,NULL,NULL,{0}};
     XtcXirWorkspaceRequest ws={argv[8],{32767,32,65536}};XtcXirNativeOperation *op=NULL;
     CHECK(xtc_xir_native_operation_new(r,&ws,&operation_limits,&op)==XTC_XIR_NATIVE_OK);
     CHECK(!xtc_xir_native_operation_command(op,XR_XIR_INVOCATION_GENERATED));
