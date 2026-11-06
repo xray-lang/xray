@@ -53,8 +53,8 @@ static void where_same_constraints(XrCompilerSession *session) {
     }
 }
 int main(void) {
-    /* All three fixed parser operations share one finite ledger. */
-    const XrCompileResourceLimits limits = {1024 * 1024, 512 * 1024, 1024 * 1024};
+    /* All three fixed parser operations share one ordinary owner. */
+    const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
     XrCompileResources *resources = NULL;
     CHECK(xr_compile_resources_new(&limits,&resources) == XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats baseline = {0}, observed = {0};
@@ -87,12 +87,10 @@ int main(void) {
     xr_arena_destroy(&arena);
     xr_compile_session_free(session);
     CHECK(xr_compile_resources_stats(resources,&observed) == XR_COMPILE_RESOURCE_OK);
-    CHECK(observed.live_bytes == baseline.live_bytes);
-    CHECK(observed.allocated_bytes <= limits.allocated_bytes && observed.peak_bytes <= limits.live_bytes &&
-          observed.work <= limits.work);
-    printf("where fixed root allocated=%llu peak=%llu work=%llu owner-live-baseline=%llu\n",
+    CHECK(observed.held_bytes == baseline.held_bytes);
+    printf("where fixed root allocated=%llu peak=%llu owner-live-baseline=%llu\n",
         (unsigned long long)observed.allocated_bytes,(unsigned long long)observed.peak_bytes,
-        (unsigned long long)observed.work,(unsigned long long)observed.live_bytes);
+        (unsigned long long)observed.held_bytes);
     xr_compile_resources_release(resources);
     return 0;
 }

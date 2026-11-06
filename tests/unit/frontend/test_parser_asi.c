@@ -46,8 +46,8 @@ static XrCompilerSession *g_session = NULL;
 static XrCompileResourceStats g_baseline;
 
 static void setup(void) {
-    /* Every original test owns one finite root; loops keep the same ledger. */
-    const XrCompileResourceLimits limits = {1024 * 1024, 512 * 1024, 1024 * 1024};
+    /* Every original test owns one ordinary owner; loops keep the same ledger. */
+    const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
     OWNER_CHECK(!g_resources && !g_session);
     OWNER_CHECK(xr_compile_resources_new(&limits,&g_resources) == XR_COMPILE_RESOURCE_OK);
     OWNER_CHECK(xr_compile_resources_stats(g_resources,&g_baseline) == XR_COMPILE_RESOURCE_OK);
@@ -61,10 +61,10 @@ static void teardown(void) {
     g_session = NULL;
     XrCompileResourceStats observed = {0};
     OWNER_CHECK(xr_compile_resources_stats(g_resources,&observed) == XR_COMPILE_RESOURCE_OK);
-    OWNER_CHECK(observed.live_bytes == g_baseline.live_bytes);
-    printf("ASI fixed root allocated=%llu peak=%llu work=%llu owner-live-baseline=%llu\n",
+    OWNER_CHECK(observed.held_bytes == g_baseline.held_bytes);
+    printf("ASI fixed root allocated=%llu peak=%llu owner-live-baseline=%llu\n",
         (unsigned long long)observed.allocated_bytes,(unsigned long long)observed.peak_bytes,
-        (unsigned long long)observed.work,(unsigned long long)observed.live_bytes);
+        (unsigned long long)observed.held_bytes);
     xr_compile_resources_release(g_resources);
     g_resources = NULL;
 }

@@ -61,9 +61,9 @@ static XrCompilerSession *g_session = NULL;
 static XrCompileResourceStats g_baseline;
 
 static void setup(void) {
-    /* Each original test is one finite root; repeated parses keep its ledger. */
+    /* Each original test is one ordinary owner; repeated parses keep its ledger. */
     /* The original depth-overflow case includes nested arrow-head lookahead. */
-    const XrCompileResourceLimits limits = {1024 * 1024, 512 * 1024, 128 * 1024 * 1024};
+    const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
     OWNER_CHECK(!g_resources && !g_session);
     OWNER_CHECK(xr_compile_resources_new(&limits, &g_resources) == XR_COMPILE_RESOURCE_OK);
     OWNER_CHECK(xr_compile_resources_stats(g_resources, &g_baseline) == XR_COMPILE_RESOURCE_OK);
@@ -77,10 +77,10 @@ static void teardown(void) {
     g_session = NULL;
     XrCompileResourceStats observed = {0};
     OWNER_CHECK(xr_compile_resources_stats(g_resources, &observed) == XR_COMPILE_RESOURCE_OK);
-    OWNER_CHECK(observed.live_bytes == g_baseline.live_bytes);
-    printf("Recoverable fixed root allocated=%llu peak=%llu work=%llu owner-live-baseline=%llu\n",
+    OWNER_CHECK(observed.held_bytes == g_baseline.held_bytes);
+    printf("Recoverable fixed root allocated=%llu peak=%llu owner-live-baseline=%llu\n",
         (unsigned long long) observed.allocated_bytes, (unsigned long long) observed.peak_bytes,
-        (unsigned long long) observed.work, (unsigned long long) observed.live_bytes);
+         (unsigned long long) observed.held_bytes);
     xr_compile_resources_release(g_resources);
     g_resources = NULL;
 }
@@ -145,9 +145,9 @@ static AstNode *parse_recoverable(const char *source, Parser *out_parser, DiagSi
     if (status != XR_PARSE_OK && status != XR_PARSE_RECOVERED) {
         XrCompileResourceStats stats = {0};
         OWNER_CHECK(xr_compile_resources_stats(g_resources, &stats) == XR_COMPILE_RESOURCE_OK);
-        fprintf(stderr, "Recoverable failure status=%u state=%u allocated=%llu peak=%llu work=%llu diagnostics=%d\n",
+        fprintf(stderr, "Recoverable failure status=%u state=%u allocated=%llu peak=%llu diagnostics=%d\n",
             status, xr_compile_state_status(state), (unsigned long long) stats.allocated_bytes,
-            (unsigned long long) stats.peak_bytes, (unsigned long long) stats.work, sink->count);
+            (unsigned long long) stats.peak_bytes,  sink->count);
     }
     OWNER_CHECK(status == XR_PARSE_OK || status == XR_PARSE_RECOVERED);
     OWNER_CHECK(ast && ast->type == AST_PROGRAM && ast->as.program.arena == arena);

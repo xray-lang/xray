@@ -44,6 +44,38 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include "base/xcompile_state.h"
+
+static XrCompileResources *scope_resources;
+static XrCompileState *scope_state;
+static uint64_t scope_baseline;
+
+static void scope_owner_check(bool condition) {
+    if (!condition) {
+        fprintf(stderr, "Type scope fixture ownership failed\n");
+        abort();
+    }
+}
+
+static void scope_fixture_open(void) {
+    const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
+    XrCompileResourceStats stats = {0};
+    scope_owner_check(xr_compile_resources_new(&limits, &scope_resources) == XR_COMPILE_RESOURCE_OK);
+    scope_owner_check(xr_compile_resources_stats(scope_resources, &stats) == XR_COMPILE_RESOURCE_OK);
+    scope_baseline = stats.held_bytes;
+    scope_owner_check(xr_compile_state_new(scope_resources, &scope_state) == XR_COMPILE_RESOURCE_OK);
+}
+
+static void scope_fixture_close(void) {
+    XrCompileResourceStats stats = {0};
+    scope_owner_check(xr_compile_state_status(scope_state) == XR_COMPILE_RESOURCE_OK);
+    xr_compile_state_release(scope_state);
+    scope_owner_check(xr_compile_resources_stats(scope_resources, &stats) == XR_COMPILE_RESOURCE_OK);
+    scope_owner_check(stats.held_bytes == scope_baseline);
+    xr_compile_resources_release(scope_resources);
+}
+
+
 /* ====================================================================== */
 /* Dummy types -- pointer-equality is all the test needs                   */
 /* ====================================================================== */
@@ -64,11 +96,13 @@ static struct XrTypeRef *as_tref(DummyType *p) {
 /* ====================================================================== */
 
 TEST(define_then_lookup_returns_same_type) {
-    XrTypeScope *scope = xr_type_scope_new(NULL);
+    XrTypeScope *scope = NULL;
+    ASSERT_EQ_INT(xr_compile_type_scope_open(scope_state, NULL, &scope), XR_COMPILE_RESOURCE_OK);
     ASSERT_NOT_NULL(scope);
 
     DummyType t = {1};
-    XrTypeAlias *e = xr_type_scope_define(scope, "Foo", as_tref(&t));
+    XrTypeAlias *e = NULL;
+    ASSERT_EQ_INT(xr_compile_type_scope_define(scope, "Foo", as_tref(&t), &e), XR_TYPE_SCOPE_OK);
     ASSERT_NOT_NULL(e);
     ASSERT_STR_EQ(e->name, "Foo");
     ASSERT_EQ_PTR(e->type_ref, &t);
@@ -84,16 +118,19 @@ TEST(define_then_lookup_returns_same_type) {
 }
 
 TEST(duplicate_define_returns_null) {
-    XrTypeScope *scope = xr_type_scope_new(NULL);
+    XrTypeScope *scope = NULL;
+    ASSERT_EQ_INT(xr_compile_type_scope_open(scope_state, NULL, &scope), XR_COMPILE_RESOURCE_OK);
     ASSERT_NOT_NULL(scope);
 
     DummyType t1 = {1}, t2 = {2};
-    XrTypeAlias *first = xr_type_scope_define(scope, "T", as_tref(&t1));
+    XrTypeAlias *first = NULL;
+    ASSERT_EQ_INT(xr_compile_type_scope_define(scope, "T", as_tref(&t1), &first), XR_TYPE_SCOPE_OK);
     ASSERT_NOT_NULL(first);
 
     // Duplicate in the SAME scope must fail -- the parser uses this
     // signal to emit a "duplicate alias" diagnostic.
-    XrTypeAlias *dup = xr_type_scope_define(scope, "T", as_tref(&t2));
+    XrTypeAlias *dup = NULL;
+    ASSERT_EQ_INT(xr_compile_type_scope_define(scope, "T", as_tref(&t2), &dup), XR_TYPE_SCOPE_DUPLICATE);
     ASSERT_NULL(dup);
 
     // Original entry must still be intact.
@@ -105,13 +142,16 @@ TEST(duplicate_define_returns_null) {
 }
 
 TEST(lookup_walks_to_parent_scope) {
-    XrTypeScope *outer = xr_type_scope_new(NULL);
-    XrTypeScope *inner = xr_type_scope_new(outer);
+    XrTypeScope *outer = NULL;
+    ASSERT_EQ_INT(xr_compile_type_scope_open(scope_state, NULL, &outer), XR_COMPILE_RESOURCE_OK);
+    XrTypeScope *inner = NULL;
+    ASSERT_EQ_INT(xr_compile_type_scope_open(scope_state, outer, &inner), XR_COMPILE_RESOURCE_OK);
     ASSERT_NOT_NULL(outer);
     ASSERT_NOT_NULL(inner);
 
     DummyType t = {42};
-    xr_type_scope_define(outer, "Foo", as_tref(&t));
+    XrTypeAlias *defined_alias_4 = NULL;
+    ASSERT_EQ_INT(xr_compile_type_scope_define(outer, "Foo", as_tref(&t), &defined_alias_4), XR_TYPE_SCOPE_OK);
 
     // Inner does not have Foo; chained lookup must find it on the
     // outer scope.
@@ -139,15 +179,19 @@ TEST(generic_param_shadow_outer_alias) {
     // Inside foo, T must resolve to the parameter, not the alias.
     // After foo finishes parsing the inner scope is freed and the
     // outer alias must remain bound.
-    XrTypeScope *outer = xr_type_scope_new(NULL);
+    XrTypeScope *outer = NULL;
+    ASSERT_EQ_INT(xr_compile_type_scope_open(scope_state, NULL, &outer), XR_COMPILE_RESOURCE_OK);
 
     DummyType outer_t = {100};
     DummyType inner_t = {200};
 
-    xr_type_scope_define(outer, "T", as_tref(&outer_t));
+    XrTypeAlias *defined_alias_5 = NULL;
+    ASSERT_EQ_INT(xr_compile_type_scope_define(outer, "T", as_tref(&outer_t), &defined_alias_5), XR_TYPE_SCOPE_OK);
 
-    XrTypeScope *inner = xr_type_scope_new(outer);
-    xr_type_scope_define(inner, "T", as_tref(&inner_t));
+    XrTypeScope *inner = NULL;
+    ASSERT_EQ_INT(xr_compile_type_scope_open(scope_state, outer, &inner), XR_COMPILE_RESOURCE_OK);
+    XrTypeAlias *defined_alias_6 = NULL;
+    ASSERT_EQ_INT(xr_compile_type_scope_define(inner, "T", as_tref(&inner_t), &defined_alias_6), XR_TYPE_SCOPE_OK);
 
     // Inside the inner scope, T resolves to the inner type
     // (generic-parameter shadow).
@@ -170,7 +214,8 @@ TEST(generic_param_shadow_outer_alias) {
 }
 
 TEST(lookup_unknown_is_null) {
-    XrTypeScope *scope = xr_type_scope_new(NULL);
+    XrTypeScope *scope = NULL;
+    ASSERT_EQ_INT(xr_compile_type_scope_open(scope_state, NULL, &scope), XR_COMPILE_RESOURCE_OK);
     ASSERT_NULL(xr_type_scope_lookup(scope, "Nope"));
     ASSERT_NULL(xr_type_scope_lookup_local(scope, "Nope"));
     ASSERT_NULL(xr_type_scope_resolve(scope, "Nope"));
@@ -199,9 +244,11 @@ TEST(forward_declared_alias_can_be_patched) {
     // `A` with type=NULL, parses the RHS, then patches the type.
     // The contract is that the entry pointer is stable across
     // the parse so the patch is visible to later lookups.
-    XrTypeScope *scope = xr_type_scope_new(NULL);
+    XrTypeScope *scope = NULL;
+    ASSERT_EQ_INT(xr_compile_type_scope_open(scope_state, NULL, &scope), XR_COMPILE_RESOURCE_OK);
 
-    XrTypeAlias *e = xr_type_scope_define(scope, "A", NULL);
+    XrTypeAlias *e = NULL;
+    ASSERT_EQ_INT(xr_compile_type_scope_define(scope, "A", NULL, &e), XR_TYPE_SCOPE_OK);
     ASSERT_NOT_NULL(e);
     ASSERT_NULL(e->type_ref);
 
@@ -221,6 +268,7 @@ TEST(forward_declared_alias_can_be_patched) {
 /* ====================================================================== */
 
 TEST_MAIN_BEGIN()
+scope_fixture_open();
 RUN_TEST_SUITE("P-01 parser-owned type scope");
 RUN_TEST(define_then_lookup_returns_same_type);
 RUN_TEST(duplicate_define_returns_null);
@@ -229,4 +277,5 @@ RUN_TEST(generic_param_shadow_outer_alias);
 RUN_TEST(lookup_unknown_is_null);
 RUN_TEST(null_safe_read_api);
 RUN_TEST(forward_declared_alias_can_be_patched);
+scope_fixture_close();
 TEST_MAIN_END()

@@ -689,7 +689,7 @@ TEST(parser_function_type_param_modes) {
     ASSERT_EQ_INT(tref->function_param_modes[2], XR_PARAM_MOVE);
 
     char buf[128];
-    xr_tref_to_string_buf(tref, buf, sizeof(buf));
+    xr_compile_tref_to_string_buf(xr_compile_session_compile_state(X_session), tref, buf, sizeof(buf));
     ASSERT_STR_EQ(buf, "fn(i64, ref string, move bool) -> i64");
 
     AstNode *complex_alias =
@@ -720,7 +720,7 @@ TEST(parser_function_type_param_modes) {
     ASSERT_EQ_INT(complex->children[5]->kind, XR_TREF_GENERIC);
     ASSERT_STR_EQ(complex->children[5]->name, "Array");
     char complex_buf[512];
-    xr_tref_to_string_buf(complex, complex_buf, sizeof(complex_buf));
+    xr_compile_tref_to_string_buf(xr_compile_session_compile_state(X_session), complex, complex_buf, sizeof(complex_buf));
     ASSERT_STR_EQ(complex_buf, "fn(Array<i64>, ref Slice<u8>?, move [u8; 16], (i64, string), "
                                "fn(ref i64) -> bool) -> Array<string>");
 
@@ -772,7 +772,7 @@ TEST(parser_borrow_origin_sets_are_explicit_source_contracts) {
     ASSERT_EQ_INT(type->borrow_origin_syntax, XR_BORROW_ORIGIN_EXPLICIT_SET);
     ASSERT_EQ_INT(type->borrow_origin_count, 2);
     char text[256];
-    xr_tref_to_string_buf(type, text, sizeof(text));
+    xr_compile_tref_to_string_buf(xr_compile_session_compile_state(X_session), type, text, sizeof(text));
     ASSERT_STR_EQ(text, "fn(left: Slice<u8>, right: Slice<u8>) -> Slice<u8> from right | "
                         "left");
 
@@ -1366,7 +1366,7 @@ TEST(parser_scalar_spelling_registry_roundtrip) {
     ASSERT_EQ_INT(tuple->kind, XR_TREF_TUPLE);
     ASSERT_EQ_INT(tuple->nchildren, 12);
     char formatted[256];
-    xr_tref_to_string_buf(tuple, formatted, sizeof(formatted));
+    xr_compile_tref_to_string_buf(xr_compile_session_compile_state(X_session), tuple, formatted, sizeof(formatted));
     ASSERT_STR_EQ(formatted, "(i8, i16, i32, i64, u8, u16, u32, u64, f32, f64, isize, usize)");
     ASSERT_EQ_INT(tuple->children[3]->scalar_rep, XR_NATIVE_I64);
     ASSERT_EQ_INT(tuple->children[4]->scalar_rep, XR_NATIVE_U8);

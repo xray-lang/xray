@@ -30,6 +30,7 @@
  */
 
 #include "../test_framework.h"
+#include "lexer_fixture_owner.h"
 #include "frontend/lexer/xlex.h"
 
 /* ====================================================================== */
@@ -37,9 +38,9 @@
 /* ====================================================================== */
 
 // Scan `source` with trivia collection enabled and return the FIRST
-// non-EOF token. Caller is responsible for freeing the trivia chains.
+// non-EOF token. The fixture owns the trivia chains until teardown.
 static Token first_token_with_trivia(Scanner *s, const char *source) {
-    xr_scanner_init_with_trivia(s, source, true);
+    lexer_scanner_open(s, source, true);
     return xr_scanner_scan(s);
 }
 
@@ -47,7 +48,7 @@ static Token first_token_with_trivia(Scanner *s, const char *source) {
 // both for cases that test "comment after token A, before token B".
 static void scan_pair(const char *source, Token *a, Token *b) {
     Scanner s;
-    xr_scanner_init_with_trivia(&s, source, true);
+    lexer_scanner_open(&s, source, true);
     *a = xr_scanner_scan(&s);
     *b = xr_scanner_scan(&s);
 }
@@ -71,11 +72,8 @@ static bool trivia_text_eq(XrTrivia *t, const char *expected) {
     return memcmp(t->start, expected, (size_t) elen) == 0;
 }
 
-static void free_token_trivia(Token *t) {
-    if (t->leading_trivia)
-        xr_trivia_free_chain(t->leading_trivia);
-    if (t->trailing_trivia)
-        xr_trivia_free_chain(t->trailing_trivia);
+static void clear_token_trivia(Token *t) {
+    /* The fixture arena retains both chains through the last token read. */
     t->leading_trivia = NULL;
     t->trailing_trivia = NULL;
 }
@@ -103,8 +101,8 @@ TEST(trailing_line_comment_same_line) {
     ASSERT_TRUE(trivia_text_eq(b.trailing_trivia, " trailing"));
     ASSERT_EQ_INT(trivia_count(b.trailing_trivia), 1);
 
-    free_token_trivia(&a);
-    free_token_trivia(&b);
+    clear_token_trivia(&a);
+    clear_token_trivia(&b);
 }
 
 TEST(trailing_line_comment_after_horizontal_whitespace) {
@@ -118,7 +116,7 @@ TEST(trailing_line_comment_after_horizontal_whitespace) {
     ASSERT_EQ_INT(a.trailing_trivia->type, TRIVIA_LINE_COMMENT);
     ASSERT_TRUE(trivia_text_eq(a.trailing_trivia, "note"));
 
-    free_token_trivia(&a);
+    clear_token_trivia(&a);
 }
 
 TEST(comment_after_newline_is_leading_of_next) {
@@ -137,8 +135,8 @@ TEST(comment_after_newline_is_leading_of_next) {
     ASSERT_NULL(b.trailing_trivia);
     ASSERT_TRUE(trivia_text_eq(b.leading_trivia, " next-line"));
 
-    free_token_trivia(&a);
-    free_token_trivia(&b);
+    clear_token_trivia(&a);
+    clear_token_trivia(&b);
 }
 
 TEST(trailing_inline_block_comment_same_line) {
@@ -154,8 +152,8 @@ TEST(trailing_inline_block_comment_same_line) {
     ASSERT_EQ_INT(b.type, TK_SEMICOLON);
     ASSERT_NULL(b.leading_trivia);
 
-    free_token_trivia(&a);
-    free_token_trivia(&b);
+    clear_token_trivia(&a);
+    clear_token_trivia(&b);
 }
 
 TEST(trailing_nested_inline_block_comment_same_line) {
@@ -170,8 +168,8 @@ TEST(trailing_nested_inline_block_comment_same_line) {
     ASSERT_EQ_INT(b.type, TK_SEMICOLON);
     ASSERT_NULL(b.leading_trivia);
 
-    free_token_trivia(&a);
-    free_token_trivia(&b);
+    clear_token_trivia(&a);
+    clear_token_trivia(&b);
 }
 
 TEST(multiline_block_comment_is_leading_of_next) {
@@ -188,8 +186,8 @@ TEST(multiline_block_comment_is_leading_of_next) {
     ASSERT_NOT_NULL(b.leading_trivia);
     ASSERT_EQ_INT(b.leading_trivia->type, TRIVIA_BLOCK_COMMENT);
 
-    free_token_trivia(&a);
-    free_token_trivia(&b);
+    clear_token_trivia(&a);
+    clear_token_trivia(&b);
 }
 
 TEST(multiline_nested_block_comment_is_leading_of_next) {
@@ -203,8 +201,8 @@ TEST(multiline_nested_block_comment_is_leading_of_next) {
     ASSERT_NOT_NULL(b.leading_trivia);
     ASSERT_EQ_INT(b.leading_trivia->type, TRIVIA_BLOCK_COMMENT);
 
-    free_token_trivia(&a);
-    free_token_trivia(&b);
+    clear_token_trivia(&a);
+    clear_token_trivia(&b);
 }
 
 TEST(eof_token_never_has_trailing) {
@@ -213,14 +211,14 @@ TEST(eof_token_never_has_trailing) {
     // is captured as leading on EOF (existing pre-L-06 behaviour) so
     // it is not lost.
     Scanner s;
-    xr_scanner_init_with_trivia(&s, "// only-comment", true);
+    lexer_scanner_open(&s, "// only-comment", true);
     Token eof = xr_scanner_scan(&s);
 
     ASSERT_EQ_INT(eof.type, TK_EOF);
     ASSERT_NULL(eof.trailing_trivia);
     ASSERT_NOT_NULL(eof.leading_trivia);
 
-    free_token_trivia(&eof);
+    clear_token_trivia(&eof);
 }
 
 TEST(no_trailing_means_no_state_leak) {
@@ -240,8 +238,8 @@ TEST(no_trailing_means_no_state_leak) {
     ASSERT_EQ_INT(b.type, TK_LITERAL_INT);
     ASSERT_TRUE(b.has_leading_space);
 
-    free_token_trivia(&a);
-    free_token_trivia(&b);
+    clear_token_trivia(&a);
+    clear_token_trivia(&b);
 }
 
 TEST(collect_trivia_off_disables_trailing) {
@@ -250,7 +248,7 @@ TEST(collect_trivia_off_disables_trailing) {
     // comments, matching pre-L-06 behaviour and keeping non-formatter
     // call sites zero-cost.
     Scanner s;
-    xr_scanner_init(&s, "var // c\n;");  // collect_trivia = false
+    lexer_scanner_open(&s, "var // c\n;", false);  // collect_trivia = false
     Token a = xr_scanner_scan(&s);
 
     ASSERT_EQ_INT(a.type, TK_VAR);
@@ -263,6 +261,7 @@ TEST(collect_trivia_off_disables_trailing) {
 /* ====================================================================== */
 
 TEST_MAIN_BEGIN()
+lexer_fixture_open();
 RUN_TEST_SUITE("L-06 trailing trivia attachment");
 RUN_TEST(trailing_line_comment_same_line);
 RUN_TEST(trailing_line_comment_after_horizontal_whitespace);
@@ -274,4 +273,5 @@ RUN_TEST(multiline_nested_block_comment_is_leading_of_next);
 RUN_TEST(eof_token_never_has_trailing);
 RUN_TEST(no_trailing_means_no_state_leak);
 RUN_TEST(collect_trivia_off_disables_trailing);
+lexer_fixture_close();
 TEST_MAIN_END()

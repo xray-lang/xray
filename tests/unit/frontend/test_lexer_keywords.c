@@ -40,43 +40,7 @@
 #include "base/xresource_limits.h"
 #include "toolchain/xcompiler_arena_backing.h"
 
-static XrCompileResources *keyword_resources;
-static XrCompileState *keyword_state;
-static XrArena keyword_arena;
-
-static void keyword_fixture_close(void) {
-    xr_arena_destroy(&keyword_arena);
-    xr_compile_state_release(keyword_state);
-    xr_compile_resources_release(keyword_resources);
-    keyword_state = NULL;
-    keyword_resources = NULL;
-}
-
-static bool keyword_fixture_open(void) {
-    const XrCompileResourceLimits limits = XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
-    XrArenaBacking backing = {0};
-    if (xr_compile_resources_new(&limits, &keyword_resources) != XR_COMPILE_RESOURCE_OK)
-        return false;
-    if (xr_compile_state_new(keyword_resources, &keyword_state) != XR_COMPILE_RESOURCE_OK ||
-        xr_compiler_arena_state_backing(keyword_state, &backing) != XR_ARENA_OK ||
-        xr_arena_open(&keyword_arena, XR_ARENA_SEGMENT_SIZE, &backing) != XR_ARENA_OK) {
-        keyword_fixture_close();
-        return false;
-    }
-    return true;
-}
-
-/* Keep the scanner arena alive until every returned token is inspected. */
-static void keyword_scanner_open(Scanner *scanner, const char *source) {
-    XrCompileResourceStatus status = xr_compile_scanner_open(scanner, keyword_state,
-        &keyword_arena, source,NULL);
-    if (status != XR_COMPILE_RESOURCE_OK) {
-        fprintf(stderr, "keyword scanner open failed: %u\n", (unsigned)status);
-        keyword_fixture_close();
-        exit(EXIT_FAILURE);
-    }
-}
-
+#include "lexer_fixture_owner.h"
 
 /* ====================================================================== */
 /* Helpers                                                                 */
@@ -86,7 +50,7 @@ static void keyword_scanner_open(Scanner *scanner, const char *source) {
 // (irrelevant for keyword recognition).
 static Token scan_one(const char *source) {
     Scanner s = {0};
-    keyword_scanner_open(&s, source);
+    lexer_scanner_open(&s, source, false);
     return xr_scanner_scan(&s);
 }
 
@@ -94,7 +58,7 @@ static Token scan_one(const char *source) {
 // produced its result. Used for "token boundary" checks.
 static void scan_two(const char *source, Token *a, Token *b) {
     Scanner s = {0};
-    keyword_scanner_open(&s, source);
+    lexer_scanner_open(&s, source, false);
     *a = xr_scanner_scan(&s);
     *b = xr_scanner_scan(&s);
 }
@@ -437,10 +401,7 @@ TEST(regex_prefix_is_contextual_raw) {
 /* ====================================================================== */
 
 TEST_MAIN_BEGIN()
-if (!keyword_fixture_open()) {
-    fputs("keyword scanner fixture open failed\n", stderr);
-    return EXIT_FAILURE;
-}
+lexer_fixture_open();
 RUN_TEST_SUITE("L-01 / L-08 keyword recognition");
 RUN_TEST(every_keyword_recognised);
 RUN_TEST(removed_keywords_are_identifiers);
@@ -449,5 +410,5 @@ RUN_TEST(keywords_are_case_sensitive);
 RUN_TEST(keyword_with_underscore_suffix_is_identifier);
 RUN_TEST(keyword_then_punctuation);
 RUN_TEST(regex_prefix_is_contextual_raw);
-keyword_fixture_close();
+lexer_fixture_close();
 TEST_MAIN_END()

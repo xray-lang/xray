@@ -9,6 +9,7 @@
  */
 
 #include "../test_framework.h"
+#include "lexer_fixture_owner.h"
 #include "base/xutf8.h"
 #include "xlex.h"
 
@@ -16,7 +17,7 @@
 
 static Token scan_single(const char *source) {
     Scanner scanner;
-    xr_scanner_init(&scanner, source);
+    lexer_scanner_open(&scanner, source, false);
     return xr_scanner_scan(&scanner);
 }
 
@@ -250,7 +251,7 @@ TEST(lexer_invalid_utf8_source_uses_shared_diagnostic_span) {
     ASSERT_EQ_UINT(scan.invalid_length, 3);
 
     Scanner scanner;
-    xr_scanner_init(&scanner, source);
+    lexer_scanner_open(&scanner, source, false);
     Token t = xr_scanner_scan(&scanner);
     ASSERT_EQ_INT(t.type, TK_ERROR);
     ASSERT_TRUE(t.error_message != NULL);
@@ -270,7 +271,7 @@ TEST(lexer_invalid_utf8_source_reports_original_line_and_column) {
     ASSERT_EQ_UINT(scan.invalid_length, 1);
 
     Scanner scanner;
-    xr_scanner_init(&scanner, source);
+    lexer_scanner_open(&scanner, source, false);
     Token t = xr_scanner_scan(&scanner);
     ASSERT_EQ_INT(t.type, TK_ERROR);
     ASSERT_TRUE(t.error_message != NULL);
@@ -324,7 +325,7 @@ TEST(lexer_skip_whitespace) {
     Scanner scanner;
     Token t;
 
-    xr_scanner_init(&scanner, "   123   ");
+    lexer_scanner_open(&scanner, "   123   ", false);
     t = xr_scanner_scan(&scanner);
     assert_token(t, TK_LITERAL_INT, "123");
 }
@@ -333,7 +334,7 @@ TEST(lexer_skip_line_comment) {
     Scanner scanner;
     Token t;
 
-    xr_scanner_init(&scanner, "// comment\n42");
+    lexer_scanner_open(&scanner, "// comment\n42", false);
     t = xr_scanner_scan(&scanner);
     assert_token(t, TK_LITERAL_INT, "42");
 }
@@ -342,7 +343,7 @@ TEST(lexer_skip_block_comment) {
     Scanner scanner;
     Token t;
 
-    xr_scanner_init(&scanner, "/* block */ 99");
+    lexer_scanner_open(&scanner, "/* block */ 99", false);
     t = xr_scanner_scan(&scanner);
     assert_token(t, TK_LITERAL_INT, "99");
 }
@@ -351,7 +352,7 @@ TEST(lexer_skip_nested_block_comment) {
     Scanner scanner;
     Token t;
 
-    xr_scanner_init(&scanner, "/* outer /* inner */ still outer */ 99");
+    lexer_scanner_open(&scanner, "/* outer /* inner */ still outer */ 99", false);
     t = xr_scanner_scan(&scanner);
     assert_token(t, TK_LITERAL_INT, "99");
 }
@@ -362,7 +363,7 @@ TEST(lexer_token_sequence) {
     Scanner scanner;
     Token t;
 
-    xr_scanner_init(&scanner, "var x = 42");
+    lexer_scanner_open(&scanner, "var x = 42", false);
 
     t = xr_scanner_scan(&scanner);
     assert_token(t, TK_VAR, "var");
@@ -384,7 +385,7 @@ TEST(lexer_function_def) {
     Scanner scanner;
     Token t;
 
-    xr_scanner_init(&scanner, "fn add(a, b) { return a + b }");
+    lexer_scanner_open(&scanner, "fn add(a, b) { return a + b }", false);
 
     t = xr_scanner_scan(&scanner);
     assert_token(t, TK_FN, "fn");
@@ -414,7 +415,7 @@ TEST(lexer_line_numbers) {
     Scanner scanner;
     Token t;
 
-    xr_scanner_init(&scanner, "a\nb\nc");
+    lexer_scanner_open(&scanner, "a\nb\nc", false);
 
     t = xr_scanner_scan(&scanner);
     ASSERT_EQ_INT(t.line, 1);
@@ -446,7 +447,7 @@ TEST(lexer_multiline_string_start_position) {
     Scanner scanner;
     Token t;
 
-    xr_scanner_init(&scanner, "\"\"\"\nline1\nline2\nline3\n\"\"\"\nx");
+    lexer_scanner_open(&scanner, "\"\"\"\nline1\nline2\nline3\n\"\"\"\nx", false);
     t = xr_scanner_scan(&scanner);  // string token starts on line 1
     ASSERT_EQ_INT(t.type, TK_LITERAL_STRING);
     ASSERT_EQ_INT(t.line, 1);
@@ -462,7 +463,7 @@ TEST(lexer_multiline_raw_string_start_position) {
     Scanner scanner;
     Token t;
 
-    xr_scanner_init(&scanner, "  r\"\"\"\nabc\ndef\n\"\"\"\nx");
+    lexer_scanner_open(&scanner, "  r\"\"\"\nabc\ndef\n\"\"\"\nx", false);
     t = xr_scanner_scan(&scanner);  // raw string starts on line 1, col 3
     ASSERT_EQ_INT(t.type, TK_RAW_STRING);
     ASSERT_EQ_INT(t.line, 1);
@@ -537,7 +538,7 @@ TEST(lexer_multiline_block_comment_position) {
     Scanner scanner;
     Token t;
 
-    xr_scanner_init(&scanner, "/* a\nb\nc */\nx");
+    lexer_scanner_open(&scanner, "/* a\nb\nc */\nx", false);
     t = xr_scanner_scan(&scanner);  // x on line 4, col 1
     ASSERT_EQ_INT(t.type, TK_NAME);
     ASSERT_EQ_INT(t.line, 4);
@@ -680,7 +681,7 @@ TEST(lexer_error_token_message_field) {
     Scanner scanner;
     Token t;
 
-    xr_scanner_init(&scanner, "\"unterminated");
+    lexer_scanner_open(&scanner, "\"unterminated", false);
     t = xr_scanner_scan(&scanner);
     ASSERT_EQ_INT(t.type, TK_ERROR);
     ASSERT_TRUE(t.error_message != NULL);
@@ -699,7 +700,7 @@ TEST(lexer_error_token_unterminated_block_comment) {
     Scanner scanner;
     Token t;
 
-    xr_scanner_init(&scanner, "/* never closes");
+    lexer_scanner_open(&scanner, "/* never closes", false);
     t = xr_scanner_scan(&scanner);
     ASSERT_EQ_INT(t.type, TK_ERROR);
     ASSERT_TRUE(t.error_message != NULL);
@@ -710,7 +711,7 @@ TEST(lexer_error_token_unterminated_nested_block_comment) {
     Scanner scanner;
     Token t;
 
-    xr_scanner_init(&scanner, "/* outer /* inner */");
+    lexer_scanner_open(&scanner, "/* outer /* inner */", false);
     t = xr_scanner_scan(&scanner);
     ASSERT_EQ_INT(t.type, TK_ERROR);
     ASSERT_TRUE(t.error_message != NULL);
@@ -823,6 +824,8 @@ static void run_all_tests(void) {
 }
 
 TEST_MAIN_BEGIN()
+lexer_fixture_open();
 printf("=== xray Lexer Unit Tests ===\n");
 run_all_tests();
+lexer_fixture_close();
 TEST_MAIN_END()

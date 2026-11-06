@@ -34,6 +34,7 @@
  */
 
 #include "../test_framework.h"
+#include "lexer_fixture_owner.h"
 #include "frontend/lexer/xlex.h"
 
 /* ====================================================================== */
@@ -42,7 +43,7 @@
 
 static Token scan_nth(const char *source, int n) {
     Scanner s;
-    xr_scanner_init(&s, source);
+    lexer_scanner_open(&s, source, false);
     Token t;
     for (int i = 0; i <= n; i++) {
         t = xr_scanner_scan(&s);
@@ -59,7 +60,7 @@ static Token scan_nth(const char *source, int n) {
 TEST(single_line_token_position) {
     // Token positions are 1-indexed.
     Scanner s;
-    xr_scanner_init(&s, "var x");
+    lexer_scanner_open(&s, "var x", false);
     Token a = xr_scanner_scan(&s);
     Token b = xr_scanner_scan(&s);
 
@@ -75,7 +76,7 @@ TEST(single_line_token_position) {
 
 TEST(token_on_second_line) {
     Scanner s;
-    xr_scanner_init(&s, "var\nx");
+    lexer_scanner_open(&s, "var\nx", false);
     (void) xr_scanner_scan(&s);  // consume `var`
     Token b = xr_scanner_scan(&s);
 
@@ -88,7 +89,7 @@ TEST(multiline_string_reports_start_position) {
     // The block starts on line 1 column 1; the closer is on line 5.
     const char *src = "\"\"\"\nline1\nline2\nline3\n\"\"\"";
     Scanner s;
-    xr_scanner_init(&s, src);
+    lexer_scanner_open(&s, src, false);
     Token t = xr_scanner_scan(&s);
 
     ASSERT_EQ_INT(t.type, TK_LITERAL_STRING);
@@ -100,7 +101,7 @@ TEST(token_after_multiline_string_uses_correct_line) {
     // A block closer is isolated; the next token starts on line 6.
     const char *src = "\"\"\"\na\nb\nc\n\"\"\"\n+ 1";
     Scanner s;
-    xr_scanner_init(&s, src);
+    lexer_scanner_open(&s, src, false);
     Token str = xr_scanner_scan(&s);
     Token plus = xr_scanner_scan(&s);
     Token one = xr_scanner_scan(&s);
@@ -123,7 +124,7 @@ TEST(token_after_multiline_block_comment) {
     // the right line and column for the line it actually starts on.
     const char *src = "/* spans\n   two */ x";
     Scanner s;
-    xr_scanner_init(&s, src);
+    lexer_scanner_open(&s, src, false);
     Token t = xr_scanner_scan(&s);
 
     ASSERT_EQ_INT(t.type, TK_NAME);
@@ -150,7 +151,7 @@ TEST(tab_indented_token_column_is_byte_offset) {
     // assumes elsewhere; test it explicitly so a "smart" tab
     // expansion regression would surface.
     Scanner s;
-    xr_scanner_init(&s, "\t\tvar");
+    lexer_scanner_open(&s, "\t\tvar", false);
     Token t = xr_scanner_scan(&s);
 
     ASSERT_EQ_INT(t.type, TK_VAR);
@@ -161,7 +162,7 @@ TEST(tab_indented_token_column_is_byte_offset) {
 TEST(carriage_return_does_not_double_count_lines) {
     // CRLF line endings must produce the same line numbers as LF.
     Scanner s;
-    xr_scanner_init(&s, "var\r\nx");
+    lexer_scanner_open(&s, "var\r\nx", false);
     Token a = xr_scanner_scan(&s);
     Token b = xr_scanner_scan(&s);
 
@@ -176,6 +177,7 @@ TEST(carriage_return_does_not_double_count_lines) {
 /* ====================================================================== */
 
 TEST_MAIN_BEGIN()
+lexer_fixture_open();
 RUN_TEST_SUITE("L-02 multi-line token positions");
 RUN_TEST(single_line_token_position);
 RUN_TEST(token_on_second_line);
@@ -185,4 +187,5 @@ RUN_TEST(token_after_multiline_block_comment);
 RUN_TEST(template_string_reports_start_position);
 RUN_TEST(tab_indented_token_column_is_byte_offset);
 RUN_TEST(carriage_return_does_not_double_count_lines);
+lexer_fixture_close();
 TEST_MAIN_END()
