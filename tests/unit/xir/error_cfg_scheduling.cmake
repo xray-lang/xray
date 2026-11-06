@@ -1,6 +1,6 @@
 # Independent error graph literals supplement the unchanged aggregate gates.
 add_executable(test_xir_error_cfg_scheduling xir/test_xir_error_cfg_scheduling.c)
-target_link_libraries(test_xir_error_cfg_scheduling PRIVATE xray_xir)
+target_link_libraries(test_xir_error_cfg_scheduling PRIVATE xray_xir xray_xir_source)
 if(MSVC)
     target_compile_options(test_xir_error_cfg_scheduling PRIVATE /W4 /WX /utf-8)
 else()

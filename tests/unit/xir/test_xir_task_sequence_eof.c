@@ -11,7 +11,7 @@
 #undef main
 int main(void) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-    uint64_t baseline=rp_stats(&context).live_bytes;
+    uint64_t baseline=rp_stats(&context).held_bytes;
     InvocationDeferredFixture fixture;invocation_deferred_fixture(&fixture,0);
     fixture.init[0]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=1};
     fixture.init[1]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=2};

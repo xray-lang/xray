@@ -103,14 +103,14 @@ static void selector_raw_source_replay(bool resources) {
         uint64_t held=rp_stats(&context).held_bytes;XrCompileResources *identity=context.resources;
         rp_attempts=0;rp_fail_at=pass?pass-1:SIZE_MAX;rp_injected=false;
         XrXirEffects *effects=NULL;
-        XrXirStatus status=xir_artifact_verify_raw_source_effects(checked,&effects,NULL);
+        XrXirStatus status=xir_artifact_verify_raw_source_effects(checked,&effects,NULL,NULL);
         if(!pass) { CHECK(status==XR_XIR_OK && effects);sites=rp_attempts; }
         else {
             if(status!=XR_XIR_OUT_OF_MEMORY) fprintf(stderr,"raw replay allocation%zu status%u\n",
                 pass-1,status);
             CHECK(status==XR_XIR_OUT_OF_MEMORY && rp_injected && !effects && rp_stats(&context).held_bytes==held);
             rp_fail_at=SIZE_MAX;
-            CHECK(xir_artifact_verify_raw_source_effects(checked,&effects,NULL)==XR_XIR_OK && effects);
+            CHECK(xir_artifact_verify_raw_source_effects(checked,&effects,NULL,NULL)==XR_XIR_OK && effects);
         }
         rp_fail_at=SIZE_MAX;uint64_t retained=rp_stats(&context).held_bytes;
         const XrXirModule *module=xr_xir_compile_artifact_module(checked);
@@ -228,7 +228,7 @@ static void selector_current_handoff(void) {
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&context,&fixture.raw.module,&checked,NULL)==XR_XIR_OK && checked);
     memset(&fixture,0xDC,sizeof(fixture));
-    CHECK(xir_artifact_verify_raw_source_effects(checked,&effects,NULL)==XR_XIR_OK && effects);
+    CHECK(xir_artifact_verify_raw_source_effects(checked,&effects,NULL,NULL)==XR_XIR_OK && effects);
     EffectInvocationFinal *final=effects->invocations->final;
     SelectorCurrentPoll poll={0};
     CHECK(xr_compile_resources_begin_cancel(context.resources,selector_current_poll,&poll)==XR_COMPILE_RESOURCE_OK);
@@ -281,7 +281,7 @@ static void selector_invocation_projection(void) {
     context.limits.functions=32;context.limits.parameters=16;context.limits.instructions=128;
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&context,&fixture.raw.module,&checked,NULL)==XR_XIR_OK && checked);
-    CHECK(xir_artifact_verify_raw_source_effects(checked,&effects,NULL)==XR_XIR_OK && effects);
+    CHECK(xir_artifact_verify_raw_source_effects(checked,&effects,NULL,NULL)==XR_XIR_OK && effects);
     memset(&fixture,0xDC,sizeof(fixture));
     EffectInvocationFinal *final=effects->invocations->final;EffectBodyMaterial *material=final->material;
     uint32_t selected=UINT32_MAX;
@@ -354,7 +354,7 @@ static void selector_capture_signature(void) {
     context.limits.functions=32;context.limits.parameters=16;context.limits.instructions=128;
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&context,&fixture.raw.module,&checked,NULL)==XR_XIR_OK && checked);
-    CHECK(xir_artifact_verify_raw_source_effects(checked,&effects,NULL)==XR_XIR_OK && effects);
+    CHECK(xir_artifact_verify_raw_source_effects(checked,&effects,NULL,NULL)==XR_XIR_OK && effects);
     memset(&fixture,0xDC,sizeof(fixture));
     EffectInvocationFinal *final=effects->invocations->final;EffectBodyMaterial *material=final->material;
     CHECK(final->site_count==1 && final->binding_count==2);

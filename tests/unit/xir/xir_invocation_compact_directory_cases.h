@@ -151,7 +151,7 @@ static void conditional_compact_tiny_masks(void) {
         conditional_compact_tiny_damage(&context,&body,expected);
         effect_body_runs_release(body.runs);rp_owner_free(&context,baseline);rp_balanced(physical);
     }
-    puts("compact tiny directories: all 1024 physical masks, one/two runs, damage and every read refusal passed");
+    puts("compact tiny directories: all 1024 physical masks, one/two runs, damage and restored reads passed");
 }
 
 static void conditional_compact_directory_literals(void) {

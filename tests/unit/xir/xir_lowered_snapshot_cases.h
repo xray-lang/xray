@@ -101,8 +101,13 @@ static XrXirStatus lowered_snapshot_empty_copy(const XrXirCompileContext *contex
     XrXirBlock block = {.count = 1};
     XrXirFunction function = {.error_type=XR_XIR_NEVER,.name = "empty", .name_length = 5, .instructions = &instruction,
         .instruction_count = 1, .blocks = &block, .block_count = 1};
+    XrXirSourceModule source = {.name="empty",.name_length=5,.initializer=0,
+        .storage=XR_XIR_MODULE_FRESH_STORAGE};
+    XrXirFunctionIdentity identity = {.method_kind=XR_XIR_NON_MEMBER};
+    XrXirDeclarations declarations = {.modules=&source,.module_count=1,.functions=&identity,
+        .root_module=UINT32_MAX,.entry_function=UINT32_MAX};
     XrXirModule module = {.stage = XR_XIR_LOWERED, .functions = &function,
-        .function_count = 1, .types = &empty};
+        .function_count = 1, .types = &empty,.declarations=&declarations,.linkage_kind=XR_XIR_LIBRARY};
     EffectBodyMaterial *body = NULL;
     XrXirStatus status = conditional_owned_body_from_raw(context, &module, &body);
     if (status == XR_XIR_OK) status = effect_lowered_snapshot_match(context, &body->terms.types, &empty);
