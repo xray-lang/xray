@@ -9,7 +9,6 @@
 #include "base/xmalloc.h"
 #include "base/xcompile_resources.h"
 #include "base/xio_policy.h"
-#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,24 +41,7 @@ static void counted_free(void *memory) {
 #pragma pop_macro("xr_free")
 #pragma pop_macro("xr_malloc")
 
-/* Independent layout arithmetic for the two-pointer allocation prefix and
- * aligned ledger root; never derive expected work from verifier statistics. */
-typedef union OracleAlignment {
-    long double floating; uint64_t integer; void *pointer;
-} OracleAlignment;
-typedef union OracleHeader {
-    struct { void *owner; size_t bytes; } fields;
-#ifdef XR_COMPILER_MSVC
-    OracleAlignment alignment;
-#else
-    max_align_t alignment;
-#endif
-} OracleHeader;
-typedef struct OracleLedger {
-    uint64_t limits[3], stats[5], references;
-    atomic_bool locked;
-} OracleLedger;
-static const XrCompileResourceLimits unlimited = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+static const XrCompileResourceLimits unlimited = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
 static XrCompileResources *ledger(XrCompileResourceLimits limits) {
     XrCompileResources *resources = NULL;
     CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
@@ -70,31 +52,41 @@ static void release(XrCompileResources *resources) {
 }
 #include "module/xsemver.h"
 
-static size_t formulas, oom_points, work_cutoffs;
+static size_t memory_boundaries, oom_points;
 static XrSemVer poison_version(void) { XrSemVer value; memset(&value, 0xA5, sizeof(value)); return value; }
 static XrCompileResourceStats statistics(XrCompileResources *resources) {
     XrCompileResourceStats result; CHECK(xr_compile_resources_stats(resources, &result) == XR_COMPILE_RESOURCE_OK); return result;
 }
-static void parse_formula(bool suffix) {
+static void parse_memory(bool suffix) {
     const char *source = suffix ? "1.2.3-a+b" : "1";
-    uint64_t bytes = sizeof(OracleLedger) + (suffix ? 2 * (sizeof(OracleHeader) + 2) : 0);
-    uint64_t work = 2 * sizeof(XrSemVer) + (suffix ? 25 : 6);
-    for (unsigned dimension = 0; dimension < 3; ++dimension) for (unsigned minus = 0; minus < 2; ++minus) {
-        if (!suffix && dimension != 2) continue;
-        XrCompileResourceLimits limits = unlimited;
-        if (!dimension) limits.allocated_bytes = bytes - minus;
-        if (dimension == 1) limits.live_bytes = bytes - minus;
-        if (dimension == 2) limits.work = work - minus;
-        XrCompileResources *resources = ledger(limits); XrOsIoPolicy policy = xr_compile_io_policy(resources);
-        XrSemVer out = poison_version(), saved = out;
-        CHECK(xr_semver_parse_owned(&policy, source, &out) == (minus ? XR_OS_IO_BUDGET : XR_OS_IO_OK));
-        if (minus) CHECK(!memcmp(&out, &saved, sizeof(out)));
-        else {
-            XrCompileResourceStats stats = statistics(resources);
-            CHECK(stats.work == work && stats.allocated_bytes == bytes && stats.peak_bytes == bytes);
-            CHECK(out.major == 1 && out.minor == (suffix ? 2 : 0)); xr_semver_free_owned(&out);
+    XrCompileResources *resources = ledger(unlimited);
+    XrOsIoPolicy policy = xr_compile_io_policy(resources);
+    XrSemVer out = poison_version();
+    CHECK(xr_semver_parse_owned(&policy, source, &out) == XR_OS_IO_OK);
+    XrCompileResourceStats exact = statistics(resources);
+    CHECK(exact.held_bytes == physical && exact.peak_bytes == physical);
+    CHECK(out.major == 1 && out.minor == (suffix ? 2 : 0));
+    xr_semver_free_owned(&out); release(resources);
+    for (unsigned minus = 0; minus < 2; ++minus) {
+        XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE, exact.peak_bytes - minus, true};
+        resources = NULL; out = poison_version(); XrSemVer saved = out;
+        XrCompileResourceStatus created = xr_compile_resources_new(&limits, &resources);
+        if (created != XR_COMPILE_RESOURCE_OK) {
+            CHECK(minus && created == XR_COMPILE_RESOURCE_MEMORY_LIMIT && !resources);
+            CHECK(!memcmp(&out, &saved, sizeof(out)) && !live && !physical);
+        } else {
+            policy = xr_compile_io_policy(resources);
+            CHECK(xr_semver_parse_owned(&policy, source, &out) == (minus ? XR_OS_IO_MEMORY_LIMIT : XR_OS_IO_OK));
+            if (minus) CHECK(!memcmp(&out, &saved, sizeof(out)));
+            else {
+                CHECK(out.major == 1 && out.minor == (suffix ? 2 : 0));
+                xr_semver_free_owned(&out);
+                CHECK(xr_semver_parse_owned(&policy, source, &out) == XR_OS_IO_OK);
+                xr_semver_free_owned(&out);
+            }
+            release(resources);
         }
-        release(resources); ++formulas;
+        ++memory_boundaries;
     }
 }
 static void grammar(void) {
@@ -188,16 +180,36 @@ static XrOsIoStatus operation(unsigned op, const XrOsIoPolicy *policy) {
     return status;
 }
 static void faults(void) {
+    XrCompileResources *rejected = NULL;
+    fail_at = calls;
+    CHECK(xr_compile_resources_new(&unlimited, &rejected) == XR_COMPILE_RESOURCE_OUT_OF_MEMORY && !rejected);
+    fail_at = SIZE_MAX; CHECK(!live && !physical); ++oom_points;
     for (unsigned op = 0; op < 5; ++op) {
-        XrCompileResources *resources = ledger(unlimited); XrOsIoPolicy policy = xr_compile_io_policy(resources); size_t start = calls;
-        CHECK(operation(op, &policy) == XR_OS_IO_OK); size_t points = calls - start; uint64_t work = statistics(resources).work; release(resources);
+        XrCompileResources *resources = ledger(unlimited);
+        XrCompileResourceStats baseline = statistics(resources);
+        XrOsIoPolicy policy = xr_compile_io_policy(resources); size_t start = calls;
+        CHECK(operation(op, &policy) == XR_OS_IO_OK);
+        size_t points = calls - start;
+        XrCompileResourceStats exact = statistics(resources);
+        CHECK(exact.held_bytes == baseline.held_bytes && exact.held_bytes == physical);
+        release(resources);
         for (size_t i = 0; i < points; ++i) {
             resources = ledger(unlimited); policy = xr_compile_io_policy(resources); fail_at = calls + i;
-            CHECK(operation(op, &policy) == XR_OS_IO_OUT_OF_MEMORY); fail_at = SIZE_MAX; release(resources); ++oom_points;
+            CHECK(operation(op, &policy) == XR_OS_IO_OUT_OF_MEMORY);
+            fail_at = SIZE_MAX; release(resources); ++oom_points;
         }
-        for (uint64_t cap = 1; cap < work; ++cap) {
-            XrCompileResourceLimits limits = unlimited; limits.work = cap; resources = ledger(limits); policy = xr_compile_io_policy(resources);
-            CHECK(operation(op, &policy) == XR_OS_IO_BUDGET); release(resources); ++work_cutoffs;
+        for (unsigned minus = 0; minus < 2; ++minus) {
+            XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE, exact.peak_bytes - minus, true};
+            resources = NULL;
+            XrCompileResourceStatus created = xr_compile_resources_new(&limits, &resources);
+            if (created != XR_COMPILE_RESOURCE_OK) {
+                CHECK(minus && created == XR_COMPILE_RESOURCE_MEMORY_LIMIT && !resources && !live && !physical);
+            } else {
+                policy = xr_compile_io_policy(resources);
+                CHECK(operation(op, &policy) == (minus ? XR_OS_IO_MEMORY_LIMIT : XR_OS_IO_OK));
+                release(resources);
+            }
+            ++memory_boundaries;
         }
     }
 }
@@ -207,6 +219,6 @@ static void lifetime(void) {
     CHECK(live == 3 && !strcmp(version.prerelease, "alpha") && !strcmp(version.build, "build")); xr_semver_free_owned(&version); CHECK(!live && !physical);
 }
 int main(void) {
-    parse_formula(false); parse_formula(true); grammar(); numeric_prerelease(); constraints(); faults(); lifetime();
-    printf("semver resources passed: %zu formula boundaries, %zu malloc OOM points, %zu work cutoffs; physical zero\n", formulas, oom_points, work_cutoffs); return 0;
+    parse_memory(false); parse_memory(true); grammar(); numeric_prerelease(); constraints(); faults(); lifetime();
+    printf("semver resources passed: %zu held memory boundaries, %zu malloc OOM points; physical zero\n", memory_boundaries, oom_points); return 0;
 }
