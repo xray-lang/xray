@@ -110,17 +110,17 @@ static XrXirArtifact *array_program_fixture(const XrXirCompileContext *context, 
     XrXirBlock blocks[] = {{0,6, 0, 0},{0,7, 0, 0},{0,25, 0, 0},{0,2, 0, 0},{0,4, 0, 0},{0,9, 0, 0},{0,3, 0, 0},{0,8, 0, 0}};
     XrXirType index_type = XR_XIR_I64;
     XrXirFunction functions[] = {
-        {"init",4,NULL,0,XR_XIR_UNIT,&blocks[0],1,init,6,NULL,0},
-        {"lib",3,NULL,0,XR_XIR_UNIT,&blocks[1],1,lib,7,lib_operands,2},
-        {"main",4,NULL,0,XR_XIR_I64,&blocks[2],1,main,25,main_operands,10},
-        {"make",4,NULL,0,a,&blocks[3],1,make,2,NULL,0},
-        {"escape",6,NULL,0,a,&blocks[6],1,escape,3,NULL,0},
-        {"bounds",6,&index_type,1,XR_XIR_STRING,&blocks[4],1,bounds,4,NULL,0},
-        {"local",5,NULL,0,XR_XIR_STRING,&blocks[7],1,local,8,local_operands,3},
-        {"captured",8,NULL,0,XR_XIR_STRING,&blocks[5],1,captured,9,captured_operands,3}};
+        {"init",4,NULL,0,XR_XIR_UNIT,&blocks[0],1,init,6,NULL,0,.error_type=XR_XIR_NEVER},
+        {"lib",3,NULL,0,XR_XIR_UNIT,&blocks[1],1,lib,7,lib_operands,2,.error_type=XR_XIR_NEVER},
+        {"main",4,NULL,0,XR_XIR_I64,&blocks[2],1,main,25,main_operands,10,.error_type=XR_XIR_NEVER},
+        {"make",4,NULL,0,a,&blocks[3],1,make,2,NULL,0,.error_type=XR_XIR_NEVER},
+        {"escape",6,NULL,0,a,&blocks[6],1,escape,3,NULL,0,.error_type=XR_XIR_NEVER},
+        {"bounds",6,&index_type,1,XR_XIR_STRING,&blocks[4],1,bounds,4,NULL,0,.error_type=XR_XIR_NEVER},
+        {"local",5,NULL,0,XR_XIR_STRING,&blocks[7],1,local,8,local_operands,3,.error_type=XR_XIR_NEVER},
+        {"captured",8,NULL,0,XR_XIR_STRING,&blocks[5],1,captured,9,captured_operands,3,.error_type=XR_XIR_NEVER}};
     uint32_t dependency = 1;
     XrXirSourceModule modules[] = {{"root",4,&dependency,1,0, 0,XR_XIR_MODULE_FRESH_STORAGE},{"library",7,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE}};
-    XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{1,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{1,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
+    XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0},{1,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0},{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0},{1,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0}};
     XrXirSlot slots[] = {{1,a,0},{0,cell,1},{0,cell,1}};
     XrXirLiteral literals[] = {{"red",3},{"blue",4},{"green",5}};
     XrXirDeclarations declarations = {modules,2,identities,slots,3,literals,3,0,2, NULL};

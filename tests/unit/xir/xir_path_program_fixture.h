@@ -106,13 +106,13 @@ static XrXirArtifact *path_program_fixture(const XrXirCompileContext *context, u
     XrXirType index_type = XR_XIR_I64;
     XrXirBlock blocks[] = {{0,9,0,0},{0,34,0,0},{0,8,0,0},{0,2,0,0},{0,3,0,0}};
     XrXirFunction functions[] = {
-        {"init",4,NULL,0,XR_XIR_UNIT,&blocks[0],1,init,9,constructed,4},
-        {"entry",5,NULL,0,root,&blocks[1],1,entry,34,values,10},
-        {"replace",7,NULL,0,root,&blocks[2],1,replace,8,constructed,4},
-        {"read",4,NULL,0,root,&blocks[4],1,read,3,NULL,0},
-        {"main",4,NULL,0,XR_XIR_I64,&blocks[3],1,main,2,NULL,0},
-        {"bounds",6,&index_type,1,XR_XIR_I64,&blocks[2],1,bounds,8,NULL,0},
-        {"badWrite",8,&index_type,1,XR_XIR_I64,&blocks[2],1,bad_write,8,NULL,0}};
+        {"init",4,NULL,0,XR_XIR_UNIT,&blocks[0],1,init,9,constructed,4,.error_type=XR_XIR_NEVER},
+        {"entry",5,NULL,0,root,&blocks[1],1,entry,34,values,10,.error_type=XR_XIR_NEVER},
+        {"replace",7,NULL,0,root,&blocks[2],1,replace,8,constructed,4,.error_type=XR_XIR_NEVER},
+        {"read",4,NULL,0,root,&blocks[4],1,read,3,NULL,0,.error_type=XR_XIR_NEVER},
+        {"main",4,NULL,0,XR_XIR_I64,&blocks[3],1,main,2,NULL,0,.error_type=XR_XIR_NEVER},
+        {"bounds",6,&index_type,1,XR_XIR_I64,&blocks[2],1,bounds,8,NULL,0,.error_type=XR_XIR_NEVER},
+        {"badWrite",8,&index_type,1,XR_XIR_I64,&blocks[2],1,bad_write,8,NULL,0,.error_type=XR_XIR_NEVER}};
     XrXirSourceModule source = {"alpha",5,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[] = {{0},{.exported = 1},{0},{.exported = 1},{0},
         {.exported = 1},{.exported = 1}};

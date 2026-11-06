@@ -33,9 +33,9 @@ static XrXirArtifact *cleanup_program_fixture(const XrXirCompileContext *context
     XrXirBlock blocks[] = {{0, 2, 0, 0}, {2, 2, 0, 2}, {4, 3, 0, 4}, {7, 3, 0, 2}, {10, 4, 0, 0}};
     uint32_t operands[] = {0, 2}; XrXirType capture = XR_XIR_I64;
     XrXirFunction functions[] = {
-        {"init", 4, NULL, 0, XR_XIR_UNIT, &one, 1, &done, 1, NULL, 0},
-        {"main", 4, NULL, 0, XR_XIR_I64, blocks, 4, ops, 10, operands, 2},
-        {"cleanup", 7, &capture, 1, XR_XIR_UNIT, &two, 1, cleanup, 2, NULL, 0}};
+        {"init", 4, NULL, 0, XR_XIR_UNIT, &one, 1, &done, 1, NULL, 0,.error_type=XR_XIR_NEVER},
+        {"main", 4, NULL, 0, XR_XIR_I64, blocks, 4, ops, 10, operands, 2,.error_type=XR_XIR_NEVER},
+        {"cleanup", 7, &capture, 1, XR_XIR_UNIT, &two, 1, cleanup, 2, NULL, 0,.error_type=XR_XIR_NEVER}};
     if (mode == 1) ops[5] = (XrXirInstruction){XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0, {0}};
     if (mode == 2 || mode == 3 || mode == 5) {
         functions[1].block_count = 5; functions[1].instruction_count = 14;

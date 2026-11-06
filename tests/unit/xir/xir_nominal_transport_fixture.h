@@ -40,12 +40,12 @@ static XrXirArtifact *nominal_transport_fixture(const XrXirCompileContext *conte
     XrXirBlock one = {0, 1, 0, 0}, two = {0, 2, 0, 0}, blocks[] = {{0, 3, 0, 0}, {3, 2, 0, 0}, {5, 2, 0, 0}, {7, 4, 0, 0}};
     uint32_t operands[] = {1, 5, 2, 7, 9};
     XrXirFunction functions[] = {
-        {"init",4,NULL,0,XR_XIR_UNIT,&one,1,init,1,NULL,0},
-        {"entry",5,NULL,0,XR_XIR_I64,&two,1,entry,2,NULL,0},
-        {"carry",5,parameters,2,pair,blocks,4,body,11,operands,5},
-        {"leaf",4,parameters,1,pair,&two,1,leaf,2,NULL,0}};
+        {"init",4,NULL,0,XR_XIR_UNIT,&one,1,init,1,NULL,0,.error_type=XR_XIR_NEVER},
+        {"entry",5,NULL,0,XR_XIR_I64,&two,1,entry,2,NULL,0,.error_type=XR_XIR_NEVER},
+        {"carry",5,parameters,2,pair,blocks,4,body,11,operands,5,.error_type=XR_XIR_NEVER},
+        {"leaf",4,parameters,1,pair,&two,1,leaf,2,NULL,0,.error_type=XR_XIR_NEVER}};
     XrXirSourceModule source = {"alpha",5,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
-    XrXirFunctionIdentity identities[] = {{0,0,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,0,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
+    XrXirFunctionIdentity identities[] = {{0,0,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0},{0,1,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0},{0,1,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0},{0,0,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0}};
     XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,1, NULL};
     XrXirModule built = {XR_XIR_BUILT,functions,4,&declarations,NULL,&types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL, *lowered = NULL;
