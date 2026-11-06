@@ -12,6 +12,7 @@
  */
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
+#include "xir/xxir_program_packet_internal.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -174,7 +175,7 @@ static bool place_vm_function(uint32_t function,uint32_t answer,unsigned mode) {
 static void place_profile(unsigned mode,const char *operation) {
     SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);
     XrXirProgramSpec spec=language_reference_program;XrXirArtifact *checked=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_checked_read(&owner.context,spec.proof.bytes,spec.proof.length,&checked,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(&owner.context,spec.packet.bytes,spec.packet.length,&checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_lower(checked,&spec.target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);uint32_t answer=UINT32_MAX;
     for (uint32_t f=0;f<module->function_count;++f)
@@ -205,9 +206,10 @@ static void place_profile(unsigned mode,const char *operation) {
             spec.types=module->types;spec.declarations=module->declarations;
             printf("INIT_PLACES_MIXED mode=%u vm=%u native=%u direct_cross_edges=%u\n",mode,vm,native,crossing);
         }
-        XrXirProgramProof proof=xr_xir_compile_program_proof(lowered);
-        CHECK(proof.length==spec.proof.length && !memcmp(proof.identity,spec.proof.identity,32) && !memcmp(proof.bytes,spec.proof.bytes,proof.length));
-        spec.proof=proof;CHECK(xr_xir_compile_program_seal(&owner.context,&spec,&program)==XR_XIR_OK);
+        XrXirProgramPacket packet=xir_program_packet_borrow(lowered);
+        CHECK(packet.identity && packet.length==spec.packet.length && !memcmp(packet.identity,spec.packet.identity,32) &&
+            !memcmp(packet.bytes,spec.packet.bytes,packet.length));
+        spec.packet=packet;CHECK(xr_xir_compile_program_seal(&owner.context,&spec,&program)==XR_XIR_OK);
     }
     PlaceRuntimeCost baseline={0};CHECK(place_case(program,answer,SIZE_MAX,NULL,&baseline));
     CHECK(baseline.sites && baseline.sites<20000);

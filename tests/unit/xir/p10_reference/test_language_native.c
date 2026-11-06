@@ -104,9 +104,9 @@ static void execute_profile(int64_t expected, bool direction, unsigned suspensio
     if (sealed != XR_XIR_OK) {
         XrCompileResourceStats stats = {0};
         CHECK(xr_compile_resources_stats(owner.context.resources, &stats) == XR_COMPILE_RESOURCE_OK);
-        fprintf(stderr, "Program seal status=%u work=%llu allocated=%llu peak=%llu live=%llu\n",
-            (unsigned) sealed, (unsigned long long) stats.work, (unsigned long long) stats.allocated_bytes,
-            (unsigned long long) stats.peak_bytes, (unsigned long long) stats.live_bytes);
+        fprintf(stderr, "Program seal status=%u allocated=%llu peak=%llu held=%llu\n",
+            (unsigned) sealed, (unsigned long long) stats.allocated_bytes,
+            (unsigned long long) stats.peak_bytes, (unsigned long long) stats.held_bytes);
     }
     CHECK(sealed == XR_XIR_OK);
     native_pair(program, answer, expected, suspensions);

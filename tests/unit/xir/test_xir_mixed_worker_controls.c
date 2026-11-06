@@ -8,6 +8,7 @@
  */
 #include "xir/xxir_vm.h"
 #include "xir/xxir_checked.h"
+#include "xir/xxir_program_packet_internal.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -78,7 +79,7 @@ static void worker_control_targets(WorkerControlCode *code, const XrXirModule *m
 static XrXirProgram *worker_control_program(const WorkerControlCase *oracle, unsigned backend) {
     const XrXirCompileContext context = *effects_source_owner();
     XrXirArtifact *checked = NULL, *lowered = NULL;
-    CHECK(xr_xir_compile_checked_read(&context, oracle->spec->proof.bytes, oracle->spec->proof.length, &checked, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(&context, oracle->spec->packet.bytes, oracle->spec->packet.length, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_lower(checked, &oracle->spec->target, NULL, &lowered, NULL) == XR_XIR_OK); xr_xir_compile_artifact_free(checked);
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
     CHECK(module->function_count == oracle->spec->entry_count && module->function_count <= WORKER_FUNCTIONS);
@@ -87,7 +88,7 @@ static XrXirProgram *worker_control_program(const WorkerControlCase *oracle, uns
     CHECK(xr_compile_resources_calloc(context.resources, module->function_count, sizeof(*code->entries), (void **)&code->entries) == XR_COMPILE_RESOURCE_OK);
     code->functions = module->function_count; code->root = *oracle->entry;
     worker_control_targets(code, module);
-    XrXirProgramProof proof = xr_xir_compile_program_proof(lowered);
+    XrXirProgramPacket packet = xir_program_packet_borrow(lowered);
     CHECK(xr_xir_compile_vm_program_take(&lowered, &code->vm) == XR_XIR_OK && !lowered);
     for (uint32_t f = 0; f < module->function_count; ++f) {
         code->native[f] = backend == 3 || (backend < 2 && (f == code->root) == (backend == 1));
@@ -97,7 +98,7 @@ static XrXirProgram *worker_control_program(const WorkerControlCase *oracle, uns
     }
     XrXirProgramSpec spec = *oracle->spec;
     spec.entries = code->entries; spec.types = module->types; spec.declarations = module->declarations;
-    spec.proof = proof; spec.code = (XrXirCodeLease){code, worker_control_free}; worker_control_code = code;
+    spec.packet = packet; spec.code = (XrXirCodeLease){code, worker_control_free}; worker_control_code = code;
     XrXirProgram *program = NULL; CHECK(xr_xir_compile_program_seal(&context, &spec, &program) == XR_XIR_OK);
     return program;
 }
