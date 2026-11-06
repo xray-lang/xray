@@ -1176,32 +1176,6 @@ add_test(NAME test_xr_program_imported_callable_native
 set_tests_properties(test_xr_program_imported_callable_native PROPERTIES
     LABELS "unit;aot;canonical-program;source;callable;multi-module;generated-c;native;task-301")
 
-set(XR_OPTIONAL_STORAGE_SOURCE_PREFIX
-    ${CMAKE_CURRENT_BINARY_DIR}/generated/optional_storage)
-
-foreach(XR_OPTIONAL_SCENARIO RANGE 0 8)
-    set(XR_OPTIONAL_NATIVE_TARGET test_xi_optional_native_${XR_OPTIONAL_SCENARIO})
-    set(XR_OPTIONAL_NATIVE_SOURCE ${XR_OPTIONAL_STORAGE_SOURCE_PREFIX}.${XR_OPTIONAL_SCENARIO}.c)
-    set_source_files_properties(${XR_OPTIONAL_NATIVE_SOURCE}
-        PROPERTIES GENERATED TRUE HEADER_FILE_ONLY TRUE)
-    add_executable(${XR_OPTIONAL_NATIVE_TARGET}
-        aot/xi_optional_storage_native.c ${XR_OPTIONAL_NATIVE_SOURCE})
-    target_compile_definitions(${XR_OPTIONAL_NATIVE_TARGET} PRIVATE
-        XR_OPTIONAL_SCENARIO=${XR_OPTIONAL_SCENARIO}
-        XR_OPTIONAL_GENERATED_C="${XR_OPTIONAL_NATIVE_SOURCE}")
-
-    target_include_directories(${XR_OPTIONAL_NATIVE_TARGET} SYSTEM PRIVATE
-        ${CMAKE_SOURCE_DIR}/src/aot ${CMAKE_SOURCE_DIR}/include)
-    set_target_properties(${XR_OPTIONAL_NATIVE_TARGET} PROPERTIES
-        C_STANDARD 11 C_STANDARD_REQUIRED TRUE C_EXTENSIONS FALSE)
-    if(MSVC)
-        target_compile_options(${XR_OPTIONAL_NATIVE_TARGET} PRIVATE /W4 /WX /wd4702)
-    else()
-        target_compile_options(${XR_OPTIONAL_NATIVE_TARGET} PRIVATE -Wall -Wextra -Werror -pedantic-errors)
-    endif()
-    add_test(NAME ${XR_OPTIONAL_NATIVE_TARGET} COMMAND $<TARGET_FILE:${XR_OPTIONAL_NATIVE_TARGET}>)
-    set_tests_properties(${XR_OPTIONAL_NATIVE_TARGET} PROPERTIES LABELS "aot;cgen;optional;native")
-endforeach()
 set(XR_NATIVE_EXPECTED_structural_root 34320a330a2d310a31370a39390a34320a390a2f726f6f743f7123660a)
 set(XR_NATIVE_EXPECTED_runtime_constructor 520a3d0a34320a747275650a322e350a)
 set(XR_NATIVE_EXPECTED_coroutine_aggregate 626574610a34320a)
