@@ -229,7 +229,7 @@ static XrXirStatus effect_control_prepare_fields(const XrXirCompileContext *work
         if (!!final->functions[f].suspend!=!!(check->seen[f]&1) ||
             (final->task_creation[f]==XR_XIR_EFFECT_MAY)!=!!(check->seen[f]&2) ||
             final->go_safe[f]!=(shape || root?XR_XIR_BAD_TYPE:XR_XIR_OK)) status=XR_XIR_BAD_STRUCTURE;
-        else status=effect_control_entry(work,&check->input,check->final,f);
+        else status=effect_control_entry(&check->input,check->final,f);
     }
     return status;
 }
