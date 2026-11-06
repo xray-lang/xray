@@ -167,10 +167,11 @@ static void declaration_attacks(XrXirCheckedPacket *packet) {
     size_t identities = at, slot_data = packet_slots(packet);
     size_t literal_data = slot_data + (size_t) slots * 12;
     const size_t offsets[] = {declarations, declarations + 12, declarations + 16,
-        dependencies + 4, initializer, identities + 4 * 36 + 4, slot_data, literal_data + 4, identities + 4 * 36 + 8};
+        dependencies + 4, initializer, identities + 4 * 40 + 4, slot_data, literal_data + 4, identities + 4 * 40 + 8};
     const uint32_t values[] = {UINT32_MAX, 1, 0, 1, 3, 0, 1, UINT32_MAX, 1};
     for (unsigned i = 0; i < sizeof(offsets) / sizeof(offsets[0]); ++i) {
         CHECK(offsets[i] + 4 <= packet->length);
+        CHECK(packet32(packet,offsets[i])!=values[i]);
         uint8_t saved[4]; memcpy(saved, packet->bytes + offsets[i], 4);
         put32(packet->bytes + offsets[i], values[i]); digest_packet(packet);
         rejected(packet->bytes, packet->length);
