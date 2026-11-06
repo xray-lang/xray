@@ -158,7 +158,8 @@ static void capacity_initialization_census(CapacityCompile *run) {
             CHECK(charged.work>before_start.work);
             result=(XrXirValue){0};
             CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_BAD_STATE&&!result.type&&!result.reserved&&!result.payload);
-            if(instance->state==XR_XIR_INSTANCE_FAILED){
+            const bool initialization_failed=instance->state==XR_XIR_INSTANCE_FAILED;
+            if(initialization_failed){
                 XrXirCallResult copy={0};
                 CHECK(xr_xir_instance_copy_failure(instance,&copy)==XR_XIR_CALL_OOM&&copy.status==XR_XIR_CALL_OOM);
                 xr_xir_call_result_drop(&copy);
@@ -178,7 +179,9 @@ static void capacity_initialization_census(CapacityCompile *run) {
                 CHECK(retried.work>charged.work);++prepared;
             }
             const XrXirDomainBudgetStats before_release=xr_xir_domain_budget_stats(domain);
-            CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+            const XrXirCallStatus completion=initialization_failed?XR_XIR_CALL_OOM:XR_XIR_CALL_READY;
+            CHECK(xr_xir_task_executor_completion_status(instance->executor)==completion);
+            CHECK(xr_xir_instance_free(instance)==completion);
             const XrXirDomainBudgetStats released=xr_xir_domain_budget_stats(domain);
             CHECK(released.requested_bytes==before_release.requested_bytes&&released.requested_call_bytes==before_release.requested_call_bytes);
             CHECK(released.work>=before_release.work&&!released.metadata_live&&!released.call_live);

@@ -23,7 +23,7 @@ static void capacity_rejections(void) {
         "value mutation requires a mutable named root",
         "field access is not permitted","field access is not permitted",
         "expression cannot satisfy its declared type","expression cannot satisfy its declared type",
-        "Array method arguments use ordinary READ values","Array method requires its declared arguments",
+        "direct call arguments must use the declared READ contract","Array method requires its declared arguments",
         "receiver has no declared interface requirements","receiver has no declared interface requirements",
         "member receiver is not a nominal value",
         "Array static member requires its declared ordinary arguments",

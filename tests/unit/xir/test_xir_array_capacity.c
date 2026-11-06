@@ -27,9 +27,9 @@
 XR_DATA const XrXirProgramSpec array_capacity_program;
 #endif
 #include "xir_instance_compile_observer.h"
-#define xr_xir_instance_path_write capacity_real_path_write
+#define xr_xir_instance_path_write_at capacity_real_path_write_at
 #include "xir_runtime_allocations.h"
-#undef xr_xir_instance_path_write
+#undef xr_xir_instance_path_write_at
 #include "xir_array_capacity_publication.h"
 #include "xir_array_capacity_pipeline.h"
 static uint32_t capacity_find(const XrXirModule *module, const char *name) {

@@ -15,10 +15,10 @@
 static XrXirInstance *capacity_watched;
 static unsigned capacity_publications;
 static size_t capacity_publication_site;
-XR_FUNC XrXirCallStatus xr_xir_instance_path_write(XrXirCallView *view,
+XR_FUNC XrXirCallStatus xr_xir_instance_path_write_at(XrXirCallView *view,uint32_t instruction,
     const XrXirValueReceiver *receiver,const XrXirValuePath *path,
     const XrXirValue *value,XrXirFaultDetail *fault) {
-    XrXirCallStatus status=capacity_real_path_write(view,receiver,path,value,fault);
+    XrXirCallStatus status=capacity_real_path_write_at(view,instruction,receiver,path,value,fault);
     if(status==XR_XIR_CALL_READY&&capacity_watched&&view_instance(view)==capacity_watched&&
         receiver->kind==XR_XIR_ROOT_SLOT&&path&&!path->count&&
         xr_xir_type_is_array(xr_xir_compile_type_arena_types(capacity_watched->program->arena),receiver->type)) {
