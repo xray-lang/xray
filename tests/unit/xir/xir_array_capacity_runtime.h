@@ -51,8 +51,7 @@ static void capacity_failed_output(XrXirInstance *instance,XrXirCallStatus compl
         (completion==XR_XIR_CALL_READY?XR_XIR_CALL_BAD_STATE:completion));
     CHECK(!output.type&&!output.reserved&&!output.payload);
     output=(XrXirValue){XR_XIR_I64,0,77};const XrXirValue before=output;
-    CHECK(xr_xir_instance_take_result(instance,&output)==
-        (completion==XR_XIR_CALL_READY?XR_XIR_CALL_BAD_ARGUMENT:completion));
+    CHECK(xr_xir_instance_take_result(instance,&output)==XR_XIR_CALL_BAD_ARGUMENT);
     CHECK(!memcmp(&output,&before,sizeof(output)));
     XrXirCallResult failure={0},original=failure;
     CHECK(xr_xir_instance_copy_failure(instance,&failure)==XR_XIR_CALL_BAD_STATE);

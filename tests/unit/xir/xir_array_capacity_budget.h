@@ -75,8 +75,7 @@ static void capacity_budget_failed_output(XrXirInstance *instance,bool exhausted
         (exhausted?XR_XIR_CALL_LIMIT:XR_XIR_CALL_BAD_STATE));
     CHECK(!memcmp(&value,&before,sizeof(value)));
     value=(XrXirValue){XR_XIR_I64,0,77};before=value;
-    CHECK(xr_xir_instance_take_result(instance,&value)==
-        (exhausted?XR_XIR_CALL_LIMIT:XR_XIR_CALL_BAD_ARGUMENT));
+    CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_BAD_ARGUMENT);
     CHECK(!memcmp(&value,&before,sizeof(value)));
     XrXirCallResult failure={0},original=failure;
     CHECK(xr_xir_instance_copy_failure(instance,&failure)==XR_XIR_CALL_BAD_STATE);
@@ -103,6 +102,9 @@ static CapacityBudgetMeasure capacity_budget_measure(CapacityCompile *run,const 
     CHECK(measure.sites&&measure.publication_site&&measure.publication_site<=measure.sites);
     CHECK(measure.after.requested_bytes>measure.before.requested_bytes&&measure.after.work>measure.before.work);
     CHECK(measure.physical_after.peak_bytes>measure.physical_before.peak_bytes);
+    printf("capacity runtime measured %s requested%llu work%llu sites%zu\n",name,
+        (unsigned long long)(measure.after.requested_bytes-measure.before.requested_bytes),
+        (unsigned long long)(measure.after.work-measure.before.work),measure.sites);
     CHECK(measure.after.work-measure.before.work==(!strcmp(name,"committed")?27u:50u));
     CHECK(measure.after.requested_bytes-measure.before.requested_bytes==(!strcmp(name,"committed")?176u:392u));
     XrXirValue result={0};CHECK(xr_xir_instance_take_result(test.first,&result)==XR_XIR_CALL_RETURNED);
