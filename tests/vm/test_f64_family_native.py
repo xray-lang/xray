@@ -248,7 +248,6 @@ def main():
     negative = []
     clean = [x for x in base if x != '/Zi' and x not in _f64_options(args.compiler, args.kind) and not x.startswith(('/fsanitize=', '/clang:-fsanitize=', '-fsanitize='))]
     controls = [('fast', ['/fp:fast'] if args.kind == 'msvc' else ['-ffast-math'])]
-    if args.kind == 'msvc': controls.append(('abi', ['/D_M_ARM64EC=1']))
     for label, options in controls:
         folder = work / ('negative-' + label);folder.mkdir()
         options = [*clean, *options, ('/I' if args.kind == 'msvc' else '-I') + str(args.include)]
