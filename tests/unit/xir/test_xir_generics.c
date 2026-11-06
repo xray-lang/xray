@@ -35,27 +35,6 @@ static void generic_runtime_retiring(void *pointer);
 #include "xir_nominal_expression_fixture.h"
 #include "xir_nominal_checked_fixture.h"
 #include "xir_nominal_field_closure_fixture.h"
-static XrXirCompileContext generic_work_context(uint64_t work) {
-    return consumer_context_limits((XrCompileResourceLimits){67108864,8388608,work});
-}
-static void generic_specialization_work_boundary(const XrXirArtifact *source) {
-    const XrXirModule *module=xr_xir_compile_artifact_module(source);
-    XrXirCompileContext measured=consumer_context_default();
-    XrXirArtifact *probe=NULL,*closed=NULL;
-    CHECK(xr_xir_compile_recheck_v2(&measured,module,xr_xir_compile_artifact_construction(source),&probe,NULL, NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_artifact_verify(probe,NULL)==XR_XIR_OK);
-    uint64_t prefix=consumer_context_stats(&measured).work;
-    CHECK(xr_xir_compile_specialize(probe,&closed,NULL, NULL)==XR_XIR_OK);
-    uint64_t total=consumer_context_stats(&measured).work;
-    CHECK(total>prefix+1);xr_xir_compile_artifact_free(closed);xr_xir_compile_artifact_free(probe);
-    XrXirCompileContext bounded=generic_work_context(total-1),original=bounded;
-    probe=NULL;closed=NULL;
-    CHECK(xr_xir_compile_recheck_v2(&bounded,module,xr_xir_compile_artifact_construction(source),&probe,NULL, NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_artifact_verify(probe,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_specialize(probe,&closed,NULL, NULL)==XR_XIR_BUDGET && !closed);
-    CHECK(!memcmp(&bounded,&original,sizeof(bounded)));
-    xr_xir_compile_artifact_free(probe);
-}
 static void nominal_ordered_matching(void) {
     NominalFixture f; nominal_fixture(&f);
     XrXirConstraint constraints[2] = {{0}};
@@ -84,43 +63,15 @@ static void nominal_ordered_matching(void) {
             (i == 0 || i == 3 ? XR_XIR_OK : XR_XIR_BAD_TYPE));
     }
 }
-static void nominal_verification_budget(uint64_t construction_work, uint64_t verification_work) {
-    CHECK(verification_work);
-    const uint64_t allowances[]={10000,verification_work-1};
-    for (unsigned test=0;test<2;++test) {
-        XrXirCompileContext context=generic_work_context(construction_work+allowances[test]);
-        XrXirArtifact *checked=nominal_field_closure_fixture(&context,2);
-        XrCompileResourceStats before=consumer_context_stats(&context);
-        CHECK(before.work==construction_work);
-        XrXirStatus expected=allowances[test]<verification_work?XR_XIR_BUDGET:XR_XIR_OK;
-        CHECK(xr_xir_compile_artifact_verify(checked,NULL)==expected);
-        XrCompileResourceStats after=consumer_context_stats(&context);
-        CHECK(after.live_bytes==before.live_bytes && after.work>before.work &&
-            after.work<=construction_work+allowances[test]);
-        xr_xir_compile_artifact_free(checked);
-    }
-}
 static void nominal_field_closure(void) {
     for (unsigned mode = 0; mode < 3; ++mode) {
-        XrXirCompileContext measured=consumer_context_default();
-        XrXirArtifact *prefix=nominal_field_closure_fixture(&measured,mode);
-        uint64_t construction_work=consumer_context_stats(&measured).work;
-        CHECK(xr_xir_compile_artifact_verify(prefix,NULL)==XR_XIR_OK);
-        uint64_t prefix_work=consumer_context_stats(&measured).work;
-        CHECK(prefix_work>construction_work);
-        xr_xir_compile_artifact_free(prefix);
-        if (mode==2) nominal_verification_budget(construction_work,prefix_work-construction_work);
-        XrXirCompileContext bounded=mode==2?generic_work_context(prefix_work+10000):consumer_context_default();
+        XrXirCompileContext bounded=mode==2 ?
+            consumer_context_limits((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,8388608,true}) :
+            consumer_context_default();
         XrXirArtifact *checked = nominal_field_closure_fixture(&bounded, mode), *closed = NULL;
-        XrCompileResourceStats before_verify=consumer_context_stats(&bounded);
         XrXirStatus rechecked=xr_xir_compile_artifact_verify(checked, NULL);
-        if (rechecked!=XR_XIR_OK)
-            fprintf(stderr,"nominal field current verify mode=%u status=%u prefix=%llu before=%llu after=%llu\n",
-                mode,(unsigned)rechecked,(unsigned long long)prefix_work,
-                (unsigned long long)before_verify.work,
-                (unsigned long long)consumer_context_stats(&bounded).work);
         CHECK(rechecked == XR_XIR_OK);
-        XrXirStatus expected = !mode ? XR_XIR_OK : mode == 1 ? XR_XIR_BAD_TYPE : XR_XIR_BUDGET;
+        XrXirStatus expected = !mode ? XR_XIR_OK : mode == 1 ? XR_XIR_BAD_TYPE : XR_XIR_MEMORY_LIMIT;
         CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == expected);
         xr_xir_compile_artifact_free(checked); checked=NULL;
         if (mode) { CHECK(!closed); continue; }
@@ -184,8 +135,6 @@ static void cross_pool_substitution(void) {
     CHECK(xr_xir_compile_type_substitution_matches_between(&budget, &source, &target, &actual, 1, (XrXirType)256, (XrXirType)256) == XR_XIR_BAD_TYPE);
     CHECK(xr_xir_compile_type_substitution_matches_between(&budget, &source, &target, NULL, 0, (XrXirType)257, (XrXirType)258) == XR_XIR_OK);
     CHECK(xr_xir_compile_type_substitution_matches_between(&budget, &source, &target, NULL, 0, (XrXirType)257, (XrXirType)257) == XR_XIR_BAD_TYPE);
-    budget=generic_work_context(1);
-    CHECK(xr_xir_compile_type_substitution_matches_between(&budget, &source, &target, &actual, 1, (XrXirType)256, (XrXirType)257) == XR_XIR_BUDGET);
 }
 static void nominal_argument_visibility(void) {
     XrXirArtifact *checked = nominal_checked_fixture(suite_context, 2);
@@ -344,10 +293,8 @@ static void error_marker_definition_case(bool current_only) {
         }
     }
     xr_xir_compile_checked_packet_free(&packet);
-    XrXirCompileContext budget=generic_work_context(1);
+    XrXirCompileContext budget=consumer_context_default();
     XrXirProofContext proof = {&built,{XR_XIR_CONTEXT_FUNCTION,0,0}};
-    CHECK(xr_xir_compile_type_markers_prove(&budget, &proof, parameter, XR_XIR_CONSTRAINT_ERROR)==XR_XIR_BUDGET);
-    budget=consumer_context_default();
     CHECK(xr_xir_compile_type_markers_prove(&budget, &proof, parameter, XR_XIR_CONSTRAINT_MASK)==XR_XIR_BAD_TYPE);
     constraint.markers = XR_XIR_CONSTRAINT_MASK;
     CHECK(xr_xir_compile_type_markers_prove(&budget, &proof, parameter, XR_XIR_CONSTRAINT_MASK)==XR_XIR_OK);
@@ -586,8 +533,6 @@ static void array_definition_constraints(void) {
     CHECK(xir_fixture_verify(suite_context, &built, NULL) == XR_XIR_BAD_TYPE);
     constraint.markers = XR_XIR_CONSTRAINT_SENDABLE;
     CHECK(xir_fixture_verify(suite_context, &built, NULL) == XR_XIR_OK);
-    XrXirCompileContext budget = generic_work_context(3);
-    CHECK(xr_xir_compile_type_satisfies(&budget, &built, 0, (XrXirType)256, (XrXirConstraint){.markers = XR_XIR_CONSTRAINT_SENDABLE}) == XR_XIR_BUDGET);
     xr_xir_compile_artifact_free(fixture); fixture=NULL;
 }
 #include "xir_array_generic_cases.h"
@@ -611,7 +556,6 @@ static void deep_body_substitution(void) {
     functions[1].instructions = body; functions[1].instruction_count = 3; functions[1].blocks = &block;
     CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(fixture); fixture=NULL; memset(nodes, 0xCC, sizeof(nodes));
-    generic_specialization_work_boundary(checked);
     CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked); checked=NULL;
     const XrXirModule *module = xr_xir_compile_artifact_module(closed);

@@ -33,9 +33,12 @@ static void string_checked(unsigned attack) {
     XrXirBlock blocks[] = {{0, 1, 0, 0}, {0, 7, 0, 0}, {0, 4, 0, 0}};
     XrXirType parameter = (XrXirType)256; uint32_t argument = 1;
     XrXirFunction functions[] = {
-        {"init", 4, NULL, 0, XR_XIR_UNIT, &blocks[0], 1, &done, 1, NULL, 0},
-        {"entry", 5, NULL, 0, XR_XIR_I64, &blocks[1], 1, entry, 7, NULL, 0},
-        {"ref", 3, &parameter, 1, XR_XIR_STRING, &blocks[2], 1, scoped, 4, NULL, 0}};
+        {.name="init",.name_length=4,.result=XR_XIR_UNIT,.error_type=XR_XIR_NEVER,
+         .blocks=&blocks[0],.block_count=1,.instructions=&done,.instruction_count=1},
+        {.name="entry",.name_length=5,.result=XR_XIR_I64,.error_type=XR_XIR_NEVER,
+         .blocks=&blocks[1],.block_count=1,.instructions=entry,.instruction_count=7},
+        {.name="ref",.name_length=3,.parameters=&parameter,.parameter_count=1,.result=XR_XIR_STRING,
+         .error_type=XR_XIR_NEVER,.blocks=&blocks[2],.block_count=1,.instructions=scoped,.instruction_count=4}};
     XrXirFunctionIdentity identities[3] = {{0}};
     XrXirSourceModule source = {"root", 4, NULL, 0, 0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirLiteral literals[] = {{"a", 1}, {"b", 1}};
@@ -63,7 +66,7 @@ static void string_checked(unsigned attack) {
         entry[3] = (XrXirInstruction){XR_XIR_CALL, XR_XIR_STRING, {0, 1}, {0}, 2, {0}};
         functions[1].operands = &argument; functions[1].operand_count = 1;
     }
-    XrXirCompileContext context = consumer_context_ephemeral((XrCompileResourceLimits){67108864, 8388608, 128000000});
+    XrXirCompileContext context = consumer_context_ephemeral((XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true});
     XrCompileResourceStats baseline = consumer_context_stats(&context);
     XrXirArtifact *checked = NULL, *decoded = NULL; XrXirDiagnostic diagnostic = {0};
     XrXirStatus status = xir_fixture_check(&context, &module, &checked, &diagnostic);
@@ -87,8 +90,6 @@ static void string_checked(unsigned attack) {
     consumer_context_ephemeral_free(&context, baseline);
 }
 int main(void) {
-    _Static_assert(XR_XIR_CELL_STRING_APPEND == 153 && XR_XIR_OP_COUNT == 154 && XR_XIR_CHECKED_CONTRACT == 76,
-        "String mutation instruction and semantic identity");
     consumer_context = consumer_context_default();
     for (unsigned attack = 0; attack < 14; ++attack) string_checked(attack);
     consumer_contexts_free();
