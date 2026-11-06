@@ -7,14 +7,9 @@
  * xlsp_source_signature.c - Signature help from parser and Checked Source facts
  */
 #include "xlsp_source_signature.h"
+#include "../../xir/xxir_compile_memory.h"
 #include <limits.h>
 #include <string.h>
-
-static XrXirStatus signature_work(XrCompileResources *resources,size_t bytes) {
-    XrCompileResourceStatus status=xr_compile_resources_work(resources,bytes);
-    return status==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?
-        XR_XIR_OUT_OF_MEMORY:status==XR_COMPILE_RESOURCE_BAD_ARGUMENT?XR_XIR_BAD_STRUCTURE:XR_XIR_BUDGET;
-}
 static bool signature_member(XrJsonValue *object,const char *key,XrJsonValue *value) {
     if(!value)return false;
     int before=object->as.object.count;xjson_object_set_new(object,key,value);
@@ -33,18 +28,15 @@ static bool signature_push(XrJsonValue *array,XrJsonValue **value) {
     if(array->as.array.count==before+1)return true;
     xjson_free(child);return false;
 }
-static XrXirStatus signature_json(XrCompileResources *resources,const XlspSourceSignature *signature,XrJsonValue **out) {
-    XrXirStatus status=signature_work(resources,signature->label.length);
-    if(status!=XR_XIR_OK)return status;
+static XrXirStatus signature_json(const XlspSourceSignature *signature,XrJsonValue **out) {
     XrJsonValue *result=xjson_new_object(),*signatures=xjson_new_array();
     XrJsonValue *info=xjson_new_object(),*parameters=xjson_new_array();XrJsonValue *item=NULL;
-    status=XR_XIR_OUT_OF_MEMORY;
+    XrXirStatus status=XR_XIR_OUT_OF_MEMORY;
     if(!result||!signatures||!info||!parameters)goto done;
     if(!signature_member(info,"label",xjson_new_string_n(signature->label.text,signature->label.length)))goto done;
     if(signature->parameter_count>INT_MAX){status=XR_XIR_BUDGET;goto done;}
     for(size_t i=0;i<signature->parameter_count;++i) {
-        status=signature_work(resources,signature->parameters[i].length+1);
-        if(status!=XR_XIR_OK)goto done;status=XR_XIR_OUT_OF_MEMORY;
+        status=XR_XIR_OUT_OF_MEMORY;
         item=xjson_new_object();if(!item)goto done;
         if(!signature_member(item,"label",xjson_new_string_n(signature->parameters[i].text,
             signature->parameters[i].length))||!signature_push(parameters,&item))goto done;
@@ -60,48 +52,40 @@ static XrXirStatus signature_json(XrCompileResources *resources,const XlspSource
 done:
     xjson_free(item);xjson_free(parameters);xjson_free(info);xjson_free(signatures);xjson_free(result);return status;
 }
-static XrXirStatus signature_equal(XrCompileResources *resources,const XlspSourceSignature *a,
+static XrXirStatus signature_equal(const XlspSourceSignature *a,
     const XlspSourceSignature *b) {
     if(a->parameter_count!=b->parameter_count||a->active_argument!=b->active_argument||a->variadic!=b->variadic||
         a->label.length!=b->label.length)return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=signature_work(resources,a->label.length);if(status!=XR_XIR_OK)return status;
     if(memcmp(a->label.text,b->label.text,a->label.length))return XR_XIR_BAD_STRUCTURE;
     if(a->target_native_identity!=b->target_native_identity||
         a->target_identity.length!=b->target_identity.length||a->target_path.length!=b->target_path.length||
         a->target_range.line!=b->target_range.line||a->target_range.column!=b->target_range.column||
         a->target_range.end_line!=b->target_range.end_line||a->target_range.end_column!=b->target_range.end_column)
         return XR_XIR_BAD_STRUCTURE;
-    status=signature_work(resources,a->target_identity.length+a->target_path.length+sizeof(a->target_fingerprint));
-    if(status!=XR_XIR_OK)return status;
     if(memcmp(a->target_identity.text,b->target_identity.text,a->target_identity.length)||
         memcmp(a->target_path.text,b->target_path.text,a->target_path.length)||
         memcmp(&a->target_fingerprint,&b->target_fingerprint,sizeof(a->target_fingerprint)))return XR_XIR_BAD_STRUCTURE;
     for(size_t i=0;i<a->parameter_count;++i) {
         if(a->parameters[i].length!=b->parameters[i].length)return XR_XIR_BAD_STRUCTURE;
-        status=signature_work(resources,a->parameters[i].length);if(status!=XR_XIR_OK)return status;
         if(memcmp(a->parameters[i].text,b->parameters[i].text,a->parameters[i].length))return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
 }
-static XrXirStatus signature_document_equal(XrCompileResources *resources,const XlspSourceDocument *a,
+static XrXirStatus signature_document_equal(const XlspSourceDocument *a,
     const XlspSourceDocument *b) {
     if(a->version!=b->version||a->length!=b->length||a->uri_length!=b->uri_length)return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=signature_work(resources,a->uri_length);if(status!=XR_XIR_OK)return status;
     if(memcmp(a->uri,b->uri,a->uri_length))return XR_XIR_BAD_STRUCTURE;
-    status=signature_work(resources,a->length);if(status!=XR_XIR_OK)return status;
     return memcmp(a->text,b->text,a->length)?XR_XIR_BAD_STRUCTURE:XR_XIR_OK;
 }
-static XrXirStatus signature_target_equal(XrCompileResources *resources,const XlspSourceLocation *a,
+static XrXirStatus signature_target_equal(const XlspSourceLocation *a,
     const XlspSourceLocation *b) {
     if(a->version!=b->version||a->range.start.line!=b->range.start.line||a->range.start.character!=b->range.start.character||
         a->range.end.line!=b->range.end.line||a->range.end.character!=b->range.end.character)return XR_XIR_BAD_STRUCTURE;
     for(size_t i=0;;++i) {
-        XrXirStatus status=signature_work(resources,2);if(status!=XR_XIR_OK)return status;
         if(a->uri[i]!=b->uri[i])return XR_XIR_BAD_STRUCTURE;
         if(!a->uri[i])return XR_XIR_OK;
     }
 }
-
 XR_FUNC XrXirStatus xlsp_source_signature_many_json(const XlspSourceSignatureRequest *request,XrJsonValue **out) {
     if(!request||!request->resources||!request->session||!request->snapshots||!request->count||!request->uri||
         request->uri_length==SIZE_MAX||!out||*out||
@@ -112,6 +96,7 @@ XR_FUNC XrXirStatus xlsp_source_signature_many_json(const XlspSourceSignatureReq
     selection.resources=request->resources;selection.uri=request->uri;selection.uri_length=request->uri_length;
     XrXirStatus status=XR_XIR_OK;bool selected=false;
     for(size_t i=0;i<request->count;++i) {
+        status=xir_compile_resource_status(xr_compile_session_poll(request->session));if(status!=XR_XIR_OK)goto done;
         bool contains=false;status=xlsp_source_snapshot_contains(request->snapshots[i],request->uri,request->uri_length,&contains);
         if(status!=XR_XIR_OK)goto done;if(!contains)continue;
         XlspSourceDocument input={0};
@@ -121,14 +106,23 @@ XR_FUNC XrXirStatus xlsp_source_signature_many_json(const XlspSourceSignatureReq
             document=input;
             XrParseStatus parsed=xlsp_source_syntax_build(request->session,&document,&syntax);
             if(parsed!=XR_PARSE_OK&&parsed!=XR_PARSE_RECOVERED) {
-                status=parsed==XR_PARSE_BUDGET?XR_XIR_BUDGET:parsed==XR_PARSE_OUT_OF_MEMORY?
-                    XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;
+                switch(parsed) {
+                case XR_PARSE_BUDGET: status=XR_XIR_BUDGET;break;
+                case XR_PARSE_MEMORY_LIMIT: status=XR_XIR_MEMORY_LIMIT;break;
+                case XR_PARSE_OVERFLOW: status=XR_XIR_OVERFLOW;break;
+                case XR_PARSE_CANCELLED: status=XR_XIR_CANCELLED;break;
+                case XR_PARSE_DEADLINE: status=XR_XIR_DEADLINE;break;
+                case XR_PARSE_CLOCK_FAILURE: status=XR_XIR_CLOCK_FAILURE;break;
+                case XR_PARSE_OUT_OF_MEMORY: status=XR_XIR_OUT_OF_MEMORY;break;
+                default: status=XR_XIR_BAD_STRUCTURE;break;
+                }
+                goto done;
             }
             status=xlsp_source_syntax_call(syntax,request->position,&selection.call);
             if(status==XR_XIR_UNRESOLVED){*out=xjson_new_null();status=*out?XR_XIR_OK:XR_XIR_OUT_OF_MEMORY;goto done;}
             if(status!=XR_XIR_OK)goto done;selected=true;
         } else {
-            status=signature_document_equal(request->resources,&document,&input);if(status!=XR_XIR_OK)goto done;
+            status=signature_document_equal(&document,&input);if(status!=XR_XIR_OK)goto done;
         }
         status=xlsp_source_signature(request->snapshots[i],&selection,&current);
         if(status!=XR_XIR_OK)goto done;
@@ -139,14 +133,15 @@ XR_FUNC XrXirStatus xlsp_source_signature_many_json(const XlspSourceSignatureReq
         }
         if(accepted.label.text) {
             if(!current.target_native_identity) {
-                status=signature_target_equal(request->resources,&target,&location);if(status!=XR_XIR_OK)goto done;
+                status=signature_target_equal(&target,&location);if(status!=XR_XIR_OK)goto done;
             }
-            status=signature_equal(request->resources,&accepted,&current);if(status!=XR_XIR_OK)goto done;
+            status=signature_equal(&accepted,&current);if(status!=XR_XIR_OK)goto done;
             xlsp_source_signature_free(&current);
         } else {accepted=current;current=(XlspSourceSignature){0};target=location;}
     }
     if(!accepted.label.text){status=XR_XIR_UNRESOLVED;goto done;}
-    status=signature_json(request->resources,&accepted,out);
+    status=xir_compile_resource_status(xr_compile_session_poll(request->session));
+    if(status==XR_XIR_OK)status=signature_json(&accepted,out);
 done:
     xlsp_source_signature_free(&current);xlsp_source_signature_free(&accepted);xlsp_source_syntax_free(syntax);
     return status;

@@ -54,7 +54,6 @@ XR_FUNC XrXirStatus xlsp_source_code_lens_json(XrCompileResources *resources,
     lenses=xjson_new_array();if(!lenses){status=XR_XIR_OUT_OF_MEMORY;goto done;}
     size_t count=0;const XlspSourceToken *items=xlsp_source_tokens_items(tokens,&count);
     for(size_t i=0;i<count;++i) {
-        if(xr_compile_resources_work(resources,1)!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;goto done;}
         const XlspSourceToken *token=&items[i];
         if(!(token->modifiers&XLSP_MOD_DECLARATION)||
            (token->type!=XLSP_TOKEN_FUNCTION&&token->type!=XLSP_TOKEN_METHOD&&
@@ -73,7 +72,7 @@ XR_FUNC XrXirStatus xlsp_source_code_lens_json(XrCompileResources *resources,
             status=XR_XIR_BAD_STRUCTURE;goto done;
         }
         int reference_count=references->as.array.count;xjson_free(references);references=NULL;
-        if(lenses->as.array.count==INT_MAX||xr_compile_resources_work(resources,128)!=XR_COMPILE_RESOURCE_OK) {
+        if(lenses->as.array.count==INT_MAX) {
             status=XR_XIR_BUDGET;goto done;
         }
         XrJsonValue *lens=lens_value(token,reference_count);
