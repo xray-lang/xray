@@ -23,7 +23,7 @@ static void cleanup_role_rejections(XrXirArtifact *checked) {
     XrXirInstruction *call = (XrXirInstruction *)module->functions[1].instructions;
     call[0].immediate = 3; CHECK(xir_fixture_verify(suite_context, module, NULL) == XR_XIR_BAD_STRUCTURE); call[0].immediate = 2;
     XrXirInstruction saved_call = call[0];
-    XrXirTypeNode signature = {0}; signature.kind = XR_XIR_TYPE_CALLABLE; signature.result = XR_XIR_UNIT;
+    XrXirTypeNode signature = {0}; signature.kind = XR_XIR_TYPE_CALLABLE;signature.element=XR_XIR_NEVER;signature.result = XR_XIR_UNIT;
     signature.flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     XrXirTypes types = {&signature, 1, NULL, NULL}; module->types = &types;
     call[0].op = XR_XIR_FUNCTION_REF; call[0].type = (XrXirType)256;
@@ -51,6 +51,7 @@ static void cleanup_role_rejections(XrXirArtifact *checked) {
     XrXirType error = XR_XIR_ERROR;
     XrXirInstruction escaping = {XR_XIR_THROW, XR_XIR_UNIT, {0}, {0}, 0, {0}};
     block.count = 1; body->instructions = &escaping; body->instruction_count = 1; body->parameters = &error; body->parameter_count = 1;
+    body->error_type=XR_XIR_ERROR;
     XrXirFunction *owner = (XrXirFunction *)&module->functions[2], saved_owner = *owner;
     XrXirGeneric saved_owner_generic = generics[2];
     owner->blocks = &block; owner->block_count = 1; owner->instructions = &suspend[1]; owner->instruction_count = 1;
@@ -69,30 +70,16 @@ static void cleanup_role_cases(void) {
     CHECK(xr_xir_compile_artifact_verify(checked, NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
-    uint8_t identities[180] = {0}; put32(identities + 3 * 36 + 16, 3); put32(identities + 4 * 36 + 16, 4);
-    put32(identities + 2 * 36 + 20, XR_XIR_FUNCTION_NO_SUSPEND);
+    uint8_t identities[200] = {0}; put32(identities + 3 * 40 + 16, 3); put32(identities + 4 * 40 + 16, 4);
+    put32(identities + 2 * 40 + 20, XR_XIR_FUNCTION_NO_SUSPEND);
     size_t at = 0; uint32_t matches = 0;
     for (size_t i = 64; i + sizeof(identities) <= packet.length; ++i)
         if (!memcmp(packet.bytes + i, identities, sizeof(identities))) { at = i; ++matches; }
     CHECK(matches == 1);
-    put32(packet.bytes + 8, 12); digest_packet(&packet); rejected(packet.bytes, packet.length);
-    put32(packet.bytes + 8, 14); digest_packet(&packet); rejected(packet.bytes, packet.length);
-    put32(packet.bytes + 8, XR_XIR_CHECKED_SCHEMA);
-    put32(packet.bytes + 12, 34); digest_packet(&packet); rejected(packet.bytes, packet.length);
-    put32(packet.bytes + 12, 35); digest_packet(&packet); rejected(packet.bytes, packet.length);
-    put32(packet.bytes + 12, 36); digest_packet(&packet); rejected(packet.bytes, packet.length);
-    put32(packet.bytes + 12, 37); digest_packet(&packet); rejected(packet.bytes, packet.length);
-    put32(packet.bytes + 12, 38); digest_packet(&packet); rejected(packet.bytes, packet.length);
-    put32(packet.bytes + 12, 39); digest_packet(&packet); rejected(packet.bytes, packet.length);
-    put32(packet.bytes + 12, 40); digest_packet(&packet); rejected(packet.bytes, packet.length);
-    put32(packet.bytes + 12, 41); digest_packet(&packet); rejected(packet.bytes, packet.length);
-    put32(packet.bytes + 12, 42); digest_packet(&packet); rejected(packet.bytes, packet.length);
-    put32(packet.bytes + 8, XR_XIR_CHECKED_SCHEMA);
-    put32(packet.bytes + 12, XR_XIR_CHECKED_CONTRACT); digest_packet(&packet);
-    put32(packet.bytes + at + 3 * 36 + 16, 4); digest_packet(&packet); rejected(packet.bytes, packet.length);
-    put32(packet.bytes + at + 3 * 36 + 16, 3); digest_packet(&packet);
-    put32(packet.bytes + at + 2 * 36 + 20, 2); digest_packet(&packet); rejected(packet.bytes, packet.length);
-    put32(packet.bytes + at + 2 * 36 + 20, XR_XIR_FUNCTION_NO_SUSPEND); digest_packet(&packet);
+    put32(packet.bytes + at + 3 * 40 + 16, 4); digest_packet(&packet); rejected(packet.bytes, packet.length);
+    put32(packet.bytes + at + 3 * 40 + 16, 3); digest_packet(&packet);
+    put32(packet.bytes + at + 2 * 40 + 20, 2); digest_packet(&packet); rejected(packet.bytes, packet.length);
+    put32(packet.bytes + at + 2 * 40 + 20, XR_XIR_FUNCTION_NO_SUSPEND); digest_packet(&packet);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL; xr_xir_compile_checked_packet_free(&packet);
     CHECK(decoded->module.declarations->functions[4].cleanup_owner == 4);

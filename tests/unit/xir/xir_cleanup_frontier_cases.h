@@ -23,9 +23,9 @@ static XrXirArtifact *cleanup_frontier_fixture(const XrXirCompileContext *contex
     uint32_t operands[] = {0, 0};
     XrXirType capture = XR_XIR_I64;
     XrXirFunction functions[] = {
-        {"init", 4, NULL, 0, XR_XIR_UNIT, &one, 1, &done, 1, NULL, 0},
-        {"main", 4, NULL, 0, XR_XIR_I64, blocks, 5, ops, 6, operands, 2},
-        {"cleanup", 7, &capture, 1, XR_XIR_UNIT, &one, 1, &done, 1, NULL, 0}};
+        {"init", 4, NULL, 0, XR_XIR_UNIT, &one, 1, &done, 1, NULL, 0,.error_type=XR_XIR_NEVER},
+        {"main", 4, NULL, 0, XR_XIR_I64, blocks, 5, ops, 6, operands, 2,.error_type=XR_XIR_NEVER},
+        {"cleanup", 7, &capture, 1, XR_XIR_UNIT, &one, 1, &done, 1, NULL, 0,.error_type=XR_XIR_NEVER}};
     XrXirFunctionIdentity identities[3] = {{0}};
     identities[2].cleanup_owner = 2;
     XrXirSourceModule source = {"root", 4, NULL, 0, 0, 0,XR_XIR_MODULE_FRESH_STORAGE};
@@ -97,9 +97,9 @@ static void cleanup_error_frontier(void) {
         {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
     XrXirBlock main_block = {0, 2, 0, 0};
-    functions[1] = (XrXirFunction){"main", 4, NULL, 0, XR_XIR_I64, &main_block, 1, main_ops, 2, NULL, 0};
+    functions[1] = (XrXirFunction){"main", 4, NULL, 0, XR_XIR_I64, &main_block, 1, main_ops, 2, NULL, 0,.error_type=XR_XIR_NEVER};
     functions[3] = functions[2]; functions[3].parameter_count = 0; functions[3].parameters = NULL;
-    functions[2] = (XrXirFunction){"owner", 5, &error, 1, XR_XIR_UNIT, blocks, 3, ops, 3, NULL, 0};
+    functions[2] = (XrXirFunction){"owner", 5, &error, 1, XR_XIR_UNIT, blocks, 3, ops, 3, NULL, 0,.error_type=XR_XIR_ERROR};
     XrXirFunctionIdentity ids[4] = {{0}}; ids[3].cleanup_owner = 3;
     XrXirDeclarations declarations = *base->module.declarations; declarations.functions = ids;
     XrXirModule module = base->module; module.stage = XR_XIR_BUILT; module.declarations = &declarations;
