@@ -113,7 +113,7 @@ static void class_cross_arena_cases(void) {
 static XrXirProgram *class_exit_program(unsigned mode,uint32_t *entry) {
  ClassPipelineOwner owner={0};CHECK(class_pipeline_new(&owner,&class_pipeline_limits)==XR_XIR_OK);ClassOwnedFixture f;class_owned_fixture(&f);XrXirType type=(XrXirType)256;
  XrXirInstruction root_ops[]={{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},41,{0}},{XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
- XrXirBlock root_block={0,2,0,0};f.functions[4]=(XrXirFunction){"root",4,NULL,0,XR_XIR_I64,&root_block,1,root_ops,2,NULL,0};
+ XrXirBlock root_block={0,2,0,0};f.functions[4]=(XrXirFunction){"root",4,NULL,0,XR_XIR_I64,&root_block,1,root_ops,2,NULL,0,.error_type=XR_XIR_NEVER};
  f.generics[4]=(XrXirGeneric){0};f.module.generics=NULL;f.declarations.entry_function=4;f.identities[3].exported=1;
  f.generics[3]=(XrXirGeneric){0};f.functions[3].result=type;f.functions[3].operand_count=2;
  if(mode==1){f.entry[3]=(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}};

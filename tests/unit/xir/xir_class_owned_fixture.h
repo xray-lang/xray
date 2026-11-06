@@ -68,11 +68,11 @@ static void class_owned_fixture(ClassOwnedFixture *f) {
     f->generic_return[0]=(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
     f->blocks[0]=(XrXirBlock){0,1,0,0};f->blocks[1]=(XrXirBlock){0,2,0,0};
     f->blocks[2]=(XrXirBlock){0,4,0,0};f->blocks[3]=(XrXirBlock){0,7,0,0};f->blocks[4]=(XrXirBlock){0,1,0,0};
-    f->functions[0]=(XrXirFunction){"init",4,NULL,0,XR_XIR_UNIT,&f->blocks[0],1,f->init,1,NULL,0};
-    f->functions[1]=(XrXirFunction){"new",3,f->constructor_parameters,2,type,&f->blocks[1],1,f->constructor,2,f->constructor_operands,2};
-    f->functions[2]=(XrXirFunction){"add",3,f->method_parameters,2,XR_XIR_I64,&f->blocks[2],1,f->method,4,NULL,0};
-    f->functions[3]=(XrXirFunction){"entry",5,NULL,0,XR_XIR_I64,&f->blocks[3],1,f->entry,7,f->entry_operands,5};
-    f->functions[4]=(XrXirFunction){"id",2,&f->generic_parameter,1,f->generic_parameter,&f->blocks[4],1,f->generic_return,1,NULL,0};
+    f->functions[0]=(XrXirFunction){"init",4,NULL,0,XR_XIR_UNIT,&f->blocks[0],1,f->init,1,NULL,0,.error_type=XR_XIR_NEVER};
+    f->functions[1]=(XrXirFunction){"new",3,f->constructor_parameters,2,type,&f->blocks[1],1,f->constructor,2,f->constructor_operands,2,.error_type=XR_XIR_NEVER};
+    f->functions[2]=(XrXirFunction){"add",3,f->method_parameters,2,XR_XIR_I64,&f->blocks[2],1,f->method,4,NULL,0,.error_type=XR_XIR_NEVER};
+    f->functions[3]=(XrXirFunction){"entry",5,NULL,0,XR_XIR_I64,&f->blocks[3],1,f->entry,7,f->entry_operands,5,.error_type=XR_XIR_NEVER};
+    f->functions[4]=(XrXirFunction){"id",2,&f->generic_parameter,1,f->generic_parameter,&f->blocks[4],1,f->generic_return,1,NULL,0,.error_type=XR_XIR_NEVER};
     f->identities[1]=(XrXirFunctionIdentity){.nominal_owner=1,.method_kind=XR_XIR_CONSTRUCTOR};
     f->identities[2]=(XrXirFunctionIdentity){.nominal_owner=1,.method_kind=XR_XIR_READ_METHOD};
     f->literal=(XrXirLiteral){"counter",7};f->source=(XrXirSourceModule){"root",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};

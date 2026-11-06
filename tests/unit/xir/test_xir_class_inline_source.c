@@ -29,7 +29,7 @@ XR_FUNC size_t xr_test_class_inline_runtime_bytes(void);
 static XrXirStatus class_source_owned(const XrXirCompileContext *context,XrXirArtifact **output) {
     XrCompilerSession *session=NULL;XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrCompileResourceStatus made=xr_compile_session_new(context->resources,&session);
-    XrXirStatus status=made==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:made==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
+    XrXirStatus status=xir_compile_resource_status(made);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
     XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     if(status==XR_XIR_OK){
@@ -74,7 +74,12 @@ static XrXirStatus class_source_operation(const XrXirCompileContext *context,voi
 }
 
 int main(int argc,char **argv) {
-    CHECK(argc==1 || argc==2);ClassPipelineOwner owner={0};CHECK(class_pipeline_new(&owner,&class_pipeline_limits)==XR_XIR_OK);
+    CHECK(argc==1 || argc==2);
+ if(argc==2 && !strcmp(argv[1],"--compiler-memory")) {
+  class_pipeline_memory_probe("Class source memory",class_source_operation,NULL);
+  class_pipeline_final_zero();return 0;
+ }
+ ClassPipelineOwner owner={0};CHECK(class_pipeline_new(&owner,&class_pipeline_limits)==XR_XIR_OK);
     XrXirArtifact *owned=NULL;CHECK(class_source_owned(&owner.context,&owned)==XR_XIR_OK);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(owned,&packet,NULL)==XR_XIR_OK && packet.length<=262144);
     XrXirArtifact *decoded=NULL;CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&decoded,NULL)==XR_XIR_OK);
