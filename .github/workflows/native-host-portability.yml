@@ -118,3 +118,130 @@ jobs:
             build/tests/unit/cli/native_ready/**/*.json
             build/tests/unit/cli/native_ready/**/*.stdout
             build/tests/unit/cli/native_ready/**/*.stderr
+
+  macos:
+    name: Native macOS (Ninja Release)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      PYTHONUTF8: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Record host and providers
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p macos-evidence
+          {
+            git rev-parse HEAD
+            uname -a
+            sw_vers
+            clang --version
+            cmake --version
+            ctest --version
+            command -v ninja || { echo 'Ninja is required; no generator fallback'; exit 1; }
+            ninja --version
+            python --version
+          } 2>&1 | tee macos-evidence/host.log
+      - name: Configure Ninja Release
+        id: configure
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --preset default 2>&1 | tee macos-evidence/configure.log
+      - name: Build all without exclusions
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build build --parallel 4 --target all -- -k 0 2>&1 | tee macos-evidence/build-all.log
+      - name: Record fresh CLI identity
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./build/xray --version --json > macos-evidence/version.json 2> macos-evidence/version.stderr
+          cat macos-evidence/version.json
+      - name: Measure complete CTest registration
+        if: ${{ !cancelled() && steps.configure.outcome == 'success' }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import subprocess
+          import time
+          directory = Path('macos-evidence')
+          command = ['ctest', '--test-dir', 'build', '-N', '--show-only=json-v1']
+          with (directory / 'ctest-list.json').open('wb') as output, (directory / 'ctest-list.stderr').open('wb') as errors:
+              started = time.perf_counter()
+              child = subprocess.run(command, stdout=output, stderr=errors)
+              seconds = time.perf_counter() - started
+          fact = {'command': command, 'seconds': seconds, 'exit': child.returncode, 'count': None}
+          try:
+              value = json.loads((directory / 'ctest-list.json').read_text(encoding='utf-8'))
+              tests = value['tests']
+              if not isinstance(tests, list):
+                  raise ValueError('CTest tests is not a list')
+              fact['count'] = len(tests)
+          finally:
+              (directory / 'ctest-list-fact.json').write_text(json.dumps(fact, indent=2) + '\n', encoding='utf-8')
+              print(json.dumps(fact), flush=True)
+          if child.returncode or not fact['count'] or seconds > 5.0:
+              raise SystemExit('Full CTest listing failed, was empty, or exceeded 5 seconds')
+          PY
+      - name: Verify LIR, register bytecode and W1-W4
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pattern='^(test_lir_core|test_lir_carriers|test_lir_lower|test_lir_c|test_lir_c_faults|test_lir_c_native|test_cgen_verify_output|register_vm|register_vm_native_print|register_vm_alloc|lir_bytecode|lir_bytecode_alloc|lir_bytecode_source|lir_vm_source|lir_vm_output|skeleton_diff)$'
+          python - "$pattern" <<'PY'
+          import json, re, sys
+          from pathlib import Path
+          rows = json.loads(Path('macos-evidence/ctest-list.json').read_text(encoding='utf-8'))['tests']
+          selected = [row['name'] for row in rows if re.fullmatch(sys.argv[1], row['name'])]
+          if len(selected) != 16 or len(set(selected)) != 16:
+              raise SystemExit('All 16 required LIR/register/W tests must be registered: ' + repr(selected))
+          PY
+          ctest --test-dir build --output-on-failure --no-tests=error -j 2 -R "$pattern" \
+            --output-junit macos-lir-register.xml 2>&1 | tee macos-evidence/lir-register.log
+      - name: Preserve strict current-carrier smoke results
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The registered command supplies both authentic suite helpers and keeps TIMEOUT 300.
+          # Known current-VM crashes remain failures; there is no Mac-specific gap conversion.
+          ctest --test-dir build --output-on-failure --no-tests=error -j 1 -R '^smoke$' \
+            --output-junit macos-smoke.xml 2>&1 | tee macos-evidence/smoke.log
+      - name: Archive CLI and original logs
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p macos-evidence
+          git rev-parse HEAD > macos-evidence/source-head.txt
+          git status --short > macos-evidence/source-status.txt
+          if [ -f build/xray ]; then
+            tar -czf macos-evidence/xray-cli.tar.gz -C build xray
+          fi
+          if [ -f build/Testing/Temporary/LastTest.log ]; then
+            cp build/Testing/Temporary/LastTest.log macos-evidence/LastTest.log
+          fi
+          if [ -f build/CMakeCache.txt ]; then
+            cp build/CMakeCache.txt macos-evidence/CMakeCache.txt
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-macos-${{ github.sha }}
+          path: |
+            macos-evidence/
+            build/macos-lir-register.xml
+            build/macos-smoke.xml
+            build/smoke/
