@@ -369,10 +369,9 @@ static void growth_and_arguments(void) {
     size_t attempts = attempt_count;
     CHECK(xr_compile_parse(session, "const value = 1", &output) == XR_PARSE_BAD_ARGUMENT);
     CHECK(output == (AstNode *) (uintptr_t) 1 && attempt_count == attempts);
-    XrCompileState *state = xr_compile_session_compile_state(session);
     XrCompileResourceStats before;
     OK(xr_compile_resources_stats(resources, &before));
-    CHECK(xr_compile_public_attribute_by_name(state, "test", 4) == xr_public_attribute_by_kind(ATTR_TEST));
+    CHECK(xr_public_attribute_by_name("test", 4) == xr_public_attribute_by_kind(ATTR_TEST));
     OK(xr_compile_resources_stats(resources, &observed));
     CHECK(!memcmp(&observed, &before, sizeof(before)));
     output = NULL;
