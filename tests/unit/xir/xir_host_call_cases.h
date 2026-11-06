@@ -197,7 +197,7 @@ static void host_lifetimes(XrXirProgram *program, const uint32_t entries[3]) {
     CHECK(second.outcome.status == XR_XIR_CALL_SUSPENDED && traces[1].count == 2 && traces[1].values[1] == 11);
     second = host_resume(calls[1], second);
     CHECK(second.outcome.status == XR_XIR_CALL_RETURNED && traces[1].count == 3 && traces[1].values[2] == 11);
-    XrXirCallResult held = {XR_XIR_CALL_RETURNED, {XR_XIR_I64, 0, 7}, 0, {0}}, held_before = held;
+    XrXirCallResult held = {.status=XR_XIR_CALL_RETURNED, .value={XR_XIR_I64, 0, 7}}, held_before = held;
     CHECK(xr_xir_host_call_take(calls[1], &held) == XR_XIR_CALL_BAD_ARGUMENT && !memcmp(&held, &held_before, sizeof(held)));
     host_copy_limit(calls[1], &second.outcome.value);
     CHECK(xr_xir_host_call_take(calls[1], &owned[1]) == XR_XIR_CALL_RETURNED);
