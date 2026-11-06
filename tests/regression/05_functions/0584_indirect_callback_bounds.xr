@@ -1,0 +1,33 @@
+struct FixedCallback<T> {
+    static apply(value: T, transform: fn(T) -> T) -> T {
+        return transform(value)
+    }
+}
+
+fn applyInteger(transform: fn(i64) -> i64, value: i64) -> i64 {
+    return transform(value)
+}
+
+fn incrementInteger(value: i64) -> i64 {
+    return value + 1
+}
+
+@test
+fn test_generic_static_value_receives_inline_callback() {
+    const apply = FixedCallback<i64>.apply
+    assertEqual(apply(17, fn(value: i64) -> i64 { return value + 1 }), 18)
+}
+
+@test
+fn test_function_value_receives_named_callback() {
+    const apply = applyInteger
+    assertEqual(apply(incrementInteger, 41), 42)
+}
+
+@test
+fn test_function_value_receives_captured_callback() {
+    const apply = applyInteger
+    const increment = 3
+    const transform = fn(value: i64) -> i64 { return value + increment }
+    assertEqual(apply(transform, 39), 42)
+}
