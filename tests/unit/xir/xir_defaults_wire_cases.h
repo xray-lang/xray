@@ -38,11 +38,18 @@ static void defaults_wire_ownership(void) {
 static void defaults_wire_failure_prefix(void) {
     size_t live=runtime_live,physical=runtime_bytes,blocks=source_live,bytes=source_bytes;
     XrXirArtifact *source=defaults_owned_fixture(false),*artifact=NULL;
+    CHECK(!xr_xir_compile_artifact_module(source)->provenance);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(source,&packet,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(source);
     uint8_t binding[20]={0};string_fixture_u32(binding,1);
     string_fixture_u32(binding+4,XR_XIR_DEFAULT_PARAMETER);string_fixture_u32(binding+8,2);
-    size_t start=string_fixture_find(&packet,binding,sizeof(binding));
+    /* With no provenance, the default table is the final declaration record,
+     * followed only by the absent-evidence tag. Other fields can contain the
+     * same integers, so a byte-pattern search alone cannot locate this table. */
+    CHECK(packet.length>=64+sizeof(binding)+4);
+    size_t start=packet.length-sizeof(binding)-4;
+    CHECK(!memcmp(packet.bytes+start,binding,sizeof(binding)));
+    CHECK(!memcmp(packet.bytes+packet.length-4,(uint8_t[4]){0},4));
     uint8_t *bad=xr_malloc(packet.length);CHECK(bad);
     for(unsigned field=0;field<5;++field){
         memcpy(bad,packet.bytes,packet.length);memset(bad+start+field*4,255,4);string_catalog_rehash(bad,packet.length);
