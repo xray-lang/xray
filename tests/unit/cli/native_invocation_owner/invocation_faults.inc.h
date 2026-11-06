@@ -12,8 +12,14 @@ static XrOsIoStatus owner_write(const XrOsIoPolicy *policy,const char *path,cons
 }
 static XrProcessStatus owner_run(const XrToolchainProcess *process,XrProcessCancelled cancelled,void *context,XrProcessResult *output) {
     unsigned stage=invocation_runs++;
-    if(stage==invocation_process_fail)runtime_fail_at=runtime_attempts;
-    XrProcessStatus status=xtc_process_run(process,cancelled,context,output);runtime_fail_at=SIZE_MAX;return status;
+    /* Generic allocator ordinals span the complete transaction. Only a
+     * process-specific fault temporarily replaces that armed threshold. */
+    size_t saved_fail_at=runtime_fail_at;
+    bool process_fault=stage==invocation_process_fail;
+    if(process_fault)runtime_fail_at=runtime_attempts;
+    XrProcessStatus status=xtc_process_run(process,cancelled,context,output);
+    if(process_fault)runtime_fail_at=saved_fail_at;
+    return status;
 }
 #define xtc_process_run owner_run
 #define xr_os_io_write_new_file_sync owner_write
