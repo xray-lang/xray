@@ -20,9 +20,17 @@ XR_FUNC XrXirCallStatus xr_xir_instance_path_write_at(XrXirCallView *view,uint32
     const XrXirValue *value,XrXirFaultDetail *fault) {
     XrXirCallStatus status=capacity_real_path_write_at(view,instruction,receiver,path,value,fault);
     if(status==XR_XIR_CALL_READY&&capacity_watched&&view_instance(view)==capacity_watched&&
-        receiver->kind==XR_XIR_ROOT_SLOT&&path&&!path->count&&
-        xr_xir_type_is_array(xr_xir_compile_type_arena_types(capacity_watched->program->arena),receiver->type)) {
-        ++capacity_publications;capacity_publication_site=runtime_attempts;
+        receiver->kind==XR_XIR_ROOT_CELL&&path&&!path->count&&
+        xr_xir_type_is_array(capacity_watched->program->types,receiver->type)) {
+        const XrXirDeclarations *decl=capacity_watched->program->declarations;
+        for(uint32_t slot=0;slot<decl->slot_count;++slot) {
+            const XrXirValue *stored=&capacity_watched->slots[slot];
+            if(decl->slots[slot].module==decl->root_module&&stored->type==receiver->value.type&&
+                stored->payload==receiver->value.payload) {
+                CHECK(xr_xir_type_is_cell(capacity_watched->program->types,(XrXirType)stored->type));
+                ++capacity_publications;capacity_publication_site=runtime_attempts;
+            }
+        }
     }
     return status;
 }

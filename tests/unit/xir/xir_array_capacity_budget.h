@@ -28,6 +28,12 @@ typedef struct CapacityBudgetMeasure {
 } CapacityBudgetMeasure;
 enum { CAPACITY_BUDGET_REQUESTED, CAPACITY_BUDGET_LIVE, CAPACITY_BUDGET_WORK };
 
+static const XrXirValue *capacity_budget_slot(const XrXirInstance *instance,uint32_t slot) {
+    const XrXirValue *stored=&instance->slots[slot];
+    CHECK(xr_xir_type_is_cell(instance->program->types,(XrXirType)stored->type));
+    CHECK(object_pointer(stored)->kind==XIR_OBJECT_CELL);
+    return &((const XirCell *)object_pointer(stored))->value;
+}
 static CapacityBudgetCase capacity_budget_open(CapacityCompile *run) {
     CapacityBudgetCase test={0};test.first=capacity_open(run);test.second=capacity_open(run);
     test.alias=capacity_run(test.first,capacity_find(run->module,"saved"));
@@ -36,8 +42,10 @@ static CapacityBudgetCase capacity_budget_open(CapacityCompile *run) {
     CHECK(xr_xir_domain_retain(test.domain));test.state_slot=UINT32_MAX;
     const XrXirDeclarations *decl=run->program->declarations;
     for(uint32_t slot=0;slot<decl->slot_count;++slot){
-        if(decl->slots[slot].module==decl->root_module&&test.first->slots[slot].type==test.alias.type&&
-            test.first->slots[slot].payload==test.alias.payload){
+        if(decl->slots[slot].module!=decl->root_module||
+            !xr_xir_type_is_cell(test.first->program->types,(XrXirType)test.first->slots[slot].type))continue;
+        const XrXirValue *current=capacity_budget_slot(test.first,slot);
+        if(current->type==test.alias.type&&current->payload==test.alias.payload){
             CHECK(test.state_slot==UINT32_MAX);test.state_slot=slot;
         }
     }
@@ -50,12 +58,12 @@ static CapacityBudgetCase capacity_budget_open(CapacityCompile *run) {
 static void capacity_budget_state(const CapacityBudgetCase *test,unsigned publications) {
     CHECK(publications<=1&&test->first->domain==test->domain);capacity_watched=NULL;
     CHECK(capacity_array_state(&test->alias)==test->old_cap);
-    const XrXirValue *current=&test->first->slots[test->state_slot];
+    const XrXirValue *current=capacity_budget_slot(test->first,test->state_slot);
     CHECK(current->type==test->alias.type&&xr_xir_value_valid(current));
     int64_t cap=capacity_array_state(current);
     if(publications)CHECK(cap>=13);
     else CHECK(cap==test->old_cap&&current->payload==test->alias.payload);
-    const XrXirValue *other=&test->second->slots[test->state_slot];
+    const XrXirValue *other=capacity_budget_slot(test->second,test->state_slot);
     CHECK(other->type==test->alias.type&&capacity_array_state(other)==test->old_cap);
 }
 static void capacity_budget_failed_output(XrXirInstance *instance,bool exhausted) {
