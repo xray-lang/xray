@@ -13,17 +13,29 @@
 #include "xir/xxir_program_packet_internal.h"
 #include "xir_construction_fixture.h"
 #include "base/xmalloc.h"
+#include "base/xhash.h"
 #include "xir/xxir_checked.h"
 #include <stdio.h>
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 static size_t packet_allocation_calls, live, fail_at = SIZE_MAX, live_bytes, peak_bytes;
-static struct { void *pointer; size_t bytes; } packet_owned[16384];
+enum { PACKET_LIVE_LIMIT=16384,PACKET_SLOT_COUNT=32768 };
+static struct { void *pointer; size_t bytes; } packet_owned[PACKET_SLOT_COUNT];
+static size_t packet_slot(const void *pointer) {
+    uintptr_t key=(uintptr_t)pointer;
+    return xr_hash_bytes(&key,sizeof(key))&(PACKET_SLOT_COUNT-1);
+}
 static void packet_record(void *pointer, size_t bytes) {
     if (!pointer) return;
-    CHECK(live < 16384 && bytes <= SIZE_MAX - live_bytes);
-    packet_owned[live].pointer = pointer;
-    packet_owned[live++].bytes = bytes;
+    CHECK(live < PACKET_LIVE_LIMIT && bytes <= SIZE_MAX - live_bytes);
+    size_t slot=packet_slot(pointer);
+    while(packet_owned[slot].pointer) {
+        CHECK(packet_owned[slot].pointer!=pointer);
+        slot=(slot+1)&(PACKET_SLOT_COUNT-1);
+    }
+    packet_owned[slot].pointer = pointer;
+    packet_owned[slot].bytes = bytes;
+    ++live;
     live_bytes += bytes;
     if (live_bytes > peak_bytes) peak_bytes = live_bytes;
 }
@@ -33,11 +45,22 @@ static void *packet_malloc(size_t size) {
 }
 static void packet_free(void *p) {
     if (p) {
-        size_t index = 0;
-        while (index < live && packet_owned[index].pointer != p) ++index;
-        CHECK(index < live && packet_owned[index].bytes <= live_bytes);
-        live_bytes -= packet_owned[index].bytes;
-        packet_owned[index] = packet_owned[--live];
+        size_t hole=packet_slot(p);
+        while(packet_owned[hole].pointer!=p) {
+            CHECK(packet_owned[hole].pointer);
+            hole=(hole+1)&(PACKET_SLOT_COUNT-1);
+        }
+        CHECK(live && packet_owned[hole].bytes<=live_bytes);
+        live_bytes-=packet_owned[hole].bytes;--live;
+        /* Backward shifting keeps every collision reachable after deletion,
+         * without tombstones accumulating across exhaustive fault sweeps. */
+        for(size_t next=(hole+1)&(PACKET_SLOT_COUNT-1);packet_owned[next].pointer;
+            next=(next+1)&(PACKET_SLOT_COUNT-1)) {
+            size_t home=packet_slot(packet_owned[next].pointer);
+            bool stays=hole<=next?hole<home && home<=next:hole<home || home<=next;
+            if(!stays){packet_owned[hole]=packet_owned[next];hole=next;}
+        }
+        packet_owned[hole].pointer=NULL;packet_owned[hole].bytes=0;
     }
     xr_free(p);
 }
@@ -716,6 +739,7 @@ static void specialization_correspondence_attacks(void) {
     xr_xir_compile_artifact_free(closed);closed=NULL; xr_xir_compile_artifact_free(source);source=NULL; CHECK(live==consumer_context_owner_count && live_bytes==consumer_context_ledger_bytes());
 }
 int main(void) {
+    CHECK(setvbuf(stdout,NULL,_IONBF,0)==0);
     generic_argument_span_cases();
     consumer_context=consumer_context_default();
     packet_failures(20); packet_failures(21);
