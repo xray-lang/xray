@@ -37,7 +37,7 @@ static const char source_text[]=
     " )\n"
     " obj.method<i64>(1, 2)\n"
     " call(/* comment , ) */ 1, \"\xf0\x9f\x98\x80,x\", 3)\n"
-    " call(/a,b/, 2)\n"
+    " call(re\"a,b\", 2)\n"
     "}\n";
 typedef struct CallCase {uint32_t row,column;size_t active,count;uint32_t name_row,name_column,name_end;} CallCase;
 /* Literal UTF-16 coordinates, independent of parser-produced locations. */
@@ -48,7 +48,7 @@ static const CallCase cases[]={
     {5,5,3,5,1,1,5},{5,8,4,5,1,1,5},{6,4,5,5,1,1,5},
     {7,1,5,5,1,1,5},{8,19,1,2,8,5,11},
     {9,18,0,3,9,1,5},{9,30,1,3,9,1,5},{9,34,2,3,9,1,5},
-    {10,9,0,2,10,1,5},{10,12,1,2,10,1,5}
+    {10,11,0,2,10,1,5},{10,14,1,2,10,1,5}
 };
 typedef struct OtherCase {
     const char *text;
@@ -124,7 +124,13 @@ static XrXirStatus once(size_t mode,XrCompileResourceLimits limits,XrCompileReso
         status=fixture_parse_status(parsed);
         goto done;
     }
-    CHECK(parsed==(other?other->parsed:XR_PARSE_OK));
+    XrParseStatus expected=other?other->parsed:XR_PARSE_OK;
+    if(parsed!=expected) {
+        const XlspSyntaxDiagnostic *diagnostic=xlsp_source_syntax_diagnostics(snapshot);
+        fprintf(stderr,"call syntax parse mode=%zu actual=%d expected=%d\n",mode,(int)parsed,(int)expected);
+        if(diagnostic)fprintf(stderr,"first parser diagnostic %d:%d: %s\n",diagnostic->line,diagnostic->column,diagnostic->message);
+    }
+    CHECK(parsed==expected);
     xr_compile_session_free(session);session=NULL;
     xr_compile_resources_release(resources);released=true;
     status=other?other_facts(snapshot,other):facts(snapshot);
