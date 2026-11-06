@@ -36,6 +36,7 @@ jobs:
         run: cmake --preset default
       - name: Build compiler and native owners
         run: >-
+          python scripts/ci_build_log.py --log linux-evidence/build.log --
           cmake --build build --parallel 4 --target xray test_native_posix
           test_publication_posix test_cli_dependency_output test_mcp_publication_faults
       - name: Verify native owners and public commands
@@ -59,6 +60,7 @@ jobs:
         with:
           name: native-${{ matrix.os }}
           path: |
+            linux-evidence/
             build/native-host.xml
             build/probe-*.json
             build/native-*.out
@@ -82,6 +84,7 @@ jobs:
         run: cmake --preset default
       - name: Build compiler and current owners
         run: >-
+          python scripts/ci_build_log.py --log windows-evidence/build.log --
           cmake --build build --parallel 4 --target xray test_native_ready
           test_xir_workspace_injected test_xir_workspace_production
           test_native_operation_owner test_native_operation_faults test_bits_wide_c11
@@ -95,6 +98,7 @@ jobs:
         id: native_owners
         if: ${{ !cancelled() && steps.configure.outcome == 'success' }}
         run: >-
+          python scripts/ci_build_log.py --log windows-evidence/build-owners.log --
           cmake --build build --parallel 4 --target
           test_native_invocation_owner test_native_invocation_faults
           test_native_admission_production test_native_admission_injected
@@ -110,6 +114,7 @@ jobs:
         with:
           name: native-windows-msvc-x64
           path: |
+            windows-evidence/
             build/native-host.xml
             build/native-owner.xml
             build/Testing/Temporary/LastTest.log
@@ -158,7 +163,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cmake --build build --parallel 4 --target all -- -k 0 2>&1 | tee macos-evidence/build-all.log
+          python scripts/ci_build_log.py --log macos-evidence/build-all.log -- cmake --build build --parallel 4 --target all -- -k 0
       - name: Record fresh CLI identity
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: bash
