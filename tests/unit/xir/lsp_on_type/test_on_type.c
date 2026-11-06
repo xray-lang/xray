@@ -8,9 +8,10 @@
 #include <string.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}}while(0)
 #include "xir_sdk_resource_test.h"
+#include "xir/xxir_compile_memory.h"
 #include "lsp_open_json_owner.h"
 typedef struct Example {const char *text,*indent;XrLspPosition position;char trigger;bool spaces;unsigned replaced;} Example;
-static const XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+static const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true};
 static const Example examples[]={
     {"fn run(){\n","    ",{1,0},'\n',true,0},
     {"fn run(){\nvar x=\"{\"\n  }","",{2,3},'}',true,2},
@@ -46,7 +47,7 @@ static void facts(XrJsonValue *result,unsigned mode) {
     else CHECK(text->string_len==strlen(e->indent)&&!memcmp(text->as.string,e->indent,text->string_len));
 }
 static XrXirStatus once(unsigned mode,XrCompileResourceLimits caps,XrCompileResourceStats *stats,size_t fault,bool *injected) {
-    XrCompileResources *r=NULL;XrCompileResourceStatus made=xr_compile_resources_new(&caps,&r);if(made!=XR_COMPILE_RESOURCE_OK)return made==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompileResources *r=NULL;XrCompileResourceStatus made=xr_compile_resources_new(&caps,&r);if(made!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(made);
     char text[512],uri[]="file:///on-type.xr";const Example *e=&examples[mode];strcpy(text,e->text);
     if(mode==17){memset(text,'{',70);memcpy(text+70,"\n  }",5);}
     XlspSourceDocument document={uri,text,sizeof(uri)-1,strlen(text),7};XlspSourceOnTypeInput input={e->position,4,e->spaces,e->trigger};XrJsonValue *result=NULL;
@@ -109,7 +110,7 @@ int main(int argc,char **argv) {
         XrCompileResourceStats stats={0};runtime_attempts=0;runtime_fail_at=SIZE_MAX;CHECK(once(mode,limits,&stats,SIZE_MAX,NULL)==XR_XIR_OK);size_t sites=runtime_attempts,json_sites=lsp_json_calls;
         if(full){for(size_t i=0;i<sites;++i){runtime_attempts=0;runtime_fail_at=i;CHECK(once(mode,limits,NULL,SIZE_MAX,NULL)==XR_XIR_OUT_OF_MEMORY&&runtime_attempts>i);}runtime_fail_at=SIZE_MAX;
             for(size_t i=0;i<json_sites;++i){bool injected=false;CHECK(once(mode,limits,NULL,i,&injected)==XR_XIR_OUT_OF_MEMORY&&injected);}
-            for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits exact={stats.allocated_bytes,stats.peak_bytes,stats.work};uint64_t *bound=axis==0?&exact.allocated_bytes:axis==1?&exact.live_bytes:&exact.work;CHECK(*bound&&*bound<INT64_MAX);*bound=(uint64_t)((int64_t)*bound+delta);CHECK(once(mode,exact,NULL,SIZE_MAX,NULL)==(delta<0?XR_XIR_BUDGET:XR_XIR_OK));}}
+            CHECK(stats.peak_bytes&&stats.peak_bytes<UINT64_MAX);for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits exact=limits;exact.memory_limit=delta<0?stats.peak_bytes-1:stats.peak_bytes+(unsigned)delta;CHECK(once(mode,exact,NULL,SIZE_MAX,NULL)==(delta<0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));}CHECK(once(mode,limits,NULL,SIZE_MAX,NULL)==XR_XIR_OK);}
         printf("Source on-type mode=%u SourceFI=%zu JSONFI=%zu full=%u prefix lexer/strictUTF16/full indent physical0/0\n",mode,sites,json_sites,full?1u:0u);
     }
     invalid();adapter_invalid();runtime_attempts=0;CHECK(adapter(SIZE_MAX,NULL)==XR_XIR_OK);size_t sites=runtime_attempts,json_sites=lsp_json_calls;

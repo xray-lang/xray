@@ -11,9 +11,10 @@
 #include <string.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}}while(0)
 #include "xir_sdk_resource_test.h"
+#include "xir/xxir_compile_memory.h"
 #include "lsp_open_json_owner.h"
 typedef struct Inputs {const char *root,*uri,*missing,*other,*other_uri,*growth,*bad,*utf8,*large,*empty,*hidden;} Inputs;
-static const XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+static const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true};
 static const char root_text[]="import \"./lib\" as lib\nfn run()->i64{return lib.target(1)}\n";
 static void configuration(XlspConfig *config,XlspIgnorePattern *patterns) {
     *config=(XlspConfig){0};patterns[0]=(XlspIgnorePattern){"skip*",true,false};patterns[1]=(XlspIgnorePattern){"vendor",false,true};
@@ -35,7 +36,7 @@ static XrXirStatus queries(const XlspSourceScope *scope) {
     size_t index=99;XrXirStatus s=xlsp_source_scope_find(scope,"missing",7,&index);if(s==XR_XIR_UNRESOLVED){CHECK(index==99);return XR_XIR_OK;}return s;
 }
 static XrXirStatus once(const Inputs *in,unsigned mode,XrCompileResourceLimits caps,XrCompileResourceStats *stats) {
-    XrCompileResources *r=NULL;XrCompileResourceStatus made=xr_compile_resources_new(&caps,&r);if(made!=XR_COMPILE_RESOURCE_OK)return made==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompileResources *r=NULL;XrCompileResourceStatus made=xr_compile_resources_new(&caps,&r);if(made!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(made);
     XrXirCompileContext context={r,xr_xir_compile_default_limits()};XlspConfig config;XlspIgnorePattern patterns[2];configuration(&config,patterns);
     char uri[2048],text[256];CHECK(strlen(in->uri)<sizeof(uri));strcpy(uri,in->uri);strcpy(text,root_text);
     XlspSourceDocument documents[]={{uri,text,strlen(uri),strlen(text),7},{in->missing,"fn fresh()->i64{return 5}",strlen(in->missing),25,7}};
@@ -69,9 +70,9 @@ static void ignores(void) {
     item=(XlspIgnorePattern){"*",false,false};bool ignored=false;CHECK(xlsp_source_ignore(r,&config,"abc",false,&ignored)==XR_XIR_OK&&!ignored);CHECK(xlsp_source_ignore(r,&config,"*",false,&ignored)==XR_XIR_OK&&ignored);
     item=(XlspIgnorePattern){"vendor",false,true};CHECK(xlsp_source_ignore(r,&config,"vendor",false,&ignored)==XR_XIR_OK&&!ignored);CHECK(xlsp_source_ignore(r,&config,"vendor",true,&ignored)==XR_XIR_OK&&ignored);
     CHECK(xlsp_source_ignore(r,&config,".hidden",false,&ignored)==XR_XIR_OK&&ignored);CHECK(!xlsp_config_should_ignore(NULL,".hidden",true));
-    XrCompileResourceStats stats=sdk_stats(r);CHECK(stats.work>0);xr_compile_resources_release(r);CHECK(!runtime_live&&!runtime_bytes);
-    XrCompileResourceLimits small=limits;small.work=1;r=sdk_ledger(&small);ignored=true;CHECK(xlsp_source_ignore(r,&config,"vendor",true,&ignored)==XR_XIR_BUDGET&&ignored);xr_compile_resources_release(r);CHECK(!runtime_live&&!runtime_bytes);
-    printf("Shared ignore policy %zu independent glob controls, literal/dir/hidden and exact resource rejection PASS\n",combinations);
+    XrCompileResourceStats stats=sdk_stats(r);CHECK(stats.held_bytes==stats.peak_bytes);xr_compile_resources_release(r);CHECK(!runtime_live&&!runtime_bytes);
+    XrCompileResourceLimits small={XR_COMPILE_MEMORY_FINITE,sizeof(XrCompileResources),true};r=sdk_ledger(&small);ignored=false;CHECK(xlsp_source_ignore(r,&config,"vendor",true,&ignored)==XR_XIR_OK&&ignored);CHECK(sdk_stats(r).held_bytes==small.memory_limit);xr_compile_resources_release(r);CHECK(!runtime_live&&!runtime_bytes);
+    printf("Shared ignore policy %zu independent glob controls, literal/dir/hidden and allocation-free finite-owner lookup PASS\n",combinations);
 }
 static void rejected(const Inputs *in) {
     const char *roots[]={in->bad,in->utf8,in->large,".",in->uri};
@@ -94,7 +95,7 @@ static void renamed_facts(XrJsonValue *result,const Inputs *in) {
     CHECK(edits==3&&known==1);
 }
 static XrXirStatus rename_once(const Inputs *in,XrCompileResourceLimits caps,XrCompileResourceStats *stats,size_t fault,bool *injected) {
-    XrCompileResources *r=NULL;XrCompileResourceStatus made=xr_compile_resources_new(&caps,&r);if(made!=XR_COMPILE_RESOURCE_OK)return made==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompileResources *r=NULL;XrCompileResourceStatus made=xr_compile_resources_new(&caps,&r);if(made!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(made);
     XrXirCompileContext context={r,xr_xir_compile_default_limits()};XlspConfig config;XlspIgnorePattern patterns[2];configuration(&config,patterns);
     XlspSourceDocument document={in->uri,root_text,strlen(in->uri),sizeof(root_text)-1,7};XlspSourceScopeOptions options={&context,&document,1,NULL,0,4096,&config};XlspSourceScope *scope=NULL;XrJsonValue *result=NULL;
     lsp_json_calls=0;lsp_json_fail=fault;lsp_json_injected=false;XrXirStatus status=xlsp_source_scope_capture(&options,&scope);size_t entry=SIZE_MAX;
@@ -153,7 +154,7 @@ static void binding_lenses_facts(XrJsonValue *root,XrJsonValue *lib,unsigned mod
     else {CHECK(root->as.array.count==2&&!lib);binding_lens_fact(root,0,0,3,6,"1 reference");binding_lens_fact(root,1,1,3,3,"0 references");}
 }
 static XrXirStatus binding_lenses_once(const Inputs *in,unsigned mode,XrCompileResourceLimits caps,XrCompileResourceStats *stats,size_t fault,bool *injected) {
-    XrCompileResources *r=NULL;XrCompileResourceStatus made=xr_compile_resources_new(&caps,&r);if(made!=XR_COMPILE_RESOURCE_OK)return made==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompileResources *r=NULL;XrCompileResourceStatus made=xr_compile_resources_new(&caps,&r);if(made!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(made);
     XrXirCompileContext context={r,xr_xir_compile_default_limits()};XrJsonValue *root=NULL,*lib=NULL;char uri[2048],library_uri[2048],text[512],library[128];size_t length=strlen(in->uri);CHECK(length>=7&&length<sizeof(uri));
     strcpy(uri,in->uri);memcpy(library_uri,in->uri,length-7);memcpy(library_uri+length-7,"lib.xr",7);strcpy(library,preserved_library);
     strcpy(text,mode==0?preserved_root:mode==1?preserved_struct:mode==2?preserved_class:"fn target()->i64{return 1}\nfn run()->i64{var alias=target;return alias()}\n");
@@ -193,7 +194,7 @@ static int run(int argc,char **argv) {
     if(binding){bool full=!strcmp(argv[12],"--binding-lenses");for(unsigned mode=0;mode<4;++mode){XrCompileResourceStats stats={0};runtime_attempts=0;runtime_fail_at=SIZE_MAX;CHECK(binding_lenses_once(&in,mode,limits,&stats,SIZE_MAX,NULL)==XR_XIR_OK);size_t sites=runtime_attempts,json_sites=lsp_json_calls;
             if(full){for(size_t i=0;i<sites;++i){runtime_attempts=0;runtime_fail_at=i;CHECK(binding_lenses_once(&in,mode,limits,NULL,SIZE_MAX,NULL)==XR_XIR_OUT_OF_MEMORY&&runtime_attempts>i);}runtime_fail_at=SIZE_MAX;
                 for(size_t i=0;i<json_sites;++i){bool injected=false;CHECK(binding_lenses_once(&in,mode,limits,NULL,i,&injected)==XR_XIR_OUT_OF_MEMORY&&injected);}
-                for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits exact={stats.allocated_bytes,stats.peak_bytes,stats.work};uint64_t *bound=axis==0?&exact.allocated_bytes:axis==1?&exact.live_bytes:&exact.work;CHECK(*bound&&*bound<INT64_MAX);*bound=(uint64_t)((int64_t)*bound+delta);CHECK(binding_lenses_once(&in,mode,exact,NULL,SIZE_MAX,NULL)==(delta<0?XR_XIR_BUDGET:XR_XIR_OK));}}
+                CHECK(stats.peak_bytes&&stats.peak_bytes<UINT64_MAX);for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits exact=limits;exact.memory_limit=delta<0?stats.peak_bytes-1:stats.peak_bytes+(unsigned)delta;CHECK(binding_lenses_once(&in,mode,exact,NULL,SIZE_MAX,NULL)==(delta<0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));}CHECK(binding_lenses_once(&in,mode,limits,NULL,SIZE_MAX,NULL)==XR_XIR_OK);}
             printf("Direct binding CodeLens mode=%u SourceFI=%zu JSONFI=%zu full=%u original3 exact literals/assertions plus function values physical0/0\n",mode,sites,json_sites,full?1u:0u);}return 0;}
     bool lens=argc==13&&(!strcmp(argv[12],"--lens")||!strcmp(argv[12],"--lens-normal"));
     if(lens){bool full=!strcmp(argv[12],"--lens");CHECK(lens_once(&in,SIZE_MAX,SIZE_MAX,NULL)==XR_XIR_OK);size_t sites=runtime_attempts,json_sites=lsp_json_calls;
@@ -205,7 +206,7 @@ static int run(int argc,char **argv) {
         CHECK((rename?rename_once(&in,limits,&stats,SIZE_MAX,NULL):once(&in,mode,limits,&stats))==XR_XIR_OK);size_t sites=runtime_attempts,json_sites=lsp_json_calls;
         if(full){for(size_t i=0;i<sites;++i){runtime_attempts=0;runtime_fail_at=i;CHECK((rename?rename_once(&in,limits,NULL,SIZE_MAX,NULL):once(&in,mode,limits,NULL))==XR_XIR_OUT_OF_MEMORY&&runtime_attempts>i);}runtime_fail_at=SIZE_MAX;
             if(rename)for(size_t i=0;i<json_sites;++i){bool injected=false;CHECK(rename_once(&in,limits,NULL,i,&injected)==XR_XIR_OUT_OF_MEMORY&&injected);}
-            for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits exact={stats.allocated_bytes,stats.peak_bytes,stats.work};uint64_t *bound=axis==0?&exact.allocated_bytes:axis==1?&exact.live_bytes:&exact.work;CHECK(*bound&&*bound<INT64_MAX);*bound=(uint64_t)((int64_t)*bound+delta);CHECK((rename?rename_once(&in,exact,NULL,SIZE_MAX,NULL):once(&in,mode,exact,NULL))==(delta<0?XR_XIR_BUDGET:XR_XIR_OK));}}
+            CHECK(stats.peak_bytes&&stats.peak_bytes<UINT64_MAX);for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits exact=limits;exact.memory_limit=delta<0?stats.peak_bytes-1:stats.peak_bytes+(unsigned)delta;CHECK((rename?rename_once(&in,exact,NULL,SIZE_MAX,NULL):once(&in,mode,exact,NULL))==(delta<0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));}CHECK((rename?rename_once(&in,limits,NULL,SIZE_MAX,NULL):once(&in,mode,limits,NULL))==XR_XIR_OK);}
         printf("Source scope rename=%u mode=%u SourceFI=%zu JSONFI=%zu full=%u closed reverse dependents/overlay/authority/versions physical0/0\n",rename?1u:0u,mode,sites,rename?json_sites:0,full?1u:0u);
     }
     if(!rename){ignores();rejected(&in);}return 0;

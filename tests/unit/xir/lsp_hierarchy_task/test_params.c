@@ -50,7 +50,7 @@ static XrCompileResourceStats normal(unsigned index, size_t *sites) {
     const XrJsonValue *view = xlsp_source_params_view(params); same(value, view);
     size_t length = 0; char *before = xjson_stringify(value, &length); CHECK(before);
     XrCompileResourceStats stats = sdk_stats(resources);
-    CHECK(stats.live_bytes && stats.work && runtime_live > 1);
+    CHECK(stats.held_bytes && runtime_live > 1);
     xjson_free(value); xr_compile_resources_release(resources);
     CHECK(runtime_live > 1);
     size_t actual = 0; char *after = xjson_stringify((XrJsonValue *)view, &actual);
@@ -68,23 +68,23 @@ static void faults(unsigned index, size_t sites, XrCompileResourceStats stats) {
         CHECK(xlsp_source_params_new(resources, value, &params) == XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
         CHECK(runtime_attempts == runtime_fail_at + 1); runtime_fail_at = SIZE_MAX;
         XrCompileResourceStats after = sdk_stats(resources);
-        CHECK(!params && runtime_live == blocks && runtime_bytes == bytes && after.live_bytes == before.live_bytes);
-        CHECK(after.work > before.work && after.allocated_bytes >= before.allocated_bytes);
+        CHECK(!params && runtime_live == blocks && runtime_bytes == bytes && after.held_bytes == before.held_bytes);
+        CHECK(after.peak_bytes >= before.peak_bytes);
         xr_compile_resources_release(resources); CHECK(!runtime_live && !runtime_bytes);
     }
-    for (unsigned axis = 0; axis < 3; ++axis) {
-        XrCompileResourceLimits limits = sdk_unlimited;
-        if (axis == 0) limits.allocated_bytes = stats.allocated_bytes - 1;
-        if (axis == 1) limits.live_bytes = stats.peak_bytes - 1;
-        if (axis == 2) limits.work = stats.work - 1;
+    CHECK(stats.peak_bytes && stats.peak_bytes < UINT64_MAX);
+    for (int delta = -1; delta <= 1; ++delta) {
+        XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE,
+            delta < 0 ? stats.peak_bytes - 1 : stats.peak_bytes + (unsigned)delta,true};
         XrCompileResources *resources = NULL; XlspSourceParams *params = NULL;
         CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
-        CHECK(xlsp_source_params_new(resources, value, &params) == XR_COMPILE_RESOURCE_BUDGET);
-        CHECK(!params); xr_compile_resources_release(resources); CHECK(!runtime_live && !runtime_bytes);
+        XrCompileResourceStatus status = xlsp_source_params_new(resources, value, &params);
+        CHECK(status == (delta < 0 ? XR_COMPILE_RESOURCE_MEMORY_LIMIT : XR_COMPILE_RESOURCE_OK));
+        CHECK((params != NULL) == (delta >= 0)); xlsp_source_params_free(params);
+        xr_compile_resources_release(resources); CHECK(!runtime_live && !runtime_bytes);
     }
     xjson_free(value); CHECK(!lsp_json_live && !lsp_json_bytes);
 }
-static bool cancelled(const void *context) { return *(const bool *)context; }
 static void malformed(void) {
     XrCompileResources *resources = sdk_ledger(&sdk_unlimited); XlspSourceParams *params = NULL;
     CHECK(xlsp_source_params_new(NULL, NULL, &params) == XR_COMPILE_RESOURCE_BAD_ARGUMENT);
@@ -98,11 +98,6 @@ static void malformed(void) {
     XrJsonValue bad = {.type = XR_JSON_STRING, .string_len = SIZE_MAX}; bad.as.string = "x";
     CHECK(xlsp_source_params_new(resources, &bad, &params) == XR_COMPILE_RESOURCE_BAD_ARGUMENT);
     CHECK(!params && runtime_live == blocks && runtime_bytes == bytes);
-    bool cancel = true;
-    CHECK(xr_compile_resources_begin_cancel(resources, cancelled, &cancel) == XR_COMPILE_RESOURCE_OK);
-    CHECK(xlsp_source_params_new(resources, &bad, &params) == XR_COMPILE_RESOURCE_CANCELLED);
-    CHECK(!params && runtime_live == blocks && runtime_bytes == bytes);
-    CHECK(xr_compile_resources_end_cancel(resources, cancelled, &cancel) == XR_COMPILE_RESOURCE_CANCELLED);
     xr_compile_resources_release(resources); CHECK(!runtime_live && !runtime_bytes);
 }
 int main(int argc, char **argv) {
@@ -112,8 +107,8 @@ int main(int argc, char **argv) {
     for (unsigned i = 0; i < 7; ++i) {
         size_t sites = 0; XrCompileResourceStats stats = normal(i, &sites); total += sites;
         if (argc == 2) faults(i, sites, stats);
-        printf("PARAMS case=%u sites=%zu allocated=%llu peak=%llu work=%llu\n", i, sites,
-            (unsigned long long)stats.allocated_bytes, (unsigned long long)stats.peak_bytes, (unsigned long long)stats.work);
+        printf("PARAMS case=%u sites=%zu allocated=%llu peak=%llu held=%llu\n", i, sites,
+            (unsigned long long)stats.allocated_bytes, (unsigned long long)stats.peak_bytes, (unsigned long long)stats.held_bytes);
     }
     malformed();
     printf("Ledger-owned params producer death physical0/0 JSON0/0 cases=7 prefixes=%zu full=%u\n", total, argc == 2 ? 1u : 0u);
