@@ -1,9 +1,9 @@
 import "./base" as base
 const published=base.message()
 const unitB:()=print("B")
-fn stop() {
+fn stop() throws(base.InitFailure<string>) {
     Coro.yield()
     throw base.InitFailure<string>.Stopped{message:published,count:41+base.next()}
 }
-const unreachable=stop()
-print("NEVER")
+const unreachable=try stop()
+const neverReached:()=print("NEVER")

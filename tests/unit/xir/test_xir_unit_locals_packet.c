@@ -32,7 +32,6 @@ long size=ftell(file);
 CHECK(size>=64&&size<=262144&&!fseek(file,0,SEEK_SET));
 uint8_t *bytes=NULL;
 CHECK(xr_compile_resources_alloc(owner.context.resources,(size_t)size,(void **)&bytes)==XR_COMPILE_RESOURCE_OK);
-CHECK(xr_compile_resources_work(owner.context.resources,(uint64_t)size)==XR_COMPILE_RESOURCE_OK);
 CHECK(bytes&&fread(bytes,1,(size_t)size,file)==(size_t)size&&!fclose(file));
 
  XrXirArtifact *checked=NULL,*special=NULL,*lowered=NULL;
