@@ -1,6 +1,10 @@
-Coro.yield()
-const counter = Atomic(10)
-Coro.yield()
+fn initialCounter()->Atomic<i64> {
+    Coro.yield()
+    const value = Atomic(10)
+    Coro.yield()
+    return value
+}
+const counter = initialCounter()
 export fn next() -> i64 { return identity<Atomic<i64>>(counter).fetchAdd(1) }
 export fn tag(value: string) -> string {
     var text = "a"
