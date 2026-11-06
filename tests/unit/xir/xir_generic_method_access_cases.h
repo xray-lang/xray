@@ -29,9 +29,9 @@ static void generic_method_access_cases(void) {
         uint32_t operand = 0;
         XrXirBlock init_block = {0,1,0,0}, answer_block = {0,2,0,0}, construct_block = {0,3,0,0};
         XrXirFunction functions[] = {
-            {"alpha_init",10,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0},
-            {"other_init",10,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0},
-            {"entry",5,NULL,0,XR_XIR_I64,&answer_block,1,answer,2,NULL,0}
+            {"alpha_init",10,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0,XR_XIR_NEVER},
+            {"other_init",10,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0,XR_XIR_NEVER},
+            {"entry",5,NULL,0,XR_XIR_I64,&answer_block,1,answer,2,NULL,0,XR_XIR_NEVER}
         };
         uint32_t dependency = 1;
         XrXirSourceModule modules[] = {{"alpha",5,&dependency,1,0, 0,XR_XIR_MODULE_FRESH_STORAGE},{"other",5,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE}};

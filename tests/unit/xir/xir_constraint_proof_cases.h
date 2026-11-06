@@ -157,7 +157,7 @@ static void constraint_proof_hidden_nominal_bounds(void) {
         if (valid) constraints[0] = f.bound;
         constraints[1].interfaces = &f.parent; constraints[1].interface_count = 1;
         XrXirGeneric generic = {constraints,2,NULL,0, NULL};
-        XrXirFunction function = {0};
+        XrXirFunction function = {.error_type=XR_XIR_NEVER};
         XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,&generic,&f.types,NULL, XR_XIR_PROGRAM, NULL};
         XrXirCompileContext budget = interface_context_default();
         CHECK(xr_xir_compile_generics_structure_verify(&budget, &module)==XR_XIR_OK);
@@ -221,7 +221,7 @@ static void constraint_proof_malformed(void) {
     CHECK(constraint_proof_status(&f)==XR_XIR_BAD_TYPE);
     constraint_proof_fixture(&f);
     XrXirConstraint empty = {0}; XrXirGeneric generic = {&empty,1,NULL,0, NULL};
-    XrXirFunction function = {0};
+    XrXirFunction function = {.error_type=XR_XIR_NEVER};
     XrXirModule actual = {XR_XIR_BUILT,&function,1,NULL,&generic,NULL,NULL, XR_XIR_PROGRAM, NULL};
     f.context = (XrXirProofContext){&actual,{XR_XIR_CONTEXT_FUNCTION,0,0}};
     XrXirType actual_arguments[] = {XR_XIR_I64,(XrXirType)XR_XIR_TYPE_PARAMETER_BASE};
@@ -238,7 +238,7 @@ static void constraint_proof_shared_type_walk(void) {
         nodes[i].parameters = parameters[i]; nodes[i].parameter_count = 2; nodes[i].result = child;
     }
     XrXirTypes types = {nodes,DEPTH,NULL,NULL}; XrXirConstraint empty = {0};
-    XrXirGeneric generic = {&empty,1,NULL,0, NULL}; XrXirFunction function = {0};
+    XrXirGeneric generic = {&empty,1,NULL,0, NULL}; XrXirFunction function = {.error_type=XR_XIR_NEVER};
     XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,&generic,&types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,0,0}};
     XrXirCompileContext structure = interface_context_default();
@@ -260,7 +260,7 @@ static void constraint_proof_interface_identity_cases(void) {
     XrXirTypes types = {&signature,1,NULL,&interfaces};
     XrXirInterfaceApplication application = {0,NULL,0};
     XrXirConstraint constraints[COUNT] = {0}; constraints[0] = (XrXirConstraint){0,&application,1};
-    XrXirGeneric generic = {constraints,COUNT,NULL,0, NULL}; XrXirFunction function = {0};
+    XrXirGeneric generic = {constraints,COUNT,NULL,0, NULL}; XrXirFunction function = {.error_type=XR_XIR_NEVER};
     XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,&generic,&types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,0,0}};
     XrXirCompileContext structure = interface_context_default();
@@ -281,7 +281,7 @@ static void constraint_proof_scalar_signatures(void) {
     XrXirInstruction op = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
     for (uint32_t i = 0; i < 1 + 2*sizeof(invalid)/sizeof(*invalid); ++i) {
         XrXirType parameter = XR_XIR_I64;
-        XrXirFunction function = {"identity",8,&parameter,1,XR_XIR_I64,&block,1,&op,1,NULL,0};
+        XrXirFunction function = {"identity",8,&parameter,1,XR_XIR_I64,&block,1,&op,1,NULL,0,XR_XIR_NEVER};
         if (i) {
             XrXirType forged = invalid[(i-1)/2];
             if (i%2) parameter = forged; else function.result = forged;
@@ -304,7 +304,7 @@ static void constraint_proof_scalar_generic_forwarding(void) {
         {XR_XIR_RETURN,XR_XIR_UNIT,{1},{0},0,{0}}};
     XrXirBlock leaf = {0,1,0,0}, body = {0,2,0,0};
     XrXirFunction functions[] = {
-        {"identity",8,&parameter,1,parameter,&leaf,1,&identity,1,NULL,0},
+        {"identity",8,&parameter,1,parameter,&leaf,1,&identity,1,NULL,0,XR_XIR_NEVER},
         {"forward",7,&parameter,1,parameter,&body,1,forwarding,2,&operand,1}};
     XrXirModule module = {XR_XIR_BUILT,functions,2,NULL,generics,NULL,NULL, XR_XIR_PROGRAM, NULL};
     for (uint32_t valid = 0; valid < 2; ++valid) {
@@ -321,9 +321,9 @@ static void constraint_proof_scalar_slot_sharing(void) {
         {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
     XrXirBlock block = {0,1,0,0}, main_block = {0,2,0,0};
     XrXirFunction functions[] = {
-        {"provider_init",13,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0},
-        {"root_init",9,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0},
-        {"main",4,NULL,0,XR_XIR_I64,&main_block,1,entry,2,NULL,0}};
+        {"provider_init",13,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0,XR_XIR_NEVER},
+        {"root_init",9,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0,XR_XIR_NEVER},
+        {"main",4,NULL,0,XR_XIR_I64,&main_block,1,entry,2,NULL,0,XR_XIR_NEVER}};
     uint32_t dependency = 0;
     XrXirSourceModule modules[] = {{"provider",8,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE},{"root",4,&dependency,1,1, 0,XR_XIR_MODULE_FRESH_STORAGE}};
     XrXirFunctionIdentity identities[] = {{0},{.module=1},{.module=1}};
