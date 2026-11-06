@@ -345,11 +345,11 @@ static void f64_negation(void) {
     fenv_t original; CHECK(fegetenv(&original) == 0);
 #if defined(XR_ARCH_X86_64)
     unsigned original_control = _mm_getcsr();
-    const unsigned control_cases = 4;
+    const unsigned control_cases = 1;
 #else
     const unsigned control_cases = 1;
 #endif
-    for (unsigned m=0;m<1;++m) for (unsigned c=0;c<1;++c) {
+    for (unsigned m=0;m<1;++m) for (unsigned c=0;c<control_cases;++c) {
         CHECK(fesetround(modes[m]) == 0 && feclearexcept(FE_ALL_EXCEPT) == 0 &&
             feraiseexcept(FE_INEXACT) == 0);
 #if defined(XR_ARCH_X86_64)
@@ -437,11 +437,11 @@ static void f64_family(void) {
     const int modes[]={FE_TONEAREST};
     fenv_t original;CHECK(fegetenv(&original)==0);
 #if defined(XR_ARCH_X86_64)
-    unsigned original_control=_mm_getcsr();const unsigned control_cases=4;
+    unsigned original_control=_mm_getcsr();const unsigned control_cases=1;
 #else
     const unsigned control_cases=1;
 #endif
-    for(unsigned m=0;m<1;++m)for(unsigned c=0;c<1;++c) {
+    for(unsigned m=0;m<1;++m)for(unsigned c=0;c<control_cases;++c) {
         CHECK(fesetround(modes[m])==0 && feclearexcept(FE_ALL_EXCEPT)==0 && feraiseexcept(FE_INEXACT)==0);
 #if defined(XR_ARCH_X86_64)
         unsigned mask=(1u<<6)|(1u<<15);
