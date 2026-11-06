@@ -48,6 +48,7 @@ static void implementation_semantic_fixture(ImplementationSemanticFixture *f) {
         f->nominals[n].module = (XrXirLiteral){"m",1}; f->nominals[n].exported = 1;
         f->nodes[n+1].kind = XR_XIR_TYPE_NOMINAL; f->nodes[n+1].nominal.declaration = n;
         f->functions[n].parameter_count = 1; f->functions[n].result = XR_XIR_I64;
+        f->functions[n].error_type = XR_XIR_NEVER;
         f->identities[n].exported = 1; f->identities[n].nominal_owner = n+1; f->identities[n].method_kind = XR_XIR_READ_METHOD;
         f->bindings[n] = (XrXirImplementationBinding){f->application,0,n};
         f->records[n] = (XrXirImplementation){n,f->application,&f->bindings[n],1};
@@ -88,6 +89,8 @@ static void implementation_semantic_bindings(void) {
         if (attack==8) f.records[0].bindings = NULL;
         if (attack==9) f.identities[0].exported = 0;
         XrXirStatus status = implementation_semantic_status(&f);
+        if ((status==XR_XIR_OK)!=(attack==0))
+            fprintf(stderr,"implementation binding attack%u status%u\n",attack,(unsigned)status);
         CHECK(attack ? status!=XR_XIR_OK : status==XR_XIR_OK);
     }
     ImplementationSemanticFixture f; implementation_semantic_fixture(&f);
