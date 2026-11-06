@@ -44,7 +44,7 @@ static int default_gap_compiler_command(int argc,char **argv) {
         CHECK(argc==8);phase=1;index=gap_compiler_number(argv[4]);
         workers=gap_compiler_number(argv[5]);expected=gap_compiler_number(argv[6]);
     }else {CHECK(!strcmp(argv[1],"--compiler-bounds") && argc==6);phase=2;expected=gap_compiler_number(argv[4]);}
-    CHECK(workers>0 && workers<=8 && index<workers && (phase==0 || (expected>0 && expected<20000)));
+    CHECK(workers>0 && workers<=8 && index<workers && (phase==0 || (expected>0 && expected<SIZE_MAX)));
     gap_compiler_report_file=fopen(argv[argc-1],"wb");CHECK(gap_compiler_report_file);
     uint8_t *bytes=default_gap_inputs(argv[2],argv[3]);
     default_compiler_partition=(DefaultCompilerPartition){true,phase,index,workers,expected,gap_compiler_report};

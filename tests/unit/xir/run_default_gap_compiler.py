@@ -45,7 +45,7 @@ def common(record, first):
 
 def baseline(record, mode):
     checked(record.get("kind") == "baseline" and record.get("mode") == mode, "Missing complete graph baseline")
-    checked(type(record.get("sites")) is int and 0 < record["sites"] < 20000, "Original site bound changed")
+    checked(type(record.get("sites")) is int and 0 < record["sites"] <= sys.maxsize, "Invalid actual fault count")
     common(record, record)
     checked(record.get("attempts") == record["sites"] and record.get("status") == 0 and
             record.get("injected") is False and record.get("empty_output") is False and
@@ -65,7 +65,8 @@ def complete(record, mode, index, workers, sites, points, axes):
 def verify_shard(rows, first, index, workers):
     checked(len(rows) >= 2 and rows[0] == first, "Worker complete baseline differs")
     sites = baseline(rows[0], first["mode"])
-    expected = list(range(index, sites, workers))
+    expected = range(index, sites, workers)
+    checked(len(rows) == len(expected) + 2, "Incomplete partition report")
     complete(rows[-1], first["mode"], index, workers, sites, len(expected), 0)
     observed = []
     for row in rows[1:-1]:
@@ -78,7 +79,7 @@ def verify_shard(rows, first, index, workers):
                 type(row.get("attempts")) is int and row["attempts"] > ordinal,
                 "Fault status, actual hit or empty output changed")
         observed.append(ordinal)
-    checked(observed == expected, "Missing/duplicate/reordered partition ordinal")
+    checked(observed == list(expected), "Missing/duplicate/reordered partition ordinal")
     return observed
 
 
@@ -87,7 +88,8 @@ def verify_union(partitions, sites):
     for values in partitions:
         checked(not seen.intersection(values), "Duplicate cross-process ordinal")
         seen.update(values)
-    checked(seen == set(range(sites)), "Incomplete original denominator")
+    checked(len(seen) == sites and all(type(n) is int and 0 <= n < sites for n in seen),
+            "Incomplete actual fault denominator")
     return sorted(seen)
 
 

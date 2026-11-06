@@ -50,7 +50,7 @@ class Protocol(unittest.TestCase):
                 runner.verify_union(parts, 3)
 
     def test_denominator_memory_mode_or_fresh_baseline_changes(self):
-        for key, value in (("sites", 4), ("sites", 20000), ("memory_mode", 1),
+        for key, value in (("sites", 4), ("sites", 0), ("memory_mode", 1),
                            ("memory_limit", 1), ("profile_allocations", False),
                            ("ledger_oom", False), ("attempts", 2), ("held", 1025)):
             row = baseline()

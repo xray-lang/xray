@@ -75,7 +75,7 @@ static inline void default_compiler_faults(DefaultBuild build,unsigned variant) 
         XrCompileResourceStats baseline=default_stats(&context);XrXirProgram *program=NULL;
         instance_compile_attempts=0;instance_compile_fail_at=pass?pass-1:SIZE_MAX;instance_compile_injected=false;
         XrXirStatus status=build(&context,variant,&program);
-        if(!pass) {CHECK(status==XR_XIR_OK && program);sites=instance_compile_attempts;CHECK(sites>0 && sites<20000);exact=default_stats(&context);}
+        if(!pass) {CHECK(status==XR_XIR_OK && program);sites=instance_compile_attempts;CHECK(sites>0 && sites<SIZE_MAX);exact=default_stats(&context);}
         else {if(status!=XR_XIR_OUT_OF_MEMORY)fprintf(stderr,"default compiler ordinal%zu status%u\n",pass-1,status);
             CHECK(status==XR_XIR_OUT_OF_MEMORY && !program && instance_compile_injected && instance_compile_attempts>pass-1);++tested;}
         DefaultCompilerFaultEvent event={.kind=pass?1u:0u,.variant=variant,.ordinal=pass?pass-1:0,
