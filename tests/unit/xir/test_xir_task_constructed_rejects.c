@@ -17,9 +17,9 @@
 int main(int argc, char **argv) {
     CHECK(argc == 2 || (argc == 3 && !strcmp(argv[2],"bad-value")));
     XrXirStatus expected=argc==3?XR_XIR_BAD_VALUE:XR_XIR_BAD_TYPE;
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     char path[1024]; CHECK(snprintf(path, sizeof(path), "%s/rejected/%s.xr", XR_TASK_CONSTRUCTED_FIXTURES, argv[1]) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_TASK_CONSTRUCTED_FIXTURES};
     XrXirSourceRequest request = {session, path, &authority, context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};

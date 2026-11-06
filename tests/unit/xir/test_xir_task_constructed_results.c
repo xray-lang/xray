@@ -42,7 +42,7 @@ static void constructed_code_drop(void *owner) {
     xr_xir_compile_artifact_free(fixture->lowered); fixture->lowered = NULL;
 }
 static void constructed_build(ConstructedFixture *fixture, const char *backend) {
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     fixture->lowered = constructed_lower(context, fixture->entry, false);
     const XrXirModule *module = xr_xir_compile_artifact_module(fixture->lowered);
     const XrXirProgramSpec *native = &task_constructed_native_program;

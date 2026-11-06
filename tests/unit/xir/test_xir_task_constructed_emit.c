@@ -21,7 +21,7 @@
 #include "xir_task_constructed_pipeline.h"
 int main(int argc, char **argv) {
     CHECK(argc == 2 || argc == 3); bool baseline = argc == 2 && !strcmp(argv[1], "baseline"); CHECK(baseline || argc == 3);
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     uint32_t entries[CONSTRUCTED_CASES][2] = {{0}}; XrXirArtifact *lowered = constructed_lower(context, entries, baseline);
     if (baseline) { effects_source_owners_free(); return 0; }
     XrXirCSource source = {0}; CHECK(xr_xir_compile_emit_c(lowered, "task_constructed_native", 4194304, &source) == XR_XIR_OK);

@@ -22,7 +22,7 @@ enum { CONSTRUCTED_CASES = sizeof(constructed_names) / sizeof(*constructed_names
 static XrXirArtifact *constructed_lower(const XrXirCompileContext *context,
     uint32_t entries[CONSTRUCTED_CASES][2], bool baseline) {
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_TASK_CONSTRUCTED_FIXTURES};
     XrXirSourceRequest request = {session, XR_TASK_CONSTRUCTED_FIXTURES "/root.xr", &authority,
         context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};

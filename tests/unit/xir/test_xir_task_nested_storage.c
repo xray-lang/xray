@@ -12,7 +12,7 @@
 #undef main
 int main(void) {
     enum { DEPTH = 8192 };
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     XrXirTypeNode *nodes = xr_calloc(DEPTH, sizeof(*nodes)); CHECK(nodes);
     for (unsigned i = 0; i < DEPTH; ++i)
         nodes[i] = (XrXirTypeNode){.kind=XR_XIR_TYPE_TASK,.element=i ? (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+i-1) : XR_XIR_I64};

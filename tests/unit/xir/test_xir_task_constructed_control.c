@@ -31,7 +31,7 @@ static XrXirAction constructed_control_resume(XrXirCallView *view) {
     return constructed_control->selected[entry].resume(view);
 }
 static void constructed_control_build(ConstructedControl *control, const char *backend) {
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     ConstructedFixture *fixture = &control->base; constructed_control = control;
     fixture->lowered = constructed_lower(context, fixture->entry, false);
     const XrXirModule *module = xr_xir_compile_artifact_module(fixture->lowered);
