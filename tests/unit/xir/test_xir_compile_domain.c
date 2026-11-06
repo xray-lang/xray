@@ -234,9 +234,9 @@ static void compile_domain_failed_growth(void) {
 #endif
 int XR_COMPILE_DOMAIN_ENTRY(void) {
     size_t sites = 0; XrCompileResourceStats baseline = compile_domain_baseline(&sites);
-    CHECK(sites > 2 && calls == 0);
+    CHECK(sites > 2 && value_allocation_calls == 0);
     compile_domain_faults(sites); compile_domain_axes(&baseline); compile_domain_late_owner();
     compile_domain_failed_growth();
-    CHECK(calls == 0 && !live);
+    CHECK(value_allocation_calls == 0 && !live);
     puts("compile Domain Cell/string/Array/Tuple/metadata/call/resize PASS"); return 0;
 }
