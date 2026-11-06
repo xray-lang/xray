@@ -18,7 +18,7 @@ static XrXirOutputStatus unexpected_output(void *context, const XrXirOutputGroup
     (void)context; (void)group; CHECK(false); return XR_XIR_OUTPUT_ERROR;
 }
 int main(void) {
-    const XrXirCompileContext context = *effects_source_owner(UINT64_C(32)*1024*1024, UINT64_C(64000000));
+    const XrXirCompileContext context = *effects_source_owner();
     XrXirProgram *program = NULL;
     CHECK(xr_xir_compile_program_seal(&context, &locked_package_program, &program) == XR_XIR_OK);
     XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); XrXirInstance *instance = NULL;

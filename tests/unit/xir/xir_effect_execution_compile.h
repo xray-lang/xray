@@ -15,7 +15,7 @@
  * and ledger. Returned snapshots and artifacts retain that producer ledger. */
 static inline XrXirStatus effect_execution_check(const XrXirSourceRequest *request,
     XrXirSourceResult *output,XrXirSourceDiagnostic *diagnostic) {
-    const XrXirCompileContext *context=effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
+    const XrXirCompileContext *context=effects_source_owner();
     XrCompilerSession *session=NULL;
     CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest local=*request;local.context=context;local.session=session;

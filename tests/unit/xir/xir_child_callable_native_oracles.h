@@ -179,7 +179,7 @@ static void cn_code_drop(void *owner) {
 static void cn_build(CnFixture *f) {
     CHECK(!cn_observed);
     cn_observed = f;
-    f->context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    f->context = effects_source_owner();
     CHECK(child_callable_native_program.entry_count == CN_FUNCTIONS);
     CHECK(child_callable_native_program.entries == child_callable_native_entries);
     CHECK(child_callable_native_program.packet.bytes && child_callable_native_program.packet.length);

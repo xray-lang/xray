@@ -135,7 +135,7 @@ static uint32_t observation_crossed_target(const XrXirModule *module, uint32_t r
     CHECK(matches == 1); return target;
 }
 static XrXirProgram *observation_program(TerminalBackend backend) {
-    const XrXirCompileContext context = *effects_source_owner(UINT64_C(64)*1024*1024, UINT64_C(128000000));
+    const XrXirCompileContext context = *effects_source_owner();
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_compile_checked_read(&context, terminal_fixture_program.proof.bytes,
         terminal_fixture_program.proof.length, &checked, NULL) == XR_XIR_OK);

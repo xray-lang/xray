@@ -79,7 +79,7 @@ static void terminal_code_free(void *pointer) {
     ++terminal_code_releases;
 }
 static XrXirProgram *terminal_program(TerminalBackend backend) {
-    const XrXirCompileContext context = *effects_source_owner(UINT64_C(64)*1024*1024, UINT64_C(128000000));
+    const XrXirCompileContext context = *effects_source_owner();
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_compile_checked_read(&context, terminal_fixture_program.packet.bytes,
         terminal_fixture_program.packet.length, &checked, NULL) == XR_XIR_OK);

@@ -23,7 +23,7 @@
 #include "xir_runtime_allocations.h"
 #include "xir_iteration_runtime_cases.h"
 int main(int argc,char **argv){
- const XrXirCompileContext *context=effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
+ const XrXirCompileContext *context=effects_source_owner();
  C(argc==1 || argc==2);FILE *file=fopen(XR_CHECKED_FIXTURE,"rb");C(file);
  C(!fseek(file,0,SEEK_END));long size=ftell(file);C(size>=64 && size<=262144);C(!fseek(file,0,SEEK_SET));
  uint8_t *bytes=malloc((size_t)size);C(bytes);C(fread(bytes,1,(size_t)size,file)==(size_t)size);C(!fclose(file));

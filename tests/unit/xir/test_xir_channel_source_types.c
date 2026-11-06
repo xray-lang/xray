@@ -22,7 +22,7 @@
 #include "xir_task_unit73_golden.h"
 #include "shared_current_checked.h"
 static void channel_wire(void) {
-    const XrXirCompileContext *context=effects_source_owner(UINT64_C(67108864),UINT64_C(128000000));
+    const XrXirCompileContext *context=effects_source_owner();
     _Static_assert(XR_XIR_CHECKED_SCHEMA==32 && XR_XIR_CHECKED_CONTRACT==91 && XR_XIR_VALUE_ABI_VERSION==30,
         "Channel descriptors require the current semantic and runtime generation");
     const uint8_t *expected[]={shared_channel_int,shared_channel_unit};
@@ -62,7 +62,7 @@ static void channel_wire(void) {
         out==(XrXirArtifact *)(uintptr_t)1 && effects_compile_attempts==before);
 }
 static void channel_source_case_channels(const char *text, XrXirStatus expected,unsigned channels) {
-    const XrXirCompileContext *context=effects_source_owner(UINT64_C(67108864),UINT64_C(128000000));
+    const XrXirCompileContext *context=effects_source_owner();
     XrCompilerSession *session=NULL; CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"channel-types",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,XR_CHANNEL_STDLIB,NULL,XR_XIR_PROGRAM,NULL};

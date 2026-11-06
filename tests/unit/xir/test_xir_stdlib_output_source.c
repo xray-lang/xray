@@ -328,7 +328,7 @@ static void publication_module_statuses(const XrXirSourceRequest *request) {
 static void publication_source_budgets(const XrXirSourceRequest *request){publication_exact(NULL,request);}
 
 int main(int argc, char **argv) {
-    CHECK(argc==3);publication_context=effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
+    CHECK(argc==3);publication_context=effects_source_owner();
     XrOsIoPolicy root_policy=xr_compile_io_policy(publication_context->resources);char *root=NULL;CHECK(xr_realpath_owned(&root_policy,argv[1],&root)==XR_OS_IO_OK&&root);
     char source[1024], entry[1024], path[1024];
     CHECK(snprintf(source,sizeof(source),"%s/io/output.xr",root) > 0);

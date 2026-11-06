@@ -72,7 +72,7 @@ static void diamond_emit(XrXirArtifact *lowered, const char *path) {
 }
 static int diamond_producer_main(int argc, char **argv) {
     CHECK(argc == 2);
-    const XrXirCompileContext context = *effects_source_owner(UINT64_C(64)*1024*1024, UINT64_C(128000000));
+    const XrXirCompileContext context = *effects_source_owner();
     XrXirCheckedPacket packet = diamond_packet(&context);
     XrXirArtifact *checked = NULL, *closed = NULL, *lowered = NULL;
     CHECK(xr_xir_compile_checked_read(&context, packet.bytes, packet.length, &checked, NULL) == XR_XIR_OK);

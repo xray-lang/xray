@@ -54,7 +54,7 @@ static void ready_compiler_faults(void){
 int main(int argc,char **argv){
  CHECK(argc==1||argc==2);
  if (argc==2) {
-  const XrXirCompileContext compile=*effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
+  const XrXirCompileContext compile=*effects_source_owner();
   XrCompilerSession *session=NULL;
   CHECK(xr_compile_session_new(compile.resources,&session)==XR_COMPILE_RESOURCE_OK);
   XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
@@ -71,7 +71,7 @@ int main(int argc,char **argv){
   return 0;
  }
  ready_compiler_faults();
- const XrXirCompileContext compile=*effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
+ const XrXirCompileContext compile=*effects_source_owner();
  XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(compile.resources,&session)==XR_COMPILE_RESOURCE_OK);
  XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
  XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,&compile,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};

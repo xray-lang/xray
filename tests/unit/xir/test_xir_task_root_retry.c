@@ -27,7 +27,7 @@ static XrXirOutputStatus root_fault_output(void *context, const XrXirOutputGroup
     ++output->calls; return output->status;
 }
 static XrXirProgram *root_fault_program(bool panic, bool initializer_fault) {
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     TaskVmFixture fixture; task_vm_fixture(&fixture, panic ? TASK_VM_PANIC : TASK_VM_I64);
     fixture.root[2] = (XrXirInstruction){.op = XR_XIR_RETURN};
     fixture.root_blocks[0].count = fixture.functions[0].instruction_count = 3;
@@ -65,7 +65,7 @@ static XrXirProgram *root_fault_program(bool panic, bool initializer_fault) {
 /* The same GO/return7/child-output graph takes one of two executable paths.
  * Both have an EXIT entry; only the registration path owes a language cleanup. */
 static XrXirProgram *root_cleanup_program(bool registered, const char *emit_path) {
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     TaskVmFixture f; task_vm_fixture(&f, TASK_VM_I64);
     f.root[2] = (XrXirInstruction){.op = XR_XIR_RETURN};
     f.root_blocks[0].count = f.functions[0].instruction_count = 3; f.functions[0].block_count = 1;

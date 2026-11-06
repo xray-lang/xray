@@ -83,7 +83,7 @@ static void diamond_code_free(void *pointer) {
     diamond_code = NULL; xr_compile_resources_free(code); ++diamond_code_releases;
 }
 static XrXirProgram *diamond_program(unsigned backend) {
-    const XrXirCompileContext context = *effects_source_owner(UINT64_C(64)*1024*1024, UINT64_C(128000000));
+    const XrXirCompileContext context = *effects_source_owner();
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_compile_checked_read(&context, diamond_fixture_program.proof.bytes,
         diamond_fixture_program.proof.length, &checked, NULL) == XR_XIR_OK);

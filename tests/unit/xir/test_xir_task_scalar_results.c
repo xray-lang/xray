@@ -38,7 +38,7 @@ static void scalar_code_drop(void *owner) {
     xr_xir_compile_artifact_free(fixture->lowered); fixture->lowered = NULL;
 }
 static void scalar_build(ScalarFixture *fixture, const char *backend) {
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     fixture->lowered = task_scalar_lower(context, fixture->entry, false);
     const XrXirModule *module = xr_xir_compile_artifact_module(fixture->lowered);
     const XrXirProgramSpec *native = &task_scalar_native_program;

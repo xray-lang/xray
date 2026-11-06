@@ -48,7 +48,7 @@ static int worker_producer_main(int argc, char **argv) {
     int length = snprintf(path, sizeof(path), "%s/%s.xr", XR_WORKER_CONTROL_FIXTURES, names[index]);
     CHECK(length > 0 && (size_t)length < sizeof(path));
     CHECK(snprintf(prefix, sizeof(prefix), "worker_control_%u", index) > 0);
-    const XrXirCompileContext context = *effects_source_owner(UINT64_C(64)*1024*1024, UINT64_C(128000000));
+    const XrXirCompileContext context = *effects_source_owner();
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_WORKER_CONTROL_FIXTURES};

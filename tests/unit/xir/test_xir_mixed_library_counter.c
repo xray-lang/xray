@@ -25,7 +25,7 @@ static void counter_code_free(void *pointer) {
     xr_compile_resources_free(code); ++counter_code_releases;
 }
 static XrXirProgram *library_counter_program(unsigned backend) {
-    const XrXirCompileContext context = *effects_source_owner(UINT64_C(64)*1024*1024, UINT64_C(128000000));
+    const XrXirCompileContext context = *effects_source_owner();
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_compile_checked_read(&context, library_counter_fixture_program.proof.bytes,
         library_counter_fixture_program.proof.length, &checked, NULL) == XR_XIR_OK);

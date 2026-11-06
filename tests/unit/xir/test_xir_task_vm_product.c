@@ -20,7 +20,7 @@
 enum { TASK_PRODUCT_BOOL_RESULT = TASK_VM_MODE_COUNT, TASK_PRODUCT_BOOL_ARGUMENT, TASK_PRODUCT_UNUSED_BOOL, TASK_PRODUCT_NO_ARENA };
 
 static XrXirProgram *task_product_program(uint32_t mode) {
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     TaskVmFixture fixture; task_vm_fixture(&fixture, mode);
     if (mode == TASK_PRODUCT_BOOL_RESULT) {
         fixture.element = XR_XIR_BOOL; fixture.node.element = XR_XIR_BOOL;

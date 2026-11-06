@@ -33,7 +33,7 @@ static void dependency_code_release(void *pointer) {
  xr_compile_resources_free(code);++dependency_code_releases;
 }
 int main(void){
- const XrXirCompileContext compile=*effects_source_owner(UINT64_C(32)*1024*1024,UINT64_C(64000000));
+ const XrXirCompileContext compile=*effects_source_owner();
  XrXirProgramSpec spec=dependency_ready_program;XrXirArtifact *checked=NULL,*lowered=NULL;
  XrXirCallEntry *entries=NULL;XrXirVmBinding *bindings=NULL;
  ReadyEntries selected={dependency_ready_functions[0],dependency_ready_functions[1],dependency_ready_functions[2]};

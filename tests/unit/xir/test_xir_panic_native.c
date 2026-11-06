@@ -17,8 +17,8 @@ XR_DATA const XrXirProgramSpec panic_source_program;
 XR_DATA const XrXirProgramSpec panic_bad_program;
 XR_DATA const uint32_t panic_source_functions[PANIC_FUNCTIONS];
 int main(void) {
-    const XrXirCompileContext context = *effects_source_owner(UINT64_C(16)*1024*1024, UINT64_C(64000000));
-    const XrXirCompileContext bad_context = *effects_source_owner(UINT64_C(16)*1024*1024, UINT64_C(64000000));
+    const XrXirCompileContext context = *effects_source_owner();
+    const XrXirCompileContext bad_context = *effects_source_owner();
     XrXirProgram *program = NULL;
     CHECK(xr_xir_compile_program_seal(&context, &panic_source_program, &program) == XR_XIR_OK);
     panic_cases(program, panic_source_functions); program = NULL;

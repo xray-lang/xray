@@ -29,7 +29,7 @@ static XrXirOutputStatus fault_cleanup_output(void *context, const XrXirOutputGr
     return XR_XIR_OUTPUT_OK;
 }
 static XrXirProgram *fault_cleanup_program(unsigned mode) {
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     TaskFaultFixture fixture; task_fault_fixture(&fixture, mode);
     XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL, *lowered = NULL;
     XrXirCheckedPacket packet = {0}; XrXirDiagnostic diagnostic = {0};

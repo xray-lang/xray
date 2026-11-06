@@ -49,7 +49,7 @@ static void closed_error_code_drop(void *owner) {
 }
 static void closed_error_build_configure(ClosedErrorFixture *fixture,const char *backend,
     void (*configure)(ClosedErrorFixture *,const XrXirModule *)) {
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     fixture->lowered = closed_error_lower(context, fixture->entry);
     const XrXirModule *module = xr_xir_compile_artifact_module(fixture->lowered);
     const XrXirProgramSpec *native = &task_closed_error_native_program;
@@ -78,7 +78,7 @@ static void closed_error_build(ClosedErrorFixture *fixture,const char *backend) 
     closed_error_build_configure(fixture,backend,NULL);
 }
 static void closed_error_task_field_source(void) {
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,XR_TASK_CLOSED_ERROR_FIXTURES};

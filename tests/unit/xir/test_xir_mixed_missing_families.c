@@ -21,7 +21,7 @@ typedef struct MissingFamilyCase {
 
 /* Admission is only a prerequisite. No runtime, scheduler or view is emulated. */
 static bool missing_family_source(const MissingFamilyCase *test) {
-    const XrXirCompileContext *context = effects_source_owner(67108864, 128000000);
+    const XrXirCompileContext *context = effects_source_owner();
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     char path[1024];

@@ -76,7 +76,7 @@ static void worker_control_targets(WorkerControlCode *code, const XrXirModule *m
     CHECK(targets == 1);
 }
 static XrXirProgram *worker_control_program(const WorkerControlCase *oracle, unsigned backend) {
-    const XrXirCompileContext context = *effects_source_owner(UINT64_C(64)*1024*1024, UINT64_C(128000000));
+    const XrXirCompileContext context = *effects_source_owner();
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_compile_checked_read(&context, oracle->spec->proof.bytes, oracle->spec->proof.length, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_lower(checked, &oracle->spec->target, NULL, &lowered, NULL) == XR_XIR_OK); xr_xir_compile_artifact_free(checked);

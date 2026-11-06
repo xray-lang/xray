@@ -175,7 +175,7 @@ static void ri_code_drop(void *owner) {
 }
 static void ri_fixture(RiFixture *f, bool fail_initialization) {
     CHECK(!ri_observed); *f = (RiFixture){0}; ri_observed = f;
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     RiGraph graph; ri_graph(&graph, fail_initialization);
     XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL;
     XrXirCheckedPacket packet = {0}; XrXirDiagnostic diagnostic = {0};

@@ -175,7 +175,7 @@ static void cm_build(CmFixture *f, bool root_native) {
     cm_observed = f;
     cn_observed = &f->base;
     f->root_native = root_native;
-    f->base.context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    f->base.context = effects_source_owner();
     const XrXirProgramSpec *native = &child_callable_native_program;
     CHECK(native->entry_count == CN_FUNCTIONS && native->entries == child_callable_native_entries);
     CHECK(native->declarations && native->declarations->entry_function == CN_ENTRY);

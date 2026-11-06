@@ -14,7 +14,7 @@
 #include "xir_mixed_atomic_source.h"
 #include "base/xsha256.h"
 int main(int argc,char **argv) {
-    CHECK(argc==2);AtomicSourcePrepare source={.context=effects_source_owner(67108864,128000000)};
+    CHECK(argc==2);AtomicSourcePrepare source={.context=effects_source_owner()};
     bool complete=atomic_source_prepare(&source);
     if(!complete)fprintf(stderr,"Atomic producer stage=%u status=%u\n",source.stage,(unsigned)source.status);
     CHECK(complete);const XrXirModule *module=xr_xir_compile_artifact_module(source.lowered);

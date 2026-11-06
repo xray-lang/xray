@@ -16,7 +16,7 @@
 #include "xir_effect_execution_owner.h"
 int main(int argc, char **argv) {
     CHECK(argc == 2);
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     char path[1024]; CHECK(snprintf(path, sizeof(path), "%s/rejected/%s.xr", XR_TASK_SCALAR_FIXTURES, argv[1]) > 0);

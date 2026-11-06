@@ -19,7 +19,7 @@
 
 int main(int argc, char **argv) {
     CHECK(argc == 2);
-    const XrXirCompileContext context = *effects_source_owner(UINT64_C(64)*1024*1024, UINT64_C(128000000));
+    const XrXirCompileContext context = *effects_source_owner();
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_CLASS_LIFETIME_FIXTURES};

@@ -196,7 +196,7 @@ static void cp_build(CpFixture *f) {
     CHECK(!cp_observed);
     *f = (CpFixture){0};
     cp_observed = f;
-    f->context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    f->context = effects_source_owner();
     CpGraph g;
     cp_graph(&g);
     CHECK(xr_xir_compile_types_structure_verify(f->context, &g.types) == XR_XIR_OK);

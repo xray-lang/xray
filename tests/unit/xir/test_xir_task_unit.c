@@ -74,7 +74,7 @@ static void unit_shape(const XrXirModule *module) {
     }
 }
 static XrXirProgram *unit_program(const UnitOracle *oracle, uint32_t *entry) {
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     char path[1024]; CHECK(snprintf(path, sizeof(path), "%s/%s.xr", XR_TASK_UNIT_FIXTURES, oracle->name) > 0);
@@ -183,7 +183,7 @@ static void unit_execute(const UnitOracle *oracle) {
         oracle->name, oracle->outputs, oracle->escaped);
 }
 static void unit_reject(const char *name) {
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     char path[1024]; CHECK(snprintf(path, sizeof(path), "%s/rejected/%s.xr", XR_TASK_UNIT_FIXTURES, name) > 0);
@@ -198,7 +198,7 @@ static void unit_reject(const char *name) {
     printf("Task<Unit> reject %s: status=%u, no owned artifact\n", name, status);
 }
 static void unit_fixed_codec(void) {
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     XrXirTypeNode nodes[] = {{.kind = XR_XIR_TYPE_TASK, .element = XR_XIR_UNIT},
         {.kind = XR_XIR_TYPE_TASK, .element = XR_XIR_STRING}};
     XrXirTypes types = {nodes, 2, NULL, NULL}; XrXirType parameters[] = {256, 257};
@@ -226,7 +226,7 @@ static void unit_fixed_codec(void) {
     puts("Task<Unit> independent225B named-role codec and deep clone: current28/76 writer/read exact, complete previous body preserved");
 }
 static void unit_old_packet_reject(void) {
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     XrXirArtifact *out = NULL; size_t before = effects_compile_attempts;
     CHECK(xr_xir_compile_checked_read(context, task_go66_golden, sizeof(task_go66_golden), &out, NULL) ==
         XR_XIR_BAD_STRUCTURE && !out && effects_compile_attempts == before);

@@ -94,7 +94,7 @@ static void deep_code_free(void *pointer) {
     DeepCode *code = pointer; CHECK(code == deep_code); deep_code = NULL; worker_control_free(&code->base);
 }
 static XrXirProgram *deep_program(unsigned backend) {
-    const XrXirCompileContext context = *effects_source_owner(UINT64_C(64)*1024*1024, UINT64_C(128000000));
+    const XrXirCompileContext context = *effects_source_owner();
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_compile_checked_read(&context, worker_deep_fixture_program.proof.bytes,
         worker_deep_fixture_program.proof.length, &checked, NULL) == XR_XIR_OK);

@@ -23,7 +23,7 @@
 #include "xir_runtime_allocations.h"
 #include "xir_dependency_execution.h"
 int main(int argc,char **argv){CHECK(argc==1||argc==2);
- const XrXirCompileContext compile=*effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
+ const XrXirCompileContext compile=*effects_source_owner();
  FILE *file=fopen(XR_CHECKED_FIXTURE,"rb");CHECK(file&&!fseek(file,0,SEEK_END));long size=ftell(file);
  CHECK(size>=64&&size<=262144&&!fseek(file,0,SEEK_SET));uint8_t *bytes=NULL;
  CHECK(xr_compile_resources_alloc(compile.resources,(size_t)size,(void **)&bytes)==XR_COMPILE_RESOURCE_OK);

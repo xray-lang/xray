@@ -57,7 +57,7 @@ static XrXirOutputStatus prefix_output(void *context, const XrXirOutputGroup *gr
 /* Only the root result and the script entry differ from the immutable graph.
  * The returned handle is the actual GO result, with the Program's own arena. */
 static XrXirProgram *prefix_program(unsigned mode) {
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     TaskFaultFixture f; task_fault_fixture(&f, mode);
     XrXirFunction functions[6]; XrXirFunctionIdentity identities[6];
     memcpy(functions, f.functions, sizeof(f.functions)); memcpy(identities, f.identities, sizeof(f.identities));

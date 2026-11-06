@@ -33,7 +33,7 @@ static void effect_mixed_free(void *pointer) {
     xr_compile_resources_free(owner); ++releases;
 }
 static void effect_mixed(bool callback_native, bool methods) {
-    const XrXirCompileContext context=*effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
+    const XrXirCompileContext context=*effects_source_owner();
     const XrXirProgramSpec *native = methods ? &method_source_program : &effect_source_program;
     XrXirArtifact *checked = NULL;
     CHECK(xr_xir_compile_checked_read(&context, native->packet.bytes, native->packet.length, &checked, NULL) == XR_XIR_OK);

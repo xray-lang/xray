@@ -43,7 +43,7 @@ static const SourceTaskOracle source_task_oracles[] = {
     {"context_match_existing", XR_XIR_CALL_RETURNED, TASK_ORACLE_NULLABLE, 42}
 };
 static XrXirProgram *source_task_program(const SourceTaskOracle *oracle, uint32_t *entry) {
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     char path[1024]; CHECK(snprintf(path, sizeof(path), "%s/%s.xr", XR_GO_EXECUTION_FIXTURES, oracle->name) > 0);

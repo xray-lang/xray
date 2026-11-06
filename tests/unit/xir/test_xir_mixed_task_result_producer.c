@@ -19,7 +19,7 @@
 #include "xir_mixed_task_source_prepare.h"
 int main(int argc, char **argv) {
     CHECK(argc == 2);
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(64)*1024*1024, UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     TaskSourcePrepare state = {.context=context}; CHECK(task_source_prepare(&state));
     xr_xir_compile_artifact_free(state.lowered); state.lowered = NULL;
     FILE *file = fopen(argv[1], "wb"); CHECK(file && fwrite(state.generated.text, 1, state.generated.length, file) == state.generated.length);

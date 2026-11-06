@@ -22,7 +22,7 @@
 int main(int argc, char **argv) {
     CHECK(argc == 2 || argc == 3); bool baseline = argc == 2 && !strcmp(argv[1], "baseline");
     CHECK(baseline || argc == 3);
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     uint32_t entries[TASK_SCALAR_CASES][2] = {{0}};
     XrXirArtifact *lowered = task_scalar_lower(context, entries, baseline);
     if (baseline) { effects_source_owners_free(); return 0; }

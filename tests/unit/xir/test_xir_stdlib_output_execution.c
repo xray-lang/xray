@@ -129,7 +129,7 @@ XR_FUNC void xr_test_stdlib_output_execute(XrXirArtifact *checked, const char *g
 extern const XrXirProgramSpec stdlib_output_program;
 extern const uint32_t stdlib_output_exports[2];
 int main(void) {
-    const XrXirCompileContext *context=effects_source_owner(1048576,1048576);
+    const XrXirCompileContext *context=effects_source_owner();
     XrXirProgram *program = NULL;
     CHECK(xr_xir_compile_program_seal(context,&stdlib_output_program,&program) == XR_XIR_OK);
     publication_finish(program,stdlib_output_exports);effects_source_owners_free();return 0;

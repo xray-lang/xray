@@ -26,7 +26,7 @@ static XrXirOutputStatus root_fault_output(void *context, const XrXirOutputGroup
     ++output->calls; return output->status;
 }
 static XrXirProgram *root_fault_program(bool panic) {
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     TaskVmFixture fixture; task_vm_fixture(&fixture, panic ? TASK_VM_PANIC : TASK_VM_I64);
     fixture.root[2] = (XrXirInstruction){.op = XR_XIR_RETURN};
     fixture.root_blocks[0].count = fixture.functions[0].instruction_count = 3;

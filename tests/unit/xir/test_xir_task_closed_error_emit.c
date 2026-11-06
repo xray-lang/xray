@@ -21,7 +21,7 @@
 #include "xir_task_closed_error_pipeline.h"
 int main(int argc, char **argv) {
     CHECK(argc == 3);
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     uint32_t entries[CLOSED_ERROR_CASES][2] = {{0}}; XrXirArtifact *lowered = closed_error_lower(context, entries);
     XrXirCSource source = {0}; CHECK(xr_xir_compile_emit_c(lowered, "task_closed_error_native", 4194304, &source) == XR_XIR_OK);
     xr_xir_compile_artifact_free(lowered); CHECK(source.text && !strstr(source.text, "({"));

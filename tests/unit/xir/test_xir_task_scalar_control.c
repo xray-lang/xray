@@ -31,7 +31,7 @@ static XrXirAction scalar_control_resume(XrXirCallView *view) {
     return scalar_control->selected[entry].resume(view);
 }
 static void scalar_control_build(ScalarControl *control, const char *backend) {
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     ScalarFixture *fixture = &control->base; scalar_control = control;
     fixture->lowered = task_scalar_lower(context, fixture->entry, false);
     const XrXirModule *module = xr_xir_compile_artifact_module(fixture->lowered);

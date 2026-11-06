@@ -56,7 +56,7 @@ static void native_witness_promises(void) {
         witness_inherited_selected_entry,witness_cross_selected_entry,witness_generic_method_selected_entry,witness_generic_where_selected_entry,
         witness_value_direct_selected_entry,witness_value_callback_selected_entry};
     for (uint32_t i = 0; i < sizeof(specs)/sizeof(*specs); ++i) {
-        const XrXirCompileContext *context=effects_source_owner(UINT64_C(32)*1024*1024,UINT64_C(64000000));
+        const XrXirCompileContext *context=effects_source_owner();
         XrXirProgram *program = NULL;
         CHECK(xr_xir_compile_program_seal(context,specs[i], &program) == XR_XIR_OK);
         size_t baseline = runtime_live, bytes = runtime_bytes, sites = 0;
@@ -72,7 +72,7 @@ static void native_witness_promises(void) {
     }
 }
 int main(void) {
-    const XrXirCompileContext *context=effects_source_owner(UINT64_C(32)*1024*1024,UINT64_C(64000000));
+    const XrXirCompileContext *context=effects_source_owner();
     generic_method_old_cache(context,&effect_source_program);
     native_witness_promises();
     XrXirProgram *program = NULL;

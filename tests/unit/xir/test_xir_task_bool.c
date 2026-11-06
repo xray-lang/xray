@@ -24,7 +24,7 @@ static const BoolOracle bool_oracles[] = {
     {"direct", "main", true, false}, {"generic", "main", false, false}, {"escape", "handle", true, true}};
 
 static XrXirProgram *bool_program(const BoolOracle *oracle, uint32_t *entry) {
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     char path[1024]; CHECK(snprintf(path, sizeof(path), "%s/%s.xr", XR_TASK_BOOL_FIXTURES, oracle->name) > 0);
@@ -110,7 +110,7 @@ static bool bool_execute(const BoolOracle *oracle) {
     return true;
 }
 static void bool_reject(const char *name) {
-    const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
+    const XrXirCompileContext *context = effects_source_owner();
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     char path[1024]; CHECK(snprintf(path, sizeof(path), "%s/rejected/%s.xr", XR_TASK_BOOL_FIXTURES, name) > 0);

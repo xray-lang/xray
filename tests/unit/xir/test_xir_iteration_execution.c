@@ -25,7 +25,7 @@ extern const XrXirProgramSpec source_iteration_program;
 extern const uint32_t source_iteration_selected_entries[3];
 #include "xir_iteration_runtime_cases.h"
 int main(void){
- const XrXirCompileContext *context=effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
+ const XrXirCompileContext *context=effects_source_owner();
  const int argc=XR_ITERATION_MIXED?2:1;XrXirProgramSpec spec=source_iteration_program;XrXirProgram *program=NULL;
  XrXirProgramSpec old=spec;old.abi_version=23;old.declarations=(const XrXirDeclarations *)(uintptr_t)1;
  C(xr_xir_compile_program_seal(context,&old,&program)==XR_XIR_BAD_LAYOUT && !program);

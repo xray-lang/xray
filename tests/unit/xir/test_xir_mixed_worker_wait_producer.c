@@ -54,7 +54,7 @@ static void worker_wait_emit(XrXirArtifact *lowered, unsigned index, const char 
 static int worker_wait_producer_main(int argc, char **argv) {
     CHECK(argc == 3 && strlen(argv[1]) == 1 && (argv[1][0] == '0' || argv[1][0] == '1'));
     unsigned index = (unsigned)(argv[1][0] - '0');
-    const XrXirCompileContext context = *effects_source_owner(UINT64_C(64)*1024*1024, UINT64_C(128000000));
+    const XrXirCompileContext context = *effects_source_owner();
     XrXirCheckedPacket packet = worker_wait_packet(&context, index); XrXirArtifact *checked = NULL, *closed = NULL, *lowered = NULL;
     CHECK(xr_xir_compile_checked_read(&context, packet.bytes, packet.length, &checked, NULL) == XR_XIR_OK);
     memset(packet.bytes, 0xCC, packet.length); xr_xir_compile_checked_packet_free(&packet);

@@ -17,7 +17,7 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"Cycle batch producer %d: %s\n",__LINE__,#c);exit(1); } } while(0)
 #include "xir_effect_execution_owner.h"
 int main(int argc,char **argv) {
-    CHECK(argc==2);const XrXirCompileContext context=*effects_source_owner(67108864,128000000);
+    CHECK(argc==2);const XrXirCompileContext context=*effects_source_owner();
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_CYCLE_BATCH_FIXTURE_ROOT};
     XrXirSourceRequest request={session,XR_CYCLE_BATCH_FIXTURE_ROOT "/xir_p20_cycle_batch/root.xr",&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};

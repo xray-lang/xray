@@ -14,7 +14,7 @@ static const char *array_error_names[]={"array","nested","strings"};
 static XrXirProgram *array_error_program(unsigned mode,bool native,uint32_t *entry) {
     if(!native) {UnitOracle oracle={array_error_names[mode],"handle",true,false,true,0};return unit_program(&oracle,entry);}
     XrXirProgram *program=NULL;
-    const XrXirCompileContext *context=effects_source_owner(UINT64_C(67108864),UINT64_C(128000000));
+    const XrXirCompileContext *context=effects_source_owner();
     CHECK(xr_xir_compile_program_seal(context,array_error_specs[mode],&program)==XR_XIR_OK);
     *entry=array_error_entries[mode];return program;
 }
@@ -96,7 +96,7 @@ static uint64_t array_error_graph_control(XrXirTypeArena *arena,uint64_t limit,b
     CHECK(!runtime_live&&!runtime_bytes);return spent.work;
 }
 static void array_error_type_controls(void) {
-    const XrXirCompileContext *context=effects_source_owner(UINT64_C(67108864),UINT64_C(128000000));
+    const XrXirCompileContext *context=effects_source_owner();
     XrXirTypeNode nodes[5]={{.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64},
         {.kind=XR_XIR_TYPE_ARRAY,.element=256}, {.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64},
         {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_NONE},

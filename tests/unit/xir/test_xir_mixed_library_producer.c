@@ -73,7 +73,7 @@ static XrXirArtifact *counter_linked(const XrXirCompileContext *context) {
 }
 static int counter_producer_main(int argc, char **argv) {
     CHECK(argc == 2);
-    const XrXirCompileContext context = *effects_source_owner(UINT64_C(64)*1024*1024, UINT64_C(128000000));
+    const XrXirCompileContext context = *effects_source_owner();
     XrXirArtifact *checked = counter_linked(&context); XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked); checked = NULL;

@@ -31,7 +31,7 @@ static void panic_mixed_free(void *pointer) {
     xr_compile_resources_free(owner); ++releases;
 }
 static void panic_mixed(bool root_native) {
-    const XrXirCompileContext context = *effects_source_owner(UINT64_C(64)*1024*1024, UINT64_C(128000000));
+    const XrXirCompileContext context = *effects_source_owner();
     XrXirArtifact *checked = NULL, *closed = NULL;
     CHECK(xr_xir_compile_checked_read(&context, panic_source_program.packet.bytes, panic_source_program.packet.length,
         &checked, NULL) == XR_XIR_OK);
@@ -70,7 +70,7 @@ static void panic_mixed(bool root_native) {
 int main(void) {
     panic_mixed(false); CHECK(releases == 1);
     panic_mixed(true); CHECK(releases == 2);
-    const XrXirCompileContext bad_context = *effects_source_owner(UINT64_C(16)*1024*1024, UINT64_C(64000000));
+    const XrXirCompileContext bad_context = *effects_source_owner();
     XrXirProgram *program = NULL;
     CHECK(xr_xir_compile_program_seal(&bad_context, &panic_bad_program, &program) == XR_XIR_OK);
     panic_sticky(program, panic_bad_program.declarations->entry_function);

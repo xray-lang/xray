@@ -65,7 +65,7 @@ static void terminal_owned_identity(const XrXirCompileContext *context) {
 int main(int argc, char **argv) {
     CHECK(argc == 2 || (argc == 3 && !strcmp(argv[2], "--owned-project")));
     const bool owned_project = argc == 3;
-    const XrXirCompileContext context = *effects_source_owner(UINT64_C(64)*1024*1024, UINT64_C(128000000));
+    const XrXirCompileContext context = *effects_source_owner();
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILE_RESOURCE_OK && session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,XR_TERMINAL_FIXTURES};

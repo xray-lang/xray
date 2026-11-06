@@ -50,7 +50,7 @@ static void publication_code_free(void *pointer) {
  * The independent packet copy dies before lowering; the VM owns its own image. */
 static PublicationInput publication_input(unsigned backend) {
     PublicationInput input = {0};
-    input.context = *effects_source_owner(UINT64_C(64)*1024*1024, UINT64_C(128000000));
+    input.context = *effects_source_owner();
     size_t length = library_counter_fixture_program.proof.length; void *packet = NULL;
     CHECK(xr_compile_resources_alloc(input.context.resources, length, &packet) == XR_COMPILE_RESOURCE_OK);
     CHECK(xr_compile_resources_work(input.context.resources, length) == XR_COMPILE_RESOURCE_OK);

@@ -95,7 +95,7 @@ static bool atomic_runtime_images(AtomicSourcePrepare *s,AtomicRuntimeFixture *f
 }
 static bool atomic_runtime_prepare(AtomicRuntimeFixture *f,unsigned backend,bool source_chain,XrXirProgram **program) {
     CHECK(backend<4 && !effects_compile_live && !runtime_live);f->backend=backend;
-    AtomicSourcePrepare s={.context=effects_source_owner(67108864,128000000)};f->resources=s.context->resources;
+    AtomicSourcePrepare s={.context=effects_source_owner()};f->resources=s.context->resources;
     bool complete=false;
     if(source_chain) {
         if(!atomic_source_prepare(&s))goto done;
