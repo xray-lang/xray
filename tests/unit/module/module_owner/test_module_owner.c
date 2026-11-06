@@ -66,11 +66,11 @@ static void make_packet(void) {
     const XrXirInstruction init_ops[] = {{XR_XIR_RETURN,XR_XIR_UNIT,{0,0},{0,0},0,{0,0}}};
     const XrXirInstruction ops[] = {{XR_XIR_CONST_INT,XR_XIR_I64,{0,0},{0,0},42,{0,0}}, {XR_XIR_RETURN,XR_XIR_UNIT,{0,0},{0,0},0,{0,0}}};
     const XrXirBlock init_block = {0,1,0,0}, block = {0,2,0,0};
-    const XrXirFunction functions[] = {{"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,init_ops,1,NULL,0,XR_XIR_NEVER},
-        {"answer",6,NULL,0,XR_XIR_I64,&block,1,ops,2,NULL,0,XR_XIR_NEVER}};
+    const XrXirFunction functions[] = {{"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,init_ops,1,NULL,0,.error_type=XR_XIR_NEVER},
+        {"answer",6,NULL,0,XR_XIR_I64,&block,1,ops,2,NULL,0,.error_type=XR_XIR_NEVER}};
     const char *canonical = "stdlib-module-v1:module=2:io:path=12:io/output.xr";
     XrXirSourceModule source = {canonical,(uint32_t)strlen(canonical),NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
-    const XrXirFunctionIdentity names[] = {{0,0,0,0,0,0,0, 0, 0},{0,1,0,0,0,0,0, 0, 0}};
+    const XrXirFunctionIdentity names[] = {{0},{.exported=1}};
     XrXirDeclarations declarations = {&source,1,names,NULL,0,NULL,0,UINT32_MAX,UINT32_MAX,NULL};
     XrXirModule module = {XR_XIR_BUILT,functions,2,&declarations,NULL,NULL,NULL,XR_XIR_LIBRARY,NULL};
     XrXirArtifact *artifact = NULL; XrXirCheckedPacket packet = {0};
