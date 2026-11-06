@@ -90,7 +90,7 @@ static void capacity_vm_paths(CapacityCompile *run) {
         CHECK(status==XR_XIR_CALL_BOUNDS&&failure.panic.detail.code==430&&
             failure.panic.detail.index==1&&failure.panic.detail.length==1);
         CHECK(!failure.value.type&&!failure.value.reserved&&!failure.value.payload);
-        capacity_failed_output(instances[i]);
+        capacity_failed_output(instances[i],XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_free(instances[i])==XR_XIR_CALL_READY);
     }
     CHECK(!runtime_live&&!runtime_bytes&&capacity_stats(&run->context).held_bytes==baseline);

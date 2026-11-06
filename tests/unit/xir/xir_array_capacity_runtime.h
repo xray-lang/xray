@@ -25,8 +25,10 @@ static int64_t capacity_array_state(const XrXirValue *value) {
     }
     xr_xir_domain_drop(reader);return cap;
 }
+static bool capacity_transaction_started;
 static XrXirCallStatus capacity_transaction(CapacityCompile *run,XrXirInstance *instance,const char *name) {
     XrXirCallStatus status=xr_xir_instance_start(instance,capacity_find(run->module,name),NULL,0);
+    capacity_transaction_started=status==XR_XIR_CALL_READY;
     while(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status;
     return status;
 }
@@ -42,12 +44,15 @@ static void capacity_transaction_state(CapacityCompile *run,XrXirInstance *first
     value=capacity_run(second,capacity_find(run->module,"saved"));
     CHECK(capacity_array_state(&value)==old_cap);xr_xir_value_drop(&value);
 }
-static void capacity_failed_output(XrXirInstance *instance) {
+static void capacity_failed_output(XrXirInstance *instance,XrXirCallStatus completion) {
+    CHECK(xr_xir_task_executor_completion_status(instance->executor)==completion);
     XrXirValue output={0};
-    CHECK(xr_xir_instance_take_result(instance,&output)==XR_XIR_CALL_BAD_STATE);
+    CHECK(xr_xir_instance_take_result(instance,&output)==
+        (completion==XR_XIR_CALL_READY?XR_XIR_CALL_BAD_STATE:completion));
     CHECK(!output.type&&!output.reserved&&!output.payload);
     output=(XrXirValue){XR_XIR_I64,0,77};const XrXirValue before=output;
-    CHECK(xr_xir_instance_take_result(instance,&output)==XR_XIR_CALL_BAD_ARGUMENT);
+    CHECK(xr_xir_instance_take_result(instance,&output)==
+        (completion==XR_XIR_CALL_READY?XR_XIR_CALL_BAD_ARGUMENT:completion));
     CHECK(!memcmp(&output,&before,sizeof(output)));
     XrXirCallResult failure={0},original=failure;
     CHECK(xr_xir_instance_copy_failure(instance,&failure)==XR_XIR_CALL_BAD_STATE);
@@ -85,7 +90,7 @@ static void capacity_transaction_census(CapacityCompile *run,const char *name) {
         CHECK(charged.requested_bytes>fee_before.requested_bytes||charged.requested_call_bytes>fee_before.requested_call_bytes);
         const unsigned publications=capacity_publications;
         if(publications)++post;else ++pre;
-        capacity_failed_output(first);
+        capacity_failed_output(first,capacity_transaction_started?XR_XIR_CALL_OOM:XR_XIR_CALL_READY);
         capacity_transaction_state(run,first,second,&alias,old_cap,publications);
         const XrXirDomainBudgetStats observed=xr_xir_domain_budget_stats(domain);
         CHECK(observed.requested_bytes>=charged.requested_bytes&&observed.requested_call_bytes>=charged.requested_call_bytes);
@@ -124,7 +129,8 @@ static void capacity_runtime_limits(CapacityCompile *run) {
         XrXirCallStatus status=capacity_transaction(run,first,"committed");
         first->domain->limit=limit;if(kind)atomic_store(references,original);
         CHECK(status==XR_XIR_CALL_LIMIT&&!capacity_publications);
-        capacity_failed_output(first);capacity_transaction_state(run,first,second,&alias,old_cap,0);
+        capacity_failed_output(first,capacity_transaction_started?XR_XIR_CALL_LIMIT:XR_XIR_CALL_READY);
+        capacity_transaction_state(run,first,second,&alias,old_cap,0);
         xr_xir_value_drop(&alias);
         CHECK(xr_xir_instance_free(first)==XR_XIR_CALL_READY&&xr_xir_instance_free(second)==XR_XIR_CALL_READY);
         CHECK(!runtime_live&&!runtime_bytes);
@@ -220,7 +226,7 @@ static void capacity_transaction_cancel(CapacityCompile *run,const char *name) {
         CHECK(xr_xir_instance_poll_bounded(first,UINT64_MAX).outcome.status==XR_XIR_CALL_CANCELLED);
         late+=runtime_attempts;CHECK(capacity_publications==publications);
         if(publications)++post;else ++pre;
-        capacity_failed_output(first);capacity_transaction_state(run,first,second,&alias,old_cap,publications);
+        capacity_failed_output(first,XR_XIR_CALL_READY);capacity_transaction_state(run,first,second,&alias,old_cap,publications);
         xr_xir_value_drop(&alias);
         CHECK(xr_xir_instance_free(first)==XR_XIR_CALL_READY&&xr_xir_instance_free(second)==XR_XIR_CALL_READY);
         CHECK(!runtime_live&&!runtime_bytes);
