@@ -31,7 +31,7 @@ static XrXirOutputStatus sdk_consumer_bytes(void *context,XrXirOutputStream stre
 }
 int main(void) {
     const XrXirProgramSpec *spec=&XIR_SDK_PROGRAM_SYMBOL;XrXirProgram *program=NULL;
-    const XrCompileResourceLimits limits={16777216,16777216,64000000};
+    const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,16777216,true};
     XrXirCompileContext context={0};context.limits=xr_xir_compile_default_limits();
     if (xr_compile_resources_new(&limits,&context.resources)!=XR_COMPILE_RESOURCE_OK) return 1;
     XrXirStatus sealed=xr_xir_compile_program_seal(&context,spec,&program);
