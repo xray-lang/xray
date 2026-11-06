@@ -34,10 +34,11 @@ static void entries_suspend(EntriesCompile *run) {
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY&&!runtime_live&&!runtime_bytes);
     for(size_t failure=0;failure<sites;++failure) {
         instance=entries_ready(run);runtime_attempts=0;runtime_fail_at=failure;
+        const uint64_t previous_epoch=instance_current(instance)->epoch;
         XrXirCallStatus status=xr_xir_instance_start(instance,function,NULL,0);
         status=entries_drive_suspend(instance,status);
         CHECK(status==XR_XIR_CALL_OOM&&runtime_attempts>failure);runtime_fail_at=SIZE_MAX;
-        value=(XrXirValue){0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_BAD_STATE&&!value.type&&!value.payload);
+        value=(XrXirValue){0};(void)array_failure_take(instance,previous_epoch,XR_XIR_CALL_OOM,&value,"entries suspended",failure);
         value=entries_run(instance,entries_find(run->module,"saved"));entries_numbers(&value,expected,2,false);xr_xir_value_drop(&value);
         value=entries_run(instance,entries_find(run->module,"count"));CHECK(value.payload==0||value.payload==1);xr_xir_value_drop(&value);
         CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY&&!runtime_live&&!runtime_bytes);

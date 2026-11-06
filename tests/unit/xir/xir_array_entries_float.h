@@ -51,11 +51,12 @@ static void entries_float_bits(EntriesCompile *run) {
             CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY&&runtime_live==live&&runtime_bytes==bytes);
             for(size_t failure=0;failure<sites;++failure) {
                 instance=entries_ready(run);runtime_attempts=0;runtime_fail_at=failure;
+                const uint64_t previous_epoch=instance_current(instance)->epoch;
                 XrXirCallStatus status=xr_xir_instance_start(instance,function,&array,1);
                 while(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status;
                 CHECK(status==XR_XIR_CALL_OOM&&runtime_attempts>failure);runtime_fail_at=SIZE_MAX;
-                result=(XrXirValue){0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_BAD_STATE&&!result.type&&!result.payload);
-                CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY&&runtime_live==live&&runtime_bytes==bytes);
+                result=(XrXirValue){0};const bool attached_failure=array_failure_take(instance,previous_epoch,XR_XIR_CALL_OOM,&result,"entries float",failure);
+                array_failure_free(instance,attached_failure,XR_XIR_CALL_OOM,live,bytes,"entries float");
             }
             CHECK(xr_xir_array_len(&array,&admission,&length)==XR_XIR_VALUE_OK&&length==1);
             xr_xir_value_drop(&array);xr_xir_domain_drop(domain);CHECK(!runtime_live&&!runtime_bytes);

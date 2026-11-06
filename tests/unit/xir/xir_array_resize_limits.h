@@ -15,10 +15,13 @@ static void resize_runtime_limits(ResizeCompile *run) {
     for(unsigned n=0;n<2;++n) {
         XrXirInstance *instance=resize_open(run);
         XrXirValue alias=resize_run(instance,resize_find(run->module,"saved"));
+        const uint64_t previous_epoch=instance_current(instance)->epoch;
         CHECK(xr_xir_instance_start(instance,resize_find(run->module,n?"maximum":"negative"),NULL,0)==XR_XIR_CALL_READY);
         XrXirCallStatus status=xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status;
         CHECK(status==(n?XR_XIR_CALL_LIMIT:XR_XIR_CALL_NUMERIC_RANGE));
-        XrXirValue absent={0};CHECK(xr_xir_instance_take_result(instance,&absent)==XR_XIR_CALL_BAD_STATE&&!absent.type&&!absent.payload);
+        XrXirValue absent={0};
+        if(n) (void)array_failure_take(instance,previous_epoch,XR_XIR_CALL_LIMIT,&absent,"resize maximum",n);
+        else CHECK(xr_xir_instance_take_result(instance,&absent)==XR_XIR_CALL_BAD_STATE&&!absent.type&&!absent.payload);
         resize_state(instance,run,false,false);
         if(!n){XrXirValue trace=resize_run(instance,resize_find(run->module,"currentTrace"));CHECK(trace.payload==12);xr_xir_value_drop(&trace);}
         static const int64_t old[]={1,INT64_MIN,3};resize_array(&alias,old,3,true,1);xr_xir_value_drop(&alias);

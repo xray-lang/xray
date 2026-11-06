@@ -12,6 +12,9 @@
 #ifndef XIR_ARRAY_ENTRIES_RUNTIME_H
 #define XIR_ARRAY_ENTRIES_RUNTIME_H
 #include "xir_array_entries_initialization.h"
+#if !defined(XR_ENTRIES_MATRIX)
+#include "xir_array_fault_lifecycle.h"
+#endif
 static XrXirInstance *entries_ready(EntriesCompile *run) {
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     config.value_limit=1048576;XrXirInstance *instance=NULL;
@@ -55,10 +58,11 @@ static void entries_faults(EntriesCompile *run,const char *name) {
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY&&runtime_live==live&&runtime_bytes==bytes);
     for(size_t failure=0;failure<sites;++failure) {
         instance=entries_ready(run);runtime_attempts=0;runtime_fail_at=failure;
+        const uint64_t previous_epoch=instance_current(instance)->epoch;
         XrXirCallStatus status=xr_xir_instance_start(instance,function,NULL,0);
         while(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status;
         CHECK(status==XR_XIR_CALL_OOM&&runtime_attempts>failure);runtime_fail_at=SIZE_MAX;
-        value=(XrXirValue){0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_BAD_STATE&&!value.type&&!value.payload);
+        value=(XrXirValue){0};(void)array_failure_take(instance,previous_epoch,XR_XIR_CALL_OOM,&value,name,failure);
         static const int64_t original[]={7,9};
         value=entries_run(instance,entries_find(run->module,"saved"));entries_numbers(&value,original,2,false);xr_xir_value_drop(&value);
         value=entries_run(instance,entries_find(run->module,"count"));CHECK(value.payload==0||value.payload==1);xr_xir_value_drop(&value);
@@ -75,12 +79,13 @@ static void entries_runtime_limits(EntriesCompile *run) {
         _Atomic uint32_t *refs=n==1?&backing->references:n==2?&instance->domain->references:&run->program->arena->references;
         uint32_t original=atomic_load(refs);uint64_t limit=instance->domain->limit;
         if(!n)instance->domain->limit=instance->domain->stats.live_bytes;else atomic_store(refs,UINT32_MAX);
+        const uint64_t previous_epoch=instance_current(instance)->epoch;
         XrXirCallStatus status=xr_xir_instance_start(instance,entries_find(run->module,"result"),NULL,0);
         if(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status;
         instance->domain->limit=limit;if(n)atomic_store(refs,original);CHECK(status==XR_XIR_CALL_LIMIT);
-        XrXirValue absent={0};CHECK(xr_xir_instance_take_result(instance,&absent)==XR_XIR_CALL_BAD_STATE&&!absent.type&&!absent.payload);
+        XrXirValue absent={0};const bool attached_failure=array_failure_take(instance,previous_epoch,XR_XIR_CALL_LIMIT,&absent,"entries retain",n);
         static const int64_t expected[]={7,9};entries_numbers(&alias,expected,2,false);xr_xir_value_drop(&alias);
-        CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY&&runtime_live==live&&runtime_bytes==bytes);
+        array_failure_free(instance,attached_failure,XR_XIR_CALL_LIMIT,live,bytes,"entries retain");
     }
     puts("entries domain/backing/domainref/arenaref LIMIT snapshot unchanged physical0");
 }

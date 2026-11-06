@@ -11,6 +11,7 @@
  */
 #ifndef XIR_ARRAY_RESIZE_CASES_H
 #define XIR_ARRAY_RESIZE_CASES_H
+#include "xir_array_fault_lifecycle.h"
 static XrXirInstance *resize_open(ResizeCompile *run) {
     XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     config.value_limit = 1048576;
@@ -80,11 +81,12 @@ static void resize_extra_faults(ResizeCompile *run) {
         xr_xir_value_drop(&result);CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY&&!runtime_live&&!runtime_bytes);
         for(size_t failure=0;failure<sites;++failure) {
             instance=resize_open(run);runtime_attempts=0;runtime_fail_at=failure;
+            const uint64_t previous_epoch=instance_current(instance)->epoch;
             XrXirCallStatus status=xr_xir_instance_start(instance,function,NULL,0);
             while(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status;
             CHECK(runtime_attempts>failure&&status==XR_XIR_CALL_OOM);runtime_fail_at=SIZE_MAX;
-            result=(XrXirValue){0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_BAD_STATE&&!result.type&&!result.payload);
-            CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY&&!runtime_live&&!runtime_bytes);
+            result=(XrXirValue){0};const bool attached_failure=array_failure_take(instance,previous_epoch,XR_XIR_CALL_OOM,&result,names[n],failure);
+            array_failure_free(instance,attached_failure,XR_XIR_CALL_OOM,0,0,names[n]);
         }
         printf("resize %s runtimeOOM%zu physical0\n",names[n],sites);
     }
@@ -131,6 +133,7 @@ static void resize_runtime_faults(ResizeCompile *run,bool shrink) {
     for(size_t failure=0;failure<line.sites;++failure) {
         XrXirInstance *instance=resize_open(run);XrXirValue alias=resize_run(instance,resize_find(run->module,"saved"));
         runtime_attempts=0;runtime_fail_at=failure;
+        const uint64_t previous_epoch=instance_current(instance)->epoch;
         XrXirCallStatus status=xr_xir_instance_start(instance,function,NULL,0);
         size_t tick=0,failed=runtime_attempts>failure?0:SIZE_MAX;
         while(status==XR_XIR_CALL_READY) {
@@ -140,7 +143,7 @@ static void resize_runtime_faults(ResizeCompile *run,bool shrink) {
         }
         CHECK(runtime_attempts>failure&&status==XR_XIR_CALL_OOM&&failed==line.allocation_ticks[failure]);
         runtime_fail_at=SIZE_MAX;XrXirValue absent={0};
-        CHECK(xr_xir_instance_take_result(instance,&absent)==XR_XIR_CALL_BAD_STATE&&!absent.type&&!absent.payload);
+        (void)array_failure_take(instance,previous_epoch,XR_XIR_CALL_OOM,&absent,shrink?"resize shrink":"resize grow",failure);
         bool committed=failed>line.commit;resize_state(instance,run,shrink,committed);
         if(committed)++after;else ++before;
         static const int64_t old[]={1,INT64_MIN,3};resize_array(&alias,old,3,true,1);xr_xir_value_drop(&alias);
