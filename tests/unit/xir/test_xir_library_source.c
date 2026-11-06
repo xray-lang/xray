@@ -43,11 +43,11 @@ static void catalog_thresholds(const XrXirLibraryInput *input) {
     library_compile_operation_cases("Library catalog exact/minus1",library_catalog_operation,&fixture);
 }
 #include "xir_library_reader_cases.h"
+#include "xir_library_string_catalog_cases.h"
 #include "xir_defaults_wire_cases.h"
 #include "xir_library_map_cases.h"
 #include "xir_library_goldens.h"
 #include "xir_library_source_budget_cases.h"
-#include "xir_library_string_catalog_cases.h"
 static void conflict_text(const char *name,const char *text) {
     char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%s",XR_SOURCE_FIXTURES,name)>0);
     FILE *file=fopen(path,"wb");CHECK(file);size_t n=strlen(text);CHECK(fwrite(text,1,n,file)==n&&!fclose(file));

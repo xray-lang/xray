@@ -151,7 +151,7 @@ static void string_catalog_bad_inputs(void) {
         string_catalog_input("beta.xr",string_fixtures[1].packet.bytes,string_fixtures[1].packet.length,(XrXirLibraryModuleInput[1]){0})};
     string_catalog_expect(NULL,2,XR_XIR_BAD_STRUCTURE);string_catalog_expect(pair,0,XR_XIR_BAD_STRUCTURE);
     XrXirLibraryCatalog *catalog=NULL;
-    CHECK(xr_xir_compile_library_catalog_new_v2(library_context,(const XrXirLibraryInput *)(uintptr_t)1,SIZE_MAX,&catalog)==XR_XIR_OVERFLOW&&!catalog);
+    CHECK(xr_xir_compile_library_catalog_new_v2(library_context,(const XrXirLibraryInput *)(uintptr_t)1,SIZE_MAX,&catalog)==XR_XIR_BUDGET&&!catalog);
     XrXirLibraryInput duplicate[]={pair[0],pair[0]};
     string_catalog_expect(duplicate,2,XR_XIR_BAD_STRUCTURE);
     XrXirLibraryModuleInput foreign_binding=*duplicate[1].modules;
