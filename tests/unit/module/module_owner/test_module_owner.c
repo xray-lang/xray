@@ -227,17 +227,18 @@ static void topology_retry(void) {
         size_t query_attempts = attempts;
         found = 123; owns = true;
         CHECK(xr_compile_module_graph_find(graph,"absent",&found) == XR_MODULE_OK && found == -1);
-        CHECK(xr_compile_module_graph_find_source(graph,main_path,&found) == XR_MODULE_OK && found == 0);
+        CHECK(xr_compile_module_graph_find_source(graph,graph->specs[0].source_path,&found) == XR_MODULE_OK && found == 0);
         CHECK(xr_compile_module_graph_owns_top_level_decl(graph,&graph->specs[0],graph->specs[0].ast,&owns) == XR_MODULE_OK && !owns);
-        XrModuleGraph *next = (void *)&canary;
-        CHECK(xr_compile_module_graph_new(owner,session,resolver,&next) == XR_MODULE_INVALID && next == (void *)&canary);
         CHECK(attempts == query_attempts);
+        XrModuleGraph *next = (void *)&canary;fail_at=attempts;
+        CHECK(xr_compile_module_graph_new(owner,session,resolver,&next) == XR_MODULE_OUT_OF_MEMORY && next == (void *)&canary);
+        CHECK(attempts == query_attempts+1);fail_at=SIZE_MAX;
         xr_compile_resources_release(owner);
         CHECK(graph->specs[0].ast->type == AST_PROGRAM && !strcmp(graph->specs[1].logical_path,"dep.xr"));
         xr_compile_module_graph_free(graph); xr_compile_module_resolver_free(resolver); xr_compile_session_free(session);
         CHECK(!physical_live && !block_count);
     }
-    puts("module: topology retry OOM preserves order, lookup outputs, occupied output rejection and lifetime PASS");
+    puts("module: topology retry OOM preserves order, lookup outputs, occupied output preserved on actual OOM and lifetime PASS");
 }
 static void many_modules(void) {
     char path[4096]; CHECK(snprintf(path,sizeof(path),"%s/many.xr",root_path) > 0);

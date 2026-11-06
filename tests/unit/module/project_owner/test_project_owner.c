@@ -159,7 +159,7 @@ static XrOsIoStatus forwarded_alloc(void *context, size_t bytes, void **output) 
 static XrXirLibraryCatalog *real_catalog(const XrXirCompileContext *context) {
     const XrXirInstruction ops[]={{XR_XIR_RETURN,XR_XIR_UNIT,{0,0},{0,0},0,{0,0}}};
     const XrXirBlock block={0,1,0,0};
-    const XrXirFunction function={"init",4,NULL,0,XR_XIR_UNIT,&block,1,ops,1,NULL,0};
+    const XrXirFunction function={"init",4,NULL,0,XR_XIR_UNIT,&block,1,ops,1,NULL,0,.error_type=XR_XIR_NEVER};
     const char canonical[]="module-id-v1:kind=6:script:namespace=0::path=6:lib.xr";
     XrXirSourceModule source={canonical,sizeof(canonical)-1,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     const XrXirFunctionIdentity name={0,0,0,0,0,0,0, 0, 0};
