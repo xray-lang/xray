@@ -453,13 +453,17 @@ static void constructed_contracts(void) {
     CHECK(xr_xir_compile_checked_write(decoded, &second, NULL) == XR_XIR_OK);
     CHECK(packet.length == second.length && !memcmp(packet.bytes,second.bytes,packet.length));
     xr_xir_compile_checked_packet_free(&second);
-    /* The final CELL node has a fixed kind/span/element wire payload. */
-    CHECK(wire32(packet.bytes+packet.length-36) == XR_XIR_TYPE_CELL);
-    put32(packet.bytes+packet.length-36,4); digest_packet(&packet);
+    const uint32_t cell[]={XR_XIR_TYPE_CELL,0,265};
+    size_t cell_offset=packet_find_fields(&packet,cell,sizeof(cell)/sizeof(*cell));
+    put32(packet.bytes+cell_offset,4); digest_packet(&packet);
     rejected(packet.bytes,packet.length);
-    put32(packet.bytes+packet.length-36,XR_XIR_TYPE_CELL);
-    put32(packet.bytes+packet.length-28,267); digest_packet(&packet);
+    put32(packet.bytes+cell_offset,XR_XIR_TYPE_CELL);
+    put32(packet.bytes+cell_offset+8,267); digest_packet(&packet);
     rejected(packet.bytes,packet.length);
+    put32(packet.bytes+cell_offset+8,265);digest_packet(&packet);
+    XrXirArtifact *neighbor=NULL;
+    CHECK(xr_xir_compile_checked_read(suite_context,packet.bytes,packet.length,&neighbor,NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(neighbor);neighbor=NULL;
     xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(decoded, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);decoded=NULL;
