@@ -23,9 +23,9 @@ typedef struct CacheTestOwner {
     XrCompileResourceStats baseline;
 } CacheTestOwner;
 
-/* The test caller owns this finite ledger; the cache retains its shared state. */
+/* The caller owns compiler memory; the cache retains its shared state. */
 static bool cache_test_open(CacheTestOwner *owner) {
-    const XrCompileResourceLimits limits={1048576,1048576,1048576};
+    const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,true};
     XrCompileResourceStatus status=xr_compile_resources_new(&limits,&owner->resources);
     if(status==XR_COMPILE_RESOURCE_OK)
         status=xr_compile_resources_stats(owner->resources,&owner->baseline);
@@ -46,8 +46,8 @@ static bool cache_test_close(CacheTestOwner *owner) {
     xr_owned_source_cache_close(owner->cache);owner->cache=NULL;
     xr_compile_state_release(owner->state);owner->state=NULL;
     ok=ok && xr_compile_resources_stats(owner->resources,&after)==XR_COMPILE_RESOURCE_OK;
-    ok=ok && after.live_bytes==owner->baseline.live_bytes &&
-        after.allocated_bytes==before.allocated_bytes && after.work==before.work &&
+    ok=ok && after.held_bytes==owner->baseline.held_bytes &&
+        after.allocated_bytes==before.allocated_bytes &&
         after.peak_bytes==before.peak_bytes && after.allocation_count==before.allocation_count;
     xr_compile_resources_release(owner->resources);owner->resources=NULL;
     return ok;

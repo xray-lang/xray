@@ -42,16 +42,18 @@ static const XrModuleIdentityAuthority script={XR_MODULE_IDENTITY_MEMORY,"logica
 static const XrModuleIdentityAuthority prelude={XR_MODULE_IDENTITY_STDLIB,"prelude",NULL};
 static const char ordering[]="export enum Ordering { Relaxed, Acquire, Release, AcquireRelease, SeqCst }";
 static XrCompileResourceLimits limits(void) {
-    return (XrCompileResourceLimits){UINT64_C(32)<<20,UINT64_C(8)<<20,UINT64_C(64)<<20};
+    return (XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true};
 }
 static XrModuleStatus probe(XrCompileResourceLimits caps,unsigned mode,XrCompileResourceStats *stats) {
     XrCompileResources *resources=NULL;XrCompilerSession *session=NULL;
     XrModuleResolver *resolver=NULL;XrModuleGraph *graph=NULL;
     XrCompileResourceStatus opened=xr_compile_resources_new(&caps,&resources);
-    XrModuleStatus status=module_resource_status(opened);
+    XrModuleStatus status=xr_module_status_from_resource(opened);
+    XrCompileResourceStats baseline={0};
+    if(resources)CHECK(xr_compile_resources_stats(resources,&baseline)==XR_COMPILE_RESOURCE_OK);
     if(status==XR_MODULE_OK) {
         XrCompileResourceStatus ss=xr_compile_session_new(resources,&session);
-        status=ss==XR_COMPILE_RESOURCE_OK?XR_MODULE_OK:ss==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_MODULE_OUT_OF_MEMORY:XR_MODULE_BUDGET;
+        status=xr_module_status_from_resource(ss);
     }
     if(status==XR_MODULE_OK)status=xr_compile_module_resolver_new(resources,&(XrModuleResolverConfig){0},&resolver);
     if(status==XR_MODULE_OK)status=xr_compile_module_graph_new(resources,session,resolver,&graph);
@@ -98,7 +100,7 @@ static XrModuleStatus probe(XrCompileResourceLimits caps,unsigned mode,XrCompile
     }
     if(stats && resources)CHECK(xr_compile_resources_stats(resources,stats)==XR_COMPILE_RESOURCE_OK);
     xr_compile_module_graph_free(graph);xr_compile_module_resolver_free(resolver);xr_compile_session_free(session);
-    if(resources) {XrCompileResourceStats end={0};XrCompileResourceStatus es=xr_compile_resources_stats(resources,&end);if(es!=XR_COMPILE_RESOURCE_OK || end.live_bytes!=sizeof(XrCompileResources))fprintf(stderr,"cleanup status=%d module=%d mode=%u fail=%zu attempts=%zu live=%llu blocks=%zu\n",(int)es,(int)status,mode,fail_at,attempts,(unsigned long long)end.live_bytes,live);CHECK(es==XR_COMPILE_RESOURCE_OK && end.live_bytes==sizeof(XrCompileResources));}
+    if(resources) {XrCompileResourceStats end={0};XrCompileResourceStatus es=xr_compile_resources_stats(resources,&end);if(es!=XR_COMPILE_RESOURCE_OK || end.held_bytes!=baseline.held_bytes)fprintf(stderr,"cleanup status=%d module=%d mode=%u fail=%zu attempts=%zu live=%llu blocks=%zu\n",(int)es,(int)status,mode,fail_at,attempts,(unsigned long long)end.held_bytes,live);CHECK(es==XR_COMPILE_RESOURCE_OK && end.held_bytes==baseline.held_bytes);}
     xr_compile_resources_release(resources);CHECK(!live && !live_bytes);return status;
 }
 int main(void) {
@@ -109,14 +111,11 @@ int main(void) {
     for(size_t i=0;i<sites;++i) {
         attempts=0;fail_at=i;CHECK(probe(limits(),0,NULL)==XR_MODULE_OUT_OF_MEMORY && attempts>i);fail_at=SIZE_MAX;
     }
-    for(unsigned axis=0;axis<3;++axis) {
-        XrCompileResourceLimits exact=limits();
-        if(!axis)exact.allocated_bytes=stats.allocated_bytes;else if(axis==1)exact.live_bytes=stats.peak_bytes;else exact.work=stats.work;
-        CHECK(probe(exact,0,NULL)==XR_MODULE_OK);
-        if(!axis)--exact.allocated_bytes;else if(axis==1)--exact.live_bytes;else --exact.work;
-        CHECK(probe(exact,0,NULL)==XR_MODULE_BUDGET);
-    }
-    printf("logical graph include: actual OOM=%zu allocated=%llu peak=%llu work=%llu 3 axes physical=0\n",sites,
-        (unsigned long long)stats.allocated_bytes,(unsigned long long)stats.peak_bytes,(unsigned long long)stats.work);
+    XrCompileResourceLimits exact={XR_COMPILE_MEMORY_FINITE,stats.peak_bytes,true};
+    CHECK(probe(exact,0,NULL)==XR_MODULE_OK);
+    --exact.memory_limit;
+    CHECK(probe(exact,0,NULL)==XR_MODULE_MEMORY_LIMIT);
+    printf("logical graph include: actual OOM=%zu allocated=%llu peak=%llu held exact/minus physical=0\n",sites,
+        (unsigned long long)stats.allocated_bytes,(unsigned long long)stats.peak_bytes);
     return 0;
 }
