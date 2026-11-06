@@ -30,7 +30,7 @@ foreach(state_flow IN ITEMS source catalog)
     endif()
     set(state_generated ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_library_state_unit_bool_${state_flow}.c)
     add_custom_command(OUTPUT ${state_generated}
-        COMMAND $<TARGET_FILE:test_xir_library_state_unit_bool_packet> ${state_checked} ${state_generated}
+        COMMAND $<TARGET_FILE:test_xir_library_state_unit_bool_packet> --write-c ${state_checked} ${state_generated}
         DEPENDS test_xir_library_state_unit_bool_packet ${state_checked}
         VERBATIM)
     add_test(NAME test_xir_library_state_unit_bool_${state_flow}_packet COMMAND test_xir_library_state_unit_bool_packet
