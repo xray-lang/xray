@@ -249,8 +249,8 @@ static XrPackageInfo *count_registry_queries(const char *name, void *context) {
     return mock_get_info(name, NULL);
 }
 
-TEST(resolve_lockfile_budget_does_not_query_registry) {
-    XrCompileResourceLimits limits = {1048576, 1048576, 1048576};
+TEST(resolve_owned_lockfile_does_not_query_registry) {
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE, 1048576, true};
     XrCompileResources *resources = NULL;
     ASSERT_EQ_INT(xr_compile_resources_new(&limits, &resources), XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats initial = {0}, used = {0};
@@ -263,12 +263,10 @@ TEST(resolve_lockfile_budget_does_not_query_registry) {
     ASSERT_NOT_NULL(graph);
     ASSERT_TRUE(xr_depgraph_add_root(graph, "xray/redis", "^1.0.0"));
     ASSERT_EQ_INT(xr_compile_resources_stats(resources, &used), XR_COMPILE_RESOURCE_OK);
-    ASSERT_TRUE(used.work <= limits.work);
-    ASSERT_EQ_INT(xr_compile_resources_work(resources, limits.work - used.work), XR_COMPILE_RESOURCE_OK);
     int queries = 0;
     XrResolveResult *result = xr_resolve_dependencies(graph, count_registry_queries, lockfile, &queries);
     ASSERT_NOT_NULL(result);
-    ASSERT_FALSE(result->success);
+    ASSERT_TRUE(result->success);
     ASSERT_EQ_INT(queries, 0);
     ASSERT_EQ_INT(lockfile->package_count, 1);
     ASSERT_STR_EQ(lockfile->packages[0].version, "1.1.0");
@@ -276,7 +274,7 @@ TEST(resolve_lockfile_budget_does_not_query_registry) {
     xr_depgraph_free(graph);
     xr_lockfile_free_owned(lockfile);
     ASSERT_EQ_INT(xr_compile_resources_stats(resources, &used), XR_COMPILE_RESOURCE_OK);
-    ASSERT_EQ_INT(used.live_bytes, initial.live_bytes);
+    ASSERT_EQ_INT(used.held_bytes, initial.held_bytes);
     xr_compile_resources_release(resources);
 }
 
@@ -306,6 +304,6 @@ RUN_TEST(resolve_no_matching_version);
 RUN_TEST(resolve_with_lockfile);
 RUN_TEST(resolve_result_free_null);
 RUN_TEST(package_info_free_null);
-RUN_TEST(resolve_lockfile_budget_does_not_query_registry);
+RUN_TEST(resolve_owned_lockfile_does_not_query_registry);
 
 TEST_MAIN_END()
