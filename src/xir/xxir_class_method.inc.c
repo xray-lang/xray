@@ -45,7 +45,8 @@ static XrXirStatus class_method_entry(const XirClassMethodRead *input,uint32_t e
 }
 static XrXirStatus class_method_override(const XirClassMethodRead *input,uint32_t derived,uint32_t base) {
     XirClassMethodSignature a={0},b={0};XrXirStatus status=class_method_entry(input,derived,&a);
-    if(status==XR_XIR_OK)status=class_method_entry(input,base,&b);if(status!=XR_XIR_OK)return status;
+    if(status==XR_XIR_OK)status=class_method_entry(input,base,&b);
+    if(status!=XR_XIR_OK)return status;
     const XirMetadataDomain *domain=input->domain;const XrXirFunctionIdentity *identity=domain->declarations->functions;
     if(!class_method_name(&a,&b) || a.parameter_count!=b.parameter_count || a.result!=b.result ||
         a.consume_parameter_count!=b.consume_parameter_count ||
@@ -59,7 +60,8 @@ static XrXirStatus class_method_override(const XirClassMethodRead *input,uint32_
 }
 XR_FUNC XrXirStatus xir_compile_class_method_select_read(const XirClassMethodRead *input,
     uint32_t slot,XrXirType actual,XirClassMethodTarget *output,XrCompileRequestControl *control) {
-    if(!output)return XR_XIR_BAD_STRUCTURE;*output=(XirClassMethodTarget){0};
+    if(!output)return XR_XIR_BAD_STRUCTURE;
+    *output=(XirClassMethodTarget){0};
     XrXirStatus status=xir_receive_poll(control);if(status!=XR_XIR_OK)return status;
     XirClassMethodSignature anchor={0};status=class_method_entry(input,slot,&anchor);if(status!=XR_XIR_OK)return status;
     const XirMetadataDomain *domain=input->domain;
@@ -100,7 +102,8 @@ XR_FUNC XrXirStatus xir_compile_class_method_candidates_read(const XirClassMetho
     if(!visit)return XR_XIR_BAD_STRUCTURE;
     XirClassMethodTarget initial={0};
     XrXirStatus status=xir_compile_class_method_select_read(input,slot,static_receiver,&initial,control);
-    if(status==XR_XIR_OK)status=visit(owner,&initial);if(status!=XR_XIR_OK)return status;
+    if(status==XR_XIR_OK)status=visit(owner,&initial);
+    if(status!=XR_XIR_OK)return status;
     const XirMetadataDomain *domain=input->domain;XirClassMethodSignature anchor={0};
     status=class_method_entry(input,slot,&anchor);if(status!=XR_XIR_OK)return status;
     uint32_t steps=0;
@@ -134,7 +137,8 @@ XR_FUNC XrXirStatus xir_compile_class_method_candidates(const XrXirModule *modul
 }
 XR_FUNC XrXirStatus xir_compile_class_method_site(const XrXirModule *module,
     uint32_t caller,uint32_t instruction,XrXirType actual_receiver,XirClassMethodTarget *output,XrCompileRequestControl *control) {
-    if(!output)return XR_XIR_BAD_STRUCTURE;*output=(XirClassMethodTarget){0};
+    if(!output)return XR_XIR_BAD_STRUCTURE;
+    *output=(XirClassMethodTarget){0};
     XrXirStatus status=xir_receive_poll(control);if(status!=XR_XIR_OK)return status;
     if(!module || !module->functions || caller>=module->function_count)return XR_XIR_BAD_STRUCTURE;
     const XrXirFunction *function=&module->functions[caller];

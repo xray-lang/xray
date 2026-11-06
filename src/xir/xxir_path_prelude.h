@@ -40,7 +40,8 @@ static inline bool xir_path_prelude_declaration(const XrXirNominalTable *table,u
             d->field_count,d->kind,d->variants,d->variant_count,d->flags,d->native,d->parent};
         if((d->field_count&&!d->fields)||(d->parameter_count&&!d->constraints))return false;
     } else {
-        if(!table->identities)return false;identity=table->identities[ordinal];
+        if(!table->identities)return false;
+        identity=table->identities[ordinal];
         if(identity.field_count&&!identity.fields)return false;
     }
     if(identity.kind!=XR_XIR_NOMINAL_CLASS||identity.exported!=1||identity.arity||
