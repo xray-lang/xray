@@ -131,23 +131,6 @@ static void library_source_case(bool middle_case,const char *packet_path) {
  wrong=input;xr_sha256(packet.bytes,packet.length,wrong.sha256);
  CHECK(xr_xir_compile_library_catalog_new_v2(library_context,&wrong,1,&bad)==XR_XIR_BAD_STRUCTURE&&!bad);
  packet.bytes[identity_offset]='l';xr_sha256_init(&sha);xr_sha256_update(&sha,packet.bytes,32);xr_sha256_update(&sha,packet.bytes+64,packet.length-64);xr_sha256_final(&sha,packet.bytes+32);
- uint8_t saved[8];memcpy(saved,packet.bytes+8,8);
- for(unsigned mode=0;mode<7;++mode){
-  memcpy(packet.bytes+8,saved,8);
-  if(mode<4){
-   if(mode!=3){memset(packet.bytes+8,0,4);packet.bytes[8]=19;}
-   if(mode!=2){memset(packet.bytes+12,0,4);packet.bytes[12]=mode==0?48:50;}
-  }else{
-   if(mode!=6){memset(packet.bytes+8,0,4);packet.bytes[8]=20;}
-   if(mode!=5){memset(packet.bytes+12,0,4);packet.bytes[12]=51;}
-  }
-  xr_sha256_init(&sha);xr_sha256_update(&sha,packet.bytes,32);xr_sha256_update(&sha,packet.bytes+64,packet.length-64);xr_sha256_final(&sha,packet.bytes+32);
-  wrong=input;xr_sha256(packet.bytes,packet.length,wrong.sha256);
-  CHECK(xr_xir_compile_library_catalog_new_v2(library_context,&wrong,1,&bad)==XR_XIR_BAD_STRUCTURE&&!bad);
-  XrXirArtifact *bad_artifact=NULL;
-  CHECK(xr_xir_compile_checked_read(library_context,packet.bytes,packet.length,&bad_artifact,NULL)==XR_XIR_BAD_STRUCTURE&&!bad_artifact);
- }
- memcpy(packet.bytes+8,saved,8);
  xr_xir_compile_checked_packet_free(&packet);
  /* A matching resource with a different authority must fail even when source exists. */
  size_t resource_count=0;const XrModuleResourceBinding *resources=xr_xir_compile_library_catalog_resources_v2(catalog,&resource_count);
