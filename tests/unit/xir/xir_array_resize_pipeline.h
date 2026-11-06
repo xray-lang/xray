@@ -13,6 +13,7 @@
 #define XIR_ARRAY_RESIZE_PIPELINE_H
 #include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_compile_memory.h"
+#include "shared/xnative_declaration.h"
 #include "base/xsha256.h"
 #ifndef XR_RESIZE_COMPONENT
 #define XR_RESIZE_COMPONENT "transaction"
@@ -128,16 +129,39 @@ static ResizeCompile resize_build(size_t failure, XrCompileResourceLimits limits
     }
     CHECK(xr_xir_compile_artifact_context(result.checked)->resources == run.context.resources);
     const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(result.snapshot);
+    const XrNativeTypeDeclaration *native_array = xr_native_declaration_by_name("Array");
+    CHECK(native_array && native_array->id == XR_NATIVE_DECLARATION_ARRAY);
+    const XrNativeMemberDeclaration *native_member = xr_native_declaration_member(native_array, "resize");
+    CHECK(native_member && native_member->operation == XR_NATIVE_OPERATION_ARRAY_RESIZE &&
+        native_member->parameter_count == 2 && !strcmp(native_member->signature, "(length: i64, fill: T) -> Array<T>"));
+    uint32_t array_parent = 0;
+    for (uint32_t d = 0; d < view->declaration_count; ++d) {
+        const XrXirSourceDeclaration *declaration = &view->declarations[d];
+        if (declaration->kind == XR_XIR_SOURCE_TYPE && declaration->native_identity == native_array->id &&
+            !strcmp(declaration->name, "Array")) { CHECK(!array_parent); array_parent = declaration->id; }
+    }
     unsigned resize_members = 0;
     for (uint32_t d = 0; d < view->declaration_count; ++d) {
         const XrXirSourceDeclaration *declaration = &view->declarations[d];
-        if (declaration->native_identity == 13) {
+        if (array_parent && declaration->kind == XR_XIR_SOURCE_MEMBER && declaration->parent == array_parent &&
+            declaration->native_identity == native_member->id) {
+            if (strcmp(declaration->name, "resize") || !(declaration->mutable) || declaration->parameter_count != 2 ||
+                !declaration->exported || declaration->type.known || !declaration->signature ||
+                strcmp(declaration->signature, "(length: i64, fill: T) -> Array<T>"))
+                fprintf(stderr, "resize member owner=Array parent%u id%u name=%s known%u type%u arity%u mutable%u exported%u signature=%s\n",
+                    array_parent, declaration->native_identity, declaration->name, declaration->type.known,
+                    declaration->type.type, declaration->parameter_count, declaration->mutable, declaration->exported,
+                    declaration->signature ? declaration->signature : "<null>");
+            CHECK(!strcmp(declaration->name, "resize"));
             CHECK(declaration->mutable && declaration->parameter_count == 2 && declaration->exported);
-            CHECK(!declaration->type.known && !strcmp(declaration->signature, "(length: i64, fill: T) -> Array<T>"));
+            CHECK(!declaration->type.known && declaration->signature &&
+                !strcmp(declaration->signature, "(length: i64, fill: T) -> Array<T>"));
             ++resize_members;
         }
     }
 #if defined(XR_RESIZE_MATRIX) && XR_RESIZE_MATRIX == 6
+    if (resize_members != 0) fprintf(stderr, "resize members actual%u expected0 owner%u member%u\n",
+        resize_members, array_parent, native_member->id);
     CHECK(resize_members == 0);
     unsigned ordinary = 0;
     for (uint32_t d = 0; d < view->declaration_count; ++d) {
@@ -152,6 +176,8 @@ static ResizeCompile resize_build(size_t failure, XrCompileResourceLimits limits
     }
     CHECK(ordinary == 1);
 #else
+    if (resize_members != 1) fprintf(stderr, "resize members actual%u expected1 owner%u member%u\n",
+        resize_members, array_parent, native_member->id);
     CHECK(resize_members == 1);
 #endif
     resize_profile_stage(&run, "source-check");

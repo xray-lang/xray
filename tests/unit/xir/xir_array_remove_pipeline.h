@@ -11,6 +11,7 @@
  */
 #include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_compile_memory.h"
+#include "shared/xnative_declaration.h"
 #ifndef XIR_ARRAY_REMOVE_PIPELINE_H
 #define XIR_ARRAY_REMOVE_PIPELINE_H
 #ifndef XR_REMOVE_COMPONENT
@@ -169,15 +170,37 @@ static RemoveCompile remove_build(size_t failure, XrCompileResourceLimits limits
     }
     CHECK(xr_xir_compile_artifact_context(result.checked)->resources == run.context.resources);
     const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(result.snapshot);
+    const XrNativeTypeDeclaration *native_array = xr_native_declaration_by_name("Array");
+    CHECK(native_array && native_array->id == XR_NATIVE_DECLARATION_ARRAY);
+    const XrNativeMemberDeclaration *native_pop = xr_native_declaration_member(native_array, "pop");
+    const XrNativeMemberDeclaration *native_shift = xr_native_declaration_member(native_array, "shift");
+    CHECK(native_pop && native_pop->operation == XR_NATIVE_OPERATION_ARRAY_POP && !native_pop->parameter_count &&
+        !strcmp(native_pop->signature, "() -> T?"));
+    CHECK(native_shift && native_shift->operation == XR_NATIVE_OPERATION_ARRAY_SHIFT && !native_shift->parameter_count &&
+        !strcmp(native_shift->signature, "() -> T?"));
+    uint32_t array_parent = 0;
+    for (uint32_t d = 0; d < view->declaration_count; ++d) {
+        const XrXirSourceDeclaration *declaration = &view->declarations[d];
+        if (declaration->kind == XR_XIR_SOURCE_TYPE && declaration->native_identity == native_array->id &&
+            !strcmp(declaration->name, "Array")) { CHECK(!array_parent); array_parent = declaration->id; }
+    }
     unsigned removal_members = 0;
     for (uint32_t d = 0; d < view->declaration_count; ++d) {
         const XrXirSourceDeclaration *declaration = &view->declarations[d];
-        if (declaration->native_identity == 8 || declaration->native_identity == 9) {
+        if (array_parent && declaration->kind == XR_XIR_SOURCE_MEMBER && declaration->parent == array_parent &&
+            (declaration->native_identity == native_pop->id || declaration->native_identity == native_shift->id)) {
+            CHECK(!strcmp(declaration->name, declaration->native_identity == native_pop->id ? "pop" : "shift"));
             CHECK(declaration->mutable && declaration->parameter_count == 0 && declaration->exported);
             CHECK(!declaration->type.known && !strcmp(declaration->signature, "() -> T?")); ++removal_members;
         }
     }
+#if defined(XR_REMOVE_MATRIX) && (XR_REMOVE_MATRIX == 6 || XR_REMOVE_MATRIX == 7)
+    CHECK(removal_members == 0);
+#else
+    if (removal_members != 2) fprintf(stderr, "remove members actual%u expected2 owner%u pop%u shift%u\n",
+        removal_members, array_parent, native_pop->id, native_shift->id);
     CHECK(removal_members == 2);
+#endif
 #if defined(XR_REMOVE_MATRIX) && XR_REMOVE_MATRIX == 7
     remove_shadow_query(&result, view);
 #endif

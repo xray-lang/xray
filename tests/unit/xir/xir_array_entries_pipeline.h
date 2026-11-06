@@ -13,6 +13,7 @@
 #define XIR_ARRAY_ENTRIES_PIPELINE_H
 #include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_compile_memory.h"
+#include "shared/xnative_declaration.h"
 #include "base/xsha256.h"
 #ifndef XR_ENTRIES_COMPONENT
 #define XR_ENTRIES_COMPONENT "transaction"
@@ -128,16 +129,39 @@ static EntriesCompile entries_build(size_t failure, XrCompileResourceLimits limi
     }
     CHECK(xr_xir_compile_artifact_context(result.checked)->resources == run.context.resources);
     const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(result.snapshot);
+    const XrNativeTypeDeclaration *native_array = xr_native_declaration_by_name("Array");
+    CHECK(native_array && native_array->id == XR_NATIVE_DECLARATION_ARRAY);
+    const XrNativeMemberDeclaration *native_member = xr_native_declaration_member(native_array, "entries");
+    CHECK(native_member && native_member->operation == XR_NATIVE_OPERATION_ARRAY_ENTRIES &&
+        native_member->parameter_count == 0 && !strcmp(native_member->signature, "() -> Array<(i64, T)>"));
+    uint32_t array_parent = 0;
+    for (uint32_t d = 0; d < view->declaration_count; ++d) {
+        const XrXirSourceDeclaration *declaration = &view->declarations[d];
+        if (declaration->kind == XR_XIR_SOURCE_TYPE && declaration->native_identity == native_array->id &&
+            !strcmp(declaration->name, "Array")) { CHECK(!array_parent); array_parent = declaration->id; }
+    }
     unsigned entries_members = 0;
     for (uint32_t d = 0; d < view->declaration_count; ++d) {
         const XrXirSourceDeclaration *declaration = &view->declarations[d];
-        if (declaration->native_identity == 32) {
+        if (array_parent && declaration->kind == XR_XIR_SOURCE_MEMBER && declaration->parent == array_parent &&
+            declaration->native_identity == native_member->id) {
+            if (strcmp(declaration->name, "entries") || !(!declaration->mutable) || declaration->parameter_count != 0 ||
+                !declaration->exported || declaration->type.known || !declaration->signature ||
+                strcmp(declaration->signature, "() -> Array<(i64, T)>"))
+                fprintf(stderr, "entries member owner=Array parent%u id%u name=%s known%u type%u arity%u mutable%u exported%u signature=%s\n",
+                    array_parent, declaration->native_identity, declaration->name, declaration->type.known,
+                    declaration->type.type, declaration->parameter_count, declaration->mutable, declaration->exported,
+                    declaration->signature ? declaration->signature : "<null>");
+            CHECK(!strcmp(declaration->name, "entries"));
             CHECK(!declaration->mutable && declaration->parameter_count == 0 && declaration->exported);
-            CHECK(!declaration->type.known && !strcmp(declaration->signature, "() -> Array<(i64, T)>"));
+            CHECK(!declaration->type.known && declaration->signature &&
+                !strcmp(declaration->signature, "() -> Array<(i64, T)>"));
             ++entries_members;
         }
     }
 #if defined(XR_ENTRIES_MATRIX) && XR_ENTRIES_MATRIX == 6
+    if (entries_members != 0) fprintf(stderr, "entries members actual%u expected0 owner%u member%u\n",
+        entries_members, array_parent, native_member->id);
     CHECK(entries_members == 0);
     unsigned ordinary = 0;
     for (uint32_t d = 0; d < view->declaration_count; ++d) {
@@ -152,6 +176,8 @@ static EntriesCompile entries_build(size_t failure, XrCompileResourceLimits limi
     }
     CHECK(ordinary == 1);
 #else
+    if (entries_members != 1) fprintf(stderr, "entries members actual%u expected1 owner%u member%u\n",
+        entries_members, array_parent, native_member->id);
     CHECK(entries_members == 1);
 #endif
     entries_profile_stage(&run, "source-check");
