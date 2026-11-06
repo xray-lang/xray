@@ -408,10 +408,14 @@ static void selector_capture_signature(void) {
         *target=saved;
     }
     SelectorCurrentPoll poll={.requested=true};
-    CHECK(xr_compile_resources_begin_cancel(context.resources,selector_current_poll,&poll)==XR_COMPILE_RESOURCE_OK);
+    XrCompileRequestControl control={0};
+    XrCompileRequestOptions options={.cancel_poll=selector_current_poll,.cancel_context=&poll};
+    CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
     selector_signature_trace=(SelectorSignatureTrace){0};bool seeded=false;
-    CHECK(effect_capture_reference_seed(&read,0,&seeded)==XR_XIR_CANCELLED && !seeded && poll.calls);
-    CHECK(xr_compile_resources_end_cancel(context.resources,selector_current_poll,&poll)==XR_COMPILE_RESOURCE_CANCELLED);
+    CHECK(effect_capture_reference_seed(&read,0,&seeded)==XR_XIR_OK && seeded && !poll.calls);
+    XrXirEffects *cancelled=NULL;
+    CHECK(xir_artifact_verify_raw_source_effects(checked,&cancelled,NULL,&control)==XR_XIR_CANCELLED &&
+        !cancelled && poll.calls && control.status==XR_COMPILE_RESOURCE_CANCELLED);
     selector_signature_trace=(SelectorSignatureTrace){0};
     CHECK(effect_capture_reference_seed(&read,0,&seeded)==XR_XIR_OK && seeded);
     CHECK(effect_capture_match(&context,final)==XR_XIR_OK);

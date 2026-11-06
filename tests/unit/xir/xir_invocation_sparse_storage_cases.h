@@ -213,10 +213,13 @@ static uint64_t invocation_storage_geometry(const XrXirCompileContext *context,
     EffectInvocationRead read={.work=context,.final=&shape};
     EffectBodyFunctionHead head={.instruction_count=values};
     EffectInvocationFlow flow={.read=&read,.function=&head,.basis={.fn_words=2}};
+    XrXirConstruction *construction=NULL;
+    XrXirStatus status=xir_construction_empty(context,NULL,&construction,NULL);
+    read.roles.construction=construction;
     flow.local_flags[0]=UINT64_MAX;flow.local_flags[1]=UINT64_MAX;
     uint64_t allocated=rp_stats(context).allocated_bytes;
     size_t attempts=rp_attempts;
-    XrXirStatus status=effect_invocation_flow_storage(&flow,NULL);
+    if (status==XR_XIR_OK) status=effect_invocation_flow_storage(&flow,NULL);
     CHECK(status==expected);
     if (status==XR_XIR_OK && check_bits) {
         bool local=!rows && values && values<=64;
@@ -256,7 +259,8 @@ static uint64_t invocation_storage_geometry(const XrXirCompileContext *context,
             flow.memory=NULL;
         }
     }
-    xr_compile_resources_free(flow.memory);return rp_stats(context).peak_bytes;
+    xr_compile_resources_free(flow.memory);xr_xir_compile_construction_free(construction);
+    return rp_stats(context).peak_bytes;
 }
 
 static void invocation_storage_geometry_literals(void) {
@@ -268,7 +272,7 @@ static void invocation_storage_geometry_literals(void) {
         uint64_t baseline=rp_stats(&context).held_bytes;
         uint64_t peak=invocation_storage_geometry(&context,values,row,true,XR_XIR_OK);
         rp_owner_free(&context,baseline);rp_balanced(physical);++cases;
-        /* Inline flags need only the owner itself. A smaller cap would reject
+        /* Inline flags need the owner and empty construction. A smaller cap rejects
          * owner construction, not the storage operation under test. */
         for (unsigned minus=0;minus<(peak>baseline?2u:1u);++minus) {
             XrCompileResourceLimits limits=rp_caps();limits.memory_limit=peak-minus;
