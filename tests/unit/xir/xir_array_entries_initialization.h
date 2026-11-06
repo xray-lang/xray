@@ -22,9 +22,11 @@ static void entries_initialization_faults(EntriesCompile *run) {
     for(size_t failure=0;failure<sites;++failure) {
         runtime_attempts=0;runtime_fail_at=failure;instance=NULL;
         XrXirCallStatus status=xr_xir_instance_new(run->program,&config,&instance);
+        const XrXirCallStatus made=status;unsigned started=UINT32_MAX,polled=0;
         if(status==XR_XIR_CALL_READY) {
             status=xr_xir_instance_start(instance,run->program->declarations->entry_function,NULL,0);
-            while(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status;
+            started=(unsigned)status;
+            while(status==XR_XIR_CALL_READY) { status=xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status;++polled; }
         }
         CHECK(status==XR_XIR_CALL_OOM&&runtime_attempts>failure);runtime_fail_at=SIZE_MAX;
         if(instance) {
@@ -34,7 +36,14 @@ static void entries_initialization_faults(EntriesCompile *run) {
                 CHECK(copy.status==XR_XIR_CALL_OOM);xr_xir_call_result_drop(&copy);
                 CHECK(xr_xir_instance_start(instance,run->program->declarations->entry_function,NULL,0)==XR_XIR_CALL_OOM);++latched;
             } else ++prepared;
-            CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+            const unsigned state=(unsigned)instance->state;const bool has_call=instance->call!=NULL;
+            const bool idle=instance->executor && xr_xir_task_executor_root_idle(instance->executor);
+            const unsigned completion=instance->executor ? (unsigned)xr_xir_task_executor_completion_status(instance->executor) : UINT32_MAX;
+            const XrXirCallStatus freed=xr_xir_instance_free(instance);
+            if(freed!=XR_XIR_CALL_READY)
+                fprintf(stderr,"entries initialization failure%zu new%u start%u polled%u terminal%u free%u preFreeState%u preFreeCall%u preFreeIdle%u preFreeCompletion%u\n",
+                    failure,made,started,polled,status,freed,state,has_call,idle,completion);
+            CHECK(freed==XR_XIR_CALL_READY);
         } else ++creation;
         CHECK(!runtime_live&&!runtime_bytes);
     }
