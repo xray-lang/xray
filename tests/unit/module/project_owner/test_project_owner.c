@@ -37,35 +37,9 @@ static void observed_free(void *pointer) {
 #undef xr_free
 #define xr_malloc(bytes) observed_alloc(bytes)
 #define xr_free(pointer) observed_free(pointer)
-#define xr_compile_resources_work real_resources_work
-#define xr_compile_resources_alloc real_resources_alloc
-#define xr_compile_resources_calloc real_resources_calloc
-#define xr_compile_resources_resize real_resources_resize
 #include "base/xcompile_resources.c"
-#undef xr_compile_resources_work
-#undef xr_compile_resources_alloc
-#undef xr_compile_resources_calloc
-#undef xr_compile_resources_resize
-static bool recording;
 
-static uint64_t boundaries[200000]; static size_t boundary_count;
-static XrCompileResourceStatus record(XrCompileResources *resources, XrCompileResourceStatus status) {
-    if (recording && status == XR_COMPILE_RESOURCE_OK) {
-        XrCompileResourceStats measured; CHECK(xr_compile_resources_stats(resources,&measured) == XR_COMPILE_RESOURCE_OK);
-        if (!boundary_count || boundaries[boundary_count-1] != measured.work) {
-            CHECK(boundary_count < 200000); boundaries[boundary_count++] = measured.work;
-        }
-    }
-    return status;
-}
-XR_FUNC XrCompileResourceStatus xr_compile_resources_work(XrCompileResources *r,uint64_t n) { return record(r,real_resources_work(r,n)); }
-XR_FUNC XrCompileResourceStatus xr_compile_resources_alloc(XrCompileResources *r,size_t n,void **out) { return record(r,real_resources_alloc(r,n,out)); }
-XR_FUNC XrCompileResourceStatus xr_compile_resources_calloc(XrCompileResources *r,size_t n,size_t s,void **out) { return record(r,real_resources_calloc(r,n,s,out)); }
-XR_FUNC XrCompileResourceStatus xr_compile_resources_resize(XrCompileResources *r,void **p,size_t n) {
-    return record(r,real_resources_resize(r,p,n));
-}
-
-static const XrCompileResourceLimits unlimited={UINT64_MAX,UINT64_MAX,UINT64_MAX};
+static const XrCompileResourceLimits unlimited={XR_COMPILE_MEMORY_ORDINARY,0,true};
 static const XrTomlParseLimits parse_limits={1024*1024,64};
 static char root_path[4096], entry_path[4096];
 static XrCompileResourceStats measured;
@@ -74,7 +48,7 @@ static void reset(size_t failure) {
 }
 static XrCompileResourceStats stats(XrCompileResources *owner) {
     XrCompileResourceStats value;CHECK(xr_compile_resources_stats(owner,&value)==XR_COMPILE_RESOURCE_OK);
-    CHECK(value.live_bytes==physical_live&&value.allocated_bytes==physical_total&&value.peak_bytes==physical_peak);return value;
+    CHECK(value.held_bytes==physical_live&&value.allocated_bytes==physical_total&&value.peak_bytes==physical_peak);return value;
 }
 static XrManifestStatus pipeline(XrCompileResources *owner, bool validate) {
     XrOsIoPolicy policy=xr_compile_io_policy(owner);XrProject *project=NULL;XrProjectAuthority *authority=NULL;
@@ -121,28 +95,22 @@ static XrManifestStatus pipeline(XrCompileResources *owner, bool validate) {
 static size_t run(const XrCompileResourceLimits *limits, size_t failure, XrManifestStatus expected) {
     reset(failure);XrCompileResources *owner=NULL;
     XrCompileResourceStatus init=xr_compile_resources_new(limits,&owner);
-    if(init!=XR_COMPILE_RESOURCE_OK) { CHECK(!owner&&!physical_live);CHECK(expected==(init==XR_COMPILE_RESOURCE_BUDGET?XR_MANIFEST_BUDGET:XR_MANIFEST_OUT_OF_MEMORY));return attempts; }
+    if(init!=XR_COMPILE_RESOURCE_OK) { CHECK(!owner&&!physical_live);CHECK(expected==(init==XR_COMPILE_RESOURCE_MEMORY_LIMIT?XR_MANIFEST_MEMORY_LIMIT:XR_MANIFEST_OUT_OF_MEMORY));return attempts; }
     DWORD before=0,after=0;CHECK(GetProcessHandleCount(GetCurrentProcess(),&before));
     XrManifestStatus status=pipeline(owner,expected==XR_MANIFEST_OK);
-    if(status!=expected||block_count!=1)fprintf(stderr,"failure=%zu work=%llu expected=%d actual=%d blocks=%zu\n",failure,(unsigned long long)limits->work,expected,status,block_count);
+    if(status!=expected||block_count!=1)fprintf(stderr,"failure=%zu memory=%llu expected=%d actual=%d blocks=%zu\n",failure,(unsigned long long)limits->memory_limit,expected,status,block_count);
     CHECK(status==expected&&block_count==1);CHECK(GetProcessHandleCount(GetCurrentProcess(),&after)&&before==after);
     measured=stats(owner);xr_compile_resources_release(owner);CHECK(!physical_live&&!block_count);return attempts;
 }
 static void qualify(void) {
-    recording=true;boundary_count=0;size_t count=run(&unlimited,SIZE_MAX,XR_MANIFEST_OK);recording=false;
-    XrCompileResourceStats baseline=measured;size_t cuts=boundary_count;
-    printf("baseline allocations=%zu workcuts=%zu work=%llu\n",count,cuts,(unsigned long long)baseline.work);fflush(stdout);
+    size_t count=run(&unlimited,SIZE_MAX,XR_MANIFEST_OK);XrCompileResourceStats baseline=measured;
     for(size_t i=0;i<count;++i) { run(&unlimited,i,XR_MANIFEST_OUT_OF_MEMORY);CHECK(attempts==i+1); }
-    puts("OOM PASS");fflush(stdout);
-    for(size_t i=0;i<cuts;++i) { XrCompileResourceLimits limits=unlimited;limits.work=boundaries[i]-1;run(&limits,SIZE_MAX,XR_MANIFEST_BUDGET); }
-    for(unsigned axis=0;axis<3;++axis)for(unsigned below=0;below<2;++below) {
-        XrCompileResourceLimits limits=unlimited;
-        if(!axis)limits.allocated_bytes=baseline.allocated_bytes-below;
-        else if(axis==1)limits.live_bytes=baseline.peak_bytes-below;
-        else limits.work=baseline.work-below;
-        run(&limits,SIZE_MAX,below?XR_MANIFEST_BUDGET:XR_MANIFEST_OK);
+    for(unsigned below=0;below<2;++below) {
+        XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,baseline.peak_bytes-below,true};
+        run(&limits,SIZE_MAX,below?XR_MANIFEST_MEMORY_LIMIT:XR_MANIFEST_OK);
     }
-    printf("project native: %zu real OOM, %zu work cutoffs, three exact-minus1 axes, physical/handles zero PASS\n",count,cuts);
+    printf("project native: %zu real OOM, held exact-minus1, physical/handles zero PASS\n",count);
+
 }
 
 static size_t mutation_sites;
@@ -153,8 +121,8 @@ static XrManifestStatus mutate(XrProject *project, unsigned kind, bool *matched)
     const char *names[]={"left","right"};layout.field_names=names;layout.fields[0].offset=0;layout.fields[1].offset=8;
     return xr_native_package_resolve_layout_owned(project->native_plan,"Point",&layout,matched);
 }
-static void mutation_case(unsigned kind, size_t failure, uint64_t limit, XrManifestStatus expected, bool record_work) {
-    reset(SIZE_MAX);XrCompileResources *owner=NULL;XrCompileResourceLimits limits=unlimited;limits.work=limit;
+static void mutation_case(unsigned kind, size_t failure, XrManifestStatus expected) {
+    reset(SIZE_MAX);XrCompileResources *owner=NULL;XrCompileResourceLimits limits=unlimited;
     CHECK(xr_compile_resources_new(&limits,&owner)==XR_COMPILE_RESOURCE_OK);
     XrOsIoPolicy policy=xr_compile_io_policy(owner);XrProject *project=NULL;
     CHECK(xr_project_load_owned(&policy,root_path,&parse_limits,&project,NULL)==XR_MANIFEST_OK);
@@ -163,14 +131,14 @@ static void mutation_case(unsigned kind, size_t failure, uint64_t limit, XrManif
     XrCExportPlan exports[2];memcpy(exports,before.exports,sizeof(exports));
     XrNativeLayoutAssertion layout=before.layouts[0];
     XrCompileResourceStats held=stats(owner);size_t start=attempts;
-    fail_at=failure==SIZE_MAX?SIZE_MAX:start+failure;recording=record_work;matched=false;
-    XrManifestStatus status=mutate(project,kind,&matched);recording=false;
-    if(status!=expected)fprintf(stderr,"mutation kind=%u fail=%zu limit=%llu got=%d expected=%d\n",kind,failure,(unsigned long long)limit,status,expected);
+    fail_at=failure==SIZE_MAX?SIZE_MAX:start+failure;matched=false;
+    XrManifestStatus status=mutate(project,kind,&matched);
+    if(status!=expected)fprintf(stderr,"mutation kind=%u fail=%zu got=%d expected=%d\n",kind,failure,status,expected);
     CHECK(status==expected);mutation_sites=attempts-start;
     if(expected!=XR_MANIFEST_OK) {
         CHECK(memcmp(project->native_plan,&before,sizeof(before))==0);
         CHECK(memcmp(before.exports,exports,sizeof(exports))==0&&memcmp(&before.layouts[0],&layout,sizeof(layout))==0);
-        CHECK(stats(owner).live_bytes==held.live_bytes&&!matched);
+        CHECK(stats(owner).held_bytes==held.held_bytes&&!matched);
         if(expected==XR_MANIFEST_OUT_OF_MEMORY) {
             CHECK(attempts==fail_at+1);fail_at=SIZE_MAX;
             CHECK(mutate(project,kind,&matched)==XR_MANIFEST_OK);
@@ -180,15 +148,13 @@ static void mutation_case(unsigned kind, size_t failure, uint64_t limit, XrManif
 }
 static void mutation_gates(void) {
     for(unsigned kind=0;kind<3;++kind) {
-        boundary_count=0;mutation_case(kind,SIZE_MAX,UINT64_MAX,XR_MANIFEST_OK,true);
-        size_t sites=mutation_sites,cuts=boundary_count;
-        for(size_t i=0;i<sites;++i)mutation_case(kind,i,UINT64_MAX,XR_MANIFEST_OUT_OF_MEMORY,false);
-        for(size_t i=0;i<cuts;++i)mutation_case(kind,SIZE_MAX,boundaries[i]-1,XR_MANIFEST_BUDGET,false);
-        printf("mutation %u: %zu OOM, %zu work cutoffs preserve plan/live; OOM retry PASS\n",kind,sites,cuts);fflush(stdout);
+        mutation_case(kind,SIZE_MAX,XR_MANIFEST_OK);size_t sites=mutation_sites;
+        for(size_t i=0;i<sites;++i)mutation_case(kind,i,XR_MANIFEST_OUT_OF_MEMORY);
+        printf("mutation %u: %zu OOM preserve plan/held; OOM retry PASS\n",kind,sites);fflush(stdout);
     }
 }
-static XrOsIoStatus forwarded_work(void *context, uint64_t work) {
-    XrOsIoPolicy real=xr_compile_io_policy(context);return real.work(context,work);
+static XrOsIoStatus forwarded_alloc(void *context, size_t bytes, void **output) {
+    XrOsIoPolicy real=xr_compile_io_policy(context);return real.alloc(context,bytes,output);
 }
 static XrXirLibraryCatalog *real_catalog(const XrXirCompileContext *context) {
     const XrXirInstruction ops[]={{XR_XIR_RETURN,XR_XIR_UNIT,{0,0},{0,0},0,{0,0}}};
@@ -211,7 +177,7 @@ static void ownership_rejections(void) {
     reset(SIZE_MAX);XrCompileResources *one=NULL,*two=NULL;
     CHECK(xr_compile_resources_new(&unlimited,&one)==XR_COMPILE_RESOURCE_OK);
     CHECK(xr_compile_resources_new(&unlimited,&two)==XR_COMPILE_RESOURCE_OK);
-    XrOsIoPolicy first=xr_compile_io_policy(one),other=xr_compile_io_policy(two),forged=first;forged.work=forwarded_work;
+    XrOsIoPolicy first=xr_compile_io_policy(one),other=xr_compile_io_policy(two),forged=first;forged.alloc=forwarded_alloc;
     const char text[]="[[export.c]]\nxray='answer'\nsymbol='answer'\n";
     XrTomlValue *document=NULL;CHECK(xtoml_parse_owned(&first,text,sizeof(text)-1,&parse_limits,&document)==XR_TOML_PARSE_OK);
     CHECK(xtoml_owned_uses_policy(document,&first)&&!xtoml_owned_uses_policy(document,&other)&&!xtoml_owned_uses_policy(document,&forged));
@@ -318,12 +284,12 @@ static const char complete_contract[] =
     "kind='start'\n"
     "section='start'\n";
 
-static size_t contract_case(size_t failure,uint64_t work,XrManifestStatus expected,bool trace) {
-    reset(failure);XrCompileResources *owner=NULL;XrCompileResourceLimits limits=unlimited;limits.work=work;
-    if(xr_compile_resources_new(&limits,&owner)!=XR_COMPILE_RESOURCE_OK) { CHECK(expected==XR_MANIFEST_OUT_OF_MEMORY||expected==XR_MANIFEST_BUDGET);return attempts; }
+static size_t contract_case(size_t failure,XrManifestStatus expected) {
+    reset(failure);XrCompileResources *owner=NULL;XrCompileResourceLimits limits=unlimited;
+    if(xr_compile_resources_new(&limits,&owner)!=XR_COMPILE_RESOURCE_OK) { CHECK(expected==XR_MANIFEST_OUT_OF_MEMORY||expected==XR_MANIFEST_MEMORY_LIMIT);return attempts; }
     XrOsIoPolicy policy=xr_compile_io_policy(owner);XrTomlValue *document=NULL;XrNativePackagePlan *plan=NULL;
-    recording=trace;XrTomlParseStatus parsed=xtoml_parse_owned(&policy,complete_contract,sizeof(complete_contract)-1,&parse_limits,&document);
-    XrManifestStatus status=parsed==XR_TOML_PARSE_OUT_OF_MEMORY?XR_MANIFEST_OUT_OF_MEMORY:parsed==XR_TOML_PARSE_BUDGET?XR_MANIFEST_BUDGET:
+    XrTomlParseStatus parsed=xtoml_parse_owned(&policy,complete_contract,sizeof(complete_contract)-1,&parse_limits,&document);
+    XrManifestStatus status=parsed==XR_TOML_PARSE_OUT_OF_MEMORY?XR_MANIFEST_OUT_OF_MEMORY:parsed==XR_TOML_PARSE_MEMORY_LIMIT?XR_MANIFEST_MEMORY_LIMIT:
         parsed==XR_TOML_PARSE_OK?xr_native_package_plan_parse_owned(&policy,document,root_path,&plan,NULL):XR_MANIFEST_INVALID;
     const XrNativeSymbol *symbol=NULL;const XrFreestandingEntryPlan *entry=NULL;const XrLinkSymbolPlan *link=NULL;const XrNativeUnit *unit=NULL;
     if(status==XR_MANIFEST_OK)status=xr_native_package_find_symbol_owned(plan,"invoke",&symbol);
@@ -331,7 +297,7 @@ static size_t contract_case(size_t failure,uint64_t work,XrManifestStatus expect
     if(status==XR_MANIFEST_OK)status=xr_native_package_find_link_symbol_owned(plan,"invoke",&link);
     if(status==XR_MANIFEST_OK)status=xr_native_package_find_unit_owned(plan,"platform",&unit);
     if(status==XR_MANIFEST_OK)status=xr_native_package_validate_symbol_arity_owned(plan,"invoke",1,NULL);
-    recording=false;CHECK(status==expected);
+    CHECK(status==expected);
     if(status==XR_MANIFEST_OK)CHECK(symbol&&symbol->contract.complete&&symbol->contract.callback_count==1&&entry&&link&&unit&&plan->capability_count==1&&!plan->capabilities[0].verified);
     xr_native_package_plan_free_owned(plan);xtoml_owned_free(document);xr_compile_resources_release(owner);CHECK(!physical_live&&!block_count);return attempts;
 }
@@ -349,38 +315,33 @@ static void contract_overflow_rejections(void) {
     }
 }
 static void contract_gates(void) {
-    boundary_count=0;size_t sites=contract_case(SIZE_MAX,UINT64_MAX,XR_MANIFEST_OK,true),cuts=boundary_count;
-    for(size_t i=0;i<sites;++i)CHECK(contract_case(i,UINT64_MAX,XR_MANIFEST_OUT_OF_MEMORY,false)==i+1);
-    for(size_t i=0;i<cuts;++i)contract_case(SIZE_MAX,boundaries[i]-1,XR_MANIFEST_BUDGET,false);
-    printf("typed parameter/return/callback, capability, link and entry: %zu OOM, %zu work cutoffs PASS\n",sites,cuts);fflush(stdout);
+    size_t sites=contract_case(SIZE_MAX,XR_MANIFEST_OK);
+    for(size_t i=0;i<sites;++i)CHECK(contract_case(i,XR_MANIFEST_OUT_OF_MEMORY)==i+1);
+    printf("typed parameter/return/callback, capability, link and entry: %zu real OOM PASS\n",sites);fflush(stdout);
 }
 
-typedef struct FaultPolicy { XrCompileResources *owner; XrOsIoStatus failure; bool fail_alloc,fail_work; } FaultPolicy;
+typedef struct FaultPolicy { XrCompileResources *owner; XrOsIoStatus failure; bool fail_alloc; } FaultPolicy;
 static XrOsIoStatus fault_alloc(void *opaque,size_t bytes,void **out) {
     FaultPolicy *fault=opaque;if(fault->fail_alloc)return fault->failure;
     XrOsIoPolicy policy=xr_compile_io_policy(fault->owner);return policy.alloc(policy.context,bytes,out);
 }
 static void fault_free(void *opaque,void *memory) {(void)opaque;xr_compile_resources_free(memory);}
-static XrOsIoStatus fault_work(void *opaque,uint64_t units) {
-    FaultPolicy *fault=opaque;if(fault->fail_work)return fault->failure;
-    XrOsIoPolicy policy=xr_compile_io_policy(fault->owner);return policy.work(policy.context,units);
-}
 static void typed_failures(void) {
     reset(SIZE_MAX);XrCompileResources *owner=NULL;CHECK(xr_compile_resources_new(&unlimited,&owner)==XR_COMPILE_RESOURCE_OK);
-    FaultPolicy fault={owner,XR_OS_IO_OK,false,false};XrOsIoPolicy policy={&fault,fault_alloc,fault_free,fault_work};
+    FaultPolicy fault={owner,XR_OS_IO_OK,false};XrOsIoPolicy policy={&fault,fault_alloc,fault_free};
     const char text[]="[[export.c]]\nxray='answer'\nsymbol='answer'\n";XrTomlValue *document=NULL;
     CHECK(xtoml_parse_owned(&policy,text,sizeof(text)-1,&parse_limits,&document)==XR_TOML_PARSE_OK);
-    XrOsIoStatus failures[]={XR_OS_IO_IO,XR_OS_IO_OUT_OF_MEMORY,XR_OS_IO_BUDGET};
-    XrManifestStatus expected[]={XR_MANIFEST_IO,XR_MANIFEST_OUT_OF_MEMORY,XR_MANIFEST_BUDGET};
-    for(unsigned i=0;i<3;++i)for(unsigned mode=0;mode<2;++mode) {
-        fault.failure=failures[i];fault.fail_alloc=mode==0;fault.fail_work=mode==1;
+    XrOsIoStatus failures[]={XR_OS_IO_IO,XR_OS_IO_OUT_OF_MEMORY,XR_OS_IO_MEMORY_LIMIT};
+    XrManifestStatus expected[]={XR_MANIFEST_IO,XR_MANIFEST_OUT_OF_MEMORY,XR_MANIFEST_MEMORY_LIMIT};
+    for(unsigned i=0;i<3;++i) {
+        fault.failure=failures[i];fault.fail_alloc=true;
         XrProject *project=NULL;XrNativePackagePlan *plan=NULL;size_t live=physical_live;
         CHECK(xr_project_load_owned(&policy,root_path,&parse_limits,&project,NULL)==expected[i]&&!project);
         CHECK(xr_native_package_plan_parse_owned(&policy,document,root_path,&plan,NULL)==expected[i]&&!plan);
         CHECK(physical_live==live);
     }
-    fault.fail_alloc=fault.fail_work=false;xtoml_owned_free(document);xr_compile_resources_release(owner);CHECK(!physical_live);
-    puts("allocation/work policy IO, OOM and BUDGET preserve first cause/output/live PASS");
+    fault.fail_alloc=false;xtoml_owned_free(document);xr_compile_resources_release(owner);CHECK(!physical_live);
+    puts("allocation policy IO, OOM and MEMORY_LIMIT preserve first cause/output/live PASS");
 }
 static void unc_gates(const XrOsIoPolicy *policy,const XrXirCompileContext *context) {
     char root[4096],entry[4096],share[64],manifest[80];

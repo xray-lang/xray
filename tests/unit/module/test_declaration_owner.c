@@ -74,7 +74,7 @@ static void fixture_init(Fixture *f) {
     f->root_fields[0] = member("declarations", &f->section);
     f->root = table(f->root_fields, 1);
 }
-static const XrCompileResourceLimits unlimited = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+static const XrCompileResourceLimits unlimited = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
 static const XrDeclarationLimits shape = {2, 2};
 static XrCompileResourceStats run(Fixture *f, XrCompileResourceLimits limits,
     XrDeclarationLimits declarations, XrDeclarationStatus expected, bool twice) {
@@ -100,10 +100,10 @@ static XrCompileResourceStats run(Fixture *f, XrCompileResourceLimits limits,
     } else REQUIRE(result == (XrDeclarationManifest *)1);
     XrCompileResourceStats s;
     REQUIRE(xr_compile_resources_stats(resources, &s) == XR_COMPILE_RESOURCE_OK);
-    REQUIRE(s.live_bytes == live && s.allocated_bytes == allocated && s.peak_bytes == peak);
+    REQUIRE(s.held_bytes == live && s.allocated_bytes == allocated && s.peak_bytes == peak);
     if (twice) {
         XrDeclarationManifest *second = (XrDeclarationManifest *)2;
-        REQUIRE(xr_compile_declaration_manifest_read(resources, &f->root, declarations, &second) == XR_DECLARATION_LIMIT);
+        REQUIRE(xr_compile_declaration_manifest_read(resources, &f->root, declarations, &second) == XR_DECLARATION_MEMORY_LIMIT);
         REQUIRE(second == (XrDeclarationManifest *)2);
     }
     xr_compile_resources_release(resources);
@@ -139,7 +139,7 @@ static void rejected(void) {
     run(&f, unlimited, (XrDeclarationLimits){2,1}, XR_DECLARATION_LIMIT, false);
     f.root = table(NULL, 0);
     XrCompileResourceStats empty = run(&f, unlimited, shape, XR_DECLARATION_ABSENT, false);
-    REQUIRE(empty.work == 15 && empty.allocation_count == 1);
+    REQUIRE(empty.allocation_count == 1);
 }
 int main(void) {
     Fixture f; fixture_init(&f);
@@ -149,27 +149,13 @@ int main(void) {
         attempts = 0; fail_at = i; run(&f, unlimited, shape, XR_DECLARATION_OUT_OF_MEMORY, false);
     }
     fail_at = 0;
-    for (uint64_t w = 1; w < baseline.work; ++w) {
-        XrCompileResourceLimits limits = unlimited; limits.work = w;
-        run(&f, limits, shape, XR_DECLARATION_LIMIT, false);
-    }
-    XrCompileResourceLimits exact = {baseline.allocated_bytes, baseline.peak_bytes, baseline.work};
+    XrCompileResourceLimits exact = {XR_COMPILE_MEMORY_FINITE, baseline.peak_bytes, true};
     run(&f, exact, shape, XR_DECLARATION_OK, true);
-    for (unsigned axis = 0; axis < 2; ++axis) {
-        XrCompileResourceLimits limits = unlimited;
-        if (!axis) limits.allocated_bytes = baseline.allocated_bytes - 1;
-        else limits.live_bytes = baseline.peak_bytes - 1;
-        run(&f, limits, shape, XR_DECLARATION_LIMIT, false);
-    }
+    --exact.memory_limit;
+    run(&f, exact, shape, XR_DECLARATION_MEMORY_LIMIT, false);
     rejected();
     XrDeclarationManifest *canary = (XrDeclarationManifest *)1;
     REQUIRE(xr_compile_declaration_manifest_read(NULL, (XrTomlValue *)1, shape, &canary) == XR_DECLARATION_BAD_ARGUMENT);
-    XrCompileResources *owner = NULL; XrCompileResourceLimits limits = unlimited; limits.work = 1;
-    REQUIRE(xr_compile_resources_new(&limits, &owner) == XR_COMPILE_RESOURCE_OK);
-    REQUIRE(xr_compile_declaration_manifest_read(owner, (XrTomlValue *)1, shape, &canary) == XR_DECLARATION_LIMIT);
-    REQUIRE(canary == (XrDeclarationManifest *)1);
-    xr_compile_resources_release(owner); REQUIRE(!live);
-    printf("Declaration schema: %zu real OOM points, %llu work cutoffs, independent absent work=15, zero physical residuals\n",
-        count, (unsigned long long)baseline.work - 1);
+    printf("Declaration schema: %zu real OOM points, held exact-minus1, owned metadata and zero physical residuals\n",count);
     return 0;
 }

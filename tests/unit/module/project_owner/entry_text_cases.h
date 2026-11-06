@@ -1,10 +1,10 @@
 /* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
-static const XrCompileResourceLimits entry_text_limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+static const XrCompileResourceLimits entry_text_limits={XR_COMPILE_MEMORY_ORDINARY,0,true};
 static XrManifestStatus entry_text_run(const XrCompileResourceLimits *limits,size_t failure,
     XrCompileResourceStats *measurement) {
     reset(failure);XrCompileResources *resources=NULL;
     XrCompileResourceStatus opened=xr_compile_resources_new(limits,&resources);
-    if(opened!=XR_COMPILE_RESOURCE_OK)return opened==XR_COMPILE_RESOURCE_BUDGET?XR_MANIFEST_BUDGET:XR_MANIFEST_OUT_OF_MEMORY;
+    if(opened!=XR_COMPILE_RESOURCE_OK)return opened==XR_COMPILE_RESOURCE_MEMORY_LIMIT?XR_MANIFEST_MEMORY_LIMIT:XR_MANIFEST_OUT_OF_MEMORY;
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     char path[4096],text[]="export fn entry()->i64 { return 41 }\n";
     CHECK(snprintf(path,sizeof(path),"%s\\sub\\not-on-disk\\main.xr",root_path)>0);
@@ -35,13 +35,12 @@ static void entry_text_failure_matrix(void) {
         CHECK(entry_text_run(&entry_text_limits,site,NULL)==XR_MANIFEST_OUT_OF_MEMORY);
         CHECK(attempts==site+1&&!physical_live&&!block_count);
     }
-    for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta) {
-        XrCompileResourceLimits limits={baseline.allocated_bytes,baseline.peak_bytes,baseline.work};
-        uint64_t *bound=axis==0?&limits.allocated_bytes:axis==1?&limits.live_bytes:&limits.work;
-        CHECK(*bound&&*bound<UINT64_MAX);*bound=(uint64_t)((int64_t)*bound+delta);
-        CHECK(entry_text_run(&limits,SIZE_MAX,NULL)==(delta<0?XR_MANIFEST_BUDGET:XR_MANIFEST_OK));
+    for(int delta=-1;delta<=1;++delta) {
+        CHECK(baseline.peak_bytes && baseline.peak_bytes<INT64_MAX);
+        XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,(uint64_t)((int64_t)baseline.peak_bytes+delta),true};
+        CHECK(entry_text_run(&limits,SIZE_MAX,NULL)==(delta<0?XR_MANIFEST_MEMORY_LIMIT:XR_MANIFEST_OK));
     }
-    printf("TEXT project authority: real fresh FI sites=%zu, three axes, physical=0/0\n",sites);
+    printf("TEXT project authority: real fresh FI sites=%zu, held exact/minus1/plus1, physical=0/0\n",sites);
 }
 static void entry_text_boundaries(const char *script_path) {
     reset(SIZE_MAX);XrCompileResources *resources=NULL;
@@ -76,7 +75,7 @@ static void entry_text_boundaries(const char *script_path) {
     const char nul_text[]={'x',0,'y'};input.text=nul_text;input.length=sizeof(nul_text);
     CHECK(xr_source_authority_open_input(&context,&input,NULL,&parse_limits,&authority,NULL)==XR_MANIFEST_INVALID&&!authority);
     input.text=text;input.length=SIZE_MAX;
-    CHECK(xr_source_authority_open_input(&context,&input,NULL,&parse_limits,&authority,NULL)==XR_MANIFEST_BUDGET&&!authority);
+    CHECK(xr_source_authority_open_input(&context,&input,NULL,&parse_limits,&authority,NULL)==XR_MANIFEST_OVERFLOW&&!authority);
     input.length=sizeof(text)-1;
     XrXirLibraryCatalog *catalog=real_catalog(&context);
     CHECK(snprintf(path,sizeof(path),"%s\\sub\\text.xr",root_path)>0);

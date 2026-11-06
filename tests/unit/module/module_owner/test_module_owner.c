@@ -37,35 +37,15 @@ static void observed_free(void *pointer) {
 #undef xr_free
 #define xr_malloc(bytes) observed_alloc(bytes)
 #define xr_free(pointer) observed_free(pointer)
-#define xr_compile_resources_work real_resources_work
-#define xr_compile_resources_alloc real_resources_alloc
-#define xr_compile_resources_calloc real_resources_calloc
 #define xr_compile_resources_resize real_resources_resize
 #include "base/xcompile_resources.c"
-#undef xr_compile_resources_work
-#undef xr_compile_resources_alloc
-#undef xr_compile_resources_calloc
 #undef xr_compile_resources_resize
-static bool recording;
 static size_t graph_growth_site = SIZE_MAX;
-static uint64_t boundaries[200000]; static size_t boundary_count;
-static XrCompileResourceStatus record(XrCompileResources *resources, XrCompileResourceStatus status) {
-    if (recording && status == XR_COMPILE_RESOURCE_OK) {
-        XrCompileResourceStats measured; CHECK(xr_compile_resources_stats(resources,&measured) == XR_COMPILE_RESOURCE_OK);
-        if (!boundary_count || boundaries[boundary_count-1] != measured.work) {
-            CHECK(boundary_count < 200000); boundaries[boundary_count++] = measured.work;
-        }
-    }
-    return status;
-}
-XR_FUNC XrCompileResourceStatus xr_compile_resources_work(XrCompileResources *r,uint64_t n) { return record(r,real_resources_work(r,n)); }
-XR_FUNC XrCompileResourceStatus xr_compile_resources_alloc(XrCompileResources *r,size_t n,void **out) { return record(r,real_resources_alloc(r,n,out)); }
-XR_FUNC XrCompileResourceStatus xr_compile_resources_calloc(XrCompileResources *r,size_t n,size_t s,void **out) { return record(r,real_resources_calloc(r,n,s,out)); }
 XR_FUNC XrCompileResourceStatus xr_compile_resources_resize(XrCompileResources *r,void **p,size_t n) {
     if (n == 32*sizeof(XrModuleSpec)) graph_growth_site = attempts;
-    return record(r,real_resources_resize(r,p,n));
+    return real_resources_resize(r,p,n);
 }
-static const XrCompileResourceLimits unlimited = {UINT64_MAX,UINT64_MAX,UINT64_MAX};
+static const XrCompileResourceLimits unlimited = {XR_COMPILE_MEMORY_ORDINARY,0,true};
 static XrCompileResourceStats measured;
 static unsigned char packet_bytes[4096], canary;
 static XrXirLibraryInput library_input;
@@ -77,7 +57,7 @@ static void reset(size_t failure) {
 }
 static XrCompileResourceStats stats(XrCompileResources *owner) {
     XrCompileResourceStats s; CHECK(xr_compile_resources_stats(owner,&s) == XR_COMPILE_RESOURCE_OK);
-    CHECK(s.live_bytes == physical_live && s.allocated_bytes == physical_total && s.peak_bytes == physical_peak); return s;
+    CHECK(s.held_bytes == physical_live && s.allocated_bytes == physical_total && s.peak_bytes == physical_peak); return s;
 }
 static void make_packet(void) {
     reset(SIZE_MAX); XrCompileResources *owner = NULL;
@@ -108,7 +88,7 @@ static XrModuleStatus from_session(XrCompileResourceStatus s) {
 }
 static XrModuleStatus from_xir(XrXirStatus s) {
     return s == XR_XIR_OK ? XR_MODULE_OK : s == XR_XIR_OUT_OF_MEMORY ? XR_MODULE_OUT_OF_MEMORY :
-        s == XR_XIR_BUDGET ? XR_MODULE_BUDGET : XR_MODULE_INVALID;
+        s == XR_XIR_MEMORY_LIMIT ? XR_MODULE_MEMORY_LIMIT : s == XR_XIR_BUDGET ? XR_MODULE_BUDGET : XR_MODULE_INVALID;
 }
 static XrModuleStatus pipeline(XrCompileResources *owner, unsigned kind, bool validate) {
     XrCompilerSession *session = NULL; XrModuleResolver *resolver = NULL; XrModuleGraph *graph = NULL; XrXirLibraryCatalog *catalog = NULL;
@@ -159,36 +139,27 @@ static size_t run(unsigned kind, const XrCompileResourceLimits *limits, size_t f
     XrCompileResourceStatus created = xr_compile_resources_new(limits,&owner);
     if (created != XR_COMPILE_RESOURCE_OK) {
         CHECK(!owner && ((created == XR_COMPILE_RESOURCE_OUT_OF_MEMORY && expected == XR_MODULE_OUT_OF_MEMORY) ||
-            (created == XR_COMPILE_RESOURCE_BUDGET && expected == XR_MODULE_BUDGET))); return attempts;
+            (created == XR_COMPILE_RESOURCE_MEMORY_LIMIT && expected == XR_MODULE_MEMORY_LIMIT))); return attempts;
     }
     DWORD handles_before = 0, handles_after = 0;
     CHECK(GetProcessHandleCount(GetCurrentProcess(),&handles_before));
     XrModuleStatus status = pipeline(owner,kind,expected == XR_MODULE_OK || (kind == 3 && expected == XR_MODULE_INVALID));
-    if (status != expected) fprintf(stderr,"kind=%u failure=%zu work=%llu expected=%d actual=%d\n",kind,failure,(unsigned long long)limits->work,expected,status);
+    if (status != expected) fprintf(stderr,"kind=%u failure=%zu memory=%llu expected=%d actual=%d\n",kind,failure,(unsigned long long)limits->memory_limit,expected,status);
     CHECK(GetProcessHandleCount(GetCurrentProcess(),&handles_after) && handles_before == handles_after);
     CHECK(status == expected && block_count == 1);
     measured = stats(owner); xr_compile_resources_release(owner); CHECK(!physical_live && !block_count); return attempts;
 }
 static void qualify(unsigned kind) {
-    boundary_count = 0; recording = true;
     XrModuleStatus expected = kind == 3 ? XR_MODULE_INVALID : XR_MODULE_OK;
     size_t sites = run(kind,&unlimited,SIZE_MAX,expected); XrCompileResourceStats baseline = measured;
-    recording = false; size_t submitted = boundary_count;
     for (size_t failure = 0; failure < sites; ++failure) {
         run(kind,&unlimited,failure,XR_MODULE_OUT_OF_MEMORY); CHECK(attempts == failure+1);
     }
-    for (size_t i = 0; i < submitted; ++i) {
-        XrCompileResourceLimits limits = unlimited; limits.work = boundaries[i]-1;
-        run(kind,&limits,SIZE_MAX,XR_MODULE_BUDGET);
+    for (unsigned below = 0; below < 2; ++below) {
+        XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE,baseline.peak_bytes-below,true};
+        run(kind,&limits,SIZE_MAX,below ? XR_MODULE_MEMORY_LIMIT : expected);
     }
-    for (unsigned axis = 0; axis < 3; ++axis) for (unsigned below = 0; below < 2; ++below) {
-        XrCompileResourceLimits limits = unlimited;
-        if (!axis) limits.allocated_bytes = baseline.allocated_bytes-below;
-        else if (axis == 1) limits.live_bytes = baseline.peak_bytes-below;
-        else limits.work = baseline.work-below;
-        run(kind,&limits,SIZE_MAX,below ? XR_MODULE_BUDGET : expected);
-    }
-    printf("module kind=%u: %zu real OOM sites, %zu actual work submission cutoffs, bytes/live/work exact-minus1, physical zero PASS\n",kind,sites,submitted); fflush(stdout);
+    printf("module kind=%u: %zu real OOM sites, held exact-minus1, physical zero PASS\n",kind,sites); fflush(stdout);
 }
 static void rejection_and_lifetime(void) {
     reset(SIZE_MAX); XrCompileResources *first = NULL, *second = NULL;
@@ -253,21 +224,20 @@ static void topology_retry(void) {
         fail_at = SIZE_MAX;
         int found = -1; CHECK(xr_compile_module_graph_find(graph,graph->specs[1].canonical,&found) == XR_MODULE_OK && found == 1);
         bool owns = false; CHECK(xr_compile_module_graph_owns_top_level_decl(graph,&graph->specs[0],graph->specs[0].ast->as.program.statements[0],&owns) == XR_MODULE_OK && owns);
-        XrCompileResourceStats current = stats(owner);
-        CHECK(xr_compile_resources_work(owner,UINT64_MAX-current.work) == XR_COMPILE_RESOURCE_OK);
+        size_t query_attempts = attempts;
         found = 123; owns = true;
-        CHECK(xr_compile_module_graph_find(graph,"absent",&found) == XR_MODULE_BUDGET && found == 123);
-        CHECK(xr_compile_module_graph_find_source(graph,main_path,&found) == XR_MODULE_BUDGET && found == 123);
-        CHECK(xr_compile_module_graph_owns_top_level_decl(graph,&graph->specs[0],graph->specs[0].ast,&owns) == XR_MODULE_BUDGET && owns);
-        CHECK(xr_compile_module_graph_topological_sort(graph) == XR_MODULE_BUDGET && graph->topo_order == order);
+        CHECK(xr_compile_module_graph_find(graph,"absent",&found) == XR_MODULE_OK && found == -1);
+        CHECK(xr_compile_module_graph_find_source(graph,main_path,&found) == XR_MODULE_OK && found == 0);
+        CHECK(xr_compile_module_graph_owns_top_level_decl(graph,&graph->specs[0],graph->specs[0].ast,&owns) == XR_MODULE_OK && !owns);
         XrModuleGraph *next = (void *)&canary;
-        CHECK(xr_compile_module_graph_new(owner,session,resolver,&next) == XR_MODULE_BUDGET && next == (void *)&canary);
+        CHECK(xr_compile_module_graph_new(owner,session,resolver,&next) == XR_MODULE_INVALID && next == (void *)&canary);
+        CHECK(attempts == query_attempts);
         xr_compile_resources_release(owner);
         CHECK(graph->specs[0].ast->type == AST_PROGRAM && !strcmp(graph->specs[1].logical_path,"dep.xr"));
         xr_compile_module_graph_free(graph); xr_compile_module_resolver_free(resolver); xr_compile_session_free(session);
         CHECK(!physical_live && !block_count);
     }
-    puts("module: topology retry OOM preserves order, depleted query canaries, shared request exhaustion and lifetime PASS");
+    puts("module: topology retry OOM preserves order, lookup outputs, occupied output rejection and lifetime PASS");
 }
 static void many_modules(void) {
     char path[4096]; CHECK(snprintf(path,sizeof(path),"%s/many.xr",root_path) > 0);
