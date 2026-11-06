@@ -30,7 +30,7 @@
 #include "xir_source_cases.h"
 #include "xir_source_default_runtime_gaps.h"
 static int source_checked_fixture_generate(const char *path) {
-    const XrXirCompileContext context=*source_fixture_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
+    const XrXirCompileContext context=*source_fixture_source_owner((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true});
     XrXirArtifact *lowered=source_fixture_lower(&context,path);
     CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(lowered);
@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
     if(argc==3 && !strcmp(argv[1],"--write-checked")) return source_checked_fixture_generate(argv[2]);
     CHECK(argc==1);
     source_default_runtime_gaps();
-    const XrXirCompileContext context=*source_fixture_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
+    const XrXirCompileContext context=*source_fixture_source_owner((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true});
     XrXirArtifact *lowered=source_fixture_lower(&context,NULL);
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
     SourceMethodValueEntries method_value_entries = source_method_value_select(module);
@@ -68,32 +68,33 @@ int main(int argc, char **argv) {
     CHECK(result != UINT32_MAX && advance != UINT32_MAX && update != UINT32_MAX && calculate != UINT32_MAX && resume_text != UINT32_MAX && stack_depth != UINT32_MAX && numeric_pause != UINT32_MAX && bound_result != UINT32_MAX && witness_result != UINT32_MAX && enum_witness_result != UINT32_MAX && enum_generic_witness_result != UINT32_MAX && generic_method_number != UINT32_MAX && generic_method_text != UINT32_MAX && generic_method_array != UINT32_MAX);
     uint32_t entry = module->declarations->entry_function;
     XrXirProgram *program = NULL;
-    XrCompileResourceStats prefix={0};CHECK(xr_compile_resources_stats(context.resources,&prefix)==XR_COMPILE_RESOURCE_OK);
     size_t negative_physical_blocks=source_fixture_compile_live,negative_physical_bytes=source_fixture_compile_bytes;
-    const XrXirCompileContext negative=*source_fixture_source_owner(prefix.allocated_bytes+UINT64_C(1048576),UINT64_C(128000000));
+    const XrXirCompileContext negative=*source_fixture_source_owner((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true});
     XrXirArtifact *negative_lowered=source_fixture_lower(&negative,NULL);
     XrCompileResourceStats before_failure={0},after_failure={0};
     CHECK(xr_compile_resources_stats(negative.resources,&before_failure)==XR_COMPILE_RESOURCE_OK);
-    CHECK(before_failure.allocated_bytes==prefix.allocated_bytes && before_failure.work==prefix.work);
     XrXirArtifact *sentinel=negative_lowered;XrXirProgram *failed_program=NULL;
-    CHECK(xr_xir_compile_vm_program_take(&negative_lowered,&failed_program)==XR_XIR_BUDGET);
+    CHECK(source_fixture_compile_fail_at==SIZE_MAX);
+    source_fixture_compile_fail_at=source_fixture_compile_attempts;source_fixture_compile_injected=false;
+    XrXirStatus failed_seal=xr_xir_compile_vm_program_take(&negative_lowered,&failed_program);
+    source_fixture_compile_fail_at=SIZE_MAX;
+    CHECK(source_fixture_compile_injected && failed_seal==XR_XIR_OUT_OF_MEMORY);
     CHECK(negative_lowered==sentinel && !failed_program);
     CHECK(xr_xir_compile_artifact_module(negative_lowered)->stage==XR_XIR_LOWERED);
     CHECK(xr_compile_resources_stats(negative.resources,&after_failure)==XR_COMPILE_RESOURCE_OK);
-    CHECK(after_failure.live_bytes==before_failure.live_bytes);
-    fprintf(stderr,"Source seal negative: prefix allocated=%llu work=%llu; failure allocated=%llu work=%llu live=%llu\n",
-        (unsigned long long)prefix.allocated_bytes,(unsigned long long)prefix.work,
-        (unsigned long long)after_failure.allocated_bytes,(unsigned long long)after_failure.work,(unsigned long long)after_failure.live_bytes);
+    CHECK(after_failure.held_bytes==before_failure.held_bytes);
+    fprintf(stderr,"Source seal OOM: injected=1 held=%llu->%llu; failure allocated=%llu peak=%llu\n",
+        (unsigned long long)before_failure.held_bytes,(unsigned long long)after_failure.held_bytes,
+        (unsigned long long)after_failure.allocated_bytes,(unsigned long long)after_failure.peak_bytes);
     xr_xir_compile_artifact_free(negative_lowered);source_fixture_source_owner_close(&negative);
     CHECK(source_fixture_compile_live==negative_physical_blocks && source_fixture_compile_bytes==negative_physical_bytes);
     XrXirStatus seal_status=xr_xir_compile_vm_program_take(&lowered,&program);
     if(seal_status!=XR_XIR_OK) {
         XrCompileResourceStats failed={0};
         CHECK(xr_compile_resources_stats(context.resources,&failed)==XR_COMPILE_RESOURCE_OK);
-        fprintf(stderr,"source seal status: %u allocated=%llu peak=%llu work=%llu live=%llu\n",
+        fprintf(stderr,"source seal status: %u allocated=%llu peak=%llu held=%llu\n",
             (unsigned)seal_status,(unsigned long long)failed.allocated_bytes,
-            (unsigned long long)failed.peak_bytes,(unsigned long long)failed.work,
-            (unsigned long long)failed.live_bytes);
+            (unsigned long long)failed.peak_bytes,(unsigned long long)failed.held_bytes);
     }
     CHECK(seal_status==XR_XIR_OK && !lowered);
     XrXirValue results[2] = {{0}, {0}};

@@ -26,7 +26,7 @@ XR_DATA const XrXirProgramSpec fixture_enum_program;
 XR_DATA const uint32_t fixture_enum_values[4],fixture_enum_count;
 #include "toolchain/xcompiler_session.h"
 static XrXirArtifact *enum_checked(const XrXirCompileContext *context) {
-    XrCompilerSession *session=NULL; CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK && session);
+    XrCompilerSession *session=NULL; CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK && session);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
     XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,context,XR_SOURCE_STDLIB,NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
@@ -47,7 +47,7 @@ static unsigned released;
 static void enum_release(void *pointer){EnumMixed *owner=pointer;xr_xir_compile_artifact_free(owner->artifact);xr_compile_resources_free(owner->entries);xr_compile_resources_free(owner->bindings);xr_compile_resources_free(owner);++released;}
 int main(void){
     SourceEnumIdentityEntries entries={{fixture_enum_values[0],fixture_enum_values[1],fixture_enum_values[2],fixture_enum_values[3]},fixture_enum_count};
-    const XrXirCompileContext context=*effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
+    const XrXirCompileContext context=*effects_source_owner();
     EnumMixed *owner=NULL;CHECK(xr_compile_resources_calloc(context.resources,1,sizeof(*owner),(void **)&owner)==XR_COMPILE_RESOURCE_OK);
     owner->artifact=enum_lower(enum_checked(&context));
     const XrXirModule *module=xr_xir_compile_artifact_module(owner->artifact);CHECK(module->function_count==fixture_enum_program.entry_count);

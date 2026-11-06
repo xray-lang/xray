@@ -24,7 +24,7 @@
 #include "xir_source_enum_identity_selection.h"
 #include "toolchain/xcompiler_session.h"
 static XrXirArtifact *enum_checked(const XrXirCompileContext *context) {
-    XrCompilerSession *session=NULL; CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK && session);
+    XrCompilerSession *session=NULL; CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK && session);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
     XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,context,XR_SOURCE_STDLIB,NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
@@ -41,7 +41,7 @@ static XrXirArtifact *enum_lower(XrXirArtifact *checked) {
     CHECK(xr_xir_compile_lower(specialized,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(specialized);return lowered;
 }
 int main(int argc,char **argv){
-    CHECK(argc==1 || argc==2);const XrXirCompileContext context=*effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
+    CHECK(argc==1 || argc==2);const XrXirCompileContext context=*effects_source_owner();
     XrXirArtifact *checked=enum_checked(&context);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
     CHECK(packet.length<262144);

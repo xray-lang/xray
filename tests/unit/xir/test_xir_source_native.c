@@ -35,11 +35,24 @@ int main(void) {
     SourceInferenceEntries inference_entries = {{fixture_source_inference_values[0],fixture_source_inference_values[1],
         fixture_source_inference_values[2],fixture_source_inference_values[3],fixture_source_inference_values[4],
         fixture_source_inference_values[5]},fixture_source_inference_count};
-    XrXirProgram *program = NULL;
-    const XrXirCompileContext *negative=source_fixture_source_owner(UINT64_C(16)*1024*1024,1);
-    CHECK(xr_xir_compile_program_seal(negative,&fixture_source_program,&program)==XR_XIR_BUDGET && !program);
-    const XrXirCompileContext *context=source_fixture_source_owner(UINT64_C(32)*1024*1024,UINT64_C(64000000));
+    size_t physical_blocks=source_fixture_compile_live,physical_bytes=source_fixture_compile_bytes;
+    const XrXirCompileContext *measured_context=source_fixture_source_owner((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true});
+    XrXirProgram *measured_program=NULL;XrCompileResourceStats measured={0};
+    CHECK(xr_xir_compile_program_seal(measured_context,&fixture_source_program,&measured_program)==XR_XIR_OK);
+    CHECK(xr_compile_resources_stats(measured_context->resources,&measured)==XR_COMPILE_RESOURCE_OK && measured.peak_bytes>1);
+    xr_xir_compile_program_drop(measured_program);source_fixture_source_owner_close(measured_context);
+    CHECK(source_fixture_compile_live==physical_blocks && source_fixture_compile_bytes==physical_bytes);
+    const XrXirCompileContext *context=source_fixture_source_owner(
+        (XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,measured.peak_bytes,true});
+    XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_program_seal(context,&fixture_source_program,&program)==XR_XIR_OK);
+    physical_blocks=source_fixture_compile_live;physical_bytes=source_fixture_compile_bytes;
+    const XrXirCompileContext *negative=source_fixture_source_owner(
+        (XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,measured.peak_bytes-1,true});
+    XrXirProgram *failed_program=NULL;
+    CHECK(xr_xir_compile_program_seal(negative,&fixture_source_program,&failed_program)==XR_XIR_MEMORY_LIMIT && !failed_program);
+    source_fixture_source_owner_close(negative);
+    CHECK(source_fixture_compile_live==physical_blocks && source_fixture_compile_bytes==physical_bytes);
     XrXirValue results[2] = {{0}, {0}};
     source_pair(program, fixture_source_program.declarations->entry_function,
         (SourceFunctions) {fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text, fixture_source_stack_depth, fixture_source_numeric_pause, fixture_source_bound_result, fixture_source_witness_result, fixture_source_enum_witness_result, fixture_source_enum_generic_witness_result, fixture_source_generic_method_number, fixture_source_generic_method_text, fixture_source_generic_method_array}, results);

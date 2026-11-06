@@ -29,7 +29,7 @@ static XrXirArtifact *enum_lower(XrXirArtifact *checked) {
     CHECK(xr_xir_compile_lower(specialized,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(specialized);return lowered;
 }
 int main(int argc,char **argv){
-    CHECK(argc>=1 && argc<=3);const XrXirCompileContext context=*effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
+    CHECK(argc>=1 && argc<=3);const XrXirCompileContext context=*effects_source_owner();
     FILE *file=fopen(argc==3?argv[2]:XR_CHECKED_FIXTURE,"rb");CHECK(file);
     CHECK(!fseek(file,0,SEEK_END));long size=ftell(file);CHECK(size>0 && size<262144);CHECK(!fseek(file,0,SEEK_SET));
     uint8_t *bytes=NULL;CHECK(xr_compile_resources_alloc(context.resources,(size_t)size,(void **)&bytes)==XR_COMPILE_RESOURCE_OK && bytes);CHECK(fread(bytes,1,(size_t)size,file)==(size_t)size && !fclose(file));

@@ -25,7 +25,7 @@ XR_DATA const XrXirProgramSpec fixture_enum_program;
 XR_DATA const uint32_t fixture_enum_values[4],fixture_enum_count;
 int main(void){
     SourceEnumIdentityEntries entries={{fixture_enum_values[0],fixture_enum_values[1],fixture_enum_values[2],fixture_enum_values[3]},fixture_enum_count};
-    const XrXirCompileContext *context=effects_source_owner(UINT64_C(32)*1024*1024,UINT64_C(64000000));
+    const XrXirCompileContext *context=effects_source_owner();
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(context,&fixture_enum_program,&program)==XR_XIR_OK);
     XrXirValue retained[2][4]={{{0}}};
     source_enum_identity_pair(program,entries,retained);

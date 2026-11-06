@@ -52,7 +52,7 @@ static XrXirArtifact *source_packet_lower(const XrXirCompileContext *context,con
 }
 int main(int argc, char **argv) {
     CHECK(argc >= 1 && argc <= 3);
-    const XrXirCompileContext context=*source_fixture_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
+    const XrXirCompileContext context=*source_fixture_source_owner((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true});
     const char *packet_path=argc==3 ? argv[2] : XR_CHECKED_FIXTURE;
     XrXirArtifact *lowered=source_packet_lower(&context,packet_path);
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
     uint32_t entry = module->declarations->entry_function;
     XrXirCSource source={0};
     size_t negative_physical_blocks=source_fixture_compile_live,negative_physical_bytes=source_fixture_compile_bytes;
-    const XrXirCompileContext negative=*source_fixture_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
+    const XrXirCompileContext negative=*source_fixture_source_owner((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true});
     XrXirArtifact *negative_lowered=source_packet_lower(&negative,packet_path);
     XrXirProgramPacket normal_proof=xir_program_packet_borrow(lowered),negative_proof=xir_program_packet_borrow(negative_lowered);
     CHECK(normal_proof.length==negative_proof.length && !memcmp(normal_proof.bytes,negative_proof.bytes,normal_proof.length));
@@ -92,10 +92,10 @@ int main(int argc, char **argv) {
     CHECK(xr_xir_compile_vm_program_take(&negative_lowered,&negative_program)==XR_XIR_OK && !negative_lowered);
     xr_xir_compile_program_drop(negative_program);
     XrCompileResourceStats negative_stats={0};CHECK(xr_compile_resources_stats(negative.resources,&negative_stats)==XR_COMPILE_RESOURCE_OK);
-    CHECK(negative_stats.live_bytes==source_fixture_source_owners[source_fixture_source_owner_count-1].baseline.live_bytes);
-    fprintf(stderr,"packet negative bytecap: allocated=%llu peak=%llu work=%llu live=%llu; artifact verified/sealed/dropped\n",
+    CHECK(negative_stats.held_bytes==source_fixture_source_owners[source_fixture_source_owner_count-1].baseline.held_bytes);
+    fprintf(stderr,"packet negative bytecap: allocated=%llu peak=%llu held=%llu; artifact verified/sealed/dropped\n",
         (unsigned long long)negative_stats.allocated_bytes,(unsigned long long)negative_stats.peak_bytes,
-        (unsigned long long)negative_stats.work,(unsigned long long)negative_stats.live_bytes);
+        (unsigned long long)negative_stats.held_bytes);
     source_fixture_source_owner_close(&negative);
     CHECK(source_fixture_compile_live==negative_physical_blocks && source_fixture_compile_bytes==negative_physical_bytes);
     XrXirStatus emitted = xr_xir_compile_emit_c(lowered, "fixture_source", 8388608, &source);
@@ -141,10 +141,10 @@ int main(int argc, char **argv) {
     CHECK(xr_compile_resources_stats(context.resources,&before_take)==XR_COMPILE_RESOURCE_OK);
     XrXirStatus take_status=xr_xir_compile_vm_program_take(&lowered,&program);
     CHECK(xr_compile_resources_stats(context.resources,&after_take)==XR_COMPILE_RESOURCE_OK);
-    fprintf(stderr,"packet seal status=%u: allocated %llu->%llu live %llu->%llu peak %llu work %llu->%llu; functions=%u\n",(unsigned)take_status,
+    fprintf(stderr,"packet seal status=%u: allocated %llu->%llu held %llu->%llu peak %llu; functions=%u\n",(unsigned)take_status,
         (unsigned long long)before_take.allocated_bytes,(unsigned long long)after_take.allocated_bytes,
-        (unsigned long long)before_take.live_bytes,(unsigned long long)after_take.live_bytes,(unsigned long long)after_take.peak_bytes,
-        (unsigned long long)before_take.work,(unsigned long long)after_take.work,module->function_count);
+        (unsigned long long)before_take.held_bytes,(unsigned long long)after_take.held_bytes,
+        (unsigned long long)after_take.peak_bytes,module->function_count);
     CHECK(take_status==XR_XIR_OK && !lowered);
     XrXirValue results[2] = {{0}, {0}};
     source_pair(program, entry, (SourceFunctions) {result, advance, update, calculate, resume_text, stack_depth, numeric_pause, bound_result, witness_result, enum_witness_result, enum_generic_witness_result, generic_method_number, generic_method_text, generic_method_array}, results);

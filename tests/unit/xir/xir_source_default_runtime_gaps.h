@@ -30,8 +30,8 @@ static XrXirArtifact *default_gap_checked(const char *root,const char *path) {
         "export fn retained()->string{return take()}\n"
         "export fn construct()->i64{return Box().value}\n";
     default_gap_write(path,source);
-    const XrXirCompileContext *context=source_fixture_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK && session);
+    const XrXirCompileContext *context=source_fixture_source_owner((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true});
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK && session);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
     XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
