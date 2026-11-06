@@ -68,7 +68,7 @@ static inline void effect_control_check_free(EffectControlCheck *check) {
 static XrXirStatus effect_control_seed_apply(EffectControlCheck *check,uint32_t f,
     uint32_t instruction,XrXirOp opcode,uint32_t count,XrXirFunctionEffects local) {
     const XrXirCompileContext *work=check->input.read.owner;XrXirEffect actual=check->final->functions[f].suspend;
-    if (!xir_compile_work(work,12)) return XR_XIR_BUDGET;
+    if (!xir_compile_context_valid(work)) return XR_XIR_BAD_STRUCTURE;
     if (local.suspend>actual) return XR_XIR_BAD_STRUCTURE;
     if (actual && local.suspend==actual && !(check->seen[f]&1)) {
         XrXirEffectCause cause=actual==XR_XIR_EFFECT_MAY?XR_XIR_EFFECT_CAUSE_SUSPEND:XR_XIR_EFFECT_CAUSE_INDIRECT;
@@ -141,6 +141,7 @@ static XrXirStatus effect_control_seeds(EffectControlCheck *check,uint32_t f) {
  * Closure checks consume proposed values, never provisional solver values. */
 static XrXirStatus effect_control_incoming(EffectControlCheck *check) {
     const XrXirCompileContext *work=check->input.read.owner;const EffectBodyMaterial *body=check->input.owner;uint32_t at=0;
+    if (!xir_compile_context_valid(work)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t f=0;f<check->count;++f) {
         const EffectBodyFunction *owned=&body->functions[f];EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
         for (uint32_t r=0;r<owned->run_count;++r) {
@@ -160,7 +161,6 @@ static XrXirStatus effect_control_incoming(EffectControlCheck *check) {
                 bool direct=false,cleanup=false;uint32_t target=UINT32_MAX;
                 status=effect_control_target(&check->input,check->count,&op,&direct,&target,&cleanup);
                 if (status!=XR_XIR_OK) return status;
-                if (!xir_compile_work(work,8)) return XR_XIR_BUDGET;
                 if (!direct || at>=check->edge_count || (!cleanup &&
                     (check->final->functions[f].suspend<check->final->functions[target].suspend ||
                      check->final->task_creation[f]<check->final->task_creation[target]))) return XR_XIR_BAD_STRUCTURE;
@@ -177,15 +177,13 @@ static XrXirStatus effect_control_incoming(EffectControlCheck *check) {
  * cycle with invented positive facts has no seed and cannot pass this walk. */
 static XrXirStatus effect_control_reachable(EffectControlCheck *check,uint8_t mode) {
     const XrXirCompileContext *work=check->input.read.owner;uint32_t front=0,back=0;
+    if (!xir_compile_context_valid(work)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t f=0;f<check->count;++f) {
-        if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
         if (check->seen[f]&mode) check->queue[back++]=f;
     }
     while (front<back) {
-        if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
         uint32_t callee=check->queue[front++];
         for (uint32_t e=check->heads[callee];e!=UINT32_MAX;e=check->edges[e].next) {
-            if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
             if (e>=check->edge_count) return XR_XIR_BAD_STRUCTURE;
             const EffectEdge *edge=&check->edges[e];uint32_t caller=edge->caller;
             if (caller>=check->count || (edge->next!=UINT32_MAX && edge->next>=e)) return XR_XIR_BAD_STRUCTURE;
@@ -197,7 +195,6 @@ static XrXirStatus effect_control_reachable(EffectControlCheck *check,uint8_t mo
                     XR_XIR_EFFECT_CAUSE_CALL,edge->instruction,callee,from->distance+1)) return XR_XIR_BAD_STRUCTURE;
             }
             if (back>=check->count) return XR_XIR_BAD_STRUCTURE;
-            if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
             check->seen[caller]|=mode;check->queue[back++]=caller;
         }
     }
@@ -211,7 +208,6 @@ static XrXirStatus effect_control_prepare_fields(const XrXirCompileContext *work
         !xir_compile_context_valid(work) || !effect_body_material_shape(material) ||
         material->resources!=work->resources || count!=effect_body_count(material) || !final)
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,sizeof(check->input)+sizeof(check->final)+sizeof(check->count))) return XR_XIR_BUDGET;
     check->input=effect_body_owned_request(work,material);check->final=final;check->count=count;
     XrXirStatus status=XR_XIR_OK;
     check->heads=xir_compile_calloc(work,check->count,sizeof(*check->heads),&status);
@@ -219,7 +215,6 @@ static XrXirStatus effect_control_prepare_fields(const XrXirCompileContext *work
     if (status==XR_XIR_OK) check->seen=xir_compile_calloc(work,check->count,sizeof(*check->seen),&status);
     if(status==XR_XIR_OK) check->input=effect_body_owned_request(work,material);
     for (uint32_t f=0;f<check->count && status==XR_XIR_OK;++f) {
-        if (!xir_compile_work(work,1)) { status=XR_XIR_BUDGET;break; }
         check->heads[f]=UINT32_MAX;status=effect_control_seeds(check,f);
     }
     if (status==XR_XIR_OK && check->edge_count)
@@ -230,7 +225,6 @@ static XrXirStatus effect_control_prepare_fields(const XrXirCompileContext *work
         status=effect_control_reachable(check,mode);
     }
     for (uint32_t f=0;f<check->count && status==XR_XIR_OK;++f) {
-        if (!xir_compile_work(work,6)) { status=XR_XIR_BUDGET;break; }
         bool shape=(check->seen[f]&4)!=0,root=final->root[f].requires_root || final->root[f].unresolved;
         if (!!final->functions[f].suspend!=!!(check->seen[f]&1) ||
             (final->task_creation[f]==XR_XIR_EFFECT_MAY)!=!!(check->seen[f]&2) ||
@@ -246,8 +240,7 @@ static inline void effect_legacy_error_oracle_free(XrXirEffects *fresh) {
 static inline XrXirStatus effect_legacy_error_oracle_prepare(const XrXirCompileContext *work,
     const XrXirEffects *effects,XrXirEffects *fresh) {
     const EffectFinalOutcomes *actual=effect_final_outcomes(effects);
-    if (!actual) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,sizeof(*fresh))) return XR_XIR_BUDGET;
+    if (!xir_compile_context_valid(work) || !actual) return XR_XIR_BAD_STRUCTURE;
     *fresh=(XrXirEffects){.resources=work->resources,.count=effects->count,.root_input=actual,
         .invocations=effects->invocations,
         .result_borrow=effects->result_borrow,.generation=effects->invocations->body,
@@ -261,19 +254,17 @@ static inline XrXirStatus effect_legacy_error_oracle_prepare(const XrXirCompileC
 static inline XrXirStatus effect_legacy_error_oracle_match(const XrXirCompileContext *work,
     const XrXirEffects *effects,const XrXirEffects *fresh) {
     const EffectFinalOutcomes *actual=effect_final_outcomes(effects);
-    if (!actual) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_context_valid(work) || !actual) return XR_XIR_BAD_STRUCTURE;
     if (actual->error_rows!=fresh->outcomes_work.error_rows ||
         actual->atom_count!=fresh->outcomes_work.atom_count || actual->words!=fresh->outcomes_work.words ||
         actual->atom_count>actual->atom_capacity || !!actual->atoms!=!!actual->atom_capacity ||
         !actual->errors || !fresh->outcomes_work.errors) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t a=0;a<actual->atom_count;++a) {
-        if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
         if (actual->atoms[a].type!=fresh->outcomes_work.atoms[a].type || actual->atoms[a].variant!=fresh->outcomes_work.atoms[a].variant)
             return XR_XIR_BAD_STRUCTURE;
     }
     uint64_t words=(uint64_t)actual->error_rows*actual->words;
     for (uint64_t w=0;w<words;++w) {
-        if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
         if (actual->errors[w]!=fresh->outcomes_work.errors[w]) return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
@@ -285,7 +276,6 @@ static inline XrXirStatus effect_legacy_error_dependencies_move(const XrXirCompi
         graph->physical_owned || graph->heads || graph->queue || graph->queued || graph->edges || graph->edge_count ||
         !input->heads || !input->queue || !input->seen || !!input->edges!=!!input->edge_count)
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,8*sizeof(void *)+sizeof(graph->edge_count))) return XR_XIR_BUDGET;
     graph->heads=input->heads;graph->queue=input->queue;graph->queued=input->seen;
     graph->edges=input->edges;graph->edge_count=input->edge_count;
     input->heads=NULL;input->queue=NULL;input->seen=NULL;input->edges=NULL;return XR_XIR_OK;
