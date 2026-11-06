@@ -36,6 +36,19 @@ static XrXirArtifact *capture_checked(const XrXirCompileContext *context, bool t
         {XR_XIR_CALL_INDIRECT,XR_XIR_STRING,{0,1},{0},0, {0}},
         {XR_XIR_CONCAT_STRING,XR_XIR_STRING,{3,1},{0},0, {0}},
         {XR_XIR_RETURN,XR_XIR_UNIT,{4},{0},0, {0}}};
+    XrXirInstruction throwing_wrap[] = {
+        {XR_XIR_SUSPEND,XR_XIR_UNIT,{0},{0},0,{0}},
+        {XR_XIR_INVOKE_INDIRECT,XR_XIR_STRING,{0,1},{1,2},0,{0}},
+        {XR_XIR_INVOKE_RESULT,XR_XIR_STRING,{0},{0},1,{0}},
+        {XR_XIR_CONCAT_STRING,XR_XIR_STRING,{4,1},{0},0,{0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{5},{0},0,{0}},
+        {XR_XIR_INVOKE_ERROR,XR_XIR_ERROR,{0},{0},1,{0}},
+        {XR_XIR_THROW,XR_XIR_UNIT,{7},{0},0,{0}}};
+    XrXirBlock throwing_wrap_blocks[] = {{0,2,0,0},{2,3,0,0},{5,2,0,0}};
+    XrXirInstruction pure_invoke[] = {
+        {XR_XIR_CALL_INDIRECT,XR_XIR_STRING,{0,1},{0},0,{0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0,{0}}};
+    XrXirBlock pure_invoke_block = {0,2,0,0};
     XrXirInstruction invoke[] = {
         {XR_XIR_INVOKE_INDIRECT,XR_XIR_STRING,{0,1},{1,2},0,{0}},
         {XR_XIR_INVOKE_RESULT,XR_XIR_STRING,{0},{0},0,{0}},
@@ -60,11 +73,18 @@ static XrXirArtifact *capture_checked(const XrXirCompileContext *context, bool t
         {"make",4,NULL,0,fn,blocks+2,1,make,4,captures,2,.error_type=XR_XIR_NEVER},
         {"wrap",4,parameters,2,XR_XIR_STRING,blocks+2,1,wrap,4,&argument,1,.error_type=signature.element},
         {"invoke",6,parameters,2,XR_XIR_STRING,invoke_blocks,3,invoke,5,&argument,1,.error_type=XR_XIR_ERROR},
-        {"capture",7,parameters+2,2,t,blocks+1,1,target,2,NULL,0,.error_type=throwing?(XrXirType)257:XR_XIR_NEVER}
+        {"capture",7,parameters+2,2,t,blocks+1,1,target,2,NULL,0,.error_type=signature.element}
     };
     if (throwing) {
+        functions[3].instructions=throwing_wrap;functions[3].instruction_count=7;
+        functions[3].blocks=throwing_wrap_blocks;functions[3].block_count=3;
         functions[5].instructions = failure; functions[5].instruction_count = 4;
         functions[5].blocks = blocks+2; functions[5].operands = &error_argument; functions[5].operand_count = 1;
+    }
+    if (!throwing) {
+        functions[4].instructions=pure_invoke;functions[4].instruction_count=2;
+        functions[4].blocks=&pure_invoke_block;functions[4].block_count=1;
+        functions[4].error_type=XR_XIR_NEVER;
     }
     XrXirGeneric generics[] = {{0},{0},{NULL,0,&concrete,1, NULL},{0},{0},{&constraint,1,NULL,0, NULL}};
     XrXirSourceModule source = {"root",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
