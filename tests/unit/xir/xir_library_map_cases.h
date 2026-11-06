@@ -42,7 +42,9 @@ static XrXirArtifact *library_initializer_middle(const char *canonical) {
     return checked;
 }
 static XrXirStatus library_map_operation(const XrXirCompileContext *context,void *opaque) {
-    const XrXirModule *library=opaque;XrModuleResourceBinding resource={.checked=library,.checked_module=0};XrModuleSpec specs[2]={{0},{.representation=XR_MODULE_CHECKED_LIBRARY,.resource=&resource}};XrModuleGraph graph={0};graph.spec_count=2;graph.specs=specs;SourceContext ctx={0};ctx.graph=&graph;ctx.function_count=7;ctx.compile=*context;
+    const XrXirArtifact *artifact=opaque;const XrXirModule *library=xr_xir_compile_artifact_module(artifact);
+    SourceLibraryUnit unit={.library=library,.artifact=artifact,.construction=xr_xir_compile_artifact_construction(artifact)};
+    XrModuleResourceBinding resource={.checked=artifact,.checked_module=0};XrModuleSpec specs[2]={{0},{.representation=XR_MODULE_CHECKED_LIBRARY,.resource=&resource}};XrModuleGraph graph={0};graph.spec_count=2;graph.specs=specs;SourceContext ctx={0};ctx.graph=&graph;ctx.function_count=7;ctx.compile=*context;ctx.library_units=&unit;
     SourceLibraryMap map={0};bool ok=source_library_map(&ctx,library,1,4,0,&map);
     if(!ok){CHECK(!map.functions);return ctx.diagnostic.status;}
     CHECK(map.functions[0]==4&&map.functions[1]==1&&map.functions[2]==5&&map.next_function==6);
@@ -53,11 +55,12 @@ static XrXirStatus library_map_operation(const XrXirCompileContext *context,void
 }
 static void library_map_boundary_cases(const XrXirArtifact *artifact) {
     const XrXirModule *library=xr_xir_compile_artifact_module(artifact);CHECK(library&&library->function_count==3&&library->declarations->modules[0].initializer==1);
-    LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);CHECK(library_map_operation(&owner.context,(void *)library)==XR_XIR_OK);
+    LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);CHECK(library_map_operation(&owner.context,(void *)artifact)==XR_XIR_OK);
     XrCompileResourceStats required=library_compile_stats(&owner.context);library_compile_owner_drop(&owner);
     for(unsigned mode=0;mode<2;++mode){XrCompileResourceLimits caps=library_compile_limits;if(mode==0)caps.memory_limit=required.peak_bytes-1;
         CHECK(library_compile_owner_new(&owner,&caps)==XR_XIR_OK);if(mode==1)source_program_compile_fail_at=source_program_compile_attempts;
-        XrModuleResourceBinding resource={.checked=library,.checked_module=0};XrModuleSpec specs[2]={{0},{.representation=XR_MODULE_CHECKED_LIBRARY,.resource=&resource}};XrModuleGraph graph={0};graph.spec_count=2;graph.specs=specs;SourceContext ctx={0};ctx.graph=&graph;ctx.function_count=7;ctx.compile=owner.context;SourceLibraryMap map={0};
+        SourceLibraryUnit unit={.library=library,.artifact=artifact,.construction=xr_xir_compile_artifact_construction(artifact)};
+        XrModuleResourceBinding resource={.checked=artifact,.checked_module=0};XrModuleSpec specs[2]={{0},{.representation=XR_MODULE_CHECKED_LIBRARY,.resource=&resource}};XrModuleGraph graph={0};graph.spec_count=2;graph.specs=specs;SourceContext ctx={0};ctx.graph=&graph;ctx.function_count=7;ctx.compile=owner.context;ctx.library_units=&unit;SourceLibraryMap map={0};
         CHECK(!source_library_map(&ctx,library,1,4,0,&map));source_program_compile_fail_at=SIZE_MAX;
         CHECK(!map.functions&&ctx.diagnostic.status==(mode==1?XR_XIR_OUT_OF_MEMORY:XR_XIR_MEMORY_LIMIT));library_compile_owner_drop(&owner);
     }
