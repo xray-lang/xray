@@ -40,7 +40,15 @@ static void string_error_bytes(const XrXirValue *value,XrXirDomain *domain) {
 static XrXirValue string_cases(XrXirProgram *program,uint32_t variant,uint32_t mode) {
     StringOutput output={0,mode,NULL};XrXirInstanceConfig config;
     CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
-    config.metadata_limit=65536;config.value_limit=mode==8?240:65536;config.call_limit=65536;
+    config.metadata_limit=65536;config.value_limit=65536;config.call_limit=65536;
+    if(mode==8) {
+        XrXirDomain *probe=NULL;CHECK(xr_xir_domain_new(65536,&probe)==XR_XIR_VALUE_OK);
+        XrXirDomainStats header=xr_xir_domain_stats(probe);
+        CHECK(header.live_bytes&&header.peak_bytes==header.live_bytes&&header.allocations==1&&!header.frees);
+        /* Foreign arguments retain their own owner at start. The first concat
+         * must allocate a value in this receiver beyond its measured header. */
+        config.value_limit=header.live_bytes;xr_xir_domain_drop(probe);
+    }
     config.poll_limit=mode==5?15:100;config.depth_limit=10;
     config.output=mode==4?(XrXirOutputProvider){0}:
         (XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,string_output,&output};
@@ -64,10 +72,23 @@ static XrXirValue string_cases(XrXirProgram *program,uint32_t variant,uint32_t m
     CHECK(xr_xir_string_new(arguments_domain,string_left,sizeof(string_left)-1,&arguments[0])==XR_XIR_VALUE_OK);
     CHECK(xr_xir_string_new(arguments_domain,string_right,sizeof(string_right)-1,&arguments[1])==XR_XIR_VALUE_OK);
     CHECK(xr_xir_instance_start(instance,mode==5 || mode==6?2:0,arguments,2)==XR_XIR_CALL_READY);
+    if(mode==8) {
+        XrXirDomainStats started=xr_xir_domain_stats(domain);
+        printf("String value boundary variant=%u limit=%llu start_live=%llu start_peak=%llu\n",
+            variant,(unsigned long long)config.value_limit,(unsigned long long)started.live_bytes,
+            (unsigned long long)started.peak_bytes);
+        CHECK(started.live_bytes==config.value_limit&&started.peak_bytes==config.value_limit);
+    }
     xr_xir_value_drop(&arguments[0]);xr_xir_value_drop(&arguments[1]);
     CHECK(xr_xir_instance_take_result(instance,&owned)==XR_XIR_CALL_BAD_STATE && !owned.type);
     XrXirInstanceResult polled=xr_xir_instance_poll_bounded(instance,UINT64_MAX);
     XrXirCallResult result=polled.outcome;
+    if(mode==8) {
+        if(result.status!=XR_XIR_CALL_LIMIT)fprintf(stderr,"string value execution variant=%u status=%u outputs=%u peak=%llu limit=%llu\n",
+            variant,(unsigned)result.status,output.calls,(unsigned long long)xr_xir_domain_stats(domain).peak_bytes,
+            (unsigned long long)config.value_limit);
+        CHECK(!output.calls&&xr_xir_domain_stats(domain).peak_bytes==config.value_limit);
+    }
     if (mode==3 || mode==4) CHECK(result.status==XR_XIR_CALL_OUTPUT_ERROR);
     else if (mode==5 || mode==8) CHECK(result.status==XR_XIR_CALL_LIMIT);
     else if (mode==6) CHECK(result.status==XR_XIR_CALL_CANCELLED && output.calls==3);
