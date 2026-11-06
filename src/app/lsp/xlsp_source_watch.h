@@ -21,8 +21,8 @@ typedef struct XlspSourceWatchEvent {
     uint32_t kind;
 } XlspSourceWatchEvent;
 /* Failure preserves empty output. Keys/types/URI bytes are validated before
- * publication. The original ledger covers decoding, copies and later revision
- * admission; producer JSON and the external ledger lease may die first. */
+ * publication. The original ledger covers owned decoding and copies; producer JSON and
+ * the external ledger lease may die before later revision validation. */
 XR_FUNC XrXirStatus xlsp_source_watch_read(XrCompileResources *, const XrJsonValue *, XlspSourceWatch **);
 XR_FUNC const XlspSourceWatchEvent *xlsp_source_watch_items(const XlspSourceWatch *, size_t *count);
 /* Caller excludes server mutation. Failure preserves revision and the cached

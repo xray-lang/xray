@@ -13,12 +13,12 @@
 #include "xlsp_source_settings.h"
 #include "../../shared/xr_utf8_core.h"
 #include "../../base/xchecks.h"
+#include "../../xir/xxir_compile_memory.h"
 #include <limits.h>
 #include <string.h>
 
 typedef enum SettingsSection {SET_DIAGNOSTICS, SET_COMPLETION, SET_FORMAT, SET_INLAY, SET_SECTION_COUNT} SettingsSection;
 struct XlspSourceSettings {
-    XrCompileResources *resources;
     XlspConfig values;
     uint32_t present;
 };
@@ -58,50 +58,31 @@ static const SettingsDescriptor settings_fields[] = {
 #undef BOOL_DESCRIPTOR
 };
 static const char *const settings_sections[] = {"diagnostics", "completion", "format", "inlayHints"};
-static XrXirStatus settings_work(XrCompileResources *resources, uint64_t units) {
-    XrCompileResourceStatus status = xr_compile_resources_work(resources, units);
-    return status == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK : status == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
-}
-static int settings_read_byte(void *context, const uint8_t *address, uint8_t *output) {
-    if (settings_work(context, 1) != XR_XIR_OK) return 0;
-    *output = *address; return 1;
-}
 static bool settings_object(const XrJsonValue *value) {
     return value && value->type == XR_JSON_OBJECT && value->as.object.count >= 0 &&
         value->as.object.capacity >= value->as.object.count &&
         (!value->as.object.count || value->as.object.members);
 }
-static XrXirStatus settings_key(XrCompileResources *resources, const XrJsonMember *member) {
+static XrXirStatus settings_key(const XrJsonMember *member) {
     if (!member->key || member->key_len == SIZE_MAX || !member->value) return XR_XIR_BAD_STRUCTURE;
     for (size_t at = 0; at < member->key_len;) {
-        XrUtf8Step step;
-        if (!xr_utf8_core_decode_step_read((const uint8_t *)member->key + at, member->key_len - at,
-                settings_read_byte, resources, &step)) return XR_XIR_BUDGET;
+        XrUtf8Step step=xr_utf8_core_decode_step((const uint8_t *)member->key + at, member->key_len - at);
         if (step.error != XR_UTF8_OK || !step.scalar) return XR_XIR_BAD_STRUCTURE;
         at += step.consumed;
     }
     return XR_XIR_OK;
 }
-static XrXirStatus settings_equal(XrCompileResources *resources, const XrJsonMember *member,
-    const char *key, size_t length, bool *equal) {
-    XrXirStatus status = settings_work(resources, 1);
-    if (status != XR_XIR_OK) return status;
-    *equal = false;
-    if (member->key_len != length) return XR_XIR_OK;
-    status = settings_work(resources, length);
-    if (status == XR_XIR_OK) *equal = !memcmp(member->key, key, length);
-    return status;
+static bool settings_equal(const XrJsonMember *member,const char *key,size_t length) {
+    return member->key_len==length&&!memcmp(member->key,key,length);
 }
-static XrXirStatus settings_member(XrCompileResources *resources, const XrJsonValue *object,
+static XrXirStatus settings_member(const XrJsonValue *object,
     const char *key, size_t length, const XrJsonValue **output) {
     if (!settings_object(object)) return XR_XIR_BAD_STRUCTURE;
     const XrJsonValue *found = NULL;
     for (int i = 0; i < object->as.object.count; ++i) {
-        XrXirStatus status = settings_work(resources, sizeof(XrJsonMember));
-        if (status != XR_XIR_OK) return status;
         const XrJsonMember *member = &object->as.object.members[i];
-        status = settings_key(resources, member); bool equal = false;
-        if (status == XR_XIR_OK) status = settings_equal(resources, member, key, length, &equal);
+        XrXirStatus status = settings_key(member); bool equal = false;
+        if (status == XR_XIR_OK) equal = settings_equal(member,key,length);
         if (status != XR_XIR_OK) return status;
         if (equal) {if (found) return XR_XIR_BAD_STRUCTURE; found = member->value;}
     }
@@ -141,23 +122,18 @@ static XrXirStatus settings_field(XlspSourceSettings *patch, SettingsField field
     }
     patch->present |= bit; return XR_XIR_OK;
 }
-static XrXirStatus settings_section(XrCompileResources *resources, const XrJsonValue *value,
+static XrXirStatus settings_section(const XrJsonValue *value,
     SettingsSection section, XlspSourceSettings *patch) {
     if (!settings_object(value)) return XR_XIR_BAD_STRUCTURE;
     for (int i = 0; i < value->as.object.count; ++i) {
-        XrXirStatus status = settings_work(resources, sizeof(XrJsonMember));
-        if (status != XR_XIR_OK) return status;
         const XrJsonMember *member = &value->as.object.members[i];
-        status = settings_key(resources, member); if (status != XR_XIR_OK) return status;
+        XrXirStatus status = settings_key(member); if (status != XR_XIR_OK) return status;
         for (size_t f = 0; f < sizeof(settings_fields) / sizeof(*settings_fields); ++f) {
             const SettingsDescriptor *descriptor = &settings_fields[f]; bool equal = false;
-            status = settings_work(resources, 1); if (status != XR_XIR_OK) return status;
             if (descriptor->section != section) continue;
-            status = settings_equal(resources, member, descriptor->key, descriptor->length, &equal);
-            if (status != XR_XIR_OK) return status;
+            equal = settings_equal(member,descriptor->key,descriptor->length);
             if (equal) {
-                status = settings_work(resources, sizeof(*member->value));
-                if (status == XR_XIR_OK) status = settings_field(patch, descriptor->field, member->value);
+                status = settings_field(patch, descriptor->field, member->value);
                 if (status != XR_XIR_OK) return status;
                 break;
             }
@@ -169,23 +145,21 @@ XR_FUNC XrXirStatus xlsp_source_settings_read(XrCompileResources *resources, con
     XlspSourceSettings **output) {
     if (!resources || !output || *output) return XR_XIR_BAD_STRUCTURE;
     const XrJsonValue *xray = NULL;
-    XrXirStatus status = settings_member(resources, settings, "xray", 4, &xray);
+    XrXirStatus status = settings_member(settings, "xray", 4, &xray);
     if (status != XR_XIR_OK) return status;
     if (!xray) return XR_XIR_UNRESOLVED;
     if (!settings_object(xray)) return XR_XIR_BAD_STRUCTURE;
-    XlspSourceSettings patch = {0}; patch.resources = resources; uint32_t sections = 0;
+    XlspSourceSettings patch = {0}; uint32_t sections = 0;
     for (int i = 0; i < xray->as.object.count; ++i) {
-        status = settings_work(resources, sizeof(XrJsonMember)); if (status != XR_XIR_OK) return status;
         const XrJsonMember *member = &xray->as.object.members[i];
-        status = settings_key(resources, member); if (status != XR_XIR_OK) return status;
+        status = settings_key(member); if (status != XR_XIR_OK) return status;
         for (unsigned s = 0; s < SET_SECTION_COUNT; ++s) {
             bool equal = false;
-            status = settings_equal(resources, member, settings_sections[s], strlen(settings_sections[s]), &equal);
-            if (status != XR_XIR_OK) return status;
+            equal = settings_equal(member,settings_sections[s],strlen(settings_sections[s]));
             if (equal) {
                 if (sections & (UINT32_C(1) << s)) return XR_XIR_BAD_STRUCTURE;
                 sections |= UINT32_C(1) << s;
-                status = settings_section(resources, member->value, (SettingsSection)s, &patch);
+                status = settings_section(member->value, (SettingsSection)s, &patch);
                 if (status != XR_XIR_OK) return status;
                 break;
             }
@@ -193,12 +167,9 @@ XR_FUNC XrXirStatus xlsp_source_settings_read(XrCompileResources *resources, con
     }
     XlspSourceSettings *owner = NULL;
     XrCompileResourceStatus allocated = xr_compile_resources_alloc(resources, sizeof(patch), (void **)&owner);
-    if (allocated != XR_COMPILE_RESOURCE_OK) return allocated == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET :
-        allocated == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BAD_STRUCTURE;
-    status = settings_work(resources, sizeof(patch));
-    if (status == XR_XIR_OK) { *owner = patch; *output = owner; }
-    else xr_compile_resources_free(owner);
-    return status;
+    if (allocated != XR_COMPILE_RESOURCE_OK) return xir_compile_resource_status(allocated);
+    *owner = patch; *output = owner;
+    return XR_XIR_OK;
 }
 XR_FUNC void xlsp_source_settings_free(XlspSourceSettings *owner) {
     xr_compile_resources_free(owner);
@@ -206,7 +177,6 @@ XR_FUNC void xlsp_source_settings_free(XlspSourceSettings *owner) {
 XR_FUNC XrXirStatus xlsp_source_settings_apply(const XlspSourceSettings *patch, XrLspServer *server, bool *clear_diagnostics) {
     const uint32_t allowed = (UINT32_C(1) << SET_FIELD_COUNT) - 1;
     if (!patch || !server || !clear_diagnostics || (patch->present & ~allowed)) return XR_XIR_BAD_STRUCTURE;
-    XrCompileResources *resources = patch->resources;
 #define INT_VALIDATE(section, key, field, minimum) \
     if ((patch->present & (UINT32_C(1) << SET_FIELD_##field)) && patch->values.field < minimum) return XR_XIR_BAD_STRUCTURE;
     SETTINGS_INTS(INT_VALIDATE)
@@ -215,9 +185,6 @@ XR_FUNC XrXirStatus xlsp_source_settings_apply(const XlspSourceSettings *patch, 
         server->config.diagnostics_enabled && !patch->values.diagnostics_enabled;
     if (clear && (server->pending_diag_count < 0 || server->pending_diag_capacity < server->pending_diag_count ||
         (server->pending_diag_count && !server->pending_diag))) return XR_XIR_BAD_STRUCTURE;
-    uint64_t work = sizeof(XlspConfig) * UINT64_C(2) + sizeof(*patch);
-    if (clear) work += (uint64_t)server->pending_diag_count * (sizeof(XrLspDocument *) + sizeof(bool));
-    XrXirStatus status = settings_work(resources, work); if (status != XR_XIR_OK) return status;
     XlspConfig candidate = server->config;
 #define INT_APPLY(section, key, field, minimum) \
     if (patch->present & (UINT32_C(1) << SET_FIELD_##field)) candidate.field = patch->values.field;

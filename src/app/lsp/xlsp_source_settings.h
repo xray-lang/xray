@@ -8,7 +8,7 @@
  *
  * KEY CONCEPT:
  *   An independent scalar patch owns no JSON or configuration pointers.
- *   Validation and application share one explicit cumulative work ledger.
+ *   The patch pins its memory owner after the input JSON retires.
  */
 #ifndef XLSP_SOURCE_SETTINGS_H
 #define XLSP_SOURCE_SETTINGS_H
