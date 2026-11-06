@@ -12,7 +12,7 @@ static int resource_once(char **argv,unsigned method,size_t source_fault,size_t 
     call_axis_active=false;
     bool source_hit=source_fault!=SIZE_MAX&&source>source_fault,json_hit=lsp_json_injected;
     runtime_fail_at=SIZE_MAX;lsp_json_fail=SIZE_MAX;lsp_json_injected=false;
-    if(call_axis_limits&&call_axis_budget){CHECK(status==XR_XIR_BUDGET&&!result);}
+    if(call_axis_limits&&call_axis_budget){CHECK(status==XR_XIR_MEMORY_LIMIT&&!result);}
     else if(source_fault==SIZE_MAX&&json_fault==SIZE_MAX){CHECK(status==XR_XIR_OK&&result&&result->type==XR_JSON_ARRAY);
         CHECK(result->as.array.count==(method==1?2:1));}
     else {CHECK(source_hit||json_hit);
@@ -20,20 +20,19 @@ static int resource_once(char **argv,unsigned method,size_t source_fault,size_t 
         CHECK(status==XR_XIR_OUT_OF_MEMORY&&!result);}
     CHECK(call_ledgers==1&&!runtime_live&&!runtime_bytes);
     xjson_free(result);xjson_free(params);call_fixture_done(&f);CHECK(!lsp_json_live&&!lsp_json_bytes);
-    if(report)printf("{\"method\":%u,\"status\":%u,\"source\":%zu,\"json\":%zu,\"allocated\":%llu,\"peak\":%llu,\"work\":%llu,\"source_hit\":%s,\"json_hit\":%s,\"ledgers\":%zu,\"physical_live\":%zu,\"physical_bytes\":%zu,\"json_live\":%zu,\"json_bytes\":%zu}\n",
+    if(report)printf("{\"method\":%u,\"status\":%u,\"source\":%zu,\"json\":%zu,\"allocated\":%llu,\"peak\":%llu,\"held\":%llu,\"source_hit\":%s,\"json_hit\":%s,\"ledgers\":%zu,\"physical_live\":%zu,\"physical_bytes\":%zu,\"json_live\":%zu,\"json_bytes\":%zu}\n",
         method,(unsigned)status,source,json,(unsigned long long)call_last_stats.allocated_bytes,(unsigned long long)call_last_stats.peak_bytes,
-        (unsigned long long)call_last_stats.work,source_hit?"true":"false",json_hit?"true":"false",call_ledgers,runtime_live,runtime_bytes,lsp_json_live,lsp_json_bytes);
+        (unsigned long long)call_last_stats.held_bytes,source_hit?"true":"false",json_hit?"true":"false",call_ledgers,runtime_live,runtime_bytes,lsp_json_live,lsp_json_bytes);
     return 0;
 }
-static int resource_axes(char **argv) {
+static int resource_memory(char **argv) {
     unsigned method=(unsigned)strtoul(argv[5],NULL,10);CHECK(method<3);
-    XrCompileResourceLimits baseline={(uint64_t)strtoull(argv[6],NULL,10),(uint64_t)strtoull(argv[7],NULL,10),(uint64_t)strtoull(argv[8],NULL,10)};
-    CHECK(baseline.allocated_bytes<=UINT64_C(64)*1024*1024&&baseline.live_bytes<=UINT64_C(8)*1024*1024&&baseline.work<=UINT64_C(128000000));
-    for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits exact=baseline;
-        uint64_t *bound=axis==0?&exact.allocated_bytes:axis==1?&exact.live_bytes:&exact.work;CHECK(*bound&&*bound<INT64_MAX);
-        *bound=(uint64_t)((int64_t)*bound+delta);call_axis_limits=&exact;call_axis_budget=delta<0;
+    uint64_t peak=(uint64_t)strtoull(argv[6],NULL,10);CHECK(peak&&peak<=UINT64_C(8)*1024*1024);
+    for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits exact={XR_COMPILE_MEMORY_FINITE,
+        delta<0?peak-1:peak+(unsigned)delta,true};call_axis_limits=&exact;call_axis_budget=delta<0;
         CHECK(!resource_once(argv,method,SIZE_MAX,SIZE_MAX,false));call_axis_limits=NULL;call_axis_budget=false;}
-    printf("{\"method\":%u,\"axes\":3,\"checked\":9,\"physical_live\":%zu,\"physical_bytes\":%zu,\"json_live\":%zu,\"json_bytes\":%zu}\n",method,runtime_live,runtime_bytes,lsp_json_live,lsp_json_bytes);return 0;
+    CHECK(!resource_once(argv,method,SIZE_MAX,SIZE_MAX,false));
+    printf("{\"method\":%u,\"axis\":\"held\",\"checked\":3,\"recovered\":true,\"physical_live\":%zu,\"physical_bytes\":%zu,\"json_live\":%zu,\"json_bytes\":%zu}\n",method,runtime_live,runtime_bytes,lsp_json_live,lsp_json_bytes);return 0;
 }
 static int resource_chunk(int argc,char **argv) {
     CHECK(argc==10);unsigned method=(unsigned)strtoul(argv[5],NULL,10);bool source=!strcmp(argv[6],"source");CHECK(source||!strcmp(argv[6],"json"));

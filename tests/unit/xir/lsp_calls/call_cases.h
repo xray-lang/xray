@@ -73,7 +73,7 @@ static void binding_roots_case(char **argv) {
     char text[]="fn target(v:i64)->i64{return v}\nfn outer()->fn(i64)->i64{return fn(v:i64)->i64{return target(v)}}\nconst cb=outer()\n";
     char closed[]="import \"./root\"\nfn external()->i64{return 1}\n";
     XlspSourceDocument documents[]={{argv[1],text,strlen(argv[1]),sizeof(text)-1,1},{argv[3],closed,strlen(argv[3]),sizeof(closed)-1,1}};
-    XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+    XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true};
     XrCompileResources *r=sdk_ledger(&limits);XrXirCompileContext context={r,xr_xir_compile_default_limits()};XlspSourceBindings *owner=NULL;
     CHECK(xlsp_source_bindings_build(&context,documents,2,&owner,NULL)==XR_XIR_OK&&owner&&xlsp_source_bindings_count(owner)==2);
     CHECK(xlsp_source_bindings_view(owner,0)==xlsp_source_bindings_view(owner,1));

@@ -22,7 +22,7 @@ static size_t hierarchy_ledgers;
 static const XrCompileResourceLimits *hierarchy_axis_limits;
 static bool hierarchy_axis_active,hierarchy_axis_budget;
 XR_FUNC XrCompileResourceStatus xr_compile_resources_new(const XrCompileResourceLimits *bounds,XrCompileResources **out) {
-    CHECK(bounds&&bounds->allocated_bytes==UINT64_C(64)*1024*1024&&bounds->live_bytes==UINT64_C(8)*1024*1024&&bounds->work==UINT64_C(128000000));
+    CHECK(bounds&&bounds->memory_mode==XR_COMPILE_MEMORY_FINITE&&bounds->memory_limit==UINT64_C(8)*1024*1024);
     ++hierarchy_ledgers;return hierarchy_resource_new_impl(hierarchy_axis_active?hierarchy_axis_limits:bounds,out);
 }
 XR_FUNC void xr_compile_resources_release(XrCompileResources *r){if(r)hierarchy_last_stats=sdk_stats(r);hierarchy_resource_release_impl(r);}
@@ -92,9 +92,9 @@ static void roots(char **argv) {
 }
 #include "type_cases.h"
 #include "type_resources.h"
-static int run(int argc,char **argv){CHECK(argc==5||argc==8||argc==9||argc==10);(void)sdk_fixture_malloc;(void)sdk_fixture_free;(void)sdk_ledger;(void)sdk_unlimited;
+static int run(int argc,char **argv){CHECK(argc==5||argc==7||argc==8||argc==10);(void)sdk_fixture_malloc;(void)sdk_fixture_free;(void)sdk_ledger;(void)sdk_unlimited;
     if(argc==10){CHECK(!strcmp(argv[4],"--chunk"));return resource_chunk(argc,argv);}
-    if(argc==9){CHECK(!strcmp(argv[4],"--axes"));return resource_axes(argv);}
+    if(argc==7){CHECK(!strcmp(argv[4],"--memory"));return resource_memory(argv);}
     if(argc==8){CHECK(!strcmp(argv[4],"--resource"));return resource_once(argv,(unsigned)strtoul(argv[5],NULL,10),(size_t)strtoull(argv[6],NULL,10),(size_t)strtoull(argv[7],NULL,10),true);}
     unsigned mode=(unsigned)strtoul(argv[4],NULL,10);CHECK(mode<8);
     switch(mode){case 0:normal(argv);break;case 1:roots(argv);break;case 2:unicode_case(argv);break;case 3:generic_case(argv);break;
