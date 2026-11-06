@@ -65,7 +65,7 @@ static void library_state_unit_bool_bad_slots(const XrXirCompileContext *context
         XrXirArtifact *output=NULL;
         size_t live=source_program_compile_live,bytes=source_program_compile_bytes;
         XrXirStatus status=xr_xir_compile_check_v2(context,&malformed,xr_xir_compile_artifact_construction(artifact),&output,NULL);
-        CHECK(status==XR_XIR_BAD_STRUCTURE && !output);
+        CHECK(status==(mode==2 ? XR_XIR_BAD_TYPE : XR_XIR_BAD_STRUCTURE) && !output);
         CHECK(source_program_compile_live==live && source_program_compile_bytes==bytes);
     }
 }
