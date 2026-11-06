@@ -2,22 +2,15 @@
 #include "xlsp_source_format.h"
 #include "../../frontend/parser/xparse.h"
 #include "../../shared/xr_utf8_core.h"
+#include "../../xir/xxir_compile_memory.h"
 #include <limits.h>
 #include <string.h>
 
-static XrXirStatus format_resource(XrCompileResourceStatus status) {
-    return status==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:status==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:
-        status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
-}
-static int format_read(void *context,const uint8_t *address,uint8_t *out) {
-    if(xr_compile_resources_work(context,1)!=XR_COMPILE_RESOURCE_OK)return 0;*out=*address;return 1;
-}
-static XrXirStatus format_end(XrCompileResources *resources,const XlspSourceBuffer *buffer,XrLspPosition *out) {
+static XrXirStatus format_end(const XlspSourceBuffer *buffer,XrLspPosition *out) {
     int count=0;const uint32_t *lines=xlsp_source_buffer_lines(buffer,&count);uint32_t column=0;
     const char *text=xlsp_source_buffer_text(buffer);size_t length=xlsp_source_buffer_length(buffer);
     for(size_t i=lines[count-1];i<length;) {
-        XrUtf8Step step;
-        if(!xr_utf8_core_decode_step_read((const uint8_t *)text+i,length-i,format_read,resources,&step))return XR_XIR_BUDGET;
+        XrUtf8Step step=xr_utf8_core_decode_step((const uint8_t *)text+i,length-i);
         if(step.error!=XR_UTF8_OK||!step.scalar)return XR_XIR_BAD_STRUCTURE;
         uint32_t width=step.scalar>UINT32_C(0xffff)?2u:1u;
         if(column>INT32_MAX-width)return XR_XIR_BAD_STRUCTURE;column+=width;i+=step.consumed;
@@ -49,24 +42,46 @@ XR_FUNC XrXirStatus xlsp_source_format_json(XrCompileResources *resources,const 
        document->version<INT32_MIN||document->version>INT32_MAX||configuration->indent_size<0||configuration->max_line_length<0)return XR_XIR_BAD_STRUCTURE;
     XlspSourceBuffer *buffer=NULL;XrCompilerSession *session=NULL;AstNode *ast=NULL;
     XrFmtOutput formatted={0};XrJsonValue *result=NULL,*edit=NULL;char *uri=NULL;
-    XrXirStatus status=format_resource(xr_compile_resources_work(resources,document->uri_length));if(status!=XR_XIR_OK)goto done;
+    XrXirStatus status=XR_XIR_OK;
     if(memchr(document->uri,0,document->uri_length)){status=XR_XIR_BAD_STRUCTURE;goto done;}
-    status=format_resource(xr_compile_resources_alloc(resources,document->uri_length+1,(void **)&uri));if(status!=XR_XIR_OK)goto done;
-    status=format_resource(xr_compile_resources_work(resources,document->uri_length+1));if(status!=XR_XIR_OK)goto done;
+    status=xir_compile_resource_status(xr_compile_resources_alloc(resources,document->uri_length+1,(void **)&uri));if(status!=XR_XIR_OK)goto done;
     memcpy(uri,document->uri,document->uri_length);uri[document->uri_length]=0;
     status=xlsp_source_buffer_new(resources,document->text,document->length,(int)document->version,&buffer);if(status!=XR_XIR_OK)goto done;
     if(!document->length)goto publish;
     XrCompileResourceStatus opened=xr_compile_session_new(resources,&session);
-    if(opened!=XR_COMPILE_RESOURCE_OK){status=opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:opened==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;}
+    status=xir_compile_resource_status(opened);if(status!=XR_XIR_OK)goto done;
     XrParseStatus parsed=xr_compile_parse_with_trivia(session,xlsp_source_buffer_text(buffer),uri,NULL,&ast);
     if(parsed==XR_PARSE_SYNTAX)goto publish;
-    if(parsed!=XR_PARSE_OK){status=parsed==XR_PARSE_BUDGET?XR_XIR_BUDGET:parsed==XR_PARSE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;}
+    if(parsed!=XR_PARSE_OK){
+        switch(parsed) {
+        case XR_PARSE_BUDGET: status=XR_XIR_BUDGET;break;
+        case XR_PARSE_MEMORY_LIMIT: status=XR_XIR_MEMORY_LIMIT;break;
+        case XR_PARSE_OVERFLOW: status=XR_XIR_OVERFLOW;break;
+        case XR_PARSE_CANCELLED: status=XR_XIR_CANCELLED;break;
+        case XR_PARSE_DEADLINE: status=XR_XIR_DEADLINE;break;
+        case XR_PARSE_CLOCK_FAILURE: status=XR_XIR_CLOCK_FAILURE;break;
+        case XR_PARSE_OUT_OF_MEMORY: status=XR_XIR_OUT_OF_MEMORY;break;
+        default: status=XR_XIR_BAD_STRUCTURE;break;
+        }
+        goto done;
+    }
     XrFmtStatus rendered=xr_compile_format_ast(xr_compile_session_compile_state(session),ast,configuration,&formatted);
-    if(rendered!=XR_FMT_OK){status=rendered==XR_FMT_BUDGET?XR_XIR_BUDGET:rendered==XR_FMT_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;}
+    if(rendered!=XR_FMT_OK){
+        switch(rendered) {
+        case XR_FMT_BUDGET: status=XR_XIR_BUDGET;break;
+        case XR_FMT_MEMORY_LIMIT: status=XR_XIR_MEMORY_LIMIT;break;
+        case XR_FMT_OVERFLOW: status=XR_XIR_OVERFLOW;break;
+        case XR_FMT_CANCELLED: status=XR_XIR_CANCELLED;break;
+        case XR_FMT_DEADLINE: status=XR_XIR_DEADLINE;break;
+        case XR_FMT_CLOCK_FAILURE: status=XR_XIR_CLOCK_FAILURE;break;
+        case XR_FMT_OUT_OF_MEMORY: status=XR_XIR_OUT_OF_MEMORY;break;
+        default: status=XR_XIR_BAD_STRUCTURE;break;
+        }
+        goto done;
+    }
     xr_program_destroy(ast);ast=NULL;xr_compile_session_free(session);session=NULL;
-    status=format_resource(xr_compile_resources_work(resources,formatted.length));if(status!=XR_XIR_OK)goto done;
     if(formatted.length==document->length&&!memcmp(formatted.text,xlsp_source_buffer_text(buffer),formatted.length))goto publish;
-    XrLspPosition end={0};status=format_end(resources,buffer,&end);if(status!=XR_XIR_OK)goto done;
+    XrLspPosition end={0};status=format_end(buffer,&end);if(status!=XR_XIR_OK)goto done;
     edit=xjson_new_object();if(!edit){status=XR_XIR_OUT_OF_MEMORY;goto done;}
     if(!format_member(edit,"range",format_range(end))||
        !format_member(edit,"newText",xjson_new_string_n(formatted.text,formatted.length))){status=XR_XIR_OUT_OF_MEMORY;goto done;}
