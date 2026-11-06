@@ -39,22 +39,22 @@ static bool call_request_select(CallWork *w) {
         if(initializer->type!=XR_JSON_BOOL)return call_fail(w,XR_XIR_BAD_STRUCTURE);module=initializer->as.boolean;}
     if(!call_cursor(w,at)||!call_pick(w,at,module))return false;return !request->mode||call_check_item(w,object);
 }
-XR_FUNC XrXirStatus xlsp_source_call_hierarchy_json(const XlspSourceHierarchyRequest *request,XrJsonValue **out) {
+XR_FUNC XrXirStatus xlsp_source_call_hierarchy_json(const XlspSourceHierarchyRequest *request,XrJsonValue **out,XrCompileRequestControl *control) {
     if(!request||!request->context||!request->context->resources||!request->documents||!request->known_versions||
         !request->count||request->entry>=request->count||request->mode>2||!request->params||!out||*out)return XR_XIR_BAD_STRUCTURE;
-    CallWork w={0};w.request=request;w.resources=request->context->resources;w.status=XR_XIR_OK;XrJsonValue *result=NULL;
-    w.status=xlsp_source_bindings_build(request->context,request->documents,request->count,&w.bindings);
+    CallWork w={0};w.request=request;w.control=control;w.resources=request->context->resources;w.status=XR_XIR_OK;XrJsonValue *result=NULL;
+    w.status=xlsp_source_bindings_build(request->context,request->documents,request->count,&w.bindings,control);
     if(w.status!=XR_XIR_OK)goto done;
     for(size_t i=0;i<request->count;++i){const XrXirSourceView *view=call_view(&w,i);const XrXirSourceSyntaxView *syntax=xlsp_source_bindings_syntax(w.bindings,i);
         const XrXirSourceCalls *calls=xlsp_source_bindings_calls(w.bindings,i);
-        if(!call_work(&w,sizeof(*view)+sizeof(*syntax)+sizeof(*calls)))goto done;
+        if(!call_poll(&w))goto done;
         if(!view||!view->complete||!syntax||!calls||calls->declaration_count!=view->declaration_count||
             syntax->declaration_count!=view->declaration_count||syntax->reference_count!=view->reference_count){call_fail(&w,XR_XIR_UNRESOLVED);goto done;}}
     if(!call_request_select(&w))goto done;
     if(request->mode&&(!call_edges(&w)||!call_sort(&w)))goto done;
     result=call_json_result(&w);
     if(!result&&w.status==XR_XIR_OK)call_fail(&w,XR_XIR_OUT_OF_MEMORY);
-    if(w.status==XR_XIR_OK){*out=result;result=NULL;}
+    if(w.status==XR_XIR_OK&&call_poll(&w)){*out=result;result=NULL;}
 done:
     xjson_free(result);for(size_t i=0;i<w.count;++i)xr_compile_resources_free(w.edges[i].sites);
     xr_compile_resources_free(w.edges);xlsp_source_bindings_free(w.bindings);return w.status;

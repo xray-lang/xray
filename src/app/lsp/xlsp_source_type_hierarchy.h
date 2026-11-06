@@ -12,5 +12,5 @@
 /* Checked tables alone select direct interface parents and explicit nominal
  * implementations. Unknown identities or bounds reject the whole response.
  * Output owns all JSON after corpus, Source and editor producers are freed. */
-XR_FUNC XrXirStatus xlsp_source_type_hierarchy_json(const XlspSourceHierarchyRequest *,XrJsonValue **);
+XR_FUNC XrXirStatus xlsp_source_type_hierarchy_json(const XlspSourceHierarchyRequest *,XrJsonValue **,XrCompileRequestControl *control);
 #endif // XLSP_SOURCE_TYPE_HIERARCHY_H

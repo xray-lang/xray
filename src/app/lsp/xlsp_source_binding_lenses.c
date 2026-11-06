@@ -156,19 +156,25 @@ static XrJsonValue *binding_lens_json(BindingLensRow row) {
 failed:
     xjson_free(range);xjson_free(command);xjson_free(lens);return NULL;
 }
-XR_FUNC XrXirStatus xlsp_source_binding_lenses_json(const XrXirCompileContext *context,const XlspSourceDocument *documents,size_t count,size_t entry,XrJsonValue **out) {
+XR_FUNC XrXirStatus xlsp_source_binding_lenses_json(const XrXirCompileContext *context,const XlspSourceDocument *documents,size_t count,size_t entry,XrJsonValue **out,XrCompileRequestControl *control) {
     if(!context||!context->resources||!documents||!count||entry>=count||!out||*out)return XR_XIR_BAD_STRUCTURE;
     BindingLenses w={0};w.resources=context->resources;w.documents=documents;w.count=count;w.entry=entry;XrJsonValue *result=NULL;
-    XrXirStatus status=xlsp_source_bindings_build(context,documents,count,&w.bindings);if(status!=XR_XIR_OK)goto done;
+    XrXirStatus status=xlsp_source_bindings_build(context,documents,count,&w.bindings,control);if(status!=XR_XIR_OK)goto done;
     status=binding_lens_declarations(&w);if(status!=XR_XIR_OK)goto done;
-    for(size_t i=0;i<w.row_count&&status==XR_XIR_OK;++i)status=binding_lens_count(&w,&w.rows[i]);if(status!=XR_XIR_OK)goto done;
+    for(size_t i=0;i<w.row_count&&status==XR_XIR_OK;++i){
+        if(control)status=xir_compile_resource_status(xr_compile_request_control_poll(control));
+        if(status==XR_XIR_OK)status=binding_lens_count(&w,&w.rows[i]);
+    }
+    if(status!=XR_XIR_OK)goto done;
     for(size_t i=0;i<w.row_count;++i){
         BindingLensRow display={0};display.range=w.rows[i].range;display.references=w.rows[i].references;w.rows[i]=display;}
     xlsp_source_bindings_free(w.bindings);w.bindings=NULL;
     result=xjson_new_array();if(!result){status=XR_XIR_OUT_OF_MEMORY;goto done;}
     for(size_t i=0;i<w.row_count;++i){
+        if(control){status=xir_compile_resource_status(xr_compile_request_control_poll(control));if(status!=XR_XIR_OK)goto done;}
         XrJsonValue *lens=binding_lens_json(w.rows[i]);if(!lens){status=XR_XIR_OUT_OF_MEMORY;goto done;}int before=result->as.array.count;xjson_array_push(result,lens);
         if(result->as.array.count==before){xjson_free(lens);status=XR_XIR_OUT_OF_MEMORY;goto done;}}
+    if(control){status=xir_compile_resource_status(xr_compile_request_control_poll(control));if(status!=XR_XIR_OK)goto done;}
     *out=result;result=NULL;
 done:
     xjson_free(result);xlsp_source_bindings_free(w.bindings);xr_compile_resources_free(w.rows);return status;

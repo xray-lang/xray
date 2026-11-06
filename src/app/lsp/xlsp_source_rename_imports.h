@@ -16,7 +16,7 @@ static XrXirStatus rename_import_binding(RenameWork *w,const XrXirSourceSyntaxVi
     XrXirSourceRange range,uint32_t *out) {
     *out=0;
     for(uint32_t i=0;i<syntax->marker_count;++i) {
-        XrXirStatus status=rename_work(w,sizeof(syntax->markers[i]));if(status!=XR_XIR_OK)return status;
+        XrXirStatus status=rename_poll(w);if(status!=XR_XIR_OK)return status;
         const XrXirSourceMarker *marker=&syntax->markers[i];
         if(marker->role!=XR_XIR_SOURCE_MARKER_IMPORT_BINDING||!xlsp_source_pattern_range(marker->range,range))continue;
         if(*out)return XR_XIR_BAD_STRUCTURE;*out=marker->declaration;
@@ -29,7 +29,7 @@ static XrXirStatus rename_import_insertion(RenameWork *w,const XlspSourceBinding
     const XrXirSourceSyntaxView *syntax=xlsp_source_bindings_syntax(queries,root);
     bool found=false;XrXirSourceRange point={0};
     for(uint32_t i=0;i<syntax->marker_count;++i) {
-        XrXirStatus status=rename_work(w,sizeof(syntax->markers[i]));if(status!=XR_XIR_OK)return status;
+        XrXirStatus status=rename_poll(w);if(status!=XR_XIR_OK)return status;
         const XrXirSourceMarker *marker=&syntax->markers[i];
         if(marker->declaration!=id||marker->role!=XR_XIR_SOURCE_MARKER_IMPORT_IMPLICIT)continue;
         if(found)return XR_XIR_BAD_STRUCTURE;point=marker->range;found=true;

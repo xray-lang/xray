@@ -46,7 +46,7 @@ static int run(int argc, char **argv) {
     char *text = sdk_fixture_malloc(length + 1), *uri = sdk_fixture_malloc(uri_length + 1);
     CHECK(text && uri); memcpy(text, original_inlay_inputs[mode], length + 1); memcpy(uri, argv[1], uri_length + 1);
     XlspSourceDocument document = {uri, text, uri_length, length, 1}; XlspSourceBindings *owner = NULL;
-    XrXirStatus status = xlsp_source_bindings_build(&context, &document, 1, &owner);
+    XrXirStatus status = xlsp_source_bindings_build(&context, &document, 1, &owner,NULL);
     if (status != XR_XIR_OK) {
         XlspSourceWorkspace *control = NULL; XlspSourceWorkspaceFailure failure = {0}; unsigned stage = 0;
         XrXirStatus observed = xlsp_source_workspace_build(&context, &document, 1, &control, &stage, &failure,NULL);

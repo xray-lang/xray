@@ -11,6 +11,7 @@
 #include "../../xir/xxir_implementation.h"
 #include "../../xir/xxir_nominal.h"
 #include "../../shared/xr_utf8_core.h"
+#include "../../xir/xxir_compile_memory.h"
 #include <limits.h>
 #include <stdio.h>
 #include <string.h>
@@ -22,6 +23,7 @@ typedef struct TypeSymbol {
     XrLspRange range,selection;
 } TypeSymbol;
 typedef struct TypeWork {
+    XrCompileRequestControl *control;
     const XlspSourceHierarchyRequest *request;
     XrCompileResources *resources;
     XlspSourceBindings *bindings;
@@ -32,19 +34,19 @@ typedef struct TypeWork {
 } TypeWork;
 static bool type_fail(TypeWork *w,XrXirStatus status) {if(w->status==XR_XIR_OK)w->status=status;return false;}
 static bool type_resource(TypeWork *w,XrCompileResourceStatus status) {
-    return status==XR_COMPILE_RESOURCE_OK||type_fail(w,status==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:
-        status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE);
+    return status==XR_COMPILE_RESOURCE_OK||type_fail(w,xir_compile_resource_status(status));
 }
-static bool type_work(TypeWork *w,uint64_t units) {
-    return w->status==XR_XIR_OK&&type_resource(w,xr_compile_resources_work(w->resources,units));
+static bool type_poll(TypeWork *w) {
+    if(w->status!=XR_XIR_OK)return false;
+    return !w->control||type_resource(w,xr_compile_request_control_poll(w->control));
 }
 static bool type_length(TypeWork *w,const char *text,size_t *out) {
     if(!text)return type_fail(w,XR_XIR_BAD_STRUCTURE);
-    for(size_t i=0;;++i){if(!type_work(w,1))return false;if(!text[i]){*out=i;return true;}if(i==SIZE_MAX-1)return type_fail(w,XR_XIR_BUDGET);}
+    for(size_t i=0;;++i){if(!type_poll(w))return false;if(!text[i]){*out=i;return true;}if(i==SIZE_MAX-1)return type_fail(w,XR_XIR_BUDGET);}
 }
 static bool type_equal(TypeWork *w,const char *a,const char *b,bool path,bool *out) {
     if(!a||!b)return type_fail(w,XR_XIR_BAD_STRUCTURE);
-    for(;;){if(!type_work(w,2))return false;char x=*a++,y=*b++;
+    for(;;){if(!type_poll(w))return false;char x=*a++,y=*b++;
 #ifdef XR_OS_WINDOWS
         if(path){if(x=='\\')x='/';if(y=='\\')y='/';}
 #else
@@ -56,16 +58,16 @@ static bool type_field(TypeWork *w,const XrJsonValue *object,const char *key,con
     if(!object||object->type!=XR_JSON_OBJECT||object->as.object.count<0||
         (object->as.object.count&&!object->as.object.members))return type_fail(w,XR_XIR_BAD_STRUCTURE);
     size_t length=strlen(key);*out=NULL;
-    for(int i=0;i<object->as.object.count;++i){if(!type_work(w,sizeof(XrJsonMember)))return false;
+    for(int i=0;i<object->as.object.count;++i){if(!type_poll(w))return false;
         const XrJsonMember *m=&object->as.object.members[i];if(m->key_len!=length)continue;
-        if(!m->key||!type_work(w,length))return type_fail(w,XR_XIR_BAD_STRUCTURE);
+        if(!m->key||!type_poll(w))return type_fail(w,XR_XIR_BAD_STRUCTURE);
         if(memcmp(m->key,key,length))continue;if(*out)return type_fail(w,XR_XIR_BAD_STRUCTURE);*out=m->value;}
     return *out!=NULL||type_fail(w,XR_XIR_BAD_STRUCTURE);
 }
 static bool type_json_text(TypeWork *w,const XrJsonValue *value,const char *text,size_t length) {
     if(!value||value->type!=XR_JSON_STRING||!value->as.string)return type_fail(w,XR_XIR_BAD_STRUCTURE);
     if(value->string_len!=length)return type_fail(w,XR_XIR_UNRESOLVED);
-    if(!type_work(w,length))return false;return !memcmp(value->as.string,text,length)||type_fail(w,XR_XIR_UNRESOLVED);
+    if(!type_poll(w))return false;return !memcmp(value->as.string,text,length)||type_fail(w,XR_XIR_UNRESOLVED);
 }
 static bool type_protocol_position(TypeWork *w,const XrJsonValue *object,XrLspPosition *out) {
     const XrJsonValue *line=NULL,*column=NULL;
@@ -84,7 +86,7 @@ static bool type_contains(XrLspRange range,XrLspPosition p) {
         (type_position_same(range.start,range.end)&&type_position_same(p,range.start)));
 }
 static int type_cursor_read(void *context,const uint8_t *address,uint8_t *out) {
-    if(!type_work(context,1))return 0;*out=*address;return 1;
+    if(!type_poll(context))return 0;*out=*address;return 1;
 }
 static bool type_cursor(TypeWork *w,XrLspPosition position) {
     const XlspSourceDocument *d=&w->request->documents[w->request->entry];uint32_t line=0,column=0;
@@ -94,7 +96,7 @@ static bool type_cursor(TypeWork *w,XrLspPosition position) {
         if(step.error!=XR_UTF8_OK||!step.scalar)return type_fail(w,XR_XIR_BAD_STRUCTURE);
         if(step.scalar=='\r'||step.scalar=='\n'){
             if(line==position.line||line==UINT32_MAX)return type_fail(w,XR_XIR_BAD_STRUCTURE);
-            if(step.scalar=='\r'&&offset+1<d->length){if(!type_work(w,1))return false;if(d->text[offset+1]=='\n')++step.consumed;}
+            if(step.scalar=='\r'&&offset+1<d->length){if(!type_poll(w))return false;if(d->text[offset+1]=='\n')++step.consumed;}
             ++line;column=0;
         }else{uint32_t width=step.scalar>UINT32_C(0xffff)?2u:1u;
             if(column>INT32_MAX-width)return type_fail(w,XR_XIR_BAD_STRUCTURE);column+=width;

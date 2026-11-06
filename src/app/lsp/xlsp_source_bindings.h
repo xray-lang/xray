@@ -16,20 +16,23 @@
 #include "xlsp_source_query.h"
 #include "../../xir/xxir_source_calls.h"
 #include "../../xir/xxir_source_type_facts.h"
+#include "../../base/xcompile_request.h"
 typedef struct XlspSourceBindings XlspSourceBindings;
 /* Complete immutable Source views for consumers that must distinguish the
  * syntactic binding from its navigation/call target. The canonical Source
  * overlay checker owns every semantic decision. No alternate inference runs.
  * Views and canonical input paths outlive all parser/Catalog/authority/input
- * producers and pin the original supplied cumulative ledger. */
+ * producers and pin the original supplied memory owner. */
 /* A manifest main remains the actual program entry while the checking graph
  * includes every captured document governed by that nearest project. A project
  * without a main, or a standalone script, keeps the explicit source entry.
  * Captured documents never become synthetic imports or initialization edges. */
 /* Within this owner, documents sharing an explicit project main borrow the same
  * immutable snapshot. Each materialized snapshot is released exactly once;
- * the owner never retains facts across separate build requests. */
-XR_FUNC XrXirStatus xlsp_source_bindings_build(const XrXirCompileContext *,const XlspSourceDocument *,size_t,XlspSourceBindings **);
+ * the owner never retains facts across separate build requests. Optional request
+ * control is borrowed only until the synchronous build destroys its Session;
+ * published binding snapshots retain no request callbacks. */
+XR_FUNC XrXirStatus xlsp_source_bindings_build(const XrXirCompileContext *,const XlspSourceDocument *,size_t,XlspSourceBindings **,XrCompileRequestControl *control);
 XR_FUNC void xlsp_source_bindings_free(XlspSourceBindings *);
 XR_FUNC size_t xlsp_source_bindings_count(const XlspSourceBindings *);
 XR_FUNC const XrXirSourceView *xlsp_source_bindings_view(const XlspSourceBindings *,size_t);

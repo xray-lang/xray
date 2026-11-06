@@ -4,10 +4,12 @@
 #include "xlsp_source_buffer.h"
 #include "../../frontend/format/xfmt.h"
 
+#include "../../base/xcompile_request.h"
 /* Parse and format on the original supplied ledger. Syntax errors produce no
  * edits; resource/configuration failures preserve output. A changed document
  * gets one complete edit ending at the actual UTF16 EOF. Equal bytes produce
- * no edit. JSON owns all output after parser/Session/text/formatter death. */
+ * no edit. JSON owns all output after parser/Session/text/formatter death.
+ * Optional request control is borrowed only through local Session teardown. */
 XR_FUNC XrXirStatus xlsp_source_format_json(XrCompileResources *,const XlspSourceDocument *,
-    const XrFmtConfig *,XrJsonValue **);
+    const XrFmtConfig *,XrJsonValue **,XrCompileRequestControl *control);
 #endif // XLSP_SOURCE_FORMAT_H

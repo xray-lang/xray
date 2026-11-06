@@ -104,7 +104,7 @@ static XrJsonValue *navigation_request(XrLspServer *server,XrLspDocument *doc,
         status=xlsp_source_scope_capture(&capture,&scope);if(status!=XR_XIR_OK)goto done;
         inputs=xlsp_source_scope_documents(scope);input_count=xlsp_source_scope_count(scope);
         size_t entry=SIZE_MAX;status=xlsp_source_scope_find(scope,doc->uri,selected_length,&entry);if(status!=XR_XIR_OK)goto done;
-        server->source_failure.stage=7;status=xlsp_source_binding_lenses_json(&context,inputs,input_count,entry,&result);
+        server->source_failure.stage=7;status=xlsp_source_binding_lenses_json(&context,inputs,input_count,entry,&result,NULL);
         if(status==XR_XIR_OK)server->source_failure.stage=0;goto done;
     }
     status=xlsp_source_workspace_build(&context,inputs,input_count,&fresh,&server->source_failure.stage,NULL,NULL);

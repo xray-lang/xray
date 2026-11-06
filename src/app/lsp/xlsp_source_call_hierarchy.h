@@ -14,5 +14,5 @@
  * reject the complete response. Opaque item data authenticates the current
  * revision, source fingerprint and known editor version without persisting
  * local declaration IDs. Output owns all JSON after every producer dies. */
-XR_FUNC XrXirStatus xlsp_source_call_hierarchy_json(const XlspSourceHierarchyRequest *,XrJsonValue **);
+XR_FUNC XrXirStatus xlsp_source_call_hierarchy_json(const XlspSourceHierarchyRequest *,XrJsonValue **,XrCompileRequestControl *control);
 #endif

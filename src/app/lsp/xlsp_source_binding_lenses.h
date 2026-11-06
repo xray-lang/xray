@@ -20,5 +20,5 @@
  * partial counts, lexical inference or guessed source positions are published.
  * Source producers die before the final independently owned JSON is built. */
 XR_FUNC XrXirStatus xlsp_source_binding_lenses_json(const XrXirCompileContext *,
-    const XlspSourceDocument *,size_t,size_t,XrJsonValue **);
+    const XlspSourceDocument *,size_t,size_t,XrJsonValue **,XrCompileRequestControl *control);
 #endif // XLSP_SOURCE_BINDING_LENSES_H

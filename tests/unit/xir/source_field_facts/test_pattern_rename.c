@@ -39,7 +39,7 @@ static XrXirStatus once(const char *uri,unsigned mode,XrCompileResourceLimits ca
     XlspSourceDocument document={uri,input,strlen(uri),strlen(input),9};
     XlspSourceRenameInput rename={0,selection(input,nth),name,strlen(name),false,NULL};
     lsp_json_calls=0;lsp_json_fail=json_fault;lsp_json_injected=false;XrJsonValue *result=NULL;
-    XrXirStatus status=xlsp_source_rename_json(&context,&document,1,&rename,&result);
+    XrXirStatus status=xlsp_source_rename_json(&context,&document,1,&rename,&result,NULL);
     if(injected)*injected=lsp_json_injected;lsp_json_fail=SIZE_MAX;lsp_json_injected=false;
     if(stats)*stats=sdk_stats(resources);xr_compile_resources_release(resources);CHECK(!runtime_live&&!runtime_bytes);
     CHECK(!strcmp(input,source[program]));

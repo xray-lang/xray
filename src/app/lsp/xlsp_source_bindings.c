@@ -54,12 +54,13 @@ static XrXirStatus bindings_program_same(const XrProject *a,const XrProject *b,b
     for(size_t i=0;;++i){
         if(a->main[i]!=b->main[i])return XR_XIR_BAD_STRUCTURE;if(!a->main[i])return XR_XIR_OK;}
 }
-XR_FUNC XrXirStatus xlsp_source_bindings_build(const XrXirCompileContext *context,const XlspSourceDocument *documents,size_t count,XlspSourceBindings **out) {
+XR_FUNC XrXirStatus xlsp_source_bindings_build(const XrXirCompileContext *context,const XlspSourceDocument *documents,size_t count,XlspSourceBindings **out,XrCompileRequestControl *control) {
     if(!context||!context->resources||!documents||!count||count>SIZE_MAX/sizeof(XrModuleOverlayInput)||!out||*out)return XR_XIR_BAD_STRUCTURE;
     XrCompileResources *r=context->resources;XlspSourceBindings *owner=NULL;XrSourceAuthority **authorities=NULL;
     XrModuleOverlayInput *overlays=NULL;size_t *included=NULL;char *program_path=NULL;
     XrStdlibPath stdlib={0};XrXirLibraryCatalog *catalog=NULL;XrCompilerSession *session=NULL;
     XrXirStatus status=xir_compile_resource_status(xr_compile_resources_calloc(r,1,sizeof(*owner),(void **)&owner));if(status!=XR_XIR_OK)goto done;owner->count=count;
+    if(control){status=xir_compile_resource_status(xr_compile_request_control_poll(control));if(status!=XR_XIR_OK)goto done;}
     status=xir_compile_resource_status(xr_compile_resources_calloc(r,count,sizeof(*owner->snapshots),(void **)&owner->snapshots));
     if(status==XR_XIR_OK)status=xir_compile_resource_status(xr_compile_resources_calloc(r,count,sizeof(*owner->paths),(void **)&owner->paths));
     if(status==XR_XIR_OK)status=xir_compile_resource_status(xr_compile_resources_calloc(r,count,sizeof(*owner->owners),(void **)&owner->owners));
@@ -70,9 +71,11 @@ XR_FUNC XrXirStatus xlsp_source_bindings_build(const XrXirCompileContext *contex
     if(selected!=XR_SOURCE_COMPILE_OK){status=selected==XR_SOURCE_COMPILE_MEMORY_LIMIT?XR_XIR_MEMORY_LIMIT:
         selected==XR_SOURCE_COMPILE_OVERFLOW?XR_XIR_OVERFLOW:selected==XR_SOURCE_COMPILE_CANCELLED?XR_XIR_CANCELLED:
         selected==XR_SOURCE_COMPILE_DEADLINE?XR_XIR_DEADLINE:selected==XR_SOURCE_COMPILE_CLOCK_FAILURE?XR_XIR_CLOCK_FAILURE:selected==XR_SOURCE_COMPILE_BUDGET?XR_XIR_BUDGET:selected==XR_SOURCE_COMPILE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:selected==XR_SOURCE_COMPILE_NOT_FOUND?XR_XIR_UNRESOLVED:XR_XIR_IO;goto done;}
+    if(control){status=xir_compile_resource_status(xr_compile_request_control_poll(control));if(status!=XR_XIR_OK)goto done;}
     status=xir_stdlib_library_catalog_new(context,stdlib.path,&catalog);if(status!=XR_XIR_OK)goto done;
     XrTomlParseLimits limits=xr_source_compile_default_manifest_limits();
     for(size_t i=0;i<count;++i) {
+        if(control){status=xir_compile_resource_status(xr_compile_request_control_poll(control));if(status!=XR_XIR_OK)goto done;}
         owner->owners[i]=i;
         char *path=NULL;
         status=xlsp_source_uri_path(r,documents[i].uri,documents[i].uri_length,&path);if(status!=XR_XIR_OK)goto done;
@@ -84,7 +87,9 @@ XR_FUNC XrXirStatus xlsp_source_bindings_build(const XrXirCompileContext *contex
     }
     XrCompileResourceStatus opened=xr_compile_session_new(r,&session);
     if(opened!=XR_COMPILE_RESOURCE_OK){status=xir_compile_resource_status(opened);goto done;}
+    if(control){status=xir_compile_resource_status(xr_compile_session_bind_request(session,control));if(status!=XR_XIR_OK)goto done;}
     for(size_t i=0;i<count;++i) {
+        status=xir_compile_resource_status(xr_compile_session_poll(session));if(status!=XR_XIR_OK)goto done;
         const XrProject *project=xr_source_authority_project(authorities[i]);size_t included_count=0;
         for(size_t j=0;j<i;++j){bool same=false;
             status=bindings_program_same(project,xr_source_authority_project(authorities[j]),&same);if(status!=XR_XIR_OK)goto done;
@@ -114,6 +119,7 @@ XR_FUNC XrXirStatus xlsp_source_bindings_build(const XrXirCompileContext *contex
         }
         xr_xir_compile_source_result_free(&result);if(status!=XR_XIR_OK)goto done;
     }
+    if(control){status=xir_compile_resource_status(xr_compile_request_control_poll(control));if(status!=XR_XIR_OK)goto done;}
     *out=owner;owner=NULL;
 done:
     xr_compile_session_free(session);if(authorities)for(size_t i=0;i<count;++i)xr_source_authority_close(authorities[i]);

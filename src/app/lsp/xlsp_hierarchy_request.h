@@ -33,7 +33,9 @@ typedef enum XlspSourceScopeQueryKind {
  * also scan captured roots. Semantic deltas own a copy of the previous cache.
  * Document links retain the open overlay corpus and canonical import resolver.
  * Params, configuration, open texts and roots survive every producer's death.
- * Cancellation borrows the stable task token only until run returns. */
+ * Cancellation borrows the stable task token only until run returns. Each
+ * parser Session binds the run's stack control through local teardown. Pure
+ * resource queries use run boundaries; they never bind callbacks to memory. */
 XR_FUNC XrXirStatus xlsp_hierarchy_request_capture(XrLspServer *, const XrJsonValue *,
     unsigned, XlspSourceScopeQueryKind, XlspHierarchyRequest **);
 XR_FUNC XrXirStatus xlsp_hierarchy_request_run(XlspHierarchyRequest *,

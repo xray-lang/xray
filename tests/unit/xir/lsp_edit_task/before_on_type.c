@@ -33,6 +33,6 @@ XR_FUNC XrJsonValue *xlsp_on_type_handle(XrLspServer *server,XrJsonValue *params
     XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();XrCompileResources *resources=NULL;XrJsonValue *result=NULL;
     XrCompileResourceStatus made=xr_compile_resources_new(&limits,&resources);
     XrXirStatus status=made==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:made==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
-    if(status==XR_XIR_OK)status=xlsp_source_on_type_json(resources,&input,&settings,&result);
+    if(status==XR_XIR_OK)status=xlsp_source_on_type_json(resources,&input,&settings,&result,NULL);
     xr_compile_resources_release(resources);server->source_failure.status=(unsigned)status;if(status==XR_XIR_OK)server->source_failure.stage=0;return result;
 }

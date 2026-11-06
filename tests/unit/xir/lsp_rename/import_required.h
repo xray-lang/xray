@@ -96,7 +96,7 @@ static int import_required(const char *uri,const char *library) {
         const char *program=import_program(mode);
         XlspSourceDocument documents[]={{uri,program,strlen(uri),strlen(program),7},
             {library,import_child,strlen(library),sizeof(import_child)-1,9}};
-        XlspSourceBindings *owner=NULL;XrXirStatus status=xlsp_source_bindings_build(&context,documents,2,&owner);
+        XlspSourceBindings *owner=NULL;XrXirStatus status=xlsp_source_bindings_build(&context,documents,2,&owner,NULL);
         CHECK(status==XR_XIR_OK&&owner);
         const XrXirSourceView *view=xlsp_source_bindings_view(owner,0);
         const XrXirSourceSyntaxView *syntax=xlsp_source_bindings_syntax(owner,0);
@@ -111,12 +111,12 @@ static int import_required(const char *uri,const char *library) {
         xlsp_source_bindings_free(owner);
         const char *name=mode==5?"changed\xf0\x9f\x98\x80":"changed";
         XlspSourceRenameInput input={mode==3?1u:0u,mode==3?(XrLspPosition){0,12}:(XrLspPosition){1,22},name,strlen(name),false,NULL};
-        XrJsonValue *result=NULL;status=xlsp_source_rename_json(&context,documents,2,&input,&result);
+        XrJsonValue *result=NULL;status=xlsp_source_rename_json(&context,documents,2,&input,&result,NULL);
         bool accepted=status==XR_XIR_OK&&result;
         if(accepted){import_result_fact(result,uri,library,mode,name);++passed;}
         if(mode==3) {
             xjson_free(result);result=NULL;input.entry=0;input.position=(XrLspPosition){0,10};
-            CHECK(xlsp_source_rename_json(&context,documents,2,&input,&result)==XR_XIR_OK&&result);
+            CHECK(xlsp_source_rename_json(&context,documents,2,&input,&result,NULL)==XR_XIR_OK&&result);
             import_result_fact(result,uri,library,3,name);
         }
         fprintf(stderr,"Import required mode=%u status=%u output=%s accepted=%u\n",mode,(unsigned)status,result?"JSON":"NULL",accepted?1u:0u);

@@ -100,7 +100,7 @@ static XrXirStatus rename_once(const Inputs *in,XrCompileResourceLimits caps,XrC
     lsp_json_calls=0;lsp_json_fail=fault;lsp_json_injected=false;XrXirStatus status=xlsp_source_scope_capture(&options,&scope);size_t entry=SIZE_MAX;
     if(status==XR_XIR_OK)status=xlsp_source_scope_find(scope,in->uri,strlen(in->uri),&entry);
     XlspSourceRenameInput input={entry,{1,26},"renamed",7,false,scope?xlsp_source_scope_known_versions(scope):NULL};
-    if(status==XR_XIR_OK)status=xlsp_source_rename_json(&context,xlsp_source_scope_documents(scope),xlsp_source_scope_count(scope),&input,&result);
+    if(status==XR_XIR_OK)status=xlsp_source_rename_json(&context,xlsp_source_scope_documents(scope),xlsp_source_scope_count(scope),&input,&result,NULL);
     if(injected)*injected=lsp_json_injected;lsp_json_fail=SIZE_MAX;lsp_json_injected=false;xlsp_source_scope_free(scope);
     if(stats){*stats=sdk_stats(r);if(status!=XR_XIR_OK)fprintf(stderr,"Scope rename status=%u\n",(unsigned)status);}
     xr_compile_resources_release(r);CHECK(!runtime_live&&!runtime_bytes);if(status==XR_XIR_OK)renamed_facts(result,in);else CHECK(!result);xjson_free(result);CHECK(!lsp_json_live&&!lsp_json_bytes);return status;
@@ -159,9 +159,9 @@ static XrXirStatus binding_lenses_once(const Inputs *in,unsigned mode,XrCompileR
     strcpy(text,mode==0?preserved_root:mode==1?preserved_struct:mode==2?preserved_class:"fn target()->i64{return 1}\nfn run()->i64{var alias=target;return alias()}\n");
     XlspSourceDocument documents[]={{uri,text,strlen(uri),strlen(text),7},{library_uri,library,strlen(library_uri),strlen(library),7}};
     lsp_json_calls=0;lsp_json_fail=fault;lsp_json_injected=false;
-    XrXirStatus status=xlsp_source_binding_lenses_json(&context,documents,mode==0?2:1,0,&root);
-    if(status==XR_XIR_OK&&mode==0)status=xlsp_source_binding_lenses_json(&context,documents,2,1,&lib);
-    if(status==XR_XIR_OK){XrJsonValue *occupied=root;size_t before=runtime_attempts,json_before=lsp_json_calls;CHECK(xlsp_source_binding_lenses_json(&context,documents,1,0,&occupied)==XR_XIR_BAD_STRUCTURE&&occupied==root&&runtime_attempts==before&&lsp_json_calls==json_before);}
+    XrXirStatus status=xlsp_source_binding_lenses_json(&context,documents,mode==0?2:1,0,&root,NULL);
+    if(status==XR_XIR_OK&&mode==0)status=xlsp_source_binding_lenses_json(&context,documents,2,1,&lib,NULL);
+    if(status==XR_XIR_OK){XrJsonValue *occupied=root;size_t before=runtime_attempts,json_before=lsp_json_calls;CHECK(xlsp_source_binding_lenses_json(&context,documents,1,0,&occupied,NULL)==XR_XIR_BAD_STRUCTURE&&occupied==root&&runtime_attempts==before&&lsp_json_calls==json_before);}
     if(injected)*injected=lsp_json_injected;lsp_json_fail=SIZE_MAX;lsp_json_injected=false;
     if(status!=XR_XIR_OK){xjson_free(root);root=NULL;xjson_free(lib);lib=NULL;}
     if(stats){*stats=sdk_stats(r);if(status!=XR_XIR_OK)fprintf(stderr,"Binding lenses mode=%u status=%u\n",mode,(unsigned)status);}
@@ -175,12 +175,12 @@ static void token_dependency_control(const Inputs *in) {
     XrJsonValue *legacy=NULL,*references=NULL;XrXirStatus status=xlsp_source_code_lens_json(r,workspace,library_uri,strlen(library_uri),&legacy);
     XrXirStatus reference_status=xlsp_source_workspace_navigation(workspace,library_uri,strlen(library_uri),(XrLspPosition){0,11},1,false,&references);
     printf("Original qualified-module CodeLens token dependency status=%u output=%s; Source refs status=%u count=%d\n",(unsigned)status,legacy?"JSON":"NULL",(unsigned)reference_status,references?references->as.array.count:-1);
-    XlspSourceBindings *bindings=NULL;CHECK(xlsp_source_bindings_build(&context,documents,2,&bindings)==XR_XIR_OK);
+    XlspSourceBindings *bindings=NULL;CHECK(xlsp_source_bindings_build(&context,documents,2,&bindings,NULL)==XR_XIR_OK);
     for(size_t root=0;root<2;++root){const XrXirSourceView *v=xlsp_source_bindings_view(bindings,root);const XrXirSourceSyntaxView *syntax=xlsp_source_bindings_syntax(bindings,root);
         for(uint32_t i=0;i<v->declaration_count;++i){const XrXirSourceDeclaration *d=&v->declarations[i];if(d->name&&!strcmp(d->name,"target"))printf("Source target root=%zu id=%u kind=%u parent=%u parentKind=%u role=%u name=%d:%d..%d:%d\n",root,d->id,(unsigned)d->kind,d->parent,d->parent?(unsigned)v->declarations[d->parent-1].kind:UINT32_MAX,(unsigned)syntax->declarations[i].role,syntax->declarations[i].name.line,syntax->declarations[i].name.column,syntax->declarations[i].name.end_line,syntax->declarations[i].name.end_column);}}
     xlsp_source_bindings_free(bindings);bindings=NULL;
     const char function_value[]="fn target()->i64{return 1}\nfn run()->i64{var alias=target;return alias()}\n";documents[0].text=function_value;documents[0].length=sizeof(function_value)-1;
-    CHECK(xlsp_source_bindings_build(&context,documents,1,&bindings)==XR_XIR_OK);const XrXirSourceView *v=xlsp_source_bindings_view(bindings,0);const XrXirSourceSyntaxView *syntax=xlsp_source_bindings_syntax(bindings,0);
+    CHECK(xlsp_source_bindings_build(&context,documents,1,&bindings,NULL)==XR_XIR_OK);const XrXirSourceView *v=xlsp_source_bindings_view(bindings,0);const XrXirSourceSyntaxView *syntax=xlsp_source_bindings_syntax(bindings,0);
     for(uint32_t i=0;i<v->declaration_count;++i)printf("Function-value declaration id=%u kind=%u name=%s target=%u\n",v->declarations[i].id,(unsigned)v->declarations[i].kind,v->declarations[i].name,v->declarations[i].target);
     for(uint32_t i=0;i<v->reference_count;++i)printf("Function-value reference binding=%u target=%u access=%u span=%d:%d..%d:%d\n",v->references[i].declaration,v->references[i].target,(unsigned)v->references[i].access,syntax->references[i].line,syntax->references[i].column,syntax->references[i].end_line,syntax->references[i].end_column);
     xlsp_source_bindings_free(bindings);xjson_free(legacy);xjson_free(references);xlsp_source_workspace_free(workspace);xr_compile_resources_release(r);CHECK(!runtime_live&&!runtime_bytes&&!lsp_json_live&&!lsp_json_bytes);

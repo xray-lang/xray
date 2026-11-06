@@ -24,12 +24,13 @@ typedef struct XlspSourceRenameInput {
     const bool *known_versions; /* NULL means every input has a known editor version. */
 } XlspSourceRenameInput;
 /* Exact Source bindings only. A real candidate edit is checked again on the
- * same cumulative ledger, and its complete binding set must match the mapped
+ * same memory owner, and its complete binding set must match the mapped
  * original set. No analyzer, guessed name positions, or partial edits.
  * The caller supplies the complete intended source scope. documentChanges
  * carries captured editor versions, or null for explicitly unversioned files.
  * JSON survives every producer. This is not workspace discovery or file I/O.
- * Missing import-selector/alias facts remain typed failures. */
+ * Missing import-selector/alias facts remain typed failures. Optional request
+ * control remains live through all local parser and binding Session teardown. */
 XR_FUNC XrXirStatus xlsp_source_rename_json(const XrXirCompileContext *,const XlspSourceDocument *,size_t,
-    const XlspSourceRenameInput *,XrJsonValue **);
+    const XlspSourceRenameInput *,XrJsonValue **,XrCompileRequestControl *control);
 #endif // XLSP_SOURCE_RENAME_H

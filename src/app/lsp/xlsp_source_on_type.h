@@ -14,6 +14,7 @@
 #ifndef XLSP_SOURCE_ON_TYPE_H
 #define XLSP_SOURCE_ON_TYPE_H
 #include "xlsp_source_buffer.h"
+#include "../../base/xcompile_request.h"
 typedef struct XlspSourceOnTypeInput {
     XrLspPosition position;
     uint32_t tab_size;
@@ -22,7 +23,8 @@ typedef struct XlspSourceOnTypeInput {
 } XlspSourceOnTypeInput;
 /* The original ledger covers capture, strict UTF16, lexer and full indentation.
  * Only leading whitespace is replaced. Results survive all producers.
- * A semicolon is a validated no-op; comments/literals are never brace syntax. */
+ * A semicolon is a validated no-op; comments/literals are never brace syntax.
+ * Optional request control is borrowed only during this synchronous call. */
 XR_FUNC XrXirStatus xlsp_source_on_type_json(XrCompileResources *,const XlspSourceDocument *,
-    const XlspSourceOnTypeInput *,XrJsonValue **);
+    const XlspSourceOnTypeInput *,XrJsonValue **,XrCompileRequestControl *control);
 #endif // XLSP_SOURCE_ON_TYPE_H

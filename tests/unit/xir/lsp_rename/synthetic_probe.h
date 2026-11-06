@@ -21,7 +21,7 @@ static int synthetic_once(const char *uri,unsigned mode) {
     XrXirCompileContext context={r,xr_xir_compile_default_limits()};
     XlspSourceDocument document={uri,input_text,strlen(uri),strlen(input_text),7};
     XlspSourceBindings *owner=NULL;
-    XrXirStatus status=xlsp_source_bindings_build(&context,&document,1,&owner);
+    XrXirStatus status=xlsp_source_bindings_build(&context,&document,1,&owner,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"Synthetic probe mode=%u Source status=%u\n",mode,(unsigned)status);
     if(status!=XR_XIR_OK){xlsp_source_bindings_free(owner);xr_compile_resources_release(r);
         CHECK(!runtime_live&&!runtime_bytes);CHECK(status==XR_XIR_OK);return 1;}
@@ -62,7 +62,7 @@ static int synthetic_once(const char *uri,unsigned mode) {
         (unsigned)unnamed,observed,(unsigned)implicit);
     xlsp_source_bindings_free(owner);
     XlspSourceRenameInput input={0,{1,mode?14u:8u},"payload",7,false,NULL};XrJsonValue *result=NULL;
-    status=xlsp_source_rename_json(&context,&document,1,&input,&result);
+    status=xlsp_source_rename_json(&context,&document,1,&input,&result,NULL);
     fprintf(stderr,"Synthetic lexical rename status=%u result=%s\n",(unsigned)status,result?"JSON":"NULL");
     bool renamed=status==XR_XIR_OK&&result;
     if(renamed){XrJsonValue *changes=xjson_get_array(result,"documentChanges");CHECK(changes&&changes->as.array.count==1);

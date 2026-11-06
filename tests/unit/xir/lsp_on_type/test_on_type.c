@@ -51,25 +51,25 @@ static XrXirStatus once(unsigned mode,XrCompileResourceLimits caps,XrCompileReso
     if(mode==17){memset(text,'{',70);memcpy(text+70,"\n  }",5);}
     XlspSourceDocument document={uri,text,sizeof(uri)-1,strlen(text),7};XlspSourceOnTypeInput input={e->position,4,e->spaces,e->trigger};XrJsonValue *result=NULL;
     lsp_json_calls=0;lsp_json_fail=fault;lsp_json_injected=false;
-    XrXirStatus status=xlsp_source_on_type_json(r,&document,&input,&result);
+    XrXirStatus status=xlsp_source_on_type_json(r,&document,&input,&result,NULL);
     if(stats){*stats=sdk_stats(r);if(status!=XR_XIR_OK)fprintf(stderr,"On-type mode=%u status=%u\n",mode,(unsigned)status);}
     if(injected)*injected=lsp_json_injected;lsp_json_fail=SIZE_MAX;lsp_json_injected=false;
     if(status==XR_XIR_OK){facts(result,mode);XrJsonValue *occupied=result;size_t before=runtime_attempts,json_before=lsp_json_calls;
-        CHECK(xlsp_source_on_type_json(r,&document,&input,&occupied)==XR_XIR_BAD_STRUCTURE&&occupied==result&&runtime_attempts==before&&lsp_json_calls==json_before);}
+        CHECK(xlsp_source_on_type_json(r,&document,&input,&occupied,NULL)==XR_XIR_BAD_STRUCTURE&&occupied==result&&runtime_attempts==before&&lsp_json_calls==json_before);}
     else CHECK(!result);
     memset(text,'?',sizeof(text));memset(uri,'?',sizeof(uri));xr_compile_resources_release(r);CHECK(!runtime_live&&!runtime_bytes);
     if(status==XR_XIR_OK)facts(result,mode);xjson_free(result);CHECK(!lsp_json_live&&!lsp_json_bytes);return status;
 }
 static void invalid(void) {
     XrCompileResources *r=sdk_ledger(&limits);XrJsonValue *result=NULL;XlspSourceDocument d={"file:///x.xr","\xf0\x9f\x98\x80",12,4,1};XlspSourceOnTypeInput input={{0,1},4,true,';'};
-    CHECK(xlsp_source_on_type_json(r,&d,&input,&result)==XR_XIR_BAD_STRUCTURE&&!result);
-    input.position=(XrLspPosition){1,0};CHECK(xlsp_source_on_type_json(r,&d,&input,&result)==XR_XIR_BAD_STRUCTURE&&!result);
-    input.position=(XrLspPosition){0,3};CHECK(xlsp_source_on_type_json(r,&d,&input,&result)==XR_XIR_BAD_STRUCTURE&&!result);
-    input.position=(XrLspPosition){0,0};d.text="\x80";d.length=1;CHECK(xlsp_source_on_type_json(r,&d,&input,&result)==XR_XIR_BAD_STRUCTURE&&!result);
-    d.text="\0";CHECK(xlsp_source_on_type_json(r,&d,&input,&result)==XR_XIR_BAD_STRUCTURE&&!result);
-    d.text="";d.length=0;d.uri="file:\0bad";d.uri_length=9;CHECK(xlsp_source_on_type_json(r,&d,&input,&result)==XR_XIR_BAD_STRUCTURE&&!result);
-    d.uri="file:///x.xr";d.uri_length=12;input.tab_size=0;size_t before=runtime_attempts;CHECK(xlsp_source_on_type_json(r,&d,&input,&result)==XR_XIR_BAD_STRUCTURE&&!result&&runtime_attempts==before);
-    input.tab_size=4;input.trigger='x';CHECK(xlsp_source_on_type_json(r,&d,&input,&result)==XR_XIR_BAD_STRUCTURE&&!result&&runtime_attempts==before);
+    CHECK(xlsp_source_on_type_json(r,&d,&input,&result,NULL)==XR_XIR_BAD_STRUCTURE&&!result);
+    input.position=(XrLspPosition){1,0};CHECK(xlsp_source_on_type_json(r,&d,&input,&result,NULL)==XR_XIR_BAD_STRUCTURE&&!result);
+    input.position=(XrLspPosition){0,3};CHECK(xlsp_source_on_type_json(r,&d,&input,&result,NULL)==XR_XIR_BAD_STRUCTURE&&!result);
+    input.position=(XrLspPosition){0,0};d.text="\x80";d.length=1;CHECK(xlsp_source_on_type_json(r,&d,&input,&result,NULL)==XR_XIR_BAD_STRUCTURE&&!result);
+    d.text="\0";CHECK(xlsp_source_on_type_json(r,&d,&input,&result,NULL)==XR_XIR_BAD_STRUCTURE&&!result);
+    d.text="";d.length=0;d.uri="file:\0bad";d.uri_length=9;CHECK(xlsp_source_on_type_json(r,&d,&input,&result,NULL)==XR_XIR_BAD_STRUCTURE&&!result);
+    d.uri="file:///x.xr";d.uri_length=12;input.tab_size=0;size_t before=runtime_attempts;CHECK(xlsp_source_on_type_json(r,&d,&input,&result,NULL)==XR_XIR_BAD_STRUCTURE&&!result&&runtime_attempts==before);
+    input.tab_size=4;input.trigger='x';CHECK(xlsp_source_on_type_json(r,&d,&input,&result,NULL)==XR_XIR_BAD_STRUCTURE&&!result&&runtime_attempts==before);
     xr_compile_resources_release(r);CHECK(!runtime_live&&!runtime_bytes&&!lsp_json_live&&!lsp_json_bytes);
 }
 static unsigned destroyed;

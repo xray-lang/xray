@@ -65,7 +65,7 @@ static int run(int argc,char **argv) {
     char *text=sdk_fixture_malloc(length+1),*uri=sdk_fixture_malloc(uri_length+1);CHECK(text&&uri);
     memcpy(text,texts[mode],length+1);memcpy(uri,argv[1],uri_length+1);
     XlspSourceDocument input={uri,text,uri_length,length,1};XlspSourceBindings *owner=NULL;
-    XrXirStatus status=xlsp_source_bindings_build(&context,&input,1,&owner);
+    XrXirStatus status=xlsp_source_bindings_build(&context,&input,1,&owner,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"Source calls mode=%u status=%d\n",mode,status);
     CHECK(status==XR_XIR_OK&&owner);XrCompileResourceStats stats=sdk_stats(resources);
     memset(text,'?',length);memset(uri,'?',uri_length);sdk_fixture_free(text);sdk_fixture_free(uri);xr_compile_resources_release(resources);

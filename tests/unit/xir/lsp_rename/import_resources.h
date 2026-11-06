@@ -24,7 +24,7 @@ static XrXirStatus import_once(const ImportResourceCase *item,XrCompileResourceL
     const char *name=item->mode==5?"changed\xf0\x9f\x98\x80":"changed";
     XlspSourceRenameInput input={item->mode==3?1u:0u,item->mode==3?(XrLspPosition){0,12}:(XrLspPosition){1,22},name,strlen(name),false,NULL};
     lsp_json_calls=0;lsp_json_fail=json_fault;lsp_json_injected=false;XrJsonValue *result=NULL;
-    XrXirStatus status=xlsp_source_rename_json(&context,documents,2,&input,&result);
+    XrXirStatus status=xlsp_source_rename_json(&context,documents,2,&input,&result,NULL);
     if(injected)*injected=lsp_json_injected;lsp_json_fail=SIZE_MAX;lsp_json_injected=false;
     if(stats)*stats=sdk_stats(r);
     memset(uri,'?',sizeof(uri));memset(library,'?',sizeof(library));memset(text,'?',sizeof(text));memset(child,'?',sizeof(child));memset(documents,0,sizeof(documents));

@@ -36,20 +36,20 @@ static bool type_request_select(TypeWork *w) {
     else{const XrJsonValue *selection=NULL;if(!type_field(w,object,"selectionRange",&selection)||!type_field(w,selection,"start",&position)||!type_protocol_position(w,position,&at))return false;}
     if(!type_cursor(w,at)||!type_pick(w,at))return false;return !request->mode||type_check_item(w,object);
 }
-XR_FUNC XrXirStatus xlsp_source_type_hierarchy_json(const XlspSourceHierarchyRequest *request,XrJsonValue **out) {
+XR_FUNC XrXirStatus xlsp_source_type_hierarchy_json(const XlspSourceHierarchyRequest *request,XrJsonValue **out,XrCompileRequestControl *control) {
     if(!request||!request->context||!request->context->resources||!request->documents||!request->known_versions||
         !request->count||request->entry>=request->count||request->mode>2||!request->params||!out||*out)return XR_XIR_BAD_STRUCTURE;
-    TypeWork w={0};w.request=request;w.resources=request->context->resources;w.status=XR_XIR_OK;XrJsonValue *result=NULL;
-    w.status=xlsp_source_bindings_build(request->context,request->documents,request->count,&w.bindings);if(w.status!=XR_XIR_OK)goto done;
+    TypeWork w={0};w.request=request;w.control=control;w.resources=request->context->resources;w.status=XR_XIR_OK;XrJsonValue *result=NULL;
+    w.status=xlsp_source_bindings_build(request->context,request->documents,request->count,&w.bindings,control);if(w.status!=XR_XIR_OK)goto done;
     for(size_t i=0;i<request->count;++i){const XrXirSourceView *view=type_view(&w,i);const XrXirSourceSyntaxView *syntax=xlsp_source_bindings_syntax(w.bindings,i);
         const XrXirSourceTypeFacts *facts=xlsp_source_bindings_types(w.bindings,i);
-        if(!type_work(&w,sizeof(*view)+sizeof(*syntax)+sizeof(*facts)))goto done;
+        if(!type_poll(&w))goto done;
         if(!view||!view->complete||!syntax||!facts||facts->declaration_count!=view->declaration_count||
             syntax->declaration_count!=view->declaration_count||syntax->reference_count!=view->reference_count){type_fail(&w,XR_XIR_UNRESOLVED);goto done;}}
     if(!type_request_select(&w))goto done;
     if(request->mode&&(!(request->mode==1?type_supertypes(&w):type_subtypes(&w))||!type_sort(&w)))goto done;
     result=type_json_result(&w);if(!result&&w.status==XR_XIR_OK)type_fail(&w,XR_XIR_OUT_OF_MEMORY);
-    if(w.status==XR_XIR_OK){*out=result;result=NULL;}
+    if(w.status==XR_XIR_OK&&type_poll(&w)){*out=result;result=NULL;}
 done:
     xjson_free(result);xr_compile_resources_free(w.rows);xlsp_source_bindings_free(w.bindings);return w.status;
 }

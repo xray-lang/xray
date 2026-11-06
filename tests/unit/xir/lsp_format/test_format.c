@@ -31,14 +31,14 @@ static XrXirStatus once(unsigned mode,XrCompileResourceLimits caps,XrCompileReso
     XlspSourceDocument input={uri,text,sizeof(uri)-1,length,7};XrFmtConfig config=xfmt_default_config;
     if(mode==1)config.indent_size=2;if(mode==2)config.use_tabs=1;
     lsp_json_calls=0;lsp_json_fail=fault;lsp_json_injected=false;
-    XrXirStatus status=xlsp_source_format_json(resources,&input,&config,&result);if(stats&&status!=XR_XIR_OK)fprintf(stderr,"Formatting diagnostic mode=%u status=%u\n",mode,(unsigned)status);memset(text,'?',sizeof(text));memset(uri,'?',sizeof(uri));
+    XrXirStatus status=xlsp_source_format_json(resources,&input,&config,&result,NULL);if(stats&&status!=XR_XIR_OK)fprintf(stderr,"Formatting diagnostic mode=%u status=%u\n",mode,(unsigned)status);memset(text,'?',sizeof(text));memset(uri,'?',sizeof(uri));
     if(status==XR_XIR_OK) {
         facts(result,mode);XrJsonValue *occupied=result;size_t before=runtime_attempts,json_before=lsp_json_calls;
-        CHECK(xlsp_source_format_json(resources,&input,&config,&occupied)==XR_XIR_BAD_STRUCTURE&&occupied==result&&runtime_attempts==before&&lsp_json_calls==json_before);
+        CHECK(xlsp_source_format_json(resources,&input,&config,&occupied,NULL)==XR_XIR_BAD_STRUCTURE&&occupied==result&&runtime_attempts==before&&lsp_json_calls==json_before);
         if(mode<4||mode==7) {
             XrJsonValue *formatted=xjson_get(xjson_array_get(result,0),"newText");
             XlspSourceDocument next={"file:///format.xr",formatted->as.string,17,formatted->string_len,8};
-            status=xlsp_source_format_json(resources,&next,&config,&again);
+            status=xlsp_source_format_json(resources,&next,&config,&again,NULL);
             if(status==XR_XIR_OK)CHECK(again&&again->as.array.count==0);else CHECK(!again);
         }
     } else CHECK(!result);
@@ -49,12 +49,12 @@ static XrXirStatus once(unsigned mode,XrCompileResourceLimits caps,XrCompileReso
 static void invalid_inputs(void) {
     XrCompileResources *resources=sdk_ledger(&limits);XrJsonValue *result=NULL;XrFmtConfig config=xfmt_default_config;
     XlspSourceDocument input={"file:///format.xr","\x80",17,1,1};
-    CHECK(xlsp_source_format_json(resources,&input,&config,&result)==XR_XIR_BAD_STRUCTURE&&!result);
-    input.text="\0";CHECK(xlsp_source_format_json(resources,&input,&config,&result)==XR_XIR_BAD_STRUCTURE&&!result);
+    CHECK(xlsp_source_format_json(resources,&input,&config,&result,NULL)==XR_XIR_BAD_STRUCTURE&&!result);
+    input.text="\0";CHECK(xlsp_source_format_json(resources,&input,&config,&result,NULL)==XR_XIR_BAD_STRUCTURE&&!result);
     input.text="";input.length=0;config.indent_size=-1;size_t before=runtime_attempts;
-    CHECK(xlsp_source_format_json(resources,&input,&config,&result)==XR_XIR_BAD_STRUCTURE&&!result&&runtime_attempts==before);
+    CHECK(xlsp_source_format_json(resources,&input,&config,&result,NULL)==XR_XIR_BAD_STRUCTURE&&!result&&runtime_attempts==before);
     config=xfmt_default_config;input.uri="file:\0bad";input.uri_length=9;
-    CHECK(xlsp_source_format_json(resources,&input,&config,&result)==XR_XIR_BAD_STRUCTURE&&!result);
+    CHECK(xlsp_source_format_json(resources,&input,&config,&result,NULL)==XR_XIR_BAD_STRUCTURE&&!result);
     xr_compile_resources_release(resources);CHECK(!runtime_live&&!runtime_bytes&&!lsp_json_live&&!lsp_json_bytes);
 }
 int main(int argc,char **argv) {

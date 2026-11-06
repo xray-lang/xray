@@ -37,12 +37,13 @@ static XrJsonValue *format_range(XrLspPosition end) {
     return value;
 }
 XR_FUNC XrXirStatus xlsp_source_format_json(XrCompileResources *resources,const XlspSourceDocument *document,
-    const XrFmtConfig *configuration,XrJsonValue **out) {
+    const XrFmtConfig *configuration,XrJsonValue **out,XrCompileRequestControl *control) {
     if(!resources||!document||!document->uri||document->uri_length==SIZE_MAX||!configuration||!out||*out||
        document->version<INT32_MIN||document->version>INT32_MAX||configuration->indent_size<0||configuration->max_line_length<0)return XR_XIR_BAD_STRUCTURE;
     XlspSourceBuffer *buffer=NULL;XrCompilerSession *session=NULL;AstNode *ast=NULL;
     XrFmtOutput formatted={0};XrJsonValue *result=NULL,*edit=NULL;char *uri=NULL;
     XrXirStatus status=XR_XIR_OK;
+    if(control){status=xir_compile_resource_status(xr_compile_request_control_poll(control));if(status!=XR_XIR_OK)goto done;}
     if(memchr(document->uri,0,document->uri_length)){status=XR_XIR_BAD_STRUCTURE;goto done;}
     status=xir_compile_resource_status(xr_compile_resources_alloc(resources,document->uri_length+1,(void **)&uri));if(status!=XR_XIR_OK)goto done;
     memcpy(uri,document->uri,document->uri_length);uri[document->uri_length]=0;
@@ -50,6 +51,7 @@ XR_FUNC XrXirStatus xlsp_source_format_json(XrCompileResources *resources,const 
     if(!document->length)goto publish;
     XrCompileResourceStatus opened=xr_compile_session_new(resources,&session);
     status=xir_compile_resource_status(opened);if(status!=XR_XIR_OK)goto done;
+    if(control){status=xir_compile_resource_status(xr_compile_session_bind_request(session,control));if(status!=XR_XIR_OK)goto done;}
     XrParseStatus parsed=xr_compile_parse_with_trivia(session,xlsp_source_buffer_text(buffer),uri,NULL,&ast);
     if(parsed==XR_PARSE_SYNTAX)goto publish;
     if(parsed!=XR_PARSE_OK){
@@ -86,6 +88,7 @@ XR_FUNC XrXirStatus xlsp_source_format_json(XrCompileResources *resources,const 
     if(!format_member(edit,"range",format_range(end))||
        !format_member(edit,"newText",xjson_new_string_n(formatted.text,formatted.length))){status=XR_XIR_OUT_OF_MEMORY;goto done;}
 publish:
+    if(control){status=xir_compile_resource_status(xr_compile_request_control_poll(control));if(status!=XR_XIR_OK)goto done;}
     result=xjson_new_array();if(!result){status=XR_XIR_OUT_OF_MEMORY;goto done;}
     if(edit){xjson_array_push(result,edit);if(result->as.array.count!=1){status=XR_XIR_OUT_OF_MEMORY;goto done;}edit=NULL;}
     *out=result;result=NULL;

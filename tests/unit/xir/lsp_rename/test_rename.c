@@ -55,13 +55,13 @@ static XrXirStatus once(const char *uri,const char *lib,const char *closed,unsig
     const char *name=mode==2?"callback":mode==5?"fresh\xf0\x9f\x98\x80":mode==6?"value":"changed";
     XlspSourceRenameInput input={0,position,name,strlen(name),mode==1||mode==7,mode==4?known_versions:NULL};
     lsp_json_calls=0;lsp_json_fail=json_fault;lsp_json_injected=false;
-    if(status==XR_XIR_OK)status=xlsp_source_rename_json(&context,documents,(mode==3||mode==4)?2:1,&input,&result);
+    if(status==XR_XIR_OK)status=xlsp_source_rename_json(&context,documents,(mode==3||mode==4)?2:1,&input,&result,NULL);
     if(closed_bytes)memset(closed_bytes,'?',closed_length);xr_compile_resources_free(closed_bytes);
     if(injected)*injected=lsp_json_injected;lsp_json_fail=SIZE_MAX;lsp_json_injected=false;
     if(stats){*stats=sdk_stats(r);if(status!=XR_XIR_OK)fprintf(stderr,"Rename diagnostic mode=%u status=%u\n",mode,(unsigned)status);}
     memset(text,'?',sizeof(text));memset(root,'?',sizeof(root));memset(library,'?',sizeof(library));memset(child,'?',sizeof(child));memset(documents,0,sizeof(documents));
     if(status==XR_XIR_OK){facts(result,uri,mode);XrJsonValue *occupied=result;size_t before=runtime_attempts,json_before=lsp_json_calls;
-        CHECK(xlsp_source_rename_json(&context,documents,1,&input,&occupied)==XR_XIR_BAD_STRUCTURE&&occupied==result&&before==runtime_attempts&&json_before==lsp_json_calls);}
+        CHECK(xlsp_source_rename_json(&context,documents,1,&input,&occupied,NULL)==XR_XIR_BAD_STRUCTURE&&occupied==result&&before==runtime_attempts&&json_before==lsp_json_calls);}
     else CHECK(!result);xr_compile_resources_release(r);CHECK(!runtime_live&&!runtime_bytes);
     if(status==XR_XIR_OK)facts(result,uri,mode);xjson_free(result);CHECK(!lsp_json_live&&!lsp_json_bytes);return status;
 }
@@ -87,9 +87,9 @@ static void rejected(const char *uri,const char *library) {
         XrCompileResources *r=sdk_ledger(&limits);XrXirCompileContext context={r,xr_xir_compile_default_limits()};
         XlspSourceDocument documents[]={{uri,programs[i],strlen(uri),strlen(programs[i]),7},{library,child,strlen(library),sizeof(child)-1,9}};
         size_t count=i==5||i==6?2:1;XlspSourceBindings *baseline=NULL;
-        CHECK(xlsp_source_bindings_build(&context,documents,count,&baseline)==XR_XIR_OK&&baseline);xlsp_source_bindings_free(baseline);
+        CHECK(xlsp_source_bindings_build(&context,documents,count,&baseline,NULL)==XR_XIR_OK&&baseline);xlsp_source_bindings_free(baseline);
         XlspSourceRenameInput input={i==6?1:0,positions[i],names[i],lengths[i],i==7,NULL};XrJsonValue *result=NULL;
-        XrXirStatus status=xlsp_source_rename_json(&context,documents,count,&input,&result);
+        XrXirStatus status=xlsp_source_rename_json(&context,documents,count,&input,&result,NULL);
         if(status!=expected[i])fprintf(stderr,"Rename rejection case=%u actual=%u expected=%u\n",i,(unsigned)status,(unsigned)expected[i]);
         CHECK(status==expected[i]);if(i==5){CHECK(result);import_result_fact(result,uri,library,0,"changed");}
         else if(i==6){CHECK(result);import_result_fact(result,uri,library,3,"changed");}
@@ -109,7 +109,7 @@ static int enum_required(const char *uri) {
         "}\n";
     XrCompileResources *r=sdk_ledger(&limits);XrXirCompileContext context={r,xr_xir_compile_default_limits()};
     XlspSourceDocument document={uri,text,strlen(uri),strlen(text),1};XlspSourceBindings *baseline=NULL;
-    CHECK(xlsp_source_bindings_build(&context,&document,1,&baseline)==XR_XIR_OK&&baseline);
+    CHECK(xlsp_source_bindings_build(&context,&document,1,&baseline,NULL)==XR_XIR_OK&&baseline);
     const XrXirSourceView *view=xlsp_source_bindings_view(baseline,0);const XrXirSourceSyntaxView *syntax=xlsp_source_bindings_syntax(baseline,0);
     for(uint32_t i=0;i<view->declaration_count;++i)if(syntax->declarations[i].role==XR_XIR_SOURCE_SYNTAX_UNRESOLVED)
         fprintf(stderr,"Required enum Source declaration=%u kind=%u name=%s parent=%u role=%u nameSpan=%d:%d..%d:%d\n",
@@ -121,7 +121,7 @@ static int enum_required(const char *uri) {
             reference->declaration,(unsigned)binding->kind,binding->name,reference->target,(unsigned)target->kind,target->name,(unsigned)reference->access,
             syntax->references[i].line,syntax->references[i].column,syntax->references[i].end_line,syntax->references[i].end_column);}
     xlsp_source_bindings_free(baseline);XlspSourceRenameInput input={0,{4,33},"payload",7,false,NULL};XrJsonValue *result=NULL;
-    XrXirStatus status=xlsp_source_rename_json(&context,&document,1,&input,&result);xr_compile_resources_release(r);CHECK(!runtime_live&&!runtime_bytes);
+    XrXirStatus status=xlsp_source_rename_json(&context,&document,1,&input,&result,NULL);xr_compile_resources_release(r);CHECK(!runtime_live&&!runtime_bytes);
     if(status!=XR_XIR_OK){fprintf(stderr,"Required original enum field rename status=%u, output=%s, compiler physical0/0; original valid3-edit obligation remains\n",(unsigned)status,result?"PARTIAL":"NULL");xjson_free(result);CHECK(false);}
     CHECK(result);XrJsonValue *documents=xjson_get_array(result,"documentChanges");CHECK(documents&&documents->as.array.count==1);
     XrJsonValue *edits=xjson_get_array(xjson_array_get(documents,0),"edits");CHECK(edits&&edits->as.array.count==3);

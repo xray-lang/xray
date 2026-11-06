@@ -24,7 +24,7 @@ static int run(int argc,char **argv){
     char *text=sdk_fixture_malloc(length+1),*uri=sdk_fixture_malloc(uri_length+1);CHECK(text&&uri);
     memcpy(text,texts[mode],length+1);memcpy(uri,argv[1],uri_length+1);
     XlspSourceDocument input={uri,text,uri_length,length,1};XlspSourceBindings *owner=NULL;
-    CHECK(xlsp_source_bindings_build(&context,&input,1,&owner)==XR_XIR_OK&&owner);
+    CHECK(xlsp_source_bindings_build(&context,&input,1,&owner,NULL)==XR_XIR_OK&&owner);
     XrCompileResourceStats stats=sdk_stats(resources);
     memset(text,'?',length);memset(uri,'?',uri_length);sdk_fixture_free(text);sdk_fixture_free(uri);xr_compile_resources_release(resources);
     const XrXirSourceView *view=xlsp_source_bindings_view(owner,0);const XrXirSourceSyntaxView *syntax=xlsp_source_bindings_syntax(owner,0);
