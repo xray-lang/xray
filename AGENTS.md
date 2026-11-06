@@ -44,7 +44,8 @@ cores a lane actually consumes.
 **Validation follows the direct-cutover verification policy.** Use the current
 numbered roadmap and `rules/verification-policy.md` as the gate boundary:
 
-- L0: incremental builds and affected `.xr` positive and negative cases.
+- L0: incremental builds and affected `.xr` positive and negative cases. Hot-path
+  changes immediately run affected performance benchmarks after rebuild.
 - L1: Windows and macOS builds, smoke `run` and `build-run`, valid LIR and
   register-bytecode tests, and W1-W4 with real host C compilers before main.
 - L2: affected ASan, UBSan and `XR_XIR_PARANOID` coverage, plus an independent
