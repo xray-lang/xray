@@ -39,7 +39,7 @@ int main(void) {
         else if (value.type) {
             XrCompileResourceStats held={0};
             CHECK(xr_compile_resources_stats(owner.context.resources,&held)==XR_COMPILE_RESOURCE_OK);
-            CHECK(held.live_bytes>owner.baseline.live_bytes);
+            CHECK(held.held_bytes>owner.baseline.held_bytes);
             XrXirDomain *reader=NULL;CHECK(xr_xir_domain_new(65536,&reader)==XR_XIR_VALUE_OK);
             string_error_bytes(&value,reader);xr_xir_domain_drop(reader);
         }
