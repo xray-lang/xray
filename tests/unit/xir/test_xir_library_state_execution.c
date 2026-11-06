@@ -89,10 +89,11 @@ done:
     xr_xir_compile_program_drop(program);xr_xir_compile_artifact_free(lowered);
     xr_xir_compile_artifact_free(special);xr_xir_compile_artifact_free(checked);return status;
 }
-static XrXirArtifact *library_state_lower(XrXirArtifact *owned,uint32_t ids[LIBRARY_STATE_EXPORTS]) {
+static XrXirArtifact *library_state_lower(XrXirArtifact *owned,uint32_t ids[LIBRARY_STATE_EXPORTS],bool resources) {
     CHECK(xr_xir_compile_artifact_verify(owned,NULL)==XR_XIR_OK);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(owned,&packet,NULL)==XR_XIR_OK);
-    library_compile_operation_cases("State reader specialization recheck lower bind seal",library_state_pipeline_operation,&packet);
+    if (resources)
+        library_compile_operation_cases("State reader specialization recheck lower bind seal",library_state_pipeline_operation,&packet);
     xr_xir_compile_checked_packet_free(&packet);
     XrXirArtifact *special=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_specialize(owned,&special,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(owned);
@@ -115,7 +116,7 @@ static XrXirProgramSpec library_state_vm_spec(XrXirArtifact *lowered,XrXirCallEn
 #endif
 #if CONSUMER_KIND==3
 XR_FUNC void xr_test_library_state_run(const XrXirCompileContext *context,XrXirArtifact *owned) {
-    uint32_t ids[LIBRARY_STATE_EXPORTS];XrXirArtifact *lowered=library_state_lower(owned,ids);
+    uint32_t ids[LIBRARY_STATE_EXPORTS];XrXirArtifact *lowered=library_state_lower(owned,ids,true);
     XrXirCallEntry entries[128];XrXirVmBinding bindings[128];XrXirProgramSpec spec=library_state_vm_spec(lowered,entries,bindings);
     library_state_finish(context,&spec,lowered,ids);
 }
@@ -128,15 +129,26 @@ int main(int argc,char **argv) {
 #endif
     uint32_t ids[LIBRARY_STATE_EXPORTS];XrXirProgramSpec spec={0};
 #if CONSUMER_KIND==0
-    CHECK(argc==3);FILE *file=fopen(argv[1],"rb");CHECK(file && !fseek(file,0,SEEK_END));long length=ftell(file);
+    const bool write_c=argc==4 && !strcmp(argv[1],"--write-c");
+    CHECK(argc==3 || write_c);
+    const unsigned path_index=write_c ? 2 : 1;
+    FILE *file=fopen(argv[path_index],"rb");CHECK(file && !fseek(file,0,SEEK_END));long length=ftell(file);
     CHECK(length>=64 && length<=262144 && !fseek(file,0,SEEK_SET));void *bytes=malloc((size_t)length);
     CHECK(bytes && fread(bytes,1,(size_t)length,file)==(size_t)length && !fclose(file));
     CHECK(xr_xir_compile_checked_read(&compiler.context,bytes,(size_t)length,&checked,NULL)==XR_XIR_OK);
-    memset(bytes,0,(size_t)length);free(bytes);lowered=library_state_lower(checked,ids);checked=NULL;
+    memset(bytes,0,(size_t)length);free(bytes);lowered=library_state_lower(checked,ids,!write_c);checked=NULL;
     XrXirCSource output={0};CHECK(xr_xir_compile_emit_c(lowered,"library_state",1048576,&output)==XR_XIR_OK);
-    file=fopen(argv[2],"wb");CHECK(file && fwrite(output.text,1,output.length,file)==output.length);
+    file=fopen(argv[path_index+1],"wb");CHECK(file && fwrite(output.text,1,output.length,file)==output.length);
     CHECK(fprintf(file,"\nconst uint32_t library_state_export_indices[5]={%u,%u,%u,%u,%u};\n",ids[0],ids[1],ids[2],ids[3],ids[4])>0 && !fclose(file));
     xr_xir_compile_c_source_free(&output);
+    if (write_c) {
+        xr_xir_compile_artifact_free(lowered);
+        library_compile_owner_drop(&compiler);
+        library_compile_observer_free();
+        CHECK(!runtime_live && !runtime_bytes);
+        puts("Library private state C written");
+        return 0;
+    }
 #else
     CHECK(argc==1);(void)argv;spec=library_state_program;memcpy(ids,library_state_export_indices,sizeof(ids));
 #if CONSUMER_KIND==2
