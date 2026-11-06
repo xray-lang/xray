@@ -2,6 +2,7 @@
 #include "xlsp_source_syntax.h"
 #include "../../toolchain/xcompiler_arena_backing.h"
 #include "../../base/xarena.h"
+#include "../../xir/xxir_compile_memory.h"
 #include "../../frontend/parser/xast_nodes.h"
 #include "../../frontend/parser/xast_walk.h"
 #include <limits.h>
@@ -35,12 +36,23 @@ struct XlspSyntaxSnapshot {
     XlspSyntaxCallRecord *calls;
     size_t call_count,call_capacity;
 };
+typedef struct SyntaxBuild {
+    XlspSyntaxSnapshot *snapshot;
+    XrCompilerSession *session;
+} SyntaxBuild;
 static XrCompileResourceStatus syntax_call_observe(void *,const XrParseCallSyntax *);
-static XrCompileResourceStatus syntax_calls_finalize(XlspSyntaxSnapshot *);
+static XrCompileResourceStatus syntax_calls_finalize(XlspSyntaxSnapshot *,XrCompilerSession *);
 static XrParseStatus syntax_status(XrCompileResourceStatus status) {
-    return status==XR_COMPILE_RESOURCE_OK?XR_PARSE_OK:
-        status==XR_COMPILE_RESOURCE_BUDGET?XR_PARSE_BUDGET:
-        status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_PARSE_OUT_OF_MEMORY:XR_PARSE_BAD_ARGUMENT;
+    switch(status) {
+    case XR_COMPILE_RESOURCE_OK: return XR_PARSE_OK;
+    case XR_COMPILE_RESOURCE_MEMORY_LIMIT: return XR_PARSE_MEMORY_LIMIT;
+    case XR_COMPILE_RESOURCE_OVERFLOW: return XR_PARSE_OVERFLOW;
+    case XR_COMPILE_RESOURCE_CANCELLED: return XR_PARSE_CANCELLED;
+    case XR_COMPILE_RESOURCE_DEADLINE: return XR_PARSE_DEADLINE;
+    case XR_COMPILE_RESOURCE_CLOCK_FAILURE: return XR_PARSE_CLOCK_FAILURE;
+    case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: return XR_PARSE_OUT_OF_MEMORY;
+    default: return XR_PARSE_BAD_ARGUMENT;
+    }
 }
 void xlsp_source_syntax_free(XlspSyntaxSnapshot *s) {
     if(!s)return;
@@ -53,11 +65,11 @@ void xlsp_source_syntax_free(XlspSyntaxSnapshot *s) {
     xr_arena_destroy(&s->arena);xr_compile_state_free(s->uri);xr_compile_state_free(s->text);xr_compile_state_free(s);
 }
 static void syntax_diagnostic(void *context,int line,int column,int end_line,int end_column,const char *message) {
-    XlspSyntaxSnapshot *s=context;XlspSyntaxDiagnostic *item=NULL;
+    SyntaxBuild *build=context;XlspSyntaxSnapshot *s=build->snapshot;XlspSyntaxDiagnostic *item=NULL;
+    if(xr_compile_session_poll(build->session)!=XR_COMPILE_RESOURCE_OK)return;
     if(xr_compile_state_calloc(s->state,1,sizeof(*item),(void **)&item)!=XR_COMPILE_RESOURCE_OK)return;
     char *copy=NULL;
     if(xr_compile_state_strdup(s->state,message,&copy)!=XR_COMPILE_RESOURCE_OK){xr_compile_state_free(item);return;}
-    if(xr_compile_state_work(s->state,sizeof(*item))!=XR_COMPILE_RESOURCE_OK){xr_compile_state_free(copy);xr_compile_state_free(item);return;}
     *item=(XlspSyntaxDiagnostic){line,column,end_line,end_column,copy,NULL};
     if(s->last)s->last->next=item;else s->diagnostics=item;
     s->last=item;
@@ -66,19 +78,28 @@ XrParseStatus xlsp_source_syntax_build(XrCompilerSession *session,const XlspSour
     if(!session||!document||!document->uri||!document->text||!out||*out||
         document->uri_length==SIZE_MAX||document->length==SIZE_MAX)return XR_PARSE_BAD_ARGUMENT;
     XrCompileState *state=xr_compile_session_compile_state(session);XlspSyntaxSnapshot *s=NULL;
-    XrParseStatus status=syntax_status(xr_compile_state_calloc(state,1,sizeof(*s),(void **)&s));
+    XrParseStatus status=syntax_status(xr_compile_session_poll(session));
+    if(status!=XR_PARSE_OK)return status;
+    status=syntax_status(xr_compile_state_calloc(state,1,sizeof(*s),(void **)&s));
     if(status!=XR_PARSE_OK)return status;
     s->state=state;s->uri_length=document->uri_length;s->length=document->length;s->version=document->version;
-    if(xr_compile_state_work(state,document->uri_length)!=XR_COMPILE_RESOURCE_OK||
-        xr_compile_state_work(state,document->length)!=XR_COMPILE_RESOURCE_OK){status=syntax_status(xr_compile_state_status(state));goto done;}
     if(memchr(document->uri,0,document->uri_length)||memchr(document->text,0,document->length)){status=XR_PARSE_BAD_ARGUMENT;goto done;}
     char *path=NULL;
     XrXirStatus uri_status=xlsp_source_uri_path(xr_compile_state_resources(state),document->uri,document->uri_length,&path);
     xr_compile_resources_free(path);
     if(uri_status!=XR_XIR_OK) {
-        status=uri_status==XR_XIR_BUDGET?XR_PARSE_BUDGET:uri_status==XR_XIR_OUT_OF_MEMORY?XR_PARSE_OUT_OF_MEMORY:XR_PARSE_BAD_ARGUMENT;
-        if(status==XR_PARSE_BUDGET)(void)xr_compile_state_fail(state,XR_COMPILE_RESOURCE_BUDGET);
-        else if(status==XR_PARSE_OUT_OF_MEMORY)(void)xr_compile_state_fail(state,XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+        XrCompileResourceStatus resource=XR_COMPILE_RESOURCE_OK;
+        switch(uri_status) {
+        case XR_XIR_BUDGET: status=XR_PARSE_BUDGET; break;
+        case XR_XIR_MEMORY_LIMIT: resource=XR_COMPILE_RESOURCE_MEMORY_LIMIT; break;
+        case XR_XIR_OVERFLOW: resource=XR_COMPILE_RESOURCE_OVERFLOW; break;
+        case XR_XIR_CANCELLED: resource=XR_COMPILE_RESOURCE_CANCELLED; break;
+        case XR_XIR_DEADLINE: resource=XR_COMPILE_RESOURCE_DEADLINE; break;
+        case XR_XIR_CLOCK_FAILURE: resource=XR_COMPILE_RESOURCE_CLOCK_FAILURE; break;
+        case XR_XIR_OUT_OF_MEMORY: resource=XR_COMPILE_RESOURCE_OUT_OF_MEMORY; break;
+        default: status=XR_PARSE_BAD_ARGUMENT; break;
+        }
+        if(resource!=XR_COMPILE_RESOURCE_OK)status=syntax_status(xr_compile_state_fail(state,resource));
         goto done;
     }
     status=syntax_status(xr_compile_state_strndup(state,document->uri,document->uri_length,&s->uri));
@@ -90,17 +111,24 @@ XrParseStatus xlsp_source_syntax_build(XrCompilerSession *session,const XlspSour
     (void)xr_arena_open(&s->arena,XR_ARENA_SEGMENT_SIZE,&backing);
     status=syntax_status(xr_compiler_arena_capture_status(&s->arena,state));
     if(status!=XR_PARSE_OK)goto done;
+    status=syntax_status(xr_compile_session_poll(session));if(status!=XR_PARSE_OK)goto done;
+    SyntaxBuild build={s,session};
     Parser parser={0};status=xr_compile_parser_open(&parser,session,s->text,s->uri,&s->arena);
     if(status!=XR_PARSE_OK)goto done;
-    xr_parser_set_error_callback(&parser,syntax_diagnostic,s,100);
-    xr_parser_set_call_syntax_callback(&parser,syntax_call_observe,s);
+    xr_parser_set_error_callback(&parser,syntax_diagnostic,&build,100);
+    xr_parser_set_call_syntax_callback(&parser,syntax_call_observe,&build);
     status=xr_compile_parse_recoverable(&parser,&s->ast);
     xr_compile_parser_close(&parser);
     if(status==XR_PARSE_OK||status==XR_PARSE_RECOVERED) {
-        XrCompileResourceStatus finalized=syntax_calls_finalize(s);
+        XrCompileResourceStatus finalized=xr_compile_session_poll(session);
+        if(finalized==XR_COMPILE_RESOURCE_OK)finalized=syntax_calls_finalize(s,session);
         if(finalized!=XR_COMPILE_RESOURCE_OK)status=syntax_status(finalized);
     }
-    if(status==XR_PARSE_OK||status==XR_PARSE_RECOVERED){s->status=status;*out=s;s=NULL;}
+    if(status==XR_PARSE_OK||status==XR_PARSE_RECOVERED) {
+        XrCompileResourceStatus published=xr_compile_session_poll(session);
+        if(published!=XR_COMPILE_RESOURCE_OK)status=syntax_status(published);
+        else {s->status=status;*out=s;s=NULL;}
+    }
 done:
     xlsp_source_syntax_free(s);return status;
 }
@@ -108,11 +136,6 @@ const AstNode *xlsp_source_syntax_ast(const XlspSyntaxSnapshot *s){return s?s->a
 XrCompileState *xlsp_source_syntax_state(const XlspSyntaxSnapshot *s){return s?s->state:NULL;}
 const XlspSyntaxDiagnostic *xlsp_source_syntax_diagnostics(const XlspSyntaxSnapshot *s){return s?s->diagnostics:NULL;}
 XrParseStatus xlsp_source_syntax_status(const XlspSyntaxSnapshot *s){return s?s->status:XR_PARSE_BAD_ARGUMENT;}
-static XrXirStatus syntax_work(const XlspSyntaxSnapshot *s,size_t amount) {
-    XrCompileResourceStatus paid=xr_compile_state_work(s->state,amount);
-    return paid==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:paid==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:
-        paid==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
-}
 static bool syntax_member(XrJsonValue *object,const char *key,XrJsonValue *child) {
     if(!child)return false;
     int before=object->as.object.count;xjson_object_set_new(object,key,child);
@@ -123,13 +146,11 @@ static bool syntax_member(XrJsonValue *object,const char *key,XrJsonValue *child
 }
 static XrXirStatus syntax_push(const XlspSyntaxSnapshot *s,const AstNode ***stack,size_t *count,size_t *capacity,const AstNode *node) {
     if(!node)return XR_XIR_OK;
-    XrXirStatus status=syntax_work(s,1);if(status!=XR_XIR_OK)return status;
     if(*count==*capacity) {
-        if(*capacity>SIZE_MAX/2/sizeof(**stack))return XR_XIR_BUDGET;
+        if(*capacity>SIZE_MAX/2/sizeof(**stack))return XR_XIR_OVERFLOW;
         size_t next=*capacity?*capacity*2:16;
         XrCompileResourceStatus grown=xr_compile_state_resize(s->state,(void **)stack,next*sizeof(**stack));
-        if(grown!=XR_COMPILE_RESOURCE_OK)return grown==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:
-            grown==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
+        if(grown!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(grown);
         *capacity=next;
     }
     (*stack)[(*count)++]=node;return XR_XIR_OK;
@@ -143,9 +164,10 @@ static XrJsonValue *syntax_position_json(XrLspPosition position) {
 XR_FUNC XrXirStatus xlsp_source_syntax_diagnostics_json(const XlspSyntaxSnapshot *s,XrJsonValue **out) {
     if(!s||!out||*out)return XR_XIR_BAD_STRUCTURE;
     XrJsonValue *array=xjson_new_array();if(!array)return XR_XIR_OUT_OF_MEMORY;
-    XrXirStatus status=XR_XIR_OK;XrCompileResources *resources=xr_compile_state_resources(s->state);
+    XrXirStatus status=xir_compile_resource_status(xr_compile_state_status(s->state));
+    if(status!=XR_XIR_OK){xjson_free(array);return status;}
+    XrCompileResources *resources=xr_compile_state_resources(s->state);
     for(const XlspSyntaxDiagnostic *d=s->diagnostics;d;d=d->next) {
-        status=syntax_work(s,sizeof(*d));if(status!=XR_XIR_OK)break;
         XrLspPosition start={0},end={0};
         status=xlsp_source_position(resources,s->text,s->length,d->line,d->column,&start);
         if(status==XR_XIR_OK)status=xlsp_source_position(resources,s->text,s->length,d->end_line,d->end_column,&end);
@@ -171,9 +193,9 @@ XrXirStatus xlsp_source_syntax_folding_json(const XlspSyntaxSnapshot *s,XrJsonVa
     if(!s||!out||*out)return XR_XIR_BAD_STRUCTURE;
     const AstNode **stack=NULL;size_t count=0,capacity=0;XrJsonValue *result=xjson_new_array();
     if(!result)return XR_XIR_OUT_OF_MEMORY;
-    XrXirStatus status=syntax_push(s,&stack,&count,&capacity,s->ast);
+    XrXirStatus status=xir_compile_resource_status(xr_compile_state_status(s->state));
+    if(status==XR_XIR_OK)status=syntax_push(s,&stack,&count,&capacity,s->ast);
     while(count&&status==XR_XIR_OK) {
-        status=syntax_work(s,sizeof(AstNode));if(status!=XR_XIR_OK)break;
         const AstNode *node=stack[--count];bool fold=false;
 #define PUSH(n) do {if(status==XR_XIR_OK)status=syntax_push(s,&stack,&count,&capacity,(n));} while(0)
         switch(node->type) {

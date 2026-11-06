@@ -16,16 +16,11 @@ const XlspSourceSymbol *xlsp_source_outline_symbols(const XlspSourceOutline *out
 static bool outline_position_le(XrLspPosition a,XrLspPosition b) {
     return a.line<b.line||(a.line==b.line&&a.character<=b.character);
 }
-static XrXirStatus outline_resource(XrCompileResourceStatus status) {
-    return status==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:status==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:
-        status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
-}
 static XrXirStatus outline_append(const XlspSyntaxSnapshot *s,XlspSourceOutline *o,
     const AstNode *node,const char *name,uint32_t kind,uint32_t parent,uint32_t *index) {
     if(!name||!kind||!node||node->line<=0||node->column<=0||node->end_line<=0||node->end_column<=0)return XR_XIR_UNRESOLVED;
     size_t length=0;XrXirStatus status=XR_XIR_OK;
     for(;;) {
-        status=syntax_work(s,1);if(status!=XR_XIR_OK)return status;
         if(!name[length])break;if(length==SIZE_MAX-1)return XR_XIR_BUDGET;++length;
     }
     if(!length||length>(size_t)(INT_MAX-node->column))return XR_XIR_BAD_STRUCTURE;
@@ -46,13 +41,11 @@ static XrXirStatus outline_append(const XlspSyntaxSnapshot *s,XlspSourceOutline 
     if(o->count==o->capacity) {
         size_t capacity=o->capacity?o->capacity*2:16;
         if(capacity<o->capacity||capacity>SIZE_MAX/sizeof(*o->items))return XR_XIR_BUDGET;
-        status=outline_resource(xr_compile_resources_resize(o->resources,(void **)&o->items,capacity*sizeof(*o->items)));
+        status=xir_compile_resource_status(xr_compile_resources_resize(o->resources,(void **)&o->items,capacity*sizeof(*o->items)));
         if(status!=XR_XIR_OK)return status;o->capacity=capacity;
     }
-    char *copy=NULL;status=outline_resource(xr_compile_resources_alloc(o->resources,length+1,(void **)&copy));
+    char *copy=NULL;status=xir_compile_resource_status(xr_compile_resources_alloc(o->resources,length+1,(void **)&copy));
     if(status!=XR_XIR_OK)return status;
-    status=syntax_work(s,length+1+sizeof(symbol));
-    if(status!=XR_XIR_OK){xr_compile_resources_free(copy);return status;}
     memcpy(copy,name,length+1);symbol.name=copy;*index=(uint32_t)o->count;o->items[o->count++]=symbol;return XR_XIR_OK;
 }
 static XrXirStatus outline_push(const XlspSyntaxSnapshot *s,OutlineFrame **stack,size_t *count,size_t *capacity,const AstNode *node,uint32_t parent) {
@@ -60,21 +53,21 @@ static XrXirStatus outline_push(const XlspSyntaxSnapshot *s,OutlineFrame **stack
     if(*count==*capacity) {
         size_t next=*capacity?*capacity*2:16;
         if(next<*capacity||next>SIZE_MAX/sizeof(**stack))return XR_XIR_BUDGET;
-        XrXirStatus status=outline_resource(xr_compile_state_resize(s->state,(void **)stack,next*sizeof(**stack)));
+        XrXirStatus status=xir_compile_resource_status(xr_compile_state_resize(s->state,(void **)stack,next*sizeof(**stack)));
         if(status!=XR_XIR_OK)return status;*capacity=next;
     }
-    XrXirStatus status=syntax_work(s,sizeof(**stack));
-    if(status==XR_XIR_OK)(*stack)[(*count)++]=(OutlineFrame){node,parent};return status;
+    (*stack)[(*count)++]=(OutlineFrame){node,parent};return XR_XIR_OK;
 }
 XrXirStatus xlsp_source_syntax_outline(const XlspSyntaxSnapshot *s,XlspSourceOutline **output) {
     if(!s||!s->ast||!output||*output)return XR_XIR_BAD_STRUCTURE;
     XrCompileResources *resources=xr_compile_state_resources(s->state);XlspSourceOutline *o=NULL;
-    XrXirStatus status=outline_resource(xr_compile_resources_calloc(resources,1,sizeof(*o),(void **)&o));
+    XrXirStatus status=xir_compile_resource_status(xr_compile_state_status(s->state));
+    if(status!=XR_XIR_OK)return status;
+    status=xir_compile_resource_status(xr_compile_resources_calloc(resources,1,sizeof(*o),(void **)&o));
     if(status!=XR_XIR_OK)return status;o->resources=resources;
     OutlineFrame *stack=NULL;size_t count=0,capacity=0;
     status=outline_push(s,&stack,&count,&capacity,s->ast,UINT32_MAX);
     while(count&&status==XR_XIR_OK) {
-        status=syntax_work(s,sizeof(AstNode));if(status!=XR_XIR_OK)break;
         OutlineFrame frame=stack[--count];const AstNode *node=frame.node;const char *name=NULL;uint32_t kind=0,index=UINT32_MAX;
         switch(node->type) {
         case AST_FUNCTION_DECL:name=node->as.function_decl.name;kind=LSP_SYMBOL_FUNCTION;break;
@@ -131,11 +124,10 @@ XrXirStatus xlsp_source_outline_json(const XlspSourceOutline *o,XrJsonValue **ou
     XrJsonValue *result=xjson_new_array();if(!result)return XR_XIR_OUT_OF_MEMORY;
     XrJsonValue **children=NULL;XrXirStatus status=XR_XIR_OK;
     if(o->count) {
-        status=outline_resource(xr_compile_resources_calloc(o->resources,o->count,sizeof(*children),(void **)&children));
+        status=xir_compile_resource_status(xr_compile_resources_calloc(o->resources,o->count,sizeof(*children),(void **)&children));
         if(status!=XR_XIR_OK)goto done;
     }
     for(size_t i=0;i<o->count;++i) {
-        status=outline_resource(xr_compile_resources_work(o->resources,sizeof(*o->items)));if(status!=XR_XIR_OK)break;
         const XlspSourceSymbol *s=&o->items[i];
         if(s->parent!=UINT32_MAX&&s->parent>=i){status=XR_XIR_BAD_STRUCTURE;break;}
         XrJsonValue *array=s->parent==UINT32_MAX?result:children[s->parent];
