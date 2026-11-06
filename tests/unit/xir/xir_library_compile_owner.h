@@ -30,6 +30,7 @@ typedef struct LibraryCompileOwner {
     XrCompileResourceStats baseline;
     size_t blocks,bytes;
 } LibraryCompileOwner;
+static bool library_compile_exhaustive_faults=true;
 static const XrCompileResourceLimits library_compile_limits={XR_COMPILE_MEMORY_FINITE,UINT64_C(8388608),true};
 static XrCompileResourceStats library_compile_stats(const XrXirCompileContext *context) {
     XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(context->resources,&stats)==XR_COMPILE_RESOURCE_OK);return stats;
@@ -50,7 +51,10 @@ XR_FUNC void library_compile_operation_cases(const char *name,LibraryCompileOper
     LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
     source_program_compile_attempts=0;CHECK(operation(&owner.context,fixture)==XR_XIR_OK);size_t sites=source_program_compile_attempts;CHECK(sites);
     XrCompileResourceStats required=library_compile_stats(&owner.context);CHECK(required.held_bytes==owner.baseline.held_bytes);library_compile_owner_drop(&owner);
+    size_t tested=0;
     for(size_t site=0;site<sites;++site){
+        if(!library_compile_exhaustive_faults && site && site!=sites-1)continue;
+        ++tested;
         CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
         source_program_compile_attempts=0;source_program_compile_fail_at=site;source_program_compile_injected=false;
         XrXirStatus status=operation(&owner.context,fixture);source_program_compile_fail_at=SIZE_MAX;
@@ -65,7 +69,7 @@ XR_FUNC void library_compile_operation_cases(const char *name,LibraryCompileOper
         if(status!=expected)fprintf(stderr,"%s held boundary%u exact%llu status%u\n",name,boundary,(unsigned long long)required.peak_bytes,status);
         CHECK(status==expected);library_compile_owner_drop(&owner);
     }
-    fprintf(stderr,"%s compilerOOM=%zu observed allocated=%llu peak=%llu allocations=%llu held-minus/exact/plus/physicalbaseline PASS\n",name,sites,(unsigned long long)required.allocated_bytes,(unsigned long long)required.peak_bytes,(unsigned long long)required.allocation_count);
+    fprintf(stderr,"%s compilerOOM=%zu sites=%zu mode=%s observed allocated=%llu peak=%llu allocations=%llu held-minus/exact/plus/physicalbaseline PASS\n",name,tested,sites,library_compile_exhaustive_faults?"all":"first-last",(unsigned long long)required.allocated_bytes,(unsigned long long)required.peak_bytes,(unsigned long long)required.allocation_count);
 }
 static void library_compile_observer_free(void) {
     CHECK(!source_program_compile_live&&!source_program_compile_bytes);

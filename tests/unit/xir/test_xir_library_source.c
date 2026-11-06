@@ -214,6 +214,10 @@ static void library_unit_boundary_cases(void) {
 int main(int argc,char **argv) {
  CHECK(argc>=1&&argc<=3);
  if(argc==3){CHECK(!strcmp(argv[1],"--emit-only"));library_emit_fixture(argv[2]);return 0;}
+ /* The ordinary gate checks complete semantics, held bounds and both ends of
+  * actual allocation failure. Keep the unchanged full compiler sweep explicit. */
+ library_compile_exhaustive_faults=argc==2&&!strcmp(argv[1],"--compiler-faults");
+ if(library_compile_exhaustive_faults)argc=1;
  if(argc==2&&!strcmp(argv[1],"--views")){
   LibraryCompileOwner views_owner={0};
   for(unsigned mode=0;mode<5;++mode){
