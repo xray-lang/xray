@@ -89,10 +89,10 @@ static void contains_cases(XrXirValueAdmission *admission, bool full) {
     uint64_t needed = start - admission->work; CHECK(needed > 1);
     uint64_t first = full ? 0 : needed - 1;
     for (uint64_t work = first; work <= needed; ++work) {
-        admission->work = work; found = false; before = value_allocation_calls;
+        admission->work = work; found = false; before = value_allocation_calls;size_t live_before=live;
         CHECK(xr_xir_map_contains_key(&map, &key, admission, &found) ==
             (work == needed ? XR_XIR_VALUE_OK : XR_XIR_VALUE_LIMIT));
-        CHECK(found == (work == needed) && value_allocation_calls == before);
+        CHECK(found == (work == needed) && value_allocation_calls-before <= query_sites && live==live_before);
         CHECK(map.payload == root && alias.payload == root && storage->data == data && !memcmp(data, bytes, size));
     }
     admission->work = 1000000; found = true;

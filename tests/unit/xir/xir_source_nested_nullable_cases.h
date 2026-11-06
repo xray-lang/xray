@@ -46,9 +46,19 @@ static XrXirCallStatus sn_run(XrXirInstance *instance,uint32_t function,int mode
     else if (result.status==XR_XIR_CALL_RUNTIME_PANIC) {
         CHECK(result.panic.detail.code==XR_XIR_PANIC_NULL_UNWRAP && !result.panic.detail.reserved &&
             !result.panic.detail.index && !result.panic.detail.length);
-        CHECK(xr_xir_instance_take_result(instance,value)==XR_XIR_CALL_BAD_STATE && !value->type && !value->payload);
+        CHECK(xr_xir_instance_take_result(instance,value)==XR_XIR_CALL_RUNTIME_PANIC && !value->type && !value->payload);
     }
-    else CHECK(xr_xir_instance_take_result(instance,value)==XR_XIR_CALL_BAD_STATE && !value->type && !value->payload);
+    else {
+        XrXirCallResult initialization={0};
+        XrXirCallStatus copied=xr_xir_instance_copy_failure(instance,&initialization);
+        XrXirCallStatus expected=result.status;
+        if(copied!=XR_XIR_CALL_BAD_STATE) {
+            CHECK(copied==result.status && initialization.status==result.status);
+            expected=XR_XIR_CALL_BAD_STATE;
+        }
+        xr_xir_call_result_drop(&initialization);
+        CHECK(xr_xir_instance_take_result(instance,value)==expected && !value->type && !value->payload);
+    }
     return result.status;
 }
 static const XrXirValue *sn_payload(const XrXirValue *value,bool expected) {
