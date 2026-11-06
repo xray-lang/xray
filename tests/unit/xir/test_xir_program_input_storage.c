@@ -127,6 +127,12 @@ int main(int argc,char **argv) {
     XrXirStatus status=xir_fixture_effects_program_body(&context,
         (XirFixtureEffectInput){&artifact->module,artifact->construction},effects);
     CHECK(status==(attack?XR_XIR_BAD_STRUCTURE:XR_XIR_OK));
+    if (attack) {
+        CHECK(xir_fixture_effects_program_final(&context,
+            (XirFixtureEffectInput){&artifact->module,artifact->construction},effects)==XR_XIR_BAD_STRUCTURE);
+        CHECK(xir_fixture_effects_program_root(&context,
+            (XirFixtureEffectInput){&artifact->module,artifact->construction},effects)==XR_XIR_BAD_STRUCTURE);
+    }
     CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(after.allocation_count==before.allocation_count && after.allocated_bytes==before.allocated_bytes);
     CHECK(after.held_bytes==before.held_bytes);

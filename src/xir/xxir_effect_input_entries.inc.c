@@ -19,14 +19,19 @@ XR_FUNC XrXirStatus xir_effects_source_body_match_input(const XrXirCompileContex
 }
 
 XR_FUNC XrXirStatus xir_effects_program_body_match_input(const XrXirCompileContext *context, XirEffectInput input, const XrXirEffects *effects) {
-    XrXirStatus status=effect_input_facts_match(context,input,effects?effects->input_facts:NULL);
+    if (!xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
+    /* Construction comparison reads types only after their owned ranges pass. */
+    XrXirStatus status=effect_program_projection_storage(context,input.module);
+    if(status==XR_XIR_OK) status=effect_input_facts_match(context,input,effects?effects->input_facts:NULL);
     if(status==XR_XIR_OK) status=effect_program_body_current(context, input.module, effects);
     if(status==XR_XIR_OK) status=effect_input_facts_match(context,input,effects->input_facts);
     return status;
 }
 
 XR_FUNC XrXirStatus xir_effects_program_final_verify_input(const XrXirCompileContext *context, XirEffectInput input, const XrXirEffects *effects) {
-    XrXirStatus status=effect_input_facts_match(context,input,effects?effects->input_facts:NULL);
+    if (!xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=effect_program_projection_storage(context,input.module);
+    if(status==XR_XIR_OK) status=effect_input_facts_match(context,input,effects?effects->input_facts:NULL);
     if(status==XR_XIR_OK) status=effect_program_input_final(context, input.module, effects);
     if(status==XR_XIR_OK) status=effect_input_facts_match(context,input,effects->input_facts);
     return status;
@@ -40,7 +45,9 @@ XR_FUNC XrXirStatus xir_effects_source_terminal_input(const XrXirCompileContext 
 }
 
 XR_FUNC XrXirStatus xir_effects_program_root_current_input(const XrXirCompileContext *context, XirEffectInput input, const XrXirEffects *effects) {
-    XrXirStatus status=effect_input_facts_match(context,input,effects?effects->input_facts:NULL);
+    if (!xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=effect_program_projection_storage(context,input.module);
+    if(status==XR_XIR_OK) status=effect_input_facts_match(context,input,effects?effects->input_facts:NULL);
     if(status==XR_XIR_OK) status=effect_program_input_root(context, input.module, effects);
     if(status==XR_XIR_OK) status=effect_input_facts_match(context,input,effects->input_facts);
     return status;
