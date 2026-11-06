@@ -237,12 +237,15 @@ static void error_erasure_packet(void) {
     xr_xir_compile_artifact_free(checked); checked=NULL;
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded); decoded=NULL; decoded = NULL;
-    const uint8_t instruction[32] = {XR_XIR_ERROR_ERASE, 0, 0, 0, XR_XIR_ERROR};
+    const uint8_t instruction[40] = {XR_XIR_ERROR_ERASE, 0, 0, 0, XR_XIR_ERROR};
+    /* Result, declared error, one block and two instructions precede the body. */
+    const uint8_t body_prefix[32] = {XR_XIR_ERROR,0,0,0,XR_XIR_NEVER,0,0,0,
+        1,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,2,0,0,0};
     size_t offset = 0; unsigned found = 0;
     for (size_t i = 64; i + sizeof(instruction) <= packet.length; ++i)
         if (!memcmp(packet.bytes + i, instruction, sizeof(instruction))) { offset = i; ++found; }
-    CHECK(found == 1 && offset >= 88 && packet.bytes[offset - 28] == XR_XIR_ERROR);
-    const size_t positions[] = {offset - 28, offset + 4, offset + 8, offset + 16};
+    CHECK(found == 1 && offset >= 96 && !memcmp(packet.bytes+offset-sizeof(body_prefix),body_prefix,sizeof(body_prefix)));
+    const size_t positions[] = {offset - sizeof(body_prefix), offset + 4, offset + 8, offset + 16};
     const uint8_t replacements[] = {XR_XIR_I64, XR_XIR_I64, 1, 1};
     for (unsigned i = 0; i < 4; ++i) {
         uint8_t saved = packet.bytes[positions[i]];
@@ -500,7 +503,7 @@ static void array_definition_constraints(void) {
     XrXirModule built = *xr_xir_compile_artifact_module(fixture); built.stage = XR_XIR_BUILT;
     XrXirTypeNode nodes[] = {{XR_XIR_TYPE_ARRAY,XR_XIR_I64,NULL,0,XR_XIR_UNIT,0,0, {0}},
         {XR_XIR_TYPE_ARRAY,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0, {0}},
-        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,NULL,0,XR_XIR_I64,XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, {0}},
+        {XR_XIR_TYPE_CALLABLE,XR_XIR_NEVER,NULL,0,XR_XIR_I64,XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, {0}},
         {XR_XIR_TYPE_ARRAY,(XrXirType)258,NULL,0,XR_XIR_UNIT,0,0, {0}}};
     XrXirTypes types = {nodes,4, NULL, NULL}; built.types = &types;
     XrXirFunction functions[2]; memcpy(functions,built.functions,sizeof(functions)); built.functions = functions;
