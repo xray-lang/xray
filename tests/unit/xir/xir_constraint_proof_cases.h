@@ -305,7 +305,7 @@ static void constraint_proof_scalar_generic_forwarding(void) {
     XrXirBlock leaf = {0,1,0,0}, body = {0,2,0,0};
     XrXirFunction functions[] = {
         {"identity",8,&parameter,1,parameter,&leaf,1,&identity,1,NULL,0,XR_XIR_NEVER},
-        {"forward",7,&parameter,1,parameter,&body,1,forwarding,2,&operand,1}};
+        {"forward",7,&parameter,1,parameter,&body,1,forwarding,2,&operand,1,XR_XIR_NEVER}};
     XrXirModule module = {XR_XIR_BUILT,functions,2,NULL,generics,NULL,NULL, XR_XIR_PROGRAM, NULL};
     for (uint32_t valid = 0; valid < 2; ++valid) {
         caller.markers = valid ? XR_XIR_CONSTRAINT_SENDABLE : 0;
