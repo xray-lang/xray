@@ -8,6 +8,7 @@
  */
 #ifndef XIR_MODULE_FOREST_SEAL_CASES_H
 #define XIR_MODULE_FOREST_SEAL_CASES_H
+#include "xir/xxir_compile_memory.h"
 static XrXirStatus module_forest_seal_probe(const XrXirProgramSpec *spec,
     XrCompileResourceLimits limits,size_t ordinal,XrCompileResourceStats *stats,size_t *attempts) {
     CHECK(source_program_compile_fail_at==SIZE_MAX);
@@ -16,8 +17,7 @@ static XrXirStatus module_forest_seal_probe(const XrXirProgramSpec *spec,
     XrXirCompileContext ctx={0};ctx.limits=xr_xir_compile_default_limits();
     XrCompileResourceStatus created=xr_compile_resources_new(&limits,&ctx.resources);
     XrXirProgram *program=NULL;
-    XrXirStatus status=created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:
-        created==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_OK;
+    XrXirStatus status=xir_compile_resource_status(created);
     XrCompileResourceStats baseline={0};
     if(status==XR_XIR_OK){baseline=consumer_context_stats(&ctx);status=xr_xir_compile_program_seal(&ctx,spec,&program);}
     *attempts=source_program_compile_attempts;
@@ -32,30 +32,25 @@ static XrXirStatus module_forest_seal_probe(const XrXirProgramSpec *spec,
     return status;
 }
 static XrXirProgram *module_forest_seal(const XrXirProgramSpec *spec) {
-    const XrCompileResourceLimits limits={2097152,2097152,16000001};
+    const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,true};
     XrCompileResourceStats stats={0};size_t sites=0;
     CHECK(!runtime_live && !runtime_bytes);
     CHECK(module_forest_seal_probe(spec,limits,SIZE_MAX,&stats,&sites)==XR_XIR_OK);
     for(size_t fail=0;fail<sites;++fail){size_t prefix=0;XrCompileResourceStats failed={0};
         CHECK(module_forest_seal_probe(spec,limits,fail,&failed,&prefix)==XR_XIR_OUT_OF_MEMORY);}
-    for(unsigned axis=0;axis<3;++axis){
-        uint64_t low=0,high=axis==2?limits.work:axis?limits.live_bytes:limits.allocated_bytes;
-        while(low<high){uint64_t middle=low+(high-low)/2;XrCompileResourceLimits probe=limits;
-            if(!axis)probe.allocated_bytes=middle;if(axis==1)probe.live_bytes=middle;if(axis==2)probe.work=middle;
-            XrCompileResourceStats used={0};size_t attempts=0;
-            XrXirStatus status=module_forest_seal_probe(spec,probe,SIZE_MAX,&used,&attempts);
-            if(status==XR_XIR_OK)high=middle;else{CHECK(status==XR_XIR_BUDGET);low=middle+1;}}
-        CHECK(low>0);
-        for(unsigned below=0;below<2;++below){XrCompileResourceLimits probe=limits;
-            if(!axis)probe.allocated_bytes=low-below;if(axis==1)probe.live_bytes=low-below;if(axis==2)probe.work=low-below;
-            XrCompileResourceStats used={0};size_t attempts=0;
-            CHECK(module_forest_seal_probe(spec,probe,SIZE_MAX,&used,&attempts)==(below?XR_XIR_BUDGET:XR_XIR_OK));}
+    CHECK(stats.peak_bytes>1);
+    for(unsigned below=0;below<2;++below){
+        XrCompileResourceLimits probe={XR_COMPILE_MEMORY_FINITE,stats.peak_bytes-below,true};
+        XrCompileResourceStats used={0};size_t attempts=0;
+        CHECK(module_forest_seal_probe(spec,probe,SIZE_MAX,&used,&attempts)==
+            (below?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
+        CHECK(used.peak_bytes<=probe.memory_limit);
     }
     XrXirCompileContext ctx=consumer_context_limits(limits);XrXirProgram *program=NULL;
     XrXirProgram *occupied=(XrXirProgram *)(uintptr_t)1;
     CHECK(xr_xir_compile_program_seal(&ctx,spec,&occupied)==XR_XIR_BAD_STRUCTURE && occupied==(XrXirProgram *)(uintptr_t)1);
     CHECK(xr_xir_compile_program_seal(&ctx,spec,&program)==XR_XIR_OK);
-    printf("Module forest seal: %zu compiler allocation failures, 3 axes exact/minus, both physical domains restored\n",sites);
+    printf("Module forest seal: %zu compiler allocation failures, held memory exact/minus, both physical domains restored\n",sites);
     return program;
 }
 #endif // XIR_MODULE_FOREST_SEAL_CASES_H
