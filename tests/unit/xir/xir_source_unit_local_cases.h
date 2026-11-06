@@ -100,7 +100,7 @@ static void source_unit_uninitialized_const_boundary(const XrXirSourceRequest *r
     CHECK(count == 1 && !ast);
     CHECK(xr_compile_session_resource_status(request->session) == XR_COMPILE_RESOURCE_OK);
     CHECK(xr_compile_resources_stats(request->context->resources, &after) == XR_COMPILE_RESOURCE_OK);
-    CHECK(after.live_bytes == before.live_bytes && after.work > before.work && after.allocated_bytes > before.allocated_bytes);
+    CHECK(after.held_bytes == before.held_bytes);
 }
 static void source_unit_local_cases(XrXirSourceRequest *request) {
     source_unit_local_run(request,

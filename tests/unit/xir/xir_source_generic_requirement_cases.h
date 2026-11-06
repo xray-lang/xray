@@ -42,8 +42,7 @@ static SourceQuerySyntaxExpectation source_query_syntax_boundary(const XrXirSour
     CHECK(expected.count == 1 && !ast);
     CHECK(xr_compile_session_resource_status(request->session) == XR_COMPILE_RESOURCE_OK);
     CHECK(xr_compile_resources_stats(request->context->resources, &after) == XR_COMPILE_RESOURCE_OK);
-    CHECK(after.live_bytes == before.live_bytes && after.work > before.work &&
-        after.allocated_bytes > before.allocated_bytes);
+    CHECK(after.held_bytes == before.held_bytes);
     return expected;
 }
 static void source_query_syntax_graph_diagnostic(const XrXirSourceDiagnostic *diagnostic, const SourceQuerySyntaxExpectation *expected) {

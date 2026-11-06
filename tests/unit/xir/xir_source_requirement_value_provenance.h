@@ -120,7 +120,7 @@ static void source_requirement_value_alternates(const XrXirSourceRequest *reques
             CHECK(xr_xir_compile_artifact_verify(closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
         }
         xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
-        CHECK(stage_stats(&context).live_bytes==stage_owner_baseline.live_bytes);
+        CHECK(stage_stats(&context).held_bytes==stage_owner_baseline.held_bytes);
     }
 }
 static void source_requirement_value_provenance(XrXirSourceRequest *request) {

@@ -52,7 +52,7 @@ static void source_core_syntax_facts(XrXirSourceRequest *request) {
         CHECK(syntax->declarations[i].name.module==view->declarations[i].range.module);
     xr_xir_compile_source_result_free(&result);
     XrCompileResourceStats after=stage_stats(request->context);
-    CHECK(after.live_bytes==before.live_bytes);
+    CHECK(after.held_bytes==before.held_bytes);
     CHECK(stage_physical_count==blocks && stage_physical_bytes==bytes);
 }
 #endif // XIR_SOURCE_CORE_SYNTAX_CASES_H
