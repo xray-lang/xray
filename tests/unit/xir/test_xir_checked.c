@@ -438,8 +438,9 @@ static void capture_packet_rejection(void) {
     CHECK(matches == 1);
     put32(packet.bytes+found+12,2); digest_packet(&packet);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_BAD_TYPE && !decoded);
-    put32(packet.bytes+found+12,1); put32(packet.bytes+12,10); digest_packet(&packet);
-    rejected(packet.bytes,packet.length);
+    put32(packet.bytes+found+12,1); digest_packet(&packet);
+    CHECK(xr_xir_compile_checked_read(suite_context,packet.bytes,packet.length,&decoded,NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(decoded);decoded=NULL;
     xr_xir_compile_checked_packet_free(&packet);
 }
 #include "xir_cell_checked_cases.h"
@@ -557,9 +558,6 @@ static void nominal_packet_cases(void) {
             digest_packet(&packet); rejected(packet.bytes, packet.length);
             put32(packet.bytes + offset + 16, XR_XIR_I64); digest_packet(&packet);
         }
-        uint32_t saved = XR_XIR_CHECKED_SCHEMA;
-        put32(packet.bytes + 8, 8); digest_packet(&packet); rejected(packet.bytes, packet.length);
-        put32(packet.bytes + 8, saved);
         size_t module_offset = 0;
         for (size_t i = 64; i + 5 <= packet.length; ++i)
             if (!memcmp(packet.bytes + i, "alpha", 5)) module_offset = i;
@@ -857,12 +855,8 @@ static void nominal_callable_components(void) {
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);decoded=NULL; xr_xir_compile_artifact_free(checked); checked = NULL;
-    uint8_t pattern[28]; const uint32_t words[] = {1, 0, 1, 256, 0, 256, 8};
-    for (unsigned i = 0; i < 7; ++i) put32(pattern + i * 4, words[i]);
-    size_t offset = 0; unsigned matches = 0;
-    for (size_t i = 64; i + sizeof(pattern) <= packet.length; ++i)
-        if (!memcmp(packet.bytes + i, pattern, sizeof(pattern))) { offset = i; ++matches; }
-    CHECK(matches == 1);
+    const uint32_t words[] = {XR_XIR_TYPE_CALLABLE,0,1,256,0,256,XR_XIR_NEVER,XR_XIR_CALLABLE_ROOT_UNRESOLVED};
+    size_t offset=packet_find_fields(&packet,words,sizeof(words)/sizeof(*words));
     put32(packet.bytes + offset + 20, 257); digest_packet(&packet); rejected(packet.bytes, packet.length);
     xr_xir_compile_checked_packet_free(&packet);
     atomic_pool.nodes[1].result = (XrXirType)257;

@@ -19,7 +19,8 @@
 static XrXirArtifact *capture_checked(const XrXirCompileContext *context, bool throwing) {
     XrXirType fn = (XrXirType) 256, t = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
     XrXirCallableParameter input = {XR_XIR_STRING,0};
-    XrXirTypeNode signature = {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &input,1,XR_XIR_STRING,XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, {0}};
+    XrXirTypeNode signature = {XR_XIR_TYPE_CALLABLE, throwing?XR_XIR_ERROR:XR_XIR_NEVER,
+        &input,1,XR_XIR_STRING,XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, {0}};
     ErrorFixture error; error_fixture_init(&error,false);
     error.declaration.module = (XrXirLiteral){"root",4};
     XrXirTypeNode nodes[] = {signature,error.node};
@@ -54,12 +55,12 @@ static XrXirArtifact *capture_checked(const XrXirCompileContext *context, bool t
     XrXirConstraint constraint = {0};
     XrXirBlock blocks[] = {{0,1, 0, 0},{0,2, 0, 0},{0,4, 0, 0}};
     XrXirFunction functions[] = {
-        {"init",4,NULL,0,XR_XIR_UNIT,blocks,1,init,1,NULL,0},
-        {"root",4,NULL,0,XR_XIR_I64,blocks+1,1,root,2,NULL,0},
-        {"make",4,NULL,0,fn,blocks+2,1,make,4,captures,2},
-        {"wrap",4,parameters,2,XR_XIR_STRING,blocks+2,1,wrap,4,&argument,1},
-        {"invoke",6,parameters,2,XR_XIR_STRING,invoke_blocks,3,invoke,5,&argument,1},
-        {"capture",7,parameters+2,2,t,blocks+1,1,target,2,NULL,0}
+        {"init",4,NULL,0,XR_XIR_UNIT,blocks,1,init,1,NULL,0,.error_type=XR_XIR_NEVER},
+        {"root",4,NULL,0,XR_XIR_I64,blocks+1,1,root,2,NULL,0,.error_type=XR_XIR_NEVER},
+        {"make",4,NULL,0,fn,blocks+2,1,make,4,captures,2,.error_type=XR_XIR_NEVER},
+        {"wrap",4,parameters,2,XR_XIR_STRING,blocks+2,1,wrap,4,&argument,1,.error_type=signature.element},
+        {"invoke",6,parameters,2,XR_XIR_STRING,invoke_blocks,3,invoke,5,&argument,1,.error_type=XR_XIR_ERROR},
+        {"capture",7,parameters+2,2,t,blocks+1,1,target,2,NULL,0,.error_type=throwing?(XrXirType)257:XR_XIR_NEVER}
     };
     if (throwing) {
         functions[5].instructions = failure; functions[5].instruction_count = 4;
