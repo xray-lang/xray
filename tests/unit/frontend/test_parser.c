@@ -23,33 +23,69 @@
 #include "frontend/parser/xast_types.h"
 #include "frontend/parser/xast_nodes.h"
 #include "frontend/parser/xtype_ref.h"
-#include "xray.h"
-#include "runtime/xisolate_internal.h"
+#include "toolchain/xcompiler_session.h"
 
 /* ========== Test Infrastructure ========== */
 
-static XrVMRuntime *X = NULL;
+static XrCompileResources *resources = NULL;
 static XrCompilerSession *X_session = NULL;
+static AstNode *programs[256];
+static size_t program_count;
+static uint64_t baseline_held;
 
-static void setup(void) {
-    XrVMConfig params = {0};
-    X = xray_vm_new_full(&params);
-    ASSERT_NOT_NULL(X);
-    X_session = xr_compiler_session_current_for_isolate(X);
-    ASSERT_NOT_NULL(X_session);
+static void owner_check(bool condition) {
+    if (!condition) {
+        fprintf(stderr, "Parser fixture owner invariant failed\n");
+        abort();
+    }
+}
+
+static void destroy_program(AstNode *program) {
+    size_t at = 0;
+    while (at < program_count && programs[at] != program) ++at;
+    owner_check(at < program_count);
+    programs[at] = programs[--program_count];
+    xr_program_destroy(program);
 }
 
 static void teardown(void) {
-    if (X) {
-        xray_vm_delete(X);
-        X = NULL;
-        X_session = NULL;
+    while (program_count) destroy_program(programs[program_count - 1]);
+    xr_compile_session_free(X_session);
+    X_session = NULL;
+    if (resources) {
+        XrCompileResourceStats stats = {0};
+        owner_check(xr_compile_resources_stats(resources, &stats) == XR_COMPILE_RESOURCE_OK);
+        owner_check(stats.held_bytes == baseline_held);
+        xr_compile_resources_release(resources);
+        resources = NULL;
     }
+}
+
+static void setup(void) {
+    teardown();
+    const XrCompileResourceLimits limits = {0};
+    owner_check(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
+    XrCompileResourceStats stats = {0};
+    owner_check(xr_compile_resources_stats(resources, &stats) == XR_COMPILE_RESOURCE_OK);
+    baseline_held = stats.held_bytes;
+    owner_check(xr_compile_session_new(resources, &X_session) == XR_COMPILE_RESOURCE_OK);
+}
+
+static AstNode *parse_program(XrCompilerSession *session, const char *source) {
+    AstNode *program = NULL;
+    XrParseStatus status = xr_compile_parse(session, source, &program);
+    if (status != XR_PARSE_OK) {
+        owner_check(!program);
+        return NULL;
+    }
+    owner_check(program && program_count < sizeof(programs) / sizeof(programs[0]));
+    programs[program_count++] = program;
+    return program;
 }
 
 /* Helper: parse source and assert success */
 static AstNode *parse_ok(const char *source) {
-    AstNode *ast = xr_parse(xr_compiler_session_current_for_isolate(X), source);
+    AstNode *ast = parse_program(X_session, source);
     assert(ast != NULL && "parse_ok: parse failed");
     assert(ast->type == AST_PROGRAM);
     return ast;
@@ -160,7 +196,7 @@ TEST(parser_selective_import_freezes_exact_locator) {
     ASSERT_EQ_INT(import->end_line, 1);
     ASSERT_EQ_INT(import->end_column, 34);
     ASSERT_TRUE(import->end_column > import->column);
-    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X), "import { add1 } from\n"));
+    ASSERT_NULL(parse_program(X_session, "import { add1 } from\n"));
     teardown();
 }
 
@@ -427,7 +463,7 @@ TEST(parser_select_channel_arrow_remains_arm_delimiter) {
 
 TEST(parser_select_default_keyword_rejected) {
     setup();
-    AstNode *ast = xr_parse(xr_compiler_session_current_for_isolate(X),
+    AstNode *ast = parse_program(X_session,
                             "select {\n  default -> { print(\"idle\") }\n}");
     ASSERT_NULL(ast);
     teardown();
@@ -490,9 +526,9 @@ TEST(parser_extern_block_flattens_typed_descriptors) {
 
 TEST(parser_extern_block_rejects_layout_declarations) {
     setup();
-    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X),
+    ASSERT_NULL(parse_program(X_session,
                          "extern \"C\" { struct Header { tag: u8 } }"));
-    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X),
+    ASSERT_NULL(parse_program(X_session,
                          "extern \"C\" dylib(\"m\") { fn cos(x: f64) -> f64 }"));
     teardown();
 }
@@ -630,10 +666,10 @@ TEST(parser_receiver_modes_are_explicit_method_contracts) {
     ASSERT_EQ_INT(property_node->as.class_decl.methods[1]->as.method_decl.receiver_mode,
                   XR_PARAM_REF);
 
-    ASSERT_NULL(xr_parse(X_session, "class Bad { ref field: i64 }"));
-    ASSERT_NULL(xr_parse(X_session, "class Bad { ref static method() {} }"));
-    ASSERT_NULL(xr_parse(X_session, "class Bad { ref init() {} }"));
-    ASSERT_NULL(xr_parse(X_session, "interface Bad { ref property: i64 }"));
+    ASSERT_NULL(parse_program(X_session, "class Bad { ref field: i64 }"));
+    ASSERT_NULL(parse_program(X_session, "class Bad { ref static method() {} }"));
+    ASSERT_NULL(parse_program(X_session, "class Bad { ref init() {} }"));
+    ASSERT_NULL(parse_program(X_session, "interface Bad { ref property: i64 }"));
 
     teardown();
 }
@@ -875,7 +911,7 @@ TEST(parser_inline_control_attributes_and_conflict) {
     ASSERT_EQ_INT(method->attr_count, 1);
     ASSERT_EQ_INT(method->attributes[0]->kind, ATTR_NOINLINE);
 
-    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X),
+    ASSERT_NULL(parse_program(X_session,
                          "@inline\n@noinline\nfn conflict() {}\n"));
     teardown();
 }
@@ -883,7 +919,7 @@ TEST(parser_inline_control_attributes_and_conflict) {
 TEST(parser_rejects_posthoc_local_export) {
     setup();
     AstNode *program =
-        xr_parse(xr_compiler_session_current_for_isolate(X), "fn local() {}\nexport { local }\n");
+        parse_program(X_session, "fn local() {}\nexport { local }\n");
     ASSERT_NULL(program);
     teardown();
 }
@@ -1009,9 +1045,9 @@ TEST(parser_panic_catch_optional_binding) {
     ASSERT_EQ_INT(bound->is_panic, true);
     ASSERT_STR_EQ(bound->var_name, "p");
     ASSERT_NULL(bound->pattern);
-    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X), "try {} catch panic () {}"));
-    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X), "try {} catch panic Fault.Bad {}"));
-    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X), "try {} catch {}"));
+    ASSERT_NULL(parse_program(X_session, "try {} catch panic () {}"));
+    ASSERT_NULL(parse_program(X_session, "try {} catch panic Fault.Bad {}"));
+    ASSERT_NULL(parse_program(X_session, "try {} catch {}"));
     teardown();
 }
 
@@ -1022,7 +1058,7 @@ static XrCatchClause *parse_single_catch(const char *header) {
                            "fn probe() { try { return } catch %s { return } }\n", header);
     if (written <= 0 || (size_t) written >= sizeof(source))
         return NULL;
-    AstNode *program = xr_parse(xr_compiler_session_current_for_isolate(X), source);
+    AstNode *program = parse_program(X_session, source);
     if (!program || program->type != AST_PROGRAM || program->as.program.count != 1)
         return NULL;
     AstNode *function = program->as.program.statements[0];
@@ -1098,17 +1134,17 @@ TEST(parser_catch_headers_are_parenthesized) {
         "fn f() { try {} catch (Failure.Done {} }",
     };
     for (size_t i = 0; i < sizeof(rejected) / sizeof(rejected[0]); i++)
-        ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X), rejected[i]));
+        ASSERT_NULL(parse_program(X_session, rejected[i]));
     teardown();
 }
 
 TEST(parser_rejects_positional_enum_payload_surface) {
     setup();
-    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X),
+    ASSERT_NULL(parse_program(X_session,
                          "enum Result { Ok(i64), Err(string) }"));
-    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X),
+    ASSERT_NULL(parse_program(X_session,
                          "var y = match (x) { Result.Ok(value) -> value }"));
-    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X),
+    ASSERT_NULL(parse_program(X_session,
                          "enum Color { Red fn label() -> string { return this.name } }"));
     teardown();
 }
@@ -1118,34 +1154,34 @@ TEST(parser_rejects_positional_enum_payload_surface) {
 TEST(parser_error_returns_null) {
     setup();
     // Unclosed brace should cause parse error
-    AstNode *ast = xr_parse(xr_compiler_session_current_for_isolate(X), "fn f() {");
+    AstNode *ast = parse_program(X_session, "fn f() {");
     ASSERT_TRUE(ast == NULL);
     teardown();
 }
 
 TEST(parser_rejects_retired_storage_declarations) {
     setup();
-    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X), "shared value = 1"));
-    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X), "owned value = [1]"));
+    ASSERT_NULL(parse_program(X_session, "shared value = 1"));
+    ASSERT_NULL(parse_program(X_session, "owned value = [1]"));
     teardown();
 }
 
 TEST(parser_rejects_move_const_parameter_capability) {
     setup();
-    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X),
+    ASSERT_NULL(parse_program(X_session,
                          "class Config {}\nfn publish(config: move const Config) {}"));
-    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X),
+    ASSERT_NULL(parse_program(X_session,
                          "type Publisher = (move const i64) -> ()"));
     teardown();
 }
 
 TEST(parser_empty_source) {
     setup();
-    AstNode *ast = xr_parse(xr_compiler_session_current_for_isolate(X), "");
+    AstNode *ast = parse_program(X_session, "");
     ASSERT_NOT_NULL(ast);
     ASSERT_EQ_INT(ast->type, AST_PROGRAM);
     ASSERT_EQ_INT(ast->as.program.count, 0);
-    xr_program_destroy(ast);
+    destroy_program(ast);
     teardown();
 }
 
@@ -1465,10 +1501,10 @@ TEST(parser_arrow_parameters_support_independent_annotations_and_modes) {
     ASSERT_EQ_INT(init->as.function_expr.params[2]->passing_mode, XR_PARAM_REF);
     ASSERT_EQ_INT(init->as.function_expr.params[3]->passing_mode, XR_PARAM_MOVE);
 
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
-    ASSERT_NULL(xr_parse(session, "var f = (ref x) -> x"));
-    ASSERT_NULL(xr_parse(session, "var f = (x: i64 = 1) -> x"));
-    ASSERT_NULL(xr_parse(session, "var f = (...xs: i64) -> xs"));
+    XrCompilerSession *session = X_session;
+    ASSERT_NULL(parse_program(session, "var f = (ref x) -> x"));
+    ASSERT_NULL(parse_program(session, "var f = (x: i64 = 1) -> x"));
+    ASSERT_NULL(parse_program(session, "var f = (...xs: i64) -> xs"));
     teardown();
 }
 
@@ -1636,7 +1672,7 @@ TEST(decimal_literal_owned_spelling) {
     changed.as.literal.decimal_length = strlen(changed.as.literal.decimal_text);
     ASSERT_TRUE(xr_ast_node_signature(&changed, after, sizeof(after)));
     ASSERT_TRUE(strcmp(before, after) != 0);
-    xr_program_destroy(program);
+    destroy_program(program);
     teardown();
 }
 
@@ -1752,6 +1788,7 @@ int main(void) {
     RUN_TEST(parser_empty_source);
     RUN_TEST(parser_multiple_stmts);
 
+    teardown();
     TEST_REPORT();
     return TEST_EXIT();
 }
