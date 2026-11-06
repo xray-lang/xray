@@ -46,7 +46,7 @@ static XrXirCallStatus sn_run(XrXirInstance *instance,uint32_t function,int mode
     else if (result.status==XR_XIR_CALL_RUNTIME_PANIC) {
         CHECK(result.panic.detail.code==XR_XIR_PANIC_NULL_UNWRAP && !result.panic.detail.reserved &&
             !result.panic.detail.index && !result.panic.detail.length);
-        CHECK(xr_xir_instance_take_result(instance,value)==XR_XIR_CALL_RUNTIME_PANIC && !value->type && !value->payload);
+        CHECK(xr_xir_instance_take_result(instance,value)==XR_XIR_CALL_BAD_STATE && !value->type && !value->payload);
     }
     else {
         XrXirCallResult initialization={0};
