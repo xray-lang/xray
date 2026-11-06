@@ -118,7 +118,7 @@ static void library_source_case(bool middle_case,const char *packet_path) {
  XrXirLibraryCatalog *catalog=NULL;status=xr_xir_compile_library_catalog_new_v2(library_context,&input,1,&catalog);
  if(status!=XR_XIR_OK)fprintf(stderr,"catalog %u\n",status);CHECK(status==XR_XIR_OK);
  library_source_metadata_cases(catalog);
- catalog_thresholds(&input);reader_remaining_cases(packet.bytes,packet.length);
+ catalog_thresholds(&input);reader_owned_cases(packet.bytes,packet.length);
  XrXirLibraryCatalog *bad=NULL;XrXirLibraryModuleInput wrong_binding=*input.modules;XrXirLibraryInput wrong=input;wrong.sha256[0]^=1;
  CHECK(xr_xir_compile_library_catalog_new_v2(library_context,&wrong,1,&bad)==XR_XIR_BAD_STRUCTURE&&!bad);
  wrong=input;wrong_binding=*input.modules;wrong.modules=&wrong_binding;wrong_binding.logical_path="other.xr";CHECK(xr_xir_compile_library_catalog_new_v2(library_context,&wrong,1,&bad)==XR_XIR_BAD_STRUCTURE&&!bad);

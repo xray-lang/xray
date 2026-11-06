@@ -25,9 +25,9 @@ static XrXirArtifact *library_initializer_middle(const char *canonical) {
         {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
     XrXirBlock two={0,2,0,0},one={0,1,0,0};
     XrXirFunction functions[]={
-        {"secret",6,NULL,0,XR_XIR_I64,&two,1,secret_ops,2,NULL,0},
-        {"$init",5,NULL,0,XR_XIR_UNIT,&one,1,init_ops,1,NULL,0},
-        {"answer",6,NULL,0,XR_XIR_I64,&two,1,answer_ops,2,NULL,0}};
+        {"secret",6,NULL,0,XR_XIR_I64,&two,1,secret_ops,2,NULL,0,.error_type=XR_XIR_NEVER},
+        {"$init",5,NULL,0,XR_XIR_UNIT,&one,1,init_ops,1,NULL,0,.error_type=XR_XIR_NEVER},
+        {"answer",6,NULL,0,XR_XIR_I64,&two,1,answer_ops,2,NULL,0,.error_type=XR_XIR_NEVER}};
     XrXirFunctionIdentity identities[3]={{0},{0},{.exported=1}};
     XrXirSourceModule module={canonical,(uint32_t)strlen(canonical),NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirDeclarations declarations={.modules=&module,.module_count=1,.functions=identities,
@@ -55,11 +55,11 @@ static void library_map_boundary_cases(const XrXirArtifact *artifact) {
     const XrXirModule *library=xr_xir_compile_artifact_module(artifact);CHECK(library&&library->function_count==3&&library->declarations->modules[0].initializer==1);
     LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);CHECK(library_map_operation(&owner.context,(void *)library)==XR_XIR_OK);
     XrCompileResourceStats required=library_compile_stats(&owner.context);library_compile_owner_drop(&owner);
-    for(unsigned mode=0;mode<3;++mode){XrCompileResourceLimits caps=library_compile_limits;if(mode==0)caps.allocated_bytes=required.allocated_bytes-1;if(mode==1)caps.work=1;
-        CHECK(library_compile_owner_new(&owner,&caps)==XR_XIR_OK);if(mode==2)source_program_compile_fail_at=source_program_compile_attempts;
+    for(unsigned mode=0;mode<2;++mode){XrCompileResourceLimits caps=library_compile_limits;if(mode==0)caps.memory_limit=required.peak_bytes-1;
+        CHECK(library_compile_owner_new(&owner,&caps)==XR_XIR_OK);if(mode==1)source_program_compile_fail_at=source_program_compile_attempts;
         XrModuleResourceBinding resource={.checked=library,.checked_module=0};XrModuleSpec specs[2]={{0},{.representation=XR_MODULE_CHECKED_LIBRARY,.resource=&resource}};XrModuleGraph graph={0};graph.spec_count=2;graph.specs=specs;SourceContext ctx={0};ctx.graph=&graph;ctx.function_count=7;ctx.compile=owner.context;SourceLibraryMap map={0};
         CHECK(!source_library_map(&ctx,library,1,4,0,&map));source_program_compile_fail_at=SIZE_MAX;
-        CHECK(!map.functions&&ctx.diagnostic.status==(mode==2?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET));library_compile_owner_drop(&owner);
+        CHECK(!map.functions&&ctx.diagnostic.status==(mode==1?XR_XIR_OUT_OF_MEMORY:XR_XIR_MEMORY_LIMIT));library_compile_owner_drop(&owner);
     }
     /* Full normal map and bad operand are independent of fault prefixes. */
 }

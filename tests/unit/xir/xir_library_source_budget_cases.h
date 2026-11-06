@@ -4,10 +4,10 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xir_library_source_budget_cases.h - Shared Source metadata remaining budget
+ * xir_library_source_budget_cases.h - Shared Source metadata held-memory ownership
  *
  * KEY CONCEPT:
- *   Arena owners and imported verification consume the same remaining quota.
+ *   Arena owners and imported verification retain the same memory owner.
  */
 static XrXirStatus library_shared_metadata_operation(const XrXirCompileContext *context,void *opaque) {
     const XrXirLibraryInput *input=opaque;XrXirLibraryCatalog *catalog=NULL;XrXirStatus status=xr_xir_compile_library_catalog_new_v2(context,input,1,&catalog);
@@ -30,12 +30,17 @@ static void library_source_metadata_cases(const XrXirLibraryCatalog *catalog) {
     LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);SourceContext ctx={0};ctx.compile=owner.context;
     XrCompileResourceStats before=library_compile_stats(&owner.context);void *owned=source_alloc(&ctx,7,1);CHECK(owned);XrCompileResourceStats required=library_compile_stats(&owner.context);source_release_private(owned);
     CHECK(!ctx.memory&&library_compile_stats(&owner.context).allocated_bytes==required.allocated_bytes);library_compile_owner_drop(&owner);
-    for(unsigned mode=0;mode<4;++mode){XrCompileResourceLimits limits=library_compile_limits;limits.allocated_bytes=required.allocated_bytes-(mode==1);CHECK(library_compile_owner_new(&owner,&limits)==XR_XIR_OK);
-        ctx=(SourceContext){0};ctx.compile=owner.context;if(mode==2)source_program_compile_fail_at=source_program_compile_attempts;
+    for(unsigned mode=0;mode<4;++mode){
+        XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,required.peak_bytes-(mode==1),true};
+        CHECK(library_compile_owner_new(&owner,&limits)==XR_XIR_OK);
+        ctx=(SourceContext){0};ctx.compile=owner.context;
+        if(mode==2)source_program_compile_fail_at=source_program_compile_attempts;
         owned=source_alloc(&ctx,mode==3?SIZE_MAX:7,1);source_program_compile_fail_at=SIZE_MAX;
-        if(!mode){CHECK(owned);source_release_private(owned);CHECK(!ctx.memory);CHECK(!source_alloc(&ctx,1,1)&&ctx.diagnostic.status==XR_XIR_BUDGET);}
-        else CHECK(!owned&&!ctx.memory&&ctx.diagnostic.status==(mode==2?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET));
-        CHECK(library_compile_stats(&owner.context).live_bytes==before.live_bytes);library_compile_owner_drop(&owner);
+        if(!mode){
+            CHECK(owned);source_release_private(owned);CHECK(!ctx.memory);
+            owned=source_alloc(&ctx,7,1);CHECK(owned);source_release_private(owned);CHECK(!ctx.memory);
+        }else CHECK(!owned&&!ctx.memory&&ctx.diagnostic.status==(mode==2?XR_XIR_OUT_OF_MEMORY:mode==3?XR_XIR_OVERFLOW:XR_XIR_MEMORY_LIMIT));
+        CHECK(library_compile_stats(&owner.context).held_bytes==before.held_bytes);library_compile_owner_drop(&owner);
     }
-    puts("Source shared metadata and private7 exact/minus1/OOM/overflow/free preserves debit PASS");
+    puts("Source shared metadata and private7 held exact/minus1/OOM/overflow/free and reuse PASS");
 }
