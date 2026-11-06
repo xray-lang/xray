@@ -20,11 +20,11 @@ static XrXirStatus library_state_atomic_i64_map_operation(const XrXirCompileCont
     CHECK((uint64_t)output.immediate==((UINT64_C(2)<<32)|2));
     XrXirInstruction sentinel=output;group.immediate=(INT64_C(0)<<32)|2;
     bool accepted=source_library_instruction(&ctx,&map,0,&group,&output);
-    if (ctx.diagnostic.status==XR_XIR_BUDGET) {xr_compile_resources_free(map.slots);return XR_XIR_BUDGET;}
+    if (ctx.diagnostic.status==XR_XIR_MEMORY_LIMIT) {xr_compile_resources_free(map.slots);return XR_XIR_MEMORY_LIMIT;}
     CHECK(!accepted && ctx.diagnostic.status==XR_XIR_BAD_STRUCTURE && !memcmp(&sentinel,&output,sizeof(output)));
     ctx.diagnostic=(XrXirSourceDiagnostic){0};group.immediate=(INT64_C(1)<<32)|2;map.slots[2]=4;
     accepted=source_library_instruction(&ctx,&map,0,&group,&output);
-    if (ctx.diagnostic.status==XR_XIR_BUDGET) {xr_compile_resources_free(map.slots);return XR_XIR_BUDGET;}
+    if (ctx.diagnostic.status==XR_XIR_MEMORY_LIMIT) {xr_compile_resources_free(map.slots);return XR_XIR_MEMORY_LIMIT;}
     CHECK(!accepted && ctx.diagnostic.status==XR_XIR_BAD_STRUCTURE && !memcmp(&sentinel,&output,sizeof(output)));
     xr_compile_resources_free(map.slots);return XR_XIR_OK;
 }
@@ -74,7 +74,7 @@ static void library_state_atomic_i64_bad_slots(const XrXirCompileContext *contex
         XrXirArtifact *output=NULL;
         size_t live=source_program_compile_live,bytes=source_program_compile_bytes;
         XrXirStatus status=xr_xir_compile_check_v2(context,&malformed,xr_xir_compile_artifact_construction(artifact),&output,NULL);
-        CHECK(status==XR_XIR_BAD_STRUCTURE && !output);
+        CHECK(status==(mode==2 ? XR_XIR_BAD_TYPE : XR_XIR_BAD_STRUCTURE) && !output);
         CHECK(source_program_compile_live==live && source_program_compile_bytes==bytes);
     }
 }

@@ -54,7 +54,7 @@ static void library_state_atomic_i64_emit_packet(const XrXirCheckedPacket *packe
     FILE *file=fopen(path,"wb");CHECK(file);
     CHECK(fwrite(packet->bytes,1,packet->length,file)==packet->length && !fclose(file));
 }
-static void library_state_atomic_i64_program(const XrXirCompileContext *context,XrXirLibraryCatalog *catalog,const char *path) {
+static void library_state_atomic_i64_program(const XrXirCompileContext *context,XrXirLibraryCatalog *catalog,const char *path,bool resources) {
     XrXirArtifact *owned=library_state_atomic_i64_check(context,XR_SOURCE_FIXTURES "/root.xr",XR_XIR_PROGRAM,catalog);
     const XrXirModule *module=xr_xir_compile_artifact_module(owned);
     CHECK(module->declarations->slot_count==4);
@@ -64,27 +64,34 @@ static void library_state_atomic_i64_program(const XrXirCompileContext *context,
     uint32_t atomic_const=0,atomic_var=0;
     for (uint32_t s=0;s<module->declarations->slot_count;++s) {
         const XrXirSlot *slot=&module->declarations->slots[s];
-        if (!xr_xir_type_is_atomic(module->types,slot->type)) continue;
-        CHECK(xr_xir_atomic_element(module->types,slot->type)==XR_XIR_I64);
+        XrXirType logical=slot->type;
+        if (slot->mutable) {CHECK(xr_xir_type_is_cell(module->types,logical));logical=xr_xir_cell_element(module->types,logical);}
+        if (!xr_xir_type_is_atomic(module->types,logical)) continue;
+        CHECK(xr_xir_atomic_element(module->types,logical)==XR_XIR_I64);
         atomic_const+=!slot->mutable;atomic_var+=slot->mutable;
     }
     CHECK(atomic_const==1 && atomic_var==1);
     CHECK(library_slots==3);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(owned,&packet,NULL)==XR_XIR_OK);
     LibraryPacketFixture replay={packet.bytes,packet.length,NULL};
-    library_compile_operation_cases(catalog ? "State Catalog whole Checked reader" : "State Source whole Checked reader",library_packet_operation,&replay);
+    if (resources)
+        library_compile_operation_cases(catalog ? "State Catalog whole Checked reader" : "State Source whole Checked reader",library_packet_operation,&replay);
     library_state_atomic_i64_emit_packet(&packet,path);xr_xir_compile_checked_packet_free(&packet);
     xr_xir_compile_library_catalog_free(catalog);
-    xr_test_library_state_atomic_i64_run(context,owned);
+    if (resources) xr_test_library_state_atomic_i64_run(context,owned);
+    else xr_xir_compile_artifact_free(owned);
 }
 int main(int argc,char **argv) {
-    CHECK(argc==1 || argc==3);LibraryCompileOwner compiler={0};
+    const bool write_packets=argc==4 && !strcmp(argv[1],"--write-packets");
+    CHECK(argc==1 || write_packets);LibraryCompileOwner compiler={0};
     CHECK(library_compile_owner_new(&compiler,&library_compile_limits)==XR_XIR_OK);
-    library_compile_operation_cases("State selected slot map/group and scratch",library_state_atomic_i64_map_operation,NULL);
+    if (!write_packets)
+        library_compile_operation_cases("State selected slot map/group and scratch",library_state_atomic_i64_map_operation,NULL);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
     LibrarySourceFixture source={NULL,0,XR_SOURCE_FIXTURES "/root.xr",authority,XR_XIR_PROGRAM};
-    library_compile_operation_cases("State original whole Source",library_source_operation,&source);
-    library_state_atomic_i64_program(&compiler.context,NULL,argc==3 ? argv[1] : NULL);
+    if (!write_packets)
+        library_compile_operation_cases("State original whole Source",library_source_operation,&source);
+    library_state_atomic_i64_program(&compiler.context,NULL,write_packets ? argv[2] : NULL,!write_packets);
     XrXirArtifact *producer=library_state_atomic_i64_check(&compiler.context,XR_SOURCE_FIXTURES "/state.xr",XR_XIR_LIBRARY,NULL);
     library_state_atomic_i64_bad_slots(&compiler.context,producer);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(producer,&packet,NULL)==XR_XIR_OK);
@@ -110,13 +117,15 @@ int main(int argc,char **argv) {
     xr_sha256(input.packet,input.length,input.sha256);
     LibrarySourceFixture linked={&input,1,XR_SOURCE_FIXTURES "/root.xr",authority,XR_XIR_PROGRAM};
     library_state_atomic_i64_catalog_negatives(&compiler.context,&input);
-    library_compile_operation_cases("State Checked Catalog",library_catalog_operation,&linked);
-    library_compile_operation_cases("State Catalog whole Source",library_source_operation,&linked);
+    if (!write_packets)
+        library_compile_operation_cases("State Checked Catalog",library_catalog_operation,&linked);
+    if (!write_packets)
+        library_compile_operation_cases("State Catalog whole Source",library_source_operation,&linked);
     XrXirLibraryCatalog *catalog=NULL;CHECK(xr_xir_compile_library_catalog_new_v2(&compiler.context,&input,1,&catalog)==XR_XIR_OK);
     memset(packet.bytes,0,packet.length);xr_xir_compile_checked_packet_free(&packet);
     memset(logical_paths,0,sizeof(logical_paths));memset(physical_roots,0,sizeof(physical_roots));
     memset(namespaces,0,sizeof(namespaces));memset(&input,0,sizeof(input));memset(bindings,0,sizeof(bindings));
-    library_state_atomic_i64_program(&compiler.context,catalog,argc==3 ? argv[2] : NULL);
+    library_state_atomic_i64_program(&compiler.context,catalog,write_packets ? argv[3] : NULL,!write_packets);
     library_compile_owner_drop(&compiler);library_compile_observer_free();
-    puts("Library private Atomic I64 state Source/Catalog producer destruction PASS");return 0;
+    puts(write_packets ? "Library Atomic I64 packets written" : "Library private Atomic I64 state Source/Catalog producer destruction PASS");return 0;
 }

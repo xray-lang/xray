@@ -12,6 +12,7 @@ XR_FUNC void xr_test_prelude_run(const XrXirCompileContext *context,XrXirArtifac
 XR_FUNC XrXirStatus xr_test_prelude_compile_pipeline(const XrXirCompileContext *context,const XrXirArtifact *checked);
 #ifdef XR_PRELUDE_RUNTIME_IMPLEMENTATION
 #include "xir/xxir_output.h"
+#include "xir_instance_oom_cleanup.h"
 typedef struct PreludeOutput { size_t bytes; } PreludeOutput;
 static XrXirOutputStatus prelude_output(void *context,XrXirOutputStream stream,const char *bytes,size_t length) {
     PreludeOutput *output=context;(void)stream;(void)bytes;output->bytes+=length;return XR_XIR_OUTPUT_OK;
@@ -40,15 +41,11 @@ static bool prelude_pair(XrXirProgram *program,uint32_t answer) {
     }
     ok=true;
 done:
-    for (unsigned i=0;i<2;++i) if(instances[i]) CHECK(xr_xir_instance_free(instances[i])==XR_XIR_CALL_READY);
+    for (unsigned i=0;i<2;++i) if(instances[i]) xir_fixture_close_instance(instances[i],!ok,XR_XIR_CALL_READY);
     return ok;
 }
-static XrXirStatus prelude_seal_operation(const XrXirCompileContext *context,void *opaque) {
-    XrXirProgram *program=NULL;XrXirStatus status=xr_xir_compile_program_seal(context,opaque,&program);
-    CHECK(status==XR_XIR_OK ? program!=NULL : program==NULL);xr_xir_compile_program_drop(program);return status;
-}
 static void prelude_finish(const XrXirCompileContext *context,XrXirProgramSpec *spec,XrXirArtifact *lowered,uint32_t answer) {
-    library_compile_operation_cases("Canonical prelude actual Program seal",prelude_seal_operation,spec);
+    /* Complete Source pipeline replays cover compiler sealing faults. */
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(context,spec,&program)==XR_XIR_OK);
     size_t live=runtime_live,bytes=runtime_bytes,sites=0;
     for (size_t p=0;p<=sites;++p) {

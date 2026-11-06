@@ -14,7 +14,7 @@ file(GLOB XIR_LIBRARY_STATE_ATOMIC_I64_FIXTURES CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/tests/fixtures/xir_library_state_atomic_i64/*.xr")
 add_custom_command(OUTPUT ${XIR_LIBRARY_STATE_ATOMIC_I64_SOURCE} ${XIR_LIBRARY_STATE_ATOMIC_I64_CATALOG}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND $<TARGET_FILE:test_xir_library_state_atomic_i64_source> ${XIR_LIBRARY_STATE_ATOMIC_I64_SOURCE} ${XIR_LIBRARY_STATE_ATOMIC_I64_CATALOG}
+    COMMAND $<TARGET_FILE:test_xir_library_state_atomic_i64_source> --write-packets ${XIR_LIBRARY_STATE_ATOMIC_I64_SOURCE} ${XIR_LIBRARY_STATE_ATOMIC_I64_CATALOG}
     DEPENDS test_xir_library_state_atomic_i64_source ${XIR_LIBRARY_STATE_ATOMIC_I64_FIXTURES}
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_library_state_atomic_i64_runtime.h
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_library_state_atomic_i64_source_cases.h
@@ -31,7 +31,7 @@ foreach(state_flow IN ITEMS source catalog)
     endif()
     set(state_generated ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_library_state_atomic_i64_${state_flow}.c)
     add_custom_command(OUTPUT ${state_generated}
-        COMMAND $<TARGET_FILE:test_xir_library_state_atomic_i64_packet> ${state_checked} ${state_generated}
+        COMMAND $<TARGET_FILE:test_xir_library_state_atomic_i64_packet> --write-c ${state_checked} ${state_generated}
         DEPENDS test_xir_library_state_atomic_i64_packet ${state_checked}
         VERBATIM)
     add_test(NAME test_xir_library_state_atomic_i64_${state_flow}_packet COMMAND test_xir_library_state_atomic_i64_packet

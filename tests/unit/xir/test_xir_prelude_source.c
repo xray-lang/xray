@@ -66,7 +66,7 @@ static void prelude_catch_dependencies(const XrXirCompileContext *context,const 
     CHECK(d->modules[child].dependency_count==1 && d->modules[child].dependencies[0]==prelude);
     CHECK(d->modules[d->root_module].dependency_count==1 && d->modules[d->root_module].dependencies[0]==child);
 }
-static void prelude_program(const XrXirCompileContext *context,const XrXirLibraryCatalog *catalog,const char *packet_path) {
+static void prelude_program(const XrXirCompileContext *context,const XrXirLibraryCatalog *catalog,const char *packet_path,bool resources) {
     XrXirSourceResult source=prelude_check(context,XR_SOURCE_FIXTURES "/original_array_error_invoke_root.xr",catalog);
     prelude_query(&source,!catalog);XrXirArtifact *owned=NULL;
     CHECK(prelude_roundtrip(context,source.checked,&owned)==XR_XIR_OK);xr_xir_compile_source_result_free(&source);
@@ -75,18 +75,22 @@ static void prelude_program(const XrXirCompileContext *context,const XrXirLibrar
         FILE *file=fopen(packet_path,"wb");CHECK(file && fwrite(packet.bytes,1,packet.length,file)==packet.length && !fclose(file));
         xr_xir_compile_checked_packet_free(&packet);
     }
-    xr_test_prelude_run(context,owned);
+    if (resources) xr_test_prelude_run(context,owned);
+    else xr_xir_compile_artifact_free(owned);
 }
 #include "xir_prelude_endian_cases.h"
 int main(int argc,char **argv) {
     if (argc==2 && !strcmp(argv[1],"--endian-owner")) { prelude_endian_owner();return 0; }
-    CHECK(argc==1 || argc==3);LibraryCompileOwner compiler={0};
+    const bool write_packets=argc==4 && !strcmp(argv[1],"--write-packets");
+    CHECK(argc==1 || write_packets);LibraryCompileOwner compiler={0};
     CHECK(library_compile_owner_new(&compiler,&library_compile_limits)==XR_XIR_OK);
-    library_compile_operation_cases("Canonical generated prelude Source and two reads",prelude_factory_operation,NULL);
+    if (!write_packets)
+        library_compile_operation_cases("Canonical generated prelude Source and two reads",prelude_factory_operation,NULL);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
     LibrarySourceFixture direct={NULL,0,XR_SOURCE_FIXTURES "/original_array_error_invoke_root.xr",authority,XR_XIR_PROGRAM};
-    library_compile_operation_cases("Original317B Crypto42 whole Source two reads",prelude_source_operation,&direct);
-    prelude_program(&compiler.context,NULL,argc==3 ? argv[1] : NULL);
+    if (!write_packets)
+        library_compile_operation_cases("Original317B Crypto42 whole Source two reads",prelude_source_operation,&direct);
+    prelude_program(&compiler.context,NULL,write_packets ? argv[2] : NULL,!write_packets);
     XrXirSourceResult provider={0};CHECK(xr_xir_compile_prelude_library(&compiler.context,&provider,NULL)==XR_XIR_OK);
     prelude_query(&provider,true);XrXirCheckedPacket packet={0};
     CHECK(xr_xir_compile_checked_write(provider.checked,&packet,NULL)==XR_XIR_OK);
@@ -97,21 +101,25 @@ int main(int argc,char **argv) {
     xr_sha256(input.packet,input.length,input.sha256);
     prelude_catalog_negatives(&compiler.context,provider.checked,&binding);
     LibrarySourceFixture linked={&input,1,direct.entry,authority,XR_XIR_PROGRAM};
-    library_compile_operation_cases("Canonical complete prelude Catalog",library_catalog_operation,&linked);
-    library_compile_operation_cases("Original317B Crypto42 Catalog Source two reads",prelude_source_operation,&linked);
+    if (!write_packets)
+        library_compile_operation_cases("Canonical complete prelude Catalog",library_catalog_operation,&linked);
+    if (!write_packets)
+        library_compile_operation_cases("Original317B Crypto42 Catalog Source two reads",prelude_source_operation,&linked);
     XrXirLibraryCatalog *catalog=NULL;CHECK(xr_xir_compile_library_catalog_new_v2(&compiler.context,&input,1,&catalog)==XR_XIR_OK);
     prelude_occupied(&compiler.context,&provider,&input,catalog);
     prelude_catalog_source_no_fallback(&compiler.context,catalog);
     xr_xir_compile_source_result_free(&provider);memset(packet.bytes,0,packet.length);xr_xir_compile_checked_packet_free(&packet);
     memset(logical,0,sizeof(logical));memset(name,0,sizeof(name));memset(physical,0,sizeof(physical));memset(&input,0,sizeof(input));memset(&binding,0,sizeof(binding));
-    prelude_program(&compiler.context,catalog,argc==3 ? argv[2] : NULL);
+    prelude_program(&compiler.context,catalog,write_packets ? argv[3] : NULL,!write_packets);
     const char *positive[]={XR_SOURCE_FIXTURES "/catch_only_root.xr",XR_SOURCE_FIXTURES "/ordering.xr",XR_SOURCE_FIXTURES "/shadow.xr"};
     for (unsigned flow=0;flow<2;++flow) for (unsigned c=0;c<3;++c) {
         XrXirSourceResult result=prelude_check(&compiler.context,positive[c],flow ? catalog : NULL);
         if (c<2) prelude_query(&result,!flow);
         if (!c) prelude_catch_dependencies(&compiler.context,&result);
         XrXirArtifact *owned=NULL;CHECK(prelude_roundtrip(&compiler.context,result.checked,&owned)==XR_XIR_OK);
-        xr_xir_compile_source_result_free(&result);xr_test_prelude_run(&compiler.context,owned);
+        xr_xir_compile_source_result_free(&result);
+        if (!write_packets) xr_test_prelude_run(&compiler.context,owned);
+        else xr_xir_compile_artifact_free(owned);
     }
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(compiler.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     const char *negative[]={XR_SOURCE_FIXTURES "/foreign_variant.xr",XR_SOURCE_FIXTURES "/foreign_ordering.xr"};
@@ -122,5 +130,5 @@ int main(int argc,char **argv) {
     }
     xr_compile_session_free(session);xr_xir_compile_library_catalog_free(catalog);
     library_compile_owner_drop(&compiler);library_compile_observer_free();
-    puts("Canonical Ordering4/Crypto0 Source/Catalog original317B=42 catch-only real dependency physicalzero PASS");return 0;
+    puts(write_packets ? "Canonical prelude packets written" : "Canonical Ordering4/Crypto0 Source/Catalog original317B=42 catch-only real dependency physicalzero PASS");return 0;
 }

@@ -12,6 +12,7 @@
 XR_FUNC void xr_test_library_state_unit_bool_run(const XrXirCompileContext *context,XrXirArtifact *owned);
 #ifdef XR_LIBRARY_STATE_UNIT_BOOL_RUNTIME_IMPLEMENTATION
 #include "xir/xxir_output.h"
+#include "xir_instance_oom_cleanup.h"
 enum { LIBRARY_STATE_UNIT_BOOL_EXPORTS=5 };
 typedef struct LibraryStateUnitBoolOutput { char bytes[64];size_t length; } LibraryStateUnitBoolOutput;
 static XrXirOutputStatus library_state_unit_bool_write(void *context,XrXirOutputStream stream,const char *bytes,size_t length) {
@@ -82,24 +83,7 @@ static bool library_state_unit_bool_pair(XrXirProgram *program,
     }
     ok=true;
 done:
-    for (uint32_t i=0;i<2;++i) if (instances[i]) {
-        XrXirCallStatus expected=XR_XIR_CALL_READY;
-        if (!ok) {
-            size_t attempts=runtime_attempts;
-            XrXirCallStatus prior=xr_xir_instance_poll_bounded(instances[i],1).outcome.status;
-            CHECK(runtime_attempts==attempts);
-            if (prior!=XR_XIR_CALL_BAD_STATE && prior!=XR_XIR_CALL_CONSUMED && prior!=XR_XIR_CALL_OOM)
-                fprintf(stderr,"state prior%u fault%zu attempts%zu\n",prior,runtime_fail_at,runtime_attempts);
-            CHECK(prior==XR_XIR_CALL_BAD_STATE || prior==XR_XIR_CALL_CONSUMED || prior==XR_XIR_CALL_OOM);
-            if (prior==XR_XIR_CALL_OOM) {
-                CHECK(runtime_fail_at!=SIZE_MAX && runtime_attempts>runtime_fail_at);
-                expected=prior;
-            }
-        }
-        XrXirCallStatus closed=xr_xir_instance_free(instances[i]);
-        if (closed!=expected) fprintf(stderr,"state close actual%u expected%u fault%zu attempts%zu\n",closed,expected,runtime_fail_at,runtime_attempts);
-        CHECK(closed==expected);
-    }
+    for (uint32_t i=0;i<2;++i) if (instances[i]) xir_fixture_close_instance(instances[i],!ok,XR_XIR_CALL_READY);
     return ok;
 }
 static void library_state_unit_bool_finish(const XrXirCompileContext *context,XrXirProgramSpec *spec,XrXirArtifact *lowered,

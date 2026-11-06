@@ -132,14 +132,20 @@ int main(int argc,char **argv) {
     XrXirArtifact *checked=NULL;
 #endif
 #if CONSUMER_KIND==0
-    CHECK(argc==3);FILE *file=fopen(argv[1],"rb");CHECK(file && !fseek(file,0,SEEK_END));long length=ftell(file);
+    const bool write_c=argc==4 && !strcmp(argv[1],"--write-c");
+    CHECK(argc==3 || write_c);int argument=write_c ? 2 : 1;
+    FILE *file=fopen(argv[argument],"rb");CHECK(file && !fseek(file,0,SEEK_END));long length=ftell(file);
     CHECK(length>=64 && length<=262144 && !fseek(file,0,SEEK_SET));void *bytes=malloc((size_t)length);
     CHECK(bytes && fread(bytes,1,(size_t)length,file)==(size_t)length && !fclose(file));
     CHECK(xr_xir_compile_checked_read(&compiler.context,bytes,(size_t)length,&checked,NULL)==XR_XIR_OK);
     memset(bytes,0,(size_t)length);free(bytes);lowered=prelude_lower(checked,&answer);checked=NULL;
     XrXirCSource output={0};CHECK(xr_xir_compile_emit_c(lowered,"prelude",1048576,&output)==XR_XIR_OK);
-    file=fopen(argv[2],"wb");CHECK(file && fwrite(output.text,1,output.length,file)==output.length);
+    file=fopen(argv[argument+1],"wb");CHECK(file && fwrite(output.text,1,output.length,file)==output.length);
     CHECK(fprintf(file,"\nconst uint32_t prelude_consumer_answer=%u;\n",answer)>0 && !fclose(file));xr_xir_compile_c_source_free(&output);
+    if (write_c) {
+        xr_xir_compile_artifact_free(lowered);library_compile_owner_drop(&compiler);library_compile_observer_free();
+        puts("Canonical prelude C written");return 0;
+    }
 #else
     CHECK(argc==1);(void)argv;spec=prelude_program;answer=prelude_consumer_answer;
 #if CONSUMER_KIND==2 || CONSUMER_KIND==4

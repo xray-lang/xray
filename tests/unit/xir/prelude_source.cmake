@@ -12,7 +12,7 @@ target_compile_definitions(test_xir_prelude_source PRIVATE
 file(GLOB XIR_PRELUDE_FIXTURES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/tests/fixtures/xir_prelude/*.xr")
 add_custom_command(OUTPUT ${XIR_PRELUDE_SOURCE} ${XIR_PRELUDE_CATALOG}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND $<TARGET_FILE:test_xir_prelude_source> ${XIR_PRELUDE_SOURCE} ${XIR_PRELUDE_CATALOG}
+    COMMAND $<TARGET_FILE:test_xir_prelude_source> --write-packets ${XIR_PRELUDE_SOURCE} ${XIR_PRELUDE_CATALOG}
     DEPENDS test_xir_prelude_source ${XIR_PRELUDE_FIXTURES}
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_prelude_source_cases.h
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_prelude_runtime.h
@@ -29,7 +29,7 @@ foreach(prelude_flow IN ITEMS source catalog)
     endif()
     set(prelude_generated ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_prelude_${prelude_flow}.c)
     add_custom_command(OUTPUT ${prelude_generated}
-        COMMAND $<TARGET_FILE:test_xir_prelude_packet> ${prelude_checked} ${prelude_generated}
+        COMMAND $<TARGET_FILE:test_xir_prelude_packet> --write-c ${prelude_checked} ${prelude_generated}
         DEPENDS test_xir_prelude_packet ${prelude_checked} VERBATIM)
     add_test(NAME test_xir_prelude_${prelude_flow}_vm COMMAND test_xir_prelude_packet
         ${prelude_checked} ${CMAKE_CURRENT_BINARY_DIR}/xir_prelude_${prelude_flow}_vm_test.c)

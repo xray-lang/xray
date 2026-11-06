@@ -13,6 +13,7 @@ XR_FUNC void xr_test_library_state_atomic_i64_run(const XrXirCompileContext *con
 #ifdef XR_LIBRARY_STATE_ATOMIC_I64_RUNTIME_IMPLEMENTATION
 #include "xir/xxir_output.h"
 #include "xir/xxir_atomic.h"
+#include "xir_instance_oom_cleanup.h"
 enum { LIBRARY_STATE_ATOMIC_I64_EXPORTS=10 };
 typedef struct LibraryStateAtomicI64Output { char bytes[64];size_t length; } LibraryStateAtomicI64Output;
 static XrXirOutputStatus library_state_atomic_i64_write(void *context,XrXirOutputStream stream,const char *bytes,size_t length) {
@@ -81,6 +82,7 @@ static bool library_state_atomic_i64_bad_order(XrXirInstance *instance,uint32_t 
 }
 static bool library_state_atomic_i64_pair(XrXirProgram *program,const uint32_t ids[LIBRARY_STATE_ATOMIC_I64_EXPORTS],XrXirValue held[4]) {
     XrXirInstance *instances[2]={0};LibraryStateAtomicI64Output outputs[2]={0};XrXirOutputSink sinks[2]={0};bool ok=false;
+    XrXirCallStatus completed[2]={XR_XIR_CALL_READY,XR_XIR_CALL_READY};
     for (uint32_t i=0;i<2;++i) {
         XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
         sinks[i]=(XrXirOutputSink){XR_XIR_CALL_ABI_VERSION,0,library_state_atomic_i64_write,&outputs[i],64};
@@ -123,19 +125,16 @@ static bool library_state_atomic_i64_pair(XrXirProgram *program,const uint32_t i
         bool valid=library_state_atomic_i64_bad_order(instances[i],ids[9]);
         library_state_atomic_i64_handle(&current,30);xr_xir_value_drop(&current);
         if (!valid) goto done;
+        completed[i]=XR_XIR_CALL_BAD_ARGUMENT;
     }
     ok=true;
 done:
-    for (uint32_t i=0;i<2;++i) if (instances[i]) CHECK(xr_xir_instance_free(instances[i])==XR_XIR_CALL_READY);
+    for (uint32_t i=0;i<2;++i) if (instances[i]) xir_fixture_close_instance(instances[i],!ok,completed[i]);
     return ok;
-}
-static XrXirStatus library_state_atomic_i64_seal_operation(const XrXirCompileContext *context,void *opaque) {
-    XrXirProgram *program=NULL;XrXirStatus status=xr_xir_compile_program_seal(context,opaque,&program);
-    CHECK(status==XR_XIR_OK ? program!=NULL : program==NULL);xr_xir_compile_program_drop(program);return status;
 }
 static void library_state_atomic_i64_finish(const XrXirCompileContext *context,XrXirProgramSpec *spec,XrXirArtifact *lowered,
     const uint32_t ids[LIBRARY_STATE_ATOMIC_I64_EXPORTS]) {
-    library_compile_operation_cases("Library private state seal",library_state_atomic_i64_seal_operation,spec);
+    /* Complete pipeline replays cover compiler sealing faults independently. */
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(context,spec,&program)==XR_XIR_OK);
     CHECK(xr_xir_domain_new(65536,&library_state_atomic_i64_read_domain)==XR_XIR_VALUE_OK);
     size_t live=runtime_live,bytes=runtime_bytes,sites=0;
