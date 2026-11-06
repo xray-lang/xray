@@ -57,7 +57,7 @@ static void nominal_visibility_cases(const XrXirProgramSpec *base) {
         CHECK(xr_xir_compile_program_seal(suite_context, &spec, &program) == (mode ? XR_XIR_BAD_STRUCTURE : XR_XIR_BAD_TYPE) && !program);
         if (!mode) {
             XrXirCompileContext budget = consumer_context_default();
-            budget=consumer_context_limits((XrCompileResourceLimits){65536,8388608,100001});
+            budget=consumer_context_limits((XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true});
             CHECK(xr_xir_compile_declarations_verify(&budget, &declarations, &types, 9, XR_XIR_PROGRAM) == XR_XIR_BAD_TYPE);
         }
         identities[1].exported = 1;

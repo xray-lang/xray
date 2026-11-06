@@ -131,7 +131,7 @@ int main(void) {
     for (unsigned i = 0; i < 3; ++i) {
         CHECK(nominals[i]->types && nominals[i]->types->nominals);
         if (i == 2) {
-            XrXirCompileContext budget=consumer_context_limits((XrCompileResourceLimits){65536,65536,10001});budget.limits.parameters=1000;
+            XrXirCompileContext budget=consumer_context_limits((XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true});budget.limits.parameters=1000;
             const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
             XrXirLayout layout = {0}; uint32_t offsets[2] = {0};
             CHECK(xr_xir_compile_nominal_layout(&budget, nominals[i]->types, (XrXirType)256, &target, &layout, offsets, 2) == XR_XIR_OK);
