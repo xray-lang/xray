@@ -172,22 +172,26 @@ static void specialization_failures(unsigned callable) {
     XrXirModule built = *xr_xir_compile_artifact_module(checked); built.stage = XR_XIR_BUILT;
     size_t baseline=live,baseline_bytes=live_bytes,sites[2]={0};
     for(unsigned mode=0;mode<2;++mode){
+        XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true});
+        XrCompileResourceStats owner_baseline=consumer_context_stats(&probe);
+        XrXirArtifact *producer=NULL;
+        if(mode)CHECK(xir_fixture_check(&probe,&built,&producer,NULL)==XR_XIR_OK);
+        size_t stage_baseline=live,stage_bytes=live_bytes;
+        /* The immutable producer is outside the injected stage. Reuse it while
+         * still failing every allocation in each actual receiving operation. */
         for(size_t attempt=0;attempt<=sites[mode];++attempt){
-            XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true});
-            XrCompileResourceStats owner_baseline=consumer_context_stats(&probe);
-            XrXirArtifact *producer=NULL;
-            if(mode)CHECK(xir_fixture_check(&probe, &built, &producer, NULL)==XR_XIR_OK);
-            size_t stage_baseline=live,stage_bytes=live_bytes;
             packet_allocation_calls=0;fail_at=attempt?attempt-1:SIZE_MAX;
-            XrXirStatus status=mode?xr_xir_compile_specialize(producer,&output,NULL, NULL):xir_fixture_check(&probe, &built, &output, NULL);
+            XrXirStatus status=mode?xr_xir_compile_specialize(producer,&output,NULL,NULL):
+                xir_fixture_check(&probe,&built,&output,NULL);
             if(!attempt){CHECK(status==XR_XIR_OK && output);sites[mode]=packet_allocation_calls;}
             else CHECK(status==XR_XIR_OUT_OF_MEMORY && !output);
             xr_xir_compile_artifact_free(output);output=NULL;
             CHECK(live==stage_baseline && live_bytes==stage_bytes);
-            fail_at=SIZE_MAX;xr_xir_compile_artifact_free(producer);
-            consumer_context_ephemeral_free(&probe,owner_baseline);
-            CHECK(live==baseline && live_bytes==baseline_bytes);
+            fail_at=SIZE_MAX;
         }
+        xr_xir_compile_artifact_free(producer);
+        consumer_context_ephemeral_free(&probe,owner_baseline);
+        CHECK(live==baseline && live_bytes==baseline_bytes);
     }
     fail_at = SIZE_MAX; xr_xir_compile_artifact_free(checked);checked=NULL; CHECK(live==consumer_context_owner_count && live_bytes==consumer_context_ledger_bytes());
     printf("%s physical release: %zu checking and %zu specialization allocation sites\n", callable == 8 ? "Nominal expressions" : callable == 7 ? "Nominal field graph" : callable == 6 ? "Combined nominal and function" : callable == 5 ? "Nominal field substitution" : callable == 4 ? "Generic Array" : callable == 3 ? "Constructed" : callable == 2 ? "Generic callable" : callable ? "Callable" : "Generic", sites[0], sites[1]);
@@ -202,20 +206,22 @@ static void nominal_field_closure_failures(void) {
         uint64_t closure_cap=consumer_context_stats(&measure).peak_bytes+65536;
         xr_xir_compile_artifact_free(measured);consumer_context_ephemeral_free(&measure,measure_baseline);
         size_t sites=0,physical=live,physical_bytes=live_bytes;
+        XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){mode==2?XR_COMPILE_MEMORY_FINITE:XR_COMPILE_MEMORY_ORDINARY,mode==2?closure_cap:0,true});
+        XrCompileResourceStats owner_baseline=consumer_context_stats(&probe);
+        XrXirArtifact *checked=nominal_field_closure_fixture(&probe,mode),*output=NULL;
+        size_t baseline=live,baseline_bytes=live_bytes;
         for(size_t attempt=0;attempt<=sites;++attempt){
-            XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){mode==2?XR_COMPILE_MEMORY_FINITE:XR_COMPILE_MEMORY_ORDINARY,mode==2?closure_cap:0,true});
-            XrCompileResourceStats owner_baseline=consumer_context_stats(&probe);
-            XrXirArtifact *checked=nominal_field_closure_fixture(&probe,mode),*output=NULL;
-            size_t baseline=live,baseline_bytes=live_bytes;
             packet_allocation_calls=0;fail_at=attempt?attempt-1:SIZE_MAX;
             XrXirStatus expected=attempt?XR_XIR_OUT_OF_MEMORY:mode==0?XR_XIR_OK:mode==1?XR_XIR_BAD_TYPE:XR_XIR_MEMORY_LIMIT;
-            CHECK(xr_xir_compile_specialize(checked,&output,NULL, NULL)==expected);
+            CHECK(xr_xir_compile_specialize(checked,&output,NULL,NULL)==expected);
             if(!attempt)sites=packet_allocation_calls;
             if(attempt || mode)CHECK(!output);
-            xr_xir_compile_artifact_free(output);CHECK(live==baseline && live_bytes==baseline_bytes);
-            fail_at=SIZE_MAX;xr_xir_compile_artifact_free(checked);consumer_context_ephemeral_free(&probe,owner_baseline);
-            CHECK(live==physical && live_bytes==physical_bytes);
+            xr_xir_compile_artifact_free(output);output=NULL;
+            CHECK(live==baseline && live_bytes==baseline_bytes);
+            fail_at=SIZE_MAX;
         }
+        xr_xir_compile_artifact_free(checked);consumer_context_ephemeral_free(&probe,owner_baseline);
+        CHECK(live==physical && live_bytes==physical_bytes);
         printf("Nominal field closure mode %u: %zu failure sites, no retained metadata\n",mode,sites);
     }
 }
