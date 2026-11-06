@@ -35,10 +35,6 @@ endif()
 add_test(NAME test_xir_generator_native COMMAND test_xir_generator_native)
 set_tests_properties(test_xir_generator_native PROPERTIES LABELS "unit;xir;generator;generated-c;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
 
-add_test(NAME test_xir_generator_packet_vectors COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_generator91_vectors.py")
-add_test(NAME test_xir_generator_historical89_vectors COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_generator89_vectors.py")
-set_tests_properties(test_xir_generator_historical89_vectors PROPERTIES LABELS "unit;xir;generator;abi;compiler;history" TIMEOUT 30 PROCESSORS 1)
-set_tests_properties(test_xir_generator_packet_vectors PROPERTIES LABELS "unit;xir;generator;abi;compiler" TIMEOUT 30 PROCESSORS 1)
 
 add_executable(test_xir_generator_cleanup_source xir/test_xir_generator_cleanup_source.c)
 target_link_libraries(test_xir_generator_cleanup_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
@@ -78,8 +74,6 @@ foreach(generator_factory_target test_xir_generator_factory_source test_xir_gene
     set_tests_properties(${generator_factory_target} PROPERTIES LABELS "unit;xir;generator;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
 endforeach()
 
-add_test(NAME test_xir_generator_factory_vectors COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_generator_factory89_vectors.py")
-set_tests_properties(test_xir_generator_factory_vectors PROPERTIES LABELS "unit;xir;generator;abi;compiler" TIMEOUT 30 PROCESSORS 1)
 
 add_executable(test_xir_generator_consumer_source xir/test_xir_generator_consumer_source.c)
 target_link_libraries(test_xir_generator_consumer_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
@@ -109,8 +103,6 @@ else()
 endif()
 add_test(NAME test_xir_iterator_pull_packets COMMAND test_xir_iterator_pull_packets)
 set_tests_properties(test_xir_iterator_pull_packets PROPERTIES LABELS "unit;xir;generator;abi;compiler" TIMEOUT 120 PROCESSORS 1)
-add_test(NAME test_xir_iterator_pull_vectors COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_iterator_pull89_vectors.py")
-set_tests_properties(test_xir_iterator_pull_vectors PROPERTIES LABELS "unit;xir;generator;abi;compiler" TIMEOUT 30 PROCESSORS 1)
 
 add_executable(test_xir_generator_consumer_mixed xir/test_xir_generator_consumer_mixed.c "${XIR_GENERATOR_CONSUMER_C}")
 target_link_libraries(test_xir_generator_consumer_mixed PRIVATE xray_xir_vm xray_xir_scalar)

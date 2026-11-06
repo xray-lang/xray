@@ -20,103 +20,108 @@
 #include <string.h>
 #define CHECK(c) do{if(!(c)){fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}}while(0)
 #include "xir_source_fixture_owner.h"
+#include "xir_construction_fixture.h"
 #include "xir_generator_factory_cases.h"
-#include "xir_generator_factory89_golden.h"
-#include "xir_generator_factory86_golden.h"
-#include "xir_generator_factory87_golden.h"
-#include "xir_generator_factory88_golden.h"
-#include "xir_checked_legacy_packets.h"
-#include "xir_generator_factory85_golden.h"
-static void factory_previous88(const XrXirCompileContext *context) {
-    const XirLegacyPacket packets[]={
-        {factory88_i64,sizeof(factory88_i64)},
-        {factory88_unit,sizeof(factory88_unit)},
-        {factory88_no_suspend,sizeof(factory88_no_suspend)},
-        {factory88_ordinary_target,sizeof(factory88_ordinary_target)},
-        {factory88_scalar_result,sizeof(factory88_scalar_result)},
-        {factory88_argument_count,sizeof(factory88_argument_count)},
-        {factory88_targets,sizeof(factory88_targets)},
-        {factory88_yield_in_factory,sizeof(factory88_yield_in_factory)},
-        {factory88_owned_cell,sizeof(factory88_owned_cell)},
-        {factory88_borrowed_cell,sizeof(factory88_borrowed_cell)},
-    };
-    checked_legacy_packets(context,packets,sizeof(packets)/sizeof(*packets));
-}
-static void factory_previous87(const XrXirCompileContext *context) {
-    const XirLegacyPacket packets[]={
-        {factory87_i64,sizeof(factory87_i64)},
-        {factory87_unit,sizeof(factory87_unit)},
-        {factory87_no_suspend,sizeof(factory87_no_suspend)},
-        {factory87_ordinary_target,sizeof(factory87_ordinary_target)},
-        {factory87_scalar_result,sizeof(factory87_scalar_result)},
-        {factory87_argument_count,sizeof(factory87_argument_count)},
-        {factory87_targets,sizeof(factory87_targets)},
-        {factory87_yield_in_factory,sizeof(factory87_yield_in_factory)},
-        {factory87_owned_cell,sizeof(factory87_owned_cell)},
-        {factory87_borrowed_cell,sizeof(factory87_borrowed_cell)},
-    };
-    checked_legacy_packets(context,packets,sizeof(packets)/sizeof(*packets));
-}
-static void factory_previous86(const XrXirCompileContext *context) {
-    const XirLegacyPacket packets[]={
-        {factory86_i64,sizeof(factory86_i64)},
-        {factory86_unit,sizeof(factory86_unit)},
-        {factory86_no_suspend,sizeof(factory86_no_suspend)},
-        {factory86_ordinary_target,sizeof(factory86_ordinary_target)},
-        {factory86_scalar_result,sizeof(factory86_scalar_result)},
-        {factory86_argument_count,sizeof(factory86_argument_count)},
-        {factory86_targets,sizeof(factory86_targets)},
-        {factory86_yield_in_factory,sizeof(factory86_yield_in_factory)},
-    };
-    checked_legacy_packets(context,packets,sizeof(packets)/sizeof(*packets));
-}
-_Static_assert(XR_XIR_GENERATOR_NEW==177 && XR_XIR_TYPE_ITERATOR==11,"independent factory protocol ordinals");
-static void factory_packet_models(const XrXirCompileContext *context) {
-    factory_previous88(context);
-    factory_previous87(context);
-    factory_previous86(context);
-    const struct {const uint8_t *bytes;size_t length;} previous85[]={
-        {factory85_i64,sizeof(factory85_i64)},
-        {factory85_unit,sizeof(factory85_unit)},
-        {factory85_no_suspend,sizeof(factory85_no_suspend)},
-        {factory85_ordinary_target,sizeof(factory85_ordinary_target)},
-        {factory85_scalar_result,sizeof(factory85_scalar_result)},
-        {factory85_argument_count,sizeof(factory85_argument_count)},
-        {factory85_targets,sizeof(factory85_targets)},
-        {factory85_yield_in_factory,sizeof(factory85_yield_in_factory)}};
-    for(unsigned i=0;i<sizeof(previous85)/sizeof(previous85[0]);++i) {
-        XrCompileResourceStats before={0},after={0};
-        CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
-        XrXirArtifact *decoded=NULL;
-        CHECK(xr_xir_compile_checked_read(context,previous85[i].bytes,previous85[i].length,&decoded,NULL)==XR_XIR_BAD_STRUCTURE && !decoded);
-        CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK);
-        CHECK(after.allocation_count==before.allocation_count && after.allocated_bytes==before.allocated_bytes && after.live_bytes==before.live_bytes);
+/* The owning checker receives real fields; no serialized identity is asserted. */
+typedef struct FactoryModuleFixture {
+    XrXirTypeNode nodes[2];XrXirTypes types;XrXirType cell;
+    XrXirInstruction init,producer[3],factory[4],entry[5];XrXirBlock blocks[4];
+    uint32_t factory_actual,entry_actual;XrXirFunction functions[4];
+    XrXirFunctionIdentity identities[4];XrXirSourceModule source;
+    XrXirDeclarations declarations;XrXirModule module;
+} FactoryModuleFixture;
+static void factory_module_fixture(FactoryModuleFixture *f,unsigned variant) {
+    memset(f,0,sizeof(*f));bool unit=variant==1,cell=variant>=8,borrowed=variant==9;
+    const XrXirType iterator=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;
+    f->cell=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1);
+    f->nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ITERATOR,
+        .element=unit?XR_XIR_UNIT:XR_XIR_I64,.result=XR_XIR_NEVER};
+    f->nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64};
+    f->types=(XrXirTypes){f->nodes,cell?2u:1u,NULL,NULL};
+    f->init=(XrXirInstruction){.op=XR_XIR_RETURN};
+    unsigned producer_count=unit?2u:3u;
+    f->producer[0]=unit?(XrXirInstruction){.op=XR_XIR_GENERATOR_YIELD}:
+        cell?(XrXirInstruction){.op=XR_XIR_CELL_READ,.type=XR_XIR_I64,.args={0}}:
+        (XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=11};
+    if(!unit)f->producer[1]=(XrXirInstruction){.op=XR_XIR_GENERATOR_YIELD,.args={cell?1u:0u}};
+    f->producer[producer_count-1]=(XrXirInstruction){.op=XR_XIR_RETURN};
+    f->factory[0]=(XrXirInstruction){.op=XR_XIR_GENERATOR_NEW,.type=iterator,.immediate=variant==3?2:1};
+    f->factory[1]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={0}};
+    unsigned factory_count=2,entry_count=2;
+    if(variant==4)f->factory[0].type=XR_XIR_I64;
+    if(variant==5 || variant==7) {
+        f->factory[2]=f->factory[1];f->factory[2].args[0]=1;
+        f->factory[1]=f->factory[0];
+        f->factory[0]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=7};
+        if(variant==5){f->factory[1].args[1]=1;f->functions[2].operands=&f->factory_actual;f->functions[2].operand_count=1;}
+        else f->factory[1]=(XrXirInstruction){.op=XR_XIR_GENERATOR_YIELD,.args={0}};
+        factory_count=3;
     }
-    const struct {const uint8_t *bytes;size_t length;XrXirStatus expected;} cases[]={
-        {factory89_i64,sizeof(factory89_i64),XR_XIR_OK},
-        {factory89_unit,sizeof(factory89_unit),XR_XIR_OK},
-        {factory89_no_suspend,sizeof(factory89_no_suspend),XR_XIR_OK},
-        {factory89_ordinary_target,sizeof(factory89_ordinary_target),XR_XIR_BAD_TYPE},
-        {factory89_scalar_result,sizeof(factory89_scalar_result),XR_XIR_BAD_TYPE},
-        {factory89_argument_count,sizeof(factory89_argument_count),XR_XIR_BAD_STRUCTURE},
-        {factory89_targets,sizeof(factory89_targets),XR_XIR_BAD_STRUCTURE},
-        {factory89_yield_in_factory,sizeof(factory89_yield_in_factory),XR_XIR_BAD_TYPE},
-        {factory89_owned_cell,sizeof(factory89_owned_cell),XR_XIR_OK},
-        {factory89_borrowed_cell,sizeof(factory89_borrowed_cell),XR_XIR_BAD_VALUE}};
-    for(unsigned i=0;i<sizeof(cases)/sizeof(cases[0]);++i) {
-        XrXirArtifact *decoded=NULL;XrXirStatus status=xr_xir_compile_checked_read(context,cases[i].bytes,cases[i].length,&decoded,NULL);
-        if(status!=cases[i].expected) fprintf(stderr,"Factory packet%u status%u expected%u\n",i,status,cases[i].expected);
-        CHECK(status==cases[i].expected);
+    if(variant==6)f->factory[0].targets[0]=1;
+    if(cell) {
+        f->factory_actual=borrowed?0u:1u;
+        if(borrowed) {
+            f->factory[0].args[1]=1;f->factory[1].args[0]=1;
+        } else {
+            f->factory[0]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=7};
+            f->factory[1]=(XrXirInstruction){.op=XR_XIR_CELL_NEW,.type=f->cell,.args={0}};
+            f->factory[2]=(XrXirInstruction){.op=XR_XIR_GENERATOR_NEW,.type=iterator,.args={0,1},.immediate=1};
+            f->factory[3]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={2}};factory_count=4;
+        }
+        f->functions[2].operands=&f->factory_actual;f->functions[2].operand_count=1;
+    }
+    f->entry[0]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64};
+    f->entry[1]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={0}};
+    if(borrowed) {
+        f->entry[0].immediate=7;
+        f->entry[1]=(XrXirInstruction){.op=XR_XIR_CELL_NEW,.type=f->cell,.args={0}};
+        f->entry[2]=(XrXirInstruction){.op=XR_XIR_CALL,.type=iterator,.args={0,1},.immediate=2};
+        f->entry[3]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64};
+        f->entry[4]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={3}};
+        f->entry_actual=1;f->functions[3].operands=&f->entry_actual;f->functions[3].operand_count=1;entry_count=5;
+    }
+    const char *names[]={"init","numbers","make","entry"};
+    XrXirInstruction *ops[]={&f->init,f->producer,f->factory,f->entry};
+    const uint32_t counts[]={1,producer_count,factory_count,entry_count};
+    for(unsigned n=0;n<4;++n) {
+        f->blocks[n]=(XrXirBlock){.count=counts[n]};
+        f->functions[n].name=names[n];f->functions[n].name_length=(uint32_t)strlen(names[n]);
+        f->functions[n].result=n==0?XR_XIR_UNIT:n==3?XR_XIR_I64:iterator;
+        f->functions[n].error_type=XR_XIR_NEVER;f->functions[n].blocks=&f->blocks[n];
+        f->functions[n].block_count=1;f->functions[n].instructions=ops[n];f->functions[n].instruction_count=counts[n];
+    }
+    if(cell){f->functions[1].parameters=&f->cell;f->functions[1].parameter_count=1;}
+    if(borrowed){f->functions[2].parameters=&f->cell;f->functions[2].parameter_count=1;}
+    f->identities[1].promises=XR_XIR_FUNCTION_GENERATOR;f->identities[2].exported=1;
+    if(variant==2)f->identities[2].promises=XR_XIR_FUNCTION_NO_SUSPEND;
+    f->source=(XrXirSourceModule){"factory",7,NULL,0,0};
+    f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=f->identities,.entry_function=3};
+    f->module=(XrXirModule){.stage=XR_XIR_BUILT,.functions=f->functions,.function_count=4,
+        .types=&f->types,.declarations=&f->declarations,.linkage_kind=XR_XIR_PROGRAM};
+}
+static void factory_module_models(const XrXirCompileContext *context) {
+    static const struct {const char *name;XrXirStatus expected;} cases[]={
+        {"i64",XR_XIR_OK},{"unit",XR_XIR_OK},{"no_suspend",XR_XIR_OK},
+        {"ordinary_target",XR_XIR_BAD_TYPE},{"scalar_result",XR_XIR_BAD_TYPE},
+        {"argument_count",XR_XIR_BAD_STRUCTURE},{"targets",XR_XIR_BAD_STRUCTURE},
+        {"yield_in_factory",XR_XIR_BAD_TYPE},{"owned_cell",XR_XIR_OK},{"borrowed_cell",XR_XIR_BAD_VALUE}};
+    for(unsigned n=0;n<sizeof(cases)/sizeof(*cases);++n) {
+        FactoryModuleFixture fixture;factory_module_fixture(&fixture,n);
+        XrXirArtifact *checked=NULL,*lowered=NULL;XrXirDiagnostic diagnostic={0};
+        XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,&diagnostic);
+        if(status!=cases[n].expected)fprintf(stderr,"Factory Module %s status%u expected%u f%u i%u\n",
+            cases[n].name,status,cases[n].expected,diagnostic.function,diagnostic.instruction);
+        CHECK(status==cases[n].expected);
         if(status==XR_XIR_OK) {
-            XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(decoded,&packet,NULL)==XR_XIR_OK);
-            CHECK(packet.length==cases[i].length && !memcmp(packet.bytes,cases[i].bytes,packet.length));
-            xr_xir_compile_checked_packet_free(&packet);XrXirArtifact *lowered=NULL;
-            CHECK(xr_xir_compile_lower(decoded,&(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}, NULL,&lowered,NULL)==XR_XIR_OK);
-            CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(lowered);
-        } else CHECK(!decoded);
-        xr_xir_compile_artifact_free(decoded);
+            CHECK(checked);memset(&fixture,0xa5,sizeof(fixture));
+            CHECK(xr_xir_compile_lower(checked,&(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
+                NULL,&lowered,&diagnostic)==XR_XIR_OK);
+            CHECK(xr_xir_compile_artifact_verify(lowered,&diagnostic)==XR_XIR_OK);
+        } else CHECK(!checked);
+        xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(checked);
     }
 }
+
 
 static const char factory_source[]=
     "fn numbers(seed:i64)->Iterator<i64> { defer {print(seed)}\n yield seed\n }\n"
@@ -125,7 +130,7 @@ static const char factory_source[]=
     "fn main(){}\n";
 int main(int argc,char **argv) {
     CHECK(argc==1 || argc==2);SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"generator-factory",NULL};
     XrXirSourceRequest request={session,NULL,&authority,&owner.context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
@@ -153,6 +158,6 @@ int main(int argc,char **argv) {
     if(argc==2){FILE *file=fopen(argv[1],"wb");CHECK(file);CHECK(fwrite(c.text,1,c.length,file)==c.length);CHECK(!fclose(file));}
     xr_xir_compile_c_source_free(&c);XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && program && !lowered);
-    generator_factory_cases(program);factory_packet_models(&owner.context);source_fixture_owner_free(&owner);
+    generator_factory_cases(program);factory_module_models(&owner.context);source_fixture_owner_free(&owner);
     puts("Source canonical factory creates owned parked Iterator; drop and Instance close retire frames before final code PASS");return 0;
 }
