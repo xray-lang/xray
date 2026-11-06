@@ -120,11 +120,8 @@ static void string_catalog_bad_inputs(void) {
     XrXirLibraryInput pair[]={string_catalog_input("alpha.xr",library_string76_alpha,sizeof(library_string76_alpha),(XrXirLibraryModuleInput[1]){0}),
         string_catalog_input("beta.xr",library_string76_beta,sizeof(library_string76_beta),(XrXirLibraryModuleInput[1]){0})};
     string_catalog_expect(NULL,2,XR_XIR_BAD_STRUCTURE);string_catalog_expect(pair,0,XR_XIR_BAD_STRUCTURE);
-    LibraryCompileOwner limited={0};XrCompileResourceLimits limits=library_compile_limits;limits.work=1;
-    CHECK(library_compile_owner_new(&limited,&limits)==XR_XIR_OK);XrXirLibraryCatalog *catalog=NULL;
-    CHECK(xr_xir_compile_library_catalog_new_v2(&limited.context,(const XrXirLibraryInput *)(uintptr_t)1,1,&catalog)==XR_XIR_BUDGET&&!catalog);
-    library_compile_owner_drop(&limited);
-    CHECK(xr_xir_compile_library_catalog_new_v2(library_context,(const XrXirLibraryInput *)(uintptr_t)1,SIZE_MAX,&catalog)==XR_XIR_BUDGET&&!catalog);
+    XrXirLibraryCatalog *catalog=NULL;
+    CHECK(xr_xir_compile_library_catalog_new_v2(library_context,(const XrXirLibraryInput *)(uintptr_t)1,SIZE_MAX,&catalog)==XR_XIR_OVERFLOW&&!catalog);
     XrXirLibraryInput duplicate[]={pair[0],pair[0]};
     string_catalog_expect(duplicate,2,XR_XIR_BAD_STRUCTURE);
     XrXirLibraryModuleInput foreign_binding=*duplicate[1].modules;
@@ -132,7 +129,7 @@ static void string_catalog_bad_inputs(void) {
     foreign_binding.authority.physical_root="E:/foreign";
     string_catalog_expect(duplicate,2,XR_XIR_BAD_STRUCTURE);
     uint8_t altered[sizeof(library_string76_alpha)];memcpy(altered,library_string76_alpha,sizeof(altered));
-    altered[LIBRARY_STRING75_ALPHA_LITERAL0_BYTES+3]='X';string_catalog_rehash(altered,sizeof(altered));
+    altered[LIBRARY_STRING76_ALPHA_LITERAL0_BYTES+3]='X';string_catalog_rehash(altered,sizeof(altered));
     duplicate[1]=string_catalog_input("alpha.xr",altered,sizeof(altered),(XrXirLibraryModuleInput[1]){0});
     string_catalog_expect(duplicate,2,XR_XIR_BAD_STRUCTURE);
     pair[1]=string_catalog_input("wrong.xr",library_string76_beta,sizeof(library_string76_beta),(XrXirLibraryModuleInput[1]){0});
@@ -142,9 +139,9 @@ static void string_catalog_poison(void) {
     size_t live=runtime_live,bytes=runtime_bytes;
     uint8_t altered[sizeof(library_string76_alpha)];
     const struct {size_t offset;uint32_t value;} attacks[]={
-        {LIBRARY_STRING86_ALPHA_LITERAL_ID_LOW,2}, /* Original count is2: merged count4 cannot legitimize ID2. */
-        {LIBRARY_STRING86_ALPHA_LITERAL_ID_LOW,UINT32_MAX},{LIBRARY_STRING86_ALPHA_LITERAL_ID_HIGH,UINT32_MAX},{LIBRARY_STRING86_ALPHA_LITERAL_COUNT,UINT32_MAX},{629,UINT32_MAX}, /* Original malformed member_access remains an attack. */
-        {LIBRARY_STRING86_ALPHA_LITERAL0_LENGTH,UINT32_MAX}
+        {LIBRARY_STRING76_ALPHA_LITERAL_ID_LOW,2}, /* Original count is2: merged count4 cannot legitimize ID2. */
+        {LIBRARY_STRING76_ALPHA_LITERAL_ID_LOW,UINT32_MAX},{LIBRARY_STRING76_ALPHA_LITERAL_ID_HIGH,UINT32_MAX},{LIBRARY_STRING76_ALPHA_LITERAL_COUNT,UINT32_MAX},{629,UINT32_MAX}, /* Original malformed member_access remains an attack. */
+        {LIBRARY_STRING76_ALPHA_LITERAL0_LENGTH,UINT32_MAX}
     };
     for(size_t i=0;i<sizeof(attacks)/sizeof(attacks[0]);++i) {
         memcpy(altered,library_string76_alpha,sizeof(altered));
@@ -154,13 +151,13 @@ static void string_catalog_poison(void) {
             string_catalog_input("alpha.xr",altered,sizeof(altered),(XrXirLibraryModuleInput[1]){0})};
         string_catalog_expect(pair,2,XR_XIR_BAD_STRUCTURE);
     }
-    memcpy(altered,library_string76_alpha,sizeof(altered));altered[LIBRARY_STRING75_ALPHA_LITERAL0_BYTES]=255;
+    memcpy(altered,library_string76_alpha,sizeof(altered));altered[LIBRARY_STRING76_ALPHA_LITERAL0_BYTES]=255;
     XrXirLibraryInput input=string_catalog_input("alpha.xr",altered,sizeof(altered),(XrXirLibraryModuleInput[1]){0});
     string_catalog_expect(&input,1,XR_XIR_BAD_STRUCTURE); /* Correct outerSHA, invalid innerdigest. */
     memcpy(altered,library_string76_alpha,sizeof(altered));input=string_catalog_input("alpha.xr",altered,sizeof(altered),(XrXirLibraryModuleInput[1]){0});
     input.sha256[0]^=1;string_catalog_expect(&input,1,XR_XIR_BAD_STRUCTURE);
     uint8_t unused[sizeof(library_string76_unused)];memcpy(unused,library_string76_unused,sizeof(unused));
-    unused[LIBRARY_STRING75_UNUSED_LITERAL2_BYTES]=255;string_catalog_rehash(unused,sizeof(unused));
+    unused[LIBRARY_STRING76_UNUSED_LITERAL2_BYTES]=255;string_catalog_rehash(unused,sizeof(unused));
     input=string_catalog_input("unused.xr",unused,sizeof(unused),(XrXirLibraryModuleInput[1]){0});string_catalog_expect(&input,1,XR_XIR_BAD_STRUCTURE);
     memcpy(altered,library_string76_alpha,sizeof(altered));size_t length=sizeof(altered)-1;
     uint64_t payload=length-64;for(unsigned b=0;b<8;++b)altered[24+b]=(uint8_t)(payload>>(8*b));
@@ -192,14 +189,14 @@ static void string_catalog_budgets_and_faults(void) {
     XrXirLibraryInput inputs[]={string_catalog_input("alpha.xr",library_string76_alpha,sizeof(library_string76_alpha),(XrXirLibraryModuleInput[1]){0}),
         string_catalog_input("beta.xr",library_string76_beta,sizeof(library_string76_beta),(XrXirLibraryModuleInput[1]){0})};
     XrCompileResourceStats a=string_catalog_cost(inputs,1),b=string_catalog_cost(inputs+1,1),pair=string_catalog_cost(inputs,2);
-    CHECK(pair.work>a.work&&pair.work>b.work&&pair.allocated_bytes>a.allocated_bytes&&pair.allocated_bytes>b.allocated_bytes);
+    CHECK(pair.allocated_bytes>a.allocated_bytes&&pair.allocated_bytes>b.allocated_bytes);
     CHECK(pair.allocation_count>a.allocation_count&&pair.allocation_count>b.allocation_count);
-    for(unsigned axis=0;axis<2;++axis){LibraryCompileOwner owner={0};XrCompileResourceLimits limits=library_compile_limits;
-        if(axis)limits.allocated_bytes=a.allocated_bytes>b.allocated_bytes?a.allocated_bytes:b.allocated_bytes;
-        else limits.work=a.work>b.work?a.work:b.work;
-        CHECK(library_compile_owner_new(&owner,&limits)==XR_XIR_OK);LibrarySourceFixture fixture={inputs,2,NULL,{0},XR_XIR_LIBRARY};
-        CHECK(library_catalog_operation(&owner.context,&fixture)==XR_XIR_BUDGET);library_compile_owner_drop(&owner);
-    }
+    CHECK(pair.peak_bytes>a.peak_bytes&&pair.peak_bytes>b.peak_bytes);
+    LibraryCompileOwner owner={0};XrCompileResourceLimits limits=library_compile_limits;
+    limits.memory_limit=a.peak_bytes>b.peak_bytes?a.peak_bytes:b.peak_bytes;
+    CHECK(library_compile_owner_new(&owner,&limits)==XR_XIR_OK);
+    LibrarySourceFixture rejected={inputs,2,NULL,{0},XR_XIR_LIBRARY};
+    CHECK(library_catalog_operation(&owner.context,&rejected)==XR_XIR_MEMORY_LIMIT);library_compile_owner_drop(&owner);
     LibrarySourceFixture fixture={inputs,1,NULL,{0},XR_XIR_LIBRARY};library_compile_operation_cases("Catalog firstinput",library_catalog_operation,&fixture);
     fixture.count=2;library_compile_operation_cases("Catalog secondprefix",library_catalog_operation,&fixture);
 }

@@ -48,14 +48,14 @@ static void library_views_reject_occupied(const XrXirLibraryInput *inputs,size_t
     CHECK(views&&view_count&&view_count<=17);XrModuleResourceBinding saved[17];
     memcpy(saved,views,view_count*sizeof(*views));
     size_t compiler_blocks=source_live,compiler_bytes=source_bytes,blocks=runtime_live,bytes=runtime_bytes;
-    uint64_t live=library_compile_stats(library_context).live_bytes;
+    uint64_t live=library_compile_stats(library_context).held_bytes;
     XrXirLibraryCatalog *output=occupied;
     CHECK(xr_xir_compile_library_catalog_new_v2(library_context,inputs,count,&output)==XR_XIR_BAD_STRUCTURE);
     CHECK(output==occupied);
     size_t after_count=0;const XrModuleResourceBinding *after=xr_xir_compile_library_catalog_resources_v2(output,&after_count);
     CHECK(after==views&&after_count==view_count&&!memcmp(after,saved,view_count*sizeof(*views)));
     CHECK(source_live==compiler_blocks&&source_bytes==compiler_bytes&&runtime_live==blocks&&runtime_bytes==bytes);
-    CHECK(library_compile_stats(library_context).live_bytes==live);
+    CHECK(library_compile_stats(library_context).held_bytes==live);
 }
 static void library_views_case(unsigned mode) {
     CHECK(mode<4);
