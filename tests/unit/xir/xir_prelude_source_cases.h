@@ -69,16 +69,20 @@ static void prelude_occupied(const XrXirCompileContext *context,XrXirSourceResul
 static void prelude_catalog_negatives(const XrXirCompileContext *context,
     const XrXirArtifact *producer,XrXirLibraryModuleInput *binding) {
     const XrXirModule *original=xr_xir_compile_artifact_module(producer);
-    CHECK(original->types->nominals->count==2);
+    const XrXirNominalTable *nominals=original->types->nominals;
+    CHECK(nominals && nominals->count && nominals->declarations);
     uint32_t crypto=UINT32_MAX,ordering=UINT32_MAX;
-    for (uint32_t n=0;n<2;++n) {
+    for (uint32_t n=0;n<nominals->count;++n) {
         XrXirLiteral name=original->types->nominals->declarations[n].name;
-        if (name.length==11 && !memcmp(name.bytes,"CryptoError",11)) crypto=n;
-        if (name.length==8 && !memcmp(name.bytes,"Ordering",8)) ordering=n;
+        if (name.length==11 && !memcmp(name.bytes,"CryptoError",11)) {CHECK(crypto==UINT32_MAX);crypto=n;}
+        if (name.length==8 && !memcmp(name.bytes,"Ordering",8)) {CHECK(ordering==UINT32_MAX);ordering=n;}
     }
     CHECK(crypto!=UINT32_MAX && ordering!=UINT32_MAX);
+    size_t live=source_program_compile_live,bytes=source_program_compile_bytes;
+    XrXirNominalDeclaration *records=NULL;
+    CHECK(xr_compile_resources_calloc(context->resources,nominals->count,sizeof(*records),(void **)&records)==XR_COMPILE_RESOURCE_OK && records);
     for (unsigned mode=0;mode<4;++mode) {
-        XrXirNominalDeclaration records[2];memcpy(records,original->types->nominals->declarations,sizeof(records));
+        memcpy(records,nominals->declarations,(size_t)nominals->count*sizeof(*records));
         XrXirNominalVariant wrong={ {"WrongLength",11},0,0 };
         if (mode==0) records[crypto].name=(XrXirLiteral){"OtherError",10};
         if (mode==1) records[crypto].variants=&wrong;
@@ -99,6 +103,8 @@ static void prelude_catalog_negatives(const XrXirCompileContext *context,
         CHECK(xr_xir_compile_library_catalog_new_v2(context,&input,1,&output)==XR_XIR_BAD_STRUCTURE && !output);
         xr_xir_compile_checked_packet_free(&packet);
     }
+    xr_compile_resources_free(records);
+    CHECK(source_program_compile_live==live && source_program_compile_bytes==bytes);
 }
 static void prelude_catalog_source_no_fallback(const XrXirCompileContext *context,XrXirLibraryCatalog *catalog) {
     size_t count=0;const XrModuleResourceBinding *resources=xr_xir_compile_library_catalog_resources_v2(catalog,&count);

@@ -23,6 +23,14 @@
 #include "xir_library_source_owner.h"
 #include "xir_prelude_runtime.h"
 #include "xir_prelude_source_cases.h"
+static uint32_t prelude_enum_line(const char *name) {
+    char spelling[64];int length=snprintf(spelling,sizeof(spelling),"export enum %s ",name);
+    CHECK(length>0 && (size_t)length<sizeof(spelling));
+    const char *found=strstr(xir_prelude_source.text,spelling);
+    CHECK(found && !strstr(found+1,spelling));uint32_t line=1;
+    for (const char *p=xir_prelude_source.text;p<found;++p) if (*p=='\n') ++line;
+    return line;
+}
 static void prelude_query(const XrXirSourceResult *result,bool generated) {
     const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(result->snapshot);
     CHECK(view && view->complete);uint32_t module=UINT32_MAX,crypto=0,ordering=0;
@@ -37,8 +45,8 @@ static void prelude_query(const XrXirSourceResult *result,bool generated) {
     for (uint32_t d=0;d<view->declaration_count;++d) {
         const XrXirSourceDeclaration *row=&view->declarations[d];
         if (row->range.module!=module || row->kind!=XR_XIR_SOURCE_TYPE) continue;
-        if (!strcmp(row->name,"CryptoError")) {++crypto;CHECK(row->exported && row->native_identity==0);if(generated)CHECK(row->range.line==3 && row->range.column>0);}
-        if (!strcmp(row->name,"Ordering")) {++ordering;CHECK(row->exported && row->native_identity==4);if(generated)CHECK(row->range.line==2 && row->range.column>0);}
+        if (!strcmp(row->name,"CryptoError")) {++crypto;CHECK(row->exported && row->native_identity==0);if(generated)CHECK(row->range.line==prelude_enum_line("CryptoError") && row->range.column>0);}
+        if (!strcmp(row->name,"Ordering")) {++ordering;CHECK(row->exported && row->native_identity==4);if(generated)CHECK(row->range.line==prelude_enum_line("Ordering") && row->range.column>0);}
     }
     CHECK(crypto==1 && ordering==1);
 }
