@@ -45,7 +45,7 @@ static void remove_escaped(RemoveCompile *run) {
     xr_xir_compile_artifact_free(run->lowered); run->lowered = NULL;
     CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
     xr_xir_compile_program_drop(run->program); run->program = NULL; run->module = NULL;
-    CHECK(remove_stats(&run->context).live_bytes > run->baseline.live_bytes);
+    CHECK(remove_stats(&run->context).held_bytes > run->baseline.held_bytes);
     const XrXirValue *payload = NULL; bool some = false;
     CHECK(xr_xir_nullable_view(&callable, &some, &payload) && some);
     const XrXirFunctionBinding *binding = xr_xir_function_binding(payload);
@@ -59,7 +59,7 @@ static void remove_escaped(RemoveCompile *run) {
     static const int64_t old[] = {1, 0, 3}; remove_array(&alias, old, 3, true, 1);
     xr_xir_value_drop(&nested); xr_xir_value_drop(&alias); xr_xir_value_drop(&text); xr_xir_value_drop(&callable);
     CHECK(!runtime_live && !runtime_bytes);
-    CHECK(remove_stats(&run->context).live_bytes == run->baseline.live_bytes);
+    CHECK(remove_stats(&run->context).held_bytes == run->baseline.held_bytes);
     puts("remove escaped Callable/String/SomeSome and old alias pin arena/code until final physical0");
 }
 #endif // XIR_ARRAY_REMOVE_ESCAPE_H

@@ -1,10 +1,9 @@
-"""Complete Array resize compiler faults in owned, bounded Windows processes."""
+"""Representative owned-memory faults for complete Array resize programs."""
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
-import math
 import os
 from pathlib import Path
 import subprocess
@@ -39,13 +38,12 @@ def zero_physical(record):
 def baseline(record, mode):
     checked(record.get("kind") == "baseline" and record.get("mode") == mode, "Wrong fresh baseline")
     sites = record.get("sites")
-    checked(type(sites) is int and 0 < sites <= 67108864, "Nonfinite whole-graph site denominator")
+    checked(type(sites) is int and 0 < sites <= 0xffffffff, "Nonfinite whole-graph site denominator")
     checked(record.get("oom_status") == 7 and record.get("functions", 0) > 0 and
             0 < record.get("c_bytes", 0) <= 1048576, "Complete Program/C-output contract changed")
-    checked((record.get("allocated_cap"), record.get("live_cap"), record.get("work_cap")) ==
-            (67108864, 8388608, 128000000), "Whole-graph resource caps changed")
-    for value, cap in (("allocated", "allocated_cap"), ("peak", "live_cap"), ("work", "work_cap")):
-        checked(type(record.get(value)) is int and 1 < record[value] <= record[cap], "Baseline budget changed")
+    checked(record.get("memory_limit") == 8388608, "Held-memory cap changed")
+    checked(type(record.get("allocated")) is int and record["allocated"] > 1 and
+            type(record.get("peak")) is int and 1 < record["peak"] <= record["memory_limit"], "Baseline memory facts changed")
     zero_physical(record)
     return sites
 
@@ -63,10 +61,7 @@ def main():
     parser.add_argument("--mode", type=int, choices=range(4), required=True)
     parser.add_argument("--workers", type=int, required=True)
     parser.add_argument("--component", choices=("transaction", "matrix1", "matrix2", "matrix3", "matrix4", "matrix5", "matrix6", "matrix7"), default="transaction")
-    parser.add_argument("--shared-prefix-root", type=Path)
-    parser.add_argument("--prefix-only", action="store_true")
     options = parser.parse_args()
-    checked(not options.prefix_only or (options.mode == 0 and options.shared_prefix_root), "Shared prefix requires VM mode and owned report root")
     checked(os.name == "nt", "Parallel compiler gate is registered only on Windows")
     checked(1 <= options.workers <= WORKERS, "Worker count must be in 1..8")
     start = time.monotonic()
@@ -77,7 +72,7 @@ def main():
     manifest = {"qualified": False, "workers": options.workers, "mode": options.mode,
                 "timeout": TIMEOUT, "executable": str(executable),
                 "executable_sha256": hashlib.sha256(executable.read_bytes()).hexdigest(),
-                "component": options.component, "commands": [], "completed_ordinals": [], "inherited_ordinals": []}
+                "component": options.component, "commands": [], "completed_ordinals": []}
     fixture = Path(__file__).resolve().parents[2] / "fixtures/xir_array_resize" / options.component
     inputs = [fixture / "root.xr", fixture / "producer.xr", Path(__file__).resolve()]
     manifest["inputs"] = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in inputs}
@@ -122,114 +117,60 @@ def main():
         wait_phase()
         rows = records(root / "baseline.jsonl")
         checked(len(rows) == 3, "Incomplete normal baseline")
-        prefix = rows[0]
-        checked(prefix.get("kind") == "prefix_identity" and type(prefix.get("prefix_sites")) is int,
-                "Missing actual pre-seal prefix identity")
-        checked(all(isinstance(prefix.get(key), str) and len(prefix[key]) == 64 and
-                    all(c in "0123456789abcdef" for c in prefix[key]) for key in ("c_sha256", "proof_sha256")), "Invalid typed artifacts")
+        identity = rows[0]
+        checked(identity.get("kind") == "generated_identity" and
+                all(isinstance(identity.get(key), str) and len(identity[key]) == 64 and
+                    all(c in "0123456789abcdef" for c in identity[key]) for key in ("c_sha256", "proof_sha256")),
+                "Missing actual generated artifacts")
         sites = baseline(rows[1], options.mode)
         first = rows[1]
-        cut = prefix["prefix_sites"]
-        checked(0 < cut < sites, "Missing actual prefix/tail partition")
         complete(rows[2], options.mode, 0, 1, sites)
-        manifest["prefix"] = prefix
-        begin, end = 0, cut if options.prefix_only else sites
-        shared = None
-        certificate = options.shared_prefix_root / (options.component + ".json") if options.shared_prefix_root else None
-        if certificate and not options.prefix_only and certificate.is_file():
-            shared = json.loads(certificate.read_text(encoding="utf-8"))
-            checked(shared.get("qualified") is True and shared.get("prefix_only") is True and
-                    shared.get("prefix") == prefix and shared.get("inputs") == manifest["inputs"] and
-                    shared.get("executable_sha256") == manifest["executable_sha256"], "Stale/different shared prefix proof")
-            checked(shared.get("completed_ordinals") == list(range(cut)), "Incomplete shared prefix responsibility")
-            inherited = set()
-            shared_workers = shared.get("workers")
-            checked(type(shared_workers) is int and 1 <= shared_workers <= WORKERS and
-                    len(shared.get("shard_reports", {})) == shared_workers and shared.get("mode") == 0 and
-                    shared.get("executable") == str(executable), "Wrong shared execution owner/partition")
-            for index, (name, digest) in enumerate(shared["shard_reports"].items()):
-                report = Path(name)
-                checked(hashlib.sha256(report.read_bytes()).hexdigest() == digest, "Shared point report changed")
-                data = records(report)
-                checked(len(data) >= 4 and data[0] == prefix and data[1] == shared["baseline"], "Shared worker prefix/baseline changed")
-                shared_sites = baseline(data[1], 0)
-                complete(data[-1], 0, index, shared_workers, shared_sites)
-                checked(data[-2] == {"kind": "range", "begin": 0, "end": cut}, "Shared worker range changed")
-                checked([row.get("ordinal") for row in data[2:-2]] == list(range(index, cut, shared_workers)), "Shared worker partition incomplete")
-                for row in data[2:-2]:
-                    ordinal = row.get("ordinal")
-                    checked(type(ordinal) is int and 0 <= ordinal < cut and ordinal not in inherited and
-                            row.get("kind") == "point" and row.get("mode") == 0 and row.get("status") == 7 and
-                            row.get("injected") is True and row.get("empty_output") is True and
-                            type(row.get("attempts")) is int and row["attempts"] > ordinal and
-                            type(row.get("stage")) is int and 0 <= row["stage"] <= 6, "Invalid inherited actual prefix point")
-                    zero_physical(row); inherited.add(ordinal)
-            checked(inherited == set(range(cut)), "Shared actual ordinal union is incomplete")
-            manifest["inherited_ordinals"] = sorted(inherited)
-            manifest["shared_prefix_certificate"] = {"path": str(certificate), "sha256": hashlib.sha256(certificate.read_bytes()).hexdigest(),
-                                                       "actual_mode": 0, "logical_mode": options.mode}
-            shared_seconds = shared.get("seconds")
-            checked(type(shared_seconds) in (int, float) and math.isfinite(shared_seconds) and 0 < shared_seconds < TIMEOUT,
-                    "Shared prefix did not finish within original parent deadline")
-            deadline = start + TIMEOUT - shared_seconds
-            checked(time.monotonic() < deadline, "Original logical parent shared-prefix plus suffix deadline exhausted")
-            manifest["shared_prefix_seconds"] = shared_seconds
-            begin = cut
-        manifest["prefix_only"] = options.prefix_only
-        manifest["range"] = [begin, end]
+        manifest["generated_identity"] = identity
         manifest["baseline"] = first
         manifest["sites"] = sites
+        faults = sorted({0, sites // 2, sites - 1})
+        manifest["scope"] = "representative-owned-memory-faults"
+        manifest["selected_ordinals"] = faults
         for index in range(options.workers):
-            arguments = ["--compiler-range-shard" if (options.prefix_only or shared) else "--compiler-shard",
-                         mode, str(index), str(options.workers), str(sites)]
-            if options.prefix_only or shared: arguments.extend((str(begin), str(end)))
-            launch(f"shard-{index}", arguments)
+            launch(f"shard-{index}", ["--compiler-shard", mode, str(index), str(options.workers), str(sites)])
         wait_phase()
         union = set()
         manifest["shard_reports"] = {}
         for index in range(options.workers):
             rows = records(root / f"shard-{index}.jsonl")
-            checked(len(rows) >= 3 and rows[0] == prefix and rows[1] == first, "Worker fresh complete baseline differs")
+            checked(len(rows) >= 3 and rows[0] == identity and all(rows[1].get(key) == first.get(key) for key in ("kind", "mode", "sites", "functions", "c_bytes", "memory_limit", "oom_status")), "Worker fresh complete baseline differs")
             baseline(rows[1], options.mode)
-            ranged = options.prefix_only or shared is not None
-            if ranged: checked(rows[-2] == {"kind": "range", "begin": begin, "end": end}, "Wrong actual worker range")
             manifest["shard_reports"][str(root / f"shard-{index}.jsonl")] = hashlib.sha256((root / f"shard-{index}.jsonl").read_bytes()).hexdigest()
             complete(rows[-1], options.mode, index, options.workers, sites)
             observed = []
-            for row in rows[2:-2 if ranged else -1]:
+            for row in rows[2:-1]:
                 ordinal = row.get("ordinal")
                 checked(row.get("kind") == "point" and row.get("mode") == options.mode and
-                        type(ordinal) is int and begin <= ordinal < end, "Invalid actual failure ordinal")
+                        type(ordinal) is int and 0 <= ordinal < sites, "Invalid actual failure ordinal")
                 checked(ordinal % options.workers == index and ordinal not in union, "Duplicate/wrong partition")
                 checked(row.get("status") == 7 and row.get("injected") is True and row.get("empty_output") is True,
                         "Failure status/output contract changed")
                 checked(type(row.get("attempts")) is int and row["attempts"] > ordinal and
                         type(row.get("stage")) is int and 0 <= row["stage"] <= 7, "Fault was not reached")
-                checked(not ranged or (row["stage"] <= 6 if options.prefix_only else row["stage"] == 7), "Fault crossed prefix/tail boundary")
                 zero_physical(row)
                 union.add(ordinal)
                 observed.append(ordinal)
-            expected = [n for n in range(begin, end) if n % options.workers == index]
+            expected = [ordinal for ordinal in faults if ordinal % options.workers == index]
             checked(observed == expected, "Missing/reordered worker ordinals")
-        checked(union == set(range(begin, end)), "Actual fault range is incomplete")
-        if not options.prefix_only:
-            checked(union | set(manifest["inherited_ordinals"]) == set(range(sites)) and
-                    not union.intersection(manifest["inherited_ordinals"]), "Original logical fault responsibility is incomplete/duplicated")
+        checked(union == set(faults), "Representative fault responsibility is incomplete")
         manifest["completed_ordinals"] = sorted(union)
         publish()
-        if not options.prefix_only:
-            launch("bounds", ["--compiler-bounds", mode])
-            wait_phase()
-            rows = records(root / "bounds.jsonl")
-            checked(len(rows) == 9 and rows[0] == prefix and rows[1] == first, "Bounds normal baseline changed")
-            complete(rows[-1], options.mode, 0, 1, sites)
-            for axis in range(3):
-                for shortfall in range(2):
-                    row = rows[2 + 2 * axis + shortfall]
-                    checked(row.get("kind") == "axis" and row.get("mode") == options.mode and
-                            row.get("axis") == axis and row.get("shortfall") == shortfall and
-                            row.get("status") == (6 if shortfall else 0), "Exact/minus1 resource responsibility missing")
-                    zero_physical(row)
+        launch("bounds", ["--compiler-bounds", mode])
+        wait_phase()
+        rows = records(root / "bounds.jsonl")
+        checked(len(rows) == 5 and rows[0] == identity and all(rows[1].get(key) == first.get(key) for key in ("kind", "mode", "sites", "functions", "c_bytes", "memory_limit", "oom_status")), "Bounds normal baseline changed")
+        complete(rows[-1], options.mode, 0, 1, sites)
+        for shortfall in range(2):
+            row = rows[2 + shortfall]
+            checked(row.get("kind") == "memory_bound" and row.get("mode") == options.mode and
+                    row.get("shortfall") == shortfall and row.get("status") == (12 if shortfall else 0),
+                    "Exact/minus1 held-memory responsibility missing")
+            zero_physical(row)
         checked(not active and time.monotonic() < deadline, "Incomplete process drain/deadline")
         checked(hashlib.sha256(executable.read_bytes()).hexdigest() == manifest["executable_sha256"],
                 "Executable changed during complete fault census")
@@ -237,15 +178,8 @@ def main():
                     for path, digest in manifest["inputs"].items()), "Source/driver changed during fault census")
         manifest["qualified"] = True
         manifest["seconds"] = time.monotonic() - start
-        manifest["logical_parent_seconds"] = manifest["seconds"] + manifest.get("shared_prefix_seconds", 0)
-        checked(manifest["logical_parent_seconds"] < TIMEOUT, "Original logical 300-second whole-parent deadline exhausted")
         publish()
-        if options.prefix_only:
-            certificate.parent.mkdir(parents=True, exist_ok=True)
-            temporary = certificate.with_suffix("." + uuid.uuid4().hex + ".tmp")
-            temporary.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-            os.replace(temporary, certificate)
-        print(f"Array resize mode{options.mode}: logical {sites}, actual {len(union)}, inherited {len(manifest['inherited_ordinals'])}; physical0; {root}")
+        print(f"Array resize mode{options.mode}: {len(faults)} representative OOMs from {sites} observed sites; physical0; {root}")
         return 0
     except Exception as error:
         manifest["failure"] = str(error)

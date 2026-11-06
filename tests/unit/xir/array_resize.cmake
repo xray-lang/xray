@@ -39,8 +39,7 @@ if(WIN32)
         add_test(NAME test_xir_array_resize_compiler_${suffix}
             COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tests/unit/xir/run_array_resize_compiler.py"
                 --executable $<TARGET_FILE:${binary}> --mode ${mode} --workers 8
-                --reports-root "${CMAKE_BINARY_DIR}/array-resize-compiler-reports/${suffix}"
-                --shared-prefix-root "${CMAKE_BINARY_DIR}/array-resize-shared-prefix")
+                --reports-root "${CMAKE_BINARY_DIR}/array-resize-compiler-reports/${suffix}")
     endforeach()
 else()
     add_test(NAME test_xir_array_resize_compiler_vm COMMAND test_xir_array_resize --compiler 0)
@@ -97,8 +96,7 @@ foreach(group RANGE 1 7)
                 add_test(NAME ${vm}_compiler_${suffix}
                     COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tests/unit/xir/run_array_resize_compiler.py"
                         --executable $<TARGET_FILE:${binary}> --mode ${mode} --workers 8 --component matrix${group}
-                        --reports-root "${CMAKE_BINARY_DIR}/array-resize-compiler-reports/matrix${group}_${suffix}"
-                        --shared-prefix-root "${CMAKE_BINARY_DIR}/array-resize-shared-prefix")
+                        --reports-root "${CMAKE_BINARY_DIR}/array-resize-compiler-reports/matrix${group}_${suffix}")
             else()
                 add_test(NAME ${vm}_compiler_${suffix} COMMAND ${binary} --compiler ${mode})
             endif()
@@ -181,28 +179,4 @@ else()
     set_tests_properties(test_xir_array_resize_matrix7_compiler_mixed_root PROPERTIES COST 4)
     set_tests_properties(test_xir_array_resize_matrix7_compiler_native PROPERTIES COST 2)
     set_tests_properties(test_xir_array_resize_matrix7_compiler_vm PROPERTIES COST 3)
-endif()
-
-# A common prefix is executed once; each original mode retains its complete seal tail and axes.
-if(WIN32)
-    foreach(group RANGE 0 7)
-        if(group EQUAL 0)
-            set(component transaction)
-            set(base test_xir_array_resize)
-        else()
-            set(component "matrix${group}")
-            set(base "test_xir_array_resize_matrix${group}")
-        endif()
-        set(prefix "${base}_compiler_prefix")
-        add_test(NAME ${prefix} COMMAND "${Python3_EXECUTABLE}"
-            "${CMAKE_SOURCE_DIR}/tests/unit/xir/run_array_resize_compiler.py"
-            --executable $<TARGET_FILE:${base}_native> --mode 0 --workers 8 --component ${component}
-            --prefix-only --shared-prefix-root "${CMAKE_BINARY_DIR}/array-resize-shared-prefix"
-            --reports-root "${CMAKE_BINARY_DIR}/array-resize-compiler-reports/${component}_prefix")
-        set_tests_properties(${prefix} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 8
-            LABELS "unit;xir;array;memory;ownership;budget")
-        foreach(suffix IN LISTS resize_modes)
-            set_tests_properties(${base}_compiler_${suffix} PROPERTIES DEPENDS ${prefix})
-        endforeach()
-    endforeach()
 endif()

@@ -10,6 +10,7 @@
  *   Source, wire replay, specialization, emission and sealing share one ledger.
  */
 #include "xir/xxir_program_packet_internal.h"
+#include "xir/xxir_compile_memory.h"
 #ifndef XIR_ARRAY_REMOVE_PIPELINE_H
 #define XIR_ARRAY_REMOVE_PIPELINE_H
 #ifndef XR_REMOVE_COMPONENT
@@ -34,8 +35,7 @@ static void remove_mixed_free(void *pointer) {
 }
 static XrXirStatus remove_allocate(const XrXirCompileContext *context, size_t count, size_t bytes, void **out) {
     XrCompileResourceStatus status = xr_compile_resources_calloc(context->resources, count, bytes, out);
-    return status == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
-        status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+    return xir_compile_resource_status(status);
 }
 #endif
 static XrXirStatus remove_seal(RemoveCompile *run, unsigned mode) {
@@ -77,7 +77,7 @@ static XrXirStatus remove_seal(RemoveCompile *run, unsigned mode) {
 static XrCompileResourceStats remove_stats(const XrXirCompileContext *context) {
     XrCompileResourceStats stats = {0};
     CHECK(xr_compile_resources_stats(context->resources, &stats) == XR_COMPILE_RESOURCE_OK);
-    CHECK(stats.live_bytes == instance_compile_bytes);
+    CHECK(stats.held_bytes == instance_compile_bytes);
     return stats;
 }
 #if defined(XR_REMOVE_MATRIX) && XR_REMOVE_MATRIX == 7
@@ -134,10 +134,10 @@ static void remove_profile_stage(RemoveCompile *run, const char *stage) {
     if (!remove_profile) return;
     clock_t now = clock();
     XrCompileResourceStats stats = remove_stats(&run->context);
-    printf("compiler profile %s seconds%.6f cumulative-sites%zu allocated%llu live%llu peak%llu work%llu\n",
+    printf("compiler profile %s seconds%.6f cumulative-sites%zu allocated%llu held%llu peak%llu\n",
         stage, (double)(now - remove_profile_clock) / CLOCKS_PER_SEC, instance_compile_attempts,
-        (unsigned long long)stats.allocated_bytes, (unsigned long long)stats.live_bytes,
-        (unsigned long long)stats.peak_bytes, (unsigned long long)stats.work);
+        (unsigned long long)stats.allocated_bytes, (unsigned long long)stats.held_bytes,
+        (unsigned long long)stats.peak_bytes);
     fflush(stdout); remove_profile_clock = now;
 }
 static RemoveCompile remove_build(size_t failure, XrCompileResourceLimits limits, unsigned mode, const char *emit) {
@@ -145,15 +145,15 @@ static RemoveCompile remove_build(size_t failure, XrCompileResourceLimits limits
     RemoveCompile run = {0}; run.status = XR_XIR_OUT_OF_MEMORY;
     run.context.limits = xr_xir_compile_default_limits();
     XrCompileResourceStatus resource = xr_compile_resources_new(&limits, &run.context.resources);
-    if (resource != XR_COMPILE_RESOURCE_OK) { CHECK(!run.context.resources); run.sites = instance_compile_attempts; return run; }
+    if (resource != XR_COMPILE_RESOURCE_OK) { CHECK(!run.context.resources); run.status = xir_compile_resource_status(resource); run.sites = instance_compile_attempts; return run; }
     run.baseline = remove_stats(&run.context);
     remove_profile_stage(&run, "resource-new");
     XrCompilerSession *session = NULL; XrXirSourceResult result = {0};
     XrXirArtifact *read = NULL, *specialized = NULL;
     XrXirSourceDiagnostic diagnostic = {0}; XrXirCheckedPacket bytes = {0}; XrXirCSource source = {0}; XrXirSourceFailure path={0};
-    XrCompilerSessionStatus session_status = xr_compile_session_new(run.context.resources, &session);
-    if (session_status != XR_COMPILER_SESSION_OK) {
-        run.status = session_status == XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+    XrCompileResourceStatus session_status = xr_compile_session_new(run.context.resources, &session);
+    if (session_status != XR_COMPILE_RESOURCE_OK) {
+        run.status = xir_compile_resource_status(session_status);
         goto done;
     }
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_REMOVE_FIXTURES};
@@ -225,12 +225,12 @@ done:
 static void remove_release(RemoveCompile *run) {
     xr_xir_compile_artifact_free(run->lowered); xr_xir_compile_program_drop(run->program);
     if (run->context.resources) {
-        CHECK(remove_stats(&run->context).live_bytes == run->baseline.live_bytes);
+        CHECK(remove_stats(&run->context).held_bytes == run->baseline.held_bytes);
         xr_compile_resources_release(run->context.resources);
     }
     *run = (RemoveCompile){0}; instance_compile_zero(); CHECK(!runtime_live && !runtime_bytes);
 }
 static XrCompileResourceLimits remove_limits(void) {
-    return (XrCompileResourceLimits){67108864, 8388608, 128000000};
+    return (XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE, 8388608, true};
 }
 #endif // XIR_ARRAY_REMOVE_PIPELINE_H

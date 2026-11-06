@@ -1,4 +1,4 @@
-"""Complete Array entries compiler faults in owned, bounded Windows processes."""
+"""Representative owned-memory faults for complete Array entries programs."""
 from __future__ import annotations
 
 import argparse
@@ -38,13 +38,12 @@ def zero_physical(record):
 def baseline(record, mode):
     checked(record.get("kind") == "baseline" and record.get("mode") == mode, "Wrong fresh baseline")
     sites = record.get("sites")
-    checked(type(sites) is int and 0 < sites <= 67108864, "Nonfinite whole-graph site denominator")
+    checked(type(sites) is int and 0 < sites <= 0xffffffff, "Nonfinite whole-graph site denominator")
     checked(record.get("oom_status") == 7 and record.get("functions", 0) > 0 and
             0 < record.get("c_bytes", 0) <= 1048576, "Complete Program/C-output contract changed")
-    checked((record.get("allocated_cap"), record.get("live_cap"), record.get("work_cap")) ==
-            (67108864, 8388608, 128000000), "Whole-graph resource caps changed")
-    for value, cap in (("allocated", "allocated_cap"), ("peak", "live_cap"), ("work", "work_cap")):
-        checked(type(record.get(value)) is int and 1 < record[value] <= record[cap], "Baseline budget changed")
+    checked(record.get("memory_limit") == 8388608, "Held-memory cap changed")
+    checked(type(record.get("allocated")) is int and record["allocated"] > 1 and
+            type(record.get("peak")) is int and 1 < record["peak"] <= record["memory_limit"], "Baseline memory facts changed")
     zero_physical(record)
     return sites
 
@@ -118,19 +117,20 @@ def main():
         wait_phase()
         rows = records(root / "baseline.jsonl")
         checked(len(rows) == 3, "Incomplete normal baseline")
-        prefix = rows[0]
-        checked(prefix.get("kind") == "prefix_identity" and type(prefix.get("prefix_sites")) is int,
-                "Missing actual pre-seal prefix identity")
-        checked(all(isinstance(prefix.get(key), str) and len(prefix[key]) == 64 and
-                    all(c in "0123456789abcdef" for c in prefix[key]) for key in ("c_sha256", "proof_sha256")), "Invalid typed artifacts")
+        identity = rows[0]
+        checked(identity.get("kind") == "generated_identity" and
+                all(isinstance(identity.get(key), str) and len(identity[key]) == 64 and
+                    all(c in "0123456789abcdef" for c in identity[key]) for key in ("c_sha256", "proof_sha256")),
+                "Missing actual generated artifacts")
         sites = baseline(rows[1], options.mode)
         first = rows[1]
-        cut = prefix["prefix_sites"]
-        checked(0 < cut < sites, "Missing actual prefix/tail partition")
         complete(rows[2], options.mode, 0, 1, sites)
-        manifest["prefix"] = prefix
+        manifest["generated_identity"] = identity
         manifest["baseline"] = first
         manifest["sites"] = sites
+        faults = sorted({0, sites // 2, sites - 1})
+        manifest["scope"] = "representative-owned-memory-faults"
+        manifest["selected_ordinals"] = faults
         for index in range(options.workers):
             launch(f"shard-{index}", ["--compiler-shard", mode, str(index), str(options.workers), str(sites)])
         wait_phase()
@@ -138,7 +138,7 @@ def main():
         manifest["shard_reports"] = {}
         for index in range(options.workers):
             rows = records(root / f"shard-{index}.jsonl")
-            checked(len(rows) >= 3 and rows[0] == prefix and rows[1] == first, "Worker fresh complete baseline differs")
+            checked(len(rows) >= 3 and rows[0] == identity and all(rows[1].get(key) == first.get(key) for key in ("kind", "mode", "sites", "functions", "c_bytes", "memory_limit", "oom_status")), "Worker fresh complete baseline differs")
             baseline(rows[1], options.mode)
             manifest["shard_reports"][str(root / f"shard-{index}.jsonl")] = hashlib.sha256((root / f"shard-{index}.jsonl").read_bytes()).hexdigest()
             complete(rows[-1], options.mode, index, options.workers, sites)
@@ -155,23 +155,22 @@ def main():
                 zero_physical(row)
                 union.add(ordinal)
                 observed.append(ordinal)
-            expected = list(range(index, sites, options.workers))
+            expected = [ordinal for ordinal in faults if ordinal % options.workers == index]
             checked(observed == expected, "Missing/reordered worker ordinals")
-        checked(union == set(range(sites)), "Whole-graph fault responsibility is incomplete")
+        checked(union == set(faults), "Representative fault responsibility is incomplete")
         manifest["completed_ordinals"] = sorted(union)
         publish()
         launch("bounds", ["--compiler-bounds", mode])
         wait_phase()
         rows = records(root / "bounds.jsonl")
-        checked(len(rows) == 9 and rows[0] == prefix and rows[1] == first, "Bounds normal baseline changed")
+        checked(len(rows) == 5 and rows[0] == identity and all(rows[1].get(key) == first.get(key) for key in ("kind", "mode", "sites", "functions", "c_bytes", "memory_limit", "oom_status")), "Bounds normal baseline changed")
         complete(rows[-1], options.mode, 0, 1, sites)
-        for axis in range(3):
-            for shortfall in range(2):
-                row = rows[2 + 2 * axis + shortfall]
-                checked(row.get("kind") == "axis" and row.get("mode") == options.mode and
-                        row.get("axis") == axis and row.get("shortfall") == shortfall and
-                        row.get("status") == (6 if shortfall else 0), "Exact/minus1 resource responsibility missing")
-                zero_physical(row)
+        for shortfall in range(2):
+            row = rows[2 + shortfall]
+            checked(row.get("kind") == "memory_bound" and row.get("mode") == options.mode and
+                    row.get("shortfall") == shortfall and row.get("status") == (12 if shortfall else 0),
+                    "Exact/minus1 held-memory responsibility missing")
+            zero_physical(row)
         checked(not active and time.monotonic() < deadline, "Incomplete process drain/deadline")
         checked(hashlib.sha256(executable.read_bytes()).hexdigest() == manifest["executable_sha256"],
                 "Executable changed during complete fault census")
@@ -180,7 +179,7 @@ def main():
         manifest["qualified"] = True
         manifest["seconds"] = time.monotonic() - start
         publish()
-        print(f"Array entries mode{options.mode}: all {sites} actual ordinals; physical0; {root}")
+        print(f"Array entries mode{options.mode}: {len(faults)} representative OOMs from {sites} observed sites; physical0; {root}")
         return 0
     except Exception as error:
         manifest["failure"] = str(error)

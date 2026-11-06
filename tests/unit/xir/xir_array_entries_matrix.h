@@ -150,7 +150,7 @@ static void entries_goldens(EntriesCompile *run) {
     xr_xir_compile_artifact_free(run->lowered);run->lowered=NULL;
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
     xr_xir_compile_program_drop(run->program);run->program=NULL;run->module=NULL;
-    CHECK(entries_stats(&run->context).live_bytes>run->baseline.live_bytes);
+    CHECK(entries_stats(&run->context).held_bytes>run->baseline.held_bytes);
     for(unsigned row=0;row<count;++row) {
 #if XR_ENTRIES_MATRIX == 4
         if(row==2)CHECK(escaped[row].type==XR_XIR_I64&&escaped[row].payload==14);
@@ -159,7 +159,7 @@ static void entries_goldens(EntriesCompile *run) {
         matrix_value(row,&escaped[row]);
         xr_xir_value_drop(&escaped[row]);
     }
-    CHECK(!runtime_live&&!runtime_bytes&&entries_stats(&run->context).live_bytes==run->baseline.live_bytes);
+    CHECK(!runtime_live&&!runtime_bytes&&entries_stats(&run->context).held_bytes==run->baseline.held_bytes);
     printf("matrix%d ordinary copy/store %u categories, Some/None exact, independent payloads\n", XR_ENTRIES_MATRIX, count);
 }
 #endif // XIR_ARRAY_ENTRIES_MATRIX_H

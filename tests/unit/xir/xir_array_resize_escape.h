@@ -51,7 +51,7 @@ static void resize_escaped(ResizeCompile *run) {
     xr_xir_compile_artifact_free(run->lowered);run->lowered=NULL;
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
     xr_xir_compile_program_drop(run->program);run->program=NULL;run->module=NULL;
-    CHECK(resize_stats(&run->context).live_bytes>run->baseline.live_bytes);
+    CHECK(resize_stats(&run->context).held_bytes>run->baseline.held_bytes);
     for(int64_t i=0;i<2;++i) {
         const XrXirFunctionBinding *binding=xr_xir_function_binding(&functions[i]);
         CHECK(binding&&binding->owner&&binding->capture_count==1&&binding->captures[0].type==XR_XIR_I64&&binding->captures[0].payload==7);
@@ -65,9 +65,9 @@ static void resize_escaped(ResizeCompile *run) {
     }
     static const int64_t old[]={1,INT64_MIN,3};resize_array(&alias,old,3,true,1);
     xr_xir_value_drop(&alias);xr_xir_value_drop(&text);xr_xir_value_drop(&callable);
-    CHECK(resize_stats(&run->context).live_bytes>run->baseline.live_bytes);
+    CHECK(resize_stats(&run->context).held_bytes>run->baseline.held_bytes);
     xr_xir_value_drop(&functions[0]);xr_xir_value_drop(&functions[1]);
-    CHECK(!runtime_live&&!runtime_bytes&&resize_stats(&run->context).live_bytes==run->baseline.live_bytes);
+    CHECK(!runtime_live&&!runtime_bytes&&resize_stats(&run->context).held_bytes==run->baseline.held_bytes);
     puts("resize escaped Callable/String/nullable alias pins arena/code until final physical0");
 }
 #endif

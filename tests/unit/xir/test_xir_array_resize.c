@@ -72,9 +72,9 @@ int main(int argc, char **argv) {
     unsigned mode = argc > 1 ? (unsigned) strtoul(argv[1], NULL, 10) : 0;
     const char *emit = argc == 3 ? argv[2] : NULL;
     ResizeCompile run = resize_build(SIZE_MAX, resize_limits(), mode, emit);
-    if (run.status != XR_XIR_OK) fprintf(stderr, "build status=%u stage=%u attempts=%zu allocated=%llu peak=%llu work=%llu\n",
+    if (run.status != XR_XIR_OK) fprintf(stderr, "build status=%u stage=%u attempts=%zu allocated=%llu peak=%llu\n",
         run.status, run.stage, run.sites, (unsigned long long)run.stats.allocated_bytes,
-        (unsigned long long)run.stats.peak_bytes, (unsigned long long)run.stats.work);
+        (unsigned long long)run.stats.peak_bytes);
     CHECK(run.status == XR_XIR_OK);
     if (!emit) { CHECK(run.program); resize_initialization_faults(&run); resize_goldens(&run);
 #if !defined(XR_RESIZE_MATRIX)
@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
         resize_runtime_limits(&run); resize_float_bits(&run); resize_escaped(&run);
 #endif
     }
-    printf("resize baseline mode%u sites=%zu allocated=%llu peak=%llu work=%llu\n", mode, run.sites,
-        (unsigned long long)run.stats.allocated_bytes, (unsigned long long)run.stats.peak_bytes, (unsigned long long)run.stats.work);
+    printf("resize baseline mode%u sites=%zu allocated=%llu peak=%llu\n", mode, run.sites,
+        (unsigned long long)run.stats.allocated_bytes, (unsigned long long)run.stats.peak_bytes);
     resize_release(&run); instance_compile_report(); return 0;
 }

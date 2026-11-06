@@ -91,7 +91,7 @@ static void entries_goldens(EntriesCompile *run) {
     xr_xir_compile_artifact_free(run->lowered);run->lowered=NULL;
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
     xr_xir_compile_program_drop(run->program);run->program=NULL;run->module=NULL;
-    CHECK(entries_stats(&run->context).live_bytes>run->baseline.live_bytes);
+    CHECK(entries_stats(&run->context).held_bytes>run->baseline.held_bytes);
     entries_numbers(&value,pair,2,true);xr_xir_value_drop(&value);
     const char *expected[]={"owned中","a\0b"};const size_t lengths[]={8,3};
     for(int64_t i=0;i<2;++i) {
@@ -106,9 +106,9 @@ static void entries_goldens(EntriesCompile *run) {
         CHECK(binding&&binding->owner&&binding->capture_count==1&&binding->captures[0].type==XR_XIR_I64&&binding->captures[0].payload==7);
     }
     xr_xir_value_drop(&text);xr_xir_value_drop(&callable);
-    CHECK(entries_stats(&run->context).live_bytes>run->baseline.live_bytes);
+    CHECK(entries_stats(&run->context).held_bytes>run->baseline.held_bytes);
     xr_xir_value_drop(&functions[0]);xr_xir_value_drop(&functions[1]);
-    CHECK(!runtime_live&&!runtime_bytes&&entries_stats(&run->context).live_bytes==run->baseline.live_bytes);
+    CHECK(!runtime_live&&!runtime_bytes&&entries_stats(&run->context).held_bytes==run->baseline.held_bytes);
     puts("entries escaped tuple/String/Callable captures own metadata through final physical0");
 }
 #else
@@ -129,9 +129,9 @@ int main(int argc,char **argv) {
     if(argc==3&&!strcmp(argv[1],"--compiler")){entries_compiler((unsigned)strtoul(argv[2],NULL,10));return 0;}
     unsigned mode=argc>1?(unsigned)strtoul(argv[1],NULL,10):0;
     const char *emit=argc==3?argv[2]:NULL;EntriesCompile run=entries_build(SIZE_MAX,entries_limits(),mode,emit);
-    if(run.status!=XR_XIR_OK)fprintf(stderr,"build status%u stage%u sites%zu work%llu\n",run.status,run.stage,run.sites,(unsigned long long)run.stats.work);
+    if(run.status!=XR_XIR_OK)fprintf(stderr,"build status%u stage%u sites%zu\n",run.status,run.stage,run.sites);
     CHECK(run.status==XR_XIR_OK);if(!emit){entries_runtime(&run);entries_goldens(&run);}
-    printf("entries baseline mode%u sites%zu allocated%llu peak%llu work%llu\n",mode,run.sites,
-        (unsigned long long)run.stats.allocated_bytes,(unsigned long long)run.stats.peak_bytes,(unsigned long long)run.stats.work);
+    printf("entries baseline mode%u sites%zu allocated%llu peak%llu\n",mode,run.sites,
+        (unsigned long long)run.stats.allocated_bytes,(unsigned long long)run.stats.peak_bytes);
     entries_release(&run);instance_compile_report();return 0;
 }

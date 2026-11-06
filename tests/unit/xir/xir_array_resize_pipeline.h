@@ -12,6 +12,7 @@
 #ifndef XIR_ARRAY_RESIZE_PIPELINE_H
 #define XIR_ARRAY_RESIZE_PIPELINE_H
 #include "xir/xxir_program_packet_internal.h"
+#include "xir/xxir_compile_memory.h"
 #include "base/xsha256.h"
 #ifndef XR_RESIZE_COMPONENT
 #define XR_RESIZE_COMPONENT "transaction"
@@ -24,10 +25,7 @@ typedef struct ResizeCompile {
     XrXirProgram *program;
     XrXirStatus status;
     unsigned stage;
-    size_t sites, c_bytes, prefix_sites;
-    XrCompileResourceStats prefix_stats;
-    uint64_t prefix_references;
-    size_t prefix_blocks, prefix_bytes;
+    size_t sites, c_bytes;
     char c_sha[65], proof_sha[65];
 } ResizeCompile;
 #if defined(XR_RESIZE_NATIVE)
@@ -39,8 +37,7 @@ static void resize_mixed_free(void *pointer) {
 }
 static XrXirStatus resize_allocate(const XrXirCompileContext *context, size_t count, size_t bytes, void **out) {
     XrCompileResourceStatus status = xr_compile_resources_calloc(context->resources, count, bytes, out);
-    return status == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
-        status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+    return xir_compile_resource_status(status);
 }
 #endif
 static XrXirStatus resize_seal(ResizeCompile *run, unsigned mode) {
@@ -82,7 +79,7 @@ static XrXirStatus resize_seal(ResizeCompile *run, unsigned mode) {
 static XrCompileResourceStats resize_stats(const XrXirCompileContext *context) {
     XrCompileResourceStats stats = {0};
     CHECK(xr_compile_resources_stats(context->resources, &stats) == XR_COMPILE_RESOURCE_OK);
-    CHECK(stats.live_bytes == instance_compile_bytes);
+    CHECK(stats.held_bytes == instance_compile_bytes);
     return stats;
 }
 static bool resize_compiler_digest;
@@ -96,10 +93,10 @@ static void resize_profile_stage(ResizeCompile *run, const char *stage) {
     if (!resize_profile) return;
     clock_t now = clock();
     XrCompileResourceStats stats = resize_stats(&run->context);
-    printf("compiler profile %s seconds%.6f cumulative-sites%zu allocated%llu live%llu peak%llu work%llu\n",
+    printf("compiler profile %s seconds%.6f cumulative-sites%zu allocated%llu held%llu peak%llu\n",
         stage, (double)(now - resize_profile_clock) / CLOCKS_PER_SEC, instance_compile_attempts,
-        (unsigned long long)stats.allocated_bytes, (unsigned long long)stats.live_bytes,
-        (unsigned long long)stats.peak_bytes, (unsigned long long)stats.work);
+        (unsigned long long)stats.allocated_bytes, (unsigned long long)stats.held_bytes,
+        (unsigned long long)stats.peak_bytes);
     fflush(stdout); resize_profile_clock = now;
 }
 static ResizeCompile resize_build(size_t failure, XrCompileResourceLimits limits, unsigned mode, const char *emit) {
@@ -107,15 +104,15 @@ static ResizeCompile resize_build(size_t failure, XrCompileResourceLimits limits
     ResizeCompile run = {0}; run.status = XR_XIR_OUT_OF_MEMORY;
     run.context.limits = xr_xir_compile_default_limits();
     XrCompileResourceStatus resource = xr_compile_resources_new(&limits, &run.context.resources);
-    if (resource != XR_COMPILE_RESOURCE_OK) { CHECK(!run.context.resources); run.sites = instance_compile_attempts; return run; }
+    if (resource != XR_COMPILE_RESOURCE_OK) { CHECK(!run.context.resources); run.status = xir_compile_resource_status(resource); run.sites = instance_compile_attempts; return run; }
     run.baseline = resize_stats(&run.context);
     resize_profile_stage(&run, "resource-new");
     XrCompilerSession *session = NULL; XrXirSourceResult result = {0};
     XrXirArtifact *read = NULL, *specialized = NULL;
     XrXirSourceDiagnostic diagnostic = {0}; XrXirCheckedPacket bytes = {0}; XrXirCSource source = {0}; XrXirSourceFailure path={0};
-    XrCompilerSessionStatus session_status = xr_compile_session_new(run.context.resources, &session);
-    if (session_status != XR_COMPILER_SESSION_OK) {
-        run.status = session_status == XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+    XrCompileResourceStatus session_status = xr_compile_session_new(run.context.resources, &session);
+    if (session_status != XR_COMPILE_RESOURCE_OK) {
+        run.status = xir_compile_resource_status(session_status);
         goto done;
     }
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_RESIZE_FIXTURES};
@@ -176,9 +173,6 @@ static ResizeCompile resize_build(size_t failure, XrCompileResourceLimits limits
     resize_profile_stage(&run, "lower");
     run.stage = 6; run.status = xr_xir_compile_emit_c(run.lowered, "array_resize", 1048576, &source);
     if (run.status != XR_XIR_OK) { CHECK(!source.text && !source.length); goto done; }
-    run.prefix_sites = instance_compile_attempts; run.prefix_stats = resize_stats(&run.context);
-    run.prefix_references = run.context.resources->references;
-    run.prefix_blocks = instance_compile_live; run.prefix_bytes = instance_compile_bytes;
     if (resize_compiler_digest) {
         XrXirProgramPacket proof = xir_program_packet_borrow(run.lowered);
         resize_digest(source.text, source.length, run.c_sha); resize_digest(proof.bytes, proof.length, run.proof_sha);
@@ -207,12 +201,12 @@ done:
 static void resize_release(ResizeCompile *run) {
     xr_xir_compile_artifact_free(run->lowered); xr_xir_compile_program_drop(run->program);
     if (run->context.resources) {
-        CHECK(resize_stats(&run->context).live_bytes == run->baseline.live_bytes);
+        CHECK(resize_stats(&run->context).held_bytes == run->baseline.held_bytes);
         xr_compile_resources_release(run->context.resources);
     }
     *run = (ResizeCompile){0}; instance_compile_zero(); CHECK(!runtime_live && !runtime_bytes);
 }
 static XrCompileResourceLimits resize_limits(void) {
-    return (XrCompileResourceLimits){67108864, 8388608, 128000000};
+    return (XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE, 8388608, true};
 }
 #endif // XIR_ARRAY_RESIZE_PIPELINE_H

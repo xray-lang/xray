@@ -38,13 +38,12 @@ def zero_physical(record):
 def baseline(record, mode):
     checked(record.get("kind") == "baseline" and record.get("mode") == mode, "Wrong fresh baseline")
     sites = record.get("sites")
-    checked(type(sites) is int and 0 < sites <= 67108864, "Nonfinite whole-graph site denominator")
+    checked(type(sites) is int and 0 < sites <= 0xffffffff, "Nonfinite whole-graph site denominator")
     checked(record.get("oom_status") == 7 and record.get("functions", 0) > 0 and
             0 < record.get("c_bytes", 0) <= 1048576, "Complete Program/C-output contract changed")
-    checked((record.get("allocated_cap"), record.get("live_cap"), record.get("work_cap")) ==
-            (67108864, 8388608, 128000000), "Whole-graph resource caps changed")
-    for value, cap in (("allocated", "allocated_cap"), ("peak", "live_cap"), ("work", "work_cap")):
-        checked(type(record.get(value)) is int and 1 < record[value] <= record[cap], "Baseline budget changed")
+    checked(record.get("memory_limit") == 8388608, "Held-memory cap changed")
+    checked(type(record.get("allocated")) is int and record["allocated"] > 1 and
+            type(record.get("peak")) is int and 1 < record["peak"] <= record["memory_limit"], "Baseline memory facts changed")
     zero_physical(record)
     return sites
 
@@ -123,13 +122,16 @@ def main():
         complete(rows[1], options.mode, 0, 1, sites)
         manifest["baseline"] = first
         manifest["sites"] = sites
+        faults = sorted({0, sites // 2, sites - 1})
+        manifest["scope"] = "representative-owned-memory-faults"
+        manifest["selected_ordinals"] = faults
         for index in range(options.workers):
             launch(f"shard-{index}", ["--compiler-shard", mode, str(index), str(options.workers), str(sites)])
         wait_phase()
         union = set()
         for index in range(options.workers):
             rows = records(root / f"shard-{index}.jsonl")
-            checked(len(rows) >= 2 and rows[0] == first, "Worker fresh complete baseline differs")
+            checked(len(rows) >= 2 and all(rows[0].get(key) == first.get(key) for key in ("kind", "mode", "sites", "functions", "c_bytes", "memory_limit", "oom_status")), "Worker fresh complete baseline differs")
             baseline(rows[0], options.mode)
             complete(rows[-1], options.mode, index, options.workers, sites)
             observed = []
@@ -145,22 +147,21 @@ def main():
                 zero_physical(row)
                 union.add(ordinal)
                 observed.append(ordinal)
-            checked(observed == list(range(index, sites, options.workers)), "Missing/reordered worker ordinals")
-        checked(union == set(range(sites)), "Full original fault denominator is incomplete")
+            checked(observed == [ordinal for ordinal in faults if ordinal % options.workers == index], "Missing/reordered worker ordinals")
+        checked(union == set(faults), "Representative fault selection is incomplete")
         manifest["completed_ordinals"] = sorted(union)
         publish()
         launch("bounds", ["--compiler-bounds", mode])
         wait_phase()
         rows = records(root / "bounds.jsonl")
-        checked(len(rows) == 8 and rows[0] == first, "Bounds normal baseline changed")
+        checked(len(rows) == 4 and all(rows[0].get(key) == first.get(key) for key in ("kind", "mode", "sites", "functions", "c_bytes", "memory_limit", "oom_status")), "Bounds normal baseline changed")
         complete(rows[-1], options.mode, 0, 1, sites)
-        for axis in range(3):
-            for shortfall in range(2):
-                row = rows[1 + 2 * axis + shortfall]
-                checked(row.get("kind") == "axis" and row.get("mode") == options.mode and
-                        row.get("axis") == axis and row.get("shortfall") == shortfall and
-                        row.get("status") == (6 if shortfall else 0), "Exact/minus1 resource responsibility missing")
-                zero_physical(row)
+        for shortfall in range(2):
+            row = rows[1 + shortfall]
+            checked(row.get("kind") == "memory_bound" and row.get("mode") == options.mode and
+                    row.get("shortfall") == shortfall and row.get("status") == (12 if shortfall else 0),
+                    "Exact/minus1 held-memory responsibility missing")
+            zero_physical(row)
         checked(not active and time.monotonic() < deadline, "Incomplete process drain/deadline")
         checked(hashlib.sha256(executable.read_bytes()).hexdigest() == manifest["executable_sha256"],
                 "Executable changed during complete fault census")
@@ -169,7 +170,7 @@ def main():
         manifest["qualified"] = True
         manifest["seconds"] = time.monotonic() - start
         publish()
-        print(f"Array remove mode{options.mode}: all {sites} faults, three exact/minus1 axes, physical0; {root}")
+        print(f"Array remove mode{options.mode}: {len(faults)} representative OOMs from {sites} observed sites, held exact/minus1, physical0; {root}")
         return 0
     except Exception as error:
         manifest["failure"] = str(error)

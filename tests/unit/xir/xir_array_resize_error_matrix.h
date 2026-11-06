@@ -96,12 +96,12 @@ static void resize_goldens(ResizeCompile *run) {
     xr_xir_compile_artifact_free(run->lowered); run->lowered = NULL;
     CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
     xr_xir_compile_program_drop(run->program); run->program = NULL; run->module = NULL;
-    CHECK(resize_stats(&run->context).live_bytes > run->baseline.live_bytes);
+    CHECK(resize_stats(&run->context).held_bytes > run->baseline.held_bytes);
     for (unsigned row = 0; row < 2; ++row) error_matrix_value(row, &escaped[row]);
     xr_xir_value_drop(&escaped[0]);
-    CHECK(runtime_live && resize_stats(&run->context).live_bytes > run->baseline.live_bytes);
+    CHECK(runtime_live && resize_stats(&run->context).held_bytes > run->baseline.held_bytes);
     xr_xir_value_drop(&escaped[1]);
-    CHECK(!runtime_live && !runtime_bytes && resize_stats(&run->context).live_bytes == run->baseline.live_bytes);
+    CHECK(!runtime_live && !runtime_bytes && resize_stats(&run->context).held_bytes == run->baseline.held_bytes);
     puts("matrix7 Error class identity/String7 and PanicInfo420/message exact; escaped owners final physical0");
 }
 #endif // XIR_ARRAY_RESIZE_ERROR_MATRIX_H

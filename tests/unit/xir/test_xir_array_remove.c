@@ -69,9 +69,9 @@ int main(int argc, char **argv) {
     unsigned mode = argc > 1 ? (unsigned) strtoul(argv[1], NULL, 10) : 0;
     const char *emit = argc == 3 ? argv[2] : NULL;
     RemoveCompile run = remove_build(SIZE_MAX, remove_limits(), mode, emit);
-    if (run.status != XR_XIR_OK) fprintf(stderr, "build status=%u stage=%u attempts=%zu allocated=%llu peak=%llu work=%llu\n",
+    if (run.status != XR_XIR_OK) fprintf(stderr, "build status=%u stage=%u attempts=%zu allocated=%llu peak=%llu\n",
         run.status, run.stage, run.sites, (unsigned long long)run.stats.allocated_bytes,
-        (unsigned long long)run.stats.peak_bytes, (unsigned long long)run.stats.work);
+        (unsigned long long)run.stats.peak_bytes);
     CHECK(run.status == XR_XIR_OK);
     if (!emit) { CHECK(run.program); remove_goldens(&run);
 #if !defined(XR_REMOVE_MATRIX)
@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
         remove_runtime_limits(&run); remove_float_bits(&run); remove_escaped(&run);
 #endif
     }
-    printf("remove baseline mode%u sites=%zu allocated=%llu peak=%llu work=%llu\n", mode, run.sites,
-        (unsigned long long)run.stats.allocated_bytes, (unsigned long long)run.stats.peak_bytes, (unsigned long long)run.stats.work);
+    printf("remove baseline mode%u sites=%zu allocated=%llu peak=%llu\n", mode, run.sites,
+        (unsigned long long)run.stats.allocated_bytes, (unsigned long long)run.stats.peak_bytes);
     remove_release(&run); instance_compile_report(); return 0;
 }
