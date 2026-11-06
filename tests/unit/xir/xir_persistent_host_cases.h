@@ -72,7 +72,10 @@ static void persistent_host_cases(XrXirProgram *program,uint32_t normal,uint32_t
     xr_xir_call_result_drop(&value);
     CHECK(xr_xir_host_instance_begin(owners[0],children,NULL,0,&calls[0])==XR_XIR_CALL_READY);
     traces[0].call=calls[0];
-    CHECK(xr_xir_host_call_step_bounded(calls[0],128).outcome.status==XR_XIR_CALL_READY);
+    const XrXirInstanceResult children_step=xr_xir_host_call_step_bounded(calls[0],128);
+    if(children_step.outcome.status!=XR_XIR_CALL_READY)
+        fprintf(stderr,"persistent child step status%u wake%llu\n",children_step.outcome.status,(unsigned long long)children_step.outcome.wake);
+    CHECK(children_step.outcome.status==XR_XIR_CALL_READY);
     CHECK(xr_xir_host_call_drop(calls[0])==XR_XIR_CALL_READY); calls[0]=NULL;traces[0].call=NULL;
     CHECK(traces[0].count==4 && traces[0].values[2]+traces[0].values[3]==147 && traces[0].values[2]!=traces[0].values[3]);
     CHECK(xr_xir_host_instance_execute(owners[0],current,NULL,0,&value)==XR_XIR_CALL_RETURNED);

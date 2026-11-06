@@ -77,6 +77,7 @@ int main(int argc, char **argv) {
         CHECK(fprintf(file, "const uint32_t host_call_fatal_entry=%uu;\n", entries[3]) > 0);
         CHECK(fprintf(file, "const uint32_t host_call_bounded_entries[4]={%uu,%uu,%uu,%uu};\n",entries[4],entries[5],entries[6],entries[7]) > 0);
         CHECK(fclose(file) == 0); xr_xir_compile_c_source_free(&source);
+        xr_xir_compile_artifact_free(lowered);return 0;
     }
     XrXirProgram *program = NULL;
     CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK);

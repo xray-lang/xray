@@ -35,15 +35,15 @@ def main():
         ('member', 'struct Item { @test fn example(self) {} }\n', structure, b''),
         ('nested', 'fn outer() { @test fn example() {} }\n', structure, b''),
         ('closure', 'const closure = @test fn() {}\n', structure, b''),
-        ('throw_only', 'enum Failure { Broken }\n@test\nfn example() { throw Failure.Broken }\n', ok,
+        ('throw_only', 'enum Failure implements Error { Broken }\n@test\nfn example() throws(Failure) { throw Failure.Broken }\n', ok,
          b'count=1\nexample:1:0\n'),
         ('cleanup', '@test\nfn example() { defer { print("cleanup") } }\n', ok,
          b'count=1\nexample:1:0\n'),
         ('export', '@test\nexport fn example() {}\n', ok, b'count=1\nexample:1:0\n'),
-        ('initialization', 'enum Failure { Broken { message:string } }\n'
-         'fn initialize()->i64 { print("init"); throw Failure.Broken { message:'
+        ('initialization', 'enum Failure implements Error { Broken { message:string } }\n'
+         'fn initialize()->i64 throws(Failure) { print("init"); throw Failure.Broken { message:'
          '"owned initialization failure after Program and product destruction" } }\n'
-         'var value=initialize()\n@before_all\nfn setup() { print("must not run") }\n'
+         'var value=try initialize()\n@before_all\nfn setup() { print("must not run") }\n'
          '@test\nfn example() { print("must not run") }\n', ok,
          b'initialization sticky; copied failure survives all producers\n'),
     ]
