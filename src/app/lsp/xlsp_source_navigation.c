@@ -82,10 +82,8 @@ static bool navigation_same_range(XrLspRange a,XrLspRange b) {
     return a.start.line==b.start.line&&a.start.character==b.start.character&&
         a.end.line==b.end.line&&a.end.character==b.end.character;
 }
-static XrXirStatus navigation_string_equal(XrCompileResources *r,const char *a,const char *b,bool *out) {
+static XrXirStatus navigation_string_equal(const char *a,const char *b,bool *out) {
     for(;;++a,++b) {
-        XrCompileResourceStatus paid=xr_compile_resources_work(r,2);
-        if(paid!=XR_COMPILE_RESOURCE_OK)return XR_XIR_BUDGET;
         if(*a!=*b){*out=false;return XR_XIR_OK;}
         if(!*a){*out=true;return XR_XIR_OK;}
     }
@@ -98,12 +96,10 @@ static bool navigation_json_range(XrJsonValue *value,XrLspRange range) {
         (uint64_t)xjson_get_int(b,"line")==range.end.line&&
         (uint64_t)xjson_get_int(b,"character")==range.end.character;
 }
-static XrXirStatus navigation_uri_equal(XrCompileResources *r,const char *a,const char *uri,size_t length,bool *out) {
+static XrXirStatus navigation_uri_equal(const char *a,const char *uri,size_t length,bool *out) {
     for(size_t i=0;i<length;++i) {
-        if(xr_compile_resources_work(r,2)!=XR_COMPILE_RESOURCE_OK)return XR_XIR_BUDGET;
         if(!a[i]||a[i]!=uri[i]){*out=false;return XR_XIR_OK;}
     }
-    if(xr_compile_resources_work(r,1)!=XR_COMPILE_RESOURCE_OK)return XR_XIR_BUDGET;
     *out=a[length]==0;return XR_XIR_OK;
 }
 XrXirStatus xlsp_source_navigation_many_json(XrCompileResources *resources,
@@ -121,8 +117,7 @@ XrXirStatus xlsp_source_navigation_many_json(XrCompileResources *resources,
         status=xlsp_source_definition(snapshots[i],uri,length,position,&current);
         if(status!=XR_XIR_OK)goto done;
         if(found) {
-            if(xr_compile_resources_work(resources,10)!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;goto done;}
-            bool equal=false;status=navigation_string_equal(resources,definition.uri,current.uri,&equal);
+            bool equal=false;status=navigation_string_equal(definition.uri,current.uri,&equal);
             if(status!=XR_XIR_OK)goto done;
             if(!equal||!navigation_same_range(definition.range,current.range)||definition.version!=current.version) {
                 status=XR_XIR_BAD_STRUCTURE;goto done;
@@ -134,18 +129,17 @@ XrXirStatus xlsp_source_navigation_many_json(XrCompileResources *resources,
         for(size_t j=0;j<locations.count;++j) {
             const XlspSourceLocation *location=&locations.items[j];bool equal=false;
             if(mode==2) {
-                status=navigation_uri_equal(resources,location->uri,uri,length,&equal);
+                status=navigation_uri_equal(location->uri,uri,length,&equal);
                 if(status!=XR_XIR_OK)goto done;
                 if(!equal)continue;
             }
             bool duplicate=false;
             for(int k=0;k<result->as.array.count;++k) {
-                if(xr_compile_resources_work(resources,8)!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;goto done;}
                 XrJsonValue *item=result->as.array.items[k];
                 if(!navigation_json_range(item,location->range))continue;
                 equal=mode==2;
                 if(!equal) {
-                    status=navigation_string_equal(resources,xjson_get_string(item,"uri"),location->uri,&equal);
+                    status=navigation_string_equal(xjson_get_string(item,"uri"),location->uri,&equal);
                     if(status!=XR_XIR_OK)goto done;
                 }
                 if(equal){duplicate=true;break;}
