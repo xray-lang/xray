@@ -18,6 +18,7 @@
 #define CONSUMER_KIND 3
 #include "xir_library_compile_owner.h"
 #include "xir_runtime_allocations.h"
+#include "xir_instance_oom_cleanup.h"
 #include "xir/xxir_specialize.c"
 #include "xir/xxir_effects.c"
 #include "xir/xxir_vm.c"
@@ -33,7 +34,13 @@ static bool pair(XrXirProgram *program,uint32_t entry){
   if(status==XR_XIR_CALL_RETURNED){XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
    CHECK(result.type==XR_XIR_I64&&result.payload==41);xr_xir_value_drop(&result);
   }else CHECK(status==XR_XIR_CALL_OOM);
-  if(instance){CHECK(xr_xir_instance_stop(instance)==XR_XIR_CALL_READY);CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);}
+  if(instance){
+   size_t attempts=runtime_attempts;
+   XrXirCallStatus prior=xr_xir_instance_poll_bounded(instance,1).outcome.status;
+   CHECK(runtime_attempts==attempts);
+   CHECK(xr_xir_instance_stop(instance)==(prior==XR_XIR_CALL_OOM?prior:XR_XIR_CALL_READY));
+   xir_fixture_close_instance(instance,status!=XR_XIR_CALL_RETURNED,XR_XIR_CALL_READY);
+  }
   if(status!=XR_XIR_CALL_RETURNED)return false;
  }return true;
 }
