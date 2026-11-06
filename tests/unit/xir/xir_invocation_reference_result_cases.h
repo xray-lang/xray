@@ -101,7 +101,8 @@ static XrXirStatus conditional_invocation_reference_result(const XrXirCompileCon
         ref_shape.result=(XrXirType)256;ref_shape.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED;
         bound=effect_term_intern(&dense->terms,ref_shape);unchanged=bound;
         CHECK(dense->terms.status==XR_XIR_OK);
-        XrXirType prefix[2]={XR_XIR_I64,cell};functions[1].parameters=prefix;functions[1].parameter_count=2;
+        /* A reference callable cannot describe a scalar by-value formal. */
+        XrXirType prefix[2]={XR_XIR_I64,XR_XIR_I64};functions[1].parameters=prefix;functions[1].parameter_count=2;
         entry[1].type=actual_ref;working[1].type=actual_ref;
         CHECK(effect_invocation_context_reference_result(dense,&module,0,1,&bound)==XR_XIR_BAD_TYPE && bound==unchanged);
         functions[1].parameters=&capture;functions[1].parameter_count=1;

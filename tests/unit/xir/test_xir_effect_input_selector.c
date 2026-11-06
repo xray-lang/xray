@@ -329,10 +329,14 @@ static void selector_invocation_projection(void) {
     }
     CHECK(effect_final_inventory_match(&foreign,material,final)==XR_XIR_BAD_STRUCTURE);
     SelectorCurrentPoll poll={.requested=true};
-    CHECK(xr_compile_resources_begin_cancel(context.resources,selector_current_poll,&poll)==XR_COMPILE_RESOURCE_OK);
+    XrCompileRequestControl control={0};
+    XrCompileRequestOptions options={.cancel_poll=selector_current_poll,.cancel_context=&poll};
+    CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
     selector_head_projection=(SelectorHeadProjection){0};
-    CHECK(effect_final_edge_payload(&context,&body,final,selected)==XR_XIR_CANCELLED && poll.calls);
-    CHECK(xr_compile_resources_end_cancel(context.resources,selector_current_poll,&poll)==XR_COMPILE_RESOURCE_CANCELLED);
+    CHECK(effect_final_edge_payload(&context,&body,final,selected)==XR_XIR_OK && !poll.calls);
+    XrXirEffects *cancelled=NULL;
+    CHECK(xir_artifact_verify_raw_source_effects(checked,&cancelled,NULL,&control)==XR_XIR_CANCELLED &&
+        !cancelled && poll.calls && control.status==XR_COMPILE_RESOURCE_CANCELLED);
     selector_head_projection=(SelectorHeadProjection){0};
     CHECK(effect_final_edge_payload(&context,&body,final,selected)==XR_XIR_OK);
     CHECK(effect_final_inventory_match(&context,material,final)==XR_XIR_OK);
