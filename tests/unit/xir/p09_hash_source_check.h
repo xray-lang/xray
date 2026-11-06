@@ -23,7 +23,7 @@ static XrXirStatus hash_source_check(const XrXirCompileContext *context, const c
     FILE *file = fopen(path, "wb"); CHECK(file);
     size_t length = strlen(text); CHECK(fwrite(text, 1, length, file) == length && !fclose(file));
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
     XrXirSourceRequest request = {session, path, &authority, context, XR_P09_HASH_STDLIB,
         NULL, XR_XIR_PROGRAM, NULL};
@@ -45,9 +45,9 @@ static XrXirArtifact *hash_source_replay(const XrXirCompileContext *context, XrX
     if (read_status!=XR_XIR_OK) {
         XrCompileResourceStats stats={0};
         CHECK(xr_compile_resources_stats(context->resources,&stats)==XR_COMPILE_RESOURCE_OK);
-        fprintf(stderr,"Source Checked replay status=%u function=%u block=%u instruction=%u work=%llu allocated=%llu live=%llu\n",
+        fprintf(stderr,"Source Checked replay status=%u function=%u block=%u instruction=%u peak=%llu allocated=%llu held=%llu\n",
             read_status,read_diagnostic.function,read_diagnostic.block,read_diagnostic.instruction,
-            (unsigned long long)stats.work,(unsigned long long)stats.allocated_bytes,(unsigned long long)stats.live_bytes);
+            (unsigned long long)stats.peak_bytes,(unsigned long long)stats.allocated_bytes,(unsigned long long)stats.held_bytes);
     }
     CHECK(read_status==XR_XIR_OK);
     memset(packet.bytes, 0xcc, packet.length); xr_xir_compile_checked_packet_free(&packet);
@@ -55,8 +55,8 @@ static XrXirArtifact *hash_source_replay(const XrXirCompileContext *context, XrX
     if (specialized_status != XR_XIR_OK) {
         XrCompileResourceStats stats = {0};
         CHECK(xr_compile_resources_stats(context->resources, &stats) == XR_COMPILE_RESOURCE_OK);
-        fprintf(stderr, "Source specialize status=%u cumulative work=%llu allocated=%llu live=%llu\n", specialized_status,
-            (unsigned long long)stats.work, (unsigned long long)stats.allocated_bytes, (unsigned long long)stats.live_bytes);
+        fprintf(stderr, "Source specialize status=%u peak=%llu allocated=%llu held=%llu\n", specialized_status,
+            (unsigned long long)stats.peak_bytes, (unsigned long long)stats.allocated_bytes, (unsigned long long)stats.held_bytes);
     }
     CHECK(specialized_status == XR_XIR_OK);
     xr_xir_compile_artifact_free(read);
@@ -67,9 +67,9 @@ static XrXirArtifact *hash_source_replay(const XrXirCompileContext *context, XrX
         const XrXirModule *module = xr_xir_compile_artifact_module(specialized);
         XrCompileResourceStats stats = {0};
         CHECK(xr_compile_resources_stats(context->resources, &stats) == XR_COMPILE_RESOURCE_OK);
-        fprintf(stderr, "Source lower status=%u function=%u block=%u instruction=%u reason=%u work=%llu\n",
+        fprintf(stderr, "Source lower status=%u function=%u block=%u instruction=%u reason=%u peak=%llu\n",
             lower_status, lower_diagnostic.function, lower_diagnostic.block, lower_diagnostic.instruction,
-            lower_diagnostic.reason, (unsigned long long)stats.work);
+            lower_diagnostic.reason, (unsigned long long)stats.peak_bytes);
         if (lower_diagnostic.function < module->function_count) {
             const XrXirFunction *function = &module->functions[lower_diagnostic.function];
             fprintf(stderr, "Source lower function=%.*s\n", (int)function->name_length, function->name);

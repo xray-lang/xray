@@ -79,7 +79,7 @@ static XrXirProgram *library_native_prepare(LibraryNativeOwner *owner,const char
     library_observed=owner;
     owner->mode=!strcmp(mode,"native")?0:!strcmp(mode,"native-vm")?1:2;
     CHECK(owner->mode!=2 || !strcmp(mode,"vm-native"));
-    XrXirCompileContext context={0};XrCompileResourceLimits caps={UINT64_C(67108864),UINT64_C(8388608),UINT64_C(128000000)};
+    XrXirCompileContext context={0};XrCompileResourceLimits caps={.memory_mode=XR_COMPILE_MEMORY_ORDINARY,.profile_allocations=true};
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);context.limits=xr_xir_compile_default_limits();
     const XrXirProgramSpec *native=&p11_library_native_program;
     XrXirProgramInput *input=NULL;XrXirProgram *program=NULL;XrXirStatus status=XR_XIR_OK;

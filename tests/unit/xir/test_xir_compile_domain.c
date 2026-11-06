@@ -16,7 +16,7 @@
 
 #define TRY_VALUE(call) do { status = (call); if (status != XR_XIR_VALUE_OK) goto done; } while (0)
 static XrCompileResourceLimits compile_domain_limits(void) {
-    return (XrCompileResourceLimits){1048576, 1048576, 4194304};
+    return (XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE, UINT64_C(1048576), true};
 }
 static XrCompileResourceStats compile_domain_stats(XrCompileResources *resources) {
     XrCompileResourceStats stats = {0};
@@ -105,7 +105,7 @@ static XrCompileResourceStats compile_domain_baseline(size_t *sites) {
     XrCompileResources *resources = NULL; XrCompileResourceLimits limits = compile_domain_limits();
     value_compile_calls = 0;
     CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
-    const uint64_t initial_live = compile_domain_stats(resources).live_bytes;
+    const uint64_t initial_live = compile_domain_stats(resources).held_bytes;
     XrXirValue value = {0}; CHECK(compile_domain_sequence(resources, &value) == XR_XIR_VALUE_OK);
     *sites = value_compile_calls;
     const XrCompileResourceStats baseline = compile_domain_stats(resources);
@@ -114,8 +114,7 @@ static XrCompileResourceStats compile_domain_baseline(size_t *sites) {
     xr_xir_value_drop(&value); value_compile_fail_at = SIZE_MAX;
     CHECK(value_compile_calls == before_drop);
     XrCompileResourceStats released = compile_domain_stats(resources);
-    CHECK(released.live_bytes == initial_live && released.allocated_bytes == baseline.allocated_bytes &&
-        released.work >= baseline.work);
+    CHECK(released.held_bytes == initial_live && released.allocated_bytes == baseline.allocated_bytes);
     xr_compile_resources_release(resources);
     CHECK(!value_compile_live && !value_compile_bytes && !live);
     return baseline;
@@ -132,12 +131,12 @@ static void compile_domain_faults(size_t sites) {
         CHECK(!value.type && !value.reserved && !value.payload);
         if (resources) {
             XrCompileResourceStats failed = compile_domain_stats(resources);
-            CHECK(failed.live_bytes == sizeof(*resources));
+            CHECK(failed.held_bytes == sizeof(*resources));
             CHECK(compile_domain_sequence(resources, &value) == XR_XIR_VALUE_OK);
             XrCompileResourceStats retried = compile_domain_stats(resources);
-            CHECK(retried.allocated_bytes > failed.allocated_bytes && retried.work > failed.work);
+            CHECK(retried.allocated_bytes > failed.allocated_bytes);
             compile_domain_read(&value); xr_xir_value_drop(&value);
-            CHECK(compile_domain_stats(resources).live_bytes == sizeof(*resources));
+            CHECK(compile_domain_stats(resources).held_bytes == sizeof(*resources));
         }
         xr_compile_resources_release(resources);
         CHECK(!value_compile_live && !value_compile_bytes && !live);
@@ -145,13 +144,10 @@ static void compile_domain_faults(size_t sites) {
     printf("compile Domain physical OOM sites=%zu; same-owner retry, cumulative charges, physical=0/0\n", sites);
 }
 static void compile_domain_axes(const XrCompileResourceStats *baseline) {
-    for (unsigned axis = 0; axis < 3; ++axis) for (unsigned shortfall = 0; shortfall < 2; ++shortfall) {
-        XrCompileResourceLimits limits = compile_domain_limits();
-        uint64_t exact = axis == 0 ? baseline->allocated_bytes : axis == 1 ? baseline->peak_bytes : baseline->work;
-        CHECK(exact > 1);
-        if (axis == 0) limits.allocated_bytes = exact - shortfall;
-        else if (axis == 1) limits.live_bytes = exact - shortfall;
-        else limits.work = exact - shortfall;
+    const uint64_t exact = baseline->peak_bytes;
+    CHECK(exact > 1);
+    for (unsigned shortfall = 0; shortfall < 2; ++shortfall) {
+        XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE, exact - shortfall, true};
         XrCompileResources *resources = NULL;
         CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
         XrXirValue value = {0}; XrXirValueStatus status = compile_domain_sequence(resources, &value);
@@ -162,13 +158,13 @@ static void compile_domain_axes(const XrCompileResourceStats *baseline) {
             XrCompileResourceStats failed = compile_domain_stats(resources);
             CHECK(compile_domain_sequence(resources, &value) == XR_XIR_VALUE_LIMIT);
             XrCompileResourceStats retried = compile_domain_stats(resources);
-            CHECK(retried.work >= failed.work && retried.allocated_bytes >= failed.allocated_bytes);
+            CHECK(retried.allocated_bytes >= failed.allocated_bytes);
         }
         XrCompileResourceStats after = compile_domain_stats(resources);
-        CHECK(after.allocated_bytes <= limits.allocated_bytes && after.peak_bytes <= limits.live_bytes && after.work <= limits.work);
-        CHECK(after.live_bytes == sizeof(*resources)); xr_compile_resources_release(resources);
+        CHECK(after.peak_bytes <= limits.memory_limit && after.held_bytes <= limits.memory_limit);
+        CHECK(after.held_bytes == sizeof(*resources)); xr_compile_resources_release(resources);
         CHECK(!value_compile_live && !value_compile_bytes);
-        printf("compile Domain axis%u exact=%llu shortfall=%u status=%u physical=0/0\n", axis,
+        printf("compile Domain held-memory exact=%llu shortfall=%u status=%u physical=0/0\n",
             (unsigned long long)exact, shortfall, status);
     }
 }
@@ -211,8 +207,7 @@ static void compile_domain_failed_growth(void) {
         CHECK(status == XR_XIR_VALUE_OOM && value_compile_injected);
         CHECK((operation ? array.payload : text.payload) == payload);
         XrCompileResourceStats after = compile_domain_stats(resources);
-        CHECK(after.allocated_bytes == before.allocated_bytes && after.live_bytes == before.live_bytes &&
-            after.work > before.work);
+        CHECK(after.allocated_bytes == before.allocated_bytes && after.held_bytes == before.held_bytes);
         if (operation) {
             int64_t length = -1; XrXirFaultDetail fault = {0};
             CHECK(xr_xir_array_len(&array, &admission, &length) == XR_XIR_VALUE_OK && length == 4);
@@ -230,7 +225,7 @@ static void compile_domain_failed_growth(void) {
     }
     xr_xir_value_drop(&array); xr_xir_value_drop(&suffix); xr_xir_value_drop(&text);
     xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
-    CHECK(compile_domain_stats(resources).live_bytes == sizeof(*resources));
+    CHECK(compile_domain_stats(resources).held_bytes == sizeof(*resources));
     xr_compile_resources_release(resources); CHECK(!value_compile_live && !value_compile_bytes && !live);
     puts("compile Domain failed string/Array growth preserves owned input; same-ledger retry physical=0/0");
 }
