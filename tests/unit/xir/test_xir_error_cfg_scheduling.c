@@ -43,7 +43,10 @@ static void sg_graph(SgGraph *graph,uint32_t count,unsigned kind) {
         graph->throws[4]=0;graph->throws[5]=1;
         /* The padded arm reaches every block before joining the diamond. */
         if(count>6)graph->edges[0][1]=6;
-        for(uint32_t b=6;b<count;++b)graph->edges[b][0]=b+1<count?b+1:2;
+        for(uint32_t b=6;b<count;++b) {
+            graph->throws[b]=SG_NONE;
+            graph->edges[b][0]=b+1<count?b+1:2;
+        }
     }
 }
 static void sg_fixture(SgFixture *f,const SgGraph *graph,unsigned order,uint32_t width) {
