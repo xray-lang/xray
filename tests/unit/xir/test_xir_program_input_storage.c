@@ -43,9 +43,9 @@ static XrXirArtifact *program_input(const XrXirCompileContext *context) {
     };
     const XrXirSourceModule source = {"root",4,NULL,0,0,0,XR_XIR_MODULE_FRESH_STORAGE};
     const XrXirFunctionIdentity identities[] = {
-        {0,0,0,0,0,0,XR_XIR_NON_MEMBER,0,0},
-        {0,0,0,0,0,0,XR_XIR_NON_MEMBER,0,0},
-        {0,0,0,0,0,0,XR_XIR_NON_MEMBER,0,0}
+        {.method_kind=XR_XIR_NON_MEMBER},
+        {.method_kind=XR_XIR_NON_MEMBER},
+        {.method_kind=XR_XIR_NON_MEMBER}
     };
     const XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,1,NULL};
     const XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
