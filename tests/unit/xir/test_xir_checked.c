@@ -564,12 +564,18 @@ static void nominal_packet_cases(void) {
         CHECK(module_offset != 0);
         packet.bytes[module_offset] = 'z'; digest_packet(&packet); rejected(packet.bytes, packet.length);
         packet.bytes[module_offset] = 'a';
-        CHECK(wire32(packet.bytes+packet.length-64)==XR_XIR_FIELD_PRIVATE && wire32(packet.bytes+packet.length-68)==XR_XIR_STRING);
-        put32(packet.bytes + packet.length - 64, 8); digest_packet(&packet); rejected(packet.bytes, packet.length);
-        put32(packet.bytes + packet.length - 64, XR_XIR_FIELD_PRIVATE);
-        put32(packet.bytes + packet.length - 68, XR_XIR_TYPE_PARAMETER_BASE + 1);
+        uint8_t label[17]={5,0,0,0,'l','a','b','e','l'};
+        put32(label+9,XR_XIR_STRING);put32(label+13,XR_XIR_FIELD_PRIVATE);
+        size_t field_offset=0;unsigned field_matches=0;
+        for(size_t i=64;i+sizeof(label)<=packet.length;++i) {
+            if(!memcmp(packet.bytes+i,label,sizeof(label))){field_offset=i;++field_matches;}
+        }
+        CHECK(field_matches==2);
+        put32(packet.bytes + field_offset + 13, 8); digest_packet(&packet); rejected(packet.bytes, packet.length);
+        put32(packet.bytes + field_offset + 13, XR_XIR_FIELD_PRIVATE);
+        put32(packet.bytes + field_offset + 9, XR_XIR_TYPE_PARAMETER_BASE + 1);
         digest_packet(&packet); rejected(packet.bytes, packet.length);
-        put32(packet.bytes + packet.length - 68, XR_XIR_STRING);
+        put32(packet.bytes + field_offset + 9, XR_XIR_STRING);
         digest_packet(&packet);
         boundaries(&packet);
         xr_xir_compile_artifact_free(source);source=NULL;
