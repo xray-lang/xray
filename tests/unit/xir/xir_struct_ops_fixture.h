@@ -26,7 +26,7 @@ static XrXirArtifact *struct_ops_checked(const XrXirCompileContext *context, uns
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,NULL,0,NULL,0}},
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{1,NULL,0,NULL,0}}};
     XrXirTypes types = {nodes,2,&nominal.table, NULL};
-    XrXirInstruction init = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0},.parent=0};
+    XrXirInstruction init = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}};
     XrXirInstruction entry[] = {
         {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},23, {0}},
         {XR_XIR_CONST_STRING,XR_XIR_STRING,{0},{0},0, {0}},

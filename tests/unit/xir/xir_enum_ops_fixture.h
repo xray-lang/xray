@@ -19,7 +19,7 @@ static XrXirArtifact *enum_ops_checked(const XrXirCompileContext *context, unsig
     XrXirNominalTable table = {&declaration,1,NULL};
     XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_NOMINAL;
     XrXirTypes types = {&node,1,&table, NULL};
-    XrXirInstruction init = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0},.parent=0};
+    XrXirInstruction init = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}};
     XrXirInstruction entry[] = {
         {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},23, {0}},
         {XR_XIR_CONST_STRING,XR_XIR_STRING,{0},{0},0, {0}},
