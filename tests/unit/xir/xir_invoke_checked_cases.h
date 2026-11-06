@@ -23,8 +23,8 @@ static void invoke_generic_cases(void) {
         XrXirInstruction ret = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
         XrXirBlock blocks[] = {{0,1, 0, 0},{1,2, 0, 0},{3,2, 0, 0}}, leaf = {0,1, 0, 0};
         XrXirFunction functions[] = {
-            {"guard",5,&parameter,1,parameter,blocks,3,ops,5,&argument,1},
-            {"leaf",4,&t,1,t,&leaf,1,&ret,1,NULL,0}};
+            {"guard",5,&parameter,1,parameter,blocks,3,ops,5,&argument,1,.error_type=XR_XIR_ERROR},
+            {"leaf",4,&t,1,t,&leaf,1,&ret,1,NULL,0,.error_type=XR_XIR_NEVER}};
         XrXirGeneric generics[] = {
             {mode ? &caller_constraint : NULL,mode ? 1u : 0u,&parameter,1, NULL},
             {&callee_constraint,1,NULL,0, NULL}};
@@ -69,8 +69,8 @@ static void invoke_checked_cases(void) {
         XrXirBlock blocks[] = {{0,1, 0, 0},{1,2, 0, 0},{3,3, 0, 0}}, leaf = {0,1, 0, 0};
         uint32_t argument = 0;
         XrXirFunction functions[] = {
-            {"guard",5,&parameter,1,XR_XIR_I64,blocks,3,ops,6,&argument,1},
-            {"leaf",4,&parameter,1,XR_XIR_I64,&leaf,1,&ret,1,NULL,0}};
+            {"guard",5,&parameter,1,XR_XIR_I64,blocks,3,ops,6,&argument,1,.error_type=XR_XIR_NEVER},
+            {"leaf",4,&parameter,1,XR_XIR_I64,&leaf,1,&ret,1,NULL,0,.error_type=XR_XIR_NEVER}};
         XrXirModule module = {XR_XIR_BUILT,functions,2,NULL,NULL,NULL,NULL, XR_XIR_PROGRAM, NULL};
         if (attack == 1) ops[0].targets[1] = 1;
         if (attack == 2) ops[1].immediate = 1;
