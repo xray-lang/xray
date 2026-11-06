@@ -55,8 +55,8 @@ static XrXirArtifact *module_forest_fixture(const XrXirCompileContext *context, 
         {"extra", 5, NULL, 0, 0, 0,XR_XIR_MODULE_FRESH_STORAGE}, {"root", 4, &dependency, 1, 1, 0,XR_XIR_MODULE_FRESH_STORAGE}, {"leaf", 4, NULL, 0, 2, 0,XR_XIR_MODULE_FRESH_STORAGE}
     };
     const XrXirFunctionIdentity identities[] = {
-        {0}, {.module=1,.exported=0,.parent=0}, {.module=2,.exported=0,.parent=0}, {.module=1,.exported=0,.parent=0}, {.module=0,.exported=1,.parent=0}, {.module=2,.exported=1,.parent=0},
-        {.module=1,.exported=1,.parent=0}, {.module=1,.exported=1,.parent=0}
+        {0}, {.module=1,.exported=0,.method_kind=XR_XIR_NON_MEMBER}, {.module=2,.exported=0,.method_kind=XR_XIR_NON_MEMBER}, {.module=1,.exported=0,.method_kind=XR_XIR_NON_MEMBER}, {.module=0,.exported=1,.method_kind=XR_XIR_NON_MEMBER}, {.module=2,.exported=1,.method_kind=XR_XIR_NON_MEMBER},
+        {.module=1,.exported=1,.method_kind=XR_XIR_NON_MEMBER}, {.module=1,.exported=1,.method_kind=XR_XIR_NON_MEMBER}
     };
     const XrXirSlot slot = {0, XR_XIR_STRING, 0};
     const XrXirLiteral literal = {"must not initialize", 19};
