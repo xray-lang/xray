@@ -8,7 +8,7 @@
  */
 #include "lir/xlir_builder.h"
 #include "lir/xlir_c.h"
-#include "aot/xi_cgen_verify_output.h"
+#include "shared/xi_cgen_verify_output.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

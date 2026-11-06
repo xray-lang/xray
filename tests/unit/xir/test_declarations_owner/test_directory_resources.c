@@ -7,7 +7,7 @@
  * test_directory_resources.c - Observe actual directory allocation and work
  */
 #include "base/xmalloc.h"
-#include "program/xr_xir_source_product.h"
+#include "xir/xr_xir_source_product.h"
 #include "toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,7 +26,7 @@ static void release(void *pointer) { if(pointer) {CHECK(live);--live;xr_free(poi
 #include "base/xcompile_resources.c"
 #undef xr_malloc
 #undef xr_free
-#include "program/xr_xir_source_product.c"
+#include "xir/xr_xir_source_product.c"
 static XrCompileResources *ledger(const XrCompileResourceLimits *limits) {
     XrCompileResources *resources=NULL;CHECK(xr_compile_resources_new(limits,&resources)==XR_COMPILE_RESOURCE_OK);return resources;
 }

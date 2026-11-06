@@ -15,7 +15,7 @@
 #include "../../core/xr_core_spec_gen.h"
 #include "../../plan/semantic/xr_semantic_ids.h"
 #include "../../runtime/abi/xr_builtin_provider_contract.h"
-#include "../xi_cgen_verify_output.h"
+#include "../../shared/xi_cgen_verify_output.h"
 #include "xr_text_kernel_embedded.inc.c"
 #include "xr_array_allocation_kernel_embedded.inc.c"
 #include "xr_array_append_kernel_embedded.inc.c"

@@ -10,7 +10,7 @@
  * KEY CONCEPT:
  *   No implementation inclusion can hide a stale verifier or missing dependency.
  */
-#include "program/xr_xir_source_product.h"
+#include "xir/xr_xir_source_product.h"
 #include "xir/xxir_output.h"
 #include "toolchain/xcompiler_session.h"
 #include "module/xlockfile.h"

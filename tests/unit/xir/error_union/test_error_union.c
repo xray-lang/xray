@@ -224,7 +224,7 @@ static void type_cases(void) {
     }
 }
 #ifndef XR_UNION_TYPES_ONLY
-#include "program/xr_xir_source_product.h"
+#include "xir/xr_xir_source_product.h"
 #include "toolchain/xcompiler_session.h"
 #include "xir/xxir_internal.h"
 #include "xir/xxir_vm.h"

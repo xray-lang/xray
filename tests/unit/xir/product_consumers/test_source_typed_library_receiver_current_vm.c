@@ -11,7 +11,7 @@
  *   The original receiver survives two real yields and returns a full owned I64.
  */
 #include "xir/xxir_program_packet_internal.h"
-#include "program/xr_xir_source_product.h"
+#include "xir/xr_xir_source_product.h"
 #include "toolchain/xcompiler_session.h"
 #include "xir/xxir_library_catalog.h"
 #include "xir/xxir_construction.h"

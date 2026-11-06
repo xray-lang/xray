@@ -6,7 +6,7 @@
  *
  * test_source_product.c - Opaque source ownership and ordinary packet re-admission
  */
-#include "program/xr_xir_source_product.h"
+#include "xir/xr_xir_source_product.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_output.h"
 #include "toolchain/xcompiler_session.h"
@@ -35,7 +35,7 @@ static void *source_observed_allocate(size_t bytes) {
 #include "xir/xxir_specialize.c"
 #include "xir/xxir_vm.c"
 #include "xir/xxir_emit_c.c"
-#include "program/xr_xir_source_product.c"
+#include "xir/xr_xir_source_product.c"
 #include "xir_source_product_execution.h"
 #include "xir_source_product_identity.h"
 #include "xir_native_projection_expectations.h"

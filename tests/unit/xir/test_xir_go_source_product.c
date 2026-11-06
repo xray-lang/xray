@@ -6,7 +6,7 @@
  *
  * test_xir_go_source_product.c - Multi-module typed output and terminal Task escape
  */
-#include "program/xr_xir_source_product.h"
+#include "xir/xr_xir_source_product.h"
 #include "xir/xxir_task.h"
 #include "toolchain/xcompiler_session.h"
 #include <stdio.h>

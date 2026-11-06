@@ -6,7 +6,7 @@
  *
  * test_test_declarations.c - Source-owned roles and sealed private test starts
  */
-#include "program/xr_xir_source_product.h"
+#include "xir/xr_xir_source_product.h"
 #include "toolchain/xcompiler_session.h"
 #include "xir/xxir_output.h"
 #include <stdio.h>

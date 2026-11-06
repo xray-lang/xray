@@ -10,7 +10,7 @@
  *   Only a real action Error satisfies the expectation. Other terminal channels
  *   and argument failures retain their actual owners and independent status.
  */
-#include "program/xr_xir_source_product.h"
+#include "xir/xr_xir_source_product.h"
 #include "xir/xxir_internal.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_output.h"

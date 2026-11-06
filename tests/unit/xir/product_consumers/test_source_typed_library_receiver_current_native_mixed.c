@@ -16,7 +16,7 @@
 #endif
 #if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER)
 #include "xir/xxir_program_packet_internal.h"
-#include "program/xr_xir_source_product.h"
+#include "xir/xr_xir_source_product.h"
 #include "toolchain/xcompiler_session.h"
 #include "xir/xxir_library_catalog.h"
 #include "base/xio_policy.h"

@@ -11,7 +11,7 @@
  *   One SourceProduct supplies the exact test IDs, VM program and generated C.
  *   Session and Source owners retire before any original test body executes.
  */
-#include "program/xr_xir_source_product.h"
+#include "xir/xr_xir_source_product.h"
 #include "base/xresource_limits.h"
 #include "toolchain/xcompiler_session.h"
 #include "base/xsha256.h"

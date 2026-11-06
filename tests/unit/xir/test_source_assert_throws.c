@@ -6,7 +6,7 @@
  *
  * test_source_assert_throws.c - Execute the original demo through its owned test catalog
  */
-#include "program/xr_xir_source_product.h"
+#include "xir/xr_xir_source_product.h"
 #include "base/xresource_limits.h"
 #include "toolchain/xcompiler_session.h"
 #include "base/xsha256.h"

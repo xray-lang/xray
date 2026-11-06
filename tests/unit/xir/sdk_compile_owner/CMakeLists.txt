@@ -34,7 +34,7 @@ add_executable(sdk_owner_generator
     "${CMAKE_CURRENT_LIST_DIR}/../test_xir_compile_emit_owner.c"
     "${SDK_OWNER_ROOT}/src/xir/xxir_specialize.c"
     "${SDK_OWNER_ROOT}/src/xir/xxir_emit_c.c"
-    "${SDK_OWNER_ROOT}/src/aot/xi_cgen_verify_output.c")
+    "${SDK_OWNER_ROOT}/src/shared/xi_cgen_verify_output.c")
 target_link_libraries(sdk_owner_generator PRIVATE ${SDK_OWNER_LIBRARIES} ${XIR_SDK_SYSTEM_LIBRARIES})
 set(SDK_OWNER_GENERATED "${CMAKE_CURRENT_BINARY_DIR}/sdk-owner-generated.c")
 add_custom_command(OUTPUT "${SDK_OWNER_GENERATED}"

@@ -6249,7 +6249,7 @@ main()
 
 ## 12. Testing
 
-> Declaration sources of truth: `src/frontend/parser/xparse_decl.c`, `src/xir/xxir_source.c`, `src/xir/xxir_declarations.h`, `src/program/xr_xir_source_product.c`, and `src/xir/xxir_instance.c`. Public runner scheduling, timeouts, and asynchronous behavior below remain requirements of the complete test system; declaration discovery and restricted starts alone do not complete the public runner.
+> Declaration sources of truth: `src/frontend/parser/xparse_decl.c`, `src/xir/xxir_source.c`, `src/xir/xxir_declarations.h`, `src/xir/xr_xir_source_product.c`, and `src/xir/xxir_instance.c`. Public runner scheduling, timeouts, and asynchronous behavior below remain requirements of the complete test system; declaration discovery and restricted starts alone do not complete the public runner.
 
 ### 12.1 Declaring Tests: the `@test` Attribute
 

@@ -6205,7 +6205,7 @@ main()
 
 ## 12. 测试系统 (Testing)
 
-> 声明真值源：`src/frontend/parser/xparse_decl.c`、`src/xir/xxir_source.c`、`src/xir/xxir_declarations.h`、`src/program/xr_xir_source_product.c` 与 `src/xir/xxir_instance.c`。下述公共 runner 调度、超时及异步行为仍是完整测试系统的要求；仅声明目录与受限启动实现不代表公共 runner 已完成。
+> 声明真值源：`src/frontend/parser/xparse_decl.c`、`src/xir/xxir_source.c`、`src/xir/xxir_declarations.h`、`src/xir/xr_xir_source_product.c` 与 `src/xir/xxir_instance.c`。下述公共 runner 调度、超时及异步行为仍是完整测试系统的要求；仅声明目录与受限启动实现不代表公共 runner 已完成。
 
 ### 12.1 测试声明：`@test` 注解
 

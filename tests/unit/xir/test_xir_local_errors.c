@@ -6,7 +6,7 @@
  *
  * test_xir_local_errors.c - Declared error checks through owned Source execution
  */
-#include "program/xr_xir_source_product.h"
+#include "xir/xr_xir_source_product.h"
 #include "toolchain/xcompiler_session.h"
 #include "base/xcompile_resources.h"
 #include "base/xmalloc.h"

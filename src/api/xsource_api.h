@@ -9,7 +9,7 @@
 #ifndef XSOURCE_API_H
 #define XSOURCE_API_H
 #include "../../include/xray_source.h"
-#include "../program/xr_xir_source_product.h"
+#include "../xir/xr_xir_source_product.h"
 /* Prepare the selected ready target from the actual product on its memory owner. Success consumes product;
  * failure preserves both owner pointers. No code or metadata is synthesized. */
 XR_FUNC XrSourceStatus xr_source_artifact_take_product(XrXirSourceProduct **product,

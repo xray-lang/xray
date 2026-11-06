@@ -9,7 +9,7 @@
 #ifndef XDAP_NATIVE_PROVIDER_H
 #define XDAP_NATIVE_PROVIDER_H
 #include "../../xir/xxir_vm_debug.h"
-#include "../../program/xr_xir_source_product.h"
+#include "../../xir/xr_xir_source_product.h"
 
 typedef struct XdapNativeCode {
     XrXirProgramSpec program;

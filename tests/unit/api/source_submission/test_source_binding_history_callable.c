@@ -10,7 +10,7 @@
 #include "test_source_submission.c"
 #undef main
 #include "source_binding_history_support.h"
-#include "program/xr_xir_source_product.h"
+#include "xir/xr_xir_source_product.h"
 
 static void callable_birth_case(unsigned capture_kind) {
     bool captured=capture_kind!=0;

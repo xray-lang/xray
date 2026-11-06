@@ -6,7 +6,7 @@
  *
  * emit_host_cli.c - Actual Source production and independent VM consumption
  */
-#include "program/xr_xir_source_product.h"
+#include "xir/xr_xir_source_product.h"
 #include "toolchain/xcompiler_session.h"
 #include "execution/xr_xir_host_cli.h"
 #include "xir/xxir_output.h"

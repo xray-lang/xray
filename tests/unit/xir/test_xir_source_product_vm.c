@@ -6,7 +6,7 @@
  *
  * test_xir_source_product_vm.c - Owned SourceProduct VM publication
  */
-#include "program/xr_xir_source_product.h"
+#include "xir/xr_xir_source_product.h"
 #include "xir/xxir_library_catalog.h"
 #include "xir/xxir_stdlib_internal.h"
 #include "xir/xxir_program_internal.h"

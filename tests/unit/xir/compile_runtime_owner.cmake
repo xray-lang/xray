@@ -66,7 +66,7 @@ target_link_libraries(test_xir_compile_runtime_owner PRIVATE xir_compile_owner_r
 add_executable(test_xir_compile_emit_owner
     "${CMAKE_CURRENT_LIST_DIR}/test_xir_compile_emit_owner.c"
     "${XIR_OWNER_ROOT}/src/xir/xxir_emit_c.c"
-    "${XIR_OWNER_ROOT}/src/aot/xi_cgen_verify_output.c"
+    "${XIR_OWNER_ROOT}/src/shared/xi_cgen_verify_output.c"
     "${XIR_OWNER_ROOT}/src/base/xcompile_resources.c")
 target_link_libraries(test_xir_compile_emit_owner PRIVATE xir_compile_owner_runtime)
 add_executable(test_xir_compile_decimal_work

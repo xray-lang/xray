@@ -1,5 +1,5 @@
 /* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
-#include "program/xr_xir_source_product.h"
+#include "xir/xr_xir_source_product.h"
 #include "base/xsha256.h"
 static bool product_packet_poll(const void *context) {
     ProductPacketProbe *probe=(ProductPacketProbe *)context;++probe->polls;

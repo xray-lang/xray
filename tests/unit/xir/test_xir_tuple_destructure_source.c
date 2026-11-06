@@ -12,7 +12,7 @@
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"FAIL %d %s\n",__LINE__,#c);exit(1);}} while(0)
 #include "xir_source_program_compile_owner.h"
 #include "xir_runtime_allocations.h"
-#include "program/xr_xir_source_product.h"
+#include "xir/xr_xir_source_product.h"
 #include "toolchain/xcompiler_session.h"
 #include "tuple_destructure_cases.h"
 static void execute(XrXirProgram *program,uint32_t entry) {

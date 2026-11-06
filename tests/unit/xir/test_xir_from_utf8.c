@@ -50,7 +50,7 @@ void xr_test_from_utf8_fault_finish(size_t index) {
 }
 #else
 #include "xray_source_entry.h"
-#include "program/xr_xir_source_product.h"
+#include "xir/xr_xir_source_product.h"
 #include "xir/xxir_construction.h"
 #include "xir/xxir_nominal.h"
 #include "shared/xnative_declaration.h"

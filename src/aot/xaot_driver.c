@@ -44,7 +44,7 @@
 #include "../ir/xi_program_semantic_plan.h"
 #include "../ir/xi_import_resolve.h"
 #include "xi_cgen.h"
-#include "xi_cgen_verify_output.h"
+#include "../shared/xi_cgen_verify_output.h"
 #include "xi_backend_plan_contract.h"
 #include "emit_c/xr_c_emission_plan.h"
 #include "refine/xr_aot_representation_refinement.h"

@@ -7,7 +7,7 @@
  * test_cgen_compile_resources.c - Shared verifier work and physical ownership
  */
 #include "base/xmalloc.h"
-#include "aot/xi_cgen_verify_output.h"
+#include "shared/xi_cgen_verify_output.h"
 #include <stdatomic.h>
 #include <limits.h>
 #ifdef XR_OS_WINDOWS
