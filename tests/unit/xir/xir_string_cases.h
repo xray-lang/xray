@@ -45,7 +45,17 @@ static XrXirValue string_cases(XrXirProgram *program,uint32_t variant,uint32_t m
     config.output=mode==4?(XrXirOutputProvider){0}:
         (XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,string_output,&output};
     XrXirInstance *instance=NULL;
-    CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY && instance);
+    XrXirCallStatus created=xr_xir_instance_new(program,&config,&instance);
+    if(created!=XR_XIR_CALL_READY || !instance) {
+        XrXirDomain *probe=NULL;
+        XrXirValueStatus probed=xr_xir_domain_new(65536,&probe);
+        uint64_t domain_bytes=probe?xr_xir_domain_stats(probe).live_bytes:0;
+        fprintf(stderr,"string instance variant=%u mode=%u status=%u value_limit=%llu domain_probe_status=%u domain_bytes=%llu metadata_limit=%llu call_limit=%llu\n",
+            variant,mode,(unsigned)created,(unsigned long long)config.value_limit,(unsigned)probed,
+            (unsigned long long)domain_bytes,(unsigned long long)config.metadata_limit,(unsigned long long)config.call_limit);
+        xr_xir_domain_drop(probe);
+    }
+    CHECK(created==XR_XIR_CALL_READY && instance);
     output.instance=instance;
     XrXirDomain *domain=xr_string_instance_domain(instance),*input_domain=NULL;
     if (mode==8 || mode==9) CHECK(xr_xir_domain_new(65536,&input_domain)==XR_XIR_VALUE_OK);
