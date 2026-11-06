@@ -51,7 +51,7 @@ static XrXirStatus class_owned_retry(const XrXirCompileContext *context,
     C(!memcmp(saved_code,code,sizeof(*code)) && !memcmp(saved_entries,code->entries,entry_bytes));
     C(!memcmp(saved_bindings,code->bindings,binding_bytes));
     XrCompileResourceStats after=class_pipeline_stats(context);
-    C(after.live_bytes==before.live_bytes && after.work>=before.work);
+    C(after.held_bytes==before.held_bytes);
     spec->abi_version=XR_XIR_PROGRAM_ABI_VERSION;
     return xir_program_receive(context,spec,input,NULL,output);
 }
@@ -66,8 +66,7 @@ static XrXirStatus class_owned_program(const XrXirCompileContext *context,
     XirMixedProjection projection;
     ClassMixedCode *code=NULL;
     XrCompileResourceStatus made=xr_compile_resources_calloc(context->resources,1,sizeof(*code),(void **)&code);
-    XrXirStatus status=made==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:
-        made==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
+    XrXirStatus status=xir_compile_resource_status(made);
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(context,definition->packet.bytes,
         definition->packet.length,&checked,NULL);
     if (status==XR_XIR_OK) status=xr_xir_compile_lower(checked,&definition->target, NULL,&lowered,NULL);
