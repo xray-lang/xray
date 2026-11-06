@@ -39,7 +39,7 @@ static void library_source_metadata_cases(const XrXirLibraryCatalog *catalog) {
         if(!mode){
             CHECK(owned);source_release_private(owned);CHECK(!ctx.memory);
             owned=source_alloc(&ctx,7,1);CHECK(owned);source_release_private(owned);CHECK(!ctx.memory);
-        }else CHECK(!owned&&!ctx.memory&&ctx.diagnostic.status==(mode==2?XR_XIR_OUT_OF_MEMORY:mode==3?XR_XIR_OVERFLOW:XR_XIR_MEMORY_LIMIT));
+        }else CHECK(!owned&&!ctx.memory&&ctx.diagnostic.status==(mode==2?XR_XIR_OUT_OF_MEMORY:mode==3?XR_XIR_BUDGET:XR_XIR_MEMORY_LIMIT));
         CHECK(library_compile_stats(&owner.context).held_bytes==before.held_bytes);library_compile_owner_drop(&owner);
     }
     puts("Source shared metadata and private7 held exact/minus1/OOM/overflow/free and reuse PASS");
