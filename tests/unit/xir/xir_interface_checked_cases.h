@@ -15,7 +15,7 @@ static XrXirArtifact *interface_checked_fixture(const XrXirCompileContext *conte
     XrXirConstraint constraint = {0};
     XrXirType parameter = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE, concrete = XR_XIR_I64;
     XrXirTypeNode signature = {0};
-    signature.kind = XR_XIR_TYPE_CALLABLE; signature.result = parameter; signature.parameter_span = 1;
+    signature.kind = XR_XIR_TYPE_CALLABLE;signature.element=XR_XIR_NEVER; signature.result = parameter; signature.parameter_span = 1;
     signature.flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     XrXirInterfaceMethod method = {{"measure",7}, (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE, 0,0,NULL};
     XrXirInterfaceApplication parents[] = {{0,&parameter,1}, {0,&concrete,1}};
@@ -32,12 +32,12 @@ static XrXirArtifact *interface_checked_fixture(const XrXirCompileContext *conte
     XrXirInstruction init = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
     XrXirBlock init_block = {0,1,0,0};
     XrXirFunction functions[] = {
-        {"main",4,NULL,0,XR_XIR_I64,&block,1,ops,2,NULL,0},
-        {"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0},
-        {"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0}};
+        {"main",4,NULL,0,XR_XIR_I64,&block,1,ops,2,NULL,0,.error_type=XR_XIR_NEVER},
+        {"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0,.error_type=XR_XIR_NEVER},
+        {"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0,.error_type=XR_XIR_NEVER}};
     uint32_t dependency = 0;
     XrXirSourceModule modules[] = {{"alpha",5,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE},{"other",5,&dependency,1,2, 0,XR_XIR_MODULE_FRESH_STORAGE}};
-    XrXirFunctionIdentity identities[] = {{0,1,0,0,0,0, XR_XIR_NON_MEMBER, 0, 0},{0,0,0,0,0,0, XR_XIR_NON_MEMBER, 0, 0},{1,0,0,0,0,0, XR_XIR_NON_MEMBER, 0, 0}};
+    XrXirFunctionIdentity identities[] = {{.exported=1},{0},{.module=1}};
     XrXirDeclarations program = {modules,2,identities,NULL,0,NULL,0,0,0, NULL};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&program,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *artifact = NULL;
@@ -86,13 +86,11 @@ static void interface_checked_cases(void) {
         rejected(packet.bytes,length); packet.length = original;
     }
     put32(packet.bytes + 24,(uint32_t)(packet.length - 64)); digest_packet(&packet);
-    for (unsigned i = 0; i < 4; ++i) {
+    for (unsigned i = 0; i < 2; ++i) {
         XrXirCompileContext budget = consumer_context_default(); XrXirArtifact *failed = NULL;
         if (i == 0) budget.limits.parameters = 1;
-        if (i == 1) budget = consumer_context_limits((XrCompileResourceLimits){packet.length+consumer_context_stats(&budget).live_bytes,8388608,128000000});
-        if (i == 2) budget = consumer_context_limits((XrCompileResourceLimits){67108864,consumer_context_stats(&budget).live_bytes,128000000});
-        if (i == 3) budget = consumer_context_limits((XrCompileResourceLimits){67108864,8388608,1});
-        CHECK(xr_xir_compile_checked_read(&budget, packet.bytes, packet.length, &failed, NULL) == XR_XIR_BUDGET);
+        if (i == 1) budget = consumer_context_limits((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,consumer_context_stats(&budget).held_bytes,true});
+        CHECK(xr_xir_compile_checked_read(&budget, packet.bytes, packet.length, &failed, NULL) == (i?XR_XIR_MEMORY_LIMIT:XR_XIR_BUDGET));
         CHECK(!failed);
     }
     memset(packet.bytes,0xcc,packet.length); xr_xir_compile_checked_packet_free(&packet);

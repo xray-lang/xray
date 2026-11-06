@@ -28,10 +28,10 @@ static void default_binding_case(unsigned mode,bool generic) {
  XrXirBlock one={0,1,0,0},three={0,3,0,0},two={0,2,0,0};
  XrXirType i64=XR_XIR_I64;uint32_t operands[]={0};
  XrXirFunction functions[]={
-  {"init",4,NULL,0,XR_XIR_UNIT,&one,1,&ret,1,NULL,0},
-  {"entry",5,NULL,0,XR_XIR_I64,&three,1,entry,3,operands,1},
-  {"owner",5,&i64,1,XR_XIR_I64,&one,1,&ret,1,NULL,0},
-  {"helper",6,NULL,0,XR_XIR_I64,&two,1,helper,2,NULL,0}};
+  {"init",4,NULL,0,XR_XIR_UNIT,&one,1,&ret,1,NULL,0,.error_type=XR_XIR_NEVER},
+  {"entry",5,NULL,0,XR_XIR_I64,&three,1,entry,3,operands,1,.error_type=XR_XIR_NEVER},
+  {"owner",5,&i64,1,XR_XIR_I64,&one,1,&ret,1,NULL,0,.error_type=XR_XIR_NEVER},
+  {"helper",6,NULL,0,XR_XIR_I64,&two,1,helper,2,NULL,0,.error_type=XR_XIR_NEVER}};
  XrXirSourceModule source={"root",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
  XrXirFunctionIdentity ids[4]={{0},{0},{0},{0}};
  XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=ids,.entry_function=1};
@@ -43,7 +43,7 @@ static void default_binding_case(unsigned mode,bool generic) {
  if(generic){generics[1].arguments=args;generics[1].argument_count=4;
   generics[2].parameter_count=generics[3].parameter_count=2;generics[2].constraints=fc;generics[3].constraints=hc;
   entry[0].type_arguments[1]=2;entry[1].type_arguments[0]=2;entry[1].type_arguments[1]=2;}
- XrXirTypeNode callable={.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
+ XrXirTypeNode callable={.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
  XrXirTypes types={&callable,1,NULL,NULL};
  XrXirModule module={XR_XIR_BUILT,functions,4,&declarations,generic?generics:NULL,NULL,NULL,XR_XIR_PROGRAM,&table};
  XrXirStatus expected=XR_XIR_BAD_STRUCTURE;
@@ -80,30 +80,25 @@ static void default_binding_case(unsigned mode,bool generic) {
   if(mode==21){ids[1].promises=XR_XIR_FUNCTION_NO_SUSPEND;expected=XR_XIR_BAD_TYPE;}break;
  }
  if(mode==0){
-  XrXirCompileContext b=consumer_context_ephemeral((XrCompileResourceLimits){67108864,8388608,128000000});
+  XrXirCompileContext b=consumer_context_ephemeral((XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true});
   XrCompileResourceStats initial=consumer_context_stats(&b);
   CHECK(xr_xir_compile_defaults_verify(&b,&module)==XR_XIR_OK);
   XrCompileResourceStats required=consumer_context_stats(&b);
-  CHECK(required.live_bytes==initial.live_bytes && required.work>initial.work);
+  CHECK(required.held_bytes==initial.held_bytes);
   consumer_context_ephemeral_free(&b,initial);
-  for(unsigned axis=0;axis<3;++axis)for(unsigned minus=0;minus<2;++minus){
-   XrCompileResourceLimits limits={67108864,8388608,128000000};
-   if(!axis)limits.allocated_bytes=required.allocated_bytes-minus;
-   if(axis==1)limits.live_bytes=required.peak_bytes-minus;
-   if(axis==2)limits.work=required.work-minus;
+  if(required.peak_bytes>initial.held_bytes)for(unsigned minus=0;minus<2;++minus){
+   XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,required.peak_bytes-minus,true};
    XrXirCompileContext probe={0};probe.limits=xr_xir_compile_default_limits();
    XrCompileResourceStatus created=xr_compile_resources_new(&limits,&probe.resources);
-   if(created==XR_COMPILE_RESOURCE_BUDGET){CHECK(minus);continue;}
+   if(created==XR_COMPILE_RESOURCE_MEMORY_LIMIT){CHECK(minus);continue;}
    CHECK(created==XR_COMPILE_RESOURCE_OK);
    XrCompileResourceStats before=consumer_context_stats(&probe);
-   CHECK(xr_xir_compile_defaults_verify(&probe,&module)==(minus?XR_XIR_BUDGET:XR_XIR_OK));
+   CHECK(xr_xir_compile_defaults_verify(&probe,&module)==(minus?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
    consumer_context_ephemeral_free(&probe,before);
   }
-  if(generic){b=consumer_context_limits((XrCompileResourceLimits){67108864,initial.live_bytes,128000000});CHECK(xr_xir_compile_defaults_verify(&b,&module)==XR_XIR_BUDGET);}
+  if(generic){b=consumer_context_limits((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,initial.held_bytes,true});CHECK(xr_xir_compile_defaults_verify(&b,&module)==XR_XIR_MEMORY_LIMIT);}
   const XrXirDefaultBinding *found=(const XrXirDefaultBinding *)(uintptr_t)1;
   b=consumer_context_default();CHECK(xr_xir_compile_default_lookup(&b,&module,2,1,&found)==XR_XIR_OK && !found);
-  b=consumer_context_limits((XrCompileResourceLimits){67108864,8388608,1});found=(const XrXirDefaultBinding *)(uintptr_t)1;
-  CHECK(xr_xir_compile_default_lookup(&b,&module,2,0,&found)==XR_XIR_BUDGET && found==(const XrXirDefaultBinding *)(uintptr_t)1);
  }
 
  XrXirArtifact *checked=NULL;XrXirDiagnostic diagnostic={0};

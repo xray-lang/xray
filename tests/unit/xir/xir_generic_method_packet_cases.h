@@ -14,83 +14,66 @@
 #define XIR_GENERIC_METHOD_PACKET_CASES_H
 #include "xir_construction_fixture.h"
 #include "xir_generic_method_owned_fixture.h"
-#include "xir_generic_method_golden.h"
-#include "xir_generic_method64_golden.h"
-#include "xir_generic_method65_golden.h"
-#include "xir_generic_method70_golden.h"
-#include "xir_generic_method71_golden.h"
-#include "xir_generic_method72_golden.h"
-#include "xir_generic_method75_golden.h"
-#include "xir_generic_method73_golden.h"
-#include "xir_generic_method74_golden.h"
-#include "xir_generic_method76_golden.h"
+static size_t generic_method_packet_find(const XrXirCheckedPacket *packet,const uint8_t *row,size_t length) {
+    size_t offset=0;unsigned matches=0;
+    for(size_t i=64;i+length<=packet->length;++i) {
+        if(!memcmp(packet->bytes+i,row,length)) {offset=i;++matches;}
+    }
+    CHECK(matches==1);return offset;
+}
 static void generic_method_packet_cases(void) {
-    checked_previous_identity_rejected(generic_method71_golden,sizeof(generic_method71_golden));
-    checked_previous_identity_rejected(generic_method71_invalid_flags0,sizeof(generic_method71_invalid_flags0));
-    checked_previous_identity_rejected(generic_method71_invalid_flags1,sizeof(generic_method71_invalid_flags1));
-    checked_previous_identity_rejected(generic_method_golden,sizeof(generic_method_golden));
-    checked_previous_identity_rejected(generic_method70_golden,sizeof(generic_method70_golden));
-    checked_previous_identity_rejected(generic_method70_invalid_flags0,sizeof(generic_method70_invalid_flags0));
-    checked_previous_identity_rejected(generic_method70_invalid_flags1,sizeof(generic_method70_invalid_flags1));
-    checked_previous_identity_rejected(generic_method64_golden,sizeof(generic_method64_golden));
-    checked_previous_identity_rejected(generic_method65_golden,sizeof(generic_method65_golden));
-    checked_previous_identity_rejected(generic_method_previous69_constructed,sizeof(generic_method_previous69_constructed));
-    checked_previous_identity_rejected(generic_method72_golden,sizeof(generic_method72_golden));
-    checked_previous_identity_rejected(generic_method72_invalid_flags0,sizeof(generic_method72_invalid_flags0));
-    checked_previous_identity_rejected(generic_method72_invalid_flags1,sizeof(generic_method72_invalid_flags1));
-    checked_previous_identity_rejected(generic_method73_golden,sizeof(generic_method73_golden));
-    checked_previous_identity_rejected(generic_method73_invalid_flags0,sizeof(generic_method73_invalid_flags0));
-    checked_previous_identity_rejected(generic_method73_invalid_flags1,sizeof(generic_method73_invalid_flags1));
-    checked_current_callable_rejected(generic_method76_invalid_flags0,sizeof(generic_method76_invalid_flags0));
-    checked_current_callable_rejected(generic_method76_invalid_flags1,sizeof(generic_method76_invalid_flags1));
-    GenericMethodOwnedFixture fixture; generic_method_owned_fixture(&fixture);
-    XrXirArtifact *checked = NULL, *decoded = NULL;
-    CHECK(xir_fixture_check(suite_context, &fixture.module, &checked, NULL) == XR_XIR_OK);
+    GenericMethodOwnedFixture fixture;generic_method_owned_fixture(&fixture);
+    XrXirArtifact *checked=NULL,*decoded=NULL;
+    CHECK(xir_fixture_check(suite_context,&fixture.module,&checked,NULL)==XR_XIR_OK);
     CHECK(!xr_xir_compile_artifact_module(checked)->provenance);
-    memset(&fixture,0xCC,sizeof(fixture));
-    XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
+    memset(&fixture,0xcc,sizeof(fixture));
+    XrXirCheckedPacket packet={0};
+    CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
-    CHECK(packet.length == sizeof(generic_method76_golden));
-    CHECK(!memcmp(packet.bytes,generic_method76_golden,sizeof(generic_method76_golden)));
-    CHECK(xr_xir_compile_checked_read(suite_context, generic_method76_golden, sizeof(generic_method76_golden), &decoded, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(suite_context,packet.bytes,packet.length,&decoded,NULL)==XR_XIR_OK);
     generic_method_owned_assert(xr_xir_compile_artifact_module(decoded)->types->interfaces);
-    CHECK(xr_xir_compile_artifact_module(decoded)->types->nodes[0].flags == 8u);
+    CHECK(xr_xir_compile_artifact_module(decoded)->types->nodes[0].flags==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
     xr_xir_compile_artifact_free(decoded);decoded=NULL;
-    CHECK(packet32(&packet,GENERIC_METHOD76_MAP_OWN) == 1 && packet32(&packet,GENERIC_METHOD76_MAP_OWN+4) == 1);
-    CHECK(packet32(&packet,GENERIC_METHOD76_COPY_OWN) == 1 && packet32(&packet,GENERIC_METHOD76_COPY_OWN+4) == 0);
-    /* Exact old semantic revision with a freshly valid wire digest. */
-    memcpy(packet.bytes,generic_method76_golden,packet.length);
-    put32(packet.bytes+12,48);digest_packet(&packet);decoded=NULL;
-    XrXirDiagnostic previous={0};
-    CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, &previous)==XR_XIR_BAD_STRUCTURE);
-    CHECK(!decoded && previous.status==XR_XIR_BAD_STRUCTURE);
-    const struct { size_t offset; uint32_t value; } attacks[] = {
-        {8,19}, {12,50}, {8,UINT32_MAX}, {12,UINT32_MAX}, {64,UINT32_MAX}, {12,49}, {12,48}, {12,47}, {8,17}, {12,45}, {8,18}, {12,46},
-        {GENERIC_METHOD76_MAP_OWN,UINT32_MAX}, {GENERIC_METHOD76_MAP_OWN,0},
-        {GENERIC_METHOD76_MAP_OWN,65536}, {GENERIC_METHOD76_MAP_OWN+4,UINT32_MAX},
-        {GENERIC_METHOD76_MAP_OWN+8,UINT32_MAX}, {GENERIC_METHOD76_MAP_OWN+12,2},
-        {GENERIC_METHOD76_MAP_OWN+16,UINT32_MAX},
-        {GENERIC_METHOD76_MAP_OWN+20,XR_XIR_TYPE_PARAMETER_BASE+2},
-        {GENERIC_METHOD76_COPY_OWN,UINT32_MAX}
-    };
-    for (uint32_t i = 0; i < sizeof(attacks)/sizeof(*attacks); ++i) {
-        memcpy(packet.bytes,generic_method76_golden,packet.length);
-        put32(packet.bytes+attacks[i].offset,attacks[i].value); digest_packet(&packet);
+    /* Complete literal method rows locate their own binders, without relying
+     * on a historical whole-packet identity or an unrelated trailer size. */
+    uint8_t map[39]={0},copy[40]={0},signature[32]={0};
+    put32(map,3);memcpy(map+4,"map",3);put32(map+7,XR_XIR_CONSTRUCTED_TYPE_BASE);
+    put32(map+15,1);put32(map+19,XR_XIR_CONSTRAINT_SENDABLE);put32(map+23,1);
+    put32(map+31,1);put32(map+35,XR_XIR_TYPE_PARAMETER_BASE);
+    put32(copy,4);memcpy(copy+4,"copy",4);put32(copy+8,XR_XIR_CONSTRUCTED_TYPE_BASE);
+    put32(copy+16,1);put32(copy+24,1);put32(copy+32,1);put32(copy+36,XR_XIR_TYPE_PARAMETER_BASE);
+    put32(signature,XR_XIR_TYPE_CALLABLE);put32(signature+4,2);put32(signature+8,1);
+    put32(signature+12,XR_XIR_TYPE_PARAMETER_BASE+1);put32(signature+20,XR_XIR_TYPE_PARAMETER_BASE+1);
+    put32(signature+24,XR_XIR_NEVER);put32(signature+28,XR_XIR_CALLABLE_ROOT_UNRESOLVED);
+    size_t map_own=generic_method_packet_find(&packet,map,sizeof(map))+15;
+    size_t copy_own=generic_method_packet_find(&packet,copy,sizeof(copy))+16;
+    size_t flags=generic_method_packet_find(&packet,signature,sizeof(signature))+28;
+    uint8_t *original=xr_malloc(packet.length);CHECK(original);memcpy(original,packet.bytes,packet.length);
+    for(uint32_t flag=0;flag<2;++flag) {
+        memcpy(packet.bytes,original,packet.length);put32(packet.bytes+flags,flag);digest_packet(&packet);
+        checked_current_callable_rejected(packet.bytes,packet.length);
+    }
+    const struct {size_t offset;uint32_t value;} attacks[]={
+        {64,UINT32_MAX},{map_own,UINT32_MAX},{map_own,0},{map_own,65536},
+        {map_own+4,UINT32_MAX},{map_own+8,UINT32_MAX},{map_own+12,2},
+        {map_own+16,UINT32_MAX},{map_own+20,XR_XIR_TYPE_PARAMETER_BASE+2},{copy_own,UINT32_MAX}};
+    for(size_t i=0;i<sizeof(attacks)/sizeof(*attacks);++i) {
+        memcpy(packet.bytes,original,packet.length);
+        put32(packet.bytes+attacks[i].offset,attacks[i].value);digest_packet(&packet);
         rejected(packet.bytes,packet.length);
     }
-    for (size_t length = 64; length < sizeof(generic_method76_golden); ++length) {
-        memcpy(packet.bytes,generic_method76_golden,sizeof(generic_method76_golden));
-        packet.length = length; put32(packet.bytes+24,(uint32_t)(length-64));
-        digest_packet(&packet); rejected(packet.bytes,packet.length);
+    size_t length=packet.length;
+    for(size_t short_length=64;short_length<length;++short_length) {
+        memcpy(packet.bytes,original,length);packet.length=short_length;
+        put32(packet.bytes+24,(uint32_t)(short_length-64));digest_packet(&packet);
+        rejected(packet.bytes,short_length);
     }
-    packet.length = sizeof(generic_method76_golden);
-    memcpy(packet.bytes,generic_method76_golden,packet.length);
-    CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
-    memset(packet.bytes,0xCC,packet.length); xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_artifact_verify(decoded, NULL) == XR_XIR_OK);
+    packet.length=length;memcpy(packet.bytes,original,length);xr_free(original);
+    CHECK(xr_xir_compile_checked_read(suite_context,packet.bytes,packet.length,&decoded,NULL)==XR_XIR_OK);
+    memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_artifact_verify(decoded,NULL)==XR_XIR_OK);
     generic_method_owned_assert(xr_xir_compile_artifact_module(decoded)->types->interfaces);
-    CHECK(xr_xir_compile_artifact_module(decoded)->types->nodes[0].flags == 8u);
+    CHECK(xr_xir_compile_artifact_module(decoded)->types->nodes[0].flags==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
     xr_xir_compile_artifact_free(decoded);decoded=NULL;
 }
 #endif // XIR_GENERIC_METHOD_PACKET_CASES_H

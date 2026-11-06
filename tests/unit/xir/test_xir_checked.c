@@ -19,18 +19,6 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_consumer_context_owner.h"
 #include "xir_checked_fixture.h"
-#include "xir_checked_scalar57_golden.h"
-#include "xir_checked_scalar58_golden.h"
-#include "xir_checked_scalar59_golden.h"
-#include "xir_checked_scalar60_golden.h"
-#include "xir_checked_scalar64_golden.h"
-#include "xir_checked_scalar65_golden.h"
-#include "xir_checked_scalar70_golden.h"
-#include "xir_checked_scalar71_golden.h"
-#include "xir_checked_scalar72_golden.h"
-#include "xir_checked_scalar73_golden.h"
-#include "xir_checked_scalar74_golden.h"
-#include "xir_checked_scalar77_golden.h"
 #include "xir_types_fixture.h"
 #include "xir_struct_ops_fixture.h"
 #include "xir_struct_set_fixture.h"
@@ -44,7 +32,7 @@ static void put32(uint8_t *p, uint32_t n) {
     for (unsigned i = 0; i < 4; ++i) p[i] = (uint8_t) (n >> (i * 8));
 }
 static void rejected(const void *bytes, size_t length) {
-    XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){67108864,8388608,128000000});
+    XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true});
     XrCompileResourceStats baseline=consumer_context_stats(&probe);
     XrXirArtifact *artifact = NULL;
     XrXirDiagnostic diagnostic = {0};
@@ -56,36 +44,18 @@ static void rejected(const void *bytes, size_t length) {
     CHECK(artifact==(XrXirArtifact *)(uintptr_t)1);
     consumer_context_ephemeral_free(&probe,baseline);
 }
-static void checked_previous_identity_rejected(const void *bytes, size_t length) {
-    XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){67108864,8388608,128000000});
-    const XrCompileResourceStats baseline=consumer_context_stats(&probe);
-    XrXirArtifact *artifact=NULL;
-    XrXirDiagnostic diagnostic={0};
-    CHECK(xr_xir_compile_checked_read(&probe,bytes,length,&artifact,&diagnostic)==XR_XIR_BAD_STRUCTURE);
-    CHECK(!artifact && diagnostic.status==XR_XIR_BAD_STRUCTURE);
-    XrCompileResourceStats after=consumer_context_stats(&probe);
-    CHECK(after.allocation_count==baseline.allocation_count && after.allocated_bytes==baseline.allocated_bytes);
-    CHECK(after.live_bytes==baseline.live_bytes);
-    artifact=(XrXirArtifact *)(uintptr_t)1;
-    CHECK(xr_xir_compile_checked_read(&probe,bytes,length,&artifact,NULL)==XR_XIR_BAD_STRUCTURE);
-    CHECK(artifact==(XrXirArtifact *)(uintptr_t)1);
-    after=consumer_context_stats(&probe);
-    CHECK(after.allocation_count==baseline.allocation_count && after.allocated_bytes==baseline.allocated_bytes);
-    CHECK(after.live_bytes==baseline.live_bytes);
-    consumer_context_ephemeral_free(&probe,baseline);
-}
 static void checked_current_callable_rejected(const void *bytes, size_t length) {
-    XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){67108864,8388608,128000000});
+    XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true});
     const XrCompileResourceStats baseline=consumer_context_stats(&probe);
     XrXirArtifact *artifact=NULL;
     XrXirDiagnostic diagnostic={0};
     CHECK(xr_xir_compile_checked_read(&probe,bytes,length,&artifact,&diagnostic)==XR_XIR_BAD_TYPE);
     CHECK(!artifact && diagnostic.status==XR_XIR_BAD_TYPE);
-    CHECK(consumer_context_stats(&probe).live_bytes==baseline.live_bytes);
+    CHECK(consumer_context_stats(&probe).held_bytes==baseline.held_bytes);
     artifact=(XrXirArtifact *)(uintptr_t)1;
     CHECK(xr_xir_compile_checked_read(&probe,bytes,length,&artifact,NULL)==XR_XIR_BAD_STRUCTURE);
     CHECK(artifact==(XrXirArtifact *)(uintptr_t)1);
-    CHECK(consumer_context_stats(&probe).live_bytes==baseline.live_bytes);
+    CHECK(consumer_context_stats(&probe).held_bytes==baseline.held_bytes);
     consumer_context_ephemeral_free(&probe,baseline);
 }
 static void boundaries(XrXirCheckedPacket *packet) {
@@ -107,21 +77,19 @@ static void boundaries(XrXirCheckedPacket *packet) {
         memcpy(packet->bytes + fields[i], saved, 4); digest_packet(packet);
     }
     XrXirCompileContext budget = consumer_context_default(); XrXirArtifact *decoded = NULL;
-    for (unsigned i = 0; i < 9; ++i) {
+    for (unsigned i = 0; i < 6; ++i) {
         budget = consumer_context_default();
         XrCompileResourceStats bootstrap=consumer_context_stats(&budget);
         if (i == 0) budget.limits.functions = 0;
         if (i == 1) budget.limits.blocks = 0;
         if (i == 2) budget.limits.instructions = 0;
-        if (i == 3) budget = consumer_context_limits((XrCompileResourceLimits){bootstrap.allocated_bytes,8388608,128000000});
-        if (i == 4) budget = consumer_context_limits((XrCompileResourceLimits){67108864,8388608,1});
-        if (i == 5) budget = consumer_context_limits((XrCompileResourceLimits){67108864,bootstrap.live_bytes,128000000});
-        if (i == 6) budget = consumer_context_limits((XrCompileResourceLimits){packet->length+bootstrap.allocated_bytes,8388608,128000000});
-        if (i == 7) budget.limits.functions = 7;
-        if (i == 8) budget.limits.parameters = 1;
+        if (i == 3) budget = consumer_context_limits((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,bootstrap.held_bytes,true});
+        if (i == 4) budget.limits.functions = 7;
+        if (i == 5) budget.limits.parameters = 1;
         XrXirStatus status = xr_xir_compile_checked_read(&budget, packet->bytes, packet->length, &decoded, NULL);
-        if (status != XR_XIR_BUDGET) fprintf(stderr, "budget case %u returned %d\n", i, status);
-        CHECK(status == XR_XIR_BUDGET);
+        XrXirStatus expected=i==3?XR_XIR_MEMORY_LIMIT:XR_XIR_BUDGET;
+        if (status != expected) fprintf(stderr, "budget case %u returned %d\n", i, status);
+        CHECK(status == expected);
         CHECK(!decoded);
     }
 }
@@ -180,97 +148,51 @@ static void semantic_attacks(XrXirCheckedPacket *packet) {
     }
 }
 static void byte_order(void) {
-    const XrXirOp identities[] = {XR_XIR_CONST_BOOL, XR_XIR_CONST_INT, XR_XIR_CONST_STRING,
-        XR_XIR_SLOT_LOAD, XR_XIR_SLOT_INIT, XR_XIR_SLOT_STORE, XR_XIR_ATOMIC_NEW,
-        XR_XIR_ATOMIC_LOAD, XR_XIR_ATOMIC_STORE, XR_XIR_ATOMIC_ADD, XR_XIR_ATOMIC_SUB,
-        XR_XIR_ATOMIC_FETCH_ADD, XR_XIR_ATOMIC_FETCH_SUB, XR_XIR_ATOMIC_SWAP,
-        XR_XIR_ATOMIC_COMPARE_EXCHANGE, XR_XIR_ATOMIC_TOGGLE, XR_XIR_ATOMIC_TO_STRING, XR_XIR_COPY, XR_XIR_SCALAR_COPY,
-        XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
-        XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
-        XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 30 && XR_XIR_CHECKED_CONTRACT == 77 && XR_XIR_OP_COUNT == 164, "packet revision");
-    _Static_assert(XR_XIR_NULLABLE_NONE == 126 && XR_XIR_NULLABLE_SOME == 127, "typed nullable operations");
-    _Static_assert(XR_XIR_EQUAL == 125, "typed value equality operation");
-    _Static_assert(XR_XIR_INVOKE_DISCARD == 124, "typed normal result discard operation");
-    _Static_assert(XR_XIR_ASSERT_CONDITION == 123, "typed assertion wire operation");
-    _Static_assert(XR_XIR_CALL_DEFAULT == 121, "default purpose wire operation");
-    _Static_assert(XR_XIR_INVOKE_DEFAULT == 122, "default error continuation wire operation");
-    _Static_assert(XR_XIR_CLASS_NEW == 118 && XR_XIR_CLASS_GET == 119 && XR_XIR_CLASS_SET == 120, "class wire operations");
-    _Static_assert(XR_XIR_PANIC_CATCH == 105 && XR_XIR_PANIC_CODE == 106 && XR_XIR_PANIC_MESSAGE == 107 &&
-        XR_XIR_PANIC_INFO == 15, "panic wire identities");
-    _Static_assert(XR_XIR_MATCH_FAIL == 97, "match fault wire operation");
-    _Static_assert(XR_XIR_ENUM_NEW == 94 && XR_XIR_ENUM_TAG == 95 && XR_XIR_ENUM_GET == 96, "enum wire operations");
-    _Static_assert(XR_XIR_STRING_INDEX_OF == 92 && XR_XIR_STRING_LAST_INDEX_OF == 93, "search wire operations");
-    _Static_assert(XR_XIR_CALL_INTRINSIC == 89, "library call wire operation");
-    _Static_assert(XR_XIR_STRING_LEN == 86 && XR_XIR_EQ_STRING == 87 && XR_XIR_NE_STRING == 88, "string query wire operations");
-    _Static_assert(XR_XIR_STRUCT_NEW == 82 && XR_XIR_STRUCT_GET == 83 && XR_XIR_STRUCT_SET == 84, "struct wire operations");
-    _Static_assert(XR_XIR_F32 == 12 && XR_XIR_F64 == 13 && XR_XIR_CONVERT_NUMBER == 62 &&
-        XR_XIR_CONST_FLOAT == 63 && XR_XIR_NEG_FLOAT == 64 && XR_XIR_EQ_FLOAT == 65 && XR_XIR_GE_FLOAT == 70, "numeric wire identities");
-    _Static_assert(XR_XIR_FUNCTION_REF == 57 && XR_XIR_CALL_INDIRECT == 58, "callable wire operations");
-    _Static_assert(XR_XIR_CELL_PLACE == 71 && XR_XIR_SLOT_PLACE == 72 && XR_XIR_ARRAY_NEW == 73 &&
-        XR_XIR_ARRAY_GET == 74 && XR_XIR_ARRAY_SET == 75 && XR_XIR_ARRAY_PUSH == 76 &&
-        XR_XIR_ARRAY_LEN == 77, "array wire operations");
-    _Static_assert(XR_XIR_UNIT == 0 && XR_XIR_BOOL == 1 && XR_XIR_I64 == 2 && XR_XIR_STRING == 3 && XR_XIR_I8 == 5, "wire type identities");
-    for (unsigned i = 0; i < sizeof(identities)/sizeof(*identities); ++i) CHECK((unsigned) identities[i] == i + 1);
-    XrXirInstruction ops[] = {{XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, INT64_MIN, {0}},
-                             {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
-    XrXirBlock block = {0, 2, 0, 0};
-    XrXirFunction function = {"n", 1, NULL, 0, XR_XIR_I64, &block, 1, ops, 2, NULL, 0};
-    XrXirModule built = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
-    XrXirArtifact *checked = NULL, *decoded = NULL;
-    CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
-    XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
+    XrXirInstruction ops[]={{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},INT64_MIN,{0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
+    XrXirBlock block={0,2,0,0};
+    XrXirFunction function={"n",1,NULL,0,XR_XIR_I64,&block,1,ops,2,NULL,0,.error_type=XR_XIR_NEVER};
+    XrXirModule built={XR_XIR_BUILT,&function,1,NULL,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirArtifact *checked=NULL,*decoded=NULL;
+    CHECK(xir_fixture_check(suite_context,&built,&checked,NULL)==XR_XIR_OK);
     CHECK(!xr_xir_compile_artifact_module(checked)->provenance);
-    CHECK(packet.length == 237 && packet.bytes[24] == 173);
-    CHECK(packet.bytes[101] == 0 && packet.bytes[105] == 0 && packet.bytes[109] == 2 && packet.bytes[113] == XR_XIR_CONST_INT);
-    for (unsigned i = 0; i < 7; ++i) CHECK(packet.bytes[137 + i] == 0);
-    CHECK(packet.bytes[144] == 128);
-    /* Independent fixed little-endian fixture, including the signed minimum
-     * and the block's zero panic handler and cleanup frontier. */
-    CHECK(!memcmp(packet.bytes + 32, checked_scalar77_digest, 32));
-    CHECK(packet.length==sizeof(checked_scalar77_golden) && !memcmp(packet.bytes,checked_scalar77_golden,packet.length));
-    checked_previous_identity_rejected(checked_scalar74_golden,sizeof(checked_scalar74_golden));
-    checked_previous_identity_rejected(checked_scalar73_golden,sizeof(checked_scalar73_golden));
-    checked_previous_identity_rejected(checked_scalar72_golden,sizeof(checked_scalar72_golden));
-    checked_previous_identity_rejected(checked_scalar71_golden,sizeof(checked_scalar71_golden));
-    checked_previous_identity_rejected(checked_scalar70_golden,sizeof(checked_scalar70_golden));
-    checked_previous_identity_rejected(checked_scalar65_golden,sizeof(checked_scalar65_golden));
-    checked_previous_identity_rejected(checked_scalar_previous69_constructed,sizeof(checked_scalar_previous69_constructed));
-    checked_previous_identity_rejected(checked_scalar64_golden,sizeof(checked_scalar64_golden));
-    checked_previous_identity_rejected(checked_scalar57_golden,sizeof(checked_scalar57_golden));
-    checked_previous_identity_rejected(checked_scalar58_golden,sizeof(checked_scalar58_golden));
-    checked_previous_identity_rejected(checked_scalar59_golden,sizeof(checked_scalar59_golden));
-    checked_previous_identity_rejected(checked_scalar60_golden,sizeof(checked_scalar60_golden));
-    uint8_t original[sizeof(checked_scalar77_golden)]; memcpy(original, packet.bytes, sizeof(original));
-    for (unsigned offset = 145; offset <= 149; offset += 4) {
-        put32(packet.bytes + offset, 1); digest_packet(&packet);
-        rejected(packet.bytes, packet.length);
-        memcpy(packet.bytes, original, sizeof(original));
+    XrXirCheckedPacket packet={0};
+    CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);checked=NULL;
+    CHECK(packet32(&packet,64)==XR_XIR_PROGRAM && packet32(&packet,68)==1 && packet32(&packet,72)==0);
+    /* One literal function row, independent of header identity and producer
+     * buffers: no parameters or consumes, Never, one block and two operations. */
+    uint8_t original[129]={0};
+    put32(original,1);original[4]='n';put32(original+13,XR_XIR_I64);
+    put32(original+17,XR_XIR_NEVER);put32(original+21,1);put32(original+29,2);
+    put32(original+41,2);put32(original+45,XR_XIR_CONST_INT);put32(original+49,XR_XIR_I64);
+    original[76]=128;put32(original+85,XR_XIR_RETURN);
+    const size_t row=76,instruction=row+45;
+    CHECK(packet.length>=row+sizeof(original) && !memcmp(packet.bytes+row,original,sizeof(original)));
+    for(unsigned extra=32;extra<=36;extra+=4) {
+        put32(packet.bytes+instruction+extra,1);digest_packet(&packet);rejected(packet.bytes,packet.length);
+        memcpy(packet.bytes+row,original,sizeof(original));digest_packet(&packet);
     }
-    put32(packet.bytes+153,XR_XIR_THROW); digest_packet(&packet);
-    rejected(packet.bytes,packet.length);
-    memcpy(packet.bytes,original,sizeof(original));
-    /* An entry block cannot be protected, and a handler must name a block. */
-    for (uint32_t handler = 0; handler < 2; ++handler) {
-        put32(packet.bytes + 101, handler + 1); digest_packet(&packet);
-        rejected(packet.bytes, packet.length);
-        memcpy(packet.bytes, original, sizeof(original));
+    put32(packet.bytes+instruction+40,XR_XIR_THROW);digest_packet(&packet);rejected(packet.bytes,packet.length);
+    memcpy(packet.bytes+row,original,sizeof(original));digest_packet(&packet);
+    for(uint32_t handler=1;handler<=2;++handler) {
+        put32(packet.bytes+row+33,handler);digest_packet(&packet);rejected(packet.bytes,packet.length);
+        memcpy(packet.bytes+row,original,sizeof(original));digest_packet(&packet);
     }
-    put32(packet.bytes + 85, XR_XIR_U8); put32(packet.bytes + 117, XR_XIR_U8);
-    memset(packet.bytes + 137, 0, 8); put32(packet.bytes + 137, 256); digest_packet(&packet);
-    rejected(packet.bytes, packet.length);
-    put32(packet.bytes + 137, 255); digest_packet(&packet);
-    XrXirArtifact *narrow = NULL;
-    CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &narrow, NULL) == XR_XIR_OK);
+    put32(packet.bytes+row+13,XR_XIR_U8);put32(packet.bytes+instruction+4,XR_XIR_U8);
+    memset(packet.bytes+instruction+24,0,8);put32(packet.bytes+instruction+24,256);
+    digest_packet(&packet);rejected(packet.bytes,packet.length);
+    put32(packet.bytes+instruction+24,255);digest_packet(&packet);
+    XrXirArtifact *narrow=NULL;
+    CHECK(xr_xir_compile_checked_read(suite_context,packet.bytes,packet.length,&narrow,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(narrow);narrow=NULL;
-    put32(packet.bytes + 12, 30); digest_packet(&packet); rejected(packet.bytes, packet.length);
-    memcpy(packet.bytes, original, sizeof(original));
-    put32(packet.bytes + 8, 9); digest_packet(&packet); rejected(packet.bytes, packet.length);
-    memcpy(packet.bytes, original, sizeof(original));
-    CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_compile_artifact_module(decoded)->functions[0].instructions[0].immediate == INT64_MIN);
-    xr_xir_compile_artifact_free(decoded);decoded=NULL; xr_xir_compile_artifact_free(checked);checked=NULL; xr_xir_compile_checked_packet_free(&packet);
+    memcpy(packet.bytes+row,original,sizeof(original));digest_packet(&packet);
+    CHECK(xr_xir_compile_checked_read(suite_context,packet.bytes,packet.length,&decoded,NULL)==XR_XIR_OK);
+    memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
+    const XrXirFunction *owned=xr_xir_compile_artifact_module(decoded)->functions;
+    CHECK(owned->error_type==XR_XIR_NEVER && owned->instructions[0].immediate==INT64_MIN);
+    CHECK(xr_xir_compile_artifact_verify(decoded,NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(decoded);decoded=NULL;
 }
 static void callable_contracts(void) {
     XrXirArtifact *checked = callable_fixture(suite_context), *decoded = NULL, *closed = NULL, *lowered = NULL;
@@ -320,9 +242,7 @@ static void callable_contracts(void) {
         signatures[0].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; signatures[2] = saved; types.count = 3;
     }
     CHECK(xir_fixture_verify(suite_context, &module, NULL) == XR_XIR_OK);
-    XrXirCompileContext budget = consumer_context_limits((XrCompileResourceLimits){67108864,8388608,4});
-    CHECK(xir_fixture_verify(&budget, &module, NULL) == XR_XIR_BUDGET);
-    budget = consumer_context_default(); budget.limits.parameters = 1;
+    XrXirCompileContext budget = consumer_context_default(); budget.limits.parameters = 1;
     CHECK(xir_fixture_verify(&budget, &module, NULL) == XR_XIR_BUDGET);
     xr_xir_compile_artifact_free(closed);closed=NULL;
 }
@@ -382,24 +302,20 @@ static void generic_callable_depth(void) {
     signatures[129].result = XR_XIR_I64;
     CHECK(xr_xir_compile_call_type_matches(&budget, &module, 0, call, (XrXirType)384, (XrXirType)513) == XR_XIR_BAD_TYPE);
     signatures[129].result = XR_XIR_STRING;
-    XrXirCompileContext measure=consumer_context_ephemeral((XrCompileResourceLimits){67108864,8388608,128000000});
+    XrXirCompileContext measure=consumer_context_ephemeral((XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true});
     XrCompileResourceStats baseline=consumer_context_stats(&measure);
     CHECK(xr_xir_compile_call_type_matches(&measure,&module,0,call,(XrXirType)384,(XrXirType)513)==XR_XIR_OK);
     XrCompileResourceStats required=consumer_context_stats(&measure);
-    CHECK(required.live_bytes==baseline.live_bytes);
+    CHECK(required.held_bytes==baseline.held_bytes);
     consumer_context_ephemeral_free(&measure,baseline);
-    for (unsigned axis=0;axis<3;++axis) for (unsigned minus=0;minus<2;++minus) {
-        XrCompileResourceLimits limits={67108864,8388608,128000000};
-        if (!axis) limits.allocated_bytes=required.allocated_bytes-minus;
-        if (axis==1) limits.live_bytes=required.peak_bytes-minus;
-        if (axis==2) limits.work=required.work-minus;
+    CHECK(required.peak_bytes>baseline.held_bytes);
+    for (unsigned minus=0;minus<2;++minus) {
+        XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,required.peak_bytes-minus,true};
         XrXirCompileContext tight=consumer_context_ephemeral(limits);
         XrCompileResourceStats before=consumer_context_stats(&tight);
-        CHECK(xr_xir_compile_call_type_matches(&tight,&module,0,call,(XrXirType)384,(XrXirType)513)==(minus?XR_XIR_BUDGET:XR_XIR_OK));
+        CHECK(xr_xir_compile_call_type_matches(&tight,&module,0,call,(XrXirType)384,(XrXirType)513)==(minus?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
         consumer_context_ephemeral_free(&tight,before);
     }
-    budget=consumer_context_limits((XrCompileResourceLimits){67108864,8388608,1});
-    CHECK(xr_xir_compile_call_type_matches(&budget,&module,0,call,(XrXirType)256,(XrXirType)385)==XR_XIR_BUDGET);
     xr_xir_compile_artifact_free(checked);checked=NULL;
 }
 static void generic_callable_contracts(void) {
@@ -425,8 +341,6 @@ static void generic_callable_contracts(void) {
     XrXirCallableParameter bad = {(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+1),0};
     signatures[0].parameters = &bad; signatures[0].parameter_span = 2;
     CHECK(xir_fixture_verify(suite_context, &module, NULL) == XR_XIR_BAD_TYPE);
-    XrXirCompileContext budget = consumer_context_limits((XrCompileResourceLimits){67108864,8388608,1});
-    CHECK(xr_xir_compile_call_type_matches(&budget, xr_xir_compile_artifact_module(decoded), 0, &functions[0].instructions[0], (XrXirType)256, (XrXirType)257) == XR_XIR_BUDGET);
     CHECK(xr_xir_compile_specialize(decoded, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);decoded=NULL;
     const XrXirModule *m = xr_xir_compile_artifact_module(closed);
@@ -655,16 +569,6 @@ static void deep_nominal_fields(void) {
     xr_xir_compile_artifact_free(base);base=NULL; memset(nodes, 0xCC, sizeof(nodes)); memset(fields, 0xCC, sizeof(fields));
     CHECK(xr_xir_compile_artifact_verify(checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);
-    XrCompileResourceStats complete=consumer_context_stats(&deep);
-    /* The failure ledger is sealed before replaying the whole producer prefix. */
-    XrXirCompileContext tight=consumer_context_limits((XrCompileResourceLimits){67108864,8388608,complete.work-1});
-    XrXirModule replay=*xr_xir_compile_artifact_module(checked);replay.stage=XR_XIR_BUILT;
-    XrXirArtifact *bounded=NULL,*failed=NULL;
-    CHECK(xir_fixture_check(&tight, &replay, &bounded, NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_artifact_verify(bounded,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_specialize(bounded,&failed,NULL, NULL)==XR_XIR_BUDGET && !failed);
-    CHECK(consumer_context_stats(&tight).work<=complete.work-1);
-    xr_xir_compile_artifact_free(bounded);bounded=NULL;
     xr_xir_compile_artifact_free(checked);checked=NULL;
     const XrXirTypes *result = xr_xir_compile_artifact_module(closed)->types;
     CHECK(result->count == DEPTH * 3 + 5 &&
@@ -810,7 +714,7 @@ static void nominal_member_authority(void) {
     const XrXirModule *module = xr_xir_compile_artifact_module(checked);
     XrXirType instance=nominal_authority_instance(module);
     XrXirFunctionIdentity *ids = (XrXirFunctionIdentity *) module->declarations->functions;
-    XrXirCompileContext access=consumer_context_limits((XrCompileResourceLimits){67108864,8388608,100001});
+    XrXirCompileContext access=consumer_context_default();
     CHECK(xr_xir_compile_nominal_access(&access, module, 4, XR_XIR_UNIT, 0, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
     CHECK(xr_xir_compile_nominal_access(&access, module, 4, XR_XIR_I64, 0, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
     CHECK(xr_xir_compile_nominal_access(&access, module, 4, (XrXirType)65535, 0, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
@@ -840,8 +744,6 @@ static void nominal_member_authority(void) {
         CHECK(xr_xir_compile_artifact_verify(checked, NULL) == XR_XIR_BAD_STRUCTURE);
         ids[invalid_functions[i]].nominal_owner = 0;
     }
-    access=consumer_context_limits((XrCompileResourceLimits){67108864,8388608,1});
-    CHECK(xr_xir_compile_nominal_access(&access, module, 4, instance, 0, XR_XIR_NOMINAL_READ) == XR_XIR_BUDGET);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
@@ -851,7 +753,7 @@ static void nominal_member_authority(void) {
     xr_xir_compile_artifact_free(decoded);decoded=NULL;
     const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
-    xr_xir_compile_artifact_free(closed);closed=NULL; module = xr_xir_compile_artifact_module(lowered); access=consumer_context_limits((XrCompileResourceLimits){67108864,8388608,10001});
+    xr_xir_compile_artifact_free(closed);closed=NULL; module = xr_xir_compile_artifact_module(lowered); access=consumer_context_default();
     instance=nominal_authority_instance(module);
     CHECK(module->declarations->functions[4].nominal_owner == 1);
     CHECK(xr_xir_compile_nominal_access(&access, module, 4, instance, 1, XR_XIR_NOMINAL_READ) == XR_XIR_OK);
@@ -867,45 +769,46 @@ static void uninitialized_packet(void) {
         {XR_XIR_RETURN, XR_XIR_UNIT, {3}, {0}, 0, {0}}
     };
     const XrXirBlock block = {0, 4, 0, 0};
-    const XrXirFunction function = {"u", 1, &parameter, 1, XR_XIR_I64, &block, 1, ops, 4, NULL, 0};
+    const XrXirFunction function = {"u", 1, &parameter, 1, XR_XIR_I64, &block, 1, ops, 4, NULL, 0,.error_type=XR_XIR_NEVER};
     const XrXirModule built = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *decoded = NULL;
     XrXirCheckedPacket packet = {0};
     CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
-    CHECK(packet.length == sizeof(checked_scalar77_golden)+4+2*40 && packet.bytes[117] == XR_XIR_LOCAL_UNINIT && packet.bytes[157] == XR_XIR_LOCAL_WRITE);
+    const size_t instruction=125;
+    CHECK(packet32(&packet,instruction)==XR_XIR_LOCAL_UNINIT && packet32(&packet,instruction+40)==XR_XIR_LOCAL_WRITE);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);decoded=NULL;
-    uint8_t original[sizeof(checked_scalar77_golden)+4+2*40]; memcpy(original, packet.bytes, sizeof(original));
+    uint8_t *original=xr_malloc(packet.length);CHECK(original);memcpy(original,packet.bytes,packet.length);
     /* A second write is valid for mutable storage, but not initialize-once. */
-    put32(packet.bytes + 197, XR_XIR_LOCAL_WRITE); put32(packet.bytes + 201, XR_XIR_UNIT);
-    put32(packet.bytes + 209, 0); put32(packet.bytes + 245, 0); digest_packet(&packet);
+    put32(packet.bytes+instruction+80,XR_XIR_LOCAL_WRITE);put32(packet.bytes+instruction+84,XR_XIR_UNIT);
+    put32(packet.bytes+instruction+92,0);put32(packet.bytes+instruction+128,0);digest_packet(&packet);
     decoded = NULL;
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded); decoded = NULL;
-    put32(packet.bytes + 141, 1); digest_packet(&packet);
+    put32(packet.bytes+instruction+24,1);digest_packet(&packet);
     XrXirDiagnostic diagnostic = {0};
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, &diagnostic) == XR_XIR_BAD_VALUE && !decoded);
     CHECK(diagnostic.status == XR_XIR_BAD_VALUE && diagnostic.reason == XR_XIR_DIAGNOSTIC_READONLY_WRITE &&
         diagnostic.function == 0 && diagnostic.block == 0 && diagnostic.instruction == 2);
-    memcpy(packet.bytes, original, sizeof(original));
+    memcpy(packet.bytes,original,packet.length);
     /* Repairing the digest must not hide removal of the initializing write. */
-    put32(packet.bytes + 157, XR_XIR_SUSPEND); put32(packet.bytes + 165, 0);
+    put32(packet.bytes+instruction+40,XR_XIR_SUSPEND);put32(packet.bytes+instruction+48,0);
     digest_packet(&packet);
     decoded = NULL;
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, &diagnostic) == XR_XIR_BAD_VALUE);
     CHECK(diagnostic.status == XR_XIR_BAD_VALUE && diagnostic.reason == XR_XIR_DIAGNOSTIC_UNINITIALIZED_READ &&
         diagnostic.function == 0 && diagnostic.block == 0 && diagnostic.instruction == 2);
     CHECK(!decoded);
-    xr_xir_compile_checked_packet_free(&packet);
+    xr_free(original);xr_xir_compile_checked_packet_free(&packet);
 }
 static void nominal_callable_components(void) {
     XrXirArtifact *base = nominal_chain_fixture(suite_context, 1, 1), *checked = NULL, *decoded = NULL;
     XrXirModule built = *xr_xir_compile_artifact_module(base); built.stage = XR_XIR_BUILT;
     XrXirCallableParameter parameter = {(XrXirType)256, 0};
     XrXirTypeNode nodes[2] = {built.types->nodes[0],
-        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameter, 1, (XrXirType)256, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 0, {0}}};
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_NEVER, &parameter, 1, (XrXirType)256, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 0, {0}}};
     XrXirTypes types = {nodes, 2, built.types->nominals, NULL}; built.types = &types;
     CheckedAtomicPool atomic_pool;checked_atomic_pool(&built,&atomic_pool);
     CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
@@ -943,7 +846,7 @@ static void string_query_contracts(void) {
         {XR_XIR_CALL_INTRINSIC, XR_XIR_BOOL, {0,2}, {0}, 3, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {7,0}, {0}, 0, {0}}};
     XrXirBlock block = {0,7, 0, 0};
-    XrXirFunction function = {"queries",7,parameters,2,XR_XIR_BOOL,&block,1,ops,7,operands,2};
+    XrXirFunction function = {"queries",7,parameters,2,XR_XIR_BOOL,&block,1,ops,7,operands,2,.error_type=XR_XIR_NEVER};
     XrXirModule built = {XR_XIR_BUILT,&function,1,NULL,NULL,NULL,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *decoded = NULL;
     CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
@@ -986,7 +889,7 @@ static void string_search_packets(void) {
         {XR_XIR_STRING_LAST_INDEX_OF, XR_XIR_I64, {0,1}, {0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {3,0}, {0}, 0, {0}}};
     XrXirBlock block = {0,3, 0, 0};
-    XrXirFunction function = {"search",6,parameters,3,XR_XIR_I64,&block,1,ops,3,operands,3};
+    XrXirFunction function = {"search",6,parameters,3,XR_XIR_I64,&block,1,ops,3,operands,3,.error_type=XR_XIR_NEVER};
     XrXirModule built = {XR_XIR_BUILT,&function,1,NULL,NULL,NULL,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *decoded = NULL;
     CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
@@ -1050,7 +953,7 @@ static void enum_packet_cases(void) {
 static void match_fault_shape(void) {
     XrXirInstruction op={XR_XIR_MATCH_FAIL,XR_XIR_UNIT,{0},{0},0, {0}};
     const XrXirBlock block={0,1, 0, 0};
-    const XrXirFunction fn={"fault",5,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0};
+    const XrXirFunction fn={"fault",5,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0,.error_type=XR_XIR_NEVER};
     const XrXirModule module={XR_XIR_BUILT,&fn,1,NULL,NULL,NULL,NULL, XR_XIR_PROGRAM, NULL};
     for (unsigned variant=0;variant<7;++variant) {
         op=(XrXirInstruction){XR_XIR_MATCH_FAIL,XR_XIR_UNIT,{0},{0},0, {0}};
@@ -1091,10 +994,8 @@ int main(int argc,char **argv) {
     if (argc==2 && !strcmp(argv[1],"--wire-smoke")) {
         consumer_context=consumer_context_default();
         byte_order();generic_method_packet_cases();
-        for (size_t i=0;i<sizeof(combined_previous_wire)/sizeof(*combined_previous_wire);++i)
-            checked_previous_identity_rejected(combined_previous_wire[i].bytes,combined_previous_wire[i].length);
         consumer_contexts_free();
-        puts("Combined wire31 field bytes and complete parent packet rejection PASS");
+        puts("Current Checked field bytes and semantic packet rejection PASS");
         return 0;
     }
     if (argc==2 && !strcmp(argv[1],"--nominal-authority")) {

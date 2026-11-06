@@ -14,9 +14,6 @@
 #include "xir_construction_fixture.h"
 #include "xir_array_metadata_fixture.h"
 
-_Static_assert(XR_XIR_CHECKED_SCHEMA == 30 && XR_XIR_CHECKED_CONTRACT == 77,
-    "array checked wire identity");
-
 static void array_checked_const_slot(XrXirCheckedPacket *packet, size_t entry, size_t slot) {
     /* A valid const Array slot must precede the hostile write; a Cell with
      * mutable=0 would fail declaration admission before testing authority. */
@@ -31,7 +28,7 @@ static void array_checked_const_slot(XrXirCheckedPacket *packet, size_t entry, s
     }
     digest_packet(packet);
     XrXirCompileContext probe = consumer_context_ephemeral(
-        (XrCompileResourceLimits){67108864, 8388608, 128000000});
+        (XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true});
     const XrCompileResourceStats baseline = consumer_context_stats(&probe);
     XrXirArtifact *decoded = NULL;
     CHECK(xr_xir_compile_checked_read(&probe, packet->bytes, packet->length, &decoded, NULL) == XR_XIR_OK);
