@@ -85,7 +85,9 @@ static void capacity_budget_failed_output(XrXirInstance *instance,bool exhausted
 static void capacity_budget_close(CapacityBudgetCase *test,bool exhausted) {
     const XrXirDomainBudgetStats spent=xr_xir_domain_budget_stats(test->domain);
     capacity_watched=NULL;xr_xir_value_drop(&test->alias);
-    CHECK(xr_xir_instance_free(test->first)==completion);
+    CHECK(test->first->budget.exhausted==exhausted);
+    CHECK(xr_xir_task_executor_completion_status(test->first->executor)==test->completion);
+    CHECK(xr_xir_instance_free(test->first)==test->completion);
     CHECK(xr_xir_instance_free(test->second)==XR_XIR_CALL_READY);
     const XrXirDomainBudgetStats released=xr_xir_domain_budget_stats(test->domain);
     const XrXirDomainStats physical=xr_xir_domain_stats(test->domain);
