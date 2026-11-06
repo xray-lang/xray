@@ -74,7 +74,7 @@ static void capacity_escape(CapacityCompile *run) {
     }
     xr_xir_value_drop(&values[1]);CHECK(runtime_live&&runtime_bytes);
     xr_xir_value_drop(&values[0]);CHECK(!runtime_live&&!runtime_bytes);
-    CHECK(capacity_stats(&run->context).live_bytes==run->baseline.live_bytes);
+    CHECK(capacity_stats(&run->context).held_bytes==run->baseline.held_bytes);
     puts("capacity escaped Array<String> cap>=9 exact NUL UTF8 after two Instances/Program drop physical0");
 }
 #endif // XIR_ARRAY_CAPACITY_CASES_H

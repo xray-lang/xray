@@ -64,6 +64,10 @@ static XrXirInstance *capacity_open(CapacityCompile *run) {
 #include "xir_array_capacity_vm_paths.h"
 #include "xir_array_capacity_compiler.h"
 int main(int argc,char **argv) {
+    if(argc==3&&!strcmp(argv[1],"--compiler-memory")) {
+        CHECK(argv[2][0]>='0'&&argv[2][0]<='3'&&!argv[2][1]);
+        capacity_memory_probe((unsigned)(argv[2][0]-'0'));return 0;
+    }
     if(capacity_parallel_cli(argc,argv))return 0;
     if(argc==3&&!strcmp(argv[1],"--compiler")){
         const unsigned mode=capacity_parallel_argument(argv[2],3);
@@ -88,12 +92,12 @@ int main(int argc,char **argv) {
     const char *emit=argc==3?argv[2]:NULL;
     CapacityCompile run=capacity_build(SIZE_MAX,capacity_limits(),mode,emit);
     if(run.status!=XR_XIR_OK)fprintf(stderr,
-        "capacity build status%u stage%u sites%zu allocated%llu peak%llu work%llu\n",
+        "capacity build status%u stage%u sites%zu allocated%llu peak%llu\n",
         run.status,run.stage,run.sites,(unsigned long long)run.stats.allocated_bytes,
-        (unsigned long long)run.stats.peak_bytes,(unsigned long long)run.stats.work);
+        (unsigned long long)run.stats.peak_bytes);
     CHECK(run.status==XR_XIR_OK);
     if(!emit){capacity_goldens(&run);if(!mode)capacity_vm_paths(&run);capacity_escape(&run);}
-    printf("capacity baseline mode%u sites%zu allocated%llu peak%llu work%llu\n",mode,run.sites,
-        (unsigned long long)run.stats.allocated_bytes,(unsigned long long)run.stats.peak_bytes,(unsigned long long)run.stats.work);
+    printf("capacity baseline mode%u sites%zu allocated%llu peak%llu\n",mode,run.sites,
+        (unsigned long long)run.stats.allocated_bytes,(unsigned long long)run.stats.peak_bytes);
     capacity_release(&run);instance_compile_report();return 0;
 }

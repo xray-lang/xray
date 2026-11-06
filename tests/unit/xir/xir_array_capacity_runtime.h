@@ -194,7 +194,7 @@ static void capacity_runtime_census(CapacityCompile *run) {
     capacity_initialization_census(run);
     capacity_transaction_census(run,"committed");
     capacity_transaction_census(run,"committedThenAllocate");capacity_runtime_limits(run);
-    CHECK(capacity_stats(&run->context).live_bytes==run->stats.live_bytes);
+    CHECK(capacity_stats(&run->context).held_bytes==run->stats.held_bytes);
 }
 static void capacity_transaction_cancel(CapacityCompile *run,const char *name) {
     XrXirInstance *instance=capacity_open(run);capacity_watch(instance);
@@ -228,6 +228,6 @@ static void capacity_transaction_cancel(CapacityCompile *run,const char *name) {
 }
 static void capacity_runtime_cancel(CapacityCompile *run) {
     capacity_transaction_cancel(run,"committed");capacity_transaction_cancel(run,"committedThenAllocate");
-    CHECK(capacity_stats(&run->context).live_bytes==run->stats.live_bytes);
+    CHECK(capacity_stats(&run->context).held_bytes==run->stats.held_bytes);
 }
 #endif // XIR_ARRAY_CAPACITY_RUNTIME_H

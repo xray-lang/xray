@@ -44,22 +44,10 @@ static void return_copy_compiler(unsigned mode) {
         capacity_release(&rejected);
         if (!(failure % 512)) { printf("return-copy mode%u compiler FI %zu/%zu physical=0/0\n", mode, failure + 1, sites); fflush(stdout); }
     }
-    for (unsigned axis = 0; axis < 3; ++axis) for (unsigned shortfall = 0; shortfall < 2; ++shortfall) {
-        XrCompileResourceLimits limits = capacity_limits();
-        uint64_t exact = axis == 0 ? stats.allocated_bytes : axis == 1 ? stats.peak_bytes : stats.work;
-        CHECK(exact > 1);
-        if (axis == 0) limits.allocated_bytes = exact - shortfall;
-        else if (axis == 1) limits.live_bytes = exact - shortfall;
-        else limits.work = exact - shortfall;
-        CapacityCompile run = capacity_build(SIZE_MAX, limits, mode, NULL);
-        CHECK(run.status == (shortfall ? XR_XIR_BUDGET : XR_XIR_OK));
-        CHECK(shortfall ? !run.program && !run.lowered : run.program != NULL);
-        CHECK(run.stats.allocated_bytes <= limits.allocated_bytes && run.stats.peak_bytes <= limits.live_bytes && run.stats.work <= limits.work);
-        capacity_release(&run);
-    }
-    printf("return-copy mode%u compiler FI complete actual-sites%zu allocated%llu peak%llu work%llu six boundaries physical=0/0\n",
-        mode, sites, (unsigned long long)stats.allocated_bytes, (unsigned long long)stats.peak_bytes,
-        (unsigned long long)stats.work);
+    for (unsigned shortfall = 0; shortfall < 2; ++shortfall)
+        capacity_memory_case(mode, stats.peak_bytes, shortfall != 0);
+    printf("return-copy mode%u compiler FI complete actual-sites%zu allocated%llu peak%llu held exact/minus-one physical=0/0\n",
+        mode, sites, (unsigned long long)stats.allocated_bytes, (unsigned long long)stats.peak_bytes);
 }
 static uint32_t return_copy_find(const CapacityCompile *run, const char *name) {
     for (uint32_t f = 0; f < run->module->function_count; ++f) {
@@ -168,6 +156,10 @@ static void return_copy_escape(CapacityCompile *run) {
     xr_xir_value_drop(&values[0]); CHECK(!runtime_live && !runtime_bytes);
 }
 int main(int argc, char **argv) {
+    if(argc==3&&!strcmp(argv[1],"--compiler-memory")) {
+        CHECK(argv[2][0]>='0'&&argv[2][0]<='3'&&!argv[2][1]);
+        capacity_memory_probe((unsigned)(argv[2][0]-'0'));return 0;
+    }
     if (argc == 3 && !strcmp(argv[1], "--compiler")) {
         unsigned mode = (unsigned)strtoul(argv[2], NULL, 10); CHECK(mode < 4);
         return_copy_compiler(mode); instance_compile_report(); return 0;
@@ -175,8 +167,8 @@ int main(int argc, char **argv) {
     CHECK(argc == 2 || argc == 3); unsigned mode = (unsigned)strtoul(argv[1], NULL, 10); CHECK(mode < 4);
     bool normal = argc == 3 && !strcmp(argv[2], "--normal");
     CapacityCompile run = capacity_build(SIZE_MAX, capacity_limits(), mode, argc == 3 && !normal ? argv[2] : NULL);
-    printf("return-copy compiler status%u stage%u sites%zu allocated%llu peak%llu work%llu\n", run.status, run.stage, run.sites,
-        (unsigned long long)run.stats.allocated_bytes, (unsigned long long)run.stats.peak_bytes, (unsigned long long)run.stats.work);
+    printf("return-copy compiler status%u stage%u sites%zu allocated%llu peak%llu\n", run.status, run.stage, run.sites,
+        (unsigned long long)run.stats.allocated_bytes, (unsigned long long)run.stats.peak_bytes);
     CHECK(run.status == XR_XIR_OK);
     if (normal) {
         XrXirInstance *first = return_copy_open(&run), *second = return_copy_open(&run);

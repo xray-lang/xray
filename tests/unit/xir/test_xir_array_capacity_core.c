@@ -26,7 +26,7 @@ static CapacityCore capacity_core_new(uint64_t live_limit, uint64_t requested, u
     CHECK(xr_xir_domain_new(65536, &f.reading) == XR_XIR_VALUE_OK);
     XrXirCallableParameter empty_field = {XR_XIR_UNIT, 0};
     XrXirNominalIdentity empty = {.module = {"capacity", 8}, .name = {"Empty", 5},
-        .exported = 1, .kind = XR_XIR_NOMINAL_STRUCT};
+        .exported = 1, .kind = XR_XIR_NOMINAL_STRUCT, .parent = 0};
     XrXirNominalTable nominals = {.count = 1, .identities = &empty};
     XrXirTypeNode nodes[] = {
         {.kind = XR_XIR_TYPE_ARRAY, .element = XR_XIR_I64},
@@ -38,7 +38,7 @@ static CapacityCore capacity_core_new(uint64_t live_limit, uint64_t requested, u
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)261}
     };
     XrXirTypes types = {nodes, 7, &nominals, NULL};
-    CHECK(value_compile_arena(&types, 65536, value_compile_limits(65536, 0, 10000), &f.arena) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(&types, 65536, value_compile_limits(), &f.arena) == XR_XIR_VALUE_OK);
     f.admission = (XrXirValueAdmission){f.arena, f.domain, NULL, NULL, 65536, 65536};
     return f;
 }

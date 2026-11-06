@@ -177,6 +177,6 @@ static void capacity_runtime_budget(CapacityCompile *run,unsigned mode) {
         }
     }
     capacity_budget_oom_retry(run,&reserve);
-    CHECK(capacity_stats(&run->context).live_bytes==run->stats.live_bytes);
+    CHECK(capacity_stats(&run->context).held_bytes==run->stats.held_bytes);
 }
 #endif // XIR_ARRAY_CAPACITY_BUDGET_H

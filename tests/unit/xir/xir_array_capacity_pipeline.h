@@ -12,6 +12,7 @@
 #ifndef XIR_ARRAY_CAPACITY_PIPELINE_H
 #define XIR_ARRAY_CAPACITY_PIPELINE_H
 #include "xir/xxir_program_packet_internal.h"
+#include "xir/xxir_compile_memory.h"
 #include "base/xsha256.h"
 #ifndef XR_CAPACITY_COMPONENT
 #define XR_CAPACITY_COMPONENT "transaction"
@@ -39,8 +40,7 @@ static void capacity_mixed_free(void *pointer) {
 }
 static XrXirStatus capacity_allocate(const XrXirCompileContext *context, size_t count, size_t bytes, void **out) {
     XrCompileResourceStatus status = xr_compile_resources_calloc(context->resources, count, bytes, out);
-    return status == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
-        status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+    return xir_compile_resource_status(status);
 }
 #endif
 static XrXirStatus capacity_seal(CapacityCompile *run, unsigned mode) {
@@ -82,7 +82,7 @@ static XrXirStatus capacity_seal(CapacityCompile *run, unsigned mode) {
 static XrCompileResourceStats capacity_stats(const XrXirCompileContext *context) {
     XrCompileResourceStats stats = {0};
     CHECK(xr_compile_resources_stats(context->resources, &stats) == XR_COMPILE_RESOURCE_OK);
-    CHECK(stats.live_bytes == instance_compile_bytes);
+    CHECK(stats.held_bytes == instance_compile_bytes);
     return stats;
 }
 static bool capacity_compiler_digest;
@@ -96,10 +96,10 @@ static void capacity_profile_stage(CapacityCompile *run, const char *stage) {
     if (!capacity_profile) return;
     clock_t now = clock();
     XrCompileResourceStats stats = capacity_stats(&run->context);
-    printf("compiler profile %s seconds%.6f cumulative-sites%zu allocated%llu live%llu peak%llu work%llu\n",
+    printf("compiler profile %s seconds%.6f cumulative-sites%zu allocated%llu live%llu peak%llu\n",
         stage, (double)(now - capacity_profile_clock) / CLOCKS_PER_SEC, instance_compile_attempts,
-        (unsigned long long)stats.allocated_bytes, (unsigned long long)stats.live_bytes,
-        (unsigned long long)stats.peak_bytes, (unsigned long long)stats.work);
+        (unsigned long long)stats.allocated_bytes, (unsigned long long)stats.held_bytes,
+        (unsigned long long)stats.peak_bytes);
     fflush(stdout); capacity_profile_clock = now;
 }
 static CapacityCompile capacity_build(size_t failure, XrCompileResourceLimits limits, unsigned mode, const char *emit) {
@@ -107,7 +107,10 @@ static CapacityCompile capacity_build(size_t failure, XrCompileResourceLimits li
     CapacityCompile run = {0}; run.status = XR_XIR_OUT_OF_MEMORY;
     run.context.limits = xr_xir_compile_default_limits();
     XrCompileResourceStatus resource = xr_compile_resources_new(&limits, &run.context.resources);
-    if (resource != XR_COMPILE_RESOURCE_OK) { CHECK(!run.context.resources); run.sites = instance_compile_attempts; return run; }
+    if (resource != XR_COMPILE_RESOURCE_OK) {
+        CHECK(!run.context.resources); run.status = xir_compile_resource_status(resource);
+        run.sites = instance_compile_attempts; return run;
+    }
     run.baseline = capacity_stats(&run.context);
     capacity_profile_stage(&run, "resource-new");
     XrCompilerSession *session = NULL; XrXirSourceResult result = {0};
@@ -115,7 +118,7 @@ static CapacityCompile capacity_build(size_t failure, XrCompileResourceLimits li
     XrXirSourceDiagnostic diagnostic = {0}; XrXirCheckedPacket bytes = {0}; XrXirCSource source = {0}; XrXirSourceFailure path={0};
     XrCompileResourceStatus session_status = xr_compile_session_new(run.context.resources, &session);
     if (session_status != XR_COMPILE_RESOURCE_OK) {
-        run.status = session_status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+        run.status = xir_compile_resource_status(session_status);
         goto done;
     }
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_CAPACITY_FIXTURES};
@@ -180,12 +183,32 @@ done:
 static void capacity_release(CapacityCompile *run) {
     xr_xir_compile_artifact_free(run->lowered); xr_xir_compile_program_drop(run->program);
     if (run->context.resources) {
-        CHECK(capacity_stats(&run->context).live_bytes == run->baseline.live_bytes);
+        CHECK(capacity_stats(&run->context).held_bytes == run->baseline.held_bytes);
         xr_compile_resources_release(run->context.resources);
     }
     *run = (CapacityCompile){0}; instance_compile_zero(); CHECK(!runtime_live && !runtime_bytes);
 }
 static XrCompileResourceLimits capacity_limits(void) {
-    return (XrCompileResourceLimits){67108864, 8388608, 128000000};
+    return (XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY, 0, true};
+}
+static inline XrXirStatus capacity_memory_case(unsigned mode, uint64_t peak, bool shortfall) {
+    CHECK(peak > 1);
+    const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE, peak - (shortfall ? 1u : 0u), true};
+    CapacityCompile run = capacity_build(SIZE_MAX, limits, mode, NULL);
+    const XrXirStatus expected = shortfall ? XR_XIR_MEMORY_LIMIT : XR_XIR_OK;
+    CHECK(run.status == expected);
+    CHECK(shortfall ? !run.program && !run.lowered : run.program != NULL);
+    CHECK(run.stats.peak_bytes <= limits.memory_limit);
+    capacity_release(&run);
+    return expected;
+}
+static inline void capacity_memory_probe(unsigned mode) {
+    CapacityCompile run = capacity_build(SIZE_MAX, capacity_limits(), mode, NULL);
+    CHECK(run.status == XR_XIR_OK && run.program);
+    const uint64_t peak = run.stats.peak_bytes;
+    capacity_release(&run);
+    for (unsigned shortfall = 0; shortfall < 2; ++shortfall)
+        capacity_memory_case(mode, peak, shortfall != 0);
+    printf("capacity compiler mode%u held peak%llu exact/minus-one physical0\n", mode, (unsigned long long)peak);
 }
 #endif // XIR_ARRAY_CAPACITY_PIPELINE_H

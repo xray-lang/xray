@@ -136,10 +136,14 @@ static void reserve_escape(CapacityCompile *run) {
     xr_xir_value_drop(&values[0]); CHECK(!runtime_live && !runtime_bytes);
 }
 int main(int argc, char **argv) {
+    if(argc==3&&!strcmp(argv[1],"--compiler-memory")) {
+        CHECK(argv[2][0]>='0'&&argv[2][0]<='3'&&!argv[2][1]);
+        capacity_memory_probe((unsigned)(argv[2][0]-'0'));return 0;
+    }
     CHECK(argc == 2 || argc == 3); unsigned mode = (unsigned)strtoul(argv[1], NULL, 10); CHECK(mode < 4);
     CapacityCompile run = capacity_build(SIZE_MAX, capacity_limits(), mode, argc == 3 ? argv[2] : NULL);
-    printf("reserve compiler status%u stage%u sites%zu allocated%llu peak%llu work%llu\n", run.status, run.stage, run.sites,
-        (unsigned long long)run.stats.allocated_bytes, (unsigned long long)run.stats.peak_bytes, (unsigned long long)run.stats.work);
+    printf("reserve compiler status%u stage%u sites%zu allocated%llu peak%llu\n", run.status, run.stage, run.sites,
+        (unsigned long long)run.stats.allocated_bytes, (unsigned long long)run.stats.peak_bytes);
     CHECK(run.status == XR_XIR_OK);
     if (argc == 2) { reserve_failures(&run, mode); reserve_cancellation(&run, mode); reserve_escape(&run); }
     capacity_release(&run); instance_compile_report(); return 0;

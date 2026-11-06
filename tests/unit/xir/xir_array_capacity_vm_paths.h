@@ -43,7 +43,7 @@ static void capacity_vm_path_fixture(CapacityVmPathFixture *path) {
     fixture->ops[13].immediate=1;
     fixture->blocks[2]=(XrXirBlock){0,9,0,0};
     fixture->functions[2]=(XrXirFunction){"badIndex",8,NULL,0,XR_XIR_BOOL,
-        &fixture->blocks[2],1,&fixture->ops[9],9,fixture->operands,1};
+        &fixture->blocks[2],1,&fixture->ops[9],9,fixture->operands,1,.error_type=XR_XIR_NEVER};
     path->entry[0]=(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}};
     path->entry[1]=(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
     path->entry_block=(XrXirBlock){0,2,0,0};
@@ -51,12 +51,12 @@ static void capacity_vm_path_fixture(CapacityVmPathFixture *path) {
     memcpy(path->identities,fixture->identities,sizeof(fixture->identities));
     path->identities[1].exported=1;path->identities[2].exported=1;
     path->functions[3]=(XrXirFunction){"main",4,NULL,0,XR_XIR_I64,
-        &path->entry_block,1,path->entry,2,NULL,0};
+        &path->entry_block,1,path->entry,2,NULL,0,.error_type=XR_XIR_NEVER};
     fixture->declarations.functions=path->identities;fixture->declarations.entry_function=3;
     fixture->module.functions=path->functions;fixture->module.function_count=4;
 }
 static void capacity_vm_paths(CapacityCompile *run) {
-    const uint64_t baseline=capacity_stats(&run->context).live_bytes;
+    const uint64_t baseline=capacity_stats(&run->context).held_bytes;
     CapacityVmPathFixture fixture;capacity_vm_path_fixture(&fixture);
     XrXirArtifact *checked=NULL,*replay=NULL,*specialized=NULL,*lowered=NULL;
     CHECK(xir_fixture_check(&run->context, &fixture.metadata.module, &checked, NULL)==XR_XIR_OK);
@@ -93,7 +93,7 @@ static void capacity_vm_paths(CapacityCompile *run) {
         capacity_failed_output(instances[i]);
         CHECK(xr_xir_instance_free(instances[i])==XR_XIR_CALL_READY);
     }
-    CHECK(!runtime_live&&!runtime_bytes&&capacity_stats(&run->context).live_bytes==baseline);
+    CHECK(!runtime_live&&!runtime_bytes&&capacity_stats(&run->context).held_bytes==baseline);
     puts("capacity VM complete Built/CheckedReplay/specialize/Lowered READ index-place cap>=13 dual BOUNDS430 index1/len1 physical0");
 }
 #endif // XIR_ARRAY_CAPACITY_VM_PATHS_H

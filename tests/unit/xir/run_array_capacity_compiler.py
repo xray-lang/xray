@@ -53,10 +53,10 @@ def baseline(record, mode):
     checked(type(sites) is int and 0 < sites <= 67108864, "Nonfinite whole-graph site denominator")
     checked(record.get("oom_status") == 7 and record.get("functions", 0) > 0 and
             0 < record.get("c_bytes", 0) <= 1048576, "Complete Program/C-output contract changed")
-    checked((record.get("allocated_cap"), record.get("live_cap"), record.get("work_cap")) ==
-            (67108864, 8388608, 128000000), "Whole-graph resource caps changed")
-    for value, cap in (("allocated", "allocated_cap"), ("peak", "live_cap"), ("work", "work_cap")):
-        checked(type(record.get(value)) is int and 1 < record[value] <= record[cap], "Baseline budget changed")
+    checked(record.get("memory_mode") == "ordinary" and record.get("profile_allocations") is True,
+            "Compiler owner must use ordinary memory and optional allocation profiling")
+    for value in ("allocated", "peak"):
+        checked(type(record.get(value)) is int and record[value] > 1, "Missing actual memory observation")
     zero_physical(record)
     return sites
 
@@ -182,15 +182,14 @@ def main():
         launch("bounds", ["--compiler-bounds", mode])
         wait_phase()
         rows = records(root / "bounds.jsonl")
-        checked(len(rows) == 9 and rows[0] == prefix and rows[1] == first, "Bounds normal baseline changed")
+        checked(len(rows) == 5 and rows[0] == prefix and rows[1] == first, "Bounds normal baseline changed")
         complete(rows[-1], options.mode, 0, 1, sites)
-        for axis in range(3):
-            for shortfall in range(2):
-                row = rows[2 + 2 * axis + shortfall]
-                checked(row.get("kind") == "axis" and row.get("mode") == options.mode and
-                        row.get("axis") == axis and row.get("shortfall") == shortfall and
-                        row.get("status") == (6 if shortfall else 0), "Exact/minus1 resource responsibility missing")
-                zero_physical(row)
+        for shortfall in range(2):
+            row = rows[2 + shortfall]
+            checked(row.get("kind") == "axis" and row.get("mode") == options.mode and
+                    row.get("axis") == 0 and row.get("shortfall") == shortfall and
+                    row.get("status") == (12 if shortfall else 0), "Held memory exact/minus1 responsibility missing")
+            zero_physical(row)
         checked(not active and time.monotonic() < deadline, "Incomplete process drain/deadline")
         checked(hashlib.sha256(executable.read_bytes()).hexdigest() == manifest["executable_sha256"],
                 "Executable changed during complete fault census")
