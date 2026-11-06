@@ -228,23 +228,33 @@ static void selector_current_handoff(void) {
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&context,&fixture.raw.module,&checked,NULL)==XR_XIR_OK && checked);
     memset(&fixture,0xDC,sizeof(fixture));
-    CHECK(xir_artifact_verify_raw_source_effects(checked,&effects,NULL,NULL)==XR_XIR_OK && effects);
+    SelectorCurrentPoll poll={0};XrCompileRequestControl control={0};
+    XrCompileRequestOptions options={.cancel_poll=selector_current_poll,.cancel_context=&poll};
+    CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+    CHECK(xir_artifact_verify_raw_source_effects(checked,&effects,NULL,&control)==XR_XIR_OK && effects && poll.calls);
     EffectInvocationFinal *final=effects->invocations->final;
-    SelectorCurrentPoll poll={0};
-    CHECK(xr_compile_resources_begin_cancel(context.resources,selector_current_poll,&poll)==XR_COMPILE_RESOURCE_OK);
     {
         EffectBodyCurrentRead current={0};CHECK(effect_body_current_open(&context,final->material,&current)==XR_XIR_OK);
         size_t allocated=rp_attempts;uint64_t physical=rp_live_bytes;uint32_t calls=poll.calls;
         rp_allocation_observer=selector_no_callback;rp_release_observer=selector_no_callback;
-        CHECK(effect_capture_current_match(&context,final,&current)==XR_XIR_OK && poll.calls>calls);
+        CHECK(effect_capture_current_match(&context,final,&current)==XR_XIR_OK && poll.calls==calls);
         poll.requested=true;
-        CHECK(effect_capture_current_match(&context,final,&current)==XR_XIR_BAD_STRUCTURE);
-        CHECK(xr_compile_resources_end_cancel(context.resources,selector_current_poll,&poll)==XR_COMPILE_RESOURCE_CANCELLED);
+        CHECK(effect_capture_current_match(&context,final,&current)==XR_XIR_OK && poll.calls==calls);
+        XrXirEffects *cancelled=NULL;
+        CHECK(xir_artifact_verify_raw_source_effects(checked,&cancelled,NULL,&control)==XR_XIR_CANCELLED &&
+            !cancelled && control.status==XR_COMPILE_RESOURCE_CANCELLED && poll.calls>calls);
+        calls=poll.calls;poll.requested=false;
+        CHECK(xir_artifact_verify_raw_source_effects(checked,&cancelled,NULL,&control)==XR_XIR_CANCELLED &&
+            !cancelled && poll.calls==calls);
         CHECK(rp_attempts==allocated && rp_live_bytes==physical);
         current=(EffectBodyCurrentRead){0};
         rp_allocation_observer=NULL;rp_release_observer=NULL;
     }
     CHECK(effect_capture_match(&context,final)==XR_XIR_OK);
+    XrCompileRequestControl retry={0};XrXirEffects *recovered=NULL;
+    CHECK(xr_compile_request_control_init(&options,&retry)==XR_COMPILE_RESOURCE_OK &&
+        xir_artifact_verify_raw_source_effects(checked,&recovered,NULL,&retry)==XR_XIR_OK && recovered);
+    xr_xir_compile_effects_free(recovered);
     xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);rp_owner_free(&context,baseline);CHECK(!rp_live && !rp_live_bytes);
     puts("current handoff: owned parent scope, independent receiving, cancellation polling/latch/recovery, no allocator callbacks and physical0 PASS");
 }

@@ -106,8 +106,9 @@ static XrXirStatus lowered_snapshot_empty_copy(const XrXirCompileContext *contex
     XrXirFunctionIdentity identity = {.method_kind=XR_XIR_NON_MEMBER};
     XrXirDeclarations declarations = {.modules=&source,.module_count=1,.functions=&identity,
         .root_module=UINT32_MAX,.entry_function=UINT32_MAX};
+    /* An absent source pool has no descriptor; its owned view is still empty. */
     XrXirModule module = {.stage = XR_XIR_LOWERED, .functions = &function,
-        .function_count = 1, .types = &empty,.declarations=&declarations,.linkage_kind=XR_XIR_LIBRARY};
+        .function_count = 1,.declarations=&declarations,.linkage_kind=XR_XIR_LIBRARY};
     EffectBodyMaterial *body = NULL;
     XrXirStatus status = conditional_owned_body_from_raw(context, &module, &body);
     if (status == XR_XIR_OK) status = effect_lowered_snapshot_match(context, &body->terms.types, &empty);
