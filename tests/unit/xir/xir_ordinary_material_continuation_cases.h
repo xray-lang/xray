@@ -48,8 +48,12 @@ static XrXirStatus ordinary_material_dense(const XrXirCompileContext *context,
     XrXirStatus status=XR_XIR_OK;
     EffectOrdinaryContexts *dense=xir_compile_calloc(context,1,sizeof(*dense),&status);
     if (!dense) return status;
+    dense->resources=context->resources;
+    status=effect_input_facts_retain(context,ordinary->input_facts);
+    if (status!=XR_XIR_OK) { effect_ordinary_free(dense);return status; }
+    dense->input_facts=ordinary->input_facts;
     dense->dense=true;dense->terms.remaining=context;dense->base_count=2;dense->source_type_count=1;
-    dense->uses=(XrXirEffects){.resources=context->resources,.count=2};
+    dense->uses=(XrXirEffects){.resources=context->resources,.count=2,.input_facts=dense->input_facts};
     status=effect_terms_seed(&dense->terms,&ordinary->terms.types);
     if (status==XR_XIR_OK) status=effect_ordinary_capacity(dense,2);
     for (uint32_t f=0;f<2 && status==XR_XIR_OK;++f) {
