@@ -6,6 +6,23 @@ add_executable(test_xir_compile_snapshot_owner
     "${CMAKE_CURRENT_LIST_DIR}/test_xir_compile_snapshot_owner.c"
     "${XIR_OWNER_ROOT}/src/xir/xxir_source_query.c")
 target_link_libraries(test_xir_compile_snapshot_owner PRIVATE compile_owner_core)
+if(TARGET gen-xir-core-source)
+    add_dependencies(test_xir_compile_snapshot_owner gen-xir-core-source)
+    target_include_directories(test_xir_compile_snapshot_owner PRIVATE
+        "$<TARGET_PROPERTY:xray_xir_source,INTERFACE_INCLUDE_DIRECTORIES>")
+else()
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    set(XIR_OWNER_CORE_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/generated/xir_core_declarations_source.inc.c")
+    add_custom_command(OUTPUT "${XIR_OWNER_CORE_SOURCE}"
+        COMMAND "${Python3_EXECUTABLE}" "${XIR_OWNER_ROOT}/scripts/embed_xir_core_source.py"
+            "${XIR_OWNER_ROOT}/src/xir/xcore_declarations.xr" --output "${XIR_OWNER_CORE_SOURCE}"
+        DEPENDS "${XIR_OWNER_ROOT}/scripts/embed_xir_core_source.py"
+            "${XIR_OWNER_ROOT}/src/xir/xcore_declarations.xr"
+        VERBATIM)
+    add_custom_target(gen-compile-owner-core-source DEPENDS "${XIR_OWNER_CORE_SOURCE}")
+    add_dependencies(test_xir_compile_snapshot_owner gen-compile-owner-core-source)
+    target_include_directories(test_xir_compile_snapshot_owner PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+endif()
 add_library(xir_compile_owner_runtime STATIC
     "${XIR_OWNER_ROOT}/src/base/xunicode.c"
     "${XIR_OWNER_ROOT}/src/os/xproc_exit.c"
