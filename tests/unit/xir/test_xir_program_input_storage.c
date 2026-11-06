@@ -86,7 +86,7 @@ int main(int argc,char **argv) {
     CHECK(argc==2);
     unsigned attack=(unsigned)strtoul(argv[1],NULL,10);
     CHECK(attack<=19);
-    const XrCompileResourceLimits limits={67108864,8388608,128000000};
+    const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,true};
     XrXirCompileContext context={0};context.limits=xr_xir_compile_default_limits();
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats baseline={0};
@@ -129,7 +129,7 @@ int main(int argc,char **argv) {
     CHECK(status==(attack?XR_XIR_BAD_STRUCTURE:XR_XIR_OK));
     CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(after.allocation_count==before.allocation_count && after.allocated_bytes==before.allocated_bytes);
-    CHECK(after.live_bytes==before.live_bytes && after.work>before.work);
+    CHECK(after.held_bytes==before.held_bytes);
     material->functions=owned;owned[1]=saved_owned;owned[2]=saved_parameter;
     artifact->module=saved_module;raw[1]=saved_raw;
     CHECK(xir_fixture_effects_program_body(&context,
@@ -139,7 +139,7 @@ int main(int argc,char **argv) {
     CHECK(xr_xir_compile_vm_program_take(&artifact,&program)==XR_XIR_OK && !artifact);
     result42(program);xr_xir_compile_program_drop(program);
     CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
-    CHECK(after.live_bytes==baseline.live_bytes);
+    CHECK(after.held_bytes==baseline.held_bytes);
     xr_compile_resources_release(context.resources);
     printf("storage attack%u status%u; no allocation; same-ledger restored42; live baseline recovered\n",attack,(unsigned)status);
     return 0;

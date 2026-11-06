@@ -321,7 +321,7 @@ int main(void) {
     core_compiler_faults(); core_carriers_and_capability(); core_call_statuses();
     float_runtime_cases();
     scalar_compile_owner_new(&scalar_owner,
-        (XrCompileResourceLimits){UINT64_C(32) << 20, UINT64_C(8) << 20, UINT64_C(64) << 20},
+        (XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY, 0, true},
         xr_xir_compile_default_limits());
     floating_value_admission(); scalar_compile_owner_free(&scalar_owner);
     CHECK(!compiler_observer.live && !compiler_observer.bytes && !runtime_observer.live && !runtime_observer.bytes);

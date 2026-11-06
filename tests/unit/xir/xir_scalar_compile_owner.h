@@ -32,22 +32,19 @@ static inline void scalar_compile_owner_new(ScalarCompileOwner *owner,
 static inline void scalar_compile_owner_free(ScalarCompileOwner *owner) {
     XrCompileResourceStats stats;
     CHECK(xr_compile_resources_stats(owner->context.resources, &stats) == XR_COMPILE_RESOURCE_OK);
-    CHECK(stats.live_bytes == owner->baseline.live_bytes);
+    CHECK(stats.held_bytes == owner->baseline.held_bytes);
     CHECK(stats.allocated_bytes >= owner->baseline.allocated_bytes);
-    CHECK(stats.work >= owner->baseline.work);
     if (owner == &scalar_owner)
-        fprintf(stderr, "scalar compiler ledger: work=%llu allocated=%llu peak=%llu live=%llu\n",
-            (unsigned long long) stats.work, (unsigned long long) stats.allocated_bytes,
-            (unsigned long long) stats.peak_bytes, (unsigned long long) stats.live_bytes);
+        fprintf(stderr, "scalar compiler ledger: allocated=%llu peak=%llu held=%llu\n",
+            (unsigned long long) stats.allocated_bytes,
+            (unsigned long long) stats.peak_bytes, (unsigned long long) stats.held_bytes);
     xr_compile_resources_release(owner->context.resources);
     *owner = (ScalarCompileOwner) {0};
 }
 
 static inline void scalar_compile_begin(void) {
     scalar_compile_owner_new(&scalar_owner,
-        /* Fewer than 10,000 runs each recheck the complete scalar artifact.
-         * Bound cumulative charges separately from the 16 MiB live limit. */
-        (XrCompileResourceLimits) {UINT64_C(8589934592), UINT64_C(16777216), UINT64_C(34359738368)},
+        (XrCompileResourceLimits) {XR_COMPILE_MEMORY_ORDINARY, 0, true},
         xr_xir_compile_default_limits());
 }
 

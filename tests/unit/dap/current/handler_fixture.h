@@ -26,7 +26,7 @@ static XrXirOutputStatus handler_output(void *context,XrXirOutputStream stream,c
     memcpy(fixture->output+fixture->length,bytes,length);fixture->length+=length;return XR_XIR_OUTPUT_OK;
 }
 static void handler_open(HandlerFixture *fixture) {
-    XrCompileResourceLimits limits={67108864,8388608,128000000};
+    XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,true};
     CHECK(xr_compile_resources_new(&limits,&fixture->resources)==XR_COMPILE_RESOURCE_OK);
     CHECK(xr_compile_resources_stats(fixture->resources,&fixture->baseline)==XR_COMPILE_RESOURCE_OK);
     XrSourceCompilerConfig source={{fixture->resources,xr_xir_compile_default_limits()},
@@ -53,7 +53,7 @@ static void handler_close(HandlerFixture *fixture) {
     CHECK(!xr_xir_domain_budget_stats(fixture->domain).metadata_live);xr_xir_domain_drop(fixture->domain);
     XrCompileResourceStats after={0};
     CHECK(xr_compile_resources_stats(fixture->resources,&after)==XR_COMPILE_RESOURCE_OK);
-    CHECK(after.live_bytes==fixture->baseline.live_bytes);xr_compile_resources_release(fixture->resources);
+    CHECK(after.held_bytes==fixture->baseline.held_bytes);xr_compile_resources_release(fixture->resources);
     CHECK(!runtime_live && !runtime_bytes);
 }
 static uint32_t handler_line(const char *text,const char *marker) {

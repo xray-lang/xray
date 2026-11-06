@@ -61,7 +61,7 @@ static void integer_value_boundaries(void) {
         XrXirCompileLimits structural = xr_xir_compile_default_limits();
         structural.parameters = 16;
         /* Copy work counts real bytes independently of the metadata limit. */
-        scalar_compile_owner_new(&owner, (XrCompileResourceLimits) {4096, 4096, 16384}, structural);
+        scalar_compile_owner_new(&owner, (XrCompileResourceLimits) {XR_COMPILE_MEMORY_FINITE, 4096, true}, structural);
         XrXirTypeArena *arena = NULL;
         CHECK(xr_xir_compile_type_arena_new(&owner.context,&types,&arena) == XR_XIR_VALUE_OK);
         XrXirValueAdmission admission = {arena,domain,NULL,NULL,16,0};
