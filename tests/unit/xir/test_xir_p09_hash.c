@@ -27,7 +27,9 @@ static XrXirValue integer(int64_t value) { return (XrXirValue){XR_XIR_I64, 0, va
 static XrXirValue hash_test_key(const XirHash *map, size_t index) {
     XrXirLayout layout = {0};
     CHECK(xr_xir_compile_type_arena_layout(map->object.arena, map->key_type, &layout));
-    return storage_leaf_value(map->key_type, hash_span(map, index, false).bytes, layout.size);
+    XrXirValue value = {0};
+    CHECK(storage_leaf_value(map->object.arena, map->key_type, hash_span(map, index, false).bytes, layout.size, &value));
+    return value;
 }
 static void hash_expect(const XrXirValue *map, int64_t key, int64_t expected,
     bool exists, XrXirValueAdmission *admission) {
