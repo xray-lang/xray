@@ -131,7 +131,7 @@ static void contains_key_relations(XrXirValueAdmission *admission) {
 }
 static void contains_function_authority(void) {
     XrXirTypeNode nodes[] = {
-        {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64, .error_type = XR_XIR_NEVER, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64, .element = XR_XIR_NEVER, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind = XR_XIR_TYPE_NULLABLE, .element = (XrXirType)256},
         {.kind = XR_XIR_TYPE_MAP, .element = XR_XIR_I64, .result = (XrXirType)257}
     };
