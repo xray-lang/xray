@@ -9,7 +9,7 @@ on:
 
 concurrency:
   group: native-host-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/agent/direct-cutover' }}
 
 jobs:
   linux:
