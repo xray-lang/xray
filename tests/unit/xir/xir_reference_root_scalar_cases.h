@@ -9,8 +9,9 @@
 #ifndef XIR_REFERENCE_ROOT_SCALAR_CASES_H
 #define XIR_REFERENCE_ROOT_SCALAR_CASES_H
 static XrXirStatus root_scalar_reference(const XrXirCompileContext *context,
-    const XrXirEffects *effects, const XrXirModule *module,
+    const XrXirEffects *effects, XirEffectInput candidate,
     uint32_t function, uint32_t instruction, uint32_t *output) {
+    const XrXirModule *module=candidate.module;
     if (!output || !module || !xir_effects_context_matches(context,effects,module->function_count) ||
         function>=module->function_count || instruction>=module->functions[function].instruction_count)
         return XR_XIR_BAD_STRUCTURE;
@@ -22,9 +23,10 @@ static XrXirStatus root_scalar_reference(const XrXirCompileContext *context,
         XrXirOrigin origin={.function=function};
         XrXirOrigin *owners=NULL;uint32_t owner_count=0;
         XrXirStatus status=effect_context_base_owner_origins(context,module,function,&owners,&owner_count);
-        XirEffectContextInput input={module,module->types,&origin,instruction,owners,owner_count};
+        XirEffectContextInput input={module,module->types,&origin,instruction,owners,owner_count,
+            candidate.construction,candidate.control};
         XirEffectContextView selected={0};
-        if (status==XR_XIR_OK) status=xir_effects_context_select(context,effects,&input,&selected);
+        if (status==XR_XIR_OK) status=xir_effects_context_select_input(context,effects,&input,&selected);
         xr_compile_resources_free(owners);
         if (status!=XR_XIR_OK) return status;
         mask=(selected.requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
@@ -42,8 +44,9 @@ static XrXirStatus root_scalar_reference(const XrXirCompileContext *context,
     *output=mask;return XR_XIR_OK;
 }
 
-static XrXirStatus root_scalar_declaration(const XrXirModule *module,
+static XrXirStatus root_scalar_declaration(XirEffectInput candidate,
     const XrXirEffects *effects, XrXirCompileContext *remaining, XrXirDiagnostic *diagnostic) {
+    const XrXirModule *module=candidate.module;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
@@ -53,7 +56,7 @@ static XrXirStatus root_scalar_declaration(const XrXirModule *module,
             const XrXirTypeNode *signature = xr_xir_callable_signature(module->types, op->type);
             uint32_t mask=0;
             if (!signature) return XR_XIR_BAD_STRUCTURE;
-            XrXirStatus status=root_scalar_reference(remaining,effects,module,f,i,&mask);
+            XrXirStatus status=root_scalar_reference(remaining,effects,candidate,f,i,&mask);
             if (status!=XR_XIR_OK) return status;
             if (!xr_xir_callable_root_accepts(!!(mask&XR_XIR_CALLABLE_ROOT_REQUIRED),
                 !!(mask&XR_XIR_CALLABLE_ROOT_UNRESOLVED),signature->flags)) {

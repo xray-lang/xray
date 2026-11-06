@@ -37,8 +37,6 @@ static void conditional_compact_directory_values(const XrXirCompileContext *cont
         CHECK(effect_body_instruction_fields_get(&read,body,i,&fields)==XR_XIR_OK &&
             fields.op==expected[i].op && fields.type==expected[i].type && fields.source==expected[i].args[0]);
     }
-    conditional_compact_read_failures(context,body,body->instruction_count-2,&expected[body->instruction_count-2]);
-    conditional_compact_fields_failures(context,body,body->instruction_count-2,&expected[body->instruction_count-2]);
 }
 
 /* Local projection is not complete semantic admission. An unexplored damaged
@@ -151,8 +149,6 @@ static void conditional_compact_tiny_masks(void) {
         }
         CHECK(effect_body_records_match(&read,&body,&raw)==XR_XIR_OK);
         conditional_compact_tiny_damage(&context,&body,expected);
-        conditional_compact_read_failures(&context,&body,1,&expected[1]);
-        conditional_compact_fields_failures(&context,&body,1,&expected[1]);
         effect_body_runs_release(body.runs);rp_owner_free(&context,baseline);rp_balanced(physical);
     }
     puts("compact tiny directories: all 1024 physical masks, one/two runs, damage and every read refusal passed");

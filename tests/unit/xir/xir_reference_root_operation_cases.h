@@ -99,10 +99,11 @@ static void root_operation_case(uint32_t generic,uint32_t repeats) {
     RootOperationCase c={.module=owned,.effects=&effects,.construction=xr_xir_compile_artifact_construction(checked),.repeats=repeats,.count=generic?4u:3u,
         .masks={0,XR_XIR_CALLABLE_ROOT_REQUIRED,0,0}};
     for(uint32_t n=0;n<c.count;++n) {
-        uint32_t value=UINT32_MAX;CHECK(root_scalar_reference(&context,&effects,owned,
+        uint32_t value=UINT32_MAX;CHECK(root_scalar_reference(&context,&effects,
+            (XirEffectInput){owned,c.construction,NULL},
             root_operation_functions[n],root_operation_instructions[n],&value)==XR_XIR_OK && value==c.masks[n]);
     }
-    CHECK(root_scalar_declaration(owned,&effects,&context,&diagnostic)==XR_XIR_OK);
+    CHECK(root_scalar_declaration((XirEffectInput){owned,c.construction,NULL},&effects,&context,&diagnostic)==XR_XIR_OK);
     CHECK(declaration_callable_root_verify((XirEffectInput){owned,c.construction,NULL},&effects,&context,&diagnostic)==XR_XIR_OK);
     XrCompileResourceStats before=rp_stats(&context);size_t start=rp_attempts;
     CHECK(root_operation_run(&context,&c)==XR_XIR_OK);size_t sites=rp_attempts-start;
@@ -140,7 +141,7 @@ static void root_operation_case(uint32_t generic,uint32_t repeats) {
     XrXirTypeNode *mutable_nodes=(XrXirTypeNode *)owned->types->nodes;uint32_t saved_flags=mutable_nodes[0].flags;
     mutable_nodes[0].flags&=~XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     XrXirDiagnostic old_diag={0},new_diag={0};
-    XrXirStatus old_status=root_scalar_declaration(owned,&effects,&context,&old_diag);
+    XrXirStatus old_status=root_scalar_declaration((XirEffectInput){owned,c.construction,NULL},&effects,&context,&old_diag);
     XrXirStatus new_status=declaration_callable_root_verify((XirEffectInput){owned,c.construction,NULL},&effects,&context,&new_diag);
     CHECK(old_status!=XR_XIR_OK && old_status==new_status);
     mutable_nodes[0].flags=saved_flags;CHECK(root_operation_run(&context,&c)==XR_XIR_OK);

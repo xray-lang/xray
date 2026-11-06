@@ -235,10 +235,12 @@ static void initial_ordinary_refresh_controls(void) {
     uint64_t baseline=rp_stats(&context).held_bytes;XrXirSourceResult result={0};
     initial_ordinary_source(&context,&result);
     const XrXirModule *original=xr_xir_compile_artifact_module(result.checked);
+    const XrXirConstruction *construction=xr_xir_compile_artifact_construction(result.checked);
     CHECK(original && original->provenance && original->provenance->kind==XR_XIR_EVIDENCE_TEMPLATE &&
         original->provenance->contract_count==original->function_count);
     XrXirEffects *effects=NULL;
-    XrXirStatus status=initial_ordinary_effects(&context,original,&effects);
+    XrXirStatus status=xr_xir_compile_verify_analyzed_effects_v2(&context,
+        original,construction,&effects,NULL);
     if (status!=XR_XIR_OK) fprintf(stderr,"INITIAL_REFRESH_EFFECTS status=%u\n",(unsigned)status);
     CHECK(status==XR_XIR_OK && effects);
     /* A published owner has no constructor refresh capability. Its actual
@@ -246,14 +248,15 @@ static void initial_ordinary_refresh_controls(void) {
     EffectInvocationFinal *published=effects->invocations->final;
     XrCompileResourceStats before_refresh=rp_stats(&context);
     RootParameterMark retained=rp_mark();
-    CHECK(xir_effects_context_refresh(&context,original,effects)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xir_effects_context_refresh_input(&context,
+        (XirEffectInput){original,construction,NULL},effects)==XR_XIR_BAD_STRUCTURE);
     XrCompileResourceStats after_refresh=rp_stats(&context);
     CHECK(!memcmp(&before_refresh,&after_refresh,sizeof(before_refresh)) &&
         effects->invocations->final==published && effect_outcomes_empty(&effects->outcomes_work));
     rp_balanced(retained);xr_xir_compile_effects_free(effects);effects=NULL;
     /* This actual constructor remains private while Source refines its body.
      * It is released without publishing facts for a changed Source input. */
-    CHECK(effect_infer_construct(&context,(XirEffectInput){original,xr_xir_compile_artifact_construction(checked),NULL},NULL,&effects)==XR_XIR_OK && effects &&
+    CHECK(effect_infer_construct(&context,(XirEffectInput){original,construction,NULL},NULL,&effects)==XR_XIR_OK && effects &&
         effects->outcomes_owner && !effects->invocations->final->outcomes);
 
     CHECK(effect_contexts_read(effects) && !effects->refinement &&
@@ -285,7 +288,8 @@ static void initial_ordinary_refresh_controls(void) {
         bool restored=pass==1 && site==1;
         XrXirStatus expected=restored?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
         CHECK(effect_body_source_match(&context,initial,&current)==expected);
-        CHECK(xir_effects_context_refresh(&context,&current,effects)==XR_XIR_OK);
+        CHECK(xir_effects_context_refresh_input(&context,
+            (XirEffectInput){&current,construction,NULL},effects)==XR_XIR_OK);
         CHECK(effects->invocations==certificate && effects->result_borrow==(&certificate->final->summary) &&
             effect_contexts_read(effects)->dense->uses.result_borrow==(&effect_contexts_read(effects)->forest->invocations->final->summary) &&
             !memcmp(certificate,&saved_certificate,sizeof(saved_certificate)) &&
@@ -294,7 +298,8 @@ static void initial_ordinary_refresh_controls(void) {
         CHECK(fresh && fresh!=initial && !fresh->backbone && !fresh->overlay &&
             fresh->cells!=initial->cells && fresh->functions[selected].block_count==0);
         uint32_t mask=UINT32_MAX;
-        CHECK(xir_effects_reference_root(&context,effects,&current,selected,sites[site],&mask)==XR_XIR_OK && !mask);
+        CHECK(xir_effects_reference_root_input(&context,effects,
+            (XirEffectInput){&current,construction,NULL},selected,sites[site],&mask)==XR_XIR_OK && !mask);
         CHECK(effect_body_source_match(&context,initial,original)==XR_XIR_OK);
         CHECK(effect_body_source_match(&context,initial,&current)==expected);
     }
