@@ -98,7 +98,7 @@ XR_FUNC XrXirStatus xlsp_workspace_symbols_capture(XrLspServer *server,const XrJ
     if(status!=XR_XIR_OK)goto done;request->resources=resources;resources=NULL;
     status=workspace_query(request,params);
     WorkspaceCapture capture={request,server};
-    if(status==XR_XIR_OK)status=xlsp_source_index_store_visit(server->source_index,request->resources,workspace_capture_symbol,&capture);
+    if(status==XR_XIR_OK)status=xlsp_source_index_store_visit(server->source_index,workspace_capture_symbol,&capture);
     if(status==XR_XIR_OK){*out=request;request=NULL;}
 done:
     xlsp_workspace_symbols_free(request);xr_compile_resources_release(resources);

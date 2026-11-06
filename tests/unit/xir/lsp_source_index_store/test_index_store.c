@@ -12,7 +12,8 @@
 #include <string.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}}while(0)
 #include "../xir_sdk_resource_test.h"
-static const XrCompileResourceLimits store_limits={UINT64_C(1073741824),UINT64_C(268435456),UINT64_C(8589934592)};
+#include "xir/xxir_compile_memory.h"
+static const XrCompileResourceLimits store_limits={XR_COMPILE_MEMORY_FINITE,UINT64_C(268435456),true};
 static XrXirStatus store_build(XrCompileResources *resources,unsigned mode,XlspSourceIndex **out) {
     const char *uris[]={"file:///E:/scope/a.xr","file:///E:/scope/b.xr","file:///E:/scope-neighbor/c.xr","file:///E:/scope/a.xr"};
     const char *texts[]={"fn shared()->i64 { return 1 }\n","export fn shared()->i64 { return 2 }\n","fn other()->i64 { return 3 }\n","fn updated()->i64 { return 4 }\n"};
@@ -34,7 +35,7 @@ static XrXirStatus store_trace(XrCompileResourceLimits limits,XrCompileResourceS
     XrCompileResources *resources=NULL;XlspSourceIndexStore *store=NULL;XlspSourceIndex *owners[4]={0};
     XrXirStatus status=XR_XIR_OK;bool external=true;XlspIndexedSymbol original={0};
     XrCompileResourceStatus made=xr_compile_resources_new(&limits,&resources);
-    if(made!=XR_COMPILE_RESOURCE_OK)return made==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    if(made!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(made);
     for(unsigned i=0;i<4&&status==XR_XIR_OK;++i)status=store_build(resources,i,&owners[i]);
     if(status!=XR_XIR_OK)goto done;
     status=xlsp_source_index_store_new(resources,&store);if(status!=XR_XIR_OK)goto done;
@@ -49,9 +50,9 @@ static XrXirStatus store_trace(XrCompileResourceLimits limits,XrCompileResourceS
     CHECK(original.symbol&&original.symbol->exported&&!strcmp(original.uri,"file:///E:/scope/b.xr")&&original.version==12);
     CHECK(original.symbol->selection.start.character==10&&original.symbol->selection.end.character==16);
     {
-        size_t count=0;status=xlsp_source_index_store_visit(store,resources,store_visit,&count);if(status!=XR_XIR_OK)goto done;CHECK(count==3);
-        count=0;XrXirStatus rejected=xlsp_source_index_store_visit(store,resources,store_reject_visit,&count);
-        if(rejected==XR_XIR_BUDGET){status=rejected;goto done;}CHECK(rejected==XR_XIR_BAD_STRUCTURE&&count==1);
+        size_t count=0;status=xlsp_source_index_store_visit(store,store_visit,&count);if(status!=XR_XIR_OK)goto done;CHECK(count==3);
+        count=0;XrXirStatus rejected=xlsp_source_index_store_visit(store,store_reject_visit,&count);
+        CHECK(rejected==XR_XIR_BAD_STRUCTURE&&count==1);
     }
     {
         XlspSourceIndex *input=owners[3];status=xlsp_source_index_store_replace(store,&owners[3]);
@@ -64,7 +65,7 @@ static XrXirStatus store_trace(XrCompileResourceLimits limits,XrCompileResourceS
     {
         XlspIndexedSymbol missing=original;status=xlsp_source_index_store_find(store,"absent",&missing);
         CHECK(missing.symbol==original.symbol&&missing.uri==original.uri&&missing.version==original.version);
-        if(status==XR_XIR_BUDGET)goto done;CHECK(status==XR_XIR_UNRESOLVED);status=XR_XIR_OK;
+        CHECK(status==XR_XIR_UNRESOLVED);status=XR_XIR_OK;
     }
     status=xlsp_source_index_store_remove_prefix(store,"file:///E:/scope");
     if(status!=XR_XIR_OK){CHECK(xlsp_source_index_store_count(store)==3&&!strcmp(original.symbol->name,"shared"));goto done;}
@@ -93,8 +94,8 @@ static void store_bad_arguments(void) {
     CHECK(xlsp_source_index_store_replace(store,&empty)==XR_XIR_BAD_STRUCTURE&&!empty);
     CHECK(xlsp_source_index_store_remove_prefix(store,"")==XR_XIR_BAD_STRUCTURE);
     CHECK(xlsp_source_index_store_find(store,NULL,&view)==XR_XIR_BAD_STRUCTURE&&!view.symbol);
-    CHECK(xlsp_source_index_store_visit(store,resources,NULL,NULL)==XR_XIR_BAD_STRUCTURE);
-    CHECK(xlsp_source_index_store_visit(store,NULL,store_visit,NULL)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xlsp_source_index_store_visit(store,NULL,NULL)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xlsp_source_index_store_visit(NULL,store_visit,NULL)==XR_XIR_BAD_STRUCTURE);
     xlsp_source_index_store_free(store);xr_compile_resources_release(resources);CHECK(!runtime_live&&!runtime_bytes);
 }
 int main(int argc,char **argv) {
@@ -106,10 +107,14 @@ int main(int argc,char **argv) {
         runtime_attempts=0;runtime_fail_at=site;CHECK(store_trace(store_limits,NULL)==XR_XIR_OUT_OF_MEMORY&&runtime_attempts>site);
     }
     runtime_fail_at=SIZE_MAX;
-    if(faults)for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta) {
-        XrCompileResourceLimits exact={needed.allocated_bytes,needed.peak_bytes,needed.work};
-        uint64_t *bound=axis==0?&exact.allocated_bytes:axis==1?&exact.live_bytes:&exact.work;CHECK(*bound&&*bound<INT64_MAX);
-        *bound=(uint64_t)((int64_t)*bound+delta);CHECK(store_trace(exact,NULL)==(delta<0?XR_XIR_BUDGET:XR_XIR_OK));
+    if(faults){
+        CHECK(needed.peak_bytes&&needed.peak_bytes<UINT64_MAX);
+        for(int delta=-1;delta<=1;++delta) {
+            XrCompileResourceLimits exact=store_limits;
+            exact.memory_limit=delta<0?needed.peak_bytes-1:needed.peak_bytes+(unsigned)delta;
+            CHECK(store_trace(exact,NULL)==(delta<0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
+        }
+        CHECK(store_trace(store_limits,NULL)==XR_XIR_OK);
     }
     store_bad_arguments();
     printf("LSP real syntax index store Source/receipt FI=%zu; owner death, atomic replacement, exact ranges, component removal, physical=0/0; full=%d\n",sites,faults?1:0);

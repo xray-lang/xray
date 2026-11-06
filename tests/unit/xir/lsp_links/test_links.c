@@ -7,10 +7,11 @@
 #include <string.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}}while(0)
 #include "xir_sdk_resource_test.h"
+#include "xir/xxir_compile_memory.h"
 #include "lsp_open_json_owner.h"
 
 typedef struct Inputs {const char *root,*library,*disk,*long_uri,*long_specifier,*math,*invalid_project;} Inputs;
-static const XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+static const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true};
 static const char *const sources[]={"import \"./lib\"\nimport \"./disk\"\n",
     "// import \"./ghost\"\nfn text()->string{return \"import ./fake\"}\nfn pattern(){var pattern=/import\\{fake\\}/}\nimport { value as selected } from \"./lib\"\n",
     "import \"\"\"\n    ./lib\n    \"\"\"\n",
@@ -46,7 +47,7 @@ static void facts(XrJsonValue *result,const Inputs *in,unsigned mode) {
 static XrXirStatus once(const Inputs *in,unsigned mode,XrCompileResourceLimits caps,XrCompileResourceStats *stats,size_t json_fault,bool *injected) {
     XrCompileResources *r=NULL;XlspSourceLinks *links=NULL;XrJsonValue *result=NULL;
     XrCompileResourceStatus made=xr_compile_resources_new(&caps,&r);
-    if(made!=XR_COMPILE_RESOURCE_OK)return made==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    if(made!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(made);
     char text[2048],root_uri[2048],lib_uri[2048],child[]="fn unfinished(";
     int written=mode==5?snprintf(text,sizeof(text),"import \"%s\"\n",in->long_specifier):snprintf(text,sizeof(text),"%s",sources[mode]);
     CHECK(written>=0&&(size_t)written<sizeof(text));CHECK(strlen(in->root)<sizeof(root_uri));strcpy(root_uri,in->root);
@@ -119,9 +120,11 @@ static int run(int argc,char **argv) {
             for(size_t i=0;i<sites;++i){runtime_attempts=0;runtime_fail_at=i;CHECK(once(&in,mode,limits,NULL,SIZE_MAX,NULL)==XR_XIR_OUT_OF_MEMORY&&runtime_attempts>i);}
             runtime_fail_at=SIZE_MAX;
             for(size_t i=0;i<json_sites;++i){bool injected=false;CHECK(once(&in,mode,limits,NULL,i,&injected)==XR_XIR_OUT_OF_MEMORY&&injected);}
-            for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits exact={stats.allocated_bytes,stats.peak_bytes,stats.work};
-                uint64_t *bound=axis==0?&exact.allocated_bytes:axis==1?&exact.live_bytes:&exact.work;CHECK(*bound&&*bound<INT64_MAX);*bound=(uint64_t)((int64_t)*bound+delta);
-                CHECK(once(&in,mode,exact,NULL,SIZE_MAX,NULL)==(delta<0?XR_XIR_BUDGET:XR_XIR_OK));}
+            CHECK(stats.peak_bytes&&stats.peak_bytes<UINT64_MAX);
+            for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits exact=limits;
+                exact.memory_limit=delta<0?stats.peak_bytes-1:stats.peak_bytes+(unsigned)delta;
+                CHECK(once(&in,mode,exact,NULL,SIZE_MAX,NULL)==(delta<0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));}
+            CHECK(once(&in,mode,limits,NULL,SIZE_MAX,NULL)==XR_XIR_OK);
         }
         printf("Source links mode=%u SourceFI=%zu JSONFI=%zu full=%u; actual resolver/overlay/UTF16, producer death physical0/0\n",mode,sites,json_sites,full?1u:0u);
     }
