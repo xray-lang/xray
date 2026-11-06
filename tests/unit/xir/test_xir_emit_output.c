@@ -66,7 +66,7 @@ static void wide_boundary(const XrXirCompileContext *context) {
     };
     XrXirType type = XR_XIR_I64;
     XrXirBlock block = {0, 2, 0, 0};
-    XrXirFunction function = {"wide", 4, &type, 1, XR_XIR_UNIT, &block, 1, ops, 2, operands, 65536};
+    XrXirFunction function = {"wide", 4, &type, 1, XR_XIR_UNIT, &block, 1, ops, 2, operands, 65536, XR_XIR_NEVER};
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xir_fixture_check(context, &module, &checked, NULL) == XR_XIR_OK);

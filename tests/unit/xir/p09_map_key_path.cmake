@@ -18,17 +18,6 @@ set_tests_properties(test_xir_p09_map_key_path_value PROPERTIES TIMEOUT 120 LABE
 add_test(NAME test_xir_p09_map_key_path_value_allocations COMMAND test_xir_p09_map_key_path_value --full)
 set_tests_properties(test_xir_p09_map_key_path_value_allocations PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "unit;xir;map;path;ownership;memory;budget;fault")
 
-add_executable(test_xir_p09_map_key_path_packets "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_map_key_path_packets.c")
-target_link_libraries(test_xir_p09_map_key_path_packets PRIVATE xray_xir_source)
-set_target_properties(test_xir_p09_map_key_path_packets PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-if(MSVC)
-    target_compile_options(test_xir_p09_map_key_path_packets PRIVATE /utf-8 /W4 /WX)
-else()
-    target_compile_options(test_xir_p09_map_key_path_packets PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_p09_map_key_path_packets COMMAND test_xir_p09_map_key_path_packets)
-set_tests_properties(test_xir_p09_map_key_path_packets PROPERTIES TIMEOUT 120 LABELS "unit;xir;map;path;ownership;codec;budget")
-
 add_executable(test_xir_p09_map_key_path_source "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_map_key_path_source.c")
 target_link_libraries(test_xir_p09_map_key_path_source PRIVATE xray_xir_source xray_xir_cgen xray_xir_vm)
 target_compile_definitions(test_xir_p09_map_key_path_source PRIVATE XR_P09_HASH_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")

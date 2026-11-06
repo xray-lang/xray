@@ -50,11 +50,11 @@ static XrXirArtifact *string_fixture(const XrXirCompileContext *context, uint32_
     const XrXirBlock init_block={0,1, 0, 0},entry_block={0,2, 0, 0};
     const XrXirBlock root_blocks[] = {{0, 4, 0, 0}}, child_blocks[] = {{0, 6, 0, 0}}, loop_blocks[] = {{0, 1, 0, 0}, {1, 3, 0, 0}};
     const XrXirFunction functions[] = {
-        {"root", 4, parameters, 2, XR_XIR_STRING, root_blocks, 1, root, 4, operands, 4},
-        {"child", 5, parameters, 4, XR_XIR_STRING, child_blocks, 1, child, 6, mode ? &error_operand : NULL, mode ? 1u : 0u},
-        {"loop", 4, parameters, 2, XR_XIR_UNIT, loop_blocks, 2, loop, 4, NULL, 0},
-        {"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0},
-        {"main",4,NULL,0,XR_XIR_I64,&entry_block,1,entry,2,NULL,0}
+        {"root", 4, parameters, 2, XR_XIR_STRING, root_blocks, 1, root, 4, operands, 4, mode ? (XrXirType)256 : XR_XIR_NEVER},
+        {"child", 5, parameters, 4, XR_XIR_STRING, child_blocks, 1, child, 6, mode ? &error_operand : NULL, mode ? 1u : 0u, mode ? (XrXirType)256 : XR_XIR_NEVER},
+        {"loop", 4, parameters, 2, XR_XIR_UNIT, loop_blocks, 2, loop, 4, NULL, 0, XR_XIR_NEVER},
+        {"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0, XR_XIR_NEVER},
+        {"main",4,NULL,0,XR_XIR_I64,&entry_block,1,entry,2,NULL,0, XR_XIR_NEVER}
     };
     ErrorFixture error; error_fixture_init(&error,false);
     const XrXirSourceModule source={"alpha",5,NULL,0,3, 0,XR_XIR_MODULE_FRESH_STORAGE};

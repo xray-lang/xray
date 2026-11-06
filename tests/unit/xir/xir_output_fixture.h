@@ -38,9 +38,9 @@ static XrXirArtifact *output_fixture(const XrXirCompileContext *context) {
     };
     const XrXirBlock write_block = {0, 2, 0, 0}, continue_block = {0, 3, 0, 0};
     const XrXirFunction functions[] = {
-        {"output", 6, parameters, 2, XR_XIR_UNIT, blocks, 1, ops, 6, operands, 3},
-        {"write", 5, &string, 1, XR_XIR_BOOL, &write_block, 1, write_ops, 2, NULL, 0},
-        {"continued", 9, &string, 1, XR_XIR_BOOL, &continue_block, 1, continue_ops, 3, NULL, 0}
+        {"output", 6, parameters, 2, XR_XIR_UNIT, blocks, 1, ops, 6, operands, 3, XR_XIR_NEVER},
+        {"write", 5, &string, 1, XR_XIR_BOOL, &write_block, 1, write_ops, 2, NULL, 0, XR_XIR_NEVER},
+        {"continued", 9, &string, 1, XR_XIR_BOOL, &continue_block, 1, continue_ops, 3, NULL, 0, XR_XIR_NEVER}
     };
     const XrXirModule built = {XR_XIR_BUILT, functions, 3, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
