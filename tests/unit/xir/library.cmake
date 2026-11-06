@@ -63,7 +63,8 @@ add_test(NAME test_xir_library_c_abi COMMAND test_xir_library_c_abi)
 set_tests_properties(test_xir_library_c_abi PROPERTIES
     LABELS "unit;xir;compiler;abi;ownership" TIMEOUT 60 RUN_SERIAL TRUE)
 
-# Separate module-view qualification leaves the complete legacy-vector gate intact.
+# Module views share semantic, held-memory and endpoint OOM coverage.
+# The Source producer retains --compiler-faults for exhaustive compiler replay.
 add_test(NAME test_xir_library_views_source COMMAND test_xir_library_source --views)
 set_tests_properties(test_xir_library_views_source PROPERTIES
     LABELS "unit;xir;compiler;ownership;budget" TIMEOUT 120 RUN_SERIAL TRUE)
