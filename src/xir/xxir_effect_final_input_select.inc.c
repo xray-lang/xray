@@ -56,7 +56,8 @@ static XrXirStatus effect_final_input_select_next(const EffectBodyRequest *body,
         cursor->selection<EFFECT_FINAL_SELECT_REFERENCE ||
         cursor->selection>EFFECT_FINAL_SELECT_RESULT) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=effect_body_request_sequence_binding(body);if(status!=XR_XIR_OK) return status;
-    const EffectBodyMaterial *material=body->owner;const EffectBodyFunction *head=&material->functions[function];
+    const EffectBodyFunction *head=effect_body_owned_function(body,function);
+    if(!head) return XR_XIR_BAD_STRUCTURE;
     if(!head->instruction_count && (head->run_count || head->run_capacity || head->runs))
         return XR_XIR_BAD_STRUCTURE;
     status=effect_role_range(body->read.owner,head->runs,head->run_capacity,sizeof(*head->runs));
