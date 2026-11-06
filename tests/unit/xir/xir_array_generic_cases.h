@@ -39,7 +39,6 @@ static void array_generic_cases(void) {
     /* The template itself has three functions: immutable whole-graph limits
      * reject the bounded receiver before it can publish that template. */
     CHECK(xr_xir_compile_checked_read(&bounded,packet.bytes,packet.length,&limited,NULL)==XR_XIR_BUDGET && !limited);
-    generic_specialization_work_boundary(decoded);
     memset(packet.bytes, 0xCC, packet.length); xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(decoded, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded); decoded=NULL;

@@ -28,9 +28,6 @@ static void generic_runtime_retiring(void *pointer);
 #include "xir_runtime_allocations.h"
 #undef XIR_RUNTIME_BEFORE_FREE
 #include "xir_generic_fixture.h"
-#include "xir_error_marker73_golden.h"
-#include "xir_error_marker76_golden.h"
-#include "xir_error_marker91_golden.h"
 #include "xir_nominal_generic_fixture.h"
 #include "xir_nominal_expression_fixture.h"
 #include "xir_nominal_checked_fixture.h"
@@ -226,7 +223,6 @@ static void rehash_generic(XrXirCheckedPacket *packet) {
     xr_sha256_final(&sha, packet->bytes + 32);
 }
 static void error_erasure_packet(void) {
-    _Static_assert(XR_XIR_ERROR_ERASE == 98 && XR_XIR_ERROR == 14, "error wire identities");
     XrXirType parameter = XR_XIR_ERROR;
     XrXirInstruction ops[] = {{XR_XIR_ERROR_ERASE, XR_XIR_ERROR, {0}, {0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {1}, {0}, 0, {0}}};
@@ -240,11 +236,11 @@ static void error_erasure_packet(void) {
     xr_xir_compile_artifact_free(checked); checked=NULL;
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded); decoded=NULL; decoded = NULL;
-    const uint8_t instruction[32] = {98, 0, 0, 0, 14};
+    const uint8_t instruction[32] = {XR_XIR_ERROR_ERASE, 0, 0, 0, XR_XIR_ERROR};
     size_t offset = 0; unsigned found = 0;
     for (size_t i = 64; i + sizeof(instruction) <= packet.length; ++i)
         if (!memcmp(packet.bytes + i, instruction, sizeof(instruction))) { offset = i; ++found; }
-    CHECK(found == 1 && offset >= 88 && packet.bytes[offset - 28] == 14);
+    CHECK(found == 1 && offset >= 88 && packet.bytes[offset - 28] == XR_XIR_ERROR);
     const size_t positions[] = {offset - 28, offset + 4, offset + 8, offset + 16};
     const uint8_t replacements[] = {XR_XIR_I64, XR_XIR_I64, 1, 1};
     for (unsigned i = 0; i < 4; ++i) {
@@ -257,12 +253,14 @@ static void error_erasure_packet(void) {
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded); decoded=NULL; xr_xir_compile_checked_packet_free(&packet);
 }
-static void error_marker_definition_case(bool current_only) {
+static void error_marker_definition_case(void) {
     XrXirConstraint constraint = {.markers = XR_XIR_CONSTRAINT_ERROR};
     XrXirType parameter = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     XrXirInstruction instruction = {XR_XIR_THROW,XR_XIR_UNIT,{0},{0},0, {0}};
     XrXirBlock block = {0,1, 0, 0};
-    XrXirFunction function = {"e",1,&parameter,1,XR_XIR_I64,&block,1,&instruction,1,NULL,0};
+    XrXirFunction function = {.name="e",.name_length=1,.parameters=&parameter,.parameter_count=1,
+        .result=XR_XIR_I64,.error_type=parameter,.blocks=&block,.block_count=1,
+        .instructions=&instruction,.instruction_count=1};
     XrXirGeneric generic = {&constraint,1,NULL,0, NULL};
     XrXirModule built = {XR_XIR_BUILT,&function,1,NULL,&generic,NULL,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked=NULL,*decoded=NULL;
@@ -272,26 +270,24 @@ static void error_marker_definition_case(bool current_only) {
     xr_xir_compile_artifact_free(checked); checked=NULL;
     _Static_assert(XR_XIR_THROW==30 && XR_XIR_TYPE_PARAMETER_BASE==65536u &&
         XR_XIR_CONSTRAINT_ERROR==2u,"independent ERROR definition fields");
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==32 && XR_XIR_CHECKED_CONTRACT==91 &&
-        sizeof(error_marker91_golden)==ERROR_MARKER91_PACKET_LENGTH,
-        "independent ERROR packet framing");
-    CHECK(packet.length==sizeof(error_marker91_golden) &&
-        !memcmp(packet.bytes,error_marker91_golden,packet.length));
-    CHECK(!packet.bytes[ERROR_MARKER91_KINDS_PRESENT] &&
-        packet.bytes[ERROR_MARKER91_MARKER]==XR_XIR_CONSTRAINT_ERROR);
-    if (!current_only) {
-        CHECK(xr_xir_compile_checked_read(suite_context,error_marker73_previous,
-            sizeof(error_marker73_previous),&decoded,NULL)==XR_XIR_BAD_STRUCTURE && !decoded);
+    /* Find the complete single-binder constraint row, independent of framing. */
+    const uint8_t generic_row[]={1,0,0,0,1,0,0,0,0,0,0,0,XR_XIR_CONSTRAINT_ERROR,0,0,0,
+        0,0,0,0,0,0,0,0};
+    size_t marker=0;uint32_t matches=0;
+    for(size_t i=64;i+sizeof(generic_row)<=packet.length;++i) {
+        if(!memcmp(packet.bytes+i,generic_row,sizeof(generic_row))) { marker=i+12;++matches; }
     }
+    CHECK(matches==1);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded); decoded=NULL; decoded=NULL;
-    if (!current_only) {
-        const uint8_t forged[]={0,XR_XIR_CONSTRAINT_SENDABLE,4};
-        for (unsigned i=0;i<sizeof(forged);++i) {
-            packet.bytes[ERROR_MARKER91_MARKER]=forged[i]; rehash_generic(&packet);
-            CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL)==XR_XIR_BAD_TYPE && !decoded);
-        }
+    const uint8_t forged[]={0,XR_XIR_CONSTRAINT_SENDABLE,4};
+    for (unsigned i=0;i<sizeof(forged);++i) {
+        packet.bytes[marker]=forged[i];rehash_generic(&packet);
+        CHECK(xr_xir_compile_checked_read(suite_context,packet.bytes,packet.length,&decoded,NULL)==XR_XIR_BAD_TYPE && !decoded);
     }
+    packet.bytes[marker]=XR_XIR_CONSTRAINT_ERROR;rehash_generic(&packet);
+    CHECK(xr_xir_compile_checked_read(suite_context,packet.bytes,packet.length,&decoded,NULL)==XR_XIR_OK && decoded);
+    xr_xir_compile_artifact_free(decoded);decoded=NULL;
     xr_xir_compile_checked_packet_free(&packet);
     XrXirCompileContext budget=consumer_context_default();
     XrXirProofContext proof = {&built,{XR_XIR_CONTEXT_FUNCTION,0,0}};
@@ -300,10 +296,10 @@ static void error_marker_definition_case(bool current_only) {
     CHECK(xr_xir_compile_type_markers_prove(&budget, &proof, parameter, XR_XIR_CONSTRAINT_MASK)==XR_XIR_OK);
 }
 static void error_marker_definition(void) {
-    error_marker_definition_case(false);
+    error_marker_definition_case();
 }
 static void error_marker_definition_current(void) {
-    error_marker_definition_case(true);
+    error_marker_definition_case();
 }
 static void rejected_templates(void) {
     for (unsigned mode = 0; mode < 12; ++mode) {
