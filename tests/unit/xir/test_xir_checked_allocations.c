@@ -527,9 +527,11 @@ static void provenance_artifact_ownership(void) {
         CHECK(!copy && live == baseline);
     }
     fail_at = SIZE_MAX;
-    remaining = consumer_context_default(); remaining.limits.functions = 4;
+    CHECK(closed->module.function_count==3 && proof->source->module.function_count==2);
+    /* The structural limit bounds one module, not accumulated source history. */
+    remaining = consumer_context_default(); remaining.limits.functions = 2;
     CHECK(xr_xir_compile_verify_v2(&remaining, &closed->module, xr_xir_compile_artifact_construction(closed), NULL)==XR_XIR_BUDGET);
-    remaining.limits.functions = 5;
+    remaining.limits.functions = 3;
     CHECK(xr_xir_compile_verify_v2(&remaining, &closed->module, xr_xir_compile_artifact_construction(closed), NULL)==XR_XIR_OK);
     proof->source->module.provenance = proof;
     CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_BAD_STRUCTURE);
