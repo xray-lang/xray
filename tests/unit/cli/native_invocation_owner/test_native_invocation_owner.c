@@ -102,6 +102,38 @@ static void clear_build_directory(const char *directory) {
     } while(FindNextFileA(find,&entry));
     CHECK(GetLastError()==ERROR_NO_MORE_FILES && FindClose(find));
 }
+/* Failed reads retire their lease; recovery belongs to a new transaction. */
+static void output_read_failure_transactions(const XrXirInvocationRequest *request,
+    XrXirInvocation **owner,uint64_t prepared_held,size_t prepared_blocks,size_t prepared_bytes) {
+    XrCompileResources *resources=xr_compile_native_projection_context(request->projection)->resources;
+    for(unsigned failure=0;failure<2;++failure) {
+        const XrXirInvocationFacts *facts=xtc_xir_invocation_facts(*owner);CHECK(facts);
+        uint64_t output_length=0;
+        for(uint32_t i=0;i<facts->file_count;++i) {const XrXirInvocationFile *file=xtc_xir_invocation_file(*owner,i);CHECK(file);if(file->kind==XR_XIR_INVOCATION_OUTPUT)output_length=file->length;}
+        CHECK(output_length>1 && output_length<=SIZE_MAX);
+        size_t expected_length=0;void *expected=read_input(request->output,&expected_length);CHECK(expected_length==output_length);
+        void *retained=NULL;size_t retained_length=0;
+        CHECK(xtc_xir_invocation_read_output(*owner,output_length,&retained,&retained_length)==XR_XIR_INVOCATION_OK && retained_length==output_length && !memcmp(retained,expected,retained_length));
+        void *empty=NULL;size_t empty_length=0;size_t attempts=runtime_attempts;
+        XrXirInvocationStatus expected_failure=failure?XR_XIR_INVOCATION_OUT_OF_MEMORY:XR_XIR_INVOCATION_BUDGET;
+        if(failure)runtime_fail_at=attempts;
+        CHECK(xtc_xir_invocation_read_output(*owner,failure?output_length:output_length-1,&empty,&empty_length)==expected_failure && !empty && !empty_length);
+        runtime_fail_at=SIZE_MAX;CHECK(runtime_attempts==attempts+(failure?1u:0u));
+        CHECK(xtc_xir_invocation_read_output(*owner,output_length,&empty,&empty_length)==expected_failure && !empty && !empty_length && runtime_attempts==attempts+(failure?1u:0u));
+        xtc_xir_invocation_free(*owner);*owner=NULL;
+        CHECK(retained_length==output_length && !memcmp(retained,expected,retained_length));free(expected);xr_compile_resources_free(retained);
+        XrCompileResourceStats restored;CHECK(xr_compile_resources_stats(resources,&restored)==XR_COMPILE_RESOURCE_OK && restored.held_bytes==prepared_held && runtime_live==prepared_blocks && runtime_bytes==prepared_bytes);
+        clear_build_directory(request->input_directory);clear_build_directory(request->output_directory);
+#ifdef INVOCATION_INJECTED
+        invocation_runs=0;
+#endif
+        XrXirInvocationDiagnostic diagnostic={0};CHECK(xtc_xir_invocation_run(request,owner,&diagnostic)==XR_XIR_INVOCATION_OK && *owner);
+#ifdef INVOCATION_INJECTED
+        CHECK(invocation_runs==3);
+#endif
+    }
+    puts("independent Budget/OOM read transactions stay sticky; retained results outlive each owner; same prepared ledger restores a fresh successful owner PASS");
+}
 static int run_test(int argc, char **argv) {
     CHECK(argc==24);
     XrXirMsvcRecipe recipe={argv[16],argv[17],argv[18],argv[19],argv[20]};
@@ -256,6 +288,7 @@ static int run_test(int argc, char **argv) {
 #ifdef INVOCATION_INJECTED
     if(owner)CHECK(invocation_runs==3);
 #endif
+    if(owner && !strcmp(mode,"positive"))output_read_failure_transactions(&request,&owner,before.held_bytes,blocks,bytes);
     xtc_process_free(foreign_process);xr_xir_runtime_sdk_free(foreign_sdk);xr_compile_resources_release(foreign);
     for(unsigned i=0;i<3;++i)xtc_process_free(processes[i]);
     xr_compile_native_projection_owner_free(project);xr_xir_runtime_sdk_free(sdk);free(launcher);free(large_launcher);
@@ -284,12 +317,8 @@ static int run_test(int argc, char **argv) {
     void *occupied_bytes=(void *)(uintptr_t)1;size_t empty_length=0;
     CHECK(xtc_xir_invocation_read_output(owner,output_length,&occupied_bytes,&empty_length)==XR_XIR_INVOCATION_INVALID && occupied_bytes==(void *)(uintptr_t)1 && !empty_length);
     again=NULL;again_length=1;CHECK(xtc_xir_invocation_read_output(owner,output_length,&again,&again_length)==XR_XIR_INVOCATION_INVALID && !again && again_length==1);
-    again_length=0;CHECK(xtc_xir_invocation_read_output(owner,output_length-1,&again,&again_length)==XR_XIR_INVOCATION_BUDGET && !again && !again_length);
-    size_t attempts=runtime_attempts;runtime_fail_at=attempts;
-    CHECK(xtc_xir_invocation_read_output(owner,output_length,&again,&again_length)==XR_XIR_INVOCATION_OUT_OF_MEMORY && !again && !again_length && runtime_attempts==attempts+1);
-    runtime_fail_at=SIZE_MAX;CHECK(xtc_xir_invocation_read_output(owner,output_length,&again,&again_length)==XR_XIR_INVOCATION_OK);xr_compile_resources_free(again);
     xtc_xir_invocation_free(owner);CHECK(runtime_live && length==output_length && !memcmp(result,expected_output,length));free(expected_output);xr_compile_resources_free(result);
-    CHECK(!runtime_live && !runtime_bytes);puts("independent output outlives producers and invocation; read OOM/retry; physical zero PASS");return 0;
+    CHECK(!runtime_live && !runtime_bytes);puts("independent healthy output outlives producers and invocation; physical zero PASS");return 0;
 }
 typedef struct InvocationThread { int argc; char **argv; } InvocationThread;
 static DWORD WINAPI invocation_thread(void *context) {
