@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main, master]
   push:
-    branches: [main, agent/host-arch-portability]
+    branches: [main, agent/host-arch-portability, agent/direct-cutover]
   workflow_dispatch:
 
 concurrency:
