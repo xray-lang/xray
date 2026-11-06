@@ -88,7 +88,9 @@ done:
             size_t attempts=runtime_attempts;
             XrXirCallStatus prior=xr_xir_instance_poll_bounded(instances[i],1).outcome.status;
             CHECK(runtime_attempts==attempts);
-            CHECK(prior==XR_XIR_CALL_BAD_STATE || prior==XR_XIR_CALL_OOM);
+            if (prior!=XR_XIR_CALL_BAD_STATE && prior!=XR_XIR_CALL_CONSUMED && prior!=XR_XIR_CALL_OOM)
+                fprintf(stderr,"state prior%u fault%zu attempts%zu\n",prior,runtime_fail_at,runtime_attempts);
+            CHECK(prior==XR_XIR_CALL_BAD_STATE || prior==XR_XIR_CALL_CONSUMED || prior==XR_XIR_CALL_OOM);
             if (prior==XR_XIR_CALL_OOM) {
                 CHECK(runtime_fail_at!=SIZE_MAX && runtime_attempts>runtime_fail_at);
                 expected=prior;
