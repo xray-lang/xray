@@ -74,7 +74,10 @@ static XrXirArtifact *struct_set_checked(const XrXirCompileContext *context, uns
         {"entry",5,NULL,0,XR_XIR_I64,&all,1,entry,29,printed,5,.error_type=XR_XIR_NEVER},
         {"replace",7,NULL,0,XR_XIR_I64,&seven,1,replace,7,replace_values,2,.error_type=XR_XIR_NEVER}};
     XrXirSourceModule source = {"alpha",5,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
-    XrXirFunctionIdentity identities[] = {{0,0,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,0,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
+    XrXirFunctionIdentity identities[] = {
+        {.method_kind=XR_XIR_NON_MEMBER},
+        {.exported=1,.method_kind=XR_XIR_NON_MEMBER},
+        {.method_kind=XR_XIR_NON_MEMBER}};
     XrXirLiteral literals[] = {{"roots",5},{"replacement",11}};
     XrXirSlot slots[] = {{0,cell,1},{0,pair,0}};
     XrXirDeclarations declarations = {&source,1,identities,slots,2,literals,2,0,1, NULL};

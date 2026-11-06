@@ -17,13 +17,13 @@ static XrXirArtifact *enum_generic_checked(const XrXirCompileContext *context, u
     XrXirNominalVariant variants[] = {{{"None",4},0,0},{{"Some",4},0,1}};
     XrXirNominalField field = {{"value",5},t,0};
     XrXirNominalDeclaration declaration = {{"alpha",5},{"Choice",6},1,&nominal_constraint,1,&field,1,
-        XR_XIR_NOMINAL_ENUM,variants,2, 0, {0}};
+        XR_XIR_NOMINAL_ENUM,variants,2, 0, {0},.parent=0};
     XrXirNominalTable table = {&declaration,1,NULL};
     XrXirTypeNode nodes[] = {
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,1,{0,&t,1,NULL,0}},
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,&concrete,1,NULL,0}}};
     XrXirTypes types = {nodes,2,&table, NULL};
-    XrXirInstruction init = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}};
+    XrXirInstruction init = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0},.parent=0};
     XrXirInstruction entry[] = {{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},42, {0}},
         {XR_XIR_CALL,(XrXirType)257,{0,1},{0},2, {0,1}},
         {XR_XIR_ENUM_GET,XR_XIR_I64,{1,0},{0},1, {0}},
@@ -39,7 +39,11 @@ static XrXirArtifact *enum_generic_checked(const XrXirCompileContext *context, u
         {"make",4,&parameter,1,(XrXirType)256,&two,1,make,2,&operand,1,.error_type=XR_XIR_NEVER},
         {"initB",5,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0,.error_type=XR_XIR_NEVER}};
     XrXirSourceModule modules[] = {{"alpha",5,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE},{"beta",4,&dependency,1,3, 0,XR_XIR_MODULE_FRESH_STORAGE}};
-    XrXirFunctionIdentity identities[] = {{0,0,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{1,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{1,0,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
+    XrXirFunctionIdentity identities[] = {
+        {.method_kind=XR_XIR_NON_MEMBER},
+        {.module=1,.exported=1,.method_kind=XR_XIR_NON_MEMBER},
+        {.exported=1,.method_kind=XR_XIR_NON_MEMBER},
+        {.module=1,.method_kind=XR_XIR_NON_MEMBER}};
     XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,1,1, NULL};
     XrXirGeneric generics[] = {{0},{NULL,0,&concrete,1, NULL},{&function_constraint,1,NULL,0, NULL},{0}};
     XrXirModule built = {XR_XIR_BUILT,functions,4,&declarations,generics,&types,NULL, XR_XIR_PROGRAM, NULL};
@@ -48,7 +52,7 @@ static XrXirArtifact *enum_generic_checked(const XrXirCompileContext *context, u
     if (mode == 3) { modules[1].dependencies = NULL; modules[1].dependency_count = 0; }
     if (mode == 4) parameter = XR_XIR_STRING;
     if (mode == 5) {
-        entry[1] = (XrXirInstruction) {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}};
+        entry[1] = (XrXirInstruction) {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0},.parent=0};
         four.count = 2; functions[1].instruction_count = 2;
         functions[1].operands = NULL; functions[1].operand_count = 0;
         generics[1].arguments = NULL; generics[1].argument_count = 0;

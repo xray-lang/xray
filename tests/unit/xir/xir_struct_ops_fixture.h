@@ -21,12 +21,12 @@ static XrXirArtifact *struct_ops_checked(const XrXirCompileContext *context, uns
     nominal.declarations[0].parameter_count = 0;
     nominal.declarations[0].flags = XR_XIR_NOMINAL_MODULE_LITERAL;
     nominal.fields[0].type = XR_XIR_I64;
-    nominal.declarations[1] = (XrXirNominalDeclaration) {{"alpha",5},{"Empty",5},1,NULL,0,NULL,0, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0, {0}};
+    nominal.declarations[1] = (XrXirNominalDeclaration) {{"alpha",5},{"Empty",5},1,NULL,0,NULL,0, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0, {0},.parent=0};
     XrXirTypeNode nodes[] = {
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,NULL,0,NULL,0}},
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{1,NULL,0,NULL,0}}};
     XrXirTypes types = {nodes,2,&nominal.table, NULL};
-    XrXirInstruction init = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}};
+    XrXirInstruction init = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0},.parent=0};
     XrXirInstruction entry[] = {
         {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},23, {0}},
         {XR_XIR_CONST_STRING,XR_XIR_STRING,{0},{0},0, {0}},
@@ -47,7 +47,10 @@ static XrXirArtifact *struct_ops_checked(const XrXirCompileContext *context, uns
         {"entry",5,NULL,0,XR_XIR_I64,&five,1,entry,5,operands,2,.error_type=XR_XIR_NEVER},
         {"make",4,parameters,2,pair,&six,1,make,6,operands,2,.error_type=XR_XIR_NEVER}};
     XrXirSourceModule source = {"alpha",5,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
-    XrXirFunctionIdentity identities[] = {{0,0,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,1, 0, 0, 0, XR_XIR_CONSTRUCTOR, 0, 0}};
+    XrXirFunctionIdentity identities[] = {
+        {.method_kind=XR_XIR_NON_MEMBER},
+        {.exported=1,.method_kind=XR_XIR_NON_MEMBER},
+        {.exported=1,.nominal_owner=1,.method_kind=XR_XIR_CONSTRUCTOR}};
     XrXirLiteral literal = {"constructed",11};
     XrXirDeclarations declarations = {&source,1,identities,NULL,0,&literal,1,0,1, NULL};
     XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types, NULL, XR_XIR_PROGRAM, NULL};

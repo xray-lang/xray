@@ -15,11 +15,11 @@
 static XrXirArtifact *enum_ops_checked(const XrXirCompileContext *context, unsigned invalid, bool wrong_variant) {
     XrXirNominalVariant variants[] = {{{"Empty",5},0,0},{{"Some",4},0,2}};
     XrXirNominalField fields[] = {{{"value",5},XR_XIR_I64,0},{{"note",4},XR_XIR_STRING,0}};
-    XrXirNominalDeclaration declaration = {{"alpha",5},{"Choice",6},1,NULL,0,fields,2,XR_XIR_NOMINAL_ENUM,variants,2, 0, {0}};
+    XrXirNominalDeclaration declaration = {{"alpha",5},{"Choice",6},1,NULL,0,fields,2,XR_XIR_NOMINAL_ENUM,variants,2, 0, {0},.parent=0};
     XrXirNominalTable table = {&declaration,1,NULL};
     XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_NOMINAL;
     XrXirTypes types = {&node,1,&table, NULL};
-    XrXirInstruction init = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}};
+    XrXirInstruction init = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0},.parent=0};
     XrXirInstruction entry[] = {
         {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},23, {0}},
         {XR_XIR_CONST_STRING,XR_XIR_STRING,{0},{0},0, {0}},
@@ -39,7 +39,10 @@ static XrXirArtifact *enum_ops_checked(const XrXirCompileContext *context, unsig
         {"entry",5,NULL,0,XR_XIR_I64,&two,1,main_ops,2,NULL,0,.error_type=XR_XIR_NEVER},
         {"make",4,NULL,0,(XrXirType)256,&block,1,entry,11,operands,6,.error_type=XR_XIR_NEVER}};
     XrXirSourceModule source = {"alpha",5,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
-    XrXirFunctionIdentity identities[] = {{0,0,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
+    XrXirFunctionIdentity identities[] = {
+        {.method_kind=XR_XIR_NON_MEMBER},
+        {.exported=1,.method_kind=XR_XIR_NON_MEMBER},
+        {.exported=1,.method_kind=XR_XIR_NON_MEMBER}};
     XrXirLiteral literal = {"constructed",11};
     XrXirDeclarations declarations = {&source,1,identities,NULL,0,&literal,1,0,1, NULL};
     XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};
