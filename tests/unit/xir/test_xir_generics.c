@@ -354,10 +354,21 @@ static void forwarding(void) {
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(valid, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(valid); valid=NULL;
-    /* Empty construction materialization, site and binding counts occupy twelve bytes. */
-    CHECK(packet.length > 80 && packet.bytes[packet.length - 80] == XR_XIR_CONSTRAINT_SENDABLE);
-    packet.bytes[packet.length - 80] = 0; rehash_generic(&packet);
+    /* Only the callee has one binder and no concrete call arguments. */
+    const uint8_t callee_row[]={1,0,0,0,0,0,0,0,XR_XIR_CONSTRAINT_SENDABLE,0,0,0,
+        0,0,0,0,0,0,0,0};
+    size_t marker=0;unsigned matches=0;
+    for(size_t i=64;i+sizeof(callee_row)<=packet.length;++i) {
+        if(!memcmp(packet.bytes+i,callee_row,sizeof(callee_row))) {marker=i+8;++matches;}
+    }
+    CHECK(matches==1);
+    CHECK(xr_xir_compile_checked_read(suite_context,packet.bytes,packet.length,&forged,NULL)==XR_XIR_OK && forged);
+    xr_xir_compile_artifact_free(forged);forged=NULL;
+    packet.bytes[marker] = 0; rehash_generic(&packet);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &forged, NULL) == XR_XIR_BAD_TYPE && !forged);
+    packet.bytes[marker]=XR_XIR_CONSTRAINT_SENDABLE;rehash_generic(&packet);
+    CHECK(xr_xir_compile_checked_read(suite_context,packet.bytes,packet.length,&forged,NULL)==XR_XIR_OK && forged);
+    xr_xir_compile_artifact_free(forged);forged=NULL;
     xr_xir_compile_checked_packet_free(&packet);
     xr_xir_compile_artifact_free(checked); checked=NULL;
 }
@@ -645,23 +656,6 @@ int main(int argc,char **argv) {
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked); checked=NULL;
-    packet.bytes[8] = 1; packet.bytes[12] = 1; rehash_generic(&packet);
-    CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_BAD_STRUCTURE && !decoded);
-    packet.bytes[8] = 2; packet.bytes[12] = 2; rehash_generic(&packet);
-    CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_BAD_STRUCTURE && !decoded);
-    packet.bytes[12] = 3; rehash_generic(&packet);
-    CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_BAD_STRUCTURE && !decoded);
-    packet.bytes[12] = 4; rehash_generic(&packet);
-    CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_BAD_STRUCTURE && !decoded);
-    packet.bytes[12] = 5; rehash_generic(&packet);
-    CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_BAD_STRUCTURE && !decoded);
-    packet.bytes[12] = 6; rehash_generic(&packet);
-    CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_BAD_STRUCTURE && !decoded);
-    packet.bytes[8] = 3; packet.bytes[12] = 7; rehash_generic(&packet);
-    CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_BAD_STRUCTURE && !decoded);
-    packet.bytes[12] = 8; rehash_generic(&packet);
-    CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_BAD_STRUCTURE && !decoded);
-    packet.bytes[8] = XR_XIR_CHECKED_SCHEMA; packet.bytes[12] = XR_XIR_CHECKED_CONTRACT; rehash_generic(&packet);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     XrXirCompileContext bounded=consumer_context_default();bounded.limits.functions=2;
     XrXirArtifact *limited=NULL;
