@@ -286,7 +286,10 @@ static void task_group_dispose_all(XrXirTaskExecutor *executor) {
             XirTaskSubscription *next=member->next_member;XirTaskSubscription **link=&member->task->subscriptions;
             while(*link!=member) {XR_CHECK(*link,"a member keeps its original subscription");link=&(*link)->next_subscription;}
             *link=member->next_subscription;XrXirValue lease=task_core_task_value(member->task);xr_xir_value_drop(&lease);
-            if(!group->kind)xr_xir_domain_metadata_deallocate(executor->config.domain,member,sizeof(*member));member=next;
+            if(!group->kind) {
+                xr_xir_domain_metadata_deallocate(executor->config.domain,member,sizeof(*member));
+            }
+            member=next;
         }
         if(group->kind&&group->count)xr_xir_domain_metadata_deallocate(executor->config.domain,group->first,
             group->count*sizeof(XirTaskSubscription));
