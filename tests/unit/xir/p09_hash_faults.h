@@ -47,9 +47,9 @@ static void hash_fault_unchanged(HashFaultCase *test, int64_t root, const unsign
 static void hash_faults(XrXirTypeArena *arena, XrXirDomain *domain) {
     for (unsigned operation = 0; operation < 5; ++operation) {
         HashFaultCase baseline; hash_fault_setup(&baseline, operation, arena, domain);
-        size_t before = calls; uint64_t work = baseline.admission.work;
+        size_t before = value_allocation_calls; uint64_t work = baseline.admission.work;
         CHECK(hash_fault_operation(&baseline) == XR_XIR_VALUE_OK);
-        size_t sites = calls - before; uint64_t exact = work - baseline.admission.work;
+        size_t sites = value_allocation_calls - before; uint64_t exact = work - baseline.admission.work;
         hash_fault_finish(&baseline); CHECK((sites > 0 || operation == 4) && exact > 1);
         if (operation == 4) CHECK(!sites);
         for (size_t site = 0; site < sites; ++site) {
@@ -58,8 +58,8 @@ static void hash_faults(XrXirTypeArena *arena, XrXirDomain *domain) {
             CHECK(hash_data_size(map->capacity, map->stride, &size) && size == sizeof(bytes));
             memcpy(bytes, map->data, size); unsigned char *data = map->data; int64_t root = test.root.payload;
             uint64_t requested = xr_xir_domain_stats(domain).allocations;
-            before = calls; fail_at = before + site;
-            CHECK(hash_fault_operation(&test) == XR_XIR_VALUE_OOM && calls > fail_at);
+            before = value_allocation_calls; fail_at = before + site;
+            CHECK(hash_fault_operation(&test) == XR_XIR_VALUE_OOM && value_allocation_calls > fail_at);
             fail_at = SIZE_MAX;
             hash_fault_unchanged(&test, root, bytes, data, size);
             CHECK(hash_fault_operation(&test) == XR_XIR_VALUE_OK && xr_xir_domain_stats(domain).allocations > requested);

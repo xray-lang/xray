@@ -67,7 +67,10 @@ static void contains_cases(XrXirValueAdmission *admission, bool full) {
     CHECK(xr_xir_map_get(&map, &key, admission, &output, &found) == XR_XIR_VALUE_OOM);
     CHECK(!output.type && !output.payload && !found && value_allocation_calls == before + 1);
     fail_at = value_allocation_calls; before = value_allocation_calls;
-    CHECK(xr_xir_map_contains_key(&map, &key, admission, &found) == XR_XIR_VALUE_OK && found);
+    XrXirValueStatus contains_status=xr_xir_map_contains_key(&map, &key, admission, &found);
+    if(contains_status!=XR_XIR_VALUE_OK || !found)fprintf(stderr,"contains status=%u found=%u allocations=%zu work=%llu\n",
+        contains_status,found,(size_t)(value_allocation_calls-before),(unsigned long long)admission->work);
+    CHECK(contains_status == XR_XIR_VALUE_OK && found);
     CHECK(value_allocation_calls == before);
     found = true;
     CHECK(xr_xir_map_contains_key(&map, &missing, admission, &found) == XR_XIR_VALUE_OK && !found && value_allocation_calls == before);

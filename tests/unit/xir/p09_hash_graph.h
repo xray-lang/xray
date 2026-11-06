@@ -48,8 +48,8 @@ static void hash_graph_cases(void) {
     CHECK(xr_xir_map_get(&map, &key, &local, &read, &found) == XR_XIR_VALUE_OK && found && read.payload == node.payload);
     xr_xir_value_drop(&read); xr_xir_value_drop(&map);
     xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(owner);
-    size_t before = calls; fail_at = calls;
-    xr_xir_value_drop(&node); CHECK(calls == before); fail_at = SIZE_MAX;
+    size_t before = value_allocation_calls; fail_at = value_allocation_calls;
+    xr_xir_value_drop(&node); CHECK(value_allocation_calls == before); fail_at = SIZE_MAX;
     CHECK(!live && !value_compile_live && !value_compile_bytes);
     puts("Map/Class/Optional cycle, foreign identity rejection, receiving detachment and final no-allocation retirement PASS");
 }
