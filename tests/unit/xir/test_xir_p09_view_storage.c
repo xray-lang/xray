@@ -237,7 +237,7 @@ int main(void) {
     resources=NULL;CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
     view_storage_guards(resources);view_storage_string_guards(resources);
     CHECK(compile_domain_stats(resources).live_bytes==sizeof(*resources));
-    xr_compile_resources_release(resources);CHECK(!value_compile_live && !value_compile_bytes && !live && !calls);
+    xr_compile_resources_release(resources);CHECK(!value_compile_live && !value_compile_bytes && !live && !value_allocation_calls);
     printf("View storage: Array COW, byte ranges, exact reborrows, owned copies, %zu complete allocation failures, three axes and physical0 PASS\n",sites);
     return 0;
 }

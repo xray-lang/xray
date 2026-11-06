@@ -42,11 +42,11 @@ static XrXirValueStatus view_origin_deep_sequence(XrCompileResources *resources)
     for (unsigned repeat=0;repeat<2;++repeat) {
         uint64_t prior_work=xr_xir_domain_budget_stats(domain).work;
         uint64_t prior_requests=xr_xir_domain_budget_stats(domain).requested_bytes;
-        uint32_t prior_calls=scope.calls;
+        uint32_t prior_calls=scope.value_allocation_calls;
         TRY_VALUE(xr_xir_borrowed_value_origin_match(&values[4],(XrXirType)262,&input,&access));
         work[repeat]=xr_xir_domain_budget_stats(domain).work-prior_work;
         requests[repeat]=xr_xir_domain_budget_stats(domain).requested_bytes-prior_requests;
-        CHECK(scope.calls==prior_calls+2 && admission.scratch_bytes==scratch &&
+        CHECK(scope.value_allocation_calls==prior_calls+2 && admission.scratch_bytes==scratch &&
             values[4].payload==before.payload && input.body==identity && xr_xir_value_valid(&values[4]));
     }
     CHECK(work[0]==work[1] && requests[0]==requests[1] && requests[0]>0 && work[0]<50000);
@@ -82,11 +82,11 @@ static XrXirValueStatus view_origin_dag_sequence(XrCompileResources *resources) 
     uint64_t work[2],requests[2];XrXirValue before=values[2];uint64_t scratch=admission.scratch_bytes;
     for (unsigned repeat=0;repeat<2;++repeat) {
         uint64_t prior_work=xr_xir_domain_budget_stats(domain).work;
-        uint64_t prior_requests=xr_xir_domain_budget_stats(domain).requested_bytes;uint32_t prior_calls=scope.calls;
+        uint64_t prior_requests=xr_xir_domain_budget_stats(domain).requested_bytes;uint32_t prior_calls=scope.value_allocation_calls;
         TRY_VALUE(xr_xir_borrowed_value_origin_match(&values[2],type,&input,&access));
         work[repeat]=xr_xir_domain_budget_stats(domain).work-prior_work;
         requests[repeat]=xr_xir_domain_budget_stats(domain).requested_bytes-prior_requests;
-        CHECK(scope.calls==prior_calls+1 && admission.scratch_bytes==scratch && values[2].payload==before.payload);
+        CHECK(scope.value_allocation_calls==prior_calls+1 && admission.scratch_bytes==scratch && values[2].payload==before.payload);
     }
     CHECK(work[0]==work[1] && requests[0]==requests[1] && requests[0]>0 && work[0]<20000);
 done:
@@ -121,6 +121,6 @@ int main(void) {
         CHECK(compile_domain_stats(resources).live_bytes==sizeof(*resources));xr_compile_resources_release(resources);resources=NULL;
         CHECK(!value_compile_live && !value_compile_bytes && !live);
     }
-    CHECK(!calls);printf("View origin: 80 retired ancestors, two distinct leaves, 2^69 logical leaves, %zu complete allocation failures, repeat axes and physical0 PASS\n",sites);
+    CHECK(!value_allocation_calls);printf("View origin: 80 retired ancestors, two distinct leaves, 2^69 logical leaves, %zu complete allocation failures, repeat axes and physical0 PASS\n",sites);
     return 0;
 }

@@ -52,12 +52,12 @@ static void key_string_cases(XrXirValueAdmission *admission) {
     CHECK(xr_xir_string_new(producer, "a\0\xce\xb2", 4, &values[2]) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_string_new(producer, "", 0, &values[3]) == XR_XIR_VALUE_OK);
     xr_xir_domain_close(producer); xr_xir_domain_drop(producer);
-    size_t before = calls; fail_at = calls;
+    size_t before = value_allocation_calls; fail_at = value_allocation_calls;
     key_pair(values[0], values[1], true, admission); key_pair(values[0], values[2], false, admission);
     key_pair(values[0], values[3], false, admission); key_pair(values[3], values[3], true, admission);
-    CHECK(calls == before);
+    CHECK(value_allocation_calls == before);
     for (unsigned i = 0; i < 4; ++i) xr_xir_value_drop(&values[i]);
-    fail_at = SIZE_MAX; CHECK(calls == before);
+    fail_at = SIZE_MAX; CHECK(value_allocation_calls == before);
 }
 static void key_failure_cases(XrXirValueAdmission *admission) {
     XrXirValue good = {XR_XIR_I64, 0, 7}, bad = {XR_XIR_BOOL, 0, 2}, unsupported = {XR_XIR_UNIT, 0, 0};
@@ -93,9 +93,9 @@ static void key_domain_boundaries(void) {
 int main(void) {
     XrXirDomain *domain = NULL; CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     XrXirValueAdmission admission = {NULL, domain, NULL, NULL, 100000, 0};
-    size_t before = calls; fail_at = calls;
+    size_t before = value_allocation_calls; fail_at = value_allocation_calls;
     key_scalar_cases(&admission); key_failure_cases(&admission);
-    fail_at = SIZE_MAX; CHECK(calls == before);
+    fail_at = SIZE_MAX; CHECK(value_allocation_calls == before);
     key_string_cases(&admission); xr_xir_domain_drop(domain); CHECK(!live);
     key_domain_boundaries(); CHECK(!value_compile_live && !value_compile_bytes);
     puts("Built-in typed key equivalence/hash: IEEE classes, full bytes, finite work and final physical0 PASS");

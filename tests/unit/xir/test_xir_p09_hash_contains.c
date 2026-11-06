@@ -31,7 +31,7 @@ static void contains_bad_admission(const XrXirValue *map, const XrXirValue *set,
     XrXirValue root = *map, set_root = *set, output = {0};
     XrXirValuePlace place = {(XrXirType)root.type, &root.payload};
     XrXirValuePlace set_place = {(XrXirType)set_root.type, &set_root.payload};
-    size_t before = calls;
+    size_t before = value_allocation_calls;
     for (size_t i = 0; i < sizeof(invalid) / sizeof(*invalid); ++i) {
         bool found = true; int64_t length = -1;
         uint64_t work = invalid[i] ? invalid[i]->work : 0;
@@ -46,7 +46,7 @@ static void contains_bad_admission(const XrXirValue *map, const XrXirValue *set,
         CHECK(xr_xir_set_add(&set_place, key, invalid[i]) == XR_XIR_VALUE_BAD_ARGUMENT);
         CHECK(xr_xir_hash_delete(&place, key, invalid[i], &found) == XR_XIR_VALUE_BAD_ARGUMENT);
         CHECK(xr_xir_hash_clear(&place, invalid[i]) == XR_XIR_VALUE_BAD_ARGUMENT);
-        CHECK(found && length == -1 && !output.type && !output.payload && calls == before);
+        CHECK(found && length == -1 && !output.type && !output.payload && value_allocation_calls == before);
         CHECK(root.payload == map->payload && set_root.payload == set->payload);
         CHECK(!invalid[i] || (invalid[i]->work == work && invalid[i]->scratch_bytes == scratch));
     }
@@ -62,15 +62,15 @@ static void contains_cases(XrXirValueAdmission *admission, bool full) {
     contains_bad_admission(&map, &set, &key, &optional, admission);
     /* Extracting this inline Nullable allocates its independently owned box.
      * A key-only query must not need that result or its allocation. */
-    size_t before = calls; fail_at = calls;
+    size_t before = value_allocation_calls; fail_at = value_allocation_calls;
     XrXirValue output = {0}; bool found = false;
     CHECK(xr_xir_map_get(&map, &key, admission, &output, &found) == XR_XIR_VALUE_OOM);
-    CHECK(!output.type && !output.payload && !found && calls == before + 1);
-    fail_at = calls; before = calls;
+    CHECK(!output.type && !output.payload && !found && value_allocation_calls == before + 1);
+    fail_at = value_allocation_calls; before = value_allocation_calls;
     CHECK(xr_xir_map_contains_key(&map, &key, admission, &found) == XR_XIR_VALUE_OK && found);
-    CHECK(calls == before);
+    CHECK(value_allocation_calls == before);
     found = true;
-    CHECK(xr_xir_map_contains_key(&map, &missing, admission, &found) == XR_XIR_VALUE_OK && !found && calls == before);
+    CHECK(xr_xir_map_contains_key(&map, &missing, admission, &found) == XR_XIR_VALUE_OK && !found && value_allocation_calls == before);
     fail_at = SIZE_MAX;
     CHECK(xr_xir_map_get(&map, &key, admission, &output, &found) == XR_XIR_VALUE_OK && found);
     CHECK(output.type == optional.type && output.payload != optional.payload);
@@ -84,10 +84,10 @@ static void contains_cases(XrXirValueAdmission *admission, bool full) {
     uint64_t needed = start - admission->work; CHECK(needed > 1);
     uint64_t first = full ? 0 : needed - 1;
     for (uint64_t work = first; work <= needed; ++work) {
-        admission->work = work; found = false; before = calls;
+        admission->work = work; found = false; before = value_allocation_calls;
         CHECK(xr_xir_map_contains_key(&map, &key, admission, &found) ==
             (work == needed ? XR_XIR_VALUE_OK : XR_XIR_VALUE_LIMIT));
-        CHECK(found == (work == needed) && calls == before);
+        CHECK(found == (work == needed) && value_allocation_calls == before);
         CHECK(map.payload == root && alias.payload == root && storage->data == data && !memcmp(data, bytes, size));
     }
     admission->work = 1000000; found = true;

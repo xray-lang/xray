@@ -32,7 +32,7 @@ _Static_assert(sizeof(XrXirViewStorage)==sizeof(ViewStorage26) && sizeof(XirView
     "one canonical parent and existing tail padding preserve view body size");
 
 typedef struct ViewBinding {int64_t payload;XrXirCellAuthority authority;} ViewBinding;
-typedef struct ViewScope {bool active,wrong;uint32_t count,calls;ViewBinding bindings[128];} ViewScope;
+typedef struct ViewScope {bool active,wrong;uint32_t count,value_allocation_calls;ViewBinding bindings[128];} ViewScope;
 static void view_bind(ViewScope *scope,const XrXirValue *value,XrXirCellAuthority authority) {
     for (uint32_t i=0;i<scope->count;++i) if (scope->bindings[i].payload==value->payload) {
         scope->bindings[i].authority=authority;return;
@@ -41,7 +41,7 @@ static void view_bind(ViewScope *scope,const XrXirValue *value,XrXirCellAuthorit
 }
 static XrXirValueStatus view_authorize(void *context,const XrXirValue *value,bool writable,
     XrXirValueAdmission *admission,XrXirCellAuthority *output) {
-    ViewScope *scope=context;(void)writable;(void)admission;++scope->calls;
+    ViewScope *scope=context;(void)writable;(void)admission;++scope->value_allocation_calls;
     if (!scope->active) return XR_XIR_VALUE_BAD_ARGUMENT;
     for (uint32_t i=0;i<scope->count;++i) if (scope->bindings[i].payload==value->payload) {
         *output=scope->bindings[i].authority;if (scope->wrong) ++output->epoch;return XR_XIR_VALUE_OK;
@@ -123,8 +123,8 @@ static XrXirValueStatus view_origin_pin_sequence(XrXirValue *root,const XrXirVal
     admission->scratch_bytes=0;
     CHECK(xr_xir_borrowed_value_origin_match(&aggregate,(XrXirType)262,&pins[0],access)==XR_XIR_VALUE_LIMIT &&
         !admission->scratch_bytes && xr_xir_value_valid(&aggregate));admission->scratch_bytes=scratch;
-    uint32_t before_calls=scope->calls;
-    TRY_VALUE(xr_xir_borrowed_value_origin_match(&aggregate,(XrXirType)262,&pins[0],access));CHECK(scope->calls==before_calls+2);
+    uint32_t before_calls=scope->value_allocation_calls;
+    TRY_VALUE(xr_xir_borrowed_value_origin_match(&aggregate,(XrXirType)262,&pins[0],access));CHECK(scope->value_allocation_calls==before_calls+2);
     xr_xir_value_drop(&aggregate);xr_xir_value_drop(&view);
     child_authority.epoch=504;child_spec=(XrXirViewStorageSpec){child_authority,1,1,XR_XIR_TYPE_SLICE};
     TRY_VALUE(xr_xir_view_new((XrXirType)258,root,NULL,&child_spec,admission,&view));view_bind(scope,&view,child_authority);
@@ -232,11 +232,11 @@ static XrXirValueStatus view_values_sequence(XrCompileResources *resources) {
         TRY_VALUE(xr_xir_borrowed_tuple_new_move(dag_type,fields,2,&access,&values[4]));
         xr_xir_value_drop(&values[3]);TRY_VALUE(xr_xir_value_move(&values[4],&values[3]));
     }
-    uint32_t before_calls=scope.calls;uint64_t work=xr_xir_domain_budget_stats(domain).work;
+    uint32_t before_calls=scope.value_allocation_calls;uint64_t work=xr_xir_domain_budget_stats(domain).work;
     CHECK(xr_xir_borrowed_value_origin_pin(&values[3],dag_type,&access,&rejected_origin)==XR_XIR_VALUE_BAD_ARGUMENT &&
-        !rejected_origin.body && scope.calls==before_calls);
+        !rejected_origin.body && scope.value_allocation_calls==before_calls);
     TRY_VALUE(xr_xir_borrowed_value_admit(&values[3],dag_type,&access));
-    CHECK(scope.calls==before_calls+1 && xr_xir_domain_budget_stats(domain).work-work<20000);
+    CHECK(scope.value_allocation_calls==before_calls+1 && xr_xir_domain_budget_stats(domain).work-work<20000);
     xr_xir_value_drop(&values[3]);xr_xir_view_origin_unpin(&input_origin);
     for (uint32_t i=0;i<80;++i) {
         XrXirCellAuthority authority={domain,&scope,100+i};
@@ -394,6 +394,6 @@ int XR_VIEW_VALUES_ENTRY(void) {
     }
     resources=NULL;CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);view_values_guards(resources);
     CHECK(compile_domain_stats(resources).live_bytes==sizeof(*resources));xr_compile_resources_release(resources);
-    CHECK(!value_compile_live && !value_compile_bytes && !live && !calls);
+    CHECK(!value_compile_live && !value_compile_bytes && !live && !value_allocation_calls);
     printf("View Value27: logical loan retirement, independent shared guards, %zu allocation failures, exact axes and physical0 PASS\n",sites);return 0;
 }

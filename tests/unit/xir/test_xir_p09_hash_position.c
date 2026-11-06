@@ -16,16 +16,16 @@ static XrXirValueStatus position_read(bool values,const XrXirValue *map,int64_t 
 }
 static void position_faults(bool values,const XrXirValue *map,XrXirValueAdmission *admission,bool full) {
     const uint64_t initial=1000000;admission->work=initial;XrXirValue result={0};XrXirFaultDetail fault={0};
-    size_t before=calls,baseline=live;uint64_t scratch=admission->scratch_bytes;
+    size_t before=value_allocation_calls,baseline=live;uint64_t scratch=admission->scratch_bytes;
     CHECK(position_read(values,map,0,admission,&result,&fault)==XR_XIR_VALUE_OK);
-    size_t points=calls-before;uint64_t exact=initial-admission->work;CHECK(exact && !fault.code);
+    size_t points=value_allocation_calls-before;uint64_t exact=initial-admission->work;CHECK(exact && !fault.code);
     xr_xir_value_drop(&result);CHECK(live==baseline && admission->scratch_bytes==scratch);
     XirHash *hash=(XirHash *)object_pointer(map);size_t bytes=0;
     CHECK(hash_data_size(hash->capacity,hash->stride,&bytes) && bytes<=512);
     unsigned char saved[512];if(bytes)memcpy(saved,hash->data,bytes);
     if(full)for(size_t point=0;point<points;++point) {
-        admission->work=initial;fail_at=calls+point;
-        CHECK(position_read(values,map,0,admission,&result,&fault)==XR_XIR_VALUE_OOM && calls>fail_at);fail_at=SIZE_MAX;
+        admission->work=initial;fail_at=value_allocation_calls+point;
+        CHECK(position_read(values,map,0,admission,&result,&fault)==XR_XIR_VALUE_OOM && value_allocation_calls>fail_at);fail_at=SIZE_MAX;
         CHECK(!result.type && !result.reserved && !result.payload && !fault.code && live==baseline && admission->scratch_bytes==scratch);
         CHECK(!bytes || !memcmp(saved,hash->data,bytes));admission->work=initial;
         CHECK(position_read(values,map,0,admission,&result,&fault)==XR_XIR_VALUE_OK);xr_xir_value_drop(&result);CHECK(live==baseline);

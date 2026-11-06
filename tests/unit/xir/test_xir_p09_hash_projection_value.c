@@ -53,17 +53,17 @@ static void projection_value_check(XrXirValue *result, unsigned operation, XrXir
 static void projection_value_faults(unsigned operation, const XrXirValue *source,
     XrXirValueAdmission *admission, bool full) {
     XrXirValue result = {0}; const uint64_t initial = 1000000;
-    admission->work = initial; size_t before = calls, baseline = live;
+    admission->work = initial; size_t before = value_allocation_calls, baseline = live;
     CHECK(projection_value_op(operation, source, admission, &result) == XR_XIR_VALUE_OK);
-    size_t points = calls - before; uint64_t exact = initial - admission->work;
+    size_t points = value_allocation_calls - before; uint64_t exact = initial - admission->work;
     CHECK(points && exact > 1); admission->work = initial;
     projection_value_check(&result, operation, admission); xr_xir_value_drop(&result); CHECK(live == baseline);
     XirHash *map = (XirHash *)object_pointer(source); size_t bytes = 0;
     CHECK(hash_data_size(map->capacity, map->stride, &bytes) && bytes <= 256);
     unsigned char saved[256]; memcpy(saved, map->data, bytes); int64_t payload = source->payload;
     if (full) for (size_t point = 0; point < points; ++point) {
-        admission->work = initial; fail_at = calls + point;
-        CHECK(projection_value_op(operation, source, admission, &result) == XR_XIR_VALUE_OOM && calls > fail_at);
+        admission->work = initial; fail_at = value_allocation_calls + point;
+        CHECK(projection_value_op(operation, source, admission, &result) == XR_XIR_VALUE_OOM && value_allocation_calls > fail_at);
         fail_at = SIZE_MAX;
         CHECK(!result.type && !result.reserved && !result.payload && live == baseline);
         CHECK(source->payload == payload && !memcmp(map->data, saved, bytes));

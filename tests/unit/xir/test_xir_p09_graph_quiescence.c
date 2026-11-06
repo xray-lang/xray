@@ -16,13 +16,13 @@
 static void quiescence_empty_domains(void) {
     XrXirDomain *domains[16] = {0};
     for (unsigned i = 0; i < 16; ++i) CHECK(xr_xir_domain_new(65536, &domains[i]) == XR_XIR_VALUE_OK);
-    size_t before_live = live, before_calls = calls;
+    size_t before_live = live, before_calls = value_allocation_calls;
     xr_xir_value_graph_begin(); xr_xir_value_graph_begin();
     for (unsigned i = 0; i < 16; ++i) { xr_xir_domain_close(domains[i]); xr_xir_domain_drop(domains[i]); }
-    CHECK(live == before_live && calls == before_calls);
-    xr_xir_value_graph_end(); CHECK(live == before_live && calls == before_calls);
-    fail_at = calls; xr_xir_value_graph_end(); fail_at = SIZE_MAX;
-    CHECK(!live && calls == before_calls);
+    CHECK(live == before_live && value_allocation_calls == before_calls);
+    xr_xir_value_graph_end(); CHECK(live == before_live && value_allocation_calls == before_calls);
+    fail_at = value_allocation_calls; xr_xir_value_graph_end(); fail_at = SIZE_MAX;
+    CHECK(!live && value_allocation_calls == before_calls);
 }
 static void quiescence_external_roots(void) {
     XrXirDomain *domains[2] = {0}; XrXirValue roots[2] = {{0}};
@@ -40,15 +40,15 @@ static void quiescence_external_roots(void) {
             xr_xir_value_drop(&copy);
         }
     }
-    size_t before_calls = calls;
+    size_t before_calls = value_allocation_calls;
     xr_xir_value_graph_begin();
     xr_xir_value_drop(&roots[0]); CHECK(live);
-    fail_at = calls; xr_xir_value_graph_end(); fail_at = SIZE_MAX;
-    CHECK(live && calls == before_calls);
+    fail_at = value_allocation_calls; xr_xir_value_graph_end(); fail_at = SIZE_MAX;
+    CHECK(live && value_allocation_calls == before_calls);
     const char *bytes = NULL; size_t length = 0;
     CHECK(xr_xir_string_view(&roots[1], &bytes, &length) && length == 7);
-    before_calls = calls; fail_at = calls; xr_xir_value_drop(&roots[1]); fail_at = SIZE_MAX;
-    CHECK(!live && calls == before_calls);
+    before_calls = value_allocation_calls; fail_at = value_allocation_calls; xr_xir_value_drop(&roots[1]); fail_at = SIZE_MAX;
+    CHECK(!live && value_allocation_calls == before_calls);
 }
 int main(void) {
     quiescence_empty_domains(); quiescence_external_roots();

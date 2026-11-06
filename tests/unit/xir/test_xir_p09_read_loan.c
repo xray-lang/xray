@@ -70,7 +70,7 @@ static XrXirValueStatus read_loan_sequence(XrXirTypeArena *arena) {
     TRY_VALUE(xr_xir_cell_new(domain,arena,(XrXirType)257,&array,&admission,&cell));
     TRY_VALUE(xr_xir_cell_project_authorized((XrXirType)258,&cell,&path,&authority,&admission,&projection));
     XrXirCellReadLoan loans[3]={{0}},waiting={0};
-    uint64_t work=xr_xir_domain_budget_stats(domain).work;size_t first=calls;
+    uint64_t work=xr_xir_domain_budget_stats(domain).work;size_t first=value_allocation_calls;
     CHECK(xr_xir_cell_read_loan_prepare(&cell,&authority,NULL,&admission,&waiting)==XR_XIR_VALUE_OK);
     uint64_t paid=xr_xir_domain_budget_stats(domain).work-work;
     CHECK(paid==XR_XIR_CELL_READ_LOAN_WORK);
@@ -94,7 +94,7 @@ static XrXirValueStatus read_loan_sequence(XrXirTypeArena *arena) {
     xr_xir_cell_read_loan_release(&loans[2]);
     read_loan_mutation_denied(&cell,&projection,&authority,&admission);
     xr_xir_cell_read_loan_release(&loans[1]);
-    CHECK(xr_xir_cell_unborrowed(&cell) && calls==first);
+    CHECK(xr_xir_cell_unborrowed(&cell) && value_allocation_calls==first);
     XrXirCellPublication publication={&cell,domain,0};
     CHECK(xr_xir_cell_publication_prepare(&cell,&publication)==XR_XIR_VALUE_OK);
     XrXirValue number={XR_XIR_I64,0,77};
@@ -183,20 +183,20 @@ static void read_loan_late_owner(XrXirTypeArena **arena) {
     CHECK(xr_xir_cell_read_loan_prepare(&alias,&authority,NULL,&admission,&second)==XR_XIR_VALUE_OK);
     xr_xir_cell_read_loan_commit(&alias,&second,&authority,NULL);
     xr_xir_value_drop(&cell);xr_xir_compile_type_arena_drop(*arena);*arena=NULL;
-    size_t before=calls;xr_xir_domain_drop(domain);
+    size_t before=value_allocation_calls;xr_xir_domain_drop(domain);
     CHECK(xr_xir_cell_read(&alias,&read)==XR_XIR_VALUE_OK && read.payload==31);xr_xir_value_drop(&read);
     xr_xir_cell_read_loan_release(&first);
     CHECK(!xr_xir_cell_unborrowed(&alias));xr_xir_cell_read_loan_release(&second);
     CHECK(xr_xir_cell_unborrowed(&alias));xr_xir_value_drop(&alias);
-    CHECK(calls==before && !live && !value_compile_live && !value_compile_bytes);
+    CHECK(value_allocation_calls==before && !live && !value_compile_live && !value_compile_bytes);
 }
 int main(int argc,char **argv) {
     CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--full")));
-    bool full=argc==2;XrXirTypeArena *arena=read_loan_arena();size_t first=calls;
-    CHECK(read_loan_sequence(arena)==XR_XIR_VALUE_OK);size_t sites=calls-first;
+    bool full=argc==2;XrXirTypeArena *arena=read_loan_arena();size_t first=value_allocation_calls;
+    CHECK(read_loan_sequence(arena)==XR_XIR_VALUE_OK);size_t sites=value_allocation_calls-first;
     CHECK(sites>3);
     if (full) for (size_t point=0;point<sites;++point) {
-        fail_at=calls+point;
+        fail_at=value_allocation_calls+point;
         XrXirValueStatus status=read_loan_sequence(arena);fail_at=SIZE_MAX;
         CHECK(status==XR_XIR_VALUE_OOM && !live);
     }

@@ -337,9 +337,9 @@ static XrXirValueStatus rr_sequence(XrCompileResources *resources,uint32_t kind,
 done:
     if (call) CHECK(xr_xir_call_free(call)==XR_XIR_CALL_READY);
     CHECK(!accounting.live_bytes && !accounting.depth && accounting.allocations==accounting.frees && w.functions==w.frees);
-    size_t before=value_compile_calls,runtime_before=calls;xr_xir_view_origin_unpin(&w.physical);xr_xir_value_drop(&w.kept);
+    size_t before=value_compile_calls,runtime_before=value_allocation_calls;xr_xir_view_origin_unpin(&w.physical);xr_xir_value_drop(&w.kept);
     for (uint32_t i=0;i<3;++i) xr_xir_value_drop(values+i);xr_xir_domain_drop(domain);xr_xir_compile_type_arena_drop(arena);
-    CHECK(before==value_compile_calls && runtime_before==calls && !live);return status;
+    CHECK(before==value_compile_calls && runtime_before==value_allocation_calls && !live);return status;
 }
 static void rr_resources(uint32_t kind,uint32_t finish,uint32_t depth) {
     XrCompileResourceLimits limits=compile_domain_limits();XrCompileResources *resources=NULL;

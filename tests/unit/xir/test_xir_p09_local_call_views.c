@@ -239,11 +239,11 @@ static XrXirValueStatus local_call_sequence(XrCompileResources *resources,uint32
 done:
     if (call) CHECK(xr_xir_call_free(call)==XR_XIR_CALL_READY);
     CHECK(!accounting.live_bytes && !accounting.depth && accounting.allocations==accounting.frees);
-    size_t allocations=value_compile_calls,raw=calls;
+    size_t allocations=value_compile_calls,raw=value_allocation_calls;
     xr_xir_value_drop(&root);xr_xir_value_drop(&w.source);xr_xir_value_drop(&result);
     xr_xir_compile_type_arena_drop(arena);xr_xir_domain_drop(domain);
     xr_xir_view_origin_unpin(&w.pin);xr_xir_value_drop(&w.escaped);
-    CHECK(allocations==value_compile_calls && raw==calls && !live);return status;
+    CHECK(allocations==value_compile_calls && raw==value_allocation_calls && !live);return status;
 }
 static void local_call_resources(uint32_t kind,uint32_t finish) {
     XrCompileResourceLimits limits=compile_domain_limits();XrCompileResources *resources=NULL;

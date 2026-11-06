@@ -28,21 +28,21 @@ int main(void) {
         CHECK(xr_xir_string_new(domain, "held", 4, &roots[i]) == XR_XIR_VALUE_OK);
         xr_xir_domain_close(domain); xr_xir_domain_drop(domain);
     }
-    size_t before_calls = calls, before_live = live;
+    size_t before_calls = value_allocation_calls, before_live = live;
     double start = graph_idle_wall();
     for (unsigned i = 0; i < operation_count; ++i) {
         xr_xir_value_graph_begin(); xr_xir_value_graph_end();
     }
     double seconds = graph_idle_wall() - start;
-    CHECK(calls == before_calls && live == before_live);
+    CHECK(value_allocation_calls == before_calls && live == before_live);
     for (unsigned i = 0; i < owner_count; ++i) {
         const char *bytes = NULL; size_t length = 0;
         CHECK(xr_xir_string_view(&roots[i], &bytes, &length) && length == 4 && !memcmp(bytes, "held", 4));
     }
-    before_calls = calls; fail_at = calls;
+    before_calls = value_allocation_calls; fail_at = value_allocation_calls;
     for (unsigned i = 0; i < owner_count; ++i) xr_xir_value_drop(&roots[i]);
     fail_at = SIZE_MAX;
-    CHECK(calls == before_calls && !live && !value_compile_live && !value_compile_bytes);
+    CHECK(value_allocation_calls == before_calls && !live && !value_compile_live && !value_compile_bytes);
     printf("{\"closed_owners\":%u,\"idle_operations\":%u,\"wall_seconds\":%.9f,"
         "\"timed_heap_requests\":0,\"copy_observer\":false,\"physical_after_drop\":0}\n",
         owner_count, operation_count, seconds);

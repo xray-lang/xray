@@ -48,9 +48,9 @@ static void hash_dense_cases(XrXirValueAdmission *admission) {
     CHECK(xr_xir_hash_len(&map, admission, &length) == XR_XIR_VALUE_OK && length == 512);
     XirHash *storage = (XirHash *)object_pointer(&map);
     CHECK(storage->stride == 24 && storage->key_offset == 8 && storage->value_offset == 16);
-    int64_t root = map.payload; size_t before = calls; fail_at = calls;
+    int64_t root = map.payload; size_t before = value_allocation_calls; fail_at = value_allocation_calls;
     XrXirValue key = integer(3), value = integer(-1);
-    CHECK(xr_xir_map_set(&place, &key, &value, admission) == XR_XIR_VALUE_OK && map.payload == root && calls == before);
+    CHECK(xr_xir_map_set(&place, &key, &value, admission) == XR_XIR_VALUE_OK && map.payload == root && value_allocation_calls == before);
     fail_at = SIZE_MAX;
     CHECK(xr_xir_value_copy(&map, &snapshot) == XR_XIR_VALUE_OK);
     value.payload = -2;

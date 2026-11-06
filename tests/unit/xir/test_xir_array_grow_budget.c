@@ -78,10 +78,10 @@ static void grow_rejection(uint64_t requested, uint64_t work, bool by_work) {
     XrXirDomainStats before = xr_xir_domain_stats(fixture.domain);
     XirArray *array = (XirArray *)object_pointer(&fixture.array);
     unsigned char *data = array->data;
-    size_t before_calls = calls;
+    size_t before_calls = value_allocation_calls;
     for (int retry = 0; retry < 2; ++retry) {
         CHECK(grow_push(&fixture) == XR_XIR_VALUE_LIMIT);
-        CHECK(calls == before_calls && array->data == data && array->capacity == 4);
+        CHECK(value_allocation_calls == before_calls && array->data == data && array->capacity == 4);
         XrXirDomainStats after = xr_xir_domain_stats(fixture.domain);
         CHECK(after.live_bytes == before.live_bytes && after.reallocations == before.reallocations);
         XrXirDomainBudgetStats budget = xr_xir_domain_budget_stats(fixture.domain);
@@ -94,8 +94,8 @@ static void grow_rejection(uint64_t requested, uint64_t work, bool by_work) {
 static void grow_exact(uint64_t requested, uint64_t work) {
     GrowFixture fixture = grow_fixture(requested + 64, work + 3);
     XrXirDomainStats before = xr_xir_domain_stats(fixture.domain);
-    size_t before_calls = calls;
-    CHECK(grow_push(&fixture) == XR_XIR_VALUE_OK && calls == before_calls + 1);
+    size_t before_calls = value_allocation_calls;
+    CHECK(grow_push(&fixture) == XR_XIR_VALUE_OK && value_allocation_calls == before_calls + 1);
     XrXirDomainBudgetStats budget = xr_xir_domain_budget_stats(fixture.domain);
     XrXirDomainStats after = xr_xir_domain_stats(fixture.domain);
     CHECK(budget.requested_bytes == requested + 64 && budget.work == work + 3);
@@ -109,9 +109,9 @@ static void grow_oom_retains_charge(uint64_t requested, uint64_t work) {
     XrXirDomainStats before = xr_xir_domain_stats(fixture.domain);
     XirArray *array = (XirArray *)object_pointer(&fixture.array);
     unsigned char *data = array->data;
-    size_t before_calls = calls;
-    fail_at = calls;
-    CHECK(grow_push(&fixture) == XR_XIR_VALUE_OOM && calls == before_calls + 1);
+    size_t before_calls = value_allocation_calls;
+    fail_at = value_allocation_calls;
+    CHECK(grow_push(&fixture) == XR_XIR_VALUE_OOM && value_allocation_calls == before_calls + 1);
     fail_at = SIZE_MAX;
     XrXirDomainBudgetStats failed = xr_xir_domain_budget_stats(fixture.domain);
     XrXirDomainStats after = xr_xir_domain_stats(fixture.domain);
@@ -119,7 +119,7 @@ static void grow_oom_retains_charge(uint64_t requested, uint64_t work) {
     CHECK(array->data == data && array->capacity == 4 && after.live_bytes == before.live_bytes);
     CHECK(after.reallocations == before.reallocations);
     grow_contents(&fixture, 4);
-    CHECK(grow_push(&fixture) == XR_XIR_VALUE_OK && calls == before_calls + 2);
+    CHECK(grow_push(&fixture) == XR_XIR_VALUE_OK && value_allocation_calls == before_calls + 2);
     XrXirDomainBudgetStats retried = xr_xir_domain_budget_stats(fixture.domain);
     CHECK(retried.requested_bytes == requested + 128 && retried.work == work + 6);
     grow_contents(&fixture, 5);

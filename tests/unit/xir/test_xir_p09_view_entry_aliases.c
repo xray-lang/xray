@@ -270,10 +270,10 @@ static XrXirValueStatus entry_alias_sequence(XrCompileResources *resources,uint3
 done:
     if (call) CHECK(xr_xir_call_free(call)==XR_XIR_CALL_READY);
     CHECK(!accounting.live_bytes && !accounting.depth && accounting.allocations==accounting.frees);
-    size_t before=value_compile_calls,runtime_before=calls;
+    size_t before=value_compile_calls,runtime_before=value_allocation_calls;
     for (uint32_t p=0;p<2;++p) xr_xir_view_origin_unpin(w.pins+p);
     for (uint32_t p=0;p<4;++p) xr_xir_value_drop(values+p);xr_xir_domain_drop(domain);xr_xir_compile_type_arena_drop(arena);
-    CHECK(before==value_compile_calls && runtime_before==calls && !live);return status;
+    CHECK(before==value_compile_calls && runtime_before==value_allocation_calls && !live);return status;
 }
 static void entry_alias_resources(uint32_t kind,uint32_t finish,bool normal) {
     XrCompileResourceLimits limits=compile_domain_limits();XrCompileResources *resources=NULL;

@@ -58,9 +58,9 @@ static void algebra_value_faults(unsigned operation, const XrXirValue *left,
     const int64_t expected[4][4] = {{3,1,2,4}, {1,2}, {3}, {3,4}};
     const int64_t lengths[] = {4,2,1,2};
     XrXirValue result = {0}; const uint64_t initial = 1000000;
-    admission->work = initial; size_t before = calls, baseline = live;
+    admission->work = initial; size_t before = value_allocation_calls, baseline = live;
     CHECK(algebra_value_operation(operation, left, right, admission, &result) == XR_XIR_VALUE_OK);
-    size_t points = calls - before; uint64_t exact = initial - admission->work;
+    size_t points = value_allocation_calls - before; uint64_t exact = initial - admission->work;
     CHECK((operation >= 4 ? points == 0 : points > 0) && exact > 1);
     admission->work = initial;
     if (operation < 4) algebra_value_order(&result, expected[operation], lengths[operation], admission);
@@ -70,8 +70,8 @@ static void algebra_value_faults(unsigned operation, const XrXirValue *left,
     size_t size = 0; CHECK(hash_data_size(a->capacity, a->stride, &size) && size == 192);
     unsigned char saved_a[192], saved_b[192]; memcpy(saved_a, a->data, size); memcpy(saved_b, b->data, size);
     if (full) for (size_t point = 0; point < points; ++point) {
-        admission->work = initial; fail_at = calls + point;
-        CHECK(algebra_value_operation(operation, left, right, admission, &result) == XR_XIR_VALUE_OOM && calls > fail_at);
+        admission->work = initial; fail_at = value_allocation_calls + point;
+        CHECK(algebra_value_operation(operation, left, right, admission, &result) == XR_XIR_VALUE_OOM && value_allocation_calls > fail_at);
         fail_at = SIZE_MAX;
         CHECK(!result.type && !result.reserved && !result.payload && live == baseline);
         CHECK(!memcmp(saved_a, a->data, size) && !memcmp(saved_b, b->data, size));
@@ -127,8 +127,8 @@ static void algebra_value_retention(XrXirValueAdmission *admission) {
         CHECK(!result.type && !result.reserved && !result.payload && live == baseline);
         CHECK(atomic_load(&first->references) == first_refs && atomic_load(&last->references) == UINT32_MAX);
     }
-    bool relation = false; admission->work = 1000000; size_t before = calls;
-    CHECK(xr_xir_set_is_subset(&left, &left, admission, &relation) == XR_XIR_VALUE_OK && relation && calls == before);
+    bool relation = false; admission->work = 1000000; size_t before = value_allocation_calls;
+    CHECK(xr_xir_set_is_subset(&left, &left, admission, &relation) == XR_XIR_VALUE_OK && relation && value_allocation_calls == before);
     atomic_store(&last->references, last_refs);
     CHECK(xr_xir_set_union(&left, &empty, admission, &result) == XR_XIR_VALUE_OK);
     xr_xir_value_drop(&left); xr_xir_value_drop(&empty);

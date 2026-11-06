@@ -227,12 +227,12 @@ static XrXirValueStatus call_views_sequence(XrCompileResources *resources,uint32
 done:
     if (call) CHECK(xr_xir_call_free(call)==XR_XIR_CALL_READY);
     CHECK(!accounting.live_bytes && !accounting.depth && accounting.allocations==accounting.frees);
-    size_t before=value_compile_calls,runtime_before=calls;
+    size_t before=value_compile_calls,runtime_before=value_allocation_calls;
     xr_xir_view_origin_unpin(&witness.physical);
     for (uint32_t i=0;i<2;++i) xr_xir_value_drop(&witness.escaped[i]);
     for (uint32_t i=0;i<5;++i) xr_xir_value_drop(&values[i]);xr_xir_value_drop(&after);
     xr_xir_domain_drop(domain);xr_xir_compile_type_arena_drop(arena);
-    CHECK(before==value_compile_calls && runtime_before==calls && !live);return status;
+    CHECK(before==value_compile_calls && runtime_before==value_allocation_calls && !live);return status;
 }
 static void call_views_resources(uint32_t mode,bool nested) {
     XrCompileResourceLimits limits=compile_domain_limits();XrCompileResources *resources=NULL;

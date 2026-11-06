@@ -27,16 +27,16 @@ static XrXirTypeArena *map_value_arena(void) {
 static void map_value_probe(unsigned id,const XrXirValue *map,const XrXirValue *query,
     bool expected,XrXirValueAdmission *admission,bool full) {
     const uint64_t initial=1000000;bool output=!expected;admission->work=initial;
-    size_t before=calls,baseline=live;uint64_t scratch=admission->scratch_bytes;
+    size_t before=value_allocation_calls,baseline=live;uint64_t scratch=admission->scratch_bytes;
     CHECK(xr_xir_map_contains_value(map,query,admission,&output)==XR_XIR_VALUE_OK && output==expected);
-    size_t points=calls-before;uint64_t exact=initial-admission->work;
+    size_t points=value_allocation_calls-before;uint64_t exact=initial-admission->work;
     CHECK(exact>0 && live==baseline && admission->scratch_bytes==scratch);
     XirHash *hash=(XirHash *)object_pointer(map);size_t bytes=0;
     CHECK(hash_data_size(hash->capacity,hash->stride,&bytes) && bytes<=512);
     unsigned char saved[512];if(bytes)memcpy(saved,hash->data,bytes);
     if(full)for(size_t point=0;point<points;++point) {
-        admission->work=initial;output=!expected;fail_at=calls+point;
-        CHECK(xr_xir_map_contains_value(map,query,admission,&output)==XR_XIR_VALUE_OOM && calls>fail_at);
+        admission->work=initial;output=!expected;fail_at=value_allocation_calls+point;
+        CHECK(xr_xir_map_contains_value(map,query,admission,&output)==XR_XIR_VALUE_OOM && value_allocation_calls>fail_at);
         fail_at=SIZE_MAX;
         CHECK(output==!expected && live==baseline && admission->scratch_bytes==scratch);
         CHECK(!bytes || !memcmp(saved,hash->data,bytes));

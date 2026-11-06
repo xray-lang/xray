@@ -44,9 +44,9 @@ static void key_path_cow(XrXirValue *root, const XrXirValuePath *path,
     XrXirValue copy={0}, replacement={XR_XIR_I64,0,99};
     XrXirValuePlace place={(XrXirType)root->type,&copy.payload}; XrXirFaultDetail fault={0};
     CHECK(xr_xir_value_copy(root,&copy)==XR_XIR_VALUE_OK);
-    admission->work=1000000; size_t begin=calls;
+    admission->work=1000000; size_t begin=value_allocation_calls;
     CHECK(xr_xir_value_path_write(&place,path,&replacement,admission,&fault)==XR_XIR_VALUE_OK);
-    uint64_t work=1000000-admission->work; size_t points=calls-begin;
+    uint64_t work=1000000-admission->work; size_t points=value_allocation_calls-begin;
     CHECK(points>2 && work>1 && key_path_read(&copy,path,admission)==99);
     CHECK(key_path_read(root,path,admission)==11); xr_xir_value_drop(&copy);
     XirHash *map=(XirHash *)object_pointer(root); size_t bytes=0;
@@ -59,7 +59,7 @@ static void key_path_cow(XrXirValue *root, const XrXirValuePath *path,
     for(size_t point=0;point<points;++point) {
         if(!full && point && point+1!=points)continue;
         CHECK(xr_xir_value_copy(root,&copy)==XR_XIR_VALUE_OK);
-        admission->work=1000000; fail_at=calls+point;
+        admission->work=1000000; fail_at=value_allocation_calls+point;
         CHECK(xr_xir_value_path_write(&place,path,&replacement,admission,&fault)==XR_XIR_VALUE_OOM);
         fail_at=SIZE_MAX;
         CHECK(copy.payload==root->payload && live==blocks && admission->domain->stats.live_bytes==live_bytes);
@@ -162,9 +162,9 @@ static void key_path_late_selector(XrXirTypeArena *arena) {
     unsigned edges[2]={0};CHECK(graph_edges(object_pointer(&projected),key_path_edge_count,edges) && edges[0]==1 && edges[1]==1);
     xr_xir_value_drop(&cell);xr_xir_value_drop(&map);xr_xir_value_drop(&stored);xr_xir_value_drop(&key);
     xr_xir_domain_close(domain);CHECK(!domain->graph_invalid && xr_xir_value_valid(&projected));
-    size_t before=calls;closed_fail_all=true;xr_xir_value_drop(&projected);closed_fail_all=false;
+    size_t before=value_allocation_calls;closed_fail_all=true;xr_xir_value_drop(&projected);closed_fail_all=false;
     XrXirDomainStats stats=xr_xir_domain_stats(domain);
-    CHECK(calls==before && !domain->graph_invalid && stats.live_bytes==sizeof(*domain));
+    CHECK(value_allocation_calls==before && !domain->graph_invalid && stats.live_bytes==sizeof(*domain));
     CHECK(stats.allocations==stats.frees+1 && !domain->budget.metadata_live && !domain->budget.call_live);
     xr_xir_domain_drop(domain);puts("Closed graph sees the selector edge and final projection release allocates nothing PASS");
 }

@@ -50,7 +50,7 @@ static XrXirValueStatus string_place_apply(StringPlaceFixture *f, bool utf8) {
 static void string_place_missing_admission(bool utf8) {
     for (unsigned mode = 0; mode < 3; ++mode) {
         StringPlaceFixture f; string_place_open(&f, mode, NULL);
-        size_t before = calls; int64_t root = f.root.payload;
+        size_t before = value_allocation_calls; int64_t root = f.root.payload;
         uint64_t work = f.admission.work;
         XrXirDomain retired = {0};
         for (unsigned invalid = 0; invalid < 3; ++invalid) {
@@ -60,7 +60,7 @@ static void string_place_missing_admission(bool utf8) {
                 xr_xir_string_place_append_utf8(&f.place, "b", 1, admission) :
                 xr_xir_string_place_append(&f.place, &f.suffix, admission);
             CHECK(status == XR_XIR_VALUE_BAD_ARGUMENT);
-            CHECK(f.root.payload == root && calls == before && f.admission.work == work);
+            CHECK(f.root.payload == root && value_allocation_calls == before && f.admission.work == work);
             string_place_expect(&f.root, "a", 1);
             if (mode == 1) string_place_expect(&f.alias, "a", 1);
         }
@@ -72,9 +72,9 @@ static void string_place_missing_admission(bool utf8) {
 static void string_place_utf8_normal(void) {
     for (unsigned mode = 0; mode < 3; ++mode) {
         StringPlaceFixture f; string_place_open(&f, mode, NULL);
-        size_t before = calls;
+        size_t before = value_allocation_calls;
         CHECK(xr_xir_string_place_append_utf8(&f.place, "\xff", 1, &f.admission) == XR_XIR_VALUE_BAD_UTF8);
-        CHECK(calls == before); string_place_expect(&f.root, "a", 1);
+        CHECK(value_allocation_calls == before); string_place_expect(&f.root, "a", 1);
         CHECK(xr_xir_string_place_append_utf8(&f.place, "\0\xce\xa9", 3, &f.admission) == XR_XIR_VALUE_OK);
         string_place_expect(&f.root, "a\0\xce\xa9", 4);
         if (mode == 1) string_place_expect(&f.alias, "a", 1);
@@ -95,9 +95,9 @@ static void string_place_normal(void) {
         if (mode == 1) string_place_expect(&f.alias, "a", 1);
         CHECK(object_pointer(&f.root)->domain == f.receiver);
         XrXirValue empty = {0}; CHECK(xr_xir_string_new(f.receiver, "", 0, &empty) == XR_XIR_VALUE_OK);
-        int64_t payload = f.root.payload; size_t before = calls;
+        int64_t payload = f.root.payload; size_t before = value_allocation_calls;
         CHECK(xr_xir_string_place_append(&f.place, &empty, &f.admission) == XR_XIR_VALUE_OK);
-        CHECK(f.root.payload == payload && calls == before); xr_xir_value_drop(&empty);
+        CHECK(f.root.payload == payload && value_allocation_calls == before); xr_xir_value_drop(&empty);
         string_place_close(&f); CHECK(!live);
     }
     StringPlaceFixture f; string_place_open(&f, 0, NULL);
@@ -153,17 +153,17 @@ static void string_place_cell_authority(void) {
 static void string_place_runtime_faults(bool utf8) {
     for (unsigned mode = 0; mode < 3; ++mode) {
         StringPlaceFixture f; string_place_open(&f, mode, NULL);
-        calls = 0;
+        value_allocation_calls = 0;
         CHECK(string_place_apply(&f, utf8) == XR_XIR_VALUE_OK);
-        const size_t sites = calls; CHECK(sites > 0); string_place_close(&f); CHECK(!live);
+        const size_t sites = value_allocation_calls; CHECK(sites > 0); string_place_close(&f); CHECK(!live);
         for (size_t failure = 0; failure < sites; ++failure) {
             string_place_open(&f, mode, NULL);
             int64_t payload = f.root.payload;
             uint64_t bytes = xr_xir_domain_stats(f.receiver).live_bytes;
-            calls = 0; fail_at = failure;
+            value_allocation_calls = 0; fail_at = failure;
             CHECK(string_place_apply(&f, utf8) == XR_XIR_VALUE_OOM);
             fail_at = SIZE_MAX;
-            CHECK(calls > failure && f.root.payload == payload && xr_xir_domain_stats(f.receiver).live_bytes == bytes);
+            CHECK(value_allocation_calls > failure && f.root.payload == payload && xr_xir_domain_stats(f.receiver).live_bytes == bytes);
             string_place_expect(&f.root, "a", 1);
             if (mode == 1) string_place_expect(&f.alias, "a", 1);
             CHECK(string_place_apply(&f, utf8) == XR_XIR_VALUE_OK);
@@ -177,10 +177,10 @@ static void string_place_local_work(bool utf8) {
     for (unsigned mode = 0; mode < 3; ++mode) for (unsigned shortfall = 0; shortfall < 2; ++shortfall) {
         StringPlaceFixture f; string_place_open(&f, mode, NULL);
         uint64_t exact = 26 + (utf8 ? 26 : 0) + (mode ? 1 : string_pointer(&f.root)->capacity);
-        f.admission.work = exact - shortfall; size_t before = calls;
+        f.admission.work = exact - shortfall; size_t before = value_allocation_calls;
         CHECK(string_place_apply(&f, utf8) ==
             (shortfall ? XR_XIR_VALUE_LIMIT : XR_XIR_VALUE_OK));
-        if (shortfall) { CHECK(calls == before); string_place_expect(&f.root, "a", 1); }
+        if (shortfall) { CHECK(value_allocation_calls == before); string_place_expect(&f.root, "a", 1); }
         else { CHECK(!f.admission.work); string_place_expect(&f.root, "abcdefghijklmnopqrstuvwxyz", 26); }
         string_place_close(&f); CHECK(!live);
     }
