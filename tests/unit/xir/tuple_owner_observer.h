@@ -5,20 +5,20 @@
 #include <string.h>
 #define CHECK(x) do { if (!(x)) { fprintf(stderr,"FAIL %d %s\n",__LINE__,#x);exit(1); } } while (0)
 typedef struct Physical { void *pointer; size_t bytes; } Physical;
-static Physical physical[4096];
+static Physical tuple_physical_blocks[4096];
 static size_t live, live_bytes, attempts, fail_at=SIZE_MAX;
 static bool injected;
 static void *observe_malloc(size_t bytes) {
     if (attempts++==fail_at) { injected=true; return NULL; }
     void *pointer=xr_malloc(bytes); if (!pointer) return NULL;
     CHECK(live<4096 && bytes<=SIZE_MAX-live_bytes);
-    physical[live++]=(Physical){pointer,bytes};live_bytes+=bytes;return pointer;
+    tuple_physical_blocks[live++]=(Physical){pointer,bytes};live_bytes+=bytes;return pointer;
 }
 static void observe_free(void *pointer) {
     if (!pointer) return;
-    size_t i=0;while (i<live && physical[i].pointer!=pointer) ++i;
-    CHECK(i<live && live_bytes>=physical[i].bytes);
-    live_bytes-=physical[i].bytes;physical[i]=physical[--live];xr_free(pointer);
+    size_t i=0;while (i<live && tuple_physical_blocks[i].pointer!=pointer) ++i;
+    CHECK(i<live && live_bytes>=tuple_physical_blocks[i].bytes);
+    live_bytes-=tuple_physical_blocks[i].bytes;tuple_physical_blocks[i]=tuple_physical_blocks[--live];xr_free(pointer);
 }
 #pragma push_macro("xr_malloc")
 #pragma push_macro("xr_free")
