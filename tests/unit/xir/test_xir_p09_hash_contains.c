@@ -103,8 +103,8 @@ static void contains_cases(XrXirValueAdmission *admission, bool full) {
     CHECK(xr_xir_map_contains_key(&map, &key, NULL, &found) == XR_XIR_VALUE_BAD_ARGUMENT && found);
     CHECK(xr_xir_map_contains_key(&map, &key, admission, NULL) == XR_XIR_VALUE_BAD_ARGUMENT);
     CHECK(xr_xir_set_contains(&set, &key, admission, &found) == XR_XIR_VALUE_OK && found);
-    printf("Map key-only lookup exact work=%llu, zero requests, %s work boundaries; inline-value get has one real OOM\n",
-        (unsigned long long)needed, full ? "all" : "exact/minus-one");
+    printf("Map key-only lookup exact work=%llu, authority allocations=%zu, %s work boundaries; inline-value get has one real OOM\n",
+        (unsigned long long)needed, query_sites, full ? "all" : "exact/minus-one");
     xr_xir_value_drop(&set); xr_xir_value_drop(&alias); xr_xir_value_drop(&map);
     xr_xir_value_drop(&optional); xr_xir_value_drop(&text);
 }
@@ -131,7 +131,7 @@ static void contains_key_relations(XrXirValueAdmission *admission) {
 }
 static void contains_function_authority(void) {
     XrXirTypeNode nodes[] = {
-        {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64, .error_type = XR_XIR_NEVER, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind = XR_XIR_TYPE_NULLABLE, .element = (XrXirType)256},
         {.kind = XR_XIR_TYPE_MAP, .element = XR_XIR_I64, .result = (XrXirType)257}
     };

@@ -203,7 +203,8 @@ static uint64_t sn_domain_case(XrXirProgram *program,uint32_t function,uint64_t 
     CHECK(status==expected);XrXirDomainStats stats=xr_xir_domain_stats(instance->domain);CHECK(stats.peak_bytes<=limit);
     if (status==XR_XIR_CALL_RETURNED) sn_outer(&result,2);
     else CHECK(!result.type && !result.payload);
-    xr_xir_value_drop(&result);CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+    xr_xir_value_drop(&result);
+    CHECK(xr_xir_instance_free(instance)==(expected==XR_XIR_CALL_LIMIT?XR_XIR_CALL_LIMIT:XR_XIR_CALL_READY));
     CHECK(runtime_live==live && runtime_bytes==bytes);return stats.peak_bytes;
 }
 static void sn_domain_bounds(XrXirProgram *program,uint32_t function) {
