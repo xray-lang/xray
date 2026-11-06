@@ -29,6 +29,7 @@
 #include "xlsp_index_pool.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
+#include "../../xir/xxir_compile_memory.h"
 
 // File change types (LSP spec)
 #define FILE_CHANGE_CREATED 1
@@ -40,8 +41,7 @@ XR_FUNC void xlsp_handle_ws_did_change_watched_files(XrLspServer *server, XrJson
     XrCompileResourceLimits limits = (XrCompileResourceLimits)XR_RESOURCE_SANDBOX_COMPILER_LIMITS;
     XrCompileResources *resources = NULL; XlspSourceWatch *batch = NULL;
     XrCompileResourceStatus opened = xr_compile_resources_new(&limits, &resources);
-    XrXirStatus status = opened == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
-        opened == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+    XrXirStatus status = xir_compile_resource_status(opened);
     if (status == XR_XIR_OK) status = xlsp_source_watch_read(resources, params, &batch);
     if (status == XR_XIR_OK) status = xlsp_source_watch_commit(batch, server);
     if (status != XR_XIR_OK) {
@@ -80,8 +80,7 @@ static void workspace_folders_apply(XrLspServer *server, const XrJsonValue *para
     XrCompileResourceLimits limits = (XrCompileResourceLimits)XR_RESOURCE_SANDBOX_COMPILER_LIMITS;
     XrCompileResources *resources = NULL; XlspSourceFolders *owner = NULL; bool changed = false;
     XrCompileResourceStatus opened = xr_compile_resources_new(&limits, &resources);
-    XrXirStatus status = opened == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
-        opened == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+    XrXirStatus status = xir_compile_resource_status(opened);
     if (status == XR_XIR_OK) status = params ? xlsp_source_folders_read(resources, server, params, &owner) :
         xlsp_source_folders_single(resources, server, uri, name, add, &owner);
     if (status == XR_XIR_OK) status = xlsp_source_folders_commit(owner, server, &changed);
@@ -125,8 +124,7 @@ static void xlsp_handle_ws_apply_configuration(XrLspServer *server, XrJsonValue 
     XrCompileResourceLimits limits = (XrCompileResourceLimits)XR_RESOURCE_SANDBOX_COMPILER_LIMITS;
     XrCompileResources *resources = NULL;
     XrCompileResourceStatus opened = xr_compile_resources_new(&limits, &resources);
-    XrXirStatus status = opened == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
-        opened == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+    XrXirStatus status = xir_compile_resource_status(opened);
     XlspSourceSettings *patch = NULL; bool clear = false;
     if (status == XR_XIR_OK) status = xlsp_source_settings_read(resources, settings, &patch);
     if (status == XR_XIR_OK) status = xlsp_source_settings_apply(patch, server, &clear);

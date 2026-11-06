@@ -15,6 +15,7 @@
 #include "../../base/xjson.h"
 #include "xlsp_utils.h"
 #include "../../base/xmalloc.h"
+#include "../../xir/xxir_compile_memory.h"
 #include "../../base/xhashmap.h"
 #include "xlsp_stdlib.h"
 #include "xlsp_imports.h"
@@ -662,8 +663,7 @@ static XrXirStatus set_enum_payload_completion(XrCompileState *state,XrJsonValue
         char type_name[160];
         if(xr_compile_tref_to_string_buf(state,member->payload_types[i],type_name,(int)sizeof(type_name))<0) {
             XrCompileResourceStatus status=xr_compile_state_status(state);
-            return status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
-                status==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
+            return status==XR_COMPILE_RESOURCE_OK?XR_XIR_BAD_STRUCTURE:xir_compile_resource_status(status);
         }
         completion_buffer_append(detail, sizeof(detail), &detail_len, "%s: %s", field_name,
                                  type_name);
@@ -702,9 +702,6 @@ static XrJsonValue *complete_enum_decl(XrLspServer *server,XrLspDocument *doc,Xr
         AstNode *member = enum_node->as.enum_decl.members[i];
         if (member && member->type == AST_ENUM_MEMBER && member->as.enum_member.name) {
             snprintf(detail_buf, sizeof(detail_buf), "%s.%s", prefix, member->as.enum_member.name);
-            XrCompileResourceStatus paid=xr_compile_state_work(state,1);
-            if(paid!=XR_COMPILE_RESOURCE_OK)return enum_completion_failed(server,items,
-                paid==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:paid==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE,outcome);
             XrJsonValue *item=enum_completion_item(member->as.enum_member.name,XR_COMPLETION_ENUM_MEMBER,detail_buf,NULL);
             if(!item)return enum_completion_failed(server,items,XR_XIR_OUT_OF_MEMORY,outcome);
             XrXirStatus status=set_enum_payload_completion(state,item,&member->as.enum_member,pattern_context);

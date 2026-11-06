@@ -22,6 +22,7 @@
 #include "xray_version.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
+#include "../../xir/xxir_compile_memory.h"
 #include <string.h>
 
 XR_FUNC XrJsonValue *xlsp_handle_lc_initialize(XrLspServer *server, XrJsonValue *params) {
@@ -29,8 +30,7 @@ XR_FUNC XrJsonValue *xlsp_handle_lc_initialize(XrLspServer *server, XrJsonValue 
     XrCompileResourceLimits limits = (XrCompileResourceLimits)XR_RESOURCE_SANDBOX_COMPILER_LIMITS;
     XrCompileResources *resources = NULL; XlspSourceInitialize *owner = NULL; XrJsonValue *result = NULL;
     XrCompileResourceStatus opened = xr_compile_resources_new(&limits, &resources);
-    XrXirStatus status = opened == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
-        opened == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+    XrXirStatus status = xir_compile_resource_status(opened);
     if (status == XR_XIR_OK) status = xlsp_source_initialize_prepare(resources, server, params, &owner);
     if (status == XR_XIR_OK) status = xlsp_source_initialize_commit(owner, server, &result);
     xlsp_source_initialize_free(owner); xr_compile_resources_release(resources);
