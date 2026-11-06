@@ -71,9 +71,8 @@ static void nested_source_case(const char *name,bool accept,bool hidden) {
     xr_xir_compile_source_product_free(product);xr_xir_compile_source_product_diagnostic_free(&diagnostic);
     xr_compile_session_free(session);nested_nullable_compile_owner_free(&owner);
 }
-static uint64_t nested_source_quota(uint64_t work,XrXirStatus expected) {
+static XrCompileResourceStats nested_source_memory(XrCompileResourceLimits limits,XrXirStatus expected) {
     SourceFixtureOwner owner={0};
-    const XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,work};
     CHECK(xr_compile_resources_new(&limits,&owner.context.resources)==XR_COMPILE_RESOURCE_OK);
     owner.context.limits=xr_xir_compile_default_limits();
     CHECK(xr_compile_resources_stats(owner.context.resources,&owner.baseline)==XR_COMPILE_RESOURCE_OK);
@@ -89,19 +88,22 @@ static uint64_t nested_source_quota(uint64_t work,XrXirStatus expected) {
         XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
         CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
     }
-    if(status!=expected)fprintf(stderr,"nested quota=%llu status=%u stage=%u\n",(unsigned long long)work,status,diagnostic.stage);
+    if(status!=expected)fprintf(stderr,"nested memory=%llu status=%u stage=%u\n",(unsigned long long)limits.memory_limit,status,diagnostic.stage);
     CHECK(status==expected && diagnostic.status==expected && (product!=NULL)==(status==XR_XIR_OK));
     xr_xir_compile_source_product_free(product);xr_xir_compile_source_product_diagnostic_free(&diagnostic);
     xr_compile_session_free(session);
     XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(owner.context.resources,&stats)==XR_COMPILE_RESOURCE_OK);
-    CHECK(stats.work<=work);nested_nullable_compile_owner_free(&owner);return stats.work;
+    if(limits.memory_mode==XR_COMPILE_MEMORY_FINITE)CHECK(stats.peak_bytes<=limits.memory_limit);
+    nested_nullable_compile_owner_free(&owner);return stats;
 }
 int main(void){
     nested_source_case("definition",true,false);nested_source_case("single",true,false);
     nested_source_case("layer",true,false);nested_source_case("none",true,false);nested_source_case("reference",true,false);nested_source_case("inferred",true,false);
     nested_source_case("hidden_local",true,true);nested_source_case("hidden_transitive",true,true);
-    uint64_t work=nested_source_quota(UINT64_C(128000000),XR_XIR_OK);CHECK(work>1);
-    CHECK(nested_source_quota(work,XR_XIR_OK)==work);
-    (void)nested_source_quota(work-1,XR_XIR_BUDGET);
+    XrCompileResourceStats measured=nested_source_memory((XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true},XR_XIR_OK);
+    CHECK(measured.peak_bytes>1);
+    XrCompileResourceLimits exact={XR_COMPILE_MEMORY_FINITE,measured.peak_bytes,true};
+    CHECK(nested_source_memory(exact,XR_XIR_OK).peak_bytes==measured.peak_bytes);
+    --exact.memory_limit;(void)nested_source_memory(exact,XR_XIR_MEMORY_LIMIT);
     puts("Original eight Source inputs retain bytes; direct, inferred and hidden nested products accepted with exact layers PASS");return 0;
 }

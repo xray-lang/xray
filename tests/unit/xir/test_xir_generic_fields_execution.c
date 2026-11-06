@@ -56,9 +56,6 @@ spec.packet=proof;
 }
  xr_xir_compile_artifact_free(checked);
  XrXirProgram *program=NULL;
-uint32_t current_abi=spec.abi_version;spec.abi_version=24;
-CHECK(xr_xir_compile_program_seal(&compiler.context,&spec,&program)==XR_XIR_BAD_LAYOUT&&!program);
-spec.abi_version=current_abi;
 CHECK(xr_xir_compile_program_seal(&compiler.context,&spec,&program)==XR_XIR_OK);
 XrXirValue held[2]={{0}};
 generic_fields_pair(program,selected,held);

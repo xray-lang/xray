@@ -24,7 +24,7 @@ static size_t sn_metadata_shard_baseline(FILE *report,bool controls) {
     xr_xir_compile_program_drop(program);CHECK(!runtime_live && !runtime_bytes);
     source_nested_compile_owner_free(&owner);
     CHECK(fprintf(report,"{\"kind\":\"baseline\",\"sites\":%zu,\"functions\":%u,\"oom_status\":%u,"
-        "\"controls\":%s,\"allocated_cap\":67108864,\"live_cap\":8388608,\"work_cap\":128000000,"
+        "\"controls\":%s,\"memory_mode\":\"ordinary\",\"profile_allocations\":true,"
         "\"compiler_blocks\":%zu,\"compiler_bytes\":%zu,\"runtime_blocks\":%zu,\"runtime_bytes\":%zu}\n",
         sites,(unsigned)SN_COUNT,(unsigned)XR_XIR_OUT_OF_MEMORY,controls?"true":"false",
         source_nested_compile_live,source_nested_compile_bytes,runtime_live,runtime_bytes)>0);
@@ -70,7 +70,7 @@ static bool sn_metadata_dispatch(int argc,char **argv) {
     if (!strcmp(argv[1],"--metadata-bounds")) {
         CHECK(argc==3);source_nested_compile_report=false;FILE *report=sn_metadata_report(argv[2]);
         sn_metadata_bounds();
-        CHECK(fprintf(report,"{\"kind\":\"bounds\",\"exact\":true,\"minus1\":[\"allocated\",\"live\",\"work\"],"
+        CHECK(fprintf(report,"{\"kind\":\"bounds\",\"exact\":true,\"minus1\":[\"held\"],"
             "\"compiler_blocks\":%zu,\"compiler_bytes\":%zu,\"runtime_blocks\":%zu,\"runtime_bytes\":%zu}\n",
             source_nested_compile_live,source_nested_compile_bytes,runtime_live,runtime_bytes)>0);
         CHECK(!fclose(report));return true;

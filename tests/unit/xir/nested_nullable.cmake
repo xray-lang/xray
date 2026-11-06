@@ -4,7 +4,7 @@ add_executable(test_xir_nested_nullable xir/test_xir_nested_nullable.c)
 target_link_libraries(test_xir_nested_nullable PRIVATE xray_xir_vm xray_xir_cgen)
 add_custom_command(OUTPUT ${XIR_NESTED_NULLABLE_C}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND $<TARGET_FILE:test_xir_nested_nullable> ${XIR_NESTED_NULLABLE_C}
+    COMMAND $<TARGET_FILE:test_xir_nested_nullable> --write-c ${XIR_NESTED_NULLABLE_C}
     DEPENDS test_xir_nested_nullable VERBATIM)
 foreach(nested_mode IN ITEMS native mixed)
     add_executable(test_xir_nested_nullable_${nested_mode} xir/test_xir_nested_nullable_execution.c ${XIR_NESTED_NULLABLE_C})

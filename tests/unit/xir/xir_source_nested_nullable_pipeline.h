@@ -5,9 +5,9 @@ static bool sn_metadata_profile;
 static void sn_metadata_checkpoint(const XrXirCompileContext *context,const char *stage,XrXirStatus status) {
     if (!sn_metadata_profile) return;
     XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(context->resources,&stats)==XR_COMPILE_RESOURCE_OK);
-    fprintf(stderr,"Source nested metadata baseline %s status=%u attempts=%zu allocated=%llu work=%llu live=%llu peak=%llu\n",
+    fprintf(stderr,"Source nested metadata baseline %s status=%u attempts=%zu allocated=%llu held=%llu peak=%llu\n",
         stage,status,source_nested_compile_attempts,(unsigned long long)stats.allocated_bytes,
-        (unsigned long long)stats.work,(unsigned long long)stats.live_bytes,(unsigned long long)stats.peak_bytes);
+        (unsigned long long)stats.held_bytes,(unsigned long long)stats.peak_bytes);
 }
 static XrXirStatus sn_build(const XrXirCompileContext *context,const char *output,
     XrXirProgram **program,uint32_t functions[SN_COUNT]) {
@@ -15,7 +15,9 @@ static XrXirStatus sn_build(const XrXirCompileContext *context,const char *outpu
     XrXirSourceProductDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};XrXirCSource source={0};
     XrCompileResourceStatus session_status=xr_compile_session_new(context->resources,&session);
     XrXirStatus status=session_status==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:
-        session_status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
+        session_status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
+        session_status==XR_COMPILE_RESOURCE_MEMORY_LIMIT?XR_XIR_MEMORY_LIMIT:
+        session_status==XR_COMPILE_RESOURCE_OVERFLOW?XR_XIR_OVERFLOW:XR_XIR_BAD_STRUCTURE;
     const XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_NESTED_FIXTURES};
     const XrXirSourceProductRequest request={{session,XR_SOURCE_NESTED_FIXTURES "/root.xr",&authority,
         context,NULL,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
@@ -46,7 +48,7 @@ static XrXirStatus sn_build(const XrXirCompileContext *context,const char *outpu
     if (status==XR_XIR_OK) status=xr_xir_compile_source_product_vm_take(product,program);
     sn_metadata_checkpoint(context,"vm-take",status);
     if (status!=XR_XIR_OK) {
-        if (status!=XR_XIR_OUT_OF_MEMORY && status!=XR_XIR_BUDGET)
+        if (status!=XR_XIR_OUT_OF_MEMORY && status!=XR_XIR_MEMORY_LIMIT)
             fprintf(stderr,"Source nested pipeline status=%u stage=%u %u:%u: %s\n",status,diagnostic.stage,
                 diagnostic_root.primary.line,diagnostic_root.primary.column,diagnostic_root.message);
         CHECK(!*program);

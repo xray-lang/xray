@@ -64,14 +64,14 @@ static const XrXirType nested_outer_parameters[]={NESTED_OUTER};
 static const XrXirType nested_inner_parameters[]={NESTED_INNER};
 static const uint32_t nested_root_operands[]={0};
 static const XrXirFunction nested_functions[]={
-    {"$init",5,NULL,0,XR_XIR_UNIT,nested_blocks+0,1,nested_init_ops,1,NULL,0},
-    {"root",4,NULL,0,XR_XIR_I64,nested_blocks+1,1,nested_root_ops,5,nested_root_operands,1},
-    {"none",4,NULL,0,NESTED_OUTER,nested_blocks+2,1,nested_none_ops,2,NULL,0},
-    {"some_none",9,NULL,0,NESTED_OUTER,nested_blocks+3,1,nested_some_none_ops,3,NULL,0},
-    {"some7",5,NULL,0,NESTED_OUTER,nested_blocks+4,1,nested_some7_ops,4,NULL,0},
-    {"unwrap_outer",12,nested_outer_parameters,1,NESTED_INNER,nested_blocks+5,1,nested_unwrap_outer_ops,2,NULL,0},
-    {"unwrap_inner",12,nested_inner_parameters,1,XR_XIR_I64,nested_blocks+6,1,nested_unwrap_inner_ops,2,NULL,0},
-    {"presence",8,nested_outer_parameters,1,XR_XIR_BOOL,nested_blocks+7,1,nested_presence_ops,2,NULL,0}
+    {"$init",5,NULL,0,XR_XIR_UNIT,nested_blocks+0,1,nested_init_ops,1,NULL,0,.error_type=XR_XIR_NEVER},
+    {"root",4,NULL,0,XR_XIR_I64,nested_blocks+1,1,nested_root_ops,5,nested_root_operands,1,.error_type=XR_XIR_NEVER},
+    {"none",4,NULL,0,NESTED_OUTER,nested_blocks+2,1,nested_none_ops,2,NULL,0,.error_type=XR_XIR_NEVER},
+    {"some_none",9,NULL,0,NESTED_OUTER,nested_blocks+3,1,nested_some_none_ops,3,NULL,0,.error_type=XR_XIR_NEVER},
+    {"some7",5,NULL,0,NESTED_OUTER,nested_blocks+4,1,nested_some7_ops,4,NULL,0,.error_type=XR_XIR_NEVER},
+    {"unwrap_outer",12,nested_outer_parameters,1,NESTED_INNER,nested_blocks+5,1,nested_unwrap_outer_ops,2,NULL,0,.error_type=XR_XIR_NEVER},
+    {"unwrap_inner",12,nested_inner_parameters,1,XR_XIR_I64,nested_blocks+6,1,nested_unwrap_inner_ops,2,NULL,0,.error_type=XR_XIR_NEVER},
+    {"presence",8,nested_outer_parameters,1,XR_XIR_BOOL,nested_blocks+7,1,nested_presence_ops,2,NULL,0,.error_type=XR_XIR_NEVER}
 };
 static const XrXirSourceModule nested_modules[]={{"nested",6,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE}};
 static const XrXirFunctionIdentity nested_identities[]={

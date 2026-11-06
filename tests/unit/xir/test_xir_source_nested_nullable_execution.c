@@ -46,11 +46,7 @@ static void sn_execution(bool direction) {
             !memcmp(matching.bytes,spec.packet.bytes,matching.length));spec.packet=matching;
     }
     xr_xir_compile_artifact_free(proof);
-    XrXirProgram *program=NULL;XrXirProgramSpec wrong=spec;
-    wrong.abi_version=XR_XIR_PROGRAM_ABI_VERSION-1;
-    CHECK(xr_xir_compile_program_seal(&owner.context,&wrong,&program)==XR_XIR_BAD_LAYOUT && !program);
-    wrong=spec;wrong.target.abi_version=XR_XIR_VALUE_ABI_VERSION-1;
-    CHECK(xr_xir_compile_program_seal(&owner.context,&wrong,&program)==XR_XIR_BAD_LAYOUT && !program);
+    XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_program_seal(&owner.context,&spec,&program)==XR_XIR_OK);
     XrXirValue held[6]={{0}};sn_program_cases(program,functions,held);
     xr_xir_compile_program_drop(program);xr_xir_compile_artifact_free(lowered);

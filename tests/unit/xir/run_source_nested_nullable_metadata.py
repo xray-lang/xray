@@ -40,8 +40,8 @@ def baseline(record, controls):
     sites = record.get("sites")
     checked(type(sites) is int and 0 < sites < MAX_SITES, "Original <20000 site guard failed")
     checked(record.get("functions") == 28 and record.get("oom_status") == 7, "Whole original Program/status changed")
-    checked((record.get("allocated_cap"), record.get("live_cap"), record.get("work_cap")) ==
-            (67108864, 8388608, 128000000), "Whole-graph resource caps changed")
+    checked(record.get("memory_mode") == "ordinary" and record.get("profile_allocations") is True,
+            "Whole-graph compiler memory policy changed")
     zero_physical(record)
     return sites
 
@@ -131,7 +131,7 @@ def main():
         wait_phase()
         bounds = records(root / "bounds.jsonl")
         checked(len(bounds) == 1 and bounds[0].get("kind") == "bounds" and bounds[0].get("exact") is True and
-                bounds[0].get("minus1") == ["allocated", "live", "work"], "Original exact/minus1 axes incomplete")
+                bounds[0].get("minus1") == ["held"], "Held-memory exact/minus1 boundary incomplete")
         zero_physical(bounds[0])
         manifest["qualified"] = True
         manifest["seconds"] = time.monotonic() - start

@@ -99,7 +99,7 @@ static void sn_metadata_faults(void) {
     }
     printf("Source nested whole pipeline metadata OOM sites=%zu physical=0/0\n",sites);
 }
-static XrCompileResourceStats sn_metadata_quota(XrCompileResourceLimits limits,XrXirStatus expected) {
+static XrCompileResourceStats sn_metadata_memory(XrCompileResourceLimits limits,XrXirStatus expected) {
     SourceFixtureOwner owner={0};
     CHECK(xr_compile_resources_new(&limits,&owner.context.resources)==XR_COMPILE_RESOURCE_OK);
     owner.context.limits=xr_xir_compile_default_limits();
@@ -110,26 +110,23 @@ static XrCompileResourceStats sn_metadata_quota(XrCompileResourceLimits limits,X
     CHECK(status==expected && (program!=NULL)==(status==XR_XIR_OK));
     xr_xir_compile_program_drop(program);CHECK(!runtime_live && !runtime_bytes);
     XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(owner.context.resources,&stats)==XR_COMPILE_RESOURCE_OK);
-    CHECK(stats.allocated_bytes<=limits.allocated_bytes && stats.peak_bytes<=limits.live_bytes && stats.work<=limits.work);
+    if(limits.memory_mode==XR_COMPILE_MEMORY_FINITE)CHECK(stats.peak_bytes<=limits.memory_limit);
     source_nested_compile_owner_free(&owner);return stats;
 }
 static void sn_metadata_bounds(void) {
-    XrCompileResourceLimits caps={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
-    XrCompileResourceStats stats=sn_metadata_quota(caps,XR_XIR_OK);
-    CHECK(stats.allocated_bytes>1 && stats.peak_bytes>1 && stats.work>1);
-    const XrCompileResourceLimits exact={stats.allocated_bytes,stats.peak_bytes,stats.work};
-    XrCompileResourceStats measured=sn_metadata_quota(exact,XR_XIR_OK);
-    CHECK(measured.allocated_bytes==stats.allocated_bytes && measured.peak_bytes==stats.peak_bytes && measured.work==stats.work);
-    caps=exact;--caps.allocated_bytes;(void)sn_metadata_quota(caps,XR_XIR_BUDGET);
-    caps=exact;--caps.live_bytes;(void)sn_metadata_quota(caps,XR_XIR_BUDGET);
-    caps=exact;--caps.work;(void)sn_metadata_quota(caps,XR_XIR_BUDGET);
+    XrCompileResourceStats stats=sn_metadata_memory((XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true},XR_XIR_OK);
+    CHECK(stats.peak_bytes>1);
+    XrCompileResourceLimits exact={XR_COMPILE_MEMORY_FINITE,stats.peak_bytes,true};
+    XrCompileResourceStats measured=sn_metadata_memory(exact,XR_XIR_OK);
+    CHECK(measured.peak_bytes==stats.peak_bytes);
+    --exact.memory_limit;(void)sn_metadata_memory(exact,XR_XIR_MEMORY_LIMIT);
 }
 #include "xir_source_nested_nullable_metadata_shards.h"
 int main(int argc,char **argv) {
     if (sn_metadata_dispatch(argc,argv)) return 0;
     CHECK(argc==1 || argc==2);
     if (argc==2 && !strcmp(argv[1],"--metadata")) {
-        sn_source_rejections();sn_permission_control();sn_metadata_faults();sn_metadata_bounds();puts("Source nested compiler OOM and three finite resource axes PASS");return 0;
+        sn_source_rejections();sn_permission_control();sn_metadata_faults();sn_metadata_bounds();puts("Source nested compiler OOM and held-memory exact/minus-one PASS");return 0;
     }
     SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);
     XrXirProgram *program=NULL;uint32_t functions[SN_COUNT];
