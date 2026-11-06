@@ -19,7 +19,8 @@
 #include "xir_generic_fields_compile_owner.h"
 #include "xir_runtime_allocations.h"
 #include "xir_generic_fields_execution.h"
-int main(int argc,char **argv){CHECK(argc==1||argc==2);
+int main(int argc,char **argv){
+ bool write_c=argc==3 && !strcmp(argv[1],"--write-c");CHECK(argc==1||write_c);
 SourceFixtureOwner compiler={0}; source_fixture_owner_new(&compiler);
 FILE *file=fopen(XR_CHECKED_FIXTURE,"rb");
 CHECK(file&&!fseek(file,0,SEEK_END));
@@ -44,9 +45,11 @@ const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
  GenericFieldEntries entries=generic_fields_entries(module);
  XrXirCSource c={0};
 CHECK(xr_xir_compile_emit_c(lowered,"generic_fields",1048576,&c)==XR_XIR_OK);
-if(argc==2){file=fopen(argv[1],"wb");
+if(write_c){file=fopen(argv[2],"wb");
 CHECK(file&&fwrite(c.text,1,c.length,file)==c.length&&!fclose(file));
-}xr_xir_compile_c_source_free(&c);
+ }xr_xir_compile_c_source_free(&c);
+ if(write_c){xr_xir_compile_artifact_free(lowered);generic_fields_compile_owner_free(&compiler);
+ CHECK(!runtime_live&&!runtime_bytes);puts("generic fields current packet C generation PASS");return 0;}
 
  XrXirProgram *program=NULL;
 CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK&&!lowered);

@@ -11,7 +11,7 @@ target_compile_definitions(test_xir_generic_fields_source PRIVATE
     XR_SOURCE_STDLIB="${CMAKE_SOURCE_DIR}/stdlib")
 add_custom_command(OUTPUT ${XIR_GENERIC_FIELDS_CHECKED}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND $<TARGET_FILE:test_xir_generic_fields_source> ${XIR_GENERIC_FIELDS_CHECKED}
+    COMMAND $<TARGET_FILE:test_xir_generic_fields_source> --write-packet ${XIR_GENERIC_FIELDS_CHECKED}
     DEPENDS test_xir_generic_fields_source
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_generic_fields/root.xr
     VERBATIM)
@@ -19,7 +19,7 @@ add_executable(test_xir_generic_fields_packet xir/test_xir_generic_fields_packet
 target_link_libraries(test_xir_generic_fields_packet PRIVATE xray_xir_vm xray_xir_cgen)
 target_compile_definitions(test_xir_generic_fields_packet PRIVATE XR_CHECKED_FIXTURE="${XIR_GENERIC_FIELDS_CHECKED}")
 add_custom_command(OUTPUT ${XIR_GENERIC_FIELDS_GENERATED}
-    COMMAND $<TARGET_FILE:test_xir_generic_fields_packet> ${XIR_GENERIC_FIELDS_GENERATED}
+    COMMAND $<TARGET_FILE:test_xir_generic_fields_packet> --write-c ${XIR_GENERIC_FIELDS_GENERATED}
     DEPENDS test_xir_generic_fields_packet ${XIR_GENERIC_FIELDS_CHECKED}
     VERBATIM)
 foreach(generic_fields_mode IN ITEMS native mixed)
