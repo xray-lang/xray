@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     CHECK(xr_xir_compile_program_seal(&context,&host_call_source_program,&program) == XR_XIR_OK);
     xr_compile_resources_release(resources);
-    if (argc == 2) host_fatal_cleanup(program, host_call_fatal_entry);
+    if (argc == 2) { host_fatal_cleanup(program, host_call_fatal_entry);return 0; }
     activation_cleanup_failure(program,host_call_entries[2]);
     size_t live=runtime_live,bytes=runtime_bytes;
     persistent_host_cases(program,host_call_entries[0],host_call_bounded_entries[0],host_call_bounded_entries[2],host_call_bounded_entries[3]);

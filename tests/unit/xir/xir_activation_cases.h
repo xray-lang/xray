@@ -82,7 +82,7 @@ static void activation_cases(XrXirProgram *program,uint32_t normal,uint32_t curr
         activation_close_without_allocation(instance);
     }
     CHECK(xr_xir_instance_start(instance,children,NULL,0)==XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll_bounded(instance,128).outcome.status==XR_XIR_CALL_READY);
+    CHECK(instance_until_pause(instance).outcome.status==XR_XIR_CALL_SUSPENDED);
     activation_close_without_allocation(instance);
     CHECK(trace.count==4 && trace.values[2]+trace.values[3]==147 && trace.values[2]!=trace.values[3]);
     CHECK(xr_xir_instance_start_function(instance,&function,NULL,0)==XR_XIR_CALL_READY);

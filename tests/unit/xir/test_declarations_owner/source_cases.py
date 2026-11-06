@@ -41,7 +41,7 @@ def main():
          b'count=1\nexample:1:0\n'),
         ('export', '@test\nexport fn example() {}\n', ok, b'count=1\nexample:1:0\n'),
         ('initialization', 'enum Failure { Broken { message:string } }\n'
-         'fn initialize()->i64 throws(Failure) { print("init"); throw Failure.Broken { message:'
+         'fn initialize() throws(Failure)->i64 { print("init"); throw Failure.Broken { message:'
          '"owned initialization failure after Program and product destruction" } }\n'
          'var value=try initialize()\n@before_all\nfn setup() { print("must not run") }\n'
          '@test\nfn example() { print("must not run") }\n', ok,

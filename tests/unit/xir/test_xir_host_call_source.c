@@ -82,7 +82,7 @@ int main(int argc, char **argv) {
     XrXirProgram *program = NULL;
     CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK);
     CHECK(!lowered);
-    if (fatal) host_fatal_cleanup(program, entries[3]);
+    if (fatal) { host_fatal_cleanup(program, entries[3]);return 0; }
     activation_cleanup_failure(program,entries[2]);
     size_t live=runtime_live,bytes=runtime_bytes;
     persistent_host_cases(program,entries[0],entries[4],entries[6],entries[7]);

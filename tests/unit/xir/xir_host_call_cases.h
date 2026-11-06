@@ -44,16 +44,29 @@ static XrXirInstanceConfig host_config(HostTrace *trace) {
     return config;
 }
 static void host_fatal_cleanup(XrXirProgram *program, uint32_t entry) {
-    HostTrace trace = {0}; XrXirInstanceConfig config = host_config(&trace);
-    XrXirHostExecutionRequest request = {program, &config, entry, NULL, 0};
-    XrXirHostCall *call = NULL;
-    CHECK(xr_xir_host_call_begin(&request, &call) == XR_XIR_CALL_READY);
+    HostTrace traces[2] = {0}; XrXirHostCall *calls[2] = {0};
+    for (unsigned i = 0; i < 2; ++i) {
+        XrXirInstanceConfig config = host_config(&traces[i]);
+        XrXirHostExecutionRequest request = {program, &config, entry, NULL, 0};
+        CHECK(xr_xir_host_call_begin(&request, &calls[i]) == XR_XIR_CALL_READY);
+    }
     xr_xir_compile_program_drop(program);
-    CHECK(xr_xir_host_call_step_bounded(call, UINT64_MAX).outcome.status == XR_XIR_CALL_SUSPENDED);
-    XrXirCallStatus dropped=xr_xir_host_call_drop(call);
-    fprintf(stderr,"cleanup drop returned status%u\n",dropped);
-    fputs("fatal cleanup incorrectly returned to the host\n", stderr);
-    exit(99);
+    for (unsigned i = 0; i < 2; ++i)
+        CHECK(xr_xir_host_call_step_bounded(calls[i], UINT64_MAX).outcome.status == XR_XIR_CALL_SUSPENDED);
+    CHECK(xr_xir_host_call_drop(calls[0]) == XR_XIR_CALL_CLEANUP_FAILED);
+    CHECK(xr_xir_host_call_request_cancel(calls[1]) == XR_XIR_CALL_CANCEL_REQUESTED);
+    CHECK(xr_xir_host_call_step_bounded(calls[1], UINT64_MAX).outcome.status == XR_XIR_CALL_CLEANUP_FAILED);
+    XrXirCallResult owned = {0};
+    CHECK(xr_xir_host_call_take(calls[1], &owned) == XR_XIR_CALL_CLEANUP_FAILED);
+    CHECK(owned.status == XR_XIR_CALL_CLEANUP_FAILED && owned.panic.detail.code == 445);
+    CHECK(owned.prior_status == XR_XIR_CALL_CANCELLED && xr_xir_panic_empty(&owned.prior_panic));
+    CHECK(xr_xir_host_call_drop(calls[1]) == XR_XIR_CALL_CLEANUP_FAILED);
+    const char *message = NULL; size_t length = 0;
+    CHECK(xr_xir_string_view(&owned.panic.message, &message, &length) && length == 7 && !memcmp(message, "cleanup", 7));
+    CHECK(xr_xir_call_result_valid(&owned));
+    xr_xir_call_result_drop(&owned);
+    CHECK(!runtime_live && !runtime_bytes && !runtime_owned);
+    puts("host survived cleanup failure: primary445 prior cancellation; owned cleanup after close physical0");
 }
 static void host_text(const XrXirValue *value, const char *expected) {
     const char *bytes = NULL; size_t length = 0;
