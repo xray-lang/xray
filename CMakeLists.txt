@@ -5762,16 +5762,6 @@ add_custom_target(xray-build-identity-refresh
         "${_XRAY_INSTALL_METADATA_DIR}/GeneratePayloadManifest.cmake"
     VERBATIM
     COMMENT "Refreshing authentic build and installation identity")
-configure_file(
-    "${CMAKE_SOURCE_DIR}/cmake/GenerateRuntimeManifest.cmake.in"
-    "${_XRAY_INSTALL_METADATA_DIR}/GenerateRuntimeManifest.cmake"
-    @ONLY
-)
-configure_file(
-    "${CMAKE_SOURCE_DIR}/cmake/NormalizeInstalledArchives.cmake.in"
-    "${_XRAY_INSTALL_METADATA_DIR}/NormalizeInstalledArchives.cmake"
-    @ONLY
-)
 
 # Install executable
 install(TARGETS xray
