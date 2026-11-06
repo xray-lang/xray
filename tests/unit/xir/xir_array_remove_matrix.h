@@ -108,22 +108,37 @@ static void matrix_faults(RemoveCompile *run, uint32_t function) {
     CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY && runtime_live == live && runtime_bytes == bytes);
     for (size_t failure = 0; failure < sites; ++failure) {
         instance = matrix_open(run); runtime_attempts = 0; runtime_fail_at = failure;
+        const XrXirInstance *previous_instance = instance_current(instance);
+        const uint64_t previous_epoch = previous_instance->epoch;
+        const unsigned previous_call = previous_instance->call ? (unsigned)xr_xir_call_state(previous_instance->call) : UINT32_MAX;
         XrXirCallStatus status = xr_xir_instance_start(instance, function, NULL, 0);
         const XrXirCallStatus started = status; unsigned polled = 0;
         while (status == XR_XIR_CALL_READY) { status = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status; ++polled; }
         CHECK(runtime_attempts > failure && status == XR_XIR_CALL_OOM); runtime_fail_at = SIZE_MAX;
         value = (XrXirValue){0};
         const XrXirCallStatus taken = xr_xir_instance_take_result(instance, &value);
-        if (taken != XR_XIR_CALL_BAD_STATE || value.type || value.payload) {
+        const XrXirInstance *result_instance = instance_current(instance);
+        XrXirCallStatus expected_take = XR_XIR_CALL_BAD_STATE;
+        if (result_instance->epoch != previous_epoch) {
+            CHECK(result_instance->epoch == previous_epoch + 1);
+            if (result_instance->call && result_instance->state != XR_XIR_INSTANCE_FAILED) {
+                CHECK(xr_xir_task_executor_root_idle(result_instance->executor));
+                CHECK(xr_xir_task_executor_completion_status(result_instance->executor) == status);
+                expected_take = status;
+            }
+        }
+        if (taken != expected_take || value.type || value.payload) {
             const XrXirInstance *take_instance = instance_current(instance);
-            fprintf(stderr, "remove take matrix group%u failure%zu start%u polled%u terminal%u take%u state%u call%u rootidle%u completion%u valueType%u valuePayload%lld\n",
+            fprintf(stderr, "remove take matrix group%u failure%zu start%u polled%u terminal%u take%u state%u call%u rootidle%u completion%u expected%u epochBefore%llu epochAfter%llu previousCall%u budgetExhausted%u valueType%u valuePayload%lld\n",
                 (unsigned)XR_REMOVE_MATRIX, failure, started, polled, status, taken, take_instance ? (unsigned)take_instance->state : UINT32_MAX,
                 take_instance && take_instance->call, take_instance && take_instance->executor ?
                     xr_xir_task_executor_root_idle(take_instance->executor) : 0,
                 take_instance && take_instance->executor ? xr_xir_task_executor_completion_status(take_instance->executor) : UINT32_MAX,
+                expected_take, (unsigned long long)previous_epoch, (unsigned long long)result_instance->epoch,
+                previous_call, instance_root(instance)->budget.exhausted,
                 value.type, (long long)value.payload);
         }
-        CHECK(taken == XR_XIR_CALL_BAD_STATE && !value.type && !value.payload);
+        CHECK(taken == expected_take && !value.type && !value.payload);
         CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY && runtime_live == live && runtime_bytes == bytes);
     }
     printf("matrix%d entry%u runtimeOOM%zu physical0\n", XR_REMOVE_MATRIX, function, sites);
