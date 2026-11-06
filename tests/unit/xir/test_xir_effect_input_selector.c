@@ -129,7 +129,8 @@ static void selector_raw_source_replay(bool resources) {
         for(uint32_t read=0;read<2;++read) {
             XrCompileResourceStats before=rp_stats(&context);
             CHECK(xir_compile_verify_raw_source_effects(&context,module,checked->construction,effects,NULL)==XR_XIR_OK);
-            CHECK(conditional_memory_unchanged(&context,before) && rp_stats(&context).held_bytes==retained && context.resources==identity);
+            CHECK(rp_stats(&context).held_bytes==before.held_bytes &&
+                rp_stats(&context).held_bytes==retained && context.resources==identity);
         }
         XrCompileResourceStats stats=rp_stats(&context);
         if(stats.peak_bytes>peak) peak=stats.peak_bytes;

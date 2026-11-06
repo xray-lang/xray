@@ -14,7 +14,7 @@
  * from pointer identity. Complete membership is independently matched. */
 static void conditional_physical_generations(const XrXirCompileContext *context,
     EffectInvocationCertificate *certificate,XrXirModule *module) {
-    EffectGraph graph={0};
+    EffectGraph graph={.input_facts=certificate->body->input_facts};
     CHECK(effect_graph_physical_refresh(context,module,&graph,NULL)==XR_XIR_OK && graph.physical_owned);
     EffectPhysicalDomain *initial=graph.physical;
     CHECK(initial && initial!=certificate->final->physical &&
