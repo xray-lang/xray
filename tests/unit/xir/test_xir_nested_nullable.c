@@ -44,12 +44,14 @@ static XrXirStatus nested_compile_pipeline(const XrXirCompileContext *context) {
 static void nested_type_rejections(const XrXirCompileContext *context) {
     XrXirTypeNode nodes[2]={nested_nodes[0],nested_nodes[1]};XrXirTypes types={nodes,2,NULL,NULL};
     CHECK(xr_xir_compile_types_structure_verify(context,&types)==XR_XIR_OK);
-    nodes[0].element=XR_XIR_UNIT;CHECK(xr_xir_compile_types_structure_verify(context,&types)==XR_XIR_BAD_TYPE);
+    nodes[0].element=(XrXirType)UINT32_MAX;CHECK(xr_xir_compile_types_structure_verify(context,&types)==XR_XIR_BAD_TYPE);
     nodes[0]=nested_nodes[0];nodes[1].element=NESTED_OUTER;
     CHECK(xr_xir_compile_types_structure_verify(context,&types)==XR_XIR_BAD_TYPE);
     nodes[1]=nested_nodes[1];nodes[0].element=NESTED_OUTER;
     CHECK(xr_xir_compile_types_structure_verify(context,&types)==XR_XIR_BAD_TYPE);
     nodes[0]=nested_nodes[0];nodes[0].kind=XR_XIR_TYPE_CELL;
+    CHECK(xr_xir_compile_types_structure_verify(context,&types)==XR_XIR_OK);
+    nodes[0].element=(XrXirType)UINT32_MAX;
     CHECK(xr_xir_compile_types_structure_verify(context,&types)==XR_XIR_BAD_TYPE);
     nodes[0]=nested_nodes[0];nodes[1].parameter_span=1;
     CHECK(xr_xir_compile_types_structure_verify(context,&types)==XR_XIR_BAD_TYPE);

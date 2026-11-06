@@ -1,6 +1,7 @@
 /* Independent Source execution expectations; one optional layer per operation. */
 #ifndef XIR_SOURCE_NESTED_NULLABLE_CASES_H
 #define XIR_SOURCE_NESTED_NULLABLE_CASES_H
+#include "xir_instance_oom_cleanup.h"
 #include "xir/xxir_nullable.h"
 #include "xir/xxir_array.h"
 #include "xir/xxir_class.h"
@@ -144,7 +145,7 @@ static void sn_faults(XrXirProgram *program,const uint32_t functions[SN_COUNT]) 
             XrXirInstance *instance=NULL;XrXirInstanceConfig config;sn_config(&config);XrXirValue result={0};
             XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
             if (status==XR_XIR_CALL_READY) status=sn_run(instance,functions[selected[n].entry],selected[n].mode,&result);
-            size_t attempts=runtime_attempts;runtime_fail_at=SIZE_MAX;
+            size_t attempts=runtime_attempts;
             if (!pass) {
                 CHECK(status==XR_XIR_CALL_RETURNED);sites=attempts;CHECK(sites && sites<20000);
                 if (selected[n].entry==SN_FACTORY) sn_outer(&result,(uint32_t)selected[n].mode);
@@ -159,7 +160,7 @@ static void sn_faults(XrXirProgram *program,const uint32_t functions[SN_COUNT]) 
                 }
             }
             else CHECK(attempts>pass-1 && status==XR_XIR_CALL_OOM && !result.type && !result.payload);
-            xr_xir_value_drop(&result);if (instance) CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+            xr_xir_value_drop(&result);if(instance) xir_fixture_close_instance(instance,pass!=0,XR_XIR_CALL_READY);runtime_fail_at=SIZE_MAX;
             CHECK(runtime_live==live && runtime_bytes==bytes);
         }
         printf("Source nested runtime %s mode=%d OOM sites=%zu physical baseline restored\n",sn_names[selected[n].entry],selected[n].mode,sites);

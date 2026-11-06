@@ -11,6 +11,7 @@
  */
 #ifndef XIR_NESTED_NULLABLE_CASES_H
 #define XIR_NESTED_NULLABLE_CASES_H
+#include "xir_instance_oom_cleanup.h"
 #include "xir/xxir_nullable.h"
 static XrXirCallResult nested_poll(XrXirInstance *instance) {
     XrXirCallResult result={0};
@@ -98,10 +99,10 @@ static void nested_runtime_faults(XrXirProgram *program) {
             runtime_attempts=0;runtime_fail_at=pass?pass-1:SIZE_MAX;
             XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
             if (status==XR_XIR_CALL_READY) status=nested_run(instance,entry,NULL,&result);
-            size_t attempts=runtime_attempts;runtime_fail_at=SIZE_MAX;
+            size_t attempts=runtime_attempts;
             if (!pass) {CHECK(status==XR_XIR_CALL_RETURNED);points=attempts;CHECK(points && points<20000);}
             else CHECK(attempts>pass-1 && status==XR_XIR_CALL_OOM && !result.type && !result.payload);
-            xr_xir_value_drop(&result);if(instance) CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+            xr_xir_value_drop(&result);if(instance) xir_fixture_close_instance(instance,pass!=0,XR_XIR_CALL_READY);runtime_fail_at=SIZE_MAX;
             CHECK(runtime_live==live && runtime_bytes==bytes);
         }
         printf("nested entry %u runtime OOM sites=%zu physical baseline restored\n",entry,points);

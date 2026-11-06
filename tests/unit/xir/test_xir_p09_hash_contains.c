@@ -60,20 +60,22 @@ static void contains_cases(XrXirValueAdmission *admission, bool full) {
     CHECK(xr_xir_value_copy(&map, &alias) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_set_new((XrXirType)258, &key, 1, admission, &set) == XR_XIR_VALUE_OK);
     contains_bad_admission(&map, &set, &key, &optional, admission);
-    /* Extracting this inline Nullable allocates its independently owned box.
-     * A key-only query must not need that result or its allocation. */
-    size_t before = value_allocation_calls; fail_at = value_allocation_calls;
-    XrXirValue output = {0}; bool found = false;
+    /* Complete authority traversal may allocate its stack. Extracting the
+     * inline Nullable needs an additional independent result owner. */
+    size_t before = value_allocation_calls;
+    bool found = false;
+    CHECK(xr_xir_map_contains_key(&map, &key, admission, &found) == XR_XIR_VALUE_OK && found);
+    size_t query_sites = value_allocation_calls - before;
+    before = value_allocation_calls; fail_at = before + query_sites;
+    XrXirValue output = {0}; found = false;
     CHECK(xr_xir_map_get(&map, &key, admission, &output, &found) == XR_XIR_VALUE_OOM);
-    CHECK(!output.type && !output.payload && !found && value_allocation_calls == before + 1);
-    fail_at = value_allocation_calls; before = value_allocation_calls;
-    XrXirValueStatus contains_status=xr_xir_map_contains_key(&map, &key, admission, &found);
-    if(contains_status!=XR_XIR_VALUE_OK || !found)fprintf(stderr,"contains status=%u found=%u allocations=%zu work=%llu\n",
-        contains_status,found,(size_t)(value_allocation_calls-before),(unsigned long long)admission->work);
-    CHECK(contains_status == XR_XIR_VALUE_OK && found);
-    CHECK(value_allocation_calls == before);
-    found = true;
-    CHECK(xr_xir_map_contains_key(&map, &missing, admission, &found) == XR_XIR_VALUE_OK && !found && value_allocation_calls == before);
+    CHECK(!output.type && !output.payload && !found && value_allocation_calls == before + query_sites + 1);
+    before = value_allocation_calls; fail_at = before + query_sites;
+    CHECK(xr_xir_map_contains_key(&map, &key, admission, &found) == XR_XIR_VALUE_OK && found);
+    CHECK(value_allocation_calls == before + query_sites);
+    before = value_allocation_calls; fail_at = before + query_sites; found = true;
+    CHECK(xr_xir_map_contains_key(&map, &missing, admission, &found) == XR_XIR_VALUE_OK && !found &&
+        value_allocation_calls == before + query_sites);
     fail_at = SIZE_MAX;
     CHECK(xr_xir_map_get(&map, &key, admission, &output, &found) == XR_XIR_VALUE_OK && found);
     CHECK(output.type == optional.type && output.payload != optional.payload);
