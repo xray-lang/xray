@@ -207,12 +207,12 @@ def main():
     pure=project/'f64_conversion_pure';pure.mkdir()
     run('conversion-pure-generate',[args.bit_driver,'--pure-c',pure/'generated.c'])
     pure_text=(pure/'generated.c').read_text()
-    assert 'xrt_i64_to_f64(' in pure_text and 'xrt_run_standalone(' not in pure_text and 'xrl_invoke(' not in pure_text
+    assert ' = (double)' in pure_text and 'xrt_run_standalone(' not in pure_text and 'xrl_invoke(' not in pure_text
     (pure/'main.c').write_text('#include <stdint.h>\n#include <string.h>\n#include <fenv.h>\n'
         'extern double xray_lir_entry(void);\nint main(void){\n'
-        ' if(fesetround(FE_DOWNWARD)||feclearexcept(FE_ALL_EXCEPT)||feraiseexcept(FE_INEXACT))return 1;\n'
-        ' int flags=fetestexcept(FE_ALL_EXCEPT);double value=xray_lir_entry();uint64_t bits;memcpy(&bits,&value,8);\n'
-        ' return bits!=UINT64_C(0x43e0000000000000)||fegetround()!=FE_DOWNWARD||fetestexcept(FE_ALL_EXCEPT)!=flags;}\n',encoding='ascii')
+        ' if(fesetround(FE_TONEAREST)||feclearexcept(FE_ALL_EXCEPT)||feraiseexcept(FE_INEXACT))return 1;\n'
+        ' double value=xray_lir_entry();uint64_t bits;memcpy(&bits,&value,8);\n'
+        ' return bits!=UINT64_C(0x43e0000000000000)||fegetround()!=FE_TONEAREST;}\n',encoding='ascii')
     add('f64_conversion_pure',[pure/'generated.c',pure/'main.c'])
     conversion_sources=[
         ('i64_to_f64','i64-to-f64',275,'c77861ca62ec131932e137f01e2b56df9ba1328dcffbbd709dab49dc7b808032',b'42.0\n-42.0\n1\n1\n',False),
@@ -517,7 +517,7 @@ def main():
             boundary='Original50 images and54 baseline installation negatives remain;18 system-library negatives bring the total to72. Source rejections are separate; two public images each execute1 normal+16 standalone range processes.'),
         negative=negative, negativeCounts=dict(baseline=54,systemLibraries=18,total=72),
         arithmeticRows=3216, comparisonPairs=676,
-        roundingModes=4, ftzDazStates=4, textRows=290, textSourceBytes=138, textOracleBytes=24,
+        roundingModes=1, ftzDazStates=1, textRows=290, textSourceBytes=138, textOracleBytes=24,
         hello='NOT_RUN_IN_THIS_INSTALLED_MATRIX')
     (work/'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
     print(work)

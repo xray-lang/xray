@@ -376,7 +376,7 @@ Checked与Program、值和调用边界使用§17.6的现行版本，不接受先
 
 ### 17.23 二进制浮点转换基础
 
-共同运行时浮点核心显式接收IEEE binary32/binary64位型（binary32高32位必须为零），整数侧沿用位宽/符号与规范payload。整数到浮点、f64到f32采用round-to-nearest ties-to-even，溢出为带符号无穷，保留subnormal渐进下溢和负零；f32到f64精确。任意NaN位型统一为正canonical quiet NaN（f32为0x7fc00000，f64为0x7ff8000000000000）。同宽转换也规范化NaN。
+CTFE 的整数位浮点核心显式接收IEEE binary32/binary64位型（binary32高32位必须为零），整数侧沿用位宽/符号与规范payload。整数到浮点、f64到f32采用round-to-nearest ties-to-even，溢出为带符号无穷，保留subnormal渐进下溢和负零；f32到f64精确。任意NaN位型统一为正canonical quiet NaN（f32为0x7fc00000，f64为0x7ff8000000000000）。同宽转换也规范化NaN。
 
 浮点到整数先向零截断再检查目标完整范围；(-1,0)可转unsigned零。NaN、无穷或截断后越界返回RANGE；非法宽度/编码返回BAD_ARGUMENT，失败清零输出。比较返回less/equal/greater/unordered，任一NaN为unordered，正负零相等；负号翻转非NaN符号并规范化NaN。全部通过整数位运算实现，不分配、不执行宿主浮点运算/转换、不更改宿主舍入模式或异常标志，也不依赖旧scalar标签/生成元数据。
 
@@ -390,9 +390,9 @@ CONST_FLOAT 是独立 wire 编码边界：两精度的 NaN 常量仍必须正 ca
 存储为4/8字节，SSA/frame 为8字节，boxed/参数/结果为16字节且对齐8。
 CONST_FLOAT、NEG_FLOAT、六种浮点比较与唯一 CONVERT_NUMBER 经同一 Checked/Lowered 管线执行。
 CONVERT_NUMBER 原子替换先前仅限整数的转换指令；浮点转整数先截断再检查完整范围，失败为 NUMERIC_RANGE，清理后结果为 unit。
-NaN 的 EQ 为 false、NE 为 true，其余关系均为 false；正负零相等。所有转换遵循17.23且不改变宿主浮点环境。
+NaN 的 EQ 为 false、NE 为 true，其余关系均为 false；正负零相等。数值范围和转换遵循17.23；现役硬件 F64 执行遵循 §2.3.2 的默认浮点环境前提，不保证保存自然产生的异常标志。
 源码接受显式数值 cast、浮点负号/比较、f32 到 f64 隐式宽化及条件合流；整数/浮点混合必须显式 cast。
-拷贝、槽、cell、闭包、泛型实例、参数/返回、Tuple/Array/Nullable/已准入名义存储与挂起保留合法值的精确位型；跨界仍核 exact 类型、arena、owner 和既有执行权限。浮点比较遇任一 NaN 为 unordered（EQ 为 false、NE 为 true、有序关系为 false）；整数 payload 搬运不能暗中 canonicalize。十进制字面量及精确整数上下文准入见§17.25；四则、转换和负号的 NaN 结果仍 canonical，浮点输出见§17.27。
+拷贝、槽、cell、闭包、泛型实例、参数/返回、Tuple/Array/Nullable/已准入名义存储与挂起保留合法值的精确位型；跨界仍核 exact 类型、arena、owner 和既有执行权限。浮点比较遇任一 NaN 为 unordered（EQ 为 false、NE 为 true、有序关系为 false）；整数 payload 搬运不能暗中 canonicalize。十进制字面量及精确整数上下文准入见§17.25；算术、浮点转换和负号的 NaN 符号和载荷不保证；位串、打印、哈希和原子比较观察统一 NaN，浮点输出见§17.27。内部 payload accessor 不得在没有 F64 类型事实时把整数位型当作 NaN 规范化。
 唯一协议版本遵循§17.6，旧版本拒绝，无兼容路径。
 
 ### 17.25 精确十进制字面量
@@ -444,7 +444,7 @@ assert、assertEqual及assertPanics的已检查调用观察保留INTRINSIC声明
 
 ADD/SUB/MUL/DIV_FLOAT 在历史引入时编号70–73、OP_COUNT为74；现行opcode编号以唯一实现表为准。stage mask为7，两个输入及结果为同一具体f32/f64，其他字段为零。唯一Checked语义、schema及值/调用/Program版本由§17.6的实现常量定义；新增准入规则拒绝旧语义包，既有值与调用布局不变。普通泛型必须在定义处取得具体数值证明，特化与复验不授予额外权限。源码四则和复合赋值沿既有求值/提交顺序，f32/f64混合先精确宽化，typed整数与浮点混合、浮点余数和位运算拒绝。
 
-每次算术按原宽度round-to-nearest ties-to-even，不融合或重排，不使用宿主浮点状态。完整宽乘和除法余数保留最终舍入依据，逐次保留subnormal与负零，溢出为带符号无穷；零除零、无穷除无穷、零乘无穷、异号无穷相加和NaN输入得到canonical NaN。有限非零数除零为带符号无穷，不是整数除零fault。
+现役 F64 的 LIR→C 直接生成 double 四则、比较和负号，寄存器 VM 执行同样的硬件运算；两端禁止 FMA 或重排，程序入口须为 nearest-even 且保留次正规数。执行器不主动改舍入/FTZ/DAZ 控制，不逐运算保存或恢复异常标志，也不逐运算规范化 NaN。有限结果、subnormal、负零和溢出无穷按原精度舍入；零除零、无穷除无穷、零乘无穷、异号无穷相加和 NaN 输入产生 NaN，但其符号和载荷未指定。有限非零数除零为带符号无穷，不是整数除零 fault。CTFE 在硬件浮点合同之外继续使用整数位内核，保留其 canonical NaN 黄金数据；这不恢复运行热路的软件运算。
 
 PRINT/OUTPUT按§17.24接受合法运行f32/f64值，包括全部f64 NaN payload；所有NaN文本仍为`nan`，不会修改输入位型。有限非零数使用原精度最少有效数字往返十进制：同长度候选选最接近者，精确中点取末位偶数，不通过先宽化f32决定格式。最短系数无尾零；十进制指数k在[-4,16)时用普通形式，整数结果加`.0`；其他值用一位整数部分、小写`e`、显式指数正负号且无冗余指数零。特殊值固定`nan`、`inf`、`-inf`、`0.0`、`-0.0`。全部ASCII、固定整数空间、无堆分配；单值32字节缓冲包含终止符足够。宿主locale、舍入模式及异常标志不影响结果。
 
@@ -1721,7 +1721,7 @@ A conditional with explicit context checks and widens each branch in its own pre
 
 ### 17.23 Binary floating conversion foundation
 
-The common runtime floating core takes explicit IEEE binary32/binary64 bit patterns (binary32 must have zero upper bits); integers retain explicit width/signedness and canonical payloads. Integer-to-float and f64-to-f32 conversions use round-to-nearest ties-to-even, overflow to signed infinity, preserve gradual subnormal underflow and signed zero, and widen f32 to f64 exactly. Every NaN pattern normalizes to positive canonical quiet NaN: 0x7fc00000 for f32 and 0x7ff8000000000000 for f64. Same-width conversion also normalizes NaN.
+The CTFE integer-bit floating core takes explicit IEEE binary32/binary64 bit patterns (binary32 must have zero upper bits); integers retain explicit width/signedness and canonical payloads. Integer-to-float and f64-to-f32 conversions use round-to-nearest ties-to-even, overflow to signed infinity, preserve gradual subnormal underflow and signed zero, and widen f32 to f64 exactly. Every NaN pattern normalizes to positive canonical quiet NaN: 0x7fc00000 for f32 and 0x7ff8000000000000 for f64. Same-width conversion also normalizes NaN.
 
 Float-to-integer truncates toward zero before checking the complete target range; (-1,0) may produce unsigned zero. NaN, infinity and out-of-range truncated values return RANGE. Invalid widths/encodings return BAD_ARGUMENT; failures clear outputs. Comparison returns less/equal/greater/unordered, any NaN is unordered, and signed zeros compare equal. Negation flips a non-NaN sign and canonicalizes NaN. All operations use integer bits, allocate nothing, execute no host floating arithmetic or conversion, preserve host rounding/exception state, and depend on no legacy scalar tags or generated metadata.
 
@@ -1735,9 +1735,9 @@ CONST_FLOAT is a separate wire-encoding boundary: NaN constants at either width 
 Storage uses 4/8 bytes, SSA/frame payloads use 8 bytes, and boxed/parameter/result values use 16 bytes aligned to 8.
 CONST_FLOAT, NEG_FLOAT, six floating comparisons and the sole CONVERT_NUMBER run through the same Checked/Lowered pipeline.
 CONVERT_NUMBER atomically replaces the former integer-only conversion. Float-to-integer truncates then checks the full range; NUMERIC_RANGE faults clean up with a unit result.
-NaN yields false for EQ, true for NE and false for ordered relations; signed zeros compare equal. Conversions follow 17.23 without changing the host floating environment.
+NaN yields false for EQ, true for NE and false for ordered relations; signed zeros compare equal. Numeric ranges and conversions follow 17.23; hardware F64 execution uses the default-environment precondition of §2.3.2 without preserving naturally raised exception flags.
 Source admits explicit numeric casts, floating negation/comparison, implicit f32-to-f64 widening and conditional joins; integer/float mixing requires explicit casts.
-Copies, slots, cells, closures, generic instances, parameters/returns, Tuple/Array/Nullable/admitted nominal storage and suspension preserve exact admitted bits. Boundaries still check exact type, arena, ownership and existing execution authority. Floating comparison with any NaN is unordered: EQ is false, NE is true and ordered relations are false; integer-payload transport never silently canonicalizes. Decimal literals and exact contextual integers follow §17.25. Arithmetic, conversion and negation NaN results remain canonical; floating output follows §17.27.
+Copies, slots, cells, closures, generic instances, parameters/returns, Tuple/Array/Nullable/admitted nominal storage and suspension preserve exact admitted bits. Boundaries still check exact type, arena, ownership and existing execution authority. Floating comparison with any NaN is unordered: EQ is false, NE is true and ordered relations are false; integer-payload transport never silently canonicalizes. Decimal literals and exact contextual integers follow §17.25. Arithmetic, floating-conversion and negation NaN sign/payload are unspecified; bit-string, printing, hashing and atomic-comparison observations normalize NaNs. Floating output follows §17.27. An untyped payload accessor must not canonicalize integer words without an F64 type fact.
 The sole current revisions follow §17.6; older versions reject without compatibility paths.
 
 ### 17.25 Exact decimal literals
@@ -1787,7 +1787,7 @@ The other 13 Array members, and unfinished capacity, slice, ptr/mutPtr and itera
 
 ADD/SUB/MUL/DIV_FLOAT were introduced with tags70–73 and OP_COUNT74; current opcode numbers come only from the implementation table. They use stage mask7, two equal concrete f32/f64 operands, the same result type, and zero unused fields. The sole Checked semantic, schema and value/call/Program versions are defined by the implementation constants in §17.6. The new admission rejects older semantic packets while preserving existing value and call layouts. Ordinary generic definitions need concrete numeric proof; specialization and revalidation grant no additional permission. Source arithmetic and compound assignment preserve existing evaluation/commit order. Mixed f32/f64 widens exactly first; typed integer/float mixing, floating remainder and bitwise operations reject.
 
-Each operation rounds at its original width, nearest with ties to even, without fusion, reassociation or host FPU dependence. Wide multiplication and division remainders preserve final rounding information. Subnormals and signed zero survive; overflow yields signed infinity. Zero/zero, infinity/infinity, zero times infinity, opposite infinities added and NaN operands produce canonical NaN. Finite nonzero division by zero yields signed infinity, not an integer division fault.
+Live F64 LIR-to-C emits direct double arithmetic, comparison and negation, and the register VM performs the same hardware operations. Both disable FMA and reassociation; entry requires nearest-even rounding and gradual underflow. Executors do not actively change rounding/FTZ/DAZ controls, save or restore exception flags per operation, or canonicalize each arithmetic NaN. Finite results, subnormals, signed zero and overflow infinity round at the original precision. Zero/zero, infinity/infinity, zero times infinity, opposite infinities added and NaN operands yield NaN with unspecified sign/payload. Finite nonzero division by zero yields signed infinity rather than an integer division fault. CTFE continues using its integer-bit kernel and unchanged canonical-NaN golden data outside the hardware execution contract; this does not restore software operations on the runtime hot path.
 
 PRINT/OUTPUT admit runtime f32/f64 values under §17.24, including every f64 NaN payload. Every NaN still formats as `nan` without modifying the input bits. Finite nonzero text uses the fewest significant decimal digits that round back at the original precision. Equal-length candidates choose the nearest exact decimal; an exact midpoint chooses an even last digit. Binary32 is not widened before formatting. The shortest coefficient has no trailing zeros. Decimal exponent k in [-4,16) uses ordinary notation, adding `.0` to integral results; other values use one leading digit, lowercase `e`, an explicit exponent sign and no redundant exponent zeros. Specials are exactly `nan`, `inf`, `-inf`, `0.0`, `-0.0`. Formatting uses ASCII and fixed integer workspace without heap allocation; 32 bytes suffice including termination. Locale, host rounding mode and exception flags do not affect results.
 

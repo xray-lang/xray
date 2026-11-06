@@ -11,7 +11,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lir'))
-from test_lir_carriers_native import _f64_profile, _f64_reject
+from test_lir_carriers_native import _f64_profile, _f64_reject, _f64_options
 
 
 def adapter(mode, cpp=False):
@@ -53,7 +53,7 @@ def adapter(mode, cpp=False):
         text += ('static const struct {uint64_t bits;int rank;} orders[]={\n'
                  '#include "order-values.h"\n};\n')
     text += r'''int main(void) {
-    const int modes[]={FE_TONEAREST,FE_DOWNWARD,FE_UPWARD,FE_TOWARDZERO};
+    const int modes[]={FE_TONEAREST};
     fenv_t original;if(fegetenv(&original))return 1;
 #if CONTROLS == 4u
     unsigned original_control=_mm_getcsr();
@@ -65,18 +65,17 @@ def adapter(mode, cpp=False):
         text += '    Arithmetic arithmetic=arithmetic_get();\n'
     else:
         text += '    Relations relations=relations_get();\n'
-    text += r'''    for(unsigned m=0;m<4;++m)for(unsigned c=0;c<CONTROLS;++c) {
+    text += r'''    for(unsigned m=0;m<1;++m)for(unsigned c=0;c<1;++c) {
         if(fesetround(modes[m]) || feclearexcept(FE_ALL_EXCEPT) || feraiseexcept(FE_INEXACT))return 2;
 #if CONTROLS == 4u
         unsigned mask=(1u<<6)|(1u<<15);
         _mm_setcsr((_mm_getcsr()&~mask)|((c&1u)<<6)|(((c>>1)&1u)<<15));
         unsigned control=_mm_getcsr();
-#define ENV_OK() (fetestexcept(FE_ALL_EXCEPT)==flags && fegetround()==modes[m] && _mm_getcsr()==control)
+#define ENV_OK() (fegetround()==modes[m] && (_mm_getcsr() & ~0x3fu)==(control & ~0x3fu))
 #else
-#define ENV_OK() (fetestexcept(FE_ALL_EXCEPT)==flags && fegetround()==modes[m])
+#define ENV_OK() (fegetround()==modes[m])
 #endif
-        int flags=fetestexcept(FE_ALL_EXCEPT);
-'''
+        '''
     if mode != 'relations':
         text += '        unsigned count=0;\n        for(unsigned i=0;i<sizeof(vectors)/sizeof(*vectors);++i) {\n'
         if public:
@@ -87,8 +86,21 @@ def adapter(mode, cpp=False):
                      '            double answer=arithmetic((int64_t)vectors[i].op,left,right);\n'
                      '            if(!ENV_OK())return 3;\n'
                      '            uint64_t bits;memcpy(&bits,&answer,8);\n')
-        text += ('            if(bits!=vectors[i].expected)return 4;\n            ++count;\n'
-                 '        }\n        if(count!=3216)return 5;\n')
+        text += r"""            if ((vectors[i].expected & UINT64_C(0x7fffffffffffffff)) > UINT64_C(0x7ff0000000000000)) {
+                if ((bits & UINT64_C(0x7fffffffffffffff)) <= UINT64_C(0x7ff0000000000000)) return 4;
+            } else if(bits!=vectors[i].expected)return 4;
+            ++count;
+        }
+        if(count!=3216)return 5;
+"""
+    if mode != 'relations':
+        text += r"""        uint64_t left_bits=UINT64_C(0x3ff0000000000001),right_bits=UINT64_C(0x3feffffffffffffe),unfused;
+"""
+        if public:
+            text += '        unfused=xrt_f64_subtract(xrt_f64_multiply(left_bits,right_bits),UINT64_C(0x3ff0000000000000));\n'
+        else:
+            text += '        double a,b;memcpy(&a,&left_bits,8);memcpy(&b,&right_bits,8);double answer=arithmetic(4,a,b);memcpy(&unfused,&answer,8);\n'
+        text += '        if(unfused!=0)return 9;\n'
     if mode != 'arithmetic':
         text += '        for(unsigned a=0;a<26;++a)for(unsigned b=0;b<26;++b) {\n'
         if public:
@@ -143,7 +155,7 @@ def main():
         return result.stdout
 
     observation = json.loads(run('source', [args.driver, '--f64-family-c', work]))
-    assert observation['arithmeticOps'] == 4 and observation['relationPredicates'] == 6
+    assert observation['arithmeticOps'] == 4 and observation['relationPredicates'] == 6 and observation['noFmaControl']
     assert run('rbc-whole', [args.driver, '--f64-family-rbc']) == b'14\n'
     golden = Path(__file__).resolve().parents[1] / 'unit/xir/xir_float_arithmetic_vectors.def'
     assert hashlib.sha256(golden.read_bytes().replace(b'\r\n', b'\n')).hexdigest() == 'f55ebc6c5529d16793607901910a6707d65b2df8a311b1820a30b218ee52805c'
@@ -156,6 +168,10 @@ def main():
     arithmetic = '\n'.join('{' + str(operations[op]) + ',' + ','.join(
         'UINT64_C(0x' + value + ')' for value in (left, right, expected)) + '},'
         for _, op, left, right, expected in rows)
+    generated_arithmetic = (work / 'arithmetic.c').read_text()
+    assert re.search(r'v[0-9]+ = (?:v|p)[0-9]+ \* (?:v|p)[0-9]+;', generated_arithmetic)
+    assert re.search(r'v[0-9]+ = (?:v|p)[0-9]+ - (?:v|p)[0-9]+;', generated_arithmetic)
+    assert 'xrt_f64_multiply(' not in generated_arithmetic and 'xrt_f64_subtract(' not in generated_arithmetic
     values = re.findall(r'XR_F64_VALUE\(([0-9a-f]{16}), (-?\d+)\)',
         Path(__file__).with_name('f64_compare_values.def').read_text());assert len(values) == 26
     order = '\n'.join('{UINT64_C(0x' + bits + '),' + rank + '},' for bits, rank in values)
@@ -170,7 +186,7 @@ def main():
             if args.asan: result += ['/fsanitize=address', '/clang:-fsanitize=undefined', '/Zi']
             return result
         return ['-std=c++17' if cpp else '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic', '-O2',
-                '-fno-lto', *(['-fsanitize=address,undefined', '-g'] if args.asan else [])]
+                '-fno-lto', *_f64_options(args.compiler, args.kind), *(['-fsanitize=address,undefined', '-g'] if args.asan else [])]
 
     def compile_command(compiler, options, src, obj):
         return [compiler, *options, '/c', src, '/Fo:' + str(obj)] if args.kind == 'msvc' else [
@@ -197,8 +213,8 @@ def main():
         command += ['/Fe:' + str(executable), '/link', '/INCREMENTAL:NO'] if args.kind == 'msvc' else ['-lm', '-o', executable]
         run('link', command, folder);assert run('native', [executable], folder) == expected
         artifacts.append({'mode': folder.name, 'cpp': cpp, 'arithmeticRows': 0 if folder.name == 'relations' else 3216,
-            'comparisonPairs': 0 if folder.name == 'arithmetic' else 676, 'roundingModes': 4,
-            'controlCases': 4, 'files': [{'path': str(p), 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()}
+            'comparisonPairs': 0 if folder.name == 'arithmetic' else 676, 'roundingModes': 1,
+            'controlCases': 1, 'files': [{'path': str(p), 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()}
                 for p in [*sources, *objects, executable]]})
 
     for mode in ('arithmetic', 'relations'):
@@ -230,7 +246,7 @@ def main():
         src = folder / ('consumer.cpp' if cpp else 'consumer.c');src.write_text(adapter('public', cpp), encoding='ascii')
         build_run(folder, [src], closure / 'include', libraries, cpp)
     negative = []
-    clean = [x for x in base if x != '/Zi' and not x.startswith(('/fsanitize=', '/clang:-fsanitize=', '-fsanitize='))]
+    clean = [x for x in base if x != '/Zi' and x not in _f64_options(args.compiler, args.kind) and not x.startswith(('/fsanitize=', '/clang:-fsanitize=', '-fsanitize='))]
     controls = [('fast', ['/fp:fast'] if args.kind == 'msvc' else ['-ffast-math'])]
     if args.kind == 'msvc': controls.append(('abi', ['/D_M_ARM64EC=1']))
     for label, options in controls:

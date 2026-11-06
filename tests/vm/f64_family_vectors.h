@@ -23,6 +23,12 @@ static const struct {uint64_t bits;int rank;} float_order_witnesses[] = {
 #include "f64_compare_values.def"
 #undef XR_F64_VALUE
 };
+static bool float_runtime_equal(uint64_t actual, uint64_t expected) {
+    const uint64_t exponent = UINT64_C(0x7ff0000000000000);
+    const uint64_t fraction = UINT64_C(0x000fffffffffffff);
+    bool expected_nan = (expected & exponent) == exponent && (expected & fraction) != 0;
+    return expected_nan ? (actual & exponent) == exponent && (actual & fraction) != 0 : actual == expected;
+}
 static uint64_t float_relation_mask(unsigned left,unsigned right) {
     int a=float_order_witnesses[left].rank,b=float_order_witnesses[right].rank;
     return a<0 || b<0 ? 2u : a==b ? 41u : a<b ? 14u : 50u;

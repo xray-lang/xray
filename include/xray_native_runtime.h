@@ -36,19 +36,20 @@ typedef struct XrtSourceMap {
 
 typedef void (*XrtSynchronousRoot)(void *context);
 
-// Pure binary64 leaves consume and return object bits. They need no active
-// execution, allocate nothing and preserve the host floating environment.
-// Arithmetic rounds once to nearest with ties to even, gradually underflows,
-// and canonicalizes every NaN result to positive quiet 0x7ff8000000000000.
-// Division by zero produces the canonical IEEE value, without an integer panic.
+// Binary64 leaves consume and return object bits without allocation or an active
+// execution. The caller supplies nearest-even rounding and gradual underflow.
+// Control modes stay unchanged; exception flags and arithmetic NaN sign/payload
+// are unspecified. Observable text/bit-string/hash/atomic boundaries normalize
+// NaNs, without changing ordinary copies, storage or floating comparisons.
+// Division by zero follows IEEE rules without an integer panic.
 XRAY_API uint64_t xrt_f64_add(uint64_t left, uint64_t right);
 XRAY_API uint64_t xrt_f64_subtract(uint64_t left, uint64_t right);
 XRAY_API uint64_t xrt_f64_multiply(uint64_t left, uint64_t right);
 XRAY_API uint64_t xrt_f64_divide(uint64_t left, uint64_t right);
 // Return -1/0/1 for less/equal/greater and 2 for unordered. Both zeros compare
-// equal; any quiet or signaling NaN operand is unordered without changing flags.
+// equal; any quiet or signaling NaN operand is unordered.
 XRAY_API int32_t xrt_f64_compare(uint64_t left, uint64_t right);
-// Integer conversion preserves the floating environment. Conversion to binary64
+// Integer conversion uses that same default environment. Conversion to binary64
 // rounds to nearest with ties to even. Conversion to integer truncates toward
 // zero; NaN, infinity and out-of-range values require an active execution and
 // end it with numeric conversion panic 422 at the supplied source id.

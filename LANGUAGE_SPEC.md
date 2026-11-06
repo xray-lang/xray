@@ -780,12 +780,16 @@ Floating `+ - * /` rounds each operation at the common operand precision,
 nearest with ties to even; a mixed f32/f64 pair first widens f32 exactly to
 f64. Subnormals use gradual underflow and overflow produces signed infinity.
 Division by zero follows IEEE rules rather than raising an integer division
-fault. Invalid operations and NaN results produce the positive canonical quiet
-NaN. Operations are not implicitly fused or reassociated and neither depend on
-nor alter host rounding state or exception flags. Floating remainder and bitwise
+fault. The sign and payload of an arithmetic NaN result are unspecified; bit-string,
+printing, hashing and atomic-comparison observations normalize NaNs. Operations
+are not implicitly fused or reassociated. Programs run in the default floating
+environment: round-to-nearest, ties-to-even with gradual underflow. An embedding
+entry must establish that precondition. Executors do not actively change rounding
+or FTZ/DAZ controls; naturally raised sticky exception flags need not be preserved.
+Nondefault rounding or flushing modes are outside the admitted execution precondition. Floating remainder and bitwise
 operations reject; already typed integer/float mixing still requires an explicit cast.
 
-Runtime `f64` values admit every binary64 payload, including signed, payload-bearing quiet and signaling NaNs. Copying, storage, parameters, returns and admitted containers preserve exact bits. This carrier rule neither makes NaN ordinarily equal nor changes runtime `f32`: its high 32 bits remain zero and its only NaN is the positive canonical quiet NaN. CONST_FLOAT wire encoding still requires canonical NaN. Arithmetic, conversions including same-width conversion, and negation still canonicalize NaN results; transporting a value is not a numeric operation. §17.24/§17.27 govern the common VM/native/typed-output boundary. No raw-bit literal or reflection bypass is introduced.
+Runtime `f64` values admit every binary64 payload, including signed, payload-bearing quiet and signaling NaNs. Copying, storage, parameters, returns and admitted containers preserve exact bits. This carrier rule neither makes NaN ordinarily equal nor changes runtime `f32`: its high 32 bits remain zero and its only NaN is the positive canonical quiet NaN. CONST_FLOAT wire encoding still requires canonical NaN. Arithmetic, floating conversions and negation do not promise NaN sign or payload. Only the observable boundaries above normalize to positive canonical quiet NaN; internal copying, parameters, returns and spills do not canonicalize each value. §17.24/§17.27 govern the common VM/native/typed-output boundary. No raw-bit literal or reflection bypass is introduced.
 
 #### 2.3.3 `bool`
 
@@ -1464,7 +1468,7 @@ Applies to:
 - Runtime checks from `JSON.Value` to scalar types; composite typed decoding uses `JSON.decode<T>` / `JSON.decodeObject<T>`.
 - Parent → child (downcast).
 
-Numeric `as` is independent of the host C compiler, optimization level, and VM/AOT backend: integer-to-integer conversion reduces modulo the target width and interprets the same bit pattern with the target signedness; integer-to-f64 and `f64 → f32` use IEEE-754 round-to-nearest, ties-to-even, overflow produces signed infinity, and NaN is normalized to Xray's canonical quiet NaN; f64-to-integer truncates toward zero and throws `XR_ERR_OVERFLOW` (E0422), with message `numeric conversion is out of range`, for NaN, infinity, or a value outside the target range.
+Numeric `as` is independent of the host C compiler, optimization level, and VM/AOT backend: integer-to-integer conversion reduces modulo the target width and interprets the same bit pattern with the target signedness; integer-to-f64 and `f64 → f32` use IEEE-754 round-to-nearest, ties-to-even, overflow produces signed infinity, and NaN sign/payload are unspecified until the observable boundaries of §2.3.2; f64-to-integer truncates toward zero and throws `XR_ERR_OVERFLOW` (E0422), with message `numeric conversion is out of range`, for NaN, infinity, or a value outside the target range.
 
 An integer as operand is typed independently of the target. A direct positive literal (parentheses allowed) above the i64 maximum and at most the u64 maximum retains its u64 source magnitude before reducing to the target width. `18446744073709551615 as i8` is -1; `200 as i8` still wraps explicitly rather than first range-checking the literal as i8.
 
@@ -5988,7 +5992,7 @@ compareExchange is strong CAS and returns a real `(T, bool)` Tuple without visib
 
 On failure the operation returns the value actually observed and writes nothing; on success it returns the value before the write. A failure or cancellation that happens after a successful CAS does not roll the write back.
 
-i64 addition and subtraction wrap modulo 2^64 as in §2.3.1. f64 construction, load, store, swap and compareExchange preserve all binary64 bits; compareExchange compares bits, so positive and negative zero differ, NaNs with the same payload match and NaNs with different payloads do not. This does not change ordinary floating-point `==`. f64 addition and subtraction round as in §2.3.2 and, when racing other writes, recompute from the latest value until they succeed. `toString()` reads one `SeqCst` snapshot.
+i64 addition and subtraction wrap modulo 2^64 as in §2.3.1. f64 construction, load, store, swap and compareExchange preserve all binary64 bits; compareExchange normalizes NaNs at the observed comparison before comparing bits: positive and negative zero differ, while every NaN sign/payload matches the same positive canonical quiet NaN. This observation rule does not canonicalize ordinary copying, parameters or storage on every step. This does not change ordinary floating-point `==`. f64 addition and subtraction round as in §2.3.2 and, when racing other writes, recompute from the latest value until they succeed. `toString()` reads one `SeqCst` snapshot.
 
 When the target cannot provide lock-free atomics of the required width, a program that uses `Atomic` is rejected at build or load time; it never falls back to a locking implementation.
 
@@ -7853,7 +7857,7 @@ A conditional with explicit context checks and widens each branch in its own pre
 
 ### 17.23 Binary floating conversion foundation
 
-The common runtime floating core takes explicit IEEE binary32/binary64 bit patterns (binary32 must have zero upper bits); integers retain explicit width/signedness and canonical payloads. Integer-to-float and f64-to-f32 conversions use round-to-nearest ties-to-even, overflow to signed infinity, preserve gradual subnormal underflow and signed zero, and widen f32 to f64 exactly. Every NaN pattern normalizes to positive canonical quiet NaN: 0x7fc00000 for f32 and 0x7ff8000000000000 for f64. Same-width conversion also normalizes NaN.
+The CTFE integer-bit floating core takes explicit IEEE binary32/binary64 bit patterns (binary32 must have zero upper bits); integers retain explicit width/signedness and canonical payloads. Integer-to-float and f64-to-f32 conversions use round-to-nearest ties-to-even, overflow to signed infinity, preserve gradual subnormal underflow and signed zero, and widen f32 to f64 exactly. Every NaN pattern normalizes to positive canonical quiet NaN: 0x7fc00000 for f32 and 0x7ff8000000000000 for f64. Same-width conversion also normalizes NaN.
 
 Float-to-integer truncates toward zero before checking the complete target range; (-1,0) may produce unsigned zero. NaN, infinity and out-of-range truncated values return RANGE. Invalid widths/encodings return BAD_ARGUMENT; failures clear outputs. Comparison returns less/equal/greater/unordered, any NaN is unordered, and signed zeros compare equal. Negation flips a non-NaN sign and canonicalizes NaN. All operations use integer bits, allocate nothing, execute no host floating arithmetic or conversion, preserve host rounding/exception state, and depend on no legacy scalar tags or generated metadata.
 
@@ -7867,9 +7871,9 @@ CONST_FLOAT is a separate wire-encoding boundary: NaN constants at either width 
 Storage uses 4/8 bytes, SSA/frame payloads use 8 bytes, and boxed/parameter/result values use 16 bytes aligned to 8.
 CONST_FLOAT, NEG_FLOAT, six floating comparisons and the sole CONVERT_NUMBER run through the same Checked/Lowered pipeline.
 CONVERT_NUMBER atomically replaces the former integer-only conversion. Float-to-integer truncates then checks the full range; NUMERIC_RANGE faults clean up with a unit result.
-NaN yields false for EQ, true for NE and false for ordered relations; signed zeros compare equal. Conversions follow 17.23 without changing the host floating environment.
+NaN yields false for EQ, true for NE and false for ordered relations; signed zeros compare equal. Numeric ranges and conversions follow 17.23; hardware F64 execution uses the default-environment precondition of §2.3.2 without preserving naturally raised exception flags.
 Source admits explicit numeric casts, floating negation/comparison, implicit f32-to-f64 widening and conditional joins; integer/float mixing requires explicit casts.
-Copies, slots, cells, closures, generic instances, parameters/returns, Tuple/Array/Nullable/admitted nominal storage and suspension preserve exact admitted bits. Boundaries still check exact type, arena, ownership and existing execution authority. Floating comparison with any NaN is unordered: EQ is false, NE is true and ordered relations are false; integer-payload transport never silently canonicalizes. Decimal literals and exact contextual integers follow §17.25. Arithmetic, conversion and negation NaN results remain canonical; floating output follows §17.27.
+Copies, slots, cells, closures, generic instances, parameters/returns, Tuple/Array/Nullable/admitted nominal storage and suspension preserve exact admitted bits. Boundaries still check exact type, arena, ownership and existing execution authority. Floating comparison with any NaN is unordered: EQ is false, NE is true and ordered relations are false; integer-payload transport never silently canonicalizes. Decimal literals and exact contextual integers follow §17.25. Arithmetic, floating-conversion and negation NaN sign/payload are unspecified; bit-string, printing, hashing and atomic-comparison observations normalize NaNs. Floating output follows §17.27. An untyped payload accessor must not canonicalize integer words without an F64 type fact.
 The sole current revisions follow §17.6; older versions reject without compatibility paths.
 
 ### 17.25 Exact decimal literals
@@ -7919,7 +7923,7 @@ The other 13 Array members, and unfinished capacity, slice, ptr/mutPtr and itera
 
 ADD/SUB/MUL/DIV_FLOAT were introduced with tags70–73 and OP_COUNT74; current opcode numbers come only from the implementation table. They use stage mask7, two equal concrete f32/f64 operands, the same result type, and zero unused fields. The sole Checked semantic, schema and value/call/Program versions are defined by the implementation constants in §17.6. The new admission rejects older semantic packets while preserving existing value and call layouts. Ordinary generic definitions need concrete numeric proof; specialization and revalidation grant no additional permission. Source arithmetic and compound assignment preserve existing evaluation/commit order. Mixed f32/f64 widens exactly first; typed integer/float mixing, floating remainder and bitwise operations reject.
 
-Each operation rounds at its original width, nearest with ties to even, without fusion, reassociation or host FPU dependence. Wide multiplication and division remainders preserve final rounding information. Subnormals and signed zero survive; overflow yields signed infinity. Zero/zero, infinity/infinity, zero times infinity, opposite infinities added and NaN operands produce canonical NaN. Finite nonzero division by zero yields signed infinity, not an integer division fault.
+Live F64 LIR-to-C emits direct double arithmetic, comparison and negation, and the register VM performs the same hardware operations. Both disable FMA and reassociation; entry requires nearest-even rounding and gradual underflow. Executors do not actively change rounding/FTZ/DAZ controls, save or restore exception flags per operation, or canonicalize each arithmetic NaN. Finite results, subnormals, signed zero and overflow infinity round at the original precision. Zero/zero, infinity/infinity, zero times infinity, opposite infinities added and NaN operands yield NaN with unspecified sign/payload. Finite nonzero division by zero yields signed infinity rather than an integer division fault. CTFE continues using its integer-bit kernel and unchanged canonical-NaN golden data outside the hardware execution contract; this does not restore software operations on the runtime hot path.
 
 PRINT/OUTPUT admit runtime f32/f64 values under §17.24, including every f64 NaN payload. Every NaN still formats as `nan` without modifying the input bits. Finite nonzero text uses the fewest significant decimal digits that round back at the original precision. Equal-length candidates choose the nearest exact decimal; an exact midpoint chooses an even last digit. Binary32 is not widened before formatting. The shortest coefficient has no trailing zeros. Decimal exponent k in [-4,16) uses ordinary notation, adding `.0` to integral results; other values use one leading digit, lowercase `e`, an explicit exponent sign and no redundant exponent zeros. Specials are exactly `nan`, `inf`, `-inf`, `0.0`, `-0.0`. Formatting uses ASCII and fixed integer workspace without heap allocation; 32 bytes suffice including termination. Locale, host rounding mode and exception flags do not affect results.
 
