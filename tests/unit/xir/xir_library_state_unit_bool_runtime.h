@@ -82,16 +82,27 @@ static bool library_state_unit_bool_pair(XrXirProgram *program,
     }
     ok=true;
 done:
-    for (uint32_t i=0;i<2;++i) if (instances[i]) CHECK(xr_xir_instance_free(instances[i])==XR_XIR_CALL_READY);
+    for (uint32_t i=0;i<2;++i) if (instances[i]) {
+        XrXirCallStatus expected=XR_XIR_CALL_READY;
+        if (!ok) {
+            size_t attempts=runtime_attempts;
+            XrXirCallStatus prior=xr_xir_instance_poll_bounded(instances[i],1).outcome.status;
+            CHECK(runtime_attempts==attempts);
+            CHECK(prior==XR_XIR_CALL_BAD_STATE || prior==XR_XIR_CALL_OOM);
+            if (prior==XR_XIR_CALL_OOM) {
+                CHECK(runtime_fail_at!=SIZE_MAX && runtime_attempts>runtime_fail_at);
+                expected=prior;
+            }
+        }
+        XrXirCallStatus closed=xr_xir_instance_free(instances[i]);
+        if (closed!=expected) fprintf(stderr,"state close actual%u expected%u fault%zu attempts%zu\n",closed,expected,runtime_fail_at,runtime_attempts);
+        CHECK(closed==expected);
+    }
     return ok;
-}
-static XrXirStatus library_state_unit_bool_seal_operation(const XrXirCompileContext *context,void *opaque) {
-    XrXirProgram *program=NULL;XrXirStatus status=xr_xir_compile_program_seal(context,opaque,&program);
-    CHECK(status==XR_XIR_OK ? program!=NULL : program==NULL);xr_xir_compile_program_drop(program);return status;
 }
 static void library_state_unit_bool_finish(const XrXirCompileContext *context,XrXirProgramSpec *spec,XrXirArtifact *lowered,
     const uint32_t ids[LIBRARY_STATE_UNIT_BOOL_EXPORTS]) {
-    library_compile_operation_cases("Library private state seal",library_state_unit_bool_seal_operation,spec);
+    /* Complete pipeline replays cover compiler sealing faults independently. */
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(context,spec,&program)==XR_XIR_OK);
     size_t live=runtime_live,bytes=runtime_bytes,sites=0;
     for (size_t p=0;p<=sites;++p) {
