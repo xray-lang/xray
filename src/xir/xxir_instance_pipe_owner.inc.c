@@ -171,7 +171,10 @@ static XrXirCallStatus instance_owned_tokens(uint32_t count,int64_t *tokens) {
     for(;;) {
         if(!count||old>(uint64_t)INT64_MAX-count)return XR_XIR_CALL_LIMIT;
         if(atomic_compare_exchange_weak_explicit(&sequence,&old,old+count,memory_order_relaxed,memory_order_relaxed)) {
-            for(uint32_t i=0;i<count;++i)tokens[i]=(int64_t)(old+i+1);return XR_XIR_CALL_READY;
+            for(uint32_t i=0;i<count;++i) {
+                tokens[i]=(int64_t)(old+i+1);
+            }
+            return XR_XIR_CALL_READY;
         }
     }
 }
