@@ -86,7 +86,7 @@ static size_t child_fault(size_t fail) {
     } else {
         CHECK(status==XR_XIR_OUT_OF_MEMORY && sites>fail && adapter->stop_epoch==epoch && adapter->snapshot==snapshot);
         CHECK(runtime_live==blocks && runtime_bytes==bytes && adapter->value_count==before_refs && adapter->next_handle==next);
-        XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(fixture.ledger,&after)==XR_COMPILE_RESOURCE_OK && after.live_bytes==resources.live_bytes && after.work>=resources.work);
+        XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(fixture.ledger,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes==resources.held_bytes);
     }
     child_output(adapter,fail==SIZE_MAX ? 99 : 11,fail==SIZE_MAX ? CHILD_TEXT_REPLACEMENT : CHILD_TEXT_OLD);write_dispose(&fixture);return sites;
 }

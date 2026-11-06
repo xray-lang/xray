@@ -19,7 +19,7 @@ static XrXirStatus write_write(void *context,const char *bytes,size_t length) {
     message->size=length;++out->seq;return XR_XIR_OK;
 }
 static WriteFixture write_open(const char *file) {
-    WriteFixture fixture={0};memset(&capture,0,sizeof(capture));XrCompileResourceLimits limits={67108864,8388608,128000000};
+    WriteFixture fixture={0};memset(&capture,0,sizeof(capture));XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,8388608,true};
     CHECK(xr_compile_resources_new(&limits,&fixture.ledger)==XR_COMPILE_RESOURCE_OK);
     CHECK(xr_compile_resources_stats(fixture.ledger,&fixture.baseline)==XR_COMPILE_RESOURCE_OK);
     XrSourceCompilerConfig source={{fixture.ledger,xr_xir_compile_default_limits()},
@@ -41,7 +41,7 @@ static WriteFixture write_open(const char *file) {
 static void write_finish(WriteFixture *fixture) {
     CHECK(!xr_xir_domain_budget_stats(fixture->domain).metadata_live);xr_xir_domain_drop(fixture->domain);
     XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(fixture->ledger,&after)==XR_COMPILE_RESOURCE_OK);
-    CHECK(after.live_bytes==fixture->baseline.live_bytes);xr_compile_resources_release(fixture->ledger);CHECK(!runtime_live && !runtime_bytes);
+    CHECK(after.held_bytes==fixture->baseline.held_bytes);xr_compile_resources_release(fixture->ledger);CHECK(!runtime_live && !runtime_bytes);
 }
 static void write_dispose(WriteFixture *fixture) { CHECK(xdap_adapter_free(fixture->adapter)==XR_XIR_CALL_READY);write_finish(fixture); }
 #include "app/dap/xdap_lexical.h"

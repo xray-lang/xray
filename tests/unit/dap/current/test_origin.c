@@ -76,7 +76,7 @@ static size_t origin_fault(size_t fail) {
             fprintf(stderr,"Origin fault site=%zu/%zu status=%d refs=%u/%u\n",fail,sites,(int)status,adapter->value_count,before_refs);
         CHECK(status==XR_XIR_OUT_OF_MEMORY && sites>fail && adapter->value_count==before_refs);
         CHECK(runtime_live==blocks && runtime_bytes==bytes);XrCompileResourceStats after={0};
-        CHECK(xr_compile_resources_stats(fixture.ledger,&after)==XR_COMPILE_RESOURCE_OK && after.live_bytes==before.live_bytes && after.work>=before.work);
+        CHECK(xr_compile_resources_stats(fixture.ledger,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes==before.held_bytes);
         request(adapter,message);CHECK(adapter->value_count==before_refs+1);
     }
     CHECK(snapshot==adapter->snapshot && epoch==adapter->stop_epoch);

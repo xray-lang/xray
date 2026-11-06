@@ -211,7 +211,7 @@ static size_t class_observer_fault(size_t fail) {
         CHECK(adapter->next_handle>=next && adapter->next_handle-next<=1 && !capture.count);
         CHECK(!memcmp(existing,adapter->values,(size_t)refs*sizeof(*existing)));
         CHECK(runtime_live==blocks && runtime_bytes==bytes);XrCompileResourceStats after={0};
-        CHECK(xr_compile_resources_stats(fixture.ledger,&after)==XR_COMPILE_RESOURCE_OK && after.live_bytes==before.live_bytes && after.work>=before.work);
+        CHECK(xr_compile_resources_stats(fixture.ledger,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes==before.held_bytes);
         uint32_t spent=adapter->next_handle;
         if (spent>next) {
             char retired[256];origin_message(retired,sizeof(retired),next);request(adapter,retired);

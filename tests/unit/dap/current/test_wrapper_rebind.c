@@ -86,7 +86,7 @@ static size_t rebind_case(bool child,unsigned end,size_t fail) {
             CHECK(!capture.count);
             CHECK(runtime_live==blocks && runtime_bytes==bytes && adapter->value_count==refs && adapter->next_handle==next);
             if (refs) CHECK(!memcmp(&kept,&adapter->values[0],sizeof(kept)));
-            XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(fixture.ledger,&after)==XR_COMPILE_RESOURCE_OK && after.live_bytes==compiler.live_bytes && after.work>=compiler.work);
+            XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(fixture.ledger,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes==compiler.held_bytes);
             rebind_state(adapter,(int)stage-1);break;
         }
         CHECK(status==XR_XIR_OK && adapter->stop_epoch==epoch+1);uint32_t returned=rebind_reply(adapter,stage);rebind_state(adapter,(int)stage);
