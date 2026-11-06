@@ -877,17 +877,17 @@ static void nominal_callable_components(void) {
 }
 static void string_query_contracts(void) {
     XrXirType parameters[] = {XR_XIR_STRING, XR_XIR_STRING};
-    const uint32_t operands[] = {0, 1};
+    const uint32_t operands[] = {0,1,0,1,0,1};
     XrXirInstruction ops[] = {
         {XR_XIR_STRING_LEN, XR_XIR_I64, {0}, {0}, 0, {0}},
         {XR_XIR_EQ_STRING, XR_XIR_BOOL, {0,1}, {0}, 0, {0}},
         {XR_XIR_NE_STRING, XR_XIR_BOOL, {0,1}, {0}, 0, {0}},
         {XR_XIR_CALL_INTRINSIC, XR_XIR_BOOL, {0,2}, {0}, 1, {0}},
-        {XR_XIR_CALL_INTRINSIC, XR_XIR_BOOL, {0,2}, {0}, 2, {0}},
-        {XR_XIR_CALL_INTRINSIC, XR_XIR_BOOL, {0,2}, {0}, 3, {0}},
+        {XR_XIR_CALL_INTRINSIC, XR_XIR_BOOL, {2,2}, {0}, 2, {0}},
+        {XR_XIR_CALL_INTRINSIC, XR_XIR_BOOL, {4,2}, {0}, 3, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {7,0}, {0}, 0, {0}}};
     XrXirBlock block = {0,7, 0, 0};
-    XrXirFunction function = {"queries",7,parameters,2,XR_XIR_BOOL,&block,1,ops,7,operands,2,.error_type=XR_XIR_NEVER};
+    XrXirFunction function = {"queries",7,parameters,2,XR_XIR_BOOL,&block,1,ops,7,operands,6,.error_type=XR_XIR_NEVER};
     XrXirModule built = {XR_XIR_BUILT,&function,1,NULL,NULL,NULL,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *decoded = NULL;
     XrXirDiagnostic diagnostic={0};
@@ -916,7 +916,7 @@ static void string_query_contracts(void) {
             if (!memcmp(packet.bytes+at,pattern,sizeof(pattern))) { found=at; ++matches; }
         CHECK(matches == 1);
         const unsigned offsets[] = {4,8,16,24};
-        const uint32_t corrupt[] = {XR_XIR_STRING,2,1,i>=3?UINT32_MAX:1};
+        const uint32_t corrupt[] = {XR_XIR_STRING,i>=3?UINT32_MAX:2,1,i>=3?UINT32_MAX:1};
         for (unsigned n = 0; n < 4; ++n) {
             put32(packet.bytes+found+offsets[n],corrupt[n]); digest_packet(&packet);
             rejected(packet.bytes,packet.length);
