@@ -32,7 +32,7 @@ static void library_generic_parent_case(unsigned reverse) {
     library_typed_closed_negative(catalog,authority,"import {Private} from \"./generic_parent\";export fn result()->i64{return 41;}",XR_XIR_BAD_STRUCTURE);
     library_typed_closed_negative(catalog,authority,"import {measure} from \"./generic_parent\";export fn result()->i64{return 41;}",XR_XIR_BAD_STRUCTURE);
     library_typed_closed_negative(catalog,authority,"import \"./generic_parent\" as lib;export fn result()->i64{const value=lib.Box<bool>{value:true,text:\"owned\"};return 41;}",XR_XIR_BAD_TYPE);
-    library_typed_closed_negative(catalog,authority,"import \"./generic_parent\" as lib;struct Bad implements lib.Diamond<i64>{measure(value:string)->i64{return 41;}}export fn result()->i64{return 41;}",XR_XIR_BAD_TYPE);
+    library_typed_closed_negative(catalog,authority,"import \"./generic_parent\" as lib;struct Bad implements lib.Diamond<i64>{measure(value:string)->i64{return 41;}};export fn result()->i64{return 41;}",XR_XIR_BAD_TYPE);
     XrCompilerSession *session=library_session_new(library_context);
     XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/generic_parent_receiver.xr",&authority,library_context,NULL,NULL,XR_XIR_PROGRAM,catalog};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
