@@ -1,5 +1,5 @@
 enum RouteError { Left, Right }
-fn fail(depth:i64)->i64 throws RouteError {
+fn fail(depth:i64) throws(RouteError) -> i64 {
     if(depth>0) { return try fail(depth-1) }
     throw RouteError.Left
 }

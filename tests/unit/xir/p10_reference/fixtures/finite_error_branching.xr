@@ -1,5 +1,5 @@
 enum BranchError { Stop }
-fn branch(value:i64)->i64 throws BranchError {
+fn branch(value:i64) throws(BranchError) -> i64 {
     if(value==4) { throw BranchError.Stop }
     var result:i64=0
     if(value%2==0) { result=value*2 }
