@@ -194,13 +194,9 @@ static RemoveCompile remove_build(size_t failure, XrCompileResourceLimits limits
             CHECK(!declaration->type.known && !strcmp(declaration->signature, "() -> T?")); ++removal_members;
         }
     }
-#if defined(XR_REMOVE_MATRIX) && (XR_REMOVE_MATRIX == 6 || XR_REMOVE_MATRIX == 7)
-    CHECK(removal_members == 0);
-#else
     if (removal_members != 2) fprintf(stderr, "remove members actual%u expected2 owner%u pop%u shift%u\n",
         removal_members, array_parent, native_pop->id, native_shift->id);
     CHECK(removal_members == 2);
-#endif
 #if defined(XR_REMOVE_MATRIX) && XR_REMOVE_MATRIX == 7
     remove_shadow_query(&result, view);
 #endif
