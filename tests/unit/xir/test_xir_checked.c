@@ -12,6 +12,7 @@
 #include "xir_construction_fixture.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_internal.h"
+#include "xir/xxir_intrinsic.h"
 #include "base/xsha256.h"
 #include "base/xmalloc.h"
 #include <stdio.h>
@@ -891,8 +892,16 @@ static void string_query_contracts(void) {
     XrXirArtifact *checked = NULL, *decoded = NULL;
     XrXirDiagnostic diagnostic={0};
     XrXirStatus status=xir_fixture_check(suite_context,&built,&checked,&diagnostic);
-    if(status!=XR_XIR_OK)fprintf(stderr,"query fixture status=%u f=%u b=%u i=%u reason=%u\n",
-        status,diagnostic.function,diagnostic.block,diagnostic.instruction,diagnostic.reason);
+    if(status!=XR_XIR_OK) {
+        fprintf(stderr,"query fixture status=%u f=%u b=%u i=%u reason=%u\n",
+            (unsigned)status,diagnostic.function,diagnostic.block,diagnostic.instruction,(unsigned)diagnostic.reason);
+        for(uint32_t id=1;id<=3;++id) {
+            const XrNativeIntrinsicDeclaration *call=xr_native_intrinsic_by_id(id);
+            fprintf(stderr,"query intrinsic id=%u name=%s parameters=%u admitted=%u\n",id,
+                call&&call->member?call->member->name:"absent",call&&call->member?call->member->parameter_count:UINT32_MAX,
+                xr_xir_intrinsic(id)!=NULL);
+        }
+    }
     CHECK(status==XR_XIR_OK);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
