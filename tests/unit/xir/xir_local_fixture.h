@@ -28,7 +28,7 @@ static XrXirArtifact *local_fixture(const XrXirCompileContext *context) {
         {XR_XIR_RETURN, XR_XIR_UNIT, {12}, {0}, 0, {0}}
     };
     const XrXirBlock blocks[] = {{0, 3, 0, 0}, {3, 2, 0, 0}, {5, 2, 0, 0}, {7, 4, 0, 0}};
-    const XrXirFunction function = {"local", 5, parameters, 3, XR_XIR_STRING, blocks, 4, ops, 11, NULL, 0};
+    const XrXirFunction function = {"local", 5, parameters, 3, XR_XIR_STRING, blocks, 4, ops, 11, NULL, 0, .error_type=XR_XIR_NEVER};
     const XrXirType fault_parameters[] = {XR_XIR_STRING, XR_XIR_STRING, XR_XIR_I64};
     const XrXirInstruction fault_ops[] = {
         {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {0, 1}, {0}, 0, {0}},
@@ -90,10 +90,10 @@ static XrXirArtifact *local_fixture(const XrXirCompileContext *context) {
     const uint32_t reset_inputs[] = {0, 0, 2, 7, 0, 1, 2, 6, 0, 3, 2, 16};
     const XrXirBlock reset_blocks[] = {{0, 3, 0, 0}, {3, 5, 0, 0}, {8, 7, 0, 0}, {15, 2, 0, 0}};
     const XrXirFunction functions[] = {function,
-        {"fault", 5, fault_parameters, 3, XR_XIR_I64, &fault_block, 1, fault_ops, 5, NULL, 0},
-        {"swap", 4, fault_parameters, 3, XR_XIR_STRING, phi_blocks, 4, phi_ops, 13, phi_inputs, 12},
-        {"initialize", 10, parameters, 3, XR_XIR_STRING, initialization_blocks, 4, initialization_ops, 10, NULL, 0},
-        {"reset", 5, fault_parameters, 3, XR_XIR_STRING, reset_blocks, 4, reset_ops, 17, reset_inputs, 12}};
+        {"fault", 5, fault_parameters, 3, XR_XIR_I64, &fault_block, 1, fault_ops, 5, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"swap", 4, fault_parameters, 3, XR_XIR_STRING, phi_blocks, 4, phi_ops, 13, phi_inputs, 12, .error_type=XR_XIR_NEVER},
+        {"initialize", 10, parameters, 3, XR_XIR_STRING, initialization_blocks, 4, initialization_ops, 10, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"reset", 5, fault_parameters, 3, XR_XIR_STRING, reset_blocks, 4, reset_ops, 17, reset_inputs, 12, .error_type=XR_XIR_NEVER}};
     const XrXirModule built = {XR_XIR_BUILT, functions, 5, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
     CHECK(xir_fixture_check(context, &built, &checked, NULL) == XR_XIR_OK);
