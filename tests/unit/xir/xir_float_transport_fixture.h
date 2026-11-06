@@ -24,8 +24,8 @@ static XrXirArtifact *float_transport_fixture(const XrXirCompileContext *context
         {XR_XIR_RETURN, XR_XIR_UNIT, {1}, {0}, 0, {0}}
     };
     const XrXirFunction functions[] = {
-        {"wide", 4, &wide, 1, XR_XIR_F64, &block, 1, wide_ops, 2, NULL, 0},
-        {"narrow", 6, &narrow, 1, XR_XIR_F32, &block, 1, narrow_ops, 2, NULL, 0}
+        {"wide", 4, &wide, 1, XR_XIR_F64, &block, 1, wide_ops, 2, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"narrow", 6, &narrow, 1, XR_XIR_F32, &block, 1, narrow_ops, 2, NULL, 0, .error_type=XR_XIR_NEVER}
     };
     const XrXirModule built = {XR_XIR_BUILT, functions, 2, NULL, NULL, NULL,
         NULL, XR_XIR_PROGRAM, NULL};

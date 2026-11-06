@@ -162,7 +162,7 @@ static void initialization_loops(const XrXirCompileContext *context) {
         {XR_XIR_RETURN, XR_XIR_UNIT, {5}, {0}, 0, {0}}
     };
     XrXirBlock blocks[] = {{0, 3, 0, 0}, {3, 2, 0, 0}, {5, 2, 0, 0}, {7, 1, 0, 0}};
-    XrXirFunction function = {"loop", 4, parameters, 2, XR_XIR_I64, blocks, 4, ops, 8, NULL, 0};
+    XrXirFunction function = {"loop", 4, parameters, 2, XR_XIR_I64, blocks, 4, ops, 8, NULL, 0, .error_type=XR_XIR_NEVER};
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     CHECK(xir_fixture_verify(context, &module, NULL) == XR_XIR_OK);
     ops[0].immediate = 1;

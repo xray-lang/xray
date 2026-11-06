@@ -31,7 +31,7 @@ static XrXirArtifact *uninitialized_leaf_fixture(const XrXirCompileContext *cont
         {XR_XIR_RETURN, XR_XIR_UNIT, {3}, {0}, 0, {0}}
     };
     const XrXirBlock block = {0, 4, 0, 0};
-    const XrXirFunction function = {"u", 1, &parameter, 1, XR_XIR_I64, &block, 1, ops, 4, NULL, 0};
+    const XrXirFunction function = {"u", 1, &parameter, 1, XR_XIR_I64, &block, 1, ops, 4, NULL, 0, .error_type=XR_XIR_NEVER};
     const XrXirModule built = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
@@ -59,7 +59,7 @@ static XrXirFunction phi_leaf_fixture(void) {
     };
     static const uint32_t inputs[] = {0, 0, 2, 10, 0, 1, 2, 9, 0, 3, 2, 12};
     static const XrXirBlock blocks[] = {{0, 4, 0, 0}, {4, 2, 0, 0}, {6, 6, 0, 0}};
-    return (XrXirFunction) {"phi", 3, parameters, 3, XR_XIR_I64, blocks, 3, ops, 12, inputs, 12};
+    return (XrXirFunction) {"phi", 3, parameters, 3, XR_XIR_I64, blocks, 3, ops, 12, inputs, 12, .error_type=XR_XIR_NEVER};
 }
 
 static XrXirArtifact *fixture_checked(const XrXirCompileContext *context) {
@@ -165,33 +165,33 @@ static XrXirArtifact *fixture_checked(const XrXirCompileContext *context) {
         {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0, {0}}
     };
     const XrXirFunction functions[] = {
-        {"add", 3, add_parameters, 3, XR_XIR_I64, add_blocks, 3, add, 6, NULL, 0},
-        {"eq", 2, eq_parameters, 2, XR_XIR_BOOL, pair_blocks, 1, eq, 2, NULL, 0},
-        {"copy", 4, bool_parameters, 1, XR_XIR_BOOL, pair_blocks, 1, copy, 2, NULL, 0},
-        {"unit", 4, NULL, 0, XR_XIR_UNIT, unit_blocks, 1, unit, 1, NULL, 0},
-        {"min", 3, NULL, 0, XR_XIR_I64, pair_blocks, 1, minimum, 2, NULL, 0},
-        {"loop", 4, NULL, 0, XR_XIR_UNIT, loop_blocks, 2, loop, 2, NULL, 0},
-        {"reverse", 7, NULL, 0, XR_XIR_BOOL, reverse_blocks, 3, reverse, 6, NULL, 0},
-        {"false", 5, NULL, 0, XR_XIR_BOOL, pair_blocks, 1, boolean, 2, NULL, 0},
-        {"max", 3, NULL, 0, XR_XIR_I64, pair_blocks, 1, maximum, 2, NULL, 0},
-        {"numeric0", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, numeric0, 2, NULL, 0},
-        {"numeric1", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, numeric1, 2, NULL, 0},
-        {"numeric2", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, numeric2, 2, NULL, 0},
-        {"numeric3", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, numeric3, 2, NULL, 0},
-        {"numeric4", 8, eq_parameters, 2, XR_XIR_BOOL, pair_blocks, 1, numeric4, 2, NULL, 0},
-        {"numeric5", 8, eq_parameters, 2, XR_XIR_BOOL, pair_blocks, 1, numeric5, 2, NULL, 0},
-        {"numeric6", 8, eq_parameters, 2, XR_XIR_BOOL, pair_blocks, 1, numeric6, 2, NULL, 0},
-        {"numeric7", 8, eq_parameters, 2, XR_XIR_BOOL, pair_blocks, 1, numeric7, 2, NULL, 0},
-        {"bitwise0", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, bitwise0, 2, NULL, 0},
-        {"bitwise1", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, bitwise1, 2, NULL, 0},
-        {"bitwise2", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, bitwise2, 2, NULL, 0},
-        {"bitwise3", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, bitwise3, 2, NULL, 0},
-        {"bitwise4", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, bitwise4, 2, NULL, 0},
+        {"add", 3, add_parameters, 3, XR_XIR_I64, add_blocks, 3, add, 6, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"eq", 2, eq_parameters, 2, XR_XIR_BOOL, pair_blocks, 1, eq, 2, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"copy", 4, bool_parameters, 1, XR_XIR_BOOL, pair_blocks, 1, copy, 2, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"unit", 4, NULL, 0, XR_XIR_UNIT, unit_blocks, 1, unit, 1, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"min", 3, NULL, 0, XR_XIR_I64, pair_blocks, 1, minimum, 2, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"loop", 4, NULL, 0, XR_XIR_UNIT, loop_blocks, 2, loop, 2, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"reverse", 7, NULL, 0, XR_XIR_BOOL, reverse_blocks, 3, reverse, 6, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"false", 5, NULL, 0, XR_XIR_BOOL, pair_blocks, 1, boolean, 2, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"max", 3, NULL, 0, XR_XIR_I64, pair_blocks, 1, maximum, 2, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"numeric0", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, numeric0, 2, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"numeric1", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, numeric1, 2, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"numeric2", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, numeric2, 2, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"numeric3", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, numeric3, 2, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"numeric4", 8, eq_parameters, 2, XR_XIR_BOOL, pair_blocks, 1, numeric4, 2, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"numeric5", 8, eq_parameters, 2, XR_XIR_BOOL, pair_blocks, 1, numeric5, 2, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"numeric6", 8, eq_parameters, 2, XR_XIR_BOOL, pair_blocks, 1, numeric6, 2, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"numeric7", 8, eq_parameters, 2, XR_XIR_BOOL, pair_blocks, 1, numeric7, 2, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"bitwise0", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, bitwise0, 2, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"bitwise1", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, bitwise1, 2, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"bitwise2", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, bitwise2, 2, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"bitwise3", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, bitwise3, 2, NULL, 0, .error_type=XR_XIR_NEVER},
+        {"bitwise4", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, bitwise4, 2, NULL, 0, .error_type=XR_XIR_NEVER},
         phi_leaf_fixture(),
 #define XIR_INTEGER_CASE(id, type, op, rhs, result, count, left, right, expected) \
         {"integer" #id, sizeof("integer" #id) - 1, (const XrXirType[]) {type, rhs}, count, result, pair_blocks, 1, \
             (const XrXirInstruction[]) {{op, result, {0, count == 2 ? 1 : 0}, {0}, 0, {0}}, \
-                {XR_XIR_RETURN, XR_XIR_UNIT, {count}, {0}, 0, {0}}}, 2, NULL, 0},
+                {XR_XIR_RETURN, XR_XIR_UNIT, {count}, {0}, 0, {0}}}, 2, NULL, 0, .error_type=XR_XIR_NEVER},
 #include "xir_integer_cases.def"
 #undef XIR_INTEGER_CASE
 #define FLOAT_PARAMETERS_0(type) NULL
@@ -200,7 +200,7 @@ static XrXirArtifact *fixture_checked(const XrXirCompileContext *context) {
 #define XIR_FLOAT_FUNCTION(id, type, op, result, count, immediate) \
         {"floating" #id, sizeof("floating" #id) - 1, FLOAT_PARAMETERS_##count(type), count, result, pair_blocks, 1, \
             (const XrXirInstruction[]) {{op, result, {0, count == 2 ? 1 : 0}, {0}, immediate, {0}}, \
-                {XR_XIR_RETURN, XR_XIR_UNIT, {count}, {0}, 0, {0}}}, 2, NULL, 0},
+                {XR_XIR_RETURN, XR_XIR_UNIT, {count}, {0}, 0, {0}}}, 2, NULL, 0, .error_type=XR_XIR_NEVER},
 #include "xir_float_functions.def"
 #undef XIR_FLOAT_FUNCTION
 #undef FLOAT_PARAMETERS_0
