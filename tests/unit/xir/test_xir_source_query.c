@@ -281,7 +281,7 @@ static void publication_copy_budgets(const XrXirSourceRequest *request, const ch
     size_t physical_count = stage_physical_count, physical_bytes = stage_physical_bytes;
     SourceFixtureOwner producer = {0}; source_fixture_owner_new(&producer);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(producer.context.resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(producer.context.resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest probe = *request; probe.context = &producer.context; probe.session = session;
     XrXirSourceResult result = {0};
     CHECK(xr_xir_compile_source_check(&probe, &result, NULL, NULL) == XR_XIR_OK && result.checked && result.snapshot);
@@ -322,10 +322,10 @@ static XrXirStatus publication_probe(const XrXirSourceRequest *request, unsigned
     XrXirCompileContext context = stage_context_limited(mode ? STAGE_ALLOCATED_BYTES : allowance,
         STAGE_LIVE_BYTES, mode ? allowance : STAGE_WORK);
     XrCompilerSession *session = NULL;
-    XrCompilerSessionStatus created = xr_compile_session_new(context.resources, &session);
+    XrCompileResourceStatus created = xr_compile_session_new(context.resources, &session);
     XrXirStatus status = XR_XIR_BUDGET;
     *diagnostic = (XrXirSourceDiagnostic){0};
-    if (created == XR_COMPILER_SESSION_OK) {
+    if (created == XR_COMPILE_RESOURCE_OK) {
         XrXirSourceRequest probe = *request; probe.context = &context; probe.session = session;
         XrXirSourceResult result = {0};
         status = xr_xir_compile_source_check(&probe, &result, diagnostic, NULL);
@@ -960,7 +960,7 @@ static void unreachable_pattern_facts(XrXirSourceRequest *request) {
 static void query_next_scope(XrXirSourceRequest *request, XrCompilerSession **session) {
     xr_compile_session_free(*session); *session = NULL;
     stage_context = stage_context_default(); request->context = &stage_context;
-    CHECK(xr_compile_session_new(stage_context.resources, session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(stage_context.resources, session) == XR_COMPILE_RESOURCE_OK);
     request->session = *session;
 }
 int main(int argc, char **argv) {
@@ -976,7 +976,7 @@ int main(int argc, char **argv) {
     CHECK(snprintf(library, sizeof(library), "%s/lib.xr", absolute) > 0);
     write_source(library, "export fn visible(value:i64)->i64 { return value }\nfn hidden(value:i64)->i64 { return value }\n");
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(stage_context.resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(stage_context.resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
     XrXirSourceRequest request = {session, root, &authority, &stage_context, NULL, NULL, XR_XIR_PROGRAM, NULL};
     if (argc == 2) {

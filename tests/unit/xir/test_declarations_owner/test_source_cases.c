@@ -47,7 +47,7 @@ int main(int argc,char **argv) {
     CHECK(argc==6);XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};
     XrCompileResources *resources=NULL;CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(resources,&session)==XR_COMPILE_RESOURCE_OK);
     const XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,argv[1]};
     const XrXirSourceProductRequest request={{session,argv[2],&authority,&context,argv[3],NULL,XR_XIR_PROGRAM,NULL},
         {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};

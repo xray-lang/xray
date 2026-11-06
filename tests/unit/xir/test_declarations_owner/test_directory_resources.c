@@ -75,7 +75,7 @@ static XrXirStatus source_once(const char *root,const char *stdlib,size_t failur
     const XrCompileResourceLimits *limits,XrCompileResourceStats *stats,size_t *count) {
     CHECK(!live);attempts=0;fail_at=SIZE_MAX;XrCompileResources *resources=ledger(limits);
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(resources,&session)==XR_COMPILE_RESOURCE_OK);
     char path[1024];CHECK(snprintf(path,sizeof(path),"%s/basic.xr",root)>0);
     const XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
     XrXirSourceProductRequest request={{session,path,&authority,&context,stdlib,NULL,XR_XIR_PROGRAM,NULL},

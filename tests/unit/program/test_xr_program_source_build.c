@@ -928,7 +928,7 @@ static bool source_build_fixture_init(SourceBuildFixture *fixture, const char *e
         goto fail;
     const XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
     if (xr_compile_resources_new(&limits, &fixture->resources) != XR_COMPILE_RESOURCE_OK ||
-        xr_compile_session_new(fixture->resources, &fixture->session) != XR_COMPILER_SESSION_OK ||
+        xr_compile_session_new(fixture->resources, &fixture->session) != XR_COMPILE_RESOURCE_OK ||
         !xr_runtime_target_profile_build_native_hosted(&fixture->runtime_profile, NULL, 0))
         goto fail;
     XrModuleResolverConfig resolver_config = {0};

@@ -10,6 +10,7 @@
  * KEY CONCEPT:
  *   Text, authority and parser owners die before product queries and execution.
  */
+#include "xir/xxir_compile_memory.h"
 #include "program/xr_xir_source_product.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_output.h"
@@ -46,7 +47,7 @@ static inline XrXirCallStatus fixture_host_execute_44b4c6f3(const XrXirHostExecu
 static void world_open_limits(TextWorld *w, XrCompileResourceLimits limits) {
     memset(w, 0, sizeof(*w));
     CHECK(xr_compile_resources_new(&limits, &w->resources) == XR_COMPILE_RESOURCE_OK);
-    CHECK(xr_compile_session_new(w->resources, &w->session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(w->resources, &w->session) == XR_COMPILE_RESOURCE_OK);
     w->context = (XrXirCompileContext){w->resources, xr_xir_compile_default_limits()};
     w->authority = (XrModuleIdentityAuthority){.kind = XR_MODULE_IDENTITY_MEMORY,
         .namespace_id = "source-product-text-owned"};
@@ -225,10 +226,10 @@ static void complete_compiler_failures(void) {
         XrCompileResourceLimits limits = {UINT64_C(64) << 20, UINT64_C(8) << 20, UINT64_C(128000000)};
         TextWorld w = {0}; XrXirSourceProduct *out = NULL; XrXirSourceProductDiagnostic diagnostic = {0};XrFrontendRoot diagnostic_root={.message=""};
         XrCompileResourceStatus created = xr_compile_resources_new(&limits, &w.resources);
-        XrCompilerSessionStatus opened = created == XR_COMPILE_RESOURCE_OK ?
-            xr_compile_session_new(w.resources, &w.session) : XR_COMPILER_SESSION_OUT_OF_MEMORY;
+        XrCompileResourceStatus opened = created == XR_COMPILE_RESOURCE_OK ?
+            xr_compile_session_new(w.resources, &w.session) : XR_COMPILE_RESOURCE_OUT_OF_MEMORY;
         XrXirStatus status = XR_XIR_OUT_OF_MEMORY;
-        if (opened == XR_COMPILER_SESSION_OK) {
+        if (opened == XR_COMPILE_RESOURCE_OK) {
             w.context = (XrXirCompileContext){w.resources, xr_xir_compile_default_limits()};
             w.authority = (XrModuleIdentityAuthority){.kind=XR_MODULE_IDENTITY_MEMORY,.namespace_id="source-text-faults"};
             w.request = (XrXirSourceProductRequest){{w.session,NULL,&w.authority,&w.context,NULL,NULL,XR_XIR_PROGRAM,NULL},
@@ -258,9 +259,8 @@ static XrXirStatus ast_compile_trial(XrCompileResourceLimits limits,
     XrXirStatus status = allocation == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
         allocation == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
     if (status == XR_XIR_OK) {
-        XrCompilerSessionStatus opened = xr_compile_session_new(w.resources, &w.session);
-        status = opened == XR_COMPILER_SESSION_OK ? XR_XIR_OK :
-            opened == XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+        XrCompileResourceStatus opened = xr_compile_session_new(w.resources, &w.session);
+        status = xir_compile_resource_status(opened);
     }
     const char source[] = "const n:i64 = 42\n";
     if (status == XR_XIR_OK) {
@@ -319,7 +319,7 @@ static void ast_owned_execution_and_guards(void) {
     XrXirSourceAst syntax={{NULL,source,sizeof(source)-1},ast};
     XrXirSourceProduct *product=NULL;
     XrCompilerSession *foreign=NULL;
-    CHECK(xr_compile_session_new(w.resources,&foreign)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(w.resources,&foreign)==XR_COMPILE_RESOURCE_OK);
     XrXirSourceProductRequest bad=w.request; bad.source.session=foreign;
     CHECK(xr_xir_compile_source_product_build_ast(&bad,&syntax,&product,NULL)==XR_XIR_BAD_STRUCTURE && !product);
     xr_compile_session_free(foreign);

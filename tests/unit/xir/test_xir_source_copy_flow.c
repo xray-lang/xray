@@ -10,6 +10,7 @@
  *   Reuse the unchanged independent flow/query/codec assertions. The complete
  *   original test remains registered with its separate error rejection cases.
  */
+#include "xir/xxir_compile_memory.h"
 #define main callable_root_source_original_checks
 #include "test_xir_callable_root_source.c"
 #undef main
@@ -44,9 +45,9 @@ static void copy_flow_facts(XrXirArtifact *artifact) {
 
 static XrXirStatus copy_flow_operation(const XrXirCompileContext *context,void *opaque) {
     bool inspect=*(const bool *)opaque;XrCompilerSession *session=NULL;
-    XrCompilerSessionStatus created=xr_compile_session_new(context->resources,&session);
-    if (created!=XR_COMPILER_SESSION_OK)
-        return created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
+    if (created!=XR_COMPILE_RESOURCE_OK)
+        return xir_compile_resource_status(created);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"source-copy-flow",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,copy_flow_text,sizeof(copy_flow_text)-1};

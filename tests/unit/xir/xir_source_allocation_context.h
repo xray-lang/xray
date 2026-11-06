@@ -1,3 +1,4 @@
+#include "xir/xxir_compile_memory.h"
 #include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
@@ -51,9 +52,8 @@ static XrXirStatus allocation_source_check_limits(const XrXirSourceRequest *requ
     XrCompileResourceStatus made=xr_compile_resources_new(limits,&context.resources);
     XrXirStatus status=xir_compile_resource_status(made);
     if(status==XR_XIR_OK){
-        XrCompilerSessionStatus created=xr_compile_session_new(context.resources,&session);
-        status=created==XR_COMPILER_SESSION_OK?XR_XIR_OK:
-            created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+        XrCompileResourceStatus created=xr_compile_session_new(context.resources,&session);
+        status=xir_compile_resource_status(created);
         if(status==XR_XIR_OK){
             XrXirSourceRequest owned=*request;owned.context=&context;owned.session=session;
             status=xr_xir_compile_source_check(&owned,output,diagnostic,NULL);

@@ -48,9 +48,9 @@ static XrXirStatus pipeline(XrCompileResourceLimits caps,XrCompileResourceStats 
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_TUPLE_DESTRUCTURE_FIXTURES};
     XrXirSourceProductRequest request={{NULL,XR_TUPLE_DESTRUCTURE_FIXTURES "/root.xr",&authority,&context,
         XR_TUPLE_DESTRUCTURE_STDLIB,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
-    XrCompilerSessionStatus created=xr_compile_session_new(context.resources,&session);
-    XrXirStatus status=created==XR_COMPILER_SESSION_OK ? XR_XIR_OK :
-        created==XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+    XrCompileResourceStatus created=xr_compile_session_new(context.resources,&session);
+    XrXirStatus status=created==XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
+        created==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
     request.source.session=session;
     if(status==XR_XIR_OK)status=xr_xir_compile_source_product_build(&request,&product,&diagnostic);
     CHECK(status==XR_XIR_OK || !product);

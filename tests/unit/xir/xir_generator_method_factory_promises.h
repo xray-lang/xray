@@ -57,7 +57,7 @@ static void generator_method_factory_promises(void) {
             file=fopen(manifest,"ab");CHECK(file);
             CHECK(fputs("[[declarations.function]]\nmodule=\"root.xr\"\nname=\"bad\"\nno_suspend=true\n",file)>=0 && !fclose(file));
         }
-        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
+        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,absolute};
         XrXirSourceRequest request={session,entry,&authority,&owner.context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
         XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};

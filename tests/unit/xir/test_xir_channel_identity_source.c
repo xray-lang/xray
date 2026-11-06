@@ -6,6 +6,7 @@
  *
  * test_xir_channel_identity_source.c - Real Source Channel identities in VM and generated C
  */
+#include "xir/xxir_compile_memory.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
@@ -23,8 +24,8 @@
 typedef struct ChannelIdentityPipeline { XrXirProgram *program;uint32_t entries[3];const char *output; } ChannelIdentityPipeline;
 static XrXirStatus channel_identity_pipeline(const XrXirCompileContext *context,void *opaque) {
     ChannelIdentityPipeline *capture=opaque;XrCompilerSession *session=NULL;
-    XrCompilerSessionStatus created=xr_compile_session_new(context->resources,&session);
-    if (created!=XR_COMPILER_SESSION_OK) return created==XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
+    if (created!=XR_COMPILE_RESOURCE_OK) return xir_compile_resource_status(created);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_CHANNEL_IDENTITY_FIXTURES};
     XrXirSourceRequest request={session,XR_CHANNEL_IDENTITY_FIXTURES "/root.xr",&authority,context,XR_CHANNEL_IDENTITY_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};XrXirCheckedPacket packet={0};

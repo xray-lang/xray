@@ -135,7 +135,7 @@ int main(int argc, char **argv) {
     }
     const XrXirCompileContext context = *effects_source_owner(UINT64_C(64)*1024*1024, work);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILER_SESSION_OK && session);
+    CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILE_RESOURCE_OK && session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_PROJECT, "consumer", argv[1]};
     XrXirSourceRequest request = {session, argv[2], &authority, &context, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrOsIoPolicy policy = xr_compile_io_policy(context.resources);

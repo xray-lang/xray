@@ -26,7 +26,7 @@ static XrXirProgram *sqrt_program(const XrXirCompileContext *context,
     const char *root,const char *entry,uint32_t *identity) {
     XrXirLibraryCatalog *catalog=NULL;XrCompilerSession *session=NULL;
     CHECK(xir_stdlib_library_catalog_new(context,root,&catalog)==XR_XIR_OK);
-    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
     XrXirSourceRequest request={session,entry,&authority,context,root,NULL,XR_XIR_PROGRAM,catalog};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};

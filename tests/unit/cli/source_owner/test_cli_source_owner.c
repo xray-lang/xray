@@ -101,7 +101,7 @@ static XrXirLibraryCatalog *catalog(const XrSourceCompileRequest *request) {
     CHECK(xr_path_join_owned(&policy,root,"library.xr",&path)==XR_OS_IO_OK);
     XrModuleIdentityAuthority authority={0};char *script_root=NULL;
     CHECK(xr_compile_module_identity_script_authority_from_source(request->context->resources,path,&authority,&script_root)==XR_MODULE_OK);
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(request->context->resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(request->context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest source={session,path,&authority,request->context,request->absolute_stdlib_path,NULL,XR_XIR_LIBRARY,NULL};
     XrXirSourceResult checked={0};XrXirSourceDiagnostic diagnostic={0};
     CHECK(xr_xir_compile_source_check(&source,&checked,&diagnostic,NULL)==XR_XIR_OK);
@@ -266,7 +266,7 @@ static FailureObservation source_failure(const char *entry,const char *stdlib,
     XrModuleIdentityAuthority authority={0};char *root=NULL;
     CHECK(xr_compile_module_identity_script_authority_from_source(resources,entry,&authority,&root)==XR_MODULE_OK);
     XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest request={session,entry,&authority,&context,stdlib,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult result={0},empty=result;
     XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure path={0};

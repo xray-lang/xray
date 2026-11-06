@@ -171,9 +171,9 @@ static RemoveCompile remove_build(size_t failure, XrCompileResourceLimits limits
     XrCompilerSession *session = NULL; XrXirSourceResult result = {0};
     XrXirArtifact *read = NULL, *specialized = NULL;
     XrXirSourceDiagnostic diagnostic = {0}; XrXirCheckedPacket bytes = {0}; XrXirCSource source = {0}; XrXirSourceFailure path={0};
-    XrCompilerSessionStatus session_status = xr_compile_session_new(run.context.resources, &session);
-    if (session_status != XR_COMPILER_SESSION_OK) {
-        run.status = session_status == XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+    XrCompileResourceStatus session_status = xr_compile_session_new(run.context.resources, &session);
+    if (session_status != XR_COMPILE_RESOURCE_OK) {
+        run.status = session_status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
         goto done;
     }
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_REMOVE_FIXTURES};

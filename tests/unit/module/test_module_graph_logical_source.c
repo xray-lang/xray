@@ -50,8 +50,8 @@ static XrModuleStatus probe(XrCompileResourceLimits caps,unsigned mode,XrCompile
     XrCompileResourceStatus opened=xr_compile_resources_new(&caps,&resources);
     XrModuleStatus status=module_resource_status(opened);
     if(status==XR_MODULE_OK) {
-        XrCompilerSessionStatus ss=xr_compile_session_new(resources,&session);
-        status=ss==XR_COMPILER_SESSION_OK?XR_MODULE_OK:ss==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_MODULE_OUT_OF_MEMORY:XR_MODULE_BUDGET;
+        XrCompileResourceStatus ss=xr_compile_session_new(resources,&session);
+        status=ss==XR_COMPILE_RESOURCE_OK?XR_MODULE_OK:ss==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_MODULE_OUT_OF_MEMORY:XR_MODULE_BUDGET;
     }
     if(status==XR_MODULE_OK)status=xr_compile_module_resolver_new(resources,&(XrModuleResolverConfig){0},&resolver);
     if(status==XR_MODULE_OK)status=xr_compile_module_graph_new(resources,session,resolver,&graph);

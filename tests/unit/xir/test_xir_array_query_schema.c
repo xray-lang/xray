@@ -14,7 +14,7 @@
 int main(void) {
     SourceFixtureOwner owner = {0}; source_fixture_owner_new(&owner);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(owner.context.resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(owner.context.resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_REFERENCE_FIXTURES};
     XrXirSourceRequest request = {session, XR_REFERENCE_FIXTURES "/array_return_logical_copy.xr",
         &authority, &owner.context, XR_REFERENCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};

@@ -96,11 +96,11 @@ static ReorderCompile source_compile(size_t failure, uint64_t work) {
     XrXirSourceResult result={0}; XrXirSourceDiagnostic source_diagnostic={0};
     XrXirArtifact *specialized=NULL;
     XrXirSourceFailure failure_path={0};
-    XrCompilerSessionStatus session_status=xr_compile_session_new(run.context.resources,&session);
-    if (session_status!=XR_COMPILER_SESSION_OK) {
+    XrCompileResourceStatus session_status=xr_compile_session_new(run.context.resources,&session);
+    if (session_status!=XR_COMPILE_RESOURCE_OK) {
         CHECK(!session);
-        CHECK(session_status==XR_COMPILER_SESSION_OUT_OF_MEMORY || session_status==XR_COMPILER_SESSION_BUDGET);
-        run.status=session_status==XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+        CHECK(session_status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY || session_status==XR_COMPILER_SESSION_BUDGET);
+        run.status=session_status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
         goto done;
     }
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_REORDER_OWNER_FIXTURES};

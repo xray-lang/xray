@@ -6,6 +6,7 @@
  *
  * test_xir_callable_root_source.c - Independent ordinary reference flow oracles
  */
+#include "xir/xxir_compile_memory.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_effects.h"
 #include "xir/xxir_types.h"
@@ -104,9 +105,9 @@ static XrXirStatus root_source_operation(const XrXirCompileContext *context, voi
     const char *file = fixture->file;
     char path[1024]; CHECK(snprintf(path,sizeof(path),"%s/%s",XR_CALLABLE_ROOT_SOURCE_FIXTURES,file) > 0);
     XrCompilerSession *session = NULL;
-    XrCompilerSessionStatus created = xr_compile_session_new(context->resources,&session);
-    if (created != XR_COMPILER_SESSION_OK)
-        return created == XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus created = xr_compile_session_new(context->resources,&session);
+    if (created != XR_COMPILE_RESOURCE_OK)
+        return xir_compile_resource_status(created);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,XR_CALLABLE_ROOT_SOURCE_FIXTURES};
     XrXirSourceRequest request = {session,path,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; XrXirSourceFailure failure={0};
@@ -138,7 +139,7 @@ done:
 }
 static void root_source_reject(const char *file, XrXirStatus expected, const char *reason) {
     LibraryCompileOwner owner = {0}; CHECK(library_compile_owner_new(&owner,&library_compile_limits) == XR_XIR_OK);
-    XrCompilerSession *session = NULL; CHECK(xr_compile_session_new(owner.context.resources,&session) == XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session = NULL; CHECK(xr_compile_session_new(owner.context.resources,&session) == XR_COMPILE_RESOURCE_OK);
     char path[1024]; CHECK(snprintf(path,sizeof(path),"%s/%s",XR_CALLABLE_ROOT_SOURCE_FIXTURES,file) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,XR_CALLABLE_ROOT_SOURCE_FIXTURES};
     XrXirSourceRequest request = {session,path,&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL};

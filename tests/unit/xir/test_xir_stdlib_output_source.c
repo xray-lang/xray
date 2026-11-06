@@ -64,8 +64,8 @@ static void publication_scope_end(PublicationScope *scope){
 }
 static XrXirStatus publication_scope_source(PublicationScope *scope,const XrXirSourceRequest *original,XrXirSourceRequest *copy){
  XrXirStatus status=xr_xir_compile_library_catalog_new_v2(&scope->context,&publication_input,1,&scope->catalog);if(status!=XR_XIR_OK)return status;
- XrCompilerSessionStatus created=xr_compile_session_new(scope->context.resources,&scope->session);
- if(created!=XR_COMPILER_SESSION_OK)return created==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
+ XrCompileResourceStatus created=xr_compile_session_new(scope->context.resources,&scope->session);
+ if(created!=XR_COMPILE_RESOURCE_OK)return created==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
  *copy=*original;copy->session=scope->session;copy->context=&scope->context;copy->libraries=scope->catalog;return XR_XIR_OK;
 }
 static const XrCompileResourceLimits publication_caps={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
@@ -113,7 +113,7 @@ static void publication_exact(const XrXirLibraryInput *input,const XrXirSourceRe
  }
 }
 static XrXirCheckedPacket publication_packet(const char *root, const char *path) {
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(publication_context->resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(publication_context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_STDLIB,"io",root};
     XrXirSourceRequest request = {session,path,&authority,publication_context,root,NULL,XR_XIR_LIBRARY,NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
@@ -135,7 +135,7 @@ static XrXirCheckedPacket publication_packet(const char *root, const char *path)
     CHECK(xr_xir_compile_checked_write(result.checked,&packet,NULL) == XR_XIR_OK);
     xr_xir_compile_source_result_free(&result); xr_compile_session_free(session);
     /* Live compiler metadata belongs to the explicit parent ledger. */
-    session=NULL;CHECK(xr_compile_session_new(publication_context->resources,&session)==XR_COMPILER_SESSION_OK);
+    session=NULL;CHECK(xr_compile_session_new(publication_context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     authority.kind = XR_MODULE_IDENTITY_SCRIPT; authority.namespace_id = NULL;
     request.session = session; result = (XrXirSourceResult){0};
     CHECK(xr_xir_compile_source_check(&request,&result,&diagnostic,NULL) != XR_XIR_OK && !result.checked && !result.snapshot);
@@ -210,7 +210,7 @@ static void publication_private_case(const XrXirLibraryInput *input, const char 
     XrXirLibraryCatalog *catalog = NULL;
     CHECK(xr_xir_compile_library_catalog_new_v2(publication_context,&private_input,1,&catalog) == XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(publication_context->resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(publication_context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,root};
     XrXirSourceRequest request = {session,entry,&authority,publication_context,root,NULL,XR_XIR_PROGRAM,catalog};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
@@ -352,7 +352,7 @@ int main(int argc, char **argv) {
     publication_source_resolver_faults(root);
     publication_file_probe_cases(root, entry, source);
     CHECK(!remove(source)); publication_resolver_cases(catalog,root,entry);
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(publication_context->resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(publication_context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,root};
     XrXirSourceRequest request = {session,entry,&authority,publication_context,root,NULL,XR_XIR_PROGRAM,catalog};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};

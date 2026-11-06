@@ -53,7 +53,7 @@ static void panic_emit(XrXirArtifact *lowered, const uint32_t *functions, const 
 static XrXirArtifact *panic_source_lower(const char *path) {
     const XrXirCompileContext context = *effects_source_owner(UINT64_C(64)*1024*1024, UINT64_C(128000000));
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILER_SESSION_OK && session);
+    CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILE_RESOURCE_OK && session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_PANIC_FIXTURES};
     XrXirSourceRequest request = {session, path, &authority, &context, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};

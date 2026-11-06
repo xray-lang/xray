@@ -11,6 +11,7 @@
  *   Inferred Cell inputs normalize to their actual common bound. Explicit
  *   advertisements and consuming CALL_BIND declarations retain their roles.
  */
+#include "xir/xxir_compile_memory.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
@@ -98,8 +99,8 @@ static void source_effect_value_inspect(const XrXirArtifact *artifact) {
  * Lowered and full public verification. Every producer dies before its reader. */
 static XrXirStatus source_effect_value_operation(const XrXirCompileContext *context, void *opaque) {
     bool inspect=*(bool *)opaque;XrCompilerSession *session=NULL;
-    XrCompilerSessionStatus opened=xr_compile_session_new(context->resources,&session);
-    if(opened!=XR_COMPILER_SESSION_OK)return opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus opened=xr_compile_session_new(context->resources,&session);
+    if(opened!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(opened);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"source-effect-value-refine",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,source_effect_value_text,sizeof(source_effect_value_text)-1};

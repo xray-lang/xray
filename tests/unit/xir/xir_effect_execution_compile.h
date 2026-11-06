@@ -17,7 +17,7 @@ static inline XrXirStatus effect_execution_check(const XrXirSourceRequest *reque
     XrXirSourceResult *output,XrXirSourceDiagnostic *diagnostic) {
     const XrXirCompileContext *context=effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
     XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest local=*request;local.context=context;local.session=session;
     XrXirStatus status=xr_xir_compile_source_check(&local,output,diagnostic,NULL);
     xr_compile_session_free(session);return status;

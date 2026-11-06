@@ -41,7 +41,7 @@ static XrXirArtifact *fixture_prepare(Fixture *fixture) {
     fixture->context.limits=xr_xir_compile_default_limits();
     CHECK(xr_compile_resources_stats(fixture->context.resources,&fixture->baseline)==XR_COMPILE_RESOURCE_OK);
     XrCompilerSession *producer=NULL;
-    CHECK(xr_compile_session_new(fixture->context.resources,&producer)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(fixture->context.resources,&producer)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"dap-debug",NULL};
     XrXirSourceRequest request={.session=producer,.authority=&authority,
         .context=&fixture->context,.linkage_kind=XR_XIR_PROGRAM};

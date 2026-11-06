@@ -111,7 +111,7 @@ int XR_P09_APPEND_PROBE_ENTRY(int argc, char **argv) {
     CHECK(bytes > 0 && (size_t)bytes < sizeof(path));
     SourceFixtureOwner owner = {0}; source_fixture_owner_new(&owner);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(owner.context.resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(owner.context.resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_REFERENCE_FIXTURES};
     XrXirSourceRequest request = {session, path, &authority, &owner.context,
         XR_REFERENCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};

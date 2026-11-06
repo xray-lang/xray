@@ -48,7 +48,7 @@ static void capacity_rejections(void) {
         XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};const XrCompileResourceLimits limits=capacity_limits();
         CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
         const uint64_t baseline=capacity_stats(&context).live_bytes;
-        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
+        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
         char name[1024];CHECK(snprintf(name,sizeof(name),"%s/rejected/%s/root.xr",XR_CAPACITY_FIXTURES,cases[n])>0);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_CAPACITY_FIXTURES};
         XrXirSourceRequest request={session,name,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};

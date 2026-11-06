@@ -8,6 +8,7 @@
  */
 #ifndef XIR_CELL_OWNER_SOURCE_PIPELINE_H
 #define XIR_CELL_OWNER_SOURCE_PIPELINE_H
+#include "xir/xxir_compile_memory.h"
 #include "xir/xxir_internal.h"
 typedef struct CellSourceEntries { uint32_t run, counter, factory; } CellSourceEntries;
 
@@ -61,11 +62,10 @@ static XrXirStatus cell_source_lower(const XrXirCompileContext *context, const c
     int length = snprintf(path, sizeof(path), "%s/%s", XR_CELL_OWNER_FIXTURES, name);
     CHECK(length > 0 && (size_t)length < sizeof(path));
     XrCompilerSession *session = NULL;
-    XrCompilerSessionStatus opened = xr_compile_session_new(context->resources, &session);
-    if (opened != XR_COMPILER_SESSION_OK) {
+    XrCompileResourceStatus opened = xr_compile_session_new(context->resources, &session);
+    if (opened != XR_COMPILE_RESOURCE_OK) {
         CHECK(!session && !*output);
-        return opened == XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
-            opened == XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
+        return xir_compile_resource_status(opened);
     }
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_CELL_OWNER_FIXTURES};
     XrXirSourceRequest request = {session, path, &authority, context, NULL, NULL, XR_XIR_PROGRAM, NULL};

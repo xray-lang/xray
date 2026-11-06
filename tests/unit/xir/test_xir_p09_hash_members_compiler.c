@@ -6,6 +6,7 @@
  *
  * test_xir_p09_hash_members_compiler.c - Whole compiler graph faults and exact resource boundaries
  */
+#include "xir/xxir_compile_memory.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,10 +24,9 @@ typedef struct MembersCompilerInput { const char *root, *path, *stdlib; } Member
 
 static XrXirStatus members_compile(const XrXirCompileContext *context, const MembersCompilerInput *input) {
     XrCompilerSession *session=NULL;
-    XrCompilerSessionStatus created=xr_compile_session_new(context->resources,&session);
-    if (created!=XR_COMPILER_SESSION_OK)
-        return created==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
-            created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
+    XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
+    if (created!=XR_COMPILE_RESOURCE_OK)
+        return xir_compile_resource_status(created);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,input->root};
     XrXirSourceRequest request={session,input->path,&authority,context,input->stdlib,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult result={0}; XrXirSourceDiagnostic diagnostic={0}; XrXirSourceFailure failure={0};

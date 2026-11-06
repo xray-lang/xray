@@ -124,7 +124,7 @@ static void caller_ast_compiler(void) {
     XrXirSourceProduct *product=NULL,*rooted=NULL;
     CHECK(xr_source_compiler_build_ast(compiler,&text,NULL,&product,NULL)==XR_SOURCE_COMPILE_BAD_ARGUMENT && !product);
     XrCompilerSession *foreign=NULL;
-    CHECK(xr_compile_session_new(resources,&foreign)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(resources,&foreign)==XR_COMPILE_RESOURCE_OK);
     AstNode *foreign_ast=NULL; CHECK(xr_compile_parse(foreign,source,&foreign_ast)==XR_PARSE_OK);
     CHECK(xr_source_compiler_build_ast(compiler,&text,foreign_ast,&product,NULL)==XR_SOURCE_COMPILE_BAD_ARGUMENT && !product);
     xr_program_destroy(foreign_ast);xr_compile_session_free(foreign);

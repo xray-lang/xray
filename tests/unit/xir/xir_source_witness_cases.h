@@ -23,7 +23,7 @@ static const char source_witness_program[] =
 static XrXirArtifact *source_witness_checked(XrXirSourceRequest *request, const char *packet_path) {
     write_source(request->entry_path,source_witness_program);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(request->context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(request->context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest local = *request; local.session = session;
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_compile_source_check(&local, &result, &diagnostic, NULL);

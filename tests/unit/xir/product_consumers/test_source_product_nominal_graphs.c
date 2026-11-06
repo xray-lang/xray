@@ -135,9 +135,9 @@ static NominalRun graph_build(const SourceProductNominalFixture *fixture,
         goto release;
     }
     CHECK(xr_compile_resources_stats(context.resources, &baseline) == XR_COMPILE_RESOURCE_OK);
-    XrCompilerSessionStatus ss = xr_compile_session_new(context.resources, &session);
-    if (ss != XR_COMPILER_SESSION_OK) {
-        run.status = ss == XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+    XrCompileResourceStatus ss = xr_compile_session_new(context.resources, &session);
+    if (ss != XR_COMPILE_RESOURCE_OK) {
+        run.status = ss == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
         goto release;
     }
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, fixture->root};

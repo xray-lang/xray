@@ -147,7 +147,7 @@ int main(int argc, char **argv) {
     CHECK(length > 0 && (size_t)length < sizeof(path));
     SourceFixtureOwner owner = {0}; source_fixture_owner_new(&owner);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(owner.context.resources, &session) == XR_COMPILER_SESSION_OK && session);
+    CHECK(xr_compile_session_new(owner.context.resources, &session) == XR_COMPILE_RESOURCE_OK && session);
     const XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_LANGUAGE_FIXTURES};
     const XrXirSourceRequest request = {session, path, &authority, &owner.context, XR_LANGUAGE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};

@@ -29,7 +29,7 @@ static XrXirCheckedPacket worker_wait_packet(const XrXirCompileContext *context,
     const char *names[] = {"yield", "timer"}; char path[1024];
     int length = snprintf(path, sizeof(path), "%s/%s/root.xr", XR_WORKER_WAIT_FIXTURES, names[index]);
     CHECK(length > 0 && (size_t)length < sizeof(path)); XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_WORKER_WAIT_FIXTURES};
     XrXirSourceRequest request = {session, path, &authority, context, XR_WORKER_WAIT_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};

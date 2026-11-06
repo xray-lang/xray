@@ -198,9 +198,9 @@ static Consumer build(unsigned mode, const char *output, size_t failure, XrCompi
     XrXirSourceProductDiagnostic diagnostic = {0};XrFrontendRoot diagnostic_root={.message=""};
     XrXirArtifact *closed = NULL;
     XrXirCSource generated = {0};
-    XrCompilerSessionStatus ss = xr_compile_session_new(run.context.resources, &session);
-    if (ss != XR_COMPILER_SESSION_OK) {
-        run.status = ss == XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+    XrCompileResourceStatus ss = xr_compile_session_new(run.context.resources, &session);
+    if (ss != XR_COMPILE_RESOURCE_OK) {
+        run.status = ss == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
         goto release;
     }
     const XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_CONSUMER_ROOT};

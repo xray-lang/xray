@@ -51,7 +51,7 @@ static XrXirLibraryCatalog *owned_catalog(SourceFixtureOwner *owner) {
 }
 static XrXirArtifact *owned_consumer(SourceFixtureOwner *owner,const XrXirLibraryCatalog *catalog) {
     XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(owner->context.resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(owner->context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"builder-catalog",NULL};
     XrXirSourceRequest request={session,NULL,&authority,&owner->context,XR_C08_STDLIB,NULL,XR_XIR_PROGRAM,catalog};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};

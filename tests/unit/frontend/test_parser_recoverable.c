@@ -67,7 +67,7 @@ static void setup(void) {
     OWNER_CHECK(!g_resources && !g_session);
     OWNER_CHECK(xr_compile_resources_new(&limits, &g_resources) == XR_COMPILE_RESOURCE_OK);
     OWNER_CHECK(xr_compile_resources_stats(g_resources, &g_baseline) == XR_COMPILE_RESOURCE_OK);
-    OWNER_CHECK(xr_compile_session_new(g_resources, &g_session) == XR_COMPILER_SESSION_OK);
+    OWNER_CHECK(xr_compile_session_new(g_resources, &g_session) == XR_COMPILE_RESOURCE_OK);
 }
 
 static void teardown(void) {

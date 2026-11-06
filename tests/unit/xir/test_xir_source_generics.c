@@ -30,7 +30,7 @@ static XrXirStatus source_generic_check(const XrXirSourceRequest *request,
     XrXirSourceResult *output,XrXirSourceDiagnostic *diagnostic) {
     generic_source_context=source_fixture_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
     XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(generic_source_context->resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(generic_source_context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest owned=*request;owned.context=generic_source_context;owned.session=session;
     XrXirStatus status=xr_xir_compile_source_check(&owned,output,diagnostic,NULL);
     xr_compile_session_free(session);
@@ -48,7 +48,7 @@ static void reference_syntax(void) {
     XrCompileResourceLimits limits={UINT64_C(1073741824),UINT64_C(268435456),UINT64_C(8589934592)};
     XrCompileResources *resources=NULL; XrCompilerSession *session=NULL;
     CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
-    CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(resources,&session)==XR_COMPILE_RESOURCE_OK);
     const char *sources[] = {"const f = identity<string>\n", "const f = mod.identity<fn(i64)->string>\n",
         "consume(identity<string>, true)\n", "const f = true ? identity<i64> : identity<i64>\n",
         "const f = (identity<i64>)\n", "(identity<i64>)(7)\n", "identity<i64>(7)\n", "const result = a<b>c\n", "const result = a < b\n"};

@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
     CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
     XrXirCompileContext context = {resources, xr_xir_compile_default_limits()};
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(resources, &session) == XR_COMPILE_RESOURCE_OK);
     char input[1024]; CHECK(snprintf(input, sizeof(input), "%s/basic.xr", argv[1]) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, argv[1]};
     XrXirSourceProductRequest request = {{session,input,&authority,&context,argv[2],NULL,XR_XIR_PROGRAM,NULL},

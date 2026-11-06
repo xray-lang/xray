@@ -112,7 +112,7 @@ static void closure_rejections(SourceFixtureOwner *owner) {
         "fn bad(it:Iterator<i64>)->i64 {var n:i64=0\n return it.nth(ref n)}\n fn main(){}"
     };
     for(unsigned i=0;i<sizeof(cases)/sizeof(*cases);++i) {
-        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner->context.resources,&session)==XR_COMPILER_SESSION_OK);
+        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner->context.resources,&session)==XR_COMPILE_RESOURCE_OK);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"generator-closure-negative",NULL};
         XrXirSourceRequest request={session,NULL,&authority,&owner->context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
         XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
@@ -126,7 +126,7 @@ static void closure_rejections(SourceFixtureOwner *owner) {
 }
 int main(int argc,char **argv) {
     CHECK(argc==1 || argc==2);SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);closure_rejections(&owner);
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"generator-wait",NULL};
     XrXirSourceRequest request={session,NULL,&authority,&owner.context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};

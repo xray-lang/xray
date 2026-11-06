@@ -26,7 +26,7 @@ static XrXirStatus lsp_many_json_run(XrCompileResources *resources,XlspSourceSna
 static void lsp_navigation_many_cases(const char *root) {
     XrCompileResourceLimits limits=lsp_limits();XrXirCompileContext context={0};XrCompilerSession *session=NULL;
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
-    context.limits=xr_xir_compile_default_limits();CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
+    context.limits=xr_xir_compile_default_limits();CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     char root_uri[XR_TEST_PATH_MAX],library_uri[XR_TEST_PATH_MAX];
     lsp_uri(root_uri,sizeof(root_uri),root,"root.xr");lsp_uri(library_uri,sizeof(library_uri),root,"lib.xr");
     XlspSourceDocument documents[2]={

@@ -38,7 +38,7 @@ static size_t panics_instruction_offset(const XrXirCheckedPacket *packet,uint32_
     CHECK(false);return 0;
 }
 static XrXirArtifact *panics_core_checked(void) {
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(assert_compile_context->resources,&session)==XR_COMPILER_SESSION_OK);CHECK(session);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(assert_compile_context->resources,&session)==XR_COMPILE_RESOURCE_OK);CHECK(session);
     XrModuleResolverConfig config={0};XrModuleResolver *resolver=NULL;CHECK(xr_compile_module_resolver_new(assert_compile_context->resources,&config,&resolver)==XR_MODULE_OK);CHECK(resolver);
     SourceContext core={0};core.compile=*assert_compile_context;core.remaining_blocks=core.compile.limits.blocks;core.remaining_instructions=core.compile.limits.instructions;core.linkage_kind=XR_XIR_LIBRARY;core.core_factory=true;
     CHECK(xr_compile_module_graph_new(assert_compile_context->resources,session,resolver,&core.graph)==XR_MODULE_OK);CHECK(core.graph);

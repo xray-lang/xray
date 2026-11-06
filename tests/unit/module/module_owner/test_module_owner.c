@@ -4,6 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  */
+#include "module/xmodule_identity.h"
 #include "../../xir/xir_construction_fixture.h"
 #include "module/xmodule_graph.h"
 #include "module/xlockfile.h"
@@ -102,9 +103,8 @@ static void make_packet(void) {
     xr_xir_compile_artifact_free(artifact); xr_xir_compile_checked_packet_free(&packet); xr_compile_resources_release(owner);
     CHECK(!physical_live && !block_count);
 }
-static XrModuleStatus from_session(XrCompilerSessionStatus s) {
-    return s == XR_COMPILER_SESSION_OK ? XR_MODULE_OK : s == XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_MODULE_OUT_OF_MEMORY :
-        s == XR_COMPILER_SESSION_BUDGET ? XR_MODULE_BUDGET : XR_MODULE_INVALID;
+static XrModuleStatus from_session(XrCompileResourceStatus s) {
+    return xr_module_status_from_resource(s);
 }
 static XrModuleStatus from_xir(XrXirStatus s) {
     return s == XR_XIR_OK ? XR_MODULE_OK : s == XR_XIR_OUT_OF_MEMORY ? XR_MODULE_OUT_OF_MEMORY :
@@ -202,7 +202,7 @@ static void rejection_and_lifetime(void) {
     config.lockfile = NULL; resolver = NULL;
     CHECK(xr_compile_module_resolver_new(second,&config,&resolver) == XR_MODULE_OK);
     CHECK(xr_compile_module_resolver_set_lockfile(resolver,lockfile) == XR_MODULE_INVALID && !resolver->config.lockfile);
-    XrCompilerSession *session = NULL; CHECK(xr_compile_session_new(first,&session) == XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session = NULL; CHECK(xr_compile_session_new(first,&session) == XR_COMPILE_RESOURCE_OK);
     XrModuleGraph *graph = (void *)&canary; before = attempts;
     CHECK(xr_compile_module_graph_new(first,session,resolver,&graph) == XR_MODULE_INVALID && graph == (void *)&canary && before == attempts);
     XrXirCompileContext context = {first,xr_xir_compile_default_limits()}; XrXirLibraryCatalog *catalog = NULL;
@@ -238,7 +238,7 @@ static void topology_retry(void) {
         CHECK(xr_compile_resources_new(&unlimited,&owner) == XR_COMPILE_RESOURCE_OK);
         XrCompilerSession *session = NULL; XrModuleResolver *resolver = NULL; XrModuleGraph *graph = NULL;
         XrModuleResolverConfig config = {0};
-        CHECK(xr_compile_session_new(owner,&session) == XR_COMPILER_SESSION_OK);
+        CHECK(xr_compile_session_new(owner,&session) == XR_COMPILE_RESOURCE_OK);
         CHECK(xr_compile_module_resolver_new(owner,&config,&resolver) == XR_MODULE_OK);
         CHECK(xr_compile_module_graph_new(owner,session,resolver,&graph) == XR_MODULE_OK);
         XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,root_path};
@@ -277,7 +277,7 @@ static void many_modules(void) {
         CHECK(xr_compile_resources_new(&unlimited,&owner) == XR_COMPILE_RESOURCE_OK);
         XrCompilerSession *session = NULL; XrModuleResolver *resolver = NULL; XrModuleGraph *graph = NULL;
         XrModuleResolverConfig config = {0};
-        CHECK(xr_compile_session_new(owner,&session) == XR_COMPILER_SESSION_OK);
+        CHECK(xr_compile_session_new(owner,&session) == XR_COMPILE_RESOURCE_OK);
         CHECK(xr_compile_module_resolver_new(owner,&config,&resolver) == XR_MODULE_OK);
         CHECK(xr_compile_module_graph_new(owner,session,resolver,&graph) == XR_MODULE_OK);
         XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,root_path};

@@ -2,7 +2,7 @@
 static XrXirArtifact *source17_lower(const XrXirCompileContext *context,
     const char *name, uint32_t *entry) {
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     char path[1024];
     CHECK(snprintf(path, sizeof(path), "%s/%s.xr", XR_GO_EXECUTION_FIXTURES, name) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_GO_EXECUTION_FIXTURES};

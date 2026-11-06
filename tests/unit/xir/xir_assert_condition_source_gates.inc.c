@@ -6,11 +6,12 @@
  *
  * xir_assert_condition_source_gates.inc.c - Source publication and budget failures
  */
+#include "xir/xxir_compile_memory.h"
 typedef struct AssertSourceInput {const char *directory,*path;} AssertSourceInput;
 static XrXirStatus assert_source_operation(const XrXirCompileContext *context,void *opaque) {
     const AssertSourceInput *input=opaque;XrCompilerSession *session=NULL;XrXirSourceResult result={0};
-    XrCompilerSessionStatus created=xr_compile_session_new(context->resources,&session);
-    if(created!=XR_COMPILER_SESSION_OK){CHECK(!session);return created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;}
+    XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
+    if(created!=XR_COMPILE_RESOURCE_OK){CHECK(!session);return xir_compile_resource_status(created);}
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,input->directory};
     XrXirSourceRequest request={session,input->path,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,NULL,NULL);

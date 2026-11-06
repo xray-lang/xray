@@ -29,7 +29,7 @@ static void retired_error(void *data, int line, int column, int end_line,
 int main(void) {
     SourceFixtureOwner owner = {0}; source_fixture_owner_new(&owner);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(owner.context.resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(owner.context.resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrCompileState *state = xr_compile_session_compile_state(session);
     const char *source = "fn init()->i64{return 7}\nstruct Box {\n value:i64\n init(value){this.value=value}\n}\n";
     AstNode *ast = NULL, *roundtrip = NULL;

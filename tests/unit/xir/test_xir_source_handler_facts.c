@@ -6,6 +6,7 @@
  *
  * test_xir_source_handler_facts.c - Owned selectors and lexical error routes
  */
+#include "xir/xxir_compile_memory.h"
 #include "xir/xxir_internal.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_source_query_internal.h"
@@ -42,8 +43,8 @@ static uint32_t handler_function(const XrXirModule *module,const char *name) {
 }
 static XrXirStatus handler_source(const XrXirCompileContext *context,uint32_t which,XrXirSourceResult *output) {
     char text[1024];size_t length=strlen(handler_sources[which].text);CHECK(length<sizeof(text));memcpy(text,handler_sources[which].text,length+1);
-    XrCompilerSession *session=NULL;XrCompilerSessionStatus created=xr_compile_session_new(context->resources,&session);
-    if (created!=XR_COMPILER_SESSION_OK) return created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompilerSession *session=NULL;XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
+    if (created!=XR_COMPILE_RESOURCE_OK) return xir_compile_resource_status(created);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"handler-facts",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,text,length};XrXirSourceDiagnostic diagnostic={0};

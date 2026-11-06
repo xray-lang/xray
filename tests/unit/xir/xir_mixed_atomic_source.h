@@ -8,6 +8,7 @@
  */
 #ifndef XIR_MIXED_ATOMIC_SOURCE_H
 #define XIR_MIXED_ATOMIC_SOURCE_H
+#include "xir/xxir_compile_memory.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
@@ -49,9 +50,9 @@ static void atomic_source_entries(AtomicSourcePrepare *s) {
     }
 }
 static bool atomic_source_prepare(AtomicSourcePrepare *s) {
-    XrCompilerSessionStatus created=xr_compile_session_new(s->context->resources,&s->session);
-    CHECK(created==XR_COMPILER_SESSION_OK || created==XR_COMPILER_SESSION_BUDGET || created==XR_COMPILER_SESSION_OUT_OF_MEMORY);
-    XrXirStatus status=created==XR_COMPILER_SESSION_OK?XR_XIR_OK:created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus created=xr_compile_session_new(s->context->resources,&s->session);
+    CHECK(created==XR_COMPILE_RESOURCE_OK || created==XR_COMPILER_SESSION_BUDGET || created==XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+    XrXirStatus status=xir_compile_resource_status(created);
     if(!atomic_source_stage(s,2,status)){CHECK(!s->session);return false;}
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_P20_ATOMIC_AUTHORITY};
     XrXirSourceRequest request={s->session,XR_P20_ATOMIC_RUNTIME_FIXTURES "/root.xr",&authority,s->context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};

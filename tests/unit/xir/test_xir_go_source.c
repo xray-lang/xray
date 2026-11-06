@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Source checks use authentic declaration proof before any execution exists.
  */
+#include "xir/xxir_compile_memory.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_types.h"
 #include "xir/xxir_checked.h"
@@ -63,10 +64,10 @@ static XrXirStatus source_task_compiler_record(const XrXirCompileContext *contex
 static XrXirStatus source_task_graph(const XrXirCompileContext *context, void *opaque) {
     const SourceTaskFixture *fixture = opaque;
     XrCompilerSession *session = NULL;
-    XrCompilerSessionStatus created = xr_compile_session_new(context->resources, &session);
-    if (created != XR_COMPILER_SESSION_OK)
+    XrCompileResourceStatus created = xr_compile_session_new(context->resources, &session);
+    if (created != XR_COMPILE_RESOURCE_OK)
         return source_task_compiler_record(context, fixture,
-            created == XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY);
+            xir_compile_resource_status(created));
     char path[1024];
     CHECK(snprintf(path, sizeof(path), "%s/%s.xr", XR_GO_SOURCE_FIXTURES, fixture->name) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_GO_SOURCE_FIXTURES};
@@ -126,7 +127,7 @@ static void source_task_reject(const char *name, XrXirStatus expected) {
     LibraryCompileOwner owner = {0};
     CHECK(library_compile_owner_new(&owner, &library_compile_limits) == XR_XIR_OK);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(owner.context.resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(owner.context.resources, &session) == XR_COMPILE_RESOURCE_OK);
     char path[1024]; CHECK(snprintf(path, sizeof(path), "%s/rejected/%s.xr", XR_GO_SOURCE_FIXTURES, name) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_GO_SOURCE_FIXTURES};
     XrXirSourceRequest request = {session, path, &authority, &owner.context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};

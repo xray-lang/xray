@@ -35,7 +35,7 @@ int main(int argc,char **argv) {
     CHECK(argc==1 || argc==2);
     const XrXirCompileContext *context=source_program_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
     XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_STATE_ZERO_FIXTURES};
     XrXirSourceProductRequest request={{session,XR_STATE_ZERO_FIXTURES "/root.xr",&authority,context,
         XR_STATE_ZERO_STDLIB,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};

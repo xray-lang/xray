@@ -10,6 +10,7 @@
  * KEY CONCEPT:
  *   Names and element constraints bind real declarations before executable recipes.
  */
+#include "xir/xxir_compile_memory.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
@@ -58,9 +59,8 @@ static XrCompileResourceLimits iterator_source_caps(void) {
 }
 static XrXirStatus iterator_source_pipeline(const XrXirCompileContext *c,const char *text,bool inspect) {
     XrCompilerSession *session=NULL;
-    XrCompilerSessionStatus made=xr_compile_session_new(c->resources,&session);
-    XrXirStatus s=made==XR_COMPILER_SESSION_OK ? XR_XIR_OK :
-        made==XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus made=xr_compile_session_new(c->resources,&session);
+    XrXirStatus s=xir_compile_resource_status(made);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"iterator-types",NULL};
     XrXirSourceRequest request={session,NULL,&authority,c,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};

@@ -8,6 +8,7 @@
  */
 #ifndef XIR_MIXED_ARRAY_QUERY_PREPARE_H
 #define XIR_MIXED_ARRAY_QUERY_PREPARE_H
+#include "xir/xxir_compile_memory.h"
 static const char *const array_query_bodies[] = {
     "export fn inspect()->i64 { return 42 }",
     "export fn inspect()->Array<i64> { return [3,1,2] }",
@@ -47,10 +48,9 @@ static bool array_query_stage(ArrayQueryCompileState *state, unsigned stage, XrX
     state->result.stage = stage; state->result.status = status; return status == XR_XIR_OK;
 }
 static bool array_query_prepare_source(ArrayQueryCompileState *state) {
-    XrCompilerSessionStatus created = xr_compile_session_new(state->context.resources, &state->session);
-    CHECK(created == XR_COMPILER_SESSION_OK || created == XR_COMPILER_SESSION_BUDGET || created == XR_COMPILER_SESSION_OUT_OF_MEMORY);
-    XrXirStatus status = created == XR_COMPILER_SESSION_OK ? XR_XIR_OK :
-        created == XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus created = xr_compile_session_new(state->context.resources, &state->session);
+    CHECK(created == XR_COMPILE_RESOURCE_OK || created == XR_COMPILER_SESSION_BUDGET || created == XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+    XrXirStatus status = xir_compile_resource_status(created);
     if (!array_query_stage(state, 2, status)) { CHECK(!state->session); return false; }
     const char *body = array_query_bodies[state->result.case_index]; state->bytes = strlen(body);
     XrCompileResourceStatus allocation = xr_compile_resources_calloc(state->context.resources, state->bytes+1, 1, (void **)&state->body);

@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Two unsaved importers share one declaration; each source location occurs once.
  */
+#include "xir/xxir_compile_memory.h"
 static const char lsp_three_extra_text[] =
     "import { value } from \"./lib\"\n"
     "export fn extra()->i64 { return value() + value() }\n";
@@ -54,9 +55,8 @@ static XrXirStatus lsp_three_prepare(const char *root, XrCompileResourceLimits l
     if (made != XR_COMPILE_RESOURCE_OK)
         return made == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
     owner->context.limits = xr_xir_compile_default_limits();
-    XrCompilerSessionStatus created = xr_compile_session_new(owner->context.resources, &session);
-    XrXirStatus status = created == XR_COMPILER_SESSION_OK ? XR_XIR_OK :
-        created == XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus created = xr_compile_session_new(owner->context.resources, &session);
+    XrXirStatus status = xir_compile_resource_status(created);
     lsp_uri(owner->root_uri, sizeof(owner->root_uri), root, "root.xr");
     lsp_uri(owner->library_uri, sizeof(owner->library_uri), root, "lib.xr");
     lsp_uri(owner->extra_uri, sizeof(owner->extra_uri), root, "extra.xr");

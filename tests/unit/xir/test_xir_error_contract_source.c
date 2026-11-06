@@ -10,6 +10,7 @@
  *   Real Source and Checked replay retain independent root bounds and exact
  *   error outcomes after all producer storage has died.
  */
+#include "xir/xxir_compile_memory.h"
 #include "xir/xxir_internal.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_source_query.h"
@@ -48,9 +49,9 @@ static XrXirStatus error_contract_program(const XrXirCompileContext *context,uin
     bool go,XrXirSourceResult *output) {
     char bytes[512];int length=snprintf(bytes,sizeof(bytes),"%sfn main()->i64{return %sworker()}\n",
         error_contract_sources[which],go?"await go ":"");CHECK(length>0 && (size_t)length<sizeof(bytes));
-    XrCompilerSession *session=NULL;XrCompilerSessionStatus created=xr_compile_session_new(context->resources,&session);
-    if (created!=XR_COMPILER_SESSION_OK)
-        return created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompilerSession *session=NULL;XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
+    if (created!=XR_COMPILE_RESOURCE_OK)
+        return xir_compile_resource_status(created);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"error-contract-source",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,bytes,(size_t)length};XrXirSourceDiagnostic diagnostic={0};

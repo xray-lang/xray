@@ -34,10 +34,9 @@ static XrCompileResourceStatus pipeline(const XrCompileResourceLimits *limits, X
     AstNode *program = NULL;
     XrCompileResourceStatus status = xr_compile_resources_new(limits, &resources);
     if (status != XR_COMPILE_RESOURCE_OK) return status;
-    XrCompilerSessionStatus opened = xr_compile_session_new(resources, &session);
-    if (opened != XR_COMPILER_SESSION_OK) {
-        status = opened == XR_COMPILER_SESSION_BUDGET ? XR_COMPILE_RESOURCE_BUDGET :
-                 opened == XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    XrCompileResourceStatus opened = xr_compile_session_new(resources, &session);
+    if (opened != XR_COMPILE_RESOURCE_OK) {
+        status = opened;
         goto done;
     }
     XrParseStatus parsed = xr_compile_parse_with_trivia(session, source, "resource-owner.xr", NULL, &program);
@@ -104,7 +103,7 @@ static void recoverable_and_rollback(void) {
     XrCompileResources *resources = NULL;
     XrCompilerSession *session = NULL;
     OK(xr_compile_resources_new(&unlimited, &resources));
-    CHECK(xr_compile_session_new(resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrCompileState *state = xr_compile_session_compile_state(session);
     XrArena arena = {0};
     XrArenaBacking backing;
@@ -137,7 +136,7 @@ static void scopes(void) {
         XrCompileResources *resources = NULL;
         XrCompilerSession *session = NULL;
         OK(xr_compile_resources_new(&unlimited, &resources));
-        CHECK(xr_compile_session_new(resources, &session) == XR_COMPILER_SESSION_OK);
+        CHECK(xr_compile_session_new(resources, &session) == XR_COMPILE_RESOURCE_OK);
         XrCompileState *state = xr_compile_session_compile_state(session);
         XrArena arenas[2] = {{0}, {0}};
         XrArenaBacking backing;
@@ -189,7 +188,7 @@ static void parser_scope_lifetime(void) {
         XrCompileResources *resources = NULL;
         XrCompilerSession *session = NULL;
         OK(xr_compile_resources_new(&unlimited, &resources));
-        CHECK(xr_compile_session_new(resources, &session) == XR_COMPILER_SESSION_OK);
+        CHECK(xr_compile_session_new(resources, &session) == XR_COMPILE_RESOURCE_OK);
         XrArena arenas[2] = {{0}, {0}};
         XrArenaBacking backing;
         CHECK(xr_compiler_arena_state_backing(xr_compile_session_compile_state(session), &backing) == XR_ARENA_OK);
@@ -223,7 +222,7 @@ static void diagnostic_io(void) {
     XrCompileResources *resources = NULL;
     XrCompilerSession *session = NULL;
     OK(xr_compile_resources_new(&unlimited, &resources));
-    CHECK(xr_compile_session_new(resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(resources, &session) == XR_COMPILE_RESOURCE_OK);
     int original = _dup(_fileno(stderr));
     CHECK(original >= 0);
     FILE *readonly = fopen("NUL", "r");
@@ -250,9 +249,19 @@ static XrParseStatus fixture(const char *text, const XrCompileResourceLimits *li
     XrCompileResourceStatus created = xr_compile_resources_new(limits, &resources);
     if (created != XR_COMPILE_RESOURCE_OK)
         return created == XR_COMPILE_RESOURCE_BUDGET ? XR_PARSE_BUDGET : XR_PARSE_OUT_OF_MEMORY;
-    XrCompilerSessionStatus opened = xr_compile_session_new(resources, &session);
-    XrParseStatus status = opened == XR_COMPILER_SESSION_BUDGET ? XR_PARSE_BUDGET : XR_PARSE_OUT_OF_MEMORY;
-    if (opened == XR_COMPILER_SESSION_OK) status = xr_compile_parse_with_trivia(session, text, "fixture.xr", NULL, &program);
+    XrCompileResourceStatus opened = xr_compile_session_new(resources, &session);
+    XrParseStatus status;
+    switch (opened) {
+    case XR_COMPILE_RESOURCE_OK: status = XR_PARSE_OK; break;
+    case XR_COMPILE_RESOURCE_MEMORY_LIMIT: status = XR_PARSE_MEMORY_LIMIT; break;
+    case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: status = XR_PARSE_OUT_OF_MEMORY; break;
+    case XR_COMPILE_RESOURCE_OVERFLOW: status = XR_PARSE_OVERFLOW; break;
+    case XR_COMPILE_RESOURCE_CANCELLED: status = XR_PARSE_CANCELLED; break;
+    case XR_COMPILE_RESOURCE_DEADLINE: status = XR_PARSE_DEADLINE; break;
+    case XR_COMPILE_RESOURCE_CLOCK_FAILURE: status = XR_PARSE_CLOCK_FAILURE; break;
+    default: status = XR_PARSE_BAD_ARGUMENT; break;
+    }
+    if (opened == XR_COMPILE_RESOURCE_OK) status = xr_compile_parse_with_trivia(session, text, "fixture.xr", NULL, &program);
     CHECK((status == XR_PARSE_OK) == (program != NULL));
     OK(xr_compile_resources_stats(resources, observed));
     if (program) xr_program_destroy(program);
@@ -288,7 +297,7 @@ static void nul_literal_lifetime(void) {
     char input[sizeof(nul_source)];
     memcpy(input, nul_source, sizeof(input));
     OK(xr_compile_resources_new(&unlimited, &resources));
-    CHECK(xr_compile_session_new(resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(resources, &session) == XR_COMPILE_RESOURCE_OK);
     CHECK(xr_compile_parse(session, input, &program) == XR_PARSE_OK);
     check_nul_literals(program);
     memset(input, '?', sizeof(input));
@@ -378,9 +387,9 @@ static void growth_and_arguments(void) {
     XrCompilerSession *session = NULL;
     OK(xr_compile_resources_new(&unlimited, &resources));
     XrCompilerSession *sentinel = (XrCompilerSession *) (uintptr_t) 1;
-    CHECK(xr_compile_session_new(resources, &sentinel) == XR_COMPILER_SESSION_BAD_ARGUMENT);
+    CHECK(xr_compile_session_new(resources, &sentinel) == XR_COMPILE_RESOURCE_BAD_ARGUMENT);
     CHECK(sentinel == (XrCompilerSession *) (uintptr_t) 1 && attempt_count == 1);
-    CHECK(xr_compile_session_new(resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(resources, &session) == XR_COMPILE_RESOURCE_OK);
     AstNode *output = (AstNode *) (uintptr_t) 1;
     size_t attempts = attempt_count;
     CHECK(xr_compile_parse(session, "const value = 1", &output) == XR_PARSE_BAD_ARGUMENT);
@@ -411,7 +420,7 @@ static void owning_trivia_diagnostics(void) {
     for(int maximum=0;maximum<3;++maximum) {
         reset(); XrCompileResources *resources=NULL; XrCompilerSession *session=NULL; AstNode *out=NULL;
         OK(xr_compile_resources_new(&unlimited,&resources));
-        CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK);
+        CHECK(xr_compile_session_new(resources,&session)==XR_COMPILE_RESOURCE_OK);
         TriviaDiagnostics capture={0}; XrParseDiagnostics diagnostics={trivia_diagnostic,&capture,maximum};
         CHECK(xr_compile_parse_with_trivia(session,"const first =\nconst second =\nconst third =\n","bad.xr",&diagnostics,&out)==XR_PARSE_SYNTAX);
         CHECK(!out && capture.count>0 && capture.last[0]);
@@ -442,9 +451,18 @@ static XrParseStatus position_pipeline(const XrCompileResourceLimits *limits,
     XrCompileResourceStatus made=xr_compile_resources_new(limits,&resources);
     if(made!=XR_COMPILE_RESOURCE_OK)
         return made==XR_COMPILE_RESOURCE_BUDGET?XR_PARSE_BUDGET:XR_PARSE_OUT_OF_MEMORY;
-    XrCompilerSessionStatus opened=xr_compile_session_new(resources,&session);
-    XrParseStatus status=opened==XR_COMPILER_SESSION_OK?XR_PARSE_OK:
-        opened==XR_COMPILER_SESSION_BUDGET?XR_PARSE_BUDGET:XR_PARSE_OUT_OF_MEMORY;
+    XrCompileResourceStatus opened=xr_compile_session_new(resources,&session);
+    XrParseStatus status;
+    switch (opened) {
+    case XR_COMPILE_RESOURCE_OK: status = XR_PARSE_OK; break;
+    case XR_COMPILE_RESOURCE_MEMORY_LIMIT: status = XR_PARSE_MEMORY_LIMIT; break;
+    case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: status = XR_PARSE_OUT_OF_MEMORY; break;
+    case XR_COMPILE_RESOURCE_OVERFLOW: status = XR_PARSE_OVERFLOW; break;
+    case XR_COMPILE_RESOURCE_CANCELLED: status = XR_PARSE_CANCELLED; break;
+    case XR_COMPILE_RESOURCE_DEADLINE: status = XR_PARSE_DEADLINE; break;
+    case XR_COMPILE_RESOURCE_CLOCK_FAILURE: status = XR_PARSE_CLOCK_FAILURE; break;
+    default: status = XR_PARSE_BAD_ARGUMENT; break;
+    }
     TriviaDiagnostics diagnostics={0};
     if(status==XR_PARSE_OK) {
         XrArenaBacking backing;
@@ -550,9 +568,19 @@ static XrParseStatus this_position_pipeline(const XrCompileResourceLimits *limit
     XrCompileResourceStatus made=xr_compile_resources_new(limits,&resources);
     if(made!=XR_COMPILE_RESOURCE_OK)
         return made==XR_COMPILE_RESOURCE_BUDGET?XR_PARSE_BUDGET:XR_PARSE_OUT_OF_MEMORY;
-    XrCompilerSessionStatus opened=xr_compile_session_new(resources,&session);
-    XrParseStatus status=opened==XR_COMPILER_SESSION_BUDGET?XR_PARSE_BUDGET:XR_PARSE_OUT_OF_MEMORY;
-    if(opened==XR_COMPILER_SESSION_OK) {
+    XrCompileResourceStatus opened=xr_compile_session_new(resources,&session);
+    XrParseStatus status;
+    switch (opened) {
+    case XR_COMPILE_RESOURCE_OK: status = XR_PARSE_OK; break;
+    case XR_COMPILE_RESOURCE_MEMORY_LIMIT: status = XR_PARSE_MEMORY_LIMIT; break;
+    case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: status = XR_PARSE_OUT_OF_MEMORY; break;
+    case XR_COMPILE_RESOURCE_OVERFLOW: status = XR_PARSE_OVERFLOW; break;
+    case XR_COMPILE_RESOURCE_CANCELLED: status = XR_PARSE_CANCELLED; break;
+    case XR_COMPILE_RESOURCE_DEADLINE: status = XR_PARSE_DEADLINE; break;
+    case XR_COMPILE_RESOURCE_CLOCK_FAILURE: status = XR_PARSE_CLOCK_FAILURE; break;
+    default: status = XR_PARSE_BAD_ARGUMENT; break;
+    }
+    if(opened==XR_COMPILE_RESOURCE_OK) {
         status=xr_compile_parse(session,input,&program);
         if(status==XR_PARSE_OK) {
             CHECK(program && program->as.program.owns_arena);this_position_facts(program);
@@ -632,9 +660,19 @@ static XrParseStatus this_ref_pipeline(const XrCompileResourceLimits *limits,XrC
     XrCompileResourceStatus made=xr_compile_resources_new(limits,&resources);
     if(made!=XR_COMPILE_RESOURCE_OK)
         return made==XR_COMPILE_RESOURCE_BUDGET?XR_PARSE_BUDGET:XR_PARSE_OUT_OF_MEMORY;
-    XrCompilerSessionStatus opened=xr_compile_session_new(resources,&session);
-    XrParseStatus status=opened==XR_COMPILER_SESSION_BUDGET?XR_PARSE_BUDGET:XR_PARSE_OUT_OF_MEMORY;
-    if(opened==XR_COMPILER_SESSION_OK) {
+    XrCompileResourceStatus opened=xr_compile_session_new(resources,&session);
+    XrParseStatus status;
+    switch (opened) {
+    case XR_COMPILE_RESOURCE_OK: status = XR_PARSE_OK; break;
+    case XR_COMPILE_RESOURCE_MEMORY_LIMIT: status = XR_PARSE_MEMORY_LIMIT; break;
+    case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: status = XR_PARSE_OUT_OF_MEMORY; break;
+    case XR_COMPILE_RESOURCE_OVERFLOW: status = XR_PARSE_OVERFLOW; break;
+    case XR_COMPILE_RESOURCE_CANCELLED: status = XR_PARSE_CANCELLED; break;
+    case XR_COMPILE_RESOURCE_DEADLINE: status = XR_PARSE_DEADLINE; break;
+    case XR_COMPILE_RESOURCE_CLOCK_FAILURE: status = XR_PARSE_CLOCK_FAILURE; break;
+    default: status = XR_PARSE_BAD_ARGUMENT; break;
+    }
+    if(opened==XR_COMPILE_RESOURCE_OK) {
         status=xr_compile_parse(session,input,&program);
         if(status==XR_PARSE_OK) {
             CHECK(program && program->as.program.owns_arena);this_ref_facts(program);

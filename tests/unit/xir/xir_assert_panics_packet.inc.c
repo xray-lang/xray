@@ -51,7 +51,7 @@ static void panics_core_bound_rejection(uint32_t flags) {
     LibraryCompileOwner owner={0};
     CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
     XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleResolverConfig config={0};XrModuleResolver *resolver=NULL;
     CHECK(xr_compile_module_resolver_new(owner.context.resources,&config,&resolver)==XR_MODULE_OK);
     SourceContext core={0};core.compile=owner.context;
@@ -82,7 +82,7 @@ static void panics_core_bound_rejections(void) {
     puts("Core canonical explicit fn UNKNOWN8 only; eight fresh-owner bound refusals and physical baselines PASS");
 }
 static XrXirArtifact *panics_core_checked(void) {
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(assert_compile_context->resources,&session)==XR_COMPILER_SESSION_OK);CHECK(session);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(assert_compile_context->resources,&session)==XR_COMPILE_RESOURCE_OK);CHECK(session);
     XrModuleResolverConfig config={0};XrModuleResolver *resolver=NULL;CHECK(xr_compile_module_resolver_new(assert_compile_context->resources,&config,&resolver)==XR_MODULE_OK);CHECK(resolver);
     SourceContext core={0};core.compile=*assert_compile_context;core.remaining_blocks=core.compile.limits.blocks;core.remaining_instructions=core.compile.limits.instructions;core.linkage_kind=XR_XIR_LIBRARY;core.core_factory=true;
     CHECK(xr_compile_module_graph_new(assert_compile_context->resources,session,resolver,&core.graph)==XR_MODULE_OK);CHECK(core.graph);

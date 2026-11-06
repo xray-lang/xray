@@ -22,7 +22,7 @@ enum { CLOSED_ERROR_CASES = sizeof(closed_error_names) / sizeof(*closed_error_na
 static XrXirArtifact *closed_error_lower(const XrXirCompileContext *context,
     uint32_t entries[CLOSED_ERROR_CASES][2]) {
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_TASK_CLOSED_ERROR_FIXTURES};
     XrXirSourceRequest request = {session, XR_TASK_CLOSED_ERROR_FIXTURES "/root.xr", &authority,
         context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};

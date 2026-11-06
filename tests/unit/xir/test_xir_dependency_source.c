@@ -34,7 +34,7 @@ static void ready_compiler_faults(void){
   const XrCompileResourceLimits caps={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
   CHECK(xr_compile_resources_new(&caps,&compile.resources)==XR_COMPILE_RESOURCE_OK);
   XrCompileResourceStats initial={0};CHECK(xr_compile_resources_stats(compile.resources,&initial)==XR_COMPILE_RESOURCE_OK);
-  XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(compile.resources,&session)==XR_COMPILER_SESSION_OK);
+  XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(compile.resources,&session)==XR_COMPILE_RESOURCE_OK);
   XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
   XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,&compile,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
   effects_compile_attempts=0;effects_compile_injected=false;effects_compile_fail_at=pass?pass-1:SIZE_MAX;
@@ -56,7 +56,7 @@ int main(int argc,char **argv){
  if (argc==2) {
   const XrXirCompileContext compile=*effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
   XrCompilerSession *session=NULL;
-  CHECK(xr_compile_session_new(compile.resources,&session)==XR_COMPILER_SESSION_OK);
+  CHECK(xr_compile_session_new(compile.resources,&session)==XR_COMPILE_RESOURCE_OK);
   XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
   XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,&compile,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
   XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
@@ -72,7 +72,7 @@ int main(int argc,char **argv){
  }
  ready_compiler_faults();
  const XrXirCompileContext compile=*effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
- XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(compile.resources,&session)==XR_COMPILER_SESSION_OK);
+ XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(compile.resources,&session)==XR_COMPILE_RESOURCE_OK);
  XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
  XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,&compile,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
  XrXirTypes conversion_types={0};XrHirConversionContext context={.compile=&compile,.types=&conversion_types};

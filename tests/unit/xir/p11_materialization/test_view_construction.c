@@ -101,7 +101,7 @@ static void generic_sites(const XrXirCompileContext *context) {
     const char text[]="const seed:i64=17;var step:i64=25;\n"
         "fn compute<T>()->i64{return comptime {const values:Array<T>=[];42}}\n"
         "export fn run()->i64{return seed+step+compute<i64>()-42}\n";
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"construction-coordinate",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,text,sizeof(text)-1};XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};

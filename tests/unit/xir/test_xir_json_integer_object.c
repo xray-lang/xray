@@ -39,7 +39,7 @@ static const char object_runtime_consumer[]=
     " if(value==null){return 0};return value![0]+value![1]}\n";
 static void object_source(const XrXirCompileContext *context,const char *text,XrXirLinkageKind kind,
     const XrXirLibraryCatalog *catalog,XrXirSourceResult *output) {
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     const char *logical=kind==XR_XIR_LIBRARY?"json_object.xr":"future_json_object.xr";char path[2048];
     int n=snprintf(path,sizeof(path),"%s/%s",XR_JSON_OBJECT_WORK,logical);CHECK(n>0 && n<(int)sizeof(path));
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_JSON_OBJECT_WORK};

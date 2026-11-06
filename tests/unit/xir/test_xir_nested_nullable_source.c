@@ -24,7 +24,7 @@ static void nested_source_case(const char *name,bool accept,bool hidden) {
     CHECK(length>0 && (size_t)length<sizeof(directory));
     length=snprintf(path,sizeof(path),"%s/root.xr",directory);CHECK(length>0 && (size_t)length<sizeof(path));
     SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory};
     XrXirSourceProductRequest request={{session,path,&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL},
         {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
@@ -78,7 +78,7 @@ static uint64_t nested_source_quota(uint64_t work,XrXirStatus expected) {
     owner.context.limits=xr_xir_compile_default_limits();
     CHECK(xr_compile_resources_stats(owner.context.resources,&owner.baseline)==XR_COMPILE_RESOURCE_OK);
     XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     const XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_NESTED_SOURCE_FIXTURES "/single"};
     const XrXirSourceProductRequest request={{session,XR_NESTED_SOURCE_FIXTURES "/single/root.xr",&authority,
         &owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};

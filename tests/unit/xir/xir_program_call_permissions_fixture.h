@@ -130,7 +130,7 @@ static void pce_source_check(PceFixture *f, XrXirArtifact **checked) {
     CHECK(xr_os_io_write_new_file_sync(&io, f->file, (const uint8_t *)pce_source,
         sizeof(pce_source) - 1) == XR_OS_IO_OK);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(f->compiler.resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(f->compiler.resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, f->root};
     XrXirSourceRequest request = {session, f->file, &authority, &f->compiler, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceResult result = {0};

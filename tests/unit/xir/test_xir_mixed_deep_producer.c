@@ -27,7 +27,7 @@ static uint32_t deep_entry(const XrXirModule *module, const char *name) {
 static XrXirCheckedPacket deep_packet(const XrXirCompileContext *context) {
     char path[1024]; int length = snprintf(path, sizeof(path), "%s/root.xr", XR_DEEP_FIXTURES);
     CHECK(length > 0 && (size_t)length < sizeof(path)); XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_DEEP_FIXTURES};
     XrXirSourceRequest request = {session, path, &authority, context, XR_DEEP_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};

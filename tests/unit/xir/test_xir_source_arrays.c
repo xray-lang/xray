@@ -23,7 +23,7 @@
 static void source_array_original(const char *checked_output, const char *bounds_output, bool execute) {
     SourceFixtureOwner compiler = {0}; source_fixture_owner_new(&compiler);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(compiler.context.resources, &session) == XR_COMPILER_SESSION_OK && session);
+    CHECK(xr_compile_session_new(compiler.context.resources, &session) == XR_COMPILE_RESOURCE_OK && session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_ARRAY_SOURCE_FIXTURES};
     XrXirSourceRequest request = {session, XR_ARRAY_SOURCE_FIXTURES "/root.xr", &authority, &compiler.context, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
@@ -75,7 +75,7 @@ static void source_array_original(const char *checked_output, const char *bounds
         CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK && !lowered);
         source_array_program_cases(program, functions); program = NULL;
     } else xr_xir_compile_artifact_free(checked);
-    CHECK(xr_compile_session_new(compiler.context.resources, &session) == XR_COMPILER_SESSION_OK && session);
+    CHECK(xr_compile_session_new(compiler.context.resources, &session) == XR_COMPILE_RESOURCE_OK && session);
     request.session = session; request.entry_path = XR_ARRAY_SOURCE_FIXTURES "/bounds.xr";
     CHECK(xr_xir_compile_source_check(&request, &result, &diagnostic, NULL) == XR_XIR_OK);
     checked = result.checked; result.checked = NULL;
@@ -100,7 +100,7 @@ static void source_array_original(const char *checked_output, const char *bounds
 static void source_array_reordering(const char *checked_output, bool query_only, bool execute) {
     SourceFixtureOwner compiler = {0}; source_fixture_owner_new(&compiler);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(compiler.context.resources, &session) == XR_COMPILER_SESSION_OK && session);
+    CHECK(xr_compile_session_new(compiler.context.resources, &session) == XR_COMPILE_RESOURCE_OK && session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_ARRAY_REORDER_SOURCE_FIXTURES};
     XrXirSourceRequest request = {session, XR_ARRAY_REORDER_SOURCE_FIXTURES "/root.xr", &authority,
         &compiler.context, NULL, NULL, XR_XIR_PROGRAM, NULL};

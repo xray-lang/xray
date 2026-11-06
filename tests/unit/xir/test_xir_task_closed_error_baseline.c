@@ -80,7 +80,7 @@ static void closed_error_build(ClosedErrorFixture *fixture,const char *backend) 
 static void closed_error_task_field_source(void) {
     const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,XR_TASK_CLOSED_ERROR_FIXTURES};
     XrXirSourceRequest request = {session,XR_TASK_CLOSED_ERROR_FIXTURES "/task-field.xr",&authority,
         context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};

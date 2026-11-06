@@ -32,7 +32,7 @@ static void atomic_permission_packet(const XrXirCompileContext *context,XrXirArt
 }
 static void atomic_permission_check(const AtomicPermissionCase *oracle) {
     const XrXirCompileContext *context=effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     char path[1024];int length=snprintf(path,sizeof(path),"%s/%s.xr",XR_P20_ATOMIC_PERMISSION_FIXTURES,oracle->name);
     CHECK(length>0 && (size_t)length<sizeof(path));
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_P20_ATOMIC_PERMISSION_FIXTURES};

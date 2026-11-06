@@ -1,3 +1,4 @@
+#include "xir/xxir_compile_memory.h"
 #define main materialization_original_main
 #include "../p11_materialization/test_materialization.c"
 #undef main
@@ -34,9 +35,9 @@ static XrXirStatus library_operation(const XrXirCompileContext *context,bool fre
     status=xr_xir_compile_library_catalog_new_v2(context,&input,1,&catalog);
     if (status!=XR_XIR_OK) goto done;
     xr_xir_compile_checked_packet_free(&packet);memset(bindings,0xa5,sizeof(bindings));
-    XrCompilerSessionStatus created=xr_compile_session_new(context->resources,&session);
-    if (created!=XR_COMPILER_SESSION_OK) {
-        status=created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:created==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
+    XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
+    if (created!=XR_COMPILE_RESOURCE_OK) {
+        status=xir_compile_resource_status(created);
         goto done;
     }
     XrXirSourceRequest request={session,MATERIALIZATION_ROOT "/consumer.xr",&authority,context,NULL,NULL,XR_XIR_PROGRAM,catalog};

@@ -98,7 +98,7 @@ static XrXirArtifact *oll_lower(const XrXirCompileContext *context, XrXirArtifac
 }
 static XrXirArtifact *oll_source(const XrXirCompileContext *context) {
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     char entry[2048]; int length = snprintf(entry, sizeof(entry), "%s/root.xr", OLL_FIXTURE_DIRECTORY);
     CHECK(length > 0 && (size_t)length < sizeof(entry));
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, OLL_FIXTURE_DIRECTORY};

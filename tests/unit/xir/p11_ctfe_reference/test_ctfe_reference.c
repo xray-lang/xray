@@ -483,7 +483,7 @@ static XrXirStatus reference_source(const XrXirCompileContext *context, const ch
     length = snprintf(identity, sizeof(identity), "ctfe-reference-%s", name);
     CHECK(length > 0 && (size_t)length < sizeof(identity));
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY, identity, NULL};
     XrXirSourceRequest request = {session, NULL, &authority, context, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceText input = {NULL, text, bytes};

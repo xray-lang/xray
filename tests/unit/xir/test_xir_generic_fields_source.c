@@ -91,7 +91,7 @@ int main(int argc,char **argv) {
         SourceFixtureOwner *owner=pass ? &failed_owner : &retained_owner;
         source_fixture_owner_new(owner);
         XrCompilerSession *session=NULL;
-        CHECK(xr_compile_session_new(owner->context.resources,&session)==XR_COMPILER_SESSION_OK);
+        CHECK(xr_compile_session_new(owner->context.resources,&session)==XR_COMPILE_RESOURCE_OK);
         const XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,
             &owner->context,NULL,NULL,XR_XIR_PROGRAM,NULL};
         /* Fault ordinals cover Source Check, including all receiving metadata

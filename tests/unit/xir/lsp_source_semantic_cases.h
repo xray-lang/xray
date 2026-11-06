@@ -1,3 +1,4 @@
+#include "xir/xxir_compile_memory.h"
 static const char semantic_source[]="/* \xf0\x9f\x98\x80 */ export fn identity(x:i64)->i64 { return x }\n";
 static void semantic_facts(const XlspSourceTokens *tokens,uint32_t row) {
     size_t count=0;const XlspSourceToken *t=xlsp_source_tokens_items(tokens,&count);CHECK(t&&count==3);
@@ -36,8 +37,8 @@ static XrXirStatus semantic_once(const char *root,XrCompileResourceLimits limits
     XrXirCompileContext context={0};XrCompilerSession *session=NULL;XlspSourceSnapshot *snap[2]={NULL,NULL};XlspSourceTokens *tokens[2]={NULL,NULL};XrJsonValue *json=NULL;
     XrCompileResourceStatus made=xr_compile_resources_new(&limits,&context.resources);
     if(made!=XR_COMPILE_RESOURCE_OK)return made==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
-    context.limits=xr_xir_compile_default_limits();XrCompilerSessionStatus opened=xr_compile_session_new(context.resources,&session);
-    XrXirStatus status=opened==XR_COMPILER_SESSION_OK?XR_XIR_OK:opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    context.limits=xr_xir_compile_default_limits();XrCompileResourceStatus opened=xr_compile_session_new(context.resources,&session);
+    XrXirStatus status=xir_compile_resource_status(opened);
     char uri[XR_TEST_PATH_MAX],new_text[sizeof(semantic_source)+1];lsp_uri(uri,sizeof(uri),root,"semantic.xr");new_text[0]='\n';memcpy(new_text+1,semantic_source,sizeof(semantic_source));
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
     XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
@@ -97,7 +98,7 @@ static void lsp_semantic_cases(const char *root) {
     /* Exact method roles now come from the owned Source syntax sidecar. */
     XrCompileResourceLimits limits=lsp_limits();XrXirCompileContext context={0};XrCompilerSession *session=NULL;
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
-    context.limits=xr_xir_compile_default_limits();CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
+    context.limits=xr_xir_compile_default_limits();CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     char uri[XR_TEST_PATH_MAX];lsp_uri(uri,sizeof(uri),root,"method.xr");
     static const char method[]="struct S { f()->i64 { return 1 } }\n";
     XlspSourceDocument document={uri,method,strlen(uri),sizeof(method)-1,1};

@@ -109,7 +109,7 @@ static void source_requirement_value_alternates(const XrXirSourceRequest *reques
             alternates[mode],call+strlen("receiver.map<U>"));
         CHECK(length>0 && (size_t)length<sizeof(text));write_source(request->entry_path,text);
         XrXirCompileContext context=stage_context_default();XrCompilerSession *session=NULL;
-        CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
+        CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
         XrXirSourceRequest input=*request;input.context=&context;input.session=session;
         XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
         CHECK(xr_xir_compile_source_check(&input,&result,&diagnostic,NULL)==(mode?XR_XIR_BAD_TYPE:XR_XIR_OK));

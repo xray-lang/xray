@@ -34,7 +34,7 @@ static XrXirArtifact *counter_source(const XrXirCompileContext *context, const c
     CHECK(path_length > 0 && (size_t)path_length < sizeof(path) && !fopen(path, "rb"));
     char *body = counter_text(context, name);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_COUNTER_LOGICAL_ROOT};
     XrXirSourceRequest request = {session, path, &authority, context, NULL, NULL, kind, catalog};
     XrXirSourceText text = {name, body, strlen(body)};

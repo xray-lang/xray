@@ -1,3 +1,4 @@
+#include "xir/xxir_compile_memory.h"
 #include "lsp_source_hover_closed_cases.h"
 static void lsp_hover_field_cases(const char *root) {
     static const char source[]=
@@ -21,7 +22,7 @@ static void lsp_hover_field_cases(const char *root) {
     };
     XrCompileResourceLimits limits=lsp_limits();XrXirCompileContext context={0};XrCompilerSession *session=NULL;
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
-    context.limits=xr_xir_compile_default_limits();CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
+    context.limits=xr_xir_compile_default_limits();CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     char uri[XR_TEST_PATH_MAX],input[sizeof(source)];lsp_uri(uri,sizeof(uri),root,"fields.xr");memcpy(input,source,sizeof(source));
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
     XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
@@ -51,8 +52,8 @@ static XrXirStatus lsp_hover_typed_once(const char *root,XrCompileResourceLimits
     XrCompileResourceStatus resource=xr_compile_resources_new(&limits,&context.resources);
     if(resource!=XR_COMPILE_RESOURCE_OK)return resource==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
     context.limits=xr_xir_compile_default_limits();
-    XrCompilerSessionStatus made=xr_compile_session_new(context.resources,&session);
-    XrXirStatus status=made==XR_COMPILER_SESSION_OK?XR_XIR_OK:made==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus made=xr_compile_session_new(context.resources,&session);
+    XrXirStatus status=xir_compile_resource_status(made);
     char uri[XR_TEST_PATH_MAX];lsp_uri(uri,sizeof(uri),root,"typed.xr");
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
     XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
@@ -105,7 +106,7 @@ static void lsp_hover_typed_matrix(const char *root) {
 static void lsp_hover_cases(const char *root) {
     XrCompileResourceLimits limits=lsp_limits();XrXirCompileContext context={0};XrCompilerSession *session=NULL;
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
-    context.limits=xr_xir_compile_default_limits();CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
+    context.limits=xr_xir_compile_default_limits();CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     char uri[XR_TEST_PATH_MAX],lib[XR_TEST_PATH_MAX];lsp_uri(uri,sizeof(uri),root,"root.xr");lsp_uri(lib,sizeof(lib),root,"lib.xr");
     XlspSourceDocument docs[2]={{uri,source_root_text,strlen(uri),sizeof(source_root_text)-1,1},
         {lib,source_library_text,strlen(lib),sizeof(source_library_text)-1,7}};

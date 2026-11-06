@@ -27,7 +27,7 @@ typedef struct LifetimeFixture {
 static void lifetime_fixture(LifetimeFixture *f) {
     memset(f,0,sizeof(*f));f->context=rp_owner(rp_caps());f->baseline=rp_stats(&f->context).live_bytes;
     static const char text[]="fn answer()->i64{return 42}\nexport fn references()->i64{const first=answer;const second=answer;return 0}\n";
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(f->context.resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(f->context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"refinement-lifetime",NULL};
     XrXirSourceRequest request={session,NULL,&authority,&f->context,NULL,NULL,XR_XIR_LIBRARY,NULL};
     XrXirSourceText input={NULL,text,sizeof(text)-1};XrXirSourceDiagnostic diagnostic={0};char *failure=NULL;

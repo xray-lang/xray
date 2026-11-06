@@ -36,7 +36,7 @@ typedef struct TimingProgram {
 static void timing_prepare(TimingProgram *run, unsigned mode, const char *emit) {
     source_fixture_owner_new(&run->owner);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(run->owner.context.resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(run->owner.context.resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_TIMING_FIXTURES};
     XrXirSourceRequest request = {session, XR_TIMING_FIXTURES "/string_build/root.xr", &authority,
         &run->owner.context, NULL, NULL, XR_XIR_PROGRAM, NULL};

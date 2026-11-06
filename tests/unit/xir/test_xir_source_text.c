@@ -1,4 +1,5 @@
 /* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
+#include "xir/xxir_compile_memory.h"
 #include "base/xmalloc.h"
 #include "toolchain/xcompiler_session.h"
 #include "../test_win_compat.h"
@@ -22,9 +23,8 @@ static XrXirStatus text_check(const XrXirSourceRequest *input, const char *logic
     if (created != XR_COMPILE_RESOURCE_OK)
         return created == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
     context.limits = xr_xir_compile_default_limits();
-    XrCompilerSessionStatus made = xr_compile_session_new(context.resources, &session);
-    XrXirStatus status = made == XR_COMPILER_SESSION_OK ? XR_XIR_OK :
-        made == XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus made = xr_compile_session_new(context.resources, &session);
+    XrXirStatus status = xir_compile_resource_status(made);
     if (status == XR_XIR_OK) {
         XrXirSourceRequest request = *input; request.context = &context; request.session = session;
         XrXirSourceDiagnostic diagnostic = {0};
@@ -129,7 +129,7 @@ static void text_allocations(const XrXirSourceRequest *request) {
 static void text_null_descriptor(const XrXirSourceRequest *prototype) {
     XrCompileResourceLimits limits=text_limits();XrXirCompileContext context={0};XrCompilerSession *session=NULL;
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
-    context.limits=xr_xir_compile_default_limits();CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
+    context.limits=xr_xir_compile_default_limits();CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest request=*prototype;request.context=&context;request.session=session;
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};
     size_t attempts=source_fixture_compile_attempts,live=source_fixture_compile_live,bytes=source_fixture_compile_bytes;

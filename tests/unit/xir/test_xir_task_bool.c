@@ -26,7 +26,7 @@ static const BoolOracle bool_oracles[] = {
 static XrXirProgram *bool_program(const BoolOracle *oracle, uint32_t *entry) {
     const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     char path[1024]; CHECK(snprintf(path, sizeof(path), "%s/%s.xr", XR_TASK_BOOL_FIXTURES, oracle->name) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_TASK_BOOL_FIXTURES};
     XrXirSourceRequest request = {session, path, &authority, context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
@@ -112,7 +112,7 @@ static bool bool_execute(const BoolOracle *oracle) {
 static void bool_reject(const char *name) {
     const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     char path[1024]; CHECK(snprintf(path, sizeof(path), "%s/rejected/%s.xr", XR_TASK_BOOL_FIXTURES, name) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_TASK_BOOL_FIXTURES};
     XrXirSourceRequest request = {session, path, &authority, context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};

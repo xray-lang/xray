@@ -1,4 +1,5 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
+#include "xir/xxir_compile_memory.h"
 static const char closed_hover_root[]="import { Shade } from \"./closed_palette\"\nvar selected = Shade.Light\n";
 static const char closed_hover_other[]="import { Shade } from \"./other_palette\"\nvar selected = Shade.Light\n";
 static void closed_hover_file(const char *path,const char *text) {
@@ -7,8 +8,8 @@ static void closed_hover_file(const char *path,const char *text) {
 }
 static XrXirStatus closed_hover_snapshot(const char *root,const char *uri,const char *text,
     XrXirCompileContext *context,XlspSourceSnapshot **output) {
-    XrCompilerSession *session=NULL;XrCompilerSessionStatus made=xr_compile_session_new(context->resources,&session);
-    if(made!=XR_COMPILER_SESSION_OK)return made==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompilerSession *session=NULL;XrCompileResourceStatus made=xr_compile_session_new(context->resources,&session);
+    if(made!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(made);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XlspSourceDocument document={uri,text,strlen(uri),strlen(text),7};
@@ -92,7 +93,7 @@ static void closed_hover_versions(const char *root) {
     static const char palette[]="export enum Shade { Light, Dark }\n";
     XlspSourceDocument documents[2]={{uri,closed_hover_root,strlen(uri),sizeof(closed_hover_root)-1,7},{library,palette,strlen(library),sizeof(palette)-1,1}};
     for(unsigned i=0;i<2;++i) {
-        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
+        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
         XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};documents[1].version=(int64_t)i+1;
         CHECK(xlsp_source_snapshot_build(&request,documents,2,0,&snapshots[i],NULL,NULL)==XR_XIR_OK);xr_compile_session_free(session);

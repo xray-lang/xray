@@ -22,7 +22,7 @@ int main(void) {
         {"rest_pending",XR_XIR_BAD_STRUCTURE,true},{"library_mutable",XR_XIR_OK,false}};
     for(size_t i=0;i<sizeof(cases)/sizeof(cases[0]);++i) {
         const XrXirCompileContext *context=source_program_owner(UINT64_C(64)*1024*1024,128000000);
-        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
         char entry[1024];int length=snprintf(entry,sizeof(entry),"%s/%s/root.xr",XR_TUPLE_DESTRUCTURE_REJECTED,cases[i].name);
         CHECK(length>0 && (size_t)length<sizeof(entry));
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_TUPLE_DESTRUCTURE_REJECTED};

@@ -75,7 +75,7 @@ static void library_state_typed_values_query(const XrXirSourceView *view,XrXirLi
 }
 static XrXirArtifact *library_state_typed_values_check(const XrXirCompileContext *context,const char *path,
     XrXirLinkageKind kind,const XrXirLibraryCatalog *catalog) {
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
     XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,kind,catalog};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};

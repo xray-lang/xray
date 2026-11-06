@@ -1,4 +1,5 @@
 /* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
+#include "xir/xxir_compile_memory.h"
 #include "base/xmalloc.h"
 #include "base/xsha256.h"
 #include "module/xmodule_graph.h"
@@ -22,9 +23,8 @@ static XrXirStatus overlay_source_check(const char *root, unsigned mode,
     if (allocated != XR_COMPILE_RESOURCE_OK)
         return allocated == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
     context.limits = xr_xir_compile_default_limits();
-    XrCompilerSessionStatus created = xr_compile_session_new(context.resources, &session);
-    XrXirStatus status = created == XR_COMPILER_SESSION_OK ? XR_XIR_OK :
-        created == XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus created = xr_compile_session_new(context.resources, &session);
+    XrXirStatus status = xir_compile_resource_status(created);
     char names[3][16] = {"root.xr", "lib.xr", "leaf.xr"}, paths[3][XR_TEST_PATH_MAX];
     char texts[3][192] = {
         "import { value } from \"./lib\"\nexport fn result()->i64 { return value() }\n",
@@ -145,7 +145,7 @@ static void overlay_catalog_collision(const char *root) {
     XrCompileResourceLimits limits = overlay_source_limits(); XrXirCompileContext context = {0};
     CHECK(xr_compile_resources_new(&limits, &context.resources) == XR_COMPILE_RESOURCE_OK);
     context.limits = xr_xir_compile_default_limits(); XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILE_RESOURCE_OK);
     char path[XR_TEST_PATH_MAX]; CHECK(snprintf(path, sizeof(path), "%s/lib.xr", root) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, root};
     XrXirSourceRequest request = {session, path, &authority, &context, NULL, NULL, XR_XIR_LIBRARY, NULL};
@@ -174,7 +174,7 @@ static void overlay_catalog_collision(const char *root) {
 static void overlay_memory_graph(void) {
     XrCompileResourceLimits limits = overlay_source_limits(); XrCompileResources *resources = NULL;
     CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
-    XrCompilerSession *session = NULL; CHECK(xr_compile_session_new(resources, &session) == XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session = NULL; CHECK(xr_compile_session_new(resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleResolverConfig config = {0}; XrModuleResolver *resolver = NULL;
     CHECK(xr_compile_module_resolver_new(resources, &config, &resolver) == XR_MODULE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY, "overlay", NULL};

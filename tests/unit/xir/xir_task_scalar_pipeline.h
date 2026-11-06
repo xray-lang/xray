@@ -6,7 +6,7 @@
 static XrXirArtifact *task_scalar_lower(const XrXirCompileContext *context,
     uint32_t entries[TASK_SCALAR_CASES][2], bool baseline) {
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_TASK_SCALAR_FIXTURES};
     XrXirSourceRequest request = {session, XR_TASK_SCALAR_FIXTURES "/root.xr", &authority,
         context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};

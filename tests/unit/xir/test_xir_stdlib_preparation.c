@@ -40,9 +40,9 @@ static XrXirStatus preparation_pipeline(const XrXirCompileContext *context,
     preparation_stage_offsets[2] = effects_compile_attempts-first_attempt;
     preparation_stage_ticks[2] = clock();
     *stage = 2;
-    XrCompilerSessionStatus session_status = xr_compile_session_new(context->resources,&session);
-    if (session_status != XR_COMPILER_SESSION_OK) {
-        status = session_status == XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+    XrCompileResourceStatus session_status = xr_compile_session_new(context->resources,&session);
+    if (session_status != XR_COMPILE_RESOURCE_OK) {
+        status = session_status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
         goto finish;
     }
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,root};

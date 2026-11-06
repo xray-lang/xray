@@ -110,7 +110,7 @@ static XrXirArtifact *source_witness_inheritance_packet(XrXirSourceRequest *requ
     const SourceWitnessInheritanceCase *test) {
     write_source(request->entry_path,test->source);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(request->context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(request->context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest local = *request; local.session = session;
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_compile_source_check(&local, &result, &diagnostic, NULL);
@@ -186,7 +186,7 @@ static void source_witness_inheritance_rejections(XrXirSourceRequest *request) {
     for (uint32_t i = 0; i < sizeof(sources)/sizeof(*sources); ++i) {
         write_source(request->entry_path,sources[i]);
         XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(request->context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(request->context->resources, &session) == XR_COMPILE_RESOURCE_OK);
         XrXirSourceRequest local = *request; local.session = session;
         XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
         XrXirStatus status = xr_xir_compile_source_check(&local, &result, &diagnostic, NULL);

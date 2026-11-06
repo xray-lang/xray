@@ -91,7 +91,7 @@ static void rename_task_sync(RenameTaskFixture *f,bool cached) {
         doc=xlsp_document_store_get(f->server.doc_table,uri);CHECK(doc);
         const XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
         CHECK(task_resource_new_impl(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
-        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK);
+        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(resources,&session)==XR_COMPILE_RESOURCE_OK);
         const char text[]="fn unrelated(){}\n";XlspSourceDocument input={uri,text,strlen(uri),sizeof(text)-1,0};
         CHECK(xlsp_source_syntax_build(session,&input,&doc->syntax_snapshot)==XR_PARSE_OK);
         doc->ast=(AstNode *)xlsp_source_syntax_ast(doc->syntax_snapshot);

@@ -38,8 +38,8 @@ static ArrayProgramEntries array_entries(const XrXirModule *module) {
 }
 static XrXirStatus array_build(ArrayCompileOwner *owner,XrXirSourceProduct **product) {
     XrCompilerSession *session=NULL;
-    XrCompilerSessionStatus ss=xr_compile_session_new(owner->context.resources,&session);
-    if(ss!=XR_COMPILER_SESSION_OK)return ss==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
+    XrCompileResourceStatus ss=xr_compile_session_new(owner->context.resources,&session);
+    if(ss!=XR_COMPILE_RESOURCE_OK)return ss==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_ARRAY_FIXTURES};
     XrXirSourceProductRequest request={{session,XR_ARRAY_FIXTURES "/root.xr",&authority,&owner->context,
         XR_ARRAY_STDLIB,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
@@ -119,7 +119,7 @@ static void array_lowered_attack(ArrayAttack attack) {
 }
 static void array_source_reject(const char *file,const char *message) {
     ArrayCompileOwner owner;CHECK(array_compile_owner_new(array_compile_caps(),&owner)==XR_COMPILE_RESOURCE_OK);
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     char path[1024];int length=snprintf(path,sizeof(path),"%s/%s",XR_ARRAY_FIXTURES,file);
     CHECK(length>0 && (size_t)length<sizeof(path));
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_ARRAY_FIXTURES};

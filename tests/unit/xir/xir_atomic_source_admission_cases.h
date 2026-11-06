@@ -8,6 +8,7 @@
  */
 #ifndef XIR_ATOMIC_SOURCE_ADMISSION_CASES_H
 #define XIR_ATOMIC_SOURCE_ADMISSION_CASES_H
+#include "xir/xxir_compile_memory.h"
 enum { AS_ORDERING=1,AS_ATOMIC=2,AS_CAS=4,AS_ORDINARY_ORDERING=8,AS_ORDINARY_ATOMIC=16,AS_PRIVATE_PERMISSION=32 };
 typedef struct AtomicSourceCase {const char *name,*source;XrXirStatus expected;unsigned query;} AtomicSourceCase;
 static void atomic_source_query(const XrXirSourceView *view,unsigned expected){
@@ -39,8 +40,8 @@ static void atomic_source_query(const XrXirSourceView *view,unsigned expected){
 }
 static XrXirStatus atomic_source_control(const XrXirCompileContext *context,void *opaque){
     AtomicSourceCase *c=opaque;XrCompilerSession *session=NULL;
-    XrCompilerSessionStatus cs=xr_compile_session_new(context->resources,&session);
-    if(cs!=XR_COMPILER_SESSION_OK)return cs==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus cs=xr_compile_session_new(context->resources,&session);
+    if(cs!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(cs);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory_path};
     XrXirSourceRequest request={session,root_path,&authority,context,XR_ATOMIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};XrXirCheckedPacket packet={0};

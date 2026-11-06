@@ -8,6 +8,7 @@
  */
 #ifndef XIR_MIXED_LIBRARY_PERMISSIONS_H
 #define XIR_MIXED_LIBRARY_PERMISSIONS_H
+#include "xir/xxir_compile_memory.h"
 typedef struct LibraryPermissionResult {
     XrXirStatus status;
     XrCompileResourceStats stats, rounds[3];
@@ -49,10 +50,9 @@ static bool library_permission_source(LibraryPermissionState *state, const char 
     CHECK(length > 0 && (size_t)length < sizeof(path) && !fopen(path, "rb"));
     char *body = library_permission_text(state, name); if (!body) return false;
     size_t bytes = strlen(body); XrCompilerSession *session = NULL;
-    XrCompilerSessionStatus created = xr_compile_session_new(state->context.resources, &session);
-    CHECK(created == XR_COMPILER_SESSION_OK || created == XR_COMPILER_SESSION_BUDGET || created == XR_COMPILER_SESSION_OUT_OF_MEMORY);
-    XrXirStatus status = created == XR_COMPILER_SESSION_OK ? XR_XIR_OK :
-        created == XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus created = xr_compile_session_new(state->context.resources, &session);
+    CHECK(created == XR_COMPILE_RESOURCE_OK || created == XR_COMPILER_SESSION_BUDGET || created == XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+    XrXirStatus status = xir_compile_resource_status(created);
     if (!library_permission_stage(state, 3, status)) {
         CHECK(!session); memset(body, 0xCC, bytes); xr_compile_resources_free(body); return false;
     }

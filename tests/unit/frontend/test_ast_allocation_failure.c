@@ -66,7 +66,7 @@ static void ast_failure_case(bool oom) {
     OK(xr_compile_resources_new(&limits, &resources));
     XrCompileResourceStats baseline = {0}, before = {0}, failed = {0}, released = {0};
     check_stats(resources, &baseline);
-    CHECK(xr_compile_session_new(resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrCompileState *state = xr_compile_session_compile_state(session);
     CHECK(xr_compile_state_resources(state) == resources);
     XrArena arena = {0};

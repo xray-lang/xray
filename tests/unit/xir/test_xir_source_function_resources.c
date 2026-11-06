@@ -6,6 +6,7 @@
  *
  * test_xir_source_function_resources.c - Complete fault closure for exact Source capacity
  */
+#include "xir/xxir_compile_memory.h"
 #include "xir/xxir_source.h"
 #include "toolchain/xcompiler_session.h"
 #include "base/xwindows_utf8.h"
@@ -22,8 +23,8 @@ static XrXirStatus once(XrCompileResourceLimits caps,XrCompileResourceStats *sta
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};context.limits.functions=15;
     const XrXirCompileContext original=context;
     XrCompilerSession *session=NULL;XrXirSourceResult result={0};XrXirStatus status=XR_XIR_OK;
-    XrCompilerSessionStatus opened=xr_compile_session_new(resources,&session);
-    if(opened!=XR_COMPILER_SESSION_OK){status=opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:opened==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;}
+    XrCompileResourceStatus opened=xr_compile_session_new(resources,&session);
+    if(opened!=XR_COMPILE_RESOURCE_OK){status=xir_compile_resource_status(opened);goto done;}
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"exact-capacity",NULL};
     XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText text={NULL,requirement_value_mixed_source,sizeof(requirement_value_mixed_source)-1};

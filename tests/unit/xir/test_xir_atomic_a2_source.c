@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Each backend checks fixed expectations after the ordinary source pipeline.
  */
+#include "xir/xxir_compile_memory.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
@@ -24,8 +25,8 @@
 typedef struct AtomicPipeline {XrXirProgram *program;uint32_t entry;const char *output;} AtomicPipeline;
 static XrXirStatus atomic_source_pipeline(const XrXirCompileContext *context,void *opaque) {
     AtomicPipeline *capture=opaque;XrCompilerSession *session=NULL;
-    XrCompilerSessionStatus cs=xr_compile_session_new(context->resources,&session);
-    if(cs!=XR_COMPILER_SESSION_OK)return cs==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus cs=xr_compile_session_new(context->resources,&session);
+    if(cs!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(cs);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_ATOMIC_A2_FIXTURES};
     XrXirSourceRequest request={session,XR_ATOMIC_A2_FIXTURES "/root.xr",&authority,context,XR_ATOMIC_A2_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};XrXirCheckedPacket packet={0};

@@ -30,7 +30,7 @@ static void receiver_opaque_return_cases(void) {
             "fn worker()->i64 {const make=escape()\n try{return gather(make())} catch(error){return -1}}\n"
             "export fn run()->i64{return await go worker()}\nfn main(){}\n",prefix,receiver[mode]);
         CHECK(length>0 && (size_t)length<sizeof(text));SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);
-        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
+        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"generator-receiver-opaque",NULL};
         XrXirSourceRequest request={session,NULL,&authority,&owner.context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
         XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
@@ -66,7 +66,7 @@ static void receiver_origin_cases(void) {
         char text[2048];int length=snprintf(text,sizeof(text),
             "%s%s export fn run()->i64{return await go worker()}\nfn main(){}\n",prefix,worker[mode]);
         CHECK(length>0 && (size_t)length<sizeof(text));SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);
-        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
+        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"generator-value-origins",NULL};
         XrXirSourceRequest request={session,NULL,&authority,&owner.context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
         XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};

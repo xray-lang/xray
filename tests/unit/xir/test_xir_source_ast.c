@@ -6,6 +6,7 @@
  *
  * test_xir_source_ast.c - Actual AST semantics and independent Program ownership
  */
+#include "xir/xxir_compile_memory.h"
 #include "program/xr_xir_source_product.h"
 #include "frontend/parser/xparse.h"
 #include "frontend/parser/xast.h"
@@ -25,10 +26,8 @@ static XrCompileResourceStats observed;
 static XrCompileResourceLimits limits(void) {
     return (XrCompileResourceLimits){UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
 }
-static XrXirStatus session_status(XrCompilerSessionStatus status) {
-    return status == XR_COMPILER_SESSION_OK ? XR_XIR_OK :
-        status == XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET :
-        status == XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BAD_STRUCTURE;
+static XrXirStatus session_status(XrCompileResourceStatus status) {
+    return xir_compile_resource_status(status);
 }
 static XrXirStatus parse_status(XrParseStatus status) {
     return status == XR_PARSE_OK ? XR_XIR_OK : status == XR_PARSE_BUDGET ? XR_XIR_BUDGET :
@@ -112,8 +111,8 @@ static void rejections(void) {
     CHECK(xr_compile_resources_new(&caps,&resources) == XR_COMPILE_RESOURCE_OK);
     CHECK(xr_compile_resources_new(&caps,&foreign) == XR_COMPILE_RESOURCE_OK);
     XrCompilerSession *producer = NULL, *consumer = NULL;
-    CHECK(xr_compile_session_new(resources,&producer) == XR_COMPILER_SESSION_OK);
-    CHECK(xr_compile_session_new(foreign,&consumer) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(resources,&producer) == XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_compile_session_new(foreign,&consumer) == XR_COMPILE_RESOURCE_OK);
     AstNode *ast = NULL; CHECK(xr_compile_parse(producer,source_text,&ast) == XR_PARSE_OK);
     xr_compile_session_free(producer);
     XrXirCompileContext context = {foreign,xr_xir_compile_default_limits()};
@@ -123,7 +122,7 @@ static void rejections(void) {
     CHECK(xr_xir_compile_source_check_ast(&request,&input,&result,&diagnostic,NULL) == XR_XIR_BAD_STRUCTURE);
     CHECK(!result.checked && !result.snapshot && ast->as.program.owns_arena);
     xr_compile_session_free(consumer); consumer = NULL; xr_compile_resources_release(foreign);
-    CHECK(xr_compile_session_new(resources,&consumer) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(resources,&consumer) == XR_COMPILE_RESOURCE_OK);
     context.resources = resources; request.session = consumer;
     ast->as.program.owns_arena = false;
     CHECK(xr_xir_compile_source_check_ast(&request,&input,&result,&diagnostic,NULL) == XR_XIR_BAD_STRUCTURE);

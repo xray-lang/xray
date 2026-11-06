@@ -3,7 +3,7 @@
 #define GO_BOOL_SOURCE_PIPELINE_H
 static XrXirArtifact *go_bool_source_lower(const XrXirCompileContext *context, uint32_t entries[3]) {
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_GO_BOOL_FIXTURES};
     XrXirSourceRequest request = {session, XR_GO_BOOL_FIXTURES "/bool_native.xr", &authority,
         context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};

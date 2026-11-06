@@ -6,6 +6,7 @@
  *
  * test_xir_atomic_admission_owner.c - Closed definition proofs before execution
  */
+#include "xir/xxir_compile_memory.h"
 #include "xir_construction_fixture.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_checked.h"
@@ -33,8 +34,8 @@ static void write_source(const char *source) {
     CHECK(fwrite(source,1,n,f)==n && fclose(f)==0);
 }
 static XrXirStatus source_pipeline(const XrXirCompileContext *context,void *unused) {
-    (void)unused;XrCompilerSession *session=NULL;XrCompilerSessionStatus session_status=xr_compile_session_new(context->resources,&session);
-    if(session_status!=XR_COMPILER_SESSION_OK)return session_status==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    (void)unused;XrCompilerSession *session=NULL;XrCompileResourceStatus session_status=xr_compile_session_new(context->resources,&session);
+    if(session_status!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(session_status);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory_path};
     XrXirSourceRequest request={session,root_path,&authority,context,XR_ATOMIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
@@ -133,7 +134,7 @@ static void source_cases(void) {
     for(unsigned i=0;i<2;++i){write_source(current_admitted[i]);library_compile_operation_cases(i==0?"original Atomic(1) now admitted":"original Ordering parameter now admitted",source_pipeline,NULL);}
     for(unsigned i=0;i<sizeof(negative)/sizeof(*negative);++i){
         write_source(negative[i]);LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
-        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
+        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory_path};
         XrXirSourceRequest request={session,root_path,&authority,&owner.context,XR_ATOMIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
         XrXirSourceResult output={0};XrXirSourceDiagnostic diagnostic={0};
@@ -187,7 +188,7 @@ static void shadow_cases(void) {
         "fn unused(x:Atomic<i64>) {}\nstruct Atomic<T> {}\n"};
     for(unsigned i=0;i<2;++i){
         write_source(sources[i]);LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
-        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
+        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory_path};
         XrXirSourceRequest request={session,root_path,&authority,&owner.context,XR_ATOMIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
         XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};

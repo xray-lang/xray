@@ -1,4 +1,5 @@
 /* Actual multi-module Source -> Checked -> specialization -> Lowered -> C. */
+#include "xir/xxir_compile_memory.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
@@ -123,10 +124,10 @@ static void h1c_ledger(H1Compiler *c, const char *tag) {
         (unsigned long long)s.peak_bytes, (unsigned long long)s.work, instance_compile_live, instance_compile_bytes);
 }
 static XrXirStatus views_session(H1Compiler *c) {
-    XrCompilerSessionStatus status=xr_compile_session_new(c->context.resources,&c->session);
-    if(status==XR_COMPILER_SESSION_OK)return XR_XIR_OK;
-    CHECK(!c->session && (status==XR_COMPILER_SESSION_BUDGET || status==XR_COMPILER_SESSION_OUT_OF_MEMORY));
-    return status==XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus status=xr_compile_session_new(c->context.resources,&c->session);
+    if(status==XR_COMPILE_RESOURCE_OK)return XR_XIR_OK;
+    CHECK(!c->session && (status==XR_COMPILER_SESSION_BUDGET || status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY));
+    return xir_compile_resource_status(status);
 }
 static XrXirStatus views_source_request(H1Compiler *c,const char *path,XrXirLinkageKind kind,
     const XrXirLibraryCatalog *catalog,XrXirArtifact **output) {
@@ -219,10 +220,10 @@ static XrXirStatus h1c_action(H1Compiler *c, unsigned p, const XrCompileResource
     }
     case H1C_IO: return views_write_sources(c);
     case H1C_SESSION: {
-        XrCompilerSessionStatus s = xr_compile_session_new(c->context.resources, &c->session);
-        if (s != XR_COMPILER_SESSION_OK) {
-            CHECK(!c->session && (s == XR_COMPILER_SESSION_BUDGET || s == XR_COMPILER_SESSION_OUT_OF_MEMORY));
-            return s == XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+        XrCompileResourceStatus s = xr_compile_session_new(c->context.resources, &c->session);
+        if (s != XR_COMPILE_RESOURCE_OK) {
+            CHECK(!c->session && (s == XR_COMPILER_SESSION_BUDGET || s == XR_COMPILE_RESOURCE_OUT_OF_MEMORY));
+            return xir_compile_resource_status(s);
         }
         CHECK(xr_compile_session_resources(c->session) == c->context.resources); break;
     }

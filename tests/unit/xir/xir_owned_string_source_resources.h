@@ -79,7 +79,7 @@ static uint32_t cs_export(const XrXirModule *m, const char *name, XrXirType resu
 static void cs_source_checked(CsFixture *f, CsMetrics *m, XrXirArtifact **checked) {
     XrCompilerSession *session = NULL;
     size_t begin = instance_compile_attempts;
-    CHECK(xr_compile_session_new(f->compiler.resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(f->compiler.resources, &session) == XR_COMPILE_RESOURCE_OK);
     cs_compiler_step(m, 1, begin);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, f->root};
     XrXirSourceRequest request = {session, f->file, &authority, &f->compiler,

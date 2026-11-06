@@ -13,9 +13,9 @@ static XrXirStatus sn_build(const XrXirCompileContext *context,const char *outpu
     XrXirProgram **program,uint32_t functions[SN_COUNT]) {
     XrCompilerSession *session=NULL;XrXirSourceProduct *product=NULL;XrXirArtifact *closed=NULL;
     XrXirSourceProductDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};XrXirCSource source={0};
-    XrCompilerSessionStatus session_status=xr_compile_session_new(context->resources,&session);
-    XrXirStatus status=session_status==XR_COMPILER_SESSION_OK?XR_XIR_OK:
-        session_status==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
+    XrCompileResourceStatus session_status=xr_compile_session_new(context->resources,&session);
+    XrXirStatus status=session_status==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:
+        session_status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
     const XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_NESTED_FIXTURES};
     const XrXirSourceProductRequest request={{session,XR_SOURCE_NESTED_FIXTURES "/root.xr",&authority,
         context,NULL,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};

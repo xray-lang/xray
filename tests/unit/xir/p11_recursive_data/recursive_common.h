@@ -1,3 +1,4 @@
+#include "xir/xxir_compile_memory.h"
 #define main materialization_original_main
 #include "../p11_materialization/test_materialization.c"
 #undef main
@@ -25,9 +26,8 @@ static void recursive_load(RecursiveInput *input,const char *name,bool plain,boo
 static XrXirStatus recursive_source(const XrXirCompileContext *context,const RecursiveInput *input,
     XrXirSourceResult *output,XrXirSourceDiagnostic *diagnostic) {
     if (!strcmp(input->name,"mode6")) return source_operation(context,6,XR_XIR_PROGRAM,output);
-    XrCompilerSession *session=NULL;XrCompilerSessionStatus created=xr_compile_session_new(context->resources,&session);
-    if (created!=XR_COMPILER_SESSION_OK) return created==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
-        created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
+    XrCompilerSession *session=NULL;XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
+    if (created!=XR_COMPILE_RESOURCE_OK) return xir_compile_resource_status(created);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,input->root};
     XrXirSourceRequest request={session,input->path,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText text={input->name,input->text,input->length};

@@ -32,7 +32,7 @@ static const char *go_unresolved="GO target lacks proof for worker execution";
 static XrXirArtifact *go_source(const char *file,bool query,XrXirStatus expected,const char *message) {
     const char *base=query?XR_ROOT_QUERY_FIXTURES:XR_ROOT_GO_FIXTURES;
     char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%s",base,file)>0);
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(effect_context.resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(effect_context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,base};
     XrXirSourceRequest request={session,path,&authority,&effect_context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};

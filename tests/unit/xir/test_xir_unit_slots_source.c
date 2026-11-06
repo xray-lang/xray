@@ -55,10 +55,10 @@ int main(int argc,char **argv){
  for(size_t pass=0;pass<=(write_only?0:sites);++pass){
   UnitCompileOwner owner;unit_compile_owner_new(&owner);
   effects_compile_attempts=0;effects_compile_injected=false;effects_compile_fail_at=pass?pass-1:SIZE_MAX;
-  XrCompilerSession *session=NULL;XrCompilerSessionStatus session_status=xr_compile_session_new(owner.context.resources,&session);
+  XrCompilerSession *session=NULL;XrCompileResourceStatus session_status=xr_compile_session_new(owner.context.resources,&session);
   XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL};
   XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
-  XrXirStatus status=session_status==XR_COMPILER_SESSION_OK?xr_xir_compile_source_check(&request,&result,&diagnostic,NULL):session_status==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
+  XrXirStatus status=session_status==XR_COMPILE_RESOURCE_OK?xr_xir_compile_source_check(&request,&result,&diagnostic,NULL):session_status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
   size_t actual=effects_compile_attempts;effects_compile_fail_at=SIZE_MAX;
   if(!pass){
    if(status!=XR_XIR_OK)fprintf(stderr,"%u %d %s\n",status,diagnostic.line,diagnostic.message);

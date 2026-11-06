@@ -39,7 +39,7 @@ static void string_worker_emit(XrXirArtifact *lowered, uint32_t entry, const cha
 }
 static XrXirCheckedPacket string_worker_packet(const XrXirCompileContext *context) {
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_STRING_WORKER_FIXTURES};
     XrXirSourceRequest request = {session, XR_STRING_WORKER_FIXTURES "/root.xr", &authority, context, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};

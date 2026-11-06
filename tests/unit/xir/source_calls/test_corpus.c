@@ -40,7 +40,7 @@ static void corpus_once(char **argv,unsigned mode) {
     for(unsigned i=0;i<4;++i){XrSourceEntryInput input={XR_SOURCE_ENTRY_TEXT,argv[i+1],texts[i],strlen(texts[i])};
         CHECK(xr_source_authority_open_input(&context,&input,catalog,&toml,&authorities[i],NULL)==XR_MANIFEST_OK);
         overlays[i]=*xr_source_authority_overlay(authorities[i]);}
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(r,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(r,&session)==XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest entry={session,xr_source_authority_source_path(authorities[0]),xr_source_authority_entry(authorities[0]),
         &context,stdlib.path,xr_source_authority_lockfile(authorities[0]),XR_XIR_PROGRAM,catalog};
     size_t included[]={0,1,2,3};XrXirSourceCorpusRequest corpus={&entry,overlays,4,included,4};

@@ -84,9 +84,9 @@ static RejectionRun run(const RejectionCase *test, size_t failure, XrCompileReso
         result.status = opened == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
         goto done;
     }
-    XrCompilerSessionStatus parsed = xr_compile_session_new(context.resources, &session);
-    if (parsed != XR_COMPILER_SESSION_OK) {
-        result.status = parsed == XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+    XrCompileResourceStatus parsed = xr_compile_session_new(context.resources, &session);
+    if (parsed != XR_COMPILE_RESOURCE_OK) {
+        result.status = parsed == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
         goto release;
     }
     const XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_REJECTION_ROOT};

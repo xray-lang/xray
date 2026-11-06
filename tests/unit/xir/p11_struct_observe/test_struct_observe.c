@@ -57,7 +57,7 @@ static void job_new(ObserveJob *job) {
     job->context.limits=xr_xir_compile_default_limits();
     static const char text[]="class Box{value:i64;init(value:i64){this.value=value}}\n"
         "struct Wrap{item:Box;label:string}\nexport fn run()->i64{const w=Wrap{item:Box(42),label:\"ab\"};return w.item.value}\n";
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(job->context.resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(job->context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"struct-observe",NULL};
     XrXirSourceRequest request={session,NULL,&authority,&job->context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,text,sizeof(text)-1};XrXirSourceResult source={0};XrXirArtifact *closed=NULL,*lowered=NULL;

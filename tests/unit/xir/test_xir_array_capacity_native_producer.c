@@ -35,7 +35,7 @@ static uint32_t capacity_native_find(const XrXirModule *module,const char *name)
 }
 int main(int argc,char **argv) {
     CHECK(argc==4);instance_compile_zero();SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_CAP_NATIVE_FIXTURES};
     XrXirSourceRequest request={session,XR_CAP_NATIVE_FIXTURES "/root.xr",&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure path={0};

@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   One sealed program serves two independently metered VM instances.
  */
+#include "xir/xxir_compile_memory.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
@@ -132,10 +133,10 @@ static XrXirStatus h1c_action(H1Compiler *c, unsigned p, const XrCompileResource
             (const uint8_t *)c->oracle->text, strlen(c->oracle->text)));
     }
     case H1C_SESSION: {
-        XrCompilerSessionStatus s = xr_compile_session_new(c->context.resources, &c->session);
-        if (s != XR_COMPILER_SESSION_OK) {
-            CHECK(!c->session && (s == XR_COMPILER_SESSION_BUDGET || s == XR_COMPILER_SESSION_OUT_OF_MEMORY));
-            return s == XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+        XrCompileResourceStatus s = xr_compile_session_new(c->context.resources, &c->session);
+        if (s != XR_COMPILE_RESOURCE_OK) {
+            CHECK(!c->session && (s == XR_COMPILER_SESSION_BUDGET || s == XR_COMPILE_RESOURCE_OUT_OF_MEMORY));
+            return xir_compile_resource_status(s);
         }
         CHECK(xr_compile_session_resources(c->session) == c->context.resources); break;
     }

@@ -146,10 +146,10 @@ static bool module_completed(XrModuleStatus actual, const char *operation) {
     if (actual == XR_MODULE_OK) return true;
     record_failure("PRODUCT_MODULE_STATUS", operation, true, XR_MODULE_OK, actual, NULL); return false;
 }
-static bool session_completed(XrCompilerSessionStatus actual, const char *operation) {
+static bool session_completed(XrCompileResourceStatus actual, const char *operation) {
     receiver_operation = operation;
-    if (actual == XR_COMPILER_SESSION_OK) return true;
-    record_failure("PRODUCT_SESSION_STATUS", operation, true, XR_COMPILER_SESSION_OK, actual, NULL); return false;
+    if (actual == XR_COMPILE_RESOURCE_OK) return true;
+    record_failure("PRODUCT_SESSION_STATUS", operation, true, XR_COMPILE_RESOURCE_OK, actual, NULL); return false;
 }
 static bool same_path(const char *left, const char *right) {
     while (*left && *right) {

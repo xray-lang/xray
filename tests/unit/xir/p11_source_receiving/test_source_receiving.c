@@ -25,7 +25,7 @@ static XrCompileResourceStats stats(const XrXirCompileContext *context) {
 }
 static void fixture(const XrXirCompileContext *context,XrXirCheckedPacket *wire) {
     static const char text[]="fn plus(x:i64)->i64{return x+2}\nexport fn run()->i64{return plus(40)}\n";
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"source-receiving",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,text,sizeof(text)-1};XrXirSourceResult source={0};XrXirArtifact *closed=NULL;

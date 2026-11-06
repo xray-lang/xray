@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Reusing a compiler session must not retain declarations from rejected input.
  */
+#include "xir/xxir_compile_memory.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_types.h"
@@ -43,7 +44,7 @@ static void admission_case_begin(const XrXirSourceRequest *request,AdmissionCase
     admission_case_end(scope);
     CHECK(library_compile_owner_new(&scope->owner,&library_compile_limits)==XR_XIR_OK);
     if(next.context)scope->owner.context.limits=next.context->limits;
-    CHECK(xr_compile_session_new(scope->owner.context.resources,&scope->session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(scope->owner.context.resources,&scope->session)==XR_COMPILE_RESOURCE_OK);
     scope->request=next;scope->request.context=&scope->owner.context;scope->request.session=scope->session;
 }
 static void admission_case_continue(const XrXirSourceRequest *request,AdmissionCase *scope) {
@@ -692,8 +693,8 @@ typedef struct AdmissionFixture { const char *path; const XrModuleIdentityAuthor
 static XrXirStatus admission_operation(const XrXirCompileContext *context,void *opaque) {
     AdmissionFixture *fixture=(AdmissionFixture *)opaque;
     XrCompilerSession *session=NULL;
-    XrCompilerSessionStatus creation=xr_compile_session_new(context->resources,&session);
-    if(creation!=XR_COMPILER_SESSION_OK)return creation==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus creation=xr_compile_session_new(context->resources,&session);
+    if(creation!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(creation);
     XrXirSourceRequest request={session,fixture->path,fixture->authority,context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult result={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,NULL,NULL);
@@ -891,7 +892,7 @@ int main(void) {
     CHECK(snprintf(root, sizeof(root), "%s/root.xr", absolute) > 0);
     CHECK(snprintf(library, sizeof(library), "%s/lib.xr", absolute) > 0);
     write_source(library, "fn hidden() -> i64 { return 1 }\nexport fn visible() -> i64 { return 2 }\n");
-    XrCompilerSession *session = NULL; CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK && session);
+    XrCompilerSession *session = NULL; CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILE_RESOURCE_OK && session);
     primitive_authority(session,&owner.context,absolute);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
     XrXirSourceRequest request = {session, root, &authority, &owner.context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};

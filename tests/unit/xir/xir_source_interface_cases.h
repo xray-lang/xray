@@ -15,7 +15,7 @@ static void source_closure_initializer_scopes(XrXirSourceRequest *request) {
         "struct Holder{const callback:fn()->i64=fn()->i64{return 41;}}\n"
         "const top=fn()->i64{return 7;}\n");
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(request->context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(request->context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest local = *request; local.session = session;
     XrXirSourceResult result = {0};
     CHECK(xr_xir_compile_source_check(&local, &result, NULL, NULL) == XR_XIR_OK);
@@ -45,7 +45,7 @@ static void source_interface_name_spans(XrXirSourceRequest *request) {
     write_source(request->entry_path,
         "interface Reader {\n  measure()->i64\n  operator len()->i64\n}\n");
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(request->context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(request->context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest local = *request; local.session = session;
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     CHECK(xr_xir_compile_source_check(&local, &result, &diagnostic, NULL) == XR_XIR_OK);
@@ -131,7 +131,7 @@ static void source_interface_facts(XrXirSourceRequest *request) {
         "const answer=41\n";
     write_source(request->entry_path,source);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(request->context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(request->context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest local = *request; local.session = session;
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_compile_source_check(&local, &result, &diagnostic, NULL);

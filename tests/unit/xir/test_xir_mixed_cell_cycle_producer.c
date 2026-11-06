@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     CHECK(argc == 2);
     const XrXirCompileContext context = *effects_source_owner(67108864, 128000000);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_CELL_CYCLE_FIXTURES};
     XrXirSourceRequest request = {session, XR_CELL_CYCLE_FIXTURES "/root.xr", &authority,
         &context, NULL, NULL, XR_XIR_PROGRAM, NULL};

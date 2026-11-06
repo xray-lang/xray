@@ -124,7 +124,7 @@ static int write_source_packet(char **argv) {
     strcpy(root, root_input); strcpy(file, file_input);
     const XrXirCompileContext *context = source_program_owner(67108864, 128000000);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, root};
     XrXirSourceProductRequest request = {{session, file, &authority, context, stdlib_input, NULL, XR_XIR_PROGRAM, NULL},
         {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION}};

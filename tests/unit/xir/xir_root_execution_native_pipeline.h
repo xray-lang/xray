@@ -113,7 +113,7 @@ static XrXirArtifact *rn_lower_source(const XrXirCompileContext *context, unsign
     char path[4096];
     CHECK(snprintf(path, sizeof(path), "%s/%s/root.xr", XR_ROOT_NATIVE_FIXTURES, rn_fixture_names[fixture]) > 0);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_ROOT_NATIVE_FIXTURES};
     XrXirSourceRequest request = {session, path, &authority, context, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceResult source = {0};

@@ -19,7 +19,7 @@ static XrXirProgram *integer_program(const XrXirCompileContext *context,
     XrXirLibraryCatalog *catalog = NULL;
     CHECK(xir_stdlib_library_catalog_new(context,root,&catalog) == XR_XIR_OK);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context->resources,&session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources,&session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,root};
     XrXirSourceRequest request = {session,entry,&authority,context,root,NULL,XR_XIR_PROGRAM,catalog};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};

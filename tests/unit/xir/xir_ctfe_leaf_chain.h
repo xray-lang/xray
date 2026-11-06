@@ -12,6 +12,7 @@
  */
 #ifndef XIR_CTFE_LEAF_CHAIN_H
 #define XIR_CTFE_LEAF_CHAIN_H
+#include "xir/xxir_compile_memory.h"
 typedef enum CtfeChainPhase {
     CTFE_CHAIN_LEDGER, CTFE_CHAIN_SESSION, CTFE_CHAIN_SOURCE,
     CTFE_CHAIN_WRITE1, CTFE_CHAIN_READ1, CTFE_CHAIN_VERIFY1,
@@ -47,11 +48,8 @@ static void ctfe_chain_trace_end(CtfeChainTrace *trace) {
     trace->allocations[trace->phase] += source_fixture_compile_attempts - trace->start;
     trace->active = false;
 }
-static XrXirStatus ctfe_session_status(XrCompilerSessionStatus status) {
-    if (status == XR_COMPILER_SESSION_OK) return XR_XIR_OK;
-    if (status == XR_COMPILER_SESSION_BUDGET) return XR_XIR_BUDGET;
-    if (status == XR_COMPILER_SESSION_OUT_OF_MEMORY) return XR_XIR_OUT_OF_MEMORY;
-    return XR_XIR_BAD_STRUCTURE;
+static XrXirStatus ctfe_session_status(XrCompileResourceStatus status) {
+    return xir_compile_resource_status(status);
 }
 static XrXirStatus ctfe_fixture_build(const XrXirCompileContext *context,
     CtfeFixture *output, CtfeChainTrace *trace) {

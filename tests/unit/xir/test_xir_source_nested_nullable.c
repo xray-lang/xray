@@ -21,7 +21,7 @@ static void sn_source_rejections(void) {
     static const char *const names[]={"default_type","default_generic","default_permission","cross_two_layers","unknown_null","default_permission_exact"};
     for (size_t n=0;n<sizeof(names)/sizeof(names[0]);++n) {
         SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);XrCompilerSession *session=NULL;
-        CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
+        CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
         char directory[4096],path[4096];
         int length=snprintf(directory,sizeof(directory),"%s/%s",XR_SOURCE_NESTED_FIXTURES,names[n]);
         CHECK(length>0 && (size_t)length<sizeof(directory));
@@ -46,7 +46,7 @@ static void sn_source_rejections(void) {
 }
 static void sn_permission_control(void) {
     SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     const char *directory=XR_SOURCE_NESTED_FIXTURES "/default_permission_control";
     const XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory};
     const XrXirSourceProductRequest request={{session,XR_SOURCE_NESTED_FIXTURES "/default_permission_control/root.xr",

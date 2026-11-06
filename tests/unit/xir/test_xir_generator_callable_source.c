@@ -60,7 +60,7 @@ static void callable_source_check(SourceFixtureOwner *owner,XrXirSourceResult *s
         "[[declarations.function]]\nmodule=\"root.xr\"\nname=\"emit_wrong\"\nno_suspend=true\nno_suspend_parameters=[\"f\"]\n"
         "[[declarations.function]]\nmodule=\"root.xr\"\nname=\"takes\"\nno_suspend=true\nno_suspend_parameters=[\"f\"]\n",file)>=0);
     CHECK(!fclose(file));XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(owner->context.resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(owner->context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_PROJECT,"generator-callable-arguments",absolute};
     XrXirSourceRequest request={session,entry,&authority,&owner->context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceDiagnostic diagnostic={0};

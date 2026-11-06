@@ -152,7 +152,7 @@ static void loop_rejections(SourceFixtureOwner *owner) {
         "fn count<T>(it:Iterator<T>)->i64 {var n=0\n for(value in it){n=n+1}\n return n}\nfn bad(it:Iterator<()>)->i64{return count(it)}\nfn main(){}\n"
     };
     for(unsigned i=0;i<sizeof(cases)/sizeof(*cases);++i) {
-        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner->context.resources,&session)==XR_COMPILER_SESSION_OK);
+        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner->context.resources,&session)==XR_COMPILE_RESOURCE_OK);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"iterator-loop-negative",NULL};
         XrXirSourceRequest request={session,NULL,&authority,&owner->context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
         XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
@@ -175,7 +175,7 @@ static void loop_worker_rejections(void) {
         for(unsigned go=0;go<2;++go) {
             char text[1024];int length=snprintf(text,sizeof(text),cases[i],go ? "go " : "");
             CHECK(length>0 && (size_t)length<sizeof(text));
-            XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
+            XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
             XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"iterator-worker-negative",NULL};
             XrXirSourceRequest request={session,NULL,&authority,&owner.context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
             XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
@@ -191,7 +191,7 @@ static void loop_worker_rejections(void) {
 }
 int main(int argc,char **argv) {
     CHECK(argc==1 || argc==2);SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);loop_rejections(&owner);loop_worker_rejections();
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"generator-wait",NULL};
     XrXirSourceRequest request={session,NULL,&authority,&owner.context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};

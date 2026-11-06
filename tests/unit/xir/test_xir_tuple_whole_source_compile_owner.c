@@ -6,6 +6,7 @@
  *
  * test_xir_tuple_whole_source_compile_owner.c - Complete source compiler fault ownership
  */
+#include "xir/xxir_compile_memory.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,10 +25,9 @@ static XrXirStatus whole_source(const XrXirCompileContext *context,void *opaque)
     XrCompilerSession *session=NULL;XrXirSourceProduct *product=NULL;
     XrXirSourceProductDiagnostic diagnostic={0};XrXirArtifact *checked=NULL;
     XrXirCSource source={0};XrXirProgram *program=NULL;
-    XrCompilerSessionStatus created=xr_compile_session_new(context->resources,&session);
-    XrXirStatus status=created==XR_COMPILER_SESSION_OK?XR_XIR_OK:
-        created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
-    CHECK(created==XR_COMPILER_SESSION_OK || created==XR_COMPILER_SESSION_BUDGET || created==XR_COMPILER_SESSION_OUT_OF_MEMORY);
+    XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
+    XrXirStatus status=xir_compile_resource_status(created);
+    CHECK(created==XR_COMPILE_RESOURCE_OK || created==XR_COMPILER_SESSION_BUDGET || created==XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
     if(status!=XR_XIR_OK){CHECK(!session && runtime_live==runtime_blocks && runtime_bytes==runtime_size);return status;}
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_TUPLE_FIXTURES};
     XrXirSourceProductRequest request={{session,XR_TUPLE_FIXTURES "/root.xr",&authority,context,

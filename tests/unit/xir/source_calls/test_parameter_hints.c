@@ -14,7 +14,7 @@ static XrLspRange parameter_range(const char *program) {
     return (XrLspRange){{0,0},{lines,0}};
 }
 static XlspSourceCallArguments *parameter_syntax(XrCompileResources *resources,const char *uri,const char *program,int64_t version) {
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(resources,&session)==XR_COMPILE_RESOURCE_OK);
     XlspSourceDocument document={uri,program,strlen(uri),strlen(program),version};XlspSyntaxSnapshot *syntax=NULL;
     CHECK(xlsp_source_syntax_build(session,&document,&syntax)==XR_PARSE_OK);
     XlspSourceCallArguments *arguments=NULL;CHECK(xlsp_source_syntax_arguments(syntax,&arguments)==XR_XIR_OK);

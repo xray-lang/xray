@@ -6,6 +6,7 @@
  *
  * test_generic.c - Closed constant thunks in real generic lexical scopes
  */
+#include "xir/xxir_compile_memory.h"
 #define XR_IMPORT_MAIN import_original_main
 #include "test_import.c"
 
@@ -38,9 +39,8 @@ static const char shadow_type[]=
 
 static XrXirStatus generic_source(const XrXirCompileContext *context,const char *text,bool library,
     XrXirSourceResult *output,XrXirSourceDiagnostic *diagnostic) {
-    XrCompilerSession *session=NULL;XrCompilerSessionStatus created=xr_compile_session_new(context->resources,&session);
-    if (created!=XR_COMPILER_SESSION_OK) return created==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
-        created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
+    XrCompilerSession *session=NULL;XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
+    if (created!=XR_COMPILE_RESOURCE_OK) return xir_compile_resource_status(created);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"generic-constant",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,library?XR_XIR_LIBRARY:XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,text,strlen(text)};

@@ -10,7 +10,7 @@ int main(int argc,char **argv) {
     size_t length=fread(text,1,sizeof(text)-1,file);CHECK(!ferror(file) && !fclose(file) && length<sizeof(text)-1);text[length]=0;
     if (plain) { char *marker=strstr(text,"comptime ");CHECK(marker && !strstr(marker+9,"comptime "));memset(marker,' ',9); }
     XrXirCompileContext context;context_new(&context);XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,DEEP_ROOT};
     XrXirSourceRequest request={session,path,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={argv[1],text,length};XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};

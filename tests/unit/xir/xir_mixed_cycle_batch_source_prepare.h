@@ -8,6 +8,7 @@
  */
 #ifndef XIR_MIXED_CYCLE_BATCH_SOURCE_PREPARE_H
 #define XIR_MIXED_CYCLE_BATCH_SOURCE_PREPARE_H
+#include "xir/xxir_compile_memory.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
@@ -43,10 +44,9 @@ static void cb_source_entries(const XrXirModule *module,uint32_t entries[3]) {
     }
 }
 static bool cb_source_prepare(CycleSourcePrepare *state) {
-    XrCompilerSessionStatus created = xr_compile_session_new(state->context->resources, &state->session);
-    CHECK(created == XR_COMPILER_SESSION_OK || created == XR_COMPILER_SESSION_BUDGET || created == XR_COMPILER_SESSION_OUT_OF_MEMORY);
-    XrXirStatus status = created == XR_COMPILER_SESSION_OK ? XR_XIR_OK :
-        created == XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus created = xr_compile_session_new(state->context->resources, &state->session);
+    CHECK(created == XR_COMPILE_RESOURCE_OK || created == XR_COMPILER_SESSION_BUDGET || created == XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+    XrXirStatus status = xir_compile_resource_status(created);
     if (!cb_source_stage(state, 2, status)) { CHECK(!state->session); return false; }
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_CYCLE_BATCH_FIXTURE_ROOT};
     XrXirSourceRequest request = {state->session, XR_CYCLE_BATCH_FIXTURE_ROOT "/xir_p20_cycle_batch/root.xr", &authority,

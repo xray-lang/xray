@@ -10,6 +10,7 @@
  *   Caller text and parser/session death precede complete query and packet
  *   receiving. Ref modes use the same Cell representation as named functions.
  */
+#include "xir/xxir_compile_memory.h"
 #include <stdio.h>
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%s:%d: %s\n",__FILE__,__LINE__,#c);exit(1); } } while (0)
@@ -29,8 +30,8 @@ static XrCompileResourceStats stats(const XrXirCompileContext *context) {
 static XrXirStatus source(const XrXirCompileContext *context,const char *text,
     XrXirSourceResult *output,XrXirSourceDiagnostic *diagnostic) {
     char bytes[4096],name[]="ref-closure-source";size_t length=strlen(text);CHECK(length<sizeof(bytes));memcpy(bytes,text,length+1);
-    XrCompilerSession *session=NULL;XrCompilerSessionStatus opened=xr_compile_session_new(context->resources,&session);
-    if (opened!=XR_COMPILER_SESSION_OK) return opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompilerSession *session=NULL;XrCompileResourceStatus opened=xr_compile_session_new(context->resources,&session);
+    if (opened!=XR_COMPILE_RESOURCE_OK) return xir_compile_resource_status(opened);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,name,NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,bytes,length};

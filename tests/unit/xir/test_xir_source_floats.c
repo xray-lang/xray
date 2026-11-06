@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
     CHECK(argc == 1 || argc == 2);
     SourceFixtureOwner compiler = {0}; source_fixture_owner_new(&compiler);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(compiler.context.resources, &session) == XR_COMPILER_SESSION_OK && session);
+    CHECK(xr_compile_session_new(compiler.context.resources, &session) == XR_COMPILE_RESOURCE_OK && session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_FLOAT_SOURCE_FIXTURES};
     XrXirSourceRequest request = {session, XR_FLOAT_SOURCE_FIXTURES "/root.xr", &authority, &compiler.context, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};

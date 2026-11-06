@@ -713,9 +713,9 @@ static XrXirStatus pipeline(const InitializerCase *fixture,
         return opened == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
     }
     XrXirStatus status = XR_XIR_OK;
-    XrCompilerSessionStatus session_status = xr_compile_session_new(resources, &session);
-    if (session_status != XR_COMPILER_SESSION_OK) {
-        status = session_status == XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+    XrCompileResourceStatus session_status = xr_compile_session_new(resources, &session);
+    if (session_status != XR_COMPILE_RESOURCE_OK) {
+        status = session_status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
         goto done;
     }
     XrXirCompileContext context = {resources, xr_xir_compile_default_limits()};

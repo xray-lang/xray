@@ -28,7 +28,7 @@ static const XrXirCompileContext *library_context;
 #include "xir/xxir_type_inference.c"
 #include "xir/xxir_source.c"
 static XrCompilerSession *library_session_new(const XrXirCompileContext *context) {
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);return session;
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);return session;
 }
 static XrModuleResolver *library_resolver_new(const XrXirCompileContext *context,const XrModuleResolverConfig *config) {
     XrModuleResolver *resolver=NULL;CHECK(xr_compile_module_resolver_new(context->resources,config,&resolver)==XR_MODULE_OK);return resolver;

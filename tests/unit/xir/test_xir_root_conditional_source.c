@@ -10,6 +10,7 @@
  *   Definition facts remain open. A concrete ordinary witness closes a real
  *   effect environment before a reader or execution consumer may use it.
  */
+#include "xir/xxir_compile_memory.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
@@ -156,8 +157,8 @@ static XrXirStatus conditional_operation(const XrXirCompileContext *context, voi
     const RootConditionalOperation *operation=opaque;const RootConditionalOracle *oracle=operation->oracle;
     RootConditionalStageObservation observation={0};
     if (operation->observe) { observation.stats=library_compile_stats(context);observation.attempts=source_program_compile_attempts; }
-    XrCompilerSession *session=NULL;XrCompilerSessionStatus created=xr_compile_session_new(context->resources,&session);
-    if (created!=XR_COMPILER_SESSION_OK) return created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompilerSession *session=NULL;XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
+    if (created!=XR_COMPILE_RESOURCE_OK) return xir_compile_resource_status(created);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"root-conditional",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};

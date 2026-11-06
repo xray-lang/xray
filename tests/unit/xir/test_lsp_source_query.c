@@ -1,4 +1,5 @@
 /* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
+#include "xir/xxir_compile_memory.h"
 #include "base/xmalloc.h"
 #include "app/lsp/xlsp_source_query.h"
 #include "../test_win_compat.h"
@@ -72,7 +73,7 @@ static void lsp_comptime_cases(const char *root) {
     context.limits=xr_xir_compile_default_limits();
     XrCompileResourceStats baseline={0};
     CHECK(xr_compile_resources_stats(context.resources,&baseline)==XR_COMPILE_RESOURCE_OK);
-    CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     char root_uri[XR_TEST_PATH_MAX],library_uri[XR_TEST_PATH_MAX];
     char input_root_uri[XR_TEST_PATH_MAX],input_library_uri[XR_TEST_PATH_MAX];
     lsp_uri(root_uri,sizeof(root_uri),root,"root.xr");lsp_uri(library_uri,sizeof(library_uri),root,"lib.xr");
@@ -122,9 +123,8 @@ static XrXirStatus lsp_once(const char *root, XrCompileResourceLimits limits, Xr
     XrCompileResourceStatus resource = xr_compile_resources_new(&limits, &context.resources);
     if (resource != XR_COMPILE_RESOURCE_OK) return resource == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
     context.limits = xr_xir_compile_default_limits();
-    XrCompilerSessionStatus created = xr_compile_session_new(context.resources, &session);
-    XrXirStatus status = created == XR_COMPILER_SESSION_OK ? XR_XIR_OK :
-        created == XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus created = xr_compile_session_new(context.resources, &session);
+    XrXirStatus status = xir_compile_resource_status(created);
     char root_uri[XR_TEST_PATH_MAX], library_uri[XR_TEST_PATH_MAX];
     char root_text[sizeof(source_root_text)], library_text[sizeof(source_library_text)];
     memcpy(root_text, source_root_text, sizeof(root_text)); memcpy(library_text, source_library_text, sizeof(library_text));
@@ -169,7 +169,7 @@ static void lsp_failure_matrix(const char *root) {
 static void lsp_versions(const char *root) {
     XrCompileResourceLimits limits = lsp_limits(); XrXirCompileContext context = {0}; XrCompilerSession *session = NULL;
     CHECK(xr_compile_resources_new(&limits,&context.resources) == XR_COMPILE_RESOURCE_OK);
-    context.limits = xr_xir_compile_default_limits(); CHECK(xr_compile_session_new(context.resources,&session) == XR_COMPILER_SESSION_OK);
+    context.limits = xr_xir_compile_default_limits(); CHECK(xr_compile_session_new(context.resources,&session) == XR_COMPILE_RESOURCE_OK);
     char root_uri[XR_TEST_PATH_MAX], library_uri[XR_TEST_PATH_MAX], next[sizeof(source_library_text)+1];
     lsp_uri(root_uri,sizeof(root_uri),root,"root.xr"); lsp_uri(library_uri,sizeof(library_uri),root,"lib.xr");
     next[0]='\n'; memcpy(next+1,source_library_text,sizeof(source_library_text));
@@ -204,7 +204,7 @@ static void lsp_rejections(const char *root) {
     for (size_t mode = 0; mode < sizeof(tails)/sizeof(tails[0]); ++mode) {
         XrCompileResourceLimits limits = lsp_limits(); XrXirCompileContext context = {0}; XrCompilerSession *session = NULL;
         CHECK(xr_compile_resources_new(&limits,&context.resources) == XR_COMPILE_RESOURCE_OK);
-        context.limits=xr_xir_compile_default_limits(); CHECK(xr_compile_session_new(context.resources,&session) == XR_COMPILER_SESSION_OK);
+        context.limits=xr_xir_compile_default_limits(); CHECK(xr_compile_session_new(context.resources,&session) == XR_COMPILE_RESOURCE_OK);
         char uri[XR_TEST_PATH_MAX]; lsp_uri(uri,sizeof(uri),root,tails[mode]);
         XlspSourceDocument document={uri,"",strlen(uri),0,1};
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};

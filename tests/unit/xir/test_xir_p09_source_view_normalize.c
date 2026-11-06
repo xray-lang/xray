@@ -6,6 +6,7 @@
  *
  * test_xir_p09_source_view_normalize.c - Actual Source lifetime relocation failures
  */
+#include "xir/xxir_compile_memory.h"
 #include "xir/xxir_source.h"
 #include "toolchain/xcompiler_session.h"
 #include "tuple_owner_observer.h"
@@ -50,9 +51,8 @@ static XrXirStatus source_normalize_expected(uint32_t kind) {
 }
 static XrXirStatus source_normalize_run(const XrXirCompileContext *context,uint32_t kind) {
     XrCompilerSession *session=NULL;XrXirSourceResult result={0};
-    XrCompilerSessionStatus made=xr_compile_session_new(context->resources,&session);
-    XrXirStatus status=made==XR_COMPILER_SESSION_OK?XR_XIR_OK:
-        made==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus made=xr_compile_session_new(context->resources,&session);
+    XrXirStatus status=xir_compile_resource_status(made);
     if (status==XR_XIR_OK) {
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"source-view-lifetime",NULL};
         XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};

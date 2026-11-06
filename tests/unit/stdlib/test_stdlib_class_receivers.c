@@ -50,7 +50,7 @@ static int receiver_self_test(void) {
         XrCompileResources *resources=NULL;XrCompilerSession *session=NULL;AstNode *program=NULL;
         CHECK(xr_compile_resources_new(&caps,&resources)==XR_COMPILE_RESOURCE_OK);
         XrCompileResourceStats initial={0},final={0};CHECK(xr_compile_resources_stats(resources,&initial)==XR_COMPILE_RESOURCE_OK);
-        CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK);
+        CHECK(xr_compile_session_new(resources,&session)==XR_COMPILE_RESOURCE_OK);
         CHECK(xr_compile_parse(session,cases[i],&program)==XR_PARSE_OK && program);
         ReceiverScan scan={"receiver contract self-test",0,0,0,true,false,NULL};
         CHECK(receiver_visit(program,&scan) && scan.invalid==expected[i]);
@@ -70,7 +70,7 @@ int main(int argc,char **argv) {
         XrCompileResources *resources=NULL;XrCompilerSession *session=NULL;AstNode *program=NULL;
         CHECK(xr_compile_resources_new(&caps,&resources)==XR_COMPILE_RESOURCE_OK);
         XrCompileResourceStats initial={0};CHECK(xr_compile_resources_stats(resources,&initial)==XR_COMPILE_RESOURCE_OK);
-        CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK);
+        CHECK(xr_compile_session_new(resources,&session)==XR_COMPILE_RESOURCE_OK);
         CHECK(xr_compile_parse_with_source(session,source,argv[i],&program)==XR_PARSE_OK && program);
         char signature[16384];ReceiverScan scan={argv[i],0,0,0,inventory,normalize,signature};CHECK(receiver_visit(program,&scan));total+=scan.invalid;
         if(!normalize)printf("MODULE\t%s\t%u\t%u\t%u\n",argv[i],scan.classes,scan.methods,scan.invalid);

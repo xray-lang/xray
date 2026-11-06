@@ -19,7 +19,7 @@ static void source_core_syntax_facts(XrXirSourceRequest *request) {
         "const counter=Atomic(1)\n"
         "equal(1,1)\nassert(true)\nassertPanics(fn()->i64{return 1/0;})\n");
     XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(request->context->resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(request->context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest local=*request;local.session=session;
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check(&local,&result,&diagnostic,NULL);

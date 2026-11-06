@@ -8,6 +8,7 @@
  */
 #ifndef XIR_MIXED_DEEP_COMPILE_H
 #define XIR_MIXED_DEEP_COMPILE_H
+#include "xir/xxir_compile_memory.h"
 typedef struct DeepCompileResult {
     XrXirStatus status;
     XrCompileResourceStats stats;
@@ -38,10 +39,9 @@ static bool deep_compile_stage(DeepCompileState *state, unsigned stage, XrXirSta
     state->result.stage = stage; state->result.status = status; return status == XR_XIR_OK;
 }
 static bool deep_compile_source(DeepCompileState *state) {
-    XrCompilerSessionStatus created = xr_compile_session_new(state->context.resources, &state->session);
-    CHECK(created == XR_COMPILER_SESSION_OK || created == XR_COMPILER_SESSION_BUDGET || created == XR_COMPILER_SESSION_OUT_OF_MEMORY);
-    XrXirStatus status = created == XR_COMPILER_SESSION_OK ? XR_XIR_OK :
-        created == XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus created = xr_compile_session_new(state->context.resources, &state->session);
+    CHECK(created == XR_COMPILE_RESOURCE_OK || created == XR_COMPILER_SESSION_BUDGET || created == XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+    XrXirStatus status = xir_compile_resource_status(created);
     if (!deep_compile_stage(state, 2, status)) { CHECK(!state->session); return false; }
     char path[1024]; int length = snprintf(path, sizeof(path), "%s/root.xr", XR_DEEP_FIXTURES);
     CHECK(length > 0 && (size_t)length < sizeof(path));

@@ -29,7 +29,7 @@ static void text(const char *name,const char *data) {
 static XrXirStatus source(const XrXirCompileContext *context,const XrXirLibraryCatalog *catalog,
     const char *name,XrXirSourceResult *result) {
     char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%s",XR_GENERIC_LIBRARY_WORK,name)>0);
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_GENERIC_LIBRARY_WORK};
     XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,XR_XIR_PROGRAM,catalog};
     XrXirSourceDiagnostic diagnostic={0};XrXirStatus status=xr_xir_compile_source_check(&request,result,&diagnostic,NULL);

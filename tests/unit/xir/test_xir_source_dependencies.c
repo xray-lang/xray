@@ -39,9 +39,18 @@ static XrSourceCompileStatus build(const XrXirCompileContext *context, char **ar
         return status;
     }
     XrCompilerSession *session=NULL; XrLockfile *lock=NULL;
-    XrCompilerSessionStatus ss=xr_compile_session_new(context->resources,&session);
-    XrSourceCompileStatus status=ss==XR_COMPILER_SESSION_OK ? XR_SOURCE_COMPILE_OK :
-        ss==XR_COMPILER_SESSION_BUDGET ? XR_SOURCE_COMPILE_BUDGET : XR_SOURCE_COMPILE_OUT_OF_MEMORY;
+    XrCompileResourceStatus ss=xr_compile_session_new(context->resources,&session);
+    XrSourceCompileStatus status;
+    switch (ss) {
+    case XR_COMPILE_RESOURCE_OK: status = XR_SOURCE_COMPILE_OK; break;
+    case XR_COMPILE_RESOURCE_MEMORY_LIMIT: status = XR_SOURCE_COMPILE_MEMORY_LIMIT; break;
+    case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: status = XR_SOURCE_COMPILE_OUT_OF_MEMORY; break;
+    case XR_COMPILE_RESOURCE_OVERFLOW: status = XR_SOURCE_COMPILE_OVERFLOW; break;
+    case XR_COMPILE_RESOURCE_CANCELLED: status = XR_SOURCE_COMPILE_CANCELLED; break;
+    case XR_COMPILE_RESOURCE_DEADLINE: status = XR_SOURCE_COMPILE_DEADLINE; break;
+    case XR_COMPILE_RESOURCE_CLOCK_FAILURE: status = XR_SOURCE_COMPILE_CLOCK_FAILURE; break;
+    default: status = XR_SOURCE_COMPILE_BAD_ARGUMENT; break;
+    }
     XrOsIoPolicy policy=xr_compile_io_policy(context->resources);
     if (status==XR_SOURCE_COMPILE_OK && strcmp(argv[4],"-")) {
         status=io_status(xr_lockfile_new_owned(&policy,&lock));

@@ -25,7 +25,7 @@ static const char *const texts[]={
 static XrXirStatus once(unsigned mode,uint32_t limit,uint32_t *count) {
     const XrCompileResourceLimits caps={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
     XrCompileResources *resources=sdk_ledger(&caps);XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
-    context.limits.functions=limit;XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK);
+    context.limits.functions=limit;XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"function-boundary",NULL};
     XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText text={NULL,texts[mode],strlen(texts[mode])};XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};

@@ -1,4 +1,5 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
+#include "xir/xxir_compile_memory.h"
 #include "app/lsp/xlsp_source_syntax.h"
 /* Literal-only oracle, fixed before execution: functions [0,2]/[3,8],
  * nested if [4,6]. In recovery mode the one extra invalid line shifts the
@@ -20,8 +21,8 @@ static XrXirStatus syntax_once(const char *root,bool recovered,XrCompileResource
     XrJsonValue *json=NULL;XrXirStatus status=XR_XIR_OK;
     XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);
     if(created!=XR_COMPILE_RESOURCE_OK)return created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
-    XrCompilerSessionStatus opened=xr_compile_session_new(resources,&session);
-    if(opened!=XR_COMPILER_SESSION_OK){status=opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;goto done;}
+    XrCompileResourceStatus opened=xr_compile_session_new(resources,&session);
+    if(opened!=XR_COMPILE_RESOURCE_OK){status=xir_compile_resource_status(opened);goto done;}
     char uri[XR_TEST_PATH_MAX],text[512];lsp_uri(uri,sizeof(uri),root,"unsaved.xr");
     int n=snprintf(text,sizeof(text),"%s%s%s",syntax_head,recovered?"var *** = ;\n":"",syntax_tail);
     CHECK(n>0&&(size_t)n<sizeof(text));
@@ -48,7 +49,7 @@ done:
 static void syntax_json_cases(const char *root) {
     XrCompileResourceLimits limits=lsp_limits();XrCompileResources *resources=NULL;XrCompilerSession *session=NULL;
     CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
-    CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(resources,&session)==XR_COMPILE_RESOURCE_OK);
     char uri[XR_TEST_PATH_MAX],text[512];lsp_uri(uri,sizeof(uri),root,"unsaved.xr");
     int n=snprintf(text,sizeof(text),"%s%s",syntax_head,syntax_tail);CHECK(n>0&&(size_t)n<sizeof(text));
     XlspSourceDocument input={uri,text,strlen(uri),(size_t)n,9};XlspSyntaxSnapshot *syntax=NULL;

@@ -9,6 +9,7 @@
  */
 #ifndef XIR_GENERATOR_COMPILER_FAULT_CASES_H
 #define XIR_GENERATOR_COMPILER_FAULT_CASES_H
+#include "xir/xxir_compile_memory.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,10 +56,9 @@ static XrXirStatus receiver_compile_operation(const XrXirCompileContext *context
     XrCompilerSession *session=NULL;XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirCheckedPacket first={0},second={0};XrXirArtifact *read=NULL,*closed=NULL,*reloaded=NULL,*lowered=NULL;
     XrXirCSource emitted={0};XrXirProgram *program=NULL;char *failure=NULL;
-    XrCompilerSessionStatus opened=xr_compile_session_new(context->resources,&session);
-    CHECK(opened==XR_COMPILER_SESSION_OK || opened==XR_COMPILER_SESSION_BUDGET || opened==XR_COMPILER_SESSION_OUT_OF_MEMORY);
-    XrXirStatus status=opened==XR_COMPILER_SESSION_OK?XR_XIR_OK:
-        opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus opened=xr_compile_session_new(context->resources,&session);
+    CHECK(opened==XR_COMPILE_RESOURCE_OK || opened==XR_COMPILER_SESSION_BUDGET || opened==XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+    XrXirStatus status=xir_compile_resource_status(opened);
     if(status!=XR_XIR_OK) {CHECK(!session);return status;}
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"receiver-compiler",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,receiver_compile_stdlib,NULL,XR_XIR_PROGRAM,NULL};

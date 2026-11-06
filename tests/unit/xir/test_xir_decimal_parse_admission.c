@@ -15,7 +15,7 @@
 static void decimal_admission_case(const char *text,XrXirStatus expected) {
     XrXirCompileContext context={0};const XrCompileResourceLimits caps={67108864,8388608,128000000};
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);context.limits=xr_xir_compile_default_limits();
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_DECIMAL_PARSE_WORK};
     XrXirSourceRequest request={.session=session,.entry_path=XR_DECIMAL_PARSE_WORK "/decimal-admission.xr",
         .authority=&authority,.context=&context,.linkage_kind=XR_XIR_PROGRAM};

@@ -29,8 +29,8 @@ static const char *class_packet_path;
 static XrXirStatus class_source_build(const XrXirCompileContext *context,unsigned variant,XrXirProgram **output) {
     (void)variant;XrCompilerSession *session=NULL;XrXirSourceResult result={0};
     XrXirArtifact *checked=NULL,*special=NULL,*lowered=NULL;XrXirCheckedPacket packet={0};
-    XrCompilerSessionStatus made=xr_compile_session_new(context->resources,&session);
-    XrXirStatus status=made==XR_COMPILER_SESSION_OK?XR_XIR_OK:made==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
+    XrCompileResourceStatus made=xr_compile_session_new(context->resources,&session);
+    XrXirStatus status=made==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:made==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
     XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceDiagnostic diagnostic={0};

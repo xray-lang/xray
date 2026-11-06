@@ -27,8 +27,8 @@
 
 static XrXirStatus class_source_owned(const XrXirCompileContext *context,XrXirArtifact **output) {
     XrCompilerSession *session=NULL;XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
-    XrCompilerSessionStatus made=xr_compile_session_new(context->resources,&session);
-    XrXirStatus status=made==XR_COMPILER_SESSION_OK?XR_XIR_OK:made==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
+    XrCompileResourceStatus made=xr_compile_session_new(context->resources,&session);
+    XrXirStatus status=made==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:made==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
     XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     if(status==XR_XIR_OK){

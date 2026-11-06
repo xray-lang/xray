@@ -6,6 +6,7 @@
  *
  * test_xir_root_parameter_source.c - Source actual bindings through Checked
  */
+#include "xir/xxir_compile_memory.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_effects.h"
 #include "xir/xxir_types.h"
@@ -104,9 +105,9 @@ static XrXirStatus rps_operation(const XrXirCompileContext *context, void *opaqu
     const RootParameterSourceOracle *oracle=operation->oracle;
     char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%s",XR_ROOT_PARAMETER_SOURCE_FIXTURES,oracle->file)>0);
     XrCompilerSession *session=NULL;
-    XrCompilerSessionStatus created=xr_compile_session_new(context->resources,&session);
-    if (created!=XR_COMPILER_SESSION_OK)
-        return created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
+    if (created!=XR_COMPILE_RESOURCE_OK)
+        return xir_compile_resource_status(created);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_ROOT_PARAMETER_SOURCE_FIXTURES};
     XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};

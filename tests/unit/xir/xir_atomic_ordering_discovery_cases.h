@@ -14,7 +14,7 @@ static void atomic_ordering_dependencies(void) {
     FILE *f=fopen(foreign,"wb");CHECK(f);CHECK(fputs("export fn normal()->i64{return 1}\n",f)>=0 && fclose(f)==0);
     write_source("import \"./foreign\" as lib\nconst order=Ordering.SeqCst\nconst n=lib.normal()\n");
     LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory_path};
     XrXirSourceRequest request={session,root_path,&authority,&owner.context,XR_ATOMIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult source={0};CHECK(xr_xir_compile_source_check(&request,&source,NULL,NULL)==XR_XIR_OK);

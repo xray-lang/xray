@@ -28,7 +28,7 @@ static void source_file(const char *name,const char *text) {
 static XrXirSourceResult compile_source(SourceFixtureOwner *owner,const XrXirLibraryCatalog *catalog,
     const char *name,XrXirLinkageKind kind,const char *text) {
     XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(owner->context.resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(owner->context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%s",XR_LIBRARY_INVENTORY_WORK,name)>0);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_LIBRARY_INVENTORY_WORK};
     XrXirSourceRequest request={session,path,&authority,&owner->context,NULL,NULL,kind,catalog};

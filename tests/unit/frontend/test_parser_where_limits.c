@@ -60,7 +60,7 @@ int main(void) {
     XrCompileResourceStats baseline = {0}, observed = {0};
     CHECK(xr_compile_resources_stats(resources,&baseline) == XR_COMPILE_RESOURCE_OK);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(resources,&session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(resources,&session) == XR_COMPILE_RESOURCE_OK);
     where_same_constraints(session);
     XrCompileState *state = xr_compile_session_compile_state(session);
     CHECK(xr_compile_state_resources(state) == resources);

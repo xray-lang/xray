@@ -75,7 +75,7 @@ static void source_inference_equivalence_cases(XrXirSourceRequest *request) {
         "export fn second()->i64{return inferredRead<i64,Box<i64,string>>(Box<i64,string>{value:41})}\n"
         "export fn third()->i64{return differentRead<i64,Box<i64,string>>(Box<i64,string>{value:41})}\n");
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(request->context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(request->context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest local=*request; local.session=session;
     XrXirSourceResult result={0}; XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check(&local, &result, &diagnostic, NULL);
@@ -111,7 +111,7 @@ static void source_inference_phantom_cases(XrXirSourceRequest *request) {
     for (unsigned mode=0;mode<2;++mode) {
         write_source(request->entry_path,sources[mode]);
         XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(request->context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(request->context->resources, &session) == XR_COMPILE_RESOURCE_OK);
         XrXirSourceRequest local=*request; local.session=session;
         XrXirSourceResult result={0}; XrXirSourceDiagnostic diagnostic={0};
         XrXirStatus status=xr_xir_compile_source_check(&local, &result, &diagnostic, NULL);

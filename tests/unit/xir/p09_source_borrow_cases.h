@@ -16,7 +16,7 @@ static XrXirStatus borrow_source_check(const XrXirCompileContext *context,const 
     FILE *file=fopen(path,"wb");CHECK(file);
     size_t length=strlen(text);CHECK(fwrite(text,1,length,file)==length && !fclose(file));
     XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,absolute};
     XrXirSourceRequest request={session,path,&authority,context,XR_P09_HASH_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
     XrXirStatus status=xr_xir_compile_source_check(&request,result,diagnostic,NULL);

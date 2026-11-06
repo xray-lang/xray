@@ -7,7 +7,7 @@
  * xir_assert_condition_authority_gates.inc.c - Source facts never confer recipes
  */
 static void assert_ordinary_memory_origin(void) {
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(assert_compile_context->resources,&session)==XR_COMPILER_SESSION_OK);CHECK(session);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(assert_compile_context->resources,&session)==XR_COMPILE_RESOURCE_OK);CHECK(session);
     XrModuleResolverConfig config={0};XrModuleResolver *resolver=NULL;CHECK(xr_compile_module_resolver_new(assert_compile_context->resources,&config,&resolver)==XR_MODULE_OK);CHECK(resolver);
     SourceContext context={0};context.compile=*assert_compile_context;context.remaining_blocks=context.compile.limits.blocks;context.remaining_instructions=context.compile.limits.instructions;context.linkage_kind=XR_XIR_LIBRARY;
     CHECK(xr_compile_module_graph_new(assert_compile_context->resources,session,resolver,&context.graph)==XR_MODULE_OK);CHECK(context.graph);

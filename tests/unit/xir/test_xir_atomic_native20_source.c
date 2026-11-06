@@ -17,8 +17,8 @@
 #include "xir_atomic_native20_cases.h"
 static XrXirStatus atomic_build(AtomicCompileOwner *owner,XrXirSourceProduct **product) {
     XrCompilerSession *session=NULL;
-    XrCompilerSessionStatus ss=xr_compile_session_new(owner->context.resources,&session);
-    if(ss!=XR_COMPILER_SESSION_OK)return ss==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
+    XrCompileResourceStatus ss=xr_compile_session_new(owner->context.resources,&session);
+    if(ss!=XR_COMPILE_RESOURCE_OK)return ss==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_ATOMIC_FIXTURES};
     XrXirSourceProductRequest request={{session,XR_ATOMIC_FIXTURES "/root.xr",&authority,&owner->context,
         XR_ATOMIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};

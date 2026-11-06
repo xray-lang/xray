@@ -6,6 +6,7 @@
  *
  * test_source_product.c - Opaque source ownership and ordinary packet re-admission
  */
+#include "xir/xxir_compile_memory.h"
 #include "program/xr_xir_source_product.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_output.h"
@@ -65,8 +66,8 @@ static void product_build_oom(const XrXirSourceProductRequest *request) {
         XrXirStatus status=xir_compile_resource_status(allocation);
         XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
         if (status==XR_XIR_OK) {
-            XrCompilerSessionStatus created=xr_compile_session_new(resources,&session);
-            status=created==XR_COMPILER_SESSION_OK ? XR_XIR_OK : XR_XIR_OUT_OF_MEMORY;
+            XrCompileResourceStatus created=xr_compile_session_new(resources,&session);
+            status=created==XR_COMPILE_RESOURCE_OK ? XR_XIR_OK : XR_XIR_OUT_OF_MEMORY;
         }
         if (status==XR_XIR_OK) {
             XrXirSourceProductRequest owned=*request;
@@ -102,9 +103,8 @@ static XrXirStatus product_limited_pipeline(const XrXirSourceProductRequest *req
     XrXirStatus status=xir_compile_resource_status(xr_compile_resources_new(limits,&resources));
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     if (status==XR_XIR_OK) {
-        XrCompilerSessionStatus created=xr_compile_session_new(resources,&session);
-        status=created==XR_COMPILER_SESSION_OK ? XR_XIR_OK :
-            created==XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+        XrCompileResourceStatus created=xr_compile_session_new(resources,&session);
+        status=xir_compile_resource_status(created);
     }
     if (status==XR_XIR_OK) {
         XrXirSourceProductRequest owned=*request;owned.source.context=&context;owned.source.session=session;
@@ -211,7 +211,7 @@ int main(int argc,char **argv) {
     CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,argv[1]};
     XrXirSourceProductRequest request={{session,argv[2],&authority,&context,argv[3],NULL,XR_XIR_PROGRAM,NULL},
                                      {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};

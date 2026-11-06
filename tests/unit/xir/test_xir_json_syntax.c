@@ -35,7 +35,7 @@ static const char syntax_runtime_consumer[]=
     "}\n";
 static void syntax_source(const XrXirCompileContext *context,const char *text,XrXirLinkageKind kind,
     const XrXirLibraryCatalog *catalog,XrXirSourceResult *output) {
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     const char *logical=kind==XR_XIR_LIBRARY?"json_syntax.xr":"future_json_syntax.xr";char path[2048];
     int n=snprintf(path,sizeof(path),"%s/%s",XR_JSON_SYNTAX_WORK,logical);CHECK(n>0 && n<(int)sizeof(path));
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_JSON_SYNTAX_WORK};

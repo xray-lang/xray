@@ -62,7 +62,7 @@ static uint32_t named(const XrXirModule *m,const char *name,bool root) {
 static XrXirArtifact *compile_case(const char *root,unsigned index,uint8_t identity[32]) {
     char path[2048],directory[2048];case_path(path,root,index,"root.xr");case_path(directory,root,index,"");
     XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(assert_compile_context->resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(assert_compile_context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory};
     XrXirSourceRequest request={session,path,&authority,assert_compile_context,XR_ENUM_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};

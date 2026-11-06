@@ -1,13 +1,13 @@
 
+#include "xir/xxir_compile_memory.h"
 #include "module/xlockfile.h"
 static XrXirStatus overlay_package_once(const char *root,XrCompileResourceLimits limits,unsigned mode,XrCompileResourceStats *stats) {
     XrXirCompileContext context={0};XrCompilerSession *session=NULL;XrLockfile *lock=NULL;XrXirSourceResult result={0};
     XrCompileResourceStatus made=xr_compile_resources_new(&limits,&context.resources);
     if(made!=XR_COMPILE_RESOURCE_OK)return made==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
     context.limits=xr_xir_compile_default_limits();
-    XrCompilerSessionStatus opened=xr_compile_session_new(context.resources,&session);
-    XrXirStatus status=opened==XR_COMPILER_SESSION_OK?XR_XIR_OK:
-        opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus opened=xr_compile_session_new(context.resources,&session);
+    XrXirStatus status=xir_compile_resource_status(opened);
     XrOsIoPolicy policy=xr_compile_io_policy(context.resources);
     if(status==XR_XIR_OK) {
         XrOsIoStatus st=xr_lockfile_new_owned(&policy,&lock);
@@ -83,9 +83,8 @@ static XrXirStatus overlay_authority_once(const char *root,XrCompileResourceLimi
     XrCompileResourceStatus made=xr_compile_resources_new(&limits,&context.resources);
     if(made!=XR_COMPILE_RESOURCE_OK)return made==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
     context.limits=xr_xir_compile_default_limits();
-    XrCompilerSessionStatus opened=xr_compile_session_new(context.resources,&session);
-    XrXirStatus status=opened==XR_COMPILER_SESSION_OK?XR_XIR_OK:
-        opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus opened=xr_compile_session_new(context.resources,&session);
+    XrXirStatus status=xir_compile_resource_status(opened);
     char sub[XR_TEST_PATH_MAX],io[XR_TEST_PATH_MAX],paths[3][XR_TEST_PATH_MAX];
     CHECK(snprintf(sub,sizeof(sub),"%s/sub",root)>0);CHECK(snprintf(io,sizeof(io),"%s/io",root)>0);
     CHECK(snprintf(paths[0],sizeof(paths[0]),"%s/main.xr",root)>0);

@@ -102,7 +102,7 @@ int main(int argc,char **argv) {
         inferred?"generator_terminal_inferred":"generator_terminal";
     char text[sizeof(terminal_text)+64];size_t length=terminal_source_text(text,inferred,workers?2u:fn_worker?1u:0u);
     SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"generator-terminal-lifetime",NULL};
     XrXirSourceRequest request={session,NULL,&authority,&owner.context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};

@@ -1,4 +1,5 @@
 /* Fixed parser-source oracle; all columns below are literal UTF-16 units. */
+#include "xir/xxir_compile_memory.h"
 static const char outline_text[]=
     "/* \xf0\x9f\x98\x80 */ fn before()->i64 {\n return 1\n}\n"
     "struct Box {\n const value:i64\n answer()->i64 { return this.value }\n}\n"
@@ -36,8 +37,8 @@ static XrXirStatus outline_once(const char *root,XrCompileResourceLimits limits,
     XrCompileResources *resources=NULL;XrCompilerSession *session=NULL;XlspSyntaxSnapshot *syntax=NULL;XlspSourceOutline *outline=NULL;
     XrJsonValue *json=NULL;XrCompileResourceStatus made=xr_compile_resources_new(&limits,&resources);
     if(made!=XR_COMPILE_RESOURCE_OK)return made==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
-    XrCompilerSessionStatus opened=xr_compile_session_new(resources,&session);
-    XrXirStatus status=opened==XR_COMPILER_SESSION_OK?XR_XIR_OK:opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus opened=xr_compile_session_new(resources,&session);
+    XrXirStatus status=xir_compile_resource_status(opened);
     char uri[XR_TEST_PATH_MAX],text[sizeof(outline_text)];lsp_uri(uri,sizeof(uri),root,"outline.xr");memcpy(text,outline_text,sizeof(text));
     XlspSourceDocument input={uri,text,strlen(uri),sizeof(text)-1,19};
     if(status==XR_XIR_OK) {

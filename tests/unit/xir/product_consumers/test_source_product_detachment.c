@@ -84,11 +84,11 @@ static XrXirStatus emit(const XrXirSourceProduct *product, XrXirCSource *output)
 static XrXirStatus produce(const XrXirCompileContext *context, const DetachmentCase *test,
     XrXirSourceProduct **product) {
     XrCompilerSession *session = NULL;
-    XrCompilerSessionStatus opened = xr_compile_session_new(context->resources, &session);
-    if (opened != XR_COMPILER_SESSION_OK) {
+    XrCompileResourceStatus opened = xr_compile_session_new(context->resources, &session);
+    if (opened != XR_COMPILE_RESOURCE_OK) {
         CHECK(!session && !*product);
-        CHECK(opened == XR_COMPILER_SESSION_OUT_OF_MEMORY || opened == XR_COMPILER_SESSION_BUDGET);
-        return opened == XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+        CHECK(opened == XR_COMPILE_RESOURCE_OUT_OF_MEMORY || opened == XR_COMPILER_SESSION_BUDGET);
+        return opened == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
     }
     const XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, test->root};
     const XrXirSourceProductRequest request = {

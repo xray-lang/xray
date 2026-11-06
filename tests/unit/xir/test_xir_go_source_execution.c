@@ -45,7 +45,7 @@ static const SourceTaskOracle source_task_oracles[] = {
 static XrXirProgram *source_task_program(const SourceTaskOracle *oracle, uint32_t *entry) {
     const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     char path[1024]; CHECK(snprintf(path, sizeof(path), "%s/%s.xr", XR_GO_EXECUTION_FIXTURES, oracle->name) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_GO_EXECUTION_FIXTURES};
     XrXirSourceRequest request = {session, path, &authority, context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};

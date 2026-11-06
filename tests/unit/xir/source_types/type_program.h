@@ -1,4 +1,5 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
+#include "xir/xxir_compile_memory.h"
 static const XrCompileResourceLimits type_limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
 static XrXirStatus type_resource_status(XrCompileResourceStatus status) {
     return status==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:status==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:
@@ -23,9 +24,8 @@ static XrXirStatus type_program(const char *path,unsigned mode,XrCompileResource
     status=xir_stdlib_library_catalog_new(&context,stdlib.path,&catalog);if(status!=XR_XIR_OK)goto done;
     XrSourceEntryInput input={XR_SOURCE_ENTRY_TEXT,path,text,length};XrTomlParseLimits toml=xr_source_compile_default_manifest_limits();
     status=type_manifest_status(xr_source_authority_open_input(&context,&input,catalog,&toml,&authority,NULL));if(status!=XR_XIR_OK)goto done;
-    XrCompilerSessionStatus opened=xr_compile_session_new(r,&session);
-    if(opened!=XR_COMPILER_SESSION_OK){status=opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:
-        opened==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;}
+    XrCompileResourceStatus opened=xr_compile_session_new(r,&session);
+    if(opened!=XR_COMPILE_RESOURCE_OK){status=xir_compile_resource_status(opened);goto done;}
     XrXirSourceRequest request={session,xr_source_authority_source_path(authority),xr_source_authority_entry(authority),&context,
         stdlib.path,xr_source_authority_lockfile(authority),XR_XIR_PROGRAM,catalog};
     status=xr_xir_compile_source_check_overlay(&request,xr_source_authority_overlay(authority),1,&result,diagnostic,NULL);

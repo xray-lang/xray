@@ -23,7 +23,7 @@ typedef struct MissingFamilyCase {
 static bool missing_family_source(const MissingFamilyCase *test) {
     const XrXirCompileContext *context = effects_source_owner(67108864, 128000000);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     char path[1024];
     int length = snprintf(path, sizeof(path), "%s/%s.xr", XR_MIXED_MISSING_FIXTURES, test->name);
     CHECK(length > 0 && (size_t)length < sizeof(path));

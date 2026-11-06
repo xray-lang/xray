@@ -98,8 +98,8 @@ static uint32_t default_ids[DEFAULT_COUNT];
 static XrXirStatus default_input(const XrXirCompileContext *context,XrXirArtifact **output) {
 #if DEFAULT_MODE==0
     XrCompilerSession *session=NULL;XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
-    XrCompilerSessionStatus setup=xr_compile_session_new(context->resources,&session);
-    XrXirStatus status=setup==XR_COMPILER_SESSION_OK?XR_XIR_OK:setup==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
+    XrCompileResourceStatus setup=xr_compile_session_new(context->resources,&session);
+    XrXirStatus status=setup==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:setup==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
     XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     if(status==XR_XIR_OK)status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);

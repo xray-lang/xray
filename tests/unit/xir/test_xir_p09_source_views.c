@@ -21,7 +21,7 @@
 static void source_view_status(const XrXirCompileContext *context,const char *text,const char *message,XrXirStatus expected) {
     XrCompileResourceStats before={0},after={0};XrCompilerSession *session=NULL;
     CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
-    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"source-view-annotations",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,text,strlen(text)};XrXirSourceResult result={0};
