@@ -345,6 +345,7 @@ target_link_libraries(test_xir_checked PRIVATE xray_xir)
 add_executable(test_xir_checked_allocations xir/test_xir_checked_allocations.c
     ${CMAKE_SOURCE_DIR}/src/base/xsha256.c
     ${CMAKE_SOURCE_DIR}/src/shared/xnative_declaration.c)
+target_link_libraries(test_xir_checked_allocations PRIVATE xray_compile_resources)
 target_include_directories(test_xir_checked_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(test_xir_execution PRIVATE xray_xir_vm)
 add_executable(test_xir_cleanup_driver xir/test_xir_cleanup_driver.c)

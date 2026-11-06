@@ -49,6 +49,7 @@ static void packet_free(void *p) {
 #define xr_free(p) packet_free(p)
 #include "base/xcompile_resources.c"
 #include "xir/xxir_types.c"
+#include "xir/xxir_view_affine.c"
 #include "xir/xxir_constraints.c"
 #include "xir/xxir_constraint_proof.c"
 #include "xir/xxir_implementation.c"
@@ -59,6 +60,7 @@ static void packet_free(void *p) {
 #include "xir/xxir_generic.c"
 #include "xir/xxir_defaults.c"
 #include "xir/xxir.c"
+#include "xir/xxir_input_owned.c"
 #include "xir/xxir_declarations.c"
 #include "xir/xxir_verify.c"
 #include "xir/xxir_effects.c"
