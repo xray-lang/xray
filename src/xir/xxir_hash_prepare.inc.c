@@ -110,7 +110,7 @@ static XrXirValueStatus hash_place_current(const XrXirValuePlace *place, uint32_
 static XrXirValueStatus hash_prepare_field(StoragePrepared *prepared, const XrXirValue *value,
     XrXirType type, XrXirValueAdmission *admission) {
     XrXirLayout layout = {0};
-    if (!xr_xir_value_argument(value,admission->arena,type) ||
+    if ((type==XR_XIR_UNIT ? !unit_value(value) : !xr_xir_value_argument(value,admission->arena,type)) ||
         !xr_xir_compile_type_arena_layout(admission->arena, type, &layout)) return XR_XIR_VALUE_BAD_ARGUMENT;
     return storage_prepared_begin(prepared, type, value, layout.size, admission);
 }

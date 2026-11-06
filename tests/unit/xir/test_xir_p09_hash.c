@@ -151,6 +151,13 @@ static void hash_string_cases(XrXirValueAdmission *admission) {
     XrXirValue unit = {0}, key = integer(42), unit_map = {0};
     CHECK(xr_xir_map_new((XrXirType)261, &key, &unit, 1, admission, &unit_map) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_map_get(&unit_map, &key, admission, &output, &found) == XR_XIR_VALUE_OK && found && !output.type);
+    for (unsigned corrupt=0;corrupt<2;++corrupt) {
+        XrXirValue invalid=unit,rejected={0};
+        if(corrupt)invalid.payload=1;else invalid.reserved=1;
+        size_t baseline=live;
+        CHECK(xr_xir_map_new((XrXirType)261,&key,&invalid,1,admission,&rejected)==XR_XIR_VALUE_BAD_ARGUMENT);
+        CHECK(!rejected.type && !rejected.reserved && !rejected.payload && live==baseline);
+    }
     xr_xir_value_drop(&unit_map);
 }
 #include "p09_hash_faults.h"
