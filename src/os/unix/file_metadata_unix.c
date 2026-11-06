@@ -23,11 +23,12 @@ static XrOsIoStatus metadata_stat_fields(const struct stat *target, const struct
     XrOsFileMetadata *output) {
     _Static_assert(sizeof(target->st_size) <= sizeof(int64_t), "stat size fits the signed output representation");
     _Static_assert(sizeof(target->st_mtime) <= sizeof(int64_t), "stat seconds fit the signed output representation");
-    if (target->st_size < 0 || (uintmax_t)target->st_uid > INT64_MAX || (uintmax_t)target->st_gid > INT64_MAX)
+    uintmax_t uid = (uintmax_t)target->st_uid, gid = (uintmax_t)target->st_gid;
+    if (target->st_size < 0 || uid > INT64_MAX || gid > INT64_MAX)
         return XR_OS_IO_OVERFLOW;
     *output = (XrOsFileMetadata){true, (int64_t)target->st_size, (int64_t)(target->st_mode & 0777),
         (int64_t)target->st_mtime, (int64_t)target->st_atime, (int64_t)target->st_ctime,
-        {true, (int64_t)target->st_uid}, {true, (int64_t)target->st_gid},
+        {true, (int64_t)uid}, {true, (int64_t)gid},
         S_ISREG(target->st_mode), S_ISDIR(target->st_mode), S_ISLNK(leaf->st_mode)};
     return XR_OS_IO_OK;
 }
