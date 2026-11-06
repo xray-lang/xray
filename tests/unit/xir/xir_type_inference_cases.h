@@ -91,7 +91,7 @@ static void type_inference_callable_cases(void) {
     XrXirType p0 = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     XrXirCallableParameter formal[2] = {{p0,0},{p0,0}}, actual[2] = {{XR_XIR_I64,0},{XR_XIR_I64,0}};
     XrXirTypeNode nodes[2] = {0};
-    for (uint32_t n = 0; n < 2; ++n) { nodes[n].kind = XR_XIR_TYPE_CALLABLE; nodes[n].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; nodes[n].parameter_count = 2; }
+    for (uint32_t n = 0; n < 2; ++n) { nodes[n].kind = XR_XIR_TYPE_CALLABLE; nodes[n].element = XR_XIR_NEVER; nodes[n].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; nodes[n].parameter_count = 2; }
     nodes[0].parameters = formal; nodes[0].result = p0; nodes[0].parameter_span = 1;
     nodes[1].parameters = actual; nodes[1].result = XR_XIR_I64;
     XrXirTypes types = {nodes,2,NULL,NULL};
@@ -301,7 +301,7 @@ static void type_inference_callable_mode_admission_case(void) {
     XrXirType p0 = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     XrXirCallableParameter formal = {p0,0}, actual = {XR_XIR_I64,0};
     XrXirTypeNode nodes[2] = {0};
-    for (uint32_t n = 0; n < 2; ++n) { nodes[n].kind = XR_XIR_TYPE_CALLABLE; nodes[n].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; nodes[n].parameter_count = 1; }
+    for (uint32_t n = 0; n < 2; ++n) { nodes[n].kind = XR_XIR_TYPE_CALLABLE; nodes[n].element = XR_XIR_NEVER; nodes[n].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; nodes[n].parameter_count = 1; }
     nodes[0].parameters = &formal; nodes[0].result = p0; nodes[0].parameter_span = 1;
     nodes[1].parameters = &actual; nodes[1].result = XR_XIR_I64;
     XrXirTypes types = {nodes,2,NULL,NULL}; XrXirCompileContext budget = interface_context_default();

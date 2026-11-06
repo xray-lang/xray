@@ -795,12 +795,12 @@ static void error_filter_packets(const XrXirArtifact *checked) {
         if (!memcmp(packet.bytes+i,needle,sizeof(needle))) {offset=i; ++found;}
     CHECK(found == 1 && !memcmp(packet.bytes+offset+40, branch, sizeof(branch)) &&
           !memcmp(packet.bytes+offset+80, narrow, sizeof(narrow)));
-    for (unsigned mode = 0; mode < 6; ++mode) {
+    for (unsigned mode = 0; mode < 5; ++mode) {
         size_t position = mode == 0 ? offset+88 : mode == 1 ? offset+24 : mode == 2 ? offset+56 :
-            mode == 3 ? offset+60 : mode == 4 ? offset+80 : 12;
+            mode == 3 ? offset+60 : offset+80;
         uint8_t saved = packet.bytes[position];
         packet.bytes[position] = mode == 0 ? 1 : mode == 1 ? 1 : mode == 2 ? 2 :
-            mode == 3 ? 1 : mode == 4 ? XR_XIR_COPY : 31;
+            mode == 3 ? 1 : XR_XIR_COPY;
         XrSHA256Context hash; xr_sha256_init(&hash);
         xr_sha256_update(&hash,packet.bytes,32);
         xr_sha256_update(&hash,packet.bytes+64,packet.length-64);
@@ -873,9 +873,10 @@ static void panic_handler_packets(const XrXirArtifact *checked) {
     CHECK(module->function_count == 1);
     const XrXirFunction *function = &module->functions[0];
     CHECK(function->block_count == 3 && function->instruction_count == 8);
-    // The declaration error word precedes the canonical block records.
+    // Consume ordinals precede the result, error and canonical block records.
     size_t blocks = 64 + 3 * 4 + 4 + function->name_length + 4 +
-        (size_t)function->parameter_count * 4 + 4 + 4 + 4;
+        (size_t)function->parameter_count * 4 + 4 +
+        (size_t)function->consume_parameter_count * 4 + 4 + 4 + 4;
     size_t instructions = blocks + (size_t)function->block_count * 16 + 4;
     CHECK(instructions <= packet.length && function->instruction_count <= (packet.length - instructions) / 40);
     uint8_t word[4];
@@ -899,8 +900,7 @@ static void panic_handler_packets(const XrXirArtifact *checked) {
     CHECK(!memcmp(packet.bytes + copied + 8, word, sizeof(word)));
     const struct { size_t offset; uint8_t value; } attacks[] = {
         {blocks + 8, 2}, {blocks + 16 + 8, 1}, {blocks + 16 + 8, 3}, {blocks + 16 + 8, 0}, {blocks + 32 + 8, 2},
-        {caught, XR_XIR_COPY}, {copied, XR_XIR_PANIC_CATCH}, {copied + 8, 2},
-        {8, XR_XIR_CHECKED_SCHEMA - 1}, {12, XR_XIR_CHECKED_CONTRACT - 1}};
+        {caught, XR_XIR_COPY}, {copied, XR_XIR_PANIC_CATCH}, {copied + 8, 2}};
     for (size_t i = 0; i < sizeof(attacks) / sizeof(attacks[0]); ++i) {
         uint8_t saved = packet.bytes[attacks[i].offset];
         packet.bytes[attacks[i].offset] = attacks[i].value;

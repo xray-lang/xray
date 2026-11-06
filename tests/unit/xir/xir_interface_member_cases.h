@@ -29,11 +29,11 @@ static void member_fixture(MemberFixture *f) {
     f->parameter = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     f->array_parameter = member_case_type(0); f->concrete = XR_XIR_I64;
     f->nodes[0].kind = XR_XIR_TYPE_ARRAY; f->nodes[0].element = f->parameter; f->nodes[0].parameter_span = 1;
-    f->nodes[1].kind = XR_XIR_TYPE_CALLABLE; f->nodes[1].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; f->nodes[1].result = f->parameter; f->nodes[1].parameter_span = 1;
-    f->nodes[2].kind = XR_XIR_TYPE_CALLABLE; f->nodes[2].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; f->nodes[2].result = member_case_type(0); f->nodes[2].parameter_span = 1;
-    f->nodes[3].kind = XR_XIR_TYPE_CALLABLE; f->nodes[3].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; f->nodes[3].result = XR_XIR_I64;
+    f->nodes[1].kind = XR_XIR_TYPE_CALLABLE; f->nodes[1].element = XR_XIR_NEVER; f->nodes[1].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; f->nodes[1].result = f->parameter; f->nodes[1].parameter_span = 1;
+    f->nodes[2].kind = XR_XIR_TYPE_CALLABLE; f->nodes[2].element = XR_XIR_NEVER; f->nodes[2].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; f->nodes[2].result = member_case_type(0); f->nodes[2].parameter_span = 1;
+    f->nodes[3].kind = XR_XIR_TYPE_CALLABLE; f->nodes[3].element = XR_XIR_NEVER; f->nodes[3].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; f->nodes[3].result = XR_XIR_I64;
     f->nodes[4].kind = XR_XIR_TYPE_ARRAY; f->nodes[4].element = XR_XIR_I64;
-    f->nodes[5].kind = XR_XIR_TYPE_CALLABLE; f->nodes[5].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; f->nodes[5].result = member_case_type(4);
+    f->nodes[5].kind = XR_XIR_TYPE_CALLABLE; f->nodes[5].element = XR_XIR_NEVER; f->nodes[5].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; f->nodes[5].result = member_case_type(4);
     f->parameter_modes[0].type = XR_XIR_I64; f->parameter_modes[1].type = XR_XIR_BOOL;
     f->nodes[6] = f->nodes[5]; f->nodes[6].parameters = f->parameter_modes; f->nodes[6].parameter_count = 1;
     f->nodes[7] = f->nodes[6]; f->nodes[7].parameters = f->parameter_modes + 1;

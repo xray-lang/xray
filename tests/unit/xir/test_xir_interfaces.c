@@ -63,7 +63,7 @@ typedef struct Fixture {
 static void fixture(Fixture *f) {
     memset(f, 0, sizeof(*f)); memcpy(f->name, "Measure", 8); memcpy(f->method, "get", 4);
     f->parameter = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE; f->concrete = XR_XIR_I64;
-    f->signature.kind = XR_XIR_TYPE_CALLABLE; f->signature.flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; f->signature.result = f->parameter; f->signature.parameter_span = 1;
+    f->signature.kind = XR_XIR_TYPE_CALLABLE; f->signature.element = XR_XIR_NEVER; f->signature.flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; f->signature.result = f->parameter; f->signature.parameter_span = 1;
     f->types = (XrXirTypes){&f->signature, 1, NULL, NULL};
     f->member = (XrXirInterfaceMethod){{f->method, 3}, (XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE, 0,0,NULL};
     f->parents[0] = (XrXirInterfaceApplication){0, &f->parameter, 1};
@@ -150,8 +150,8 @@ static XrXirStatus check_interface_module(const XrXirCompileContext *context, co
     XrXirInstruction ret = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
     XrXirBlock block = {0,1,0,0};
     XrXirFunction functions[] = {function,
-        {"init",4,NULL,0,XR_XIR_UNIT,&block,1,&ret,1,NULL,0},
-        {"init",4,NULL,0,XR_XIR_UNIT,&block,1,&ret,1,NULL,0}};
+        {"init",4,NULL,0,XR_XIR_UNIT,&block,1,&ret,1,NULL,0,XR_XIR_NEVER},
+        {"init",4,NULL,0,XR_XIR_UNIT,&block,1,&ret,1,NULL,0,XR_XIR_NEVER}};
     uint32_t dependency = 0;
     XrXirSourceModule modules[] = {{"alpha",5,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE},{"other",5,&dependency,1,2, 0,XR_XIR_MODULE_FRESH_STORAGE}};
     XrXirFunctionIdentity identities[] = {{0},{0},{1,0,0,0,0,0, XR_XIR_NON_MEMBER, 0, 0}};
@@ -168,7 +168,7 @@ static void checked_owner_lifetime(void) {
             {XR_XIR_RETURN, XR_XIR_UNIT, {0,0}, {0,0}, 0, {0}}
         };
         XrXirBlock block = {0,2,0,0};
-        XrXirFunction function = {"entry",5,NULL,0,XR_XIR_I64,&block,1,instructions,2,NULL,0};
+        XrXirFunction function = {"entry",5,NULL,0,XR_XIR_I64,&block,1,instructions,2,NULL,0,XR_XIR_NEVER};
         attempts = 0; fail_at = site ? site - 1 : SIZE_MAX;
         XrXirArtifact *checked = NULL;
         XrXirCompileContext context = interface_context_default();
@@ -198,9 +198,9 @@ static XrXirStatus inherited_module_verify(Fixture *f, XrXirCompileContext *budg
     XrXirInstruction entry[] = {{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},
         {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
     XrXirFunction functions[] = {
-        {"init",4,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0},
-        {"init",4,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0},
-        {"main",4,NULL,0,XR_XIR_I64,&entry_block,1,entry,2,NULL,0}};
+        {"init",4,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0,XR_XIR_NEVER},
+        {"init",4,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0,XR_XIR_NEVER},
+        {"main",4,NULL,0,XR_XIR_I64,&entry_block,1,entry,2,NULL,0,XR_XIR_NEVER}};
     uint32_t dependency = 0;
     XrXirSourceModule modules[] = {{"alpha",5,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE},{"other",5,&dependency,1,1, 0,XR_XIR_MODULE_FRESH_STORAGE}};
     XrXirFunctionIdentity identities[] = {{0},{.module=1},{0}};
@@ -242,7 +242,7 @@ static void interface_parameters_remain_declaration_scoped(void) {
             {XR_XIR_RETURN, XR_XIR_UNIT, {0,0}, {0,0}, 0, {0}}
         };
         XrXirBlock block = {0,3,0,0};
-        XrXirFunction function = {"entry",5,NULL,0,XR_XIR_I64,&block,1,instructions,3,NULL,0};
+        XrXirFunction function = {"entry",5,NULL,0,XR_XIR_I64,&block,1,instructions,3,NULL,0,XR_XIR_NEVER};
         if (attack == 1 || attack == 4) {
             function.parameters = &leaked; function.parameter_count = 1;
             instructions[1].args[0] = 1; instructions[2].args[0] = 1;
@@ -272,7 +272,7 @@ static void checked_owner_outlives_producer(void) {
         {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},41,{0}},
         {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
     XrXirBlock block = {0,2,0,0};
-    XrXirFunction function = {"entry",5,NULL,0,XR_XIR_I64,&block,1,instructions,2,NULL,0};
+    XrXirFunction function = {"entry",5,NULL,0,XR_XIR_I64,&block,1,instructions,2,NULL,0,XR_XIR_NEVER};
     XrXirArtifact *checked = NULL;
     CHECK(check_interface_module(&context,&f.types,function,&checked,NULL)==XR_XIR_OK && checked);
     xr_compile_resources_release(context.resources); context = (XrXirCompileContext){0};

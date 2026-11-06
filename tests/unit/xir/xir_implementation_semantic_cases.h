@@ -38,7 +38,7 @@ static void implementation_semantic_fixture(ImplementationSemanticFixture *f) {
     memset(f,0,sizeof(*f));
     f->parameter = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     f->meter = member_case_type(1); f->box_parameter = member_case_type(2); f->box_meter = member_case_type(3);
-    f->nodes[0].kind = XR_XIR_TYPE_CALLABLE; f->nodes[0].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; f->nodes[0].result = XR_XIR_I64;
+    f->nodes[0].kind = XR_XIR_TYPE_CALLABLE; f->nodes[0].element = XR_XIR_NEVER; f->nodes[0].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; f->nodes[0].result = XR_XIR_I64;
     f->method = (XrXirInterfaceMethod){{"measure",7},member_case_type(0),0,0,NULL};
     f->interface = (XrXirInterfaceDeclaration){{"m",1},{"Measure",7},1,NULL,0,NULL,0,&f->method,1};
     f->interfaces = (XrXirInterfaceTable){&f->interface,1};
