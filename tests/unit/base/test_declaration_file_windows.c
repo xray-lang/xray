@@ -33,24 +33,10 @@ static void probe_free(void *memory) {
 #undef xr_free
 #define xr_malloc probe_malloc
 #define xr_free probe_free
-#define xr_compile_resources_work actual_work
 #include "base/xcompile_resources.c"
-#undef xr_compile_resources_work
-
-static bool record_work;
-static uint64_t work_points[32768];
-static size_t work_count;
-XR_FUNC XrCompileResourceStatus xr_compile_resources_work(XrCompileResources *owner, uint64_t units) {
-    if (record_work) {
-        XrCompileResourceStats s;
-        REQUIRE(xr_compile_resources_stats(owner, &s) == XR_COMPILE_RESOURCE_OK);
-        REQUIRE(work_count < 32768); work_points[work_count++] = s.work + units;
-    }
-    return actual_work(owner, units);
-}
 
 static const XrDeclarationInputLimits shape = {{65536, 128}, {32, 32}};
-static const XrCompileResourceLimits unlimited = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+static const XrCompileResourceLimits unlimited = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
 static XrCompileResourceStats load_case(const char *root, XrDeclarationInputLimits input,
     XrCompileResourceLimits limits, XrDeclarationStatus expected, size_t failure, bool twice) {
     REQUIRE(!live); fail_at = failure; attempts = allocated = peak = 0;
@@ -73,10 +59,10 @@ static XrCompileResourceStats load_case(const char *root, XrDeclarationInputLimi
     } else REQUIRE(manifest == (XrDeclarationManifest *)1);
     XrCompileResourceStats stats;
     REQUIRE(xr_compile_resources_stats(resources, &stats) == XR_COMPILE_RESOURCE_OK);
-    REQUIRE(stats.live_bytes == live && stats.allocated_bytes == allocated && stats.peak_bytes == peak);
+    REQUIRE(stats.held_bytes == live && stats.allocated_bytes == allocated && stats.peak_bytes == peak);
     if (twice) {
         XrDeclarationManifest *second = (XrDeclarationManifest *)2;
-        REQUIRE(xr_compile_declaration_manifest_load(resources, root, &input, &second) == XR_DECLARATION_LIMIT);
+        REQUIRE(xr_compile_declaration_manifest_load(resources, root, &input, &second) == XR_DECLARATION_MEMORY_LIMIT);
         REQUIRE(second == (XrDeclarationManifest *)2);
     }
     xr_compile_resources_release(resources);
@@ -87,25 +73,15 @@ static XrCompileResourceStats load_case(const char *root, XrDeclarationInputLimi
     REQUIRE(!live); return stats;
 }
 static void resource_cases(const char *root) {
-    work_count = 0; record_work = true;
     XrCompileResourceStats stats = load_case(root, shape, unlimited, XR_DECLARATION_OK, 0, false);
-    record_work = false; size_t count = attempts;
+    size_t count = attempts;
     for (size_t i = 1; i <= count; ++i)
         load_case(root, shape, unlimited, XR_DECLARATION_OUT_OF_MEMORY, i, false);
-    for (size_t i = 0; i < work_count; ++i) {
-        XrCompileResourceLimits limits = unlimited; limits.work = work_points[i] - 1;
-        load_case(root, shape, limits, XR_DECLARATION_LIMIT, 0, false);
-    }
-    XrCompileResourceLimits exact = {stats.allocated_bytes, stats.peak_bytes, stats.work};
+    XrCompileResourceLimits exact = {XR_COMPILE_MEMORY_FINITE, stats.peak_bytes, true};
     load_case(root, shape, exact, XR_DECLARATION_OK, 0, true);
-    for (unsigned axis = 0; axis < 3; ++axis) {
-        XrCompileResourceLimits limits = unlimited;
-        if (!axis) limits.allocated_bytes = stats.allocated_bytes - 1;
-        if (axis == 1) limits.live_bytes = stats.peak_bytes - 1;
-        if (axis == 2) limits.work = stats.work - 1;
-        load_case(root, shape, limits, XR_DECLARATION_LIMIT, 0, false);
-    }
-    printf("File/TOML/schema: %zu OOM points, %zu submitted-work cutoffs, one ledger, zero physical owners\n", count, work_count);
+    --exact.memory_limit;
+    load_case(root, shape, exact, XR_DECLARATION_MEMORY_LIMIT, 0, false);
+    printf("File/TOML/schema: %zu OOM points, held exact/minus, one owner, zero physical owners\n", count);
 }
 int main(int argc, char **argv) {
     REQUIRE(argc == 3);
@@ -119,7 +95,7 @@ int main(int argc, char **argv) {
         char path[4096]; int length = snprintf(path, sizeof(path), "%s/%s", argv[1], names[i]);
         REQUIRE(length > 0 && (size_t)length < sizeof(path));
         XrCompileResourceStats stats = load_case(path, shape, unlimited, expected[i], 0, false);
-        REQUIRE(stats.work > 1);
+        REQUIRE(stats.held_bytes >= sizeof(XrCompileResources));
     }
     XrDeclarationInputLimits limited = shape;
     limited.parsing.input_bytes = 1; load_case(argv[1], limited, unlimited, XR_DECLARATION_LIMIT, 0, false);

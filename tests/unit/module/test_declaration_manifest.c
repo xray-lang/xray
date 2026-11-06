@@ -32,21 +32,8 @@ static void probe_free(void *memory) {
 #undef xr_free
 #define xr_malloc probe_malloc
 #define xr_free probe_free
-#define xr_compile_resources_work actual_work
 #include "base/xcompile_resources.c"
-#undef xr_compile_resources_work
 
-static bool record_work;
-static uint64_t work_points[32768];
-static size_t work_count;
-XR_FUNC XrCompileResourceStatus xr_compile_resources_work(XrCompileResources *owner, uint64_t units) {
-    if (record_work) {
-        XrCompileResourceStats s;
-        REQUIRE(xr_compile_resources_stats(owner, &s) == XR_COMPILE_RESOURCE_OK);
-        REQUIRE(work_count < 32768); work_points[work_count++] = s.work + units;
-    }
-    return actual_work(owner, units);
-}
 static const char valid[] =
     "[project]\nname='fixture'\n[declarations]\nversion=1\n"
     "[[declarations.function]]\nmodule='src/main.xr'\nname='apply'\n"
@@ -54,7 +41,7 @@ static const char valid[] =
     "[[declarations.function]]\nmodule='src/box.xr'\nowner='Box'\nname='get'\nno_suspend=true\n";
 
 
-static const XrCompileResourceLimits unlimited = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+static const XrCompileResourceLimits unlimited = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
 static const XrTomlParseLimits parsing = {65536,128};
 static XrCompileResources *open_owner(void) {
     XrCompileResources *resources = NULL;
@@ -155,6 +142,6 @@ int main(void) {
     admission("[declarations]\nversion=1\n[[declarations.function]]\nmodule='a.xr'\nname='f'\nno_suspend=true\n"
         "[[declarations.function]]\nmodule='a.xr'\nname='f'\nno_suspend_parameters=['cb']\n", XR_DECLARATION_INVALID);
     admission("[declarations]\nversion=1\n[[declarations.function]]\nmodule='a.xr'\nname='f'\nno_suspend_parameters=['cb']\n", XR_DECLARATION_OK);
-    printf("Declaration schema: 27 rejections, work/space/count limits, owned selectors and %zu allocation failures passed\n", count);
+    printf("Declaration schema: 27 rejections, shape/count limits, owned selectors and %zu allocation failures passed\n", count);
     return 0;
 }

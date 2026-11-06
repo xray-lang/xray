@@ -19,8 +19,6 @@
 typedef struct Allocation { void *memory; size_t size; } Allocation;
 static Allocation blocks[64];
 static size_t attempts, fail_at, live, allocated, peak;
-static uint64_t boundaries[8192];
-static size_t boundary_count;
 static void *probe_malloc(size_t bytes) {
     if (++attempts == fail_at) return NULL;
     void *memory = xr_malloc(bytes); REQUIRE(memory);
@@ -44,24 +42,16 @@ static void probe_free(void *memory) {
 #undef xr_malloc
 #undef xr_free
 
-static XrOsIoStatus tracked_work(void *context, uint64_t units) {
-    XrCompileResourceStats s;
-    REQUIRE(xr_compile_resources_stats(context, &s) == XR_COMPILE_RESOURCE_OK);
-    REQUIRE(boundary_count < 8192);
-    boundaries[boundary_count++] = s.work + units;
-    XrCompileResourceStatus status = xr_compile_resources_work(context, units);
-    return status == XR_COMPILE_RESOURCE_OK ? XR_OS_IO_OK : XR_OS_IO_BUDGET;
-}
 static XrCompileResourceStats check_limits(const char *root, const char *path, size_t limit,
     XrFileReadStatus expected, XrCompileResourceLimits limits, bool twice) {
-    REQUIRE(!live); allocated = peak = boundary_count = 0;
+    REQUIRE(!live); allocated = peak = 0;
     XrCompileResources *owner = NULL;
     XrCompileResourceStatus created = xr_compile_resources_new(&limits, &owner);
     if (created != XR_COMPILE_RESOURCE_OK) {
         REQUIRE(created == XR_COMPILE_RESOURCE_OUT_OF_MEMORY && expected == XR_FILE_READ_OUT_OF_MEMORY);
         REQUIRE(!live && !owner); return (XrCompileResourceStats){0};
     }
-    XrOsIoPolicy policy = xr_compile_io_policy(owner); policy.work = tracked_work;
+    XrOsIoPolicy policy = xr_compile_io_policy(owner);
     XrFileBytes output = {(char *)1, 999};
     XrFileReadStatus status = xr_os_io_read_under_root(&policy, root, path, limit, &output);
     if (status != expected) fprintf(stderr, "path %s: status %d expected %d\n", path, status, expected);
@@ -77,10 +67,10 @@ static XrCompileResourceStats check_limits(const char *root, const char *path, s
     } else REQUIRE(output.data == (char *)1 && output.size == 999);
     XrCompileResourceStats s;
     REQUIRE(xr_compile_resources_stats(owner, &s) == XR_COMPILE_RESOURCE_OK);
-    REQUIRE(s.live_bytes == live && s.allocated_bytes == allocated && s.peak_bytes == peak);
+    REQUIRE(s.held_bytes == live && s.allocated_bytes == allocated && s.peak_bytes == peak);
     if (twice) {
         XrFileBytes second = {(char *)2, 333};
-        REQUIRE(xr_os_io_read_under_root(&policy, root, path, limit, &second) == XR_FILE_READ_LIMIT);
+        REQUIRE(xr_os_io_read_under_root(&policy, root, path, limit, &second) == XR_FILE_READ_MEMORY_LIMIT);
         REQUIRE(second.data == (char *)2 && second.size == 333);
     }
     xr_compile_resources_release(owner);
@@ -91,7 +81,7 @@ static XrCompileResourceStats check_limits(const char *root, const char *path, s
     REQUIRE(!live);
     return s;
 }
-static const XrCompileResourceLimits unlimited = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+static const XrCompileResourceLimits unlimited = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
 static void check(const char *root, const char *path, size_t limit, XrFileReadStatus expected) {
     (void)check_limits(root, path, limit, expected, unlimited, false);
 }
@@ -107,41 +97,23 @@ static size_t fault_sweep(const char *root, const char *path, XrFileReadStatus e
 static void resource_sweep(const char *root, const char *path, XrFileReadStatus expected) {
     attempts = 0; fail_at = 0;
     XrCompileResourceStats s = check_limits(root, path, 10, expected, unlimited, false);
-    size_t count = boundary_count;
-    uint64_t points[8192]; memcpy(points, boundaries, count * sizeof(*points));
-    for (size_t i = 0; i < count; ++i) {
-        XrCompileResourceLimits limits = unlimited; limits.work = points[i] - 1;
-        check_limits(root, path, 10, XR_FILE_READ_LIMIT, limits, false);
-    }
-    XrCompileResourceLimits exact = {s.allocated_bytes, s.peak_bytes, s.work};
+    XrCompileResourceLimits exact = {XR_COMPILE_MEMORY_FINITE, s.peak_bytes, true};
     check_limits(root, path, 10, expected, exact, expected == XR_FILE_READ_OK);
-    for (unsigned axis = 0; axis < 3; ++axis) {
-        XrCompileResourceLimits limits = unlimited;
-        if (axis == 0) limits.allocated_bytes = s.allocated_bytes - 1;
-        if (axis == 1) limits.live_bytes = s.peak_bytes - 1;
-        if (axis == 2) limits.work = s.work - 1;
-        check_limits(root, path, 10, XR_FILE_READ_LIMIT, limits, false);
-    }
-    printf("resource boundaries %s: %zu, allocations=%llu work=%llu\n", path, count,
-        (unsigned long long)s.allocation_count, (unsigned long long)s.work);
+    --exact.memory_limit;
+    check_limits(root, path, 10, XR_FILE_READ_MEMORY_LIMIT, exact, false);
+    printf("held memory exact/minus %s: allocations=%llu peak=%llu\n", path,
+        (unsigned long long)s.allocation_count, (unsigned long long)s.peak_bytes);
 }
 static void argument_and_guard_checks(void) {
     XrFileBytes output = {(char *)3, 77};
     XrOsIoPolicy policy = xr_os_io_system_policy();
     REQUIRE(xr_os_io_read_under_root(NULL, (char *)1, (char *)1, 1, &output) == XR_FILE_READ_BAD_ARGUMENT);
     REQUIRE(xr_os_io_read_under_root(&policy, NULL, (char *)1, 1, &output) == XR_FILE_READ_BAD_ARGUMENT);
-    XrCompileResources *owner = NULL;
-    XrCompileResourceLimits limits = unlimited; limits.work = 1;
-    REQUIRE(xr_compile_resources_new(&limits, &owner) == XR_COMPILE_RESOURCE_OK);
-    policy = xr_compile_io_policy(owner);
-    REQUIRE(xr_os_io_read_under_root(&policy, (char *)1, (char *)1, 1, &output) == XR_FILE_READ_LIMIT);
     REQUIRE(output.data == (char *)3 && output.size == 77);
-    xr_compile_resources_release(owner); REQUIRE(!live);
-    /* Bootstrap is one work unit; the first invalid path byte is one more. */
     XrCompileResourceStats s = check_limits((char *)1, ":", 0, XR_FILE_READ_FORBIDDEN, unlimited, false);
-    REQUIRE(s.work == 2 && s.allocation_count == 1);
+    REQUIRE(s.allocation_count == 1);
     s = check_limits((char *)1, "a/", 0, XR_FILE_READ_FORBIDDEN, unlimited, false);
-    REQUIRE(s.work == 5 && s.allocation_count == 1);
+    REQUIRE(s.allocation_count == 1);
 }
 
 static void root_and_sharing(const char *root) {
