@@ -12,6 +12,7 @@
 #include "xir_reference_root_scalar_cases.h"
 typedef struct RootOperationCase {
     const XrXirModule *module;const XrXirEffects *effects;
+    const XrXirConstruction *construction;
     uint32_t repeats,count,masks[4],actual[64];
 } RootOperationCase;
 static const uint32_t root_operation_functions[]={2,2,5,7};
@@ -37,7 +38,8 @@ static XrXirStatus root_operation_ignore_error(void *data,XirEffectContextScope 
     CHECK(!memcmp(&before,&after,sizeof(before)) && rp_attempts==attempts);return XR_XIR_OK;
 }
 static XrXirStatus root_operation_run(const XrXirCompileContext *context,RootOperationCase *c) {
-    return xir_effects_context_operation(context,c->effects,c->module,c->module->types,root_operation_read,c);
+    return xir_effects_context_operation_input(context,c->effects,
+        (XirEffectInput){c->module,c->construction,NULL},c->module->types,root_operation_read,c);
 }
 static void root_operation_case(uint32_t generic,uint32_t repeats) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());uint64_t baseline=rp_stats(&context).held_bytes;
@@ -88,18 +90,20 @@ static void root_operation_case(uint32_t generic,uint32_t repeats) {
     XrXirArtifact *checked=NULL;EffectContextOwner *owner=NULL;XrXirDiagnostic diagnostic={0};
     CHECK(xir_fixture_check(&context,&module,&checked,&diagnostic)==XR_XIR_OK);
     const XrXirModule *owned=xr_xir_compile_artifact_module(checked);
-    CHECK(effect_context_owner_build(&context,owned,NULL,NULL,&owner)==XR_XIR_OK);
+    CHECK(conditional_context_from_input(&context,
+        (XirEffectInput){owned,xr_xir_compile_artifact_construction(checked),NULL},NULL,NULL,&owner)==XR_XIR_OK);
     XrXirEffects *root_effects=NULL;CHECK(xr_xir_compile_effects_analyze(checked,&root_effects)==XR_XIR_OK);
     XrXirEffects effects={.resources=context.resources,.count=module.function_count,
+        .input_facts=owner->dense->input_facts,
         .outcomes_work={.contexts=owner,.root=effect_roots_read(root_effects)->root}};
-    RootOperationCase c={.module=owned,.effects=&effects,.repeats=repeats,.count=generic?4u:3u,
+    RootOperationCase c={.module=owned,.effects=&effects,.construction=xr_xir_compile_artifact_construction(checked),.repeats=repeats,.count=generic?4u:3u,
         .masks={0,XR_XIR_CALLABLE_ROOT_REQUIRED,0,0}};
     for(uint32_t n=0;n<c.count;++n) {
         uint32_t value=UINT32_MAX;CHECK(root_scalar_reference(&context,&effects,owned,
             root_operation_functions[n],root_operation_instructions[n],&value)==XR_XIR_OK && value==c.masks[n]);
     }
     CHECK(root_scalar_declaration(owned,&effects,&context,&diagnostic)==XR_XIR_OK);
-    CHECK(declaration_callable_root_verify(owned,&effects,&context,&diagnostic)==XR_XIR_OK);
+    CHECK(declaration_callable_root_verify((XirEffectInput){owned,c.construction,NULL},&effects,&context,&diagnostic)==XR_XIR_OK);
     XrCompileResourceStats before=rp_stats(&context);size_t start=rp_attempts;
     CHECK(root_operation_run(&context,&c)==XR_XIR_OK);size_t sites=rp_attempts-start;
     XrCompileResourceStats after=rp_stats(&context);CHECK(after.held_bytes==before.held_bytes);
@@ -112,31 +116,32 @@ static void root_operation_case(uint32_t generic,uint32_t repeats) {
         CHECK(root_operation_run(&context,&c)==XR_XIR_OK && rp_stats(&context).held_bytes==live &&
             rp_live==blocks && rp_live_bytes==bytes);
     }
-    CHECK(xir_effects_context_operation(&context,&effects,owned,owned->types,root_operation_ignore_error,&c)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xir_effects_context_operation_input(&context,&effects,
+        (XirEffectInput){owned,c.construction,NULL},owned->types,root_operation_ignore_error,&c)==XR_XIR_BAD_STRUCTURE);
     XrXirInstruction *changed=(XrXirInstruction *)owned->functions[3].instructions;
     int64_t immediate=changed[0].immediate;changed[0].immediate^=1;
     CHECK(root_operation_run(&context,&c)==XR_XIR_BAD_STRUCTURE);changed[0].immediate=immediate;
     CHECK(root_operation_run(&context,&c)==XR_XIR_OK);
     for(uint32_t n=0;n<c.count;++n) {
-        uint32_t value=UINT32_MAX;CHECK(xir_effects_reference_root(&context,&effects,owned,
+        uint32_t value=UINT32_MAX;CHECK(xir_effects_reference_root_input(&context,&effects,(XirEffectInput){owned,c.construction,NULL},
             root_operation_functions[n],root_operation_instructions[n],&value)==XR_XIR_OK && value==c.masks[n]);
     }
     uint32_t untouched=UINT32_MAX;
     CHECK(xir_effects_reference_root_scoped(NULL,2,0,&untouched)==XR_XIR_BAD_STRUCTURE && untouched==UINT32_MAX);
     XrXirModule *mutable=(XrXirModule *)owned;const XrXirFunction *saved_functions=mutable->functions;
     mutable->functions=NULL;
-    CHECK(xir_effects_reference_root(&context,&effects,owned,2,0,&untouched)==XR_XIR_BAD_STRUCTURE && untouched==UINT32_MAX);
+    CHECK(xir_effects_reference_root_input(&context,&effects,(XirEffectInput){owned,c.construction,NULL},2,0,&untouched)==XR_XIR_BAD_STRUCTURE && untouched==UINT32_MAX);
     CHECK(root_operation_run(&context,&c)==XR_XIR_BAD_STRUCTURE);mutable->functions=saved_functions;
     XrXirFunction *mutable_functions=(XrXirFunction *)owned->functions;
     const XrXirInstruction *saved_instructions=mutable_functions[2].instructions;
     mutable_functions[2].instructions=NULL;
-    CHECK(xir_effects_reference_root(&context,&effects,owned,2,0,&untouched)==XR_XIR_BAD_STRUCTURE && untouched==UINT32_MAX);
+    CHECK(xir_effects_reference_root_input(&context,&effects,(XirEffectInput){owned,c.construction,NULL},2,0,&untouched)==XR_XIR_BAD_STRUCTURE && untouched==UINT32_MAX);
     CHECK(root_operation_run(&context,&c)==XR_XIR_BAD_STRUCTURE);mutable_functions[2].instructions=saved_instructions;
     XrXirTypeNode *mutable_nodes=(XrXirTypeNode *)owned->types->nodes;uint32_t saved_flags=mutable_nodes[0].flags;
     mutable_nodes[0].flags&=~XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     XrXirDiagnostic old_diag={0},new_diag={0};
     XrXirStatus old_status=root_scalar_declaration(owned,&effects,&context,&old_diag);
-    XrXirStatus new_status=declaration_callable_root_verify(owned,&effects,&context,&new_diag);
+    XrXirStatus new_status=declaration_callable_root_verify((XirEffectInput){owned,c.construction,NULL},&effects,&context,&new_diag);
     CHECK(old_status!=XR_XIR_OK && old_status==new_status);
     mutable_nodes[0].flags=saved_flags;CHECK(root_operation_run(&context,&c)==XR_XIR_OK);
     effect_context_owner_free(owner);xr_xir_compile_effects_free(root_effects);xr_xir_compile_artifact_free(checked);

@@ -89,7 +89,7 @@ static void conditional_compact_pending_state(const XrXirCompileContext *context
     uint64_t held_bytes=rp_stats(context).held_bytes;
     EffectBodyRun run;memset(&run,0xA5,sizeof(run));
     EffectBodyFunction body={.instruction_count=1};
-    CHECK(effect_body_run_seed(context,&run,expected,0)==XR_XIR_OK && run.first==0 && run.count==1 && !run.mask);
+    CHECK(effect_body_run_seed(&run,expected,0)==XR_XIR_OK && run.first==0 && run.count==1 && !run.mask);
     CHECK(effect_body_run_append(context,&body,&run)==XR_XIR_OK && body.run_count==1 && body.run_capacity==1);
     EffectBodyRead read=(EffectBodyRead){.owner=context,.execution=NULL};XrXirInstruction decoded;
     CHECK(effect_body_instruction_get(&read,&body,0,&decoded)==XR_XIR_OK && conditional_compact_same(&decoded,expected));
@@ -575,10 +575,13 @@ static void conditional_compact_refinement_span(const XrXirCompileContext *conte
     const XrXirModule *source) {
     uint64_t held_bytes=rp_stats(context).held_bytes;
     XrXirEffects captured={.resources=context->resources,.count=source->function_count};
-    CHECK(xir_effects_refinement_capture(context,source,&captured)==XR_XIR_OK && captured.refinement);
+    CHECK(conditional_capture_from_raw(context,source,&captured)==XR_XIR_OK && captured.refinement);
     conditional_compact_advertisement_pair(context,source,captured.refinement);
     EffectBodyMaterial *material=NULL;
-    CHECK(effect_body_material_generation(context,source,captured.refinement,&material)==XR_XIR_OK && material);
+    EffectInputFacts *facts=NULL;
+    CHECK(conditional_facts_from_raw(context,source,&facts)==XR_XIR_OK);
+    CHECK(effect_body_material_generation(context,source,captured.refinement,facts,&material)==XR_XIR_OK && material);
+    effect_input_facts_free(facts);
     CHECK(effect_body_source_match(context,material,source)==XR_XIR_OK);
     effect_body_material_free(material);
     XrXirType *declared=(XrXirType *)captured.refinement->functions[3].instructions;

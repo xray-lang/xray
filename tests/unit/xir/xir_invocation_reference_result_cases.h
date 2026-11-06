@@ -38,14 +38,14 @@ static XrXirStatus conditional_invocation_reference_result(const XrXirCompileCon
     XrXirStatus status=xir_fixture_check(context,&module,&checked,&diagnostic);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(checked,&diagnostic);
     XrXirEffects effects={.resources=context->resources,.count=4};
-    if (status==XR_XIR_OK) status=xir_effects_refinement_capture(context,&module,&effects);
+    if (status==XR_XIR_OK) status=conditional_capture_from_raw(context,&module,&effects);
     if (status==XR_XIR_OK) {
         /* This mirrors inferred Source changes after its immutable prefix was captured. */
         factory[0].type=(XrXirType)258;functions[1].result=(XrXirType)258;
         entry[1].type=(XrXirType)259;entry[2].type=(XrXirType)258;
     }
     EffectContextOwner *execution=NULL;
-    if (status==XR_XIR_OK) status=effect_context_owner_build(context,&module,effects.refinement,NULL,&execution);
+    if (status==XR_XIR_OK) status=conditional_context_from_raw(context,&module,effects.refinement,NULL,&execution);
     xr_xir_compile_artifact_free(checked);effect_refinement_free(effects.refinement);effects.refinement=NULL;
     if (status==XR_XIR_OK && oracle) {
         CHECK(execution && !execution->refinement && execution->forest && execution->forest->invocations &&

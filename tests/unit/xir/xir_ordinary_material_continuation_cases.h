@@ -85,7 +85,7 @@ static XrXirStatus ordinary_material_operation(const XrXirCompileContext *contex
     EffectOrdinaryContexts *ordinary=NULL,*dense=NULL;
     EffectBodyMaterial *material=NULL;EffectOrdinaryView view={0};
     XrXirEffects refinement={.resources=context->resources,.count=2};
-    XrXirStatus status=effect_ordinary_build(context,&f.source,NULL,NULL,&ordinary);
+    XrXirStatus status=conditional_ordinary_from_raw(context,&f.source,NULL,NULL,&ordinary);
     if (status==XR_XIR_OK) status=ordinary_material_dense(context,&f,ordinary,&dense);
     if (status==XR_XIR_OK) status=effect_ordinary_view(dense,&f.source,&view);
     EffectBodyMaterial *basis=ordinary?ordinary->uses.generation:NULL;
@@ -93,7 +93,7 @@ static XrXirStatus ordinary_material_operation(const XrXirCompileContext *contex
         CHECK(basis && basis->references==1 && dense->functions[0].instructions!=ordinary->functions[0].instructions);
         view.input.basis=ordinary;
         if (mode==1) ((XrXirInstruction *)dense->functions[0].instructions)[0].immediate=43;
-        if (mode==2) status=xir_effects_refinement_capture(context,&view.module,&refinement);
+        if (mode==2) status=conditional_capture_from_raw(context,&view.module,&refinement);
         if (mode==3) {
             CHECK(xr_xir_cell_provenance_origin(basis->cells,0,0)==XR_XIR_CELL_ORIGIN_SCOPED);
             /* A legitimate new physical vector and complete instruction row
@@ -103,7 +103,7 @@ static XrXirStatus ordinary_material_operation(const XrXirCompileContext *contex
                 (XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=42};
         }
         if (status==XR_XIR_OK)
-            status=effect_body_material_generation_input(context,&view.module,refinement.refinement,&view.input,&material);
+            status=effect_body_material_generation_input(context,&view.module,refinement.refinement,&view.input,ordinary->input_facts,&material);
     }
     if (status==XR_XIR_OK) {
         CHECK(material!=basis && (mode?basis->references==1 && !material->backbone:
@@ -146,7 +146,7 @@ static XrXirStatus ordinary_material_owner_operation(const XrXirCompileContext *
         f.operations[1].args[0]=1;
     }
     EffectContextOwner *owner=NULL;
-    XrXirStatus status=effect_context_owner_build(context,&f.source,NULL,NULL,&owner);
+    XrXirStatus status=conditional_context_from_raw(context,&f.source,NULL,NULL,&owner);
     EffectContextForest *forest=NULL;
     if (status==XR_XIR_OK) {
         EffectBodyMaterial *basis=owner->ordinary->uses.generation;
@@ -249,31 +249,31 @@ static void ordinary_material_controls(void) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
     uint64_t baseline=rp_stats(&context).held_bytes;OrdinaryMaterialFixture f;ordinary_material_fixture(&f);
     EffectOrdinaryContexts *ordinary=NULL,*dense=NULL;
-    CHECK(effect_ordinary_build(&context,&f.source,NULL,NULL,&ordinary)==XR_XIR_OK);
+    CHECK(conditional_ordinary_from_raw(&context,&f.source,NULL,NULL,&ordinary)==XR_XIR_OK);
     CHECK(ordinary_material_dense(&context,&f,ordinary,&dense)==XR_XIR_OK);
     EffectOrdinaryView view={0};CHECK(effect_ordinary_view(dense,&f.source,&view)==XR_XIR_OK);
     view.input.basis=ordinary;EffectBodyMaterial *basis=ordinary->uses.generation,*empty=NULL,*occupied=basis;
     XrCompileResourceStats initial=rp_stats(&context);size_t attempts=rp_attempts;
-    CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,&occupied)==XR_XIR_BAD_STRUCTURE && occupied==basis);
+    CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,dense->input_facts,&occupied)==XR_XIR_BAD_STRUCTURE && occupied==basis);
     CHECK(conditional_memory_unchanged(&context,initial) && rp_attempts==attempts && basis->references==1);
     const XrXirInstruction *instructions=dense->functions[0].instructions;
     dense->functions[0].instructions=NULL;
-    CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,&empty)==XR_XIR_BAD_STRUCTURE && !empty && basis->references==1);
+    CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,dense->input_facts,&empty)==XR_XIR_BAD_STRUCTURE && !empty && basis->references==1);
     dense->functions[0].instructions=instructions;
     uint32_t declaration=dense->nodes[0].declaration;dense->nodes[0].declaration=2;
-    CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,&empty)==XR_XIR_BAD_STRUCTURE && !empty && basis->references==1);
+    CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,dense->input_facts,&empty)==XR_XIR_BAD_STRUCTURE && !empty && basis->references==1);
     dense->nodes[0].declaration=declaration;
     XrXirCompileContext foreign=rp_owner(rp_caps());XrCompileResourceStats foreign_before=rp_stats(&foreign);
-    CHECK(effect_body_material_generation_input(&foreign,&view.module,NULL,&view.input,&empty)==XR_XIR_BAD_STRUCTURE && !empty);
+    CHECK(effect_body_material_generation_input(&foreign,&view.module,NULL,&view.input,dense->input_facts,&empty)==XR_XIR_BAD_STRUCTURE && !empty);
     CHECK(conditional_memory_unchanged(&foreign,foreign_before) && rp_stats(&foreign).held_bytes==foreign_before.held_bytes);
     rp_owner_free(&foreign,foreign_before.held_bytes);
     ordinary_material_word_controls(&context,&view,basis);
     ordinary_material_metadata_controls(&context,&view,basis);
     f.operations[0].immediate=99;
-    CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,&empty)==XR_XIR_BAD_STRUCTURE &&
+    CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,dense->input_facts,&empty)==XR_XIR_BAD_STRUCTURE &&
         !empty && basis->references==1);
     f.operations[0].immediate=42;
-    CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,&empty)==XR_XIR_OK &&
+    CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,dense->input_facts,&empty)==XR_XIR_OK &&
         empty!=basis && empty->backbone==basis && basis->references==2 &&
         empty->declared!=basis->declared && empty->functions==basis->functions);
     effect_body_material_free(empty);CHECK(basis->references==1);

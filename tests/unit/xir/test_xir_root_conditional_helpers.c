@@ -73,7 +73,7 @@ static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint
     if (status==XR_XIR_OK) {
         if (oracle) CHECK(resolved && resolved->known && resolved->target==1 &&
             resolved->family==1 && resolved->argument_count==1 && resolved->arguments[0]==(XrXirType)256);
-        status=effect_ordinary_classify(context,&f.module,resolved,&contexts,&selected);
+        status=conditional_classify_from_raw(context,&f.module,resolved,&contexts,&selected);
     }
     if (status==XR_XIR_OK && oracle) {
         contexts->terms.remaining=context;
@@ -107,7 +107,7 @@ static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint
         XrXirDeclarations declarations=f.declarations;declarations.functions=identities;
         XrXirModule module=f.module;module.functions=functions;module.function_count=5;
         module.generics=generics;module.declarations=&declarations;
-        status=effect_context_owner_build(context,&module,NULL,NULL,&execution);
+        status=conditional_context_from_raw(context,&module,NULL,NULL,&execution);
         if (status==XR_XIR_OK) {
             if (oracle && context->limits.functions==5) {
                 CHECK(contexts->count==5 && execution->ordinary->count>module.function_count &&
@@ -224,7 +224,7 @@ static XrXirStatus conditional_forest(const XrXirCompileContext *context, bool o
     uint32_t selected=UINT32_MAX;
     if (status==XR_XIR_OK) { phase=1;status=effect_context_resolve(context,&request,&resolved); }
     if (status==XR_XIR_OK)
-        { phase=2;status=effect_ordinary_classify(context,&fixture.module,resolved,&contexts,&selected); }
+        { phase=2;status=conditional_classify_from_raw(context,&fixture.module,resolved,&contexts,&selected); }
     if (status==XR_XIR_OK) { phase=3;status=effect_context_forest_seal(context,&fixture.module,contexts,&forest); }
     effect_ordinary_free(contexts);effect_context_free(resolved);memset(&fixture,0,sizeof(fixture));
     if (status==XR_XIR_OK) { phase=4;status=effect_context_forest_trace(context,forest,2,&trace); }
@@ -323,7 +323,7 @@ static void conditional_domain_rejections(const XrXirCompileContext *context) {
     EffectOrdinaryContexts *contexts=NULL;uint32_t selected=UINT32_MAX;
     request.actual_types=&fixture.types;
     CHECK(effect_context_resolve(context,&request,&resolved)==XR_XIR_OK);
-    CHECK(effect_ordinary_classify(context,&fixture.module,resolved,&contexts,&selected)==XR_XIR_OK);
+    CHECK(conditional_classify_from_raw(context,&fixture.module,resolved,&contexts,&selected)==XR_XIR_OK);
     fixture.types.count=5;
     CHECK(effect_ordinary_roots(context,&fixture.module,contexts)==XR_XIR_BAD_STRUCTURE);
     CHECK(!contexts->uses.outcomes_work.root && !contexts->uses.outcomes_work.root_witnesses);
@@ -345,7 +345,10 @@ static XrXirStatus conditional_dense_owner(const XrXirCompileContext *context,
         .result=XR_XIR_I64,.instructions=ops,.instruction_count=2,.operands=operands,.operand_count=2};
     f.declarations.functions=identities;f.declarations.entry_function=4;
     f.module.functions=functions;f.module.function_count=5;f.module.generics=generics;
-    EffectContextOwner *owner=NULL;XrXirStatus status=effect_context_owner_build(context,&f.module,NULL,NULL,&owner);
+    EffectContextOwner *owner=NULL;XrXirConstruction *construction=NULL;
+    XrXirStatus status=xir_fixture_module_construction(context,&f.module,&construction);
+    if (status==XR_XIR_OK) status=conditional_context_from_input(context,
+        (XirEffectInput){&f.module,construction,NULL},NULL,NULL,&owner);
     XrXirRootCauseTrace *trace=NULL;
     if (status==XR_XIR_OK && oracle) {
         EffectContextRootValue value;CHECK(effect_invocation_forest_values(context,owner->forest,4,&value)==XR_XIR_OK);
@@ -364,22 +367,22 @@ static XrXirStatus conditional_dense_owner(const XrXirCompileContext *context,
             }
         }
         CHECK(facts->requires_root==(mode==3 || mode==4) && facts->unresolved==(mode==1));
-        XrXirEffects effects={.resources=context->resources,.count=5,.outcomes_work={.contexts=owner}};
+        XrXirEffects effects={.resources=context->resources,.count=5,.input_facts=owner->dense->input_facts,.outcomes_work={.contexts=owner}};
         XrXirEffectArgument physical[2]={{0,(XrXirType)256},{1,(XrXirType)259}};
         XrXirOrigin origin={4,NULL,0,physical,2};
-        XirEffectContextInput request={&f.module,&f.types,&origin,0,NULL,0};XirEffectContextView selected={0};
-        CHECK(xir_effects_context_select(context,&effects,&request,&selected)==XR_XIR_OK);
+        XirEffectContextInput request={&f.module,&f.types,&origin,0,NULL,0,construction,NULL};XirEffectContextView selected={0};
+        CHECK(xir_effects_context_select_input(context,&effects,&request,&selected)==XR_XIR_OK);
         CHECK(selected.declaration==2 && selected.parameter_count==2 && !selected.argument_count);
         CHECK(selected.physical_types[0]==(XrXirType)256 &&
             selected.physical_types[1]==(mode==1 || mode==3 ? (XrXirType)257 : (XrXirType)259));
         physical[0].type=XR_XIR_I64;
-        CHECK(xir_effects_context_select(context,&effects,&request,&selected)==XR_XIR_BAD_TYPE);
+        CHECK(xir_effects_context_select_input(context,&effects,&request,&selected)==XR_XIR_BAD_TYPE);
         physical[0].type=(XrXirType)256;f.types.count=5;
-        CHECK(xir_effects_context_select(context,&effects,&request,&selected)==XR_XIR_BAD_STRUCTURE);
+        CHECK(xir_effects_context_select_input(context,&effects,&request,&selected)==XR_XIR_BAD_STRUCTURE);
         f.types.count=6;f.binding.function=2;
-        CHECK(xir_effects_context_select(context,&effects,&request,&selected)==XR_XIR_BAD_STRUCTURE);
+        CHECK(xir_effects_context_select_input(context,&effects,&request,&selected)==XR_XIR_BAD_STRUCTURE);
         f.binding.function=0;
-        CHECK(xir_effects_context_select(context,&effects,&request,&selected)==XR_XIR_OK);
+        CHECK(xir_effects_context_select_input(context,&effects,&request,&selected)==XR_XIR_OK);
     }
     if (status==XR_XIR_OK) {
         memset(&f,0,sizeof(f));memset(functions,0,sizeof(functions));memset(identities,0,sizeof(identities));
@@ -392,7 +395,7 @@ static XrXirStatus conditional_dense_owner(const XrXirCompileContext *context,
         CHECK(steps[2].function==1 && steps[2].cause==5 && steps[2].callee==0 && steps[2].distance==1);
         CHECK(steps[3].function==0 && steps[3].cause==1 && steps[3].slot==0 && !steps[3].distance);
     }
-    effect_context_owner_free(owner);
+    effect_context_owner_free(owner);xr_xir_compile_construction_free(construction);
     if (status==XR_XIR_OK && oracle) CHECK(xr_xir_root_cause_trace_facts(trace)->requires_root==(mode==3 || mode==4));
     xr_xir_compile_root_cause_trace_free(trace);return status;
 }
@@ -400,9 +403,9 @@ static XrXirStatus conditional_dense_owner(const XrXirCompileContext *context,
 static XrXirStatus conditional_refinement(const XrXirCompileContext *context, bool oracle) {
     ConditionalRawFixture f;conditional_raw_fixture(&f,0);
     XrXirEffects effects={.resources=context->resources,.count=4};
-    XrXirStatus status=xir_effects_refinement_capture(context,&f.module,&effects);
+    XrXirStatus status=conditional_capture_from_raw(context,&f.module,&effects);
     EffectOrdinaryContexts *ordinary=NULL;
-    if (status==XR_XIR_OK) status=effect_ordinary_build(context,&f.module,NULL,NULL,&ordinary);
+    if (status==XR_XIR_OK) status=conditional_ordinary_from_raw(context,&f.module,NULL,NULL,&ordinary);
     if (status==XR_XIR_OK) {
         f.method_parameters[1]=(XrXirType)259;
         ordinary->terms.remaining=context;
@@ -499,33 +502,36 @@ static XrXirStatus conditional_cleanup_owner(const XrXirCompileContext *context,
     XrXirProvenance template={.kind=XR_XIR_EVIDENCE_TEMPLATE};
     XrXirModule module={.stage=XR_XIR_CHECKED,.functions=functions,.function_count=4,.declarations=&declarations,
         .types=&types,.provenance=&template,.linkage_kind=XR_XIR_PROGRAM};
-    EffectContextOwner *owner=NULL;XrXirStatus status=effect_context_owner_build(context,&module,NULL,NULL,&owner);
+    EffectContextOwner *owner=NULL;XrXirConstruction *construction=NULL;
+    XrXirStatus status=xir_fixture_module_construction(context,&module,&construction);
+    if (status==XR_XIR_OK) status=conditional_context_from_input(context,
+        (XirEffectInput){&module,construction,NULL},NULL,NULL,&owner);
     if (status==XR_XIR_OK && oracle) {
-        XrXirEffects effects={.resources=context->resources,.count=4,.outcomes_work={.contexts=owner}};
+        XrXirEffects effects={.resources=context->resources,.count=4,.input_facts=owner->dense->input_facts,.outcomes_work={.contexts=owner}};
         XrXirEffectArgument physical[2]={{0,(XrXirType)257},{1,(XrXirType)258}};
         XrXirOrigin origin={0,NULL,0,physical,2};
-        XirEffectContextInput input={&module,&types,&origin,0,NULL,0};XirEffectContextView first={0},second={0};
-        CHECK(xir_effects_context_select(context,&effects,&input,&first)==XR_XIR_OK);
-        input.instruction=1;CHECK(xir_effects_context_select(context,&effects,&input,&second)==XR_XIR_OK);
+        XirEffectContextInput input={&module,&types,&origin,0,NULL,0,construction,NULL};XirEffectContextView first={0},second={0};
+        CHECK(xir_effects_context_select_input(context,&effects,&input,&first)==XR_XIR_OK);
+        input.instruction=1;CHECK(xir_effects_context_select_input(context,&effects,&input,&second)==XR_XIR_OK);
         CHECK(first.declaration==1 && second.declaration==1 && first.parameter_count==1 && second.parameter_count==1);
         CHECK(first.physical_types[0]==(XrXirType)257 && !first.requires_root && !first.unresolved);
         CHECK(second.physical_types[0]==(XrXirType)258 && second.requires_root && !second.unresolved);
         CHECK(first.function!=second.function);
         XrXirEffectArgument capture={0,(XrXirType)257};XrXirOrigin child={1,NULL,0,&capture,1};
         input.origin=&child;input.instruction=UINT32_MAX;input.owners=&origin;input.owner_count=1;
-        CHECK(xir_effects_context_select(context,&effects,&input,&first)==XR_XIR_OK && !first.requires_root);
+        CHECK(xir_effects_context_select_input(context,&effects,&input,&first)==XR_XIR_OK && !first.requires_root);
         /* Missing owner, another actual owner, and a forged declaration cannot
          * reuse the independently selected body/capture certificate. */
         input.owners=NULL;input.owner_count=0;
-        CHECK(xir_effects_context_select(context,&effects,&input,&first)==XR_XIR_BAD_TYPE);
+        CHECK(xir_effects_context_select_input(context,&effects,&input,&first)==XR_XIR_BAD_TYPE);
         input.owners=&origin;input.owner_count=1;physical[1].type=(XrXirType)257;
-        CHECK(xir_effects_context_select(context,&effects,&input,&first)==XR_XIR_BAD_TYPE);
+        CHECK(xir_effects_context_select_input(context,&effects,&input,&first)==XR_XIR_BAD_TYPE);
         physical[1].type=(XrXirType)258;child.function=2;
-        CHECK(xir_effects_context_select(context,&effects,&input,&first)==XR_XIR_BAD_TYPE);
+        CHECK(xir_effects_context_select_input(context,&effects,&input,&first)==XR_XIR_BAD_TYPE);
         child.function=1;capture.type=(XrXirType)256;
-        CHECK(xir_effects_context_select(context,&effects,&input,&first)==XR_XIR_BAD_TYPE);
+        CHECK(xir_effects_context_select_input(context,&effects,&input,&first)==XR_XIR_BAD_TYPE);
     }
-    effect_context_owner_free(owner);return status;
+    effect_context_owner_free(owner);xr_xir_compile_construction_free(construction);return status;
 }
 
 static XrXirStatus conditional_cell_owner(const XrXirCompileContext *context, bool oracle) {
@@ -569,7 +575,10 @@ static XrXirStatus conditional_cell_owner(const XrXirCompileContext *context, bo
     XrXirEffects *effects=NULL;XrXirRootCauseTrace *trace=NULL;EffectContextOwner *owner=NULL;
     XrXirStatus status=conditional_effects_from_raw(context,&module,&effects);
     XrXirProvenance template={.kind=XR_XIR_EVIDENCE_TEMPLATE};module.provenance=&template;
-    if (status==XR_XIR_OK) status=effect_context_owner_build(context,&module,NULL,NULL,&owner);
+    XrXirConstruction *construction=NULL;
+    if (status==XR_XIR_OK) status=xir_fixture_module_construction(context,&module,&construction);
+    if (status==XR_XIR_OK) status=conditional_context_from_input(context,
+        (XirEffectInput){&module,construction,NULL},NULL,NULL,&owner);
     if (status==XR_XIR_OK && oracle) {
         CHECK(effect_roots_read(effects)->root[0].unresolved && !effect_roots_read(effects)->root[0].requires_root);
         CHECK(!effect_roots_read(effects)->root[1].unresolved && !effect_roots_read(effects)->root[1].requires_root);
@@ -593,13 +602,13 @@ static XrXirStatus conditional_cell_owner(const XrXirCompileContext *context, bo
         CHECK(xir_effects_entry_root(context,effects,6,&entry)==XR_XIR_BAD_STRUCTURE &&
             entry.intrinsic_mask==UINT32_MAX);
         CHECK(owner->dense->count==6);
-        XrXirEffects selected_effects={.resources=context->resources,.count=6,.outcomes_work={.contexts=owner}};
+        XrXirEffects selected_effects={.resources=context->resources,.count=6,.input_facts=owner->dense->input_facts,.outcomes_work={.contexts=owner}};
         XrXirOrigin local_origin={.function=1},shared_origin={.function=2};
-        XirEffectContextInput input={&module,&types,&local_origin,2,NULL,0};
+        XirEffectContextInput input={&module,&types,&local_origin,2,NULL,0,construction,NULL};
         XirEffectContextView local_view={0},shared_view={0};
-        CHECK(xir_effects_context_select(context,&selected_effects,&input,&local_view)==XR_XIR_OK);
+        CHECK(xir_effects_context_select_input(context,&selected_effects,&input,&local_view)==XR_XIR_OK);
         input.origin=&shared_origin;input.instruction=1;
-        CHECK(xir_effects_context_select(context,&selected_effects,&input,&shared_view)==XR_XIR_OK);
+        CHECK(xir_effects_context_select_input(context,&selected_effects,&input,&shared_view)==XR_XIR_OK);
         CHECK(local_view.function==shared_view.function && local_view.declaration==0 && shared_view.declaration==0);
         CHECK(!local_view.requires_root && !local_view.unresolved && shared_view.requires_root && !shared_view.unresolved);
         memset(nodes,0,sizeof(nodes));memset(functions,0,sizeof(functions));
@@ -611,7 +620,7 @@ static XrXirStatus conditional_cell_owner(const XrXirCompileContext *context, bo
             CHECK(count==1 && steps && steps[0].cause==XR_XIR_ROOT_CAUSE_CELL_PARAMETER && steps[0].slot==0);
         }
     }
-    effect_context_owner_free(owner);
+    effect_context_owner_free(owner);xr_xir_compile_construction_free(construction);
     xr_xir_compile_effects_free(effects);
     if (status==XR_XIR_OK && oracle) CHECK(xr_xir_root_cause_trace_facts(trace)->unresolved);
     xr_xir_compile_root_cause_trace_free(trace);return status;
@@ -694,25 +703,27 @@ static void conditional_empty_domains(const XrXirCompileContext *context) {
     XrXirProvenance template={.kind=XR_XIR_EVIDENCE_TEMPLATE};
     XrXirModule module={.stage=XR_XIR_CHECKED,.functions=functions,.function_count=3,
         .declarations=&declarations,.linkage_kind=XR_XIR_PROGRAM,.provenance=&template};
-    EffectContextOwner *owner=NULL;
-    CHECK(effect_context_owner_build(context,&module,NULL,NULL,&owner)==XR_XIR_OK);
-    XrXirEffects effects={.resources=context->resources,.count=3,.outcomes_work={.contexts=owner}};
-    XrXirOrigin origin={.function=1};XirEffectContextInput input={&module,NULL,&origin,0,NULL,0};
+    EffectContextOwner *owner=NULL;XrXirConstruction *construction=NULL;
+    CHECK(xir_fixture_module_construction(context,&module,&construction)==XR_XIR_OK);
+    CHECK(conditional_context_from_input(context,(XirEffectInput){&module,construction,NULL},NULL,NULL,&owner)==XR_XIR_OK);
+    XrXirEffects effects={.resources=context->resources,.count=3,.input_facts=owner->dense->input_facts,.outcomes_work={.contexts=owner}};
+    XrXirOrigin origin={.function=1};XirEffectContextInput input={&module,NULL,&origin,0,NULL,0,construction,NULL};
     XirEffectContextView selected={0};
-    CHECK(xir_effects_context_select(context,&effects,&input,&selected)==XR_XIR_OK && selected.declaration==0);
+    CHECK(xir_effects_context_select_input(context,&effects,&input,&selected)==XR_XIR_OK && selected.declaration==0);
     call[0].immediate=1;selected.declaration=UINT32_MAX;
-    CHECK(xir_effects_context_select(context,&effects,&input,&selected)==XR_XIR_BAD_STRUCTURE &&
+    CHECK(xir_effects_context_select_input(context,&effects,&input,&selected)==XR_XIR_BAD_STRUCTURE &&
         selected.declaration==UINT32_MAX);
-    effect_context_owner_free(owner);
+    effect_context_owner_free(owner);xr_xir_compile_construction_free(construction);construction=NULL;
 
     ConditionalRawFixture nominal;conditional_raw_fixture(&nominal,0);owner=NULL;
-    CHECK(effect_context_owner_build(context,&nominal.module,NULL,NULL,&owner)==XR_XIR_OK);
-    effects=(XrXirEffects){.resources=context->resources,.count=4,.outcomes_work={.contexts=owner}};
-    origin=(XrXirOrigin){.function=2};input=(XirEffectContextInput){&nominal.module,NULL,&origin,UINT32_MAX,NULL,0};
+    CHECK(xir_fixture_module_construction(context,&nominal.module,&construction)==XR_XIR_OK);
+    CHECK(conditional_context_from_input(context,(XirEffectInput){&nominal.module,construction,NULL},NULL,NULL,&owner)==XR_XIR_OK);
+    effects=(XrXirEffects){.resources=context->resources,.count=4,.input_facts=owner->dense->input_facts,.outcomes_work={.contexts=owner}};
+    origin=(XrXirOrigin){.function=2};input=(XirEffectContextInput){&nominal.module,NULL,&origin,UINT32_MAX,NULL,0,construction,NULL};
     selected.declaration=UINT32_MAX;
-    CHECK(xir_effects_context_select(context,&effects,&input,&selected)==XR_XIR_BAD_TYPE &&
+    CHECK(xir_effects_context_select_input(context,&effects,&input,&selected)==XR_XIR_BAD_TYPE &&
         selected.declaration==UINT32_MAX);
-    effect_context_owner_free(owner);
+    effect_context_owner_free(owner);xr_xir_compile_construction_free(construction);construction=NULL;
 }
 
 /* Complete raw checking and the owned checked revalidation precede the
@@ -867,16 +878,17 @@ static XrXirStatus conditional_zero_arity(const XrXirCompileContext *context,boo
     const XrXirModule *owned=xr_xir_compile_artifact_module(checked);
     if (status==XR_XIR_OK) status=xr_xir_compile_verify_v2(context,owned,
         xr_xir_compile_artifact_construction(checked),NULL);
-    if (status==XR_XIR_OK) status=effect_context_owner_build(context,owned,NULL,NULL,&owner);
+    if (status==XR_XIR_OK) status=conditional_context_from_input(context,
+        (XirEffectInput){owned,xr_xir_compile_artifact_construction(checked),NULL},NULL,NULL,&owner);
     if (status==XR_XIR_OK) {
-        XrXirEffects effects={.resources=context->resources,.count=3,.outcomes_work={.contexts=owner}};
+        XrXirEffects effects={.resources=context->resources,.count=3,.input_facts=owner->dense->input_facts,.outcomes_work={.contexts=owner}};
         XrXirOrigin origin={.function=0,.arguments=&ordinary[0],.argument_count=1};
-        XirEffectContextInput input={owned,owned->types,&origin,UINT32_MAX,NULL,0};
+        XirEffectContextInput input={owned,owned->types,&origin,UINT32_MAX,NULL,0,xr_xir_compile_artifact_construction(checked),NULL};
         XirEffectContextView first={0},second={0};
-        status=xir_effects_context_select(context,&effects,&input,&first);
+        status=xir_effects_context_select_input(context,&effects,&input,&first);
         if (status==XR_XIR_OK) {
             origin.arguments=&ordinary[1];
-            status=xir_effects_context_select(context,&effects,&input,&second);
+            status=xir_effects_context_select_input(context,&effects,&input,&second);
         }
         if (status==XR_XIR_OK && oracle) {
             CHECK(first.declaration==0 && second.declaration==0 && !first.parameter_count && !second.parameter_count);
@@ -884,20 +896,20 @@ static XrXirStatus conditional_zero_arity(const XrXirCompileContext *context,boo
                 second.arguments[0]==XR_XIR_F64 && first.function!=second.function);
             CHECK(!first.requires_root && !first.unresolved && !second.requires_root && !second.unresolved);
             XrXirType wrong=XR_XIR_I32;origin.arguments=&wrong;XirEffectContextView rejected={.declaration=UINT32_MAX};
-            CHECK(xir_effects_context_select(context,&effects,&input,&rejected)==XR_XIR_BAD_TYPE &&
+            CHECK(xir_effects_context_select_input(context,&effects,&input,&rejected)==XR_XIR_BAD_TYPE &&
                 rejected.declaration==UINT32_MAX);
             origin.arguments=ordinary;origin.argument_count=2;
-            CHECK(xir_effects_context_select(context,&effects,&input,&rejected)==XR_XIR_BAD_TYPE);
+            CHECK(xir_effects_context_select_input(context,&effects,&input,&rejected)==XR_XIR_BAD_TYPE);
             origin.argument_count=1;origin.function=2;
-            CHECK(xir_effects_context_select(context,&effects,&input,&rejected)==XR_XIR_BAD_TYPE);
+            CHECK(xir_effects_context_select_input(context,&effects,&input,&rejected)==XR_XIR_BAD_TYPE);
             origin.function=0;XrXirEffectArgument extra={0,XR_XIR_I64};
             origin.effect_arguments=&extra;origin.effect_argument_count=1;
-            CHECK(xir_effects_context_select(context,&effects,&input,&rejected)==XR_XIR_BAD_TYPE);
+            CHECK(xir_effects_context_select_input(context,&effects,&input,&rejected)==XR_XIR_BAD_TYPE);
             origin.effect_arguments=NULL;origin.effect_argument_count=0;
             XrXirOrigin false_owner={.function=1};input.owners=&false_owner;input.owner_count=1;
-            CHECK(xir_effects_context_select(context,&effects,&input,&rejected)==XR_XIR_BAD_TYPE);
+            CHECK(xir_effects_context_select_input(context,&effects,&input,&rejected)==XR_XIR_BAD_TYPE);
             input.owners=NULL;input.owner_count=0;
-            CHECK(xir_effects_context_select(context,&effects,&input,&first)==XR_XIR_OK);
+            CHECK(xir_effects_context_select_input(context,&effects,&input,&first)==XR_XIR_OK);
         }
     }
     xr_xir_compile_artifact_free(checked);memset(functions,0,sizeof(functions));memset(generics,0,sizeof(generics));
@@ -951,18 +963,19 @@ static XrXirStatus conditional_zero_arity_cleanup(const XrXirCompileContext *con
     const XrXirModule *owned=xr_xir_compile_artifact_module(checked);
     if (status==XR_XIR_OK) status=xr_xir_compile_verify_v2(context,owned,
         xr_xir_compile_artifact_construction(checked),NULL);
-    if (status==XR_XIR_OK) status=effect_context_owner_build(context,owned,NULL,NULL,&owner);
+    if (status==XR_XIR_OK) status=conditional_context_from_input(context,
+        (XirEffectInput){owned,xr_xir_compile_artifact_construction(checked),NULL},NULL,NULL,&owner);
     if (status==XR_XIR_OK) {
-        XrXirEffects effects={.resources=context->resources,.count=5,.outcomes_work={.contexts=owner}};
+        XrXirEffects effects={.resources=context->resources,.count=5,.input_facts=owner->dense->input_facts,.outcomes_work={.contexts=owner}};
         XrXirOrigin nested={.function=2,.arguments=&ordinary[0],.argument_count=1};
         XrXirOrigin parents[2]={{.function=1,.arguments=&ordinary[0],.argument_count=1},
             {.function=0,.arguments=&ordinary[0],.argument_count=1}};
-        XirEffectContextInput input={owned,owned->types,&nested,UINT32_MAX,parents,2};
+        XirEffectContextInput input={owned,owned->types,&nested,UINT32_MAX,parents,2,xr_xir_compile_artifact_construction(checked),NULL};
         XirEffectContextView first={0},second={0};
-        status=xir_effects_context_select(context,&effects,&input,&first);
+        status=xir_effects_context_select_input(context,&effects,&input,&first);
         if (status==XR_XIR_OK) {
             nested.arguments=&ordinary[1];parents[0].arguments=parents[1].arguments=&ordinary[1];
-            status=xir_effects_context_select(context,&effects,&input,&second);
+            status=xir_effects_context_select_input(context,&effects,&input,&second);
         }
         if (status==XR_XIR_OK && oracle) {
             CHECK(first.declaration==2 && second.declaration==2 && first.function!=second.function &&
@@ -970,18 +983,18 @@ static XrXirStatus conditional_zero_arity_cleanup(const XrXirCompileContext *con
                 !second.requires_root && !second.unresolved);
             nested.arguments=&ordinary[0];parents[0].arguments=parents[1].arguments=&ordinary[0];
             XirEffectContextView rejected={.declaration=UINT32_MAX};input.owners=NULL;input.owner_count=0;
-            CHECK(xir_effects_context_select(context,&effects,&input,&rejected)==XR_XIR_BAD_TYPE &&
+            CHECK(xir_effects_context_select_input(context,&effects,&input,&rejected)==XR_XIR_BAD_TYPE &&
                 rejected.declaration==UINT32_MAX);
             input.owners=parents;input.owner_count=1;
-            CHECK(xir_effects_context_select(context,&effects,&input,&rejected)==XR_XIR_BAD_TYPE);
+            CHECK(xir_effects_context_select_input(context,&effects,&input,&rejected)==XR_XIR_BAD_TYPE);
             input.owner_count=2;XrXirOrigin saved=parents[0];parents[0]=parents[1];parents[1]=saved;
-            CHECK(xir_effects_context_select(context,&effects,&input,&rejected)==XR_XIR_BAD_TYPE);
+            CHECK(xir_effects_context_select_input(context,&effects,&input,&rejected)==XR_XIR_BAD_TYPE);
             parents[1]=parents[0];parents[0]=saved;parents[1].function=3;
-            CHECK(xir_effects_context_select(context,&effects,&input,&rejected)==XR_XIR_BAD_TYPE);
+            CHECK(xir_effects_context_select_input(context,&effects,&input,&rejected)==XR_XIR_BAD_TYPE);
             parents[1].function=0;parents[1].arguments=&ordinary[1];
-            CHECK(xir_effects_context_select(context,&effects,&input,&rejected)==XR_XIR_BAD_TYPE);
+            CHECK(xir_effects_context_select_input(context,&effects,&input,&rejected)==XR_XIR_BAD_TYPE);
             parents[1].arguments=&ordinary[0];
-            CHECK(xir_effects_context_select(context,&effects,&input,&first)==XR_XIR_OK);
+            CHECK(xir_effects_context_select_input(context,&effects,&input,&first)==XR_XIR_OK);
         }
     }
     xr_xir_compile_artifact_free(checked);memset(functions,0,sizeof(functions));memset(generics,0,sizeof(generics));
@@ -1060,54 +1073,55 @@ static XrXirStatus conditional_base_cleanup_reference(const XrXirCompileContext 
     const XrXirModule *owned=xr_xir_compile_artifact_module(checked);
     if (status==XR_XIR_OK) status=xr_xir_compile_verify_v2(context,owned,
         xr_xir_compile_artifact_construction(checked),NULL);
-    if (status==XR_XIR_OK) status=effect_context_owner_build(context,owned,NULL,NULL,&owner);
+    if (status==XR_XIR_OK) status=conditional_context_from_input(context,
+        (XirEffectInput){owned,xr_xir_compile_artifact_construction(checked),NULL},NULL,NULL,&owner);
     uint32_t pure_mask=UINT32_MAX,root_mask=UINT32_MAX;
     if (status==XR_XIR_OK) {
-        XrXirEffects effects={.resources=context->resources,.count=7,.outcomes_work={.contexts=owner}};
-        status=xir_effects_reference_root(context,&effects,owned,2,0,&pure_mask);
-        if (status==XR_XIR_OK) status=xir_effects_reference_root(context,&effects,owned,2,1,&root_mask);
+        XrXirEffects effects={.resources=context->resources,.count=7,.input_facts=owner->dense->input_facts,.outcomes_work={.contexts=owner}};
+        status=xir_effects_reference_root_input(context,&effects,(XirEffectInput){owned,xr_xir_compile_artifact_construction(checked),NULL},2,0,&pure_mask);
+        if (status==XR_XIR_OK) status=xir_effects_reference_root_input(context,&effects,(XirEffectInput){owned,xr_xir_compile_artifact_construction(checked),NULL},2,1,&root_mask);
         uint32_t noncleanup=UINT32_MAX;
-        if (status==XR_XIR_OK) status=xir_effects_reference_root(context,&effects,owned,5,1,&noncleanup);
+        if (status==XR_XIR_OK) status=xir_effects_reference_root_input(context,&effects,(XirEffectInput){owned,xr_xir_compile_artifact_construction(checked),NULL},5,1,&noncleanup);
         if (status==XR_XIR_OK && oracle) {
             CHECK(!pure_mask && !noncleanup && root_mask==XR_XIR_CALLABLE_ROOT_REQUIRED);
             EffectContextRootValue value;CHECK(effect_invocation_forest_values(context,owner->forest,2,&value)==XR_XIR_OK);
             CHECK(!value.facts.requires_root && !value.facts.unresolved);
             XrXirOrigin origin={.function=2},parents[3]={{.function=1},{.function=0},{.function=5}};
-            XirEffectContextInput input={owned,owned->types,&origin,0,parents,2};
+            XirEffectContextInput input={owned,owned->types,&origin,0,parents,2,xr_xir_compile_artifact_construction(checked),NULL};
             XirEffectContextView selected={.declaration=UINT32_MAX};
-            CHECK(xir_effects_context_select(context,&effects,&input,&selected)==XR_XIR_OK &&
+            CHECK(xir_effects_context_select_input(context,&effects,&input,&selected)==XR_XIR_OK &&
                 selected.declaration==3 && !selected.requires_root && !selected.unresolved);
             selected.declaration=UINT32_MAX;input.owners=NULL;input.owner_count=0;
-            CHECK(xir_effects_context_select(context,&effects,&input,&selected)==XR_XIR_BAD_TYPE &&
+            CHECK(xir_effects_context_select_input(context,&effects,&input,&selected)==XR_XIR_BAD_TYPE &&
                 selected.declaration==UINT32_MAX);
             input.owners=parents;input.owner_count=1;
-            CHECK(xir_effects_context_select(context,&effects,&input,&selected)==XR_XIR_BAD_TYPE);
+            CHECK(xir_effects_context_select_input(context,&effects,&input,&selected)==XR_XIR_BAD_TYPE);
             input.owner_count=2;parents[0].function=0;parents[1].function=1;
-            CHECK(xir_effects_context_select(context,&effects,&input,&selected)==XR_XIR_BAD_TYPE);
+            CHECK(xir_effects_context_select_input(context,&effects,&input,&selected)==XR_XIR_BAD_TYPE);
             parents[0].function=1;parents[1].function=5;
-            CHECK(xir_effects_context_select(context,&effects,&input,&selected)==XR_XIR_BAD_TYPE);
+            CHECK(xir_effects_context_select_input(context,&effects,&input,&selected)==XR_XIR_BAD_TYPE);
             parents[1].function=0;input.owner_count=3;
-            CHECK(xir_effects_context_select(context,&effects,&input,&selected)==XR_XIR_BAD_TYPE);
+            CHECK(xir_effects_context_select_input(context,&effects,&input,&selected)==XR_XIR_BAD_TYPE);
             input.owner_count=2;
-            CHECK(xir_effects_context_select(context,&effects,&input,&selected)==XR_XIR_OK);
+            CHECK(xir_effects_context_select_input(context,&effects,&input,&selected)==XR_XIR_OK);
             XrXirModule changed=*owned;XrXirDeclarations altered=*owned->declarations;
             XrXirFunctionIdentity copied[7];memcpy(copied,owned->declarations->functions,sizeof(copied));
             altered.functions=copied;changed.declarations=&altered;
             uint32_t sentinel=UINT32_MAX;changed.declarations=NULL;
-            CHECK(xir_effects_reference_root(context,&effects,&changed,2,0,&sentinel)==XR_XIR_BAD_STRUCTURE &&
+            CHECK(xir_effects_reference_root_input(context,&effects,(XirEffectInput){&changed,xr_xir_compile_artifact_construction(checked),NULL},2,0,&sentinel)==XR_XIR_BAD_STRUCTURE &&
                 sentinel==UINT32_MAX);
             changed.declarations=&altered;copied[2].cleanup_owner=8;
-            CHECK(xir_effects_reference_root(context,&effects,&changed,2,0,&sentinel)==XR_XIR_BAD_STRUCTURE &&
+            CHECK(xir_effects_reference_root_input(context,&effects,(XirEffectInput){&changed,xr_xir_compile_artifact_construction(checked),NULL},2,0,&sentinel)==XR_XIR_BAD_STRUCTURE &&
                 sentinel==UINT32_MAX);
             copied[2].cleanup_owner=2;copied[1].cleanup_owner=3;
-            CHECK(xir_effects_reference_root(context,&effects,&changed,2,0,&sentinel)==XR_XIR_BAD_STRUCTURE &&
+            CHECK(xir_effects_reference_root_input(context,&effects,(XirEffectInput){&changed,xr_xir_compile_artifact_construction(checked),NULL},2,0,&sentinel)==XR_XIR_BAD_STRUCTURE &&
                 sentinel==UINT32_MAX);
             copied[1].cleanup_owner=1;copied[0].cleanup_owner=2;
-            CHECK(xir_effects_reference_root(context,&effects,&changed,2,0,&sentinel)==XR_XIR_BAD_STRUCTURE &&
+            CHECK(xir_effects_reference_root_input(context,&effects,(XirEffectInput){&changed,xr_xir_compile_artifact_construction(checked),NULL},2,0,&sentinel)==XR_XIR_BAD_STRUCTURE &&
                 sentinel==UINT32_MAX);
             copied[0].cleanup_owner=0;XrXirGeneric generics[7]={0};
             generics[1].parameter_count=1;changed.generics=generics;
-            CHECK(xir_effects_reference_root(context,&effects,&changed,2,0,&sentinel)==XR_XIR_BAD_TYPE &&
+            CHECK(xir_effects_reference_root_input(context,&effects,(XirEffectInput){&changed,xr_xir_compile_artifact_construction(checked),NULL},2,0,&sentinel)==XR_XIR_BAD_TYPE &&
                 sentinel==UINT32_MAX);
             XrXirOrigin occupied={0},*out=&occupied;uint32_t out_count=0;
             CHECK(effect_context_base_owner_origins(context,owned,2,&out,&out_count)==XR_XIR_BAD_STRUCTURE &&
@@ -1214,7 +1228,7 @@ static XrXirStatus conditional_invocation_bounds(const XrXirCompileContext *cont
     if (status!=XR_XIR_OK) return status;
     ConditionalRawFixture fixture;conditional_raw_fixture(&fixture,2);
     EffectContextOwner *execution=NULL;
-    status=effect_context_owner_build(context,&fixture.module,NULL,NULL,&execution);
+    status=conditional_context_from_raw(context,&fixture.module,NULL,NULL,&execution);
     if (status==XR_XIR_OK && oracle) {
         CHECK(execution && execution->declared && execution->declared->count==execution->dense->count);
         uint32_t mask=UINT32_MAX;
@@ -1229,13 +1243,13 @@ static XrXirStatus conditional_invocation_bounds(const XrXirCompileContext *cont
 static XrXirStatus conditional_invocation_refinement(const XrXirCompileContext *context, bool oracle) {
     ConditionalRawFixture fixture;conditional_raw_fixture(&fixture,2);
     XrXirEffects effects={.resources=context->resources,.count=4};
-    XrXirStatus status=xir_effects_refinement_capture(context,&fixture.module,&effects);
+    XrXirStatus status=conditional_capture_from_raw(context,&fixture.module,&effects);
     if (status==XR_XIR_OK) {
         fixture.method_parameters[1]=(XrXirType)259;
         fixture.method_ops[0].type=(XrXirType)259;
     }
     EffectContextOwner *execution=NULL;
-    if (status==XR_XIR_OK) status=effect_context_owner_build(context,&fixture.module,effects.refinement,NULL,&execution);
+    if (status==XR_XIR_OK) status=conditional_context_from_raw(context,&fixture.module,effects.refinement,NULL,&execution);
     effect_refinement_free(effects.refinement);effects.refinement=NULL;
     memset(&fixture,0,sizeof(fixture));
     if (status==XR_XIR_OK && oracle) {
@@ -1294,10 +1308,10 @@ static XrXirStatus conditional_invocation_generic_bounds(const XrXirCompileConte
     XrXirStatus status=xir_fixture_check(context,&module,&checked,&diagnostic);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(checked,&diagnostic);
     XrXirEffects effects={.resources=context->resources,.count=4};
-    if (status==XR_XIR_OK) status=xir_effects_refinement_capture(context,&module,&effects);
+    if (status==XR_XIR_OK) status=conditional_capture_from_raw(context,&module,&effects);
     if (status==XR_XIR_OK) maker[0].type=(XrXirType)257;
     EffectContextOwner *execution=NULL;
-    if (status==XR_XIR_OK) status=effect_context_owner_build(context,&module,effects.refinement,NULL,&execution);
+    if (status==XR_XIR_OK) status=conditional_context_from_raw(context,&module,effects.refinement,NULL,&execution);
     xr_xir_compile_artifact_free(checked);
     effect_refinement_free(effects.refinement);effects.refinement=NULL;
     memset(nodes,0,sizeof(nodes));memset(functions,0,sizeof(functions));
@@ -1453,24 +1467,27 @@ static XrXirStatus conditional_descriptor_case(const XrXirCompileContext *contex
     if (status!=XR_XIR_OK) return status;
     ConditionalRawFixture fixture;conditional_raw_fixture(&fixture,0);
     EffectContextOwner *owner=NULL;XrXirRootCauseTrace *trace=NULL;
-    status=effect_context_owner_build(context,&fixture.module,NULL,NULL,&owner);
+    XrXirConstruction *construction=NULL;
+    status=xir_fixture_module_construction(context,&fixture.module,&construction);
+    if (status==XR_XIR_OK) status=conditional_context_from_input(context,
+        (XirEffectInput){&fixture.module,construction,NULL},NULL,NULL,&owner);
     for (uint32_t which=0;which<2 && status==XR_XIR_OK;++which) {
         EffectOrdinaryContexts *records=which?owner->dense:owner->ordinary;
         records->terms.remaining=context;
         status=conditional_descriptor_grow(records,oracle);records->terms.remaining=NULL;
     }
     if (status==XR_XIR_OK) {
-        XrXirEffects effects={.resources=context->resources,.count=4,.outcomes_work={.contexts=owner}};
+        XrXirEffects effects={.resources=context->resources,.count=4,.input_facts=owner->dense->input_facts,.outcomes_work={.contexts=owner}};
         XrXirOrigin origin={.function=2};
-        XirEffectContextInput input={&fixture.module,&fixture.types,&origin,UINT32_MAX,NULL,0};
+        XirEffectContextInput input={&fixture.module,&fixture.types,&origin,UINT32_MAX,NULL,0,construction,NULL};
         XirEffectContextView selected={0};
-        status=xir_effects_context_select(context,&effects,&input,&selected);
+        status=xir_effects_context_select_input(context,&effects,&input,&selected);
         if (status==XR_XIR_OK && oracle) CHECK(selected.declaration==2 && selected.parameter_count==2 &&
             selected.function==&owner->dense->functions[2]);
     }
     memset(&fixture,0,sizeof(fixture));
     if (status==XR_XIR_OK) status=effect_context_forest_trace(context,owner->forest,2,&trace);
-    effect_context_owner_free(owner);
+    effect_context_owner_free(owner);xr_xir_compile_construction_free(construction);
     if (status==XR_XIR_OK && oracle) CHECK(trace && xr_xir_root_cause_trace_facts(trace) &&
         !xr_xir_root_cause_trace_facts(trace)->requires_root &&
         xr_xir_root_cause_trace_facts(trace)->unresolved);
