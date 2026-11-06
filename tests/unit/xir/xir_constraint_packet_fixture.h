@@ -30,9 +30,12 @@ static XrXirStatus constraint_packet_fixture(const XrXirCompileContext *context,
         {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
     XrXirBlock init_block = {0,1,0,0}, answer_block = {0,2,0,0};
     XrXirFunction functions[] = {
-        {"entry",5,NULL,0,XR_XIR_I64,&answer_block,1,answer,2,NULL,0},
-        {"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0},
-        {"generic",7,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0}};
+        {.name="entry",.name_length=5,.result=XR_XIR_I64,.error_type=XR_XIR_NEVER,
+         .blocks=&answer_block,.block_count=1,.instructions=answer,.instruction_count=2},
+        {.name="init",.name_length=4,.result=XR_XIR_UNIT,.error_type=XR_XIR_NEVER,
+         .blocks=&init_block,.block_count=1,.instructions=&init,.instruction_count=1},
+        {.name="generic",.name_length=7,.result=XR_XIR_UNIT,.error_type=XR_XIR_NEVER,
+         .blocks=&init_block,.block_count=1,.instructions=&init,.instruction_count=1}};
     XrXirGeneric generics[] = {{0},{0},{&constraint,1,NULL,0, NULL}};
     XrXirSourceModule source = {"alpha",5,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[] = {{0},{0},{0}};

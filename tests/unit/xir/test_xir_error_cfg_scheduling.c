@@ -80,7 +80,8 @@ static void sg_fixture(SgFixture *f,const SgGraph *graph,unsigned order,uint32_t
             CHECK(graph->edges[logical][0]!=SG_NONE);
             f->instructions[at++]=(XrXirInstruction){.op=XR_XIR_JUMP,.targets={f->map[graph->edges[logical][0]]}};
         }
-        f->blocks[physical]=(XrXirBlock){.first=first,.count=at-first};
+        f->blocks[physical]=(XrXirBlock){.first=first,.count=at-first,
+            .frontier=physical?f->blocks[0].count:0};
     }
     f->base.functions[1].parameters=&f->parameter;f->base.functions[1].parameter_count=1;
     f->base.functions[1].blocks=f->blocks;f->base.functions[1].block_count=graph->count;
