@@ -81,7 +81,10 @@ static bool source_path_discover(SourceContext *ctx) {
     for(uint32_t m=0;m<(uint32_t)ctx->graph->spec_count&&!needed;++m) {
         if(source_owned_checked(ctx->graph->specs+m))continue;
         ctx->module=m;SourcePreludeScan scan={ctx,0,false,true};
-        if(!source_path_scan(ctx->graph->specs[m].ast,&scan))return false;needed=scan.needed;
+        if(!source_path_scan(ctx->graph->specs[m].ast,&scan)) {
+            return false;
+        }
+        needed=scan.needed;
     }
     ctx->module=saved;if(!needed)return ctx->diagnostic.status==XR_XIR_OK;
     char logical[64],canonical[160];if(!xir_path_prelude_coordinates(logical,canonical))
