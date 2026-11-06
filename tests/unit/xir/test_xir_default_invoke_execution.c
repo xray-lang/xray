@@ -46,7 +46,9 @@ static XrXirStatus default_invoke_effects(XrXirArtifact *checked) {
     for(uint32_t f=0;f<module->function_count;++f){
         if(!module->declarations->functions[f].exported)continue;
         const XrXirFunction *function=&module->functions[f];
-        bool escaping=function->name_length==8 && !memcmp(function->name,"escaping",8);
+        /* An untyped catch binds Error; its rethrow keeps the declared bound. */
+        bool escaping=(function->name_length==8 && !memcmp(function->name,"escaping",8)) ||
+            (function->name_length==7 && !memcmp(function->name,"rethrow",7));
         bool yielding=function->name_length==10 && !memcmp(function->name,"yieldCatch",10);
         XrXirEffectFacts fact_read=xr_xir_effects_read(effects,f);
         const XrXirFunctionEffects *fact=(fact_read.status==XR_XIR_OK?&fact_read.control:NULL);CHECK(fact);

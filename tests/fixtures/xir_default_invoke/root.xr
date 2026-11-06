@@ -20,7 +20,7 @@ export fn method()->i64 { const r=Reader<string>{value:"parent"};try { return r.
 export fn staticMethod()->i64 { try { return Reader<string>.make<i64>() } catch(e:Failure) { return 41 } }
 export fn construction()->i64 { try { return Box().value } catch(e:Failure) { return 41 } }
 export fn nested()->i64 { try { try { return receive() } catch(e:Other) { return 0 } } catch(e:Failure) { return 41 } }
-export fn rethrow()->i64 { try { try { return receive() } catch(e) { throw e } } catch(e:Failure) { return 41 } }
+export fn rethrow() throws(Error)->i64 { try { try { return receive() } catch(e) { throw e } } catch(e:Failure) { return 41 } }
 export fn cleanup()->i64 { try { return mustNotEnter() } catch(e) { if(cleaned.load()==1 && entered.load()==0){return 41}else{return 0} } }
 export fn explicitControl()->i64 { try { return receive(fail()) } catch(e:Failure) { return 41 } }
 export fn heldString()->string { try { receive();return "wrong" } catch(e:Failure) { return "caught"+"-owned" } }
