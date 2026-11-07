@@ -40,10 +40,12 @@ static void setup_tmpdir(void) {
      * authority compares the two byte for byte, so the root has to be
      * canonical as well. On Darwin /tmp is a symlink to private/tmp, which
      * makes an uncanonicalized root escape itself. */
-    char *canonical = xr_realpath(g_tmpdir, NULL);
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    char *canonical = NULL;
+    ASSERT_EQ(xr_realpath_owned(&policy, g_tmpdir, &canonical), XR_OS_IO_OK);
     ASSERT_NOT_NULL(canonical);
     snprintf(g_tmpdir, sizeof(g_tmpdir), "%s", canonical);
-    xr_free(canonical);
+    policy.free(policy.context, canonical);
 }
 
 /* Recursively remove the temp directory. */

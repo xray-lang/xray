@@ -144,8 +144,8 @@ static void built_after_retirement(void) {
         {.op=XR_XIR_CONST_INT,.type=XR_XIR_I8,.immediate=42},xr_hir_conversion_instruction(&conversion,0),{.op=XR_XIR_RETURN,.args={1}}};
     XrXirBlock one={0,1,0,0},three={0,3,0,0};
     XrXirFunction functions[]={
-        {"$init",5,NULL,0,XR_XIR_UNIT,&one,1,&ret,1,NULL,0,XR_XIR_NEVER},
-        {"entry",5,NULL,0,XR_XIR_I64,&three,1,answer,3,NULL,0,XR_XIR_NEVER}};
+        {"$init",5,NULL,0,XR_XIR_UNIT,&one,1,&ret,1,NULL,0,XR_XIR_NEVER,0,NULL},
+        {"entry",5,NULL,0,XR_XIR_I64,&three,1,answer,3,NULL,0,XR_XIR_NEVER,0,NULL}};
     XrXirFunctionIdentity identities[2]={{0}};
     XrXirSourceModule module={.name="conversion",.name_length=10,.storage=XR_XIR_MODULE_FRESH_STORAGE};
     XrXirDeclarations declarations={&module,1,identities,NULL,0,NULL,0,0,1,NULL};

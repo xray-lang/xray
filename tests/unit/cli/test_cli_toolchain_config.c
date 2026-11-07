@@ -106,7 +106,7 @@ static int test_main(int argc,char **argv) {
         }
         printf("complete allocation cuts=%zu held-boundary physical=0\n",count);return 0;
     }
-    int expected=atoi(argv[2]);
+    XrCliToolchainConfigStatus expected=(XrCliToolchainConfigStatus)atoi(argv[2]);
     XrCliToolchainConfigStatus actual=run(argv[1],SIZE_MAX,&defaults,&stats,false);
     CHECK(actual==expected);return 0;
 }

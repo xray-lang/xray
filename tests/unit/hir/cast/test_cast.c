@@ -120,9 +120,9 @@ static void built_after_retirement(void) {
     XrXirInstruction ret={.op=XR_XIR_RETURN},ops[]={{.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=255},xr_hir_cast_instruction(&node,0),{.op=XR_XIR_RETURN,.args={1}}};
     XrXirInstruction entry[]={{.op=XR_XIR_CONST_INT,.type=XR_XIR_I64},{.op=XR_XIR_RETURN,.args={0}}};XrXirBlock one={0,1,0,0},body={0,3,0,0},main_body={0,2,0,0};
     XrXirFunction functions[]={
-        {"$init",5,NULL,0,XR_XIR_UNIT,&one,1,&ret,1,NULL,0,XR_XIR_NEVER},
-        {"cast",4,NULL,0,node.target,&body,1,ops,3,NULL,0,XR_XIR_NEVER},
-        {"entry",5,NULL,0,XR_XIR_I64,&main_body,1,entry,2,NULL,0,XR_XIR_NEVER}};
+        {"$init",5,NULL,0,XR_XIR_UNIT,&one,1,&ret,1,NULL,0,XR_XIR_NEVER,0,NULL},
+        {"cast",4,NULL,0,node.target,&body,1,ops,3,NULL,0,XR_XIR_NEVER,0,NULL},
+        {"entry",5,NULL,0,XR_XIR_I64,&main_body,1,entry,2,NULL,0,XR_XIR_NEVER,0,NULL}};
     XrXirFunctionIdentity identities[3]={{0}};XrXirSourceModule module={.name="cast",.name_length=4,.storage=XR_XIR_MODULE_FRESH_STORAGE};
     XrXirDeclarations declarations={&module,1,identities,NULL,0,NULL,0,0,2,NULL};XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=3,.declarations=&declarations,.linkage_kind=XR_XIR_PROGRAM};
     XrXirConstruction *construction=NULL;CHECK(xr_xir_compile_construction_new_v5(&receiver,NULL,&(XrXirConstructionSpec){NULL,0,NULL,0,NULL},&(XrXirSlotFacts){NULL,0},&construction, NULL)==XR_XIR_OK);

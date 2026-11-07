@@ -15,7 +15,21 @@
 #include "frontend/parser/xattribute_registry.h"
 #include <stdio.h>
 #include <string.h>
+#if XR_OS_WINDOWS
 #include <io.h>
+#define test_dup _dup
+#define test_dup2 _dup2
+#define test_fileno _fileno
+#define test_close _close
+#define TEST_NULL_DEVICE "NUL"
+#else
+#include <unistd.h>
+#define test_dup dup
+#define test_dup2 dup2
+#define test_fileno fileno
+#define test_close close
+#define TEST_NULL_DEVICE "/dev/null"
+#endif
 
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #define OK(c) CHECK((c) == XR_COMPILE_RESOURCE_OK)
@@ -209,15 +223,15 @@ static void diagnostic_io(void) {
     XrCompilerSession *session = NULL;
     OK(xr_compile_resources_new(&unlimited, &resources));
     CHECK(xr_compile_session_new(resources, &session) == XR_COMPILE_RESOURCE_OK);
-    int original = _dup(_fileno(stderr));
+    int original = test_dup(test_fileno(stderr));
     CHECK(original >= 0);
-    FILE *readonly = fopen("NUL", "r");
-    CHECK(readonly && fflush(stderr) == 0 && _dup2(_fileno(readonly), _fileno(stderr)) == 0);
+    FILE *readonly = fopen(TEST_NULL_DEVICE, "r");
+    CHECK(readonly && fflush(stderr) == 0 && test_dup2(test_fileno(readonly), test_fileno(stderr)) >= 0);
     AstNode *output = NULL;
     XrParseStatus status = xr_compile_parse(session, "const value =", &output);
-    CHECK(_dup2(original, _fileno(stderr)) == 0);
+    CHECK(test_dup2(original, test_fileno(stderr)) >= 0);
     clearerr(stderr);
-    CHECK(_close(original) == 0 && fclose(readonly) == 0);
+    CHECK(test_close(original) == 0 && fclose(readonly) == 0);
     CHECK(status == XR_PARSE_IO && !output);
     OK(xr_compile_session_resource_status(session));
     CHECK(xr_compile_parse(session, "const valid = 1", &output) == XR_PARSE_OK);

@@ -22,6 +22,11 @@ project(Xray
     LANGUAGES C CXX ASM
 )
 
+if(APPLE)
+    # Darwin's owned OS adapters also need BSD declarations in standalone tests.
+    add_compile_definitions(_DARWIN_C_SOURCE)
+endif()
+
 # ----------------------------------------------------------------------------
 # Compiler cache
 #

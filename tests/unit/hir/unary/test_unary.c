@@ -101,9 +101,9 @@ static void run_node(XrHirUnary node,uint64_t input,uint64_t expected) {
     XrXirBlock one={0,1,0,0},body={0,count,0,0},entry_block={0,2,0,0};
     XrXirInstruction entry[]={ {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64}, {.op=XR_XIR_RETURN,.args={0}} };
     XrXirFunction functions[]={
-        {"$init",5,NULL,0,XR_XIR_UNIT,&one,1,&ret,1,NULL,0,XR_XIR_NEVER},
-        {"unary",5,&node.type,1,node.type,&body,1,instructions,count,NULL,0,XR_XIR_NEVER},
-        {"entry",5,NULL,0,XR_XIR_I64,&entry_block,1,entry,2,NULL,0,XR_XIR_NEVER}};
+        {"$init",5,NULL,0,XR_XIR_UNIT,&one,1,&ret,1,NULL,0,XR_XIR_NEVER,0,NULL},
+        {"unary",5,&node.type,1,node.type,&body,1,instructions,count,NULL,0,XR_XIR_NEVER,0,NULL},
+        {"entry",5,NULL,0,XR_XIR_I64,&entry_block,1,entry,2,NULL,0,XR_XIR_NEVER,0,NULL}};
     XrXirFunctionIdentity identities[3]={{0}};XrXirSourceModule module={.name="unary",.name_length=5,.storage=XR_XIR_MODULE_FRESH_STORAGE};
     XrXirDeclarations declarations={&module,1,identities,NULL,0,NULL,0,0,2,NULL};
     XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=3,.declarations=&declarations,.linkage_kind=XR_XIR_PROGRAM};

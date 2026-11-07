@@ -29,7 +29,8 @@ if(MSVC)
     target_compile_options(test_stdlib_source_owner PRIVATE /W4 /WX /utf-8)
     target_compile_definitions(test_stdlib_source_owner PRIVATE _CRT_SECURE_NO_WARNINGS WIN32_LEAN_AND_MEAN NOMINMAX)
 else()
-    target_compile_options(test_stdlib_source_owner PRIVATE -Wall -Wextra -Werror -pedantic)
+    # Complete embedded modules exceed the ISO minimum string-literal length.
+    target_compile_options(test_stdlib_source_owner PRIVATE -Wall -Wextra -Werror -pedantic -Wno-overlength-strings)
 endif()
 add_test(NAME test_stdlib_source_owner COMMAND ${Python3_EXECUTABLE} -X utf8
     "${CMAKE_CURRENT_LIST_DIR}/../test_stdlib_source_owner.py" $<TARGET_FILE:test_stdlib_source_owner> "${XR_ROOT}")

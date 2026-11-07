@@ -97,9 +97,9 @@ static void built_after_retirement(void) {
     XrXirInstruction entry[]={{.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=42},{.op=XR_XIR_RETURN,.args={0}}};
     XrXirBlock one={0,1,0,0},two={0,2,0,0};
     XrXirFunction functions[]={
-        {"$init",5,NULL,0,XR_XIR_UNIT,&one,1,&ret,1,NULL,0,XR_XIR_NEVER},
-        {"answer",6,NULL,0,XR_XIR_F64,&two,1,answer,2,NULL,0,XR_XIR_NEVER},
-        {"entry",5,NULL,0,XR_XIR_I64,&two,1,entry,2,NULL,0,XR_XIR_NEVER}};
+        {"$init",5,NULL,0,XR_XIR_UNIT,&one,1,&ret,1,NULL,0,XR_XIR_NEVER,0,NULL},
+        {"answer",6,NULL,0,XR_XIR_F64,&two,1,answer,2,NULL,0,XR_XIR_NEVER,0,NULL},
+        {"entry",5,NULL,0,XR_XIR_I64,&two,1,entry,2,NULL,0,XR_XIR_NEVER,0,NULL}};
     XrXirFunctionIdentity identities[3]={{0}};identities[1].exported=1;
     XrXirSourceModule module={.name="literal",.name_length=7,.storage=XR_XIR_MODULE_FRESH_STORAGE};
     XrXirDeclarations declarations={&module,1,identities,NULL,0,NULL,0,0,2,NULL};

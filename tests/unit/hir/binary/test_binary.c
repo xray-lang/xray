@@ -122,8 +122,8 @@ static void built_after_retirement(void) {
         xr_hir_conversion_instruction(&node.left,0),xr_hir_binary_instruction(&node,2,1),{.op=XR_XIR_RETURN,.args={3}}};
     XrXirBlock one={0,1,0,0},five={0,5,0,0};
     XrXirFunction functions[]={
-        {"$init",5,NULL,0,XR_XIR_UNIT,&one,1,&ret,1,NULL,0,XR_XIR_NEVER},
-        {"entry",5,NULL,0,XR_XIR_I64,&five,1,answer,5,NULL,0,XR_XIR_NEVER}};
+        {"$init",5,NULL,0,XR_XIR_UNIT,&one,1,&ret,1,NULL,0,XR_XIR_NEVER,0,NULL},
+        {"entry",5,NULL,0,XR_XIR_I64,&five,1,answer,5,NULL,0,XR_XIR_NEVER,0,NULL}};
     XrXirFunctionIdentity identities[2]={{0}};XrXirSourceModule module={.name="binary",.name_length=6,.storage=XR_XIR_MODULE_FRESH_STORAGE};
     XrXirDeclarations declarations={&module,1,identities,NULL,0,NULL,0,0,1,NULL};
     XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=2,.declarations=&declarations,.linkage_kind=XR_XIR_PROGRAM};
