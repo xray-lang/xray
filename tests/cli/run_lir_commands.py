@@ -17,8 +17,11 @@ def main() -> None:
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--runtime-library", type=Path, action="append", required=True)
+    parser.add_argument("--runtime-library", type=Path, action="append")
+    parser.add_argument("--effects-only", action="store_true")
     args = parser.parse_args()
+    if not args.effects_only and not args.runtime_library:
+        parser.error("--runtime-library is required for native command checks")
     binary, root = args.binary.resolve(), args.root.resolve()
     args.output.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="lir-cli-", dir=args.output.resolve()))
@@ -26,6 +29,7 @@ def main() -> None:
     environment = dict(os.environ, XRAY_STDLIB_PATH=str(root / "stdlib"), NO_COLOR="1")
     environment["PATH"] = str(binary.parent) + os.pathsep + environment.get("PATH", "")
     records = []
+    sentinel = b"previous output\n"
 
     def run(name, command, expected):
         argv = list(map(str, command))
@@ -41,6 +45,39 @@ def main() -> None:
         (work / "result.json").write_text(json.dumps(records, indent=2) + "\n", encoding="utf-8")
         assert child.returncode == expected, (name, child.returncode, child.stdout, child.stderr)
         return child
+
+    def verify_effects():
+        effects = fixtures / "effects"
+        for name in ("pure_recursive_import", "pure_import_go", "nosuspend_literal",
+                     "root_const", "signature_throws", "signature_generic_try"):
+            checked = run(name + "-check", [binary, "check", effects / (name + ".xr")], 0)
+            assert not checked.stdout and not checked.stderr, name
+
+        rejected_effects = (
+            ("nosuspend_await", b"declared no_suspend function may suspend"),
+            ("nosuspend_fixed_callable", b"declared no_suspend function may suspend"),
+            ("nosuspend_strengthen", b"qualified reference requires an explicit target promise"),
+            ("root_mutable", b"GO target requires the current instance root execution"),
+            ("root_cleanup", b"GO target requires the current instance root execution"),
+            ("root_default", b"GO target requires the current instance root execution"),
+            ("root_import", b"GO target requires the current instance root execution"),
+            ("signature_missing_try", b"E0330: throwing call requires try or a try body"),
+            ("signature_redundant_try", b"E0336: try expression has no business-error source"),
+        )
+        for name, diagnostic in rejected_effects:
+            source = effects / (name + ".xr")
+            destination = work / (name + ".c")
+            destination.write_bytes(sentinel)
+            for command in ("check", "run", "build"):
+                options = ["--c-only", "-o", destination] if command == "build" else []
+                refused = run(name + "-" + command, [binary, command, source, *options], 1)
+                assert not refused.stdout and diagnostic in refused.stderr, (name, command)
+            assert destination.read_bytes() == sentinel, name
+
+    if args.effects_only:
+        verify_effects()
+        print(f"{len(records)} public effect checks passed")
+        return
 
     expected = {"hello": b"42\n", "call": b"42\n", "unicode": "你好\n".encode(),
                 "f64": b"3.75\n", "instance_growth": b"1\n" * 8,
@@ -87,7 +124,6 @@ def main() -> None:
     generated = work / "hello.c"
     run("c-only", [binary, "build", fixtures / "hello.xr", "--c-only", "-o", generated], 0)
     assert "int main(void)" in generated.read_text(encoding="utf-8")
-    sentinel = b"previous output\n"
     for flag, path in (([], work / "protected.exe"), (["--c-only"], generated)):
         path.write_bytes(sentinel)
         run("invalid-" + path.suffix[1:],
@@ -102,32 +138,7 @@ def main() -> None:
         refused = run(name + "-build", [binary, "build", source, "-o", executable], 1)
         assert not executable.exists() and b"constant scalar initializer" in refused.stderr
 
-    effects = fixtures / "effects"
-    for name in ("pure_recursive_import", "pure_import_go", "nosuspend_literal",
-                 "root_const", "signature_throws", "signature_generic_try"):
-        checked = run(name + "-check", [binary, "check", effects / (name + ".xr")], 0)
-        assert not checked.stdout and not checked.stderr, name
-
-    rejected_effects = (
-        ("nosuspend_await", b"declared no_suspend function may suspend"),
-        ("nosuspend_fixed_callable", b"declared no_suspend function may suspend"),
-        ("nosuspend_strengthen", b"qualified reference requires an explicit target promise"),
-        ("root_mutable", b"GO target requires the current instance root execution"),
-        ("root_cleanup", b"GO target requires the current instance root execution"),
-        ("root_default", b"GO target requires the current instance root execution"),
-        ("root_import", b"GO target requires the current instance root execution"),
-        ("signature_missing_try", b"E0330: throwing call requires try or a try body"),
-        ("signature_redundant_try", b"E0336: try expression has no business-error source"),
-    )
-    for name, diagnostic in rejected_effects:
-        source = effects / (name + ".xr")
-        destination = work / (name + ".c")
-        destination.write_bytes(sentinel)
-        for command in ("check", "run", "build"):
-            options = ["--c-only", "-o", destination] if command == "build" else []
-            refused = run(name + "-" + command, [binary, command, source, *options], 1)
-            assert not refused.stdout and diagnostic in refused.stderr, (name, command)
-        assert destination.read_bytes() == sentinel, name
+    verify_effects()
 
     for command in ("repl", "dap", "test"):
         refused = run("unavailable-" + command, [binary, command], 1)
