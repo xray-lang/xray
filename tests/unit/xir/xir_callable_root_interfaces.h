@@ -17,7 +17,7 @@ static XrXirStatus bound_implementation(const XrXirCompileContext *context,
     XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_NOMINAL},
         {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,.flags=flags},
         {.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64}};
-    XrXirNominalDeclaration nominal={{"alpha",5},{"Meter",5},1,NULL,0,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}};
+    XrXirNominalDeclaration nominal={{"alpha",5},{"Meter",5},1,NULL,0,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0},.parent=0};
     XrXirNominalTable nominals={&nominal,1,NULL};
     XrXirInterfaceMethod method={{"measure",7},(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1),0,0,NULL};
     XrXirInterfaceDeclaration interface={{"alpha",5},{"Measure",7},1,NULL,0,NULL,0,&method,1};
