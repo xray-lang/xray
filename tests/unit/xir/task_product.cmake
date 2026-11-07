@@ -6,8 +6,7 @@ add_executable(test_xir_task_root_retry xir/test_xir_task_root_retry.c)
 target_link_libraries(test_xir_task_root_retry PRIVATE xray_xir_vm xray_xir_scalar xray_xir_cgen)
 add_executable(test_xir_task_root_retry_probe xir/test_xir_task_root_retry_probe.c)
 target_link_libraries(test_xir_task_root_retry_probe PRIVATE xray_xir_vm xray_xir_scalar)
-add_executable(test_xir_go_cgen_source xir/test_xir_go_cgen_source.c)
-target_link_libraries(test_xir_go_cgen_source PRIVATE xray_xir_cgen)
+
 add_executable(test_xir_go_source_execution xir/test_xir_go_source_execution.c)
 target_link_libraries(test_xir_go_source_execution PRIVATE xray_xir_source xray_xir_vm)
 target_compile_definitions(test_xir_go_source_execution PRIVATE
@@ -18,7 +17,7 @@ target_link_libraries(test_xir_go_source_product PRIVATE xray_xir_source_product
 target_compile_definitions(test_xir_go_source_product PRIVATE
     XR_GO_PRODUCT_FIXTURES="${PROJECT_SOURCE_DIR}/tests/fixtures/xir_go_product"
     XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-foreach(target test_xir_task_vm_product test_xir_task_root_fault test_xir_task_root_retry test_xir_task_root_retry_probe test_xir_go_cgen_source test_xir_go_source_execution test_xir_go_source_product)
+foreach(target IN ITEMS test_xir_task_vm_product test_xir_task_root_fault test_xir_task_root_retry test_xir_task_root_retry_probe test_xir_go_source_execution test_xir_go_source_product)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
     else()

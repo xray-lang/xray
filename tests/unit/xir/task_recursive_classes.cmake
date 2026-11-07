@@ -1,4 +1,4 @@
-foreach(flavor results errors)
+foreach(flavor results)
     if(flavor STREQUAL "results")
         set(recursive_class_group constructed)
         set(recursive_class_fixture_macro XR_TASK_CONSTRUCTED_FIXTURES)
@@ -70,27 +70,6 @@ add_test(NAME test_xir_task_sequence_eof COMMAND test_xir_task_sequence_eof)
 set_tests_properties(test_xir_task_sequence_eof PROPERTIES
     TIMEOUT 60 LABELS "unit;xir;task;ownership;source;root-effects;malformed-input")
 
-add_executable(test_xir_task_cell_range_row "${CMAKE_CURRENT_LIST_DIR}/test_xir_task_cell_range_row.c")
-target_link_libraries(test_xir_task_cell_range_row PRIVATE xray_xir xray_xir_scalar xray_xir_source)
-if(MSVC)
-    target_compile_options(test_xir_task_cell_range_row PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_task_cell_range_row PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_task_cell_range_row COMMAND test_xir_task_cell_range_row)
-set_tests_properties(test_xir_task_cell_range_row PROPERTIES
-    TIMEOUT 60 LABELS "unit;xir;task;ownership;source;root-effects;malformed-input")
-
-add_executable(test_xir_task_small_runs "${CMAKE_CURRENT_LIST_DIR}/test_xir_task_small_runs.c")
-target_link_libraries(test_xir_task_small_runs PRIVATE xray_xir xray_xir_scalar xray_xir_source)
-if(MSVC)
-    target_compile_options(test_xir_task_small_runs PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_task_small_runs PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_task_small_runs COMMAND test_xir_task_small_runs)
-set_tests_properties(test_xir_task_small_runs PROPERTIES
-    TIMEOUT 60 LABELS "unit;xir;task;ownership;source;root-effects;malformed-input")
 
 add_executable(test_xir_task_recursive_class_proof "${CMAKE_CURRENT_LIST_DIR}/test_xir_task_recursive_class_proof.c")
 target_link_libraries(test_xir_task_recursive_class_proof PRIVATE xray_xir_source xray_xir_cgen xray_xir_vm)

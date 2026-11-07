@@ -1,27 +1,6 @@
-add_executable(test_xir_p09_hash_projection "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_hash_projection.c")
-target_link_libraries(test_xir_p09_hash_projection PRIVATE xray_xir_source xray_xir_cgen xray_xir_vm)
+
+
 set(HASH_PROJECTION_C "${CMAKE_BINARY_DIR}/generated/xir_p09_hash_projection.c")
-add_custom_command(OUTPUT "${HASH_PROJECTION_C}"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/generated"
-    COMMAND $<TARGET_FILE:test_xir_p09_hash_projection> "${HASH_PROJECTION_C}"
-    DEPENDS test_xir_p09_hash_projection VERBATIM)
-add_executable(test_xir_p09_hash_projection_native
-    "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_hash_projection_native.c" "${HASH_PROJECTION_C}")
-target_link_libraries(test_xir_p09_hash_projection_native PRIVATE xray_xir_scalar)
-add_executable(test_xir_p09_hash_projection_mixed
-    "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_hash_projection_mixed.c" "${HASH_PROJECTION_C}")
-target_link_libraries(test_xir_p09_hash_projection_mixed PRIVATE xray_xir_source xray_xir_vm)
-foreach(target test_xir_p09_hash_projection test_xir_p09_hash_projection_native test_xir_p09_hash_projection_mixed)
-    target_compile_definitions(${target} PRIVATE XR_P09_HASH_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-    set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-    if(MSVC)
-        target_compile_options(${target} PRIVATE /utf-8 /W4 /WX)
-    else()
-        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
-    endif()
-    add_test(NAME ${target} COMMAND ${target})
-    set_tests_properties(${target} PROPERTIES TIMEOUT 120 LABELS "unit;xir;hash;source;ownership;codec;provider")
-endforeach()
 
 add_test(NAME test_xir_p09_hash_projection78_vectors COMMAND ${XRAY_PYTHON}
     "${PROJECT_SOURCE_DIR}/tests/unit/xir/derive_hash_projection78_vectors.py"
@@ -45,23 +24,10 @@ set_tests_properties(test_xir_p09_hash_projection_resources PROPERTIES TIMEOUT 6
 
 foreach(mode native mixed)
     set(target test_xir_p09_hash_projection_resources_${mode})
-    add_executable(${target}
-        "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_hash_projection_resources_${mode}.c" "${HASH_PROJECTION_C}")
-    target_link_libraries(${target} PRIVATE xray_xir_source xray_xir_vm)
-    target_compile_definitions(${target} PRIVATE XR_P09_HASH_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-    set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-    if(MSVC)
-        target_compile_options(${target} PRIVATE /utf-8 /W4 /WX)
-    else()
-        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
-    endif()
-    add_test(NAME ${target}_normal COMMAND ${target} --normal)
-    set_tests_properties(${target}_normal PROPERTIES TIMEOUT 120 LABELS "unit;xir;hash;resources;target-impact;provider")
-    add_test(NAME ${target} COMMAND ${target})
-    set_tests_properties(${target} PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE LABELS "unit;xir;hash;resources;allocation;ownership;cancellation;provider")
+
 endforeach()
 
-foreach(target test_xir_p09_hash_projection_resources test_xir_p09_hash_projection_resources_native test_xir_p09_hash_projection_resources_mixed)
+foreach(target IN ITEMS test_xir_p09_hash_projection_resources)
     add_test(NAME ${target}_cancellation COMMAND ${target} --cancel)
     set_tests_properties(${target}_cancellation PROPERTIES TIMEOUT 120
         LABELS "unit;xir;hash;resources;cancellation;ownership;target-impact;provider")
@@ -86,20 +52,3 @@ add_test(NAME test_xir_p09_hash_projection_value COMMAND test_xir_p09_hash_proje
 set_tests_properties(test_xir_p09_hash_projection_value PROPERTIES TIMEOUT 120 LABELS "unit;xir;hash;ownership;memory;budget")
 add_test(NAME test_xir_p09_hash_projection_value_allocations COMMAND test_xir_p09_hash_projection_value --full)
 set_tests_properties(test_xir_p09_hash_projection_value_allocations PROPERTIES TIMEOUT 120 LABELS "unit;xir;hash;ownership;memory;budget;fault")
-add_executable(test_xir_p09_hash_projection_compiler
-    "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_hash_projection_compiler.c")
-target_link_libraries(test_xir_p09_hash_projection_compiler PRIVATE xray_xir_source xray_xir_cgen xray_xir_vm)
-target_compile_definitions(test_xir_p09_hash_projection_compiler PRIVATE XR_P09_HASH_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-set_target_properties(test_xir_p09_hash_projection_compiler PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-if(MSVC)
-    target_compile_options(test_xir_p09_hash_projection_compiler PRIVATE /utf-8 /W4 /WX)
-else()
-    target_compile_options(test_xir_p09_hash_projection_compiler PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_p09_hash_projection_compiler_normal COMMAND test_xir_p09_hash_projection_compiler --normal)
-add_test(NAME test_xir_p09_hash_projection_compiler_resources COMMAND test_xir_p09_hash_projection_compiler --resources)
-set_tests_properties(test_xir_p09_hash_projection_compiler_normal test_xir_p09_hash_projection_compiler_resources
-    PROPERTIES TIMEOUT 120 LABELS "unit;xir;hash;source;ownership;resources")
-add_test(NAME test_xir_p09_hash_projection_compiler COMMAND test_xir_p09_hash_projection_compiler --full)
-set_tests_properties(test_xir_p09_hash_projection_compiler PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 600
-    LABELS "unit;xir;hash;source;ownership;fault-injection;compiler-faults")

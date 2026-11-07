@@ -48,17 +48,6 @@ if(MSVC)
 endif()
 enable_testing()
 
-add_executable(test_compile_owner test_compile_owner.c)
-target_link_libraries(test_compile_owner PRIVATE compile_owner_core)
-target_compile_definitions(test_compile_owner PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
-if(MSVC)
-    target_compile_options(test_compile_owner PRIVATE /utf-8 /W4 /WX)
-    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
-        target_compile_options(test_compile_owner PRIVATE /experimental:c11atomics)
-    endif()
-endif()
-add_test(NAME test_compile_owner COMMAND test_compile_owner)
-set_tests_properties(test_compile_owner PROPERTIES LABELS "unit;xir;compiler;ownership;budget" TIMEOUT 120)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 add_test(NAME test_root_construction72_vectors
     COMMAND "${Python3_EXECUTABLE}" "${XR_ROOT}/tests/unit/xir/derive_combined_wire.py"

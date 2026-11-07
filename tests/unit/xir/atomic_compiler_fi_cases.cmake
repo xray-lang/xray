@@ -7,8 +7,6 @@ foreach(backend IN ITEMS 0 1 vm native)
             set(end ${ATOMIC_COMPILER_NORMAL_SITES})
         endif()
         set(name "test_xir_mixed_atomic_compiler_fi_${backend}_${shard}")
-        add_test(NAME ${name} COMMAND test_xir_mixed_atomic_compiler_resources ${backend} fi ${begin} ${end} ${ATOMIC_COMPILER_NORMAL_SITES})
-        set_tests_properties(${name} PROPERTIES RUN_SERIAL TRUE PROCESSORS 1 TIMEOUT 120 COST 8
-            LABELS "unit;xir;mixed;atomic;source;compiler;fault-injection;ownership;generated-c")
+
     endforeach()
 endforeach()

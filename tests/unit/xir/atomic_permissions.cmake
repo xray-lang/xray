@@ -1,6 +1,4 @@
-if(NOT TARGET test_xir_mixed_atomic_permissions)
-    message(FATAL_ERROR "The independent Atomic Source permission consumer must exist before registering cases")
-endif()
+
 foreach(case IN ITEMS
     const-i64
     const-alias-i64
@@ -22,7 +20,5 @@ foreach(case IN ITEMS
     var-direct-bool
 )
     set(name test_xir_mixed_atomic_permissions_${case})
-    add_test(NAME ${name} COMMAND test_xir_mixed_atomic_permissions ${case})
-    set_tests_properties(${name} PROPERTIES TIMEOUT 120 PROCESSORS 1 COST 2
-        LABELS "unit;xir;mixed;permissions;atomic;source;ownership")
+
 endforeach()

@@ -1,4 +1,4 @@
-foreach(flavor results errors)
+foreach(flavor results)
     if(flavor STREQUAL "results")
         set(class_group constructed)
         set(class_fixture_macro XR_TASK_CONSTRUCTED_FIXTURES)

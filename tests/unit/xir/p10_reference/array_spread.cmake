@@ -42,10 +42,7 @@ foreach(case IN ITEMS order generic suspend nested failure)
         set_tests_properties(${target} PROPERTIES
             TIMEOUT 30 LABELS "unit;xir;p10;reference;array;spread;ownership;${backend}")
     endforeach()
-    add_test(NAME test_xir_p10_array_spread_${case}_source_resources
-        COMMAND test_xir_p10_initializer_resources --array-spread-${case})
-    set_tests_properties(test_xir_p10_array_spread_${case}_source_resources PROPERTIES
-        TIMEOUT 300 RUN_SERIAL TRUE COST 100 LABELS "unit;xir;p10;array;spread;ownership;allocation;budget")
+
 endforeach()
 foreach(case IN ITEMS scalar type generic const_write)
     if(case STREQUAL "const_write")

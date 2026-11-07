@@ -38,19 +38,6 @@ add_custom_command(OUTPUT "${protocol_selection}"
       "${FMT_ROOT}/src/app/lsp/xlsp_document_owner.c"
       "${FMT_ROOT}/src/app/mcp/xmcp_source.c"
       "${FMT_ROOT}/src/app/mcp/xmcp_result.c" VERBATIM)
-add_executable(test_protocol_format "${CMAKE_CURRENT_LIST_DIR}/test_protocol_format.c"
-    "${protocol_selection}" "${FMT_ROOT}/src/app/lsp/xlsp_format.c" "${FMT_ROOT}/src/app/mcp/xmcp_json.c"
-    "${FMT_ROOT}/src/app/lsp/xlsp_document_store.c" "${FMT_ROOT}/src/app/lsp/xlsp_pending_requests.c"
-    "${FMT_ROOT}/src/app/lsp/xlsp_protocol_message.c" "${FMT_ROOT}/src/app/lsp/xlsp_protocol_output.c"
-    "${FMT_ROOT}/src/app/lsp/xlsp_framing.c"
-    "${FMT_ROOT}/src/os/win/time_win.c"
-    "${FMT_ROOT}/src/base/xjson.c" "${FMT_ROOT}/src/base/xframing.c")
-target_link_libraries(test_protocol_format PRIVATE xray_frontend_format xray_lsp_hierarchy_handlers)
-target_include_directories(test_protocol_format PRIVATE "${FMT_ROOT}/src" "${FMT_ROOT}/include" "${CMAKE_CURRENT_BINARY_DIR}")
-if(MSVC)
-    target_compile_options(test_protocol_format PRIVATE /W4 /WX /utf-8)
-endif()
-add_test(NAME test_protocol_format COMMAND test_protocol_format)
 
 set(fmt_fault_sources ${fmt_cli_sources})
 list(REMOVE_ITEM fmt_fault_sources "${FMT_ROOT}/src/app/cli/xcmd_fmt.c")

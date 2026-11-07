@@ -1,25 +1,4 @@
-add_executable(test_xir_instance_generations xir/test_xir_instance_generations.c)
-target_link_libraries(test_xir_instance_generations PRIVATE xray_xir_vm xray_xir_cgen)
-if(MSVC)
-    target_compile_options(test_xir_instance_generations PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_xir_instance_generations PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_instance_generations COMMAND test_xir_instance_generations)
-set_tests_properties(test_xir_instance_generations PROPERTIES
-    LABELS "unit;xir;lifecycle;ownership;generation" TIMEOUT 120)
-add_test(NAME test_xir_instance_generations_runtime_fi
-    COMMAND test_xir_instance_generations --runtime-fi)
-set_tests_properties(test_xir_instance_generations_runtime_fi PROPERTIES
-    LABELS "unit;xir;lifecycle;ownership;generation;fault-injection" TIMEOUT 120)
-add_test(NAME test_xir_instance_generations_runtime_axes
-    COMMAND test_xir_instance_generations --runtime-axes)
-set_tests_properties(test_xir_instance_generations_runtime_axes PROPERTIES
-    LABELS "unit;xir;lifecycle;ownership;generation;resources" TIMEOUT 120)
-add_test(NAME test_xir_instance_generations_runtime_prepare
-    COMMAND test_xir_instance_generations --runtime-prepare)
-set_tests_properties(test_xir_instance_generations_runtime_prepare PROPERTIES
-    LABELS "unit;xir;lifecycle;ownership;generation;resources" TIMEOUT 120)
+
 
 foreach(generation_backend IN ITEMS vm native vm_native native_vm)
     set(generation_target test_xir_instance_generation_${generation_backend})

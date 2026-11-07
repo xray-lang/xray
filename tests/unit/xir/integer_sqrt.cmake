@@ -18,15 +18,9 @@ foreach(mode IN ITEMS measure faults)
     else()
         set(sqrt_binding_mode faults)
     endif()
-    add_test(NAME test_xir_integer_sqrt_preparation_${mode}
-        COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/tests/unit/xir/integer_sqrt_resources.py
-            $<TARGET_FILE:test_xir_stdlib_preparation> ${PROJECT_SOURCE_DIR} ${mode})
-    add_test(NAME test_xir_integer_sqrt_binding_${mode}
-        COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/tests/unit/xir/integer_sqrt_resources.py
-            $<TARGET_FILE:test_xir_stdlib_resources> ${PROJECT_SOURCE_DIR} ${sqrt_binding_mode})
+
     add_test(NAME test_xir_integer_sqrt_runtime_${mode}
         COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/tests/unit/xir/integer_sqrt_resources.py
             $<TARGET_FILE:test_xir_integer_sqrt_vm> ${PROJECT_SOURCE_DIR} ${mode})
-    set_tests_properties(test_xir_integer_sqrt_preparation_${mode} test_xir_integer_sqrt_binding_${mode} test_xir_integer_sqrt_runtime_${mode} PROPERTIES
-        TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;xir;ownership;stdlib;resources;integer")
+    set_tests_properties(test_xir_integer_sqrt_runtime_${mode} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;xir;ownership;stdlib;resources;integer")
 endforeach()

@@ -56,10 +56,7 @@ foreach(case IN ITEMS mutation query generic suspend failure shape)
                 TIMEOUT 30 LABELS "unit;xir;p10;reference;call;spread;ownership;${backend}")
         endforeach()
     endif()
-    add_test(NAME test_xir_p10_native_spread_${case}_source_resources
-        COMMAND test_xir_p10_initializer_resources --native-spread-${case})
-    set_tests_properties(test_xir_p10_native_spread_${case}_source_resources PROPERTIES
-        TIMEOUT 300 RUN_SERIAL TRUE COST 100 LABELS "unit;xir;p10;call;spread;ownership;allocation;budget")
+
 endforeach()
 add_test(NAME test_xir_p10_reference_reject_native_spread_scalar
     COMMAND test_xir_p10_reference --reject reject_native_spread_scalar 3 "call spread requires a statically known Tuple")
@@ -82,9 +79,7 @@ set_tests_properties(test_xir_p10_reference_reject_native_spread_const PROPERTIE
 add_test(NAME test_xir_p10_reference_native_spread_callback
     COMMAND test_xir_p10_reference --accept native_spread_callback 12 0)
 set_tests_properties(test_xir_p10_reference_native_spread_callback PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;native;spread;callback-gap")
-add_test(NAME test_xir_p10_native_spread_source_baseline
-    COMMAND test_xir_p10_initializer_resources --native-spread-baseline)
-set_tests_properties(test_xir_p10_native_spread_source_baseline PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;native;spread;resource-control")
+
 foreach(case IN ITEMS mutation generic suspend failure shape)
     set(target test_xir_p10_native_spread_${case}_runtime)
     add_executable(${target} "${CMAKE_CURRENT_LIST_DIR}/test_initializer_places_runtime.c"

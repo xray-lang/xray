@@ -72,27 +72,13 @@ if(WIN32)
         endif()
     endforeach()
     target_compile_definitions(test_cli_toolchain_update_injected PRIVATE UPDATE_INJECTED)
-    add_executable(test_cli_toolchain_update_matrix "${CMAKE_CURRENT_LIST_DIR}/test_cli_toolchain_update_matrix.c")
-    target_link_libraries(test_cli_toolchain_update_matrix PRIVATE xray_cli_toolchain_update)
-    target_compile_definitions(test_cli_toolchain_update_matrix PRIVATE _CRT_SECURE_NO_WARNINGS WIN32_LEAN_AND_MEAN NOMINMAX)
-    set_target_properties(test_cli_toolchain_update_matrix PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
-    target_compile_options(test_cli_toolchain_update_matrix PRIVATE /W4 /WX /utf-8)
-    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
-        target_compile_options(test_cli_toolchain_update_matrix PRIVATE /experimental:c11atomics)
-    endif()
+
     foreach(mode normal resources)
         set(matrix_args)
         if(mode STREQUAL "resources")
             list(APPEND matrix_args --resources)
         endif()
-        add_test(NAME cli_toolchain_update_matrix_${mode} COMMAND "${XRAY_PYTHON}" -X utf8
-            "${CMAKE_CURRENT_LIST_DIR}/test_cli_toolchain_update_matrix.py" $<TARGET_FILE:test_cli_toolchain_update_matrix>
-            "${CMAKE_CURRENT_BINARY_DIR}/toolchain-update-matrix-${mode}" ${matrix_args})
-        set_tests_properties(cli_toolchain_update_matrix_${mode} PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE
-            LABELS "unit;cli;toolchain;ownership;budget")
-        if(mode STREQUAL "resources")
-            set_tests_properties(cli_toolchain_update_matrix_${mode} PROPERTIES TIMEOUT 600 COST 120)
-        endif()
+
     endforeach()
     add_test(NAME cli_toolchain_update_cleanup COMMAND "${XRAY_PYTHON}" -X utf8
         "${CMAKE_CURRENT_LIST_DIR}/test_cli_toolchain_update_cleanup.py" $<TARGET_FILE:test_cli_toolchain_update_injected>

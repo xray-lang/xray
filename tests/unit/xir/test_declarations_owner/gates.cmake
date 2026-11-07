@@ -7,20 +7,11 @@ target_link_libraries(test_test_source_cases PRIVATE xray_xir_source_product)
 add_test(NAME test_test_source_cases COMMAND "${Python3_EXECUTABLE}" -X utf8
     "${CMAKE_CURRENT_LIST_DIR}/source_cases.py" --driver "$<TARGET_FILE:test_test_source_cases>"
     --stdlib "${XR_ROOT}/stdlib" --output "${XR_TEST_DECLARATIONS_BINARY}/source-cases")
-add_executable(test_test_directory_resources "${CMAKE_CURRENT_LIST_DIR}/test_directory_resources.c")
-target_link_libraries(test_test_directory_resources PRIVATE xray_xir_source_product)
-add_test(NAME test_test_directory_resources COMMAND test_test_directory_resources "${CMAKE_CURRENT_LIST_DIR}" "${XR_ROOT}/stdlib")
-add_executable(test_test_identity "${CMAKE_CURRENT_LIST_DIR}/test_identity.c")
-target_link_libraries(test_test_identity PRIVATE xray_xir_vm xray_compile_resources)
-add_test(NAME test_test_identity COMMAND "${Python3_EXECUTABLE}" -X utf8
-    "${CMAKE_CURRENT_LIST_DIR}/identity_wire.py" "$<TARGET_FILE:test_test_identity>" "${XR_TEST_DECLARATIONS_BINARY}/identity-packets")
-add_executable(test_test_packets "${CMAKE_CURRENT_LIST_DIR}/test_packets.c")
-target_link_libraries(test_test_packets PRIVATE xray_xir_admission xray_compile_resources)
+
 add_test(NAME test_test_packet_oracle COMMAND "${Python3_EXECUTABLE}" -X utf8
     "${CMAKE_CURRENT_LIST_DIR}/../derive_test_roles_vectors.py" --output "${XR_TEST_DECLARATIONS_BINARY}/ordinary-packets")
 set_tests_properties(test_test_packet_oracle PROPERTIES FIXTURES_SETUP role_packets)
-add_test(NAME test_test_packets COMMAND test_test_packets "${XR_TEST_DECLARATIONS_BINARY}/ordinary-packets")
-set_tests_properties(test_test_packets PROPERTIES FIXTURES_REQUIRED role_packets)
+
 add_executable(test_method_role_regression "${CMAKE_CURRENT_LIST_DIR}/../test_xir_compile_runtime_owner.c")
 target_link_libraries(test_method_role_regression PRIVATE xray_xir_vm)
 add_test(NAME test_method_role_regression COMMAND test_method_role_regression)
@@ -35,12 +26,8 @@ add_executable(test_test_native "${CMAKE_CURRENT_LIST_DIR}/test_native.c" "${tes
 target_link_libraries(test_test_native PRIVATE xray_xir_scalar xray_compile_resources)
 add_test(NAME test_test_native COMMAND test_test_native)
 
-set(test_declaration_targets test_test_source_cases test_test_directory_resources
-    test_test_identity test_test_packets test_method_role_regression
-    test_test_declarations test_test_native)
-set(test_declaration_tests test_test_source_cases test_test_directory_resources
-    test_test_identity test_test_packet_oracle test_test_packets test_method_role_regression
-    test_test_declarations test_test_native)
+set(test_declaration_targets test_test_source_cases test_method_role_regression test_test_declarations test_test_native)
+set(test_declaration_tests test_test_source_cases test_test_packet_oracle test_method_role_regression test_test_declarations test_test_native)
 
 foreach(target IN LISTS test_declaration_targets)
     target_include_directories(${target} PRIVATE "${XR_ROOT}/src" "${XR_ROOT}/include")

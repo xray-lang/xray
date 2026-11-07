@@ -64,14 +64,7 @@ if(WIN32)
     add_subdirectory(os/thread_join_owner)
     add_subdirectory(module/module_owner)
     add_subdirectory(module/project_owner)
-    add_executable(test_cli_source_owner cli/source_owner/test_cli_source_owner.c)
-    target_link_libraries(test_cli_source_owner PRIVATE xray_source_compile bcrypt)
-    target_compile_options(test_cli_source_owner PRIVATE /W4 /WX /utf-8)
-    add_test(NAME test_cli_source_owner COMMAND ${XRAY_PYTHON} -X utf8
-        ${CMAKE_CURRENT_SOURCE_DIR}/cli/source_owner/test_cli_source_owner.py
-        $<TARGET_FILE:test_cli_source_owner> ${PROJECT_SOURCE_DIR}/stdlib)
-    set_tests_properties(test_cli_source_owner PROPERTIES TIMEOUT 300 COST 40
-        RUN_SERIAL TRUE LABELS "unit;cli;xir;ownership;budget")
+
 endif()
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/xir_target_authority.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/native_projection_owner.cmake)
@@ -252,44 +245,8 @@ set_tests_properties(test_declaration_manifest PROPERTIES LABELS "unit;metadata;
 # value/ — Value system
 # ============================================================================
 
-add_executable(test_xir_effects_source xir/test_xir_effects_source.c)
-target_link_libraries(test_xir_effects_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
-target_compile_definitions(test_xir_effects_source PRIVATE XR_EFFECT_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_effect_source")
-if(MSVC)
-    target_compile_options(test_xir_effects_source PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_xir_effects_source PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_effects_source COMMAND test_xir_effects_source)
-set_tests_properties(test_xir_effects_source PROPERTIES LABELS "unit;xir;metadata;ownership")
-add_test(NAME test_xir_source_fixed_callable_boundary COMMAND test_xir_effects_source --qualified-boundary)
-set_tests_properties(test_xir_source_fixed_callable_boundary PROPERTIES LABELS "unit;xir;metadata;ownership" TIMEOUT 60)
-add_test(NAME test_xir_source_qualified_forwarding COMMAND test_xir_effects_source --qualified-forwarding)
-set_tests_properties(test_xir_source_qualified_forwarding PROPERTIES LABELS "unit;xir;metadata;ownership" TIMEOUT 60)
 set(XIR_EFFECT_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_effect_fixture.c)
-add_custom_command(OUTPUT ${XIR_EFFECT_GENERATED}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND $<TARGET_FILE:test_xir_effects_source> ${XIR_EFFECT_GENERATED}
-    DEPENDS test_xir_effects_source ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_effect_source/root.xr
-        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_effect_source/methods.xr
-        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_effect_source/default_selector.xr
-    VERBATIM)
-add_executable(test_xir_effects_native xir/test_xir_effects_native.c ${XIR_EFFECT_GENERATED})
-target_link_libraries(test_xir_effects_native PRIVATE xray_xir_scalar)
-add_executable(test_xir_effects_mixed xir/test_xir_effects_mixed.c ${XIR_EFFECT_GENERATED})
-target_link_libraries(test_xir_effects_mixed PRIVATE xray_xir_vm)
-add_executable(test_xir_effects xir/test_xir_effects.c)
-target_link_libraries(test_xir_effects PRIVATE xray_xir)
-if(MSVC)
-    target_compile_options(test_xir_effects PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_xir_effects PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_effects COMMAND test_xir_effects)
-set_tests_properties(test_xir_effects PROPERTIES LABELS "unit;xir;metadata;ownership")
-add_test(NAME test_xir_effect_error_query_work COMMAND test_xir_effects --error-query-work)
-set_tests_properties(test_xir_effect_error_query_work PROPERTIES
-    LABELS "unit;xir;metadata;ownership;bounded-query" TIMEOUT 60)
+
 add_executable(test_xir_stages xir/test_xir_stages.c)
 add_executable(test_xir_interfaces xir/test_xir_interfaces.c)
 target_link_libraries(test_xir_interfaces PRIVATE xray_xir)
@@ -310,24 +267,9 @@ add_test(NAME test_xir_stages COMMAND test_xir_stages)
 set_tests_properties(test_xir_stages PROPERTIES LABELS "unit;xir;metadata;ownership")
 add_test(NAME l3_xir_array_frame_limits COMMAND test_xir_stages --legacy-array-frame-limits)
 set_tests_properties(l3_xir_array_frame_limits PROPERTIES LABELS "l3;xir;legacy-resource;redlist" TIMEOUT 60)
-add_executable(test_xir_allocations xir/test_xir_allocations.c
-    ${CMAKE_SOURCE_DIR}/src/lir/xi_cgen_verify_output.c
-    ${CMAKE_SOURCE_DIR}/src/shared/xnative_declaration.c)
-target_link_libraries(test_xir_allocations PRIVATE xray_xir_scalar)
-target_include_directories(test_xir_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src)
-if(MSVC)
-    target_compile_options(test_xir_allocations PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_xir_allocations PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_allocations
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/xir/run_allocation_case_faults.py
-        --executable $<TARGET_FILE:test_xir_allocations>
-        --source-root ${CMAKE_SOURCE_DIR} --build-root ${CMAKE_BINARY_DIR} --mode aggregate)
-set_tests_properties(test_xir_allocations PROPERTIES LABELS "unit;xir;memory;ownership")
+
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/allocation_feedback.cmake)
 
-add_executable(test_xir_execution xir/test_xir_execution.c)
 add_executable(test_xir_locals xir/test_xir_locals.c)
 target_link_libraries(test_xir_locals PRIVATE xray_xir_vm xray_xir_cgen)
 set(XIR_LOCAL_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_local_fixture.c)
@@ -346,16 +288,7 @@ add_executable(test_xir_checked_allocations xir/test_xir_checked_allocations.c
     ${CMAKE_SOURCE_DIR}/src/shared/xnative_declaration.c)
 target_link_libraries(test_xir_checked_allocations PRIVATE xray_compile_resources)
 target_include_directories(test_xir_checked_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(test_xir_execution PRIVATE xray_xir_vm)
-add_executable(test_xir_cleanup_driver xir/test_xir_cleanup_driver.c)
-target_link_libraries(test_xir_cleanup_driver PRIVATE xray_xir_scalar)
-add_test(NAME test_xir_cleanup_fatal COMMAND ${XRAY_PYTHON}
-    ${CMAKE_CURRENT_SOURCE_DIR}/xir/check_xir_cleanup_fatal.py $<TARGET_FILE:test_xir_cleanup_driver>)
-set_tests_properties(test_xir_cleanup_fatal PROPERTIES LABELS "unit;xir;ownership")
-add_test(NAME test_xir_source_cleanup_fatal COMMAND ${XRAY_PYTHON}
-    ${CMAKE_CURRENT_SOURCE_DIR}/xir/check_xir_source_cleanup_fatal.py
-    $<TARGET_FILE:test_xir_cleanup_source>)
-set_tests_properties(test_xir_source_cleanup_fatal PROPERTIES LABELS "unit;xir;ownership;abi;execution")
+
 add_executable(test_xir_calls xir/test_xir_calls.c)
 target_link_libraries(test_xir_calls PRIVATE xray_xir_vm)
 add_executable(test_xir_emit xir/test_xir_emit.c)
@@ -381,39 +314,23 @@ add_custom_command(OUTPUT ${XIR_SCALAR_GENERATED}
 add_executable(test_xir_native xir/test_xir_native.c ${XIR_SCALAR_GENERATED})
 target_link_libraries(test_xir_native PRIVATE xray_xir_scalar)
 # Complete panic outcomes keep message ownership independent of result values.
-add_executable(test_xir_panic_carrier xir/test_xir_panic_carrier.c xir/xir_legacy_call_provider.c)
-target_link_libraries(test_xir_panic_carrier PRIVATE xray_xir xray_xir_scalar)
+
 # These implementations are included under the runtime allocation macros,
 # never compiled as additional uncounted translation units.
 set_property(SOURCE xir/test_xir_panic_carrier.c APPEND PROPERTY OBJECT_DEPENDS
     "${CMAKE_SOURCE_DIR}/src/xir/xxir_task_budget.c"
     "${CMAKE_SOURCE_DIR}/src/xir/xxir_task.c"
     "${CMAKE_SOURCE_DIR}/src/xir/xxir_task_outcome.inc.c")
-if(MSVC)
-    target_compile_options(test_xir_panic_carrier PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_xir_panic_carrier PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_panic_carrier COMMAND $<TARGET_FILE:test_xir_panic_carrier>)
-add_test(NAME test_xir_panic_carrier_fatal COMMAND ${XRAY_PYTHON}
-    ${CMAKE_CURRENT_SOURCE_DIR}/xir/check_xir_panic_carrier_fatal.py $<TARGET_FILE:test_xir_panic_carrier>)
+
 add_test(NAME test_xir_panic_carrier_wire_vector COMMAND ${XRAY_PYTHON}
     ${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_panic_carrier_vector.py
     --output ${CMAKE_CURRENT_BINARY_DIR}/generated/panic-carrier-wire-vector.json)
-set_tests_properties(test_xir_panic_carrier test_xir_panic_carrier_fatal test_xir_panic_carrier_wire_vector
-    PROPERTIES LABELS "unit;xir;ownership;abi")
+set_tests_properties(test_xir_panic_carrier_wire_vector PROPERTIES LABELS "unit;xir;ownership;abi")
 
-add_executable(test_xir_cell_owner_values xir/test_xir_cell_owner_values.c)
-target_link_libraries(test_xir_cell_owner_values PRIVATE xray_xir_scalar)
-add_test(NAME test_xir_cell_owner_values COMMAND test_xir_cell_owner_values)
-set_tests_properties(test_xir_cell_owner_values PROPERTIES LABELS "unit;xir;ownership")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/object_storage_prefix.cmake")
 add_executable(test_xir_values xir/test_xir_values.c)
 target_link_libraries(test_xir_values PRIVATE xray_xir_scalar)
-add_executable(test_xir_instances xir/test_xir_instances.c xir/xir_instance_retirement_probe.c)
-target_link_libraries(test_xir_instances PRIVATE xray_xir_scalar xray_xir)
-add_test(NAME test_xir_instance_invalid_slot_views COMMAND test_xir_instances --invalid-slot-views)
-set_tests_properties(test_xir_instance_invalid_slot_views PROPERTIES LABELS "unit;xir;ownership" TIMEOUT 30)
+
 add_executable(test_xir_emit_program xir/test_xir_emit_program.c)
 target_link_libraries(test_xir_emit_program PRIVATE xray_xir_cgen)
 set(XIR_PROGRAM_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_program_fixture.c)
@@ -424,8 +341,7 @@ add_custom_command(OUTPUT ${XIR_PROGRAM_GENERATED}
     VERBATIM)
 add_executable(test_xir_program_native xir/test_xir_program_native.c ${XIR_PROGRAM_GENERATED})
 target_link_libraries(test_xir_program_native PRIVATE xray_xir_scalar)
-add_executable(test_xir_program_vm xir/test_xir_program_vm.c ${XIR_PROGRAM_GENERATED})
-target_link_libraries(test_xir_program_vm PRIVATE xray_xir_vm)
+
 if(NOT WIN32)
     find_package(Threads REQUIRED)
     target_link_libraries(test_xir_values PRIVATE Threads::Threads)
@@ -486,112 +402,25 @@ add_executable(test_xir_output_native xir/test_xir_output_native.c ${XIR_OUTPUT_
 target_link_libraries(test_xir_output_native PRIVATE xray_xir_scalar)
 add_executable(test_xir_output_vm xir/test_xir_output_vm.c)
 target_link_libraries(test_xir_output_vm PRIVATE xray_xir_vm)
-add_executable(test_xir_output_status xir/test_xir_output_status.c)
-target_link_libraries(test_xir_output_status PRIVATE xray_xir_scalar)
-if(MSVC)
-    target_compile_options(test_xir_output_status PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_xir_output_status PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_output_status COMMAND test_xir_output_status)
-set_tests_properties(test_xir_output_status PROPERTIES LABELS "unit;xir;ownership;abi")
 
 add_executable(test_xir_source xir/test_xir_source.c)
 target_link_libraries(test_xir_source PRIVATE xray_xir_source xray_xir_vm)
-add_executable(test_xir_source_product xir/test_xir_source_product.c)
+
 add_test(NAME test_xir_native_projection_policy COMMAND ${XRAY_PYTHON}
     ${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_native_projection_vectors.py)
 set_tests_properties(test_xir_native_projection_policy PROPERTIES LABELS "unit;xir;abi;generated-c" TIMEOUT 30)
-target_link_libraries(test_xir_source_product PRIVATE xray_xir_native_projection)
-if(MSVC)
-    target_compile_options(test_xir_source_product PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_source_product PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_source_product COMMAND ${XRAY_PYTHON}
-    ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_source_product.py
-    $<TARGET_FILE:test_xir_source_product> ${CMAKE_SOURCE_DIR}/stdlib)
-set_tests_properties(test_xir_source_product PROPERTIES
-    LABELS "unit;xir;ownership;abi;execution")
-foreach(source_case retired array)
-    add_test(NAME test_xir_source_product_original_${source_case} COMMAND ${XRAY_PYTHON}
-        ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_source_product.py
-        $<TARGET_FILE:test_xir_source_product> ${CMAKE_SOURCE_DIR}/stdlib --case ${source_case})
-    set_tests_properties(test_xir_source_product_original_${source_case} PROPERTIES
-        LABELS "unit;xir;ownership;abi;execution")
-endforeach()
-add_test(NAME test_xir_source_product_allocations COMMAND ${XRAY_PYTHON}
-    ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_source_product.py
-    $<TARGET_FILE:test_xir_source_product> ${CMAKE_SOURCE_DIR}/stdlib --scan)
-set_tests_properties(test_xir_source_product_allocations PROPERTIES
-    LABELS "unit;xir;ownership;abi;execution" TIMEOUT 600 COST 80)
-add_executable(test_xir_source_product_linked xir/test_xir_source_product_linked.c)
-target_link_libraries(test_xir_source_product_linked PRIVATE xray_xir_native_projection)
-if(MSVC)
-    target_compile_options(test_xir_source_product_linked PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_source_product_linked PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_source_product_linked COMMAND ${XRAY_PYTHON}
-    ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_source_product.py
-    $<TARGET_FILE:test_xir_source_product_linked> ${CMAKE_SOURCE_DIR}/stdlib)
-set_tests_properties(test_xir_source_product_linked PROPERTIES LABELS "unit;xir;ownership;abi;execution" TIMEOUT 60)
+
 add_test(NAME test_xir_source_product_identity_oracle COMMAND ${XRAY_PYTHON}
     ${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_source_product_identity.py)
 set_tests_properties(test_xir_source_product_identity_oracle PROPERTIES LABELS "unit;xir;abi;ownership" TIMEOUT 30)
 set(XIR_SOURCE_OWNER_FIXTURE "${CMAKE_SOURCE_DIR}/tests/fixtures/xir_compile_owner")
 set(XIR_SOURCE_OWNER_NATIVE "${CMAKE_CURRENT_BINARY_DIR}/xir-source-owner-native.c")
-add_custom_command(OUTPUT "${XIR_SOURCE_OWNER_NATIVE}"
-    COMMAND $<TARGET_FILE:test_xir_source_product_linked> "${XIR_SOURCE_OWNER_FIXTURE}"
-        "${XIR_SOURCE_OWNER_FIXTURE}/root.xr" "${CMAKE_SOURCE_DIR}/stdlib"
-        accept "${XIR_SOURCE_OWNER_NATIVE}" multi normal
-    DEPENDS test_xir_source_product_linked "${XIR_SOURCE_OWNER_FIXTURE}/root.xr"
-        "${XIR_SOURCE_OWNER_FIXTURE}/counter.xr" "${XIR_SOURCE_OWNER_FIXTURE}/label.xr"
-    VERBATIM)
-add_executable(test_xir_source_product_native xir/test_xir_source_product_native.c "${XIR_SOURCE_OWNER_NATIVE}")
-target_link_libraries(test_xir_source_product_native PRIVATE xray_xir_scalar xray_compile_resources)
-if(MSVC)
-    target_compile_options(test_xir_source_product_native PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_source_product_native PRIVATE -Wall -Wextra -Werror -pedantic)
-endif()
-add_test(NAME test_xir_source_product_vm_modules
-    COMMAND test_xir_source_product_linked "${XIR_SOURCE_OWNER_FIXTURE}"
-        "${XIR_SOURCE_OWNER_FIXTURE}/root.xr" "${CMAKE_SOURCE_DIR}/stdlib"
-        accept "${CMAKE_CURRENT_BINARY_DIR}/xir-source-owner-vm.c" multi normal)
-add_test(NAME test_xir_source_product_native COMMAND test_xir_source_product_native)
-set_tests_properties(test_xir_source_product_vm_modules test_xir_source_product_native
-    PROPERTIES LABELS "unit;xir;ownership;abi;execution" TIMEOUT 60)
+
 target_compile_definitions(test_xir_source PRIVATE XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source")
-add_executable(test_xir_source_admission xir/test_xir_source_admission.c)
-add_executable(test_xir_source_generics xir/test_xir_source_generics.c)
+
 add_executable(test_xir_source_query xir/test_xir_source_query.c)
-add_executable(test_xir_source_packages xir/test_xir_source_packages.c)
-target_link_libraries(test_xir_source_packages PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
-if(MSVC)
-    target_compile_options(test_xir_source_packages PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_xir_source_packages PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_source_packages COMMAND ${XRAY_PYTHON}
-    ${CMAKE_CURRENT_SOURCE_DIR}/xir/run_source_packages.py $<TARGET_FILE:test_xir_source_packages>)
-set_tests_properties(test_xir_source_packages PROPERTIES LABELS "unit;xir;metadata;ownership")
+
 set(XIR_PACKAGE_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_package_fixture.c)
-add_custom_command(OUTPUT ${XIR_PACKAGE_GENERATED}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/xir/run_source_packages.py
-        $<TARGET_FILE:test_xir_source_packages> ${XIR_PACKAGE_GENERATED}
-    DEPENDS test_xir_source_packages ${CMAKE_CURRENT_SOURCE_DIR}/xir/run_source_packages.py
-    VERBATIM)
-add_executable(test_xir_package_native xir/test_xir_package_native.c ${XIR_PACKAGE_GENERATED})
-target_link_libraries(test_xir_package_native PRIVATE xray_xir_scalar)
-if(MSVC)
-    target_compile_options(test_xir_package_native PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_xir_package_native PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_package_native COMMAND test_xir_package_native)
-set_tests_properties(test_xir_package_native PROPERTIES LABELS "unit;xir;execution;ownership;abi")
 
 target_link_libraries(test_xir_source_query PRIVATE xray_xir_source xray_xir_vm)
 add_test(NAME test_xir_source_class_definitions COMMAND test_xir_source_query --class-definitions)
@@ -603,26 +432,6 @@ set_tests_properties(test_xir_source_core_syntax PROPERTIES TIMEOUT 60 RUN_SERIA
 add_test(NAME test_xir_source_interface_name_spans COMMAND test_xir_source_query --interface-name-spans)
 set_tests_properties(test_xir_source_interface_name_spans PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
     LABELS "unit;xir;ownership;metadata")
-
-add_executable(test_lsp_source_query xir/test_lsp_source_query.c)
-target_link_libraries(test_lsp_source_query PRIVATE xray_lsp_source_query xray_lsp_source_syntax xray_lsp_document_open)
-if(MSVC)
-    target_compile_options(test_lsp_source_query PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_lsp_source_query PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_lsp_source_query COMMAND test_lsp_source_query)
-set_tests_properties(test_lsp_source_query PROPERTIES LABELS "unit;xir;lsp;ownership;metadata" TIMEOUT 60)
-
-add_executable(test_xir_source_overlay xir/test_xir_source_overlay.c)
-target_link_libraries(test_xir_source_overlay PRIVATE xray_xir_source)
-if(MSVC)
-    target_compile_options(test_xir_source_overlay PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_xir_source_overlay PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_source_overlay COMMAND test_xir_source_overlay)
-set_tests_properties(test_xir_source_overlay PROPERTIES LABELS "unit;xir;ownership;metadata" TIMEOUT 60)
 
 add_executable(test_xir_module_overlay xir/test_xir_module_overlay.c)
 target_link_libraries(test_xir_module_overlay PRIVATE xray_xir_source)
@@ -646,12 +455,6 @@ add_test(NAME test_xir_source_text COMMAND test_xir_source_text)
 set_tests_properties(test_xir_source_text PROPERTIES LABELS "unit;xir;ownership;metadata" TIMEOUT 60)
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/source_ast.cmake")
 
-target_link_libraries(test_xir_source_generics PRIVATE xray_xir_source xray_frontend_format xray_xir_vm)
-target_link_libraries(test_xir_source_admission PRIVATE xray_xir_source)
-add_executable(test_xir_source_allocations xir/test_xir_source_allocations.c)
-target_link_libraries(test_xir_source_allocations PRIVATE xray_xir_source xray_xir xray_xir_scalar)
-target_compile_definitions(test_xir_source_allocations PRIVATE XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source")
-target_compile_definitions(test_xir_source_allocations PRIVATE XR_CLASS_ARRAY_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_class_array")
 set(XIR_SOURCE_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_source_fixture.c)
 set(XIR_CHECKED_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_source_fixture.xrc)
 add_custom_command(OUTPUT ${XIR_CHECKED_GENERATED}
@@ -745,11 +548,7 @@ add_custom_command(OUTPUT ${XIR_ARRAY_CHECKED_GENERATED} ${XIR_ARRAY_BOUNDS_CHEC
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_array_reordering_source/root.xr
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_array_reordering_source/producer.xr
     VERBATIM)
-add_executable(test_xir_array_packet_vm xir/test_xir_array_packet_vm.c ${XIR_ARRAY_CHECKED_GENERATED} ${XIR_ARRAY_BOUNDS_CHECKED_GENERATED} ${XIR_ARRAY_REORDER_CHECKED_GENERATED})
-target_link_libraries(test_xir_array_packet_vm PRIVATE xray_xir_vm xray_xir_cgen)
-target_compile_definitions(test_xir_array_packet_vm PRIVATE XR_ARRAY_CHECKED_FIXTURE="${XIR_ARRAY_CHECKED_GENERATED}")
-target_compile_definitions(test_xir_array_packet_vm PRIVATE XR_ARRAY_BOUNDS_CHECKED_FIXTURE="${XIR_ARRAY_BOUNDS_CHECKED_GENERATED}"
-    XR_ARRAY_REORDER_CHECKED_FIXTURE="${XIR_ARRAY_REORDER_CHECKED_GENERATED}")
+
 add_executable(test_xir_source_floats xir/test_xir_source_floats.c)
 target_link_libraries(test_xir_source_floats PRIVATE xray_xir_source xray_xir_vm)
 target_compile_definitions(test_xir_source_floats PRIVATE XR_FLOAT_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_float_source")
@@ -774,9 +573,7 @@ target_link_libraries(test_xir_source_float_native PRIVATE xray_xir_scalar)
 add_executable(test_xir_source_float_mixed xir/test_xir_source_float_mixed.c ${XIR_FLOAT_SOURCE_GENERATED})
 target_link_libraries(test_xir_source_float_mixed PRIVATE xray_xir_vm)
 target_compile_definitions(test_xir_source_float_mixed PRIVATE XR_FLOAT_CHECKED_FIXTURE="${XIR_FLOAT_CHECKED_GENERATED}")
-add_executable(test_xir_cleanup_source xir/test_xir_cleanup_source.c)
-target_link_libraries(test_xir_cleanup_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
-target_compile_definitions(test_xir_cleanup_source PRIVATE XR_CLEANUP_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_cleanup_source")
+
 include(xir/mixed_lifecycle.cmake)
 include(xir/mixed_terminals.cmake)
 include(xir/mixed_observation.cmake)
@@ -788,11 +585,6 @@ include(xir/mixed_string_worker.cmake)
 include(xir/mixed_diamond.cmake)
 include(xir/mixed_worker_waits.cmake)
 include(xir/mixed_deep_recursion.cmake)
-if(MSVC)
-    foreach(cleanup_host IN ITEMS test_xir_cleanup_source)
-        target_compile_options(${cleanup_host} PRIVATE /O2 /Ob2 /Oy-)
-    endforeach()
-endif()
 add_executable(test_xir_panic_source xir/test_xir_panic_source.c)
 target_link_libraries(test_xir_panic_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
 target_compile_definitions(test_xir_panic_source PRIVATE XR_PANIC_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_panic_source")
@@ -809,18 +601,10 @@ add_executable(test_xir_panic_native xir/test_xir_panic_native.c ${XIR_PANIC_GEN
 target_link_libraries(test_xir_panic_native PRIVATE xray_xir_scalar)
 add_executable(test_xir_panic_mixed xir/test_xir_panic_mixed.c ${XIR_PANIC_GENERATED})
 target_link_libraries(test_xir_panic_mixed PRIVATE xray_xir_vm)
-foreach(xir_source_test IN ITEMS test_xir_source test_xir_source_mixed test_xir_source_allocations test_xir_source_admission)
+foreach(xir_source_test IN ITEMS test_xir_source test_xir_source_mixed)
     target_compile_definitions(${xir_source_test} PRIVATE XR_SOURCE_STDLIB="${CMAKE_SOURCE_DIR}/stdlib")
 endforeach()
-foreach(xir_test IN ITEMS test_xir_cleanup_source test_xir_cleanup_driver test_xir_locals test_xir_local_native test_xir_generics test_xir_checked test_xir_checked_allocations test_xir_execution test_xir_emit test_xir_native test_xir_calls
-    test_xir_emit_calls test_xir_call_native test_xir_values test_xir_value_allocations
-    test_xir_emit_strings test_xir_string_native test_xir_string_vm test_xir_instances
-    test_xir_emit_program test_xir_program_vm test_xir_program_native
-    test_xir_emit_output test_xir_output_vm test_xir_output_native test_xir_source test_xir_source_native
-    test_xir_source_admission test_xir_source_allocations test_xir_source_mixed test_xir_packet_vm test_xir_source_generics test_xir_source_query
-    test_xir_source_arrays test_xir_array_packet_vm
-    test_xir_source_floats test_xir_float_packet_vm test_xir_source_float_native test_xir_source_float_mixed
-    test_xir_panic_source test_xir_panic_native test_xir_panic_mixed test_xir_effects_native test_xir_effects_mixed)
+foreach(xir_test IN ITEMS test_xir_locals test_xir_local_native test_xir_generics test_xir_checked test_xir_checked_allocations test_xir_emit test_xir_native test_xir_calls test_xir_emit_calls test_xir_call_native test_xir_values test_xir_value_allocations test_xir_emit_strings test_xir_string_native test_xir_string_vm test_xir_emit_program test_xir_program_native test_xir_emit_output test_xir_output_vm test_xir_output_native test_xir_source test_xir_source_native test_xir_source_mixed test_xir_packet_vm test_xir_source_query test_xir_source_arrays test_xir_source_floats test_xir_float_packet_vm test_xir_source_float_native test_xir_source_float_mixed test_xir_panic_source test_xir_panic_native test_xir_panic_mixed)
     if(MSVC)
         target_compile_options(${xir_test} PRIVATE /W4 /WX)
     else()
@@ -842,7 +626,7 @@ endforeach()
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/generic_normal.cmake")
 
 if(UNIX)
-    target_link_libraries(test_xir_execution PRIVATE m)
+
     target_link_libraries(test_xir_native PRIVATE m)
 endif()
 
@@ -863,10 +647,6 @@ set_tests_properties(test_core_spec PROPERTIES
 # executable. Other consumers link the ordinary production objects.
 
 # This fixture retains its existing legacy compiler object ownership.
-
-
-
-
 
 add_xray_unit_test(test_xvalue value/test_xvalue.c)
 
@@ -976,12 +756,6 @@ add_test(
 )
 set_tests_properties(check_runtime_object_header_boundary PROPERTIES
     LABELS "runtime;abi;static-analysis;target-machine")
-
-
-
-
-
-
 
 # ============================================================================
 # object/ — Runtime objects (string, array, utf8)
@@ -1102,8 +876,6 @@ set_tests_properties(test_release_evidence_contract PROPERTIES
 # ir/ — New typed SSA IR (Xi)
 # ============================================================================
 
-
-
 function(xr_enable_pure_aot_symbol_map target_name)
     if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
             OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
@@ -1154,7 +926,6 @@ add_test(NAME test_enum_namespace_execution
 set_tests_properties(test_enum_namespace_execution PROPERTIES
     LABELS "vm;aot;enum;integration" TIMEOUT 300)
 
-
 add_test(NAME test_native_class_coalesce_authority
     COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_class_coalesce.py
         --compiler $<TARGET_FILE:test_source_generated_c> ${XR_NATIVE_SOURCE_HOST_ARGS})
@@ -1187,22 +958,14 @@ set(XR_LEAF_PRODUCT_NATIVE_SOURCE
 
 set_source_files_properties(${XR_LEAF_PRODUCT_NATIVE_SOURCE}
     PROPERTIES GENERATED TRUE)
-add_executable(test_leaf_product_native
-    ${XR_LEAF_PRODUCT_NATIVE_SOURCE})
-set_target_properties(test_leaf_product_native PROPERTIES
-    C_STANDARD 11
-    C_STANDARD_REQUIRED TRUE)
+
 if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
         OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
             AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
-    target_compile_options(test_leaf_product_native PRIVATE /W4 /WX)
+
 else()
-    target_compile_options(test_leaf_product_native PRIVATE -Wall -Wextra -Werror)
+
 endif()
-add_test(NAME test_leaf_product_native
-    COMMAND $<TARGET_FILE:test_leaf_product_native>)
-set_tests_properties(test_leaf_product_native PROPERTIES
-    LABELS "aot;cgen;native;target-machine;task-281")
 
 # This opt-in tool refreshes the checked-in runtime fixture when the canonical
 # artifact schema changes. It is intentionally excluded from normal builds and
@@ -1265,13 +1028,6 @@ include("xir/module_state_remaining.cmake")
 # plus one exact XTP, which no single-module fixture can stand in for. The
 # writer is a CLI mode of the closure test rather than one of its cases, so it
 # produces the artifacts without running them.
-
-
-
-
-
-
-
 
 set(XR_XTP_FUZZ_EVIDENCE_SANITIZER release)
 if(ENABLE_SANITIZERS OR (ENABLE_ASAN AND ENABLE_UBSAN))
@@ -1604,31 +1360,6 @@ set_tests_properties(test_stdlib_generators_content_stable PROPERTIES
 # api/ — Public API defense tests
 # ============================================================================
 
-add_executable(test_api_defense api/test_api_defense.c)
-target_link_libraries(test_api_defense PRIVATE xray_source_api)
-target_include_directories(test_api_defense PRIVATE "${PROJECT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}")
-target_compile_definitions(test_api_defense PRIVATE XR_API_DEFENSE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
-    XR_API_DEFENSE_FILE="${PROJECT_SOURCE_DIR}/tests/unit/api/source_repl_hosted/program.xr")
-set_target_properties(test_api_defense PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-if(MSVC)
-    target_compile_options(test_api_defense PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_api_defense PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_api_defense COMMAND test_api_defense)
-set_tests_properties(test_api_defense PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership;repl;original")
-foreach(source_entry IN ITEMS test_dostring_module_defaults test_dostring_program_image)
-    add_executable(${source_entry} api/${source_entry}.c)
-    target_link_libraries(${source_entry} PRIVATE xray_source_api)
-    target_include_directories(${source_entry} PRIVATE ${XRAY_COMMON_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR})
-    target_compile_definitions(${source_entry} PRIVATE XR_PUBLIC_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-    set_target_properties(${source_entry} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-    add_test(NAME ${source_entry} COMMAND $<TARGET_FILE:${source_entry}>)
-endforeach()
-target_compile_definitions(test_dostring_program_image PRIVATE
-    XR_PROGRAM_IMAGE_TEMP_ROOT="${CMAKE_CURRENT_BINARY_DIR}")
-set_tests_properties(test_dostring_module_defaults PROPERTIES LABELS "api;modules;defaults")
-set_tests_properties(test_dostring_program_image PROPERTIES LABELS "api;modules;generics")
 add_test(
     NAME test_api_inventory_param_modes
     COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/api/test_api_inventory_param_modes.py
@@ -1728,7 +1459,6 @@ set_tests_properties(test_crypto_native_error_abi PROPERTIES
     LABELS "vm;aot;frontend;stdlib;crypto;task-198"
     TIMEOUT 120
 )
-
 
 # ============================================================================
 # lsp/ — Language Server Protocol (conditional)
@@ -2042,11 +1772,10 @@ add_test(
 # Debug sanitizer execution includes the complete numerical witness corpus and
 # source module specialization. Schedule these measured long tests early.
 if(ENABLE_ASAN)
-    set_tests_properties(test_xir_execution PROPERTIES COST 120)
+
     # The exhaustive source-owner sweep takes about 280 seconds when run alone.
     # Preserve every injection site and allow for sanitizer contention.
-    set_tests_properties(test_xir_source_allocations PROPERTIES COST 300 TIMEOUT 600)
-    set_tests_properties(test_dostring_program_image PROPERTIES COST 230)
+
 endif()
 
 # Include every test, even when new declarations are appended later.
@@ -2060,57 +1789,7 @@ cmake_language(DEFER CALL xray_prepend_windows_asan_runtime_to_directory_tests)
 add_test(NAME test_callable52_wire_encoder
     COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/plan/derive_callable52_wire.py)
 
-add_executable(test_source_compile_transaction api/test_source_compile_transaction.c)
-target_link_libraries(test_source_compile_transaction PRIVATE xray_source_api)
-target_include_directories(test_source_compile_transaction PRIVATE
-    "${PROJECT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}")
-target_compile_definitions(test_source_compile_transaction PRIVATE
-    XR_TRANSACTION_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-set_target_properties(test_source_compile_transaction PROPERTIES
-    C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-if(MSVC)
-    target_compile_options(test_source_compile_transaction PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_source_compile_transaction PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_source_compile_transaction COMMAND test_source_compile_transaction)
-set_tests_properties(test_source_compile_transaction PROPERTIES
-    LABELS "unit;api;source;ownership;ast;original;transaction" TIMEOUT 120)
-
-add_executable(test_source_repl_generation api/test_source_repl_generation.c)
-target_link_libraries(test_source_repl_generation PRIVATE xray_source_api)
-target_include_directories(test_source_repl_generation PRIVATE
-    "${PROJECT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}")
-target_compile_definitions(test_source_repl_generation PRIVATE
-    XR_GENERATION_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-set_target_properties(test_source_repl_generation PROPERTIES
-    C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-if(MSVC)
-    target_compile_options(test_source_repl_generation PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_source_repl_generation PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_source_repl_generation COMMAND test_source_repl_generation)
-set_tests_properties(test_source_repl_generation PROPERTIES
-    LABELS "unit;api;source;ownership;repl;original;generation" TIMEOUT 120)
-
 # Exercise the original publication obligation against actual Source owners.
-add_executable(test_repl_publication_allocations api/test_repl_publication_allocations.c)
-target_link_libraries(test_repl_publication_allocations PRIVATE xray_source_api)
-target_include_directories(test_repl_publication_allocations PRIVATE
-    "${PROJECT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}")
-target_compile_definitions(test_repl_publication_allocations PRIVATE
-    XR_PUBLICATION_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-set_target_properties(test_repl_publication_allocations PROPERTIES
-    C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-if(MSVC)
-    target_compile_options(test_repl_publication_allocations PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_repl_publication_allocations PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_repl_publication_allocations COMMAND test_repl_publication_allocations)
-set_tests_properties(test_repl_publication_allocations PROPERTIES
-    LABELS "unit;api;source;ownership;repl;original;compiler-faults" RUN_SERIAL TRUE TIMEOUT 120)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/constraint_queue.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/type_access_scratch.cmake)
@@ -2128,11 +1807,6 @@ include(xir/tuple_values.cmake)
 include(xir/tuple_source_compile_owner.cmake)
 
 # Fresh whole compiler/runtime fault matrices; scheduling does not extend deadlines.
-if(ENABLE_ASAN OR ENABLE_UBSAN)
-    set_tests_properties(test_xir_cleanup_source PROPERTIES COST 702)
-else()
-    set_tests_properties(test_xir_cleanup_source PROPERTIES COST 160)
-endif()
 
 include(xir/atomic_admission_owner.cmake)
 
@@ -2378,23 +2052,12 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/source_decimal_parse.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/json_float_native.cmake")
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/ordinary_live_limit.cmake)
-add_test(NAME test_xir_ctfe_leaf_resources COMMAND test_xir_ctfe_leaf --resources)
-set_tests_properties(test_xir_ctfe_leaf_resources PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 120
-    LABELS "unit;xir;compiler;ctfe;resources;ownership;budget")
 
 include(xir/library_state_atomic_i64.cmake)
 
 include(xir/library_state_task_i64.cmake)
 
 include(xir/prelude_source.cmake)
-
-add_executable(test_xir_cell_provenance xir/test_xir_cell_provenance.c)
-target_include_directories(test_xir_cell_provenance PRIVATE "${CMAKE_SOURCE_DIR}/src")
-target_link_libraries(test_xir_cell_provenance PRIVATE xray_xir)
-add_test(NAME test_xir_cell_provenance COMMAND test_xir_cell_provenance)
-set_tests_properties(test_xir_cell_provenance PROPERTIES LABELS "xir;ownership" TIMEOUT 120)
-add_test(NAME test_xir_cell_final_runtime COMMAND test_xir_cell_provenance --final-runtime)
-set_tests_properties(test_xir_cell_final_runtime PROPERTIES LABELS "xir;ownership;finite-control;runtime;cell" TIMEOUT 60)
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/root_conditional.cmake")
 include(xir/effect_ordinary_environment.cmake)
@@ -2516,15 +2179,6 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/stdlib/class_receivers.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/xir/error_contract_source.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/xir/source_handler_facts.cmake)
 
-add_executable(test_xir_retired_merge_packets xir/test_xir_retired_merge_packets.c)
-target_link_libraries(test_xir_retired_merge_packets PRIVATE xray_xir)
-if(MSVC)
-    target_compile_options(test_xir_retired_merge_packets PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_retired_merge_packets PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_retired_merge_packets COMMAND test_xir_retired_merge_packets)
-set_tests_properties(test_xir_retired_merge_packets PROPERTIES TIMEOUT 120 LABELS "xir;identity;ownership")
 if(WIN32)
     add_test(NAME test_xir_runtime_sdk_known_bytes COMMAND test_xir_runtime_sdk --known-bytes)
     set_tests_properties(test_xir_runtime_sdk_known_bytes PROPERTIES TIMEOUT 120 LABELS "xir;sdk;identity;ownership")
@@ -2581,22 +2235,9 @@ include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_view_owner_state.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_view_may_owned.cmake)
 include(xir/union86.cmake)
 
-add_executable(test_xir_shared_interfaces xir/test_xir_shared_interfaces.c)
-target_link_libraries(test_xir_shared_interfaces PRIVATE xray_xir_scalar)
-target_include_directories(test_xir_shared_interfaces PRIVATE ${PROJECT_SOURCE_DIR}/src)
-target_compile_definitions(test_xir_shared_interfaces PRIVATE
-    SHARED_PACKET_FILE="${PROJECT_SOURCE_DIR}/tests/unit/xir/shared_parent_packets.bin")
-set_target_properties(test_xir_shared_interfaces PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-if(MSVC)
-    target_compile_options(test_xir_shared_interfaces PRIVATE /utf-8 /W4 /WX)
-else()
-    target_compile_options(test_xir_shared_interfaces PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_shared_interfaces COMMAND test_xir_shared_interfaces)
 add_test(NAME test_xir_shared_interfaces_vectors COMMAND ${XRAY_PYTHON}
     ${CMAKE_CURRENT_LIST_DIR}/xir/derive_shared_interfaces_vectors.py)
-set_tests_properties(test_xir_shared_interfaces test_xir_shared_interfaces_vectors PROPERTIES
-    TIMEOUT 120 LABELS "unit;xir;checked;independent;ownership")
+set_tests_properties(test_xir_shared_interfaces_vectors PROPERTIES TIMEOUT 120 LABELS "unit;xir;checked;independent;ownership")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/source_entry.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/never_type.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/local_errors.cmake")

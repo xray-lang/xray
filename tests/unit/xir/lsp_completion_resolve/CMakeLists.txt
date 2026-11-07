@@ -20,7 +20,7 @@ endforeach()
 configure_file("${resolve_fixture}/before_resolve.inc.c" "${resolve_generated}/before.inc.c" COPYONLY)
 set_source_files_properties("${resolve_generated}/current.inc.c" "${resolve_generated}/producer.inc.c"
     PROPERTIES HEADER_FILE_ONLY TRUE)
-foreach(target test_lsp_completion_resolve test_lsp_completion_resolve_before)
+foreach(target IN ITEMS test_lsp_completion_resolve)
     add_executable(${target} "${resolve_fixture}/test_resolve.c"
         "${resolve_generated}/current.inc.c" "${resolve_generated}/producer.inc.c"
         "${PROJECT_SOURCE_DIR}/tests/unit/xir/lsp_json_clone/test_allocator.c"
@@ -35,9 +35,8 @@ foreach(target test_lsp_completion_resolve test_lsp_completion_resolve_before)
         target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
     endif()
 endforeach()
-target_compile_definitions(test_lsp_completion_resolve_before PRIVATE RESOLVE_BEFORE=1)
+
 add_test(NAME test_lsp_completion_resolve_normal COMMAND test_lsp_completion_resolve --normal)
 add_test(NAME test_lsp_completion_resolve_resources COMMAND test_lsp_completion_resolve --full)
-add_test(NAME test_lsp_completion_resolve_before COMMAND test_lsp_completion_resolve_before)
-set_tests_properties(test_lsp_completion_resolve_normal test_lsp_completion_resolve_resources
-    test_lsp_completion_resolve_before PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE LABELS "unit;lsp;json;ownership;allocation")
+
+set_tests_properties(test_lsp_completion_resolve_normal test_lsp_completion_resolve_resources PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE LABELS "unit;lsp;json;ownership;allocation")

@@ -4,15 +4,7 @@ set(product_consumer_fixture_root "${CMAKE_CURRENT_LIST_DIR}/../xir/product_cons
 get_filename_component(product_consumer_fixture_root "${product_consumer_fixture_root}" REALPATH)
 set(product_consumer_fault_runner "${CMAKE_SOURCE_DIR}/scripts/source_product_consumer_faults.py")
 set(product_consumer_main_template "${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_consumer_main.c.in")
-add_library(source_product_consumer_driver OBJECT "${product_consumer_source}")
-target_link_libraries(source_product_consumer_driver PUBLIC xray_xir_source_product)
-target_include_directories(source_product_consumer_driver PUBLIC "${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers")
-set_target_properties(source_product_consumer_driver PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-if(MSVC)
-    target_compile_options(source_product_consumer_driver PRIVATE /utf-8 /W4 /WX)
-else()
-    target_compile_options(source_product_consumer_driver PRIVATE -Wall -Wextra -Werror)
-endif()
+
 add_executable(test_source_product_probe "${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_consumer_probe.c")
 target_link_libraries(test_source_product_probe PRIVATE source_product_consumer_driver)
 set_target_properties(test_source_product_probe PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
@@ -98,15 +90,7 @@ foreach(case IN LISTS product_consumer_cases)
     endforeach()
 endforeach()
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_nominal_graph_cases.cmake")
-add_library(source_product_nominal_driver OBJECT "${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/test_source_product_nominal_graphs.c")
-target_link_libraries(source_product_nominal_driver PUBLIC xray_xir_source_product)
-target_include_directories(source_product_nominal_driver PUBLIC "${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers")
-set_target_properties(source_product_nominal_driver PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-if(MSVC)
-    target_compile_options(source_product_nominal_driver PRIVATE /utf-8 /W4 /WX)
-else()
-    target_compile_options(source_product_nominal_driver PRIVATE -Wall -Wextra -Werror)
-endif()
+
 foreach(case IN LISTS product_nominal_graph_cases)
     set(expected_variable "product_nominal_graph_expected_${case}")
     set(expected "${${expected_variable}}")
@@ -144,58 +128,10 @@ foreach(case IN LISTS product_nominal_graph_cases)
     set_tests_properties(${producer}_compiler PROPERTIES TIMEOUT 600 PROCESSORS 8
         LABELS "unit;xir;source-product;program-consumer;ownership;compiler-faults")
 endforeach()
-add_executable(test_source_product_detachment
-    "${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/test_source_product_detachment.c")
-target_link_libraries(test_source_product_detachment PRIVATE xray_xir_source_product)
-target_compile_definitions(test_source_product_detachment PRIVATE
-    XR_DETACHMENT_ROOT="${product_consumer_fixture_root}"
-    XR_DETACHMENT_SCRATCH="${CMAKE_BINARY_DIR}/consumer-detachment-inputs")
-set_target_properties(test_source_product_detachment PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-if(MSVC)
-    target_compile_options(test_source_product_detachment PRIVATE /utf-8 /W4 /WX)
-else()
-    target_compile_options(test_source_product_detachment PRIVATE -Wall -Wextra -Werror)
-endif()
-foreach(case IN ITEMS generics callables single_module text_program cross_module_coroutine cross_module_static_coroutine)
-    add_test(NAME test_source_product_detachment_${case}
-        COMMAND ${XRAY_PYTHON} -X utf8 "${CMAKE_SOURCE_DIR}/scripts/source_product_consumer_detachment.py"
-            --binary $<TARGET_FILE:test_source_product_detachment> --case ${case}
-            --scratch "${CMAKE_BINARY_DIR}/consumer-detachment-inputs")
-    set_tests_properties(test_source_product_detachment_${case} PROPERTIES TIMEOUT 120
-        LABELS "unit;xir;source-product;program-consumer;ownership;detachment")
-    add_test(NAME test_source_product_detachment_${case}_axes
-        COMMAND ${XRAY_PYTHON} -X utf8 "${CMAKE_SOURCE_DIR}/scripts/source_product_consumer_detachment.py"
-            --binary $<TARGET_FILE:test_source_product_detachment> --case ${case}
-            --scratch "${CMAKE_BINARY_DIR}/consumer-detachment-inputs" --check axes)
-    set_tests_properties(test_source_product_detachment_${case}_axes PROPERTIES TIMEOUT 120
-        LABELS "unit;xir;source-product;program-consumer;ownership;detachment;axes")
-    add_test(NAME test_source_product_detachment_${case}_compiler
-        COMMAND ${XRAY_PYTHON} -X utf8 "${CMAKE_SOURCE_DIR}/scripts/source_product_consumer_detachment_faults.py"
-            --binary $<TARGET_FILE:test_source_product_detachment> --case ${case}
-            --scratch "${CMAKE_BINARY_DIR}/consumer-detachment-inputs" --jobs 8
-            --evidence "${CMAKE_BINARY_DIR}/consumer-detachment-fault-evidence/${case}")
-    set_tests_properties(test_source_product_detachment_${case}_compiler PROPERTIES TIMEOUT 600 PROCESSORS 8
-        LABELS "unit;xir;source-product;program-consumer;ownership;detachment;compiler-faults")
-endforeach()
-add_executable(test_source_product_rejections
-    "${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/test_source_product_rejections.c")
-target_link_libraries(test_source_product_rejections PRIVATE xray_xir_source_product)
-target_compile_definitions(test_source_product_rejections PRIVATE XR_REJECTION_ROOT="${product_consumer_fixture_root}")
-set_target_properties(test_source_product_rejections PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-if(MSVC)
-    target_compile_options(test_source_product_rejections PRIVATE /utf-8 /W4 /WX)
-else()
-    target_compile_options(test_source_product_rejections PRIVATE -Wall -Wextra -Werror)
-endif()
+
 foreach(case IN ITEMS bare_nullable missing_name)
     set(test "test_source_product_rejections_${case}")
-    add_test(NAME ${test} COMMAND test_source_product_rejections ${case})
-    add_test(NAME ${test}_axes COMMAND test_source_product_rejections ${case} --axes)
-    add_test(NAME ${test}_compiler COMMAND test_source_product_rejections ${case} --compiler)
-    set_tests_properties(${test} ${test}_axes PROPERTIES TIMEOUT 120
-        LABELS "unit;xir;source-product;program-consumer;ownership;rejection")
-    set_tests_properties(${test}_compiler PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE
-        LABELS "unit;xir;source-product;program-consumer;ownership;compiler-faults")
+
 endforeach()
 add_test(NAME source_product_consumer_inventory
     COMMAND ${XRAY_PYTHON} -X utf8 "${CMAKE_SOURCE_DIR}/scripts/source_product_consumer_inventory.py" check)

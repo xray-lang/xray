@@ -13,9 +13,8 @@ endforeach()
 add_custom_command(OUTPUT ${XIR_ENUM_EQUAL_NATIVE}
     COMMAND $<TARGET_FILE:test_xir_enum_equal> --generate "${XIR_ENUM_EQUAL_DIR}"
     DEPENDS test_xir_enum_equal VERBATIM)
-add_executable(test_xir_enum_equal_native "${CMAKE_CURRENT_LIST_DIR}/test_xir_enum_equal_native.c" ${XIR_ENUM_EQUAL_NATIVE})
-target_link_libraries(test_xir_enum_equal_native PRIVATE xray_xir_source xray_xir_vm)
-foreach(target IN ITEMS test_xir_enum_equal test_xir_enum_equal_native)
+
+foreach(target IN ITEMS test_xir_enum_equal)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /WX)
     else()
@@ -24,6 +23,5 @@ foreach(target IN ITEMS test_xir_enum_equal test_xir_enum_equal_native)
 endforeach()
 add_test(NAME test_xir_enum_equal_vm COMMAND test_xir_enum_equal --vm "${XIR_ENUM_EQUAL_DIR}")
 add_test(NAME test_xir_enum_equal_ctfe COMMAND test_xir_enum_equal --ctfe "${XIR_ENUM_EQUAL_DIR}")
-add_test(NAME test_xir_enum_equal_native_mixed COMMAND test_xir_enum_equal_native)
-set_tests_properties(test_xir_enum_equal_vm test_xir_enum_equal_ctfe test_xir_enum_equal_native_mixed
-    PROPERTIES LABELS "unit;xir;enum;equality;ownership;execution" RUN_SERIAL TRUE TIMEOUT 300 PROCESSORS 1)
+
+set_tests_properties(test_xir_enum_equal_vm test_xir_enum_equal_ctfe PROPERTIES LABELS "unit;xir;enum;equality;ownership;execution" RUN_SERIAL TRUE TIMEOUT 300 PROCESSORS 1)

@@ -41,4 +41,3 @@ add_test(NAME check_source_owner COMMAND "${Python3_EXECUTABLE}" -X utf8
     --driver "$<TARGET_FILE:check_owner_driver>" --injected "$<TARGET_FILE:check_owner_injected>"
     --output "${CMAKE_CURRENT_BINARY_DIR}/cases")
 set_tests_properties(check_source_owner PROPERTIES TIMEOUT 120 COST 3)
-

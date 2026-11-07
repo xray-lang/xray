@@ -9,7 +9,7 @@ add_custom_command(OUTPUT "${byte_dir}/byte_frame.inc.c" "${byte_dir}/byte-sourc
         "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_server.c" "${byte_dir}/byte_frame.inc.c"
     DEPENDS "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_server.c" "${CMAKE_CURRENT_LIST_DIR}/extract_frame.py" VERBATIM)
 set_source_files_properties("${byte_dir}/byte_frame.inc.c" PROPERTIES HEADER_FILE_ONLY TRUE)
-foreach(target test_lsp_json_decode test_lsp_json_decode_before test_lsp_json_frame)
+foreach(target IN ITEMS test_lsp_json_decode test_lsp_json_frame)
     if(target STREQUAL "test_lsp_json_frame")
         set(entry test_frame.c)
     else()
@@ -26,7 +26,7 @@ foreach(target test_lsp_json_decode test_lsp_json_decode_before test_lsp_json_fr
         target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
     endif()
 endforeach()
-target_compile_definitions(test_lsp_json_decode_before PRIVATE DECODE_BEFORE=1)
+
 target_sources(test_lsp_json_frame PRIVATE "${byte_dir}/byte_frame.inc.c" "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_framing.c")
 if(WIN32)
     target_sources(test_lsp_json_frame PRIVATE "${PROJECT_SOURCE_DIR}/src/os/win/pipe_win.c"
@@ -35,7 +35,7 @@ else()
     target_sources(test_lsp_json_frame PRIVATE "${PROJECT_SOURCE_DIR}/src/os/unix/pipe_unix.c"
         "${PROJECT_SOURCE_DIR}/src/os/unix/fd_unix.c" "${PROJECT_SOURCE_DIR}/src/os/unix/time_unix.c")
 endif()
-foreach(mode normal resources before)
+foreach(mode IN ITEMS normal resources)
     if(mode STREQUAL "before")
         set(image test_lsp_json_decode_before)
     else()

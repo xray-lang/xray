@@ -35,7 +35,6 @@ endif()
 add_test(NAME test_xir_generator_native COMMAND test_xir_generator_native)
 set_tests_properties(test_xir_generator_native PROPERTIES LABELS "unit;xir;generator;generated-c;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
 
-
 add_executable(test_xir_generator_cleanup_source xir/test_xir_generator_cleanup_source.c)
 target_link_libraries(test_xir_generator_cleanup_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
 target_compile_definitions(test_xir_generator_cleanup_source PRIVATE XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
@@ -74,25 +73,7 @@ foreach(generator_factory_target test_xir_generator_factory_source test_xir_gene
     set_tests_properties(${generator_factory_target} PROPERTIES LABELS "unit;xir;generator;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
 endforeach()
 
-
-add_executable(test_xir_generator_consumer_source xir/test_xir_generator_consumer_source.c)
-target_link_libraries(test_xir_generator_consumer_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
-target_compile_definitions(test_xir_generator_consumer_source PRIVATE XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
 set(XIR_GENERATOR_CONSUMER_C "${CMAKE_CURRENT_BINARY_DIR}/generated/xir_generator_consumer.c")
-add_custom_command(OUTPUT "${XIR_GENERATOR_CONSUMER_C}"
-    COMMAND $<TARGET_FILE:test_xir_generator_consumer_source> "${XIR_GENERATOR_CONSUMER_C}"
-    DEPENDS test_xir_generator_consumer_source VERBATIM)
-add_executable(test_xir_generator_consumer_native xir/test_xir_generator_consumer_native.c "${XIR_GENERATOR_CONSUMER_C}")
-target_link_libraries(test_xir_generator_consumer_native PRIVATE xray_xir_scalar)
-foreach(generator_consumer_target test_xir_generator_consumer_source test_xir_generator_consumer_native)
-    if(MSVC)
-        target_compile_options(${generator_consumer_target} PRIVATE /W4 /WX /utf-8)
-    else()
-        target_compile_options(${generator_consumer_target} PRIVATE -Wall -Wextra -Werror)
-    endif()
-    add_test(NAME ${generator_consumer_target} COMMAND ${generator_consumer_target})
-    set_tests_properties(${generator_consumer_target} PROPERTIES LABELS "unit;xir;generator;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
-endforeach()
 
 add_executable(test_xir_iterator_pull_packets xir/test_xir_iterator_pull_packets.c)
 target_link_libraries(test_xir_iterator_pull_packets PRIVATE xray_xir)
@@ -104,196 +85,57 @@ endif()
 add_test(NAME test_xir_iterator_pull_packets COMMAND test_xir_iterator_pull_packets)
 set_tests_properties(test_xir_iterator_pull_packets PROPERTIES LABELS "unit;xir;generator;abi;compiler" TIMEOUT 120 PROCESSORS 1)
 
-add_executable(test_xir_generator_consumer_mixed xir/test_xir_generator_consumer_mixed.c "${XIR_GENERATOR_CONSUMER_C}")
-target_link_libraries(test_xir_generator_consumer_mixed PRIVATE xray_xir_vm xray_xir_scalar)
-if(MSVC)
-    target_compile_options(test_xir_generator_consumer_mixed PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_generator_consumer_mixed PRIVATE -Wall -Wextra -Werror)
-endif()
-foreach(direction vm-native native-vm)
-    add_test(NAME test_xir_generator_consumer_mixed_${direction} COMMAND test_xir_generator_consumer_mixed ${direction})
-    set_tests_properties(test_xir_generator_consumer_mixed_${direction} PROPERTIES LABELS "unit;xir;generator;mixed;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
-endforeach()
-
-add_executable(test_xir_generator_wait_source xir/test_xir_generator_wait_source.c)
-target_link_libraries(test_xir_generator_wait_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
-target_compile_definitions(test_xir_generator_wait_source PRIVATE XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
 set(XIR_GENERATOR_WAIT_C "${CMAKE_CURRENT_BINARY_DIR}/generated/xir_generator_wait.c")
-add_custom_command(OUTPUT "${XIR_GENERATOR_WAIT_C}"
-    COMMAND $<TARGET_FILE:test_xir_generator_wait_source> "${XIR_GENERATOR_WAIT_C}"
-    DEPENDS test_xir_generator_wait_source VERBATIM)
-add_executable(test_xir_generator_wait_native xir/test_xir_generator_wait_native.c "${XIR_GENERATOR_WAIT_C}")
-target_link_libraries(test_xir_generator_wait_native PRIVATE xray_xir_scalar)
-foreach(generator_wait_target test_xir_generator_wait_source test_xir_generator_wait_native)
-    if(MSVC)
-        target_compile_options(${generator_wait_target} PRIVATE /W4 /WX /utf-8)
-    else()
-        target_compile_options(${generator_wait_target} PRIVATE -Wall -Wextra -Werror)
-    endif()
-    add_test(NAME ${generator_wait_target} COMMAND ${generator_wait_target})
-    set_tests_properties(${generator_wait_target} PROPERTIES LABELS "unit;xir;generator;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
-endforeach()
 
-add_executable(test_xir_generator_wait_mixed xir/test_xir_generator_wait_mixed.c "${XIR_GENERATOR_WAIT_C}")
-target_link_libraries(test_xir_generator_wait_mixed PRIVATE xray_xir_vm xray_xir_scalar)
-if(MSVC)
-    target_compile_options(test_xir_generator_wait_mixed PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_generator_wait_mixed PRIVATE -Wall -Wextra -Werror)
-endif()
-foreach(direction vm-native native-vm)
-    add_test(NAME test_xir_generator_wait_mixed_${direction} COMMAND test_xir_generator_wait_mixed ${direction})
-    set_tests_properties(test_xir_generator_wait_mixed_${direction} PROPERTIES LABELS "unit;xir;generator;mixed;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
-endforeach()
-
-add_executable(test_xir_generator_wait_resources xir/test_xir_generator_wait_resources.c "${XIR_GENERATOR_WAIT_C}")
-target_link_libraries(test_xir_generator_wait_resources PRIVATE xray_xir_vm xray_xir_scalar)
-if(MSVC)
-    target_compile_options(test_xir_generator_wait_resources PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_generator_wait_resources PRIVATE -Wall -Wextra -Werror)
-endif()
 foreach(provider native vm vm-native native-vm)
     foreach(mode measure axes faults cancel)
-        add_test(NAME test_xir_generator_wait_resources_${mode}_${provider}
-            COMMAND test_xir_generator_wait_resources ${provider} ${mode})
+
         if(mode STREQUAL "measure" OR mode STREQUAL "axes")
             set(generator_resource_timeout 120)
         else()
             set(generator_resource_timeout 300)
         endif()
-        set_tests_properties(test_xir_generator_wait_resources_${mode}_${provider} PROPERTIES
-            LABELS "unit;xir;generator;ownership;runtime" TIMEOUT ${generator_resource_timeout} PROCESSORS 1)
+
     endforeach()
 endforeach()
 
-add_executable(test_xir_generator_closure_source xir/test_xir_generator_closure_source.c)
-target_link_libraries(test_xir_generator_closure_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
-target_compile_definitions(test_xir_generator_closure_source PRIVATE XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-if(MSVC)
-    target_compile_options(test_xir_generator_closure_source PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_generator_closure_source PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_generator_closure_source COMMAND test_xir_generator_closure_source)
-set_tests_properties(test_xir_generator_closure_source PROPERTIES LABELS "unit;xir;generator;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
-
 set(XIR_GENERATOR_CLOSURE_C "${CMAKE_CURRENT_BINARY_DIR}/generated/xir_generator_closure.c")
-add_custom_command(OUTPUT "${XIR_GENERATOR_CLOSURE_C}"
-    COMMAND $<TARGET_FILE:test_xir_generator_closure_source> "${XIR_GENERATOR_CLOSURE_C}"
-    DEPENDS test_xir_generator_closure_source VERBATIM)
-add_executable(test_xir_generator_closure_native xir/test_xir_generator_closure_native.c "${XIR_GENERATOR_CLOSURE_C}")
-target_link_libraries(test_xir_generator_closure_native PRIVATE xray_xir_scalar)
-add_executable(test_xir_generator_closure_mixed xir/test_xir_generator_closure_mixed.c "${XIR_GENERATOR_CLOSURE_C}")
-target_link_libraries(test_xir_generator_closure_mixed PRIVATE xray_xir_vm xray_xir_scalar)
-foreach(target test_xir_generator_closure_native test_xir_generator_closure_mixed)
-    if(MSVC)
-        target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
-    else()
-        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
-    endif()
-endforeach()
-add_test(NAME test_xir_generator_closure_native COMMAND test_xir_generator_closure_native)
-set_tests_properties(test_xir_generator_closure_native PROPERTIES LABELS "unit;xir;generator;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
-foreach(direction vm-native native-vm)
-    add_test(NAME test_xir_generator_closure_mixed_${direction} COMMAND test_xir_generator_closure_mixed ${direction})
-    set_tests_properties(test_xir_generator_closure_mixed_${direction} PROPERTIES LABELS "unit;xir;generator;mixed;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
-endforeach()
 
-add_executable(test_xir_generator_cell_resources xir/test_xir_generator_cell_resources.c "${XIR_GENERATOR_WAIT_C}" "${XIR_GENERATOR_CLOSURE_C}")
-target_link_libraries(test_xir_generator_cell_resources PRIVATE xray_xir_vm xray_xir_scalar)
-if(MSVC)
-    target_compile_options(test_xir_generator_cell_resources PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_generator_cell_resources PRIVATE -Wall -Wextra -Werror)
-endif()
 foreach(provider native vm vm-native native-vm)
     foreach(mode measure axes faults cancel)
-        add_test(NAME test_xir_generator_cell_resources_${mode}_${provider}
-            COMMAND test_xir_generator_cell_resources ${provider} ${mode})
+
         if(mode STREQUAL "measure" OR mode STREQUAL "axes")
             set(generator_cell_resource_timeout 120)
         else()
             set(generator_cell_resource_timeout 300)
         endif()
-        set_tests_properties(test_xir_generator_cell_resources_${mode}_${provider} PROPERTIES
-            LABELS "unit;xir;generator;ownership;runtime" TIMEOUT ${generator_cell_resource_timeout} PROCESSORS 1)
+
     endforeach()
 endforeach()
 
-add_executable(test_xir_generator_nth_resources xir/test_xir_generator_nth_resources.c "${XIR_GENERATOR_WAIT_C}" "${XIR_GENERATOR_CLOSURE_C}")
-target_link_libraries(test_xir_generator_nth_resources PRIVATE xray_xir_vm xray_xir_scalar)
-if(MSVC)
-    target_compile_options(test_xir_generator_nth_resources PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_generator_nth_resources PRIVATE -Wall -Wextra -Werror)
-endif()
 foreach(provider native vm vm-native native-vm)
     foreach(mode measure axes faults cancel)
-        add_test(NAME test_xir_generator_nth_resources_${mode}_${provider}
-            COMMAND test_xir_generator_nth_resources ${provider} ${mode})
+
         if(mode STREQUAL "measure" OR mode STREQUAL "axes")
             set(generator_nth_resource_timeout 120)
         else()
             set(generator_nth_resource_timeout 300)
         endif()
-        set_tests_properties(test_xir_generator_nth_resources_${mode}_${provider} PROPERTIES
-            LABELS "unit;xir;generator;ownership;runtime" TIMEOUT ${generator_nth_resource_timeout} PROCESSORS 1)
+
     endforeach()
 endforeach()
 
-add_executable(test_xir_generator_loop_source xir/test_xir_generator_loop_source.c)
-target_link_libraries(test_xir_generator_loop_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
-target_compile_definitions(test_xir_generator_loop_source PRIVATE XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-if(MSVC)
-    target_compile_options(test_xir_generator_loop_source PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_generator_loop_source PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_generator_loop_source COMMAND test_xir_generator_loop_source)
-set_tests_properties(test_xir_generator_loop_source PROPERTIES LABELS "unit;xir;generator;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
-
 set(XIR_GENERATOR_LOOP_C "${CMAKE_CURRENT_BINARY_DIR}/generated/xir_generator_loop.c")
-add_custom_command(OUTPUT "${XIR_GENERATOR_LOOP_C}"
-    COMMAND $<TARGET_FILE:test_xir_generator_loop_source> "${XIR_GENERATOR_LOOP_C}"
-    DEPENDS test_xir_generator_loop_source VERBATIM)
-add_executable(test_xir_generator_loop_native xir/test_xir_generator_loop_native.c "${XIR_GENERATOR_LOOP_C}")
-target_link_libraries(test_xir_generator_loop_native PRIVATE xray_xir_scalar)
-add_executable(test_xir_generator_loop_mixed xir/test_xir_generator_loop_mixed.c "${XIR_GENERATOR_LOOP_C}")
-target_link_libraries(test_xir_generator_loop_mixed PRIVATE xray_xir_vm xray_xir_scalar)
-foreach(target test_xir_generator_loop_native test_xir_generator_loop_mixed)
-    if(MSVC)
-        target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
-    else()
-        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
-    endif()
-endforeach()
-add_test(NAME test_xir_generator_loop_native COMMAND test_xir_generator_loop_native)
-set_tests_properties(test_xir_generator_loop_native PROPERTIES LABELS "unit;xir;generator;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
-foreach(direction vm-native native-vm)
-    add_test(NAME test_xir_generator_loop_mixed_${direction} COMMAND test_xir_generator_loop_mixed ${direction})
-    set_tests_properties(test_xir_generator_loop_mixed_${direction} PROPERTIES LABELS "unit;xir;generator;mixed;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
-endforeach()
 
-add_executable(test_xir_generator_loop_resources xir/test_xir_generator_loop_resources.c "${XIR_GENERATOR_WAIT_C}" "${XIR_GENERATOR_LOOP_C}")
-target_link_libraries(test_xir_generator_loop_resources PRIVATE xray_xir_vm xray_xir_scalar)
-if(MSVC)
-    target_compile_options(test_xir_generator_loop_resources PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_generator_loop_resources PRIVATE -Wall -Wextra -Werror)
-endif()
 foreach(provider native vm vm-native native-vm)
     foreach(mode measure axes faults cancel)
-        add_test(NAME test_xir_generator_loop_resources_${mode}_${provider}
-            COMMAND test_xir_generator_loop_resources ${provider} ${mode})
+
         if(mode STREQUAL "measure" OR mode STREQUAL "axes")
             set(generator_loop_resource_timeout 120)
         else()
             set(generator_loop_resource_timeout 300)
         endif()
-        set_tests_properties(test_xir_generator_loop_resources_${mode}_${provider} PROPERTIES
-            LABELS "unit;xir;generator;ownership;runtime" TIMEOUT ${generator_loop_resource_timeout} PROCESSORS 1)
+
     endforeach()
 endforeach()
 
@@ -330,57 +172,17 @@ foreach(direction vm-native native-vm)
     set_tests_properties(test_xir_generator_worker_mixed_${direction} PROPERTIES LABELS "unit;xir;generator;mixed;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
 endforeach()
 
-add_executable(test_xir_generator_iterable_source xir/test_xir_generator_iterable_source.c)
-target_link_libraries(test_xir_generator_iterable_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
-target_compile_definitions(test_xir_generator_iterable_source PRIVATE XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-if(MSVC)
-    target_compile_options(test_xir_generator_iterable_source PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_generator_iterable_source PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_generator_iterable_source COMMAND test_xir_generator_iterable_source)
-set_tests_properties(test_xir_generator_iterable_source PROPERTIES LABELS "unit;xir;generator;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
-
 set(XIR_GENERATOR_ITERABLE_C "${CMAKE_CURRENT_BINARY_DIR}/generated/xir_generator_iterable.c")
-add_custom_command(OUTPUT "${XIR_GENERATOR_ITERABLE_C}"
-    COMMAND $<TARGET_FILE:test_xir_generator_iterable_source> "${XIR_GENERATOR_ITERABLE_C}"
-    DEPENDS test_xir_generator_iterable_source VERBATIM)
-add_executable(test_xir_generator_iterable_native xir/test_xir_generator_iterable_native.c "${XIR_GENERATOR_ITERABLE_C}")
-target_link_libraries(test_xir_generator_iterable_native PRIVATE xray_xir_scalar)
-add_executable(test_xir_generator_iterable_mixed xir/test_xir_generator_iterable_mixed.c "${XIR_GENERATOR_ITERABLE_C}")
-target_link_libraries(test_xir_generator_iterable_mixed PRIVATE xray_xir_vm xray_xir_scalar)
-foreach(target test_xir_generator_iterable_native test_xir_generator_iterable_mixed)
-    if(MSVC)
-        target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
-    else()
-        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
-    endif()
-endforeach()
-add_test(NAME test_xir_generator_iterable_native COMMAND test_xir_generator_iterable_native)
-set_tests_properties(test_xir_generator_iterable_native PROPERTIES LABELS "unit;xir;generator;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
-foreach(direction vm-native native-vm)
-    add_test(NAME test_xir_generator_iterable_mixed_${direction} COMMAND test_xir_generator_iterable_mixed ${direction})
-    set_tests_properties(test_xir_generator_iterable_mixed_${direction} PROPERTIES LABELS "unit;xir;generator;mixed;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
-endforeach()
 
-add_executable(test_xir_generator_iterable_resources xir/test_xir_generator_iterable_resources.c "${XIR_GENERATOR_WAIT_C}" "${XIR_GENERATOR_ITERABLE_C}")
-target_link_libraries(test_xir_generator_iterable_resources PRIVATE xray_xir_vm xray_xir_scalar)
-if(MSVC)
-    target_compile_options(test_xir_generator_iterable_resources PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_generator_iterable_resources PRIVATE -Wall -Wextra -Werror)
-endif()
 foreach(provider native vm vm-native native-vm)
     foreach(mode measure axes faults cancel)
-        add_test(NAME test_xir_generator_iterable_resources_${mode}_${provider}
-            COMMAND test_xir_generator_iterable_resources ${provider} ${mode})
+
         if(mode STREQUAL "measure" OR mode STREQUAL "axes")
             set(generator_iterable_resource_timeout 120)
         else()
             set(generator_iterable_resource_timeout 300)
         endif()
-        set_tests_properties(test_xir_generator_iterable_resources_${mode}_${provider} PROPERTIES
-            LABELS "unit;xir;generator;ownership;runtime" TIMEOUT ${generator_iterable_resource_timeout} PROCESSORS 1)
+
     endforeach()
 endforeach()
 
@@ -417,183 +219,49 @@ foreach(direction vm-native native-vm)
     set_tests_properties(test_xir_generator_method_factory_mixed_${direction} PROPERTIES LABELS "unit;xir;generator;mixed;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
 endforeach()
 
-add_executable(test_xir_generator_method_factory_resources xir/test_xir_generator_method_factory_resources.c "${XIR_GENERATOR_WAIT_C}" "${XIR_GENERATOR_METHOD_FACTORY_C}")
-target_link_libraries(test_xir_generator_method_factory_resources PRIVATE xray_xir_vm xray_xir_scalar)
-if(MSVC)
-    target_compile_options(test_xir_generator_method_factory_resources PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_generator_method_factory_resources PRIVATE -Wall -Wextra -Werror)
-endif()
 foreach(provider native vm vm-native native-vm)
     foreach(mode measure axes faults cancel)
-        add_test(NAME test_xir_generator_method_factory_resources_${mode}_${provider}
-            COMMAND test_xir_generator_method_factory_resources ${provider} ${mode})
+
         if(mode STREQUAL "measure" OR mode STREQUAL "axes")
             set(generator_method_factory_resource_timeout 120)
         else()
             set(generator_method_factory_resource_timeout 300)
         endif()
-        set_tests_properties(test_xir_generator_method_factory_resources_${mode}_${provider} PROPERTIES
-            LABELS "unit;xir;generator;ownership;runtime" TIMEOUT ${generator_method_factory_resource_timeout} PROCESSORS 1)
+
     endforeach()
 endforeach()
 
-add_executable(test_xir_generator_callable_source xir/test_xir_generator_callable_source.c)
-target_link_libraries(test_xir_generator_callable_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
-target_compile_definitions(test_xir_generator_callable_source PRIVATE XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-if(MSVC)
-    target_compile_options(test_xir_generator_callable_source PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_generator_callable_source PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_generator_callable_source COMMAND test_xir_generator_callable_source)
-set_tests_properties(test_xir_generator_callable_source PROPERTIES LABELS "unit;xir;generator;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
-
 set(XIR_GENERATOR_CALLABLE_C "${CMAKE_CURRENT_BINARY_DIR}/generated/xir_generator_callable.c")
-add_custom_command(OUTPUT "${XIR_GENERATOR_CALLABLE_C}"
-    COMMAND $<TARGET_FILE:test_xir_generator_callable_source> "${XIR_GENERATOR_CALLABLE_C}"
-    DEPENDS test_xir_generator_callable_source VERBATIM)
-add_executable(test_xir_generator_callable_native xir/test_xir_generator_callable_native.c "${XIR_GENERATOR_CALLABLE_C}")
-target_link_libraries(test_xir_generator_callable_native PRIVATE xray_xir_scalar)
-add_executable(test_xir_generator_callable_mixed xir/test_xir_generator_callable_mixed.c "${XIR_GENERATOR_CALLABLE_C}")
-target_link_libraries(test_xir_generator_callable_mixed PRIVATE xray_xir_vm xray_xir_scalar)
-foreach(target test_xir_generator_callable_native test_xir_generator_callable_mixed)
-    if(MSVC)
-        target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
-    else()
-        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
-    endif()
-endforeach()
-add_test(NAME test_xir_generator_callable_native COMMAND test_xir_generator_callable_native)
-set_tests_properties(test_xir_generator_callable_native PROPERTIES LABELS "unit;xir;generator;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
-foreach(direction vm-native native-vm)
-    add_test(NAME test_xir_generator_callable_mixed_${direction} COMMAND test_xir_generator_callable_mixed ${direction})
-    set_tests_properties(test_xir_generator_callable_mixed_${direction} PROPERTIES LABELS "unit;xir;generator;mixed;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
-endforeach()
 
-add_executable(test_xir_generator_callable_resources xir/test_xir_generator_callable_resources.c "${XIR_GENERATOR_WAIT_C}" "${XIR_GENERATOR_CALLABLE_C}")
-target_link_libraries(test_xir_generator_callable_resources PRIVATE xray_xir_vm xray_xir_scalar)
-if(MSVC)
-    target_compile_options(test_xir_generator_callable_resources PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_generator_callable_resources PRIVATE -Wall -Wextra -Werror)
-endif()
 foreach(provider native vm vm-native native-vm)
     foreach(mode measure axes faults cancel)
-        add_test(NAME test_xir_generator_callable_resources_${mode}_${provider}
-            COMMAND test_xir_generator_callable_resources ${provider} ${mode})
+
         if(mode STREQUAL "measure" OR mode STREQUAL "axes")
             set(generator_callable_resource_timeout 120)
         else()
             set(generator_callable_resource_timeout 300)
         endif()
-        set_tests_properties(test_xir_generator_callable_resources_${mode}_${provider} PROPERTIES
-            LABELS "unit;xir;generator;ownership;runtime" TIMEOUT ${generator_callable_resource_timeout} PROCESSORS 1)
+
     endforeach()
 endforeach()
 
-add_executable(test_xir_generator_receiver_source xir/test_xir_generator_receiver_source.c)
-target_link_libraries(test_xir_generator_receiver_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
-target_compile_definitions(test_xir_generator_receiver_source PRIVATE XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-if(MSVC)
-    target_compile_options(test_xir_generator_receiver_source PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_generator_receiver_source PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_generator_receiver_source COMMAND test_xir_generator_receiver_source)
-set_tests_properties(test_xir_generator_receiver_source PROPERTIES LABELS "unit;xir;generator;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
-
 set(XIR_GENERATOR_RECEIVER_C "${CMAKE_CURRENT_BINARY_DIR}/generated/xir_generator_receiver.c")
-add_custom_command(OUTPUT "${XIR_GENERATOR_RECEIVER_C}"
-    COMMAND $<TARGET_FILE:test_xir_generator_receiver_source> "${XIR_GENERATOR_RECEIVER_C}"
-    DEPENDS test_xir_generator_receiver_source VERBATIM)
-add_executable(test_xir_generator_receiver_native xir/test_xir_generator_receiver_native.c "${XIR_GENERATOR_RECEIVER_C}")
-target_link_libraries(test_xir_generator_receiver_native PRIVATE xray_xir_scalar)
-add_executable(test_xir_generator_receiver_mixed xir/test_xir_generator_receiver_mixed.c "${XIR_GENERATOR_RECEIVER_C}")
-target_link_libraries(test_xir_generator_receiver_mixed PRIVATE xray_xir_vm xray_xir_scalar)
-foreach(target test_xir_generator_receiver_native test_xir_generator_receiver_mixed)
-    if(MSVC)
-        target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
-    else()
-        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
-    endif()
-endforeach()
-add_test(NAME test_xir_generator_receiver_native COMMAND test_xir_generator_receiver_native)
-set_tests_properties(test_xir_generator_receiver_native PROPERTIES LABELS "unit;xir;generator;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
-foreach(direction vm-native native-vm)
-    add_test(NAME test_xir_generator_receiver_mixed_${direction} COMMAND test_xir_generator_receiver_mixed ${direction})
-    set_tests_properties(test_xir_generator_receiver_mixed_${direction} PROPERTIES LABELS "unit;xir;generator;mixed;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
-endforeach()
 
-add_executable(test_xir_generator_receiver_proof xir/test_xir_generator_receiver_proof.c)
-target_link_libraries(test_xir_generator_receiver_proof PRIVATE xray_xir)
-if(MSVC)
-    target_compile_options(test_xir_generator_receiver_proof PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_generator_receiver_proof PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_generator_receiver_proof COMMAND test_xir_generator_receiver_proof)
-set_tests_properties(test_xir_generator_receiver_proof PROPERTIES LABELS "unit;xir;metadata;ownership;generator" TIMEOUT 120 PROCESSORS 1)
-
-add_executable(test_xir_generator_receiver_resources xir/test_xir_generator_receiver_resources.c "${XIR_GENERATOR_WAIT_C}" "${XIR_GENERATOR_RECEIVER_C}")
-target_link_libraries(test_xir_generator_receiver_resources PRIVATE xray_xir_vm xray_xir_scalar)
-if(MSVC)
-    target_compile_options(test_xir_generator_receiver_resources PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_generator_receiver_resources PRIVATE -Wall -Wextra -Werror)
-endif()
 foreach(provider native vm vm-native native-vm)
     foreach(mode measure axes faults cancel)
-        add_test(NAME test_xir_generator_receiver_resources_${mode}_${provider}
-            COMMAND test_xir_generator_receiver_resources ${provider} ${mode})
+
         if(mode STREQUAL "measure" OR mode STREQUAL "axes")
             set(generator_receiver_resource_timeout 120)
         else()
             set(generator_receiver_resource_timeout 300)
         endif()
-        set_tests_properties(test_xir_generator_receiver_resources_${mode}_${provider} PROPERTIES
-            LABELS "unit;xir;generator;ownership;runtime" TIMEOUT ${generator_receiver_resource_timeout} PROCESSORS 1)
+
     endforeach()
 endforeach()
-
-add_test(NAME test_xir_generator_receiver_cell_source COMMAND test_xir_generator_receiver_source --cell)
-add_test(NAME test_xir_generator_receiver_cell_native COMMAND test_xir_generator_receiver_native --cell)
-foreach(direction vm-native native-vm)
-    add_test(NAME test_xir_generator_receiver_cell_mixed_${direction} COMMAND test_xir_generator_receiver_mixed ${direction} --cell)
-endforeach()
-set_tests_properties(test_xir_generator_receiver_cell_source test_xir_generator_receiver_cell_native
-    test_xir_generator_receiver_cell_mixed_vm-native test_xir_generator_receiver_cell_mixed_native-vm
-    PROPERTIES LABELS "unit;xir;generator;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
-
-add_executable(test_xir_generator_receiver_compiler xir/test_xir_generator_receiver_compiler.c)
-target_link_libraries(test_xir_generator_receiver_compiler PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
-target_compile_definitions(test_xir_generator_receiver_compiler PRIVATE XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-if(MSVC)
-    target_compile_options(test_xir_generator_receiver_compiler PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_generator_receiver_compiler PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_generator_receiver_compiler COMMAND test_xir_generator_receiver_compiler)
-set_tests_properties(test_xir_generator_receiver_compiler PROPERTIES
-    LABELS "unit;xir;generator;compiler;ownership" TIMEOUT 120 PROCESSORS 1)
-if(WIN32)
-    add_test(NAME test_xir_generator_receiver_compiler_faults
-        COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/unit/xir/run_receiver_compiler_faults.py"
-            --executable "$<TARGET_FILE:test_xir_generator_receiver_compiler>"
-            --source-root "${PROJECT_SOURCE_DIR}" --build-root "${CMAKE_BINARY_DIR}")
-    set_tests_properties(test_xir_generator_receiver_compiler_faults PROPERTIES
-        LABELS "unit;xir;generator;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 8 COST 600)
-endif()
 
 add_test(NAME test_xir_generator_receiver_compiler_history_reports
     COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_receiver_compiler_history_reports.py")
 set_tests_properties(test_xir_generator_receiver_compiler_history_reports PROPERTIES
-    LABELS "unit;xir;generator;compiler-fault;ownership" TIMEOUT 30 PROCESSORS 1)
-
-add_test(NAME test_xir_generator_receiver_compiler_allocator_audit
-    COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_receiver_compiler_history_reports.py"
-        --allocator-audit "$<TARGET_FILE:test_xir_generator_receiver_compiler>")
-set_tests_properties(test_xir_generator_receiver_compiler_allocator_audit PROPERTIES
     LABELS "unit;xir;generator;compiler-fault;ownership" TIMEOUT 30 PROCESSORS 1)
 
 add_executable(test_xir_generator_producer_sites xir/test_xir_generator_producer_sites.c)
@@ -644,17 +312,6 @@ foreach(direction vm-native native-vm)
     add_test(NAME test_xir_generator_consumption_mixed_${direction} COMMAND test_xir_generator_consumption_mixed ${direction})
     set_tests_properties(test_xir_generator_consumption_mixed_${direction} PROPERTIES LABELS "unit;xir;generator;mixed;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
 endforeach()
-
-add_executable(test_xir_generator_consumption_proof xir/test_xir_generator_consumption_proof.c)
-target_link_libraries(test_xir_generator_consumption_proof PRIVATE xray_xir)
-if(MSVC)
-    target_compile_options(test_xir_generator_consumption_proof PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_generator_consumption_proof PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_generator_consumption_proof COMMAND test_xir_generator_consumption_proof)
-set_tests_properties(test_xir_generator_consumption_proof PROPERTIES
-    LABELS "unit;xir;generator;metadata;ownership;compiler-fault" TIMEOUT 120 PROCESSORS 1)
 
 add_executable(test_xir_generator_capture_source xir/test_xir_generator_capture_source.c)
 target_link_libraries(test_xir_generator_capture_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
@@ -819,31 +476,6 @@ foreach(mode native vm vm-native native-vm)
     set_tests_properties(test_xir_generator_cell_borrow_faults_${mode} PROPERTIES LABELS "unit;xir;generator;ownership;runtime;mixed;allocation" TIMEOUT 120 PROCESSORS 1)
 endforeach()
 
-add_executable(test_xir_generator_cell_borrow_compiler xir/test_xir_generator_cell_borrow_compiler.c)
-target_link_libraries(test_xir_generator_cell_borrow_compiler PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
-target_compile_definitions(test_xir_generator_cell_borrow_compiler PRIVATE XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-if(MSVC)
-    target_compile_options(test_xir_generator_cell_borrow_compiler PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_generator_cell_borrow_compiler PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_generator_cell_borrow_compiler COMMAND test_xir_generator_cell_borrow_compiler)
-set_tests_properties(test_xir_generator_cell_borrow_compiler PROPERTIES
-    LABELS "unit;xir;generator;compiler;ownership" TIMEOUT 120 PROCESSORS 1)
-add_test(NAME test_xir_generator_cell_borrow_compiler_allocator_audit
-    COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_receiver_compiler_history_reports.py"
-        --allocator-audit "$<TARGET_FILE:test_xir_generator_cell_borrow_compiler>")
-set_tests_properties(test_xir_generator_cell_borrow_compiler_allocator_audit PROPERTIES
-    LABELS "unit;xir;generator;compiler-fault;ownership" TIMEOUT 30 PROCESSORS 1)
-if(WIN32)
-    add_test(NAME test_xir_generator_cell_borrow_compiler_faults
-        COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/unit/xir/run_cell_borrow_compiler_faults.py"
-            --executable "$<TARGET_FILE:test_xir_generator_cell_borrow_compiler>"
-            --source-root "${PROJECT_SOURCE_DIR}" --build-root "${CMAKE_BINARY_DIR}")
-    set_tests_properties(test_xir_generator_cell_borrow_compiler_faults PROPERTIES
-        LABELS "unit;xir;generator;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 8 COST 600)
-endif()
-
 add_test(NAME test_xir_generator_cell_weakened_source COMMAND test_xir_generator_cell_borrow_source --explicit-root)
 set_tests_properties(test_xir_generator_cell_weakened_source PROPERTIES
     LABELS "unit;xir;generator;ownership;compiler;runtime" TIMEOUT 120 PROCESSORS 1)
@@ -860,31 +492,6 @@ foreach(mode native vm vm-native native-vm)
     set_tests_properties(test_xir_generator_cell_weakened_faults_${mode} PROPERTIES
         LABELS "unit;xir;generator;ownership;runtime;mixed;allocation" TIMEOUT 120 PROCESSORS 1)
 endforeach()
-
-add_executable(test_xir_generator_cell_weakened_compiler xir/test_xir_generator_cell_weakened_compiler.c)
-target_link_libraries(test_xir_generator_cell_weakened_compiler PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
-target_compile_definitions(test_xir_generator_cell_weakened_compiler PRIVATE XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-if(MSVC)
-    target_compile_options(test_xir_generator_cell_weakened_compiler PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_generator_cell_weakened_compiler PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_generator_cell_weakened_compiler COMMAND test_xir_generator_cell_weakened_compiler)
-set_tests_properties(test_xir_generator_cell_weakened_compiler PROPERTIES
-    LABELS "unit;xir;generator;compiler;ownership" TIMEOUT 120 PROCESSORS 1)
-add_test(NAME test_xir_generator_cell_weakened_compiler_allocator_audit
-    COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_receiver_compiler_history_reports.py"
-        --allocator-audit "$<TARGET_FILE:test_xir_generator_cell_weakened_compiler>")
-set_tests_properties(test_xir_generator_cell_weakened_compiler_allocator_audit PROPERTIES
-    LABELS "unit;xir;generator;compiler-fault;ownership" TIMEOUT 30 PROCESSORS 1)
-if(WIN32)
-    add_test(NAME test_xir_generator_cell_weakened_compiler_faults
-        COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/unit/xir/run_cell_weakened_compiler_faults.py"
-            --executable "$<TARGET_FILE:test_xir_generator_cell_weakened_compiler>"
-            --source-root "${PROJECT_SOURCE_DIR}" --build-root "${CMAKE_BINARY_DIR}")
-    set_tests_properties(test_xir_generator_cell_weakened_compiler_faults PROPERTIES
-        LABELS "unit;xir;generator;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 8 COST 600)
-endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/mixed_iterator_lifetime.cmake")
 

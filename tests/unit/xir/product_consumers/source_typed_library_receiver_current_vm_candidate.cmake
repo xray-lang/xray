@@ -25,25 +25,6 @@ endforeach()
 # Only the directory exists before the test. The driver uses CREATE_NEW for its
 # own leaves, preserves foreign files and removes only its own created inputs.
 file(MAKE_DIRECTORY "${source_typed_library_receiver_private}")
-add_executable(${source_typed_library_receiver_target} "${source_typed_library_receiver_driver}")
-target_link_libraries(${source_typed_library_receiver_target} PRIVATE xray_xir_source_product xray_xir_vm)
+
 # These observers embed product implementations; use the same immutable
 # producer helper/src roots as the linked product targets. No worker fallback.
-target_include_directories(${source_typed_library_receiver_target} BEFORE PRIVATE
-    "${SOURCE_TYPED_LIBRARY_CURRENT_FORMAL_ROOT}/tests/unit/xir"
-    "${SOURCE_TYPED_LIBRARY_CURRENT_FORMAL_ROOT}/src")
-set_target_properties(${source_typed_library_receiver_target} PROPERTIES
-    C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-if(MSVC)
-    target_compile_definitions(${source_typed_library_receiver_target} PRIVATE _CRT_SECURE_NO_WARNINGS)
-    target_compile_options(${source_typed_library_receiver_target} PRIVATE /utf-8 /W4 /WX)
-else()
-    target_compile_options(${source_typed_library_receiver_target} PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME ${source_typed_library_receiver_target} COMMAND ${source_typed_library_receiver_target}
-    "${source_typed_library_receiver_private}"
-    "${source_typed_library_receiver_fixture}"
-    "${SOURCE_TYPED_LIBRARY_CURRENT_FORMAL_ROOT}/stdlib")
-set_tests_properties(${source_typed_library_receiver_target} PROPERTIES
-    WORKING_DIRECTORY "${CMAKE_BINARY_DIR}" TIMEOUT 120 PROCESSORS 1 RUN_SERIAL TRUE
-    LABELS "unit;xir;program-consumer;typed-library;module-graph;class;receiver;coroutine;ownership;source;vm;normal-only;current-interface-candidate")

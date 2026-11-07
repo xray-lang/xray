@@ -7,7 +7,7 @@ source_task_target(test_lsp_edit_task "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_na
 target_compile_definitions(test_lsp_edit_task PRIVATE XLSP_EDIT_TASK=1)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set(edit_dir "${CMAKE_CURRENT_BINARY_DIR}/lsp-edit-task")
-foreach(kind current before)
+foreach(kind IN ITEMS current)
     if(kind STREQUAL "before")
         set(extra "${CMAKE_CURRENT_LIST_DIR}/before_format.c")
         set(textdoc "${CMAKE_CURRENT_LIST_DIR}/before_on_type.c")

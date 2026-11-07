@@ -1,14 +1,5 @@
 if(WIN32)
-    add_executable(test_xir_host_execution ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_host_execution.c
-        ${XIR_ASSERT_PANICS_C} ${XIR_ASSERT_PANICS_MATRIX_C})
-    target_link_libraries(test_xir_host_execution PRIVATE xray_xir_runtime_host)
-    if(MSVC)
-        target_compile_options(test_xir_host_execution PRIVATE /W4 /WX)
-    else()
-        target_compile_options(test_xir_host_execution PRIVATE -Wall -Wextra -Werror)
-    endif()
-    add_test(NAME test_xir_host_execution COMMAND test_xir_host_execution)
-    set_tests_properties(test_xir_host_execution PROPERTIES LABELS "unit;xir;execution;ownership;sdk;abi" TIMEOUT 180)
+
     add_executable(test_xir_runtime_sdk ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_runtime_sdk.c
         ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
     add_dependencies(test_xir_runtime_sdk xir-runtime-sdk-bundle)

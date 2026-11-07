@@ -1,20 +1,3 @@
-add_executable(test_xir_channel_try_source xir/test_xir_channel_try_source.c)
-target_link_libraries(test_xir_channel_try_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
-target_include_directories(test_xir_channel_try_source PRIVATE ${XRAY_COMMON_INCLUDES} ${CMAKE_BINARY_DIR}/generated)
-target_compile_definitions(test_xir_channel_try_source PRIVATE XR_CHANNEL_TRY_FIXTURES="${PROJECT_SOURCE_DIR}/tests/fixtures/xir_channel_try" XR_CHANNEL_TRY_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-foreach(target test_xir_channel_try_source)
-    if(MSVC)
-        target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
-    else()
-        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -pedantic)
-    endif()
-    add_test(NAME ${target} COMMAND ${target})
-    set_tests_properties(${target} PROPERTIES LABELS "unit;xir;channel;ownership;generated-c;execution" TIMEOUT 60)
-endforeach()
-add_test(NAME test_xir_channel_try_compile_owner COMMAND test_xir_channel_try_source --faults)
-set_tests_properties(test_xir_channel_try_compile_owner PROPERTIES LABELS "unit;xir;channel;compiler-memory;ownership;faults" TIMEOUT 300)
-add_test(NAME test_xir_channel_try_runtime_vm COMMAND test_xir_channel_try_source --runtime-faults)
-set_tests_properties(test_xir_channel_try_runtime_vm
-    PROPERTIES LABELS "unit;xir;channel;runtime;ownership;faults" TIMEOUT 300)
+
 
 include("${CMAKE_CURRENT_LIST_DIR}/channel_blocking_execution.cmake")

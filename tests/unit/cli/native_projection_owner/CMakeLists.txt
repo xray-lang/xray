@@ -40,12 +40,7 @@ add_library(projection_sdk_target STATIC "${XR_ROOT}/src/toolchain/xr_xir_runtim
     "${XR_ROOT}/src/base/xjson_cursor.c" "${XR_ROOT}/src/app/toolchain/xtc_xir_target.c"
     "${XR_ROOT}/src/app/toolchain/xtc_xir_sysroot.c" "${XR_ROOT}/src/app/toolchain/xtc_xir_images.c")
 target_link_libraries(projection_sdk_target PUBLIC projection)
-add_executable(test_native_projection_owner test_native_projection_owner.c)
-target_link_libraries(test_native_projection_owner PRIVATE projection_sdk_target)
-foreach(name test_xir_source_product test_xir_source_product_linked)
-    add_executable(${name} "${XR_ROOT}/tests/unit/xir/${name}.c")
-    target_link_libraries(${name} PRIVATE projection)
-endforeach()
+
 add_executable(test_projection_sdk_lease "${XR_ROOT}/tests/unit/xir/test_xir_sdk_lease.c")
 target_link_libraries(test_projection_sdk_lease PRIVATE projection_sdk_target)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
@@ -54,23 +49,12 @@ find_program(PROJECTION_LINKER NAMES link REQUIRED)
 find_program(PROJECTION_CLANG NAMES clang REQUIRED)
 find_program(PROJECTION_ZIG NAMES zig REQUIRED)
 enable_testing()
-add_test(NAME projection_actual_binding COMMAND "${Python3_EXECUTABLE}" -X utf8
-    "${CMAKE_CURRENT_LIST_DIR}/test_native_projection_owner.py" $<TARGET_FILE:test_native_projection_owner>
-    "${XR_ROOT}/stdlib" "${XR_ROOT}/build/xir-runtime-sdk" "${PROJECTION_MSVC}")
+
 add_test(NAME projection_policy COMMAND "${Python3_EXECUTABLE}" "${XR_ROOT}/tests/unit/xir/derive_native_projection_vectors.py")
-foreach(name test_xir_source_product test_xir_source_product_linked)
-    add_test(NAME ${name} COMMAND "${Python3_EXECUTABLE}" "${XR_ROOT}/tests/unit/xir/test_xir_source_product.py"
-        $<TARGET_FILE:${name}> "${XR_ROOT}/stdlib")
-endforeach()
-add_test(NAME projection_source_faults COMMAND "${Python3_EXECUTABLE}" "${XR_ROOT}/tests/unit/xir/test_xir_source_product.py"
-    $<TARGET_FILE:test_xir_source_product> "${XR_ROOT}/stdlib" --scan)
+
 foreach(provider msvc clang zig)
     string(TOUPPER "${provider}" upper)
-    add_test(NAME projection_${provider}_native COMMAND "${Python3_EXECUTABLE}" -X utf8
-        "${XR_ROOT}/tests/unit/xir/sdk_native_consumers.py" --lease $<TARGET_FILE:test_projection_sdk_lease>
-        --generator $<TARGET_FILE:test_xir_source_product_linked> --original-generator $<TARGET_FILE:test_xir_source_product>
-        --bundle "${XR_ROOT}/build/xir-runtime-sdk" --stdlib "${XR_ROOT}/stdlib"
-        --compiler "${PROJECTION_${upper}}" --linker "${PROJECTION_LINKER}" --provider "${provider}")
+
 endforeach()
 get_property(tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${tests} PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)

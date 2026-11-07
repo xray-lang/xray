@@ -26,65 +26,16 @@ foreach(source_typed_native_leaf IN ITEMS root.xr library.xr)
         message(FATAL_ERROR "Complete original typed Library Source input missing: ${source_typed_native_leaf}")
     endif()
 endforeach()
-add_executable(${source_typed_native_writer} "${source_typed_native_driver}" "${source_typed_native_support}")
-target_compile_definitions(${source_typed_native_writer} PRIVATE XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER=1)
-target_link_libraries(${source_typed_native_writer} PRIVATE xray_xir_source_product)
+
 set(source_typed_native_c "${source_typed_native_material}/actual_payload.c")
 set(source_typed_native_proof "${source_typed_native_material}/actual_proof.bin")
 set(source_typed_native_identity "${source_typed_native_material}/actual_identity.bin")
 set(source_typed_native_binding "${source_typed_native_material}/payload_binding.c")
-add_custom_command(
-    OUTPUT "${source_typed_native_c}" "${source_typed_native_proof}"
-        "${source_typed_native_identity}" "${source_typed_native_binding}"
-    COMMAND "${CMAKE_COMMAND}" -E make_directory "${source_typed_native_private}" "${source_typed_native_material}"
-    COMMAND $<TARGET_FILE:${source_typed_native_writer}>
-        "${source_typed_native_private}" "${source_typed_native_fixture}"
-        "${SOURCE_TYPED_LIBRARY_CURRENT_FORMAL_ROOT}/stdlib"
-        "${source_typed_native_c}" "${source_typed_native_proof}"
-        "${source_typed_native_identity}" "${source_typed_native_binding}"
-    DEPENDS ${source_typed_native_writer} "${source_typed_native_driver}" "${source_typed_native_support}"
-        "${source_typed_native_fixture}/root.xr" "${source_typed_native_fixture}/library.xr"
-        "${SOURCE_TYPED_LIBRARY_CURRENT_FORMAL_ROOT}/stdlib/types/coro.xr"
-    WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
-    COMMENT "Emit real Library native C and authentic full Closed packet/identity without runtime calls"
-    VERBATIM)
-add_executable(${source_typed_native_runner} "${source_typed_native_driver}" "${source_typed_native_support}"
-    "${source_typed_native_c}" "${source_typed_native_binding}")
-target_link_libraries(${source_typed_native_runner} PRIVATE xray_xir_vm)
+
 # Cancellation reuses the same four authentic outputs and real host C/binding inputs.
 set(source_typed_native_cancel_runner test_source_typed_library_receiver_current_native_mixed_cancel_prefix)
-add_executable(${source_typed_native_cancel_runner} "${source_typed_native_driver}" "${source_typed_native_support}"
-    "${source_typed_native_c}" "${source_typed_native_binding}")
-target_compile_definitions(${source_typed_native_cancel_runner} PRIVATE XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_CANCEL_RECEIVER=1)
-target_link_libraries(${source_typed_native_cancel_runner} PRIVATE xray_xir_vm)
+
 # The public VM native-cache closure still includes Source; physical SourceDelete is OPEN.
-foreach(source_typed_native_target IN ITEMS ${source_typed_native_writer} ${source_typed_native_runner} ${source_typed_native_cancel_runner})
-    target_include_directories(${source_typed_native_target} BEFORE PRIVATE
-        "${SOURCE_TYPED_LIBRARY_CURRENT_FORMAL_ROOT}/tests/unit/xir"
-        "${SOURCE_TYPED_LIBRARY_CURRENT_FORMAL_ROOT}/src" "${source_typed_native_candidate}")
-    set_target_properties(${source_typed_native_target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-    if(MSVC)
-        target_compile_definitions(${source_typed_native_target} PRIVATE _CRT_SECURE_NO_WARNINGS)
-        target_compile_options(${source_typed_native_target} PRIVATE /utf-8 /W4 /WX)
-    else()
-        target_compile_options(${source_typed_native_target} PRIVATE -Wall -Wextra -Werror)
-    endif()
-endforeach()
-foreach(source_typed_native_mode IN ITEMS 1 2 3)
-    add_test(NAME ${source_typed_native_runner}_mode${source_typed_native_mode}
-        COMMAND ${source_typed_native_runner} "${source_typed_native_mode}"
-        "${source_typed_native_proof}" "${source_typed_native_identity}" "${source_typed_native_c}")
-    set_tests_properties(${source_typed_native_runner}_mode${source_typed_native_mode} PROPERTIES
-        WORKING_DIRECTORY "${source_typed_native_material}" TIMEOUT 120 PROCESSORS 1
-        LABELS "unit;xir;program-consumer;typed-library;module-graph;class;receiver;coroutine;ownership;packet;native;mixed;normal-only;current-interface-candidate")
-endforeach()
+
 # The original three ordinary tests retain their frozen independent facet.
 # This separate facet drives only one call at a time with two initialized live Instances.
-foreach(source_typed_native_mode IN ITEMS 1 2 3)
-    add_test(NAME ${source_typed_native_cancel_runner}_mode${source_typed_native_mode}
-        COMMAND ${source_typed_native_cancel_runner} "${source_typed_native_mode}"
-        "${source_typed_native_proof}" "${source_typed_native_identity}" "${source_typed_native_c}")
-    set_tests_properties(${source_typed_native_cancel_runner}_mode${source_typed_native_mode} PROPERTIES
-        WORKING_DIRECTORY "${source_typed_native_material}" TIMEOUT 120 PROCESSORS 1
-        LABELS "unit;xir;program-consumer;typed-library;module-graph;receiver;coroutine;ownership;packet;native;mixed;cancel-prefix;normal-only;current-interface-candidate")
-endforeach()

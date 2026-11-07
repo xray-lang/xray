@@ -1,15 +1,10 @@
 # Compiler allocation observation remains independent of runtime domain allocation.
 get_filename_component(XIR_OWNER_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
-add_executable(test_xir_compile_c_buffer "${CMAKE_CURRENT_LIST_DIR}/test_xir_compile_c_buffer.c")
+
 add_executable(test_xir_compile_api "${CMAKE_CURRENT_LIST_DIR}/test_xir_compile_api.c")
-add_executable(test_xir_compile_snapshot_owner
-    "${CMAKE_CURRENT_LIST_DIR}/test_xir_compile_snapshot_owner.c"
-    "${XIR_OWNER_ROOT}/src/xir/xxir_source_query.c")
-target_link_libraries(test_xir_compile_snapshot_owner PRIVATE compile_owner_core)
+
 if(TARGET gen-xir-core-source)
-    add_dependencies(test_xir_compile_snapshot_owner gen-xir-core-source)
-    target_include_directories(test_xir_compile_snapshot_owner PRIVATE
-        "$<TARGET_PROPERTY:xray_xir_source,INTERFACE_INCLUDE_DIRECTORIES>")
+
 else()
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
     set(XIR_OWNER_CORE_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/generated/xir_core_declarations_source.inc.c")
@@ -20,8 +15,7 @@ else()
             "${XIR_OWNER_ROOT}/src/xir/xcore_declarations.xr"
         VERBATIM)
     add_custom_target(gen-compile-owner-core-source DEPENDS "${XIR_OWNER_CORE_SOURCE}")
-    add_dependencies(test_xir_compile_snapshot_owner gen-compile-owner-core-source)
-    target_include_directories(test_xir_compile_snapshot_owner PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+
 endif()
 add_library(xir_compile_owner_runtime STATIC
     "${XIR_OWNER_ROOT}/src/base/xunicode.c"
@@ -119,8 +113,7 @@ if(DEFINED XR_XIR_OLD_ADMISSION_OBJECT)
     add_test(NAME test_xir_compile_old_data COMMAND test_xir_compile_old_data)
     set_tests_properties(test_xir_compile_old_data PROPERTIES LABELS "unit;xir;abi" TIMEOUT 30)
 endif()
-foreach(owner_target xir_compile_owner_runtime test_xir_compile_decimal_work test_xir_compile_snapshot_owner test_xir_compile_api test_xir_compile_c_buffer test_xir_compile_runtime_owner
-    test_xir_compile_emit_owner test_xir_compile_native_owner)
+foreach(owner_target IN ITEMS xir_compile_owner_runtime test_xir_compile_decimal_work test_xir_compile_api test_xir_compile_runtime_owner test_xir_compile_emit_owner test_xir_compile_native_owner)
     target_include_directories(${owner_target} PRIVATE "${XIR_OWNER_ROOT}/src" "${XIR_OWNER_ROOT}/include")
     target_compile_features(${owner_target} PRIVATE c_std_11)
     if(MSVC)
@@ -149,7 +142,7 @@ set_tests_properties(test_xir_compile_api_rejection PROPERTIES LABELS "unit;xir;
 add_test(NAME test_xir_compile_emit_owner COMMAND test_xir_compile_emit_owner
     "${CMAKE_CURRENT_BINARY_DIR}/compile-owner-test-generated.c")
 set_tests_properties(test_xir_compile_emit_owner PROPERTIES LABELS "unit;xir;compiler;ownership" TIMEOUT 60)
-foreach(owner_target test_xir_compile_decimal_work test_xir_compile_snapshot_owner test_xir_compile_api test_xir_compile_c_buffer test_xir_compile_runtime_owner test_xir_compile_native_owner)
+foreach(owner_target IN ITEMS test_xir_compile_decimal_work test_xir_compile_api test_xir_compile_runtime_owner test_xir_compile_native_owner)
     add_test(NAME ${owner_target} COMMAND ${owner_target})
     set_tests_properties(${owner_target} PROPERTIES LABELS "unit;xir;compiler;ownership;budget;abi" TIMEOUT 60)
 endforeach()

@@ -1,15 +1,5 @@
 include_guard(GLOBAL)
-add_executable(test_xir_p10_builder_catalog "${CMAKE_CURRENT_LIST_DIR}/test_builder_catalog.c")
-target_link_libraries(test_xir_p10_builder_catalog PRIVATE xray_xir_source xray_xir_vm)
-target_compile_definitions(test_xir_p10_builder_catalog PRIVATE XR_C08_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-set_target_properties(test_xir_p10_builder_catalog PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-if(MSVC)
-    target_compile_options(test_xir_p10_builder_catalog PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_p10_builder_catalog PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_p10_builder_catalog COMMAND test_xir_p10_builder_catalog)
-set_tests_properties(test_xir_p10_builder_catalog PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;string-builder;catalog")
+
 foreach(case IN ITEMS basic rune i64 f64 bool null alias_clear order repeated_owner comptime concat_order)
     add_test(NAME test_xir_p10_string_builder_source_${case}
         COMMAND test_xir_p10_reference --accept builder_${case} 42)

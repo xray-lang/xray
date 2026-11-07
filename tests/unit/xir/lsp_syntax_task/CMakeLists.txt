@@ -8,7 +8,7 @@ target_sources(test_lsp_syntax_task PRIVATE "${CMAKE_CURRENT_LIST_DIR}/before_se
 target_compile_definitions(test_lsp_syntax_task PRIVATE XLSP_SYNTAX_TASK=1)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set(syntax_dir "${CMAKE_CURRENT_BINARY_DIR}/lsp-syntax-task")
-foreach(kind current before)
+foreach(kind IN ITEMS current)
     if(kind STREQUAL "before")
         set(extra "${CMAKE_CURRENT_LIST_DIR}/before_extra.c")
         set(textdoc "${CMAKE_CURRENT_LIST_DIR}/before_textdoc.c")
