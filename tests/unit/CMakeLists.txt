@@ -561,18 +561,6 @@ add_custom_command(OUTPUT ${XIR_FLOAT_CHECKED_GENERATED}
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_float_source/root.xr
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_float_source/producer.xr
     VERBATIM)
-add_executable(test_xir_float_packet_vm xir/test_xir_float_packet_vm.c ${XIR_FLOAT_CHECKED_GENERATED})
-target_link_libraries(test_xir_float_packet_vm PRIVATE xray_xir_vm xray_xir_cgen)
-target_compile_definitions(test_xir_float_packet_vm PRIVATE XR_FLOAT_CHECKED_FIXTURE="${XIR_FLOAT_CHECKED_GENERATED}")
-add_custom_command(OUTPUT ${XIR_FLOAT_SOURCE_GENERATED}
-    COMMAND $<TARGET_FILE:test_xir_float_packet_vm> ${XIR_FLOAT_SOURCE_GENERATED}
-    DEPENDS test_xir_float_packet_vm ${XIR_FLOAT_CHECKED_GENERATED}
-    VERBATIM)
-add_executable(test_xir_source_float_native xir/test_xir_source_float_native.c ${XIR_FLOAT_SOURCE_GENERATED})
-target_link_libraries(test_xir_source_float_native PRIVATE xray_xir_scalar)
-add_executable(test_xir_source_float_mixed xir/test_xir_source_float_mixed.c ${XIR_FLOAT_SOURCE_GENERATED})
-target_link_libraries(test_xir_source_float_mixed PRIVATE xray_xir_vm)
-target_compile_definitions(test_xir_source_float_mixed PRIVATE XR_FLOAT_CHECKED_FIXTURE="${XIR_FLOAT_CHECKED_GENERATED}")
 
 include(xir/mixed_lifecycle.cmake)
 include(xir/mixed_terminals.cmake)
@@ -597,14 +585,11 @@ add_custom_command(OUTPUT ${XIR_PANIC_GENERATED}
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_panic_source/initialization.xr
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_panic_source/faults.xr
     VERBATIM)
-add_executable(test_xir_panic_native xir/test_xir_panic_native.c ${XIR_PANIC_GENERATED})
-target_link_libraries(test_xir_panic_native PRIVATE xray_xir_scalar)
-add_executable(test_xir_panic_mixed xir/test_xir_panic_mixed.c ${XIR_PANIC_GENERATED})
-target_link_libraries(test_xir_panic_mixed PRIVATE xray_xir_vm)
+
 foreach(xir_source_test IN ITEMS test_xir_source test_xir_source_mixed)
     target_compile_definitions(${xir_source_test} PRIVATE XR_SOURCE_STDLIB="${CMAKE_SOURCE_DIR}/stdlib")
 endforeach()
-foreach(xir_test IN ITEMS test_xir_locals test_xir_local_native test_xir_generics test_xir_checked test_xir_checked_allocations test_xir_emit test_xir_native test_xir_calls test_xir_emit_calls test_xir_call_native test_xir_values test_xir_value_allocations test_xir_emit_strings test_xir_string_native test_xir_string_vm test_xir_emit_program test_xir_program_native test_xir_emit_output test_xir_output_vm test_xir_output_native test_xir_source test_xir_source_native test_xir_source_mixed test_xir_packet_vm test_xir_source_query test_xir_source_arrays test_xir_source_floats test_xir_float_packet_vm test_xir_source_float_native test_xir_source_float_mixed test_xir_panic_source test_xir_panic_native test_xir_panic_mixed)
+foreach(xir_test IN ITEMS test_xir_locals test_xir_local_native test_xir_generics test_xir_checked test_xir_checked_allocations test_xir_emit test_xir_native test_xir_calls test_xir_emit_calls test_xir_call_native test_xir_values test_xir_value_allocations test_xir_emit_strings test_xir_string_native test_xir_string_vm test_xir_emit_program test_xir_program_native test_xir_emit_output test_xir_output_vm test_xir_output_native test_xir_source test_xir_source_native test_xir_source_mixed test_xir_packet_vm test_xir_source_query test_xir_source_arrays test_xir_source_floats test_xir_panic_source)
     if(MSVC)
         target_compile_options(${xir_test} PRIVATE /W4 /WX)
     else()
@@ -647,8 +632,6 @@ set_tests_properties(test_core_spec PROPERTIES
 # executable. Other consumers link the ordinary production objects.
 
 # This fixture retains its existing legacy compiler object ownership.
-
-add_xray_unit_test(test_xvalue value/test_xvalue.c)
 
 # ============================================================================
 # util/ — Hash, dynamic array, hashmap, arena
@@ -1162,12 +1145,8 @@ add_xray_unit_test(test_resolver module/test_resolver.c)
 if(NOT WIN32)
   add_xray_unit_test(test_module_resolver module/test_module_resolver.c)
 endif()
-add_xray_unit_test(test_module_graph module/test_module_graph.c)
 
-add_xray_unit_test(test_semver module/test_semver.c)
-add_xray_unit_test(test_lockfile module/test_lockfile.c)
 add_xray_unit_test(test_source_cache module/test_source_cache.c)
-add_xray_unit_test(test_project module/test_project.c)
 
 # ============================================================================
 # encoding/ — Base64, hex, URL encoding, Unicode

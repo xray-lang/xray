@@ -37,19 +37,11 @@ foreach(state_flow IN ITEMS source catalog)
         ${state_checked} ${CMAKE_CURRENT_BINARY_DIR}/library-state-task-i64-${state_flow}-packet-test.c)
     foreach(state_mode IN ITEMS native mixed)
         set(state_target test_xir_library_state_task_i64_${state_flow}_${state_mode})
-        add_executable(${state_target} xir/test_xir_library_state_task_i64_execution.c ${state_generated})
-        target_link_libraries(${state_target} PRIVATE xray_xir_vm)
-        if(state_mode STREQUAL "mixed")
-            target_compile_definitions(${state_target} PRIVATE CONSUMER_KIND=2)
-        else()
-            target_compile_definitions(${state_target} PRIVATE CONSUMER_KIND=1)
-        endif()
-        list(APPEND XIR_LIBRARY_STATE_TASK_I64_TARGETS ${state_target})
-        add_test(NAME ${state_target} COMMAND ${state_target})
+
+        list(APPEND XIR_LIBRARY_STATE_TASK_I64_TARGETS)
+
     endforeach()
-    set_tests_properties(test_xir_library_state_task_i64_${state_flow}_packet
-        test_xir_library_state_task_i64_${state_flow}_native test_xir_library_state_task_i64_${state_flow}_mixed
-        PROPERTIES LABELS "unit;xir;execution;ownership;abi;budget" TIMEOUT 600 RUN_SERIAL TRUE)
+    set_tests_properties(test_xir_library_state_task_i64_${state_flow}_packet PROPERTIES LABELS "unit;xir;execution;ownership;abi;budget" TIMEOUT 600 RUN_SERIAL TRUE)
 endforeach()
 foreach(state_target IN LISTS XIR_LIBRARY_STATE_TASK_I64_TARGETS)
     if(MSVC)

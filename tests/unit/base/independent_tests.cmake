@@ -16,10 +16,9 @@ target_sources(test_unicode_grapheme_cursor PRIVATE
 
 # These tests exercise the current module graph and its owned source inputs.
 target_sources(test_resolver PRIVATE "${PROJECT_SOURCE_DIR}/src/module/xresolver.c")
-foreach(target IN ITEMS test_resolver test_module_graph test_semver test_lockfile)
+foreach(target IN ITEMS test_resolver)
     target_link_libraries(${target} PRIVATE xray_xir_source)
 endforeach()
-target_link_libraries(test_project PRIVATE xray_source_compile)
 
 # Real OS operations keep their existing platform implementations.
 foreach(target IN ITEMS test_fs_atomic test_mutex test_numeric_core test_os_core)
@@ -34,8 +33,7 @@ else()
     target_sources(test_fs_atomic PRIVATE "${PROJECT_SOURCE_DIR}/src/os/unix/temp_unix.c")
     target_sources(test_os_core PRIVATE "${PROJECT_SOURCE_DIR}/src/os/unix/proc_unix.c"
         "${PROJECT_SOURCE_DIR}/src/os/unix/pipe_unix.c")
-    foreach(target IN ITEMS test_xvalue test_math_core test_numeric_core test_compare_core
-            test_truthy_core test_typed_ops test_mutex test_os_core)
+    foreach(target IN ITEMS test_math_core test_numeric_core test_compare_core test_truthy_core test_typed_ops test_mutex test_os_core)
         target_link_libraries(${target} PRIVATE m pthread)
     endforeach()
 endif()

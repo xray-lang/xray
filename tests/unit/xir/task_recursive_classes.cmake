@@ -70,7 +70,6 @@ add_test(NAME test_xir_task_sequence_eof COMMAND test_xir_task_sequence_eof)
 set_tests_properties(test_xir_task_sequence_eof PROPERTIES
     TIMEOUT 60 LABELS "unit;xir;task;ownership;source;root-effects;malformed-input")
 
-
 add_executable(test_xir_task_recursive_class_proof "${CMAKE_CURRENT_LIST_DIR}/test_xir_task_recursive_class_proof.c")
 target_link_libraries(test_xir_task_recursive_class_proof PRIVATE xray_xir_source xray_xir_cgen xray_xir_vm)
 target_compile_definitions(test_xir_task_recursive_class_proof PRIVATE

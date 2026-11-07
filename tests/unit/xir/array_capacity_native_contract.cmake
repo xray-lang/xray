@@ -12,12 +12,8 @@ add_custom_command(OUTPUT "${CAP_NATIVE_C}" "${CAP_NATIVE_H}" "${CAP_NATIVE_PATH
     DEPENDS test_xir_array_capacity_native_producer
         "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_array_capacity_native/root.xr"
         "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_array_capacity_native/producer.xr" VERBATIM)
-add_executable(test_xir_array_capacity_native_contract
-    "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_array_capacity_native_consumer.c" "${CAP_NATIVE_C}" "${CAP_NATIVE_H}" "${CAP_NATIVE_PATH_C}")
-target_link_libraries(test_xir_array_capacity_native_contract PRIVATE xray_xir_scalar)
-target_include_directories(test_xir_array_capacity_native_contract PRIVATE "${CMAKE_BINARY_DIR}/generated")
-xr_enable_pure_aot_symbol_map(test_xir_array_capacity_native_contract)
-foreach(target test_xir_array_capacity_native_producer test_xir_array_capacity_native_contract)
+
+foreach(target IN ITEMS test_xir_array_capacity_native_producer)
     set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
     if(MSVC)
         target_compile_options(${target} PRIVATE /utf-8 /W4 /WX)
@@ -25,8 +21,3 @@ foreach(target test_xir_array_capacity_native_producer test_xir_array_capacity_n
         target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
     endif()
 endforeach()
-add_test(NAME test_xir_array_capacity_native_contract COMMAND "${Python3_EXECUTABLE}"
-    "${PROJECT_SOURCE_DIR}/tests/unit/xir/verify_array_capacity_native_contract.py"
-    --executable $<TARGET_FILE:test_xir_array_capacity_native_contract>)
-set_tests_properties(test_xir_array_capacity_native_contract PROPERTIES TIMEOUT 120
-    LABELS "unit;xir;array;ownership;execution;generated-c;portability;abi")

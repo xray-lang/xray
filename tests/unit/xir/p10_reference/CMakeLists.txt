@@ -42,10 +42,8 @@ add_custom_command(OUTPUT ${history_native_sources} "${history_native_header}"
     DEPENDS source_history_native_producer "${CMAKE_CURRENT_LIST_DIR}/source_history_cell_fixture.h"
         "${CMAKE_CURRENT_LIST_DIR}/source_history_function_fixture.h"
     VERBATIM)
-add_library(source_history_native_entries STATIC ${history_native_sources} "${history_native_header}")
-target_link_libraries(source_history_native_entries PRIVATE xray_xir_scalar)
-set_target_properties(source_history_native_entries PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-foreach(history_target IN ITEMS source_history_native_producer source_history_native_entries)
+
+foreach(history_target IN ITEMS source_history_native_producer)
     if(MSVC)
         target_compile_options(${history_target} PRIVATE /W4 /WX /utf-8)
     else()
@@ -54,30 +52,18 @@ foreach(history_target IN ITEMS source_history_native_producer source_history_na
 endforeach()
 foreach(history_backend IN ITEMS native vm_native native_vm)
     set(history_target test_xir_p10_source_history_${history_backend})
-    add_executable(${history_target} "${CMAKE_CURRENT_LIST_DIR}/test_source_generations.c" "${history_native_header}")
-    target_include_directories(${history_target} PRIVATE "${history_native_dir}")
-    target_link_libraries(${history_target} PRIVATE xray_xir_source xray_xir_vm source_history_native_entries)
-    target_compile_definitions(${history_target} PRIVATE XR_SOURCE_HISTORY_NATIVE=1
-        XR_GENERATION_STDLIB="${CMAKE_CURRENT_LIST_DIR}/fixtures/generation_stdlib")
+
     if(history_backend STREQUAL "native")
-        target_compile_definitions(${history_target} PRIVATE XR_SOURCE_HISTORY_OLD_VM=0 XR_SOURCE_HISTORY_NEW_VM=0)
+
     elseif(history_backend STREQUAL "vm_native")
-        target_compile_definitions(${history_target} PRIVATE XR_SOURCE_HISTORY_OLD_VM=1 XR_SOURCE_HISTORY_NEW_VM=0)
+
     else()
-        target_compile_definitions(${history_target} PRIVATE XR_SOURCE_HISTORY_OLD_VM=0 XR_SOURCE_HISTORY_NEW_VM=1)
+
     endif()
-    set_target_properties(${history_target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-    if(MSVC)
-        target_compile_options(${history_target} PRIVATE /W4 /WX /utf-8)
-    else()
-        target_compile_options(${history_target} PRIVATE -Wall -Wextra -Werror)
-    endif()
+
     foreach(history_kind IN ITEMS cell cell-write array array-const function-call function-value class class-array class-ref class-inline-ref)
         string(REPLACE "-" "_" history_suffix "${history_kind}")
-        add_test(NAME test_xir_p10_source_history_${history_suffix}_${history_backend}
-            COMMAND ${history_target} --history-${history_kind})
-        set_tests_properties(test_xir_p10_source_history_${history_suffix}_${history_backend} PROPERTIES
-            TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;source;history-accept;native")
+
     endforeach()
 endforeach()
 

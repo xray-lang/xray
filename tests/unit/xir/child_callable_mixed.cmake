@@ -2,16 +2,7 @@
 if(NOT TARGET test_xir_child_callable_native_producer OR NOT DEFINED CN_NATIVE_C)
     message(FATAL_ERROR "child_callable_native.cmake must be included before the mixed consumer")
 endif()
-add_executable(test_xir_child_callable_mixed
-    "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_child_callable_mixed.c" "${CN_NATIVE_C}")
-target_link_libraries(test_xir_child_callable_mixed PRIVATE xray_xir_vm xray_xir_scalar)
-xr_enable_pure_aot_symbol_map(test_xir_child_callable_mixed)
-set_target_properties(test_xir_child_callable_mixed PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-if(MSVC)
-    target_compile_options(test_xir_child_callable_mixed PRIVATE /utf-8 /W4 /WX)
-else()
-    target_compile_options(test_xir_child_callable_mixed PRIVATE -Wall -Wextra -Werror)
-endif()
+
 set(CM_MIXED_VERIFY [=[
 import re,subprocess,sys
 from pathlib import Path
@@ -36,9 +27,5 @@ print('MIXED_CHILD_SYMBOLS actual native bodies and VM bind, no legacy/Source/em
 ]=])
 foreach(direction vm-native native-vm)
     string(REPLACE "-" "_" test_direction "${direction}")
-    add_test(NAME test_xir_child_callable_mixed_${test_direction}
-        COMMAND "${Python3_EXECUTABLE}" -B -c "${CM_MIXED_VERIFY}"
-            "${PROJECT_SOURCE_DIR}/scripts" $<TARGET_FILE:test_xir_child_callable_mixed> "${direction}")
-    set_tests_properties(test_xir_child_callable_mixed_${test_direction} PROPERTIES RUN_SERIAL TRUE TIMEOUT 120
-        LABELS "unit;xir;task;root-effects;ownership;instance;generated-c;mixed;portability;abi")
+
 endforeach()

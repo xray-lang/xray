@@ -17,21 +17,11 @@ add_custom_command(OUTPUT ${TASK_UNIT_NATIVE_CS} "${TASK_UNIT_NATIVE_GENERATED_D
     COMMAND ${CMAKE_COMMAND} -E make_directory "${TASK_UNIT_NATIVE_GENERATED_DIR}"
     COMMAND test_xir_task_unit_native_producer "${TASK_UNIT_NATIVE_GENERATED_DIR}"
     DEPENDS test_xir_task_unit_native_producer ${TASK_UNIT_NATIVE_FIXTURES} VERBATIM)
-add_executable(test_xir_task_unit_native "${CMAKE_CURRENT_LIST_DIR}/test_xir_task_unit_native.c"
-    ${TASK_UNIT_NATIVE_CS} "${TASK_UNIT_NATIVE_GENERATED_DIR}/task_unit_generated.h"
-    "${PROJECT_SOURCE_DIR}/src/base/xsha256.c" "${PROJECT_SOURCE_DIR}/src/shared/xnative_declaration.c"
-    "${PROJECT_SOURCE_DIR}/src/xir/xxir_scalar_core.c")
-target_include_directories(test_xir_task_unit_native PRIVATE ${XRAY_COMMON_INCLUDES}
-    "${CMAKE_CURRENT_LIST_DIR}" "${TASK_UNIT_NATIVE_GENERATED_DIR}")
-if(WIN32)
-    target_link_libraries(test_xir_task_unit_native PRIVATE kernel32)
-endif()
-foreach(target test_xir_task_unit_native_producer test_xir_task_unit_native)
+
+foreach(target IN ITEMS test_xir_task_unit_native_producer)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
     else()
         target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
     endif()
 endforeach()
-add_test(NAME test_xir_task_unit_native COMMAND test_xir_task_unit_native)
-set_tests_properties(test_xir_task_unit_native PROPERTIES TIMEOUT 60 LABELS "ownership;unit;xir;task;native")

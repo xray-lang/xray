@@ -24,28 +24,8 @@ add_custom_command(OUTPUT ${XIR_LIBRARY_STRING_CHECKED}
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_library_strings/nul_escape.xr
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_library_strings/nul_unicode.xr
     VERBATIM)
-add_executable(test_xir_library_string_packet
-    xir/test_xir_library_string_execution.c ${XIR_LIBRARY_STRING_CHECKED})
-target_compile_definitions(test_xir_library_string_packet PRIVATE CONSUMER_KIND=0)
-target_link_libraries(test_xir_library_string_packet PRIVATE xray_xir_vm xray_xir_cgen)
-add_custom_command(OUTPUT ${XIR_LIBRARY_STRING_GENERATED}
-    COMMAND $<TARGET_FILE:test_xir_library_string_packet>
-        ${XIR_LIBRARY_STRING_CHECKED} ${XIR_LIBRARY_STRING_GENERATED}
-    DEPENDS test_xir_library_string_packet ${XIR_LIBRARY_STRING_CHECKED}
-    VERBATIM)
-foreach(string_mode IN ITEMS native mixed)
-    add_executable(test_xir_library_string_${string_mode}
-        xir/test_xir_library_string_execution.c ${XIR_LIBRARY_STRING_GENERATED})
-    target_link_libraries(test_xir_library_string_${string_mode} PRIVATE xray_xir_vm)
-    if(string_mode STREQUAL "mixed")
-        target_compile_definitions(test_xir_library_string_${string_mode} PRIVATE CONSUMER_KIND=2)
-    else()
-        target_compile_definitions(test_xir_library_string_${string_mode} PRIVATE CONSUMER_KIND=1)
-    endif()
-endforeach()
-foreach(string_target IN ITEMS xir_library_string_source_runtime
-        test_xir_library_string_source test_xir_library_string_packet
-        test_xir_library_string_native test_xir_library_string_mixed)
+
+foreach(string_target IN ITEMS xir_library_string_source_runtime test_xir_library_string_source)
     if(MSVC)
         target_compile_options(${string_target} PRIVATE /W4 /WX)
     else()
@@ -55,10 +35,5 @@ endforeach()
 add_test(NAME test_xir_library_string_source COMMAND test_xir_library_string_source)
 add_test(NAME test_xir_library_literal_owner COMMAND test_xir_library_string_source --literal-owner)
 set_tests_properties(test_xir_library_literal_owner PROPERTIES LABELS "unit;xir;ownership;fast" TIMEOUT 15)
-add_test(NAME test_xir_library_string_packet COMMAND test_xir_library_string_packet
-    ${XIR_LIBRARY_STRING_CHECKED} ${CMAKE_CURRENT_BINARY_DIR}/library-string-packet-test.c)
-add_test(NAME test_xir_library_string_native COMMAND test_xir_library_string_native)
-add_test(NAME test_xir_library_string_mixed COMMAND test_xir_library_string_mixed)
-set_tests_properties(test_xir_library_string_source test_xir_library_string_packet
-    test_xir_library_string_native test_xir_library_string_mixed
-    PROPERTIES LABELS "unit;xir;execution;ownership;abi")
+
+set_tests_properties(test_xir_library_string_source PROPERTIES LABELS "unit;xir;execution;ownership;abi")

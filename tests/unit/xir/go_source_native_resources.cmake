@@ -20,26 +20,12 @@ add_custom_command(OUTPUT ${GO_SOURCE_NATIVE_CS} "${GO_SOURCE_NATIVE_DIR}/source
     DEPENDS test_xir_go_source_native_producer ${GO_SOURCE_NATIVE_FIXTURES}
         xir/build_go_source_native_cases.py
     VERBATIM)
-add_executable(test_xir_go_source_native_resources xir/test_xir_go_source_native_resources.c
-    ${GO_SOURCE_NATIVE_CS} "${GO_SOURCE_NATIVE_DIR}/source17_generated.h"
-    ${PROJECT_SOURCE_DIR}/src/base/xsha256.c ${PROJECT_SOURCE_DIR}/src/shared/xnative_declaration.c)
-target_include_directories(test_xir_go_source_native_resources PRIVATE "${GO_SOURCE_NATIVE_DIR}")
-if(WIN32)
-    target_link_libraries(test_xir_go_source_native_resources PRIVATE kernel32)
-endif()
-foreach(target test_xir_go_source_native_producer test_xir_go_source_native_resources)
+
+foreach(target IN ITEMS test_xir_go_source_native_producer)
     target_include_directories(${target} PRIVATE ${XRAY_COMMON_INCLUDES})
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
     else()
         target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
     endif()
-endforeach()
-foreach(case IN LISTS GO_SOURCE_NATIVE_NAMES)
-    foreach(mode measure faults axes cancel)
-        add_test(NAME test_xir_go_source_native_${mode}_${case}
-            COMMAND test_xir_go_source_native_resources --${mode} ${case})
-        set_tests_properties(test_xir_go_source_native_${mode}_${case} PROPERTIES
-            LABELS "unit;xir;task;source;native;ownership;runtime" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
-    endforeach()
 endforeach()

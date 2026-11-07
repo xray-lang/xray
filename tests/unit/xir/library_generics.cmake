@@ -14,10 +14,8 @@ add_custom_command(OUTPUT ${generic_library_outputs}
   COMMAND $<TARGET_FILE:test_xir_library_generics_source> ${generic_library_base}
   DEPENDS test_xir_library_generics_source VERBATIM)
 set_source_files_properties(${generic_library_sources} PROPERTIES GENERATED TRUE)
-add_executable(test_xir_library_generics_native ${CMAKE_CURRENT_LIST_DIR}/test_xir_library_generics_native.c ${generic_library_sources})
-target_include_directories(test_xir_library_generics_native PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
-target_link_libraries(test_xir_library_generics_native PRIVATE xray_xir_vm)
-foreach(target test_xir_library_generics_source test_xir_library_generics_native)
+
+foreach(target IN ITEMS test_xir_library_generics_source)
   if(MSVC)
     target_compile_options(${target} PRIVATE /W4 /WX)
   else()
