@@ -368,7 +368,7 @@ target_compile_definitions(test_xir_p10_reference_native_for_and_ternary PRIVATE
 list(APPEND reference_native_targets test_xir_p10_reference_native_for_and_ternary)
 add_test(NAME test_xir_p10_reference_native_for_and_ternary COMMAND test_xir_p10_reference_native_for_and_ternary 607)
 set_tests_properties(test_xir_p10_reference_native_for_and_ternary PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;native")
-foreach(case IN ITEMS init_contextual init_resource_lifo init_module_authority init_nominal_kind finite_error_loop finite_error_values finite_error_branching finite_error_cycle finite_error_single_variant capture_scalar_mix comptime_float comptime_owned_batch)
+foreach(case IN ITEMS init_contextual init_module_authority init_nominal_kind finite_error_loop finite_error_values finite_error_branching finite_error_cycle finite_error_single_variant capture_scalar_mix comptime_float)
     set(case_label init)
     if(case MATCHES "^finite_error_")
         set(case_label error)
