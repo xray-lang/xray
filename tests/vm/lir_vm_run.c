@@ -10,100 +10,50 @@
  *   Execute only the entry returned by lowering, after all borrowed compiler
  *   inputs have been retired. Unsupported closures never select an executor.
  */
-#include "lir/xlir_lower.h"
-#include "lir/xlir_builder.h"
-#include "lir/xlir_sccp.h"
-#include "lir/xlir_inline.h"
-#include "toolchain/xcompiler_session.h"
+#include "lir/xlir_source.h"
 #include "vm/register/xrbc_lir.h"
 #include "lir_vm_result_report.h"
-#include "xir/xxir_generic.h"
-#include "xir/xxir_source.h"
 #include <stdio.h>
+#include <string.h>
 
 static XrRbcProgram *compile_file(const char *path, bool optimize, const char *stdlib) {
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
-    XrXirCompileContext context = {0};
-    XrCompilerSession *session = NULL;
-    XrModuleIdentityAuthority authority = {0};
-    char *root = NULL;
-    XrXirSourceResult source = {0};
-    XrXirSourceDiagnostic source_diagnostic = {0};
-    XrXirSourceFailure source_failure = {0};
-    XrXirArtifact *closed = NULL;
+    XrCompileResources *resources = NULL;
     XrLirLowered lowered = {0};
-    XrLirLowerFailure lower_failure = {0};
+    XrLirSourceFailure failure = {0};
     XrRbcProgram *program = NULL;
-    XrRbcCompileDiagnostic bytecode_diagnostic = {0};
-    if (xr_compile_resources_new(&limits, &context.resources) != XR_COMPILE_RESOURCE_OK ||
-        xr_compile_session_new(context.resources, &session) != XR_COMPILE_RESOURCE_OK ||
-        xr_compile_module_identity_script_authority_from_source(context.resources, path,
-            &authority, &root) != XR_MODULE_OK) {
+    if (xr_compile_resources_new(&limits, &resources) != XR_COMPILE_RESOURCE_OK) {
         fprintf(stderr, "lir_vm_run: cannot prepare source input: %s\n", path);
-        goto done;
+        return NULL;
     }
-    context.limits = xr_xir_compile_default_limits();
-    XrXirSourceRequest request = {.session = session, .entry_path = path,
-        .authority = &authority, .context = &context, .linkage_kind = XR_XIR_PROGRAM,
-        .stdlib_path = stdlib};
-    if (xr_xir_compile_source_check(&request, &source, &source_diagnostic,
-            &source_failure) != XR_XIR_OK) {
+    XrLirSourceRequest request = {resources, path, stdlib, optimize};
+    XrLirSourceStatus status = xr_lir_compile_source(&request, &lowered, &failure);
+    if (status == XR_LIR_SOURCE_CHECK_FAILED) {
         fprintf(stderr, "lir_vm_run: source %s:%d:%d: %s\n",
-            source_failure.path ? source_failure.path : path,
-            source_diagnostic.line, source_diagnostic.column, source_diagnostic.message);
-        goto done;
-    }
-    XrXirDiagnostic specialization = {0};
-    if (xr_xir_compile_specialize(source.checked, &closed, &specialization, NULL) != XR_XIR_OK) {
+            failure.source_failure.path ? failure.source_failure.path : path,
+            failure.source.line, failure.source.column, failure.source.message);
+    } else if (status == XR_LIR_SOURCE_SPECIALIZATION_FAILED) {
         fprintf(stderr, "lir_vm_run: specialization failed (%u)\n",
-            (unsigned)specialization.status);
-        goto done;
-    }
-    XrLirLowerRequest lower_request = {closed, source.snapshot, false};
-    if (xr_lir_lower_program_checked(&lower_request, &lowered, &lower_failure) != XR_LIR_OK) {
+            (unsigned)failure.specialization_status);
+    } else if (status == XR_LIR_SOURCE_LOWER_FAILED) {
         fprintf(stderr, "lir_vm_run: lower %s:%u:%u: %s\n",
-            lower_failure.owned_path ? lower_failure.owned_path : path,
-            lower_failure.diagnostic.source.line, lower_failure.diagnostic.source.column,
-            lower_failure.diagnostic.message);
-        goto done;
+            failure.lower.owned_path ? failure.lower.owned_path : path,
+            failure.lower.diagnostic.source.line, failure.lower.diagnostic.source.column,
+            failure.lower.diagnostic.message);
+    } else if (status != XR_LIR_SOURCE_OK) {
+        fprintf(stderr, "lir_vm_run: cannot prepare source input: %s\n", path);
+    } else {
+        XrRbcCompileDiagnostic diagnostic = {0};
+        if (xr_rbc_compile(lowered.module, lowered.entry, &program, &diagnostic) !=
+            XR_RBC_COMPILE_OK) {
+            fprintf(stderr, "lir_vm_run: bytecode %s:%u:%u: %s\n",
+                diagnostic.path[0] ? diagnostic.path : path,
+                diagnostic.line, diagnostic.column, diagnostic.message);
+        }
     }
-    // Lowering owns its output, including metadata, independently of Source.
-    xr_xir_compile_artifact_free(closed);
-    closed = NULL;
-    xr_xir_compile_source_result_free(&source);
-    xr_compile_session_free(session);
-    session = NULL;
-    xr_compile_resources_free(root);
-    root = NULL;
-    xr_compile_resources_release(context.resources);
-    context.resources = NULL;
-    if (optimize) {
-        XrLirModule *optimized = NULL;
-        if (xr_lir_sccp(lowered.module, &optimized) != XR_LIR_OK) goto done;
-        xr_lir_module_destroy(lowered.module);
-        lowered.module = optimized;
-        lowered.entry.module = optimized;
-        optimized = NULL;
-        if (xr_lir_inline(lowered.module, &optimized) != XR_LIR_OK) goto done;
-        xr_lir_module_destroy(lowered.module);
-        lowered.module = optimized;
-        lowered.entry.module = optimized;
-    }
-    if (xr_rbc_compile(lowered.module, lowered.entry, &program,
-            &bytecode_diagnostic) != XR_RBC_COMPILE_OK) {
-        fprintf(stderr, "lir_vm_run: bytecode %s:%u:%u: %s\n",
-            bytecode_diagnostic.path[0] ? bytecode_diagnostic.path : path,
-            bytecode_diagnostic.line, bytecode_diagnostic.column, bytecode_diagnostic.message);
-    }
-done:
+    xr_lir_source_failure_free(&failure);
     xr_lir_lowered_free(&lowered);
-    xr_lir_lower_failure_free(&lower_failure);
-    xr_xir_compile_artifact_free(closed);
-    xr_xir_compile_source_result_free(&source);
-    xr_xir_compile_source_failure_free(&source_failure);
-    xr_compile_session_free(session);
-    xr_compile_resources_free(root);
-    xr_compile_resources_release(context.resources);
+    xr_compile_resources_release(resources);
     return program;
 }
 

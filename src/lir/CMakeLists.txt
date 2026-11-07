@@ -27,7 +27,7 @@ else()
 endif()
 
 # The source adapter is separate from the executor-independent SSA core.
-add_library(xray_lir_lower STATIC xlir_lower.c)
+add_library(xray_lir_lower STATIC xlir_lower.c xlir_source.c)
 target_link_libraries(xray_lir_lower PUBLIC xray_lir xray_xir_source)
 target_compile_features(xray_lir_lower PUBLIC c_std_11)
 set_target_properties(xray_lir_lower PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)

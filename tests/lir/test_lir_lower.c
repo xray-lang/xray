@@ -10,6 +10,7 @@
 #include "xir/xxir_types.h"
 #include "base/xmalloc.h"
 #include "lir/xlir_lower.h"
+#include "lir/xlir_source.h"
 #include "lir/xlir_builder.h"
 #include "lir/xlir_verify.h"
 #include "lir/xlir_print.h"
@@ -476,6 +477,24 @@ static void argument_validation(void) {
     source_fixture_free(&fixture);
     xr_lir_lowered_free(NULL);
     xr_lir_lower_failure_free(NULL);
+
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
+    XrCompileResources *resources = NULL;
+    CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
+    XrCompileResourceStats before, after;
+    CHECK(xr_compile_resources_stats(resources, &before) == XR_COMPILE_RESOURCE_OK);
+    XrLirSourceRequest input = {resources, "unopened.xr", NULL, false};
+    XrLirSourceFailure source_failure = {0};
+    output.entry.id = 1;
+    CHECK(xr_lir_compile_source(&input, &output, &source_failure) == XR_LIR_SOURCE_BAD_ARGUMENT);
+    CHECK(!output.module && !output.entry.module && output.entry.id == 1);
+    CHECK(source_failure.stage == XR_LIR_SOURCE_OK &&
+        xr_xir_compile_source_failure_empty(&source_failure.source_failure));
+    CHECK(xr_compile_resources_stats(resources, &after) == XR_COMPILE_RESOURCE_OK);
+    CHECK(after.held_bytes == before.held_bytes &&
+        after.allocation_count == before.allocation_count);
+    xr_lir_source_failure_free(&source_failure);
+    xr_compile_resources_release(resources);
 }
 static void literal_sources(void) {
     const char *text = "const n=7\nprint(n)\nprint(n)\n";
