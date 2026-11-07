@@ -16,6 +16,7 @@
 #include "base/xmalloc.h"
 #include "base/xchecks.h"
 #include <stdio.h>
+#include <string.h>
 
 struct XrRbcProgram {
     XrRbcModule module;
@@ -724,6 +725,62 @@ static bool rbc_lir_spilled_instruction(RbcLirCompiler *c,const XrLirInstruction
     if(result)c->slots[i->result]=UINT32_MAX;
     return valid;
 }
+static size_t rbc_lir_jump_target(const RbcLirCompiler *c, size_t pc) {
+    uint32_t bits = c->code[pc] >> 8;
+    int32_t offset = bits <= XR_RBC_JUMP_MAX ? (int32_t) bits : (int32_t) bits - 16777216;
+    size_t target = pc + 1 + (size_t) offset;
+    XR_DCHECK(target < c->code_count, "emitted jumps stay inside their function");
+    return target;
+}
+
+static bool rbc_lir_thread_jumps(RbcLirCompiler *c) {
+    size_t first = 0;
+    while (first < c->code_count) {
+        if ((c->code[first] & 255) == XR_RBC_JMP &&
+            (c->code[rbc_lir_jump_target(c, first)] & 255) == XR_RBC_JMP)
+            break;
+        ++first;
+    }
+    if (first == c->code_count)
+        return true;
+    if (c->code_count > SIZE_MAX / (sizeof(size_t) + sizeof(uint8_t)))
+        return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "jump workspace exceeds address space");
+    size_t *targets = xr_malloc(c->code_count * (sizeof(*targets) + sizeof(uint8_t)));
+    if (!targets)
+        return rbc_lir_fail(c, XR_RBC_COMPILE_OUT_OF_MEMORY, "cannot allocate jump workspace");
+    uint8_t *states = (uint8_t *) (targets + c->code_count);
+    memset(states, 0, c->code_count);
+    // Resolve each functional-graph path once. A pure jump cycle keeps a
+    // representative self-loop, and instruction/source positions stay fixed.
+    for (size_t pc = 0; pc < c->code_count; ++pc) {
+        if ((c->code[pc] & 255) != XR_RBC_JMP || states[pc])
+            continue;
+        size_t cursor = pc;
+        while ((c->code[cursor] & 255) == XR_RBC_JMP && !states[cursor]) {
+            states[cursor] = 1;
+            cursor = rbc_lir_jump_target(c, cursor);
+        }
+        size_t target = states[cursor] == 2 ? targets[cursor] : cursor;
+        cursor = pc;
+        while ((c->code[cursor] & 255) == XR_RBC_JMP && states[cursor] == 1) {
+            size_t next = rbc_lir_jump_target(c, cursor);
+            targets[cursor] = target;
+            states[cursor] = 2;
+            cursor = next;
+        }
+    }
+    for (size_t pc = 0; pc < c->code_count; ++pc) {
+        if ((c->code[pc] & 255) != XR_RBC_JMP)
+            continue;
+        uint32_t word;
+        // A chain may span more than one encodable displacement. Keep the
+        // original hop whenever the direct edge cannot fit its signed field.
+        if (xr_rbc_jump(&word, pc, targets[pc], c->code_count))
+            c->code[pc] = word;
+    }
+    xr_free(targets);
+    return true;
+}
 static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
     if(!rbc_lir_output_values(c->input,c->function,&c->view,&c->output,c->diagnostic)) {
         c->status=c->diagnostic->status;return false;
@@ -743,7 +800,9 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
     c->blocks = xr_malloc(count * sizeof(*c->blocks));
     if (!c->blocks)
         return rbc_lir_fail(c, XR_RBC_COMPILE_OUT_OF_MEMORY, "cannot allocate block offsets");
-    if ((!c->typed_spills || c->view.block_count > 1) && !rbc_lir_jump(c, c->view.entry)) return false;
+    XrLirBlock first;
+    xr_lir_block_at(c->input, c->function, 0, &first);
+    if (first.id != c->view.entry && !rbc_lir_jump(c, c->view.entry)) return false;
     for (uint32_t b = 0; b < c->view.block_count; ++b) {
         XrLirBlock block;
         XrLirBlockView bv;
@@ -778,6 +837,7 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
         if (!xr_rbc_jump(&c->code[patch.pc], patch.pc, c->blocks[patch.block], c->code_count))
             return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "branch exceeds jump encoding");
     }
+    if (!rbc_lir_thread_jumps(c)) return false;
     *out = (XrRbcFunction) {.code=c->code, .code_count=c->code_count,
         .constants=c->constants, .constant_count=c->constant_count,
         .register_count=c->register_count, .parameter_count=c->view.parameter_count,

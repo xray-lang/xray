@@ -185,7 +185,10 @@ static void compiled_source_maps(void) {
     for (size_t f = 0; f < 2; ++f) {
         const XrRbcFunction *function = &program->module.functions[f];
         CHECK(function->source_ids && function->source_id_count == function->code_count);
-        CHECK(function->source_ids[0] == 0);
+        if (!f) {
+            CHECK((function->code[0] & 255) == XR_RBC_LOADI);
+            CHECK(function->source_ids[0] == 1);
+        }
         for (size_t pc = 0; pc < function->code_count; ++pc) {
             CHECK(function->source_ids[pc] <= 1);
             if (f) CHECK(function->source_ids[pc] == 0);
@@ -416,7 +419,60 @@ static void physical_string_copy_cycle(void) {
     CHECK(!live_allocations);
 }
 
+static void jump_threading(void) {
+    uint32_t code[9], original[9], source_ids[9];
+    for (unsigned pc = 0; pc < 9; ++pc) {
+        code[pc] = XR_RBC_RET0;
+        source_ids[pc] = pc + 1;
+    }
+    CHECK(xr_rbc_encode(&code[0], (XrRbcOperands) {XR_RBC_LT, 0, 1, 0, 0}));
+    const size_t jumps[][2] = {{1, 3}, {2, 3}, {3, 4}, {5, 6}, {6, 5}, {7, 5}};
+    for (size_t j = 0; j < sizeof(jumps) / sizeof(jumps[0]); ++j)
+        CHECK(xr_rbc_jump(&code[jumps[j][0]], jumps[j][0], jumps[j][1], 9));
+    memcpy(original, code, sizeof(code));
+    XrRbcCompileDiagnostic diagnostic = {0};
+    RbcLirCompiler compiler = {
+        .code = code, .source_ids = source_ids, .code_count = 9, .diagnostic = &diagnostic};
+    size_t live = live_allocations;
+    fail_at = attempts + 1;
+    CHECK(!rbc_lir_thread_jumps(&compiler));
+    CHECK(compiler.status == XR_RBC_COMPILE_OUT_OF_MEMORY);
+    CHECK(!memcmp(code, original, sizeof(code)) && live_allocations == live);
+    fail_at = SIZE_MAX;
+    compiler.status = XR_RBC_COMPILE_OK;
+    diagnostic = (XrRbcCompileDiagnostic) {0};
+    CHECK(rbc_lir_thread_jumps(&compiler));
+    CHECK(live_allocations == live && (code[1] & 255) == XR_RBC_JMP);
+    for (size_t pc = 1; pc <= 3; ++pc)
+        CHECK(rbc_lir_jump_target(&compiler, pc) == 4);
+    for (size_t pc = 5; pc <= 7; ++pc)
+        CHECK(rbc_lir_jump_target(&compiler, pc) == 5);
+    for (unsigned pc = 0; pc < 9; ++pc)
+        CHECK(source_ids[pc] == pc + 1);
+    XrRbcFunction function = {
+        .code = code, .code_count = 9, .register_count = 2, .parameter_count = 2};
+    XrRbcModule module = {.functions = &function, .function_count = 1};
+    XrtLocationOwner *owner = NULL;
+    CHECK(xrt_locations_create(NULL, 0, &owner) == XRT_LOCATION_OK);
+    CHECK(xr_rbc_module_admit(&module, owner) == XR_RBC_OK);
+    xrt_locations_release(owner);
+
+    size_t count = 8193;
+    uint32_t *chain = xr_malloc(count * sizeof(*chain));
+    CHECK(chain);
+    for (size_t pc = 0; pc + 1 < count; ++pc)
+        CHECK(xr_rbc_jump(&chain[pc], pc, pc + 1, count));
+    chain[count - 1] = XR_RBC_RET0;
+    compiler = (RbcLirCompiler) {.code = chain, .code_count = count, .diagnostic = &diagnostic};
+    CHECK(rbc_lir_thread_jumps(&compiler));
+    for (size_t pc = 0; pc + 1 < count; ++pc)
+        CHECK(rbc_lir_jump_target(&compiler, pc) == count - 1);
+    xr_free(chain);
+    CHECK(live_allocations == live);
+    attempts = 0;
+}
 int main(void) {
+    jump_threading();
     physical_string_copy_cycle();
     compiled_spills();
     literal_allocation_failures();
@@ -430,7 +486,9 @@ int main(void) {
     for (size_t f = 0; f < program->module.function_count; ++f) {
         const XrRbcFunction *function = &program->module.functions[f];
         CHECK(function->source_ids && function->source_id_count == function->code_count);
-        CHECK(function->source_ids[0] == 0);
+        for (size_t pc = 0; pc < function->code_count; ++pc)
+            CHECK(!function->source_ids[pc] ||
+                xrt_locations_get(program->locations, function->source_ids[pc]));
     }
     size_t total = attempts;
     xr_rbc_program_destroy(program);
