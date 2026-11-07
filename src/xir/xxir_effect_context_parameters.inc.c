@@ -39,8 +39,6 @@ static void effect_ordinary_results_free(EffectOrdinaryContexts *contexts) {
     xr_compile_resources_free(contexts->uses.outcomes_work.root);
     xr_compile_resources_free(contexts->uses.outcomes_work.root_witnesses);
     xr_compile_resources_free(contexts->uses.outcomes_work.unresolved_witnesses);
-    xr_compile_resources_free(contexts->uses.outcomes_work.functions);
-    xr_compile_resources_free(contexts->uses.outcomes_work.task_creation);
 }
 
 static bool effect_ordinary_work_empty(const EffectOrdinaryContexts *contexts) {

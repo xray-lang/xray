@@ -180,8 +180,95 @@ static void root_go_rejections(void) {
     CHECK(!root_source("rejected/root_parent.xr",XR_XIR_BAD_TYPE));
     puts("root GO child/parent BAD_TYPE remain fail closed PASS");
 }
+static void control_summary_kernel(void) {
+    const uint32_t count = 8193;
+    XrXirFunction *functions = xr_calloc(count, sizeof(*functions));
+    XrXirInstruction (*rows)[2] = xr_calloc(count, sizeof(*rows));
+    XrXirBlock *blocks = xr_calloc(count, sizeof(*blocks));
+    CHECK(functions && rows && blocks);
+    for (uint32_t f = 0; f < count; ++f) {
+        rows[f][0] = (XrXirInstruction){.op = XR_XIR_CALL, .immediate = f + 1};
+        rows[f][1] = (XrXirInstruction){.op = XR_XIR_RETURN};
+        blocks[f] = (XrXirBlock){.count = 2};
+        functions[f] = (XrXirFunction){.name = "f", .name_length = 1, .error_type = XR_XIR_NEVER,
+            .blocks = &blocks[f], .block_count = 1, .instructions = rows[f], .instruction_count = 2};
+    }
+    rows[count - 1][0] = (XrXirInstruction){.op = XR_XIR_SUSPEND};
+    XrXirModule module = {.stage = XR_XIR_BUILT, .functions = functions, .function_count = count};
+    EffectControlSummary *summary = NULL;
+    EffectMark baseline = effect_mark();
+    CHECK(effect_control_summary_build(&effect_context, &module, NULL, &summary) == XR_XIR_OK);
+    for (uint32_t f = 0; f < count; ++f) {
+        CHECK(summary->facts[f].suspend == XR_XIR_EFFECT_MAY);
+        CHECK(summary->facts[f].throws == XR_XIR_EFFECT_NONE);
+        CHECK(summary->causes[f].distance == count - f - 1);
+    }
+    EffectControlSummary *occupied = summary;
+    size_t before = attempts;
+    CHECK(effect_control_summary_build(&effect_context, &module, NULL, &occupied) == XR_XIR_BAD_STRUCTURE);
+    CHECK(occupied == summary && attempts == before);
+    effect_control_summary_free(summary);
+    effect_mark_check(baseline);
+
+    module.function_count = 4;
+    rows[2][0].immediate = 0;
+    rows[3][0].immediate = 3;
+    summary = NULL;
+    CHECK(effect_control_summary_build(&effect_context, &module, NULL, &summary) == XR_XIR_OK);
+    for (uint32_t f = 0; f < 4; ++f) CHECK(summary->facts[f].suspend == XR_XIR_EFFECT_NONE);
+    effect_control_summary_free(summary);
+
+    XrXirInstruction terminal[3] = {
+        {.op = XR_XIR_CALL}, {.op = XR_XIR_SUSPEND}, {.op = XR_XIR_RETURN}
+    };
+    functions[2].instructions = terminal;
+    functions[2].instruction_count = blocks[2].count = 3;
+    summary = NULL;
+    attempts = 0;
+    CHECK(effect_control_summary_build(&effect_context, &module, NULL, &summary) == XR_XIR_OK);
+    size_t sites = attempts;
+    for (uint32_t f = 0; f < 4; ++f)
+        CHECK(summary->facts[f].suspend == (f < 3 ? XR_XIR_EFFECT_MAY : XR_XIR_EFFECT_NONE));
+    CHECK(summary->causes[0].callee == 1 && summary->causes[0].distance == 2);
+    effect_control_summary_free(summary);
+    effect_mark_check(baseline);
+    for (size_t point = 0; point < sites; ++point) {
+        summary = NULL;
+        attempts = 0;
+        injected = false;
+        fail_at = point;
+        CHECK(effect_control_summary_build(&effect_context, &module, NULL, &summary) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(injected && !summary);
+        fail_at = SIZE_MAX;
+        effect_mark_check(baseline);
+    }
+    XrXirCompileContext finite = effect_owner_new((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE, 128, true});
+    uint64_t held = effect_stats(&finite).held_bytes;
+    summary = NULL;
+    CHECK(effect_control_summary_build(&finite, &module, NULL, &summary) == XR_XIR_MEMORY_LIMIT && !summary);
+    effect_owner_free(&finite, held);
+    effect_mark_check(baseline);
+
+    summary = NULL;
+    CHECK(effect_control_summary_build(&effect_context, &module, NULL, &summary) == XR_XIR_OK);
+    memset(functions, 0xCE, count * sizeof(*functions));
+    memset(rows, 0xCE, count * sizeof(*rows));
+    memset(terminal, 0xCE, sizeof(terminal));
+    xr_free(functions);
+    xr_free(rows);
+    xr_free(blocks);
+    CHECK(summary->facts[0].suspend == XR_XIR_EFFECT_MAY && summary->causes[0].callee == 1);
+    effect_control_summary_free(summary);
+    effect_mark_check(baseline);
+    printf("control summaries: iterative long chain, seeded/unseeded SCC, %zu allocation failures and detached owner PASS\n", sites);
+}
+
 int main(int argc,char **argv) {
-    CHECK(argc==1 || (argc==2 && (!strcmp(argv[1],"--var-atomic") || !strcmp(argv[1],"--ordinary") || !strcmp(argv[1],"--full"))));
+    CHECK(argc==1 || (argc==2 && (!strcmp(argv[1],"--var-atomic") || !strcmp(argv[1],"--ordinary") ||
+        !strcmp(argv[1],"--full") || !strcmp(argv[1],"--control-summary"))));
+    if (argc == 2 && !strcmp(argv[1], "--control-summary")) {
+        effect_case_begin();control_summary_kernel();effect_case_end();return 0;
+    }
     effect_full_faults=argc==2 && !strcmp(argv[1],"--full");
     bool resources=argc==1 || effect_full_faults;
     effect_case_begin();root_var_atomic_case();effect_case_end();

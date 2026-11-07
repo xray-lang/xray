@@ -63,10 +63,10 @@ int main(int argc,char **argv) {
     if(attack==30) { graph->role_proof.rows=(EffectRoleFunction *)(uintptr_t)1;graph->role_proof.functions=3; }
     if(attack==31) graph->count=graph->capacity+1;
     if(attack==32) graph->nodes=(EffectInvocationNode *)((uint8_t *)graph->nodes+1);
-    if(attack==34) outcomes->control_proof=(EffectControlProof *)(uintptr_t)1;
+    if(attack==34) outcomes->control_summary=(EffectControlSummary *)(uintptr_t)1;
     if(attack==35) { graph->role_proof.facts=(EffectRoleFact *)(uintptr_t)1;graph->role_proof.total=1; }
     if(attack==36) { graph->capture.facts=(EffectCaptureFact *)(uintptr_t)1;graph->capture.capacity=1; }
-    if(attack==38) outcomes->control_proof=(EffectControlProof *)((uint8_t *)outcomes->control_proof+_Alignof(EffectControlProof));
+    if(attack==38) outcomes->control_summary=(EffectControlSummary *)((uint8_t *)outcomes->control_summary+_Alignof(EffectControlSummary));
     XrXirStatus status=xir_fixture_effects_program_final(&context,
         (XirFixtureEffectInput){&artifact->module,artifact->construction},effects);
     fprintf(stderr,"Final storage attack%u status%u\n",attack,status);

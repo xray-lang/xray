@@ -10,6 +10,39 @@
  */
 #ifndef XIR_LEGACY_ERROR_ORACLE_H
 #define XIR_LEGACY_ERROR_ORACLE_H
+static bool oracle_control_cause_is(const XrXirEffectWitness *actual,
+    XrXirEffectCause cause, uint32_t instruction, uint32_t callee, uint32_t distance) {
+    return actual->cause == cause && actual->instruction == instruction &&
+        actual->callee == callee && actual->distance == distance;
+}
+
+static bool oracle_control_direct(XrXirOp opcode) {
+    return opcode == XR_XIR_CALL || opcode == XR_XIR_INVOKE ||
+        opcode == XR_XIR_CALL_DEFAULT || opcode == XR_XIR_INVOKE_DEFAULT ||
+        opcode == XR_XIR_CLEANUP_REGISTER;
+}
+
+static XrXirStatus oracle_control_target(const EffectBodyRequest *input, uint32_t count,
+    const XrXirInstruction *op, bool *direct, uint32_t *target, bool *cleanup) {
+    *direct = oracle_control_direct(op->op);
+    *cleanup = op->op == XR_XIR_CLEANUP_REGISTER;
+    *target = UINT32_MAX;
+    if (!*direct) return XR_XIR_OK;
+    if (op->op == XR_XIR_CALL_DEFAULT || op->op == XR_XIR_INVOKE_DEFAULT) {
+        const uint32_t *identity = xr_xir_default_identity(op);
+        const XrXirDefaultBinding *binding = NULL;
+        XrXirStatus status = xir_metadata_default_lookup(input->read.owner, &input->domain,
+            identity[0], identity[1], &binding);
+        if (status != XR_XIR_OK) return status;
+        if (!binding) return XR_XIR_BAD_STRUCTURE;
+        *target = binding->function;
+    } else {
+        if (op->immediate < 0 || (uint64_t)op->immediate >= count) return XR_XIR_BAD_STRUCTURE;
+        *target = (uint32_t)op->immediate;
+    }
+    return *target < count ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
+}
+
 /* The allocating raw oracle retains its own Slot rule. Production Input
  * readers cannot select this raw-domain allocation path. */
 static XrXirStatus oracle_root_seed_record(const EffectRootSeedRecord *request,XrXirEffects *effects,
@@ -72,7 +105,7 @@ static XrXirStatus effect_control_seed_apply(EffectControlCheck *check,uint32_t 
     if (local.suspend>actual) return XR_XIR_BAD_STRUCTURE;
     if (actual && local.suspend==actual && !(check->seen[f]&1)) {
         XrXirEffectCause cause=actual==XR_XIR_EFFECT_MAY?XR_XIR_EFFECT_CAUSE_SUSPEND:XR_XIR_EFFECT_CAUSE_INDIRECT;
-        if (!effect_control_cause_is(&check->final->witnesses[f],cause,instruction,UINT32_MAX,0)) return XR_XIR_BAD_STRUCTURE;
+        if (!oracle_control_cause_is(&check->final->witnesses[f],cause,instruction,UINT32_MAX,0)) return XR_XIR_BAD_STRUCTURE;
         check->seen[f]|=1;
     }
     if (opcode==XR_XIR_GO) {
@@ -80,7 +113,7 @@ static XrXirStatus effect_control_seed_apply(EffectControlCheck *check,uint32_t 
         check->seen[f]|=2;
     }
     if (opcode==XR_XIR_SLOT_PLACE) check->seen[f]|=4;
-    if (effect_control_direct(opcode)) {
+    if (oracle_control_direct(opcode)) {
         if (count>UINT32_MAX-check->edge_count) return XR_XIR_BUDGET;
         check->edge_count+=count;
     }
@@ -132,7 +165,7 @@ static XrXirStatus effect_control_seeds(EffectControlCheck *check,uint32_t f) {
         }
     }
     if (cursor.first!=owned->instruction_count || cursor.run!=owned->run_count) return XR_XIR_BAD_STRUCTURE;
-    if (!actual && !effect_control_cause_is(&check->final->witnesses[f],XR_XIR_EFFECT_CAUSE_NONE,0,0,0))
+    if (!actual && !oracle_control_cause_is(&check->final->witnesses[f],XR_XIR_EFFECT_CAUSE_NONE,0,0,0))
         return XR_XIR_BAD_STRUCTURE;
     return XR_XIR_OK;
 }
@@ -149,17 +182,17 @@ static XrXirStatus effect_control_incoming(EffectControlCheck *check) {
             if (status!=XR_XIR_OK) return status;
             uint32_t opcode=XR_XIR_INVALID;status=effect_body_run_word(&check->input.read,run,run->first,0,&opcode);
             if (status!=XR_XIR_OK) return status;
-            if (!(run->mask&UINT32_C(1)) && !effect_control_direct((XrXirOp)opcode)) continue;
+            if (!(run->mask&UINT32_C(1)) && !oracle_control_direct((XrXirOp)opcode)) continue;
             for (uint32_t i=run->first;i<run->first+run->count;++i) {
                 if (run->mask&UINT32_C(1)) {
                     status=effect_body_run_word(&check->input.read,run,i,0,&opcode);
                     if (status!=XR_XIR_OK) return status;
-                    if (!effect_control_direct((XrXirOp)opcode)) continue;
+                    if (!oracle_control_direct((XrXirOp)opcode)) continue;
                 }
                 XrXirInstruction op;status=effect_body_instruction_ref_value(&check->input.read,run,i,&op);
                 if (status!=XR_XIR_OK) return status;
                 bool direct=false,cleanup=false;uint32_t target=UINT32_MAX;
-                status=effect_control_target(&check->input,check->count,&op,&direct,&target,&cleanup);
+                status=oracle_control_target(&check->input,check->count,&op,&direct,&target,&cleanup);
                 if (status!=XR_XIR_OK) return status;
                 if (!direct || at>=check->edge_count || (!cleanup &&
                     (check->final->functions[f].suspend<check->final->functions[target].suspend ||
@@ -191,7 +224,7 @@ static XrXirStatus effect_control_reachable(EffectControlCheck *check,uint8_t mo
             if (mode==1) {
                 if (check->final->functions[caller].suspend!=check->final->functions[callee].suspend) continue;
                 const XrXirEffectWitness *from=&check->final->witnesses[callee];
-                if (from->distance==UINT32_MAX || !effect_control_cause_is(&check->final->witnesses[caller],
+                if (from->distance==UINT32_MAX || !oracle_control_cause_is(&check->final->witnesses[caller],
                     XR_XIR_EFFECT_CAUSE_CALL,edge->instruction,callee,from->distance+1)) return XR_XIR_BAD_STRUCTURE;
             }
             if (back>=check->count) return XR_XIR_BAD_STRUCTURE;

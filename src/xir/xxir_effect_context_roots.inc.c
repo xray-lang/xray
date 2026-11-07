@@ -217,10 +217,6 @@ static XrXirStatus effect_ordinary_root_storage(EffectOrdinaryContexts *contexts
     const XrXirCompileContext *context) {
     XrXirEffects *effects=&contexts->uses;
     XrXirStatus status=XR_XIR_OK;
-    effects->outcomes_work.functions=xir_compile_calloc(context,contexts->count,sizeof(*effects->outcomes_work.functions),&status);
-    if (!effects->outcomes_work.functions) return status;
-    effects->outcomes_work.task_creation=xir_compile_calloc(context,contexts->count,sizeof(*effects->outcomes_work.task_creation),&status);
-    if (!effects->outcomes_work.task_creation) return status;
     effects->outcomes_work.root=xir_compile_calloc(context,contexts->count,sizeof(*effects->outcomes_work.root),&status);
     if (!effects->outcomes_work.root) return status;
     effects->outcomes_work.root_witnesses=xir_compile_calloc(context,contexts->count,sizeof(*effects->outcomes_work.root_witnesses),&status);

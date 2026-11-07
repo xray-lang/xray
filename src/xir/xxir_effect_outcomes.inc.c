@@ -12,7 +12,7 @@
  */
 static bool effect_outcomes_empty(const EffectFinalOutcomes *outcomes) {
     return !outcomes->resources && !outcomes->count && !outcomes->functions && !outcomes->witnesses &&
-        !outcomes->control_proof &&
+        !outcomes->control_summary &&
         !outcomes->go_safe && !outcomes->task_creation && !outcomes->root &&
         !outcomes->root_witnesses && !outcomes->unresolved_witnesses &&
         !outcomes->contracts && !outcomes->entry_roots && !outcomes->contexts;
@@ -29,7 +29,7 @@ static const EffectFinalOutcomes *effect_final_outcomes(const XrXirEffects *effe
         !final->count || !final->functions || !final->witnesses ||
         !final->go_safe || !final->task_creation ||
         !final->root || !final->root_witnesses || !final->unresolved_witnesses ||
-        !final->contracts || !final->entry_roots || !final->control_proof)
+        !final->contracts || !final->entry_roots || !final->control_summary)
         return NULL;
     if (final->contexts && !effect_context_owner_published(effects->resources,final->contexts)) return NULL;
     return final;
@@ -49,11 +49,8 @@ static XrXirStatus effect_outcomes_publish(const XrXirCompileContext *work,
         !records->contracts || !records->entry_roots)
         return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=local_errors_owned(work,effects->invocations->body,NULL);
-    if(status==XR_XIR_OK) status=effect_control_proof_build(work,effects->invocations,records,&records->control_proof);
     if(status==XR_XIR_OK) status=effect_final_retire_construction(work,effects);
     if(status==XR_XIR_OK) status=effect_final_inventories_match(work,effects->invocations,records);
-    if(status==XR_XIR_OK) status=local_error_outcomes(work,effects->invocations->body,records->functions,true);
-    if(status==XR_XIR_OK) status=effect_control_proof_check(work,effects->invocations,records);
     if (status==XR_XIR_OK) status=effect_invocation_current_input_match(work,source,effects->invocations->body);
     if (status!=XR_XIR_OK) return status;
 

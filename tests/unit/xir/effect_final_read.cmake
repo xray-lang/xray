@@ -53,9 +53,8 @@ set_tests_properties(test_xir_effect_final_outcomes_resources PROPERTIES
 
 
 
-add_test(NAME test_xir_effect_control_proof_literals COMMAND test_xir_effect_final_read --control-proof-literals)
 add_test(NAME test_xir_effect_source_terminal_callback COMMAND test_xir_effect_final_read --source-terminal-callback)
-set_tests_properties(test_xir_effect_control_proof_literals test_xir_effect_source_terminal_callback PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "xir;metadata;ownership;final-input-proof")
+set_tests_properties(test_xir_effect_source_terminal_callback PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "xir;metadata;ownership;final-input-proof")
 
 set(XR_EFFECT_INPUT_WORK "${CMAKE_CURRENT_BINARY_DIR}/effect-input-current")
 file(MAKE_DIRECTORY "${XR_EFFECT_INPUT_WORK}")

@@ -342,7 +342,8 @@ static XrXirStatus effect_source_terminal_current(const XrXirCompileContext *wor
     if (status==XR_XIR_OK) status=effect_source_terminal_roles(work,effects);
     if (status==XR_XIR_OK) status=effect_source_publication_match(work,source,effects);
     if (status==XR_XIR_OK) status=effect_source_outcomes(work,effects);
-    if (status==XR_XIR_OK) status=local_error_outcomes(work,effects->invocations->body,effect_final_outcomes(effects)->functions,true);
+    if (status==XR_XIR_OK) status=effect_control_summary_recheck(work,source,
+        effect_final_outcomes(effects)->control_summary);
     if (status==XR_XIR_OK) status=(checked_copy||
         (effects->invocations->body->stage==XR_XIR_BUILT&&source->stage==XR_XIR_CHECKED))?
         effect_body_checked_copy_match(work,effects->invocations->body,source):

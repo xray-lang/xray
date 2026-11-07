@@ -80,7 +80,7 @@ static uint32_t inventory_source_once(uint32_t cut,unsigned mode) {
     CHECK(xir_fixture_effects_terminal(&context,(XirFixtureEffectInput){xr_xir_compile_artifact_module(checked),
         xr_xir_compile_artifact_construction(checked)},effects)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);memset(ops,0xDC,sizeof(ops));memset(functions,0xDC,sizeof(functions));
-    CHECK(local_error_outcomes(&context,effects->invocations->body,final->outcomes->functions,true)==XR_XIR_OK);
+    CHECK(xr_xir_effects_read(effects,0).status==XR_XIR_OK);
     size_t allocated=rp_attempts;uint64_t physical=rp_live_bytes;rp_allocation_observer=inventory_no_callback;rp_release_observer=inventory_no_callback;
     CHECK(effect_final_inventories_match(&context,effects->invocations,final->outcomes)==XR_XIR_OK);
     rp_allocation_observer=NULL;rp_release_observer=NULL;CHECK(rp_attempts==allocated && rp_live_bytes==physical);

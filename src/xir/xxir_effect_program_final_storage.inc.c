@@ -43,9 +43,9 @@ static XrXirStatus effect_program_outcomes_storage(const XrXirCompileContext *wo
     FINAL_STORAGE(outcomes,1,EffectFinalOutcomes);
     if (outcomes->resources!=work->resources || outcomes->count!=count || outcomes->contexts)
         return XR_XIR_BAD_STRUCTURE;
-    FINAL_STORAGE(outcomes->control_proof,1,EffectControlProof);
+    FINAL_STORAGE(outcomes->control_summary,1,EffectControlSummary);
     XrCompileResourceStatus control_owner=xr_compile_resources_allocation(work->resources,
-        outcomes->control_proof,sizeof(*outcomes->control_proof));
+        outcomes->control_summary,sizeof(*outcomes->control_summary));
     if (control_owner!=XR_COMPILE_RESOURCE_OK)
         return XR_XIR_BAD_STRUCTURE;
     FINAL_STORAGE(outcomes->functions,count,XrXirFunctionEffects);

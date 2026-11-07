@@ -397,6 +397,5 @@ static void pc_local_equation_controls(void) {
 }
 
 #include "xir_final_metadata_cases.h"
-#include "xir_final_control_proof_cases.h"
 #include "xir_source_terminal_callback_cases.h"
 #endif

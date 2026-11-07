@@ -1794,10 +1794,6 @@ int main(int argc, char **argv) {
     if (argc==2 && !strcmp(argv[1],"--outcomes-resources")) {
         pc_outcome_resources();CHECK(!rp_live && !rp_live_bytes);return 0;
     }
-    if (argc==2 && !strcmp(argv[1],"--control-proof-literals")) {
-        pc_control_proof_literals();pc_control_graph_isolation();
-        CHECK(!rp_live && !rp_live_bytes);return 0;
-    }
     if (argc==2 && !strcmp(argv[1],"--source-terminal-callback")) {
         pc_source_terminal_literals();CHECK(!rp_live && !rp_live_bytes);return 0;
     }

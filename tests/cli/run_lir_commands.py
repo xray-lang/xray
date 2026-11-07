@@ -49,7 +49,8 @@ def main() -> None:
     def verify_effects():
         effects = fixtures / "effects"
         for name in ("pure_recursive_import", "pure_import_go", "nosuspend_literal",
-                     "root_const", "signature_throws", "signature_generic_try"):
+                     "root_const", "signature_throws", "signature_generic_try",
+                     "closed_dispatch_pure", "closed_dispatch_reference"):
             checked = run(name + "-check", [binary, "check", effects / (name + ".xr")], 0)
             assert not checked.stdout and not checked.stderr, name
 
@@ -57,6 +58,9 @@ def main() -> None:
             ("nosuspend_await", b"declared no_suspend function may suspend"),
             ("nosuspend_fixed_callable", b"declared no_suspend function may suspend"),
             ("nosuspend_strengthen", b"qualified reference requires an explicit target promise"),
+            ("closed_dispatch_suspend", b"declared no_suspend function may suspend"),
+            ("closed_dispatch_erased", b"declared no_suspend function may suspend"),
+            ("closed_dispatch_late_erased", b"declared no_suspend function may suspend"),
             ("root_mutable", b"GO target requires the current instance root execution"),
             ("root_cleanup", b"GO target requires the current instance root execution"),
             ("root_default", b"GO target requires the current instance root execution"),

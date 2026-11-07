@@ -84,14 +84,11 @@ static XrXirStatus pc_current_input_operation(const XrXirCompileContext *context
         if (status==XR_XIR_OK) status=effect_invocation_publish(context,&source,effects,&graph,NULL,NULL);
         if (status==XR_XIR_OK) CHECK(effect_roots_read(effects)->root[0].requires_root &&
             rp_stats(context).allocated_bytes>before.allocated_bytes);
-        /* Building a new graph initializes provisional control rows. Complete
-         * every original effect derivation again before the sole outcome move. */
+        /* This retry rebuilds root storage; the owned control summary is immutable. */
         XrXirCompileContext final=*context;
         if(status==XR_XIR_OK) status=effect_propagate(effects,&graph);
         if(status==XR_XIR_OK) status=effect_go_safe(&source,effects,&graph,&final);
-        if(status==XR_XIR_OK) status=effect_witnesses(&source,effects,&graph,&final);
         if(status==XR_XIR_OK) status=local_errors_owned(&final,graph.material,NULL);
-        if(status==XR_XIR_OK) status=local_error_outcomes(&final,graph.material,effects->outcomes_work.functions,false);
         if(status==XR_XIR_OK) {
             const XirEffectEntryRootView *sealed=effects->outcomes_work.entry_roots;
             size_t allocations=rp_attempts;XrCompileResourceStats retained=rp_stats(context);

@@ -67,6 +67,8 @@ static XrXirStatus effect_context_read_scoped(XirEffectContextScope *,
     const XirEffectContextInput *,XirEffectContextView *);
 
 typedef struct EffectContextOwner EffectContextOwner;
+static bool effect_seed(const XrXirModule *module, const XrXirFunction *function,
+    const XrXirInstruction *instruction, XrXirFunctionEffects *effect);
 typedef struct EffectRefinementBounds EffectRefinementBounds;
 typedef struct EffectInvocationCertificate EffectInvocationCertificate;
 typedef struct EffectFinalFunctions EffectFinalFunctions;
@@ -80,15 +82,15 @@ static XrXirStatus effect_final_retire_construction(const XrXirCompileContext *w
 static XrXirStatus effect_context_owner_trace(const XrXirCompileContext *context,
     const XrXirEffects *effects, uint32_t function, XrXirRootCauseTrace **output);
 
-typedef struct EffectControlProof EffectControlProof;
-static void effect_control_proof_free(EffectControlProof *proof);
+typedef struct EffectControlSummary EffectControlSummary;
+static void effect_control_summary_free(EffectControlSummary *summary);
 
 typedef struct EffectFinalOutcomes {
     XrCompileResources *resources;
     uint32_t count;
     XrXirFunctionEffects *functions;
     XrXirEffectWitness *witnesses;
-    EffectControlProof *control_proof;
+    EffectControlSummary *control_summary;
     XrXirStatus *go_safe;
     XrXirEffect *task_creation;
     XrXirRootEffects *root;
@@ -97,10 +99,7 @@ typedef struct EffectFinalOutcomes {
     XirEffectEntryRootView *entry_roots;
     EffectContextOwner *contexts;
 } EffectFinalOutcomes;
-static XrXirStatus effect_control_proof_build(const XrXirCompileContext *work,
-    const EffectInvocationCertificate *certificate,const EffectFinalOutcomes *claims,EffectControlProof **output);
-static XrXirStatus effect_control_proof_check(const XrXirCompileContext *work,
-    const EffectInvocationCertificate *certificate,const EffectFinalOutcomes *claims);
+
 
 /* Formula storage belongs to the canonical summary after ROOT publication.
  * Partial constructors alone own their provisional formula allocations. */
@@ -121,12 +120,10 @@ static void effect_outcomes_clear(EffectFinalOutcomes *outcomes,uint32_t count) 
             xr_compile_resources_free((void *)outcomes->entry_roots[f].parameters);
         xr_compile_resources_free(outcomes->entry_roots);
     }
-    effect_control_proof_free(outcomes->control_proof);
+    effect_control_summary_free(outcomes->control_summary);
     effect_context_owner_free(outcomes->contexts);
     effect_contracts_clear(outcomes->contracts,count,false);
-    xr_compile_resources_free(outcomes->functions);xr_compile_resources_free(outcomes->witnesses);
     xr_compile_resources_free(outcomes->go_safe);
-    xr_compile_resources_free(outcomes->task_creation);
     xr_compile_resources_free(outcomes->root);xr_compile_resources_free(outcomes->root_witnesses);
     xr_compile_resources_free(outcomes->unresolved_witnesses);
     *outcomes=(EffectFinalOutcomes){0};
@@ -192,8 +189,7 @@ XR_FUNC bool xir_effects_context_matches(const XrXirCompileContext *context,
     return xir_compile_context_valid(context) && effects && functions &&
         effects->resources==context->resources && effects->count==functions;
 }
-static bool effect_seed(const XrXirModule *module,const XrXirFunction *function,
-    const XrXirInstruction *instruction,XrXirFunctionEffects *effect);
+
 #include "xxir_effect_invocation_classification.inc.c"
 #include "xxir_effect_terms.inc.c"
 #include "xxir_effect_context_types.inc.c"
@@ -518,14 +514,15 @@ static bool effect_seed_type(const XrXirTypes *types,XrXirType callable,
     default: return false;
     }
 }
-static bool effect_seed(const XrXirModule *module,const XrXirFunction *function,
-    const XrXirInstruction *instruction,XrXirFunctionEffects *effect) {
-    XrXirType callable=XR_XIR_UNIT;
-    if (instruction->op==XR_XIR_CALL_INDIRECT || instruction->op==XR_XIR_INVOKE_INDIRECT)
-        callable=xr_xir_operand_type(function,(uint32_t)instruction->immediate);
-    return effect_seed_type(module->types,callable,instruction,effect);
+static bool effect_seed(const XrXirModule *module, const XrXirFunction *function,
+    const XrXirInstruction *instruction, XrXirFunctionEffects *effect) {
+    XrXirType callable = XR_XIR_UNIT;
+    if (instruction->op == XR_XIR_CALL_INDIRECT || instruction->op == XR_XIR_INVOKE_INDIRECT)
+        callable = xr_xir_operand_type(function, (uint32_t)instruction->immediate);
+    return effect_seed_type(module->types, callable, instruction, effect);
 }
-#include "xxir_effect_control_primitive.inc.c"
+
+#include "xxir_effect_summary.inc.c"
 #include "xxir_effects_root.inc.c"
 
 typedef struct EffectReferenceBuild { EffectGraph *graph;uint32_t caller,at,capacity; } EffectReferenceBuild;
@@ -602,7 +599,7 @@ typedef struct EffectGraphDependencyCounts {
  * exact canonical EOF. A constant physical opcode avoids unused row copies;
  * each real dependency still enters the original semantic handler. */
 static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *remaining,
-    XrXirEffects *effects,const EffectGraph *graph,uint32_t f,bool symbolic,
+    const EffectGraph *graph,uint32_t f,bool symbolic,
     EffectGraphDependencyCounts *counts) {
     EffectBodyRequest request=effect_body_owned_request(remaining,graph->material);
     EffectBodyFunctionDimensions head={0};XrXirStatus status=effect_body_request_dimensions(&request,f,&head);
@@ -613,11 +610,6 @@ static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *re
     if (status!=XR_XIR_OK) return status;
     const EffectBodyFunction *owned=&graph->material->functions[f];
 
-    if (effects) effects->outcomes_work.functions[f]=(XrXirFunctionEffects){0};
-    bool native_suspend=false;
-    status=effect_control_native_suspend(&request,f,&native_suspend);
-    if(status!=XR_XIR_OK)return status;
-    if(effects && native_suspend)effects->outcomes_work.functions[f].suspend=XR_XIR_EFFECT_MAY;
     EffectBodyRecordCursor cursor={0,0,UINT32_MAX};uint32_t r=0;
 
     while (r<physical->count && physical->records[r].value<function->parameter_count) {
@@ -629,10 +621,6 @@ static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *re
         const EffectBodyRun *ref;uint32_t opcode=XR_XIR_INVALID;
         status=effect_body_range_ref(&request.read,owned,&cursor,&ref);
         if (status!=XR_XIR_OK) return status;
-        if (effects) {
-            status=effect_control_run_seed(&request,f,ref,&effects->outcomes_work.functions[f]);
-            if(status!=XR_XIR_OK) return status;
-        }
         if (!(ref->mask&UINT32_C(1))) {
             status=effect_body_run_word(&request.read,ref,ref->first,0,&opcode);
             if (status!=XR_XIR_OK) return status;
@@ -651,7 +639,6 @@ static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *re
                 if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
             }
             XrXirOp op=(XrXirOp)opcode;
-            if (effects && xr_xir_op_is_spawn(op)) effects->outcomes_work.task_creation[f]=XR_XIR_EFFECT_MAY;
             if(symbolic && op==XR_XIR_CLASS_METHOD_REF) {
                 uint32_t i=record.value-function->parameter_count;
                 status=effect_class_method_candidates(remaining,graph->material,f,i,effect_reference_count,&counts->references);
@@ -677,8 +664,7 @@ static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *re
 static XrXirStatus effect_graph_build_material(const XrXirModule *module, XrXirEffects *effects,
     EffectGraph *graph, XrXirCompileContext *remaining) {
     if (!xir_compile_context_valid(remaining) || !module || !graph ||
-        (effects && (effects->resources!=remaining->resources || effects->count!=module->function_count ||
-            !effects->outcomes_work.functions || !effects->outcomes_work.task_creation)) ||
+        (effects && (effects->resources!=remaining->resources || effects->count!=module->function_count)) ||
         !effect_body_material_shape(graph->material) ||
         graph->material->resources!=remaining->resources || graph->physical!=graph->material->physical ||
         !graph->physical || effect_body_count(graph->material)!=module->function_count ||
@@ -696,7 +682,7 @@ static XrXirStatus effect_graph_build_material(const XrXirModule *module, XrXirE
         if (graph->material->domain.types->nodes[t].kind==XR_XIR_TYPE_CELL) symbolic=true;
     }
     for (uint32_t f=0;f<module->function_count;++f) {
-        status=effect_graph_dependencies_count(remaining,effects,graph,f,symbolic,&counts);
+        status=effect_graph_dependencies_count(remaining,graph,f,symbolic,&counts);
         if (status!=XR_XIR_OK) return status;
     }
     uint32_t edges=counts.edges,references=counts.references;
@@ -792,14 +778,6 @@ static XrXirStatus effect_propagate(XrXirEffects *effects, EffectGraph *graph) {
         --pending; graph->queued[callee] = 0;
         for (uint32_t edge = graph->heads[callee]; edge != UINT32_MAX; edge = graph->edges[edge].next) {
             EffectEdge link = graph->edges[edge];bool changed = false;
-            if (effects && !link.cleanup) {
-                XrXirFunctionEffects from=effects->outcomes_work.functions[callee];
-                XrXirFunctionEffects *to=&effects->outcomes_work.functions[link.caller];
-                if (from.suspend>to->suspend) { to->suspend=from.suspend;changed=true; }
-                if (effects->outcomes_work.task_creation[callee]>effects->outcomes_work.task_creation[link.caller]) {
-                    effects->outcomes_work.task_creation[link.caller]=effects->outcomes_work.task_creation[callee];changed=true;
-                }
-            }
             /* Cleanup keeps its separate control rules, but its storage access
              * executes inside the registering helper's access closure. */
             if (graph->default_access_denied && graph->default_access_denied[callee] &&
@@ -916,77 +894,6 @@ static XrXirStatus effect_default_access_seed(XirEffectDefaultAccessScope *scope
 
 /* A breadth-first forest over final facts cannot inherit a cyclic cause chain
  * from recursive fixed-point updates. Each function enters the queue once. */
-static XrXirStatus effect_witnesses(const XrXirModule *module, XrXirEffects *effects,
-    EffectGraph *graph, const XrXirCompileContext *work) {
-    uint32_t front = 0, back = 0;
-    for (uint32_t f = 0; f < effects->count; ++f) {
-        EffectBodyRequest body=effect_body_owned_request(work,graph->material);
-        EffectBodyFunctionDimensions dimensions={0};
-        XrXirStatus head_status=effect_body_request_dimensions(&body,f,&dimensions);
-        if (head_status!=XR_XIR_OK) return head_status;
-        const EffectBodyFunctionDimensions *function=&dimensions;
-        XrXirEffect fact = effects->outcomes_work.functions[f].suspend;
-        bool native_suspend=false;
-        head_status=effect_control_native_suspend(&body,f,&native_suspend);
-        if(head_status!=XR_XIR_OK)return head_status;
-        if(native_suspend) {
-            if(fact!=XR_XIR_EFFECT_MAY)return XR_XIR_BAD_STRUCTURE;
-            effects->outcomes_work.witnesses[f]=(XrXirEffectWitness){XR_XIR_EFFECT_CAUSE_SUSPEND,UINT32_MAX,UINT32_MAX,0};
-            graph->queue[back++]=f;continue;
-        }
-        /* The pre-existing NONE precharge is retained in this slice. No
-         * accounting reduction is attributed to a walk that never occurred. */
-        if (fact == XR_XIR_EFFECT_NONE) {
-
-            continue;
-        }
-        const EffectPhysicalFunction *physical=NULL;
-        XrXirStatus status=effect_graph_physical_function(work,module,graph,f,&physical);
-        if (status!=XR_XIR_OK) return status;
-        for (uint32_t r=0;r<physical->count;++r) {
-
-            EffectPhysicalRecord record=physical->records[r];
-            if (!(record.mask&EFFECT_PHYSICAL_CONTROL)) continue;
-            if (record.value<function->parameter_count || record.value>=physical->values)
-                return XR_XIR_BAD_STRUCTURE;
-            uint32_t i=record.value-function->parameter_count;
-            XrXirInstruction storage;const XrXirInstruction *instruction=NULL;
-            status=effect_body_request_instruction(&body,f,i,&storage,&instruction);
-            if (status!=XR_XIR_OK) return status;
-            XrXirOp op=instruction->op;XrXirType callable=XR_XIR_UNIT;
-            if (op==XR_XIR_CALL_INDIRECT || op==XR_XIR_INVOKE_INDIRECT) {
-                if (instruction->immediate<0 || (uint64_t)instruction->immediate>=physical->values) return XR_XIR_BAD_STRUCTURE;
-                status=effect_body_request_type(&body,f,(uint32_t)instruction->immediate,&callable);
-                if (status!=XR_XIR_OK) return status;
-            }
-            XrXirFunctionEffects local={0};
-            if (!effect_seed_type(body.domain.types,callable,instruction,&local)) return XR_XIR_BAD_STRUCTURE;
-            XrXirEffectCause cause = XR_XIR_EFFECT_CAUSE_NONE;
-            if (fact == XR_XIR_EFFECT_MAY && local.suspend == XR_XIR_EFFECT_MAY) cause = XR_XIR_EFFECT_CAUSE_SUSPEND;
-            else if (fact == XR_XIR_EFFECT_UNKNOWN && local.suspend == XR_XIR_EFFECT_UNKNOWN)
-                cause = XR_XIR_EFFECT_CAUSE_INDIRECT;
-            if (!cause) continue;
-            effects->outcomes_work.witnesses[f] = (XrXirEffectWitness){cause, i, UINT32_MAX, 0};
-            graph->queue[back++] = f; break;
-        }
-    }
-    while (front < back) {
-
-        uint32_t callee = graph->queue[front++];
-        for (uint32_t e = graph->heads[callee]; e != UINT32_MAX; e = graph->edges[e].next) {
-
-            EffectEdge edge = graph->edges[e];
-            if (edge.cleanup) continue;
-            if (effects->outcomes_work.witnesses[edge.caller].cause ||
-                effects->outcomes_work.functions[edge.caller].suspend != effects->outcomes_work.functions[callee].suspend) continue;
-            effects->outcomes_work.witnesses[edge.caller] = (XrXirEffectWitness){XR_XIR_EFFECT_CAUSE_CALL,
-                edge.instruction, callee, effects->outcomes_work.witnesses[callee].distance + 1};
-            graph->queue[back++] = edge.caller;
-        }
-    }
-    return XR_XIR_OK;
-}
-
 /* Seal only after the common formula owner and all other analyses agree.
  * The sealed result owns the sole canonical vectors and final witness inventory. */
 static XrXirStatus effect_entry_roots_seal(const XrXirModule *module,
@@ -1212,15 +1119,11 @@ static XrXirStatus effect_infer_construct(const XrXirCompileContext *compile_con
      * No constructor or failure path may read its uninitialized payload. */
     effects->outcomes_owner=xir_compile_alloc(compile_context,sizeof(*effects->outcomes_owner),&allocation_status);
     if (!effects->outcomes_owner) { xr_xir_compile_effects_free(effects);return allocation_status; }
-    effects->outcomes_work.functions = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->outcomes_work.functions), &allocation_status);
-    effects->outcomes_work.witnesses = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->outcomes_work.witnesses), &allocation_status);
     effects->outcomes_work.go_safe = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->outcomes_work.go_safe), &allocation_status);
-    effects->outcomes_work.task_creation = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->outcomes_work.task_creation), &allocation_status);
     effects->outcomes_work.root = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->outcomes_work.root), &allocation_status);
     effects->outcomes_work.root_witnesses = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->outcomes_work.root_witnesses), &allocation_status);
     effects->outcomes_work.unresolved_witnesses = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->outcomes_work.unresolved_witnesses), &allocation_status);
-    if (!effects->outcomes_work.functions || !effects->outcomes_work.witnesses || !effects->outcomes_work.go_safe ||
-        !effects->outcomes_work.task_creation || !effects->outcomes_work.root || !effects->outcomes_work.root_witnesses ||
+    if (!effects->outcomes_work.go_safe || !effects->outcomes_work.root || !effects->outcomes_work.root_witnesses ||
         !effects->outcomes_work.unresolved_witnesses) { xr_xir_compile_effects_free(effects); return allocation_status; }
     EffectGraph graph = {0};
     bool changed = false;
@@ -1254,11 +1157,18 @@ static XrXirStatus effect_infer_construct(const XrXirCompileContext *compile_con
         if (status == XR_XIR_OK) status = effect_context_owner_refresh(remaining,module,effects,effects->invocations->body);
     }
     if (status == XR_XIR_OK) status = effect_go_safe(module, effects, &graph, remaining);
-    if (status == XR_XIR_OK) status = effect_witnesses(module, effects, &graph, remaining);
+    if (status == XR_XIR_OK) {
+        EffectFinalOutcomes *records = &effects->outcomes_work;
+        status = effect_control_summary_build(remaining, module, input.control, &records->control_summary);
+        if (status == XR_XIR_OK) {
+            records->functions = records->control_summary->facts;
+            records->witnesses = records->control_summary->causes;
+            records->task_creation = records->control_summary->task_creation;
+        }
+    }
     if (status==XR_XIR_OK && effect_contexts_read(effects))
         status=effect_context_owner_project(remaining,module,effects,effect_contexts_read(effects));
     if (status == XR_XIR_OK) status = local_errors_owned(remaining,graph.material,NULL);
-    if (status == XR_XIR_OK) status = local_error_outcomes(remaining,graph.material,effects->outcomes_work.functions,false);
     if (status == XR_XIR_OK && !effect_contexts_read(effects))
         status=effect_invocation_public_gate(remaining,effects->invocations);
     if (status == XR_XIR_OK) status = effect_entry_roots_seal(module,effects,remaining);

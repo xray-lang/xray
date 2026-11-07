@@ -69,8 +69,6 @@ static XrXirStatus effect_program_semantics_current(const XrXirCompileContext *w
     const XrXirEffects *effects) {
     XrXirStatus status=effect_source_terminal_roles(work,effects);
     if (status==XR_XIR_OK) status=effect_source_outcomes(work,effects);
-    if (status==XR_XIR_OK) status=local_error_outcomes(work,effects->invocations->body,
-        effect_final_outcomes(effects)->functions,true);
     return status;
 }
 
@@ -94,14 +92,14 @@ static XrXirStatus effect_program_input_final(const XrXirCompileContext *work,
     if (status==XR_XIR_OK) status=effect_program_final_storage(work,effects);
     if (status==XR_XIR_OK) status=effect_source_publication_match(work,source,effects);
     if (status==XR_XIR_OK) status=effect_program_semantics_current(work,effects);
+    if (status==XR_XIR_OK) status=effect_control_summary_recheck(work,source,final->control_summary);
     if (status==XR_XIR_OK) status=effect_program_body_current(work,source,effects);
     if (status==XR_XIR_OK) status=effect_invocation_current_input_match(work,source,certificate->body);
     return status;
 }
 
-/* No allocation or release occurs in this current ROOT replay. The complete
- * receiving proof still precedes it; this closes later preparation callbacks
- * over the actual equations, causes, formulas and published ROOT records. */
+/* ROOT correspondence observes the owned equations after receiving callbacks.
+ * Independent control recomputation is confined to paranoid builds. */
 static XrXirStatus effect_program_input_root(const XrXirCompileContext *work,
     const XrXirModule *source,const XrXirEffects *effects) {
     XrXirStatus status=effect_program_body_current(work,source,effects);
@@ -115,6 +113,8 @@ static XrXirStatus effect_program_input_root(const XrXirCompileContext *work,
     if (status==XR_XIR_OK) status=effect_source_projections(work,certificate);
     if (status==XR_XIR_OK) status=effect_source_publication_match(work,source,effects);
     if (status==XR_XIR_OK) status=effect_program_semantics_current(work,effects);
+    if (status==XR_XIR_OK) status=effect_control_summary_recheck(work,source,
+        effect_final_outcomes(effects)->control_summary);
     return status;
 }
 

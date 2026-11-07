@@ -19,3 +19,7 @@ set_tests_properties(test_xir_root_var_atomic_binding PROPERTIES TIMEOUT 180 RUN
 add_test(NAME test_xir_root_effects_ordinary COMMAND test_xir_root_effects --ordinary)
 set_tests_properties(test_xir_root_effects_ordinary PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE PROCESSORS 1
     LABELS "unit;xir;root-effects;metadata;ownership")
+
+add_test(NAME test_xir_control_summary_owner COMMAND test_xir_root_effects --control-summary)
+set_tests_properties(test_xir_control_summary_owner PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1
+    LABELS "unit;xir;metadata;ownership;compiler-fault")

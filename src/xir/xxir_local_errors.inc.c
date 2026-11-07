@@ -284,25 +284,6 @@ static XrXirStatus local_errors_owned(const XrXirCompileContext *memory,
     EffectBodyRequest input=effect_body_owned_request(memory,material);
     return local_errors_request(memory,&input,diagnostic);
 }
-static XrXirStatus local_error_outcomes(const XrXirCompileContext *memory,
-    const EffectBodyMaterial *material,XrXirFunctionEffects *functions,bool compare) {
-    EffectBodyRequest input=effect_body_owned_request(memory,material);
-    for (uint32_t f=0;f<input.domain.function_count;++f) {
-        EffectBodyFunctionHead head={0};XrXirStatus status=effect_body_request_head(&input,f,&head);
-        if (status!=XR_XIR_OK) return status;
-        XrXirType error=head.error_type;
-        if (input.domain.declarations && (input.domain.declarations->functions[f].promises&XR_XIR_FUNCTION_GENERATOR)) {
-            const XrXirTypeNode *iterator=xr_xir_type_node(input.domain.types,head.result);
-            if (!iterator || iterator->kind!=XR_XIR_TYPE_ITERATOR) return XR_XIR_BAD_TYPE;
-            error=iterator->result;
-        }
-        if (error==XR_XIR_UNIT) return XR_XIR_BAD_TYPE;
-        XrXirEffect bound=error==XR_XIR_NEVER?XR_XIR_EFFECT_NONE:XR_XIR_EFFECT_MAY;
-        if (compare) { if (functions[f].throws!=bound) return XR_XIR_BAD_STRUCTURE; }
-        else functions[f].throws=bound;
-    }
-    return XR_XIR_OK;
-}
 XR_FUNC XrXirStatus xir_compile_worker_error_verify(const XrXirCompileContext *context,
     const XrXirModule *module,uint32_t function) {
     if (!xir_compile_context_valid(context) || !module || function>=module->function_count) return XR_XIR_BAD_STRUCTURE;

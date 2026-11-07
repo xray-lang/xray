@@ -1,0 +1,16 @@
+class Base {
+    init() {}
+    value() -> i64 { return 1 }
+}
+
+class Derived extends Base {
+    init() { super() }
+    override value() -> i64 { return 2 }
+}
+
+fn accept(value: Base) {
+    const limited: nosuspend fn() -> i64 = fn() -> i64 {
+        const erased: fn() -> i64 = value.value
+        return erased()
+    }
+}
