@@ -33,6 +33,8 @@ jobs:
       PYTHONDONTWRITEBYTECODE: '1'
       NO_COLOR: '1'
       VSLANG: '1033'
+      CCACHE_DIR: ${{ runner.temp }}/xray-ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -42,6 +44,24 @@ jobs:
         if: runner.os == 'Windows'
         with:
           arch: x64
+      - name: Cache Unix compiler objects
+        if: runner.os != 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/xray-ccache
+          key: target-compiler-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+          restore-keys: |
+            target-compiler-${{ runner.os }}-${{ runner.arch }}-
+      - name: Prepare Unix compiler cache
+        if: runner.os != 'Windows'
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            brew install ccache
+          else
+            sudo apt-get update
+            sudo apt-get install -y ccache
+          fi
+          ccache --max-size=2G
       - name: Configure Windows Ninja Release
         if: runner.os == 'Windows'
         shell: cmd
