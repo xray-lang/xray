@@ -83,6 +83,7 @@ static inline XrXirStatus xir_fixture_recheck(const XrXirCompileContext *context
         return xr_xir_compile_recheck_v2(context,module,NULL,output,diagnostic, NULL);
     XrXirConstruction *facts = NULL;
     XrXirStatus status = xir_fixture_module_construction(context, module, &facts);
+    if (status == XR_XIR_OK) status = xr_xir_compile_verify_v2(context, module, facts, diagnostic);
     if (status == XR_XIR_OK) status = xr_xir_compile_recheck_v2(context, module, facts, output, diagnostic, NULL);
     else xir_fixture_preparation_diagnostic(status,diagnostic);
     xr_xir_compile_construction_free(facts);

@@ -49,6 +49,16 @@ static XrXirSourceResult compile_text(const char *text) {
         fprintf(stderr, "source %u:%d:%d: %s\n", (unsigned) status, diagnostic.line,
                 diagnostic.column, diagnostic.message);
     CHECK(status == XR_XIR_OK && result.checked && result.snapshot);
+    CHECK(result.checked->checked_effects);
+#if !XR_XIR_PARANOID
+    CHECK(!result.checked->source_facts&&!result.checked->checked_packet.bytes);
+#endif
+    XrXirDiagnostic verified={0};
+    XrXirStatus verification=xr_xir_compile_artifact_verify(result.checked,&verified);
+    if(verification!=XR_XIR_OK)
+        fprintf(stderr,"source verification status=%u function=%u block=%u instruction=%u\n%s\n",
+            (unsigned)verification,verified.function,verified.block,verified.instruction,text);
+    XIR_OK(verification);
     xr_compile_session_free(session);
     xr_compile_resources_release(context.resources);
     return result;

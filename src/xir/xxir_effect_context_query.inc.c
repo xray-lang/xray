@@ -214,7 +214,8 @@ static XrXirStatus effect_context_select_actual(const XrXirCompileContext *conte
 
 
 static XrXirStatus effect_context_read_select(const XrXirCompileContext *context,
-    const XrXirEffects *effects,const XirEffectContextInput *input,XirEffectContextView *output) {
+    const XrXirEffects *effects,const XirEffectContextInput *input,XirEffectContextView *output,
+    bool revalidate) {
     if (!xir_compile_context_valid(context) || !effects || effects->resources!=context->resources ||
         !effect_contexts_read(effects) || !input || !input->source || !input->origin || !output ||
         input->origin->function>=input->source->function_count ||
@@ -225,7 +226,7 @@ static XrXirStatus effect_context_read_select(const XrXirCompileContext *context
     if (!request.types) request.types=&effect_empty_types;
     request.source=&normalized;
     XrXirStatus status=effect_context_owner_shapes(&request);
-    if (status==XR_XIR_OK) status=effect_context_admission(context,effects,request.source,request.types);
+    if (status==XR_XIR_OK&&revalidate) status=effect_context_admission(context,effects,request.source,request.types);
     if (status!=XR_XIR_OK) return status;
     return effect_context_select_actual(context,effects,&request,output);
 }
@@ -357,7 +358,7 @@ static XrXirStatus effect_context_reference_root(const XrXirCompileContext *cont
             scope?scope->construction:effects->input_facts->construction,scope?scope->control:NULL};
         XirEffectContextView selected={0};
         if (status==XR_XIR_OK) status=scope ? effect_context_read_scoped(scope,&input,&selected) :
-            effect_context_read_select(context,effects,&input,&selected);
+            effect_context_read_select(context,effects,&input,&selected,true);
         xr_compile_resources_free(owners);
         if (status!=XR_XIR_OK) return status;
         mask=(selected.requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|

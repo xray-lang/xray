@@ -70,6 +70,7 @@ void xr_xir_compile_artifact_free(XrXirArtifact *artifact) {
         }
     }
     xir_source_facts_release(artifact->source_facts);
+    xr_xir_compile_effects_free(artifact->checked_effects);
     xr_xir_compile_effects_free(artifact->program_final);
     xr_xir_compile_construction_free(artifact->construction);
     xr_compile_resources_free(artifact->layouts);
@@ -233,13 +234,18 @@ XrXirStatus xr_xir_compile_recheck_v2(const XrXirCompileContext *compile_context
     XrXirStatus entry_status=xir_receive_poll(control);
     if (entry_status!=XR_XIR_OK) return transition_error(entry_status,diagnostic);
     XrXirCompileContext limits = *budget;
-    XrXirStatus status = xir_compile_verify_effects_input(&limits,(XirEffectInput){checked,construction,control},NULL,diagnostic);
+    XrXirStatus status=XR_XIR_OK;
+#if XR_XIR_PARANOID
+    status=xir_compile_verify_effects_input(&limits,(XirEffectInput){checked,construction,control},NULL,diagnostic);
+#endif
     if (status != XR_XIR_OK) return status;
     XrXirArtifact *copy = clone_module_receiving(compile_context,checked,construction,&allocation_status,NULL,control);
     if (!copy) return transition_error(allocation_status, diagnostic);
     copy->context = limits;
     status = source_facts_prepare(copy,diagnostic, control);
+#if XR_XIR_PARANOID
     if (status==XR_XIR_OK) status = artifact_verify_owned_effects(copy,NULL,NULL,NULL,diagnostic,control);
+#endif
     if (status==XR_XIR_OK) status=xir_receive_poll(control);
     if (status != XR_XIR_OK) { xr_xir_compile_artifact_free(copy); return status; }
     *output = copy; return XR_XIR_OK;
@@ -274,25 +280,34 @@ XrXirStatus xr_xir_compile_recheck_provenance_take(const XrXirCompileContext *co
     if (entry_status!=XR_XIR_OK) return transition_error(entry_status,diagnostic);
     XrXirProvenance *receiving_owner = *owned_provenance; *owned_provenance = NULL;
     XrXirStatus status = XR_XIR_OK;
-    XrXirArtifact *receiving_copy = NULL;XrXirEffects *receiving_effects=NULL;
+    XrXirArtifact *receiving_copy = NULL;
+#if XR_XIR_PARANOID
+    XrXirEffects *receiving_effects=NULL;
+#endif
 
     const XirProvenanceReceiving request=*receiving;
     XrXirModule receiving_module = *checked;
     receiving_module.provenance = receiving_owner;
     XrXirCompileContext limits = *compile_context;
+#if XR_XIR_PARANOID
     status = xir_compile_verify_receiving_collect(&limits,(XirEffectInput){&receiving_module,
         request.construction,control},request.source_effects,&receiving_effects,diagnostic);
     if (status != XR_XIR_OK) goto done;
+#endif
     receiving_copy = clone_module_receiving(compile_context, &receiving_module, request.construction,
         &status, &receiving_owner,control);
     if (!receiving_copy) { status = transition_error(status, diagnostic); goto done; }
     receiving_copy->context = limits;
+#if XR_XIR_PARANOID
     status = artifact_verify_owned_effects(receiving_copy, NULL, request.source_effects,
         receiving_effects?&receiving_effects:NULL, diagnostic, control);
+#endif
     if (status==XR_XIR_OK) status=xir_receive_poll(control);
     if (status == XR_XIR_OK) { *output = receiving_copy; receiving_copy = NULL; }
 done:
+#if XR_XIR_PARANOID
     xr_xir_compile_effects_free(receiving_effects);
+#endif
     xr_xir_compile_artifact_free(receiving_copy);
     xr_xir_compile_provenance_free(receiving_owner);
     return status;
@@ -395,12 +410,17 @@ static XrXirStatus transition_owned(const XrXirModule *input, const XrXirConstru
             return transition_error(status, diagnostic);
         }
     }
+    if(status==XR_XIR_OK&&copy->module.stage==XR_XIR_CHECKED&&proof->receiving_effects&&
+        *proof->receiving_effects)
+        status=xir_effects_retain(budget,*proof->receiving_effects,&copy->checked_effects,control);
     if (status==XR_XIR_OK && copy->module.stage==XR_XIR_CHECKED)
         status=source_facts_prepare(copy,diagnostic, control);
-    if (status == XR_XIR_OK)
-        status = copy->module.stage==XR_XIR_LOWERED ?
-            artifact_verify_owned_effects(copy,&copy->program_final,NULL,NULL,diagnostic, control) :
-            artifact_verify_owned_effects(copy,NULL,NULL,proof->receiving_effects,diagnostic, control);
+    if(status==XR_XIR_OK&&copy->module.stage==XR_XIR_LOWERED)
+        status=artifact_verify_owned_effects(copy,&copy->program_final,NULL,NULL,diagnostic,control);
+#if XR_XIR_PARANOID
+    else if(status==XR_XIR_OK)
+        status=artifact_verify_owned_effects(copy,NULL,NULL,proof->receiving_effects,diagnostic,control);
+#endif
     if (status != XR_XIR_OK) {
         xr_xir_compile_artifact_free(copy);
         return status;
@@ -480,7 +500,10 @@ XR_FUNC XrXirStatus xr_xir_compile_check_refined_v2(const XrXirCompileContext *c
         copy = clone_module_receiving(context,built,construction,&status,NULL,control);
         if (copy) {
             copy->module.stage = XR_XIR_CHECKED;
+#if XR_XIR_PARANOID
             status = xir_compile_verify_effects_input(context,(XirEffectInput){&copy->module,copy->construction,control},effects,diagnostic);
+#endif
+            copy->checked_effects=effects;effects=NULL;
         }
     }
     xr_xir_compile_effects_free(effects);
@@ -582,7 +605,7 @@ static XrXirStatus artifact_verify_owned_effects(const XrXirArtifact *artifact,
     }
     const XrXirProvenance *provenance=artifact->module.provenance;
     if (artifact->module.stage==XR_XIR_CHECKED && provenance && provenance->kind==XR_XIR_EVIDENCE_TEMPLATE) {
-        XrXirStatus status=source_facts_match(&limits,artifact,diagnostic, control);
+        XrXirStatus status=source_semantics_match(&limits,artifact,diagnostic,control);
         if (status!=XR_XIR_OK) return transition_error(status,diagnostic);
         if (!output) return transition_error(xir_receive_poll(control),diagnostic);
     }
@@ -597,12 +620,15 @@ static XrXirStatus artifact_verify_owned_effects(const XrXirArtifact *artifact,
          * effects and permissions on every request. Bind its retained owner,
          * terminal and layout here without running those full checks twice.
          * A separately supplied derivation cannot stand in for stored facts. */
-        XrXirStatus status=source_effects && facts && source_effects!=facts->effects?
-            source_facts_match(&limits,source,diagnostic, control):source_facts_input_match(&limits,source,facts, control);
-        if (status==XR_XIR_OK) status=xir_effects_source_terminal_input(&limits,(XirEffectInput){&source->module,source->construction,control},facts->effects);
+        const XrXirEffects *semantics=facts?facts->effects:source->checked_effects;
+        XrXirStatus status;
+        if(facts&&(!source_effects||source_effects==facts->effects))
+            status=source_facts_input_match(&limits,source,facts,control);
+        else status=source_semantics_match(&limits,source,diagnostic,control);
+        if (status==XR_XIR_OK) status=xir_effects_source_terminal_input(&limits,(XirEffectInput){&source->module,source->construction,control},semantics);
         if (status==XR_XIR_OK) status=xr_xir_compile_layout_match_verified(source);
         if (status!=XR_XIR_OK) return transition_error(status,diagnostic);
-        if (!source_effects) source_effects=facts->effects;
+        if (!source_effects) source_effects=semantics;
     }
     XrXirEffects *owned=NULL;
     XirEffectInput input={xr_xir_compile_artifact_module(artifact),artifact->construction,control};

@@ -136,6 +136,17 @@ static XrXirStatus source_facts_match(const XrXirCompileContext *context,
     return status;
 }
 
+static XrXirStatus source_semantics_match(const XrXirCompileContext *context,
+    const XrXirArtifact *artifact,XrXirDiagnostic *diagnostic,XrCompileRequestControl *control) {
+    if(artifact->source_facts)return source_facts_match(context,artifact,diagnostic,control);
+    if(!artifact->checked_effects)return XR_XIR_BAD_STRUCTURE;
+    XirEffectInput input={&artifact->module,artifact->construction,control};
+    XrXirStatus status=xir_compile_verify_source_effects_input(context,input,artifact->checked_effects,diagnostic);
+    if(status==XR_XIR_OK)status=xir_effects_source_terminal_input(context,input,artifact->checked_effects);
+    if(status==XR_XIR_OK)status=xr_xir_compile_layout_match_verified(artifact);
+    return status;
+}
+
 /* This entry is called only while the receiving Artifact is unpublished.
  * The fresh collector sees the actual final Checked body, not Built facts. */
 static XrXirStatus source_facts_build(XrXirArtifact *artifact,XrXirDiagnostic *diagnostic, XrCompileRequestControl *control) {
@@ -172,19 +183,37 @@ static XrXirStatus source_facts_prepare(XrXirArtifact *artifact,XrXirDiagnostic 
     if (!artifact || !xir_compile_context_valid(&artifact->context)) return XR_XIR_BAD_STRUCTURE;
     const XrXirProvenance *provenance=artifact->module.provenance;
     if (!provenance) return artifact->source_facts?XR_XIR_BAD_STRUCTURE:XR_XIR_OK;
-    if (provenance->kind==XR_XIR_EVIDENCE_TEMPLATE) return source_facts_build(artifact,diagnostic, control);
+    if (provenance->kind==XR_XIR_EVIDENCE_TEMPLATE) {
+        if(!artifact->checked_effects) {
+            XrXirStatus status=xir_compile_verify_owned_effects_input(&artifact->context,
+                (XirEffectInput){&artifact->module,artifact->construction,control},
+                &artifact->checked_effects,diagnostic);
+            if(status!=XR_XIR_OK)return status;
+        }
+#if XR_XIR_PARANOID
+        return source_facts_build(artifact,diagnostic,control);
+#else
+        return XR_XIR_OK;
+#endif
+    }
     if (!xir_effect_kind_is_closed(provenance->kind) || !provenance->source || artifact->source_facts)
         return XR_XIR_BAD_STRUCTURE;
     XrXirArtifact *source=provenance->source;
     if (!source->module.provenance) return source->source_facts?XR_XIR_BAD_STRUCTURE:XR_XIR_OK;
     if (source->module.provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE) return XR_XIR_BAD_STRUCTURE;
-    return source->source_facts?source_facts_match(&artifact->context,source,diagnostic, control):
-        source_facts_build(source,diagnostic, control);
+#if XR_XIR_PARANOID
+    if(source->source_facts)return source_facts_match(&artifact->context,source,diagnostic,control);
+#endif
+    return source->checked_effects?XR_XIR_OK:source_facts_prepare(source,diagnostic,control);
 }
 
 XR_FUNC XrXirStatus xir_source_facts_prepare_decoded(XrXirArtifact *artifact,
     XrXirDiagnostic *diagnostic, XrCompileRequestControl *control) {
-    return source_facts_prepare(artifact,diagnostic, control);
+    XrXirStatus status=source_facts_prepare(artifact,diagnostic,control);
+    if(status==XR_XIR_OK&&artifact->module.provenance&&
+        artifact->module.provenance->kind==XR_XIR_EVIDENCE_TEMPLATE&&!artifact->source_facts)
+        status=source_facts_build(artifact,diagnostic,control);
+    return status;
 }
 
 XR_FUNC XrXirStatus xir_source_facts_acquire(const XrXirArtifact *artifact,
@@ -200,22 +229,30 @@ XR_FUNC const XrXirEffects *xir_source_facts_effects(const XirSourceFacts *facts
 }
 
 static XrXirArtifact *source_artifact_clone(const XrXirCompileContext *context,
-    const XrXirArtifact *source,XrXirStatus *status, XrCompileRequestControl *control) {
-    if (!source || source->module.stage!=XR_XIR_CHECKED) { *status=XR_XIR_BAD_STAGE;return NULL; }
+    const XrXirArtifact *source,XrXirStatus *status,XrCompileRequestControl *control) {
+    if(!source||source->module.stage!=XR_XIR_CHECKED){*status=XR_XIR_BAD_STAGE;return NULL;}
     XrXirArtifact *copy=clone_module_receiving(context,&source->module,source->construction,status,NULL,control);
-    if (!copy) return NULL;
-    if (source->module.provenance && source->module.provenance->kind==XR_XIR_EVIDENCE_TEMPLATE) {
-        if (!source->source_facts) { *status=XR_XIR_BAD_STRUCTURE;goto failed; }
-        if (source->context.resources==context->resources) {
-            *status=source_facts_match(context,source,NULL, control);
-            if (*status==XR_XIR_OK) *status=source_facts_input_match(context,copy,source->source_facts, control);
-            if (*status==XR_XIR_OK) *status=source_facts_retain(context,source->source_facts,&copy->source_facts, control);
-            if (*status==XR_XIR_OK) *status=source_facts_match(context,copy,NULL, control);
-        } else {
-            *status=source_facts_build(copy,NULL, control);
+    if(!copy)return NULL;
+    if(source->module.provenance&&source->module.provenance->kind==XR_XIR_EVIDENCE_TEMPLATE) {
+#if XR_XIR_PARANOID
+        if(!source->source_facts)*status=XR_XIR_BAD_STRUCTURE;
+        else if(source->context.resources==context->resources) {
+            *status=source_facts_match(context,source,NULL,control);
+            if(*status==XR_XIR_OK)*status=source_facts_input_match(context,copy,source->source_facts,control);
+            if(*status==XR_XIR_OK)*status=source_facts_retain(context,source->source_facts,&copy->source_facts,control);
+            if(*status==XR_XIR_OK)*status=source_facts_match(context,copy,NULL,control);
+        }else *status=source_facts_build(copy,NULL,control);
+#endif
+        if(*status==XR_XIR_OK) {
+            if(source->context.resources==context->resources&&source->checked_effects)
+                *status=xir_effects_retain(context,source->checked_effects,&copy->checked_effects,control);
+            else *status=xr_xir_compile_effects_infer_verified_input(context,
+                (XirEffectInput){&copy->module,copy->construction,control},&copy->checked_effects);
         }
-    } else if (source->source_facts) *status=XR_XIR_BAD_STRUCTURE;
-failed:
-    if (*status!=XR_XIR_OK) { xr_xir_compile_artifact_free(copy);return NULL; }
+    }
+#if XR_XIR_PARANOID
+    else if(source->source_facts)*status=XR_XIR_BAD_STRUCTURE;
+#endif
+    if(*status!=XR_XIR_OK){xr_xir_compile_artifact_free(copy);return NULL;}
     return copy;
 }

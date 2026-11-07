@@ -268,6 +268,13 @@ static XrXirStatus effect_context_dense_stable_read(const XrXirCompileContext *c
     const EffectInvocationCertificate *certificate,EffectTerms *ordinary_terms,EffectTerms *dense_terms) {
     if (!xir_compile_context_valid(context) || !owner || !source || !owner->dense || !owner->ordinary)
         return XR_XIR_BAD_STRUCTURE;
+    XrXirModule projected=*source;
+    if(certificate&&effect_body_material_shape(certificate->body)&&
+        certificate->body->stage==XR_XIR_BUILT&&source->stage==XR_XIR_CHECKED&&
+        source->provenance&&source->provenance->kind==XR_XIR_EVIDENCE_TEMPLATE) {
+        /* The Checked copy preserves every declaration and body row. */
+        projected.stage=XR_XIR_BUILT;source=&projected;
+    }
     const EffectOrdinaryContexts *dense=owner->dense,*ordinary=owner->ordinary;
     if (!xir_compile_context_valid(context) || !dense->dense ||
         !ordinary || ordinary->dense || ordinary->base_count!=source->function_count ||

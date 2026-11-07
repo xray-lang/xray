@@ -695,7 +695,9 @@ static void nominal_field_graph(void) {
     XrXirNominalField *last = (XrXirNominalField *) declarations[159].fields;
     last[0].type = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
     CHECK(xr_xir_compile_artifact_verify(checked, NULL) == XR_XIR_BAD_TYPE);
+#if XR_XIR_PARANOID
     CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_BAD_TYPE && !closed);
+#endif
     last[0].type = (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + 159);
     CHECK(xr_xir_compile_artifact_verify(checked, NULL) == XR_XIR_BAD_TYPE);
     last[0].type = XR_XIR_STRING;

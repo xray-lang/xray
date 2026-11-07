@@ -196,6 +196,7 @@ static XrXirStatus provenance_copy_source(const XrXirCompileContext *context,
     if (status != XR_XIR_OK) return status;
     status=xir_receive_poll(control);if (status!=XR_XIR_OK) return status;
     if (xir_effect_kind_is_closed(source->kind)) {
+#if XR_XIR_PARANOID
         if(source_effects && !source->source->module.provenance)
             status=xir_compile_verify_raw_source_effects_input(context,
                 (XirEffectInput){&source->source->module,source->source->construction,control},source_effects,NULL);
@@ -203,6 +204,9 @@ static XrXirStatus provenance_copy_source(const XrXirCompileContext *context,
             (XirEffectInput){&source->source->module,source->source->construction,control},source_effects,NULL) :
             xir_compile_verify_effects_input(context,(XirEffectInput){&source->source->module,source->source->construction,control},NULL,NULL);
         if (status != XR_XIR_OK) return status;
+#else
+        (void)source_effects;
+#endif
         uint32_t progress=0;
         for (uint32_t f = 0; f < source->count; ++f) {
             status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return status;

@@ -687,12 +687,23 @@ static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
     c.diagnostic.status=xir_receive_poll(control);
     if (c.diagnostic.status!=XR_XIR_OK) goto done;
     bool templated=c.source->provenance && c.source->provenance->kind==XR_XIR_EVIDENCE_TEMPLATE;
+#if XR_XIR_PARANOID
     if(templated) c.diagnostic.status=xir_source_facts_acquire(checked,&c.source_facts,&c.diagnostic, control);
     else if(!c.source->provenance && c.source->declarations && c.source->declarations->implementations)
         c.diagnostic.status=xir_artifact_verify_raw_source_effects(checked,&c.verification_effects,&c.diagnostic,control);
     else c.diagnostic.status=xir_artifact_verify(checked,&c.diagnostic,control);
     if (c.diagnostic.status != XR_XIR_OK) goto done;
     c.effects=xir_source_facts_effects(c.source_facts);
+#else
+    if(templated) {
+        c.effects=checked->checked_effects;
+        if(!c.effects){c.diagnostic.status=XR_XIR_BAD_STRUCTURE;goto done;}
+    }else if(!c.source->provenance&&c.source->declarations&&c.source->declarations->implementations) {
+        c.diagnostic.status=xr_xir_compile_effects_infer_verified_input(&limits,
+            (XirEffectInput){c.source,checked->construction,control},&c.verification_effects);
+        if(c.diagnostic.status!=XR_XIR_OK)goto done;
+    }
+#endif
     if (xir_effect_evidence_is_instance(c.source)) {
         c.diagnostic.status=xr_xir_compile_recheck_v2(&limits, c.source, checked->construction, &built, &c.diagnostic, control); goto done;
     }

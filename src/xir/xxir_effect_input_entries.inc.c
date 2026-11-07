@@ -90,8 +90,17 @@ XR_FUNC XrXirStatus xir_effects_context_select_input(const XrXirCompileContext *
     XirEffectContextView candidate={0};
     XirEffectInput current={input->source,input->construction,input->control};
     XrXirStatus status=effect_input_facts_match(context,current,effects?effects->input_facts:NULL);
-    if(status==XR_XIR_OK)status=effect_context_read_select(context,effects,input,&candidate);
+    if(status==XR_XIR_OK)status=effect_context_read_select(context,effects,input,&candidate,true);
     if(status==XR_XIR_OK)status=effect_input_facts_match(context,current,effects->input_facts);
+    if(status==XR_XIR_OK)*output=candidate;
+    return status;
+}
+XR_FUNC XrXirStatus xir_effects_context_select_owned_input(const XrXirCompileContext *context,
+    const XrXirEffects *effects,const XirEffectContextInput *input,XirEffectContextView *output) {
+    if(XR_XIR_PARANOID)return xir_effects_context_select_input(context,effects,input,output);
+    if(!output)return XR_XIR_BAD_STRUCTURE;
+    XirEffectContextView candidate={0};
+    XrXirStatus status=effect_context_read_select(context,effects,input,&candidate,false);
     if(status==XR_XIR_OK)*output=candidate;
     return status;
 }

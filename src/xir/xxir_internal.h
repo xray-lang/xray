@@ -14,6 +14,10 @@
 #ifndef XXIR_INTERNAL_H
 #define XXIR_INTERNAL_H
 
+#ifndef XR_XIR_PARANOID
+#define XR_XIR_PARANOID 0
+#endif
+
 #include "xxir.h"
 #include "xxir_checked.h"
 #include "xxir_effects.h"
@@ -126,6 +130,7 @@ struct XrXirArtifact {
     XrXirCheckedPacket checked_packet;
     uint8_t checked_identity[32];
     XirSourceFacts *source_facts;
+    XrXirEffects *checked_effects;
     XrXirEffects *program_final;
     uint32_t evaluation_only;
 };
@@ -225,10 +230,15 @@ XR_FUNC XrXirStatus xr_xir_effects_go_safe(const XrXirEffects *effects, uint32_t
 XR_FUNC XrXirEffect xr_xir_effects_task_creation(const XrXirEffects *effects, uint32_t function);
 
 XR_FUNC XrXirStatus xr_xir_compile_layout_build(XrXirArtifact *artifact, XrCompileRequestControl *control);
+/* Copy a compiler-produced immutable Checked module. Raw inputs require
+ * complete admission before this private ownership operation. */
 XR_FUNC XrXirStatus xr_xir_compile_recheck_v2(const XrXirCompileContext *compile_context, const XrXirModule *checked, const XrXirConstruction *construction, XrXirArtifact **output, XrXirDiagnostic *diagnostic, XrCompileRequestControl *control);
+/* Retain a published semantic result on its existing allocation ledger. */
+XR_FUNC XrXirStatus xir_effects_retain(const XrXirCompileContext *context,
+    XrXirEffects *effects,XrXirEffects **output,XrCompileRequestControl *control);
 /* Rejection preserves both slots. Acceptance clears the unique provenance
  * slot and every subsequent failure releases that owner. The main body and
- * construction are still cloned; source and final receiving proofs are fresh.
+ * construction are still cloned; paranoid builds verify the receiving copy.
  * The provenance must have been allocated on this same finite ledger. */
 typedef struct XirProvenanceReceiving {
     const XrXirConstruction *construction;

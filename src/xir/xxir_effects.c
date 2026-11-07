@@ -27,6 +27,7 @@
 #include "xxir_cell_provenance_internal.h"
 #include "xxir_effect_runtime_internal.h"
 #include "../base/xmalloc.h"
+#include <stdatomic.h>
 
 /* Private execution contexts share the existing equation-ID bound. Repeated
  * environments do not add declarations to the admitted source function table. */
@@ -61,7 +62,7 @@ static XrXirStatus effect_context_reference_current(const XrXirCompileContext *c
     uint32_t function, uint32_t instruction, uint32_t *output);
 
 static XrXirStatus effect_context_read_select(const XrXirCompileContext *,
-    const XrXirEffects *,const XirEffectContextInput *,XirEffectContextView *);
+    const XrXirEffects *,const XirEffectContextInput *,XirEffectContextView *,bool);
 static XrXirStatus effect_context_read_scoped(XirEffectContextScope *,
     const XirEffectContextInput *,XirEffectContextView *);
 
@@ -138,6 +139,7 @@ static bool effect_public_root_context(const XrXirEffects *effects,uint32_t func
 static XrXirStatus effect_public_root_match(const XrXirCompileContext *work,const XrXirEffects *effects);
 
 struct XrXirEffects {
+    atomic_uint_fast64_t references;
     /* Each charged allocation independently retains this ledger. */
     XrCompileResources *resources;
     EffectInputFacts *input_facts;
@@ -349,6 +351,9 @@ static void effect_graph_free(EffectGraph *graph) {
 }
 void xr_xir_compile_effects_free(XrXirEffects *effects) {
     if (effects) {
+        uint_fast64_t previous=atomic_fetch_sub_explicit(&effects->references,1,memory_order_acq_rel);
+        XR_CHECK(previous,"A published effect owner must be released exactly once");
+        if(previous!=1)return;
         effect_refinement_free(effects->refinement);
         effect_parameters_free(effects);
         effect_outcomes_clear(&effects->outcomes_work,effects->count);
@@ -356,6 +361,22 @@ void xr_xir_compile_effects_free(XrXirEffects *effects) {
         effect_input_facts_free(effects->input_facts);
         xr_compile_resources_free(effects);
     }
+}
+XR_FUNC XrXirStatus xir_effects_retain(const XrXirCompileContext *context,
+    XrXirEffects *effects,XrXirEffects **output,XrCompileRequestControl *control) {
+    if(!xir_compile_context_valid(context)||!effects||!output||*output||
+        effects->resources!=context->resources)return XR_XIR_BAD_STRUCTURE;
+    uint_fast64_t count=atomic_load_explicit(&effects->references,memory_order_relaxed);
+    uint32_t progress=0;
+    for(;;) {
+        if(!count||count==UINT_FAST64_MAX)return XR_XIR_OVERFLOW;
+        XrXirStatus status=xir_receive_step(control,&progress);
+        if(status!=XR_XIR_OK)return status;
+        if(atomic_compare_exchange_weak_explicit(&effects->references,&count,count+1,
+            memory_order_relaxed,memory_order_relaxed))break;
+    }
+    *output=effects;
+    return XR_XIR_OK;
 }
 XR_FUNC XrXirEffectFacts xr_xir_effects_read(const XrXirEffects *effects,uint32_t function) {
     XrXirEffectFacts read={.status=XR_XIR_BAD_STRUCTURE};
@@ -1182,6 +1203,7 @@ static XrXirStatus effect_infer_construct(const XrXirCompileContext *compile_con
     if ((bytes > SIZE_MAX) || bytes > SIZE_MAX) return XR_XIR_BUDGET;
     XrXirEffects *effects = xir_compile_calloc(compile_context, 1, sizeof(*effects), &allocation_status);
     if (!effects) return allocation_status;
+    atomic_init(&effects->references,1);
     effects->resources = compile_context->resources;
     allocation_status=effect_input_facts_new(compile_context,input,&effects->input_facts);
     if(allocation_status!=XR_XIR_OK){xr_xir_compile_effects_free(effects);return allocation_status;}
@@ -1305,7 +1327,10 @@ static XrXirStatus effect_source_body_current(const XrXirCompileContext *context
         effects->invocations->body->resources!=context->resources)
         return XR_XIR_BAD_STRUCTURE;
 
-    return effect_body_source_match(context,effects->invocations->body,source);
+    const EffectBodyMaterial *body=effects->invocations->body;
+    if(body->stage==XR_XIR_BUILT&&source->stage==XR_XIR_CHECKED)
+        return effect_body_checked_copy_match(context,body,source);
+    return effect_body_source_match(context,body,source);
 }
 
 #include "xxir_effect_program_storage.inc.c"

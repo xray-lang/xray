@@ -177,6 +177,9 @@ XR_FUNC bool xir_effects_context_available(const XrXirCompileContext *context,
 XR_FUNC XrXirStatus xir_effects_context_refresh_input(const XrXirCompileContext *context, XirEffectInput input, const struct XrXirEffects *effects);
 XR_FUNC XrXirStatus xir_effects_context_select_input(const XrXirCompileContext *context,
     const struct XrXirEffects *effects, const XirEffectContextInput *input, XirEffectContextView *output);
+/* Specialization reads an immutable admitted Artifact and its owned type pool. */
+XR_FUNC XrXirStatus xir_effects_context_select_owned_input(const XrXirCompileContext *context,
+    const struct XrXirEffects *effects,const XirEffectContextInput *input,XirEffectContextView *output);
 /* This private lexical scope belongs to one read-only correspondence call.
  * Only its constructor creates a scope; no stored fact or caller flag can
  * complete the first full source/body/destination admission. The callback
