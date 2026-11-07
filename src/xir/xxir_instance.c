@@ -275,7 +275,7 @@ static bool function_shape_admitted(const XrXirProgram *program,uint32_t entry,
 }
 static bool function_bound_admitted(const XrXirProgram *program,uint32_t entry,
     const XrXirTypeNode *signature) {
-    if(!function_shape_admitted(program,entry,signature) || !program->permissions->effects) return false;
+    if(!function_shape_admitted(program,entry,signature)) return false;
     const XrXirProgramPermission *permission=&program->permissions->entries[entry];
     return xr_xir_callable_root_accepts(permission->requires_root,permission->unresolved,signature->flags);
 }
@@ -1861,8 +1861,6 @@ static XrXirCallStatus resolve_function_target(XrXirInstance *instance,const XrX
         return XR_XIR_CALL_BAD_STATE;
     if (gate->program!=birth->program || xr_xir_value_arena(value)!=birth->program->arena ||
         binding->entry>=birth->program->entry_count) return XR_XIR_CALL_BAD_ARGUMENT;
-    const XrXirTypeNode *signature=xr_xir_callable_signature(birth->program->types,(XrXirType)value->type);
-    if (!function_bound_admitted(birth->program,binding->entry,signature)) return XR_XIR_CALL_BAD_ARGUMENT;
     *entry=binding->entry;*output=birth;return XR_XIR_CALL_READY;
 }
 XR_FUNC XrXirCallStatus xr_xir_instance_call_target(XrXirCallView *view,
@@ -1905,8 +1903,6 @@ static XrXirCallStatus resolve_function(XrXirInstance *instance, const XrXirValu
         return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirCallStatus admitted = admit_instance_value(admission, value, (XrXirType) value->type);
     if (admitted != XR_XIR_CALL_READY) return admitted;
-    const XrXirTypeNode *signature=xr_xir_callable_signature(instance->program->types,(XrXirType)value->type);
-    if (!function_bound_admitted(instance->program,binding->entry,signature)) return XR_XIR_CALL_BAD_ARGUMENT;
     *entry = binding->entry; return XR_XIR_CALL_READY;
 }
 #include "xxir_instance_signal_frontier.inc.c"
@@ -2061,16 +2057,11 @@ XR_FUNC XrXirCallStatus xr_xir_instance_argument_weakening_admit(XrXirCallView *
         !xr_xir_callable_signature(instance->program->types,(XrXirType)input->type)) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirCallStatus status = admit_instance_value(admission, input, (XrXirType)input->type);
     if (status != XR_XIR_CALL_READY) return status;
-    const XrXirFunctionBinding *binding = xr_xir_function_binding(input);
-    const FunctionGate *source_gate = binding ? binding->owner : NULL;
-    if (!source_gate || xr_xir_value_arena(input)!=source_gate->program->arena ||
-        !function_bound_admitted(source_gate->program,binding->entry,
-            xr_xir_callable_signature(source_gate->program->types,(XrXirType)input->type)))
-        return XR_XIR_CALL_BAD_ARGUMENT;
     InstanceInvocationRead read={admission,NULL,NULL,NULL,instance};
     XrXirStatus match = xr_xir_callable_weakening_admit(instance->program->types,
         (XrXirType)input->type,type,&read,instance_invocation_work);
     if (match != XR_XIR_OK) return match == XR_XIR_BUDGET ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_BAD_ARGUMENT;
+    const XrXirFunctionBinding *binding = xr_xir_function_binding(input);
     if (!binding || !function_bound_admitted(instance->program, binding->entry,
         xr_xir_callable_signature(instance->program->types, type))) return XR_XIR_CALL_BAD_ARGUMENT;
     return XR_XIR_CALL_READY;
@@ -2088,16 +2079,11 @@ XR_FUNC XrXirCallStatus xr_xir_instance_weaken_function(XrXirCallView *view,
     if (status!=XR_XIR_CALL_READY) return status;
     status = admit_instance_value(admission, input, local);
     if (status != XR_XIR_CALL_READY) return status;
-    const XrXirFunctionBinding *binding = xr_xir_function_binding(input);
-    const FunctionGate *source_gate = binding ? binding->owner : NULL;
-    if (!source_gate || xr_xir_value_arena(input)!=source_gate->program->arena ||
-        !function_bound_admitted(source_gate->program,binding->entry,
-            xr_xir_callable_signature(source_gate->program->types,(XrXirType)input->type)))
-        return XR_XIR_CALL_BAD_ARGUMENT;
     InstanceInvocationRead read={admission,NULL,NULL,NULL,instance};
     XrXirStatus match = xr_xir_callable_weakening_admit(instance->program->types,
         local, type, &read, instance_invocation_work);
     if (match != XR_XIR_OK) return match == XR_XIR_BUDGET ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_BAD_ARGUMENT;
+    const XrXirFunctionBinding *binding = xr_xir_function_binding(input);
     if (!binding) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirInstance *carrier=instance;
     XrXirType carrier_type=type;
