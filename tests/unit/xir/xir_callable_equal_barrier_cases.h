@@ -7,7 +7,7 @@
  * xir_callable_equal_barrier_cases.h - Complete same-bound loss admission
  *
  * KEY CONCEPT:
- *   Equal bounds still scan real parameters and pay the same finite ledger.
+ *   Equal bounds still scan real parameters without retaining compiler memory.
  */
 #ifndef XIR_CALLABLE_EQUAL_BARRIER_CASES_H
 #define XIR_CALLABLE_EQUAL_BARRIER_CASES_H
@@ -16,9 +16,9 @@ static void bound_equal_raw_guards(void) {
     XrXirCallableParameter parameters[]={{XR_XIR_I64,0},{XR_XIR_BOOL,0},{XR_XIR_STRING,0}};
     for (unsigned attack=0;attack<12;++attack) {
         XrXirTypeNode nodes[]={
-            {.kind=XR_XIR_TYPE_CALLABLE,.parameters=parameters,.parameter_count=3,
+            {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.parameters=parameters,.parameter_count=3,
              .result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},
-            {.kind=XR_XIR_TYPE_CALLABLE,.parameters=parameters,.parameter_count=3,
+            {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.parameters=parameters,.parameter_count=3,
              .result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED}};
         XrXirTypes types={nodes,2,NULL,NULL};
         XrXirType target=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1);
@@ -41,8 +41,8 @@ static void bound_equal_raw_guards(void) {
         CHECK(xr_xir_compile_callable_weakening(&context,&types,
             XR_XIR_CONSTRUCTED_TYPE_BASE,target)==XR_XIR_BAD_TYPE);
         XrCompileResourceStats after=bound_stats(&context);
-        CHECK(after.work==before.work+1 && after.allocated_bytes==before.allocated_bytes);
-        CHECK(after.live_bytes==before.live_bytes);
+        CHECK(after.allocation_count==before.allocation_count && after.allocated_bytes==before.allocated_bytes);
+        CHECK(after.held_bytes==before.held_bytes);
     }
     bound_owner_free(&context);
 }
@@ -51,9 +51,9 @@ static void bound_equal_complete_parameters(void) {
     XrXirCallableParameter input[]={{XR_XIR_I64,0},{XR_XIR_BOOL,0},{XR_XIR_STRING,0}};
     XrXirCallableParameter output[3];memcpy(output,input,sizeof(input));
     XrXirTypeNode nodes[]={
-        {.kind=XR_XIR_TYPE_CALLABLE,.parameters=input,.parameter_count=3,
+        {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.parameters=input,.parameter_count=3,
          .result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},
-        {.kind=XR_XIR_TYPE_CALLABLE,.parameters=output,.parameter_count=3,
+        {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.parameters=output,.parameter_count=3,
          .result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED}};
     XrXirTypes types={nodes,2,NULL,NULL};
     for (unsigned attack=0;attack<3;++attack) {
@@ -64,40 +64,32 @@ static void bound_equal_complete_parameters(void) {
         CHECK(xr_xir_compile_callable_weakening(&context,&types,XR_XIR_CONSTRUCTED_TYPE_BASE,
             (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1))==(attack?XR_XIR_BAD_TYPE:XR_XIR_OK));
         XrCompileResourceStats after=bound_stats(&context);
-        CHECK(after.work==before.work+4 && after.allocated_bytes==before.allocated_bytes);
-        CHECK(after.live_bytes==before.live_bytes);
+        CHECK(after.allocation_count==before.allocation_count && after.allocated_bytes==before.allocated_bytes);
+        CHECK(after.held_bytes==before.held_bytes);
     }
     bound_owner_free(&context);
 }
-static void bound_equal_work_boundary(void) {
+static void bound_equal_memory_reuse(void) {
     XrXirCallableParameter parameters[]={{XR_XIR_I64,0},{XR_XIR_BOOL,0},{XR_XIR_STRING,0}};
-    XrXirTypeNode node={.kind=XR_XIR_TYPE_CALLABLE,.parameters=parameters,.parameter_count=3,
+    XrXirTypeNode node={.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.parameters=parameters,.parameter_count=3,
         .result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
-    XrXirTypes types={&node,1,NULL,NULL};
-    BoundMark mark=bound_mark();
-    for (unsigned minus=0;minus<2;++minus) {
-        XrCompileResourceLimits caps=bound_caps();caps.work=5-minus;
-        XrXirCompileContext context=bound_owner(caps);
-        XrCompileResourceStats before=bound_stats(&context);
-        CHECK(before.work==1);
+    XrXirTypes types={&node,1,NULL,NULL};BoundMark mark=bound_mark();
+    XrXirCompileContext context=bound_owner(bound_caps());uint64_t held=bound_creation.held_bytes;
+    bound_owner_free(&context);bound_balanced(mark);
+    XrCompileResourceLimits caps={XR_COMPILE_MEMORY_FINITE,held,true};context=bound_owner(caps);
+    XrCompileResourceStats before=bound_stats(&context);
+    for(unsigned repeat=0;repeat<2;++repeat) {
         CHECK(xr_xir_compile_callable_weakening(&context,&types,XR_XIR_CONSTRUCTED_TYPE_BASE,
-            XR_XIR_CONSTRUCTED_TYPE_BASE)==(minus?XR_XIR_BUDGET:XR_XIR_OK));
-        XrCompileResourceStats paid=bound_stats(&context);
-        CHECK(paid.work==caps.work && paid.allocated_bytes==before.allocated_bytes);
-        CHECK(paid.live_bytes==before.live_bytes);
-        CHECK(xr_xir_compile_callable_weakening(&context,&types,XR_XIR_CONSTRUCTED_TYPE_BASE,
-            XR_XIR_CONSTRUCTED_TYPE_BASE)==XR_XIR_BUDGET);
-        XrCompileResourceStats after=bound_stats(&context);
-        CHECK(after.work==paid.work && after.allocated_bytes==paid.allocated_bytes);
-        CHECK(after.live_bytes==before.live_bytes);
-        bound_owner_free(&context);bound_balanced(mark);
+            XR_XIR_CONSTRUCTED_TYPE_BASE)==XR_XIR_OK);
+        XrCompileResourceStats after=bound_stats(&context);CHECK(!memcmp(&before,&after,sizeof(before)));
     }
+    bound_owner_free(&context);bound_balanced(mark);
 }
 static void bound_equal_barrier_cases(void) {
     BoundMark mark=bound_mark();
     bound_equal_raw_guards();bound_balanced(mark);
     bound_equal_complete_parameters();bound_balanced(mark);
-    bound_equal_work_boundary();bound_balanced(mark);
-    puts("same callable bounds: 12 malformed guards, complete parameters, exact/minus1 and retained fees");
+    bound_equal_memory_reuse();bound_balanced(mark);
+    puts("same callable bounds: 12 malformed guards, complete parameters, finite held memory and repeatable validation");
 }
 #endif /* XIR_CALLABLE_EQUAL_BARRIER_CASES_H */

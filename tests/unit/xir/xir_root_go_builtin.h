@@ -6,7 +6,7 @@ static XrXirStatus go_shape_check(const XrXirCompileContext *context, unsigned m
     bool spawn, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
     XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_TASK,.element=XR_XIR_I64},
         {.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64},
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_NO_SUSPEND|XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_NO_SUSPEND|XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind=XR_XIR_TYPE_CELL,.element=(XrXirType)257}};
     XrXirTypes types={nodes,4,NULL,NULL};
     bool mutable=mode==2||mode==4;
@@ -49,10 +49,10 @@ static XrXirStatus go_shape_check(const XrXirCompileContext *context, unsigned m
     }
     uint32_t operand=0;XrXirBlock initial={0,init_count,0,0},three={0,3,0,0},two={0,2,0,0},body={0,worker_count,0,0};
     XrXirFunction functions[]={
-        {"init",4,NULL,0,XR_XIR_UNIT,&initial,1,init,init_count,&operand,1},
-        {"entry",5,NULL,0,XR_XIR_I64,&three,1,entry,3,NULL,0},
-        {"worker",6,NULL,0,XR_XIR_I64,&body,1,worker,worker_count,NULL,0},
-        {"leaf",4,NULL,0,XR_XIR_I64,&two,1,leaf,2,NULL,0}};
+        {.name="init",.name_length=4,.parameters=NULL,.parameter_count=0,.result=XR_XIR_UNIT,.blocks=&initial,.block_count=1,.instructions=init,.instruction_count=init_count,.operands=&operand,.operand_count=1,.error_type=XR_XIR_NEVER},
+        {.name="entry",.name_length=5,.parameters=NULL,.parameter_count=0,.result=XR_XIR_I64,.blocks=&three,.block_count=1,.instructions=entry,.instruction_count=3,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER},
+        {.name="worker",.name_length=6,.parameters=NULL,.parameter_count=0,.result=XR_XIR_I64,.blocks=&body,.block_count=1,.instructions=worker,.instruction_count=worker_count,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER},
+        {.name="leaf",.name_length=4,.parameters=NULL,.parameter_count=0,.result=XR_XIR_I64,.blocks=&two,.block_count=1,.instructions=leaf,.instruction_count=2,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER}};
     XrXirFunctionIdentity identities[4]={{0}};identities[3].promises=XR_XIR_FUNCTION_NO_SUSPEND;
     XrXirSourceModule source={"root",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};XrXirSlot slot={0,mutable?(XrXirType)259:(XrXirType)257,mutable};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,

@@ -117,8 +117,8 @@ static void permission_runtime(void) {
     CHECK(xr_xir_effects_read(program->permissions->effects,13).status==XR_XIR_BAD_STRUCTURE);
     XrCompileResourceStats reads_after=bound_stats(&context);
     CHECK(reads_before.allocation_count==reads_after.allocation_count &&
-        reads_before.allocated_bytes==reads_after.allocated_bytes && reads_before.live_bytes==reads_after.live_bytes &&
-        reads_before.peak_bytes==reads_after.peak_bytes && reads_before.work==reads_after.work);
+        reads_before.allocated_bytes==reads_after.allocated_bytes && reads_before.held_bytes==reads_after.held_bytes &&
+        reads_before.peak_bytes==reads_after.peak_bytes && reads_before.allocation_count==reads_after.allocation_count);
     CHECK(program->permissions->entries[0].worker == XR_XIR_BAD_TYPE);
     CHECK(program->permissions->entries[3].worker == XR_XIR_OK);
     /* A pure body with a non-Sendable Fn parameter still fails worker admission. */

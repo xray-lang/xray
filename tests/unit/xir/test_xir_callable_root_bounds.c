@@ -21,7 +21,6 @@
 _Static_assert(XR_XIR_CALLABLE_NO_SUSPEND==1 && XR_XIR_CALLABLE_ROOT_NONE==2 &&
     XR_XIR_CALLABLE_ROOT_REQUIRED==4 && XR_XIR_CALLABLE_ROOT_UNRESOLVED==8 &&
     XR_XIR_CALLABLE_ROOT_MASK==14,"The closed bound bit assignments are one contract");
-_Static_assert(XR_XIR_CHECKED_SCHEMA==31 && XR_XIR_CHECKED_CONTRACT==76,"The callable dependency contract has one wire identity");
 
 static void bound_matrix(void) {
     static const bool admitted[16]={false,false,true,true,true,true,false,false,true,true,false,false,true,true,false,false};
@@ -31,7 +30,7 @@ static void bound_matrix(void) {
     uint32_t accepted=0, rejected=0;
     XrXirCompileContext context=bound_owner(bound_caps());
     for(uint32_t flags=0;flags<16;++flags) {
-        XrXirTypeNode node={.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=flags};
+        XrXirTypeNode node={.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,.flags=flags};
         XrXirTypes types={&node,1,NULL,NULL};
         CHECK(xr_xir_callable_flags_valid(flags)==admitted[flags]);
         CHECK(xr_xir_compile_types_structure_verify(&context,&types)==(admitted[flags]?XR_XIR_OK:XR_XIR_BAD_TYPE));
@@ -40,8 +39,8 @@ static void bound_matrix(void) {
         uint32_t source=root[a]|sn,target=root[b]|tn;
         bool allowed=compatible[a][b] && (!tn || sn);
         CHECK(xr_xir_callable_flags_compatible(source,target)==allowed);
-        XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=source},
-            {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=target}};
+        XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,.flags=source},
+            {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,.flags=target}};
         XrXirTypes types={nodes,source==target?1u:2u,NULL,NULL};
         CHECK(xr_xir_compile_types_structure_verify(&context,&types)==XR_XIR_OK);
         XrXirType receive=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+(source==target?0:1));
@@ -67,10 +66,10 @@ static void bound_nested(void) {
     XrXirCallableParameter parameters[]={{XR_XIR_CONSTRUCTED_TYPE_BASE,0},
         {(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1),0}};
     XrXirTypeNode nodes[]={
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=2},
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=4},
-        {.kind=XR_XIR_TYPE_CALLABLE,.parameters=&parameters[0],.parameter_count=1,.result=XR_XIR_I64,.flags=3},
-        {.kind=XR_XIR_TYPE_CALLABLE,.parameters=&parameters[1],.parameter_count=1,.result=XR_XIR_I64,.flags=8}};
+        {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,.flags=2},
+        {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,.flags=4},
+        {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.parameters=&parameters[0],.parameter_count=1,.result=XR_XIR_I64,.flags=3},
+        {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.parameters=&parameters[1],.parameter_count=1,.result=XR_XIR_I64,.flags=8}};
     XrXirTypes types={nodes,4,NULL,NULL};
     CHECK(xr_xir_compile_types_structure_verify(&context,&types)==XR_XIR_OK);
     CHECK(xr_xir_compile_callable_weakening(&context,&types,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+2),
@@ -108,7 +107,7 @@ static void bound_facts(void) {
     XrXirRootCauseTrace *trace=NULL;CHECK(xr_xir_compile_root_cause_trace_copy(&context,effects,10,&trace)==XR_XIR_OK && trace);
     XrCompileResourceStats before=bound_stats(&context);
     CHECK(xr_xir_compile_effects_infer_verified(&context,xr_xir_compile_artifact_module(checked),&effects)==XR_XIR_BAD_STRUCTURE);
-    XrCompileResourceStats after=bound_stats(&context);CHECK(before.work==after.work && before.allocated_bytes==after.allocated_bytes);
+    XrCompileResourceStats after=bound_stats(&context);CHECK(before.allocation_count==after.allocation_count && before.allocated_bytes==after.allocated_bytes);
     xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);
     xr_compile_resources_release(context.resources);context=(XrXirCompileContext){0};
     const XrXirRootEffects *detached=xr_xir_root_cause_trace_facts(trace);CHECK(detached && detached->requires_root && detached->unresolved);
@@ -139,23 +138,20 @@ static void bound_resource_gates(void) {
         context=bound_owner(bound_caps());BoundMark owner_mark=bound_mark();
         bound_injected=false;bound_fail_at=bound_attempts+site;checked=NULL;
         CHECK(bound_fixture(&context,0,3,&checked,&diagnostic)==XR_XIR_OUT_OF_MEMORY && !checked && bound_injected);
-        bound_fail_at=SIZE_MAX;bound_balanced(owner_mark);CHECK(bound_stats(&context).live_bytes==bound_creation.live_bytes);
+        bound_fail_at=SIZE_MAX;bound_balanced(owner_mark);CHECK(bound_stats(&context).held_bytes==bound_creation.held_bytes);
         XrCompileResourceStats paid=bound_stats(&context);
         CHECK(bound_fixture(&context,0,3,&checked,&diagnostic)==XR_XIR_OK && checked);
-        CHECK(bound_stats(&context).work>paid.work && bound_stats(&context).allocated_bytes>paid.allocated_bytes);
+        CHECK(bound_stats(&context).allocation_count>paid.allocation_count && bound_stats(&context).allocated_bytes>paid.allocated_bytes);
         xr_xir_compile_artifact_free(checked);bound_owner_free(&context);bound_balanced(mark);
     }
-    for(uint32_t axis=0;axis<3;++axis)for(uint32_t shortfall=0;shortfall<2;++shortfall) {
-        XrCompileResourceLimits caps=bound_caps();
-        if(axis==0)caps.allocated_bytes=required.allocated_bytes-shortfall;
-        else if(axis==1)caps.live_bytes=required.peak_bytes-shortfall;
-        else caps.work=required.work-shortfall;
+    for(uint32_t shortfall=0;shortfall<2;++shortfall) {
+        XrCompileResourceLimits caps={XR_COMPILE_MEMORY_FINITE,required.peak_bytes-shortfall,true};
         context=bound_owner(caps);checked=NULL;
-        CHECK(bound_fixture(&context,0,3,&checked,&diagnostic)==(shortfall?XR_XIR_BUDGET:XR_XIR_OK));
+        CHECK(bound_fixture(&context,0,3,&checked,&diagnostic)==(shortfall?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
         CHECK(shortfall?checked==NULL:checked!=NULL);
         xr_xir_compile_artifact_free(checked);bound_owner_free(&context);bound_balanced(mark);
     }
-    printf("callable bounds %zu actual OOM sites, three exact/minus1 axes, physical0\n",sites);
+    printf("callable bounds %zu actual OOM sites, held-memory exact/minus1, physical0\n",sites);
 }
 #include "xir_callable_equal_barrier_cases.h"
 int main(void) {

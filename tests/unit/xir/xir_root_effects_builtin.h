@@ -27,21 +27,21 @@ static XrXirArtifact *root_builtin(unsigned mode) {
     XrXirBlock one={0,1,0,0},two={0,2,0,0},three={0,3,0,0},four={0,4,0,0};
     XrXirType i64=XR_XIR_I64,callable=XR_XIR_CONSTRUCTED_TYPE_BASE;
     XrXirFunction functions[]={
-        {"init",4,NULL,0,XR_XIR_UNIT,&four,1,init,4,NULL,0},
-        {"entry",5,NULL,0,XR_XIR_I64,&two,1,pure,2,NULL,0},
-        {"rooted",6,NULL,0,XR_XIR_I64,&three,1,rooted,3,NULL,0},
-        {"pure",4,NULL,0,XR_XIR_I64,&two,1,pure,2,NULL,0},
-        {"owner",5,&i64,1,XR_XIR_I64,&one,1,&owner,1,NULL,0},
-        {"caller",6,NULL,0,XR_XIR_I64,&two,1,caller,2,NULL,0},
-        {"dynamic",7,&callable,1,XR_XIR_I64,&two,1,dynamic,2,NULL,0},
-        {"reference",9,NULL,0,callable,&two,1,reference,2,NULL,0},
-        {"refTarget",9,NULL,0,XR_XIR_I64,&three,1,rooted,3,NULL,0}};
+        {.name="init",.name_length=4,.parameters=NULL,.parameter_count=0,.result=XR_XIR_UNIT,.blocks=&four,.block_count=1,.instructions=init,.instruction_count=4,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER},
+        {.name="entry",.name_length=5,.parameters=NULL,.parameter_count=0,.result=XR_XIR_I64,.blocks=&two,.block_count=1,.instructions=pure,.instruction_count=2,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER},
+        {.name="rooted",.name_length=6,.parameters=NULL,.parameter_count=0,.result=XR_XIR_I64,.blocks=&three,.block_count=1,.instructions=rooted,.instruction_count=3,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER},
+        {.name="pure",.name_length=4,.parameters=NULL,.parameter_count=0,.result=XR_XIR_I64,.blocks=&two,.block_count=1,.instructions=pure,.instruction_count=2,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER},
+        {.name="owner",.name_length=5,.parameters=&i64,.parameter_count=1,.result=XR_XIR_I64,.blocks=&one,.block_count=1,.instructions=&owner,.instruction_count=1,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER},
+        {.name="caller",.name_length=6,.parameters=NULL,.parameter_count=0,.result=XR_XIR_I64,.blocks=&two,.block_count=1,.instructions=caller,.instruction_count=2,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER},
+        {.name="dynamic",.name_length=7,.parameters=&callable,.parameter_count=1,.result=XR_XIR_I64,.blocks=&two,.block_count=1,.instructions=dynamic,.instruction_count=2,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER},
+        {.name="reference",.name_length=9,.parameters=NULL,.parameter_count=0,.result=callable,.blocks=&two,.block_count=1,.instructions=reference,.instruction_count=2,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER},
+        {.name="refTarget",.name_length=9,.parameters=NULL,.parameter_count=0,.result=XR_XIR_I64,.blocks=&three,.block_count=1,.instructions=rooted,.instruction_count=3,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER}};
     XrXirFunctionIdentity identities[9]={{0}};
     identities[8].promises=XR_XIR_FUNCTION_NO_SUSPEND;
     XrXirSourceModule source={"root",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};XrXirSlot slot={0,cell,1};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,
         .slots=&slot,.slot_count=1,.entry_function=1};
-    XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,
+    XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,
         .flags=XR_XIR_CALLABLE_NO_SUSPEND|XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64}};
     XrXirTypes types={nodes,2,NULL,NULL};
@@ -68,9 +68,9 @@ static XrXirArtifact *root_group(void) {
     uint32_t payload[]={0,1},dependency=1;
     XrXirBlock two={0,2,0,0},three={0,3,0,0},four={0,4,0,0};
     XrXirFunction functions[]={
-        {"init",4,NULL,0,XR_XIR_UNIT,&four,1,init,4,payload,2},
-        {"entry",5,NULL,0,XR_XIR_I64,&two,1,entry,2,NULL,0},
-        {"other",5,NULL,0,XR_XIR_UNIT,&three,1,other,3,NULL,0}};
+        {.name="init",.name_length=4,.parameters=NULL,.parameter_count=0,.result=XR_XIR_UNIT,.blocks=&four,.block_count=1,.instructions=init,.instruction_count=4,.operands=payload,.operand_count=2,.error_type=XR_XIR_NEVER},
+        {.name="entry",.name_length=5,.parameters=NULL,.parameter_count=0,.result=XR_XIR_I64,.blocks=&two,.block_count=1,.instructions=entry,.instruction_count=2,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER},
+        {.name="other",.name_length=5,.parameters=NULL,.parameter_count=0,.result=XR_XIR_UNIT,.blocks=&three,.block_count=1,.instructions=other,.instruction_count=3,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER}};
     XrXirSourceModule modules[]={{"root",4,&dependency,1,0, 0,XR_XIR_MODULE_FRESH_STORAGE},{"other",5,NULL,0,2, 0,XR_XIR_MODULE_FRESH_STORAGE}};
     XrXirFunctionIdentity ids[3]={{0},{0},{0}};ids[2].module=1;
     XrXirSlot slots[]={{1,XR_XIR_I64,0},{0,XR_XIR_I64,0},{0,XR_XIR_I64,0}};

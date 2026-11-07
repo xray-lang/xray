@@ -44,11 +44,11 @@ static void bound_free(void *pointer) {
 #pragma pop_macro("xr_free")
 #pragma pop_macro("xr_malloc")
 static XrCompileResourceLimits bound_caps(void) {
-    return (XrCompileResourceLimits){UINT64_C(67108864),UINT64_C(8388608),UINT64_C(128000000)};
+    return (XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true};
 }
 static XrXirCompileContext bound_owner(XrCompileResourceLimits caps) {
-    XrCompileResourceLimits ceiling=bound_caps();
-    CHECK(caps.allocated_bytes<=ceiling.allocated_bytes && caps.live_bytes<=ceiling.live_bytes && caps.work<=ceiling.work);
+    CHECK(caps.profile_allocations && (caps.memory_mode==XR_COMPILE_MEMORY_ORDINARY ?
+        caps.memory_limit==0 : caps.memory_mode==XR_COMPILE_MEMORY_FINITE && caps.memory_limit>0));
     XrXirCompileContext context={0};
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);
     CHECK(xr_compile_resources_stats(context.resources,&bound_creation)==XR_COMPILE_RESOURCE_OK);
@@ -59,7 +59,7 @@ static XrCompileResourceStats bound_stats(const XrXirCompileContext *context) {
     CHECK(xr_compile_resources_stats(context->resources,&stats)==XR_COMPILE_RESOURCE_OK);return stats;
 }
 static void bound_owner_free(XrXirCompileContext *context) {
-    CHECK(bound_stats(context).live_bytes==bound_creation.live_bytes);xr_compile_resources_release(context->resources);
+    CHECK(bound_stats(context).held_bytes==bound_creation.held_bytes);xr_compile_resources_release(context->resources);
     *context=(XrXirCompileContext){0};
 }
 #endif // XIR_CALLABLE_ROOT_OWNER_H

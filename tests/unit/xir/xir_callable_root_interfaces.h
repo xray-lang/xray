@@ -15,7 +15,7 @@ static XrXirStatus bound_implementation(const XrXirCompileContext *context,
     XrXirType receiver=XR_XIR_CONSTRUCTED_TYPE_BASE;
     const XrXirType cell_type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+2);
     XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_NOMINAL},
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=flags},
+        {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,.flags=flags},
         {.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64}};
     XrXirNominalDeclaration nominal={{"alpha",5},{"Meter",5},1,NULL,0,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}};
     XrXirNominalTable nominals={&nominal,1,NULL};
@@ -35,9 +35,9 @@ static XrXirStatus bound_implementation(const XrXirCompileContext *context,
     }
     XrXirBlock two={.count=2},four={.count=4},method_block={.count=rooted?3u:2u};
     XrXirFunction functions[]={
-        {"entry",5,NULL,0,XR_XIR_I64,&two,1,answer,2,NULL,0},
-        {"init",4,NULL,0,XR_XIR_UNIT,&three,1,init,3,NULL,0},
-        {"measure",7,&receiver,1,XR_XIR_I64,&two,1,measure,2,NULL,0}};
+        {.name="entry",.name_length=5,.parameters=NULL,.parameter_count=0,.result=XR_XIR_I64,.blocks=&two,.block_count=1,.instructions=answer,.instruction_count=2,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER},
+        {.name="init",.name_length=4,.parameters=NULL,.parameter_count=0,.result=XR_XIR_UNIT,.blocks=&three,.block_count=1,.instructions=init,.instruction_count=3,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER},
+        {.name="measure",.name_length=7,.parameters=&receiver,.parameter_count=1,.result=XR_XIR_I64,.blocks=&two,.block_count=1,.instructions=measure,.instruction_count=2,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER}};
     XrXirSourceModule source={"alpha",5,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[3]={{0}};
     identities[2].exported=1;identities[2].nominal_owner=1;identities[2].method_kind=XR_XIR_READ_METHOD;
@@ -52,7 +52,7 @@ static XrXirStatus bound_implementation(const XrXirCompileContext *context,
 }
 static XrXirStatus bound_requirement(const XrXirCompileContext *context,uint32_t flags,
     XrXirArtifact **output,XrXirDiagnostic *diagnostic) {
-    XrXirTypeNode node={.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=flags};
+    XrXirTypeNode node={.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,.flags=flags};
     XrXirInterfaceMethod method={{"measure",7},XR_XIR_CONSTRUCTED_TYPE_BASE,0,0,NULL};
     XrXirInterfaceDeclaration interface={{"alpha",5},{"Measure",7},1,NULL,0,NULL,0,&method,1};
     XrXirInterfaceTable interfaces={&interface,1};XrXirTypes types={&node,1,NULL,&interfaces};
@@ -61,9 +61,9 @@ static XrXirStatus bound_requirement(const XrXirCompileContext *context,uint32_t
     XrXirInstruction call[]={{.op=XR_XIR_CALL_REQUIREMENT,.type=XR_XIR_I64,.args={0,1}}, {.op=XR_XIR_RETURN,.args={1,0}}};
     XrXirBlock one={.count=1},two={.count=2};XrXirType parameter=XR_XIR_TYPE_PARAMETER_BASE;uint32_t operand=0;
     XrXirFunction functions[]={
-        {"entry",5,NULL,0,XR_XIR_I64,&two,1,answer,2,NULL,0},
-        {"init",4,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0},
-        {"caller",6,&parameter,1,XR_XIR_I64,&two,1,call,2,&operand,1}};
+        {.name="entry",.name_length=5,.parameters=NULL,.parameter_count=0,.result=XR_XIR_I64,.blocks=&two,.block_count=1,.instructions=answer,.instruction_count=2,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER},
+        {.name="init",.name_length=4,.parameters=NULL,.parameter_count=0,.result=XR_XIR_UNIT,.blocks=&one,.block_count=1,.instructions=&init,.instruction_count=1,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER},
+        {.name="caller",.name_length=6,.parameters=&parameter,.parameter_count=1,.result=XR_XIR_I64,.blocks=&two,.block_count=1,.instructions=call,.instruction_count=2,.operands=&operand,.operand_count=1,.error_type=XR_XIR_NEVER}};
     XrXirInterfaceApplication application={0,NULL,0};XrXirConstraint constraint={0,&application,1};
     XrXirGeneric generics[3]={{0}};generics[2].constraints=&constraint;generics[2].parameter_count=1;
     XrXirSourceModule source={"alpha",5,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE};XrXirFunctionIdentity identities[3]={{0}};
@@ -73,7 +73,7 @@ static XrXirStatus bound_requirement(const XrXirCompileContext *context,uint32_t
 }
 static XrXirStatus bound_invoke(const XrXirCompileContext *context,uint32_t flags,
     XrXirArtifact **output,XrXirDiagnostic *diagnostic) {
-    XrXirTypeNode node={.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=flags};
+    XrXirTypeNode node={.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,.flags=flags};
     XrXirTypes types={&node,1,NULL,NULL};XrXirType parameter=XR_XIR_CONSTRUCTED_TYPE_BASE;
     XrXirInstruction answer[]={{.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=41}, {.op=XR_XIR_RETURN,.args={0,0}}};
     XrXirInstruction init={.op=XR_XIR_RETURN};
@@ -84,9 +84,9 @@ static XrXirStatus bound_invoke(const XrXirCompileContext *context,uint32_t flag
         {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=7}, {.op=XR_XIR_RETURN,.args={5,0}}};
     XrXirBlock one={.count=1},two={.count=2},blocks[]={{.count=1},{.first=1,.count=2},{.first=3,.count=3}};
     XrXirFunction functions[]={
-        {"entry",5,NULL,0,XR_XIR_I64,&two,1,answer,2,NULL,0},
-        {"init",4,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0},
-        {"caller",6,&parameter,1,XR_XIR_I64,blocks,3,call,6,NULL,0}};
+        {.name="entry",.name_length=5,.parameters=NULL,.parameter_count=0,.result=XR_XIR_I64,.blocks=&two,.block_count=1,.instructions=answer,.instruction_count=2,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER},
+        {.name="init",.name_length=4,.parameters=NULL,.parameter_count=0,.result=XR_XIR_UNIT,.blocks=&one,.block_count=1,.instructions=&init,.instruction_count=1,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER},
+        {.name="caller",.name_length=6,.parameters=&parameter,.parameter_count=1,.result=XR_XIR_I64,.blocks=blocks,.block_count=3,.instructions=call,.instruction_count=6,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER}};
     XrXirSourceModule source={"alpha",5,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE};XrXirFunctionIdentity identities[3]={{0}};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.entry_function=0};
     XrXirModule module={XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL,XR_XIR_PROGRAM,NULL};

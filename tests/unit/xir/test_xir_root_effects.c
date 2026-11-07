@@ -49,7 +49,7 @@ static void root_occupied(XrXirArtifact *artifact) {
     CHECK(xr_xir_compile_effects_analyze(artifact,&output)==XR_XIR_BAD_STRUCTURE);
     CHECK(output==summary&&!attempts&&!memcmp(bytes,summary,sizeof(bytes)));effect_mark_check(mark);
     XrCompileResourceStats after=effect_stats(&effect_context);
-    CHECK(before.allocated_bytes==after.allocated_bytes&&before.live_bytes==after.live_bytes&&before.work==after.work);
+    CHECK(before.allocated_bytes==after.allocated_bytes&&before.held_bytes==after.held_bytes&&before.allocation_count==after.allocation_count);
     XrXirArtifact wrong=*artifact;wrong.module.stage=XR_XIR_BUILT;
     CHECK(xr_xir_compile_effects_analyze(&wrong,&output)==XR_XIR_BAD_STAGE&&output==summary);
     CHECK(xr_xir_compile_effects_analyze(NULL,&output)==XR_XIR_BAD_STRUCTURE&&output==summary);
@@ -62,7 +62,7 @@ static void root_failures(const XrXirArtifact *artifact) {
     effect_summary_free(summary);CHECK(sites&&effect_balanced());
     for(size_t point=0;point<sites;++point){
         EffectMark mark=effect_mark();XrXirCompileContext context=effect_owner_new(effect_caps());
-        uint64_t baseline=effect_stats(&context).live_bytes;XrXirArtifact *copy=NULL;
+        uint64_t baseline=effect_stats(&context).held_bytes;XrXirArtifact *copy=NULL;
         CHECK(effect_reproduce(artifact,&context,&copy)==XR_XIR_OK);EffectMark retained=effect_mark();
         summary=NULL;attempts=0;injected=false;fail_at=point;
         XrXirStatus status=xr_xir_compile_effects_analyze(copy,&summary);
@@ -70,7 +70,7 @@ static void root_failures(const XrXirArtifact *artifact) {
         XrCompileResourceStats paid=effect_stats(&context);fail_at=SIZE_MAX;
         CHECK(xr_xir_compile_effects_analyze(copy,&summary)==XR_XIR_OK&&summary);
         XrCompileResourceStats retried=effect_stats(&context);
-        CHECK(retried.allocated_bytes>paid.allocated_bytes&&retried.work>paid.work);
+        CHECK(retried.allocated_bytes>paid.allocated_bytes&&retried.allocation_count>paid.allocation_count);
         xr_xir_compile_effects_free(summary);effect_mark_check(retained);
         xr_xir_compile_artifact_free(copy);effect_owner_free(&context,baseline);effect_mark_check(mark);
     }
@@ -96,8 +96,8 @@ static void root_source_cases(bool resources) {
     XrXirArtifact *checked=root_replay(root_source("root.xr",XR_XIR_OK));root_source_oracles(checked,false);
     root_occupied(checked);
     if(resources){
-        root_failures(checked);effect_budget_boundaries(checked);
-        effect_analysis_work_cut(checked,1,false);effect_analysis_work_cut(checked,0,true);
+        root_failures(checked);effect_memory_boundaries(checked);
+        effect_analysis_reuse(checked);
     }
     root_detached_owner(checked);
     XrXirArtifact *specialized=NULL,*lowered=NULL;
