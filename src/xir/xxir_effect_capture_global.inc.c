@@ -829,7 +829,11 @@ static XrXirStatus effect_capture_build(const XrXirCompileContext *work,EffectIn
         read.fixed_only=false;
         status=effect_capture_complete_construct(&read,&current);
     }
+#if XR_XIR_PARANOID
+    /* Construction owns this fresh relation. Replay belongs to diagnostic
+     * builds; explicit receiving operations still validate their full input. */
     if(status==XR_XIR_OK) status=effect_capture_current_match(work,final,current.material?&current:NULL);
+#endif
     current=(EffectBodyCurrentRead){0};
     if(status!=XR_XIR_OK) { xr_compile_resources_free(final->capture.facts);final->capture=(EffectCaptureProof){0}; }
     return status;

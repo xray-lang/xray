@@ -15,8 +15,19 @@
 struct EffectCaptureSchedule {
     uint32_t nodes,edges,capacity,front,back,count;
     uint32_t *queue;
+    uint64_t *incident_offsets;
+    uint64_t *change_epochs;
+    uint64_t epoch;
+    uint32_t *incident_edges;
     unsigned char *pending;
 };
+static void effect_capture_schedule_next_job(EffectCaptureSchedule *schedule) {
+    if(schedule->epoch==UINT64_MAX) {
+        memset(schedule->change_epochs,0,(size_t)schedule->nodes*sizeof(*schedule->change_epochs));
+        schedule->epoch=0;
+    }
+    ++schedule->epoch;
+}
 static XrXirStatus effect_capture_schedule_push(EffectCaptureRead *read,uint32_t job) {
     EffectCaptureSchedule *schedule=read->schedule;
     if(!schedule || job>=schedule->capacity || schedule->count>schedule->capacity) return XR_XIR_BAD_STRUCTURE;
@@ -35,12 +46,19 @@ static XrXirStatus effect_capture_schedule_changed(EffectCaptureRead *read,uint3
     EffectCaptureSchedule *schedule=read->schedule;if(!schedule) return XR_XIR_OK;
     if(node>=schedule->nodes || read->final->count!=schedule->nodes || read->final->edge_count!=schedule->edges)
         return XR_XIR_BAD_STRUCTURE;
+    /* No job is consumed while its clause runs. One notification per changed
+     * node covers all facts emitted by that clause, including rank decreases. */
+    if(schedule->change_epochs[node]==schedule->epoch) return XR_XIR_OK;
+    schedule->change_epochs[node]=schedule->epoch;
     XrXirStatus status=effect_capture_schedule_push(read,node);if(status!=XR_XIR_OK) return status;
-    for(uint32_t e=0;e<schedule->edges;++e) {
-
+    uint64_t first=schedule->incident_offsets[node],end=schedule->incident_offsets[node+1];
+    if(first>end || end>(uint64_t)schedule->edges*2) return XR_XIR_BAD_STRUCTURE;
+    for(uint64_t at=first;at<end;++at) {
+        uint32_t e=schedule->incident_edges[at];
+        if(e>=schedule->edges) return XR_XIR_BAD_STRUCTURE;
         const EffectInvocationEdge *edge=&read->final->edges[e];
-        if(edge->caller>=schedule->nodes || edge->target>=schedule->nodes) return XR_XIR_BAD_STRUCTURE;
-        if(edge->caller!=node && edge->target!=node) continue;
+        if(edge->caller>=schedule->nodes || edge->target>=schedule->nodes ||
+            (edge->caller!=node && edge->target!=node)) return XR_XIR_BAD_STRUCTURE;
         status=effect_capture_schedule_push(read,schedule->nodes+e);if(status!=XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
@@ -49,8 +67,10 @@ static XrXirStatus effect_capture_schedule_create(EffectCaptureRead *read,Effect
     if(!read || !output || *output || read->schedule || !read->final->count) return XR_XIR_BAD_STRUCTURE;
     uint32_t nodes=read->final->count,edges=read->final->edge_count;
     uint64_t capacity=(uint64_t)nodes+edges;
-    uint64_t bytes=sizeof(EffectCaptureSchedule)+capacity*(sizeof(uint32_t)+sizeof(unsigned char));
+    uint64_t bytes=sizeof(EffectCaptureSchedule)+capacity*(sizeof(uint32_t)+sizeof(unsigned char))+
+        ((uint64_t)nodes*2+1)*sizeof(uint64_t)+(uint64_t)edges*2*sizeof(uint32_t);
     if(capacity>UINT32_MAX || bytes>SIZE_MAX) return XR_XIR_BUDGET;
+    if(edges && !read->final->edges) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=XR_XIR_OK;
     EffectCaptureSchedule *schedule=xir_compile_calloc(read->work,1,(size_t)bytes,&status);
     if(!schedule) return status;
@@ -58,7 +78,29 @@ static XrXirStatus effect_capture_schedule_create(EffectCaptureRead *read,Effect
         xr_compile_resources_free(schedule);return XR_XIR_BAD_STRUCTURE;
     }
     schedule->nodes=read->final->count;schedule->edges=read->final->edge_count;schedule->capacity=(uint32_t)capacity;
-    schedule->queue=(uint32_t *)(schedule+1);schedule->pending=(unsigned char *)(schedule->queue+schedule->capacity);
+    schedule->incident_offsets=(uint64_t *)(schedule+1);
+    schedule->change_epochs=schedule->incident_offsets+(uint64_t)nodes+1;
+    schedule->queue=(uint32_t *)(schedule->change_epochs+nodes);
+    schedule->incident_edges=schedule->queue+schedule->capacity;
+    schedule->pending=(unsigned char *)(schedule->incident_edges+(uint64_t)edges*2);
+    /* Only fact rows grow during clause closure. The fixed edge set owns an
+     * ordinal index so fact reallocation never leaves borrowed edge pointers. */
+    for(uint32_t e=0;e<edges;++e) {
+        const EffectInvocationEdge *edge=&read->final->edges[e];
+        if(edge->caller>=nodes || edge->target>=nodes) {
+            xr_compile_resources_free(schedule);return XR_XIR_BAD_STRUCTURE;
+        }
+        ++schedule->incident_offsets[edge->caller+1];
+        ++schedule->incident_offsets[edge->target+1];
+    }
+    for(uint32_t n=0;n<nodes;++n) schedule->incident_offsets[n+1]+=schedule->incident_offsets[n];
+    for(uint32_t e=0;e<edges;++e) {
+        const EffectInvocationEdge *edge=&read->final->edges[e];
+        schedule->incident_edges[schedule->incident_offsets[edge->caller]++]=e;
+        schedule->incident_edges[schedule->incident_offsets[edge->target]++]=e;
+    }
+    for(uint32_t n=nodes;n>0;--n) schedule->incident_offsets[n]=schedule->incident_offsets[n-1];
+    schedule->incident_offsets[0]=0;
     *output=schedule;return XR_XIR_OK;
 }
 static XrXirStatus effect_capture_schedule_run(EffectCaptureRead *read,EffectCaptureSchedule *schedule) {
@@ -76,6 +118,7 @@ static XrXirStatus effect_capture_schedule_run(EffectCaptureRead *read,EffectCap
         uint32_t job=schedule->queue[schedule->front];
         if(job>=schedule->capacity || !schedule->pending[job]) { status=XR_XIR_BAD_STRUCTURE;break; }
         schedule->pending[job]=0;schedule->front=schedule->front+1==schedule->capacity?0:schedule->front+1;--schedule->count;
+        effect_capture_schedule_next_job(schedule);
         if(job<schedule->nodes) status=effect_capture_node_clauses(read,job,false);
         else status=effect_capture_edge(read,job-schedule->nodes);
     }
@@ -107,6 +150,7 @@ static XrXirStatus effect_capture_schedule_ordered(EffectCaptureRead *read,Effec
             if(!schedule->pending[job]) continue;
             if(!schedule->count) { status=XR_XIR_BAD_STRUCTURE;break; }
             schedule->pending[job]=0;--schedule->count;
+            effect_capture_schedule_next_job(schedule);
             if(job<schedule->nodes) status=effect_capture_node_clauses(read,job,false);
             else status=effect_capture_edge(read,job-schedule->nodes);
         }

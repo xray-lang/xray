@@ -18,8 +18,10 @@
 #include "base/xmalloc.h"
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}}while(0)
 static size_t allocations,releases,blocks,seen_releases,attack_cut,attacks;
+static bool fail_malloc;
 static void (*release_hook)(void);
 static void *capture_malloc(size_t bytes) {
+    if(fail_malloc)return NULL;
     void *p=xr_malloc(bytes);if(p){++allocations;++blocks;}return p;
 }
 static void capture_free(void *p) {
@@ -454,7 +456,63 @@ static void capture_class_case(uint32_t mode) {
     fprintf(stderr,"Class mode%u value%u mask%u: mask/known/rank rejected, restored, producer retired PASS\n",
         mode,values[mode],masks[mode]);
 }
+static void capture_schedule_index(void) {
+    XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};
+    XrXirCompileContext context={.limits=xr_xir_compile_default_limits()};
+    CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    uint64_t baseline=capture_held(&context);
+    EffectInvocationEdge edges[]={
+        {.caller=0,.target=1},{.caller=2,.target=1},{.caller=1,.target=1},
+        {.caller=3,.target=0},{.caller=0,.target=1}
+    };
+    EffectInvocationFinal final={.count=5,.edge_count=5,.edges=edges};
+    EffectCaptureRead read={.work=&context,.final=&final};
+    EffectCaptureSchedule *schedule=NULL;
+    fail_malloc=true;
+    CHECK(effect_capture_schedule_create(&read,&schedule)==XR_XIR_OUT_OF_MEMORY && !schedule);
+    fail_malloc=false;CHECK(capture_held(&context)==baseline);
+    CHECK(effect_capture_schedule_create(&read,&schedule)==XR_XIR_OK && schedule);
+    const uint64_t offsets[]={0,3,8,9,10,10};
+    const uint32_t incidents[]={0,3,4,0,1,2,2,4,1,3},jobs[]={1,5,6,7,9};
+    CHECK(!memcmp(schedule->incident_offsets,offsets,sizeof(offsets)));
+    CHECK(!memcmp(schedule->incident_edges,incidents,sizeof(incidents)));
+    CHECK((uintptr_t)schedule->incident_offsets%_Alignof(uint64_t)==0);
+    CHECK((uintptr_t)schedule->queue%_Alignof(uint32_t)==0);
+    read.schedule=schedule;
+    effect_capture_schedule_next_job(schedule);
+    CHECK(effect_capture_schedule_changed(&read,1)==XR_XIR_OK && schedule->count==5);
+    CHECK(!memcmp(schedule->queue,jobs,sizeof(jobs)));
+    CHECK(effect_capture_schedule_changed(&read,1)==XR_XIR_OK && schedule->count==5);
+    const uint32_t popped[]={1,5};
+    for(unsigned i=0;i<2;++i) {
+        uint32_t job=schedule->queue[schedule->front];CHECK(job==popped[i]);
+        schedule->pending[job]=0;
+        schedule->front=schedule->front+1==schedule->capacity?0:schedule->front+1;
+        --schedule->count;effect_capture_schedule_next_job(schedule);
+        CHECK(effect_capture_schedule_changed(&read,1)==XR_XIR_OK && schedule->count==5);
+        CHECK(schedule->pending[1] && schedule->pending[5]);
+    }
+    schedule->epoch=UINT64_MAX;
+    effect_capture_schedule_next_job(schedule);
+    CHECK(schedule->epoch==1);
+    for(uint32_t n=0;n<schedule->nodes;++n) CHECK(!schedule->change_epochs[n]);
+    CHECK(effect_capture_schedule_changed(&read,4)==XR_XIR_OK && schedule->count==6 && schedule->pending[4]);
+    read.schedule=NULL;xr_compile_resources_free(schedule);schedule=NULL;
+    CHECK(capture_held(&context)==baseline);
+    edges[0].target=final.count;
+    CHECK(effect_capture_schedule_create(&read,&schedule)==XR_XIR_BAD_STRUCTURE && !schedule);
+    CHECK(capture_held(&context)==baseline);
+    final.count=3;final.edge_count=0;final.edges=NULL;
+    CHECK(effect_capture_schedule_create(&read,&schedule)==XR_XIR_OK && schedule);
+    CHECK(!schedule->incident_offsets[3]);
+    read.schedule=schedule;effect_capture_schedule_next_job(schedule);
+    CHECK(effect_capture_schedule_changed(&read,2)==XR_XIR_OK && schedule->count==1 && schedule->queue[0]==2);
+    read.schedule=NULL;xr_compile_resources_free(schedule);
+    CHECK(capture_held(&context)==baseline);
+    xr_compile_resources_release(context.resources);CHECK(!blocks);
+}
 int main(void) {
+    capture_schedule_index();
     fixture(false);fixture(true);
     for(uint32_t mode=0;mode<7;++mode) capture_class_case(mode);
     puts("Complete capture terminals: outer/nested callback-free receivers reject cleanup mutation PASS");
