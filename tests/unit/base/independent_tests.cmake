@@ -39,3 +39,37 @@ else()
         target_link_libraries(${target} PRIVATE m pthread)
     endforeach()
 endif()
+
+# Standalone kernels use the same implementation files as their production owners.
+target_sources(test_dynarray PRIVATE "${PROJECT_SOURCE_DIR}/src/base/xdynarray.c")
+target_sources(test_native_type_core PRIVATE "${PROJECT_SOURCE_DIR}/src/base/xtarget_data_layout.c")
+target_sources(test_crypto PRIVATE "${PROJECT_SOURCE_DIR}/src/base/xsha256.c")
+if(XR_STDLIB_COMPRESS)
+    target_sources(test_compress PRIVATE "${PROJECT_SOURCE_DIR}/src/shared/xr_compress_engine.c")
+endif()
+if(WIN32)
+    target_sources(test_crypto PRIVATE "${PROJECT_SOURCE_DIR}/src/os/win/random_win.c")
+    target_sources(test_fs_atomic PRIVATE "${PROJECT_SOURCE_DIR}/src/os/win/random_win.c"
+        "${PROJECT_SOURCE_DIR}/src/os/win/time_win.c")
+    target_link_libraries(test_crypto PRIVATE bcrypt)
+else()
+    target_sources(test_crypto PRIVATE "${PROJECT_SOURCE_DIR}/src/os/unix/random_unix.c")
+    target_sources(test_fs_atomic PRIVATE "${PROJECT_SOURCE_DIR}/src/os/unix/random_unix.c"
+        "${PROJECT_SOURCE_DIR}/src/os/unix/time_unix.c")
+endif()
+
+# The filesystem kernel has no parser, Checked artifact or executor dependency.
+set_property(TARGET test_fs_atomic PROPERTY LINK_LIBRARIES xray_compile_resources)
+target_sources(test_fs_atomic PRIVATE
+    "${PROJECT_SOURCE_DIR}/src/base/xio_policy.c"
+    "${PROJECT_SOURCE_DIR}/src/base/xfileio.c"
+    "${PROJECT_SOURCE_DIR}/src/base/xutf8.c")
+if(WIN32)
+    target_sources(test_fs_atomic PRIVATE
+        "${PROJECT_SOURCE_DIR}/src/os/win/fs_win.c"
+        "${PROJECT_SOURCE_DIR}/src/os/win/file_metadata_win.c")
+else()
+    target_sources(test_fs_atomic PRIVATE
+        "${PROJECT_SOURCE_DIR}/src/os/unix/fs_unix.c"
+        "${PROJECT_SOURCE_DIR}/src/os/unix/file_metadata_unix.c")
+endif()

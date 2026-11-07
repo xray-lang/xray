@@ -92,9 +92,19 @@ XR_FUNC XrOsIoStatus xr_os_io_mkdir(const XrOsIoPolicy *policy, const char *path
     if (((&io)->status == XR_OS_IO_OK) && !CreateDirectoryW(wide, NULL)) {
         DWORD error = GetLastError();
         if (error == ERROR_ALREADY_EXISTS && ((&io)->status == XR_OS_IO_OK)) {
-            DWORD attributes = GetFileAttributesW(wide);
-            if (attributes == INVALID_FILE_ATTRIBUTES) io_status(&io, io_windows_status(GetLastError()));
-            else if (!(attributes & FILE_ATTRIBUTE_DIRECTORY)) io_status(&io, XR_OS_IO_BAD_ARGUMENT);
+            /* Open the resolved target: a directory reparse point can dangle. */
+            HANDLE existing = CreateFileW(wide, 0,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+                OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+            if (existing == INVALID_HANDLE_VALUE) io_status(&io, io_windows_status(GetLastError()));
+            else {
+                BY_HANDLE_FILE_INFORMATION information;
+                if (!GetFileInformationByHandle(existing, &information))
+                    io_status(&io, io_windows_status(GetLastError()));
+                else if (!(information.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+                    io_status(&io, XR_OS_IO_BAD_ARGUMENT);
+                close_file(&io, existing);
+            }
         } else io_status(&io, io_windows_status(error));
     }
     io_free(&io, wide); return io.status;
