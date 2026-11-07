@@ -46,7 +46,7 @@ static int receiver_self_test(void) {
         "struct Value {\n ref set() {}\n}\n"};
     const unsigned expected[]={0,1,1,0};
     for(unsigned i=0;i<4;++i) {
-        XrCompileResourceLimits caps={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+        XrCompileResourceLimits caps={XR_COMPILE_MEMORY_ORDINARY,0,true};
         XrCompileResources *resources=NULL;XrCompilerSession *session=NULL;AstNode *program=NULL;
         CHECK(xr_compile_resources_new(&caps,&resources)==XR_COMPILE_RESOURCE_OK);
         XrCompileResourceStats initial={0},final={0};CHECK(xr_compile_resources_stats(resources,&initial)==XR_COMPILE_RESOURCE_OK);
@@ -55,7 +55,7 @@ static int receiver_self_test(void) {
         ReceiverScan scan={"receiver contract self-test",0,0,0,true,false,NULL};
         CHECK(receiver_visit(program,&scan) && scan.invalid==expected[i]);
         xr_program_destroy(program);xr_compile_session_free(session);
-        CHECK(xr_compile_resources_stats(resources,&final)==XR_COMPILE_RESOURCE_OK && final.live_bytes==initial.live_bytes);
+        CHECK(xr_compile_resources_stats(resources,&final)==XR_COMPILE_RESOURCE_OK && final.held_bytes==initial.held_bytes);
         xr_compile_resources_release(resources);
     }
     puts("READ class, explicit class REF/MOVE refusal and retained value REF contracts PASS");return 0;
@@ -66,7 +66,7 @@ int main(int argc,char **argv) {
     CHECK(argc>=3);bool inventory=!strcmp(argv[1],"--inventory");bool normalize=!strcmp(argv[1],"--signature");CHECK(inventory || normalize || !strcmp(argv[1],"--verify"));unsigned total=0;
     for(int i=2;i<argc;++i) {
         size_t length=0;char *source=xr_file_read_all(argv[i],"rb",&length);CHECK(source && length);
-        XrCompileResourceLimits caps={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+        XrCompileResourceLimits caps={XR_COMPILE_MEMORY_ORDINARY,0,true};
         XrCompileResources *resources=NULL;XrCompilerSession *session=NULL;AstNode *program=NULL;
         CHECK(xr_compile_resources_new(&caps,&resources)==XR_COMPILE_RESOURCE_OK);
         XrCompileResourceStats initial={0};CHECK(xr_compile_resources_stats(resources,&initial)==XR_COMPILE_RESOURCE_OK);
@@ -75,7 +75,7 @@ int main(int argc,char **argv) {
         char signature[16384];ReceiverScan scan={argv[i],0,0,0,inventory,normalize,signature};CHECK(receiver_visit(program,&scan));total+=scan.invalid;
         if(!normalize)printf("MODULE\t%s\t%u\t%u\t%u\n",argv[i],scan.classes,scan.methods,scan.invalid);
         xr_program_destroy(program);xr_compile_session_free(session);xr_free(source);XrCompileResourceStats final={0};
-        CHECK(xr_compile_resources_stats(resources,&final)==XR_COMPILE_RESOURCE_OK && final.live_bytes==initial.live_bytes);
+        CHECK(xr_compile_resources_stats(resources,&final)==XR_COMPILE_RESOURCE_OK && final.held_bytes==initial.held_bytes);
         xr_compile_resources_release(resources);
     }
     if(!normalize)printf("CLASS_RECEIVERS invalid%u\n",total);return inventory || normalize || !total?0:1;

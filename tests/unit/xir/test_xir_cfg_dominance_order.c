@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   A Boolean full-scan oracle reads literal edges, never the production
- *   queue, rank or bitset. Current dirty scratch and refused work must not
+ *   queue, rank or bitset. Dirty scratch and failed memory admission must not
  *   retain facts or permissions for the next graph on the same owner.
  */
 #include "xir/xxir_internal.h"
@@ -20,15 +20,7 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while (0)
 
-static size_t od_work_calls, od_refuse = SIZE_MAX;
-static bool od_refused;
-static bool od_work(const XrXirCompileContext *context,uint64_t work) {
-    if (od_work_calls++==od_refuse) { od_refused=true;return false; }
-    return xir_compile_work(context,work);
-}
-#define xir_compile_work(context,work) od_work(context,work)
 #include "xir/xxir_verify.c"
-#undef xir_compile_work
 
 enum { OD_MAX=129, OD_EDGES=3*OD_MAX };
 typedef struct OdEdge { uint32_t from,to;bool fault; } OdEdge;
@@ -122,7 +114,7 @@ static void od_compare(const OdFixture *f,const Graph *graph,unsigned kind) {
         CHECK(rank[f->map[f->edges[e].from]]<rank[f->map[f->edges[e].to]]);
 }
 static XrCompileResourceLimits od_caps(void) {
-    return (XrCompileResourceLimits){UINT64_C(8388608),UINT64_C(4194304),UINT64_C(4000000)};
+    return (XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true};
 }
 static XrCompileResourceStats od_stats(const VerifyContext *context) {
     XrCompileResourceStats stats={0};
@@ -136,20 +128,20 @@ static VerifyContext od_owner(XrCompileResourceLimits caps) {
 }
 static XrXirStatus od_solve(VerifyContext *context,const OdFixture *f,Graph *graph) {
     XrXirStatus status=graph_allocate(graph,&f->function,context);
-    if (status==XR_XIR_OK) status=graph_connect(graph,&f->function,context);
-    if (status==XR_XIR_OK) status=graph_dominators(graph,&f->function,context);
+    if (status==XR_XIR_OK) status=graph_connect(graph,&f->function);
+    if (status==XR_XIR_OK) status=graph_dominators(graph,&f->function);
     return status;
 }
 static void od_free(VerifyContext *context,uint64_t baseline) {
     xr_compile_resources_free(context->graph_storage);context->graph_storage=NULL;context->graph_capacity=0;
-    CHECK(od_stats(context).live_bytes==baseline);xr_compile_resources_release(context->remaining.resources);
+    CHECK(od_stats(context).held_bytes==baseline);xr_compile_resources_release(context->remaining.resources);
     *context=(VerifyContext){0};
 }
 static void od_cases(void) {
     static const uint32_t sizes[]={1,2,6,63,64,65,127,128,129,6};
     unsigned cases=0;
     for (unsigned size=0;size<sizeof(sizes)/sizeof(*sizes);++size) {
-        VerifyContext context=od_owner(od_caps());uint64_t baseline=od_stats(&context).live_bytes;
+        VerifyContext context=od_owner(od_caps());uint64_t baseline=od_stats(&context).held_bytes;
         for (unsigned kind=0;kind<(sizes[size]<6?1u:6u);++kind) for (unsigned order=0;order<3;++order) {
             OdFixture f;od_fixture(&f,sizes[size],kind,order);Graph graph={0};
             if (context.graph_storage) memset(context.graph_storage,0xa5,context.graph_capacity);
@@ -164,7 +156,7 @@ static void od_cases(void) {
     printf("%u literal graph permutations, Boolean normal/fault dominance and dirty wide/narrow reuse PASS\n",cases);
 }
 static XrCompileResourceStats od_budget(XrCompileResourceLimits caps,XrXirStatus expected) {
-    VerifyContext context=od_owner(caps);uint64_t baseline=od_stats(&context).live_bytes;
+    VerifyContext context=od_owner(caps);uint64_t baseline=od_stats(&context).held_bytes;
     OdFixture f;od_fixture(&f,65,3,2);Graph graph={0};
     CHECK(od_solve(&context,&f,&graph)==expected);
     if (expected==XR_XIR_OK) od_compare(&f,&graph,3);
@@ -172,35 +164,26 @@ static XrCompileResourceStats od_budget(XrCompileResourceLimits caps,XrXirStatus
 }
 static void od_boundaries(void) {
     XrCompileResourceStats first=od_budget(od_caps(),XR_XIR_OK);
-    XrCompileResourceLimits exact={first.allocated_bytes,first.peak_bytes,first.work};
-    XrCompileResourceStats again=od_budget(exact,XR_XIR_OK);
-    CHECK(first.allocated_bytes==again.allocated_bytes && first.peak_bytes==again.peak_bytes && first.work==again.work);
-    CHECK(exact.allocated_bytes && exact.live_bytes && exact.work);
-    XrCompileResourceLimits less=exact;--less.allocated_bytes;(void)od_budget(less,XR_XIR_BUDGET);
-    less=exact;--less.live_bytes;(void)od_budget(less,XR_XIR_BUDGET);
-    less=exact;--less.work;(void)od_budget(less,XR_XIR_BUDGET);
-    puts("private complete graph exact/minus-one allocation, live and work axes PASS");
-}
-static void od_refusals(void) {
-    size_t sites=0;
-    for (size_t pass=0;pass<=sites;++pass) {
-        VerifyContext context=od_owner(od_caps());uint64_t baseline=od_stats(&context).live_bytes;
-        OdFixture f;od_fixture(&f,6,3,2);Graph graph={0};
-        CHECK(graph_allocate(&graph,&f.function,&context)==XR_XIR_OK);
-        CHECK(graph_connect(&graph,&f.function,&context)==XR_XIR_OK);
-        uint64_t before=od_stats(&context).work;
-        od_work_calls=0;od_refuse=pass?pass-1:SIZE_MAX;od_refused=false;
-        XrXirStatus status=graph_dominators(&graph,&f.function,&context);
-        size_t calls=od_work_calls;od_refuse=SIZE_MAX;
-        if (!pass) { CHECK(status==XR_XIR_OK);sites=calls;CHECK(sites && sites<4096); }
-        else CHECK(od_refused && calls==pass && status==XR_XIR_BUDGET);
-        uint64_t after=od_stats(&context).work;CHECK(after>=before);
-        memset(context.graph_storage,0xa5,context.graph_capacity);graph=(Graph){0};
-        CHECK(od_solve(&context,&f,&graph)==XR_XIR_OK);od_compare(&f,&graph,3);
-        CHECK(od_stats(&context).work>after);od_free(&context,baseline);
+    CHECK(first.peak_bytes>1 && first.peak_bytes<INT64_MAX);
+    for(int delta=-1;delta<=1;++delta) {
+        XrCompileResourceLimits caps={XR_COMPILE_MEMORY_FINITE,
+            (uint64_t)((int64_t)first.peak_bytes+delta),true};
+        (void)od_budget(caps,delta<0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK);
     }
-    printf("%zu synthetic work callback refusals, same-owner cumulative rebuild PASS\n",sites);
+    puts("private complete graph held-memory exact/minus1/plus1 PASS");
+}
+static void od_reuse(void) {
+    VerifyContext context=od_owner(od_caps());uint64_t baseline=od_stats(&context).held_bytes;
+    OdFixture f;od_fixture(&f,6,3,2);
+    for(unsigned repeat=0;repeat<3;++repeat) {
+        Graph graph={0};
+        CHECK(od_solve(&context,&f,&graph)==XR_XIR_OK);od_compare(&f,&graph,3);
+        CHECK(context.graph_storage && context.graph_capacity);
+        memset(context.graph_storage,0xa5,context.graph_capacity);
+    }
+    od_free(&context,baseline);
+    puts("dirty scratch same-owner repeated dominance rebuild PASS");
 }
 int main(void) {
-    od_cases();od_boundaries();od_refusals();return 0;
+    od_cases();od_boundaries();od_reuse();return 0;
 }

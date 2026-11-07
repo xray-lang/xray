@@ -55,12 +55,11 @@ static void rp_free(void *memory) {
 #pragma pop_macro("xr_malloc")
 
 static XrCompileResourceLimits rp_caps(void) {
-    return (XrCompileResourceLimits){UINT64_C(8388608),UINT64_C(4194304),UINT64_C(4000000)};
+    return (XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true};
 }
 static XrXirCompileContext rp_owner(XrCompileResourceLimits caps) {
-    XrCompileResourceLimits maximum=rp_caps();
-    CHECK(caps.allocated_bytes<=maximum.allocated_bytes && caps.live_bytes<=maximum.live_bytes &&
-        caps.work<=maximum.work);
+    CHECK(caps.profile_allocations && (caps.memory_mode==XR_COMPILE_MEMORY_ORDINARY ?
+        caps.memory_limit==0 : caps.memory_mode==XR_COMPILE_MEMORY_FINITE && caps.memory_limit>0));
     XrXirCompileContext context={0};
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();context.limits.functions=32;
@@ -71,7 +70,7 @@ static XrCompileResourceStats rp_stats(const XrXirCompileContext *context) {
     CHECK(xr_compile_resources_stats(context->resources,&result)==XR_COMPILE_RESOURCE_OK);return result;
 }
 static void rp_owner_free(XrXirCompileContext *context, uint64_t baseline) {
-    CHECK(rp_stats(context).live_bytes==baseline);xr_compile_resources_release(context->resources);
+    CHECK(rp_stats(context).held_bytes==baseline);xr_compile_resources_release(context->resources);
     *context=(XrXirCompileContext){0};
 }
 
@@ -97,7 +96,7 @@ typedef struct CfgStorageProbe {
 static void cfg_storage_function(CfgStorageFixture *fixture, uint32_t f,
     uint32_t instructions, uint32_t blocks) {
     fixture->functions[f] = (XrXirFunction){.name="cfg-zero",.name_length=8,
-        .result=XR_XIR_I64,.blocks=fixture->blocks[f],.block_count=blocks,
+        .result=XR_XIR_I64,.error_type=XR_XIR_NEVER,.blocks=fixture->blocks[f],.block_count=blocks,
         .instructions=fixture->instructions[f],.instruction_count=instructions};
 }
 static void cfg_storage_chain(CfgStorageFixture *fixture, uint32_t f) {
@@ -203,12 +202,12 @@ static XrXirStatus cfg_storage_probe(CfgStorageCase mode, XrCompileResourceLimit
     XrXirStatus status=xir_fixture_verify(&context,&fixture.module,NULL);
     output->calls=rp_attempts-first;output->injected=rp_injected;
     rp_fail_at=SIZE_MAX;rp_allocation_poison=false;rp_injected=false;
-    output->after=rp_stats(&context);CHECK(output->after.live_bytes==output->before.live_bytes);
-    rp_owner_free(&context,output->before.live_bytes);rp_balanced(mark);return status;
+    output->after=rp_stats(&context);CHECK(output->after.held_bytes==output->before.held_bytes);
+    rp_owner_free(&context,output->before.held_bytes);rp_balanced(mark);return status;
 }
 static void cfg_storage_owned_case(void) {
     CfgStorageMark mark=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-    uint64_t baseline=rp_stats(&context).live_bytes;
+    uint64_t baseline=rp_stats(&context).held_bytes;
     CfgStorageFixture fixture;cfg_storage_fixture(&fixture,CFG_STORAGE_REUSE);
     CHECK(!rp_allocation_poison);rp_allocation_poison=true;
     XrXirArtifact *artifact=NULL;
@@ -227,7 +226,7 @@ static void cfg_storage_initialization_cases(void) {
         if (status!=expected) fprintf(stderr,"CFG dirty storage mode%u status%u expected%u\n",mode,status,expected);
         CHECK(status==expected && !poisoned.injected);
         CHECK(cfg_storage_probe((CfgStorageCase)mode,rp_caps(),SIZE_MAX,false,&plain)==expected);
-        CHECK(plain.after.work==poisoned.after.work && plain.after.allocated_bytes==poisoned.after.allocated_bytes &&
+        CHECK(plain.after.allocated_bytes==poisoned.after.allocated_bytes &&
             plain.after.peak_bytes==poisoned.after.peak_bytes && plain.calls==poisoned.calls);
     }
     CHECK(cfg_storage_probe(CFG_STORAGE_REUSE,rp_caps(),SIZE_MAX,true,&plain)==XR_XIR_OK);
@@ -235,19 +234,15 @@ static void cfg_storage_initialization_cases(void) {
         CHECK(cfg_storage_probe(CFG_STORAGE_REUSE,rp_caps(),fail,true,&poisoned)==XR_XIR_OUT_OF_MEMORY);
         CHECK(poisoned.injected);
     }
-    for (uint32_t axis=0;axis<3;++axis) {
-        XrCompileResourceLimits exact=rp_caps();
-        if (axis==0) exact.allocated_bytes=plain.after.allocated_bytes;
-        if (axis==1) exact.live_bytes=plain.after.peak_bytes;
-        if (axis==2) exact.work=plain.after.work;
-        CHECK(cfg_storage_probe(CFG_STORAGE_REUSE,exact,SIZE_MAX,true,&poisoned)==XR_XIR_OK);
-        if (axis==0) --exact.allocated_bytes;
-        if (axis==1) --exact.live_bytes;
-        if (axis==2) --exact.work;
-        CHECK(cfg_storage_probe(CFG_STORAGE_REUSE,exact,SIZE_MAX,true,&poisoned)==XR_XIR_BUDGET);
+    for (int delta=-1;delta<=1;++delta) {
+        CHECK(plain.after.peak_bytes>1 && plain.after.peak_bytes<INT64_MAX);
+        XrCompileResourceLimits caps={XR_COMPILE_MEMORY_FINITE,
+            (uint64_t)((int64_t)plain.after.peak_bytes+delta),true};
+        CHECK(cfg_storage_probe(CFG_STORAGE_REUSE,caps,SIZE_MAX,true,&poisoned)==
+            (delta<0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
     }
     cfg_storage_owned_case();
-    puts("CFG dirty allocation: root/65-block/join/loop/panic/reuse/SSA rejection; FI and three exact/minus1 caps physical0");
+    puts("CFG dirty allocation: root/65-block/join/loop/panic/reuse/SSA rejection; FI and held-memory exact/minus1/plus1 physical0");
 }
 int main(void) {
     cfg_storage_initialization_cases();

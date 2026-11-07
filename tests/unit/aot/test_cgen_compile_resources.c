@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_cgen_compile_resources.c - Shared verifier work and physical ownership
+ * test_cgen_compile_resources.c - Controlled verifier memory and physical ownership
  */
 #include "base/xmalloc.h"
 #include "lir/xi_cgen_verify_output.h"
@@ -50,24 +50,7 @@ static void counted_free(void *memory) {
 #undef xr_malloc
 #undef xr_free
 
-/* Independent layout arithmetic for the two-pointer allocation prefix and
- * aligned ledger root; never derive expected work from verifier statistics. */
-typedef union OracleAlignment {
-    long double floating; uint64_t integer; void *pointer;
-} OracleAlignment;
-typedef union OracleHeader {
-    struct { void *owner; size_t bytes; } fields;
-#ifdef XR_COMPILER_MSVC
-    OracleAlignment alignment;
-#else
-    max_align_t alignment;
-#endif
-} OracleHeader;
-typedef struct OracleLedger {
-    uint64_t limits[3], stats[5], references;
-    atomic_bool locked;
-} OracleLedger;
-static const XrCompileResourceLimits unlimited = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+static const XrCompileResourceLimits unlimited = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
 static XrCompileResources *ledger(XrCompileResourceLimits limits) {
     XrCompileResources *resources = NULL;
     CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
@@ -80,56 +63,35 @@ static XiCgenVerifyResult poisoned(void) {
     XiCgenVerifyResult result; memset(&result, 0xA5, sizeof(result)); return result;
 }
 
-static void formula(bool c90, const char *source, size_t length) {
-    const uint64_t diagnostic = sizeof(XiCgenVerifyCategory) + sizeof(int) + 256;
-    const uint64_t scratch = 2 * sizeof(void *) + 4 * sizeof(size_t) + 64 * sizeof(long) + 4 * diagnostic + 160;
-    CHECK(diagnostic == sizeof(XiCgenVerifyResult));
-    uint64_t allocated = sizeof(OracleLedger) + sizeof(OracleHeader) + (c90 ? diagnostic : scratch);
-    uint64_t peak = allocated, allocations_count = 2;
-    /* Quoted C90: one allocation, n loop steps, 2n-1 byte reads, publication. */
-    uint64_t work = 1 + 3 * length + diagnostic;
-    if (!c90) {
-        CHECK(length == 1 || length == 7 || length == 4096);
-        for (size_t i = 0; i < length; ++i) CHECK(source[i] == '\n');
-        const uint64_t mask_bytes = (length + 7) / 8;
-        /* One endpoint block holds 128 uint32 records. The 4096-line case
-         * allocates 512+1024+2048+4096+8192+16384 payload bytes, copies
-         * 512+1024+2048+4096+8192, and overlaps 8192+16384 at its peak.
-         * Line scratch is allocated only after endpoint growth finishes. */
-        const uint64_t blocks = length == 4096 ? 6 : 1;
-        const uint64_t endpoints = length == 4096 ? 32256 : 512;
-        const uint64_t copied = length == 4096 ? 15872 : 0;
-        const uint64_t lexical = sizeof(OracleLedger) + 2 * sizeof(OracleHeader) + scratch + mask_bytes;
-        allocated = lexical + (blocks+1) * sizeof(OracleHeader) + endpoints + 1;
-        peak = length == 4096 ? lexical + 2 * sizeof(OracleHeader) + 24576 : allocated;
-        allocations_count = blocks+4;
-        /* Each empty line pays lexical loop/read2, record6, structural
-         * loop1, endpoint read4 and newline read1. Unmasked lines borrow
-         * source bytes, so there is no payload copy or mask application.
-         * Add scratch/mask clearing, all allocations, resize copies and
-         * complete diagnostic publication; ledger creation costs one. */
-        work = 1 + scratch + mask_bytes + diagnostic + 14 * length + blocks+3 + copied;
-    }
-    VerifyPrototype verify = c90 ? xr_compile_cgen_verify_c90_output : xr_compile_cgen_verify_output;
-    for (unsigned dimension = 0; dimension < 3; ++dimension) for (unsigned minus = 0; minus < 2; ++minus) {
-        XrCompileResourceLimits limits = unlimited;
-        if (dimension == 0) limits.allocated_bytes = allocated - minus;
-        if (dimension == 1) limits.live_bytes = peak - minus;
-        if (dimension == 2) limits.work = work - minus;
-        XrCompileResources *resources = ledger(limits);
-        physical_peak = physical;
+/* The physical allocator is an independent oracle for held memory. */
+static XiCgenVerifyStatus memory_edges(VerifyPrototype verify, const char *source, size_t length) {
+    XrCompileResources *resources = ledger(unlimited);
+    physical_peak = physical;
+    XiCgenVerifyResult expected = poisoned();
+    XiCgenVerifyStatus status = verify(resources, source, length, &expected);
+    CHECK(status == XI_CGEN_VERIFY_PASSED || status == XI_CGEN_VERIFY_MALFORMED);
+    XrCompileResourceStats stats;
+    CHECK(xr_compile_resources_stats(resources, &stats) == XR_COMPILE_RESOURCE_OK);
+    CHECK(stats.peak_bytes == physical_peak && stats.held_bytes == physical && live == 1);
+    uint64_t peak = stats.peak_bytes;
+    CHECK(peak > physical);
+    release(resources);
+    for (int delta = -1; delta <= 1; ++delta) {
+        XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE, (uint64_t)((int64_t)peak + delta), true};
+        resources = ledger(limits);
         XiCgenVerifyResult result = poisoned(), saved = result;
-        CHECK(verify(resources, source, length, &result) == (minus ? XI_CGEN_VERIFY_BUDGET : XI_CGEN_VERIFY_PASSED));
-        XrCompileResourceStats stats; CHECK(xr_compile_resources_stats(resources, &stats) == XR_COMPILE_RESOURCE_OK);
-        if (minus) CHECK(!memcmp(&result, &saved, sizeof(result)));
-        else {
-            CHECK(result.category == XI_CGEN_VERIFY_OK);
-            CHECK(stats.allocated_bytes == allocated && stats.peak_bytes == peak);
-            CHECK(physical_peak == peak);
-            CHECK(stats.work == work && stats.allocation_count == allocations_count);
-        }
-        CHECK(stats.live_bytes == sizeof(OracleLedger)); release(resources);
+        CHECK(verify(resources, source, length, &result) == (delta < 0 ? XI_CGEN_VERIFY_MEMORY_LIMIT : status));
+        if (delta < 0) CHECK(!memcmp(&result, &saved, sizeof(result)));
+        else CHECK(result.category == expected.category && result.line == expected.line && !strcmp(result.message, expected.message));
+        CHECK(xr_compile_resources_stats(resources, &stats) == XR_COMPILE_RESOURCE_OK);
+        CHECK(stats.held_bytes == physical && stats.peak_bytes <= limits.memory_limit && live == 1);
+        release(resources);
     }
+    return status;
+}
+static void formula(bool c90, const char *source, size_t length) {
+    CHECK(memory_edges(c90 ? xr_compile_cgen_verify_c90_output : xr_compile_cgen_verify_output,
+        source, length) == XI_CGEN_VERIFY_PASSED);
 }
 
 static void categories(void) {
@@ -157,35 +119,11 @@ static void categories(void) {
 }
 
 static void comparison_formula(void) {
-    const uint64_t diagnostic = sizeof(XiCgenVerifyCategory) + sizeof(int) + 256;
-    const uint64_t detail_length = sizeof("C11 _Atomic residue") - 1;
-    const uint64_t bytes = sizeof(OracleLedger) + sizeof(OracleHeader) + diagnostic;
-    /* Ledger, allocation, scan step, two lookahead bytes, first mismatching
-     * inline byte, table step, seven equal bytes; static keyword lengths
-     * require no runtime character scan.
-     * The local diagnostic clears D bytes and stores its two scalar fields;
-     * %s scans three format bytes and L+1 text bytes, writes L+1 bytes, then
-     * publishes the complete D-byte result. */
-    const uint64_t work = 1 + 1 + 1 + 2 + 1 + 1 + 7 + diagnostic +
-        sizeof(XiCgenVerifyCategory) + sizeof(int) + 2 * detail_length + 5 + diagnostic;
-    for (unsigned dimension = 0; dimension < 3; ++dimension) for (unsigned minus = 0; minus < 2; ++minus) {
-        XrCompileResourceLimits limits = unlimited;
-        if (dimension == 0) limits.allocated_bytes = bytes - minus;
-        if (dimension == 1) limits.live_bytes = bytes - minus;
-        if (dimension == 2) limits.work = work - minus;
-        XrCompileResources *resources = ledger(limits);
-        XiCgenVerifyResult result = poisoned(), saved = result;
-        CHECK(xr_compile_cgen_verify_c90_output(resources, "_Atomic", 7, &result) ==
-            (minus ? XI_CGEN_VERIFY_BUDGET : XI_CGEN_VERIFY_MALFORMED));
-        if (minus) CHECK(!memcmp(&result, &saved, sizeof(result)));
-        else {
-            XrCompileResourceStats stats; CHECK(xr_compile_resources_stats(resources, &stats) == XR_COMPILE_RESOURCE_OK);
-            CHECK(stats.work == work && stats.allocated_bytes == bytes && stats.peak_bytes == bytes);
-            CHECK(result.category == XI_CGEN_VERIFY_C90_RESTRICTED && result.line == 1);
-            CHECK(!strcmp(result.message, "C11 _Atomic residue"));
-        }
-        release(resources);
-    }
+    CHECK(memory_edges(xr_compile_cgen_verify_c90_output, "_Atomic", 7) == XI_CGEN_VERIFY_MALFORMED);
+    XrCompileResources *resources = ledger(unlimited); XiCgenVerifyResult result;
+    CHECK(xr_compile_cgen_verify_c90_output(resources, "_Atomic", 7, &result) == XI_CGEN_VERIFY_MALFORMED);
+    CHECK(result.category == XI_CGEN_VERIFY_C90_RESTRICTED && result.line == 1);
+    CHECK(!strcmp(result.message, "C11 _Atomic residue")); release(resources);
 }
 
 static void scan_semantics(void) {
@@ -246,46 +184,11 @@ static void allocation_failures(void) {
 
 static void growth_formula(void) {
     const char source[] = "void f(void) {\n int v0=1;\n int v2048=2;\n int v4096=3;\n return;\n}\n";
-    const uint64_t diagnostic = sizeof(XiCgenVerifyCategory) + sizeof(int) + 256;
-    const uint64_t scratch = 2 * sizeof(void *) + 4 * sizeof(size_t) + 64 * sizeof(long) + 4 * diagnostic + 160;
-    const uint64_t longest_line = sizeof("void f(void) {\n") - 1; CHECK(longest_line == 15);
-    const uint64_t mask_bytes = (sizeof(source) - 1 + 7) / 8;
-    /* Six physical lines fit in one owned 128-entry endpoint block. */
-    const uint64_t fixed = sizeof(OracleLedger) + 4 * sizeof(OracleHeader) + scratch + mask_bytes + longest_line + 512;
-    /* Definitions grow the seen bytes from 1024 to 4096 to 8192. All three
-     * allocations are cumulative; the two largest coexist during resize. */
-    const uint64_t cumulative = fixed + 3 * sizeof(OracleHeader) + 1024 + 4096 + 8192;
-    const uint64_t peak = fixed + 2 * sizeof(OracleHeader) + 4096 + 8192;
-    for (unsigned dimension = 0; dimension < 2; ++dimension) for (unsigned minus = 0; minus < 2; ++minus) {
-        XrCompileResourceLimits limits = unlimited;
-        if (dimension == 0) limits.allocated_bytes = cumulative - minus;
-        else limits.live_bytes = peak - minus;
-        XrCompileResources *resources = ledger(limits); XiCgenVerifyResult result = poisoned(), saved = result;
-        CHECK(xr_compile_cgen_verify_output(resources, source, sizeof(source) - 1, &result) ==
-            (minus ? XI_CGEN_VERIFY_BUDGET : XI_CGEN_VERIFY_PASSED));
-        if (minus) CHECK(!memcmp(&result, &saved, sizeof(result)));
-        else {
-            XrCompileResourceStats stats; CHECK(xr_compile_resources_stats(resources, &stats) == XR_COMPILE_RESOURCE_OK);
-            CHECK(stats.allocated_bytes == cumulative && stats.peak_bytes == peak && stats.allocation_count == 8);
-            CHECK(stats.live_bytes == sizeof(OracleLedger));
-        }
-        release(resources);
-    }
+    CHECK(memory_edges(xr_compile_cgen_verify_output, source, sizeof(source)-1) == XI_CGEN_VERIFY_PASSED);
 }
 
-static void failed_work_preserves_diagnostic(VerifyPrototype verify, const char *source) {
-    XrCompileResources *resources = ledger(unlimited); XiCgenVerifyResult result;
-    size_t length = strlen(source);
-    CHECK(verify(resources, source, length, &result) == XI_CGEN_VERIFY_MALFORMED);
-    XrCompileResourceStats stats; CHECK(xr_compile_resources_stats(resources, &stats) == XR_COMPILE_RESOURCE_OK);
-    release(resources);
-    for (uint64_t work = 1; work < stats.work; ++work) {
-        XrCompileResourceLimits limits = unlimited; limits.work = work; resources = ledger(limits);
-        result = poisoned(); XiCgenVerifyResult saved = result;
-        CHECK(verify(resources, source, length, &result) == XI_CGEN_VERIFY_BUDGET);
-        CHECK(!memcmp(&result, &saved, sizeof(result))); release(resources);
-    }
-    printf("all %llu incomplete work limits preserve diagnostic bytes\n", (unsigned long long)(stats.work - 1));
+static void failed_memory_preserves_diagnostic(VerifyPrototype verify, const char *source) {
+    (void)memory_edges(verify, source, strlen(source));
 }
 
 static void line_scratch_boundaries(void) {
@@ -312,7 +215,7 @@ static void line_scratch_boundaries(void) {
         CHECK(result.category == cases[i].category && result.line == cases[i].line);
         CHECK(!strcmp(result.message, cases[i].message));
         XrCompileResourceStats stats; CHECK(xr_compile_resources_stats(resources, &stats) == XR_COMPILE_RESOURCE_OK);
-        CHECK(stats.live_bytes == sizeof(OracleLedger));
+        CHECK(stats.held_bytes == physical && live == 1);
         size_t points = calls - before - 1; CHECK(points); release(resources);
         for (size_t point = 0; point < points; ++point) {
             resources = ledger(unlimited); result = poisoned(); XiCgenVerifyResult saved = result;
@@ -321,16 +224,11 @@ static void line_scratch_boundaries(void) {
             CHECK(!memcmp(&result, &saved, sizeof(result)));
             fail_at = SIZE_MAX; release(resources);
         }
-        for (uint64_t work = 1; work < stats.work; ++work) {
-            XrCompileResourceLimits limits = unlimited; limits.work = work;
-            resources = ledger(limits); result = poisoned(); XiCgenVerifyResult saved = result;
-            CHECK(xr_compile_cgen_verify_output(resources, cases[i].source, length, &result) == XI_CGEN_VERIFY_BUDGET);
-            CHECK(!memcmp(&result, &saved, sizeof(result))); release(resources);
-        }
+        (void)memory_edges(xr_compile_cgen_verify_output, cases[i].source, length);
     }
     static char many_lines[4096]; memset(many_lines, '\n', sizeof(many_lines));
     formula(false, many_lines, sizeof(many_lines));
-    puts("cross-line lexical priority, every work cut, OOM and small physical scratch passed");
+    puts("cross-line lexical priority, held-memory boundaries, OOM and physical scratch passed");
 }
 
 static void w4_token_boundaries(void) {
@@ -367,38 +265,13 @@ static void w4_token_boundaries(void) {
             fail_at = SIZE_MAX; release(resources);
         }
     }
-    failed_work_preserves_diagnostic(xr_compile_cgen_verify_output,
+    failed_memory_preserves_diagnostic(xr_compile_cgen_verify_output,
         "void f(void) {\n return v3abc + v4;\n}\n");
 }
 
 static void uses_growth_formula(void) {
     const char source[] = "void f(void) {\n int v0=7;\n return v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0;\n}\n";
-    const uint64_t diagnostic = sizeof(XiCgenVerifyCategory) + sizeof(int) + 256;
-    const uint64_t scratch = 2 * sizeof(void *) + 4 * sizeof(size_t) + 64 * sizeof(long) + 4 * diagnostic + 160;
-    const uint64_t longest_line = sizeof(" return v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0;\n") - 1;
-    const uint64_t mask_bytes = (sizeof(source) - 1 + 7) / 8;
-    /* Four physical lines fit in one owned 128-entry endpoint block. */
-    const uint64_t fixed = sizeof(OracleLedger) + 4 * sizeof(OracleHeader) + scratch + mask_bytes + longest_line + 512;
-    /* One seen block stays live while the uses vector grows 16, 32, 64, 128.
-     * Only the last two vector blocks coexist; every allocation is cumulative. */
-    const uint64_t cumulative = fixed + 5 * sizeof(OracleHeader) + 1024 + (16 + 32 + 64 + 128) * sizeof(long);
-    const uint64_t peak = fixed + 3 * sizeof(OracleHeader) + 1024 + (64 + 128) * sizeof(long);
-    for (unsigned dimension = 0; dimension < 2; ++dimension) for (unsigned minus = 0; minus < 2; ++minus) {
-        XrCompileResourceLimits limits = unlimited;
-        if (dimension == 0) limits.allocated_bytes = cumulative - minus;
-        else limits.live_bytes = peak - minus;
-        XrCompileResources *resources = ledger(limits); physical_peak = physical;
-        XiCgenVerifyResult result = poisoned(), saved = result;
-        CHECK(xr_compile_cgen_verify_output(resources, source, sizeof(source) - 1, &result) ==
-            (minus ? XI_CGEN_VERIFY_BUDGET : XI_CGEN_VERIFY_PASSED));
-        if (minus) CHECK(!memcmp(&result, &saved, sizeof(result)));
-        else {
-            XrCompileResourceStats stats; CHECK(xr_compile_resources_stats(resources, &stats) == XR_COMPILE_RESOURCE_OK);
-            CHECK(stats.allocated_bytes == cumulative && stats.peak_bytes == peak && stats.allocation_count == 10);
-            CHECK(physical_peak == peak && stats.live_bytes == sizeof(OracleLedger));
-        }
-        release(resources);
-    }
+    CHECK(memory_edges(xr_compile_cgen_verify_output, source, sizeof(source)-1) == XI_CGEN_VERIFY_PASSED);
 }
 
 static void fused_line_vectors(void) {
@@ -438,9 +311,9 @@ static void fused_line_vectors(void) {
             fail_at = SIZE_MAX; release(resources);
         }
     }
-    failed_work_preserves_diagnostic(xr_compile_cgen_verify_output,
+    failed_memory_preserves_diagnostic(xr_compile_cgen_verify_output,
         "void f(void) {\n return v7 + v3; int v7=1;\n}\n");
-    failed_work_preserves_diagnostic(xr_compile_cgen_verify_output,
+    failed_memory_preserves_diagnostic(xr_compile_cgen_verify_output,
         "void f(void) {\n int v3=7;\n return v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v3 + v9 + v8;\n}\n");
 }
 
@@ -453,13 +326,25 @@ static void arguments_and_cumulative(void) {
     CHECK(!memcmp(&result, &saved, sizeof(result)));
     CHECK(xr_compile_cgen_verify_output(resources, NULL, 0, &result) == XI_CGEN_VERIFY_PASSED);
     CHECK(result.category == XI_CGEN_VERIFY_OK && !result.line && !result.message[0]); release(resources);
-    XrCompileResourceLimits limits = unlimited; limits.work = 1 + 3 * 3 + sizeof(XiCgenVerifyResult);
-    resources = ledger(limits);
-    CHECK(xr_compile_cgen_verify_c90_output(resources, "\"x\"", 3, &result) == XI_CGEN_VERIFY_PASSED);
-    result = poisoned(); saved = result; size_t before = calls;
-    CHECK(xr_compile_cgen_verify_output_or_ice(resources, "\n", 1, "budget") == XI_CGEN_VERIFY_BUDGET);
-    CHECK(calls == before); CHECK(xr_compile_cgen_verify_c90_output(resources, "\"x\"", 3, &result) == XI_CGEN_VERIFY_BUDGET);
-    CHECK(!memcmp(&result, &saved, sizeof(result))); release(resources);
+    resources = ledger(unlimited);
+    XrCompileResourceStats baseline;
+    CHECK(xr_compile_resources_stats(resources, &baseline) == XR_COMPILE_RESOURCE_OK);
+    release(resources);
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE, baseline.held_bytes, true};
+    resources = ledger(limits); result = poisoned(); saved = result;
+    size_t before = calls;
+    CHECK(xr_compile_cgen_verify_output_or_ice(resources, "\n", 1, "memory") == XI_CGEN_VERIFY_MEMORY_LIMIT);
+    CHECK(xr_compile_cgen_verify_c90_output(resources, "\"x\"", 3, &result) == XI_CGEN_VERIFY_MEMORY_LIMIT);
+    CHECK(calls == before && !memcmp(&result, &saved, sizeof(result))); release(resources);
+    resources = ledger(unlimited);
+    for (unsigned repeat = 0; repeat < 3; ++repeat) {
+        CHECK(xr_compile_cgen_verify_c90_output(resources, "\"x\"", 3, &result) == XI_CGEN_VERIFY_PASSED);
+        CHECK(xr_compile_cgen_verify_output(resources, "\n", 1, &result) == XI_CGEN_VERIFY_PASSED);
+        XrCompileResourceStats current;
+        CHECK(xr_compile_resources_stats(resources, &current) == XR_COMPILE_RESOURCE_OK);
+        CHECK(current.held_bytes == baseline.held_bytes && current.held_bytes == physical && live == 1);
+    }
+    release(resources);
 }
 
 int main(int argc, char **argv) {
@@ -477,8 +362,8 @@ int main(int argc, char **argv) {
     formula(true, "\"abc\"", 5); formula(true, "\"abcdefgh\"", 10);
     formula(false, "\n", 1); formula(false, "\n\n\n\n\n\n\n", 7);
     comparison_formula(); categories(); scan_semantics(); allocation_failures(); growth_formula();
-    failed_work_preserves_diagnostic(xr_compile_cgen_verify_output, "void f(void) {\n return v31;\n}\n");
-    failed_work_preserves_diagnostic(xr_compile_cgen_verify_c90_output, "_Atomic");
+    failed_memory_preserves_diagnostic(xr_compile_cgen_verify_output, "void f(void) {\n return v31;\n}\n");
+    failed_memory_preserves_diagnostic(xr_compile_cgen_verify_c90_output, "_Atomic");
     line_scratch_boundaries(); w4_token_boundaries(); uses_growth_formula(); fused_line_vectors(); arguments_and_cumulative();
-    puts("neutral compiler verifier resources and independent formulas passed"); return 0;
+    puts("compiler verifier held memory and physical failure ownership passed"); return 0;
 }

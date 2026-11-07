@@ -7,7 +7,7 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_source_compile_owner.h"
 static XrCompileResourceLimits overlay_limits(void) {
-    return (XrCompileResourceLimits){UINT64_C(64)*1024*1024, UINT64_C(8)*1024*1024, UINT64_C(128000000)};
+    return (XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true};
 }
 static void overlay_zero(void) { CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes); }
 static XrModuleStatus overlay_make(XrCompileResourceLimits limits, XrModuleOverlay **output,
@@ -15,7 +15,7 @@ static XrModuleStatus overlay_make(XrCompileResourceLimits limits, XrModuleOverl
     XrCompileResources *resources = NULL;
     XrCompileResourceStatus status = xr_compile_resources_new(&limits, &resources);
     if (status != XR_COMPILE_RESOURCE_OK)
-        return status == XR_COMPILE_RESOURCE_BUDGET ? XR_MODULE_BUDGET : XR_MODULE_OUT_OF_MEMORY;
+        return xr_module_status_from_resource(status);
     char names[8][16], paths[8][64], text[] = "overlay payload";
     char root[] = "/overlay", coordinate[] = "workspace";
     XrModuleOverlayInput inputs[8] = {0};
@@ -72,17 +72,16 @@ static void overlay_failures(void) {
         xr_compile_module_overlay_free(overlay); overlay_zero();
     }
     source_fixture_compile_fail_at = SIZE_MAX; source_fixture_compile_injected = false;
-    for (unsigned axis = 0; axis < 3; ++axis) for (int delta = -1; delta <= 1; ++delta) {
-        XrCompileResourceLimits limits = {required.allocated_bytes, required.peak_bytes, required.work};
-        uint64_t *bound = axis == 0 ? &limits.allocated_bytes : axis == 1 ? &limits.live_bytes : &limits.work;
-        CHECK(*bound && *bound < UINT64_MAX); *bound = (uint64_t)((int64_t)*bound + delta);
+    for (int delta = -1; delta <= 1; ++delta) {
+        CHECK(required.peak_bytes > 1 && required.peak_bytes < INT64_MAX);
+        XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE,
+            (uint64_t)((int64_t)required.peak_bytes + delta),true};
         XrModuleOverlay *overlay = NULL; XrCompileResourceStats stats = {0};
-        CHECK(overlay_make(limits, &overlay, &stats) == (delta < 0 ? XR_MODULE_BUDGET : XR_MODULE_OK));
+        CHECK(overlay_make(limits, &overlay, &stats) == (delta < 0 ? XR_MODULE_MEMORY_LIMIT : XR_MODULE_OK));
         CHECK((overlay != NULL) == (delta >= 0));
-        /* Exact construction work leaves no allowance for a separate lookup. */
         xr_compile_module_overlay_free(overlay); overlay_zero();
     }
-    printf("Overlay owner fresh allocation sites=%zu; exact/minus1/plus1, physical=0/0\n", sites);
+    printf("Overlay owner fresh allocation sites=%zu; held-memory exact/minus1/plus1, physical=0/0\n", sites);
 }
 static void overlay_rejections(void) {
     for (unsigned mode = 0; mode < 14; ++mode) {
@@ -150,9 +149,9 @@ static void overlay_paths(void) {
         XrModuleOverlay *saved = overlay;
         CHECK(xr_compile_module_overlay_new(resources, inputs, 1, &overlay) == XR_MODULE_INVALID && overlay == saved);
         XrCompileResourceStats stats = {0}; CHECK(xr_compile_resources_stats(resources, &stats) == XR_COMPILE_RESOURCE_OK);
-        CHECK(xr_compile_resources_work(resources, limits.work-stats.work) == XR_COMPILE_RESOURCE_OK);
-        found = entries;
-        CHECK(xr_compile_module_overlay_lookup(overlay, key, &inputs[i].authority, &found) == XR_MODULE_BUDGET && found == entries);
+        CHECK(stats.held_bytes > 0);
+        found = NULL;
+        CHECK(xr_compile_module_overlay_lookup(overlay, key, &inputs[i].authority, &found) == XR_MODULE_OK && found == entries);
         xr_compile_resources_release(resources); xr_compile_module_overlay_free(overlay); overlay_zero();
     }
 }

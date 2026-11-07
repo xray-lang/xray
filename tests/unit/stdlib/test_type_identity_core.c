@@ -56,7 +56,6 @@ TEST(type_identity_core_covers_every_kind) {
         XR_TYPE_IDENTITY_CORE_INSTANCE,
         XR_TYPE_IDENTITY_CORE_OBJECT,
         XR_TYPE_IDENTITY_CORE_BIGINT,
-        XR_TYPE_IDENTITY_CORE_STRINGBUILDER,
         XR_TYPE_IDENTITY_CORE_CHANNEL,
         XR_TYPE_IDENTITY_CORE_REGEX,
         XR_TYPE_IDENTITY_CORE_DATETIME,
@@ -83,6 +82,7 @@ TEST(type_identity_core_covers_every_kind) {
     };
     for (size_t i = 0; i < sizeof(kinds) / sizeof(kinds[0]); i++)
         ASSERT_EQ_INT(xr_type_identity_core_eval_impl(kinds[i]), (int) kinds[i]);
+    ASSERT_EQ_INT(xr_type_identity_core_eval_impl((XrTypeIdentityCoreKind) 20), UINT8_MAX);
     ASSERT_EQ_INT(xr_type_identity_core_eval_impl((XrTypeIdentityCoreKind) 255), UINT8_MAX);
 }
 

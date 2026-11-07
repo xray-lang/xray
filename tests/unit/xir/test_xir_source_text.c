@@ -12,8 +12,7 @@
 static const char entry_text[] = "export fn unsaved(value:i64)->i64 { return value }\n";
 static XrCompileResourceStats text_stats;
 static XrCompileResourceLimits text_limits(void) {
-    return (XrCompileResourceLimits){UINT64_C(64)*1024*1024,
-        UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+    return (XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true};
 }
 /* This wraps the real resource/session/source calls. No result is fabricated. */
 static XrXirStatus text_check(const XrXirSourceRequest *input, const char *logical,
@@ -21,7 +20,7 @@ static XrXirStatus text_check(const XrXirSourceRequest *input, const char *logic
     XrXirCompileContext context = {0}; XrCompilerSession *session = NULL;
     XrCompileResourceStatus created = xr_compile_resources_new(&limits, &context.resources);
     if (created != XR_COMPILE_RESOURCE_OK)
-        return created == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+        return xir_compile_resource_status(created);
     context.limits = xr_xir_compile_default_limits();
     XrCompileResourceStatus made = xr_compile_session_new(context.resources, &session);
     XrXirStatus status = xir_compile_resource_status(made);
@@ -114,17 +113,17 @@ static void text_allocations(const XrXirSourceRequest *request) {
         xr_xir_compile_source_result_free(&result); text_physical_zero();
     }
     source_fixture_compile_fail_at = SIZE_MAX; source_fixture_compile_injected = false;
-    for (unsigned axis = 0; axis < 3; ++axis) for (int delta = -1; delta <= 1; ++delta) {
-        XrCompileResourceLimits limits = {required.allocated_bytes, required.peak_bytes, required.work};
-        uint64_t *bound = axis == 0 ? &limits.allocated_bytes : axis == 1 ? &limits.live_bytes : &limits.work;
-        CHECK(*bound && *bound < UINT64_MAX); *bound = (uint64_t)((int64_t)*bound + delta);
+    for (int delta = -1; delta <= 1; ++delta) {
+        CHECK(required.peak_bytes > 1 && required.peak_bytes < INT64_MAX);
+        XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE,
+            (uint64_t)((int64_t)required.peak_bytes + delta),true};
         XrXirSourceResult result = {0};
         CHECK(text_check(request, "root.xr", entry_text, sizeof(entry_text)-1, limits, &result) ==
-            (delta < 0 ? XR_XIR_BUDGET : XR_XIR_OK));
+            (delta < 0 ? XR_XIR_MEMORY_LIMIT : XR_XIR_OK));
         if (delta < 0) CHECK(!result.checked && !result.snapshot); else text_facts(&result, request->entry_path);
         xr_xir_compile_source_result_free(&result); text_physical_zero();
     }
-    printf("Entry text fresh allocation sites=%zu; three axes exact/minus1/plus1; physical=0/0\n", sites);
+    printf("Entry text fresh allocation sites=%zu; held-memory exact/minus1/plus1; physical=0/0\n", sites);
 }
 static void text_null_descriptor(const XrXirSourceRequest *prototype) {
     XrCompileResourceLimits limits=text_limits();XrXirCompileContext context={0};XrCompilerSession *session=NULL;

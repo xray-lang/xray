@@ -31,7 +31,7 @@ static void observed_free(void *p) {
 #define xr_malloc(bytes) observed_alloc(bytes)
 #define xr_free(memory) observed_free(memory)
 #include "base/xcompile_resources.c"
-static const XrCompileResourceLimits unlimited = {UINT64_MAX,UINT64_MAX,UINT64_MAX};
+static const XrCompileResourceLimits unlimited = {XR_COMPILE_MEMORY_ORDINARY,0,true};
 static XrCompileResourceStats measured;
 static char keys[80][24];
 static unsigned char canary;
@@ -40,7 +40,7 @@ static void reset(size_t failure) {
 }
 static XrCompileResourceStats stats(XrCompileResources *owner) {
     XrCompileResourceStats result; CHECK(xr_compile_resources_stats(owner,&result) == XR_COMPILE_RESOURCE_OK);
-    CHECK(result.live_bytes == physical_live && result.allocated_bytes == physical_total && result.peak_bytes == physical_peak);
+    CHECK(result.held_bytes == physical_live && result.allocated_bytes == physical_total && result.peak_bytes == physical_peak);
     return result;
 }
 static void cleanup(void) { CHECK(!physical_live && !block_count); }
@@ -66,19 +66,16 @@ static size_t sequence(const XrCompileResourceLimits *limits, size_t failure, bo
         }
         xr_hashmap_owned_free(map);
     }
-    CHECK(status == (success ? XR_OS_IO_OK : failure != SIZE_MAX ? XR_OS_IO_OUT_OF_MEMORY : XR_OS_IO_BUDGET));
+    CHECK(status == (success ? XR_OS_IO_OK : failure != SIZE_MAX ? XR_OS_IO_OUT_OF_MEMORY : XR_OS_IO_MEMORY_LIMIT));
     measured = stats(owner); CHECK(block_count == 1); xr_compile_resources_release(owner); cleanup(); return attempts;
 }
 typedef struct FaultPolicy { XrCompileResources *owner; size_t calls, failure; XrOsIoStatus error; } FaultPolicy;
 static XrOsIoStatus fault_alloc(void *context, size_t size, void **out) {
-    FaultPolicy *fault = context; XrOsIoPolicy p = xr_compile_io_policy(fault->owner); return p.alloc(p.context,size,out);
-}
-static void fault_free(void *context, void *p) { (void)context; xr_compile_resources_free(p); }
-static XrOsIoStatus fault_work(void *context, uint64_t units) {
     FaultPolicy *fault = context;
     if (++fault->calls == fault->failure) return fault->error;
-    XrOsIoPolicy p = xr_compile_io_policy(fault->owner); return p.work(p.context,units);
+    XrOsIoPolicy p = xr_compile_io_policy(fault->owner); return p.alloc(p.context,size,out);
 }
+static void fault_free(void *context, void *p) { (void)context; xr_compile_resources_free(p); }
 static void counter(const char *key, void *value, void *context) { (void)key; (void)value; ++*(size_t *)context; }
 static XrOsIoStatus operation(XrHashMap *map, unsigned op) {
     bool b = true; void *v = &canary; size_t count = 0; XrOsIoStatus s;
@@ -103,7 +100,7 @@ static XrOsIoStatus operation(XrHashMap *map, unsigned op) {
 static size_t one_operation(unsigned op, size_t failure, XrOsIoStatus error) {
     reset(SIZE_MAX); XrCompileResources *owner = NULL;
     CHECK(xr_compile_resources_new(&unlimited,&owner) == XR_COMPILE_RESOURCE_OK);
-    FaultPolicy fault = {owner,0,SIZE_MAX,error}; XrOsIoPolicy p = {&fault,fault_alloc,fault_free,fault_work};
+    FaultPolicy fault = {owner,0,SIZE_MAX,error}; XrOsIoPolicy p = {&fault,fault_alloc,fault_free};
     XrHashMap *map = NULL; CHECK(xr_hashmap_owned_new(&p,&map) == XR_OS_IO_OK);
     for (unsigned i = 0; i < 12; ++i) CHECK(xr_hashmap_owned_set(map,keys[i],(void *)(uintptr_t)(i+2)) == XR_OS_IO_OK);
     CHECK(map->capacity == 16); XrHashMapEntry snapshot[16]; memcpy(snapshot,map->entries,sizeof(snapshot));
@@ -131,7 +128,7 @@ static void growth_oom(void) {
     CHECK(xr_hashmap_owned_set(map,keys[12],(void *)(uintptr_t)14) == XR_OS_IO_OUT_OF_MEMORY);
     XrCompileResourceStats after = stats(owner);
     CHECK(map->entries == entries && map->capacity == 16 && map->count == 12 && !memcmp(snapshot,entries,sizeof(snapshot)));
-    CHECK(after.live_bytes == before.live_bytes && after.allocated_bytes == before.allocated_bytes && after.work > before.work);
+    CHECK(after.held_bytes == before.held_bytes && after.allocated_bytes == before.allocated_bytes && attempts == fail_at+1);
     fail_at = SIZE_MAX; check_entries(map,12);
     CHECK(xr_hashmap_owned_set(map,keys[12],(void *)(uintptr_t)14) == XR_OS_IO_OK && map->capacity == 32);
     check_entries(map,13); xr_compile_resources_release(owner); xr_hashmap_owned_free(map); cleanup();
@@ -163,7 +160,7 @@ typedef struct StoppingVisit {
     XrCompileResources *resources;
     unsigned calls;
     int mode;
-    uint64_t work_after_callback;
+    uint64_t allocations_after_callback;
     XrCompileResourceStatus child_status;
 } StoppingVisit;
 static bool stopping_visit(const char *key, void *value, void *context) {
@@ -175,7 +172,7 @@ static bool stopping_visit(const char *key, void *value, void *context) {
         visit->child_status = xr_compile_resources_alloc(visit->resources, 1, &output);
         CHECK(visit->child_status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY && !output);
     }
-    visit->work_after_callback = stats(visit->resources).work;
+    visit->allocations_after_callback = attempts;
     return visit->mode == 2;
 }
 static void stopping_visits(void) {
@@ -189,39 +186,38 @@ static void stopping_visits(void) {
         StoppingVisit visit = {.resources = owner, .mode = mode};
         CHECK(xr_hashmap_owned_visit(map, stopping_visit, &visit) == XR_OS_IO_OK);
         CHECK(visit.calls == (mode == 2 ? 2u : 1u) && map->count == 2);
-        if (mode != 2) CHECK(stats(owner).work == visit.work_after_callback);
+        if (mode != 2) CHECK(attempts == visit.allocations_after_callback);
         if (mode == 1) CHECK(visit.child_status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
-        fail_at = SIZE_MAX; uint64_t before = stats(owner).work;
+        fail_at = SIZE_MAX; uint64_t before = attempts;
         CHECK(xr_hashmap_owned_visit(map, NULL, &visit) == XR_OS_IO_BAD_ARGUMENT);
         CHECK(xr_hashmap_owned_visit(NULL, stopping_visit, &visit) == XR_OS_IO_BAD_ARGUMENT);
-        CHECK(stats(owner).work == before);
+        CHECK(attempts == before);
         void *value = NULL;
         CHECK(xr_hashmap_owned_get(map, "first", &value) == XR_OS_IO_OK && value == (void *)(uintptr_t)2);
         CHECK(xr_hashmap_owned_get(map, "second", &value) == XR_OS_IO_OK && value == (void *)(uintptr_t)3);
         xr_hashmap_owned_free(map); xr_compile_resources_release(owner); cleanup();
     }
-    puts("hashmap visitor: callback stop/OOM has no later read/work; full visit/content/physical0 PASS");
+    puts("hashmap visitor: callback stop/OOM has no later allocation; full visit/content/physical0 PASS");
 }
 int main(void) {
     for (unsigned i = 0; i < 80; ++i) snprintf(keys[i],sizeof(keys[i]),"collision_candidate_%u",i);
     size_t sites = sequence(&unlimited,SIZE_MAX,true); XrCompileResourceStats baseline = measured;
     for (size_t i = 0; i < sites; ++i) sequence(&unlimited,i,false);
-    for (unsigned axis = 0; axis < 3; ++axis) for (unsigned below = 0; below < 2; ++below) {
-        XrCompileResourceLimits limits = unlimited;
-        if (!axis) limits.allocated_bytes = baseline.allocated_bytes-below;
-        else if (axis == 1) limits.live_bytes = baseline.peak_bytes-below;
-        else limits.work = baseline.work-below;
-        sequence(&limits,SIZE_MAX,!below);
+    for (int delta=-1;delta<=1;++delta) {
+        CHECK(baseline.peak_bytes>1 && baseline.peak_bytes<INT64_MAX);
+        XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE,
+            (uint64_t)((int64_t)baseline.peak_bytes+delta),true};
+        sequence(&limits,SIZE_MAX,delta>=0);
     }
     size_t boundaries = 0;
     for (unsigned op = 0; op < 9; ++op) {
-        size_t calls = one_operation(op,SIZE_MAX,XR_OS_IO_BUDGET);
-        const XrOsIoStatus errors[] = {XR_OS_IO_BUDGET,XR_OS_IO_IO,XR_OS_IO_OUT_OF_MEMORY};
+        size_t calls = one_operation(op,SIZE_MAX,XR_OS_IO_MEMORY_LIMIT);
+        const XrOsIoStatus errors[] = {XR_OS_IO_MEMORY_LIMIT,XR_OS_IO_IO,XR_OS_IO_OUT_OF_MEMORY};
         for (size_t e = 0; e < 3; ++e) for (size_t i = 1; i <= calls; ++i) {
             one_operation(op,i,errors[e]); ++boundaries;
         }
     }
     collisions(); growth_oom(); stopping_visits();
-    printf("hashmap: %zu real OOM sites, %zu transactional work failures, 3-axis exact/minus1, FNV collision/tombstone, lifetime and physical zero PASS\n",sites,boundaries);
+    printf("hashmap: %zu real OOM sites, %zu transactional allocation failures, held-memory exact/minus1/plus1, FNV collision/tombstone, lifetime and physical zero PASS\n",sites,boundaries);
     return 0;
 }
