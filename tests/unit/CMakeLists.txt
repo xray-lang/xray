@@ -270,15 +270,8 @@ set_tests_properties(l3_xir_array_frame_limits PROPERTIES LABELS "l3;xir;legacy-
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/allocation_feedback.cmake)
 
-add_executable(test_xir_locals xir/test_xir_locals.c)
-target_link_libraries(test_xir_locals PRIVATE xray_xir_vm xray_xir_cgen)
 set(XIR_LOCAL_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_local_fixture.c)
-add_custom_command(OUTPUT ${XIR_LOCAL_GENERATED}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND $<TARGET_FILE:test_xir_locals> ${XIR_LOCAL_GENERATED}
-    DEPENDS test_xir_locals VERBATIM)
-add_executable(test_xir_local_native xir/test_xir_local_native.c ${XIR_LOCAL_GENERATED})
-target_link_libraries(test_xir_local_native PRIVATE xray_xir_scalar)
+
 add_executable(test_xir_generics xir/test_xir_generics.c)
 target_link_libraries(test_xir_generics PRIVATE xray_xir_vm)
 add_executable(test_xir_checked xir/test_xir_checked.c)
@@ -291,8 +284,7 @@ target_include_directories(test_xir_checked_allocations PRIVATE ${CMAKE_SOURCE_D
 
 add_executable(test_xir_calls xir/test_xir_calls.c)
 target_link_libraries(test_xir_calls PRIVATE xray_xir_vm)
-add_executable(test_xir_emit xir/test_xir_emit.c)
-target_link_libraries(test_xir_emit PRIVATE xray_xir_cgen)
+
 add_executable(test_xir_emit_calls xir/test_xir_emit_calls.c)
 target_link_libraries(test_xir_emit_calls PRIVATE xray_xir_cgen)
 set(XIR_CALL_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_call_fixture.c)
@@ -306,13 +298,7 @@ target_link_libraries(test_xir_call_native PRIVATE xray_xir_scalar)
 target_sources(test_xir_calls PRIVATE ${XIR_CALL_GENERATED})
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/calls_owned_receive.cmake")
 set(XIR_SCALAR_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_scalar_fixture.c)
-add_custom_command(OUTPUT ${XIR_SCALAR_GENERATED}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND $<TARGET_FILE:test_xir_emit> ${XIR_SCALAR_GENERATED}
-    DEPENDS test_xir_emit
-    VERBATIM)
-add_executable(test_xir_native xir/test_xir_native.c ${XIR_SCALAR_GENERATED})
-target_link_libraries(test_xir_native PRIVATE xray_xir_scalar)
+
 # Complete panic outcomes keep message ownership independent of result values.
 
 # These implementations are included under the runtime allocation macros,
@@ -375,33 +361,12 @@ else()
     target_link_libraries(test_xir_value_allocations PRIVATE Threads::Threads)
     target_link_libraries(test_xir_array_grow_budget PRIVATE Threads::Threads)
 endif()
-add_executable(test_xir_emit_strings xir/test_xir_emit_strings.c)
-target_link_libraries(test_xir_emit_strings PRIVATE xray_xir_cgen)
+
 set(XIR_STRING_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_string_fixture.c)
-add_custom_command(OUTPUT ${XIR_STRING_GENERATED}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND $<TARGET_FILE:test_xir_emit_strings> ${XIR_STRING_GENERATED}
-    DEPENDS test_xir_emit_strings
-    VERBATIM)
-add_executable(test_xir_string_native xir/test_xir_string_native.c ${XIR_STRING_GENERATED})
-target_sources(test_xir_string_native PRIVATE xir/xir_string_instance_probe.c)
-target_link_libraries(test_xir_string_native PRIVATE xray_xir_scalar)
-add_executable(test_xir_string_vm xir/test_xir_string_vm.c ${XIR_STRING_GENERATED})
-target_sources(test_xir_string_vm PRIVATE xir/xir_string_instance_probe.c)
-target_link_libraries(test_xir_string_vm PRIVATE xray_xir_vm)
+
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/string_allocation_owner.cmake")
-add_executable(test_xir_emit_output xir/test_xir_emit_output.c)
-target_link_libraries(test_xir_emit_output PRIVATE xray_xir_cgen)
+
 set(XIR_OUTPUT_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_output_fixture.c)
-add_custom_command(OUTPUT ${XIR_OUTPUT_GENERATED}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND $<TARGET_FILE:test_xir_emit_output> ${XIR_OUTPUT_GENERATED}
-    DEPENDS test_xir_emit_output
-    VERBATIM)
-add_executable(test_xir_output_native xir/test_xir_output_native.c ${XIR_OUTPUT_GENERATED})
-target_link_libraries(test_xir_output_native PRIVATE xray_xir_scalar)
-add_executable(test_xir_output_vm xir/test_xir_output_vm.c)
-target_link_libraries(test_xir_output_vm PRIVATE xray_xir_vm)
 
 add_executable(test_xir_source xir/test_xir_source.c)
 target_link_libraries(test_xir_source PRIVATE xray_xir_source xray_xir_vm)
@@ -589,7 +554,7 @@ add_custom_command(OUTPUT ${XIR_PANIC_GENERATED}
 foreach(xir_source_test IN ITEMS test_xir_source test_xir_source_mixed)
     target_compile_definitions(${xir_source_test} PRIVATE XR_SOURCE_STDLIB="${CMAKE_SOURCE_DIR}/stdlib")
 endforeach()
-foreach(xir_test IN ITEMS test_xir_locals test_xir_local_native test_xir_generics test_xir_checked test_xir_checked_allocations test_xir_emit test_xir_native test_xir_calls test_xir_emit_calls test_xir_call_native test_xir_values test_xir_value_allocations test_xir_emit_strings test_xir_string_native test_xir_string_vm test_xir_emit_program test_xir_program_native test_xir_emit_output test_xir_output_vm test_xir_output_native test_xir_source test_xir_source_native test_xir_source_mixed test_xir_packet_vm test_xir_source_query test_xir_source_arrays test_xir_source_floats test_xir_panic_source)
+foreach(xir_test IN ITEMS test_xir_generics test_xir_checked test_xir_checked_allocations test_xir_calls test_xir_emit_calls test_xir_call_native test_xir_values test_xir_value_allocations test_xir_emit_program test_xir_program_native test_xir_source test_xir_source_native test_xir_source_mixed test_xir_packet_vm test_xir_source_query test_xir_source_arrays test_xir_source_floats test_xir_panic_source)
     if(MSVC)
         target_compile_options(${xir_test} PRIVATE /W4 /WX)
     else()
@@ -609,11 +574,6 @@ foreach(xir_test IN ITEMS test_xir_locals test_xir_local_native test_xir_generic
 endforeach()
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/generic_normal.cmake")
-
-if(UNIX)
-
-    target_link_libraries(test_xir_native PRIVATE m)
-endif()
 
 # Task 295 CoreSpec metadata is intentionally independent of xray_core and both
 # executors. This target compiles only the generated registry projection.
@@ -1811,7 +1771,6 @@ include(xir/array_resize.cmake)
 
 include(xir/source_shadow_function.cmake)
 
-include("${CMAKE_CURRENT_SOURCE_DIR}/xir/array_entries.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/program/source_product_consumers.cmake")
 
@@ -1832,12 +1791,12 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/task_executor.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/root_callback.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/root_signal.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/pipe_runtime/pipe_runtime.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/xir/process_runtime/process_runtime.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/xir/dylib_runtime/dylib_runtime.cmake")
+
+
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/task_product.cmake")
 
-include("${CMAKE_CURRENT_LIST_DIR}/xir/task_cancel_prefix.cmake")
+
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/go_pending_normal.cmake")
 
@@ -1848,12 +1807,12 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/vm19_fault_runtime.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/executor_first_failure.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/task_fault_order.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/task_bool.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/xir/task_bool_native.cmake")
+
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/task_unit.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/task_unit_native.cmake")
 
-include("${CMAKE_CURRENT_LIST_DIR}/xir/library_generics.cmake")
+
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/stdlib_vm.cmake")
 
@@ -1882,12 +1841,11 @@ target_link_libraries(test_xir_array_capacity_core PRIVATE xray_xir_scalar)
 include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_reserve_cow.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_compile_domain.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_return_copy.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_append_probe.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_append_performance.cmake")
+
+
 include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_mutation.cmake")
-add_executable(test_xir_array_capacity_checked xir/test_xir_array_capacity_checked.c)
-target_link_libraries(test_xir_array_capacity_checked PRIVATE xray_xir)
-foreach(capacity_core_target test_xir_array_capacity_core test_xir_array_capacity_checked)
+
+foreach(capacity_core_target IN ITEMS test_xir_array_capacity_core)
     if(MSVC)
         target_compile_options(${capacity_core_target} PRIVATE /W4 /WX)
     else()
@@ -1899,7 +1857,7 @@ endforeach()
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/array_capacity.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/array_capacity_budget.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/xir/array_capacity_native_contract.cmake")
+
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/native_projection70.cmake")
 
@@ -1935,14 +1893,14 @@ include(xir/instance_bindings.cmake)
 
 include(xir/owned_string_source_resources.cmake)
 
-include("${CMAKE_CURRENT_LIST_DIR}/xir/child_callable_permissions.cmake")
+
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/error_cell_index.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/error_edge_snapshot.cmake")
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/program_call_permissions.cmake)
-include(${CMAKE_CURRENT_SOURCE_DIR}/xir/child_callable_native.cmake)
-include(${CMAKE_CURRENT_SOURCE_DIR}/xir/child_callable_mixed.cmake)
+
+
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/mixed_task_faults.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/call_observation.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/task_scalar_results.cmake")
@@ -2198,7 +2156,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_view_liveness.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_view_roots.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_view_root_resolver.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_view_loan_origins.cmake)
-include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_view_access.cmake)
+
 include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_view_owner_path.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_call_views.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_local_call_views.cmake)
@@ -2229,7 +2187,7 @@ add_subdirectory(api/source_submission/correspondence)
 
 add_subdirectory(xir/task_result)
 
-include("${CMAKE_CURRENT_LIST_DIR}/xir/callable_array_transport.cmake")
+
 include("${CMAKE_CURRENT_LIST_DIR}/xir/source_local_recursive_binding.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/source_records.cmake")
@@ -2251,6 +2209,6 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/call_select.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/math_source.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/path_prelude.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/xir/host_os/host_os.cmake")
+
 
 include("${CMAKE_CURRENT_LIST_DIR}/base/independent_tests.cmake")

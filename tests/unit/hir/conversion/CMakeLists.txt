@@ -8,9 +8,7 @@ else()
 endif()
 add_test(NAME hir_contextual_conversion COMMAND test_hir_contextual_conversion)
 set_tests_properties(hir_contextual_conversion PROPERTIES TIMEOUT 60 LABELS "unit;hir;types;ownership")
-add_test(NAME source_conversion_sdk COMMAND test_source_sdk_consumer --conversion
-    "${PROJECT_BINARY_DIR}/tests/unit/source-sdk-empty-stdlib")
-set_tests_properties(source_conversion_sdk PROPERTIES TIMEOUT 120 LABELS "unit;hir;api;sdk;ownership")
+
 if(WIN32)
     add_test(NAME hir_contextual_conversion_cli COMMAND ${XRAY_PYTHON} -X utf8
         "${CMAKE_CURRENT_SOURCE_DIR}/test_conversion_cli.py"

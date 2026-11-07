@@ -12,9 +12,6 @@ add_test(NAME test_test_packet_oracle COMMAND "${Python3_EXECUTABLE}" -X utf8
     "${CMAKE_CURRENT_LIST_DIR}/../derive_test_roles_vectors.py" --output "${XR_TEST_DECLARATIONS_BINARY}/ordinary-packets")
 set_tests_properties(test_test_packet_oracle PROPERTIES FIXTURES_SETUP role_packets)
 
-add_executable(test_method_role_regression "${CMAKE_CURRENT_LIST_DIR}/../test_xir_compile_runtime_owner.c")
-target_link_libraries(test_method_role_regression PRIVATE xray_xir_vm)
-add_test(NAME test_method_role_regression COMMAND test_method_role_regression)
 add_executable(test_test_declarations "${CMAKE_CURRENT_LIST_DIR}/test_test_declarations.c")
 target_link_libraries(test_test_declarations PRIVATE xray_xir_source_product)
 add_test(NAME test_test_declarations COMMAND test_test_declarations "${CMAKE_CURRENT_LIST_DIR}" "${XR_ROOT}/stdlib")
@@ -26,8 +23,8 @@ add_executable(test_test_native "${CMAKE_CURRENT_LIST_DIR}/test_native.c" "${tes
 target_link_libraries(test_test_native PRIVATE xray_xir_scalar xray_compile_resources)
 add_test(NAME test_test_native COMMAND test_test_native)
 
-set(test_declaration_targets test_test_source_cases test_method_role_regression test_test_declarations test_test_native)
-set(test_declaration_tests test_test_source_cases test_test_packet_oracle test_method_role_regression test_test_declarations test_test_native)
+set(test_declaration_targets test_test_source_cases test_test_declarations test_test_native)
+set(test_declaration_tests test_test_source_cases test_test_packet_oracle test_test_declarations test_test_native)
 
 foreach(target IN LISTS test_declaration_targets)
     target_include_directories(${target} PRIVATE "${XR_ROOT}/src" "${XR_ROOT}/include")

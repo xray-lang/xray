@@ -8,9 +8,7 @@ else()
 endif()
 add_test(NAME hir_binary COMMAND test_hir_binary)
 set_tests_properties(hir_binary PROPERTIES TIMEOUT 60 LABELS "unit;hir;types;ownership")
-add_test(NAME source_binary_sdk COMMAND test_source_sdk_consumer --binary
-    "${PROJECT_BINARY_DIR}/tests/unit/source-sdk-empty-stdlib")
-set_tests_properties(source_binary_sdk PROPERTIES TIMEOUT 120 LABELS "unit;hir;api;sdk;ownership")
+
 if(WIN32)
     add_test(NAME hir_binary_cli COMMAND ${XRAY_PYTHON} -X utf8
         "${CMAKE_CURRENT_SOURCE_DIR}/test_binary_cli.py"

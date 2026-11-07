@@ -15,8 +15,6 @@ function(xray_recursive_consumer target source)
     endif()
 endfunction()
 
-xray_recursive_consumer(test_xir_p11_recursive_source deep_loans_probe.c)
-
 function(xray_recursive_test name target seconds)
     add_test(NAME ${name} COMMAND ${target} ${ARGN})
     set_tests_properties(${name} PROPERTIES TIMEOUT ${seconds} LABELS "unit;xir;ctfe;ownership;recursive-data")

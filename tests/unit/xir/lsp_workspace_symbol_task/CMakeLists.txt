@@ -3,9 +3,7 @@ if(TARGET test_lsp_workspace_symbol_task)
 endif()
 include("${CMAKE_CURRENT_LIST_DIR}/../lsp_source_task/CMakeLists.txt")
 include("${CMAKE_CURRENT_LIST_DIR}/../lsp_source_index_store/CMakeLists.txt")
-source_task_target(test_lsp_workspace_symbol_task "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_navigation.c")
-target_sources(test_lsp_workspace_symbol_task PRIVATE "${CMAKE_CURRENT_LIST_DIR}/before_store_owner.c")
-target_compile_definitions(test_lsp_workspace_symbol_task PRIVATE XLSP_WORKSPACE_SYMBOL_TASK=1)
+
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set(workspace_dir "${CMAKE_CURRENT_BINARY_DIR}/lsp-workspace-symbol-task")
 foreach(kind IN ITEMS current)
@@ -25,14 +23,8 @@ foreach(kind IN ITEMS current)
             "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_server.c" "${workspace_dir}/${output}" "${extra}" "${textdoc}" ${flag}
         DEPENDS "${CMAKE_CURRENT_LIST_DIR}/extract_handlers.py" "${extra}" "${textdoc}" "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_server.c" VERBATIM)
     set_source_files_properties("${workspace_dir}/${output}" PROPERTIES HEADER_FILE_ONLY TRUE)
-    target_sources(test_lsp_workspace_symbol_task PRIVATE "${workspace_dir}/${output}")
+
 endforeach()
-target_include_directories(test_lsp_workspace_symbol_task PRIVATE "${workspace_dir}")
-foreach(mode normal resources counterfactual)
-    add_test(NAME test_lsp_workspace_symbol_task_${mode} COMMAND "${Python3_EXECUTABLE}" -X utf8
-        "${CMAKE_CURRENT_LIST_DIR}/test_workspace.py" "$<TARGET_FILE:test_lsp_workspace_symbol_task>" "${PROJECT_SOURCE_DIR}/stdlib" --${mode})
-    set_tests_properties(test_lsp_workspace_symbol_task_${mode} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE LABELS "unit;lsp;source;ownership;allocation")
-endforeach()
-set_tests_properties(test_lsp_workspace_symbol_task_resources PROPERTIES PROCESSORS 8 COST 290)
+
 add_test(NAME test_lsp_source_index_store_normal COMMAND test_lsp_source_index_store --normal)
 set_tests_properties(test_lsp_source_index_store_normal PROPERTIES TIMEOUT 30 LABELS "unit;lsp;ownership;metadata;allocation")

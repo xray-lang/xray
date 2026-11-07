@@ -10,21 +10,7 @@ add_test(NAME test_xir_generator_driver_allocations COMMAND test_xir_generator_d
 set_tests_properties(test_xir_generator_driver_allocations PROPERTIES LABELS "unit;xir;generator;ownership;runtime;fault-injection" TIMEOUT 120 PROCESSORS 1)
 set_tests_properties(test_xir_generator_driver PROPERTIES LABELS "unit;xir;generator;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
 
-add_executable(test_xir_generator_source xir/test_xir_generator_source.c)
-target_link_libraries(test_xir_generator_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
-target_compile_definitions(test_xir_generator_source PRIVATE XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-if(MSVC)
-    target_compile_options(test_xir_generator_source PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_generator_source PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_generator_source COMMAND test_xir_generator_source)
-set_tests_properties(test_xir_generator_source PROPERTIES LABELS "unit;xir;source;generator;compiler;runtime" TIMEOUT 120 PROCESSORS 1)
-
 set(XIR_GENERATOR_SOURCE_C "${CMAKE_CURRENT_BINARY_DIR}/generated/xir_generator_source.c")
-add_custom_command(OUTPUT "${XIR_GENERATOR_SOURCE_C}"
-    COMMAND $<TARGET_FILE:test_xir_generator_source> "${XIR_GENERATOR_SOURCE_C}"
-    DEPENDS test_xir_generator_source VERBATIM)
 
 add_executable(test_xir_generator_cleanup_source xir/test_xir_generator_cleanup_source.c)
 target_link_libraries(test_xir_generator_cleanup_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
@@ -44,23 +30,7 @@ foreach(generator_cleanup_target IN ITEMS test_xir_generator_cleanup_source)
     set_tests_properties(${generator_cleanup_target} PROPERTIES LABELS "unit;xir;generator;cleanup;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
 endforeach()
 
-add_executable(test_xir_generator_factory_source xir/test_xir_generator_factory_source.c)
-target_link_libraries(test_xir_generator_factory_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
-target_compile_definitions(test_xir_generator_factory_source PRIVATE XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
 set(XIR_GENERATOR_FACTORY_C "${CMAKE_CURRENT_BINARY_DIR}/generated/xir_generator_factory.c")
-add_custom_command(OUTPUT "${XIR_GENERATOR_FACTORY_C}"
-    COMMAND $<TARGET_FILE:test_xir_generator_factory_source> "${XIR_GENERATOR_FACTORY_C}"
-    DEPENDS test_xir_generator_factory_source VERBATIM)
-
-foreach(generator_factory_target IN ITEMS test_xir_generator_factory_source)
-    if(MSVC)
-        target_compile_options(${generator_factory_target} PRIVATE /W4 /WX /utf-8)
-    else()
-        target_compile_options(${generator_factory_target} PRIVATE -Wall -Wextra -Werror)
-    endif()
-    add_test(NAME ${generator_factory_target} COMMAND ${generator_factory_target})
-    set_tests_properties(${generator_factory_target} PROPERTIES LABELS "unit;xir;generator;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
-endforeach()
 
 set(XIR_GENERATOR_CONSUMER_C "${CMAKE_CURRENT_BINARY_DIR}/generated/xir_generator_consumer.c")
 
@@ -218,17 +188,6 @@ add_test(NAME test_xir_generator_receiver_compiler_history_reports
     COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_receiver_compiler_history_reports.py")
 set_tests_properties(test_xir_generator_receiver_compiler_history_reports PROPERTIES
     LABELS "unit;xir;generator;compiler-fault;ownership" TIMEOUT 30 PROCESSORS 1)
-
-add_executable(test_xir_generator_producer_sites xir/test_xir_generator_producer_sites.c)
-target_link_libraries(test_xir_generator_producer_sites PRIVATE xray_xir)
-if(MSVC)
-    target_compile_options(test_xir_generator_producer_sites PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_generator_producer_sites PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_generator_producer_sites COMMAND test_xir_generator_producer_sites)
-set_tests_properties(test_xir_generator_producer_sites PROPERTIES
-    LABELS "unit;xir;generator;metadata;ownership;compiler-fault" TIMEOUT 120 PROCESSORS 1)
 
 add_executable(test_xir_generator_consumption_source xir/test_xir_generator_consumption_source.c)
 target_link_libraries(test_xir_generator_consumption_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)

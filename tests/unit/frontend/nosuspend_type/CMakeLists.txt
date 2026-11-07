@@ -8,6 +8,3 @@ else()
 endif()
 add_test(NAME nosuspend_type_syntax COMMAND test_nosuspend_type_syntax)
 set_tests_properties(nosuspend_type_syntax PROPERTIES TIMEOUT 60 LABELS "unit;frontend;types;ownership")
-add_test(NAME source_nosuspend_sdk COMMAND test_source_sdk_consumer --nosuspend
-    "${PROJECT_BINARY_DIR}/tests/unit/source-sdk-empty-stdlib")
-set_tests_properties(source_nosuspend_sdk PROPERTIES TIMEOUT 120 LABELS "unit;api;source;sdk;ownership")

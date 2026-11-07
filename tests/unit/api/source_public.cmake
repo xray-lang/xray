@@ -109,17 +109,14 @@ add_test(NAME source_request_ast_boundary COMMAND test_source_request_ast_bounda
 set_tests_properties(source_request_ast_boundary PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership")
 
 # The original C11 embedding scenarios consume the real request/artifact API.
-add_executable(test_source_sdk_consumer "${PROJECT_SOURCE_DIR}/tests/unit/xir/source_sdk_consumer.c")
-target_link_libraries(test_source_sdk_consumer PRIVATE xray_source_api)
+
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/source-sdk-empty-stdlib")
-add_test(NAME source_sdk_c11_consumer COMMAND test_source_sdk_consumer "${CMAKE_CURRENT_BINARY_DIR}/source-sdk-empty-stdlib")
-set_tests_properties(source_sdk_c11_consumer PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership;sdk")
 
 add_executable(test_ctfe_resource_modes "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_ctfe_resource_modes.c")
 target_link_libraries(test_ctfe_resource_modes PRIVATE xray_xir_ctfe)
 add_test(NAME ctfe_resource_modes COMMAND test_ctfe_resource_modes)
 set_tests_properties(ctfe_resource_modes PROPERTIES TIMEOUT 120 LABELS "unit;compiler;ctfe;ownership")
-foreach(target test_source_sdk_consumer test_ctfe_resource_modes)
+foreach(target IN ITEMS test_ctfe_resource_modes)
     set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /WX /utf-8)

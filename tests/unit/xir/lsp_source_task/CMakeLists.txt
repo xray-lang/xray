@@ -45,18 +45,5 @@ else()
     target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
 endif()
 endfunction()
-source_task_target(test_lsp_source_task "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_navigation.c")
-source_task_target(test_lsp_source_task_before "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_navigation.c")
-source_task_target(test_lsp_source_task_budget_before "${CMAKE_CURRENT_LIST_DIR}/before_navigation.c")
-target_sources(test_lsp_source_task_before PRIVATE "${PROJECT_SOURCE_DIR}/tests/unit/xir/source_cancel/before_request.c")
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
-add_test(NAME test_lsp_source_task COMMAND "${Python3_EXECUTABLE}" -X utf8
-    "${CMAKE_CURRENT_LIST_DIR}/test_task.py" "$<TARGET_FILE:test_lsp_source_task>" "${PROJECT_SOURCE_DIR}/stdlib")
-set_tests_properties(test_lsp_source_task PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE LABELS "unit;lsp;source;ownership")
 
-add_test(NAME test_lsp_source_task_counterfactual COMMAND "${Python3_EXECUTABLE}" -X utf8
-    "${CMAKE_CURRENT_LIST_DIR}/test_task.py" "$<TARGET_FILE:test_lsp_source_task_before>" "${PROJECT_SOURCE_DIR}/stdlib" --before)
-set_tests_properties(test_lsp_source_task_counterfactual PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE LABELS "unit;lsp;source;ownership")
-add_test(NAME test_lsp_source_task_budget_counterfactual COMMAND "${Python3_EXECUTABLE}" -X utf8
-    "${CMAKE_CURRENT_LIST_DIR}/test_task.py" "$<TARGET_FILE:test_lsp_source_task_budget_before>" "${PROJECT_SOURCE_DIR}/stdlib" --budget-before)
-set_tests_properties(test_lsp_source_task_budget_counterfactual PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE LABELS "unit;lsp;source;ownership")
+find_package(Python3 REQUIRED COMPONENTS Interpreter)

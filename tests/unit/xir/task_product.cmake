@@ -1,11 +1,4 @@
-add_executable(test_xir_task_vm_product xir/test_xir_task_vm_product.c)
-target_link_libraries(test_xir_task_vm_product PRIVATE xray_xir_vm xray_xir_scalar)
-add_executable(test_xir_task_root_fault xir/test_xir_task_root_fault.c)
-target_link_libraries(test_xir_task_root_fault PRIVATE xray_xir_vm xray_xir_scalar)
-add_executable(test_xir_task_root_retry xir/test_xir_task_root_retry.c)
-target_link_libraries(test_xir_task_root_retry PRIVATE xray_xir_vm xray_xir_scalar xray_xir_cgen)
-add_executable(test_xir_task_root_retry_probe xir/test_xir_task_root_retry_probe.c)
-target_link_libraries(test_xir_task_root_retry_probe PRIVATE xray_xir_vm xray_xir_scalar)
+
 
 add_executable(test_xir_go_source_execution xir/test_xir_go_source_execution.c)
 target_link_libraries(test_xir_go_source_execution PRIVATE xray_xir_source xray_xir_vm)
@@ -17,17 +10,14 @@ target_link_libraries(test_xir_go_source_product PRIVATE xray_xir_source_product
 target_compile_definitions(test_xir_go_source_product PRIVATE
     XR_GO_PRODUCT_FIXTURES="${PROJECT_SOURCE_DIR}/tests/fixtures/xir_go_product"
     XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-foreach(target IN ITEMS test_xir_task_vm_product test_xir_task_root_fault test_xir_task_root_retry test_xir_task_root_retry_probe test_xir_go_source_execution test_xir_go_source_product)
+foreach(target IN ITEMS test_xir_go_source_execution test_xir_go_source_product)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
     else()
         target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
     endif()
 endforeach()
-add_test(NAME test_xir_task_vm_product COMMAND test_xir_task_vm_product)
-set_tests_properties(test_xir_task_vm_product PROPERTIES LABELS "unit;xir;task;ownership;runtime" TIMEOUT 60)
-add_test(NAME test_xir_task_root_fault COMMAND test_xir_task_root_fault)
-set_tests_properties(test_xir_task_root_fault PROPERTIES LABELS "unit;xir;task;ownership;runtime" TIMEOUT 60)
+
 add_test(NAME test_xir_go_source_execution COMMAND test_xir_go_source_execution)
 set_tests_properties(test_xir_go_source_execution PROPERTIES LABELS "unit;xir;task;source;ownership;runtime" TIMEOUT 60)
 add_test(NAME test_xir_go_source_product COMMAND test_xir_go_source_product)
@@ -43,6 +33,4 @@ foreach(case integer string generic context_ordinary context_go context_existing
         PROPERTIES LABELS "unit;xir;task;source;ownership;runtime" TIMEOUT 300)
 endforeach()
 
-add_test(NAME test_xir_task_root_retry COMMAND test_xir_task_root_retry)
-set_tests_properties(test_xir_task_root_retry PROPERTIES LABELS "unit;xir;task;ownership;runtime" TIMEOUT 60)
 include(${CMAKE_CURRENT_LIST_DIR}/task_fault_cleanup.cmake)

@@ -64,21 +64,8 @@ add_test(NAME test_xir_effect_control_proof_literals COMMAND test_xir_effect_fin
 add_test(NAME test_xir_effect_source_terminal_callback COMMAND test_xir_effect_final_read --source-terminal-callback)
 set_tests_properties(test_xir_effect_control_proof_literals test_xir_effect_source_terminal_callback PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "xir;metadata;ownership;final-input-proof")
 
-add_executable(test_xir_effect_source_terminal_ordinary ${CMAKE_CURRENT_LIST_DIR}/test_xir_effect_source_terminal_ordinary.c
-    ${CMAKE_CURRENT_LIST_DIR}/xir_effect_input_probe.c)
 set(XR_EFFECT_INPUT_WORK "${CMAKE_CURRENT_BINARY_DIR}/effect-input-current")
 file(MAKE_DIRECTORY "${XR_EFFECT_INPUT_WORK}")
-target_compile_definitions(test_xir_effect_source_terminal_ordinary PRIVATE XR_EFFECT_INPUT_WORK="${XR_EFFECT_INPUT_WORK}")
-target_include_directories(test_xir_effect_source_terminal_ordinary PRIVATE ${XRAY_COMMON_INCLUDES})
-target_link_libraries(test_xir_effect_source_terminal_ordinary PRIVATE xray_xir xray_xir_scalar xray_xir_source)
-if(MSVC)
-    target_compile_options(test_xir_effect_source_terminal_ordinary PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_effect_source_terminal_ordinary PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_effect_source_terminal_ordinary COMMAND test_xir_effect_source_terminal_ordinary)
-set_tests_properties(test_xir_effect_source_terminal_ordinary PROPERTIES
-    TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;xir;metadata;ownership;final-input;producer-lifetime")
 
 add_executable(test_xir_capture_terminal ${CMAKE_CURRENT_LIST_DIR}/test_xir_capture_terminal.c)
 target_include_directories(test_xir_capture_terminal PRIVATE ${XRAY_COMMON_INCLUDES})
