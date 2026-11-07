@@ -292,9 +292,15 @@ static XrRbcStatus xr_rbc_call(const XrRbcModule *module, XrRbcStack *stack, uin
     size_t spill_base = stack->spill_count;
     if (base > SIZE_MAX - callee->register_count ||
         cell_base > SIZE_MAX - callee->cell_count ||
-        spill_base > SIZE_MAX - callee->spill_count ||
-        !xr_rbc_reserve(stack, base + callee->register_count, stack->depth + 1,
-            cell_base + callee->cell_count, spill_base + callee->spill_count))
+        spill_base > SIZE_MAX - callee->spill_count)
+        return XR_RBC_OUT_OF_MEMORY;
+    size_t slots = base + callee->register_count;
+    size_t frames = stack->depth + 1;
+    size_t cells = cell_base + callee->cell_count;
+    size_t spills = spill_base + callee->spill_count;
+    if ((slots > stack->slot_capacity || frames > stack->frame_capacity ||
+            cells > stack->cell_capacity || spills > stack->spill_capacity) &&
+        !xr_rbc_reserve(stack, slots, frames, cells, spills))
         return XR_RBC_OUT_OF_MEMORY;
     // Only arguments are live on entry; clearing the rest prevents stale
     // bits from an earlier invocation from becoming observable.
