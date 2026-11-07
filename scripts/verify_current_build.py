@@ -32,6 +32,8 @@ def main() -> None:
     parser.add_argument("--build", type=Path, required=True)
     parser.add_argument("--evidence", type=Path, required=True)
     args = parser.parse_args()
+    args.build = args.build.resolve()
+    args.evidence = args.evidence.resolve()
     args.evidence.mkdir(parents=True, exist_ok=True)
     facts = []
 
