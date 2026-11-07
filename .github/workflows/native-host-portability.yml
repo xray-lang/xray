@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 60
     concurrency:
       group: native-host-${{ github.ref }}-${{ matrix.os }}
-      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/agent/direct-cutover' }}
     strategy:
       fail-fast: false
       matrix:
