@@ -12,7 +12,7 @@ static void pc_outcome_metadata_literals(void) {
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&context,&fixture.edge.module,&checked,NULL)==XR_XIR_OK);
     const XrXirModule *input=xr_xir_compile_artifact_module(checked);
-    CHECK(effect_infer_construct(&context,(XirEffectInput){input,xr_xir_compile_artifact_construction(checked),NULL},NULL,&effects)==XR_XIR_OK && effects);
+    CHECK(effect_infer_construct(&context,(XirEffectInput){input,xr_xir_compile_artifact_construction(checked),NULL},NULL,NULL,&effects)==XR_XIR_OK && effects);
     XrXirFunctionEffectContract *contracts=effects->outcomes_work.contracts;
     XirEffectEntryRootView *entries=effects->outcomes_work.entry_roots;
     CHECK(contracts && entries && contracts[1].parameter_count==1 && contracts[1].parameters &&

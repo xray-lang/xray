@@ -90,7 +90,12 @@ def main() -> None:
                 "f64": b"3.75\n", "instance_growth": b"1\n" * 8,
                 "module_scalar_constants": b"1\n"}
     generated = {}
+    scalar_types = ("i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64")
     capacity_cases = (
+        ("many_generic_instances",
+         "".join(f"fn genericFn{i}<T>()->i64{{return {i}}}\n" for i in range(16))
+         + "".join(f"print(genericFn{i}<{kind}>())\n" for i in range(16) for kind in scalar_types),
+         b"".join(f"{i}\n".encode() for i in range(16) for _ in scalar_types)),
         ("many_functions",
          "".join(f"fn capacityFn{i}()->i64{{return {i}}}\n" for i in range(1100))
          + "print(capacityFn1099())\n", b"1099\n"),

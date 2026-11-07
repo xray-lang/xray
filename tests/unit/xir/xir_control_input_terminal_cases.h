@@ -80,7 +80,7 @@ static void control_late_signature_case(bool no_suspend) {
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&context,&module,&checked,NULL)==XR_XIR_OK);
     uint64_t held=rp_stats(&context).held_bytes;const XrXirModule *source=xr_xir_compile_artifact_module(checked);
-    CHECK(source && effect_infer_construct(&context,(XirEffectInput){source,xr_xir_compile_artifact_construction(checked),NULL},NULL,&effects)==XR_XIR_OK);
+    CHECK(source && effect_infer_construct(&context,(XirEffectInput){source,xr_xir_compile_artifact_construction(checked),NULL},NULL,NULL,&effects)==XR_XIR_OK);
     const EffectBodyMaterial *body=effects->invocations->body;
     control_late_source=(XrXirTypeNode *)&source->types->nodes[0];
     control_late_input=(XrXirTypeNode *)&body->terms.types.nodes[0];

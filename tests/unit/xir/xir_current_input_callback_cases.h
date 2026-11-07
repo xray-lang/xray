@@ -42,7 +42,7 @@ static XrXirStatus pc_current_input_operation(const XrXirCompileContext *context
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;EffectGraph graph={0};
     XrXirModule source={0};XrXirFunction functions[3];XrXirInstruction rows[EE_MAX_OPS];
     XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,NULL);
-    if (status==XR_XIR_OK) status=effect_infer_construct(context,(XirEffectInput){xr_xir_compile_artifact_module(checked),xr_xir_compile_artifact_construction(checked),NULL},NULL,&effects);
+    if (status==XR_XIR_OK) status=effect_infer_construct(context,(XirEffectInput){xr_xir_compile_artifact_module(checked),xr_xir_compile_artifact_construction(checked),NULL},NULL,NULL,&effects);
     if (status==XR_XIR_OK) {
         const XrXirModule *original=xr_xir_compile_artifact_module(checked);
         CHECK(original->function_count==3 && original->functions[1].instruction_count<=EE_MAX_OPS);

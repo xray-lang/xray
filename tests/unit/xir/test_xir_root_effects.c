@@ -107,6 +107,8 @@ static void root_source_cases(bool resources) {
     CHECK(xr_xir_compile_specialize(checked,&specialized,NULL, NULL)==XR_XIR_OK);
     XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(specialized,&target, NULL,&lowered,NULL)==XR_XIR_OK);
+    CHECK(specialized->control_summary &&
+        xir_effects_control_summary(lowered->program_final)==specialized->control_summary);
     effect_artifact_free(specialized);root_source_oracles(lowered,true);effect_artifact_free(lowered);
     XrXirEffects *summary=NULL;CHECK(effect_analyze(checked,&summary)==XR_XIR_OK);
     const XrXirModule *module=xr_xir_compile_artifact_module(checked);
@@ -180,7 +182,54 @@ static void root_go_rejections(void) {
     CHECK(!root_source("rejected/root_parent.xr",XR_XIR_BAD_TYPE));
     puts("root GO child/parent BAD_TYPE remain fail closed PASS");
 }
+static void control_summary_streamed(void) {
+    EffectMark baseline = effect_mark();
+    XrXirInstruction rows[3][2] = {
+        {{.op = XR_XIR_CALL, .immediate = 1}, {.op = XR_XIR_RETURN}},
+        {{.op = XR_XIR_CALL, .immediate = 2}, {.op = XR_XIR_RETURN}},
+        {{.op = XR_XIR_SUSPEND}, {.op = XR_XIR_RETURN}}
+    };
+    XrXirFunction functions[3] = {0};
+    for (uint32_t f = 0; f < 3; ++f)
+        functions[f] = (XrXirFunction){.name = "f", .name_length = 1, .error_type = XR_XIR_NEVER,
+            .instructions = rows[f], .instruction_count = 2};
+    XrXirModule module = {.stage = XR_XIR_CHECKED, .functions = functions, .function_count = 3};
+    XirControlBuilder *builder = NULL;
+    EffectControlSummary *summary = NULL, *retained = NULL;
+    CHECK(xir_effect_control_builder_new(&effect_context, &module, NULL, &builder) == XR_XIR_OK);
+    const uint32_t order[] = {1, 0, 2};
+    for (uint32_t at = 0; at < 3; ++at) {
+        uint32_t f = order[at];
+        CHECK(xir_effect_control_begin(builder, &module, f) == XR_XIR_OK);
+        CHECK(xir_effect_control_begin(builder, &module, f) == XR_XIR_BAD_STRUCTURE);
+        CHECK(xir_effect_control_instruction(builder, &module, f, 1) == XR_XIR_BAD_STRUCTURE);
+        CHECK(xir_effect_control_end(builder, &module, f) == XR_XIR_BAD_STRUCTURE);
+        CHECK(xir_effect_control_finish(builder, &module, &summary) == XR_XIR_BAD_STRUCTURE && !summary);
+        for (uint32_t i = 0; i < 2; ++i)
+            CHECK(xir_effect_control_instruction(builder, &module, f, i) == XR_XIR_OK);
+        CHECK(xir_effect_control_end(builder, &module, f) == XR_XIR_OK);
+        CHECK(xir_effect_control_begin(builder, &module, f) == XR_XIR_BAD_STRUCTURE);
+    }
+    memset(rows, 0xCE, sizeof(rows));
+    for (uint32_t f = 0; f < 3; ++f) {
+        functions[f].instructions = NULL;
+        functions[f].instruction_count = UINT32_MAX;
+    }
+    CHECK(xir_effect_control_finish(builder, &module, &summary) == XR_XIR_OK);
+    CHECK(xir_effect_control_finish(builder, &module, &retained) == XR_XIR_BAD_STRUCTURE && !retained);
+    xir_effect_control_builder_free(builder);
+    CHECK(summary->facts[0].suspend == XR_XIR_EFFECT_MAY && summary->causes[0].callee == 1);
+    CHECK(summary->causes[0].distance == 2 && summary->causes[1].callee == 2);
+    CHECK(xir_effect_control_retain(&effect_context, summary, &retained) == XR_XIR_OK);
+    CHECK(xir_effect_control_retain(&effect_context, summary, &retained) == XR_XIR_BAD_STRUCTURE);
+    xir_effect_control_free(summary);
+    CHECK(retained->causes[2].cause == XR_XIR_EFFECT_CAUSE_SUSPEND);
+    xir_effect_control_free(retained);
+    effect_mark_check(baseline);
+    puts("streamed control summaries close without bodies and retain independent ownership PASS");
+}
 static void control_summary_kernel(void) {
+    control_summary_streamed();
     const uint32_t count = 8193;
     XrXirFunction *functions = xr_calloc(count, sizeof(*functions));
     XrXirInstruction (*rows)[2] = xr_calloc(count, sizeof(*rows));
@@ -207,7 +256,7 @@ static void control_summary_kernel(void) {
     size_t before = attempts;
     CHECK(effect_control_summary_build(&effect_context, &module, NULL, &occupied) == XR_XIR_BAD_STRUCTURE);
     CHECK(occupied == summary && attempts == before);
-    effect_control_summary_free(summary);
+    xir_effect_control_free(summary);
     effect_mark_check(baseline);
 
     module.function_count = 4;
@@ -216,7 +265,7 @@ static void control_summary_kernel(void) {
     summary = NULL;
     CHECK(effect_control_summary_build(&effect_context, &module, NULL, &summary) == XR_XIR_OK);
     for (uint32_t f = 0; f < 4; ++f) CHECK(summary->facts[f].suspend == XR_XIR_EFFECT_NONE);
-    effect_control_summary_free(summary);
+    xir_effect_control_free(summary);
 
     XrXirInstruction terminal[3] = {
         {.op = XR_XIR_CALL}, {.op = XR_XIR_SUSPEND}, {.op = XR_XIR_RETURN}
@@ -230,7 +279,7 @@ static void control_summary_kernel(void) {
     for (uint32_t f = 0; f < 4; ++f)
         CHECK(summary->facts[f].suspend == (f < 3 ? XR_XIR_EFFECT_MAY : XR_XIR_EFFECT_NONE));
     CHECK(summary->causes[0].callee == 1 && summary->causes[0].distance == 2);
-    effect_control_summary_free(summary);
+    xir_effect_control_free(summary);
     effect_mark_check(baseline);
     for (size_t point = 0; point < sites; ++point) {
         summary = NULL;
@@ -258,7 +307,7 @@ static void control_summary_kernel(void) {
     xr_free(rows);
     xr_free(blocks);
     CHECK(summary->facts[0].suspend == XR_XIR_EFFECT_MAY && summary->causes[0].callee == 1);
-    effect_control_summary_free(summary);
+    xir_effect_control_free(summary);
     effect_mark_check(baseline);
     printf("control summaries: iterative long chain, seeded/unseeded SCC, %zu allocation failures and detached owner PASS\n", sites);
 }

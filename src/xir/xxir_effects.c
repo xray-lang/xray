@@ -82,9 +82,6 @@ static XrXirStatus effect_final_retire_construction(const XrXirCompileContext *w
 static XrXirStatus effect_context_owner_trace(const XrXirCompileContext *context,
     const XrXirEffects *effects, uint32_t function, XrXirRootCauseTrace **output);
 
-typedef struct EffectControlSummary EffectControlSummary;
-static void effect_control_summary_free(EffectControlSummary *summary);
-
 typedef struct EffectFinalOutcomes {
     XrCompileResources *resources;
     uint32_t count;
@@ -120,7 +117,7 @@ static void effect_outcomes_clear(EffectFinalOutcomes *outcomes,uint32_t count) 
             xr_compile_resources_free((void *)outcomes->entry_roots[f].parameters);
         xr_compile_resources_free(outcomes->entry_roots);
     }
-    effect_control_summary_free(outcomes->control_summary);
+    xir_effect_control_free(outcomes->control_summary);
     effect_context_owner_free(outcomes->contexts);
     effect_contracts_clear(outcomes->contracts,count,false);
     xr_compile_resources_free(outcomes->go_safe);
@@ -1096,7 +1093,8 @@ XR_FUNC XrXirStatus xir_effects_default_access_operation_input(const XrXirCompil
 }
 
 static XrXirStatus effect_infer_construct(const XrXirCompileContext *compile_context,
-    XirEffectInput input, const XrXirRootRefiner *refiner, XrXirEffects **output) {
+    XirEffectInput input, const XrXirRootRefiner *refiner, EffectControlSummary *control,
+    XrXirEffects **output) {
     const XrXirModule *module=input.module;
     XrXirStatus allocation_status = XR_XIR_OK;
     if (!xir_compile_context_valid(compile_context) || !module || !output || *output)
@@ -1159,7 +1157,12 @@ static XrXirStatus effect_infer_construct(const XrXirCompileContext *compile_con
     if (status == XR_XIR_OK) status = effect_go_safe(module, effects, &graph, remaining);
     if (status == XR_XIR_OK) {
         EffectFinalOutcomes *records = &effects->outcomes_work;
-        status = effect_control_summary_build(remaining, module, input.control, &records->control_summary);
+        status = control ? xir_effect_control_retain(remaining, control, &records->control_summary) :
+            effect_control_summary_build(remaining, module, input.control, &records->control_summary);
+        if (status == XR_XIR_OK && records->control_summary->functions != module->function_count)
+            status = XR_XIR_BAD_STRUCTURE;
+        if (status == XR_XIR_OK && control)
+            status = effect_control_summary_recheck(remaining, module, control);
         if (status == XR_XIR_OK) {
             records->functions = records->control_summary->facts;
             records->witnesses = records->control_summary->causes;
@@ -1179,23 +1182,32 @@ static XrXirStatus effect_infer_construct(const XrXirCompileContext *compile_con
 /* The constructor has retired its graph before the only public ownership
  * move. Its staging can be observed only by private construction consumers. */
 static XrXirStatus effect_infer(const XrXirCompileContext *context,
-    XirEffectInput input,const XrXirRootRefiner *refiner,XrXirEffects **output) {
+    XirEffectInput input,const XrXirRootRefiner *refiner,EffectControlSummary *control,XrXirEffects **output) {
     const XrXirModule *module=input.module;
     if (!output || *output) return XR_XIR_BAD_STRUCTURE;
     XrXirEffects *effects=NULL;
-    XrXirStatus status=effect_infer_construct(context,input,refiner,&effects);
+    XrXirStatus status=effect_infer_construct(context,input,refiner,control,&effects);
     if (status==XR_XIR_OK) status=effect_outcomes_publish(context,module,effects);
     if (status!=XR_XIR_OK) { xr_xir_compile_effects_free(effects);return status; }
     *output=effects;return XR_XIR_OK;
 }
 XR_FUNC XrXirStatus xr_xir_compile_effects_infer_verified_input(const XrXirCompileContext *context,
     XirEffectInput input, XrXirEffects **output) {
-    return effect_infer(context,input,NULL,output);
+    return effect_infer(context,input,NULL,NULL,output);
+}
+XR_FUNC XrXirStatus xir_effects_lower_verified_input(const XrXirCompileContext *context,
+    XirEffectInput input, EffectControlSummary *control, XrXirEffects **output) {
+    if (!input.module || input.module->stage != XR_XIR_LOWERED) return XR_XIR_BAD_STAGE;
+    return effect_infer(context,input,NULL,control,output);
+}
+XR_FUNC EffectControlSummary *xir_effects_control_summary(const XrXirEffects *effects) {
+    const EffectFinalOutcomes *final = effect_final_outcomes(effects);
+    return final ? final->control_summary : NULL;
 }
 XR_FUNC XrXirStatus xr_xir_compile_effects_refine_verified_input(const XrXirCompileContext *context,
     XirEffectInput input, const XrXirRootRefiner *refiner, XrXirEffects **output) {
     if (!refiner || !refiner->update || !refiner->context) return XR_XIR_BAD_STRUCTURE;
-    return effect_infer(context,input,refiner,output);
+    return effect_infer(context,input,refiner,NULL,output);
 }
 /* This lexical producer retains the sole fresh derivation. Each use still
  * proves the entire current Source against its owned physical representation,

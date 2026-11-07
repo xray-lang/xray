@@ -218,7 +218,7 @@ static void pc_local_callback_boundary(void) {
     EdgeFixture fixture;pc_empty_fixture(&fixture,0);
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&c,&fixture.module,&checked,NULL)==XR_XIR_OK);
-    CHECK(effect_infer_construct(&c,(XirEffectInput){xr_xir_compile_artifact_module(checked),xr_xir_compile_artifact_construction(checked),NULL},NULL,&effects)==XR_XIR_OK);pc_empty_constructed(effects,0);
+    CHECK(effect_infer_construct(&c,(XirEffectInput){xr_xir_compile_artifact_module(checked),xr_xir_compile_artifact_construction(checked),NULL},NULL,NULL,&effects)==XR_XIR_OK);pc_empty_constructed(effects,0);
     const XrXirModule *source=xr_xir_compile_artifact_module(checked);EffectGraph graph={0};
     CHECK(effect_graph_build(source,effects,&graph,&c)==XR_XIR_OK && graph.physical_owned);
     EffectBodyRequest body=effect_body_owned_request(&c,graph.material);
@@ -253,7 +253,7 @@ static void pc_local_release_boundary(void) {
     EdgeFixture fixture;pc_empty_fixture(&fixture,0);
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&c,&fixture.module,&checked,NULL)==XR_XIR_OK);
-    CHECK(effect_infer_construct(&c,(XirEffectInput){xr_xir_compile_artifact_module(checked),xr_xir_compile_artifact_construction(checked),NULL},NULL,&effects)==XR_XIR_OK);pc_empty_constructed(effects,0);
+    CHECK(effect_infer_construct(&c,(XirEffectInput){xr_xir_compile_artifact_module(checked),xr_xir_compile_artifact_construction(checked),NULL},NULL,NULL,&effects)==XR_XIR_OK);pc_empty_constructed(effects,0);
     const XrXirModule *source=xr_xir_compile_artifact_module(checked);EffectGraph graph={0};
     CHECK(effect_graph_build(source,effects,&graph,&c)==XR_XIR_OK && graph.physical_owned);
     EffectBodyRequest body=effect_body_owned_request(&c,graph.material);

@@ -6,7 +6,7 @@ static void pc_dense_retirement_literals(void) {
         XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
         CHECK(xir_fixture_check(&context,&fixture.module,&checked,NULL)==XR_XIR_OK);
         const XrXirModule *input=xr_xir_compile_artifact_module(checked);
-        CHECK(effect_infer_construct(&context,(XirEffectInput){input,xr_xir_compile_artifact_construction(checked),NULL},NULL,&effects)==XR_XIR_OK && effects->outcomes_work.contexts);
+        CHECK(effect_infer_construct(&context,(XirEffectInput){input,xr_xir_compile_artifact_construction(checked),NULL},NULL,NULL,&effects)==XR_XIR_OK && effects->outcomes_work.contexts);
         EffectContextOwner *owner=effects->outcomes_work.contexts;
         EffectOrdinaryContexts *dense=owner->dense;XrXirEffects *uses=&dense->uses;
         const EffectFinalFunctions *result=&owner->forest->invocations->final->summary;
@@ -48,7 +48,7 @@ static void pc_dense_retirement_literals(void) {
         fprintf(stderr,"dense retirement mutation%u actual_freed%u roles%u callback%u status%u borrowed five terms rp_live\n",
             mutation,pc_ordinary_block_count,roles,pc_ordinary_callbacks,status);
         rows[0].type=XR_XIR_I64;xr_xir_compile_effects_free(effects);effects=NULL;
-        CHECK(effect_infer_construct(&context,(XirEffectInput){input,xr_xir_compile_artifact_construction(checked),NULL},NULL,&effects)==XR_XIR_OK);
+        CHECK(effect_infer_construct(&context,(XirEffectInput){input,xr_xir_compile_artifact_construction(checked),NULL},NULL,NULL,&effects)==XR_XIR_OK);
         CHECK(effect_outcomes_publish(&context,input,effects)==XR_XIR_OK);
         xr_xir_compile_artifact_free(checked);memset(&fixture,0xCE,sizeof(fixture));
         memset(functions,0xCE,sizeof(functions));memset(rows,0xCE,sizeof(rows));

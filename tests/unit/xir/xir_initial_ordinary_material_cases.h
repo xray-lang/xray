@@ -256,7 +256,7 @@ static void initial_ordinary_refresh_controls(void) {
     rp_balanced(retained);xr_xir_compile_effects_free(effects);effects=NULL;
     /* This actual constructor remains private while Source refines its body.
      * It is released without publishing facts for a changed Source input. */
-    CHECK(effect_infer_construct(&context,(XirEffectInput){original,construction,NULL},NULL,&effects)==XR_XIR_OK && effects &&
+    CHECK(effect_infer_construct(&context,(XirEffectInput){original,construction,NULL},NULL,NULL,&effects)==XR_XIR_OK && effects &&
         effects->outcomes_owner && !effects->invocations->final->outcomes);
 
     CHECK(effect_contexts_read(effects) && !effects->refinement &&

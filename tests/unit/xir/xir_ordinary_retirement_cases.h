@@ -96,7 +96,7 @@ static void pc_ordinary_parameter_retirement(void) {
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(&context,&fixture.module,&checked,NULL)==XR_XIR_OK);
     const XrXirModule *input=xr_xir_compile_artifact_module(checked);
-    CHECK(effect_infer_construct(&context,(XirEffectInput){input,xr_xir_compile_artifact_construction(checked),NULL},NULL,&effects)==XR_XIR_OK &&
+    CHECK(effect_infer_construct(&context,(XirEffectInput){input,xr_xir_compile_artifact_construction(checked),NULL},NULL,NULL,&effects)==XR_XIR_OK &&
         effects->outcomes_work.contexts && effects->outcomes_work.contexts->ordinary);
     EffectOrdinaryContexts *ordinary=effects->outcomes_work.contexts->ordinary;
     XrXirEffects *uses=&ordinary->uses;
@@ -137,7 +137,7 @@ static void pc_ordinary_retirement_literals(void) {
         XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
         CHECK(xir_fixture_check(&context,&fixture.module,&checked,NULL)==XR_XIR_OK);
         const XrXirModule *input=xr_xir_compile_artifact_module(checked);
-        CHECK(effect_infer_construct(&context,(XirEffectInput){input,xr_xir_compile_artifact_construction(checked),NULL},NULL,&effects)==XR_XIR_OK);
+        CHECK(effect_infer_construct(&context,(XirEffectInput){input,xr_xir_compile_artifact_construction(checked),NULL},NULL,NULL,&effects)==XR_XIR_OK);
         EffectOrdinaryContexts *ordinary=effects->outcomes_work.contexts->ordinary;
         XrXirEffects *uses=&ordinary->uses;CHECK(uses->outcomes_work.contracts && uses->generation);
         pc_ordinary_block_count=0;
@@ -170,7 +170,7 @@ static void pc_ordinary_retirement_literals(void) {
             mutation,pc_ordinary_block_count,pc_ordinary_callbacks,status);
         xr_xir_compile_effects_free(effects);effects=NULL;
         /* A rejected receiving candidate leaves the same real ledger usable. */
-        CHECK(effect_infer_construct(&context,(XirEffectInput){input,xr_xir_compile_artifact_construction(checked),NULL},NULL,&effects)==XR_XIR_OK);
+        CHECK(effect_infer_construct(&context,(XirEffectInput){input,xr_xir_compile_artifact_construction(checked),NULL},NULL,NULL,&effects)==XR_XIR_OK);
         CHECK(effect_outcomes_publish(&context,input,effects)==XR_XIR_OK);
         xr_xir_compile_artifact_free(checked);memset(&fixture,0xCE,sizeof(fixture));
         memset(functions,0xCE,sizeof(functions));memset(rows,0xCE,sizeof(rows));

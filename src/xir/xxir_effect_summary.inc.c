@@ -23,7 +23,8 @@ typedef enum EffectSummaryNodeKind {
 typedef struct EffectSummaryNode {
     uint32_t head;
     uint32_t terminals[2];
-    uint8_t local, closed, kind;
+    uint32_t function;
+    uint8_t local, closed, kind, throws, collected;
 } EffectSummaryNode;
 
 typedef struct EffectSummaryEdge {
@@ -44,6 +45,7 @@ typedef struct EffectControlGraph {
 } EffectControlGraph;
 
 struct EffectControlSummary {
+    atomic_uint_fast64_t references;
     XrCompileResources *resources;
     uint32_t functions;
     XrXirFunctionEffects *facts;
@@ -52,6 +54,7 @@ struct EffectControlSummary {
 };
 
 typedef struct EffectSummaryBuild {
+    XrXirCompileContext context;
     const XrXirCompileContext *memory;
     const XrXirModule *input;
     XrCompileRequestControl *control;
@@ -61,15 +64,35 @@ typedef struct EffectSummaryBuild {
     size_t *default_offsets;
     uint32_t *default_targets;
     uint32_t dispatch_index_capacity, progress;
+    uint32_t *function_nodes, function_capacity;
+    uint32_t *values, active_function, active_parameters, active_instructions, next_instruction;
+    bool active, finished;
     XrXirStatus status;
 } EffectSummaryBuild;
 
-static void effect_control_summary_free(EffectControlSummary *summary) {
+XR_FUNC void xir_effect_control_free(EffectControlSummary *summary) {
     if (!summary) return;
+    uint_fast64_t previous = atomic_fetch_sub_explicit(&summary->references, 1, memory_order_acq_rel);
+    XR_CHECK(previous, "A control summary must be released exactly once per owner");
+    if (previous != 1) return;
     xr_compile_resources_free(summary->facts);
     xr_compile_resources_free(summary->causes);
     xr_compile_resources_free(summary->task_creation);
     xr_compile_resources_free(summary);
+}
+
+XR_FUNC XrXirStatus xir_effect_control_retain(const XrXirCompileContext *context,
+    EffectControlSummary *summary, EffectControlSummary **output) {
+    if (!xir_compile_context_valid(context) || !summary || !output || *output ||
+        summary->resources != context->resources) return XR_XIR_BAD_STRUCTURE;
+    uint_fast64_t references = atomic_load_explicit(&summary->references, memory_order_relaxed);
+    for (;;) {
+        if (!references || references == UINT_FAST64_MAX) return XR_XIR_OVERFLOW;
+        if (atomic_compare_exchange_weak_explicit(&summary->references, &references, references + 1,
+            memory_order_relaxed, memory_order_relaxed)) break;
+    }
+    *output = summary;
+    return XR_XIR_OK;
 }
 
 static bool effect_summary_poll(EffectSummaryBuild *build) {
@@ -126,6 +149,24 @@ static bool effect_summary_edge(EffectSummaryBuild *build, uint32_t caller,
         graph->nodes[caller].head, instruction};
     graph->nodes[caller].head = index;
     return true;
+}
+
+static uint32_t effect_summary_function_node(EffectSummaryBuild *build, uint32_t function) {
+    while (function >= build->function_capacity) {
+        uint32_t previous = build->function_capacity;
+        uint32_t *nodes = effect_summary_grow(build, build->function_nodes,
+            previous, sizeof(*nodes), &build->function_capacity);
+        if (!nodes) return UINT32_MAX;
+        build->function_nodes = nodes;
+        for (uint32_t f = previous; f < build->function_capacity; ++f) nodes[f] = UINT32_MAX;
+    }
+    if (build->function_nodes[function] == UINT32_MAX) {
+        uint32_t node = effect_summary_node(build, EFFECT_SUMMARY_FUNCTION);
+        if (node == UINT32_MAX) return node;
+        build->function_nodes[function] = node;
+        build->graph.nodes[node].function = function;
+    }
+    return build->function_nodes[function];
 }
 
 static void effect_summary_seed(EffectControlGraph *graph, uint32_t node,
@@ -303,13 +344,15 @@ static bool effect_summary_instruction(EffectSummaryBuild *build, uint32_t funct
     const XrXirFunction *body = &build->input->functions[function];
     const XrXirInstruction *op = &body->instructions[instruction];
     if (!effect_summary_poll(build)) return false;
+    uint32_t caller = effect_summary_function_node(build, function);
+    if (caller == UINT32_MAX) return false;
     XrXirFunctionEffects seed = {0};
     EffectSeedProjection projection = effect_seed_opcode(op->op, &seed);
     if (projection == EFFECT_SEED_INVALID) { build->status = XR_XIR_BAD_STRUCTURE; return false; }
     if (seed.suspend == XR_XIR_EFFECT_MAY)
-        effect_summary_seed(&build->graph, function, EFFECT_SUMMARY_SUSPEND, instruction);
+        effect_summary_seed(&build->graph, caller, EFFECT_SUMMARY_SUSPEND, instruction);
     if (xr_xir_op_is_spawn(op->op))
-        effect_summary_seed(&build->graph, function, EFFECT_SUMMARY_SPAWN, instruction);
+        effect_summary_seed(&build->graph, caller, EFFECT_SUMMARY_SPAWN, instruction);
     if (xr_xir_type_is_callable(build->input->types, op->type) &&
         !effect_summary_value_flow(build, function, instruction, values)) return false;
     if (op->op == XR_XIR_CALL || op->op == XR_XIR_INVOKE) {
@@ -317,7 +360,8 @@ static bool effect_summary_instruction(EffectSummaryBuild *build, uint32_t funct
             build->status = XR_XIR_BAD_STRUCTURE;
             return false;
         }
-        return effect_summary_edge(build, function, (uint32_t)op->immediate, instruction);
+        uint32_t target = effect_summary_function_node(build, (uint32_t)op->immediate);
+        return target != UINT32_MAX && effect_summary_edge(build, caller, target, instruction);
     }
     if (op->op == XR_XIR_CALL_DEFAULT || op->op == XR_XIR_INVOKE_DEFAULT) {
         const uint32_t *identity = xr_xir_default_identity(op);
@@ -328,10 +372,11 @@ static bool effect_summary_instruction(EffectSummaryBuild *build, uint32_t funct
         }
         uint32_t target = build->default_targets[build->default_offsets[identity[0]] + identity[1]];
         if (target == UINT32_MAX) { build->status = XR_XIR_BAD_STRUCTURE; return false; }
-        return effect_summary_edge(build, function, target, instruction);
+        target = effect_summary_function_node(build, target);
+        return target != UINT32_MAX && effect_summary_edge(build, caller, target, instruction);
     }
     if (op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT)
-        return effect_summary_value_edge(build, function, function,
+        return effect_summary_value_edge(build, function, caller,
             (uint32_t)op->immediate, values, instruction);
     if (op->op == XR_XIR_CALL_REQUIREMENT) {
         if (!effect_seed_type(build->input->types, XR_XIR_UNIT, op, &seed)) {
@@ -339,7 +384,7 @@ static bool effect_summary_instruction(EffectSummaryBuild *build, uint32_t funct
             return false;
         }
         if (seed.suspend == XR_XIR_EFFECT_UNKNOWN)
-            effect_summary_seed(&build->graph, function, EFFECT_SUMMARY_UNKNOWN, instruction);
+            effect_summary_seed(&build->graph, caller, EFFECT_SUMMARY_UNKNOWN, instruction);
     }
     if (op->op == XR_XIR_LOCAL_WRITE || op->op == XR_XIR_SCALAR_LOCAL_WRITE ||
         op->op == XR_XIR_OWNED_LOCAL_WRITE) {
@@ -352,17 +397,31 @@ static bool effect_summary_instruction(EffectSummaryBuild *build, uint32_t funct
     return true;
 }
 
-static bool effect_summary_function(EffectSummaryBuild *build, uint32_t function) {
-    const XrXirModule *module = build->input;
+XR_FUNC XrXirStatus xir_effect_control_begin(XirControlBuilder *build,
+    const XrXirModule *module, uint32_t function) {
+    if (!build || !module || !module->functions || function >= module->function_count ||
+        build->active || build->finished) return XR_XIR_BAD_STRUCTURE;
+    if (build->status != XR_XIR_OK) return build->status;
+    build->input = module;
+    uint32_t caller = effect_summary_function_node(build, function);
+    if (caller == UINT32_MAX) { build->input = NULL; return build->status; }
+    if (build->graph.nodes[caller].collected) { build->input = NULL; return XR_XIR_BAD_STRUCTURE; }
     const XrXirFunction *body = &module->functions[function];
     uint64_t count = (uint64_t)body->parameter_count + body->instruction_count;
     if (count > UINT32_MAX || count > SIZE_MAX / sizeof(uint32_t)) {
         build->status = XR_XIR_OVERFLOW;
-        return false;
+        build->input = NULL;
+        return build->status;
     }
     uint32_t *values = count ? xir_compile_alloc(build->memory,
         (size_t)count * sizeof(*values), &build->status) : NULL;
-    if (count && !values) return false;
+    if (count && !values) { build->input = NULL; return build->status; }
+    build->values = values;
+    build->active = true;
+    build->active_function = function;
+    build->active_parameters = body->parameter_count;
+    build->active_instructions = body->instruction_count;
+    build->next_instruction = 0;
     for (uint32_t i = 0; i < (uint32_t)count; ++i) values[i] = UINT32_MAX;
     for (uint32_t p = 0; p < body->parameter_count && build->status == XR_XIR_OK; ++p) {
         const XrXirTypeNode *signature = xr_xir_callable_signature(module->types, body->parameters[p]);
@@ -374,13 +433,38 @@ static bool effect_summary_function(EffectSummaryBuild *build, uint32_t function
     }
     if (module->declarations && module->declarations->functions &&
         xir_sys_pipe_can_suspend(module->declarations->functions[function].native_callable))
-        effect_summary_seed(&build->graph, function, EFFECT_SUMMARY_SUSPEND, UINT32_MAX);
-    for (uint32_t i = 0; i < body->instruction_count && build->status == XR_XIR_OK; ++i)
-        if (!effect_summary_instruction(build, function, i, values)) {
-            if (build->status == XR_XIR_OK) build->status = XR_XIR_BAD_STRUCTURE;
-            break;
-        }
-    xr_compile_resources_free(values);
+        effect_summary_seed(&build->graph, caller, EFFECT_SUMMARY_SUSPEND, UINT32_MAX);
+    build->input = NULL;
+    return build->status;
+}
+
+static bool effect_summary_active(const EffectSummaryBuild *build,
+    const XrXirModule *module, uint32_t function) {
+    return build && build->active && !build->finished && module && module->functions &&
+        function < module->function_count && function == build->active_function &&
+        module->functions[function].parameter_count == build->active_parameters &&
+        module->functions[function].instruction_count == build->active_instructions;
+}
+
+XR_FUNC XrXirStatus xir_effect_control_instruction(XirControlBuilder *build,
+    const XrXirModule *module, uint32_t function, uint32_t instruction) {
+    if (!effect_summary_active(build, module, function) || instruction != build->next_instruction ||
+        instruction >= build->active_instructions) return XR_XIR_BAD_STRUCTURE;
+    if (build->status != XR_XIR_OK) return build->status;
+    build->input = module;
+    if (!effect_summary_instruction(build, function, instruction, build->values) && build->status == XR_XIR_OK)
+        build->status = XR_XIR_BAD_STRUCTURE;
+    build->input = NULL;
+    if (build->status == XR_XIR_OK) ++build->next_instruction;
+    return build->status;
+}
+
+XR_FUNC XrXirStatus xir_effect_control_end(XirControlBuilder *build,
+    const XrXirModule *module, uint32_t function) {
+    if (!effect_summary_active(build, module, function) ||
+        build->next_instruction != build->active_instructions) return XR_XIR_BAD_STRUCTURE;
+    if (build->status != XR_XIR_OK) return build->status;
+    const XrXirFunction *body = &module->functions[function];
     XrXirType error = body->error_type;
     if (module->declarations && module->declarations->functions &&
         (module->declarations->functions[function].promises & XR_XIR_FUNCTION_GENERATOR)) {
@@ -389,8 +473,13 @@ static bool effect_summary_function(EffectSummaryBuild *build, uint32_t function
         else error = iterator->result;
     }
     if (error == XR_XIR_UNIT) build->status = XR_XIR_BAD_TYPE;
-    build->summary->facts[function].throws = error == XR_XIR_NEVER ? XR_XIR_EFFECT_NONE : XR_XIR_EFFECT_MAY;
-    return build->status == XR_XIR_OK;
+    EffectSummaryNode *node = &build->graph.nodes[build->function_nodes[function]];
+    node->throws = error == XR_XIR_NEVER ? XR_XIR_EFFECT_NONE : XR_XIR_EFFECT_MAY;
+    node->collected = 1;
+    xr_compile_resources_free(build->values);
+    build->values = NULL;
+    build->active = false;
+    return build->status;
 }
 
 typedef struct EffectSummaryCandidate {
@@ -400,7 +489,8 @@ typedef struct EffectSummaryCandidate {
 
 static XrXirStatus effect_summary_candidate(void *owner, const XirClassMethodTarget *target) {
     EffectSummaryCandidate *candidate = owner;
-    return effect_summary_edge(candidate->build, candidate->dispatch, target->function,
+    uint32_t node = effect_summary_function_node(candidate->build, target->function);
+    return node != UINT32_MAX && effect_summary_edge(candidate->build, candidate->dispatch, node,
         UINT32_MAX) ? XR_XIR_OK : candidate->build->status;
 }
 
@@ -523,8 +613,8 @@ static bool effect_summary_causes(EffectSummaryBuild *build) {
         uint8_t suspension = effect_summary_suspension(node->closed);
         if (!suspension || !(node->local & suspension)) continue;
         bool function = node->kind == EFFECT_SUMMARY_FUNCTION;
-        reasons[n] = (EffectSummaryReason){function ? n : UINT32_MAX, 0, true};
-        if (function) result->causes[n] = (XrXirEffectWitness){
+        reasons[n] = (EffectSummaryReason){function ? node->function : UINT32_MAX, 0, true};
+        if (function) result->causes[node->function] = (XrXirEffectWitness){
             suspension == EFFECT_SUMMARY_SUSPEND ? XR_XIR_EFFECT_CAUSE_SUSPEND : XR_XIR_EFFECT_CAUSE_INDIRECT,
             node->terminals[suspension == EFFECT_SUMMARY_SUSPEND], UINT32_MAX, 0};
         queue[back++] = n;
@@ -539,10 +629,11 @@ static bool effect_summary_causes(EffectSummaryBuild *build) {
             EffectSummaryReason reason = reasons[target];
             if (graph->nodes[caller].kind == EFFECT_SUMMARY_FUNCTION) {
                 uint32_t distance = reason.function == UINT32_MAX ? 0 : reason.distance + 1;
-                result->causes[caller] = (XrXirEffectWitness){
+                uint32_t function = graph->nodes[caller].function;
+                result->causes[function] = (XrXirEffectWitness){
                     reason.function == UINT32_MAX ? XR_XIR_EFFECT_CAUSE_INDIRECT : XR_XIR_EFFECT_CAUSE_CALL,
                     edge->instruction, reason.function, distance};
-                reason.function = caller;
+                reason.function = function;
                 reason.distance = distance;
             }
             reasons[caller] = reason;
@@ -550,11 +641,13 @@ static bool effect_summary_causes(EffectSummaryBuild *build) {
         }
     }
     for (uint32_t f = 0; f < result->functions && build->status == XR_XIR_OK; ++f) {
-        uint8_t suspension = effect_summary_suspension(graph->nodes[f].closed);
-        if (suspension && !reasons[f].ready) build->status = XR_XIR_BAD_STRUCTURE;
+        uint32_t node = build->function_nodes[f];
+        uint8_t suspension = effect_summary_suspension(graph->nodes[node].closed);
+        if (suspension && !reasons[node].ready) build->status = XR_XIR_BAD_STRUCTURE;
         result->facts[f].suspend = suspension == EFFECT_SUMMARY_SUSPEND ? XR_XIR_EFFECT_MAY :
             suspension ? XR_XIR_EFFECT_UNKNOWN : XR_XIR_EFFECT_NONE;
-        result->task_creation[f] = graph->nodes[f].closed & EFFECT_SUMMARY_SPAWN ?
+        result->facts[f].throws = (XrXirEffect)graph->nodes[node].throws;
+        result->task_creation[f] = graph->nodes[node].closed & EFFECT_SUMMARY_SPAWN ?
             XR_XIR_EFFECT_MAY : XR_XIR_EFFECT_NONE;
     }
 done:
@@ -565,41 +658,86 @@ done:
     return build->status == XR_XIR_OK;
 }
 
-static XrXirStatus effect_control_summary_build(const XrXirCompileContext *memory,
-    const XrXirModule *module, XrCompileRequestControl *control, EffectControlSummary **output) {
+XR_FUNC void xir_effect_control_builder_free(XirControlBuilder *build) {
+    if (!build) return;
+    xir_effect_control_free(build->summary);
+    xr_compile_resources_free(build->values);
+    xr_compile_resources_free(build->function_nodes);
+    xr_compile_resources_free(build->dispatch_index);
+    xr_compile_resources_free(build->default_offsets);
+    xr_compile_resources_free(build->default_targets);
+    xr_compile_resources_free(build->graph.nodes);
+    xr_compile_resources_free(build->graph.edges);
+    xr_compile_resources_free(build->graph.dispatches);
+    xr_compile_resources_free(build);
+}
+
+XR_FUNC XrXirStatus xir_effect_control_builder_new(const XrXirCompileContext *memory,
+    const XrXirModule *module, XrCompileRequestControl *control, XirControlBuilder **output) {
     if (!xir_compile_context_valid(memory) || !module || !module->function_count ||
         !module->functions || !output || *output) return XR_XIR_BAD_STRUCTURE;
-    EffectSummaryBuild build = {.memory = memory, .input = module, .control = control};
-    EffectControlSummary *summary = xir_compile_calloc(memory, 1, sizeof(*summary), &build.status);
-    if (!summary) return build.status;
-    build.summary = summary;
+    XrXirStatus status = XR_XIR_OK;
+    EffectSummaryBuild *build = xir_compile_calloc(memory, 1, sizeof(*build), &status);
+    if (!build) return status;
+    build->context = *memory;
+    build->memory = &build->context;
+    build->input = module;
+    build->control = control;
+    effect_summary_defaults(build);
+    build->input = NULL;
+    status = build->status;
+    if (status != XR_XIR_OK) { xir_effect_control_builder_free(build); return status; }
+    *output = build;
+    return XR_XIR_OK;
+}
+
+XR_FUNC XrXirStatus xir_effect_control_finish(XirControlBuilder *build,
+    const XrXirModule *module, EffectControlSummary **output) {
+    if (!build || build->active || build->finished || !module || !module->function_count ||
+        !module->functions || !output || *output) return XR_XIR_BAD_STRUCTURE;
+    if (build->status != XR_XIR_OK) return build->status;
+    for (uint32_t f = 0; f < module->function_count; ++f) {
+        if (f >= build->function_capacity || build->function_nodes[f] == UINT32_MAX ||
+            !build->graph.nodes[build->function_nodes[f]].collected) return XR_XIR_BAD_STRUCTURE;
+    }
+    for (uint32_t f = module->function_count; f < build->function_capacity; ++f)
+        if (build->function_nodes[f] != UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
+    const XrXirCompileContext *memory = build->memory;
+    EffectControlSummary *summary = xir_compile_calloc(memory, 1, sizeof(*summary), &build->status);
+    if (!summary) return build->status;
+    atomic_init(&summary->references, 1);
+    build->summary = summary;
     summary->resources = memory->resources;
     summary->functions = module->function_count;
-    summary->facts = xir_compile_calloc(memory, summary->functions, sizeof(*summary->facts), &build.status);
-    summary->causes = xir_compile_calloc(memory, summary->functions, sizeof(*summary->causes), &build.status);
+    summary->facts = xir_compile_calloc(memory, summary->functions, sizeof(*summary->facts), &build->status);
+    summary->causes = xir_compile_calloc(memory, summary->functions, sizeof(*summary->causes), &build->status);
     summary->task_creation = xir_compile_calloc(memory, summary->functions,
-        sizeof(*summary->task_creation), &build.status);
-    for (uint32_t f = 0; f < summary->functions && build.status == XR_XIR_OK; ++f) {
-        uint32_t node = effect_summary_node(&build, EFFECT_SUMMARY_FUNCTION);
-        if (node != f && build.status == XR_XIR_OK) build.status = XR_XIR_BAD_STRUCTURE;
-    }
-    if (build.status == XR_XIR_OK) effect_summary_defaults(&build);
-    for (uint32_t f = 0; f < summary->functions && build.status == XR_XIR_OK; ++f)
-        if (!effect_summary_function(&build, f)) break;
-    if (build.status == XR_XIR_OK && effect_summary_link(&build) && effect_summary_close(&build))
-        effect_summary_causes(&build);
-    xr_compile_resources_free(build.dispatch_index);
-    xr_compile_resources_free(build.default_offsets);
-    xr_compile_resources_free(build.default_targets);
-    xr_compile_resources_free(build.graph.nodes);
-    xr_compile_resources_free(build.graph.edges);
-    xr_compile_resources_free(build.graph.dispatches);
-    if (build.status != XR_XIR_OK) {
-        effect_control_summary_free(summary);
-        return build.status;
-    }
+        sizeof(*summary->task_creation), &build->status);
+    build->input = module;
+    if (build->status == XR_XIR_OK && effect_summary_link(build) && effect_summary_close(build))
+        effect_summary_causes(build);
+    build->input = NULL;
+    if (build->status != XR_XIR_OK) return build->status;
+    build->finished = true;
     *output = summary;
+    build->summary = NULL;
     return XR_XIR_OK;
+}
+
+static XrXirStatus effect_control_summary_build(const XrXirCompileContext *memory,
+    const XrXirModule *module, XrCompileRequestControl *control, EffectControlSummary **output) {
+    if (!output || *output) return XR_XIR_BAD_STRUCTURE;
+    XirControlBuilder *build = NULL;
+    XrXirStatus status = xir_effect_control_builder_new(memory, module, control, &build);
+    for (uint32_t f = 0; status == XR_XIR_OK && f < module->function_count; ++f) {
+        status = xir_effect_control_begin(build, module, f);
+        for (uint32_t i = 0; status == XR_XIR_OK && i < module->functions[f].instruction_count; ++i)
+            status = xir_effect_control_instruction(build, module, f, i);
+        if (status == XR_XIR_OK) status = xir_effect_control_end(build, module, f);
+    }
+    if (status == XR_XIR_OK) status = xir_effect_control_finish(build, module, output);
+    xir_effect_control_builder_free(build);
+    return status;
 }
 
 static XrXirStatus effect_control_summary_recheck(const XrXirCompileContext *memory,
@@ -616,6 +754,6 @@ static XrXirStatus effect_control_summary_recheck(const XrXirCompileContext *mem
             a->instruction != b->instruction || a->callee != b->callee || a->distance != b->distance)
             status = XR_XIR_BAD_STRUCTURE;
     }
-    effect_control_summary_free(fresh);
+    xir_effect_control_free(fresh);
     return status;
 }

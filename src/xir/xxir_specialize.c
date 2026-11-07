@@ -51,6 +51,8 @@ typedef struct SpecContext {
     XirSourceFacts *source_facts;
     const XrXirEffects *effects;
     XrXirEffects *verification_effects;
+    XirControlBuilder *control_builder;
+    EffectControlSummary *control_summary;
     XrXirCompileContext remaining;
     XrXirDiagnostic diagnostic;
     SpecMemory *memory;
@@ -467,110 +469,126 @@ static uint32_t spec_intern(SpecContext *c, uint32_t declaration, const XrXirTyp
     if (!spec_index_place(c, c->instance_index, c->index_capacity, (SpecIndexEntry){index + 1, hash})) return UINT32_MAX;
     return index;
 }
-static bool spec_calls(SpecContext *c, uint32_t index) {
-    /* Instance discovery can grow both tables; their owned operand vectors stay stable. */
+static bool spec_call(SpecContext *c, uint32_t index, uint32_t i) {
     const SpecInstance instance = c->instances[index];
     const XrXirGeneric *generic = c->source->generics ? &c->source->generics[instance.declaration] : NULL;
     XrXirFunction function = c->functions[index];
-    XrXirInstruction *ops = (XrXirInstruction *) function.instructions;
-    c->diagnostic.function = instance.declaration;
-    for (uint32_t i = 0; i < function.instruction_count; ++i) {
-        c->diagnostic.instruction = i;
-        if (!spec_progress(c)) return false;
-        XrXirInstruction *op = &ops[i];
-        if(op->op==XR_XIR_CLASS_METHOD_REF) {
-            if(op->immediate<0 || (uint64_t)op->immediate>=c->source->function_count ||
-                c->ordinary[op->immediate]==UINT32_MAX || op->type_arguments[0] || op->type_arguments[1]) {
-                c->diagnostic.status=XR_XIR_BAD_STRUCTURE;return false;
-            }
-            /* Every nongeneric method is already interned in the ordinary
-             * prefix. The complete closed table rederives dynamic candidates. */
-            op->immediate=c->ordinary[op->immediate];continue;
+    XrXirInstruction *op = (XrXirInstruction *)&function.instructions[i];
+    c->diagnostic.instruction = i;
+    if (!spec_progress(c)) return false;
+    if(op->op==XR_XIR_CLASS_METHOD_REF) {
+        if(op->immediate<0 || (uint64_t)op->immediate>=c->source->function_count ||
+            c->ordinary[op->immediate]==UINT32_MAX || op->type_arguments[0] || op->type_arguments[1]) {
+            c->diagnostic.status=XR_XIR_BAD_STRUCTURE;return false;
         }
-        if (!xr_xir_op_uses_type_arguments(op->op)) continue;
-        uint32_t count = op->type_arguments[1];
-        XrXirType *types = spec_alloc(c, count, sizeof(*types));
-        if (count && !types) return false;
-        if (!spec_progress(c)) return false;
-        for (uint32_t a = 0; a < count; ++a) types[a] = spec_type(c, &instance, generic->arguments[op->type_arguments[0] + a]);
-        if (c->diagnostic.status != XR_XIR_OK) return false;
-        uint32_t declaration = (uint32_t)op->immediate;
-        if (op->op == XR_XIR_CALL_DEFAULT || op->op == XR_XIR_INVOKE_DEFAULT) {
-            const XrXirDefaultBinding *binding=NULL;
-            const uint32_t *identity=xr_xir_default_identity(op);
-            c->diagnostic.status=xr_xir_compile_default_lookup(&c->remaining, c->source, identity[0], identity[1], &binding);
-            if(c->diagnostic.status!=XR_XIR_OK) return false;
-            if(!binding) { c->diagnostic.status=XR_XIR_BAD_STRUCTURE; return false; }
-            declaration=binding->function;
-            if(op->op==XR_XIR_CALL_DEFAULT) { op->op=XR_XIR_CALL; op->targets[0]=op->targets[1]=0; }
-            else { op->op=XR_XIR_INVOKE; op->args[0]=op->args[1]=0; }
-        }
-        if (op->op == XR_XIR_CALL_REQUIREMENT) {
-            XrXirModule actual = {XR_XIR_CHECKED,c->functions,c->count,NULL,NULL,&c->types,NULL,XR_XIR_PROGRAM,NULL};
-            XrXirProofContext context = {&actual,{XR_XIR_CONTEXT_CLOSED,0,0}};
-            const XrXirInterfaceDeclaration *interface = &c->source->types->interfaces->declarations[op->targets[0]];
-            const XrXirInterfaceMethod *method = &interface->methods[op->targets[1]];
-            uint32_t parent = interface->parameter_count, own = method->own_parameter_count;
-            if (parent > 65536 || own > 65536 - parent || count != parent + own) {
-                c->diagnostic.status = XR_XIR_BAD_STRUCTURE; return false;
-            }
-            for (uint32_t a = 0; a < own; ++a) {
-                XrXirConstraintUse use = {c->source,
-                    {XR_XIR_CONTEXT_INTERFACE_METHOD,op->targets[0],op->targets[1]},parent+a,types,count};
-                c->diagnostic.status = xir_compile_constraints_prove_controlled(&c->remaining, &context, &use,c->control);
-                if (c->diagnostic.status != XR_XIR_OK) return false;
-            }
-            XrXirWitnessRequest request = {c->source,
-                xr_xir_operand_type(&function,function.operands[op->args[0]]),
-                {op->targets[0],parent ? types : NULL,parent},op->targets[1]};
-            XrXirWitness witness = {0};
-            c->diagnostic.status = xir_compile_witness_resolve_controlled(&c->remaining, &context, &request, &witness,c->control);
-            if (c->diagnostic.status != XR_XIR_OK) return false;
-            if (witness.argument_count > 65536 || own > 65536 - witness.argument_count) {
-                c->diagnostic.status = XR_XIR_BAD_STRUCTURE; return false;
-            }
-            uint32_t complete_count = witness.argument_count + own;
-            XrXirType *complete = spec_alloc(c,complete_count,sizeof(*complete));
-            if ((complete_count && !complete) || !spec_progress(c)) return false;
-            if (witness.argument_count && !spec_copy(c,complete,witness.arguments,(size_t)witness.argument_count*sizeof(*complete))) return false;
-            if (own && !spec_copy(c,complete+witness.argument_count,types+parent,(size_t)own*sizeof(*complete))) return false;
-            declaration = witness.function; types = complete; count = complete_count;
-            op->op = XR_XIR_CALL; op->targets[0] = op->targets[1] = 0;
-        }
-        XirComptimeSelection selection={c->source,&c->types,instance.declaration,i,types,count};
-        const XrXirComptimeBinding *constant=NULL;
-        XrXirStatus selected=xir_comptime_select(&c->remaining,c->source_artifact->construction,&selection,&constant, c->control);
-        bool evaluation_root=false;
-        if (c->evaluation && selected==XR_XIR_BAD_TYPE) {
-            const XrXirComptimeSite *site=xir_comptime_site(c->source_artifact->construction,instance.declaration,i);
-            if (site && site->helper==declaration) {
-                selected=XR_XIR_OK;evaluation_root=!c->evaluation_found;
-            }
-        }
-        if (c->pending && selected==XR_XIR_BAD_TYPE) {
-            const XrXirComptimeSite *site=xir_comptime_site(c->source_artifact->construction,instance.declaration,i);
-            if (site && site->helper==declaration) {
-                if (!spec_progress(c)) return false;
-                c->pending->site=*site;c->pending->borrowed_arguments=types;c->pending->count=count;c->pending->found=true;
-                return false;
-            }
-        }
-        c->diagnostic.status=selected;
-        if (c->diagnostic.status!=XR_XIR_OK) return false;
-        if (constant) { declaration=constant->provider;types=NULL;count=0; }
-        SpecEffectInput input={&function,op,index,i};SpecEffectVector effect={0};
-        if (!spec_effect_vector(c,declaration,types,count,constant?NULL:&input,&effect)) return false;
-        c->cleanup_owner=op->op==XR_XIR_CLEANUP_REGISTER ? index : UINT32_MAX;
-        uint32_t target = spec_intern(c, declaration, types, count,effect.arguments,effect.count);
-        c->cleanup_owner=UINT32_MAX;
-        if (target == UINT32_MAX) return false;
-        if (evaluation_root) {
-            if (!spec_progress(c)) return false;
-            *c->evaluation=(XirEvaluationRoot){index,i,target};c->evaluation_found=true;
-        }
-        op->immediate = target; op->type_arguments[0] = op->type_arguments[1] = 0;
+        /* Every nongeneric method is already interned in the ordinary
+         * prefix. The complete closed table rederives dynamic candidates. */
+        op->immediate=c->ordinary[op->immediate];return true;
     }
+    if (!xr_xir_op_uses_type_arguments(op->op)) return true;
+    uint32_t count = op->type_arguments[1];
+    XrXirType *types = spec_alloc(c, count, sizeof(*types));
+    if (count && !types) return false;
+    if (!spec_progress(c)) return false;
+    for (uint32_t a = 0; a < count; ++a) types[a] = spec_type(c, &instance, generic->arguments[op->type_arguments[0] + a]);
+    if (c->diagnostic.status != XR_XIR_OK) return false;
+    uint32_t declaration = (uint32_t)op->immediate;
+    if (op->op == XR_XIR_CALL_DEFAULT || op->op == XR_XIR_INVOKE_DEFAULT) {
+        const XrXirDefaultBinding *binding=NULL;
+        const uint32_t *identity=xr_xir_default_identity(op);
+        c->diagnostic.status=xr_xir_compile_default_lookup(&c->remaining, c->source, identity[0], identity[1], &binding);
+        if(c->diagnostic.status!=XR_XIR_OK) return false;
+        if(!binding) { c->diagnostic.status=XR_XIR_BAD_STRUCTURE; return false; }
+        declaration=binding->function;
+        if(op->op==XR_XIR_CALL_DEFAULT) { op->op=XR_XIR_CALL; op->targets[0]=op->targets[1]=0; }
+        else { op->op=XR_XIR_INVOKE; op->args[0]=op->args[1]=0; }
+    }
+    if (op->op == XR_XIR_CALL_REQUIREMENT) {
+        XrXirModule actual = {XR_XIR_CHECKED,c->functions,c->count,NULL,NULL,&c->types,NULL,XR_XIR_PROGRAM,NULL};
+        XrXirProofContext context = {&actual,{XR_XIR_CONTEXT_CLOSED,0,0}};
+        const XrXirInterfaceDeclaration *interface = &c->source->types->interfaces->declarations[op->targets[0]];
+        const XrXirInterfaceMethod *method = &interface->methods[op->targets[1]];
+        uint32_t parent = interface->parameter_count, own = method->own_parameter_count;
+        if (parent > 65536 || own > 65536 - parent || count != parent + own) {
+            c->diagnostic.status = XR_XIR_BAD_STRUCTURE; return false;
+        }
+        for (uint32_t a = 0; a < own; ++a) {
+            XrXirConstraintUse use = {c->source,
+                {XR_XIR_CONTEXT_INTERFACE_METHOD,op->targets[0],op->targets[1]},parent+a,types,count};
+            c->diagnostic.status = xir_compile_constraints_prove_controlled(&c->remaining, &context, &use,c->control);
+            if (c->diagnostic.status != XR_XIR_OK) return false;
+        }
+        XrXirWitnessRequest request = {c->source,
+            xr_xir_operand_type(&function,function.operands[op->args[0]]),
+            {op->targets[0],parent ? types : NULL,parent},op->targets[1]};
+        XrXirWitness witness = {0};
+        c->diagnostic.status = xir_compile_witness_resolve_controlled(&c->remaining, &context, &request, &witness,c->control);
+        if (c->diagnostic.status != XR_XIR_OK) return false;
+        if (witness.argument_count > 65536 || own > 65536 - witness.argument_count) {
+            c->diagnostic.status = XR_XIR_BAD_STRUCTURE; return false;
+        }
+        uint32_t complete_count = witness.argument_count + own;
+        XrXirType *complete = spec_alloc(c,complete_count,sizeof(*complete));
+        if ((complete_count && !complete) || !spec_progress(c)) return false;
+        if (witness.argument_count && !spec_copy(c,complete,witness.arguments,(size_t)witness.argument_count*sizeof(*complete))) return false;
+        if (own && !spec_copy(c,complete+witness.argument_count,types+parent,(size_t)own*sizeof(*complete))) return false;
+        declaration = witness.function; types = complete; count = complete_count;
+        op->op = XR_XIR_CALL; op->targets[0] = op->targets[1] = 0;
+    }
+    XirComptimeSelection selection={c->source,&c->types,instance.declaration,i,types,count};
+    const XrXirComptimeBinding *constant=NULL;
+    XrXirStatus selected=xir_comptime_select(&c->remaining,c->source_artifact->construction,&selection,&constant, c->control);
+    bool evaluation_root=false;
+    if (c->evaluation && selected==XR_XIR_BAD_TYPE) {
+        const XrXirComptimeSite *site=xir_comptime_site(c->source_artifact->construction,instance.declaration,i);
+        if (site && site->helper==declaration) {
+            selected=XR_XIR_OK;evaluation_root=!c->evaluation_found;
+        }
+    }
+    if (c->pending && selected==XR_XIR_BAD_TYPE) {
+        const XrXirComptimeSite *site=xir_comptime_site(c->source_artifact->construction,instance.declaration,i);
+        if (site && site->helper==declaration) {
+            if (!spec_progress(c)) return false;
+            c->pending->site=*site;c->pending->borrowed_arguments=types;c->pending->count=count;c->pending->found=true;
+            return false;
+        }
+    }
+    c->diagnostic.status=selected;
+    if (c->diagnostic.status!=XR_XIR_OK) return false;
+    if (constant) { declaration=constant->provider;types=NULL;count=0; }
+    SpecEffectInput input={&function,op,index,i};SpecEffectVector effect={0};
+    if (!spec_effect_vector(c,declaration,types,count,constant?NULL:&input,&effect)) return false;
+    c->cleanup_owner=op->op==XR_XIR_CLEANUP_REGISTER ? index : UINT32_MAX;
+    uint32_t target = spec_intern(c, declaration, types, count,effect.arguments,effect.count);
+    c->cleanup_owner=UINT32_MAX;
+    if (target == UINT32_MAX) return false;
+    if (evaluation_root) {
+        if (!spec_progress(c)) return false;
+        *c->evaluation=(XirEvaluationRoot){index,i,target};c->evaluation_found=true;
+    }
+    op->immediate = target; op->type_arguments[0] = op->type_arguments[1] = 0;
     return true;
+}
+static bool spec_calls(SpecContext *c, uint32_t index) {
+    c->diagnostic.function = c->instances[index].declaration;
+    XrXirDeclarations declarations = {.functions = c->identities};
+    XrXirModule module = {.stage = XR_XIR_CHECKED, .functions = c->functions, .function_count = c->count,
+        .declarations = c->identities ? &declarations : NULL, .types = &c->types, .linkage_kind = XR_XIR_PROGRAM};
+    c->diagnostic.status = xir_effect_control_begin(c->control_builder, &module, index);
+    if (c->diagnostic.status != XR_XIR_OK) return false;
+    uint32_t instructions = c->functions[index].instruction_count;
+    for (uint32_t i = 0; i < instructions; ++i) {
+        if (!spec_call(c, index, i)) return false;
+        /* Discovery may move descriptor arrays. Emit only after rebinding the
+         * actual final function and identity tables, without another body walk. */
+        declarations.functions = c->identities;
+        module.functions = c->functions;
+        module.function_count = c->count;
+        c->diagnostic.status = xir_effect_control_instruction(c->control_builder, &module, index, i);
+        if (c->diagnostic.status != XR_XIR_OK) return false;
+    }
+    c->diagnostic.status = xir_effect_control_end(c->control_builder, &module, index);
+    return c->diagnostic.status == XR_XIR_OK;
 }
 static bool spec_declarations(SpecContext *c, XrXirDeclarations *result) {
     const XrXirDeclarations *source = c->source->declarations;
@@ -778,6 +796,11 @@ static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
         }
     }
     if (!c.count) { c.diagnostic.status = XR_XIR_BAD_STRUCTURE; goto done; }
+    XrXirDeclarations control_declarations = {.functions = c.identities};
+    XrXirModule control_module = {.stage = XR_XIR_CHECKED, .functions = c.functions, .function_count = c.count,
+        .declarations = c.identities ? &control_declarations : NULL, .types = &c.types, .linkage_kind = XR_XIR_PROGRAM};
+    c.diagnostic.status = xir_effect_control_builder_new(&limits, &control_module, control, &c.control_builder);
+    if (c.diagnostic.status != XR_XIR_OK) goto done;
     for (uint32_t f = 0; f < c.count; ++f) if (!spec_calls(&c, f)) goto done;
     if (pending) { pending->complete=true;goto done; }
     if (evaluation && !c.evaluation_found) { c.diagnostic.status=XR_XIR_BAD_TYPE;goto done; }
@@ -790,6 +813,8 @@ static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
     c.diagnostic.status = spec_provenance(&c,&provenance);
     if (c.diagnostic.status != XR_XIR_OK) goto done;
     specialized.provenance = provenance;
+    c.diagnostic.status = xir_effect_control_finish(c.control_builder, &specialized, &c.control_summary);
+    if (c.diagnostic.status != XR_XIR_OK) { xr_xir_compile_provenance_free(provenance); goto done; }
     XrXirConstruction *projected = NULL;
     c.diagnostic.status = spec_materialization_construction(&c,&specialized,&projected);
     if (c.diagnostic.status == XR_XIR_OK) {
@@ -798,6 +823,10 @@ static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
             c.diagnostic.status = xr_xir_compile_recheck_provenance_take(&limits, &specialized,
                 &receiving, &provenance, &built, &c.diagnostic, control);
         }
+    }
+    if (c.diagnostic.status == XR_XIR_OK) {
+        built->control_summary = c.control_summary;
+        c.control_summary = NULL;
     }
     xr_xir_compile_construction_free(projected);
     xr_xir_compile_provenance_free(provenance);
@@ -822,6 +851,8 @@ done:
     xr_xir_compile_artifact_free(built);
     xir_source_facts_release(c.source_facts);
     xr_xir_compile_effects_free(c.verification_effects);
+    xir_effect_control_builder_free(c.control_builder);
+    xir_effect_control_free(c.control_summary);
     while (c.memory) { SpecMemory *next = c.memory->next; xr_compile_resources_free(c.memory); c.memory = next; }
     if (diagnostic) *diagnostic = c.diagnostic;
     return c.diagnostic.status;

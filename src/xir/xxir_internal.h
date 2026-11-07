@@ -21,6 +21,7 @@
 #include "xxir.h"
 #include "xxir_checked.h"
 #include "xxir_effects.h"
+#include "xxir_effect_control_internal.h"
 #include "xxir_effect_contract_internal.h"
 #include "xxir_construction_internal.h"
 #include "xxir_effect_input_internal.h"
@@ -132,6 +133,7 @@ struct XrXirArtifact {
     XirSourceFacts *source_facts;
     XrXirEffects *checked_effects;
     XrXirEffects *program_final;
+    EffectControlSummary *control_summary;
     uint32_t evaluation_only;
 };
 
@@ -162,6 +164,9 @@ XR_FUNC XrXirStatus xir_effects_source_terminal_input(const XrXirCompileContext 
 
 /* Requires completed structural and type verification; never re-enters verification. */
 XR_FUNC XrXirStatus xr_xir_compile_effects_infer_verified_input(const XrXirCompileContext *compile_context, XirEffectInput input, XrXirEffects **output);
+XR_FUNC XrXirStatus xir_effects_lower_verified_input(const XrXirCompileContext *context,
+    XirEffectInput input, EffectControlSummary *control, XrXirEffects **output);
+XR_FUNC EffectControlSummary *xir_effects_control_summary(const XrXirEffects *effects);
 /* Private construction preparation grants no artifact or execution authority. */
 typedef struct XrXirRootRefiner {
     void *context;
