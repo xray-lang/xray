@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Enum descriptor coverage for the source-derived API inventory."""
+"""Current declaration provenance for the source-derived API inventory."""
 
 from __future__ import annotations
 
@@ -15,44 +15,15 @@ import gen_api_inventory as api_inventory  # noqa: E402
 
 
 class ApiInventoryEnumMetadataTest(unittest.TestCase):
-    def test_descriptor_types_and_properties_come_from_shared_definition(self) -> None:
-        items = api_inventory.collect_enum_metadata_api(ROOT)
-        by_key = {(entry["namespace"], entry["name"], entry["kind"]): entry for entry in items}
-
-        self.assertEqual(
-            "EnumVariant<E>",
-            by_key[("EnumVariant", "EnumVariant", "type")]["signature"],
-        )
-        self.assertEqual(
-            ": EnumPayloads<E>",
-            by_key[("EnumVariant", "payloads", "property")]["signature"],
-        )
-        self.assertEqual(
-            ": i64",
-            by_key[("EnumPayloadField", "type", "property")]["signature"],
-        )
-        self.assertEqual(
-            ": EnumVariants<E>",
-            by_key[("enum", "variants", "static-property")]["signature"],
-        )
-
-    def test_descriptor_contracts_are_machine_readable(self) -> None:
-        items = api_inventory.collect_enum_metadata_api(ROOT)
-        ordinal = next(
-            entry
-            for entry in items
-            if entry["namespace"] == "EnumVariant" and entry["name"] == "ordinal"
-        )
-        name = next(
-            entry
-            for entry in items
-            if entry["namespace"] == "EnumVariant" and entry["name"] == "name"
-        )
-
-        self.assertEqual("all", ordinal["profile"])
-        self.assertEqual("pure", ordinal["effect"])
-        self.assertEqual("none", ordinal["allocation"])
-        self.assertEqual("materializes-string", name["allocation"])
+    def test_inventory_uses_surviving_source_declarations(self) -> None:
+        inventory = api_inventory.build_inventory(ROOT)
+        self.assertFalse(inventory["execution_authority"])
+        for entry in inventory["items"]:
+            with self.subTest(symbol=entry["qualified"]):
+                self.assertTrue((ROOT / entry["source"]).is_file(), entry["source"])
+                self.assertFalse(entry["source"].startswith("src/frontend/analyzer/"))
+                self.assertFalse(entry["source"].startswith("src/ir/"))
+                self.assertFalse(entry["source"].startswith("src/runtime/value/"))
 
     def test_compiler_module_schema_keeps_xray_semantic_source(self) -> None:
         items = api_inventory.collect_stdlib_metadata(ROOT)

@@ -877,80 +877,22 @@ def collect_stdlib_metadata(root: Path) -> list[dict[str, Any]]:
     return out
 
 
-def collect_runtime_intrinsic_modules(root: Path) -> list[dict[str, Any]]:
-    path = root / "src/frontend/analyzer/xanalyzer_builtins.c"
+def collect_source_intrinsics(root: Path) -> list[dict[str, Any]]:
+    """Read the current zero-argument suspend namespace from Source admission."""
+    path = root / "src/xir/xxir_source.c"
     text = path.read_text(encoding="utf-8")
-    member_arrays: dict[str, list[dict[str, Any]]] = {}
-    member_array_re = re.compile(
-        r"static\s+const\s+XaBuiltinMember\s+"
-        r"(?P<array>g_rt_[A-Za-z0-9_]+_functions)\[\]\s*=\s*\{(?P<body>.*?)\};",
+    pattern = re.compile(
+        r'source_text_same\(ctx, NULL, member->object->as.variable.name, "([^"]+)"\) &&\s*'
+        r'source_text_same\(ctx, NULL, member->name, "([^"]+)"\)\) \{\s*'
+        r'if \(call->arg_count \|\| call->type_arg_count\).*?'
+        r'return source_recipe_record\(ctx, \(XrXirInstruction\) \{XR_XIR_SUSPEND, XR_XIR_UNIT,',
         re.S,
     )
-    member_re = re.compile(
-        r"\{\s*\"(?P<name>(?:\\.|[^\"\\])*)\"\s*,\s*"
-        r"\"(?P<signature>(?:\\.|[^\"\\])*)\"\s*,\s*"
-        r"\"(?P<summary>(?:\\.|[^\"\\])*)\"\s*,\s*"
-        r"(?P<is_method>true|false)\s*,\s*"
-        r"(?P<is_static>true|false)\s*,\s*"
-        r"(?P<is_internal>true|false)\s*,\s*"
-        r"(?P<is_lowered_only>true|false)"
-        r"(?:\s*,\s*(?:true|false))*"
-        r"(?:\s*,\s*\{[^{}]*\}\s*,\s*[A-Z][A-Z0-9_]*"
-        r"\s*,\s*[A-Z][A-Z0-9_]*\s*,\s*[A-Z][A-Z0-9_]*)?"
-        r"\s*\}(?=\s*,)",
-        re.S,
-    )
-    for array_match in member_array_re.finditer(text):
-        symbols: list[dict[str, Any]] = []
-        body = array_match.group("body")
-        body_offset = array_match.start("body")
-        for member_match in member_re.finditer(body):
-            if member_match.group("is_internal") == "true":
-                continue
-            symbols.append(
-                {
-                    "name": decode_c_string(member_match.group("name")),
-                    "signature": decode_c_string(member_match.group("signature")),
-                    "summary": decode_c_string(member_match.group("summary")),
-                    "line": line_for_offset(text, body_offset + member_match.start()),
-                }
-            )
-        member_arrays[array_match.group("array")] = symbols
-
-    module_match = re.search(
-        r"static\s+const\s+XaBuiltinModule\s+g_rt_builtin_modules\[\]\s*=\s*\{(?P<body>.*?)\};",
-        text,
-        re.S,
-    )
-    if not module_match:
-        return []
-
-    out: list[dict[str, Any]] = []
-    for match in re.finditer(
-        r"\{\s*\"(?P<module>(?:\\.|[^\"\\])*)\"\s*,\s*"
-        r"(?P<array>g_rt_[A-Za-z0-9_]+_functions)\s*,",
-        module_match.group("body"),
-    ):
-        module = decode_c_string(match.group("module"))
-        for symbol in member_arrays.get(match.group("array"), []):
-            surface, doc_module = stdlib_doc_surface_for_name("stdlib", module, symbol["name"])
-            out.append(
-                item(
-                    category="stdlib-module",
-                    namespace=module,
-                    name=symbol["name"],
-                    kind="function",
-                    signature=symbol["signature"],
-                    summary=symbol["summary"],
-                    source=rel(root, path),
-                    line=symbol["line"],
-                    doc_surface=surface,
-                    doc_module=doc_module,
-                )
-            )
-    return out
-
-
+    return [item(category="stdlib-module", namespace=match.group(1), name=match.group(2),
+                 kind="function", signature="(): ()", summary="Cooperative task suspension",
+                 source=rel(root, path), line=line_for_offset(text, match.start()),
+                 doc_surface="stdlib", doc_module=match.group(1))
+            for match in pattern.finditer(text)]
 
 
 def collect_pure_stdlib(root: Path) -> list[dict[str, Any]]:
@@ -1115,10 +1057,7 @@ def collect_native_types(root: Path) -> list[dict[str, Any]]:
 
 
 def collect_globals(root: Path) -> list[dict[str, Any]]:
-    path = root / "src/frontend/analyzer/xanalyzer.c"
-    text = path.read_text(encoding="utf-8")
     out: list[dict[str, Any]] = []
-    seen: set[tuple[str, str]] = set()
     core_path = root / "src/shared/xr_core_intrinsic.def"
     core_text = core_path.read_text(encoding="utf-8")
     for match in re.finditer(
@@ -1126,7 +1065,6 @@ def collect_globals(root: Path) -> list[dict[str, Any]]:
         core_text,
     ):
         name = match.group(1)
-        seen.add(("function", name))
         out.append(
             item(
                 category="global-builtin",
@@ -1139,29 +1077,6 @@ def collect_globals(root: Path) -> list[dict[str, Any]]:
                 line=line_for_offset(core_text, match.start()),
             )
         )
-    for kind, pattern in (
-        ("function", r'register_builtin_func\s*\(\s*analyzer\s*,\s*"([^"]+)"'),
-        ("module", r'register_builtin_module\s*\(\s*analyzer\s*,\s*"([^"]+)"'),
-        ("variable", r'register_builtin_var\s*\(\s*analyzer\s*,\s*"([^"]+)"'),
-    ):
-        for match in re.finditer(pattern, text):
-            name = match.group(1)
-            key = (kind, name)
-            if key in seen:
-                continue
-            seen.add(key)
-            out.append(
-                item(
-                    category="global-builtin",
-                    namespace="global",
-                    name=name,
-                    kind=kind,
-                    signature=GLOBAL_SIGNATURES.get(name, ""),
-                    summary=GLOBAL_SUMMARIES.get(name, ""),
-                    source=rel(root, path),
-                    line=line_for_offset(text, match.start()),
-                )
-            )
     return out
 
 
@@ -1219,42 +1134,12 @@ def collect_constraint_predicates(root: Path) -> list[dict[str, Any]]:
 
 
 def collect_interfaces(root: Path) -> list[dict[str, Any]]:
-    path = root / "src/frontend/analyzer/xanalyzer_builtin_interfaces.c"
-    text = path.read_text(encoding="utf-8")
-    method_counts: dict[str, int] = {}
-    method_names: dict[str, list[str]] = {}
-    for match in re.finditer(r"static\s+XaInterfaceMethod\s+(\w+)_methods\[\]\s*=\s*\{(.*?)\};", text, re.S):
-        key = match.group(1)
-        names = re.findall(r'\{\s*"([^"]+)"', match.group(2))
-        method_names[key] = names
-        method_counts[key] = len(names)
-    out: list[dict[str, Any]] = []
-    for match in re.finditer(r'\[XA_IFACE_[^\]]+\]\s*=\s*\{"([^"]+)",\s*(\w+)_methods,\s*(\d+)\}', text):
-        iface = match.group(1)
-        method_key = match.group(2)
-        out.append(
-            item(
-                category="interface",
-                namespace=iface,
-                name=iface,
-                kind="interface",
-                signature=f"{method_counts.get(method_key, int(match.group(3)))} method(s)",
-                source=rel(root, path),
-                line=line_for_offset(text, match.start()),
-            )
-        )
-        for method in method_names.get(method_key, []):
-            out.append(
-                item(
-                    category="interface",
-                    namespace=iface,
-                    name=method,
-                    kind="method",
-                    source=rel(root, path),
-                    line=line_for_offset(text, match.start()),
-                )
-            )
-    return out
+    """Publish declared interfaces without reviving retired analyzer methods."""
+    registry = builtin_symbols.load(root)
+    return [item(category="interface", namespace=symbol.name, name=symbol.name,
+                 kind="interface", signature=symbol.spelling,
+                 source=rel(root, registry.path), line=symbol.line)
+            for symbol in registry.by_category("interface")]
 
 
 def collect_keywords(root: Path) -> list[dict[str, Any]]:
@@ -1271,126 +1156,6 @@ def collect_keywords(root: Path) -> list[dict[str, Any]]:
                 signature=match.group(3),
                 source=rel(root, path),
                 line=line_for_offset(text, match.start()),
-            )
-        )
-    return out
-
-
-def collect_intrinsics(root: Path) -> list[dict[str, Any]]:
-    path = root / "src/ir/xi_intrinsic.def"
-    text = path.read_text(encoding="utf-8")
-    out: list[dict[str, Any]] = []
-    for match in re.finditer(
-        r"XI_INTRINSIC\(\s*([A-Z0-9_]+)\s*,\s*([0-9]+)\s*,\s*(-?[0-9]+)\s*,\s*([A-Za-z0-9_]+)\s*,\s*([^,]+),\s*([A-Z0-9_]+)\s*\)",
-        text,
-    ):
-        out.append(
-            item(
-                category="ir-intrinsic",
-                namespace="intrinsic",
-                name=match.group(1),
-                kind="intrinsic",
-                signature=f"id={match.group(2)}, arity={match.group(3)}, ret={match.group(6)}",
-                summary=f"Helper {match.group(4)}; effects {match.group(5).strip()}",
-                source=rel(root, path),
-                line=line_for_offset(text, match.start()),
-            )
-        )
-    return out
-
-
-def collect_enum_metadata_api(root: Path) -> list[dict[str, Any]]:
-    """Collect the compiler-owned, non-reflective enum descriptor surface."""
-    path = root / "src/runtime/value/xenum_metadata_api.def"
-    text = path.read_text(encoding="utf-8")
-    quoted = r'"(?:\\.|[^"\\])*"'
-    common = (
-        rf"\s*,\s*({quoted})\s*,\s*({quoted})\s*,\s*({quoted})\s*,\s*({quoted})"
-    )
-    out: list[dict[str, Any]] = []
-
-    type_pattern = re.compile(
-        rf"XR_ENUM_METADATA_TYPE\(\s*([A-Z_]+)\s*,\s*([A-Za-z_][A-Za-z0-9_]*)"
-        rf"{common}\s*\)",
-        re.S,
-    )
-    for match in type_pattern.finditer(text):
-        source_name = match.group(2)
-        summary, profile, effect, allocation = (
-            ast.literal_eval(match.group(i)) for i in range(3, 7)
-        )
-        out.append(
-            item(
-                category="language-intrinsic",
-                namespace=source_name,
-                name=source_name,
-                kind="type",
-                signature=f"{source_name}<E>",
-                summary=summary,
-                source=rel(root, path),
-                line=line_for_offset(text, match.start()),
-                profile=profile,
-                effect=effect,
-                allocation=allocation,
-            )
-        )
-
-    property_pattern = re.compile(
-        rf"XR_ENUM_METADATA_PROPERTY\(\s*([A-Z_]+)\s*,\s*"
-        rf"([A-Za-z_][A-Za-z0-9_]*)\s*,\s*({quoted}){common}\s*\)",
-        re.S,
-    )
-    owner_names = {
-        "VARIANTS": "EnumVariants",
-        "VARIANT": "EnumVariant",
-        "PAYLOADS": "EnumPayloads",
-        "PAYLOAD_FIELD": "EnumPayloadField",
-    }
-    for match in property_pattern.finditer(text):
-        owner = owner_names[match.group(1)]
-        source_name = match.group(2)
-        result_type, summary, profile, effect, allocation = (
-            ast.literal_eval(match.group(i)) for i in range(3, 8)
-        )
-        out.append(
-            item(
-                category="language-intrinsic",
-                namespace=owner,
-                name=source_name,
-                kind="property",
-                signature=f": {result_type}",
-                summary=summary,
-                source=rel(root, path),
-                line=line_for_offset(text, match.start()),
-                profile=profile,
-                effect=effect,
-                allocation=allocation,
-            )
-        )
-
-    static_pattern = re.compile(
-        rf"XR_ENUM_STATIC_PROPERTY\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*"
-        rf"({quoted}){common}\s*\)",
-        re.S,
-    )
-    for match in static_pattern.finditer(text):
-        source_name = match.group(1)
-        result_type, summary, profile, effect, allocation = (
-            ast.literal_eval(match.group(i)) for i in range(2, 7)
-        )
-        out.append(
-            item(
-                category="language-intrinsic",
-                namespace="enum",
-                name=source_name,
-                kind="static-property",
-                signature=f": {result_type}",
-                summary=summary,
-                source=rel(root, path),
-                line=line_for_offset(text, match.start()),
-                profile=profile,
-                effect=effect,
-                allocation=allocation,
             )
         )
     return out
@@ -1565,9 +1330,8 @@ def compare_api_inventories(
 def build_inventory(root: Path) -> dict[str, Any]:
     items: list[dict[str, Any]] = []
     metadata_items = collect_stdlib_metadata(root)
-    runtime_intrinsic_items = collect_runtime_intrinsic_modules(root)
     items.extend(metadata_items)
-    items.extend(runtime_intrinsic_items)
+    items.extend(collect_source_intrinsics(root))
     items.extend(collect_pure_stdlib(root))
     items.extend(collect_native_types(root))
     items.extend(collect_globals(root))
@@ -1575,8 +1339,6 @@ def build_inventory(root: Path) -> dict[str, Any]:
     items.extend(collect_constraint_predicates(root))
     items.extend(collect_interfaces(root))
     items.extend(collect_keywords(root))
-    items.extend(collect_intrinsics(root))
-    items.extend(collect_enum_metadata_api(root))
     items = dedupe(items)
     return {
         "schema": 1,
