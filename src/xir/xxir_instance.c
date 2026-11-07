@@ -2062,10 +2062,10 @@ XR_FUNC XrXirCallStatus xr_xir_instance_argument_weakening_admit(XrXirCallView *
     XrXirCallStatus status = admit_instance_value(admission, input, (XrXirType)input->type);
     if (status != XR_XIR_CALL_READY) return status;
     const XrXirFunctionBinding *binding = xr_xir_function_binding(input);
-    const FunctionGate *origin = binding ? binding->owner : NULL;
-    if (!origin || xr_xir_value_arena(input)!=origin->program->arena ||
-        !function_bound_admitted(origin->program,binding->entry,
-            xr_xir_callable_signature(origin->program->types,(XrXirType)input->type)))
+    const FunctionGate *source_gate = binding ? binding->owner : NULL;
+    if (!source_gate || xr_xir_value_arena(input)!=source_gate->program->arena ||
+        !function_bound_admitted(source_gate->program,binding->entry,
+            xr_xir_callable_signature(source_gate->program->types,(XrXirType)input->type)))
         return XR_XIR_CALL_BAD_ARGUMENT;
     InstanceInvocationRead read={admission,NULL,NULL,NULL,instance};
     XrXirStatus match = xr_xir_callable_weakening_admit(instance->program->types,
@@ -2089,10 +2089,10 @@ XR_FUNC XrXirCallStatus xr_xir_instance_weaken_function(XrXirCallView *view,
     status = admit_instance_value(admission, input, local);
     if (status != XR_XIR_CALL_READY) return status;
     const XrXirFunctionBinding *binding = xr_xir_function_binding(input);
-    const FunctionGate *origin = binding ? binding->owner : NULL;
-    if (!origin || xr_xir_value_arena(input)!=origin->program->arena ||
-        !function_bound_admitted(origin->program,binding->entry,
-            xr_xir_callable_signature(origin->program->types,(XrXirType)input->type)))
+    const FunctionGate *source_gate = binding ? binding->owner : NULL;
+    if (!source_gate || xr_xir_value_arena(input)!=source_gate->program->arena ||
+        !function_bound_admitted(source_gate->program,binding->entry,
+            xr_xir_callable_signature(source_gate->program->types,(XrXirType)input->type)))
         return XR_XIR_CALL_BAD_ARGUMENT;
     InstanceInvocationRead read={admission,NULL,NULL,NULL,instance};
     XrXirStatus match = xr_xir_callable_weakening_admit(instance->program->types,
