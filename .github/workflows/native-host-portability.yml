@@ -154,10 +154,26 @@ jobs:
             -DLUA_USE_POSIX -DLUA_USE_DLOPEN -DLUA_USE_JUMPTABLE=1 \
             "$RUNNER_TEMP/scalar-lua/onelua.c" -o "$RUNNER_TEMP/scalar-lua/lua"
       - name: Measure public CLI, C and Lua
+        id: measure
         run: >-
           python scripts/run_scalar_performance.py --root . --build build
           --work build/scalar-performance --samples 9 --cc /usr/bin/clang
           --alignment ${{ matrix.alignment }} --lua "$RUNNER_TEMP/scalar-lua/lua"
+      - name: Observe the previous CLI on the same runner
+        if: always() && (steps.measure.outcome == 'success' || steps.measure.outcome == 'failure')
+        continue-on-error: true
+        run: |
+          git fetch --depth=1 origin 395d6246fc90b8ce384c25874e513a7418359386
+          git worktree add --detach "$RUNNER_TEMP/scalar-before" FETCH_HEAD
+          python scripts/ci_build_log.py --log build/scalar-before-configure.log -- \
+            cmake -S "$RUNNER_TEMP/scalar-before" -B "$RUNNER_TEMP/scalar-before-build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_C_FLAGS=-falign-functions=${{ matrix.alignment }} "-DCMAKE_C_FLAGS_RELEASE=-O2 -DNDEBUG"
+          python scripts/ci_build_log.py --log build/scalar-before-build.log -- \
+            cmake --build "$RUNNER_TEMP/scalar-before-build" --parallel 4 --target xray lir_vm_run xray_native_runtime
+          python scripts/run_scalar_performance.py --root "$RUNNER_TEMP/scalar-before" \
+            --build "$RUNNER_TEMP/scalar-before-build" --work build/scalar-before-performance \
+            --samples 9 --cc /usr/bin/clang --alignment ${{ matrix.alignment }} --lua "$RUNNER_TEMP/scalar-lua/lua"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
