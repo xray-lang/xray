@@ -44,6 +44,13 @@ def main():
             else:
                 assert result.stderr == b'', (name, result.stderr)
 
+        scalar_types = ('i8', 'i16', 'i32', 'i64', 'u8', 'u16', 'u32', 'u64')
+        generic_growth = ''.join(f'fn genericFn{i}<T>()->i64{{return {i}}}\n' for i in range(16))
+        generic_growth += ''.join(f'print(genericFn{i}<{kind}>())\n'
+                                  for i in range(16) for kind in scalar_types)
+        generic_output = b''.join(f'{i}\n'.encode() for i in range(16) for _ in scalar_types)
+        run('generic-summary-growth', generic_growth, stdout=generic_output)
+
         stdlib = Path(__file__).resolve().parents[2] / 'stdlib'
         time_library = stdlib / 'time/time.xr'
         time_bytes = time_library.read_bytes()
