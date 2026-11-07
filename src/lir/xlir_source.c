@@ -50,14 +50,17 @@ XR_FUNC XrLirSourceStatus xr_lir_compile_source(const XrLirSourceRequest *reques
     XrXirArtifact *closed = NULL;
     XrLirLowered lowered = {0};
     XrLirSourceStatus status = XR_LIR_SOURCE_PREPARATION_FAILED;
-    if (xr_compile_session_new(request->resources, &session) != XR_COMPILE_RESOURCE_OK ||
+    if (xr_compile_session_new(request->resources, &session) != XR_COMPILE_RESOURCE_OK)
+        goto cleanup;
+    if (!request->authority &&
         xr_compile_module_identity_script_authority_from_source(request->resources,
             request->entry_path, &authority, &root) != XR_MODULE_OK)
         goto cleanup;
 
     XrXirCompileContext context = {request->resources, xr_xir_compile_default_limits()};
     XrXirSourceRequest input = {.session = session, .entry_path = request->entry_path,
-        .authority = &authority, .context = &context, .stdlib_path = request->stdlib_path,
+        .authority = request->authority ? request->authority : &authority,
+        .context = &context, .stdlib_path = request->stdlib_path, .lockfile = request->lockfile,
         .linkage_kind = XR_XIR_PROGRAM};
     status = XR_LIR_SOURCE_CHECK_FAILED;
     if (xr_xir_compile_source_check(&input, &source, &failure->source,

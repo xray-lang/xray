@@ -4,7 +4,7 @@ add_executable(test_xir_p09_string_copy_sites_native
     "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_string_copy_sites.c" "${P09_STRING_BUILD_C}")
 target_compile_definitions(test_xir_p09_string_copy_sites_native PRIVATE XR_CAPACITY_NATIVE=1)
 foreach(target test_xir_p09_string_copy_sites test_xir_p09_string_copy_sites_native)
-    target_link_libraries(${target} PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
+    target_link_libraries(${target} PRIVATE xray_xir_source  )
     target_compile_definitions(${target} PRIVATE XR_CAPACITY_COMPONENT="string_build"
         XR_CAPACITY_FIXTURES="${PROJECT_SOURCE_DIR}/tests/fixtures/xir_array_capacity")
     set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)

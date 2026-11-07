@@ -70,5 +70,8 @@ typedef struct XrLirCDiagnostic {
  * The complete TU, including the bound wrapper, is verified before publication.
  * There is no process exit-code mapping. */
 XR_FUNC XrLirCStatus xr_lir_emit_c(const XrLirCRequest *, XrLirCOutput *, XrLirCDiagnostic *);
+/* Emit the same typed root with a process main that discards its result. The
+ * complete translation unit passes W1-W4 before publication. */
+XR_FUNC XrLirCStatus xr_lir_emit_c_standalone(const XrLirCRequest *, XrLirCOutput *, XrLirCDiagnostic *);
 XR_FUNC void xr_lir_c_output_free(XrLirCOutput *);
 #endif  // XLIR_C_H

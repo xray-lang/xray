@@ -1,16 +1,10 @@
 add_executable(test_hir_nullable test_nullable.c)
-target_link_libraries(test_hir_nullable PRIVATE xray_xir_source xray_xir_vm)
-add_executable(test_hir_nullable_source test_nullable_source.c)
-if(WIN32)
-    target_link_libraries(test_hir_nullable_source PRIVATE ${XRAY_SOURCE_SDK_ARCHIVE_TARGETS})
-else()
-    target_link_libraries(test_hir_nullable_source PRIVATE xray_source_api)
-endif()
-target_include_directories(test_hir_nullable_source PRIVATE "${PROJECT_SOURCE_DIR}/include")
-if(MSVC)
-    set_target_properties(test_hir_nullable_source PROPERTIES MSVC_RUNTIME_LIBRARY MultiThreadedDLL)
-endif()
-foreach(target test_hir_nullable test_hir_nullable_source)
+target_link_libraries(test_hir_nullable PRIVATE xray_xir_source)
+
+
+
+
+foreach(target test_hir_nullable )
     set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
@@ -20,8 +14,8 @@ foreach(target test_hir_nullable test_hir_nullable_source)
 endforeach()
 add_test(NAME hir_nullable COMMAND test_hir_nullable)
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/empty-stdlib")
-add_test(NAME source_nullable_sdk COMMAND test_hir_nullable_source "${CMAKE_CURRENT_BINARY_DIR}/empty-stdlib")
-set_tests_properties(hir_nullable source_nullable_sdk PROPERTIES TIMEOUT 60 LABELS "unit;hir;types;ownership;sdk")
+
+set_tests_properties(hir_nullable  PROPERTIES TIMEOUT 60 LABELS "unit;hir;types;ownership;sdk")
 if(WIN32)
     add_test(NAME hir_nullable_cli COMMAND ${XRAY_PYTHON} -X utf8
         "${CMAKE_CURRENT_SOURCE_DIR}/test_nullable_cli.py"

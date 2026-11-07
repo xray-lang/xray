@@ -1,139 +1,69 @@
-add_executable(test_xir_intrinsic_registry xir/test_xir_intrinsic_registry.c)
-target_sources(test_xir_intrinsic_registry PRIVATE xir/xir_string_slice_value_observer.c)
-target_link_libraries(test_xir_intrinsic_registry PRIVATE
-    xray_xir_source xray_xir_vm xray_xir_cgen xray_lir_lower)
+
+
+
 set(intrinsic_contains_generated "${CMAKE_CURRENT_BINARY_DIR}/generated/intrinsic_contains.c")
-add_custom_command(OUTPUT "${intrinsic_contains_generated}"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
-    COMMAND $<TARGET_FILE:test_xir_intrinsic_registry> --emit "${intrinsic_contains_generated}"
-    DEPENDS test_xir_intrinsic_registry
-    VERBATIM)
-add_executable(test_xir_intrinsic_registry_native
-    xir/test_xir_intrinsic_registry_native.c "${intrinsic_contains_generated}")
-target_link_libraries(test_xir_intrinsic_registry_native PRIVATE xray_xir_scalar xray_compile_resources)
-foreach(target test_xir_intrinsic_registry test_xir_intrinsic_registry_native)
-    set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
-    if(MSVC)
-        target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
-        if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
-            target_compile_options(${target} PRIVATE /experimental:c11atomics)
-        endif()
-    else()
-        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -pedantic)
-    endif()
-endforeach()
+
+
+
+
 
 set(XIR_TYPED_DISPLAY_C ${CMAKE_CURRENT_BINARY_DIR}/typed-display/received.c)
-add_custom_command(OUTPUT ${XIR_TYPED_DISPLAY_C}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/typed-display
-    COMMAND $<TARGET_FILE:test_xir_typed_display_source> ${PROJECT_SOURCE_DIR} ${XIR_TYPED_DISPLAY_C}
-    DEPENDS test_xir_typed_display_source xir/typed_display_cases.h xir/typed_display_receiving_cases.h
-        ${PROJECT_SOURCE_DIR}/demos/02-collections/maps_and_sets.xr
-        ${PROJECT_SOURCE_DIR}/tests/smoke/expected/maps_and_sets.txt
-    VERBATIM)
-add_executable(test_xir_typed_display_native xir/test_xir_typed_display_native.c ${XIR_TYPED_DISPLAY_C})
-target_link_libraries(test_xir_typed_display_native PRIVATE xray_xir_vm)
-set_target_properties(test_xir_typed_display_native PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
-if(MSVC)
-    target_compile_options(test_xir_typed_display_native PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_typed_display_native PRIVATE -Wall -Wextra -Werror -pedantic)
-endif()
-add_test(NAME xir_typed_display_native COMMAND test_xir_typed_display_native)
-set_tests_properties(xir_typed_display_native PROPERTIES LABELS "unit;xir;ownership" TIMEOUT 60)
-add_test(NAME xir_intrinsic_contains COMMAND test_xir_intrinsic_registry
-    "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_intrinsics/contains-schema33.xrc"
-    "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_intrinsics/scalar-schema33.xrc"
-    "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_intrinsics/predicates-schema34.xrc"
-    "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_intrinsics/scalar-schema34.xrc"
-    "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_intrinsics/evaluation-contract94.xrc"
-    "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_intrinsics/time-schema38-contract98.xrc")
-add_test(NAME xir_intrinsic_contains_native COMMAND test_xir_intrinsic_registry_native)
-set_tests_properties(xir_intrinsic_contains xir_intrinsic_contains_native PROPERTIES
-    LABELS "unit;xir;intrinsic;fast" TIMEOUT 60)
 
-add_executable(test_xir_from_utf8 xir/test_xir_from_utf8.c)
-target_link_libraries(test_xir_from_utf8 PRIVATE xray_source_api)
-target_include_directories(test_xir_from_utf8 PRIVATE "${PROJECT_SOURCE_DIR}/src")
-target_compile_definitions(test_xir_from_utf8 PRIVATE XR_PUBLIC_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
-    XR_FROM_UTF8_HISTORICAL="${PROJECT_SOURCE_DIR}/tests/fixtures/xir_intrinsics/current-schema38-contract99.xrc")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 set(from_utf8_generated "${CMAKE_CURRENT_BINARY_DIR}/generated/from_utf8.c")
-add_custom_command(OUTPUT "${from_utf8_generated}"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
-    COMMAND $<TARGET_FILE:test_xir_from_utf8> --emit "${from_utf8_generated}"
-    DEPENDS test_xir_from_utf8 VERBATIM)
-add_executable(test_xir_from_utf8_native xir/test_xir_from_utf8_native.c "${from_utf8_generated}")
-target_link_libraries(test_xir_from_utf8_native PRIVATE xray_xir_scalar xray_compile_resources)
-foreach(target test_xir_from_utf8 test_xir_from_utf8_native)
-    set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
-    if(MSVC)
-        target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
-        if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
-            target_compile_options(${target} PRIVATE /experimental:c11atomics)
-        endif()
-    else()
-        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -pedantic)
-    endif()
-endforeach()
-add_test(NAME xir_from_utf8 COMMAND test_xir_from_utf8)
-add_test(NAME xir_unicode_property_core COMMAND test_xir_from_utf8 --unicode-core)
-set_tests_properties(xir_unicode_property_core PROPERTIES TIMEOUT 120 LABELS "unit;xir;native;ownership")
-add_test(NAME xir_from_utf8_native COMMAND test_xir_from_utf8_native)
-set_tests_properties(xir_from_utf8 xir_from_utf8_native PROPERTIES LABELS "unit;xir;source;fast" TIMEOUT 60)
+
+
+
+
+
+
+
+
+
 
 # Physical observer is a distinct consumer; canonical API/native targets keep their ordinary provider.
-add_library(from_utf8_value_observer OBJECT xir/test_xir_from_utf8.c)
-target_compile_definitions(from_utf8_value_observer PRIVATE XR_FROM_UTF8_VALUE_OBSERVER=1)
-target_include_directories(from_utf8_value_observer PRIVATE "${PROJECT_SOURCE_DIR}/src")
-add_executable(test_xir_from_utf8_fault xir/test_xir_from_utf8.c $<TARGET_OBJECTS:from_utf8_value_observer>)
-target_compile_definitions(test_xir_from_utf8_fault PRIVATE XR_FROM_UTF8_WITH_OBSERVER=1 XR_PUBLIC_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-target_include_directories(test_xir_from_utf8_fault PRIVATE "${PROJECT_SOURCE_DIR}/src")
-target_link_libraries(test_xir_from_utf8_fault PRIVATE xray_source_api)
-foreach(target from_utf8_value_observer test_xir_from_utf8_fault)
-    set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
-    if(MSVC)
-        target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
-        if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
-            target_compile_options(${target} PRIVATE /experimental:c11atomics)
-        endif()
-    else()
-        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -pedantic)
-    endif()
-endforeach()
-add_test(NAME xir_from_utf8_physical_header COMMAND test_xir_from_utf8_fault --physical-header)
-add_test(NAME xir_from_utf8_physical_bytes COMMAND test_xir_from_utf8_fault --physical-bytes)
-set_tests_properties(xir_from_utf8_physical_header xir_from_utf8_physical_bytes PROPERTIES LABELS "unit;xir;source;resource" TIMEOUT 60)
 
-add_test(NAME xir_from_utf8_cancel_after_allocation COMMAND test_xir_from_utf8_fault --cancel-after-allocation)
-set_tests_properties(xir_from_utf8_cancel_after_allocation PROPERTIES LABELS "unit;xir;source;resource" TIMEOUT 60)
 
-add_executable(test_xir_module_limits xir/test_xir_module_limits.c)
-target_link_libraries(test_xir_module_limits PRIVATE xray_source_api)
-target_include_directories(test_xir_module_limits PRIVATE "${PROJECT_SOURCE_DIR}/src")
-target_compile_definitions(test_xir_module_limits PRIVATE XR_PUBLIC_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 set(module_limits_generated "${CMAKE_CURRENT_BINARY_DIR}/generated/module-limits.c")
-add_custom_command(OUTPUT "${module_limits_generated}"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
-    COMMAND $<TARGET_FILE:test_xir_module_limits> --emit "${module_limits_generated}"
-    DEPENDS test_xir_module_limits VERBATIM)
-add_executable(test_xir_module_limits_native xir/test_xir_module_limits.c "${module_limits_generated}")
-target_compile_definitions(test_xir_module_limits_native PRIVATE XR_MODULE_LIMITS_NATIVE=1)
-target_include_directories(test_xir_module_limits_native PRIVATE "${PROJECT_SOURCE_DIR}/src")
-target_link_libraries(test_xir_module_limits_native PRIVATE xray_xir_scalar xray_compile_resources)
-foreach(target test_xir_module_limits test_xir_module_limits_native)
-    set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-    if(MSVC)
-        target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
-        if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
-            target_compile_options(${target} PRIVATE /experimental:c11atomics)
-        endif()
-    else()
-        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -pedantic)
-    endif()
-endforeach()
-add_test(NAME xir_module_limits COMMAND test_xir_module_limits)
-add_test(NAME xir_module_limits_native COMMAND test_xir_module_limits_native)
-set_tests_properties(xir_module_limits xir_module_limits_native PROPERTIES LABELS "unit;xir;source;resource" TIMEOUT 300)
+
+
+
+
+
+
+
+
+
 
 add_executable(test_xir_pointer_owner xir/test_xir_pointer_owner.c)
 target_link_libraries(test_xir_pointer_owner PRIVATE xray_xir_scalar)
@@ -159,48 +89,32 @@ else()
 endif()
 add_test(NAME xir_pointer_owner_fault COMMAND test_xir_pointer_owner_fault)
 set_tests_properties(xir_pointer_owner_fault PROPERTIES LABELS "unit;xir;ownership" TIMEOUT 60)
-add_executable(test_xir_pointer_close_source xir/test_xir_pointer_close_source.c
-    xir/xir_pointer_owner_probe.c xir/xir_pointer_instance_probe.c)
-target_link_libraries(test_xir_pointer_close_source PRIVATE xray_source_api)
-set_target_properties(test_xir_pointer_close_source PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
-if(MSVC)
-    target_compile_options(test_xir_pointer_close_source PRIVATE /W4 /WX /utf-8)
-    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
-        target_compile_options(test_xir_pointer_close_source PRIVATE /experimental:c11atomics)
-    endif()
-else()
-    target_compile_options(test_xir_pointer_close_source PRIVATE -Wall -Wextra -Werror -pedantic)
-endif()
-add_test(NAME xir_pointer_close_source COMMAND test_xir_pointer_close_source)
-set_tests_properties(xir_pointer_close_source PROPERTIES LABELS "unit;xir;ownership" TIMEOUT 60)
+
+
+
+
+
+
 
 set(buffer_storage_generated "${CMAKE_CURRENT_BINARY_DIR}/generated/buffer_storage.c")
 
-add_executable(test_xir_string_runes_source xir/test_xir_string_runes_source.c)
-target_link_libraries(test_xir_string_runes_source PRIVATE xray_xir_source xray_xir_vm)
-set_target_properties(test_xir_string_runes_source PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
-if(MSVC)
-    target_compile_options(test_xir_string_runes_source PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_string_runes_source PRIVATE -Wall -Wextra -Werror -pedantic)
-endif()
-add_test(NAME xir_string_runes_source COMMAND test_xir_string_runes_source)
-set_tests_properties(xir_string_runes_source PROPERTIES LABELS "unit;xir;ownership" TIMEOUT 60)
 
-add_executable(test_xir_map_iteration_source xir/test_xir_map_iteration_source.c)
-target_link_libraries(test_xir_map_iteration_source PRIVATE xray_xir_source xray_xir_vm)
-set_target_properties(test_xir_map_iteration_source PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
-if(MSVC)
-    target_compile_options(test_xir_map_iteration_source PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_map_iteration_source PRIVATE -Wall -Wextra -Werror -pedantic)
-endif()
-add_test(NAME xir_map_iteration_source COMMAND test_xir_map_iteration_source)
-set_tests_properties(xir_map_iteration_source PROPERTIES LABELS "unit;xir;ownership" TIMEOUT 60)
+
+
+
+
+
+
+
+
+
+
+
+
 
 foreach(display_part source values)
     add_executable(test_xir_typed_display_${display_part} xir/test_xir_typed_display_${display_part}.c)
-    target_link_libraries(test_xir_typed_display_${display_part} PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
+    target_link_libraries(test_xir_typed_display_${display_part} PRIVATE xray_xir_source  )
     set_target_properties(test_xir_typed_display_${display_part} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
     if(MSVC)
         target_compile_options(test_xir_typed_display_${display_part} PRIVATE /W4 /WX /utf-8)

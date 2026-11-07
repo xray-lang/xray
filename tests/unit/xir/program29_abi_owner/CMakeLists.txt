@@ -42,7 +42,7 @@ set(current_code "${CMAKE_CURRENT_BINARY_DIR}/current29.c")
 add_custom_command(OUTPUT "${current_code}" COMMAND program29_generator "${current_code}" current29
     DEPENDS program29_generator VERBATIM)
 add_executable(test_program29_boundary test_program29_boundary.c "${current_code}" $<TARGET_OBJECTS:old28_object>)
-foreach(owner xray_compile_resources xray_xir_admission xray_xir_declarations xray_xir_scalar xray_xir_runtime_host)
+foreach(owner xray_compile_resources xray_xir_admission xray_xir_declarations xray_xir_scalar )
     foreach(target program29_generator test_program29_boundary)
         target_link_libraries(${target} PRIVATE "${XIR_SDK_BUNDLE_DIR}/lib/${owner}.lib")
     endforeach()

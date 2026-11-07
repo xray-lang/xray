@@ -22,6 +22,11 @@ typedef struct XrCliToolchainConfigView {
     const XrCliToolchainPreference *preferences;
     size_t count;
 } XrCliToolchainConfigView;
+
+typedef struct XrCliToolchainChoice {
+    XrToolchainSelector selector;
+    const char *compiler;
+} XrCliToolchainChoice;
 typedef enum XrCliToolchainConfigStatus {
     XR_CLI_TOOLCHAIN_CONFIG_OK, XR_CLI_TOOLCHAIN_CONFIG_INVALID,
     XR_CLI_TOOLCHAIN_CONFIG_BUDGET, XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY,
@@ -47,4 +52,8 @@ XR_FUNC XrCliToolchainConfigStatus xr_cli_toolchain_config_path(
 /* Immutable borrows remain valid until free and do not allocate. */
 XR_FUNC const XrCliToolchainConfigView *xr_cli_toolchain_config_view(const XrCliToolchainConfig *owner);
 XR_FUNC void xr_cli_toolchain_config_free(XrCliToolchainConfig *owner);
+/* Result strings borrow the supplied snapshot or explicit arguments. */
+XR_FUNC XrCliToolchainConfigStatus xr_cli_toolchain_choose(
+    const XrCliToolchainConfigView *preferences, const char *target,
+    const char *provider, const char *compiler, XrCliToolchainChoice *output);
 #endif // XCLI_TOOLCHAIN_CONFIG_H

@@ -12,6 +12,3 @@ if(WIN32)
 endif()
 
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/record-empty-stdlib")
-add_test(NAME xir_record_sdk COMMAND test_hir_body_source "${CMAKE_CURRENT_BINARY_DIR}/record-empty-stdlib"
-    "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_records/readme.xr" "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_records/readme.out")
-set_tests_properties(xir_record_sdk PROPERTIES TIMEOUT 120 LABELS "unit;xir;source;records;sdk;ownership")

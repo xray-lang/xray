@@ -4,11 +4,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xsource_compile.c - Shared source admission to an owned Source product
+ * xsource_compile.c - Shared source checking and owned diagnostics
  *
  * KEY CONCEPT:
  *   Project authority and parsing borrow one ledger; only the ordinary Source
- *   owner constructs the resolver, graph, Checked packets and Lowered code.
+ *   owner constructs the resolver, graph and Checked XIR.
  */
 #include "xsource_compile.h"
 #include "xsource_authority.h"
@@ -18,7 +18,6 @@
 #include "../base/xio_policy.inc.h"
 #include "../os/os_fs.h"
 #include "../xir/xxir_library_catalog.h"
-#include "../xir/xxir_stdlib_internal.h"
 #include <stdarg.h>
 #include <stdio.h>
 
@@ -117,7 +116,7 @@ static bool source_absolute(XrIoContext *io, const char *path) {
 }
 XR_FUNC void xr_source_compile_diagnostic_free(XrSourceCompileDiagnostic *diagnostic) {
     if (!diagnostic) return;
-    xr_xir_compile_source_product_diagnostic_free(&diagnostic->source);
+    xr_xir_compile_source_failure_free(&diagnostic->source.failure);
     memset(diagnostic, 0, sizeof(*diagnostic));
 }
 XR_FUNC XrCompileResourceStatus xr_source_compile_manifest_report(XrSourceCompileDiagnostic *detail,
@@ -132,22 +131,18 @@ XR_FUNC XrCompileResourceStatus xr_source_compile_manifest_report(XrSourceCompil
     if(status!=XR_COMPILE_RESOURCE_OK){xr_frontend_report_free(report);return status;}
     xr_frontend_report_seal(report,false);detail->source.failure.report=report;return status;
 }
-XR_FUNC XrSourceCompileStatus xr_source_compile_build(
-    const XrSourceCompileRequest *request, XrXirSourceProduct **output,
+XR_FUNC XrSourceCompileStatus xr_source_compile_check(
+    const XrSourceCompileRequest *request, XrXirSourceResult *output,
     XrSourceCompileDiagnostic *diagnostic) {
-    /* Never overwrite a caller's still-owned diagnostic storage. */
-    if (diagnostic && (diagnostic->source.snapshot || !xr_xir_compile_source_failure_empty(&diagnostic->source.failure)))
+    if (diagnostic && !xr_xir_compile_source_failure_empty(&diagnostic->source.failure))
         return XR_SOURCE_COMPILE_BAD_ARGUMENT;
-    XrSourceCompileDiagnostic detail = {0};XrManifestDiagnostic authority_fact={0};
+    XrSourceCompileDiagnostic detail = {0};
     XrSourceCompileStatus status = XR_SOURCE_COMPILE_BAD_ARGUMENT;
-    if (!request || !request->context || !request->context->resources || !output || *output ||
-        !request->absolute_entry_path || !request->absolute_stdlib_path || !source_catalog_matches(request) ||
+    if (!request || !request->context || !request->context->resources ||
+        !output || output->checked || output->snapshot || !request->absolute_entry_path ||
+        !request->absolute_stdlib_path || !source_catalog_matches(request) ||
         (request->session && xr_compile_session_resources(request->session) != request->context->resources))
         goto rejected;
-    if (request->target.architecture != XR_XIR_ARCH_LE64 ||
-        request->target.abi_version != XR_XIR_VALUE_ABI_VERSION) {
-        status = XR_SOURCE_COMPILE_UNSUPPORTED; goto rejected;
-    }
     XrOsIoPolicy policy = xr_compile_io_policy(request->context->resources);
     XrIoContext io = {&policy, XR_OS_IO_OK};
     detail.stage = XR_SOURCE_COMPILE_PATH;
@@ -160,9 +155,8 @@ XR_FUNC XrSourceCompileStatus xr_source_compile_build(
     XrSourceAuthority *authority = NULL;
     XrCompilerSession *session = request->session;
     bool owns_session = !session;
-    XrXirSourceProduct *product = NULL;
-    XrXirLibraryCatalog *owned_catalog = NULL;
-    const XrXirLibraryCatalog *libraries = request->libraries;
+    XrXirSourceResult source = {0};
+    XrManifestDiagnostic authority_fact = {0};
     io_status(&io, xr_realpath_owned(&policy, request->absolute_entry_path, &entry));
     if (io.status == XR_OS_IO_OK)
         io_status(&io, xr_realpath_owned(&policy, request->absolute_stdlib_path, &stdlib));
@@ -172,55 +166,39 @@ XR_FUNC XrSourceCompileStatus xr_source_compile_build(
         if (io.status == XR_OS_IO_OK && info.kind != XR_FS_DIR) io_status(&io, XR_OS_IO_BAD_ARGUMENT);
     }
     status = source_io_status(io.status);
-    if (status == XR_SOURCE_COMPILE_OK && !libraries) {
-        detail.stage = XR_SOURCE_COMPILE_LIBRARY;
-        status = source_xir_status(xir_stdlib_library_catalog_new(request->context,stdlib,&owned_catalog));
-        libraries = owned_catalog;
-    }
     if (status == XR_SOURCE_COMPILE_OK) {
         detail.stage = XR_SOURCE_COMPILE_AUTHORITY;
         detail.authority_status = xr_source_authority_open(request->context, entry,
-            libraries, &request->manifest_limits, &authority, &authority_fact);
-        (void)xr_source_compile_manifest_report(&detail,request->context->resources,&authority_fact);
+            request->libraries, &request->manifest_limits, &authority, &authority_fact);
+        (void)xr_source_compile_manifest_report(&detail, request->context->resources, &authority_fact);
         status = source_manifest_status(detail.authority_status);
     }
     if (status == XR_SOURCE_COMPILE_OK) {
         detail.stage = XR_SOURCE_COMPILE_SESSION;
-        detail.session_status=owns_session ? xr_compile_session_new(request->context->resources,&session) :
+        detail.session_status = owns_session ? xr_compile_session_new(request->context->resources, &session) :
             xr_compile_session_resource_status(session);
-        status=source_resource_status(detail.session_status);
+        status = source_resource_status(detail.session_status);
     }
     if (status == XR_SOURCE_COMPILE_OK) {
-        detail.stage = XR_SOURCE_COMPILE_PRODUCT;
-        XrXirSourceProductRequest source = {
-            {session, entry, xr_source_authority_entry(authority), request->context,
-             stdlib, xr_source_authority_lockfile(authority), XR_XIR_PROGRAM, libraries},
-            request->target};
-        status = source_xir_status(xr_xir_compile_source_product_build(&source, &product, &detail.source));
-        if(detail.source.status==XR_XIR_BAD_STRUCTURE &&
-            (detail.source.failure.origin==XR_XIR_SOURCE_DIAGNOSTIC_PARSE ||
-             detail.source.failure.origin==XR_XIR_SOURCE_DIAGNOSTIC_INPUT))status=XR_SOURCE_COMPILE_INVALID;
-        if (status == XR_SOURCE_COMPILE_OK) {
-            XrXirSourceDiagnostic immediate={0};
-            XrXirStatus admitted = xr_xir_compile_source_product_public_admit(product, &immediate);
-            detail.source.source=(XrXirSourceDiagnosticFact){immediate.status,immediate.module};
-            if(admitted!=XR_XIR_OK)(void)xr_xir_compile_source_failure_record(request->context->resources,
-                &detail.source.failure,&immediate,NULL,NULL,0);
-            status = source_xir_status(admitted);
-            if (admitted != XR_XIR_OK) {
-                detail.source.stage = XR_XIR_SOURCE_PRODUCT_FACTS;
-                detail.source.status = admitted;
-                xr_xir_compile_source_product_free(product);
-                product = NULL;
-            }
-        }
+        detail.stage = XR_SOURCE_COMPILE_CHECK;
+        XrXirSourceRequest input = {.session = session, .entry_path = entry,
+            .authority = xr_source_authority_entry(authority), .context = request->context,
+            .stdlib_path = stdlib, .lockfile = xr_source_authority_lockfile(authority),
+            .linkage_kind = XR_XIR_PROGRAM, .libraries = request->libraries};
+        detail.source.status = xr_xir_compile_source_check(&input, &source,
+            &detail.source.diagnostic, &detail.source.failure);
+        status = source_xir_status(detail.source.status);
+        if (detail.source.status == XR_XIR_BAD_STRUCTURE &&
+            (detail.source.failure.origin == XR_XIR_SOURCE_DIAGNOSTIC_PARSE ||
+             detail.source.failure.origin == XR_XIR_SOURCE_DIAGNOSTIC_INPUT))
+            status = XR_SOURCE_COMPILE_INVALID;
     }
     if (owns_session) xr_compile_session_free(session);
     xr_source_authority_close(authority);
-    xr_xir_compile_library_catalog_free(owned_catalog);
     xr_compile_resources_free(stdlib);
     xr_compile_resources_free(entry);
-    if (status == XR_SOURCE_COMPILE_OK) *output = product;
+    if (status == XR_SOURCE_COMPILE_OK) *output = source;
+    else xr_xir_compile_source_result_free(&source);
 rejected:
     detail.status = status;
     if (diagnostic) *diagnostic = detail;

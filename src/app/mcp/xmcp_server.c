@@ -378,7 +378,6 @@ XR_FUNC XmcpServer *xmcp_server_new(const XmcpServerOptions *options) {
 XR_FUNC bool xmcp_server_free(XmcpServer *s) {
     if (!s)
         return true;
-    if (!xmcp_run_close_pending(s)) return false;
     if (g_mcp_server == s)
         g_mcp_server = NULL;
     if (s->knowledge)

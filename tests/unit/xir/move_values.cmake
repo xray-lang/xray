@@ -8,29 +8,7 @@ else()
 endif()
 add_test(NAME test_xir_move_values COMMAND test_xir_move_values)
 set_tests_properties(test_xir_move_values PROPERTIES TIMEOUT 120 LABELS "unit;xir;ownership")
-add_executable(test_xir_move_source "${CMAKE_CURRENT_LIST_DIR}/test_xir_move_source.c")
-target_link_libraries(test_xir_move_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
-target_compile_definitions(test_xir_move_source PRIVATE XR_MOVE_PREVIOUS_PACKET="${PROJECT_SOURCE_DIR}/tests/fixtures/xir_move/previous119-read-ref.chk")
+
+
+
 set(move_generated "${CMAKE_CURRENT_BINARY_DIR}/generated/move_values.c")
-add_custom_command(OUTPUT "${move_generated}"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
-    COMMAND $<TARGET_FILE:test_xir_move_source> "${move_generated}"
-    DEPENDS test_xir_move_source VERBATIM)
-add_executable(test_xir_move_native "${CMAKE_CURRENT_LIST_DIR}/test_xir_move_native.c" "${move_generated}")
-target_link_libraries(test_xir_move_native PRIVATE xray_xir_scalar)
-set_target_properties(test_xir_move_source PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
-if(MSVC)
-    target_compile_options(test_xir_move_source PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_move_source PRIVATE -Wall -Wextra -Werror -pedantic-errors)
-endif()
-add_test(NAME test_xir_move_source COMMAND test_xir_move_source)
-set_tests_properties(test_xir_move_source PROPERTIES TIMEOUT 120 LABELS "unit;xir;source;ownership")
-set_target_properties(test_xir_move_native PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
-if(MSVC)
-    target_compile_options(test_xir_move_native PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_move_native PRIVATE -Wall -Wextra -Werror -pedantic-errors)
-endif()
-add_test(NAME test_xir_move_native COMMAND test_xir_move_native)
-set_tests_properties(test_xir_move_native PROPERTIES TIMEOUT 120 LABELS "unit;xir;source;ownership;generated-c")

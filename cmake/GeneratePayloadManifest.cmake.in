@@ -43,6 +43,10 @@ file(GLOB_RECURSE _xray_entries
     RELATIVE "${_xray_root}"
     "${_xray_root}/*")
 list(REMOVE_ITEM _xray_entries "share/xray/install/payload-manifest.json")
+# Retired SDK files can remain in an existing installation without becoming
+# part of the current compiler's payload ownership.
+list(FILTER _xray_entries EXCLUDE REGEX "^lib/xray/(source-sdk|xir-runtime-sdk)(/|$)")
+list(FILTER _xray_entries EXCLUDE REGEX "^lib/cmake/XraySource(/|$)")
 # The independent native package keeps its own manifest across component installs.
 list(FILTER _xray_entries EXCLUDE REGEX "^lib/xray/native-runtime(/|$)")
 list(FILTER _xray_entries EXCLUDE REGEX "^lib/cmake/XrayNativeRuntime(/|$)")

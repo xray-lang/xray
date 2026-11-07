@@ -1,19 +1,3 @@
-# Keep the scalar interpreter independent of the retired execution libraries.
-add_library(xray_register_vm STATIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/vm/register/xrbc.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/vm/register/xrbc_encode.c)
-target_include_directories(xray_register_vm PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(xray_register_vm PUBLIC xray_native_runtime)
-if(MSVC)
-    if(CMAKE_C_COMPILER_ID MATCHES "Clang")
-        target_compile_options(xray_register_vm PRIVATE /clang:-ffp-contract=off)
-    else()
-        target_compile_options(xray_register_vm PRIVATE /fp:precise)
-    endif()
-else()
-    target_compile_options(xray_register_vm PRIVATE -ffp-contract=off)
-endif()
-
 add_executable(test_register_vm ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/test_register_vm.c)
 target_link_libraries(test_register_vm PRIVATE xray_register_vm)
 add_test(NAME register_vm COMMAND test_register_vm)
@@ -30,16 +14,6 @@ target_include_directories(test_register_vm_alloc PRIVATE ${CMAKE_CURRENT_SOURCE
 target_link_libraries(test_register_vm_alloc PRIVATE xray_native_runtime)
 add_test(NAME register_vm_alloc COMMAND test_register_vm_alloc)
 set_tests_properties(register_vm_alloc PROPERTIES LABELS "unit;vm;fast" TIMEOUT 10)
-
-add_library(xray_lir_bytecode STATIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/vm/register/xrbc_lir.c)
-target_link_libraries(xray_lir_bytecode PUBLIC xray_register_vm xray_lir xray_native_runtime)
-target_compile_features(xray_lir_bytecode PUBLIC c_std_11)
-if(MSVC)
-    target_compile_options(xray_lir_bytecode PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(xray_lir_bytecode PRIVATE -Wall -Wextra -Werror -pedantic)
-endif()
 
 add_executable(test_lir_bytecode ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/test_lir_bytecode.c)
 target_link_libraries(test_lir_bytecode PRIVATE xray_lir_bytecode)

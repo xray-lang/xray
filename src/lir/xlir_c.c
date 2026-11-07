@@ -901,8 +901,8 @@ XR_FUNC void xr_lir_c_output_free(XrLirCOutput *output) {
     xr_compile_resources_free(output->bytes);
     *output = (XrLirCOutput) {0};
 }
-XR_FUNC XrLirCStatus xr_lir_emit_c(const XrLirCRequest *request, XrLirCOutput *output,
-                                   XrLirCDiagnostic *diagnostic) {
+static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *output,
+    XrLirCDiagnostic *diagnostic, bool standalone) {
     if (diagnostic)
         *diagnostic = (XrLirCDiagnostic) {0};
     LirC c = {.request = request, .diagnostic = diagnostic};
@@ -940,6 +940,13 @@ XR_FUNC XrLirCStatus xr_lir_emit_c(const XrLirCRequest *request, XrLirCOutput *o
         c_admit(&c);
     if (c.status == XR_LIR_C_OK)
         c_emit(&c, entry.result);
+    if (c.status == XR_LIR_C_OK && standalone) {
+        if (entry.result == XR_LIR_STRING)
+            c_text(&c, "\nint main(void) {\n    XrtString *result = xray_lir_entry();\n"
+                "    xrt_string_owned_drop(&result);\n    return 0;\n}\n");
+        else
+            c_text(&c, "\nint main(void) {\n    (void)xray_lir_entry();\n    return 0;\n}\n");
+    }
     if (c_request_poll(&c)) {
         XiCgenVerifyStatus verified = xr_compile_cgen_verify_output_or_ice(request->resources,
             c.text, c.length, request->translation_unit);
@@ -969,4 +976,14 @@ XR_FUNC XrLirCStatus xr_lir_emit_c(const XrLirCRequest *request, XrLirCOutput *o
     xr_compile_resources_free(c.fixed_divisors);
     xr_compile_resources_free(c.used_literals);
     return c.status;
+}
+
+XR_FUNC XrLirCStatus xr_lir_emit_c(const XrLirCRequest *request, XrLirCOutput *output,
+    XrLirCDiagnostic *diagnostic) {
+    return c_emit_output(request, output, diagnostic, false);
+}
+
+XR_FUNC XrLirCStatus xr_lir_emit_c_standalone(const XrLirCRequest *request, XrLirCOutput *output,
+    XrLirCDiagnostic *diagnostic) {
+    return c_emit_output(request, output, diagnostic, true);
 }

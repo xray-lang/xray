@@ -5,9 +5,9 @@ get_filename_component(product_consumer_fixture_root "${product_consumer_fixture
 set(product_consumer_fault_runner "${CMAKE_SOURCE_DIR}/scripts/source_product_consumer_faults.py")
 set(product_consumer_main_template "${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_consumer_main.c.in")
 
-include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_consumer_cases.cmake")
 
-include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_nominal_graph_cases.cmake")
+
+
 
 foreach(case IN ITEMS bare_nullable missing_name)
     set(test "test_source_product_rejections_${case}")
@@ -34,7 +34,7 @@ set_tests_properties(source_product_integer_source_constructors PROPERTIES TIMEO
     LABELS "unit;xir;source-product;program-consumer;inventory;integer")
 add_executable(test_source_product_nominal_constructors
     "${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_nominal_constructors.c")
-target_link_libraries(test_source_product_nominal_constructors PRIVATE xray_xir_source_product)
+target_link_libraries(test_source_product_nominal_constructors PRIVATE )
 set_target_properties(test_source_product_nominal_constructors PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 if(MSVC)
     target_compile_options(test_source_product_nominal_constructors PRIVATE /utf-8 /W4 /WX)

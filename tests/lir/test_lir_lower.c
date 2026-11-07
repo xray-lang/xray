@@ -483,7 +483,7 @@ static void argument_validation(void) {
     CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats before, after;
     CHECK(xr_compile_resources_stats(resources, &before) == XR_COMPILE_RESOURCE_OK);
-    XrLirSourceRequest input = {resources, "unopened.xr", NULL, false};
+    XrLirSourceRequest input = {resources, "unopened.xr", NULL, false, NULL, NULL};
     XrLirSourceFailure source_failure = {0};
     output.entry.id = 1;
     CHECK(xr_lir_compile_source(&input, &output, &source_failure) == XR_LIR_SOURCE_BAD_ARGUMENT);

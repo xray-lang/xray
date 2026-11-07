@@ -91,9 +91,14 @@ static void make_importer(char *buf, size_t bufsz, const char *rel) {
 
 TEST(resolver_new_free) {
     XrModuleResolverConfig cfg = {0};
-    XrModuleResolver *r = xr_module_resolver_new(&cfg);
+    const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
+    XrCompileResources *resources = NULL;
+    ASSERT_EQ_INT(xr_compile_resources_new(&limits, &resources), XR_COMPILE_RESOURCE_OK);
+    XrModuleResolver *r = NULL;
+    ASSERT_EQ_INT(xr_compile_module_resolver_new(resources, &cfg, &r), XR_MODULE_OK);
     ASSERT_NOT_NULL(r);
-    xr_module_resolver_free(r);
+    xr_compile_module_resolver_free(r);
+    xr_compile_resources_release(resources);
 }
 
 /* ========== Stdlib Resolution Tests ========== */
@@ -102,39 +107,49 @@ TEST(resolver_new_free) {
  * caller supplies, so these cases assert against the real one. */
 TEST(resolve_bare_stdlib_known) {
     XrModuleResolverConfig cfg = {.stdlib_path = NULL, .lockfile = NULL};
-    XrModuleResolver *r = xr_module_resolver_new(&cfg);
+    const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
+    XrCompileResources *resources = NULL;
+    ASSERT_EQ_INT(xr_compile_resources_new(&limits, &resources), XR_COMPILE_RESOURCE_OK);
+    XrModuleResolver *r = NULL;
+    ASSERT_EQ_INT(xr_compile_module_resolver_new(resources, &cfg, &r), XR_MODULE_OK);
 
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(r, "time", NULL, NULL, &mid, &err);
+    int rc = xr_compile_module_resolver_resolve(r, "time", NULL, NULL, &mid, &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_NULL(err);
     ASSERT_EQ_INT(mid.kind, XR_MOD_STDLIB);
     ASSERT_STR_EQ(mid.canonical, "stdlib-module-v1:module=4:time:path=12:time/time.xr");
     ASSERT_NULL(mid.source_path);
-    xr_module_id_cleanup(&mid);
+    xr_compile_module_id_cleanup(&mid);
 
-    rc = xr_module_resolver_resolve(r, "math", NULL, NULL, &mid, &err);
+    rc = xr_compile_module_resolver_resolve(r, "math", NULL, NULL, &mid, &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_EQ_INT(mid.kind, XR_MOD_STDLIB);
     ASSERT_STR_EQ(mid.canonical, "stdlib-module-v1:module=4:math:path=12:math/math.xr");
-    xr_module_id_cleanup(&mid);
+    xr_compile_module_id_cleanup(&mid);
 
-    xr_module_resolver_free(r);
+    xr_compile_module_resolver_free(r);
+    xr_compile_resources_release(resources);
 }
 
 TEST(resolve_bare_stdlib_unknown) {
     XrModuleResolverConfig cfg = {.stdlib_path = NULL, .lockfile = NULL};
-    XrModuleResolver *r = xr_module_resolver_new(&cfg);
+    const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
+    XrCompileResources *resources = NULL;
+    ASSERT_EQ_INT(xr_compile_resources_new(&limits, &resources), XR_COMPILE_RESOURCE_OK);
+    XrModuleResolver *r = NULL;
+    ASSERT_EQ_INT(xr_compile_module_resolver_new(resources, &cfg, &r), XR_MODULE_OK);
 
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(r, "nosuchmodule", NULL, NULL, &mid, &err);
+    int rc = xr_compile_module_resolver_resolve(r, "nosuchmodule", NULL, NULL, &mid, &err);
     ASSERT_EQ_INT(rc, XR_MODULE_NOT_FOUND);
     ASSERT_NOT_NULL(err);
-    xr_free(err);
+    xr_compile_resources_free(err);
 
-    xr_module_resolver_free(r);
+    xr_compile_module_resolver_free(r);
+    xr_compile_resources_release(resources);
 }
 
 /* ========== Relative File Resolution Tests ========== */
@@ -145,7 +160,11 @@ TEST(resolve_relative_file) {
     create_file("src/utils.xr", "// utils");
 
     XrModuleResolverConfig cfg = {0};
-    XrModuleResolver *r = xr_module_resolver_new(&cfg);
+    const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
+    XrCompileResources *resources = NULL;
+    ASSERT_EQ_INT(xr_compile_resources_new(&limits, &resources), XR_COMPILE_RESOURCE_OK);
+    XrModuleResolver *r = NULL;
+    ASSERT_EQ_INT(xr_compile_module_resolver_new(resources, &cfg, &r), XR_MODULE_OK);
     XrModuleIdentityAuthority authority = script_authority();
 
     char importer[1024];
@@ -153,22 +172,23 @@ TEST(resolve_relative_file) {
 
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(r, "./utils", importer, NULL, &mid, &err);
+    int rc = xr_compile_module_resolver_resolve(r, "./utils", importer, NULL, &mid, &err);
     ASSERT_EQ_INT(rc, XR_MODULE_INVALID);
     ASSERT_NOT_NULL(err);
-    xr_free(err);
+    xr_compile_resources_free(err);
     err = NULL;
 
-    rc = xr_module_resolver_resolve(r, "./utils", importer, &authority, &mid, &err);
+    rc = xr_compile_module_resolver_resolve(r, "./utils", importer, &authority, &mid, &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_NULL(err);
     ASSERT_EQ_INT(mid.kind, XR_MOD_FILE);
     ASSERT_NOT_NULL(mid.source_path);
     /* Should end with /src/utils.xr */
     ASSERT_NOT_NULL(strstr(mid.source_path, "utils.xr"));
-    xr_module_id_cleanup(&mid);
+    xr_compile_module_id_cleanup(&mid);
 
-    xr_module_resolver_free(r);
+    xr_compile_module_resolver_free(r);
+    xr_compile_resources_release(resources);
     teardown_tmpdir();
 }
 
@@ -178,7 +198,11 @@ TEST(resolve_relative_dir_index) {
     create_file("src/models/index.xr", "// models index");
 
     XrModuleResolverConfig cfg = {0};
-    XrModuleResolver *r = xr_module_resolver_new(&cfg);
+    const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
+    XrCompileResources *resources = NULL;
+    ASSERT_EQ_INT(xr_compile_resources_new(&limits, &resources), XR_COMPILE_RESOURCE_OK);
+    XrModuleResolver *r = NULL;
+    ASSERT_EQ_INT(xr_compile_module_resolver_new(resources, &cfg, &r), XR_MODULE_OK);
     XrModuleIdentityAuthority authority = script_authority();
 
     char importer[1024];
@@ -186,15 +210,16 @@ TEST(resolve_relative_dir_index) {
 
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(r, "./models", importer, &authority, &mid, &err);
+    int rc = xr_compile_module_resolver_resolve(r, "./models", importer, &authority, &mid, &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_NULL(err);
     ASSERT_EQ_INT(mid.kind, XR_MOD_FILE);
     ASSERT_NOT_NULL(mid.source_path);
     ASSERT_NOT_NULL(strstr(mid.source_path, "models/index.xr"));
-    xr_module_id_cleanup(&mid);
+    xr_compile_module_id_cleanup(&mid);
 
-    xr_module_resolver_free(r);
+    xr_compile_module_resolver_free(r);
+    xr_compile_resources_release(resources);
     teardown_tmpdir();
 }
 
@@ -203,7 +228,11 @@ TEST(resolve_relative_not_found) {
     create_file("src/main.xr", "// entry");
 
     XrModuleResolverConfig cfg = {0};
-    XrModuleResolver *r = xr_module_resolver_new(&cfg);
+    const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
+    XrCompileResources *resources = NULL;
+    ASSERT_EQ_INT(xr_compile_resources_new(&limits, &resources), XR_COMPILE_RESOURCE_OK);
+    XrModuleResolver *r = NULL;
+    ASSERT_EQ_INT(xr_compile_module_resolver_new(resources, &cfg, &r), XR_MODULE_OK);
     XrModuleIdentityAuthority authority = script_authority();
 
     char importer[1024];
@@ -211,12 +240,13 @@ TEST(resolve_relative_not_found) {
 
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(r, "./nonexist", importer, &authority, &mid, &err);
+    int rc = xr_compile_module_resolver_resolve(r, "./nonexist", importer, &authority, &mid, &err);
     ASSERT_EQ_INT(rc, XR_MODULE_NOT_FOUND);
     ASSERT_NOT_NULL(err);
-    xr_free(err);
+    xr_compile_resources_free(err);
 
-    xr_module_resolver_free(r);
+    xr_compile_module_resolver_free(r);
+    xr_compile_resources_release(resources);
     teardown_tmpdir();
 }
 
@@ -226,7 +256,11 @@ TEST(resolve_parent_relative) {
     create_file("src/deep/nested.xr", "// nested");
 
     XrModuleResolverConfig cfg = {0};
-    XrModuleResolver *r = xr_module_resolver_new(&cfg);
+    const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
+    XrCompileResources *resources = NULL;
+    ASSERT_EQ_INT(xr_compile_resources_new(&limits, &resources), XR_COMPILE_RESOURCE_OK);
+    XrModuleResolver *r = NULL;
+    ASSERT_EQ_INT(xr_compile_module_resolver_new(resources, &cfg, &r), XR_MODULE_OK);
     XrModuleIdentityAuthority authority = script_authority();
 
     char importer[1024];
@@ -234,14 +268,15 @@ TEST(resolve_parent_relative) {
 
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(r, "../../lib/helper", importer, &authority, &mid, &err);
+    int rc = xr_compile_module_resolver_resolve(r, "../../lib/helper", importer, &authority, &mid, &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_NULL(err);
     ASSERT_EQ_INT(mid.kind, XR_MOD_FILE);
     ASSERT_NOT_NULL(strstr(mid.source_path, "helper.xr"));
-    xr_module_id_cleanup(&mid);
+    xr_compile_module_id_cleanup(&mid);
 
-    xr_module_resolver_free(r);
+    xr_compile_module_resolver_free(r);
+    xr_compile_resources_release(resources);
     teardown_tmpdir();
 }
 
@@ -253,7 +288,11 @@ TEST(resolve_caches_results) {
     create_file("src/utils.xr", "// utils");
 
     XrModuleResolverConfig cfg = {0};
-    XrModuleResolver *r = xr_module_resolver_new(&cfg);
+    const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
+    XrCompileResources *resources = NULL;
+    ASSERT_EQ_INT(xr_compile_resources_new(&limits, &resources), XR_COMPILE_RESOURCE_OK);
+    XrModuleResolver *r = NULL;
+    ASSERT_EQ_INT(xr_compile_module_resolver_new(resources, &cfg, &r), XR_MODULE_OK);
     XrModuleIdentityAuthority authority = script_authority();
 
     char importer[1024];
@@ -261,18 +300,19 @@ TEST(resolve_caches_results) {
 
     XrModuleId mid1, mid2;
     char *err = NULL;
-    int rc1 = xr_module_resolver_resolve(r, "./utils", importer, &authority, &mid1, &err);
+    int rc1 = xr_compile_module_resolver_resolve(r, "./utils", importer, &authority, &mid1, &err);
     ASSERT_EQ_INT(rc1, 0);
 
-    int rc2 = xr_module_resolver_resolve(r, "./utils", importer, &authority, &mid2, &err);
+    int rc2 = xr_compile_module_resolver_resolve(r, "./utils", importer, &authority, &mid2, &err);
     ASSERT_EQ_INT(rc2, 0);
 
     /* Both should resolve to the same canonical path */
     ASSERT_STR_EQ(mid1.source_path, mid2.source_path);
 
-    xr_module_id_cleanup(&mid1);
-    xr_module_id_cleanup(&mid2);
-    xr_module_resolver_free(r);
+    xr_compile_module_id_cleanup(&mid1);
+    xr_compile_module_id_cleanup(&mid2);
+    xr_compile_module_resolver_free(r);
+    xr_compile_resources_release(resources);
     teardown_tmpdir();
 }
 
@@ -280,11 +320,11 @@ TEST(resolve_caches_results) {
 
 TEST(module_id_cleanup_null_safe) {
     XrModuleId mid = {.kind = XR_MOD_STDLIB, .canonical = NULL, .source_path = NULL};
-    xr_module_id_cleanup(&mid);
+    xr_compile_module_id_cleanup(&mid);
     ASSERT_NULL(mid.canonical);
     ASSERT_NULL(mid.source_path);
 
-    xr_module_id_cleanup(NULL);
+    xr_compile_module_id_cleanup(NULL);
 }
 
 /* ========== Single-Segment Name Tests ========== */
@@ -300,7 +340,11 @@ TEST(resolve_single_segment_is_not_project_relative) {
     create_file("src/config.xr", "// config");
 
     XrModuleResolverConfig cfg = {0};
-    XrModuleResolver *r = xr_module_resolver_new(&cfg);
+    const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
+    XrCompileResources *resources = NULL;
+    ASSERT_EQ_INT(xr_compile_resources_new(&limits, &resources), XR_COMPILE_RESOURCE_OK);
+    XrModuleResolver *r = NULL;
+    ASSERT_EQ_INT(xr_compile_module_resolver_new(resources, &cfg, &r), XR_MODULE_OK);
     XrModuleIdentityAuthority authority = script_authority();
 
     char importer[1024];
@@ -308,20 +352,21 @@ TEST(resolve_single_segment_is_not_project_relative) {
 
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(r, "config", importer, NULL, &mid, &err);
+    int rc = xr_compile_module_resolver_resolve(r, "config", importer, NULL, &mid, &err);
     ASSERT_EQ_INT(rc, XR_MODULE_NOT_FOUND);
-    xr_free(err);
+    xr_compile_resources_free(err);
     err = NULL;
 
     /* The same file IS reachable through the explicit relative form. */
-    rc = xr_module_resolver_resolve(r, "./config", importer, &authority, &mid, &err);
+    rc = xr_compile_module_resolver_resolve(r, "./config", importer, &authority, &mid, &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_NULL(err);
     ASSERT_EQ_INT(mid.kind, XR_MOD_FILE);
     ASSERT_NOT_NULL(strstr(mid.source_path, "config.xr"));
-    xr_module_id_cleanup(&mid);
+    xr_compile_module_id_cleanup(&mid);
 
-    xr_module_resolver_free(r);
+    xr_compile_module_resolver_free(r);
+    xr_compile_resources_release(resources);
     teardown_tmpdir();
 }
 

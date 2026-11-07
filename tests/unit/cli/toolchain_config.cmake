@@ -35,7 +35,7 @@ if(WIN32)
         "${PROJECT_SOURCE_DIR}/src/app/cli/xcli_diag.c"
         "${PROJECT_SOURCE_DIR}/src/app/cli/xcli_output.c"
         "${PROJECT_SOURCE_DIR}/src/os/win/time_win.c")
-    target_link_libraries(test_cli_toolchain_command PRIVATE xray_cli_toolchain_update xray_cli_native_probe)
+    target_link_libraries(test_cli_toolchain_command PRIVATE xray_cli_toolchain_update )
     target_compile_definitions(test_cli_toolchain_command PRIVATE _CRT_SECURE_NO_WARNINGS)
     target_include_directories(test_cli_toolchain_command PRIVATE "${PROJECT_SOURCE_DIR}/src"
         "${CMAKE_BINARY_DIR}/generated")

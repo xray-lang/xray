@@ -36,11 +36,11 @@ set(cli_sources "${XR_ROOT}/src/app/cli/xcmd_build.c" "${XR_ROOT}/src/app/cli/xc
     "${XR_ROOT}/src/app/cli/xcli_parser.c" "${XR_ROOT}/src/app/cli/xcli_diag.c"
     "${XR_ROOT}/src/app/cli/xcli_output.c" "${XR_ROOT}/src/app/cli/xcli_help.c"
     "${XR_ROOT}/src/os/win/fd_win.c" "${XR_ROOT}/src/os/win/time_win.c")
-add_executable(build_source_driver build_source_driver.c ${cli_sources})
-target_link_libraries(build_source_driver PRIVATE publication_production)
-add_executable(build_source_faults build_source_driver.c ${cli_sources})
-target_compile_definitions(build_source_faults PRIVATE BUILD_SOURCE_INJECTED=1)
-target_link_libraries(build_source_faults PRIVATE publication_lease bcrypt)
+
+
+
+
+
 add_executable(test_publication_owner test_publication_owner.c)
 target_link_libraries(test_publication_owner PRIVATE publication_production)
 add_executable(test_publication_faults test_publication_owner.c)
@@ -48,8 +48,3 @@ target_compile_definitions(test_publication_faults PRIVATE PUBLICATION_INJECTED=
 target_link_libraries(test_publication_faults PRIVATE publication_lease bcrypt)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 enable_testing()
-add_test(NAME build_source_owner COMMAND "${Python3_EXECUTABLE}" -X utf8 "${CMAKE_CURRENT_LIST_DIR}/build_source_cases.py"
-    --root "${XR_ROOT}" --driver "$<TARGET_FILE:build_source_driver>" --output "${CMAKE_CURRENT_BINARY_DIR}/cases"
-    --publication "$<TARGET_FILE:test_publication_owner>" --faults "$<TARGET_FILE:test_publication_faults>"
-    --fault-driver "$<TARGET_FILE:build_source_faults>")
-set_tests_properties(build_source_owner PROPERTIES TIMEOUT 120 COST 3)

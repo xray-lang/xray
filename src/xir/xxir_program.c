@@ -349,16 +349,6 @@ failed:
     program_dispose(program);
     return status;
 }
-XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *context,
-    const XrXirProgramSpec *spec,XrXirProgram **output) {
-    if (!xir_compile_context_valid(context) || !output || *output) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=program_shape(context,spec);
-    if (status!=XR_XIR_OK) return status;
-    XrXirProgramInput *input=NULL;
-    status=xir_program_input_read(context,&spec->packet,&spec->target,&input);
-    if (status==XR_XIR_OK) status=xir_program_receive(context,spec,&input,NULL,output);
-    xir_program_input_free(input);return status;
-}
 XR_FUNC bool xr_xir_compile_program_retain(XrXirProgram *program) {
     if (!program) return false;
     uint32_t count = atomic_load_explicit(&program->references, memory_order_relaxed);

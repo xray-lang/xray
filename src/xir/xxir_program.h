@@ -65,9 +65,6 @@ typedef struct XrXirInstanceResult {
     uint64_t epoch;
 } XrXirInstanceResult;
 
-/* Successful sealing takes the code lease. A null lease declares static code. */
-XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *context,
-    const XrXirProgramSpec *spec, XrXirProgram **output);
 XR_FUNC void xr_xir_compile_program_drop(XrXirProgram *program);
 /* Ordinary execution has no policy quotas; checked counters and allocation
  * failures still apply. Explicit sandbox initialization restores finite limits.

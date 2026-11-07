@@ -16,7 +16,7 @@ execute_process(COMMAND "${Python3_EXECUTABLE}" "${SDK_OWNER_ROOT}/scripts/gen_x
     COMMAND_ERROR_IS_FATAL ANY)
 enable_testing()
 set(SDK_OWNER_LIBRARIES)
-foreach(owner xray_compile_resources xray_xir_admission xray_xir_declarations xray_xir_scalar xray_xir_runtime_host)
+foreach(owner xray_compile_resources xray_xir_admission xray_xir_declarations xray_xir_scalar )
     add_library(sdk_${owner} STATIC IMPORTED)
     set_target_properties(sdk_${owner} PROPERTIES IMPORTED_LOCATION "${XIR_SDK_BUNDLE_DIR}/lib/${owner}.lib")
     list(APPEND SDK_OWNER_LIBRARIES sdk_${owner})

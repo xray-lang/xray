@@ -26,7 +26,7 @@ static XrRbcProgram *compile_file(const char *path, bool optimize, const char *s
         fprintf(stderr, "lir_vm_run: cannot prepare source input: %s\n", path);
         return NULL;
     }
-    XrLirSourceRequest request = {resources, path, stdlib, optimize};
+    XrLirSourceRequest request = {resources, path, stdlib, optimize, NULL, NULL};
     XrLirSourceStatus status = xr_lir_compile_source(&request, &lowered, &failure);
     if (status == XR_LIR_SOURCE_CHECK_FAILED) {
         fprintf(stderr, "lir_vm_run: source %s:%d:%d: %s\n",

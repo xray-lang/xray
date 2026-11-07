@@ -56,14 +56,18 @@ static void runtime_record(void *pointer, size_t bytes) {
     XIR_RUNTIME_AFTER_ALLOCATE(pointer,bytes);
 #endif
 }
-/* Backward-shift deletion keeps every probe chain contiguous without tombstones. */
-static bool runtime_forget(const void *pointer) {
-    if (!pointer || !runtime_live) return false;
+static size_t runtime_find(const void *pointer) {
+    if (!pointer || !runtime_live) return SIZE_MAX;
     size_t mask = runtime_owned_capacity - 1, hole = runtime_slot(pointer);
     while (runtime_owned[hole].pointer != pointer) {
-        if (!runtime_owned[hole].pointer) return false;
+        if (!runtime_owned[hole].pointer) return SIZE_MAX;
         hole = (hole + 1) & mask;
     }
+    return hole;
+}
+/* Backward-shift deletion keeps every probe chain contiguous without tombstones. */
+static void runtime_forget_at(size_t hole) {
+    size_t mask = runtime_owned_capacity - 1;
     runtime_bytes -= runtime_owned[hole].bytes; --runtime_live;
     for (size_t next = (hole + 1) & mask; runtime_owned[next].pointer; next = (next + 1) & mask) {
         size_t home = runtime_slot(runtime_owned[next].pointer);
@@ -71,6 +75,11 @@ static bool runtime_forget(const void *pointer) {
         if (!stays) { runtime_owned[hole] = runtime_owned[next]; hole = next; }
     }
     runtime_owned[hole].pointer = NULL; runtime_owned[hole].bytes = 0;
+}
+static bool runtime_forget(const void *pointer) {
+    size_t slot = runtime_find(pointer);
+    if (slot == SIZE_MAX) return false;
+    runtime_forget_at(slot);
     return true;
 }
 static inline void runtime_report_residuals(FILE *stream) {
@@ -99,9 +108,10 @@ static void runtime_free(void *pointer) {
 }
 static void *runtime_realloc(void *pointer, size_t size) {
     if (runtime_attempts++ == runtime_fail_at) return NULL;
+    size_t previous = runtime_find(pointer);
     void *replacement = xr_realloc(pointer, size);
     if (replacement) {
-        (void) runtime_forget(pointer);
+        if (previous != SIZE_MAX) runtime_forget_at(previous);
         runtime_record(replacement, size);
     }
     return replacement;

@@ -184,12 +184,6 @@ static DWORD test_wait(HANDLE process, DWORD milliseconds) {
 #undef GetExitCodeProcess
 #undef GetEnvironmentStringsW
 #undef FreeEnvironmentStringsW
-#ifdef XTC_TEST_SDK
-#include "toolchain/xr_xir_runtime_sdk.c"
-#include "app/toolchain/xtc_xir_target.c"
-#include "app/toolchain/xtc_xir_sysroot.c"
-#include "app/toolchain/xtc_xir_images.c"
-#endif
 
 static char executable[32768], directory[32768];
 static DWORD handles(void) { DWORD result; CHECK(GetProcessHandleCount(GetCurrentProcess(), &result)); return result; }
@@ -315,42 +309,6 @@ static void root_completion_without_observer(void) {
     xtc_process_free(p); xtc_process_result_free(&result);
     CHECK(!live && !physical_bytes && !physical_handles);
 }
-#ifdef XTC_TEST_SDK
-static void sdk_target_process(const char *root) {
-    XrCompileResources *r = ledger(unlimited); XrXirRuntimeSdk *sdk = NULL; XrXirTargetSnapshot *target = NULL;
-    char manifest_path[32768]; CHECK(snprintf(manifest_path, sizeof(manifest_path), "%s/sdk_manifest.json", root) > 0);
-    FILE *file = fopen(manifest_path, "rb"); CHECK(file); CHECK(!fseek(file, 0, SEEK_END)); long size = ftell(file); CHECK(size > 0); CHECK(!fseek(file, 0, SEEK_SET));
-    void *manifest = NULL; CHECK(xr_compile_resources_alloc(r, (size_t)size, &manifest) == XR_COMPILE_RESOURCE_OK);
-    CHECK(fread(manifest, 1, (size_t)size, file) == (size_t)size); CHECK(!fclose(file));
-    XrXirRuntimeSdkRequest sdk_request = {root, manifest, (size_t)size, r};
-    CHECK(xr_xir_runtime_sdk_load(&sdk_request, &sdk) == XR_XIR_SDK_OK);
-    xr_compile_resources_free(manifest); memset(&sdk_request, 0xCD, sizeof(sdk_request));
-    XrProcessSpec spec; spec_init(&spec, "--child");
-    XrToolchainProcess *owner = NULL; CHECK(xtc_process_prepare(r, &spec, &owner) == XTC_PROCESS_OK);
-    XrProcessView view = frozen_view(owner);
-    CHECK(view.env_count == 0 && xtc_process_resources(owner) == r);
-    XrXirTargetDependency dependency = {executable, XR_XIR_TARGET_PROVIDER_SUPPORT};
-    XrXirTargetCommandFacts command = {view.executable, view.cwd, view.argv, (uint32_t)view.argc, NULL, 0,
-        view.timeout_ms, view.output_limit, (uint32_t)view.image_mode, (uint32_t)view.completion_policy};
-    XrXirTargetSnapshotRequest request = {r, "x86_64-windows-msvc", 3, 2, 11, &dependency, 1, &command, 1, NULL};
-    CHECK(xtc_xir_target_snapshot_capture(&request, &target) == XR_XIR_TARGET_OK);
-    xtc_process_free(owner); owner = NULL; memset(&view, 0xCD, sizeof(view));
-    const XrXirTargetCommandFacts *saved = xtc_xir_target_command_facts(target, 0);
-    xtc_process_spec_init(&spec, saved->executable, saved->timeout_ms); spec.output_limit = (size_t)saved->output_limit; spec.argv[1] = saved->argv[1]; spec.cwd = saved->cwd;
-    CHECK(xtc_process_prepare(r, &spec, &owner) == XTC_PROCESS_OK);
-    XrCompileResourceStats stats; CHECK(xr_compile_resources_stats(r, &stats) == XR_COMPILE_RESOURCE_OK);
-    CHECK(stats.held_bytes > xr_xir_runtime_sdk_facts(sdk)->metadata_bytes);
-    xr_compile_resources_release(r);
-    CHECK(xr_xir_runtime_sdk_facts(sdk)->file_count == sizeof(sdk_recipe_files) / sizeof(sdk_recipe_files[0]));
-    memset(&request, 0xCD, sizeof(request)); memset(&spec, 0xCD, sizeof(spec));
-    XrProcessResult result = {0}; CHECK(xtc_process_run(owner, NULL, NULL, &result) == XTC_PROCESS_OK);
-    CHECK(result.exit_code == 23 && result.stdout_bytes.length == strlen("out|none|absent|"));
-    CHECK(!memcmp(result.stdout_bytes.data, "out|none|absent|", result.stdout_bytes.length));
-    xtc_process_free(owner); xtc_xir_target_free(target); xr_xir_runtime_sdk_free(sdk);
-    CHECK(result.stderr_bytes.length == 3 && !memcmp(result.stderr_bytes.data, "err", 3));
-    xtc_process_result_free(&result); CHECK(!live && !physical_bytes && !physical_handles);
-}
-#endif
 static bool cancel_started(void *context) { return ++*(unsigned *)context > 1; }
 static void os_failures(void) {
     XrProcessSpec spec; spec_init(&spec, "--sleep");
@@ -452,18 +410,6 @@ static void hidden_environment(void) {
     const char expected[] = "hidden|unicode|space";
     CHECK(result.stdout_bytes.length == sizeof(expected) - 1);
     CHECK(!memcmp(result.stdout_bytes.data, expected, sizeof(expected) - 1));
-#ifdef XTC_TEST_SDK
-    XrProcessView view = frozen_view(process);
-    XrXirTargetEnvironment environment[XTC_PROCESS_MAX_ENV];
-    for (size_t i = 0; i < view.env_count; ++i)
-        environment[i] = (XrXirTargetEnvironment){view.env_keys[i], view.env_values[i]};
-    XrXirTargetCommandFacts command = {view.executable, view.cwd, view.argv, (uint32_t)view.argc,
-        environment, (uint32_t)view.env_count, view.timeout_ms, view.output_limit, (uint32_t)view.image_mode, (uint32_t)view.completion_policy};
-    XrXirTargetDependency dependency = {executable, XR_XIR_TARGET_COMPILER};
-    XrXirTargetSnapshotRequest request = {r, "x86_64-windows-msvc", 3, 2, 11, &dependency, 1, &command, 1, NULL};
-    XrXirTargetSnapshot *target = NULL;
-    CHECK(xtc_process_resources(process) == r && xtc_xir_target_snapshot_capture(&request, &target) == XR_XIR_TARGET_OK);
-#endif
     xtc_process_result_free(&result); xtc_process_free(process); process = NULL;
     const char *reserved[] = {"=C:","=ExitCode","=XR_PRIVATE","=","a=b"};
     for (unsigned snapshot = 0; snapshot < 2; ++snapshot) for (unsigned key = 0; key < 5; ++key) {
@@ -473,18 +419,6 @@ static void hidden_environment(void) {
         CHECK(xtc_process_prepare(r, &spec, &process) == XTC_PROCESS_INVALID && !process);
     }
     xr_compile_resources_release(r);
-#ifdef XTC_TEST_SDK
-    const XrXirTargetCommandFacts *saved = xtc_xir_target_command_facts(target, 0);
-    CHECK(!strcmp(saved->executable, executable) && !strcmp(saved->argv[0], "independent-display-name"));
-    CHECK(saved->timeout_ms == view.timeout_ms && saved->output_limit == view.output_limit && saved->image_mode == (uint32_t)view.image_mode);
-    unsigned hidden = 0, unicode = 0;
-    for (uint32_t i = 0; i < saved->environment_count; ++i) {
-        if (!strcmp(saved->environment[i].key, "=C:")) { CHECK(!strcmp(saved->environment[i].value, "C:\\xray-drive-A")); ++hidden; }
-        if (!strcmp(saved->environment[i].key, "XR_OWNED_测试")) { CHECK(!strcmp(saved->environment[i].value, "unicode-A")); ++unicode; }
-    }
-    CHECK(hidden == 1 && unicode == 1); xtc_xir_target_free(target);
-    puts("real frozen view to command v2: distinct executable, hidden environment, policy and producer-first lifetime PASS");
-#endif
     CHECK(SetEnvironmentStringsW(previous)); CHECK(FreeEnvironmentStringsW(previous));
     CHECK(!live && !physical_bytes && !physical_handles && !environment_blocks);
     puts("hidden drive/ExitCode/private names frozen, Unicode and space readable, user reserved keys rejected");
@@ -680,7 +614,7 @@ static void budgets(void) {
     }
 }
 int main(int argc, char **argv) {
-    if (argc > 1 && strcmp(argv[1], "--sdk")) {
+    if (argc > 1) {
         if (!strcmp(argv[1], "--hidden-env-parent")) { hidden_environment(); return 0; }
         if (!strcmp(argv[1], "--hidden-env-read")) {
             check_hidden_value(L"=C:=", L"C:\\xray-drive-A");
@@ -723,9 +657,6 @@ int main(int argc, char **argv) {
     basic(); failures(); descendants(); root_completion_without_observer(); os_failures(); bad_requests(); missing_inputs();
     capture_idle(); budgets(); oom(); unicode_environment(); snapshot_failures();
     detached_group_flag(); runtime_program_paths(); concurrent_waiters(); cumulative_requests();
-#ifdef XTC_TEST_SDK
-    if (argc == 3 && !strcmp(argv[1], "--sdk")) sdk_target_process(argv[2]);
-#endif
     printf("handle baseline=%lu final=%lu\n", before, handles());
     CHECK(handles() == before); CHECK(!live && !physical_bytes && !physical_handles && !environment_blocks);
     puts("frozen process request, statuses and physical cleanup passed"); return 0;

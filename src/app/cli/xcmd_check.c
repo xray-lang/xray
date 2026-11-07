@@ -8,7 +8,6 @@
  */
 #include "xcli.h"
 #include "../../api/xsource_compile.h"
-#include "../../execution/xr_xir_host_execution.h"
 #include "../../api/xsource_paths.h"
 #include "../../base/xio_policy.inc.h"
 #include "../../frontend/parser/xparse.h"
@@ -150,13 +149,13 @@ static void check_semantic(CheckWork *work, const char *path) {
     XrSourcePaths paths = {0};
     XrSourcePathsDiagnostic path_diagnostic = {0};
     XrSourceCompileDiagnostic diagnostic = {0};
-    XrXirSourceProduct *product = NULL;
+    XrXirSourceResult source = {0};
     XrXirCompileContext context = {work->resources, xr_xir_compile_default_limits()};
     XrSourceCompileStatus status = xr_source_paths(work->resources, path, &paths, &path_diagnostic);
     if (status == XR_SOURCE_COMPILE_OK) {
         XrSourceCompileRequest request = {&context, paths.entry, paths.stdlib, NULL,
-            xr_source_compile_default_manifest_limits(), xr_xir_host_target(), NULL};
-        status = xr_source_compile_build(&request, &product, &diagnostic);
+            xr_source_compile_default_manifest_limits(), NULL};
+        status = xr_source_compile_check(&request, &source, &diagnostic);
         if (status != XR_SOURCE_COMPILE_OK) {
             char *text=NULL;
             XrSourceCompileStatus shown=xr_source_compile_diagnostic_render(&diagnostic,work->resources,&text);
@@ -169,7 +168,7 @@ static void check_semantic(CheckWork *work, const char *path) {
         xr_source_paths_diagnostic_format(&path_diagnostic, text, sizeof(text));
         fprintf(stderr, "xray check: %s: %s\n", path, text);
     }
-    xr_xir_compile_source_product_free(product);
+    xr_xir_compile_source_result_free(&source);
     xr_source_compile_diagnostic_free(&diagnostic);
     xr_source_paths_free(&paths);
     xr_source_paths_diagnostic_free(&path_diagnostic);

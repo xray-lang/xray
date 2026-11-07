@@ -50,17 +50,17 @@ static void observed_release(XrCompileResources *owner) {
     xr_compile_resources_release(owner);
 }
 static XrSourceCompileStatus observed_source(const XrSourceCompileRequest *request,
-    XrXirSourceProduct **output,XrSourceCompileDiagnostic *diagnostic) {
+    XrXirSourceResult *output,XrSourceCompileDiagnostic *diagnostic) {
     ++source_calls;CHECK(request->context->resources==original);phases[1]=attempts;
-    return xr_source_compile_build(request,output,diagnostic);
+    return xr_source_compile_check(request,output,diagnostic);
 }
 #define xr_compile_resources_new observed_new
 #define xr_compile_resources_release observed_release
-#define xr_source_compile_build observed_source
+#define xr_source_compile_check observed_source
 #include "app/cli/xcmd_check.c"
 #undef xr_compile_resources_new
 #undef xr_compile_resources_release
-#undef xr_source_compile_build
+#undef xr_source_compile_check
 static int checked_call(const XrCliInvocation *inv) {
     resource_calls=source_calls=0;attempts=0;original=NULL;
     DWORD handles_before=0,handles_after=0;

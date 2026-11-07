@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
         fputs("cannot prepare source compilation\n", stderr);
         return 1;
     }
-    XrLirSourceRequest input = {resources, argv[1], stdlib, optimize};
+    XrLirSourceRequest input = {resources, argv[1], stdlib, optimize, NULL, NULL};
     XrLirSourceStatus status = xr_lir_compile_source(&input, &lowered, &failure);
     if (status == XR_LIR_SOURCE_CHECK_FAILED) {
         fprintf(stderr, "source %d:%d: %s\n", failure.source.line,

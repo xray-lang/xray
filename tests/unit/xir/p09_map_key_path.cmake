@@ -18,106 +18,32 @@ set_tests_properties(test_xir_p09_map_key_path_value PROPERTIES TIMEOUT 120 LABE
 add_test(NAME test_xir_p09_map_key_path_value_allocations COMMAND test_xir_p09_map_key_path_value --full)
 set_tests_properties(test_xir_p09_map_key_path_value_allocations PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "unit;xir;map;path;ownership;memory;budget;fault")
 
-add_executable(test_xir_p09_map_key_path_source "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_map_key_path_source.c")
-target_link_libraries(test_xir_p09_map_key_path_source PRIVATE xray_xir_source xray_xir_cgen xray_xir_vm)
-target_compile_definitions(test_xir_p09_map_key_path_source PRIVATE XR_P09_HASH_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-set_target_properties(test_xir_p09_map_key_path_source PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-if(MSVC)
-    target_compile_options(test_xir_p09_map_key_path_source PRIVATE /utf-8 /W4 /WX)
-else()
-    target_compile_options(test_xir_p09_map_key_path_source PRIVATE -Wall -Wextra -Werror)
-endif()
-foreach(case RANGE 0 7)
-    add_test(NAME test_xir_p09_map_key_path_source_${case} COMMAND test_xir_p09_map_key_path_source --case ${case})
-    set_tests_properties(test_xir_p09_map_key_path_source_${case} PROPERTIES TIMEOUT 120 LABELS "unit;xir;map;path;source;ownership;vm")
-endforeach()
+
+
+
+
+
+
 
 set(MAP_KEY_PATH_C "${CMAKE_BINARY_DIR}/generated/xir_p09_map_key_path.c")
-add_custom_command(OUTPUT "${MAP_KEY_PATH_C}"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/generated"
-    COMMAND $<TARGET_FILE:test_xir_p09_map_key_path_source> --emit "${MAP_KEY_PATH_C}"
-    DEPENDS test_xir_p09_map_key_path_source VERBATIM)
-foreach(mode native mixed)
-    add_executable(test_xir_p09_map_key_path_${mode} "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_map_key_path_${mode}.c" "${MAP_KEY_PATH_C}")
-    target_link_libraries(test_xir_p09_map_key_path_${mode} PRIVATE xray_xir_source xray_xir_cgen xray_xir_vm)
-    target_compile_definitions(test_xir_p09_map_key_path_${mode} PRIVATE XR_P09_HASH_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-    set_target_properties(test_xir_p09_map_key_path_${mode} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-    if(MSVC)
-        target_compile_options(test_xir_p09_map_key_path_${mode} PRIVATE /utf-8 /W4 /WX)
-    else()
-        target_compile_options(test_xir_p09_map_key_path_${mode} PRIVATE -Wall -Wextra -Werror)
-    endif()
-endforeach()
-foreach(case RANGE 0 7)
-    add_test(NAME test_xir_p09_map_key_path_native_${case} COMMAND test_xir_p09_map_key_path_native ${case})
-    set_tests_properties(test_xir_p09_map_key_path_native_${case} PROPERTIES TIMEOUT 120 LABELS "unit;xir;map;path;source;ownership;native;provider")
-endforeach()
-add_test(NAME test_xir_p09_map_key_path_mixed COMMAND test_xir_p09_map_key_path_mixed)
-set_tests_properties(test_xir_p09_map_key_path_mixed PROPERTIES TIMEOUT 120 LABELS "unit;xir;map;path;source;ownership;mixed;provider")
 
-add_executable(test_xir_p09_map_key_path_resources "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_map_key_path_resources.c")
-target_link_libraries(test_xir_p09_map_key_path_resources PRIVATE xray_xir_source xray_xir_cgen xray_xir_vm)
-target_compile_definitions(test_xir_p09_map_key_path_resources PRIVATE XR_P09_HASH_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-set_target_properties(test_xir_p09_map_key_path_resources PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-if(MSVC)
-    target_compile_options(test_xir_p09_map_key_path_resources PRIVATE /utf-8 /W4 /WX)
-else()
-    target_compile_options(test_xir_p09_map_key_path_resources PRIVATE -Wall -Wextra -Werror)
-endif()
-foreach(row RANGE 0 8)
-    foreach(mode normal cancel full)
-        add_test(NAME test_xir_p09_map_key_path_resources_${row}_${mode}
-            COMMAND test_xir_p09_map_key_path_resources --${mode} ${row})
-        if(mode STREQUAL "full")
-            set_tests_properties(test_xir_p09_map_key_path_resources_${row}_${mode} PROPERTIES
-                TIMEOUT 600 RUN_SERIAL TRUE COST 600 LABELS "unit;xir;map;path;ownership;allocation;cancellation")
-        else()
-            set_tests_properties(test_xir_p09_map_key_path_resources_${row}_${mode} PROPERTIES
-                TIMEOUT 120 LABELS "unit;xir;map;path;ownership;resources;cancellation")
-        endif()
-    endforeach()
-endforeach()
+
+
+
+
+
+
+
+
+
+
+
 
 add_test(NAME test_xir_p09_map_key_path83_vectors COMMAND ${XRAY_PYTHON}
     "${PROJECT_SOURCE_DIR}/tests/unit/xir/derive_map_key_path83_vectors.py"
     --source "${PROJECT_SOURCE_DIR}" --output "${CMAKE_BINARY_DIR}/p09-map-key-path83-vectors")
 set_tests_properties(test_xir_p09_map_key_path83_vectors PROPERTIES TIMEOUT 30 LABELS "unit;xir;map;path;codec")
 
-add_executable(test_xir_p09_map_key_path_mixed_generator
-    "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_map_key_path_mixed_generator.c")
-target_link_libraries(test_xir_p09_map_key_path_mixed_generator PRIVATE xray_xir_source xray_xir_cgen xray_xir_vm)
+
+
 set(MAP_KEY_BRIDGE_C "${CMAKE_BINARY_DIR}/generated/xir_p09_map_key_bridge.c")
-add_custom_command(OUTPUT "${MAP_KEY_BRIDGE_C}"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/generated"
-    COMMAND $<TARGET_FILE:test_xir_p09_map_key_path_mixed_generator> "${MAP_KEY_BRIDGE_C}"
-    DEPENDS test_xir_p09_map_key_path_mixed_generator VERBATIM)
-add_executable(test_xir_p09_map_key_path_resources_native
-    "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_map_key_path_resources_native.c"
-    "${MAP_KEY_PATH_C}" "${HASH_WORKER_C}")
-add_executable(test_xir_p09_map_key_path_resources_mixed
-    "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_map_key_path_resources_mixed.c"
-    "${MAP_KEY_BRIDGE_C}")
-foreach(target test_xir_p09_map_key_path_mixed_generator test_xir_p09_map_key_path_resources_native test_xir_p09_map_key_path_resources_mixed)
-    target_link_libraries(${target} PRIVATE xray_xir_source xray_xir_cgen xray_xir_vm)
-    target_compile_definitions(${target} PRIVATE XR_P09_HASH_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-    set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-    if(MSVC)
-        target_compile_options(${target} PRIVATE /utf-8 /W4 /WX)
-    else()
-        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
-    endif()
-endforeach()
-foreach(row RANGE 0 8)
-    foreach(target test_xir_p09_map_key_path_resources_native test_xir_p09_map_key_path_resources_mixed)
-        foreach(mode normal cancel full)
-            add_test(NAME ${target}_${row}_${mode} COMMAND ${target} --${mode} ${row})
-            if(mode STREQUAL "full")
-                set_tests_properties(${target}_${row}_${mode} PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 600
-                    LABELS "unit;xir;map;path;ownership;allocation;cancellation;provider")
-            else()
-                set_tests_properties(${target}_${row}_${mode} PROPERTIES TIMEOUT 120
-                    LABELS "unit;xir;map;path;ownership;resources;cancellation;provider")
-            endif()
-        endforeach()
-    endforeach()
-endforeach()

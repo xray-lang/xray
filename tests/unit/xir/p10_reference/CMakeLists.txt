@@ -1,6 +1,6 @@
-add_executable(test_xir_p10_reference "${CMAKE_CURRENT_LIST_DIR}/test_language_reference.c")
 
-target_link_libraries(test_xir_p10_reference PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
+
+
 
 foreach(fact IN ITEMS function generic type stateful cell cell-write array array-const class class-array class-ref class-inline-ref active-birth)
     string(REPLACE "-" "_" suffix "${fact}")
@@ -15,9 +15,9 @@ foreach(kind IN ITEMS definitions definitions-comptime definitions-import defini
 
 endforeach()
 
-add_executable(source_history_native_producer "${CMAKE_CURRENT_LIST_DIR}/source_history_native_producer.c")
-target_link_libraries(source_history_native_producer PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
-set_target_properties(source_history_native_producer PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+
+
+
 set(history_native_dir "${CMAKE_CURRENT_BINARY_DIR}/source_history_native")
 set(history_native_header "${history_native_dir}/source_history_native_generated.h")
 set(history_native_sources)
@@ -26,30 +26,13 @@ foreach(history_mode IN ITEMS read write array array_const function_call functio
         list(APPEND history_native_sources "${history_native_dir}/source_history_${history_mode}_${history_generation}.c")
     endforeach()
 endforeach()
-add_custom_command(OUTPUT ${history_native_sources} "${history_native_header}"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${history_native_dir}"
-    COMMAND $<TARGET_FILE:source_history_native_producer> "${history_native_dir}"
-    DEPENDS source_history_native_producer "${CMAKE_CURRENT_LIST_DIR}/source_history_cell_fixture.h"
-        "${CMAKE_CURRENT_LIST_DIR}/source_history_function_fixture.h"
-    VERBATIM)
 
-foreach(history_target IN ITEMS source_history_native_producer)
-    if(MSVC)
-        target_compile_options(${history_target} PRIVATE /W4 /WX /utf-8)
-    else()
-        target_compile_options(${history_target} PRIVATE -Wall -Wextra -Werror)
-    endif()
-endforeach()
+
+
 foreach(history_backend IN ITEMS native vm_native native_vm)
     set(history_target test_xir_p10_source_history_${history_backend})
 
-    if(history_backend STREQUAL "native")
 
-    elseif(history_backend STREQUAL "vm_native")
-
-    else()
-
-    endif()
 
     foreach(history_kind IN ITEMS cell cell-write array array-const function-call function-value class class-array class-ref class-inline-ref)
         string(REPLACE "-" "_" history_suffix "${history_kind}")
@@ -78,361 +61,240 @@ else()
 endif()
 add_test(NAME test_xir_p10_initializer_surface COMMAND test_xir_p10_initializer_surface)
 set_tests_properties(test_xir_p10_initializer_surface PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;parser;init;ownership")
-target_compile_definitions(test_xir_p10_reference PRIVATE
-    XR_LANGUAGE_FIXTURES="${CMAKE_CURRENT_LIST_DIR}/fixtures"
-    XR_LANGUAGE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-set_target_properties(test_xir_p10_reference PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-if(MSVC)
-    target_compile_options(test_xir_p10_reference PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_p10_reference PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_p10_reference_explicit_witness COMMAND test_xir_p10_reference --accept explicit_witness 41)
-set_tests_properties(test_xir_p10_reference_explicit_witness PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept")
-add_test(NAME test_xir_p10_reference_witness_forward COMMAND test_xir_p10_reference --accept witness_forward 42)
-set_tests_properties(test_xir_p10_reference_witness_forward PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept")
-add_test(NAME test_xir_p10_reference_witness_diamond COMMAND test_xir_p10_reference --accept witness_diamond 53)
-set_tests_properties(test_xir_p10_reference_witness_diamond PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept")
-add_test(NAME test_xir_p10_reference_generic_method_value COMMAND test_xir_p10_reference --accept generic_method_value 69)
-set_tests_properties(test_xir_p10_reference_generic_method_value PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept")
-add_test(NAME test_xir_p10_reference_optional_layers COMMAND test_xir_p10_reference --accept optional_layers 12)
-set_tests_properties(test_xir_p10_reference_optional_layers PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept")
-add_test(NAME test_xir_p10_reference_optional_lazy_absent COMMAND test_xir_p10_reference --accept optional_lazy_absent 10109)
-set_tests_properties(test_xir_p10_reference_optional_lazy_absent PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept")
-add_test(NAME test_xir_p10_reference_optional_lazy_inner COMMAND test_xir_p10_reference --accept optional_lazy_inner 99)
-set_tests_properties(test_xir_p10_reference_optional_lazy_inner PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept")
-add_test(NAME test_xir_p10_reference_optional_exact_context COMMAND test_xir_p10_reference --accept optional_exact_context 102)
-set_tests_properties(test_xir_p10_reference_optional_exact_context PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept")
-add_test(NAME test_xir_p10_reference_optional_triple_claims COMMAND test_xir_p10_reference --accept optional_triple_claims 14)
-set_tests_properties(test_xir_p10_reference_optional_triple_claims PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept")
-add_test(NAME test_xir_p10_reference_for_and_ternary COMMAND test_xir_p10_reference --accept for_and_ternary 607)
-set_tests_properties(test_xir_p10_reference_for_and_ternary PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept")
-add_test(NAME test_xir_p10_reference_generic_class_phantom COMMAND test_xir_p10_reference --accept generic_class_phantom 41)
-set_tests_properties(test_xir_p10_reference_generic_class_phantom PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept")
-add_test(NAME test_xir_p10_reference_reject_generic_class_sendable COMMAND test_xir_p10_reference --reject reject_generic_class_sendable 7 "type argument does not prove the declared constraint")
-set_tests_properties(test_xir_p10_reference_reject_generic_class_sendable PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;reject;class")
 
-add_test(NAME test_xir_p10_reference_init_contextual COMMAND test_xir_p10_reference --accept init_contextual 51)
-add_test(NAME test_xir_p10_reference_finite_error_loop COMMAND test_xir_p10_reference --accept finite_error_loop 42)
-set_tests_properties(test_xir_p10_reference_finite_error_loop PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept;error;loop")
-add_test(NAME test_xir_p10_reference_finite_error_values COMMAND test_xir_p10_reference --accept finite_error_values 42)
-set_tests_properties(test_xir_p10_reference_finite_error_values PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept;error")
-add_test(NAME test_xir_p10_reference_finite_error_branching COMMAND test_xir_p10_reference --accept finite_error_branching 42)
-set_tests_properties(test_xir_p10_reference_finite_error_branching PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept;error;loop")
-add_test(NAME test_xir_p10_reference_finite_error_cycle COMMAND test_xir_p10_reference --accept finite_error_cycle 42)
-set_tests_properties(test_xir_p10_reference_finite_error_cycle PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept;error;recursion")
-add_test(NAME test_xir_p10_reference_finite_error_single_variant COMMAND test_xir_p10_reference --accept finite_error_single_variant 42)
-set_tests_properties(test_xir_p10_reference_finite_error_single_variant PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept;error;recursion")
-add_test(NAME test_xir_p10_reference_comptime_float COMMAND test_xir_p10_reference --accept comptime_float 42)
-set_tests_properties(test_xir_p10_reference_comptime_float PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept;comptime")
-add_test(NAME test_xir_p10_reference_comptime_owned_batch COMMAND test_xir_p10_reference --accept comptime_owned_batch 42)
-set_tests_properties(test_xir_p10_reference_comptime_owned_batch PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept;comptime;ownership")
-add_test(NAME test_xir_p10_reference_capture_scalar_mix COMMAND test_xir_p10_reference --accept capture_scalar_mix 42)
-set_tests_properties(test_xir_p10_reference_capture_scalar_mix PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept;capture;loop")
-add_test(NAME test_xir_p10_reference_init_nominal_kind COMMAND test_xir_p10_reference --accept init_nominal_kind 42)
-set_tests_properties(test_xir_p10_reference_init_nominal_kind PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept;init")
-add_test(NAME test_xir_p10_reference_reject_sendable_class_local_field COMMAND test_xir_p10_reference --reject reject_sendable_class_local_field 0 "declaration type obligations failed")
-add_test(NAME test_xir_p10_reference_reject_sendable_class_field_write COMMAND test_xir_p10_reference --reject reject_sendable_class_field_write 2 "field access is not permitted")
-set_tests_properties(test_xir_p10_reference_reject_sendable_class_local_field test_xir_p10_reference_reject_sendable_class_field_write PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;reject;class;sendable")
-add_test(NAME test_xir_p10_reference_const_values COMMAND test_xir_p10_reference --accept const_values 561)
-add_test(NAME test_xir_p10_reference_reject_const_type COMMAND test_xir_p10_reference --reject-structure reject_const_type 0 "module graph build failed")
-add_test(NAME test_xir_p10_reference_reject_const_field_write COMMAND test_xir_p10_reference --reject reject_const_field_write 7 "field access is not permitted")
-set_tests_properties(test_xir_p10_reference_const_values test_xir_p10_reference_reject_const_type test_xir_p10_reference_reject_const_field_write PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;const")
-add_test(NAME test_xir_p10_reference_init_resource_lifo COMMAND test_xir_p10_reference --accept init_resource_lifo 123321)
-add_test(NAME test_xir_p10_reference_init_module_authority COMMAND test_xir_p10_reference --accept init_module_authority 50)
-set_tests_properties(test_xir_p10_reference_init_contextual test_xir_p10_reference_init_resource_lifo PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept;init")
-add_test(NAME test_xir_p10_reference_reject_init_other_parameter COMMAND test_xir_p10_reference --reject reject_init_other_parameter 1 "constructor parameter needs a declaration type")
-add_test(NAME test_xir_p10_reference_reject_init_duplicate COMMAND test_xir_p10_reference --reject reject_init_duplicate 1 "constructor declaration contract is not admitted")
-add_test(NAME test_xir_p10_reference_reject_init_legacy_spelling COMMAND test_xir_p10_reference --reject-structure reject_init_legacy_spelling 0 "module graph build failed")
-add_test(NAME test_xir_p10_reference_reject_init_foreign_literal COMMAND test_xir_p10_reference --reject reject_init_foreign_literal 2 "struct literal with init is restricted to its declaring module")
-set_tests_properties(test_xir_p10_reference_init_module_authority test_xir_p10_reference_reject_init_foreign_literal PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;init;authority")
-set_tests_properties(test_xir_p10_reference_reject_init_other_parameter test_xir_p10_reference_reject_init_duplicate test_xir_p10_reference_reject_init_legacy_spelling PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;reject;init")
-add_test(NAME test_xir_p10_reference_reject_unused_member COMMAND test_xir_p10_reference --reject reject_unused_member 1 "receiver has no declared interface requirements")
-set_tests_properties(test_xir_p10_reference_reject_unused_member PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;reject")
-add_test(NAME test_xir_p10_reference_reject_call_witness COMMAND test_xir_p10_reference --reject reject_call_witness 4 "type argument does not prove the declared constraint")
-set_tests_properties(test_xir_p10_reference_reject_call_witness PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;reject")
-add_test(NAME test_xir_p10_reference_reject_extra_member COMMAND test_xir_p10_reference --reject reject_extra_member 2 "member is absent from declared interface requirements")
-set_tests_properties(test_xir_p10_reference_reject_extra_member PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;reject")
-add_test(NAME test_xir_p10_reference_reject_method_arguments COMMAND test_xir_p10_reference --reject reject_method_arguments 2 "interface method value requires its complete explicit type arguments")
-set_tests_properties(test_xir_p10_reference_reject_method_arguments PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;reject")
-add_test(NAME test_xir_p10_reference_reject_method_constraint COMMAND test_xir_p10_reference --reject reject_method_constraint 2 "method type argument does not prove the declared constraint")
-set_tests_properties(test_xir_p10_reference_reject_method_constraint PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;reject")
-add_test(NAME test_xir_p10_reference_reject_forward_constraint COMMAND test_xir_p10_reference --reject reject_forward_constraint 2 "type argument does not prove the declared constraint")
-set_tests_properties(test_xir_p10_reference_reject_forward_constraint PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;reject")
-add_test(NAME test_xir_p10_reference_reject_dead_default COMMAND test_xir_p10_reference --reject reject_dead_default 1 "expression cannot satisfy its declared type")
-set_tests_properties(test_xir_p10_reference_reject_dead_default PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;reject")
-add_test(NAME test_xir_p10_reference_reject_stale_fact COMMAND test_xir_p10_reference --reject reject_stale_fact 8 "operator requires a declared concrete operand contract")
-set_tests_properties(test_xir_p10_reference_reject_stale_fact PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;reject")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 set(reference_native_targets)
 set(native_generic_class_phantom "${CMAKE_CURRENT_BINARY_DIR}/generated_native/generic_class_phantom.c")
-add_custom_command(OUTPUT ${native_generic_class_phantom}
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated_native"
-    COMMAND $<TARGET_FILE:test_xir_p10_reference> --emit generic_class_phantom 41 ${native_generic_class_phantom}
-    DEPENDS test_xir_p10_reference "${CMAKE_CURRENT_LIST_DIR}/fixtures/generic_class_phantom.xr"
-    VERBATIM)
-foreach(profile IN ITEMS native mixed)
-    set(target "test_xir_p10_reference_${profile}_generic_class_phantom")
-    add_executable(${target} "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" ${native_generic_class_phantom})
-    target_link_libraries(${target} PRIVATE xray_xir_vm)
-    if(profile STREQUAL "mixed")
-        target_compile_definitions(${target} PRIVATE XR_LANGUAGE_MIXED=1)
-    else()
-        target_compile_definitions(${target} PRIVATE XR_LANGUAGE_MIXED=0)
-    endif()
-    list(APPEND reference_native_targets ${target})
-    add_test(NAME ${target} COMMAND ${target} 41)
-    set_tests_properties(${target} PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;${profile};class")
-endforeach()
-set(native_explicit_witness "${CMAKE_CURRENT_BINARY_DIR}/generated_native/explicit_witness.c")
-add_custom_command(OUTPUT ${native_explicit_witness}
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated_native"
-    COMMAND $<TARGET_FILE:test_xir_p10_reference> --emit explicit_witness 41 ${native_explicit_witness}
-    DEPENDS test_xir_p10_reference "${CMAKE_CURRENT_LIST_DIR}/fixtures/explicit_witness.xr"
-    VERBATIM)
-add_executable(test_xir_p10_reference_native_explicit_witness "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" ${native_explicit_witness})
-target_link_libraries(test_xir_p10_reference_native_explicit_witness PRIVATE xray_xir_vm)
-target_compile_definitions(test_xir_p10_reference_native_explicit_witness PRIVATE XR_LANGUAGE_MIXED=0)
-list(APPEND reference_native_targets test_xir_p10_reference_native_explicit_witness)
-add_test(NAME test_xir_p10_reference_native_explicit_witness COMMAND test_xir_p10_reference_native_explicit_witness 41)
-set_tests_properties(test_xir_p10_reference_native_explicit_witness PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;native")
-add_executable(test_xir_p10_reference_mixed_explicit_witness "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" ${native_explicit_witness})
-target_link_libraries(test_xir_p10_reference_mixed_explicit_witness PRIVATE xray_xir_vm)
-target_compile_definitions(test_xir_p10_reference_mixed_explicit_witness PRIVATE XR_LANGUAGE_MIXED=1)
-list(APPEND reference_native_targets test_xir_p10_reference_mixed_explicit_witness)
-add_test(NAME test_xir_p10_reference_mixed_explicit_witness COMMAND test_xir_p10_reference_mixed_explicit_witness 41)
-set_tests_properties(test_xir_p10_reference_mixed_explicit_witness PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;mixed")
-set(native_witness_forward "${CMAKE_CURRENT_BINARY_DIR}/generated_native/witness_forward.c")
-add_custom_command(OUTPUT ${native_witness_forward}
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated_native"
-    COMMAND $<TARGET_FILE:test_xir_p10_reference> --emit witness_forward 42 ${native_witness_forward}
-    DEPENDS test_xir_p10_reference "${CMAKE_CURRENT_LIST_DIR}/fixtures/witness_forward.xr"
-    VERBATIM)
-add_executable(test_xir_p10_reference_native_witness_forward "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" ${native_witness_forward})
-target_link_libraries(test_xir_p10_reference_native_witness_forward PRIVATE xray_xir_vm)
-target_compile_definitions(test_xir_p10_reference_native_witness_forward PRIVATE XR_LANGUAGE_MIXED=0)
-list(APPEND reference_native_targets test_xir_p10_reference_native_witness_forward)
-add_test(NAME test_xir_p10_reference_native_witness_forward COMMAND test_xir_p10_reference_native_witness_forward 42)
-set_tests_properties(test_xir_p10_reference_native_witness_forward PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;native")
-add_executable(test_xir_p10_reference_mixed_witness_forward "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" ${native_witness_forward})
-target_link_libraries(test_xir_p10_reference_mixed_witness_forward PRIVATE xray_xir_vm)
-target_compile_definitions(test_xir_p10_reference_mixed_witness_forward PRIVATE XR_LANGUAGE_MIXED=1)
-list(APPEND reference_native_targets test_xir_p10_reference_mixed_witness_forward)
-add_test(NAME test_xir_p10_reference_mixed_witness_forward COMMAND test_xir_p10_reference_mixed_witness_forward 42)
-set_tests_properties(test_xir_p10_reference_mixed_witness_forward PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;mixed")
-set(native_witness_diamond "${CMAKE_CURRENT_BINARY_DIR}/generated_native/witness_diamond.c")
-add_custom_command(OUTPUT ${native_witness_diamond}
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated_native"
-    COMMAND $<TARGET_FILE:test_xir_p10_reference> --emit witness_diamond 53 ${native_witness_diamond}
-    DEPENDS test_xir_p10_reference "${CMAKE_CURRENT_LIST_DIR}/fixtures/witness_diamond.xr"
-    VERBATIM)
-add_executable(test_xir_p10_reference_native_witness_diamond "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" ${native_witness_diamond})
-target_link_libraries(test_xir_p10_reference_native_witness_diamond PRIVATE xray_xir_vm)
-target_compile_definitions(test_xir_p10_reference_native_witness_diamond PRIVATE XR_LANGUAGE_MIXED=0)
-list(APPEND reference_native_targets test_xir_p10_reference_native_witness_diamond)
-add_test(NAME test_xir_p10_reference_native_witness_diamond COMMAND test_xir_p10_reference_native_witness_diamond 53)
-set_tests_properties(test_xir_p10_reference_native_witness_diamond PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;native")
-add_executable(test_xir_p10_reference_mixed_witness_diamond "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" ${native_witness_diamond})
-target_link_libraries(test_xir_p10_reference_mixed_witness_diamond PRIVATE xray_xir_vm)
-target_compile_definitions(test_xir_p10_reference_mixed_witness_diamond PRIVATE XR_LANGUAGE_MIXED=1)
-list(APPEND reference_native_targets test_xir_p10_reference_mixed_witness_diamond)
-add_test(NAME test_xir_p10_reference_mixed_witness_diamond COMMAND test_xir_p10_reference_mixed_witness_diamond 53)
-set_tests_properties(test_xir_p10_reference_mixed_witness_diamond PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;mixed")
-set(native_generic_method_value "${CMAKE_CURRENT_BINARY_DIR}/generated_native/generic_method_value.c")
-add_custom_command(OUTPUT ${native_generic_method_value}
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated_native"
-    COMMAND $<TARGET_FILE:test_xir_p10_reference> --emit generic_method_value 69 ${native_generic_method_value}
-    DEPENDS test_xir_p10_reference "${CMAKE_CURRENT_LIST_DIR}/fixtures/generic_method_value.xr"
-    VERBATIM)
-add_executable(test_xir_p10_reference_native_generic_method_value "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" ${native_generic_method_value})
-target_link_libraries(test_xir_p10_reference_native_generic_method_value PRIVATE xray_xir_vm)
-target_compile_definitions(test_xir_p10_reference_native_generic_method_value PRIVATE XR_LANGUAGE_MIXED=0)
-list(APPEND reference_native_targets test_xir_p10_reference_native_generic_method_value)
-add_test(NAME test_xir_p10_reference_native_generic_method_value COMMAND test_xir_p10_reference_native_generic_method_value 69)
-set_tests_properties(test_xir_p10_reference_native_generic_method_value PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;native")
-add_executable(test_xir_p10_reference_mixed_generic_method_value "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" ${native_generic_method_value})
-target_link_libraries(test_xir_p10_reference_mixed_generic_method_value PRIVATE xray_xir_vm)
-target_compile_definitions(test_xir_p10_reference_mixed_generic_method_value PRIVATE XR_LANGUAGE_MIXED=1)
-list(APPEND reference_native_targets test_xir_p10_reference_mixed_generic_method_value)
-add_test(NAME test_xir_p10_reference_mixed_generic_method_value COMMAND test_xir_p10_reference_mixed_generic_method_value 69)
-set_tests_properties(test_xir_p10_reference_mixed_generic_method_value PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;mixed")
-set(native_optional_layers "${CMAKE_CURRENT_BINARY_DIR}/generated_native/optional_layers.c")
-add_custom_command(OUTPUT ${native_optional_layers}
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated_native"
-    COMMAND $<TARGET_FILE:test_xir_p10_reference> --emit optional_layers 12 ${native_optional_layers}
-    DEPENDS test_xir_p10_reference "${CMAKE_CURRENT_LIST_DIR}/fixtures/optional_layers.xr"
-    VERBATIM)
-add_executable(test_xir_p10_reference_native_optional_layers "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" ${native_optional_layers})
-target_link_libraries(test_xir_p10_reference_native_optional_layers PRIVATE xray_xir_vm)
-target_compile_definitions(test_xir_p10_reference_native_optional_layers PRIVATE XR_LANGUAGE_MIXED=0)
-list(APPEND reference_native_targets test_xir_p10_reference_native_optional_layers)
-add_test(NAME test_xir_p10_reference_native_optional_layers COMMAND test_xir_p10_reference_native_optional_layers 12)
-set_tests_properties(test_xir_p10_reference_native_optional_layers PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;native")
-add_executable(test_xir_p10_reference_mixed_optional_layers "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" ${native_optional_layers})
-target_link_libraries(test_xir_p10_reference_mixed_optional_layers PRIVATE xray_xir_vm)
-target_compile_definitions(test_xir_p10_reference_mixed_optional_layers PRIVATE XR_LANGUAGE_MIXED=1)
-list(APPEND reference_native_targets test_xir_p10_reference_mixed_optional_layers)
-add_test(NAME test_xir_p10_reference_mixed_optional_layers COMMAND test_xir_p10_reference_mixed_optional_layers 12)
-set_tests_properties(test_xir_p10_reference_mixed_optional_layers PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;mixed")
-set(native_optional_lazy_absent "${CMAKE_CURRENT_BINARY_DIR}/generated_native/optional_lazy_absent.c")
-add_custom_command(OUTPUT ${native_optional_lazy_absent}
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated_native"
-    COMMAND $<TARGET_FILE:test_xir_p10_reference> --emit optional_lazy_absent 10109 ${native_optional_lazy_absent}
-    DEPENDS test_xir_p10_reference "${CMAKE_CURRENT_LIST_DIR}/fixtures/optional_lazy_absent.xr"
-    VERBATIM)
-add_executable(test_xir_p10_reference_native_optional_lazy_absent "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" ${native_optional_lazy_absent})
-target_link_libraries(test_xir_p10_reference_native_optional_lazy_absent PRIVATE xray_xir_vm)
-target_compile_definitions(test_xir_p10_reference_native_optional_lazy_absent PRIVATE XR_LANGUAGE_MIXED=0)
-list(APPEND reference_native_targets test_xir_p10_reference_native_optional_lazy_absent)
-add_test(NAME test_xir_p10_reference_native_optional_lazy_absent COMMAND test_xir_p10_reference_native_optional_lazy_absent 10109)
-set_tests_properties(test_xir_p10_reference_native_optional_lazy_absent PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;native")
-add_executable(test_xir_p10_reference_mixed_optional_lazy_absent "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" ${native_optional_lazy_absent})
-target_link_libraries(test_xir_p10_reference_mixed_optional_lazy_absent PRIVATE xray_xir_vm)
-target_compile_definitions(test_xir_p10_reference_mixed_optional_lazy_absent PRIVATE XR_LANGUAGE_MIXED=1)
-list(APPEND reference_native_targets test_xir_p10_reference_mixed_optional_lazy_absent)
-add_test(NAME test_xir_p10_reference_mixed_optional_lazy_absent COMMAND test_xir_p10_reference_mixed_optional_lazy_absent 10109)
-set_tests_properties(test_xir_p10_reference_mixed_optional_lazy_absent PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;mixed")
-set(native_optional_lazy_inner "${CMAKE_CURRENT_BINARY_DIR}/generated_native/optional_lazy_inner.c")
-add_custom_command(OUTPUT ${native_optional_lazy_inner}
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated_native"
-    COMMAND $<TARGET_FILE:test_xir_p10_reference> --emit optional_lazy_inner 99 ${native_optional_lazy_inner}
-    DEPENDS test_xir_p10_reference "${CMAKE_CURRENT_LIST_DIR}/fixtures/optional_lazy_inner.xr"
-    VERBATIM)
-add_executable(test_xir_p10_reference_native_optional_lazy_inner "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" ${native_optional_lazy_inner})
-target_link_libraries(test_xir_p10_reference_native_optional_lazy_inner PRIVATE xray_xir_vm)
-target_compile_definitions(test_xir_p10_reference_native_optional_lazy_inner PRIVATE XR_LANGUAGE_MIXED=0)
-list(APPEND reference_native_targets test_xir_p10_reference_native_optional_lazy_inner)
-add_test(NAME test_xir_p10_reference_native_optional_lazy_inner COMMAND test_xir_p10_reference_native_optional_lazy_inner 99)
-set_tests_properties(test_xir_p10_reference_native_optional_lazy_inner PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;native")
-add_executable(test_xir_p10_reference_mixed_optional_lazy_inner "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" ${native_optional_lazy_inner})
-target_link_libraries(test_xir_p10_reference_mixed_optional_lazy_inner PRIVATE xray_xir_vm)
-target_compile_definitions(test_xir_p10_reference_mixed_optional_lazy_inner PRIVATE XR_LANGUAGE_MIXED=1)
-list(APPEND reference_native_targets test_xir_p10_reference_mixed_optional_lazy_inner)
-add_test(NAME test_xir_p10_reference_mixed_optional_lazy_inner COMMAND test_xir_p10_reference_mixed_optional_lazy_inner 99)
-set_tests_properties(test_xir_p10_reference_mixed_optional_lazy_inner PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;mixed")
-set(native_optional_exact_context "${CMAKE_CURRENT_BINARY_DIR}/generated_native/optional_exact_context.c")
-add_custom_command(OUTPUT ${native_optional_exact_context}
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated_native"
-    COMMAND $<TARGET_FILE:test_xir_p10_reference> --emit optional_exact_context 102 ${native_optional_exact_context}
-    DEPENDS test_xir_p10_reference "${CMAKE_CURRENT_LIST_DIR}/fixtures/optional_exact_context.xr"
-    VERBATIM)
-add_executable(test_xir_p10_reference_native_optional_exact_context "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" ${native_optional_exact_context})
-target_link_libraries(test_xir_p10_reference_native_optional_exact_context PRIVATE xray_xir_vm)
-target_compile_definitions(test_xir_p10_reference_native_optional_exact_context PRIVATE XR_LANGUAGE_MIXED=0)
-list(APPEND reference_native_targets test_xir_p10_reference_native_optional_exact_context)
-add_test(NAME test_xir_p10_reference_native_optional_exact_context COMMAND test_xir_p10_reference_native_optional_exact_context 102)
-set_tests_properties(test_xir_p10_reference_native_optional_exact_context PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;native")
-add_executable(test_xir_p10_reference_mixed_optional_exact_context "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" ${native_optional_exact_context})
-target_link_libraries(test_xir_p10_reference_mixed_optional_exact_context PRIVATE xray_xir_vm)
-target_compile_definitions(test_xir_p10_reference_mixed_optional_exact_context PRIVATE XR_LANGUAGE_MIXED=1)
-list(APPEND reference_native_targets test_xir_p10_reference_mixed_optional_exact_context)
-add_test(NAME test_xir_p10_reference_mixed_optional_exact_context COMMAND test_xir_p10_reference_mixed_optional_exact_context 102)
-set_tests_properties(test_xir_p10_reference_mixed_optional_exact_context PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;mixed")
-set(native_optional_triple_claims "${CMAKE_CURRENT_BINARY_DIR}/generated_native/optional_triple_claims.c")
-add_custom_command(OUTPUT ${native_optional_triple_claims}
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated_native"
-    COMMAND $<TARGET_FILE:test_xir_p10_reference> --emit optional_triple_claims 14 ${native_optional_triple_claims}
-    DEPENDS test_xir_p10_reference "${CMAKE_CURRENT_LIST_DIR}/fixtures/optional_triple_claims.xr"
-    VERBATIM)
-add_executable(test_xir_p10_reference_native_optional_triple_claims "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" ${native_optional_triple_claims})
-target_link_libraries(test_xir_p10_reference_native_optional_triple_claims PRIVATE xray_xir_vm)
-target_compile_definitions(test_xir_p10_reference_native_optional_triple_claims PRIVATE XR_LANGUAGE_MIXED=0)
-list(APPEND reference_native_targets test_xir_p10_reference_native_optional_triple_claims)
-add_test(NAME test_xir_p10_reference_native_optional_triple_claims COMMAND test_xir_p10_reference_native_optional_triple_claims 14)
-set_tests_properties(test_xir_p10_reference_native_optional_triple_claims PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;native")
-add_executable(test_xir_p10_reference_mixed_optional_triple_claims "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" ${native_optional_triple_claims})
-target_link_libraries(test_xir_p10_reference_mixed_optional_triple_claims PRIVATE xray_xir_vm)
-target_compile_definitions(test_xir_p10_reference_mixed_optional_triple_claims PRIVATE XR_LANGUAGE_MIXED=1)
-list(APPEND reference_native_targets test_xir_p10_reference_mixed_optional_triple_claims)
-add_test(NAME test_xir_p10_reference_mixed_optional_triple_claims COMMAND test_xir_p10_reference_mixed_optional_triple_claims 14)
-set_tests_properties(test_xir_p10_reference_mixed_optional_triple_claims PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;mixed")
-set(native_for_and_ternary "${CMAKE_CURRENT_BINARY_DIR}/generated_native/for_and_ternary.c")
-add_custom_command(OUTPUT ${native_for_and_ternary}
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated_native"
-    COMMAND $<TARGET_FILE:test_xir_p10_reference> --emit for_and_ternary 607 ${native_for_and_ternary}
-    DEPENDS test_xir_p10_reference "${CMAKE_CURRENT_LIST_DIR}/fixtures/for_and_ternary.xr"
-    VERBATIM)
-add_executable(test_xir_p10_reference_native_for_and_ternary "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" ${native_for_and_ternary})
-target_link_libraries(test_xir_p10_reference_native_for_and_ternary PRIVATE xray_xir_vm)
-target_compile_definitions(test_xir_p10_reference_native_for_and_ternary PRIVATE XR_LANGUAGE_MIXED=0)
-list(APPEND reference_native_targets test_xir_p10_reference_native_for_and_ternary)
-add_test(NAME test_xir_p10_reference_native_for_and_ternary COMMAND test_xir_p10_reference_native_for_and_ternary 607)
-set_tests_properties(test_xir_p10_reference_native_for_and_ternary PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;native")
-foreach(case IN ITEMS init_contextual init_module_authority init_nominal_kind finite_error_loop finite_error_values finite_error_branching finite_error_cycle finite_error_single_variant capture_scalar_mix comptime_float)
-    set(case_label init)
-    if(case MATCHES "^finite_error_")
-        set(case_label error)
-    elseif(case STREQUAL "capture_scalar_mix")
-        set(case_label capture)
-    elseif(case MATCHES "^comptime_")
-        set(case_label comptime)
-    endif()
-    if(case STREQUAL "init_contextual")
-        set(expected 51)
-    elseif(case STREQUAL "init_resource_lifo")
-        set(expected 123321)
-    elseif(case STREQUAL "init_nominal_kind" OR case MATCHES "^finite_error_" OR case STREQUAL "capture_scalar_mix" OR case MATCHES "^comptime_")
-        set(expected 42)
-    else()
-        set(expected 50)
-    endif()
-    set(generated "${CMAKE_CURRENT_BINARY_DIR}/generated_native/${case}.c")
-    add_custom_command(OUTPUT "${generated}"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated_native"
-        COMMAND $<TARGET_FILE:test_xir_p10_reference> --emit ${case} ${expected} "${generated}"
-        DEPENDS test_xir_p10_reference "${CMAKE_CURRENT_LIST_DIR}/fixtures/${case}.xr" "${CMAKE_CURRENT_LIST_DIR}/fixtures/init_types.xr"
-        VERBATIM)
-    foreach(backend IN ITEMS native mixed)
-        set(target "test_xir_p10_reference_${backend}_${case}")
-        add_executable(${target} "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" "${generated}")
-        target_link_libraries(${target} PRIVATE xray_xir_vm)
-        if(backend STREQUAL "mixed")
-            target_compile_definitions(${target} PRIVATE XR_LANGUAGE_MIXED=1)
-        else()
-            target_compile_definitions(${target} PRIVATE XR_LANGUAGE_MIXED=0)
-        endif()
-        list(APPEND reference_native_targets ${target})
-        add_test(NAME ${target} COMMAND ${target} ${expected})
-        set_tests_properties(${target} PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;${case_label};${backend}")
-    endforeach()
-endforeach()
 
-foreach(target IN LISTS reference_native_targets)
-    set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-    if(MSVC)
-        target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
-    else()
-        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
-    endif()
-endforeach()
+
+set(native_explicit_witness "${CMAKE_CURRENT_BINARY_DIR}/generated_native/explicit_witness.c")
+
+
+
+
+list(APPEND reference_native_targets )
+
+
+
+
+
+list(APPEND reference_native_targets )
+
+
+set(native_witness_forward "${CMAKE_CURRENT_BINARY_DIR}/generated_native/witness_forward.c")
+
+
+
+
+list(APPEND reference_native_targets )
+
+
+
+
+
+list(APPEND reference_native_targets )
+
+
+set(native_witness_diamond "${CMAKE_CURRENT_BINARY_DIR}/generated_native/witness_diamond.c")
+
+
+
+
+list(APPEND reference_native_targets )
+
+
+
+
+
+list(APPEND reference_native_targets )
+
+
+set(native_generic_method_value "${CMAKE_CURRENT_BINARY_DIR}/generated_native/generic_method_value.c")
+
+
+
+
+list(APPEND reference_native_targets )
+
+
+
+
+
+list(APPEND reference_native_targets )
+
+
+set(native_optional_layers "${CMAKE_CURRENT_BINARY_DIR}/generated_native/optional_layers.c")
+
+
+
+
+list(APPEND reference_native_targets )
+
+
+
+
+
+list(APPEND reference_native_targets )
+
+
+set(native_optional_lazy_absent "${CMAKE_CURRENT_BINARY_DIR}/generated_native/optional_lazy_absent.c")
+
+
+
+
+list(APPEND reference_native_targets )
+
+
+
+
+
+list(APPEND reference_native_targets )
+
+
+set(native_optional_lazy_inner "${CMAKE_CURRENT_BINARY_DIR}/generated_native/optional_lazy_inner.c")
+
+
+
+
+list(APPEND reference_native_targets )
+
+
+
+
+
+list(APPEND reference_native_targets )
+
+
+set(native_optional_exact_context "${CMAKE_CURRENT_BINARY_DIR}/generated_native/optional_exact_context.c")
+
+
+
+
+list(APPEND reference_native_targets )
+
+
+
+
+
+list(APPEND reference_native_targets )
+
+
+set(native_optional_triple_claims "${CMAKE_CURRENT_BINARY_DIR}/generated_native/optional_triple_claims.c")
+
+
+
+
+list(APPEND reference_native_targets )
+
+
+
+
+
+list(APPEND reference_native_targets )
+
+
+set(native_for_and_ternary "${CMAKE_CURRENT_BINARY_DIR}/generated_native/for_and_ternary.c")
+
+
+
+
+list(APPEND reference_native_targets )
+
+
+
+
+
 set(native_const_values "${CMAKE_CURRENT_BINARY_DIR}/generated_native/const_values.c")
-add_custom_command(OUTPUT ${native_const_values}
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated_native"
-    COMMAND $<TARGET_FILE:test_xir_p10_reference> --emit const_values 561 ${native_const_values}
-    DEPENDS test_xir_p10_reference "${CMAKE_CURRENT_LIST_DIR}/fixtures/const_values.xr"
-    VERBATIM)
-foreach(mode IN ITEMS native mixed)
-    add_executable(test_xir_p10_reference_${mode}_const_values "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" ${native_const_values})
-    target_link_libraries(test_xir_p10_reference_${mode}_const_values PRIVATE xray_xir_vm)
-    if(mode STREQUAL "mixed")
-        target_compile_definitions(test_xir_p10_reference_${mode}_const_values PRIVATE XR_LANGUAGE_MIXED=1)
-    else()
-        target_compile_definitions(test_xir_p10_reference_${mode}_const_values PRIVATE XR_LANGUAGE_MIXED=0)
-    endif()
-    list(APPEND reference_native_targets test_xir_p10_reference_${mode}_const_values)
-    add_test(NAME test_xir_p10_reference_${mode}_const_values COMMAND test_xir_p10_reference_${mode}_const_values 561)
-    set_tests_properties(test_xir_p10_reference_${mode}_const_values PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;const;${mode}")
-endforeach()
-include(${CMAKE_CURRENT_LIST_DIR}/array_spread.cmake)
-include(${CMAKE_CURRENT_LIST_DIR}/tuple_spread.cmake)
-include(${CMAKE_CURRENT_LIST_DIR}/call_spread.cmake)
-include(${CMAKE_CURRENT_LIST_DIR}/native_spread.cmake)
+
+
+
+
+
+
 add_custom_target(xir_p10_native_references DEPENDS ${reference_native_targets})
 
 xray_stage_windows_asan_runtime("${CMAKE_CURRENT_BINARY_DIR}")
 xray_prepend_windows_asan_runtime_to_directory_tests()
 include("${CMAKE_CURRENT_LIST_DIR}/reception_patterns.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/concat_spread.cmake")
+
 include("${CMAKE_CURRENT_LIST_DIR}/string_members.cmake")
 
 foreach(storage_kind IN ITEMS array array-const)
@@ -443,15 +305,3 @@ endforeach()
 include("${CMAKE_CURRENT_LIST_DIR}/string_builder_source.cmake")
 
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/library_inventory")
-add_executable(test_xir_p10_library_inventory "${CMAKE_CURRENT_LIST_DIR}/test_library_inventory.c")
-target_link_libraries(test_xir_p10_library_inventory PRIVATE xray_xir_source xray_xir_vm)
-target_compile_definitions(test_xir_p10_library_inventory PRIVATE
-    XR_LIBRARY_INVENTORY_WORK="${CMAKE_CURRENT_BINARY_DIR}/library_inventory")
-set_target_properties(test_xir_p10_library_inventory PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-if(MSVC)
-    target_compile_options(test_xir_p10_library_inventory PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_p10_library_inventory PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_p10_library_inventory COMMAND test_xir_p10_library_inventory)
-set_tests_properties(test_xir_p10_library_inventory PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;source;catalog;ownership")

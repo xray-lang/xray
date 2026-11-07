@@ -4,196 +4,85 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xcmd_build.c - One Source product and admitted output publication
+ * xcmd_build.c - LIR emission and ordinary native output publication
  */
 #include "xcli.h"
-#include "xcli_toolchain_config.h"
-#include "../../api/xsource_compile.h"
-#include "../../execution/xr_xir_host_execution.h"
-#include "../../api/xsource_paths.h"
-#include "../toolchain/xtc_xir_publication.h"
-#include "../toolchain/xtc_xir_local_toolchain.h"
-#include "../toolchain/xtc_xir_native_admission.h"
-#include "../../aot/program/xr_xir_native_projection.h"
-#include "../../shared/xr_path_limit.h"
+#include "xcli_lir.h"
+#include "lir/xlir_c.h"
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #if XR_OS_WINDOWS
 #include <fcntl.h>
 #include <io.h>
 #endif
-#define BUILD_C_LIMIT (UINT64_C(64) << 20)
 
-static int build_source_exit(XrSourceCompileStatus status) {
-    return status == XR_SOURCE_COMPILE_OUT_OF_MEMORY || status == XR_SOURCE_COMPILE_BAD_ARGUMENT ?
-        XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL;
-}
-static int build_publication_exit(XtcXirPublicationStatus status) {
-    return status == XTC_XIR_PUBLICATION_OUT_OF_MEMORY || status == XTC_XIR_PUBLICATION_INVALID ?
-        XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL;
-}
-static bool build_verbose(const XrCliInvocation *inv) {
-    return xr_cli_opt_bool(&inv->options,"verbose") || (inv->ctx && inv->ctx->verbose);
-}
 static bool build_options_supported(const XrCliInvocation *inv) {
-    bool c_only = xr_cli_opt_bool(&inv->options,"c-only");
+    bool c_only = xr_cli_opt_bool(&inv->options, "c-only");
     for (int i = 0; i < inv->options.count; ++i) {
         if (!inv->options.present[i]) continue;
         const char *name = inv->options.spec[i].long_name;
-        if (!strcmp(name,"output") || !strcmp(name,"c-only") || !strcmp(name,"native") || !strcmp(name,"verbose")) continue;
-        if (!c_only && !strcmp(name,"cc")) continue;
-        fprintf(stderr,"XR_BUILD_6001: unsupported Source build option --%s\n",name); return false;
+        if (!strcmp(name, "output") || !strcmp(name, "c-only") ||
+            !strcmp(name, "native") || !strcmp(name, "verbose")) continue;
+        if (!c_only && !strcmp(name, "cc")) continue;
+        fprintf(stderr, "unsupported build option --%s\n", name);
+        return false;
     }
     return true;
 }
-static void build_source_report(const XrSourceCompileDiagnostic *diagnostic,XrCompileResources *resources) {
-    char *text=NULL;XrSourceCompileStatus shown=xr_source_compile_diagnostic_render(diagnostic,resources,&text);
-    if(shown==XR_SOURCE_COMPILE_OK)fputs(text,stderr);
-    else fprintf(stderr,"XR_BUILD_6003: diagnostic rendering failed (%s)\n",xr_source_compile_status_name(shown));
-    xr_compile_resources_free(text);
-}
-static int build_publication_close(XtcXirPublication **owner) {
-    bool had_failure=false;
-    XtcXirPublicationDiagnostic last={0};
-    for (unsigned attempt=0; attempt<8; ++attempt) {
-        if (xtc_xir_publication_close(owner)==XTC_XIR_PUBLICATION_OK) {
-            if (had_failure) fprintf(stderr,"XR_BUILD_6005: publication cleanup recovered (published=%u os=%u)\n",
-                (unsigned)last.published,last.cleanup_os_error);
-            return had_failure ? build_publication_exit(last.status) : XR_CLI_EXIT_OK;
-        }
-        had_failure=true; last=*xtc_xir_publication_diagnostic(*owner);
-    }
-    fprintf(stderr,"XR_BUILD_6005: terminal publication cleanup failure (published=%u cleanup_pending=%u os=%u)\n",
-        (unsigned)last.published,(unsigned)last.cleanup_pending,last.cleanup_os_error);
-    fflush(stdout); fflush(stderr);
-    /* A one-shot command cannot return and discard an outstanding OS owner.
-     * Process termination is explicit here; the publication API never exits. */
-    _Exit(XR_CLI_EXIT_INTERNAL);
-}
-/* Windows x86_64 links with MSVC; macOS and Linux link with one C driver on
- * x86_64 and arm64. Every other host publishes generated C only. */
-#if (defined(XR_ARCH_X86_64) && XR_OS_WINDOWS) || defined(XR_XIR_SDK_POSIX_HOST)
-#define BUILD_NATIVE_HOST 1
-#include "xcmd_build_native.inc.c"
-#endif
-#if XR_OS_WINDOWS
-#define BUILD_NATIVE_OUTPUT "app.exe"
-#else
-#define BUILD_NATIVE_OUTPUT "app"
-#endif
+
 XR_FUNC int cmd_build(const XrCliInvocation *inv) {
-    if (!inv || (inv->options.count && (!inv->options.spec || !inv->options.present))) return XR_CLI_EXIT_INTERNAL;
+    if (!inv) return XR_CLI_EXIT_INTERNAL;
 #if XR_OS_WINDOWS
-    if (_setmode(_fileno(stdout),_O_BINARY)==-1 || _setmode(_fileno(stderr),_O_BINARY)==-1) return XR_CLI_EXIT_INTERNAL;
+    if (_setmode(_fileno(stdout), _O_BINARY) == -1 ||
+        _setmode(_fileno(stderr), _O_BINARY) == -1) return XR_CLI_EXIT_INTERNAL;
 #endif
-    if (inv->positional_count!=1 || inv->passthrough_argc) {
-        xr_cli_error("build","exactly one source file and no passthrough arguments are required"); return XR_CLI_EXIT_USAGE;
+    if (inv->positional_count != 1 || !inv->positionals || inv->passthrough_argc) {
+        xr_cli_error("build", "one source file and no passthrough arguments are required");
+        return XR_CLI_EXIT_USAGE;
     }
-    if (!inv->positionals || !inv->positionals[0]) return XR_CLI_EXIT_INTERNAL;
-    const char *input=inv->positionals[0];
-    size_t spelling_length=strlen(input);
-    if (spelling_length<=3 || strcmp(input+spelling_length-3,".xr")) {
-        fprintf(stderr,"XR_BUILD_6001: Source build requires an exact .xr source file\n"); return XR_CLI_EXIT_FAIL;
-    }
-    if (!build_options_supported(inv)) return XR_CLI_EXIT_FAIL;
-#if !defined(XR_ARCH_LE64)
-    fprintf(stderr,"XR_BUILD_6001: this Source publication target is unsupported\n"); return XR_CLI_EXIT_FAIL;
-#else
-    bool c_only=xr_cli_opt_bool(&inv->options,"c-only");
-#ifndef BUILD_NATIVE_HOST
-    if (!c_only) {
-        fprintf(stderr,"XR_BUILD_6001: native executables are published only on Windows x86_64 and "
-            "macOS/Linux x86_64 or arm64; use --c-only\n");
+    const char *input = inv->positionals[0];
+    size_t length = input ? strlen(input) : 0;
+    if (length <= 3 || strcmp(input + length - 3, ".xr")) {
+        xr_cli_error("build", "an exact .xr source path is required");
         return XR_CLI_EXIT_FAIL;
     }
+    if (!build_options_supported(inv)) return XR_CLI_EXIT_FAIL;
+    bool c_only = xr_cli_opt_bool(&inv->options, "c-only");
+#if XR_OS_WINDOWS
+    const char *default_output = c_only ? "app.c" : "app.exe";
+#else
+    const char *default_output = c_only ? "app.c" : "app";
 #endif
-    const char *output=xr_cli_opt_string(&inv->options,"output",c_only ? "app.c" : BUILD_NATIVE_OUTPUT);
-    XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
-    XrCompileResources *resources=NULL;
-    XrCompileResourceStatus opened=xr_compile_resources_new(&limits,&resources);
-    if (opened!=XR_COMPILE_RESOURCE_OK) return opened==XR_COMPILE_RESOURCE_MEMORY_LIMIT || opened==XR_COMPILE_RESOURCE_OVERFLOW ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL;
-    XrCompileState *state=NULL;opened=xr_compile_state_new(resources,&state);
-    if(opened!=XR_COMPILE_RESOURCE_OK) {
-        xr_compile_resources_release(resources);
-        return opened==XR_COMPILE_RESOURCE_MEMORY_LIMIT || opened==XR_COMPILE_RESOURCE_OVERFLOW ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL;
-    }
-    XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
-    XrSourcePaths paths={0}; XrSourcePathsDiagnostic path_diagnostic={0};
-    XrSourceCompileDiagnostic diagnostic={0}; XrXirSourceProduct *product=NULL;
-    XrXirNativeProjection *projection=NULL; XtcXirPublication *publication=NULL;
-    XrXirNativeArtifact *artifact=NULL;
-    int result=XR_CLI_EXIT_FAIL;
-    XrSourceCompileStatus source=xr_source_paths(resources,input,&paths,&path_diagnostic);
-    if (source!=XR_SOURCE_COMPILE_OK) {
-        char text[4096];
-        xr_source_paths_diagnostic_format(&path_diagnostic,text,sizeof(text));
-        fprintf(stderr,"XR_BUILD_6003: %s\n",text);
-        result=build_source_exit(source); goto cleanup;
-    }
-    XrSourceCompileRequest request={&context,paths.entry,paths.stdlib,NULL,
-        xr_source_compile_default_manifest_limits(),xr_xir_host_target(), NULL};
-    source=xr_source_compile_build(&request,&product,&diagnostic);
-    if (source!=XR_SOURCE_COMPILE_OK) { build_source_report(&diagnostic,resources);result=build_source_exit(source);goto cleanup; }
-    XrXirNativeProjectionRequest prepare={product,"xray_app",(size_t)BUILD_C_LIMIT};
-    XrXirStatus projected=xr_compile_native_projection_prepare(&prepare, &projection);
-    if (projected!=XR_XIR_OK) {
-        fprintf(stderr,"XR_BUILD_6004: C projection failed (status=%u)\n",(unsigned)projected);
-        result=projected==XR_XIR_OUT_OF_MEMORY || projected==XR_XIR_BAD_STRUCTURE ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL;
-        goto cleanup;
-    }
-    if (build_verbose(inv)) {
-        const XrXirNativeProjectionSource *c=xr_compile_native_projection_source(projection);
-        fprintf(stderr,"XR_BUILD: Source %s\nXR_BUILD: C projection %zu bytes\n",paths.entry,c->length);
-    }
-#ifdef BUILD_NATIVE_HOST
-    if (!c_only) {
-        result=build_native_prepare(state,inv,projection,&artifact);
-        if (result!=XR_CLI_EXIT_OK) goto cleanup;
-    }
-#endif
-    XtcXirPublicationRequest publish={output,{XR_PATH_LIMIT_MAX_PATH,8,BUILD_C_LIMIT},!c_only};
-    XtcXirPublicationStatus status=xtc_xir_publication_new(resources,&publish,&publication);
-    if (status==XTC_XIR_PUBLICATION_OK) {
-        if (c_only) {
-            const XrXirNativeProjectionSource *c=xr_compile_native_projection_source(projection);
-            status=xtc_xir_publication_write(publication,c->text,c->length);
-        } else {
-            const XrXirNativeArtifactView *native=xr_compile_native_artifact_view(artifact);
-            status=xtc_xir_publication_write(publication,native->bytes,native->size);
+    const char *destination = xr_cli_opt_string(&inv->options, "output", default_output);
+    XrCompileResources *resources = NULL;
+    XrLirLowered lowered = {0};
+    XrLirCOutput output = {0};
+    int result = xr_cli_lir_compile(input, &resources, &lowered);
+    if (result == XR_CLI_EXIT_OK) {
+        XrLirCRequest request = {lowered.module, lowered.entry, resources, input, NULL};
+        XrLirCDiagnostic diagnostic = {0};
+        if (xr_lir_emit_c_standalone(&request, &output, &diagnostic) != XR_LIR_C_OK) {
+            fprintf(stderr, "%s:%u:%u: %s\n", diagnostic.source.path ? diagnostic.source.path : input,
+                diagnostic.source.line, diagnostic.source.column, diagnostic.message);
+            result = XR_CLI_EXIT_FAIL;
         }
     }
-    xr_compile_native_artifact_free(artifact);artifact=NULL;
-    xr_compile_native_projection_owner_free(projection);projection=NULL;
-    xr_xir_compile_source_product_free(product);product=NULL;
-    xr_source_compile_diagnostic_free(&diagnostic);
-    xr_source_paths_free(&paths);
-    xr_compile_state_release(state);state=NULL;
-    xr_compile_resources_release(resources);resources=NULL;
-    if (status==XTC_XIR_PUBLICATION_OK) status=xtc_xir_publication_commit(publication);
-    if (status!=XTC_XIR_PUBLICATION_OK) {
-        const XtcXirPublicationDiagnostic *d=xtc_xir_publication_diagnostic(publication);
-        fprintf(stderr,"XR_BUILD_6005: output publication failed (status=%u stage=%u published=%u os=%u)\n",
-            (unsigned)status,d?(unsigned)d->stage:0,d?(unsigned)d->published:0,d?d->os_error:0);
-        result=build_publication_exit(status);
-    } else result=XR_CLI_EXIT_OK;
-cleanup:
-    xr_compile_native_artifact_free(artifact);
-    xr_compile_native_projection_owner_free(projection);
-    xr_xir_compile_source_product_free(product);
-    xr_source_compile_diagnostic_free(&diagnostic);
-    xr_source_paths_free(&paths);xr_source_paths_diagnostic_free(&path_diagnostic);
-    xr_compile_state_release(state);xr_compile_resources_release(resources);
-    bool published=publication && xtc_xir_publication_diagnostic(publication)->published;
-    int closed=build_publication_close(&publication);
-    if (closed>result) result=closed;
-    bool report_failed=result==XR_CLI_EXIT_OK && printf("%s: %s\n",c_only ? "Generated" : "Built",output)<0;
-    if (fflush(stdout)) report_failed=true;
-    if (report_failed) {
-        fprintf(stderr,"XR_BUILD_6005: stdout reporting failed (published=%u)\n",(unsigned)published);
-        if(result<XR_CLI_EXIT_FAIL)result=XR_CLI_EXIT_FAIL;
+    xr_lir_lowered_free(&lowered);
+    if (result == XR_CLI_EXIT_OK) {
+        if (c_only) {
+            result = xr_cli_lir_publish(resources, destination, output.bytes, output.length, false);
+        } else {
+            const char *compiler = xr_cli_opt_string(&inv->options, "cc", NULL);
+            bool verbose = xr_cli_opt_bool(&inv->options, "verbose") || (inv->ctx && inv->ctx->verbose);
+            XrCliNativeOptions options = {compiler, NULL, verbose};
+            result = xr_cli_lir_native(resources, &options, output.bytes, output.length, destination);
+        }
     }
-    if (ferror(stderr) && result<XR_CLI_EXIT_FAIL) result=XR_CLI_EXIT_FAIL;
+    xr_lir_c_output_free(&output);
+    xr_compile_resources_release(resources);
+    if (result == XR_CLI_EXIT_OK) {
+        if (printf("%s: %s\n", c_only ? "Generated" : "Built", destination) < 0 || fflush(stdout))
+            result = XR_CLI_EXIT_FAIL;
+    }
     return result;
-#endif
 }

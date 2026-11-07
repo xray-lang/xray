@@ -27,17 +27,6 @@ endif()
 add_library(xray_xir_ctfe STATIC xxir_ctfe.c xxir_ctfe_instance.c)
 target_include_directories(xray_xir_ctfe PUBLIC ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(xray_xir_ctfe PUBLIC xray_xir_scalar)
-add_library(xray_xir_vm STATIC xxir_vm.c xxir_vm_debug.c xxir_vm_debug_calls.c)
-  add_library(xray_dap_current STATIC ../app/dap/xdap_current.c ../app/dap/xdap_json.c ../app/dap/xdap_launch.c ../app/dap/xdap_dispatch.c ../app/dap/xdap_dispatch_inspect.c ../app/dap/xdap_source_breakpoints.c ../app/dap/xdap_function_breakpoints.c ../app/dap/xdap_predicates.c ../app/dap/xdap_lexical.c ../app/dap/xdap_expression.c ../app/dap/xdap_exception.c ../app/dap/xdap_hit.c ../app/dap/xdap_value.c ../app/dap/xdap_type.c ../app/dap/xdap_framed.c ../app/dap/xdap_stdio.c ../app/dap/xdap_tcp.c ../base/xframing.c)
-target_link_libraries(xray_dap_current PUBLIC xray_xir_vm xray_json_cursor xray_source_compile xray_xir_runtime_host)
-if(MSVC)
-    target_compile_options(xray_dap_current PRIVATE /W4 /WX)
-else()
-    target_compile_options(xray_dap_current PRIVATE -Wall -Wextra -Werror)
-endif()
-target_link_libraries(xray_xir_vm PUBLIC xray_xir xray_xir_scalar xray_xir_ctfe)
-add_library(xray_xir_cgen STATIC xxir_emit_c.c ../lir/xi_cgen_verify_output.c)
-target_link_libraries(xray_xir_cgen PUBLIC xray_xir)
 add_library(xray_xir_source STATIC xxir_source.c xxir_source_query.c xxir_source_failure.c xxir_type_inference.c xxir_library_catalog.c
     ../hir/xhir_body.c ../hir/xhir_items.c ../hir/xhir_diagnostics.c ../hir/xhir_literal.c ../hir/xhir_conversion.c ../hir/xhir_binary.c ../hir/xhir_unary.c ../hir/xhir_boolean.c ../hir/xhir_cast.c ../hir/xhir_nullable.c)
 target_sources(xray_xir_source PRIVATE
@@ -74,9 +63,7 @@ if(MSVC)
 else()
     target_compile_options(xray_lsp_source_query PRIVATE -Wall -Wextra -Werror)
 endif()
-add_library(xray_xir_source_product STATIC ../program/xr_xir_source_product.c)
-target_link_libraries(xray_xir_source_product PUBLIC xray_xir_source xray_xir_vm xray_xir_cgen)
-foreach(target xray_xir xray_xir_admission xray_xir_declarations xray_xir_scalar xray_xir_ctfe xray_xir_vm xray_xir_cgen xray_xir_source xray_xir_source_product)
+foreach(target xray_xir xray_xir_admission xray_xir_declarations xray_xir_scalar xray_xir_ctfe xray_xir_source)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /WX)
     else()
@@ -84,7 +71,6 @@ foreach(target xray_xir xray_xir_admission xray_xir_declarations xray_xir_scalar
     endif()
 endforeach()
 
-include("${CMAKE_CURRENT_LIST_DIR}/stdlib_checked.cmake")
 
 # Server query owner uses the actual CLI stdlib/Catalog/authority kernel.
 add_library(xray_lsp_source_workspace STATIC ../app/lsp/xlsp_source_workspace.c ../app/lsp/xlsp_source_request.c

@@ -1,5 +1,5 @@
 add_executable(test_xir_ctfe_cleanup test_ctfe_cleanup.c)
-target_link_libraries(test_xir_ctfe_cleanup PRIVATE xray_xir_source xray_xir_vm)
+target_link_libraries(test_xir_ctfe_cleanup PRIVATE xray_xir_source )
 target_compile_definitions(test_xir_ctfe_cleanup PRIVATE
     XR_CTFE_CLEANUP_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/cleanup_owned.xr"
     XR_CTFE_CLEANUP_ORIGINAL="${PROJECT_SOURCE_DIR}/tests/unit/xir/p11_ctfe_reference/fixtures/panic_cleanup_escape.xr"

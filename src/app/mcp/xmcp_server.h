@@ -34,7 +34,6 @@ typedef enum XmcpLifecycleState {
 } XmcpLifecycleState;
 
 /* MCP server state */
-typedef struct XmcpPendingRun XmcpPendingRun;
 typedef struct XmcpServer {
     /* stdio transport */
     XmcpStdioTransport transport;
@@ -53,7 +52,6 @@ typedef struct XmcpServer {
     XmcpLifecycleState lifecycle_state;
     bool failed;
     volatile sig_atomic_t shutdown; /* signal-safe shutdown flag */
-    XmcpPendingRun *pending_run;
 } XmcpServer;
 
 typedef struct XmcpServerOptions {
@@ -68,7 +66,6 @@ XR_FUNC XmcpServer *xmcp_server_new(const XmcpServerOptions *options);
 /* Destroy server and free all resources. */
 /* False preserves the whole server while a stopped Run still owns mappings. */
 XR_FUNC bool xmcp_server_free(XmcpServer *server);
-XR_FUNC bool xmcp_run_close_pending(XmcpServer *server);
 
 /* Run the server main loop (blocking, reads stdin, writes stdout).
  * Returns 0 on clean shutdown, non-zero on error. */

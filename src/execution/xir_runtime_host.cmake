@@ -1,7 +1,0 @@
-add_library(xray_xir_runtime_host STATIC xr_xir_host_execution.c xr_xir_host_cli.c xr_xir_host_time.c)
-target_link_libraries(xray_xir_runtime_host PUBLIC xray_xir_scalar)
-if(MSVC)
-    target_compile_options(xray_xir_runtime_host PRIVATE /W4 /WX)
-else()
-    target_compile_options(xray_xir_runtime_host PRIVATE -Wall -Wextra -Werror)
-endif()

@@ -32,6 +32,8 @@ typedef struct XrLirSourceRequest {
     const char *entry_path;
     const char *stdlib_path;
     bool optimize;
+    const XrModuleIdentityAuthority *authority;
+    struct XrLockfile *lockfile;
 } XrLirSourceRequest;
 
 typedef struct XrLirSourceFailure {

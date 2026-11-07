@@ -1,5 +1,5 @@
 add_executable(test_hir_binary test_binary.c)
-target_link_libraries(test_hir_binary PRIVATE xray_xir_source xray_xir_vm)
+target_link_libraries(test_hir_binary PRIVATE xray_xir_source)
 set_target_properties(test_hir_binary PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 if(MSVC)
     target_compile_options(test_hir_binary PRIVATE /W4 /WX /utf-8)

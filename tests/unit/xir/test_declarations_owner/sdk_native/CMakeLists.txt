@@ -25,7 +25,7 @@ target_compile_definitions(test_test_sdk_native PRIVATE WIN32_LEAN_AND_MEAN NOMI
 if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(test_test_sdk_native PRIVATE /experimental:c11atomics)
 endif()
-foreach(owner xray_compile_resources xray_xir_admission xray_xir_declarations xray_xir_scalar xray_xir_runtime_host)
+foreach(owner xray_compile_resources xray_xir_admission xray_xir_declarations xray_xir_scalar )
     add_library(sdk_${owner} STATIC IMPORTED)
     set_target_properties(sdk_${owner} PROPERTIES IMPORTED_LOCATION "${XIR_SDK_BUNDLE_DIR}/lib/${owner}.lib")
     target_link_libraries(test_test_sdk_native PRIVATE sdk_${owner})

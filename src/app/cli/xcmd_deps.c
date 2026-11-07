@@ -14,8 +14,8 @@
 #include "xcli.h"
 #include "xcli_spec.h"
 #include "../../api/xsource_compile.h"
-#include "../../execution/xr_xir_host_execution.h"
 #include "../../api/xsource_paths.h"
+#include "xir/xxir_source_dependencies.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include <stdio.h>
@@ -47,13 +47,13 @@ XR_FUNC int cmd_deps(const XrCliInvocation *inv) {
     }
     XrXirCompileContext context = {resources, xr_xir_compile_default_limits()};
     XrSourcePaths paths = {0}; XrSourcePathsDiagnostic path_diagnostic = {0};
-    XrSourceCompileDiagnostic diagnostic = {0}; XrXirSourceProduct *product = NULL;
+    XrSourceCompileDiagnostic diagnostic = {0}; XrXirSourceResult source = {0};
     XrSourceCompileStatus status = xr_source_paths(resources, input_file,
         &paths, &path_diagnostic);
     if (status == XR_SOURCE_COMPILE_OK) {
         XrSourceCompileRequest request = {&context, paths.entry, paths.stdlib, NULL,
-            xr_source_compile_default_manifest_limits(), xr_xir_host_target(), NULL};
-        status = xr_source_compile_build(&request, &product, &diagnostic);
+            xr_source_compile_default_manifest_limits(), NULL};
+        status = xr_source_compile_check(&request, &source, &diagnostic);
     }
     if (status != XR_SOURCE_COMPILE_OK) {
         char text[4096] = {0};
@@ -67,10 +67,10 @@ XR_FUNC int cmd_deps(const XrCliInvocation *inv) {
     xr_source_paths_diagnostic_free(&path_diagnostic);
     xr_source_compile_diagnostic_free(&diagnostic);
     xr_compile_resources_release(resources);
-    const XrXirSourceDependencies *bundle = xr_xir_compile_source_product_dependencies(product);
+    const XrXirSourceDependencies *bundle = xr_xir_compile_source_snapshot_dependencies(source.snapshot);
     if (status != XR_SOURCE_COMPILE_OK || !bundle) {
         xr_cli_error("deps", "dependency analysis failed for '%s'", input_file);
-        xr_xir_compile_source_product_free(product);
+        xr_xir_compile_source_result_free(&source);
         return XR_CLI_EXIT_FAIL;
     }
 
@@ -80,7 +80,7 @@ XR_FUNC int cmd_deps(const XrCliInvocation *inv) {
         out = fopen(output_file, "w");
         if (!out) {
             xr_cli_error("deps", "cannot create '%s'", output_file);
-            xr_xir_compile_source_product_free(product);
+            xr_xir_compile_source_result_free(&source);
             return XR_CLI_EXIT_FAIL;
         }
     }
@@ -90,7 +90,7 @@ XR_FUNC int cmd_deps(const XrCliInvocation *inv) {
         if (fclose(out) != 0) output_failed = true;
         if (output_failed) {
             xr_cli_error("deps", "cannot write '%s'", output_file);
-            xr_xir_compile_source_product_free(product);
+            xr_xir_compile_source_result_free(&source);
             return XR_CLI_EXIT_FAIL;
         }
         printf("Dependency script generated: %s\n", output_file);
@@ -99,7 +99,7 @@ XR_FUNC int cmd_deps(const XrCliInvocation *inv) {
         }
     }
 
-    xr_xir_compile_source_product_free(product);
+    xr_xir_compile_source_result_free(&source);
     if (output_failed) {
         xr_cli_error("deps", "cannot write dependency output");
         return XR_CLI_EXIT_FAIL;

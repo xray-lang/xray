@@ -1,173 +1,110 @@
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
+ *
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xcmd_toolchain_probe.inc.c - Fresh Source and runtime SDK readiness observations
+ * xcmd_toolchain_probe.inc.c - Compile and run a real LIR native program
  */
-#include "../../api/xsource_compiler.h"
-#include "../../api/xsource_paths.h"
-#include "../../shared/xr_path_limit.h"
-#include "../toolchain/xtc_xir_local_toolchain.h"
-#include "../toolchain/xtc_xir_native_admission.h"
-#include "xcli_native_probe.h"
-#include "xray_version.h"
-#include "xray_build_identity.h"
-#if XR_OS_WINDOWS
-#include <windows.h>
-#define toolchain_clock_ms() GetTickCount64()
-#else
-#include "../../os/os_time.h"
-#define toolchain_clock_ms() xr_time_monotonic_ms()
-#endif
-/* Native capability is probed where `xray build` can publish executables. */
-#if (XR_OS_WINDOWS && defined(XR_ARCH_X86_64)) || defined(XR_XIR_SDK_POSIX_HOST)
-#define TOOLCHAIN_PROBE_NATIVE 1
-#endif
+#include "xcli_lir.h"
+#include "api/xsource_compile.h"
+#include "lir/xlir_c.h"
+#include "app/toolchain/xtc_host_toolchain.h"
+#include "app/toolchain/xtc_xir_workspace.h"
+#include "base/xfileio.h"
+#include "os/os_fs.h"
 
-typedef struct ToolchainProbeReport {
-    const char *requested, *normalized, *provider, *compiler;
-    const char *c_compile, *sdk_compile, *runtime_link, *native_run;
-    const char *code, *stage;
-    char message[256], version[24], runtime[65], fingerprint[65];
-    bool ready, fallback_used;
-    XrCliNativeProbeFailure previous;
-    char compiler_path[XR_PATH_LIMIT_MAX_PATH+1];
-    uint64_t duration_ms;
-} ToolchainProbeReport;
-static void toolchain_probe_report(const XrCliInvocation *inv,const ToolchainProbeReport *report) {
-    if (!toolchain_json(inv)) {
-        printf("AOT toolchain: %s\n",report->ready ? "READY" : "UNAVAILABLE");
-        printf("Provider: %s\nCompiler: %s\n",report->provider,report->compiler ? report->compiler : "");
-        if (report->code) printf("%s: %s\n",report->stage,report->message);
-        return;
-    }
-    fputs("{\"schema\":1,\"xray\":{\"version\":",stdout);toolchain_string(XRAY_VERSION_STRING);
-    fputs(",\"build\":",stdout);toolchain_string(XRAY_BUILD_COMMIT);
-    fputs(",\"sdkDigest\":",stdout);toolchain_string(report->runtime);
-    fputs("},\"request\":{\"target\":",stdout);toolchain_string(report->requested);
-    fputs(",\"normalizedTarget\":",stdout);toolchain_string(report->normalized);
-    fputs(",\"profile\":",stdout);toolchain_string(xr_cli_opt_string(&inv->options,"profile","hosted"));
-    fputs(",\"provider\":",stdout);
-    toolchain_string(xr_cli_opt_string(&inv->options,"provider","auto"));
-    fputs("},\"selection\":{\"provider\":",stdout);toolchain_string(report->provider);
-    fputs(",\"ownership\":\"external\",\"compiler\":",stdout);toolchain_string(report->compiler ? report->compiler : "");
-    fputs(",\"version\":",stdout);toolchain_string(report->version);
-    fputs(",\"targetAbi\":",stdout);toolchain_string(report->normalized);
-    fputs(",\"runtimeArtifact\":",stdout);toolchain_string(report->runtime);
-    printf(",\"ready\":%s,\"fallbackUsed\":%s},\"capabilities\":{\"cCompile\":",
-        report->ready ? "true" : "false",report->fallback_used ? "true" : "false");
-    toolchain_string(report->c_compile);fputs(",\"sdkCompile\":",stdout);toolchain_string(report->sdk_compile);
-    fputs(",\"runtimeLink\":",stdout);toolchain_string(report->runtime_link);
-    fputs(",\"nativeRun\":",stdout);toolchain_string(report->native_run);
-    fputs(",\"cross\":\"unsupported\",\"lto\":\"unsupported\"},\"diagnostics\":[",stdout);
-    if (report->previous.code) {
-        fputs("{\"code\":",stdout);toolchain_string(report->previous.code);
-        fputs(",\"stage\":",stdout);toolchain_string(report->previous.stage);
-        fputs(",\"message\":",stdout);toolchain_string(report->previous.message);putchar('}');
-    }
-    if (report->code) {
-        if (report->previous.code) putchar(',');
-        fputs("{\"code\":",stdout);toolchain_string(report->code);
-        fputs(",\"stage\":",stdout);toolchain_string(report->stage);
-        fputs(",\"message\":",stdout);toolchain_string(report->message);putchar('}');
-    }
-    fputs("],\"probe\":{\"id\":\"xir-source-sdk-native-v1\",\"fingerprint\":",stdout);
-    toolchain_string(report->fingerprint);
-    printf(",\"cache\":\"disabled\",\"durationMs\":%llu}}\n",(unsigned long long)report->duration_ms);
-}
-static void toolchain_probe_failure(ToolchainProbeReport *report,const char *code,
-    const char *stage,unsigned status,int detail) {
-    if (report->code) return;
-    report->code=code;report->stage=stage;report->ready=false;
-    snprintf(report->message,sizeof(report->message),"%s failed (status=%u detail=%d)",stage,status,detail);
-}
-#ifdef TOOLCHAIN_PROBE_NATIVE
-static bool toolchain_probe_close(XrCliNativeProbe **owner) {
-    bool failed=false;
-    for (unsigned i=0;i<8;++i) {
-        XrCliNativeProbeStatus status=xr_cli_native_probe_close(owner);
-        if (status==XR_CLI_NATIVE_PROBE_OK) return !failed;
-        if (status!=XR_CLI_NATIVE_PROBE_PENDING) failed=true;
-    }
-    fputs("toolchain: native probe cleanup remains pending\n",stderr);fflush(stderr);
-    _Exit(XR_CLI_EXIT_INTERNAL);
-}
-static void toolchain_probe_native(XrCompileState *state,const XrCliInvocation *inv,
-    ToolchainProbeReport *report) {
-    XrCompileResources *resources=xr_compile_state_resources(state);
-    uint64_t started=toolchain_clock_ms();XrCliToolchainConfig *preferences=NULL;XrCliNativeProbe *owner=NULL;
-    XrCliToolchainConfigStatus configured=xr_cli_toolchain_config_open(state,NULL,&preferences);
-    if (configured!=XR_CLI_TOOLCHAIN_CONFIG_OK) {
-        toolchain_probe_failure(report,configured==XR_CLI_TOOLCHAIN_CONFIG_MEMORY_LIMIT ? "PROBE_MEMORY_LIMIT" :
-            configured==XR_CLI_TOOLCHAIN_CONFIG_OVERFLOW ? "PROBE_OVERFLOW" :
-            configured==XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY ? "PROBE_OUT_OF_MEMORY" :
-            configured==XR_CLI_TOOLCHAIN_CONFIG_BUDGET ? "PROBE_BUDGET" :
-            "CONFIG_INVALID","preferences",(unsigned)configured,0);goto done;
-    }
-    const XrCliToolchainConfigView *config=xr_cli_toolchain_config_view(preferences);
-    if (xr_cli_opt_present(&inv->options,"zig") || strcmp(xr_cli_opt_string(&inv->options,"profile","hosted"),"hosted")) {
-        toolchain_probe_failure(report,"TARGET_UNSUPPORTED","provider",0,0);goto done;
-    }
-    XrCliNativeProbeOptions options={config,report->requested,xr_cli_opt_string(&inv->options,"provider",NULL),
-        xr_cli_opt_string(&inv->options,"cc",NULL)};
-    XrCliNativeProbeRequest request;
-    XrCliNativeProbeStatus resolved=xr_cli_native_probe_resolve(&options,&request);
-    if (resolved!=XR_CLI_NATIVE_PROBE_OK) {
-        toolchain_probe_failure(report,resolved==XR_CLI_NATIVE_PROBE_MEMORY_LIMIT ? "PROBE_MEMORY_LIMIT" :
-            resolved==XR_CLI_NATIVE_PROBE_OVERFLOW ? "PROBE_OVERFLOW" :
-            resolved==XR_CLI_NATIVE_PROBE_OUT_OF_MEMORY ? "PROBE_OUT_OF_MEMORY" :
-            resolved==XR_CLI_NATIVE_PROBE_BUDGET ? "PROBE_BUDGET" : "PROVIDER_UNSUPPORTED",
-            "provider",(unsigned)resolved,0);goto done;
-    }
-    XrCliNativeProbeStatus status=xr_cli_native_probe_new(resources,&owner);
-    if (status==XR_CLI_NATIVE_PROBE_OK) status=xr_cli_native_probe_run(owner,&request);
-    const XrCliNativeProbeReport *facts=xr_cli_native_probe_report(owner);
-    if (facts) {
-        report->provider=facts->provider;report->c_compile=facts->c_compile;report->sdk_compile=facts->sdk_compile;
-        report->runtime_link=facts->runtime_link;report->native_run=facts->native_run;
-        report->fallback_used=facts->fallback_used;report->previous=facts->previous;
-        memcpy(report->version,facts->version,sizeof(report->version));memcpy(report->runtime,facts->runtime,sizeof(report->runtime));
-        memcpy(report->fingerprint,facts->fingerprint,sizeof(report->fingerprint));
-        report->code=facts->failure.code;report->stage=facts->failure.stage;
-        memcpy(report->message,facts->failure.message,sizeof(report->message));
-        report->ready=status==XR_CLI_NATIVE_PROBE_OK && facts->ready;
-        const XtcXirLocalToolchainView *local=xtc_xir_local_toolchain_view(xr_cli_native_probe_local(owner));
-        if (local) {
-            int size=snprintf(report->compiler_path,sizeof(report->compiler_path),"%s",local->compiler);
-            if (size<0 || (size_t)size>=sizeof(report->compiler_path))
-                toolchain_probe_failure(report,"PROBE_INPUT_INVALID","compiler-path",0,0);
-            else report->compiler=report->compiler_path;
-        }
-    }
-    if (status!=XR_CLI_NATIVE_PROBE_OK && !report->code)
-        toolchain_probe_failure(report,status==XR_CLI_NATIVE_PROBE_MEMORY_LIMIT ? "PROBE_MEMORY_LIMIT" :
-            status==XR_CLI_NATIVE_PROBE_OVERFLOW ? "PROBE_OVERFLOW" :
-            status==XR_CLI_NATIVE_PROBE_OUT_OF_MEMORY ? "PROBE_OUT_OF_MEMORY" :
-            "PROBE_UNAVAILABLE","capability",(unsigned)status,0);
-done:
-    xr_cli_toolchain_config_free(preferences);
-    if (!toolchain_probe_close(&owner)) toolchain_probe_failure(report,"PROBE_CLEANUP_FAILED","cleanup",0,0);
-    report->duration_ms=toolchain_clock_ms()-started;toolchain_probe_report(inv,report);
+static bool probe_workspace_close(XtcXirWorkspace **workspace) {
+    for (unsigned attempt = 0; attempt < 8; ++attempt)
+        if (xtc_xir_workspace_close(workspace, 1024) == XTC_XIR_WORKSPACE_OK) return true;
+    return false;
 }
 
-#endif
-static int toolchain_probe(XrCompileState *state,const XrCliInvocation *inv) {
-    if (inv->positional_count!=1 || inv->passthrough_argc) return XR_CLI_EXIT_USAGE;
-    ToolchainProbeReport report={0};report.requested=xr_cli_opt_string(&inv->options,"target","native");
-    XrToolchainTarget target={0};char error[256]={0};
-    if (!xtc_target_parse(report.requested,&target,error,sizeof(error))) return XR_CLI_EXIT_USAGE;
-    report.normalized=target.name;report.provider="none";
-    report.c_compile=report.sdk_compile=report.runtime_link=report.native_run="skipped";
-#ifdef TOOLCHAIN_PROBE_NATIVE
-    if (target.is_native) toolchain_probe_native(state,inv,&report);
-    else {
-        toolchain_probe_failure(&report,"TARGET_UNSUPPORTED","target",0,0);toolchain_probe_report(inv,&report);
+static int toolchain_probe(XrCompileState *state, const XrCliInvocation *inv) {
+    if (inv->positional_count != 1 || inv->passthrough_argc) return XR_CLI_EXIT_USAGE;
+    const char *target_name = xr_cli_opt_string(&inv->options, "target", "native");
+    XrToolchainTarget target = {0};
+    char error[256];
+    if (!xtc_target_parse(target_name, &target, error, sizeof(error))) return XR_CLI_EXIT_USAGE;
+    bool ready = false;
+    const char *stage = "target";
+    XrCompileResources *resources = xr_compile_state_resources(state), *compiled = NULL;
+    XrOsIoPolicy policy = xr_compile_io_policy(resources);
+    XtcHostToolchain *host_owner = NULL;
+    XtcXirWorkspace *workspace = NULL;
+    XrLirLowered lowered = {0};
+    XrLirCOutput c = {0};
+    XrToolchainProcess *process = NULL;
+    XrProcessResult outcome = {0};
+    char *source = NULL, *program = NULL;
+    XrCliNativeOptions options = {xr_cli_opt_string(&inv->options, "cc", NULL),
+        xr_cli_opt_string(&inv->options, "provider", NULL), false};
+    if (!target.is_native || xr_cli_opt_present(&inv->options, "zig") ||
+        strcmp(xr_cli_opt_string(&inv->options, "profile", "hosted"), "hosted"))
+        goto cleanup;
+    stage = "workspace";
+    XtcHostDiagnostic diagnostic = {0};
+    XtcHostToolchainRequest discovery = {.timeout_ms = 30000, .output_limit = 1024 * 1024};
+    if (xtc_host_toolchain_open(resources, &discovery, &host_owner, &diagnostic) != XTC_HOST_OK)
+        goto cleanup;
+    const XtcHostToolchainView *host = xtc_host_toolchain_view(host_owner);
+    XtcXirWorkspaceRequest temporary = {host->workspace_parent, {XR_PATH_LIMIT_MAX_PATH, 8, 65536}};
+    if (xtc_xir_workspace_new(resources, &temporary, &workspace) != XTC_XIR_WORKSPACE_OK ||
+        xtc_xir_workspace_create(workspace) != XTC_XIR_WORKSPACE_OK)
+        goto cleanup;
+    const XtcXirWorkspacePaths *paths = xtc_xir_workspace_paths(workspace);
+    static const char text[] = "print(42)\n";
+    if (xr_path_join_owned(&policy, paths->input, "probe.xr", &source) != XR_OS_IO_OK ||
+        xr_path_join_owned(&policy, paths->output, "probe.exe", &program) != XR_OS_IO_OK ||
+        xr_os_io_write_new_file_sync(&policy, source, (const uint8_t *)text, sizeof(text) - 1) != XR_OS_IO_OK)
+        goto cleanup;
+    stage = "source";
+    if (xr_cli_lir_compile(source, &compiled, &lowered) != XR_CLI_EXIT_OK) goto cleanup;
+    XrLirCRequest emit = {lowered.module, lowered.entry, compiled, source, NULL};
+    XrLirCDiagnostic emitted = {0};
+    stage = "C emission";
+    if (xr_lir_emit_c_standalone(&emit, &c, &emitted) != XR_LIR_C_OK) goto cleanup;
+    xr_lir_lowered_free(&lowered);
+    stage = "native compilation";
+    if (xr_cli_lir_native(compiled, &options, c.bytes, c.length, program) != XR_CLI_EXIT_OK)
+        goto cleanup;
+    stage = "native execution";
+    XrProcessSpec command;
+    xtc_process_spec_init(&command, program, 30000);
+    command.environment_source = XTC_PROCESS_ENV_SNAPSHOT;
+    command.cwd = paths->output;
+    command.output_limit = 4096;
+    if (xtc_process_prepare(resources, &command, &process) != XTC_PROCESS_OK ||
+        xtc_process_run(process, NULL, NULL, &outcome) != XTC_PROCESS_OK)
+        goto cleanup;
+    ready = outcome.exit_code == 0 && !outcome.stdout_bytes.truncated &&
+        outcome.stdout_bytes.length == 3 && !memcmp(outcome.stdout_bytes.data, "42\n", 3) &&
+        !outcome.stderr_bytes.length;
+cleanup:
+    xtc_process_result_free(&outcome);
+    xtc_process_free(process);
+    xr_lir_c_output_free(&c);
+    xr_lir_lowered_free(&lowered);
+    xr_compile_resources_release(compiled);
+    if (!probe_workspace_close(&workspace)) {
+        fputs("native probe workspace cleanup remains pending\n", stderr);
+        fflush(stderr);
+        _Exit(XR_CLI_EXIT_INTERNAL);
     }
-#else
-    (void)state;
-    toolchain_probe_failure(&report,"TARGET_UNSUPPORTED","host",0,0);toolchain_probe_report(inv,&report);
-#endif
-    return report.ready ? XR_CLI_EXIT_OK : XR_CLI_EXIT_UNAVAILABLE;
+    xr_compile_resources_free(source);
+    xr_compile_resources_free(program);
+    xtc_host_toolchain_free(host_owner);
+    if (toolchain_json(inv)) {
+        fputs("{\"target\":", stdout);
+        toolchain_string(target.name);
+        fputs(",\"compilerRequest\":", stdout);
+        toolchain_string(options.compiler);
+        fputs(",\"stage\":", stdout);
+        toolchain_string(ready ? "complete" : stage);
+        printf(",\"ready\":%s}\n", ready ? "true" : "false");
+    } else {
+        printf("Native compiler %s (%s)\n", ready ? "ready" : "unavailable", ready ? "complete" : stage);
+    }
+    return ready ? XR_CLI_EXIT_OK : XR_CLI_EXIT_UNAVAILABLE;
 }

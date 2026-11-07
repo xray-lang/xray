@@ -1,6 +1,6 @@
 set(P09_TIMING_C "${CMAKE_BINARY_DIR}/generated/xir_p09_string_timing.c")
 add_executable(test_xir_p09_string_timing "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_string_timing.c")
-target_link_libraries(test_xir_p09_string_timing PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
+target_link_libraries(test_xir_p09_string_timing PRIVATE xray_xir_source  )
 add_custom_command(OUTPUT "${P09_TIMING_C}"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/generated"
     COMMAND $<TARGET_FILE:test_xir_p09_string_timing> --generate "${P09_TIMING_C}"
@@ -9,7 +9,7 @@ add_custom_command(OUTPUT "${P09_TIMING_C}"
         "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_array_capacity/string_build/producer.xr" VERBATIM)
 add_executable(test_xir_p09_string_timing_native
     "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_string_timing.c" "${P09_TIMING_C}")
-target_link_libraries(test_xir_p09_string_timing_native PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
+target_link_libraries(test_xir_p09_string_timing_native PRIVATE xray_xir_source  )
 target_compile_definitions(test_xir_p09_string_timing_native PRIVATE XR_STRING_TIMING_NATIVE=1)
 
 foreach(target test_xir_p09_string_timing test_xir_p09_string_timing_native )

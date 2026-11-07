@@ -11,28 +11,7 @@ else()
 endif()
 add_test(NAME xir_fixed_bytes COMMAND test_xir_fixed_bytes)
 set_tests_properties(xir_fixed_bytes PROPERTIES TIMEOUT 60 LABELS "unit;xir;fixed;ownership")
-add_executable(test_xir_fixed_bytes_source xir/test_xir_fixed_bytes_source.c)
-target_link_libraries(test_xir_fixed_bytes_source PRIVATE xray_xir_source_product)
-target_compile_definitions(test_xir_fixed_bytes_source PRIVATE XR_FIXED_BYTES_ROOT="${PROJECT_SOURCE_DIR}")
+
+
+
 set(XIR_FIXED_BYTES_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/fixed_bytes.c)
-add_custom_command(OUTPUT ${XIR_FIXED_BYTES_GENERATED}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND $<TARGET_FILE:test_xir_fixed_bytes_source> ${XIR_FIXED_BYTES_GENERATED}
-    DEPENDS test_xir_fixed_bytes_source ${PROJECT_SOURCE_DIR}/demos/01-basics/quoted_literals.xr
-    VERBATIM)
-add_executable(test_xir_fixed_bytes_native xir/test_xir_fixed_bytes_native.c ${XIR_FIXED_BYTES_GENERATED})
-target_link_libraries(test_xir_fixed_bytes_native PRIVATE xray_xir_scalar)
-foreach(target test_xir_fixed_bytes_source test_xir_fixed_bytes_native)
-    set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
-    if(MSVC)
-        target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
-        if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
-            target_compile_options(${target} PRIVATE /experimental:c11atomics)
-        endif()
-    else()
-        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -pedantic)
-    endif()
-endforeach()
-add_test(NAME xir_fixed_bytes_source COMMAND test_xir_fixed_bytes_source)
-add_test(NAME xir_fixed_bytes_native COMMAND test_xir_fixed_bytes_native)
-set_tests_properties(xir_fixed_bytes_source xir_fixed_bytes_native PROPERTIES TIMEOUT 60 LABELS "unit;xir;fixed;source;native;ownership")

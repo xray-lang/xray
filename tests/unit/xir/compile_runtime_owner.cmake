@@ -1,7 +1,7 @@
 # Compiler allocation observation remains independent of runtime domain allocation.
 get_filename_component(XIR_OWNER_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
 
-add_executable(test_xir_compile_api "${CMAKE_CURRENT_LIST_DIR}/test_xir_compile_api.c")
+
 
 if(TARGET gen-xir-core-source)
 
@@ -95,7 +95,7 @@ if(DEFINED XR_XIR_OLD_ADMISSION_OBJECT)
     add_test(NAME test_xir_compile_old_data COMMAND test_xir_compile_old_data)
     set_tests_properties(test_xir_compile_old_data PROPERTIES LABELS "unit;xir;abi" TIMEOUT 30)
 endif()
-foreach(owner_target IN ITEMS xir_compile_owner_runtime test_xir_compile_decimal_work test_xir_compile_api)
+foreach(owner_target IN ITEMS xir_compile_owner_runtime test_xir_compile_decimal_work )
     target_include_directories(${owner_target} PRIVATE "${XIR_OWNER_ROOT}/src" "${XIR_OWNER_ROOT}/include")
     target_compile_features(${owner_target} PRIVATE c_std_11)
     if(MSVC)
@@ -122,7 +122,7 @@ add_test(NAME test_xir_compile_api_rejection
         --output "${CMAKE_CURRENT_BINARY_DIR}/compile-api-rejections")
 set_tests_properties(test_xir_compile_api_rejection PROPERTIES LABELS "unit;xir;abi" TIMEOUT 60)
 
-foreach(owner_target IN ITEMS test_xir_compile_decimal_work test_xir_compile_api)
+foreach(owner_target IN ITEMS test_xir_compile_decimal_work )
     add_test(NAME ${owner_target} COMMAND ${owner_target})
     set_tests_properties(${owner_target} PROPERTIES LABELS "unit;xir;compiler;ownership;budget;abi" TIMEOUT 60)
 endforeach()

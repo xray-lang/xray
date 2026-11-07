@@ -10,7 +10,6 @@
 #include "xir/xxir_types.h"
 #include "xir/xxir_construction.h"
 #include "xir/xxir_generic.h"
-#include "xir/xxir_vm.h"
 #include "frontend/parser/xparse.h"
 #include "toolchain/xcompiler_session.h"
 #include <stdio.h>
@@ -88,52 +87,14 @@ static XrHirUnary retired_unary(void) {
     CHECK(xr_compile_resources_stats(memory,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes==before.held_bytes);
     xr_compile_resources_release(memory);return node;
 }
-static void run_node(XrHirUnary node,uint64_t input,uint64_t expected) {
-    const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};
-    XrXirCompileContext receiver={.limits=xr_xir_compile_default_limits()};
-    CHECK(xr_compile_resources_new(&limits,&receiver.resources)==XR_COMPILE_RESOURCE_OK);
-    XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(receiver.resources,&before)==XR_COMPILE_RESOURCE_OK);
-    int64_t bits=0;memcpy(&bits,&input,sizeof(bits));
-    XrXirInstruction ret={.op=XR_XIR_RETURN},instructions[3]={{0}};uint32_t count=0,seed=0;
-    if(node.has_seed){seed=count+1;instructions[count++]=xr_hir_unary_seed_instruction(&node);}
-    uint32_t result=count+1;instructions[count++]=xr_hir_unary_instruction(&node,0,seed);
-    instructions[count++]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={result}};
-    XrXirBlock one={0,1,0,0},body={0,count,0,0},entry_block={0,2,0,0};
-    XrXirInstruction entry[]={ {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64}, {.op=XR_XIR_RETURN,.args={0}} };
-    XrXirFunction functions[]={
-        {"$init",5,NULL,0,XR_XIR_UNIT,&one,1,&ret,1,NULL,0,XR_XIR_NEVER,0,NULL},
-        {"unary",5,&node.type,1,node.type,&body,1,instructions,count,NULL,0,XR_XIR_NEVER,0,NULL},
-        {"entry",5,NULL,0,XR_XIR_I64,&entry_block,1,entry,2,NULL,0,XR_XIR_NEVER,0,NULL}};
-    XrXirFunctionIdentity identities[3]={{0}};XrXirSourceModule module={.name="unary",.name_length=5,.storage=XR_XIR_MODULE_FRESH_STORAGE};
-    XrXirDeclarations declarations={&module,1,identities,NULL,0,NULL,0,0,2,NULL};
-    XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=3,.declarations=&declarations,.linkage_kind=XR_XIR_PROGRAM};
-    XrXirConstruction *construction=NULL;
-    CHECK(xr_xir_compile_construction_new_v5(&receiver,NULL,&(XrXirConstructionSpec){NULL,0,NULL,0,NULL},&(XrXirSlotFacts){NULL,0},&construction, NULL)==XR_XIR_OK);
-    XrXirArtifact *checked_artifact=NULL,*closed=NULL,*lowered=NULL;
-    XrXirDiagnostic diagnostic={0};XrXirStatus status=xr_xir_compile_check_v2(&receiver,&built,construction,&checked_artifact,&diagnostic);
-    if(status!=XR_XIR_OK)fprintf(stderr,"unary type%u: status%d at%u/%u/%u reason%d\n",(unsigned)node.type,(int)status,
-        diagnostic.function,diagnostic.block,diagnostic.instruction,(int)diagnostic.reason);
-    CHECK(status==XR_XIR_OK);xr_xir_compile_construction_free(construction);
-    CHECK(xr_xir_compile_specialize(checked_artifact,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked_artifact);
-    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
-    XrXirRunContext run={1024,1024,0,0,0,0};XrXirValue value={0};
-    XrXirValue argument={node.type,0,bits};
-    CHECK(xr_xir_compile_vm_run(lowered,1,&run,&argument,1,&value)==XR_XIR_RUN_OK && value.type==(uint32_t)node.type);
-    if((uint64_t)value.payload!=expected)fprintf(stderr,"type%u: actual%llx expected%llx\n",(unsigned)node.type,(unsigned long long)value.payload,(unsigned long long)expected);
-    CHECK((uint64_t)value.payload==expected && !run.live_bytes && run.allocations==run.frees);
-    xr_xir_value_drop(&value);xr_xir_compile_artifact_free(lowered);
-    CHECK(xr_compile_resources_stats(receiver.resources,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes==before.held_bytes);
-    xr_compile_resources_release(receiver.resources);
-}
 int main(void) {
-    relations();controls();
-    run_node(retired_unary(),(uint64_t)-42,42);
-    run_node(checked(XR_HIR_UNARY_NEGATE,XR_XIR_I8),(uint64_t)-128,(uint64_t)-128);
-    run_node(checked(XR_HIR_UNARY_NEGATE,XR_XIR_U8),1,255);
-    run_node(checked(XR_HIR_UNARY_COMPLEMENT,XR_XIR_U64),0,UINT64_MAX);
-    run_node(checked(XR_HIR_UNARY_NEGATE,XR_XIR_F32),0,UINT64_C(0x80000000));
-    run_node(checked(XR_HIR_UNARY_NEGATE,XR_XIR_F64),UINT64_C(0x8000000000000000),0);
-    run_node(checked(XR_HIR_UNARY_NEGATE,XR_XIR_F64),UINT64_C(0xfff8000000000042),UINT64_C(0x7ff8000000000000));
-    puts("Numeric unary HIR: widths, refusals, controls, retired syntax, float zero/NaN and Built VM PASS");return 0;
+    relations();controls();(void)retired_unary();
+
+
+
+
+
+
+
+    puts("Numeric unary HIR: widths, refusals, controls, retired syntax, AST lifetime PASS");return 0;
 }

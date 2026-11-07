@@ -251,3 +251,32 @@ XR_FUNC void xr_cli_toolchain_config_free(XrCliToolchainConfig *owner) {
     xtoml_owned_free(owner->root); xr_compile_resources_free(owner->path);
     xr_compile_resources_free(owner);xr_compile_state_release(state);
 }
+
+XR_FUNC XrCliToolchainConfigStatus xr_cli_toolchain_choose(
+    const XrCliToolchainConfigView *preferences, const char *target,
+    const char *provider, const char *compiler, XrCliToolchainChoice *output) {
+    if (!preferences || !target || !output || (preferences->count && !preferences->preferences))
+        return XR_CLI_TOOLCHAIN_CONFIG_INVALID;
+    const XrCliToolchainPreference *preference = NULL;
+    for (size_t i = 0; i < preferences->count; ++i) {
+        if (!strcmp(preferences->preferences[i].target, target)) {
+            preference = &preferences->preferences[i];
+            break;
+        }
+    }
+    XrCliToolchainChoice choice = {XR_TOOLCHAIN_SELECTOR_AUTO, compiler};
+    if (provider) {
+        char error[256];
+        if (!xtc_selector_parse(provider, &choice.selector, error, sizeof(error)))
+            return XR_CLI_TOOLCHAIN_CONFIG_INVALID;
+    } else if (preference && !compiler) choice.selector = preference->selector;
+    if (!choice.compiler && preference && (choice.selector == preference->selector ||
+        (choice.selector == XR_TOOLCHAIN_SELECTOR_AUTO && preference->selector == XR_TOOLCHAIN_SELECTOR_MSVC)))
+        choice.compiler = preference->compiler;
+#if !XR_OS_WINDOWS
+    if (!choice.compiler && choice.selector == XR_TOOLCHAIN_SELECTOR_CLANG) choice.compiler = "clang";
+    if (!choice.compiler && choice.selector == XR_TOOLCHAIN_SELECTOR_GCC) choice.compiler = "gcc";
+#endif
+    *output = choice;
+    return XR_CLI_TOOLCHAIN_CONFIG_OK;
+}

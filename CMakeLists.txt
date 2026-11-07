@@ -683,6 +683,8 @@ if(ENABLE_UBSAN)
                 message(FATAL_ERROR "Clang x64 UBSan runtime library is missing")
             endif()
             link_libraries("${_XRAY_WINDOWS_UBSAN_RUNTIME}")
+            add_compile_definitions(
+                XRT_BUILD_UBSAN_WINDOWS_RUNTIME="${_XRAY_WINDOWS_UBSAN_RUNTIME}")
         endif()
     else()
         add_compile_options(
@@ -1076,6 +1078,8 @@ set(XRAY_CLI_SOURCES
     ${XRAY_CLI_ROOT}/xcmd_repl.c
     ${XRAY_CLI_ROOT}/xcmd_run.c
     ${XRAY_CLI_ROOT}/xcmd_build.c
+    ${XRAY_CLI_ROOT}/xcli_lir.c
+    ${XRAY_CLI_ROOT}/xcli_lir_native.c
     ${XRAY_CLI_ROOT}/xcmd_deps.c
     ${XRAY_CLI_ROOT}/xcmd_toolchain.c
     ${XRAY_CLI_ROOT}/xcmd_check.c
@@ -1218,9 +1222,6 @@ if(XR_BUILD_DAP)
     list(APPEND XRAY_CLI_SOURCES ${XRAY_CLI_ROOT}/xcmd_dap.c)
 endif()
 add_executable(xray ${XRAY_CLI_SOURCES})
-if(XR_BUILD_DAP)
-    target_link_libraries(xray PRIVATE xray_dap_current)
-endif()
 target_link_libraries(xray PRIVATE xray_cli_toolchain_config)
 if(TARGET xray_cli_toolchain_update)
     target_link_libraries(xray PRIVATE xray_cli_toolchain_update)
@@ -1235,15 +1236,10 @@ endif()
 
 # The executable links only the single-pipeline libraries; none of them reach
 # the retired analyzer/Xi/Program core.
-target_link_libraries(xray PRIVATE xray_source_api xray_xir_runtime_host xray_frontend_format
-    xray_compile_resources xray_toolchain_process xray_xir_publication xray_xir_native_projection)
-if(WIN32)
-    target_link_libraries(xray PRIVATE xray_xir_native_admission xray_xir_local_toolchain
-        xray_toolchain_dependencies xray_cli_native_probe)
-elseif(XR_XIR_POSIX_SDK_ARCHITECTURE)
-    target_link_libraries(xray PRIVATE xray_xir_native_admission xray_xir_local_toolchain
-        xray_toolchain_dependencies xray_cli_native_probe)
-endif()
+target_link_libraries(xray PRIVATE xray_source_compile xray_frontend_format
+    xray_lir_lower xray_lir_c xray_lir_bytecode xray_native_runtime
+    xray_compile_resources xray_toolchain_process xray_xir_publication
+    xray_xir_workspace xray_host_toolchain)
 
 if(XR_BUILD_MCP)
     target_link_libraries(xray PRIVATE xray_mcp)
@@ -1286,16 +1282,49 @@ message(STATUS "Main executable: xray (${MODULES_ENABLED})")
 add_subdirectory(src/base)
 add_subdirectory(src/lir)
 add_subdirectory(src/runtime/native)
+add_subdirectory(src/vm/register)
 target_link_libraries(xray PRIVATE xray_compile_resources)
 add_subdirectory(src/xir)
-add_subdirectory(src/execution)
 add_subdirectory(src/toolchain)
 include(src/frontend/format/xformatter.cmake)
 target_link_libraries(xray PRIVATE xray_frontend_format)
 include(src/api/xsource_compile.cmake)
-include(cmake/XraySourceSdk.cmake)
-include(cmake/XrayNativeRuntime.cmake)
 include(src/app/toolchain/xir_target.cmake)
+
+add_library(xray_host_toolchain STATIC src/app/toolchain/xtc_host_toolchain.c
+    src/base/xio_policy.c src/base/xfileio.c src/os/${XIR_NATIVE_OS}/fs_${XIR_NATIVE_OS}.c)
+target_link_libraries(xray_host_toolchain PUBLIC xray_toolchain_process xray_xir_target)
+target_include_directories(xray_host_toolchain PUBLIC "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(xray_host_toolchain PUBLIC c_std_11)
+set_target_properties(xray_host_toolchain PROPERTIES C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+target_compile_definitions(xray_host_toolchain PRIVATE ${XIR_NATIVE_DEFINITIONS})
+if(MSVC)
+    target_compile_options(xray_host_toolchain PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(xray_host_toolchain PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+
+set(_native_crt_name "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>")
+set(_native_crt "$<IF:$<STREQUAL:${_native_crt_name},MultiThreaded>,0,$<IF:$<STREQUAL:${_native_crt_name},MultiThreadedDebug>,1,$<IF:$<STREQUAL:${_native_crt_name},MultiThreadedDebugDLL>,3,2>>>")
+set(_native_link_header "#ifndef XRAY_NATIVE_LINK_PATHS_H\n#define XRAY_NATIVE_LINK_PATHS_H\n#define XRT_NATIVE_LIBRARY_COUNT 5\n")
+string(APPEND _native_link_header "#define XRT_NATIVE_CRT ${_native_crt}\n#define XRT_NATIVE_ASAN $<OR:$<BOOL:${ENABLE_ASAN}>,$<BOOL:${ENABLE_SANITIZERS}>>\n#define XRT_NATIVE_UBSAN $<OR:$<BOOL:${ENABLE_UBSAN}>,$<BOOL:${ENABLE_SANITIZERS}>>\n")
+file(TO_CMAKE_PATH "${CMAKE_C_COMPILER}" _native_build_compiler)
+string(APPEND _native_link_header "#define XRT_NATIVE_BUILD_COMPILER \"${_native_build_compiler}\"\n")
+string(APPEND _native_link_header "#define XRT_NATIVE_BUILD_EXECUTABLE \"$<TARGET_FILE:xray>\"\n")
+set(_native_link_targets xray_native_runtime xray_xir_scalar xray_xir_admission xray_xir_declarations xray_compile_resources)
+string(APPEND _native_link_header "static const char *const xrt_native_development_libraries[] = {\n")
+foreach(_native_target IN LISTS _native_link_targets)
+    string(APPEND _native_link_header "    \"$<TARGET_FILE:${_native_target}>\",\n")
+    install(FILES "$<TARGET_FILE:${_native_target}>" DESTINATION lib/xray/native COMPONENT XrayRuntime)
+endforeach()
+string(APPEND _native_link_header "};\nstatic const char *const xrt_native_library_names[] = {\n")
+foreach(_native_target IN LISTS _native_link_targets)
+    string(APPEND _native_link_header "    \"$<TARGET_FILE_NAME:${_native_target}>\",\n")
+endforeach()
+string(APPEND _native_link_header "};\n#endif\n")
+file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/xray_native_link_paths.h" CONTENT "${_native_link_header}")
+install(FILES include/xray_native_runtime.h include/xray_export.h
+    DESTINATION lib/xray/native/include COMPONENT XrayRuntime)
 
 if(BUILD_TESTS)
     enable_testing()
@@ -1321,6 +1350,7 @@ if(BUILD_TESTS)
     # Qualify the current public CLI and its exact installed Core/SDK payload.
     include("${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/xir_public_cli_product.cmake")
     include("${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/cli_usability.cmake")
+    include("${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/lir_commands.cmake")
     include("${CMAKE_CURRENT_SOURCE_DIR}/tests/smoke/smoke.cmake")
 
     if(XRAY_WINDOWS_ASAN_RUNTIME_DIR)
@@ -4375,13 +4405,7 @@ if(XRAY_BUNDLE_ZIG)
     endif()
 endif()
 
-# Publish Checked library components and verify any independently installed SDK.
-configure_file("${CMAKE_SOURCE_DIR}/cmake/VerifyInstalledXirComponents.cmake.in"
-    "${_XRAY_INSTALL_METADATA_DIR}/VerifyInstalledXirComponents.cmake" @ONLY)
-install(SCRIPT "${_XRAY_INSTALL_METADATA_DIR}/VerifyInstalledXirComponents.cmake" ALL_COMPONENTS)
-
-# Run after component payload rules.  ALL_COMPONENTS also gives a Core-only or
-# SDK-only staging install an exact manifest of what is actually present.
+# Run after component payload rules so staged installs record their actual files.
 install(SCRIPT "${_XRAY_INSTALL_METADATA_DIR}/GeneratePayloadManifest.cmake"
     ALL_COMPONENTS
 )
@@ -4395,7 +4419,7 @@ set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
 set(CPACK_PACKAGE_VENDOR "Xray Language")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Xray Programming Language")
 set(CPACK_PACKAGE_HOMEPAGE_URL "https://xray-lang.org")
-set(CPACK_COMPONENTS_ALL XrayCore XraySDK XrayToolchainIntegration)
+set(CPACK_COMPONENTS_ALL XrayCore XrayRuntime XrayToolchainIntegration)
 if(XRAY_BUNDLE_ZIG)
     list(APPEND CPACK_COMPONENTS_ALL XrayBundledZig)
 endif()

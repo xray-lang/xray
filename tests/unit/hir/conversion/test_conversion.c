@@ -10,7 +10,6 @@
 #include "xir/xxir_types.h"
 #include "xir/xxir_construction.h"
 #include "xir/xxir_generic.h"
-#include "xir/xxir_vm.h"
 #include "frontend/parser/xparse.h"
 #include "toolchain/xcompiler_session.h"
 #include <stdio.h>
@@ -138,31 +137,7 @@ static XrHirConversion retired_conversion(void) {
     xr_compile_session_free(session);xr_program_destroy(program);CHECK(held(owner.resources)==before);xr_compile_resources_release(owner.resources);
     return conversion;
 }
-static void built_after_retirement(void) {
-    XrHirConversion conversion=retired_conversion();XrXirCompileContext receiver=context_new();uint64_t before=held(receiver.resources);
-    XrXirInstruction ret={.op=XR_XIR_RETURN},answer[]={
-        {.op=XR_XIR_CONST_INT,.type=XR_XIR_I8,.immediate=42},xr_hir_conversion_instruction(&conversion,0),{.op=XR_XIR_RETURN,.args={1}}};
-    XrXirBlock one={0,1,0,0},three={0,3,0,0};
-    XrXirFunction functions[]={
-        {"$init",5,NULL,0,XR_XIR_UNIT,&one,1,&ret,1,NULL,0,XR_XIR_NEVER,0,NULL},
-        {"entry",5,NULL,0,XR_XIR_I64,&three,1,answer,3,NULL,0,XR_XIR_NEVER,0,NULL}};
-    XrXirFunctionIdentity identities[2]={{0}};
-    XrXirSourceModule module={.name="conversion",.name_length=10,.storage=XR_XIR_MODULE_FRESH_STORAGE};
-    XrXirDeclarations declarations={&module,1,identities,NULL,0,NULL,0,0,1,NULL};
-    XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=2,.declarations=&declarations,.linkage_kind=XR_XIR_PROGRAM};
-    XrXirConstruction *construction=NULL;
-    CHECK(xr_xir_compile_construction_new_v5(&receiver,NULL,&(XrXirConstructionSpec){NULL,0,NULL,0,NULL},&(XrXirSlotFacts){NULL,0},&construction, NULL)==XR_XIR_OK);
-    XrXirArtifact *checked_artifact=NULL,*closed=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_check_v2(&receiver,&built,construction,&checked_artifact,NULL)==XR_XIR_OK);xr_xir_compile_construction_free(construction);
-    CHECK(xr_xir_compile_specialize(checked_artifact,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked_artifact);
-    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
-    XrXirRunContext run={1024,1024,0,0,0,0};XrXirValue value={0};
-    CHECK(xr_xir_compile_vm_run(lowered,1,&run,NULL,0,&value)==XR_XIR_RUN_OK && value.type==XR_XIR_I64 && value.payload==42);
-    CHECK(!run.live_bytes && run.allocations==run.frees);
-    xr_xir_value_drop(&value);xr_xir_compile_artifact_free(lowered);CHECK(held(receiver.resources)==before);xr_compile_resources_release(receiver.resources);
-}
 int main(void) {
-    relations();open_result();controls();built_after_retirement();
-    puts("Typed conversion HIR: complete contextual rules, preserved authority, controls and retired syntax to Built/VM PASS");return 0;
+    relations();open_result();controls();(void)retired_conversion();
+    puts("Typed conversion HIR: complete contextual rules, preserved authority, controls and retired syntax to HIR PASS");return 0;
 }

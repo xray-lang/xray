@@ -10,7 +10,6 @@
 #include "xir/xxir_types.h"
 #include "xir/xxir_construction.h"
 #include "xir/xxir_generic.h"
-#include "xir/xxir_vm.h"
 #include "frontend/parser/xparse.h"
 #include "toolchain/xcompiler_session.h"
 #include <stdio.h>
@@ -81,42 +80,7 @@ static XrHirBoolean retired_boolean(void) {
     CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes==before.held_bytes);
     xr_compile_resources_release(resources);return typed;
 }
-static void built_after_retirement(void) {
-    XrHirBoolean typed=retired_boolean();CHECK(typed.operation==XR_HIR_BOOLEAN_NOT && typed.type==XR_XIR_BOOL);
-    const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};
-    XrXirCompileContext receiver={.limits=xr_xir_compile_default_limits()};
-    CHECK(xr_compile_resources_new(&limits,&receiver.resources)==XR_COMPILE_RESOURCE_OK);
-    XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(receiver.resources,&before)==XR_COMPILE_RESOURCE_OK);
-    XrXirInstruction ret={.op=XR_XIR_RETURN},logic[]={
-        {.op=XR_XIR_BRANCH,.args={0},.targets={1,2}},
-        {.op=XR_XIR_CONST_BOOL,.type=typed.type,.immediate=0},{.op=XR_XIR_RETURN,.args={2}},
-        {.op=XR_XIR_CONST_BOOL,.type=typed.type,.immediate=1},{.op=XR_XIR_RETURN,.args={4}}};
-    XrXirInstruction entry[]={{.op=XR_XIR_CONST_INT,.type=XR_XIR_I64},{.op=XR_XIR_RETURN,.args={0}}};
-    XrXirBlock one={0,1,0,0},body[]={{0,1,0,0},{1,2,0,0},{3,2,0,0}},main_body={0,2,0,0};
-    XrXirFunction functions[]={
-        {"$init",5,NULL,0,XR_XIR_UNIT,&one,1,&ret,1,NULL,0,XR_XIR_NEVER,0,NULL},
-        {"negate",6,&typed.type,1,typed.type,body,3,logic,5,NULL,0,XR_XIR_NEVER,0,NULL},
-        {"entry",5,NULL,0,XR_XIR_I64,&main_body,1,entry,2,NULL,0,XR_XIR_NEVER,0,NULL}};
-    XrXirFunctionIdentity identities[3]={{0}};XrXirSourceModule module={.name="boolean",.name_length=7,.storage=XR_XIR_MODULE_FRESH_STORAGE};
-    XrXirDeclarations declarations={&module,1,identities,NULL,0,NULL,0,0,2,NULL};
-    XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=3,.declarations=&declarations,.linkage_kind=XR_XIR_PROGRAM};
-    XrXirConstruction *construction=NULL;
-    CHECK(xr_xir_compile_construction_new_v5(&receiver,NULL,&(XrXirConstructionSpec){NULL,0,NULL,0,NULL},&(XrXirSlotFacts){NULL,0},&construction, NULL)==XR_XIR_OK);
-    XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_check_v2(&receiver,&built,construction,&checked,NULL)==XR_XIR_OK);xr_xir_compile_construction_free(construction);
-    CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
-    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
-    for(int64_t input=0;input<=1;++input) {
-        XrXirRunContext run={1024,1024,0,0,0,0};XrXirValue argument={XR_XIR_BOOL,0,input},result={0};
-        CHECK(xr_xir_compile_vm_run(lowered,1,&run,&argument,1,&result)==XR_XIR_RUN_OK && result.type==XR_XIR_BOOL && result.payload==!input);
-        CHECK(!run.live_bytes && run.allocations==run.frees);xr_xir_value_drop(&result);
-    }
-    xr_xir_compile_artifact_free(lowered);
-    CHECK(xr_compile_resources_stats(receiver.resources,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes==before.held_bytes);
-    xr_compile_resources_release(receiver.resources);
-}
 int main(void) {
-    relations();controls();built_after_retirement();
-    puts("Boolean HIR: all operand roles, unchanged refusals, request failure and retired facts to Built/VM PASS");return 0;
+    relations();controls();(void)retired_boolean();
+    puts("Boolean HIR: all operand roles, unchanged refusals, request failure and retired facts to HIR PASS");return 0;
 }

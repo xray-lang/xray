@@ -26,12 +26,12 @@ static const XrCliOptionSpec repl_options[] = {
 
 static const XrCliOptionSpec run_options[] = {
     {"sandbox", 0, XR_CLI_VALUE_NONE, false, false, NULL,
-     "Apply finite compilation and execution resource limits"},
+     "Temporarily unavailable"},
     XR_CLI_OPT_END};
 
 static const XrCliOptionSpec test_options[] = {
     {"sandbox", 0, XR_CLI_VALUE_NONE, false, false, NULL,
-     "Apply finite compilation and execution resource limits"},
+     "Temporarily unavailable"},
     {"verbose", 'v', XR_CLI_VALUE_NONE, false, false, NULL, "Verbose output"},
     {"fail-fast", 'F', XR_CLI_VALUE_NONE, false, false, NULL, "Stop on first failure"},
     {"filter", 'f', XR_CLI_VALUE_STRING, false, false, "PATTERN", "Only run matching tests"},
@@ -137,12 +137,12 @@ static const XrCliOptionSpec mcp_options[] = {
 static XrCliCommandSpec cli_commands[] = {
     /* Execution commands */
     {"run", "Run one exact .xr source entry", NULL, run_options, 1, 1, true, false, NULL, NULL, 0},
-    {"repl", "Interactive Source session", NULL, repl_options, 0, 0, false, false, NULL, NULL, 0},
-    {"test", "Run tests", NULL, test_options, 0, -1, false, false, NULL, NULL, 0},
+    {"repl", "Temporarily unavailable", NULL, repl_options, 0, 0, false, false, NULL, NULL, 0},
+    {"test", "Temporarily unavailable", NULL, test_options, 0, -1, false, false, NULL, NULL, 0},
     {"check", "Syntax check", NULL, check_options, 0, -1, false, false, NULL, NULL, 0},
     {"fmt", "Format source code", NULL, fmt_options, 0, -1, false, false, NULL, NULL, 0},
 #ifdef XR_HAS_DAP
-    {"dap","Debug current source programs over stdio or loopback TCP",NULL,dap_options,0,0,false,false,NULL,NULL,0},
+    {"dap","Temporarily unavailable",NULL,dap_options,0,0,false,false,NULL,NULL,0},
 #endif
     /* Artifact commands */
     {"build", "Compile to a native binary", NULL, build_options, 1, 1, false, false, NULL, NULL, 0},

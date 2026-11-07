@@ -10,7 +10,6 @@
 #include "xir/xxir_types.h"
 #include "xir/xxir_construction.h"
 #include "xir/xxir_generic.h"
-#include "xir/xxir_vm.h"
 #include "frontend/parser/xparse.h"
 #include "toolchain/xcompiler_session.h"
 #include "base/xmalloc.h"
@@ -136,29 +135,4 @@ static XrHirNullable retired_node(void) {
     memset(&types,0xa5,sizeof(types));memset(&input,0xa5,sizeof(input));memset(&context,0xa5,sizeof(context));xr_program_destroy(program);xr_compile_session_free(session);
     CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes==before.held_bytes);xr_compile_resources_release(resources);return node;
 }
-static void built_after_retirement(void) {
-    XrHirNullable node=retired_node();CHECK(node.kind==XR_HIR_NULLABLE_ELEMENT && node.result==XR_XIR_I64 && node.origin.module==3);
-    const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};XrXirCompileContext receiver={.limits=xr_xir_compile_default_limits()};
-    CHECK(xr_compile_resources_new(&limits,&receiver.resources)==XR_COMPILE_RESOURCE_OK);XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(receiver.resources,&before)==XR_COMPILE_RESOURCE_OK);
-    XrXirTypeNode type={.kind=XR_XIR_TYPE_NULLABLE,.element=XR_XIR_I64};XrXirTypes types={.nodes=&type,.count=1};
-    XrXirInstruction ret={.op=XR_XIR_RETURN},ops[]={{.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=41},
-        {.op=XR_XIR_NULLABLE_SOME,.type=(XrXirType)256,.args={0}},xr_hir_nullable_instruction(&node,1),{.op=XR_XIR_RETURN,.args={2}}};
-    XrXirInstruction entry[]={{.op=XR_XIR_CONST_INT,.type=XR_XIR_I64},{.op=XR_XIR_RETURN,.args={0}}};XrXirBlock one={0,1,0,0},body={0,4,0,0},main_body={0,2,0,0};
-    XrXirFunction functions[]={{"$init",5,NULL,0,XR_XIR_UNIT,&one,1,&ret,1,NULL,0,XR_XIR_NEVER,0,NULL},
-        {"nullable",8,NULL,0,XR_XIR_I64,&body,1,ops,4,NULL,0,XR_XIR_NEVER,0,NULL},{"entry",5,NULL,0,XR_XIR_I64,&main_body,1,entry,2,NULL,0,XR_XIR_NEVER,0,NULL}};
-    XrXirFunctionIdentity identities[3]={{0}};XrXirSourceModule module={.name="nullable",.name_length=8,.storage=XR_XIR_MODULE_FRESH_STORAGE};
-    XrXirDeclarations declarations={&module,1,identities,NULL,0,NULL,0,0,1,NULL};XrXirModule built={.stage=XR_XIR_BUILT,.types=&types,.functions=functions,.function_count=3,.declarations=&declarations,.linkage_kind=XR_XIR_PROGRAM};
-    XrXirConstruction *construction=NULL;CHECK(xr_xir_compile_construction_new_v5(&receiver,NULL,&(XrXirConstructionSpec){NULL,0,NULL,0,NULL},&(XrXirSlotFacts){NULL,0},&construction, NULL)==XR_XIR_OK);
-    XrXirArtifact *artifact=NULL,*closed=NULL,*lowered=NULL;CHECK(xr_xir_compile_check_v2(&receiver,&built,construction,&artifact,NULL)==XR_XIR_OK);xr_xir_compile_construction_free(construction);
-    CHECK(xr_xir_compile_specialize(artifact,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(artifact);const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
-    XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);
-    XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
-    XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);xr_xir_compile_program_drop(program);
-    CHECK(xr_xir_instance_start(instance,1,NULL,0)==XR_XIR_CALL_READY);XrXirCallResult outcome={0};
-    for(unsigned ticks=0;;++ticks) {CHECK(ticks<1000);outcome=xr_xir_instance_poll_bounded(instance,32).outcome;if(outcome.status!=XR_XIR_CALL_READY)break;}
-    XrXirValue value={0};CHECK(outcome.status==XR_XIR_CALL_RETURNED && xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED && value.type==XR_XIR_I64 && value.payload==41);
-    xr_xir_value_drop(&value);CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
-    CHECK(xr_compile_resources_stats(receiver.resources,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes==before.held_bytes);xr_compile_resources_release(receiver.resources);
-}
-int main(void) {relations();interning();controls();built_after_retirement();puts("Nullable HIR: outer-layer relations, real default, growing interner, request failures and retired Built/VM PASS");return 0;}
+int main(void) {relations();interning();controls();(void)retired_node();puts("Nullable HIR: outer-layer relations, real default, growing interner, request failures and retired HIR PASS");return 0;}

@@ -172,11 +172,10 @@ static const char *self_delegation(XrSelfProvider provider, const char *action) 
     bool update = strcmp(action, "update") == 0;
     switch (provider) {
         case XR_SELF_PROVIDER_DEB:
-            return update ? "sudo apt update && sudo apt install --only-upgrade xray-lang "
-                            "xray-lang-sdk"
+            return update ? "sudo apt update && sudo apt install --only-upgrade xray-lang"
                           : "sudo apt remove xray-lang-dev xray-lang-sdk xray-lang";
         case XR_SELF_PROVIDER_RPM:
-            return update ? "sudo dnf upgrade xray-lang xray-lang-sdk"
+            return update ? "sudo dnf upgrade xray-lang"
                           : "sudo dnf remove xray-lang-full xray-lang-dev xray-lang-sdk xray-lang";
         case XR_SELF_PROVIDER_MACOS_PKG:
             return update ? "download and run the signed Xray macOS PKG"

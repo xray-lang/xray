@@ -17,6 +17,3 @@ set_tests_properties(test_xir_effect_analysis_context_controls PROPERTIES TIMEOU
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 include("${CMAKE_CURRENT_LIST_DIR}/effect_ordinary_environment.cmake")
-add_test(NAME test_xir_source_enum_ref_places COMMAND test_xir_source_query --enum-ref-permission)
-set_tests_properties(test_xir_source_enum_ref_places PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE
-    LABELS "unit;xir;ownership;metadata;execution")
