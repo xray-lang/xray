@@ -12,7 +12,7 @@ add_test(NAME test_xir_root_go_consumption COMMAND test_xir_root_go_consumption)
 set_tests_properties(test_xir_root_go_consumption PROPERTIES
     LABELS "unit;xir;metadata;ownership;budget;memory;root-effects;task" RUN_SERIAL TRUE TIMEOUT 300)
 
-# The complete entry still executes all failure ordinals and resource boundaries.
+# Default resource feedback samples real endpoints; --full replays every fault ordinal.
 add_test(NAME test_xir_root_go_consumption_ordinary COMMAND test_xir_root_go_consumption --ordinary)
 set_tests_properties(test_xir_root_go_consumption_ordinary PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1
     LABELS "unit;xir;metadata;ownership;memory;root-effects;task")

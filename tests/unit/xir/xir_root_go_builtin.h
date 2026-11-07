@@ -4,7 +4,7 @@
 #define XIR_ROOT_GO_BUILTIN_H
 static XrXirStatus go_shape_check(const XrXirCompileContext *context, unsigned mode,
     bool spawn, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
-    XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_TASK,.element=XR_XIR_I64},
+    XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_TASK,.element=XR_XIR_I64,.result=XR_XIR_NEVER},
         {.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64},
         {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_NO_SUSPEND|XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind=XR_XIR_TYPE_CELL,.element=(XrXirType)257}};

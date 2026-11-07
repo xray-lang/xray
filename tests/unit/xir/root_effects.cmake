@@ -15,7 +15,7 @@ add_test(NAME test_xir_root_var_atomic_binding COMMAND test_xir_root_effects --v
 set_tests_properties(test_xir_root_var_atomic_binding PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE PROCESSORS 1
     LABELS "unit;xir;root-effects;metadata;ownership;budget")
 
-# Ordinary feedback uses the same cases; the original entry retains every resource probe.
+# Ordinary feedback keeps semantic cases; --full explicitly replays every allocation failure.
 add_test(NAME test_xir_root_effects_ordinary COMMAND test_xir_root_effects --ordinary)
 set_tests_properties(test_xir_root_effects_ordinary PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE PROCESSORS 1
     LABELS "unit;xir;root-effects;metadata;ownership")

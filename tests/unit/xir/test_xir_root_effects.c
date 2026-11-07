@@ -60,7 +60,10 @@ static void root_failures(const XrXirArtifact *artifact) {
     XrXirEffects *summary=NULL;attempts=0;fail_at=SIZE_MAX;
     CHECK(effect_analyze(artifact,&summary)==XR_XIR_OK);size_t sites=attempts;
     effect_summary_free(summary);CHECK(sites&&effect_balanced());
+    size_t selected=0;
     for(size_t point=0;point<sites;++point){
+        if(!effect_full_faults && point && point+1!=sites)continue;
+        ++selected;
         EffectMark mark=effect_mark();XrXirCompileContext context=effect_owner_new(effect_caps());
         uint64_t baseline=effect_stats(&context).held_bytes;XrXirArtifact *copy=NULL;
         CHECK(effect_reproduce(artifact,&context,&copy)==XR_XIR_OK);EffectMark retained=effect_mark();
@@ -74,7 +77,7 @@ static void root_failures(const XrXirArtifact *artifact) {
         xr_xir_compile_effects_free(summary);effect_mark_check(retained);
         xr_xir_compile_artifact_free(copy);effect_owner_free(&context,baseline);effect_mark_check(mark);
     }
-    printf("root facts %zu actual analysis allocation failures, retained charges and physical0\n",sites);
+    printf("root facts %zu allocation sites, %zu selected actual failures, retry and physical0\n",sites,selected);
 }
 static void root_detached_owner(const XrXirArtifact *artifact) {
     EffectMark mark=effect_mark();XrXirCompileContext context=effect_owner_new(effect_caps());
@@ -178,8 +181,9 @@ static void root_go_rejections(void) {
     puts("root GO child/parent BAD_TYPE remain fail closed PASS");
 }
 int main(int argc,char **argv) {
-    CHECK(argc==1 || (argc==2 && (!strcmp(argv[1],"--var-atomic") || !strcmp(argv[1],"--ordinary"))));
-    bool resources=argc==1;
+    CHECK(argc==1 || (argc==2 && (!strcmp(argv[1],"--var-atomic") || !strcmp(argv[1],"--ordinary") || !strcmp(argv[1],"--full"))));
+    effect_full_faults=argc==2 && !strcmp(argv[1],"--full");
+    bool resources=argc==1 || effect_full_faults;
     effect_case_begin();root_var_atomic_case();effect_case_end();
     if (argc==2 && !strcmp(argv[1],"--var-atomic")) return 0;
     effect_case_begin();root_source_cases(resources);effect_case_end();

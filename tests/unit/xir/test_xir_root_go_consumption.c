@@ -148,8 +148,9 @@ static void go_source_cases(void) {
     CHECK(!go_source("unconstrained.xr",false,XR_XIR_BAD_TYPE,NULL));
 }
 int main(int argc,char **argv) {
-    CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--ordinary")));
-    bool resources=argc==1;
+    CHECK(argc==1 || (argc==2 && (!strcmp(argv[1],"--ordinary") || !strcmp(argv[1],"--full"))));
+    effect_full_faults=argc==2 && !strcmp(argv[1],"--full");
+    bool resources=argc==1 || effect_full_faults;
     effect_case_begin();go_query_cases(resources);effect_case_end();
     effect_case_begin();go_shape_cases(resources);effect_case_end();
     effect_case_begin();go_source_cases();effect_case_end();

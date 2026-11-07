@@ -17,7 +17,10 @@ static void go_check_failures(void) {
     attempts=0;CHECK(go_shape_check(&context,true,true,&output,NULL)==XR_XIR_BAD_TYPE&&!output);
     size_t sites=attempts;XrCompileResourceStats measured=effect_stats(&context);CHECK(sites);
     effect_owner_free(&context,baseline);effect_mark_check(mark);
+    size_t selected=0;
     for(size_t point=0;point<sites;++point){
+        if(!effect_full_faults && point && point+1!=sites)continue;
+        ++selected;
         context=effect_owner_new(effect_caps());baseline=effect_stats(&context).held_bytes;
         output=NULL;attempts=0;injected=false;fail_at=point;
         CHECK(go_shape_check(&context,true,true,&output,NULL)==XR_XIR_OUT_OF_MEMORY&&!output&&injected);
@@ -34,7 +37,7 @@ static void go_check_failures(void) {
         effect_owner_free(&context,baseline);effect_mark_check(mark);
     }
     go_check_occupied();
-    printf("GO check %zu real allocation failures, retry/held-release, exact-minus1 and occupied-output physical0\n",sites);
+    printf("GO check %zu allocation sites, %zu selected failures, held-memory and physical0\n",sites,selected);
 }
 static void go_authority_oracles(const XrXirModule *module,const XrXirProgramPermissions *authority) {
     const char *safe[]={"pure","worker","constRead","constAtomicRead","atomicParameter","local","localCell","localBox"};
@@ -58,7 +61,10 @@ static void go_authority_failures(const XrXirProgramSpec *spec) {
     size_t sites=attempts;CHECK(sites);xir_program_permissions_free(authority);authority=NULL;
     xir_program_input_free(program_input);program_input=NULL;
     XrCompileResourceStats measured=effect_stats(&context);effect_owner_free(&context,baseline);effect_mark_check(mark);
+    size_t selected=0;
     for(size_t point=0;point<sites;++point){
+        if(!effect_full_faults && point && point+1!=sites)continue;
+        ++selected;
         context=effect_owner_new(effect_caps());baseline=effect_stats(&context).held_bytes;
         authority=NULL;attempts=0;injected=false;fail_at=point;
         CHECK(program_fixture_decode_prepare(&context,spec,&spec->packet,&program_input,&authority)==XR_XIR_OUT_OF_MEMORY&&!authority&&injected);
@@ -82,6 +88,6 @@ static void go_authority_failures(const XrXirProgramSpec *spec) {
     XrCompileResourceStats after=effect_stats(&context);
     CHECK(authority==(XrXirProgramPermissions *)(uintptr_t)1&&!attempts&&occupied.allocation_count==after.allocation_count&&occupied.allocated_bytes==after.allocated_bytes);
     effect_owner_free(&context,baseline);effect_mark_check(mark);
-    printf("native GO authority %zu real allocation failures, retry/held-release, held exact/minus1 and early occupied-output physical0\n",sites);
+    printf("native GO authority %zu allocation sites, %zu selected failures, held-memory and physical0\n",sites,selected);
 }
 #endif

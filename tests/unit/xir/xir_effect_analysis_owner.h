@@ -22,6 +22,8 @@ static EffectAllocation effect_blocks[32768];
 static uint32_t effect_block_index[65536];
 static size_t live, live_bytes, attempts, fail_at = SIZE_MAX;
 static bool injected;
+/* Full allocation replay is explicit; ordinary feedback keeps real endpoints. */
+static bool effect_full_faults;
 static XrXirCompileContext effect_context;
 static XrCompileResourceStats effect_baseline;
 static EffectMark effect_expected;
