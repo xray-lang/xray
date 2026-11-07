@@ -149,10 +149,9 @@ def main():
             crt = {'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd',
                    'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd'}[args.msvc_runtime]
             flags = ['/nologo', '/std:c++17' if cpp else '/std:c11', '/W4', '/WX', '/utf-8', crt, '/O2',
-                     '/fp:precise', '/I' + str(args.include), '/I' + str(work)]
-            if 'clang' in args.compiler.name.lower():
-                flags += ['/clang:-ffp-contract=off']
-            else:
+                     '/I' + str(args.include), '/I' + str(work)]
+            flags += _f64_options(args.compiler, args.kind)
+            if 'clang' not in args.compiler.name.lower():
                 # This input deliberately produces IEEE infinities and NaN by
                 # dividing by zero. Keep every other warning fatal.
                 flags += ['/wd4723']
