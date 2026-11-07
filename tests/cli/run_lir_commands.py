@@ -121,13 +121,13 @@ def main() -> None:
     )
     for name, diagnostic in rejected_effects:
         source = effects / (name + ".xr")
+        destination = work / (name + ".c")
+        destination.write_bytes(sentinel)
         for command in ("check", "run", "build"):
-            destination = work / (name + ".c")
-            destination.write_bytes(sentinel)
             options = ["--c-only", "-o", destination] if command == "build" else []
             refused = run(name + "-" + command, [binary, command, source, *options], 1)
             assert not refused.stdout and diagnostic in refused.stderr, (name, command)
-            assert destination.read_bytes() == sentinel, (name, command)
+        assert destination.read_bytes() == sentinel, name
 
     for command in ("repl", "dap", "test"):
         refused = run("unavailable-" + command, [binary, command], 1)

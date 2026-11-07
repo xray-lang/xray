@@ -123,6 +123,9 @@ jobs:
             build/Testing/Temporary/LastTest.log
             build/smoke/
             build/CMakeCache.txt
+            build/lir-cli-commands/**/result.json
+            build/lir-cli-commands/**/*.stdout
+            build/lir-cli-commands/**/*.stderr
 
   scalar-performance:
     if: github.event_name == 'workflow_dispatch' && inputs.scalar_performance
