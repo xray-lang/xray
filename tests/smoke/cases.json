@@ -230,7 +230,7 @@
       "stdout": "tests/smoke/expected/atomic.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/05-concurrency/atomic.xr:8:7: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/05-concurrency/atomic.xr:8:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
       }
     },
     {
@@ -243,7 +243,7 @@
       "stdout_channels": "tests/smoke/expected/channels-catalog.json",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/05-concurrency/channels.xr:8:7: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/05-concurrency/channels.xr:8:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
       }
     },
     {
@@ -269,7 +269,7 @@
       "stdout_traces": "tests/smoke/expected/select_and_scope-traces.json",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/05-concurrency/select_and_scope.xr:9:7: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/05-concurrency/select_and_scope.xr:9:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
       }
     },
     {
@@ -282,7 +282,7 @@
       "stdout_traces": "tests/smoke/expected/shared_data-traces.json",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/05-concurrency/shared_data.xr:11:7: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/05-concurrency/shared_data.xr:11:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
       }
     },
     {
@@ -322,7 +322,7 @@
       },
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/07-advanced/crypto_entropy.xr:2:7: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/07-advanced/crypto_entropy.xr:2:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
       }
     },
     {
@@ -399,7 +399,7 @@
       "stdout": "tests/smoke/expected/readme_concurrency.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "README.md#xray-3:1:7: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "first_diagnostic": "README.md#xray-3:1:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
       }
     },
     {
@@ -435,7 +435,7 @@
       "stdout": "tests/smoke/expected/readme_concurrency.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "README_CN.md#xray-3:1:7: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "first_diagnostic": "README_CN.md#xray-3:1:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
       }
     },
     {
@@ -467,7 +467,7 @@
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/compress/compress.xr:2:1: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "first_diagnostic": "stdlib/compress/compress.xr:2:1: module slots other than immutable scalar constants is not supported by LIR lowering yet"
       }
     },
     {
@@ -479,7 +479,7 @@
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/crypto/crypto.xr:2:1: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "first_diagnostic": "stdlib/crypto/crypto.xr:2:1: module slots other than immutable scalar constants is not supported by LIR lowering yet"
       }
     },
     {
@@ -515,7 +515,7 @@
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/encoding/encoding.xr:2:1: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "first_diagnostic": "stdlib/encoding/encoding.xr:2:1: module slots other than immutable scalar constants is not supported by LIR lowering yet"
       }
     },
     {
@@ -570,13 +570,9 @@
       "id": "stdlib/math/math.xr",
       "path": "stdlib/math/math.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/one.txt",
-      "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/math/math.xr:2:1: module slots other than immutable i64 literals is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "stdlib/mem/mem.xr",
@@ -747,7 +743,7 @@
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/url/url.xr:2:1: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "first_diagnostic": "stdlib/url/url.xr:2:1: module slots other than immutable scalar constants is not supported by LIR lowering yet"
       }
     },
     {
@@ -759,7 +755,7 @@
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/url/url.xr:2:1: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "first_diagnostic": "stdlib/url/url.xr:2:1: module slots other than immutable scalar constants is not supported by LIR lowering yet"
       }
     },
     {
@@ -964,7 +960,7 @@
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/encoding/encoding.xr:2:1: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "first_diagnostic": "stdlib/encoding/encoding.xr:2:1: module slots other than immutable scalar constants is not supported by LIR lowering yet"
       }
     },
     {
@@ -980,7 +976,7 @@
       },
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/07-advanced/crypto_entropy.xr:2:7: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/07-advanced/crypto_entropy.xr:2:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
       }
     },
     {
@@ -992,7 +988,7 @@
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/crypto/crypto.xr:2:1: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "first_diagnostic": "stdlib/crypto/crypto.xr:2:1: module slots other than immutable scalar constants is not supported by LIR lowering yet"
       }
     },
     {
@@ -1016,7 +1012,7 @@
       "stdout": "tests/smoke/expected/atomic.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/05-concurrency/atomic.xr:8:7: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/05-concurrency/atomic.xr:8:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
       }
     },
     {
@@ -1029,7 +1025,7 @@
       "stdout_channels": "tests/smoke/expected/channels-catalog.json",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/05-concurrency/channels.xr:8:7: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/05-concurrency/channels.xr:8:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
       }
     },
     {
@@ -1055,7 +1051,7 @@
       "stdout_traces": "tests/smoke/expected/select_and_scope-traces.json",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/05-concurrency/select_and_scope.xr:9:7: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/05-concurrency/select_and_scope.xr:9:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
       }
     },
     {
@@ -1068,7 +1064,7 @@
       "stdout_traces": "tests/smoke/expected/shared_data-traces.json",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/05-concurrency/shared_data.xr:11:7: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/05-concurrency/shared_data.xr:11:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
       }
     },
     {
@@ -1080,7 +1076,7 @@
       "stdout": "tests/smoke/expected/readme_concurrency.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "README.md#xray-3:1:7: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "first_diagnostic": "README.md#xray-3:1:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
       }
     },
     {
@@ -1092,20 +1088,16 @@
       "stdout": "tests/smoke/expected/readme_concurrency.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "README_CN.md#xray-3:1:7: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "first_diagnostic": "README_CN.md#xray-3:1:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
       }
     },
     {
       "id": "native:stdlib/math/math.xr",
       "path": "stdlib/math/math.xr",
       "mode": "build-run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/one.txt",
-      "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/math/math.xr:2:1: module slots other than immutable i64 literals is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "native:stdlib/compress/compress.xr",
@@ -1116,7 +1108,7 @@
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/compress/compress.xr:2:1: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "first_diagnostic": "stdlib/compress/compress.xr:2:1: module slots other than immutable scalar constants is not supported by LIR lowering yet"
       }
     },
     {
@@ -1380,7 +1372,7 @@
       "exit_code": 1,
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "tests/smoke/inputs/regex_crypto_compress.xr:4:1: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "first_diagnostic": "tests/smoke/inputs/regex_crypto_compress.xr:4:1: module slots other than immutable scalar constants is not supported by LIR lowering yet"
       }
     },
     {
@@ -1392,7 +1384,7 @@
       "exit_code": 1,
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "tests/smoke/inputs/regex_crypto_compress.xr:4:1: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "first_diagnostic": "tests/smoke/inputs/regex_crypto_compress.xr:4:1: module slots other than immutable scalar constants is not supported by LIR lowering yet"
       }
     }
   ]

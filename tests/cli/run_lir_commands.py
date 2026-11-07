@@ -43,7 +43,8 @@ def main() -> None:
         return child
 
     expected = {"hello": b"42\n", "call": b"42\n", "unicode": "你好\n".encode(),
-                "f64": b"3.75\n", "instance_growth": b"1\n" * 8}
+                "f64": b"3.75\n", "instance_growth": b"1\n" * 8,
+                "module_scalar_constants": b"1\n"}
     generated = {}
     capacity_cases = (
         ("many_functions",
@@ -92,6 +93,14 @@ def main() -> None:
         run("invalid-" + path.suffix[1:],
             [binary, "build", fixtures / "invalid.xr", *flag, "-o", path], 1)
         assert path.read_bytes() == sentinel
+
+    for name in ("constant_div_zero", "constant_conversion_range"):
+        source = fixtures / (name + ".xr")
+        refused = run(name + "-vm", [binary, "run", source], 1)
+        assert not refused.stdout and b"constant scalar initializer" in refused.stderr
+        executable = work / (name + (".exe" if os.name == "nt" else ""))
+        refused = run(name + "-build", [binary, "build", source, "-o", executable], 1)
+        assert not executable.exists() and b"constant scalar initializer" in refused.stderr
 
     for command in ("repl", "dap", "test"):
         refused = run("unavailable-" + command, [binary, command], 1)

@@ -75,6 +75,23 @@ static void supported_length(void) {
     }
     source_fixture_free(&fixture);
 }
+static void constant_initializer_failures(void) {
+    SourceFixture fixture = source_fixture(
+        "const n=6*7\nconst f=(n as f64)/2.0\nconst b=f>20.0\nprint(n)\n");
+    attempts = 0;
+    fail_at = SIZE_MAX;
+    OK(run(&fixture));
+    size_t total = attempts;
+    CHECK(total > 10);
+    for (size_t point = 0; point < total; ++point) {
+        attempts = 0;
+        fail_at = point;
+        CHECK(run(&fixture) == XR_LIR_OUT_OF_MEMORY);
+    }
+    fail_at = SIZE_MAX;
+    OK(run(&fixture));
+    source_fixture_free(&fixture);
+}
 static void diagnostic_copy_failure(void) {
     SourceFixture fixture = source_fixture(
         "struct Pair{x:i64}\nfn answer()->i64{const p=Pair{x:42}\nreturn p.x}\nprint(answer())\n");
@@ -407,6 +424,7 @@ int main(void) {
     }
     source_fixture_free(&fixture);
     supported_length();
+    constant_initializer_failures();
     diagnostic_copy_failure();
     literal_structure();
     CHECK(!lower_live && !lower_bytes);

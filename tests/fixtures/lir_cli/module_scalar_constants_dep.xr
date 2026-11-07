@@ -1,0 +1,3 @@
+export const base: i64 = 6 * 7
+export const fraction: f64 = (base as f64) / 4.0
+export const enabled: bool = fraction > 10.0

@@ -16,6 +16,7 @@
 #include "../xir/xxir_source_query.h"
 #include "../xir/xxir_generic.h"
 #include "../xir/xxir_types.h"
+#include "../xir/xxir_float.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include <stdio.h>
@@ -483,25 +484,239 @@ static bool lower_modules(Lower *c) {
     }
     return true;
 }
+typedef struct LowerConstant {
+    uint64_t bits;
+    XrXirType type;
+    bool known;
+} LowerConstant;
+
+static XrLirPredicate lower_predicate(const XrXirInstruction *op);
+
+static bool lower_constant_type(XrXirType type) {
+    return type == XR_XIR_I64 || type == XR_XIR_F64 || type == XR_XIR_BOOL;
+}
+static bool lower_constant_integer(XrXirArithmetic operation, const LowerConstant *left,
+                                   const LowerConstant *right, LowerConstant *result) {
+    if (left->type != XR_XIR_I64 || right->type != XR_XIR_I64 || result->type != XR_XIR_I64)
+        return false;
+    int64_t a, b, value;
+    memcpy(&a, &left->bits, sizeof(a));
+    memcpy(&b, &right->bits, sizeof(b));
+    if (xr_xir_integer_arithmetic((XrXirIntegerFormat) {64, true}, operation, a, b, &value) !=
+        XR_XIR_RUN_OK)
+        return false;
+    memcpy(&result->bits, &value, sizeof(value));
+    return true;
+}
+static bool lower_constant_float(XrXirFloatOperation operation, const LowerConstant *left,
+                                 const LowerConstant *right, LowerConstant *result) {
+    return left->type == XR_XIR_F64 && right->type == XR_XIR_F64 && result->type == XR_XIR_F64 &&
+           xr_xir_float_arithmetic(64, operation, left->bits, right->bits, &result->bits) ==
+               XR_XIR_NUMERIC_OK;
+}
+static bool lower_constant_compare(XrLirPredicate predicate, const LowerConstant *left,
+                                   const LowerConstant *right, LowerConstant *result) {
+    if (result->type != XR_XIR_BOOL || left->type != right->type)
+        return false;
+    int order = 0;
+    if (left->type == XR_XIR_F64) {
+        XrXirFloatOrder floating;
+        if (xr_xir_float_compare(64, left->bits, right->bits, &floating) != XR_XIR_NUMERIC_OK)
+            return false;
+        order = floating;
+    } else if (left->type == XR_XIR_I64) {
+        int64_t a, b;
+        memcpy(&a, &left->bits, sizeof(a));
+        memcpy(&b, &right->bits, sizeof(b));
+        if (xr_xir_integer_compare((XrXirIntegerFormat) {64, true}, a, b, &order) != XR_XIR_RUN_OK)
+            return false;
+    } else if (left->type == XR_XIR_BOOL)
+        order = (left->bits > right->bits) - (left->bits < right->bits);
+    else
+        return false;
+    if (order == XR_XIR_FLOAT_UNORDERED) {
+        result->bits = predicate == XR_LIR_NE;
+        return true;
+    }
+    switch (predicate) {
+        case XR_LIR_EQ:
+            result->bits = order == 0;
+            break;
+        case XR_LIR_NE:
+            result->bits = order != 0;
+            break;
+        case XR_LIR_LT:
+            result->bits = order < 0;
+            break;
+        case XR_LIR_LE:
+            result->bits = order <= 0;
+            break;
+        case XR_LIR_GT:
+            result->bits = order > 0;
+            break;
+        case XR_LIR_GE:
+            result->bits = order >= 0;
+            break;
+        default:
+            return false;
+    }
+    return true;
+}
+/* Only already-known SSA operands participate. The bit kernels give compile-time
+ * arithmetic its existing environment-independent semantics, including NaN. */
+static LowerConstant lower_constant(Lower *c, const XrXirInstruction *op,
+                                    const LowerConstant *values, uint32_t before) {
+    LowerConstant result = {.type = op->type};
+    if (!lower_constant_type(op->type))
+        return result;
+    if (op->op == XR_XIR_CONST_INT || op->op == XR_XIR_CONST_FLOAT || op->op == XR_XIR_CONST_BOOL) {
+        result.bits = (uint64_t) op->immediate;
+        result.known = true;
+        return result;
+    }
+    if (op->op == XR_XIR_SLOT_LOAD) {
+        const XrXirDeclarations *d = c->source->declarations;
+        if (op->immediate >= 0 && (uint64_t) op->immediate < d->slot_count &&
+            c->literals[op->immediate].publication != UINT32_MAX &&
+            d->slots[op->immediate].type == op->type) {
+            result.bits = c->literals[op->immediate].bits;
+            result.known = true;
+        }
+        return result;
+    }
+    if (op->args[0] >= before || !values[op->args[0]].known)
+        return result;
+    const LowerConstant *left = values + op->args[0], *right = left;
+    bool unary =
+        op->op == XR_XIR_COPY || op->op == XR_XIR_NEG_FLOAT || op->op == XR_XIR_CONVERT_NUMBER;
+    if (!unary) {
+        if (op->args[1] >= before || !values[op->args[1]].known)
+            return result;
+        right = values + op->args[1];
+    }
+    XrLirPredicate predicate = lower_predicate(op);
+    if (predicate) {
+        result.known = lower_constant_compare(predicate, left, right, &result);
+        return result;
+    }
+    switch (op->op) {
+        case XR_XIR_COPY:
+            if (left->type == op->type)
+                result = *left;
+            break;
+        case XR_XIR_CONVERT_NUMBER: {
+            int64_t input, output;
+            memcpy(&input, &left->bits, sizeof(input));
+            if (xr_xir_number_convert(left->type, op->type, input, &output) == XR_XIR_RUN_OK) {
+                memcpy(&result.bits, &output, sizeof(output));
+                result.known = true;
+            }
+            break;
+        }
+        case XR_XIR_NEG_FLOAT:
+            result.known = left->type == XR_XIR_F64 && op->type == XR_XIR_F64 &&
+                           xr_xir_float_negate(64, left->bits, &result.bits) == XR_XIR_NUMERIC_OK;
+            break;
+        case XR_XIR_ADD_INT:
+            result.known = lower_constant_integer(XR_XIR_ARITH_ADD, left, right, &result);
+            break;
+        case XR_XIR_SUB_INT:
+            result.known = lower_constant_integer(XR_XIR_ARITH_SUB, left, right, &result);
+            break;
+        case XR_XIR_MUL_INT:
+            result.known = lower_constant_integer(XR_XIR_ARITH_MUL, left, right, &result);
+            break;
+        case XR_XIR_DIV_INT:
+            result.known = lower_constant_integer(XR_XIR_ARITH_DIV, left, right, &result);
+            break;
+        case XR_XIR_REM_INT:
+            result.known = lower_constant_integer(XR_XIR_ARITH_REM, left, right, &result);
+            break;
+        case XR_XIR_ADD_FLOAT:
+            result.known = lower_constant_float(XR_XIR_FLOAT_ADD, left, right, &result);
+            break;
+        case XR_XIR_SUB_FLOAT:
+            result.known = lower_constant_float(XR_XIR_FLOAT_SUBTRACT, left, right, &result);
+            break;
+        case XR_XIR_MUL_FLOAT:
+            result.known = lower_constant_float(XR_XIR_FLOAT_MULTIPLY, left, right, &result);
+            break;
+        case XR_XIR_DIV_FLOAT:
+            result.known = lower_constant_float(XR_XIR_FLOAT_DIVIDE, left, right, &result);
+            break;
+        default:
+            break;
+    }
+    return result;
+}
+static bool lower_constant_publications(Lower *c, uint32_t module) {
+    const XrXirDeclarations *d = c->source->declarations;
+    uint32_t init = d->modules[module].initializer;
+    const XrXirFunction *function = &c->source->functions[init];
+    c->function = init;
+    c->block = 0;
+    c->instruction = UINT32_MAX;
+    if (!function->block_count || function->parameter_count)
+        return lower_unsupported(c, "module constant initializer shape");
+    LowerConstant *values = lower_alloc(c, function->instruction_count, sizeof(*values));
+    if (!values)
+        return false;
+    const XrXirBlock *block = &function->blocks[0];
+    bool good = true;
+    for (uint32_t i = block->first; i < block->first + block->count && good; ++i) {
+        const XrXirInstruction *op = &function->instructions[i];
+        c->instruction = i;
+        values[i] = lower_constant(c, op, values, i);
+        if (op->op != XR_XIR_SLOT_INIT)
+            continue;
+        if (op->immediate < 0 || (uint64_t) op->immediate >= d->slot_count ||
+            d->slots[op->immediate].module != module ||
+            c->literals[op->immediate].publication != UINT32_MAX)
+            good = lower_unsupported(c, "module slot initializer");
+        else if (op->args[0] < block->first || op->args[0] >= i || !values[op->args[0]].known ||
+                 values[op->args[0]].type != d->slots[op->immediate].type)
+            good = lower_unsupported(c, "module slot without a constant scalar initializer");
+        else {
+            c->literals[op->immediate].publication = i;
+            c->literals[op->immediate].bits = values[op->args[0]].bits;
+            c->last_publication[module] = i;
+        }
+    }
+    xr_free(values);
+    return good;
+}
 /* Inspect every original function, including bodies outside the retained
  * roots. Erasing storage must not hide a reader, address, or publication. */
 static bool lower_literal(Lower *c) {
     const XrXirDeclarations *d = c->source->declarations;
-    if (!d->slot_count) return true;
-    if (!d->slots || !d->functions) return lower_unsupported(c, "module slot declarations");
+    if (!d->slot_count)
+        return true;
+    if (!d->slots || !d->functions)
+        return lower_unsupported(c, "module slot declarations");
     if (xr_xir_type_is_cell(c->source->types, d->slots[0].type)) {
         if (d->module_count != 1 || d->root_module != 0 || d->modules[0].dependency_count)
             return lower_unsupported(c, "imported mutable module slots");
         return lower_mutable_slots(c);
     }
     c->literals = lower_alloc(c, d->slot_count, sizeof(*c->literals));
-    if (!c->literals) return false;
+    if (!c->literals)
+        return false;
     for (uint32_t s = 0; s < d->slot_count; ++s) {
         c->literals[s].publication = UINT32_MAX;
         if (d->slots[s].module >= d->module_count ||
             (c->active_modules[d->slots[s].module] &&
-             (d->slots[s].type != XR_XIR_I64 || d->slots[s].mutable)))
-            return lower_unsupported(c, "module slots other than immutable i64 literals");
+             (!lower_constant_type(d->slots[s].type) || d->slots[s].mutable)))
+            return lower_unsupported(c, "module slots other than immutable scalar constants");
+        if (c->active_modules[d->slots[s].module])
+            c->last_publication[d->slots[s].module] = 0;
+    }
+    /* Dependency order makes imported constants available before their readers.
+     * A marked module owns slots; successful analysis replaces its marker with
+     * the actual last publication. No initializer body is executed here. */
+    for (uint32_t i = 0; i < c->initialization_count; ++i) {
+        uint32_t module = c->module_order[i];
+        if (c->last_publication[module] != UINT32_MAX && !lower_constant_publications(c, module))
+            return false;
     }
     for (uint32_t f = 0; f < c->source->function_count; ++f) {
         const XrXirFunction *function = &c->source->functions[f];
@@ -509,30 +724,26 @@ static bool lower_literal(Lower *c) {
             const XrXirBlock *block = &function->blocks[b];
             for (uint32_t i = block->first; i < block->first + block->count; ++i) {
                 const XrXirInstruction *op = &function->instructions[i];
-                c->function = f; c->block = b; c->instruction = i;
+                c->function = f;
+                c->block = b;
+                c->instruction = i;
                 if (op->op == XR_XIR_CALL && op->immediate >= 0 &&
-                    (uint64_t)op->immediate < c->source->function_count &&
+                    (uint64_t) op->immediate < c->source->function_count &&
                     c->initializer_owner[op->immediate] != UINT32_MAX)
                     return lower_unsupported(c, "call back to module initializer");
                 if (op->op == XR_XIR_SLOT_STORE || op->op == XR_XIR_SLOT_PLACE ||
                     op->op == XR_XIR_SLOT_GROUP_INIT)
                     return lower_unsupported(c, "module slot write, address or group");
-                if (op->op != XR_XIR_SLOT_INIT) continue;
-                if (op->immediate < 0 || (uint64_t)op->immediate >= d->slot_count)
+                if (op->op != XR_XIR_SLOT_INIT)
+                    continue;
+                if (op->immediate < 0 || (uint64_t) op->immediate >= d->slot_count)
                     return lower_unsupported(c, "module slot initializer");
-                uint32_t s = (uint32_t)op->immediate, m = d->slots[s].module;
-                if (!c->active_modules[m]) continue;
-                if (f != d->modules[m].initializer || b != 0 ||
-                    c->literals[s].publication != UINT32_MAX || op->args[0] < function->parameter_count)
+                uint32_t s = (uint32_t) op->immediate, m = d->slots[s].module;
+                if (!c->active_modules[m])
+                    continue;
+                if (f != d->modules[m].initializer || b != 0 || c->literals[s].publication != i ||
+                    op->args[0] < function->parameter_count)
                     return lower_unsupported(c, "module slot initializer");
-                uint32_t value = op->args[0] - function->parameter_count;
-                if (value < block->first || value >= i ||
-                    function->instructions[value].op != XR_XIR_CONST_INT ||
-                    function->instructions[value].type != XR_XIR_I64)
-                    return lower_unsupported(c, "module slot without a direct same-block i64 literal");
-                c->literals[s].publication = i;
-                c->literals[s].bits = (uint64_t)function->instructions[value].immediate;
-                c->last_publication[m] = i;
             }
         }
     }
@@ -542,25 +753,29 @@ static bool lower_literal(Lower *c) {
     /* Calls only descend through declared imports or stay in the current
      * module. Once its entry publications finish, every such callee can read
      * only this module or already initialized dependencies. No runtime slot
-     * state or inferred ownership is needed for immutable scalar literals. */
+     * state or inferred ownership is needed for immutable scalar constants. */
     for (uint32_t f = 0; f < c->source->function_count; ++f) {
         const XrXirFunction *function = &c->source->functions[f];
         for (uint32_t b = 0; b < function->block_count; ++b) {
             const XrXirBlock *block = &function->blocks[b];
             for (uint32_t i = block->first; i < block->first + block->count; ++i) {
                 const XrXirInstruction *op = &function->instructions[i];
-                if (op->op != XR_XIR_SLOT_LOAD) continue;
-                c->function = f; c->block = b; c->instruction = i;
-                if (op->immediate < 0 || (uint64_t)op->immediate >= d->slot_count ||
-                    op->type != XR_XIR_I64 || d->functions[f].module >= d->module_count)
+                if (op->op != XR_XIR_SLOT_LOAD)
+                    continue;
+                c->function = f;
+                c->block = b;
+                c->instruction = i;
+                if (op->immediate < 0 || (uint64_t) op->immediate >= d->slot_count ||
+                    op->type != d->slots[op->immediate].type ||
+                    d->functions[f].module >= d->module_count)
                     return lower_unsupported(c, "module slot read authority");
-                uint32_t s = (uint32_t)op->immediate, m = d->slots[s].module;
+                uint32_t s = (uint32_t) op->immediate, m = d->slots[s].module;
                 uint32_t reader = d->functions[f].module;
-                if (!c->active_modules[reader]) continue;
+                if (!c->active_modules[reader])
+                    continue;
                 if (!c->active_modules[m] || !xr_xir_module_imports(d, reader, m))
                     return lower_unsupported(c, "module slot read authority");
-                if (f == d->modules[m].initializer &&
-                    (b != 0 || i <= c->literals[s].publication))
+                if (f == d->modules[m].initializer && (b != 0 || i <= c->literals[s].publication))
                     return lower_unsupported(c, "slot read outside its initialized block");
             }
         }
@@ -584,7 +799,8 @@ static bool lower_local_pure(Lower *c, uint32_t selected) {
         const XrXirFunction *f = &c->source->functions[c->function];
         for (uint32_t b = 0; b < f->block_count; ++b) {
             c->block = b;
-            for (uint32_t i = f->blocks[b].first; i < f->blocks[b].first + f->blocks[b].count; ++i) {
+            for (uint32_t i = f->blocks[b].first; i < f->blocks[b].first + f->blocks[b].count;
+                 ++i) {
                 c->instruction = i;
                 const XrXirInstruction *op = &f->instructions[i];
                 if (op->op == XR_XIR_PRINT || op->op == XR_XIR_CLOCK_NANOS ||

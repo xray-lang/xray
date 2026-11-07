@@ -564,9 +564,10 @@ static void literal_sources(void) {
     xr_lir_lowered_free(&output);
     output = lower_text("const n=0\nprint(n)\n");
     xr_lir_lowered_free(&output);
-    rejected("const n=1+2\nprint(n)\n", false, "direct same-block i64 literal");
+    output = lower_text("const n=1+2\nprint(n)\n");
+    xr_lir_lowered_free(&output);
     rejected("fn value()->i64{return 7}\nconst n=value()\nprint(n)\n", false,
-             "direct same-block i64 literal");
+             "constant scalar initializer");
     rejected("const s=\"managed\"\nprint(7)\n", false, "module slots");
     static const char *constants[] = {
         "const n=7\nconst m=8\nprint(n+m)\n",

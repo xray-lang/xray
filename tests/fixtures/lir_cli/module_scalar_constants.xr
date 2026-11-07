@@ -1,0 +1,25 @@
+import math
+import "./module_scalar_constants_dep" as dep
+
+const wrapped: i64 = 9223372036854775807 + 1
+const quotient: i64 = wrapped / -1
+const divided: i64 = (9 * 8 - 2) / 7
+const remainder: i64 = 31 % 7
+const fraction: f64 = dep.fraction + 0.5
+const negative: f64 = -fraction
+const converted: i64 = fraction as i64
+const enabled: bool = dep.enabled == true
+const unordered: bool = math.NAN != math.NAN
+
+fn check() -> i64 {
+    if (dep.base != 42) { return 0 }
+    if (wrapped != math.MIN_I64 || quotient != wrapped) { return 0 }
+    if (divided != 10 || remainder != 3) { return 0 }
+    if (fraction != 11.0 || negative != -11.0) { return 0 }
+    if (converted != 11 || !enabled || !unordered) { return 0 }
+    if (math.PI <= 3.14 || math.PI >= 3.15) { return 0 }
+    if (math.INF <= math.MAX_F64 || math.NAN == math.NAN) { return 0 }
+    return 1
+}
+
+print(check())
