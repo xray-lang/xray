@@ -191,34 +191,59 @@ static void test_location_ownership(void) {
 static void test_comparisons(void) {
     const uint64_t inputs[][2] = {{0, 0}, {UINT64_MAX, 2}, {INT64_MAX, UINT64_C(1) << 63}};
     const bool expected[][6] = {{true, false, false, true, false, true},
-        {false, true, true, true, false, false}, {false, true, false, false, true, true}};
-    for (uint32_t predicate = XR_LIR_EQ; predicate <= XR_LIR_GE; ++predicate) {
-        XrLirModule *m = NULL;
-        OK(xr_lir_module_create(NULL, &m));
-        XrLirType types[] = {XR_LIR_I64, XR_LIR_I64}, boolean = XR_LIR_I1;
-        XrLirFunction root = test_function(m, "predicate", types, 2, boolean);
-        XrLirBlock entry = test_block(m, root, NULL, 0);
-        XrLirBlock join = test_block(m, root, &boolean, 1);
-        OK(xr_lir_set_entry(m, root, entry));
-        XrLirValue result = test_binary(m, entry, XR_LIR_ICMP, parameter(m, root, 0),
-            parameter(m, root, 1), (XrLirPredicate) predicate);
-        test_branch(m, entry, join, &result, 1);
-        test_return(m, join, block_parameter(m, join, 0));
-        OK(xr_lir_module_finish(m, NULL));
-        XrRbcProgram *program = compile(m, root);
-        xr_lir_module_destroy(m);
-        for (size_t n = 0; n < 3; ++n)
-            CHECK(run(program, inputs[n], 2) == expected[n][predicate - XR_LIR_EQ]);
-        xr_rbc_program_destroy(program);
-    }
+                                {false, true, true, true, false, false},
+                                {false, true, false, false, true, true}};
+    for (uint32_t predicate = XR_LIR_EQ; predicate <= XR_LIR_GE; ++predicate)
+        for (unsigned control = 0; control < 3; ++control) {
+            XrLirModule *m = NULL;
+            OK(xr_lir_module_create(NULL, &m));
+            XrLirType types[] = {XR_LIR_I64, XR_LIR_I64}, boolean = XR_LIR_I1;
+            XrLirFunction root = test_function(m, "predicate", types, 2, boolean);
+            XrLirBlock entry = test_block(m, root, NULL, 0);
+            XrLirBlock join = test_block(m, root, &boolean, 1);
+            OK(xr_lir_set_entry(m, root, entry));
+            XrLirValue yes = {0}, no = {0};
+            if (control == 1) {
+                yes = test_constant(m, entry, boolean, 1);
+                no = test_constant(m, entry, boolean, 0);
+            }
+            XrLirValue result = test_binary(m, entry, XR_LIR_ICMP, parameter(m, root, 0),
+                                            parameter(m, root, 1), (XrLirPredicate) predicate);
+            if (control == 0)
+                test_branch(m, entry, join, &result, 1);
+            else {
+                if (control == 2)
+                    yes = no = result;
+                conditional(m, entry, result, (XrLirEdge) {join, &yes, 1},
+                            (XrLirEdge) {join, &no, 1});
+            }
+            test_return(m, join, block_parameter(m, join, 0));
+            OK(xr_lir_module_finish(m, NULL));
+            XrRbcProgram *program = compile(m, root);
+            if (control == 1) {
+                const XrRbcFunction *function = &xr_rbc_program_view(program)->functions[0];
+                unsigned loads = 0;
+                for (size_t pc = 0; pc < function->code_count; ++pc)
+                    if ((function->code[pc] & 255) == XR_RBC_LOADI)
+                        ++loads;
+                CHECK(loads == 2);
+            }
+            xr_lir_module_destroy(m);
+            for (size_t n = 0; n < 3; ++n)
+                CHECK(run(program, inputs[n], 2) == expected[n][predicate - XR_LIR_EQ]);
+            xr_rbc_program_destroy(program);
+        }
 }
 
 static void test_arithmetic(void) {
     const XrLirOp operations[] = {XR_LIR_ADD, XR_LIR_SUB, XR_LIR_MUL,
-        XR_LIR_DIV, XR_LIR_REM, XR_LIR_NEG};
+                                  XR_LIR_DIV, XR_LIR_REM, XR_LIR_NEG};
     const uint64_t expected[] = {UINT64_C(9223372036854775807),
-        UINT64_C(9223372036854775809), UINT64_C(9223372036854775808),
-        UINT64_C(9223372036854775808), 0, UINT64_C(9223372036854775808)};
+                                 UINT64_C(9223372036854775809),
+                                 UINT64_C(9223372036854775808),
+                                 UINT64_C(9223372036854775808),
+                                 0,
+                                 UINT64_C(9223372036854775808)};
     for (size_t n = 0; n < sizeof(operations) / sizeof(operations[0]); ++n) {
         XrLirModule *m = NULL;
         OK(xr_lir_module_create(NULL, &m));

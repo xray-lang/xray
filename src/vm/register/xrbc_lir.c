@@ -35,6 +35,7 @@ static bool rbc_lir_native(uint32_t mapping) {
 typedef struct {
     uint32_t *literals;
     bool *lengths;
+    uint8_t *uses;
 } RbcLirOutputValues;
 
 typedef struct {
@@ -151,7 +152,13 @@ static bool rbc_lir_string_call(const XrLirModule *input, const XrLirInstruction
 
 static void rbc_lir_output_free(RbcLirOutputValues *output) {
     xr_free(output->literals); xr_free(output->lengths);
+    xr_free(output->uses);
     *output=(RbcLirOutputValues){0};
+}
+static void rbc_lir_count_use(RbcLirOutputValues *output, uint32_t value) {
+    // Only uniqueness matters, so counts saturate at two.
+    if (output->uses[value] < 2)
+        ++output->uses[value];
 }
 static bool rbc_lir_output_values(const XrLirModule *input, XrLirFunction f,
     const XrLirFunctionView *view, RbcLirOutputValues *output, XrRbcCompileDiagnostic *d) {
@@ -163,7 +170,8 @@ static bool rbc_lir_output_values(const XrLirModule *input, XrLirFunction f,
     }
     output->literals=xr_calloc(count,sizeof(*output->literals));
     output->lengths=xr_calloc(count,sizeof(*output->lengths));
-    if (!output->literals || !output->lengths) {
+    output->uses=xr_calloc(count,sizeof(*output->uses));
+    if (!output->literals || !output->lengths || !output->uses) {
         rbc_lir_output_free(output);
         rbc_lir_error(d,XR_RBC_COMPILE_OUT_OF_MEMORY,"cannot allocate SSA output bookkeeping",(XrLirSource){0});
         return false;
@@ -176,6 +184,11 @@ static bool rbc_lir_output_values(const XrLirModule *input, XrLirFunction f,
         for (uint32_t n = 0; n < bv.instruction_count; ++n) {
             XrLirInstructionView i;
             xr_lir_instruction_view(input, block, n, &i);
+            for (uint32_t a = 0; a < i.operand_count; ++a)
+                rbc_lir_count_use(output, i.operands[a]);
+            for (uint32_t e = 0; e < i.edge_count; ++e)
+                for (uint32_t a = 0; a < i.edges[e].argument_count; ++a)
+                    rbc_lir_count_use(output, i.edges[e].arguments[a]);
             if (i.op == XR_LIR_LITERAL_ADDR) output->literals[i.result] = (uint32_t)i.bits;
             // The LIR verifier owns the pair's provenance, exact length and
             // unique direct address use. These IDs only select no-code values.
@@ -490,18 +503,23 @@ static bool rbc_lir_constant(RbcLirCompiler *c, uint32_t slot, uint64_t bits) {
     return rbc_lir_emit(c, XR_RBC_LOADK, slot, 0, 0, index);
 }
 
-static bool rbc_lir_comparison(RbcLirCompiler *c, const XrLirInstructionView *i) {
+static bool rbc_lir_predicate(RbcLirCompiler *c, const XrLirInstructionView *i) {
+    XR_DCHECK(i->operand_count == 2, "integer predicates have two verified operands");
     uint32_t a = c->slots[i->operands[0]], b = c->slots[i->operands[1]];
-    bool inverse = i->predicate == XR_LIR_NE;
     XrRbcOp op = XR_RBC_EQ;
     if (i->predicate == XR_LIR_GT || i->predicate == XR_LIR_GE) {
         uint32_t swap = a; a = b; b = swap;
     }
     if (i->predicate == XR_LIR_LT || i->predicate == XR_LIR_GT) op = XR_RBC_LT;
     if (i->predicate == XR_LIR_LE || i->predicate == XR_LIR_GE) op = XR_RBC_LE;
+    return rbc_lir_emit(c, op, a, b, 0, 0);
+}
+
+static bool rbc_lir_comparison(RbcLirCompiler *c, const XrLirInstructionView *i) {
+    bool inverse = i->predicate == XR_LIR_NE;
     uint32_t result = c->slots[i->result];
     return rbc_lir_emit(c, XR_RBC_LOADI, result, 0, 0, inverse ? 1 : 0) &&
-        rbc_lir_emit(c, op, a, b, 0, 0) &&
+        rbc_lir_predicate(c, i) &&
         rbc_lir_emit(c, XR_RBC_JMP, 0, 0, 0, 1) &&
         rbc_lir_emit(c, XR_RBC_JMP, 0, 0, 0, 1) &&
         rbc_lir_emit(c, XR_RBC_LOADI, result, 0, 0, inverse ? 0 : 1);
@@ -513,16 +531,24 @@ static bool rbc_lir_edge(RbcLirCompiler *c, XrLirEdgeView edge) {
 }
 
 static bool rbc_lir_conditional(RbcLirCompiler *c, const XrLirInstructionView *i) {
-    uint32_t scratch = c->slot_count + (c->typed_spills ? c->temporary_strings+c->temporary_bits : 0);
-    if (!rbc_lir_emit(c, XR_RBC_LOADI, scratch, 0, 0, 0) ||
-        !rbc_lir_emit(c, XR_RBC_EQ, c->slots[i->operands[0]], scratch, 0, 0))
-        return false;
-    size_t failure = c->code_count;
+    // A two-operand internal conditional carries its sole-use integer predicate.
+    bool comparison = i->operand_count == 2;
+    if (comparison) {
+        if (!rbc_lir_predicate(c, i)) return false;
+    } else {
+        uint32_t scratch = c->slot_count +
+            (c->typed_spills ? c->temporary_strings+c->temporary_bits : 0);
+        if (!rbc_lir_emit(c, XR_RBC_LOADI, scratch, 0, 0, 0) ||
+            !rbc_lir_emit(c, XR_RBC_EQ, c->slots[i->operands[0]], scratch, 0, 0))
+            return false;
+    }
+    uint32_t taken = comparison && i->predicate != XR_LIR_NE ? 0u : 1u;
+    size_t taken_jump = c->code_count;
     if (!rbc_lir_emit(c, XR_RBC_JMP, 0, 0, 0, 0) ||
-        !rbc_lir_edge(c, i->edges[0])) return false;
-    size_t false_start = c->code_count;
-    if (!rbc_lir_edge(c, i->edges[1])) return false;
-    if (!xr_rbc_jump(&c->code[failure], failure, false_start, c->code_count))
+        !rbc_lir_edge(c, i->edges[1u - taken])) return false;
+    size_t taken_start = c->code_count;
+    if (!rbc_lir_edge(c, i->edges[taken])) return false;
+    if (!xr_rbc_jump(&c->code[taken_jump], taken_jump, taken_start, c->code_count))
         return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "conditional edge exceeds jump encoding");
     return true;
 }
@@ -728,6 +754,19 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
             XrLirInstructionView i;
             xr_lir_instruction_view(c->input, block, n, &i);
             c->current_source_id = i.source.path_length ? ++c->source_id : 0;
+            if (i.op == XR_LIR_ICMP && c->output.uses[i.result] == 1 &&
+                n + 1 < bv.instruction_count) {
+                XrLirInstructionView branch;
+                xr_lir_instruction_view(c->input, block, n + 1, &branch);
+                if (branch.op == XR_LIR_CONDBR && branch.operands[0] == i.result) {
+                    c->current_source_id = branch.source.path_length ? ++c->source_id : 0;
+                    branch.operands = i.operands;
+                    branch.operand_count = i.operand_count;
+                    branch.predicate = i.predicate;
+                    i = branch;
+                    ++n;
+                }
+            }
             c->diagnostic->block = block.id;
             c->diagnostic->instruction = n + 1;
             rbc_lir_error(c->diagnostic, XR_RBC_COMPILE_OK, "", i.source);
