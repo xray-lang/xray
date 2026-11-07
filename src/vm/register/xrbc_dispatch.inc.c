@@ -21,7 +21,7 @@
         c = instruction >> 24; \
     } while (0)
 
-#define XR_RBC_SLOT(index) stack->slots[base + (index)]
+#define XR_RBC_SLOT(index) registers[index]
 #define XR_RBC_REG(index) XR_RBC_SLOT(index).bits
 #define XR_RBC_STRING(index) XR_RBC_SLOT(index).string
 #define XR_RBC_SOURCE() (function->source_ids ? function->source_ids[pc - 1] : 0)
@@ -46,7 +46,7 @@ static const void *const dispatch[] = {
 
 xr_rbc_reload : XR_DCHECK(stack->depth > 0, "interpreter requires an active frame");
 function = &module->functions[stack->frames[stack->depth - 1].function];
-base = stack->frames[stack->depth - 1].base;
+registers = stack->slots + stack->frames[stack->depth - 1].base;
 pc = stack->frames[stack->depth - 1].pc;
 #if defined(__clang__) || defined(__GNUC__)
 XR_RBC_NEXT();
@@ -300,6 +300,8 @@ xr_rbc_jump: {
 }
 XR_RBC_CASE(CALL) {
     stack->frames[stack->depth - 1].pc = pc;
+    // A call can relocate the stack. Reload the register window on entry.
+    registers = NULL;
     status = xr_rbc_call(module, stack, a, instruction >> 16);
     if (status != XR_RBC_OK)
         return status;

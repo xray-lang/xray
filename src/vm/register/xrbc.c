@@ -329,7 +329,8 @@ static XrRbcRegister *xr_rbc_cell(XrRbcStack *stack, const XrRbcModule *module,
 static XrRbcStatus xr_rbc_execute(const XrRbcModule *module, XrRbcStack *stack,
     const XrtLocationOwner *locations, XrRbcRegister *result) {
     const XrRbcFunction *function;
-    size_t base, pc;
+    XrRbcRegister *registers;
+    size_t pc;
     uint32_t instruction, op, a, b, c;
     XrRbcStatus status;
     // Dispatch mechanics follow the existing register interpreter: each
