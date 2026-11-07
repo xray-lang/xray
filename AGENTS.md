@@ -82,9 +82,10 @@ selected target.
   a typed runtime helper. Provider intrinsics are allowed only behind an owned,
   capability-gated runtime boundary with a portable implementation where the
   feature is part of the supported language surface.
-- On Windows, automatic native-toolchain discovery prefers a ready MSVC, then
-  Clang, then Zig. A fallback is evidence of a failed capability probe, not the
-  normal path when MSVC is installed and ready.
+- Automatic native compilation currently supports host MSVC and Clang on
+  Windows, and host Clang and GCC on Unix. Cross-target and Zig automatic
+  compilation are temporarily unavailable. On Windows, discovery prefers a
+  ready MSVC, then Clang. A fallback records a failed capability probe.
 - A generated-C portability change needs a regression gate that compiles real
   generated output with MSVC and rejects newly introduced GNU statement
   expressions; a synthetic SDK probe alone is insufficient evidence.

@@ -206,7 +206,9 @@ typedef enum XrXirSourceMarkerRole {
      * retains the independent export identity. Bare modules preserve their path. */
     XR_XIR_SOURCE_MARKER_IMPORT_BINDING,
     /* Parser-certified insertion point after a quoted module specifier. */
-    XR_XIR_SOURCE_MARKER_IMPORT_IMPLICIT
+    XR_XIR_SOURCE_MARKER_IMPORT_IMPLICIT,
+    /* A checked whole-local ownership transfer, independent of parameter mode. */
+    XR_XIR_SOURCE_MARKER_MOVE_VALUE
 } XrXirSourceMarkerRole;
 typedef struct XrXirSourceMarker {
     XrXirSourceRange range;

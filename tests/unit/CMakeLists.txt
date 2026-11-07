@@ -423,7 +423,7 @@ set(XIR_CHECKED_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_source_fixtu
 
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/enum_description.cmake)
-include(${CMAKE_CURRENT_SOURCE_DIR}/xir/class_identity.cmake)
+
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/class_hierarchy_contract.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/class_move_shape.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/class_stage_contract.cmake)
@@ -889,7 +889,7 @@ add_xray_unit_test(test_fs_atomic os/test_fs_atomic.c)
 
 add_executable(test_cgen_verify_output aot/test_cgen_verify_output.c)
 target_include_directories(test_cgen_verify_output PRIVATE ${XRAY_COMMON_INCLUDES})
-target_link_libraries(test_cgen_verify_output PRIVATE )
+target_link_libraries(test_cgen_verify_output PRIVATE xray_lir_c)
 if(MSVC)
     target_compile_options(test_cgen_verify_output PRIVATE /W4 /WX /utf-8)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
@@ -1659,7 +1659,6 @@ include(xir/semantic65_vectors.cmake)
 include(xir/source_shadow_function.cmake)
 
 
-include("${CMAKE_CURRENT_LIST_DIR}/program/source_product_consumers.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/go_source.cmake")
 
@@ -1905,7 +1904,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/xir/vm_bind_table.cmake)
 
 
 
-include(${CMAKE_CURRENT_SOURCE_DIR}/xir/stdlib_catalog.cmake)
+
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/owned_instruction_inventory.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/move_values.cmake")
@@ -2022,7 +2021,6 @@ include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_map_value.cmake)
 
 include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_hash_foreach.cmake)
 
-include(xir/p09_hash_sendable.cmake)
 
 
 
@@ -2067,7 +2065,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/never_type.cmake")
 
 
 
-add_subdirectory(xir/task_result)
+
 
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/source_local_recursive_binding.cmake")

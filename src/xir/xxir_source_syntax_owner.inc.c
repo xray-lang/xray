@@ -130,7 +130,8 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_syntax_copy(XrXirSourceSnapsh
         if(!marker->declaration||marker->declaration>view->declaration_count||
             (marker->role!=XR_XIR_SOURCE_MARKER_REF&&marker->role!=XR_XIR_SOURCE_MARKER_MOVE&&marker->role!=XR_XIR_SOURCE_MARKER_REF_ARGUMENT&&
                 marker->role!=XR_XIR_SOURCE_MARKER_PATTERN_FIELD_BINDING&&
-                marker->role!=XR_XIR_SOURCE_MARKER_IMPORT_BINDING&&marker->role!=XR_XIR_SOURCE_MARKER_IMPORT_IMPLICIT))
+                marker->role!=XR_XIR_SOURCE_MARKER_IMPORT_BINDING&&marker->role!=XR_XIR_SOURCE_MARKER_IMPORT_IMPLICIT&&
+                marker->role!=XR_XIR_SOURCE_MARKER_MOVE_VALUE))
             return XR_XIR_BAD_STRUCTURE;
         bool insertion=marker->role==XR_XIR_SOURCE_MARKER_IMPORT_IMPLICIT;
         if(insertion?marker->range.module>=view->module_count||marker->range.line<=0||marker->range.column<=0||
@@ -156,9 +157,12 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_syntax_copy(XrXirSourceSnapsh
             bool class_root=decl->type.known&&xr_xir_type_is_class(view->types,decl->type.type);
             if((!decl->mutable&&!class_root)||
                 (decl->kind!=XR_XIR_SOURCE_BINDING&&decl->kind!=XR_XIR_SOURCE_PARAMETER))return XR_XIR_BAD_STRUCTURE;
+        } else if(marker->role==XR_XIR_SOURCE_MARKER_MOVE_VALUE) {
+            if(decl->kind!=XR_XIR_SOURCE_BINDING&&decl->kind!=XR_XIR_SOURCE_PARAMETER)return XR_XIR_BAD_STRUCTURE;
         } else if((decl->kind!=XR_XIR_SOURCE_PARAMETER&&fact->role!=XR_XIR_SOURCE_SYNTAX_METHOD)||
             (fact->flags&XR_XIR_SOURCE_SYNTAX_STATIC))return XR_XIR_BAD_STRUCTURE;
-        if(marker->range.end_column-marker->range.column!=(marker->role==XR_XIR_SOURCE_MARKER_MOVE?4:3))return XR_XIR_BAD_STRUCTURE;
+        bool move=marker->role==XR_XIR_SOURCE_MARKER_MOVE||marker->role==XR_XIR_SOURCE_MARKER_MOVE_VALUE;
+        if(marker->range.end_column-marker->range.column!=(move?4:3))return XR_XIR_BAD_STRUCTURE;
     }
     SourceQueryMemory *previous=snapshot->memory;
     XrXirSourceSyntaxView owned=*syntax;

@@ -112,7 +112,7 @@ set(buffer_storage_generated "${CMAKE_CURRENT_BINARY_DIR}/generated/buffer_stora
 
 
 
-foreach(display_part source values)
+foreach(display_part values)
     add_executable(test_xir_typed_display_${display_part} xir/test_xir_typed_display_${display_part}.c)
     target_link_libraries(test_xir_typed_display_${display_part} PRIVATE xray_xir_source  )
     set_target_properties(test_xir_typed_display_${display_part} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)

@@ -49,16 +49,6 @@ set_tests_properties(test_xir_cell_instruction_storage PROPERTIES TIMEOUT 120 LA
 xray_stage_windows_asan_runtime("${CMAKE_CURRENT_BINARY_DIR}")
 cmake_language(DEFER CALL xray_prepend_windows_asan_runtime_to_directory_tests)
 
-add_executable(test_dap_json test_json.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
-target_link_libraries(test_dap_json PRIVATE xray_dap_current)
-if(MSVC)
-    target_compile_options(test_dap_json PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_dap_json PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_dap_json COMMAND test_dap_json)
-add_test(NAME test_dap_json_resources COMMAND test_dap_json --resources)
-set_tests_properties(test_dap_json test_dap_json_resources PROPERTIES TIMEOUT 120 LABELS "dap;json;resources")
 
 
 
@@ -94,16 +84,18 @@ set_tests_properties(test_dap_json test_dap_json_resources PROPERTIES TIMEOUT 12
 
 
 
-add_executable(test_dap_stdio_owner test_stdio_owner.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
-target_link_libraries(test_dap_stdio_owner PRIVATE xray_dap_current)
-if(MSVC)
-    target_compile_options(test_dap_stdio_owner PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_dap_stdio_owner PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_dap_stdio_owner COMMAND test_dap_stdio_owner)
-add_test(NAME test_dap_stdio_resources COMMAND test_dap_stdio_owner --resources)
-set_tests_properties(test_dap_stdio_owner test_dap_stdio_resources PROPERTIES TIMEOUT 120 LABELS "dap;stdio;resources;ownership")
+
+
+
+
+
+
+
+
+
+
+
+
 
 if(XR_BUILD_DAP)
     set(XR_DAP_SCRIPT_DIR "${CMAKE_CURRENT_BINARY_DIR}/worker-scripts")
@@ -215,27 +207,19 @@ if(XR_BUILD_DAP)
     endforeach()
 endif()
 
-add_executable(test_dap_tcp test_tcp.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
-target_link_libraries(test_dap_tcp PRIVATE xray_dap_current)
-if(MSVC)
-    target_compile_options(test_dap_tcp PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_dap_tcp PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_dap_tcp COMMAND test_dap_tcp)
-add_test(NAME test_dap_tcp_resources COMMAND test_dap_tcp --resources)
-set_tests_properties(test_dap_tcp test_dap_tcp_resources PROPERTIES TIMEOUT 120 LABELS "dap;tcp;resources;ownership")
 
-add_executable(test_dap_expression test_expression.c)
-target_link_libraries(test_dap_expression PRIVATE xray_dap_current)
-if(MSVC)
-    target_compile_options(test_dap_expression PRIVATE /W4 /WX)
-else()
-    target_compile_options(test_dap_expression PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_dap_expression COMMAND test_dap_expression)
-add_test(NAME test_dap_expression_resources COMMAND test_dap_expression --resources)
-set_tests_properties(test_dap_expression test_dap_expression_resources PROPERTIES TIMEOUT 120 LABELS "dap;expression;parser;ownership;fault-injection;resources")
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

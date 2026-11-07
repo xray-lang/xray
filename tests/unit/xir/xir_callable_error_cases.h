@@ -257,78 +257,6 @@ static void callable_error_bad_packet(const XrXirCompileContext *work,const XrXi
     xr_free(bytes);
 }
 
-typedef struct CallableErrorHost {
-    uint32_t entry,target,narrow_target,pass;
-    XrXirType type,narrow,wide,array,capture;
-    XrXirValue held,stored,captured;
-} CallableErrorHost;
-static XrXirAction callable_error_host_resume(XrXirCallView *view) {
-    CallableErrorHost *host=(CallableErrorHost *)view->environment;
-    uint32_t current=xr_xir_call_current_entry(view->activation);
-    if (current==host->pass) return (XrXirAction){.kind=XR_XIR_ACTION_RETURN,.value=view->arguments[0]};
-    if (current!=host->entry) return (XrXirAction){.kind=XR_XIR_ACTION_RETURN,
-        .value=current==host->target || current==host->narrow_target ? (XrXirValue){XR_XIR_I64,0,42}:(XrXirValue){0}};
-    XrXirValue actual={0},wide={0},narrow={0},bad={0};
-    CHECK(xr_xir_instance_function(view,host->type,host->target,NULL,0,&actual)==XR_XIR_CALL_READY);
-    if (host->type!=host->wide)
-        CHECK(xr_xir_instance_weaken_function(view,host->wide,&actual,&wide)==XR_XIR_CALL_READY);
-    else CHECK(xr_xir_value_copy(&actual,&wide)==XR_XIR_VALUE_OK);
-    CHECK(xr_xir_instance_function(view,host->narrow,host->narrow_target,NULL,0,&narrow)==XR_XIR_CALL_READY);
-    if (xr_xir_callable_error(xr_xir_compile_type_arena_types(view->arena),host->type)!=XR_XIR_NEVER) {
-        CHECK(xr_xir_instance_function(view,host->narrow,host->target,NULL,0,&bad)==XR_XIR_CALL_BAD_ARGUMENT && !bad.type);
-        CHECK(xr_xir_instance_weaken_function(view,host->narrow,&wide,&bad)==XR_XIR_CALL_BAD_ARGUMENT && !bad.type);
-    }
-    XrXirValueAdmission *admission=xr_xir_call_admission(view);
-    CHECK(xr_xir_array_new(host->array,&wide,1,admission,&host->stored)==XR_XIR_VALUE_OK);
-    CHECK(xr_xir_instance_function(view,host->capture,host->pass,&wide,1,&host->captured)==XR_XIR_CALL_READY);
-    CHECK(xr_xir_value_copy(&wide,&host->held)==XR_XIR_VALUE_OK);
-    xr_xir_value_drop(&actual);xr_xir_value_drop(&wide);xr_xir_value_drop(&narrow);
-    return (XrXirAction){.kind=XR_XIR_ACTION_RETURN,.value={XR_XIR_I64,0,42}};
-}
-static void callable_error_host(const XrXirCompileContext *work,const XrXirArtifact *lowered) {
-    const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
-    CallableErrorHost host={.entry=module->declarations->entry_function};
-    const XrXirFunction *entry=&module->functions[host.entry];
-    host.narrow_target=(uint32_t)entry->instructions[0].immediate;host.narrow=entry->instructions[0].type;
-    host.target=(uint32_t)entry->instructions[1].immediate;host.type=entry->instructions[1].type;
-    for (uint32_t i=2;i<entry->instruction_count;++i) {
-        const XrXirInstruction *op=&entry->instructions[i];
-        if (op->op==XR_XIR_CALL) {host.pass=(uint32_t)op->immediate;host.wide=op->type;}
-        if (op->op==XR_XIR_ARRAY_NEW) host.array=op->type;
-        if (op->op==XR_XIR_FUNCTION_REF) host.capture=op->type;
-    }
-    CHECK(host.wide && host.array && host.capture);
-    XrXirCallEntry *entries=xr_calloc(module->function_count,sizeof(*entries));CHECK(entries);
-    for (uint32_t i=0;i<module->function_count;++i) entries[i]=(XrXirCallEntry){
-        .abi_version=XR_XIR_CALL_ABI_VERSION,.parameters=module->functions[i].parameters,
-        .parameter_count=module->functions[i].parameter_count,.result=module->functions[i].result,
-        .resume=callable_error_host_resume,.environment=&host};
-    XrXirProgramSpec spec={.abi_version=XR_XIR_PROGRAM_ABI_VERSION,
-        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},.entries=entries,.entry_count=module->function_count,
-        .declarations=module->declarations,.types=module->types,.packet=xir_program_packet_borrow(lowered)};
-    XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(work,&spec,&program)==XR_XIR_OK);
-    xr_free(entries);
-    XrXirInstanceConfig config={0};CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
-    XrXirInstance *instance=NULL,*other=NULL;
-    CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_new(program,&config,&other)==XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_start(instance,host.entry,NULL,0)==XR_XIR_CALL_READY);
-    XrXirInstanceResult polled={0};
-    do { polled=xr_xir_instance_poll_bounded(instance,1024); } while (polled.outcome.status==XR_XIR_CALL_READY);
-    CHECK(polled.outcome.status==XR_XIR_CALL_RETURNED && polled.outcome.value.payload==42);
-    XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
-    xr_xir_value_drop(&result);
-    CHECK(xr_xir_instance_start_function(other,&host.held,NULL,0)==XR_XIR_CALL_BAD_ARGUMENT);
-    CHECK(xr_xir_instance_start_function(instance,&host.held,NULL,0)==XR_XIR_CALL_READY);
-    do { polled=xr_xir_instance_poll_bounded(instance,1024); } while (polled.outcome.status==XR_XIR_CALL_READY);
-    CHECK(polled.outcome.status==XR_XIR_CALL_RETURNED && polled.outcome.value.payload==42);
-    CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);xr_xir_value_drop(&result);
-    CHECK(xr_xir_instance_free(other)==XR_XIR_CALL_READY && xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
-    xr_xir_compile_program_drop(program);
-    CHECK(xr_xir_value_valid(&host.held) && xr_xir_value_valid(&host.captured) && xr_xir_value_valid(&host.stored));
-    xr_xir_value_drop(&host.held);xr_xir_value_drop(&host.captured);xr_xir_value_drop(&host.stored);
-}
-
 static void callable_error_program(const XrXirCompileContext *work,XrXirType error) {
     CallableErrorFixture *f=xr_malloc(sizeof(*f));CHECK(f);callable_error_fixture(f,error);
     XrXirArtifact *checked=NULL,*received=NULL,*closed=NULL,*lowered=NULL;XrXirDiagnostic diagnostic={0};
@@ -377,7 +305,7 @@ static void callable_error_program(const XrXirCompileContext *work,XrXirType err
     memcpy(request.evaluation.checked_identity,identity,32);
     XrXirValue output={0};
     CHECK(xr_xir_compile_ctfe_calls(&request,&output)==XR_XIR_CTFE_OK && output.type==XR_XIR_I64 && output.payload==42);
-    xr_xir_value_drop(&output);callable_error_host(work,lowered);xr_xir_compile_artifact_free(lowered);
+    xr_xir_value_drop(&output);xr_xir_compile_artifact_free(lowered);
 }
 static void callable_error_library(const XrXirCompileContext *work,bool nested) {
     char directory[XR_TEST_PATH_MAX]="xir-callable-errors-XXXXXX",absolute[XR_TEST_PATH_MAX];

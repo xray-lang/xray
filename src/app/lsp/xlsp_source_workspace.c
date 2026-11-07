@@ -4,8 +4,6 @@
 #include "xlsp_source_inlay.h"
 #include "../../api/xsource_paths.h"
 #include "../../api/xsource_authority.h"
-#include "../../xir/xxir_stdlib_internal.h"
-#include "../../xir/xxir_library_catalog.h"
 #include "../../xir/xxir_compile_memory.h"
 #include <string.h>
 #include <limits.h>
@@ -18,7 +16,6 @@ void xlsp_source_workspace_free(XlspSourceWorkspace *w) {
     }
     xr_compile_resources_free(w->snapshots);xr_compile_resources_free(w->authorities);
     xr_compile_session_free(w->session);
-    xr_xir_compile_library_catalog_free(w->catalog);
     xr_source_stdlib_path_free(&w->stdlib);
     xr_compile_resources_free(w);
 }
@@ -58,8 +55,6 @@ XrXirStatus xlsp_source_workspace_build(const XrXirCompileContext *context,
     }
     if(stage)*stage=3;
     if(control){status=xir_compile_resource_status(xr_compile_request_control_poll(control));if(status!=XR_XIR_OK)goto done;}
-    status=xir_stdlib_library_catalog_new(context,w->stdlib.path,&w->catalog);
-    if(status!=XR_XIR_OK)goto done;
     if(stage)*stage=4;
     if(control){status=xir_compile_resource_status(xr_compile_request_control_poll(control));if(status!=XR_XIR_OK)goto done;}
     XrTomlParseLimits limits=xr_source_compile_default_manifest_limits();
@@ -68,7 +63,7 @@ XrXirStatus xlsp_source_workspace_build(const XrXirCompileContext *context,
         status=xlsp_source_uri_path(context->resources,documents[i].uri,documents[i].uri_length,&path);
         if(status!=XR_XIR_OK)goto done;
         XrSourceEntryInput input={XR_SOURCE_ENTRY_TEXT,path,documents[i].text,documents[i].length};
-        XrManifestStatus admitted=xr_source_authority_open_input(context,&input,w->catalog,&limits,&w->authorities[i],NULL);
+        XrManifestStatus admitted=xr_source_authority_open_input(context,&input,NULL,&limits,&w->authorities[i],NULL);
         xr_compile_resources_free(path);path=NULL;
         if(admitted!=XR_MANIFEST_OK) {
             status=admitted==XR_MANIFEST_MEMORY_LIMIT?XR_XIR_MEMORY_LIMIT:
@@ -89,7 +84,7 @@ XrXirStatus xlsp_source_workspace_build(const XrXirCompileContext *context,
         status=xir_compile_resource_status(xr_compile_session_poll(w->session));if(status!=XR_XIR_OK)goto done;
         XrXirSourceRequest request={w->session,xr_source_authority_source_path(w->authorities[i]),
             &identities[i],&w->context,w->stdlib.path,xr_source_authority_lockfile(w->authorities[i]),
-            XR_XIR_PROGRAM,w->catalog};
+            XR_XIR_PROGRAM,NULL};
         XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure source_failure={0};
         status=xlsp_source_snapshot_build_authorities(&request,documents,identities,count,i,&w->snapshots[i],&diagnostic,&source_failure);
         if(status!=XR_XIR_OK) {

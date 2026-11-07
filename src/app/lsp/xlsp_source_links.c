@@ -3,8 +3,6 @@
 #include "xlsp_index_pool.h"
 #include "../../api/xsource_paths.h"
 #include "../../api/xsource_authority.h"
-#include "../../xir/xxir_stdlib_internal.h"
-#include "../../xir/xxir_library_catalog.h"
 #include "../../xir/xxir_compile_memory.h"
 #include "../../module/xmodule_resolver.h"
 #include <limits.h>
@@ -37,7 +35,6 @@ XR_FUNC void xlsp_source_links_free(XlspSourceLinks *owner) {
 }
 typedef struct LinksInputs {
     XrStdlibPath stdlib;
-    XrXirLibraryCatalog *catalog;
     XrSourceAuthority **authorities;
     XrModuleOverlayInput *overlays;
     size_t count;
@@ -47,7 +44,7 @@ static void links_inputs_free(LinksInputs *inputs) {
     xr_compile_module_resolver_free(inputs->resolver);
     if(inputs->authorities)for(size_t i=0;i<inputs->count;++i)xr_source_authority_close(inputs->authorities[i]);
     xr_compile_resources_free(inputs->authorities);xr_compile_resources_free(inputs->overlays);
-    xr_xir_compile_library_catalog_free(inputs->catalog);xr_source_stdlib_path_free(&inputs->stdlib);
+    xr_source_stdlib_path_free(&inputs->stdlib);
 }
 static XrXirStatus links_inputs_build(const XrXirCompileContext *context,const XlspSourceDocument *documents,size_t count,size_t entry,LinksInputs *inputs) {
     XrCompileResources *r=context->resources;inputs->count=count;
@@ -60,20 +57,19 @@ static XrXirStatus links_inputs_build(const XrXirCompileContext *context,const X
         selected==XR_SOURCE_COMPILE_CANCELLED?XR_XIR_CANCELLED:selected==XR_SOURCE_COMPILE_DEADLINE?XR_XIR_DEADLINE:
         selected==XR_SOURCE_COMPILE_CLOCK_FAILURE?XR_XIR_CLOCK_FAILURE:
         selected==XR_SOURCE_COMPILE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:selected==XR_SOURCE_COMPILE_NOT_FOUND?XR_XIR_UNRESOLVED:XR_XIR_IO;
-    status=xir_stdlib_library_catalog_new(context,inputs->stdlib.path,&inputs->catalog);if(status!=XR_XIR_OK)return status;
     XrTomlParseLimits limits=xr_source_compile_default_manifest_limits();
     for(size_t i=0;i<count;++i) {
         char *path=NULL;
         status=xlsp_source_uri_path(r,documents[i].uri,documents[i].uri_length,&path);if(status!=XR_XIR_OK)return status;
         XrSourceEntryInput input={XR_SOURCE_ENTRY_TEXT,path,documents[i].text,documents[i].length};
-        status=links_manifest(xr_source_authority_open_input(context,&input,inputs->catalog,&limits,&inputs->authorities[i],NULL));
+        status=links_manifest(xr_source_authority_open_input(context,&input,NULL,&limits,&inputs->authorities[i],NULL));
         xr_compile_resources_free(path);if(status!=XR_XIR_OK)return status;
         const XrModuleOverlayInput *overlay=xr_source_authority_overlay(inputs->authorities[i]);
         if(!overlay)return XR_XIR_BAD_STRUCTURE;
         inputs->overlays[i]=*overlay;
     }
     /* Only the selected importer's pins may select this request's packages. */
-    XrModuleResolverConfig config={inputs->stdlib.path,xr_source_authority_lockfile(inputs->authorities[entry]),inputs->catalog};
+    XrModuleResolverConfig config={inputs->stdlib.path,xr_source_authority_lockfile(inputs->authorities[entry]),NULL};
     status=links_module(xr_compile_module_resolver_new(r,&config,&inputs->resolver));
     if(status==XR_XIR_OK)status=links_module(xr_compile_module_resolver_set_overlay(inputs->resolver,inputs->overlays,count));
     return status;

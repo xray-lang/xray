@@ -14,12 +14,10 @@
 #include "xlsp_source_workspace.h"
 #include "../../api/xsource_paths.h"
 #include "../../api/xsource_authority.h"
-#include "../../xir/xxir_library_catalog.h"
 struct XlspSourceWorkspace {
     XrXirCompileContext context;
     XrCompilerSession *session;
     XrStdlibPath stdlib;
-    XrXirLibraryCatalog *catalog;
     XrSourceAuthority **authorities;
     XlspSourceSnapshot **snapshots;
     size_t count;

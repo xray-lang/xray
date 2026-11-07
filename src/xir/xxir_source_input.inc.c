@@ -239,10 +239,11 @@ done:
     if(!report && failure && ctx.diagnostic.status!=XR_XIR_OK) {
         const XrModuleSpec *spec=ctx.graph&&ctx.diagnostic.module<(uint32_t)ctx.graph->spec_count?
             &ctx.graph->specs[ctx.diagnostic.module]:NULL;
-        (void)xr_xir_compile_source_failure_record(ctx.compile.resources,failure,&ctx.diagnostic,
+        XrCompileResourceStatus recorded=xr_xir_compile_source_failure_record(ctx.compile.resources,failure,&ctx.diagnostic,
             failure->path?failure->path:spec?spec->source_path:NULL,
             spec&&spec->source_text?spec->source_text:supplied&&(!spec||ctx.diagnostic.module==(uint32_t)ctx.graph->entry_index)?text:NULL,
             spec&&spec->source_text?spec->source_length:supplied&&(!spec||ctx.diagnostic.module==(uint32_t)ctx.graph->entry_index)?length:0);
+        if(recorded!=XR_COMPILE_RESOURCE_OK)ctx.diagnostic.status=xir_compile_resource_status(recorded);
         report=failure->report;failure->report=NULL;
     }
     xr_frontend_report_seal(report,false);

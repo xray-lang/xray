@@ -209,8 +209,9 @@ static bool source_array_literal(SourceContext *ctx, AstNode *node, SourceExpect
     if (!source_array_element_type(ctx, element.type, &array) || !source_native_array_declaration(ctx)) return false;
     if (!source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_ARRAY_NEW, array, {0}, {0}, 0, {0}},
         elements, (uint32_t) literal->count, value)) return false;
-    return source_query_target_token_reference(ctx,node,
-        ctx->array_declaration, XR_XIR_SOURCE_TYPE_USE);
+    /* Literal brackets imply Array without spelling a type name. */
+    return source_query_target_selected_reference(ctx,source_query_range(ctx,node,NULL),
+        (XrXirSourceRange){ctx->module,0,0,0,0},ctx->array_declaration,XR_XIR_SOURCE_TYPE_USE);
 }
 static bool source_default_value(SourceContext *ctx, AstNode *node, XrXirType type, SourceValue *value);
 /* `Array<T>()` is empty, `Array<T>(n)` and `Array<T>(n, fill)` hold n copies of the fill or of the

@@ -15,8 +15,6 @@
 #include "xlsp_source_bindings.h"
 #include "../../api/xsource_paths.h"
 #include "../../api/xsource_authority.h"
-#include "../../xir/xxir_stdlib_internal.h"
-#include "../../xir/xxir_library_catalog.h"
 #include "../../xir/xxir_source_corpus.h"
 #include <string.h>
 
@@ -58,7 +56,7 @@ XR_FUNC XrXirStatus xlsp_source_bindings_build(const XrXirCompileContext *contex
     if(!context||!context->resources||!documents||!count||count>SIZE_MAX/sizeof(XrModuleOverlayInput)||!out||*out)return XR_XIR_BAD_STRUCTURE;
     XrCompileResources *r=context->resources;XlspSourceBindings *owner=NULL;XrSourceAuthority **authorities=NULL;
     XrModuleOverlayInput *overlays=NULL;size_t *included=NULL;char *program_path=NULL;
-    XrStdlibPath stdlib={0};XrXirLibraryCatalog *catalog=NULL;XrCompilerSession *session=NULL;
+    XrStdlibPath stdlib={0};XrCompilerSession *session=NULL;
     XrXirStatus status=xir_compile_resource_status(xr_compile_resources_calloc(r,1,sizeof(*owner),(void **)&owner));if(status!=XR_XIR_OK)goto done;owner->count=count;
     if(control){status=xir_compile_resource_status(xr_compile_request_control_poll(control));if(status!=XR_XIR_OK)goto done;}
     status=xir_compile_resource_status(xr_compile_resources_calloc(r,count,sizeof(*owner->snapshots),(void **)&owner->snapshots));
@@ -72,7 +70,6 @@ XR_FUNC XrXirStatus xlsp_source_bindings_build(const XrXirCompileContext *contex
         selected==XR_SOURCE_COMPILE_OVERFLOW?XR_XIR_OVERFLOW:selected==XR_SOURCE_COMPILE_CANCELLED?XR_XIR_CANCELLED:
         selected==XR_SOURCE_COMPILE_DEADLINE?XR_XIR_DEADLINE:selected==XR_SOURCE_COMPILE_CLOCK_FAILURE?XR_XIR_CLOCK_FAILURE:selected==XR_SOURCE_COMPILE_BUDGET?XR_XIR_BUDGET:selected==XR_SOURCE_COMPILE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:selected==XR_SOURCE_COMPILE_NOT_FOUND?XR_XIR_UNRESOLVED:XR_XIR_IO;goto done;}
     if(control){status=xir_compile_resource_status(xr_compile_request_control_poll(control));if(status!=XR_XIR_OK)goto done;}
-    status=xir_stdlib_library_catalog_new(context,stdlib.path,&catalog);if(status!=XR_XIR_OK)goto done;
     XrTomlParseLimits limits=xr_source_compile_default_manifest_limits();
     for(size_t i=0;i<count;++i) {
         if(control){status=xir_compile_resource_status(xr_compile_request_control_poll(control));if(status!=XR_XIR_OK)goto done;}
@@ -80,7 +77,7 @@ XR_FUNC XrXirStatus xlsp_source_bindings_build(const XrXirCompileContext *contex
         char *path=NULL;
         status=xlsp_source_uri_path(r,documents[i].uri,documents[i].uri_length,&path);if(status!=XR_XIR_OK)goto done;
         XrSourceEntryInput input={XR_SOURCE_ENTRY_TEXT,path,documents[i].text,documents[i].length};
-        status=bindings_manifest(xr_source_authority_open_input(context,&input,catalog,&limits,&authorities[i],NULL));xr_compile_resources_free(path);if(status!=XR_XIR_OK)goto done;
+        status=bindings_manifest(xr_source_authority_open_input(context,&input,NULL,&limits,&authorities[i],NULL));xr_compile_resources_free(path);if(status!=XR_XIR_OK)goto done;
         const XrModuleOverlayInput *overlay=xr_source_authority_overlay(authorities[i]);if(!overlay){status=XR_XIR_BAD_STRUCTURE;goto done;}
         overlays[i]=*overlay;
         status=bindings_path_copy(r,xr_source_authority_source_path(authorities[i]),&owner->paths[i]);if(status!=XR_XIR_OK)goto done;
@@ -108,7 +105,7 @@ XR_FUNC XrXirStatus xlsp_source_bindings_build(const XrXirCompileContext *contex
             status=bindings_project_same(project,xr_source_authority_project(authorities[j]),&same);
             if(status!=XR_XIR_OK)goto done;if(same||i==j)included[included_count++]=j;}
         XrXirSourceRequest request={session,entry,xr_source_authority_entry(authorities[i]),context,
-            stdlib.path,xr_source_authority_lockfile(authorities[i]),XR_XIR_PROGRAM,catalog};
+            stdlib.path,xr_source_authority_lockfile(authorities[i]),XR_XIR_PROGRAM,NULL};
         XrXirSourceCorpusRequest corpus={&request,overlays,count,included,included_count};
         XrXirSourceResult result={0};status=xr_xir_compile_source_check_corpus(&corpus,&result,NULL,NULL);
         xr_compile_resources_free(program_path);program_path=NULL;
@@ -123,6 +120,6 @@ XR_FUNC XrXirStatus xlsp_source_bindings_build(const XrXirCompileContext *contex
     *out=owner;owner=NULL;
 done:
     xr_compile_session_free(session);if(authorities)for(size_t i=0;i<count;++i)xr_source_authority_close(authorities[i]);
-    xr_compile_resources_free(program_path);xr_compile_resources_free(included);xr_compile_resources_free(authorities);xr_compile_resources_free(overlays);xr_xir_compile_library_catalog_free(catalog);xr_source_stdlib_path_free(&stdlib);
+    xr_compile_resources_free(program_path);xr_compile_resources_free(included);xr_compile_resources_free(authorities);xr_compile_resources_free(overlays);xr_source_stdlib_path_free(&stdlib);
     xlsp_source_bindings_free(owner);return status;
 }

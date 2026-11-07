@@ -67,7 +67,8 @@ static bool source_move(SourceContext *ctx,AstNode *node,SourceValue *output) {
     }
     XrHirBindingAction action;
     if(!source_hir_binding_use(ctx,node,binding,XR_HIR_BINDING_TAKE,(SourceValue){0},&action)||
-        !source_query_reference(ctx,position,binding,binding,XR_XIR_SOURCE_READ_WRITE))return false;
+        !source_query_reference(ctx,position,binding,binding,XR_XIR_SOURCE_READ_WRITE)||
+        !source_query_move_value(ctx,binding->declaration,node))return false;
     uint32_t before=ctx->bodies[ctx->function].count;
     return source_recipe_record(ctx,(XrXirInstruction){action.operation,action.logical,
         {action.location},{0},0,{0}},output)&&source_hir_binding_emitted(ctx,&action,output,before);

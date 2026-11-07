@@ -127,3 +127,13 @@ static bool source_query_ref_argument(SourceContext *ctx,uint32_t declaration,Xr
     XrXirSourceMarker marker={range,declaration,XR_XIR_SOURCE_MARKER_REF_ARGUMENT};
     return source_copy_bytes(ctx,NULL,&facts[ctx->syntax.marker_count-1],&marker,sizeof(marker));
 }
+static bool source_query_move_value(SourceContext *ctx,uint32_t declaration,AstNode *node) {
+    XrXirSourceRange range=source_query_name_span(ctx,(XrNameSpan){node->line,node->column},"move");
+    if(ctx->diagnostic.status!=XR_XIR_OK)return false;
+    XrXirSourceMarker *facts=source_query_append(ctx,ctx->syntax.markers,&ctx->syntax.marker_count,
+        &ctx->syntax_marker_capacity,sizeof(*facts));
+    if(!facts)return false;
+    ctx->syntax.markers=facts;
+    XrXirSourceMarker marker={range,declaration,XR_XIR_SOURCE_MARKER_MOVE_VALUE};
+    return source_copy_bytes(ctx,NULL,&facts[ctx->syntax.marker_count-1],&marker,sizeof(marker));
+}

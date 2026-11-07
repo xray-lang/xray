@@ -1048,7 +1048,6 @@ else()
     set(XRAY_BUILD_LIB_DIR "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 add_compile_definitions(
-    XRT_AOT_INCLUDE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/src/aot"
     XRT_SOURCE_INCLUDE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/include"
     XRT_BUILD_LIB_DIR="${XRAY_BUILD_LIB_DIR}"
     XTC_BUILD_HOST_TARGET="${XRAY_HOST_TARGET_ABI}"
@@ -1078,15 +1077,13 @@ set(XRAY_CLI_SOURCES
     ${XRAY_CLI_ROOT}/xcmd_repl.c
     ${XRAY_CLI_ROOT}/xcmd_run.c
     ${XRAY_CLI_ROOT}/xcmd_build.c
-    ${XRAY_CLI_ROOT}/xcli_lir.c
-    ${XRAY_CLI_ROOT}/xcli_lir_native.c
     ${XRAY_CLI_ROOT}/xcmd_deps.c
     ${XRAY_CLI_ROOT}/xcmd_toolchain.c
     ${XRAY_CLI_ROOT}/xcmd_check.c
     ${XRAY_CLI_ROOT}/xcmd_fmt.c
     ${XRAY_CLI_ROOT}/xcmd_test.c
     ${XRAY_CLI_ROOT}/xcmd_self.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/app/toolchain/xtc_discovery.c)
+)
 if(WIN32)
     list(APPEND XRAY_CLI_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/os/win/thread_win.c)
 else()
@@ -1292,6 +1289,7 @@ include(src/api/xsource_compile.cmake)
 include(src/app/toolchain/xir_target.cmake)
 
 add_library(xray_host_toolchain STATIC src/app/toolchain/xtc_host_toolchain.c
+    src/app/toolchain/xtc_discovery.c
     src/base/xio_policy.c src/base/xfileio.c src/os/${XIR_NATIVE_OS}/fs_${XIR_NATIVE_OS}.c)
 target_link_libraries(xray_host_toolchain PUBLIC xray_toolchain_process xray_xir_target)
 target_include_directories(xray_host_toolchain PUBLIC "${PROJECT_SOURCE_DIR}/src")
@@ -1303,6 +1301,20 @@ if(MSVC)
 else()
     target_compile_options(xray_host_toolchain PRIVATE -Wall -Wextra -Werror -pedantic)
 endif()
+
+add_library(xray_cli_lir STATIC src/app/cli/xcli_lir.c src/app/cli/xcli_lir_native.c)
+target_link_libraries(xray_cli_lir PUBLIC xray_source_compile xray_lir_lower xray_lir_c
+    xray_host_toolchain xray_xir_workspace xray_xir_publication xray_cli_toolchain_config)
+target_include_directories(xray_cli_lir PUBLIC "${PROJECT_SOURCE_DIR}/src"
+    PRIVATE "${PROJECT_BINARY_DIR}/generated")
+target_compile_features(xray_cli_lir PUBLIC c_std_11)
+set_target_properties(xray_cli_lir PROPERTIES C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(xray_cli_lir PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(xray_cli_lir PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+target_link_libraries(xray PRIVATE xray_cli_lir)
 
 set(_native_crt_name "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>")
 set(_native_crt "$<IF:$<STREQUAL:${_native_crt_name},MultiThreaded>,0,$<IF:$<STREQUAL:${_native_crt_name},MultiThreadedDebug>,1,$<IF:$<STREQUAL:${_native_crt_name},MultiThreadedDebugDLL>,3,2>>>")
