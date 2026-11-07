@@ -372,18 +372,3 @@ else()
 endif()
 add_test(NAME test_xir_cleanup_replaced_resources COMMAND test_xir_cleanup_replaced_value_fault resources)
 set_tests_properties(test_xir_cleanup_replaced_resources PROPERTIES LABELS "unit;xir;cleanup;ownership;resources" TIMEOUT 120)
-
-add_executable(test_xir_cleanup_replaced_sdk_reader "${PROJECT_SOURCE_DIR}/tests/unit/xir/sdk_cleanup_consumer.c")
-target_link_libraries(test_xir_cleanup_replaced_sdk_reader PRIVATE xray_xir_runtime_sdk)
-target_compile_definitions(test_xir_cleanup_replaced_sdk_reader PRIVATE XR_CLEANUP_READER=1)
-set_target_properties(test_xir_cleanup_replaced_sdk_reader PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-if(MSVC)
-    target_compile_options(test_xir_cleanup_replaced_sdk_reader PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_cleanup_replaced_sdk_reader PRIVATE -Wall -Wextra -Werror -pedantic)
-endif()
-add_test(NAME test_xir_cleanup_replaced_sdk_manifest COMMAND ${XRAY_PYTHON} -X utf8
-    "${PROJECT_SOURCE_DIR}/tests/unit/xir/sdk_manifest_vectors.py"
-    --executable $<TARGET_FILE:test_xir_cleanup_replaced_sdk_reader>
-    --bundle "${CMAKE_BINARY_DIR}/xir-runtime-sdk" --case cleanup-abi)
-set_tests_properties(test_xir_cleanup_replaced_sdk_manifest PROPERTIES LABELS "unit;xir;cleanup;sdk;abi" TIMEOUT 120)

@@ -50,9 +50,8 @@
         "tests/unit/xir/rune_text_output.cmake",
         "tests/fixtures/xir_rune_whitespace/previous*-read-ref.chk"
       ],
-      "reason": "Installed Checked-to-C runtime SDK and previous-contract/cleanup ABI rejection.",
+      "reason": "Current loader ownership, malformed external input and local toolchain behavior.",
       "tests": [
-        "test_xir_cleanup_replaced_sdk_manifest",
         "xir_checked_previous111",
         "xir_checked_previous112",
         "xir_checked_previous113",
@@ -69,13 +68,13 @@
         "xir_checked_previous126",
         "xir_checked_previous127",
         "xir_checked_previous128",
-        "test_xir_runtime_sdk_combined_identity",
-        "test_xir_runtime_sdk_current_wire_vector",
         "local_toolchain_real",
-        "local_toolchain_faults"
+        "local_toolchain_faults",
+        "test_xir_runtime_sdk_owner",
+        "test_xir_runtime_sdk_shared_resources",
+        "test_xir_runtime_sdk_manifest"
       ],
       "targets": [
-        "test_xir_cleanup_replaced_sdk_reader",
         "test_xir_runtime_sdk",
         "test_xir_rune_whitespace",
         "test_local_toolchain_production",

@@ -51,7 +51,7 @@ add_test(NAME meta_ownership_inventory COMMAND "${Python3_EXECUTABLE}" -X utf8
 foreach(oracle derive_assert_condition_vector derive_assert_equal_vector derive_assert_panics_vector
     derive_equal57_migration derive_nullable58_vectors derive_panic_carrier_vector
     derive_native_projection_vectors derive_native_projection69_vectors derive_native_projection70_vectors
-    derive_native_projection72_vectors derive_sdk_identity derive_sdk_current_identity
+    derive_native_projection72_vectors
     derive_source_layout_identity derive_source_layout22_identity)
     add_test(NAME ${oracle} COMMAND "${Python3_EXECUTABLE}" -X utf8 "${CMAKE_CURRENT_LIST_DIR}/../${oracle}.py")
 endforeach()

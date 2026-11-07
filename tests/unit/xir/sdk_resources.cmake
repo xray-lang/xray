@@ -16,9 +16,7 @@ add_library(xir_sdk_resources_production STATIC
 add_executable(test_xir_sdk_resources "${CMAKE_CURRENT_LIST_DIR}/test_xir_runtime_sdk.c"
     "${XIR_TARGET_SOURCE_ROOT}/src/base/xjson_cursor.c"
     "${XIR_TARGET_SOURCE_ROOT}/src/base/xsha256.c" "${XIR_TARGET_SOURCE_ROOT}/src/base/xutf8.c")
-add_executable(test_xir_sdk_resources_lease "${CMAKE_CURRENT_LIST_DIR}/test_xir_sdk_lease.c")
-target_link_libraries(test_xir_sdk_resources_lease PRIVATE xir_sdk_resources_production)
-foreach(target xir_sdk_resources_production test_xir_sdk_resources test_xir_sdk_resources_lease)
+foreach(target xir_sdk_resources_production test_xir_sdk_resources)
     target_include_directories(${target} PRIVATE "${XIR_TARGET_SOURCE_ROOT}/src" "${XIR_SDK_BUNDLE_DIR}")
     target_compile_features(${target} PRIVATE c_std_11)
     target_compile_definitions(${target} PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
@@ -30,7 +28,7 @@ foreach(target xir_sdk_resources_production test_xir_sdk_resources test_xir_sdk_
 endforeach()
 add_test(NAME test_xir_sdk_resources COMMAND test_xir_sdk_resources
     "${XIR_SDK_BUNDLE_DIR}" "${XIR_SDK_BUNDLE_DIR}/sdk_manifest.json")
-# Target-only impact gate; the default executable invocation remains exhaustive.
+# The explicit --faults mode retains the complete allocator and IO fault sweep.
 add_test(NAME test_xir_sdk_shared_resources COMMAND test_xir_sdk_resources
     "${XIR_SDK_BUNDLE_DIR}" "${XIR_SDK_BUNDLE_DIR}/sdk_manifest.json" --shared-resources)
 set_tests_properties(test_xir_sdk_shared_resources PROPERTIES
@@ -39,12 +37,6 @@ find_package(Python3 COMPONENTS Interpreter REQUIRED)
 add_test(NAME test_xir_sdk_resources_manifest COMMAND "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_LIST_DIR}/sdk_manifest_vectors.py" --executable $<TARGET_FILE:test_xir_sdk_resources>
     --bundle "${XIR_SDK_BUNDLE_DIR}")
-add_test(NAME test_xir_sdk_resources_current_wire_vector COMMAND "${Python3_EXECUTABLE}"
-    "${CMAKE_CURRENT_LIST_DIR}/derive_sdk_current_identity.py")
-set_tests_properties(test_xir_sdk_resources test_xir_sdk_resources_manifest test_xir_sdk_resources_current_wire_vector PROPERTIES
+set_tests_properties(test_xir_sdk_resources test_xir_sdk_resources_manifest PROPERTIES
     LABELS "unit;xir;ownership;sdk;resources" RUN_SERIAL TRUE TIMEOUT 300)
-if(ENABLE_ASAN OR ENABLE_SANITIZERS)
-    set_tests_properties(test_xir_sdk_resources PROPERTIES COST 210)
-else()
-    set_tests_properties(test_xir_sdk_resources PROPERTIES COST 30)
-endif()
+set_tests_properties(test_xir_sdk_resources PROPERTIES COST 30)

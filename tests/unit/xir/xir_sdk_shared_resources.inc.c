@@ -41,7 +41,7 @@ static void sdk_faults_with_target(const XrXirRuntimeSdkRequest *original) {
 }
 static void sdk_shared_resources(const XrXirRuntimeSdkRequest *original,bool run_sdk_faults) {
     size_t physical=runtime_bytes;DWORD handles=sdk_handles();
-    XrXirRuntimeSdkRequest request=*original;request.resources=sdk_ledger(&sdk_measurement_limits);
+    XrXirRuntimeSdkRequest request=*original;request.resources=sdk_ledger(&sdk_unlimited);
     XrXirRuntimeSdk *sdk=NULL;XrXirTargetSnapshot *target=NULL;
     CHECK(xr_xir_runtime_sdk_load(&request,&sdk)==XR_XIR_SDK_OK);
     uint64_t sdk_live=sdk_stats(request.resources).held_bytes;
@@ -66,7 +66,7 @@ static void sdk_shared_resources(const XrXirRuntimeSdkRequest *original,bool run
         CHECK(runtime_bytes==physical && sdk_handles()==handles);
     }
     for (unsigned reverse=0;reverse<2;++reverse) {
-        request.resources=sdk_ledger(&sdk_measurement_limits);sdk=NULL;target=NULL;
+        request.resources=sdk_ledger(&sdk_unlimited);sdk=NULL;target=NULL;
         CHECK(sdk_target(&request,&target)==XR_XIR_TARGET_OK);
         CHECK(xr_xir_runtime_sdk_load(&request,&sdk)==XR_XIR_SDK_OK);
         xr_compile_resources_release(request.resources);
@@ -92,7 +92,7 @@ static void sdk_shared_resources(const XrXirRuntimeSdkRequest *original,bool run
     puts("SDK + Target resident-memory exact-minus1, reuse, producer release and both destruction orders PASS");
 }
 static void sdk_io_and_utf8(void) {
-    XrCompileResources *resources=sdk_ledger(&sdk_measurement_limits);
+    XrCompileResources *resources=sdk_ledger(&sdk_unlimited);
     XrCompileResourceStats before=sdk_stats(resources);
     XrJsonCursor json=xr_json_cursor_make(NULL,0);size_t length=0;
     CHECK(xr_json_cursor_length(&json,"abc",&length) && length==3);

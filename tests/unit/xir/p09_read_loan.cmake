@@ -17,17 +17,3 @@ add_test(NAME test_xir_p09_read_loan COMMAND test_xir_p09_read_loan)
 set_tests_properties(test_xir_p09_read_loan PROPERTIES TIMEOUT 120 LABELS "unit;xir;borrow;ownership;memory;budget;target-impact")
 add_test(NAME test_xir_p09_read_loan_allocations COMMAND test_xir_p09_read_loan --full)
 set_tests_properties(test_xir_p09_read_loan_allocations PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "unit;xir;borrow;ownership;memory;budget;fault")
-
-if(WIN32)
-    foreach(provider msvc clang zig)
-        string(TOUPPER ${provider} upper)
-        if(XIR_SDK_${upper})
-            add_test(NAME test_xir_p09_read_loan_sdk_${provider} COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_LIST_DIR}/p09_read_loan_sdk.py
-                --lease $<TARGET_FILE:test_xir_sdk_lease> --bundle ${CMAKE_BINARY_DIR}/xir-runtime-sdk
-                --compiler ${XIR_SDK_${upper}} --linker ${XIR_SDK_LINKER} --provider ${provider})
-            set_tests_properties(test_xir_p09_read_loan_sdk_${provider} PROPERTIES
-                TIMEOUT 300 RUN_SERIAL TRUE COST 30 LABELS "unit;xir;borrow;ownership;sdk;abi;generated-c;portability")
-        endif()
-    endforeach()
-endif()

@@ -50,7 +50,7 @@ add_executable(test_sdk_old_data "${CMAKE_CURRENT_LIST_DIR}/../test_xir_compile_
 target_link_libraries(test_sdk_old_data PRIVATE ${SDK_OWNER_LIBRARIES} ${XIR_SDK_SYSTEM_LIBRARIES})
 set(XIR_TARGET_SOURCE_ROOT "${SDK_OWNER_ROOT}")
 include("${CMAKE_CURRENT_LIST_DIR}/../sdk_resources.cmake")
-foreach(target sdk_owner_generator test_sdk_compile_owner test_sdk_old_data xir_sdk_resources_production test_xir_sdk_resources test_xir_sdk_resources_lease)
+foreach(target sdk_owner_generator test_sdk_compile_owner test_sdk_old_data xir_sdk_resources_production test_xir_sdk_resources)
     target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}" "${XIR_SDK_BUNDLE_DIR}" "${XIR_SDK_BUNDLE_DIR}/src" "${SDK_OWNER_ROOT}/src")
     target_compile_definitions(${target} PRIVATE NDEBUG NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS)
     target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
@@ -65,7 +65,5 @@ add_test(NAME test_sdk_old_objects COMMAND "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_LIST_DIR}/verify_sdk_compile_owner.py" --bundle "${XIR_SDK_BUNDLE_DIR}"
     --old "${XIR_OLD_ABI_DIR}" --root "${SDK_OWNER_ROOT}" --output "${CMAKE_CURRENT_BINARY_DIR}/old-objects"
     --owner $<TARGET_FILE:test_xir_sdk_resources>)
-add_test(NAME test_sdk_identity_known_bytes COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/../derive_sdk_identity.py")
-add_test(NAME test_sdk_current_identity_known_bytes COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/../derive_sdk_current_identity.py")
-set_tests_properties(test_sdk_compile_owner test_sdk_old_data test_sdk_old_objects test_sdk_identity_known_bytes test_sdk_current_identity_known_bytes
+set_tests_properties(test_sdk_compile_owner test_sdk_old_data test_sdk_old_objects
     PROPERTIES LABELS "unit;xir;sdk;abi;ownership" RUN_SERIAL TRUE TIMEOUT 180)

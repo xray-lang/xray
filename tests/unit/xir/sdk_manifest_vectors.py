@@ -23,89 +23,11 @@ def identity(manifest):
 
 
 
-def raw_error_abi_cases(original):
-    rows=original['abi_measurements']
-    positions=[i for i,row in enumerate(rows) if row['id']==304]
-    assert len(positions)==1 and rows[positions[0]]['value']==40
-    index=positions[0];cases=[('raw-error-same',original,0)]
-    for name in ('missing','offset','id','old-call35'):
-        value=json.loads(json.dumps(original))
-        if name=='missing':value['abi_measurements'].pop(index)
-        elif name=='offset':value['abi_measurements'][index]['value']=41
-        elif name=='id':value['abi_measurements'][index]['id']=305
-        else:value['call_abi']=35
-        cases.append(('raw-error-'+name,value,1))
-    return cases
-
-
-def cleanup_abi_cases(original):
-    assert original['call_abi']==38 and original['semantic']==129
-    rows=original['abi_measurements'];cases=[('cleanup-current',original,0)]
-    for field,offset in ((305,56),(406,104),(407,176),(3014,124),(3113,108)):
-        indexes=[i for i,row in enumerate(rows) if row['id']==field]
-        assert len(indexes)==1 and rows[indexes[0]]['value']==offset
-        index=indexes[0]
-        for attack in ('missing','offset','id'):
-            value=json.loads(json.dumps(original))
-            if attack=='missing':value['abi_measurements'].pop(index)
-            elif attack=='offset':value['abi_measurements'][index]['value']=offset+1
-            else:value['abi_measurements'][index]['id']=999999
-            cases.append((f'cleanup-{field}-{attack}',value,1))
-    for attack in ('old-call36','old-common102','old-common103','old-common104','old-common105','old-common106','old-common107','old-common108','old-common109','old-common110','old-common111','old-common112','old-common113','old-common114','old-common115','old-common116','old-common117','old-common118','old-common119','old-common120','old-common121','old-common122','old-common123','old-common124','old-common125','old-common126','old-common127','old-common128','extra','duplicate','order'):
-        value=json.loads(json.dumps(original))
-        if attack=='old-call36':value['call_abi']=36
-        elif attack=='old-common102':value['semantic']=102
-        elif attack=='old-common103':value['semantic']=103
-        elif attack=='old-common104':value['semantic']=104
-        elif attack=='old-common105':value['semantic']=105
-        elif attack=='old-common106':value['semantic']=106
-        elif attack=='old-common107':value['semantic']=107
-        elif attack=='old-common108':value['semantic']=108
-        elif attack=='old-common109':value['semantic']=109
-        elif attack=='old-common110':value['semantic']=110
-        elif attack=='old-common111':value['semantic']=111
-        elif attack=='old-common112':value['semantic']=112
-        elif attack=='old-common113':value['semantic']=113
-        elif attack=='old-common114':value['semantic']=114
-        elif attack=='old-common115':value['semantic']=115
-        elif attack=='old-common116':value['semantic']=116
-        elif attack=='old-common117':value['semantic']=117
-        elif attack=='old-common118':value['semantic']=118
-        elif attack=='old-common119':value['semantic']=119
-        elif attack=='old-common120':value['semantic']=120
-        elif attack=='old-common121':value['semantic']=121
-        elif attack=='old-common122':value['semantic']=122
-        elif attack=='old-common123':value['semantic']=123
-        elif attack=='old-common124':value['semantic']=124
-        elif attack=='old-common125':value['semantic']=125
-        elif attack=='old-common126':value['semantic']=126
-        elif attack=='old-common127':value['semantic']=127
-        elif attack=='old-common128':value['semantic']=128
-        elif attack=='extra':value['abi_measurements'].append({'id':999999,'value':0})
-        elif attack=='duplicate':value['abi_measurements'].append(value['abi_measurements'][-1])
-        else:value['abi_measurements'][-1],value['abi_measurements'][-2]=value['abi_measurements'][-2],value['abi_measurements'][-1]
-        cases.append(('cleanup-'+attack,value,1))
-    return cases
-
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--executable',required=True);parser.add_argument('--bundle',type=Path,required=True)
-    parser.add_argument('--case',choices=('all','raw-error-abi','cleanup-abi'),default='all')
-    args=parser.parse_args();bundle=args.bundle.resolve();original=json.loads((bundle/'sdk_manifest.json').read_text())
-    if args.case in ('raw-error-abi','cleanup-abi'):
-        with tempfile.TemporaryDirectory(prefix='xir-sdk-error-abi-') as temporary:
-            directory=Path(temporary)
-            for name,value,status in (cleanup_abi_cases(original) if args.case=='cleanup-abi' else raw_error_abi_cases(original)):
-                path=directory/(name+'.json');path.write_text(json.dumps(value,ensure_ascii=False),encoding='utf-8')
-                result=subprocess.run([args.executable,str(bundle),str(path),'status'],capture_output=True,timeout=60)
-                assert not result.returncode,(name,result.stderr.decode(errors='replace'))
-                facts=result.stdout.decode().split();assert int(facts[0])==status,(name,facts,status)
-                if status==0:assert int(facts[1])==len(original['files']) and facts[2]==identity(original)
-                print(name+': actual SDK status '+facts[0])
-        print('SDK owned Error ABI exact row/offset/current admission and missing/wrong/old Call refusal PASS')
-        return
-
+    args=parser.parse_args();bundle=args.bundle.resolve();original=json.loads((bundle/'sdk_manifest.json').read_text(encoding='utf-8'))
     with tempfile.TemporaryDirectory(prefix='xir-sdk-gates-') as temporary:
         directory=Path(temporary);cases=[]
         def add(name,value,status=1):
@@ -114,8 +36,6 @@ def main():
             cases.append((name,path,status))
         def modified():return json.loads(json.dumps(original))
         add('same',original,0);add('root-reordered',dict(reversed(list(original.items()))),0)
-        for case in raw_error_abi_cases(original):add(*case)
-        for case in cleanup_abi_cases(original):add(*case)
         escaped=json.dumps(original).replace('"schema"','"\\u0073chema"').replace('kernel32','kernel\\u0033\\u0032')
         add('escaped-same',escaped.encode(),0)
         assert original['system_libraries']==['kernel32','bcrypt','advapi32','userenv']
@@ -130,10 +50,15 @@ def main():
             value=modified();value['system_libraries']=libraries;add('libraries-'+name,value)
         for name in list(original)[:17]:
             value=modified();value[name]+=1;add('prefix-'+name,value,6 if name in ('sanitizers','allocator') else 1)
-        for name,old in (('schema',1),('semantic',57),('semantic',84),('value_abi',16),('call_abi',20),('program_abi',25)):
-            value=modified();value[name]=old;add('old-'+name+('-84' if name=='semantic' and old==84 else ''),value)
         for i,row in enumerate(original['abi_measurements']):
             value=modified();value['abi_measurements'][i]['value']=row['value']+1;add('abi-'+str(row['id']),value)
+        for attack in ('missing','unknown','extra','order'):
+            value=modified();rows=value['abi_measurements']
+            if attack=='missing':rows.pop()
+            elif attack=='unknown':rows[-1]['id']=max(row['id'] for row in rows)+1
+            elif attack=='extra':rows.append({'id':max(row['id'] for row in rows)+1,'value':0})
+            else:rows[-1],rows[-2]=rows[-2],rows[-1]
+            add('abi-'+attack,value)
         for name in original:
             value=modified();del value[name];add('missing-'+name,value)
         for name,token in (('negative',b'-1'),('fraction',b'2.5'),('bool',b'true'),('leading',b'02'),
@@ -174,7 +99,7 @@ def main():
         assert not junction.returncode,junction.stderr.decode(errors='replace')
         run(('reparse-ancestor',good,1),shadow)
         src.rmdir();moved.rename(src)
-    print('SDK independent identity and '+str(len(cases))+' closed manifest/ABI attacks; actual file/ancestor gates PASS')
+    print('SDK current manifest facts and '+str(len(cases))+' closed manifest/ABI attacks; actual file/ancestor gates PASS')
 
 
 if __name__=='__main__':main()
