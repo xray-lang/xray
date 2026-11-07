@@ -36,8 +36,8 @@ static XrXirStatus bound_implementation(const XrXirCompileContext *context,
     XrXirBlock two={.count=2},four={.count=4},method_block={.count=rooted?3u:2u};
     XrXirFunction functions[]={
         {.name="entry",.name_length=5,.parameters=NULL,.parameter_count=0,.result=XR_XIR_I64,.blocks=&two,.block_count=1,.instructions=answer,.instruction_count=2,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER},
-        {.name="init",.name_length=4,.parameters=NULL,.parameter_count=0,.result=XR_XIR_UNIT,.blocks=&three,.block_count=1,.instructions=init,.instruction_count=3,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER},
-        {.name="measure",.name_length=7,.parameters=&receiver,.parameter_count=1,.result=XR_XIR_I64,.blocks=&two,.block_count=1,.instructions=measure,.instruction_count=2,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER}};
+        {.name="init",.name_length=4,.parameters=NULL,.parameter_count=0,.result=XR_XIR_UNIT,.blocks=&four,.block_count=1,.instructions=init,.instruction_count=4,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER},
+        {.name="measure",.name_length=7,.parameters=&receiver,.parameter_count=1,.result=XR_XIR_I64,.blocks=&method_block,.block_count=1,.instructions=measure,.instruction_count=rooted?3u:2u,.operands=NULL,.operand_count=0,.error_type=XR_XIR_NEVER}};
     XrXirSourceModule source={"alpha",5,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[3]={{0}};
     identities[2].exported=1;identities[2].nominal_owner=1;identities[2].method_kind=XR_XIR_READ_METHOD;

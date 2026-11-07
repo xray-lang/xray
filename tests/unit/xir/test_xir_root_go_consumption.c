@@ -99,7 +99,7 @@ static void go_query_cases(bool resources) {
     XrXirArtifact *checked=go_replay(go_source("root.xr",true,XR_XIR_OK,NULL));
     go_source_oracles(checked,false);
     if(resources){
-        effect_memory_boundaries(checked);effect_analysis_work_cut(checked,1,false);effect_analysis_work_cut(checked,0,true);
+        effect_memory_boundaries(checked);effect_analysis_reuse(checked);
     }
     XrXirArtifact *lowered=go_lower(checked);go_source_oracles(lowered,true);
     go_proof(lowered,resources);effect_artifact_free(lowered);effect_artifact_free(checked);CHECK(effect_balanced());

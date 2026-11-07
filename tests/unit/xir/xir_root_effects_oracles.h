@@ -159,7 +159,7 @@ static void root_permutation(void) {
         EffectEdge edges[]={{1,reverse?UINT32_MAX:1u,0,false},{2,reverse?0u:UINT32_MAX,0,false},
             {0,UINT32_MAX,8,false},{0,UINT32_MAX,2,false}};
         EffectGraph graph={.heads=heads,.queue=queue,.edges=edges};
-        CHECK(effect_root_witnesses(&effects,&graph,&effect_context,false)==XR_XIR_OK);
+        CHECK(effect_root_witnesses(&effects,&graph,false)==XR_XIR_OK);
         for(uint32_t f=0;f<4;++f){
             CHECK(witnesses[f].cause==expected[f].cause&&witnesses[f].instruction==expected[f].instruction);
             CHECK(witnesses[f].callee==expected[f].callee&&witnesses[f].slot==expected[f].slot&&witnesses[f].distance==expected[f].distance);

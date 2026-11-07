@@ -106,7 +106,7 @@ static void bound_facts(void) {
     CHECK(known->instruction==0 && unknown->instruction==0 && known->distance==0 && unknown->distance==0);
     XrXirRootCauseTrace *trace=NULL;CHECK(xr_xir_compile_root_cause_trace_copy(&context,effects,10,&trace)==XR_XIR_OK && trace);
     XrCompileResourceStats before=bound_stats(&context);
-    CHECK(xr_xir_compile_effects_infer_verified(&context,xr_xir_compile_artifact_module(checked),&effects)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_effects_analyze(checked,&effects)==XR_XIR_BAD_STRUCTURE);
     XrCompileResourceStats after=bound_stats(&context);CHECK(before.allocation_count==after.allocation_count && before.allocated_bytes==after.allocated_bytes);
     xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);
     xr_compile_resources_release(context.resources);context=(XrXirCompileContext){0};
