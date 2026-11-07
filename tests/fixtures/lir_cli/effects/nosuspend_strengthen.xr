@@ -1,0 +1,2 @@
+fn pure()->i64{return 1}
+const limited:nosuspend fn()->i64=pure

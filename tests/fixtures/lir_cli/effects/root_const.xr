@@ -1,0 +1,4 @@
+const state:i64=1
+fn leaf()->i64{return state}
+fn relay()->i64{return leaf()}
+const task=go relay()

@@ -18,7 +18,7 @@ REQUIRED = (
     "test_lir_c_faults", "test_lir_c_native", "test_cgen_verify_output",
     "register_vm", "register_vm_native_print", "register_vm_alloc",
     "lir_bytecode", "lir_bytecode_alloc", "lir_bytecode_source",
-    "lir_vm_source", "lir_vm_output", "skeleton_diff", "smoke",
+    "lir_vm_source", "lir_vm_output", "skeleton_diff", "smoke", "test_lir_cli_commands",
 )
 
 

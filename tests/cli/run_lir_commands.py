@@ -102,6 +102,33 @@ def main() -> None:
         refused = run(name + "-build", [binary, "build", source, "-o", executable], 1)
         assert not executable.exists() and b"constant scalar initializer" in refused.stderr
 
+    effects = fixtures / "effects"
+    for name in ("pure_recursive_import", "pure_import_go", "nosuspend_literal",
+                 "root_const", "signature_throws", "signature_generic_try"):
+        checked = run(name + "-check", [binary, "check", effects / (name + ".xr")], 0)
+        assert not checked.stdout and not checked.stderr, name
+
+    rejected_effects = (
+        ("nosuspend_await", b"declared no_suspend function may suspend"),
+        ("nosuspend_fixed_callable", b"declared no_suspend function may suspend"),
+        ("nosuspend_strengthen", b"qualified reference requires an explicit target promise"),
+        ("root_mutable", b"GO target requires the current instance root execution"),
+        ("root_cleanup", b"GO target requires the current instance root execution"),
+        ("root_default", b"GO target requires the current instance root execution"),
+        ("root_import", b"GO target requires the current instance root execution"),
+        ("signature_missing_try", b"E0330: throwing call requires try or a try body"),
+        ("signature_redundant_try", b"E0336: try expression has no business-error source"),
+    )
+    for name, diagnostic in rejected_effects:
+        source = effects / (name + ".xr")
+        for command in ("check", "run", "build"):
+            destination = work / (name + ".c")
+            destination.write_bytes(sentinel)
+            options = ["--c-only", "-o", destination] if command == "build" else []
+            refused = run(name + "-" + command, [binary, command, source, *options], 1)
+            assert not refused.stdout and diagnostic in refused.stderr, (name, command)
+            assert destination.read_bytes() == sentinel, (name, command)
+
     for command in ("repl", "dap", "test"):
         refused = run("unavailable-" + command, [binary, command], 1)
         assert not refused.stdout and b"temporarily unavailable" in refused.stderr

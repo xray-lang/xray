@@ -1,0 +1,4 @@
+var state:i64=1
+fn helper(value:i64=state)->i64{return value}
+fn worker()->i64{return helper()}
+const task=go worker()

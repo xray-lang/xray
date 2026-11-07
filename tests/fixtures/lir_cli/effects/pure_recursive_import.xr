@@ -1,0 +1,2 @@
+import "./pure" as pure
+const limited:nosuspend fn()->i64=fn()->i64{return pure.even(5)}

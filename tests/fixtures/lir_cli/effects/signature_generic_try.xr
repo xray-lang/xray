@@ -1,0 +1,1 @@
+fn apply<E:Error>(callback:fn() throws(E)->i64) throws(E)->i64{return try callback()}

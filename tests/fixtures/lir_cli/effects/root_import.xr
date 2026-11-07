@@ -1,0 +1,3 @@
+import "./root_library" as library
+fn worker()->i64{return library.left()+library.right()}
+const task=go worker()

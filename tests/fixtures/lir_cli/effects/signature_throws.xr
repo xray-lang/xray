@@ -1,0 +1,3 @@
+enum Failure{Bad}
+fn promised() throws(Failure)->i64{return 1}
+fn handled() throws(Failure)->i64{return try promised()}

@@ -1,0 +1,2 @@
+import "./pure" as pure
+const task=go pure.even(5)

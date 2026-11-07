@@ -1,0 +1,4 @@
+var state:i64=1
+export fn leaf()->i64{return state}
+export fn left()->i64{return leaf()}
+export fn right()->i64{return leaf()}
