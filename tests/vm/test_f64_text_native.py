@@ -149,12 +149,18 @@ def main():
             crt = {'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd',
                    'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd'}[args.msvc_runtime]
             flags = ['/nologo', '/std:c++17' if cpp else '/std:c11', '/W4', '/WX', '/utf-8', crt, '/O2',
-                     '/I' + str(args.include), '/I' + str(work)]
+                     '/fp:precise', '/I' + str(args.include), '/I' + str(work)]
+            if 'clang' in args.compiler.name.lower():
+                flags += ['/clang:-ffp-contract=off']
+            else:
+                # This input deliberately produces IEEE infinities and NaN by
+                # dividing by zero. Keep every other warning fatal.
+                flags += ['/wd4723']
             flags += ['/clang:-fno-lto'] if 'clang' in args.compiler.name.lower() else ['/GL-']
             if cpp: flags += ['/EHsc']
             if args.asan: flags += ['/fsanitize=address', '/clang:-fsanitize=undefined', '/Zi']
             return flags
-        return ['-std=c++17' if cpp else '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic', '-O2', '-fno-lto',
+        return ['-std=c++17' if cpp else '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic', '-O2', '-fno-lto', '-ffp-contract=off',
                 '-I' + str(args.include), '-I' + str(work), *(['-fsanitize=address,undefined', '-g'] if args.asan else [])]
 
     def compile_command(compiler, flags, path, obj):
