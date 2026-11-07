@@ -103,6 +103,59 @@ static XrModuleStatus probe(XrCompileResourceLimits caps,unsigned mode,XrCompile
     if(resources) {XrCompileResourceStats end={0};XrCompileResourceStatus es=xr_compile_resources_stats(resources,&end);if(es!=XR_COMPILE_RESOURCE_OK || end.held_bytes!=baseline.held_bytes)fprintf(stderr,"cleanup status=%d module=%d mode=%u fail=%zu attempts=%zu live=%llu blocks=%zu\n",(int)es,(int)status,mode,fail_at,attempts,(unsigned long long)end.held_bytes,live);CHECK(es==XR_COMPILE_RESOURCE_OK && end.held_bytes==baseline.held_bytes);}
     xr_compile_resources_release(resources);CHECK(!live && !live_bytes);return status;
 }
+static size_t deep_graph(size_t failure) {
+    enum { count = 32768 };
+    XrCompileResources *resources = NULL;
+    XrCompileResourceLimits caps = limits();
+    CHECK(xr_compile_resources_new(&caps,&resources) == XR_COMPILE_RESOURCE_OK);
+    XrCompileResourceStats baseline = {0};
+    CHECK(xr_compile_resources_stats(resources,&baseline) == XR_COMPILE_RESOURCE_OK);
+    ModuleWork work = {resources,XR_MODULE_OK};
+    XrModuleSpec *specs = module_calloc(&work,count,sizeof(*specs));
+    int *edges = module_calloc(&work,count,sizeof(*edges));
+    CHECK(specs && edges && work.status == XR_MODULE_OK);
+    /* The fixture owns these two arrays. Sort only borrows their edge views. */
+    XrModuleGraph graph = {.resources=resources,.specs=specs,.spec_count=count,.spec_capacity=count};
+    for (int i = 0; i < count; ++i) {
+        edges[i] = i+1;
+        specs[i].logical_path = "node";
+        specs[i].dep_indices = &edges[i];
+        specs[i].dep_count = specs[i].dep_capacity = i+1 < count ? 1 : 0;
+    }
+    CHECK(xr_compile_module_graph_topological_sort(&graph) == XR_MODULE_OK);
+    CHECK(graph.topo_count == count && !graph.has_cycle && !graph.cycle_desc);
+    for (int i = 0; i < count; ++i) CHECK(graph.topo_order[i] == count-1-i);
+    int *previous_order = graph.topo_order;
+    edges[count-1] = 0;
+    specs[count-1].dep_count = specs[count-1].dep_capacity = 1;
+    size_t first = attempts;
+    if (failure != SIZE_MAX) fail_at = first+failure;
+    XrModuleStatus status = xr_compile_module_graph_topological_sort(&graph);
+    fail_at = SIZE_MAX;
+    size_t sites = attempts-first;
+    if (failure == SIZE_MAX) {
+        static const char prefix[] = "E0504: circular dependency: node -> node";
+        CHECK(status == XR_MODULE_INVALID && graph.has_cycle && graph.cycle_desc);
+        CHECK(!strncmp(graph.cycle_desc,prefix,sizeof(prefix)-1));
+        CHECK(strlen(graph.cycle_desc) == strlen("E0504: circular dependency: ")+4+8*count);
+        for (int i = 0; i < count; ++i)
+            CHECK(graph.topo_order[i] == i && specs[i].topo_index == i && specs[i].scc_id == 0);
+    } else {
+        CHECK(status == XR_MODULE_OUT_OF_MEMORY && sites > failure);
+        CHECK(graph.topo_order == previous_order && graph.topo_count == count && !graph.has_cycle && !graph.cycle_desc);
+        for (int i = 0; i < count; ++i)
+            CHECK(graph.topo_order[i] == count-1-i && specs[i].topo_index == count-1-i && specs[i].scc_id == count-1-i);
+    }
+    xr_compile_resources_free(graph.topo_order);
+    xr_compile_resources_free(graph.cycle_desc);
+    xr_compile_resources_free(edges);
+    xr_compile_resources_free(specs);
+    XrCompileResourceStats end = {0};
+    CHECK(xr_compile_resources_stats(resources,&end) == XR_COMPILE_RESOURCE_OK && end.held_bytes == baseline.held_bytes);
+    xr_compile_resources_release(resources);
+    CHECK(!live && !live_bytes);
+    return sites;
+}
 int main(void) {
     XrCompileResourceStats stats={0};attempts=0;
     CHECK(probe(limits(),0,&stats)==XR_MODULE_OK);
@@ -117,5 +170,9 @@ int main(void) {
     CHECK(probe(exact,0,NULL)==XR_MODULE_MEMORY_LIMIT);
     printf("logical graph include: actual OOM=%zu allocated=%llu peak=%llu held exact/minus physical=0\n",sites,
         (unsigned long long)stats.allocated_bytes,(unsigned long long)stats.peak_bytes);
+    size_t deep_sites = deep_graph(SIZE_MAX);
+    CHECK(deep_sites && deep_sites < 32);
+    for (size_t i = 0; i < deep_sites; ++i) (void)deep_graph(i);
+    printf("deep graph: 32768-module chain and closed cycle, actual OOM=%zu, physical=0\n",deep_sites);
     return 0;
 }

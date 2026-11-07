@@ -24,6 +24,7 @@
 #include "xmodule_position.h"
 
 #include <stdbool.h>
+#include <limits.h>
 #include <stdint.h>
 
 /* Forward declarations */
@@ -32,7 +33,8 @@ struct XrModule;
 struct XrCompilerSession;
 struct XrVMRuntime;
 struct XrXirSourceHistoryUnit;
-enum { XR_MODULE_GRAPH_MAX_MODULES = 1024 };
+/* A closed cycle needs one more path entry than the module count. */
+enum { XR_MODULE_GRAPH_MAX_MODULES = INT_MAX - 1 };
 
 /* ========== Module Spec Status ========== */
 

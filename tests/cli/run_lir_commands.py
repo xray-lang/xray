@@ -58,6 +58,15 @@ def main() -> None:
         source.write_text(text, encoding="utf-8", newline="\n")
         generated[name] = source
         expected[name] = stdout
+    modules = work / "modules"
+    modules.mkdir()
+    for index in range(1025):
+        (modules / f"module{index}.xr").write_text("\n", encoding="utf-8")
+    entry = modules / "entry.xr"
+    entry.write_text("".join(f'import "./module{i}" as capacityMod{i}\n' for i in range(1025))
+                     + "print(1)\n", encoding="utf-8", newline="\n")
+    generated["many_modules"] = entry
+    expected["many_modules"] = b"1\n"
     for name, stdout in expected.items():
         source = generated.get(name, fixtures / (name + ".xr"))
         vm = run(name + "-vm", [binary, "run", source], 0)

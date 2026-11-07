@@ -17,6 +17,7 @@
 #include "../frontend/xsource_input_control.h"
 #include "../toolchain/xcompiler_arena_backing.h"
 #include "../os/os_file_read.h"
+#include "../base/xchecks.h"
 #include <limits.h>
 #define GRAPH_INITIAL_CAP 16
 #define GRAPH_EMBEDDED_STDLIB_PREFIX "<embedded stdlib>/"
@@ -117,11 +118,20 @@ XR_FUNC XrModuleStatus xr_compile_module_graph_find_named_dependency(const XrMod
     if (work.status == XR_MODULE_OK) *output = match;
     return work.status;
 }
+static bool graph_grow_capacity(ModuleWork *work, int current, size_t element_size, int *output) {
+    uint64_t capacity = current ? (uint64_t)current * 2 : 4;
+    if (capacity > XR_MODULE_GRAPH_MAX_MODULES) capacity = XR_MODULE_GRAPH_MAX_MODULES;
+    if (capacity <= (uint64_t)current || capacity > SIZE_MAX / element_size)
+        return module_status(work,XR_MODULE_BUDGET);
+    *output = (int)capacity;
+    return true;
+}
 static int graph_add_spec(ModuleWork *work, XrModuleGraph *graph, const char *canonical, const char *logical,
     const char *path, XrModuleKind kind, const XrModuleIdentityAuthority *authority) {
     if (graph->spec_count >= XR_MODULE_GRAPH_MAX_MODULES) { module_status(work,XR_MODULE_BUDGET); return -1; }
     if (graph->spec_count >= graph->spec_capacity) {
-        int capacity = graph->spec_capacity*2; void *memory = graph->specs;
+        int capacity = 0; void *memory = graph->specs;
+        if (!graph_grow_capacity(work,graph->spec_capacity,sizeof(*graph->specs),&capacity)) return -1;
         if (!module_resize(work,&memory,(size_t)capacity*sizeof(*graph->specs))) return -1;
         graph->specs = memory; graph->spec_capacity = capacity;
     }
@@ -137,8 +147,8 @@ static int graph_add_spec(ModuleWork *work, XrModuleGraph *graph, const char *ca
 static void spec_add_dep(ModuleWork *work, XrModuleSpec *spec, int index) {
     for (int i = 0; i < spec->dep_count && ((work)->status == XR_MODULE_OK); ++i) if (spec->dep_indices[i] == index) return;
     if (spec->dep_count == spec->dep_capacity) {
-        if (spec->dep_capacity >= XR_MODULE_GRAPH_MAX_MODULES) { module_status(work,XR_MODULE_BUDGET); return; }
-        int capacity = spec->dep_capacity ? spec->dep_capacity*2 : 4; void *memory = spec->dep_indices;
+        int capacity = 0; void *memory = spec->dep_indices;
+        if (!graph_grow_capacity(work,spec->dep_capacity,sizeof(int),&capacity)) return;
         if (!module_resize(work,&memory,(size_t)capacity*sizeof(int))) return;
         spec->dep_indices = memory; spec->dep_capacity = capacity;
     }
@@ -599,31 +609,53 @@ XR_FUNC XrModuleStatus xr_compile_module_graph_add_dependency(XrModuleGraph *gra
 /* All Tarjan metadata remains private until a complete order and any cycle
  * description have passed admission. A failed retry preserves the prior order. */
 typedef struct GraphTarjanNode { int index, lowlink, scc; bool on_stack; } GraphTarjanNode;
+typedef struct GraphDfsFrame { int vertex, next_edge; } GraphDfsFrame;
 typedef struct GraphTarjanCtx {
     ModuleWork *work; XrModuleGraph *graph; GraphTarjanNode *nodes; int *stack, *sizes;
+    GraphDfsFrame *frames;
     int stack_top, next_index, next_scc;
 } GraphTarjanCtx;
 static void strongconnect(GraphTarjanCtx *context, int vertex) {
-    if (!((context->work)->status == XR_MODULE_OK)) return;
-    GraphTarjanNode *node = &context->nodes[vertex];
-    node->index = node->lowlink = context->next_index++; context->stack[context->stack_top++] = vertex; node->on_stack = true;
-    const XrModuleSpec *spec = &context->graph->specs[vertex];
-    for (int i = 0; i < spec->dep_count && ((context->work)->status == XR_MODULE_OK); ++i) {
-        int next = spec->dep_indices[i];
-        if (next < 0 || next >= context->graph->spec_count) { module_status(context->work,XR_MODULE_INVALID); return; }
-        if (context->nodes[next].index < 0) {
-            strongconnect(context,next);
-            if (context->work->status != XR_MODULE_OK) return;
-            if (context->nodes[next].lowlink < node->lowlink) node->lowlink = context->nodes[next].lowlink;
-        } else if (context->nodes[next].on_stack && context->nodes[next].index < node->lowlink) node->lowlink = context->nodes[next].index;
-    }
-    if (context->work->status == XR_MODULE_OK && node->lowlink == node->index) {
-        int scc = context->next_scc++, next;
-        do {
-            if (!((context->work)->status == XR_MODULE_OK)) return;
-            next = context->stack[--context->stack_top]; context->nodes[next].on_stack = false;
-            context->nodes[next].scc = scc; ++context->sizes[scc];
-        } while (next != vertex);
+    int depth = 1;
+    context->frames[0] = (GraphDfsFrame){vertex,0};
+    while (depth && context->work->status == XR_MODULE_OK) {
+        GraphDfsFrame *frame = &context->frames[depth-1];
+        GraphTarjanNode *node = &context->nodes[frame->vertex];
+        const XrModuleSpec *spec = &context->graph->specs[frame->vertex];
+        if (node->index < 0) {
+            if (spec->dep_count < 0 || (spec->dep_count && !spec->dep_indices)) {
+                module_status(context->work,XR_MODULE_INVALID); return;
+            }
+            node->index = node->lowlink = context->next_index++;
+            context->stack[context->stack_top++] = frame->vertex;
+            node->on_stack = true;
+        }
+        if (frame->next_edge < spec->dep_count) {
+            int next = spec->dep_indices[frame->next_edge++];
+            if (next < 0 || next >= context->graph->spec_count) {
+                module_status(context->work,XR_MODULE_INVALID); return;
+            }
+            GraphTarjanNode *child = &context->nodes[next];
+            if (child->index < 0) {
+                XR_DCHECK(depth < context->graph->spec_count,"DFS frames contain distinct active modules");
+                context->frames[depth++] = (GraphDfsFrame){next,0};
+            } else if (child->on_stack && child->index < node->lowlink) node->lowlink = child->index;
+            continue;
+        }
+        if (node->lowlink == node->index) {
+            int scc = context->next_scc++, next;
+            do {
+                next = context->stack[--context->stack_top];
+                context->nodes[next].on_stack = false;
+                context->nodes[next].scc = scc;
+                ++context->sizes[scc];
+            } while (next != frame->vertex);
+        }
+        --depth;
+        if (depth) {
+            GraphTarjanNode *parent = &context->nodes[context->frames[depth-1].vertex];
+            if (node->lowlink < parent->lowlink) parent->lowlink = node->lowlink;
+        }
     }
 }
 static const char *cycle_name(ModuleWork *work, const XrModuleSpec *spec) {
@@ -652,16 +684,27 @@ static char *format_cycle(ModuleWork *work, const XrModuleGraph *graph, const in
     if (work->status != XR_MODULE_OK) { xr_compile_resources_free(text); return NULL; }
     return text;
 }
-static bool cycle_dfs(GraphTarjanCtx *context, int scc, int start, int current, bool *seen, int *path, int depth, int *length) {
-    if (!((context->work)->status == XR_MODULE_OK)) return false;
-    seen[current] = true; path[depth] = current;
-    const XrModuleSpec *spec = &context->graph->specs[current];
-    for (int i = 0; i < spec->dep_count && ((context->work)->status == XR_MODULE_OK); ++i) {
-        int next = spec->dep_indices[i]; if (context->nodes[next].scc != scc) continue;
-        if (next == start && depth >= 1) { path[depth+1] = start; *length = depth+2; return true; }
-        if (!seen[next] && cycle_dfs(context,scc,start,next,seen,path,depth+1,length)) return true;
+static bool cycle_dfs(GraphTarjanCtx *context, int scc, int start, bool *seen, int *path, int *length) {
+    int depth = 1;
+    context->frames[0] = (GraphDfsFrame){start,0};
+    seen[start] = true; path[0] = start;
+    while (depth && context->work->status == XR_MODULE_OK) {
+        GraphDfsFrame *frame = &context->frames[depth-1];
+        const XrModuleSpec *spec = &context->graph->specs[frame->vertex];
+        if (frame->next_edge == spec->dep_count) {
+            seen[frame->vertex] = false; --depth;
+            continue;
+        }
+        int next = spec->dep_indices[frame->next_edge++];
+        if (context->nodes[next].scc != scc) continue;
+        if (next == start && depth > 1) { path[depth] = start; *length = depth+1; return true; }
+        if (!seen[next]) {
+            XR_DCHECK(depth < context->graph->spec_count,"Cycle frames contain distinct active modules");
+            context->frames[depth] = (GraphDfsFrame){next,0};
+            path[depth++] = next; seen[next] = true;
+        }
     }
-    seen[current] = false; return false;
+    return false;
 }
 static char *cycle_description(GraphTarjanCtx *context) {
     ModuleWork *work = context->work; XrModuleGraph *graph = context->graph; int n = graph->spec_count;
@@ -673,7 +716,7 @@ static char *cycle_description(GraphTarjanCtx *context) {
             if (context->nodes[i].scc != scc) continue;
             if (!((work)->status == XR_MODULE_OK)) break;
             memset(seen,0,(size_t)n*sizeof(bool)); int length = 0;
-            if (cycle_dfs(context,scc,i,i,seen,path,0,&length)) { description = format_cycle(work,graph,path,length); break; }
+            if (cycle_dfs(context,scc,i,seen,path,&length)) { description = format_cycle(work,graph,path,length); break; }
         }
         xr_compile_resources_free(seen); xr_compile_resources_free(path);
         if (!description && work->status == XR_MODULE_OK) module_status(work,XR_MODULE_INVALID);
@@ -685,21 +728,26 @@ static char *cycle_description(GraphTarjanCtx *context) {
     return NULL;
 }
 XR_FUNC XrModuleStatus xr_compile_module_graph_topological_sort(XrModuleGraph *graph) {
-    if (!graph || !graph->resources) return XR_MODULE_INVALID;
+    if (!graph || !graph->resources || graph->spec_count < 0 || graph->spec_count > XR_MODULE_GRAPH_MAX_MODULES ||
+        (graph->spec_count && !graph->specs)) return XR_MODULE_INVALID;
     if (graph->resolution_status != XR_MODULE_OK) return graph->resolution_status;
     if (!graph->spec_count) return XR_MODULE_OK;
     ModuleWork work = {graph->resources,XR_MODULE_OK}; int n = graph->spec_count;
     GraphTarjanNode *nodes = module_calloc(&work,(size_t)n,sizeof(*nodes));
     int *stack = module_calloc(&work,(size_t)n,sizeof(int)), *sizes = module_calloc(&work,(size_t)n,sizeof(int));
     int *order = module_calloc(&work,(size_t)n,sizeof(int));
+    GraphDfsFrame *frames = module_calloc(&work,(size_t)n,sizeof(*frames));
     for (int i = 0; i < n && ((&work)->status == XR_MODULE_OK); ++i) nodes[i].index = nodes[i].lowlink = nodes[i].scc = -1;
-    GraphTarjanCtx context = {&work,graph,nodes,stack,sizes,0,0,0};
+    GraphTarjanCtx context = {.work=&work,.graph=graph,.nodes=nodes,.stack=stack,.sizes=sizes,.frames=frames};
     for (int i = 0; i < n && ((&work)->status == XR_MODULE_OK); ++i) if (nodes[i].index < 0) strongconnect(&context,i);
     char *description = work.status == XR_MODULE_OK ? cycle_description(&context) : NULL;
     int position = 0;
-    for (int scc = 0; scc < context.next_scc && ((&work)->status == XR_MODULE_OK); ++scc)
-        for (int i = 0; i < n && ((&work)->status == XR_MODULE_OK); ++i) if (nodes[i].scc == scc) order[position++] = i;
+    /* Preserve SCC and discovery order without rescanning every module per SCC. */
+    for (int scc = 0; scc < context.next_scc && work.status == XR_MODULE_OK; ++scc) {
+        int count = sizes[scc]; sizes[scc] = position; position += count;
+    }
     if (work.status == XR_MODULE_OK && position != n) module_status(&work,XR_MODULE_INVALID);
+    for (int i = 0; i < n && work.status == XR_MODULE_OK; ++i) order[sizes[nodes[i].scc]++] = i;
     if ((&work)->status == XR_MODULE_OK) {
         for (int i = 0; i < n; ++i) { int index = order[i]; graph->specs[index].topo_index = i; graph->specs[index].scc_id = nodes[index].scc; }
         xr_compile_resources_free(graph->topo_order); xr_compile_resources_free(graph->cycle_desc);
@@ -707,6 +755,7 @@ XR_FUNC XrModuleStatus xr_compile_module_graph_topological_sort(XrModuleGraph *g
         graph->cycle_desc = description; description = NULL; graph->has_cycle = graph->cycle_desc != NULL;
     }
     xr_compile_resources_free(nodes); xr_compile_resources_free(stack); xr_compile_resources_free(sizes);
+    xr_compile_resources_free(frames);
     xr_compile_resources_free(order); xr_compile_resources_free(description);
     return work.status != XR_MODULE_OK ? work.status : graph->has_cycle ? XR_MODULE_INVALID : XR_MODULE_OK;
 }
