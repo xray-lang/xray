@@ -32,8 +32,6 @@ jobs:
       PYTHONDONTWRITEBYTECODE: '1'
       NO_COLOR: '1'
       VSLANG: '1033'
-      CCACHE_DIR: ${{ runner.temp }}/xray-ccache
-      CCACHE_BASEDIR: ${{ github.workspace }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -53,7 +51,12 @@ jobs:
             target-compiler-${{ runner.os }}-${{ runner.arch }}-
       - name: Prepare Unix compiler cache
         if: runner.os != 'Windows'
+        env:
+          CCACHE_DIR: ${{ runner.temp }}/xray-ccache
+          CCACHE_BASEDIR: ${{ github.workspace }}
         run: |
+          echo "CCACHE_DIR=$CCACHE_DIR" >> "$GITHUB_ENV"
+          echo "CCACHE_BASEDIR=$CCACHE_BASEDIR" >> "$GITHUB_ENV"
           if [ "$RUNNER_OS" = "macOS" ]; then
             brew install ccache
           else
