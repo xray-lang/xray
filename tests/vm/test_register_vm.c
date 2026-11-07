@@ -24,7 +24,12 @@
 #include <string.h>
 #include <time.h>
 
-#define CHECK(condition) XR_CHECK(condition, #condition)
+#define CHECK(condition) do { \
+    if (!(condition)) { \
+        fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, #condition); \
+        exit(EXIT_FAILURE); \
+    } \
+} while (0)
 
 static XrRbcStatus execute(const XrRbcModule *module, uint32_t entry,
     const uint64_t *arguments, size_t count, uint64_t *bits) {
@@ -109,13 +114,13 @@ static void test_f64_negation(void) {
     emit(code,0,XR_RBC_FNEG,254,0,0); emit(code,1,XR_RBC_RET,254,0,0);
     XrRbcFunction f = {.code=code,.code_count=2,.register_count=255,.parameter_count=1};
     for (unsigned i=0;i<sizeof(vectors)/sizeof(*vectors);++i)
-        CHECK(run_function(f,&vectors[i][0],1) == vectors[i][1]);
+        CHECK(float_runtime_equal(run_function(f,&vectors[i][0],1), vectors[i][1]));
     // The result may reuse the operand or a typed scalar spill home.
     emit(code,0,XR_RBC_FNEG,0,0,0); immediate(code,1,XR_RBC_SPILL,0,0);
     immediate(code,2,XR_RBC_RELOAD,1,0); emit(code,3,XR_RBC_RET,1,0,0);
     f.code_count=4; f.register_count=2; f.spill_count=1;
     for (unsigned i=0;i<sizeof(vectors)/sizeof(*vectors);++i)
-        CHECK(run_function(f,&vectors[i][0],1) == vectors[i][1]);
+        CHECK(float_runtime_equal(run_function(f,&vectors[i][0],1), vectors[i][1]));
     f.spill_count=0; f.code_count=2;
     emit(code,1,XR_RBC_RET,0,0,0);
     XrRbcModule module = {.functions=&f,.function_count=1};
@@ -166,11 +171,12 @@ static void test_f64_family(void) {
     fenv_t original;CHECK(fegetenv(&original)==0);
 #if defined(XR_ARCH_X86_64)
     unsigned original_control=_mm_getcsr();const unsigned controls=4;
-#define RAW_FLOAT_ENV() (fetestexcept(FE_ALL_EXCEPT)==flags && fegetround()==modes[m] && _mm_getcsr()==control)
+#define KERNEL_FLOAT_ENV() (fetestexcept(FE_ALL_EXCEPT)==flags && fegetround()==modes[m] && _mm_getcsr()==control)
 #else
     const unsigned controls=1;
-#define RAW_FLOAT_ENV() (fetestexcept(FE_ALL_EXCEPT)==flags && fegetround()==modes[m])
+#define KERNEL_FLOAT_ENV() (fetestexcept(FE_ALL_EXCEPT)==flags && fegetround()==modes[m])
 #endif
+    /* Integer CTFE retains its exact results and complete environment isolation. */
     for(unsigned m=0;m<4;++m)for(unsigned c=0;c<controls;++c) {
         CHECK(fesetround(modes[m])==0 && feclearexcept(FE_ALL_EXCEPT)==0 && feraiseexcept(FE_INEXACT)==0);
 #if defined(XR_ARCH_X86_64)
@@ -178,40 +184,56 @@ static void test_f64_family(void) {
         _mm_setcsr((_mm_getcsr()&~mask)|((c&1u)<<6)|(((c>>1)&1u)<<15));
         unsigned control=_mm_getcsr();
 #endif
-        int flags=fetestexcept(FE_ALL_EXCEPT);unsigned kernel_rows=0,raw_rows=0;
+        int flags=fetestexcept(FE_ALL_EXCEPT);unsigned kernel_rows=0;
         for(unsigned i=0;i<sizeof(float_arithmetic_witnesses)/sizeof(*float_arithmetic_witnesses);++i) {
             uint64_t result=0;
             XrXirNumericStatus status=xr_xir_float_arithmetic(float_arithmetic_witnesses[i].width,
                 float_arithmetic_witnesses[i].operation,float_arithmetic_witnesses[i].left,
                 float_arithmetic_witnesses[i].right,&result);
-            CHECK(RAW_FLOAT_ENV());CHECK(status==XR_XIR_NUMERIC_OK && result==float_arithmetic_witnesses[i].expected);
+            CHECK(KERNEL_FLOAT_ENV());CHECK(status==XR_XIR_NUMERIC_OK && result==float_arithmetic_witnesses[i].expected);
             ++kernel_rows;
-            if(float_arithmetic_witnesses[i].width!=64)continue;
-            uint64_t args[]={float_arithmetic_witnesses[i].left,float_arithmetic_witnesses[i].right};
-            for(unsigned destination=0;destination<3;++destination) {
-                uint32_t code[2];emit(code,0,arithmetic[float_arithmetic_witnesses[i].operation],destination,0,1);
-                emit(code,1,XR_RBC_RET,destination,0,0);
-                XrRbcFunction f={.code=code,.code_count=2,.register_count=3,.parameter_count=2};
-                result=run_function(f,args,2);CHECK(RAW_FLOAT_ENV());CHECK(result==float_arithmetic_witnesses[i].expected);
-            }
-            ++raw_rows;
         }
-        CHECK(kernel_rows==6432 && raw_rows==3216);
-        for(unsigned a=0;a<26;++a)for(unsigned b=0;b<26;++b)for(unsigned p=0;p<6;++p) {
-            uint64_t args[]={float_order_witnesses[a].bits,float_order_witnesses[b].bits};
-            for(unsigned destination=0;destination<3;++destination) {
-                uint32_t code[2];emit(code,0,comparisons[p],destination,0,1);emit(code,1,XR_RBC_RET,destination,0,0);
-                XrRbcFunction f={.code=code,.code_count=2,.register_count=3,.parameter_count=2};
-                uint64_t result=run_function(f,args,2);CHECK(RAW_FLOAT_ENV());
-                CHECK(result==((float_relation_mask(a,b)>>p)&1u));
-            }
+        CHECK(kernel_rows==6432);
+    }
+#undef KERNEL_FLOAT_ENV
+    /* Hardware execution requires nearest-even rounding and gradual underflow.
+     * Exception status flags and arithmetic NaN payloads may change. */
+    CHECK(fesetround(FE_TONEAREST)==0 && feclearexcept(FE_ALL_EXCEPT)==0);
+#if defined(XR_ARCH_X86_64)
+    _mm_setcsr(_mm_getcsr()&~((1u<<6)|(1u<<15)));
+    unsigned runtime_control=_mm_getcsr();
+#define RUNTIME_FLOAT_ENV() (fegetround()==FE_TONEAREST && (_mm_getcsr()&~0x3fu)==(runtime_control&~0x3fu))
+#else
+#define RUNTIME_FLOAT_ENV() (fegetround()==FE_TONEAREST)
+#endif
+    unsigned raw_rows=0;
+    for(unsigned i=0;i<sizeof(float_arithmetic_witnesses)/sizeof(*float_arithmetic_witnesses);++i) {
+        if(float_arithmetic_witnesses[i].width!=64)continue;
+        uint64_t args[]={float_arithmetic_witnesses[i].left,float_arithmetic_witnesses[i].right};
+        for(unsigned destination=0;destination<3;++destination) {
+            uint32_t code[2];emit(code,0,arithmetic[float_arithmetic_witnesses[i].operation],destination,0,1);
+            emit(code,1,XR_RBC_RET,destination,0,0);
+            XrRbcFunction f={.code=code,.code_count=2,.register_count=3,.parameter_count=2};
+            CHECK(float_runtime_equal(run_function(f,args,2),float_arithmetic_witnesses[i].expected));
+            CHECK(RUNTIME_FLOAT_ENV());
+        }
+        ++raw_rows;
+    }
+    CHECK(raw_rows==3216);
+    for(unsigned a=0;a<26;++a)for(unsigned b=0;b<26;++b)for(unsigned p=0;p<6;++p) {
+        uint64_t args[]={float_order_witnesses[a].bits,float_order_witnesses[b].bits};
+        for(unsigned destination=0;destination<3;++destination) {
+            uint32_t code[2];emit(code,0,comparisons[p],destination,0,1);emit(code,1,XR_RBC_RET,destination,0,0);
+            XrRbcFunction f={.code=code,.code_count=2,.register_count=3,.parameter_count=2};
+            CHECK(run_function(f,args,2)==((float_relation_mask(a,b)>>p)&1u));
+            CHECK(RUNTIME_FLOAT_ENV());
         }
     }
+#undef RUNTIME_FLOAT_ENV
     CHECK(fesetenv(&original)==0);
 #if defined(XR_ARCH_X86_64)
     _mm_setcsr(original_control);
 #endif
-#undef RAW_FLOAT_ENV
 }
 
 static void test_float_kinds_and_spills(void) {
