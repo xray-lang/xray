@@ -16,14 +16,30 @@ python -X utf8 tests/smoke/run_smoke.py --binary D:\xray-build\d-rel\xray.exe --
 every public `stdlib/<module>/<module>.xr` entry. Internal `_probe` and
 `codegen` are excluded. A module can contain supporting files: `io` still has
 one public entry. `json` has no `json.xr`, and prelude types have no module
-entry. Network demos are checked without starting a server.
+entry. Every input, including network demos, is executed through `run` and `build-run`. A server that does not finish within 30 seconds fails the gate.
 
 The runner discovers these inputs on every invocation and rejects missing or
 duplicate manifest entries. The current README denominator is **6**, including
 both languages and all three examples in each. The older homepage-only census
-used 1. Each passing VM case must have a native companion with the same output
-oracle. Source and expected-output paths are relative to the repository; README
+used 1. Every VM case, including every gap, must have a native companion with the same verdict, first diagnostic and output oracle. Source and expected-output paths are relative to the repository; README
 paths use `#xray-N` to identify the Nth Xray fence.
+
+## Current architecture baseline
+
+The input identities in `original-baseline.json` remain frozen at 60, including
+20 originally failing demos. Its historical verdicts do not override the current
+architecture manifest. The execution cutover explicitly rebases `cases.json`.
+Subsequent passing-case demotion or removal is rejected by `smoke_ratchet`.
+Every original source and oracle is retained, including catalogs for currently
+rejected concurrency and crypto examples. Combination imports are additional
+rows and never increase the original denominator.
+
+The testing example requires its real six-test catalog on both engines before
+it scores. While `test` is unavailable, both engines must still execute the
+original initializer, followed by the real public `test` command. Its exact
+unavailable diagnostic is a named suite gap. An initializer failure, timeout,
+changed rejection or unexpectedly successful test command fails the gate.
+Initializer-only success never counts as a repaired demo.
 
 ## Verdicts and ratchet
 
@@ -32,7 +48,7 @@ paths use `#xray-N` to identify the Nth Xray fence.
   files retain LF bytes on every checkout host.
 - `gap`: the exact recorded exit-1 rejection, empty stdout, and the same first
   diagnostic. Source-root and temporary-source paths are normalized; diagnostic
-  content and locations are preserved. Each entry names its F item.
+  content and locations are preserved. Each entry names its F item or target milestone. Both engines must produce the same exact first diagnostic.
 - `fail`: a passing example regressed, a known gap unexpectedly succeeded,
   the rejection changed, a process timed out/crashed, or a required tool or
   output disappeared. A gap that succeeds must be reviewed, given an output
@@ -56,7 +72,7 @@ but unprinted job per worker. This rejects impossible assignments that merely
 contain each job once. The two saved engine outputs must still match byte for
 byte; this predicate never rewrites their order or newline bytes.
 
-The native companions build through the trusted-host direct-C
+The native companions build through the ordinary LIR-to-C
 CLI path and execute against their original, complete VM output oracles.
 Provider and explicit input identities, private workspace/output ownership,
 C11/W1-W4 validation, cancellation and owned-child cleanup remain required.

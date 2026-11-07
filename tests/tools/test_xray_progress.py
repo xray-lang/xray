@@ -55,18 +55,23 @@ class MetricsTests(unittest.TestCase):
         native["commands"][1]["timed_out"] = True
         self.assertEqual(self.metrics()["original_failed_demo_repaired"], 0)
 
-    def test_removed_replaced_or_demoted_original_is_rejected(self):
-        for edit in ("remove", "replace", "demote"):
+    def test_removed_or_replaced_original_is_rejected(self):
+        for edit in ("remove", "replace"):
             with self.subTest(edit=edit):
                 cases = deepcopy(self.cases)
                 if edit == "remove":
                     cases.pop(0)
                 elif edit == "replace":
                     cases[0]["path"] = "new-demo.xr"
-                else:
-                    next(row for row in cases if row["id"] == "demos/01-basics/hello.xr")["expect"] = "gap"
                 with self.assertRaises(ValueError):
                     progress.fixed_metrics(self.baseline, cases, self.results)
+
+    def test_current_architecture_verdict_does_not_change_the_original_denominator(self):
+        name = "demos/01-basics/hello.xr"
+        next(row for row in self.cases if row["id"] == name)["expect"] = "gap"
+        next(row for row in self.results if row["id"] == name)["status"] = "gap"
+        self.assertEqual(self.metrics()["original_total"],60)
+        self.assertEqual(self.metrics()["original_pass"],2)
 
     def test_testing_initializer_only_or_unexecuted_suite_cannot_repair_original_demo(self):
         name = "demos/07-advanced/testing.xr"
@@ -312,6 +317,19 @@ class GitTests(unittest.TestCase):
         self.commit()
         with self.assertRaisesRegex(ValueError, "suite removed"):
             progress.smoke_ratchet(self.root, base)
+
+    def test_published_passing_case_cannot_be_demoted(self):
+        path = self.root/"tests/smoke/cases.json"
+        path.parent.mkdir(parents=True)
+        case = {"id":"hello","path":"hello.xr","mode":"run","expect":"pass"}
+        path.write_text(json.dumps({"schema":1,"cases":[case]}))
+        self.commit()
+        base = self.git("rev-parse","HEAD")
+        case["expect"] = "gap"
+        path.write_text(json.dumps({"schema":1,"cases":[case]}))
+        self.commit()
+        with self.assertRaisesRegex(ValueError,"passing case demoted"):
+            progress.smoke_ratchet(self.root,base)
 
     def test_leaf_review_allowed_but_header_and_owner_crossing_require_independence(self):
         (self.root / "src/frontend").mkdir()

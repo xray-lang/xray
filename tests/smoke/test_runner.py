@@ -57,6 +57,25 @@ class VerdictTests(unittest.TestCase):
         self.assertEqual(self.verdict(actual, "unsupported", "build"), "gap")
         self.assertEqual(self.verdict(actual, "unsupported", "run"), "fail")
 
+    def test_ordinary_outputs_and_known_refusals_require_both_real_engines(self):
+        native = dict(self.case,id="native:example",mode="build-run")
+        with tempfile.TemporaryDirectory() as directory:
+            rows = []
+            for i,case in enumerate((self.case,native)):
+                logs = Path(directory)/str(i)
+                logs.mkdir()
+                (logs/"run.stdout").write_bytes(f"{i}\n".encode())
+                rows.append({"id":case["id"],"status":"pass","executed":True,"log_directory":str(logs)})
+            self.assertEqual(len(smoke.verify_pairs([self.case,native],rows)),2)
+        for row,diagnostic in zip(rows,("unsupported","different")):
+            row.update(status="gap",exit_code=1,first_diagnostic=diagnostic)
+        self.assertEqual(len(smoke.verify_pairs([self.case,native],rows)),2)
+        for row in rows:
+            row.update(status="gap",first_diagnostic="unsupported")
+        self.assertEqual(smoke.verify_pairs([self.case,native],rows),[])
+        rows[1]["executed"] = False
+        self.assertEqual(len(smoke.verify_pairs([self.case,native],rows)),2)
+
 
 class InventoryTests(unittest.TestCase):
     def setUp(self):
@@ -68,8 +87,7 @@ class InventoryTests(unittest.TestCase):
         self.sources = {self.source.path: self.source}
         self.case = {"id": "hello", "path": self.source.path, "mode": "run",
                      "expect": "pass", "exit_code": 0, "stdout": "one.txt"}
-        self.native = dict(self.case, id="native-hello", mode="build-run", expect="gap", exit_code=1,
-                           gap={"feature": "Task328 P2", "first_diagnostic": "unsupported"})
+        self.native = dict(self.case, id="native-hello", mode="build-run")
 
     def load(self, cases, sources=None):
         path = self.root / "cases.json"
@@ -80,6 +98,17 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(len(self.load([self.case, self.native])), 2)
         with self.assertRaisesRegex(ValueError, "native companions differ"):
             self.load([self.case])
+
+    def test_every_gap_requires_the_same_native_refusal(self):
+        for case in (self.case,self.native):
+            case.update(expect="gap",exit_code=1,
+                        gap={"feature":"Task339 M2","first_diagnostic":"unsupported"})
+        self.assertEqual(len(self.load([self.case,self.native])),2)
+        with self.assertRaisesRegex(ValueError,"native companions differ"):
+            self.load([self.case])
+        self.native["gap"]["first_diagnostic"] = "different"
+        with self.assertRaisesRegex(ValueError,"same verdict and first diagnostic"):
+            self.load([self.case,self.native])
 
     def test_removing_cases_or_duplicating_ids_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "unregistered sources"):
@@ -93,23 +122,22 @@ class InventoryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "same stdout oracle"):
             self.load([self.case, self.native])
 
-    def test_network_demo_cannot_be_run(self):
+    def test_historical_check_identity_executes_the_real_run_command(self):
         network = smoke.Source(self.source.path, "demos", "check")
-        with self.assertRaisesRegex(ValueError, "check-only"):
-            self.load([self.case], {network.path: network})
+        self.case["mode"] = "check"
+        self.assertEqual(len(self.load([self.case,self.native],{network.path:network})),2)
+        with patch.object(smoke.proc,"run",return_value=result()) as run:
+            row = smoke.execute(self.case,network,self.root/"xray",self.root,self.root,self.root,1)
+        self.assertEqual(row["status"],"pass")
+        self.assertEqual(run.call_args.args[0][1],"run")
 
-    def test_deferral_is_limited_to_the_pending_native_path(self):
-        self.native.update(exit_code=None, gap={"feature": "Task328 P2",
+    def test_deferred_engines_are_rejected(self):
+        self.native.update(expect="gap", exit_code=None, gap={"feature": "Task339 M2",
                            "first_diagnostic": None, "deferred": "pending native path"})
-        self.assertEqual(len(self.load([self.case, self.native])), 2)
-        with patch.object(smoke.proc, "run") as run:
-            row = smoke.execute(self.native, self.source, self.root / "xray", self.root,
-                                self.root, self.root, 1)
-        run.assert_not_called()
-        self.assertEqual(row["status"], "gap")
-        self.assertFalse(row["executed"])
+        with self.assertRaisesRegex(ValueError,"deferred gaps are forbidden"):
+            self.load([self.case,self.native])
         self.case.update(expect="gap", exit_code=None, gap=dict(self.native["gap"]))
-        with self.assertRaisesRegex(ValueError, "only the pending native path"):
+        with self.assertRaisesRegex(ValueError, "deferred gaps are forbidden"):
             self.load([self.case, self.native])
 
     def test_discovery_keeps_both_readmes_and_multifile_modules(self):
@@ -297,6 +325,33 @@ class SuiteTests(unittest.TestCase):
             row = smoke.execute(self.case, source, self.root / "xray", self.root, self.root, logs, 1)
         self.assertEqual(row["status"], "fail")
         self.assertEqual(row["suite"]["executed"], False)
+
+    def test_known_suite_gap_runs_both_initializers_and_the_real_test_command(self):
+        gap = {"feature":"Task339 M2","stage":"suite",
+               "first_diagnostic":"xray test: temporarily unavailable"}
+        source = smoke.Source(suite_catalog.SOURCE,"demos","run")
+        for mode in ("run","build-run"):
+            case = dict(self.case,mode=mode,expect="gap",exit_code=1,gap=gap)
+            logs = self.root/mode
+            logs.mkdir()
+            def invoke(command,**kwargs):
+                if "build" in command:
+                    Path(command[-1]).write_bytes(b"test executable")
+                    return result(stdout=b"Generated\n")
+                if len(command)>1 and command[1]=="test":
+                    return result(1,b"",b"xray test: temporarily unavailable\n")
+                return result(stdout=b"")
+            with patch.object(smoke.proc,"run",side_effect=invoke):
+                row = smoke.execute(case,source,self.root/"xray",self.root,logs,logs,1)
+            self.assertEqual(row["status"],"gap")
+            self.assertTrue(row["executed"])
+            self.assertEqual([c["stage"] for c in row["commands"]],
+                             (["build","run"] if mode=="build-run" else ["run"])+["suite"])
+        with patch.object(smoke.proc,"run",return_value=result(stdout=b"wrong initializer\n")) as run:
+            row = smoke.execute(dict(self.case,expect="gap",exit_code=1,gap=gap),source,
+                                self.root/"xray",self.root,self.root,self.root,1)
+        self.assertEqual(row["status"],"fail")
+        self.assertEqual(run.call_count,1)
 
     def test_loader_rejects_promoting_initializer_only_testing_demo(self):
         source = smoke.Source(suite_catalog.SOURCE, "demos", "run")

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -15,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from xraytest import proc
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 from xray_progress import fixed_metrics
-from suite_catalog import SuiteCommands, expected_catalog
+from suite_catalog import SOURCE as TESTING_SOURCE, SuiteCommands, expected_catalog
 from xray_crypto_suite import CryptoCommands, expected_catalog as expected_crypto_catalog
 from trace_oracle import ChannelTrace, expected_channels, expected_traces, verify_pairs
 
@@ -70,6 +71,9 @@ def discover(root: Path) -> dict[str, Source]:
         if entry.is_file():
             key = entry.relative_to(root).as_posix()
             sources[key] = Source(key, "stdlib", "run", f"import {directory.name}\nprint(1)\n")
+    for path in sorted((root / "tests/smoke/inputs").glob("*.xr")):
+        relative = path.relative_to(root).as_posix()
+        sources[relative] = Source(relative, "combined", "run")
     return sources
 
 
@@ -98,9 +102,7 @@ def load_cases(manifest: Path, root: Path, sources: dict[str, Source]) -> list[d
         if source is None:
             raise ValueError(f"{name}: source is absent from discovery: {case['path']}")
         if case["mode"] not in {source.mode, "build-run"}:
-            raise ValueError(f"{name}: mode does not match source (network demos are check-only)")
-        if case["mode"] == "build-run" and source.mode != "run":
-            raise ValueError(f"{name}: check-only source cannot be executed natively")
+            raise ValueError(f"{name}: mode does not match the recorded source identity")
         target = native if case["mode"] == "build-run" else primary
         if source.path in target:
             raise ValueError(f"duplicate source/mode: {source.path}")
@@ -116,28 +118,28 @@ def load_cases(manifest: Path, root: Path, sources: dict[str, Source]) -> list[d
                 raise ValueError(f"{name}: pass must exit zero without a gap allowance")
         elif case["expect"] == "gap":
             gap = case.get("gap", {})
-            deferred = gap.get("deferred")
-            if deferred:
-                if (case["mode"] != "build-run" or gap.get("feature") != "Task328 P2"
-                        or case["exit_code"] is not None or gap.get("first_diagnostic") is not None):
-                    raise ValueError(f"{name}: only the pending native path can be deferred")
-            elif case["exit_code"] != 1 or not gap.get("first_diagnostic"):
+            if gap.get("deferred"):
+                raise ValueError(f"{name}: both engines must execute; deferred gaps are forbidden")
+            if case["exit_code"] != 1 or not gap.get("first_diagnostic"):
                 raise ValueError(f"{name}: gap requires exit 1 and its first diagnostic")
             feature = gap.get("feature", "")
-            if not re.fullmatch(r"F\d{2}|Task328 P2", feature):
-                raise ValueError(f"{name}: gap requires a feature or Task328 P2")
-            if case["mode"] == "build-run" and feature != "Task328 P2":
-                raise ValueError(f"{name}: native gap must identify Task328 P2")
+            if not re.fullmatch(r"F\d{2}|Task339 M[1-5]", feature):
+                raise ValueError(f"{name}: gap requires a feature or target milestone")
+            if gap.get("stage") is not None and (gap["stage"] != "suite" or
+                    case["path"] != TESTING_SOURCE or case.get("suite") is None):
+                raise ValueError(f"{name}: suite gaps require the original testing catalog")
         else:
             raise ValueError(f"{name}: expect must be pass or gap")
     if set(primary) != set(sources):
         raise ValueError(f"unregistered sources: {sorted(set(sources) - set(primary))}")
-    required_native = {path for path, case in primary.items()
-                       if case["expect"] == "pass" and case["mode"] == "run"}
+    required_native = set(primary)
     if set(native) != required_native:
         raise ValueError(f"native companions differ: missing={sorted(required_native - set(native))}, "
                          f"extra={sorted(set(native) - required_native)}")
     for path, case in native.items():
+        if (case["expect"], case["exit_code"], case.get("gap")) != (
+                primary[path]["expect"], primary[path]["exit_code"], primary[path].get("gap")):
+            raise ValueError(f"{case['id']}: both engines must share the same verdict and first diagnostic")
         if case["stdout"] != primary[path]["stdout"]:
             raise ValueError(f"{case['id']}: native and VM must share the same stdout oracle")
         if case.get("stdout_traces") != primary[path].get("stdout_traces"):
@@ -170,7 +172,10 @@ def classify(case: dict, result: proc.ProcResult, diagnostic: str,
             return "fail", "gap unexpectedly passed; review output and promote the case"
         if result.returncode != case["exit_code"]:
             return "fail", f"{stage} exit {result.returncode}, expected {case['exit_code']}"
-        if case["mode"] == "build-run" and stage != "build":
+        if case["gap"].get("stage") == "suite" and stage != "suite":
+            return "fail", "suite gap changed to an initializer failure"
+        required_stage = "suite" if case["gap"].get("stage") == "suite" else "build"
+        if case["mode"] == "build-run" and stage != required_stage:
             return "fail", "native build gap changed to an execution failure"
         if diagnostic != case["gap"]["first_diagnostic"]:
             return "fail", f"first diagnostic changed: {diagnostic!r}"
@@ -193,9 +198,6 @@ def classify(case: dict, result: proc.ProcResult, diagnostic: str,
 def execute(case: dict, spec: Source, binary: Path, root: Path, work: Path,
             logs: Path, timeout: float, suites: SuiteCommands | None = None,
             crypto_suites: CryptoCommands | None = None) -> dict:
-    if case.get("gap", {}).get("deferred"):
-        return {"id": case["id"], "group": "native", "status": "gap", "executed": False,
-                "reason": "NOT_RUN: " + case["gap"]["deferred"], "commands": []}
     source = root / spec.path
     if spec.text is not None:
         source = work / "source.xr"
@@ -204,11 +206,15 @@ def execute(case: dict, spec: Source, binary: Path, root: Path, work: Path,
     commands = []
 
     def invoke(stage: str, command: list) -> proc.ProcResult:
+        started_command = time.monotonic()
         result = proc.run(command, cwd=root, env=environment, timeout=timeout)
         (logs / f"{stage}.stdout").write_bytes(result.stdout)
         (logs / f"{stage}.stderr").write_bytes(result.stderr)
         commands.append({"stage": stage, "argv": [str(arg) for arg in command],
-                         "exit_code": result.returncode, "timed_out": result.timed_out})
+                         "exit_code": result.returncode, "timed_out": result.timed_out,
+                         "seconds": time.monotonic() - started_command,
+                         "stdout_sha256": hashlib.sha256(result.stdout).hexdigest(),
+                         "stderr_sha256": hashlib.sha256(result.stderr).hexdigest()})
         return result
 
     started = time.monotonic()
@@ -223,8 +229,17 @@ def execute(case: dict, spec: Source, binary: Path, root: Path, work: Path,
             return {"id": case["id"], "group": "native", "status": "fail",
                     "reason": "successful build produced no executable", "commands": commands}
     else:
-        stage = case["mode"]
+        # Historical check labels remain part of the fixed denominator only.
+        stage = "run"
         result = invoke(stage, [binary, stage, source])
+    if case.get("gap", {}).get("stage") == "suite" and result.ok:
+        expected = rooted_file(root, case["stdout"]).read_bytes()
+        if result.stdout != expected or result.stderr:
+            return {"id": case["id"], "group": "native" if case["mode"] == "build-run" else spec.group,
+                    "status": "fail", "reason": "initializer changed before the known suite gap",
+                    "executed": True, "commands": commands}
+        stage = "suite"
+        result = invoke(stage, [binary, "test", source])
     diagnostic = first_diagnostic(result.stderr, root, source, spec.path)
     expected = expected_traces(case, root) or expected_channels(case, root) or rooted_file(root, case["stdout"]).read_bytes()
     status, reason = classify(case, result, diagnostic, expected, stage)
@@ -253,7 +268,7 @@ def execute(case: dict, spec: Source, binary: Path, root: Path, work: Path,
 
 def summary(results: list[dict]) -> str:
     fields = []
-    for group in ("demos", "stdlib", "readme", "native"):
+    for group in ("demos", "stdlib", "readme", "native", "combined"):
         selected = [row for row in results if row["group"] == group]
         fields.append(f"{group} {sum(row['status'] == 'pass' for row in selected)}/{len(selected)}")
     return "smoke: " + " ".join(fields)
@@ -274,8 +289,8 @@ def main() -> int:
     parser.add_argument("--crypto-suite-generated-dir", type=Path)
     args = parser.parse_args()
     root, binary, output = args.root.resolve(), args.binary.resolve(), args.output.resolve()
-    if args.timeout <= 0:
-        parser.error("--timeout must be positive")
+    if not 0 < args.timeout <= 30:
+        parser.error("--timeout must be positive and at most 30 seconds")
     manifest = args.manifest or root / "tests/smoke/cases.json"
     output.mkdir(parents=True, exist_ok=True)
     report = output / "results.json"

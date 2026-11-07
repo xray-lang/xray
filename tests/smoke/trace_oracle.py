@@ -57,9 +57,9 @@ def expected_channels(case: dict, root: Path) -> ChannelTrace | None:
     relative = case.get("stdout_channels")
     if relative is None:
         return None
-    if (case["path"] != CHANNELS or case["expect"] != "pass"
+    if (case["path"] != CHANNELS
             or case["mode"] not in ("run", "build-run") or not isinstance(relative, str)):
-        raise ValueError("channel fanout oracle is restricted to its passing original demo")
+        raise ValueError("channel fanout oracle is restricted to its original demo")
     path = (root / relative).resolve()
     if not path.is_relative_to(root.resolve()) or not path.is_file():
         raise ValueError("channel oracle is missing or outside the source root")
@@ -92,9 +92,9 @@ def expected_traces(case: dict, root: Path) -> tuple[bytes, ...] | None:
     relative = case.get("stdout_traces")
     if relative is None:
         return None
-    if (case["path"] not in SOURCES or case["expect"] != "pass"
+    if (case["path"] not in SOURCES
             or case["mode"] not in ("run", "build-run") or not isinstance(relative, str)):
-        raise ValueError("trace oracles are restricted to passing original concurrency demos")
+        raise ValueError("trace oracles are restricted to original concurrency demos")
     path = (root / relative).resolve()
     if not path.is_relative_to(root.resolve()) or not path.is_file():
         raise ValueError("trace oracle is missing or outside the source root")
@@ -116,20 +116,25 @@ def expected_traces(case: dict, root: Path) -> tuple[bytes, ...] | None:
 
 
 def verify_pairs(cases: list[dict], rows: list[dict]) -> list[dict]:
-    """A legal but different trace is still a VM/native differential failure."""
+    """Both engines must agree on complete raw output or the exact known refusal."""
     groups: dict[str, list[dict]] = {}
     by_id = {row["id"]: row for row in rows}
     changed = []
     for case in cases:
-        if case.get("stdout_traces") is not None or case.get("stdout_channels") is not None:
-            groups.setdefault(case["path"], []).append(case)
+        groups.setdefault(case["path"], []).append(case)
     for path, pair in groups.items():
         actual = [by_id[case["id"]] for case in pair]
         reason = None
-        if len(pair) != 2 or {case["mode"] for case in pair} != {"run", "build-run"}:
-            reason = "trace output requires both VM and native results"
-        elif any(row["status"] != "pass" for row in actual):
-            reason = "trace companion did not pass its complete output oracle"
+        if len(pair) != 2 or sum(case["mode"] == "build-run" for case in pair) != 1:
+            reason = "output requires both VM and native results"
+        elif any(row.get("executed") is not True for row in actual):
+            reason = "both engines must actually execute"
+        elif any(row["status"] == "fail" for row in actual) or actual[0]["status"] != actual[1]["status"]:
+            reason = "VM/native companion verdicts differ or one failed"
+        elif actual[0]["status"] == "gap":
+            if (actual[0].get("exit_code"), actual[0].get("first_diagnostic")) != (
+                    actual[1].get("exit_code"), actual[1].get("first_diagnostic")):
+                reason = "VM/native first diagnostics differ"
         else:
             try:
                 outputs = [(Path(row["log_directory"]) / "run.stdout").read_bytes() for row in actual]
@@ -142,7 +147,7 @@ def verify_pairs(cases: list[dict], rows: list[dict]) -> list[dict]:
                 reason = f"trace comparison could not read original stdout: {error}"
         if reason:
             for row in actual:
-                if row["status"] == "pass":
+                if row["status"] != "fail":
                     row.update(status="fail", reason=reason)
                     changed.append(row)
     return changed

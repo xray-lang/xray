@@ -42,7 +42,7 @@ class TraceOracleTests(unittest.TestCase):
             logs = self.root / str(i)
             logs.mkdir()
             (logs / "run.stdout").write_bytes(output)
-            rows.append({"id": case["id"], "status": "pass", "log_directory": str(logs)})
+            rows.append({"id": case["id"], "status": "pass", "executed": True, "log_directory": str(logs)})
         return rows
 
     def test_source_identity_and_both_companions_are_required(self):
@@ -70,10 +70,10 @@ class TraceOracleTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.load()
 
-    def test_gaps_and_unrelated_sources_cannot_use_traces(self):
+    def test_gaps_retain_the_original_oracle_but_unrelated_sources_are_rejected(self):
         self.case.update(expect="gap", exit_code=1, gap={"feature": "F19", "first_diagnostic": "closed"})
-        with self.assertRaisesRegex(ValueError, "restricted"):
-            self.load()
+        self.native.update(expect="gap",exit_code=1,gap=dict(self.case["gap"]))
+        self.assertEqual(len(self.load()),2)
         self.case.update(expect="pass", path="demos/hello.xr")
         with self.assertRaisesRegex(ValueError, "restricted"):
             smoke.expected_traces(self.case, self.root)
@@ -203,5 +203,5 @@ class ChannelOracleTests(unittest.TestCase):
             logs = self.root / str(i)
             logs.mkdir()
             (logs / "run.stdout").write_bytes(output)
-            rows.append({"id": case["id"], "status": "pass", "log_directory": str(logs)})
+            rows.append({"id": case["id"], "status": "pass", "executed": True, "log_directory": str(logs)})
         self.assertEqual(len(smoke.verify_pairs([self.case, self.native], rows)), 2)
