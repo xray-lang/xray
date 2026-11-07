@@ -167,6 +167,8 @@ def main():
                    'MultiThreadedDLL':'/MD','MultiThreadedDebugDLL':'/MDd'}[args.msvc_runtime]
             values = ['/nologo','/std:c++17' if cpp else '/std:c11','/W4','/WX','/utf-8',crt,'/O2']
             values += ['/clang:-fno-lto'] if 'clang' in args.compiler.name.lower() else ['/GL-']
+            # Match the CLI's IEEE contract, including literal division by zero.
+            values += ['/clang:-ffp-contract=off'] if 'clang' in args.compiler.name.lower() else ['/fp:precise','/wd4723']
             if cpp:values += ['/EHsc']
             if args.asan:values += ['/fsanitize=address','/clang:-fsanitize=undefined','/Zi']
             return values
