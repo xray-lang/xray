@@ -342,7 +342,7 @@ XR_FUNC int xr_cli_lir_native(XrCompileResources *resources, const XrCliNativeOp
         goto cleanup;
     }
     if (choice.selector == XR_TOOLCHAIN_SELECTOR_ZIG) {
-        fputs("selected compiler provider is unavailable\n", stderr);
+        fputs("Zig automatic native compilation is temporarily unavailable\n", stderr);
         goto cleanup;
     }
     request.compiler = choice.compiler;

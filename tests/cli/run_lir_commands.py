@@ -77,6 +77,9 @@ def main() -> None:
     assert not refused.stdout and b"temporarily unavailable" in refused.stderr
     probe = run("probe", [binary, "toolchain", "probe", "--json"], 0)
     assert json.loads(probe.stdout)["ready"] is True and not probe.stderr
+    refused = run("unavailable-zig", [binary, "toolchain", "probe", "--provider", "zig", "--json"], 3)
+    assert json.loads(refused.stdout)["ready"] is False
+    assert b"temporarily unavailable" in refused.stderr
 
     prefix = work / "relocated with 空格"
     (prefix / "bin").mkdir(parents=True)
