@@ -67,18 +67,11 @@ if(WIN32)
 
 endif()
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/xir_target_authority.cmake)
-include(${CMAKE_CURRENT_SOURCE_DIR}/cli/native_projection_owner.cmake)
 
 
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/toolchain_config.cmake)
 add_subdirectory(cli/pe_version_owner)
-if(WIN32)
-    set(ADMISSION_SDK "${CMAKE_BINARY_DIR}/xir-runtime-sdk")
-    set(ADMISSION_MSVC "${XIR_INVOCATION_MSVC}")
-    set(ADMISSION_LINKER "${XIR_INVOCATION_LINKER}")
-
-endif()
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/workspace_owner.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/source_paths_owner.cmake)
 
@@ -362,10 +355,6 @@ set(XIR_OUTPUT_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_output_fixtur
 
 
 
-
-add_test(NAME test_xir_native_projection_policy COMMAND ${XRAY_PYTHON}
-    ${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_native_projection_vectors.py)
-set_tests_properties(test_xir_native_projection_policy PROPERTIES LABELS "unit;xir;abi;generated-c" TIMEOUT 30)
 
 add_test(NAME test_xir_source_product_identity_oracle COMMAND ${XRAY_PYTHON}
     ${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_source_product_identity.py)
@@ -1747,7 +1736,6 @@ endforeach()
 include("${CMAKE_CURRENT_LIST_DIR}/xir/array_capacity_budget.cmake")
 
 
-include("${CMAKE_CURRENT_LIST_DIR}/xir/native_projection70.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/source_layout22.cmake")
 

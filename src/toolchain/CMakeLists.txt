@@ -1,8 +1,0 @@
-add_library(xray_toolchain_binding STATIC xr_toolchain_binding.c ../base/xsha256.c)
-target_link_libraries(xray_toolchain_binding PUBLIC xray_compile_resources)
-target_compile_features(xray_toolchain_binding PUBLIC c_std_11)
-if(MSVC)
-    target_compile_options(xray_toolchain_binding PRIVATE /W4 /WX)
-else()
-    target_compile_options(xray_toolchain_binding PRIVATE -Wall -Wextra -Werror)
-endif()

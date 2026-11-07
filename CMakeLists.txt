@@ -1286,7 +1286,6 @@ add_subdirectory(src/runtime/native)
 add_subdirectory(src/vm/register)
 target_link_libraries(xray PRIVATE xray_compile_resources)
 add_subdirectory(src/xir)
-add_subdirectory(src/toolchain)
 include(src/frontend/format/xformatter.cmake)
 target_link_libraries(xray PRIVATE xray_frontend_format)
 include(src/api/xsource_compile.cmake)
@@ -1363,7 +1362,7 @@ if(BUILD_TESTS)
     include("${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/register_vm.cmake")
     include("${CMAKE_CURRENT_SOURCE_DIR}/bench/native/native_bench.cmake")
 
-    # Qualify the current public CLI and its exact installed Core/SDK payload.
+    # Exercise public commands and the installed native runtime.
     include("${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/xir_public_cli_product.cmake")
     include("${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/cli_usability.cmake")
     include("${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/lir_commands.cmake")
