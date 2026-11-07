@@ -996,6 +996,7 @@ set_tests_properties(test_channel_buffer PROPERTIES LABELS "unit;runtime;channel
 add_xray_unit_test(test_resolver module/test_resolver.c)
 if(NOT WIN32)
   add_xray_unit_test(test_module_resolver module/test_module_resolver.c)
+  target_link_libraries(test_module_resolver PRIVATE xray_xir_source)
 endif()
 
 add_xray_unit_test(test_source_cache module/test_source_cache.c)
