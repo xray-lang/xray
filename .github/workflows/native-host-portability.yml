@@ -11,6 +11,10 @@ on:
         description: Run macOS scalar performance across three declared alignments
         type: boolean
         default: false
+      native_sanitizers:
+        description: Include focused macOS native sanitizer checks
+        type: boolean
+        default: false
 
 jobs:
   current:
@@ -174,6 +178,51 @@ jobs:
           python scripts/run_scalar_performance.py --root "$RUNNER_TEMP/scalar-before" \
             --build "$RUNNER_TEMP/scalar-before-build" --work build/scalar-before-performance \
             --samples 9 --cc /usr/bin/clang --alignment ${{ matrix.alignment }} --lua "$RUNNER_TEMP/scalar-lua/lua"
+      - name: Build focused native sanitizers
+        if: always() && inputs.native_sanitizers && matrix.alignment == 16
+        run: |
+          python scripts/ci_build_log.py --log build/scalar-san-configure.log -- \
+            cmake -S . -B build-native-san -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang -DENABLE_ASAN=ON -DENABLE_UBSAN=ON -DXR_XIR_PARANOID=ON
+          python scripts/ci_build_log.py --log build/scalar-san-build.log -- \
+            cmake --build build-native-san --parallel 4 --target xray xray_native_runtime
+      - name: Verify sanitized public native output
+        if: always() && inputs.native_sanitizers && matrix.alignment == 16
+        env:
+          ASAN_OPTIONS: abort_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, json, os, subprocess
+          root = Path.cwd()
+          work = root / 'build/scalar-native-sanitizers'
+          work.mkdir()
+          binary = root / 'build-native-san/xray'
+          env = dict(os.environ, XRAY_STDLIB_PATH=str(root / 'stdlib'), NO_COLOR='1')
+          records = []
+          def run(name, command, code):
+              child = subprocess.run(list(map(str, command)), capture_output=True, env=env, timeout=30)
+              streams = {}
+              for stream, data in (('stdout', child.stdout), ('stderr', child.stderr)):
+                  path = work / (name + '.' + stream)
+                  path.write_bytes(data)
+                  streams[stream] = hashlib.sha256(data).hexdigest()
+              records.append(dict(name=name, command=list(map(str, command)), exit=child.returncode, streams=streams))
+              (work / 'result.json').write_text(json.dumps(records, indent=2) + '\n')
+              assert child.returncode == code, (name, child.returncode, child.stderr)
+              return child
+          for name, wanted in (('hello', b'42\n'), ('unicode', '你好\n'.encode()),
+                               ('f64', b'3.75\n'), ('module_scalar_constants', b'1\n'), ('panic', None)):
+              source = root / 'tests/fixtures/lir_cli' / (name + '.xr')
+              vm = run(name + '-vm', [binary, 'run', source], 1 if wanted is None else 0)
+              if wanted is not None:
+                  assert vm.stdout == wanted and not vm.stderr
+              output = work / name
+              run(name + '-build', [binary, 'build', source, '-o', output], 0)
+              native = run(name + '-native', [output], vm.returncode)
+              assert (native.stdout, native.stderr) == (vm.stdout, vm.stderr), name
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:

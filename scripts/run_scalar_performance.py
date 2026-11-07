@@ -62,6 +62,7 @@ def main() -> None:
     result = {"state": "RUNNING", "alignment": args.alignment,
               "platform": platform.platform(), "machine": platform.machine(),
               "compiler": str(args.cc), "commands": [], "samples": [], "medians": {},
+              "products": {},
               "boundary": "Public CLI run includes process startup and compilation. Native and "
                           "reference C timings include startup and execution. Compilation and "
                           "linking are recorded separately. All samples are retained. Only "
@@ -126,6 +127,7 @@ def main() -> None:
             source = Path(original["LIR VM"][1])
             row = {"Xray VM": [binary, "run", source]}
             if "Lua" in original:
+                result["products"][label] = {}
                 row["Lua"] = original["Lua"]
                 generated = source.with_suffix(".native.c")
                 run(f"emit-{index}", [binary, "build", source, "--c-only", "-o", generated])
@@ -145,13 +147,35 @@ def main() -> None:
                         command += ["advapi32.lib", "userenv.lib"] if msvc else (
                             [] if platform.system() == "Darwin" else ["-lm", "-lpthread", "-ldl"])
                     command += ["/Fe" + str(executable), "/link", "/INCREMENTAL:NO", "/OPT:REF"] if msvc else ["-o", executable]
+                    if platform.system() == "Darwin":
+                        command += ["-Wl,-dead_strip"]
                     run(f"link-{index}-{engine}", command)
                     row[engine] = [executable]
+                    result["products"][label][engine] = {
+                        "path": str(executable), "bytes": executable.stat().st_size,
+                        "sha256": hashlib.sha256(executable.read_bytes()).hexdigest(),
+                        "codeSha256": code_hash(executable)}
+                    if engine == "native" and platform.system() == "Darwin":
+                        retained = code.with_suffix(".unstripped.out")
+                        comparison = [str(value) for value in command if value != "-Wl,-dead_strip"]
+                        comparison[comparison.index("-o") + 1] = str(retained)
+                        run(f"link-{index}-unstripped", comparison)
+                        row["native-unstripped"] = [retained]
+                        result["products"][label]["native-unstripped"] = {
+                            "path": str(retained), "bytes": retained.stat().st_size,
+                            "sha256": hashlib.sha256(retained.read_bytes()).hexdigest(),
+                            "codeSha256": code_hash(retained)}
             engines[label] = row
         for sample in range(args.samples):
             for index, (label, row) in enumerate(engines.items()):
                 order = list(row)
                 order = order[sample % len(order):] + order[:sample % len(order)]
+                if "native-unstripped" in order:
+                    first, second = sorted((order.index("native"), order.index("native-unstripped")))
+                    pair = ("native", "native-unstripped")
+                    if sample % 2:
+                        pair = pair[::-1]
+                    order[first], order[second] = pair
                 outputs = []
                 for engine in order:
                     data, seconds = run(f"run-{sample}-{index}-{engine.replace(' ', '_')}", row[engine])
