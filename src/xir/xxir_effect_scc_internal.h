@@ -26,13 +26,14 @@ static XrXirStatus xir_effect_scc_close(const XrXirCompileContext *memory,
     if (!xir_compile_context_valid(memory) || (count && !nodes) || (edge_count && !edges))
         return XR_XIR_BAD_STRUCTURE;
     if (!count) return XR_XIR_OK;
-    if ((uint64_t)count > SIZE_MAX / sizeof(XirEffectSccFrame)) return XR_XIR_OVERFLOW;
+    uint64_t frame_bytes = (uint64_t)count * sizeof(XirEffectSccFrame);
+    if (frame_bytes > SIZE_MAX) return XR_XIR_OVERFLOW;
     XrXirStatus status = control ? xir_compile_resource_status(xr_compile_request_control_poll(control)) : XR_XIR_OK;
     uint32_t *index = xir_compile_calloc(memory, count, sizeof(*index), &status);
     uint32_t *low = xir_compile_calloc(memory, count, sizeof(*low), &status);
     uint32_t *component = xir_compile_alloc(memory, (size_t)count * sizeof(*component), &status);
     uint32_t *stack = xir_compile_alloc(memory, (size_t)count * sizeof(*stack), &status);
-    XirEffectSccFrame *frames = xir_compile_alloc(memory, (size_t)count * sizeof(*frames), &status);
+    XirEffectSccFrame *frames = xir_compile_alloc(memory, (size_t)frame_bytes, &status);
     if (!index || !low || !component || !stack || !frames) goto done;
     for (uint32_t n = 0; n < count; ++n) component[n] = UINT32_MAX;
     uint32_t next = 0, components = 0, stacked = 0, progress = 0;

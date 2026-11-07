@@ -502,15 +502,16 @@ static bool effect_summary_link(EffectSummaryBuild *build) {
 
 static bool effect_summary_close(EffectSummaryBuild *build) {
     EffectControlGraph *graph = &build->graph;
-    if ((uint64_t)graph->node_count > SIZE_MAX / sizeof(XirEffectSccNode) ||
-        (uint64_t)graph->edge_count > SIZE_MAX / sizeof(XirEffectSccEdge)) {
+    uint64_t node_bytes = (uint64_t)graph->node_count * sizeof(XirEffectSccNode);
+    uint64_t edge_bytes = (uint64_t)graph->edge_count * sizeof(XirEffectSccEdge);
+    if (node_bytes > SIZE_MAX || edge_bytes > SIZE_MAX) {
         build->status = XR_XIR_OVERFLOW;
         return false;
     }
     XirEffectSccNode *nodes = xir_compile_alloc(build->memory,
-        (size_t)graph->node_count * sizeof(*nodes), &build->status);
+        (size_t)node_bytes, &build->status);
     XirEffectSccEdge *edges = graph->edge_count ? xir_compile_alloc(build->memory,
-        (size_t)graph->edge_count * sizeof(*edges), &build->status) : NULL;
+        (size_t)edge_bytes, &build->status) : NULL;
     if (nodes && (!graph->edge_count || edges)) {
         for (uint32_t n = 0; n < graph->node_count; ++n)
             nodes[n] = (XirEffectSccNode){graph->nodes[n].head, graph->nodes[n].local, 0};
