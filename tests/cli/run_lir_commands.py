@@ -57,6 +57,9 @@ def main() -> None:
         rejected_effects = (
             ("nosuspend_await", b"declared no_suspend function may suspend"),
             ("nosuspend_fixed_callable", b"declared no_suspend function may suspend"),
+            ("nosuspend_chain", b"entry -> bridge -> leaf (suspending operation)"),
+            ("nosuspend_callable_chain", b"forward (unqualified callable)"),
+            ("nosuspend_chain_truncated", b"intermediate_function_with_a_long_name -> ..."),
             ("nosuspend_strengthen", b"qualified reference requires an explicit target promise"),
             ("closed_dispatch_suspend", b"declared no_suspend function may suspend"),
             ("closed_dispatch_erased", b"declared no_suspend function may suspend"),

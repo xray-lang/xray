@@ -1,0 +1,11 @@
+fn worker() -> i64 { return 1 }
+fn downstream_function_with_a_long_name() -> i64 { return await go worker() }
+fn intermediate_function_with_a_long_name() -> i64 {
+    return downstream_function_with_a_long_name()
+}
+fn upstream_function_with_a_long_name() -> i64 {
+    return intermediate_function_with_a_long_name()
+}
+const limited: nosuspend fn() -> i64 = fn() -> i64 {
+    return upstream_function_with_a_long_name()
+}

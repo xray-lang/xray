@@ -1,0 +1,3 @@
+fn worker() -> i64 { return 1 }
+fn leaf() -> i64 { return await go worker() }
+export fn bridge() -> i64 { return leaf() }

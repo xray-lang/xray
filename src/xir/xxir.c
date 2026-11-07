@@ -524,6 +524,8 @@ XR_FUNC XrXirStatus xr_xir_compile_check_refined_v2(const XrXirCompileContext *c
     XrXirEffects *effects = NULL;
     if (status == XR_XIR_OK) status = xr_xir_compile_effects_refine_verified_input(context,(XirEffectInput){built,construction,control},refiner,&effects);
     if (status == XR_XIR_OK) status = xir_compile_verify_effects_input(context,(XirEffectInput){built,construction,control},effects,diagnostic);
+    if (status == XR_XIR_BAD_TYPE && effects && diagnostic && refiner->explain)
+        refiner->explain(refiner->context, built, effects, diagnostic);
     XrXirArtifact *copy = NULL;
     if (status == XR_XIR_OK) {
         copy = clone_module_receiving(context,built,construction,&status,NULL,control);

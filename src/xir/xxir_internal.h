@@ -166,6 +166,8 @@ XR_FUNC XrXirStatus xr_xir_compile_effects_infer_verified_input(const XrXirCompi
 typedef struct XrXirRootRefiner {
     void *context;
     XrXirStatus (*update)(void *, const XrXirEffects *, bool *);
+    /* The diagnostic consumer copies its presentation before the owner expires. */
+    void (*explain)(void *, const XrXirModule *, const XrXirEffects *, const XrXirDiagnostic *);
 } XrXirRootRefiner;
 XR_FUNC XrXirStatus xr_xir_compile_structure_verify_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic);

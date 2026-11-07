@@ -276,6 +276,44 @@ static bool source_items_prepare(SourceContext *ctx) {
     ctx->module=previous_module;
     return !xr_hir_items_errors(ctx->items)||source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"duplicate declaration name");
 }
+/* Diagnostic expansion follows the retained first cause only after rejection.
+ * The Source diagnostic owns its text before the effect owner is released. */
+static void source_effect_explain(void *context, const XrXirModule *module,
+    const XrXirEffects *effects, const XrXirDiagnostic *location) {
+    SourceContext *ctx = context;
+    if (ctx->diagnostic.status != XR_XIR_OK || location->reason != XR_XIR_DIAGNOSTIC_NO_SUSPEND ||
+        location->function >= module->function_count) return;
+    uint32_t function = location->function;
+    ctx->module = ctx->bodies[function].module;
+    source_fail(ctx, ctx->bodies[function].node, location->status,
+        "declared no_suspend function may suspend or call an unqualified callable. Reason ");
+    char *message = ctx->diagnostic.message;
+    size_t used = strlen(message), capacity = sizeof(ctx->diagnostic.message);
+    uint32_t previous = UINT32_MAX;
+    for (uint32_t step = 0; step < module->function_count; ++step) {
+        XrXirEffectFacts facts = xr_xir_effects_read(effects, function);
+        if (facts.status != XR_XIR_OK || facts.control.suspend == XR_XIR_EFFECT_NONE) break;
+        const XrXirEffectWitness *cause = &facts.suspend_witness;
+        if (cause->distance >= previous) break;
+        previous = cause->distance;
+        const XrXirFunction *body = &module->functions[function];
+        const char *terminal = cause->cause == XR_XIR_EFFECT_CAUSE_CALL ? " -> " :
+            cause->cause == XR_XIR_EFFECT_CAUSE_SUSPEND ? " (suspending operation)" :
+            " (unqualified callable)";
+        size_t room = capacity - used - 4, tail = strlen(terminal);
+        if (body->name_length > room || tail > room - body->name_length) {
+            memcpy(message + used, "...", 4);
+            break;
+        }
+        memcpy(message + used, body->name, body->name_length);
+        used += body->name_length;
+        memcpy(message + used, terminal, tail + 1);
+        used += tail;
+        if (cause->cause != XR_XIR_EFFECT_CAUSE_CALL || cause->callee >= module->function_count) break;
+        function = cause->callee;
+    }
+}
+
 static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
     if(!source_hir_body_begin(ctx))return;
     XrXirStatus body_status=XR_XIR_OK;
@@ -293,7 +331,7 @@ static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
         XrXirDeclarations declarations;
         XrXirModule built = source_module_view(ctx,&declarations);
         XrXirDiagnostic location = {0};
-        XrXirRootRefiner refiner = {ctx,source_root_refine};
+        XrXirRootRefiner refiner = {ctx,source_root_refine,source_effect_explain};
         XrXirStatus status = xr_xir_compile_check_refined_v2(&ctx->compile, &built, ctx->construction, &refiner, ctx->request, &output->checked, &location);
         for (uint32_t f=0;status==XR_XIR_OK && f<ctx->function_count;++f) {
             if (!ctx->bodies[f].initialization_regions) continue;

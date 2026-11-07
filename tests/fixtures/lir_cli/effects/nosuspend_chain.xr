@@ -1,0 +1,4 @@
+import "./suspend_chain_leaf" as chain
+
+fn entry() -> i64 { return chain.bridge() }
+const limited: nosuspend fn() -> i64 = fn() -> i64 { return entry() }
