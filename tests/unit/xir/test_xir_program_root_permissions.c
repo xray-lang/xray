@@ -154,7 +154,9 @@ static void permission_runtime(void) {
     CHECK(forged && forged->entry == 3);
     forged->entry = 2; probe_input = pure;
     CHECK(xr_xir_value_valid(&pure));
-    CHECK(xr_xir_instance_start_function(a, &pure, NULL, 0) == XR_XIR_CALL_BAD_ARGUMENT);
+    XrXirCallStatus forged_status=xr_xir_instance_start_function(a,&pure,NULL,0);
+    if(forged_status!=XR_XIR_CALL_BAD_ARGUMENT)fprintf(stderr,"forged root claim status=%u\n",(unsigned)forged_status);
+    CHECK(forged_status==XR_XIR_CALL_BAD_ARGUMENT);
     probe_mode = 2; permission_drive(a);
     probe_mode = 1; permission_drive(a);
     forged->entry = 3;

@@ -29,13 +29,13 @@ export fn localBox()->i64{const value=Box();value.number=11;return value.number}
 export fn relay()->i64{return mutableRead()}
 export fn rootA()->i64{const value=mutableScalar;return value+rootB()}
 export fn rootB()->i64{return rootA()}
-fn rootFail()->i64{const value=mutableScalar;throw Fault.Failed}
+fn rootFail()->i64 throws(Fault){const value=mutableScalar;throw Fault.Failed}
 export fn invoke()->i64{try{return rootFail()}catch(e){return 19}}
 fn defaultOwner(value:i64=mutableRead())->i64{return value}
 export fn defaultUse()->i64{return defaultOwner()}
 export fn cleanupOwner()->i64{defer{const value=mutableScalar};return 23}
 export fn indirect(f:fn()->i64)->i64{return f()}
-export fn indirectInvoke(f:fn()->i64)->i64{try{return f()}catch(e){return 29}}
+export fn indirectInvoke(f:fn()->i64 throws(Fault))->i64{try{return f()}catch(e){return 29}}
 export fn requirement<T:Read>(value:T)->i64{return value.read()}
 export fn instantiateRequirement()->i64{return requirement<Token>(Token{})}
 export fn reference()->fn()->i64{return mutableRead}

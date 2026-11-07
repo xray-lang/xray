@@ -54,7 +54,7 @@ static void bound_matrix(void) {
     }
     CHECK(accepted==33 && rejected==31);
     uint32_t untouched=71;
-    CHECK(!xr_xir_callable_flags_valid(18));
+    CHECK(!xr_xir_callable_flags_valid(34));
     CHECK(!xr_xir_callable_flags_join(0,2,&untouched) && untouched==71);
     CHECK(!xr_xir_callable_flags_join(2,1,&untouched) && untouched==71);
     CHECK(!xr_xir_callable_flags_join(2,2,NULL));

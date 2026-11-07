@@ -32,7 +32,7 @@ static void bound_equal_raw_guards(void) {
             if (attack==4) nodes[0].parameters=NULL;
             if (attack==5) target=XR_XIR_CONSTRUCTED_TYPE_BASE;
         } else if (attack<10) {
-            static const uint32_t invalid[]={0,1,10,24};
+            static const uint32_t invalid[]={0,1,10,34};
             nodes[0].flags=nodes[1].flags=invalid[attack-6];
             target=XR_XIR_CONSTRUCTED_TYPE_BASE;
         } else if (attack==10) nodes[1].parameter_count=2;
