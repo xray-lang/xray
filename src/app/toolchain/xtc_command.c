@@ -247,7 +247,7 @@ static bool emit_msvc_compile(const XrToolchainSelection *selection,
     if (!add(sink, "/nologo", err, err_size) || !add(sink, "/utf-8", err, err_size) ||
         !add(sink, msvc_optimization(spec->optimization), err, err_size))
         return false;
-    if (spec->fp_contract == XR_FP_CONTRACT_OFF && !add(sink, "/fp:strict", err, err_size))
+    if (spec->fp_contract == XR_FP_CONTRACT_OFF && !add(sink, "/fp:precise", err, err_size))
         return false;
     if (spec->fp_contract == XR_FP_CONTRACT_FAST && !add(sink, "/fp:fast", err, err_size))
         return false;
