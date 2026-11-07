@@ -34,7 +34,8 @@ static XrXirCtfeStatus instance_batch_receive(const XirCtfeInstanceBatchRequest 
     if (request->count>input->context.limits.functions ||
         (uint64_t)request->count*sizeof(XrXirValue)>SIZE_MAX ||
         (uint64_t)request->count*sizeof(uint32_t)>SIZE_MAX) return XR_XIR_CTFE_BAD_ARGUMENT;
-    XrXirStatus status=xir_artifact_verify(input,NULL,control);
+    XrXirStatus status=XR_XIR_OK;
+    if(XR_XIR_PARANOID)status=xir_artifact_verify(input,NULL,control);
     if (status!=XR_XIR_OK) return instance_compile_status(status);
 
     uint32_t progress=0;
@@ -51,10 +52,7 @@ static XrXirCtfeStatus instance_batch_receive(const XirCtfeInstanceBatchRequest 
     owner->values=xir_type_copy_zero(&input->context,request->count,sizeof(*owner->values),&status,control);
     if (status==XR_XIR_OK) owner->functions=xir_type_copy_bytes(&input->context,request->functions,request->count,sizeof(*owner->functions),&status,control);
 
-    XrXirCheckedPacket packet={0};
-    if (status==XR_XIR_OK) status=instance_packet_write(input,&packet,control);
-    if (status==XR_XIR_OK) status=instance_packet_read(&owner->context,input,&packet,&owner->checked,control);
-    xr_xir_compile_checked_packet_free(&packet);
+    if (status==XR_XIR_OK) status=instance_checked_receive(input,&owner->checked,control);
     if (status==XR_XIR_OK) {
         controlled=instance_control_poll(control);
         if (controlled!=XR_XIR_CTFE_OK) { xr_xir_compile_ctfe_instance_batch_free(owner);return controlled; }

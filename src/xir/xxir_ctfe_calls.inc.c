@@ -186,10 +186,9 @@ static XrXirCtfeStatus ctfe_call_prepare_received(const XrXirCtfeCallRequest *re
     if (!target || target->architecture!=XR_XIR_ARCH_LE64 || target->abi_version!=XR_XIR_VALUE_ABI_VERSION ||
         input->target.architecture!=target->architecture || input->target.abi_version!=target->abi_version)
         return XR_XIR_CTFE_PROFILE;
-    for (uint32_t b=0;b<32;++b) {
-
-        if (input->checked_identity[b]!=artifact->checked_identity[b]) return XR_XIR_CTFE_IDENTITY;
-    }
+    if (XR_XIR_PARANOID)
+        for (uint32_t b=0;b<32;++b)
+            if (input->checked_identity[b]!=artifact->checked_identity[b]) return XR_XIR_CTFE_IDENTITY;
     status=ctfe_call_closure(artifact,input->function,owned,cells,closure);
     if (status!=XR_XIR_CTFE_OK) return status;
     const XrXirFunction *body=&artifact->module.functions[input->function];
@@ -443,7 +442,8 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_calls(const XrXirCtfeCallRequest *re
         request->call_depth>XR_XIR_CTFE_MAX_CALL_DEPTH) return XR_XIR_CTFE_BAD_ARGUMENT;
     XrXirCtfeStatus status=ctfe_control_poll(request->evaluation.control);
     if (status!=XR_XIR_CTFE_OK) return status;
-    status=ctfe_compile_status(xir_artifact_verify(request->evaluation.artifact,NULL,request->evaluation.control));
+    if (XR_XIR_PARANOID)
+        status=ctfe_compile_status(xir_artifact_verify(request->evaluation.artifact,NULL,request->evaluation.control));
     if (status!=XR_XIR_CTFE_OK) return status;
     bool owned=false;XrXirCellProvenance *cells=NULL;void *closure=NULL;
     status=ctfe_call_prepare_received(request,&owned,&cells,&closure);

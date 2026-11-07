@@ -7,8 +7,8 @@
  * xxir_ctfe_instance.c - Definition-preserving closed compiler result ownership
  *
  * KEY CONCEPT:
- *   Retained immutable inputs preserve lifetimes, never admission. Every factory
- *   receives fresh Checked bytes and executes under its original memory owner.
+ *   Admitted immutable inputs receive independent ownership before evaluation.
+ *   Each execution uses its original memory owner and validates new arguments.
  */
 #include "xxir_ctfe_instance_internal.h"
 #include "xxir_ctfe_batch_internal.h"
@@ -51,6 +51,15 @@ static XrXirStatus instance_packet_read(const XrXirCompileContext *context,const
     return input->evaluation_only?xir_evaluation_read(context,packet->bytes,packet->length,output,NULL,control):
         xir_checked_read(context,packet->bytes,packet->length,output,NULL,control);
 }
+static XrXirStatus instance_checked_receive(const XrXirArtifact *input,
+    XrXirArtifact **output,XrCompileRequestControl *control) {
+    if(!XR_XIR_PARANOID)return xir_artifact_clone_checked(input,output,NULL,control);
+    XrXirCheckedPacket packet={0};
+    XrXirStatus status=instance_packet_write(input,&packet,control);
+    if(status==XR_XIR_OK)status=instance_packet_read(&input->context,input,&packet,output,control);
+    xr_xir_compile_checked_packet_free(&packet);
+    return status;
+}
 /* Full artifact admission precedes this physical correspondence observation.
  * Concrete equality never repairs missing symbolic constraints or witnesses. */
 static XrXirCtfeStatus instance_definition(const XrXirArtifact *artifact,uint32_t function,
@@ -73,6 +82,7 @@ static XrXirStatus instance_inputs_match(const XrXirCompileContext *context,
     const XrXirArtifact *checked,const XrXirArtifact *lowered,XrCompileRequestControl *control) {
     if (checked->context.resources!=context->resources ||
         lowered->context.resources!=context->resources) return XR_XIR_BAD_STRUCTURE;
+    if (!XR_XIR_PARANOID) return xir_receive_poll(control);
     XrXirCheckedPacket current={0};XrXirStatus status=instance_packet_write(checked,&current,control);
     if (status==XR_XIR_OK) status=xir_artifact_verify(lowered,NULL,control);
     if (status==XR_XIR_OK) {
@@ -100,7 +110,8 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance(const XirCtfeInstanceReques
     if (controlled!=XR_XIR_CTFE_OK) return controlled;
     const XrXirArtifact *input=request->checked;
     if (!xir_compile_context_valid(&input->context)) return XR_XIR_CTFE_BAD_ARTIFACT;
-    XrXirStatus status=xir_artifact_verify(input,NULL,control);
+    XrXirStatus status=XR_XIR_OK;
+    if(XR_XIR_PARANOID)status=xir_artifact_verify(input,NULL,control);
     if (status!=XR_XIR_OK) return instance_compile_status(status);
     const XrXirArtifact *definition=NULL;uint32_t declaration=0;
     XrXirCtfeStatus admitted=instance_definition(input,request->function,&definition,&declaration);
@@ -110,9 +121,7 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance(const XirCtfeInstanceReques
     if (!owner) return instance_compile_status(status);
 
     owner->context=input->context;owner->function=request->function;
-    XrXirCheckedPacket packet={0};status=instance_packet_write(input,&packet,control);
-    if (status==XR_XIR_OK) status=instance_packet_read(&owner->context,input,&packet,&owner->checked,control);
-    xr_xir_compile_checked_packet_free(&packet);
+    status=instance_checked_receive(input,&owner->checked,control);
     if (status==XR_XIR_OK) {
         controlled=instance_control_poll(control);
         if (controlled!=XR_XIR_CTFE_OK) { xr_xir_compile_ctfe_instance_free(owner);return controlled; }

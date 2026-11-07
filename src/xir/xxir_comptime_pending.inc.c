@@ -7,8 +7,8 @@
  * xxir_comptime_pending.inc.c - Atomic owning observations of unresolved keys
  *
  * KEY CONCEPT:
- *   Every borrow verifies current Source bytes and repeats actual discovery.
- *   Owned type descriptions preserve lifetime without executable authority.
+ *   Pending keys retain an independent immutable definition and type pool.
+ *   Paranoid builds repeat discovery and compare serialized observations.
  */
 #include "xxir_checked.h"
 struct XirComptimePending {
@@ -34,12 +34,11 @@ static XrXirStatus pending_status(XrXirDiagnostic *diagnostic,XrXirStatus status
 }
 static XrXirStatus pending_definition_receive(XirComptimePending *owner,const SpecPendingPoint *point,
     XrXirDiagnostic *diagnostic,XrCompileRequestControl *control) {
-    /* The complete Source owns every new descriptor. Its current packet covers
-     * the whole pool, including declarations not reached by this argument. */
+    /* The receiving definition owns the complete expanded type pool. */
     XrXirModule module=owner->definition->module;module.types=point->types;
     XrXirArtifact *received=NULL;XrXirCheckedPacket packet={0};
     XrXirStatus status=xr_xir_compile_recheck_v2(&owner->context,&module,owner->definition->construction,&received,diagnostic,control);
-    if (status==XR_XIR_OK) status=xir_checked_write(received,&packet,diagnostic,control);
+    if (status==XR_XIR_OK && XR_XIR_PARANOID) status=xir_checked_write(received,&packet,diagnostic,control);
     if (status==XR_XIR_OK) status=xir_receive_poll(control);
     if (status==XR_XIR_OK) {
         xr_xir_compile_artifact_free(owner->definition);xr_xir_compile_checked_packet_free(&owner->packet);
@@ -57,8 +56,10 @@ XR_FUNC XrXirStatus xr_xir_compile_comptime_pending(const XrXirArtifact *definit
     XirComptimePending *owner=xir_type_copy_zero(&definition->context,1,sizeof(*owner),&status,control);
     if (!owner) return pending_status(diagnostic,status);
     owner->context=definition->context;SpecPendingPoint point={0};XrXirArtifact *unexpected=NULL;
-    status=xir_checked_write(definition,&owner->packet,diagnostic,control);
-    if (status==XR_XIR_OK) status=xir_checked_read(&owner->context,owner->packet.bytes,owner->packet.length,&owner->definition,diagnostic,control);
+    if(XR_XIR_PARANOID) {
+        status=xir_checked_write(definition,&owner->packet,diagnostic,control);
+        if (status==XR_XIR_OK) status=xir_checked_read(&owner->context,owner->packet.bytes,owner->packet.length,&owner->definition,diagnostic,control);
+    }else status=xir_artifact_clone_checked(definition,&owner->definition,diagnostic,control);
     if (status==XR_XIR_OK && owner->definition->construction->comptime.site_count)
         status=spec_run(owner->definition,&unexpected,diagnostic,&point,NULL,NULL,control);
     if (unexpected) status=XR_XIR_BAD_STRUCTURE;
@@ -79,6 +80,13 @@ XR_FUNC XrXirStatus xr_xir_compile_comptime_pending_view(const XirComptimePendin
         output->site.caller || output->site.instruction || output->site.helper ||
         !xir_compile_context_valid(&owner->context) || !owner->definition ||
         owner->definition->context.resources!=owner->context.resources) return pending_status(diagnostic,XR_XIR_BAD_STRUCTURE);
+    if(!XR_XIR_PARANOID) {
+        XrXirStatus status=xir_receive_poll(control);
+        if(status==XR_XIR_OK)
+            *output=(XirComptimePendingView){owner->definition,owner->definition->module.types,
+                owner->site,owner->arguments,owner->count};
+        return pending_status(diagnostic,status);
+    }
     XrXirCheckedPacket current={0};SpecPendingPoint point={0};XrXirArtifact *unexpected=NULL;
     XrXirStatus status=xir_checked_write(owner->definition,&current,diagnostic,control);
     if (status==XR_XIR_OK) {

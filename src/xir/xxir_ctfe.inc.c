@@ -187,7 +187,8 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request
     const XrXirArtifact *artifact = request->artifact;
     XrXirCtfeStatus status=ctfe_control_poll(request->control);
     if (status!=XR_XIR_CTFE_OK) return status;
-    status = ctfe_compile_status(xir_artifact_verify(artifact,NULL,request->control));
+    if (XR_XIR_PARANOID)
+        status = ctfe_compile_status(xir_artifact_verify(artifact,NULL,request->control));
     if (status != XR_XIR_CTFE_OK) return status;
     if (artifact->module.stage != XR_XIR_LOWERED || request->function >= artifact->module.function_count)
         return XR_XIR_CTFE_BAD_ARTIFACT;
@@ -199,10 +200,9 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request
         target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
         request->target.architecture != target->architecture ||
         request->target.abi_version != target->abi_version) return XR_XIR_CTFE_PROFILE;
-    for (uint32_t i = 0; i < 32; ++i) {
-
-        if (request->checked_identity[i] != artifact->checked_identity[i]) return XR_XIR_CTFE_IDENTITY;
-    }
+    if (XR_XIR_PARANOID)
+        for (uint32_t i = 0; i < 32; ++i)
+            if (request->checked_identity[i] != artifact->checked_identity[i]) return XR_XIR_CTFE_IDENTITY;
     status = ctfe_admit(artifact, request->function);
     if (status != XR_XIR_CTFE_OK) return status;
     const XrXirFunction *body = &artifact->module.functions[request->function];

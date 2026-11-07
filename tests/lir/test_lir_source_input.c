@@ -210,6 +210,17 @@ static void evaluation_origin_rejected(void) {
     CHECK(xr_xir_compile_source_comptime_instances_view(&instances, views, bindings, 2) ==
           XR_XIR_CTFE_OK);
     CHECK(views[0].definition == views[1].definition);
+    for(unsigned i=0;i<2;++i) {
+        CHECK(views[i].lowered->program_final);
+#if !XR_XIR_PARANOID
+        CHECK(!views[i].checked->checked_packet.bytes&&!views[i].checked->checked_packet.length);
+        CHECK(!views[i].lowered->checked_packet.bytes&&!views[i].lowered->checked_packet.length);
+        CHECK(!views[i].definition->checked_packet.bytes&&!views[i].definition->checked_packet.length);
+        CHECK(!views[i].checked->source_facts&&!views[i].lowered->source_facts&&!views[i].definition->source_facts);
+#endif
+        CHECK(views[i].value->type==XR_XIR_I64&&views[i].value->payload==42);
+        XIR_OK(xr_xir_compile_artifact_verify(views[i].lowered,NULL));
+    }
     const XrXirArtifact *checked = views[0].definition;
     XrXirComptimeSite site = {bindings[0].source_function, bindings[0].source_instruction,
                               bindings[0].helper};

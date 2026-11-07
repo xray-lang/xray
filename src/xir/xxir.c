@@ -219,6 +219,28 @@ static XrXirStatus transition_error(XrXirStatus status, XrXirDiagnostic *diagnos
     return status;
 }
 
+XR_FUNC XrXirStatus xir_artifact_clone_checked(const XrXirArtifact *source,
+    XrXirArtifact **output,XrXirDiagnostic *diagnostic,XrCompileRequestControl *control) {
+    if (!source || !output || *output || !xir_compile_context_valid(&source->context))
+        return transition_error(XR_XIR_BAD_STRUCTURE,diagnostic);
+    if (source->module.stage!=XR_XIR_CHECKED)
+        return transition_error(XR_XIR_BAD_STAGE,diagnostic);
+    XrXirStatus status=xir_receive_poll(control);
+    if (status==XR_XIR_OK && XR_XIR_PARANOID)
+        status=xir_artifact_verify(source,diagnostic,control);
+    XrXirArtifact *copy=NULL;
+    if (status==XR_XIR_OK) copy=source_artifact_clone(&source->context,source,&status,control);
+    if (status==XR_XIR_OK && XR_XIR_PARANOID)
+        status=xir_artifact_verify(copy,diagnostic,control);
+    if (status==XR_XIR_OK) status=xir_receive_poll(control);
+    if (status!=XR_XIR_OK) {
+        xr_xir_compile_artifact_free(copy);
+        return transition_error(status,diagnostic);
+    }
+    *output=copy;
+    return XR_XIR_OK;
+}
+
 static XrXirStatus artifact_verify_owned_effects(const XrXirArtifact *artifact,
     XrXirEffects **output, const XrXirEffects *source_effects,
     XrXirEffects **receiving_effects, XrXirDiagnostic *diagnostic, XrCompileRequestControl *control);
@@ -320,7 +342,7 @@ static XrXirStatus transition_shape(const XrXirModule *input, XrXirStage source,
     if (source == XR_XIR_CHECKED) {
         if (input->linkage_kind != XR_XIR_PROGRAM)
             return transition_error(XR_XIR_BAD_STAGE, diagnostic);
-        if (input->generics || (input->types && input->types->interfaces))
+        if (input->generics || input->defaults || (input->types && input->types->interfaces))
             return transition_error(XR_XIR_BAD_STAGE, diagnostic);
         if (input->types) {
             if (input->types->count && !input->types->nodes) return transition_error(XR_XIR_BAD_STRUCTURE,diagnostic);
@@ -361,7 +383,7 @@ static XrXirStatus transition_owned(const XrXirModule *input, const XrXirConstru
     }
     copy->context = limits;
     budget = &limits;
-    if (source == XR_XIR_CHECKED) {
+    if (source == XR_XIR_CHECKED && XR_XIR_PARANOID) {
         status = proof->writer(copy, &copy->checked_packet, diagnostic, control);
         if (status != XR_XIR_OK) { xr_xir_compile_artifact_free(copy); return status; }
 
@@ -415,8 +437,15 @@ static XrXirStatus transition_owned(const XrXirModule *input, const XrXirConstru
         status=xir_effects_retain(budget,*proof->receiving_effects,&copy->checked_effects,control);
     if (status==XR_XIR_OK && copy->module.stage==XR_XIR_CHECKED)
         status=source_facts_prepare(copy,diagnostic, control);
-    if(status==XR_XIR_OK&&copy->module.stage==XR_XIR_LOWERED)
-        status=artifact_verify_owned_effects(copy,&copy->program_final,NULL,NULL,diagnostic,control);
+    if(status==XR_XIR_OK&&copy->module.stage==XR_XIR_LOWERED) {
+        if(XR_XIR_PARANOID)
+            status=artifact_verify_owned_effects(copy,&copy->program_final,NULL,NULL,diagnostic,control);
+        else {
+            status=xr_xir_compile_effects_infer_verified_input(budget,
+                (XirEffectInput){&copy->module,copy->construction,control},&copy->program_final);
+            if(status!=XR_XIR_OK)status=transition_error(status,diagnostic);
+        }
+    }
 #if XR_XIR_PARANOID
     else if(status==XR_XIR_OK)
         status=artifact_verify_owned_effects(copy,NULL,NULL,proof->receiving_effects,diagnostic,control);
@@ -526,7 +555,7 @@ XrXirStatus xr_xir_compile_lower(const XrXirArtifact *checked, const XrXirTarget
     XrXirStatus status=lower_control_poll(control);
     if (status!=XR_XIR_OK) status=transition_error(status,diagnostic);
     if (status==XR_XIR_OK) status=transition_shape(&checked->module,XR_XIR_CHECKED,&checked->context,target,diagnostic);
-    if (status==XR_XIR_OK) status=xir_artifact_verify(checked,diagnostic,control);
+    if (status==XR_XIR_OK && XR_XIR_PARANOID) status=xir_artifact_verify(checked,diagnostic,control);
     const TransitionInputProof proof={checked->evaluation_only?checked_evaluation_encode:checked_encode,NULL,NULL};
     return status==XR_XIR_OK?transition_owned(&checked->module,checked->construction,
         &checked->context,output,diagnostic,target,&proof,control):status;
@@ -545,11 +574,11 @@ XR_FUNC XrXirStatus xr_xir_compile_lower_take(XrXirArtifact **owned_input,
     XrXirStatus status=lower_control_poll(control);
     if (status!=XR_XIR_OK) status=transition_error(status,diagnostic);
     if (status==XR_XIR_OK) status=transition_shape(&checked->module,XR_XIR_CHECKED,&limits,target,diagnostic);
-    if (status == XR_XIR_OK)
+    if (status == XR_XIR_OK && XR_XIR_PARANOID)
         status = xir_artifact_verify(checked,diagnostic,control);
     if (status == XR_XIR_OK && (checked->checked_packet.bytes || checked->checked_packet.length))
         status = transition_error(XR_XIR_BAD_STRUCTURE, diagnostic);
-    if (status == XR_XIR_OK) {
+    if (status == XR_XIR_OK && XR_XIR_PARANOID) {
         status = xr_xir_compile_layout_verify(checked);
         if (status != XR_XIR_OK) status = transition_error(status, diagnostic);
     }
@@ -575,7 +604,8 @@ static XrXirStatus artifact_verify_owned_effects(const XrXirArtifact *artifact,
     XrXirCompileContext limits = *budget;
     XrXirStatus controlled=xir_receive_poll(control);
     if (controlled!=XR_XIR_OK) return transition_error(controlled,diagnostic);
-    if (artifact && artifact->module.stage == XR_XIR_LOWERED) {
+    if (artifact->module.stage == XR_XIR_LOWERED &&
+        (XR_XIR_PARANOID || artifact->checked_packet.bytes || artifact->checked_packet.length)) {
         const XrXirCheckedPacket *packet = &artifact->checked_packet;
         if (!packet->bytes || packet->length < 64)
             return transition_error(XR_XIR_BAD_STRUCTURE, diagnostic);

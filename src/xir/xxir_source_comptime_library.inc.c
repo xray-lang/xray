@@ -60,7 +60,8 @@ static bool source_comptime_library_results(SourceContext *ctx,const SourceConte
     return true;
 }
 static bool source_comptime_evaluate_library(SourceContext *ctx,const XrXirArtifact *checked) {
-    XrXirStatus status=xir_artifact_verify(checked,NULL,ctx->request);
+    XrXirStatus status=XR_XIR_OK;
+    if(XR_XIR_PARANOID)status=xir_artifact_verify(checked,NULL,ctx->request);
     if (status!=XR_XIR_OK) return source_fail(ctx,NULL,status,"library CTFE input failed current checking");
     if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     SourceContext program={0};program.request=ctx->request;program.compile=ctx->compile;program.graph=ctx->graph;program.linkage_kind=XR_XIR_PROGRAM;

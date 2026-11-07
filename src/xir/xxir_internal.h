@@ -230,6 +230,9 @@ XR_FUNC XrXirStatus xr_xir_effects_go_safe(const XrXirEffects *effects, uint32_t
 XR_FUNC XrXirEffect xr_xir_effects_task_creation(const XrXirEffects *effects, uint32_t function);
 
 XR_FUNC XrXirStatus xr_xir_compile_layout_build(XrXirArtifact *artifact, XrCompileRequestControl *control);
+/* Clone an admitted immutable Checked Artifact into an independent owner. */
+XR_FUNC XrXirStatus xir_artifact_clone_checked(const XrXirArtifact *source,
+    XrXirArtifact **output,XrXirDiagnostic *diagnostic,XrCompileRequestControl *control);
 /* Copy a compiler-produced immutable Checked module. Raw inputs require
  * complete admission before this private ownership operation. */
 XR_FUNC XrXirStatus xr_xir_compile_recheck_v2(const XrXirCompileContext *compile_context, const XrXirModule *checked, const XrXirConstruction *construction, XrXirArtifact **output, XrXirDiagnostic *diagnostic, XrCompileRequestControl *control);

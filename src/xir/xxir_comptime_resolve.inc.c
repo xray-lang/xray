@@ -87,10 +87,14 @@ static XrXirStatus source_comptime_resolve(const XirComptimeResolveRequest *requ
         return resolution_status(diagnostic,XR_XIR_BAD_STAGE);
     if (request->target.architecture!=XR_XIR_ARCH_LE64 || request->target.abi_version!=XR_XIR_VALUE_ABI_VERSION)
         return resolution_status(diagnostic,XR_XIR_BAD_LAYOUT);
-    XrXirCheckedPacket packet={0};XrXirArtifact *current=NULL;
-    XrXirStatus status=xir_checked_write(input,&packet,diagnostic,request->control);
-    if (status==XR_XIR_OK) status=xir_checked_read(&input->context,packet.bytes,packet.length,&current,diagnostic,request->control);
-    xr_xir_compile_checked_packet_free(&packet);
+    XrXirArtifact *current=NULL;
+    XrXirStatus status=XR_XIR_OK;
+    if(XR_XIR_PARANOID) {
+        XrXirCheckedPacket packet={0};
+        status=xir_checked_write(input,&packet,diagnostic,request->control);
+        if (status==XR_XIR_OK) status=xir_checked_read(&input->context,packet.bytes,packet.length,&current,diagnostic,request->control);
+        xr_xir_compile_checked_packet_free(&packet);
+    }else status=xir_artifact_clone_checked(input,&current,diagnostic,request->control);
     while (status==XR_XIR_OK) {
         XirComptimePending *pending=NULL;XrXirArtifact *next=NULL;
         status=xr_xir_compile_comptime_pending(current,&pending,diagnostic,request->control);
