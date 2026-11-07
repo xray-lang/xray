@@ -281,7 +281,7 @@ static void constraint_proof_scalar_signatures(void) {
     XrXirInstruction op = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
     for (uint32_t i = 0; i < 1 + 2*sizeof(invalid)/sizeof(*invalid); ++i) {
         XrXirType parameter = XR_XIR_I64;
-        XrXirFunction function = {"identity",8,&parameter,1,XR_XIR_I64,&block,1,&op,1,NULL,0,XR_XIR_NEVER};
+        XrXirFunction function = {"identity",8,&parameter,1,XR_XIR_I64,&block,1,&op,1,NULL,0,.error_type=XR_XIR_NEVER};
         if (i) {
             XrXirType forged = invalid[(i-1)/2];
             if (i%2) parameter = forged; else function.result = forged;
@@ -304,8 +304,8 @@ static void constraint_proof_scalar_generic_forwarding(void) {
         {XR_XIR_RETURN,XR_XIR_UNIT,{1},{0},0,{0}}};
     XrXirBlock leaf = {0,1,0,0}, body = {0,2,0,0};
     XrXirFunction functions[] = {
-        {"identity",8,&parameter,1,parameter,&leaf,1,&identity,1,NULL,0,XR_XIR_NEVER},
-        {"forward",7,&parameter,1,parameter,&body,1,forwarding,2,&operand,1,XR_XIR_NEVER}};
+        {"identity",8,&parameter,1,parameter,&leaf,1,&identity,1,NULL,0,.error_type=XR_XIR_NEVER},
+        {"forward",7,&parameter,1,parameter,&body,1,forwarding,2,&operand,1,.error_type=XR_XIR_NEVER}};
     XrXirModule module = {XR_XIR_BUILT,functions,2,NULL,generics,NULL,NULL, XR_XIR_PROGRAM, NULL};
     for (uint32_t valid = 0; valid < 2; ++valid) {
         caller.markers = valid ? XR_XIR_CONSTRAINT_SENDABLE : 0;
@@ -321,9 +321,9 @@ static void constraint_proof_scalar_slot_sharing(void) {
         {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
     XrXirBlock block = {0,1,0,0}, main_block = {0,2,0,0};
     XrXirFunction functions[] = {
-        {"provider_init",13,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0,XR_XIR_NEVER},
-        {"root_init",9,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0,XR_XIR_NEVER},
-        {"main",4,NULL,0,XR_XIR_I64,&main_block,1,entry,2,NULL,0,XR_XIR_NEVER}};
+        {"provider_init",13,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0,.error_type=XR_XIR_NEVER},
+        {"root_init",9,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0,.error_type=XR_XIR_NEVER},
+        {"main",4,NULL,0,XR_XIR_I64,&main_block,1,entry,2,NULL,0,.error_type=XR_XIR_NEVER}};
     uint32_t dependency = 0;
     XrXirSourceModule modules[] = {{"provider",8,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE},{"root",4,&dependency,1,1, 0,XR_XIR_MODULE_FRESH_STORAGE}};
     XrXirFunctionIdentity identities[] = {{0},{.module=1},{.module=1}};

@@ -20,15 +20,15 @@ static void interface_access_cases(void) {
         };
         XrXirBlock init_block = {0,1,0,0}, answer_block = {0,2,0,0};
         XrXirFunction functions[] = {
-            {"alpha_init",10,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0,XR_XIR_NEVER},
-            {"other_init",10,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0,XR_XIR_NEVER},
-            {"entry",5,NULL,0,XR_XIR_I64,&answer_block,1,answer,2,NULL,0,XR_XIR_NEVER}
+            {"alpha_init",10,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0,.error_type=XR_XIR_NEVER},
+            {"other_init",10,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0,.error_type=XR_XIR_NEVER},
+            {"entry",5,NULL,0,XR_XIR_I64,&answer_block,1,answer,2,NULL,0,.error_type=XR_XIR_NEVER}
         };
         uint32_t dependency = 1;
         XrXirSourceModule modules[] = {{"alpha",5,&dependency,1,0, 0,XR_XIR_MODULE_FRESH_STORAGE},{"other",5,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE}};
-        XrXirFunctionIdentity identities[] = {{0},{1,0,0,0,0,0, XR_XIR_NON_MEMBER, 0, 0},{0}};
+        XrXirFunctionIdentity identities[] = {{0},{1,0,0,0,0,0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0},{0}};
         XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,2, NULL};
-        XrXirNominalDeclaration nominal = {{"other",5},{"Payload",7},1,NULL,0,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0, 0,{0}};
+        XrXirNominalDeclaration nominal = {{"other",5},{"Payload",7},1,NULL,0,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0, 0,{0},.parent=0};
         XrXirNominalTable nominals = {&nominal,1,NULL};
         XrXirTypeNode nodes[3] = {0};
         nodes[0].kind = XR_XIR_TYPE_NOMINAL;

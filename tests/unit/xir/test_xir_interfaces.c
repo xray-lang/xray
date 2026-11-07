@@ -150,11 +150,11 @@ static XrXirStatus check_interface_module(const XrXirCompileContext *context, co
     XrXirInstruction ret = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
     XrXirBlock block = {0,1,0,0};
     XrXirFunction functions[] = {function,
-        {"init",4,NULL,0,XR_XIR_UNIT,&block,1,&ret,1,NULL,0,XR_XIR_NEVER},
-        {"init",4,NULL,0,XR_XIR_UNIT,&block,1,&ret,1,NULL,0,XR_XIR_NEVER}};
+        {"init",4,NULL,0,XR_XIR_UNIT,&block,1,&ret,1,NULL,0,.error_type=XR_XIR_NEVER},
+        {"init",4,NULL,0,XR_XIR_UNIT,&block,1,&ret,1,NULL,0,.error_type=XR_XIR_NEVER}};
     uint32_t dependency = 0;
     XrXirSourceModule modules[] = {{"alpha",5,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE},{"other",5,&dependency,1,2, 0,XR_XIR_MODULE_FRESH_STORAGE}};
-    XrXirFunctionIdentity identities[] = {{0},{0},{1,0,0,0,0,0, XR_XIR_NON_MEMBER, 0, 0}};
+    XrXirFunctionIdentity identities[] = {{0},{0},{1,0,0,0,0,0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0}};
     XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,0, NULL};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,types,NULL, XR_XIR_PROGRAM, NULL};
     return xir_fixture_check(context, &module, checked, diagnostic);
@@ -168,7 +168,7 @@ static void checked_owner_lifetime(void) {
             {XR_XIR_RETURN, XR_XIR_UNIT, {0,0}, {0,0}, 0, {0}}
         };
         XrXirBlock block = {0,2,0,0};
-        XrXirFunction function = {"entry",5,NULL,0,XR_XIR_I64,&block,1,instructions,2,NULL,0,XR_XIR_NEVER};
+        XrXirFunction function = {"entry",5,NULL,0,XR_XIR_I64,&block,1,instructions,2,NULL,0,.error_type=XR_XIR_NEVER};
         attempts = 0; fail_at = site ? site - 1 : SIZE_MAX;
         XrXirArtifact *checked = NULL;
         XrXirCompileContext context = interface_context_default();
@@ -198,9 +198,9 @@ static XrXirStatus inherited_module_verify(Fixture *f, XrXirCompileContext *budg
     XrXirInstruction entry[] = {{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},
         {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
     XrXirFunction functions[] = {
-        {"init",4,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0,XR_XIR_NEVER},
-        {"init",4,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0,XR_XIR_NEVER},
-        {"main",4,NULL,0,XR_XIR_I64,&entry_block,1,entry,2,NULL,0,XR_XIR_NEVER}};
+        {"init",4,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0,.error_type=XR_XIR_NEVER},
+        {"init",4,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0,.error_type=XR_XIR_NEVER},
+        {"main",4,NULL,0,XR_XIR_I64,&entry_block,1,entry,2,NULL,0,.error_type=XR_XIR_NEVER}};
     uint32_t dependency = 0;
     XrXirSourceModule modules[] = {{"alpha",5,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE},{"other",5,&dependency,1,1, 0,XR_XIR_MODULE_FRESH_STORAGE}};
     XrXirFunctionIdentity identities[] = {{0},{.module=1},{0}};
@@ -242,7 +242,7 @@ static void interface_parameters_remain_declaration_scoped(void) {
             {XR_XIR_RETURN, XR_XIR_UNIT, {0,0}, {0,0}, 0, {0}}
         };
         XrXirBlock block = {0,3,0,0};
-        XrXirFunction function = {"entry",5,NULL,0,XR_XIR_I64,&block,1,instructions,3,NULL,0,XR_XIR_NEVER};
+        XrXirFunction function = {"entry",5,NULL,0,XR_XIR_I64,&block,1,instructions,3,NULL,0,.error_type=XR_XIR_NEVER};
         if (attack == 1 || attack == 4) {
             function.parameters = &leaked; function.parameter_count = 1;
             instructions[1].args[0] = 1; instructions[2].args[0] = 1;
@@ -272,7 +272,7 @@ static void checked_owner_outlives_producer(void) {
         {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},41,{0}},
         {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
     XrXirBlock block = {0,2,0,0};
-    XrXirFunction function = {"entry",5,NULL,0,XR_XIR_I64,&block,1,instructions,2,NULL,0,XR_XIR_NEVER};
+    XrXirFunction function = {"entry",5,NULL,0,XR_XIR_I64,&block,1,instructions,2,NULL,0,.error_type=XR_XIR_NEVER};
     XrXirArtifact *checked = NULL;
     CHECK(check_interface_module(&context,&f.types,function,&checked,NULL)==XR_XIR_OK && checked);
     xr_compile_resources_release(context.resources); context = (XrXirCompileContext){0};

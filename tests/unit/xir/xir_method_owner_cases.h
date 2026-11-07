@@ -17,8 +17,8 @@ static void method_owner_cases(void) {
     XrXirConstraint constraints[2] = {{0},{0}};
     XrXirNominalVariant variant = {{"Only",4},0,0};
     XrXirNominalDeclaration nominal[2] = {
-        {{"alpha",5},{"Box",3},0,constraints,1,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}},
-        {{"alpha",5},{"Twin",4},0,constraints,1,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}}};
+        {{"alpha",5},{"Box",3},0,constraints,1,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0},.parent=0},
+        {{"alpha",5},{"Twin",4},0,constraints,1,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0},.parent=0}};
     XrXirNominalTable table = {nominal,2,NULL};
     XrXirType argument = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     XrXirTypeNode node = {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,1,{0,&argument,1,NULL,0}};
@@ -30,12 +30,12 @@ static void method_owner_cases(void) {
     XrXirInstruction init = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
     XrXirBlock block = {0,2,0,0}, init_block = {0,1,0,0};
     XrXirFunction functions[3] = {
-        {"main",4,NULL,0,XR_XIR_I64,&block,1,code,2,NULL,0,XR_XIR_NEVER},
-        {"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0,XR_XIR_NEVER},
-        {"read",4,&receiver,1,XR_XIR_I64,&block,1,member_code,2,NULL,0,XR_XIR_NEVER}};
+        {"main",4,NULL,0,XR_XIR_I64,&block,1,code,2,NULL,0,.error_type=XR_XIR_NEVER},
+        {"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0,.error_type=XR_XIR_NEVER},
+        {"read",4,&receiver,1,XR_XIR_I64,&block,1,member_code,2,NULL,0,.error_type=XR_XIR_NEVER}};
     XrXirGeneric generic[3] = {{0},{0},{constraints,2,NULL,0, NULL}};
-    XrXirFunctionIdentity identities[3] = {{0,1,0,0,0,0,XR_XIR_NON_MEMBER, 0, 0},
-        {0,0,0,0,0,0,XR_XIR_NON_MEMBER, 0, 0},{0,0,1,XR_XIR_MEMBER_PRIVATE,0,0,XR_XIR_READ_METHOD, 0, 0}};
+    XrXirFunctionIdentity identities[3] = {{0,1,0,0,0,0,XR_XIR_NON_MEMBER, 0, 0,.native_callable=0},
+        {0,0,0,0,0,0,XR_XIR_NON_MEMBER, 0, 0,.native_callable=0},{0,0,1,XR_XIR_MEMBER_PRIVATE,0,0,XR_XIR_READ_METHOD, 0, 0,.native_callable=0}};
     XrXirSourceModule source = {"alpha",5,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,0,NULL};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,generic,&types,NULL, XR_XIR_PROGRAM, NULL};
@@ -65,7 +65,7 @@ static void method_owner_cases(void) {
             {XR_XIR_RETURN,XR_XIR_UNIT,{1},{0},0,{0}}};
         XrXirBlock entry_block={0,3,0,0};uint32_t operands[]={0};
         XrXirFunction original_main=functions[0];
-        functions[0]=(XrXirFunction){"main",4,NULL,0,XR_XIR_I64,&entry_block,1,entry_ops,3,operands,1,XR_XIR_NEVER};
+        functions[0]=(XrXirFunction){"main",4,NULL,0,XR_XIR_I64,&entry_block,1,entry_ops,3,operands,1,.error_type=XR_XIR_NEVER};
         generic[0]=(XrXirGeneric){NULL,0,call_args,2, NULL};types.nodes=pair;types.count=2;
         XrXirArtifact *original=NULL,*special=NULL;
         CHECK(xir_fixture_check(&stage_context, &module, &original, NULL)==XR_XIR_OK);
