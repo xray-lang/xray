@@ -45,7 +45,7 @@ foreach(target test_lsp_completion_resolve_errors test_lsp_completion_resolve_er
     endif()
 endforeach()
 target_compile_definitions(test_lsp_completion_resolve_errors_before PRIVATE ERRORS_BEFORE=1)
-foreach(mode IN ITEMS normal resources)
+foreach(mode normal resources before)
     if(mode STREQUAL "before")
         set(image test_lsp_completion_resolve_errors_before)
     else()

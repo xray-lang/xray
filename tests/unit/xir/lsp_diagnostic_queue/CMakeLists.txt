@@ -8,7 +8,7 @@ add_custom_command(OUTPUT "${queue_dir}/notification_handlers.inc.c"
         "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_handlers_textdoc.c" "${queue_dir}/notification_handlers.inc.c"
     DEPENDS "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_handlers_textdoc.c"
         "${PROJECT_SOURCE_DIR}/tests/unit/xir/lsp_document_notification/extract_handlers.py")
-foreach(kind IN ITEMS current)
+foreach(kind current before)
     if(kind STREQUAL "current")
         set(input "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_document_owner.c")
         set(output "current_schedule.inc.c")
