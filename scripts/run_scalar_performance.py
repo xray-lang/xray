@@ -197,6 +197,8 @@ def main() -> None:
                            for label, limit in limits.items()}
         result["nativeRatios"] = {label: row["native"] / row["C"]
                                   for label, row in result["medians"].items() if "C" in row}
+        result["initialNativeGates"] = {label: result["nativeRatios"][label] <= 1.1
+                                        for label in ("fib(32)", "mandelbrot")}
         result["nativeSerialSamples"] = []
         for sample in range(max(args.samples, 9)):
             for index, (label, row) in enumerate(engines.items()):

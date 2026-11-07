@@ -15,6 +15,10 @@ on:
         description: Include focused macOS native sanitizer checks
         type: boolean
         default: false
+      baseline_comparison:
+        description: Include the earlier compiler on each scalar runner
+        type: boolean
+        default: false
 
 jobs:
   current:
@@ -164,7 +168,7 @@ jobs:
           --work build/scalar-performance --samples 9 --cc /usr/bin/clang
           --alignment ${{ matrix.alignment }} --lua "$RUNNER_TEMP/scalar-lua/lua"
       - name: Observe the previous CLI on the same runner
-        if: always() && (steps.measure.outcome == 'success' || steps.measure.outcome == 'failure')
+        if: always() && inputs.baseline_comparison && (steps.measure.outcome == 'success' || steps.measure.outcome == 'failure')
         continue-on-error: true
         run: |
           git fetch --depth=1 origin 395d6246fc90b8ce384c25874e513a7418359386
