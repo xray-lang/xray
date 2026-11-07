@@ -182,6 +182,75 @@ static void root_go_rejections(void) {
     CHECK(!root_source("rejected/root_parent.xr",XR_XIR_BAD_TYPE));
     puts("root GO child/parent BAD_TYPE remain fail closed PASS");
 }
+static XrXirStatus parameter_summary_try(const XrXirCompileContext *context,
+    const XrXirModule *module, XrXirEffectParameter *parameters) {
+    XrXirFunctionEffectContract contracts[3] = {0};
+    for (uint32_t f = 0; f < 3; ++f)
+        contracts[f] = (XrXirFunctionEffectContract){.parameter_count = 1, .parameters = &parameters[f]};
+    EffectParameterGraph graph = {.work = context, .module = *module};
+    XrXirStatus status = effect_parameter_graph_prepare(&graph, contracts);
+    if (status == XR_XIR_OK) status = effect_parameter_graph_collect(&graph);
+    XrXirFunction headers[3];
+    memcpy(headers, module->functions, sizeof(headers));
+    for (uint32_t f = 0; f < 3; ++f) {
+        headers[f].instructions = NULL;
+        headers[f].instruction_count = UINT32_MAX;
+    }
+    graph.module.functions = headers;
+    if (status == XR_XIR_OK) status = effect_parameter_graph_finish(&graph, contracts);
+    effect_parameter_graph_free(&graph);
+    return status;
+}
+static void parameter_summary_kernel(void) {
+    EffectMark baseline = effect_mark();
+    XrXirTypeNode callable = {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER,
+        .result = XR_XIR_UNIT, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED};
+    XrXirTypes types = {.nodes = &callable, .count = 1};
+    XrXirType parameter = XR_XIR_CONSTRUCTED_TYPE_BASE;
+    uint32_t operand = 0;
+    XrXirInstruction rows[3][2] = {
+        {{.op = XR_XIR_CALL, .immediate = 1, .type = XR_XIR_CONSTRUCTED_TYPE_BASE, .args = {0, 1}},
+            {.op = XR_XIR_RETURN}},
+        {{.op = XR_XIR_FUNCTION_REF, .immediate = 2, .type = XR_XIR_CONSTRUCTED_TYPE_BASE, .args = {0, 1}},
+            {.op = XR_XIR_RETURN, .args = {1}}},
+        {{.op = XR_XIR_CALL_INDIRECT, .immediate = 0, .type = XR_XIR_UNIT}, {.op = XR_XIR_RETURN}}
+    };
+    XrXirFunction functions[3] = {0};
+    for (uint32_t f = 0; f < 3; ++f)
+        functions[f] = (XrXirFunction){.error_type = XR_XIR_NEVER, .parameters = &parameter, .parameter_count = 1,
+            .instructions = rows[f], .instruction_count = 2, .operands = &operand, .operand_count = 1};
+    functions[1].result = XR_XIR_CONSTRUCTED_TYPE_BASE;
+    XrXirModule module = {.stage = XR_XIR_CHECKED, .types = &types, .functions = functions, .function_count = 3};
+    XrXirEffectParameter parameters[3] = {
+        {XR_XIR_EFFECT_PARAMETER_VARIABLE, 0},
+        {XR_XIR_EFFECT_PARAMETER_VARIABLE, 0},
+        {XR_XIR_EFFECT_PARAMETER_VARIABLE, 0}
+    }, empty[3];
+    memcpy(empty, parameters, sizeof(empty));
+    attempts = 0;
+    CHECK(parameter_summary_try(&effect_context, &module, parameters) == XR_XIR_OK);
+    size_t sites = attempts;
+    CHECK(parameters[0].kind == XR_XIR_EFFECT_PARAMETER_FIXED && parameters[0].uses == XR_XIR_EFFECT_USE_FIXED);
+    CHECK(parameters[1].kind == XR_XIR_EFFECT_PARAMETER_FIXED && parameters[1].uses ==
+        (XR_XIR_EFFECT_USE_CONST_CAPTURE | XR_XIR_EFFECT_USE_RETURN | XR_XIR_EFFECT_USE_INVOKE));
+    CHECK(parameters[2].kind == XR_XIR_EFFECT_PARAMETER_VARIABLE && parameters[2].uses == XR_XIR_EFFECT_USE_INVOKE);
+    effect_mark_check(baseline);
+    for (size_t point = 0; point < sites; ++point) {
+        memcpy(parameters, empty, sizeof(parameters));
+        attempts = 0; injected = false; fail_at = point;
+        CHECK(parameter_summary_try(&effect_context, &module, parameters) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(injected && !memcmp(parameters, empty, sizeof(parameters)));
+        fail_at = SIZE_MAX;
+        effect_mark_check(baseline);
+    }
+    XrXirCompileContext finite = effect_owner_new((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE, 128, true});
+    uint64_t held = effect_stats(&finite).held_bytes;
+    CHECK(parameter_summary_try(&finite, &module, parameters) == XR_XIR_MEMORY_LIMIT);
+    CHECK(!memcmp(parameters, empty, sizeof(parameters)));
+    effect_owner_free(&finite, held);
+    effect_mark_check(baseline);
+    printf("parameter summaries: capture/forward masks, body-free closure, %zu allocation failures and finite owner PASS\n", sites);
+}
 static void control_summary_streamed(void) {
     EffectMark baseline = effect_mark();
     XrXirInstruction rows[3][2] = {
@@ -229,6 +298,7 @@ static void control_summary_streamed(void) {
     puts("streamed control summaries close without bodies and retain independent ownership PASS");
 }
 static void control_summary_kernel(void) {
+    parameter_summary_kernel();
     control_summary_streamed();
     const uint32_t count = 8193;
     XrXirFunction *functions = xr_calloc(count, sizeof(*functions));

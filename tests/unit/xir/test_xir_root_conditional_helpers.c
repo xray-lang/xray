@@ -60,7 +60,6 @@
 #include "xir_class_physical_replay_cases.h"
 #include "xir_invocation_edge_key_cases.h"
 #include "xir_context_constraint_vector_cases.h"
-#include "xir_parameter_schedule_cases.h"
 #include "xir_single_run_reader_cases.h"
 #include "xir_final_input_controls.h"
 
@@ -828,11 +827,6 @@ static XrXirStatus conditional_zero_module_fn(const XrXirCompileContext *context
     XrXirEffects *effects=NULL;
     XrXirStatus status=conditional_zero_checked(context,&module,&effects);
     if (status==XR_XIR_OK && oracle) {
-        EffectParameterFlow flow={.work=context};
-        flow.body=effect_body_owned_request(context,effects->invocations->body);
-        CHECK(effect_body_request_head(&flow.body,0,&flow.head)==XR_XIR_OK);flow.function=&flow.head;
-        bool needed=true;
-        CHECK(effect_formula_needs_value_flow(&flow,&needed)==XR_XIR_OK && !needed);
         CHECK(effect_roots_read(effects)->root[0].requires_root && !effect_roots_read(effects)->root[0].unresolved &&
             effect_roots_read(effects)->contracts[0].formula.constant_mask==XR_XIR_CALLABLE_ROOT_REQUIRED &&
             !effect_roots_read(effects)->contracts[0].formula.term_count);
@@ -1137,47 +1131,6 @@ static XrXirStatus conditional_base_cleanup_reference(const XrXirCompileContext 
         xr_xir_compile_root_cause_trace_free(trace);
     }
     effect_context_owner_free(owner);return status;
-}
-
-static void conditional_zero_flow_gate(const XrXirCompileContext *context) {
-    XrXirCallableParameter field={(XrXirType)256,0};
-    XrXirTypeNode nodes[5]={
-        {.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},
-        {.kind=XR_XIR_TYPE_NULLABLE,.element=(XrXirType)256},
-        {.kind=XR_XIR_TYPE_ARRAY,.element=(XrXirType)256},
-        {.kind=XR_XIR_TYPE_TUPLE,.parameters=&field,.parameter_count=1},
-        {.kind=XR_XIR_TYPE_CELL,.element=(XrXirType)256}};
-    XrXirTypes types={nodes,5,NULL,NULL};
-    XrXirType parameter=XR_XIR_I64;
-    XrXirInstruction ops[2]={{.op=XR_XIR_CONST_INT,.type=XR_XIR_I64},{.op=XR_XIR_RETURN}};
-    XrXirFunction function={.error_type=XR_XIR_NEVER,.parameters=&parameter,.parameter_count=1,
-        .instructions=ops,.instruction_count=2,.result=XR_XIR_UNIT};
-    XrXirModule module={.types=&types,.functions=&function,.function_count=1};
-    EffectParameterFlow flow={.work=context};flow.body=effect_body_raw_request(context,&module);
-    CHECK(effect_body_request_head(&flow.body,0,&flow.head)==XR_XIR_OK);flow.function=&flow.head;
-    bool needed=true;
-    CHECK(effect_formula_needs_value_flow(&flow,&needed)==XR_XIR_OK && !needed);
-    parameter=(XrXirType)256;needed=false;
-    CHECK(effect_formula_needs_value_flow(&flow,&needed)==XR_XIR_OK && needed);
-    for (uint32_t container=257;container<=260;++container) {
-        parameter=(XrXirType)container;needed=true;
-        CHECK(effect_formula_needs_value_flow(&flow,&needed)==XR_XIR_OK && !needed);
-        ops[1]=(XrXirInstruction){.op=container==257 ? XR_XIR_NULLABLE_UNWRAP :
-            container==258 ? XR_XIR_ARRAY_GET : container==259 ? XR_XIR_TUPLE_FIELD : XR_XIR_CELL_READ,
-            .type=(XrXirType)256};
-        needed=false;
-        CHECK(effect_formula_needs_value_flow(&flow,&needed)==XR_XIR_OK && needed);
-        ops[1]=(XrXirInstruction){.op=XR_XIR_RETURN};
-    }
-    parameter=XR_XIR_I64;
-    XrXirOp calls[]={XR_XIR_CALL,XR_XIR_INVOKE,XR_XIR_CALL_DEFAULT,XR_XIR_INVOKE_DEFAULT,
-        XR_XIR_CALL_REQUIREMENT,XR_XIR_CALL_INDIRECT,XR_XIR_INVOKE_INDIRECT,
-        XR_XIR_FUNCTION_REF,XR_XIR_FUNCTION_WEAKEN,XR_XIR_GO,XR_XIR_CLEANUP_REGISTER};
-    for (uint32_t i=0;i<sizeof(calls)/sizeof(calls[0]);++i) {
-        ops[1]=(XrXirInstruction){.op=calls[i],.type=XR_XIR_UNIT};needed=false;
-        CHECK(effect_formula_needs_value_flow(&flow,&needed)==XR_XIR_OK && needed);
-    }
-
 }
 
 /* This private storage probe does not create a module permission. A complete
@@ -1593,7 +1546,6 @@ static void conditional_literals(void) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
     uint64_t baseline=rp_stats(&context).held_bytes;
     conditional_shape_candidates(&context);conditional_domain_rejections(&context);conditional_empty_domains(&context);
-    conditional_zero_flow_gate(&context);
     for (uint32_t mode=0;mode<3;++mode) CHECK(conditional_zero_carrier(&context,mode,true)==XR_XIR_OK);
     CHECK(conditional_zero_module_fn(&context,true)==XR_XIR_OK);
     CHECK(conditional_zero_arity(&context,true)==XR_XIR_OK);
@@ -1849,9 +1801,6 @@ int main(int argc, char **argv) {
     input_seed_run_literals();
     if (argc==2 && !strcmp(argv[1],"--single-run-reader")) {
         single_run_reader_controls();return 0;
-    }
-    if (argc==2 && !strcmp(argv[1],"--parameter-schedule")) {
-        parameter_schedule_controls();return 0;
     }
     if (argc==2 && !strcmp(argv[1],"--read-allocation-bounds")) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());

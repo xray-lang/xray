@@ -564,9 +564,6 @@ static XrXirStatus effect_context_dense_solve(EffectContextOwner *owner,
         graph.ordinary=view.input;
         status=effect_parameters_derive(&view.module,&dense->uses,&graph,context);
     }
-    xr_compile_resources_free(graph.flow_rows);
-
-    graph.flow_rows=NULL;graph.flow_capacity=0;
     EffectInvocationDeclaredBounds *temporary=NULL;
     if (status==XR_XIR_OK) status=effect_ordinary_roots_prepare(context,source,dense,owner->declared,&temporary);
     if (status==XR_XIR_OK) status=effect_ordinary_roots_publish(context,dense,

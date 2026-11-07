@@ -103,18 +103,7 @@ static bool effect_summary_poll(EffectSummaryBuild *build) {
 
 static void *effect_summary_grow(EffectSummaryBuild *build, void *old,
     uint32_t count, size_t element, uint32_t *capacity) {
-    uint64_t next = *capacity ? (uint64_t)*capacity * 2 : 32;
-    if (next > UINT32_MAX) next = UINT32_MAX;
-    if (next <= count || next > SIZE_MAX / element) {
-        build->status = XR_XIR_OVERFLOW;
-        return NULL;
-    }
-    void *memory = xir_compile_alloc(build->memory, (size_t)next * element, &build->status);
-    if (!memory) return NULL;
-    if (count) memcpy(memory, old, (size_t)count * element);
-    xr_compile_resources_free(old);
-    *capacity = (uint32_t)next;
-    return memory;
+    return xir_compile_array_grow(build->memory, old, count, element, capacity, &build->status);
 }
 
 static uint32_t effect_summary_node(EffectSummaryBuild *build, EffectSummaryNodeKind kind) {
@@ -511,74 +500,29 @@ static bool effect_summary_link(EffectSummaryBuild *build) {
     return true;
 }
 
-typedef struct EffectSummaryFrame {
-    uint32_t node, edge, parent;
-} EffectSummaryFrame;
-
 static bool effect_summary_close(EffectSummaryBuild *build) {
     EffectControlGraph *graph = &build->graph;
-    uint32_t count = graph->node_count;
-    uint32_t *index = xir_compile_calloc(build->memory, count, sizeof(*index), &build->status);
-    uint32_t *low = xir_compile_calloc(build->memory, count, sizeof(*low), &build->status);
-    uint32_t *component = xir_compile_alloc(build->memory, (size_t)count * sizeof(*component), &build->status);
-    uint32_t *stack = xir_compile_alloc(build->memory, (size_t)count * sizeof(*stack), &build->status);
-    EffectSummaryFrame *frames = xir_compile_calloc(build->memory, count, sizeof(*frames), &build->status);
-    if (!index || !low || !component || !stack || !frames) goto done;
-    for (uint32_t n = 0; n < count; ++n) component[n] = UINT32_MAX;
-    uint32_t next = 0, components = 0, stacked = 0;
-    for (uint32_t start = 0; start < count && build->status == XR_XIR_OK; ++start) {
-        if (index[start]) continue;
-        uint32_t depth = 1;
-        frames[0] = (EffectSummaryFrame){start, graph->nodes[start].head, UINT32_MAX};
-        index[start] = low[start] = ++next;
-        stack[stacked++] = start;
-        while (depth && effect_summary_poll(build)) {
-            EffectSummaryFrame *frame = &frames[depth - 1];
-            uint32_t node = frame->node;
-            if (frame->edge != UINT32_MAX) {
-                const EffectSummaryEdge *edge = &graph->edges[frame->edge];
-                frame->edge = edge->next;
-                uint32_t target = edge->target;
-                if (!index[target]) {
-                    index[target] = low[target] = ++next;
-                    stack[stacked++] = target;
-                    frames[depth++] = (EffectSummaryFrame){target, graph->nodes[target].head, node};
-                } else if (component[target] == UINT32_MAX && index[target] < low[node]) {
-                    low[node] = index[target];
-                }
-                continue;
-            }
-            uint32_t parent = frame->parent;
-            --depth;
-            if (low[node] == index[node]) {
-                uint32_t end = stacked;
-                uint8_t mask = 0;
-                do {
-                    XR_DCHECK(stacked, "An active SCC owns at least its root");
-                    uint32_t member = stack[--stacked];
-                    component[member] = components;
-                    mask |= graph->nodes[member].local;
-                } while (stack[stacked] != node);
-                for (uint32_t at = stacked; at < end; ++at) {
-                    const EffectSummaryNode *member = &graph->nodes[stack[at]];
-                    for (uint32_t e = member->head; e != UINT32_MAX; e = graph->edges[e].next) {
-                        uint32_t target = graph->edges[e].target;
-                        XR_DCHECK(component[target] != UINT32_MAX, "SCC dependencies close before their callers");
-                        if (component[target] != components) mask |= graph->nodes[target].closed;
-                    }
-                }
-                for (uint32_t at = stacked; at < end; ++at) graph->nodes[stack[at]].closed = mask;
-                ++components;
-            }
-            if (parent != UINT32_MAX && low[node] < low[parent]) low[parent] = low[node];
-        }
+    if ((uint64_t)graph->node_count > SIZE_MAX / sizeof(XirEffectSccNode) ||
+        (uint64_t)graph->edge_count > SIZE_MAX / sizeof(XirEffectSccEdge)) {
+        build->status = XR_XIR_OVERFLOW;
+        return false;
     }
-done:
-    xr_compile_resources_free(index);
-    xr_compile_resources_free(low);
-    xr_compile_resources_free(component);
-    xr_compile_resources_free(stack);
-    xr_compile_resources_free(frames);
+    XirEffectSccNode *nodes = xir_compile_alloc(build->memory,
+        (size_t)graph->node_count * sizeof(*nodes), &build->status);
+    XirEffectSccEdge *edges = graph->edge_count ? xir_compile_alloc(build->memory,
+        (size_t)graph->edge_count * sizeof(*edges), &build->status) : NULL;
+    if (nodes && (!graph->edge_count || edges)) {
+        for (uint32_t n = 0; n < graph->node_count; ++n)
+            nodes[n] = (XirEffectSccNode){graph->nodes[n].head, graph->nodes[n].local, 0};
+        for (uint32_t e = 0; e < graph->edge_count; ++e)
+            edges[e] = (XirEffectSccEdge){graph->edges[e].target, graph->edges[e].next};
+        build->status = xir_effect_scc_close(build->memory, nodes, graph->node_count,
+            edges, graph->edge_count, build->control);
+        for (uint32_t n = 0; n < graph->node_count && build->status == XR_XIR_OK; ++n)
+            graph->nodes[n].closed = (uint8_t)nodes[n].closed;
+    }
+    xr_compile_resources_free(nodes);
+    xr_compile_resources_free(edges);
     return build->status == XR_XIR_OK;
 }
 

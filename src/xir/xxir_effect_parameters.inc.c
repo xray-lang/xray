@@ -4,28 +4,12 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_effect_parameters.inc.c - Physical parameter uses on verified value flow
+ * xxir_effect_parameters.inc.c - Callable parameter summaries from direct instruction arrays
  *
  * KEY CONCEPT:
- *   Captures carry origins, so an escaping closure fixes its original formals.
- *   Actual instructions determine use; stored writer modes grant no authority.
+ *   Numeric value dependencies preserve capture and forwarding boundaries.
+ *   Two SCC closures derive roles and their exact use masks without body replay.
  */
-
-typedef struct EffectParameterFlow {
-    const XrXirCompileContext *work;
-    EffectBodyRequest body;
-    EffectBodyFunctionHead head;
-    uint32_t function_index, instruction;
-    XrXirEffects *effects;
-    const EffectBodyFunctionHead *function;
-    XrXirEffectParameter *parameters;
-    uint64_t *rows;
-    uint32_t *previous_uses, *masks;
-    uint32_t *first_reads, *first_callers;
-    uint8_t *conditional, *terms;
-    uint32_t words, values;
-    bool changed, feedback, formula_phase, capture_masks;
-} EffectParameterFlow;
 
 static const uint8_t effect_parameter_operands[XR_XIR_OP_COUNT] = {
     0,
@@ -58,19 +42,6 @@ XR_FUNC const XrXirFunctionEffectContract *xir_effects_contract(
 /* INSTANCE use roles follow the same actual instruction fixed point.
  * Its complete source/body/domain proof precedes this verified-only
  * analysis hook; a serialized kind or role never admits execution. */
-static inline XrXirStatus effect_parameters_variable_domain(const XrXirModule *module,
-    const XrXirCompileContext *work,bool *output) {
-    if (!module || !output) return XR_XIR_BAD_STRUCTURE;
-    const XrXirProvenance *provenance=module->provenance;
-    bool variables=provenance && provenance->kind==XR_XIR_EVIDENCE_TEMPLATE;
-    if (provenance && xir_effect_kind_is_closed(provenance->kind)) {
-        XrXirStatus status=effect_contract_instance(work,module,provenance);
-        if (status!=XR_XIR_OK) return status;
-        variables=true;
-    }
-    *output=variables;return XR_XIR_OK;
-}
-
 static XrXirStatus effect_parameters_allocate(const XrXirModule *module,
     XrXirEffects *effects, EffectGraph *graph,const XrXirCompileContext *work) {
     if (!graph || !module || effects->count!=module->function_count) return XR_XIR_BAD_STRUCTURE;
@@ -110,114 +81,133 @@ static XrXirStatus effect_parameters_allocate(const XrXirModule *module,
     return XR_XIR_OK;
 }
 
-static XrXirStatus effect_parameter_type(EffectParameterFlow *flow,uint32_t value,XrXirType *type) {
-    return effect_body_request_type(&flow->body,flow->function_index,value,type);
+enum { EFFECT_PARAMETER_CONDITIONAL = 1, EFFECT_PARAMETER_FIXED = 2 };
+static const uint32_t effect_parameter_forbidden = XR_XIR_EFFECT_USE_FIXED | XR_XIR_EFFECT_USE_STORE |
+    XR_XIR_EFFECT_USE_RETURN | XR_XIR_EFFECT_USE_CHILD | XR_XIR_EFFECT_USE_OTHER;
+
+typedef struct EffectParameterRow { uint32_t first, parameters, instructions; } EffectParameterRow;
+typedef struct EffectParameterCall { uint32_t source, target; bool capture; } EffectParameterCall;
+typedef struct EffectParameterGraph {
+    const XrXirCompileContext *work;
+    XrXirModule module;
+    XrXirTypes types;
+    XrXirDeclarations declarations;
+    XrCompileRequestControl *control;
+    EffectParameterRow *rows;
+    XirEffectSccNode *roles, *uses;
+    XirEffectSccEdge *role_edges, *use_edges;
+    EffectParameterCall *calls;
+    uint32_t count, role_count, role_capacity, use_count, use_capacity, call_count, call_capacity, progress;
+    XrXirStatus status;
+} EffectParameterGraph;
+typedef struct EffectParameterFlow {
+    EffectParameterGraph *graph;
+    const XrXirModule *module;
+    XrXirFunction body;
+    const XrXirFunction *function;
+    uint32_t function_index, instruction;
+} EffectParameterFlow;
+
+static XrXirStatus effect_parameter_poll(EffectParameterGraph *graph) {
+    if (graph->status == XR_XIR_OK && graph->control && !(++graph->progress & 255u))
+        graph->status = xir_compile_resource_status(xr_compile_request_control_poll(graph->control));
+    return graph->status;
 }
-
-static XrXirStatus effect_parameter_operation(EffectParameterFlow *flow,uint32_t instruction,
-    XrXirInstruction *storage,const XrXirInstruction **output) {
-    return effect_body_request_operation(&flow->body,flow->function_index,instruction,storage,output);
+static uint32_t effect_parameter_node(EffectParameterFlow *flow, uint32_t value) {
+    const EffectParameterRow *row = &flow->graph->rows[flow->function_index];
+    if (row->first == UINT32_MAX || value >= (uint64_t)row->parameters + row->instructions) {
+        flow->graph->status = XR_XIR_BAD_STRUCTURE;
+        return UINT32_MAX;
+    }
+    return row->first + value;
 }
-
-/* Only a write after a consumer has run can require another ascending pass.
- * Keep the earliest actual reader, including PHI backedges and local writes. */
-static XrXirStatus effect_parameter_read(EffectParameterFlow *flow, uint32_t value) {
-    if (!flow->first_reads) return XR_XIR_OK;
-
-    if (flow->instruction < flow->first_reads[value])
-        flow->first_reads[value] = flow->instruction;
+static XrXirStatus effect_parameter_type(EffectParameterFlow *flow, uint32_t value, XrXirType *type) {
+    if (effect_parameter_node(flow, value) == UINT32_MAX) return flow->graph->status;
+    *type = xr_xir_operand_type(flow->function, value);
     return XR_XIR_OK;
 }
-
-static XrXirStatus effect_parameter_join(EffectParameterFlow *flow,
-    uint32_t destination, uint32_t source) {
-    if (destination >= flow->values || source >= flow->values) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status = effect_parameter_read(flow, source);
-    if (status != XR_XIR_OK) return status;
-    uint64_t *to = flow->rows + (size_t)destination * flow->words;
-    const uint64_t *from = flow->rows + (size_t)source * flow->words;
-    for (uint32_t w = 0; w < flow->words; ++w) {
-
-        uint64_t joined = to[w] | from[w];
-        if (joined != to[w]) {
-            flow->changed = true;
-            if (flow->first_reads) {
-
-                if (flow->first_reads[destination] <= flow->instruction) flow->feedback = true;
-            }
-        }
-        to[w] = joined;
+static XrXirStatus effect_parameter_edge(EffectParameterGraph *graph, uint32_t source,
+    uint32_t target, bool usage) {
+    if (graph->status != XR_XIR_OK) return graph->status;
+    XirEffectSccNode *nodes = usage ? graph->uses : graph->roles;
+    XirEffectSccEdge **edges = usage ? &graph->use_edges : &graph->role_edges;
+    uint32_t *count = usage ? &graph->use_count : &graph->role_count;
+    uint32_t *capacity = usage ? &graph->use_capacity : &graph->role_capacity;
+    if (source >= graph->count || target >= graph->count) return XR_XIR_BAD_STRUCTURE;
+    if (*count == *capacity) {
+        XirEffectSccEdge *fresh = xir_compile_array_grow(graph->work, *edges,
+            *count, sizeof(**edges), capacity, &graph->status);
+        if (!fresh) return graph->status;
+        *edges = fresh;
     }
-    if (flow->formula_phase) {
-
-        uint32_t mask = flow->masks[destination] | flow->masks[source];
-        if (mask != flow->masks[destination]) flow->changed = true;
-        flow->masks[destination] = mask;
-    }
+    (*edges)[*count] = (XirEffectSccEdge){target, nodes[source].head};
+    nodes[source].head = (*count)++;
     return XR_XIR_OK;
 }
-
+static XrXirStatus effect_parameter_join(EffectParameterFlow *flow, uint32_t destination, uint32_t source) {
+    uint32_t from = effect_parameter_node(flow, source), to = effect_parameter_node(flow, destination);
+    if (from == UINT32_MAX || to == UINT32_MAX) return flow->graph->status;
+    XrXirStatus status = effect_parameter_edge(flow->graph, from, to, false);
+    return status == XR_XIR_OK ? effect_parameter_edge(flow->graph, from, to, true) : status;
+}
 static XrXirStatus effect_parameter_use(EffectParameterFlow *flow,
     uint32_t source, uint32_t use, bool conditional) {
-    if (source >= flow->values) return XR_XIR_BAD_STRUCTURE;
-    if (flow->formula_phase) return XR_XIR_OK;
-    XrXirStatus status = effect_parameter_read(flow, source);
-    if (status != XR_XIR_OK) return status;
-    const uint64_t *from = flow->rows + (size_t)source * flow->words;
-    for (uint32_t p = 0; p < flow->function->parameter_count; ++p) {
-
-        if (!(from[p / 64] & (UINT64_C(1) << (p % 64)))) continue;
-
-        uint32_t joined = flow->parameters[p].uses | use;
-        if (joined != flow->parameters[p].uses) flow->changed = true;
-        flow->parameters[p].uses = joined;
-        if (conditional) {
-
-            flow->conditional[p] = 1;
-        }
-    }
+    uint32_t node = effect_parameter_node(flow, source);
+    if (node == UINT32_MAX) return flow->graph->status;
+    flow->graph->uses[node].seed |= use;
+    if (use & effect_parameter_forbidden) flow->graph->roles[node].seed |= EFFECT_PARAMETER_FIXED;
+    if (conditional) flow->graph->roles[node].seed |= EFFECT_PARAMETER_CONDITIONAL;
     return XR_XIR_OK;
 }
-
 static XrXirStatus effect_parameter_transfer(EffectParameterFlow *flow,
     uint32_t destination, uint32_t source, uint32_t use) {
     XrXirStatus status = effect_parameter_use(flow, source, use, false);
     return status == XR_XIR_OK ? effect_parameter_join(flow, destination, source) : status;
 }
-
+/* Role closure precedes use closure. Direct calls then choose FIXED or FORWARD
+ * from the final callee role, while captures also inherit its complete uses. */
 static XrXirStatus effect_parameter_call(EffectParameterFlow *flow,
     const XrXirInstruction *op, bool capture) {
-    if (op->immediate < 0 || (uint64_t)op->immediate >= flow->effects->count)
+    EffectParameterGraph *graph = flow->graph;
+    if (op->immediate < 0 || (uint64_t)op->immediate >= flow->module->function_count ||
+        op->args[0] > flow->function->operand_count ||
+        op->args[1] > flow->function->operand_count - op->args[0]) return XR_XIR_BAD_STRUCTURE;
+    uint32_t function = (uint32_t)op->immediate;
+    const XrXirFunction callee = flow->module->functions[function];
+    const EffectParameterRow *row = &graph->rows[function];
+    if (callee.parameter_count != row->parameters || op->args[1] > callee.parameter_count)
         return XR_XIR_BAD_STRUCTURE;
-    uint32_t target = (uint32_t)op->immediate;
-    const XrXirFunctionEffectContract *callee = &flow->effects->outcomes_work.contracts[target];
-    uint32_t destination = flow->function->parameter_count +
-        flow->instruction;
-    if (op->args[1] > callee->parameter_count) return XR_XIR_BAD_STRUCTURE;
-    if (op->args[1] && flow->first_callers) {
-
-        if (flow->function_index < flow->first_callers[target])
-            flow->first_callers[target] = flow->function_index;
-    }
     for (uint32_t a = 0; a < op->args[1]; ++a) {
-
         uint32_t value = flow->function->operands[op->args[0] + a];
-        XrXirEffectParameter parameter = callee->parameters[a];
-        uint32_t use = parameter.kind == XR_XIR_EFFECT_PARAMETER_FIXED ?
-            XR_XIR_EFFECT_USE_FIXED : XR_XIR_EFFECT_USE_FORWARD;
-        if (capture) use = XR_XIR_EFFECT_USE_CONST_CAPTURE | parameter.uses |
-            (parameter.kind == XR_XIR_EFFECT_PARAMETER_FIXED ? XR_XIR_EFFECT_USE_FIXED : 0);
-        XrXirStatus status = effect_parameter_use(flow, value, use,
-            parameter.kind == XR_XIR_EFFECT_PARAMETER_CONDITIONAL_STATIC);
-        if (status == XR_XIR_OK && capture)
-            status = effect_parameter_join(flow, destination, value);
-        if (status != XR_XIR_OK) return status;
+        uint32_t source = effect_parameter_node(flow, value), target = UINT32_MAX;
+        if (source == UINT32_MAX) return graph->status;
+        if (xr_xir_callable_signature(flow->module->types, callee.parameters[a])) {
+            if (row->first == UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
+            target = row->first + a;
+            XrXirStatus status = effect_parameter_edge(graph, source, target, false);
+            if (status == XR_XIR_OK && capture) status = effect_parameter_edge(graph, source, target, true);
+            if (status != XR_XIR_OK) return status;
+        } else graph->roles[source].seed |= EFFECT_PARAMETER_FIXED;
+        if (graph->call_count == graph->call_capacity) {
+            EffectParameterCall *fresh = xir_compile_array_grow(graph->work, graph->calls,
+                graph->call_count, sizeof(*fresh), &graph->call_capacity, &graph->status);
+            if (!fresh) return graph->status;
+            graph->calls = fresh;
+        }
+        graph->calls[graph->call_count++] = (EffectParameterCall){source, target, capture};
+        if (capture) {
+            XrXirStatus status = effect_parameter_join(flow,
+                flow->function->parameter_count + flow->instruction, value);
+            if (status != XR_XIR_OK) return status;
+        }
     }
     return XR_XIR_OK;
 }
 
 static XrXirStatus effect_parameter_group(EffectParameterFlow *flow,
     const XrXirInstruction *op, uint32_t use, bool carry) {
+    if (op->args[0] > flow->function->operand_count ||
+        op->args[1] > flow->function->operand_count - op->args[0]) return XR_XIR_BAD_STRUCTURE;
     uint32_t first = op->op == XR_XIR_PHI || op->op==XR_XIR_SCOPED_GO ? 1 : 0;
     uint32_t step = op->op == XR_XIR_PHI ? 2 : 1;
     uint32_t destination = flow->function->parameter_count +
@@ -235,16 +225,16 @@ static XrXirStatus effect_parameter_group(EffectParameterFlow *flow,
 static XrXirStatus effect_parameter_opaque(EffectParameterFlow *flow,
     const XrXirInstruction *op, uint32_t use) {
     if (xr_xir_op_uses_owner_slots(op->op)) return XR_XIR_OK;
-    if (op->op==XR_XIR_NULLABLE_SOME && xr_xir_nullable_is_unit(flow->body.domain.types,op->type)) return XR_XIR_OK;
+    if (op->op==XR_XIR_NULLABLE_SOME && xr_xir_nullable_is_unit(flow->module->types,op->type)) return XR_XIR_OK;
     if (xr_xir_op_uses_operand_table(op->op)) return effect_parameter_group(flow, op, use, false);
     uint32_t count = effect_parameter_operands[op->op];
     if (op->op == XR_XIR_RETURN) count = flow->function->result != XR_XIR_UNIT &&
-        !(flow->body.domain.declarations && (flow->body.domain.declarations->functions[flow->function_index].promises & XR_XIR_FUNCTION_GENERATOR));
+        !(flow->module->declarations && (flow->module->declarations->functions[flow->function_index].promises & XR_XIR_FUNCTION_GENERATOR));
     if (op->op==XR_XIR_GENERATOR_YIELD)
-        count=xr_xir_iterator_element(flow->body.domain.types,flow->function->result)!=XR_XIR_UNIT;
+        count=xr_xir_iterator_element(flow->module->types,flow->function->result)!=XR_XIR_UNIT;
     if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_STORE)
-        count = xr_xir_slot_payload_operands(flow->body.domain.declarations->slots,
-            flow->body.domain.declarations->slot_count, op);
+        count = xr_xir_slot_payload_operands(flow->module->declarations->slots,
+            flow->module->declarations->slot_count, op);
     if (op->op == XR_XIR_CELL_NEW || op->op == XR_XIR_CELL_READ ||
         op->op == XR_XIR_CELL_WRITE || op->op == XR_XIR_CELL_LOCAL_WRITE) {
         XrXirType owner_type=op->type;
@@ -252,7 +242,7 @@ static XrXirStatus effect_parameter_opaque(EffectParameterFlow *flow,
             XrXirStatus status=effect_parameter_type(flow,op->args[0],&owner_type);
             if (status!=XR_XIR_OK) return status;
         }
-        count=xr_xir_cell_payload_operands(flow->body.domain.types,owner_type,op->op);
+        count=xr_xir_cell_payload_operands(flow->module->types,owner_type,op->op);
     }
     for (uint32_t a = 0; a < count; ++a) {
 
@@ -284,7 +274,9 @@ static XrXirStatus effect_parameter_instruction(EffectParameterFlow *flow,
     case XR_XIR_CALL: case XR_XIR_INVOKE: case XR_XIR_CLEANUP_REGISTER:
         return effect_parameter_call(flow, op, false);
     case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT: {
-        if (op->immediate < 0 || (uint64_t)op->immediate >= flow->values) return XR_XIR_BAD_STRUCTURE;
+        if (op->immediate < 0 || (uint64_t)op->immediate >=
+            (uint64_t)flow->function->parameter_count + flow->function->instruction_count)
+            return XR_XIR_BAD_STRUCTURE;
         XrXirStatus status = effect_parameter_use(flow, (uint32_t)op->immediate,
             XR_XIR_EFFECT_USE_INVOKE, false);
         return status == XR_XIR_OK ? effect_parameter_opaque(flow, op, XR_XIR_EFFECT_USE_OTHER) : status;
@@ -297,6 +289,8 @@ static XrXirStatus effect_parameter_instruction(EffectParameterFlow *flow,
     case XR_XIR_GO: case XR_XIR_SCOPED_GO: case XR_XIR_GENERATOR_NEW:
         return effect_parameter_opaque(flow, op, XR_XIR_EFFECT_USE_CHILD);
     case XR_XIR_CALL_REQUIREMENT:
+        if (op->args[0] > flow->function->operand_count ||
+            op->args[1] > flow->function->operand_count - op->args[0]) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t a = 0; a < op->args[1]; ++a) {
 
             XrXirStatus status = effect_parameter_use(flow,
@@ -308,10 +302,10 @@ static XrXirStatus effect_parameter_instruction(EffectParameterFlow *flow,
         /* A scoped descriptor contains no copied callable payload. */
         return XR_XIR_OK;
     case XR_XIR_CELL_NEW_TAKE: case XR_XIR_CELL_NEW:
-        if (xr_xir_cell_is_unit(flow->body.domain.types,op->type)) return XR_XIR_OK;
+        if (xr_xir_cell_is_unit(flow->module->types,op->type)) return XR_XIR_OK;
         return effect_parameter_transfer(flow, destination, op->args[0], XR_XIR_EFFECT_USE_STORE);
     case XR_XIR_NULLABLE_SOME:
-        if (xr_xir_nullable_is_unit(flow->body.domain.types,op->type)) return XR_XIR_OK;
+        if (xr_xir_nullable_is_unit(flow->module->types,op->type)) return XR_XIR_OK;
         return effect_parameter_transfer(flow, destination, op->args[0], XR_XIR_EFFECT_USE_STORE);
     case XR_XIR_SET_UNION: case XR_XIR_SET_INTERSECTION: case XR_XIR_SET_DIFFERENCE:
     case XR_XIR_SET_SYMMETRIC_DIFFERENCE: {
@@ -324,7 +318,7 @@ static XrXirStatus effect_parameter_instruction(EffectParameterFlow *flow,
     case XR_XIR_CELL_WRITE_TAKE: case XR_XIR_CELL_WRITE: case XR_XIR_CELL_LOCAL_WRITE: {
         XrXirType type;XrXirStatus status=effect_parameter_type(flow,op->args[0],&type);
         if (status!=XR_XIR_OK) return status;
-        if (xr_xir_cell_is_unit(flow->body.domain.types,type)) return XR_XIR_OK;
+        if (xr_xir_cell_is_unit(flow->module->types,type)) return XR_XIR_OK;
         return effect_parameter_transfer(flow, op->args[0], op->args[1], XR_XIR_EFFECT_USE_STORE);
     }
     case XR_XIR_PLACE_WRITE:
@@ -340,184 +334,103 @@ static XrXirStatus effect_parameter_instruction(EffectParameterFlow *flow,
     }
 }
 
-static XrXirStatus effect_parameter_rows(EffectParameterFlow *flow, EffectGraph *graph) {
-    uint64_t values = (uint64_t)flow->function->parameter_count + flow->function->instruction_count;
-    uint64_t words = ((uint64_t)flow->function->parameter_count + 63) / 64;
-    if (!words && flow->formula_phase) words = 1;
-    uint64_t tail = (uint64_t)flow->function->parameter_count * (sizeof(uint32_t) + sizeof(uint8_t));
-    if (flow->formula_phase) tail += values * (sizeof(uint32_t) + sizeof(uint8_t));
-    else tail += values * sizeof(uint32_t);
-    if (values > UINT32_MAX || !words || words > UINT32_MAX || tail > SIZE_MAX ||
-        values > (SIZE_MAX - tail) / sizeof(uint64_t) / words)
-        return XR_XIR_BUDGET;
-    flow->words = (uint32_t)words; flow->values = (uint32_t)values;
-    size_t bytes = (size_t)values * (size_t)words * sizeof(uint64_t) + (size_t)tail;
-
-    if (bytes > graph->flow_capacity) {
-        /* Old contents carry no facts across functions or solver passes. */
-        xr_compile_resources_free(graph->flow_rows);
-        graph->flow_rows = NULL; graph->flow_capacity = 0;
-        XrXirStatus status = XR_XIR_OK;
-        graph->flow_rows = xir_compile_calloc(flow->work, 1, bytes, &status);
-        if (!graph->flow_rows) return status;
-        graph->flow_capacity = bytes;
-    } else {
-
-        memset(graph->flow_rows, 0, bytes);
-    }
-    flow->rows = graph->flow_rows;
-    uint32_t *tail_words = (uint32_t *)(flow->rows + (size_t)values * flow->words);
-    flow->previous_uses = tail_words;
-    flow->first_reads = flow->formula_phase ? NULL : tail_words + flow->function->parameter_count;
-    flow->masks = flow->formula_phase ? tail_words + flow->function->parameter_count : NULL;
-    flow->conditional = (uint8_t *)(tail_words + flow->function->parameter_count +
-        (size_t)values);
-    flow->terms = flow->formula_phase ? flow->conditional + flow->function->parameter_count : NULL;
-    if (flow->first_reads) {
-
-        memset(flow->first_reads, 0xff, (size_t)values * sizeof(uint32_t));
-    }
-    for (uint32_t p = 0; p < flow->function->parameter_count; ++p) {
-
-        const XrXirTypeNode *signature = xr_xir_callable_signature(flow->body.domain.types,flow->function->parameters[p]);
-        bool variable = !flow->formula_phase ||
-            flow->parameters[p].kind != XR_XIR_EFFECT_PARAMETER_FIXED;
-        if (signature && variable)
-            flow->rows[(size_t)p * flow->words + p / 64] = UINT64_C(1) << (p % 64);
-        if (flow->formula_phase) {
-
-            flow->masks[p] = signature && flow->parameters[p].kind!=XR_XIR_EFFECT_PARAMETER_VARIABLE ? signature->flags &
-                (XR_XIR_CALLABLE_ROOT_REQUIRED | XR_XIR_CALLABLE_ROOT_UNRESOLVED) : 0;
-        } else {
-            flow->previous_uses[p] = flow->parameters[p].uses;
-            flow->parameters[p].uses = 0;
+static void effect_parameter_graph_free(EffectParameterGraph *graph) {
+    xr_compile_resources_free(graph->rows);
+    xr_compile_resources_free(graph->roles);
+    xr_compile_resources_free(graph->uses);
+    xr_compile_resources_free(graph->role_edges);
+    xr_compile_resources_free(graph->use_edges);
+    xr_compile_resources_free(graph->calls);
+}
+static XrXirStatus effect_parameter_graph_prepare(EffectParameterGraph *graph,
+    const XrXirFunctionEffectContract *contracts) {
+    uint32_t functions = graph->module.function_count;
+    graph->rows = xir_compile_calloc(graph->work, functions, sizeof(*graph->rows), &graph->status);
+    if (!graph->rows) return graph->status;
+    uint64_t total = 0;
+    for (uint32_t f = 0; f < functions; ++f) {
+        if (effect_parameter_poll(graph) != XR_XIR_OK) return graph->status;
+        const XrXirFunction *body = &graph->module.functions[f];
+        if (body->parameter_count != contracts[f].parameter_count) return XR_XIR_BAD_STRUCTURE;
+        bool callable = false;
+        for (uint32_t p = 0; p < body->parameter_count; ++p)
+            callable |= xr_xir_callable_signature(graph->module.types, body->parameters[p]) != NULL;
+        uint64_t values = (uint64_t)body->parameter_count + body->instruction_count;
+        graph->rows[f] = (EffectParameterRow){callable ? (uint32_t)total : UINT32_MAX,
+            body->parameter_count, body->instruction_count};
+        if (callable) {
+            total += values;
+            if (total > UINT32_MAX || total > SIZE_MAX / sizeof(XirEffectSccNode)) return XR_XIR_OVERFLOW;
         }
     }
-    if (flow->formula_phase) for (uint32_t i = 0; i < flow->function->instruction_count; ++i) {
-
-        XrXirInstruction storage;const XrXirInstruction *op=NULL;
-        XrXirStatus status=effect_parameter_operation(flow,i,&storage,&op);
-        if (status!=XR_XIR_OK) return status;
-        const XrXirTypeNode *signature = xr_xir_callable_signature(flow->body.domain.types,op->type);
-        bool transfer = op->op == XR_XIR_COPY || op->op == XR_XIR_PHI ||
-            op->op == XR_XIR_LOCAL_NEW || op->op == XR_XIR_LOCAL_READ ||
-            op->op == XR_XIR_SCALAR_COPY || op->op == XR_XIR_OWNED_RETAIN ||
-            op->op == XR_XIR_SCALAR_LOCAL_NEW || op->op == XR_XIR_SCALAR_LOCAL_READ ||
-            op->op == XR_XIR_OWNED_LOCAL_NEW || op->op == XR_XIR_OWNED_LOCAL_READ;
-        flow->masks[flow->function->parameter_count + i] = signature && !transfer && op->op != XR_XIR_FUNCTION_REF && op->op!=XR_XIR_CLASS_METHOD_REF ?
-            signature->flags & (XR_XIR_CALLABLE_ROOT_REQUIRED | XR_XIR_CALLABLE_ROOT_UNRESOLVED) : 0;
+    graph->count = (uint32_t)total;
+    if (!total) return XR_XIR_OK;
+    graph->roles = xir_compile_calloc(graph->work, graph->count, sizeof(*graph->roles), &graph->status);
+    graph->uses = xir_compile_calloc(graph->work, graph->count, sizeof(*graph->uses), &graph->status);
+    if (!graph->roles || !graph->uses) return graph->status;
+    for (uint32_t n = 0; n < graph->count; ++n) graph->roles[n].head = graph->uses[n].head = UINT32_MAX;
+    return XR_XIR_OK;
+}
+static XrXirStatus effect_parameter_graph_collect(EffectParameterGraph *graph) {
+    for (uint32_t f = 0; f < graph->module.function_count; ++f) {
+        if (graph->rows[f].first == UINT32_MAX) continue;
+        EffectParameterFlow flow = {.graph = graph, .module = &graph->module, .function_index = f,
+            .body = graph->module.functions[f]};
+        flow.function = &flow.body;
+        if (flow.body.parameter_count != graph->rows[f].parameters ||
+            flow.body.instruction_count != graph->rows[f].instructions) return XR_XIR_BAD_STRUCTURE;
+        for (uint32_t i = 0; i < flow.body.instruction_count; ++i) {
+            if (effect_parameter_poll(graph) != XR_XIR_OK) return graph->status;
+            const XrXirInstruction op = flow.body.instructions[i];
+            flow.instruction = i;
+            XrXirStatus status = effect_parameter_instruction(&flow, &op);
+            if (status != XR_XIR_OK) return status;
+        }
     }
     return XR_XIR_OK;
 }
-
-static XrXirStatus effect_parameter_solve(EffectParameterFlow *flow) {
-    XrXirStatus status = XR_XIR_OK;
-    flow->feedback = true;
-    while (status == XR_XIR_OK && flow->feedback) {
-        flow->feedback = false;
-        for (uint32_t i=0;status==XR_XIR_OK && i<flow->function->instruction_count;++i) {
-            XrXirInstruction storage;const XrXirInstruction *op=NULL;
-            flow->instruction=i;status=effect_parameter_operation(flow,i,&storage,&op);
-            if (status==XR_XIR_OK) status=effect_parameter_instruction(flow,op);
+static XrXirStatus effect_parameter_graph_finish(EffectParameterGraph *graph,
+    XrXirFunctionEffectContract *contracts) {
+    XrXirStatus status = xir_effect_scc_close(graph->work, graph->roles, graph->count,
+        graph->role_edges, graph->role_count, graph->control);
+    if (status != XR_XIR_OK) return status;
+    for (uint32_t c = 0; c < graph->call_count; ++c) {
+        const EffectParameterCall *call = &graph->calls[c];
+        bool fixed = call->target == UINT32_MAX || (graph->roles[call->target].closed & EFFECT_PARAMETER_FIXED);
+        uint32_t use = fixed ? XR_XIR_EFFECT_USE_FIXED : XR_XIR_EFFECT_USE_FORWARD;
+        if (call->capture) use = XR_XIR_EFFECT_USE_CONST_CAPTURE | (fixed ? XR_XIR_EFFECT_USE_FIXED : 0);
+        graph->uses[call->source].seed |= use;
+    }
+    status = xir_effect_scc_close(graph->work, graph->uses, graph->count,
+        graph->use_edges, graph->use_count, graph->control);
+    if (status != XR_XIR_OK) return status;
+    for (uint32_t f = 0; f < graph->module.function_count; ++f) {
+        const EffectParameterRow *row = &graph->rows[f];
+        if (row->first == UINT32_MAX) continue;
+        XrXirEffectParameter *parameters = (XrXirEffectParameter *)contracts[f].parameters;
+        for (uint32_t p = 0; p < row->parameters; ++p) {
+            if (!xr_xir_callable_signature(graph->module.types, graph->module.functions[f].parameters[p])) continue;
+            uint32_t node = row->first + p, roles = graph->roles[node].closed;
+            parameters[p].kind = roles & EFFECT_PARAMETER_FIXED ? XR_XIR_EFFECT_PARAMETER_FIXED :
+                roles & EFFECT_PARAMETER_CONDITIONAL ? XR_XIR_EFFECT_PARAMETER_CONDITIONAL_STATIC : XR_XIR_EFFECT_PARAMETER_VARIABLE;
+            parameters[p].uses = graph->uses[node].closed;
         }
     }
-    return status;
+    return XR_XIR_OK;
 }
-
-static XrXirStatus effect_parameter_function(const XrXirModule *module,
-    XrXirEffects *effects, uint32_t function, EffectGraph *graph,
-    const XrXirCompileContext *work, bool *changed) {
-    EffectParameterFlow flow = {0};
-    (void)module;
-    if (!effects->generation || graph->material!=effects->generation) return XR_XIR_BAD_STRUCTURE;
-    flow.work=work;flow.effects=effects;flow.function_index=function;
-    flow.first_callers = graph->parameter_first_callers;
-    flow.body=effect_body_owned_request(work,effects->generation);flow.function=&flow.head;
-    XrXirStatus status=effect_body_request_head(&flow.body,function,&flow.head);
-    if (status!=XR_XIR_OK) return status;
-    flow.parameters = (XrXirEffectParameter *)effects->outcomes_work.contracts[function].parameters;
-    bool has_callable = false;
-    for (uint32_t p = 0; p < flow.function->parameter_count; ++p) {
-
-        if (xr_xir_callable_signature(flow.body.domain.types, flow.function->parameters[p])) has_callable = true;
-    }
-    if (!has_callable) return XR_XIR_OK;
-    status = effect_parameter_rows(&flow, graph);
-    if (status == XR_XIR_OK) status = effect_parameter_solve(&flow);
-    for (uint32_t p = 0; status == XR_XIR_OK && p < flow.function->parameter_count; ++p) {
-
-        XrXirEffectParameter *parameter = &flow.parameters[p];
-        if (!xr_xir_callable_signature(flow.body.domain.types, flow.function->parameters[p])) continue;
-        uint32_t forbidden = XR_XIR_EFFECT_USE_FIXED | XR_XIR_EFFECT_USE_STORE |
-            XR_XIR_EFFECT_USE_RETURN | XR_XIR_EFFECT_USE_CHILD | XR_XIR_EFFECT_USE_OTHER;
-        uint32_t kind = parameter->uses & forbidden ? XR_XIR_EFFECT_PARAMETER_FIXED :
-            flow.conditional[p] ? XR_XIR_EFFECT_PARAMETER_CONDITIONAL_STATIC : XR_XIR_EFFECT_PARAMETER_VARIABLE;
-        if (parameter->kind != kind || flow.previous_uses[p] != parameter->uses) *changed = true;
-        parameter->kind = kind;
-    }
-    return status;
-}
-
 static XrXirStatus effect_parameters_derive(const XrXirModule *module,
-    XrXirEffects *effects, EffectGraph *graph, const XrXirCompileContext *work) {
-    XrXirStatus status = effect_parameters_allocate(module,effects,graph,work);
-    if (status != XR_XIR_OK || !effects->outcomes_work.contracts) return status;
-    if (!effect_body_variable_roles(effects->generation)) return XR_XIR_OK;
-    if (effects->count > graph->parameter_capacity) {
-        xr_compile_resources_free(graph->parameter_first_callers);
-        graph->parameter_first_callers = NULL; graph->parameter_capacity = 0;
-        graph->parameter_first_callers = xir_compile_calloc(work, effects->count,
-            sizeof(*graph->parameter_first_callers), &status);
-        if (!graph->parameter_first_callers) return status;
-        graph->parameter_capacity = effects->count;
-    }
-
-    if (effects->count) memset(graph->parameter_first_callers, 0xff,
-        (size_t)effects->count * sizeof(uint32_t));
-    /* Later callers observe a new summary in this pass. Earlier callers and
-     * recursive calls rewind the next pass to the earliest actual consumer. */
-    uint32_t first = 0;
-    while (status == XR_XIR_OK && first < effects->count) {
-        uint32_t next = effects->count;
-        for (uint32_t f = first; status == XR_XIR_OK && f < effects->count; ++f) {
-            bool changed = false;
-            status = effect_parameter_function(module, effects, f, graph, work, &changed);
-            if (status != XR_XIR_OK) break;
-
-            uint32_t caller = graph->parameter_first_callers[f];
-            if (changed && caller <= f && caller < next) next = caller;
-        }
-        first = next;
-    }
+    XrXirEffects *effects, EffectGraph *input, const XrXirCompileContext *work) {
+    XrXirStatus status = effect_parameters_allocate(module, effects, input, work);
+    if (status != XR_XIR_OK || !effects->outcomes_work.contracts ||
+        !effect_body_variable_roles(effects->generation)) return status;
+    EffectParameterGraph graph = {.work = work, .module = *module, .control = input->control};
+    if (module->types) { graph.types = *module->types; graph.module.types = &graph.types; }
+    if (module->declarations) { graph.declarations = *module->declarations; graph.module.declarations = &graph.declarations; }
+    status = effect_parameter_graph_prepare(&graph, effects->outcomes_work.contracts);
+    if (status == XR_XIR_OK) status = effect_parameter_graph_collect(&graph);
+    if (status == XR_XIR_OK) status = effect_parameter_graph_finish(&graph, effects->outcomes_work.contracts);
+    effect_parameter_graph_free(&graph);
     return status;
-}
-
-/* A charged structural probe retained for the original negative controls.
- * It does not derive a formula or authorize execution. */
-static inline XrXirStatus effect_formula_needs_value_flow(EffectParameterFlow *flow,bool *needed) {
-    *needed=true;
-    for (uint32_t p=0;p<flow->function->parameter_count;++p) {
-
-        if (xr_xir_callable_signature(flow->body.domain.types,flow->function->parameters[p]))
-            return XR_XIR_OK;
-    }
-    for (uint32_t i=0;i<flow->function->instruction_count;++i) {
-
-        EffectBodyInstructionShape shape={0};
-        XrXirStatus status=effect_body_request_shape(&flow->body,flow->function_index,i,&shape);
-        if (status!=XR_XIR_OK) return status;
-        if (xr_xir_callable_signature(flow->body.domain.types,shape.type)) return XR_XIR_OK;
-        switch (shape.op) {
-        case XR_XIR_CALL: case XR_XIR_INVOKE: case XR_XIR_CALL_DEFAULT:
-        case XR_XIR_INVOKE_DEFAULT: case XR_XIR_CALL_REQUIREMENT:
-        case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT:
-        case XR_XIR_FUNCTION_REF: case XR_XIR_CLASS_METHOD_REF: case XR_XIR_FUNCTION_WEAKEN:
-        case XR_XIR_CLEANUP_REGISTER: case XR_XIR_GO: case XR_XIR_SCOPED_GO:
-            return XR_XIR_OK;
-        default: break;
-        }
-    }
-    *needed=false;return XR_XIR_OK;
 }
 
 static XrXirStatus effect_parameters_current(const XrXirCompileContext *work,

@@ -13,6 +13,7 @@
  */
 #include "xxir_effects.h"
 #include "xxir_compile_memory.h"
+#include "xxir_effect_scc_internal.h"
 #include "xxir_read_scratch.h"
 #include "xxir_defaults_internal.h"
 #include "xxir_internal.h"
@@ -230,11 +231,7 @@ typedef struct EffectGraph {
     /* Latent callable dependencies never enter execution or GO error flow. */
     uint32_t *reference_heads;
     EffectReference *references;
-    /* One inference-local workspace; every function starts with cleared rows. */
-    uint64_t *flow_rows;
-    size_t flow_capacity;
-    uint32_t *parameter_first_callers;
-    uint32_t parameter_capacity;
+    XrCompileRequestControl *control;
     /* Fresh construction owns this domain. After publication this is only a
      * borrow from the latest certificate, valid until the next refresh. */
     EffectPhysicalDomain *physical;
@@ -337,8 +334,6 @@ static void effect_graph_free(EffectGraph *graph) {
     if (graph->physical_owned) effect_body_material_free(graph->material);
     graph->material=NULL;graph->physical=NULL;graph->physical_owned=false;
     xr_compile_resources_free(graph->default_access_denied);
-    xr_compile_resources_free(graph->flow_rows);
-    xr_compile_resources_free(graph->parameter_first_callers);
     xr_compile_resources_free(graph->reference_heads); xr_compile_resources_free(graph->references);
     xr_compile_resources_free(graph->heads); xr_compile_resources_free(graph->queue); xr_compile_resources_free(graph->queued); xr_compile_resources_free(graph->edges);
 }
@@ -1123,7 +1118,7 @@ static XrXirStatus effect_infer_construct(const XrXirCompileContext *compile_con
     effects->outcomes_work.unresolved_witnesses = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->outcomes_work.unresolved_witnesses), &allocation_status);
     if (!effects->outcomes_work.go_safe || !effects->outcomes_work.root || !effects->outcomes_work.root_witnesses ||
         !effects->outcomes_work.unresolved_witnesses) { xr_xir_compile_effects_free(effects); return allocation_status; }
-    EffectGraph graph = {0};
+    EffectGraph graph = {.control = input.control};
     bool changed = false;
     XrXirStatus status = refiner ? refiner->update(refiner->context,effects,&changed) : XR_XIR_OK;
     if (status == XR_XIR_OK) status = effect_graph_build(module, effects, &graph, remaining);

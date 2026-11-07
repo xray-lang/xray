@@ -57,4 +57,21 @@ static inline void *xir_compile_copy(const XrXirCompileContext *context, const v
     memcpy(memory, source, bytes);
     return memory;
 }
+/* Growth keeps the previous owner intact until allocation succeeds. */
+static inline void *xir_compile_array_grow(const XrXirCompileContext *context, void *old,
+    uint32_t count, size_t element, uint32_t *capacity, XrXirStatus *status) {
+    if (*status != XR_XIR_OK) return NULL;
+    uint64_t next = *capacity ? (uint64_t)*capacity * 2 : 32;
+    if (next > UINT32_MAX) next = UINT32_MAX;
+    if (!element || next <= count || next > SIZE_MAX / element) {
+        *status = XR_XIR_OVERFLOW;
+        return NULL;
+    }
+    void *memory = xir_compile_alloc(context, (size_t)next * element, status);
+    if (!memory) return NULL;
+    if (count) memcpy(memory, old, (size_t)count * element);
+    xr_compile_resources_free(old);
+    *capacity = (uint32_t)next;
+    return memory;
+}
 #endif // XXIR_COMPILE_MEMORY_H

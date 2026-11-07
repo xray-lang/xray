@@ -38,11 +38,6 @@ foreach(_root_conditional_gate IN ITEMS helpers)
     endif()
 endforeach()
 
-add_test(NAME test_xir_parameter_schedule_oracle
-    COMMAND test_xir_root_conditional_helpers --parameter-schedule)
-set_tests_properties(test_xir_parameter_schedule_oracle PROPERTIES
-    LABELS "unit;xir;root-effects;compiler;ownership;parameter-schedule" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
-
 add_test(NAME test_xir_single_run_reader
     COMMAND test_xir_root_conditional_helpers --single-run-reader)
 set_tests_properties(test_xir_single_run_reader PROPERTIES
