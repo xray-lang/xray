@@ -534,7 +534,16 @@ static bool rbc_lir_conditional(RbcLirCompiler *c, const XrLirInstructionView *i
     // A two-operand internal conditional carries its sole-use integer predicate.
     bool comparison = i->operand_count == 2;
     if (comparison) {
-        if (!rbc_lir_predicate(c, i)) return false;
+        // Keep the ordinary conditional's true-edge fallthrough for ordered predicates.
+        XrLirInstructionView predicate = *i;
+        switch (i->predicate) {
+        case XR_LIR_LT: predicate.predicate = XR_LIR_GE; break;
+        case XR_LIR_LE: predicate.predicate = XR_LIR_GT; break;
+        case XR_LIR_GT: predicate.predicate = XR_LIR_LE; break;
+        case XR_LIR_GE: predicate.predicate = XR_LIR_LT; break;
+        default: break;
+        }
+        if (!rbc_lir_predicate(c, &predicate)) return false;
     } else {
         uint32_t scratch = c->slot_count +
             (c->typed_spills ? c->temporary_strings+c->temporary_bits : 0);
@@ -542,7 +551,7 @@ static bool rbc_lir_conditional(RbcLirCompiler *c, const XrLirInstructionView *i
             !rbc_lir_emit(c, XR_RBC_EQ, c->slots[i->operands[0]], scratch, 0, 0))
             return false;
     }
-    uint32_t taken = comparison && i->predicate != XR_LIR_NE ? 0u : 1u;
+    uint32_t taken = comparison && i->predicate == XR_LIR_EQ ? 0u : 1u;
     size_t taken_jump = c->code_count;
     if (!rbc_lir_emit(c, XR_RBC_JMP, 0, 0, 0, 0) ||
         !rbc_lir_edge(c, i->edges[1u - taken])) return false;
