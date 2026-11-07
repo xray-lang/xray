@@ -638,11 +638,9 @@ XR_FUNC XrLirStatus xr_lir_module_finish(XrLirModule *m, XrLirDiagnostic *diagno
                 return lir_failure_details(m, XR_LIR_VERIFY_ERROR, result, NULL);
             }
     }
-#if XR_DEBUG
     status = xr_lir_verify(m, result);
     if (status != XR_LIR_OK)
         return lir_failure_details(m, status, result, NULL);
-#endif
     m->finished = true;
     return XR_LIR_OK;
 }

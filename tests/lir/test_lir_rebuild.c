@@ -171,13 +171,8 @@ static void test_invalid_graph(void) {
     test_return(module, entry, (XrLirValue){0});
     test_return(module, dead, (XrLirValue){0});
     XrLirStatus finish = xr_lir_module_finish(module, NULL);
-    if (finish == XR_LIR_OK) {
-        CHECK(xr_lir_module_is_readable(module));
-        CHECK(xr_lir_rebuild(module, &copy) == XR_LIR_VERIFY_ERROR);
-    } else {
-        CHECK(finish == XR_LIR_VERIFY_ERROR && !xr_lir_module_is_readable(module));
-        CHECK(xr_lir_rebuild(module, &copy) == XR_LIR_INVALID_ARGUMENT);
-    }
+    CHECK(finish == XR_LIR_VERIFY_ERROR && !xr_lir_module_is_readable(module));
+    CHECK(xr_lir_rebuild(module, &copy) == XR_LIR_INVALID_ARGUMENT);
     CHECK(!copy);
     xr_lir_module_destroy(module);
 }

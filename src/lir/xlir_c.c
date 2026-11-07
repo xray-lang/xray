@@ -917,6 +917,7 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
     }
     if (!c_request_poll(&c))
         return c.status;
+#if defined(XR_XIR_PARANOID) && XR_XIR_PARANOID
     XrLirDiagnostic invalid;
     XrLirStatus status = xr_lir_verify(request->module, &invalid);
     if (status != XR_LIR_OK) {
@@ -928,6 +929,7 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
                 invalid.message);
         return c.status;
     }
+#endif
     if (!c_request_poll(&c))
         return c.status;
     uint32_t literal_count = xr_lir_literal_count(request->module);

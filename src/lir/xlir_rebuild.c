@@ -233,8 +233,11 @@ static XrLirStatus rebuild_body(Rebuild *c) {
 XR_FUNC XrLirStatus xr_lir_internal_copy(const XrLirModule *input, XrLirModule **output,
     const XrLirCopyPlan *plan) {
     if (!output || *output || !xr_lir_module_is_readable(input)) return XR_LIR_INVALID_ARGUMENT;
-    XrLirStatus status = xr_lir_verify(input, NULL);
+    XrLirStatus status = XR_LIR_OK;
+#if defined(XR_XIR_PARANOID) && XR_XIR_PARANOID
+    status = xr_lir_verify(input, NULL);
     if (status != XR_LIR_OK) return status;
+#endif
     Rebuild c = {.input = input, .plan = plan};
     status = rebuild_registry(&c);
     uint32_t count = xr_lir_function_count(input);

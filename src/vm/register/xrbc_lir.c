@@ -880,6 +880,7 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
         xr_lir_function_view(input, entry, &root) != XR_LIR_OK)
         return rbc_lir_error(d, XR_RBC_COMPILE_INVALID, "invalid module, root or output",
             (XrLirSource) {0});
+#if defined(XR_XIR_PARANOID) && XR_XIR_PARANOID
     XrLirDiagnostic invalid;
     XrLirStatus verified = xr_lir_verify(input, &invalid);
     if (verified != XR_LIR_OK) {
@@ -889,6 +890,7 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
         return rbc_lir_error(d, verified == XR_LIR_OUT_OF_MEMORY ?
             XR_RBC_COMPILE_OUT_OF_MEMORY : XR_RBC_COMPILE_INVALID, invalid.message, invalid.source);
     }
+#endif
     for (uint32_t i = 0; i < root.parameter_count; ++i)
         if (root.parameter_types[i] == XR_LIR_I64_CELL || root.parameter_types[i] == XR_LIR_STRING_CELL ||
             root.parameter_types[i] == XR_LIR_STRING)

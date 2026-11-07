@@ -397,8 +397,11 @@ static XrLirStatus inline_definition(Inliner *c, uint32_t id) {
 
 XR_FUNC XrLirStatus xr_lir_inline(const XrLirModule *input, XrLirModule **output) {
     if (!output || *output || !xr_lir_module_is_readable(input)) return XR_LIR_INVALID_ARGUMENT;
-    XrLirStatus status = xr_lir_verify(input, NULL);
+    XrLirStatus status = XR_LIR_OK;
+#if defined(XR_XIR_PARANOID) && XR_XIR_PARANOID
+    status = xr_lir_verify(input, NULL);
     if (status != XR_LIR_OK) return status;
+#endif
     Inliner c = {.input = input, .count = xr_lir_function_count(input)};
     status = inline_graph_storage(&c);
     if (status == XR_LIR_OK) { inline_graph_edges(&c); inline_components(&c); }

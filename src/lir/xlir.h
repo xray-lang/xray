@@ -155,8 +155,8 @@ typedef struct XrLirInstructionView {
 /* Queries require a finished module. Out-of-range queries preserve no view.
  * Local IDs in views are one-based within the indicated function. All borrowed
  * arrays, names and paths remain valid until module destruction. */
-/* A non-NULL module must be live. Readability permits views, not execution or
- * verified SSA; NULL, unfinished and failed modules are not readable. */
+/* A non-NULL module must be live. Successful finish verifies SSA and owned
+ * value flow before publication. NULL, unfinished and failed modules are unreadable. */
 XR_FUNC bool xr_lir_module_is_readable(const XrLirModule *module);
 XR_FUNC uint32_t xr_lir_function_count(const XrLirModule *module);
 XR_FUNC uint32_t xr_lir_literal_count(const XrLirModule *module);

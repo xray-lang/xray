@@ -291,11 +291,7 @@ static void graph_edges(void) {
             test_return(m, merge, a);
         }
         XrLirStatus status = xr_lir_module_finish(m, NULL);
-        CHECK(status == XR_LIR_OK || status == XR_LIR_VERIFY_ERROR);
-        if (status == XR_LIR_OK)
-            CHECK(xr_lir_verify(m, NULL) == XR_LIR_VERIFY_ERROR);
-        else
-            CHECK(!m->finished);
+        CHECK(status == XR_LIR_VERIFY_ERROR && !m->finished);
         xr_lir_module_destroy(m);
     }
 }

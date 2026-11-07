@@ -497,8 +497,7 @@ static void test_unused_and_invalid(void) {
     CHECK(execute(program, NULL, 1, &result) == XR_RBC_INVALID && result == 44);
     xr_rbc_program_destroy(program);
 
-    // Release construction can publish before the explicit SSA trust check.
-    // A value defined only on one sibling must never execute on the other.
+    // Publication rejects a value defined only on one sibling branch.
     m = NULL;
     OK(xr_lir_module_create(NULL, &m));
     root = test_function(m, "bad_dominance", NULL, 0, XR_LIR_I64);
@@ -511,7 +510,7 @@ static void test_unused_and_invalid(void) {
     test_return(m, left, sibling);
     test_return(m, right, sibling);
     XrLirStatus finished = xr_lir_module_finish(m, NULL);
-    CHECK(finished == XR_LIR_OK || finished == XR_LIR_VERIFY_ERROR);
+    CHECK(finished == XR_LIR_VERIFY_ERROR && !xr_lir_module_is_readable(m));
     program = NULL;
     CHECK(xr_rbc_compile(m, root, &program, &diagnostic) == XR_RBC_COMPILE_INVALID);
     CHECK(!program);
