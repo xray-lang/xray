@@ -675,36 +675,59 @@ static void test_f64_constants_and_refusals(void) {
         diagnostic.column == 11 && diagnostic.instruction == 1);
 }
 
-static XrRbcProgram *panic_program(XrLirOp op, bool unknown, const char *path) {
+static XrRbcProgram *panic_program(XrLirOp op, bool unknown, const char *path, unsigned located) {
     XrLirModule *m = NULL;
     OK(xr_lir_module_create(NULL, &m));
     XrLirType flag_type = XR_LIR_I1, types[] = {XR_LIR_I64, XR_LIR_I64};
     XrLirFunction root = test_function(m, "choose", &flag_type, 1, XR_LIR_I64);
     XrLirFunction helpers[] = {test_function(m, "left", types, 2, XR_LIR_I64),
-        test_function(m, "right", types, 2, XR_LIR_I64)};
+                               test_function(m, "right", types, 2, XR_LIR_I64)};
     XrLirBlock entry = test_block(m, root, NULL, 0);
     XrLirBlock yes = test_block(m, root, NULL, 0), no = test_block(m, root, NULL, 0);
     OK(xr_lir_set_entry(m, root, entry));
     XrLirValue arguments[] = {test_constant(m, entry, XR_LIR_I64, 17),
-        test_constant(m, entry, XR_LIR_I64, 0)};
-    conditional(m, entry, parameter(m, root, 0), (XrLirEdge){yes, NULL, 0},
-        (XrLirEdge){no, NULL, 0});
+                              test_constant(m, entry, XR_LIR_I64, 0)};
+    XrLirValue zero = test_constant(m, entry, flag_type, 0);
+    XrLirValue operands[] = {parameter(m, root, 0), zero}, condition;
+    XrLirInstruction predicate = {
+        .op = XR_LIR_ICMP,
+        .type = XR_LIR_I1,
+        .operands = operands,
+        .operand_count = 2,
+        .predicate = XR_LIR_NE,
+        .source = located & 1 ? (XrLirSource) {"choose.xr", 9, 11, 1, 11, 4} : (XrLirSource) {0}};
+    OK(xr_lir_emit_value(m, entry, &predicate, &condition));
+    XrLirInstruction branch = {.op = XR_LIR_CONDBR,
+                               .type = XR_LIR_UNIT,
+                               .operands = &condition,
+                               .operand_count = 1,
+                               .edge_count = 2,
+                               .edges = {{yes, NULL, 0}, {no, NULL, 0}},
+                               .source = located & 2 ? (XrLirSource) {"choose.xr", 9, 12, 1, 12, 4}
+                                                     : (XrLirSource) {0}};
+    OK(xr_lir_set_terminator(m, entry, &branch));
     test_return(m, yes, call(m, yes, helpers[0], XR_LIR_I64, arguments, 2));
     test_return(m, no, call(m, no, helpers[1], XR_LIR_I64, arguments, 2));
     for (unsigned h = 0; h < 2; ++h) {
         XrLirBlock b = test_block(m, helpers[h], NULL, 0);
         OK(xr_lir_set_entry(m, helpers[h], b));
         XrLirValue one, result;
-        XrLirInstruction instruction = {.op = XR_LIR_CONST, .type = XR_LIR_I64, .bits = 1,
-            .source = {path, strlen(path), 3, 2, 3, 4}};
+        XrLirInstruction instruction = {.op = XR_LIR_CONST,
+                                        .type = XR_LIR_I64,
+                                        .bits = 1,
+                                        .source = {path, strlen(path), 3, 2, 3, 4}};
         OK(xr_lir_emit_value(m, b, &instruction, &one));
-        XrLirValue lhs = test_binary(m, b, XR_LIR_ADD, parameter(m, helpers[h], 0), one,
-            XR_LIR_PREDICATE_NONE);
+        XrLirValue lhs =
+            test_binary(m, b, XR_LIR_ADD, parameter(m, helpers[h], 0), one, XR_LIR_PREDICATE_NONE);
         XrLirValue operands[] = {lhs, parameter(m, helpers[h], 1)};
-        XrLirSource source = unknown && h ? (XrLirSource){0} :
-            (XrLirSource){path, strlen(path), h ? 29u : 17u, 5, h ? 30u : 18u, 9};
-        instruction = (XrLirInstruction){.op = op, .type = XR_LIR_I64,
-            .operands = operands, .operand_count = 2, .source = source};
+        XrLirSource source =
+            unknown && h ? (XrLirSource) {0}
+                         : (XrLirSource) {path, strlen(path), h ? 29u : 17u, 5, h ? 30u : 18u, 9};
+        instruction = (XrLirInstruction) {.op = op,
+                                          .type = XR_LIR_I64,
+                                          .operands = operands,
+                                          .operand_count = 2,
+                                          .source = source};
         OK(xr_lir_emit_value(m, b, &instruction, &result));
         test_return(m, b, result);
     }
@@ -716,70 +739,78 @@ static XrRbcProgram *panic_program(XrLirOp op, bool unknown, const char *path) {
 
 static void test_owned_arithmetic_panics(void) {
     for (unsigned op = 0; op < 2; ++op) {
-        for (unsigned unknown = 0; unknown < 2; ++unknown) {
-            for (unsigned program_first = 0; program_first < 2; ++program_first) {
-                char *path = xr_malloc(401), expected[401];
-                CHECK(path);
-                memset(path, 'p', 400);
-                memcpy(path + 380, "\xc3\xa9\n\"\\.xr", 8);
-                path[400] = 0;
-                memcpy(expected, path, 401);
-                XrRbcProgram *program = panic_program(op ? XR_LIR_REM : XR_LIR_DIV,
-                    unknown != 0, path);
-                memset(path, 'x', 400);
-                xr_free(path);
-                XrRbcOutcome *outcomes[2];
-                for (unsigned h = 0; h < 2; ++h) {
-                    uint64_t argument = h ? 0 : 1;
-                    XrRbcExecution *execution = NULL;
-                    CHECK(xr_rbc_program_prepare(program, &argument, 1, &execution) == XR_RBC_OK);
-                    outcomes[h] = xr_rbc_execution_run(execution);
-                    CHECK(outcomes[h] && !xr_rbc_execution_run(execution));
-                    xr_rbc_execution_free(&execution);
+        for (unsigned located = 0; located < 4; ++located) {
+            unsigned prefix = (located & 1 ? 1u : 0u) + (located & 2 ? 1u : 0u);
+            for (unsigned unknown = 0; unknown < 2; ++unknown) {
+                for (unsigned program_first = 0; program_first < 2; ++program_first) {
+                    char *path = xr_malloc(401), expected[401];
+                    CHECK(path);
+                    memset(path, 'p', 400);
+                    memcpy(path + 380, "\xc3\xa9\n\"\\.xr", 8);
+                    path[400] = 0;
+                    memcpy(expected, path, 401);
+                    XrRbcProgram *program =
+                        panic_program(op ? XR_LIR_REM : XR_LIR_DIV, unknown != 0, path, located);
+                    memset(path, 'x', 400);
+                    xr_free(path);
+                    XrRbcOutcome *outcomes[2];
+                    for (unsigned h = 0; h < 2; ++h) {
+                        uint64_t argument = h ? 0 : 1;
+                        XrRbcExecution *execution = NULL;
+                        CHECK(xr_rbc_program_prepare(program, &argument, 1, &execution) ==
+                              XR_RBC_OK);
+                        outcomes[h] = xr_rbc_execution_run(execution);
+                        CHECK(outcomes[h] && !xr_rbc_execution_run(execution));
+                        xr_rbc_execution_free(&execution);
+                    }
+                    if (program_first)
+                        xr_rbc_program_destroy(program);
+                    for (unsigned h = 0; h < 2; ++h) {
+                        XrRbcOutcome *outcome = outcomes[h];
+                        CHECK(xr_rbc_outcome_status(outcome) == XR_RBC_ARITHMETIC_PANIC);
+                        uint64_t bits = 919;
+                        CHECK(!xr_rbc_outcome_bits(outcome, &bits) && bits == 919);
+                        XrtArithmeticPanic facts = {77, 88};
+                        const XrtLocationOwner *borrowed = NULL;
+                        CHECK(!xr_rbc_outcome_arithmetic_panic(outcome, NULL, &borrowed) &&
+                              !borrowed);
+                        CHECK(!xr_rbc_outcome_arithmetic_panic(outcome, &facts, NULL));
+                        CHECK(facts.code == 77 && facts.source_id == 88);
+                        CHECK(xr_rbc_outcome_arithmetic_panic(outcome, &facts, &borrowed));
+                        CHECK(facts.code == (op ? 421u : 420u));
+                        bool known = !unknown || !h;
+                        CHECK(facts.source_id == (known ? prefix + (h ? 4u : 2u) : 0u));
+                        XrtOutputFailure output = {.source_id = 99};
+                        unsigned char before[sizeof(output)];
+                        memcpy(before, &output, sizeof(output));
+                        const XrtLocationOwner *same = borrowed;
+                        CHECK(!xr_rbc_outcome_output_failure(outcome, &output, &borrowed));
+                        CHECK(!memcmp(before, &output, sizeof(output)) && borrowed == same);
+                        XrtLocationOwner *retained = (XrtLocationOwner *) borrowed;
+                        CHECK(xrt_locations_retain(retained));
+                        xr_rbc_outcome_free(&outcome);
+                        CHECK(xrt_locations_count(retained) == prefix + (unknown ? 3u : 4u));
+                        const XrtSourceLocation *location =
+                            xrt_locations_get(retained, facts.source_id);
+                        if (known) {
+                            CHECK(location && location->path_length == 400);
+                            CHECK(!memcmp(location->path, expected, 400));
+                            CHECK(location->line == (h ? 29u : 17u) && location->column == 5);
+                            CHECK(location->end_line == (h ? 30u : 18u) &&
+                                  location->end_column == 9);
+                        } else
+                            CHECK(!location);
+                        xrt_locations_release(retained);
+                    }
+                    if (!program_first)
+                        xr_rbc_program_destroy(program);
                 }
-                if (program_first) xr_rbc_program_destroy(program);
-                for (unsigned h = 0; h < 2; ++h) {
-                    XrRbcOutcome *outcome = outcomes[h];
-                    CHECK(xr_rbc_outcome_status(outcome) == XR_RBC_ARITHMETIC_PANIC);
-                    uint64_t bits = 919;
-                    CHECK(!xr_rbc_outcome_bits(outcome, &bits) && bits == 919);
-                    XrtArithmeticPanic facts = {77, 88};
-                    const XrtLocationOwner *borrowed = NULL;
-                    CHECK(!xr_rbc_outcome_arithmetic_panic(outcome, NULL, &borrowed) && !borrowed);
-                    CHECK(!xr_rbc_outcome_arithmetic_panic(outcome, &facts, NULL));
-                    CHECK(facts.code == 77 && facts.source_id == 88);
-                    CHECK(xr_rbc_outcome_arithmetic_panic(outcome, &facts, &borrowed));
-                    CHECK(facts.code == (op ? 421u : 420u));
-                    bool known = !unknown || !h;
-                    CHECK(facts.source_id == (known ? h ? 4u : 2u : 0u));
-                    XrtOutputFailure output = {.source_id = 99};
-                    unsigned char before[sizeof(output)];
-                    memcpy(before, &output, sizeof(output));
-                    const XrtLocationOwner *same = borrowed;
-                    CHECK(!xr_rbc_outcome_output_failure(outcome, &output, &borrowed));
-                    CHECK(!memcmp(before, &output, sizeof(output)) && borrowed == same);
-                    XrtLocationOwner *retained = (XrtLocationOwner *)borrowed;
-                    CHECK(xrt_locations_retain(retained));
-                    xr_rbc_outcome_free(&outcome);
-                    CHECK(xrt_locations_count(retained) == (unknown ? 3u : 4u));
-                    const XrtSourceLocation *location = xrt_locations_get(retained, facts.source_id);
-                    if (known) {
-                        CHECK(location && location->path_length == 400);
-                        CHECK(!memcmp(location->path, expected, 400));
-                        CHECK(location->line == (h ? 29u : 17u) && location->column == 5);
-                        CHECK(location->end_line == (h ? 30u : 18u) && location->end_column == 9);
-                    } else CHECK(!location);
-                    xrt_locations_release(retained);
-                }
-                if (!program_first) xr_rbc_program_destroy(program);
             }
         }
     }
 }
 
-
-static XrLirValue cell_value(XrLirModule *m, XrLirBlock block, XrLirOp op,
-    XrLirValue operand) {
+static XrLirValue cell_value(XrLirModule *m, XrLirBlock block, XrLirOp op, XrLirValue operand) {
     XrLirInstruction instruction = {.op = op,
         .type = op == XR_LIR_CELL_NEW ? XR_LIR_I64_CELL : XR_LIR_I64,
         .operands = &operand, .operand_count = 1};
