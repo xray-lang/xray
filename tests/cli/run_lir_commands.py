@@ -50,7 +50,8 @@ def main() -> None:
         effects = fixtures / "effects"
         for name in ("pure_recursive_import", "pure_import_go", "nosuspend_literal",
                      "root_const", "signature_throws", "signature_generic_try",
-                     "closed_dispatch_pure", "closed_dispatch_reference"):
+                     "closed_dispatch_pure", "closed_dispatch_reference",
+                     "root_parameter_forward", "root_parameter_capture", "root_parameter_recursive"):
             checked = run(name + "-check", [binary, "check", effects / (name + ".xr")], 0)
             assert not checked.stdout and not checked.stderr, name
 
@@ -68,6 +69,14 @@ def main() -> None:
             ("root_cleanup", b"GO target requires the current instance root execution"),
             ("root_default", b"GO target requires the current instance root execution"),
             ("root_import", b"GO target requires the current instance root execution"),
+            ("root_parameter_escape", b"GO target lacks proof for worker execution"),
+            ("redundant_root_apply", b"E0336: try body has no business-error source"),
+            ("redundant_root_fixed", b"E0336: try body has no business-error source"),
+            ("redundant_root_root", b"E0336: try body has no business-error source"),
+            ("redundant_root_forward", b"E0336: try body has no business-error source"),
+            ("redundant_root_capture_pure", b"E0336: try body has no business-error source"),
+            ("redundant_root_capture_root", b"E0336: try body has no business-error source"),
+            ("redundant_root_capture_fixed", b"E0336: try body has no business-error source"),
             ("signature_missing_try", b"E0330: throwing call requires try or a try body"),
             ("signature_redundant_try", b"E0336: try expression has no business-error source"),
         )

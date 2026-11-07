@@ -26,19 +26,19 @@ typedef struct RootParameterSourceOperation {
 } RootParameterSourceOperation;
 static const RootParameterSourceOracle rps_capture_oracles[]={
     {"capture-pure.xr",
-     "fn apply(callback:fn()->i64)->i64{try{return callback()}catch(error){return 0}}\n"
-     "fn capture(callback:fn()->i64)->i64{const thunk=fn()->i64{try{return callback()}catch(error){return 0}};return apply(thunk)}\n"
+     "fn apply(callback:fn()->i64)->i64{return callback()}\n"
+     "fn capture(callback:fn()->i64)->i64{const thunk=fn()->i64{return callback()};return apply(thunk)}\n"
      "fn pure()->i64{return 7}\n"
      "export fn run()->i64{return capture(pure)}\nprint(run())\n",false,false,7,"7\n",2},
     {"capture-root.xr",
      "var state:i64=9\n"
-     "fn apply(callback:fn()->i64)->i64{try{return callback()}catch(error){return 0}}\n"
-     "fn capture(callback:fn()->i64)->i64{const thunk=fn()->i64{try{return callback()}catch(error){return 0}};return apply(thunk)}\n"
+     "fn apply(callback:fn()->i64)->i64{return callback()}\n"
+     "fn capture(callback:fn()->i64)->i64{const thunk=fn()->i64{return callback()};return apply(thunk)}\n"
      "fn rooted()->i64{return state}\n"
      "export fn run()->i64{return capture(rooted)}\nprint(run())\n",true,false,9,"9\n",2},
     {"capture-fixed.xr",
-     "fn apply(callback:fn()->i64)->i64{try{return callback()}catch(error){return 0}}\n"
-     "fn capture(callback:fn()->i64)->i64{const thunk=fn()->i64{try{return callback()}catch(error){return 0}};return apply(thunk)}\n"
+     "fn apply(callback:fn()->i64)->i64{return callback()}\n"
+     "fn capture(callback:fn()->i64)->i64{const thunk=fn()->i64{return callback()};return apply(thunk)}\n"
      "fn pure()->i64{return 7}\n"
      "export fn run()->i64{const fixed:fn()->i64=pure;return capture(fixed)}\nprint(run())\n",false,true,7,"7\n",2}
 };

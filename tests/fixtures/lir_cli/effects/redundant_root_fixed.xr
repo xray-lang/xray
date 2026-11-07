@@ -1,0 +1,4 @@
+fn apply(callback:fn()->i64)->i64{try{return callback()}catch(error){return 0}}
+fn pure()->i64{return 7}
+export fn run()->i64{const fixed:fn()->i64=pure;return apply(fixed)}
+print(run())

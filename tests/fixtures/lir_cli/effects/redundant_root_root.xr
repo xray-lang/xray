@@ -1,0 +1,5 @@
+var state:i64=9
+fn apply(callback:fn()->i64)->i64{try{return callback()}catch(error){return 0}}
+fn rooted()->i64{return state}
+export fn run()->i64{return apply(rooted)}
+print(run())

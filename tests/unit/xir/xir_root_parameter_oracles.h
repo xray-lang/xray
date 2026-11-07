@@ -17,23 +17,23 @@ typedef struct RootParameterSourceOracle {
 } RootParameterSourceOracle;
 static const RootParameterSourceOracle rps_oracles[] = {
     {"apply.xr",
-     "fn apply(callback:fn()->i64)->i64{try{return callback()}catch(error){return 0}}\n"
+     "fn apply(callback:fn()->i64)->i64{return callback()}\n"
      "fn pure()->i64{return 7}\n"
      "export fn run()->i64{return apply(pure)}\n"
      "print(run())\n", false,false,7,"7\n",2},
     {"fixed.xr",
-     "fn apply(callback:fn()->i64)->i64{try{return callback()}catch(error){return 0}}\n"
+     "fn apply(callback:fn()->i64)->i64{return callback()}\n"
      "fn pure()->i64{return 7}\n"
      "export fn run()->i64{const fixed:fn()->i64=pure;return apply(fixed)}\n"
      "print(run())\n", false,true,7,"7\n",2},
     {"root.xr",
      "var state:i64=9\n"
-     "fn apply(callback:fn()->i64)->i64{try{return callback()}catch(error){return 0}}\n"
+     "fn apply(callback:fn()->i64)->i64{return callback()}\n"
      "fn rooted()->i64{return state}\n"
      "export fn run()->i64{return apply(rooted)}\n"
      "print(run())\n", true,false,9,"9\n",2},
     {"forward.xr",
-     "fn apply(callback:fn()->i64)->i64{try{return callback()}catch(error){return 0}}\n"
+     "fn apply(callback:fn()->i64)->i64{return callback()}\n"
      "fn forward(callback:fn()->i64)->i64{return apply(callback)}\n"
      "fn pure()->i64{return 7}\n"
      "export fn run()->i64{return forward(pure)}\n"

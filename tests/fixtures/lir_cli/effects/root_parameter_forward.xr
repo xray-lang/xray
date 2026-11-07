@@ -1,0 +1,5 @@
+const value=7
+fn leaf()->i64{return value}
+fn apply(callback:fn()->i64)->i64{return callback()}
+fn worker()->i64{return apply(leaf)}
+const task=go worker()

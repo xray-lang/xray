@@ -1,0 +1,6 @@
+const value=7
+fn leaf()->i64{return value}
+fn first(n:i64,callback:fn()->i64)->i64{if(n==0){return callback()};return second(n-1,callback)}
+fn second(n:i64,callback:fn()->i64)->i64{return first(n,callback)}
+fn worker()->i64{return first(2,leaf)}
+const task=go worker()
