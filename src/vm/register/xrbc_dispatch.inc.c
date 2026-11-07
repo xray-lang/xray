@@ -78,7 +78,9 @@ XR_RBC_CASE(SPILL) {
 XR_RBC_CASE(RELOAD) {
     size_t index = stack->frames[stack->depth - 1].spill_base + (instruction >> 16);
     XR_RBC_SLOT(a) = stack->spills[index];
-    stack->spills[index] = (XrRbcRegister){0};
+    // Scalar reloads copy bits. Reference reloads transfer the sole owner.
+    if ((instruction >> 16) < function->reference_spill_count)
+        stack->spills[index] = (XrRbcRegister){0};
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(CELL_NEW) {

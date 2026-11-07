@@ -1071,6 +1071,34 @@ static void test_scalar_spill_branches(void) {
     uint64_t flag=0;CHECK(run(program,&flag,1)==42);
     flag=1;CHECK(run(program,&flag,1)==259);xr_rbc_program_destroy(program);
 }
+static void test_many_spilled_conditions(void) {
+    XrLirModule *module=NULL;
+    OK(xr_lir_module_create(NULL,&module));
+    XrLirType integer=XR_LIR_I64;
+    XrLirFunction function=test_function(module,"many_conditions",&integer,1,integer);
+    XrLirBlock current=test_block(module,function,NULL,0);
+    OK(xr_lir_set_entry(module,function,current));
+    XrLirValue argument=parameter(module,function,0);
+    for(uint32_t n=0;n<300;++n) {
+        XrLirValue value=test_constant(module,current,integer,n);
+        XrLirValue condition=test_binary(module,current,XR_LIR_ICMP,argument,value,XR_LIR_EQ);
+        XrLirBlock selected=test_block(module,function,NULL,0);
+        XrLirBlock next=test_block(module,function,NULL,0);
+        conditional(module,current,condition,(XrLirEdge){selected,NULL,0},(XrLirEdge){next,NULL,0});
+        test_return(module,selected,value);
+        current=next;
+    }
+    test_return(module,current,test_constant(module,current,integer,UINT64_MAX));
+    OK(xr_lir_module_finish(module,NULL));
+    XrRbcProgram *program=compile(module,function);
+    CHECK(xr_rbc_program_view(program)->functions[0].spill_count);
+    xr_lir_module_destroy(module);
+    const uint64_t arguments[]={0,150,299,300};
+    for(unsigned n=0;n<4;++n)
+        CHECK(run(program,&arguments[n],1)==(arguments[n]<300 ? arguments[n] : UINT64_MAX));
+    xr_rbc_program_destroy(program);
+}
+
 static XrLirValue frame_text(XrLirModule *m,XrLirBlock block,const char *bytes,size_t length) {
     XrLirLiteral literal={0};XrLirValue value;
     OK(xr_lir_add_literal(m,bytes,length,&literal));
@@ -1172,6 +1200,7 @@ static void test_publication_admission(void) {
 }
 
 int main(void) {
+    test_many_spilled_conditions();
     test_typed_spill_copy_cycle();
     test_publication_admission();
     test_frame_cell_aliases();

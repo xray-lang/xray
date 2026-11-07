@@ -691,7 +691,7 @@ static bool rbc_lir_spilled_instruction(RbcLirCompiler *c,const XrLirInstruction
         valid=rbc_lir_emit(c,XR_RBC_SPILL,c->slots[i->result],0,0,c->spill_home[i->result]);
     for(uint32_t n=0;n<count;++n) {
         uint32_t value=staged[n];
-        if(valid && i->op!=XR_LIR_RET && i->op!=XR_LIR_STRING_DROP)
+        if(valid && i->op!=XR_LIR_RET && i->op!=XR_LIR_STRING_DROP && i->op!=XR_LIR_CONDBR)
             valid=rbc_lir_emit(c,XR_RBC_SPILL,c->slots[value],0,0,c->spill_home[value]);
         c->slots[value]=UINT32_MAX;
     }

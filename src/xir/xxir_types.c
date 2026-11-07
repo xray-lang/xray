@@ -21,7 +21,12 @@
 #include "xxir_receive_control.h"
 
 XR_FUNC XrXirCompileLimits xr_xir_compile_default_limits(void) {
-    return (XrXirCompileLimits){1024, 65536, 4096, 1048576, UINT64_C(16) * 1024 * 1024};
+    return (XrXirCompileLimits){
+        .functions=UINT32_MAX,
+        .parameters=UINT32_MAX,
+        .blocks=UINT32_MAX,
+        .instructions=UINT32_MAX,
+        .frame_bytes=UINT64_MAX};
 }
 #include "xxir_interface.h"
 #include "xxir_constraints.h"

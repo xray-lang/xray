@@ -1,0 +1,9 @@
+fn one<T>()->i64{return 1}
+print(one<i8>())
+print(one<i16>())
+print(one<i32>())
+print(one<i64>())
+print(one<u8>())
+print(one<u16>())
+print(one<u32>())
+print(one<u64>())

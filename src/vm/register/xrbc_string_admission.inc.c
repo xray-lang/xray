@@ -319,7 +319,7 @@ static bool rbc_spill_transfer(RbcStringAdmission *s, XrRbcOperands v) {
         if (s->spills[index] != initialized ||
             (string && s->state[v.a] != RBC_EMPTY)) return false;
         s->state[v.a] = initialized;
-        s->spills[index] = RBC_EMPTY;
+        if (string) s->spills[index] = RBC_EMPTY;
     }
     return true;
 }

@@ -908,6 +908,20 @@ static void test_spill_layout_and_overwrite(void) {
     emit(overwrite,6,XR_RBC_RET,0,0,0);reject_prepare(&m,0,NULL,0);
 }
 
+static void test_scalar_reload_copies(void) {
+    uint32_t code[6];
+    immediate(code,0,XR_RBC_LOADI,0,42);
+    immediate(code,1,XR_RBC_SPILL,0,0);
+    immediate(code,2,XR_RBC_RELOAD,1,0);
+    immediate(code,3,XR_RBC_RELOAD,2,0);
+    emit(code,4,XR_RBC_ADD,0,1,2);
+    emit(code,5,XR_RBC_RET,0,0,0);
+    XrRbcFunction function={.code=code,.code_count=6,.register_count=3,.spill_count=1};
+    XrRbcModule module={.functions=&function,.function_count=1};
+    uint64_t result=0;
+    CHECK(execute(&module,0,NULL,0,&result)==XR_RBC_OK && result==84);
+}
+
 static void test_spill_loop(void) {
     uint32_t code[16];
     immediate(code,0,XR_RBC_LOADI,1,0);immediate(code,1,XR_RBC_SPILL,1,0);
@@ -926,7 +940,9 @@ static void test_spill_loop(void) {
     uint64_t count=5;uint32_t saved=code[12],overwritten=code[11];
     immediate(code,11,XR_RBC_LOADI,2,0);immediate(code,12,XR_RBC_LOADI,2,0);
     reject_prepare(&m,0,&count,1);code[12]=saved;code[11]=overwritten;
-    saved=code[8];immediate(code,8,XR_RBC_LOADI,1,0);reject_prepare(&m,0,&count,1);code[8]=saved;
+    saved=code[8];immediate(code,8,XR_RBC_LOADI,1,0);
+    CHECK(execute(&m,0,&count,1,&result)==XR_RBC_OK && result==0);code[8]=saved;
+    saved=code[1];immediate(code,1,XR_RBC_LOADI,1,0);reject_prepare(&m,0,&count,1);code[1]=saved;
     // A definition on a later iteration cannot initialize the first entry.
     uint32_t entry[4];immediate(entry,0,XR_RBC_RELOAD,0,0);
     immediate(entry,1,XR_RBC_LOADI,0,42);immediate(entry,2,XR_RBC_SPILL,0,0);
@@ -970,6 +986,7 @@ static void test_spill_managed_backedge(void) {
 }
 
 int main(int argc, char **argv) {
+    test_scalar_reload_copies();
     test_spill_layout_and_overwrite();
     test_spill_loop();
     test_spill_late_predecessor();

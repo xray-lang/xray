@@ -108,6 +108,33 @@ static void *spec_alloc(SpecContext *c, uint64_t count, size_t size) {
 
     memory->next = c->memory; c->memory = memory; return memory + 1;
 }
+static bool spec_function_reserve(SpecContext *c, uint32_t minimum) {
+    if (minimum<=c->capacity) return true;
+    if (minimum>c->remaining.limits.functions) {
+        c->diagnostic.status=XR_XIR_BUDGET;
+        return false;
+    }
+    uint64_t grown=c->capacity ? (uint64_t)c->capacity*2 : c->source->function_count;
+    if (grown<minimum) grown=minimum;
+    uint32_t capacity=grown>c->remaining.limits.functions ?
+        c->remaining.limits.functions : (uint32_t)grown;
+    XrXirFunction *functions=spec_alloc(c,capacity,sizeof(*functions));
+    XrXirFunctionIdentity *identities=c->source->declarations ?
+        spec_alloc(c,capacity,sizeof(*identities)) : NULL;
+    SpecInstance *instances=spec_alloc(c,capacity,sizeof(*instances));
+    if (c->diagnostic.status!=XR_XIR_OK) return false;
+    if (c->count) {
+        if (!spec_copy(c,functions,c->functions,(size_t)c->count*sizeof(*functions))) return false;
+        if (!spec_copy(c,instances,c->instances,(size_t)c->count*sizeof(*instances))) return false;
+    }
+    if (c->identities &&
+        !spec_copy(c,identities,c->identities,(size_t)c->count*sizeof(*identities))) return false;
+    c->functions=functions;
+    c->identities=identities;
+    c->instances=instances;
+    c->capacity=capacity;
+    return true;
+}
 static XrXirType spec_node_raw(SpecContext *c, XrXirTypeNode signature) {
     for (uint32_t i = 0; i < c->types.count; ++i) {
         if (!spec_progress(c)) return XR_XIR_UNIT;
@@ -372,11 +399,11 @@ static uint32_t spec_intern(SpecContext *c, uint32_t declaration, const XrXirTyp
     uint32_t existing = spec_index_find(c, &key, hash);
     if (existing != UINT32_MAX || c->diagnostic.status != XR_XIR_OK) return existing;
     const XrXirFunction *source = &c->source->functions[declaration];
-    if (c->count == c->capacity || source->parameter_count > c->remaining.limits.parameters ||
+    if (c->count >= c->remaining.limits.functions || source->parameter_count > c->remaining.limits.parameters ||
         source->instruction_count > c->remaining.limits.instructions || source->block_count > c->remaining.limits.blocks) {
         c->diagnostic.status = XR_XIR_BUDGET; return UINT32_MAX;
     }
-    if (!spec_index_reserve(c)) return UINT32_MAX;
+    if (!spec_function_reserve(c,c->count+1) || !spec_index_reserve(c)) return UINT32_MAX;
     c->remaining.limits.parameters -= source->parameter_count;
     c->remaining.limits.instructions -= source->instruction_count;
     c->remaining.limits.blocks -= source->block_count;
@@ -441,12 +468,13 @@ static uint32_t spec_intern(SpecContext *c, uint32_t declaration, const XrXirTyp
     return index;
 }
 static bool spec_calls(SpecContext *c, uint32_t index) {
-    const SpecInstance *instance = &c->instances[index];
-    const XrXirGeneric *generic = c->source->generics ? &c->source->generics[instance->declaration] : NULL;
-    XrXirFunction *function = &c->functions[index];
-    XrXirInstruction *ops = (XrXirInstruction *) function->instructions;
-    c->diagnostic.function = instance->declaration;
-    for (uint32_t i = 0; i < function->instruction_count; ++i) {
+    /* Instance discovery can grow both tables; their owned operand vectors stay stable. */
+    const SpecInstance instance = c->instances[index];
+    const XrXirGeneric *generic = c->source->generics ? &c->source->generics[instance.declaration] : NULL;
+    XrXirFunction function = c->functions[index];
+    XrXirInstruction *ops = (XrXirInstruction *) function.instructions;
+    c->diagnostic.function = instance.declaration;
+    for (uint32_t i = 0; i < function.instruction_count; ++i) {
         c->diagnostic.instruction = i;
         if (!spec_progress(c)) return false;
         XrXirInstruction *op = &ops[i];
@@ -464,7 +492,7 @@ static bool spec_calls(SpecContext *c, uint32_t index) {
         XrXirType *types = spec_alloc(c, count, sizeof(*types));
         if (count && !types) return false;
         if (!spec_progress(c)) return false;
-        for (uint32_t a = 0; a < count; ++a) types[a] = spec_type(c, instance, generic->arguments[op->type_arguments[0] + a]);
+        for (uint32_t a = 0; a < count; ++a) types[a] = spec_type(c, &instance, generic->arguments[op->type_arguments[0] + a]);
         if (c->diagnostic.status != XR_XIR_OK) return false;
         uint32_t declaration = (uint32_t)op->immediate;
         if (op->op == XR_XIR_CALL_DEFAULT || op->op == XR_XIR_INVOKE_DEFAULT) {
@@ -493,7 +521,7 @@ static bool spec_calls(SpecContext *c, uint32_t index) {
                 if (c->diagnostic.status != XR_XIR_OK) return false;
             }
             XrXirWitnessRequest request = {c->source,
-                xr_xir_operand_type(function,function->operands[op->args[0]]),
+                xr_xir_operand_type(&function,function.operands[op->args[0]]),
                 {op->targets[0],parent ? types : NULL,parent},op->targets[1]};
             XrXirWitness witness = {0};
             c->diagnostic.status = xir_compile_witness_resolve_controlled(&c->remaining, &context, &request, &witness,c->control);
@@ -509,18 +537,18 @@ static bool spec_calls(SpecContext *c, uint32_t index) {
             declaration = witness.function; types = complete; count = complete_count;
             op->op = XR_XIR_CALL; op->targets[0] = op->targets[1] = 0;
         }
-        XirComptimeSelection selection={c->source,&c->types,instance->declaration,i,types,count};
+        XirComptimeSelection selection={c->source,&c->types,instance.declaration,i,types,count};
         const XrXirComptimeBinding *constant=NULL;
         XrXirStatus selected=xir_comptime_select(&c->remaining,c->source_artifact->construction,&selection,&constant, c->control);
         bool evaluation_root=false;
         if (c->evaluation && selected==XR_XIR_BAD_TYPE) {
-            const XrXirComptimeSite *site=xir_comptime_site(c->source_artifact->construction,instance->declaration,i);
+            const XrXirComptimeSite *site=xir_comptime_site(c->source_artifact->construction,instance.declaration,i);
             if (site && site->helper==declaration) {
                 selected=XR_XIR_OK;evaluation_root=!c->evaluation_found;
             }
         }
         if (c->pending && selected==XR_XIR_BAD_TYPE) {
-            const XrXirComptimeSite *site=xir_comptime_site(c->source_artifact->construction,instance->declaration,i);
+            const XrXirComptimeSite *site=xir_comptime_site(c->source_artifact->construction,instance.declaration,i);
             if (site && site->helper==declaration) {
                 if (!spec_progress(c)) return false;
                 c->pending->site=*site;c->pending->borrowed_arguments=types;c->pending->count=count;c->pending->found=true;
@@ -530,7 +558,7 @@ static bool spec_calls(SpecContext *c, uint32_t index) {
         c->diagnostic.status=selected;
         if (c->diagnostic.status!=XR_XIR_OK) return false;
         if (constant) { declaration=constant->provider;types=NULL;count=0; }
-        SpecEffectInput input={function,op,index,i};SpecEffectVector effect={0};
+        SpecEffectInput input={&function,op,index,i};SpecEffectVector effect={0};
         if (!spec_effect_vector(c,declaration,types,count,constant?NULL:&input,&effect)) return false;
         c->cleanup_owner=op->op==XR_XIR_CLEANUP_REGISTER ? index : UINT32_MAX;
         uint32_t target = spec_intern(c, declaration, types, count,effect.arguments,effect.count);
@@ -733,10 +761,6 @@ static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
         }
         if (c.diagnostic.status != XR_XIR_OK) goto done;
     }
-    c.capacity = limits.limits.functions;
-    c.functions = spec_alloc(&c, c.capacity, sizeof(*c.functions));
-    c.identities = c.source->declarations ? spec_alloc(&c, c.capacity, sizeof(*c.identities)) : NULL;
-    c.instances = spec_alloc(&c, c.capacity, sizeof(*c.instances));
     c.ordinary = spec_alloc(&c, c.source->function_count, sizeof(*c.ordinary));
     if (c.diagnostic.status != XR_XIR_OK) goto done;
     for (uint32_t f = 0; f < c.source->function_count; ++f) {

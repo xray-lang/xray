@@ -43,9 +43,23 @@ def main() -> None:
         return child
 
     expected = {"hello": b"42\n", "call": b"42\n", "unicode": "你好\n".encode(),
-                "f64": b"3.75\n"}
+                "f64": b"3.75\n", "instance_growth": b"1\n" * 8}
+    generated = {}
+    capacity_cases = (
+        ("many_functions",
+         "".join(f"fn capacityFn{i}()->i64{{return {i}}}\n" for i in range(1100))
+         + "print(capacityFn1099())\n", b"1099\n"),
+        ("many_blocks", "fn choose(value:i64)->i64{\n"
+         + "".join(f"if(value=={i}){{return {i}}}\n" for i in range(2100))
+         + "return -1\n}\nprint(choose(2099))\n", b"2099\n"),
+    )
+    for name, text, stdout in capacity_cases:
+        source = work / (name + ".xr")
+        source.write_text(text, encoding="utf-8", newline="\n")
+        generated[name] = source
+        expected[name] = stdout
     for name, stdout in expected.items():
-        source = fixtures / (name + ".xr")
+        source = generated.get(name, fixtures / (name + ".xr"))
         vm = run(name + "-vm", [binary, "run", source], 0)
         assert vm.stdout == stdout and not vm.stderr, name
         executable = work / (name + (".exe" if os.name == "nt" else ""))
