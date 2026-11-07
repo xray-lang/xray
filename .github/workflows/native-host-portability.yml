@@ -6,6 +6,11 @@ on:
   push:
     branches: [main, agent/host-arch-portability, agent/direct-cutover]
   workflow_dispatch:
+    inputs:
+      scalar_performance:
+        description: Run macOS scalar performance across three declared alignments
+        type: boolean
+        default: false
 
 jobs:
   current:
@@ -109,3 +114,54 @@ jobs:
             build/Testing/Temporary/LastTest.log
             build/smoke/
             build/CMakeCache.txt
+
+  scalar-performance:
+    if: github.event_name == 'workflow_dispatch' && inputs.scalar_performance
+    name: Scalar macOS (alignment ${{ matrix.alignment }})
+    runs-on: macos-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        alignment: [16, 32, 64]
+    env:
+      PYTHONUTF8: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+      NO_COLOR: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Configure matched Clang Release
+        run: >-
+          python scripts/ci_build_log.py --log build/scalar-configure.log --
+          cmake --preset default
+          -DCMAKE_C_COMPILER=clang
+          -DCMAKE_C_FLAGS=-falign-functions=${{ matrix.alignment }}
+          "-DCMAKE_C_FLAGS_RELEASE=-O2 -DNDEBUG"
+      - name: Build scalar execution targets
+        run: >-
+          python scripts/ci_build_log.py --log build/scalar-build.log --
+          cmake --build build --parallel 4 --target xray lir_vm_run xray_native_runtime
+      - name: Build pinned Lua with matched optimization and dispatch
+        run: |
+          git init "$RUNNER_TEMP/scalar-lua"
+          git -C "$RUNNER_TEMP/scalar-lua" fetch --depth=1 https://github.com/lua/lua.git 7579fc9d7ed90240487251dfb69168f8e64e9294
+          git -C "$RUNNER_TEMP/scalar-lua" checkout --detach FETCH_HEAD
+          clang -std=c11 -O2 -DNDEBUG -ffp-contract=off -falign-functions=${{ matrix.alignment }} \
+            -DLUA_USE_POSIX -DLUA_USE_DLOPEN -DLUA_USE_JUMPTABLE=1 \
+            "$RUNNER_TEMP/scalar-lua/onelua.c" -o "$RUNNER_TEMP/scalar-lua/lua"
+      - name: Measure public CLI, C and Lua
+        run: >-
+          python scripts/run_scalar_performance.py --root . --build build
+          --work build/scalar-performance --samples 9 --cc /usr/bin/clang
+          --alignment ${{ matrix.alignment }} --lua "$RUNNER_TEMP/scalar-lua/lua"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scalar-macos-${{ matrix.alignment }}-${{ github.sha }}
+          path: |
+            build/scalar-*
+            build/CMakeCache.txt
+            build/compile_commands.json
