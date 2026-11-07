@@ -59,8 +59,9 @@ EXE = ".exe" if os.name == "nt" else ""
 BENCH_LABELS = {"fib": "fib(32)", "loop10m": "loop 10M", "loop100m": "loop 100M",
                 "mandelbrot": "mandelbrot", "hello": "print(1)",
                 "regex": "import regex; print(1)"}
-LIBS = ("xray_native_runtime", "xray_xir_scalar", "xray_xir_declarations",
-        "xray_xir_admission", "xray_compile_resources")
+LIBS = (("src/runtime/native", "xray_native_runtime"), ("src/xir", "xray_xir_scalar"),
+        ("src/xir", "xray_xir_declarations"), ("src/xir", "xray_xir_admission"),
+        ("src/base", "xray_compile_resources"))
 ADAPTER = """#include <stdint.h>
 extern {result} xray_lir_entry(void);
 int main(void) {{ (void)xray_lir_entry(); return 0; }}
@@ -228,11 +229,11 @@ def load_smoke(root):
 
 def libraries(build):
     found = []
-    for name in LIBS:
-        hits = sorted(build.rglob(f"lib{name}.a"), key=lambda p: len(p.parts))
-        if not hits:
-            sys.exit(f"missing lib{name}.a: build xray_native_runtime in {build}")
-        found.append(str(hits[0]))
+    for directory, name in LIBS:
+        path = build / directory / f"lib{name}.a"
+        if not path.is_file():
+            sys.exit(f"missing {path}: build xray_native_runtime in {build}")
+        found.append(str(path))
     return found + found
 
 

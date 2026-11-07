@@ -110,11 +110,9 @@ def main() -> None:
         configuration = SimpleNamespace(**dict(vars(args), no_native=True, include_carrier=False,
                                                bench=[], python=None))
         programs, _ = baseline.bench_programs(configuration, args.root)
-        names = ("xray_native_runtime", "xray_xir_scalar", "xray_xir_admission",
-                 "xray_xir_declarations", "xray_compile_resources")
         suffix, prefix = (".lib", "") if os.name == "nt" else (".a", "lib")
-        libraries = [min(args.build.rglob(prefix + name + suffix), key=lambda p: len(p.parts))
-                     for name in names]
+        libraries = [args.build / directory / (prefix + name + suffix)
+                     for directory, name in baseline.LIBS]
         result["libraries"] = {str(path): hashlib.sha256(path.read_bytes()).hexdigest()
                                for path in libraries}
         msvc = args.cc.name.lower() in ("cl.exe", "clang-cl.exe")
@@ -134,19 +132,20 @@ def main() -> None:
                 reference = source.with_name(source.stem + "_ref.c")
                 for engine, code in (("native", generated), ("C", reference)):
                     executable = code.with_suffix(baseline.EXE or ".out")
+                    obj = code.with_suffix(".obj" if msvc else ".o")
                     command = [args.cc, *flags]
                     if engine == "native":
                         command += ["/I" + str(args.root / "include") if msvc else
                                     "-I" + str(args.root / "include")]
-                    command += [code]
-                    if msvc:
-                        command += ["/Fo" + str(code.with_suffix(".obj"))]
+                    command += ["/c", code, "/Fo" + str(obj)] if msvc else ["-c", code, "-o", obj]
+                    run(f"compile-{index}-{engine}", command)
+                    command = [args.cc, "/MT", obj] if msvc else [args.cc, obj]
                     if engine == "native":
                         command += libraries if msvc else libraries + libraries
                         command += ["advapi32.lib", "userenv.lib"] if msvc else (
                             [] if platform.system() == "Darwin" else ["-lm", "-lpthread", "-ldl"])
                     command += ["/Fe" + str(executable), "/link", "/INCREMENTAL:NO", "/OPT:REF"] if msvc else ["-o", executable]
-                    run(f"compile-{index}-{engine}", command)
+                    run(f"link-{index}-{engine}", command)
                     row[engine] = [executable]
             engines[label] = row
         for sample in range(args.samples):
