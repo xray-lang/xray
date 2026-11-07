@@ -66,7 +66,8 @@ def main() -> None:
               "boundary": "Public CLI run includes process startup and compilation. Native and "
                           "reference C timings include startup and execution. Compilation and "
                           "linking are recorded separately. All samples are retained. Only "
-                          "external C and Lua CRLF is normalized for value comparison."}
+                          "external C and Lua CRLF is normalized for value comparison. Native "
+                          "gates use a fixed quiet serial follow-up, retaining the initial mix."}
 
     def save() -> None:
         (args.work / "result.json").write_text(
@@ -196,15 +197,37 @@ def main() -> None:
                            for label, limit in limits.items()}
         result["nativeRatios"] = {label: row["native"] / row["C"]
                                   for label, row in result["medians"].items() if "C" in row}
-        result["gates"]["native-fib"] = result["nativeRatios"]["fib(32)"] <= 1.1
-        result["gates"]["native-mandelbrot"] = result["nativeRatios"]["mandelbrot"] <= 1.1
+        result["nativeSerialSamples"] = []
+        for sample in range(max(args.samples, 9)):
+            for index, (label, row) in enumerate(engines.items()):
+                order = [engine for engine in row if engine in ("native", "native-unstripped", "C")]
+                if sample % 2:
+                    order.reverse()
+                outputs = []
+                for engine in order:
+                    data, seconds = run(f"serial-{sample}-{index}-{engine}", row[engine])
+                    outputs.append(data.replace(b"\r\n", b"\n") if engine == "C" else data)
+                    result["nativeSerialSamples"].append({"sample": sample, "label": label,
+                                                           "engine": engine, "seconds": seconds})
+                if outputs and len(set(outputs)) != 1:
+                    raise RuntimeError(label + " serial native output mismatch")
+        result["nativeSerialMedians"] = {
+            label: {engine: statistics.median(row["seconds"] for row in result["nativeSerialSamples"]
+                                             if row["label"] == label and row["engine"] == engine)
+                    for engine in engines[label] if engine in ("native", "native-unstripped", "C")}
+            for label in result["nativeRatios"]}
+        result["nativeSerialRatios"] = {label: row["native"] / row["C"]
+                                        for label, row in result["nativeSerialMedians"].items()}
+        result["gates"]["native-fib"] = result["nativeSerialRatios"]["fib(32)"] <= 1.1
+        result["gates"]["native-mandelbrot"] = result["nativeSerialRatios"]["mandelbrot"] <= 1.1
         result["state"] = "PASS" if all(result["gates"].values()) else "FAIL"
     except BaseException as error:
         result.update(state="FAIL", error=str(error))
         raise
     finally:
         save()
-    print(json.dumps({key: result[key] for key in ("state", "medians", "nativeRatios", "gates")}, indent=2))
+    print(json.dumps({key: result[key] for key in ("state", "medians", "nativeRatios",
+                                                 "nativeSerialRatios", "gates")}, indent=2))
     if result["state"] != "PASS":
         raise SystemExit(1)
 
