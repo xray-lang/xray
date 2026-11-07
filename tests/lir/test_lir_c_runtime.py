@@ -222,8 +222,8 @@ def main():
             if name == 'f64-source':
                 assert 'return p0;' in body
             else:
-                assert 'memcpy' in body and '0x7ff8000000000000' in body
-                assert '#pragma STDC FENV_ACCESS ON' in text and re.search(r'return v[0-9]+;', body)
+                assert re.search(r'v[0-9]+ = -p0;', body)
+                assert re.search(r'return v[0-9]+;', body)
             assertion = ('\n_Static_assert(_Generic(&' + worker +
                          ', double (*)(double): 1, default: 0), "source worker type");\n')
             adapter.write_text(adapter.read_text(encoding='ascii') + assertion, encoding='ascii')
