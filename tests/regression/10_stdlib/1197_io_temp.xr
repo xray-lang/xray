@@ -14,6 +14,11 @@ fn hasDoubleSlash(text: string) -> bool {
     return false
 }
 
+fn restoreTmpdir(saved: string?) {
+    if (saved != null) { assert(os.setenv("TMPDIR", saved!)) }
+    else { assert(os.unsetenv("TMPDIR")) }
+}
+
 @test
 fn test_temp_dir_is_created_and_is_a_directory() {
     var dir = io.tempDir()
@@ -32,28 +37,42 @@ fn test_temp_file_is_created_and_is_a_file() {
 
 @test
 fn test_a_trailing_separator_in_the_root_is_not_doubled() {
-    var saved = os.getenv("TMPDIR")
-    assert(os.setenv("TMPDIR", "/tmp/"))
-    var dir = io.tempDir()
+    const saved = os.getenv("TMPDIR")
+    var base = io.tempDir()!
+    var set = false
+    var dir: Path? = null
+    {
+        defer { restoreTmpdir(saved) }
+        set = os.setenv("TMPDIR", base.toString() + "/")
+        if (set) { dir = io.tempDir() }
+    }
+    var removedDir = true
+    if (dir != null) { removedDir = io.removeAll(dir!) }
+    var removedBase = io.removeAll(base)
+    assert(set)
     assert(dir != null)
     assertEqual(hasDoubleSlash(dir!.toString()), false)
-    io.removeAll(dir!)
-    if (saved != null) { os.setenv("TMPDIR", saved!) }
+    assert(removedDir)
+    assert(removedBase)
 }
 
 @test
 fn test_the_root_comes_from_the_environment() {
     var base = io.tempDir()!
-    var saved = os.getenv("TMPDIR")
-    assert(os.setenv("TMPDIR", base.toString()))
-
-    var inner = io.tempDir()
+    const saved = os.getenv("TMPDIR")
+    var set = false
+    var inner: Path? = null
+    {
+        defer { restoreTmpdir(saved) }
+        set = os.setenv("TMPDIR", base.toString())
+        if (set) { inner = io.tempDir() }
+    }
+    var removedBase = io.removeAll(base)
+    assert(set)
     assert(inner != null)
     // Created inside the root the environment named.
     assert(inner!.toString().indexOf(base.toString()) == 0)
-
-    if (saved != null) { os.setenv("TMPDIR", saved!) }
-    io.removeAll(base)
+    assert(removedBase)
 }
 
 @test

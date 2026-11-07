@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "evidence_scope": "generated-provider-path; binding and tests require build-bound evidence",
-  "leaf_count": 157,
+  "leaf_count": 159,
   "leaves": [
     {
       "symbol": "crypto.__fillRandomBytes",
@@ -2462,7 +2462,7 @@
     },
     {
       "symbol": "os.__loadavg",
-      "signature": "(): Array<f64>",
+      "signature": "(): Array<f64>?",
       "declared": false,
       "admitted": false,
       "blocking_reasons": [
@@ -2651,8 +2651,46 @@
       }
     },
     {
+      "symbol": "path.__fullpath",
+      "signature": "(raw: string): string",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
       "symbol": "path.__getcwd",
       "signature": "(): string",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "path.__isWindows",
+      "signature": "(): bool",
       "declared": false,
       "admitted": false,
       "blocking_reasons": [

@@ -550,8 +550,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F13",
-        "first_diagnostic": "stdlib/io/io.xr:57:22: error: name is not an initialized value"
+        "feature": "Task339 M4",
+        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
       }
     },
     {
@@ -606,8 +606,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/os/os.xr:2:1: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "feature": "Task339 M4",
+        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
       }
     },
     {
@@ -626,8 +626,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/path/path.xr:2:1: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "feature": "Task339 M4",
+        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
       }
     },
     {
@@ -682,8 +682,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/sys/sys.xr:2:1: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "feature": "Task339 M4",
+        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
       }
     },
     {
@@ -734,8 +734,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F13",
-        "first_diagnostic": "stdlib/toml/toml.xr:631:0: error: name is not an initialized value"
+        "feature": "Task339 M4",
+        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
       }
     },
     {
@@ -782,8 +782,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F11",
-        "first_diagnostic": "stdlib/xml/xml.xr:969:9: error: E0331: escaping error exceeds the declared throws type; catch it or declare throws"
+        "feature": "Task339 M4",
+        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
       }
     },
     {
@@ -794,8 +794,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F13",
-        "first_diagnostic": "stdlib/yaml/yaml.xr:618:0: error: name is not an initialized value"
+        "feature": "Task339 M4",
+        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
       }
     },
     {
@@ -1127,8 +1127,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/os/os.xr:2:1: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "feature": "Task339 M4",
+        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
       }
     },
     {
@@ -1139,8 +1139,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/sys/sys.xr:2:1: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "feature": "Task339 M4",
+        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
       }
     },
     {
@@ -1151,8 +1151,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/path/path.xr:2:1: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "feature": "Task339 M4",
+        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
       }
     },
     {
@@ -1235,8 +1235,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F13",
-        "first_diagnostic": "stdlib/io/io.xr:57:22: error: name is not an initialized value"
+        "feature": "Task339 M4",
+        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
       }
     },
     {
@@ -1307,8 +1307,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F13",
-        "first_diagnostic": "stdlib/toml/toml.xr:631:0: error: name is not an initialized value"
+        "feature": "Task339 M4",
+        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
       }
     },
     {
@@ -1331,8 +1331,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F11",
-        "first_diagnostic": "stdlib/xml/xml.xr:969:9: error: E0331: escaping error exceeds the declared throws type; catch it or declare throws"
+        "feature": "Task339 M4",
+        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
       }
     },
     {
@@ -1343,8 +1343,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F13",
-        "first_diagnostic": "stdlib/yaml/yaml.xr:618:0: error: name is not an initialized value"
+        "feature": "Task339 M4",
+        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
       }
     },
     {
@@ -1355,8 +1355,8 @@
       "expect": "gap",
       "exit_code": 1,
       "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "tests/smoke/inputs/os_path_sys_regex.xr:5:1: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "feature": "Task339 M4",
+        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
       }
     },
     {
@@ -1367,8 +1367,8 @@
       "expect": "gap",
       "exit_code": 1,
       "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "tests/smoke/inputs/os_path_sys_regex.xr:5:1: module slots other than immutable i64 literals is not supported by LIR lowering yet"
+        "feature": "Task339 M4",
+        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
       }
     },
     {

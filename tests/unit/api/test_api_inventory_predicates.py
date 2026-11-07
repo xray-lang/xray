@@ -61,10 +61,10 @@ class ConstraintPredicateInventoryTest(unittest.TestCase):
     def test_private_provider_inventory_keeps_source_denominator(self) -> None:
         data = inventory.build_inventory(ROOT)
         private = [row for row in data["items"] if row.get("internal")]
-        expected = {"crypto": 2, "io": 34, "math": 28, "mem": 18,
-                    "net": 33, "os": 21, "regex": 2, "runtime": 5,
+        expected = {"crypto": 2, "io": 34, "math": 28, "mem": 19,
+                    "net": 33, "os": 23, "path": 3, "regex": 2, "runtime": 5,
                     "sys": 16, "time": 5}
-        self.assertEqual(164, len(private))
+        self.assertEqual(sum(expected.values()), len(private))
         self.assertEqual(expected, {module: sum(row["namespace"] == module for row in private)
                                     for module in sorted(expected)})
         lines = (ROOT / "stdlib/defs/core.def").read_text(encoding="utf-8").splitlines()

@@ -1,5 +1,6 @@
-import path
-import { sep as directSep, delimiter as directDelimiter } from path
+// Fixed POSIX lexical vectors are independent of the executing filesystem.
+import "std/path/posix" as path
+import { sep as directSep, delimiter as directDelimiter } from "std/path/posix"
 
 print(path.sep == "/")
 print(len(path.delimiter) == 1)
@@ -13,10 +14,10 @@ print(path.normalize(path.from("/usr/local/../bin/./xray")).toString())
 print(path.normalize(path.from("foo/bar/../../baz")).toString())
 print(path.normalize(path.from("/../foo")).toString())
 print(path.normalize(path.from("")).toString())
-print(path.relative(path.from("/usr/local/bin"), path.from("/usr/local/lib")).toString())
-print(path.relative(path.from("/foo"), path.from("/foobar")).toString())
-print(path.relative(path.from("/usr/local"), path.from("/usr/local/bin")).toString())
-print(path.relative(path.from("/usr/local/bin"), path.from("/usr/local")).toString())
+print(path.relative(path.from("/usr/local/bin"), path.from("/usr/local/lib"))!.toString())
+print(path.relative(path.from("/foo"), path.from("/foobar"))!.toString())
+print(path.relative(path.from("/usr/local"), path.from("/usr/local/bin"))!.toString())
+print(path.relative(path.from("/usr/local/bin"), path.from("/usr/local"))!.toString())
 print(path.join(path.from("foo"), path.from("bar")).toString())
 print(path.join(path.from("foo"), path.from("bar"), path.from("baz")).toString())
 print(path.join(path.from("/usr"), path.from("local"), path.from("bin")).toString())
@@ -25,10 +26,10 @@ print(path.join(path.from("foo"), path.from("/bar"), path.from("baz")).toString(
 print(path.join(path.from("very/long/prefix/that/resets"), path.from("/x")).toString())
 print(path.join().toString() == "")
 print(path.join(path.from(""), path.from("x")).toString())
-print(path.resolve(path.from("/foo"), path.from("bar")).toString())
-print(path.resolve(path.from("/foo"), path.from("/bar"), path.from("baz")).toString())
-print(path.resolve(path.from("/tmp"), path.from("../var")).toString())
-print(path.resolve(path.from("/foo"), path.from("..")).toString())
+print(path.resolve(path.from("/foo"), path.from("bar"))!.toString())
+print(path.resolve(path.from("/foo"), path.from("/bar"), path.from("baz"))!.toString())
+print(path.resolve(path.from("/tmp"), path.from("../var"))!.toString())
+print(path.resolve(path.from("/foo"), path.from(".."))!.toString())
 
 var parsed = path.parse(path.from("/home/user/file.txt"))
 print(parsed.root)

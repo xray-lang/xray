@@ -1,5 +1,5 @@
 {
   "module": "os",
   "summary": "Operating system interface (environment, bounded process-byte capture, signals)",
-  "lead": "Operating system interface with byte-preserving, independently bounded stdout and stderr capture."
+  "lead": "Operating system interface with byte-preserving, independently bounded stdout and stderr capture. Load averages are absent when unavailable; an actual observation contains three samples. Query failures are errors, not absence."
 }

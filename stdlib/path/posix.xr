@@ -1,0 +1,55 @@
+// Fixed Posix lexical paths never query the execution host or filesystem.
+import "std/path/_lexical" as lexical
+
+export const sep: string="/"
+export const delimiter: string=":"
+
+export class PosixPath {
+    raw: string
+    init(raw: string) { this.raw=raw }
+    toString() -> string { return this.raw }
+}
+
+export class PosixPathInfo {
+    root: string
+    dir: PosixPath
+    base: string
+    name: string
+    ext: string
+    init(root: string, dir: PosixPath, base: string, name: string, ext: string) {
+        this.root=root; this.dir=dir; this.base=base; this.name=name; this.ext=ext
+    }
+}
+
+fn _strings(parts: Array<PosixPath>) -> Array<string> {
+    var out: Array<string> = []
+    for (var i=0; i<len(parts); i++) { out.push(parts[i].raw) }
+    return out
+}
+
+export fn from(raw: string) -> PosixPath { return PosixPath(raw) }
+export fn hasRoot(p: PosixPath) -> bool { return lexical.root(p.raw,false).rooted }
+export fn isAbsolute(p: PosixPath) -> bool { return lexical.root(p.raw,false).absolute }
+export fn joinAll(parts: Array<PosixPath>) -> PosixPath { return PosixPath(lexical.joinAll(_strings(parts),false)) }
+export fn join(...parts: PosixPath) -> PosixPath { return joinAll(parts) }
+export fn dirname(p: PosixPath) -> PosixPath { return PosixPath(lexical.dirname(p.raw,false)) }
+export fn basename(p: PosixPath) -> string { return lexical.basename(p.raw,false) }
+export fn extname(p: PosixPath) -> string { return lexical.extname(p.raw,false) }
+export fn normalize(p: PosixPath) -> PosixPath { return PosixPath(lexical.normalize(p.raw,false)) }
+export fn relative(fromPath: PosixPath, toPath: PosixPath) -> PosixPath? {
+    const value=lexical.relative(fromPath.raw,toPath.raw,false)
+    if (value==null) { return null }
+    return PosixPath(value!)
+}
+export fn resolve(base: PosixPath, ...parts: PosixPath) -> PosixPath? {
+    const value=lexical.resolve(base.raw,_strings(parts),false)
+    if (value==null) { return null }
+    return PosixPath(value!)
+}
+export fn parse(p: PosixPath) -> PosixPathInfo {
+    const value=lexical.parse(p.raw,false)
+    return PosixPathInfo(value.root,PosixPath(value.dir),value.base,value.name,value.ext)
+}
+export fn format(info: PosixPathInfo) -> PosixPath {
+    return PosixPath(lexical.format(info.root,info.dir.raw,info.base,info.name,info.ext,false))
+}

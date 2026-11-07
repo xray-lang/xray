@@ -1,7 +1,8 @@
+// Fixed POSIX lexical vectors are independent of the executing filesystem.
 // Pure-Xray `path` module: VM/AOT parity for every operation, including the
 // variadic namespace calls path.join(...) / path.resolve(...) and the typed
 // PathInfo returned by path.parse.
-import path
+import "std/path/posix" as path
 
 print(path.sep)
 print(path.delimiter)
@@ -17,10 +18,10 @@ print(path.normalize(path.from("/usr/local/../bin/./xray")).toString())
 print(path.normalize(path.from("foo/bar/../../baz")).toString())
 print(path.isAbsolute(path.from("/abs")))
 print(path.isAbsolute(path.from("rel")))
-print(path.relative(path.from("/usr/local/bin"), path.from("/usr/local/lib")).toString())
-print(path.relative(path.from("/a/b/c"), path.from("/a/x/y")).toString())
-print(path.resolve(path.from("/foo"), path.from("/bar"), path.from("baz")).toString())
-print(path.resolve(path.from("/tmp"), path.from("../var")).toString())
+print(path.relative(path.from("/usr/local/bin"), path.from("/usr/local/lib"))!.toString())
+print(path.relative(path.from("/a/b/c"), path.from("/a/x/y"))!.toString())
+print(path.resolve(path.from("/foo"), path.from("/bar"), path.from("baz"))!.toString())
+print(path.resolve(path.from("/tmp"), path.from("../var"))!.toString())
 
 var p = path.parse(path.from("/home/user/file.txt"))
 print(p.root)

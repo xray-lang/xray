@@ -1,6 +1,6 @@
 // 1170_path_basic.xr - Path module basic tests
 
-import path
+import "std/path/posix" as path
 
 // ===== Constants =====
 
@@ -150,20 +150,21 @@ fn test_is_absolute_false() {
 
 @test
 fn test_resolve_absolute() {
-    var result = path.resolve(path.from("/foo"), path.from("bar"))
+    var result = path.resolve(path.from("/foo"), path.from("bar"))!
     assertEqual(result.toString(), "/foo/bar")
 }
 
 @test
 fn test_resolve_absolute_reset_and_normalize() {
-    assertEqual(path.resolve(path.from("/foo"), path.from("/bar"), path.from("baz")).toString(), "/bar/baz")
-    assertEqual(path.resolve(path.from("/tmp"), path.from("../var")).toString(), "/var")
-    assertEqual(path.resolve(path.from("/foo"), path.from("..")).toString(), "/")
+    assertEqual(path.resolve(path.from("/foo"), path.from("/bar"), path.from("baz"))!.toString(), "/bar/baz")
+    assertEqual(path.resolve(path.from("/tmp"), path.from("../var"))!.toString(), "/var")
+    assertEqual(path.resolve(path.from("/foo"), path.from(".."))!.toString(), "/")
 }
 
 @test
 fn test_resolve_returns_absolute() {
-    var result = path.resolve(path.from("foo"))
+    var result = path.resolve(path.from("/base"), path.from("foo"))!
+    assertEqual(result.toString(), "/base/foo")
     assert(path.isAbsolute(result))
 }
 
@@ -171,13 +172,13 @@ fn test_resolve_returns_absolute() {
 
 @test
 fn test_relative_basic() {
-    var result = path.relative(path.from("/usr/local/bin"), path.from("/usr/local/lib"))
+    var result = path.relative(path.from("/usr/local/bin"), path.from("/usr/local/lib"))!
     assertEqual(result.toString(), "../lib")
 }
 
 @test
 fn test_relative_same() {
-    var result = path.relative(path.from("/usr/local"), path.from("/usr/local"))
+    var result = path.relative(path.from("/usr/local"), path.from("/usr/local"))!
     assertEqual(result.toString(), ".")
 }
 
@@ -186,25 +187,25 @@ fn test_relative_same() {
 @test
 fn test_relative_prefix_mismatch() {
     // BUG-4 regression: /foo vs /foobar should not treat /foo as common prefix
-    var result = path.relative(path.from("/foo"), path.from("/foobar"))
+    var result = path.relative(path.from("/foo"), path.from("/foobar"))!
     assertEqual(result.toString(), "../foobar")
 }
 
 @test
 fn test_relative_child() {
-    var result = path.relative(path.from("/usr/local"), path.from("/usr/local/bin"))
+    var result = path.relative(path.from("/usr/local"), path.from("/usr/local/bin"))!
     assertEqual(result.toString(), "bin")
 }
 
 @test
 fn test_relative_parent() {
-    var result = path.relative(path.from("/usr/local/bin"), path.from("/usr/local"))
+    var result = path.relative(path.from("/usr/local/bin"), path.from("/usr/local"))!
     assertEqual(result.toString(), "..")
 }
 
 @test
 fn test_relative_deep() {
-    var result = path.relative(path.from("/a/b/c"), path.from("/a/x/y"))
+    var result = path.relative(path.from("/a/b/c"), path.from("/a/x/y"))!
     assertEqual(result.toString(), "../../x/y")
 }
 

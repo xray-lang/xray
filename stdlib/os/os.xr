@@ -156,7 +156,7 @@ export fn kill(pid: i64, signal: i64 = 15) -> bool { return __kill(pid, signal) 
 export fn totalMemory() -> i64 { return __totalMemory() }
 export fn freeMemory() -> i64 { return __freeMemory() }
 export fn uptime() -> f64 { return __uptime() }
-export fn loadavg() -> Array<f64> { return __loadavg() }
+export fn loadavg() -> Array<f64>? { return __loadavg() }
 
 // Shell execution is source-owned composition over the typed process and pipe
 // resources. Both output streams are byte arrays: a child may emit embedded

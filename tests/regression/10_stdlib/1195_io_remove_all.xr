@@ -40,17 +40,29 @@ fn test_missing_path_is_reported_as_failure() {
 @test
 fn test_a_symlink_is_removed_without_following_it() {
     var outside = path.join(io.tempDir()!, path.from("rmall_outside"))
-    assert(io.mkdirp(outside))
+    const madeOutside = io.mkdirp(outside)
+    if (!madeOutside) { print("removeAll symlink stage=mkdirp-outside actual:"); print(madeOutside) }
+    assert(madeOutside)
     var keep = path.join(outside, path.from("keep"))
-    assert(io.writeFile(keep, "keep me"))
+    const wroteKeep = io.writeFile(keep, "keep me")
+    if (!wroteKeep) { print("removeAll symlink stage=write-keep actual:"); print(wroteKeep) }
+    assert(wroteKeep)
 
     var root = tree("rmall_link")
-    assert(io.symlink(outside, path.join(root, path.from("link"))))
+    const madeLink = io.symlink(outside, path.join(root, path.from("link")))
+    if (!madeLink) { print("removeAll symlink stage=create-link actual:"); print(madeLink) }
+    assert(madeLink)
 
-    assert(io.removeAll(root))
-    assertEqual(io.exists(root), false)
+    const removedRoot = io.removeAll(root)
+    if (!removedRoot) { print("removeAll symlink stage=remove-root actual:"); print(removedRoot) }
+    assert(removedRoot)
+    const rootExists = io.exists(root)
+    if (rootExists) { print("removeAll symlink stage=root-still-exists actual:"); print(rootExists) }
+    assertEqual(rootExists, false)
     // The link is gone with the tree; what it pointed at is untouched.
-    assert(io.exists(keep))
+    const keepExists = io.exists(keep)
+    if (!keepExists) { print("removeAll symlink stage=keep-missing actual:"); print(keepExists) }
+    assert(keepExists)
     io.removeAll(outside)
 }
 

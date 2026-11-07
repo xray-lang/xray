@@ -171,6 +171,8 @@ def simple_term(term, binder):
         return 'ARRAY_STRING'
     if term == ('name', 'Array', (('name', 'f64', ()),)):
         return 'ARRAY_F64'
+    if term == ('nullable', ('name', 'Array', (('name', 'f64', ()),))):
+        return 'NULLABLE_ARRAY_F64'
     if term == ('name', 'Slice', (('name', 'u8', ()),)):
         return 'SLICE_U8'
     if term == ('name', 'string', ()):
@@ -1425,7 +1427,7 @@ def render_os_system_callables(declarations):
         ('totalMemory', '(): i64', 'total_memory', 'I64'),
         ('freeMemory', '(): i64', 'free_memory', 'I64'),
         ('uptime', '(): f64', 'uptime', 'F64'),
-        ('loadavg', '(): Array<f64>', 'loadavg', 'ARRAY_F64'),
+        ('loadavg', '(): Array<f64>?', 'loadavg', 'NULLABLE_ARRAY_F64'),
     )
     lines, rows = [], []
     for ordinal, (name, signature, provider, term) in enumerate(contracts, 14):

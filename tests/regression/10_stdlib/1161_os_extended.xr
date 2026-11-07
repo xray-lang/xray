@@ -87,11 +87,19 @@ fn test_uptime() {
 @test
 fn test_loadavg() {
     var avg = os.loadavg()
-    assertEqual(len(avg), 3)
-    // Load averages should be non-negative
-    assert(avg[0] >= 0.0)
-    assert(avg[1] >= 0.0)
-    assert(avg[2] >= 0.0)
+    if (os.platform() == "windows") {
+        assert(avg == null)
+    } else if (os.platform() == "linux" || os.platform() == "darwin") {
+        assert(avg != null)
+        var samples = avg!
+        assertEqual(len(samples), 3)
+        // Actual load averages should be non-negative.
+        assert(samples[0] >= 0.0)
+        assert(samples[1] >= 0.0)
+        assert(samples[2] >= 0.0)
+    } else {
+        assert(avg == null)
+    }
 }
 
 // ===== Process & Signal =====
@@ -123,10 +131,27 @@ fn test_exec_echo() {
 
 @test
 fn test_exec_stderr() {
-    var result = os.exec("echo error_msg >&2")
+    var result = os.exec("echo error_msg>&2")
     assert(result != null)
     var expected = os.platform() == "windows" ? "error_msg\r\n" : "error_msg\n"
-    assertEqual(execText(result!.stderr), expected)
+    const actual = execText(result!.stderr)
+    if (actual != expected || result!.exitCode != 0) {
+        print("exec stderr actual byte length:")
+        print(len(result!.stderr))
+        print("exec stderr first 64 bytes (decimal):")
+        for (var i = 0; i < len(result!.stderr) && i < 64; i++) {
+            print(result!.stderr[i] as i64)
+        }
+        print("exec stderr exitCode:")
+        print(result!.exitCode)
+        print("exec stderr stdoutTruncated/stderrTruncated:")
+        print(result!.stdoutTruncated)
+        print(result!.stderrTruncated)
+        print("exec stderr expected length and text:")
+        print(len(expected))
+        print(expected)
+    }
+    assertEqual(actual, expected)
     assertEqual(result!.exitCode, 0)
 }
 

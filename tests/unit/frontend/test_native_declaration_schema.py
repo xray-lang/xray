@@ -921,10 +921,11 @@ class OsSystemDeclarations(unittest.TestCase):
         self.assertEqual(text.count('XR_NATIVE_ALLOCATION_UNKNOWN'), 8)
         self.assertEqual(text.count('XR_NATIVE_RESULT_OWNERSHIP_OWNED'), 8)
         self.assertEqual(text.count('XR_NATIVE_TERM_NULLABLE_I64'), 2)
-        self.assertIn('XR_NATIVE_TERM_ARRAY_F64', text)
+        self.assertIn('XR_NATIVE_TERM_NULLABLE_ARRAY_F64', text)
         self.assertIn('{"pid", "i64", XR_NATIVE_TERM_I64, false, false}', text)
         self.assertIn('{"signal", "i64", XR_NATIVE_TERM_I64, false, false}', text)
         self.assertEqual(schema.simple_term(schema.TypeParser('Array<f64>').type(), ''), 'ARRAY_F64')
+        self.assertEqual(schema.simple_term(schema.TypeParser('Array<f64>?').type(), ''), 'NULLABLE_ARRAY_F64')
         for name in ('__uid', '__gid'):
             row = next(item for item in self.declarations if item.module == 'os' and item.name == name)
             self.assertEqual(row.signature, '(): i64?')

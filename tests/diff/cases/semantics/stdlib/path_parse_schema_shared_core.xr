@@ -1,5 +1,6 @@
+// Fixed POSIX lexical vectors are independent of the executing filesystem.
 // path.parse field schema is shared by VM and AOT.
-import path
+import "std/path/posix" as path
 
 var parsed = path.parse(path.from("/home/user/file.txt"))
 print(parsed.root)

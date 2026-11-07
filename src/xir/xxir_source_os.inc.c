@@ -53,10 +53,16 @@ static bool source_os_declare(SourceContext *ctx) {
                 if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,
                     .element=member->result==XR_NATIVE_TERM_NULLABLE_I64?XR_XIR_I64:XR_XIR_STRING},&result))return false;
                 break;
-            case XR_NATIVE_TERM_ARRAY_STRING:case XR_NATIVE_TERM_ARRAY_F64:
+            case XR_NATIVE_TERM_ARRAY_STRING:
                 if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,
-                    .element=member->result==XR_NATIVE_TERM_ARRAY_F64?XR_XIR_F64:XR_XIR_STRING},&result))return false;
+                    .element=XR_XIR_STRING},&result))return false;
                 break;
+            case XR_NATIVE_TERM_NULLABLE_ARRAY_F64: {
+                XrXirType array=XR_XIR_UNIT;
+                if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_F64},&array) ||
+                    !source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=array},&result))return false;
+                break;
+            }
             default:return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"os result requires its governed exact type");
             }
             if(!xir_os_native_signature(id,&ctx->types,parameters,count,result,XR_XIR_NEVER))

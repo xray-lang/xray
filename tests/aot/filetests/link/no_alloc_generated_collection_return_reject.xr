@@ -1,7 +1,9 @@
 import os
 
 fn xray_no_alloc_os_loadavg_reject() -> i64 {
-    return len(os.loadavg())
+    var samples = os.loadavg()
+    if (samples == null) { return 0 }
+    return len(samples!)
 }
 
 fn xray_no_alloc_os_environ_reject() -> i64 {
