@@ -7,15 +7,14 @@ on:
     branches: [main, agent/host-arch-portability, agent/direct-cutover]
   workflow_dispatch:
 
-concurrency:
-  group: native-host-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
   current:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    concurrency:
+      group: native-host-${{ github.ref }}-${{ matrix.os }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     strategy:
       fail-fast: false
       matrix:
