@@ -178,12 +178,41 @@ static int temp_long_positive(void) {
     fprintf(stderr,"file temp actual long root UTF16=%zu\n",wcslen(temp_long_root_path));
     return temp_visible(root,false)&&temp_visible(root,true);
 }
+static int temp_drive_relative(void) {
+    wchar_t previous[32768], absolute[32768], raw[32768];
+    DWORD count=GetCurrentDirectoryW(32768,previous);
+    CHECK(count && count<32768 && SetCurrentDirectoryW(paths.child));
+    char drive[3]={(char)paths.child[0],':',0};
+    XrOsIoPolicy policy=test_policy();
+    for(unsigned directory=0;directory<2;++directory) {
+        XrOsFileTempOwner owner={0};bool created=false;
+        XrOsFileTempRequest request={&policy,{drive,2},&metadata_memory,test_current,temp_prepare};
+        XrOsIoStatus status=directory?xr_os_io_temp_directory(&request,&owner,&created):
+            xr_os_io_temp_file(&request,&owner,&created);
+        CHECK(status==XR_OS_IO_OK && created && owner.state && temp_prepared);
+        CHECK(!strncmp(temp_prepared,drive,2) && temp_prepared[2]=='x');
+        CHECK(xr_win_utf8_to_utf16(temp_prepared,strlen(temp_prepared),raw,32768));
+        count=GetFullPathNameW(raw,32768,absolute,NULL);
+        CHECK(count && count<32768 && !wcsncmp(absolute,paths.child,wcslen(paths.child)));
+        count=GetFinalPathNameByHandleW(temp_child,raw,32768,FILE_NAME_NORMALIZED|VOLUME_NAME_DOS);
+        CHECK(count && count<32768);
+        const wchar_t *actual=!wcsncmp(raw,L"\\\\?\\",4)?raw+4:raw;
+        const wchar_t *expected=!wcsncmp(absolute,L"\\\\?\\",4)?absolute+4:absolute;
+        CHECK(CompareStringOrdinal(actual,-1,expected,-1,TRUE)==CSTR_EQUAL);
+        CHECK(xr_os_io_temp_finish(&policy,&owner,false)==XR_OS_IO_OK && !owner.state);
+        CHECK(GetFileAttributesW(absolute)==INVALID_FILE_ATTRIBUTES);
+        temp_drop_prepared();
+        CHECK(!metadata_memory.live && !metadata_memory.held);
+    }
+    CHECK(SetCurrentDirectoryW(previous));
+    return 1;
+}
 int main(void) {
     reset_memory();int passed=setup_paths();char root[65536];
     if(passed)passed=xr_win_utf16_to_utf8(paths.child,wcslen(paths.child),root,sizeof(root));
     for(unsigned directory=0;directory<2&&passed;++directory)
         passed=temp_visible(root,directory!=0)&&temp_faults(root,directory!=0)&&temp_collisions(root,directory!=0);
-    if(passed)passed=temp_long_positive();
+    if(passed)passed=temp_long_positive()&&temp_drive_relative();
     if(temp_long_root_created) {
         bool removed=directory_operation(temp_long_root_path,false)!=0;
         if(removed)temp_long_root_created=false;

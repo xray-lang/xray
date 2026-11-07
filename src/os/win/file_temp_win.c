@@ -126,7 +126,10 @@ static XrOsIoStatus file_temp_create(const XrOsFileTempRequest *request,
     }
     if(status==XR_OS_IO_OK && state && !refused && state->parent) {
         size_t prefix=request->root.length;memcpy(state->candidate,root,prefix);
-        if(prefix && root[prefix-1]!='/' && root[prefix-1]!='\\')state->candidate[prefix++]='/';
+        bool drive_relative=prefix==2 && root[1]==':' &&
+            ((root[0]>='A'&&root[0]<='Z') || (root[0]>='a'&&root[0]<='z'));
+        if(prefix && root[prefix-1]!='/' && root[prefix-1]!='\\' && !drive_relative)
+            state->candidate[prefix++]='\\';
         for(unsigned attempt=0;attempt<32 && file_temp_current(&work);++attempt) {
             unsigned char entropy[16];wchar_t leaf[36];static const char hex[]="0123456789abcdef";
             xr_random_bytes(entropy,sizeof(entropy));memcpy(state->candidate+prefix,"xr-",3);
