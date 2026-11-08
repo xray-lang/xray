@@ -23,6 +23,21 @@ typedef enum XirExecutionPort {
     XIR_EXECUTION_NORMAL, XIR_EXECUTION_ERROR, XIR_EXECUTION_PANIC
 } XirExecutionPort;
 
+#define XIR_EXECUTION_CURRENT_ENVIRONMENT UINT32_MAX
+#define XIR_EXECUTION_UNKNOWN_ENVIRONMENT (UINT32_MAX - 1u)
+
+enum {
+    XIR_EXECUTION_REMAINDER_STORAGE = 1u,
+    XIR_EXECUTION_REMAINDER_PARAMETER = 2u,
+    XIR_EXECUTION_REMAINDER_OPAQUE = 4u
+};
+
+typedef struct XirRestrictionFormula {
+    bool constant;
+    const uint32_t *inputs;
+    uint32_t input_count;
+} XirRestrictionFormula;
+
 typedef struct XirExecutionSite {
     XirExecutionSiteKind kind;
     uint32_t index;
@@ -30,7 +45,10 @@ typedef struct XirExecutionSite {
     uint32_t target, declaration;
     uint32_t argument_count, capture_count;
     uint32_t output_function, output_value;
-    uint32_t native_callable, environment;
+    uint32_t receiver_function, receiver_value;
+    /* The semantic call-record ID of the original registration, or UINT32_MAX. */
+    uint32_t registration;
+    uint32_t native_callable, environment, reference, capture_environment, remainder;
     XirExecutionPort port;
     XrXirType signature;
     uint8_t protocol;
@@ -53,6 +71,8 @@ typedef XrXirStatus (*XirExecutionVisitor)(void *, const XirExecutionSite *);
  * Cleanup uses have increasing order in actual LIFO execution order. Panic
  * sequences may name a whole block with instruction UINT32_MAX; their input
  * is the join of the block's before-instruction states. */
+XR_FUNC XrXirStatus xir_execution_site(const XirExecutionOwner *,
+    XirExecutionSiteKind, uint32_t, XirExecutionSite *);
 XR_FUNC XrXirStatus xir_execution_visit_calls(const XirExecutionOwner *,
     XirExecutionVisitor, void *);
 XR_FUNC XrXirStatus xir_execution_visit_captures(const XirExecutionOwner *,
@@ -71,6 +91,13 @@ XR_FUNC XrXirStatus xir_execution_argument(const XirExecutionOwner *,
  * receive known bindings even when another origin is unresolved. */
 XR_FUNC XrXirStatus xir_execution_visit_value_captures(const XirExecutionOwner *,
     uint32_t, uint32_t, XirExecutionVisitor, void *, bool *complete);
+/* Qualified substitution of this owner's symbolic receiver. Returned pending
+ * projections retain their canonical index and name the originating capture
+ * record in reference. Consumers key an application by both IDs and context. */
+XR_FUNC XrXirStatus xir_execution_resolve_site(const XirExecutionOwner *,
+    const XirExecutionSite *, uint32_t environment, XirExecutionVisitor, void *,
+    bool *complete, uint32_t *remainder);
+
 
 /* Type IDs belong to this owner's stable numeric type namespace. The returned
  * pool is borrowed only during the synchronous query and must be rebound after
