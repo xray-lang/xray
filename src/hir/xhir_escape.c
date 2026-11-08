@@ -30,6 +30,11 @@ typedef struct HirEscapeNode {
 } HirEscapeNode;
 
 typedef struct HirEscapeEdge { uint32_t target, next, flags; } HirEscapeEdge;
+typedef struct HirEscapeUse {
+    uint32_t function, instruction, value, storage;
+    const char *reason;
+} HirEscapeUse;
+typedef struct HirEscapeCapture { uint32_t source, result; bool view, reference; } HirEscapeCapture;
 
 typedef struct HirEscapeFactRow {
     uint32_t count, flow_count;
@@ -50,8 +55,11 @@ typedef struct HirEscape {
     XrCompileRequestControl *control;
     HirEscapeNode *nodes;
     HirEscapeEdge *edges;
+    HirEscapeUse *uses;
+    HirEscapeCapture *captures;
     uint32_t *offsets, *queue;
     uint32_t count, edge_count, edge_capacity, progress;
+    uint32_t use_count, use_capacity, capture_count, capture_capacity;
     uint32_t queue_first, queue_count;
     XrXirStatus status;
 } HirEscape;
@@ -383,26 +391,35 @@ static const char *escape_argument_reason(HirEscape *owner, uint32_t f,
     return xr_xir_callable_signature(owner->module->types, signature->parameters[ordinal].type) ? NULL : "a generic or stored value parameter";
 }
 
-static bool escape_borrow_captures(HirEscape *owner) {
-    for (uint32_t f = 0; f < owner->module->function_count; ++f) {
-        const XrXirFunction *body = &owner->module->functions[f];
-        for (uint32_t i = 0; i < body->instruction_count; ++i) {
-            if (!escape_poll(owner)) return false;
-            const XrXirInstruction *op = &body->instructions[i];
-            if (op->op != XR_XIR_FUNCTION_REF) continue;
-            uint32_t result = owner->offsets[f] + body->parameter_count + i;
-            for (uint32_t a = 0; a < op->args[1]; ++a) {
-                uint32_t value = body->operands[op->args[0] + a];
-                uint32_t source = escape_node(owner, f, value), flags = 0;
-                if (owner->status != XR_XIR_OK) return false;
-                XrXirType type = xr_xir_operand_type(body, value);
-                owner->status = xr_xir_compile_view_type_flags(owner->memory, owner->module->types, type, &flags);
-                if (owner->status != XR_XIR_OK) return false;
-                bool reference = xr_xir_type_is_cell(owner->module->types, type) &&
-                    owner->nodes[source].storage != ESCAPE_LOCAL;
-                if (flags || reference) owner->nodes[result].borrowed = source + 1;
-            }
+static bool escape_record_captures(HirEscape *owner, uint32_t f, uint32_t i, const XrXirInstruction *op) {
+    if (op->op != XR_XIR_FUNCTION_REF) return true;
+    const XrXirFunction *body = &owner->module->functions[f];
+    uint32_t result = owner->offsets[f] + body->parameter_count + i;
+    for (uint32_t a = 0; a < op->args[1] && escape_poll(owner); ++a) {
+        uint32_t value = body->operands[op->args[0] + a];
+        uint32_t source = escape_node(owner, f, value), flags = 0;
+        if (owner->status != XR_XIR_OK) return false;
+        XrXirType type = xr_xir_operand_type(body, value);
+        owner->status = xr_xir_compile_view_type_flags(owner->memory, owner->module->types, type, &flags);
+        if (owner->status != XR_XIR_OK) return false;
+        bool reference = xr_xir_type_is_cell(owner->module->types, type);
+        if (!flags && !reference) continue;
+        if (owner->capture_count == owner->capture_capacity) {
+            HirEscapeCapture *grown = xir_compile_array_grow(owner->memory, owner->captures,
+                owner->capture_count, sizeof(*grown), &owner->capture_capacity, &owner->status);
+            if (!grown) return false;
+            owner->captures = grown;
         }
+        owner->captures[owner->capture_count++] = (HirEscapeCapture){source, result, flags != 0, reference};
+    }
+    return owner->status == XR_XIR_OK;
+}
+
+static bool escape_borrow_captures(HirEscape *owner) {
+    for (uint32_t c = 0; c < owner->capture_count && escape_poll(owner); ++c) {
+        HirEscapeCapture capture = owner->captures[c];
+        if (capture.view || (capture.reference && owner->nodes[capture.source].storage != ESCAPE_LOCAL))
+            owner->nodes[capture.result].borrowed = capture.source + 1;
     }
     return true;
 }
@@ -429,22 +446,33 @@ static XrXirStatus escape_reject(HirEscape *owner, uint32_t f, uint32_t i,
     return XR_XIR_BAD_TYPE;
 }
 
-static XrXirStatus escape_uses(HirEscape *owner, uint32_t f, uint32_t i, XrHirEscapeDiagnostic *diagnostic) {
+static XrXirStatus escape_use(HirEscape *owner, uint32_t f, uint32_t i,
+    uint32_t value, uint32_t storage, const char *reason) {
+    if (!reason) return XR_XIR_OK;
+    if (owner->use_count == owner->use_capacity) {
+        HirEscapeUse *grown = xir_compile_array_grow(owner->memory, owner->uses,
+            owner->use_count, sizeof(*grown), &owner->use_capacity, &owner->status);
+        if (!grown) return owner->status;
+        owner->uses = grown;
+    }
+    owner->uses[owner->use_count++] = (HirEscapeUse){f, i, value, storage, reason};
+    return XR_XIR_OK;
+}
+
+static XrXirStatus escape_record_uses(HirEscape *owner, uint32_t f, uint32_t i, const XrXirInstruction *op) {
     const XrXirFunction *body = &owner->module->functions[f];
-    const XrXirInstruction *op = &body->instructions[i];
     switch (op->op) {
     case XR_XIR_RETURN: return body->result == XR_XIR_UNIT ? XR_XIR_OK :
-        escape_reject(owner, f, i, op->args[0], "a return", diagnostic);
-    case XR_XIR_NULLABLE_SOME: return escape_reject(owner, f, i, op->args[0], "nullable storage", diagnostic);
+        escape_use(owner, f, i, op->args[0], UINT32_MAX, "a return");
+    case XR_XIR_NULLABLE_SOME: return escape_use(owner, f, i, op->args[0], UINT32_MAX, "nullable storage");
     case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_STORE:
-        return escape_reject(owner, f, i, op->args[0], "module storage", diagnostic);
+        return escape_use(owner, f, i, op->args[0], UINT32_MAX, "module storage");
     case XR_XIR_ARRAY_REPEAT: case XR_XIR_ARRAY_PUSH: case XR_XIR_CLASS_SET: case XR_XIR_STRUCT_SET: case XR_XIR_SET_ADD:
-        return escape_reject(owner, f, i, op->args[1], "field or collection storage", diagnostic);
+        return escape_use(owner, f, i, op->args[1], UINT32_MAX, "field or collection storage");
     case XR_XIR_CELL_WRITE: case XR_XIR_CELL_WRITE_TAKE: case XR_XIR_CELL_LOCAL_WRITE: case XR_XIR_PLACE_WRITE: {
         uint32_t storage = escape_node(owner, f, op->args[0]);
         if (owner->status != XR_XIR_OK) return owner->status;
-        return owner->nodes[storage].storage == ESCAPE_LOCAL ? XR_XIR_OK :
-            escape_reject(owner, f, i, op->args[1], "a ref or stored place", diagnostic);
+        return escape_use(owner, f, i, op->args[1], storage, "a ref or stored place");
     }
     default: break;
     }
@@ -461,7 +489,7 @@ static XrXirStatus escape_uses(HirEscape *owner, uint32_t f, uint32_t i, XrHirEs
         if (!escape_poll(owner)) return owner->status;
         if (op->op == XR_XIR_SCOPED_GO && !a) continue;
         const char *reason = call ? escape_argument_reason(owner, f, op, a) : "aggregate or collection storage";
-        XrXirStatus status = escape_reject(owner, f, i, body->operands[op->args[0] + a], reason, diagnostic);
+        XrXirStatus status = escape_use(owner, f, i, body->operands[op->args[0] + a], UINT32_MAX, reason);
         if (status != XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
@@ -507,21 +535,27 @@ XR_FUNC XrXirStatus xr_hir_escape_check(const XrXirCompileContext *memory, const
     if (owner.status == XR_XIR_OK && escape_prepare(&owner)) {
         for (uint32_t f = 0; f < module->function_count && owner.status == XR_XIR_OK; ++f) {
             const XrXirFunction *body = &module->functions[f];
-            for (uint32_t i = 0; i < body->instruction_count && escape_poll(&owner); ++i)
-                if (!escape_alias(&owner, f, i, &body->instructions[i])) break;
+            for (uint32_t i = 0; i < body->instruction_count && escape_poll(&owner); ++i) {
+                const XrXirInstruction *op = &body->instructions[i];
+                if (!escape_alias(&owner, f, i, op) || !escape_record_captures(&owner, f, i, op)) break;
+                owner.status = escape_record_uses(&owner, f, i, op);
+            }
         }
         if (owner.status == XR_XIR_OK && escape_close(&owner) &&
             escape_borrow_captures(&owner) && escape_close(&owner))
-            for (uint32_t f = 0; f < module->function_count && owner.status == XR_XIR_OK; ++f)
-                for (uint32_t i = 0; i < module->functions[f].instruction_count && escape_poll(&owner); ++i) {
-                    owner.status = escape_uses(&owner, f, i, diagnostic);
-                    if (owner.status != XR_XIR_OK) break;
-                }
+            for (uint32_t u = 0; u < owner.use_count && escape_poll(&owner); ++u) {
+                HirEscapeUse use = owner.uses[u];
+                if (use.storage != UINT32_MAX && owner.nodes[use.storage].storage == ESCAPE_LOCAL) continue;
+                owner.status = escape_reject(&owner, use.function, use.instruction, use.value, use.reason, diagnostic);
+                if (owner.status != XR_XIR_OK) break;
+            }
     }
     if (owner.status == XR_XIR_OK && output) escape_facts_publish(&owner, output);
     xr_compile_resources_free(owner.nodes);
     xr_compile_resources_free(owner.edges);
     xr_compile_resources_free(owner.offsets);
     xr_compile_resources_free(owner.queue);
+    xr_compile_resources_free(owner.uses);
+    xr_compile_resources_free(owner.captures);
     return owner.status;
 }
