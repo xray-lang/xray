@@ -493,6 +493,7 @@ XR_FUNC XrXirStatus xir_effects_finish_prepared_input(const XrXirCompileContext 
         records->task_creation = records->control_summary->task_creation;
         status = xir_compile_local_errors_verify(memory, input.module, NULL);
     }
+    if (status == XR_XIR_OK) status = effect_outcomes_publish(memory, input.module, effects);
     if (status != XR_XIR_OK) {
         xr_xir_compile_effects_free(effects);
         return status;

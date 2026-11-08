@@ -305,11 +305,9 @@ static XrXirStatus effect_infer_construct(const XrXirCompileContext *context,
  * move. Its staging can be observed only by private construction consumers. */
 static XrXirStatus effect_infer(const XrXirCompileContext *context,
     XirEffectInput input,const XrXirRootRefiner *refiner,XrXirEffects **output) {
-    const XrXirModule *module=input.module;
     if (!output || *output) return XR_XIR_BAD_STRUCTURE;
     XrXirEffects *effects=NULL;
     XrXirStatus status=effect_infer_construct(context,input,refiner,&effects);
-    if (status==XR_XIR_OK) status=effect_outcomes_publish(context,module,effects);
     if (status!=XR_XIR_OK) { xr_xir_compile_effects_free(effects);return status; }
     *output=effects;return XR_XIR_OK;
 }

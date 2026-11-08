@@ -517,16 +517,19 @@ XrXirStatus xr_xir_compile_check_v2(const XrXirCompileContext *context,const XrX
  * Effect refinement reuses that admission; structural replay is paranoid-only. */
 XR_FUNC XrXirStatus xr_xir_compile_check_refined_v2(const XrXirCompileContext *context,
     const XrXirModule *built, const XrXirConstruction *construction, const XrXirRootRefiner *refiner,
-    XrCompileRequestControl *control, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
-    if (!xir_compile_context_valid(context) || !output || *output || !refiner ||
-        !refiner->update || !refiner->context) return transition_error(XR_XIR_BAD_STRUCTURE,diagnostic);
-    XrXirStatus status=lower_control_poll(control);
+    XrCompileRequestControl *control, XrXirEffects **pending, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
+    if (!pending || !*pending) return transition_error(XR_XIR_BAD_STRUCTURE,diagnostic);
+    XrXirEffects *prepared=*pending;*pending=NULL;
+    XrXirStatus status=!xir_compile_context_valid(context) || !output || *output || !refiner ||
+        !refiner->update || !refiner->context ? XR_XIR_BAD_STRUCTURE : lower_control_poll(control);
     if (status!=XR_XIR_OK) status=transition_error(status,diagnostic);
     if (status==XR_XIR_OK) status=transition_shape(built,XR_XIR_BUILT,context,NULL,diagnostic);
     if (status == XR_XIR_OK)
         status = xir_compile_structure_verify_input(context,(XirEffectInput){built,construction,control},diagnostic);
     XrXirEffects *effects = NULL;
-    if (status == XR_XIR_OK) status = xr_xir_compile_effects_refine_verified_input(context,(XirEffectInput){built,construction,control},refiner,&effects);
+    if (status == XR_XIR_OK) status = xir_effects_finish_prepared_input(context,
+        (XirEffectInput){built,construction,control},refiner,&prepared,&effects);
+    xr_xir_compile_effects_free(prepared);
     if (status == XR_XIR_OK) {
 #if XR_XIR_PARANOID
         status = xir_compile_verify_effects_input(context,(XirEffectInput){built,construction,control},effects,diagnostic);

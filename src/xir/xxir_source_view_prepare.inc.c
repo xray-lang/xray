@@ -21,8 +21,7 @@ static bool source_view_preparation_needed(SourceContext *ctx,bool *needed) {
     }
     return true;
 }
-/* Lifetime work publishes the relocated immutable construction owner before
- * effect records capture the final SSA numbering. */
+/* Construction precedes numeric collection and is replaced after relocation. */
 static bool source_construction_ready(SourceContext *ctx) {
     return ctx->construction || source_construction_prepare(ctx);
 }
@@ -30,9 +29,8 @@ static bool source_view_prepare(SourceContext *ctx) {
     bool needed=false;
     if (!source_view_preparation_needed(ctx,&needed)) return false;
     if (!needed) return true;
-    if (ctx->effect_evidence)
-        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"view lifetime preparation requires unfrozen Source effects");
-    if (!source_construction_prepare(ctx)) return false;
+    if (!ctx->semantic_prepare || !ctx->construction)
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"view lifetime preparation requires a private semantic owner");
     XrXirDeclarations declarations;XrXirModule module=source_module_view(ctx,&declarations);
     XrXirDiagnostic diagnostic={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     XrXirStatus status=xir_compile_view_prepare_ordinary(&ctx->compile,(XirEffectInput){&module,ctx->construction,ctx->request},&diagnostic);

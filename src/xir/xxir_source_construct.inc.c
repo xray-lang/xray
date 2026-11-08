@@ -379,10 +379,65 @@ static void source_effect_explain(void *context, const XrXirModule *module,
 }
 
 #include "xxir_source_escape.inc.c"
-static XrXirStatus source_effect_restricted(void *context, uint32_t function,
-    uint32_t value, bool *output) {
+static void source_check_failure(SourceContext *ctx, XrXirDiagnostic location, XrXirStatus status) {
+    char message[128] = {0};
+    if (status != XR_XIR_BUDGET && status != XR_XIR_OUT_OF_MEMORY &&
+        source_format(ctx, message, sizeof(message),
+            "constructed XIR failed checking at function %u block %u instruction %u",
+            location.function, location.block, location.instruction) != XR_DIAG_OK)
+        status = XR_XIR_BUDGET;
+    AstNode *site = NULL;
+    if (location.function < ctx->function_count) {
+        site = ctx->bodies[location.function].node;
+        ctx->module = ctx->bodies[location.function].module;
+    }
+    const char *cause = location.reason == XR_XIR_DIAGNOSTIC_GO_ROOT_REQUIRED ?
+        "GO target requires the current instance root execution" :
+        location.reason == XR_XIR_DIAGNOSTIC_GO_ROOT_UNRESOLVED ?
+        "GO target lacks proof for worker execution" :
+        location.reason == XR_XIR_DIAGNOSTIC_NO_SUSPEND ?
+        "declared no_suspend function may suspend or call an unqualified callable" :
+        location.reason == XR_XIR_DIAGNOSTIC_CLEANUP_THROW ?
+        "E0387: an error can escape the defer body" :
+        location.reason == XR_XIR_DIAGNOSTIC_CLEANUP_SUSPEND ?
+        "E0392: defer may suspend or create a task" :
+        location.reason == XR_XIR_DIAGNOSTIC_UNINITIALIZED_READ ?
+        "read requires storage initialized on every incoming path" :
+        location.reason == XR_XIR_DIAGNOSTIC_READONLY_WRITE ?
+        "write may overwrite already initialized const storage" : message;
+    source_fail(ctx, site, status, cause);
+}
+
+static XrXirStatus source_semantic_begin(void *context, const XrXirEffects *effects) {
     SourceContext *ctx = context;
-    return xr_hir_escape_restricted(ctx->escape_facts, function, value, output);
+    XrXirStatus status = source_effect_bindings_prepare(ctx, effects);
+    if (status == XR_XIR_OK && !source_escape_prepare(ctx)) status = ctx->diagnostic.status;
+    return status;
+}
+
+static XrXirRootRefiner source_semantic_refiner(SourceContext *ctx) {
+    return (XrXirRootRefiner){.context=ctx,.update=source_root_refine,.explain=source_effect_explain,
+        .begin=source_semantic_begin,.observe=source_escape_observe,.points=source_escape_points,
+        .prepare=source_escape_finish,.admit=source_view_admit};
+}
+
+static bool source_semantic_prepare(SourceContext *ctx) {
+    XrXirDeclarations declarations;
+    XrXirModule module=source_module_view(ctx,&declarations);
+    XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+    XirEffectInput input={&module,ctx->construction,ctx->request};
+    XrXirStatus status=xir_compile_structure_verify_input(&ctx->compile,input,&location);
+    for (uint32_t f=0;status==XR_XIR_OK && f<ctx->function_count;++f)
+        if (ctx->bodies[f].initialization_regions)
+            status=xr_xir_compile_initialization_check(&ctx->compile,&module,f,
+                ctx->bodies[f].initialization_regions,&location);
+    if (status==XR_XIR_OK) {
+        XrXirRootRefiner refiner=source_semantic_refiner(ctx);
+        status=xir_effects_prepare_verified_input(&ctx->compile,input,&refiner,&ctx->semantic_prepare);
+    }
+    if (status==XR_XIR_OK) return true;
+    if (ctx->diagnostic.status==XR_XIR_OK) source_check_failure(ctx,location,status);
+    return false;
 }
 static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
     if(!source_hir_body_begin(ctx))return;
@@ -393,7 +448,7 @@ static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
     ctx->declarations_building = false;
     if (declarations_ready && (!ctx->core_factory || source_core_contract(ctx)) && source_manifests_bind(ctx) &&
         source_implementations_bind(ctx) && source_generator_named_factories(ctx) && build_bodies(ctx) && source_binding_readers(ctx) && source_history_graph_commit(ctx) &&
-        source_instance_literals_finish(ctx) && source_materialization_finish(ctx) && source_class_carriers(ctx) && source_local_errors_finish(ctx) && source_escape_prepare(ctx) && source_view_prepare(ctx) && source_effect_prepare(ctx) && source_construction_ready(ctx)) {
+        source_instance_literals_finish(ctx) && source_materialization_finish(ctx) && source_class_carriers(ctx) && source_local_errors_finish(ctx) && source_effect_prepare(ctx) && source_construction_ready(ctx) && source_semantic_prepare(ctx) && source_view_prepare(ctx)) {
         body_status=xr_hir_body_finish(ctx->typed_body,ctx->request);
         if(body_status!=XR_XIR_OK){source_fail(ctx,NULL,body_status,"typed body has an unconsumed or unprojected use");xr_hir_body_end(ctx->typed_body);return;}
         source_release_retired_arrays(ctx);
@@ -401,9 +456,8 @@ static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
         XrXirDeclarations declarations;
         XrXirModule built = source_module_view(ctx,&declarations);
         XrXirDiagnostic location = {0};
-        XrXirRootRefiner refiner = {.context=ctx,.update=source_root_refine,.explain=source_effect_explain,.restricted=source_effect_restricted,
-            .begin=source_effect_bindings_prepare,.admit=source_view_admit};
-        XrXirStatus status = xr_xir_compile_check_refined_v2(&ctx->compile, &built, ctx->construction, &refiner, ctx->request, &output->checked, &location);
+        XrXirRootRefiner refiner=source_semantic_refiner(ctx);
+        XrXirStatus status = xr_xir_compile_check_refined_v2(&ctx->compile, &built, ctx->construction, &refiner, ctx->request, &ctx->semantic_prepare, &output->checked, &location);
         for (uint32_t f=0;status==XR_XIR_OK && f<ctx->function_count;++f) {
             if (!ctx->bodies[f].initialization_regions) continue;
             location.function=f;
@@ -411,32 +465,7 @@ static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
         }
         if (status != XR_XIR_OK) {
             xr_xir_compile_artifact_free(output->checked); output->checked=NULL;
-            char message[128] = {0};
-            if (status != XR_XIR_BUDGET && status != XR_XIR_OUT_OF_MEMORY &&
-                source_format(ctx, message, sizeof(message),
-                    "constructed XIR failed checking at function %u block %u instruction %u",
-                    location.function, location.block, location.instruction) != XR_DIAG_OK)
-                status = XR_XIR_BUDGET;
-            AstNode *site = NULL;
-            if (location.function < ctx->function_count) {
-                site = ctx->bodies[location.function].node;
-                ctx->module = ctx->bodies[location.function].module;
-            }
-            const char *cause = location.reason == XR_XIR_DIAGNOSTIC_GO_ROOT_REQUIRED ?
-                "GO target requires the current instance root execution" :
-                location.reason == XR_XIR_DIAGNOSTIC_GO_ROOT_UNRESOLVED ?
-                "GO target lacks proof for worker execution" :
-                location.reason == XR_XIR_DIAGNOSTIC_NO_SUSPEND ?
-                "declared no_suspend function may suspend or call an unqualified callable" :
-                location.reason == XR_XIR_DIAGNOSTIC_CLEANUP_THROW ?
-                "E0387: an error can escape the defer body" :
-                location.reason == XR_XIR_DIAGNOSTIC_CLEANUP_SUSPEND ?
-                "E0392: defer may suspend or create a task" :
-                location.reason == XR_XIR_DIAGNOSTIC_UNINITIALIZED_READ ?
-                "read requires storage initialized on every incoming path" :
-                location.reason == XR_XIR_DIAGNOSTIC_READONLY_WRITE ?
-                "write may overwrite already initialized const storage" : message;
-            source_fail(ctx, site, status, cause);
+            source_check_failure(ctx, location, status);
         }
     }
     xr_hir_body_end(ctx->typed_body);

@@ -246,7 +246,7 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_analyzed_effects_v2(const XrXirCompile
 XR_FUNC XrXirStatus xr_xir_compile_effects_refine_verified_input(const XrXirCompileContext *context, XirEffectInput input, const XrXirRootRefiner *refiner, XrXirEffects **output);
 XR_FUNC XrXirStatus xr_xir_compile_check_refined_v2(const XrXirCompileContext *context,
     const XrXirModule *built, const XrXirConstruction *construction, const XrXirRootRefiner *refiner,
-    XrCompileRequestControl *control, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
+    XrCompileRequestControl *control, XrXirEffects **prepared, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
 /* A derived complete-outcome fact grants no call or source permissions.
  * Checked import and specialization rebuild it from authentic declarations. */
 XR_FUNC XrXirStatus xir_compile_worker_error_verify(const XrXirCompileContext *context,
