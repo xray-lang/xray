@@ -841,7 +841,8 @@ static void execution_cell_input_boundaries(void) {
             .blocks = &block, .block_count = 1, .error_type = XR_XIR_NEVER}
     };
     XrXirFunctionIdentity identities[] = {{0}, {.capture_owner = 1, .capture_count = 1}};
-    XrXirDeclarations declarations = {.functions = identities};
+    XrXirSourceModule source_module = {0};
+    XrXirDeclarations declarations = {.functions = identities, .modules = &source_module, .module_count = 1};
     XrXirModule module = {.types = &types, .functions = functions, .function_count = 2,
         .declarations = &declarations};
     EffectCheckedRoots *roots = NULL;
@@ -905,7 +906,8 @@ static void execution_symbolic_environment_inputs(void) {
             .instruction_count = 1, .error_type = XR_XIR_NEVER}
     };
     XrXirFunctionIdentity identities[] = {{0}, {.capture_owner = 1, .capture_count = 1}};
-    XrXirDeclarations declarations = {.functions = identities};
+    XrXirSourceModule source_module = {0};
+    XrXirDeclarations declarations = {.functions = identities, .modules = &source_module, .module_count = 1};
     XrXirModule module = {.types = &types, .functions = functions, .function_count = 2,
         .declarations = &declarations};
     EffectCheckedRoots *roots = NULL;
