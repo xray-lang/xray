@@ -276,7 +276,8 @@ static XrXirType spec_type(SpecContext *c, const SpecInstance *instance, XrXirTy
             parameters[frame->next].type = result;
             if (frame->node.kind == XR_XIR_TYPE_CALLABLE &&
                 !xr_xir_callable_signature(c->source->types,original) &&
-                xr_xir_callable_signature(&c->types,result)) parameters[frame->next].escaping = 1;
+                xr_xir_callable_signature(&c->types,result) && !xr_xir_type_is_c_callable(&c->types,result))
+                parameters[frame->next].escaping = 1;
         }
         ++frame->next;
     }
@@ -436,7 +437,8 @@ static uint32_t spec_intern(SpecContext *c, uint32_t declaration, const XrXirTyp
     for (uint32_t p=0;p<source->parameter_count;++p)
         if (xr_xir_function_parameter_escaping(source,p) ||
             (!xr_xir_callable_signature(c->source->types,source->parameters[p]) &&
-             xr_xir_callable_signature(&c->types,parameters[p]))) escapes[escape_count++]=p;
+               xr_xir_callable_signature(&c->types,parameters[p]) &&
+               !xr_xir_type_is_c_callable(&c->types,parameters[p]))) escapes[escape_count++]=p;
     to->escaping_parameter_count=escape_count;
     to->escaping_parameters=escape_count?escapes:NULL;
     for (uint32_t i = 0; i < source->instruction_count; ++i) {

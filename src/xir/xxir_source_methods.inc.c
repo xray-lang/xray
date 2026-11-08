@@ -67,7 +67,8 @@ static bool source_static_value(SourceContext *ctx, AstNode *node, SourceStaticM
             function->consume_parameters, function->consume_parameter_count, p);
         parameters[p].escaping = xr_xir_function_parameter_escaping(function, p) ||
             (!xr_xir_callable_signature(&ctx->types, function->parameters[p]) &&
-             xr_xir_callable_signature(&ctx->types, parameters[p].type));
+             xr_xir_callable_signature(&ctx->types, parameters[p].type) &&
+             !xr_xir_type_is_c_callable(&ctx->types, parameters[p].type));
     }
     XrXirType result, error_type;
     XrXirInstruction op = {XR_XIR_FUNCTION_REF, XR_XIR_UNIT, {0}, {0}, selected->method->index, {0}};
@@ -261,7 +262,8 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
             function->consume_parameters, function->consume_parameter_count, p + 1);
         parameters[p].escaping = xr_xir_function_parameter_escaping(function, p + 1) ||
             (!xr_xir_callable_signature(&ctx->types, function->parameters[p + 1]) &&
-             xr_xir_callable_signature(&ctx->types, parameters[p].type));
+             xr_xir_callable_signature(&ctx->types, parameters[p].type) &&
+             !xr_xir_type_is_c_callable(&ctx->types, parameters[p].type));
     }
     XrXirType result, error_type;
     XrXirInstruction op = {XR_XIR_FUNCTION_REF, XR_XIR_UNIT, {0}, {0}, method->index, {0}};

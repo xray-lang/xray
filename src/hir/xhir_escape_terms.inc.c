@@ -319,7 +319,8 @@ static bool restriction_seed(HirRestrictionSolver *solver) {
             HirEscapeNode old = owner->nodes[owner->offsets[f] + p];
             uint32_t index = restriction_node(solver, f, p, false);
             HirRestrictionNode *node = &solver->nodes[index];
-            bool callable = xr_xir_callable_signature(owner->module->types, old.type) != NULL;
+            bool callable = xr_xir_callable_signature(owner->module->types, old.type) != NULL &&
+                !xr_xir_type_is_c_callable(owner->module->types, old.type);
             bool cell = xr_xir_type_is_cell(owner->module->types, old.type);
             if (p < row.captures && (callable || cell)) restriction_input(solver, index, p);
             else if (old.parameter) {node->constant = true; node->parameter = old.parameter;}
@@ -368,7 +369,8 @@ static bool restriction_seed(HirRestrictionSolver *solver) {
         } else if (hidden) {
             XrXirType type = owner->nodes[owner->offsets[input.function] + input.handle].type;
             if (xr_xir_type_is_cell(owner->module->types, type)) type = xr_xir_cell_element(owner->module->types, type);
-            if (xr_xir_callable_signature(owner->module->types, type)) restriction_input(solver, index, input.value);
+            if (xr_xir_callable_signature(owner->module->types, type) &&
+                !xr_xir_type_is_c_callable(owner->module->types, type)) restriction_input(solver, index, input.value);
         }
     }
     for (uint32_t a = 0; a < solver->view.allocation_count && escape_poll(owner); ++a) {
