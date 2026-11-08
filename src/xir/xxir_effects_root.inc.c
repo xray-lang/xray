@@ -65,14 +65,7 @@ XR_FUNC void xr_xir_compile_root_cause_trace_free(XrXirRootCauseTrace *trace) {
 }
 XR_FUNC XrXirStatus xr_xir_compile_root_cause_trace_copy(const XrXirCompileContext *context,
     const XrXirEffects *effects,uint32_t function,XrXirRootCauseTrace **output) {
-    const EffectFinalOutcomes *final=effect_final_outcomes(effects);
-    if (!output || *output || !final || function>=final->count ||
-        !xir_effects_context_matches(context,effects,final->count)) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_public_root_match(context,effects);
-    if (status!=XR_XIR_OK) return status;
-    if (effect_public_root_context(effects,function))
-        return effect_context_owner_trace(context,effects,function,output);
-    return effect_invocation_public_trace(context,effects->invocations,function,&final->root[function],output);
+    return effect_checked_trace_copy(context,effects,function,output);
 }
 static XrXirStatus effect_root_callable(const EffectRootSeedRecord *request,XrXirRootEffects *facts,
     XrXirRootEffectWitness *required,XrXirRootEffectWitness *unresolved) {

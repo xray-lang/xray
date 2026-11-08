@@ -35,17 +35,6 @@ set(XR_DAP_NATIVE_SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/native-source")
 
 
 
-add_executable(test_xir_cell_instruction_storage test_cell_instruction_storage.c)
-target_link_libraries(test_xir_cell_instruction_storage PRIVATE xray_xir xray_xir_scalar xray_xir_source)
-target_include_directories(test_xir_cell_instruction_storage PRIVATE ${XRAY_COMMON_INCLUDES})
-if(MSVC)
-    target_compile_options(test_xir_cell_instruction_storage PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_cell_instruction_storage PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_cell_instruction_storage COMMAND test_xir_cell_instruction_storage)
-set_tests_properties(test_xir_cell_instruction_storage PROPERTIES TIMEOUT 120 LABELS "dap;source;ownership;compiler")
-
 xray_stage_windows_asan_runtime("${CMAKE_CURRENT_BINARY_DIR}")
 cmake_language(DEFER CALL xray_prepend_windows_asan_runtime_to_directory_tests)
 

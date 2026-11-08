@@ -1872,12 +1872,6 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/source_decimal_parse.cmake")
 
 
 
-include("${CMAKE_CURRENT_LIST_DIR}/xir/root_conditional.cmake")
-include(xir/effect_ordinary_environment.cmake)
-include(xir/source_function_boundary.cmake)
-include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_final_retirement.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_final_read.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_final_proof.cmake")
 
 include(xir/cell_owner_source.cmake)
 
@@ -1904,7 +1898,6 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/cfg_dominance_order.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/instance_domain_fuel.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/specialize_key_controls.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/xir/error_cfg_scheduling.cmake")
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/stdlib_families.cmake)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/program_correspondence.cmake)

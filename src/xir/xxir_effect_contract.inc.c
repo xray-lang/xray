@@ -399,23 +399,10 @@ static XrXirStatus effect_contract_instance(const XrXirCompileContext *context,
         if (origin->function >= p->source->module.function_count) return XR_XIR_BAD_STRUCTURE;
         status = effect_contract_vector( origin->arguments, origin->argument_count,
             sizeof(*origin->arguments));
-        if (status == XR_XIR_OK) status = effect_contract_vector( origin->effect_arguments,
-            origin->effect_argument_count, sizeof(*origin->effect_arguments));
         if (status != XR_XIR_OK) return status;
-        uint32_t physical=p->source->module.functions[origin->function].parameter_count;
-        if (p->source->module.provenance && origin->effect_argument_count!=physical)
-            return XR_XIR_BAD_STRUCTURE;
-        for (uint32_t a = 0; a < origin->effect_argument_count; ++a) {
-
-            const XrXirEffectArgument *argument = &origin->effect_arguments[a];
-            if (argument->parameter >= p->source->module.functions[origin->function].parameter_count ||
-                (a && origin->effect_arguments[a - 1].parameter >= argument->parameter))
-                return XR_XIR_BAD_STRUCTURE;
-            if (argument->parameter!=a || xr_xir_type_span(module->types,argument->type))
-                return XR_XIR_BAD_TYPE;
-        }
+        if (origin->effect_arguments || origin->effect_argument_count) return XR_XIR_BAD_STRUCTURE;
     }
-    return xir_effect_binding_proofs_shape(context, module, p);
+    return xir_compile_context_valid(context) && !p->bindings && !p->binding_count ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
 }
 
 XR_FUNC XrXirStatus xir_effect_contract_shape_verify(const XrXirCompileContext *context,

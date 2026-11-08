@@ -67,14 +67,12 @@ static XrXirStatus declaration_effects_verify(XirEffectInput input,
 
             const XrXirInstruction *op = &function->instructions[i];
             if (!xr_xir_op_is_spawn(op->op)) continue;
-            status = xr_xir_effects_go_safe(facts, (uint32_t)op->immediate);
+            XrXirRootEffects root = {0};
+            status = xir_effects_spawn_read(remaining, facts, f, i, &root);
             XrXirDiagnosticReason reason = XR_XIR_DIAGNOSTIC_NONE;
             if (status == XR_XIR_BAD_TYPE) {
-                XrXirEffectFacts root_read=xr_xir_effects_read(facts, (uint32_t)op->immediate);
-                const XrXirRootEffects *root=(root_read.status==XR_XIR_OK?&root_read.root:NULL);
-                if (!root) status = XR_XIR_BAD_STRUCTURE;
-                else if (root->requires_root) reason = XR_XIR_DIAGNOSTIC_GO_ROOT_REQUIRED;
-                else if (root->unresolved) reason = XR_XIR_DIAGNOSTIC_GO_ROOT_UNRESOLVED;
+                if (root.requires_root) reason = XR_XIR_DIAGNOSTIC_GO_ROOT_REQUIRED;
+                else if (root.unresolved) reason = XR_XIR_DIAGNOSTIC_GO_ROOT_UNRESOLVED;
             }
             if (status == XR_XIR_OK) status = xir_compile_worker_error_verify(remaining,module,(uint32_t)op->immediate);
             if (status != XR_XIR_OK) *diagnostic = (XrXirDiagnostic){status, f, UINT32_MAX, i, reason};

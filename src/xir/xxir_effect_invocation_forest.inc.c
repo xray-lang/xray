@@ -9,29 +9,7 @@
 /* The independently sealed certificate owns the complete immutable type
  * snapshot. Prove its real ordered correspondence before retaining its view;
  * metadata allocations cannot intern, substitute or grow this type pool. */
-static XrXirStatus effect_invocation_forest_types(const XrXirCompileContext *work,
-    const EffectOrdinaryContexts *contexts,EffectTerms *output) {
-    if (!xir_compile_context_valid(work) || !contexts || !output ||
-        contexts->uses.resources!=work->resources || output->remaining!=work ||
-        output->status!=XR_XIR_OK || output->types.count || output->types.nodes ||
-        output->types.nominals || output->types.interfaces || output->owned_nominals ||
-        output->owned_interfaces) return XR_XIR_BAD_STRUCTURE;
-    const EffectInvocationCertificate *certificate=contexts->uses.invocations;
-    if (!certificate || !effect_body_material_shape(certificate->body) ||
-        certificate->body->resources!=certificate->resources || certificate->resources!=work->resources || certificate->terms.remaining ||
-        certificate->body->domain.types!=&certificate->body->terms.types || !certificate->final ||
-        effect_body_count(certificate->body)!=contexts->count ||
-        certificate->terms.types.count!=contexts->terms.types.count) return XR_XIR_BAD_STRUCTURE;
-    /* A query-local comparison owns all of its scratch. The complete semantic
-     * declaration domain and every descriptor are checked on the real ledger. */
-    EffectTerms comparison={.types=certificate->terms.types,.remaining=work};
-    XrXirStatus status=effect_terms_snapshot_match(&comparison,&contexts->terms.types,
-        contexts->terms.types.count);
-    effect_terms_free(&comparison);
-    if (status!=XR_XIR_OK) return status;
 
-    output->types=certificate->terms.types;return XR_XIR_OK;
-}
 
 /* A record request borrows only this call's fresh four-domain selection.
  * It carries no authority and is not retained by the forest or certificate. */
@@ -197,38 +175,7 @@ static XrXirStatus effect_invocation_forest_match(const XrXirCompileContext *wor
     return status==XR_XIR_BAD_TYPE?XR_XIR_BAD_STRUCTURE:status;
 }
 
-static XrXirStatus effect_invocation_forest_trace(const XrXirCompileContext *work,
-    const EffectContextForest *forest,uint32_t function,XrXirRootCauseTrace **output) {
-    if (!xir_compile_context_valid(work) || !forest || forest->resources!=work->resources ||
-        !output || *output || function>=forest->count) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_invocation_forest_match(work,forest);
-    if (status!=XR_XIR_OK) return status;
-    XrXirRootCauseTrace *trace=NULL;
-    EffectContextRootValue value;
-    status=effect_invocation_forest_values(work,forest,function,&value);
-    if(status==XR_XIR_OK) status=effect_invocation_public_trace(work,forest->invocations,function,&value.facts,&trace);
-    uint64_t count=trace?(uint64_t)trace->counts[0]+trace->counts[1]:0;
-    XrXirRootCauseStep *steps=trace?effect_root_trace_storage(trace):NULL;
-    for (uint64_t s=0;s<count && status==XR_XIR_OK;++s) {
-        XrXirRootCauseStep *step=&steps[s];
-        if (!step->distance || step->cause!=XR_XIR_ROOT_CAUSE_CALL) continue;
-        bool found=false,requirement=false;
-        for (uint32_t f=0;f<forest->count;++f) {
 
-            if (forest->nodes[f].declaration!=step->function) continue;
-            if (step->instruction>=forest->invocations->body->functions[f].instruction_count) {
-                status=XR_XIR_BAD_STRUCTURE;break;
-            }
-            bool actual=forest->requirements[f] && forest->requirements[f][step->instruction];
-            if (found && actual!=requirement) { status=XR_XIR_BAD_STRUCTURE;break; }
-            found=true;requirement=actual;
-        }
-        if (status==XR_XIR_OK && !found) status=XR_XIR_BAD_STRUCTURE;
-        if (status==XR_XIR_OK && requirement) step->cause=XR_XIR_ROOT_CAUSE_REQUIREMENT;
-    }
-    if (status!=XR_XIR_OK) { xr_xir_compile_root_cause_trace_free(trace);return status; }
-    *output=trace;return XR_XIR_OK;
-}
 
 static XrXirStatus effect_invocation_context_edge_mask(const XrXirCompileContext *work,
     const EffectContextForest *forest,uint32_t caller,uint32_t instruction,uint32_t target,uint32_t *output) {

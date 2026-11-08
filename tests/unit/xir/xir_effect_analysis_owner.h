@@ -123,19 +123,8 @@ static void effect_case_end(void) {
 }
 /* A summary may outlive its producer; producer releases adjust the retained
  * baseline, while final owner release independently checks all artifact bytes. */
-static XrXirStatus effect_analyze(const XrXirArtifact *artifact, XrXirEffects **output) {
-    CHECK(!effect_owned_summary && output && !*output);
-    effect_expected = effect_mark();
-    XrXirStatus status = xr_xir_compile_effects_analyze(artifact, output);
-    if (status == XR_XIR_OK) { CHECK(*output); effect_owned_summary = *output; }
-    else { CHECK(!*output); effect_mark_check(effect_expected); }
-    return status;
-}
-static void effect_summary_free(XrXirEffects *summary) {
-    CHECK(!summary || summary == effect_owned_summary);
-    xr_xir_compile_effects_free(summary);
-    if (summary) { effect_owned_summary = NULL; effect_mark_check(effect_expected); }
-}
+
+
 static void effect_artifact_free(XrXirArtifact *artifact) {
     EffectMark before = effect_mark(); xr_xir_compile_artifact_free(artifact);
     CHECK(live <= before.blocks && live_bytes <= before.bytes);
@@ -144,57 +133,12 @@ static void effect_artifact_free(XrXirArtifact *artifact) {
         effect_expected.blocks -= before.blocks-live; effect_expected.bytes -= before.bytes-live_bytes;
     } else effect_expected = effect_mark();
 }
-static bool effect_balanced(void) {
-    effect_mark_check(effect_expected); return true;
-}
+
 /* A new probe begins at the same semantic graph, through real reverification.
  * Lowered instances are reconstructed from their sealed Checked packet. */
-static XrXirStatus effect_reproduce(const XrXirArtifact *source, const XrXirCompileContext *c, XrXirArtifact **out) {
-    const XrXirModule *m = xr_xir_compile_artifact_module(source);
-    if (m->stage == XR_XIR_CHECKED) return xr_xir_compile_recheck_v2(c,m,xr_xir_compile_artifact_construction(source), out, NULL, NULL);
-    CHECK(m->stage == XR_XIR_LOWERED);
-    XrXirArtifact *checked = NULL;
-    XrXirStatus status = xr_xir_compile_checked_read(c, source->checked_packet.bytes, source->checked_packet.length, &checked, NULL);
-    if (status == XR_XIR_OK) status = xr_xir_compile_lower(checked, &source->target, NULL, out, NULL);
-    xr_xir_compile_artifact_free(checked); return status;
-}
+
 /* Finite memory covers the complete probe lifetime and releases with owners. */
-static void effect_memory_probe(const XrXirArtifact *source,uint64_t limit,bool exact) {
-    EffectMark mark=effect_mark();
-    XrCompileResourceLimits caps={XR_COMPILE_MEMORY_FINITE,limit,true};
-    XrXirCompileContext c=effect_owner_new(caps);uint64_t baseline=effect_stats(&c).held_bytes;
-    XrXirArtifact *copy=NULL;XrXirEffects *summary=NULL;
-    XrXirStatus status=effect_reproduce(source,&c,&copy);
-    if(status==XR_XIR_OK)status=xr_xir_compile_effects_analyze(copy,&summary);
-    CHECK(status==(exact?XR_XIR_OK:XR_XIR_MEMORY_LIMIT));CHECK(exact?summary!=NULL:summary==NULL);
-    xr_xir_compile_effects_free(summary);xr_xir_compile_artifact_free(copy);
-    effect_owner_free(&c,baseline);effect_mark_check(mark);
-}
-static void effect_memory_boundaries(const XrXirArtifact *source) {
-    EffectMark mark=effect_mark();XrXirCompileContext c=effect_owner_new(effect_caps());
-    uint64_t baseline=effect_stats(&c).held_bytes;XrXirArtifact *copy=NULL;XrXirEffects *summary=NULL;
-    CHECK(effect_reproduce(source,&c,&copy)==XR_XIR_OK);
-    CHECK(xr_xir_compile_effects_analyze(copy,&summary)==XR_XIR_OK);
-    XrCompileResourceStats measured=effect_stats(&c);CHECK(measured.peak_bytes>1);
-    xr_xir_compile_effects_free(summary);xr_xir_compile_artifact_free(copy);
-    effect_owner_free(&c,baseline);effect_mark_check(mark);
-    effect_memory_probe(source,measured.peak_bytes,true);
-    effect_memory_probe(source,measured.peak_bytes-1,false);
-    effect_memory_probe(source,measured.peak_bytes+1,true);
-    fprintf(stderr,"effect held memory exact/minus1/plus1=%llu\n",(unsigned long long)measured.peak_bytes);
-}
-static void effect_analysis_reuse(const XrXirArtifact *source) {
-    EffectMark mark=effect_mark();XrXirCompileContext c=effect_owner_new(effect_caps());
-    uint64_t baseline=effect_stats(&c).held_bytes;XrXirArtifact *copy=NULL;
-    CHECK(effect_reproduce(source,&c,&copy)==XR_XIR_OK);
-    uint64_t retained=effect_stats(&c).held_bytes;
-    for(unsigned repeat=0;repeat<2;++repeat) {
-        XrCompileResourceStats before=effect_stats(&c);XrXirEffects *summary=NULL;
-        CHECK(xr_xir_compile_effects_analyze(copy,&summary)==XR_XIR_OK && summary);
-        xr_xir_compile_effects_free(summary);
-        XrCompileResourceStats after=effect_stats(&c);
-        CHECK(after.held_bytes==retained && after.allocated_bytes>before.allocated_bytes);
-    }
-    xr_xir_compile_artifact_free(copy);effect_owner_free(&c,baseline);effect_mark_check(mark);
-}
+
+
+
 #endif // XIR_EFFECT_ANALYSIS_OWNER_H

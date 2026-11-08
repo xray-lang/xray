@@ -157,19 +157,3 @@ static XrXirStatus effect_final_inventory_match(const XrXirCompileContext *work,
     if(status==XR_XIR_OK) status=effect_capture_match(work,final);
     return status;
 }
-static XrXirStatus effect_final_inventories_match(const XrXirCompileContext *work,
-    const EffectInvocationCertificate *certificate,const EffectFinalOutcomes *outcomes) {
-    XrXirStatus status=effect_role_range(work,certificate,1,sizeof(*certificate));if(status!=XR_XIR_OK) return status;
-    if(certificate->resources!=work->resources) return XR_XIR_BAD_STRUCTURE;
-    status=effect_final_inventory_match(work,certificate->body,certificate->final);if(status!=XR_XIR_OK) return status;
-    status=effect_role_range(work,outcomes,1,sizeof(*outcomes));if(status!=XR_XIR_OK) return status;
-    status=effect_parameter_summary_matches(work, &certificate->final->parameter_summary, outcomes->contracts, effect_body_count(certificate->body));
-    if(status!=XR_XIR_OK || !outcomes->contexts) return status;
-    const EffectContextOwner *contexts=outcomes->contexts;
-    status=effect_role_range(work,contexts,1,sizeof(*contexts));if(status!=XR_XIR_OK) return status;
-    status=effect_role_range(work,contexts->forest,1,sizeof(*contexts->forest));if(status!=XR_XIR_OK) return status;
-    const EffectInvocationCertificate *nested=contexts->forest->invocations;
-    status=effect_role_range(work,nested,1,sizeof(*nested));if(status!=XR_XIR_OK) return status;
-    if(nested->resources!=work->resources) return XR_XIR_BAD_STRUCTURE;
-    return effect_final_inventory_match(work,nested->body,nested->final);
-}

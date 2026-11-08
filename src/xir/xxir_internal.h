@@ -177,6 +177,7 @@ typedef struct XrXirRootRefiner {
     XrXirStatus (*update)(void *, const XrXirEffects *, bool *);
     /* The diagnostic consumer copies its presentation before the owner expires. */
     void (*explain)(void *, const XrXirModule *, const XrXirEffects *, const XrXirDiagnostic *);
+    XrXirStatus (*prepare)(void *, const XrXirEffects *);
 } XrXirRootRefiner;
 XR_FUNC XrXirStatus xr_xir_compile_structure_verify_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic);
@@ -238,6 +239,8 @@ XR_FUNC XrXirStatus xir_compile_worker_error_verify(const XrXirCompileContext *c
     const XrXirModule *module,uint32_t function);
 /* Derived from the verified direct graph; neither fact is wire authority. */
 XR_FUNC XrXirStatus xr_xir_effects_go_safe(const XrXirEffects *effects, uint32_t function);
+XR_FUNC XrXirStatus xir_effects_spawn_read(const XrXirCompileContext *context,
+    const XrXirEffects *effects, uint32_t function, uint32_t instruction, XrXirRootEffects *output);
 XR_FUNC XrXirEffect xr_xir_effects_task_creation(const XrXirEffects *effects, uint32_t function);
 
 XR_FUNC XrXirStatus xr_xir_compile_layout_build(XrXirArtifact *artifact, XrCompileRequestControl *control);

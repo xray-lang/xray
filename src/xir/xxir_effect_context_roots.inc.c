@@ -213,79 +213,12 @@ static XrXirStatus effect_ordinary_bodies_match(const EffectOrdinaryContexts *co
     return XR_XIR_OK;
 }
 
-static XrXirStatus effect_ordinary_root_storage(EffectOrdinaryContexts *contexts,
-    const XrXirCompileContext *context) {
-    XrXirEffects *effects=&contexts->uses;
-    XrXirStatus status=XR_XIR_OK;
-    effects->outcomes_work.root=xir_compile_calloc(context,contexts->count,sizeof(*effects->outcomes_work.root),&status);
-    if (!effects->outcomes_work.root) return status;
-    effects->outcomes_work.root_witnesses=xir_compile_calloc(context,contexts->count,sizeof(*effects->outcomes_work.root_witnesses),&status);
-    if (!effects->outcomes_work.root_witnesses) return status;
-    effects->outcomes_work.unresolved_witnesses=xir_compile_calloc(context,contexts->count,
-        sizeof(*effects->outcomes_work.unresolved_witnesses),&status);
-    return effects->outcomes_work.unresolved_witnesses ? XR_XIR_OK : status;
-}
+
 
 /* Descriptor declarations, structural children, equations, facts and
  * forests are owned. Source bodies are consulted only during this proof. */
-static XrXirStatus effect_invocation_context_bounds(const XrXirCompileContext *work,
-    const XrXirModule *source,EffectOrdinaryContexts *contexts,EffectInvocationDeclaredBounds **output);
 
-static XrXirStatus effect_ordinary_roots_prepare(const XrXirCompileContext *context,
-    const XrXirModule *source,EffectOrdinaryContexts *contexts,
-    const EffectInvocationDeclaredBounds *declared,EffectInvocationDeclaredBounds **temporary) {
-    if (!xir_compile_context_valid(context) || !source || !source->declarations ||
-        !source->declarations->functions || !source->declarations->modules || !contexts ||
-        contexts->uses.resources!=context->resources || contexts->uses.outcomes_work.root ||
-        contexts->base_count!=source->function_count || !temporary || *temporary) return XR_XIR_BAD_STRUCTURE;
-    contexts->terms.remaining=context;
-    XrXirStatus status=effect_terms_snapshot_match(&contexts->terms,source->types,contexts->source_type_count);
-    if (status==XR_XIR_OK && !contexts->dense) status=effect_ordinary_bodies_match(contexts,source,&contexts->terms);
-    if (status==XR_XIR_OK && !declared)
-        status=effect_invocation_context_bounds(context,source,contexts,temporary);
-    return status;
-}
+
 
 /* The view and graph are local to one construction request. Parameter flow
  * reads its owned generation; publication transfers that same complete owner. */
-static XrXirStatus effect_ordinary_roots_publish(const XrXirCompileContext *context,
-    EffectOrdinaryContexts *contexts,const EffectInvocationDeclaredBounds *declared,
-    EffectGraph *graph,EffectOrdinaryView *view) {
-    if (!xir_compile_context_valid(context) || !contexts || !graph || !view ||
-        contexts->uses.resources!=context->resources || view->input.contexts!=contexts || !view->input.source ||
-        view->module.functions!=contexts->functions || view->module.function_count!=contexts->count ||
-        view->module.types!=&contexts->terms.types || view->module.declarations!=&view->declarations ||
-        view->module.provenance || (graph->material && (graph->physical_owned ||
-        graph->material!=contexts->uses.generation || graph->ordinary.contexts!=view->input.contexts ||
-        graph->ordinary.source!=view->input.source))) return XR_XIR_BAD_STRUCTURE;
-
-    XrXirStatus status=effect_ordinary_root_storage(contexts,context);
-    if (status==XR_XIR_OK && !graph->material) {
-        graph->ordinary=view->input;graph->input_facts=contexts->input_facts;
-        status=effect_graph_physical_refresh(context,&view->module,graph,contexts->uses.refinement);
-    }
-    XrXirCompileContext remaining=*context;
-    if (status==XR_XIR_OK) status=effect_graph_build_material(&view->module,&contexts->uses,graph,&remaining);
-    if (status==XR_XIR_OK) status=effect_invocation_publish(context,&view->module,&contexts->uses,
-        graph,declared,contexts);
-    return status;
-}
-
-static XrXirStatus effect_ordinary_roots_with_bounds(const XrXirCompileContext *context,
-    const XrXirModule *source,EffectOrdinaryContexts *contexts,
-    const EffectInvocationDeclaredBounds *declared) {
-    EffectInvocationDeclaredBounds *temporary=NULL;
-    XrXirStatus status=effect_ordinary_roots_prepare(context,source,contexts,declared,&temporary);
-    EffectGraph graph={0};EffectOrdinaryView view={0};
-    if (status==XR_XIR_OK) status=effect_ordinary_view(contexts,source,&view);
-    if (status==XR_XIR_OK) status=effect_ordinary_roots_publish(context,contexts,
-        declared?declared:temporary,&graph,&view);
-    effect_graph_free(&graph);effect_invocation_bounds_free(temporary);
-    if (contexts) contexts->terms.remaining=NULL;
-    return status;
-}
-
-static XrXirStatus effect_ordinary_roots(const XrXirCompileContext *context,
-    const XrXirModule *source,EffectOrdinaryContexts *contexts) {
-    return effect_ordinary_roots_with_bounds(context,source,contexts,NULL);
-}

@@ -21,17 +21,15 @@ static bool effect_outcomes_empty(const EffectFinalOutcomes *outcomes) {
 /* Shape rejects invalid requests. Fresh receiving verification separately
  * compares all current Input fields and every reconstructed result row. */
 static const EffectFinalOutcomes *effect_final_outcomes(const XrXirEffects *effects) {
-    if (!effects || !effects->invocations || !effects->invocations->final ||
-        effects->invocations->resources!=effects->resources ||
+    if (!effects || !effects->checked_roots ||
         effects->root_input || effects->outcomes_owner || !effect_outcomes_empty(&effects->outcomes_work)) return NULL;
-    const EffectFinalOutcomes *final=effects->invocations->final->outcomes;
+    const EffectFinalOutcomes *final=effects->final_outcomes;
     if (!final || final->resources!=effects->resources || final->count!=effects->count ||
         !final->count || !final->functions || !final->witnesses ||
         !final->go_safe || !final->task_creation ||
         !final->root || !final->root_witnesses || !final->unresolved_witnesses ||
-        !final->contracts || !final->entry_roots || !final->control_summary)
+        !final->contracts || !final->control_summary)
         return NULL;
-    if (final->contexts && !effect_context_owner_published(effects->resources,final->contexts)) return NULL;
     return final;
 }
 
@@ -40,23 +38,18 @@ static const EffectFinalOutcomes *effect_final_outcomes(const XrXirEffects *effe
 static XrXirStatus effect_outcomes_publish(const XrXirCompileContext *work,
     const XrXirModule *source,XrXirEffects *effects) {
     if (!xir_effects_context_matches(work,effects,source?source->function_count:0) ||
-        !effects->invocations || !effects->invocations->final ||
-        effects->invocations->final->outcomes || !effects->outcomes_owner || effects->root_input) return XR_XIR_BAD_STRUCTURE;
+        !effects->checked_roots || effects->final_outcomes ||
+        !effects->outcomes_owner || effects->root_input) return XR_XIR_BAD_STRUCTURE;
     EffectFinalOutcomes *records=&effects->outcomes_work;
     if (records->resources || records->count || !records->functions || !records->witnesses ||
         !records->go_safe || !records->task_creation ||
         !records->root || !records->root_witnesses || !records->unresolved_witnesses ||
-        !records->contracts || !records->entry_roots)
+        !records->contracts || !records->control_summary)
         return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=local_errors_owned(work,effects->invocations->body,NULL);
-    if(status==XR_XIR_OK) status=effect_final_retire_construction(work,effects);
-    if(status==XR_XIR_OK) status=effect_final_inventories_match(work,effects->invocations,records);
-    if (status==XR_XIR_OK) status=effect_invocation_current_input_match(work,source,effects->invocations->body);
-    if (status!=XR_XIR_OK) return status;
 
     EffectFinalOutcomes *final=effects->outcomes_owner;
     *final=*records;final->resources=effects->resources;final->count=effects->count;
-    effects->invocations->final->outcomes=final;effects->outcomes_owner=NULL;
+    effects->final_outcomes=final;effects->outcomes_owner=NULL;
     *records=(EffectFinalOutcomes){0};
     return XR_XIR_OK;
 }

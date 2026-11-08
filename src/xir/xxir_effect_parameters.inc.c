@@ -42,44 +42,7 @@ XR_FUNC const XrXirFunctionEffectContract *xir_effects_contract(
 /* INSTANCE use roles follow the same actual instruction fixed point.
  * Its complete source/body/domain proof precedes this verified-only
  * analysis hook; a serialized kind or role never admits execution. */
-static XrXirStatus effect_parameters_allocate(const XrXirModule *module,
-    XrXirEffects *effects, EffectGraph *graph,const XrXirCompileContext *work) {
-    if (!graph || !module || effects->count!=module->function_count) return XR_XIR_BAD_STRUCTURE;
-    graph->input_facts=effects->input_facts;
-    XrXirStatus status=XR_XIR_OK;
-    if (!graph->material || !graph->physical_owned)
-        status=effect_graph_physical_refresh(work,module,graph,effects->refinement);
-    if (status!=XR_XIR_OK) return status;
-    EffectBodyMaterial *material=graph->material;
-    if (!effect_body_material_shape(material) || material->resources!=work->resources ||
-        effect_body_count(material)!=effects->count || !material->cells)
-        return XR_XIR_BAD_STRUCTURE;
 
-    effect_parameters_free(effects);
-    effects->generation=material;effects->cells=material->cells;graph->physical_owned=false;
-    effects->outcomes_work.contracts = xir_compile_calloc(work, effects->count,
-        sizeof(*effects->outcomes_work.contracts), &status);
-    if (!effects->outcomes_work.contracts) return status;
-    for (uint32_t f=0;f<effects->count;++f) {
-
-        const EffectBodyFunction *function=&material->functions[f];
-        uint32_t count=function->parameter_count;
-        status=effect_body_initial_roles_match(work,material,f);
-        if (status!=XR_XIR_OK) return status;
-        XrXirFunctionEffectContract *contract=&effects->outcomes_work.contracts[f];contract->parameter_count=count;
-        if (count) {
-            contract->parameters=xir_compile_calloc(work,count,sizeof(*contract->parameters),&status);
-            if (!contract->parameters) return status;
-        }
-        XrXirEffectParameter *parameters=(XrXirEffectParameter *)contract->parameters;
-        for (uint32_t v=0;v<count;++v) {
-
-            uint32_t kind=function->initial_roles[v];
-            parameters[v].kind=kind;
-        }
-    }
-    return XR_XIR_OK;
-}
 
 enum { EFFECT_PARAMETER_CONDITIONAL = 1, EFFECT_PARAMETER_FIXED = 2 };
 static const uint32_t effect_parameter_forbidden = XR_XIR_EFFECT_USE_FIXED | XR_XIR_EFFECT_USE_STORE |
@@ -418,20 +381,7 @@ static XrXirStatus effect_parameter_graph_finish(EffectParameterGraph *graph,
     }
     return XR_XIR_OK;
 }
-static XrXirStatus effect_parameters_derive(const XrXirModule *module,
-    XrXirEffects *effects, EffectGraph *input, const XrXirCompileContext *work) {
-    XrXirStatus status = effect_parameters_allocate(module, effects, input, work);
-    if (status != XR_XIR_OK || !effects->outcomes_work.contracts ||
-        !effect_body_variable_roles(effects->generation)) return status;
-    EffectParameterGraph graph = {.work = work, .module = *module, .control = input->control};
-    if (module->types) { graph.types = *module->types; graph.module.types = &graph.types; }
-    if (module->declarations) { graph.declarations = *module->declarations; graph.module.declarations = &graph.declarations; }
-    status = effect_parameter_graph_prepare(&graph, effects->outcomes_work.contracts);
-    if (status == XR_XIR_OK) status = effect_parameter_graph_collect(&graph);
-    if (status == XR_XIR_OK) status = effect_parameter_graph_finish(&graph, effects->outcomes_work.contracts);
-    effect_parameter_graph_free(&graph);
-    return status;
-}
+
 
 static XrXirStatus effect_parameters_current(const XrXirCompileContext *work,
     const XrXirModule *module, const XrXirEffects *effects) {

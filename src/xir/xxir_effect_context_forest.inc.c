@@ -54,98 +54,14 @@ static void effect_context_forest_free(EffectContextForest *forest) {
 }
 
 
-static XrXirStatus effect_context_forest_node(EffectContextForest *forest,
-    const EffectOrdinaryContexts *contexts, uint32_t index) {
 
-    EffectOrdinaryNode origin=contexts->nodes[index];
-    const XrXirFunction *function=&contexts->functions[index];
-    const XrXirFunctionEffectContract *contract=&contexts->uses.outcomes_work.contracts[index];
-    XrXirType *arguments=origin.argument_count ?
-        effect_terms_alloc(&forest->terms,origin.argument_count,sizeof(*arguments)) : NULL;
-    XrXirType *physical=function->parameter_count ?
-        effect_terms_alloc(&forest->terms,function->parameter_count,sizeof(*physical)) : NULL;
-    if ((origin.argument_count && !arguments) || (function->parameter_count && !physical))
-        return forest->terms.status;
-    for (uint32_t a=0;a<origin.argument_count;++a) {
 
-        arguments[a]=origin.arguments[a];
-    }
-    for (uint32_t p=0;p<function->parameter_count;++p) {
 
-        physical[p]=function->parameters[p];
-    }
-    forest->nodes[index]=(EffectForestNode){.declaration=origin.declaration,.argument_count=origin.argument_count,
-        .parameter_count=function->parameter_count,.constant_mask=contract->formula.constant_mask,
-        .owner=origin.owner,.arguments=arguments,.physical_types=physical};
-    return XR_XIR_OK;
-}
 
-static XrXirStatus effect_context_forest_requirements(
-    const XrXirModule *source,const EffectOrdinaryContexts *contexts,EffectContextForest *forest) {
-    forest->requirements=effect_terms_alloc(&forest->terms,forest->count,sizeof(*forest->requirements));
-    if (!forest->requirements) return forest->terms.status;
-    for (uint32_t f=0;f<forest->count;++f) {
-        uint32_t declaration=contexts->nodes[f].declaration;
-        if (declaration>=source->function_count) return XR_XIR_BAD_STRUCTURE;
-        const XrXirFunction *original=&source->functions[declaration];
-        const XrXirFunction *actual=&contexts->functions[f];bool any=false;
-        if (original->instruction_count!=actual->instruction_count) return XR_XIR_BAD_STRUCTURE;
-        for (uint32_t i=0;i<original->instruction_count;++i) {
-
-            if (original->instructions[i].op==XR_XIR_CALL_REQUIREMENT) any=true;
-        }
-        uint8_t *bits=any?effect_terms_alloc(&forest->terms,original->instruction_count,1):NULL;
-        if (any && !bits) return forest->terms.status;
-        if (any) for (uint32_t i=0;i<original->instruction_count;++i) {
-
-            bits[i]=(uint8_t)(original->instructions[i].op==XR_XIR_CALL_REQUIREMENT);
-            if (bits[i] && actual->instructions[i].op!=XR_XIR_CALL_REQUIREMENT &&
-                actual->instructions[i].op!=XR_XIR_CALL) return XR_XIR_BAD_STRUCTURE;
-        }
-        forest->requirements[f]=bits;
-    }
-    return XR_XIR_OK;
-}
-
-static XrXirStatus effect_invocation_forest_types(const XrXirCompileContext *work,
-    const EffectOrdinaryContexts *contexts,EffectTerms *output);
 static XrXirStatus effect_invocation_forest_admit(const XrXirCompileContext *work,
     const EffectContextForest *forest,const EffectInvocationCertificate *certificate);
-static XrXirStatus effect_invocation_forest_trace(const XrXirCompileContext *work,
-    const EffectContextForest *forest,uint32_t function,XrXirRootCauseTrace **output);
 static XrXirStatus effect_invocation_context_edge_mask(const XrXirCompileContext *work,
     const EffectContextForest *forest,uint32_t caller,uint32_t instruction,uint32_t target,uint32_t *output);
 
 /* Dense ordinals identify public declarations. An executing cause can visit
  * one body in several distinct invocation environments before its terminal. */
-static XrXirStatus effect_context_forest_seal(const XrXirCompileContext *context,
-    const XrXirModule *source,EffectOrdinaryContexts *contexts,EffectContextForest **output) {
-    if (!xir_compile_context_valid(context) || !source || !contexts || !output || *output ||
-        contexts->uses.resources!=context->resources) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=contexts->uses.outcomes_work.root?XR_XIR_OK:effect_ordinary_roots(context,source,contexts);
-    if (status==XR_XIR_OK) status=effect_invocation_public_gate(context,contexts->uses.invocations);
-    if (status!=XR_XIR_OK) return status;
-    EffectContextForest *forest=xir_compile_calloc(context,1,sizeof(*forest),&status);
-    if (!forest) return status;
-    forest->resources=context->resources;forest->count=contexts->count;forest->terms.remaining=context;
-    status=effect_invocation_forest_types(context,contexts,&forest->terms);
-    if (status==XR_XIR_OK) {
-        forest->nodes=effect_terms_alloc(&forest->terms,forest->count,sizeof(*forest->nodes));
-        if (!forest->nodes)
-            status=forest->terms.status;
-    }
-    for (uint32_t f=0;f<forest->count && status==XR_XIR_OK;++f)
-        status=effect_context_forest_node(forest,contexts,f);
-    if (status==XR_XIR_OK) status=effect_context_forest_requirements(source,contexts,forest);
-    if (status==XR_XIR_OK) status=effect_invocation_forest_admit(context,forest,contexts->uses.invocations);
-    if (status!=XR_XIR_OK) { effect_context_forest_free(forest);return status; }
-    /* No fallible step follows the actual transfer. The type view stays
-     * live until this same retained owner is released by forest_free. */
-    forest->invocations=contexts->uses.invocations;contexts->uses.invocations=NULL;
-    forest->terms.remaining=NULL;*output=forest;return XR_XIR_OK;
-}
-
-static XrXirStatus effect_context_forest_trace(const XrXirCompileContext *context,
-    const EffectContextForest *forest,uint32_t selected,XrXirRootCauseTrace **output) {
-    return effect_invocation_forest_trace(context,forest,selected,output);
-}

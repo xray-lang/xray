@@ -13,52 +13,11 @@
  */
 /* Drop every borrowed constructor pointer before freeing the backbone's
  * real scratch. The owning immutable descriptors remain at the same addresses. */
-static XrXirStatus effect_final_retire_body(const XrXirCompileContext *work,EffectBodyMaterial *body) {
-    uint32_t depth=0;
-    for (;body;body=body->backbone) {
 
-        if (depth++==3 || !effect_body_material_shape(body) || body->resources!=work->resources)
-            return XR_XIR_BAD_STRUCTURE;
-        XrXirStatus status=effect_terms_retire(work,&body->terms,body->backbone==NULL);
-        if (status!=XR_XIR_OK) return status;
-    }
-    return XR_XIR_OK;
-}
 
 /* Only the completed private constructor calls this. All real scratch frees
  * precede the last current-Input comparison and the sole public ownership move. */
-static XrXirStatus effect_final_retire_construction(const XrXirCompileContext *work,XrXirEffects *effects) {
-    if (!effects || !effects->outcomes_owner || effects->root_input || !effects->invocations ||
-        !effects->invocations->body || effects->generation || effects->refinement) return XR_XIR_BAD_STRUCTURE;
-    EffectInvocationCertificate *certificate=effects->invocations;
-    XrXirStatus status=effect_terms_retire(work,&certificate->terms,true);
-    if (status==XR_XIR_OK) status=effect_final_retire_body(work,certificate->body);
-    EffectContextOwner *owner=effects->outcomes_work.contexts;
-    if (status==XR_XIR_OK && owner) {
-        if (!owner->ordinary || !owner->dense || !owner->forest || owner->refinement ||
-            !owner->forest->invocations || !owner->forest->invocations->body ||
-            !owner->ordinary->uses.generation || owner->dense->uses.generation) return XR_XIR_BAD_STRUCTURE;
-        certificate=owner->forest->invocations;
-        status=effect_terms_retire(work,&owner->ordinary->terms,true);
-        if (status==XR_XIR_OK) status=effect_terms_retire(work,&owner->dense->terms,true);
-        if (status==XR_XIR_OK) status=effect_terms_retire(work,&owner->forest->terms,true);
-        if (status==XR_XIR_OK) status=effect_terms_retire(work,&certificate->terms,true);
-        if (status==XR_XIR_OK) status=effect_final_retire_body(work,certificate->body);
-        if (status==XR_XIR_OK) status=effect_final_retire_body(work,owner->ordinary->uses.generation);
-        if (status==XR_XIR_OK && (owner->ordinary->resources!=work->resources ||
-            owner->ordinary->uses.resources!=work->resources ||
-            owner->dense->resources!=work->resources || owner->dense->uses.resources!=work->resources))
-            status=XR_XIR_BAD_STRUCTURE;
 
-        if (status==XR_XIR_OK) {
-            effect_ordinary_results_free(owner->ordinary);
-            owner->ordinary->uses=(XrXirEffects){0};
-            effect_ordinary_results_free(owner->dense);owner->dense->uses=(XrXirEffects){0};
-        }
-    }
-    if (status==XR_XIR_OK) effect_source_summary_clear(&effects->source_summary);
-    return status;
-}
 
 static XrXirStatus effect_source_body_retired(const XrXirCompileContext *work,const EffectBodyMaterial *body) {
     uint32_t depth=0;
@@ -331,52 +290,36 @@ static XrXirStatus effect_source_terminal_roles(const XrXirCompileContext *work,
     return XR_XIR_OK;
 }
 
+/* The semantic owner is already closed. External artifact verification scans
+ * the input independently before checking this ownership association. */
 static XrXirStatus effect_source_terminal_current(const XrXirCompileContext *work,
-    const XrXirModule *source,const XrXirEffects *effects,bool checked_copy) {
-    if (!xir_effects_context_matches(work,effects,source?source->function_count:0) ||
-        !effect_final_outcomes(effects) || !source || source->stage!=XR_XIR_CHECKED || !effects->invocations ||
-        effects->generation || effects->refinement) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_source_relations(work,effects->invocations,effects);
-    if (status==XR_XIR_OK) status=effect_source_contexts(work,source,effects);
-    if (status==XR_XIR_OK) status=local_errors_owned(work,effects->invocations->body,NULL);
-    if (status==XR_XIR_OK) status=effect_source_terminal_roles(work,effects);
-    if (status==XR_XIR_OK) status=effect_source_publication_match(work,source,effects);
-    if (status==XR_XIR_OK) status=effect_source_outcomes(work,effects);
-    if (status==XR_XIR_OK) status=effect_control_summary_recheck(work,source,
-        effect_final_outcomes(effects)->control_summary);
-    if (status==XR_XIR_OK) status=(checked_copy||
-        (effects->invocations->body->stage==XR_XIR_BUILT&&source->stage==XR_XIR_CHECKED))?
-        effect_body_checked_copy_match(work,effects->invocations->body,source):
-        effect_invocation_current_input_match(work,source,effects->invocations->body);
-    return status;
+    const XrXirModule *source, const XrXirEffects *effects) {
+    return effect_source_body_current(work, source, effects);
 }
 
 static XrXirStatus effect_source_input_terminal(const XrXirCompileContext *work,
     const XrXirModule *source,const XrXirEffects *effects) {
-    if(!source || !source->provenance || source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE) return XR_XIR_BAD_STRUCTURE;
-    return effect_source_terminal_current(work,source,effects,false);
+    return effect_source_body_current(work,source,effects);
 }
 static XrXirStatus effect_source_raw_terminal(const XrXirCompileContext *work,
     const XrXirModule *source,const XrXirEffects *effects) {
     if(!source || source->provenance) return XR_XIR_BAD_STRUCTURE;
-    return effect_source_terminal_current(work,source,effects,false);
+    return effect_source_terminal_current(work,source,effects);
 }
 
 static XrXirStatus effect_source_receiving_terminal(const XrXirCompileContext *work,
     const XrXirModule *module,const XrXirEffects *effects) {
     if(!module || !module->provenance || !xir_effect_kind_is_closed(module->provenance->kind))
         return XR_XIR_BAD_STRUCTURE;
-    return effect_source_terminal_current(work,module,effects,false);
+    return effect_source_terminal_current(work,module,effects);
 }
 
 static XrXirStatus effect_source_copy_match(const XrXirCompileContext *work,
     const XrXirModule *module,const XrXirEffects *effects) {
-    if(!xir_effects_context_matches(work,effects,module?module->function_count:0) ||
-        !effects->invocations) return XR_XIR_BAD_STRUCTURE;
-    return effect_body_checked_copy_match(work,effects->invocations->body,module);
+    return effect_source_body_current(work,module,effects);
 }
 static XrXirStatus effect_source_copy_terminal(const XrXirCompileContext *work,
     const XrXirModule *module,const XrXirEffects *effects) {
     if(!module || module->provenance) return XR_XIR_BAD_STRUCTURE;
-    return effect_source_terminal_current(work,module,effects,true);
+    return effect_source_terminal_current(work,module,effects);
 }

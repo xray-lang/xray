@@ -48,7 +48,7 @@ def main() -> None:
 
     def verify_effects():
         effects = fixtures / "effects"
-        for name in ("pure_recursive_import", "pure_import_go", "nosuspend_literal",
+        for name in ("pure_recursive_import", "pure_import_go", "pure_scoped_go", "nosuspend_literal",
                      "root_const", "signature_throws", "signature_generic_try",
                      "closed_dispatch_pure", "closed_dispatch_reference",
                      "root_parameter_forward", "root_parameter_capture", "root_parameter_recursive"):

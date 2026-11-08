@@ -44,6 +44,11 @@ typedef struct EffectControlGraph {
     EffectSummaryDispatch *dispatches;
 } EffectControlGraph;
 
+typedef struct EffectSummaryDispatchSource {
+    void *owner;
+    XrXirStatus (*read)(void *, XrXirType, uint32_t, XirClassMethodVisitor, void *);
+} EffectSummaryDispatchSource;
+
 struct EffectControlSummary {
     atomic_uint_fast64_t references;
     XrCompileResources *resources;
@@ -60,6 +65,7 @@ typedef struct EffectSummaryBuild {
     XrCompileRequestControl *control;
     EffectControlSummary *summary;
     EffectControlGraph graph;
+    EffectSummaryDispatchSource dispatch_source;
     uint32_t *dispatch_index;
     size_t *default_offsets;
     uint32_t *default_targets;
@@ -493,8 +499,11 @@ static bool effect_summary_link(EffectSummaryBuild *build) {
             continue;
         }
         EffectSummaryCandidate candidate = {build, dispatch.node};
-        build->status = xir_compile_class_method_candidates(build->input, dispatch.receiver,
-            dispatch.slot, effect_summary_candidate, &candidate, build->control);
+        build->status = build->dispatch_source.read ?
+            build->dispatch_source.read(build->dispatch_source.owner, dispatch.receiver,
+                dispatch.slot, effect_summary_candidate, &candidate) :
+            xir_compile_class_method_candidates(build->input, dispatch.receiver,
+                dispatch.slot, effect_summary_candidate, &candidate, build->control);
         if (build->status != XR_XIR_OK) return false;
     }
     return true;
@@ -669,11 +678,13 @@ XR_FUNC XrXirStatus xir_effect_control_finish(XirControlBuilder *build,
     return XR_XIR_OK;
 }
 
-static XrXirStatus effect_control_summary_build(const XrXirCompileContext *memory,
-    const XrXirModule *module, XrCompileRequestControl *control, EffectControlSummary **output) {
+static XrXirStatus effect_control_summary_build_from(const XrXirCompileContext *memory,
+    const XrXirModule *module, XrCompileRequestControl *control,
+    const EffectSummaryDispatchSource *dispatch, EffectControlSummary **output) {
     if (!output || *output) return XR_XIR_BAD_STRUCTURE;
     XirControlBuilder *build = NULL;
     XrXirStatus status = xir_effect_control_builder_new(memory, module, control, &build);
+    if (status == XR_XIR_OK && dispatch) build->dispatch_source = *dispatch;
     for (uint32_t f = 0; status == XR_XIR_OK && f < module->function_count; ++f) {
         status = xir_effect_control_begin(build, module, f);
         for (uint32_t i = 0; status == XR_XIR_OK && i < module->functions[f].instruction_count; ++i)
@@ -683,6 +694,11 @@ static XrXirStatus effect_control_summary_build(const XrXirCompileContext *memor
     if (status == XR_XIR_OK) status = xir_effect_control_finish(build, module, output);
     xir_effect_control_builder_free(build);
     return status;
+}
+
+static XrXirStatus effect_control_summary_build(const XrXirCompileContext *memory,
+    const XrXirModule *module, XrCompileRequestControl *control, EffectControlSummary **output) {
+    return effect_control_summary_build_from(memory, module, control, NULL, output);
 }
 
 static XrXirStatus effect_control_summary_recheck(const XrXirCompileContext *memory,

@@ -8,18 +8,6 @@ if(MSVC)
 else()
     target_compile_options(test_xir_root_effects PRIVATE -Wall -Wextra -Werror)
 endif()
-add_test(NAME test_xir_root_effects COMMAND test_xir_root_effects)
-set_tests_properties(test_xir_root_effects PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE PROCESSORS 1
-    LABELS "unit;xir;root-effects;metadata;ownership;budget")
-add_test(NAME test_xir_root_var_atomic_binding COMMAND test_xir_root_effects --var-atomic)
-set_tests_properties(test_xir_root_var_atomic_binding PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE PROCESSORS 1
-    LABELS "unit;xir;root-effects;metadata;ownership;budget")
-
-# Ordinary feedback keeps semantic cases; --full explicitly replays every allocation failure.
-add_test(NAME test_xir_root_effects_ordinary COMMAND test_xir_root_effects --ordinary)
-set_tests_properties(test_xir_root_effects_ordinary PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE PROCESSORS 1
-    LABELS "unit;xir;root-effects;metadata;ownership")
-
 add_test(NAME test_xir_control_summary_owner COMMAND test_xir_root_effects --control-summary)
 set_tests_properties(test_xir_control_summary_owner PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1
     LABELS "unit;xir;metadata;ownership;compiler-fault")

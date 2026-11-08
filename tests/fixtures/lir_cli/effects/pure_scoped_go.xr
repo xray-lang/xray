@@ -1,0 +1,4 @@
+fn worker(value:i64)->i64{return value}
+scope {
+    go worker(1)
+}

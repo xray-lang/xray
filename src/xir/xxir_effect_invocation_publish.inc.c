@@ -97,110 +97,13 @@ static XrXirStatus effect_invocation_publication_match(const XrXirCompileContext
 /* Precharge every final assignment before changing a receiving field.
  * Canonical vectors and the immutable four-domain witness inventory belong
  * solely to the new certificate. Mutable context projections stay separate. */
-static XrXirStatus effect_invocation_publication_commit(const XrXirCompileContext *work,
-    XrXirEffects *effects,EffectInvocationCertificate **certificate) {
-    if (!xir_compile_context_valid(work) || !effects || effects->resources!=work->resources ||
-        !certificate) return XR_XIR_BAD_STRUCTURE;
-    if (effects->invocations && effects->invocations->final && effects->invocations->final->outcomes)
-        return XR_XIR_BAD_STRUCTURE;
-    EffectInvocationCertificate *fresh=*certificate;uint32_t count=effects->count;
-    EffectFinalFunctions *result=fresh && fresh->final?&fresh->final->summary:NULL;
-    if (!result || result->resources!=work->resources || result->count!=count ||
-        fresh->resources!=work->resources || result->capacity!=count ||
-        !result->functions || !result->witnesses || !effects->outcomes_work.contracts ||
-        !effects->outcomes_work.root || !effects->outcomes_work.root_witnesses || !effects->outcomes_work.unresolved_witnesses)
-        return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_invocation_publication_match(work,fresh,result);
-    if (status!=XR_XIR_OK) return status;
 
-    EffectInvocationCertificate *old=effects->invocations;
-    const EffectFinalFunctions *old_result=effects->result_borrow;
-    for (uint32_t f=0;f<count;++f) {
-        if (!old_result) xr_compile_resources_free((void *)effects->outcomes_work.contracts[f].formula.terms);
-        effects->outcomes_work.contracts[f].formula=result->functions[f].formula;
-    }
-    for (uint32_t f=0;f<count;++f)
-        effects->outcomes_work.root[f]=(XrXirRootEffects){result->witnesses[f].cause!=XR_XIR_ROOT_CAUSE_NONE,
-            result->witnesses[count+f].cause!=XR_XIR_ROOT_CAUSE_NONE};
-    memcpy(effects->outcomes_work.root_witnesses,result->witnesses,(size_t)count*sizeof(*effects->outcomes_work.root_witnesses));
-    memcpy(effects->outcomes_work.unresolved_witnesses,result->witnesses+count,
-        (size_t)count*sizeof(*effects->outcomes_work.unresolved_witnesses));
-    if (!old_result) {
-        xr_compile_resources_free(effects->formula_terminals);
-        xr_compile_resources_free(effects->constant_witnesses);
-    }
-    effects->formula_terminals=result->witnesses;
-    effects->constant_witnesses=result->witnesses+(size_t)count*2;
-    effects->result_borrow=result;
-    effects->invocations=fresh;effects->cells=fresh->body->cells;*certificate=NULL;
-    effect_invocation_certificate_free(old);return XR_XIR_OK;
-}
 
 /* This is the sole production ROOT derivation. It neither runs the retired
  * formula solver nor grants Program permission from a temporary empty mask. */
-static XrXirStatus effect_invocation_publish(const XrXirCompileContext *work,
-    const XrXirModule *module,XrXirEffects *effects,EffectGraph *graph,
-    const EffectInvocationDeclaredBounds *declared,const EffectOrdinaryContexts *dense) {
-    if (!module || !graph || !xir_effects_context_matches(work,effects,module->function_count) ||
-        !effects->outcomes_work.contracts || (declared && declared->resources!=work->resources)) return XR_XIR_BAD_STRUCTURE;
-    if (effects->invocations && effects->invocations->final && effects->invocations->final->outcomes)
-        return XR_XIR_BAD_STRUCTURE;
-    EffectInvocationDeclaredBounds *temporary=NULL;EffectInvocationCertificate *certificate=NULL;
-    EffectFinalFunctions *publication=NULL;XrXirStatus status=XR_XIR_OK;
-    if (!graph->material || (!graph->physical_owned && graph->material!=effects->generation))
-        status=effect_graph_physical_refresh(work,module,graph,effects->refinement);
-    if (status==XR_XIR_OK && (!effect_body_material_shape(graph->material) ||
-        graph->material->resources!=work->resources || !graph->material->declared)) status=XR_XIR_BAD_STRUCTURE;
-    if (status==XR_XIR_OK && declared) {
-        status=effect_invocation_bounds_copy_physical(work,declared,graph->physical,&temporary);
 
-        if (status==XR_XIR_OK) {
-            effect_invocation_bounds_free(graph->material->declared);
-            graph->material->declared=temporary;temporary=NULL;
-        }
-    }
-    if (status==XR_XIR_OK && dense && (dense->count!=module->function_count ||
-        dense->functions!=module->functions || &dense->terms.types!=module->types ||
-        &dense->uses!=effects)) status=XR_XIR_BAD_STRUCTURE;
-    EffectBodyRequest body={0};
 
-    if (status==XR_XIR_OK) status=effect_invocation_collect(work,module,effects,graph,
-        graph->material->declared,&body);
-    EffectInvocationDriverInput input={work,&body,effects,graph,
-        status==XR_XIR_OK?graph->material->declared:NULL,dense};
-    EffectInvocationProjectionSink sink;
 
-    if (status==XR_XIR_OK) {
-        sink=(EffectInvocationProjectionSink){work->resources,module->function_count,
-            &publication,effect_invocation_publication_write};
-        status=effect_invocation_derive(&input,&certificate,&sink,&publication);
-    }
-    /* The raw boundary remains inside this whole operation, after the
-     * last projection callback and before any public result changes. */
-    if (status==XR_XIR_OK) status=effect_invocation_current_input_match(work,module,certificate->body);
-
-    if (status==XR_XIR_OK) status=effect_invocation_publication_commit(work,effects,&certificate);
-    if (status==XR_XIR_OK) {
-        /* Construction ownership has moved through seal to this certificate.
-         * The graph borrows it only while the same generation remains live. */
-        graph->material=effects->invocations->body;
-        graph->physical=graph->material->physical;graph->physical_owned=false;
-    }
-    if (certificate && certificate->body) {
-        if (effects->cells==certificate->body->cells) effects->cells=NULL;
-        if (graph->material==certificate->body) {
-            graph->material=NULL;graph->physical=NULL;graph->physical_owned=false;
-        }
-    }
-    effect_invocation_result_free(publication);effect_invocation_certificate_free(certificate);
-    effect_invocation_bounds_free(temporary);return status;
-}
-
-static XrXirStatus effect_invocation_effect_edge_mask(const XrXirCompileContext *work,
-    const XrXirEffects *effects,uint32_t caller,uint32_t instruction,uint32_t target,uint32_t *output) {
-    if (!effects || effects->resources!=work->resources) return XR_XIR_BAD_STRUCTURE;
-    return effect_invocation_certificate_edge_mask(work,effects->invocations,caller,instruction,target,output);
-}
 
 #include "xxir_effect_invocation_forest.inc.c"
 
@@ -313,12 +216,3 @@ static XrXirStatus effect_context_dense_stable_read(const XrXirCompileContext *c
 
 /* Mutable construction retains its own scratch capacity. Published queries
  * supply separate request-owned Terms to the exact same correspondence core. */
-static XrXirStatus effect_context_dense_stable(const XrXirCompileContext *context,
-    EffectContextOwner *owner,const XrXirModule *source) {
-    if (!owner || !owner->dense || !owner->ordinary || owner->dense->terms.remaining!=context)
-        return XR_XIR_BAD_STRUCTURE;
-    owner->ordinary->terms.remaining=context;
-    XrXirStatus status=effect_context_dense_stable_read(context,owner,source,
-        owner->dense->uses.invocations,&owner->ordinary->terms,&owner->dense->terms);
-    owner->ordinary->terms.remaining=NULL;return status;
-}

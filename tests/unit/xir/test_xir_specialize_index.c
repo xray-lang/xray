@@ -22,35 +22,29 @@ enum { INDEX_KEYS = 12, INDEX_WIDTH = 128 };
 typedef struct IndexFixture {
     SpecInstance keys[INDEX_KEYS];
     XrXirType types[INDEX_KEYS][INDEX_WIDTH];
-    XrXirEffectArgument effects[INDEX_KEYS][2];
 } IndexFixture;
 static void index_fixture(IndexFixture *f) {
     memset(f,0,sizeof(*f));
     for (uint32_t k=0;k<INDEX_KEYS;++k) {
         for (uint32_t a=0;a<INDEX_WIDTH;++a) f->types[k][a]=XR_XIR_I64;
-        f->effects[k][0]=(XrXirEffectArgument){0,XR_XIR_I64};
-        f->effects[k][1]=(XrXirEffectArgument){1,XR_XIR_F64};
-        f->keys[k]=(SpecInstance){0,f->types[k],INDEX_WIDTH,NULL,f->effects[k],2,UINT32_MAX};
+        f->keys[k]=(SpecInstance){.declaration=0,.arguments=f->types[k],.count=INDEX_WIDTH,.owner=UINT32_MAX};
     }
     f->types[1][INDEX_WIDTH-1]=XR_XIR_I32;
-    f->effects[2][1].type=XR_XIR_I32;
-    f->effects[3][1].parameter=2;
+    f->types[2][1]=XR_XIR_I32;
+    f->types[3][2]=XR_XIR_I32;
     f->keys[4].owner=0;f->keys[5].owner=1;
     f->keys[6].declaration=1;f->keys[7].count=INDEX_WIDTH-1;
-    f->keys[8].effect_count=1;f->types[9][0]=XR_XIR_I32;
-    /* Key 10 is equal in independent storage; key 11 reverses effect order. */
-    f->effects[11][0]=(XrXirEffectArgument){1,XR_XIR_F64};
-    f->effects[11][1]=(XrXirEffectArgument){0,XR_XIR_I64};
+    f->keys[8].count=INDEX_WIDTH-2;f->types[9][0]=XR_XIR_I32;
+    /* Key 10 is equal in independent storage; key 11 differs in its middle. */
+    f->types[11][INDEX_WIDTH/2]=XR_XIR_I32;
 }
 static uint32_t index_reference(const SpecContext *c,const SpecInstance *key) {
     for (uint32_t i=0;i<c->count;++i) {
         const SpecInstance *old=&c->instances[i];
         if (key->declaration!=old->declaration || key->owner!=old->owner ||
-            key->count!=old->count || key->effect_count!=old->effect_count) continue;
+            key->count!=old->count) continue;
         bool same=true;
         for (uint32_t a=0;a<key->count;++a) if (key->arguments[a]!=old->arguments[a]) same=false;
-        for (uint32_t a=0;a<key->effect_count;++a)
-            if (key->effects[a].parameter!=old->effects[a].parameter || key->effects[a].type!=old->effects[a].type) same=false;
         if (same) return i;
     }
     return UINT32_MAX;
@@ -84,7 +78,7 @@ static XrXirStatus index_operation(const XrXirCompileContext *context,void *opaq
 static void index_collisions(void) {
     LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
     IndexFixture f;index_fixture(&f);SpecInstance instances[32];SpecContext c={0};c.remaining=owner.context;c.instances=instances;
-    const uint32_t bits[]={8408,18786};uint32_t hashes[2]={0};
+    const uint32_t bits[]={42239,47305};uint32_t hashes[2]={0};
     for (uint32_t k=0;k<2;++k) {
         for (uint32_t a=0;a<INDEX_WIDTH;++a) f.types[k][a]=XR_XIR_I64;
         for (uint32_t a=0;a<32;++a) f.types[k][a]=(bits[k]&(UINT32_C(1)<<a))?XR_XIR_I32:XR_XIR_I64;
@@ -113,7 +107,7 @@ static void index_collisions(void) {
 static void index_prepare_growth(SpecContext *c,const XrXirCompileContext *context,SpecInstance *instances) {
     *c=(SpecContext){0};c->remaining=*context;c->instances=instances;
     for (uint32_t i=0;i<4;++i) {
-        SpecInstance key={i,NULL,0,NULL,NULL,0,UINT32_MAX};CHECK(index_add(c,&key)==i);
+        SpecInstance key={.declaration=i,.owner=UINT32_MAX};CHECK(index_add(c,&key)==i);
     }
     CHECK(c->index_capacity==8 && c->count==4);
 }

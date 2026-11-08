@@ -24,193 +24,25 @@ typedef struct ProvenanceMatch {
     XrXirDiagnostic *diagnostic;
     XrXirTypeMatchScratch scratch;
     const XrXirProvenance *instance;
-    const XrXirEffects *effects;
-    XirEffectContextScope *selection_scope;
 } ProvenanceMatch;
 #include "xxir_provenance_comptime.inc.c"
 
-static XrXirStatus provenance_effect_context(ProvenanceMatch *c, uint32_t caller,
-    uint32_t instruction, XirEffectContextView *output) {
-    uint32_t owner=c->destination->declarations ?
-        c->destination->declarations->functions[caller].cleanup_owner : 0;
-    uint32_t count=0,current=owner;
-    while (current) {
-
-        if (current>c->count || count>=c->count) return XR_XIR_BAD_STRUCTURE;
-        ++count;current=c->destination->declarations->functions[current-1].cleanup_owner;
-    }
-    XrXirStatus status=XR_XIR_OK;
-    XrXirOrigin *owners=count ? xir_compile_alloc(c->remaining,(size_t)count*sizeof(*owners),&status) : NULL;
-    if (count && !owners) return status;
-    current=owner;
-    for (uint32_t a=0;a<count;++a) {
-
-        owners[a]=c->origins[current-1];
-        current=c->destination->declarations->functions[current-1].cleanup_owner;
-    }
-    XirEffectContextInput input={c->source,c->destination->types,&c->origins[caller],instruction,owners,count,c->instance->source->construction,NULL};
-    if (status==XR_XIR_OK) status=c->selection_scope ?
-        xir_effects_context_select_scoped_input(c->selection_scope,&input,output) :
-        xir_effects_context_select_input(c->remaining,c->effects,&input,output);
-    xr_compile_resources_free(owners);return status;
-}
-
-#include "xxir_effect_capture.inc.c"
-
-static XrXirStatus provenance_effect_default(ProvenanceMatch *c,
-    const XrXirOrigin *origin, bool *is_default) {
-    *is_default=origin->argument_count==0;
-    if (!c->effects) return origin->effect_argument_count ? XR_XIR_BAD_STRUCTURE : XR_XIR_OK;
-    const XrXirFunction *definition=&c->source->functions[origin->function];
-    if (origin->effect_argument_count!=definition->parameter_count ||
-        !!origin->effect_arguments!=!!origin->effect_argument_count) return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t p=0;p<definition->parameter_count;++p) {
-
-        if (origin->effect_arguments[p].parameter!=p) return XR_XIR_BAD_STRUCTURE;
-        XrXirType actual=origin->effect_arguments[p].type,declared=definition->parameters[p];
-        XrXirStatus exact=xr_xir_compile_type_substitution_matches_between_scratch(c->remaining,
-            c->source->types,c->destination->types,origin->arguments,origin->argument_count,
-            declared,actual,&c->scratch);
-        if (exact==XR_XIR_BAD_TYPE && xr_xir_callable_signature(c->source->types,declared)) {
-            XirEffectCallableBound request={c->source->types,c->destination->types,
-                origin->arguments,origin->argument_count,declared,actual};
-            XrXirStatus status=xir_effect_callable_bound_matches(c->remaining,&request);
-            if (status!=XR_XIR_OK) return status;
-            *is_default=false;
-        } else if (exact!=XR_XIR_OK) return exact;
-    }
+/* Instance identity contains ordinary type arguments only. Effect facts belong
+ * to the common semantic summary and never select a second body variant. */
+static XrXirStatus provenance_ordinary_default(const XrXirOrigin *origin, bool *is_default) {
+    if (origin->effect_argument_count || origin->effect_arguments) return XR_XIR_BAD_STRUCTURE;
+    *is_default = origin->argument_count == 0;
     return XR_XIR_OK;
 }
 
-static XrXirStatus provenance_effect_type(ProvenanceMatch *c,
-    uint32_t function, uint32_t component, XrXirType declared, XrXirType actual) {
-    const XrXirOrigin *origin=&c->origins[function];
-    XrXirStatus status=xr_xir_compile_type_substitution_matches_between_scratch(c->remaining,
-        c->source->types,c->destination->types,origin->arguments,origin->argument_count,
-        declared,actual,&c->scratch);
-    if (status!=XR_XIR_BAD_TYPE || !c->effects || !component) return status;
-    const XrXirFunction *source=&c->source->functions[origin->function];
-    if (component<=source->parameter_count) {
-        uint32_t physical=component-1;
-        for (uint32_t a=0;a<origin->effect_argument_count;++a) {
-
-            if (origin->effect_arguments[a].parameter!=physical) continue;
-            if (origin->effect_arguments[a].type!=actual) return XR_XIR_BAD_TYPE;
-            XirEffectCallableBound request={c->source->types,c->destination->types,
-                origin->arguments,origin->argument_count,declared,actual};
-            return xir_effect_callable_bound_matches(c->remaining,&request);
-        }
-        return XR_XIR_BAD_TYPE;
-    }
-    uint32_t instruction=component-source->parameter_count-1;
-    XirEffectContextView selected={0};
-    status=provenance_effect_context(c,function,UINT32_MAX,&selected);
-    if (status!=XR_XIR_OK) return status;
-    if (instruction>=selected.function->instruction_count) return XR_XIR_BAD_STRUCTURE;
+static XrXirStatus provenance_type(ProvenanceMatch *c,
+    uint32_t function, XrXirType declared, XrXirType actual) {
+    const XrXirOrigin *origin = &c->origins[function];
     return xr_xir_compile_type_substitution_matches_between_scratch(c->remaining,
-        selected.types,c->destination->types,NULL,0,selected.function->instructions[instruction].type,
-        actual,&c->scratch);
+        c->source->types, c->destination->types, origin->arguments, origin->argument_count,
+        declared, actual, &c->scratch);
 }
 
-/* A selected variant's environment is rebuilt from this real destination
- * operand. Proof records must name precisely that edge, not another caller. */
-static XrXirStatus provenance_effect_call(ProvenanceMatch *c,
-    uint32_t caller, uint32_t instruction, uint32_t family) {
-    const XrXirFunction *function=&c->destination->functions[caller];
-    const XrXirInstruction *op=&function->instructions[instruction];
-    bool constant=false;
-    XrXirStatus constant_status=provenance_comptime_match(c,&c->origins[caller],instruction,op,&constant);
-    if (constant_status!=XR_XIR_OK || constant) return constant_status;
-    const XrXirFunction *original=&c->source->functions[c->origins[caller].function];
-    if (!family && (instruction>=original->instruction_count ||
-        original->instructions[instruction].op!=XR_XIR_CLEANUP_REGISTER || op->op!=XR_XIR_CLEANUP_REGISTER))
-        return XR_XIR_BAD_STRUCTURE;
-    if (op->immediate<0 || (uint64_t)op->immediate>=c->count) return XR_XIR_BAD_STRUCTURE;
-    const XrXirOrigin *target=&c->origins[op->immediate];
-    XirEffectContextView selected={0};
-    XrXirStatus selection=provenance_effect_context(c,caller,instruction,&selected);
-    if (selection!=XR_XIR_OK) return selection;
-    if (selected.declaration!=target->function || selected.parameter_count!=target->effect_argument_count ||
-        selected.argument_count!=target->argument_count) return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t a=0;a<target->argument_count;++a) {
-        selection=xr_xir_compile_type_substitution_matches_between_scratch(c->remaining,
-            selected.types,c->destination->types,NULL,0,selected.arguments[a],target->arguments[a],&c->scratch);
-        if (selection!=XR_XIR_OK) return selection;
-    }
-
-    uint32_t first=0,count=0;if(!xr_xir_direct_argument_range(op,&first,&count))return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t a=0;a<target->effect_argument_count;++a) {
-
-        const XrXirEffectArgument *argument=&target->effect_arguments[a];
-        if (argument->parameter!=a) return XR_XIR_BAD_STRUCTURE;
-        selection=xr_xir_compile_type_substitution_matches_between_scratch(c->remaining,
-            selected.types,c->destination->types,NULL,0,selected.physical_types[a],argument->type,&c->scratch);
-        if (selection!=XR_XIR_OK) return selection;
-        if (argument->parameter>=count) {
-            if (family!=XR_XIR_EFFECT_BINDING_CAPTURE) return XR_XIR_BAD_STRUCTURE;
-            XrXirType declared=c->source->functions[target->function].parameters[argument->parameter];
-            XrXirStatus status=xr_xir_compile_type_substitution_matches_between_scratch(c->remaining,
-                c->source->types,c->destination->types,target->arguments,target->argument_count,
-                declared,argument->type,&c->scratch);
-            if (status!=XR_XIR_OK) return status;
-            continue;
-        }
-        if (!function->operands || op->args[0]>function->operand_count ||
-            op->args[1]>function->operand_count-op->args[0]) return XR_XIR_BAD_STRUCTURE;
-        uint32_t value=function->operands[first+argument->parameter];
-        XrXirType actual=xr_xir_operand_type(function,value);
-        if (xr_xir_callable_signature(c->destination->types,argument->type)) {
-            XirEffectCallableBound bound={c->destination->types,c->destination->types,NULL,0,argument->type,actual};
-            selection=xir_effect_callable_bound_matches(c->remaining,&bound);
-        } else selection=xr_xir_compile_type_substitution_matches_between_scratch(c->remaining,
-            c->destination->types,c->destination->types,NULL,0,argument->type,actual,&c->scratch);
-        if (selection!=XR_XIR_OK) return selection;
-        if (!family) continue;
-
-        XrXirEffectBindingProof wanted={family,caller,instruction,(uint32_t)op->immediate,argument->parameter,value};
-        bool found=false;
-        selection=xir_effect_binding_proof_lookup(c->remaining,c->instance,&wanted,&found);
-        if (selection!=XR_XIR_OK) return selection;
-        if (!found) return XR_XIR_BAD_STRUCTURE;
-    }
-    return XR_XIR_OK;
-}
-
-static XrXirStatus provenance_effect_proofs(ProvenanceMatch *c) {
-    if (!!c->instance->bindings != !!c->instance->binding_count) return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t b=0;b<c->instance->binding_count;++b) {
-
-        const XrXirEffectBindingProof *proof=&c->instance->bindings[b];
-        if (proof->caller>=c->count || proof->callee>=c->count) return XR_XIR_BAD_STRUCTURE;
-        const XrXirFunction *caller=&c->destination->functions[proof->caller];
-        const XrXirOrigin *origin=&c->origins[proof->caller];
-        if (proof->instruction>=caller->instruction_count ||
-            proof->instruction>=c->source->functions[origin->function].instruction_count)
-            return XR_XIR_BAD_STRUCTURE;
-        const XrXirInstruction *actual=&caller->instructions[proof->instruction];
-        XrXirOp source=c->source->functions[origin->function].instructions[proof->instruction].op;
-        uint32_t first=0,count=0;if(!xr_xir_direct_argument_range(actual,&first,&count))return XR_XIR_BAD_STRUCTURE;
-        uint32_t family=source==XR_XIR_CALL || source==XR_XIR_INVOKE || xr_xir_op_is_spawn(source) || source==XR_XIR_GENERATOR_NEW ? XR_XIR_EFFECT_BINDING_DIRECT :
-            source==XR_XIR_FUNCTION_REF ? XR_XIR_EFFECT_BINDING_CAPTURE :
-            source==XR_XIR_CALL_DEFAULT || source==XR_XIR_INVOKE_DEFAULT ? XR_XIR_EFFECT_BINDING_DEFAULT :
-            source==XR_XIR_CALL_REQUIREMENT ? XR_XIR_EFFECT_BINDING_REQUIREMENT : 0;
-        if (!family || proof->family!=family || actual->immediate!=proof->callee ||
-            proof->parameter>=count || !caller->operands ||
-            actual->args[0]>caller->operand_count || actual->args[1]>caller->operand_count-actual->args[0] ||
-            proof->actual_value!=caller->operands[first+proof->parameter]) return XR_XIR_BAD_STRUCTURE;
-        const XrXirOrigin *target=&c->origins[proof->callee];
-        bool found=false;
-        for (uint32_t a=0;a<target->effect_argument_count;++a) {
-
-            if (target->effect_arguments[a].parameter!=proof->parameter) continue;
-            XrXirStatus policy=provenance_effect_call(c,proof->caller,proof->instruction,family);
-            if (policy!=XR_XIR_OK) return policy;
-            found=true;
-        }
-        if (!found) return XR_XIR_BAD_STRUCTURE;
-    }
-    return XR_XIR_OK;
-}
 static XrXirStatus provenance_call_match(ProvenanceMatch *c, const XrXirOrigin *origin,
     const XrXirInstruction *from, const XrXirInstruction *to,uint32_t instruction) {
     if (instruction!=UINT32_MAX) {
@@ -324,14 +156,14 @@ static XrXirStatus provenance_requirement_match(ProvenanceMatch *c, const XrXirO
     xr_xir_compile_interface_closure_free(closure);
      return status;
 }
-static XrXirStatus provenance_name(ProvenanceMatch *c, const XrXirOrigin *origin,
+static XrXirStatus provenance_name(const XrXirOrigin *origin,
     const XrXirFunction *from, const XrXirFunction *to, bool is_default) {
     if (!to->name || to->name_length < from->name_length) return XR_XIR_BAD_STRUCTURE;
 
 
     if (memcmp(from->name, to->name, from->name_length)) return XR_XIR_BAD_STRUCTURE;
     size_t at = from->name_length;
-    if (c->effects && is_default) return at==to->name_length ? XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+    if (is_default) return at==to->name_length ? XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
     if (origin->argument_count || origin->effect_argument_count) {
         for (uint32_t i = 0; i <= origin->argument_count; ++i) {
             char part[12];
@@ -399,10 +231,10 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
             from->error_type,to->error_type,&c->scratch);
         if (error_status!=XR_XIR_OK) return error_status;
         bool is_default=false;
-        XrXirStatus effect_status=provenance_effect_default(c,origin,&is_default);
+        XrXirStatus effect_status=provenance_ordinary_default(origin,&is_default);
         if (effect_status!=XR_XIR_OK) return effect_status;
         c->diagnostic->function = origin->function;
-        XrXirStatus name_status = provenance_name(c, origin, from, to, is_default);
+        XrXirStatus name_status = provenance_name(origin, from, to, is_default);
         if (name_status != XR_XIR_OK) return name_status;
         bool native=c->source->declarations &&
             c->source->declarations->functions[origin->function].native_callable;
@@ -422,7 +254,7 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
         if (c->source->declarations) {
             const XrXirFunctionIdentity *identity = &c->source->declarations->functions[origin->function];
             const XrXirFunctionIdentity *actual = &c->destination->declarations->functions[f];
-            if (identity->module != actual->module || ((!c->effects || is_default) ? identity->exported : 0) != actual->exported ||
+            if (identity->module != actual->module || (is_default ? identity->exported : 0) != actual->exported ||
                 identity->nominal_owner != actual->nominal_owner || identity->member_access != actual->member_access ||
                 identity->promises != actual->promises || identity->method_kind != actual->method_kind ||
                 identity->test_role != actual->test_role || identity->test_timeout_seconds != actual->test_timeout_seconds ||
@@ -475,21 +307,14 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
                 if (status != XR_XIR_OK) return status;
             } else if (a->immediate != b->immediate || a->type_arguments[0] != b->type_arguments[0] || a->type_arguments[1] != b->type_arguments[1])
                 return XR_XIR_BAD_STRUCTURE;
-            if (c->effects && xr_xir_op_references_function(a->op)) {
-                uint32_t family=a->op==XR_XIR_FUNCTION_REF ? XR_XIR_EFFECT_BINDING_CAPTURE :
-                    a->op==XR_XIR_CALL || a->op==XR_XIR_INVOKE || xr_xir_op_is_spawn(a->op) || a->op==XR_XIR_GENERATOR_NEW ? XR_XIR_EFFECT_BINDING_DIRECT :
-                    a->op==XR_XIR_CALL_DEFAULT || a->op==XR_XIR_INVOKE_DEFAULT ? XR_XIR_EFFECT_BINDING_DEFAULT :
-                    a->op==XR_XIR_CALL_REQUIREMENT ? XR_XIR_EFFECT_BINDING_REQUIREMENT : 0;
-                XrXirStatus status=provenance_effect_call(c,f,i,family);
-                if (status!=XR_XIR_OK) return status;
-            }
+
         }
         for (uint32_t t = 0; t < 1 + from->parameter_count + from->instruction_count; ++t) {
             XrXirType expected = !t ? from->result : t <= from->parameter_count ? from->parameters[t - 1] :
                 from->instructions[t - from->parameter_count - 1].type;
             XrXirType actual = !t ? to->result : t <= to->parameter_count ? to->parameters[t - 1] :
                 to->instructions[t - to->parameter_count - 1].type;
-            XrXirStatus status = provenance_effect_type(c,f,t,expected,actual);
+            XrXirStatus status = provenance_type(c,f,expected,actual);
             if (status != XR_XIR_OK) return status;
         }
     }
@@ -778,7 +603,7 @@ static XrXirStatus provenance_reachable(ProvenanceMatch *c) {
     for (uint32_t f = 0; f < c->count; ++f) {
         const XrXirOrigin *origin = &c->origins[f];
         bool is_default=false;
-        status=provenance_effect_default(c,origin,&is_default);
+        status=provenance_ordinary_default(origin,&is_default);
         if (status!=XR_XIR_OK) goto done;
         bool cleanup=c->source->declarations &&
             c->source->declarations->functions[origin->function].cleanup_owner;
@@ -815,20 +640,18 @@ done:
     return status;
 }
 
-static XrXirStatus provenance_match_scoped(void *data,XirEffectContextScope *scope) {
-    ProvenanceMatch *match=data;match->selection_scope=scope;
+static XrXirStatus provenance_match(ProvenanceMatch *match) {
     XrXirStatus status=provenance_nominals(match);
     if (status==XR_XIR_OK) status=provenance_functions_match(match);
-    if (status==XR_XIR_OK) status=provenance_effect_proofs(match);
     if (status==XR_XIR_OK) status=provenance_declarations(match);
     if (status==XR_XIR_OK) status=provenance_reachable(match);
     if (status==XR_XIR_OK) status=provenance_evaluation_root(match);
-    match->selection_scope=NULL;return status;
+    return status;
 }
 
 static XrXirStatus provenance_functions_match_owned(const XrXirCompileContext *compile_context,
     const XrXirModule *source, const XrXirModule *destination, const XrXirProvenance *instance,
-    const XrXirEffects *effects, XrXirDiagnostic *diagnostic) {
+    XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *remaining = &compile_state;
@@ -855,20 +678,12 @@ static XrXirStatus provenance_functions_match_owned(const XrXirCompileContext *c
                 status = XR_XIR_BAD_STRUCTURE; break;
             }
         }
-        if (status==XR_XIR_OK) status=xir_effect_binding_proofs_shape(remaining,destination,instance);
+        if (status==XR_XIR_OK && (instance->bindings || instance->binding_count)) status=XR_XIR_BAD_STRUCTURE;
         if (status == XR_XIR_OK) {
             ProvenanceMatch context = {source, destination, origins, destination->function_count, remaining, &location,
-                {remaining->resources, NULL},instance,effects,NULL};
-            XrXirEffects *inferred=NULL;
-            if (!effects && source->provenance && source->provenance->kind==XR_XIR_EVIDENCE_TEMPLATE) {
-                status=xr_xir_compile_effects_infer_verified_input(remaining,(XirEffectInput){source,instance->source->construction,NULL},&inferred);
-                context.effects=inferred;
-            }
-            if (status==XR_XIR_OK) status=xir_effects_context_available(remaining,context.effects) ?
-                xir_effects_context_operation_input(remaining,context.effects,(XirEffectInput){source,instance->source->construction,NULL},destination->types,
-                    provenance_match_scoped,&context) : provenance_match_scoped(&context,NULL);
+                {remaining->resources, NULL}, instance};
+            status = provenance_match(&context);
             xr_xir_type_match_scratch_free(&context.scratch);
-            xr_xir_compile_effects_free(inferred);
         }
     }
     location.status = status;
@@ -879,7 +694,7 @@ static XrXirStatus provenance_functions_match_owned(const XrXirCompileContext *c
 XrXirStatus xr_xir_compile_provenance_functions_match(const XrXirCompileContext *context,
     const XrXirModule *source, const XrXirModule *destination, const XrXirProvenance *instance,
     XrXirDiagnostic *diagnostic) {
-    return provenance_functions_match_owned(context,source,destination,instance,NULL,diagnostic);
+    return provenance_functions_match_owned(context,source,destination,instance,diagnostic);
 }
 
 /* Raw verification creates and retires its fresh Source derivation.
@@ -904,8 +719,7 @@ XR_FUNC XrXirStatus xr_xir_compile_provenance_verify(const XrXirCompileContext *
         templated ? xir_compile_verify_owned_effects_input(context,(XirEffectInput){&source->module,source->construction,control},&effects,diagnostic) :
         xir_compile_verify_effects_input(context,(XirEffectInput){&source->module,source->construction,control},NULL,diagnostic);
     if (status==XR_XIR_OK)
-        status=provenance_functions_match_owned(context,&source->module,destination,instance,
-            templated ? (source_effects ? source_effects : effects) : NULL,diagnostic);
+        status=provenance_functions_match_owned(context,&source->module,destination,instance,diagnostic);
     xr_xir_compile_effects_free(effects);
     return status;
 }

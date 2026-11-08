@@ -450,20 +450,3 @@ typedef struct EffectClassReferenceMask {
     const XrXirCompileContext *work;const XrXirEffects *effects;
     uint32_t function,instruction,mask,count;
 } EffectClassReferenceMask;
-static XrXirStatus effect_class_reference_mask_target(void *owner,const XirClassMethodTarget *target) {
-    EffectClassReferenceMask *read=owner;uint32_t mask=0;
-    XrXirStatus status=effect_invocation_effect_edge_mask(read->work,read->effects,read->function,read->instruction,target->function,&mask);
-    if(status==XR_XIR_OK) {read->mask|=mask;++read->count;}return status;
-}
-static XrXirStatus effect_class_reference_mask(const XrXirCompileContext *work,
-    const XrXirEffects *effects,uint32_t function,uint32_t instruction,uint32_t *output) {
-    if(!output || !effects || effects->resources!=work->resources)return XR_XIR_BAD_STRUCTURE;
-    if(!effects->invocations) {*output=XR_XIR_CALLABLE_ROOT_UNRESOLVED;return XR_XIR_OK;}
-    const EffectInvocationCertificate *certificate=effects->invocations;
-    if(!effect_body_material_shape(certificate->body) || certificate->resources!=work->resources)return XR_XIR_BAD_STRUCTURE;
-    EffectClassReferenceMask read={work,effects,function,instruction,0,0};
-    XrXirStatus status=effect_class_method_candidates(work,certificate->body,function,instruction,effect_class_reference_mask_target,&read);
-    if(status==XR_XIR_OK && !read.count)status=XR_XIR_BAD_STRUCTURE;
-    if(status==XR_XIR_OK)*output=read.mask;
-    return status;
-}

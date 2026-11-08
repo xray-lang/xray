@@ -127,11 +127,7 @@ static XrXirStatus effect_invocation_public_walk_selection(const XrXirCompileCon
 
 /* Every public domain is proved before publication. Function and environment
  * identities are separate: several keys may execute one recursive body. */
-static XrXirStatus effect_invocation_public_walk(const XrXirCompileContext *work,
-    const EffectInvocationCertificate *certificate,const EffectInvocationTraceRequest *request,
-    uint32_t *length,const EffectInvocationPublicTraceOutput *output) {
-    return effect_invocation_public_walk_selection(work,certificate,request,length,output,NULL);
-}
+
 
 static XrXirStatus effect_invocation_public_gate(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate) {
@@ -153,51 +149,4 @@ static XrXirStatus effect_invocation_public_gate(const XrXirCompileContext *work
         }
     }
     return XR_XIR_OK;
-}
-
-static XrXirStatus effect_invocation_public_trace(const XrXirCompileContext *work,
-    const EffectInvocationCertificate *certificate,uint32_t function,
-    const XrXirRootEffects *facts,XrXirRootCauseTrace **output) {
-    if (!xir_compile_context_valid(work) || !certificate || !effect_body_material_shape(certificate->body) ||
-        certificate->body->resources!=certificate->resources || certificate->resources!=work->resources ||
-        !facts || !output || *output || function>=effect_body_count(certificate->body) ||
-        !certificate->final) return XR_XIR_BAD_STRUCTURE;
-
-    XrXirRootEffects expected={0};
-    XrXirStatus fact_status=effect_invocation_certificate_facts(work,certificate,function,&expected);
-    if (fact_status!=XR_XIR_OK) return fact_status;
-    if (facts->requires_root!=expected.requires_root || facts->unresolved!=expected.unresolved)
-        return XR_XIR_BAD_STRUCTURE;
-    uint32_t counts[2]={0};EffectInvocationTraceRequest request={.function=function};
-    XrXirStatus status=effect_invocation_public_walk(work,certificate,&request,&counts[0],NULL);
-    request.domain=1;
-    if (status==XR_XIR_OK) status=effect_invocation_public_walk(work,certificate,&request,&counts[1],NULL);
-    if (status!=XR_XIR_OK) return status;
-    uint64_t total=(uint64_t)counts[0]+counts[1];XrXirRootCauseTrace *trace=NULL;
-    if (total>(SIZE_MAX-sizeof(*trace))/sizeof(XrXirRootCauseStep)) status=XR_XIR_BUDGET;
-    if (status==XR_XIR_OK) {
-        size_t bytes=sizeof(*trace)+(size_t)total*sizeof(XrXirRootCauseStep);
-        status=xir_compile_resource_status(xr_compile_resources_admit(work->resources,bytes));
-        if (status!=XR_XIR_OK) return status;
-        trace=xir_compile_calloc(work,1,bytes,&status);
-        if (!trace) status=status==XR_XIR_OK?XR_XIR_OUT_OF_MEMORY:status;
-    }
-    XrXirRootCauseStep *steps=trace?effect_root_trace_storage(trace):NULL;
-    uint32_t copied=0;
-    for (uint32_t d=0;d<2 && status==XR_XIR_OK;++d) {
-        request.domain=d;uint32_t written=UINT32_MAX;
-        const EffectInvocationPublicTraceOutput target={counts[d]?steps+copied:NULL,counts[d]};
-        status=effect_invocation_public_walk(work,certificate,&request,&written,&target);
-        if (status==XR_XIR_OK && written!=counts[d]) status=XR_XIR_BAD_STRUCTURE;
-        if (status==XR_XIR_OK) copied+=written;
-    }
-    if (status==XR_XIR_OK && copied!=total) status=XR_XIR_BAD_STRUCTURE;
-
-    /* The sole allocation can invoke external code. Re-read the current Final
-     * facts after filling; no temporary owner is freed after this comparison. */
-    if (status==XR_XIR_OK) status=effect_invocation_certificate_facts(work,certificate,function,&expected);
-    if (status==XR_XIR_OK && (facts->requires_root!=expected.requires_root || facts->unresolved!=expected.unresolved))
-        status=XR_XIR_BAD_STRUCTURE;
-    if (status!=XR_XIR_OK) { xr_xir_compile_root_cause_trace_free(trace);return status; }
-    trace->facts=*facts;trace->counts[0]=counts[0];trace->counts[1]=counts[1];*output=trace;return XR_XIR_OK;
 }

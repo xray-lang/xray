@@ -248,7 +248,6 @@ static bool source_effect_sync(SourceContext *ctx, const XrXirEffects *effects, 
             if (!source_effect_library_match(ctx,effects,f)) return false;
             continue;
         }
-        if (!source_effect_fixed_arguments(ctx,effects,f,changed)) return false;
         const XrXirFunctionEffectContract *derived = xir_effects_contract(effects,f);
         XrXirFunctionEffectContract *stored = &ctx->effect_evidence->contracts[f];
         SourceFunction *body = &ctx->bodies[f];
@@ -273,4 +272,13 @@ static bool source_effect_sync(SourceContext *ctx, const XrXirEffects *effects, 
         if (!source_effect_records(ctx,f,false)) return false;
     }
     return true;
+}
+
+static XrXirStatus source_effect_bindings_prepare(void *opaque, const XrXirEffects *effects) {
+    SourceContext *ctx = opaque;
+    bool changed = false;
+    for (uint32_t f = 0; ctx->effect_evidence && f < ctx->function_count; ++f)
+        if (!ctx->bodies[f].library_effect && !source_effect_fixed_arguments(ctx,effects,f,&changed))
+            return ctx->diagnostic.status;
+    return XR_XIR_OK;
 }

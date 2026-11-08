@@ -1,0 +1,1591 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xxir_effect_check.inc.c - Parameterized module effects from direct SSA input
+ *
+ * KEY CONCEPT:
+ *   Instructions contribute equations once. Function and value equations own
+ *   numeric dependencies, never instructions or a replayable body snapshot.
+ *   Recursive components close before callers consume their summaries.
+ */
+#include "../base/xhash.h"
+
+#ifndef XXIR_EFFECT_CHECK_IMPLEMENTATION
+#define XXIR_EFFECT_CHECK_IMPLEMENTATION
+
+typedef struct EffectCheckFunction {
+    uint32_t first, values, contents, parameters, words, root, result, module, generic_parameters;
+    uint32_t declaration, type_first, type_count, pending_first, pending_count;
+    uint64_t *bits;
+} EffectCheckFunction;
+
+typedef struct EffectCheckNode {
+    uint32_t function, dependencies, consumers, aliases, calls, last_call, bindings;
+    uint32_t component, reason[2];
+    uint8_t cell_use, origin, bound, closed;
+    bool queued, deferred, worker_blocked, cell_parameter, spawn;
+} EffectCheckNode;
+
+typedef enum EffectCheckPendingKind {
+    EFFECT_CHECK_REQUIREMENT, EFFECT_CHECK_CLASS_DISPATCH, EFFECT_CHECK_HIGHER_ORDER
+} EffectCheckPendingKind;
+
+typedef struct EffectCheckPending {
+    uint32_t function, instruction, node, selector, member, result;
+    uint32_t receiver, argument_first, argument_count, type_first, type_count;
+    XrXirType receiver_type;
+    EffectCheckPendingKind kind;
+    bool linked;
+} EffectCheckPending;
+
+typedef struct EffectCheckDispatch {
+    XrXirType receiver;
+    uint32_t slot, first, count;
+} EffectCheckDispatch;
+
+typedef struct EffectCheckDependency {
+    uint32_t source, target, next_source, next_target;
+} EffectCheckDependency;
+
+typedef struct EffectCheckAlias {
+    uint32_t source, next;
+} EffectCheckAlias;
+
+typedef struct EffectCheckBinding {
+    uint32_t source, next;
+} EffectCheckBinding;
+
+typedef struct EffectCheckCall {
+    uint32_t target, first, count, next, instruction;
+    uint32_t type_first, type_count;
+    uint8_t protocol;
+} EffectCheckCall;
+
+typedef struct EffectCheckFrame {
+    uint32_t node, dependency, parent;
+} EffectCheckFrame;
+
+typedef struct EffectCheckCause {
+    uint32_t function;
+    XrXirRootEffectWitness witness;
+} EffectCheckCause;
+
+typedef struct EffectCheckedRoots {
+    XrCompileResources *resources;
+    uint32_t functions, nodes, dependencies, aliases, calls, arguments;
+    uint32_t dependency_capacity, alias_capacity, call_capacity, argument_capacity;
+    uint32_t modules, pending_count, pending_capacity;
+    uint32_t type_arguments, type_argument_capacity;
+    uint32_t dispatches, dispatch_capacity, dispatch_targets, dispatch_target_capacity;
+    uint32_t *dispatch_index;
+    uint32_t dispatch_index_capacity;
+    uint32_t templates, function_capacity, node_capacity, terminal_capacity;
+    uint32_t bindings, binding_capacity;
+    EffectCheckFunction *function;
+    EffectCheckNode *node;
+    EffectCheckDependency *dependency;
+    EffectCheckAlias *alias;
+    EffectCheckBinding *binding;
+    EffectCheckCall *call;
+    uint32_t *argument;
+    uint32_t *module_offsets, *module_functions;
+    EffectCheckPending *pending;
+    EffectCheckDispatch *dispatch;
+    XirClassMethodTarget *dispatch_target;
+    XrXirType *type_argument;
+    XrXirRootEffectWitness *terminals;
+    EffectTerms *terms;
+} EffectCheckedRoots;
+
+typedef struct EffectCheckBuild {
+    const XrXirCompileContext *memory;
+    const XrXirModule *module;
+    const XrXirFunctionEffectContract *contracts;
+    XrCompileRequestControl *control;
+    EffectCheckedRoots *roots;
+    XirReadScratch scratch;
+    uint32_t *dispatch_index;
+    uint32_t dispatch_index_capacity;
+    uint32_t *instance_index;
+    uint32_t instance_index_capacity;
+    uint32_t progress;
+    XrXirStatus status;
+} EffectCheckBuild;
+
+static void effect_checked_roots_free(EffectCheckedRoots *roots) {
+    if (!roots) return;
+    if (roots->function) for (uint32_t f = 0; f < roots->functions; ++f)
+        xr_compile_resources_free(roots->function[f].bits);
+    xr_compile_resources_free(roots->function);
+    xr_compile_resources_free(roots->node);
+    xr_compile_resources_free(roots->dependency);
+    xr_compile_resources_free(roots->alias);
+    xr_compile_resources_free(roots->binding);
+    xr_compile_resources_free(roots->call);
+    xr_compile_resources_free(roots->argument);
+    xr_compile_resources_free(roots->module_offsets);
+    xr_compile_resources_free(roots->module_functions);
+    xr_compile_resources_free(roots->pending);
+    xr_compile_resources_free(roots->dispatch);
+    xr_compile_resources_free(roots->dispatch_target);
+    xr_compile_resources_free(roots->dispatch_index);
+    xr_compile_resources_free(roots->type_argument);
+    xr_compile_resources_free(roots->terminals);
+    if (roots->terms) effect_terms_free(roots->terms);
+    xr_compile_resources_free(roots->terms);
+    xr_compile_resources_free(roots);
+}
+
+static bool effect_check_poll(EffectCheckBuild *build) {
+    if (build->status == XR_XIR_OK)
+        build->status = xir_receive_step(build->control, &build->progress);
+    return build->status == XR_XIR_OK;
+}
+
+static uint64_t *effect_check_bits(const EffectCheckedRoots *roots, uint32_t node) {
+    const EffectCheckFunction *function = &roots->function[roots->node[node].function];
+    return function->bits + (size_t)(node - function->first) * function->words;
+}
+
+static uint32_t effect_check_value(EffectCheckBuild *build, uint32_t function, uint32_t value) {
+    if (function >= build->roots->functions || value >= build->roots->function[function].values) {
+        build->status = XR_XIR_BAD_STRUCTURE;
+        return UINT32_MAX;
+    }
+    return build->roots->function[function].first + value;
+}
+
+static bool effect_check_dependency(EffectCheckBuild *build, uint32_t source, uint32_t target) {
+    EffectCheckedRoots *roots = build->roots;
+    if (source >= roots->nodes || target >= roots->nodes) {
+        build->status = XR_XIR_BAD_STRUCTURE;
+        return false;
+    }
+    if (roots->dependencies == roots->dependency_capacity) {
+        EffectCheckDependency *values = xir_compile_array_grow(build->memory, roots->dependency,
+            roots->dependencies, sizeof(*values), &roots->dependency_capacity, &build->status);
+        if (!values) return false;
+        roots->dependency = values;
+    }
+    uint32_t index = roots->dependencies++;
+    roots->dependency[index] = (EffectCheckDependency){source, target,
+        roots->node[source].consumers, roots->node[target].dependencies};
+    roots->node[source].consumers = roots->node[target].dependencies = index;
+    return true;
+}
+
+static bool effect_check_alias(EffectCheckBuild *build, uint32_t target, uint32_t source) {
+    EffectCheckedRoots *roots = build->roots;
+    if (source >= roots->nodes || target >= roots->nodes ||
+        roots->node[source].function != roots->node[target].function) {
+        build->status = XR_XIR_BAD_STRUCTURE;
+        return false;
+    }
+    if (roots->aliases == roots->alias_capacity) {
+        EffectCheckAlias *values = xir_compile_array_grow(build->memory, roots->alias,
+            roots->aliases, sizeof(*values), &roots->alias_capacity, &build->status);
+        if (!values) return false;
+        roots->alias = values;
+    }
+    uint32_t index = roots->aliases++;
+    roots->alias[index] = (EffectCheckAlias){source, roots->node[target].aliases};
+    roots->node[target].aliases = index;
+    return effect_check_dependency(build, source, target);
+}
+
+static void effect_check_seed(EffectCheckedRoots *roots, uint32_t node,
+    uint32_t mask, XrXirRootEffectWitness witness) {
+    uint64_t *bits = effect_check_bits(roots, node);
+    bits[0] |= mask;
+    for (uint32_t bit = 0; bit < 2; ++bit) {
+        if ((mask & (1u << bit)) && roots->node[node].reason[bit] == UINT32_MAX) {
+            roots->node[node].reason[bit] = node;
+            roots->terminals[(size_t)node * 2 + bit] = witness;
+        }
+    }
+}
+
+static uint32_t effect_check_type_mask(const XrXirTypes *types, XrXirType type) {
+    const XrXirTypeNode *callable = xr_xir_callable_signature(types, type);
+    if (!callable) return 0;
+    return ((callable->flags & XR_XIR_CALLABLE_ROOT_REQUIRED) ? 1u : 0u) |
+        ((callable->flags & XR_XIR_CALLABLE_ROOT_UNRESOLVED) ? 2u : 0u);
+}
+
+static XrXirStatus effect_check_allocate(EffectCheckBuild *build) {
+    EffectCheckedRoots *roots = xir_compile_calloc(build->memory, 1, sizeof(*roots), &build->status);
+    if (!roots) return build->status;
+    build->roots = roots;
+    roots->resources = build->memory->resources;
+    roots->functions = build->module->function_count;
+    roots->templates = roots->function_capacity = roots->functions;
+    roots->modules = build->module->declarations ? build->module->declarations->module_count : 1;
+    if (!roots->modules || (uint64_t)roots->modules + 1 > SIZE_MAX / sizeof(uint32_t))
+        return XR_XIR_BAD_STRUCTURE;
+    roots->function = xir_compile_calloc(build->memory, roots->functions,
+        sizeof(*roots->function), &build->status);
+    if (!roots->function) return build->status;
+    uint64_t nodes = 0;
+    for (uint32_t f = 0; f < roots->functions; ++f) {
+        if (!effect_check_poll(build)) return build->status;
+        const XrXirFunction *source = &build->module->functions[f];
+        uint64_t values = (uint64_t)source->parameter_count + source->instruction_count;
+        uint64_t words = ((uint64_t)source->parameter_count * 2 + 2 + 63) / 64;
+        uint64_t expressions = values * 2 + 2;
+        if (expressions > UINT32_MAX - nodes || words > UINT32_MAX ||
+            expressions > SIZE_MAX / sizeof(uint64_t) / words) return XR_XIR_OVERFLOW;
+        EffectCheckFunction *function = &roots->function[f];
+        *function = (EffectCheckFunction){.first = (uint32_t)nodes, .values = (uint32_t)values,
+            .contents = (uint32_t)(nodes + values),
+            .parameters = source->parameter_count, .words = (uint32_t)words,
+            .root = (uint32_t)(nodes + values * 2), .result = (uint32_t)(nodes + values * 2 + 1),
+            .declaration = f};
+        if (build->module->declarations && build->module->declarations->functions)
+            function->module = build->module->declarations->functions[f].module;
+        if (build->module->generics)
+            function->generic_parameters = build->module->generics[f].parameter_count;
+        function->bits = xir_compile_calloc(build->memory, (size_t)expressions * (size_t)words,
+            sizeof(*function->bits), &build->status);
+        if (!function->bits) return build->status;
+        nodes += expressions;
+    }
+    roots->nodes = (uint32_t)nodes;
+    roots->node_capacity = roots->terminal_capacity = roots->nodes;
+    roots->node = xir_compile_calloc(build->memory, roots->nodes, sizeof(*roots->node), &build->status);
+    roots->terminals = xir_compile_calloc(build->memory, roots->nodes,
+        2 * sizeof(*roots->terminals), &build->status);
+    if (!roots->node || !roots->terminals) return build->status;
+    roots->module_offsets = xir_compile_calloc(build->memory, (size_t)roots->modules + 1,
+        sizeof(*roots->module_offsets), &build->status);
+    roots->module_functions = xir_compile_alloc(build->memory,
+        (size_t)roots->functions * sizeof(*roots->module_functions), &build->status);
+    if (!roots->module_offsets || !roots->module_functions) return build->status;
+    for (uint32_t f = 0; f < roots->functions; ++f) {
+        const EffectCheckFunction *function = &roots->function[f];
+        if (function->module >= roots->modules) return XR_XIR_BAD_STRUCTURE;
+        ++roots->module_offsets[function->module];
+        for (uint32_t n = function->first; n <= function->result; ++n)
+            roots->node[n] = (EffectCheckNode){.function = f, .dependencies = UINT32_MAX,
+                .consumers = UINT32_MAX, .aliases = UINT32_MAX, .calls = UINT32_MAX, .last_call = UINT32_MAX,
+                .bindings = UINT32_MAX,
+                .component = UINT32_MAX, .reason = {UINT32_MAX, UINT32_MAX}};
+    }
+    uint32_t total = 0;
+    for (uint32_t m = 0; m < roots->modules; ++m) {
+        uint32_t count = roots->module_offsets[m];
+        roots->module_offsets[m] = total;
+        total += count;
+    }
+    roots->module_offsets[roots->modules] = total;
+    for (uint32_t f = 0; f < roots->functions; ++f) {
+        uint32_t module = roots->function[f].module;
+        roots->module_functions[roots->module_offsets[module]++] = f;
+    }
+    for (uint32_t m = roots->modules; m > 0; --m)
+        roots->module_offsets[m] = roots->module_offsets[m - 1];
+    roots->module_offsets[0] = 0;
+    return XR_XIR_OK;
+}
+
+static bool effect_check_type_arguments(EffectCheckBuild *build, uint32_t function,
+    const XrXirInstruction *op, uint32_t *first, uint32_t *count) {
+    EffectCheckedRoots *roots = build->roots;
+    const XrXirGeneric *generic = build->module->generics ? &build->module->generics[function] : NULL;
+    uint32_t stored = generic ? generic->argument_count : 0;
+    if (op->type_arguments[0] > stored || op->type_arguments[1] > stored - op->type_arguments[0]) {
+        build->status = XR_XIR_BAD_STRUCTURE;
+        return false;
+    }
+    *first = roots->type_arguments;
+    *count = op->type_arguments[1];
+    for (uint32_t a = 0; a < *count; ++a) {
+        if (roots->type_arguments == roots->type_argument_capacity) {
+            XrXirType *values = xir_compile_array_grow(build->memory, roots->type_argument,
+                roots->type_arguments, sizeof(*values), &roots->type_argument_capacity, &build->status);
+            if (!values) return false;
+            roots->type_argument = values;
+        }
+        roots->type_argument[roots->type_arguments++] = generic->arguments[op->type_arguments[0] + a];
+    }
+    return true;
+}
+
+static bool effect_check_pending(EffectCheckBuild *build, uint32_t function,
+    uint32_t instruction, uint32_t node, EffectCheckPendingKind kind) {
+    EffectCheckedRoots *roots = build->roots;
+    if (roots->pending_count == roots->pending_capacity) {
+        EffectCheckPending *pending = xir_compile_array_grow(build->memory, roots->pending,
+            roots->pending_count, sizeof(*pending), &roots->pending_capacity, &build->status);
+        if (!pending) return false;
+        roots->pending = pending;
+    }
+    const XrXirFunction *body = &build->module->functions[function];
+    const XrXirInstruction *op = &body->instructions[instruction];
+    EffectCheckPending pending = {.function = function, .instruction = instruction, .node = node,
+        .selector = op->targets[0], .member = op->targets[1], .kind = kind,
+        .argument_first = roots->arguments, .argument_count = op->args[1], .receiver = UINT32_MAX,
+        .result = UINT32_MAX};
+    if (kind != EFFECT_CHECK_CLASS_DISPATCH && xr_xir_type_is_callable(build->module->types, op->type))
+        pending.result = roots->function[function].first + body->parameter_count + instruction;
+    uint32_t receiver = UINT32_MAX;
+    if (kind == EFFECT_CHECK_CLASS_DISPATCH) {
+        pending.selector = (uint32_t)op->immediate;
+        receiver = op->args[0];
+    } else if (kind == EFFECT_CHECK_HIGHER_ORDER) receiver = (uint32_t)op->immediate;
+    else if (op->args[1] && op->args[0] < body->operand_count) receiver = body->operands[op->args[0]];
+    pending.receiver = effect_check_value(build, function, receiver);
+    if (pending.receiver == UINT32_MAX) return false;
+    pending.receiver_type = xr_xir_operand_type(body, receiver);
+    const uint32_t *arguments = &receiver;
+    uint32_t argument_count = 1;
+    if (kind != EFFECT_CHECK_CLASS_DISPATCH) {
+        if (op->args[0] > body->operand_count || op->args[1] > body->operand_count - op->args[0]) {
+            build->status = XR_XIR_BAD_STRUCTURE;
+            return false;
+        }
+        arguments = op->args[1] ? body->operands + op->args[0] : NULL;
+        argument_count = op->args[1];
+    }
+    pending.argument_count = argument_count;
+    if (argument_count && !arguments) {
+        build->status = XR_XIR_BAD_STRUCTURE;
+        return false;
+    }
+    for (uint32_t a = 0; a < argument_count; ++a) {
+        uint32_t value = effect_check_value(build, function, arguments[a]);
+        if (value == UINT32_MAX) return false;
+        if (roots->arguments == roots->argument_capacity) {
+            uint32_t *values = xir_compile_array_grow(build->memory, roots->argument,
+                roots->arguments, sizeof(*values), &roots->argument_capacity, &build->status);
+            if (!values) return false;
+            roots->argument = values;
+        }
+        roots->argument[roots->arguments++] = value;
+    }
+    if (!effect_check_type_arguments(build, function, op, &pending.type_first, &pending.type_count)) return false;
+    roots->pending[roots->pending_count++] = pending;
+    roots->node[node].deferred = true;
+    return true;
+}
+
+static bool effect_check_call_record(EffectCheckBuild *build, uint32_t output, EffectCheckCall call) {
+    EffectCheckedRoots *roots = build->roots;
+    if (output >= roots->nodes || call.target >= roots->nodes || call.first > roots->arguments ||
+        call.count > roots->arguments - call.first) {
+        build->status = XR_XIR_BAD_STRUCTURE;
+        return false;
+    }
+    if (roots->calls == roots->call_capacity) {
+        EffectCheckCall *values = xir_compile_array_grow(build->memory, roots->call,
+            roots->calls, sizeof(*values), &roots->call_capacity, &build->status);
+        if (!values) return false;
+        roots->call = values;
+    }
+    uint32_t index = roots->calls++;
+    /* Source order breaks equal first-cause choices without retaining bodies. */
+    call.next = UINT32_MAX;
+    roots->call[index] = call;
+    if (roots->node[output].last_call == UINT32_MAX) roots->node[output].calls = index;
+    else roots->call[roots->node[output].last_call].next = index;
+    roots->node[output].last_call = index;
+    EffectCheckFunction callee = roots->function[roots->node[call.target].function];
+    uint8_t use = call.protocol == 8 ? 2 : call.protocol;
+    for (uint32_t p = 0; p < call.count; ++p)
+        roots->node[callee.first + p].cell_use |= use;
+    if (call.protocol == 1) for (uint32_t p = call.count; p < callee.parameters; ++p)
+        roots->node[callee.first + p].cell_use |= 2;
+    if (!effect_check_dependency(build, call.target, output)) return false;
+    for (uint32_t p = 0; p < call.count; ++p)
+        if (!effect_check_dependency(build, roots->argument[call.first + p], output)) return false;
+    return true;
+}
+
+static bool effect_check_argument(EffectCheckBuild *build, uint32_t value) {
+    EffectCheckedRoots *roots = build->roots;
+    if (value >= roots->nodes) {
+        build->status = XR_XIR_BAD_STRUCTURE;
+        return false;
+    }
+    if (roots->arguments == roots->argument_capacity) {
+        uint32_t *values = xir_compile_array_grow(build->memory, roots->argument,
+            roots->arguments, sizeof(*values), &roots->argument_capacity, &build->status);
+        if (!values) return false;
+        roots->argument = values;
+    }
+    roots->argument[roots->arguments++] = value;
+    return true;
+}
+
+static bool effect_check_call(EffectCheckBuild *build, uint32_t output,
+    uint32_t target, const XrXirInstruction *op, uint32_t instruction, bool result) {
+    EffectCheckedRoots *roots = build->roots;
+    uint32_t caller = roots->node[output].function;
+    const XrXirFunction *function = &build->module->functions[caller];
+    uint32_t operand_first = 0, argument_count = 0;
+    if (!xr_xir_direct_argument_range(op, &operand_first, &argument_count) ||
+        target >= roots->functions || operand_first > function->operand_count ||
+        argument_count > function->operand_count - operand_first ||
+        argument_count > roots->function[target].parameters) {
+        build->status = XR_XIR_BAD_STRUCTURE;
+        return false;
+    }
+    uint32_t first = roots->arguments;
+    uint8_t protocol = op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_GENERATOR_NEW ? 1u :
+        op->op == XR_XIR_CLEANUP_REGISTER ? 4u : 2u;
+    for (uint32_t p = 0; p < argument_count; ++p) {
+        uint32_t value = effect_check_value(build, caller, function->operands[operand_first + p]);
+        if (value == UINT32_MAX) return false;
+        if (!effect_check_argument(build, value)) return false;
+        if (xr_xir_type_is_cell(build->module->types, build->module->functions[target].parameters[p]))
+            roots->node[roots->function[target].first + p].cell_use |= protocol;
+    }
+    if (protocol == 1) {
+        for (uint32_t p = argument_count; p < roots->function[target].parameters; ++p)
+            if (xr_xir_type_is_cell(build->module->types, build->module->functions[target].parameters[p]))
+                roots->node[roots->function[target].first + p].cell_use |= 2u;
+    }
+    uint32_t callee = result ? roots->function[target].result : roots->function[target].root;
+    EffectCheckCall call = {.target = callee, .first = first, .count = argument_count,
+        .instruction = instruction, .protocol = protocol};
+    if (!effect_check_type_arguments(build, caller, op, &call.type_first, &call.type_count)) return false;
+    return effect_check_call_record(build, output, call);
+}
+
+static XrXirStatus effect_check_local(EffectCheckBuild *build, uint32_t function,
+    uint32_t instruction, const XrXirInstruction *operation) {
+    if (operation->op == XR_XIR_CALL_INDIRECT || operation->op == XR_XIR_INVOKE_INDIRECT ||
+        operation->op == XR_XIR_CALL_REQUIREMENT) return XR_XIR_OK;
+    XirMetadataDomain domain = xir_metadata_domain_from_module(build->module);
+    EffectRootSeedRecord input = {&domain, operation, function, instruction, XR_XIR_UNIT};
+    XrXirRootEffects facts = {0};
+    XrXirRootEffectWitness root = {0}, unknown = {0};
+    XrXirStatus status;
+    for (;;) {
+        status = effect_root_seed_output(&input, &facts, &root, &unknown, build->memory, &build->scratch);
+        if (status != XR_XIR_BUDGET || !build->scratch.required) break;
+        status = xir_read_scratch_grow(build->memory, &build->scratch);
+        if (status != XR_XIR_OK) break;
+        status = xir_read_scratch_begin(build->memory, &build->scratch);
+        if (status != XR_XIR_OK) break;
+    }
+    if (status == XR_XIR_OK) {
+        uint32_t node = build->roots->function[function].root;
+        if (facts.requires_root) effect_check_seed(build->roots, node, 1, root);
+        if (facts.unresolved) effect_check_seed(build->roots, node, 2, unknown);
+    }
+    return status;
+}
+
+static bool effect_check_copy(EffectCheckBuild *build, uint32_t function,
+    uint32_t target, uint32_t source) {
+    source = effect_check_value(build, function, source);
+    if (source == UINT32_MAX || !effect_check_alias(build, target, source)) return false;
+    EffectCheckFunction row = build->roots->function[function];
+    if (target < row.first || target - row.first >= row.values) return true;
+    return effect_check_alias(build, row.contents + target - row.first, row.contents + source - row.first);
+}
+
+static void effect_check_cell_seed(EffectCheckBuild *build, uint32_t node, const XrXirInstruction *op) {
+    if (!xr_xir_type_is_cell(build->module->types, op->type)) return;
+    uint8_t origin = XR_XIR_CELL_ORIGIN_UNKNOWN;
+    switch (op->op) {
+    case XR_XIR_CELL_NEW: case XR_XIR_CELL_NEW_TAKE:
+        origin = XR_XIR_CELL_ORIGIN_OWNED;
+        break;
+    case XR_XIR_COPY: case XR_XIR_OWNED_RETAIN: case XR_XIR_LOCAL_NEW: case XR_XIR_LOCAL_READ:
+    case XR_XIR_OWNED_LOCAL_NEW: case XR_XIR_OWNED_LOCAL_READ: case XR_XIR_PHI:
+    case XR_XIR_CELL_READ: case XR_XIR_CELL_TAKE: case XR_XIR_VALUE_TAKE: case XR_XIR_PLACE_READ:
+        origin = 0;
+        break;
+    case XR_XIR_CELL_PROJECT: case XR_XIR_FIELD_PLACE: case XR_XIR_INDEX_PLACE: case XR_XIR_OBJECT_PLACE:
+        origin = XR_XIR_CELL_ORIGIN_SCOPED;
+        break;
+    case XR_XIR_SLOT_PLACE:
+        origin = XR_XIR_CELL_ORIGIN_MODULE;
+        break;
+    default: break;
+    }
+    build->roots->node[node].origin = origin;
+}
+
+static bool effect_check_instruction(EffectCheckBuild *build, uint32_t f, uint32_t i) {
+    const XrXirFunction *function = &build->module->functions[f];
+    const XrXirInstruction *op = &function->instructions[i];
+    EffectCheckFunction row = build->roots->function[f];
+    uint32_t value = row.first + function->parameter_count + i;
+    effect_check_cell_seed(build, value, op);
+    if (op->op == XR_XIR_SLOT_PLACE) build->roots->node[row.root].worker_blocked = true;
+    build->status = effect_check_local(build, f, i, op);
+    if (build->status != XR_XIR_OK) return false;
+    bool callable = xr_xir_callable_signature(build->module->types, op->type) != NULL;
+    switch (op->op) {
+    case XR_XIR_GO: case XR_XIR_SCOPED_GO: {
+        if (op->immediate < 0 || (uint64_t)op->immediate >= build->roots->templates) return false;
+        build->roots->node[value].spawn = true;
+        if (!effect_check_call(build, value, (uint32_t)op->immediate, op, i, false)) return false;
+        uint32_t call = build->roots->node[value].calls;
+        build->roots->call[call].protocol = 8;
+        return true;
+    }
+    case XR_XIR_CALL_REQUIREMENT:
+        return effect_check_pending(build, f, i, row.root, EFFECT_CHECK_REQUIREMENT);
+    case XR_XIR_CLASS_METHOD_REF:
+        return effect_check_pending(build, f, i, value, EFFECT_CHECK_CLASS_DISPATCH);
+    case XR_XIR_FUNCTION_REF:
+        return op->immediate >= 0 && (uint64_t)op->immediate < build->roots->functions &&
+            effect_check_call(build, value, (uint32_t)op->immediate, op, i, false);
+    case XR_XIR_CALL: case XR_XIR_INVOKE: case XR_XIR_CLEANUP_REGISTER:
+        if (op->immediate < 0 || (uint64_t)op->immediate >= build->roots->functions) return false;
+        if (!effect_check_call(build, row.root, (uint32_t)op->immediate, op, i, false)) return false;
+        return !callable || effect_check_call(build, value, (uint32_t)op->immediate, op, i, true);
+    case XR_XIR_CALL_DEFAULT: case XR_XIR_INVOKE_DEFAULT: {
+        const uint32_t *identity = xr_xir_default_identity(op);
+        const XrXirDefaultTable *defaults = build->module->defaults;
+        uint32_t target = UINT32_MAX;
+        for (uint32_t d = 0; defaults && d < defaults->count; ++d) {
+            const XrXirDefaultBinding *binding = &defaults->records[d];
+            if (binding->owner_kind == XR_XIR_DEFAULT_PARAMETER &&
+                binding->owner == identity[0] && binding->ordinal == identity[1]) {
+                target = binding->function;
+                break;
+            }
+        }
+        if (target == UINT32_MAX) return false;
+        XrXirInstruction call = {.type_arguments = {op->type_arguments[0], op->type_arguments[1]}};
+        if (!effect_check_call(build, row.root, target, &call, i, false)) return false;
+        return !callable || effect_check_call(build, value, target, &call, i, true);
+    }
+    case XR_XIR_GENERATOR_NEW:
+        return op->immediate >= 0 && (uint64_t)op->immediate < build->roots->functions &&
+            effect_check_call(build, value, (uint32_t)op->immediate, op, i, false);
+    case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT:
+    case XR_XIR_ITERATOR_NTH: case XR_XIR_ITERATOR_CLOSE:
+        return effect_check_copy(build, f, row.root, op->args[0]);
+    case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT:
+        if (op->immediate < 0 || (uint64_t)op->immediate >= row.values) return false;
+        {
+            XrXirType type = xr_xir_operand_type(function, (uint32_t)op->immediate);
+            const XrXirTypeNode *signature = xr_xir_callable_signature(build->module->types, type);
+            for (uint32_t p = 0; signature && p < signature->parameter_count; ++p)
+                if (xr_xir_type_is_callable(build->module->types, signature->parameters[p].type))
+                    return effect_check_pending(build, f, i, row.root, EFFECT_CHECK_HIGHER_ORDER);
+        }
+        return effect_check_copy(build, f, row.root, (uint32_t)op->immediate);
+    case XR_XIR_COPY: case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN:
+    case XR_XIR_LOCAL_NEW: case XR_XIR_LOCAL_READ: case XR_XIR_SCALAR_LOCAL_NEW:
+    case XR_XIR_SCALAR_LOCAL_READ: case XR_XIR_OWNED_LOCAL_NEW: case XR_XIR_OWNED_LOCAL_READ:
+    case XR_XIR_CELL_PROJECT: case XR_XIR_CELL_PLACE: case XR_XIR_VALUE_TAKE:
+        return effect_check_copy(build, f, value, op->args[0]);
+    case XR_XIR_CELL_READ: case XR_XIR_CELL_TAKE: case XR_XIR_PLACE_READ: {
+        uint32_t cell = effect_check_value(build, f, op->args[0]);
+        return cell != UINT32_MAX && effect_check_alias(build, row.root, cell) &&
+            effect_check_alias(build, value, row.contents + op->args[0]);
+    }
+    case XR_XIR_LOCAL_WRITE: case XR_XIR_SCALAR_LOCAL_WRITE: case XR_XIR_OWNED_LOCAL_WRITE:
+        return effect_check_copy(build, f, effect_check_value(build, f, op->args[0]), op->args[1]);
+    case XR_XIR_PHI:
+        if (op->args[0] > function->operand_count || op->args[1] > function->operand_count - op->args[0] ||
+            op->args[1] % 2) return false;
+        for (uint32_t p = 1; p < op->args[1]; p += 2)
+            if (!effect_check_copy(build, f, value, function->operands[op->args[0] + p])) return false;
+        return true;
+    case XR_XIR_RETURN:
+        return !xr_xir_type_is_callable(build->module->types, function->result) ||
+            effect_check_copy(build, f, row.result, op->args[0]);
+    case XR_XIR_CELL_NEW: case XR_XIR_CELL_NEW_TAKE: {
+        uint32_t input = effect_check_value(build, f, op->args[0]);
+        return input != UINT32_MAX && effect_check_alias(build,
+            row.contents + function->parameter_count + i, input);
+    }
+    case XR_XIR_CELL_WRITE: case XR_XIR_CELL_WRITE_TAKE: case XR_XIR_CELL_STRING_APPEND:
+    case XR_XIR_CELL_LOCAL_WRITE: case XR_XIR_PLACE_WRITE:
+    {
+        uint32_t cell = effect_check_value(build, f, op->args[0]);
+        uint32_t input = effect_check_value(build, f, op->args[1]);
+        return cell != UINT32_MAX && input != UINT32_MAX &&
+            effect_check_alias(build, row.root, cell) &&
+            effect_check_alias(build, row.contents + op->args[0], input);
+    }
+    default: break;
+    }
+    if (callable) {
+        uint32_t mask = effect_check_type_mask(build->module->types, op->type);
+        effect_check_seed(build->roots, value, mask,
+            (XrXirRootEffectWitness){XR_XIR_ROOT_CAUSE_INDIRECT, i, UINT32_MAX, UINT32_MAX, 0});
+    }
+    return true;
+}
+
+static XrXirStatus effect_check_collect(EffectCheckBuild *build) {
+    for (uint32_t f = 0; f < build->roots->functions; ++f) {
+        const XrXirFunction *body = &build->module->functions[f];
+        EffectCheckFunction row = build->roots->function[f];
+        build->roots->function[f].pending_first = build->roots->pending_count;
+        for (uint32_t p = 0; p < body->parameter_count; ++p) {
+            const XrXirTypeNode *callable = xr_xir_callable_signature(build->module->types, body->parameters[p]);
+            uint32_t mask = effect_check_type_mask(build->module->types, body->parameters[p]);
+            build->roots->node[row.first + p].bound = (uint8_t)mask;
+            uint32_t kind = build->contracts ? build->contracts[f].parameters[p].kind : XR_XIR_EFFECT_PARAMETER_FIXED;
+            if (callable && kind != XR_XIR_EFFECT_PARAMETER_FIXED) {
+                uint32_t bit = p + 2;
+                effect_check_bits(build->roots, row.first + p)[bit / 64] |= UINT64_C(1) << (bit % 64);
+            } else if (callable) {
+                effect_check_seed(build->roots, row.first + p,
+                    effect_check_type_mask(build->module->types, body->parameters[p]),
+                    (XrXirRootEffectWitness){XR_XIR_ROOT_CAUSE_INDIRECT, UINT32_MAX, UINT32_MAX, p, 0});
+            } else if (xr_xir_type_is_cell(build->module->types, body->parameters[p])) {
+                build->roots->node[row.first + p].cell_parameter = true;
+                build->roots->node[row.first + p].bound = 1;
+                uint32_t bit = body->parameter_count + p + 2;
+                effect_check_bits(build->roots, row.first + p)[bit / 64] |= UINT64_C(1) << (bit % 64);
+                build->roots->node[row.first + p].origin = XR_XIR_CELL_ORIGIN_SCOPED;
+                XrXirType element = xr_xir_cell_element(build->module->types, body->parameters[p]);
+                effect_check_seed(build->roots, row.contents + p,
+                    effect_check_type_mask(build->module->types, element),
+                    (XrXirRootEffectWitness){XR_XIR_ROOT_CAUSE_INDIRECT, UINT32_MAX, UINT32_MAX, p, 0});
+            }
+        }
+        const XrXirDeclarations *declarations = build->module->declarations;
+        if (declarations && declarations->functions && declarations->modules &&
+            row.module < declarations->module_count && declarations->modules[row.module].initializer == f)
+            effect_check_seed(build->roots, row.root, 1,
+                (XrXirRootEffectWitness){XR_XIR_ROOT_CAUSE_INITIALIZER, UINT32_MAX, UINT32_MAX, UINT32_MAX, 0});
+        if (declarations && declarations->functions &&
+            declarations->functions[f].native_callable == XR_NATIVE_CALLABLE_SYS_ON_SIGNAL)
+            effect_check_seed(build->roots, row.root, 1,
+                (XrXirRootEffectWitness){XR_XIR_ROOT_CAUSE_NATIVE, UINT32_MAX, UINT32_MAX, UINT32_MAX, 0});
+        for (uint32_t i = 0; i < body->instruction_count; ++i) {
+            if (!effect_check_poll(build)) return build->status;
+            if (!effect_check_instruction(build, f, i))
+                return build->status == XR_XIR_OK ? XR_XIR_BAD_STRUCTURE : build->status;
+        }
+        build->roots->function[f].pending_count = build->roots->pending_count -
+            build->roots->function[f].pending_first;
+    }
+    return XR_XIR_OK;
+}
+
+static bool effect_check_type_argument(EffectCheckBuild *build, XrXirType type) {
+    EffectCheckedRoots *roots = build->roots;
+    if (roots->type_arguments == roots->type_argument_capacity) {
+        XrXirType *values = xir_compile_array_grow(build->memory, roots->type_argument,
+            roots->type_arguments, sizeof(*values), &roots->type_argument_capacity, &build->status);
+        if (!values) return false;
+        roots->type_argument = values;
+    }
+    roots->type_argument[roots->type_arguments++] = type;
+    return true;
+}
+
+static bool effect_check_types(EffectCheckBuild *build) {
+    if (build->roots->terms) return true;
+    EffectTerms *terms = xir_compile_calloc(build->memory, 1, sizeof(*terms), &build->status);
+    if (!terms) return false;
+    build->roots->terms = terms;
+    terms->remaining = build->memory;
+    build->status = effect_terms_seed(terms, build->module->types);
+    return build->status == XR_XIR_OK;
+}
+
+static const XrXirTypes *effect_check_types_read(const EffectCheckBuild *build) {
+    return build->roots->terms ? &build->roots->terms->types : build->module->types;
+}
+
+static bool effect_check_substitute(EffectCheckBuild *build, uint32_t function,
+    XrXirType type, XrXirType *output) {
+    EffectCheckFunction row = build->roots->function[function];
+    if (!row.type_count) {
+        *output = type;
+        return true;
+    }
+    if (!effect_check_types(build)) return false;
+    XrXirGeneric arguments = {.arguments = build->roots->type_argument + row.type_first,
+        .argument_count = row.type_count};
+    build->status = effect_terms_substitute(build->roots->terms, type, &arguments, output);
+    return build->status == XR_XIR_OK;
+}
+
+static bool effect_check_substitute_arguments(EffectCheckBuild *build,
+    uint32_t function, uint32_t first, uint32_t count, uint32_t *output) {
+    *output = build->roots->type_arguments;
+    for (uint32_t a = 0; a < count; ++a) {
+        XrXirType type = build->roots->type_argument[first + a];
+        if (!effect_check_substitute(build, function, type, &type) ||
+            !effect_check_type_argument(build, type)) return false;
+    }
+    return true;
+}
+
+static uint32_t effect_check_instance_hash(const EffectCheckedRoots *roots,
+    uint32_t declaration, uint32_t first, uint32_t count) {
+    return xr_hash_int(declaration) ^ xr_hash_bytes(roots->type_argument + first,
+        (size_t)count * sizeof(*roots->type_argument));
+}
+
+static bool effect_check_instance_index(EffectCheckBuild *build) {
+    EffectCheckedRoots *roots = build->roots;
+    if (roots->functions - roots->templates < build->instance_index_capacity / 2) return true;
+    uint64_t capacity = build->instance_index_capacity ? (uint64_t)build->instance_index_capacity * 2 : 32;
+    if (capacity > UINT32_MAX || capacity > SIZE_MAX / sizeof(uint32_t)) {
+        build->status = XR_XIR_OVERFLOW;
+        return false;
+    }
+    uint32_t *index = xir_compile_calloc(build->memory, (size_t)capacity, sizeof(*index), &build->status);
+    if (!index) return false;
+    for (uint32_t f = roots->templates; f < roots->functions; ++f) {
+        EffectCheckFunction row = roots->function[f];
+        uint32_t at = effect_check_instance_hash(roots, row.declaration, row.type_first, row.type_count) &
+            ((uint32_t)capacity - 1);
+        while (index[at]) at = (at + 1) & ((uint32_t)capacity - 1);
+        index[at] = f + 1;
+    }
+    xr_compile_resources_free(build->instance_index);
+    build->instance_index = index;
+    build->instance_index_capacity = (uint32_t)capacity;
+    return true;
+}
+
+static bool effect_check_instance_storage(EffectCheckBuild *build, uint32_t count) {
+    EffectCheckedRoots *roots = build->roots;
+    if (roots->functions == roots->function_capacity) {
+        EffectCheckFunction *values = xir_compile_array_grow(build->memory, roots->function,
+            roots->functions, sizeof(*values), &roots->function_capacity, &build->status);
+        if (!values) return false;
+        roots->function = values;
+    }
+    while (count > roots->node_capacity) {
+        EffectCheckNode *values = xir_compile_array_grow(build->memory, roots->node,
+            roots->nodes, sizeof(*values), &roots->node_capacity, &build->status);
+        if (!values) return false;
+        roots->node = values;
+    }
+    while (count > roots->terminal_capacity) {
+        XrXirRootEffectWitness *values = xir_compile_array_grow(build->memory, roots->terminals,
+            roots->nodes, 2 * sizeof(*values), &roots->terminal_capacity, &build->status);
+        if (!values) return false;
+        roots->terminals = values;
+    }
+    return true;
+}
+
+/* A generic instance binds numeric equations. It owns no executable body and
+ * never fetches an instruction while resolving an interface requirement. */
+static bool effect_check_instance_equations(EffectCheckBuild *build, uint32_t function) {
+    EffectCheckedRoots *roots = build->roots;
+    EffectCheckFunction row = roots->function[function];
+    EffectCheckFunction source = roots->function[row.declaration];
+    for (uint32_t n = source.first; n <= source.result; ++n) {
+        uint32_t output = row.first + n - source.first;
+        EffectCheckNode original = roots->node[n];
+        for (uint32_t a = original.aliases; a != UINT32_MAX; a = roots->alias[a].next) {
+            uint32_t input = row.first + roots->alias[a].source - source.first;
+            if (!effect_check_alias(build, output, input)) return false;
+        }
+        for (uint32_t c = original.calls; c != UINT32_MAX; c = roots->call[c].next) {
+            EffectCheckCall call = roots->call[c];
+            uint32_t first = roots->arguments;
+            for (uint32_t p = 0; p < call.count; ++p) {
+                uint32_t input = row.first + roots->argument[call.first + p] - source.first;
+                if (!effect_check_argument(build, input)) return false;
+            }
+            call.first = first;
+            if (!effect_check_substitute_arguments(build, function, call.type_first,
+                    call.type_count, &call.type_first) || !effect_check_call_record(build, output, call)) return false;
+        }
+    }
+    roots->function[function].pending_first = roots->pending_count;
+    for (uint32_t p = 0; p < source.pending_count; ++p) {
+        EffectCheckPending pending = roots->pending[source.pending_first + p];
+        pending.function = function;
+        pending.node = row.first + pending.node - source.first;
+        pending.receiver = row.first + pending.receiver - source.first;
+        if (pending.result != UINT32_MAX) pending.result = row.first + pending.result - source.first;
+        pending.linked = false;
+        uint32_t first = roots->arguments;
+        for (uint32_t a = 0; a < pending.argument_count; ++a) {
+            uint32_t input = row.first + roots->argument[pending.argument_first + a] - source.first;
+            if (!effect_check_argument(build, input)) return false;
+        }
+        pending.argument_first = first;
+        if (!effect_check_substitute(build, function, pending.receiver_type, &pending.receiver_type) ||
+            !effect_check_substitute_arguments(build, function, pending.type_first,
+                pending.type_count, &pending.type_first)) return false;
+        if (roots->pending_count == roots->pending_capacity) {
+            EffectCheckPending *values = xir_compile_array_grow(build->memory, roots->pending,
+                roots->pending_count, sizeof(*values), &roots->pending_capacity, &build->status);
+            if (!values) return false;
+            roots->pending = values;
+        }
+        roots->pending[roots->pending_count++] = pending;
+    }
+    roots->function[function].pending_count = source.pending_count;
+    return true;
+}
+
+static uint32_t effect_check_instance(EffectCheckBuild *build,
+    uint32_t declaration, uint32_t first, uint32_t count) {
+    EffectCheckedRoots *roots = build->roots;
+    if (!count) return declaration;
+    const XrXirTypes *types = effect_check_types_read(build);
+    for (uint32_t a = 0; a < count; ++a)
+        if (xr_xir_type_span(types, roots->type_argument[first + a])) return declaration;
+    if (count != roots->function[declaration].generic_parameters) {
+        build->status = XR_XIR_BAD_STRUCTURE;
+        return UINT32_MAX;
+    }
+    if (!effect_check_instance_index(build)) return UINT32_MAX;
+    uint32_t mask = build->instance_index_capacity - 1;
+    uint32_t at = effect_check_instance_hash(roots, declaration, first, count) & mask;
+    while (build->instance_index[at]) {
+        uint32_t index = build->instance_index[at] - 1;
+        EffectCheckFunction row = roots->function[index];
+        if (row.declaration == declaration && row.type_count == count &&
+            !memcmp(roots->type_argument + row.type_first, roots->type_argument + first,
+                (size_t)count * sizeof(*roots->type_argument))) return index;
+        at = (at + 1) & mask;
+    }
+    EffectCheckFunction source = roots->function[declaration];
+    uint32_t expressions = source.result - source.first + 1;
+    if (expressions > UINT32_MAX - roots->nodes) {
+        build->status = XR_XIR_OVERFLOW;
+        return UINT32_MAX;
+    }
+    if (!effect_check_instance_storage(build, roots->nodes + expressions)) return UINT32_MAX;
+    uint32_t index = roots->functions++;
+    EffectCheckFunction row = source;
+    row.first = roots->nodes;
+    row.contents = row.first + source.contents - source.first;
+    row.root = row.first + source.root - source.first;
+    row.result = row.first + source.result - source.first;
+    row.type_first = first;
+    row.type_count = count;
+    row.generic_parameters = 0;
+    row.bits = NULL;
+    roots->function[index] = row;
+    roots->function[index].bits = xir_compile_copy(build->memory, source.bits,
+        (size_t)expressions * source.words * sizeof(*source.bits), &build->status);
+    if (!roots->function[index].bits) return UINT32_MAX;
+    for (uint32_t n = 0; n < expressions; ++n) {
+        EffectCheckNode node = roots->node[source.first + n];
+        node.function = index;
+        node.dependencies = node.consumers = node.aliases = node.calls = node.last_call = node.bindings = UINT32_MAX;
+        for (uint32_t bit = 0; bit < 2; ++bit)
+            if (node.reason[bit] != UINT32_MAX) node.reason[bit] = row.first + n;
+        roots->node[row.first + n] = node;
+        memcpy(roots->terminals + (size_t)(row.first + n) * 2,
+            roots->terminals + (size_t)(source.first + n) * 2, 2 * sizeof(*roots->terminals));
+    }
+    roots->nodes += expressions;
+    build->instance_index[at] = index + 1;
+    if (!effect_check_instance_equations(build, index)) return UINT32_MAX;
+    return index;
+}
+
+static bool effect_check_bind_calls(EffectCheckBuild *build, uint32_t function) {
+    EffectCheckedRoots *roots = build->roots;
+    EffectCheckFunction row = roots->function[function];
+    for (uint32_t n = row.first; n <= row.result; ++n) {
+        for (uint32_t c = roots->node[n].calls; c != UINT32_MAX; c = roots->call[c].next) {
+            EffectCheckCall call = roots->call[c];
+            uint32_t callee = roots->node[call.target].function;
+            uint32_t target = effect_check_instance(build, roots->function[callee].declaration,
+                call.type_first, call.type_count);
+            if (target == UINT32_MAX) return false;
+            if (target == callee) continue;
+            roots->call[c].target = call.target == roots->function[callee].root ?
+                roots->function[target].root : roots->function[target].result;
+            if (!effect_check_dependency(build, roots->call[c].target, n)) return false;
+        }
+    }
+    return true;
+}
+
+static XrXirStatus effect_check_dispatch_target(void *owner, const XirClassMethodTarget *target) {
+    EffectCheckBuild *build = owner;
+    EffectCheckedRoots *roots = build->roots;
+    if (target->function >= roots->functions) return XR_XIR_BAD_STRUCTURE;
+    if (roots->dispatch_targets == roots->dispatch_target_capacity) {
+        XirClassMethodTarget *values = xir_compile_array_grow(build->memory, roots->dispatch_target,
+            roots->dispatch_targets, sizeof(*values), &roots->dispatch_target_capacity, &build->status);
+        if (!values) return build->status;
+        roots->dispatch_target = values;
+    }
+    roots->dispatch_target[roots->dispatch_targets++] = *target;
+    return XR_XIR_OK;
+}
+
+static uint32_t effect_check_dispatch_hash(XrXirType receiver, uint32_t slot) {
+    return xr_hash_int((int64_t)(((uint64_t)(uint32_t)receiver << 32) | slot));
+}
+
+static bool effect_check_dispatch_index(EffectCheckBuild *build) {
+    EffectCheckedRoots *roots = build->roots;
+    if (roots->dispatches < build->dispatch_index_capacity / 2) return true;
+    uint64_t capacity = build->dispatch_index_capacity ? (uint64_t)build->dispatch_index_capacity * 2 : 32;
+    if (capacity > UINT32_MAX || capacity > SIZE_MAX / sizeof(uint32_t)) {
+        build->status = XR_XIR_OVERFLOW;
+        return false;
+    }
+    uint32_t *index = xir_compile_calloc(build->memory, (size_t)capacity, sizeof(*index), &build->status);
+    if (!index) return false;
+    for (uint32_t d = 0; d < roots->dispatches; ++d) {
+        EffectCheckDispatch row = roots->dispatch[d];
+        uint32_t at = effect_check_dispatch_hash(row.receiver, row.slot) & ((uint32_t)capacity - 1);
+        while (index[at]) at = (at + 1) & ((uint32_t)capacity - 1);
+        index[at] = d + 1;
+    }
+    xr_compile_resources_free(build->dispatch_index);
+    build->dispatch_index = index;
+    build->dispatch_index_capacity = (uint32_t)capacity;
+    return true;
+}
+
+/* Candidate identity is shared by every use of the same receiver and slot.
+ * Linking consumes declaration headers and the recorded site arguments only. */
+static uint32_t effect_check_dispatch(EffectCheckBuild *build, const EffectCheckPending *pending) {
+    EffectCheckedRoots *roots = build->roots;
+    if (!effect_check_dispatch_index(build)) return UINT32_MAX;
+    uint32_t mask = build->dispatch_index_capacity - 1;
+    uint32_t at = effect_check_dispatch_hash(pending->receiver_type, pending->selector) & mask;
+    while (build->dispatch_index[at]) {
+        uint32_t index = build->dispatch_index[at] - 1;
+        EffectCheckDispatch row = roots->dispatch[index];
+        if (row.receiver == pending->receiver_type && row.slot == pending->selector) return index;
+        at = (at + 1) & mask;
+    }
+    if (roots->dispatches == roots->dispatch_capacity) {
+        EffectCheckDispatch *values = xir_compile_array_grow(build->memory, roots->dispatch,
+            roots->dispatches, sizeof(*values), &roots->dispatch_capacity, &build->status);
+        if (!values) return UINT32_MAX;
+        roots->dispatch = values;
+    }
+    uint32_t first = roots->dispatch_targets;
+    XrXirModule module = *build->module;
+    module.types = effect_check_types_read(build);
+    build->status = xir_compile_class_method_candidates(&module, pending->receiver_type,
+        pending->selector, effect_check_dispatch_target, build, build->control);
+    if (build->status != XR_XIR_OK) return UINT32_MAX;
+    uint32_t index = roots->dispatches++;
+    roots->dispatch[index] = (EffectCheckDispatch){pending->receiver_type, pending->selector,
+        first, roots->dispatch_targets - first};
+    build->dispatch_index[at] = index + 1;
+    return index;
+}
+
+static bool effect_check_link_target(EffectCheckBuild *build,
+    const EffectCheckPending *pending, uint32_t target, uint8_t protocol) {
+    EffectCheckedRoots *roots = build->roots;
+    if (target >= roots->functions || pending->argument_count > roots->function[target].parameters) {
+        build->status = XR_XIR_BAD_STRUCTURE;
+        return false;
+    }
+    EffectCheckCall call = {.target = roots->function[target].root,
+        .first = pending->argument_first, .count = pending->argument_count,
+        .instruction = pending->instruction, .protocol = protocol,
+        .type_first = pending->type_first, .type_count = pending->type_count};
+    if (!effect_check_call_record(build, pending->node, call)) return false;
+    if (pending->result != UINT32_MAX) {
+        call.target = roots->function[target].result;
+        if (!effect_check_call_record(build, pending->result, call)) return false;
+    }
+    return true;
+}
+
+static bool effect_check_link_requirement(EffectCheckBuild *build, EffectCheckPending *pending) {
+    XrXirModule module = *build->module;
+    module.types = effect_check_types_read(build);
+    const XrXirInterfaceTable *table = module.types ? module.types->interfaces : NULL;
+    if (!table || pending->selector >= table->count ||
+        pending->member >= table->declarations[pending->selector].method_count) {
+        build->status = XR_XIR_BAD_STRUCTURE;
+        return false;
+    }
+    const XrXirInterfaceDeclaration *interface = &table->declarations[pending->selector];
+    const XrXirInterfaceMethod *method = &interface->methods[pending->member];
+    const XrXirTypeNode *signature = xr_xir_callable_signature(module.types, method->signature);
+    if (!signature) {
+        build->status = XR_XIR_BAD_TYPE;
+        return false;
+    }
+    if (!(signature->flags & XR_XIR_CALLABLE_ROOT_UNRESOLVED)) {
+        effect_check_seed(build->roots, pending->node,
+            effect_check_type_mask(module.types, method->signature),
+            (XrXirRootEffectWitness){XR_XIR_ROOT_CAUSE_CONTEXT_CALL,
+                pending->instruction, UINT32_MAX, UINT32_MAX, 0});
+        pending->linked = true;
+        return true;
+    }
+    if (xr_xir_type_span(module.types, pending->receiver_type)) return true;
+    uint32_t count = interface->parameter_count;
+    if (pending->type_count < count) {
+        build->status = XR_XIR_BAD_STRUCTURE;
+        return false;
+    }
+    const XrXirType *types = count ? build->roots->type_argument + pending->type_first : NULL;
+    for (uint32_t a = 0; a < pending->type_count; ++a)
+        if (xr_xir_type_span(module.types, build->roots->type_argument[pending->type_first + a])) return true;
+    XrXirProofContext context = {&module, {XR_XIR_CONTEXT_CLOSED, 0, 0}};
+    XrXirWitnessRequest request = {build->module, pending->receiver_type,
+        {pending->selector, types, count}, pending->member};
+    XrXirWitness witness = {0};
+    build->status = xir_compile_witness_resolve_controlled(build->memory, &context,
+        &request, &witness, build->control);
+    if (build->status != XR_XIR_OK) return false;
+    if (witness.function >= build->roots->templates) {
+        build->status = XR_XIR_BAD_STRUCTURE;
+        return false;
+    }
+    EffectCheckPending applied = *pending;
+    applied.type_first = build->roots->type_arguments;
+    uint32_t own = method->own_parameter_count;
+    if (own > UINT32_MAX - witness.argument_count || own != pending->type_count - count) {
+        build->status = XR_XIR_BAD_STRUCTURE;
+        return false;
+    }
+    applied.type_count = witness.argument_count + own;
+    for (uint32_t a = 0; a < witness.argument_count; ++a)
+        if (!effect_check_type_argument(build, witness.arguments[a])) return false;
+    for (uint32_t a = 0; a < own; ++a) {
+        XrXirType type = build->roots->type_argument[pending->type_first + count + a];
+        if (!effect_check_type_argument(build, type)) return false;
+    }
+    pending->linked = effect_check_link_target(build, &applied, witness.function, 2);
+    return pending->linked;
+}
+
+static bool effect_check_link_application(EffectCheckBuild *build,
+    const EffectCheckPending *pending, EffectCheckCall reference) {
+    EffectCheckedRoots *roots = build->roots;
+    uint32_t target = roots->node[reference.target].function;
+    uint64_t count = (uint64_t)reference.count + pending->argument_count;
+    if (count != roots->function[target].parameters) {
+        build->status = XR_XIR_BAD_STRUCTURE;
+        return false;
+    }
+    uint32_t first = roots->arguments;
+    for (uint32_t p = 0; p < reference.count; ++p) {
+        uint32_t argument = roots->argument[reference.first + p];
+        if (!effect_check_argument(build, argument)) return false;
+    }
+    for (uint32_t p = 0; p < pending->argument_count; ++p) {
+        uint32_t argument = roots->argument[pending->argument_first + p];
+        if (!effect_check_argument(build, argument)) return false;
+    }
+    EffectCheckPending applied = *pending;
+    applied.argument_first = first;
+    applied.argument_count = (uint32_t)count;
+    applied.type_first = reference.type_first;
+    applied.type_count = reference.type_count;
+    return effect_check_link_target(build, &applied, target, 2);
+}
+
+static bool effect_check_capture_bindings(EffectCheckBuild *build) {
+    EffectCheckedRoots *roots = build->roots;
+    for (uint32_t c = 0; c < roots->calls; ++c) {
+        EffectCheckCall call = roots->call[c];
+        if (call.protocol != 1) continue;
+        uint32_t first = roots->function[roots->node[call.target].function].first;
+        for (uint32_t p = 0; p < call.count; ++p) {
+            if (roots->bindings == roots->binding_capacity) {
+                EffectCheckBinding *values = xir_compile_array_grow(build->memory, roots->binding,
+                    roots->bindings, sizeof(*values), &roots->binding_capacity, &build->status);
+                if (!values) return false;
+                roots->binding = values;
+            }
+            uint32_t source = roots->argument[call.first + p], target = first + p;
+            uint32_t index = roots->bindings++;
+            roots->binding[index] = (EffectCheckBinding){source, roots->node[target].bindings};
+            roots->node[target].bindings = index;
+            if (!effect_check_dependency(build, source, target)) return false;
+        }
+    }
+    return true;
+}
+
+static bool effect_check_link_higher_order(EffectCheckBuild *build, EffectCheckPending *pending,
+    uint32_t *visited, uint32_t *stack, uint32_t generation) {
+    EffectCheckedRoots *roots = build->roots;
+    uint32_t depth = 1, references = 0;
+    bool complete = true;
+    stack[0] = pending->receiver;
+    visited[pending->receiver] = generation;
+    while (depth) {
+        if (!effect_check_poll(build)) return false;
+        uint32_t node = stack[--depth];
+        EffectCheckNode row = roots->node[node];
+        bool origin = false;
+        for (uint32_t c = row.calls; c != UINT32_MAX; c = roots->call[c].next) {
+            EffectCheckCall call = roots->call[c];
+            if (call.protocol != 1 || (call.count && roots->node[node].function != pending->function)) {
+                complete = false;
+                continue;
+            }
+            origin = true;
+            if (!effect_check_link_application(build, pending, call)) return false;
+            ++references;
+        }
+        for (uint32_t a = row.aliases; a != UINT32_MAX; a = roots->alias[a].next) {
+            uint32_t source = roots->alias[a].source;
+            origin = true;
+            if (visited[source] == generation) continue;
+            visited[source] = generation;
+            XR_DCHECK(depth < roots->nodes, "Each callable origin is queued once");
+            stack[depth++] = source;
+        }
+        for (uint32_t b = row.bindings; b != UINT32_MAX; b = roots->binding[b].next) {
+            uint32_t source = roots->binding[b].source;
+            origin = true;
+            if (visited[source] == generation) continue;
+            visited[source] = generation;
+            XR_DCHECK(depth < roots->nodes, "Each captured callable origin is queued once");
+            stack[depth++] = source;
+        }
+        if (!origin) complete = false;
+    }
+    pending->linked = complete && references;
+    return true;
+}
+
+static XrXirStatus effect_check_link(EffectCheckBuild *build) {
+    EffectCheckedRoots *roots = build->roots;
+    bool higher_order = false;
+    for (uint32_t f = 0; f < roots->functions; ++f) {
+        if (!effect_check_bind_calls(build, f)) return build->status;
+        EffectCheckFunction function = roots->function[f];
+        for (uint32_t p = 0; p < function.pending_count; ++p) {
+            if (!effect_check_poll(build)) return build->status;
+            EffectCheckPending *pending = &roots->pending[function.pending_first + p];
+            if (pending->kind == EFFECT_CHECK_HIGHER_ORDER) {
+                higher_order = true;
+                continue;
+            }
+            if (pending->kind == EFFECT_CHECK_REQUIREMENT) {
+                if (!effect_check_link_requirement(build, pending)) return build->status;
+                continue;
+            }
+            if (build->module->linkage_kind != XR_XIR_PROGRAM) continue;
+            uint32_t index = effect_check_dispatch(build, pending);
+            if (index == UINT32_MAX) return build->status;
+            EffectCheckDispatch row = roots->dispatch[index];
+            for (uint32_t t = 0; t < row.count; ++t)
+                if (!effect_check_link_target(build, pending, roots->dispatch_target[row.first + t].function, 1))
+                    return build->status;
+            pending->linked = true;
+        }
+        if (!effect_check_bind_calls(build, f)) return build->status;
+    }
+    uint32_t *visited = NULL, *stack = NULL;
+    if (!effect_check_capture_bindings(build)) return build->status;
+    if (higher_order) {
+        visited = xir_compile_calloc(build->memory, roots->nodes, sizeof(*visited), &build->status);
+        stack = xir_compile_alloc(build->memory, (size_t)roots->nodes * sizeof(*stack), &build->status);
+        if (!visited || !stack) goto done;
+        for (uint32_t p = 0; p < roots->pending_count; ++p)
+            if (roots->pending[p].kind == EFFECT_CHECK_HIGHER_ORDER &&
+                !effect_check_link_higher_order(build, &roots->pending[p], visited, stack, p + 1)) goto done;
+    }
+    for (uint32_t n = 0; n < roots->nodes; ++n) roots->node[n].deferred = false;
+    for (uint32_t p = 0; p < roots->pending_count; ++p)
+        if (!roots->pending[p].linked) roots->node[roots->pending[p].node].deferred = true;
+done:
+    xr_compile_resources_free(visited);
+    xr_compile_resources_free(stack);
+    return build->status;
+}
+
+static XrXirStatus effect_check_cell_roles(EffectCheckBuild *build) {
+    EffectCheckedRoots *roots = build->roots;
+    for (uint32_t f = 0; f < roots->functions; ++f) {
+        const EffectCheckFunction *function = &roots->function[f];
+        for (uint32_t p = 0; p < function->parameters; ++p) {
+            const EffectCheckNode *node = &roots->node[function->first + p];
+            uint32_t bit = function->parameters + p + 2;
+            bool cell = (effect_check_bits(roots, function->first + p)[bit / 64] &
+                (UINT64_C(1) << (bit % 64))) != 0;
+            if (cell && (node->cell_use & 1u) && (node->cell_use & 6u)) return XR_XIR_BAD_TYPE;
+            if (cell && (node->cell_use & 4u) && (node->cell_use & 3u)) return XR_XIR_BAD_TYPE;
+            if (cell && (node->cell_use & 1u)) {
+                effect_check_bits(roots, function->first + p)[bit / 64] &= ~(UINT64_C(1) << (bit % 64));
+                roots->node[function->first + p].origin = XR_XIR_CELL_ORIGIN_OWNED;
+                roots->node[function->first + p].bound = 0;
+            }
+            roots->node[function->first + p].closed = node->cell_use == 1 ? 0 : node->bound;
+        }
+    }
+    return XR_XIR_OK;
+}
+
+static XrXirStatus effect_check_capture_origins(const EffectCheckedRoots *roots) {
+    for (uint32_t c = 0; c < roots->calls; ++c) {
+        const EffectCheckCall *call = &roots->call[c];
+        if (call->protocol != 1) continue;
+        const EffectCheckFunction *callee = &roots->function[roots->node[call->target].function];
+        for (uint32_t p = 0; p < call->count; ++p) {
+            if (!roots->node[callee->first + p].cell_parameter ||
+                !(roots->node[callee->first + p].cell_use & 1u)) continue;
+            uint32_t argument = roots->argument[call->first + p];
+            if (roots->node[argument].origin != XR_XIR_CELL_ORIGIN_OWNED) return XR_XIR_BAD_TYPE;
+            const uint64_t *origin = effect_check_bits(roots, argument);
+            uint32_t words = roots->function[roots->node[argument].function].words;
+            for (uint32_t w = 0; w < words; ++w)
+                if (origin[w]) return XR_XIR_BAD_TYPE;
+        }
+    }
+    return XR_XIR_OK;
+}
+
+static bool effect_check_merge(EffectCheckedRoots *roots, uint32_t target, uint32_t source) {
+    const EffectCheckFunction *function = &roots->function[roots->node[target].function];
+    uint64_t *to = effect_check_bits(roots, target), *from = effect_check_bits(roots, source);
+    bool changed = false;
+    uint8_t origin = roots->node[target].origin | roots->node[source].origin;
+    if (origin != roots->node[target].origin) {
+        roots->node[target].origin = origin;
+        changed = true;
+    }
+    if (roots->node[source].deferred && !roots->node[target].deferred) {
+        roots->node[target].deferred = true;
+        changed = true;
+    }
+    for (uint32_t w = 0; w < function->words; ++w) {
+        uint64_t combined = to[w] | from[w];
+        changed |= combined != to[w];
+        to[w] = combined;
+    }
+    for (uint32_t bit = 0; bit < 2; ++bit)
+        if ((from[0] & (UINT64_C(1) << bit)) && roots->node[target].reason[bit] == UINT32_MAX)
+            roots->node[target].reason[bit] = source;
+    return changed;
+}
+
+static bool effect_check_apply(EffectCheckedRoots *roots, uint32_t output, const EffectCheckCall *call) {
+    const EffectCheckFunction *callee = &roots->function[roots->node[call->target].function];
+    uint64_t *to = effect_check_bits(roots, output), *from = effect_check_bits(roots, call->target);
+    uint64_t constant = from[0] & 3u;
+    bool changed = (to[0] | constant) != to[0];
+    if (roots->node[call->target].deferred && !roots->node[output].deferred) {
+        roots->node[output].deferred = true;
+        changed = true;
+    }
+    to[0] |= constant;
+    for (uint32_t bit = 0; bit < 2; ++bit)
+        if ((constant & (UINT64_C(1) << bit)) && roots->node[output].reason[bit] == UINT32_MAX)
+            roots->node[output].reason[bit] = call->target;
+    for (uint32_t w = 0; w < callee->words; ++w) {
+        uint64_t terms = from[w];
+        if (!w) terms &= ~UINT64_C(3);
+        while (terms) {
+            uint32_t low = (uint32_t)__builtin_ctzll(terms);
+            terms &= terms - 1;
+            uint64_t bit = (uint64_t)w * 64 + low - 2;
+            if (bit >= (uint64_t)callee->parameters * 2) continue;
+            uint32_t parameter = (uint32_t)(bit % callee->parameters);
+            if (parameter >= call->count) {
+                if (call->protocol == 1) {
+                    uint64_t mask = bit < callee->parameters ? 2u : 1u;
+                    changed |= (to[0] | mask) != to[0];
+                    to[0] |= mask;
+                    uint32_t reason = mask == 1 ? 0 : 1;
+                    if (roots->node[output].reason[reason] == UINT32_MAX) {
+                        roots->node[output].reason[reason] = output;
+                        roots->terminals[(size_t)output * 2 + reason] = (XrXirRootEffectWitness){
+                            bit < callee->parameters ? XR_XIR_ROOT_CAUSE_PARAMETER : XR_XIR_ROOT_CAUSE_CELL_PARAMETER,
+                            call->instruction, callee->declaration, parameter, 0};
+                    }
+                }
+                continue;
+            }
+            changed |= effect_check_merge(roots, output, roots->argument[call->first + parameter]);
+        }
+    }
+    return changed;
+}
+
+static bool effect_check_evaluate(EffectCheckedRoots *roots, uint32_t node) {
+    bool changed = false;
+    for (uint32_t e = roots->node[node].aliases; e != UINT32_MAX; e = roots->alias[e].next)
+        changed |= effect_check_merge(roots, node, roots->alias[e].source);
+    for (uint32_t c = roots->node[node].calls; c != UINT32_MAX; c = roots->call[c].next)
+        changed |= effect_check_apply(roots, node, &roots->call[c]);
+    uint8_t mask = roots->node[node].closed | (uint8_t)(effect_check_bits(roots, node)[0] & 3u);
+    bool blocked = roots->node[node].worker_blocked;
+    if (roots->node[node].deferred) mask |= 2;
+    for (uint32_t a = roots->node[node].aliases; a != UINT32_MAX; a = roots->alias[a].next) {
+        mask |= roots->node[roots->alias[a].source].closed;
+        blocked |= roots->node[roots->alias[a].source].worker_blocked;
+    }
+    for (uint32_t b = roots->node[node].bindings; b != UINT32_MAX; b = roots->binding[b].next) {
+        mask |= roots->node[roots->binding[b].source].closed;
+        blocked |= roots->node[roots->binding[b].source].worker_blocked;
+    }
+    for (uint32_t c = roots->node[node].calls; c != UINT32_MAX; c = roots->call[c].next) {
+        EffectCheckCall call = roots->call[c];
+        EffectCheckFunction callee = roots->function[roots->node[call.target].function];
+        const uint64_t *bits = effect_check_bits(roots, call.target);
+        mask |= (uint8_t)(bits[0] & 3u);
+        if (roots->node[call.target].deferred) mask |= 2;
+        blocked |= roots->node[call.target].worker_blocked;
+        for (uint64_t p = 0; p < (uint64_t)callee.parameters * 2; ++p) {
+            if (!(bits[(p + 2) / 64] & (UINT64_C(1) << ((p + 2) % 64)))) continue;
+            uint32_t parameter = (uint32_t)(p % callee.parameters);
+            if (parameter < call.count) {
+                uint32_t source = roots->argument[call.first + parameter];
+                mask |= roots->node[source].closed;
+                blocked |= roots->node[source].worker_blocked;
+            } else if (call.protocol == 1) mask |= roots->node[callee.first + parameter].bound;
+        }
+    }
+    changed |= mask != roots->node[node].closed || blocked != roots->node[node].worker_blocked;
+    roots->node[node].closed = mask;
+    roots->node[node].worker_blocked = blocked;
+    return changed;
+}
+
+static XrXirStatus effect_check_component(EffectCheckBuild *build, const uint32_t *members,
+    uint32_t count, uint32_t component, uint32_t *queue) {
+    EffectCheckedRoots *roots = build->roots;
+    uint32_t front = 0, back = 0, pending = count;
+    for (uint32_t m = 0; m < count; ++m) {
+        uint32_t node = members[m];
+        roots->node[node].component = component;
+        roots->node[node].queued = true;
+        queue[m] = node;
+    }
+    while (pending) {
+        if (!effect_check_poll(build)) return build->status;
+        uint32_t node = queue[front];
+        front = front + 1 == count ? 0 : front + 1;
+        --pending;
+        roots->node[node].queued = false;
+        if (!effect_check_evaluate(roots, node)) continue;
+        for (uint32_t e = roots->node[node].consumers; e != UINT32_MAX; e = roots->dependency[e].next_source) {
+            uint32_t target = roots->dependency[e].target;
+            if (roots->node[target].component != component || roots->node[target].queued) continue;
+            XR_DCHECK(pending < count, "Each member has at most one pending equation");
+            queue[back] = target;
+            back = back + 1 == count ? 0 : back + 1;
+            ++pending;
+            roots->node[target].queued = true;
+        }
+    }
+    return XR_XIR_OK;
+}
+
+static XrXirStatus effect_check_close(EffectCheckBuild *build) {
+    EffectCheckedRoots *roots = build->roots;
+    uint32_t count = roots->nodes;
+    uint64_t frames_bytes = (uint64_t)count * sizeof(EffectCheckFrame);
+    if (frames_bytes > SIZE_MAX) return XR_XIR_OVERFLOW;
+    uint32_t *index = xir_compile_calloc(build->memory, count, sizeof(*index), &build->status);
+    uint32_t *low = xir_compile_calloc(build->memory, count, sizeof(*low), &build->status);
+    uint32_t *stack = xir_compile_alloc(build->memory, (size_t)count * sizeof(*stack), &build->status);
+    uint32_t *queue = xir_compile_alloc(build->memory, (size_t)count * sizeof(*queue), &build->status);
+    EffectCheckFrame *frames = xir_compile_alloc(build->memory, (size_t)frames_bytes, &build->status);
+    if (!index || !low || !stack || !queue || !frames) goto done;
+    uint32_t next = 0, components = 0, stacked = 0;
+    for (uint32_t start = 0; start < count && build->status == XR_XIR_OK; ++start) {
+        if (index[start]) continue;
+        uint32_t depth = 1;
+        frames[0] = (EffectCheckFrame){start, roots->node[start].dependencies, UINT32_MAX};
+        index[start] = low[start] = ++next;
+        stack[stacked++] = start;
+        while (depth && effect_check_poll(build)) {
+            EffectCheckFrame *frame = &frames[depth - 1];
+            uint32_t node = frame->node;
+            if (frame->dependency != UINT32_MAX) {
+                const EffectCheckDependency *edge = &roots->dependency[frame->dependency];
+                frame->dependency = edge->next_target;
+                uint32_t target = edge->source;
+                if (!index[target]) {
+                    index[target] = low[target] = ++next;
+                    stack[stacked++] = target;
+                    frames[depth++] = (EffectCheckFrame){target, roots->node[target].dependencies, node};
+                } else if (roots->node[target].component == UINT32_MAX && index[target] < low[node]) {
+                    low[node] = index[target];
+                }
+                continue;
+            }
+            uint32_t parent = frame->parent;
+            --depth;
+            if (index[node] == low[node]) {
+                uint32_t end = stacked;
+                do {
+                    XR_DCHECK(stacked, "A live component contains its root");
+                    --stacked;
+                } while (stack[stacked] != node);
+                build->status = effect_check_component(build, stack + stacked, end - stacked, components++, queue);
+            }
+            if (parent != UINT32_MAX && low[node] < low[parent]) low[parent] = low[node];
+        }
+    }
+done:
+    xr_compile_resources_free(index);
+    xr_compile_resources_free(low);
+    xr_compile_resources_free(stack);
+    xr_compile_resources_free(queue);
+    xr_compile_resources_free(frames);
+    return build->status;
+}
+
+static XrXirStatus effect_checked_roots_build(const XrXirCompileContext *memory,
+    const XrXirModule *module, const XrXirFunctionEffectContract *contracts,
+    XrCompileRequestControl *control, EffectCheckedRoots **output) {
+    if (!xir_compile_context_valid(memory) || !module || !module->functions || !module->function_count ||
+        !output || *output) return XR_XIR_BAD_STRUCTURE;
+    EffectCheckBuild build = {.memory = memory, .module = module, .contracts = contracts, .control = control,
+        .scratch = {.resources = memory->resources}};
+    build.status = effect_check_allocate(&build);
+    if (build.status == XR_XIR_OK) build.status = effect_check_collect(&build);
+    if (build.status == XR_XIR_OK) build.status = effect_check_link(&build);
+    if (build.status == XR_XIR_OK) build.status = effect_check_cell_roles(&build);
+    if (build.status == XR_XIR_OK) build.status = effect_check_close(&build);
+    if (build.status == XR_XIR_OK) build.status = effect_check_capture_origins(build.roots);
+    if (build.status == XR_XIR_OK && build.roots->terms)
+        build.status = effect_terms_retire(build.memory, build.roots->terms, true);
+    xir_read_scratch_free(&build.scratch);
+    if (build.status == XR_XIR_OK) {
+        build.roots->dispatch_index = build.dispatch_index;
+        build.roots->dispatch_index_capacity = build.dispatch_index_capacity;
+    } else xr_compile_resources_free(build.dispatch_index);
+    xr_compile_resources_free(build.instance_index);
+    if (build.status != XR_XIR_OK) {
+        effect_checked_roots_free(build.roots);
+        return build.status;
+    }
+    *output = build.roots;
+    return XR_XIR_OK;
+}
+
+/* The interface owns canonical parameter terms. A deferred function cannot be
+ * consumed as a closed Program effect before its symbolic dependencies link. */
+static XrXirStatus effect_checked_root_formula(const XrXirCompileContext *memory,
+    const EffectCheckedRoots *roots, uint32_t function, bool result, XrXirRootFormula *output) {
+    if (!xir_compile_context_valid(memory) || !roots || roots->resources != memory->resources ||
+        function >= roots->functions || !output || output->constant_mask || output->term_count || output->terms)
+        return XR_XIR_BAD_STRUCTURE;
+    const EffectCheckFunction *body = &roots->function[function];
+    uint32_t node = result ? body->result : body->root;
+    if (roots->node[node].deferred) return XR_XIR_UNRESOLVED;
+    const uint64_t *bits = effect_check_bits(roots, node);
+    uint32_t count = 0;
+    for (uint64_t p = 0; p < (uint64_t)body->parameters * 2; ++p)
+        count += !!(bits[(p + 2) / 64] & (UINT64_C(1) << ((p + 2) % 64)));
+    XrXirStatus status = XR_XIR_OK;
+    XrXirRootTerm *terms = count ? xir_compile_calloc(memory, count, sizeof(*terms), &status) : NULL;
+    if (count && !terms) return status;
+    uint32_t at = 0;
+    for (uint64_t p = 0; p < (uint64_t)body->parameters * 2; ++p) {
+        if (!(bits[(p + 2) / 64] & (UINT64_C(1) << ((p + 2) % 64)))) continue;
+        terms[at++] = (XrXirRootTerm){p < body->parameters ? XR_XIR_ROOT_TERM_PARAMETER :
+            XR_XIR_ROOT_TERM_CELL_PARAMETER, (uint32_t)(p % body->parameters)};
+    }
+    uint32_t mask = (bits[0] & 1 ? XR_XIR_CALLABLE_ROOT_REQUIRED : 0) |
+        (bits[0] & 2 ? XR_XIR_CALLABLE_ROOT_UNRESOLVED : 0);
+    *output = (XrXirRootFormula){mask, count, terms};
+    return XR_XIR_OK;
+}
+
+/* Construction and specialization read the same closed row. Parameter masks
+ * are substituted at the receiving boundary without creating another solver. */
+static XrXirStatus effect_checked_root_mask(const EffectCheckedRoots *roots, uint32_t node,
+    const uint32_t *arguments, uint32_t count, uint32_t *output) {
+    if (!roots || node >= roots->nodes || !output) return XR_XIR_BAD_STRUCTURE;
+    const EffectCheckFunction *function = &roots->function[roots->node[node].function];
+    if ((!arguments && count) || (arguments && count != function->parameters)) return XR_XIR_BAD_STRUCTURE;
+    if (roots->node[node].deferred) return XR_XIR_UNRESOLVED;
+    if (!arguments) {
+        uint32_t mask = roots->node[node].closed;
+        *output = ((mask & 1) ? XR_XIR_CALLABLE_ROOT_REQUIRED : 0) |
+            ((mask & 2) ? XR_XIR_CALLABLE_ROOT_UNRESOLVED : 0);
+        return XR_XIR_OK;
+    }
+    if (arguments) for (uint32_t p = 0; p < count; ++p)
+        if (arguments[p] & ~(XR_XIR_CALLABLE_ROOT_REQUIRED | XR_XIR_CALLABLE_ROOT_UNRESOLVED))
+            return XR_XIR_BAD_STRUCTURE;
+    const uint64_t *bits = effect_check_bits(roots, node);
+    uint32_t mask = (bits[0] & 1 ? XR_XIR_CALLABLE_ROOT_REQUIRED : 0) |
+        (bits[0] & 2 ? XR_XIR_CALLABLE_ROOT_UNRESOLVED : 0);
+    for (uint32_t w = 0; w < function->words; ++w) {
+        uint64_t terms = bits[w];
+        if (!w) terms &= ~UINT64_C(3);
+        while (terms) {
+            uint32_t low = (uint32_t)__builtin_ctzll(terms);
+            terms &= terms - 1;
+            uint64_t parameter = (uint64_t)w * 64 + low - 2;
+            if (parameter >= (uint64_t)function->parameters * 2) return XR_XIR_BAD_STRUCTURE;
+            uint32_t p = (uint32_t)(parameter % function->parameters);
+            mask |= arguments ? arguments[p] : parameter < function->parameters ?
+                XR_XIR_CALLABLE_ROOT_UNRESOLVED : XR_XIR_CALLABLE_ROOT_REQUIRED;
+        }
+    }
+    *output = mask;
+    return XR_XIR_OK;
+}
+
+static XrXirStatus effect_checked_first_cause(const EffectCheckedRoots *roots, uint32_t node,
+    const uint32_t *arguments, uint32_t count, bool unresolved, EffectCheckCause *output) {
+    if (!output) return XR_XIR_BAD_STRUCTURE;
+    uint32_t mask = 0;
+    XrXirStatus status = effect_checked_root_mask(roots, node, arguments, count, &mask);
+    if (status != XR_XIR_OK) return status;
+    uint32_t wanted = unresolved ? XR_XIR_CALLABLE_ROOT_UNRESOLVED : XR_XIR_CALLABLE_ROOT_REQUIRED;
+    EffectCheckCause result = {.function = UINT32_MAX};
+    if (!(mask & wanted)) {
+        *output = result;
+        return XR_XIR_OK;
+    }
+    const EffectCheckFunction *function = &roots->function[roots->node[node].function];
+    const uint64_t *bits = effect_check_bits(roots, node);
+    if (bits[0] & (UINT64_C(1) << unresolved)) {
+        uint32_t current = node, distance = 0;
+        XrXirRootEffectWitness first = {0};
+        for (uint32_t step = 0; step < roots->nodes; ++step) {
+            uint32_t reason = roots->node[current].reason[unresolved];
+            if (reason >= roots->nodes) return XR_XIR_BAD_STRUCTURE;
+            if (reason == current) {
+                result.function = roots->function[roots->node[node].function].declaration;
+                result.witness = first.cause ? first : roots->terminals[(size_t)current * 2 + unresolved];
+                if (!result.witness.cause) return XR_XIR_BAD_STRUCTURE;
+                result.witness.distance += distance;
+                *output = result;
+                return XR_XIR_OK;
+            }
+            if (roots->node[current].function != roots->node[reason].function) {
+                ++distance;
+                if (!first.cause) {
+                    for (uint32_t c = roots->node[current].calls; c != UINT32_MAX; c = roots->call[c].next) {
+                        const EffectCheckCall *call = &roots->call[c];
+                        if (call->target != reason) continue;
+                        first = (XrXirRootEffectWitness){call->protocol == 4 ? XR_XIR_ROOT_CAUSE_CLEANUP :
+                            XR_XIR_ROOT_CAUSE_CALL, call->instruction,
+                            roots->function[roots->node[reason].function].declaration, UINT32_MAX, 0};
+                        break;
+                    }
+                }
+            }
+            current = reason;
+        }
+        return XR_XIR_BAD_STRUCTURE;
+    }
+    for (uint64_t p = 0; p < (uint64_t)function->parameters * 2; ++p) {
+        if (!(bits[(p + 2) / 64] & (UINT64_C(1) << ((p + 2) % 64)))) continue;
+        uint32_t parameter = (uint32_t)(p % function->parameters);
+        uint32_t closed = roots->node[function->first + parameter].closed;
+        uint32_t actual = arguments ? arguments[parameter] :
+            ((closed & 1) ? XR_XIR_CALLABLE_ROOT_REQUIRED : 0) |
+            ((closed & 2) ? XR_XIR_CALLABLE_ROOT_UNRESOLVED : 0);
+        if (!(actual & wanted)) continue;
+        result.function = function->declaration;
+        result.witness = (XrXirRootEffectWitness){p < function->parameters ?
+            XR_XIR_ROOT_CAUSE_PARAMETER : XR_XIR_ROOT_CAUSE_CELL_PARAMETER,
+            UINT32_MAX, UINT32_MAX, parameter, 0};
+        *output = result;
+        return XR_XIR_OK;
+    }
+    return XR_XIR_BAD_STRUCTURE;
+}
+
+#endif // XXIR_EFFECT_CHECK_IMPLEMENTATION

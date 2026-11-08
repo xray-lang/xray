@@ -31,8 +31,7 @@ typedef struct SpecInstance {
     const XrXirType *arguments;
     uint32_t count;
     XrXirType *node_cache;
-    const XrXirEffectArgument *effects;
-    uint32_t effect_count, owner;
+    uint32_t owner;
 } SpecInstance;
 typedef struct SpecIndexEntry { uint32_t ordinal, hash; } SpecIndexEntry;
 typedef struct SpecTypeFrame { uint32_t index, next; XrXirTypeNode node; } SpecTypeFrame;
@@ -281,11 +280,10 @@ static XrXirType spec_type(SpecContext *c, const SpecInstance *instance, XrXirTy
         *spec_type_cache(c, instance, (uint32_t) type - XR_XIR_CONSTRUCTED_TYPE_BASE) : XR_XIR_UNIT;
 }
 
-#include "xxir_effect_instance_key.inc.c"
 /* Hash only selects candidates in this request's destination type pool.
  * Explicit scalar fields exclude padding; ordered vectors retain every element. */
 static bool spec_instance_hash(SpecContext *c, const SpecInstance *key, uint32_t *output) {
-    uint32_t header[] = {key->declaration, key->count, key->effect_count, key->owner};
+    uint32_t header[] = {key->declaration, key->count, key->owner};
     if (!spec_progress(c)) return false;
     uint32_t hash = xr_hash_bytes(header, sizeof(header));
     if (key->count) {
@@ -295,23 +293,18 @@ static bool spec_instance_hash(SpecContext *c, const SpecInstance *key, uint32_t
         uint32_t pair[] = {hash, arguments};
         hash = xr_hash_bytes(pair, sizeof(pair));
     }
-    for (uint32_t a = 0; a < key->effect_count; ++a) {
-        uint32_t row[] = {hash, key->effects[a].parameter, (uint32_t)key->effects[a].type};
-        if (!spec_progress(c)) return false;
-        hash = xr_hash_bytes(row, sizeof(row));
-    }
     if (!spec_progress(c)) return false;
     *output = hash; return true;
 }
 static bool spec_instance_equal(SpecContext *c, const SpecInstance *a, const SpecInstance *b) {
     if (!spec_progress(c)) return false;
     if (a->declaration != b->declaration || a->count != b->count ||
-        a->effect_count != b->effect_count || a->owner != b->owner) return false;
+        a->owner != b->owner) return false;
     for (uint32_t i = 0; i < a->count; ++i) {
         if (!spec_progress(c)) return false;
         if (a->arguments[i] != b->arguments[i]) return false;
     }
-    return spec_effect_same(c, a, b->effects, b->effect_count);
+    return true;
 }
 static uint32_t spec_index_find(SpecContext *c, const SpecInstance *key, uint32_t hash) {
     if (!c->index_capacity) return UINT32_MAX;
@@ -363,14 +356,8 @@ static bool spec_index_reserve(SpecContext *c) {
 
 
 static bool spec_name(SpecContext *c, XrXirFunction *function, const SpecInstance *instance) {
-    if (!instance->count && !instance->effect_count) return true;
-    if (c->effects && !instance->count) {
-        bool is_default=false;
-        if (!spec_effect_default(c,instance,&is_default)) return false;
-        if (is_default) return true;
-    }
-    uint64_t capacity = (uint64_t) function->name_length + 32 + (uint64_t) instance->count * 12 +
-        (uint64_t)instance->effect_count*24;
+    if (!instance->count) return true;
+    uint64_t capacity = (uint64_t)function->name_length + 32 + (uint64_t)instance->count * 12;
     if (capacity > UINT32_MAX) { c->diagnostic.status = XR_XIR_BUDGET; return false; }
     char *name = spec_alloc(c, capacity, 1); if (!name) return false;
     if (!spec_copy(c,name,function->name,function->name_length)) return false;
@@ -384,18 +371,11 @@ static bool spec_name(SpecContext *c, XrXirFunction *function, const SpecInstanc
         if (written < 0 || (size_t) written >= capacity - at) { c->diagnostic.status = XR_XIR_BAD_STRUCTURE; return false; }
         at += (size_t) written;
     }
-    for (uint32_t i=0;i<instance->effect_count;++i) {
-        written=snprintf(name+at,(size_t)capacity-at,"@%u:%u",instance->effects[i].parameter,
-            (unsigned)instance->effects[i].type);
-        if (written<0 || (size_t)written>=capacity-at) { c->diagnostic.status=XR_XIR_BAD_STRUCTURE;return false; }
-        if (!spec_progress(c)) return false;
-        at+=(size_t)written;
-    }
     function->name = name; function->name_length = (uint32_t) at; return true;
 }
 static uint32_t spec_intern(SpecContext *c, uint32_t declaration, const XrXirType *types,
-    uint32_t count, const XrXirEffectArgument *effects, uint32_t effect_count) {
-    SpecInstance key = {declaration, types, count, NULL, effects, effect_count, c->cleanup_owner};
+    uint32_t count) {
+    SpecInstance key = {declaration, types, count, NULL, c->cleanup_owner};
     uint32_t hash = 0;
     if (!spec_instance_hash(c, &key, &hash)) return UINT32_MAX;
     uint32_t existing = spec_index_find(c, &key, hash);
@@ -416,13 +396,7 @@ static uint32_t spec_intern(SpecContext *c, uint32_t declaration, const XrXirTyp
     if (count && !spec_copy(c,owned_types,types,(size_t)count*sizeof(*types))) return UINT32_MAX;
     XrXirType *type_cache = c->source->types ? spec_alloc(c, c->source->types->count, sizeof(*type_cache)) : NULL;
     if (c->source->types && c->source->types->count && !type_cache) return UINT32_MAX;
-    XrXirEffectArgument *owned_effects=spec_alloc(c,effect_count,sizeof(*owned_effects));
-    if (effect_count && !owned_effects) return UINT32_MAX;
-    if (effect_count) {
-        if (!spec_progress(c)) return UINT32_MAX;
-        if (!spec_copy(c,owned_effects,effects,(size_t)effect_count*sizeof(*owned_effects))) return UINT32_MAX;
-    }
-    c->instances[index] = (SpecInstance) {declaration, owned_types, count, type_cache,owned_effects,effect_count,c->cleanup_owner};
+    c->instances[index] = (SpecInstance){declaration, owned_types, count, type_cache, c->cleanup_owner};
     XrXirFunction *to = &c->functions[index]; *to = *source;
     XrXirType *parameters = spec_alloc(c, source->parameter_count, sizeof(*parameters));
     uint32_t *consumes=spec_alloc(c,source->consume_parameter_count,sizeof(*consumes));
@@ -436,11 +410,6 @@ static uint32_t spec_intern(SpecContext *c, uint32_t declaration, const XrXirTyp
     to->result = spec_type(c, instance, source->result);
     to->error_type = spec_type(c, instance, source->error_type);
     for (uint32_t p = 0; p < source->parameter_count; ++p) parameters[p] = spec_type(c, instance, source->parameters[p]);
-    for (uint32_t a=0;a<effect_count;++a) {
-        if (!spec_progress(c)) return UINT32_MAX;
-        if (owned_effects[a].parameter>=source->parameter_count) { c->diagnostic.status=XR_XIR_BAD_STRUCTURE;return UINT32_MAX; }
-        parameters[owned_effects[a].parameter]=owned_effects[a].type;
-    }
     for (uint32_t i = 0; i < source->instruction_count; ++i) {
         ops[i] = source->instructions[i]; ops[i].type = spec_type(c, instance, ops[i].type);
         if (ops[i].op == XR_XIR_ERROR_IS)
@@ -451,20 +420,12 @@ static uint32_t spec_intern(SpecContext *c, uint32_t declaration, const XrXirTyp
         c->identities[index]=c->source->declarations->functions[declaration];
     if (c->source->declarations && c->source->declarations->functions[declaration].cleanup_owner)
         c->identities[index].cleanup_owner=c->cleanup_owner+1;
-    if (!spec_effect_flow(c,index)) return UINT32_MAX;
     if (!spec_name(c, to, instance)) return UINT32_MAX;
     if (c->source->declarations) {
         if (!spec_progress(c)) return UINT32_MAX;
         c->identities[index] = c->source->declarations->functions[declaration];
         if (c->identities[index].cleanup_owner) c->identities[index].cleanup_owner=c->cleanup_owner+1;
-        if (c->effects) {
-            bool is_default=false;
-            if (!spec_effect_default(c,instance,&is_default)) return UINT32_MAX;
-            if (!is_default) {
-                if (!spec_progress(c)) return UINT32_MAX;
-                c->identities[index].exported=0;
-            }
-        }
+        if (instance->count) c->identities[index].exported=0;
     }
     if (!spec_index_place(c, c->instance_index, c->index_capacity, (SpecIndexEntry){index + 1, hash})) return UINT32_MAX;
     return index;
@@ -556,10 +517,8 @@ static bool spec_call(SpecContext *c, uint32_t index, uint32_t i) {
     c->diagnostic.status=selected;
     if (c->diagnostic.status!=XR_XIR_OK) return false;
     if (constant) { declaration=constant->provider;types=NULL;count=0; }
-    SpecEffectInput input={&function,op,index,i};SpecEffectVector effect={0};
-    if (!spec_effect_vector(c,declaration,types,count,constant?NULL:&input,&effect)) return false;
     c->cleanup_owner=op->op==XR_XIR_CLEANUP_REGISTER ? index : UINT32_MAX;
-    uint32_t target = spec_intern(c, declaration, types, count,effect.arguments,effect.count);
+    uint32_t target = spec_intern(c, declaration, types, count);
     c->cleanup_owner=UINT32_MAX;
     if (target == UINT32_MAX) return false;
     if (evaluation_root) {
@@ -675,7 +634,7 @@ static XrXirStatus spec_nominal_fields(SpecContext *c) {
         XrXirType *cache = spec_alloc(c, source->count, sizeof(*cache));
         XrXirType *fields = spec_alloc(c, d->field_count, sizeof(*fields));
         if (c->diagnostic.status != XR_XIR_OK) return c->diagnostic.status;
-        SpecInstance instance = {node.nominal.declaration, node.nominal.arguments, node.nominal.argument_count, cache,NULL,0,UINT32_MAX};
+        SpecInstance instance = {node.nominal.declaration, node.nominal.arguments, node.nominal.argument_count, cache,UINT32_MAX};
         for (uint32_t f = 0; f < d->field_count; ++f) fields[f] = spec_type(c, &instance, d->fields[f].type);
         if (c->diagnostic.status != XR_XIR_OK) return c->diagnostic.status;
         XrXirTypeNode *owned = (XrXirTypeNode *) c->types.nodes;
@@ -693,14 +652,11 @@ static XrXirStatus spec_provenance(SpecContext *c, XrXirProvenance **output) {
     for (uint32_t f = 0; f < c->count; ++f) {
         if (!spec_progress(c)) {xr_compile_resources_free(origins);return c->diagnostic.status;}
         origins[f] = (XrXirOrigin) {c->instances[f].declaration, c->instances[f].arguments,
-            c->instances[f].count,c->instances[f].effects,c->instances[f].effect_count};
+            c->instances[f].count,NULL,0};
     }
     XrXirProvenance evidence = {c->evaluation?XR_XIR_EVIDENCE_EVALUATION:XR_XIR_EVIDENCE_INSTANCE,
         (XrXirArtifact *)c->source_artifact,origins,c->count,NULL,0,NULL,0,{0}};
     if (c->evaluation) evidence.evaluation=*c->evaluation;
-    if (!spec_effect_proofs(c,&evidence.bindings,&evidence.binding_count)) {
-        xr_compile_resources_free(origins);return c->diagnostic.status;
-    }
     const XrXirEffects *source_read=c->effects?c->effects:c->verification_effects;
     XrXirStatus status = source_read ? xr_xir_compile_provenance_copy_source_effects(
         &c->remaining,&evidence,source_read,output, c->control) :
@@ -788,9 +744,7 @@ static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
         bool cleanup=c.source->declarations && c.source->declarations->functions[f].cleanup_owner;
         if (!cleanup && (!c.source->generics || !c.source->generics[f].parameter_count)) {
             c.diagnostic.function = f;
-            SpecEffectVector effect={0};
-            if (!spec_effect_vector(&c,f,NULL,0,NULL,&effect)) goto done;
-            c.ordinary[f] = spec_intern(&c, f, NULL, 0,effect.arguments,effect.count);
+            c.ordinary[f] = spec_intern(&c, f, NULL, 0);
             c.cleanup_owner=UINT32_MAX;
             if (c.diagnostic.status != XR_XIR_OK) goto done;
         }

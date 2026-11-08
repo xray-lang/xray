@@ -159,32 +159,3 @@ static XrXirStatus effect_refinement_match(const XrXirCompileContext *context,
     }
     bounds->terms.remaining=NULL;return status;
 }
-
-static XrXirStatus effect_refinement_apply(EffectOrdinaryContexts *ordinary,
-    const XrXirModule *source, EffectRefinementBounds *bounds) {
-    const XrXirCompileContext *context=ordinary->terms.remaining;
-    XrXirStatus status=effect_refinement_match(context,source,bounds);
-    const XrXirType *cache=NULL;
-    if (status==XR_XIR_OK) status=effect_terms_import(&ordinary->terms,&bounds->terms.types,&cache);
-    for (uint32_t f=0;f<ordinary->count && status==XR_XIR_OK;++f) {
-        EffectOrdinaryNode node=ordinary->nodes[f];
-        const EffectRefinementFunction *original=&bounds->functions[node.declaration];
-        XrXirType *parameters=original->parameter_count ?
-            effect_terms_alloc(&ordinary->terms,original->parameter_count,sizeof(*parameters)) : NULL;
-        if (original->parameter_count && !parameters) { status=ordinary->terms.status;break; }
-        XrXirGeneric environment={.arguments=node.arguments,.argument_count=node.argument_count};
-        for (uint32_t p=0;p<original->parameter_count && status==XR_XIR_OK;++p) {
-            XrXirType declared=XR_XIR_UNIT;
-            if (!xr_xir_callable_signature(&bounds->terms.types,original->parameters[p])) {
-                parameters[p]=node.source_parameters[p];continue;
-            }
-            status=effect_terms_import_child(cache,bounds->terms.types.count,
-                original->parameters[p],&declared);
-            if (status==XR_XIR_OK && f>=ordinary->base_count)
-                status=effect_terms_substitute(&ordinary->terms,declared,&environment,&declared);
-            parameters[p]=declared;
-        }
-        ordinary->functions[f].parameters=parameters;
-    }
-    return status;
-}
