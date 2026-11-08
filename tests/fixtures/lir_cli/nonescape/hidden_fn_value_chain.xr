@@ -1,0 +1,7 @@
+fn leaf() -> i64 { return 4 }
+fn twice(callback: fn() -> i64) -> i64 {
+    const firstFn = fn() -> i64 { return callback() }
+    const secondFn = fn() -> i64 { return firstFn() }
+    return secondFn() + secondFn()
+}
+print(twice(leaf))
