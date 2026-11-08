@@ -486,7 +486,10 @@ static void nonescape_bound_prefix(void) {
         .declarations=&declarations,.types=&types,.linkage_kind=XR_XIR_PROGRAM};
     XrXirArtifact *checked=NULL,*decoded=NULL,*closed=NULL;
     XrXirDiagnostic diagnostic={0};
-    CHECK(xir_fixture_check(suite_context,&built,&checked,&diagnostic)==XR_XIR_OK && checked);
+    XrXirStatus admitted=xir_fixture_check(suite_context,&built,&checked,&diagnostic);
+    if(admitted!=XR_XIR_OK)fprintf(stderr,"bound prefix status%u function%u block%u instruction%u reason%u\n",
+        (unsigned)admitted,diagnostic.function,diagnostic.block,diagnostic.instruction,(unsigned)diagnostic.reason);
+    CHECK(admitted==XR_XIR_OK && checked);
     XrXirCheckedPacket packet={0};
     CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_checked_read(suite_context,packet.bytes,packet.length,&decoded,NULL)==XR_XIR_OK);
