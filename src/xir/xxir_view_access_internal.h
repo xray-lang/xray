@@ -21,9 +21,9 @@
 typedef struct XirViewAccessCells {
     const XrXirCellProvenance *owner;
     XrXirCellProofRole (*role)(const XrXirCellProvenance *,uint32_t,uint32_t);
-    /* Only the composite verifier installs this live lexical owner. An absent
-     * scope leaves default access unresolved; it is never a caller promise. */
-    XirEffectDefaultAccessScope *default_access;
+    /* This synchronous borrow reads the same immutable numeric semantic owner.
+     * Missing facts leave hidden access unresolved. */
+    const struct XrXirEffects *effects;
     /* Synchronous request observation borrows the current input only. It is
      * never retained by the resolver or any published proof owner. */
     XrCompileRequestControl *control;
@@ -44,5 +44,5 @@ XR_FUNC XrXirStatus xir_compile_view_access_verified(const XrXirCompileContext *
  * entry below alone creates that owner and charges its simultaneous residency. */
 XR_FUNC XrXirStatus xir_compile_view_access_cells_verified(const XrXirCompileContext *context,
     const XrXirModule *module,const XirViewAccessCells *cells,XrXirDiagnostic *diagnostic);
-XR_FUNC XrXirStatus xir_compile_view_cell_access_verified_input(const XrXirCompileContext *context, XirEffectInput input,XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xir_compile_view_cell_access_verified_input(const XrXirCompileContext *context, XirEffectInput input,const struct XrXirEffects *effects,XrXirDiagnostic *diagnostic);
 #endif // XXIR_VIEW_ACCESS_INTERNAL_H

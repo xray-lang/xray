@@ -65,6 +65,7 @@ typedef struct SourceContext {
     XrXirSourceDiagnostic diagnostic;
     SourceMemory *memory,*retired_arrays;
     XrXirConstruction *construction;
+    bool view_normalized;
     SourceSemanticEnvironment **semantic_output;
     const struct XrXirSourceHistoryUnit *history_input, *self_unit;
     struct SourceHistoryReceive *history;

@@ -310,16 +310,25 @@ static XrXirStatus source_view_normalize(SourceContext *ctx,const XrXirModule *m
     if (status==XR_XIR_OK) status=xir_compile_view_affine_verified(&ctx->compile,&replacement,diagnostic);
     if (status==XR_XIR_OK) status=xir_compile_view_liveness_verified(&ctx->compile,&replacement,NULL,NULL,diagnostic);
     if (status==XR_XIR_OK) status=xir_compile_view_roots_verified(&ctx->compile,(XirEffectInput){&replacement,construction,ctx->request},NULL,NULL,diagnostic);
-    /* Access sees the actual cleanup and relocated SSA before publication. */
     if (status==XR_XIR_OK) {
-        status=xir_compile_view_cell_access_verified_input(&ctx->compile,(XirEffectInput){&replacement,construction,ctx->request},diagnostic);
-        if (status!=XR_XIR_OK) status=source_view_access_failure(ctx,&replacement,diagnostic,status);
-    }
-    if (status==XR_XIR_OK) {
-        xr_xir_compile_construction_free(ctx->construction);ctx->construction=construction;construction=NULL;
+        xr_xir_compile_construction_free(ctx->construction);
+        ctx->view_normalized=true;
+        ctx->construction=construction;construction=NULL;
         ctx->functions=functions;ctx->bodies=bodies;ctx->root_queries=queries;ctx->remaining_instructions-=(uint32_t)added;
     }
     xr_xir_compile_construction_free(construction);xir_compile_view_normalization_free(n);return status;
 source_failure:
     xr_xir_compile_construction_free(construction);xir_compile_view_normalization_free(n);return ctx->diagnostic.status;
+}
+
+/* The numeric effects belong to this exact relocated SSA generation. Access
+ * still runs before declaration obligations and before any Checked publication. */
+static XrXirStatus source_view_admit(void *owner,const XrXirModule *module,
+    const XrXirEffects *effects,XrXirDiagnostic *diagnostic) {
+    SourceContext *ctx=owner;
+    if (!ctx->view_normalized) return XR_XIR_OK;
+    XrXirStatus status=xir_compile_view_cell_access_verified_input(&ctx->compile,
+        (XirEffectInput){module,ctx->construction,ctx->request},effects,diagnostic);
+    if (status!=XR_XIR_OK) status=source_view_access_failure(ctx,module,diagnostic,status);
+    return status;
 }

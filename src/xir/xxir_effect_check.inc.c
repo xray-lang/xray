@@ -13,6 +13,7 @@
  */
 #include "../base/xhash.h"
 #include "xxir_stringable_internal.h"
+#include "xxir_implementation_verify.h"
 
 #ifndef XXIR_EFFECT_CHECK_IMPLEMENTATION
 #define XXIR_EFFECT_CHECK_IMPLEMENTATION
@@ -27,7 +28,7 @@ typedef struct EffectCheckNode {
     uint32_t function, dependencies, consumers, aliases, calls, last_call, bindings, elements;
     uint32_t component, reason[2];
     uint8_t cell_use, origin, bound, closed;
-    bool queued, deferred, worker_blocked, cell_parameter, spawn, tuple, capture_contents;
+    bool queued, deferred, worker_blocked, cell_parameter, spawn, tuple, capture_contents, access_denied;
 } EffectCheckNode;
 
 typedef enum EffectCheckPendingKind {
@@ -564,6 +565,8 @@ static bool effect_check_instruction(EffectCheckBuild *build, uint32_t f, uint32
     EffectCheckFunction row = build->roots->function[f];
     uint32_t value = row.first + function->parameter_count + i;
     effect_check_cell_seed(build, value, op);
+    if (!effect_default_access_local(op->op) && !effect_default_access_scalar_slot(build->module,f,op))
+        build->roots->node[row.root].access_denied=true;
     if (op->op == XR_XIR_SLOT_PLACE) build->roots->node[row.root].worker_blocked = true;
     build->status = effect_check_local(build, f, i, op);
     if (build->status != XR_XIR_OK) return false;
@@ -1517,6 +1520,8 @@ static bool effect_check_evaluate(EffectCheckedRoots *roots, uint32_t node) {
         changed |= effect_check_apply(roots, node, &roots->call[c]);
     uint8_t mask = roots->node[node].closed | (uint8_t)(effect_check_bits(roots, node)[0] & 3u);
     bool blocked = roots->node[node].worker_blocked;
+    bool access_denied = roots->node[node].access_denied;
+    uint32_t root = roots->function[roots->node[node].function].root;
     if (roots->node[node].deferred) mask |= 2;
     for (uint32_t a = roots->node[node].aliases; a != UINT32_MAX; a = roots->alias[a].next) {
         mask |= roots->node[roots->alias[a].source].closed;
@@ -1537,6 +1542,8 @@ static bool effect_check_evaluate(EffectCheckedRoots *roots, uint32_t node) {
     for (uint32_t c = roots->node[node].calls; c != UINT32_MAX; c = roots->call[c].next) {
         EffectCheckCall call = roots->call[c];
         EffectCheckFunction callee = roots->function[roots->node[call.target].function];
+        if (node==root && call.target==callee.root && (call.protocol==2 || call.protocol==4))
+            access_denied |= roots->node[call.target].access_denied;
         const uint64_t *bits = effect_check_bits(roots, call.target);
         mask |= (uint8_t)(bits[0] & 3u);
         if (roots->node[call.target].deferred) mask |= 2;
@@ -1551,7 +1558,9 @@ static bool effect_check_evaluate(EffectCheckedRoots *roots, uint32_t node) {
             } else if (call.protocol == 1) mask |= roots->node[callee.first + parameter].bound;
         }
     }
-    changed |= mask != roots->node[node].closed || blocked != roots->node[node].worker_blocked;
+    changed |= mask != roots->node[node].closed || blocked != roots->node[node].worker_blocked ||
+        access_denied != roots->node[node].access_denied;
+    roots->node[node].access_denied = access_denied;
     roots->node[node].closed = mask;
     roots->node[node].worker_blocked = blocked;
     return changed;

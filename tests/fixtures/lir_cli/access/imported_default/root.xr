@@ -1,0 +1,2 @@
+import {use} from "./lib"
+export fn storage_receiver()->i64{var text="abc";var view:Slice<u8>=text.bytes();return use(view)-9}

@@ -1,0 +1,8 @@
+class Box{items:Array<u8>;init(){this.items=[1]}}
+const shared=Box()
+fn same()->Box{return shared}
+fn mutate(v:Slice<u8>,box:Box=same())->i64{box.items[0]=9;return len(v)}
+export fn same_object_borrow(v:Slice<u8>)->i64{return mutate(v)}
+
+fn rooted()->i64{return len(shared.items)}
+go rooted()

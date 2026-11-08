@@ -168,6 +168,9 @@ typedef struct XrXirRootRefiner {
     /* The diagnostic consumer copies its presentation before the owner expires. */
     void (*explain)(void *, const XrXirModule *, const XrXirEffects *, const XrXirDiagnostic *);
     XrXirStatus (*prepare)(void *, const XrXirEffects *);
+    /* Reads closed numeric equations before refinement and publication.
+     * Neither borrowed module nor provisional semantic owner may escape. */
+    XrXirStatus (*admit)(void *, const XrXirModule *, const XrXirEffects *, XrXirDiagnostic *);
 } XrXirRootRefiner;
 XR_FUNC XrXirStatus xr_xir_compile_structure_verify_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic);

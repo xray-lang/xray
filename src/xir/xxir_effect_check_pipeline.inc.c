@@ -323,6 +323,10 @@ static XrXirStatus effect_checked_construct(const XrXirCompileContext *memory,
         status = refiner->prepare(refiner->context, effects);
     if (status == XR_XIR_OK) status = effect_checked_roots_build(memory, input.module,
         effects->outcomes_work.contracts, input.control, &effects->checked_roots);
+    if (status == XR_XIR_OK && refiner && refiner->admit) {
+        XrXirDiagnostic diagnostic={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+        status=refiner->admit(refiner->context,input.module,effects,&diagnostic);
+    }
     if (status == XR_XIR_OK) status = effect_checked_project(memory, effects);
     if (status == XR_XIR_OK && refiner) {
         bool changed = false;

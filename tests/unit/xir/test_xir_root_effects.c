@@ -380,6 +380,10 @@ static void module_interface_lifetime(void) {
             uint32_t mask = 0;
             CHECK(effect_checked_root_mask(roots, roots->function[0].root, NULL, 0, &mask) == XR_XIR_OK &&
                 mask == XR_XIR_CALLABLE_ROOT_REQUIRED);
+            CHECK(roots->node[roots->function[0].root].access_denied &&
+                roots->node[roots->function[1].root].access_denied);
+            CHECK(!roots->node[roots->function[2].root].access_denied &&
+                !roots->node[roots->function[3].root].access_denied);
             effect_checked_roots_free(roots);
         }
         effect_mark_check(baseline);

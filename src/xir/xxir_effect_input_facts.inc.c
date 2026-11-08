@@ -34,13 +34,6 @@ static void effect_input_facts_free(EffectInputFacts *facts) {
     xr_compile_resources_free(facts);
 }
 
-static XrXirStatus effect_input_facts_retain(const XrXirCompileContext *work, EffectInputFacts *facts) {
-    if (!xir_compile_context_valid(work) || !facts || !facts->references || facts->resources!=work->resources || !facts->construction)
-        return XR_XIR_BAD_STRUCTURE;
-    if (facts->references==UINT32_MAX) return XR_XIR_OVERFLOW;
-    ++facts->references;return XR_XIR_OK;
-}
-
 static XrXirStatus effect_input_facts_new(const XrXirCompileContext *work,
     XirEffectInput input, EffectInputFacts **output) {
     if (!output || *output) return XR_XIR_BAD_STRUCTURE;

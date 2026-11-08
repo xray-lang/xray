@@ -17,8 +17,8 @@
 typedef struct LocalErrorAtom { XrXirType type;uint32_t variant; } LocalErrorAtom;
 typedef struct LocalErrorCfg {
     const XrXirCompileContext *memory;
-    const EffectBodyRequest *input;
-    EffectBodyFunctionHead head;
+    const XrXirModule *input;
+    XrXirFunction head;
     EffectTerms terms;
     XrXirInstruction *operations;
     XrXirType *types,*calls;
@@ -102,7 +102,7 @@ static XrXirStatus local_error_subset(LocalErrorCfg *cfg,const uint64_t *set) {
 static XrXirStatus local_error_substitute(LocalErrorCfg *cfg,const XrXirInstruction *op,
     XrXirType type,XrXirType *output) {
     uint32_t first=op->type_arguments[0],count=op->type_arguments[1];
-    const XrXirGeneric *caller=cfg->input->domain.generics?&cfg->input->domain.generics[cfg->function]:NULL;
+    const XrXirGeneric *caller=cfg->input->generics?&cfg->input->generics[cfg->function]:NULL;
     if ((count && (!caller || !caller->arguments || first>caller->argument_count ||
         count>caller->argument_count-first)) || (!count && first)) return XR_XIR_BAD_STRUCTURE;
     XrXirGeneric arguments={0};arguments.argument_count=count;
@@ -112,24 +112,25 @@ static XrXirStatus local_error_substitute(LocalErrorCfg *cfg,const XrXirInstruct
 static XrXirStatus local_error_call(LocalErrorCfg *cfg,const XrXirInstruction *op,XrXirType *output) {
     *output=XR_XIR_NEVER;uint32_t target=UINT32_MAX;
     if (op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE) {
-        if (op->immediate<0 || (uint64_t)op->immediate>=cfg->input->domain.function_count) return XR_XIR_BAD_STRUCTURE;
+        if (op->immediate<0 || (uint64_t)op->immediate>=cfg->input->function_count) return XR_XIR_BAD_STRUCTURE;
         target=(uint32_t)op->immediate;
     } else if (op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_INVOKE_DEFAULT) {
         const uint32_t *identity=xr_xir_default_identity(op);const XrXirDefaultBinding *binding=NULL;
-        XrXirStatus status=xir_metadata_default_lookup(cfg->memory,&cfg->input->domain,identity[0],identity[1],&binding);
+        XirMetadataDomain domain=xir_metadata_domain_from_module(cfg->input);
+        XrXirStatus status=xir_metadata_default_lookup(cfg->memory,&domain,identity[0],identity[1],&binding);
         if (status!=XR_XIR_OK) return status;
         if (!binding) return XR_XIR_BAD_STRUCTURE;
         target=binding->function;
     } else if (op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT) {
         if (op->immediate<0 || (uint64_t)op->immediate>=cfg->values) return XR_XIR_BAD_STRUCTURE;
-        *output=xr_xir_callable_error(cfg->input->domain.types,cfg->types[(uint32_t)op->immediate]);
+        *output=xr_xir_callable_error(cfg->input->types,cfg->types[(uint32_t)op->immediate]);
         return *output==XR_XIR_UNIT?XR_XIR_BAD_TYPE:XR_XIR_OK;
     } else if (op->op==XR_XIR_CALL_REQUIREMENT) {
-        const XrXirInterfaceTable *table=cfg->input->domain.types->interfaces;
+        const XrXirInterfaceTable *table=cfg->input->types->interfaces;
         if (!table || !table->declarations || op->targets[0]>=table->count) return XR_XIR_BAD_STRUCTURE;
         const XrXirInterfaceDeclaration *owner=&table->declarations[op->targets[0]];
         if (op->targets[1]>=owner->method_count) return XR_XIR_BAD_STRUCTURE;
-        XrXirType error=xr_xir_callable_error(cfg->input->domain.types,owner->methods[op->targets[1]].signature);
+        XrXirType error=xr_xir_callable_error(cfg->input->types,owner->methods[op->targets[1]].signature);
         if (error==XR_XIR_UNIT) return XR_XIR_BAD_TYPE;
         return local_error_substitute(cfg,op,error,output);
     } else if (op->op==XR_XIR_SCOPE_JOIN) {
@@ -146,51 +147,33 @@ static XrXirStatus local_error_call(LocalErrorCfg *cfg,const XrXirInstruction *o
     }
     else if (op->op==XR_XIR_ITERATOR_HAS_NEXT || op->op==XR_XIR_ITERATOR_NEXT || op->op==XR_XIR_ITERATOR_NTH) {
         if (op->args[0]>=cfg->values) return XR_XIR_BAD_STRUCTURE;
-        const XrXirTypeNode *type=xr_xir_type_node(cfg->input->domain.types,cfg->types[op->args[0]]);
+        const XrXirTypeNode *type=xr_xir_type_node(cfg->input->types,cfg->types[op->args[0]]);
         if (!type || type->kind!=XR_XIR_TYPE_ITERATOR || type->result==XR_XIR_UNIT) return XR_XIR_BAD_TYPE;
         *output=type->result;return XR_XIR_OK;
     } else return XR_XIR_OK;
-    EffectBodyFunctionHead head={0};
-    XrXirStatus status=effect_body_request_head(cfg->input,target,&head);
-    if (status!=XR_XIR_OK) return status;
-    return local_error_substitute(cfg,op,head.error_type,output);
+    if (target>=cfg->input->function_count) return XR_XIR_BAD_STRUCTURE;
+    return local_error_substitute(cfg,op,cfg->input->functions[target].error_type,output);
 }
-static bool local_error_native(const EffectBodyRequest *input,uint32_t function) {
-    const XrXirDeclarations *d=input->domain.declarations;
-    return d && d->functions && function<input->domain.function_count && d->functions[function].native_callable;
-}
-static XrXirStatus local_error_native_header(const LocalErrorCfg *cfg) {
-    const EffectBodyRequest *input=cfg->input;
-    if (input->head==effect_body_raw_head)
-        return xir_native_callable_verify(input->owner,cfg->function);
-    const XrXirDeclarations *d=input->domain.declarations;
-    const XrXirFunctionIdentity *id=&d->functions[cfg->function];
-    const EffectBodyFunctionHead *head=&cfg->head;
-    if (!xir_native_callable_identity(id) || id->module>=d->module_count || cfg->function==d->entry_function ||
-        !head->name || !head->name_length || memchr(head->name,0,head->name_length) ||
-        head->blocks || head->block_count || head->instruction_count || head->operands || head->operand_count ||
-        (input->domain.generics && (input->domain.generics[cfg->function].parameter_count ||
-            input->domain.generics[cfg->function].argument_count))) return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t module=0;module<d->module_count;++module)
-        if (d->modules[module].initializer==cfg->function) return XR_XIR_BAD_STRUCTURE;
-    return xir_native_callable_types(id->native_callable,input->domain.types,head->parameters,
-        head->parameter_count,head->result,head->error_type)?XR_XIR_OK:XR_XIR_BAD_TYPE;
+static bool local_error_native(const XrXirModule *input,uint32_t function) {
+    const XrXirDeclarations *d=input->declarations;
+    return d && d->functions && function<input->function_count && d->functions[function].native_callable;
 }
 static XrXirStatus local_error_prepare(LocalErrorCfg *cfg) {
-    XrXirStatus status=effect_body_request_head(cfg->input,cfg->function,&cfg->head);
-    if (status!=XR_XIR_OK) return status;
+    if (cfg->function>=cfg->input->function_count) return XR_XIR_BAD_STRUCTURE;
+    cfg->head=cfg->input->functions[cfg->function];
+    XrXirStatus status=XR_XIR_OK;
     cfg->bound=cfg->head.error_type;
-    if (local_error_native(cfg->input,cfg->function)) return local_error_native_header(cfg);
-    if (cfg->input->domain.declarations &&
-        (cfg->input->domain.declarations->functions[cfg->function].promises&XR_XIR_FUNCTION_GENERATOR)) {
-        const XrXirTypeNode *iterator=xr_xir_type_node(cfg->input->domain.types,cfg->head.result);
+    if (local_error_native(cfg->input,cfg->function)) return xir_native_callable_verify(cfg->input,cfg->function);
+    if (cfg->input->declarations &&
+        (cfg->input->declarations->functions[cfg->function].promises&XR_XIR_FUNCTION_GENERATOR)) {
+        const XrXirTypeNode *iterator=xr_xir_type_node(cfg->input->types,cfg->head.result);
         if (!iterator || iterator->kind!=XR_XIR_TYPE_ITERATOR) return XR_XIR_BAD_TYPE;
         cfg->bound=iterator->result;
     }
     if (cfg->bound==XR_XIR_UNIT || !cfg->head.block_count ||
         (uint64_t)cfg->head.parameter_count+cfg->head.instruction_count>UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
     cfg->values=cfg->head.parameter_count+cfg->head.instruction_count;
-    cfg->terms=(EffectTerms){.types=*cfg->input->domain.types,.remaining=cfg->memory};
+    cfg->terms=(EffectTerms){.types=*cfg->input->types,.remaining=cfg->memory};
     cfg->operations=local_error_alloc(cfg,cfg->head.instruction_count,sizeof(*cfg->operations),&status);
     cfg->types=local_error_alloc(cfg,cfg->values,sizeof(*cfg->types),&status);
     cfg->calls=local_error_alloc(cfg,cfg->head.instruction_count,sizeof(*cfg->calls),&status);
@@ -199,9 +182,7 @@ static XrXirStatus local_error_prepare(LocalErrorCfg *cfg) {
     if (status!=XR_XIR_OK) return status;
     for (uint32_t v=0;v<cfg->head.parameter_count;++v) cfg->types[v]=cfg->head.parameters[v];
     for (uint32_t i=0;i<cfg->head.instruction_count;++i) {
-        XrXirInstruction storage;const XrXirInstruction *actual=NULL;
-        status=effect_body_request_instruction(cfg->input,cfg->function,i,&storage,&actual);
-        if (status!=XR_XIR_OK) return status;
+        const XrXirInstruction *actual=&cfg->head.instructions[i];
         if (!actual || actual->op<=XR_XIR_INVALID || actual->op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
         cfg->operations[i]=*actual;cfg->types[cfg->head.parameter_count+i]=actual->type;
     }
@@ -221,7 +202,7 @@ static XrXirStatus local_error_prepare(LocalErrorCfg *cfg) {
 }
 static XrXirStatus local_error_storage(LocalErrorCfg *cfg) {
     const XrXirTypes *types=&cfg->terms.types;uint64_t atoms=0;
-    uint32_t parameters=cfg->input->domain.generics?cfg->input->domain.generics[cfg->function].parameter_count:0;
+    uint32_t parameters=cfg->input->generics?cfg->input->generics[cfg->function].parameter_count:0;
     for (uint32_t t=0;t<types->count;++t) {
         XrXirType type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+t);
         if (!xr_xir_type_is_enum(types,type)) continue;
@@ -259,8 +240,8 @@ static XrXirStatus local_error_storage(LocalErrorCfg *cfg) {
 #include "xxir_local_errors_cfg.inc.c"
 
 static XrXirStatus local_errors_request(const XrXirCompileContext *memory,
-    const EffectBodyRequest *input,XrXirDiagnostic *diagnostic) {
-    for (uint32_t f=0;f<input->domain.function_count;++f) {
+    const XrXirModule *input,XrXirDiagnostic *diagnostic) {
+    for (uint32_t f=0;f<input->function_count;++f) {
         LocalErrorCfg cfg={.memory=memory,.input=input,.function=f,.block=UINT32_MAX,
             .instruction=UINT32_MAX,.diagnostic=diagnostic};
         XrXirStatus status=local_error_prepare(&cfg);
@@ -274,8 +255,8 @@ static XrXirStatus local_errors_request(const XrXirCompileContext *memory,
 XR_FUNC XrXirStatus xir_compile_local_errors_verify(const XrXirCompileContext *memory,
     const XrXirModule *module,XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(memory) || !module) return XR_XIR_BAD_STRUCTURE;
-    EffectBodyRequest input=effect_body_raw_request(memory,module);XrXirTypes empty={0};
-    if (!input.domain.types) input.domain.types=&empty;
+    XrXirModule input=*module;XrXirTypes empty={0};
+    if (!input.types) input.types=&empty;
     return local_errors_request(memory,&input,diagnostic);
 }
 XR_FUNC XrXirStatus xir_compile_worker_error_verify(const XrXirCompileContext *context,

@@ -285,22 +285,10 @@ static inline bool xir_effect_evidence_is_evaluation(const XrXirModule *module) 
     return module && module->provenance && module->provenance->kind==XR_XIR_EVIDENCE_EVALUATION;
 }
 
-/* This lexical owner proves only absence of implicit module-storage access
- * in the actual default or direct Class-result execution closure. It grants no root, alias, result
- * freshness or executable permission. The callback retains no scope or input.
- * Complete immutable input products use the resource owner's held-memory
- * policy; the callback frame excludes the operation's live temporary scratch.
- * The first failed scoped query remains terminal even if a callback ignores it. */
-typedef struct XirEffectDefaultAccessScope XirEffectDefaultAccessScope;
-typedef XrXirStatus (*XirEffectDefaultAccessOperation)(void *data,
-    const XrXirCompileContext *remaining,XirEffectDefaultAccessScope *scope);
-XR_FUNC XrXirStatus xir_effects_default_access_operation_input(const XrXirCompileContext *context, XirEffectInput input, XirEffectDefaultAccessOperation operation, void *data);
-XR_FUNC XrXirStatus xir_effects_default_access_site(XirEffectDefaultAccessScope *scope,
-    const XrXirCompileContext *remaining,uint32_t caller,uint32_t instruction);
-/* A current direct Class-result call uses the same owned Control closure.
- * Module, site, target, argument/receiver types and result stay bound to this
- * lexical input; this is not object identity or executable permission. */
-XR_FUNC XrXirStatus xir_effects_class_call_access_site(XirEffectDefaultAccessScope *scope,
-    const XrXirCompileContext *remaining,const XrXirModule *module,
-    uint32_t caller,uint32_t instruction,XrXirType result);
+/* Current call identity and types remain obligations of the admitted module.
+ * The immutable semantic owner supplies only its numeric hidden-access fact. */
+XR_FUNC XrXirStatus xir_effects_default_access_site(const XrXirCompileContext *context,
+    const struct XrXirEffects *effects,XirEffectInput input,uint32_t caller,uint32_t instruction);
+XR_FUNC XrXirStatus xir_effects_class_call_access_site(const XrXirCompileContext *context,
+    const struct XrXirEffects *effects,XirEffectInput input,uint32_t caller,uint32_t instruction,XrXirType result);
 #endif // XXIR_EFFECT_CONTRACT_INTERNAL_H

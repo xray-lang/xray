@@ -528,7 +528,9 @@ XR_FUNC XrXirStatus xr_xir_compile_check_refined_v2(const XrXirCompileContext *c
 #if XR_XIR_PARANOID
         status = xir_compile_verify_effects_input(context,(XirEffectInput){built,construction,control},effects,diagnostic);
 #else
-        status = xir_compile_check_effect_declarations(context,(XirEffectInput){built,construction,control},effects,diagnostic);
+        status = refiner->admit ?
+            xir_compile_check_effect_declarations(context,(XirEffectInput){built,construction,control},effects,diagnostic) :
+            xir_compile_verify_effects_input(context,(XirEffectInput){built,construction,control},effects,diagnostic);
 #endif
     }
     if (status == XR_XIR_BAD_TYPE && effects && diagnostic && refiner->explain)
