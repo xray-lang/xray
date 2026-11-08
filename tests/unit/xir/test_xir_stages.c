@@ -388,7 +388,7 @@ static void numeric_admission(void) {
 }
 
 static void constructed_metadata(void) {
-    XrXirCallableParameter input = {(XrXirType)256,0};
+    XrXirCallableParameter input = {(XrXirType)256,0,0};
     XrXirTypeNode nodes[] = {
         {XR_XIR_TYPE_ARRAY,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0, {0}},
         {XR_XIR_TYPE_CELL,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,0, {0}},

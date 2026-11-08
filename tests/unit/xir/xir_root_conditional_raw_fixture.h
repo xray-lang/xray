@@ -41,7 +41,7 @@ static void conditional_raw_fixture(ConditionalRawFixture *f, uint32_t mode) {
     f->receiver=(XrXirType)256;
     f->nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NOMINAL};
     f->nodes[1]=(XrXirTypeNode){.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=8};
-    f->callback=(XrXirCallableParameter){(XrXirType)257,0};
+    f->callback=(XrXirCallableParameter){(XrXirType)257,0,0};
     f->nodes[2]=(XrXirTypeNode){.element=XR_XIR_NEVER,.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,
         .parameters=&f->callback,.parameter_count=1,.flags=8};
     f->nodes[3]=f->nodes[1];f->nodes[3].flags=2;

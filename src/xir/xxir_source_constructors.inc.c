@@ -133,7 +133,7 @@ static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, As
     if (declaration->kind == XR_XIR_NOMINAL_STRUCT) declaration->flags |= XR_XIR_NOMINAL_MODULE_LITERAL;
     uint32_t access = method->is_private ? XR_XIR_MEMBER_PRIVATE : method->is_protected ? XR_XIR_MEMBER_PROTECTED : XR_XIR_MEMBER_PUBLIC;
     ctx->identities[index] = (XrXirFunctionIdentity) {owner->module, access ? 0 : declaration->exported, owner->index + 1, access, 0,
-        declaration->kind == XR_XIR_NOMINAL_CLASS ? XR_XIR_FUNCTION_NO_SUSPEND : 0, XR_XIR_CONSTRUCTOR, 0, 0, 0};
+        declaration->kind == XR_XIR_NOMINAL_CLASS ? XR_XIR_FUNCTION_NO_SUSPEND : 0, XR_XIR_CONSTRUCTOR, 0, 0, 0, 0, 0};
     SourceFunction *body = &ctx->bodies[index]; body->node = node; body->module = owner->module;
     if(!source_method_parameter_scope(ctx,node,&body->parameter_scope))return false;
     if (!source_nominal_function_scope(ctx,index,owner)) return false;

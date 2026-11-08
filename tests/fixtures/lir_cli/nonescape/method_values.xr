@@ -1,0 +1,8 @@
+final class Sink {
+    init() {}
+    put(callback: escaping fn() -> i64) -> fn() -> i64 { return callback }
+    static accept(callback: escaping fn() -> i64) -> fn() -> i64 { return callback }
+}
+const instance = Sink()
+const bound = instance.put
+const method = Sink.accept

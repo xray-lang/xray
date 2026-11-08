@@ -51,7 +51,7 @@ def main() -> None:
         source_root = fixtures / "nonescape"
         accepted = ("local_alias", "conditional_alias", "local_capture", "forward",
                     "escaping_storage", "escaping_compose", "ref_replacement", "contextual_keyword",
-                    "borrow_slice", "borrow_ref")
+                    "borrow_slice", "borrow_ref", "stored_collection_values", "method_values", "requirement_value")
         for name in accepted:
             checked = run("nonescape-" + name, [binary, "check", source_root / (name + ".xr")], 0)
             assert not checked.stdout and not checked.stderr, name

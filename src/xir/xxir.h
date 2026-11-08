@@ -59,6 +59,10 @@ typedef struct XrXirTarget {
     uint32_t abi_version;
 } XrXirTarget;
 
+/* SSA value transport within one function. The receiving analysis owns the
+ * array; synchronous consumers retain only ordinal dependencies. */
+typedef struct XrXirValueFlow { uint32_t source, target; } XrXirValueFlow;
+
 typedef enum XrXirLayoutContext {
     XR_XIR_LAYOUT_STORAGE = 1,
     XR_XIR_LAYOUT_SSA,

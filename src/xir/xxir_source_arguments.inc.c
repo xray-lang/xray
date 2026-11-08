@@ -112,6 +112,7 @@ static bool source_argument_functions(SourceContext *ctx, uint32_t *next) {
             ctx->identities[helper].test_timeout_seconds = 0;
             ctx->identities[helper].exported = false;
             ctx->identities[helper].promises = 0;
+            ctx->identities[helper].capture_owner = ctx->identities[helper].capture_count = 0;
             ctx->identities[helper].method_kind = ctx->identities[helper].nominal_owner ? XR_XIR_MEMBER_HELPER : XR_XIR_NON_MEMBER;
         }
     }

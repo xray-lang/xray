@@ -45,6 +45,7 @@ static bool source_timeout_register(SourceContext *ctx,uint32_t helper,SourceVal
 static bool source_timeout_cancel_body(SourceContext *ctx,uint32_t function,uint32_t owner) {
     ctx->function=function;ctx->returned=false;
     ctx->identities[function].cleanup_owner=owner+1;
+    ctx->identities[function].capture_owner=owner+1;ctx->identities[function].capture_count=1;
     ctx->identities[function].promises=XR_XIR_FUNCTION_NO_SUSPEND;
     if(!source_recipe_append(ctx,(XrXirInstruction){.op=XR_XIR_TASK_CANCEL,.type=XR_XIR_UNIT,.args={0}},NULL)||
         !source_recipe_append(ctx,(XrXirInstruction){.op=XR_XIR_RETURN,.type=XR_XIR_UNIT},NULL))return false;

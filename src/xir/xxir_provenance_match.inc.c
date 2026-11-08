@@ -258,13 +258,16 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
                 identity->nominal_owner != actual->nominal_owner || identity->member_access != actual->member_access ||
                 identity->promises != actual->promises || identity->method_kind != actual->method_kind ||
                 identity->test_role != actual->test_role || identity->test_timeout_seconds != actual->test_timeout_seconds ||
-                identity->native_callable != actual->native_callable)
+                identity->native_callable != actual->native_callable || identity->capture_count != actual->capture_count)
                 return XR_XIR_BAD_STRUCTURE;
-            if (!!identity->cleanup_owner != !!actual->cleanup_owner) return XR_XIR_BAD_STRUCTURE;
-            if (identity->cleanup_owner) {
-                if (actual->cleanup_owner > f) return XR_XIR_BAD_STRUCTURE;
-                const XrXirOrigin *parent = &c->origins[actual->cleanup_owner - 1];
-                if (parent->function != identity->cleanup_owner - 1 ||
+            uint32_t declared_owners[] = {identity->cleanup_owner, identity->capture_owner};
+            uint32_t actual_owners[] = {actual->cleanup_owner, actual->capture_owner};
+            for (uint32_t o = 0; o < 2; ++o) {
+                if (!!declared_owners[o] != !!actual_owners[o]) return XR_XIR_BAD_STRUCTURE;
+                if (!declared_owners[o]) continue;
+                if (actual_owners[o] > f) return XR_XIR_BAD_STRUCTURE;
+                const XrXirOrigin *parent = &c->origins[actual_owners[o] - 1];
+                if (parent->function != declared_owners[o] - 1 ||
                     parent->argument_count != origin->argument_count) return XR_XIR_BAD_STRUCTURE;
                 for (uint32_t a = 0; a < origin->argument_count; ++a) {
 
@@ -514,8 +517,8 @@ static XrXirStatus provenance_origin_hash(ProvenanceMatch *c,uint32_t f,uint32_t
         (origin->effect_argument_count && !origin->effect_arguments) ||
         origin->argument_count!=(c->source->generics?
             c->source->generics[origin->function].parameter_count:0)) return XR_XIR_BAD_STRUCTURE;
-    /* Four field reads, four xor/multiply pairs and the actual scalar write
-     * are charged here. Variable vector loops charge their own element work. */
+    /* Scalar identity reads and the actual write are charged here.
+     * Variable vector loops charge their own element work. */
 
     uint32_t hash=UINT32_C(2166136261);
     hash=(hash^origin->function)*UINT32_C(16777619);
@@ -524,6 +527,9 @@ static XrXirStatus provenance_origin_hash(ProvenanceMatch *c,uint32_t f,uint32_t
     uint32_t cleanup=c->destination->declarations?
         c->destination->declarations->functions[f].cleanup_owner:0;
     hash=(hash^cleanup)*UINT32_C(16777619);
+    uint32_t captures=c->destination->declarations?
+        c->destination->declarations->functions[f].capture_owner:0;
+    hash=(hash^captures)*UINT32_C(16777619);
     for (uint32_t a=0;a<origin->argument_count;++a) {
 
         hash=(hash^origin->arguments[a])*UINT32_C(16777619);
@@ -544,8 +550,10 @@ static XrXirStatus provenance_origin_equal(ProvenanceMatch *c,uint32_t f,uint32_
     if (a->function!=b->function || a->argument_count!=b->argument_count ||
         a->effect_argument_count!=b->effect_argument_count ||
         (c->destination->declarations &&
-            c->destination->declarations->functions[f].cleanup_owner!=
-            c->destination->declarations->functions[prior].cleanup_owner)) return XR_XIR_OK;
+            (c->destination->declarations->functions[f].cleanup_owner!=
+             c->destination->declarations->functions[prior].cleanup_owner ||
+             c->destination->declarations->functions[f].capture_owner!=
+             c->destination->declarations->functions[prior].capture_owner))) return XR_XIR_OK;
     for (uint32_t v=0;v<a->argument_count;++v) {
 
         if (a->arguments[v]!=b->arguments[v]) return XR_XIR_OK;

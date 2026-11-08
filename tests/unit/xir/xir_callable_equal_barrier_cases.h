@@ -13,7 +13,7 @@
 #define XIR_CALLABLE_EQUAL_BARRIER_CASES_H
 static void bound_equal_raw_guards(void) {
     XrXirCompileContext context=bound_owner(bound_caps());
-    XrXirCallableParameter parameters[]={{XR_XIR_I64,0},{XR_XIR_BOOL,0},{XR_XIR_STRING,0}};
+    XrXirCallableParameter parameters[]={{XR_XIR_I64,0,0},{XR_XIR_BOOL,0,0},{XR_XIR_STRING,0,0}};
     for (unsigned attack=0;attack<12;++attack) {
         XrXirTypeNode nodes[]={
             {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.parameters=parameters,.parameter_count=3,
@@ -48,7 +48,7 @@ static void bound_equal_raw_guards(void) {
 }
 static void bound_equal_complete_parameters(void) {
     XrXirCompileContext context=bound_owner(bound_caps());
-    XrXirCallableParameter input[]={{XR_XIR_I64,0},{XR_XIR_BOOL,0},{XR_XIR_STRING,0}};
+    XrXirCallableParameter input[]={{XR_XIR_I64,0,0},{XR_XIR_BOOL,0,0},{XR_XIR_STRING,0,0}};
     XrXirCallableParameter output[3];memcpy(output,input,sizeof(input));
     XrXirTypeNode nodes[]={
         {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.parameters=input,.parameter_count=3,
@@ -70,7 +70,7 @@ static void bound_equal_complete_parameters(void) {
     bound_owner_free(&context);
 }
 static void bound_equal_memory_reuse(void) {
-    XrXirCallableParameter parameters[]={{XR_XIR_I64,0},{XR_XIR_BOOL,0},{XR_XIR_STRING,0}};
+    XrXirCallableParameter parameters[]={{XR_XIR_I64,0,0},{XR_XIR_BOOL,0,0},{XR_XIR_STRING,0,0}};
     XrXirTypeNode node={.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.parameters=parameters,.parameter_count=3,
         .result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     XrXirTypes types={&node,1,NULL,NULL};BoundMark mark=bound_mark();

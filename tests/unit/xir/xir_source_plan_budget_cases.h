@@ -97,7 +97,7 @@ static void source_plan_context_cases(void) {
     allocation_private_close(&ctx);CHECK(!source_fixture_compile_live);
 }
 static void source_plan_conversion_budget_cases(void) {
-    XrXirCallableParameter parameters[]={{XR_XIR_I64,0},{XR_XIR_I64,0}};
+    XrXirCallableParameter parameters[]={{XR_XIR_I64,0,0},{XR_XIR_I64,0,0}};
     SourceValue values[]={{0,XR_XIR_I64},{1,XR_XIR_I64}};
     SourceCallConversions request={SOURCE_CALL_REQUIREMENT,{0},NULL,parameters,values,2,0};
     XrXirType input_types[]={XR_XIR_I64,XR_XIR_I64};

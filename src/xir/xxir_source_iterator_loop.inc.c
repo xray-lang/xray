@@ -27,6 +27,7 @@ static bool source_iterator_cleanup(SourceContext *ctx,AstNode *node,SourceValue
     ctx->generics[index].constraints=ctx->generics[outer].constraints;
     ctx->identities[index]=ctx->identities[outer];
     ctx->identities[index].promises=0;ctx->identities[index].cleanup_owner=outer+1;
+    ctx->identities[index].capture_owner=outer+1;ctx->identities[index].capture_count=1;
     ctx->identities[index].exported=0;ctx->identities[index].test_role=XR_XIR_TEST_ROLE_NONE;
     ctx->identities[index].test_timeout_seconds=0;
     ctx->identities[index].method_kind=ctx->identities[index].nominal_owner ? XR_XIR_MEMBER_HELPER : XR_XIR_NON_MEMBER;

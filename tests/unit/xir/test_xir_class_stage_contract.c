@@ -59,7 +59,7 @@ static void stage_wrapper(StageFixture *f,uint32_t index,uint32_t helper,XrXirTy
 static void stage_fixture(StageFixture *f) {
     memset(f,0,sizeof(*f));f->parameter=XR_XIR_I64;
     for(uint32_t field=0;field<3;++field) {
-        f->field_types[field]=XR_XIR_I64;f->tuple[field]=(XrXirCallableParameter){XR_XIR_I64,XR_PARAM_READ};
+        f->field_types[field]=XR_XIR_I64;f->tuple[field]=(XrXirCallableParameter){XR_XIR_I64,XR_PARAM_READ,0};
         f->fields[field]=(XrXirNominalFieldIdentity){{field==0?"x":field==1?"y":"z",1},XR_XIR_FIELD_MUTABLE};
     }
     f->identities[0]=(XrXirNominalIdentity){.module={"base",4},.name={"Base",4},.exported=1,

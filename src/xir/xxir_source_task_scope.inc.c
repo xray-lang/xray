@@ -42,6 +42,7 @@ static bool source_scope_cleanup(SourceContext *ctx,AstNode *node) {
     ctx->identities[index].test_role=XR_XIR_TEST_ROLE_NONE;ctx->identities[index].test_timeout_seconds=0;
     ctx->identities[index].method_kind=ctx->identities[index].nominal_owner?XR_XIR_MEMBER_HELPER:XR_XIR_NON_MEMBER;
     ctx->identities[index].exported=0;ctx->identities[index].cleanup_owner=outer+1;
+    ctx->identities[index].capture_owner=outer+1;ctx->identities[index].capture_count=0;
     SourceComptimeScope saved=source_comptime_scope(ctx);SourceTaskScope *scope=ctx->task_scope;
     ctx->function=index;ctx->returned=false;ctx->task_scope=NULL;
     ctx->locals=ctx->scope=NULL;ctx->facts=NULL;ctx->epochs=NULL;ctx->loop=NULL;

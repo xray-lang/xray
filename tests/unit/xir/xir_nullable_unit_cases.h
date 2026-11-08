@@ -38,7 +38,7 @@ static void nullable_unit_compile_boundaries(const XrXirTypes *types) {
         (unsigned long long)exact.peak_bytes);
 }
 static void nullable_unit_value_cases(void) {
-    XrXirCallableParameter fields[]={{(XrXirType)256,0},{XR_XIR_UNIT,0}};
+    XrXirCallableParameter fields[]={{(XrXirType)256,0,0},{XR_XIR_UNIT,0,0}};
     XrXirTypeNode nodes[]={
         {.kind=XR_XIR_TYPE_NULLABLE,.element=XR_XIR_UNIT},
         {.kind=XR_XIR_TYPE_NULLABLE,.element=(XrXirType)256},

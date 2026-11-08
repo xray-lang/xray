@@ -40,7 +40,7 @@ static void generic_method_owned_fixture(GenericMethodOwnedFixture *f) {
     f->applications[1] = f->applications[0];
     f->own[0] = (XrXirConstraint){XR_XIR_CONSTRAINT_SENDABLE,&f->applications[0],1};
     f->own[1] = (XrXirConstraint){0,&f->applications[1],1};
-    f->parameter = (XrXirCallableParameter){(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+1),0};
+    f->parameter = (XrXirCallableParameter){(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+1),0,0};
     f->signature.kind = XR_XIR_TYPE_CALLABLE; f->signature.parameter_span = 2;
     f->signature.flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED;f->signature.element=XR_XIR_NEVER;
     f->signature.parameters = &f->parameter; f->signature.parameter_count = 1;

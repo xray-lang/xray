@@ -342,7 +342,7 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
                 method->is_protected ? XR_XIR_MEMBER_PROTECTED : XR_XIR_MEMBER_PUBLIC;
             ctx->identities[index] = (XrXirFunctionIdentity) {owner->module,
                 access ? 0 : ctx->nominals.declarations[d].exported, d + 1, access, 0,
-                method->is_override?XR_XIR_FUNCTION_OVERRIDE:0, method->is_static ? XR_XIR_STATIC_METHOD : XR_XIR_READ_METHOD, 0, 0, 0};
+                method->is_override?XR_XIR_FUNCTION_OVERRIDE:0, method->is_static ? XR_XIR_STATIC_METHOD : XR_XIR_READ_METHOD, 0, 0, 0, 0, 0};
             symbol->kind = SOURCE_FUNCTION; symbol->index = index; symbol->module = owner->module;
             SourceFunction *body = &ctx->bodies[index]; body->node = node; body->module = owner->module;
             if(!source_method_parameter_scope(ctx,node,&body->parameter_scope))return false;

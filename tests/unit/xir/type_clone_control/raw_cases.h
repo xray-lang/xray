@@ -21,7 +21,7 @@ typedef struct TcFixture {
 } TcFixture;
 static TcFixture *raw_fixture(void) {
     TcFixture *f=xr_calloc(1,sizeof(*f));CHECK(f);
-    for(unsigned i=0;i<600;++i)f->parameters[i]=(XrXirCallableParameter){XR_XIR_I64,XR_PARAM_READ};
+    for(unsigned i=0;i<600;++i)f->parameters[i]=(XrXirCallableParameter){XR_XIR_I64,XR_PARAM_READ,0};
     f->nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,
         .parameters=f->parameters,.parameter_count=600,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_NONE};
     for(unsigned i=0;i<TC_ARITY;++i) {

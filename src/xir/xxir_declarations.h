@@ -60,6 +60,9 @@ typedef struct XrXirFunctionIdentity {
     uint32_t test_role, test_timeout_seconds;
     /* Zero is ordinary code; otherwise the canonical callable selects the body. */
     uint32_t native_callable;
+    /* Lexical environments are declaration-owned physical parameter prefixes.
+     * Partial application of ordinary parameters never changes these fields. */
+    uint32_t capture_owner, capture_count;
 } XrXirFunctionIdentity;
 
 #define XR_XIR_FUNCTION_NO_SUSPEND 1u

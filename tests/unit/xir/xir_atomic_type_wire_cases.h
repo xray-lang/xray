@@ -72,7 +72,7 @@ static void legacy_types_cases(void){
     CHECK(xr_xir_compile_checked_read(&owner.context,atomic_types65_golden,sizeof(atomic_types65_golden),&previous,NULL)==XR_XIR_BAD_STRUCTURE && previous==(XrXirArtifact *)(uintptr_t)1);
     CHECK(source_program_compile_attempts==previous_attempts);
     for(unsigned mutation=0;mutation<12;++mutation){
-        LegacyTypesFixture f;legacy_types_fixture(&f);XrXirCallableParameter field={XR_XIR_I64,0};
+        LegacyTypesFixture f;legacy_types_fixture(&f);XrXirCallableParameter field={XR_XIR_I64,0,0};
         switch(mutation){case 0:f.nodes[0].element=XR_XIR_UNIT;break;case 1:f.nodes[0].element=XR_XIR_STRING;break;
         case 2:f.nodes[0].element=(XrXirType)91;break;case 3:f.nodes[0].nominal.declaration=1;break;
         case 4:f.nodes[0].flags=1;break;case 5:f.nodes[0].result=XR_XIR_I64;break;case 6:f.nodes[0].parameter_span=1;break;

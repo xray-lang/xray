@@ -1,0 +1,8 @@
+interface Sink { put(callback: escaping fn() -> i64) -> fn() -> i64 }
+struct Receiver implements Sink {
+    put(callback: escaping fn() -> i64) -> fn() -> i64 { return callback }
+}
+fn bind<T: Sink>(value: T) -> fn(escaping fn() -> i64) -> fn() -> i64 {
+    return value.put
+}
+const bound = bind<Receiver>(Receiver{})
