@@ -1,0 +1,11 @@
+fn leaf() -> i64 { return 7 }
+fn retain(callback: escaping fn() -> i64) -> fn() -> i64 { return callback }
+fn local(callback: fn() -> i64) {
+    var first = leaf
+    var second = leaf
+    const readFirst = fn() -> i64 { return first() }
+    const readSecond = fn() -> i64 { return second() }
+    const saved = retain(readFirst)
+    first = readSecond
+    second = callback
+}
