@@ -26,14 +26,8 @@ static bool declaration_view_access_needed(const XrXirModule *module) {
     return false;
 }
 
-static XrXirStatus declaration_effects_infer(const XrXirCompileContext *context,
-    XirEffectInput input, const XrHirEscapeFacts *lifetimes, XrXirEffects **output) {
-    return lifetimes ? xir_effects_infer_escape_input(context, input, lifetimes, output) :
-        xr_xir_compile_effects_infer_verified_input(context, input, output);
-}
-
 static XrXirStatus declaration_effects_verify(XirEffectInput input,
-    XrXirCompileContext *remaining, XrXirDiagnostic *diagnostic, const XrXirEffects *prepared, XrXirEffects **output, EffectDeclarationAdmission admission, const XrHirEscapeFacts *lifetimes) {
+    XrXirCompileContext *remaining, XrXirDiagnostic *diagnostic, const XrXirEffects *prepared, XrXirEffects **output, EffectDeclarationAdmission admission) {
     const XrXirModule *module=input.module;
     bool require_owned=admission!=EFFECT_DECLARATION_OPTIONAL;
     bool access=admission!=EFFECT_DECLARATION_SOURCE && declaration_view_access_needed(module);
@@ -46,7 +40,7 @@ static XrXirStatus declaration_effects_verify(XirEffectInput input,
         if (!access && !templated && (!output || !require_owned)) return XR_XIR_OK;
         XrXirEffects *owned = NULL;
         XrXirStatus status = prepared ? XR_XIR_OK :
-            declaration_effects_infer(remaining,input,lifetimes,&owned);
+            xir_effects_infer_lifetimes_input(remaining,input,&owned,diagnostic);
         if (status == XR_XIR_OK && templated) status = xir_effects_parameters_match_input(remaining,
             input, prepared ? prepared : owned);
         if (status==XR_XIR_OK && access)
@@ -80,9 +74,9 @@ static XrXirStatus declaration_effects_verify(XirEffectInput input,
             }
         }
     }
-    if (!present) return output && require_owned ? declaration_effects_infer(remaining,input,lifetimes,output) : XR_XIR_OK;
+    if (!present) return output && require_owned ? xir_effects_infer_lifetimes_input(remaining,input,output,diagnostic) : XR_XIR_OK;
     XrXirEffects *effects = NULL;
-    XrXirStatus status = prepared ? XR_XIR_OK : declaration_effects_infer(remaining,input,lifetimes,&effects);
+    XrXirStatus status = prepared ? XR_XIR_OK : xir_effects_infer_lifetimes_input(remaining,input,&effects,diagnostic);
     const XrXirEffects *facts = prepared ? prepared : effects;
     if (status == XR_XIR_OK) status = xir_effects_parameters_match_input(remaining, input, facts);
     if (status == XR_XIR_OK && access)

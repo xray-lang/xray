@@ -712,11 +712,6 @@ static bool effect_check_instruction(EffectCheckBuild *build, uint32_t f, uint32
     build->roots->node[value].cell = xr_xir_type_is_cell(build->module->types, op->type);
     build->roots->node[value].weaken = op->op == XR_XIR_FUNCTION_WEAKEN;
     effect_check_cell_seed(build, value, op);
-    if (build->refiner && build->refiner->restricted) {
-        build->status = build->refiner->restricted(build->refiner->context, f,
-            function->parameter_count + i, &build->roots->node[value].restricted);
-        if (build->status != XR_XIR_OK) return false;
-    }
     XrXirFunctionEffects control = {0};
     if (effect_seed_opcode(op->op, &control) == EFFECT_SEED_INVALID) {
         build->status = XR_XIR_BAD_STRUCTURE;
@@ -937,11 +932,6 @@ static XrXirStatus effect_check_collect(EffectCheckBuild *build) {
             parameter_node->mode = xr_xir_declared_parameter_mode(build->module->types, body->parameters[p],
                 body->consume_parameters, body->consume_parameter_count, p);
 
-            if (build->refiner && build->refiner->restricted) {
-                build->status = build->refiner->restricted(build->refiner->context, f, p,
-                    &build->roots->node[row.first + p].restricted);
-                if (build->status != XR_XIR_OK) return build->status;
-            }
             effect_check_array_bound(build, f, p, body->parameters[p], 0);
             const XrXirTypeNode *callable = xr_xir_callable_signature(build->module->types, body->parameters[p]);
             if (callable) {

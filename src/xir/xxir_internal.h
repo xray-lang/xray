@@ -160,9 +160,8 @@ XR_FUNC XrXirStatus xir_effects_source_terminal_input(const XrXirCompileContext 
 XR_FUNC XrXirStatus xr_xir_compile_effects_infer_verified_input(const XrXirCompileContext *compile_context, XirEffectInput input, XrXirEffects **output);
 XR_FUNC XrXirStatus xir_effects_lower_verified_input(const XrXirCompileContext *context,
     XirEffectInput input, const XrXirEffects *checked, XrXirEffects **output);
-struct XrHirEscapeFacts;
-XR_FUNC XrXirStatus xir_effects_infer_escape_input(const XrXirCompileContext *context,
-    XirEffectInput input, const struct XrHirEscapeFacts *lifetimes, XrXirEffects **output);
+XR_FUNC XrXirStatus xir_effects_infer_lifetimes_input(const XrXirCompileContext *context,
+    XirEffectInput input, XrXirEffects **output, XrXirDiagnostic *diagnostic);
 struct XirStorageFlow;
 struct XirViewNormalization;
 /* Private construction preparation grants no artifact or execution authority. */
@@ -178,9 +177,6 @@ typedef struct XrXirRootRefiner {
     /* Reads closed numeric equations before refinement and publication.
      * Neither borrowed module nor provisional semantic owner may escape. */
     XrXirStatus (*admit)(void *, const XrXirModule *, const XrXirEffects *, XrXirDiagnostic *);
-    /* Reads the HIR-owned restricted-value classification synchronously. */
-    XrXirStatus (*restricted)(void *, uint32_t, uint32_t, bool *);
-    XrXirStatus (*restriction)(void *, uint32_t, uint32_t, uint32_t, XirRestrictionFormula *);
 } XrXirRootRefiner;
 /* Ordinary admission precedes collection. Preparation owns numeric equations
  * and synchronous observer output, with no public effect facts yet. */

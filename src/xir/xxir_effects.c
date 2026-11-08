@@ -311,41 +311,17 @@ static XrXirStatus effect_infer(const XrXirCompileContext *context,
     if (status!=XR_XIR_OK) { xr_xir_compile_effects_free(effects);return status; }
     *output=effects;return XR_XIR_OK;
 }
+#include "xxir_effect_lifetimes.inc.c"
+
 XR_FUNC XrXirStatus xr_xir_compile_effects_infer_verified_input(const XrXirCompileContext *context,
     XirEffectInput input, XrXirEffects **output) {
-    XrHirEscapeFacts *lifetimes = NULL;
-    XrHirEscapeDiagnostic failure = {0};
-    XrXirStatus status = xr_hir_escape_check(context, input.module, NULL, input.control, &failure, &lifetimes);
-    if (status == XR_XIR_OK) status = xir_effects_infer_escape_input(context, input, lifetimes, output);
-    xr_hir_escape_facts_free(lifetimes);
-    return status;
-}
-static XrXirStatus effect_escape_restricted(void *context, uint32_t function,
-    uint32_t value, bool *output) {
-    return xr_hir_escape_restricted(context, function, value, output);
-}
-XR_FUNC XrXirStatus xir_effects_infer_escape_input(const XrXirCompileContext *context,
-    XirEffectInput input, const XrHirEscapeFacts *lifetimes, XrXirEffects **output) {
-    if (!lifetimes) return XR_XIR_BAD_STRUCTURE;
-    XrXirRootRefiner refiner = {.context = (void *)lifetimes, .restricted = effect_escape_restricted};
-    return effect_infer(context, input, &refiner, output);
-}
-typedef struct EffectRestrictedSource {
-    const XrXirCompileContext *context;
-    const XrXirEffects *effects;
-} EffectRestrictedSource;
-static XrXirStatus effect_checked_restricted(void *context, uint32_t function,
-    uint32_t value, bool *output) {
-    const EffectRestrictedSource *source = context;
-    return xir_effects_value_restricted(source->context, source->effects, function, value, output);
+    return xir_effects_infer_lifetimes_input(context, input, output, NULL);
 }
 XR_FUNC XrXirStatus xir_effects_lower_verified_input(const XrXirCompileContext *context,
     XirEffectInput input, const XrXirEffects *checked, XrXirEffects **output) {
+    (void)checked;
     if (!input.module || input.module->stage != XR_XIR_LOWERED) return XR_XIR_BAD_STAGE;
-    EffectRestrictedSource source = {context, checked};
-    XrXirRootRefiner refiner = {.context = &source, .restricted = effect_checked_restricted};
-    return checked ? effect_infer(context, input, &refiner, output) :
-        xr_xir_compile_effects_infer_verified_input(context, input, output);
+    return xir_effects_infer_lifetimes_input(context, input, output, NULL);
 }
 XR_FUNC XrXirStatus xr_xir_compile_effects_refine_verified_input(const XrXirCompileContext *context,
     XirEffectInput input, const XrXirRootRefiner *refiner, XrXirEffects **output) {
