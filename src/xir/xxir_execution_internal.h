@@ -38,6 +38,37 @@ typedef struct XirRestrictionFormula {
     uint32_t input_count;
 } XirRestrictionFormula;
 
+typedef struct XirRestrictionFormulaRow {
+    uint32_t first, count;
+    bool constant;
+} XirRestrictionFormulaRow;
+
+typedef struct XirRestrictionFunction {
+    uint32_t physical_values, value_count;
+    const uint32_t *intrinsic;
+    const XrXirValueFlow *flows;
+    uint32_t flow_count;
+} XirRestrictionFunction;
+
+typedef struct XirRestrictionPoint {
+    uint32_t function, instruction, value, formula, carrier;
+} XirRestrictionPoint;
+
+/* Formula inputs are sorted physical/aux leaf IDs in the observing function's
+ * namespace. Intrinsic has value_count formula IDs. Point rows are ordered by
+ * function/instruction/value and name the current transport carrier, including
+ * mutable capture contents. A true formula retains its independent loan flows. */
+typedef struct XirRestrictionView {
+    const XirRestrictionFunction *functions;
+    uint32_t function_count;
+    const XirRestrictionFormulaRow *formulas;
+    uint32_t formula_count;
+    const uint32_t *inputs;
+    uint32_t input_count;
+    const XirRestrictionPoint *points;
+    uint32_t point_count;
+} XirRestrictionView;
+
 typedef struct XirExecutionSite {
     XirExecutionSiteKind kind;
     uint32_t index;
@@ -54,6 +85,8 @@ typedef struct XirExecutionSite {
     uint8_t protocol;
     bool unresolved;
 } XirExecutionSite;
+
+typedef struct XirExecutionValue { uint32_t function, value, environment; } XirExecutionValue;
 
 typedef struct XirExecutionArgument {
     uint32_t function, value, caller_handle, environment;
@@ -91,12 +124,20 @@ XR_FUNC XrXirStatus xir_execution_argument(const XirExecutionOwner *,
  * receive known bindings even when another origin is unresolved. */
 XR_FUNC XrXirStatus xir_execution_visit_value_captures(const XirExecutionOwner *,
     uint32_t, uint32_t, XirExecutionVisitor, void *, bool *complete);
+XR_FUNC XrXirStatus xir_execution_visit_value_captures_in(const XirExecutionOwner *,
+    const XirExecutionValue *, XirExecutionVisitor, void *, bool *complete);
+/* Construction rebinds this receiving index once after each storage round. */
+XR_FUNC XrXirStatus xir_execution_refresh_storage(XirExecutionOwner *);
 /* Qualified substitution of this owner's symbolic receiver. Returned pending
  * projections retain their canonical index and name the originating capture
  * record in reference. Consumers key an application by both IDs and context. */
 XR_FUNC XrXirStatus xir_execution_resolve_site(const XirExecutionOwner *,
     const XirExecutionSite *, uint32_t environment, XirExecutionVisitor, void *,
     bool *complete, uint32_t *remainder);
+/* The same relation supplies late effect precision. An ordinary weakening
+ * keeps its declared upper bound while physical capture queries stay exact. */
+XR_FUNC XrXirStatus xir_execution_resolve_effect_site(const XirExecutionOwner *,
+    const XirExecutionSite *, XirExecutionVisitor, void *, bool *, uint32_t *);
 
 
 /* Type IDs belong to this owner's stable numeric type namespace. The returned
