@@ -533,13 +533,61 @@ static void nonescape_bound_prefix(void) {
     CHECK(xir_fixture_check(suite_context,&built,&checked,&diagnostic)==XR_XIR_BAD_TYPE && !checked);
     CHECK(diagnostic.function==1 && diagnostic.instruction==4);
 }
+typedef struct NonescapeFixtureOwner {
+    XrHirEscapeBuilder *builder;
+    XrHirEscapeFacts *facts;
+} NonescapeFixtureOwner;
+static XrXirStatus nonescape_fixture_observe(void *context,const XrXirModule *module,
+    uint32_t function,uint32_t instruction,const XrXirInstruction *op) {
+    (void)module;
+    NonescapeFixtureOwner *owner=context;
+    return xr_hir_escape_builder_observe(owner->builder,function,instruction,op);
+}
+static XrXirStatus nonescape_fixture_points(void *context,const XirExecutionOwner *execution,
+    XirStorageFlow *storage,bool final,bool *ready) {
+    NonescapeFixtureOwner *owner=context;
+    return xr_hir_escape_builder_prepare_points(owner->builder,storage,execution,final,ready);
+}
+static XrXirStatus nonescape_fixture_finish(void *context,const XirExecutionOwner *execution,
+    XirStorageFlow *storage,const XirRestrictionReceiver *receiver) {
+    NonescapeFixtureOwner *owner=context;
+    XrHirEscapeDiagnostic diagnostic={0};
+    XrXirStatus status=xr_hir_escape_builder_finish(owner->builder,storage,execution,&diagnostic,&owner->facts);
+    if(status==XR_XIR_OK) {
+        XirRestrictionView view;
+        status=xr_hir_escape_facts_view(owner->facts,&view);
+        if(status==XR_XIR_OK)status=receiver && receiver->accept ? receiver->accept(receiver->context,&view) : XR_XIR_BAD_STRUCTURE;
+    }
+    return status;
+}
+static XrXirStatus nonescape_fixture_facts(const XrXirCompileContext *context,
+    const XrXirModule *module,XrHirEscapeFacts **output) {
+    if(!output || *output)return XR_XIR_BAD_STRUCTURE;
+    XrXirConstruction *construction=NULL;
+    XrXirEffects *pending=NULL;
+    NonescapeFixtureOwner owner={0};
+    XrXirStatus status=xir_fixture_module_construction(context,module,&construction);
+    XirEffectInput input={module,construction,NULL};
+    if(status==XR_XIR_OK)status=xir_compile_structure_verify_input(context,input,NULL);
+    if(status==XR_XIR_OK)status=xr_hir_escape_builder_new(context,module,NULL,NULL,&owner.builder);
+    if(status==XR_XIR_OK) {
+        XrXirRootRefiner refiner={.context=&owner,.observe=nonescape_fixture_observe,
+            .points=nonescape_fixture_points,.prepare=nonescape_fixture_finish};
+        status=xir_effects_prepare_verified_input(context,input,&refiner,&pending);
+    }
+    xr_xir_compile_effects_free(pending);
+    xr_hir_escape_builder_free(owner.builder);
+    xr_xir_compile_construction_free(construction);
+    if(status!=XR_XIR_OK) {xr_hir_escape_facts_free(owner.facts);return status;}
+    *output=owner.facts;return XR_XIR_OK;
+}
 static void nonescape_facts_ownership(void) {
     XrCompileResourceStats baseline=consumer_context_stats(suite_context);
     XrXirType callable=XR_XIR_CONSTRUCTED_TYPE_BASE;
     XrXirTypeNode signature={.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,
         .result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     XrXirTypes types={.nodes=&signature,.count=1};
-    XrXirInstruction ops[] = {{.op=XR_XIR_COPY,.type=callable,.args={0}},
+    XrXirInstruction ops[]={{.op=XR_XIR_COPY,.type=callable,.args={0}},
         {.op=XR_XIR_CALL_INDIRECT,.type=XR_XIR_I64,.immediate=1},
         {.op=XR_XIR_RETURN,.type=XR_XIR_UNIT,.args={2}}};
     XrXirBlock block={0,3,0,0};
@@ -549,37 +597,37 @@ static void nonescape_facts_ownership(void) {
     XrXirArtifact *checked=NULL;
     CHECK(xir_fixture_check(suite_context,&built,&checked,NULL)==XR_XIR_OK && checked);
     xr_xir_compile_artifact_free(checked);
-    XrHirEscapeDiagnostic diagnostic={0};XrHirEscapeFacts *facts=NULL,*copy=NULL;
-    CHECK(xr_hir_escape_check(suite_context,&built,NULL,NULL,&diagnostic,&facts)==XR_XIR_OK && facts);
-    bool restricted=false;
-    CHECK(xr_hir_escape_restricted(facts,0,1,&restricted)==XR_XIR_OK && restricted);
-    CHECK(xr_hir_escape_restricted(facts,0,2,&restricted)==XR_XIR_OK && !restricted);
-    const XrXirValueFlow *flows=NULL;uint32_t count=0;
-    CHECK(xr_hir_escape_flows(facts,0,&flows,&count)==XR_XIR_OK && count==1);
-    CHECK(flows[0].source==0 && flows[0].target==1);
+    XrHirEscapeFacts *facts=NULL,*second=NULL;
+    CHECK(nonescape_fixture_facts(suite_context,&built,&facts)==XR_XIR_OK && facts);
+    XirRestrictionView view={0};
+    CHECK(xr_hir_escape_facts_view(facts,&view)==XR_XIR_OK && view.function_count==1);
+    CHECK(view.functions[0].physical_values==4);
+    CHECK(view.formulas[view.functions[0].intrinsic[1]].constant);
+    CHECK(!view.formulas[view.functions[0].intrinsic[2]].constant);
     size_t attempts=source_program_compile_attempts;
-    CHECK(xr_hir_escape_facts_copy(suite_context,facts,NULL,&copy)==XR_XIR_OK && copy);
+    CHECK(nonescape_fixture_facts(suite_context,&built,&second)==XR_XIR_OK && second);
     attempts=source_program_compile_attempts-attempts;
-    xr_hir_escape_facts_free(copy);copy=NULL;
+    xr_hir_escape_facts_free(second);second=NULL;
     XrCompileResourceStats owned=consumer_context_stats(suite_context);
     for(size_t ordinal=0;ordinal<attempts;++ordinal) {
         source_program_compile_fail_at=source_program_compile_attempts+ordinal;
         source_program_compile_injected=false;
-        CHECK(xr_hir_escape_facts_copy(suite_context,facts,NULL,&copy)==XR_XIR_OUT_OF_MEMORY && !copy);
+        CHECK(nonescape_fixture_facts(suite_context,&built,&second)==XR_XIR_OUT_OF_MEMORY && !second);
         source_program_compile_fail_at=SIZE_MAX;
         CHECK(source_program_compile_injected && consumer_context_stats(suite_context).held_bytes==owned.held_bytes);
     }
-    CHECK(xr_hir_escape_facts_copy(suite_context,facts,NULL,&copy)==XR_XIR_OK && copy);
+    CHECK(nonescape_fixture_facts(suite_context,&built,&second)==XR_XIR_OK && second);
     xr_hir_escape_facts_free(facts);facts=NULL;
     memset(ops,0xCC,sizeof(ops));memset(&signature,0xCC,sizeof(signature));
-    uint32_t map[]={0,3,4,5};
-    CHECK(xr_hir_escape_facts_relocate(suite_context,copy,0,6,map,NULL)==XR_XIR_OK);
-    CHECK(xr_hir_escape_restricted(copy,0,3,&restricted)==XR_XIR_OK && restricted);
-    CHECK(xr_hir_escape_flows(copy,0,&flows,&count)==XR_XIR_OK && count==1 && flows[0].target==3);
-    uint32_t invalid[]={0,1,2,3,4,6};
-    CHECK(xr_hir_escape_facts_relocate(suite_context,copy,0,6,invalid,NULL)==XR_XIR_BAD_STRUCTURE);
-    CHECK(xr_hir_escape_restricted(copy,0,3,&restricted)==XR_XIR_OK && restricted);
-    xr_hir_escape_facts_free(copy);
+    CHECK(xr_hir_escape_facts_view(second,&view)==XR_XIR_OK && view.function_count==1);
+    CHECK(view.formulas[view.functions[0].intrinsic[1]].constant);
+    bool copied=false;
+    for(uint32_t e=0;e<view.functions[0].flow_count;++e) {
+        XrXirValueFlow edge=view.functions[0].flows[e];
+        copied|=edge.source==0 && edge.target==1;
+    }
+    CHECK(copied && view.point_count && view.points[0].function==0 && view.points[0].instruction==1);
+    xr_hir_escape_facts_free(second);
     CHECK(consumer_context_stats(suite_context).held_bytes==baseline.held_bytes);
 }
 static void nonescape_observer_ownership(void) {
