@@ -1,0 +1,4 @@
+{
+  "line": 2,
+  "message": "E0383: borrowed closure capture cannot escape through a task or generator"
+}

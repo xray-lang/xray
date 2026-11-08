@@ -3137,8 +3137,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
     if(ok) ok=source_generator_declaration(ctx,node,index,&ctx->identities[index],scan.count);
     if(ok && (ctx->identities[index].promises & XR_XIR_FUNCTION_GENERATOR)) {
         ctx->identities[index].promises&=~XR_XIR_FUNCTION_NO_SUSPEND;
-        ok=source_generator_closure_captures(ctx,node,&scan) &&
-            source_generator_closure_factory(ctx,node,index,no_suspend,&factory);
+        ok=source_generator_closure_factory(ctx,node,index,no_suspend,&factory);
     }
     bool nested_function = node->type == AST_FUNCTION_DECL;
     if (ok && (nested_function || scan.self_used)) {

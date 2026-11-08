@@ -1,0 +1,5 @@
+fn owned() -> Iterator<i64> {
+    var value = 17
+    fn values() -> Iterator<i64> { yield value }
+    return values()
+}

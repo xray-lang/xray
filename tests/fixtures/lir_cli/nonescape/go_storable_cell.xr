@@ -1,0 +1,7 @@
+fn leaf() -> i64 { return 7 }
+fn start(callback: escaping fn() -> i64) {
+    var slot = leaf
+    fn worker() { print(slot()) }
+    const task = go worker()
+    slot = callback
+}

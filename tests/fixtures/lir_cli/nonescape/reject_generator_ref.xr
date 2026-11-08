@@ -1,0 +1,4 @@
+fn borrowed(value: ref i64) -> Iterator<i64> {
+    fn values() -> Iterator<i64> { yield value }
+    return values()
+}
