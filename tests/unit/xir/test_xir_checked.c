@@ -481,7 +481,7 @@ static void nonescape_bound_prefix(void) {
     };
     XrXirSourceModule source={.name="root",.name_length=4,.initializer=0};
     XrXirFunctionIdentity identities[3]={{0}};
-    XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities};
+    XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.entry_function=2};
     XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=3,
         .declarations=&declarations,.types=&types,.linkage_kind=XR_XIR_PROGRAM};
     XrXirArtifact *checked=NULL,*decoded=NULL,*closed=NULL;
@@ -601,7 +601,10 @@ static void nonescape_cell_capture_contract(void) {
     XrXirInstruction reader[]={
         {.op=XR_XIR_CELL_READ,.type=XR_XIR_I64,.args={0}},
         {.op=XR_XIR_RETURN,.type=XR_XIR_UNIT,.args={1}}};
-    XrXirBlock blocks[]={{0,1,0,0},{0,3,0,0},{0,2,0,0}};
+    XrXirInstruction entry[]={
+        {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64},
+        {.op=XR_XIR_RETURN,.type=XR_XIR_UNIT,.args={0}}};
+    XrXirBlock blocks[]={{0,1,0,0},{0,3,0,0},{0,2,0,0},{0,2,0,0}};
     uint32_t operand=0;
     XrXirFunction functions[]={
         {.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&blocks[0],.block_count=1,
@@ -610,11 +613,13 @@ static void nonescape_cell_capture_contract(void) {
             .blocks=&blocks[1],.block_count=1,.instructions=caller,.instruction_count=3,
             .operands=&operand,.operand_count=1,.error_type=XR_XIR_NEVER},
         {.name="reader",.name_length=6,.parameters=&cell,.parameter_count=1,.result=XR_XIR_I64,
-            .blocks=&blocks[2],.block_count=1,.instructions=reader,.instruction_count=2,.error_type=XR_XIR_NEVER}};
+            .blocks=&blocks[2],.block_count=1,.instructions=reader,.instruction_count=2,.error_type=XR_XIR_NEVER},
+        {.name="entry",.name_length=5,.result=XR_XIR_I64,.blocks=&blocks[3],.block_count=1,
+            .instructions=entry,.instruction_count=2,.error_type=XR_XIR_NEVER}};
     XrXirSourceModule source={.name="root",.name_length=4,.initializer=0};
-    XrXirFunctionIdentity identities[3]={{0},{0},{.capture_owner=2,.capture_count=1}};
-    XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities};
-    XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=3,
+    XrXirFunctionIdentity identities[4]={{0},{0},{.capture_owner=2,.capture_count=1},{0}};
+    XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.entry_function=3};
+    XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=4,
         .declarations=&declarations,.types=&types,.linkage_kind=XR_XIR_PROGRAM};
     for(unsigned direct=0;direct<2;++direct) {
         if(direct)caller[1]=(XrXirInstruction){.op=XR_XIR_CALL,.type=XR_XIR_I64,.args={0,1},.immediate=2};
@@ -772,6 +777,9 @@ static void nonescape_capture_calls(void) {
         .result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     XrXirTypes types={.nodes=&signature,.count=1};
     XrXirInstruction ret={.op=XR_XIR_RETURN,.type=XR_XIR_UNIT};
+    XrXirInstruction entry[]={
+        {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64},
+        {.op=XR_XIR_RETURN,.type=XR_XIR_UNIT,.args={0}}};
     XrXirInstruction direct[]={{.op=XR_XIR_CALL,.type=callable,.args={0,1},.immediate=1},ret};
     XrXirInstruction invoke[]={
         {.op=XR_XIR_INVOKE,.type=callable,.args={0,1},.targets={1,2},.immediate=1},
@@ -785,12 +793,14 @@ static void nonescape_capture_calls(void) {
         {.name="capture",.name_length=7,.parameters=&callable,.parameter_count=1,.result=callable,
             .blocks=&leaf,.block_count=1,.instructions=&ret,.instruction_count=1,.error_type=XR_XIR_NEVER},
         {.name="forward",.name_length=7,.parameters=&callable,.parameter_count=1,.result=XR_XIR_UNIT,
-            .operands=&argument,.operand_count=1,.error_type=XR_XIR_NEVER,.escaping_parameters=&escaping}
+            .operands=&argument,.operand_count=1,.error_type=XR_XIR_NEVER,.escaping_parameters=&escaping},
+        {.name="entry",.name_length=5,.result=XR_XIR_I64,.blocks=&block,.block_count=1,
+            .instructions=entry,.instruction_count=2,.error_type=XR_XIR_NEVER}
     };
-    XrXirFunctionIdentity identities[]={{0},{.capture_owner=1,.capture_count=1},{.capture_owner=1}};
+    XrXirFunctionIdentity identities[]={{0},{.capture_owner=1,.capture_count=1},{.capture_owner=1},{0}};
     XrXirSourceModule source={.name="root",.name_length=4,.initializer=0};
-    XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities};
-    XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=3,
+    XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.entry_function=3};
+    XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=4,
         .declarations=&declarations,.types=&types,.linkage_kind=XR_XIR_PROGRAM};
     for(unsigned protocol=0;protocol<2;++protocol) {
         functions[2].instructions=protocol?invoke:direct;functions[2].instruction_count=protocol?5:2;
@@ -810,7 +820,7 @@ static void nonescape_capture_calls(void) {
     functions[2].instructions=direct;functions[2].instruction_count=2;functions[2].blocks=&block;functions[2].block_count=1;
     direct[0]=(XrXirInstruction){.op=XR_XIR_FUNCTION_REF,.type=callable,.args={0,1},.immediate=1};
     XrXirType generic=XR_XIR_TYPE_PARAMETER_BASE;XrXirConstraint constraint={0};
-    XrXirGeneric generics[]={{0},{.constraints=&constraint,.parameter_count=1},{.arguments=&callable,.argument_count=1}};
+    XrXirGeneric generics[]={{0},{.constraints=&constraint,.parameter_count=1},{.arguments=&callable,.argument_count=1},{0}};
     for(unsigned stored=0;stored<2;++stored) {
         built.generics=stored?generics:NULL;
         functions[1].parameters=stored?&generic:&callable;

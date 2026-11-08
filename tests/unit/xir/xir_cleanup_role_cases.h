@@ -70,16 +70,16 @@ static void cleanup_role_cases(void) {
     CHECK(xr_xir_compile_artifact_verify(checked, NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
-    uint8_t identities[200] = {0}; put32(identities + 3 * 40 + 16, 3); put32(identities + 4 * 40 + 16, 4);
-    put32(identities + 2 * 40 + 20, XR_XIR_FUNCTION_NO_SUSPEND);
+    uint8_t identities[240] = {0}; put32(identities + 3 * 48 + 16, 3); put32(identities + 4 * 48 + 16, 4);
+    put32(identities + 2 * 48 + 20, XR_XIR_FUNCTION_NO_SUSPEND);
     size_t at = 0; uint32_t matches = 0;
     for (size_t i = 64; i + sizeof(identities) <= packet.length; ++i)
         if (!memcmp(packet.bytes + i, identities, sizeof(identities))) { at = i; ++matches; }
     CHECK(matches == 1);
-    put32(packet.bytes + at + 3 * 40 + 16, 4); digest_packet(&packet); rejected(packet.bytes, packet.length);
-    put32(packet.bytes + at + 3 * 40 + 16, 3); digest_packet(&packet);
-    put32(packet.bytes + at + 2 * 40 + 20, 2); digest_packet(&packet); rejected(packet.bytes, packet.length);
-    put32(packet.bytes + at + 2 * 40 + 20, XR_XIR_FUNCTION_NO_SUSPEND); digest_packet(&packet);
+    put32(packet.bytes + at + 3 * 48 + 16, 4); digest_packet(&packet); rejected(packet.bytes, packet.length);
+    put32(packet.bytes + at + 3 * 48 + 16, 3); digest_packet(&packet);
+    put32(packet.bytes + at + 2 * 48 + 20, 2); digest_packet(&packet); rejected(packet.bytes, packet.length);
+    put32(packet.bytes + at + 2 * 48 + 20, XR_XIR_FUNCTION_NO_SUSPEND); digest_packet(&packet);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL; xr_xir_compile_checked_packet_free(&packet);
     CHECK(decoded->module.declarations->functions[4].cleanup_owner == 4);
