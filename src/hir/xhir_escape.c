@@ -478,7 +478,8 @@ static bool escape_observation(XrHirEscapeBuilder *builder, uint32_t f, uint32_t
     HirEscape *owner = &builder->graph;
     if (value >= owner->functions[f].physical_values) {owner->status = XR_XIR_BAD_STRUCTURE; return false;}
     if (xr_xir_place_kind(&owner->module->functions[f], value) != XR_XIR_PLACE_NONE) return true;
-    if (!xr_xir_callable_signature(owner->module->types, owner->nodes[owner->offsets[f] + value].type)) return true;
+    XrXirType type = owner->nodes[owner->offsets[f] + value].type;
+    if (!xr_xir_callable_signature(owner->module->types, type) || xr_xir_type_is_c_callable(owner->module->types, type)) return true;
     for (uint32_t n = builder->observation_count; n; --n) {
         HirEscapeObservation row = builder->observations[n - 1];
         if (row.function != f || row.instruction != i) break;
