@@ -423,7 +423,7 @@ XR_FUNC XrXirStatus xir_effects_prepare_verified_input(const XrXirCompileContext
     if (status == XR_XIR_OK) status = effect_checked_roots_build(memory, input.module,
         effects->outcomes_work.contracts, input.control, refiner, &effects->checked_roots, false);
     if (status == XR_XIR_OK && refiner && refiner->prepare)
-        status = refiner->prepare(refiner->context, effects->checked_roots, effects->checked_roots->storage);
+        status = refiner->prepare(refiner->context, effects->checked_roots, effects->checked_roots->storage, NULL);
     if (status != XR_XIR_OK) {
         xr_xir_compile_effects_free(effects);
         return status;
