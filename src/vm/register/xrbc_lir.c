@@ -862,6 +862,90 @@ static bool rbc_lir_thread_jumps(RbcLirCompiler *c) {
     xr_free(targets);
     return true;
 }
+
+static bool rbc_lir_paired_jump(uint32_t op) {
+    return op == XR_RBC_LT || op == XR_RBC_LE || op == XR_RBC_EQ ||
+        (op >= XR_RBC_LTI && op <= XR_RBC_EQI);
+}
+
+static bool rbc_lir_compact_jumps(RbcLirCompiler *c) {
+    enum { REACHABLE = 1, PAIRED = 2, RETAIN = 4 };
+    size_t count = c->code_count;
+    if (!count)
+        return rbc_lir_fail(c, XR_RBC_COMPILE_INVALID, "function has no emitted instructions");
+    size_t jump = 0;
+    while (jump < count && (c->code[jump] & 255) != XR_RBC_JMP) ++jump;
+    if (jump == count) return true;
+    if (count > SIZE_MAX / (sizeof(size_t) + sizeof(uint8_t)))
+        return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "control-flow workspace exceeds address space");
+    size_t *positions = xr_malloc(count * (sizeof(*positions) + sizeof(uint8_t)));
+    if (!positions)
+        return rbc_lir_fail(c, XR_RBC_COMPILE_OUT_OF_MEMORY, "cannot allocate control-flow workspace");
+    uint8_t *flags = (uint8_t *)(positions + count);
+    memset(flags, 0, count);
+    // Use the relocation array as a work queue until reachability is complete.
+    size_t first = 0, pending = 1;
+    positions[0] = 0;
+    flags[0] = REACHABLE;
+    while (first < pending) {
+        size_t pc = positions[first++], successors[2], successors_count = 0;
+        uint32_t op = c->code[pc] & 255;
+        if (op == XR_RBC_JMP) {
+            successors[successors_count++] = rbc_lir_jump_target(c, pc);
+        } else if (op != XR_RBC_RET && op != XR_RBC_RET0) {
+            XR_DCHECK(pc + 1 < count, "emitted fallthrough stays inside its function");
+            successors[successors_count++] = pc + 1;
+            if (rbc_lir_paired_jump(op)) {
+                XR_DCHECK(pc + 2 < count && (c->code[pc + 1] & 255) == XR_RBC_JMP,
+                    "comparisons retain their paired jump and skip successor");
+                flags[pc + 1] |= PAIRED;
+                successors[successors_count++] = pc + 2;
+            }
+        }
+        for (size_t n = 0; n < successors_count; ++n) {
+            size_t target = successors[n];
+            if (!(flags[target] & REACHABLE)) {
+                flags[target] |= REACHABLE;
+                positions[pending++] = target;
+            }
+        }
+    }
+    size_t next = count, retained = 0;
+    for (size_t pc = count; pc-- > 0;) {
+        if (!(flags[pc] & REACHABLE)) continue;
+        // A paired jump is part of the preceding comparison's encoding even
+        // when its taken target coincides with the skip successor.
+        if (!(flags[pc] & PAIRED) && (c->code[pc] & 255) == XR_RBC_JMP &&
+            rbc_lir_jump_target(c, pc) == next) continue;
+        flags[pc] |= RETAIN;
+        next = pc;
+        ++retained;
+    }
+    XR_DCHECK(retained, "reachable return or jump cycle survives compaction");
+    size_t output = retained;
+    for (size_t pc = count; pc-- > 0;) {
+        if (flags[pc] & RETAIN) --output;
+        positions[pc] = output;
+    }
+    for (size_t pc = 0; pc < count; ++pc) {
+        if (!(flags[pc] & RETAIN)) continue;
+        uint32_t word = c->code[pc];
+        if ((word & 255) == XR_RBC_JMP) {
+            size_t target = rbc_lir_jump_target(c, pc);
+            bool fits = xr_rbc_jump(&word, positions[pc], positions[target], retained);
+            XR_DCHECK(fits, "compaction cannot increase a jump displacement");
+            if (!fits) {
+                xr_free(positions);
+                return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "compacted branch exceeds jump encoding");
+            }
+        }
+        c->code[positions[pc]] = word;
+        c->source_ids[positions[pc]] = c->source_ids[pc];
+    }
+    c->code_count = retained;
+    xr_free(positions);
+    return true;
+}
 static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
     if(!rbc_lir_output_values(c->input,c->function,&c->view,&c->output,c->diagnostic)) {
         c->status=c->diagnostic->status;return false;
@@ -918,7 +1002,7 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
         if (!xr_rbc_jump(&c->code[patch.pc], patch.pc, c->blocks[patch.block], c->code_count))
             return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "branch exceeds jump encoding");
     }
-    if (!rbc_lir_thread_jumps(c)) return false;
+    if (!rbc_lir_thread_jumps(c) || !rbc_lir_compact_jumps(c)) return false;
     *out = (XrRbcFunction) {.code=c->code, .code_count=c->code_count,
         .constants=c->constants, .constant_count=c->constant_count,
         .register_count=c->register_count, .parameter_count=c->view.parameter_count,
