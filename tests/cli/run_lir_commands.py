@@ -48,7 +48,7 @@ def main() -> None:
 
     def verify_effects():
         effects = fixtures / "effects"
-        for name in ("pure_recursive_import", "pure_import_go", "pure_scoped_go", "nosuspend_literal",
+        for name in ("pure_recursive_import", "pure_import_go", "pure_scoped_go", "generic_stringable", "nosuspend_literal",
                      "root_const", "signature_throws", "signature_generic_try",
                      "closed_dispatch_pure", "closed_dispatch_reference",
                      "root_parameter_forward", "root_parameter_capture", "root_parameter_recursive"):
@@ -102,7 +102,8 @@ def main() -> None:
     expected = {"hello": b"42\n", "call": b"42\n", "unicode": "你好\n".encode(),
                 "f64": b"3.75\n", "instance_growth": b"1\n" * 8,
                 "module_scalar_constants": b"1\n"}
-    generated = {}
+    expected["generic_stringable"] = b"42\nhello\n"
+    generated = {"generic_stringable": fixtures / "effects" / "generic_stringable.xr"}
     scalar_types = ("i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64")
     capacity_cases = (
         ("many_generic_instances",

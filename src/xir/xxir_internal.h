@@ -241,6 +241,10 @@ XR_FUNC XrXirStatus xir_compile_worker_error_verify(const XrXirCompileContext *c
 XR_FUNC XrXirStatus xr_xir_effects_go_safe(const XrXirEffects *effects, uint32_t function);
 XR_FUNC XrXirStatus xir_effects_spawn_read(const XrXirCompileContext *context,
     const XrXirEffects *effects, uint32_t function, uint32_t instruction, XrXirRootEffects *output);
+/* The module checker admitted these scalar adapters before retiring bodies. */
+XR_FUNC XrXirStatus xir_effects_scalar_witness(const XrXirCompileContext *context,
+    const XrXirEffects *effects, uint32_t interface, uint32_t member, XrXirType receiver, uint32_t *output);
+
 XR_FUNC XrXirEffect xr_xir_effects_task_creation(const XrXirEffects *effects, uint32_t function);
 
 XR_FUNC XrXirStatus xr_xir_compile_layout_build(XrXirArtifact *artifact, XrCompileRequestControl *control);

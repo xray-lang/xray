@@ -12,6 +12,7 @@
  *   Recursive components close before callers consume their summaries.
  */
 #include "../base/xhash.h"
+#include "xxir_stringable_internal.h"
 
 #ifndef XXIR_EFFECT_CHECK_IMPLEMENTATION
 #define XXIR_EFFECT_CHECK_IMPLEMENTATION
@@ -84,6 +85,7 @@ typedef struct EffectCheckedRoots {
     uint32_t dispatch_index_capacity;
     uint32_t templates, function_capacity, node_capacity, terminal_capacity;
     uint32_t bindings, binding_capacity;
+    uint32_t stringable_interface, stringable_integer, stringable_string;
     EffectCheckFunction *function;
     EffectCheckNode *node;
     EffectCheckDependency *dependency;
@@ -220,6 +222,7 @@ static XrXirStatus effect_check_allocate(EffectCheckBuild *build) {
     if (!roots) return build->status;
     build->roots = roots;
     roots->resources = build->memory->resources;
+    roots->stringable_interface = roots->stringable_integer = roots->stringable_string = UINT32_MAX;
     roots->functions = build->module->function_count;
     roots->templates = roots->function_capacity = roots->functions;
     roots->modules = build->module->declarations ? build->module->declarations->module_count : 1;
@@ -668,6 +671,40 @@ static XrXirStatus effect_check_collect(EffectCheckBuild *build) {
     return XR_XIR_OK;
 }
 
+/* Prelude scalar adapters are admitted with their module while bodies are
+ * available. Linkers consume only the exported witness ordinals. */
+static XrXirStatus effect_check_builtin_interfaces(EffectCheckBuild *build) {
+    EffectCheckedRoots *roots = build->roots;
+    XirStringableRead read = xir_stringable_read(build->control);
+    if (read.status != XR_XIR_OK) return read.status;
+    for (uint32_t p = 0; p < roots->pending_count; ++p) {
+        EffectCheckPending pending = roots->pending[p];
+        if (pending.kind != EFFECT_CHECK_REQUIREMENT) continue;
+        XrXirInterfaceApplication application = {pending.selector, NULL, 0};
+        uint32_t module = UINT32_MAX;
+        if (!xir_stringable_schema(build->module->types, build->module->declarations,
+                application, &module, &read)) {
+            if (read.status != XR_XIR_OK) return read.status;
+            continue;
+        }
+        XrXirStatus status = xir_stringable_witness(build->module, application, 0,
+            XR_XIR_I64, &roots->stringable_integer, &read);
+        if (status != XR_XIR_OK) return status;
+        roots->stringable_interface = pending.selector;
+        for (uint32_t f = 0; f < build->module->function_count; ++f) {
+            if (!effect_check_poll(build)) return build->status;
+            const XrXirFunctionIdentity *identity = &build->module->declarations->functions[f];
+            const XrXirFunction *function = &build->module->functions[f];
+            if (identity->module == module && !identity->nominal_owner &&
+                f != build->module->declarations->modules[module].initializer &&
+                function->parameter_count == 1 && function->parameters[0] == XR_XIR_STRING)
+                roots->stringable_string = f;
+        }
+        return roots->stringable_string == UINT32_MAX ? XR_XIR_BAD_TYPE : XR_XIR_OK;
+    }
+    return XR_XIR_OK;
+}
+
 static bool effect_check_type_argument(EffectCheckBuild *build, XrXirType type) {
     EffectCheckedRoots *roots = build->roots;
     if (roots->type_arguments == roots->type_argument_capacity) {
@@ -686,7 +723,7 @@ static bool effect_check_types(EffectCheckBuild *build) {
     if (!terms) return false;
     build->roots->terms = terms;
     terms->remaining = build->memory;
-    build->status = effect_terms_seed(terms, build->module->types);
+    build->status = effect_terms_seed(terms, build->module->types ? build->module->types : &effect_empty_types);
     return build->status == XR_XIR_OK;
 }
 
@@ -1031,7 +1068,15 @@ static bool effect_check_link_requirement(EffectCheckBuild *build, EffectCheckPe
     XrXirWitnessRequest request = {build->module, pending->receiver_type,
         {pending->selector, types, count}, pending->member};
     XrXirWitness witness = {0};
-    build->status = xir_compile_witness_resolve_controlled(build->memory, &context,
+    if (pending->receiver_type == XR_XIR_I64 || pending->receiver_type == XR_XIR_STRING) {
+        const EffectCheckedRoots *roots = build->roots;
+        if (pending->selector != roots->stringable_interface || pending->member || pending->type_count) {
+            build->status = XR_XIR_BAD_TYPE;
+            return false;
+        }
+        witness.function = pending->receiver_type == XR_XIR_I64 ?
+            roots->stringable_integer : roots->stringable_string;
+    } else build->status = xir_compile_witness_resolve_controlled(build->memory, &context,
         &request, &witness, build->control);
     if (build->status != XR_XIR_OK) return false;
     if (witness.function >= build->roots->templates) {
@@ -1430,7 +1475,9 @@ done:
     return build->status;
 }
 
-static XrXirStatus effect_checked_roots_build(const XrXirCompileContext *memory,
+/* Scanning exports numeric module equations. Typed dispatch applications own
+ * their pool so an imported interface never borrows the scanning arena. */
+static XrXirStatus effect_checked_roots_collect(const XrXirCompileContext *memory,
     const XrXirModule *module, const XrXirFunctionEffectContract *contracts,
     XrCompileRequestControl *control, EffectCheckedRoots **output) {
     if (!xir_compile_context_valid(memory) || !module || !module->functions || !module->function_count ||
@@ -1439,24 +1486,78 @@ static XrXirStatus effect_checked_roots_build(const XrXirCompileContext *memory,
         .scratch = {.resources = memory->resources}};
     build.status = effect_check_allocate(&build);
     if (build.status == XR_XIR_OK) build.status = effect_check_collect(&build);
-    if (build.status == XR_XIR_OK) build.status = effect_check_link(&build);
-    if (build.status == XR_XIR_OK) build.status = effect_check_cell_roles(&build);
-    if (build.status == XR_XIR_OK) build.status = effect_check_close(&build);
-    if (build.status == XR_XIR_OK) build.status = effect_check_capture_origins(build.roots);
+    if (build.status == XR_XIR_OK) build.status = effect_check_builtin_interfaces(&build);
+    if (build.status == XR_XIR_OK && (build.roots->pending_count || build.roots->type_arguments))
+        effect_check_types(&build);
     if (build.status == XR_XIR_OK && build.roots->terms)
-        build.status = effect_terms_retire(build.memory, build.roots->terms, true);
+        build.status = effect_terms_retire(memory, build.roots->terms, true);
     xir_read_scratch_free(&build.scratch);
-    if (build.status == XR_XIR_OK) {
-        build.roots->dispatch_index = build.dispatch_index;
-        build.roots->dispatch_index_capacity = build.dispatch_index_capacity;
-    } else xr_compile_resources_free(build.dispatch_index);
-    xr_compile_resources_free(build.instance_index);
     if (build.status != XR_XIR_OK) {
         effect_checked_roots_free(build.roots);
         return build.status;
     }
     *output = build.roots;
     return XR_XIR_OK;
+}
+
+/* Linking consumes the exported owner even on failure. Only declaration
+ * headers are visible here; recursive closure never rescans instruction arrays. */
+static XrXirStatus effect_checked_roots_link_take(const XrXirCompileContext *memory,
+    const XrXirModule *program, XrCompileRequestControl *control,
+    EffectCheckedRoots **interfaces, EffectCheckedRoots **output) {
+    if (!xir_compile_context_valid(memory) || !program || !program->functions || !interfaces ||
+        !*interfaces || !output || *output || interfaces == output ||
+        (*interfaces)->resources != memory->resources ||
+        (*interfaces)->templates != program->function_count) return XR_XIR_BAD_STRUCTURE;
+    EffectCheckedRoots *roots = *interfaces;
+    *interfaces = NULL;
+    if (roots->terms) roots->terms->remaining = memory;
+    EffectCheckBuild build = {.memory = memory, .roots = roots, .control = control,
+        .scratch = {.resources = memory->resources}};
+    XrXirFunction *headers = xir_compile_copy(memory, program->functions,
+        (size_t)program->function_count * sizeof(*headers), &build.status);
+    XrXirModule declarations = *program;
+    declarations.functions = headers;
+    build.module = &declarations;
+    if (headers) for (uint32_t f = 0; f < program->function_count; ++f) {
+        headers[f].instructions = NULL;
+        headers[f].instruction_count = 0;
+        headers[f].blocks = NULL;
+        headers[f].block_count = 0;
+        headers[f].operands = NULL;
+        headers[f].operand_count = 0;
+    }
+    if (build.status == XR_XIR_OK) build.status = effect_check_link(&build);
+    if (build.status == XR_XIR_OK) build.status = effect_check_cell_roles(&build);
+    if (build.status == XR_XIR_OK) build.status = effect_check_close(&build);
+    if (build.status == XR_XIR_OK) build.status = effect_check_capture_origins(roots);
+    if (build.status == XR_XIR_OK && roots->terms)
+        build.status = effect_terms_retire(memory, roots->terms, true);
+    xir_read_scratch_free(&build.scratch);
+    xr_compile_resources_free(headers);
+    if (build.status == XR_XIR_OK) {
+        roots->dispatch_index = build.dispatch_index;
+        roots->dispatch_index_capacity = build.dispatch_index_capacity;
+    } else xr_compile_resources_free(build.dispatch_index);
+    xr_compile_resources_free(build.instance_index);
+    if (build.status != XR_XIR_OK) {
+        effect_checked_roots_free(roots);
+        return build.status;
+    }
+    *output = roots;
+    return XR_XIR_OK;
+}
+
+static XrXirStatus effect_checked_roots_build(const XrXirCompileContext *memory,
+    const XrXirModule *module, const XrXirFunctionEffectContract *contracts,
+    XrCompileRequestControl *control, EffectCheckedRoots **output) {
+    if (!output || *output) return XR_XIR_BAD_STRUCTURE;
+    EffectCheckedRoots *interfaces = NULL;
+    XrXirStatus status = effect_checked_roots_collect(memory, module, contracts, control, &interfaces);
+    if (status == XR_XIR_OK)
+        status = effect_checked_roots_link_take(memory, module, control, &interfaces, output);
+    effect_checked_roots_free(interfaces);
+    return status;
 }
 
 /* The interface owns canonical parameter terms. A deferred function cannot be

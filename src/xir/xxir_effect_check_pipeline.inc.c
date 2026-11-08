@@ -133,6 +133,19 @@ XR_FUNC XrXirStatus xir_effects_spawn_read(const XrXirCompileContext *context,
     return node->closed || node->worker_blocked ? XR_XIR_BAD_TYPE : XR_XIR_OK;
 }
 
+XR_FUNC XrXirStatus xir_effects_scalar_witness(const XrXirCompileContext *context,
+    const XrXirEffects *effects, uint32_t interface, uint32_t member, XrXirType receiver, uint32_t *output) {
+    if (!output || !effects || !effect_final_outcomes(effects) || !effects->checked_roots ||
+        !xir_effects_context_matches(context, effects, effects->count)) return XR_XIR_BAD_STRUCTURE;
+    const EffectCheckedRoots *roots = effects->checked_roots;
+    if (member || interface != roots->stringable_interface ||
+        (receiver != XR_XIR_I64 && receiver != XR_XIR_STRING)) return XR_XIR_BAD_TYPE;
+    uint32_t function = receiver == XR_XIR_I64 ? roots->stringable_integer : roots->stringable_string;
+    if (function >= roots->templates) return XR_XIR_BAD_STRUCTURE;
+    *output = function;
+    return XR_XIR_OK;
+}
+
 typedef struct EffectCheckTraceWalk {
     const EffectCheckedRoots *roots;
     uint8_t *visited;

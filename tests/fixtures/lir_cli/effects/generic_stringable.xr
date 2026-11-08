@@ -1,0 +1,5 @@
+fn display<T: Stringable>(value: T) -> string {
+    return value.toString()
+}
+print(display(42))
+print(display("hello"))

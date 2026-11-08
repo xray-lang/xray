@@ -483,7 +483,12 @@ static bool spec_call(SpecContext *c, uint32_t index, uint32_t i) {
             xr_xir_operand_type(&function,function.operands[op->args[0]]),
             {op->targets[0],parent ? types : NULL,parent},op->targets[1]};
         XrXirWitness witness = {0};
-        c->diagnostic.status = xir_compile_witness_resolve_controlled(&c->remaining, &context, &request, &witness,c->control);
+        const XrXirEffects *source_effects = c->effects ? c->effects : c->verification_effects;
+        if (source_effects && (request.receiver == XR_XIR_I64 || request.receiver == XR_XIR_STRING))
+            c->diagnostic.status = xir_effects_scalar_witness(&c->remaining, source_effects,
+                op->targets[0], op->targets[1], request.receiver, &witness.function);
+        else c->diagnostic.status = xir_compile_witness_resolve_controlled(&c->remaining, &context,
+            &request, &witness, c->control);
         if (c->diagnostic.status != XR_XIR_OK) return false;
         if (witness.argument_count > 65536 || own > 65536 - witness.argument_count) {
             c->diagnostic.status = XR_XIR_BAD_STRUCTURE; return false;

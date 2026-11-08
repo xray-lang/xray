@@ -176,7 +176,12 @@ static void generic_resource_failures(void) {
         effect_mark_check(mark);
     }
     roots = NULL;
-    CHECK(effect_checked_roots_build(&effect_context, module, contracts, NULL, &roots) == XR_XIR_OK);
+    EffectCheckedRoots *interfaces = NULL;
+    XrXirCompileContext producer = effect_context;
+    CHECK(effect_checked_roots_collect(&producer, module, contracts, NULL, &interfaces) == XR_XIR_OK);
+    CHECK(interfaces->terms && effect_terms_scratch_retired(interfaces->terms));
+    memset(&producer, 0xCE, sizeof(producer));
+    CHECK(effect_checked_roots_link_take(&effect_context, module, NULL, &interfaces, &roots) == XR_XIR_OK && !interfaces);
     uint32_t resolved = root_find(module, "instantiateRequirement");
     effect_artifact_free(artifact);
     XrXirRootFormula formula = {0};
@@ -390,6 +395,71 @@ static void control_summary_streamed(void) {
     effect_mark_check(baseline);
     puts("streamed control summaries close without bodies and retain independent ownership PASS");
 }
+static void module_interface_lifetime(void) {
+    uint32_t imported = 1;
+    XrXirSourceModule modules[2] = {
+        {.name = "entry", .name_length = 5, .dependencies = &imported, .dependency_count = 1, .initializer = 2},
+        {.name = "dependency", .name_length = 10, .initializer = 3}
+    };
+    XrXirFunctionIdentity identities[4] = {{.module = 0}, {.module = 1}, {.module = 0}, {.module = 1}};
+    XrXirSlot slot = {.type = XR_XIR_I64, .module = 1, .mutable = true};
+    XrXirDeclarations declarations = {.modules = modules, .module_count = 2,
+        .functions = identities, .slots = &slot, .slot_count = 1};
+    XrXirType scalar_argument = XR_XIR_I64;
+    XrXirGeneric generics[4] = {{.arguments = &scalar_argument, .argument_count = 1}, {.parameter_count = 1}};
+    const XrXirInstruction original[4][2] = {
+        {{.op = XR_XIR_CALL, .immediate = 1, .type_arguments = {0, 1}}, {.op = XR_XIR_RETURN}},
+        {{.op = XR_XIR_SLOT_INIT}, {.op = XR_XIR_RETURN}},
+        {{.op = XR_XIR_RETURN}}, {{.op = XR_XIR_RETURN}}
+    };
+    XrXirInstruction rows[4][2];
+    XrXirFunction functions[4] = {0};
+    XrXirModule module = {.stage = XR_XIR_CHECKED, .linkage_kind = XR_XIR_PROGRAM,
+        .functions = functions, .function_count = 4, .declarations = &declarations, .generics = generics};
+    EffectMark baseline = effect_mark();
+    size_t sites = 0;
+    for (size_t point = 0; point <= sites; ++point) {
+        memcpy(rows, original, sizeof(rows));
+        for (uint32_t f = 0; f < 4; ++f)
+            functions[f] = (XrXirFunction){.name = "f", .name_length = 1, .instructions = rows[f],
+                .instruction_count = f < 2 ? 2 : 1, .error_type = XR_XIR_NEVER};
+        EffectCheckedRoots *interfaces = NULL, *roots = NULL;
+        XrXirCompileContext producer = effect_context;
+        CHECK(effect_checked_roots_collect(&producer, &module, NULL, NULL, &interfaces) == XR_XIR_OK);
+        CHECK(interfaces->terms && effect_terms_scratch_retired(interfaces->terms));
+        memset(&producer, 0xCE, sizeof(producer));
+        CHECK(interfaces->modules == 2 && interfaces->module_offsets[1] == 2 &&
+            !effect_check_bits(interfaces, interfaces->function[0].root)[0]);
+        EffectCheckedRoots *occupied = interfaces;
+        size_t prior = attempts;
+        CHECK(effect_checked_roots_link_take(&effect_context, &module, NULL, &interfaces, &occupied) == XR_XIR_BAD_STRUCTURE);
+        CHECK(interfaces == occupied && attempts == prior);
+        memset(rows, 0xCE, sizeof(rows));
+        for (uint32_t f = 0; f < 4; ++f) {
+            functions[f].instructions = NULL;
+            functions[f].instruction_count = UINT32_MAX;
+        }
+        attempts = 0;
+        if (point) { injected = false; fail_at = point - 1; }
+        XrXirStatus status = effect_checked_roots_link_take(&effect_context, &module, NULL, &interfaces, &roots);
+        CHECK(!interfaces);
+        if (point) {
+            CHECK(status == XR_XIR_OUT_OF_MEMORY && injected && !roots);
+            fail_at = SIZE_MAX;
+        } else {
+            CHECK(status == XR_XIR_OK && roots);
+            sites = attempts;
+            memset(functions, 0xCE, sizeof(functions));
+            uint32_t mask = 0;
+            CHECK(effect_checked_root_mask(roots, roots->function[0].root, NULL, 0, &mask) == XR_XIR_OK &&
+                mask == XR_XIR_CALLABLE_ROOT_REQUIRED);
+            effect_checked_roots_free(roots);
+        }
+        effect_mark_check(baseline);
+    }
+    printf("module interfaces: body-free cross-module closure, %zu consumed-owner failures and detached reads PASS\n", sites);
+}
+
 static void control_summary_kernel(void) {
     parameter_summary_kernel();
     parameter_summary_owner();
@@ -479,6 +549,7 @@ static void control_summary_kernel(void) {
 int main(int argc, char **argv) {
     CHECK(argc == 1 || (argc == 2 && !strcmp(argv[1], "--control-summary")));
     effect_case_begin();
+    module_interface_lifetime();
     direct_root_equations();
     generic_resource_failures();
     control_summary_kernel();
