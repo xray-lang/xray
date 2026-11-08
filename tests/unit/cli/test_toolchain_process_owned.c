@@ -253,8 +253,12 @@ static void failures(void) {
     CHECK(!memcmp(&result, &before, sizeof(result)));
     CHECK(xtc_process_run(p, NULL, NULL, &result) == XTC_PROCESS_TIMEOUT);
     CHECK(!memcmp(&result, &before, sizeof(result)));
+    xtc_process_free(p); p = NULL;
+    s.timeout_ms = 3000;
+    CHECK(xtc_process_prepare(r, &s, &p) == XTC_PROCESS_OK);
     fail_wait = true;
     CHECK(xtc_process_run(p, NULL, NULL, &result) == XTC_PROCESS_IO);
+    CHECK(!fail_wait);
     CHECK(!memcmp(&result, &before, sizeof(result)));
     xtc_process_free(p); xr_compile_resources_release(r); CHECK(!live);
 }
