@@ -23,15 +23,57 @@ static XrXirStatus effect_context_owner_project(const XrXirCompileContext *conte
     return XR_XIR_OK;
 }
 
+/* A completed context derivation projects each real reference exactly once.
+ * Source reads only these numeric results until the next outer derivation. */
+static XrXirStatus effect_context_source_summary(const XrXirCompileContext *context,
+    const XrXirModule *source,const XrXirEffects *effects,const EffectContextOwner *owner,
+    EffectSourceSummary *output) {
+    if (!owner || !owner->dense || !owner->forest || owner->dense->base_count!=source->function_count ||
+        owner->dense->count<source->function_count) return XR_XIR_BAD_STRUCTURE;
+    EffectSourceSummary summary={0};
+    XrXirStatus status=effect_source_summary_begin(context,source,&summary);
+    for (uint32_t f=0;f<source->function_count && status==XR_XIR_OK;++f) {
+        if (!summary.rows[f].count) continue;
+        const XrXirFunction *original=&source->functions[f],*function=&owner->dense->functions[f];
+        if (owner->dense->nodes[f].declaration!=f || function->instruction_count!=original->instruction_count) {
+            status=XR_XIR_BAD_STRUCTURE;break;
+        }
+        for (uint32_t i=0;i<original->instruction_count && status==XR_XIR_OK;++i) {
+            XrXirOp op=original->instructions[i].op;
+            if (op!=XR_XIR_FUNCTION_REF && op!=XR_XIR_CLASS_METHOD_REF) continue;
+            uint32_t mask=0;
+            if (op==XR_XIR_CLASS_METHOD_REF) status=effect_class_reference_mask(context,effects,f,i,&mask);
+            else {
+                XrXirInstruction reference=function->instructions[i];
+                if (reference.op!=XR_XIR_FUNCTION_REF || reference.immediate<0 ||
+                    (uint64_t)reference.immediate>=owner->dense->count) { status=XR_XIR_BAD_STRUCTURE;break; }
+                status=effect_invocation_context_edge_mask(context,owner->forest,f,i,
+                    (uint32_t)reference.immediate,&mask);
+            }
+            if (status==XR_XIR_OK && (mask&~(XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED)))
+                status=XR_XIR_BAD_STRUCTURE;
+            if (status==XR_XIR_OK) summary.masks[summary.rows[f].first+i]=
+                (uint8_t)(EFFECT_SOURCE_REFERENCE_PRESENT|mask);
+        }
+    }
+    if (status!=XR_XIR_OK) { effect_source_summary_clear(&summary);return status; }
+    *output=summary;return XR_XIR_OK;
+}
+
 static XrXirStatus effect_context_owner_refresh(const XrXirCompileContext *context,
     const XrXirModule *source, XrXirEffects *effects,EffectBodyMaterial *initial) {
+    if (!source || !effects || !xir_effects_context_matches(context,effects,source->function_count) ||
+        !effects->outcomes_owner || effects->root_input || effect_final_outcomes(effects)) return XR_XIR_BAD_STRUCTURE;
     if (!source->provenance || source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE ||
         !source->declarations || !source->declarations->functions) return XR_XIR_OK;
     EffectContextOwner *fresh=NULL;
     XrXirStatus status=effect_context_owner_build(context,source,effects->refinement,initial,effects->input_facts,&fresh);
     if (status!=XR_XIR_OK) return status;
     status=effect_context_owner_project(context,source,effects,fresh);
+    EffectSourceSummary summary={0};
+    if (status==XR_XIR_OK) status=effect_context_source_summary(context,source,effects,fresh,&summary);
     if (status!=XR_XIR_OK) { effect_context_owner_free(fresh);return status; }
+    effect_source_summary_clear(&effects->source_summary);effects->source_summary=summary;
     EffectContextOwner *old=effects->outcomes_work.contexts;effects->outcomes_work.contexts=fresh;
     effect_context_owner_free(old);return XR_XIR_OK;
 }
@@ -42,29 +84,13 @@ XR_FUNC bool xir_effects_context_available(const XrXirCompileContext *context,
         effect_contexts_read(effects)!=NULL;
 }
 
-static XrXirStatus effect_context_refresh_current(const XrXirCompileContext *context,
-    const XrXirModule *source, const XrXirEffects *effects) {
-    if (!xir_effects_context_matches(context,effects,source ? source->function_count : 0) ||
-        !source || !effects->outcomes_owner || effects->root_input) return XR_XIR_BAD_STRUCTURE;
-    XrXirModule normalized=*source;
-    if (!normalized.types) normalized.types=&effect_empty_types;
-    source=&normalized;
-    if (!effect_contexts_read(effects)) return XR_XIR_OK;
-    if (effects->refinement) {
-        XrXirStatus bound_status=effect_refinement_match(context,source,effects->refinement);
-        if (bound_status!=XR_XIR_OK) return bound_status;
-    }
-    const EffectOrdinaryContexts *ordinary=effect_contexts_read(effects)->ordinary;
-    EffectTerms terms={.types=ordinary->terms.types,.remaining=context};
-
-    XrXirStatus status=effect_terms_snapshot_match(&terms,source->types,ordinary->source_type_count);
-    if (status==XR_XIR_OK) status=effect_ordinary_bodies_match(ordinary,source,&terms);
-    effect_terms_free(&terms);
-    if (status==XR_XIR_BAD_TYPE || status==XR_XIR_BAD_STRUCTURE)
-        /* Source may have advanced inside the refiner before the next outer
-         * invocation publication. Its changed view needs the original writer. */
-        return effect_context_owner_refresh(context,source,(XrXirEffects *)effects,NULL);
-    return status;
+XR_FUNC XrXirStatus xir_effects_construction_reference(const XrXirCompileContext *context,
+    const XrXirEffects *effects,uint32_t function,uint32_t instruction,uint32_t *output) {
+    if (!output || !effects || !xir_effects_context_matches(context,effects,effects->count) ||
+        !effects->outcomes_owner || effects->root_input || !effects->outcomes_work.contexts ||
+        effect_final_outcomes(effects) || effects->source_summary.resources!=context->resources)
+        return XR_XIR_BAD_STRUCTURE;
+    return effect_source_summary_read(&effects->source_summary,function,instruction,output);
 }
 
 static XrXirStatus effect_context_origin_match(const XrXirCompileContext *context,

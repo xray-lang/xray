@@ -337,6 +337,65 @@ static void parameter_summary_owner(void) {
     effect_mark_check(baseline);
     printf("owned parameter rows: %zu allocation failures, detached scalar reads and finite owner PASS\n", sites);
 }
+static void source_reference_summary_kernel(void) {
+    EffectMark baseline = effect_mark();
+    XrXirFunction functions[3] = {
+        {.instruction_count = 3}, {.instruction_count = UINT32_MAX}, {.instruction_count = 2}
+    };
+    XrXirGeneric generics[3] = {{0}, {.parameter_count = 1}, {0}};
+    XrXirModule module = {.functions = functions, .function_count = 3, .generics = generics};
+    EffectSourceSummary summary = {0};
+    attempts = 0;
+    CHECK(effect_source_summary_begin(&effect_context, &module, &summary) == XR_XIR_OK);
+    size_t sites = attempts;
+    CHECK(summary.count == 3 && summary.total == 5 && !summary.rows[1].count);
+    uint32_t mask = UINT32_MAX;
+    CHECK(effect_source_summary_read(&summary, 0, 1, &mask) == XR_XIR_BAD_STRUCTURE && mask == UINT32_MAX);
+    summary.masks[1] = EFFECT_SOURCE_REFERENCE_PRESENT;
+    summary.masks[3] = EFFECT_SOURCE_REFERENCE_PRESENT | XR_XIR_CALLABLE_ROOT_REQUIRED | XR_XIR_CALLABLE_ROOT_UNRESOLVED;
+    memset(functions, 0xCE, sizeof(functions));
+    memset(generics, 0xCE, sizeof(generics));
+    attempts = 0;
+    CHECK(effect_source_summary_read(&summary, 0, 1, &mask) == XR_XIR_OK && !mask);
+    CHECK(effect_source_summary_read(&summary, 2, 0, &mask) == XR_XIR_OK &&
+        mask == (XR_XIR_CALLABLE_ROOT_REQUIRED | XR_XIR_CALLABLE_ROOT_UNRESOLVED));
+    CHECK(!attempts);
+    mask = UINT32_MAX;
+    CHECK(effect_source_summary_read(&summary, 1, 0, &mask) == XR_XIR_BAD_STRUCTURE && mask == UINT32_MAX);
+    CHECK(effect_source_summary_read(&summary, 3, 0, &mask) == XR_XIR_BAD_STRUCTURE && mask == UINT32_MAX);
+    CHECK(effect_source_summary_read(&summary, 0, 3, &mask) == XR_XIR_BAD_STRUCTURE && mask == UINT32_MAX);
+    CHECK(effect_source_summary_read(&summary, 0, 0, &mask) == XR_XIR_BAD_STRUCTURE && mask == UINT32_MAX);
+    summary.masks[1] |= 64u;
+    CHECK(effect_source_summary_read(&summary, 0, 1, &mask) == XR_XIR_BAD_STRUCTURE && mask == UINT32_MAX);
+    EffectSourceSummary saved = summary;
+    CHECK(effect_source_summary_begin(&effect_context, &module, &summary) == XR_XIR_BAD_STRUCTURE);
+    CHECK(!attempts && !memcmp(&summary, &saved, sizeof(summary)));
+    effect_source_summary_clear(&summary);
+    effect_mark_check(baseline);
+
+    functions[0] = (XrXirFunction){.instruction_count = 200};
+    functions[1] = (XrXirFunction){.instruction_count = 200};
+    module.function_count = 2;
+    module.generics = NULL;
+    for (size_t point = 0; point < sites; ++point) {
+        attempts = 0; injected = false; fail_at = point;
+        CHECK(effect_source_summary_begin(&effect_context, &module, &summary) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(injected && !summary.resources && !summary.rows && !summary.masks && !summary.count && !summary.total);
+        fail_at = SIZE_MAX;
+        effect_mark_check(baseline);
+    }
+    XrXirCompileContext finite = effect_owner_new((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE, 128, true});
+    uint64_t held = effect_stats(&finite).held_bytes;
+    CHECK(effect_source_summary_begin(&finite, &module, &summary) == XR_XIR_MEMORY_LIMIT);
+    CHECK(!summary.resources && !summary.rows && !summary.masks && !summary.count && !summary.total);
+    effect_owner_free(&finite, held);
+    functions[0].instruction_count = functions[1].instruction_count = 0;
+    CHECK(effect_source_summary_begin(&effect_context, &module, &summary) == XR_XIR_OK);
+    CHECK(summary.count == 2 && !summary.total && !summary.masks);
+    effect_source_summary_clear(&summary);
+    effect_mark_check(baseline);
+    printf("source reference summaries: %zu allocation failures, body-free reads and finite owner PASS\n", sites);
+}
 static void control_summary_streamed(void) {
     EffectMark baseline = effect_mark();
     XrXirInstruction rows[3][2] = {
@@ -386,6 +445,7 @@ static void control_summary_streamed(void) {
 static void control_summary_kernel(void) {
     parameter_summary_kernel();
     parameter_summary_owner();
+    source_reference_summary_kernel();
     control_summary_streamed();
     const uint32_t count = 8193;
     XrXirFunction *functions = xr_calloc(count, sizeof(*functions));

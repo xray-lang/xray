@@ -459,10 +459,14 @@ static void provenance_source_controls(void) {
     provenance_source_mismatched();
 }
 
+#if XR_XIR_PARANOID
 #include "xir_source_facts_cases.h"
+#endif
 
 static void provenance_take_controls(void) {
+#if XR_XIR_PARANOID
     source_facts_case_lifetime();
+#endif
     provenance_source_types_controls();
     provenance_source_controls();
     LibraryCompileOwner owner={0},foreign={0};

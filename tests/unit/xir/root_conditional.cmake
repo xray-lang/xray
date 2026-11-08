@@ -105,11 +105,13 @@ add_test(NAME test_xir_source_generic_callable_context_compiler
 set_tests_properties(test_xir_source_generic_callable_context_compiler PROPERTIES
     LABELS "unit;xir;root-effects;higher-order;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 8 COST 600)
 
-# The unique provenance receiver has its own whole-operation fault census.
-add_test(NAME test_xir_source_provenance_take_resources
-    COMMAND test_xir_source_generic_callable_context --provenance-take)
-set_tests_properties(test_xir_source_provenance_take_resources PROPERTIES
-    LABELS "unit;xir;root-effects;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)
+# Same-process body correspondence is independently checked in paranoid builds.
+if(XR_XIR_PARANOID)
+    add_test(NAME test_xir_source_provenance_take_resources
+        COMMAND test_xir_source_generic_callable_context --provenance-take)
+    set_tests_properties(test_xir_source_provenance_take_resources PROPERTIES
+        LABELS "unit;xir;root-effects;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)
+endif()
 
 # Exact instance indexing has a genuine Source scale and whole-operation census.
 add_test(NAME test_xir_specialize_instance_index_scale

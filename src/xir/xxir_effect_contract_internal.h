@@ -172,9 +172,6 @@ typedef struct XirEffectContextView {
 XR_FUNC XrXirStatus xir_effects_refinement_capture_input(const XrXirCompileContext *context, XirEffectInput input, const struct XrXirEffects *effects);
 XR_FUNC bool xir_effects_context_available(const XrXirCompileContext *context,
     const struct XrXirEffects *effects);
-/* Only a genuine unpublished Source constructor can refresh contexts.
- * A completed Final rejects the call without work or output changes. */
-XR_FUNC XrXirStatus xir_effects_context_refresh_input(const XrXirCompileContext *context, XirEffectInput input, const struct XrXirEffects *effects);
 XR_FUNC XrXirStatus xir_effects_context_select_input(const XrXirCompileContext *context,
     const struct XrXirEffects *effects, const XirEffectContextInput *input, XirEffectContextView *output);
 /* Specialization reads an immutable admitted Artifact and its owned type pool. */

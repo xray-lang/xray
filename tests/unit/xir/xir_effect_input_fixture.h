@@ -46,10 +46,6 @@ static inline XrXirStatus xir_fixture_effects_refine(const XrXirCompileContext *
     XirFixtureEffectInput input,const XrXirRootRefiner *refiner,XrXirEffects **output) {
     return xr_xir_compile_effects_refine_verified_input(context,(XirEffectInput){input.module,input.construction,NULL},refiner,output);
 }
-static inline XrXirStatus xir_fixture_effects_refresh(const XrXirCompileContext *context,
-    XirFixtureEffectInput input,const XrXirEffects *effects) {
-    return xir_effects_context_refresh_input(context,(XirEffectInput){input.module,input.construction,NULL},effects);
-}
 static inline XrXirStatus xir_fixture_effects_capture(const XrXirCompileContext *context,
     XirFixtureEffectInput input,const XrXirEffects *effects) {
     return xir_effects_refinement_capture_input(context,(XirEffectInput){input.module,input.construction,NULL},effects);

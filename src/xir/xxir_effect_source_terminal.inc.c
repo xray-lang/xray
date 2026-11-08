@@ -56,6 +56,7 @@ static XrXirStatus effect_final_retire_construction(const XrXirCompileContext *w
             effect_ordinary_results_free(owner->dense);owner->dense->uses=(XrXirEffects){0};
         }
     }
+    if (status==XR_XIR_OK) effect_source_summary_clear(&effects->source_summary);
     return status;
 }
 

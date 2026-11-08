@@ -177,6 +177,11 @@ static XrXirStatus source_generic_definition_operation(const XrXirCompileContext
     if(status==XR_XIR_OK)sgm_artifact("source-template",result.checked);
     sgm_begin(context); xr_compile_session_free(session); sgm_end(context,"session-free","drop",status);
     if(status==XR_XIR_OK && inspect) {
+#if XR_XIR_PARANOID
+        CHECK(result.checked->source_facts && result.checked->checked_effects);
+#else
+        CHECK(!result.checked->source_facts && result.checked->checked_effects);
+#endif
         source_generic_definition_inspect(result.checked);
         source_generic_definition_source_negative(context,
             "fn unused<T:AtomicValue>(a:Atomic<T>,v:T)->T{return a.fetchAdd(v)}\n");
@@ -253,6 +258,8 @@ int main(int argc,char **argv) {
     CHECK(argc==1);bool inspect=true;
     LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
     CHECK(source_generic_definition_operation(&owner.context,&inspect)==XR_XIR_OK);library_compile_owner_drop(&owner);
+#if XR_XIR_PARANOID
     provenance_take_controls();
+#endif
     library_compile_observer_free();return 0;
 }

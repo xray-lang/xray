@@ -86,9 +86,8 @@ static XrXirStatus pc_source_terminal_operation(const XrXirCompileContext *conte
         effect_contexts_read(effects)==published->contexts);
     const EffectContextOwner *original=published->contexts;
     size_t calls=rp_attempts;XrCompileResourceStats observed=rp_stats(context);
-    CHECK(xir_fixture_effects_refresh(context,
-        (XirFixtureEffectInput){xr_xir_compile_artifact_module(checked),
-        xr_xir_compile_artifact_construction(checked)},effects)==XR_XIR_BAD_STRUCTURE);
+    uint32_t mask=UINT32_MAX;
+    CHECK(xir_effects_construction_reference(context,effects,0,0,&mask)==XR_XIR_BAD_STRUCTURE && mask==UINT32_MAX);
     CHECK(rp_attempts==calls && conditional_memory_unchanged(context,observed));
     CHECK(effect_contexts_read(effects)==original);
     const XrXirModule *input=xr_xir_compile_artifact_module(checked);

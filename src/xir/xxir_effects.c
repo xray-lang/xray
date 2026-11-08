@@ -53,8 +53,6 @@ static XrXirStatus effect_program_input_root(const XrXirCompileContext *context,
     const XrXirModule *module,const XrXirEffects *effects);
 static XrXirStatus effect_refinement_capture_current(const XrXirCompileContext *context,
     const XrXirModule *source, const struct XrXirEffects *effects);
-static XrXirStatus effect_context_refresh_current(const XrXirCompileContext *context,
-    const XrXirModule *source, const struct XrXirEffects *effects);
 static XrXirStatus effect_context_read_operation(const XrXirCompileContext *context,
     const struct XrXirEffects *effects,XirEffectInput input,const XrXirTypes *types,
     XirEffectContextOperation operation,void *data);
@@ -75,6 +73,7 @@ typedef struct EffectInvocationCertificate EffectInvocationCertificate;
 typedef struct EffectFinalFunctions EffectFinalFunctions;
 typedef struct EffectInvocationDeclaredBounds EffectInvocationDeclaredBounds;
 typedef struct EffectOrdinaryContexts EffectOrdinaryContexts;
+#include "xxir_effect_source_summary.inc.c"
 static void effect_invocation_certificate_free(EffectInvocationCertificate *certificate);
 static void effect_invocation_bounds_free(EffectInvocationDeclaredBounds *bounds);
 static void effect_refinement_free(EffectRefinementBounds *bounds);
@@ -150,6 +149,9 @@ struct XrXirEffects {
     XrXirRootEffectWitness *constant_witnesses;
     XrXirCellProvenance *cells;
     EffectRefinementBounds *refinement;
+    /* Numeric masks are immutable for one Source refinement round and retire
+     * before the completed effects owner can be published. */
+    EffectSourceSummary source_summary;
     /* The invocation Final owns every published public effect record. */
     EffectInvocationCertificate *invocations;
     /* Destruction provenance survives transfer of the certificate to a
@@ -343,6 +345,7 @@ void xr_xir_compile_effects_free(XrXirEffects *effects) {
         XR_CHECK(previous,"A published effect owner must be released exactly once");
         if(previous!=1)return;
         effect_refinement_free(effects->refinement);
+        effect_source_summary_clear(&effects->source_summary);
         effect_parameters_free(effects);
         effect_outcomes_clear(&effects->outcomes_work,effects->count);
         xr_compile_resources_free(effects->outcomes_owner);

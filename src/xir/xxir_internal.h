@@ -96,6 +96,10 @@ XR_FUNC const XrXirFunctionEffectContract *xir_effects_contract(
 /* Provisional ROOT copies belong only to genuine unpublished construction. */
 XR_FUNC XrXirStatus xir_effects_construction_root(const XrXirCompileContext *context,
     const XrXirEffects *effects,uint32_t function,XrXirRootEffects *output);
+/* A genuine Source constructor reads the previous completed derivation.
+ * The read neither accepts mutable Source nor invokes its producer. */
+XR_FUNC XrXirStatus xir_effects_construction_reference(const XrXirCompileContext *context,
+    const XrXirEffects *effects,uint32_t function,uint32_t instruction,uint32_t *output);
 /* A ledger identity guard grants no source, type or execution proof. */
 XR_FUNC bool xir_effects_context_matches(const XrXirCompileContext *context,
     const XrXirEffects *effects, uint32_t functions);

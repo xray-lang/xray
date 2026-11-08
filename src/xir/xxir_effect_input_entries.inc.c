@@ -60,13 +60,6 @@ XR_FUNC XrXirStatus xir_effects_refinement_capture_input(const XrXirCompileConte
     return status;
 }
 
-XR_FUNC XrXirStatus xir_effects_context_refresh_input(const XrXirCompileContext *context, XirEffectInput input, const struct XrXirEffects *effects) {
-    XrXirStatus status=effect_input_facts_match(context,input,effects?effects->input_facts:NULL);
-    if(status==XR_XIR_OK) status=effect_context_refresh_current(context, input.module, effects);
-    if(status==XR_XIR_OK) status=effect_input_facts_match(context,input,effects->input_facts);
-    return status;
-}
-
 XR_FUNC XrXirStatus xir_effects_context_operation_input(const XrXirCompileContext *context, const struct XrXirEffects *effects, XirEffectInput input, const XrXirTypes *types, XirEffectContextOperation operation, void *data) {
     XrXirStatus status=effect_input_facts_match(context,input,effects?effects->input_facts:NULL);
     if(status==XR_XIR_OK) status=effect_context_read_operation(context, effects, input, types, operation, data);
