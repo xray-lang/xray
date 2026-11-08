@@ -173,6 +173,7 @@ typedef struct XrXirRootRefiner {
     void (*explain)(void *, const XrXirModule *, const XrXirEffects *, const XrXirDiagnostic *);
     XrXirStatus (*begin)(void *, const XrXirEffects *);
     XrXirStatus (*observe)(void *, const XrXirModule *, uint32_t, uint32_t, const XrXirInstruction *);
+    XrXirStatus (*points)(void *, const XirExecutionOwner *, struct XirStorageFlow *, bool, bool *);
     XrXirStatus (*prepare)(void *, const XirExecutionOwner *, struct XirStorageFlow *, const XirRestrictionReceiver *);
     /* Reads closed numeric equations before refinement and publication.
      * Neither borrowed module nor provisional semantic owner may escape. */

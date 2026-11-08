@@ -57,7 +57,8 @@ typedef struct XirRestrictionPoint {
 /* Formula inputs are sorted physical/aux leaf IDs in the observing function's
  * namespace. Intrinsic has value_count formula IDs. Point rows are ordered by
  * function/instruction/value and name the current transport carrier, including
- * mutable capture contents. A true formula retains its independent loan flows. */
+ * mutable capture contents. Formula IDs belong to exactly one function. A true
+ * formula retains its independent loan flows. */
 typedef struct XirRestrictionView {
     const XirRestrictionFunction *functions;
     uint32_t function_count;
@@ -132,7 +133,7 @@ XR_FUNC XrXirStatus xir_execution_argument(const XirExecutionOwner *,
 XR_FUNC XrXirStatus xir_execution_visit_value_captures(const XirExecutionOwner *,
     uint32_t, uint32_t, XirExecutionVisitor, void *, bool *complete);
 XR_FUNC XrXirStatus xir_execution_visit_value_captures_in(const XirExecutionOwner *,
-    const XirExecutionValue *, XirExecutionVisitor, void *, bool *complete);
+    const XirExecutionValue *, XirExecutionVisitor, void *, bool *complete, uint32_t *remainder);
 /* Construction rebinds this receiving index once after each storage round. */
 XR_FUNC XrXirStatus xir_execution_refresh_storage(XirExecutionOwner *);
 /* Qualified substitution of this owner's symbolic receiver. Returned pending

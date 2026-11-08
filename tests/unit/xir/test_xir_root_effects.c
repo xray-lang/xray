@@ -407,7 +407,7 @@ static void suspension_parameter_equations(void) {
     captures = 0; complete = true;
     XirExecutionValue formal = {0, 0, XIR_EXECUTION_CURRENT_ENVIRONMENT};
     CHECK(xir_execution_visit_value_captures_in(roots, &formal,
-        execution_value_oracle, &captures, &complete) == XR_XIR_OK && !complete && !captures);
+        execution_value_oracle, &captures, &complete, NULL) == XR_XIR_OK && !complete && !captures);
     for (uint32_t p = 0; p < roots->pending_count; ++p) {
         if (roots->pending[p].function != 6) continue;
         XirExecutionSite site = {0};
