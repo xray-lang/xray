@@ -293,6 +293,7 @@ static EffectSeedProjection effect_seed_opcode(XrXirOp op,XrXirFunctionEffects *
 #include "xxir_effect_check.inc.c"
 #include "xxir_execution.inc.c"
 #include "xxir_effect_check_pipeline.inc.c"
+#include "xxir_effect_relocate.inc.c"
 #include "xxir_effect_access_query.inc.c"
 
 static XrXirStatus effect_infer_construct(const XrXirCompileContext *context,

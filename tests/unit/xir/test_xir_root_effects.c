@@ -194,7 +194,7 @@ static void generic_resource_failures(void) {
     CHECK(effect_checked_roots_collect(&producer, module, contracts, NULL, NULL, &interfaces, false) == XR_XIR_OK);
     CHECK(interfaces->terms && effect_terms_scratch_retired(interfaces->terms));
     memset(&producer, 0xCE, sizeof(producer));
-    CHECK(effect_checked_roots_link_take(&effect_context, module, NULL, &interfaces, &roots, true) == XR_XIR_OK && !interfaces);
+    CHECK(effect_checked_roots_link_take(&effect_context, module, NULL, &interfaces, &roots, true, NULL) == XR_XIR_OK && !interfaces);
     uint32_t resolved = root_find(module, "instantiateRequirement");
     effect_artifact_free(artifact);
     XrXirRootFormula formula = {0};
@@ -236,7 +236,7 @@ static void control_summary_detached(void) {
         functions[f].instructions = NULL;
         functions[f].instruction_count = UINT32_MAX;
     }
-    CHECK(effect_checked_roots_link_take(&effect_context, &module, NULL, &interfaces, &roots, true) == XR_XIR_OK);
+    CHECK(effect_checked_roots_link_take(&effect_context, &module, NULL, &interfaces, &roots, true, NULL) == XR_XIR_OK);
     CHECK(effect_checked_control_project(&effect_context, roots, &summary) == XR_XIR_OK);
     effect_checked_roots_free(roots);
     CHECK(summary->facts[0].suspend == XR_XIR_EFFECT_MAY && summary->causes[0].callee == 1);
@@ -283,7 +283,7 @@ static void module_interface_lifetime(void) {
             !effect_check_bits(interfaces, interfaces->function[0].root)[0]);
         EffectCheckedRoots *occupied = interfaces;
         size_t prior = attempts;
-        CHECK(effect_checked_roots_link_take(&effect_context, &module, NULL, &interfaces, &occupied, true) == XR_XIR_BAD_STRUCTURE);
+        CHECK(effect_checked_roots_link_take(&effect_context, &module, NULL, &interfaces, &occupied, true, NULL) == XR_XIR_BAD_STRUCTURE);
         CHECK(interfaces == occupied && attempts == prior);
         memset(rows, 0xCE, sizeof(rows));
         for (uint32_t f = 0; f < 4; ++f) {
@@ -292,7 +292,7 @@ static void module_interface_lifetime(void) {
         }
         attempts = 0;
         if (point) { injected = false; fail_at = point - 1; }
-        XrXirStatus status = effect_checked_roots_link_take(&effect_context, &module, NULL, &interfaces, &roots, true);
+        XrXirStatus status = effect_checked_roots_link_take(&effect_context, &module, NULL, &interfaces, &roots, true, NULL);
         CHECK(!interfaces);
         if (point) {
             CHECK(status == XR_XIR_OUT_OF_MEMORY && injected && !roots);
@@ -574,12 +574,76 @@ static void execution_origin_namespaces(void) {
     effect_mark_check(baseline);
 }
 
+static void restriction_owner_relocation(void) {
+    XrXirType parameter = XR_XIR_I64;
+    XrXirInstruction code[] = {{.op = XR_XIR_COPY, .type = XR_XIR_I64}, {.op = XR_XIR_RETURN, .args = {1}}};
+    XrXirBlock block = {.count = 2};
+    XrXirFunction body = {.parameters = &parameter, .parameter_count = 1, .instructions = code,
+        .instruction_count = 2, .blocks = &block, .block_count = 1, .result = XR_XIR_I64, .error_type = XR_XIR_NEVER};
+    XrXirModule module = {.functions = &body, .function_count = 1};
+    uint32_t intrinsic[] = {0, 1, 2, 3}, inputs[] = {3};
+    XrXirValueFlow flow = {1, 3};
+    XirRestrictionFormulaRow formulas[] = {{0}, {0}, {.constant = true}, {.count = 1}};
+    XirRestrictionFunction row = {3, 4, intrinsic, &flow, 1};
+    XirRestrictionPoint point = {0, 1, 1, 3, 3};
+    XirRestrictionView view = {&row, 1, formulas, 4, inputs, 1, &point, 1};
+    EffectMark baseline = effect_mark();
+    EffectCheckedRoots *roots = NULL;
+    CHECK(effect_checked_roots_build(&effect_context, &module, NULL, NULL, NULL, &roots, false) == XR_XIR_OK);
+    EffectMark held = effect_mark();
+    EffectCheckRestrictions copy = {0};
+    attempts = 0;
+    CHECK(effect_check_restrictions_copy(&effect_context, roots, &view, &copy) == XR_XIR_OK);
+    size_t sites = attempts;
+    effect_check_restrictions_clear(&copy);
+    effect_mark_check(held);
+    for (size_t i = 0; i < sites; ++i) {
+        attempts = 0; injected = false; fail_at = i;
+        CHECK(effect_check_restrictions_copy(&effect_context, roots, &view, &copy) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(injected);
+        fail_at = SIZE_MAX;
+        effect_check_restrictions_clear(&copy);
+        effect_mark_check(held);
+    }
+    CHECK(effect_check_restrictions_receive(roots, &view) == XR_XIR_OK);
+    CHECK(roots->restrictions.view.inputs != inputs && roots->restrictions.view.points != &point);
+    CHECK(effect_check_restrictions_receive(roots, &view) == XR_XIR_BAD_STRUCTURE);
+    XirStorageFlowView storage = {0};
+    CHECK(xir_storage_flow_seal(roots->storage, &storage) == XR_XIR_OK);
+    XrXirInstruction replacement[] = {{.op = XR_XIR_CONST_INT, .type = XR_XIR_I64}, code[0], code[1]};
+    XrXirBlock replacement_block = {.count = 3};
+    XrXirFunction relocated = body;
+    relocated.instructions = replacement; relocated.instruction_count = 3; relocated.blocks = &replacement_block;
+    uint32_t values[] = {0, 2, 3};
+    XirViewNormalizedFunction map = {.instructions = replacement, .values = values, .old_instructions = 2};
+    XrXirModule next = module; next.functions = &relocated;
+    XirViewNormalization normalization = {.module = next, .bodies = &relocated, .functions = &map};
+    EffectFinalOutcomes outcomes = {0};
+    XrXirEffects effects = {.resources = effect_context.resources, .count = 1,
+        .outcomes_owner = &outcomes, .checked_roots = roots};
+    CHECK(xir_effects_relocate_prepared(&effect_context, &effects, &next, &normalization, NULL) == XR_XIR_OK);
+    const XirRestrictionView *owned = &roots->restrictions.view;
+    CHECK(owned->functions[0].physical_values == 4 && owned->functions[0].value_count == 5);
+    CHECK(owned->functions[0].intrinsic[2] == 1 && owned->functions[0].intrinsic[4] == 3);
+    CHECK(!owned->formulas[owned->functions[0].intrinsic[1]].constant);
+    CHECK(owned->inputs[0] == 4 && owned->functions[0].flows[0].source == 2 &&
+        owned->functions[0].flows[0].target == 4);
+    CHECK(owned->points[0].instruction == 2 && owned->points[0].value == 2 && owned->points[0].carrier == 4);
+    memset(intrinsic, 0xCE, sizeof(intrinsic)); memset(inputs, 0xCE, sizeof(inputs));
+    memset(formulas, 0xCE, sizeof(formulas)); memset(&point, 0xCE, sizeof(point));
+    CHECK(owned->inputs[0] == 4 && owned->formulas[2].constant);
+    effect_checked_roots_free(roots);
+    effect_mark_check(baseline);
+    printf("restriction receiver: detached formulas, %zu allocation failures and numeric relocation PASS\n", sites);
+}
+
 static void control_summary_kernel(void) {
     control_summary_detached();
     suspension_parameter_equations();
     suspension_reason_order();
     execution_cleanup_order();
     execution_origin_namespaces();
+    restriction_owner_relocation();
     const uint32_t count = 8193;
     XrXirFunction *functions = xr_calloc(count, sizeof(*functions));
     XrXirInstruction (*rows)[2] = xr_calloc(count, sizeof(*rows));

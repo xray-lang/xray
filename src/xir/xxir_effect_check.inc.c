@@ -103,6 +103,12 @@ typedef struct EffectCheckOrigins {
     uint32_t nodes, count;
 } EffectCheckOrigins;
 
+typedef struct EffectCheckRestrictions {
+    XirRestrictionView view;
+    uint32_t *intrinsic, *owners;
+    XrXirValueFlow *flows;
+} EffectCheckRestrictions;
+
 typedef struct EffectCheckFrame {
     uint32_t node, dependency, parent;
 } EffectCheckFrame;
@@ -146,6 +152,7 @@ typedef struct EffectCheckedRoots {
     const XrXirTypes *borrowed_types;
     XirStorageFlow *storage;
     EffectCheckOrigins storage_origins;
+    EffectCheckRestrictions restrictions;
 } EffectCheckedRoots;
 
 typedef struct EffectCheckBuild {
@@ -164,8 +171,11 @@ typedef struct EffectCheckBuild {
     XrXirStatus status;
 } EffectCheckBuild;
 
+#include "xxir_effect_restrictions.inc.c"
+
 static void effect_checked_roots_free(EffectCheckedRoots *roots) {
     if (!roots) return;
+    effect_check_restrictions_clear(&roots->restrictions);
     xir_storage_flow_free(roots->storage);
     xr_compile_resources_free(roots->storage_origins.offsets);
     xr_compile_resources_free(roots->storage_origins.heads);
@@ -2132,7 +2142,8 @@ static XrXirStatus effect_checked_roots_collect(const XrXirCompileContext *memor
  * headers are visible here; recursive closure never rescans instruction arrays. */
 static XrXirStatus effect_checked_roots_link_take(const XrXirCompileContext *memory,
     const XrXirModule *program, XrCompileRequestControl *control,
-    EffectCheckedRoots **interfaces, EffectCheckedRoots **output, bool close) {
+    EffectCheckedRoots **interfaces, EffectCheckedRoots **output, bool close,
+    const XrXirRootRefiner *refiner) {
     if (!xir_compile_context_valid(memory) || !program || !program->functions || !interfaces ||
         !*interfaces || !output || *output || interfaces == output ||
         (*interfaces)->resources != memory->resources ||
@@ -2140,7 +2151,7 @@ static XrXirStatus effect_checked_roots_link_take(const XrXirCompileContext *mem
     EffectCheckedRoots *roots = *interfaces;
     *interfaces = NULL;
     if (roots->terms) roots->terms->remaining = memory;
-    EffectCheckBuild build = {.memory = memory, .roots = roots, .control = control,
+    EffectCheckBuild build = {.memory = memory, .roots = roots, .control = control, .refiner = refiner,
         .scratch = {.resources = memory->resources}};
     XrXirFunction *headers = xir_compile_copy(memory, program->functions,
         (size_t)program->function_count * sizeof(*headers), &build.status);
@@ -2158,15 +2169,29 @@ static XrXirStatus effect_checked_roots_link_take(const XrXirCompileContext *mem
     if (build.status == XR_XIR_OK) build.status = effect_check_link(&build);
     if (build.status == XR_XIR_OK) build.status = effect_check_cleanup_uses(&build);
     if (build.status == XR_XIR_OK && roots->storage) {
-        bool changed = true;
+        bool changed = true, final = false;
         while (changed && build.status == XR_XIR_OK) {
+            uint32_t nodes = roots->storage_origins.nodes, edges = roots->storage_origins.count;
             build.status = xir_storage_flow_link(roots->storage, roots, &changed);
+            bool ready = true;
+            if (build.status == XR_XIR_OK && refiner && refiner->points)
+                build.status = refiner->points(refiner->context, roots, roots->storage, final, &ready);
             if (build.status == XR_XIR_OK) build.status = xir_execution_refresh_storage(roots);
             uint32_t calls = roots->calls;
             for (uint32_t p = 0; p < roots->pending_count && build.status == XR_XIR_OK; ++p)
                 if (roots->pending[p].kind == EFFECT_CHECK_HIGHER_ORDER)
                     effect_check_link_higher_order(&build, &roots->pending[p]);
-            changed |= calls != roots->calls;
+            bool content_changed = calls != roots->calls || edges != roots->storage_origins.count;
+            bool origins_changed = content_changed || nodes != roots->storage_origins.nodes;
+            if (final && content_changed) build.status = XR_XIR_UNRESOLVED;
+            if (!ready && !changed && !origins_changed) build.status = XR_XIR_UNRESOLVED;
+            changed |= (!final && origins_changed) || !ready;
+            if (!changed && !final && refiner && refiner->points) {final = true; changed = true;}
+        }
+        if (build.status == XR_XIR_OK && final) {
+            XirStorageFlowView storage = {0};
+            build.status = xir_storage_flow_seal(roots->storage, &storage);
+            if (build.status == XR_XIR_OK) build.status = xir_execution_refresh_storage(roots);
         }
         for (uint32_t n = 0; n < roots->nodes; ++n) roots->node[n].deferred = false;
         for (uint32_t p = 0; p < roots->pending_count; ++p) {
@@ -2203,7 +2228,7 @@ static XrXirStatus effect_checked_roots_build(const XrXirCompileContext *memory,
     EffectCheckedRoots *interfaces = NULL;
     XrXirStatus status = effect_checked_roots_collect(memory, module, contracts, control, refiner, &interfaces, !close);
     if (status == XR_XIR_OK)
-        status = effect_checked_roots_link_take(memory, module, control, &interfaces, output, close);
+        status = effect_checked_roots_link_take(memory, module, control, &interfaces, output, close, refiner);
     effect_checked_roots_free(interfaces);
     return status;
 }

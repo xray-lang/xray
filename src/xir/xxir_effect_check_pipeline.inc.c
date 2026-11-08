@@ -422,8 +422,10 @@ XR_FUNC XrXirStatus xir_effects_prepare_verified_input(const XrXirCompileContext
         status = refiner->begin(refiner->context, effects);
     if (status == XR_XIR_OK) status = effect_checked_roots_build(memory, input.module,
         effects->outcomes_work.contracts, input.control, refiner, &effects->checked_roots, false);
-    if (status == XR_XIR_OK && refiner && refiner->prepare)
-        status = refiner->prepare(refiner->context, effects->checked_roots, effects->checked_roots->storage, NULL);
+    if (status == XR_XIR_OK && refiner && refiner->prepare) {
+        XirRestrictionReceiver receiver = {effects->checked_roots, effect_check_restrictions_receive};
+        status = refiner->prepare(refiner->context, effects->checked_roots, effects->checked_roots->storage, &receiver);
+    }
     if (status != XR_XIR_OK) {
         xr_xir_compile_effects_free(effects);
         return status;
