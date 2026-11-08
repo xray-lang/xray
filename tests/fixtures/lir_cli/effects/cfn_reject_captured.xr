@@ -1,0 +1,4 @@
+fn outer(value: i64) {
+    fn leaf() -> i64 { return value }
+    const callback: CFn<fn() -> i64> = leaf
+}

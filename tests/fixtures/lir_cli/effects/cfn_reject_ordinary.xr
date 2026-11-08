@@ -1,0 +1,4 @@
+fn leaf() -> i64 { return 1 }
+fn accept(callback: fn() -> i64) {}
+const callback: CFn<fn() -> i64> = leaf
+accept(callback)

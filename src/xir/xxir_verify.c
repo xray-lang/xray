@@ -250,6 +250,11 @@ static XrXirStatus instruction_direct_call_shape(const XrXirFunction *function,
         if ((signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) &&
             !(module->declarations->functions[op->immediate].promises & XR_XIR_FUNCTION_NO_SUSPEND))
             return XR_XIR_BAD_TYPE;
+        if ((signature->flags & XR_XIR_CALLABLE_C_ABI) &&
+            (op->args[1] || callee->error_type != XR_XIR_NEVER ||
+             module->declarations->functions[op->immediate].native_callable ||
+             module->declarations->functions[op->immediate].method_kind != XR_XIR_NON_MEMBER))
+            return XR_XIR_BAD_TYPE;
         if (!!(signature->flags & XR_XIR_CALLABLE_REST) !=
             !!(module->declarations->functions[op->immediate].promises & XR_XIR_FUNCTION_REST) ||
             ((signature->flags & XR_XIR_CALLABLE_REST) && op->args[1] >= callee->parameter_count))

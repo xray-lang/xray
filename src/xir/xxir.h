@@ -188,6 +188,7 @@ static inline bool xr_xir_function_parameter_escaping(const XrXirFunction *funct
 
 #define XR_XIR_CALLABLE_NO_SUSPEND 1u
 #define XR_XIR_CALLABLE_REST 16u
+#define XR_XIR_CALLABLE_C_ABI 32u
 #define XR_XIR_CALLABLE_ROOT_NONE 2u
 #define XR_XIR_CALLABLE_ROOT_REQUIRED 4u
 #define XR_XIR_CALLABLE_ROOT_UNRESOLVED 8u

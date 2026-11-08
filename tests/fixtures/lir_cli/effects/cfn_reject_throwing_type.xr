@@ -1,0 +1,2 @@
+enum Failure { Bad }
+fn accept(callback: CFn<fn() throws(Failure) -> i64>) {}
