@@ -277,8 +277,16 @@ XR_FUNC XrXirStatus xir_execution_refresh_storage(XirExecutionOwner *owner) {
 
 XR_FUNC XrXirStatus xir_execution_visit_value_captures_in(const XirExecutionOwner *owner,
     const XirExecutionValue *value, XirExecutionVisitor visit, void *context, bool *complete) {
-    if (!value || !owner || value->function >= owner->templates ||
-        value->value >= owner->function[value->function].values) return XR_XIR_BAD_STRUCTURE;
+    if (!value || !owner || value->function >= owner->templates) return XR_XIR_BAD_STRUCTURE;
+    uint32_t count = owner->function[value->function].values;
+    if (owner->storage) {
+        XirStorageFlowView storage = {0};
+        XrXirStatus status = xir_storage_flow_view(owner->storage, &storage);
+        if (status != XR_XIR_OK) return status;
+        if (value->function >= storage.function_count) return XR_XIR_BAD_STRUCTURE;
+        count = storage.functions[value->function].value_count;
+    }
+    if (value->value >= count) return XR_XIR_BAD_STRUCTURE;
     uint32_t remainder = 0;
     return execution_visit_origins(owner, value->function, value->value, value->environment,
         visit, context, complete, &remainder, false);
