@@ -290,6 +290,7 @@ static EffectSeedProjection effect_seed_opcode(XrXirOp op,XrXirFunctionEffects *
 #include "xxir_effect_check_access.inc.c"
 
 #include "xxir_effect_check.inc.c"
+#include "xxir_execution.inc.c"
 #include "xxir_effect_check_pipeline.inc.c"
 #include "xxir_effect_access_query.inc.c"
 

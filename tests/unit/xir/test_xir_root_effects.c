@@ -423,10 +423,76 @@ static void suspension_reason_order(void) {
     puts("equal-length suspension causes retain source order across recursive component scheduling PASS");
 }
 
+typedef struct ExecutionCleanupOracle {
+    uint32_t normal, panic, captures;
+} ExecutionCleanupOracle;
+static XrXirStatus execution_cleanup_oracle(void *context, const XirExecutionSite *site) {
+    ExecutionCleanupOracle *oracle = context;
+    CHECK(site->kind == XIR_EXECUTION_CLEANUP_USE && site->protocol == 4 && site->function == 0);
+    CHECK(site->registration != UINT32_MAX);
+    if (site->port == XIR_EXECUTION_PANIC) {
+        CHECK(site->instruction == UINT32_MAX && (site->block == 1 || site->block == 2));
+        CHECK(site->declaration == (site->block == 1 ? 1u : 2u - site->order));
+        ++oracle->panic;
+    } else {
+        CHECK(site->instruction == 2 && site->block == 2 && site->order == oracle->normal);
+        CHECK(site->declaration == 2 - site->order);
+        ++oracle->normal;
+    }
+    return XR_XIR_OK;
+}
+static XrXirStatus execution_capture_oracle(void *context, const XirExecutionSite *site) {
+    ExecutionCleanupOracle *oracle = context;
+    CHECK(site->kind == XIR_EXECUTION_CALL && site->protocol == 4);
+    CHECK(site->instruction < 2 && site->declaration == site->instruction + 1);
+    ++oracle->captures;
+    return XR_XIR_OK;
+}
+static void execution_cleanup_order(void) {
+    EffectMark baseline = effect_mark();
+    XrXirInstruction parent[] = {
+        {.op = XR_XIR_CLEANUP_REGISTER, .immediate = 1, .targets = {1}},
+        {.op = XR_XIR_CLEANUP_REGISTER, .immediate = 2, .targets = {2}},
+        {.op = XR_XIR_CLEANUP_LEAVE, .targets = {3}},
+        {.op = XR_XIR_RETURN}
+    };
+    XrXirInstruction leaf = {.op = XR_XIR_RETURN};
+    XrXirBlock blocks[] = {{.first = 0, .count = 1}, {.first = 1, .count = 1, .frontier = 1},
+        {.first = 2, .count = 1, .frontier = 2}, {.first = 3, .count = 1}};
+    XrXirBlock leaf_block = {.count = 1};
+    XrXirFunction functions[] = {
+        {.instructions = parent, .instruction_count = 4, .blocks = blocks, .block_count = 4, .error_type = XR_XIR_NEVER},
+        {.instructions = &leaf, .instruction_count = 1, .blocks = &leaf_block, .block_count = 1, .error_type = XR_XIR_NEVER},
+        {.instructions = &leaf, .instruction_count = 1, .blocks = &leaf_block, .block_count = 1, .error_type = XR_XIR_NEVER}
+    };
+    XrXirModule module = {.stage = XR_XIR_CHECKED, .functions = functions, .function_count = 3};
+    EffectCheckedRoots *roots = NULL;
+    attempts = 0;
+    CHECK(effect_checked_roots_build(&effect_context, &module, NULL, NULL, NULL, &roots) == XR_XIR_OK);
+    size_t sites = attempts;
+    ExecutionCleanupOracle oracle = {0};
+    CHECK(xir_execution_visit_calls(roots, execution_cleanup_oracle, &oracle) == XR_XIR_OK);
+    CHECK(xir_execution_visit_captures(roots, execution_capture_oracle, &oracle) == XR_XIR_OK);
+    CHECK(oracle.normal == 2 && oracle.panic == 3 && oracle.captures == 2);
+    XirExecutionSite site = {0};
+    CHECK(xir_execution_site(roots, XIR_EXECUTION_CLEANUP_USE, 0, &site) == XR_XIR_OK);
+    effect_checked_roots_free(roots);
+    effect_mark_check(baseline);
+    for (size_t point = 0; point < sites; ++point) {
+        roots = NULL; attempts = 0; injected = false; fail_at = point;
+        CHECK(effect_checked_roots_build(&effect_context, &module, NULL, NULL, NULL, &roots) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(injected && !roots);
+        fail_at = SIZE_MAX;
+        effect_mark_check(baseline);
+    }
+    printf("ordered normal/panic cleanup uses retain registration identities and %zu failure boundaries PASS\n", sites);
+}
+
 static void control_summary_kernel(void) {
     control_summary_detached();
     suspension_parameter_equations();
     suspension_reason_order();
+    execution_cleanup_order();
     const uint32_t count = 8193;
     XrXirFunction *functions = xr_calloc(count, sizeof(*functions));
     XrXirInstruction (*rows)[2] = xr_calloc(count, sizeof(*rows));
