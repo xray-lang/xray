@@ -123,6 +123,67 @@ XR_FUNC XrXirStatus xir_execution_visit_captures(const XirExecutionOwner *owner,
     return XR_XIR_OK;
 }
 
+XR_FUNC XrXirStatus xir_execution_parameter(const XirExecutionOwner *owner,
+    const XirExecutionSite *site, uint32_t parameter, XirExecutionParameter *output) {
+    const EffectCheckedRoots *roots = owner;
+    if (!roots || !site || !output) return XR_XIR_BAD_STRUCTURE;
+    if (site->kind != XIR_EXECUTION_FORMAL && parameter >= site->argument_count) return XR_XIR_BAD_STRUCTURE;
+    uint32_t target = UINT32_MAX;
+    if (site->kind == XIR_EXECUTION_FORMAL) {
+        if (parameter || site->caller_instance >= roots->functions) return XR_XIR_BAD_STRUCTURE;
+        target = site->caller_instance;
+        const EffectCheckFunction *function = &roots->function[target];
+        if (site->receiver_function != function->declaration || site->receiver_value < function->capture_count ||
+            site->receiver_value >= function->parameters ||
+            !roots->node[function->first + site->receiver_value].callable_input) return XR_XIR_BAD_STRUCTURE;
+        parameter = site->receiver_value;
+    } else if (site->kind == XIR_EXECUTION_CALL || site->kind == XIR_EXECUTION_CLEANUP_USE) {
+        uint32_t call = site->index;
+        if (site->kind == XIR_EXECUTION_CLEANUP_USE) {
+            if (call >= roots->cleanup_uses) return XR_XIR_BAD_STRUCTURE;
+            call = roots->cleanup_use[call].registration;
+        }
+        if (call >= roots->calls) return XR_XIR_BAD_STRUCTURE;
+        target = roots->node[roots->call[call].target].function;
+    } else if (site->kind == XIR_EXECUTION_PENDING) {
+        if (site->index >= roots->pending_count) return XR_XIR_BAD_STRUCTURE;
+        if (site->reference != UINT32_MAX) {
+            if (site->reference >= roots->calls || roots->call[site->reference].protocol != 1)
+                return XR_XIR_BAD_STRUCTURE;
+            target = roots->node[roots->call[site->reference].target].function;
+        }
+    } else return XR_XIR_BAD_STRUCTURE;
+    if (target != UINT32_MAX) {
+        const EffectCheckFunction *function = &roots->function[target];
+        if (parameter >= function->parameters) return XR_XIR_BAD_STRUCTURE;
+        EffectCheckNode node = roots->node[function->first + parameter];
+        *output = (XirExecutionParameter){node.type, node.mode, node.escaping,
+            parameter < function->capture_count, node.cell};
+        return XR_XIR_OK;
+    }
+    const EffectCheckPending *pending = &roots->pending[site->index];
+    const XrXirTypes *types = xir_execution_types(roots);
+    const XrXirTypeNode *signature = xr_xir_callable_signature(types, pending->receiver_type);
+    if (pending->kind == EFFECT_CHECK_REQUIREMENT) {
+        if (!parameter) {
+            EffectCheckNode node = roots->node[pending->receiver];
+            *output = (XirExecutionParameter){node.type, XR_PARAM_READ, false, false, node.cell};
+            return XR_XIR_OK;
+        }
+        --parameter;
+        const XrXirInterfaceTable *table = types ? types->interfaces : NULL;
+        if (!table || pending->selector >= table->count ||
+            pending->member >= table->declarations[pending->selector].method_count) return XR_XIR_BAD_STRUCTURE;
+        signature = xr_xir_callable_signature(types,
+            table->declarations[pending->selector].methods[pending->member].signature);
+    }
+    if (!signature || parameter >= signature->parameter_count) return XR_XIR_BAD_TYPE;
+    XrXirCallableParameter formal = signature->parameters[parameter];
+    *output = (XirExecutionParameter){formal.type, formal.mode, formal.escaping != 0, false,
+        xr_xir_type_is_cell(types, formal.type)};
+    return XR_XIR_OK;
+}
+
 XR_FUNC XrXirStatus xir_execution_argument(const XirExecutionOwner *owner,
     const XirExecutionSite *site, uint32_t parameter, XirExecutionArgument *output) {
     const EffectCheckedRoots *roots = owner;
@@ -139,7 +200,7 @@ XR_FUNC XrXirStatus xir_execution_argument(const XirExecutionOwner *owner,
             .mode = node->mode, .type = node->type, .cell = node->cell, .escaping = node->escaping};
         return XR_XIR_OK;
     }
-    uint32_t first, count, caller, target = UINT32_MAX;
+    uint32_t first, count, caller;
     uint32_t formal_ordinal = parameter;
     uint32_t environment = site->environment;
     if (site->kind == XIR_EXECUTION_CALL || site->kind == XIR_EXECUTION_CLEANUP_USE) {
@@ -152,7 +213,6 @@ XR_FUNC XrXirStatus xir_execution_argument(const XirExecutionOwner *owner,
         const EffectCheckCall *call = &roots->call[index];
         first = call->first; count = call->count;
         caller = roots->node[call->output].function;
-        target = roots->node[call->target].function;
     } else if (site->kind == XIR_EXECUTION_PENDING) {
         if (site->index >= roots->pending_count) return XR_XIR_BAD_STRUCTURE;
         const EffectCheckPending *pending = &roots->pending[site->index];
@@ -162,7 +222,6 @@ XR_FUNC XrXirStatus xir_execution_argument(const XirExecutionOwner *owner,
             EffectCheckCall capture = roots->call[site->reference];
             if (capture.protocol != 1 || capture.count > UINT32_MAX - count ||
                 site->argument_count != capture.count + count) return XR_XIR_BAD_STRUCTURE;
-            target = roots->node[capture.target].function;
             if (parameter < capture.count) {
                 first = capture.first; count = capture.count;
                 environment = site->capture_environment;
@@ -182,29 +241,12 @@ XR_FUNC XrXirStatus xir_execution_argument(const XirExecutionOwner *owner,
             environment : XIR_EXECUTION_UNKNOWN_ENVIRONMENT,
         .mode = XR_PARAM_READ, .type = roots->node[node].type,
         .cell = roots->node[node].cell};
-    if (target != UINT32_MAX) {
-        if (formal_ordinal >= roots->function[target].parameters) return XR_XIR_BAD_STRUCTURE;
-        const EffectCheckNode *formal = &roots->node[roots->function[target].first + formal_ordinal];
-        argument.mode = formal->mode;
-        argument.escaping = formal->escaping;
-    } else {
-        const EffectCheckPending *pending = &roots->pending[site->index];
-        const XrXirTypes *types = xir_execution_types(roots);
-        const XrXirTypeNode *signature = xr_xir_callable_signature(types, pending->receiver_type);
-        uint32_t ordinal = parameter;
-        if (pending->kind == EFFECT_CHECK_REQUIREMENT) {
-            if (!ordinal) { *output = argument; return XR_XIR_OK; }
-            --ordinal;
-            const XrXirInterfaceTable *table = types ? types->interfaces : NULL;
-            if (!table || pending->selector >= table->count ||
-                pending->member >= table->declarations[pending->selector].method_count) return XR_XIR_BAD_STRUCTURE;
-            signature = xr_xir_callable_signature(types,
-                table->declarations[pending->selector].methods[pending->member].signature);
-        }
-        if (!signature || ordinal >= signature->parameter_count) return XR_XIR_BAD_TYPE;
-        argument.mode = signature->parameters[ordinal].mode;
-        argument.escaping = signature->parameters[ordinal].escaping != 0;
-    }
+    XirExecutionParameter formal = {0};
+    XrXirStatus status = xir_execution_parameter(owner, site, formal_ordinal, &formal);
+    if (status != XR_XIR_OK) return status;
+    argument.mode = formal.mode;
+    argument.escaping = formal.escaping;
+
     *output = argument;
     return XR_XIR_OK;
 }

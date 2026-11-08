@@ -706,6 +706,59 @@ static void point_request_failure(void) {
     effect_mark_check(baseline);
 }
 
+static void execution_instance_parameters(void) {
+    EffectMark baseline = effect_mark();
+    XrXirType type_parameter = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
+    XrXirCallableParameter callback_parameter = {.type = XR_XIR_CONSTRUCTED_TYPE_BASE};
+    XrXirTypeNode nodes[] = {
+        {.kind = XR_XIR_TYPE_ARRAY, .element = type_parameter},
+        {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER, .result = XR_XIR_UNIT,
+            .parameters = &callback_parameter, .parameter_count = 1, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.kind = XR_XIR_TYPE_CELL, .element = type_parameter},
+        {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER, .result = XR_XIR_UNIT,
+            .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED}
+    };
+    XrXirTypes types = {.nodes = nodes, .count = 4};
+    XrXirType parameters[] = {type_parameter, XR_XIR_CONSTRUCTED_TYPE_BASE + 1, XR_XIR_CONSTRUCTED_TYPE_BASE + 2};
+    XrXirInstruction ret = {.op = XR_XIR_RETURN};
+    XrXirBlock block = {.count = 1};
+    XrXirFunction function = {.parameters = parameters, .parameter_count = 3, .instructions = &ret,
+        .instruction_count = 1, .blocks = &block, .block_count = 1, .error_type = XR_XIR_NEVER};
+    XrXirConstraint constraint = {0};
+    XrXirGeneric generic = {.constraints = &constraint, .parameter_count = 1};
+    XrXirModule module = {.types = &types, .functions = &function, .function_count = 1, .generics = &generic};
+    EffectCheckedRoots *roots = NULL;
+    CHECK(effect_checked_roots_collect(&effect_context, &module, NULL, NULL, NULL, &roots, false) == XR_XIR_OK);
+    EffectCheckBuild build = {.memory = &effect_context, .module = &module, .roots = roots,
+        .scratch = {.resources = effect_context.resources}};
+    CHECK(effect_check_type_argument(&build, XR_XIR_CONSTRUCTED_TYPE_BASE + 3));
+    uint32_t instance = effect_check_instance(&build, 0, 0, 1);
+    CHECK(instance == 1 && build.status == XR_XIR_OK);
+    for (uint32_t p = 0; p < 3; ++p) CHECK(effect_check_argument(&build, roots->function[0].first + p));
+    CHECK(effect_check_call_record(&build, roots->function[0].root,
+        (EffectCheckCall){.target = roots->function[instance].root, .count = 3, .protocol = 2}));
+    XirExecutionSite site = {0};
+    CHECK(xir_execution_site(roots, XIR_EXECUTION_CALL, 0, &site) == XR_XIR_OK);
+    XirExecutionParameter formal = {0};
+    CHECK(xir_execution_parameter(roots, &site, 0, &formal) == XR_XIR_OK &&
+        formal.type == XR_XIR_CONSTRUCTED_TYPE_BASE + 3 && formal.escaping && !formal.cell);
+    CHECK(xir_execution_parameter(roots, &site, 1, &formal) == XR_XIR_OK &&
+        (uint32_t)formal.type >= (uint32_t)XR_XIR_CONSTRUCTED_TYPE_BASE + types.count && !formal.escaping);
+    const XrXirTypes *closed = xir_execution_types(roots);
+    const XrXirTypeNode *signature = xr_xir_callable_signature(closed, formal.type);
+    CHECK(signature && signature->parameter_count == 1);
+    const XrXirTypeNode *array = xr_xir_type_node(closed, signature->parameters[0].type);
+    CHECK(array && array->kind == XR_XIR_TYPE_ARRAY && array->element == XR_XIR_CONSTRUCTED_TYPE_BASE + 3);
+    CHECK(xir_execution_parameter(roots, &site, 2, &formal) == XR_XIR_OK && formal.cell &&
+        xr_xir_cell_element(closed, formal.type) == XR_XIR_CONSTRUCTED_TYPE_BASE + 3);
+    CHECK(effect_check_suspend_bits(roots, roots->function[instance].root)[0] == 8);
+    CHECK(effect_check_suspend_bits(roots, roots->function[instance].contents + 2)[0] == 1);
+    xr_compile_resources_free(build.instance_index);
+    xir_read_scratch_free(&build.scratch);
+    effect_checked_roots_free(roots);
+    effect_mark_check(baseline);
+}
+
 static void control_summary_kernel(void) {
     control_summary_detached();
     suspension_parameter_equations();
@@ -715,6 +768,7 @@ static void control_summary_kernel(void) {
     restriction_owner_relocation();
     c_callable_parameter_equations();
     point_request_failure();
+    execution_instance_parameters();
     const uint32_t count = 8193;
     XrXirFunction *functions = xr_calloc(count, sizeof(*functions));
     XrXirInstruction (*rows)[2] = xr_calloc(count, sizeof(*rows));

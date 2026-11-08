@@ -32,7 +32,7 @@ typedef struct EffectCheckNode {
     uint32_t component, reason[2];
     XrXirType type;
     uint32_t block, mode, cleanup_call, cleanup_parent;
-    bool cell, escaping, weaken, callable_opaque, callable_input;
+    bool cell, escaping, weaken, erased, callable_opaque, callable_input;
     uint32_t suspend_reason[2], suspend_call[2], suspend_parameter[2], suspend_instruction[2], suspend_distance[2], suspend_order[2];
     uint8_t cell_use, origin, bound, closed, suspend_bound;
     bool task_creation, restricted;
@@ -711,6 +711,7 @@ static bool effect_check_instruction(EffectCheckBuild *build, uint32_t f, uint32
     build->roots->node[value].type = op->type;
     build->roots->node[value].cell = xr_xir_type_is_cell(build->module->types, op->type);
     build->roots->node[value].weaken = op->op == XR_XIR_FUNCTION_WEAKEN;
+    build->roots->node[value].erased = op->op == XR_XIR_FUNCTION_WEAKEN;
     effect_check_cell_seed(build, value, op);
     XrXirFunctionEffects control = {0};
     if (effect_seed_opcode(op->op, &control) == EFFECT_SEED_INVALID) {
@@ -1262,7 +1263,18 @@ static uint32_t effect_check_instance(EffectCheckBuild *build,
     if (!roots->function[index].bits || !roots->function[index].suspend_bits) return UINT32_MAX;
     for (uint32_t n = 0; n < expressions; ++n) {
         EffectCheckNode node = roots->node[source.first + n];
+        bool callable = xr_xir_type_is_callable(effect_check_types_read(build), node.type);
+        if (n < source.values && !effect_check_substitute(build, index, node.type, &node.type)) return UINT32_MAX;
         node.function = index;
+        node.cell = xr_xir_type_is_cell(effect_check_types_read(build), node.type);
+        if (n < source.parameters) node.callable_input = xr_xir_type_is_callable(effect_check_types_read(build), node.type);
+        bool stored_callable = n < source.values && !callable &&
+            xr_xir_type_is_callable(effect_check_types_read(build), node.type);
+        if (stored_callable) {
+            node.erased = true;
+            node.bound = (uint8_t)effect_check_type_mask(effect_check_types_read(build), node.type);
+            if (n < source.parameters) node.escaping = true;
+        }
         node.dependencies = node.consumers = node.aliases = node.calls = node.last_call = node.bindings = node.elements = UINT32_MAX;
         for (uint32_t bit = 0; bit < 2; ++bit)
             if (node.reason[bit] != UINT32_MAX) node.reason[bit] = row.first + n;
@@ -1271,6 +1283,29 @@ static uint32_t effect_check_instance(EffectCheckBuild *build,
         roots->node[row.first + n] = node;
         memcpy(roots->terminals + (size_t)(row.first + n) * 2,
             roots->terminals + (size_t)(source.first + n) * 2, 2 * sizeof(*roots->terminals));
+        if (stored_callable) {
+            const XrXirTypeNode *signature = xr_xir_callable_signature(effect_check_types_read(build), node.type);
+            uint8_t bound = signature->flags & XR_XIR_CALLABLE_NO_SUSPEND ? 0 : 1;
+            roots->node[row.first + n].suspend_bound = bound;
+            effect_check_suspend_seed(roots, row.first + n, bound, UINT32_MAX);
+            effect_check_seed(roots, row.first + n, effect_check_type_mask(effect_check_types_read(build), node.type),
+                (XrXirRootEffectWitness){XR_XIR_ROOT_CAUSE_INDIRECT, UINT32_MAX, UINT32_MAX, n, 0});
+        }
+    }
+    for (uint32_t p = 0; p < row.parameters; ++p) {
+        XrXirType type = roots->node[row.first + p].type;
+        if (!xr_xir_type_is_cell(effect_check_types_read(build), type)) continue;
+        XrXirType element = xr_xir_cell_element(effect_check_types_read(build), type);
+        const XrXirTypeNode *signature = xr_xir_callable_signature(effect_check_types_read(build), element);
+        XrXirType original = roots->node[source.first + p].type;
+        if (!signature || (xr_xir_type_is_cell(effect_check_types_read(build), original) &&
+            xr_xir_type_is_callable(effect_check_types_read(build),
+                xr_xir_cell_element(effect_check_types_read(build), original)))) continue;
+        uint8_t bound = signature->flags & XR_XIR_CALLABLE_NO_SUSPEND ? 0 : 1;
+        roots->node[row.contents + p].suspend_bound = bound;
+        effect_check_suspend_seed(roots, row.contents + p, bound, UINT32_MAX);
+        effect_check_seed(roots, row.contents + p, effect_check_type_mask(effect_check_types_read(build), element),
+            (XrXirRootEffectWitness){XR_XIR_ROOT_CAUSE_INDIRECT, UINT32_MAX, UINT32_MAX, p, 0});
     }
     roots->nodes += expressions;
     build->instance_index[at] = index + 1;

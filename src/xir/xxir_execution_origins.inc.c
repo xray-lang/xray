@@ -222,7 +222,7 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
                 } else unresolved |= XIR_EXECUTION_REMAINDER_PARAMETER;
                 continue;
             }
-            if (effects && node->weaken && !node->restricted && !function.default_callback) {
+            if (effects && node->erased && !node->restricted && !function.default_callback) {
                 unresolved |= XIR_EXECUTION_REMAINDER_OPAQUE;
                 continue;
             }
