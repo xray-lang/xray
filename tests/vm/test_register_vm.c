@@ -296,6 +296,21 @@ static void test_f64_family(void) {
             XrRbcFunction f={.code=code,.code_count=2,.register_count=3,.parameter_count=2};
             CHECK(run_function(f,args,2)==((float_relation_mask(a,b)>>p)&1u));
             CHECK(RUNTIME_FLOAT_ENV());
+            uint32_t branch[8];
+            emit(branch,0,comparisons[p],destination,0,1);
+            CHECK(xr_rbc_encode(&branch[1],(XrRbcOperands){XR_RBC_EQI,destination,0,0,0}));
+            CHECK(xr_rbc_jump(&branch[2],2,5,8));
+            CHECK(xr_rbc_encode(&branch[3],(XrRbcOperands){XR_RBC_LOADI,3,0,0,17}));
+            CHECK(xr_rbc_jump(&branch[4],4,6,8));
+            CHECK(xr_rbc_encode(&branch[5],(XrRbcOperands){XR_RBC_LOADI,3,0,0,23}));
+            emit(branch,6,XR_RBC_ADD,3,3,destination);
+            emit(branch,7,XR_RBC_RET,3,0,0);
+            f=(XrRbcFunction){.code=branch,.code_count=8,.register_count=4,.parameter_count=2};
+            CHECK(run_function(f,args,2)==(((float_relation_mask(a,b)>>p)&1u)?18u:23u));
+            CHECK(RUNTIME_FLOAT_ENV());
+            CHECK(xr_rbc_encode(&branch[1],(XrRbcOperands){XR_RBC_EQI,destination,0,0,1}));
+            CHECK(run_function(f,args,2)==(((float_relation_mask(a,b)>>p)&1u)?24u:17u));
+            CHECK(RUNTIME_FLOAT_ENV());
         }
     }
 #undef RUNTIME_FLOAT_ENV
