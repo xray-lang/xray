@@ -55,6 +55,14 @@ def main() -> None:
             checked = run(name + "-check", [binary, "check", effects / (name + ".xr")], 0)
             assert not checked.stdout and not checked.stderr, name
 
+        source = effects / "generic_stringable.xr"
+        vm = run("generic-stringable-vm", [binary, "run", source], 0)
+        executable = work / ("generic-stringable.exe" if os.name == "nt" else "generic-stringable")
+        run("generic-stringable-build", [binary, "build", source, "-o", executable], 0)
+        native = run("generic-stringable-native", [executable], 0)
+        assert vm.stdout == b"42\nhello\n" and not vm.stderr
+        assert (native.stdout, native.stderr) == (vm.stdout, vm.stderr)
+
         checked = run("root-rest-captures-check",
                       [binary, "check", root / "tests/unit/xir/rest_values/values.xr"], 0)
         assert not checked.stdout and not checked.stderr, "root-rest-captures"
@@ -102,8 +110,7 @@ def main() -> None:
     expected = {"hello": b"42\n", "call": b"42\n", "unicode": "你好\n".encode(),
                 "f64": b"3.75\n", "instance_growth": b"1\n" * 8,
                 "module_scalar_constants": b"1\n"}
-    expected["generic_stringable"] = b"42\nhello\n"
-    generated = {"generic_stringable": fixtures / "effects" / "generic_stringable.xr"}
+    generated = {}
     scalar_types = ("i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64")
     capacity_cases = (
         ("many_generic_instances",
