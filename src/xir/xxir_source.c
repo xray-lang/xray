@@ -2956,6 +2956,7 @@ static bool capture_scan(AstNode *node, void *pointer) {
 static bool source_capture_parameters(SourceContext *ctx, AstNode *node, const SourceCaptureScan *scan) {
     SourceFunction *body = &ctx->bodies[ctx->function];
     body->root_capture_count = scan->count;
+    ctx->identities[ctx->function].capture_count = scan->count;
     body->root_captures = scan->count ? source_alloc(ctx,scan->count,sizeof(*body->root_captures)) : NULL;
     if (scan->count && !body->root_captures) return false;
     for (SourceCapture *p = scan->captures; p; p = p->next) {
@@ -3086,6 +3087,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
         scan.count + (uint32_t) decl->param_count, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0,
         node->type == AST_FUNCTION_DECL ? XR_XIR_NEVER : XR_XIR_ERROR,0,NULL,0,NULL};
     ctx->identities[index].module = ctx->module;
+    ctx->identities[index].capture_owner = outer + 1;
     ctx->identities[index].nominal_owner = ctx->identities[outer].nominal_owner;
     ctx->identities[index].method_kind = ctx->identities[index].nominal_owner ? XR_XIR_MEMBER_HELPER : XR_XIR_NON_MEMBER;
     ctx->identities[index].promises = no_suspend ? XR_XIR_FUNCTION_NO_SUSPEND : 0;

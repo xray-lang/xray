@@ -82,7 +82,7 @@ static void cell_zero_verified_boundary(XrCompileResourceLimits caps) {
     f.initial[1].immediate=5;
     CHECK(xir_fixture_verify(&context,&f.module,NULL)==XR_XIR_BAD_STRUCTURE);
     cell_zero_reference_fixture(&f);
-    XrXirCallableParameter parameter={(XrXirType)256,XR_PARAM_REF};
+    XrXirCallableParameter parameter={(XrXirType)256,XR_PARAM_REF,0};
     f.nodes[1].parameters=&parameter;f.nodes[1].parameter_count=1;
     f.initial[1].args[1]=0;
     CHECK(xir_fixture_verify(&context,&f.module,NULL)==XR_XIR_BAD_TYPE);
@@ -105,7 +105,7 @@ static void cell_zero_mixed_reference_roles(XrCompileResourceLimits caps) {
         uint64_t baseline=value_compile_stats(&context).live_bytes;
         CellInterleavedFixture f;cell_interleaved_fixture(&f);
         XrXirTypeNode nodes[3];memcpy(nodes,f.nodes,sizeof(f.nodes));
-        XrXirCallableParameter parameter={f.cell,mode==2?XR_PARAM_READ:XR_PARAM_REF};
+        XrXirCallableParameter parameter={f.cell,mode==2?XR_PARAM_READ:XR_PARAM_REF,0};
         nodes[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.parameters=&parameter,
             .parameter_count=1,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
         f.types.nodes=nodes;f.types.count=3;

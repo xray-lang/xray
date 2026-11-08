@@ -18,7 +18,7 @@
 #include "xir_error_fixture.h"
 static XrXirArtifact *capture_checked(const XrXirCompileContext *context, bool throwing) {
     XrXirType fn = (XrXirType) 256, t = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
-    XrXirCallableParameter input = {XR_XIR_STRING,0};
+    XrXirCallableParameter input = {XR_XIR_STRING,0,0};
     XrXirTypeNode signature = {XR_XIR_TYPE_CALLABLE, throwing?XR_XIR_ERROR:XR_XIR_NEVER,
         &input,1,XR_XIR_STRING,XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, {0}};
     ErrorFixture error; error_fixture_init(&error,false);
@@ -92,9 +92,9 @@ static XrXirArtifact *capture_checked(const XrXirCompileContext *context, bool t
         {.method_kind=XR_XIR_NON_MEMBER},
         {.exported=1,.method_kind=XR_XIR_NON_MEMBER},
         {.exported=1,.method_kind=XR_XIR_NON_MEMBER},
-        {.method_kind=XR_XIR_NON_MEMBER},
+        {.method_kind=XR_XIR_NON_MEMBER,.capture_owner=3,.capture_count=1},
         {.exported=1,.method_kind=XR_XIR_NON_MEMBER},
-        {.method_kind=XR_XIR_NON_MEMBER}};
+        {.method_kind=XR_XIR_NON_MEMBER,.capture_owner=3,.capture_count=1}};
     XrXirLiteral literal = {"captured",8};
     XrXirDeclarations declarations = {&source,1,identities,NULL,0,&literal,1,0,1, NULL};
     XrXirModule built = {XR_XIR_BUILT,functions,6,&declarations,generics,&types, NULL, XR_XIR_PROGRAM, NULL};

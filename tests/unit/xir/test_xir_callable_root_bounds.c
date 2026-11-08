@@ -63,8 +63,8 @@ static void bound_matrix(void) {
 }
 static void bound_nested(void) {
     XrXirCompileContext context=bound_owner(bound_caps());
-    XrXirCallableParameter parameters[]={{XR_XIR_CONSTRUCTED_TYPE_BASE,0},
-        {(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1),0}};
+    XrXirCallableParameter parameters[]={{XR_XIR_CONSTRUCTED_TYPE_BASE,0,0},
+        {(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1),0,0}};
     XrXirTypeNode nodes[]={
         {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,.flags=2},
         {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,.flags=4},

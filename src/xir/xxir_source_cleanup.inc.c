@@ -51,6 +51,7 @@ static bool source_defer(SourceContext *ctx, AstNode *node) {
     ctx->identities[index].test_timeout_seconds = 0;
     ctx->identities[index].method_kind = ctx->identities[index].nominal_owner ? XR_XIR_MEMBER_HELPER : XR_XIR_NON_MEMBER;
     ctx->identities[index].exported = 0; ctx->identities[index].cleanup_owner = outer + 1;
+    ctx->identities[index].capture_owner = outer + 1;
     SourceName *locals = ctx->locals, *scope = ctx->scope;
     SourceLoop *loop = ctx->loop; bool returned = ctx->returned;
     SourceFact *facts = ctx->facts;SourceEpoch *epochs=ctx->epochs; uint32_t alternatives = ctx->flow_alternatives;
@@ -69,7 +70,7 @@ static bool source_defer(SourceContext *ctx, AstNode *node) {
     for (SourceCapture *p = scan.captures; p; p = p->next) {
         if (p->source->kind == SOURCE_UNIT_LOCAL) continue;
         XrXirType type = p->source->type;
-        if (p->source->mutable && !source_cell_type(ctx, type, &type)) return false;
+        if (p->source->mutable && !p->source->direct_borrowed && !source_cell_type(ctx, type, &type)) return false;
         if (p->source->construction) {
             uint32_t fields = xr_xir_type_node(&ctx->types, p->source->type)->nominal.field_count;
             for (uint32_t f = 0; f < fields; ++f)

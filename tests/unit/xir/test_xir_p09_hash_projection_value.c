@@ -10,7 +10,7 @@
 #include "test_xir_compile_domain.c"
 #undef XR_COMPILE_DOMAIN_ENTRY
 static XrXirTypeArena *projection_value_arena(void) {
-    XrXirCallableParameter fields[] = {{XR_XIR_I64, 0}, {XR_XIR_STRING, 0}};
+    XrXirCallableParameter fields[] = {{XR_XIR_I64, 0,0}, {XR_XIR_STRING, 0,0}};
     XrXirTypeNode nodes[] = {
         {.kind = XR_XIR_TYPE_MAP, .element = XR_XIR_I64, .result = XR_XIR_STRING},
         {.kind = XR_XIR_TYPE_SET, .element = XR_XIR_STRING},

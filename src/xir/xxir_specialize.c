@@ -31,7 +31,7 @@ typedef struct SpecInstance {
     const XrXirType *arguments;
     uint32_t count;
     XrXirType *node_cache;
-    uint32_t owner;
+    uint32_t owner, capture_owner;
 } SpecInstance;
 typedef struct SpecIndexEntry { uint32_t ordinal, hash; } SpecIndexEntry;
 typedef struct SpecTypeFrame { uint32_t index, next; XrXirTypeNode node; } SpecTypeFrame;
@@ -62,7 +62,7 @@ typedef struct SpecContext {
     SpecIndexEntry *instance_index;
     uint32_t index_capacity;
     uint32_t *ordinary;
-    uint32_t count, capacity, cleanup_owner;
+    uint32_t count, capacity, cleanup_owner, lexical_context;
     XrXirTypes types;
     uint32_t node_capacity;
     SpecInstance closed;
@@ -287,7 +287,7 @@ static XrXirType spec_type(SpecContext *c, const SpecInstance *instance, XrXirTy
 /* Hash only selects candidates in this request's destination type pool.
  * Explicit scalar fields exclude padding; ordered vectors retain every element. */
 static bool spec_instance_hash(SpecContext *c, const SpecInstance *key, uint32_t *output) {
-    uint32_t header[] = {key->declaration, key->count, key->owner};
+    uint32_t header[] = {key->declaration, key->count, key->owner, key->capture_owner};
     if (!spec_progress(c)) return false;
     uint32_t hash = xr_hash_bytes(header, sizeof(header));
     if (key->count) {
@@ -303,7 +303,7 @@ static bool spec_instance_hash(SpecContext *c, const SpecInstance *key, uint32_t
 static bool spec_instance_equal(SpecContext *c, const SpecInstance *a, const SpecInstance *b) {
     if (!spec_progress(c)) return false;
     if (a->declaration != b->declaration || a->count != b->count ||
-        a->owner != b->owner) return false;
+        a->owner != b->owner || a->capture_owner != b->capture_owner) return false;
     for (uint32_t i = 0; i < a->count; ++i) {
         if (!spec_progress(c)) return false;
         if (a->arguments[i] != b->arguments[i]) return false;
@@ -377,9 +377,24 @@ static bool spec_name(SpecContext *c, XrXirFunction *function, const SpecInstanc
     }
     function->name = name; function->name_length = (uint32_t) at; return true;
 }
+static uint32_t spec_capture_owner(SpecContext *c, uint32_t declaration) {
+    if (!c->source->declarations) return UINT32_MAX;
+    uint32_t owner = c->source->declarations->functions[declaration].capture_owner;
+    if (!owner) return UINT32_MAX;
+    uint32_t current = c->lexical_context;
+    while (current < c->count && spec_progress(c)) {
+        if (c->instances[current].declaration == owner - 1) return current;
+        uint32_t parent = c->identities[current].capture_owner;
+        current = parent ? parent - 1 : UINT32_MAX;
+    }
+    if (c->diagnostic.status == XR_XIR_OK) c->diagnostic.status = XR_XIR_BAD_STRUCTURE;
+    return UINT32_MAX;
+}
 static uint32_t spec_intern(SpecContext *c, uint32_t declaration, const XrXirType *types,
     uint32_t count) {
-    SpecInstance key = {declaration, types, count, NULL, c->cleanup_owner};
+    uint32_t capture_owner = spec_capture_owner(c, declaration);
+    if (c->diagnostic.status != XR_XIR_OK) return UINT32_MAX;
+    SpecInstance key = {declaration, types, count, NULL, c->cleanup_owner, capture_owner};
     uint32_t hash = 0;
     if (!spec_instance_hash(c, &key, &hash)) return UINT32_MAX;
     uint32_t existing = spec_index_find(c, &key, hash);
@@ -400,7 +415,7 @@ static uint32_t spec_intern(SpecContext *c, uint32_t declaration, const XrXirTyp
     if (count && !spec_copy(c,owned_types,types,(size_t)count*sizeof(*types))) return UINT32_MAX;
     XrXirType *type_cache = c->source->types ? spec_alloc(c, c->source->types->count, sizeof(*type_cache)) : NULL;
     if (c->source->types && c->source->types->count && !type_cache) return UINT32_MAX;
-    c->instances[index] = (SpecInstance){declaration, owned_types, count, type_cache, c->cleanup_owner};
+    c->instances[index] = (SpecInstance){declaration, owned_types, count, type_cache, c->cleanup_owner, capture_owner};
     XrXirFunction *to = &c->functions[index]; *to = *source;
     XrXirType *parameters = spec_alloc(c, source->parameter_count, sizeof(*parameters));
     uint32_t *consumes=spec_alloc(c,source->consume_parameter_count,sizeof(*consumes));
@@ -430,15 +445,12 @@ static uint32_t spec_intern(SpecContext *c, uint32_t declaration, const XrXirTyp
             ops[i].immediate = spec_type(c, instance, (XrXirType) ops[i].immediate);
     }
     if (c->diagnostic.status != XR_XIR_OK) return UINT32_MAX;
-    if (c->source->declarations)
-        c->identities[index]=c->source->declarations->functions[declaration];
-    if (c->source->declarations && c->source->declarations->functions[declaration].cleanup_owner)
-        c->identities[index].cleanup_owner=c->cleanup_owner+1;
     if (!spec_name(c, to, instance)) return UINT32_MAX;
     if (c->source->declarations) {
         if (!spec_progress(c)) return UINT32_MAX;
         c->identities[index] = c->source->declarations->functions[declaration];
         if (c->identities[index].cleanup_owner) c->identities[index].cleanup_owner=c->cleanup_owner+1;
+        if (c->identities[index].capture_owner) c->identities[index].capture_owner=capture_owner+1;
         if (instance->count) c->identities[index].exported=0;
     }
     if (!spec_index_place(c, c->instance_index, c->index_capacity, (SpecIndexEntry){index + 1, hash})) return UINT32_MAX;
@@ -537,8 +549,9 @@ static bool spec_call(SpecContext *c, uint32_t index, uint32_t i) {
     if (c->diagnostic.status!=XR_XIR_OK) return false;
     if (constant) { declaration=constant->provider;types=NULL;count=0; }
     c->cleanup_owner=op->op==XR_XIR_CLEANUP_REGISTER ? index : UINT32_MAX;
+    c->lexical_context=index;
     uint32_t target = spec_intern(c, declaration, types, count);
-    c->cleanup_owner=UINT32_MAX;
+    c->cleanup_owner=UINT32_MAX;c->lexical_context=UINT32_MAX;
     if (target == UINT32_MAX) return false;
     if (evaluation_root) {
         if (!spec_progress(c)) return false;
@@ -653,7 +666,7 @@ static XrXirStatus spec_nominal_fields(SpecContext *c) {
         XrXirType *cache = spec_alloc(c, source->count, sizeof(*cache));
         XrXirType *fields = spec_alloc(c, d->field_count, sizeof(*fields));
         if (c->diagnostic.status != XR_XIR_OK) return c->diagnostic.status;
-        SpecInstance instance = {node.nominal.declaration, node.nominal.arguments, node.nominal.argument_count, cache,UINT32_MAX};
+        SpecInstance instance = {node.nominal.declaration, node.nominal.arguments, node.nominal.argument_count, cache,UINT32_MAX,UINT32_MAX};
         for (uint32_t f = 0; f < d->field_count; ++f) fields[f] = spec_type(c, &instance, d->fields[f].type);
         if (c->diagnostic.status != XR_XIR_OK) return c->diagnostic.status;
         XrXirTypeNode *owned = (XrXirTypeNode *) c->types.nodes;
@@ -698,7 +711,7 @@ static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
     SpecContext c = {0};
     XrXirArtifact *built = NULL;
     c.diagnostic = (XrXirDiagnostic) {XR_XIR_OK, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
-    c.source = xr_xir_compile_artifact_module(checked);c.source_artifact=checked;c.cleanup_owner=UINT32_MAX;
+    c.source = xr_xir_compile_artifact_module(checked);c.source_artifact=checked;c.cleanup_owner=UINT32_MAX;c.lexical_context=UINT32_MAX;
     c.remaining = *budget;
     c.pending=pending;c.evaluation=evaluation;c.control=control;
     XrXirCompileContext limits = c.remaining;
@@ -761,7 +774,8 @@ static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
         c.ordinary[f] = UINT32_MAX;
         if (c.source->declarations && c.source->declarations->functions[f].cleanup_owner) c.has_cleanup = true;
         bool cleanup=c.source->declarations && c.source->declarations->functions[f].cleanup_owner;
-        if (!cleanup && (!c.source->generics || !c.source->generics[f].parameter_count)) {
+        bool captured=c.source->declarations && c.source->declarations->functions[f].capture_owner;
+        if (!cleanup && !captured && (!c.source->generics || !c.source->generics[f].parameter_count)) {
             c.diagnostic.function = f;
             c.ordinary[f] = spec_intern(&c, f, NULL, 0);
             c.cleanup_owner=UINT32_MAX;

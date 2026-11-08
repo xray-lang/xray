@@ -86,7 +86,7 @@ static void fixed_sendable_controls(const XrXirCompileContext *context) {
         CHECK(xr_xir_compile_type_markers_prove(context,&proof,type,XR_XIR_CONSTRAINT_SENDABLE)==XR_XIR_OK);
         CHECK(fixed_held(context)==held);
     }
-    XrXirCallableParameter parameter={XR_XIR_U8,0};XrXirType nominal_argument=XR_XIR_U8;
+    XrXirCallableParameter parameter={XR_XIR_U8,0,0};XrXirType nominal_argument=XR_XIR_U8;
     for(unsigned attack=0;attack<10;++attack) {
         node=original;
         if(attack==0)node.parameter_count=0;

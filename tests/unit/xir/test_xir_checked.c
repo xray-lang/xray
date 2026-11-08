@@ -13,6 +13,7 @@
 #include "xir/xxir_checked.h"
 #include "xir/xxir_internal.h"
 #include "xir/xxir_intrinsic.h"
+#include "hir/xhir_escape.h"
 #include "base/xsha256.h"
 #include "base/xmalloc.h"
 #include <stdio.h>
@@ -119,6 +120,7 @@ static CheckedPacketFunction packet_function(const XrXirCheckedPacket *packet,ui
         at=packet_span(packet,at+4,packet32(packet,at),1);
         at=packet_span(packet,at+4,packet32(packet,at),4);
         at=packet_span(packet,at+4,packet32(packet,at),4);
+        at=packet_span(packet,at+4,packet32(packet,at),4);
         row.result=at;at=packet_span(packet,at,2,4);
         row.block_count=packet32(packet,at);row.blocks=at+4;
         at=packet_span(packet,row.blocks,row.block_count,16);
@@ -138,7 +140,7 @@ static size_t packet_slots(const XrXirCheckedPacket *packet) {
         at=packet_span(packet,at+4,packet32(packet,at),4);
         at=packet_span(packet,at,3,4);
     }
-    return packet_span(packet,at,functions,40);
+    return packet_span(packet,at,functions,48);
 }
 static size_t packet_find_fields(const XrXirCheckedPacket *packet,const uint32_t *fields,size_t count) {
     uint8_t expected[256];CHECK(count && count<=sizeof(expected)/4);
@@ -167,7 +169,7 @@ static void declaration_attacks(XrXirCheckedPacket *packet) {
     size_t identities = at, slot_data = packet_slots(packet);
     size_t literal_data = slot_data + (size_t) slots * 12;
     const size_t offsets[] = {declarations, declarations + 12, declarations + 16,
-        dependencies + 4, initializer, identities + 4 * 40 + 4, slot_data, literal_data + 4, identities + 4 * 40 + 8};
+        dependencies + 4, initializer, identities + 4 * 48 + 4, slot_data, literal_data + 4, identities + 4 * 48 + 8};
     const uint32_t values[] = {UINT32_MAX, 1, 0, 1, 3, 0, 1, UINT32_MAX, 1};
     for (unsigned i = 0; i < sizeof(offsets) / sizeof(offsets[0]); ++i) {
         CHECK(offsets[i] + 4 <= packet->length);
@@ -208,13 +210,13 @@ static void byte_order(void) {
     xr_xir_compile_artifact_free(checked);checked=NULL;
     CHECK(packet32(&packet,64)==XR_XIR_PROGRAM && packet32(&packet,68)==1 && packet32(&packet,72)==0);
     /* One literal function row, independent of header identity and producer
-     * buffers: no parameters or consumes, Never, one block and two operations. */
-    uint8_t original[129]={0};
-    put32(original,1);original[4]='n';put32(original+13,XR_XIR_I64);
-    put32(original+17,XR_XIR_NEVER);put32(original+21,1);put32(original+29,2);
-    put32(original+41,2);put32(original+45,XR_XIR_CONST_INT);put32(original+49,XR_XIR_I64);
-    original[76]=128;put32(original+85,XR_XIR_RETURN);
-    const size_t row=76,instruction=row+45;
+     * buffers: no parameter or qualifier ordinals, Never and two operations. */
+    uint8_t original[133]={0};
+    put32(original,1);original[4]='n';put32(original+17,XR_XIR_I64);
+    put32(original+21,XR_XIR_NEVER);put32(original+25,1);put32(original+33,2);
+    put32(original+45,2);put32(original+49,XR_XIR_CONST_INT);put32(original+53,XR_XIR_I64);
+    original[80]=128;put32(original+89,XR_XIR_RETURN);
+    const size_t row=76,instruction=row+49;
     CHECK(packet.length>=row+sizeof(original) && !memcmp(packet.bytes+row,original,sizeof(original)));
     for(unsigned extra=32;extra<=36;extra+=4) {
         put32(packet.bytes+instruction+extra,1);digest_packet(&packet);rejected(packet.bytes,packet.length);
@@ -223,10 +225,10 @@ static void byte_order(void) {
     put32(packet.bytes+instruction+40,XR_XIR_THROW);digest_packet(&packet);rejected(packet.bytes,packet.length);
     memcpy(packet.bytes+row,original,sizeof(original));digest_packet(&packet);
     for(uint32_t handler=1;handler<=2;++handler) {
-        put32(packet.bytes+row+33,handler);digest_packet(&packet);rejected(packet.bytes,packet.length);
+        put32(packet.bytes+row+37,handler);digest_packet(&packet);rejected(packet.bytes,packet.length);
         memcpy(packet.bytes+row,original,sizeof(original));digest_packet(&packet);
     }
-    put32(packet.bytes+row+13,XR_XIR_U8);put32(packet.bytes+instruction+4,XR_XIR_U8);
+    put32(packet.bytes+row+17,XR_XIR_U8);put32(packet.bytes+instruction+4,XR_XIR_U8);
     memset(packet.bytes+instruction+24,0,8);put32(packet.bytes+instruction+24,256);
     digest_packet(&packet);rejected(packet.bytes,packet.length);
     put32(packet.bytes+instruction+24,255);digest_packet(&packet);
@@ -281,7 +283,7 @@ static void callable_contracts(void) {
         if (attack == 8) types.count = 0;
         if (attack == 9) signatures[2].parameters = &parameter;
         CHECK(xir_fixture_verify(suite_context, &module, NULL) != XR_XIR_OK);
-        parameter = (XrXirCallableParameter) {XR_XIR_I64, 0};
+        parameter = (XrXirCallableParameter) {XR_XIR_I64, 0,0};
         signatures[0].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; signatures[2] = saved; types.count = 3;
     }
     CHECK(xir_fixture_verify(suite_context, &module, NULL) == XR_XIR_OK);
@@ -383,7 +385,7 @@ static void generic_callable_contracts(void) {
     functions[0].parameters = saved;
     XrXirTypeNode signatures[2]; memcpy(signatures,module.types->nodes,sizeof(signatures));
     XrXirTypes table = {signatures,2, NULL, NULL}; module.types = &table;
-    XrXirCallableParameter bad = {(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+1),0};
+    XrXirCallableParameter bad = {(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+1),0,0};
     signatures[0].parameters = &bad; signatures[0].parameter_span = 2;
     CHECK(xir_fixture_verify(suite_context, &module, NULL) == XR_XIR_BAD_TYPE);
     CHECK(xr_xir_compile_specialize(decoded, &closed, NULL, NULL) == XR_XIR_OK);
@@ -446,6 +448,139 @@ static void capture_packet_rejection(void) {
     CHECK(xr_xir_compile_checked_read(suite_context,packet.bytes,packet.length,&decoded,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);decoded=NULL;
     xr_xir_compile_checked_packet_free(&packet);
+}
+/* A partial binding cannot alter the callee's declaration contract. The same
+ * body may use an environment parameter only with explicit lexical ownership. */
+static void nonescape_bound_prefix(void) {
+    XrXirType callable = XR_XIR_CONSTRUCTED_TYPE_BASE;
+    XrXirType thunk = XR_XIR_CONSTRUCTED_TYPE_BASE + 1;
+    XrXirTypeNode nodes[] = {
+        {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=callable,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED}
+    };
+    XrXirTypes types = {.nodes=nodes,.count=2};
+    XrXirInstruction root[] = {
+        {.op=XR_XIR_FUNCTION_REF,.type=callable,.immediate=2},
+        {.op=XR_XIR_FUNCTION_REF,.type=thunk,.args={0,1},.immediate=1},
+        {.op=XR_XIR_RETURN,.type=XR_XIR_UNIT}
+    };
+    XrXirInstruction leak[] = {{.op=XR_XIR_RETURN,.type=XR_XIR_UNIT,.args={0}}};
+    XrXirInstruction leaf[] = {{.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=7},
+        {.op=XR_XIR_RETURN,.type=XR_XIR_UNIT,.args={0}}};
+    XrXirBlock blocks[] = {{0,3,0,0},{0,1,0,0},{0,2,0,0}};
+    uint32_t operand=0, escaping=0;
+    XrXirFunction functions[] = {
+        {.name="root",.name_length=4,.result=XR_XIR_UNIT,.blocks=&blocks[0],.block_count=1,
+            .instructions=root,.instruction_count=3,.operands=&operand,.operand_count=1,.error_type=XR_XIR_NEVER},
+        {.name="leak",.name_length=4,.parameters=&callable,.parameter_count=1,.result=callable,
+            .blocks=&blocks[1],.block_count=1,.instructions=leak,.instruction_count=1,.error_type=XR_XIR_NEVER,
+            .escaping_parameter_count=1,.escaping_parameters=&escaping},
+        {.name="leaf",.name_length=4,.result=XR_XIR_I64,.blocks=&blocks[2],.block_count=1,
+            .instructions=leaf,.instruction_count=2,.error_type=XR_XIR_NEVER}
+    };
+    XrXirSourceModule source={.name="root",.name_length=4,.initializer=0};
+    XrXirFunctionIdentity identities[3]={{0}};
+    XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities};
+    XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=3,
+        .declarations=&declarations,.types=&types,.linkage_kind=XR_XIR_PROGRAM};
+    XrXirArtifact *checked=NULL,*decoded=NULL,*closed=NULL;
+    XrXirDiagnostic diagnostic={0};
+    CHECK(xir_fixture_check(suite_context,&built,&checked,&diagnostic)==XR_XIR_OK && checked);
+    XrXirCheckedPacket packet={0};
+    CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(suite_context,packet.bytes,packet.length,&decoded,NULL)==XR_XIR_OK);
+    CHECK(decoded->module.functions[1].escaping_parameter_count==1 &&
+        decoded->module.functions[1].escaping_parameters[0]==0);
+    xr_xir_compile_artifact_free(decoded);decoded=NULL;
+    xr_xir_compile_checked_packet_free(&packet);
+    xr_xir_compile_artifact_free(checked);checked=NULL;
+
+    functions[1].escaping_parameter_count=0;functions[1].escaping_parameters=NULL;
+    CHECK(xir_fixture_check(suite_context,&built,&checked,&diagnostic)==XR_XIR_BAD_TYPE && !checked);
+    CHECK(diagnostic.function==1 && diagnostic.instruction==0);
+    identities[1].capture_owner=1;identities[1].capture_count=1;
+    CHECK(xir_fixture_check(suite_context,&built,&checked,&diagnostic)==XR_XIR_OK && checked);
+    CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL,NULL)==XR_XIR_OK && closed);
+    bool found=false;
+    for(uint32_t f=0;f<closed->module.function_count;++f) {
+        if(!closed->module.declarations->functions[f].capture_owner)continue;
+        CHECK(closed->module.declarations->functions[f].capture_owner<=f &&
+            closed->module.declarations->functions[f].capture_count==1);found=true;
+    }
+    CHECK(found);xr_xir_compile_artifact_free(closed);closed=NULL;
+    xr_xir_compile_artifact_free(checked);checked=NULL;
+    uint8_t identity[48]={0};put32(identity+40,1);put32(identity+44,1);
+    size_t at=0;unsigned matches=0;
+    for(size_t p=64;p+sizeof(identity)<=packet.length;++p)
+        if(!memcmp(packet.bytes+p,identity,sizeof(identity))){at=p;++matches;}
+    CHECK(matches==1);
+    put32(packet.bytes+at+44,2);digest_packet(&packet);rejected(packet.bytes,packet.length);
+    put32(packet.bytes+at+44,1);put32(packet.bytes+at+40,2);digest_packet(&packet);rejected(packet.bytes,packet.length);
+    put32(packet.bytes+at+40,1);digest_packet(&packet);
+    CHECK(xr_xir_compile_checked_read(suite_context,packet.bytes,packet.length,&decoded,NULL)==XR_XIR_OK && decoded);
+    xr_xir_compile_artifact_free(decoded);xr_xir_compile_checked_packet_free(&packet);
+
+    identities[1].capture_owner=identities[1].capture_count=0;
+    XrXirInstruction local[] = {
+        {.op=XR_XIR_FUNCTION_REF,.type=callable,.immediate=2},
+        {.op=XR_XIR_OWNED_LOCAL_NEW,.type=callable,.args={1}},
+        {.op=XR_XIR_PLACE_WRITE,.type=XR_XIR_UNIT,.args={2,0}},
+        {.op=XR_XIR_OWNED_LOCAL_READ,.type=callable,.args={2}},
+        {.op=XR_XIR_RETURN,.type=XR_XIR_UNIT,.args={4}}
+    };
+    blocks[1].count=5;functions[1].instructions=local;functions[1].instruction_count=5;
+    CHECK(xir_fixture_check(suite_context,&built,&checked,&diagnostic)==XR_XIR_BAD_TYPE && !checked);
+    CHECK(diagnostic.function==1 && diagnostic.instruction==4);
+}
+static void nonescape_facts_ownership(void) {
+    XrCompileResourceStats baseline=consumer_context_stats(suite_context);
+    XrXirType callable=XR_XIR_CONSTRUCTED_TYPE_BASE;
+    XrXirTypeNode signature={.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,
+        .result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
+    XrXirTypes types={.nodes=&signature,.count=1};
+    XrXirInstruction ops[] = {{.op=XR_XIR_COPY,.type=callable,.args={0}},
+        {.op=XR_XIR_CALL_INDIRECT,.type=XR_XIR_I64,.immediate=1},
+        {.op=XR_XIR_RETURN,.type=XR_XIR_UNIT,.args={2}}};
+    XrXirBlock block={0,3,0,0};
+    XrXirFunction body={.name="apply",.name_length=5,.parameters=&callable,.parameter_count=1,
+        .result=XR_XIR_I64,.blocks=&block,.block_count=1,.instructions=ops,.instruction_count=3,.error_type=XR_XIR_NEVER};
+    XrXirModule built={.stage=XR_XIR_BUILT,.functions=&body,.function_count=1,.types=&types,.linkage_kind=XR_XIR_PROGRAM};
+    XrXirArtifact *checked=NULL;
+    CHECK(xir_fixture_check(suite_context,&built,&checked,NULL)==XR_XIR_OK && checked);
+    xr_xir_compile_artifact_free(checked);
+    XrHirEscapeDiagnostic diagnostic={0};XrHirEscapeFacts *facts=NULL,*copy=NULL;
+    CHECK(xr_hir_escape_check(suite_context,&built,NULL,NULL,&diagnostic,&facts)==XR_XIR_OK && facts);
+    bool restricted=false;
+    CHECK(xr_hir_escape_restricted(facts,0,1,&restricted)==XR_XIR_OK && restricted);
+    CHECK(xr_hir_escape_restricted(facts,0,2,&restricted)==XR_XIR_OK && !restricted);
+    const XrXirValueFlow *flows=NULL;uint32_t count=0;
+    CHECK(xr_hir_escape_flows(facts,0,&flows,&count)==XR_XIR_OK && count==1);
+    CHECK(flows[0].source==0 && flows[0].target==1);
+    size_t attempts=source_program_compile_attempts;
+    CHECK(xr_hir_escape_facts_copy(suite_context,facts,NULL,&copy)==XR_XIR_OK && copy);
+    attempts=source_program_compile_attempts-attempts;
+    xr_hir_escape_facts_free(copy);copy=NULL;
+    XrCompileResourceStats owned=consumer_context_stats(suite_context);
+    for(size_t ordinal=0;ordinal<attempts;++ordinal) {
+        source_program_compile_fail_at=source_program_compile_attempts+ordinal;
+        source_program_compile_injected=false;
+        CHECK(xr_hir_escape_facts_copy(suite_context,facts,NULL,&copy)==XR_XIR_OUT_OF_MEMORY && !copy);
+        source_program_compile_fail_at=SIZE_MAX;
+        CHECK(source_program_compile_injected && consumer_context_stats(suite_context).held_bytes==owned.held_bytes);
+    }
+    CHECK(xr_hir_escape_facts_copy(suite_context,facts,NULL,&copy)==XR_XIR_OK && copy);
+    xr_hir_escape_facts_free(facts);facts=NULL;
+    memset(ops,0xCC,sizeof(ops));memset(&signature,0xCC,sizeof(signature));
+    uint32_t map[]={0,3,4,5};
+    CHECK(xr_hir_escape_facts_relocate(suite_context,copy,0,6,map,NULL)==XR_XIR_OK);
+    CHECK(xr_hir_escape_restricted(copy,0,3,&restricted)==XR_XIR_OK && restricted);
+    CHECK(xr_hir_escape_flows(copy,0,&flows,&count)==XR_XIR_OK && count==1 && flows[0].target==3);
+    uint32_t invalid[]={0,1,2,3,4,6};
+    CHECK(xr_hir_escape_facts_relocate(suite_context,copy,0,6,invalid,NULL)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_hir_escape_restricted(copy,0,3,&restricted)==XR_XIR_OK && restricted);
+    xr_hir_escape_facts_free(copy);
+    CHECK(consumer_context_stats(suite_context).held_bytes==baseline.held_bytes);
 }
 #include "xir_cell_checked_cases.h"
 static void constructed_contracts(void) {
@@ -861,7 +996,7 @@ static void uninitialized_packet(void) {
 static void nominal_callable_components(void) {
     XrXirArtifact *base = nominal_chain_fixture(suite_context, 1, 1), *checked = NULL, *decoded = NULL;
     XrXirModule built = *xr_xir_compile_artifact_module(base); built.stage = XR_XIR_BUILT;
-    XrXirCallableParameter parameter = {(XrXirType)256, 0};
+    XrXirCallableParameter parameter = {(XrXirType)256, 0,0};
     XrXirTypeNode nodes[2] = {built.types->nodes[0],
         {XR_XIR_TYPE_CALLABLE, XR_XIR_NEVER, &parameter, 1, (XrXirType)256, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 0, {0}}};
     XrXirTypes types = {nodes, 2, built.types->nominals, NULL}; built.types = &types;
@@ -1057,6 +1192,7 @@ int main(int argc,char **argv) {
     if (argc==2 && !strcmp(argv[1],"--wire-smoke")) {
         consumer_context=consumer_context_default();
         byte_order();generic_method_packet_cases();
+        nonescape_bound_prefix();nonescape_facts_ownership();
         consumer_contexts_free();
         puts("Current Checked field bytes and semantic packet rejection PASS");
         return 0;
@@ -1133,6 +1269,8 @@ int main(int argc,char **argv) {
     cell_checked_cases();
     consumer_context=consumer_context_default();
     capture_rejections(); capture_packet_rejection();
+    nonescape_bound_prefix();
+    nonescape_facts_ownership();
     consumer_context=consumer_context_default();
     generic_callable_contracts(); generic_callable_depth();
     consumer_context=consumer_context_default();

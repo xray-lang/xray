@@ -95,7 +95,7 @@ static void compiler_type_families(void) {
     XrXirCompileContext context={0};
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();
-    XrXirCallableParameter fields[]={{(XrXirType)257,0},{XR_XIR_I64,0}};
+    XrXirCallableParameter fields[]={{(XrXirType)257,0,0},{XR_XIR_I64,0,0}};
     XrXirTypeNode nodes[]={
         {.kind=XR_XIR_TYPE_NULLABLE,.element=XR_XIR_STRING},
         {.kind=XR_XIR_TYPE_ARRAY,.element=(XrXirType)256},

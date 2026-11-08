@@ -433,6 +433,12 @@ static bool source_library_function(SourceContext *ctx, const XrXirModule *libra
         if (!source_library_instruction(ctx, map, index,&original->instructions[i], &instructions[i])) return false;
     ctx->identities[target] = library->declarations->functions[index];
     ctx->identities[target].module = module;
+    if (ctx->identities[target].capture_owner) {
+        uint32_t owner=ctx->identities[target].capture_owner-1;
+        if (owner>=map->function_count || map->functions[owner]==UINT32_MAX)
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library capture owner is not mapped");
+        ctx->identities[target].capture_owner=map->functions[owner]+1;
+    }
     if (ctx->identities[target].nominal_owner) {
         uint32_t owner=ctx->identities[target].nominal_owner-1;
         if (!map->unit || !library->types || !library->types->nominals ||

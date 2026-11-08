@@ -1,0 +1,6 @@
+class Parent {
+    put(callback: escaping fn() -> i64) {}
+}
+class Child extends Parent {
+    override put(callback: fn() -> i64) {}
+}

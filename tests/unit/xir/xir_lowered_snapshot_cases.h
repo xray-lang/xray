@@ -26,7 +26,7 @@ static void lowered_snapshot_fixture(LoweredSnapshotFixture *f) {
         .variants = &f->variant, .variant_count = 1};
     f->table = (XrXirNominalTable){.count = 1, .identities = &f->identity};
     f->payload = f->argument = XR_XIR_I64;
-    f->parameter = (XrXirCallableParameter){(XrXirType)257, XR_PARAM_REF};
+    f->parameter = (XrXirCallableParameter){(XrXirType)257, XR_PARAM_REF,0};
     f->nodes[0] = (XrXirTypeNode){.kind = XR_XIR_TYPE_NOMINAL,
         .nominal = {.arguments = &f->argument, .argument_count = 1,
             .fields = &f->payload, .field_count = 1}};

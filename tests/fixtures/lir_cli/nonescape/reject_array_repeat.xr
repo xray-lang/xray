@@ -1,0 +1,3 @@
+fn leak(callback: fn() -> i64) -> Array<fn() -> i64> {
+    return Array<fn() -> i64>(1, callback)
+}

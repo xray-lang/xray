@@ -401,7 +401,7 @@ static void callable_error_open_values(const XrXirCompileContext *work,uint32_t 
     CallableErrorFixture *f=xr_malloc(sizeof(*f));CHECK(f);
     callable_error_fixture(f,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+2));
     XrXirType variable=(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+1),caller_parameter=variable,target_parameter=variable;
-    XrXirCallableParameter parameter={variable,XR_PARAM_READ};
+    XrXirCallableParameter parameter={variable,XR_PARAM_READ,0};
     XrXirConstraint constraints[2]={{.markers=XR_XIR_CONSTRAINT_ERROR},{0}};
     XrXirType arguments[]={(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+3),variable,
         (XrXirType)XR_XIR_TYPE_PARAMETER_BASE,variable};

@@ -207,6 +207,14 @@ static XrXirStatus instruction_direct_call_shape(const XrXirFunction *function,
     if ((registration && !module->declarations) || (module->declarations &&
         module->declarations->functions[op->immediate].cleanup_owner != (registration ? caller_id + 1 : 0)))
         return XR_XIR_BAD_STRUCTURE;
+    if (module->declarations && module->declarations->functions[op->immediate].capture_owner) {
+        uint32_t owner=module->declarations->functions[op->immediate].capture_owner-1, current=caller_id;
+        while (current!=owner) {
+            if (current>=module->function_count || !module->declarations->functions[current].capture_owner)
+                return XR_XIR_BAD_STRUCTURE;
+            current=module->declarations->functions[current].capture_owner-1;
+        }
+    }
     const XrXirFunction *callee = &module->functions[op->immediate];
     uint32_t arguments=0,count=0;
     if(!xr_xir_direct_argument_range(op,&arguments,&count))return XR_XIR_BAD_STRUCTURE;
@@ -236,6 +244,7 @@ static XrXirStatus instruction_direct_call_shape(const XrXirFunction *function,
     if (op->op == XR_XIR_FUNCTION_REF) {
         signature = xr_xir_callable_signature(module->types, op->type);
         if (!module->declarations || !signature || op->args[1] > callee->parameter_count ||
+            op->args[1] < module->declarations->functions[op->immediate].capture_count ||
             signature->parameter_count != callee->parameter_count - op->args[1])
             return XR_XIR_BAD_TYPE;
         if ((signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) &&

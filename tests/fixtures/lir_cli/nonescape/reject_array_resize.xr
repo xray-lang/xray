@@ -1,0 +1,4 @@
+fn leak(callback: fn() -> i64) {
+    var handlers: Array<fn() -> i64> = []
+    handlers.resize(2, callback)
+}

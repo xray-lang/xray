@@ -63,7 +63,7 @@ static void constraint_formula(void) {
 
 static const XrXirConstraint empty_constraints[2] = {{0},{0}};
 static const XrXirConstraint copied_constraints[2] = {{0,&copy_application,1},{0}};
-static const XrXirCallableParameter copied_parameter = {XR_XIR_I64,0};
+static const XrXirCallableParameter copied_parameter = {XR_XIR_I64,0,0};
 static const XrXirTypeNode copied_signature = {
     .kind=XR_XIR_TYPE_CALLABLE,.parameters=&copied_parameter,.parameter_count=1,.result=XR_XIR_I64,
     .flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED

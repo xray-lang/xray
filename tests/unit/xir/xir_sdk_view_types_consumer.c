@@ -17,8 +17,8 @@ int main(void) {
     XrXirCompileContext c={0};CHECK(xr_compile_resources_new(&limits,&c.resources)==XR_COMPILE_RESOURCE_OK);
     c.limits=xr_xir_compile_default_limits();XrCompileResourceStats initial={0},final={0};
     CHECK(xr_compile_resources_stats(c.resources,&initial)==XR_COMPILE_RESOURCE_OK);
-    XrXirCallableParameter fields[]={{(XrXirType)256,0},{(XrXirType)257,0}};
-    XrXirCallableParameter parameter={(XrXirType)257,0};
+    XrXirCallableParameter fields[]={{(XrXirType)256,0,0},{(XrXirType)257,0,0}};
+    XrXirCallableParameter parameter={(XrXirType)257,0,0};
     XrXirTypeNode nodes[]={
         {.kind=XR_XIR_TYPE_SLICE,.element=XR_XIR_I64},
         {.kind=XR_XIR_TYPE_MUT_SLICE,.element=XR_XIR_I64},

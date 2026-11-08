@@ -98,7 +98,7 @@ static void root_signal_contracts(const XrXirCompileContext *context,const XrXir
     XrXirType handler=module->functions[native].parameters[1];
     CHECK((uint32_t)handler>=XR_XIR_CONSTRUCTED_TYPE_BASE && (uint32_t)handler-XR_XIR_CONSTRUCTED_TYPE_BASE<types.count);
     uint32_t h=(uint32_t)(handler-XR_XIR_CONSTRUCTED_TYPE_BASE);XrXirTypeNode original=nodes[h];
-    XrXirCallableParameter parameter={XR_XIR_I64,XR_PARAM_READ};
+    XrXirCallableParameter parameter={XR_XIR_I64,XR_PARAM_READ,0};
     for (unsigned mutation=0;mutation<8;++mutation) {
         nodes[h]=original;
         if(mutation==0)nodes[h].flags=XR_XIR_CALLABLE_ROOT_NONE;

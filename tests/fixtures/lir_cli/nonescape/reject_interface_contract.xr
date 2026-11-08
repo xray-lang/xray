@@ -1,0 +1,4 @@
+interface Sink { put(callback: escaping fn() -> i64) }
+struct Receiver implements Sink {
+    put(callback: fn() -> i64) {}
+}

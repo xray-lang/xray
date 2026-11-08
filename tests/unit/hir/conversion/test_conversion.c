@@ -34,7 +34,7 @@ static XrHirConversion checked(const XrHirConversionContext *context,XrXirType a
 }
 static void relations(void) {
     XrXirCompileContext owner=context_new();uint64_t before=held(owner.resources);
-    const XrXirCallableParameter parameter={XR_XIR_I64,0},field={(XrXirType)257,0};
+    const XrXirCallableParameter parameter={XR_XIR_I64,0,0},field={(XrXirType)257,0};
     XrXirTypeNode nodes[]={
         {.kind=XR_XIR_TYPE_NULLABLE,.element=XR_XIR_I64},
         {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.parameters=&parameter,.parameter_count=1,.result=XR_XIR_I64,

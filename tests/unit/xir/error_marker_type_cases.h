@@ -53,8 +53,8 @@ static void marker_types(MarkerTypes *f) {
         .nominal = {4, &f->generic_argument, 1, &f->generic_projection, 1}};
     f->nodes[5] = (XrXirTypeNode){.kind = XR_XIR_TYPE_NOMINAL,
         .nominal = {4, &f->scalar_argument, 1, &f->scalar_projection, 1}};
-    f->tuple_fields[0] = (XrXirCallableParameter){XR_XIR_UNIT, 0};
-    f->tuple_fields[1] = (XrXirCallableParameter){(XrXirType)257, 0};
+    f->tuple_fields[0] = (XrXirCallableParameter){XR_XIR_UNIT, 0,0};
+    f->tuple_fields[1] = (XrXirCallableParameter){(XrXirType)257, 0,0};
     f->nodes[6] = (XrXirTypeNode){.kind = XR_XIR_TYPE_TUPLE, .parameters = f->tuple_fields, .parameter_count = 2};
     f->nodes[7] = (XrXirTypeNode){.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)262};
     f->nodes[8] = (XrXirTypeNode){.kind = XR_XIR_TYPE_TASK, .element = (XrXirType)263, .result = XR_XIR_NEVER};

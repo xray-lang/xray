@@ -233,7 +233,7 @@ static void constraint_proof_shared_type_walk(void) {
     XrXirTypeNode nodes[DEPTH] = {0}; XrXirCallableParameter parameters[DEPTH][2];
     for (uint32_t i = 0; i < DEPTH; ++i) {
         XrXirType child = i ? member_case_type(i-1) : (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
-        parameters[i][0] = parameters[i][1] = (XrXirCallableParameter){child,0};
+        parameters[i][0] = parameters[i][1] = (XrXirCallableParameter){child,0,0};
         nodes[i].kind = XR_XIR_TYPE_CALLABLE; nodes[i].element = XR_XIR_NEVER; nodes[i].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; nodes[i].parameter_span = 1;
         nodes[i].parameters = parameters[i]; nodes[i].parameter_count = 2; nodes[i].result = child;
     }

@@ -4,7 +4,8 @@
 #include "../xir/xxir.h"
 
 /* Parameter spellings are synchronous declaration borrows. No AST or caller
- * storage survives the analysis. Hidden environment parameters precede names.
+ * storage survives the analysis. Physical name offsets include hidden captures
+ * and receivers, while environment roles come from declaration identities.
  * A NULL table checks admitted external declarations without source spellings. */
 typedef struct XrHirEscapeDeclaration {
     const char *const *names;
@@ -22,6 +23,8 @@ XR_FUNC XrXirStatus xr_hir_escape_check(const XrXirCompileContext *, const XrXir
     const XrHirEscapeDeclaration *, XrCompileRequestControl *, XrHirEscapeDiagnostic *, XrHirEscapeFacts **);
 XR_FUNC void xr_hir_escape_facts_free(XrHirEscapeFacts *);
 XR_FUNC XrXirStatus xr_hir_escape_restricted(const XrHirEscapeFacts *, uint32_t, uint32_t, bool *);
+XR_FUNC XrXirStatus xr_hir_escape_flows(const XrHirEscapeFacts *, uint32_t,
+    const XrXirValueFlow **, uint32_t *);
 XR_FUNC XrXirStatus xr_hir_escape_facts_copy(const XrXirCompileContext *, const XrHirEscapeFacts *,
     XrCompileRequestControl *, XrHirEscapeFacts **);
 /* The private receiving owner changes only after a complete successful map.
