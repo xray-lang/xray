@@ -32,13 +32,19 @@ typedef struct XirStorageBinding {
 
 typedef struct XirStorageApplication {
     XirExecutionSiteKind kind;
+    /* Function is the caller template. Declaration is the callee template. */
     uint32_t site, function, instruction, declaration;
     uint32_t first, count;
 } XirStorageApplication;
 
 typedef struct XirStorageIdentity {
     uint32_t source_function, source, target_function, target;
+    uint32_t application;
 } XirStorageIdentity;
+
+/* An allocation belongs to this template frame. Applications preserve the
+ * corresponding invocation context. An absent allocation is external. */
+typedef struct XirStorageAllocation { uint32_t function, value; } XirStorageAllocation;
 
 typedef struct XirStorageUnknown {
     uint32_t function, value;
@@ -56,6 +62,8 @@ typedef struct XirStorageFlowView {
     uint32_t binding_count;
     const XirStorageIdentity *identities;
     uint32_t identity_count;
+    const XirStorageAllocation *allocations;
+    uint32_t allocation_count;
     const XirStorageUnknown *unknowns;
     uint32_t unknown_count;
 } XirStorageFlowView;
