@@ -167,3 +167,28 @@ XR_FUNC XrXirStatus xir_storage_flow_point_value(XirStorageFlow *flow, const Xir
     *output = (XirStorageReference){point->function, value, XIR_EXECUTION_CURRENT_ENVIRONMENT};
     return XR_XIR_OK;
 }
+
+static XrXirStatus storage_formal_footprint(XirStorageFlow *flow, const XirStorageValuePoint *point,
+    uint32_t parameter, XirStorageReference *output) {
+    if (parameter >= flow->rows[point->function].body->parameter_count) return XR_XIR_BAD_STRUCTURE;
+    XirStorageValuePoint formal = *point;
+    formal.reference = (XirStorageReference){point->function, parameter, XIR_EXECUTION_CURRENT_ENVIRONMENT};
+    XrXirStatus status = xir_storage_flow_point_value(flow, &formal, output);
+    if (status != XR_XIR_OK) return status;
+    uint32_t index = storage_existing_point(flow, formal);
+    if (index == UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
+    if (flow->view.point_values[index].footprint_input != UINT32_MAX) return XR_XIR_OK;
+    if (flow->exposure_started) return XR_XIR_BAD_STRUCTURE;
+    StorageFunction *row = &flow->rows[point->function];
+    if (!storage_reserve(flow, (void **)&row->footprint_inputs, row->footprint_input_count,
+        &row->footprint_input_capacity, sizeof(*row->footprint_inputs))) return flow->status;
+    uint32_t value = storage_aux(flow, point->function), input = flow->view.input_count;
+    if (value == UINT32_MAX || !storage_input(flow, point->function, value, parameter, XIR_STORAGE_FOOTPRINT) ||
+        !storage_relation_bank(flow, point->function, value, output->value, XIR_STORAGE_FOOTPRINT)) return flow->status;
+    uint32_t link = row->footprint_input_count++;
+    row->footprint_inputs[link] = (StorageFootprintLink){input, row->footprint_heads[parameter]};
+    row->footprint_heads[parameter] = link;
+    ((XirStoragePointValue *)flow->view.point_values)[index].footprint_input = value;
+    ++flow->revision;
+    return XR_XIR_OK;
+}

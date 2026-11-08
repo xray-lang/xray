@@ -59,6 +59,7 @@ typedef struct StorageCaptureWalk {
     uint32_t *index;
     uint32_t count, capacity, index_capacity, remainder;
     XirStorageReference current_proxy;
+    XirStorageValuePoint point;
     bool complete;
 } StorageCaptureWalk;
 
@@ -113,11 +114,26 @@ static XrXirStatus storage_capture_arguments(void *opaque, const XirExecutionSit
         XirExecutionArgument formal = {0};
         XrXirStatus status = xir_execution_argument(flow->execution, capture, 0, &formal);
         if (status != XR_XIR_OK) return status;
+        XirExecutionParameter parameter = {0};
+        status = xir_execution_parameter(flow->execution, capture, 0, &parameter);
+        if (status != XR_XIR_OK) return status;
+        XirStorageReference proxy = walk->current_proxy;
+        if (!parameter.escaping && !parameter.generic_storage &&
+            !xr_xir_type_is_c_callable(xir_execution_types(flow->execution), parameter.type)) {
+            XirStorageReference local;
+            status = storage_local_reference(flow, walk->point.function,
+                (XirStorageReference){formal.function, formal.value, formal.environment}, false, &local);
+            if (status != XR_XIR_OK) return status;
+            status = storage_formal_footprint(flow, &walk->point, local.value, &proxy);
+            if (status != XR_XIR_OK) return status;
+        }
         if (!storage_capture_push(walk, (StorageCaptureItem){
             .reference={formal.function, formal.value, formal.environment},
-            .kind=STORAGE_CARRIER_FORMAL, .proxy=walk->current_proxy.value})) return flow->status;
+            .kind=STORAGE_CARRIER_FORMAL, .proxy=proxy.value})) return flow->status;
         return XR_XIR_OK;
     }
+    if (capture->kind == XIR_EXECUTION_CAPTURE_INPUT)
+        return storage_reference_pending(flow, XIR_EXECUTION_REMAINDER_PARAMETER);
     for (uint32_t p = 0; p < capture->argument_count && storage_step(flow); ++p) {
         XirExecutionArgument actual = {0};
         XrXirStatus status = xir_execution_argument(flow->execution, capture, p, &actual);
@@ -140,6 +156,7 @@ static XrXirStatus storage_capture_arguments(void *opaque, const XirExecutionSit
 
 static XrXirStatus storage_capture_collect(StorageCaptureWalk *walk, const XirStorageValuePoint *point) {
     XirStorageFlow *flow = walk->flow;
+    walk->point = *point;
     if (!storage_capture_push(walk, (StorageCaptureItem){.reference=point->reference, .kind=STORAGE_CARRIER_FN})) return flow->status;
     for (uint32_t n = 0; n < walk->count && storage_step(flow); ++n) {
         StorageCaptureItem item = walk->items[n];
@@ -262,6 +279,46 @@ XR_FUNC XrXirStatus xir_storage_flow_expose_value_when(XirStorageFlow *flow, con
     const XirStorageObservation *condition) {
     if (!condition) return XR_XIR_BAD_STRUCTURE;
     return storage_publish_value(flow, point, condition);
+}
+
+typedef struct StorageCallFootprint {
+    XirStorageFlow *flow;
+    uint32_t function, value;
+} StorageCallFootprint;
+
+static XrXirStatus storage_call_footprint_capture(void *opaque, const XirStorageCapture *capture) {
+    StorageCallFootprint *point = opaque;
+    if (capture->kind == XIR_STORAGE_CAPTURE_STORABLE_FN) return XR_XIR_OK;
+    if (capture->function != point->function || capture->contents == UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
+    if (capture->kind == XIR_STORAGE_CAPTURE_CELL) {
+        if (capture->identity.function != point->function ||
+            capture->identity.environment != XIR_EXECUTION_CURRENT_ENVIRONMENT ||
+            !storage_is_handle(point->flow, point->function, capture->identity.value)) return XR_XIR_BAD_STRUCTURE;
+        if (!storage_relation_bank(point->flow, point->function, capture->identity.value,
+            point->value, XIR_STORAGE_FOOTPRINT)) return point->flow->status;
+    }
+    return storage_relation_bank(point->flow, point->function, capture->contents,
+        point->value, XIR_STORAGE_FOOTPRINT) ? XR_XIR_OK : point->flow->status;
+}
+
+static XrXirStatus storage_call_footprint(XirStorageFlow *flow, const XirExecutionSite *site,
+    XirExecutionArgument actual, uint32_t *output) {
+    if (!xr_xir_type_is_callable(xir_execution_types(flow->execution), actual.type) || actual.cell ||
+        xr_xir_type_is_c_callable(xir_execution_types(flow->execution), actual.type)) return XR_XIR_BAD_STRUCTURE;
+    /* A cleanup's ordered input is distinct from the ordinary before-point.
+     * Keep it unresolved until that contextual observation is represented. */
+    if (site->kind == XIR_EXECUTION_CLEANUP_USE)
+        return storage_reference_pending(flow, XIR_EXECUTION_REMAINDER_OPAQUE);
+    XirStorageValuePoint use = {site->function, site->instruction,
+        {actual.function, actual.value, actual.environment}, XIR_STORAGE_BEFORE};
+    XirStorageReference proxy;
+    XrXirStatus status = xir_storage_flow_point_value(flow, &use, &proxy);
+    if (status != XR_XIR_OK) return status;
+    StorageCallFootprint point = {flow, site->function, proxy.value};
+    status = xir_storage_flow_visit_value_captures(flow, &use, XIR_STORAGE_QUERY_CONTENTS,
+        storage_call_footprint_capture, &point);
+    if (status == XR_XIR_OK) *output = proxy.value;
+    return status;
 }
 
 XR_FUNC uint32_t xir_storage_flow_remainder(const XirStorageFlow *flow) {

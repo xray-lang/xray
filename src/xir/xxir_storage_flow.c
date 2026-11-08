@@ -27,6 +27,7 @@ typedef struct StorageAddress { uint32_t first, count; bool ready; } StorageAddr
 typedef struct StorageState { uint32_t point, handle, value, kind, order, generation; } StorageState;
 typedef struct StorageWork { uint32_t function, state; } StorageWork;
 typedef struct StorageIdentityLink { uint32_t identity, next; } StorageIdentityLink;
+typedef struct StorageFootprintLink { uint32_t input, next; } StorageFootprintLink;
 typedef struct StorageOperation { XrXirOp op; uint32_t source, destination, receiver; } StorageOperation;
 typedef struct StorageRead {
     uint32_t source, target, point;
@@ -59,6 +60,9 @@ typedef struct StorageFunction {
     uint32_t write_count, write_capacity;
     uint32_t *write_offsets, *write_points, *calls, *content_inputs;
     uint32_t *exposure_inputs, *exposure_offsets, *exposure_points;
+    uint32_t *footprint_heads;
+    StorageFootprintLink *footprint_inputs;
+    uint32_t footprint_input_count, footprint_input_capacity;
     uint32_t call_count, call_capacity;
     StoragePublication *publications;
     uint32_t *publication_index, publication_index_capacity;
@@ -110,6 +114,8 @@ struct XirStorageFlow {
 };
 static bool storage_close_applications(XirStorageFlow *flow);
 static bool storage_start_exposure(XirStorageFlow *flow);
+static XrXirStatus storage_call_footprint(XirStorageFlow *, const XirExecutionSite *,
+    XirExecutionArgument, uint32_t *);
 
 static uint32_t storage_base_kind(StorageState state) { return state.kind & (STORAGE_EXPOSURE_KIND - 1); }
 static XirStorageFlowBank storage_bank(StorageState state) {
@@ -871,6 +877,20 @@ static bool storage_bind_application(XirStorageFlow *flow, uint32_t site_index, 
         }
         if (!storage_binding(flow, (XirStorageBinding){site.declaration, p,
             actual.function, actual.value, actual.environment})) return false;
+        uint32_t head = flow->rows[site.declaration].footprint_heads[p];
+        if (!storage_environment_site(&site) && head != UINT32_MAX) {
+            uint32_t footprint = UINT32_MAX;
+            status = storage_call_footprint(flow, &site, actual, &footprint);
+            if (status == XR_XIR_UNRESOLVED) { complete = false; continue; }
+            if (status != XR_XIR_OK) { flow->status = status; return false; }
+            for (uint32_t l = head; l != UINT32_MAX && storage_step(flow);
+                l = flow->rows[site.declaration].footprint_inputs[l].next) {
+                uint32_t input = flow->rows[site.declaration].footprint_inputs[l].input;
+                uint32_t formal = flow->view.inputs[input].value;
+                if (!storage_binding(flow, (XirStorageBinding){site.declaration, formal,
+                    site.function, footprint, XIR_EXECUTION_CURRENT_ENVIRONMENT})) return false;
+            }
+        }
         if (!actual.cell) continue;
         if (!storage_bound_identity(flow, site_index, p, actual, outcome)) return false;
         /* A function reference captures the Cell identity. Its contents are
@@ -1252,6 +1272,8 @@ static bool storage_prepare_function(XirStorageFlow *flow, uint32_t function) {
         sizeof(*row->content_inputs), &flow->status);
     row->exposure_inputs = xir_compile_calloc(&flow->memory, body->parameter_count,
         sizeof(*row->exposure_inputs), &flow->status);
+    row->footprint_heads = xir_compile_calloc(&flow->memory, body->parameter_count,
+        sizeof(*row->footprint_heads), &flow->status);
     row->header.blocks = xir_compile_copy(&flow->memory, body->blocks,
         (size_t)body->block_count * sizeof(*body->blocks), &flow->status);
     row->header.parameters = row->types;
@@ -1275,6 +1297,7 @@ static bool storage_prepare_function(XirStorageFlow *flow, uint32_t function) {
     for (uint32_t p = 0; p < body->parameter_count; ++p) {
         row->handles[p] = xr_xir_type_is_cell(flow->module->types, row->types[p]);
         row->content_inputs[p] = UINT32_MAX; row->exposure_inputs[p] = UINT32_MAX;
+        row->footprint_heads[p] = UINT32_MAX;
     }
     for (uint32_t b = 0; b < body->block_count; ++b) {
         XrXirBlock block = body->blocks[b];
@@ -1297,6 +1320,7 @@ static void storage_retire_construction(XirStorageFlow *flow) {
         xr_compile_resources_free(row->writes); xr_compile_resources_free(row->write_offsets);
         xr_compile_resources_free(row->write_points); xr_compile_resources_free(row->calls);
         xr_compile_resources_free(row->content_inputs); xr_compile_resources_free(row->exposure_inputs);
+        xr_compile_resources_free(row->footprint_heads); xr_compile_resources_free(row->footprint_inputs);
         xr_compile_resources_free(row->publications); xr_compile_resources_free(row->exposure_offsets);
         xr_compile_resources_free(row->publication_index);
         xr_compile_resources_free(row->exposure_points);
