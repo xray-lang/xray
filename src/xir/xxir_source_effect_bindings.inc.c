@@ -180,6 +180,7 @@ static bool source_effect_prepare(SourceContext *ctx) {
         for (uint32_t p = 0; p < function->parameter_count; ++p) {
             body->effect_parameters[p] = (XrXirEffectParameter){
                 xr_xir_callable_signature(&ctx->types,function->parameters[p]) &&
+                    !xr_xir_type_is_c_callable(&ctx->types,function->parameters[p]) &&
                     !xr_xir_function_parameter_escaping(function,p) ?
                     XR_XIR_EFFECT_PARAMETER_VARIABLE : XR_XIR_EFFECT_PARAMETER_FIXED};
         }
