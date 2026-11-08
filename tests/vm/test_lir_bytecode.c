@@ -155,7 +155,8 @@ static void test_immediate_selection(void) {
             cases[n].left ? constant : input, cases[n].left ? input : constant,
             XR_LIR_PREDICATE_NONE);
         // A non-immediate use keeps a real constant register alongside encoded uses.
-        (void)test_binary(m, block, XR_LIR_XOR, constant, constant, XR_LIR_PREDICATE_NONE);
+        XrLirValue one = test_constant(m, block, type, 1);
+        (void)test_binary(m, block, XR_LIR_DIV, constant, one, XR_LIR_PREDICATE_NONE);
         result = test_binary(m, block, XR_LIR_MUL, result, constant, XR_LIR_PREDICATE_NONE);
         test_return(m, block, result);
         OK(xr_lir_module_finish(m, NULL));
