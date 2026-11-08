@@ -1,0 +1,4 @@
+{
+  "line": 4,
+  "message": "E0398: parameter 'next' cannot escape through a ref or stored place. Declare 'next: escaping fn(...)'"
+}

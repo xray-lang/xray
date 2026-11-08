@@ -1,0 +1,8 @@
+fn leaf() -> i64 { return 7 }
+fn retain(callback: escaping fn() -> i64) -> fn() -> i64 { return callback }
+fn outer(callback: fn() -> i64) {
+    var slot = leaf
+    const read = fn() -> i64 { return slot() }
+    const saved = retain(read)
+    slot = callback
+}
