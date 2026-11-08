@@ -19,7 +19,7 @@
 #define XXIR_EFFECT_CHECK_IMPLEMENTATION
 
 typedef struct EffectCheckFunction {
-    uint32_t first, values, contents, parameters, words, root, result, module, generic_parameters;
+    uint32_t first, values, contents, parameters, words, root, result, last, module, generic_parameters;
     uint32_t declaration, type_first, type_count, pending_first, pending_count;
     uint32_t native_callable, capture_count, cleanup_first, cleanup_count;
     uint64_t *bits, *suspend_bits;
@@ -342,6 +342,16 @@ static uint32_t effect_check_type_mask(const XrXirTypes *types, XrXirType type) 
         ((callable->flags & XR_XIR_CALLABLE_ROOT_UNRESOLVED) ? 2u : 0u);
 }
 
+static EffectCheckNode effect_check_empty_node(uint32_t function) {
+    return (EffectCheckNode){.function = function, .dependencies = UINT32_MAX,
+        .consumers = UINT32_MAX, .aliases = UINT32_MAX, .calls = UINT32_MAX, .last_call = UINT32_MAX,
+        .bindings = UINT32_MAX, .elements = UINT32_MAX, .component = UINT32_MAX,
+        .reason = {UINT32_MAX, UINT32_MAX}, .block = UINT32_MAX, .cleanup_call = UINT32_MAX,
+        .suspend_reason = {UINT32_MAX, UINT32_MAX}, .suspend_call = {UINT32_MAX, UINT32_MAX},
+        .suspend_parameter = {UINT32_MAX, UINT32_MAX}, .suspend_instruction = {UINT32_MAX, UINT32_MAX},
+        .suspend_distance = {UINT32_MAX, UINT32_MAX}, .suspend_order = {UINT32_MAX, UINT32_MAX}};
+}
+
 static XrXirStatus effect_check_allocate(EffectCheckBuild *build) {
     EffectCheckedRoots *roots = xir_compile_calloc(build->memory, 1, sizeof(*roots), &build->status);
     if (!roots) return build->status;
@@ -371,6 +381,7 @@ static XrXirStatus effect_check_allocate(EffectCheckBuild *build) {
             .contents = (uint32_t)(nodes + values),
             .parameters = source->parameter_count, .words = (uint32_t)words,
             .root = (uint32_t)(nodes + values * 2), .result = (uint32_t)(nodes + values * 2 + 1),
+            .last = (uint32_t)(nodes + expressions - 1),
             .declaration = f};
         if (build->module->declarations && build->module->declarations->functions) {
             const XrXirFunctionIdentity *identity = &build->module->declarations->functions[f];
@@ -402,14 +413,8 @@ static XrXirStatus effect_check_allocate(EffectCheckBuild *build) {
         const EffectCheckFunction *function = &roots->function[f];
         if (function->module >= roots->modules) return XR_XIR_BAD_STRUCTURE;
         ++roots->module_offsets[function->module];
-        for (uint32_t n = function->first; n <= function->result; ++n)
-            roots->node[n] = (EffectCheckNode){.function = f, .dependencies = UINT32_MAX,
-                .consumers = UINT32_MAX, .aliases = UINT32_MAX, .calls = UINT32_MAX, .last_call = UINT32_MAX,
-                .bindings = UINT32_MAX, .elements = UINT32_MAX,
-                .component = UINT32_MAX, .reason = {UINT32_MAX, UINT32_MAX}, .block = UINT32_MAX, .cleanup_call = UINT32_MAX,
-                .suspend_reason = {UINT32_MAX, UINT32_MAX}, .suspend_call = {UINT32_MAX, UINT32_MAX},
-                .suspend_parameter = {UINT32_MAX, UINT32_MAX}, .suspend_instruction = {UINT32_MAX, UINT32_MAX},
-                .suspend_distance = {UINT32_MAX, UINT32_MAX}, .suspend_order = {UINT32_MAX, UINT32_MAX}};
+        for (uint32_t n = function->first; n <= function->last; ++n)
+            roots->node[n] = effect_check_empty_node(f);
     }
     uint32_t total = 0;
     for (uint32_t m = 0; m < roots->modules; ++m) {
@@ -1144,7 +1149,7 @@ static bool effect_check_instance_equations(EffectCheckBuild *build, uint32_t fu
     EffectCheckedRoots *roots = build->roots;
     EffectCheckFunction row = roots->function[function];
     EffectCheckFunction source = roots->function[row.declaration];
-    for (uint32_t n = source.first; n <= source.result; ++n) {
+    for (uint32_t n = source.first; n <= source.last; ++n) {
         uint32_t output = row.first + n - source.first;
         EffectCheckNode original = roots->node[n];
         for (uint32_t a = original.aliases; a != UINT32_MAX; a = roots->alias[a].next) {
@@ -1227,7 +1232,7 @@ static uint32_t effect_check_instance(EffectCheckBuild *build,
         at = (at + 1) & mask;
     }
     EffectCheckFunction source = roots->function[declaration];
-    uint32_t expressions = source.result - source.first + 1;
+    uint32_t expressions = source.last - source.first + 1;
     if (expressions > UINT32_MAX - roots->nodes) {
         build->status = XR_XIR_OVERFLOW;
         return UINT32_MAX;
@@ -1239,6 +1244,7 @@ static uint32_t effect_check_instance(EffectCheckBuild *build,
     row.contents = row.first + source.contents - source.first;
     row.root = row.first + source.root - source.first;
     row.result = row.first + source.result - source.first;
+    row.last = row.first + source.last - source.first;
     row.type_first = first;
     row.type_count = count;
     row.generic_parameters = 0;
@@ -1271,7 +1277,7 @@ static uint32_t effect_check_instance(EffectCheckBuild *build,
 static bool effect_check_bind_calls(EffectCheckBuild *build, uint32_t function) {
     EffectCheckedRoots *roots = build->roots;
     EffectCheckFunction row = roots->function[function];
-    for (uint32_t n = row.first; n <= row.result; ++n) {
+    for (uint32_t n = row.first; n <= row.last; ++n) {
         for (uint32_t c = roots->node[n].calls; c != UINT32_MAX; c = roots->call[c].next) {
             EffectCheckCall call = roots->call[c];
             uint32_t callee = roots->node[call.target].function;
@@ -2131,7 +2137,7 @@ static XrXirStatus effect_checked_roots_build(const XrXirCompileContext *memory,
 static XrXirStatus effect_checked_formula_contexts(const XrXirCompileContext *memory,
     const EffectCheckedRoots *roots, uint32_t function, uint32_t node, uint8_t **output, bool *unknown) {
     EffectCheckFunction body = roots->function[function];
-    uint32_t expressions = body.result - body.first + 1, instructions = body.values - body.parameters;
+    uint32_t expressions = body.last - body.first + 1, instructions = body.values - body.parameters;
     if ((uint64_t)expressions * sizeof(uint32_t) > SIZE_MAX) return XR_XIR_BUDGET;
     XrXirStatus status = XR_XIR_OK;
     uint8_t *contexts = NULL;

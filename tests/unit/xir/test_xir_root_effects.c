@@ -527,11 +527,59 @@ static void execution_cleanup_order(void) {
     printf("ordered normal/panic cleanup uses retain registration identities and %zu failure boundaries PASS\n", sites);
 }
 
+static void execution_origin_namespaces(void) {
+    EffectMark baseline = effect_mark();
+    XrXirType fn = XR_XIR_CONSTRUCTED_TYPE_BASE, array = XR_XIR_CONSTRUCTED_TYPE_BASE + 1;
+    XrXirTypeNode nodes[] = {
+        {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_UNIT, .element = XR_XIR_NEVER,
+            .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.kind = XR_XIR_TYPE_ARRAY, .element = XR_XIR_CONSTRUCTED_TYPE_BASE}
+    };
+    XrXirTypes types = {.nodes = nodes, .count = 2};
+    uint32_t operands[] = {0};
+    XrXirInstruction instructions[] = {
+        {.op = XR_XIR_FUNCTION_REF, .type = fn, .immediate = 1},
+        {.op = XR_XIR_FUNCTION_REF, .type = fn, .immediate = 2},
+        {.op = XR_XIR_ARRAY_NEW, .type = array, .args = {0, 1}},
+        {.op = XR_XIR_CONST_INT, .type = XR_XIR_I64},
+        {.op = XR_XIR_ARRAY_GET, .type = fn, .args = {2, 3}},
+        {.op = XR_XIR_CALL_INDIRECT, .immediate = 4},
+        {.op = XR_XIR_RETURN}
+    };
+    XrXirInstruction leaf = {.op = XR_XIR_RETURN};
+    XrXirFunction functions[] = {
+        {.instructions = instructions, .instruction_count = 7, .operands = operands,
+            .operand_count = 1, .error_type = XR_XIR_NEVER},
+        {.instructions = &leaf, .instruction_count = 1, .error_type = XR_XIR_NEVER},
+        {.instructions = &leaf, .instruction_count = 1, .error_type = XR_XIR_NEVER}
+    };
+    XrXirModule module = {.stage = XR_XIR_CHECKED, .types = &types,
+        .functions = functions, .function_count = 3};
+    EffectCheckedRoots *roots = NULL;
+    CHECK(effect_checked_roots_build(&effect_context, &module, NULL, NULL, NULL, &roots, true) == XR_XIR_OK);
+    XrXirValueFlow unrelated = {1, 9};
+    XirStorageFlowFunction rows[] = {
+        {.physical_values = 7, .value_count = 10, .flows = &unrelated, .flow_count = 1},
+        {.physical_values = 1, .value_count = 1},
+        {.physical_values = 1, .value_count = 1}
+    };
+    XirStorageFlowView storage = {.functions = rows, .function_count = 3};
+    CHECK(execution_origins_receive(&effect_context, roots, &storage) == XR_XIR_OK);
+    uint32_t captures = 0;
+    bool complete = true;
+    CHECK(xir_execution_visit_value_captures(roots, 0, 4,
+        execution_value_oracle, &captures, &complete) == XR_XIR_OK);
+    CHECK(!complete && captures == 1);
+    effect_checked_roots_free(roots);
+    effect_mark_check(baseline);
+}
+
 static void control_summary_kernel(void) {
     control_summary_detached();
     suspension_parameter_equations();
     suspension_reason_order();
     execution_cleanup_order();
+    execution_origin_namespaces();
     const uint32_t count = 8193;
     XrXirFunction *functions = xr_calloc(count, sizeof(*functions));
     XrXirInstruction (*rows)[2] = xr_calloc(count, sizeof(*rows));

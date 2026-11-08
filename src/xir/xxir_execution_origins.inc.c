@@ -88,7 +88,10 @@ done:
     return status;
 }
 
-typedef struct ExecutionOrigin { uint32_t function, value, environment; } ExecutionOrigin;
+typedef struct ExecutionOrigin {
+    uint32_t function, value, environment;
+    bool equation;
+} ExecutionOrigin;
 typedef struct ExecutionOriginWalk {
     XrXirCompileContext memory;
     ExecutionOrigin *items;
@@ -98,7 +101,8 @@ typedef struct ExecutionOriginWalk {
 } ExecutionOriginWalk;
 
 static uint32_t execution_origin_hash(ExecutionOrigin origin) {
-    return xr_hash_int(origin.function) ^ xr_hash_int(origin.value) * 3u ^ xr_hash_int(origin.environment) * 7u;
+    return xr_hash_int(origin.function) ^ xr_hash_int(origin.value) * 3u ^ xr_hash_int(origin.environment) * 7u ^
+        (origin.equation ? UINT32_C(0x9e3779b9) : 0);
 }
 
 static bool execution_origin_push(ExecutionOriginWalk *walk, ExecutionOrigin origin) {
@@ -123,7 +127,7 @@ static bool execution_origin_push(ExecutionOriginWalk *walk, ExecutionOrigin ori
     while (walk->index[at]) {
         ExecutionOrigin found = walk->items[walk->index[at] - 1];
         if (found.function == origin.function && found.value == origin.value &&
-            found.environment == origin.environment) return true;
+            found.environment == origin.environment && found.equation == origin.equation) return true;
         at = (at + 1) & (walk->index_capacity - 1);
     }
     if (walk->count == walk->capacity) {
@@ -164,7 +168,7 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
         if (status != XR_XIR_OK) return status;
     }
     ExecutionOriginWalk walk = {.memory = {.resources = roots->resources}};
-    execution_origin_push(&walk, (ExecutionOrigin){function_id, value, environment});
+    execution_origin_push(&walk, (ExecutionOrigin){function_id, value, environment, false});
     bool found = false;
     uint32_t unresolved = 0;
     for (uint32_t cursor = 0; cursor < walk.count && walk.status == XR_XIR_OK; ++cursor) {
@@ -179,7 +183,7 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
         if (origin.environment < XIR_EXECUTION_UNKNOWN_ENVIRONMENT) {
             if (origin.environment >= storage.application_count) {walk.status = XR_XIR_BAD_STRUCTURE; break;}
             XirStorageApplication app = storage.applications[origin.environment];
-            if (app.declaration == function.declaration) {
+            if (!origin.equation && app.declaration == function.declaration) {
                 if (app.first > storage.binding_count || app.count > storage.binding_count - app.first) {
                     walk.status = XR_XIR_BAD_STRUCTURE; break;
                 }
@@ -193,14 +197,15 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
                         roots->function[app.caller_instance].declaration == actual_function) actual_function = app.caller_instance;
                     if (actual_environment == XIR_EXECUTION_UNKNOWN_ENVIRONMENT)
                         unresolved |= XIR_EXECUTION_REMAINDER_OPAQUE;
-                    else execution_origin_push(&walk, (ExecutionOrigin){actual_function, binding.actual_value, actual_environment});
+                    else execution_origin_push(&walk, (ExecutionOrigin){actual_function, binding.actual_value, actual_environment, false});
                     bound = true;
                 }
             }
         }
         if (bound) continue;
         bool predecessor = false;
-        if (origin.value < function.values) {
+        if (origin.value < function.values || origin.equation) {
+            if (origin.value > function.last - function.first) {walk.status = XR_XIR_BAD_STRUCTURE; break;}
             const EffectCheckNode *node = &roots->node[function.first + origin.value];
             if (node->callable_input) {unresolved |= XIR_EXECUTION_REMAINDER_PARAMETER; continue;}
             if (node->callable_opaque) unresolved |= XIR_EXECUTION_REMAINDER_OPAQUE;
@@ -217,13 +222,14 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
                 if (!roots->alias[a].callable_origin) continue;
                 uint32_t source = roots->alias[a].source;
                 EffectCheckFunction source_function = roots->function[roots->node[source].function];
+                uint32_t value = source - source_function.first;
                 execution_origin_push(&walk, (ExecutionOrigin){roots->node[source].function,
-                    source - source_function.first, origin.environment});
+                    value, origin.environment, value >= source_function.values});
                 predecessor = true;
             }
         }
         const EffectCheckOrigins *origins = &roots->storage_origins;
-        if (origins->offsets && function.declaration < roots->templates &&
+        if (!origin.equation && origins->offsets && function.declaration < roots->templates &&
             origin.value < origins->offsets[function.declaration + 1] - origins->offsets[function.declaration]) {
             uint32_t index = origins->offsets[function.declaration] + origin.value;
             for (uint32_t e = origins->heads[index]; e != UINT32_MAX; e = origins->edges[e].next) {
@@ -244,7 +250,7 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
                 }
                 uint32_t next_environment = edge.application == UINT32_MAX ? origin.environment : edge.application;
                 uint32_t source_function = edge.function == function.declaration ? origin.function : edge.function;
-                execution_origin_push(&walk, (ExecutionOrigin){source_function, edge.value, next_environment});
+                execution_origin_push(&walk, (ExecutionOrigin){source_function, edge.value, next_environment, false});
                 predecessor = true;
             }
         }
