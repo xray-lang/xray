@@ -402,7 +402,7 @@ static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
         XrXirModule built = source_module_view(ctx,&declarations);
         XrXirDiagnostic location = {0};
         XrXirRootRefiner refiner = {.context=ctx,.update=source_root_refine,.explain=source_effect_explain,.restricted=source_effect_restricted,
-            .prepare=source_effect_bindings_prepare,.admit=source_view_admit};
+            .begin=source_effect_bindings_prepare,.admit=source_view_admit};
         XrXirStatus status = xr_xir_compile_check_refined_v2(&ctx->compile, &built, ctx->construction, &refiner, ctx->request, &output->checked, &location);
         for (uint32_t f=0;status==XR_XIR_OK && f<ctx->function_count;++f) {
             if (!ctx->bodies[f].initialization_regions) continue;
