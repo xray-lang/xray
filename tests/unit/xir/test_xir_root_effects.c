@@ -711,14 +711,16 @@ static void execution_instance_parameters(void) {
     XrXirType type_parameter = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     XrXirCallableParameter callback_parameter = {.type = XR_XIR_CONSTRUCTED_TYPE_BASE};
     XrXirTypeNode nodes[] = {
-        {.kind = XR_XIR_TYPE_ARRAY, .element = type_parameter},
+        {.kind = XR_XIR_TYPE_ARRAY, .element = type_parameter, .parameter_span = 1},
         {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER, .result = XR_XIR_UNIT,
-            .parameters = &callback_parameter, .parameter_count = 1, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
-        {.kind = XR_XIR_TYPE_CELL, .element = type_parameter},
+            .parameters = &callback_parameter, .parameter_count = 1, .parameter_span = 1,
+            .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.kind = XR_XIR_TYPE_CELL, .element = type_parameter, .parameter_span = 1},
         {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER, .result = XR_XIR_UNIT,
             .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED}
     };
     XrXirTypes types = {.nodes = nodes, .count = 4};
+    CHECK(xr_xir_compile_types_structure_verify(&effect_context, &types) == XR_XIR_OK);
     XrXirType parameters[] = {type_parameter, XR_XIR_CONSTRUCTED_TYPE_BASE + 1, XR_XIR_CONSTRUCTED_TYPE_BASE + 2};
     XrXirInstruction ret = {.op = XR_XIR_RETURN};
     XrXirBlock block = {.count = 1};
@@ -741,9 +743,9 @@ static void execution_instance_parameters(void) {
     CHECK(xir_execution_site(roots, XIR_EXECUTION_CALL, 0, &site) == XR_XIR_OK);
     XirExecutionParameter formal = {0};
     CHECK(xir_execution_parameter(roots, &site, 0, &formal) == XR_XIR_OK &&
-        formal.type == XR_XIR_CONSTRUCTED_TYPE_BASE + 3 && formal.escaping && !formal.cell);
+        formal.type == XR_XIR_CONSTRUCTED_TYPE_BASE + 3 && formal.escaping && !formal.cell && formal.generic_storage);
     CHECK(xir_execution_parameter(roots, &site, 1, &formal) == XR_XIR_OK &&
-        (uint32_t)formal.type >= (uint32_t)XR_XIR_CONSTRUCTED_TYPE_BASE + types.count && !formal.escaping);
+        (uint32_t)formal.type >= (uint32_t)XR_XIR_CONSTRUCTED_TYPE_BASE + types.count && !formal.escaping && !formal.generic_storage);
     const XrXirTypes *closed = xir_execution_types(roots);
     const XrXirTypeNode *signature = xr_xir_callable_signature(closed, formal.type);
     CHECK(signature && signature->parameter_count == 1);

@@ -106,7 +106,8 @@ typedef struct XirExecutionArgument {
 typedef struct XirExecutionParameter {
     XrXirType type;
     uint32_t mode;
-    bool escaping, hidden, cell;
+    /* Generic storage follows the original naked type parameter declaration. */
+    bool escaping, hidden, cell, generic_storage;
 } XirExecutionParameter;
 
 typedef XrXirStatus (*XirExecutionVisitor)(void *, const XirExecutionSite *);

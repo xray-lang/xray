@@ -157,8 +157,10 @@ XR_FUNC XrXirStatus xir_execution_parameter(const XirExecutionOwner *owner,
         const EffectCheckFunction *function = &roots->function[target];
         if (parameter >= function->parameters) return XR_XIR_BAD_STRUCTURE;
         EffectCheckNode node = roots->node[function->first + parameter];
+        XrXirType declared = roots->node[roots->function[function->declaration].first + parameter].type;
         *output = (XirExecutionParameter){node.type, node.mode, node.escaping,
-            parameter < function->capture_count, node.cell};
+            parameter < function->capture_count, node.cell,
+            (uint32_t)declared >= XR_XIR_TYPE_PARAMETER_BASE && (uint32_t)declared < XR_XIR_TYPE_PARAMETER_LIMIT};
         return XR_XIR_OK;
     }
     const EffectCheckPending *pending = &roots->pending[site->index];
@@ -167,7 +169,7 @@ XR_FUNC XrXirStatus xir_execution_parameter(const XirExecutionOwner *owner,
     if (pending->kind == EFFECT_CHECK_REQUIREMENT) {
         if (!parameter) {
             EffectCheckNode node = roots->node[pending->receiver];
-            *output = (XirExecutionParameter){node.type, XR_PARAM_READ, false, false, node.cell};
+            *output = (XirExecutionParameter){node.type, XR_PARAM_READ, false, false, node.cell, false};
             return XR_XIR_OK;
         }
         --parameter;
@@ -180,7 +182,8 @@ XR_FUNC XrXirStatus xir_execution_parameter(const XirExecutionOwner *owner,
     if (!signature || parameter >= signature->parameter_count) return XR_XIR_BAD_TYPE;
     XrXirCallableParameter formal = signature->parameters[parameter];
     *output = (XirExecutionParameter){formal.type, formal.mode, formal.escaping != 0, false,
-        xr_xir_type_is_cell(types, formal.type)};
+        xr_xir_type_is_cell(types, formal.type),
+        (uint32_t)formal.type >= XR_XIR_TYPE_PARAMETER_BASE && (uint32_t)formal.type < XR_XIR_TYPE_PARAMETER_LIMIT};
     return XR_XIR_OK;
 }
 
