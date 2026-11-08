@@ -182,22 +182,24 @@ static XrXirStatus view_access_class_body(ViewAccess *a,uint32_t value,bool *bod
         const XrXirBlock *normal=a->body->blocks+call->targets[0];
         if (!normal->count || normal->first>=a->body->instruction_count || normal->first!=instruction)
             return XR_XIR_OK;
-        if (!a->cells || !a->cells->default_access) return XR_XIR_OK;
+        if (!a->cells || !a->cells->effects) return XR_XIR_OK;
         XrXirStatus status=call->op==XR_XIR_INVOKE_DEFAULT ?
-            xir_effects_default_access_site(a->cells->default_access,a->resolver->check.context,a->function,parent) :
-            xir_effects_class_call_access_site(a->cells->default_access,a->resolver->check.context,
-                a->resolver->check.module,a->function,parent,producer->type);
+            xir_effects_default_access_site(a->resolver->check.context,a->cells->effects,
+                (XirEffectInput){a->resolver->check.module,a->cells->construction,a->cells->control},a->function,parent) :
+            xir_effects_class_call_access_site(a->resolver->check.context,a->cells->effects,
+                (XirEffectInput){a->resolver->check.module,a->cells->construction,a->cells->control},a->function,parent,producer->type);
         if (status == XR_XIR_OK)
             *body = true;
         return status;
     }
     if ((producer->op!=XR_XIR_CALL_DEFAULT && producer->op!=XR_XIR_CALL) ||
         !xr_xir_type_is_class(a->resolver->check.module->types,producer->type) ||
-        !a->cells || !a->cells->default_access) return XR_XIR_OK;
+        !a->cells || !a->cells->effects) return XR_XIR_OK;
     XrXirStatus status=producer->op==XR_XIR_CALL_DEFAULT ?
-        xir_effects_default_access_site(a->cells->default_access,a->resolver->check.context,a->function,instruction) :
-        xir_effects_class_call_access_site(a->cells->default_access,a->resolver->check.context,
-            a->resolver->check.module,a->function,instruction,producer->type);
+        xir_effects_default_access_site(a->resolver->check.context,a->cells->effects,
+                (XirEffectInput){a->resolver->check.module,a->cells->construction,a->cells->control},a->function,instruction) :
+        xir_effects_class_call_access_site(a->resolver->check.context,a->cells->effects,
+            (XirEffectInput){a->resolver->check.module,a->cells->construction,a->cells->control},a->function,instruction,producer->type);
     if (status == XR_XIR_OK)
         *body = true;
     return status;

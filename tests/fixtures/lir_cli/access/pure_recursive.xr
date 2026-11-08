@@ -1,0 +1,5 @@
+class Options{value:i64;init(){this.value=7}}
+fn a(n:i64)->Options{if(n==0){return Options()};return b(n-1)}
+fn b(n:i64)->Options{return a(n)}
+fn use(v:Slice<u8>,options:Options=a(2))->i64{return len(v)+options.value}
+export fn storage_receiver()->i64{var text="abc";var view:Slice<u8>=text.bytes();return use(view)-9}

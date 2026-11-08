@@ -1,0 +1,6 @@
+class Options{value:i64;init(){this.value=7}}
+fn make()->Options{return Options()}
+fn factory()->fn()->Options{return make}
+fn hidden()->Options{const f=factory();return f()}
+fn use(v:Slice<u8>,options:Options)->i64{return len(v)+options.value}
+export fn opaque()->i64{var text="abc";var view:Slice<u8>=text.bytes();return use(view,hidden())}

@@ -224,6 +224,6 @@ XR_FUNC XrXirStatus xir_compile_view_module_boundary_input(const XrXirCompileCon
         }
     }
     xr_compile_resources_free(flags);
-    if (status==XR_XIR_OK) status=xir_compile_view_cell_access_verified_input(context,input,diagnostic);
+
     return status;
 }

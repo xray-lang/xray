@@ -1,0 +1,4 @@
+const seed:i64=7
+class Options{value:i64;init(){this.value=seed}}
+fn use(v:Slice<u8>,options:Options=Options())->i64{return len(v)+options.value}
+export fn storage_receiver()->i64{var text="abc";var view:Slice<u8>=text.bytes();return use(view)-9}

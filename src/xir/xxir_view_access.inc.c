@@ -538,12 +538,12 @@ static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEve
         receiver_read=present || row.native_callable==XR_NATIVE_CALLABLE_BUFFER_LENGTH;
     }
     if (op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_INVOKE_DEFAULT) {
-        if (!a->cells || !a->cells->default_access || view_flags_at(types,flags,op->type))
+        if (!a->cells || !a->cells->effects || view_flags_at(types,flags,op->type))
             return XR_XIR_UNRESOLVED;
-        /* Declaration identity is not SSA input. The scope authenticates the
-         * actual helper closure without retiring any caller loan or epoch. */
-        return xir_effects_default_access_site(a->cells->default_access,
-            a->resolver->check.context,a->function,event->instruction);
+        /* Current default identity selects the helper's numeric access fact
+         * without retiring any caller loan or epoch. */
+        return xir_effects_default_access_site(a->resolver->check.context,a->cells->effects,
+            (XirEffectInput){a->resolver->check.module,a->cells->construction,a->cells->control},a->function,event->instruction);
     }
     if (op->op==XR_XIR_CALL_REQUIREMENT) return XR_XIR_UNRESOLVED;
     if (((op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_INDIRECT) || op->op==XR_XIR_INVOKE_RESULT) && view_flags_at(types,flags,op->type)) {

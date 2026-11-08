@@ -1,0 +1,4 @@
+const seed:Array<u8>=[1]
+class Options{items:Array<u8>;init(){this.items=seed}}
+fn use(v:Slice<u8>,options:Options=Options())->i64{return len(v)+len(options.items)}
+export fn storage_receiver()->i64{var text="abc";var view:Slice<u8>=text.bytes();return use(view)-9}

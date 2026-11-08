@@ -1,0 +1,2 @@
+export class Options{value:i64;init(){this.value=7}}
+export fn use<T>(v:Slice<u8>,item:T,options:Options=Options())->i64{return len(v)-2}
