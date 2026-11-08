@@ -163,8 +163,6 @@ XR_FUNC XrXirStatus xir_effects_lower_verified_input(const XrXirCompileContext *
 struct XrHirEscapeFacts;
 XR_FUNC XrXirStatus xir_effects_infer_escape_input(const XrXirCompileContext *context,
     XirEffectInput input, const struct XrHirEscapeFacts *lifetimes, XrXirEffects **output);
-XR_FUNC XrXirStatus xir_effects_value_restricted(const XrXirCompileContext *context,
-    const XrXirEffects *effects, uint32_t function, uint32_t value, bool *output);
 struct XirStorageFlow;
 struct XirViewNormalization;
 /* Private construction preparation grants no artifact or execution authority. */
