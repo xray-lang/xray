@@ -183,8 +183,8 @@ def is_public_container_alias_test_file(rel_path: Path) -> bool:
     )
 
 
-def classify_type_query(root: Path, path: Path, lineno: int, line: str) -> list[Hit]:
-    rel_path = rel(root, path)
+def classify_type_query(root: Path, path: Path, lineno: int, line: str, relative: Path | None = None) -> list[Hit]:
+    rel_path = rel(root, path) if relative is None else relative
     rel_str = rel_path.as_posix()
     stripped = line.strip()
     hits: list[Hit] = []
@@ -214,8 +214,8 @@ def classify_type_query(root: Path, path: Path, lineno: int, line: str) -> list[
     return [Hit("HISTORICAL_TYPE_QUERY_TEXT", rel_str, lineno, stripped)]
 
 
-def classify_container_query(root: Path, path: Path, lineno: int, line: str) -> list[Hit]:
-    rel_path = rel(root, path)
+def classify_container_query(root: Path, path: Path, lineno: int, line: str, relative: Path | None = None) -> list[Hit]:
+    rel_path = rel(root, path) if relative is None else relative
     rel_str = rel_path.as_posix()
     stripped = line.strip()
     hits: list[Hit] = []
@@ -253,9 +253,10 @@ def scan_file(root: Path, path: Path) -> list[Hit]:
         lines = path.read_text(encoding="utf-8").splitlines()
     except UnicodeDecodeError:
         return hits
+    relative = rel(root, path)
     for lineno, line in enumerate(lines, 1):
-        hits.extend(classify_type_query(root, path, lineno, line))
-        hits.extend(classify_container_query(root, path, lineno, line))
+        hits.extend(classify_type_query(root, path, lineno, line, relative))
+        hits.extend(classify_container_query(root, path, lineno, line, relative))
     return hits
 
 
