@@ -20,6 +20,7 @@ static XrXirStatus effect_checked_parameters(const XrXirCompileContext *memory,
     if (!contracts) return status;
     effects->outcomes_work.contracts = contracts;
     effects->outcomes_work.owns_formulas = true;
+    bool variable = module->provenance != NULL;
     for (uint32_t f = 0; f < effects->count; ++f) {
         const XrXirFunction *function = &module->functions[f];
         uint32_t count = function->parameter_count;
@@ -29,7 +30,7 @@ static XrXirStatus effect_checked_parameters(const XrXirCompileContext *memory,
         if (count && !parameters) return status;
         contracts[f].parameters = parameters;
         for (uint32_t p = 0; p < count; ++p)
-            parameters[p].kind = xr_xir_type_is_callable(module->types, function->parameters[p]) &&
+            parameters[p].kind = variable && xr_xir_type_is_callable(module->types, function->parameters[p]) &&
                 !xr_xir_function_parameter_escaping(function, p) ?
                 XR_XIR_EFFECT_PARAMETER_VARIABLE : XR_XIR_EFFECT_PARAMETER_FIXED;
     }
