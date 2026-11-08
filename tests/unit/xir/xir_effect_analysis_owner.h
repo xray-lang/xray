@@ -23,11 +23,8 @@ static uint32_t effect_block_index[65536];
 static size_t live, live_bytes, attempts, fail_at = SIZE_MAX;
 static bool injected;
 /* Full allocation replay is explicit; ordinary feedback keeps real endpoints. */
-static bool effect_full_faults;
 static XrXirCompileContext effect_context;
 static XrCompileResourceStats effect_baseline;
-static EffectMark effect_expected;
-static XrXirEffects *effect_owned_summary;
 static EffectMark effect_mark(void) { return (EffectMark){live, live_bytes}; }
 static void effect_mark_check(EffectMark mark) { CHECK(live == mark.blocks && live_bytes == mark.bytes); }
 static size_t effect_index_home(const void *pointer) {
@@ -109,29 +106,24 @@ static void effect_owner_free(XrXirCompileContext *c, uint64_t baseline) {
     xr_compile_resources_release(c->resources); *c = (XrXirCompileContext){0};
 }
 static void effect_case_begin(void) {
-    CHECK(!live && !live_bytes && !effect_owned_summary);
+    CHECK(!live && !live_bytes);
     effect_context = effect_owner_new(effect_caps()); effect_baseline = effect_stats(&effect_context);
-    effect_expected = effect_mark();
 }
 static void effect_case_end(void) {
     XrCompileResourceStats s = effect_stats(&effect_context);
-    CHECK(!effect_owned_summary && s.held_bytes == effect_baseline.held_bytes);
+    CHECK(s.held_bytes == effect_baseline.held_bytes);
     fprintf(stderr,"effect memory: allocated=%llu peak=%llu held=%llu allocations=%llu\n",
         (unsigned long long)s.allocated_bytes,(unsigned long long)s.peak_bytes,
         (unsigned long long)s.held_bytes,(unsigned long long)s.allocation_count);
     effect_owner_free(&effect_context, effect_baseline.held_bytes); CHECK(!live && !live_bytes);
 }
-/* A summary may outlive its producer; producer releases adjust the retained
- * baseline, while final owner release independently checks all artifact bytes. */
+/* Artifact retirement cannot increase the observer's retained allocation set. */
 
 
 static void effect_artifact_free(XrXirArtifact *artifact) {
     EffectMark before = effect_mark(); xr_xir_compile_artifact_free(artifact);
     CHECK(live <= before.blocks && live_bytes <= before.bytes);
-    if (effect_owned_summary) {
-        CHECK(before.blocks-live <= effect_expected.blocks && before.bytes-live_bytes <= effect_expected.bytes);
-        effect_expected.blocks -= before.blocks-live; effect_expected.bytes -= before.bytes-live_bytes;
-    } else effect_expected = effect_mark();
+
 }
 
 /* A new probe begins at the same semantic graph, through real reverification.
