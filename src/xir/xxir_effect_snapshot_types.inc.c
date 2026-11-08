@@ -47,10 +47,6 @@ typedef struct EffectBodyOrdinaryInput {
 typedef struct EffectBodyOrdinaryIdentity {
     uint32_t declaration,owner;
 } EffectBodyOrdinaryIdentity;
-static XrXirStatus effect_body_ordinary_input_verify(const XrXirCompileContext *work,
-    const XrXirModule *module,const EffectBodyOrdinaryInput *input);
-static XrXirStatus effect_body_ordinary_identity(const XrXirCompileContext *work,
-    const EffectBodyOrdinaryInput *input,uint32_t function,EffectBodyOrdinaryIdentity *output);
 
 typedef struct EffectBodyFunction {
     const char *name;
@@ -112,12 +108,6 @@ typedef struct EffectBodyMaterial {
     XrXirCellProvenance *cells;
     EffectInvocationDeclaredBounds *declared;
 } EffectBodyMaterial;
-static XrXirStatus effect_body_ordinary_basis(const XrXirCompileContext *work,
-    const EffectBodyOrdinaryInput *input,EffectBodyMaterial **output);
-static XrXirStatus effect_body_ordinary_record_parent(const XrXirCompileContext *work,
-    const EffectBodyOrdinaryInput *input,EffectBodyMaterial **output);
-static XrXirStatus effect_body_ordinary_record_index(const XrXirCompileContext *work,
-    const EffectBodyOrdinaryInput *input,uint32_t function,uint32_t *output);
 /* Memory identity and execution read policy are distinct borrowed inputs.
  * Compiler reads carry no accounting callback or cumulative work allowance. */
 typedef struct EffectBodyRead {

@@ -6,9 +6,6 @@
  * Same-operation complete correspondence precedes shared immutable ownership.
  */
 
-static XrXirStatus effect_invocation_bounds_copy_physical(const XrXirCompileContext *work,
-    const EffectInvocationDeclaredBounds *source,const EffectPhysicalDomain *physical,
-    EffectInvocationDeclaredBounds **output);
 
 /* Only the immutable backbone is shared. Both existing equation creation
  * and publication replace declared bounds, so every generation owns a fresh

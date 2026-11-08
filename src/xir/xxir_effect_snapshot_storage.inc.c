@@ -12,12 +12,8 @@
 
 #include "xxir_effect_snapshot_metadata_match.inc.c"
 #include "xxir_effect_snapshot_types_compare.inc.c"
-static XrXirStatus effect_body_material_continue(const XrXirCompileContext *work,
-    const XrXirModule *source,const EffectBodyOrdinaryInput *ordinary,EffectBodyMaterial **output);
 
 static void effect_body_ordinary_overlay_free(EffectBodyOrdinaryOverlay *overlay);
-static XrXirStatus effect_body_material_initial(const XrXirCompileContext *work,
-    const XrXirModule *source,const EffectBodyOrdinaryInput *ordinary,EffectBodyMaterial **output);
 static void effect_body_material_free(EffectBodyMaterial *body) {
     if (!body) return;
     XR_CHECK(body->references,"effect body reference must be live");

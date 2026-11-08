@@ -39,17 +39,12 @@ typedef struct EffectOrdinaryContexts {
  * Each root belongs to the same finite ledger. Every admitted byte is still
  * initialized; growth publishes only after both complete vectors are copied. */
 
-static XrXirStatus effect_ordinary_consumes_match(const XrXirFunction *original,const XrXirFunction *actual);
-static XrXirStatus effect_ordinary_signature_match(const EffectOrdinaryContexts *contexts,
-    const XrXirModule *source,uint32_t function, EffectTerms *terms);
 
 /* Internal role products are derived from the real generating vector. No
  * incomplete public TEMPLATE, stored writer role or permission hint enters it. */
 
 /* This live ordinary owner supplies lifetime only. The complete current
  * request is compared independently before its material can be retained. */
-static XrXirStatus effect_ordinary_bodies_match(const EffectOrdinaryContexts *contexts,
-    const XrXirModule *source, EffectTerms *terms);
 
 /* The retained material never aliases producer arrays. Recheck the real
  * source relation using the original ordinary matcher before retaining it. */
