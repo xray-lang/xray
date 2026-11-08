@@ -1,0 +1,10 @@
+add_executable(test_xir_channel_select xir/test_xir_channel_select.c)
+target_link_libraries(test_xir_channel_select PRIVATE xray_xir_scalar xray_xir)
+if(MSVC)
+    target_compile_options(test_xir_channel_select PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_channel_select PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME test_xir_channel_select COMMAND test_xir_channel_select)
+set_tests_properties(test_xir_channel_select PROPERTIES
+    LABELS "unit;xir;channel;ownership;runtime;faults" TIMEOUT 60)

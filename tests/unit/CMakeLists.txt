@@ -1625,6 +1625,7 @@ include(xir/source_shadow_function.cmake)
 
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/go_source.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/channel_select.cmake")
 
 
 add_executable(test_xir_scope_syntax frontend/test_scope_syntax.c)
