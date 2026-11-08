@@ -45,17 +45,24 @@ XR_FUNC XrXirStatus xir_storage_flow_expose_reference(XirStorageFlow *flow,
         observation->instruction, reference.value, observation->point) : status;
 }
 
-typedef struct StorageCaptureItem { XirStorageReference reference; bool cell; } StorageCaptureItem;
+typedef enum StorageCarrierKind { STORAGE_CARRIER_FN, STORAGE_CARRIER_CELL, STORAGE_CARRIER_FORMAL } StorageCarrierKind;
+typedef struct StorageCaptureItem {
+    XirStorageReference reference;
+    StorageCarrierKind kind;
+    uint32_t proxy;
+} StorageCaptureItem;
 typedef struct StorageCaptureWalk {
     XirStorageFlow *flow;
     StorageCaptureItem *items;
     uint32_t *index;
     uint32_t count, capacity, index_capacity, remainder;
+    XirStorageReference current_proxy;
     bool complete;
 } StorageCaptureWalk;
 
 static uint32_t storage_capture_hash(StorageCaptureItem item) {
-    uint32_t fields[] = {item.reference.function, item.reference.value, item.reference.environment, item.cell};
+    uint32_t fields[] = {item.reference.function, item.reference.value, item.reference.environment, (uint32_t)item.kind,
+        item.kind == STORAGE_CARRIER_FORMAL ? item.proxy : 0};
     return xr_hash_bytes(fields, sizeof(fields));
 }
 
@@ -78,7 +85,8 @@ static bool storage_capture_push(StorageCaptureWalk *walk, StorageCaptureItem it
     uint32_t slot = storage_capture_hash(item) & (walk->index_capacity - 1);
     while (walk->index[slot]) {
         StorageCaptureItem found = walk->items[walk->index[slot] - 1];
-        if (found.cell == item.cell && found.reference.function == item.reference.function &&
+        if (found.kind == item.kind && (item.kind != STORAGE_CARRIER_FORMAL || found.proxy == item.proxy) &&
+            found.reference.function == item.reference.function &&
             found.reference.value == item.reference.value && found.reference.environment == item.reference.environment) return true;
         slot = (slot + 1) & (walk->index_capacity - 1);
     }
@@ -90,6 +98,15 @@ static bool storage_capture_push(StorageCaptureWalk *walk, StorageCaptureItem it
 static XrXirStatus storage_capture_arguments(void *opaque, const XirExecutionSite *capture) {
     StorageCaptureWalk *walk = opaque;
     XirStorageFlow *flow = walk->flow;
+    if (capture->kind == XIR_EXECUTION_FORMAL) {
+        XirExecutionArgument formal = {0};
+        XrXirStatus status = xir_execution_argument(flow->execution, capture, 0, &formal);
+        if (status != XR_XIR_OK) return status;
+        if (!storage_capture_push(walk, (StorageCaptureItem){
+            .reference={formal.function, formal.value, formal.environment},
+            .kind=STORAGE_CARRIER_FORMAL, .proxy=walk->current_proxy.value})) return flow->status;
+        return XR_XIR_OK;
+    }
     for (uint32_t p = 0; p < capture->argument_count && storage_step(flow); ++p) {
         XirExecutionArgument actual = {0};
         XrXirStatus status = xir_execution_argument(flow->execution, capture, p, &actual);
@@ -99,8 +116,12 @@ static XrXirStatus storage_capture_arguments(void *opaque, const XirExecutionSit
             continue;
         }
         if (status != XR_XIR_OK) return status;
-        if (!actual.cell && !xr_xir_callable_signature(xir_execution_types(flow->execution), actual.type)) continue;
-        if (!storage_capture_push(walk, (StorageCaptureItem){{actual.function, actual.value, actual.environment}, actual.cell}))
+        if (!actual.cell) {
+            const XrXirTypes *types = xir_execution_types(flow->execution);
+            if (!xr_xir_type_is_callable(types, actual.type) || xr_xir_type_is_c_callable(types, actual.type)) continue;
+        }
+        if (!storage_capture_push(walk, (StorageCaptureItem){.reference={actual.function, actual.value, actual.environment},
+            .kind=actual.cell ? STORAGE_CARRIER_CELL : STORAGE_CARRIER_FN}))
             return flow->status;
     }
     return flow->status;
@@ -108,20 +129,23 @@ static XrXirStatus storage_capture_arguments(void *opaque, const XirExecutionSit
 
 static XrXirStatus storage_capture_collect(StorageCaptureWalk *walk, const XirStorageValuePoint *point) {
     XirStorageFlow *flow = walk->flow;
-    if (!storage_capture_push(walk, (StorageCaptureItem){point->reference, false})) return flow->status;
+    if (!storage_capture_push(walk, (StorageCaptureItem){.reference=point->reference, .kind=STORAGE_CARRIER_FN})) return flow->status;
     for (uint32_t n = 0; n < walk->count && storage_step(flow); ++n) {
         StorageCaptureItem item = walk->items[n];
-        if (item.cell) {
+        if (item.kind == STORAGE_CARRIER_FORMAL) continue;
+        if (item.kind == STORAGE_CARRIER_CELL) {
             XirStorageReference local;
             XrXirStatus status = storage_current_reference(flow, point->function, item.reference, &local);
             if (status != XR_XIR_OK) return status;
-            if (!xr_xir_callable_signature(flow->module->types, storage_payload(flow, local.function, local.value))) continue;
+            XrXirType payload = storage_payload(flow, local.function, local.value);
+            if (!xr_xir_type_is_callable(flow->module->types, payload) ||
+                xr_xir_type_is_c_callable(flow->module->types, payload)) continue;
             uint32_t contents;
             status = xir_storage_flow_contents_at(flow, point->function, point->instruction,
                 local.value, point->point, &contents);
             if (status != XR_XIR_OK) return status;
             if (!storage_capture_push(walk, (StorageCaptureItem){
-                {point->function, contents, XIR_EXECUTION_CURRENT_ENVIRONMENT}, false})) return flow->status;
+                .reference={point->function, contents, XIR_EXECUTION_CURRENT_ENVIRONMENT}, .kind=STORAGE_CARRIER_FN})) return flow->status;
             continue;
         }
         bool complete = false;
@@ -131,7 +155,8 @@ static XrXirStatus storage_capture_collect(StorageCaptureWalk *walk, const XirSt
         XirStorageReference proxy;
         XrXirStatus status = xir_storage_flow_point_value(flow, &use, &proxy);
         if (status != XR_XIR_OK) return status;
-        status = xir_execution_visit_value_captures_in(flow->execution, &proxy,
+        walk->current_proxy = proxy;
+        status = xir_execution_visit_value_environment_in(flow->execution, &proxy,
             storage_capture_arguments, walk, &complete, &remainder);
         if (status != XR_XIR_OK) return status;
         walk->remainder |= remainder;
@@ -140,7 +165,7 @@ static XrXirStatus storage_capture_collect(StorageCaptureWalk *walk, const XirSt
     if (flow->status != XR_XIR_OK) return flow->status;
     if (!walk->complete) return XR_XIR_UNRESOLVED;
     for (uint32_t n = 0; n < walk->count && storage_step(flow); ++n) {
-        if (!walk->items[n].cell) continue;
+        if (walk->items[n].kind != STORAGE_CARRIER_CELL) continue;
         XirStorageReference reference;
         XrXirStatus status = storage_current_reference(flow, point->function, walk->items[n].reference, &reference);
         if (status != XR_XIR_OK) return status;
@@ -164,7 +189,14 @@ XR_FUNC XrXirStatus xir_storage_flow_visit_value_captures(XirStorageFlow *flow, 
     XrXirStatus status = storage_capture_collect(&walk, point);
     flow->request_remainder |= walk.remainder;
     for (uint32_t n = 0; status == XR_XIR_OK && n < walk.count; ++n) {
-        if (!walk.items[n].cell) continue;
+        if (walk.items[n].kind == STORAGE_CARRIER_FN) continue;
+        if (walk.items[n].kind == STORAGE_CARRIER_FORMAL) {
+            XirStorageCapture formal = {.identity=walk.items[n].reference, .function=point->function,
+                .contents=banks & XIR_STORAGE_QUERY_CONTENTS ? walk.items[n].proxy : UINT32_MAX,
+                .exposure=UINT32_MAX, .kind=XIR_STORAGE_CAPTURE_FORMAL_FN};
+            status = visit(context, &formal);
+            continue;
+        }
         XirStorageCapture capture = {.identity=walk.items[n].reference, .function=point->function,
             .contents=UINT32_MAX, .exposure=UINT32_MAX};
         XirStorageObservation observation = {point->function, point->instruction, point->point, capture.identity};
@@ -194,7 +226,7 @@ static XrXirStatus storage_publish_value(XirStorageFlow *flow, const XirStorageV
     XrXirStatus status = storage_capture_collect(&walk, point);
     flow->request_remainder |= walk.remainder;
     for (uint32_t n = 0; status == XR_XIR_OK && n < walk.count; ++n) {
-        if (!walk.items[n].cell) continue;
+        if (walk.items[n].kind != STORAGE_CARRIER_CELL) continue;
         if (!storage_record_publication(flow, point->function, (StoragePublication){
             .point=point->instruction, .handle=walk.items[n].reference.value, .kind=point->point,
             .condition_point=condition ? condition->instruction : 0, .condition_handle=destination.value,
