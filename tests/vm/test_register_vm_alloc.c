@@ -370,7 +370,7 @@ typedef struct FrameObservation {
 static void observe_frame_root(void *data) {
     FrameObservation *o=data;
     o->status=xr_rbc_execute(o->execution->module,&o->execution->stack,
-        o->execution->pending->locations,&o->result);
+        o->execution->pending->locations,&o->result,o->execution->entries);
     if(o->status!=XR_RBC_OK)return;
     if(o->execution->pending->result_kind==XR_RBC_STRING)
         o->result.string=xrt_string_root_take(o->result.string);
