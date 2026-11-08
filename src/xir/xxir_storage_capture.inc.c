@@ -102,7 +102,7 @@ static XrXirStatus storage_capture_arguments(void *opaque, const XirExecutionSit
     XirStorageFlow *flow = walk->flow;
     if (capture->kind == XIR_EXECUTION_STORABLE) {
         if (capture->argument_count || capture->receiver_function >= flow->view.function_count ||
-            capture->receiver_value >= flow->view.functions[capture->receiver_function].physical_values ||
+            capture->receiver_value >= flow->view.functions[capture->receiver_function].value_count ||
             !xr_xir_type_is_callable(xir_execution_types(flow->execution), capture->signature)) return XR_XIR_BAD_STRUCTURE;
         if (!storage_capture_push(walk, (StorageCaptureItem){
             .reference={capture->receiver_function, capture->receiver_value, capture->environment},
