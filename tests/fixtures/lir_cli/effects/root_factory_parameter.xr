@@ -1,0 +1,9 @@
+var state:i64 = 1
+fn leaf()->i64 { return state }
+fn mk()->fn()->i64 { return leaf }
+fn call2(m:fn()->fn()->i64)->i64 {
+    const g = m()
+    return g()
+}
+fn worker()->i64 { return call2(mk) }
+const task = go worker()

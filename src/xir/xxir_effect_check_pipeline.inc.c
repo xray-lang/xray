@@ -70,8 +70,14 @@ static XrXirStatus effect_checked_project(const XrXirCompileContext *memory, XrX
             EffectCheckCause cause = {0};
             status = effect_checked_first_cause(roots, node, NULL, 0, bit != 0, &cause);
             if (status == XR_XIR_UNRESOLVED) {
+                uint32_t instruction = UINT32_MAX;
+                for (uint32_t t = 0; t < formula->term_count; ++t)
+                    if (formula->terms[t].kind == XR_XIR_ROOT_TERM_CONTEXT_CALL) {
+                        instruction = formula->terms[t].index;
+                        break;
+                    }
                 cause.witness = (XrXirRootEffectWitness){XR_XIR_ROOT_CAUSE_CONTEXT_CALL,
-                    UINT32_MAX, UINT32_MAX, UINT32_MAX, 0};
+                    instruction, UINT32_MAX, UINT32_MAX, 0};
                 status = XR_XIR_OK;
             }
             if (status != XR_XIR_OK) return status;
@@ -211,8 +217,16 @@ static XrXirStatus effect_checked_trace_next(EffectCheckTraceWalk *walk,
         }
     }
     if (bit && roots->node[node].deferred) {
+        uint32_t instruction = UINT32_MAX;
+        for (uint32_t p = 0; p < function.pending_count; ++p) {
+            const EffectCheckPending *pending = &roots->pending[function.pending_first + p];
+            if (!pending->linked && pending->node == node) {
+                instruction = pending->instruction;
+                break;
+            }
+        }
         *witness = (XrXirRootEffectWitness){XR_XIR_ROOT_CAUSE_CONTEXT_CALL,
-            UINT32_MAX, UINT32_MAX, UINT32_MAX, 0};
+            instruction, UINT32_MAX, UINT32_MAX, 0};
         return XR_XIR_OK;
     }
     return XR_XIR_BAD_STRUCTURE;
@@ -297,6 +311,11 @@ static XrXirStatus effect_checked_construct(const XrXirCompileContext *memory,
     if (status == XR_XIR_OK && refiner) {
         bool changed = false;
         status = refiner->update(refiner->context, effects, &changed);
+        if (status == XR_XIR_OK && XR_XIR_PARANOID && changed) {
+            changed = false;
+            status = refiner->update(refiner->context, effects, &changed);
+            XR_CHECK(status != XR_XIR_OK || !changed, "Refinement of the closed SSA summary is idempotent");
+        }
     }
     EffectFinalOutcomes *records = &effects->outcomes_work;
     EffectSummaryDispatchSource dispatch = {effects->checked_roots, effect_checked_control_targets};

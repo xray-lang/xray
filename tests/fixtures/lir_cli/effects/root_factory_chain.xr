@@ -1,0 +1,6 @@
+var state:i64 = 1
+fn leaf()->i64 { return state }
+fn mk()->fn()->i64 { return leaf }
+fn worker(m:fn()->fn()->i64)->i64 { return m()() }
+fn start()->i64 { return worker(mk) }
+const task = go start()

@@ -87,18 +87,15 @@ static void rps_instance(XrXirArtifact *artifact, const RootParameterSourceOracl
     XrXirEffectFacts root_read=xr_xir_effects_read(effects,destination);
     const XrXirRootEffects *root=(root_read.status==XR_XIR_OK?&root_read.root:NULL);
     CHECK(root && root->requires_root==oracle->root && root->unresolved==oracle->unresolved);
-    bool default_bound=false,actual_bound=false;
+    uint32_t instances=0;
     uint32_t apply=rps_named(source,"apply");CHECK(apply!=UINT32_MAX);
     for (uint32_t f=0;f<m->function_count;++f) {
         const XrXirOrigin *origin=&m->provenance->origins[f];
         if (origin->function!=apply) continue;
-        CHECK(origin->effect_argument_count==1 && origin->effect_arguments[0].parameter==0);
-        const XrXirTypeNode *signature=xr_xir_callable_signature(m->types,origin->effect_arguments[0].type);
-        CHECK(signature);
-        if (signature->flags==8) default_bound=true;
-        if (signature->flags==(oracle->unresolved?8u:oracle->root?4u:2u)) actual_bound=true;
+        CHECK(!origin->effect_argument_count && !origin->effect_arguments && !origin->argument_count);
+        ++instances;
     }
-    CHECK(default_bound && actual_bound);xr_xir_compile_effects_free(effects);
+    CHECK(instances==1);xr_xir_compile_effects_free(effects);
 }
 static XrXirStatus rps_operation(const XrXirCompileContext *context, void *opaque) {
     const RootParameterSourceOperation *operation=opaque;

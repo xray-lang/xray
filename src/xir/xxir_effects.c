@@ -1070,7 +1070,34 @@ static XrXirStatus effect_source_body_current(const XrXirCompileContext *context
     const XrXirModule *source, const XrXirEffects *effects) {
     if (!source || !effect_final_outcomes(effects) ||
         !xir_effects_context_matches(context,effects,source->function_count)) return XR_XIR_BAD_STRUCTURE;
-    return effects->checked_roots->templates==source->function_count ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
+    const EffectCheckedRoots *roots = effects->checked_roots;
+    if (roots->templates != source->function_count) return XR_XIR_BAD_STRUCTURE;
+    const XrXirProvenance *provenance = source->provenance;
+    if (!provenance || provenance->kind != XR_XIR_EVIDENCE_TEMPLATE) return XR_XIR_OK;
+    if (!provenance->contracts || provenance->contract_count != source->function_count)
+        return XR_XIR_BAD_STRUCTURE;
+    /* Published callback bindings retain their actual SSA producer. The owned
+     * alias edge checks that identity without retaining an instruction copy. */
+    for (uint32_t f = 0; f < source->function_count; ++f) {
+        const XrXirFunctionEffectContract *contract = &provenance->contracts[f];
+        const XrXirFunction *body = &source->functions[f];
+        const EffectCheckFunction *row = &roots->function[f];
+        if (contract->value_count > body->instruction_count ||
+            (contract->value_count && !contract->values)) return XR_XIR_BAD_STRUCTURE;
+        for (uint32_t v = 0; v < contract->value_count; ++v) {
+            const XrXirRootValueIdentity *identity = &contract->values[v];
+            if (identity->mode != XR_XIR_EFFECT_VALUE_CALL_BIND) continue;
+            if (identity->instruction >= body->instruction_count ||
+                identity->instruction >= row->values - row->parameters) return XR_XIR_BAD_STRUCTURE;
+            const XrXirInstruction *op = &body->instructions[identity->instruction];
+            uint32_t node = row->first + row->parameters + identity->instruction;
+            uint32_t alias = roots->node[node].aliases;
+            if (op->op != XR_XIR_COPY || op->args[0] >= row->values || alias >= roots->aliases ||
+                roots->alias[alias].source != row->first + op->args[0] ||
+                roots->alias[alias].next != UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
+        }
+    }
+    return XR_XIR_OK;
 }
 
 #include "xxir_effect_program_storage.inc.c"

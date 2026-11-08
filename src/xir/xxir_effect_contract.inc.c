@@ -535,10 +535,6 @@ static XrXirStatus effect_contract_instance_candidate(const XrXirCompileContext 
     }
     if (matches!=1) return XR_XIR_BAD_STRUCTURE;
 
-    XrXirEffectBindingProof wanted={family,caller,instruction,target,parameter,value};bool found=false;
-    status=xir_effect_binding_proof_lookup(context,p,&wanted,&found);
-    if (status!=XR_XIR_OK) return status;
-    if (!found) return XR_XIR_BAD_STRUCTURE;
     XirEffectCallableBound declared={source->types,module->types,origin->arguments,
         origin->argument_count,identity->declared_type,module->functions[target].parameters[parameter]};
     status=xir_effect_callable_bound_matches(context,&declared);

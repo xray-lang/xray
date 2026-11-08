@@ -1,0 +1,9 @@
+var state:i64 = 2
+fn leaf()->i64 { return 1 }
+fn rooted()->i64 { return state }
+fn worker()->i64 {
+    var fs = [leaf]
+    fs[0] = rooted
+    return fs[0]()
+}
+const task = go worker()

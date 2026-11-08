@@ -1,0 +1,7 @@
+var state:i64 = 2
+fn rooted()->i64 { return state }
+fn worker()->i64 {
+    const t = (rooted, 2)
+    return t.0()
+}
+const task = go worker()

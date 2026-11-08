@@ -51,7 +51,8 @@ def main() -> None:
         for name in ("pure_recursive_import", "pure_import_go", "pure_scoped_go", "generic_stringable", "nosuspend_literal",
                      "root_const", "signature_throws", "signature_generic_try",
                      "closed_dispatch_pure", "closed_dispatch_reference",
-                     "root_parameter_forward", "root_parameter_capture", "root_parameter_recursive"):
+                     "root_parameter_forward", "root_parameter_capture", "root_parameter_recursive",
+                     "root_array_literal", "root_tuple_literal", "root_tuple_selected"):
             checked = run(name + "-check", [binary, "check", effects / (name + ".xr")], 0)
             assert not checked.stdout and not checked.stderr, name
 
@@ -82,6 +83,11 @@ def main() -> None:
             ("root_default", b"GO target requires the current instance root execution"),
             ("root_import", b"GO target requires the current instance root execution"),
             ("root_parameter_escape", b"GO target lacks proof for worker execution"),
+            ("root_factory_alias", b"GO target lacks proof for worker execution"),
+            ("root_factory_parameter", b"GO target lacks proof for worker execution"),
+            ("root_factory_chain", b"GO target lacks proof for worker execution"),
+            ("root_array_mutated", b"GO target lacks proof for worker execution"),
+            ("root_tuple_rooted", b"GO target requires the current instance root execution"),
             ("redundant_root_apply", b"E0336: try body has no business-error source"),
             ("redundant_root_fixed", b"E0336: try body has no business-error source"),
             ("redundant_root_root", b"E0336: try body has no business-error source"),

@@ -1,0 +1,6 @@
+fn leaf()->i64 { return 1 }
+fn worker()->i64 {
+    const t = (leaf, 2)
+    return t.0()
+}
+const task = go worker()
