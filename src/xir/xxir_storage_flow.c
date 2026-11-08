@@ -26,6 +26,12 @@ typedef struct StorageAddress { uint32_t first, count; bool ready; } StorageAddr
 typedef struct StorageState { uint32_t point, handle, value, kind, order, generation; } StorageState;
 typedef struct StorageWork { uint32_t function, state; } StorageWork;
 typedef struct StorageIdentityLink { uint32_t identity, next; } StorageIdentityLink;
+typedef struct StorageOperation { XrXirOp op; uint32_t source, destination, receiver; } StorageOperation;
+typedef struct StorageRead {
+    uint32_t source, target, point;
+    XirStoragePointKind kind;
+    bool force;
+} StorageRead;
 typedef struct StorageExecution {
     XirExecutionSite site;
     uint32_t applications[3], next;
@@ -34,7 +40,13 @@ typedef struct StorageExecution {
 } StorageExecution;
 
 typedef struct StorageFunction {
+    XrXirFunction header;
     const XrXirFunction *body;
+    XrXirType *types;
+    uint8_t *handles;
+    StorageOperation *operations;
+    StorageRead *reads;
+    uint32_t read_count, read_capacity, observed, current_block;
     uint32_t *blocks, *predecessors;
     StoragePredecessor *edges;
     uint32_t edge_count, edge_capacity, flow_capacity;
@@ -69,8 +81,9 @@ struct XirStorageFlow {
     uint32_t progress;
     uint64_t revision;
     XrXirStatus status;
-    bool sealed, sealing;
+    bool sealed, sealing, local_finished;
 };
+static bool storage_close_applications(XirStorageFlow *flow);
 
 static bool storage_step(XirStorageFlow *flow) {
     if (flow->status == XR_XIR_OK)
@@ -113,7 +126,7 @@ static bool storage_unknown(XirStorageFlow *flow, uint32_t function, uint32_t va
     if (!storage_reserve(flow, &values, flow->view.unknown_count, &flow->unknown_capacity,
         sizeof(*flow->view.unknowns))) return false;
     flow->view.unknowns = values;
-    ((XirStorageUnknown *)values)[flow->view.unknown_count++] = (XirStorageUnknown){function, value, type};
+    ((XirStorageUnknown *)values)[flow->view.unknown_count++] = (XirStorageUnknown){function, value, type, UINT32_MAX};
     ++flow->revision;
     return true;
 }
@@ -132,12 +145,12 @@ static bool storage_input(XirStorageFlow *flow, uint32_t function, uint32_t valu
     if (!storage_reserve(flow, &values, flow->view.input_count, &flow->input_capacity,
         sizeof(*flow->view.inputs))) return false;
     flow->view.inputs = values;
-    ((XirStorageInput *)values)[flow->view.input_count++] = (XirStorageInput){function, value, handle};
+    ((XirStorageInput *)values)[flow->view.input_count++] = (XirStorageInput){function, value, handle, XIR_STORAGE_CONTENTS};
     return true;
 }
 
 static XrXirType storage_payload(const XirStorageFlow *flow, uint32_t function, uint32_t value) {
-    XrXirType type = xr_xir_operand_type(flow->rows[function].body, value);
+    XrXirType type = flow->rows[function].types[value];
     return xr_xir_type_is_cell(flow->module->types, type) ? xr_xir_cell_element(flow->module->types, type) : type;
 }
 
@@ -204,8 +217,9 @@ static uint32_t storage_state_hash(uint32_t point, uint32_t handle, uint32_t kin
 
 static bool storage_index_grow(XirStorageFlow *flow, uint32_t function) {
     StorageFunction *row = &flow->rows[function];
-    uint32_t capacity = row->index_capacity ? row->index_capacity * 2u : 16u;
-    if (capacity < row->index_capacity) { flow->status = XR_XIR_OVERFLOW; return false; }
+    uint64_t next = row->index_capacity ? (uint64_t)row->index_capacity * 2u : 16u;
+    if (next > UINT32_MAX) { flow->status = XR_XIR_OVERFLOW; return false; }
+    uint32_t capacity = (uint32_t)next;
     uint32_t *index = xir_compile_calloc(&flow->memory, capacity, sizeof(*index), &flow->status);
     if (!index) return false;
     for (uint32_t n = 0; n < row->state_count && storage_step(flow); ++n) {
@@ -270,36 +284,8 @@ static XrXirStatus storage_successor(void *opaque, const XirInstructionFlowEdge 
     return connect->flow->status;
 }
 
-static bool storage_graph(XirStorageFlow *flow, uint32_t function) {
-    StorageFunction *row = &flow->rows[function];
-    const XrXirFunction *body = row->body;
-    for (uint32_t b = 0; b < body->block_count && storage_step(flow); ++b) {
-        XrXirBlock block = body->blocks[b];
-        if (block.first > body->instruction_count || block.count > body->instruction_count - block.first) {
-            flow->status = XR_XIR_BAD_STRUCTURE; return false;
-        }
-        for (uint32_t i = block.first; i < block.first + block.count && storage_step(flow); ++i) {
-            row->blocks[i] = b;
-            StorageConnect connect = {flow, function};
-            flow->status = xr_xir_instruction_flow_visit(body, i, b, XIR_INSTRUCTION_FLOW_ALL,
-                storage_successor, &connect);
-            if (flow->status != XR_XIR_OK) return false;
-            XrXirOp op = body->instructions[i].op;
-            if (op == XR_XIR_RETURN && !storage_predecessor(flow, function, i,
-                body->instruction_count, XIR_INSTRUCTION_FLOW_NEXT, 0)) return false;
-            if (op == XR_XIR_THROW && !storage_predecessor(flow, function, i,
-                body->instruction_count + 1, XIR_INSTRUCTION_FLOW_NEXT, 0)) return false;
-            if (!block.panic && !storage_predecessor(flow, function, i,
-                body->instruction_count + 2, XIR_INSTRUCTION_FLOW_PANIC, 0)) return false;
-        }
-    }
-    return flow->status == XR_XIR_OK;
-}
-
 static bool storage_is_handle(const XirStorageFlow *flow, uint32_t function, uint32_t value) {
-    const XrXirFunction *body = flow->rows[function].body;
-    return xr_xir_place_kind(body, value) != XR_XIR_PLACE_NONE ||
-        xr_xir_type_is_cell(flow->module->types, xr_xir_operand_type(body, value));
+    return value < flow->view.functions[function].physical_values && flow->rows[function].handles[value] != 0;
 }
 
 static bool storage_new_place(XrXirOp op) {
@@ -330,21 +316,19 @@ static bool storage_execution(XrXirOp op) {
         op == XR_XIR_RETURN || op == XR_XIR_THROW;
 }
 
-static bool storage_collect_identities(XirStorageFlow *flow, uint32_t function) {
+static bool storage_observe_identity(XirStorageFlow *flow, uint32_t function, uint32_t i,
+    const XrXirInstruction *op) {
     const XrXirFunction *body = flow->rows[function].body;
-    for (uint32_t i = 0; i < body->instruction_count && storage_step(flow); ++i) {
-        const XrXirInstruction *op = &body->instructions[i];
-        uint32_t value = body->parameter_count + i;
-        if (storage_new_place(op->op) && !storage_allocation(flow, function, value)) return false;
-        if (!storage_is_handle(flow, function, value)) continue;
-        if (storage_copy(op->op) || op->op == XR_XIR_CELL_PLACE || op->op == XR_XIR_CELL_PROJECT) {
-            if (!storage_identity(flow, function, op->args[0], value)) return false;
-        } else if (op->op == XR_XIR_PHI) {
-            if (op->args[0] > body->operand_count || op->args[1] > body->operand_count - op->args[0] ||
-                op->args[1] % 2) { flow->status = XR_XIR_BAD_STRUCTURE; return false; }
-            for (uint32_t p = 1; p < op->args[1]; p += 2)
-                if (!storage_identity(flow, function, body->operands[op->args[0] + p], value)) return false;
-        }
+    uint32_t value = body->parameter_count + i;
+    if (storage_new_place(op->op) && !storage_allocation(flow, function, value)) return false;
+    if (!storage_is_handle(flow, function, value)) return true;
+    if (storage_copy(op->op) || op->op == XR_XIR_CELL_PLACE || op->op == XR_XIR_CELL_PROJECT) {
+        if (!storage_identity(flow, function, op->args[0], value)) return false;
+    } else if (op->op == XR_XIR_PHI) {
+        if (op->args[0] > body->operand_count || op->args[1] > body->operand_count - op->args[0] ||
+            op->args[1] % 2) { flow->status = XR_XIR_BAD_STRUCTURE; return false; }
+        for (uint32_t p = 1; p < op->args[1]; p += 2)
+            if (!storage_identity(flow, function, body->operands[op->args[0] + p], value)) return false;
     }
     return flow->status == XR_XIR_OK;
 }
@@ -357,26 +341,47 @@ static uint32_t storage_contents(XirStorageFlow *flow, uint32_t function, uint32
     return storage_state(flow, function, point, handle);
 }
 
-static bool storage_collect_values(XirStorageFlow *flow, uint32_t function) {
-    const XrXirFunction *body = flow->rows[function].body;
-    for (uint32_t p = 0; p < body->parameter_count && storage_step(flow); ++p) {
-        if (!xr_xir_type_is_cell(flow->module->types, body->parameters[p])) continue;
-        uint32_t value = storage_state(flow, function, 0, p);
-        if (value == UINT32_MAX || !storage_input(flow, function, value, p)) return false;
+static uint32_t storage_contents_point(XirStorageFlow *flow, uint32_t function, uint32_t point,
+    uint32_t handle, XirStoragePointKind kind) {
+    if (kind == XIR_STORAGE_BEFORE) return storage_contents(flow, function, point, handle);
+    StorageAddress address;
+    if (!storage_address(flow, function, handle, &address)) return UINT32_MAX;
+    uint32_t root = address.count == 1 ? flow->rows[function].address_values[address.first] : handle;
+    if (kind == XIR_STORAGE_NORMAL) return storage_point(flow, function, point, root, 5, 0);
+    XrXirOp op = flow->rows[function].operations[point].op;
+    if (!storage_execution(op)) {
+        if (kind == XIR_STORAGE_PANIC) return storage_state(flow, function, point, root);
+        flow->status = XR_XIR_BAD_STRUCTURE; return UINT32_MAX;
     }
-    for (uint32_t i = 0; i < body->instruction_count && storage_step(flow); ++i) {
-        const XrXirInstruction *op = &body->instructions[i];
-        uint32_t value = body->parameter_count + i;
-        if (storage_read(op->op)) {
-            uint32_t contents = storage_contents(flow, function, i, op->args[0]);
-            if (contents == UINT32_MAX || !storage_relation(flow, function, contents, value)) return false;
-        } else if (storage_copy(op->op) && !storage_is_handle(flow, function, value)) {
-            if (!storage_relation(flow, function, op->args[0], value)) return false;
-        } else if (op->op == XR_XIR_PHI && !storage_is_handle(flow, function, value)) {
-            if (op->args[0] > body->operand_count || op->args[1] > body->operand_count - op->args[0] ||
-                op->args[1] % 2) { flow->status = XR_XIR_BAD_STRUCTURE; return false; }
-            for (uint32_t p = 1; p < op->args[1]; p += 2)
-                if (!storage_relation(flow, function, body->operands[op->args[0] + p], value)) return false;
+    return storage_point(flow, function, point, root, kind == XIR_STORAGE_ERROR ? 2 : 4, UINT32_MAX);
+}
+
+static bool storage_request_read(XirStorageFlow *flow, uint32_t function, StorageRead read) {
+    StorageFunction *row = &flow->rows[function];
+    if (!storage_reserve(flow, (void **)&row->reads, row->read_count,
+        &row->read_capacity, sizeof(*row->reads))) return false;
+    row->reads[row->read_count++] = read;
+    return true;
+}
+
+static bool storage_observe_values(XirStorageFlow *flow, uint32_t function, uint32_t i,
+    const XrXirInstruction *op) {
+    const XrXirFunction *body = flow->rows[function].body;
+    uint32_t value = body->parameter_count + i;
+    if (storage_read(op->op) || (storage_copy(op->op) && !storage_is_handle(flow, function, value)))
+        return storage_request_read(flow, function, (StorageRead){op->args[0], value, i,
+            XIR_STORAGE_BEFORE, storage_read(op->op)});
+    if (op->op == XR_XIR_PHI && !storage_is_handle(flow, function, value)) {
+        if (op->args[0] > body->operand_count || op->args[1] > body->operand_count - op->args[0] ||
+            op->args[1] % 2) { flow->status = XR_XIR_BAD_STRUCTURE; return false; }
+        for (uint32_t p = 0; p < op->args[1]; p += 2) {
+            uint32_t predecessor = body->operands[op->args[0] + p];
+            if (predecessor >= body->block_count || !body->blocks[predecessor].count) {
+                flow->status = XR_XIR_BAD_STRUCTURE; return false;
+            }
+            XrXirBlock block = body->blocks[predecessor];
+            if (!storage_request_read(flow, function, (StorageRead){body->operands[op->args[0] + p + 1],
+                value, block.first + block.count - 1, XIR_STORAGE_NORMAL, false})) return false;
         }
     }
     return flow->status == XR_XIR_OK;
@@ -385,7 +390,7 @@ static bool storage_collect_values(XirStorageFlow *flow, uint32_t function) {
 static bool storage_transfer(XirStorageFlow *flow, uint32_t function, StorageState state,
     StoragePredecessor edge) {
     const XrXirFunction *body = flow->rows[function].body;
-    const XrXirInstruction *op = &body->instructions[edge.source];
+    const StorageOperation *op = &flow->rows[function].operations[edge.source];
     bool preserve = true;
     if (edge.kind != XIR_INSTRUCTION_FLOW_PANIC && storage_new_place(op->op) &&
         state.handle == body->parameter_count + edge.source) {
@@ -393,14 +398,25 @@ static bool storage_transfer(XirStorageFlow *flow, uint32_t function, StorageSta
         if (op->op == XR_XIR_LOCAL_UNINIT)
             return storage_unknown(flow, function, state.value, storage_payload(flow, function, state.handle));
         if (storage_payload(flow, function, state.handle) != XR_XIR_UNIT &&
-            !storage_relation(flow, function, op->args[0], state.value)) return false;
+            !storage_relation(flow, function, op->source, state.value)) return false;
     } else if (edge.kind != XIR_INSTRUCTION_FLOW_PANIC && storage_write(op->op)) {
         StorageAddress address;
-        if (!storage_address(flow, function, op->args[0], &address)) return false;
+        if (!storage_address(flow, function, op->destination, &address)) return false;
         for (uint32_t a = 0; a < address.count; ++a) {
             if (flow->rows[function].address_values[address.first + a] != state.handle) continue;
             if (storage_payload(flow, function, state.handle) != XR_XIR_UNIT &&
-                !storage_relation(flow, function, op->args[1], state.value)) return false;
+                !storage_relation(flow, function, op->source, state.value)) return false;
+            preserve = address.count != 1;
+            break;
+        }
+    } else if (edge.kind != XIR_INSTRUCTION_FLOW_PANIC &&
+        (op->op == XR_XIR_CELL_TAKE || op->op == XR_XIR_VALUE_TAKE) &&
+        storage_is_handle(flow, function, op->destination)) {
+        StorageAddress address;
+        if (!storage_address(flow, function, op->destination, &address)) return false;
+        for (uint32_t a = 0; a < address.count; ++a) {
+            if (flow->rows[function].address_values[address.first + a] != state.handle) continue;
+            if (!storage_unknown(flow, function, state.value, storage_payload(flow, function, state.handle))) return false;
             preserve = address.count != 1;
             break;
         }
@@ -421,6 +437,11 @@ static bool storage_drain(XirStorageFlow *flow) {
         StorageWork item = flow->work[flow->work_first++];
         StorageFunction *row = &flow->rows[item.function];
         StorageState state = row->states[item.state];
+        if (state.kind == 5) {
+            StoragePredecessor edge = {state.point, UINT32_MAX, 0, XIR_INSTRUCTION_FLOW_NEXT};
+            if (!storage_transfer(flow, item.function, state, edge)) return false;
+            continue;
+        }
         if (state.kind) continue;
         StorageAddress address;
         if (!storage_address(flow, item.function, state.handle, &address)) return false;
@@ -483,8 +504,9 @@ static uint32_t storage_application(XirStorageFlow *flow, const XirExecutionSite
 }
 
 static bool storage_site_index_grow(XirStorageFlow *flow) {
-    uint32_t capacity = flow->site_index_capacity ? flow->site_index_capacity * 2u : 16u;
-    if (capacity < flow->site_index_capacity) { flow->status = XR_XIR_OVERFLOW; return false; }
+    uint64_t next = flow->site_index_capacity ? (uint64_t)flow->site_index_capacity * 2u : 16u;
+    if (next > UINT32_MAX) { flow->status = XR_XIR_OVERFLOW; return false; }
+    uint32_t capacity = (uint32_t)next;
     uint32_t *index = xir_compile_calloc(&flow->memory, capacity, sizeof(*index), &flow->status);
     if (!index) return false;
     for (uint32_t n = 0; n < flow->site_count && storage_step(flow); ++n) {
@@ -507,6 +529,7 @@ static XrXirStatus storage_import_site(void *opaque, const XirExecutionSite *sit
     if (!storage_step(flow)) return flow->status;
     if (site->function >= flow->view.function_count) return flow->status = XR_XIR_BAD_STRUCTURE;
     const XrXirFunction *body = flow->rows[site->function].body;
+    if (site->order >= flow->rows[site->function].point_count) return flow->status = XR_XIR_BAD_STRUCTURE;
     if ((site->instruction == UINT32_MAX && (site->kind != XIR_EXECUTION_CLEANUP_USE ||
         site->port != XIR_EXECUTION_PANIC || site->block >= body->block_count)) ||
         (site->instruction != UINT32_MAX && site->instruction >= body->instruction_count))
@@ -660,7 +683,7 @@ static uint32_t storage_state_sites(const XirStorageFlow *flow, uint32_t functio
 
 static XirExecutionPort storage_activation(const XirStorageFlow *flow, uint32_t function, StorageState state) {
     if (state.kind == 3) return XIR_EXECUTION_PANIC;
-    XrXirOp op = flow->rows[function].body->instructions[state.point].op;
+    XrXirOp op = flow->rows[function].operations[state.point].op;
     return op == XR_XIR_CLEANUP_ERROR || op == XR_XIR_THROW ? XIR_EXECUTION_ERROR : XIR_EXECUTION_NORMAL;
 }
 
@@ -672,7 +695,7 @@ static bool storage_site_port(const XirStorageFlow *flow, uint32_t function,
 static uint32_t storage_stage_count(const XirStorageFlow *flow, uint32_t function, StorageState state) {
     bool cleanup = state.kind == 3;
     if (!cleanup) {
-        XrXirOp op = flow->rows[function].body->instructions[state.point].op;
+        XrXirOp op = flow->rows[function].operations[state.point].op;
         cleanup = op == XR_XIR_CLEANUP_LEAVE || op == XR_XIR_CLEANUP_ERROR ||
             op == XR_XIR_RETURN || op == XR_XIR_THROW;
     }
@@ -697,7 +720,7 @@ static bool storage_argument_matches(XirStorageFlow *flow, const XirExecutionSit
         if (actual.environment != UINT32_MAX && actual.environment >= flow->view.application_count) return true;
         if (actual.function == site->function && actual.value == root) return true;
         if (root < body->parameter_count) return true;
-        return !storage_new_place(body->instructions[root - body->parameter_count].op);
+        return !storage_new_place(flow->rows[site->function].operations[root - body->parameter_count].op);
     }
     StorageAddress address;
     if (!storage_address(flow, site->function, handle, &address)) return false;
@@ -727,7 +750,7 @@ static bool storage_apply_known(XirStorageFlow *flow, uint32_t site_index, uint3
         uint32_t exit = callee->instruction_count + (uint32_t)outcome;
         uint32_t source = storage_contents(flow, site.declaration, exit, p);
         if (source == UINT32_MAX || !storage_cross(flow, (XirStorageCrossFlow){
-            site.declaration, source, function, state.value, record.applications[outcome]})) return false;
+            site.declaration, source, function, state.value, record.applications[outcome], XIR_STORAGE_CONTENTS})) return false;
     }
     return affected && exact ? true : storage_relation(flow, function, input, state.value);
 }
@@ -765,7 +788,7 @@ static XrXirStatus storage_opaque_capture(void *opaque, const XirExecutionSite *
             if (actual.environment != UINT32_MAX && actual.environment >= flow->view.application_count)
                 return flow->status = XR_XIR_UNRESOLVED;
             if (!storage_cross(flow, (XirStorageCrossFlow){actual.function, actual.value,
-                query->use.function, query->target, actual.environment})) return flow->status;
+                query->use.function, query->target, actual.environment, XIR_STORAGE_CONTENTS})) return flow->status;
         }
     }
     return flow->status;
@@ -803,9 +826,9 @@ static bool storage_opaque_environment(XirStorageFlow *flow, const XirExecutionS
         }
     }
     if (site->instruction != UINT32_MAX) {
-        const XrXirInstruction *op = &flow->rows[site->function].body->instructions[site->instruction];
+        const StorageOperation *op = &flow->rows[site->function].operations[site->instruction];
         if (op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT)
-            if (!storage_observe_opaque_value(flow, site->function, (uint32_t)op->immediate, query)) return false;
+            if (!storage_observe_opaque_value(flow, site->function, op->receiver, query)) return false;
     }
     *affected |= query->reachable;
     return flow->status == XR_XIR_OK;
@@ -817,7 +840,8 @@ static bool storage_apply_opaque(XirStorageFlow *flow, const XirExecutionSite *s
     const XrXirFunction *body = flow->rows[function].body;
     bool affected = !site->native_callable && state.handle < body->parameter_count;
     if (state.handle >= body->parameter_count)
-        affected = !site->native_callable && !storage_new_place(body->instructions[state.handle - body->parameter_count].op);
+        affected = !site->native_callable && !storage_new_place(flow->rows[function].operations[
+            state.handle - body->parameter_count].op);
     StorageOpaqueCapture query = {.flow=flow, .use=*site, .target=state.value, .handle=state.handle};
     if (!storage_opaque_environment(flow, site, &query, &affected)) return false;
     if (affected && flow->sealing) {
@@ -834,7 +858,7 @@ static bool storage_apply_opaque(XirStorageFlow *flow, const XirExecutionSite *s
 
 static bool storage_process_stage(XirStorageFlow *flow, uint32_t function, uint32_t state_index) {
     StorageState state = flow->rows[function].states[state_index];
-    if (!state.kind || state.generation == flow->generation) return true;
+    if (!state.kind || state.kind == 5 || state.generation == flow->generation) return true;
     uint32_t generation = flow->generation;
     if (state.order == UINT32_MAX) {
         uint32_t count = storage_stage_count(flow, function, state);
@@ -854,7 +878,7 @@ static bool storage_process_stage(XirStorageFlow *flow, uint32_t function, uint3
         if (state.kind == 3) {
             XrXirBlock block = flow->rows[function].body->blocks[state.point];
             for (uint32_t i = block.first; i < block.first + block.count && storage_step(flow); ++i) {
-                XrXirOp op = flow->rows[function].body->instructions[i].op;
+                XrXirOp op = flow->rows[function].operations[i].op;
                 uint32_t source = storage_execution(op) ?
                     storage_point(flow, function, i, state.handle, 4, UINT32_MAX) :
                     storage_state(flow, function, i, state.handle);
@@ -900,14 +924,25 @@ static bool storage_prepare_function(XirStorageFlow *flow, uint32_t function) {
     uint64_t heads = (uint64_t)body->instruction_count + body->block_count;
     if (physical > UINT32_MAX || points > UINT32_MAX || heads > UINT32_MAX ||
         points > SIZE_MAX / sizeof(*row->predecessors) || heads > SIZE_MAX / sizeof(*row->site_heads) ||
-        (body->parameter_count && !body->parameters) ||
-        (body->instruction_count && (!body->instructions || !body->blocks || !body->block_count))) {
+        (body->parameter_count && !body->parameters) || (body->operand_count && !body->operands) ||
+        (body->block_count && !body->blocks) || (body->instruction_count && !body->block_count)) {
         flow->status = XR_XIR_BAD_STRUCTURE; return false;
     }
-    row->body = body;
+    row->header = *body;
+    row->header.name = NULL; row->header.name_length = 0; row->header.instructions = NULL;
+    row->header.consume_parameters = NULL; row->header.consume_parameter_count = 0;
+    row->header.escaping_parameters = NULL; row->header.escaping_parameter_count = 0;
+    row->types = xir_compile_calloc(&flow->memory, (size_t)physical, sizeof(*row->types), &flow->status);
+    row->handles = xir_compile_calloc(&flow->memory, (size_t)physical, sizeof(*row->handles), &flow->status);
+    row->operations = xir_compile_calloc(&flow->memory, body->instruction_count, sizeof(*row->operations), &flow->status);
+    row->header.blocks = xir_compile_copy(&flow->memory, body->blocks,
+        (size_t)body->block_count * sizeof(*body->blocks), &flow->status);
+    row->header.parameters = row->types;
+    row->body = &row->header;
     row->point_count = (uint32_t)points; row->site_head_count = (uint32_t)heads;
     XirStorageFlowFunction *view = (XirStorageFlowFunction *)&flow->view.functions[function];
     view->physical_values = (uint32_t)physical; view->value_count = (uint32_t)physical;
+    view->parameter_count = body->parameter_count;
     row->blocks = xir_compile_calloc(&flow->memory, body->instruction_count, sizeof(*row->blocks), &flow->status);
     row->predecessors = xir_compile_calloc(&flow->memory, row->point_count,
         sizeof(*row->predecessors), &flow->status);
@@ -918,15 +953,28 @@ static bool storage_prepare_function(XirStorageFlow *flow, uint32_t function) {
     row->site_heads = xir_compile_calloc(&flow->memory, row->site_head_count,
         sizeof(*row->site_heads), &flow->status);
     if (flow->status != XR_XIR_OK) return false;
+    if (body->parameter_count) memcpy(row->types, body->parameters,
+        (size_t)body->parameter_count * sizeof(*row->types));
+    for (uint32_t p = 0; p < body->parameter_count; ++p)
+        row->handles[p] = xr_xir_type_is_cell(flow->module->types, row->types[p]);
+    for (uint32_t b = 0; b < body->block_count; ++b) {
+        XrXirBlock block = body->blocks[b];
+        if (block.first > body->instruction_count || block.count > body->instruction_count - block.first) {
+            flow->status = XR_XIR_BAD_STRUCTURE; return false;
+        }
+    }
     for (uint32_t p = 0; p < row->point_count; ++p) row->predecessors[p] = UINT32_MAX;
     for (uint32_t v = 0; v < physical; ++v) row->identity_heads[v] = UINT32_MAX;
     for (uint32_t p = 0; p < row->site_head_count; ++p) row->site_heads[p] = UINT32_MAX;
-    return storage_graph(flow, function) && storage_collect_identities(flow, function);
+    return true;
 }
 
 static void storage_retire_construction(XirStorageFlow *flow) {
     for (uint32_t f = 0; flow->rows && f < flow->view.function_count; ++f) {
         StorageFunction *row = &flow->rows[f];
+        xr_compile_resources_free((void *)row->header.blocks);
+        xr_compile_resources_free(row->types); xr_compile_resources_free(row->handles);
+        xr_compile_resources_free(row->operations); xr_compile_resources_free(row->reads);
         xr_compile_resources_free(row->blocks); xr_compile_resources_free(row->predecessors);
         xr_compile_resources_free(row->edges); xr_compile_resources_free(row->identity_heads);
         xr_compile_resources_free(row->identity_links); xr_compile_resources_free(row->address_values);
@@ -974,18 +1022,84 @@ XR_FUNC XrXirStatus xir_storage_flow_new(const XrXirCompileContext *memory, cons
     if (flow->status == XR_XIR_OK) flow->view.function_count = module->function_count;
     for (uint32_t f = 0; f < flow->view.function_count && storage_step(flow); ++f)
         if (!storage_prepare_function(flow, f)) break;
-    for (uint32_t f = 0; f < flow->view.function_count && storage_step(flow); ++f)
-        if (!storage_collect_values(flow, f)) break;
-    if (flow->status == XR_XIR_OK) storage_drain(flow);
     status = flow->status;
     if (status != XR_XIR_OK) { xir_storage_flow_free(flow); return status; }
     *output = flow;
     return XR_XIR_OK;
 }
 
+XR_FUNC XrXirStatus xir_storage_flow_observe(XirStorageFlow *flow, uint32_t function,
+    uint32_t instruction, const XrXirInstruction *op) {
+    if (!flow || flow->sealed || flow->local_finished || !op || function >= flow->view.function_count)
+        return XR_XIR_BAD_STRUCTURE;
+    if (flow->status != XR_XIR_OK) return flow->status;
+    StorageFunction *row = &flow->rows[function];
+    const XrXirFunction *body = row->body;
+    if (instruction != row->observed || instruction >= body->instruction_count ||
+        !op->op || (uint32_t)op->op >= XR_XIR_OP_COUNT) return flow->status = XR_XIR_BAD_STRUCTURE;
+    while (row->current_block + 1 < body->block_count &&
+        body->blocks[row->current_block + 1].first <= instruction) ++row->current_block;
+    uint32_t value = body->parameter_count + instruction;
+    row->types[value] = op->type;
+    row->handles[value] = xr_xir_place_op_kind(op->op) != XR_XIR_PLACE_NONE ||
+        xr_xir_type_is_cell(flow->module->types, op->type);
+    StorageOperation record = {op->op, op->args[0], UINT32_MAX, UINT32_MAX};
+    if (storage_write(op->op)) { record.destination = op->args[0]; record.source = op->args[1]; }
+    if (storage_new_place(op->op)) record.destination = value;
+    if (op->op == XR_XIR_CELL_TAKE || op->op == XR_XIR_VALUE_TAKE) record.destination = op->args[0];
+    if (op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT) {
+        if (op->immediate < 0 || (uint64_t)op->immediate >= flow->view.functions[function].physical_values)
+            return flow->status = XR_XIR_BAD_STRUCTURE;
+        record.receiver = (uint32_t)op->immediate;
+    }
+    row->operations[instruction] = record; row->blocks[instruction] = row->current_block;
+    StorageConnect connect = {flow, function};
+    XirInstructionFlowPoint point = {body, op, instruction, row->current_block};
+    flow->status = xr_xir_instruction_flow_point(&point, XIR_INSTRUCTION_FLOW_ALL, storage_successor, &connect);
+    if (flow->status != XR_XIR_OK) return flow->status;
+    if (op->op == XR_XIR_RETURN && !storage_predecessor(flow, function, instruction,
+        body->instruction_count, XIR_INSTRUCTION_FLOW_NEXT, 0)) return flow->status;
+    if (op->op == XR_XIR_THROW && !storage_predecessor(flow, function, instruction,
+        body->instruction_count + 1, XIR_INSTRUCTION_FLOW_NEXT, 0)) return flow->status;
+    if (!body->blocks[row->current_block].panic && !storage_predecessor(flow, function, instruction,
+        body->instruction_count + 2, XIR_INSTRUCTION_FLOW_PANIC, 0)) return flow->status;
+    if (!storage_observe_identity(flow, function, instruction, op) ||
+        !storage_observe_values(flow, function, instruction, op)) return flow->status;
+    ++row->observed;
+    return flow->status;
+}
+
+XR_FUNC XrXirStatus xir_storage_flow_finish_local(XirStorageFlow *flow) {
+    if (!flow || flow->sealed || flow->local_finished) return XR_XIR_BAD_STRUCTURE;
+    if (flow->status != XR_XIR_OK) return flow->status;
+    for (uint32_t f = 0; f < flow->view.function_count && storage_step(flow); ++f) {
+        StorageFunction *row = &flow->rows[f];
+        if (row->observed != row->body->instruction_count) return flow->status = XR_XIR_BAD_STRUCTURE;
+        for (uint32_t p = 0; p < row->body->parameter_count && storage_step(flow); ++p) {
+            if (!xr_xir_type_is_cell(flow->module->types, row->types[p])) continue;
+            uint32_t value = storage_state(flow, f, 0, p);
+            if (value == UINT32_MAX || !storage_input(flow, f, value, p)) return flow->status;
+        }
+        for (uint32_t r = 0; r < row->read_count && storage_step(flow); ++r) {
+            StorageRead read = row->reads[r];
+            if (read.source >= flow->view.functions[f].physical_values) return flow->status = XR_XIR_BAD_STRUCTURE;
+            uint32_t source = read.source;
+            if (read.force || storage_is_handle(flow, f, read.source)) {
+                if (!storage_is_handle(flow, f, read.source)) return flow->status = XR_XIR_BAD_STRUCTURE;
+                source = storage_contents_point(flow, f, read.point, read.source, read.kind);
+            }
+            if (source == UINT32_MAX || !storage_relation(flow, f, source, read.target)) return flow->status;
+        }
+        row->header.operands = NULL; row->header.operand_count = 0;
+    }
+    if (!storage_drain(flow)) return flow->status;
+    flow->local_finished = true;
+    return XR_XIR_OK;
+}
+
 XR_FUNC XrXirStatus xir_storage_flow_contents(XirStorageFlow *flow, uint32_t function,
     uint32_t instruction, uint32_t handle, uint32_t *value) {
-    if (!flow || flow->sealed || !value || function >= flow->view.function_count ||
+    if (!flow || flow->sealed || !flow->local_finished || !value || function >= flow->view.function_count ||
         instruction >= flow->rows[function].body->instruction_count ||
         handle >= flow->view.functions[function].physical_values ||
         !storage_is_handle(flow, function, handle)) return XR_XIR_BAD_STRUCTURE;
@@ -1013,7 +1127,7 @@ static bool storage_close_applications(XirStorageFlow *flow) {
 }
 
 XR_FUNC XrXirStatus xir_storage_flow_link(XirStorageFlow *flow, const XirExecutionOwner *execution, bool *changed) {
-    if (!flow || flow->sealed || !execution || execution != flow->execution || !changed)
+    if (!flow || flow->sealed || !flow->local_finished || !execution || execution != flow->execution || !changed)
         return XR_XIR_BAD_STRUCTURE;
     if (flow->status != XR_XIR_OK) return flow->status;
     uint32_t generation = flow->generation, work = flow->work_count;

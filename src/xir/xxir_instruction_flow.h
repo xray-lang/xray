@@ -26,23 +26,30 @@ typedef struct XirInstructionFlowEdge {
     XirInstructionFlowKind kind;
 } XirInstructionFlowEdge;
 typedef XrXirStatus (*XirInstructionFlowVisitor)(void *, const XirInstructionFlowEdge *);
+typedef struct XirInstructionFlowPoint {
+    const XrXirFunction *function;
+    const XrXirInstruction *op;
+    uint32_t instruction, block;
+} XirInstructionFlowPoint;
 
 /* Detached initialization may name its synthetic instruction-count exit.
  * Admission and consumer-specific reachability remain separate obligations. */
-static inline XrXirStatus xr_xir_instruction_flow_visit(const XrXirFunction *function,
-    uint32_t instruction, uint32_t block, uint32_t kinds,
-    XirInstructionFlowVisitor visit, void *context) {
+static inline XrXirStatus xr_xir_instruction_flow_point(const XirInstructionFlowPoint *point,
+    uint32_t kinds, XirInstructionFlowVisitor visit, void *context) {
     static const struct { uint8_t edges; bool terminal; } rules[XR_XIR_OP_COUNT] = {
         {0, false},
 #define XR_XIR_OP(name, stages, rule, operands, edges, terminal) {edges, terminal != 0},
 #include "xxir_ops.def"
 #undef XR_XIR_OP
     };
-    if (!function || !visit || !function->instructions || !function->blocks ||
+    if (!point || !point->function || !point->op) return XR_XIR_BAD_STRUCTURE;
+    const XrXirFunction *function = point->function;
+    const XrXirInstruction *op = point->op;
+    uint32_t instruction = point->instruction, block = point->block;
+    if (!visit || !function->blocks ||
         instruction >= function->instruction_count || block >= function->block_count ||
         (kinds & ~XIR_INSTRUCTION_FLOW_ALL)) return XR_XIR_BAD_STRUCTURE;
     const XrXirBlock *source = &function->blocks[block];
-    const XrXirInstruction *op = &function->instructions[instruction];
     if (instruction < source->first || instruction - source->first >= source->count ||
         !op->op || (uint32_t)op->op >= XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = XR_XIR_OK;
@@ -68,5 +75,13 @@ static inline XrXirStatus xr_xir_instruction_flow_visit(const XrXirFunction *fun
         status = visit(context, &edge);
     }
     return status;
+}
+static inline XrXirStatus xr_xir_instruction_flow_visit(const XrXirFunction *function,
+    uint32_t instruction, uint32_t block, uint32_t kinds,
+    XirInstructionFlowVisitor visit, void *context) {
+    if (!function || !function->instructions || instruction >= function->instruction_count)
+        return XR_XIR_BAD_STRUCTURE;
+    XirInstructionFlowPoint point = {function, &function->instructions[instruction], instruction, block};
+    return xr_xir_instruction_flow_point(&point, kinds, visit, context);
 }
 #endif // XXIR_INSTRUCTION_FLOW_H
