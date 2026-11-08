@@ -164,6 +164,9 @@ XR_FUNC XrXirStatus xir_storage_flow_expose_value(XirStorageFlow *, const XirSto
  * when the store completes. Condition names the destination's prior exposure. */
 XR_FUNC XrXirStatus xir_storage_flow_expose_value_when(XirStorageFlow *, const XirStorageValuePoint *,
     const XirStorageObservation *condition);
+/* Read immediately after an unresolved qualified query. STORAGE can await the
+ * next shared receiving round. PARAMETER and OPAQUE require a semantic bound. */
+XR_FUNC uint32_t xir_storage_flow_remainder(const XirStorageFlow *);
 /* Every borrow must be rebound after a query or link can grow storage. */
 XR_FUNC XrXirStatus xir_storage_flow_view(const XirStorageFlow *, XirStorageFlowView *);
 /* Sealing retires body borrows. The resulting numeric view stays valid until
