@@ -284,13 +284,16 @@ static bool source_view_effect_contract(SourceContext *ctx,uint32_t f,const XirV
     uint32_t parameters=ctx->functions[f].parameter_count;
     uint64_t capacity=(uint64_t)parameters+n->bodies[f].instruction_count;
     if (capacity>UINT32_MAX || contract->formula.term_count>capacity ||
-        contract->value_count!=body->effect_value_capacity || contract->binding_count!=body->effect_binding_capacity)
+        contract->value_count!=body->effect_value_capacity || contract->binding_count>body->effect_binding_capacity ||
+        contract->values!=(contract->value_count?body->effect_values:NULL) ||
+        contract->bindings!=(contract->binding_count?body->effect_bindings:NULL))
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Source effect lifetime inventory changed shape");
     body->effect_terms=capacity?source_alloc(ctx,(size_t)capacity,sizeof(*body->effect_terms)):NULL;
     body->effect_values=source_view_copy(ctx,contract->values,contract->value_count,sizeof(*body->effect_values));
     body->effect_bindings=source_view_copy(ctx,contract->bindings,contract->binding_count,sizeof(*body->effect_bindings));
     if ((capacity&&!body->effect_terms) || (contract->value_count&&!body->effect_values) ||
         (contract->binding_count&&!body->effect_bindings)) return false;
+    body->effect_binding_capacity=contract->binding_count;
     for (uint32_t t=0;t<contract->formula.term_count;++t) {
         body->effect_terms[t]=contract->formula.terms[t];
         if (body->effect_terms[t].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL &&
