@@ -361,8 +361,15 @@ static bool restriction_seed(HirRestrictionSolver *solver) {
         }
         uint32_t index = restriction_node(solver, input.function, input.value, input.bank == XIR_STORAGE_EXPOSURE);
         if (owner->status != XR_XIR_OK) return false;
-        if (input.handle < owner->functions[input.function].captures) restriction_input(solver, index, input.value);
-        else if (input.bank == XIR_STORAGE_EXPOSURE) solver->nodes[index].constant = true;
+        bool hidden = input.handle < owner->functions[input.function].captures;
+        if (input.bank == XIR_STORAGE_EXPOSURE) {
+            if (hidden) restriction_input(solver, index, input.value);
+            else solver->nodes[index].constant = true;
+        } else if (hidden) {
+            XrXirType type = owner->nodes[owner->offsets[input.function] + input.handle].type;
+            if (xr_xir_type_is_cell(owner->module->types, type)) type = xr_xir_cell_element(owner->module->types, type);
+            if (xr_xir_callable_signature(owner->module->types, type)) restriction_input(solver, index, input.value);
+        }
     }
     for (uint32_t a = 0; a < solver->view.allocation_count && escape_poll(owner); ++a) {
         XirStorageAllocation allocation = solver->view.allocations[a];
