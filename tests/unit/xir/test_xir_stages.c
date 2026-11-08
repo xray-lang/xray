@@ -288,10 +288,14 @@ static void budgets(void) {
     limits.limits.instructions = 6;
     CHECK(xir_fixture_verify(&limits, &f.module, NULL) == XR_XIR_BUDGET);
     f.module.function_count = UINT32_MAX;
-    CHECK(xir_fixture_verify(&stage_context, &f.module, NULL) == XR_XIR_BUDGET);
+    limits = stage_context_default();
+    limits.limits.functions = 2;
+    CHECK(xir_fixture_verify(&limits, &f.module, NULL) == XR_XIR_BUDGET);
     fixture_init(&f);
     f.function.instruction_count = UINT32_MAX;
-    CHECK(xir_fixture_verify(&stage_context, &f.module, NULL) == XR_XIR_BUDGET);
+    limits = stage_context_default();
+    limits.limits.instructions = 6;
+    CHECK(xir_fixture_verify(&limits, &f.module, NULL) == XR_XIR_BUDGET);
 }
 
 static void loops_and_storage_order(void) {
