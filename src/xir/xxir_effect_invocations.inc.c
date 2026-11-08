@@ -137,7 +137,7 @@ struct EffectFinalFunctions {
 
 /* The complete semantic inventory survives construction without a solver,
  * queue, compile callback, mutable receiver or edge lookup workspace. */
-#include "xxir_effect_role_types.inc.c"
+#include "xxir_effect_parameter_summary.inc.c"
 
 /* Value and initial-key coordinates share a finite positive cause order.
  * The complete relation remains in the sole owning Final. */
@@ -155,7 +155,7 @@ static bool effect_capture_before(const EffectCaptureFact *a,const EffectCapture
 
 typedef struct EffectInvocationFinal {
     EffectCaptureProof capture;
-    EffectRoleProof role_proof;
+    EffectParameterSummary parameter_summary;
     EffectFinalFunctions summary;
     EffectFinalOutcomes *outcomes;
     EffectPhysicalDomain *physical;

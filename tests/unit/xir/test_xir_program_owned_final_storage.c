@@ -60,11 +60,11 @@ int main(int argc,char **argv) {
     if(attack==27) { graph->summary.functions[2].storage=(XrXirRootTerm *)(uintptr_t)1;graph->summary.functions[2].capacity=1; }
     if(attack==28) certificate->origins=(XrXirOrigin *)(uintptr_t)1;
     if(attack==29) { certificate->origins[2].arguments=(XrXirType *)(uintptr_t)1;certificate->origins[2].argument_count=1; }
-    if(attack==30) { graph->role_proof.rows=(EffectRoleFunction *)(uintptr_t)1;graph->role_proof.functions=3; }
+    if(attack==30) { graph->parameter_summary.rows=(EffectParameterSummaryRow *)(uintptr_t)1;graph->parameter_summary.count=3; }
     if(attack==31) graph->count=graph->capacity+1;
     if(attack==32) graph->nodes=(EffectInvocationNode *)((uint8_t *)graph->nodes+1);
     if(attack==34) outcomes->control_summary=(EffectControlSummary *)(uintptr_t)1;
-    if(attack==35) { graph->role_proof.facts=(EffectRoleFact *)(uintptr_t)1;graph->role_proof.total=1; }
+    if(attack==35) { graph->parameter_summary.values=(XrXirEffectParameter *)(uintptr_t)1;graph->parameter_summary.total=1; }
     if(attack==36) { graph->capture.facts=(EffectCaptureFact *)(uintptr_t)1;graph->capture.capacity=1; }
     if(attack==38) outcomes->control_summary=(EffectControlSummary *)((uint8_t *)outcomes->control_summary+_Alignof(EffectControlSummary));
     XrXirStatus status=xir_fixture_effects_program_final(&context,

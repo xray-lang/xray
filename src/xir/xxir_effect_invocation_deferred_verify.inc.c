@@ -186,6 +186,6 @@ static XrXirStatus effect_invocation_result_match(EffectInvocationWorkspace *own
     if (!owner || !xir_compile_context_valid(owner->read.work) || !owner->effects ||
         !effect_contracts_read(owner->effects)) return XR_XIR_BAD_STRUCTURE;
 
-    const EffectInvocationTermSource source={owner->read.work,&owner->final,NULL,owner->effects};
+    const EffectInvocationTermSource source={owner->read.work,&owner->final};
     return effect_invocation_result_match_source(&source,result);
 }

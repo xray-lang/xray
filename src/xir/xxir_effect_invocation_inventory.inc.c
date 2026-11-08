@@ -119,7 +119,7 @@ static XrXirStatus effect_final_inventory_keys(const XrXirCompileContext *work,
 }
 static XrXirStatus effect_final_inventory_seeds(const XrXirCompileContext *work,
     const EffectBodyMaterial *material,const EffectInvocationFinal *final) {
-    EffectBodyRequest body=effect_body_owned_request(work,material);EffectBodyRead role=(EffectBodyRead){.owner=work};
+    EffectBodyRequest body=effect_body_owned_request(work,material);
     for(uint32_t f=0;f<effect_body_count(material);++f) {
         EffectInvocationSeedRead read={0};XrXirStatus status=effect_invocation_seed_open(work,&body,final,f,&read);
         if(status!=XR_XIR_OK) return status;
@@ -127,7 +127,7 @@ static XrXirStatus effect_final_inventory_seeds(const XrXirCompileContext *work,
         for(uint32_t p=0;p<read.head.parameter_count;++p) {
             uint32_t kind=XR_XIR_EFFECT_PARAMETER_FIXED;
             if(xr_xir_callable_signature(body.domain.types,read.head.parameters[p]))
-                status=effect_role_parameter_value(&role,material,&final->role_proof,f,p,&kind);
+                status=effect_parameter_summary_get(&final->parameter_summary, f, p, &kind);
             EffectInvocationSeedBits bits={0};
             if(status==XR_XIR_OK) status=effect_invocation_seed_bits(&read,p,kind,&bits);
             if(status!=XR_XIR_OK) return status;
@@ -144,7 +144,7 @@ static XrXirStatus effect_final_inventory_seeds(const XrXirCompileContext *work,
 static XrXirStatus effect_final_inventory_match(const XrXirCompileContext *work,
     const EffectBodyMaterial *material,const EffectInvocationFinal *final) {
     XrXirStatus status=effect_role_range(work,final,1,sizeof(*final));if(status!=XR_XIR_OK) return status;
-    status=effect_role_proof_match(work,material,&final->role_proof);if(status!=XR_XIR_OK) return status;
+    status=effect_parameter_summary_shape(work, &final->parameter_summary, effect_body_count(material));if(status!=XR_XIR_OK) return status;
     uint32_t functions=effect_body_count(material);
     if(final->material!=material || final->physical!=material->physical || final->count<functions || final->count>final->capacity ||
         (uint64_t)final->count>(uint64_t)work->limits.functions*work->limits.instructions) return XR_XIR_BAD_STRUCTURE;
@@ -163,8 +163,7 @@ static XrXirStatus effect_final_inventories_match(const XrXirCompileContext *wor
     if(certificate->resources!=work->resources) return XR_XIR_BAD_STRUCTURE;
     status=effect_final_inventory_match(work,certificate->body,certificate->final);if(status!=XR_XIR_OK) return status;
     status=effect_role_range(work,outcomes,1,sizeof(*outcomes));if(status!=XR_XIR_OK) return status;
-    status=effect_role_contracts_match(work,certificate->body,&certificate->final->role_proof,
-        outcomes->contracts,effect_body_count(certificate->body));
+    status=effect_parameter_summary_matches(work, &certificate->final->parameter_summary, outcomes->contracts, effect_body_count(certificate->body));
     if(status!=XR_XIR_OK || !outcomes->contexts) return status;
     const EffectContextOwner *contexts=outcomes->contexts;
     status=effect_role_range(work,contexts,1,sizeof(*contexts));if(status!=XR_XIR_OK) return status;

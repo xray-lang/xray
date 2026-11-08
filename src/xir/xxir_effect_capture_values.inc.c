@@ -136,7 +136,7 @@ static XrXirStatus effect_capture_parameters(EffectCaptureRead *read,const Effec
         uint32_t initial=node->values+1+p;
         if(root) {
             uint32_t role=0;EffectInvocationSeedBits bits={0};
-            status=effect_role_parameter_read(read->work,read->final->material,&read->final->role_proof,body,p,&role);
+            status=effect_parameter_summary_get(&read->final->parameter_summary, body, p, &role);
             if(status==XR_XIR_OK) status=effect_invocation_seed_bits(&seed,p,role,&bits);
             if(status!=XR_XIR_OK) return status;
             for(uint32_t b=0;b<bits.origin_count;++b) {

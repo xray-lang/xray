@@ -13,8 +13,8 @@ static void rejected_final(const XrXirCompileContext *context,XrXirArtifact *art
     XrXirEffects *effects) {
     EffectFinalOutcomes *final=(EffectFinalOutcomes *)effect_final_outcomes(effects);
     CHECK(final);
-    EffectRoleProof *roles=&effects->invocations->final->role_proof;
-    EffectRoleProof saved_roles=*roles;
+    EffectParameterSummary *roles=&effects->invocations->final->parameter_summary;
+    EffectParameterSummary saved_roles=*roles;
     XrXirRootEffects root=final->root[1];
     XrXirFunctionEffects control=final->functions[1];
     XrXirStatus worker=final->go_safe[1];

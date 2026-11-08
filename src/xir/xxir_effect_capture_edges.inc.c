@@ -92,8 +92,7 @@ static XrXirStatus effect_capture_argument_bound(const EffectCaptureRead *read,
         status=effect_capture_find(read,(EffectCaptureFact){actual->node,actual->value,EFFECT_CAPTURE_FLAGS,EFFECT_CAPTURE_FIXED,0},&fixed);
         if(status!=XR_XIR_OK || fixed) return status;
     }
-    uint32_t role=0;status=effect_role_parameter_read(read->work,read->final->material,
-        &read->final->role_proof,read->final->nodes[edge->target].body,parameter,&role);
+    uint32_t role=0;status=effect_parameter_summary_get(&read->final->parameter_summary, read->final->nodes[edge->target].body, parameter, &role);
     if(status!=XR_XIR_OK || role!=XR_XIR_EFFECT_PARAMETER_FIXED) return status;
     bool ref=false;
     for(uint32_t p=0;p<signature->parameter_count;++p) {

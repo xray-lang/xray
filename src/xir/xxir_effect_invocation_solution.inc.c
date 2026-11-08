@@ -152,14 +152,11 @@ static XrXirStatus effect_invocation_closed(EffectInvocationWorkspace *owner) {
 /* The same canonical enumerator counts, writes or compares a bounded
  * receiving span. Comparison reads the actual stored kind/index directly;
  * no expected array or permission result survives this one request. */
-/* Sources are lifetime adapters for actual role metadata, not permission
- * hints. The immutable role inventory is explicit when available;
- * otherwise the generating owner supplies its actual contracts. */
+/* Formula construction and published readers use the same owned numeric
+ * parameter rows. No second body walk reconstructs their role classification. */
 typedef struct EffectInvocationTermSource {
     const XrXirCompileContext *work;
     const EffectInvocationFinal *equations;
-    const EffectRoleProof *roles;
-    const XrXirEffects *effects;
 } EffectInvocationTermSource;
 typedef struct EffectInvocationTermTarget {
     uint32_t limit,kind,index;
@@ -178,23 +175,13 @@ static XrXirStatus effect_body_result_head(const XrXirCompileContext *work,
     return XR_XIR_OK;
 }
 
-static XrXirStatus effect_invocation_constructor_parameter(const EffectInvocationTermSource *source,
-    uint32_t function,uint32_t parameter,uint32_t *output) {
-    if (source->roles || !source->effects || !output) return XR_XIR_BAD_STRUCTURE;
-    const XrXirFunctionEffectContract *contract=&effect_contracts_read(source->effects)[function];
-    if (contract->parameter_count!=source->equations->material->functions[function].parameter_count ||
-        parameter>=contract->parameter_count || !contract->parameters) return XR_XIR_BAD_STRUCTURE;
-    *output=contract->parameters[parameter].kind;return XR_XIR_OK;
-}
-
 static XrXirStatus effect_invocation_result_terms(const EffectInvocationTermSource *source,
     uint32_t function,XrXirRootTerm *terms,const XrXirRootTerm *expected,
     const EffectInvocationTermTarget *target,uint32_t *count) {
     if (!source || !source->equations || !xir_compile_context_valid(source->work) ||
         !effect_body_material_shape(source->equations->material) || source->equations->material->resources!=source->work->resources ||
         !source->equations->nodes ||
-        (!!source->effects==!!source->roles) ||
-        (!source->roles && source->effects && !effect_contracts_read(source->effects)) || !target || !count || (terms && expected) || !source->equations->roots ||
+        !target || !count || (terms && expected) || !source->equations->roots ||
         function>=source->equations->material->domain.function_count || source->equations->roots[function]>=source->equations->count)
         return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationNode *node=&source->equations->nodes[source->equations->roots[function]];
@@ -225,7 +212,6 @@ static XrXirStatus effect_invocation_result_terms(const EffectInvocationTermSour
         }
     }
     uint64_t at=0;bool found=false;uint32_t limit=target->limit;
-    EffectRoleParametersRead roles={0};
     for (uint32_t kind=XR_XIR_ROOT_TERM_PARAMETER;kind<=XR_XIR_ROOT_TERM_CELL_PARAMETER;++kind) {
         uint32_t items=kind==XR_XIR_ROOT_TERM_CONTEXT_CALL?body->instruction_count:shared?0:body->parameter_count;
         const uint64_t *bits=kind==XR_XIR_ROOT_TERM_PARAMETER?effect_invocation_node_row(node,EFFECT_INVOCATION_PARAMETERS,false):
@@ -247,12 +233,8 @@ static XrXirStatus effect_invocation_result_terms(const EffectInvocationTermSour
                     if (!xr_xir_callable_signature(source->equations->material->domain.types,body->parameters[i]))
                         return XR_XIR_BAD_STRUCTURE;
                     uint32_t parameter_kind=UINT32_MAX;
-                    XrXirStatus status=XR_XIR_OK;
-                    if (source->roles) {
-                        if (!roles.material) status=effect_role_parameters_open(source->work,
-                            source->equations->material,source->roles,function,i,&roles);
-                        if (status==XR_XIR_OK) status=effect_role_parameters_value(&roles,i,&parameter_kind);
-                    } else status=effect_invocation_constructor_parameter(source,function,i,&parameter_kind);
+                    XrXirStatus status=effect_parameter_summary_get(&source->equations->parameter_summary,
+                        function,i,&parameter_kind);
                     if (status!=XR_XIR_OK) return status;
                     if (parameter_kind!=XR_XIR_EFFECT_PARAMETER_VARIABLE) return XR_XIR_BAD_STRUCTURE;
                 }
@@ -294,7 +276,7 @@ static inline XrXirStatus effect_invocation_terms_read(EffectInvocationWorkspace
     if (!owner || !xir_compile_context_valid(owner->read.work) || !owner->effects ||
         !effect_contracts_read(owner->effects)) return XR_XIR_BAD_STRUCTURE;
 
-    const EffectInvocationTermSource source={owner->read.work,&owner->final,NULL,owner->effects};
+    const EffectInvocationTermSource source={owner->read.work,&owner->final};
     const EffectInvocationTermTarget target={limit,0,0,NULL};
     return effect_invocation_result_terms(&source,function,terms,expected,&target,count);
 }
@@ -413,6 +395,6 @@ static XrXirStatus effect_invocation_stage(EffectInvocationWorkspace *owner,
     XrXirStatus status=effect_invocation_closed(owner);
     if (status!=XR_XIR_OK) return status;
 
-    const EffectInvocationTermSource source={owner->read.work,&owner->final,NULL,owner->effects};
+    const EffectInvocationTermSource source={owner->read.work,&owner->final};
     return effect_invocation_result_new(&source,output);
 }

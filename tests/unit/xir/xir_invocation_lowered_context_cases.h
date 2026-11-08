@@ -172,8 +172,7 @@ static XrXirStatus conditional_invocation_lowered_context(const XrXirCompileCont
             const XrXirRootFormula *formula=&certificate->final->summary.functions[f].formula;
             uint32_t original=UINT32_MAX,closed=UINT32_MAX;
             uint32_t role=UINT32_MAX;
-            CHECK(function->parameter_count==1 && effect_role_parameter_read(context,certificate->body,
-                &certificate->final->role_proof,f,0,&role)==XR_XIR_OK && role==XR_XIR_EFFECT_PARAMETER_VARIABLE);
+            CHECK(function->parameter_count==1 && effect_parameter_summary_get(&certificate->final->parameter_summary, f, 0, &role)==XR_XIR_OK && role==XR_XIR_EFFECT_PARAMETER_VARIABLE);
             CHECK(effect_invocation_bounds_mask(context,certificate->declared,f,0,&original)==XR_XIR_OK);
             const XrXirTypeNode *physical=xr_xir_callable_signature(&certificate->terms.types,function->parameters[0]);
             CHECK(physical && original==(physical->flags&

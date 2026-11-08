@@ -55,6 +55,10 @@ def main() -> None:
             checked = run(name + "-check", [binary, "check", effects / (name + ".xr")], 0)
             assert not checked.stdout and not checked.stderr, name
 
+        checked = run("root-rest-captures-check",
+                      [binary, "check", root / "tests/unit/xir/rest_values/values.xr"], 0)
+        assert not checked.stdout and not checked.stderr, "root-rest-captures"
+
         rejected_effects = (
             ("nosuspend_await", b"declared no_suspend function may suspend"),
             ("nosuspend_fixed_callable", b"declared no_suspend function may suspend"),

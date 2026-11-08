@@ -53,10 +53,16 @@ static void rest_producer_failures(const XrXirCompileContext *work,const XrXirMo
         CHECK(rest_producer_begin(work,module,effects,&graph,&owner,&seed)==XR_XIR_OK);
         CHECK(effect_invocations_discover(owner)==XR_XIR_OK);
         uint32_t nodes=owner->final.count,edges=owner->final.edge_count;
-        CHECK(effect_role_proof_build(work,owner->final.material,&owner->final.role_proof)==XR_XIR_OK);
+        EffectParameterSummary parameters=owner->final.parameter_summary;
+        CHECK(parameters.resources==work->resources && parameters.rows && parameters.values && parameters.total);
+        XrXirEffectParameter first=parameters.values[0];
         CHECK(effect_capture_build(work,&owner->final,owner)==XR_XIR_OK);
         CHECK(owner->final.count>nodes||owner->final.edge_count>edges);
-        CHECK(!owner->final.capture.facts&&!owner->final.capture.count&&!owner->final.role_proof.resources);
+        CHECK(!owner->final.capture.facts&&!owner->final.capture.count);
+        CHECK(owner->final.parameter_summary.resources==parameters.resources &&
+            owner->final.parameter_summary.rows==parameters.rows && owner->final.parameter_summary.values==parameters.values &&
+            owner->final.parameter_summary.count==parameters.count && owner->final.parameter_summary.total==parameters.total);
+        CHECK(parameters.values[0].kind==first.kind && parameters.values[0].uses==first.uses);
         if(!mode) {
             rest_producer_fail_next();
             CHECK(effect_invocations_solve(owner)==XR_XIR_OUT_OF_MEMORY&&rest_producer_fault_observed());

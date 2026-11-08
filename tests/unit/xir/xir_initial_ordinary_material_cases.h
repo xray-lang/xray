@@ -333,7 +333,7 @@ static void initial_ordinary_forest_literals(const XrXirCompileContext *context,
     CHECK(effect_invocation_forest_values(context,forest,0,&fresh)==XR_XIR_OK &&
         fresh.facts.unresolved==facts.unresolved && effect_invocation_witness_equal(&fresh.root,&witness));
     XrXirType wrong_type=XR_XIR_I64;
-    EffectRoleProof role_proof=forest->invocations->final->role_proof;
+    EffectParameterSummary parameter_summary=forest->invocations->final->parameter_summary;
     for (uint32_t attack=0;attack<14;++attack) {
         uint64_t live=rp_stats(context).held_bytes;
         switch (attack) {
@@ -344,7 +344,7 @@ static void initial_ordinary_forest_literals(const XrXirCompileContext *context,
             case 4: ++forest->nodes[0].parameter_count;break;
             case 5: root_node->intrinsic_mask^=XR_XIR_CALLABLE_ROOT_UNRESOLVED;break;
             case 6: forest->nodes[0].physical_types=&wrong_type;break;
-            case 7: ++forest->invocations->final->role_proof.functions;break;
+            case 7: ++forest->invocations->final->parameter_summary.count;break;
             case 8: summary->witnesses[0].cause=
                 (XrXirRootEffectCause)((uint32_t)witness.cause^1u);break;
             case 9: summary->witnesses[0].callee=forest->count;break;
@@ -357,7 +357,7 @@ static void initial_ordinary_forest_literals(const XrXirCompileContext *context,
         CHECK(effect_invocation_forest_match(context,forest)==XR_XIR_BAD_STRUCTURE &&
             rp_stats(context).held_bytes==live);
         forest->nodes[0]=node;root_node->intrinsic_mask=intrinsic;
-        forest->invocations->final->role_proof=role_proof;
+        forest->invocations->final->parameter_summary=parameter_summary;
         summary->witnesses[0]=witness;summary->witnesses[forest->count]=unknown;
         CHECK(effect_invocation_forest_match(context,forest)==XR_XIR_OK &&
             rp_stats(context).held_bytes==live);

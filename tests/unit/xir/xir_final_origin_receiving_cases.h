@@ -29,7 +29,7 @@ static XrXirStatus final_origin_receive(const XrXirCompileContext *work,XrXirEff
     EffectInvocationCertificate *certificate=effects->invocations;EffectInvocationRead read={0};
     XrXirStatus status=request?final_origin_request_rows(request):XR_XIR_OK;
     if(status==XR_XIR_OK) status=effect_body_physical_match(work,certificate->final->physical,certificate->body);
-    if(status==XR_XIR_OK) status=effect_role_proof_match(work,certificate->body,&certificate->final->role_proof);
+    if(status==XR_XIR_OK) status=effect_parameter_summary_shape(work, &certificate->final->parameter_summary, effect_body_count(certificate->body));
     if(status==XR_XIR_OK) status=effect_capture_match(work,certificate->final);
     if(status==XR_XIR_OK) status=effect_invocation_read_open(work,certificate,certificate->final,&read);
     if(status==XR_XIR_OK) status=effect_invocation_iterators_read(&read,&read.body,NULL);

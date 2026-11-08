@@ -251,6 +251,92 @@ static void parameter_summary_kernel(void) {
     effect_mark_check(baseline);
     printf("parameter summaries: capture/forward masks, body-free closure, %zu allocation failures and finite owner PASS\n", sites);
 }
+static void parameter_summary_owner(void) {
+    EffectMark baseline = effect_mark();
+    XrXirEffectParameter values[3] = {
+        {XR_XIR_EFFECT_PARAMETER_FIXED, XR_XIR_EFFECT_USE_STORE},
+        {XR_XIR_EFFECT_PARAMETER_VARIABLE, XR_XIR_EFFECT_USE_INVOKE},
+        {XR_XIR_EFFECT_PARAMETER_CONDITIONAL_STATIC, XR_XIR_EFFECT_USE_FORWARD}
+    };
+    XrXirFunctionEffectContract contracts[3] = {
+        {.parameter_count = 2, .parameters = values}, {0},
+        {.parameter_count = 1, .parameters = values + 2}
+    };
+    EffectParameterSummary summary = {0};
+    attempts = 0;
+    CHECK(effect_parameter_summary_copy(&effect_context, contracts, 3, &summary) == XR_XIR_OK);
+    size_t sites = attempts;
+    CHECK(summary.count == 3 && summary.total == 3 && summary.rows[1].count == 0);
+    CHECK(effect_parameter_summary_shape(&effect_context, &summary, 3) == XR_XIR_OK);
+    EffectParameterSummary saved = summary;
+    attempts = 0;
+    CHECK(effect_parameter_summary_copy(&effect_context, contracts, 3, &summary) == XR_XIR_BAD_STRUCTURE);
+    CHECK(!attempts && !memcmp(&summary, &saved, sizeof(summary)));
+    uint32_t kind = UINT32_MAX;
+    CHECK(effect_parameter_summary_get(&summary, 0, 0, &kind) == XR_XIR_OK && kind == XR_XIR_EFFECT_PARAMETER_FIXED);
+    CHECK(effect_parameter_summary_get(&summary, 0, 1, &kind) == XR_XIR_OK && kind == XR_XIR_EFFECT_PARAMETER_VARIABLE);
+    CHECK(effect_parameter_summary_get(&summary, 2, 0, &kind) == XR_XIR_OK && kind == XR_XIR_EFFECT_PARAMETER_CONDITIONAL_STATIC);
+    kind = UINT32_MAX;
+    CHECK(effect_parameter_summary_get(&summary, 1, 0, &kind) == XR_XIR_BAD_STRUCTURE && kind == UINT32_MAX);
+    CHECK(effect_parameter_summary_get(&summary, 3, 0, &kind) == XR_XIR_BAD_STRUCTURE && kind == UINT32_MAX);
+    CHECK(effect_parameter_summary_get(&summary, 0, 2, &kind) == XR_XIR_BAD_STRUCTURE && kind == UINT32_MAX);
+    effect_parameter_summary_clear(&summary);
+    effect_mark_check(baseline);
+    for (size_t point = 0; point < sites; ++point) {
+        attempts = 0; injected = false; fail_at = point;
+        CHECK(effect_parameter_summary_copy(&effect_context, contracts, 3, &summary) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(injected && !summary.resources && !summary.rows && !summary.values && !summary.count && !summary.total);
+        fail_at = SIZE_MAX;
+        effect_mark_check(baseline);
+    }
+    XrXirEffectParameter finite_values[32] = {0};
+    XrXirFunctionEffectContract large = {.parameter_count = 32, .parameters = finite_values};
+    XrXirCompileContext finite = effect_owner_new((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE, 128, true});
+    uint64_t held = effect_stats(&finite).held_bytes;
+    CHECK(effect_parameter_summary_copy(&finite, &large, 1, &summary) == XR_XIR_MEMORY_LIMIT);
+    CHECK(!summary.resources && !summary.rows && !summary.values && !summary.count && !summary.total);
+    effect_owner_free(&finite, held);
+    values[0].kind = UINT32_MAX;
+    CHECK(effect_parameter_summary_copy(&effect_context, contracts, 3, &summary) == XR_XIR_BAD_STRUCTURE);
+    CHECK(!summary.rows && !summary.values);
+    values[0].kind = XR_XIR_EFFECT_PARAMETER_FIXED;
+    effect_mark_check(baseline);
+
+    XrXirStatus status = XR_XIR_OK;
+    XrXirFunctionEffectContract *owned = xir_compile_calloc(&effect_context, 3, sizeof(*owned), &status);
+    XrXirEffectParameter *inputs = xir_compile_alloc(&effect_context, sizeof(values), &status);
+    CHECK(status == XR_XIR_OK && owned && inputs);
+    memcpy(owned, contracts, sizeof(contracts));
+    memcpy(inputs, values, sizeof(values));
+    owned[0].parameters = inputs;
+    owned[2].parameters = inputs + 2;
+    CHECK(effect_parameter_summary_copy(&effect_context, owned, 3, &summary) == XR_XIR_OK);
+    CHECK(effect_parameter_summary_matches(&effect_context, &summary, owned, 3) == XR_XIR_OK);
+    inputs[0].kind = XR_XIR_EFFECT_PARAMETER_VARIABLE;
+    CHECK(effect_parameter_summary_matches(&effect_context, &summary, owned, 3) == XR_XIR_BAD_STRUCTURE);
+    inputs[0] = values[0];
+    inputs[0].uses ^= XR_XIR_EFFECT_USE_INVOKE;
+    CHECK(effect_parameter_summary_matches(&effect_context, &summary, owned, 3) == XR_XIR_BAD_STRUCTURE);
+    xr_compile_resources_free(inputs);
+    xr_compile_resources_free(owned);
+    memset(values, 0xCE, sizeof(values));
+    memset(contracts, 0xCE, sizeof(contracts));
+    attempts = 0;
+    CHECK(effect_parameter_summary_get(&summary, 0, 0, &kind) == XR_XIR_OK && kind == XR_XIR_EFFECT_PARAMETER_FIXED);
+    CHECK(effect_parameter_summary_get(&summary, 0, 1, &kind) == XR_XIR_OK && kind == XR_XIR_EFFECT_PARAMETER_VARIABLE);
+    CHECK(!attempts && summary.values[0].uses == XR_XIR_EFFECT_USE_STORE);
+    CHECK(effect_parameter_summary_shape(&effect_context, &summary, 3) == XR_XIR_OK);
+    effect_parameter_summary_clear(&summary);
+    effect_mark_check(baseline);
+
+    memset(contracts, 0, sizeof(contracts));
+    CHECK(effect_parameter_summary_copy(&effect_context, contracts, 3, &summary) == XR_XIR_OK);
+    CHECK(summary.count == 3 && !summary.total && !summary.values);
+    CHECK(effect_parameter_summary_shape(&effect_context, &summary, 3) == XR_XIR_OK);
+    effect_parameter_summary_clear(&summary);
+    effect_mark_check(baseline);
+    printf("owned parameter rows: %zu allocation failures, detached scalar reads and finite owner PASS\n", sites);
+}
 static void control_summary_streamed(void) {
     EffectMark baseline = effect_mark();
     XrXirInstruction rows[3][2] = {
@@ -299,6 +385,7 @@ static void control_summary_streamed(void) {
 }
 static void control_summary_kernel(void) {
     parameter_summary_kernel();
+    parameter_summary_owner();
     control_summary_streamed();
     const uint32_t count = 8193;
     XrXirFunction *functions = xr_calloc(count, sizeof(*functions));

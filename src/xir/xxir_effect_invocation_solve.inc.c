@@ -368,12 +368,11 @@ static XrXirStatus effect_invocation_origins_finalize(EffectInvocationWorkspace 
     if (!owner || owner->pending || !owner->states) return XR_XIR_BAD_STRUCTURE;
     for(;;) {
         uint32_t nodes=owner->final.count,edges=owner->final.edge_count;
-        XrXirStatus status=effect_role_proof_build(owner->read.work,owner->final.material,&owner->final.role_proof);
-        if(status==XR_XIR_OK)status=effect_capture_build(owner->read.work,&owner->final,owner);
+        XrXirStatus status=effect_capture_build(owner->read.work,&owner->final,owner);
         if(status!=XR_XIR_OK)return status;
         if(owner->final.count==nodes && owner->final.edge_count==edges)return XR_XIR_OK;
         if(owner->final.count<nodes || owner->final.edge_count<edges || owner->final.capture.facts ||
-            owner->final.capture.count || owner->final.role_proof.resources)return XR_XIR_BAD_STRUCTURE;
+            owner->final.capture.count)return XR_XIR_BAD_STRUCTURE;
         status=effect_invocations_discover(owner);if(status!=XR_XIR_OK)return status;
     }
 }
@@ -922,7 +921,8 @@ static XrXirStatus effect_invocations_create(const XrXirCompileContext *work,
         .read={.work=work,.final=&owner->final,.roles={.construction=effects},.declared=declared,.body=*body_request,.discovery=owner},
         .final={.material=graph->material,.physical=graph->material->physical,.cells=graph->material->cells}};
     EffectInvocationLocalInput *local_inputs=NULL;
-    status=effect_invocation_local_inputs(work,owner->final.material,&local_inputs);
+    status=effect_parameter_summary_copy(work,effect_contracts_read(effects),functions,&owner->final.parameter_summary);
+    if (status==XR_XIR_OK) status=effect_invocation_local_inputs(work,owner->final.material,&local_inputs);
     if (status!=XR_XIR_OK) { effect_invocation_free(owner);return status; }
     if (local_inputs) {
         status=effect_invocation_local_nodes(owner,local_inputs);

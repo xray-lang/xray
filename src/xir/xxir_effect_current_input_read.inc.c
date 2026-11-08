@@ -15,7 +15,7 @@
 static XrXirStatus effect_body_current_open(const XrXirCompileContext *work,
     const EffectBodyMaterial *material,EffectBodyCurrentRead *output) {
     if(!output || output->work || output->material) return XR_XIR_BAD_STRUCTURE;
-    EffectRoleCheck check={.work=work,.material=material};
+    EffectBodyFrame check={.work=work,.material=material};
     XrXirStatus status=effect_role_frame(&check);if(status!=XR_XIR_OK) return status;
     EffectBodyRead read=(EffectBodyRead){.owner=work};
     for(uint32_t f=0;f<check.functions;++f) {

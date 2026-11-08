@@ -817,7 +817,6 @@ static XrXirStatus effect_capture_build(const XrXirCompileContext *work,EffectIn
     if(growth) {
         read=(EffectCaptureRead){0};
         xr_compile_resources_free(final->capture.facts);final->capture=(EffectCaptureProof){0};
-        effect_role_proof_clear(&final->role_proof);
         return status;
     }
     if(status==XR_XIR_OK) {

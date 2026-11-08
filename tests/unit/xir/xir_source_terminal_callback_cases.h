@@ -132,14 +132,10 @@ static void pc_source_terminal_literal(uint32_t mutation) {
 
 #include "xir_ordinary_retirement_cases.h"
 
-#include "xir_role_reach_cases.h"
 #include "xir_dense_retirement_cases.h"
 
-#include "xir_role_source_final_cases.h"
 
 static void pc_source_terminal_literals(void) {
-    pc_role_source_final_literals();
-    pc_role_reach_literals();
     pc_ordinary_retirement_literals();
     pc_dense_retirement_literals();
     for (uint32_t mutation=0;mutation<3;++mutation) pc_source_terminal_literal(mutation);

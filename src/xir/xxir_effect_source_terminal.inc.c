@@ -204,12 +204,12 @@ static XrXirStatus effect_source_relations(const XrXirCompileContext *work,
         for (uint32_t p=0;p<parameters && status==XR_XIR_OK;++p) {
 
             uint32_t parameter_kind=UINT32_MAX;
-            status=effect_role_parameter_read(work,certificate->body,&certificate->final->role_proof,f,p,&parameter_kind);
+            status=effect_parameter_summary_get(&certificate->final->parameter_summary, f, p, &parameter_kind);
             if (status==XR_XIR_OK && parameter_kind!=contract->parameters[p].kind) status=XR_XIR_BAD_STRUCTURE;
         }
     }
     if (status==XR_XIR_OK) status=effect_body_physical_match(work,owner.final->physical,owner.final->material);
-    if (status==XR_XIR_OK) status=effect_role_proof_match(work,certificate->body,&certificate->final->role_proof);
+    if (status==XR_XIR_OK) status=effect_parameter_summary_shape(work, &certificate->final->parameter_summary, effect_body_count(certificate->body));
     if (status==XR_XIR_OK) status=effect_invocation_cell_terminals_read(&owner,&owner.body);
     if (status==XR_XIR_OK) status=effect_invocation_iterators_read(&owner,&owner.body,NULL);
     if (status==XR_XIR_OK) status=effect_invocation_closed_read(work,certificate->final);
@@ -317,8 +317,7 @@ static XrXirStatus effect_source_terminal_roles(const XrXirCompileContext *work,
     const EffectFinalOutcomes *outcomes=certificate->final->outcomes;
     status=effect_role_range(work,outcomes,1,sizeof(*outcomes));if (status!=XR_XIR_OK) return status;
     if (outcomes->resources!=work->resources || outcomes->count!=effects->count) return XR_XIR_BAD_STRUCTURE;
-    status=effect_role_contracts_match(work,certificate->body,&certificate->final->role_proof,
-        outcomes->contracts,outcomes->count);
+    status=effect_parameter_summary_matches(work, &certificate->final->parameter_summary, outcomes->contracts, outcomes->count);
     if (status!=XR_XIR_OK || !outcomes->contexts) return status;
     status=effect_role_range(work,outcomes->contexts,1,sizeof(*outcomes->contexts));
     if (status!=XR_XIR_OK) return status;

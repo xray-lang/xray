@@ -84,10 +84,10 @@ static XrXirStatus effect_program_final_storage(const XrXirCompileContext *work,
         effects->outcomes_owner || effects->root_input ||
         final->count>final->capacity || final->edge_count>final->edge_capacity ||
         final->deferred_count>final->deferred_capacity) return XR_XIR_BAD_STRUCTURE;
-    const EffectRoleProof *roles=&final->role_proof;
-    if (roles->functions>count) return XR_XIR_BAD_STRUCTURE;
-    FINAL_STORAGE(roles->rows,roles->functions,EffectRoleFunction);
-    FINAL_STORAGE(roles->facts,roles->total,EffectRoleFact);
+    const EffectParameterSummary *roles=&final->parameter_summary;
+    if (roles->count!=count) return XR_XIR_BAD_STRUCTURE;
+    FINAL_STORAGE(roles->rows,roles->count,EffectParameterSummaryRow);
+    FINAL_STORAGE(roles->values,roles->total,XrXirEffectParameter);
     if (final->capture.count>final->capture.capacity) return XR_XIR_BAD_STRUCTURE;
     FINAL_STORAGE(final->capture.facts,final->capture.capacity,EffectCaptureFact);
     status=effect_program_outcomes_storage(work,final->outcomes,count);

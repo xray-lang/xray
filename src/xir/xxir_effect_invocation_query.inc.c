@@ -357,8 +357,7 @@ static XrXirStatus effect_invocation_certificate_node_mask(const XrXirCompileCon
         if (atom-2<parameters) {
             uint32_t p=atom-2,original=0;
             uint32_t parameter_kind=UINT32_MAX;
-            XrXirStatus role_status=effect_role_parameter_read(work,certificate->body,
-                &certificate->final->role_proof,node->root,p,&parameter_kind);
+            XrXirStatus role_status=effect_parameter_summary_get(&certificate->final->parameter_summary, node->root, p, &parameter_kind);
             if (role_status!=XR_XIR_OK) return role_status;
             if (parameter_kind!=XR_XIR_EFFECT_PARAMETER_VARIABLE) return XR_XIR_BAD_STRUCTURE;
             XrXirStatus status=effect_invocation_bounds_mask(work,certificate->declared,node->root,p,&original);

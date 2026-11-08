@@ -46,21 +46,7 @@ static XrXirStatus effect_invocation_role(const EffectInvocationRead *read,
     if (!output || !effect_invocation_roles_shape(read) ||
         function>=effect_body_count(read->final->material) ||
         parameter>=read->final->material->functions[function].parameter_count) return XR_XIR_BAD_STRUCTURE;
-    uint32_t kind=UINT32_MAX;
-
-    if (read->roles.construction) {
-        const XrXirFunctionEffectContract *contract=&effect_contracts_read(read->roles.construction)[function];
-        if (contract->parameter_count!=read->final->material->functions[function].parameter_count ||
-            !contract->parameters) return XR_XIR_BAD_STRUCTURE;
-        kind=contract->parameters[parameter].kind;
-    } else {
-        const EffectInvocationCertificate *sealed=read->roles.sealed;
-        XrXirStatus status=effect_role_parameter_read(read->work,sealed->body,&read->final->role_proof,
-            function,parameter,&kind);
-        if (status!=XR_XIR_OK) return status;
-    }
-    if (kind>XR_XIR_EFFECT_PARAMETER_CONDITIONAL_STATIC) return XR_XIR_BAD_STRUCTURE;
-    *output=kind;return XR_XIR_OK;
+    return effect_parameter_summary_get(&read->final->parameter_summary, function, parameter, output);
 }
 
 /* The receiving request borrows the actual Final. Its reverse index is fresh
@@ -284,8 +270,7 @@ static XrXirStatus effect_invocation_certificate_terms(const XrXirCompileContext
         record->formula.constant_mask!=certificate->final->nodes[
             certificate->final->roots[function]].intrinsic_mask) return XR_XIR_BAD_STRUCTURE;
 
-    const EffectInvocationTermSource source={work,certificate->final,
-        &certificate->final->role_proof,NULL};
+    const EffectInvocationTermSource source={work,certificate->final};
     uint32_t actual=0;
     XrXirStatus status=effect_invocation_result_terms(&source,function,NULL,record->storage,target,&actual);
     if (status==XR_XIR_OK && actual!=record->capacity) status=XR_XIR_BAD_STRUCTURE;
@@ -472,11 +457,6 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
             certificate->final->summary=*staged;
             result=&certificate->final->summary;*request->result=result;summary_moved=true;
         }
-        if (status==XR_XIR_OK) status=certificate->final->role_proof.resources ?
-            effect_role_proof_match(work,certificate->body,&certificate->final->role_proof) :
-            effect_role_proof_build(work,certificate->body,&certificate->final->role_proof);
-        if (status==XR_XIR_OK) status=effect_role_contracts_match(work,certificate->body,
-            &certificate->final->role_proof,effect_contracts_read(owner->effects),owner->effects->count);
         if (status==XR_XIR_OK) effect_invocation_discovery_clear(owner);
         if (status==XR_XIR_OK) {
             status=certificate->final->capture.facts ? effect_capture_match(work,certificate->final) :
@@ -493,14 +473,10 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
         if (summary_moved) { *staged=*result;*request->result=staged; }
         if (certificate) {
             if (certificate->final) {
-                /* Copied proof pointers remain borrowed until publication.
+                /* Copied child pointers remain borrowed until publication.
                  * Rollback releases only children created by this receiver. */
                 if (certificate->final->capture.facts!=owner->final.capture.facts)
                     xr_compile_resources_free(certificate->final->capture.facts);
-                EffectRoleProof *proof=&certificate->final->role_proof;
-                if (proof->rows==owner->final.role_proof.rows) proof->rows=NULL;
-                if (proof->facts==owner->final.role_proof.facts) proof->facts=NULL;
-                effect_role_proof_clear(proof);
                 *certificate->final=(EffectInvocationFinal){0};
             }
             certificate->body=NULL;
@@ -528,8 +504,7 @@ static inline XrXirStatus effect_invocation_result_read_new(const XrXirCompileCo
         certificate->final->material!=certificate->body || !output || *output)
         return XR_XIR_BAD_STRUCTURE;
 
-    const EffectInvocationTermSource source={work,certificate->final,
-        &certificate->final->role_proof,NULL};
+    const EffectInvocationTermSource source={work,certificate->final};
     return effect_invocation_result_new(&source,output);
 }
 
@@ -539,8 +514,7 @@ static XrXirStatus effect_invocation_certificate_result_match(const XrXirCompile
         certificate->resources!=work->resources ||
         certificate->final->material!=certificate->body) return XR_XIR_BAD_STRUCTURE;
 
-    const EffectInvocationTermSource source={work,certificate->final,
-        &certificate->final->role_proof,NULL};
+    const EffectInvocationTermSource source={work,certificate->final};
     bool local=false;
     XrXirStatus status=effect_invocation_local_certificate_match(work,certificate,result,&local);
     if (status==XR_XIR_OK && !local) status=effect_invocation_input_seeds_match(work,certificate,result);

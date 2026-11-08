@@ -193,7 +193,7 @@ static XrXirStatus effect_invocation_forest_match(const XrXirCompileContext *wor
     }
     if(status==XR_XIR_OK) status=effect_invocation_forest_admit(work,forest,certificate);
     effect_terms_free(&comparison);
-    if (status==XR_XIR_OK) status=effect_role_proof_match(work,certificate->body,&certificate->final->role_proof);
+    if (status==XR_XIR_OK) status=effect_parameter_summary_shape(work, &certificate->final->parameter_summary, effect_body_count(certificate->body));
     return status==XR_XIR_BAD_TYPE?XR_XIR_BAD_STRUCTURE:status;
 }
 
