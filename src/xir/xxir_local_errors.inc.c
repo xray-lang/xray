@@ -278,12 +278,6 @@ XR_FUNC XrXirStatus xir_compile_local_errors_verify(const XrXirCompileContext *m
     if (!input.domain.types) input.domain.types=&empty;
     return local_errors_request(memory,&input,diagnostic);
 }
-static XrXirStatus local_errors_owned(const XrXirCompileContext *memory,
-    const EffectBodyMaterial *material,XrXirDiagnostic *diagnostic) {
-    if (!effect_body_material_shape(material) || material->resources!=memory->resources) return XR_XIR_BAD_STRUCTURE;
-    EffectBodyRequest input=effect_body_owned_request(memory,material);
-    return local_errors_request(memory,&input,diagnostic);
-}
 XR_FUNC XrXirStatus xir_compile_worker_error_verify(const XrXirCompileContext *context,
     const XrXirModule *module,uint32_t function) {
     if (!xir_compile_context_valid(context) || !module || function>=module->function_count) return XR_XIR_BAD_STRUCTURE;
