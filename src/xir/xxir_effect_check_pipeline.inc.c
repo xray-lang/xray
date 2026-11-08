@@ -422,7 +422,7 @@ XR_FUNC XrXirStatus xir_effects_prepare_verified_input(const XrXirCompileContext
     if (status == XR_XIR_OK) status = effect_checked_roots_build(memory, input.module,
         effects->outcomes_work.contracts, input.control, refiner, &effects->checked_roots, false);
     if (status == XR_XIR_OK && refiner && refiner->prepare)
-        status = refiner->prepare(refiner->context, effects->checked_roots, NULL);
+        status = refiner->prepare(refiner->context, effects->checked_roots, effects->checked_roots->storage);
     if (status != XR_XIR_OK) {
         xr_xir_compile_effects_free(effects);
         return status;
@@ -435,6 +435,11 @@ XR_FUNC const XirExecutionOwner *xir_effects_prepared_execution(const XrXirEffec
     return effects && effects->outcomes_owner && !effects->final_outcomes ? effects->checked_roots : NULL;
 }
 
+XR_FUNC XirStorageFlow *xir_effects_prepared_storage(const XrXirEffects *effects) {
+    const EffectCheckedRoots *roots = xir_effects_prepared_execution(effects);
+    return roots ? roots->storage : NULL;
+}
+
 XR_FUNC XrXirStatus xir_effects_finish_prepared_input(const XrXirCompileContext *memory,
     XirEffectInput input, const XrXirRootRefiner *refiner, XrXirEffects **pending, XrXirEffects **output) {
     if (!pending || !*pending) return XR_XIR_BAD_STRUCTURE;
@@ -445,6 +450,17 @@ XR_FUNC XrXirStatus xir_effects_finish_prepared_input(const XrXirCompileContext 
     if (status == XR_XIR_OK && (!input.module || !xir_effects_context_matches(memory, effects, input.module->function_count) ||
         !effects->outcomes_owner || effects->input_facts || !effects->checked_roots || effects->final_outcomes))
         status = XR_XIR_BAD_STRUCTURE;
+    if (status == XR_XIR_OK && effects->checked_roots->storage) {
+        XirStorageFlowView storage = {0};
+        status = xir_storage_flow_seal(effects->checked_roots->storage, &storage);
+        if (status == XR_XIR_OK) status = xir_execution_refresh_storage(effects->checked_roots);
+        uint32_t calls = effects->checked_roots->calls;
+        EffectCheckBuild links = {.memory = memory, .roots = effects->checked_roots, .control = input.control};
+        for (uint32_t p = 0; status == XR_XIR_OK && p < effects->checked_roots->pending_count; ++p)
+            if (effects->checked_roots->pending[p].kind == EFFECT_CHECK_HIGHER_ORDER &&
+                !effect_check_link_higher_order(&links, &effects->checked_roots->pending[p])) status = links.status;
+        if (status == XR_XIR_OK && calls != effects->checked_roots->calls) status = XR_XIR_UNRESOLVED;
+    }
     if (status == XR_XIR_OK) status = effect_input_facts_new(memory, input, &effects->input_facts);
     EffectCheckBuild build = {.memory = memory, .roots = effects->checked_roots, .control = input.control};
     if (status == XR_XIR_OK) status = effect_check_cell_roles(&build);

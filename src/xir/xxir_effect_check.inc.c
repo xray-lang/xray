@@ -983,6 +983,10 @@ static XrXirStatus effect_check_collect(EffectCheckBuild *build) {
             if (!effect_check_poll(build)) return build->status;
             while (block + 1 < body->block_count && body->blocks[block + 1].first <= i) ++block;
             if (body->block_count) build->roots->node[row.first + row.parameters + i].block = block;
+            if (build->roots->storage) {
+                build->status = xir_storage_flow_observe(build->roots->storage, f, i, &body->instructions[i]);
+                if (build->status != XR_XIR_OK) return build->status;
+            }
             if (build->refiner && build->refiner->observe) {
                 build->status = build->refiner->observe(build->refiner->context, build->module, f, i, &body->instructions[i]);
                 if (build->status != XR_XIR_OK) return build->status;
@@ -1464,6 +1468,20 @@ static bool effect_check_link_application(EffectCheckBuild *build,
         build->status = XR_XIR_BAD_STRUCTURE;
         return false;
     }
+    for (uint32_t c = roots->node[pending->node].calls; c != UINT32_MAX; c = roots->call[c].next) {
+        EffectCheckCall call = roots->call[c];
+        if (call.protocol != 2 || call.instruction != pending->instruction || call.target != reference.target ||
+            call.count != count || call.type_count != reference.type_count) continue;
+        bool same = true;
+        for (uint32_t p = 0; same && p < call.type_count; ++p)
+            same = roots->type_argument[call.type_first + p] == roots->type_argument[reference.type_first + p];
+        for (uint32_t p = 0; same && p < call.count; ++p) {
+            uint32_t source = p < reference.count ? roots->argument[reference.first + p] :
+                roots->argument[pending->argument_first + p - reference.count];
+            same = roots->argument[call.first + p] == source;
+        }
+        if (same) return true;
+    }
     uint32_t first = roots->arguments;
     for (uint32_t p = 0; p < reference.count; ++p) {
         uint32_t argument = roots->argument[reference.first + p];
@@ -1516,58 +1534,38 @@ static bool effect_check_capture_bindings(EffectCheckBuild *build) {
     return true;
 }
 
-static bool effect_check_link_higher_order(EffectCheckBuild *build, EffectCheckPending *pending,
-    uint32_t *visited, uint32_t *stack, uint32_t generation) {
-    EffectCheckedRoots *roots = build->roots;
-    uint32_t depth = 1, references = 0;
-    bool complete = true;
-    pending->remainder = 0;
-    stack[0] = pending->receiver;
-    visited[pending->receiver] = generation;
-    while (depth) {
-        if (!effect_check_poll(build)) return false;
-        uint32_t node = stack[--depth];
-        EffectCheckNode row = roots->node[node];
-        if (row.callable_input) {
-            complete = false;
-            pending->remainder |= XIR_EXECUTION_REMAINDER_PARAMETER;
-            continue;
-        }
-        if (row.callable_opaque) pending->remainder |= XIR_EXECUTION_REMAINDER_OPAQUE;
-        bool origin = false;
-        for (uint32_t c = row.calls; c != UINT32_MAX; c = roots->call[c].next) {
-            EffectCheckCall call = roots->call[c];
-            if (call.protocol != 1 || (call.count && roots->node[node].function != pending->function)) {
-                complete = false;
-                continue;
-            }
-            origin = true;
-            if (!effect_check_link_application(build, pending, call)) return false;
-            ++references;
-        }
-        for (uint32_t a = row.aliases; a != UINT32_MAX; a = roots->alias[a].next) {
-            if (!roots->alias[a].callable_origin) continue;
-            uint32_t source = roots->alias[a].source;
-            origin = true;
-            if (visited[source] == generation) continue;
-            visited[source] = generation;
-            XR_DCHECK(depth < roots->nodes, "Each callable origin is queued once");
-            stack[depth++] = source;
-        }
-        for (uint32_t b = row.bindings; b != UINT32_MAX; b = roots->binding[b].next) {
-            uint32_t source = roots->binding[b].source;
-            origin = true;
-            if (visited[source] == generation) continue;
-            visited[source] = generation;
-            XR_DCHECK(depth < roots->nodes, "Each captured callable origin is queued once");
-            stack[depth++] = source;
-        }
-        if (!origin) {
-            complete = false;
-            if (!row.callable_opaque) pending->remainder |= XIR_EXECUTION_REMAINDER_STORAGE;
-        }
+typedef struct EffectCheckResolve {
+    EffectCheckBuild *build;
+    EffectCheckPending *pending;
+    bool foreign;
+} EffectCheckResolve;
+
+static XrXirStatus effect_check_resolved_capture(void *context, const XirExecutionSite *site) {
+    EffectCheckResolve *resolve = context;
+    EffectCheckedRoots *roots = resolve->build->roots;
+    if (site->reference >= roots->calls) return XR_XIR_BAD_STRUCTURE;
+    EffectCheckCall reference = roots->call[site->reference];
+    if (reference.count && roots->node[reference.output].function != resolve->pending->function) {
+        resolve->foreign = true;
+        return XR_XIR_OK;
     }
-    pending->linked = complete && references;
+    return effect_check_link_application(resolve->build, resolve->pending, reference) ?
+        XR_XIR_OK : resolve->build->status;
+}
+
+static bool effect_check_link_higher_order(EffectCheckBuild *build, EffectCheckPending *pending) {
+    XirExecutionSite site = {0};
+    uint32_t index = (uint32_t)(pending - build->roots->pending);
+    build->status = xir_execution_site(build->roots, XIR_EXECUTION_PENDING, index, &site);
+    if (build->status != XR_XIR_OK) return false;
+    EffectCheckResolve resolve = {build, pending, false};
+    bool complete = false;
+    uint32_t remainder = 0;
+    build->status = xir_execution_resolve_site(build->roots, &site, XIR_EXECUTION_CURRENT_ENVIRONMENT,
+        effect_check_resolved_capture, &resolve, &complete, &remainder);
+    if (build->status != XR_XIR_OK) return false;
+    pending->remainder = remainder | (resolve.foreign ? XIR_EXECUTION_REMAINDER_PARAMETER : 0);
+    pending->linked = complete && !resolve.foreign;
     return true;
 }
 
@@ -1649,7 +1647,7 @@ static XrXirStatus effect_check_link(EffectCheckBuild *build) {
                 !effect_check_link_tuple(build, &roots->pending[p], visited, stack, p + 1)) goto done;
         for (uint32_t p = 0; p < roots->pending_count; ++p)
             if (roots->pending[p].kind == EFFECT_CHECK_HIGHER_ORDER &&
-                !effect_check_link_higher_order(build, &roots->pending[p], visited, stack, p + 1)) goto done;
+                !effect_check_link_higher_order(build, &roots->pending[p])) goto done;
     }
     for (uint32_t n = 0; n < roots->nodes; ++n) roots->node[n].deferred = false;
     for (uint32_t p = 0; p < roots->pending_count; ++p) {
@@ -2021,13 +2019,20 @@ done:
  * their pool so an imported interface never borrows the scanning arena. */
 static XrXirStatus effect_checked_roots_collect(const XrXirCompileContext *memory,
     const XrXirModule *module, const XrXirFunctionEffectContract *contracts,
-    XrCompileRequestControl *control, const XrXirRootRefiner *refiner, EffectCheckedRoots **output) {
+    XrCompileRequestControl *control, const XrXirRootRefiner *refiner, EffectCheckedRoots **output,
+    bool prepare_storage) {
     if (!xir_compile_context_valid(memory) || !module || !module->functions || !module->function_count ||
         !output || *output) return XR_XIR_BAD_STRUCTURE;
     EffectCheckBuild build = {.memory = memory, .module = module, .contracts = contracts, .control = control, .refiner = refiner,
         .scratch = {.resources = memory->resources}};
     build.status = effect_check_allocate(&build);
+    if (build.status == XR_XIR_OK && prepare_storage)
+        build.status = xir_storage_flow_new(memory, module, build.roots, control, &build.roots->storage);
     if (build.status == XR_XIR_OK) build.status = effect_check_collect(&build);
+    if (build.status == XR_XIR_OK && build.roots->storage)
+        build.status = xir_storage_flow_finish_local(build.roots->storage);
+    if (build.status == XR_XIR_OK && build.roots->storage)
+        build.status = xir_execution_refresh_storage(build.roots);
     if (build.status == XR_XIR_OK) build.status = effect_check_builtin_interfaces(&build);
     if (build.status == XR_XIR_OK && (build.roots->pending_count || build.roots->type_arguments))
         effect_check_types(&build);
@@ -2071,6 +2076,25 @@ static XrXirStatus effect_checked_roots_link_take(const XrXirCompileContext *mem
     }
     if (build.status == XR_XIR_OK) build.status = effect_check_link(&build);
     if (build.status == XR_XIR_OK) build.status = effect_check_cleanup_uses(&build);
+    if (build.status == XR_XIR_OK && roots->storage) {
+        bool changed = true;
+        while (changed && build.status == XR_XIR_OK) {
+            build.status = xir_storage_flow_link(roots->storage, roots, &changed);
+            if (build.status == XR_XIR_OK) build.status = xir_execution_refresh_storage(roots);
+            uint32_t calls = roots->calls;
+            for (uint32_t p = 0; p < roots->pending_count && build.status == XR_XIR_OK; ++p)
+                if (roots->pending[p].kind == EFFECT_CHECK_HIGHER_ORDER)
+                    effect_check_link_higher_order(&build, &roots->pending[p]);
+            changed |= calls != roots->calls;
+        }
+        for (uint32_t n = 0; n < roots->nodes; ++n) roots->node[n].deferred = false;
+        for (uint32_t p = 0; p < roots->pending_count; ++p) {
+            EffectCheckPending pending = roots->pending[p];
+            if (pending.linked || pending.root_linked) continue;
+            roots->node[pending.node].deferred = true;
+            if (pending.result != UINT32_MAX) roots->node[pending.result].deferred = true;
+        }
+    }
     if (build.status == XR_XIR_OK && close) build.status = effect_check_cell_roles(&build);
     if (build.status == XR_XIR_OK && close) build.status = effect_check_close(&build);
     if (build.status == XR_XIR_OK && roots->terms)
@@ -2095,7 +2119,7 @@ static XrXirStatus effect_checked_roots_build(const XrXirCompileContext *memory,
     XrCompileRequestControl *control, const XrXirRootRefiner *refiner, EffectCheckedRoots **output, bool close) {
     if (!output || *output) return XR_XIR_BAD_STRUCTURE;
     EffectCheckedRoots *interfaces = NULL;
-    XrXirStatus status = effect_checked_roots_collect(memory, module, contracts, control, refiner, &interfaces);
+    XrXirStatus status = effect_checked_roots_collect(memory, module, contracts, control, refiner, &interfaces, !close);
     if (status == XR_XIR_OK)
         status = effect_checked_roots_link_take(memory, module, control, &interfaces, output, close);
     effect_checked_roots_free(interfaces);

@@ -191,7 +191,7 @@ static void generic_resource_failures(void) {
     roots = NULL;
     EffectCheckedRoots *interfaces = NULL;
     XrXirCompileContext producer = effect_context;
-    CHECK(effect_checked_roots_collect(&producer, module, contracts, NULL, NULL, &interfaces) == XR_XIR_OK);
+    CHECK(effect_checked_roots_collect(&producer, module, contracts, NULL, NULL, &interfaces, false) == XR_XIR_OK);
     CHECK(interfaces->terms && effect_terms_scratch_retired(interfaces->terms));
     memset(&producer, 0xCE, sizeof(producer));
     CHECK(effect_checked_roots_link_take(&effect_context, module, NULL, &interfaces, &roots, true) == XR_XIR_OK && !interfaces);
@@ -230,7 +230,7 @@ static void control_summary_detached(void) {
     XrXirModule module = {.stage = XR_XIR_CHECKED, .functions = functions, .function_count = 3};
     EffectCheckedRoots *interfaces = NULL, *roots = NULL;
     EffectControlSummary *summary = NULL;
-    CHECK(effect_checked_roots_collect(&effect_context, &module, NULL, NULL, NULL, &interfaces) == XR_XIR_OK);
+    CHECK(effect_checked_roots_collect(&effect_context, &module, NULL, NULL, NULL, &interfaces, false) == XR_XIR_OK);
     memset(rows, 0xCE, sizeof(rows));
     for (uint32_t f = 0; f < 3; ++f) {
         functions[f].instructions = NULL;
@@ -276,7 +276,7 @@ static void module_interface_lifetime(void) {
                 .instruction_count = f < 2 ? 2 : 1, .error_type = XR_XIR_NEVER};
         EffectCheckedRoots *interfaces = NULL, *roots = NULL;
         XrXirCompileContext producer = effect_context;
-        CHECK(effect_checked_roots_collect(&producer, &module, NULL, NULL, NULL, &interfaces) == XR_XIR_OK);
+        CHECK(effect_checked_roots_collect(&producer, &module, NULL, NULL, NULL, &interfaces, false) == XR_XIR_OK);
         CHECK(interfaces->terms && effect_terms_scratch_retired(interfaces->terms));
         memset(&producer, 0xCE, sizeof(producer));
         CHECK(interfaces->modules == 2 && interfaces->module_offsets[1] == 2 &&
@@ -512,10 +512,13 @@ static void execution_cleanup_order(void) {
     }
     roots = NULL;
     CHECK(effect_checked_roots_build(&effect_context, &module, NULL, NULL, NULL, &roots, false) == XR_XIR_OK);
+    CHECK(roots->storage);
     for (uint32_t n = 0; n < roots->nodes; ++n) CHECK(roots->node[n].component == UINT32_MAX);
     oracle = (ExecutionCleanupOracle){0};
     CHECK(xir_execution_visit_calls(roots, execution_cleanup_oracle, &oracle) == XR_XIR_OK);
     CHECK(oracle.normal == 2 && oracle.panic == 3);
+    XirStorageFlowView storage = {0};
+    CHECK(xir_storage_flow_seal(roots->storage, &storage) == XR_XIR_OK && storage.function_count == 3);
     EffectCheckBuild close = {.memory = &effect_context, .roots = roots};
     CHECK(effect_check_cell_roles(&close) == XR_XIR_OK && effect_check_close(&close) == XR_XIR_OK);
     for (uint32_t n = 0; n < roots->nodes; ++n) CHECK(roots->node[n].component != UINT32_MAX);
