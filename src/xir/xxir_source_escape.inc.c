@@ -25,7 +25,7 @@ static bool source_escape_prepare(SourceContext *ctx) {
     XrXirDeclarations identities;
     XrXirModule module = source_module_view(ctx, &identities);
     XrHirEscapeDiagnostic diagnostic = {0};
-    XrXirStatus status = xr_hir_escape_check(&ctx->compile, &module, declarations, ctx->request, &diagnostic);
+    XrXirStatus status = xr_hir_escape_check(&ctx->compile, &module, declarations, ctx->request, &diagnostic, &ctx->escape_facts);
     if (status == XR_XIR_OK) return true;
     AstNode *site = NULL;
     if (diagnostic.function < ctx->function_count) {

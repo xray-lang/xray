@@ -280,6 +280,11 @@ static XrXirStatus source_view_normalize(SourceContext *ctx,const XrXirModule *m
     XrXirStatus status=xir_compile_view_normalize_source_verified(&ctx->compile,module,&source,&n,diagnostic);
     if (status!=XR_XIR_OK) return status;
     XrXirConstruction *construction=NULL;
+    XrHirEscapeFacts *escape_facts=NULL;
+    if(ctx->escape_facts) {
+        status=xr_hir_escape_facts_copy(&ctx->compile,ctx->escape_facts,ctx->request,&escape_facts);
+        if(status!=XR_XIR_OK)goto source_failure;
+    }
     XrXirFunction *functions=source_alloc(ctx,ctx->function_capacity,sizeof(*functions));
     SourceFunction *bodies=source_alloc(ctx,ctx->function_capacity,sizeof(*bodies));
     uint64_t added=0;
@@ -288,6 +293,11 @@ static XrXirStatus source_view_normalize(SourceContext *ctx,const XrXirModule *m
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto source_failure;
         functions[f]=n->bodies[f];bodies[f]=ctx->bodies[f];
         if (!n->functions[f].instructions) continue;
+        if(escape_facts) {
+            status=xr_hir_escape_facts_relocate(&ctx->compile,escape_facts,f,
+                functions[f].parameter_count+functions[f].instruction_count,n->functions[f].values,ctx->request);
+            if(status!=XR_XIR_OK)goto source_failure;
+        }
         added+=functions[f].instruction_count-ctx->functions[f].instruction_count;
         if (added>ctx->remaining_instructions) {source_fail(ctx,NULL,XR_XIR_BUDGET,"Source lifetime instructions exhausted");goto source_failure;}
         functions[f].instructions=source_view_copy(ctx,functions[f].instructions,functions[f].instruction_count,sizeof(*functions[f].instructions));
@@ -314,11 +324,15 @@ static XrXirStatus source_view_normalize(SourceContext *ctx,const XrXirModule *m
         xr_xir_compile_construction_free(ctx->construction);
         ctx->view_normalized=true;
         ctx->construction=construction;construction=NULL;
+        xr_hir_escape_facts_free(ctx->escape_facts);ctx->escape_facts=escape_facts;escape_facts=NULL;
         ctx->functions=functions;ctx->bodies=bodies;ctx->root_queries=queries;ctx->remaining_instructions-=(uint32_t)added;
     }
+    xr_hir_escape_facts_free(escape_facts);
     xr_xir_compile_construction_free(construction);xir_compile_view_normalization_free(n);return status;
 source_failure:
-    xr_xir_compile_construction_free(construction);xir_compile_view_normalization_free(n);return ctx->diagnostic.status;
+    xr_hir_escape_facts_free(escape_facts);
+    xr_xir_compile_construction_free(construction);xir_compile_view_normalization_free(n);
+    return ctx->diagnostic.status==XR_XIR_OK?status:ctx->diagnostic.status;
 }
 
 /* The numeric effects belong to this exact relocated SSA generation. Access

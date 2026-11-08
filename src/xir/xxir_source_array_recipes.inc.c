@@ -101,7 +101,8 @@ static bool source_array_callback(SourceContext *ctx, AstNode *node, AstNode *ar
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "collection callback takes a different number of parameters");
         XrXirCallableParameter *parameters = count ? source_alloc(ctx, count, sizeof(*parameters)) : NULL;
         if (count && !parameters) return false;
-        for (uint32_t i = 0; i < count; ++i) parameters[i] = (XrXirCallableParameter) {shape->parameters[i], XR_PARAM_READ,0};
+        for (uint32_t i = 0; i < count; ++i) parameters[i] = (XrXirCallableParameter) {shape->parameters[i], XR_PARAM_READ,
+            xr_xir_callable_signature(&ctx->types,shape->parameters[i]) != NULL};
         XrXirType expected;
         if (!source_signature(ctx, parameters, count, result.present ? result.type : XR_XIR_UNIT, shape->error_type, &expected)) return false;
         if (!source_closure(ctx, literal, (SourceExpectedType) {true, expected, !result.present, false}, callback)) return false;

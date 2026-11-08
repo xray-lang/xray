@@ -31,6 +31,14 @@ typedef struct HirEscapeNode {
 
 typedef struct HirEscapeEdge { uint32_t target, next, flags; } HirEscapeEdge;
 
+typedef struct HirEscapeFactRow { uint32_t count; uint8_t *flags; } HirEscapeFactRow;
+
+struct XrHirEscapeFacts {
+    XrCompileResources *resources;
+    uint32_t count;
+    HirEscapeFactRow *rows;
+};
+
 typedef struct HirEscape {
     const XrXirCompileContext *memory;
     const XrXirModule *module;
@@ -43,6 +51,95 @@ typedef struct HirEscape {
     uint32_t queue_first, queue_count;
     XrXirStatus status;
 } HirEscape;
+
+XR_FUNC void xr_hir_escape_facts_free(XrHirEscapeFacts *facts) {
+    if (!facts) return;
+    for (uint32_t f = 0; f < facts->count; ++f) xr_compile_resources_free(facts->rows[f].flags);
+    xr_compile_resources_free(facts->rows);
+    xr_compile_resources_free(facts);
+}
+
+XR_FUNC XrXirStatus xr_hir_escape_restricted(const XrHirEscapeFacts *facts,
+    uint32_t function, uint32_t value, bool *output) {
+    if (!facts || !output || function >= facts->count || value >= facts->rows[function].count)
+        return XR_XIR_BAD_STRUCTURE;
+    *output = facts->rows[function].flags[value] != 0;
+    return XR_XIR_OK;
+}
+
+static XrHirEscapeFacts *escape_facts_new(const XrXirCompileContext *memory,
+    uint32_t count, XrXirStatus *status) {
+    XrHirEscapeFacts *facts = xir_compile_calloc(memory, 1, sizeof(*facts), status);
+    if (!facts) return NULL;
+    facts->resources = memory->resources;
+    facts->rows = count ? xir_compile_calloc(memory, count, sizeof(*facts->rows), status) : NULL;
+    if (count && !facts->rows) {xr_hir_escape_facts_free(facts); return NULL;}
+    facts->count = count;
+    return facts;
+}
+
+XR_FUNC XrXirStatus xr_hir_escape_facts_copy(const XrXirCompileContext *memory,
+    const XrHirEscapeFacts *source, XrCompileRequestControl *control, XrHirEscapeFacts **output) {
+    if (!xir_compile_context_valid(memory) || !source || !output || *output ||
+        source->resources != memory->resources) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status = XR_XIR_OK;
+    XrHirEscapeFacts *copy = escape_facts_new(memory, source->count, &status);
+    for (uint32_t f = 0; copy && f < source->count && status == XR_XIR_OK; ++f) {
+        status = xir_receive_poll(control);
+        if (status != XR_XIR_OK) break;
+        uint32_t count = source->rows[f].count;
+        copy->rows[f].flags = count ? xir_compile_copy(memory, source->rows[f].flags, count, &status) : NULL;
+        copy->rows[f].count = count;
+    }
+    if (status != XR_XIR_OK) {xr_hir_escape_facts_free(copy); return status;}
+    *output = copy;
+    return XR_XIR_OK;
+}
+
+XR_FUNC XrXirStatus xr_hir_escape_facts_relocate(const XrXirCompileContext *memory, XrHirEscapeFacts *facts,
+    uint32_t function, uint32_t count, const uint32_t *values, XrCompileRequestControl *control) {
+    if (!xir_compile_context_valid(memory) || !facts || function >= facts->count ||
+        facts->resources != memory->resources || (facts->rows[function].count && !values)) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status = XR_XIR_OK;
+    uint8_t *flags = count ? xir_compile_calloc(memory, count, sizeof(*flags), &status) : NULL;
+    uint32_t progress = 0;
+    for (uint32_t v = 0; v < facts->rows[function].count && status == XR_XIR_OK; ++v) {
+        status = xir_receive_step(control, &progress);
+        if (status != XR_XIR_OK) break;
+        if (values[v] >= count) {status = XR_XIR_BAD_STRUCTURE; break;}
+        flags[values[v]] |= facts->rows[function].flags[v];
+    }
+    if (status != XR_XIR_OK) {xr_compile_resources_free(flags); return status;}
+    xr_compile_resources_free(facts->rows[function].flags);
+    facts->rows[function] = (HirEscapeFactRow){count, flags};
+    return XR_XIR_OK;
+}
+
+XR_FUNC XrXirStatus xr_hir_escape_function_match(const XrXirFunction *actual,
+    const XrXirFunction *required, const char **reason) {
+    if (reason) *reason = NULL;
+    if (!actual || !required) return XR_XIR_BAD_STRUCTURE;
+    if (actual->parameter_count != required->parameter_count) return XR_XIR_OK;
+    for (uint32_t p = 0; p < actual->parameter_count; ++p)
+        if (xr_xir_function_parameter_escaping(actual, p) != xr_xir_function_parameter_escaping(required, p)) {
+            if (reason) *reason = "function parameter escaping flags must match the required signature exactly";
+            return XR_XIR_BAD_TYPE;
+        }
+    return XR_XIR_OK;
+}
+
+XR_FUNC XrXirStatus xr_hir_escape_callable_match(const XrXirFunction *actual, uint32_t offset,
+    const XrXirTypeNode *required, const char **reason) {
+    if (reason) *reason = NULL;
+    if (!actual || !required || offset > actual->parameter_count) return XR_XIR_BAD_STRUCTURE;
+    if (actual->parameter_count - offset != required->parameter_count) return XR_XIR_OK;
+    for (uint32_t p = 0; p < required->parameter_count; ++p)
+        if (xr_xir_function_parameter_escaping(actual, p + offset) != (required->parameters[p].escaping != 0)) {
+            if (reason) *reason = "function parameter escaping flags must match the required signature exactly";
+            return XR_XIR_BAD_TYPE;
+        }
+    return XR_XIR_OK;
+}
 
 static bool escape_poll(HirEscape *owner) {
     if (owner->status == XR_XIR_OK)
@@ -175,6 +272,7 @@ static bool escape_alias(HirEscape *owner, uint32_t f, uint32_t i, const XrXirIn
         return true;
     case XR_XIR_CELL_WRITE: case XR_XIR_CELL_WRITE_TAKE: case XR_XIR_CELL_LOCAL_WRITE:
     case XR_XIR_LOCAL_WRITE: case XR_XIR_SCALAR_LOCAL_WRITE: case XR_XIR_OWNED_LOCAL_WRITE:
+    case XR_XIR_PLACE_WRITE:
         return escape_value_edge(owner, f, op->args[1], op->args[0], ESCAPE_RESTRICTION);
     case XR_XIR_PHI:
         for (uint32_t a = 1; a < op->args[1]; a += 2)
@@ -283,8 +381,9 @@ static XrXirStatus escape_uses(HirEscape *owner, uint32_t f, uint32_t i, XrHirEs
     case XR_XIR_RETURN: return body->result == XR_XIR_UNIT ? XR_XIR_OK :
         escape_reject(owner, f, i, op->args[0], "a return", diagnostic);
     case XR_XIR_NULLABLE_SOME: return escape_reject(owner, f, i, op->args[0], "nullable storage", diagnostic);
-    case XR_XIR_SLOT_STORE: return escape_reject(owner, f, i, op->args[0], "module storage", diagnostic);
-    case XR_XIR_ARRAY_PUSH: case XR_XIR_CLASS_SET: case XR_XIR_STRUCT_SET: case XR_XIR_SET_ADD:
+    case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_STORE:
+        return escape_reject(owner, f, i, op->args[0], "module storage", diagnostic);
+    case XR_XIR_ARRAY_REPEAT: case XR_XIR_ARRAY_PUSH: case XR_XIR_CLASS_SET: case XR_XIR_STRUCT_SET: case XR_XIR_SET_ADD:
         return escape_reject(owner, f, i, op->args[1], "field or collection storage", diagnostic);
     case XR_XIR_CELL_WRITE: case XR_XIR_CELL_WRITE_TAKE: case XR_XIR_CELL_LOCAL_WRITE: case XR_XIR_PLACE_WRITE: {
         uint32_t storage = escape_node(owner, f, op->args[0]);
@@ -312,10 +411,27 @@ static XrXirStatus escape_uses(HirEscape *owner, uint32_t f, uint32_t i, XrHirEs
     return XR_XIR_OK;
 }
 
+static bool escape_facts_publish(HirEscape *owner, XrHirEscapeFacts **output) {
+    XrHirEscapeFacts *facts = escape_facts_new(owner->memory, owner->module->function_count, &owner->status);
+    for (uint32_t f = 0; facts && f < facts->count && owner->status == XR_XIR_OK; ++f) {
+        uint32_t count = owner->offsets[f + 1] - owner->offsets[f];
+        facts->rows[f].flags = count ? xir_compile_calloc(owner->memory, count, 1, &owner->status) : NULL;
+        facts->rows[f].count = count;
+        for (uint32_t v = 0; v < count && escape_poll(owner); ++v) {
+            HirEscapeNode node = owner->nodes[owner->offsets[f] + v];
+            facts->rows[f].flags[v] = (uint8_t)((node.parameter ? 1u : 0u) | (node.borrowed ? 2u : 0u));
+        }
+    }
+    if (owner->status != XR_XIR_OK) {xr_hir_escape_facts_free(facts); return false;}
+    *output = facts;
+    return true;
+}
+
 XR_FUNC XrXirStatus xr_hir_escape_check(const XrXirCompileContext *memory, const XrXirModule *module,
-    const XrHirEscapeDeclaration *declarations, XrCompileRequestControl *control, XrHirEscapeDiagnostic *diagnostic) {
+    const XrHirEscapeDeclaration *declarations, XrCompileRequestControl *control,
+    XrHirEscapeDiagnostic *diagnostic, XrHirEscapeFacts **output) {
     if (!xir_compile_context_valid(memory) || !module || !diagnostic ||
-        (module->function_count && !module->functions)) return XR_XIR_BAD_STRUCTURE;
+        (output && *output) || (module->function_count && !module->functions)) return XR_XIR_BAD_STRUCTURE;
     *diagnostic = (XrHirEscapeDiagnostic){0};
     HirEscape owner = {.memory = memory, .module = module, .declarations = declarations,
         .control = control, .status = XR_XIR_OK};
@@ -357,6 +473,7 @@ XR_FUNC XrXirStatus xr_hir_escape_check(const XrXirCompileContext *memory, const
                     if (owner.status != XR_XIR_OK) break;
                 }
     }
+    if (owner.status == XR_XIR_OK && output) escape_facts_publish(&owner, output);
     xr_compile_resources_free(owner.nodes);
     xr_compile_resources_free(owner.edges);
     xr_compile_resources_free(owner.offsets);

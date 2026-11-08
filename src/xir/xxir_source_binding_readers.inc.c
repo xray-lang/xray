@@ -35,6 +35,11 @@ static bool source_binding_accessor(SourceContext *ctx,const SourceName *symbol,
     ctx->function=function;ctx->module=root;ctx->locals=ctx->scope=NULL;
     ctx->loop=NULL;ctx->facts=NULL;ctx->epochs=NULL;ctx->flow_alternatives=0;ctx->returned=false;
     ctx->functions[function]=(XrXirFunction){name,(uint32_t)source_text_size(ctx,name),parameter,parameters,type,NULL,0,NULL,0,NULL,0, XR_XIR_NEVER,0,NULL,0,NULL};
+    if(parameters && xr_xir_callable_signature(&ctx->types,input)) {
+        uint32_t *escaping=source_alloc(ctx,1,sizeof(*escaping));if(!escaping)return false;
+        *escaping=0;ctx->functions[function].escaping_parameters=escaping;
+        ctx->functions[function].escaping_parameter_count=1;
+    }
     ctx->bodies[function].module=root;ctx->bodies[function].infer_result=true;
     ctx->identities[function]=(XrXirFunctionIdentity){.module=root,.exported=1,.promises=XR_XIR_FUNCTION_NO_SUSPEND};
     if(push) {

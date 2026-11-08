@@ -324,7 +324,9 @@ static XrXirStatus effect_terms_substitute(EffectTerms *pool,XrXirType type,
         else if (source.kind==XR_XIR_TYPE_CALLABLE && frame->next==source.parameter_count) frame->node.result=result;
         else if (source.kind==XR_XIR_TYPE_CALLABLE && frame->next>source.parameter_count) frame->node.element=result;
         else ((XrXirCallableParameter *)frame->node.parameters)[frame->next]=
-            (XrXirCallableParameter){result,source.parameters[frame->next].mode,0};
+            (XrXirCallableParameter){result,source.parameters[frame->next].mode,
+                source.parameters[frame->next].escaping ||
+                (!xr_xir_callable_signature(&pool->types,child) && xr_xir_callable_signature(&pool->types,result))};
         uint32_t span=xr_xir_type_span(&pool->types,result);
         if (span>frame->node.parameter_span) frame->node.parameter_span=span;
         ++frame->next;
