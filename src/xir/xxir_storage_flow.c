@@ -1141,7 +1141,7 @@ static bool storage_apply_opaque(XirStorageFlow *flow, const XirExecutionSite *s
         }
         return !exposure.reachable || storage_exposure_seed(flow, function, state.value, UINT32_MAX);
     }
-    if (!flow->sealing && !site->native_callable) return true;
+    if (!terminal && !flow->sealing) return true;
     const XrXirFunction *body = flow->rows[function].body;
     bool affected = !site->native_callable && state.handle < body->parameter_count;
     if (state.handle >= body->parameter_count)
@@ -1149,15 +1149,13 @@ static bool storage_apply_opaque(XirStorageFlow *flow, const XirExecutionSite *s
             state.handle - body->parameter_count].op);
     StorageOpaqueCapture query = {.flow=flow, .use=*site, .target=state.value, .handle=state.handle};
     if (!storage_opaque_environment(flow, site, &query, &affected)) return false;
-    if (affected && flow->sealing) {
+    if (affected) {
         query.publish = true;
         if (!storage_opaque_environment(flow, site, &query, &affected)) return false;
     }
-    if (!affected || flow->sealing) {
-        if (!storage_relation(flow, function, input, state.value)) return false;
-        if (affected && !storage_unknown(flow, function, state.value,
-            storage_payload(flow, function, state.handle))) return false;
-    }
+    if (!storage_relation(flow, function, input, state.value)) return false;
+    if (affected && !storage_unknown(flow, function, state.value,
+        storage_payload(flow, function, state.handle))) return false;
     return flow->status == XR_XIR_OK;
 }
 
