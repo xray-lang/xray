@@ -152,6 +152,13 @@ static XrXirStatus restriction_capture(void *context, const XirStorageCapture *c
     HirEscape *owner = &solver->builder->graph;
     if (capture->function != solver->builder->observations[solver->observation].function ||
         capture->contents == UINT32_MAX) return XR_XIR_UNRESOLVED;
+    if (capture->kind == XIR_STORAGE_CAPTURE_FORMAL_FN) {
+        uint32_t f = capture->identity.function, p = capture->identity.value;
+        if (capture->exposure != UINT32_MAX || f >= owner->module->function_count ||
+            p < owner->functions[f].captures || p >= owner->functions[f].parameters ||
+            !xr_xir_callable_signature(owner->module->types, owner->nodes[owner->offsets[f] + p].type))
+            return XR_XIR_BAD_STRUCTURE;
+    } else if (capture->kind != XIR_STORAGE_CAPTURE_CELL) return XR_XIR_BAD_STRUCTURE;
     if (solver->carrier_count == solver->carrier_capacity) {
         HirRestrictionCarrier *grown = xir_compile_array_grow(owner->memory, solver->carriers,
             solver->carrier_count, sizeof(*grown), &solver->carrier_capacity, &owner->status);
@@ -193,7 +200,7 @@ static XrXirStatus restriction_call_actuals(void *context, const XirExecutionSit
         const XrXirTypes *types = xir_execution_types(solver->execution);
         XrXirType type = actual.type;
         if (xr_xir_type_is_cell(types, type)) type = xr_xir_cell_element(types, type);
-        if (!actual.cell || !xr_xir_callable_signature(types, type)) continue;
+        if (!actual.cell || !xr_xir_callable_signature(types, type) || xr_xir_type_is_c_callable(types, type)) continue;
         /* An ordinary ref callable names a storable variable, including a
          * bound ordinary argument whose contents changed after binding. */
         XirStorageObservation observation = {site->function, site->instruction, XIR_STORAGE_BEFORE,
@@ -207,6 +214,13 @@ static XrXirStatus restriction_call_actuals(void *context, const XirExecutionSit
             (HirEscapeObservation){site->function, site->instruction, contents, XIR_STORAGE_BEFORE})) return owner->status;
     }
     return owner->status;
+}
+
+static bool restriction_function_use(const HirEscape *owner, HirEscapeUse use) {
+    if (use.value >= owner->functions[use.function].physical_values) return true;
+    XrXirType type = owner->nodes[owner->offsets[use.function] + use.value].type;
+    return xr_xir_callable_signature(owner->module->types, type) &&
+        !xr_xir_type_is_c_callable(owner->module->types, type);
 }
 
 static bool restriction_observe_storage(HirRestrictionSolver *solver, bool final) {
@@ -228,8 +242,7 @@ static bool restriction_observe_storage(HirRestrictionSolver *solver, bool final
     }
     for (uint32_t u = 0; u < owner->use_count && escape_poll(owner); ++u) {
         HirEscapeUse use = owner->uses[u];
-        if (use.value < owner->functions[use.function].physical_values &&
-            !xr_xir_callable_signature(owner->module->types, owner->nodes[owner->offsets[use.function] + use.value].type)) continue;
+        if (!restriction_function_use(owner, use)) continue;
         bool returned = use.reason && !strcmp(use.reason, "a return");
         XirStorageValuePoint point = {use.function, use.instruction,
             {use.function, use.value, XIR_EXECUTION_CURRENT_ENVIRONMENT},
@@ -254,6 +267,7 @@ static bool restriction_observe_storage(HirRestrictionSolver *solver, bool final
     }
     for (uint32_t u = 0; final && u < owner->use_count && escape_poll(owner); ++u) {
         HirEscapeUse use = owner->uses[u];
+        if (!restriction_function_use(owner, use)) continue;
         uint32_t exposure = UINT32_MAX;
         if (use.storage != UINT32_MAX) {
             uint32_t handle = use.storage - owner->offsets[use.function];

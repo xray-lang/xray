@@ -19,6 +19,7 @@
 #include "../xir/xxir_receive_control.h"
 #include "../shared/xerror_codes.h"
 #include "../shared/xr_utf8_core.h"
+#include "../base/xhash.h"
 #include <stdio.h>
 #include <stdlib.h>
 
