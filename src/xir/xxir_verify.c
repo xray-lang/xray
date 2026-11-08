@@ -1774,7 +1774,7 @@ XR_FUNC XrXirStatus xir_compile_check_effect_declarations(const XrXirCompileCont
 static XrXirStatus verify_callable_lifetimes(const XrXirCompileContext *context,
     XirEffectInput input, XrXirDiagnostic *location) {
     XrHirEscapeDiagnostic failure={0};
-    XrXirStatus status=xr_hir_escape_check(context,input.module,NULL,input.control,&failure);
+    XrXirStatus status=xr_hir_escape_check(context,input.module,NULL,input.control,&failure,NULL);
     if(status!=XR_XIR_OK && location) {
         location->status=status;
         location->function=failure.function;

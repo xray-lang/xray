@@ -74,6 +74,10 @@ static bool source_implementation_applications(SourceContext *ctx) {
 static bool source_implementation_promises(SourceContext *ctx, uint32_t function, XrXirType signature) {
     const XrXirTypeNode *found = xr_xir_callable_signature(&ctx->types,signature);
     XrXirTypeNode requirement = *found;
+    const char *reason = NULL;
+    XrXirStatus escape_status = xr_hir_escape_callable_match(&ctx->functions[function], 1, &requirement, &reason);
+    if (escape_status != XR_XIR_OK)
+        return source_fail(ctx, ctx->bodies[function].node, escape_status, reason);
     if (requirement.flags & XR_XIR_CALLABLE_NO_SUSPEND)
         ctx->identities[function].promises |= XR_XIR_FUNCTION_NO_SUSPEND;
     if (ctx->functions[function].parameter_count != requirement.parameter_count + 1) return true;
@@ -165,6 +169,18 @@ static bool source_implementations_bind(SourceContext *ctx) {
     /* Only the declared prefix exists here. Closure and entry producers fill
      * their reserved rows before the common checker admits the full module. */
     module.function_count = ctx->first_closure;
+    for (uint32_t f = 0; f < module.function_count; ++f) {
+        const XrXirFunctionIdentity *identity = &ctx->identities[f];
+        if (!(identity->promises & XR_XIR_FUNCTION_OVERRIDE) || !identity->nominal_owner) continue;
+        uint32_t parent = ctx->nominals.declarations[identity->nominal_owner - 1].parent;
+        SourceName *base = NULL;
+        for (; parent && !base; parent = ctx->nominals.declarations[parent - 1].parent)
+            base = find_name(ctx, ctx->nominal_methods[parent - 1], ctx->functions[f].name);
+        if (!base) continue;
+        const char *reason = NULL;
+        status = xr_hir_escape_function_match(&ctx->functions[f], &ctx->functions[base->index], &reason);
+        if (status != XR_XIR_OK) return source_fail(ctx, ctx->bodies[f].node, status, reason);
+    }
     XrXirDiagnostic class_location={.function=UINT32_MAX,.block=UINT32_MAX,.instruction=UINT32_MAX};
     status=xir_compile_class_declarations_verify(&module,&class_location,ctx->request);
     if(status!=XR_XIR_OK)return source_fail(ctx,class_location.function<module.function_count?

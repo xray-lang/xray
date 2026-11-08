@@ -54,6 +54,7 @@ typedef struct SourceHistoryReceive {
 } SourceHistoryReceive;
 typedef struct SourceContext {
     XrModuleGraph *graph;
+    XrHirEscapeFacts *escape_facts; /* Independent numeric lifetime classifications. */
     XrHirBody *typed_body; /* Closed before this construction replaces its type view. */
     XrHirItems *items; /* Synchronous module namespace; never a persistent graph borrow. */
     XrFrontendReport *report; /* Sole transferred child failure, before this context retires. */

@@ -57,16 +57,19 @@ static bool source_requirement_helper(SourceContext *ctx, AstNode *site,
     uint32_t generic_count = ctx->generics[outer].parameter_count;
     XrXirConstraint *constraints = generic_count ? source_alloc(ctx,generic_count,sizeof(*constraints)) : NULL;
     XrXirType *parameters = source_alloc(ctx,signature.parameter_count+1,sizeof(*parameters));
+    uint32_t *escapes = signature.parameter_count ? source_alloc(ctx,signature.parameter_count,sizeof(*escapes)) : NULL;
     char *name = source_alloc(ctx,40,sizeof(*name));
-    if (!parameters || !name || (generic_count && !constraints)) return false;
+    if (!parameters || !name || (generic_count && !constraints) || (signature.parameter_count && !escapes)) return false;
     for (uint32_t p = 0; p < generic_count; ++p) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         constraints[p] = ctx->generics[outer].constraints[p];
     }
     parameters[0] = request->receiver;
+    uint32_t escape_count = 0;
     for (uint32_t p = 0; p < signature.parameter_count; ++p) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         parameters[p+1] = signature.parameters[p].type;
+        if (signature.parameters[p].escaping) escapes[escape_count++] = p + 1;
     }
     if (source_format(ctx, name, 40, "$requirement%u", index) != XR_DIAG_OK)
         return source_fail(ctx, site, XR_XIR_BUDGET, "requirement name formatting exhausted");
@@ -78,7 +81,8 @@ static bool source_requirement_helper(SourceContext *ctx, AstNode *site,
     body->type_parameters = parent->type_parameters; body->type_parameter_count = parent->type_parameter_count;
     body->declaration = declaration.declaration;
     ctx->functions[index] = (XrXirFunction){name,(uint32_t)source_text_size(ctx, name),parameters,
-        signature.parameter_count+1,signature.result,NULL,0,NULL,0,NULL,0, signature.element,0,NULL,0,NULL};
+        signature.parameter_count+1,signature.result,NULL,0,NULL,0,NULL,0, signature.element,0,NULL,
+        escape_count,escape_count ? escapes : NULL};
     ctx->generics[index].parameter_count = generic_count;
     ctx->generics[index].constraints = constraints;
     ctx->identities[index] = ctx->identities[outer];

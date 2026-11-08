@@ -61,8 +61,14 @@ static bool source_static_value(SourceContext *ctx, AstNode *node, SourceStaticM
     }
     XrXirCallableParameter *parameters = count ? source_alloc(ctx, count, sizeof(*parameters)) : NULL;
     if (count && !parameters) return false;
-    for (uint32_t p = 0; p < count; ++p)
+    for (uint32_t p = 0; p < count; ++p) {
         if (!source_substitute(ctx, &selected->substitution, function->parameters[p], 0, &parameters[p].type)) return false;
+        parameters[p].mode = xr_xir_declared_parameter_mode(&ctx->types, function->parameters[p],
+            function->consume_parameters, function->consume_parameter_count, p);
+        parameters[p].escaping = xr_xir_function_parameter_escaping(function, p) ||
+            (!xr_xir_callable_signature(&ctx->types, function->parameters[p]) &&
+             xr_xir_callable_signature(&ctx->types, parameters[p].type));
+    }
     XrXirType result, error_type;
     XrXirInstruction op = {XR_XIR_FUNCTION_REF, XR_XIR_UNIT, {0}, {0}, selected->method->index, {0}};
     return source_substitute(ctx, &selected->substitution, function->result, 0, &result) &&
@@ -249,8 +255,14 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
     uint32_t count = function->parameter_count - 1;
     XrXirCallableParameter *parameters = count ? source_alloc(ctx, count, sizeof(*parameters)) : NULL;
     if (count && !parameters) return false;
-    for (uint32_t p = 0; p < count; ++p)
+    for (uint32_t p = 0; p < count; ++p) {
         if (!source_substitute(ctx, &substitution, function->parameters[p + 1], 0, &parameters[p].type)) return false;
+        parameters[p].mode = xr_xir_declared_parameter_mode(&ctx->types, function->parameters[p + 1],
+            function->consume_parameters, function->consume_parameter_count, p + 1);
+        parameters[p].escaping = xr_xir_function_parameter_escaping(function, p + 1) ||
+            (!xr_xir_callable_signature(&ctx->types, function->parameters[p + 1]) &&
+             xr_xir_callable_signature(&ctx->types, parameters[p].type));
+    }
     XrXirType result, error_type;
     XrXirInstruction op = {XR_XIR_FUNCTION_REF, XR_XIR_UNIT, {0}, {0}, method->index, {0}};
     return source_substitute(ctx, &substitution, function->result, 0, &result) &&

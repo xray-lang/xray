@@ -16,6 +16,19 @@ typedef struct XrHirEscapeDiagnostic {
     char message[512];
 } XrHirEscapeDiagnostic;
 
+typedef struct XrHirEscapeFacts XrHirEscapeFacts;
+
 XR_FUNC XrXirStatus xr_hir_escape_check(const XrXirCompileContext *, const XrXirModule *,
-    const XrHirEscapeDeclaration *, XrCompileRequestControl *, XrHirEscapeDiagnostic *);
+    const XrHirEscapeDeclaration *, XrCompileRequestControl *, XrHirEscapeDiagnostic *, XrHirEscapeFacts **);
+XR_FUNC void xr_hir_escape_facts_free(XrHirEscapeFacts *);
+XR_FUNC XrXirStatus xr_hir_escape_restricted(const XrHirEscapeFacts *, uint32_t, uint32_t, bool *);
+XR_FUNC XrXirStatus xr_hir_escape_facts_copy(const XrXirCompileContext *, const XrHirEscapeFacts *,
+    XrCompileRequestControl *, XrHirEscapeFacts **);
+/* The private receiving owner changes only after a complete successful map.
+ * This relocates an existing classification and never derives a new rule. */
+XR_FUNC XrXirStatus xr_hir_escape_facts_relocate(const XrXirCompileContext *, XrHirEscapeFacts *,
+    uint32_t, uint32_t, const uint32_t *, XrCompileRequestControl *);
+XR_FUNC XrXirStatus xr_hir_escape_function_match(const XrXirFunction *, const XrXirFunction *, const char **);
+XR_FUNC XrXirStatus xr_hir_escape_callable_match(const XrXirFunction *, uint32_t,
+    const XrXirTypeNode *, const char **);
 #endif // XHIR_ESCAPE_H
