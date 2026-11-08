@@ -124,6 +124,7 @@ struct XrHirBody {
     uint32_t binding_count,binding_capacity;
     uint32_t *binding_map;
     HirBodyVector scopes,places,signatures;
+    uint32_t *scope_index,scope_index_capacity;
     HirBodyVector tuples,tuple_contexts;
     uint32_t *tuple_map;
     uint32_t tuple_map_capacity;
@@ -222,6 +223,7 @@ XR_FUNC void xr_hir_body_free(XrHirBody *body) {
         xr_compile_resources_free(((HirBodySignature *)body->signatures.items)[i].default_types);
     }
     xr_compile_resources_free(body->signatures.items);
+    xr_compile_resources_free(body->scope_index);
     xr_compile_resources_free(body->places.items);xr_compile_resources_free(body->scopes.items);xr_compile_resources_free(body->binding_map);xr_compile_resources_free(body->bindings);
     xr_compile_resources_free(body->uses);xr_compile_resources_free(body);
 }
@@ -303,6 +305,66 @@ XR_FUNC void xr_hir_body_end(XrHirBody *body) {
     body->ended = true;
 }
 XR_FUNC bool xr_hir_body_live(const XrHirBody *body){return body&&!body->ended;}
+static uint32_t body_scope_hash(XrHirBodyScope parent,XrHirBodyOrigin origin) {
+    uint32_t key[] = {parent.owner!=NULL,parent.index,origin.function,origin.module,origin.node};
+    return xr_hash_bytes(key,sizeof(key));
+}
+static XrXirStatus body_scope_position(const XrHirBody *body,XrHirBodyScope parent,
+    XrHirBodyOrigin origin,XrCompileRequestControl *control,uint32_t *slot,uint32_t *found) {
+    *found=UINT32_MAX;
+    *slot=0;
+    XrXirStatus status=body_poll(control);
+    if(status!=XR_XIR_OK||!body->scope_index_capacity)return status;
+    uint32_t capacity=body->scope_index_capacity;
+    *slot=body_scope_hash(parent,origin)%capacity;
+    for(uint32_t probe=0;probe<capacity;++probe) {
+        if(!(probe%64)){status=body_poll(control);if(status!=XR_XIR_OK)return status;}
+        uint32_t index=body->scope_index[*slot];
+        if(!index)return XR_XIR_OK;
+        XR_DCHECK(index<=body->scopes.count,"scope index refers to an admitted row");
+        HirBodyScope previous=((HirBodyScope *)body->scopes.items)[index-1];
+        if(previous.parent.owner==parent.owner&&previous.parent.index==parent.index&&
+            previous.origin.function==origin.function&&previous.origin.module==origin.module&&previous.origin.node==origin.node) {
+            *found=index-1;
+            return XR_XIR_OK;
+        }
+        *slot=*slot+1==capacity?0:*slot+1;
+    }
+    return XR_XIR_OVERFLOW;
+}
+static XrXirStatus body_scope_index_reserve(XrHirBody *body,XrHirBodyScope parent,
+    XrHirBodyOrigin origin,XrCompileRequestControl *control,uint32_t *position) {
+    if(body->scopes.count<body->scope_index_capacity/2||body->scope_index_capacity==UINT32_MAX)
+        return body_poll(control);
+    uint32_t capacity=body->scope_index_capacity?
+        (body->scope_index_capacity>UINT32_MAX/2?UINT32_MAX:body->scope_index_capacity*2):16;
+    uint32_t *index=NULL;
+    XrXirStatus status=xir_compile_resource_status(xr_compile_resources_calloc(body->resources,
+        capacity,sizeof(*index),(void **)&index));
+    if(status!=XR_XIR_OK)return status;
+    for(uint32_t i=0;i<body->scopes.count&&status==XR_XIR_OK;++i) {
+        HirBodyScope row=((HirBodyScope *)body->scopes.items)[i];
+        uint32_t slot=body_scope_hash(row.parent,row.origin)%capacity;
+        status=body_poll(control);
+        while(index[slot]&&status==XR_XIR_OK) {
+            status=body_poll(control);
+            slot=slot+1==capacity?0:slot+1;
+        }
+        if(status==XR_XIR_OK)index[slot]=i+1;
+    }
+    uint32_t slot=body_scope_hash(parent,origin)%capacity;
+    while(index[slot]&&status==XR_XIR_OK) {
+        status=body_poll(control);
+        slot=slot+1==capacity?0:slot+1;
+    }
+    if(status==XR_XIR_OK)status=body_poll(control);
+    if(status!=XR_XIR_OK){xr_compile_resources_free(index);return status;}
+    xr_compile_resources_free(body->scope_index);
+    body->scope_index=index;
+    body->scope_index_capacity=capacity;
+    *position=slot;
+    return XR_XIR_OK;
+}
 XR_FUNC XrXirStatus xr_hir_body_scope(XrHirBody *body,XrHirBodyScope parent,
     XrHirBodyOrigin origin,XrCompileRequestControl *control,XrHirBodyScope *out) {
     if(!body||body->ended||!out||(parent.owner&&(parent.owner!=body||parent.index>=body->scopes.count)))return XR_XIR_BAD_STRUCTURE;
@@ -310,15 +372,10 @@ XR_FUNC XrXirStatus xr_hir_body_scope(XrHirBody *body,XrHirBodyScope parent,
         HirBodyScope previous=((HirBodyScope *)body->scopes.items)[parent.index];
         if(previous.origin.function!=origin.function||previous.origin.module!=origin.module)return XR_XIR_BAD_STRUCTURE;
     }
-    for(uint32_t i=0;i<body->scopes.count;++i) {
-        if(!(i%64)){XrXirStatus status=body_poll(control);if(status!=XR_XIR_OK)return status;}
-        HirBodyScope previous=((HirBodyScope *)body->scopes.items)[i];
-        if(previous.parent.owner==parent.owner&&previous.parent.index==parent.index&&
-            previous.origin.function==origin.function&&previous.origin.module==origin.module&&previous.origin.node==origin.node) {
-            *out=(XrHirBodyScope){body,i};return XR_XIR_OK;
-        }
-    }
-    XrXirStatus status=body_vector_reserve(body,&body->scopes,sizeof(HirBodyScope),control);if(status!=XR_XIR_OK)return status;
+    uint32_t position=0,found=UINT32_MAX;
+    XrXirStatus status=body_scope_position(body,parent,origin,control,&position,&found);
+    if(status!=XR_XIR_OK)return status;
+    if(found!=UINT32_MAX){*out=(XrHirBodyScope){body,found};return XR_XIR_OK;}
     uint32_t nominal=0;
     if(parent.owner)nominal=((HirBodyScope *)body->scopes.items)[parent.index].nominal_owner;
     else if(body->declarations.function_count) {
@@ -329,7 +386,17 @@ XR_FUNC XrXirStatus xr_hir_body_scope(XrHirBody *body,XrHirBodyScope parent,
             nominal=(*body->declarations.identities)[origin.function].nominal_owner;
         }
     }
+    HirBodyVector staged={0};
+    status=body_vector_stage(body,body->scopes,sizeof(HirBodyScope),control,&staged);
+    if(status!=XR_XIR_OK)return status;
+    status=body_scope_index_reserve(body,parent,origin,control,&position);
+    if(status!=XR_XIR_OK) {
+        if(staged.items!=body->scopes.items)xr_compile_resources_free(staged.items);
+        return status;
+    }
+    body_vector_commit(&body->scopes,staged);
     ((HirBodyScope *)body->scopes.items)[body->scopes.count]=(HirBodyScope){parent,origin,nominal};
+    body->scope_index[position]=body->scopes.count+1;
     *out=(XrHirBodyScope){body,body->scopes.count++};return XR_XIR_OK;
 }
 XR_FUNC XrXirStatus xr_hir_body_declarations(XrHirBody *body,const XrHirBodyDeclarations *input) {
