@@ -303,6 +303,7 @@ static bool effect_check_suspend_arguments(EffectCheckBuild *build, uint32_t nod
     for (uint32_t p = 0; p < count; ++p) {
         const XrXirCallableParameter *parameter = &signature->parameters[p];
         if (!parameter->escaping && xr_xir_type_is_callable(effect_check_types_read(build), parameter->type) &&
+            !xr_xir_type_is_c_callable(effect_check_types_read(build), parameter->type) &&
             !effect_check_suspend_alias(build, node, build->roots->argument[first + p])) return false;
     }
     return true;
@@ -447,6 +448,7 @@ static XrXirStatus effect_check_allocate(EffectCheckBuild *build) {
         const XrXirFunction *owner = &build->module->functions[binding->owner];
         if (binding->ordinal < owner->parameter_count &&
             xr_xir_type_is_callable(build->module->types, owner->parameters[binding->ordinal]) &&
+            !xr_xir_type_is_c_callable(build->module->types, owner->parameters[binding->ordinal]) &&
             !xr_xir_function_parameter_escaping(owner, binding->ordinal))
             roots->function[binding->function].default_callback = true;
     }
@@ -945,7 +947,8 @@ static XrXirStatus effect_check_collect(EffectCheckBuild *build) {
             if (callable) {
                 uint8_t bound = callable->flags & XR_XIR_CALLABLE_NO_SUSPEND ? 0 : 1;
                 build->roots->node[row.first + p].suspend_bound = bound;
-                if (!xr_xir_function_parameter_escaping(body, p)) {
+                if (!xr_xir_function_parameter_escaping(body, p) &&
+                    !xr_xir_type_is_c_callable(build->module->types, body->parameters[p])) {
                     uint32_t bit = p + 2;
                     effect_check_suspend_bits(build->roots, row.first + p)[bit / 64] |= UINT64_C(1) << (bit % 64);
                     /* The declaration states every non-escaping callback dependency,
@@ -955,7 +958,8 @@ static XrXirStatus effect_check_collect(EffectCheckBuild *build) {
             } else if (xr_xir_type_is_cell(build->module->types, body->parameters[p])) {
                 const XrXirTypeNode *content = xr_xir_callable_signature(build->module->types,
                     xr_xir_cell_element(build->module->types, body->parameters[p]));
-                if (content) {
+                if (content && !xr_xir_type_is_c_callable(build->module->types,
+                    xr_xir_cell_element(build->module->types, body->parameters[p]))) {
                     uint32_t bit = body->parameter_count + p + 2;
                     build->roots->node[row.contents + p].suspend_bound =
                         content->flags & XR_XIR_CALLABLE_NO_SUSPEND ? 0 : 1;

@@ -159,7 +159,7 @@ static XirExecutionSite execution_resolved_site(const EffectCheckedRoots *roots,
 
 static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
     uint32_t function_id, uint32_t value, uint32_t environment, XirExecutionVisitor visit, void *context,
-    bool *complete, uint32_t *remainder, bool effects) {
+    bool *complete, uint32_t *remainder, bool effects, bool observe_environment) {
     if (!roots || !visit || !complete || !remainder || function_id >= roots->functions)
         return XR_XIR_BAD_STRUCTURE;
     XirStorageFlowView storage = {0};
@@ -207,7 +207,21 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
         if (origin.value < function.values || origin.equation) {
             if (origin.value > function.last - function.first) {walk.status = XR_XIR_BAD_STRUCTURE; break;}
             const EffectCheckNode *node = &roots->node[function.first + origin.value];
-            if (node->callable_input) {unresolved |= XIR_EXECUTION_REMAINDER_PARAMETER; continue;}
+            if (node->callable_input) {
+                if (observe_environment && origin.value >= function.capture_count && origin.value < function.parameters) {
+                    XirExecutionSite formal = {.kind = XIR_EXECUTION_FORMAL, .index = origin.value,
+                        .function = function.declaration, .instruction = UINT32_MAX, .block = UINT32_MAX,
+                        .caller_instance = origin.function, .target = UINT32_MAX, .declaration = function.declaration,
+                        .argument_count = 1, .capture_count = function.capture_count,
+                        .output_function = UINT32_MAX, .output_value = UINT32_MAX,
+                        .receiver_function = function.declaration, .receiver_value = origin.value,
+                        .registration = UINT32_MAX, .reference = UINT32_MAX, .environment = origin.environment,
+                        .capture_environment = origin.environment, .signature = node->type};
+                    walk.status = visit(context, &formal);
+                    found = true;
+                } else unresolved |= XIR_EXECUTION_REMAINDER_PARAMETER;
+                continue;
+            }
             if (effects && node->weaken && !node->restricted && !function.default_callback) {
                 unresolved |= XIR_EXECUTION_REMAINDER_OPAQUE;
                 continue;
@@ -275,8 +289,9 @@ XR_FUNC XrXirStatus xir_execution_refresh_storage(XirExecutionOwner *owner) {
     return status == XR_XIR_OK ? execution_origins_receive(&memory, owner, &storage) : status;
 }
 
-XR_FUNC XrXirStatus xir_execution_visit_value_captures_in(const XirExecutionOwner *owner,
-    const XirExecutionValue *value, XirExecutionVisitor visit, void *context, bool *complete, uint32_t *remainder) {
+static XrXirStatus execution_visit_value_environment(const XirExecutionOwner *owner,
+    const XirExecutionValue *value, XirExecutionVisitor visit, void *context, bool *complete,
+    uint32_t *remainder, bool observe_environment) {
     if (!value || !owner || value->function >= owner->templates) return XR_XIR_BAD_STRUCTURE;
     uint32_t count = owner->function[value->function].values;
     if (owner->storage) {
@@ -289,7 +304,17 @@ XR_FUNC XrXirStatus xir_execution_visit_value_captures_in(const XirExecutionOwne
     if (value->value >= count) return XR_XIR_BAD_STRUCTURE;
     uint32_t pending = 0;
     return execution_visit_origins(owner, value->function, value->value, value->environment,
-        visit, context, complete, remainder ? remainder : &pending, false);
+        visit, context, complete, remainder ? remainder : &pending, false, observe_environment);
+}
+
+XR_FUNC XrXirStatus xir_execution_visit_value_captures_in(const XirExecutionOwner *owner,
+    const XirExecutionValue *value, XirExecutionVisitor visit, void *context, bool *complete, uint32_t *remainder) {
+    return execution_visit_value_environment(owner, value, visit, context, complete, remainder, false);
+}
+
+XR_FUNC XrXirStatus xir_execution_visit_value_environment_in(const XirExecutionOwner *owner,
+    const XirExecutionValue *value, XirExecutionVisitor visit, void *context, bool *complete, uint32_t *remainder) {
+    return execution_visit_value_environment(owner, value, visit, context, complete, remainder, true);
 }
 
 typedef struct ExecutionResolveContext {
@@ -324,7 +349,7 @@ XR_FUNC XrXirStatus xir_execution_resolve_site(const XirExecutionOwner *owner,
     ExecutionResolveContext resolve = {owner, &request, environment, visit, context};
     return execution_visit_origins(owner, owner->node[pending.receiver].function,
         pending.receiver - receiver->first, environment, execution_resolve_capture, &resolve,
-        complete, remainder, false);
+        complete, remainder, false, false);
 }
 
 XR_FUNC XrXirStatus xir_execution_resolve_effect_site(const XirExecutionOwner *owner,
@@ -340,5 +365,5 @@ XR_FUNC XrXirStatus xir_execution_resolve_effect_site(const XirExecutionOwner *o
     ExecutionResolveContext resolve = {owner, &request, XIR_EXECUTION_CURRENT_ENVIRONMENT, visit, context};
     return execution_visit_origins(owner, owner->node[pending.receiver].function,
         pending.receiver - receiver->first, XIR_EXECUTION_CURRENT_ENVIRONMENT,
-        execution_resolve_capture, &resolve, complete, remainder, true);
+        execution_resolve_capture, &resolve, complete, remainder, true, false);
 }

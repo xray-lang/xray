@@ -31,6 +31,7 @@ static XrXirStatus effect_checked_parameters(const XrXirCompileContext *memory,
         contracts[f].parameters = parameters;
         for (uint32_t p = 0; p < count; ++p)
             parameters[p].kind = variable && xr_xir_type_is_callable(module->types, function->parameters[p]) &&
+                !xr_xir_type_is_c_callable(module->types, function->parameters[p]) &&
                 !xr_xir_function_parameter_escaping(function, p) ?
                 XR_XIR_EFFECT_PARAMETER_VARIABLE : XR_XIR_EFFECT_PARAMETER_FIXED;
     }

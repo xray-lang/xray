@@ -16,7 +16,7 @@
 
 typedef struct EffectCheckedRoots XirExecutionOwner;
 typedef enum XirExecutionSiteKind {
-    XIR_EXECUTION_CALL, XIR_EXECUTION_PENDING, XIR_EXECUTION_CLEANUP_USE
+    XIR_EXECUTION_CALL, XIR_EXECUTION_PENDING, XIR_EXECUTION_CLEANUP_USE, XIR_EXECUTION_FORMAL
 } XirExecutionSiteKind;
 
 typedef enum XirExecutionPort {
@@ -133,6 +133,10 @@ XR_FUNC XrXirStatus xir_execution_argument(const XirExecutionOwner *,
 XR_FUNC XrXirStatus xir_execution_visit_value_captures(const XirExecutionOwner *,
     uint32_t, uint32_t, XirExecutionVisitor, void *, bool *complete);
 XR_FUNC XrXirStatus xir_execution_visit_value_captures_in(const XirExecutionOwner *,
+    const XirExecutionValue *, XirExecutionVisitor, void *, bool *complete, uint32_t *remainder);
+/* Environment observation additionally represents an ordinary callable formal
+ * as a typed symbolic terminal. It never adds a call or resolves its callee. */
+XR_FUNC XrXirStatus xir_execution_visit_value_environment_in(const XirExecutionOwner *,
     const XirExecutionValue *, XirExecutionVisitor, void *, bool *complete, uint32_t *remainder);
 /* Construction rebinds this receiving index once after each storage round. */
 XR_FUNC XrXirStatus xir_execution_refresh_storage(XirExecutionOwner *);

@@ -323,6 +323,21 @@ static XrXirStatus execution_value_oracle(void *context, const XirExecutionSite 
     return XR_XIR_OK;
 }
 
+typedef struct ExecutionFormalProbe {
+    EffectCheckedRoots *roots;
+    uint32_t count;
+} ExecutionFormalProbe;
+static XrXirStatus execution_formal_oracle(void *context, const XirExecutionSite *site) {
+    ExecutionFormalProbe *probe = context;
+    CHECK(site->kind == XIR_EXECUTION_FORMAL && site->declaration == 0 && site->receiver_value == 0);
+    XirExecutionArgument argument = {0};
+    CHECK(xir_execution_argument(probe->roots, site, 0, &argument) == XR_XIR_OK);
+    CHECK(argument.function == 0 && argument.value == 0 && !argument.escaping && !argument.cell);
+    CHECK(argument.type == XR_XIR_CONSTRUCTED_TYPE_BASE && argument.environment == XIR_EXECUTION_CURRENT_ENVIRONMENT);
+    ++probe->count;
+    return XR_XIR_OK;
+}
+
 static void suspension_parameter_equations(void) {
     EffectMark baseline = effect_mark();
     XrXirType fn = XR_XIR_CONSTRUCTED_TYPE_BASE, cell = XR_XIR_CONSTRUCTED_TYPE_BASE + 1;
@@ -408,6 +423,11 @@ static void suspension_parameter_equations(void) {
     XirExecutionValue formal = {0, 0, XIR_EXECUTION_CURRENT_ENVIRONMENT};
     CHECK(xir_execution_visit_value_captures_in(roots, &formal,
         execution_value_oracle, &captures, &complete, NULL) == XR_XIR_OK && !complete && !captures);
+    ExecutionFormalProbe probe = {roots, 0};
+    uint32_t before_calls = roots->calls, remainder = UINT32_MAX;
+    CHECK(xir_execution_visit_value_environment_in(roots, &formal, execution_formal_oracle,
+        &probe, &complete, &remainder) == XR_XIR_OK && complete && !remainder && probe.count == 1);
+    CHECK(roots->calls == before_calls);
     for (uint32_t p = 0; p < roots->pending_count; ++p) {
         if (roots->pending[p].function != 6) continue;
         XirExecutionSite site = {0};
@@ -637,6 +657,34 @@ static void restriction_owner_relocation(void) {
     printf("restriction receiver: detached formulas, %zu allocation failures and numeric relocation PASS\n", sites);
 }
 
+static void c_callable_parameter_equations(void) {
+    EffectMark baseline = effect_mark();
+    XrXirType callable = XR_XIR_CONSTRUCTED_TYPE_BASE, cell = callable + 1;
+    XrXirTypeNode nodes[] = {
+        {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_UNIT, .element = XR_XIR_NEVER,
+            .flags = XR_XIR_CALLABLE_C_ABI | XR_XIR_CALLABLE_NO_SUSPEND},
+        {.kind = XR_XIR_TYPE_CELL, .element = XR_XIR_CONSTRUCTED_TYPE_BASE}
+    };
+    XrXirTypes types = {.nodes = nodes, .count = 2};
+    XrXirInstruction ret = {.op = XR_XIR_RETURN};
+    XrXirFunction functions[] = {
+        {.parameters = &callable, .parameter_count = 1, .instructions = &ret, .instruction_count = 1,
+            .error_type = XR_XIR_NEVER},
+        {.parameters = &cell, .parameter_count = 1, .instructions = &ret, .instruction_count = 1,
+            .error_type = XR_XIR_NEVER}
+    };
+    XrXirModule module = {.types = &types, .functions = functions, .function_count = 2};
+    EffectCheckedRoots *roots = NULL;
+    CHECK(effect_checked_roots_build(&effect_context, &module, NULL, NULL, NULL, &roots, true) == XR_XIR_OK);
+    for (uint32_t f = 0; f < 2; ++f) {
+        CHECK(!effect_check_suspend_bits(roots, roots->function[f].root)[0]);
+        CHECK(!effect_check_suspend_bits(roots, roots->function[f].first)[0]);
+        CHECK(!effect_check_suspend_bits(roots, roots->function[f].contents)[0]);
+    }
+    effect_checked_roots_free(roots);
+    effect_mark_check(baseline);
+}
+
 static void control_summary_kernel(void) {
     control_summary_detached();
     suspension_parameter_equations();
@@ -644,6 +692,7 @@ static void control_summary_kernel(void) {
     execution_cleanup_order();
     execution_origin_namespaces();
     restriction_owner_relocation();
+    c_callable_parameter_equations();
     const uint32_t count = 8193;
     XrXirFunction *functions = xr_calloc(count, sizeof(*functions));
     XrXirInstruction (*rows)[2] = xr_calloc(count, sizeof(*rows));

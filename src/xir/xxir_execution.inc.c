@@ -127,6 +127,18 @@ XR_FUNC XrXirStatus xir_execution_argument(const XirExecutionOwner *owner,
     const XirExecutionSite *site, uint32_t parameter, XirExecutionArgument *output) {
     const EffectCheckedRoots *roots = owner;
     if (!roots || !site || !output) return XR_XIR_BAD_STRUCTURE;
+    if (site->kind == XIR_EXECUTION_FORMAL) {
+        if (parameter || site->caller_instance >= roots->functions) return XR_XIR_BAD_STRUCTURE;
+        const EffectCheckFunction *function = &roots->function[site->caller_instance];
+        if (site->receiver_function != function->declaration || site->receiver_value >= function->parameters ||
+            site->receiver_value < function->capture_count) return XR_XIR_BAD_STRUCTURE;
+        const EffectCheckNode *node = &roots->node[function->first + site->receiver_value];
+        if (!node->callable_input) return XR_XIR_BAD_STRUCTURE;
+        *output = (XirExecutionArgument){.function = function->declaration, .value = site->receiver_value,
+            .caller_handle = site->receiver_value, .environment = site->environment,
+            .mode = node->mode, .type = node->type, .cell = node->cell, .escaping = node->escaping};
+        return XR_XIR_OK;
+    }
     uint32_t first, count, caller, target = UINT32_MAX;
     uint32_t formal_ordinal = parameter;
     uint32_t environment = site->environment;
