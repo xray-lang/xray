@@ -154,6 +154,10 @@ XR_FUNC XrXirStatus xir_storage_flow_expose_reference(XirStorageFlow *, const Xi
 XR_FUNC XrXirStatus xir_storage_flow_visit_value_captures(XirStorageFlow *, const XirStorageValuePoint *,
     XirStorageCaptureVisitor, void *);
 XR_FUNC XrXirStatus xir_storage_flow_expose_value(XirStorageFlow *, const XirStorageValuePoint *);
+/* Storing a carrier in exposed storage exposes its reachable environment only
+ * when the store completes. Condition names the destination's prior exposure. */
+XR_FUNC XrXirStatus xir_storage_flow_expose_value_when(XirStorageFlow *, const XirStorageValuePoint *,
+    const XirStorageObservation *condition);
 /* Every borrow must be rebound after a query or link can grow storage. */
 XR_FUNC XrXirStatus xir_storage_flow_view(const XirStorageFlow *, XirStorageFlowView *);
 /* Sealing retires body borrows. The resulting numeric view stays valid until
