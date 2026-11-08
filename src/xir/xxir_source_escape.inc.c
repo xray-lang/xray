@@ -24,9 +24,13 @@ static bool source_escape_prepare(SourceContext *ctx) {
     }
     XrXirDeclarations identities;
     XrXirModule module = source_module_view(ctx, &identities);
-    XrHirEscapeDiagnostic diagnostic = {0};
-    XrXirStatus status = xr_hir_escape_check(&ctx->compile, &module, declarations, ctx->request, &diagnostic, &ctx->escape_facts);
+    XrXirStatus status = xr_hir_escape_builder_new(&ctx->compile, &module, declarations, ctx->request, &ctx->escape_builder);
     if (status == XR_XIR_OK) return true;
+    source_fail(ctx, NULL, status, "callable lifetime construction failed");
+    return false;
+}
+
+static void source_escape_failure(SourceContext *ctx, XrXirStatus status, XrHirEscapeDiagnostic diagnostic) {
     AstNode *site = NULL;
     if (diagnostic.function < ctx->function_count) {
         SourceFunction *body = &ctx->bodies[diagnostic.function];
@@ -57,5 +61,30 @@ static bool source_escape_prepare(SourceContext *ctx) {
         if (recorded != XR_COMPILE_RESOURCE_OK) ctx->diagnostic.status = xir_compile_resource_status(recorded);
         else xr_frontend_report_seal(ctx->report, false);
     }
-    return false;
+}
+
+static XrXirStatus source_escape_observe(void *context, const XrXirModule *module,
+    uint32_t function, uint32_t instruction, const XrXirInstruction *op) {
+    (void)module;
+    SourceContext *ctx = context;
+    return xr_hir_escape_builder_observe(ctx->escape_builder, function, instruction, op);
+}
+
+static XrXirStatus source_escape_finish(void *context, const XirExecutionOwner *execution,
+    XirStorageFlow *storage, const XirRestrictionReceiver *receiver) {
+    SourceContext *ctx = context;
+    XrHirEscapeFacts *facts = NULL;
+    XrHirEscapeDiagnostic diagnostic = {0};
+    XrXirStatus status = xr_hir_escape_builder_finish(ctx->escape_builder, storage, execution, &diagnostic, &facts);
+    if (status == XR_XIR_OK) {
+        XirRestrictionView view;
+        status = xr_hir_escape_facts_view(facts, &view);
+        if (status == XR_XIR_OK) status = receiver && receiver->accept ?
+            receiver->accept(receiver->context, &view) : XR_XIR_BAD_STRUCTURE;
+    }
+    xr_hir_escape_facts_free(facts);
+    xr_hir_escape_builder_free(ctx->escape_builder);
+    ctx->escape_builder = NULL;
+    if (status != XR_XIR_OK) source_escape_failure(ctx, status, diagnostic);
+    return status;
 }

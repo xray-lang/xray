@@ -69,6 +69,13 @@ typedef struct XirRestrictionView {
     uint32_t point_count;
 } XirRestrictionView;
 
+/* Accept copies the complete numeric view synchronously. The producer releases
+ * its temporary owner after the call, including when receiving fails. */
+typedef struct XirRestrictionReceiver {
+    void *context;
+    XrXirStatus (*accept)(void *, const XirRestrictionView *);
+} XirRestrictionReceiver;
+
 typedef struct XirExecutionSite {
     XirExecutionSiteKind kind;
     uint32_t index;
