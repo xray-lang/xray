@@ -767,11 +767,26 @@ static uint32_t storage_application(XirStorageFlow *flow, const XirExecutionSite
     uint32_t index = flow->view.application_count++;
     ((XirStorageApplication *)values)[index] = (XirStorageApplication){
         .kind = site->kind, .site = site->index, .function = site->function,
-        .instruction = site->instruction, .declaration = site->declaration,
+        .instruction = site->instruction, .block = site->block, .declaration = site->declaration,
         .target = site->target, .caller_instance = site->caller_instance,
+        .reference = site->reference, .capture_environment = site->capture_environment,
         .environment = site->environment, .order = site->order, .port = site->port,
         .outcome = outcome, .protocol = site->protocol};
     return index;
+}
+
+static uint32_t storage_site_hash(XirExecutionSite site) {
+    uint32_t fields[] = {(uint32_t)site.kind, site.index, site.function, site.instruction, site.block,
+        site.caller_instance, site.environment, site.reference, site.capture_environment,
+        site.target, site.declaration, site.order, (uint32_t)site.port};
+    return xr_hash_bytes(fields, sizeof(fields));
+}
+
+static bool storage_same_site(XirExecutionSite a, XirExecutionSite b) {
+    return a.kind == b.kind && a.index == b.index && a.function == b.function && a.instruction == b.instruction &&
+        a.block == b.block && a.caller_instance == b.caller_instance && a.environment == b.environment &&
+        a.reference == b.reference && a.capture_environment == b.capture_environment && a.target == b.target &&
+        a.declaration == b.declaration && a.order == b.order && a.port == b.port;
 }
 
 static bool storage_site_index_grow(XirStorageFlow *flow) {
@@ -782,7 +797,7 @@ static bool storage_site_index_grow(XirStorageFlow *flow) {
     if (!index) return false;
     for (uint32_t n = 0; n < flow->site_count && storage_step(flow); ++n) {
         XirExecutionSite site = flow->sites[n].site;
-        uint32_t slot = storage_state_hash(site.index, (uint32_t)site.kind, 0, 0) & (capacity - 1);
+        uint32_t slot = storage_site_hash(site) & (capacity - 1);
         while (index[slot]) slot = (slot + 1) & (capacity - 1);
         index[slot] = n + 1;
     }
@@ -807,19 +822,17 @@ static XrXirStatus storage_import_site(void *opaque, const XirExecutionSite *sit
         return flow->status = XR_XIR_BAD_STRUCTURE;
     if (!flow->site_index_capacity || flow->site_count >= flow->site_index_capacity / 2)
         if (!storage_site_index_grow(flow)) return flow->status;
-    uint32_t slot = storage_state_hash(site->index, (uint32_t)site->kind, 0, 0) & (flow->site_index_capacity - 1);
+    uint32_t slot = storage_site_hash(*site) & (flow->site_index_capacity - 1);
     while (flow->site_index[slot]) {
         uint32_t index = flow->site_index[slot] - 1;
-        if (flow->sites[index].site.kind == site->kind && flow->sites[index].site.index == site->index) {
+        if (storage_same_site(flow->sites[index].site, *site)) {
             XirExecutionSite previous = flow->sites[index].site;
-            if (previous.function != site->function || previous.instruction != site->instruction ||
-                previous.target != site->target || previous.declaration != site->declaration ||
-                previous.protocol != site->protocol || previous.order != site->order || previous.port != site->port)
+            if (previous.protocol != site->protocol || previous.argument_count != site->argument_count ||
+                previous.capture_count != site->capture_count || previous.native_callable != site->native_callable ||
+                previous.unresolved != site->unresolved)
                 return flow->status = XR_XIR_BAD_STRUCTURE;
             flow->sites[index].site = *site;
             flow->sites[index].active = true;
-            if (previous.environment != site->environment || previous.caller_instance != site->caller_instance)
-                if (++flow->generation == 0) return flow->status = XR_XIR_OVERFLOW;
             return XR_XIR_OK;
         }
         slot = (slot + 1) & (flow->site_index_capacity - 1);
