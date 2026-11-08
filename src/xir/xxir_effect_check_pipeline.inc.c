@@ -463,7 +463,9 @@ XR_FUNC XrXirStatus xir_effects_finish_prepared_input(const XrXirCompileContext 
         if (status == XR_XIR_OK && calls != effects->checked_roots->calls) status = XR_XIR_UNRESOLVED;
     }
     if (status == XR_XIR_OK) status = effect_input_facts_new(memory, input, &effects->input_facts);
-    EffectCheckBuild build = {.memory = memory, .roots = effects->checked_roots, .control = input.control};
+    EffectCheckBuild build = {.memory = memory, .module = input.module,
+        .roots = effects->checked_roots, .control = input.control};
+    if (status == XR_XIR_OK) status = effect_check_effect_projection(&build);
     if (status == XR_XIR_OK) status = effect_check_cell_roles(&build);
     if (status == XR_XIR_OK) status = effect_check_close(&build);
     if (status == XR_XIR_OK && refiner && refiner->admit) {
