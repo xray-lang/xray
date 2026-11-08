@@ -78,7 +78,6 @@ static void nominal_free_identities(XrXirNominalTable *table);
 static XrXirStatus nominal_table_verify(const XrXirNominalTable *table,
     const XrXirTypes *types, XrXirCompileContext *budget);
 static XrXirStatus nominal_nodes_verify(const XrXirTypes *types, XrXirCompileContext *budget);
-static XrXirStatus nominal_layout_verify(const XrXirTypes *types, XrXirCompileContext *budget);
 static XrXirStatus nominal_copy_table(const XrXirCompileContext *compile_context, const XrXirNominalTable *table, XrCompileRequestControl *control,
     XrXirNominalTable **output);
 
@@ -465,7 +464,7 @@ XrXirStatus xr_xir_compile_type_descriptors_verify(const XrXirCompileContext *co
     XrXirStatus status = view_types_verify(remaining, types);
     if (status == XR_XIR_OK) status = nominal_table_verify(types->nominals, types, remaining);
     if (status == XR_XIR_OK) status = nominal_nodes_verify(types, remaining);
-    if (status == XR_XIR_OK) status = nominal_layout_verify(types, remaining);
+    if (status == XR_XIR_OK) status = xr_xir_compile_nominal_field_graph_verify(remaining, types);
     return status;
 }
 static bool type_parameter_count_add(const XrXirCompileContext *context, uint32_t *total, uint64_t amount) {

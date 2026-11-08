@@ -88,6 +88,7 @@ static XrXirStatus provenance_storage_shape(const XrXirCompileContext *context,
     if (status != XR_XIR_OK) return status;
     const XrXirModule *module = &source->source->module;
     if (module->stage != XR_XIR_CHECKED) return XR_XIR_BAD_STAGE;
+    if (module->function_count > context->limits.functions) return XR_XIR_BUDGET;
     if (module->provenance && module->provenance->kind != XR_XIR_EVIDENCE_TEMPLATE)
         return XR_XIR_BAD_STRUCTURE;
     for (uint32_t f = 0; f < source->count; ++f) {

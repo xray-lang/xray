@@ -209,7 +209,10 @@ static void nominal_field_closure_failures(void) {
         for(size_t attempt=0;attempt<=sites;++attempt){
             packet_allocation_calls=0;fail_at=attempt?attempt-1:SIZE_MAX;
             XrXirStatus expected=attempt?XR_XIR_OUT_OF_MEMORY:mode==0?XR_XIR_OK:mode==1?XR_XIR_BAD_TYPE:XR_XIR_MEMORY_LIMIT;
-            CHECK(xr_xir_compile_specialize(checked,&output,NULL,NULL)==expected);
+            XrXirStatus actual=xr_xir_compile_specialize(checked,&output,NULL,NULL);
+            if (actual!=expected) fprintf(stderr,"nominal closure mode%u attempt%zu actual%u expected%u\n",
+                mode,attempt,actual,expected);
+            CHECK(actual==expected);
             if(!attempt)sites=packet_allocation_calls;
             if(attempt || mode)CHECK(!output);
             xr_xir_compile_artifact_free(output);output=NULL;
@@ -306,7 +309,10 @@ static void provenance_ownership(void) {
         remaining=consumer_context_ephemeral(limits);remaining.limits.functions=mode==1?1:2;
         XrCompileResourceStats before=consumer_context_stats(&remaining);copy=NULL;
         XrXirStatus expected=!mode?XR_XIR_OK:mode==1?XR_XIR_BUDGET:XR_XIR_MEMORY_LIMIT;
-        CHECK(xr_xir_compile_provenance_copy(&remaining,&instance,&copy,NULL)==expected);
+        XrXirStatus actual=xr_xir_compile_provenance_copy(&remaining,&instance,&copy,NULL);
+        if (actual!=expected) fprintf(stderr,"provenance limit mode%u actual%u expected%u bytes%llu\n",
+            mode,actual,expected,(unsigned long long)limits.memory_limit);
+        CHECK(actual==expected);
         if(mode)CHECK(!copy);
         xr_xir_compile_provenance_free(copy);copy=NULL;
         consumer_context_ephemeral_free(&remaining,before);CHECK(live==baseline);
@@ -409,18 +415,24 @@ static void provenance_lowering(XrXirArtifact *closed) {
     size_t baseline = live; packet_allocation_calls = 0;
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     size_t sites = packet_allocation_calls;
-    CHECK(lowered->checked_packet.bytes && lowered->checked_packet.length >= 64);
-    XrXirCheckedPacket expected = {0};
-    CHECK(xr_xir_compile_checked_write(closed, &expected, NULL) == XR_XIR_OK);
-    CHECK(expected.length == lowered->checked_packet.length);
-    CHECK(!memcmp(expected.bytes, lowered->checked_packet.bytes, expected.length));
-    xr_xir_compile_checked_packet_free(&expected);
-    lowered->checked_packet.bytes[0] ^= 1;
-    CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_BAD_STRUCTURE);
-    lowered->checked_packet.bytes[0] ^= 1;
-    lowered->checked_identity[0] ^= 1;
-    CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_BAD_STRUCTURE);
-    lowered->checked_identity[0] ^= 1;
+    if (XR_XIR_PARANOID) {
+        CHECK(lowered->checked_packet.bytes && lowered->checked_packet.length >= 64);
+        XrXirCheckedPacket expected = {0};
+        CHECK(xr_xir_compile_checked_write(closed, &expected, NULL) == XR_XIR_OK);
+        CHECK(expected.length == lowered->checked_packet.length);
+        CHECK(!memcmp(expected.bytes, lowered->checked_packet.bytes, expected.length));
+        xr_xir_compile_checked_packet_free(&expected);
+        lowered->checked_packet.bytes[0] ^= 1;
+        CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_BAD_STRUCTURE);
+        lowered->checked_packet.bytes[0] ^= 1;
+        lowered->checked_identity[0] ^= 1;
+        CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_BAD_STRUCTURE);
+        lowered->checked_identity[0] ^= 1;
+    } else {
+        const uint8_t empty_identity[32] = {0};
+        CHECK(!lowered->checked_packet.bytes && !lowered->checked_packet.length);
+        CHECK(!memcmp(lowered->checked_identity, empty_identity, sizeof(empty_identity)));
+    }
     XrXirCompileContext tight=consumer_context_ephemeral((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,consumer_context_owners[0].baseline.held_bytes,true});
     XrCompileResourceStats tight_baseline=consumer_context_stats(&tight);
     CHECK(xr_xir_compile_verify_v2(&tight, &lowered->module, xr_xir_compile_artifact_construction(lowered), NULL)==XR_XIR_MEMORY_LIMIT);

@@ -143,6 +143,10 @@ XR_FUNC uint32_t xr_xir_type_span(const XrXirTypes *types, XrXirType type);
 /* Structural admission precedes declaration-context constraint proofs. */
 XR_FUNC XrXirStatus xr_xir_compile_type_expression_shape(const XrXirCompileContext *compile_context, const XrXirTypes *types, XrXirType type, uint32_t parameter_count);
 XR_FUNC XrXirStatus xr_xir_compile_type_descriptors_verify(const XrXirCompileContext *compile_context, const XrXirTypes *types);
+/* Requires admitted descriptor indexes. Newly substituted fields receive the
+ * visibility and finite inline-layout checks before their owner publishes them. */
+XR_FUNC XrXirStatus xr_xir_compile_nominal_field_graph_verify(
+    const XrXirCompileContext *compile_context, const XrXirTypes *types);
 XR_FUNC XrXirStatus xr_xir_compile_type_substitution_matches(const XrXirCompileContext *compile_context, const XrXirTypes *types, const XrXirType *arguments, uint32_t count, XrXirType expected, XrXirType actual);
 /* Pools share nominal declaration identities; arguments name destination types. */
 XR_FUNC XrXirStatus xr_xir_compile_type_substitution_matches_between(const XrXirCompileContext *compile_context, const XrXirTypes *source_types, const XrXirTypes *types, const XrXirType *arguments, uint32_t count, XrXirType expected, XrXirType actual);

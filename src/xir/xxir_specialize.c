@@ -645,7 +645,7 @@ static XrXirStatus spec_nominal_fields(SpecContext *c) {
         XrXirTypeNode *owned = (XrXirTypeNode *) c->types.nodes;
         owned[i].nominal.fields = fields; owned[i].nominal.field_count = d->field_count;
     }
-    return XR_XIR_OK;
+    return xr_xir_compile_nominal_field_graph_verify(&c->remaining, &c->types);
 }
 static XrXirStatus spec_provenance(SpecContext *c, XrXirProvenance **output) {
     XrXirStatus allocation_status = XR_XIR_OK;

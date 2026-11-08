@@ -33,14 +33,16 @@ static XrXirStatus nominal_field_visibility(const XrXirTypes *types) {
     }
     return XR_XIR_OK;
 }
-static XrXirStatus nominal_layout_verify(const XrXirTypes *types, XrXirCompileContext *budget) {
+XR_FUNC XrXirStatus xr_xir_compile_nominal_field_graph_verify(
+    const XrXirCompileContext *compile_context, const XrXirTypes *types) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus allocation_status = XR_XIR_OK;
-    if (!types->nominals) return XR_XIR_OK;
+    if (!types || !types->nominals) return XR_XIR_OK;
     XrXirStatus status = nominal_field_visibility(types);
     if (status != XR_XIR_OK || !types->count) return status;
     uint64_t stack_bytes = (uint64_t) types->count * sizeof(NominalLayoutFrame);
     if (!((stack_bytes + types->count) <= SIZE_MAX)) return XR_XIR_BUDGET;
-    NominalLayoutFrame *stack = xir_compile_alloc(budget, (size_t) (stack_bytes + types->count), &allocation_status);
+    NominalLayoutFrame *stack = xir_compile_alloc(compile_context, (size_t) (stack_bytes + types->count), &allocation_status);
     if (!stack) return allocation_status;
     unsigned char *state = (unsigned char *) stack + (size_t) stack_bytes;
     memset(state, 0, types->count);
