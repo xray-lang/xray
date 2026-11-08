@@ -13,6 +13,7 @@
 #include "xir/xxir_checked.h"
 #include "xir/xxir_internal.h"
 #include "xir/xxir_intrinsic.h"
+#include "xir/xxir_cell_provenance_internal.h"
 #include "hir/xhir_escape.h"
 #include "base/xsha256.h"
 #include "base/xmalloc.h"
@@ -580,6 +581,71 @@ static XrXirStatus nonescape_fixture_facts(const XrXirCompileContext *context,
     xr_xir_compile_construction_free(construction);
     if(status!=XR_XIR_OK) {xr_hir_escape_facts_free(owner.facts);return status;}
     *output=owner.facts;return XR_XIR_OK;
+}
+static void nonescape_cell_capture_contract(void) {
+    XrCompileResourceStats baseline=consumer_context_stats(suite_context);
+    XrXirType cell=XR_XIR_CONSTRUCTED_TYPE_BASE,callable=XR_XIR_CONSTRUCTED_TYPE_BASE+1;
+    XrXirTypeNode nodes[]={
+        {.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64},
+        {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,
+            .flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED}};
+    XrXirTypes types={.nodes=nodes,.count=2};
+    XrXirInstruction done={.op=XR_XIR_RETURN,.type=XR_XIR_UNIT};
+    XrXirInstruction caller[]={
+        {.op=XR_XIR_FUNCTION_REF,.type=callable,.args={0,1},.immediate=2},
+        {.op=XR_XIR_CALL_INDIRECT,.type=XR_XIR_I64,.immediate=1},
+        {.op=XR_XIR_RETURN,.type=XR_XIR_UNIT,.args={2}}};
+    XrXirInstruction reader[]={
+        {.op=XR_XIR_CELL_READ,.type=XR_XIR_I64,.args={0}},
+        {.op=XR_XIR_RETURN,.type=XR_XIR_UNIT,.args={1}}};
+    XrXirBlock blocks[]={{0,1,0,0},{0,3,0,0},{0,2,0,0}};
+    uint32_t operand=0;
+    XrXirFunction functions[]={
+        {.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&blocks[0],.block_count=1,
+            .instructions=&done,.instruction_count=1,.error_type=XR_XIR_NEVER},
+        {.name="outer",.name_length=5,.parameters=&cell,.parameter_count=1,.result=XR_XIR_I64,
+            .blocks=&blocks[1],.block_count=1,.instructions=caller,.instruction_count=3,
+            .operands=&operand,.operand_count=1,.error_type=XR_XIR_NEVER},
+        {.name="reader",.name_length=6,.parameters=&cell,.parameter_count=1,.result=XR_XIR_I64,
+            .blocks=&blocks[2],.block_count=1,.instructions=reader,.instruction_count=2,.error_type=XR_XIR_NEVER}};
+    XrXirSourceModule source={.name="root",.name_length=4,.initializer=0};
+    XrXirFunctionIdentity identities[3]={{0},{0},{.capture_owner=2,.capture_count=1}};
+    XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities};
+    XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=3,
+        .declarations=&declarations,.types=&types,.linkage_kind=XR_XIR_PROGRAM};
+    for(unsigned direct=0;direct<2;++direct) {
+        if(direct)caller[1]=(XrXirInstruction){.op=XR_XIR_CALL,.type=XR_XIR_I64,.args={0,1},.immediate=2};
+        XrXirCellProvenance *proof=NULL;
+        CHECK(xr_xir_compile_cell_provenance_verified(suite_context,&built,&proof,NULL)==XR_XIR_OK && proof);
+        CHECK(xr_xir_cell_provenance_role(proof,2,0)==XR_XIR_CELL_PROOF_SCOPED_CAPTURE);
+        CHECK(xr_xir_cell_provenance_origin(proof,2,0)==XR_XIR_CELL_ORIGIN_SCOPED);
+        XrXirCellOriginView view={0};
+        CHECK(xr_xir_compile_cell_origin_view(suite_context,proof,2,0,&view)==XR_XIR_OK);
+        CHECK(!view.intrinsic_mask && view.parameter_count==1 && view.parameters[0]==0 &&
+            view.word_count==1 && view.dependencies[0]==UINT64_C(1));
+        uint8_t owners[]={XR_XIR_CELL_ACCESS_ROOT};uint32_t access=0;
+        CHECK(xr_xir_compile_cell_access(suite_context,proof,&(XrXirCellAccessRequest){2,0,owners,1},&access)==XR_XIR_OK &&
+            access==XR_XIR_CELL_ACCESS_ROOT);
+        xr_xir_compile_cell_provenance_free(proof);
+        XrXirArtifact *checked=NULL,*decoded=NULL;XrXirDiagnostic diagnostic={0};
+        CHECK(xir_fixture_check(suite_context,&built,&checked,&diagnostic)==XR_XIR_OK && checked);
+        XrXirCheckedPacket packet={0};
+        CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
+        CHECK(xr_xir_compile_checked_read(suite_context,packet.bytes,packet.length,&decoded,NULL)==XR_XIR_OK && decoded);
+        xr_xir_compile_artifact_free(decoded);decoded=NULL;
+        CheckedPacketFunction wire=packet_function(&packet,1);
+        put32(packet.bytes+wire.result,callable);
+        put32(packet.bytes+wire.instructions+2*40+8,1);digest_packet(&packet);
+        CHECK(xr_xir_compile_checked_read(suite_context,packet.bytes,packet.length,&decoded,&diagnostic)==XR_XIR_BAD_TYPE && !decoded);
+        CHECK(diagnostic.function==1 && diagnostic.instruction==2);
+        xr_xir_compile_checked_packet_free(&packet);
+        xr_xir_compile_artifact_free(checked);checked=NULL;
+        functions[1].result=callable;caller[2].args[0]=1;
+        CHECK(xir_fixture_check(suite_context,&built,&checked,&diagnostic)==XR_XIR_BAD_TYPE && !checked);
+        CHECK(diagnostic.function==1 && diagnostic.instruction==2);
+        functions[1].result=XR_XIR_I64;caller[2].args[0]=2;
+    }
+    CHECK(consumer_context_stats(suite_context).held_bytes==baseline.held_bytes);
 }
 static void nonescape_facts_ownership(void) {
     XrCompileResourceStats baseline=consumer_context_stats(suite_context);
@@ -1445,6 +1511,7 @@ int main(int argc,char **argv) {
     consumer_context=consumer_context_default();
     capture_rejections(); capture_packet_rejection();
     nonescape_bound_prefix();
+    nonescape_cell_capture_contract();
     nonescape_facts_ownership();
     nonescape_observer_ownership();
     nonescape_c_callback_contract();

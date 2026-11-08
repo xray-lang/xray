@@ -429,9 +429,15 @@ static bool cell_proof_role_row(CellProofBuild *build,uint32_t f,uint32_t i,cons
         module->declarations->functions[target].cleanup_owner != f+1))
         return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
     if (!((build)->status == XR_XIR_OK)) return false;
-    uint8_t use = (op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_GENERATOR_NEW) ? 1u : op->op == XR_XIR_CLEANUP_REGISTER ? 4u : 2u;
+    uint32_t captures = module->declarations ? module->declarations->functions[target].capture_count : 0;
+    if (captures > callee->parameters) return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
     for (uint32_t p = 0; p < op->args[1]; ++p)
-        if (cell_proof_tracking(proof,target,p) == 1) build->uses[callee->begin+p] |= use;
+        if (cell_proof_tracking(proof,target,p) == 1) {
+            uint8_t use = (op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_GENERATOR_NEW ||
+                ((op->op == XR_XIR_CALL || op->op == XR_XIR_INVOKE) && p < captures)) ? 1u :
+                op->op == XR_XIR_CLEANUP_REGISTER ? 4u : 2u;
+            build->uses[callee->begin+p] |= use;
+        }
     if (op->op == XR_XIR_FUNCTION_REF) {
         const XrXirTypeNode *signature = xr_xir_callable_signature(module->types, op->type);
         if (!signature || signature->parameter_count != callee->parameters-op->args[1])
@@ -507,24 +513,40 @@ static bool cell_proof_roles(CellProofBuild *build) {
             }
         }
     }
-    size_t words = 0; uint64_t scopes = 0;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         CellProofFunction *function = &proof->functions[f];
-        function->scope_begin = (uint32_t)scopes;
-        if (!((build)->status == XR_XIR_OK)) return false;
         for (uint32_t p = 0; p < function->parameters; ++p) {
+            if (build->status != XR_XIR_OK) return false;
             uint32_t id = function->begin+p;
             if (cell_proof_tracking(proof,f,p) != 1) continue;
             uint8_t use = build->uses[id];
-            if ((use & 1u) && (use & 6u)) return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_TYPE);
             if ((use & 4u) && (use & 3u)) return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_TYPE);
             proof->roles[id] = (use & 1u) ? XR_XIR_CELL_PROOF_OWNED_CAPTURE :
                 (use & 4u) ? XR_XIR_CELL_PROOF_LEXICAL_CLEANUP :
                 (use & 2u) ? XR_XIR_CELL_PROOF_SCOPED_REF : XR_XIR_CELL_PROOF_UNKNOWN;
-            if (module->declarations && (module->declarations->functions[f].promises & XR_XIR_FUNCTION_GENERATOR) &&
-                proof->roles[id]!=XR_XIR_CELL_PROOF_OWNED_CAPTURE)
-                return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_TYPE);
-            if (!(use & 1u)) ++function->scopes;
+            if ((!(use & 1u) || (use & 2u)) && !cell_proof_seed(build,id,XR_XIR_CELL_ORIGIN_SCOPED)) return false;
+        }
+    }
+    return true;
+}
+
+/* Capture bindings establish their storage origins before dependency columns
+ * are assigned. A scoped capture names this frame's physical input; caller
+ * dependency bits are never copied into a different function's namespace. */
+static bool cell_proof_scope_storage(CellProofBuild *build) {
+    XrXirCellProvenance *proof = build->proof;
+    size_t words = 0; uint64_t scopes = 0;
+    for (uint32_t f = 0; f < proof->function_count; ++f) {
+        CellProofFunction *function = &proof->functions[f];
+        function->scope_begin = (uint32_t)scopes;
+        for (uint32_t p = 0; p < function->parameters; ++p) {
+            if (build->status != XR_XIR_OK) return false;
+            uint32_t id = function->begin+p;
+            if (cell_proof_tracking(proof,f,p) != 1) continue;
+            if (proof->roles[id] == XR_XIR_CELL_PROOF_OWNED_CAPTURE &&
+                (proof->origins[id] & XR_XIR_CELL_ORIGIN_SCOPED))
+                proof->roles[id] = XR_XIR_CELL_PROOF_SCOPED_CAPTURE;
+            if (proof->roles[id] != XR_XIR_CELL_PROOF_OWNED_CAPTURE) ++function->scopes;
         }
         scopes += function->scopes;
         function->words = function->scopes/64u+(function->scopes%64u != 0);
@@ -539,17 +561,16 @@ static bool cell_proof_roles(CellProofBuild *build) {
     proof->scope_parameters = xir_compile_calloc(build->context,(size_t)scopes,sizeof(uint32_t),&build->status);
     proof->dependencies = xir_compile_calloc(build->context,words,sizeof(uint64_t),&build->status);
     if (build->status != XR_XIR_OK) return false;
-    for (uint32_t f = 0; f < module->function_count; ++f) {
+    for (uint32_t f = 0; f < proof->function_count; ++f) {
         CellProofFunction *function = &proof->functions[f]; uint32_t compact = 0;
         for (uint32_t p = 0; p < function->parameters; ++p) {
-            if (!((build)->status == XR_XIR_OK)) return false;
+            if (build->status != XR_XIR_OK) return false;
             uint32_t id = function->begin+p;
             if (cell_proof_tracking(proof,f,p) != 1 || proof->roles[id] == XR_XIR_CELL_PROOF_OWNED_CAPTURE) continue;
-            if (!((build)->status == XR_XIR_OK)) return false;
             proof->scope_parameters[function->scope_begin+compact] = p;
             cell_proof_dependencies(proof,id)[compact/64u] = UINT64_C(1)<<(compact%64u);
             ++compact;
-            if (!cell_proof_seed(build,id,XR_XIR_CELL_ORIGIN_SCOPED)) return false;
+            if (!cell_proof_enqueue(build,id)) return false;
         }
     }
     return true;
@@ -742,7 +763,9 @@ static bool cell_proof_edge_row(CellProofBuild *build,uint32_t f,uint32_t i,
         uint32_t source = begin+value;
         if (cell && cell_proof_identity_producer(op->op)) {
             if (!cell_proof_edge(build,source,result,true)) return false;
-        } else if (op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_GENERATOR_NEW) {
+        } else if (op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_GENERATOR_NEW ||
+            ((op->op == XR_XIR_CALL || op->op == XR_XIR_INVOKE) && module->declarations &&
+             a < module->declarations->functions[op->immediate].capture_count)) {
             uint32_t target = (uint32_t)op->immediate;
             uint32_t formal = proof->functions[target].begin+a;
             if (cell_proof_tracking(proof,target,a) == 1) {
@@ -916,7 +939,8 @@ static bool cell_proof_view_root(CellProofBuild *build,uint32_t f,uint32_t i,uin
         /* A scoped origin bit alone includes unbound definition parameters.
          * Only actual call/reference or lexical-cleanup edges bind a scope. */
         if (role==XR_XIR_CELL_PROOF_UNKNOWN) return cell_proof_error(build,f,i,XR_XIR_UNRESOLVED);
-        if (role!=XR_XIR_CELL_PROOF_SCOPED_REF && role!=XR_XIR_CELL_PROOF_LEXICAL_CLEANUP)
+        if (role!=XR_XIR_CELL_PROOF_SCOPED_REF && role!=XR_XIR_CELL_PROOF_LEXICAL_CLEANUP &&
+            role!=XR_XIR_CELL_PROOF_SCOPED_CAPTURE)
             return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
     }
     return true;
@@ -943,10 +967,16 @@ static bool cell_proof_sink(CellProofBuild *build, uint32_t f, uint32_t i,
         uint8_t role = proof->roles[proof->functions[target].begin+ordinal];
         if (op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_GENERATOR_NEW)
             return (role == XR_XIR_CELL_PROOF_OWNED_CAPTURE && origin == XR_XIR_CELL_ORIGIN_OWNED) ||
+                (role == XR_XIR_CELL_PROOF_SCOPED_CAPTURE &&
+                 !(origin & ~(XR_XIR_CELL_ORIGIN_OWNED | XR_XIR_CELL_ORIGIN_SCOPED))) ||
                 cell_proof_error(build,f,i,XR_XIR_BAD_VALUE);
         if (op->op == XR_XIR_CLEANUP_REGISTER)
             return role == XR_XIR_CELL_PROOF_LEXICAL_CLEANUP || cell_proof_error(build,f,i,XR_XIR_BAD_VALUE);
-        return role == XR_XIR_CELL_PROOF_SCOPED_REF || cell_proof_error(build,f,i,XR_XIR_BAD_VALUE);
+        bool capture = build->body->domain.declarations &&
+            ordinal < build->body->domain.declarations->functions[target].capture_count;
+        return role == XR_XIR_CELL_PROOF_SCOPED_REF || role == XR_XIR_CELL_PROOF_SCOPED_CAPTURE ||
+            (capture && role == XR_XIR_CELL_PROOF_OWNED_CAPTURE && origin == XR_XIR_CELL_ORIGIN_OWNED) ||
+            cell_proof_error(build,f,i,XR_XIR_BAD_VALUE);
     }
     if (op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT) {
         XrXirType callee = cell_proof_type(build,f,(uint32_t)op->immediate);
@@ -1062,7 +1092,8 @@ static void cell_proof_complete(CellProofBuild *build) {
             if (build->proof->tracked[v] == 1 && !build->proof->origins[v])
                 cell_proof_seed(build,v,XR_XIR_CELL_ORIGIN_UNKNOWN);
         }
-        if (build->status == XR_XIR_OK && cell_proof_solve(build)) cell_proof_validate(build);
+        if (build->status == XR_XIR_OK && cell_proof_scope_storage(build) && cell_proof_solve(build))
+            cell_proof_validate(build);
     }
 }
 static void cell_proof_workspace_free(CellProofBuild *build) {
