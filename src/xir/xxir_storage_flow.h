@@ -28,6 +28,7 @@ typedef struct XirStorageCrossFlow {
 
 typedef struct XirStorageBinding {
     uint32_t formal_function, formal_value, actual_function, actual_value;
+    /* Every non-sentinel value, including zero, indexes applications. */
     uint32_t actual_environment;
 } XirStorageBinding;
 
@@ -49,6 +50,10 @@ typedef struct XirStorageIdentity {
  * corresponding invocation context. An absent allocation is external. */
 typedef struct XirStorageAllocation { uint32_t function, value; } XirStorageAllocation;
 
+/* Every formal Cell has an explicit contents input, including unused bodies.
+ * The declaration identity determines whether it is a hidden capture. */
+typedef struct XirStorageInput { uint32_t function, value, handle; } XirStorageInput;
+
 typedef struct XirStorageUnknown {
     uint32_t function, value;
     XrXirType type;
@@ -67,6 +72,8 @@ typedef struct XirStorageFlowView {
     uint32_t identity_count;
     const XirStorageAllocation *allocations;
     uint32_t allocation_count;
+    const XirStorageInput *inputs;
+    uint32_t input_count;
     const XirStorageUnknown *unknowns;
     uint32_t unknown_count;
 } XirStorageFlowView;
