@@ -7,6 +7,7 @@
  * xxir_source_calls_publish.inc.c - Copy actual source body bounds at publication
  */
 static XrXirStatus source_calls_publish(SourceContext *ctx,XrXirSourceSnapshot *snapshot) {
+    if (!ctx->call_observations) return XR_XIR_OK;
     uint32_t count=ctx->query.declaration_count;
     XrXirSourceFunctionRange *functions=count?source_alloc(ctx,count,sizeof(*functions)):NULL;
     if(count&&!functions)return ctx->diagnostic.status;

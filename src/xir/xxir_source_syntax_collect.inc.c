@@ -66,6 +66,7 @@ static bool source_query_callable(SourceContext *ctx,uint32_t declaration) {
         ctx->syntax.declarations[declaration-1].role==XR_XIR_SOURCE_SYNTAX_METHOD);
 }
 static bool source_query_call(SourceContext *ctx,uint32_t reference,XrXirSourceRange range) {
+    if (!ctx->call_observations) return true;
     if(ctx->function>=ctx->function_count)return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source call body is invalid");
     uint32_t declaration=ctx->bodies[ctx->function].declaration;
     uint32_t body=source_query_callable(ctx,declaration)?declaration:0;

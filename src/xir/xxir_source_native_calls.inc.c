@@ -13,12 +13,17 @@ typedef struct SourceNativeCallShape {
 } SourceNativeCallShape;
 static bool source_native_call_shape(SourceContext *ctx,SourceNativeCallShape *shape,
     XrXirType receiver,const XrXirType *parameters,uint32_t count) {
+    if (!ctx->call_observations) {
+        *shape=(SourceNativeCallShape){0};
+        return true;
+    }
     XrXirType *owned=count?source_alloc(ctx,count,sizeof(*owned)):NULL;
     if(count&&(!owned||!source_copy_bytes(ctx,NULL,owned,parameters,count*sizeof(*owned))))return false;
     *shape=(SourceNativeCallShape){receiver,owned,count};return true;
 }
 static bool source_array_call_signature(SourceContext *ctx,AstNode *node,
     const SourceNativeCallShape *shape,XrXirType result) {
+    if (!ctx->call_observations) return true;
     if(!node||node->type!=AST_CALL_EXPR)return true;
     XrXirSourceRange range=source_query_token_range(ctx,node);
     uint32_t selected=UINT32_MAX,target=0;

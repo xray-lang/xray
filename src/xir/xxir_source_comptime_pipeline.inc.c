@@ -197,6 +197,7 @@ static void source_comptime_receive(SourceContext *ctx,XrXirSourceResult *output
     if (!source_comptime_evaluate(ctx,output->checked,ctx->linkage_kind==XR_XIR_LIBRARY)) { xr_xir_compile_source_result_free(output);source_comptime_values_free(ctx);return; }
     if (!((ctx)->diagnostic.status == XR_XIR_OK)) { xr_xir_compile_source_result_free(output);source_comptime_values_free(ctx);return; }
     SourceContext received={0};received.request=ctx->request;received.compile=ctx->compile;received.graph=ctx->graph;received.linkage_kind=ctx->linkage_kind;
+    received.call_observations=ctx->call_observations;
     received.semantic_output=ctx->semantic_output;
     received.binding_readers=ctx->binding_readers;
     received.interactive=ctx->interactive;received.type_query=ctx->type_query;received.repl_tail=ctx->repl_tail;

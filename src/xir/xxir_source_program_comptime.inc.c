@@ -48,6 +48,7 @@ static void source_program_comptime_receive(SourceContext *ctx,XrXirSourceResult
         xr_xir_compile_source_result_free(output);source_comptime_values_free(ctx);return;
     }
     SourceContext received={0};received.request=ctx->request;received.compile=ctx->compile;received.graph=ctx->graph;received.linkage_kind=ctx->linkage_kind;
+    received.call_observations=ctx->call_observations;
     received.manifests=ctx->manifests;received.prelude_module=ctx->prelude_module;received.core_factory=ctx->core_factory;
     received.remaining_blocks=ctx->remaining_blocks;received.remaining_instructions=ctx->remaining_instructions;
     received.comptime_input=ctx->comptime_sites;received.comptime_input_types=&ctx->types;

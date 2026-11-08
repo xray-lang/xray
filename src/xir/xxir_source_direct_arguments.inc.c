@@ -136,6 +136,7 @@ static bool source_direct_signature_names(SourceContext *ctx,AstNode *node,XrXir
  * Retain its ordinal, never an array element pointer across metadata growth. */
 static bool source_direct_call_signature(SourceContext *ctx,AstNode *node,uint32_t function,
     const SourceDirectArguments *prepared,uint32_t reference_before) {
+    if (!ctx->call_observations) return true;
     if(ctx->query.reference_count==reference_before)return true;
     if(reference_before==UINT32_MAX||ctx->query.reference_count!=reference_before+1||!ctx->calls.count||
         ctx->calls.items[ctx->calls.count-1].reference!=reference_before||function>=ctx->function_count)

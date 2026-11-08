@@ -2,6 +2,7 @@
 #include "xlsp_source_query.h"
 #include "xlsp_source_signature.h"
 #include "../../xir/xxir_source_calls.h"
+#include "../../xir/xxir_source_corpus.h"
 #include "../../module/xmodule_overlay.h"
 #include "../../shared/xr_utf8_core.h"
 #include "../../xir/xxir_compile_memory.h"
@@ -232,7 +233,8 @@ XrXirStatus xlsp_source_snapshot_build_authorities(const XrXirSourceRequest *req
     }
     {
         XrXirSourceRequest selected = *request; selected.entry_path = s->texts[entry].path;
-        status = xr_xir_compile_source_check_overlay(&selected, inputs, count, &result, diagnostic, failure);
+        XrXirSourceCorpusRequest corpus={&selected,inputs,count,NULL,0};
+        status = xr_xir_compile_source_check_corpus(&corpus,&result,diagnostic,failure);
         if (status != XR_XIR_OK) goto done;
         const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(result.snapshot);
         if (!view || !view->complete) { status = XR_XIR_BAD_STRUCTURE; goto done; }

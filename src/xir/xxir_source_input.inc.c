@@ -25,6 +25,7 @@ typedef struct SourceComptimeInstancesOperation {
 } SourceComptimeInstancesOperation;
 typedef struct SourceInput {
     bool supplied;
+    bool call_observations;
     XrXirSourceText text;
     const XrModuleOverlayInput *overlays;
     size_t overlay_count;
@@ -115,6 +116,7 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
     if (!source_request_poll(&ctx, NULL)) goto done;
     ctx.semantic_output=input.capture ? &input.capture->semantic : NULL;
     ctx.binding_readers=input.binding_readers;
+    ctx.call_observations=input.call_observations;
     ctx.interactive=input.interactive;ctx.type_query=input.type_query;ctx.module_scope=input.module_scope;
     ctx.history_input=input.history;ctx.self_unit=input.self;
     ctx.remaining_blocks = ctx.compile.limits.blocks;
@@ -293,8 +295,8 @@ XrXirStatus xr_xir_compile_source_check_overlay(const XrXirSourceRequest *reques
 }
 XR_FUNC XrXirStatus xr_xir_compile_source_check_corpus(const XrXirSourceCorpusRequest *request,
     XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure) {
-    SourceInput input = {0};
-    if (request) input = (SourceInput){.overlays=request->overlays,
+    SourceInput input = {.call_observations=true};
+    if (request) input = (SourceInput){.call_observations=true,.overlays=request->overlays,
         .overlay_count=request->overlay_count, .included=request->included,
         .included_count=request->included_count};
     return source_check_input(request ? request->entry : NULL, input, output, diagnostic, failure);

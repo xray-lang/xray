@@ -139,6 +139,7 @@ typedef struct SourceContext {
     SourceLoop *loop;
     SourceTaskScope *task_scope;
     bool returned, has_generics, query_ready;
+    bool call_observations;
     XrXirSourceView query;
     XrXirSourceSyntaxView syntax;
     XrXirSourceCalls calls;

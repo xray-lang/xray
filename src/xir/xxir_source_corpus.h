@@ -22,7 +22,9 @@ typedef struct XrXirSourceCorpusRequest {
  * Repeated indices are idempotent. Ordinary module-storage and Sendable rules
  * remain in force for every non-entry module. All coordinates are synchronous
  * borrows; results own their facts on the original cumulative ledger. Overlay
- * validation and failure publication are identical to source_check_overlay. */
+ * validation and failure publication are identical to source_check_overlay.
+ * Corpus queries collect the owned call observations used by IDE consumers;
+ * ordinary source checks publish their syntax and types without a call table. */
 XR_FUNC XrXirStatus xr_xir_compile_source_check_corpus(const XrXirSourceCorpusRequest *,
     XrXirSourceResult *, XrXirSourceDiagnostic *, XrXirSourceFailure *failure);
 #endif /* XXIR_SOURCE_CORPUS_H */

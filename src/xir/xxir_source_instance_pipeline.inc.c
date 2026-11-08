@@ -46,6 +46,7 @@ static void source_instance_receive(SourceContext *ctx,XrXirSourceResult *output
     if (ctx->diagnostic.status==XR_XIR_OK && ((ctx)->diagnostic.status == XR_XIR_OK)) {
         SourceInstanceBatch batch={views,providers,count};SourceContext received={0};
         received.request=ctx->request;received.compile=ctx->compile;received.graph=ctx->graph;received.linkage_kind=ctx->linkage_kind;
+        received.call_observations=ctx->call_observations;
         received.manifests=ctx->manifests;received.prelude_module=ctx->prelude_module;received.core_factory=ctx->core_factory;
         received.remaining_blocks=ctx->remaining_blocks;received.remaining_instructions=ctx->remaining_instructions;
         received.instance_constants=&batch;

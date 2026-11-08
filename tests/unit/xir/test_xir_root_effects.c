@@ -11,6 +11,8 @@
 #include "xir/xxir_effects.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_source.h"
+#include "xir/xxir_source_calls.h"
+#include "xir/xxir_source_corpus.h"
 #include "toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,6 +37,16 @@ static XrXirArtifact *root_source(const char *file,XrXirStatus expected) {
         file,status,diagnostic.line,diagnostic.column,diagnostic.message);
     CHECK(status==expected);
     CHECK(expected==XR_XIR_OK?(source.checked!=NULL):(!source.checked&&!source.snapshot));
+    if (expected==XR_XIR_OK) {
+        CHECK(xr_xir_compile_source_snapshot_calls(source.snapshot)==NULL);
+        XrXirSourceCorpusRequest corpus={&request,NULL,0,NULL,0};
+        XrXirSourceResult observed={0};
+        CHECK(xr_xir_compile_source_check_corpus(&corpus,&observed,NULL,NULL)==XR_XIR_OK);
+        const XrXirSourceCalls *calls=xr_xir_compile_source_snapshot_calls(observed.snapshot);
+        const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(observed.snapshot);
+        CHECK(calls && view && calls->declaration_count==view->declaration_count);
+        xr_xir_compile_source_result_free(&observed);
+    }
     XrXirArtifact *checked=source.checked;source.checked=NULL;
     xr_xir_compile_source_failure_free(&failure_path);xr_xir_compile_source_result_free(&source);xr_compile_session_free(session);
     return checked;
