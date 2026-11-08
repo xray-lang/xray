@@ -1,0 +1,4 @@
+class Options{value:i64;init(){this.value=7}}
+fn make(left:Array<i64>,right:Array<i64>)->Options{if(left==right){return Options()};return Options()}
+fn use(v:Slice<u8>,options:Options=make([1],[1]))->i64{return len(v)+options.value}
+export fn storage_receiver()->i64{var text="abc";var view:Slice<u8>=text.bytes();return use(view)-9}

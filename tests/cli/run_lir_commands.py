@@ -59,7 +59,8 @@ def main() -> None:
         access = fixtures / "access"
         accepted_access = ("default_class_positive.xr", "imported_default/root.xr",
                            "imported_generic/root.xr", "imported_callable/root.xr",
-                           "pure_recursive.xr", "latent_reference.xr", "immutable_scalar.xr")
+                           "pure_recursive.xr", "primitive_equality.xr",
+                           "latent_reference.xr", "immutable_scalar.xr")
         for name in accepted_access:
             checked = run("access-" + name.replace("/", "-") + "-check",
                           [binary, "check", access / name], 0)
@@ -77,6 +78,10 @@ def main() -> None:
             ("cleanup_hidden.xr", b"(CALL_DEFAULT)"),
             ("mutable_scalar.xr", b"(CALL_DEFAULT)"),
             ("immutable_reference.xr", b"(CALL_DEFAULT)"),
+            ("aggregate_equality.xr", b"(CALL_DEFAULT)"),
+            ("nominal_equality.xr", b"(CALL_DEFAULT)"),
+            ("generic_equality.xr", b"(CALL_DEFAULT)"),
+            ("string_equality.xr", b"(CALL_DEFAULT)"),
             ("access_before_nosuspend.xr", b"(ARRAY_SET)"),
             ("access_before_root.xr", b"(ARRAY_SET)"),
         )

@@ -565,7 +565,7 @@ static bool effect_check_instruction(EffectCheckBuild *build, uint32_t f, uint32
     EffectCheckFunction row = build->roots->function[f];
     uint32_t value = row.first + function->parameter_count + i;
     effect_check_cell_seed(build, value, op);
-    if (!effect_default_access_local(op->op) && !effect_default_access_scalar_slot(build->module,f,op))
+    if (!effect_default_access_local(function,op) && !effect_default_access_scalar_slot(build->module,f,op))
         build->roots->node[row.root].access_denied=true;
     if (op->op == XR_XIR_SLOT_PLACE) build->roots->node[row.root].worker_blocked = true;
     build->status = effect_check_local(build, f, i, op);

@@ -1,0 +1,5 @@
+enum Choice{First,Second}
+class Options{value:i64;init(){this.value=7}}
+fn make(left:Choice,right:Choice)->Options{if(left!=right){return Options()};return Options()}
+fn use(v:Slice<u8>,options:Options=make(Choice.First,Choice.Second))->i64{return len(v)+options.value}
+export fn storage_receiver()->i64{var text="abc";var view:Slice<u8>=text.bytes();return use(view)-9}

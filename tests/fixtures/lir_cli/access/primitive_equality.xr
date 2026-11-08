@@ -1,0 +1,26 @@
+class Options{value:i64;init(value:i64){this.value=value}}
+fn boolean(left:bool,right:bool)->bool{return (left==right)!=(left!=right)}
+fn runeValue(left:rune,right:rune)->bool{return (left==right)!=(left!=right)}
+fn signed8(left:i8,right:i8)->bool{return (left==right)!=(left!=right)}
+fn signed16(left:i16,right:i16)->bool{return (left==right)!=(left!=right)}
+fn signed32(left:i32,right:i32)->bool{return (left==right)!=(left!=right)}
+fn signed64(left:i64,right:i64)->bool{return (left==right)!=(left!=right)}
+fn unsigned8(left:u8,right:u8)->bool{return (left==right)!=(left!=right)}
+fn unsigned16(left:u16,right:u16)->bool{return (left==right)!=(left!=right)}
+fn unsigned32(left:u32,right:u32)->bool{return (left==right)!=(left!=right)}
+fn unsigned64(left:u64,right:u64)->bool{return (left==right)!=(left!=right)}
+fn float32(left:f32,right:f32)->bool{return (left==right)!=(left!=right)}
+fn float64(left:f64,right:f64)->bool{return (left==right)!=(left!=right)}
+fn make()->Options{
+    if(boolean(true,false) && runeValue('A','B') &&
+        signed8(i8(7),i8(8)) && signed16(i16(7),i16(8)) &&
+        signed32(i32(7),i32(8)) && signed64(7,8) &&
+        unsigned8(u8(7),u8(8)) && unsigned16(u16(7),u16(8)) &&
+        unsigned32(u32(7),u32(8)) && unsigned64(u64(7),u64(8)) &&
+        float32(f32(1.0),f32(2.0)) && float64(1.0,2.0)){
+        return Options(7)
+    }
+    return Options(0)
+}
+fn use(v:Slice<u8>,options:Options=make())->i64{return len(v)+options.value}
+export fn storage_receiver()->i64{var text="abc";var view:Slice<u8>=text.bytes();return use(view)-9}
