@@ -17,6 +17,7 @@
 #include "xxir_metadata_domain_internal.h"
 #include "xxir_defaults_internal.h"
 #include "xxir_internal.h"
+#include "xxir_storage_flow.h"
 #include "xxir_source_replay_internal.h"
 #include "xxir_types.h"
 #include "xxir_native_callable.h"

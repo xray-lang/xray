@@ -93,6 +93,16 @@ typedef struct EffectCheckCleanupUse {
     XirExecutionPort port;
 } EffectCheckCleanupUse;
 
+typedef struct EffectCheckOriginEdge {
+    uint32_t function, value, application, next;
+} EffectCheckOriginEdge;
+
+typedef struct EffectCheckOrigins {
+    uint32_t *offsets, *heads;
+    EffectCheckOriginEdge *edges;
+    uint32_t nodes, count;
+} EffectCheckOrigins;
+
 typedef struct EffectCheckFrame {
     uint32_t node, dependency, parent;
 } EffectCheckFrame;
@@ -134,6 +144,8 @@ typedef struct EffectCheckedRoots {
     XrXirRootEffectWitness *terminals;
     EffectTerms *terms;
     const XrXirTypes *borrowed_types;
+    XirStorageFlow *storage;
+    EffectCheckOrigins storage_origins;
 } EffectCheckedRoots;
 
 typedef struct EffectCheckBuild {
@@ -154,6 +166,10 @@ typedef struct EffectCheckBuild {
 
 static void effect_checked_roots_free(EffectCheckedRoots *roots) {
     if (!roots) return;
+    xir_storage_flow_free(roots->storage);
+    xr_compile_resources_free(roots->storage_origins.offsets);
+    xr_compile_resources_free(roots->storage_origins.heads);
+    xr_compile_resources_free(roots->storage_origins.edges);
     if (roots->function) for (uint32_t f = 0; f < roots->functions; ++f)
         {
             xr_compile_resources_free(roots->function[f].bits);
@@ -698,6 +714,18 @@ static bool effect_check_instruction(EffectCheckBuild *build, uint32_t f, uint32
     if (build->status != XR_XIR_OK) return false;
     const XrXirTypeNode *suspend_signature = xr_xir_callable_signature(build->module->types, op->type);
     bool callable = suspend_signature != NULL;
+    if (callable) {
+        switch (op->op) {
+        case XR_XIR_FUNCTION_REF: case XR_XIR_CLASS_METHOD_REF:
+        case XR_XIR_COPY: case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN:
+        case XR_XIR_LOCAL_NEW: case XR_XIR_LOCAL_READ: case XR_XIR_SCALAR_LOCAL_NEW:
+        case XR_XIR_SCALAR_LOCAL_READ: case XR_XIR_OWNED_LOCAL_NEW: case XR_XIR_OWNED_LOCAL_READ:
+        case XR_XIR_CELL_READ: case XR_XIR_CELL_TAKE: case XR_XIR_PLACE_READ:
+        case XR_XIR_VALUE_TAKE: case XR_XIR_PHI: case XR_XIR_FUNCTION_WEAKEN:
+        case XR_XIR_TUPLE_FIELD: case XR_XIR_CALL_DEFAULT: case XR_XIR_INVOKE_DEFAULT: break;
+        default: build->roots->node[value].callable_opaque = true; break;
+        }
+    }
     if (callable && !(suspend_signature->flags & XR_XIR_CALLABLE_NO_SUSPEND)) {
         switch (op->op) {
         case XR_XIR_FUNCTION_REF: case XR_XIR_CLASS_METHOD_REF:

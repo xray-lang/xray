@@ -19,7 +19,9 @@ static XirExecutionSite execution_call_site(const EffectCheckedRoots *roots, uin
         .caller_instance = roots->node[call->output].function,
         .target = roots->node[call->target].function, .declaration = callee->declaration,
         .argument_count = call->count, .capture_count = callee->capture_count,
-        .output_function = caller->declaration, .output_value = value < caller->values ? value : UINT32_MAX,
+        .output_function = caller->declaration,
+        .output_value = call->instruction < caller->values - caller->parameters ?
+            caller->parameters + call->instruction : value < caller->values ? value : UINT32_MAX,
         .receiver_function = UINT32_MAX, .receiver_value = UINT32_MAX, .registration = UINT32_MAX,
         .native_callable = callee->native_callable, .reference = UINT32_MAX, .capture_environment = UINT32_MAX,
         .environment = call->has_environment ? call->environment : UINT32_MAX,
@@ -37,7 +39,8 @@ static XirExecutionSite execution_pending_site(const EffectCheckedRoots *roots, 
         .function = caller->declaration, .instruction = pending->instruction, .block = block,
         .caller_instance = pending->function, .target = UINT32_MAX, .declaration = UINT32_MAX,
         .argument_count = pending->argument_count, .output_function = caller->declaration,
-        .output_value = UINT32_MAX, .receiver_function = receiver->declaration,
+        .output_value = pending->instruction < caller->values - caller->parameters ?
+            caller->parameters + pending->instruction : UINT32_MAX, .receiver_function = receiver->declaration,
         .receiver_value = value < receiver->values ? value : UINT32_MAX,
         .registration = UINT32_MAX, .environment = UINT32_MAX, .reference = UINT32_MAX, .capture_environment = UINT32_MAX,
         .remainder = pending->remainder ? pending->remainder : XIR_EXECUTION_REMAINDER_STORAGE,
@@ -125,6 +128,8 @@ XR_FUNC XrXirStatus xir_execution_argument(const XirExecutionOwner *owner,
     const EffectCheckedRoots *roots = owner;
     if (!roots || !site || !output) return XR_XIR_BAD_STRUCTURE;
     uint32_t first, count, caller, target = UINT32_MAX;
+    uint32_t formal_ordinal = parameter;
+    uint32_t environment = site->environment;
     if (site->kind == XIR_EXECUTION_CALL || site->kind == XIR_EXECUTION_CLEANUP_USE) {
         uint32_t index = site->index;
         if (site->kind == XIR_EXECUTION_CLEANUP_USE) {
@@ -140,6 +145,17 @@ XR_FUNC XrXirStatus xir_execution_argument(const XirExecutionOwner *owner,
         if (site->index >= roots->pending_count) return XR_XIR_BAD_STRUCTURE;
         const EffectCheckPending *pending = &roots->pending[site->index];
         first = pending->argument_first; count = pending->argument_count; caller = pending->function;
+        if (site->reference != UINT32_MAX) {
+            if (site->reference >= roots->calls) return XR_XIR_BAD_STRUCTURE;
+            EffectCheckCall capture = roots->call[site->reference];
+            if (capture.protocol != 1 || capture.count > UINT32_MAX - count ||
+                site->argument_count != capture.count + count) return XR_XIR_BAD_STRUCTURE;
+            target = roots->node[capture.target].function;
+            if (parameter < capture.count) {
+                first = capture.first; count = capture.count;
+                environment = site->capture_environment;
+            } else parameter -= capture.count;
+        }
     } else return XR_XIR_UNRESOLVED;
     if (parameter >= count || first > roots->arguments || count > roots->arguments - first)
         return XR_XIR_BAD_STRUCTURE;
@@ -149,14 +165,14 @@ XR_FUNC XrXirStatus xir_execution_argument(const XirExecutionOwner *owner,
     uint32_t value = node - source->first;
     if (value >= source->values) return XR_XIR_UNRESOLVED;
     XirExecutionArgument argument = {.function = source->declaration, .value = value,
-        .caller_handle = roots->node[node].function == caller ? value : UINT32_MAX,
-        .environment = roots->node[node].function == caller ? site->environment :
-            site->environment == XIR_EXECUTION_CURRENT_ENVIRONMENT ? XIR_EXECUTION_UNKNOWN_ENVIRONMENT : site->environment,
+        .caller_handle = roots->node[node].function == caller && environment == site->environment ? value : UINT32_MAX,
+        .environment = roots->node[node].function == caller || environment != XIR_EXECUTION_CURRENT_ENVIRONMENT ?
+            environment : XIR_EXECUTION_UNKNOWN_ENVIRONMENT,
         .mode = XR_PARAM_READ, .type = roots->node[node].type,
         .cell = roots->node[node].cell};
     if (target != UINT32_MAX) {
-        if (parameter >= roots->function[target].parameters) return XR_XIR_BAD_STRUCTURE;
-        const EffectCheckNode *formal = &roots->node[roots->function[target].first + parameter];
+        if (formal_ordinal >= roots->function[target].parameters) return XR_XIR_BAD_STRUCTURE;
+        const EffectCheckNode *formal = &roots->node[roots->function[target].first + formal_ordinal];
         argument.mode = formal->mode;
         argument.escaping = formal->escaping;
     } else {
@@ -183,46 +199,11 @@ XR_FUNC XrXirStatus xir_execution_argument(const XirExecutionOwner *owner,
 
 XR_FUNC XrXirStatus xir_execution_visit_value_captures(const XirExecutionOwner *owner,
     uint32_t function, uint32_t value, XirExecutionVisitor visit, void *context, bool *complete) {
-    const EffectCheckedRoots *roots = owner;
-    if (!roots || !visit || !complete || function >= roots->templates || value >= roots->function[function].values)
-        return XR_XIR_BAD_STRUCTURE;
-    XrXirCompileContext memory = {.resources = roots->resources};
-    XrXirStatus status = XR_XIR_OK;
-    uint8_t *seen = xir_compile_calloc(&memory, roots->nodes, 1, &status);
-    uint32_t *stack = xir_compile_alloc(&memory, (size_t)roots->nodes * sizeof(*stack), &status);
-    bool closed = true, found = false;
-    if (!seen || !stack) goto done;
-    uint32_t count = 1;
-    stack[0] = roots->function[function].first + value;
-    seen[stack[0]] = 1;
-    while (count && status == XR_XIR_OK) {
-        uint32_t node = stack[--count];
-        const EffectCheckNode *row = &roots->node[node];
-        const EffectCheckFunction *body = &roots->function[row->function];
-        bool origin = false;
-        if (row->callable_input) {closed = false; continue;}
-        if (node < body->first + body->parameters && node - body->first >= body->capture_count) closed = false;
-        for (uint32_t c = row->calls; c != UINT32_MAX && status == XR_XIR_OK; c = roots->call[c].next) {
-            if (roots->call[c].protocol != 1) continue;
-            XirExecutionSite site = execution_call_site(roots, c);
-            status = visit(context, &site); origin = found = true;
-        }
-        for (uint32_t a = row->aliases; a != UINT32_MAX; a = roots->alias[a].next) {
-            if (!roots->alias[a].callable_origin) continue;
-            uint32_t source = roots->alias[a].source; origin = true;
-            if (!seen[source]) {seen[source] = 1; stack[count++] = source;}
-        }
-        for (uint32_t b = row->bindings; b != UINT32_MAX; b = roots->binding[b].next) {
-            uint32_t source = roots->binding[b].source; origin = true;
-            if (!seen[source]) {seen[source] = 1; stack[count++] = source;}
-        }
-        if (!origin) closed = false;
-    }
-    if (status == XR_XIR_OK) *complete = closed && found;
-done:
-    xr_compile_resources_free(seen); xr_compile_resources_free(stack);
-    return status;
+    XirExecutionValue reference = {function, value, XIR_EXECUTION_CURRENT_ENVIRONMENT};
+    return xir_execution_visit_value_captures_in(owner, &reference, visit, context, complete);
 }
+
+#include "xxir_execution_origins.inc.c"
 
 XR_FUNC const XrXirTypes *xir_execution_types(const XirExecutionOwner *owner) {
     const EffectCheckedRoots *roots = owner;

@@ -315,6 +315,14 @@ static void module_interface_lifetime(void) {
     printf("module interfaces: body-free cross-module closure, %zu consumed-owner failures and detached reads PASS\n", sites);
 }
 
+static XrXirStatus execution_value_oracle(void *context, const XirExecutionSite *site) {
+    uint32_t *count = context;
+    CHECK(site->protocol == 1 && site->declaration == 1);
+    CHECK(site->environment == XIR_EXECUTION_CURRENT_ENVIRONMENT);
+    ++*count;
+    return XR_XIR_OK;
+}
+
 static void suspension_parameter_equations(void) {
     EffectMark baseline = effect_mark();
     XrXirType fn = XR_XIR_CONSTRUCTED_TYPE_BASE, cell = XR_XIR_CONSTRUCTED_TYPE_BASE + 1;
@@ -392,6 +400,23 @@ static void suspension_parameter_equations(void) {
         CHECK(effect_checked_suspend_mask(roots, roots->function[f].root) == expected[f]);
     CHECK(effect_check_suspend_bits(roots, roots->function[13].root)[0] == 4);
     CHECK(effect_check_suspend_bits(roots, roots->function[14].root)[0] == 4);
+    uint32_t captures = 0;
+    bool complete = false;
+    CHECK(xir_execution_visit_value_captures(roots, 3, 0,
+        execution_value_oracle, &captures, &complete) == XR_XIR_OK && complete && captures == 1);
+    captures = 0; complete = true;
+    XirExecutionValue formal = {0, 0, XIR_EXECUTION_CURRENT_ENVIRONMENT};
+    CHECK(xir_execution_visit_value_captures_in(roots, &formal,
+        execution_value_oracle, &captures, &complete) == XR_XIR_OK && !complete && !captures);
+    for (uint32_t p = 0; p < roots->pending_count; ++p) {
+        if (roots->pending[p].function != 6) continue;
+        XirExecutionSite site = {0};
+        CHECK(xir_execution_site(roots, XIR_EXECUTION_PENDING, p, &site) == XR_XIR_OK);
+        uint32_t remainder = 0;
+        CHECK(xir_execution_resolve_site(roots, &site, XIR_EXECUTION_CURRENT_ENVIRONMENT,
+            execution_value_oracle, &captures, &complete, &remainder) == XR_XIR_OK);
+        CHECK(!complete && !captures && (remainder & XIR_EXECUTION_REMAINDER_PARAMETER));
+    }
     memset(rows, 0xCE, sizeof(rows));
     memset(functions, 0xCE, sizeof(functions));
     CHECK(effect_checked_suspend_mask(roots, roots->function[4].root) == 2);
