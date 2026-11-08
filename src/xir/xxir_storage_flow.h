@@ -83,7 +83,8 @@ typedef struct XirStorageObservation {
     XirStorageReference reference;
 } XirStorageObservation;
 typedef struct XirStorageValuePoint {
-    uint32_t function, instruction, value, environment;
+    uint32_t function, instruction;
+    XirStorageReference reference;
     XirStoragePointKind point;
 } XirStorageValuePoint;
 typedef struct XirStorageCapture {
@@ -135,12 +136,14 @@ XR_FUNC XrXirStatus xir_storage_flow_contents(XirStorageFlow *, uint32_t functio
 XR_FUNC XrXirStatus xir_storage_flow_contents_at(XirStorageFlow *, uint32_t function,
     uint32_t instruction, uint32_t handle, XirStoragePointKind, uint32_t *value);
 /* HIR supplies publication events. These transport exposure through the same
- * graph and never decide whether a value may escape. Exposure has its own bank. */
+ * graph and never decide whether a value may escape. Exposure has its own bank.
+ * Register every event before the first exposure query freezes the inventory. */
 XR_FUNC XrXirStatus xir_storage_flow_expose(XirStorageFlow *, uint32_t function,
     uint32_t instruction, uint32_t handle, XirStoragePointKind);
 XR_FUNC XrXirStatus xir_storage_flow_exposure_at(XirStorageFlow *, uint32_t function,
     uint32_t instruction, uint32_t handle, XirStoragePointKind, uint32_t *value);
 /* Qualified observations project R/X values into the observation's function.
+ * Either output may be NULL. A contents-only query leaves exposure events open.
  * A foreign identity never becomes a fabricated caller-local physical value. */
 XR_FUNC XrXirStatus xir_storage_flow_reference(XirStorageFlow *, const XirStorageObservation *,
     uint32_t *contents, uint32_t *exposure);
