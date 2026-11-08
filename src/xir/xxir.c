@@ -72,7 +72,6 @@ void xr_xir_compile_artifact_free(XrXirArtifact *artifact) {
     xir_source_facts_release(artifact->source_facts);
     xr_xir_compile_effects_free(artifact->checked_effects);
     xr_xir_compile_effects_free(artifact->program_final);
-    xir_effect_control_free(artifact->control_summary);
     xr_xir_compile_construction_free(artifact->construction);
     xr_compile_resources_free(artifact->layouts);
     xr_xir_compile_checked_packet_free(&artifact->checked_packet);
@@ -567,8 +566,7 @@ XrXirStatus xr_xir_compile_lower(const XrXirArtifact *checked, const XrXirTarget
     if (status!=XR_XIR_OK) status=transition_error(status,diagnostic);
     if (status==XR_XIR_OK) status=transition_shape(&checked->module,XR_XIR_CHECKED,&checked->context,target,diagnostic);
     if (status==XR_XIR_OK && XR_XIR_PARANOID) status=xir_artifact_verify(checked,diagnostic,control);
-    EffectControlSummary *summary = checked->control_summary ? checked->control_summary :
-        xir_effects_control_summary(checked->checked_effects);
+    EffectControlSummary *summary = xir_effects_control_summary(checked->checked_effects);
     const TransitionInputProof proof={checked->evaluation_only?checked_evaluation_encode:checked_encode,NULL,NULL,summary};
     return status==XR_XIR_OK?transition_owned(&checked->module,checked->construction,
         &checked->context,output,diagnostic,target,&proof,control):status;
@@ -595,8 +593,7 @@ XR_FUNC XrXirStatus xr_xir_compile_lower_take(XrXirArtifact **owned_input,
         status = xr_xir_compile_layout_verify(checked);
         if (status != XR_XIR_OK) status = transition_error(status, diagnostic);
     }
-    EffectControlSummary *summary = checked->control_summary ? checked->control_summary :
-        xir_effects_control_summary(checked->checked_effects);
+    EffectControlSummary *summary = xir_effects_control_summary(checked->checked_effects);
     const TransitionInputProof proof = {checked->evaluation_only?checked_evaluation_encode:checked_encode,&checked,NULL,summary};
     if (status == XR_XIR_OK)
         status = transition_owned(&checked->module, checked->construction, &limits, output, diagnostic, target, &proof, control);

@@ -127,7 +127,6 @@ struct XrXirArtifact {
     XirSourceFacts *source_facts;
     XrXirEffects *checked_effects;
     XrXirEffects *program_final;
-    EffectControlSummary *control_summary;
     uint32_t evaluation_only;
 };
 
