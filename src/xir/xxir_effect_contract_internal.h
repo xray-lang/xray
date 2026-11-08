@@ -150,56 +150,9 @@ XR_FUNC XrXirStatus xir_effect_binding_proof_lookup(const XrXirCompileContext *c
 
 struct XrXirEffects;
 
-/* Context selection rechecks a full structural origin against the owned
- * source-derived graph. A returned view borrows only its Effects owner. */
-typedef struct XirEffectContextInput {
-    const XrXirModule *source;
-    const XrXirTypes *types;
-    const XrXirOrigin *origin;
-    uint32_t instruction;
-    const XrXirOrigin *owners;
-    uint32_t owner_count;
-    const XrXirConstruction *construction;
-    XrCompileRequestControl *control;
-} XirEffectContextInput;
-typedef struct XirEffectContextView {
-    const XrXirTypes *types;
-    const XrXirFunction *function;
-    const XrXirType *physical_types, *arguments;
-    uint32_t declaration, parameter_count, argument_count;
-    bool requires_root, unresolved;
-} XirEffectContextView;
-
-
-
-/* Specialization reads an immutable admitted Artifact and its owned type pool. */
-
-/* This private lexical scope belongs to one read-only correspondence call.
- * Only its constructor creates a scope; no stored fact or caller flag can
- * complete the first full source/body/destination admission. The callback
- * cannot retain the scope or mutate either borrowed input. Every selection
- * still verifies its complete origin, physical arguments and actual edge.
- * Every rejected scoped request is terminal for this operation. The first
- * error also overrides a callback that ignores it; later requests do no work. */
-typedef struct XirEffectContextScope XirEffectContextScope;
-typedef XrXirStatus (*XirEffectContextOperation)(void *data,XirEffectContextScope *scope);
-
-
-/* The Source producer may advance before this call. Complete current matching
- * and any required rebuild precede one immutable, fully admitted edge read. */
 /* The common verifier calls this with its freshly derived owner and the same
  * verified module. It consumes the real reference edge, never a target hint. */
 XR_FUNC XrXirStatus xir_effects_reference_root_input(const XrXirCompileContext *context, const struct XrXirEffects *effects, XirEffectInput input, uint32_t function, uint32_t instruction, uint32_t *output);
-
-/* Sealed entry facts borrow only Effects, never the source module or formula.
- * Intrinsic ROOT flags retain every non-Cell unknown; sorted physical Cell
- * parameter IDs are closed by real runtime arguments and existing loan checks.
- * The view itself grants no execution or reference authority. */
-typedef struct XirEffectEntryRootView {
-    uint32_t intrinsic_mask;
-    const uint32_t *parameters;
-    uint32_t parameter_count;
-} XirEffectEntryRootView;
 
 /* A producer view names a real instruction from the sealed owned body. It
  * contains no permission bit, and a consumer keeps its Effects owner alive. */

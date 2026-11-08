@@ -27,7 +27,6 @@
 #include "xxir_constraint_proof.h"
 #include "xxir_operand_roles.h"
 #include "xxir_cell_provenance_internal.h"
-#include "xxir_effect_runtime_internal.h"
 #include "../base/xmalloc.h"
 #include <stdatomic.h>
 

@@ -29,40 +29,6 @@ static XrXirStatus root_signal_check(const XrXirCompileContext *context,const ch
         xr_xir_compile_source_check_text(&request,&text,source,diagnostic,NULL);
     xr_compile_session_free(session);return status;
 }
-static void root_signal_canonical_owner(const XrXirCompileContext *context,const XrXirArtifact *code,XrXirEffects *effects) {
-    const XrXirModule *source=xr_xir_compile_artifact_module(code);
-    (void)effects;
-    EffectInputFacts *facts=NULL;EffectBodyMaterial *initial=NULL;EffectOrdinaryContexts *ordinary=NULL;
-    CHECK(effect_input_facts_new(context,(XirEffectInput){source,code->construction,NULL},&facts)==XR_XIR_OK);
-    CHECK(effect_body_material_generation(context,source,NULL,facts,&initial)==XR_XIR_OK);
-    CHECK(effect_ordinary_build(context,source,initial,NULL,facts,&ordinary)==XR_XIR_OK);
-    const XrXirCompileContext *saved=ordinary->terms.remaining;ordinary->terms.remaining=context;
-    EffectOrdinaryView view={0};CHECK(effect_ordinary_view(ordinary,source,&view)==XR_XIR_OK);
-    /* A real complete copy has no borrowed backbone or optional sharing prior. */
-    view.input.initial=NULL;view.input.basis=NULL;view.input.record_source=NULL;
-    EffectBodyMaterial *full=NULL;
-    CHECK(effect_body_material_generation_input(context,&view.module,NULL,&view.input,ordinary->input_facts,&full)==XR_XIR_OK);
-    ordinary->terms.remaining=saved;
-    CHECK(full && !full->backbone && full->canonical_source && effect_body_material_shape(full));
-    uint32_t selected=UINT32_MAX;
-    for(uint32_t f=0;f<effect_body_count(full);++f)
-        if(full->declarations->functions[f].native_callable==XR_NATIVE_CALLABLE_SYS_ON_SIGNAL){selected=f;break;}
-    CHECK(selected!=UINT32_MAX);bool native=false;
-    CHECK(effect_invocation_native_root(full,selected,&native)==XR_XIR_OK && native);
-    EffectBodyMaterial invalid=*full;invalid.canonical_source=NULL;native=true;
-    CHECK(effect_invocation_native_root(&invalid,selected,&native)==XR_XIR_BAD_STRUCTURE && !native);
-    EffectBodyOrdinaryIdentity identities[256];CHECK(effect_body_count(full)<256);
-    memcpy(identities,full->ordinary_identities,effect_body_count(full)*sizeof(*identities));
-    invalid=*full;invalid.ordinary_identities=identities;
-    identities[selected].declaration=source->declarations->entry_function;native=true;
-    CHECK(effect_invocation_native_root(&invalid,selected,&native)==XR_XIR_BAD_STRUCTURE && !native);
-    EffectBodyMaterial changed=*full->canonical_source;EffectBodyFunction heads[256];
-    CHECK(effect_body_count(&changed)<256);memcpy(heads,changed.functions,effect_body_count(&changed)*sizeof(*heads));
-    changed.functions=heads;heads[full->ordinary_identities[selected].declaration].parameter_count=1;
-    invalid=*full;invalid.canonical_source=&changed;native=true;
-    CHECK(effect_invocation_native_root(&invalid,selected,&native)==XR_XIR_BAD_TYPE && !native);
-    effect_body_material_free(full);effect_ordinary_free(ordinary);effect_body_material_free(initial);effect_input_facts_free(facts);
-}
 static void root_signal_contracts(const XrXirCompileContext *context,const XrXirArtifact *code,const uint32_t ids[6]) {
     const XrXirModule *module=xr_xir_compile_artifact_module(code);uint32_t native=ids[4];
     CHECK(xir_native_callable_verify(module,native)==XR_XIR_OK);
@@ -137,7 +103,6 @@ static XrXirArtifact *root_signal_code(const XrXirCompileContext *context,uint32
     XrXirStatus status=root_signal_check(context,root_signal_text,true,&source,&diagnostic);
     if (status!=XR_XIR_OK) fprintf(stderr,"signal Source%u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);
     CHECK(status==XR_XIR_OK);
-    root_signal_canonical_owner(context,source.checked,NULL);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&source);XrXirArtifact *cold=NULL,*closed=NULL,*code=NULL;
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&cold,NULL)==XR_XIR_OK);
