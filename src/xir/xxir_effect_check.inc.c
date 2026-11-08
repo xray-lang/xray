@@ -2018,7 +2018,7 @@ static XrXirStatus effect_checked_roots_collect(const XrXirCompileContext *memor
  * headers are visible here; recursive closure never rescans instruction arrays. */
 static XrXirStatus effect_checked_roots_link_take(const XrXirCompileContext *memory,
     const XrXirModule *program, XrCompileRequestControl *control,
-    EffectCheckedRoots **interfaces, EffectCheckedRoots **output) {
+    EffectCheckedRoots **interfaces, EffectCheckedRoots **output, bool close) {
     if (!xir_compile_context_valid(memory) || !program || !program->functions || !interfaces ||
         !*interfaces || !output || *output || interfaces == output ||
         (*interfaces)->resources != memory->resources ||
@@ -2043,8 +2043,8 @@ static XrXirStatus effect_checked_roots_link_take(const XrXirCompileContext *mem
     }
     if (build.status == XR_XIR_OK) build.status = effect_check_link(&build);
     if (build.status == XR_XIR_OK) build.status = effect_check_cleanup_uses(&build);
-    if (build.status == XR_XIR_OK) build.status = effect_check_cell_roles(&build);
-    if (build.status == XR_XIR_OK) build.status = effect_check_close(&build);
+    if (build.status == XR_XIR_OK && close) build.status = effect_check_cell_roles(&build);
+    if (build.status == XR_XIR_OK && close) build.status = effect_check_close(&build);
     if (build.status == XR_XIR_OK && roots->terms)
         build.status = effect_terms_retire(memory, roots->terms, true);
     xir_read_scratch_free(&build.scratch);
@@ -2064,12 +2064,12 @@ static XrXirStatus effect_checked_roots_link_take(const XrXirCompileContext *mem
 
 static XrXirStatus effect_checked_roots_build(const XrXirCompileContext *memory,
     const XrXirModule *module, const XrXirFunctionEffectContract *contracts,
-    XrCompileRequestControl *control, const XrXirRootRefiner *refiner, EffectCheckedRoots **output) {
+    XrCompileRequestControl *control, const XrXirRootRefiner *refiner, EffectCheckedRoots **output, bool close) {
     if (!output || *output) return XR_XIR_BAD_STRUCTURE;
     EffectCheckedRoots *interfaces = NULL;
     XrXirStatus status = effect_checked_roots_collect(memory, module, contracts, control, refiner, &interfaces);
     if (status == XR_XIR_OK)
-        status = effect_checked_roots_link_take(memory, module, control, &interfaces, output);
+        status = effect_checked_roots_link_take(memory, module, control, &interfaces, output, close);
     effect_checked_roots_free(interfaces);
     return status;
 }
