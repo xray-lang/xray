@@ -45,6 +45,9 @@ typedef struct XirStorageApplication {
     /* Function is the caller template. Declaration is the callee template. */
     uint32_t site, function, instruction, block, declaration;
     uint32_t target, caller_instance, environment, order;
+    /* Reference is the execution owner's capture-call ID, or UINT32_MAX.
+     * Block is a caller-template ordinal. Both environments use application
+     * indices or the execution environment sentinels. */
     uint32_t reference, capture_environment;
     XirExecutionPort port, outcome;
     uint8_t protocol;
