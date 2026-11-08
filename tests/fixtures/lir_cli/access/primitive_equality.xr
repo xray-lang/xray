@@ -13,11 +13,11 @@ fn float32(left:f32,right:f32)->bool{return (left==right)!=(left!=right)}
 fn float64(left:f64,right:f64)->bool{return (left==right)!=(left!=right)}
 fn make()->Options{
     if(boolean(true,false) && runeValue('A','B') &&
-        signed8(i8(7),i8(8)) && signed16(i16(7),i16(8)) &&
-        signed32(i32(7),i32(8)) && signed64(7,8) &&
-        unsigned8(u8(7),u8(8)) && unsigned16(u16(7),u16(8)) &&
-        unsigned32(u32(7),u32(8)) && unsigned64(u64(7),u64(8)) &&
-        float32(f32(1.0),f32(2.0)) && float64(1.0,2.0)){
+        signed8((7 as i8),(8 as i8)) && signed16((7 as i16),(8 as i16)) &&
+        signed32((7 as i32),(8 as i32)) && signed64(7,8) &&
+        unsigned8((7 as u8),(8 as u8)) && unsigned16((7 as u16),(8 as u16)) &&
+        unsigned32((7 as u32),(8 as u32)) && unsigned64((7 as u64),(8 as u64)) &&
+        float32((1.0 as f32),(2.0 as f32)) && float64(1.0,2.0)){
         return Options(7)
     }
     return Options(0)
