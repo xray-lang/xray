@@ -47,9 +47,6 @@ static bool effect_physical_iterator(const XrXirTypes *types,XrXirType type) {
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
     return node && node->kind==XR_XIR_TYPE_ITERATOR;
 }
-static bool effect_physical_origin(const XrXirTypes *types,XrXirType type) {
-    return xr_xir_callable_signature(types,type)!=NULL || effect_physical_iterator(types,type);
-}
 
 /* The Error CFG and raw classifier use this one exhaustive opcode core.
  * Call identity, ROOT or NO_SUSPEND never substitute for its answer. */
@@ -242,53 +239,6 @@ static XrXirStatus effect_physical_value(const XrXirCompileContext *work,
     return mask?effect_physical_record(work,body,value,mask):XR_XIR_OK;
 }
 
-static XrXirStatus effect_physical_function(const XrXirCompileContext *work,
-    const XrXirModule *module,const XrXirFunction *function,EffectPhysicalFunction *body) {
-    uint64_t values=(uint64_t)function->parameter_count+function->instruction_count;
-    if (values>UINT32_MAX) return XR_XIR_BUDGET;
-    if ((function->parameter_count && !function->parameters) ||
-        (function->instruction_count && !function->instructions)) return XR_XIR_BAD_STRUCTURE;
-
-    body->parameters=function->parameter_count;body->instructions=function->instruction_count;
-    body->values=(uint32_t)values;
-    for (uint32_t v=0;v<body->values;++v) {
-
-        XrXirOp op=XR_XIR_INVALID;
-        if (v>=body->parameters) {
-            op=function->instructions[v-body->parameters].op;
-            if (op<=XR_XIR_INVALID || op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
-            XrXirFunctionEffects local={0};
-            if (!effect_seed(module,function,&function->instructions[v-body->parameters],&local))
-                return XR_XIR_BAD_STRUCTURE;
-        }
-        XrXirStatus status=effect_physical_value(work,module->types,body,v,
-            xr_xir_operand_type(function,v),op);
-        if (status!=XR_XIR_OK) return status;
-    }
-    return XR_XIR_OK;
-}
-
 /* A fresh domain is made after the current Source refinement and dense
  * physical vector have been assigned. The construction graph may transfer
  * that one storage owner to the invocation certificate in this generation. */
-static inline XrXirStatus effect_physical_new(const XrXirCompileContext *work,
-    const XrXirModule *module,EffectPhysicalDomain **output) {
-    if (!xir_compile_context_valid(work) || !module || !output || *output ||
-        (module->function_count && !module->functions)) return XR_XIR_BAD_STRUCTURE;
-    if (module->function_count > work->limits.functions ||
-        (module->function_count &&
-         sizeof(EffectPhysicalFunction) > SIZE_MAX / (uint64_t) module->function_count))
-        return XR_XIR_BUDGET;
-    XrXirStatus status=XR_XIR_OK;
-    EffectPhysicalDomain *domain=xir_compile_calloc(work,1,sizeof(*domain),&status);
-    if (!domain) return status;
-    domain->resources=work->resources;
-    domain->functions=module->function_count?xir_compile_calloc(work,module->function_count,
-        sizeof(*domain->functions),&status):NULL;
-    if (module->function_count && !domain->functions) { effect_physical_free(domain);return status; }
-    domain->count=module->function_count;
-    for (uint32_t f=0;status==XR_XIR_OK && f<domain->count;++f)
-        status=effect_physical_function(work,module,&module->functions[f],&domain->functions[f]);
-    if (status!=XR_XIR_OK) { effect_physical_free(domain);return status; }
-    *output=domain;return XR_XIR_OK;
-}

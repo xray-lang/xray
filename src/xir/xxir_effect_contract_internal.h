@@ -169,14 +169,13 @@ typedef struct XirEffectContextView {
     uint32_t declaration, parameter_count, argument_count;
     bool requires_root, unresolved;
 } XirEffectContextView;
-XR_FUNC XrXirStatus xir_effects_refinement_capture_input(const XrXirCompileContext *context, XirEffectInput input, const struct XrXirEffects *effects);
+
 XR_FUNC bool xir_effects_context_available(const XrXirCompileContext *context,
     const struct XrXirEffects *effects);
 XR_FUNC XrXirStatus xir_effects_context_select_input(const XrXirCompileContext *context,
     const struct XrXirEffects *effects, const XirEffectContextInput *input, XirEffectContextView *output);
 /* Specialization reads an immutable admitted Artifact and its owned type pool. */
-XR_FUNC XrXirStatus xir_effects_context_select_owned_input(const XrXirCompileContext *context,
-    const struct XrXirEffects *effects,const XirEffectContextInput *input,XirEffectContextView *output);
+
 /* This private lexical scope belongs to one read-only correspondence call.
  * Only its constructor creates a scope; no stored fact or caller flag can
  * complete the first full source/body/destination admission. The callback
@@ -187,8 +186,7 @@ XR_FUNC XrXirStatus xir_effects_context_select_owned_input(const XrXirCompileCon
 typedef struct XirEffectContextScope XirEffectContextScope;
 typedef XrXirStatus (*XirEffectContextOperation)(void *data,XirEffectContextScope *scope);
 XR_FUNC XrXirStatus xir_effects_context_operation_input(const XrXirCompileContext *context, const struct XrXirEffects *effects, XirEffectInput input, const XrXirTypes *types, XirEffectContextOperation operation, void *data);
-XR_FUNC XrXirStatus xir_effects_context_select_scoped_input(XirEffectContextScope *scope,
-    const XirEffectContextInput *input,XirEffectContextView *output);
+
 /* The Source producer may advance before this call. Complete current matching
  * and any required rebuild precede one immutable, fully admitted edge read. */
 /* The common verifier calls this with its freshly derived owner and the same
@@ -204,8 +202,6 @@ typedef struct XirEffectEntryRootView {
     const uint32_t *parameters;
     uint32_t parameter_count;
 } XirEffectEntryRootView;
-XR_FUNC XrXirStatus xir_effects_entry_root(const XrXirCompileContext *context,
-    const struct XrXirEffects *effects, uint32_t function, XirEffectEntryRootView *output);
 
 /* A producer view names a real instruction from the sealed owned body. It
  * contains no permission bit, and a consumer keeps its Effects owner alive. */
@@ -213,14 +209,9 @@ typedef struct XirEffectProducerView {
     uint32_t site, function, instruction, target, capture_count;
     XrXirType type;
 } XirEffectProducerView;
-XR_FUNC XrXirStatus xir_effects_producer(const XrXirCompileContext *context,
-    const struct XrXirEffects *effects, uint32_t function, uint32_t instruction,
-    XirEffectProducerView *output);
+
 /* A dynamic class producer must match one exact independently sealed candidate.
  * Its runtime consumer separately proves the actual receiver's selected target. */
-XR_FUNC XrXirStatus xir_effects_producer_target(const XrXirCompileContext *context,
-    const struct XrXirEffects *effects,uint32_t function,uint32_t instruction,
-    uint32_t target,XirEffectProducerView *output);
 
 /* Runtime matching reads only existing completed equations. The callback
  * consumes the live runtime ledger, never the retired compile context. */
@@ -255,8 +246,6 @@ typedef struct XirEffectClassAccessRequest {
     XirEffectRuntimeRead read;
 } XirEffectClassAccessRequest;
 /* The genuine Instance keeps its Class reservation across this exact query. */
-XR_FUNC XrXirStatus xir_effects_class_access(const struct XrXirEffects *effects,
-    const XirEffectClassAccessRequest *request);
 
 typedef struct XirEffectClassScopeRequest {
     uint32_t caller,node;
@@ -266,13 +255,9 @@ typedef struct XirEffectClassScopeRequest {
 } XirEffectClassScopeRequest;
 /* Paused control has no language instruction. The genuine Instance supplies
  * its actual frame selection and retains the Class reservation across replay. */
-XR_FUNC XrXirStatus xir_effects_class_scope(const struct XrXirEffects *effects,
-    const XirEffectClassScopeRequest *request);
 
 /* Original operation facts from the same sealed body, without a verdict. */
 typedef struct XirEffectIteratorInstruction {uint32_t opcode;XrXirType receiver;} XirEffectIteratorInstruction;
-XR_FUNC XrXirStatus xir_effects_iterator_instruction(const struct XrXirEffects *effects,
-    uint32_t caller,uint32_t instruction,const XirEffectRuntimeRead *read,XirEffectIteratorInstruction *output);
 
 typedef struct XirEffectInvocationRequest {
     uint32_t caller,instruction,target,producer,node,count,captures;
@@ -283,14 +268,9 @@ typedef struct XirEffectInvocationSelection {
     const struct XrXirEffects *owner;
     uint32_t caller,instruction,target,producer,parent,node,edge;
 } XirEffectInvocationSelection;
-XR_FUNC XrXirStatus xir_effects_execution_edge(const struct XrXirEffects *effects,
-    const XirEffectInvocationRequest *request,XirEffectInvocationSelection *output);
 
 /* This private view reports complete owned Class sources. It grants no
  * execution permission and requires an empty scalar output. */
-XR_FUNC XrXirStatus xir_effects_class_value(const XrXirCompileContext *context,
-    const struct XrXirEffects *effects,uint32_t node,uint32_t function,
-    uint32_t value,uint32_t *mask);
 
 /* A discriminant is only a grammar choice. Complete checking proves authority. */
 static inline bool xir_effect_evidence_is_instance(const XrXirModule *module) {

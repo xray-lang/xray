@@ -41,14 +41,6 @@ static void effect_ordinary_results_free(EffectOrdinaryContexts *contexts) {
     xr_compile_resources_free(contexts->uses.outcomes_work.unresolved_witnesses);
 }
 
-static bool effect_ordinary_work_empty(const EffectOrdinaryContexts *contexts) {
-    const XrXirEffects *uses=&contexts->uses;
-    return !uses->resources && !uses->count && !uses->outcomes_owner && !uses->root_input &&
-        !uses->formula_terminals && !uses->constant_witnesses && !uses->cells &&
-        !uses->refinement && !uses->invocations && !uses->result_borrow && !uses->generation &&
-        effect_outcomes_empty(&uses->outcomes_work);
-}
-
 static void effect_ordinary_free(EffectOrdinaryContexts *contexts) {
     if (!contexts) return;
     xr_xir_compile_declarations_free(contexts->source_declarations);
@@ -65,11 +57,6 @@ static void effect_ordinary_free(EffectOrdinaryContexts *contexts) {
  * Each root belongs to the same finite ledger. Every admitted byte is still
  * initialized; growth publishes only after both complete vectors are copied. */
 
-
-
-
-
-
 static XrXirStatus effect_ordinary_environment_same(EffectTerms *terms,
     const EffectOrdinaryNode *node,const EffectContextResolved *target,bool *equal) {
     *equal=node->declaration==target->target && node->argument_count==target->argument_count;
@@ -82,12 +69,6 @@ static XrXirStatus effect_ordinary_environment_same(EffectTerms *terms,
     }
     return status;
 }
-
-
-
-
-
-
 
 static XrXirStatus effect_ordinary_consumes_match(const XrXirFunction *original,const XrXirFunction *actual);
 static XrXirStatus effect_ordinary_signature_match(const EffectOrdinaryContexts *contexts,
@@ -259,7 +240,6 @@ typedef struct EffectOrdinaryView {
 
 /* All contextual function metadata uses contextual indices. The source
  * identity relation is verified before any rewritten cleanup owner enters it. */
-
 
 #ifdef XR_XIR_EFFECT_CONTEXT_TESTS
 static XrXirStatus effect_ordinary_seed_rebuild(const XrXirCompileContext *context,

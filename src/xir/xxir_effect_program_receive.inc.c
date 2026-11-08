@@ -9,114 +9,15 @@
 #include "xxir_layout_input_internal.h"
 #include "xxir_effect_program_final_storage.inc.c"
 
-static XrXirStatus effect_program_layout_head(const XrXirCompileContext *work,
-    const void *owner,uint32_t function,XirInputFunctionHead *output) {
-    if (!output) return XR_XIR_BAD_STRUCTURE;
-    EffectBodyRequest request=effect_body_owned_request(work,owner);
-    EffectBodyFunctionHead head;
-    XrXirStatus status=effect_body_request_head(&request,function,&head);
-    if (status!=XR_XIR_OK) return status;
-
-    *output=(XirInputFunctionHead){head.name,head.name_length,head.parameters,head.parameter_count,
-        head.result,head.blocks,head.block_count,head.instruction_count,head.operands,head.operand_count,head.error_type,
-        head.consume_parameter_count,head.consume_parameters};
-    return XR_XIR_OK;
-}
-static XrXirStatus effect_program_layout_instruction(const XrXirCompileContext *work,
-    const void *owner,uint32_t function,uint32_t instruction,
-    XrXirInstruction *storage,const XrXirInstruction **output) {
-    EffectBodyRequest request=effect_body_owned_request(work,owner);
-    return request.instruction(&request,function,instruction,storage,output,NULL);
-}
-XR_FUNC XrXirStatus xir_effects_program_layout_match(const XrXirCompileContext *work,
-    const XrXirEffects *effects,const XrXirTarget *target,XrXirFunctionLayout *layouts) {
-    if (!xir_compile_context_valid(work) || !effects || !target) return XR_XIR_BAD_STRUCTURE;
-    const EffectBodyMaterial *body=NULL;
-    XrXirStatus status=effect_program_input_storage(work,effects,&body);
-    if (status!=XR_XIR_OK) return status;
-    XirLayoutInput input={body->domain,body,effect_program_layout_head,effect_program_layout_instruction};
-    return xir_layout_input_match(work,&input,target,layouts);
-}
-
 /* Source templates have authentic specialization contexts; closed execution
  * inputs have no such owner. Both cases read the current Control input and
  * locally check declared errors, never a saved constructor result. */
-static XrXirStatus effect_program_parameter_domains(const XrXirCompileContext *work,
-    const XrXirEffects *effects) {
-    const EffectBodyMaterial *body=effects->invocations->body;
-    const XrXirFunctionEffectContract *contracts=effect_contracts_read(effects);
-    for(uint32_t f=0;f<effects->count;++f) {
-        XrXirStatus status=effect_body_initial_roles_match(work,body,f);
-        if(status!=XR_XIR_OK) return status;
-        const EffectBodyFunction *function=&body->functions[f];
-        for(uint32_t p=0;p<function->parameter_count;++p) {
-
-            const XrXirEffectParameter *parameter=&contracts[f].parameters[p];
-            if(parameter->kind>XR_XIR_EFFECT_PARAMETER_CONDITIONAL_STATIC) return XR_XIR_BAD_STRUCTURE;
-            /* Fixed domains contain no callable-origin variable or use row. */
-            bool fixed=function->initial_roles[p]==XR_XIR_EFFECT_PARAMETER_FIXED ||
-                !xr_xir_callable_signature(body->domain.types,function->parameters[p]);
-            if(fixed && (parameter->kind!=XR_XIR_EFFECT_PARAMETER_FIXED || parameter->uses))
-                return XR_XIR_BAD_STRUCTURE;
-        }
-    }
-    return XR_XIR_OK;
-}
 
 /* Pure final projections follow every temporary CFG release. Root and
  * suspension evidence retain their independent receiving checks. */
-static XrXirStatus effect_program_semantics_current(const XrXirCompileContext *work,
-    const XrXirEffects *effects) {
-    XrXirStatus status=effect_source_terminal_roles(work,effects);
-    if (status==XR_XIR_OK) status=effect_source_outcomes(work,effects);
-    return status;
-}
-
-static XrXirStatus effect_program_input_final(const XrXirCompileContext *work,
-    const XrXirModule *source,const XrXirEffects *effects) {
-    XrXirStatus status=effect_program_body_current(work,source,effects);
-    if (status==XR_XIR_OK) status=effect_program_final_storage(work,effects);
-    if (status!=XR_XIR_OK) return status;
-    const EffectInvocationCertificate *certificate=effects->invocations;
-    const EffectFinalOutcomes *final=effect_final_outcomes(effects);
-    if (!final || effects->generation || effects->refinement) return XR_XIR_BAD_STRUCTURE;
-    status=effect_source_relations(work,certificate,effects);
-    if(status==XR_XIR_OK) status=effect_program_parameter_domains(work,effects);
-    bool contexts=source->provenance && source->provenance->kind==XR_XIR_EVIDENCE_TEMPLATE &&
-        source->declarations && source->declarations->functions;
-    if (status==XR_XIR_OK) {
-        if (contexts) status=effect_source_contexts(work,source,effects);
-        else if (final->contexts) status=XR_XIR_BAD_STRUCTURE;
-    }
-    if (status==XR_XIR_OK) status=local_errors_owned(work,certificate->body,NULL);
-    if (status==XR_XIR_OK) status=effect_program_final_storage(work,effects);
-    if (status==XR_XIR_OK) status=effect_source_publication_match(work,source,effects);
-    if (status==XR_XIR_OK) status=effect_program_semantics_current(work,effects);
-    if (status==XR_XIR_OK) status=effect_control_summary_recheck(work,source,final->control_summary);
-    if (status==XR_XIR_OK) status=effect_program_body_current(work,source,effects);
-    if (status==XR_XIR_OK) status=effect_invocation_current_input_match(work,source,certificate->body);
-    return status;
-}
 
 /* ROOT correspondence observes the owned equations after receiving callbacks.
  * Independent control recomputation is confined to paranoid builds. */
-static XrXirStatus effect_program_input_root(const XrXirCompileContext *work,
-    const XrXirModule *source,const XrXirEffects *effects) {
-    XrXirStatus status=effect_program_body_current(work,source,effects);
-    if (status==XR_XIR_OK) status=effect_program_final_storage(work,effects);
-    if (status!=XR_XIR_OK) return status;
-    const EffectInvocationCertificate *certificate=effects->invocations;
-    status=effect_source_equation_shape(work,certificate);
-    if (status==XR_XIR_OK) status=effect_source_result_views(certificate,effects);
-    if (status==XR_XIR_OK) status=effect_program_parameter_domains(work,effects);
-    if (status==XR_XIR_OK) status=effect_source_atoms(work,certificate);
-    if (status==XR_XIR_OK) status=effect_source_projections(work,certificate);
-    if (status==XR_XIR_OK) status=effect_source_publication_match(work,source,effects);
-    if (status==XR_XIR_OK) status=effect_program_semantics_current(work,effects);
-    if (status==XR_XIR_OK) status=effect_control_summary_recheck(work,source,
-        effect_final_outcomes(effects)->control_summary);
-    return status;
-}
 
 /* The structural checker derives the same Cell proof through the sole owned
  * Input reader. The raw Lowered projection is matched again after callbacks. */

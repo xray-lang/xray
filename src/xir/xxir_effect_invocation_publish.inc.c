@@ -12,207 +12,26 @@
  */
 /* Only the current private request supplies selected values. A failure leaves
  * partial parent scratch for unconditional free, with no public field changed. */
-static XrXirStatus effect_invocation_publication_write(const XrXirCompileContext *work,
-    const EffectInvocationCertificate *certificate,uint32_t function,
-    const uint32_t *selected,EffectFinalFunctions *result,void *receiver) {
-    EffectFinalFunctions **expected=receiver;
-    if (!xir_compile_context_valid(work) || !certificate || !certificate->final || !selected || !expected || *expected!=result ||
-        !effect_body_material_shape(certificate->body) || !result || (&certificate->final->summary)!=result || !result->functions ||
-        certificate->body->resources!=work->resources || certificate->resources!=work->resources ||
-        result->resources!=work->resources || result->count!=effect_body_count(certificate->body) ||
-        result->capacity!=result->count || function>=result->count || !result->witnesses)
-        return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t domain=0;domain<4;++domain) {
-        XrXirRootEffectWitness witness;
-        XrXirStatus status=effect_invocation_selected_witness(work,certificate,function,selected[domain],&witness);
-        if (status!=XR_XIR_OK) return status;
-        bool symbolic=false;
-
-        const EffectInvocationProjectedCause projected={selected[domain],&witness};
-        status=effect_invocation_public_transform(work,certificate,function,&projected,
-            &result->witnesses[(size_t)domain*result->count+function],&symbolic);
-        if (status!=XR_XIR_OK) return status;
-    }
-    return XR_XIR_OK;
-}
 
 /* A source refinement owns its pre-bottom records in the verified descriptor
  * prefix. INSTANCE originals instead come from the full owned source proof. */
-static inline XrXirStatus effect_invocation_publication_bounds(const XrXirCompileContext *work,
-    const XrXirModule *module,const XrXirEffects *effects,EffectInvocationDeclaredBounds **output) {
-    if (module->provenance && xir_effect_kind_is_closed(module->provenance->kind))
-        return effect_invocation_instance_bounds(work,module,output);
-    EffectRefinementBounds *refinement=effects->refinement;
-    XrXirStatus status=refinement?effect_refinement_match(work,module,refinement):XR_XIR_OK;
-    EffectInvocationDeclaredBounds *bounds=NULL;
-    if (status==XR_XIR_OK) status=effect_invocation_bounds_new(work,&bounds);
-    for (uint32_t f=0;f<module->function_count && status==XR_XIR_OK;++f) {
-        XrXirFunction original=module->functions[f];const XrXirType *instructions=NULL;
-        XrXirType *source_types=NULL;
-        if (refinement) {
-            original.parameters=refinement->functions[f].parameters;
-            instructions=refinement->functions[f].instructions;
-        }
-        status=effect_invocation_source_declarations(work,module,f,refinement?&refinement->functions[f]:NULL,&source_types);
-        if (source_types) instructions=source_types;
-        if (status==XR_XIR_OK)
-            status=effect_invocation_bounds_capture(work,bounds,module->types,&original,f,instructions);
-        xr_compile_resources_free(source_types);
-    }
-    if (status!=XR_XIR_OK) { effect_invocation_bounds_free(bounds);return status; }
-    *output=bounds;return XR_XIR_OK;
-}
 
 /* The receiving packet has no permission mirror. Compare every final field
  * to an independent current-material replay after all projection callbacks,
  * before any public contract or witness changes. Atom indices only locate. */
-static XrXirStatus effect_invocation_publication_match(const XrXirCompileContext *work,
-    const EffectInvocationCertificate *certificate,const EffectFinalFunctions *result) {
-    if (!xir_compile_context_valid(work) || !certificate || !result ||
-        !result->witnesses)
-        return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_invocation_certificate_result_match(work,certificate,result);
-    for (uint32_t f=0;f<result->count && status==XR_XIR_OK;++f) {
-        uint32_t selected[4];
-        status=effect_invocation_projection_domains(work,certificate,f,0,4,selected);
-        if (status!=XR_XIR_OK) break;
-
-        for (uint32_t domain=0;domain<4 && status==XR_XIR_OK;++domain) {
-            size_t at=(size_t)domain*result->count+f;
-
-            XrXirRootEffectWitness witness,expected;bool symbolic=false;
-            status=effect_invocation_selected_witness(work,certificate,f,selected[domain],&witness);
-            if (status!=XR_XIR_OK) break;
-
-            const EffectInvocationProjectedCause cause={selected[domain],&witness};
-            status=effect_invocation_public_transform(work,certificate,f,&cause,&expected,&symbolic);
-            if (status!=XR_XIR_OK) break;
-
-            if (!effect_invocation_witness_equal(&expected,&result->witnesses[at])) status=XR_XIR_BAD_STRUCTURE;
-        }
-    }
-    return status;
-}
 
 /* Precharge every final assignment before changing a receiving field.
  * Canonical vectors and the immutable four-domain witness inventory belong
  * solely to the new certificate. Mutable context projections stay separate. */
 
-
 /* This is the sole production ROOT derivation. It neither runs the retired
  * formula solver nor grants Program permission from a temporary empty mask. */
-
-
-
 
 #include "xxir_effect_invocation_forest.inc.c"
 
 /* The last expansion still visits every actual body and edge. A stable
  * round may retain only this operation's already sealed summary, after exact
  * correspondence with its independently owned input copy has been checked. */
-static XrXirStatus effect_context_dense_bytes(
-    const void *left,const void *right,uint64_t count,size_t size) {
-    if (!size || count>SIZE_MAX/size || count*size==UINT64_MAX || (count && (!left || !right)))
-        return XR_XIR_BAD_STRUCTURE;
-
-    return !count || !memcmp(left,right,(size_t)count*size)?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
-}
-
-static XrXirStatus effect_context_dense_body_match(const XrXirCompileContext *context,
-    const EffectContextOwner *owner,uint32_t index,const EffectInvocationCertificate *certificate) {
-    const EffectOrdinaryContexts *dense=owner->dense;
-    const XrXirFunction *actual=&dense->functions[index];
-    const EffectBodyFunction *sealed=&certificate->body->functions[index];
-    const EffectOrdinaryNode *node=&dense->nodes[index];const XrXirOrigin *origin=&certificate->origins[index];
-
-    if (actual->name_length!=sealed->name_length || actual->parameter_count!=sealed->parameter_count ||
-        actual->consume_parameter_count!=sealed->consume_parameter_count ||
-        actual->consume_parameter_count>actual->parameter_count ||
-        (actual->consume_parameter_count==0)!=(actual->consume_parameters==NULL) ||
-        (sealed->consume_parameter_count==0)!=(sealed->consume_parameters==NULL) ||
-        actual->result!=sealed->result || actual->instruction_count!=sealed->instruction_count ||
-        actual->operand_count!=sealed->operand_count || actual->block_count!=sealed->block_count ||
-        node->declaration!=origin->function || node->argument_count!=origin->argument_count ||
-        node->owner!=certificate->owners[index]) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_context_dense_bytes(actual->name,sealed->name,actual->name_length,1);
-    if (status==XR_XIR_OK) status=effect_context_dense_bytes(actual->parameters,sealed->parameters,
-        actual->parameter_count,sizeof(*actual->parameters));
-    if(status==XR_XIR_OK)status=effect_context_dense_bytes(actual->consume_parameters,sealed->consume_parameters,
-        actual->consume_parameter_count,sizeof(*actual->consume_parameters));
-    if (status==XR_XIR_OK) status=effect_context_dense_bytes(node->physical_types,sealed->parameters,
-        actual->parameter_count,sizeof(*actual->parameters));
-    if (status==XR_XIR_OK) {
-        EffectBodyRead read=(EffectBodyRead){.owner=context};
-        status=effect_body_records_match(&read,sealed,actual);
-    }
-    if (status==XR_XIR_OK) status=effect_context_dense_bytes(actual->operands,sealed->operands,
-        actual->operand_count,sizeof(*actual->operands));
-    if (status==XR_XIR_OK) status=effect_context_dense_bytes(actual->blocks,sealed->blocks,
-        actual->block_count,sizeof(*actual->blocks));
-    if (status==XR_XIR_OK) status=effect_context_dense_bytes(node->arguments,origin->arguments,
-        node->argument_count,sizeof(*node->arguments));
-    const EffectInvocationFunctionBounds *bounds=&owner->declared->functions[index];
-    const EffectInvocationFunctionBounds *copied=&certificate->declared->functions[index];
-    uint64_t values=(uint64_t)actual->parameter_count+actual->instruction_count;
-    if (status==XR_XIR_OK && (values!=bounds->values || values!=copied->values ||
-        bounds->count!=copied->count || bounds->count>values ||
-        (!!bounds->bounds!=!!bounds->count) || (!!copied->bounds!=!!copied->count))) status=XR_XIR_BAD_STRUCTURE;
-    for (uint32_t v=0;v<bounds->count && status==XR_XIR_OK;++v) {
-
-        if (bounds->bounds[v].value!=copied->bounds[v].value ||
-            bounds->bounds[v].mask!=copied->bounds[v].mask ||
-            bounds->bounds[v].callable!=copied->bounds[v].callable) status=XR_XIR_BAD_STRUCTURE;
-    }
-    return status;
-}
-
-static XrXirStatus effect_context_dense_stable_read(const XrXirCompileContext *context,
-    const EffectContextOwner *owner,const XrXirModule *source,
-    const EffectInvocationCertificate *certificate,EffectTerms *ordinary_terms,EffectTerms *dense_terms) {
-    if (!xir_compile_context_valid(context) || !owner || !source || !owner->dense || !owner->ordinary)
-        return XR_XIR_BAD_STRUCTURE;
-    XrXirModule projected=*source;
-    if(certificate&&effect_body_material_shape(certificate->body)&&
-        certificate->body->stage==XR_XIR_BUILT&&source->stage==XR_XIR_CHECKED&&
-        source->provenance&&source->provenance->kind==XR_XIR_EVIDENCE_TEMPLATE) {
-        /* The Checked copy preserves every declaration and body row. */
-        projected.stage=XR_XIR_BUILT;source=&projected;
-    }
-    const EffectOrdinaryContexts *dense=owner->dense,*ordinary=owner->ordinary;
-    if (!xir_compile_context_valid(context) || !dense->dense ||
-        !ordinary || ordinary->dense || ordinary->base_count!=source->function_count ||
-        dense->base_count!=source->function_count || ordinary->resources!=context->resources ||
-        dense->resources!=context->resources ||
-        !certificate || !effect_body_material_shape(certificate->body) ||
-        certificate->body->resources!=certificate->resources || certificate->resources!=context->resources || !certificate->final ||
-        !certificate->final || certificate->final->summary.count!=dense->count ||
-        certificate->final->summary.resources!=context->resources ||
-        !certificate->final->summary.functions ||
-        !certificate->final->summary.witnesses ||
-        effect_body_count(certificate->body)!=dense->count || !certificate->body->functions ||
-        certificate->body->stage!=source->stage || certificate->body->linkage_kind!=source->linkage_kind ||
-        certificate->body->domain.types!=&certificate->body->terms.types || !certificate->origins || !certificate->owners ||
-        !source->declarations || !certificate->declarations ||
-        certificate->declarations->root_module!=source->declarations->root_module ||
-        certificate->declarations->entry_function!=source->declarations->entry_function ||
-        certificate->declarations->module_count!=source->declarations->module_count ||
-        certificate->declarations->slot_count!=source->declarations->slot_count ||
-        certificate->declarations->literal_count!=source->declarations->literal_count ||
-        !owner->declared || owner->declared->resources!=context->resources || owner->declared->count!=dense->count ||
-        !certificate->declared || certificate->declared->resources!=context->resources ||
-        certificate->declared->count!=dense->count) return XR_XIR_BAD_STRUCTURE;
-    if (!ordinary_terms || !dense_terms || ordinary_terms->remaining!=context ||
-        dense_terms->remaining!=context) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=owner->refinement?effect_refinement_match(context,source,owner->refinement):XR_XIR_OK;
-    if (status==XR_XIR_OK)
-        status=effect_terms_snapshot_match(ordinary_terms,source->types,ordinary->source_type_count);
-    if (status==XR_XIR_OK) status=effect_ordinary_bodies_match(ordinary,source,ordinary_terms);
-    if (status==XR_XIR_OK)
-        status=effect_terms_snapshot_match(dense_terms,&certificate->terms.types,dense->terms.types.count);
-    for (uint32_t f=0;f<dense->count && status==XR_XIR_OK;++f)
-        status=effect_context_dense_body_match(context,owner,f,certificate);
-    return status;
-}
 
 /* Mutable construction retains its own scratch capacity. Published queries
  * supply separate request-owned Terms to the exact same correspondence core. */

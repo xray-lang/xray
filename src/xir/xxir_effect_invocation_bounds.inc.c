@@ -88,49 +88,6 @@ static const EffectInvocationValueBound *effect_invocation_bound_find(
  * after its real physical vector is assigned and before FUNCTION_REF bottom.
  * Instruction types may come from the same owner's fully substituted
  * pre-bottom Source copy. No supplied permission mask table is accepted. */
-static XrXirStatus effect_invocation_bounds_capture(const XrXirCompileContext *work,
-    EffectInvocationDeclaredBounds *bounds,const XrXirTypes *types,
-    const XrXirFunction *function,uint32_t index,const XrXirType *declared_instructions) {
-    if (!xir_compile_context_valid(work) || !bounds || bounds->resources!=work->resources ||
-        !function || index!=bounds->count ||
-        (function->parameter_count && !function->parameters) ||
-        (function->instruction_count && !function->instructions)) return XR_XIR_BAD_STRUCTURE;
-    uint64_t values=(uint64_t)function->parameter_count+function->instruction_count;
-    if (values>UINT32_MAX || values>SIZE_MAX/sizeof(EffectInvocationValueBound)) return XR_XIR_BUDGET;
-    if (index==UINT32_MAX) return XR_XIR_BUDGET;
-    XrXirStatus status=effect_invocation_bounds_capacity(work,bounds,index+1);
-    if (status!=XR_XIR_OK) return status;
-    uint32_t count=0;
-    for (uint32_t v=0;v<(uint32_t)values;++v) {
-
-        if (xr_xir_callable_signature(types,xr_xir_operand_type(function,v))) ++count;
-    }
-    EffectInvocationValueBound *records=count ? xir_compile_alloc(work,
-        (size_t)count*sizeof(*records),&status) : NULL;
-    if (count && !records) return status;
-    uint32_t at=0;
-    for (uint32_t v=0;v<(uint32_t)values;++v) {
-
-        XrXirType type=v>=function->parameter_count && declared_instructions ?
-            declared_instructions[v-function->parameter_count] : xr_xir_operand_type(function,v);
-        bool actual_callable=xr_xir_callable_signature(types,xr_xir_operand_type(function,v))!=NULL;
-        const XrXirTypeNode *signature=xr_xir_callable_signature(types,type);
-        if (!!signature!=actual_callable || (signature && !xr_xir_callable_flags_valid(signature->flags))) {
-            status=XR_XIR_BAD_TYPE;break;
-        }
-        if (signature) {
-            if (at>=count) { status=XR_XIR_BAD_STRUCTURE;break; }
-
-            records[at++]=(EffectInvocationValueBound){.mask=signature->flags&
-                (XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED),.callable=true,.value=v};
-        }
-    }
-    if (status==XR_XIR_OK && at!=count) status=XR_XIR_BAD_STRUCTURE;
-
-    if (status!=XR_XIR_OK) { xr_compile_resources_free(records);return status; }
-    bounds->functions[index]=(EffectInvocationFunctionBounds){(uint32_t)values,count,records};
-    ++bounds->count;return XR_XIR_OK;
-}
 
 /* Ledger equality is an ownership check. Admission comes from the verified
  * construction hook and the final full source/body/domain correspondence. */

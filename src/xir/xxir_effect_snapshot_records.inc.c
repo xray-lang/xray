@@ -66,46 +66,6 @@ static XrXirStatus effect_body_runs_reserve(const XrXirCompileContext *work,
     function->run_capacity=capacity;return XR_XIR_OK;
 }
 
-static inline XrXirStatus effect_body_run_append(const XrXirCompileContext *work,
-    EffectBodyFunction *function,const EffectBodyRun *run) {
-    if (!function || !run || function->run_count>function->run_capacity ||
-        function->run_capacity>function->instruction_count ||
-        (function->run_capacity && !function->runs)) return XR_XIR_BAD_STRUCTURE;
-
-    /* A borrowed record must not survive reserve reallocation as its input.
-     * This is a memory-alias boundary, never a permission or identity proof. */
-    uintptr_t address=(uintptr_t)run,begin=(uintptr_t)function->runs;
-    if (function->runs && address>=begin &&
-        (address-begin)/sizeof(*run)<function->run_capacity) return XR_XIR_BAD_STRUCTURE;
-    if (!run->count || run->first>=function->instruction_count ||
-        run->count>function->instruction_count-run->first || run->mask&~EFFECT_BODY_MASK)
-        return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t w=0;w<EFFECT_BODY_WORDS;++w) {
-
-        if (!(run->mask&(UINT32_C(1)<<w))) continue;
-
-        if (run->count==1 || !run->delta[w]) return XR_XIR_BAD_STRUCTURE;
-    }
-    XrXirStatus status=effect_body_runs_reserve(work,function);
-    if (status!=XR_XIR_OK) return status;
-    EffectBodyRun *target=&function->runs[function->run_count];
-
-    target->first=run->first;target->count=run->count;target->mask=run->mask;
-    target->base=run->base;
-    for (uint32_t w=0;w<EFFECT_BODY_WORDS;++w) {
-
-        if (!(run->mask&(UINT32_C(1)<<w))) continue;
-
-        target->delta[w]=run->delta[w];
-    }
-    ++function->run_count;
-    if (run->first+run->count==function->instruction_count) {
-
-        function->run_capacity=function->run_count;
-    }
-    return XR_XIR_OK;
-}
-
 static XrXirStatus effect_body_run_seed(
     EffectBodyRun *run,const XrXirInstruction *source,uint32_t first) {
 
@@ -261,10 +221,6 @@ static XrXirStatus effect_body_records_write(const XrXirCompileContext *work,
 }
 
 /* Literal codec construction does not publish a semantic generation. */
-static inline XrXirStatus effect_body_records_copy(const XrXirCompileContext *work,
-    const XrXirFunction *source,EffectBodyFunction *target) {
-    return effect_body_records_write(work,source,target,NULL);
-}
 
 /* Keep selected reads and callbacks in field order. Charge the whole group
  * only after every check succeeds so failures leave units unchanged. */
@@ -449,7 +405,6 @@ typedef struct EffectBodyRecordCursor {
     uint32_t first,run,last;
 } EffectBodyRecordCursor;
 
-
 /* One complete walk visits every canonical run and its adjacent boundary.
  * Numeric positions are stack-local; the reference is consumed immediately
  * by the existing word decoder. This is a storage projection, not admission. */
@@ -603,29 +558,6 @@ static XrXirStatus effect_body_instruction_ref_value(const EffectBodyRead *read,
 /* The first or constant canonical row is complete immutable storage. Borrowing
  * it avoids a decoder copy; no row, domain or semantic permission is cached.
  * Other varying rows keep the full decoder and caller-owned scratch lifetime. */
-static XrXirStatus effect_body_instruction_ref_borrow(const EffectBodyRead *read,
-    const EffectBodyRun *ref,uint32_t instruction,XrXirInstruction *storage,const XrXirInstruction **output) {
-    if (!read || !storage || !output || !ref || (ref->mask&~EFFECT_BODY_MASK) ||
-        (ref->count==1 && ref->mask) || instruction<ref->first || instruction-ref->first>=ref->count)
-        return XR_XIR_BAD_STRUCTURE;
-    if (!ref->mask || instruction==ref->first) {
-        if (!((read) && ((read)->execution ? effect_body_execution_work((read)->execution, 6+sizeof(*output)) : xir_compile_context_valid((read)->owner)))) return XR_XIR_BUDGET;
-        if (ref->base.op<=XR_XIR_INVALID || ref->base.op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
-        *output=&ref->base;return XR_XIR_OK;
-    }
-    XrXirStatus status=effect_body_instruction_ref_value(read,ref,instruction,storage);
-    if (status!=XR_XIR_OK) return status;
-    if (!((read) && ((read)->execution ? effect_body_execution_work((read)->execution, sizeof(*output)) : xir_compile_context_valid((read)->owner)))) return XR_XIR_BUDGET;
-    *output=storage;return XR_XIR_OK;
-}
-
-static inline XrXirStatus effect_body_instruction_words_publish(const EffectBodyRead *read,
-    const uint32_t *words,XrXirInstruction *output) {
-    if (!words || !output) return XR_XIR_BAD_STRUCTURE;
-    if (!((read) && ((read)->execution ? effect_body_execution_work((read)->execution, sizeof(uint32_t)+2*EFFECT_BODY_WORDS+sizeof(*output)+2) : xir_compile_context_valid((read)->owner))))
-        return XR_XIR_BUDGET;
-    *output=effect_body_instruction_words_value(NULL,words,0,NULL,0);return XR_XIR_OK;
-}
 
 static XrXirStatus effect_body_instruction_get(const EffectBodyRead *read,
     const EffectBodyFunction *function,uint32_t instruction,XrXirInstruction *output) {
@@ -644,35 +576,6 @@ static XrXirStatus effect_body_instruction_fields_get(const EffectBodyRead *read
     if (!((read) && ((read)->execution ? effect_body_execution_work((read)->execution, sizeof(*output)+2) : xir_compile_context_valid((read)->owner)))) return XR_XIR_BUDGET;
     *output=(EffectBodyInstructionFields){(XrXirOp)words[0],(XrXirType)words[1],words[2]};
     return XR_XIR_OK;
-}
-
-static XrXirStatus effect_body_instruction_cursor_words(const EffectBodyRead *read,
-    const EffectBodyFunction *function,uint32_t instruction,EffectBodyRecordCursor *cursor,uint32_t *words) {
-    if (!words) return XR_XIR_BAD_STRUCTURE;
-    const EffectBodyRun *ref;
-    XrXirStatus status=effect_body_record_cursor_ref(read,function,instruction,cursor,&ref);
-    return status==XR_XIR_OK?effect_body_instruction_ref_words(read,ref,instruction,words):status;
-}
-
-static inline XrXirStatus effect_body_instruction_cursor_fields(const EffectBodyRead *read,
-    const EffectBodyFunction *function,uint32_t instruction,EffectBodyRecordCursor *cursor,
-    EffectBodyInstructionFields *output) {
-    if (!output) return XR_XIR_BAD_STRUCTURE;
-    uint32_t words[EFFECT_BODY_WORDS];
-    XrXirStatus status=effect_body_instruction_cursor_words(read,function,instruction,cursor,words);
-    if (status!=XR_XIR_OK) return status;
-    if (!((read) && ((read)->execution ? effect_body_execution_work((read)->execution, sizeof(*output)+2) : xir_compile_context_valid((read)->owner)))) return XR_XIR_BUDGET;
-    *output=(EffectBodyInstructionFields){(XrXirOp)words[0],(XrXirType)words[1],words[2]};
-    return XR_XIR_OK;
-}
-
-static inline XrXirStatus effect_body_instruction_cursor_get(const EffectBodyRead *read,
-    const EffectBodyFunction *function,uint32_t instruction,EffectBodyRecordCursor *cursor,
-    XrXirInstruction *output) {
-    if (!output) return XR_XIR_BAD_STRUCTURE;
-    const EffectBodyRun *ref;
-    XrXirStatus status=effect_body_record_cursor_ref(read,function,instruction,cursor,&ref);
-    return status==XR_XIR_OK?effect_body_instruction_ref_value(read,ref,instruction,output):status;
 }
 
 static XrXirStatus effect_body_operand_type(const EffectBodyRead *read,
@@ -804,9 +707,4 @@ static XrXirStatus effect_body_records_compare(const EffectBodyRead *read,
         first+=ref->count;
     }
     return first==function->instruction_count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
-}
-
-static XrXirStatus effect_body_records_match(const EffectBodyRead *read,
-    const EffectBodyFunction *function,const XrXirFunction *source) {
-    return effect_body_records_compare(read,function,source,NULL);
 }

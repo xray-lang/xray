@@ -49,27 +49,7 @@ static XrXirStatus effect_class_method_candidates(const XrXirCompileContext *wor
     return xir_compile_class_method_candidates_read(&input,receiver,(uint32_t)op.immediate,visit,owner,NULL);
 }
 typedef struct EffectClassMethodTargetMatch { uint32_t target,count;XrXirType receiver; } EffectClassMethodTargetMatch;
-static XrXirStatus effect_class_method_target_match(void *owner,const XirClassMethodTarget *target) {
-    EffectClassMethodTargetMatch *match=owner;
-    if(target->function==match->target) {
-        if(match->count++)return XR_XIR_BAD_STRUCTURE;
-        match->receiver=target->receiver_type;
-    }
-    return XR_XIR_OK;
-}
-static XrXirStatus effect_class_method_target(const XrXirCompileContext *work,const EffectBodyMaterial *material,
-    uint32_t function,uint32_t instruction,uint32_t target,XirClassMethodTarget *output) {
-    EffectClassMethodTargetMatch match={target,0,XR_XIR_UNIT};
-    XrXirStatus status=effect_class_method_candidates(work,material,function,instruction,effect_class_method_target_match,&match);
-    if(status==XR_XIR_OK && match.count!=1)status=XR_XIR_BAD_STRUCTURE;
-    if(status==XR_XIR_OK)*output=(XirClassMethodTarget){target,match.receiver};
-    return status;
-}
 
 static uint32_t effect_reference_captures(const XrXirInstruction *op) {
     return op->op==XR_XIR_CLASS_METHOD_REF?1:op->args[1];
-}
-static uint32_t effect_reference_value(const uint32_t *operands,
-    const XrXirInstruction *op,uint32_t parameter) {
-    return op->op==XR_XIR_CLASS_METHOD_REF?op->args[0]:operands[op->args[0]+parameter];
 }

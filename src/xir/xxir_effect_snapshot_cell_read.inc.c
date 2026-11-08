@@ -306,13 +306,7 @@ static inline XrXirStatus effect_cell_body_request(const XrXirCompileContext *wo
 }
 /* The raw constructor preserves the verified-caller precondition. It does
  * not replace full shape, type, SSA, initialization or external matching. */
-static inline XrXirStatus effect_cell_body_raw(const XrXirCompileContext *work,
-    const XrXirModule *module,EffectCellBodyAdapter *adapter,XrXirCellProofBodyRead *output) {
-    if (!xir_compile_context_valid(work) || !module ||
-        (module->function_count && !module->functions)) return XR_XIR_BAD_STRUCTURE;
-    EffectBodyRequest request=effect_body_raw_request(work,module);
-    return effect_cell_body_request(work,&request,adapter,output);
-}
+
 static inline XrXirStatus effect_cell_body_owned(const XrXirCompileContext *work,
     const EffectBodyMaterial *body,EffectCellBodyAdapter *adapter,XrXirCellProofBodyRead *output) {
     if (!xir_compile_context_valid(work) || !effect_body_material_shape(body) ||

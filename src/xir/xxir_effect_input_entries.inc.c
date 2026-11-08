@@ -28,34 +28,9 @@ XR_FUNC XrXirStatus xir_effects_program_body_match_input(const XrXirCompileConte
     return status;
 }
 
-XR_FUNC XrXirStatus xir_effects_program_final_verify_input(const XrXirCompileContext *context, XirEffectInput input, const XrXirEffects *effects) {
-    if (!xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_program_projection_storage(context,input.module);
-    if(status==XR_XIR_OK) status=effect_input_facts_match(context,input,effects?effects->input_facts:NULL);
-    if(status==XR_XIR_OK) status=effect_program_input_final(context, input.module, effects);
-    if(status==XR_XIR_OK) status=effect_input_facts_match(context,input,effects->input_facts);
-    return status;
-}
-
 XR_FUNC XrXirStatus xir_effects_source_terminal_input(const XrXirCompileContext *context, XirEffectInput input, const XrXirEffects *effects) {
     XrXirStatus status=effect_input_facts_match(context,input,effects?effects->input_facts:NULL);
     if(status==XR_XIR_OK) status=effect_source_input_terminal(context, input.module, effects);
-    if(status==XR_XIR_OK) status=effect_input_facts_match(context,input,effects->input_facts);
-    return status;
-}
-
-XR_FUNC XrXirStatus xir_effects_program_root_current_input(const XrXirCompileContext *context, XirEffectInput input, const XrXirEffects *effects) {
-    if (!xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_program_projection_storage(context,input.module);
-    if(status==XR_XIR_OK) status=effect_input_facts_match(context,input,effects?effects->input_facts:NULL);
-    if(status==XR_XIR_OK) status=effect_program_input_root(context, input.module, effects);
-    if(status==XR_XIR_OK) status=effect_input_facts_match(context,input,effects->input_facts);
-    return status;
-}
-
-XR_FUNC XrXirStatus xir_effects_refinement_capture_input(const XrXirCompileContext *context, XirEffectInput input, const struct XrXirEffects *effects) {
-    XrXirStatus status=effect_input_facts_match(context,input,effects?effects->input_facts:NULL);
-    if(status==XR_XIR_OK) status=effect_refinement_capture_current(context, input.module, effects);
     if(status==XR_XIR_OK) status=effect_input_facts_match(context,input,effects->input_facts);
     return status;
 }
@@ -87,20 +62,6 @@ XR_FUNC XrXirStatus xir_effects_context_select_input(const XrXirCompileContext *
     if(status==XR_XIR_OK)status=effect_input_facts_match(context,current,effects->input_facts);
     if(status==XR_XIR_OK)*output=candidate;
     return status;
-}
-XR_FUNC XrXirStatus xir_effects_context_select_owned_input(const XrXirCompileContext *context,
-    const XrXirEffects *effects,const XirEffectContextInput *input,XirEffectContextView *output) {
-    if(XR_XIR_PARANOID)return xir_effects_context_select_input(context,effects,input,output);
-    if(!output)return XR_XIR_BAD_STRUCTURE;
-    XirEffectContextView candidate={0};
-    XrXirStatus status=effect_context_read_select(context,effects,input,&candidate,false);
-    if(status==XR_XIR_OK)*output=candidate;
-    return status;
-}
-XR_FUNC XrXirStatus xir_effects_context_select_scoped_input(XirEffectContextScope *scope,
-    const XirEffectContextInput *input,XirEffectContextView *output) {
-    if(!scope)return XR_XIR_BAD_STRUCTURE;
-    return effect_context_read_scoped(scope,input,output);
 }
 
 XR_FUNC XrXirStatus xir_effects_raw_source_terminal_input(const XrXirCompileContext *context,

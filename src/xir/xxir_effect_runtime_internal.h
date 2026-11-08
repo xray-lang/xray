@@ -17,9 +17,7 @@
 
 /* Empty outputs only. The caller retains Effects and charges actual frame
  * admission on its runtime ledger; these views grant no execution permission. */
-XR_FUNC XrXirStatus xir_effects_runtime_cell_role(const struct XrXirEffects *effects,
-    uint32_t function,uint32_t parameter,XrXirCellProofRole *output);
+
 /* Parameter storage borrows the same Final until the retained owner dies. */
-XR_FUNC XrXirStatus xir_effects_runtime_entry_root(const struct XrXirEffects *effects,
-    uint32_t function,XirEffectEntryRootView *output);
+
 #endif // XXIR_EFFECT_RUNTIME_INTERNAL_H

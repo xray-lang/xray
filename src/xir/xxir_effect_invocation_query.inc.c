@@ -162,24 +162,6 @@ static XrXirStatus effect_invocation_edge_read_selected(const XrXirCompileContex
     return XR_XIR_OK;
 }
 
-static XrXirStatus effect_invocation_edge_shape_read(const XrXirCompileContext *work,
-    const EffectInvocationFinal *equations,const EffectBodyRequest *body,
-    const XrXirTypes *types,uint32_t caller,uint32_t edge_index) {
-    if (!body || !equations || caller>=equations->count || edge_index>=equations->edge_count ||
-        equations->edges[edge_index].target>=equations->count) return XR_XIR_BAD_STRUCTURE;
-
-    const EffectInvocationEdgeRead request={caller,edge_index,NULL};
-    return effect_invocation_edge_read_selected(work,equations,body,types,&request,NULL);
-}
-
-static inline XrXirStatus effect_invocation_edge_shape(const XrXirCompileContext *work,
-    const EffectInvocationFinal *equations,const XrXirModule *module,
-    const XrXirTypes *types,uint32_t caller,uint32_t edge_index) {
-    if (!module) return XR_XIR_BAD_STRUCTURE;
-    EffectBodyRequest body=effect_body_raw_request(work,module);
-    return effect_invocation_edge_shape_read(work,equations,&body,types,caller,edge_index);
-}
-
 static XrXirStatus effect_invocation_certificate_edge_selected(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate,uint32_t caller,uint32_t edge_index,XrXirOp *opcode) {
     if (!certificate || !effect_body_material_shape(certificate->body) ||
@@ -422,28 +404,6 @@ static inline XrXirStatus effect_invocation_certificate_edge_mask(const XrXirCom
     if (!found) mask|=XR_XIR_CALLABLE_ROOT_UNRESOLVED;
 
     *output=mask;return XR_XIR_OK;
-}
-
-XR_FUNC XrXirStatus xir_effects_class_value(const XrXirCompileContext *context,
-    const XrXirEffects *effects,uint32_t selected,uint32_t function,
-    uint32_t value,uint32_t *output) {
-    if (!xir_compile_context_valid(context) || !effects || !effects->invocations ||
-        effects->resources!=context->resources || !output || *output) return XR_XIR_BAD_STRUCTURE;
-    const EffectInvocationCertificate *certificate=effects->invocations;
-    const EffectInvocationFinal *owner=certificate->final;
-    if (!effect_body_material_shape(certificate->body) ||
-        certificate->body->resources!=certificate->resources || !owner ||
-        certificate->resources!=context->resources || function>=effect_body_count(certificate->body) ||
-        selected>=owner->count || !owner->nodes) return XR_XIR_BAD_STRUCTURE;
-    const EffectInvocationNode *node=&owner->nodes[selected];
-    const EffectBodyFunction *body=&certificate->body->functions[function];
-    if (node->body!=function ||
-        value>=(uint64_t)body->parameter_count+body->instruction_count) return XR_XIR_BAD_STRUCTURE;
-    EffectBodyRead read=(EffectBodyRead){.owner=context};XrXirType type;
-    XrXirStatus status=effect_body_operand_type(&read,body,value,&type);
-    if (status!=XR_XIR_OK) return status;
-    if (!xr_xir_type_is_class(certificate->body->domain.types,type)) return XR_XIR_BAD_STRUCTURE;
-    return effect_final_class_mask(context,owner,selected,value,output);
 }
 
 typedef struct EffectClassReferenceMask {

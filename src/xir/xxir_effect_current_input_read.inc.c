@@ -12,33 +12,6 @@
  *   Subsequent random projections read current words without reopening the
  *   complete directory. The stack view never crosses an allocator callback.
  */
-static XrXirStatus effect_body_current_open(const XrXirCompileContext *work,
-    const EffectBodyMaterial *material,EffectBodyCurrentRead *output) {
-    if(!output || output->work || output->material) return XR_XIR_BAD_STRUCTURE;
-    EffectBodyFrame check={.work=work,.material=material};
-    XrXirStatus status=effect_role_frame(&check);if(status!=XR_XIR_OK) return status;
-    EffectBodyRead read=(EffectBodyRead){.owner=work};
-    for(uint32_t f=0;f<check.functions;++f) {
-        const EffectBodyFunction *head=&material->functions[f];
-        if(!!head->runs!=!!head->run_capacity || !!head->run_count!=!!head->instruction_count ||
-            head->run_capacity>head->instruction_count) return XR_XIR_BAD_STRUCTURE;
-        EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
-        for(uint32_t r=0;r<head->run_count;++r) {
-            const EffectBodyRun *ref=NULL;status=effect_body_range_ref(&read,head,&cursor,&ref);
-            if(status!=XR_XIR_OK) return status;
-            uint32_t count=(ref->mask&UINT32_C(1))?ref->count:1;
-            for(uint32_t i=0;i<count;++i) {
-                uint32_t opcode=XR_XIR_INVALID;
-                status=effect_body_run_word(&read,ref,ref->first+i,0,&opcode);
-                if(status!=XR_XIR_OK) return status;
-                if(opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
-            }
-        }
-        if(cursor.first!=head->instruction_count || cursor.run!=head->run_count) return XR_XIR_BAD_STRUCTURE;
-    }
-
-    *output=(EffectBodyCurrentRead){work,material};return XR_XIR_OK;
-}
 
 /* The caller supplies only a live stack view produced in this same request.
  * Compile work has no external callback, and all consuming clauses are read-only.

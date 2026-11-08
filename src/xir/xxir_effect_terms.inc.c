@@ -105,11 +105,6 @@ static void effect_terms_scratch_free(EffectTerms *pool) {
     if (pool->stack_claimed) pool->stack_claimed=false;
 }
 
-static inline bool effect_terms_scratch_retired(const EffectTerms *pool) {
-    return pool && !pool->remaining && !pool->stack && !pool->cache &&
-        !pool->stack_capacity && !pool->stack_claimed && !pool->match.memory && !pool->match.resources;
-}
-
 /* Backbone holders borrow the original arena and its constructor pointers.
  * They drop those pointer views; only the actual root frees the allocations. */
 static inline XrXirStatus effect_terms_retire(const XrXirCompileContext *work,EffectTerms *pool,bool owns_scratch) {
@@ -339,4 +334,9 @@ static XrXirStatus effect_terms_substitute(EffectTerms *pool,XrXirType type,
     /* Every published cache entry prepays its cleanup, including failure. */
     for (uint32_t n=0;n<pool->cache_count;++n) cache[stack[size-1-n].index]=XR_XIR_UNIT;
     pool->cache_count=0;pool->stack_claimed=false;return pool->status;
+}
+
+static inline bool effect_terms_scratch_retired(const EffectTerms *pool) {
+    return pool && !pool->remaining && !pool->stack && !pool->cache &&
+        !pool->stack_capacity && !pool->stack_claimed && !pool->match.memory && !pool->match.resources;
 }

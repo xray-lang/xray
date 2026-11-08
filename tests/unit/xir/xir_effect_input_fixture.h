@@ -34,22 +34,13 @@ static inline XrXirStatus xir_fixture_effects_program_body(const XrXirCompileCon
     XirFixtureEffectInput input,const XrXirEffects *effects) {
     return xir_effects_program_body_match_input(context,(XirEffectInput){input.module,input.construction,NULL},effects);
 }
-static inline XrXirStatus xir_fixture_effects_program_final(const XrXirCompileContext *context,
-    XirFixtureEffectInput input,const XrXirEffects *effects) {
-    return xir_effects_program_final_verify_input(context,(XirEffectInput){input.module,input.construction,NULL},effects);
-}
-static inline XrXirStatus xir_fixture_effects_program_root(const XrXirCompileContext *context,
-    XirFixtureEffectInput input,const XrXirEffects *effects) {
-    return xir_effects_program_root_current_input(context,(XirEffectInput){input.module,input.construction,NULL},effects);
-}
+
+
 static inline XrXirStatus xir_fixture_effects_refine(const XrXirCompileContext *context,
     XirFixtureEffectInput input,const XrXirRootRefiner *refiner,XrXirEffects **output) {
     return xr_xir_compile_effects_refine_verified_input(context,(XirEffectInput){input.module,input.construction,NULL},refiner,output);
 }
-static inline XrXirStatus xir_fixture_effects_capture(const XrXirCompileContext *context,
-    XirFixtureEffectInput input,const XrXirEffects *effects) {
-    return xir_effects_refinement_capture_input(context,(XirEffectInput){input.module,input.construction,NULL},effects);
-}
+
 static inline XrXirStatus xir_fixture_effects_terminal(const XrXirCompileContext *context,
     XirFixtureEffectInput input,const XrXirEffects *effects) {
     return xir_effects_source_terminal_input(context,(XirEffectInput){input.module,input.construction,NULL},effects);

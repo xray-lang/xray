@@ -53,13 +53,6 @@ static void effect_context_forest_free(EffectContextForest *forest) {
     xr_compile_resources_free(forest);
 }
 
-
-
-
-
-
-static XrXirStatus effect_invocation_forest_admit(const XrXirCompileContext *work,
-    const EffectContextForest *forest,const EffectInvocationCertificate *certificate);
 static XrXirStatus effect_invocation_context_edge_mask(const XrXirCompileContext *work,
     const EffectContextForest *forest,uint32_t caller,uint32_t instruction,uint32_t target,uint32_t *output);
 

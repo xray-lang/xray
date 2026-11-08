@@ -55,14 +55,6 @@ XR_FUNC XrXirStatus xir_effects_program_body_match_input(const XrXirCompileConte
  * current same-ledger payload bounds precede canonical metadata traversal.
  * Bounds grant no effect proof. Callers must compare every current field
  * before publishing a Program. */
-XR_FUNC XrXirStatus xir_effects_program_metadata(const XrXirCompileContext *context,
-    const XrXirEffects *effects, const XrXirTypes **types, const XrXirDeclarations **declarations);
-XR_FUNC XrXirStatus xir_effects_program_signature_match(const XrXirCompileContext *context,
-    const XrXirEffects *effects, uint32_t function, const XrXirType *parameters,
-    uint32_t parameter_count, XrXirType result);
-XR_FUNC XrXirStatus xir_effects_program_final_verify_input(const XrXirCompileContext *context, XirEffectInput input, const XrXirEffects *effects);
-XR_FUNC XrXirStatus xir_effects_program_layout_match(const XrXirCompileContext *context,
-    const XrXirEffects *effects,const XrXirTarget *target,XrXirFunctionLayout *layouts);
 
 /* Metadata shape cannot authorize substitutions; the common owner derives facts. */
 XR_FUNC XrXirStatus xir_effect_contract_shape_verify(const XrXirCompileContext *context,
@@ -200,7 +192,7 @@ XR_FUNC XrXirStatus xir_compile_verify_owned_effects_input(const XrXirCompileCon
 XR_FUNC XrXirStatus xir_compile_verify_receiving_effects_input(const XrXirCompileContext *context,
     XirEffectInput input,const XrXirEffects *source_effects,XrXirEffects **output,XrXirDiagnostic *diagnostic);
 /* These current readers consume genuine canonical Input and Final storage. */
-XR_FUNC XrXirStatus xir_effects_program_root_current_input(const XrXirCompileContext *context, XirEffectInput input, const XrXirEffects *effects);
+
 XR_FUNC XrXirStatus xir_effects_program_cells_match(const XrXirCompileContext *context,
     const XrXirEffects *effects,XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xir_compile_verify_program_effects(const XrXirCompileContext *context,
@@ -299,6 +291,5 @@ XR_FUNC XrXirStatus xir_artifact_verify(const XrXirArtifact *artifact,
     XrXirDiagnostic *diagnostic,XrCompileRequestControl *control);
 XR_FUNC XrXirStatus xir_check(const XrXirCompileContext *context,const XrXirModule *built,
     const XrXirConstruction *construction,XrXirArtifact **output,XrXirDiagnostic *diagnostic,XrCompileRequestControl *control);
-
 
 #endif // XXIR_INTERNAL_H

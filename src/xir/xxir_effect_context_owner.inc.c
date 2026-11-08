@@ -20,14 +20,6 @@ struct EffectContextOwner {
 
 /* Publication removes the ordinary classifier's real allocations and its
  * construction identity. Surviving descriptors belong to this Final owner. */
-static bool effect_context_owner_published(XrCompileResources *resources,const EffectContextOwner *owner) {
-    return resources && owner && owner->ordinary && owner->dense && owner->forest &&
-        owner->ordinary->resources==resources && owner->dense->resources==resources &&
-        owner->forest->resources==resources && !owner->ordinary->dense && owner->dense->dense &&
-        !owner->refinement && !owner->ordinary->terms.remaining && !owner->dense->terms.remaining &&
-        !owner->forest->terms.remaining && effect_ordinary_work_empty(owner->ordinary) &&
-        effect_ordinary_work_empty(owner->dense);
-}
 
 static void effect_context_owner_free(EffectContextOwner *owner) {
     if (!owner) return;
@@ -38,9 +30,6 @@ static void effect_context_owner_free(EffectContextOwner *owner) {
     effect_context_forest_free(owner->forest);
     xr_compile_resources_free(owner);
 }
-
-
-
 
 /* The original COPY is an inferred SSA value, not a declared barrier. Its
  * complete operand/target/type-argument edge must survive normalization;
@@ -143,20 +132,13 @@ static XrXirStatus effect_invocation_source_declarations(const XrXirCompileConte
  * advertisement on this exact current physical shape. Fixed receivers never
  * enter this path; all nested children still use the shared exact matcher. */
 
-
 /* Refinement matched the immutable source type prefix and copied declaration
  * domain before the dense pool was seeded. These original IDs therefore name
  * that verified prefix. Actual ordinary binders still undergo full substitution. */
 
-
 /* Ordinary views carry actual typed initial-role products for physical-use derivation,
  * not stored source records. Capture each authentic source advertisement in
  * this exact ordinary pool before the common queue receives that view. */
-
-
-
-
-
 
 /* A sequential expansion pass owns this temporary workspace. Only small
  * capacities survive between definitions; no actual type or proof is reused.

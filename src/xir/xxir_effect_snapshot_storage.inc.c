@@ -344,10 +344,6 @@ static XrXirStatus effect_body_material_generation(const XrXirCompileContext *wo
 }
 
 /* Literal construction uses the same writer without a Source refiner. */
-static inline XrXirStatus effect_body_material_create(const XrXirCompileContext *work,
-    const XrXirModule *source,EffectInputFacts *input_facts,EffectBodyMaterial **output) {
-    return effect_body_material_generation(work,source,NULL,input_facts,output);
-}
 
 /* Original metadata and physical body producers have no lifetime claim on
  * this receiving owner. Fresh external source matches remain full traversals. */
@@ -476,19 +472,9 @@ static XrXirStatus effect_body_source_match(const XrXirCompileContext *work,
  * Template evidence is preserved by that copy; a closed instance is not this
  * transition. Every physical field and metadata row still matches below. */
 
-
 /* The canonical empty pool has no descriptor owner to validate. All
  * nonempty actual descriptors and their nominal/interface graphs are replayed
  * from the sole owned domain, independently of its membership index. */
-static XrXirStatus effect_body_owned_types_verify(const XrXirCompileContext *work,
-    const EffectBodyMaterial *body) {
-    if (!xir_compile_context_valid(work) || !effect_body_material_shape(body) ||
-        body->resources!=work->resources) return XR_XIR_BAD_STRUCTURE;
-
-    const XrXirTypes *types=body->domain.types;
-    if (!types->count && !types->nodes && !types->nominals && !types->interfaces) types=NULL;
-    return xr_xir_compile_types_structure_verify(work,types);
-}
 
 /* A run is only a lossless storage range. This classifier derives each mask
  * from its actual opcode and type, independent of the stored membership. */
@@ -496,113 +482,19 @@ typedef struct EffectBodyPhysicalReplay {
     uint32_t at,rows,origins,classes;
 } EffectBodyPhysicalReplay;
 
-static XrXirStatus effect_body_physical_values(
-    const EffectPhysicalFunction *physical,EffectBodyPhysicalReplay *state,
-    uint32_t first,uint32_t count,uint32_t mask) {
-    if (!count || first>=physical->values || count>physical->values-first)
-        return XR_XIR_BAD_STRUCTURE;
-
-    if (mask&EFFECT_PHYSICAL_CALLABLE) state->rows+=count;
-    if(mask&(EFFECT_PHYSICAL_CALLABLE|EFFECT_PHYSICAL_ITERATOR)) state->origins+=count;
-    if (mask&EFFECT_PHYSICAL_CLASS) state->classes+=count;
-    if (!mask) {
-        if (state->at<physical->count && physical->records[state->at].value<first+count)
-            return XR_XIR_BAD_STRUCTURE;
-        return XR_XIR_OK;
-    }
-    if (state->at>physical->count || count>physical->count-state->at)
-        return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t offset=0;offset<count;++offset) {
-
-        const EffectPhysicalRecord *record=&physical->records[state->at];
-        if (record->value!=first+offset || record->mask!=mask) return XR_XIR_BAD_STRUCTURE;
-        ++state->at;
-    }
-    return XR_XIR_OK;
-}
-
-static XrXirStatus effect_body_physical_typed(
-    const XrXirTypes *types,XrXirOp op,XrXirType type,uint32_t *output) {
-    if (!output || (op!=XR_XIR_INVALID && (op<=XR_XIR_INVALID || op>=XR_XIR_OP_COUNT)))
-        return XR_XIR_BAD_STRUCTURE;
-
-    uint32_t mask=op==XR_XIR_INVALID?0:effect_physical_opcode(op);
-    if (xr_xir_callable_signature(types,type)) mask|=EFFECT_PHYSICAL_CALLABLE;
-    if(effect_physical_iterator(types,type)) mask|=EFFECT_PHYSICAL_ITERATOR;
-    if (xr_xir_type_is_class(types,type)) mask|=EFFECT_PHYSICAL_CLASS;
-    *output=mask;return XR_XIR_OK;
-}
-
 /* Every canonical range is read afresh. Only mathematically constant op/type
  * can share a classification; a nonempty mask still compares every ordinal.
  * All other physical fields stay lossless and their consumers replay them. */
-static XrXirStatus effect_body_physical_run(
-    const EffectBodyMaterial *material,uint32_t function,const EffectPhysicalFunction *physical,const EffectBodyRun *run,
-    EffectBodyPhysicalReplay *state) {
-    const EffectBodyFunction *body=&material->functions[function];
-    bool constant=!(run->mask&UINT32_C(3));
-
-    uint32_t points=constant?1:run->count;
-    for (uint32_t offset=0;offset<points;++offset) {
-
-        uint32_t opcode=run->base.op,type=run->base.type,mask=0;
-        if (!constant) {
-            if (run->mask&UINT32_C(1)) opcode+=run->delta[0]*offset;
-            if (run->mask&UINT32_C(2)) type+=run->delta[1]*offset;
-        }
-        if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
-        XrXirStatus status=effect_body_physical_typed(material->domain.types,
-            (XrXirOp)opcode,(XrXirType)type,&mask);
-        if (status==XR_XIR_OK) status=effect_body_physical_values(physical,state,
-            body->parameter_count+run->first+offset,constant?run->count:1,mask);
-        if (status!=XR_XIR_OK) return status;
-    }
-    return XR_XIR_OK;
-}
 
 /* The index cannot prove its own completeness. Parameters and all complete
  * runs are independently classified from the current sole owned input. */
-static XrXirStatus effect_body_physical_match(const XrXirCompileContext *work,
-    const EffectPhysicalDomain *domain,const EffectBodyMaterial *material) {
-    if (!xir_compile_context_valid(work) || !effect_body_material_shape(material) || !domain ||
-        domain->resources!=work->resources || material->resources!=work->resources ||
-        domain->count!=effect_body_count(material) || (domain->count && !domain->functions))
-        return XR_XIR_BAD_STRUCTURE;
-    EffectBodyRead read=(EffectBodyRead){.owner=work};
-    for (uint32_t f=0;f<domain->count;++f) {
-        const EffectPhysicalFunction *physical=&domain->functions[f];
-        const EffectBodyFunction *body=&material->functions[f];
 
-        if (physical->parameters!=body->parameter_count || physical->instructions!=body->instruction_count ||
-            physical->values!=(uint64_t)body->parameter_count+body->instruction_count ||
-            physical->rows>physical->values || physical->origins>physical->values ||
-            physical->rows>physical->origins || physical->classes>physical->values ||
-            physical->count>physical->capacity || physical->capacity>physical->values ||
-            !!physical->records!=!!physical->capacity || (body->parameter_count && !body->parameters) ||
-            body->run_count>body->run_capacity || body->run_capacity>body->instruction_count ||
-            body->run_count>body->instruction_count ||
-            !!body->run_count!=!!body->instruction_count || !!body->runs!=!!body->run_capacity)
-            return XR_XIR_BAD_STRUCTURE;
-        EffectBodyPhysicalReplay state={0};EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
-        for (uint32_t p=0;p<body->parameter_count;++p) {
-            uint32_t mask=0;
-
-            XrXirStatus status=effect_body_physical_typed(material->domain.types,
-                XR_XIR_INVALID,body->parameters[p],&mask);
-            if (status==XR_XIR_OK) status=effect_body_physical_values(physical,&state,p,1,mask);
-            if (status!=XR_XIR_OK) return status;
-        }
-        for (uint32_t r=0;r<body->run_count;++r) {
-            const EffectBodyRun *run=NULL;
-
-            XrXirStatus status=effect_body_range_ref(&read,body,&cursor,&run);
-            if (status==XR_XIR_OK) status=effect_body_physical_run(material,f,physical,run,&state);
-            if (status!=XR_XIR_OK) return status;
-        }
-
-        if (cursor.first!=body->instruction_count || cursor.run!=body->run_count ||
-            state.at!=physical->count || state.rows!=physical->rows || state.origins!=physical->origins || state.classes!=physical->classes)
-            return XR_XIR_BAD_STRUCTURE;
-    }
-    return XR_XIR_OK;
+/* Current intake and callback projections retain exact instructions, types and metadata. */
+static XrXirStatus effect_body_current_input_match(const XrXirCompileContext *work,
+    const XrXirModule *module,const EffectBodyMaterial *material) {
+    XrXirStatus status=effect_body_source_types_match(work,material,module);
+    for (uint32_t f=0;status==XR_XIR_OK && f<module->function_count;++f)
+        status=effect_body_function_match(work,&material->functions[f],&module->functions[f]);
+    if (status==XR_XIR_OK) status=effect_body_metadata_match(&material->domain,module);
+    return status;
 }

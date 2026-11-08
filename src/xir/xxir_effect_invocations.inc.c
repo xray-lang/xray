@@ -69,13 +69,6 @@ typedef struct EffectInvocationState {
     uint32_t lookup_next;
     bool queued,expanded,precision_pending;
 } EffectInvocationState;
-static uint64_t effect_invocation_state_offset(uint32_t capacity) {
-    uint64_t bytes=(uint64_t)capacity*sizeof(uint32_t),alignment=_Alignof(EffectInvocationState);
-    return (bytes+alignment-1)/alignment*alignment;
-}
-static uint64_t effect_invocation_state_bytes(uint32_t capacity) {
-    return effect_invocation_state_offset(capacity)+(uint64_t)capacity*sizeof(EffectInvocationState);
-}
 
 /* The two output copies and cause copies share one payload lifetime. These
  * views store no permission facts and are checked against the real root and
@@ -151,7 +144,6 @@ typedef struct EffectCaptureProof {
     EffectCaptureFact *facts;
     uint32_t count,capacity;
 } EffectCaptureProof;
-static bool effect_capture_before(const EffectCaptureFact *a,const EffectCaptureFact *b);
 
 typedef struct EffectInvocationFinal {
     EffectCaptureProof capture;
@@ -190,16 +182,10 @@ typedef struct EffectInvocationRead {
     bool producer_enabled,class_enabled;
 } EffectInvocationRead;
 
-static bool effect_invocation_roles_shape(const EffectInvocationRead *read);
-static XrXirStatus effect_invocation_role(const EffectInvocationRead *read,
-    uint32_t function,uint32_t parameter,uint32_t *output);
-
 typedef struct EffectInvocationPrimitive {
     XrXirRootEffects facts;
     XrXirRootEffectWitness witnesses[2];
 } EffectInvocationPrimitive;
-static XrXirStatus effect_invocation_primitive_frame(const XrXirCompileContext *work,
-    const EffectBodyMaterial *material);
 
 typedef struct EffectInvocationWorkspace {
     EffectInvocationFinal final;
@@ -218,45 +204,9 @@ typedef struct EffectInvocationWorkspace {
 
 /* Discovery rows have only the workspace lifetime. A sealed reader has no
  * workspace pointer and cannot recover this constructor capability. */
-static const EffectInvocationProducerSet *effect_invocation_discovery_read(
-    const EffectInvocationRead *read,uint32_t node) {
-    const EffectInvocationWorkspace *owner=read?read->discovery:NULL;
-    if(!owner || read->roles.sealed || !read->roles.construction ||
-        read->final!=&owner->final || !owner->states || node>=owner->final.count ||
-        !read->work || read->work->resources!=owner->read.work->resources) return NULL;
-    return &owner->states[node].producers;
-}
-
-static const EffectInvocationClassDiscovery *effect_invocation_class_discovery(
-    const EffectInvocationRead *read,uint32_t node) {
-    const EffectInvocationWorkspace *owner=read?read->discovery:NULL;
-    if(!owner || read->roles.sealed || !read->roles.construction ||
-        read->final!=&owner->final || !owner->states || node>=owner->final.count ||
-        !read->work || read->work->resources!=owner->read.work->resources) return NULL;
-    return &owner->states[node].classes;
-}
-
-static XrXirStatus effect_final_class_mask(const XrXirCompileContext *work,
-    const EffectInvocationFinal *final,uint32_t node,uint32_t value,uint32_t *output);
-
-static inline XrXirStatus effect_invocation_producer_column(const EffectInvocationWorkspace *owner,
-    const EffectInvocationBasis *basis,uint32_t site,uint32_t atom,uint32_t *word,uint32_t *bit);
-
-static XrXirStatus effect_invocation_class_verify(EffectInvocationWorkspace *owner);
-static XrXirStatus effect_invocation_return_supported(
-    const XrXirTypes *types,XrXirType type,bool *output);
-static XrXirStatus effect_final_callable_complete(const XrXirCompileContext *work,
-    const EffectInvocationFinal *final,uint32_t node,uint32_t value,bool *complete);
-static XrXirStatus effect_invocation_iterator_residual(EffectInvocationWorkspace *owner);
-static XrXirStatus effect_invocation_iterators_read(const EffectInvocationRead *owner,
-    const EffectBodyRequest *request,EffectInvocationWorkspace *builder);
 
 typedef struct EffectInvocationColumn { uint32_t word,bit; } EffectInvocationColumn;
-static XrXirStatus effect_invocation_producer_column_read(const EffectInvocationRead *owner,
-    const EffectBodyRequest *request,const EffectInvocationBasis *basis,
-    uint32_t index,uint32_t atom,EffectInvocationColumn *output);
-static XrXirStatus effect_invocation_cell_terminals_read(const EffectInvocationRead *owner,
-    const EffectBodyRequest *request);
+
 /* The physical row is scratch for this single completed edge read. Only its
  * operation pointer is published on success; no fact or authority is retained. */
 typedef struct EffectInvocationEdgeOperation {
@@ -270,66 +220,26 @@ typedef struct EffectInvocationEdgeRead {
 static XrXirStatus effect_invocation_edge_read_selected(const XrXirCompileContext *work,
     const EffectInvocationFinal *equations,const EffectBodyRequest *body,
     const XrXirTypes *types,const EffectInvocationEdgeRead *selection,EffectInvocationEdgeOperation *decoded);
-static XrXirStatus effect_invocation_edge_shape_read(const XrXirCompileContext *work,
-    const EffectInvocationFinal *equations,const EffectBodyRequest *body,
-    const XrXirTypes *types,uint32_t caller,uint32_t edge_index);
+
 /* Each request charges the current real context and reads the sole immutable
  * material. There is no construction-time raw instruction fallback. */
-static inline EffectBodyRequest effect_invocation_body(const EffectInvocationRead *owner) {
-    return effect_body_owned_request(owner->work,owner->final->material);
-}
-static XrXirStatus effect_invocation_head(const EffectInvocationRead *owner,uint32_t function,
-    EffectBodyFunctionHead *output) {
-    if (!owner || !owner->work || !effect_body_material_shape(owner->final->material)) return XR_XIR_BAD_STRUCTURE;
-    EffectBodyRequest request=effect_invocation_body(owner);
-    return effect_body_request_head(&request,function,output);
-}
-static XrXirStatus effect_invocation_dimensions(const EffectInvocationRead *owner,uint32_t function,
-    EffectBodyFunctionDimensions *output) {
-    if (!owner || !owner->work || !effect_body_material_shape(owner->final->material)) return XR_XIR_BAD_STRUCTURE;
-    EffectBodyRequest request=effect_invocation_body(owner);
-    return effect_body_request_dimensions(&request,function,output);
-}
-static XrXirStatus effect_invocation_operation(const EffectInvocationRead *owner,uint32_t function,
-    uint32_t instruction,XrXirInstruction *storage,const XrXirInstruction **output) {
-    if (!owner || !owner->work || !effect_body_material_shape(owner->final->material)) return XR_XIR_BAD_STRUCTURE;
-    EffectBodyRequest request=effect_invocation_body(owner);
-    return effect_body_request_operation(&request,function,instruction,storage,output);
-}
 
-static XrXirStatus effect_invocation_shape(const EffectInvocationRead *owner,uint32_t function,
-    uint32_t instruction,EffectBodyInstructionShape *output) {
-    if (!owner || !owner->work || !effect_body_material_shape(owner->final->material)) return XR_XIR_BAD_STRUCTURE;
-    EffectBodyRequest request=effect_invocation_body(owner);
-    return effect_body_request_shape(&request,function,instruction,output);
-}
-
-static XrXirStatus effect_capture_match(const XrXirCompileContext *work,const EffectInvocationFinal *final);
-static XrXirStatus effect_capture_build(const XrXirCompileContext *work,EffectInvocationFinal *final,
-    EffectInvocationWorkspace *discovery);
 static void effect_invocation_result_clear(EffectFinalFunctions *result);
-static void effect_invocation_result_free(EffectFinalFunctions *result);
+
 static bool effect_invocation_witness_equal(const XrXirRootEffectWitness *a,
     const XrXirRootEffectWitness *b);
 
-#include "xxir_effect_invocation_class_nodes.inc.c"
 #include "xxir_effect_invocation_nodes.inc.c"
 #include "xxir_effect_invocation_root_seeds.inc.c"
 #include "xxir_effect_invocation_primitive.inc.c"
 #include "xxir_effect_invocation_causes.inc.c"
 #include "xxir_effect_invocation_flow.inc.c"
 #include "xxir_effect_invocation_class_flow.inc.c"
-#include "xxir_effect_invocation_deferred.inc.c"
 #include "xxir_effect_invocation_calls.inc.c"
 #include "xxir_effect_invocation_producers.inc.c"
 #include "xxir_effect_invocation_solve.inc.c"
 #include "xxir_effect_invocation_solution.inc.c"
-#include "xxir_effect_invocation_deferred_verify.inc.c"
 #include "xxir_effect_invocation_seal.inc.c"
 #include "xxir_effect_invocation_query.inc.c"
-#include "xxir_effect_invocation_input_match.inc.c"
-#include "xxir_effect_invocation_iterator_verify.inc.c"
-#include "xxir_effect_invocation_class_verify.inc.c"
 #include "xxir_effect_invocation_projection.inc.c"
 #include "xxir_effect_invocation_trace.inc.c"
-#include "xxir_effect_invocation_driver.inc.c"

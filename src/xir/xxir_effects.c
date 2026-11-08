@@ -45,14 +45,10 @@ static XrXirStatus effect_source_body_current(const XrXirCompileContext *context
     const XrXirModule *source, const XrXirEffects *effects);
 static XrXirStatus effect_program_body_current(const XrXirCompileContext *context,
     const XrXirModule *source, const XrXirEffects *effects);
-static XrXirStatus effect_program_input_final(const XrXirCompileContext *context,
-    const XrXirModule *source,const XrXirEffects *effects);
+
 static XrXirStatus effect_source_input_terminal(const XrXirCompileContext *context,
     const XrXirModule *source,const XrXirEffects *effects);
-static XrXirStatus effect_program_input_root(const XrXirCompileContext *context,
-    const XrXirModule *module,const XrXirEffects *effects);
-static XrXirStatus effect_refinement_capture_current(const XrXirCompileContext *context,
-    const XrXirModule *source, const struct XrXirEffects *effects);
+
 static XrXirStatus effect_context_read_operation(const XrXirCompileContext *context,
     const struct XrXirEffects *effects,XirEffectInput input,const XrXirTypes *types,
     XirEffectContextOperation operation,void *data);
@@ -62,8 +58,6 @@ static XrXirStatus effect_context_reference_current(const XrXirCompileContext *c
 
 static XrXirStatus effect_context_read_select(const XrXirCompileContext *,
     const XrXirEffects *,const XirEffectContextInput *,XirEffectContextView *,bool);
-static XrXirStatus effect_context_read_scoped(XirEffectContextScope *,
-    const XirEffectContextInput *,XirEffectContextView *);
 
 typedef struct EffectContextOwner EffectContextOwner;
 typedef struct EffectCheckedRoots EffectCheckedRoots;
@@ -100,7 +94,6 @@ typedef struct EffectFinalOutcomes {
     EffectContextOwner *contexts;
 } EffectFinalOutcomes;
 
-
 /* Formula storage belongs to the canonical summary after ROOT publication.
  * Partial constructors alone own their provisional formula allocations. */
 static void effect_contracts_clear(XrXirFunctionEffectContract *contracts,uint32_t count,bool formulas) {
@@ -130,10 +123,8 @@ static void effect_outcomes_clear(EffectFinalOutcomes *outcomes,uint32_t count) 
 }
 
 static bool effect_outcomes_empty(const EffectFinalOutcomes *outcomes);
-static bool effect_context_owner_published(XrCompileResources *resources,const EffectContextOwner *owner);
+
 static const EffectFinalOutcomes *effect_final_outcomes(const XrXirEffects *effects);
-static bool effect_public_root_context(const XrXirEffects *effects,uint32_t function);
-static XrXirStatus effect_public_root_match(const XrXirCompileContext *work,const XrXirEffects *effects);
 
 struct XrXirEffects {
     atomic_uint_fast64_t references;
@@ -208,8 +199,6 @@ typedef struct EffectRootSeedRecord {
     XrXirType callable_type;
 } EffectRootSeedRecord;
 
-static XrXirStatus effect_invocation_primitive_frame(const XrXirCompileContext *work,
-    const EffectBodyMaterial *material);
 typedef struct EffectBodyAdvertisementBuilder EffectBodyAdvertisementBuilder;
 static XrXirStatus effect_body_advertisements_begin(const XrXirCompileContext *work,
     const XrXirModule *source,EffectRefinementBounds *refinement,EffectBodyAdvertisementBuilder **output);
@@ -320,8 +309,6 @@ static inline XrXirStatus effect_graph_material_take(const XrXirCompileContext *
 
 static bool effect_root_cause_before(const XrXirRootEffectWitness *a, const XrXirRootEffectWitness *b);
 
-static XrXirStatus effect_invocation_public_gate(const XrXirCompileContext *work,
-    const EffectInvocationCertificate *certificate);
 #include "xxir_effect_parameters.inc.c"
 
 static void effect_graph_free(EffectGraph *graph) {
@@ -882,26 +869,12 @@ static XrXirStatus effect_default_access_seed(XirEffectDefaultAccessScope *scope
 /* Seal only after the common formula owner and all other analyses agree.
  * The sealed result owns the sole canonical vectors and final witness inventory. */
 
-
-#include "xxir_effect_invocation_producer.inc.c"
 #include "xxir_effect_invocation_runtime.inc.c"
 
-XR_FUNC XrXirStatus xir_effects_entry_root(const XrXirCompileContext *context,
-    const XrXirEffects *effects, uint32_t function, XirEffectEntryRootView *output) {
-    const EffectFinalOutcomes *final=effect_final_outcomes(effects);
-    if (!output || !final || !xir_effects_context_matches(context,effects,final->count) ||
-        !final->entry_roots || function>=final->count) return XR_XIR_BAD_STRUCTURE;
-
-    *output=final->entry_roots[function];return XR_XIR_OK;
-}
-
-#include "xxir_effect_runtime_entries.inc.c"
 #include "xxir_effect_outcomes.inc.c"
-#include "xxir_effect_control_verify.inc.c"
 #include "xxir_effect_role_frame.inc.c"
 #include "xxir_effect_current_input_read.inc.c"
 #include "xxir_effect_invocation_inventory.inc.c"
-#include "xxir_effect_final_callable_read.inc.c"
 #include "xxir_effect_source_terminal.inc.c"
 
 XR_FUNC XrXirStatus xir_effects_default_access_site(XirEffectDefaultAccessScope *scope,
@@ -911,7 +884,7 @@ XR_FUNC XrXirStatus xir_effects_default_access_site(XirEffectDefaultAccessScope 
     XrXirStatus status=XR_XIR_OK;
     if (!xir_compile_context_valid(remaining) || remaining->resources!=scope->remaining.resources ||
         remaining->limits.frame_bytes>scope->remaining.limits.frame_bytes) status=XR_XIR_BAD_STRUCTURE;
-    if (status==XR_XIR_OK) status=effect_invocation_current_input_match(remaining,scope->module,scope->graph.material);
+    if (status==XR_XIR_OK) status=effect_body_current_input_match(remaining,scope->module,scope->graph.material);
     EffectBodyRequest body=effect_body_owned_request(remaining,scope->graph.material);
     XrXirInstruction storage;const XrXirInstruction *op=NULL;
     if (status==XR_XIR_OK) status=effect_body_request_instruction(&body,caller,instruction,&storage,&op);
@@ -947,7 +920,7 @@ XR_FUNC XrXirStatus xir_effects_class_call_access_site(XirEffectDefaultAccessSco
     EffectClassCallAccessQuery query={0};query.callee=UINT32_MAX;
     if (sizeof(query)>remaining->limits.frame_bytes) return scope->status=XR_XIR_BUDGET;
     query.work=*remaining;query.work.limits.frame_bytes-=sizeof(query);
-    XrXirStatus status=effect_invocation_current_input_match(&query.work,module,scope->graph.material);
+    XrXirStatus status=effect_body_current_input_match(&query.work,module,scope->graph.material);
     query.body=effect_body_owned_request(&query.work,scope->graph.material);
     if (status==XR_XIR_OK) status=effect_body_request_instruction(&query.body,caller,instruction,&query.storage,&query.operation);
     const XrXirInstruction *op=query.operation;
@@ -997,7 +970,7 @@ XR_FUNC XrXirStatus xir_effects_default_access_operation_input(const XrXirCompil
     XrXirStatus status=effect_input_facts_new(&scope.work,input,&input_facts);
     scope.graph.input_facts=input_facts;
     if(status==XR_XIR_OK) status=effect_graph_physical_refresh(&scope.work,module,&scope.graph,NULL);
-    if (status==XR_XIR_OK) status=effect_invocation_current_input_match(&scope.work,module,scope.graph.material);
+    if (status==XR_XIR_OK) status=effect_body_current_input_match(&scope.work,module,scope.graph.material);
     if (status==XR_XIR_OK) status=effect_graph_build_material(module,NULL,&scope.graph,&scope.work);
     if (status==XR_XIR_OK) {
         scope.graph.default_access_denied=xir_compile_calloc(&scope.work,module->function_count,
@@ -1012,7 +985,7 @@ XR_FUNC XrXirStatus xir_effects_default_access_operation_input(const XrXirCompil
         scope.remaining=scope.work;scope.remaining.limits.frame_bytes-=scratch;scope.active=true;
         status=operation(data,&scope.remaining,&scope);scope.active=false;
         if (scope.status!=XR_XIR_OK) status=scope.status;
-        if (status==XR_XIR_OK) status=effect_invocation_current_input_match(&scope.remaining,module,scope.graph.material);
+        if (status==XR_XIR_OK) status=effect_body_current_input_match(&scope.remaining,module,scope.graph.material);
     }
     if(status==XR_XIR_OK) status=effect_input_facts_match(&scope.work,input,input_facts);
     effect_graph_free(&scope.graph);effect_input_facts_free(input_facts);return status;
@@ -1105,40 +1078,6 @@ static XrXirStatus effect_source_body_current(const XrXirCompileContext *context
 static XrXirStatus effect_program_body_current(const XrXirCompileContext *context,
     const XrXirModule *source, const XrXirEffects *effects) {
     return effect_source_body_current(context, source, effects);
-}
-
-XR_FUNC XrXirStatus xir_effects_program_metadata(const XrXirCompileContext *context,
-    const XrXirEffects *effects, const XrXirTypes **types, const XrXirDeclarations **declarations) {
-    if (!xir_compile_context_valid(context) || !effects || !types || !declarations)
-        return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status = effect_program_metadata_storage(context, effects);
-    if (status != XR_XIR_OK) return status;
-    const EffectBodyMaterial *body=effects->invocations->body;
-    if (body->resources!=context->resources || body->stage!=XR_XIR_LOWERED ||
-        !body->domain.types || !body->domain.declarations || effect_body_count(body)!=effects->count)
-        return XR_XIR_BAD_STRUCTURE;
-
-    *types=body->domain.types;*declarations=body->domain.declarations;
-    return XR_XIR_OK;
-}
-
-XR_FUNC XrXirStatus xir_effects_program_signature_match(const XrXirCompileContext *context,
-    const XrXirEffects *effects, uint32_t function, const XrXirType *parameters,
-    uint32_t parameter_count, XrXirType result) {
-    if (!xir_compile_context_valid(context) || !effects) return XR_XIR_BAD_STRUCTURE;
-    const EffectBodyMaterial *input = NULL;
-    XrXirStatus status = effect_program_body_storage(context, effects, &input);
-    if (status!=XR_XIR_OK) return status;
-    if (function>=effects->count || (parameter_count && !parameters)) return XR_XIR_BAD_STRUCTURE;
-    const EffectBodyFunction *body=&input->functions[function];
-    status = effect_program_range(context, body->parameters, body->parameter_count,
-        sizeof(*body->parameters), _Alignof(XrXirType));
-    if (status != XR_XIR_OK) return status;
-
-    if (parameter_count!=body->parameter_count || result!=body->result) return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t p=0;p<parameter_count;++p)
-        if (parameters[p]!=body->parameters[p]) return XR_XIR_BAD_STRUCTURE;
-    return XR_XIR_OK;
 }
 
 #include "xxir_effect_program_receive.inc.c"

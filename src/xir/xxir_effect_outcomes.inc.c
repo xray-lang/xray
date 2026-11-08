@@ -56,41 +56,7 @@ static XrXirStatus effect_outcomes_publish(const XrXirCompileContext *work,
 
 /* Presentation uses the actual dense context only for closed Source bodies.
  * An open generic keeps its original symbolic function namespace. */
-static bool effect_public_root_context(const XrXirEffects *effects,uint32_t function) {
-    const EffectBodyMaterial *body=effects->invocations->body;
-    return effect_contexts_read(effects) && (!body->generics || !body->generics[function].parameter_count);
-}
 
 /* These public records are a semantic projection of the same immutable ROOT
  * proof. Every output is compared before a receiving trace allocates storage;
  * shape alone never blesses an overwritten permission or cause. */
-static XrXirStatus effect_public_root_match(const XrXirCompileContext *work,const XrXirEffects *effects) {
-    const EffectFinalOutcomes *actual=effect_final_outcomes(effects);
-    if (!actual || !xir_effects_context_matches(work,effects,actual->count) ||
-        !effect_body_material_shape(effects->invocations->body) ||
-        effect_body_count(effects->invocations->body)!=actual->count) return XR_XIR_BAD_STRUCTURE;
-    const EffectFinalFunctions *summary=&effects->invocations->final->summary;
-    if (summary->resources!=work->resources || summary->count!=actual->count ||
-        summary->capacity!=summary->count || !summary->witnesses)
-        return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t f=0;f<actual->count;++f) {
-        XrXirRootEffects expected;
-        XrXirStatus status=effect_invocation_certificate_facts(work,effects->invocations,f,&expected);
-        if(status!=XR_XIR_OK) return status;
-        const XrXirRootEffects *facts=&expected;
-        const XrXirRootEffectWitness *root=&summary->witnesses[f];
-        const XrXirRootEffectWitness *unknown=&summary->witnesses[summary->count+f];
-        EffectContextRootValue value;
-        if (effect_public_root_context(effects,f)) {
-            const EffectContextForest *forest=effect_contexts_read(effects)->forest;
-            status=effect_invocation_forest_values(work,forest,f,&value);
-            if(status!=XR_XIR_OK) return status;
-            facts=&value.facts;root=&value.root;unknown=&value.unresolved;
-        }
-
-        if (actual->root[f].requires_root!=facts->requires_root || actual->root[f].unresolved!=facts->unresolved ||
-            !effect_invocation_witness_equal(&actual->root_witnesses[f],root) ||
-            !effect_invocation_witness_equal(&actual->unresolved_witnesses[f],unknown)) return XR_XIR_BAD_STRUCTURE;
-    }
-    return XR_XIR_OK;
-}

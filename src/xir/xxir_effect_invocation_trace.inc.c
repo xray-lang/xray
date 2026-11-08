@@ -22,10 +22,6 @@ typedef struct EffectInvocationTraceRequest {
     EffectInvocationTraceStep *steps;
 } EffectInvocationTraceRequest;
 
-static void effect_invocation_trace_free(EffectInvocationCauseTrace *trace) {
-    xr_compile_resources_free(trace);
-}
-
 /* A selection is a value local to one completed trace request. It never
  * survives the caller, changes an owner, or substitutes for a fresh query. */
 typedef struct EffectInvocationTraceSelection {
@@ -33,103 +29,6 @@ typedef struct EffectInvocationTraceSelection {
     XrXirRootEffectWitness witness;
 } EffectInvocationTraceSelection;
 
-static XrXirStatus effect_invocation_trace_finish(
-    uint32_t count,uint32_t atom,XrXirRootEffectWitness witness,uint32_t *length,
-    EffectInvocationTraceSelection *selection) {
-
-    if (selection) *selection=(EffectInvocationTraceSelection){atom,witness};
-    *length=count;return XR_XIR_OK;
-}
-
 /* The selected atom retains the namespace's complete physical input identity
  * for the whole descent. Repeated declaration IDs cannot replace an actual
  * equation edge, and public ordinals are emitted only after that proof. */
-static XrXirStatus effect_invocation_trace_walk_selected(const XrXirCompileContext *work,
-    const EffectInvocationCertificate *certificate,const EffectInvocationTraceRequest *request,
-    uint32_t *length,EffectInvocationTraceSelection *selection,const EffectInvocationTraceSelection *chosen) {
-    if (!certificate || !effect_body_material_shape(certificate->body) ||
-        certificate->body->resources!=certificate->resources || certificate->resources!=work->resources || !request || !length ||
-        request->domain>=4 || request->function>=effect_body_count(certificate->body) ||
-        !certificate->final)
-        return XR_XIR_BAD_STRUCTURE;
-    uint32_t scalar_atom=UINT32_MAX;XrXirRootEffectWitness scalar_witness={0};
-    XrXirStatus status=chosen?XR_XIR_OK:effect_invocation_projection_select(work,certificate,request->function,request->domain,
-        &scalar_atom,&scalar_witness);
-    if (status!=XR_XIR_OK) return status;
-
-    uint32_t atom=chosen?chosen->atom:scalar_atom;
-    const XrXirRootEffectWitness *witness=chosen?&chosen->witness:&scalar_witness;
-    status=effect_invocation_projection_result_match(work,certificate,request->function,request->domain,
-        atom,witness);
-    if (status!=XR_XIR_OK) return status;
-    bool fact=atom!=UINT32_MAX;
-    if (!fact) return effect_invocation_trace_finish(0,atom,*witness,length,selection);
-    const EffectInvocationFinal *equations=certificate->final;
-    uint32_t current=equations->roots[request->function],count=0;
-    for (;;) {
-
-        if (current>=equations->count || count>=equations->count) return XR_XIR_BAD_STRUCTURE;
-        const EffectInvocationNode *node=&equations->nodes[current];
-        if (node->body>=effect_body_count(certificate->body) || atom>=node->cause_count)
-            return XR_XIR_BAD_STRUCTURE;
-        const EffectInvocationCause *cause=&node->causes[atom];
-        if (cause->witness.callee!=UINT32_MAX && cause->witness.callee>=effect_body_count(certificate->body))
-            return XR_XIR_BAD_STRUCTURE;
-        XrXirRootEffectWitness public_value=effect_invocation_public_witness(certificate,node,cause);
-        if (request->steps) {
-
-            request->steps[count]=(EffectInvocationTraceStep){current,node->root,
-                certificate->origins[node->body].function,public_value};
-        }
-        ++count;
-        if (!cause->distance) {
-            if (cause->next!=UINT32_MAX || cause->edge!=UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
-            return effect_invocation_trace_finish(count,atom,*witness,length,selection);
-        }
-        if (cause->next>=equations->count || cause->edge>=equations->edge_count ||
-            equations->edges[cause->edge].caller!=current ||
-            equations->edges[cause->edge].target!=cause->next ||
-            equations->nodes[cause->next].causes[atom].distance+1!=cause->distance)
-            return XR_XIR_BAD_STRUCTURE;
-        current=cause->next;
-    }
-}
-
-static XrXirStatus effect_invocation_trace_walk(const XrXirCompileContext *work,
-    const EffectInvocationCertificate *certificate,const EffectInvocationTraceRequest *request,
-    uint32_t *length) {
-    return effect_invocation_trace_walk_selected(work,certificate,request,length,NULL,NULL);
-}
-
-static inline XrXirStatus effect_invocation_certificate_trace(const XrXirCompileContext *work,
-    const EffectInvocationCertificate *certificate,uint32_t function,EffectInvocationCauseTrace **output) {
-    if (!xir_compile_context_valid(work) || !certificate || !effect_body_material_shape(certificate->body) ||
-        certificate->body->resources!=certificate->resources || certificate->resources!=work->resources ||
-        !output || *output || function>=effect_body_count(certificate->body)) return XR_XIR_BAD_STRUCTURE;
-    uint32_t counts[2]={0};EffectInvocationTraceRequest request={.function=function};
-    XrXirStatus status=effect_invocation_trace_walk(work,certificate,&request,&counts[0]);
-    request.domain=1;
-    if (status==XR_XIR_OK) status=effect_invocation_trace_walk(work,certificate,&request,&counts[1]);
-    if (status!=XR_XIR_OK) return status;
-    uint64_t total=(uint64_t)counts[0]+counts[1];
-    if (total>(SIZE_MAX-sizeof(EffectInvocationCauseTrace))/sizeof(EffectInvocationTraceStep)) return XR_XIR_BUDGET;
-    size_t bytes=sizeof(EffectInvocationCauseTrace)+(size_t)total*sizeof(EffectInvocationTraceStep);
-    EffectInvocationCauseTrace *trace=xir_compile_calloc(work,1,bytes,&status);
-    if (!trace) return status;
-    /* The trailing records share this allocation and its resource charge. */
-    EffectInvocationTraceStep *steps=(EffectInvocationTraceStep *)(trace+1);uint32_t copied=0;
-    trace->steps=steps;
-    request=(EffectInvocationTraceRequest){function,0,steps};
-    status=effect_invocation_trace_walk(work,certificate,&request,&copied);
-    if (status==XR_XIR_OK && copied!=counts[0]) status=XR_XIR_BAD_STRUCTURE;
-    request=(EffectInvocationTraceRequest){function,1,steps+counts[0]};
-    if (status==XR_XIR_OK) status=effect_invocation_trace_walk(work,certificate,&request,&copied);
-    if (status==XR_XIR_OK && copied!=counts[1]) status=XR_XIR_BAD_STRUCTURE;
-
-    if (status!=XR_XIR_OK) { effect_invocation_trace_free(trace);return status; }
-    trace->resources=work->resources;
-    status=effect_invocation_certificate_facts(work,certificate,function,&trace->facts);
-    if (status!=XR_XIR_OK) { effect_invocation_trace_free(trace);return status; }
-    trace->counts[0]=counts[0];trace->counts[1]=counts[1];
-    *output=trace;return XR_XIR_OK;
-}

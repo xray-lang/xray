@@ -51,8 +51,6 @@ typedef struct EffectBodyCurrentRead {
     const XrXirCompileContext *work;
     const EffectBodyMaterial *material;
 } EffectBodyCurrentRead;
-static XrXirStatus effect_body_current_open(const XrXirCompileContext *work,
-    const EffectBodyMaterial *material,EffectBodyCurrentRead *output);
 
 typedef struct EffectBodyRequest EffectBodyRequest;
 struct EffectBodyRequest {
@@ -227,39 +225,15 @@ static inline EffectBodyRequest effect_body_owned_request(const XrXirCompileCont
 }
 /* This is only the identity of the sole current storage adapter. Every
  * permission and final semantic fact is independently replayed by its consumer. */
-static bool effect_body_request_owned_matches(const XrXirCompileContext *work,
-    const EffectBodyRequest *request,const EffectBodyMaterial *material) {
-    return xir_compile_context_valid(work) && request && effect_body_material_shape(material) &&
-        material->resources==work->resources && request->owner==material &&
-        request->read.owner==work && request->read.execution == NULL &&
-        request->head==effect_body_owned_head && request->instruction==effect_body_owned_instruction &&
-        request->type==effect_body_owned_type && request->shape==effect_body_owned_shape &&
-        request->domain.types==material->domain.types &&
-        request->domain.function_count==effect_body_count(material) &&
-        request->domain.declarations==material->domain.declarations &&
-        request->domain.generics==material->domain.generics && request->domain.defaults==material->domain.defaults;
-}
 
 /* An unpublished projection has no live field, even if its owner is NULL.
  * Field checks avoid reading structure padding or an uninitialized tail. */
-static bool effect_body_request_empty(const EffectBodyRequest *request) {
-    return request && !request->owner && !request->head && !request->instruction &&
-        !request->type && !request->shape && !request->current && !request->read.owner && !request->read.execution &&
-        !request->domain.types && !request->domain.declarations && !request->domain.generics &&
-        !request->domain.defaults && !request->domain.function_count;
-}
 
 static inline XrXirStatus effect_body_request_head(const EffectBodyRequest *request,
     uint32_t f,EffectBodyFunctionHead *output) {
     if (!request || !request->owner || !request->head || !request->domain.types ||
         !output || f>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
     return request->head(request,f,output,NULL,NULL);
-}
-static inline XrXirStatus effect_body_request_signature(const EffectBodyRequest *request,
-    uint32_t f,EffectBodyFunctionSignature *output) {
-    if (!request || !request->owner || !request->head || !request->domain.types ||
-        !output || f>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
-    return request->head(request,f,NULL,NULL,output);
 }
 
 static inline XrXirStatus effect_body_request_dimensions(const EffectBodyRequest *request,
@@ -297,35 +271,6 @@ static XrXirStatus effect_body_request_sequence_binding(const EffectBodyRequest 
  * The ordinary getter retains its caller-scratch contract. Layout identity
  * and complete domain correspondence select storage, never permission.
  * Metadata clients may use this optional getter independently of opcode replay. */
-static inline XrXirStatus effect_body_request_borrow_instruction(const EffectBodyRequest *request,
-    uint32_t f,uint32_t i,XrXirInstruction *storage,const XrXirInstruction **output) {
-    if (!request || !request->owner || !storage || !output || !request->domain.types ||
-        f>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
-    if (request->instruction==effect_body_raw_instruction) {
-        if (request->head!=effect_body_raw_head || request->type!=effect_body_raw_type ||
-            request->shape!=effect_body_raw_shape) return XR_XIR_BAD_STRUCTURE;
-        if (!(((&request->read)->execution ? effect_body_execution_work((&request->read)->execution, sizeof(XirMetadataDomain)+6) : xir_compile_context_valid((&request->read)->owner)))) return XR_XIR_BUDGET;
-        XirMetadataDomain actual=xir_metadata_domain_from_module(request->owner);
-        if (!actual.types) actual.types=&effect_empty_types;
-        if (request->domain.types!=actual.types || request->domain.declarations!=actual.declarations ||
-            request->domain.generics!=actual.generics || request->domain.defaults!=actual.defaults ||
-            request->domain.function_count!=actual.function_count) return XR_XIR_BAD_STRUCTURE;
-        return effect_body_request_instruction(request,f,i,storage,output);
-    }
-    if (request->head!=effect_body_owned_head || request->instruction!=effect_body_owned_instruction ||
-        request->type!=effect_body_owned_type || request->shape!=effect_body_owned_shape)
-        return XR_XIR_BAD_STRUCTURE;
-    const EffectBodyMaterial *material=request->owner;
-    if (!effect_body_material_shape(material) || request->domain.types!=material->domain.types ||
-        request->domain.function_count!=effect_body_count(material) ||
-        request->domain.declarations!=material->domain.declarations ||
-        request->domain.generics!=material->domain.generics || request->domain.defaults!=material->domain.defaults)
-        return XR_XIR_BAD_STRUCTURE;
-    if (!(((&request->read)->execution ? effect_body_execution_work((&request->read)->execution, 10) : xir_compile_context_valid((&request->read)->owner)))) return XR_XIR_BUDGET;
-    const EffectBodyRun *ref=NULL;
-    XrXirStatus status=effect_body_record_ref(&request->read,&material->functions[f],i,&ref);
-    return status==XR_XIR_OK?effect_body_instruction_ref_borrow(&request->read,ref,i,storage,output):status;
-}
 
 /* A constant record and the first row of any affine record already own the
  * complete physical Instruction. Borrow
@@ -360,110 +305,24 @@ static XrXirStatus effect_body_request_operation(const EffectBodyRequest *reques
     return effect_body_operation_ref(&request->read,ref,i,storage,output);
 }
 
-static XrXirStatus effect_body_request_sequence_begin(const EffectBodyRequest *request,
-    EffectBodyRecordCursor *cursor) {
-    if (!request || !request->owner || !request->instruction || !request->domain.types || !cursor)
-        return XR_XIR_BAD_STRUCTURE;
-    if (!effect_body_request_sequence_owned(request)) return XR_XIR_OK;
-    XrXirStatus status=effect_body_request_sequence_binding(request);
-    if (status!=XR_XIR_OK) return status;
-    if (!(((&request->read)->execution ? effect_body_execution_work((&request->read)->execution, sizeof(*cursor)) : xir_compile_context_valid((&request->read)->owner)))) return XR_XIR_BUDGET;
-    *cursor=(EffectBodyRecordCursor){0,0,UINT32_MAX};return XR_XIR_OK;
-}
-
 /* Only numeric location survives one ascending pass. Failed scratch is
  * discarded by that pass; no decoded value or permission is retained. The
  * full-row decoder retains all unused and signed physical fields in caller
  * scratch. Only the raw adapter returns its current actual row. */
-static inline XrXirStatus effect_body_request_sequence_instruction(const EffectBodyRequest *request,
-    uint32_t f,uint32_t i,EffectBodyRecordCursor *cursor,XrXirInstruction *storage,
-    const XrXirInstruction **output) {
-    if (!request || !request->owner || !request->instruction || !request->domain.types ||
-        !storage || !output || f>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
-    if (!effect_body_request_sequence_owned(request))
-        return effect_body_request_instruction(request,f,i,storage,output);
-    if (!cursor) return XR_XIR_BAD_STRUCTURE;
-    if (cursor->last==UINT32_MAX?i!=0:i!=cursor->last+1) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_body_request_sequence_binding(request);
-    if (status!=XR_XIR_OK) return status;
-    const EffectBodyMaterial *material=request->owner;
-    if (!(((&request->read)->execution ? effect_body_execution_work((&request->read)->execution, 2) : xir_compile_context_valid((&request->read)->owner)))) return XR_XIR_BUDGET;
-    const EffectBodyRun *ref=NULL;
-    status=effect_body_record_cursor_ref(&request->read,&material->functions[f],i,cursor,&ref);
-    if (status==XR_XIR_OK) status=effect_body_instruction_ref_value(&request->read,ref,i,storage);
-    if (status!=XR_XIR_OK) return status;
-    if (!(((&request->read)->execution ? effect_body_execution_work((&request->read)->execution, sizeof(*output)) : xir_compile_context_valid((&request->read)->owner)))) return XR_XIR_BUDGET;
-    *output=storage;return XR_XIR_OK;
-}
 
 /* Only numeric position crosses calls. Reopen the current owner and record
  * before each projection; the returned loan ends before a consumer callback. */
-static XrXirStatus effect_body_request_sequence_record(const EffectBodyRequest *request,
-    uint32_t f,uint32_t i,EffectBodyRecordCursor *cursor,const EffectBodyRun **output) {
-    if (!request || !request->owner || !request->domain.types || !cursor || !output ||
-        f>=request->domain.function_count || !effect_body_request_sequence_owned(request))
-        return XR_XIR_BAD_STRUCTURE;
-    if (cursor->last==UINT32_MAX?i!=0:i!=cursor->last+1) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_body_request_sequence_binding(request);
-    if (status!=XR_XIR_OK) return status;
-    const EffectBodyMaterial *material=request->owner;
-    if (!(((&request->read)->execution ? effect_body_execution_work((&request->read)->execution, 2) : xir_compile_context_valid((&request->read)->owner)))) return XR_XIR_BUDGET;
-    return effect_body_record_cursor_ref(&request->read,&material->functions[f],i,cursor,output);
-}
 
 /* Local consumers may borrow the complete immutable base row. The copied
  * sequence reader retains its storage identity for callers that require it. */
-static XrXirStatus effect_body_request_sequence_operation(const EffectBodyRequest *request,
-    uint32_t f,uint32_t i,EffectBodyRecordCursor *cursor,XrXirInstruction *storage,
-    const XrXirInstruction **output) {
-    if (!request || !request->owner || !request->instruction || !request->domain.types ||
-        !storage || !output || f>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
-    if (!effect_body_request_sequence_owned(request))
-        return effect_body_request_instruction(request,f,i,storage,output);
-    const EffectBodyRun *ref=NULL;
-    XrXirStatus status=effect_body_request_sequence_record(request,f,i,cursor,&ref);
-    if (status!=XR_XIR_OK) return status;
-    return effect_body_operation_ref(&request->read,ref,i,storage,output);
-}
 
 /* Re-read the current final run and exact EOF independently of the cursor.
  * Completion describes this storage walk; Source, type, ROOT and terminal
  * correspondence remain the caller's independent full obligations. */
-static XrXirStatus effect_body_request_sequence_finish(const EffectBodyRequest *request,
-    uint32_t f,const EffectBodyRecordCursor *cursor) {
-    if (!request || !request->owner || !request->instruction || !request->domain.types ||
-        f>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
-    if (!effect_body_request_sequence_owned(request)) return XR_XIR_OK;
-    if (!cursor) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_body_request_sequence_binding(request);
-    if (status!=XR_XIR_OK) return status;
-    const EffectBodyMaterial *material=request->owner;
-    const EffectBodyFunction *function=&material->functions[f];
-    if (!(((&request->read)->execution ? effect_body_execution_work((&request->read)->execution, 7) : xir_compile_context_valid((&request->read)->owner)))) return XR_XIR_BUDGET;
-    if (!function->instruction_count)
-        return !function->run_count && !function->run_capacity && !function->runs &&
-            !cursor->first && !cursor->run && cursor->last==UINT32_MAX?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
-    if (!function->run_count || cursor->run>=function->run_count ||
-        cursor->run+1!=function->run_count || cursor->last!=function->instruction_count-1)
-        return XR_XIR_BAD_STRUCTURE;
-    const EffectBodyRun *ref=NULL;
-    status=effect_body_run_ref(&request->read,function,cursor->run,cursor->first,&ref);
-    if (status!=XR_XIR_OK) return status;
-    if (!(((&request->read)->execution ? effect_body_execution_work((&request->read)->execution, 2) : xir_compile_context_valid((&request->read)->owner)))) return XR_XIR_BUDGET;
-    return ref->first+ref->count==function->instruction_count?
-        XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
-}
 
 /* Raw storage still returns its original row pointer and cost. Owned
  * storage publishes only the requested fields after complete record checks. */
-static inline XrXirStatus effect_body_request_fields(const EffectBodyRequest *request,
-    uint32_t f,uint32_t i,XrXirInstruction *storage,const XrXirInstruction **output,
-    EffectBodyInstructionFields *fields) {
-    if (!request || !request->owner || !request->instruction || !request->domain.types ||
-        !storage || !output || *output || !fields || f>=request->domain.function_count)
-        return XR_XIR_BAD_STRUCTURE;
-    return request->instruction(request,f,i,storage,output,fields);
-}
+
 static inline XrXirStatus effect_body_request_type(const EffectBodyRequest *request,
     uint32_t f,uint32_t value,XrXirType *output) {
     if (!request || !request->owner || !request->type || !request->domain.types ||

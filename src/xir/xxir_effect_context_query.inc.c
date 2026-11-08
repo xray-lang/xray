@@ -8,13 +8,8 @@
  */
 #include "xxir_effect_reference_internal.h"
 
-
-
 /* A completed context derivation projects each real reference exactly once.
  * Source reads only these numeric results until the next outer derivation. */
-
-
-
 
 XR_FUNC bool xir_effects_context_available(const XrXirCompileContext *context,
     const XrXirEffects *effects) {
@@ -172,7 +167,6 @@ static XrXirStatus effect_context_select_actual(const XrXirCompileContext *conte
     return XR_XIR_OK;
 }
 
-
 static XrXirStatus effect_context_read_select(const XrXirCompileContext *context,
     const XrXirEffects *effects,const XirEffectContextInput *input,XirEffectContextView *output,
     bool revalidate) {
@@ -214,40 +208,9 @@ static XrXirStatus effect_context_read_operation(const XrXirCompileContext *cont
     return selection_scope.status!=XR_XIR_OK ? selection_scope.status : status;
 }
 
-static XrXirStatus effect_context_read_scoped(XirEffectContextScope *scope,
-    const XirEffectContextInput *input,XirEffectContextView *output) {
-    if (!scope) return XR_XIR_BAD_STRUCTURE;
-    if (scope->status!=XR_XIR_OK) return scope->status;
-    if (!xir_compile_context_valid(scope->context) || !scope->effects ||
-        scope->effects->resources!=scope->context->resources || !effect_contexts_read(scope->effects) ||
-        !input || input->source!=scope->source || input->types!=scope->types ||
-        !input->construction || input->construction!=scope->construction || !input->origin || !output ||
-        input->origin->function>=scope->source->function_count ||
-        !!input->origin->arguments!=!!input->origin->argument_count ||
-        !!input->owners!=!!input->owner_count || input->owner_count>scope->effects->count)
-        return effect_context_scope_failure(scope,XR_XIR_BAD_STRUCTURE);
-
-    XrXirStatus shape=effect_context_owner_shapes(input);
-    if (shape!=XR_XIR_OK) return effect_context_scope_failure(scope,shape);
-    if (scope->state==EFFECT_CONTEXT_ADMISSION_PENDING) {
-        scope->status=effect_context_admission(scope->context,scope->effects,scope->source,scope->types);
-        scope->state=scope->status==XR_XIR_OK ? EFFECT_CONTEXT_ADMISSION_COMPLETE : EFFECT_CONTEXT_ADMISSION_REJECTED;
-    }
-    if (scope->status!=XR_XIR_OK) return scope->status;
-    if (scope->state!=EFFECT_CONTEXT_ADMISSION_COMPLETE)
-        return effect_context_scope_failure(scope,XR_XIR_BAD_STRUCTURE);
-    XrXirModule normalized=*input->source;XirEffectContextInput request=*input;
-    if (!normalized.types) normalized.types=&effect_empty_types;
-    if (!request.types) request.types=&effect_empty_types;
-    request.source=&normalized;
-    XrXirStatus status=effect_context_select_actual(scope->context,scope->effects,&request,output);
-    return effect_context_scope_failure(scope,status);
-}
-
 /* The base reference API has no instantiated owner vector. It reconstructs
  * only complete nongeneric lexical identities from the authentic declaration
  * chain; generic ancestors require the explicit context request instead. */
-
 
 /* Both entry points read the same real edge. A lexical scope borrows
  * immutable inputs only for its current operation and retains no result. */
