@@ -181,6 +181,7 @@ typedef struct XrXirRootRefiner {
     XrXirStatus (*admit)(void *, const XrXirModule *, const XrXirEffects *, XrXirDiagnostic *);
     /* Reads the HIR-owned restricted-value classification synchronously. */
     XrXirStatus (*restricted)(void *, uint32_t, uint32_t, bool *);
+    XrXirStatus (*restriction)(void *, uint32_t, uint32_t, uint32_t, XirRestrictionFormula *);
 } XrXirRootRefiner;
 /* Ordinary admission precedes collection. Preparation owns numeric equations
  * and synchronous observer output, with no public effect facts yet. */
