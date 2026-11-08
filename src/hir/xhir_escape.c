@@ -356,7 +356,8 @@ static const char *escape_argument_reason(HirEscape *owner, uint32_t f,
     const XrXirFunction *body = &owner->module->functions[f];
     if (op->op == XR_XIR_GO || op->op == XR_XIR_SCOPED_GO || op->op == XR_XIR_GENERATOR_NEW)
         return "a task or generator";
-    if (op->op == XR_XIR_CALL || op->op == XR_XIR_INVOKE) {
+    if (op->op == XR_XIR_CALL || op->op == XR_XIR_INVOKE ||
+        op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_CLEANUP_REGISTER) {
         if (op->immediate < 0 || (uint64_t)op->immediate >= owner->module->function_count) return "an unknown callee";
         const XrXirFunction *target = &owner->module->functions[op->immediate];
         if (ordinal >= target->parameter_count) return "an unknown parameter";
@@ -449,6 +450,7 @@ static XrXirStatus escape_uses(HirEscape *owner, uint32_t f, uint32_t i, XrHirEs
     }
     bool call = op->op == XR_XIR_CALL || op->op == XR_XIR_INVOKE || op->op == XR_XIR_CALL_INDIRECT ||
         op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_CALL_REQUIREMENT ||
+        op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_CLEANUP_REGISTER ||
         op->op == XR_XIR_GO || op->op == XR_XIR_SCOPED_GO || op->op == XR_XIR_GENERATOR_NEW;
     bool store = op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_MAP_NEW ||
         op->op == XR_XIR_MAP_SET || op->op == XR_XIR_SET_NEW || op->op == XR_XIR_STRUCT_NEW ||
