@@ -439,18 +439,21 @@ static bool source_semantic_prepare(SourceContext *ctx) {
     if (ctx->diagnostic.status==XR_XIR_OK) source_check_failure(ctx,location,status);
     return false;
 }
+
+static bool source_typed_body_finish(SourceContext *ctx) {
+    XrXirStatus status=xr_hir_body_finish(ctx->typed_body,ctx->request);
+    return status==XR_XIR_OK || source_fail(ctx,NULL,status,"typed body has an unconsumed or unprojected use");
+}
+
 static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
     if(!source_hir_body_begin(ctx))return;
-    XrXirStatus body_status=XR_XIR_OK;
     ctx->query_ready = true;
     ctx->declarations_building = true;
     bool declarations_ready = source_query_modules(ctx) && source_items_prepare(ctx) && collect_declarations(ctx);
     ctx->declarations_building = false;
     if (declarations_ready && (!ctx->core_factory || source_core_contract(ctx)) && source_manifests_bind(ctx) &&
         source_implementations_bind(ctx) && source_generator_named_factories(ctx) && build_bodies(ctx) && source_binding_readers(ctx) && source_history_graph_commit(ctx) &&
-        source_instance_literals_finish(ctx) && source_materialization_finish(ctx) && source_class_carriers(ctx) && source_local_errors_finish(ctx) && source_effect_prepare(ctx) && source_construction_ready(ctx) && source_semantic_prepare(ctx) && source_view_prepare(ctx)) {
-        body_status=xr_hir_body_finish(ctx->typed_body,ctx->request);
-        if(body_status!=XR_XIR_OK){source_fail(ctx,NULL,body_status,"typed body has an unconsumed or unprojected use");xr_hir_body_end(ctx->typed_body);return;}
+        source_instance_literals_finish(ctx) && source_materialization_finish(ctx) && source_class_carriers(ctx) && source_local_errors_finish(ctx) && source_typed_body_finish(ctx) && source_effect_prepare(ctx) && source_construction_ready(ctx) && source_semantic_prepare(ctx) && source_view_prepare(ctx)) {
         source_release_retired_arrays(ctx);
         if (!source_quiescent_storage(ctx)){xr_hir_body_end(ctx->typed_body);return;}
         XrXirDeclarations declarations;

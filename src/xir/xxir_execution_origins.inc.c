@@ -226,7 +226,8 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
                 unresolved |= XIR_EXECUTION_REMAINDER_OPAQUE;
                 continue;
             }
-            if (observe_environment && node->storable_value) {
+            if (observe_environment && node->storable_value &&
+                xr_xir_type_is_callable(xir_execution_types(roots), node->type)) {
                 XirExecutionSite stored = {.kind = XIR_EXECUTION_STORABLE, .index = origin.value,
                     .function = function.declaration, .instruction = origin.value >= function.parameters ?
                         origin.value - function.parameters : UINT32_MAX, .block = node->block,

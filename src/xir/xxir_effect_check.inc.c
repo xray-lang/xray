@@ -727,16 +727,16 @@ static bool effect_check_instruction(EffectCheckBuild *build, uint32_t f, uint32
     if (build->status != XR_XIR_OK) return false;
     const XrXirTypeNode *suspend_signature = xr_xir_callable_signature(build->module->types, op->type);
     bool callable = suspend_signature != NULL;
+    switch (op->op) {
+    case XR_XIR_CALL: case XR_XIR_CALL_INDIRECT: case XR_XIR_CALL_REQUIREMENT: case XR_XIR_INVOKE_RESULT:
+    case XR_XIR_SLOT_LOAD: case XR_XIR_ARRAY_GET: case XR_XIR_STRUCT_GET: case XR_XIR_CLASS_GET:
+    case XR_XIR_ENUM_GET: case XR_XIR_MAP_INDEX: case XR_XIR_MAP_VALUE_AT:
+    case XR_XIR_NULLABLE_UNWRAP:
+        build->roots->node[value].storable_value = true;
+        break;
+    default: break;
+    }
     if (callable) {
-        switch (op->op) {
-        case XR_XIR_CALL: case XR_XIR_CALL_INDIRECT: case XR_XIR_CALL_REQUIREMENT: case XR_XIR_INVOKE_RESULT:
-        case XR_XIR_SLOT_LOAD: case XR_XIR_ARRAY_GET: case XR_XIR_STRUCT_GET: case XR_XIR_CLASS_GET:
-        case XR_XIR_ENUM_GET: case XR_XIR_MAP_INDEX: case XR_XIR_MAP_VALUE_AT:
-        case XR_XIR_NULLABLE_UNWRAP:
-            build->roots->node[value].storable_value = true;
-            break;
-        default: break;
-        }
         switch (op->op) {
         case XR_XIR_FUNCTION_REF: case XR_XIR_CLASS_METHOD_REF:
         case XR_XIR_COPY: case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN:

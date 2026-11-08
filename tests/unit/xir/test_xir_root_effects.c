@@ -712,7 +712,7 @@ static void execution_instance_parameters(void) {
     XrXirCallableParameter callback_parameter = {.type = XR_XIR_CONSTRUCTED_TYPE_BASE};
     XrXirTypeNode nodes[] = {
         {.kind = XR_XIR_TYPE_ARRAY, .element = type_parameter, .parameter_span = 1},
-        {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER, .result = XR_XIR_UNIT,
+        {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER, .result = type_parameter,
             .parameters = &callback_parameter, .parameter_count = 1, .parameter_span = 1,
             .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind = XR_XIR_TYPE_CELL, .element = type_parameter, .parameter_span = 1},
@@ -721,14 +721,19 @@ static void execution_instance_parameters(void) {
     };
     XrXirTypes types = {.nodes = nodes, .count = 4};
     CHECK(xr_xir_compile_types_structure_verify(&effect_context, &types) == XR_XIR_OK);
-    XrXirType parameters[] = {type_parameter, XR_XIR_CONSTRUCTED_TYPE_BASE + 1, XR_XIR_CONSTRUCTED_TYPE_BASE + 2};
-    XrXirInstruction ret = {.op = XR_XIR_RETURN};
-    XrXirBlock block = {.count = 1};
-    XrXirFunction function = {.parameters = parameters, .parameter_count = 3, .instructions = &ret,
-        .instruction_count = 1, .blocks = &block, .block_count = 1, .error_type = XR_XIR_NEVER};
+    XrXirType parameters[] = {type_parameter, XR_XIR_CONSTRUCTED_TYPE_BASE + 1,
+        XR_XIR_CONSTRUCTED_TYPE_BASE + 2, XR_XIR_CONSTRUCTED_TYPE_BASE};
+    uint32_t operand = 3;
+    XrXirInstruction code[] = {{.op = XR_XIR_CALL_INDIRECT, .type = type_parameter,
+        .args = {0, 1}, .immediate = 1}, {.op = XR_XIR_RETURN}};
+    XrXirBlock block = {.count = 2};
+    XrXirFunction function = {.parameters = parameters, .parameter_count = 4, .instructions = code,
+        .instruction_count = 2, .blocks = &block, .block_count = 1, .operands = &operand,
+        .operand_count = 1, .error_type = XR_XIR_NEVER};
     XrXirConstraint constraint = {0};
     XrXirGeneric generic = {.constraints = &constraint, .parameter_count = 1};
     XrXirModule module = {.types = &types, .functions = &function, .function_count = 1, .generics = &generic};
+    CHECK(xr_xir_compile_generics_structure_verify(&effect_context, &module) == XR_XIR_OK);
     EffectCheckedRoots *roots = NULL;
     CHECK(effect_checked_roots_collect(&effect_context, &module, NULL, NULL, NULL, &roots, false) == XR_XIR_OK);
     EffectCheckBuild build = {.memory = &effect_context, .module = &module, .roots = roots,
@@ -736,9 +741,10 @@ static void execution_instance_parameters(void) {
     CHECK(effect_check_type_argument(&build, XR_XIR_CONSTRUCTED_TYPE_BASE + 3));
     uint32_t instance = effect_check_instance(&build, 0, 0, 1);
     CHECK(instance == 1 && build.status == XR_XIR_OK);
-    for (uint32_t p = 0; p < 3; ++p) CHECK(effect_check_argument(&build, roots->function[0].first + p));
+    uint32_t first = roots->arguments;
+    for (uint32_t p = 0; p < 4; ++p) CHECK(effect_check_argument(&build, roots->function[0].first + p));
     CHECK(effect_check_call_record(&build, roots->function[0].root,
-        (EffectCheckCall){.target = roots->function[instance].root, .count = 3, .protocol = 2}));
+        (EffectCheckCall){.target = roots->function[instance].root, .first = first, .count = 4, .protocol = 2}));
     XirExecutionSite site = {0};
     CHECK(xir_execution_site(roots, XIR_EXECUTION_CALL, 0, &site) == XR_XIR_OK);
     XirExecutionParameter formal = {0};
@@ -755,6 +761,8 @@ static void execution_instance_parameters(void) {
         xr_xir_cell_element(closed, formal.type) == XR_XIR_CONSTRUCTED_TYPE_BASE + 3);
     CHECK(effect_check_suspend_bits(roots, roots->function[instance].root)[0] == 8);
     CHECK(effect_check_suspend_bits(roots, roots->function[instance].contents + 2)[0] == 1);
+    CHECK(roots->node[roots->function[instance].first + 4].storable_value);
+    CHECK(roots->node[roots->function[instance].first + 4].type == XR_XIR_CONSTRUCTED_TYPE_BASE + 3);
     xr_compile_resources_free(build.instance_index);
     xir_read_scratch_free(&build.scratch);
     effect_checked_roots_free(roots);
