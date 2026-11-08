@@ -12,16 +12,12 @@
  */
 #ifndef XIR_SPECIALIZE_INSTANCE_INDEX_CASES_H
 #define XIR_SPECIALIZE_INSTANCE_INDEX_CASES_H
+#include "xir_specialize_source_fixture.h"
 
 typedef struct SpecIndexSourceCase { uint32_t count,ordinary,effects;bool report; } SpecIndexSourceCase;
 static const char *const spec_index_type_names[]={"i8","i16","i32","i64","u8","u16","u32","u64"};
 static const XrXirType spec_index_type_ids[]={XR_XIR_I8,XR_XIR_I16,XR_XIR_I32,XR_XIR_I64,
     XR_XIR_U8,XR_XIR_U16,XR_XIR_U32,XR_XIR_U64};
-
-static void spec_index_text_append(char *text,size_t capacity,size_t *length,const char *piece) {
-    size_t count=strlen(piece);CHECK(*length<capacity && count<capacity-*length);
-    memcpy(text+*length,piece,count+1);*length+=count;
-}
 
 static void spec_index_source_text(const SpecIndexSourceCase *input,char *text,size_t capacity) {
     CHECK(input->count && input->count<=64 && (input->ordinary==3 || input->ordinary==6) &&
@@ -43,15 +39,6 @@ static void spec_index_source_text(const SpecIndexSourceCase *input,char *text,s
         spec_index_text_append(text,capacity,&length,");");
     }
     spec_index_text_append(text,capacity,&length,"return sum}\nprint(run())\n");
-}
-
-static uint32_t spec_index_source_function(const XrXirModule *module,const char *name) {
-    size_t length=strlen(name);uint32_t output=UINT32_MAX;
-    for (uint32_t f=0;f<module->function_count;++f)
-        if (module->functions[f].name_length==length && !memcmp(module->functions[f].name,name,length)) {
-            CHECK(output==UINT32_MAX);output=f;
-        }
-    CHECK(output!=UINT32_MAX);return output;
 }
 
 static void spec_index_source_origins(const SpecIndexSourceCase *input,const XrXirModule *source,

@@ -1,6 +1,13 @@
 # Long vectors and literal call order provide independent specialization keys.
+add_executable(test_xir_specialize_key_controls ${CMAKE_CURRENT_LIST_DIR}/test_xir_specialize_key_controls.c)
+target_link_libraries(test_xir_specialize_key_controls PRIVATE xray_xir_source)
+if(MSVC)
+    target_compile_options(test_xir_specialize_key_controls PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_specialize_key_controls PRIVATE -Wall -Wextra -Werror)
+endif()
 add_test(NAME test_xir_specialize_key_controls
-    COMMAND test_xir_source_generic_callable_context --spec-key-controls)
+    COMMAND test_xir_specialize_key_controls)
 set_tests_properties(test_xir_specialize_key_controls PROPERTIES
     LABELS "unit;xir;specialization;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
 

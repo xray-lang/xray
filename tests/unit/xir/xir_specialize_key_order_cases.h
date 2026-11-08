@@ -12,6 +12,7 @@
  */
 #ifndef XIR_SPECIALIZE_KEY_ORDER_CASES_H
 #define XIR_SPECIALIZE_KEY_ORDER_CASES_H
+#include "xir_specialize_source_fixture.h"
 
 enum { SPEC_KEY_WIDTH = 16, SPEC_KEY_CALLS = 10, SPEC_KEY_UNIQUE = 5 };
 static const uint32_t spec_key_calls[SPEC_KEY_CALLS] = {2,4,1,2,3,0,4,1,0,3};
@@ -83,10 +84,9 @@ static void spec_key_origins(const XrXirModule *source, const XrXirModule *insta
         uint32_t rank = calls < SPEC_KEY_CALLS ? spec_key_ranks[calls] : 0;
         const XrXirOrigin *origin = &proof->origins[id];
         CHECK(origin->function == (calls == SPEC_KEY_CALLS ? twin : stamp));
-        CHECK(origin->argument_count == SPEC_KEY_WIDTH && origin->effect_argument_count == 1);
+        CHECK(origin->argument_count == SPEC_KEY_WIDTH && !origin->effect_argument_count && !origin->effect_arguments);
         CHECK(origin->arguments[0] == first[rank] && origin->arguments[SPEC_KEY_WIDTH - 1] == last[rank]);
         for (uint32_t a = 1; a + 1 < SPEC_KEY_WIDTH; ++a) CHECK(origin->arguments[a] == XR_XIR_I64);
-        CHECK(origin->effect_arguments[0].parameter == 0 && origin->effect_arguments[0].type == XR_XIR_I64);
         CHECK(!instance->declarations->functions[id].cleanup_owner);
         if (calls == SPEC_KEY_CALLS) {
             twin_id = id;
