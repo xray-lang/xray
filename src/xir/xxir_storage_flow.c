@@ -67,6 +67,8 @@ typedef struct StorageFunction {
     uint32_t *blocks, *predecessors;
     StoragePredecessor *edges;
     uint32_t edge_count, edge_capacity, flow_capacity;
+    uint32_t *flow_index, *exposure_index;
+    uint32_t flow_index_capacity, exposure_index_capacity;
     uint32_t point_count, site_head_count;
     uint32_t *identity_heads;
     StorageIdentityLink *identity_links;
@@ -96,6 +98,8 @@ struct XirStorageFlow {
     uint32_t point_value_capacity, point_index_capacity;
     uint32_t *point_index, *point_value_index;
     uint32_t identity_capacity, allocation_capacity, input_capacity, unknown_capacity, exposure_seed_capacity;
+    uint32_t *cross_index, *unknown_index, *exposure_seed_index;
+    uint32_t cross_index_capacity, unknown_index_capacity, exposure_seed_index_capacity;
     StorageExecution *sites;
     uint32_t site_count, site_capacity, site_index_capacity, generation;
     uint32_t *site_index;
@@ -137,52 +141,7 @@ static uint32_t storage_aux(XirStorageFlow *flow, uint32_t function) {
     return row->value_count++;
 }
 
-static bool storage_relation_bank(XirStorageFlow *flow, uint32_t function, uint32_t source,
-    uint32_t target, XirStorageFlowBank bank) {
-    XirStorageFlowFunction *row = (XirStorageFlowFunction *)&flow->view.functions[function];
-    StorageFunction *work = &flow->rows[function];
-    if (source >= row->value_count || target >= row->value_count) {
-        flow->status = XR_XIR_BAD_STRUCTURE; return false;
-    }
-    const XrXirValueFlow **edges = bank == XIR_STORAGE_EXPOSURE ? &row->exposure_flows : &row->flows;
-    uint32_t *count = bank == XIR_STORAGE_EXPOSURE ? &row->exposure_flow_count : &row->flow_count;
-    uint32_t *capacity = bank == XIR_STORAGE_EXPOSURE ? &work->exposure_capacity : &work->flow_capacity;
-    void *values = (void *)*edges;
-    if (!storage_reserve(flow, &values, *count, capacity, sizeof(**edges))) return false;
-    *edges = values;
-    ((XrXirValueFlow *)values)[(*count)++] = (XrXirValueFlow){source, target};
-    ++flow->revision;
-    return true;
-}
-
-static bool storage_relation(XirStorageFlow *flow, uint32_t function, uint32_t source, uint32_t target) {
-    return storage_relation_bank(flow, function, source, target, XIR_STORAGE_CONTENTS);
-}
-
-static bool storage_state_relation(XirStorageFlow *flow, uint32_t function, StorageState state, uint32_t source) {
-    return storage_relation_bank(flow, function, source, state.value, storage_bank(state));
-}
-
-static bool storage_exposure_seed(XirStorageFlow *flow, uint32_t function, uint32_t value, uint32_t application) {
-    void *values = (void *)flow->view.exposure_seeds;
-    if (!storage_reserve(flow, &values, flow->view.exposure_seed_count, &flow->exposure_seed_capacity,
-        sizeof(*flow->view.exposure_seeds))) return false;
-    flow->view.exposure_seeds = values;
-    ((XirStorageExposureSeed *)values)[flow->view.exposure_seed_count++] =
-        (XirStorageExposureSeed){function, value, application};
-    ++flow->revision;
-    return true;
-}
-
-static bool storage_unknown(XirStorageFlow *flow, uint32_t function, uint32_t value, XrXirType type) {
-    void *values = (void *)flow->view.unknowns;
-    if (!storage_reserve(flow, &values, flow->view.unknown_count, &flow->unknown_capacity,
-        sizeof(*flow->view.unknowns))) return false;
-    flow->view.unknowns = values;
-    ((XirStorageUnknown *)values)[flow->view.unknown_count++] = (XirStorageUnknown){function, value, type, UINT32_MAX};
-    ++flow->revision;
-    return true;
-}
+#include "xxir_storage_facts.inc.c"
 
 static bool storage_allocation(XirStorageFlow *flow, uint32_t function, uint32_t value) {
     void *values = (void *)flow->view.allocations;
@@ -734,21 +693,6 @@ static bool storage_drain(XirStorageFlow *flow) {
     return flow->status == XR_XIR_OK;
 }
 
-static bool storage_cross(XirStorageFlow *flow, XirStorageCrossFlow edge) {
-    if (edge.source_function >= flow->view.function_count || edge.target_function >= flow->view.function_count ||
-        edge.source >= flow->view.functions[edge.source_function].value_count ||
-        edge.target >= flow->view.functions[edge.target_function].value_count) {
-        flow->status = XR_XIR_BAD_STRUCTURE; return false;
-    }
-    void *values = (void *)flow->view.crossflows;
-    if (!storage_reserve(flow, &values, flow->view.crossflow_count, &flow->crossflow_capacity,
-        sizeof(*flow->view.crossflows))) return false;
-    flow->view.crossflows = values;
-    ((XirStorageCrossFlow *)values)[flow->view.crossflow_count++] = edge;
-    ++flow->revision;
-    return true;
-}
-
 static bool storage_binding(XirStorageFlow *flow, XirStorageBinding binding) {
     void *values = (void *)flow->view.bindings;
     if (!storage_reserve(flow, &values, flow->view.binding_count, &flow->binding_capacity,
@@ -1046,8 +990,9 @@ static bool storage_apply_known(XirStorageFlow *flow, uint32_t site_index, uint3
          * is a local write contract, not publication of the caller's Cell. */
         if (bank == XIR_STORAGE_EXPOSURE && p >= site.capture_count) continue;
         bool match_exact;
-        if (!storage_argument_matches(flow, &site, actual, state.handle, &match_exact)) continue;
+        bool matches = storage_argument_matches(flow, &site, actual, state.handle, &match_exact);
         if (flow->status != XR_XIR_OK) return false;
+        if (!matches) continue;
         affected = true; exact &= match_exact;
         uint32_t exit = callee->instruction_count + (uint32_t)outcome;
         uint32_t source = storage_bank_state(flow, site.declaration, exit, p, bank);
@@ -1115,6 +1060,7 @@ static bool storage_opaque_environment(XirStorageFlow *flow, const XirExecutionS
         if (actual.cell) {
             bool exact;
             if (storage_argument_matches(flow, site, actual, query->handle, &exact)) *affected = true;
+            if (flow->status != XR_XIR_OK) return false;
             if (query->publish) {
                 uint32_t handle = actual.caller_handle;
                 if (handle == UINT32_MAX && actual.function == site->function && actual.environment == UINT32_MAX)
@@ -1348,6 +1294,7 @@ static void storage_retire_construction(XirStorageFlow *flow) {
         xr_compile_resources_free(row->exposure_points);
         xr_compile_resources_free(row->blocks); xr_compile_resources_free(row->predecessors);
         xr_compile_resources_free(row->edges); xr_compile_resources_free(row->identity_heads);
+        xr_compile_resources_free(row->flow_index); xr_compile_resources_free(row->exposure_index);
         xr_compile_resources_free(row->identity_links); xr_compile_resources_free(row->address_values);
         xr_compile_resources_free(row->addresses); xr_compile_resources_free(row->visited);
         xr_compile_resources_free(row->queue); xr_compile_resources_free(row->states);
@@ -1362,6 +1309,9 @@ static void storage_retire_construction(XirStorageFlow *flow) {
     xr_compile_resources_free(flow->site_index); flow->site_index = NULL;
     xr_compile_resources_free(flow->point_index); flow->point_index = NULL;
     xr_compile_resources_free(flow->point_value_index); flow->point_value_index = NULL;
+    xr_compile_resources_free(flow->cross_index); flow->cross_index = NULL;
+    xr_compile_resources_free(flow->unknown_index); flow->unknown_index = NULL;
+    xr_compile_resources_free(flow->exposure_seed_index); flow->exposure_seed_index = NULL;
     flow->site_count = 0; flow->work_count = 0; flow->work_first = 0;
     flow->stage_count = 0; flow->stage_first = 0;
     flow->module = NULL; flow->execution = NULL; flow->control = NULL;
