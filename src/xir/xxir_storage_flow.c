@@ -34,7 +34,11 @@ typedef struct StorageRead {
     bool force;
 } StorageRead;
 typedef struct StorageWrite { uint32_t point, handle; } StorageWrite;
-typedef struct StoragePublication { uint32_t point, handle; XirStoragePointKind kind; } StoragePublication;
+typedef struct StoragePublication {
+    uint32_t point, handle, condition_point, condition_handle;
+    XirStoragePointKind kind, condition_kind;
+    bool conditional;
+} StoragePublication;
 enum { STORAGE_EXPOSURE_KIND = 16 };
 typedef struct StorageExecution {
     XirExecutionSite site;
@@ -57,6 +61,7 @@ typedef struct StorageFunction {
     uint32_t *exposure_inputs, *exposure_offsets, *exposure_points;
     uint32_t call_count, call_capacity;
     StoragePublication *publications;
+    uint32_t *publication_index, publication_index_capacity;
     uint32_t publication_count, publication_capacity, exposure_capacity;
     bool events_ready;
     uint32_t *blocks, *predecessors;
@@ -85,12 +90,14 @@ struct XirStorageFlow {
     StorageFunction *rows;
     StorageWork *work;
     uint32_t work_count, work_capacity, work_first;
+    StorageWork *stages;
+    uint32_t stage_count, stage_capacity, stage_first, stage_generation;
     uint32_t crossflow_capacity, application_capacity, binding_capacity;
     uint32_t identity_capacity, allocation_capacity, input_capacity, unknown_capacity, exposure_seed_capacity;
     StorageExecution *sites;
     uint32_t site_count, site_capacity, site_index_capacity, generation;
     uint32_t *site_index;
-    uint32_t progress;
+    uint32_t progress, request_remainder;
     uint64_t revision;
     XrXirStatus status;
     bool sealed, sealing, local_finished, exposure_started;
@@ -336,11 +343,15 @@ static uint32_t storage_point(XirStorageFlow *flow, uint32_t function, uint32_t 
         &row->state_capacity, sizeof(*row->states)) ||
         !storage_reserve(flow, (void **)&flow->work, flow->work_count,
         &flow->work_capacity, sizeof(*flow->work))) return UINT32_MAX;
+    bool stage = (kind & (STORAGE_EXPOSURE_KIND - 1)) && (kind & (STORAGE_EXPOSURE_KIND - 1)) != 5;
+    if (stage && !storage_reserve(flow, (void **)&flow->stages, flow->stage_count,
+        &flow->stage_capacity, sizeof(*flow->stages))) return UINT32_MAX;
     uint32_t value = storage_aux(flow, function);
     if (value == UINT32_MAX) return value;
     uint32_t index = row->state_count++;
     row->states[index] = (StorageState){point, handle, value, kind, order, 0}; row->state_index[slot] = index + 1;
     flow->work[flow->work_count++] = (StorageWork){function, index};
+    if (stage) flow->stages[flow->stage_count++] = (StorageWork){function, index};
     return value;
 }
 
@@ -555,6 +566,44 @@ static bool storage_index_publications(XirStorageFlow *flow, uint32_t function) 
     }
     xr_compile_resources_free(heads); xr_compile_resources_free(next); xr_compile_resources_free(events);
     return flow->status == XR_XIR_OK;
+}
+
+static uint32_t storage_publication_hash(StoragePublication event) {
+    uint32_t fields[] = {event.point, event.handle, event.condition_point, event.condition_handle,
+        (uint32_t)event.kind, (uint32_t)event.condition_kind, event.conditional};
+    return xr_hash_bytes(fields, sizeof(fields));
+}
+
+static bool storage_record_publication(XirStorageFlow *flow, uint32_t function, StoragePublication event) {
+    StorageFunction *row = &flow->rows[function];
+    if (!row->publication_index_capacity || row->publication_count >= row->publication_index_capacity / 2) {
+        uint64_t next = row->publication_index_capacity ? (uint64_t)row->publication_index_capacity * 2 : 16;
+        if (next > UINT32_MAX) { flow->status = XR_XIR_OVERFLOW; return false; }
+        uint32_t capacity = (uint32_t)next;
+        uint32_t *index = xir_compile_calloc(&flow->memory, capacity, sizeof(*index), &flow->status);
+        if (!index) return false;
+        for (uint32_t p = 0; p < row->publication_count && storage_step(flow); ++p) {
+            uint32_t slot = storage_publication_hash(row->publications[p]) & (capacity - 1);
+            while (index[slot]) slot = (slot + 1) & (capacity - 1);
+            index[slot] = p + 1;
+        }
+        if (flow->status != XR_XIR_OK) { xr_compile_resources_free(index); return false; }
+        xr_compile_resources_free(row->publication_index);
+        row->publication_index = index; row->publication_index_capacity = capacity;
+    }
+    uint32_t slot = storage_publication_hash(event) & (row->publication_index_capacity - 1);
+    while (row->publication_index[slot]) {
+        StoragePublication found = row->publications[row->publication_index[slot] - 1];
+        if (found.point == event.point && found.handle == event.handle && found.kind == event.kind &&
+            found.conditional == event.conditional && found.condition_point == event.condition_point &&
+            found.condition_handle == event.condition_handle && found.condition_kind == event.condition_kind) return true;
+        slot = (slot + 1) & (row->publication_index_capacity - 1);
+    }
+    if (!storage_reserve(flow, (void **)&row->publications, row->publication_count,
+        &row->publication_capacity, sizeof(*row->publications))) return false;
+    row->publications[row->publication_count] = event; row->publication_index[slot] = ++row->publication_count;
+    ++flow->revision;
+    return true;
 }
 
 static bool storage_observe_values(XirStorageFlow *flow, uint32_t function, uint32_t i,
@@ -1282,6 +1331,7 @@ static void storage_retire_construction(XirStorageFlow *flow) {
         xr_compile_resources_free(row->write_points); xr_compile_resources_free(row->calls);
         xr_compile_resources_free(row->content_inputs); xr_compile_resources_free(row->exposure_inputs);
         xr_compile_resources_free(row->publications); xr_compile_resources_free(row->exposure_offsets);
+        xr_compile_resources_free(row->publication_index);
         xr_compile_resources_free(row->exposure_points);
         xr_compile_resources_free(row->blocks); xr_compile_resources_free(row->predecessors);
         xr_compile_resources_free(row->edges); xr_compile_resources_free(row->identity_heads);
@@ -1292,11 +1342,13 @@ static void storage_retire_construction(XirStorageFlow *flow) {
     }
     xr_compile_resources_free(flow->rows); flow->rows = NULL;
     xr_compile_resources_free(flow->work); flow->work = NULL;
+    xr_compile_resources_free(flow->stages); flow->stages = NULL;
     for (uint32_t s = 0; flow->sites && s < flow->site_count; ++s)
         xr_compile_resources_free(flow->sites[s].identity_parameters);
     xr_compile_resources_free(flow->sites); flow->sites = NULL;
     xr_compile_resources_free(flow->site_index); flow->site_index = NULL;
     flow->site_count = 0; flow->work_count = 0; flow->work_first = 0;
+    flow->stage_count = 0; flow->stage_first = 0;
     flow->module = NULL; flow->execution = NULL; flow->control = NULL;
 }
 
@@ -1448,11 +1500,9 @@ XR_FUNC XrXirStatus xir_storage_flow_expose(XirStorageFlow *flow, uint32_t funct
     if (!storage_valid_observation(flow, function, instruction, handle, point) || flow->exposure_started)
         return XR_XIR_BAD_STRUCTURE;
     if (flow->status != XR_XIR_OK) return flow->status;
-    StorageFunction *row = &flow->rows[function];
-    if (!storage_reserve(flow, (void **)&row->publications, row->publication_count,
-        &row->publication_capacity, sizeof(*row->publications))) return flow->status;
-    row->publications[row->publication_count++] = (StoragePublication){instruction, handle, point};
-    return XR_XIR_OK;
+    storage_record_publication(flow, function,
+        (StoragePublication){.point=instruction, .handle=handle, .kind=point});
+    return flow->status;
 }
 
 static bool storage_start_exposure(XirStorageFlow *flow) {
@@ -1472,13 +1522,22 @@ static bool storage_start_exposure(XirStorageFlow *flow) {
         }
         for (uint32_t p = 0; p < row->publication_count && storage_step(flow); ++p) {
             StoragePublication event = row->publications[p];
+            uint32_t condition = UINT32_MAX;
+            if (event.conditional) {
+                condition = storage_contents_point(flow, f, event.condition_point, event.condition_handle,
+                    event.condition_kind, XIR_STORAGE_EXPOSURE);
+                if (condition == UINT32_MAX) return false;
+            }
             StorageAddress address;
             if (!storage_address(flow, f, event.handle, &address)) return false;
             for (uint32_t a = 0; a < address.count && storage_step(flow); ++a) {
                 uint32_t root = row->address_values[address.first + a];
                 uint32_t value = storage_contents_point(flow, f, event.point, root,
                     event.kind, XIR_STORAGE_EXPOSURE);
-                if (value == UINT32_MAX || !storage_exposure_seed(flow, f, value, UINT32_MAX)) return false;
+                if (value == UINT32_MAX) return false;
+                if (event.conditional) {
+                    if (!storage_relation_bank(flow, f, condition, value, XIR_STORAGE_EXPOSURE)) return false;
+                } else if (!storage_exposure_seed(flow, f, value, UINT32_MAX)) return false;
             }
         }
     }
@@ -1501,6 +1560,8 @@ XR_FUNC XrXirStatus xir_storage_flow_exposure_at(XirStorageFlow *flow, uint32_t 
     return flow->status;
 }
 
+#include "xxir_storage_capture.inc.c"
+
 XR_FUNC XrXirStatus xir_storage_flow_view(const XirStorageFlow *flow, XirStorageFlowView *output) {
     if (!flow || !output) return XR_XIR_BAD_STRUCTURE;
     if (flow->status != XR_XIR_OK) return flow->status;
@@ -1509,11 +1570,15 @@ XR_FUNC XrXirStatus xir_storage_flow_view(const XirStorageFlow *flow, XirStorage
 }
 
 static bool storage_close_applications(XirStorageFlow *flow) {
+    if (flow->stage_generation != flow->generation) {
+        flow->stage_first = 0; flow->stage_generation = flow->generation;
+    }
     do {
         if (!storage_drain(flow)) return false;
-        for (uint32_t f = 0; f < flow->view.function_count && storage_step(flow); ++f)
-            for (uint32_t s = 0; s < flow->rows[f].state_count && storage_step(flow); ++s)
-                if (!storage_process_stage(flow, f, s)) return false;
+        while (flow->stage_first < flow->stage_count && storage_step(flow)) {
+            StorageWork item = flow->stages[flow->stage_first++];
+            if (!storage_process_stage(flow, item.function, item.state)) return false;
+        }
     } while (flow->work_first < flow->work_count && flow->status == XR_XIR_OK);
     return flow->status == XR_XIR_OK;
 }
