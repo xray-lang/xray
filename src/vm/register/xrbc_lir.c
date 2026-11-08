@@ -1002,14 +1002,7 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
         if (!xr_rbc_jump(&c->code[patch.pc], patch.pc, c->blocks[patch.block], c->code_count))
             return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "branch exceeds jump encoding");
     }
-    if (!rbc_lir_thread_jumps(c)) return false;
-    // Floating predicate joins expose a paired branch after compaction.
-    bool float_comparison = false;
-    for (size_t pc = 0; pc < c->code_count && !float_comparison; ++pc) {
-        uint32_t op = c->code[pc] & 255;
-        float_comparison = op >= XR_RBC_FEQ && op <= XR_RBC_FGE;
-    }
-    if (float_comparison && !rbc_lir_compact_jumps(c)) return false;
+    if (!rbc_lir_thread_jumps(c) || !rbc_lir_compact_jumps(c)) return false;
     *out = (XrRbcFunction) {.code=c->code, .code_count=c->code_count,
         .constants=c->constants, .constant_count=c->constant_count,
         .register_count=c->register_count, .parameter_count=c->view.parameter_count,
