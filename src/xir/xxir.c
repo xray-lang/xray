@@ -510,8 +510,8 @@ XrXirStatus xr_xir_compile_check_v2(const XrXirCompileContext *context,const XrX
     return xir_check(context,built,construction,output,diagnostic,NULL);
 }
 
-/* A private prepared graph is consumed immediately by the complete checker.
- * Construction memory remains private until an independent owned copy passes. */
+/* Body admission enforces ownership, initialization and type obligations once.
+ * Effect refinement reuses that admission; structural replay is paranoid-only. */
 XR_FUNC XrXirStatus xr_xir_compile_check_refined_v2(const XrXirCompileContext *context,
     const XrXirModule *built, const XrXirConstruction *construction, const XrXirRootRefiner *refiner,
     XrCompileRequestControl *control, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
@@ -520,10 +520,17 @@ XR_FUNC XrXirStatus xr_xir_compile_check_refined_v2(const XrXirCompileContext *c
     XrXirStatus status=lower_control_poll(control);
     if (status!=XR_XIR_OK) status=transition_error(status,diagnostic);
     if (status==XR_XIR_OK) status=transition_shape(built,XR_XIR_BUILT,context,NULL,diagnostic);
-    if (status == XR_XIR_OK) status = xir_compile_structure_verify_input(context,(XirEffectInput){built,construction,control},diagnostic);
+    if (status == XR_XIR_OK)
+        status = xir_compile_structure_verify_input(context,(XirEffectInput){built,construction,control},diagnostic);
     XrXirEffects *effects = NULL;
     if (status == XR_XIR_OK) status = xr_xir_compile_effects_refine_verified_input(context,(XirEffectInput){built,construction,control},refiner,&effects);
-    if (status == XR_XIR_OK) status = xir_compile_verify_effects_input(context,(XirEffectInput){built,construction,control},effects,diagnostic);
+    if (status == XR_XIR_OK) {
+#if XR_XIR_PARANOID
+        status = xir_compile_verify_effects_input(context,(XirEffectInput){built,construction,control},effects,diagnostic);
+#else
+        status = xir_compile_check_effect_declarations(context,(XirEffectInput){built,construction,control},effects,diagnostic);
+#endif
+    }
     if (status == XR_XIR_BAD_TYPE && effects && diagnostic && refiner->explain)
         refiner->explain(refiner->context, built, effects, diagnostic);
     XrXirArtifact *copy = NULL;

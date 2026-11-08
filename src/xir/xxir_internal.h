@@ -186,6 +186,9 @@ XR_FUNC XrXirStatus xir_compile_structure_verify_input(const XrXirCompileContext
     XirEffectInput input,XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xir_compile_verify_effects_input(const XrXirCompileContext *context,
     XirEffectInput input,const XrXirEffects *effects,XrXirDiagnostic *diagnostic);
+/* Source has admitted the body; language obligations consume its sole effect summary. */
+XR_FUNC XrXirStatus xir_compile_check_effect_declarations(const XrXirCompileContext *context,
+    XirEffectInput input,const XrXirEffects *effects,XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xir_compile_verify_source_effects_input(const XrXirCompileContext *context,
     XirEffectInput input,const XrXirEffects *effects,XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xir_compile_verify_raw_source_effects_input(const XrXirCompileContext *context,

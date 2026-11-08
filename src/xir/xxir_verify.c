@@ -1746,6 +1746,16 @@ XR_FUNC XrXirStatus xir_compile_verify_effects_input(const XrXirCompileContext *
     XirEffectInput input,const XrXirEffects *effects,XrXirDiagnostic *diagnostic) {
     return verify_effects_body(context,input,effects,NULL,diagnostic);
 }
+XR_FUNC XrXirStatus xir_compile_check_effect_declarations(const XrXirCompileContext *context,
+    XirEffectInput input,const XrXirEffects *effects,XrXirDiagnostic *diagnostic) {
+    if(!xir_compile_context_valid(context)||!input.module||!effects)return XR_XIR_BAD_STRUCTURE;
+    XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+    XrXirCompileContext remaining=*context;
+    XrXirStatus status=declaration_effects_verify(input,&remaining,&location,effects,NULL,true);
+    location.status=status;
+    if(diagnostic)*diagnostic=location;
+    return status;
+}
 XR_FUNC XrXirStatus xir_compile_verify_program_effects(const XrXirCompileContext *context,
     const XrXirModule *module,const XrXirConstruction *construction,
     const XrXirEffects *effects,XrXirDiagnostic *diagnostic) {
