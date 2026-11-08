@@ -44,10 +44,11 @@ static const void *const dispatch[] = {
 #define XR_RBC_NEXT() goto xr_rbc_next
 #endif
 
-xr_rbc_reload : XR_DCHECK(stack->depth > 0, "interpreter requires an active frame");
-function = &module->functions[stack->frames[stack->depth - 1].function];
-registers = stack->slots + stack->frames[stack->depth - 1].base;
-pc = stack->frames[stack->depth - 1].pc;
+XR_DCHECK(stack->depth > 0, "interpreter requires an active frame");
+frame = &stack->frames[stack->depth - 1];
+function = &module->functions[frame->function];
+registers = stack->slots + frame->base;
+pc = frame->pc;
 #if defined(__clang__) || defined(__GNUC__)
 XR_RBC_NEXT();
 #else
@@ -70,13 +71,13 @@ XR_RBC_CASE(LOADI) {
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(SPILL) {
-    size_t index = stack->frames[stack->depth - 1].spill_base + (instruction >> 16);
+    size_t index = frame->spill_base + (instruction >> 16);
     stack->spills[index] = XR_RBC_SLOT(a);
     XR_RBC_SLOT(a) = (XrRbcRegister){0};
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(RELOAD) {
-    size_t index = stack->frames[stack->depth - 1].spill_base + (instruction >> 16);
+    size_t index = frame->spill_base + (instruction >> 16);
     XR_RBC_SLOT(a) = stack->spills[index];
     // Scalar reloads copy bits. Reference reloads transfer the sole owner.
     if ((instruction >> 16) < function->reference_spill_count)
@@ -85,7 +86,6 @@ XR_RBC_CASE(RELOAD) {
 }
 XR_RBC_CASE(CELL_NEW) {
     uint32_t ordinal = instruction >> 16;
-    XrRbcFrame *frame = &stack->frames[stack->depth - 1];
     if (ordinal > frame->initialized_cells) return XR_RBC_INVALID;
     size_t index = frame->cell_base + ordinal;
     stack->cells[index].bits = XR_RBC_REG(a);
@@ -153,7 +153,6 @@ XR_RBC_CASE(STRING_TAKE) {
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(STRING_CELL_NEW) {
-    XrRbcFrame *frame = &stack->frames[stack->depth - 1];
     if (c != frame->initialized_cells) return XR_RBC_INVALID;
     size_t index = frame->cell_base + c;
     stack->cells[index].string = xrt_string_retain(XR_RBC_STRING(b), XR_RBC_SOURCE());
@@ -170,6 +169,12 @@ XR_RBC_CASE(STRING_CELL_DROP) {
 }
 XR_RBC_CASE(ADD) {
     XR_RBC_BINARY(XR_RBC_REG(b) + XR_RBC_REG(c));
+    XR_RBC_NEXT();
+}
+XR_RBC_CASE(ADDI)
+XR_RBC_CASE(SUBI) {
+    uint64_t value = c <= INT8_MAX ? (uint64_t)c : (uint64_t)c - 256;
+    XR_RBC_REG(a) = op == XR_RBC_ADDI ? XR_RBC_REG(b) + value : XR_RBC_REG(b) - value;
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(SUB) {
@@ -280,6 +285,20 @@ XR_RBC_CASE(USHR) {
     XR_RBC_BINARY(XR_RBC_REG(b) >> (XR_RBC_REG(c) & 63));
     XR_RBC_NEXT();
 }
+XR_RBC_CASE(LTI)
+XR_RBC_CASE(LEI)
+XR_RBC_CASE(GTI)
+XR_RBC_CASE(GEI)
+XR_RBC_CASE(EQI) {
+    uint32_t bits = instruction >> 16;
+    int64_t rhs = bits <= INT16_MAX ? (int64_t)bits : (int64_t)bits - 65536;
+    int64_t lhs = xr_rbc_signed(XR_RBC_REG(a));
+    bool take = op == XR_RBC_LTI ? lhs < rhs : op == XR_RBC_LEI ? lhs <= rhs :
+        op == XR_RBC_GTI ? lhs > rhs : op == XR_RBC_GEI ? lhs >= rhs : lhs == rhs;
+    instruction = function->code[pc++];
+    if (take) goto xr_rbc_jump;
+    XR_RBC_NEXT();
+}
 XR_RBC_CASE(LT)
 XR_RBC_CASE(LE)
 XR_RBC_CASE(EQ) {
@@ -299,13 +318,31 @@ xr_rbc_jump: {
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(CALL) {
-    stack->frames[stack->depth - 1].pc = pc;
-    // A call can relocate the stack. Reload the register window on entry.
-    registers = NULL;
-    status = xr_rbc_call(module, stack, a, instruction >> 16);
-    if (status != XR_RBC_OK)
-        return status;
-    goto xr_rbc_reload;
+    uint32_t target = instruction >> 16;
+    const XrRbcFunction *callee = &module->functions[target];
+    size_t base = frame->base + a + 1;
+    frame->pc = pc;
+    // Admission places the complete argument window at the caller's top.
+    // Its end already fits the allocated stack, so this base cannot overflow.
+    XR_DCHECK(base <= stack->slot_capacity, "call base belongs to the allocated register stack");
+    if ((callee->register_count > stack->slot_capacity - base ||
+         stack->depth == stack->frame_capacity ||
+         callee->cell_count > stack->cell_capacity - stack->cell_count ||
+         callee->spill_count > stack->spill_capacity - stack->spill_count) &&
+        !xr_rbc_call_reserve(stack, base, callee)) return XR_RBC_OUT_OF_MEMORY;
+    // Reserve may move every stack array. Rebind both cached pointers before
+    // touching the new frame or its arguments, including on partial growth.
+    frame = &stack->frames[stack->depth++];
+    *frame = (XrRbcFrame){target, 0, base, a, stack->cell_count, 0, stack->spill_count};
+    registers = stack->slots + base;
+    xr_rbc_entry_clear(registers, &entries[target]);
+    if (callee->reference_spill_count)
+        memset(stack->spills + stack->spill_count, 0, callee->reference_spill_count * sizeof(*stack->spills));
+    stack->cell_count += callee->cell_count;
+    stack->spill_count += callee->spill_count;
+    function = callee;
+    pc = 0;
+    XR_RBC_NEXT();
 }
 XR_RBC_CASE(CALLN) {
     uint32_t target = instruction >> 16;
@@ -342,16 +379,19 @@ XR_RBC_CASE(RET0) {
         value = XR_RBC_SLOT(a);
         if (function->result_kind == XR_RBC_STRING) XR_RBC_STRING(a) = NULL;
     }
-    XrRbcFrame retired = stack->frames[--stack->depth];
-    uint32_t destination = retired.destination;
-    stack->cell_count = retired.cell_base;
-    stack->spill_count = retired.spill_base;
-    if (!stack->depth) {
+    uint32_t destination = frame->destination;
+    stack->cell_count = frame->cell_base;
+    stack->spill_count = frame->spill_base;
+    if (!--stack->depth) {
         *result = value;
         return XR_RBC_OK;
     }
-    stack->slots[stack->frames[stack->depth - 1].base + destination] = value;
-    goto xr_rbc_reload;
+    --frame;
+    registers = stack->slots + frame->base;
+    XR_RBC_SLOT(destination) = value;
+    function = &module->functions[frame->function];
+    pc = frame->pc;
+    XR_RBC_NEXT();
 }
 #if !defined(__clang__) && !defined(__GNUC__)
 }

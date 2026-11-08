@@ -707,7 +707,7 @@ static bool effect_check_instruction(EffectCheckBuild *build, uint32_t f, uint32
     }
     if (control.suspend == XR_XIR_EFFECT_MAY) effect_check_suspend_seed(build->roots, row.root, 2, i);
     if (xr_xir_op_is_spawn(op->op)) build->roots->node[row.root].task_creation = true;
-    if (!effect_default_access_local(op->op) && !effect_default_access_scalar_slot(build->module,f,op))
+    if (!effect_default_access_local(function,op) && !effect_default_access_scalar_slot(build->module,f,op))
         build->roots->node[row.root].access_denied=true;
     if (op->op == XR_XIR_SLOT_PLACE) build->roots->node[row.root].worker_blocked = true;
     build->status = effect_check_local(build, f, i, op);

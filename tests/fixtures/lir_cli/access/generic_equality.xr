@@ -1,0 +1,5 @@
+class Options{value:i64;init(){this.value=7}}
+fn same<T:Equal>(left:T,right:T)->bool{return left==right}
+fn make()->Options{if(same<i64>(7,7)){return Options()};return Options()}
+fn use(v:Slice<u8>,options:Options=make())->i64{return len(v)+options.value}
+export fn storage_receiver()->i64{var text="abc";var view:Slice<u8>=text.bytes();return use(view)-9}

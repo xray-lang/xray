@@ -1,0 +1,22 @@
+fn plus(n:i64)->i64{return n+1}
+fn minus(n:i64)->i64{return n-1}
+fn left(n:i64)->i64{return 127+n}
+fn compare(n:i64)->i64{
+    var result=0
+    if(n<2){result=result+1}
+    if(n<=2){result=result+2}
+    if(n>2){result=result+4}
+    if(n>=2){result=result+8}
+    if(n==2){result=result+16}
+    if(n!=2){result=result+32}
+    if(2<n){result=result+64}
+    if(2<=n){result=result+128}
+    if(2>n){result=result+256}
+    if(2>=n){result=result+512}
+    return result
+}
+print(plus(9223372036854775807))
+print(minus(-9223372036854775807-1))
+print(left(-128))
+print(compare(2))
+print(compare(-1))
