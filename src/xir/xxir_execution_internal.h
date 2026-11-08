@@ -55,6 +55,8 @@ typedef struct XirExecutionSite {
     bool unresolved;
 } XirExecutionSite;
 
+typedef struct XirExecutionValue { uint32_t function, value, environment; } XirExecutionValue;
+
 typedef struct XirExecutionArgument {
     uint32_t function, value, caller_handle, environment;
     uint32_t mode;
@@ -91,6 +93,10 @@ XR_FUNC XrXirStatus xir_execution_argument(const XirExecutionOwner *,
  * receive known bindings even when another origin is unresolved. */
 XR_FUNC XrXirStatus xir_execution_visit_value_captures(const XirExecutionOwner *,
     uint32_t, uint32_t, XirExecutionVisitor, void *, bool *complete);
+XR_FUNC XrXirStatus xir_execution_visit_value_captures_in(const XirExecutionOwner *,
+    const XirExecutionValue *, XirExecutionVisitor, void *, bool *complete);
+/* Construction rebinds this receiving index once after each storage round. */
+XR_FUNC XrXirStatus xir_execution_refresh_storage(XirExecutionOwner *);
 /* Qualified substitution of this owner's symbolic receiver. Returned pending
  * projections retain their canonical index and name the originating capture
  * record in reference. Consumers key an application by both IDs and context. */

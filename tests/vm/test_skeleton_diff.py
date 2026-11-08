@@ -56,6 +56,7 @@ def main():
     cases = [
         ('fib', None, b'55\n'),
         ('sum', None, b'0\n0\n190\n'),
+        ('immediates', None, b'-9223372036854775808\n9223372036854775807\n-1\n666\n803\n'),
         ('swap', 'fn swap(n:i64)->i64{var a=1\nvar b=2\nvar i=0\n'
          'while(i<n){const t=a\na=b\nb=t\ni=i+1}\nreturn a*10+b}\n'
          'print(swap(0))\nprint(swap(1))\nprint(swap(4))\n', b'12\n21\n12\n'),

@@ -17,6 +17,7 @@
 #include "xxir_metadata_domain_internal.h"
 #include "xxir_defaults_internal.h"
 #include "xxir_internal.h"
+#include "xxir_storage_flow.h"
 #include "xxir_source_replay_internal.h"
 #include "xxir_types.h"
 #include "xxir_native_callable.h"
@@ -290,6 +291,7 @@ static EffectSeedProjection effect_seed_opcode(XrXirOp op,XrXirFunctionEffects *
 #include "xxir_effect_check_access.inc.c"
 
 #include "xxir_effect_check.inc.c"
+#include "xxir_execution.inc.c"
 #include "xxir_effect_check_pipeline.inc.c"
 #include "xxir_effect_access_query.inc.c"
 

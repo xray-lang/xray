@@ -22,6 +22,7 @@ typedef enum {
     XR_FMT_A,
     XR_FMT_AB,
     XR_FMT_ABC,
+    XR_FMT_ABS8,
     XR_FMT_ABX,
     XR_FMT_ASBX,
     XR_FMT_SJ
@@ -51,7 +52,12 @@ XR_FUNC bool xr_rbc_encode(uint32_t *out, XrRbcOperands o) {
         if (o.a >= XR_RBC_REGISTER_COUNT_MAX)
             return false;
         payload = o.a << 8;
-        if (format == XR_FMT_ABX || format == XR_FMT_ASBX) {
+        if (format == XR_FMT_ABS8) {
+            if (o.b >= XR_RBC_REGISTER_COUNT_MAX || o.c ||
+                o.immediate < INT8_MIN || o.immediate > INT8_MAX)
+                return false;
+            payload |= o.b << 16 | ((uint32_t)o.immediate & 255u) << 24;
+        } else if (format == XR_FMT_ABX || format == XR_FMT_ASBX) {
             int64_t low = format == XR_FMT_ABX ? 0 : INT16_MIN;
             int64_t high = format == XR_FMT_ABX ? UINT16_MAX : INT16_MAX;
             if (o.b || o.c || o.immediate < low || o.immediate > high)

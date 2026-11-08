@@ -126,7 +126,26 @@ static void spec_key_source_controls(void) {
     spec_key_origins(&read->module,&instance->module);
     xr_xir_compile_artifact_free(read);
     CHECK(xr_xir_compile_artifact_verify(instance,&diagnostic) == XR_XIR_OK);
-    xr_xir_compile_artifact_free(instance); xr_xir_compile_source_failure_free(&failure);
+    // Specialization leaves control facts with the Source semantic owner.
+    // Physical lowering derives its own instance facts only when requested.
+    CHECK(!instance->checked_effects && !instance->program_final);
+    uint32_t run = spec_index_source_function(&instance->module,"run");
+    const XrXirTarget target = {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
+    XrXirArtifact *borrowed = NULL, *consumed = NULL;
+    CHECK(xr_xir_compile_lower(instance,&target,NULL,&borrowed,&diagnostic) == XR_XIR_OK);
+    CHECK(instance && borrowed->program_final &&
+        xir_effects_control_summary(borrowed->program_final));
+    CHECK(xr_xir_compile_lower_take(&instance,&target,NULL,&consumed,&diagnostic) == XR_XIR_OK);
+    CHECK(!instance && consumed->program_final &&
+        xir_effects_control_summary(consumed->program_final) &&
+        xir_effects_control_summary(borrowed->program_final) !=
+            xir_effects_control_summary(consumed->program_final));
+    xr_xir_compile_artifact_free(borrowed);
+    XrXirEffectFacts facts = xr_xir_effects_read(consumed->program_final,run);
+    CHECK(facts.status == XR_XIR_OK && facts.control.suspend == XR_XIR_EFFECT_NONE &&
+        facts.control.throws == XR_XIR_EFFECT_NONE);
+    CHECK(xr_xir_compile_artifact_verify(consumed,&diagnostic) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(consumed); xr_xir_compile_source_failure_free(&failure);
     CHECK(library_compile_stats(&owner.context).held_bytes == owner.baseline.held_bytes);
     library_compile_owner_drop(&owner);
     puts("specialization 16-element keys, endpoint/order distinctions, declaration separation, first-discovery reuse and producer death PASS");

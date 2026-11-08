@@ -52,7 +52,7 @@ def main() -> None:
         accepted = ("local_alias", "conditional_alias", "local_capture", "forward",
                     "escaping_storage", "escaping_compose", "ref_replacement", "contextual_keyword",
                     "borrow_slice", "borrow_ref", "stored_collection_values", "method_values", "requirement_value",
-                    "local_snapshot", "local_overwrite")
+                    "local_snapshot", "local_overwrite", "generic_function_tuple")
         for name in accepted:
             checked = run("nonescape-" + name, [binary, "check", source_root / (name + ".xr")], 0)
             assert not checked.stdout and not checked.stderr, name
@@ -85,7 +85,8 @@ def main() -> None:
         access = fixtures / "access"
         accepted_access = ("default_class_positive.xr", "imported_default/root.xr",
                            "imported_generic/root.xr", "imported_callable/root.xr",
-                           "pure_recursive.xr", "latent_reference.xr", "immutable_scalar.xr")
+                           "pure_recursive.xr", "primitive_equality.xr",
+                           "latent_reference.xr", "immutable_scalar.xr")
         for name in accepted_access:
             checked = run("access-" + name.replace("/", "-") + "-check",
                           [binary, "check", access / name], 0)
@@ -103,6 +104,10 @@ def main() -> None:
             ("cleanup_hidden.xr", b"(CALL_DEFAULT)"),
             ("mutable_scalar.xr", b"(CALL_DEFAULT)"),
             ("immutable_reference.xr", b"(CALL_DEFAULT)"),
+            ("aggregate_equality.xr", b"(CALL_DEFAULT)"),
+            ("nominal_equality.xr", b"(CALL_DEFAULT)"),
+            ("generic_equality.xr", b"(CALL_DEFAULT)"),
+            ("string_equality.xr", b"(CALL_DEFAULT)"),
             ("access_before_nosuspend.xr", b"(ARRAY_SET)"),
             ("access_before_root.xr", b"(ARRAY_SET)"),
         )

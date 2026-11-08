@@ -169,10 +169,14 @@ static int temp_collisions(const char *root,bool directory) {
     CHECK(DeleteFileW(protected_name)&&RemoveDirectoryW(name)&&!metadata_memory.live&&!metadata_memory.held);return 1;
 }
 static int temp_long_positive(void) {
-    wchar_t leaf[106];char root[65536];
-    for(size_t n=0;n<100;++n)leaf[n]=L'l';
-    memcpy(leaf+100,L"-\x4e2d-\xd83d\xde00",6*sizeof(wchar_t));
-    CHECK(wide_join(temp_long_root_path,paths.child,leaf)&&wcslen(temp_long_root_path)>260);
+    enum { TEMP_LONG_PREFIX_UNITS=250,TEMP_LONG_SUFFIX_UNITS=5,TEMP_COMPONENT_MAX_UNITS=255 };
+    _Static_assert(TEMP_LONG_PREFIX_UNITS+TEMP_LONG_SUFFIX_UNITS<=TEMP_COMPONENT_MAX_UNITS,
+        "long temporary root component must fit the filesystem limit");
+    wchar_t leaf[TEMP_LONG_PREFIX_UNITS+TEMP_LONG_SUFFIX_UNITS+1];char root[65536];
+    for(size_t n=0;n<TEMP_LONG_PREFIX_UNITS;++n)leaf[n]=L'l';
+    memcpy(leaf+TEMP_LONG_PREFIX_UNITS,L"-\x4e2d-\xd83d\xde00",(TEMP_LONG_SUFFIX_UNITS+1)*sizeof(wchar_t));
+    CHECK(wcslen(leaf)==TEMP_LONG_PREFIX_UNITS+TEMP_LONG_SUFFIX_UNITS);
+    CHECK(wide_join(temp_long_root_path,paths.child,leaf)&&wcslen(temp_long_root_path)>MAX_PATH);
     CHECK(directory_operation(temp_long_root_path,true));temp_long_root_created=true;
     CHECK(xr_win_utf16_to_utf8(temp_long_root_path,wcslen(temp_long_root_path),root,sizeof(root)));
     fprintf(stderr,"file temp actual long root UTF16=%zu\n",wcslen(temp_long_root_path));

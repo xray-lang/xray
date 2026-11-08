@@ -8,8 +8,17 @@
  */
 /* Only explicit value/local/Cell operations have no hidden module source.
  * Native, child execution and any new opcode need their own access facts. */
-static bool effect_default_access_local(XrXirOp op) {
-    switch (op) {
+static bool effect_default_access_local(const XrXirFunction *function,
+    const XrXirInstruction *op) {
+    switch (op->op) {
+    case XR_XIR_EQUAL: {
+        XrXirType type=xr_xir_operand_type(function,op->args[0]);
+        /* Concrete primitive equality cannot invoke code or inspect a referent.
+         * Constructed and parameter types retain their conservative access seed. */
+        return (type==XR_XIR_BOOL || type==XR_XIR_RUNE || xr_xir_type_is_number(type)) &&
+            xr_xir_operand_type(function,op->args[1])==type && op->type==XR_XIR_BOOL &&
+            (op->immediate==0 || op->immediate==1);
+    }
     case XR_XIR_TASK_CANCEL: case XR_XIR_TASK_POLL:
     case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: case XR_XIR_CONST_FLOAT:
     case XR_XIR_CONST_STRING: case XR_XIR_CONST_RUNE: case XR_XIR_COPY:
