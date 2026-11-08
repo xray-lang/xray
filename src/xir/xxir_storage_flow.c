@@ -93,6 +93,8 @@ struct XirStorageFlow {
     StorageWork *stages;
     uint32_t stage_count, stage_capacity, stage_first, stage_generation;
     uint32_t crossflow_capacity, application_capacity, binding_capacity;
+    uint32_t point_value_capacity, point_index_capacity;
+    uint32_t *point_index, *point_value_index;
     uint32_t identity_capacity, allocation_capacity, input_capacity, unknown_capacity, exposure_seed_capacity;
     StorageExecution *sites;
     uint32_t site_count, site_capacity, site_index_capacity, generation;
@@ -1358,6 +1360,8 @@ static void storage_retire_construction(XirStorageFlow *flow) {
         xr_compile_resources_free(flow->sites[s].identity_parameters);
     xr_compile_resources_free(flow->sites); flow->sites = NULL;
     xr_compile_resources_free(flow->site_index); flow->site_index = NULL;
+    xr_compile_resources_free(flow->point_index); flow->point_index = NULL;
+    xr_compile_resources_free(flow->point_value_index); flow->point_value_index = NULL;
     flow->site_count = 0; flow->work_count = 0; flow->work_first = 0;
     flow->stage_count = 0; flow->stage_first = 0;
     flow->module = NULL; flow->execution = NULL; flow->control = NULL;
@@ -1379,6 +1383,7 @@ XR_FUNC void xir_storage_flow_free(XirStorageFlow *flow) {
     xr_compile_resources_free((void *)flow->view.inputs);
     xr_compile_resources_free((void *)flow->view.unknowns);
     xr_compile_resources_free((void *)flow->view.exposure_seeds);
+    xr_compile_resources_free((void *)flow->view.point_values);
     xr_compile_resources_free(flow);
 }
 
@@ -1571,6 +1576,7 @@ XR_FUNC XrXirStatus xir_storage_flow_exposure_at(XirStorageFlow *flow, uint32_t 
     return flow->status;
 }
 
+#include "xxir_storage_point.inc.c"
 #include "xxir_storage_capture.inc.c"
 
 XR_FUNC XrXirStatus xir_storage_flow_view(const XirStorageFlow *flow, XirStorageFlowView *output) {
@@ -1650,6 +1656,7 @@ static XirStorageFlow *storage_numeric_clone(const XirStorageFlow *source,
     copy->view.functions = NULL; copy->view.crossflows = NULL; copy->view.applications = NULL;
     copy->view.bindings = NULL; copy->view.identities = NULL; copy->view.allocations = NULL;
     copy->view.inputs = NULL; copy->view.unknowns = NULL; copy->view.exposure_seeds = NULL;
+    copy->view.point_values = NULL;
     XirStorageFlowFunction *functions = xir_compile_calloc(&copy->memory, copy->view.function_count,
         sizeof(*functions), status);
     copy->view.functions = functions;
@@ -1677,6 +1684,8 @@ static XirStorageFlow *storage_numeric_clone(const XirStorageFlow *source,
         source->view.unknown_count, sizeof(*source->view.unknowns), control, status);
     copy->view.exposure_seeds = storage_numeric_copy(&copy->memory, source->view.exposure_seeds,
         source->view.exposure_seed_count, sizeof(*source->view.exposure_seeds), control, status);
+    copy->view.point_values = storage_numeric_copy(&copy->memory, source->view.point_values,
+        source->view.point_value_count, sizeof(*source->view.point_values), control, status);
     if (*status != XR_XIR_OK) { xir_storage_flow_free(copy); return NULL; }
     return copy;
 }
@@ -1775,6 +1784,28 @@ static bool storage_remap_leaves(StorageRelocate *map, XirStorageFlowView *targe
     return map->status == XR_XIR_OK;
 }
 
+static bool storage_remap_points(StorageRelocate *map, XirStorageFlowView *target) {
+    for (uint32_t p = 0; p < target->point_value_count; ++p) {
+        XirStoragePointValue *point = (XirStoragePointValue *)&target->point_values[p];
+        if (point->function >= map->source->function_count || (uint32_t)point->point > XIR_STORAGE_PANIC ||
+            (point->reference.environment < XIR_EXECUTION_UNKNOWN_ENVIRONMENT &&
+                point->reference.environment >= target->application_count)) {
+            map->status = XR_XIR_BAD_STRUCTURE; return false;
+        }
+        XirStorageFlowFunction source = map->source->functions[point->function];
+        uint32_t instructions = source.physical_values - source.parameter_count;
+        if (point->value < source.physical_values || point->instruction >= instructions ||
+            !storage_remap_value(map, point->function, &point->value) ||
+            !storage_remap_value(map, point->reference.function, &point->reference.value)) {
+            if (map->status == XR_XIR_OK) map->status = XR_XIR_BAD_STRUCTURE;
+            return false;
+        }
+        uint32_t index = map->index[point->function];
+        if (index != UINT32_MAX) point->instruction = map->maps[index].instructions[point->instruction];
+    }
+    return map->status == XR_XIR_OK;
+}
+
 XR_FUNC XrXirStatus xir_storage_flow_relocate(XirStorageFlow *flow, const XirStorageRelocation *maps,
     uint32_t count, XrCompileRequestControl *control) {
     if (!flow || !flow->sealed || (count && !maps) || flow->status != XR_XIR_OK) return XR_XIR_BAD_STRUCTURE;
@@ -1812,7 +1843,7 @@ XR_FUNC XrXirStatus xir_storage_flow_relocate(XirStorageFlow *flow, const XirSto
     }
     XirStorageFlow *copy = map.status == XR_XIR_OK ? storage_numeric_clone(flow, control, &map.status) : NULL;
     if (copy && storage_remap_rows(&map, &copy->view) && storage_remap_relations(&map, &copy->view) &&
-        storage_remap_leaves(&map, &copy->view)) {
+        storage_remap_leaves(&map, &copy->view) && storage_remap_points(&map, &copy->view)) {
         XirStorageFlowView previous = flow->view; flow->view = copy->view; copy->view = previous;
     }
     xir_storage_flow_free(copy); xr_compile_resources_free(index);

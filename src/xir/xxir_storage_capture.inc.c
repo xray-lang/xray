@@ -12,51 +12,6 @@
  *   and observes Cell contents at the use, separately from Cell identity.
  */
 
-static XrXirStatus storage_reference_pending(XirStorageFlow *flow, uint32_t remainder) {
-    flow->request_remainder |= remainder;
-    return XR_XIR_UNRESOLVED;
-}
-
-static XrXirStatus storage_current_reference(XirStorageFlow *flow, uint32_t function,
-    XirStorageReference reference, XirStorageReference *output) {
-    for (uint32_t step = 0; step <= flow->view.application_count && storage_step(flow); ++step) {
-        if (reference.function >= flow->view.function_count ||
-            reference.value >= flow->view.functions[reference.function].value_count) return XR_XIR_BAD_STRUCTURE;
-        if (reference.environment == XIR_EXECUTION_CURRENT_ENVIRONMENT) {
-            if (reference.function != function || !storage_is_handle(flow, function, reference.value))
-                return storage_reference_pending(flow, XIR_EXECUTION_REMAINDER_OPAQUE);
-            *output = reference;
-            return XR_XIR_OK;
-        }
-        if (reference.environment == XIR_EXECUTION_UNKNOWN_ENVIRONMENT)
-            return storage_reference_pending(flow, XIR_EXECUTION_REMAINDER_OPAQUE);
-        if (reference.environment >= flow->view.application_count) return XR_XIR_BAD_STRUCTURE;
-        XirStorageApplication app = flow->view.applications[reference.environment];
-        if (app.declaration != reference.function) return storage_reference_pending(flow, XIR_EXECUTION_REMAINDER_OPAQUE);
-        if (app.first > flow->view.binding_count || app.count > flow->view.binding_count - app.first)
-            return XR_XIR_BAD_STRUCTURE;
-        bool found = false;
-        for (uint32_t b = 0; b < app.count && storage_step(flow); ++b) {
-            XirStorageBinding binding = flow->view.bindings[app.first + b];
-            if (binding.formal_function != reference.function || binding.formal_value != reference.value) continue;
-            reference = (XirStorageReference){binding.actual_function, binding.actual_value,
-                binding.actual_environment == XIR_EXECUTION_CURRENT_ENVIRONMENT ? app.environment : binding.actual_environment};
-            found = true;
-            break;
-        }
-        if (flow->status != XR_XIR_OK) return flow->status;
-        if (!found) return storage_reference_pending(flow, XIR_EXECUTION_REMAINDER_OPAQUE);
-    }
-    return flow->status == XR_XIR_OK ?
-        storage_reference_pending(flow, XIR_EXECUTION_REMAINDER_OPAQUE) : flow->status;
-}
-
-static bool storage_valid_point(const XirStorageFlow *flow, uint32_t function,
-    uint32_t instruction, XirStoragePointKind point) {
-    return flow && !flow->sealed && flow->local_finished && function < flow->view.function_count &&
-        instruction < flow->rows[function].body->instruction_count && (uint32_t)point <= XIR_STORAGE_PANIC;
-}
-
 XR_FUNC XrXirStatus xir_storage_flow_reference(XirStorageFlow *flow, const XirStorageObservation *observation,
     uint32_t *contents, uint32_t *exposure) {
     if (!observation || (!contents && !exposure) || !storage_valid_point(flow, observation->function,
@@ -95,7 +50,7 @@ typedef struct StorageCaptureWalk {
     XirStorageFlow *flow;
     StorageCaptureItem *items;
     uint32_t *index;
-    uint32_t count, capacity, index_capacity;
+    uint32_t count, capacity, index_capacity, remainder;
     bool complete;
 } StorageCaptureWalk;
 
@@ -139,7 +94,7 @@ static XrXirStatus storage_capture_arguments(void *opaque, const XirExecutionSit
         XirExecutionArgument actual = {0};
         XrXirStatus status = xir_execution_argument(flow->execution, capture, p, &actual);
         if (status == XR_XIR_UNRESOLVED) {
-            flow->request_remainder |= XIR_EXECUTION_REMAINDER_STORAGE;
+            walk->remainder |= XIR_EXECUTION_REMAINDER_STORAGE;
             walk->complete = false;
             continue;
         }
@@ -171,10 +126,15 @@ static XrXirStatus storage_capture_collect(StorageCaptureWalk *walk, const XirSt
         }
         bool complete = false;
         uint32_t remainder = 0;
-        XrXirStatus status = xir_execution_visit_value_captures_in(flow->execution, &item.reference,
+        XirStorageValuePoint use = *point;
+        use.reference = item.reference;
+        XirStorageReference proxy;
+        XrXirStatus status = xir_storage_flow_point_value(flow, &use, &proxy);
+        if (status != XR_XIR_OK) return status;
+        status = xir_execution_visit_value_captures_in(flow->execution, &proxy,
             storage_capture_arguments, walk, &complete, &remainder);
         if (status != XR_XIR_OK) return status;
-        flow->request_remainder |= remainder;
+        walk->remainder |= remainder;
         walk->complete &= complete;
     }
     if (flow->status != XR_XIR_OK) return flow->status;
@@ -202,6 +162,7 @@ XR_FUNC XrXirStatus xir_storage_flow_visit_value_captures(XirStorageFlow *flow, 
     flow->request_remainder = 0;
     StorageCaptureWalk walk = {.flow=flow, .complete=true};
     XrXirStatus status = storage_capture_collect(&walk, point);
+    flow->request_remainder |= walk.remainder;
     for (uint32_t n = 0; status == XR_XIR_OK && n < walk.count; ++n) {
         if (!walk.items[n].cell) continue;
         XirStorageCapture capture = {.identity=walk.items[n].reference, .function=point->function,
@@ -231,6 +192,7 @@ static XrXirStatus storage_publish_value(XirStorageFlow *flow, const XirStorageV
     }
     StorageCaptureWalk walk = {.flow=flow, .complete=true};
     XrXirStatus status = storage_capture_collect(&walk, point);
+    flow->request_remainder |= walk.remainder;
     for (uint32_t n = 0; status == XR_XIR_OK && n < walk.count; ++n) {
         if (!walk.items[n].cell) continue;
         if (!storage_record_publication(flow, point->function, (StoragePublication){
