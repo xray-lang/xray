@@ -211,12 +211,13 @@ static uint32_t rbc_lir_immediate_operand(const RbcLirCompiler *c,
     if (i->operand_count != 2) return i->operand_count;
     bool comparison = i->op == XR_LIR_ICMP || i->op == XR_LIR_CONDBR;
     if (!comparison && (i->type != XR_LIR_I64 ||
-        (i->op != XR_LIR_ADD && i->op != XR_LIR_SUB))) return i->operand_count;
+        (i->op != XR_LIR_ADD && i->op != XR_LIR_SUB &&
+         i->op != XR_LIR_MUL && i->op != XR_LIR_REM))) return i->operand_count;
     for (uint32_t n = 2; n; --n) {
         uint32_t a = n - 1;
         const RbcLirImmediate *value = &c->immediates[i->operands[a]];
         if (value->known && (comparison ||
-            ((a == 1 || i->op == XR_LIR_ADD) &&
+            ((a == 1 || i->op == XR_LIR_ADD || i->op == XR_LIR_MUL) &&
              value->value >= INT8_MIN && value->value <= INT8_MAX))) return a;
     }
     return i->operand_count;
@@ -745,10 +746,19 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
     }
     default: {
         uint32_t selected = rbc_lir_immediate_operand(c, i);
-        if (selected < i->operand_count)
-            return rbc_lir_emit(c, i->op == XR_LIR_ADD ? XR_RBC_ADDI : XR_RBC_SUBI,
+        if (selected < i->operand_count) {
+            XrRbcOp immediate;
+            switch (i->op) {
+            case XR_LIR_ADD: immediate = XR_RBC_ADDI; break;
+            case XR_LIR_SUB: immediate = XR_RBC_SUBI; break;
+            case XR_LIR_MUL: immediate = XR_RBC_MULI; break;
+            case XR_LIR_REM: immediate = XR_RBC_REMI; break;
+            default: return rbc_lir_fail(c, XR_RBC_COMPILE_INVALID, "invalid immediate arithmetic");
+            }
+            return rbc_lir_emit(c, immediate,
                 result, c->slots[i->operands[1u - selected]], 0,
                 c->immediates[i->operands[selected]].value);
+        }
         XrRbcOp op;
         switch (i->op) {
         case XR_LIR_ADD: op = XR_RBC_ADD; break;

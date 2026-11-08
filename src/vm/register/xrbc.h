@@ -86,7 +86,9 @@
     X(LEI, ASBX)                                                                                   \
     X(GTI, ASBX)                                                                                   \
     X(GEI, ASBX)                                                                                   \
-    X(EQI, ASBX)
+    X(EQI, ASBX)                                                                                   \
+    X(MULI, ABS8)                                                                                  \
+    X(REMI, ABS8)
 
 typedef enum {
 #define XR_RBC_ENUM(name, format) XR_RBC_##name,
