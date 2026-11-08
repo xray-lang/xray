@@ -761,7 +761,30 @@ var f: Mapper2<i64, string> = (n) -> string(n)
 
 **函数类型语法**：函数类型以 `fn` 引导，写作 `fn(T1, T2) -> R`；参数可带 `ref` / `move` mode（如 `fn(ref i64) -> i64`）。返回 `unit` 时省略箭头段，写作 `fn(T)` / `fn()`——类型位置**不允许**显式写 `-> ()`。这与函数声明位有意不对称：声明位 `fn f() -> ()` 与 `fn f()` 都合法（§5.2），而类型出现在参数、泛型实参、容器元素等密集内联位置，只保留一种拼写。类型位置的裸 `(` 只表示元组或分组括号，与表达式侧和 §2.7 一致——出现逗号才是元组，`(T)` 是分组；因此可空函数类型直接写作 `(fn() -> i64)?`。`CFn<...>` 内同样使用 `fn` 拼写（`CFn<fn(A, B) -> R>`，见 §3.12）。
 
-函数类型允许可选的上下文前缀 `nosuspend fn(T1, T2) throws(E) -> R`；无前缀的书写类型默认可能挂起。`nosuspend` 只在类型位置、紧接 `fn` 之前识别，其它位置仍可作普通名字；它不越过未分组的语句换行。该保证属于同一个 callable 类型身份，与 `throws(E)` 独立，并由别名替换、可空及嵌套类型、格式化和接收后的复验保留。直接处于该期望类型的函数字面量按此保证检查，未知或可能挂起的调用拒绝；已经构造的普通函数值不能根据其函数体被隐式强化。限定类型可放宽到普通 callable，反向需要已有真实承诺；不新增函数声明自身的效应注解。
+函数类型允许可选的上下文前缀 `nosuspend fn(T1, T2) throws(E) -> R`。可逃逸参数和存储位置上的无前缀书写类型默认可能挂起。不逃逸函数参数在调用点代入实参的挂起性。`nosuspend` 只在类型位置、紧接 `fn` 之前识别，其它位置仍可作普通名字；它不越过未分组的语句换行。该保证属于同一个 callable 类型身份，与 `throws(E)` 独立，并由别名替换、可空及嵌套类型、格式化和接收后的复验保留。直接处于该期望类型的函数字面量按此保证检查，未知或可能挂起的调用拒绝；已经构造的普通函数值不能根据其函数体被隐式强化。限定类型可放宽到普通 callable，反向需要已有真实承诺；不新增函数声明自身的效应注解。
+
+**函数参数的调用期限**
+
+函数类型参数默认不逃逸。函数类型内部的参数位置采用相同规则。需要跨调用保存的参数写作 `callback: escaping fn(...)`。`escaping` 仅在参数类型的 `fn` 或 `nosuspend fn` 前按上下文识别，其它位置可作普通名字。限定词顺序为参数 mode、`escaping`、`nosuspend`、`fn`。
+
+- 不逃逸参数可被调用、转交给不逃逸参数、绑定到局部常量或变量、参与条件值选择，并被不逃逸的局部闭包捕获。别名、条件值和捕获闭包保留同一不逃逸限制。
+- 不逃逸值不能进入字段、数组、Map、Set、聚合或模块存储，不能从函数返回，不能被逃逸闭包捕获，不能传给 `escaping` 参数，不能写入 `ref` 所指变量。局部变量自身的保存与赋值保留不逃逸限制。
+- 不逃逸值不能作为普通泛型 `T` 的值，也不能作为 `go`、Task 或生成器的实参或捕获。即使一次结构化调用会等待任务结束，这个边界仍成立。单态化保留原 `T` 值的可保存合同。
+- 字段、普通局部存储、集合元素和返回值上的函数类型保持可逃逸规则。`ref fn(...)` 所指变量里的函数值保持原有可保存规则。`CFn` 保持 `nosuspend` 要求。
+- 函数的挂起摘要组合自身挂起和每个不逃逸函数参数的实参挂起性，包括未被使用的形参。依赖在各调用点分别代入，递归转交保留参数依赖。定义级 `nosuspend` 承诺须对签名允许的全部实参成立。可逃逸参数和固定存储函数值按类型上的效应位处理。
+- 不逃逸闭包可以捕获 Slice、`ref` 等借用。捕获借用的闭包不能逃逸，违反时报告 `E0383`。其它借用来源、存活和独占访问要求继续适用。
+- 覆写方法、接口实现和函数类型比较要求每个函数参数的 `escaping` 标志精确相等。
+- 不逃逸参数越过期限时在违规使用处报告 `E0398`，指出参数名和去向，并提示相应参数改为 `escaping fn(...)`。`throws` 继续由签名陈述，错误类型不按 callback 实参推导。
+
+```xray @id=types-nonescaping-parameters
+fn apply(callback: fn() -> i64) -> i64 {
+    const thunk = fn() -> i64 { return callback() + 1 }
+    return thunk()
+}
+fn compose(f: escaping fn(i64) -> i64, g: escaping fn(i64) -> i64) -> fn(i64) -> i64 {
+    return fn(x: i64) -> i64 { return f(g(x)) }
+}
+```
 
 末尾 READ rest 在函数类型中写作 `fn(...T) -> R`，带固定前缀时为 `fn(P, ...T) -> R`。rest 是真实 callable 类型事实；体内物理 Array 不使它与 `fn(Array<T>) -> R` 或固定元数类型相等，也不隐式适配。取值、泛型替换、嵌套类型、格式化及冷库接收均保留该事实。`throws`、root 与 `nosuspend` 仍按各自既有规则匹配；这不增加 C 可变参数 ABI。
 
@@ -1912,7 +1935,30 @@ matching the expression side and §2.7 — a comma makes a tuple, `(T)` groups �
 a nullable function type is written directly as `(fn() -> i64)?`. `CFn<...>`
 uses the same `fn` spelling (`CFn<fn(A, B) -> R>`, see §3.12).
 
-A function type may carry the contextual prefix `nosuspend fn(T1, T2) throws(E) -> R`; a written type without the prefix may suspend. `nosuspend` is recognized only in type position immediately before `fn`, without crossing an ungrouped statement line boundary, and remains an ordinary name elsewhere. The guarantee belongs to the same callable type identity, independently of `throws(E)`, and survives alias substitution, nullable and nested types, formatting and receiving revalidation. A function literal directly checked against this expected type must prove the guarantee; unknown or potentially suspending calls reject. An already constructed ordinary function value cannot be implicitly strengthened from its body. A restricted callable may weaken to an ordinary one; the reverse requires an actual existing promise. This adds no own-function declaration effect annotation.
+A function type may carry the contextual prefix `nosuspend fn(T1, T2) throws(E) -> R`. Written types on escaping parameters and storage positions may suspend without the prefix. Non-escaping function parameters substitute the actual argument suspension at each call. `nosuspend` is recognized only in type position immediately before `fn`, without crossing an ungrouped statement line boundary, and remains an ordinary name elsewhere. The guarantee belongs to the same callable type identity, independently of `throws(E)`, and survives alias substitution, nullable and nested types, formatting and receiving revalidation. A function literal directly checked against this expected type must prove the guarantee; unknown or potentially suspending calls reject. An already constructed ordinary function value cannot be implicitly strengthened from its body. A restricted callable may weaken to an ordinary one; the reverse requires an actual existing promise. This adds no own-function declaration effect annotation.
+
+**Function parameter invocation lifetime**
+
+Function-typed parameters are non-escaping by default, including parameters inside function types. A parameter retained across its invocation is written `callback: escaping fn(...)`. The contextual `escaping` prefix is recognized only before `fn` or `nosuspend fn` in parameter positions and remains an ordinary name elsewhere. Qualifier order is the parameter mode, `escaping`, `nosuspend`, and `fn`.
+
+- A non-escaping parameter can be called, forwarded to another non-escaping parameter, bound to a local constant or variable, selected by a conditional expression, and captured by a non-escaping local closure. Aliases, conditional values and capturing closures preserve its restriction.
+- Non-escaping values cannot enter fields, arrays, Map, Set, aggregates or module storage, leave through a return, be captured by an escaping closure, reach an `escaping` parameter, or be written into a `ref` referent. Local binding and assignment preserve the restriction.
+- Non-escaping values cannot be ordinary generic `T` values, or arguments or captures of `go`, Task or generators. Structured joining preserves this boundary. Monomorphization preserves the storable contract of an original `T` parameter.
+- Function types in fields, ordinary local storage, collections and results retain their escaping rules. Values in the variable referred to by `ref fn(...)` retain their existing storable rules. `CFn` retains its `nosuspend` requirement.
+- A suspension summary combines intrinsic suspension with each non-escaping function argument, including unused parameters. Each call substitutes its own arguments. Recursive forwarding retains parameter dependencies. A definition-level `nosuspend` promise must hold for every argument allowed by its signature. Escaping parameters and fixed stored function values use the type effect bits.
+- A non-escaping closure may capture loans such as Slice and `ref`. A closure retaining a loan cannot escape, and violations report `E0383`. Borrow origin, lifetime and exclusive-access checks continue to apply.
+- Overrides, interface implementations and function-type matching require exact equality of each function parameter's `escaping` flag.
+- A non-escaping parameter crossing its invocation reports `E0398` at the offending use with the parameter name, destination and a suggested `escaping fn(...)` declaration. `throws` remains declared in the signature and is not inferred from callback arguments.
+
+```xray
+fn apply(callback: fn() -> i64) -> i64 {
+    const thunk = fn() -> i64 { return callback() + 1 }
+    return thunk()
+}
+fn compose(f: escaping fn(i64) -> i64, g: escaping fn(i64) -> i64) -> fn(i64) -> i64 {
+    return fn(x: i64) -> i64 { return f(g(x)) }
+}
+```
 
 A final READ rest is written `fn(...T) -> R`, or `fn(P, ...T) -> R` with a fixed prefix. Rest is an authentic callable type fact: the physical Array in the body does not make it equal or implicitly adaptable to `fn(Array<T>) -> R` or a fixed-arity type. Function values, generic substitution, nested types, formatting and cold-library reception retain the fact. Existing error, root and `nosuspend` matching remains independent; this does not introduce a C varargs ABI.
 

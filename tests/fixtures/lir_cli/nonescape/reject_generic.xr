@@ -1,0 +1,5 @@
+fn keep<T>(value: T) -> T { return value }
+fn relay(callback: fn() -> i64) -> i64 {
+    const saved = keep(callback)
+    return saved()
+}

@@ -296,6 +296,7 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
                 src->borrow_origin_syntax, src->borrow_origins, src->borrow_origin_count);
             if (!xr_parser_healthy(parser) || !result) return NULL;
             result->requires_nothrow = src->requires_nothrow;
+            result->parameter_escaping = src->parameter_escaping;
             result->requires_nosuspend = src->requires_nosuspend;
             result->function_rest = src->function_rest;
             result->throws_clause = src->throws_clause;
@@ -479,6 +480,23 @@ static void xr_parse_reject_postfix_param_mode(Parser *parser) {
     }
 }
 
+/* Parameter qualifiers belong to the type occurrence, including nested signatures. */
+static XrTypeRef *parse_parameter_type(Parser *parser) {
+    bool escaping = false;
+    if (xr_parser_check_name(parser, "escaping")) {
+        XrParserStreamState saved = xr_parser_stream_save(parser);
+        xr_parser_advance(parser);
+        if (xr_parser_check_name(parser, "nosuspend")) xr_parser_advance(parser);
+        escaping = xr_parser_check(parser, TK_FN);
+        xr_parser_stream_restore(parser, &saved);
+        if (escaping) xr_parser_advance(parser);
+    }
+    XrTypeRef *type = xr_parse_type_annotation(parser);
+    if (!xr_parser_healthy(parser) || !type) return NULL;
+    if (escaping) type->parameter_escaping = true;
+    return type;
+}
+
 static bool parse_param_type_annotation_span(Parser *parser, bool allow_mode,
     XrParamMode *out_mode, XrTypeRef **out_type, XrNameSpan *out_span) {
     if (out_span) {
@@ -516,7 +534,7 @@ static bool parse_param_type_annotation_span(Parser *parser, bool allow_mode,
         }
     }
 
-    XrTypeRef *type = xr_parse_type_annotation(parser);
+    XrTypeRef *type = parse_parameter_type(parser);
     if (!xr_parser_healthy(parser)) return false;
     do {
         xr_parse_reject_postfix_param_mode(parser);
@@ -1008,7 +1026,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
                 }
             }
             do {
-                elems[count] = xr_parse_type_annotation(parser);
+                elems[count] = parse_parameter_type(parser);
                 if (!xr_parser_healthy(parser)) return NULL;
             } while (0);
             count++;
@@ -1122,7 +1140,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
                 cap = new_cap;
             }
             do {
-                elems[count] = xr_parse_type_annotation(parser);
+                elems[count] = parse_parameter_type(parser);
                 if (!xr_parser_healthy(parser)) return NULL;
             } while (0);
             count++;

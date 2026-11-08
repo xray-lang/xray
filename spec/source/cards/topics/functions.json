@@ -12,7 +12,9 @@
     "verify contract",
     "throws",
     "Never",
-    "error signature"
+    "error signature",
+    "escaping",
+    "non-escaping callback"
   ],
   "sections": [
     {
@@ -61,6 +63,13 @@
     {
       "heading": "Higher-order functions",
       "markdown": "- Function types use `fn(T1, T2) throws(E) -> R`; omit throws for a non-throwing type and omit the arrow for Unit\n- Error types are covariant by subset without changing parameter or result matching\n- Generic `E: Error` is inferred from callback arguments; a non-throwing callback can infer `E = Never`\n- Explicit closure throws clauses constrain the body before matching an expected type; otherwise closures use the expected type or local body inference\n- fn lambdas may write throws(E); arrow lambdas do not write the clause\n- Capture and cross-execution rules remain independent of the error signature"
+    },
+    {
+      "heading": "Non-escaping function parameters",
+      "markdown": "Function-typed parameters default to non-escaping, including nested function-type parameters. Local aliases, conditional values and non-escaping captures preserve the invocation lifetime. Storage, returns, ordinary generic T values, ref writes, escaping arguments and tasks require escaping fn(...). Violations report E0398. Non-escaping closures may capture Slice/ref loans, while escaping loan captures report E0383. Suspension is substituted per argument and call. Error signatures retain their declared throws contract.",
+      "fences": [
+        "types-nonescaping-parameters"
+      ]
     }
   ]
 }

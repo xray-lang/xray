@@ -267,7 +267,7 @@ fn closureScope()->i64 {
     }
     return evaluate()
 }
-fn passCallback(callback:fn(bool)->string)->fn(bool)->string { return callback }
+fn passCallback(callback: escaping fn(bool)->string)->fn(bool)->string { return callback }
 var activeCallback:fn(bool)->string = rightCallback
 fn flipCallback(flag:bool)->bool { activeCallback = rightCallback; return flag }
 

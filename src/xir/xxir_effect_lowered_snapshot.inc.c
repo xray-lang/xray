@@ -46,7 +46,7 @@ static XrXirStatus effect_lowered_snapshot_node(
         return XR_XIR_BAD_STRUCTURE;
     for (uint32_t p = 0; p < xr_xir_type_parameter_slots(left); ++p) {
 
-        if (left->parameters[p].mode != right->parameters[p].mode ||
+        if (left->parameters[p].mode != right->parameters[p].mode || left->parameters[p].escaping != right->parameters[p].escaping ||
             left->parameters[p].type != right->parameters[p].type) return XR_XIR_BAD_STRUCTURE;
     }
     XrXirStatus status = effect_lowered_snapshot_vector( left->nominal.arguments,

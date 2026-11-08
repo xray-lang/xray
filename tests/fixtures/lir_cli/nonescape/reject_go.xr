@@ -1,0 +1,4 @@
+fn run(callback: escaping fn()) { callback() }
+fn startWorker(job: fn()) {
+    const task = go run(job)
+}

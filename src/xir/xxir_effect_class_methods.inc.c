@@ -15,7 +15,7 @@ static XrXirStatus effect_class_method_header(const void *owner,uint32_t entry,X
     if(!effect_body_material_shape(material) || !output || entry>=effect_body_count(material))return XR_XIR_BAD_STRUCTURE;
     const EffectBodyFunction *function=&material->functions[entry];
     *output=(XirClassMethodSignature){function->name,function->name_length,function->parameters,function->parameter_count,
-        function->result,function->error_type,function->consume_parameters,function->consume_parameter_count};return XR_XIR_OK;
+        function->result,function->error_type,function->consume_parameters,function->consume_parameter_count,function->escaping_parameter_count,function->escaping_parameters};return XR_XIR_OK;
 }
 static XrXirStatus effect_class_method_candidates(const XrXirCompileContext *work,
     const EffectBodyMaterial *material,uint32_t function,uint32_t instruction,XirClassMethodVisitor visit,void *owner) {
@@ -41,6 +41,7 @@ static XrXirStatus effect_class_method_candidates(const XrXirCompileContext *wor
          !(material->domain.declarations->functions[op.immediate].promises&XR_XIR_FUNCTION_NO_SUSPEND)))return XR_XIR_BAD_TYPE;
     for(uint32_t p=0;p<signature->parameter_count;++p)
         if(!xr_xir_callable_parameter_storage_valid(types,&signature->parameters[p]) ||
+            signature->parameters[p].escaping!=xr_xir_parameter_escaping(anchor->escaping_parameters,anchor->escaping_parameter_count,p+1) ||
             signature->parameters[p].type!=anchor->parameters[p+1] ||
             signature->parameters[p].mode!=xr_xir_declared_parameter_mode(types,anchor->parameters[p+1],
                 anchor->consume_parameters,anchor->consume_parameter_count,p+1))return XR_XIR_BAD_TYPE;

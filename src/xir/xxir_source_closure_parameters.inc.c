@@ -59,7 +59,17 @@ static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCa
             !source_query_mode(ctx, symbol->declaration, param->passing_mode, param->mode_span)) return false;
         if(!source_hir_parameter_declared(ctx,symbol))return false;
         source_query_binding_type(ctx, symbol);
-        parameters[i] = (XrXirCallableParameter){physical, mode};
+        parameters[i] = (XrXirCallableParameter){physical, mode,
+            param->type ? param->type->parameter_escaping : context->parameters[i].escaping};
     }
+    uint32_t escapes = 0;
+    for (int i = 0; i < decl->param_count; ++i) escapes += parameters[i].escaping != 0;
+    uint32_t *ordinals = escapes ? source_alloc(ctx, escapes, sizeof(*ordinals)) : NULL;
+    if (escapes && !ordinals) return false;
+    uint32_t at = 0;
+    for (uint32_t i = 0; i < (uint32_t)decl->param_count; ++i)
+        if (parameters[i].escaping) ordinals[at++] = scan->count + i;
+    ctx->functions[ctx->function].escaping_parameter_count = escapes;
+    ctx->functions[ctx->function].escaping_parameters = ordinals;
     return true;
 }

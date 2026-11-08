@@ -1,0 +1,8 @@
+fn countIf(n: i64, predicate: fn(i64) -> bool) -> i64 {
+    var count: i64 = 0
+    for (i in 0..n) { if (predicate(i)) { count = count + 1 } }
+    return count
+}
+fn zeros(data: Slice<u8>) -> i64 {
+    return countIf(len(data), (i) -> data[i] == 0)
+}

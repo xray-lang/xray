@@ -57,7 +57,7 @@ XrXirStatus xr_xir_callable_weakening_admit(const XrXirTypes *types,
     for (uint32_t p = 0; p < from->parameter_count; ++p) {
         if (!charge(work_owner, 1)) return XR_XIR_BUDGET;
         if (from->parameters[p].type != to->parameters[p].type ||
-            from->parameters[p].mode != to->parameters[p].mode) return XR_XIR_BAD_TYPE;
+            from->parameters[p].mode != to->parameters[p].mode || from->parameters[p].escaping != to->parameters[p].escaping) return XR_XIR_BAD_TYPE;
     }
     return XR_XIR_OK;
 }
@@ -69,7 +69,7 @@ XrXirStatus xr_xir_compile_callable_weakening(const XrXirCompileContext *context
     if (status != XR_XIR_OK) return status;
     for (uint32_t p = 0; p < from->parameter_count; ++p)
         if (from->parameters[p].type != to->parameters[p].type ||
-            from->parameters[p].mode != to->parameters[p].mode) return XR_XIR_BAD_TYPE;
+            from->parameters[p].mode != to->parameters[p].mode || from->parameters[p].escaping != to->parameters[p].escaping) return XR_XIR_BAD_TYPE;
     return XR_XIR_OK;
 }
 static XrXirStatus nominal_identities_verify(const XrXirNominalTable *table, XrXirCompileContext *budget);
@@ -347,7 +347,7 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
         remaining->limits.parameters -= node->parameter_count;
         for (uint32_t p = 0; p < node->parameter_count; ++p) {
             XrXirType field = node->parameters[p].type;
-            if (node->parameters[p].mode ||
+            if (node->parameters[p].mode || node->parameters[p].escaping ||
                 (field != XR_XIR_UNIT && !callable_component(types, field, index))) return XR_XIR_BAD_TYPE;
             uint32_t component = xr_xir_type_span(types, field);
             if (component > span) span = component;
@@ -435,7 +435,7 @@ static XrXirStatus type_unique(const XrXirTypes *types, uint32_t index) {
         bool same = true;
         for (uint32_t p = 0; p < xr_xir_type_parameter_slots(node); ++p)
             if (node->parameters[p].type != previous->parameters[p].type ||
-                node->parameters[p].mode != previous->parameters[p].mode) same = false;
+                node->parameters[p].mode != previous->parameters[p].mode || node->parameters[p].escaping != previous->parameters[p].escaping) same = false;
 
 
         for (uint32_t a = 0; a < node->nominal.argument_count; ++a)

@@ -133,7 +133,7 @@ static bool source_intern_type_raw(SourceContext *ctx, XrXirTypeNode node, XrXir
         for (uint32_t p = 0; p < xr_xir_type_parameter_slots(&node); ++p) {
             if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (s->parameters[p].type != node.parameters[p].type ||
-                s->parameters[p].mode != node.parameters[p].mode) same = false;
+                s->parameters[p].mode != node.parameters[p].mode || s->parameters[p].escaping != node.parameters[p].escaping) same = false;
         }
         if (same) { *type = (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + i); return true; }
     }

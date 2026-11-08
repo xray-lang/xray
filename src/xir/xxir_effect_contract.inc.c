@@ -58,7 +58,7 @@ static XrXirStatus effect_callable_bound_compare_scratch(const XrXirCompileConte
         declared->result,actual->result,scratch);
     for (uint32_t p=0;status==XR_XIR_OK && p<declared->parameter_count;++p) {
 
-        if (declared->parameters[p].mode != actual->parameters[p].mode) { status=XR_XIR_BAD_TYPE;break; }
+        if (declared->parameters[p].mode != actual->parameters[p].mode || declared->parameters[p].escaping != actual->parameters[p].escaping) { status=XR_XIR_BAD_TYPE;break; }
         status=xr_xir_compile_type_substitution_matches_between_scratch(context,
             request->source,request->destination,request->arguments,request->argument_count,
             declared->parameters[p].type,actual->parameters[p].type,scratch);

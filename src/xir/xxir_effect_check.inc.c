@@ -1423,25 +1423,6 @@ static XrXirStatus effect_check_cell_roles(EffectCheckBuild *build) {
     return XR_XIR_OK;
 }
 
-static XrXirStatus effect_check_capture_origins(const EffectCheckedRoots *roots) {
-    for (uint32_t c = 0; c < roots->calls; ++c) {
-        const EffectCheckCall *call = &roots->call[c];
-        if (call->protocol != 1) continue;
-        const EffectCheckFunction *callee = &roots->function[roots->node[call->target].function];
-        for (uint32_t p = 0; p < call->count; ++p) {
-            if (!roots->node[callee->first + p].cell_parameter ||
-                !(roots->node[callee->first + p].cell_use & 1u)) continue;
-            uint32_t argument = roots->argument[call->first + p];
-            if (roots->node[argument].origin != XR_XIR_CELL_ORIGIN_OWNED) return XR_XIR_BAD_TYPE;
-            const uint64_t *origin = effect_check_bits(roots, argument);
-            uint32_t words = roots->function[roots->node[argument].function].words;
-            for (uint32_t w = 0; w < words; ++w)
-                if (origin[w]) return XR_XIR_BAD_TYPE;
-        }
-    }
-    return XR_XIR_OK;
-}
-
 static bool effect_check_merge(EffectCheckedRoots *roots, uint32_t target, uint32_t source) {
     const EffectCheckFunction *function = &roots->function[roots->node[target].function];
     uint64_t *to = effect_check_bits(roots, target), *from = effect_check_bits(roots, source);
@@ -1698,7 +1679,6 @@ static XrXirStatus effect_checked_roots_link_take(const XrXirCompileContext *mem
     if (build.status == XR_XIR_OK) build.status = effect_check_link(&build);
     if (build.status == XR_XIR_OK) build.status = effect_check_cell_roles(&build);
     if (build.status == XR_XIR_OK) build.status = effect_check_close(&build);
-    if (build.status == XR_XIR_OK) build.status = effect_check_capture_origins(roots);
     if (build.status == XR_XIR_OK && roots->terms)
         build.status = effect_terms_retire(memory, roots->terms, true);
     xir_read_scratch_free(&build.scratch);

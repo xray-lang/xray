@@ -356,7 +356,7 @@ static XrXirStatus source_inference_union(void *owner,const XrXirType *members,u
     if (!source_request_poll(ctx,NULL)) return ctx->diagnostic.status;
     XrXirCallableParameter *parameters=source_alloc(ctx,count,sizeof(*parameters));
     if (!parameters) return ctx->diagnostic.status;
-    for (uint32_t p=0;p<count;++p) parameters[p]=(XrXirCallableParameter){members[p],0};
+    for (uint32_t p=0;p<count;++p) parameters[p]=(XrXirCallableParameter){members[p],0,0};
     bool completed=source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,
         .parameters=parameters,.parameter_count=count},output);
     source_retire_array(ctx,parameters);

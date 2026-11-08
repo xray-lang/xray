@@ -1,0 +1,8 @@
+fn apply(callback: fn(i64) -> i64) -> i64 {
+    const first = callback
+    var second = first
+    second = first
+    return second(41)
+}
+fn increment(value: i64) -> i64 { return value + 1 }
+print(apply(increment))

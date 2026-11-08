@@ -52,7 +52,7 @@ fn test_function_factory() {
 
 @test
 fn test_compose() {
-    fn compose(f: fn(i64) -> i64, g: fn(i64) -> i64) -> fn(i64) -> i64 {
+    fn compose(f: escaping fn(i64) -> i64, g: escaping fn(i64) -> i64) -> fn(i64) -> i64 {
         fn composed(x: i64) -> i64 {
             return f(g(x))
         }
@@ -77,7 +77,7 @@ fn test_partial() {
         return a + b
     }
 
-    fn partial(f: fn(i64, i64) -> i64, x: i64) -> fn(i64) -> i64 {
+    fn partial(f: escaping fn(i64, i64) -> i64, x: i64) -> fn(i64) -> i64 {
         fn applied(y: i64) -> i64 {
             return f(x, y)
         }

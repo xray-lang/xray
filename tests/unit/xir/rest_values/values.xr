@@ -9,8 +9,8 @@ fn pair<T>(x:T)->(T,T){return (x,x)}
 fn array<T>(x:T)->Array<T>{return [x,x]}
 fn identity<T>(x:T)->T{return x}
 fn choose()->fn(...i64)->i64{trace=trace*10+9;return sum}
-fn pass(f:fn(...i64)->i64)->fn(...i64)->i64{return f}
-fn passPlain(f:fn(Array<i64>)->i64)->fn(Array<i64>)->i64{return f}
+fn pass(f: escaping fn(...i64)->i64)->fn(...i64)->i64{return f}
+fn passPlain(f: escaping fn(Array<i64>)->i64)->fn(Array<i64>)->i64{return f}
 fn invoke(f:fn(...i64)->i64)->i64{return f(20,...[22])}
 fn values(...xs:i64)->Iterator<i64>{for(x in xs){yield x}}
 fn genericValues<T>(...xs:T)->Iterator<T>{for(x in xs){yield x}}

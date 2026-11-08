@@ -159,7 +159,7 @@ static bool source_go_call(SourceContext *ctx, AstNode *node, SourceExpectedType
         SourceTaskScope *scope=ctx->task_scope;
         if(error!=XR_XIR_NEVER&&scope->mode==XR_SOURCE_SCOPE_ISOLATED)
             return source_fail(ctx,node,XR_XIR_UNSUPPORTED,"isolated scope child error aggregation is not yet admitted");
-        XrXirCallableParameter errors[2]={{scope->child_error,XR_PARAM_READ},{error,XR_PARAM_READ}};
+        XrXirCallableParameter errors[2]={{scope->child_error,XR_PARAM_READ,0},{error,XR_PARAM_READ,0}};
         if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,
             .parameters=errors,.parameter_count=2},&scope->child_error))return false;
         if(prepared.count==UINT32_MAX)return source_fail(ctx,node,XR_XIR_OVERFLOW,"scoped argument count overflow");

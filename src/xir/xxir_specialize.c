@@ -155,7 +155,7 @@ static XrXirType spec_node_raw(SpecContext *c, XrXirTypeNode signature) {
         for (uint32_t p = 0; p < xr_xir_type_parameter_slots(s); ++p) {
             if (!spec_progress(c)) return XR_XIR_UNIT;
             if (s->parameters[p].type != signature.parameters[p].type ||
-                s->parameters[p].mode != signature.parameters[p].mode) same = false;
+                s->parameters[p].mode != signature.parameters[p].mode || s->parameters[p].escaping != signature.parameters[p].escaping) same = false;
         }
         if (same) return (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + i);
     }
@@ -272,7 +272,11 @@ static XrXirType spec_type(SpecContext *c, const SpecInstance *instance, XrXirTy
         else {
             XrXirCallableParameter *parameters = (XrXirCallableParameter *) frame->node.parameters;
             parameters[frame->next] = source->parameters[frame->next];
+            XrXirType original = parameters[frame->next].type;
             parameters[frame->next].type = result;
+            if (frame->node.kind == XR_XIR_TYPE_CALLABLE &&
+                !xr_xir_callable_signature(c->source->types,original) &&
+                xr_xir_callable_signature(&c->types,result)) parameters[frame->next].escaping = 1;
         }
         ++frame->next;
     }
@@ -400,16 +404,26 @@ static uint32_t spec_intern(SpecContext *c, uint32_t declaration, const XrXirTyp
     XrXirFunction *to = &c->functions[index]; *to = *source;
     XrXirType *parameters = spec_alloc(c, source->parameter_count, sizeof(*parameters));
     uint32_t *consumes=spec_alloc(c,source->consume_parameter_count,sizeof(*consumes));
+    uint32_t *escapes=spec_alloc(c,source->parameter_count,sizeof(*escapes));
     XrXirInstruction *ops = spec_alloc(c, source->instruction_count, sizeof(*ops));
     if (c->diagnostic.status != XR_XIR_OK) return UINT32_MAX;
     to->parameters = parameters; to->instructions = ops;
     to->consume_parameters=consumes;
+    to->escaping_parameters=escapes;
     if(source->consume_parameter_count &&
         !spec_copy(c,consumes,source->consume_parameters,(size_t)source->consume_parameter_count*sizeof(*consumes)))return UINT32_MAX;
+
     const SpecInstance *instance = &c->instances[index];
     to->result = spec_type(c, instance, source->result);
     to->error_type = spec_type(c, instance, source->error_type);
     for (uint32_t p = 0; p < source->parameter_count; ++p) parameters[p] = spec_type(c, instance, source->parameters[p]);
+    uint32_t escape_count=0;
+    for (uint32_t p=0;p<source->parameter_count;++p)
+        if (xr_xir_function_parameter_escaping(source,p) ||
+            (!xr_xir_callable_signature(c->source->types,source->parameters[p]) &&
+             xr_xir_callable_signature(&c->types,parameters[p]))) escapes[escape_count++]=p;
+    to->escaping_parameter_count=escape_count;
+    to->escaping_parameters=escape_count?escapes:NULL;
     for (uint32_t i = 0; i < source->instruction_count; ++i) {
         ops[i] = source->instructions[i]; ops[i].type = spec_type(c, instance, ops[i].type);
         if (ops[i].op == XR_XIR_ERROR_IS)

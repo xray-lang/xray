@@ -245,7 +245,7 @@ static bool source_struct_default_functions(SourceContext *ctx, uint32_t *next) 
                     return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "field initializer function range exhausted");
                 uint32_t index = (*next)++;
                 ctx->functions[index] = (XrXirFunction) {"$field_default", 14, NULL, 0,
-                    nominal->fields[f].type, NULL, 0, NULL, 0, NULL, 0, XR_XIR_UNIT,0,NULL};
+                    nominal->fields[f].type, NULL, 0, NULL, 0, NULL, 0, XR_XIR_UNIT,0,NULL,0,NULL};
                 ctx->bodies[index].infer_errors = ctx->bodies[index].infer_initializer = true;
                 ctx->bodies[index].node = node; ctx->bodies[index].module = m;
                 if (!source_nominal_function_scope(ctx,index,symbol)) return false;

@@ -90,7 +90,7 @@ static XrXirStatus generated_receive_shape(const XrXirCompileContext *context,
         XirInputFunctionHead head={function->name,function->name_length,function->parameters,
             function->parameter_count,function->result,function->blocks,function->block_count,
             function->instruction_count,function->operands,function->operand_count,function->error_type,
-            function->consume_parameter_count,function->consume_parameters};
+            function->consume_parameter_count,function->consume_parameters,function->escaping_parameter_count,function->escaping_parameters};
         XrXirStatus status=xir_input_function_head_shape(&head);
         if (status!=XR_XIR_OK) return status;
     }

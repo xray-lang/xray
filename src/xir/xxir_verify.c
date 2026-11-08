@@ -15,6 +15,7 @@
  *   that strictly dominate every block it protects.
  */
 
+#include "../hir/xhir_escape.h"
 #include "xxir_internal.h"
 #include "xxir_intrinsic.h"
 #include "xxir_source_replay_internal.h"
@@ -252,7 +253,11 @@ static XrXirStatus instruction_direct_call_shape(const XrXirFunction *function,
     if (generic_status != XR_XIR_OK) return generic_status;
     if (signature) for (uint32_t p = 0; p < signature->parameter_count; ++p) {
         if (!xr_xir_callable_parameter_storage_valid(module->types, &signature->parameters[p])) return XR_XIR_BAD_TYPE;
-        if(signature->parameters[p].mode!=xr_xir_declared_parameter_mode(module->types,
+        bool escaping=xr_xir_function_parameter_escaping(callee,p+op->args[1]) ||
+            (!xr_xir_callable_signature(module->types,callee->parameters[p+op->args[1]]) &&
+             xr_xir_callable_signature(module->types,signature->parameters[p].type));
+        if(signature->parameters[p].escaping!=escaping ||
+            signature->parameters[p].mode!=xr_xir_declared_parameter_mode(module->types,
             callee->parameters[p+op->args[1]],callee->consume_parameters,callee->consume_parameter_count,p+op->args[1]))
             return XR_XIR_BAD_TYPE;
         generic_status = xr_xir_compile_call_type_matches(remaining, module, caller_id, op, callee->parameters[p + op->args[1]], signature->parameters[p].type);
@@ -482,6 +487,7 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
     uint64_t bytes = sizeof(*function) + (uint64_t) function->name_length +
         (uint64_t) function->parameter_count * sizeof(*function->parameters) +
         (uint64_t) function->consume_parameter_count * sizeof(*function->consume_parameters) +
+        (uint64_t) function->escaping_parameter_count * sizeof(*function->escaping_parameters) +
         (uint64_t) function->block_count * sizeof(*function->blocks) +
         (uint64_t) function->operand_count * sizeof(*function->operands) +
         (uint64_t) function->instruction_count * sizeof(*function->instructions);
@@ -512,6 +518,14 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
             function->parameters[ordinal],&borrowed);
         if(status!=XR_XIR_OK)return status;
         if(borrowed)return XR_XIR_BAD_TYPE;
+    }
+    if(function->escaping_parameter_count>function->parameter_count ||
+        (function->escaping_parameter_count==0)!=(function->escaping_parameters==NULL))return XR_XIR_BAD_STRUCTURE;
+    for(uint32_t p=0;p<function->escaping_parameter_count;++p) {
+        uint32_t ordinal=function->escaping_parameters[p];
+        if(ordinal>=function->parameter_count || (p&&function->escaping_parameters[p-1]>=ordinal))
+            return XR_XIR_BAD_STRUCTURE;
+        if(!xr_xir_callable_signature(context->module->types,function->parameters[ordinal]))return XR_XIR_BAD_TYPE;
     }
     uint32_t function_id = (uint32_t) (function - context->module->functions);
     if (xr_xir_function_is_generator(context->module,function_id) &&
@@ -1717,12 +1731,15 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_provenance_effects_v2(const XrXirCompi
 
 /* The same complete checker consumes either freshly inferred facts or the
  * private prepared owner; neither path omits declarations or permissions. */
+static XrXirStatus verify_callable_lifetimes(const XrXirCompileContext *,
+    XirEffectInput, XrXirDiagnostic *);
 static XrXirStatus verify_effects_body(const XrXirCompileContext *context,
     XirEffectInput input,const XrXirEffects *effects,
     XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location = {XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     XrXirStatus status = structure_verify_source(context,input,NULL,&location);
+    if (status == XR_XIR_OK) status=verify_callable_lifetimes(context,input,&location);
     if (status == XR_XIR_OK) {
         XrXirCompileContext remaining = *context;
         status = declaration_effects_verify(input,&remaining,&location,effects,NULL,true);
@@ -1754,6 +1771,18 @@ XR_FUNC XrXirStatus xir_compile_check_effect_declarations(const XrXirCompileCont
 /* Structural, source and permission checks finish before the fresh owner
  * becomes observable. Only the Template consumer restricts this collector's
  * domain; ordinary verification never requests otherwise unused facts. */
+static XrXirStatus verify_callable_lifetimes(const XrXirCompileContext *context,
+    XirEffectInput input, XrXirDiagnostic *location) {
+    XrHirEscapeDiagnostic failure={0};
+    XrXirStatus status=xr_hir_escape_check(context,input.module,NULL,input.control,&failure);
+    if(status!=XR_XIR_OK && location) {
+        location->status=status;
+        location->function=failure.function;
+        location->instruction=failure.instruction;
+    }
+    return status;
+}
+
 static XrXirStatus verify_collected_effects(const XrXirCompileContext *context,
     XirEffectInput input,
     const XrXirEffects *source_effects,XrXirEffects **output, XrXirDiagnostic *diagnostic) {
@@ -1761,6 +1790,7 @@ static XrXirStatus verify_collected_effects(const XrXirCompileContext *context,
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     XrXirEffects *owned=NULL;
     XrXirStatus status=structure_verify_source(context,input,source_effects,&location);
+    if(status==XR_XIR_OK)status=verify_callable_lifetimes(context,input,&location);
     if (status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
         status=declaration_effects_verify(input,&remaining,&location,NULL,&owned,true);
@@ -1813,6 +1843,7 @@ static XrXirStatus verify_optional_effects(const XrXirCompileContext *context,
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     XrXirEffects *owned=NULL;
     XrXirStatus status=structure_verify_source(context,input,source_effects,&location);
+    if(status==XR_XIR_OK)status=verify_callable_lifetimes(context,input,&location);
     if(status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
         status=declaration_effects_verify(input,&remaining,&location,NULL,&owned,false);

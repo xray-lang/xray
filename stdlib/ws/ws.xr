@@ -1154,7 +1154,7 @@ final class _WsServeCtx {
     handler: fn(ref WsConn)
     maxMessage: i64
 
-    init(handler: fn(ref WsConn), maxMessage: i64) {
+    init(handler: escaping fn(ref WsConn), maxMessage: i64) {
         this.handler = handler
         this.maxMessage = maxMessage
     }
@@ -1219,7 +1219,7 @@ fn _wsListen(port: i64) -> NetListener? {
 // the accept loop; the scope waits for in-flight handlers before returning.
 export fn serve(
     port: i64,
-    handler: fn(ref WsConn),
+    handler: escaping fn(ref WsConn),
     running: Atomic<bool>,
     maxMessage: i64 = _WS_MAX_MESSAGE_BYTES
 ) -> bool {

@@ -128,7 +128,7 @@ static bool source_task_timeout_call(SourceContext *ctx,AstNode *node,
     SourceName *symbol=source_prelude_name(ctx,"Timeout");
     if(!symbol||symbol->kind!=SOURCE_NOMINAL)return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Task.timeout requires the governed Timeout declaration");
     if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_NOMINAL,.nominal={.declaration=symbol->index}},&timeout))return false;
-    XrXirCallableParameter errors[2]={{error,0},{timeout,0}};
+    XrXirCallableParameter errors[2]={{error,0,0},{timeout,0,0}};
     if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,.parameters=errors,.parameter_count=2},&combined)||
         !source_task_type(ctx,node,element,combined,&aggregate)||!source_array_element_type(ctx,aggregate,&array))return false;
     uint32_t functions[5];

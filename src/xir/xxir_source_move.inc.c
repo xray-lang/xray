@@ -15,22 +15,29 @@ static bool source_move_parameters(SourceContext *ctx,uint32_t index,
     if(index>=ctx->function_count || (count&&!parameters) ||
         offset>ctx->functions[index].parameter_count || count!=ctx->functions[index].parameter_count-offset)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"consuming parameters have no exact declaration span");
-    uint32_t consumes=0;
+    uint32_t consumes=0, escapes=0;
     for(uint32_t p=0;p<count;++p) {
         if(!(p&63u)&&!source_request_poll(ctx,NULL))return false;
         if(!parameters[p] || !xr_param_mode_is_valid(parameters[p]->passing_mode))
             return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"parameter passing mode is invalid");
         consumes+=parameters[p]->passing_mode==XR_PARAM_MOVE;
+        escapes+=parameters[p]->type && parameters[p]->type->parameter_escaping;
     }
     uint32_t *ordinals=consumes?source_alloc(ctx,consumes,sizeof(*ordinals)):NULL;
     if(consumes&&!ordinals)return false;
-    uint32_t at=0;
+    uint32_t *escaping=escapes?source_alloc(ctx,escapes,sizeof(*escaping)):NULL;
+    if(escapes&&!escaping)return false;
+    uint32_t at=0, escape_at=0;
     for(uint32_t p=0;p<count;++p) {
         if(!(p&63u)&&!source_request_poll(ctx,NULL))return false;
         if(parameters[p]->passing_mode==XR_PARAM_MOVE)ordinals[at++]=offset+p;
+        if(parameters[p]->type && parameters[p]->type->parameter_escaping)escaping[escape_at++]=offset+p;
     }
     ctx->functions[index].consume_parameters=ordinals;
-    ctx->functions[index].consume_parameter_count=consumes;return true;
+    ctx->functions[index].consume_parameter_count=consumes;
+    ctx->functions[index].escaping_parameter_count=escapes;
+    ctx->functions[index].escaping_parameters=escaping;
+    return true;
 }
 static bool source_move(SourceContext *ctx,AstNode *node,SourceValue *output) {
     AstNode *position=node->as.move_expr.expr;

@@ -672,7 +672,7 @@ class _ServerRouteMatch {
     init(
         value: JSON.Value,
         params: Map<string, string>,
-        handler: fn(HttpRequest) -> HttpResponse,
+        handler: escaping fn(HttpRequest) -> HttpResponse,
         hasHandler: bool
     ) {
         this.value = value
@@ -693,7 +693,7 @@ class _ServerRouteEntry {
         method: string,
         path: string,
         value: JSON.Value,
-        handler: fn(HttpRequest) -> HttpResponse,
+        handler: escaping fn(HttpRequest) -> HttpResponse,
         hasHandler: bool
     ) {
         this.method = method
@@ -725,7 +725,7 @@ class _ServerRouter {
         return this.addRouteJson(method, path, JSON.value(value), _serverDefaultHandler, false)
     }
 
-    addHandler(method: string, path: string, handler: fn(HttpRequest) -> HttpResponse) -> bool {
+    addHandler(method: string, path: string, handler: escaping fn(HttpRequest) -> HttpResponse) -> bool {
         var value: JSON.Value = JSON.value({})
         return this.addRouteJson(method, path, value, handler, true)
     }
@@ -734,7 +734,7 @@ class _ServerRouter {
         method: string,
         path: string,
         value: JSON.Value,
-        handler: fn(HttpRequest) -> HttpResponse,
+        handler: escaping fn(HttpRequest) -> HttpResponse,
         hasHandler: bool
     ) -> bool {
         var m = _routeMethodKey(method)
@@ -1088,7 +1088,7 @@ export class Server {
     routeHandler(
         method: string,
         path: string,
-        handler: fn(HttpRequest) -> HttpResponse
+        handler: escaping fn(HttpRequest) -> HttpResponse
     ) -> bool {
         return this.router.addHandler(method, path, handler)
     }

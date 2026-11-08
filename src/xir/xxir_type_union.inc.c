@@ -32,7 +32,7 @@ static bool error_union_shape(const XrXirTypes *types, XrXirType type) {
         return false;
     for (uint32_t p = 0; p < node->parameter_count; ++p) {
         XrXirType member = node->parameters[p].type;
-        if (node->parameters[p].mode || member == XR_XIR_NEVER || member == XR_XIR_ERROR ||
+        if (node->parameters[p].mode || node->parameters[p].escaping || member == XR_XIR_NEVER || member == XR_XIR_ERROR ||
             !error_union_atom(types, member) || (p && (uint32_t)node->parameters[p-1].type >= (uint32_t)member))
             return false;
     }
@@ -80,7 +80,7 @@ XR_FUNC XrXirStatus xr_xir_compile_error_union(const XrXirCompileContext *contex
         uint32_t n = node ? node->parameter_count : members[i] == XR_XIR_NEVER ? 0u : 1u;
         for (uint32_t p = 0; p < n; ++p) {
             XrXirType member = node ? node->parameters[p].type : members[i];
-            vector[used++] = (XrXirCallableParameter){member,0};
+            vector[used++] = (XrXirCallableParameter){member,0,0};
         }
     }
     qsort(vector, used, sizeof(*vector), error_union_order);

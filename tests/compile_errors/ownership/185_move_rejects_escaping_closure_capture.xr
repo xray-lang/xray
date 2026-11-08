@@ -1,7 +1,7 @@
 // A closure literal is normally call-bounded, so its captures loan nothing
 // past the statement. A callee that stores the closure breaks that: the
 // closure -- and the root it captured -- outlives the call.
-fn stash(f: fn() -> i64, sink: ref Array<fn() -> i64>) {
+fn stash(f: escaping fn() -> i64, sink: ref Array<fn() -> i64>) {
     sink.push(f)
 }
 

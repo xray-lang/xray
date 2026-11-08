@@ -27,7 +27,7 @@ static bool source_root_join_type(SourceContext *ctx, XrXirType left,
         return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"inferred callable flow has invalid bounds");
     for (uint32_t p = 0; p < a->parameter_count; ++p) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        if (a->parameters[p].type != b->parameters[p].type || a->parameters[p].mode != b->parameters[p].mode)
+        if (a->parameters[p].type != b->parameters[p].type || a->parameters[p].mode != b->parameters[p].mode || a->parameters[p].escaping != b->parameters[p].escaping)
             return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"inferred callable parameters must remain exact");
     }
     return source_intern_type(ctx,joined,output);

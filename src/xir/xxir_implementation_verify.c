@@ -77,7 +77,11 @@ static XrXirStatus implementation_function(const XrXirModule *module, const XrXi
     XrXirType *arguments = NULL;
     XrXirStatus status = implementation_identity_arguments(full_count,budget,&arguments);
     for (uint32_t a = 0; status == XR_XIR_OK && a < signature->parameter_count; ++a) {
-        if (signature->parameters[a].mode) { status = XR_XIR_BAD_TYPE; break; }
+        if (signature->parameters[a].mode ||
+            signature->parameters[a].escaping != xr_xir_function_parameter_escaping(f,a+1)) {
+            status = XR_XIR_BAD_TYPE;
+            break;
+        }
         status = xr_xir_compile_type_substitution_matches_between(budget, types, module->types, arguments, full_count, signature->parameters[a].type, f->parameters[a+1]);
     }
     if (status == XR_XIR_OK) status = xr_xir_compile_type_substitution_matches_between(budget, types, module->types, arguments, full_count, signature->result, f->result);

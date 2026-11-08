@@ -40,7 +40,7 @@ XR_FUNC XrXirStatus xr_hir_body_call_method(XrHirBody *body,XrHirBodySignature s
     for(uint32_t p=0;p<type->parameter_count;++p) {
         if(!(p%64)){XrXirStatus status=body_poll(control);if(status!=XR_XIR_OK)return status;}
         if(type->parameters[p].type!=call.parameters[p+1].type||
-            type->parameters[p].mode!=call.parameters[p+1].mode)return XR_XIR_BAD_TYPE;
+            type->parameters[p].mode!=call.parameters[p+1].mode || type->parameters[p].escaping != call.parameters[p+1].escaping)return XR_XIR_BAD_TYPE;
     }
     HirBodyUse first=body->uses[call.first_argument];
     if(first.signature.owner!=body||first.signature.index!=signature.index||first.action.formal||

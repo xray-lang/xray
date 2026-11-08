@@ -27,7 +27,7 @@ static bool source_hash_query_intern(SourceContext *ctx,SourceHashQueryTypes *qu
         for (uint32_t p=0;p<node.parameter_count;++p) {
             if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (old->parameters[p].type!=node.parameters[p].type ||
-                old->parameters[p].mode!=node.parameters[p].mode) same=false;
+                old->parameters[p].mode!=node.parameters[p].mode || old->parameters[p].escaping != node.parameters[p].escaping) same=false;
         }
         if (same) { *output=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+i);return true; }
     }
@@ -56,7 +56,7 @@ static bool source_hash_query_projection(SourceContext *ctx,SourceHashQueryTypes
     if (entries) {
         XrXirCallableParameter *fields=source_alloc(ctx,2,sizeof(*fields));
         if (!fields) return false;
-        fields[0]=(XrXirCallableParameter){key,0};fields[1]=(XrXirCallableParameter){element,0};
+        fields[0]=(XrXirCallableParameter){key,0,0};fields[1]=(XrXirCallableParameter){element,0,0};
         SourceHashTupleReceiver receiver={ctx,query};
         XrHirTuplePool pool={&ctx->compile,query->types,ctx->request,&receiver,source_hash_query_tuple_intern};
         const char *reason=NULL;XrXirStatus status=xr_hir_tuple_type(&pool,fields,2,&element,&reason);

@@ -74,7 +74,7 @@ static XrXirStatus inference_match(XrXirInferenceState *s, const XrXirTypes *typ
     XrXirStatus status=xr_xir_compile_error_substitution_accepts(&match,&errors);
     if (status==XR_XIR_OK) status=xr_xir_compile_type_substitution_matches_between(&match,types,types,arguments,count,from->result,to->result);
     for (uint32_t p=0;status==XR_XIR_OK && p<from->parameter_count;++p) {
-        if (from->parameters[p].mode!=to->parameters[p].mode) return XR_XIR_BAD_TYPE;
+        if (from->parameters[p].mode!=to->parameters[p].mode || from->parameters[p].escaping != to->parameters[p].escaping) return XR_XIR_BAD_TYPE;
         status=xr_xir_compile_type_substitution_matches_between(&match,types,types,arguments,count,from->parameters[p].type,to->parameters[p].type);
     }
     return status;
@@ -173,7 +173,7 @@ static void inference_pair(InferenceWalk *w, const InferenceTask *task) {
             inference_enqueue(w,from->element,to->element,depth);
         }
         for (uint32_t p = 0; p < from->parameter_count && s->status == XR_XIR_OK; ++p) {
-            if (from->parameters[p].mode != to->parameters[p].mode) { s->status = XR_XIR_BAD_TYPE; break; }
+            if (from->parameters[p].mode != to->parameters[p].mode || from->parameters[p].escaping != to->parameters[p].escaping) { s->status = XR_XIR_BAD_TYPE; break; }
             inference_enqueue(w,from->parameters[p].type,to->parameters[p].type,depth);
         }
     } else if (from->kind == XR_XIR_TYPE_MAP || from->kind == XR_XIR_TYPE_TASK || from->kind == XR_XIR_TYPE_ITERATOR) {

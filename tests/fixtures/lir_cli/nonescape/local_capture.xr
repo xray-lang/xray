@@ -1,0 +1,9 @@
+fn countIf(n: i64, predicate: fn(i64) -> bool) -> i64 {
+    var count: i64 = 0
+    for (i in 0..n) { if (predicate(i)) { count = count + 1 } }
+    return count
+}
+fn apply(callback: fn() -> i64) -> i64 {
+    const thunk = fn() -> i64 { return callback() + 1 }
+    return countIf(1, (i) -> thunk() > 0)
+}

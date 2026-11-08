@@ -1,6 +1,6 @@
 import sys
 
-fn makeLocal(init: fn() -> i64) {
+fn makeLocal(init: escaping fn() -> i64) {
     var local = sys.ThreadLocal<i64, Never>(init)
     print(try! local.get())
 }

@@ -413,6 +413,8 @@ static bool source_library_function(SourceContext *ctx, const XrXirModule *libra
         original->parameter_count, sizeof(*original->parameters));
     function->consume_parameters=source_library_bytes(ctx,original->consume_parameters,
         original->consume_parameter_count,sizeof(*original->consume_parameters));
+    function->escaping_parameters=source_library_bytes(ctx,original->escaping_parameters,
+        original->escaping_parameter_count,sizeof(*original->escaping_parameters));
     function->blocks = source_library_bytes(ctx, original->blocks,
         original->block_count, sizeof(*original->blocks));
     function->operands = source_library_bytes(ctx, original->operands,
@@ -421,6 +423,7 @@ static bool source_library_function(SourceContext *ctx, const XrXirModule *libra
     function->instructions = instructions;
     if ((original->parameter_count && !function->parameters) || (original->block_count && !function->blocks) ||
         (original->consume_parameter_count && !function->consume_parameters) ||
+        (original->escaping_parameter_count && !function->escaping_parameters) ||
         (original->operand_count && !function->operands) || (original->instruction_count && !instructions)) return false;
     if (!source_library_type(ctx,map->unit,original->result,&function->result)) return false;
     if (!source_library_type(ctx,map->unit,original->error_type,&function->error_type)) return false;

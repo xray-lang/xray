@@ -41,6 +41,7 @@ static bool source_instance_argument(SourceInstanceTypes *input,XrXirType argume
         for (uint32_t p=0;p<node.parameter_count;++p) {
             if (!source_receive_step(ctx,&input->control_rows)) return false;
             parameters[p].mode=node.parameters[p].mode;
+            parameters[p].escaping=node.parameters[p].escaping;
             if (!source_instance_argument(input,node.parameters[p].type,depth+1,&parameters[p].type)) return false;
         }
         node.parameters=parameters;
@@ -103,7 +104,7 @@ static bool source_instance_literal(SourceContext *ctx,uint32_t index) {
     uint32_t module=ctx->bodies[definition].module,nominal=ctx->identities[definition].nominal_owner;
     uint32_t parent=ctx->bodies[definition].declaration;
     ctx->function=f;ctx->module=module;++ctx->function_count;
-    ctx->functions[f]=(XrXirFunction){name,(uint32_t)source_text_size(ctx,name),NULL,0,result,NULL,0,NULL,0,NULL,0, XR_XIR_NEVER,0,NULL};
+    ctx->functions[f]=(XrXirFunction){name,(uint32_t)source_text_size(ctx,name),NULL,0,result,NULL,0,NULL,0,NULL,0, XR_XIR_NEVER,0,NULL,0,NULL};
     ctx->identities[f]=(XrXirFunctionIdentity){.module=module,.nominal_owner=nominal,
         .method_kind=nominal?XR_XIR_MEMBER_HELPER:XR_XIR_NON_MEMBER};
     ctx->bodies[f].node=node;ctx->bodies[f].module=module;

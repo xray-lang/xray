@@ -142,7 +142,7 @@ static bool source_tuple_expanded_literal(SourceContext *ctx, AstNode *node,
     uint32_t payload_count = 0;
     for (uint32_t f = 0; f < elements.count; ++f) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        types[f] = (XrXirCallableParameter){elements.values[f].type, 0};
+        types[f] = (XrXirCallableParameter){elements.values[f].type, 0,0};
         if (elements.values[f].type != XR_XIR_UNIT) payloads[payload_count++] = elements.values[f];
     }
     XrXirType tuple;

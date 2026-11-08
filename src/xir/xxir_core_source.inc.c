@@ -230,6 +230,8 @@ static bool source_core_function_copy(SourceContext *ctx, const XrXirModule *mod
         original->parameter_count,sizeof(*original->parameters));
     function->consume_parameters=source_library_bytes(ctx,original->consume_parameters,
         original->consume_parameter_count,sizeof(*original->consume_parameters));
+    function->escaping_parameters=source_library_bytes(ctx,original->escaping_parameters,
+        original->escaping_parameter_count,sizeof(*original->escaping_parameters));
     function->blocks=source_library_bytes(ctx,original->blocks,
         original->block_count,sizeof(*original->blocks));
     function->operands=source_library_bytes(ctx,original->operands,
@@ -240,6 +242,7 @@ static bool source_core_function_copy(SourceContext *ctx, const XrXirModule *mod
     if (!function->name || !function->blocks || !instructions ||
         (original->parameter_count && !function->parameters) ||
         (original->consume_parameter_count && !function->consume_parameters) ||
+        (original->escaping_parameter_count && !function->escaping_parameters) ||
         (original->operand_count && !function->operands)) return false;
     for (uint32_t p=0;p<function->parameter_count;++p) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;

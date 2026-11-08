@@ -126,7 +126,9 @@ static inline uint32_t xr_xir_declared_parameter_mode(const XrXirTypes *types,
 /* Physical storage validity does not establish the declared mode or authority. */
 static inline bool xr_xir_callable_parameter_storage_valid(const XrXirTypes *types,
     const XrXirCallableParameter *parameter) {
-    if (!parameter) return false;
+    if (!parameter || parameter->escaping > 1u ||
+        (parameter->escaping && (parameter->mode == XR_PARAM_REF ||
+         !xr_xir_callable_signature(types, parameter->type)))) return false;
     bool cell = xr_xir_type_is_cell(types, parameter->type);
     return parameter->mode == XR_PARAM_READ || parameter->mode == XR_PARAM_MOVE ? !cell :
         parameter->mode == XR_PARAM_REF && cell;

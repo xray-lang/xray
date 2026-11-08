@@ -295,6 +295,7 @@ These are not in the lexer keyword table; the parser recognizes them by position
 | `after` | `select` timeout arm (`after 1000 -> ...`) |
 | `panic` | panic-channel boundary in `catch panic (p)` |
 | `throws` | after the parameter list of a function, method, initializer, fn lambda, or function type; declares its error type |
+| `escaping` | Before `fn` or `nosuspend fn` in a parameter type, allowing the function value to outlive the invocation |
 
 ### 1.6 Literals
 
@@ -1385,7 +1386,30 @@ matching the expression side and §2.7 — a comma makes a tuple, `(T)` groups �
 a nullable function type is written directly as `(fn() -> i64)?`. `CFn<...>`
 uses the same `fn` spelling (`CFn<fn(A, B) -> R>`, see §3.12).
 
-A function type may carry the contextual prefix `nosuspend fn(T1, T2) throws(E) -> R`; a written type without the prefix may suspend. `nosuspend` is recognized only in type position immediately before `fn`, without crossing an ungrouped statement line boundary, and remains an ordinary name elsewhere. The guarantee belongs to the same callable type identity, independently of `throws(E)`, and survives alias substitution, nullable and nested types, formatting and receiving revalidation. A function literal directly checked against this expected type must prove the guarantee; unknown or potentially suspending calls reject. An already constructed ordinary function value cannot be implicitly strengthened from its body. A restricted callable may weaken to an ordinary one; the reverse requires an actual existing promise. This adds no own-function declaration effect annotation.
+A function type may carry the contextual prefix `nosuspend fn(T1, T2) throws(E) -> R`. Written types on escaping parameters and storage positions may suspend without the prefix. Non-escaping function parameters substitute the actual argument suspension at each call. `nosuspend` is recognized only in type position immediately before `fn`, without crossing an ungrouped statement line boundary, and remains an ordinary name elsewhere. The guarantee belongs to the same callable type identity, independently of `throws(E)`, and survives alias substitution, nullable and nested types, formatting and receiving revalidation. A function literal directly checked against this expected type must prove the guarantee; unknown or potentially suspending calls reject. An already constructed ordinary function value cannot be implicitly strengthened from its body. A restricted callable may weaken to an ordinary one; the reverse requires an actual existing promise. This adds no own-function declaration effect annotation.
+
+**Function parameter invocation lifetime**
+
+Function-typed parameters are non-escaping by default, including parameters inside function types. A parameter retained across its invocation is written `callback: escaping fn(...)`. The contextual `escaping` prefix is recognized only before `fn` or `nosuspend fn` in parameter positions and remains an ordinary name elsewhere. Qualifier order is the parameter mode, `escaping`, `nosuspend`, and `fn`.
+
+- A non-escaping parameter can be called, forwarded to another non-escaping parameter, bound to a local constant or variable, selected by a conditional expression, and captured by a non-escaping local closure. Aliases, conditional values and capturing closures preserve its restriction.
+- Non-escaping values cannot enter fields, arrays, Map, Set, aggregates or module storage, leave through a return, be captured by an escaping closure, reach an `escaping` parameter, or be written into a `ref` referent. Local binding and assignment preserve the restriction.
+- Non-escaping values cannot be ordinary generic `T` values, or arguments or captures of `go`, Task or generators. Structured joining preserves this boundary. Monomorphization preserves the storable contract of an original `T` parameter.
+- Function types in fields, ordinary local storage, collections and results retain their escaping rules. Values in the variable referred to by `ref fn(...)` retain their existing storable rules. `CFn` retains its `nosuspend` requirement.
+- A suspension summary combines intrinsic suspension with each non-escaping function argument, including unused parameters. Each call substitutes its own arguments. Recursive forwarding retains parameter dependencies. A definition-level `nosuspend` promise must hold for every argument allowed by its signature. Escaping parameters and fixed stored function values use the type effect bits.
+- A non-escaping closure may capture loans such as Slice and `ref`. A closure retaining a loan cannot escape, and violations report `E0383`. Borrow origin, lifetime and exclusive-access checks continue to apply.
+- Overrides, interface implementations and function-type matching require exact equality of each function parameter's `escaping` flag.
+- A non-escaping parameter crossing its invocation reports `E0398` at the offending use with the parameter name, destination and a suggested `escaping fn(...)` declaration. `throws` remains declared in the signature and is not inferred from callback arguments.
+
+```xray
+fn apply(callback: fn() -> i64) -> i64 {
+    const thunk = fn() -> i64 { return callback() + 1 }
+    return thunk()
+}
+fn compose(f: escaping fn(i64) -> i64, g: escaping fn(i64) -> i64) -> fn(i64) -> i64 {
+    return fn(x: i64) -> i64 { return f(g(x)) }
+}
+```
 
 A final READ rest is written `fn(...T) -> R`, or `fn(P, ...T) -> R` with a fixed prefix. Rest is an authentic callable type fact: the physical Array in the body does not make it equal or implicitly adaptable to `fn(Array<T>) -> R` or a fixed-arity type. Function values, generic substitution, nested types, formatting and cold-library reception retain the fact. Existing error, root and `nosuspend` matching remains independent; this does not introduce a C varargs ABI.
 
@@ -8776,7 +8800,7 @@ These numbers follow the Task329 §2.9 decision. Header definitions and position
 | `E0380` | `XR_ERR_ANALYZE_UNKNOWN_FIELD` | reading or setting a field / member the type does not declare |
 | `E0381` | `XR_ERR_ANALYZE_MISSING_FIELD` | aggregate literal omits a required field |
 | `E0382` | `XR_ERR_ANALYZE_BORROW_CONFLICT` | owner invalidated while a borrow (`Slice<T>` view, `ref`, or raw pointer) is live |
-| `E0383` | `XR_ERR_ANALYZE_BORROW_ESCAPE` | a borrowed value escapes its owner's scope (return, field, container, closure capture, execution boundary) |
+| `E0383` | `XR_ERR_ANALYZE_BORROW_ESCAPE` | a borrowed value escapes its owner's scope (return, field, container, escaping closure capture, execution boundary) |
 | `E0384` | `XR_ERR_ANALYZE_BORROW_SOURCE` | the borrow source is not a stable, uniquely inferable owner (temporary owner, multi-source return, borrowed from a local) |
 | `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | Legacy analyzer prohibition on generator scheduling; current Checked generators use the independent frame/consumer wait rules of §3.16.2 and actual admission limits of §17.39 |
 | `E0386` | `XR_ERR_ANALYZE_GENERATOR_DEFER` | Legacy analyzer prohibition on generator defer; current Checked generators use the registered-cleanup and close rules of §3.16.3 instead |
@@ -8791,6 +8815,7 @@ These numbers follow the Task329 §2.9 decision. Header definitions and position
 | `E0395` | `XR_ERR_ANALYZE_DEFER_CONTROL` | a defer body exits its function with `return`, or crosses the cleanup boundary with `break` / `continue` |
 | `E0396` | `XR_ERR_ANALYZE_BINDING_STATE` | Read of a moved or possibly moved binding |
 | `E0397` | `XR_ERR_ANALYZE_MOVE_CAPABILITY` | Move capability or constraint violation |
+| `E0398` | `XR_ERR_ANALYZE_FUNCTION_ESCAPE` | A non-escaping function parameter or capturing closure crosses its invocation |
 
 ### 18.3 Runtime
 

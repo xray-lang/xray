@@ -137,7 +137,7 @@ static XrXirStatus effect_body_type_nodes_compare(
             x->nominal.field_count!=y->nominal.field_count) return effect_body_difference(same);
         for (uint32_t p=0;p<xr_xir_type_parameter_slots(x);++p) {
 
-            if (x->parameters[p].mode!=y->parameters[p].mode || x->parameters[p].type!=y->parameters[p].type) {
+            if (x->parameters[p].mode!=y->parameters[p].mode || x->parameters[p].escaping != y->parameters[p].escaping || x->parameters[p].type!=y->parameters[p].type) {
                 XrXirStatus difference=effect_body_difference(same);
                 if (difference!=XR_XIR_OK) return difference;
             }

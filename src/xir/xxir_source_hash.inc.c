@@ -16,7 +16,7 @@ static bool source_hash_projection_type(SourceContext *ctx, XrXirType key, XrXir
     if (entries) {
         XrXirCallableParameter *fields = source_alloc(ctx, 2, sizeof(*fields));
         if (!fields) return false;
-        fields[0] = (XrXirCallableParameter){key, 0}; fields[1] = (XrXirCallableParameter){element, 0};
+        fields[0] = (XrXirCallableParameter){key, 0,0}; fields[1] = (XrXirCallableParameter){element, 0,0};
         if (!source_hir_tuple_type(ctx,fields,2,&element)) return false;
     }
     return source_intern_type(ctx, (XrXirTypeNode){.kind = XR_XIR_TYPE_ARRAY, .element = element}, output);
@@ -32,7 +32,7 @@ static XrXirSourceType source_hash_schema(SourceContext *ctx, XrNativeTypeTerm t
         XrXirCallableParameter *parameters = source_alloc(ctx, count, sizeof(*parameters));
         if (!parameters) return (XrXirSourceType){0};
         for (uint32_t i = 0; i < count; ++i)
-            parameters[i] = (XrXirCallableParameter){(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE + i), XR_PARAM_READ};
+            parameters[i] = (XrXirCallableParameter){(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE + i), XR_PARAM_READ,0};
         XrXirType signature = XR_XIR_UNIT;
         if (!source_hash_query_intern(ctx,query,(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,
             .element=XR_XIR_NEVER,.parameters=parameters,.parameter_count=count,

@@ -1,0 +1,7 @@
+class Bus {
+    handlers: Array<fn(string)>
+    init() { this.handlers = [] }
+    subscribe(handler: fn(string)) {
+        this.handlers.push(handler)
+    }
+}

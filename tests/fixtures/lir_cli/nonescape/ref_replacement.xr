@@ -1,0 +1,3 @@
+fn replace(callback: ref fn(i64) -> i64) {
+    callback = fn(value: i64) -> i64 { return 99 }
+}

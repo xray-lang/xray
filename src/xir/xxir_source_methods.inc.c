@@ -92,7 +92,8 @@ static bool source_class_method_reference(SourceContext *ctx,AstNode *node,Sourc
     XrXirCallableParameter *parameters=count?source_alloc(ctx,count,sizeof(*parameters)):NULL;
     if(count&&!parameters)return false;
     for(uint32_t p=0;p<count;++p)parameters[p]=(XrXirCallableParameter){function.parameters[p+1],
-        xr_xir_declared_parameter_mode(&ctx->types,function.parameters[p+1],function.consume_parameters,function.consume_parameter_count,p+1)};
+        xr_xir_declared_parameter_mode(&ctx->types,function.parameters[p+1],function.consume_parameters,function.consume_parameter_count,p+1),
+        xr_xir_function_parameter_escaping(&function,p+1)};
     XrXirType signature;
     if(!source_signature(ctx,parameters,count,function.result,function.error_type,&signature))return false;
     if(ctx->identities[method->index].promises&XR_XIR_FUNCTION_NO_SUSPEND) {
@@ -351,7 +352,7 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
             }
             XrXirFunction *function = &ctx->functions[index];
             *function = (XrXirFunction) {method->name, (uint32_t)source_text_size(ctx, method->name), body->parameters,
-                count, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0, XR_XIR_NEVER,0,NULL};
+                count, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0, XR_XIR_NEVER,0,NULL,0,NULL};
             if (!source_type(ctx, method->return_type, &function->result) ||
                 !source_error_clause_type(ctx,node,&method->throws_clause,&function->error_type)) return false;
             for (int i = 0; i < method->param_count; ++i) {

@@ -180,7 +180,7 @@ fn _signalCode(signal: Signal) -> i64 {
 // it to a handler. Refusing it here says so at the boundary, rather than
 // leaving the request to fail further down for a reason the caller cannot see.
 // It stays in the enum because sending it is both legal and common.
-export fn onSignal(signal: Signal, handler: fn()) -> bool {
+export fn onSignal(signal: Signal, handler: escaping fn()) -> bool {
     if (signal == Signal.KILL) { return false }
     return __onSignal(_signalCode(signal), handler)
 }
@@ -358,7 +358,7 @@ export class ThreadLocal<T, E: Error> {
     _initializing: Map<i64, bool>
     _init: nosuspend fn() throws(E) -> T
 
-    init(init: nosuspend fn() throws(E) -> T) {
+    init(init: escaping nosuspend fn() throws(E) -> T) {
         this._lock = OsMutex()
         this._values = #{}
         this._initializing = #{}

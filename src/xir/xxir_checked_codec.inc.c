@@ -145,6 +145,15 @@ static void checked_function(CheckedCursor *c, XrXirFunction *f) {
         if(c->reading)consumes[p]=ordinal;
         if(ordinal>=f->parameter_count || (p&&consumes[p-1]>=ordinal))c->status=XR_XIR_BAD_STRUCTURE;
     }
+    f->escaping_parameter_count=checked_u32(c,f->escaping_parameter_count);
+    if(f->escaping_parameter_count>f->parameter_count)c->status=XR_XIR_BAD_STRUCTURE;
+    uint32_t *escapings=checked_array(c,f->escaping_parameters,f->escaping_parameter_count,sizeof(*escapings),4);
+    f->escaping_parameters=escapings;
+    for(uint32_t p=0;p<f->escaping_parameter_count && c->status==XR_XIR_OK;++p) {
+        uint32_t ordinal=checked_u32(c,escapings[p]);
+        if(c->reading)escapings[p]=ordinal;
+        if(ordinal>=f->parameter_count || (p&&escapings[p-1]>=ordinal))c->status=XR_XIR_BAD_STRUCTURE;
+    }
     f->result = (XrXirType) checked_u32(c, (uint32_t) f->result);
     f->error_type = (XrXirType) checked_u32(c, (uint32_t) f->error_type);
     f->block_count = checked_count(c, f->block_count, &c->structural.blocks, 16);
@@ -457,13 +466,14 @@ static void checked_types(CheckedCursor *c, XrXirModule *m) {
         s.kind = checked_u32(c, s.kind);
         s.parameter_span = checked_u32(c, s.parameter_span);
         if (s.kind == XR_XIR_TYPE_CALLABLE) {
-            s.parameter_count = checked_count(c, s.parameter_count, &c->structural.parameters, 8);
-            XrXirCallableParameter *parameters = checked_array(c, s.parameters, s.parameter_count, sizeof(*parameters), 8);
+            s.parameter_count = checked_count(c, s.parameter_count, &c->structural.parameters, 12);
+            XrXirCallableParameter *parameters = checked_array(c, s.parameters, s.parameter_count, sizeof(*parameters), 12);
             s.parameters = parameters;
             for (uint32_t p = 0; p < s.parameter_count && c->status == XR_XIR_OK; ++p) {
                 XrXirCallableParameter parameter = parameters[p];
                 parameter.type = (XrXirType) checked_u32(c, (uint32_t) parameter.type);
                 parameter.mode = checked_u32(c, parameter.mode);
+                parameter.escaping = checked_u32(c, parameter.escaping);
                 if (c->reading) parameters[p] = parameter;
             }
             s.result = (XrXirType) checked_u32(c, (uint32_t) s.result);
@@ -480,7 +490,7 @@ static void checked_types(CheckedCursor *c, XrXirModule *m) {
             s.parameters = fields;
             for (uint32_t p = 0; p < s.parameter_count && c->status == XR_XIR_OK; ++p) {
                 XrXirType field = (XrXirType)checked_u32(c,(uint32_t)fields[p].type);
-                if (c->reading) fields[p] = (XrXirCallableParameter){field,0};
+                if (c->reading) fields[p] = (XrXirCallableParameter){field,0,0};
             }
         } else if (s.kind == XR_XIR_TYPE_MAP || s.kind == XR_XIR_TYPE_TASK || s.kind == XR_XIR_TYPE_ITERATOR) {
             s.element = (XrXirType)checked_u32(c, (uint32_t)s.element);

@@ -49,13 +49,14 @@ static XrXirStatus class_method_override(const XirClassMethodRead *input,uint32_
     if(status!=XR_XIR_OK)return status;
     const XirMetadataDomain *domain=input->domain;const XrXirFunctionIdentity *identity=domain->declarations->functions;
     if(!class_method_name(&a,&b) || a.parameter_count!=b.parameter_count || a.result!=b.result ||
-        a.consume_parameter_count!=b.consume_parameter_count ||
+        a.consume_parameter_count!=b.consume_parameter_count || a.escaping_parameter_count!=b.escaping_parameter_count ||
         !xr_xir_class_is_subtype(domain->types,a.parameters[0],b.parameters[0]) ||
         !xr_xir_error_bound_accepts(domain->types,a.error_type,b.error_type) ||
         ((identity[base].promises&XR_XIR_FUNCTION_NO_SUSPEND) &&
             !(identity[derived].promises&XR_XIR_FUNCTION_NO_SUSPEND)))return XR_XIR_BAD_TYPE;
     for(uint32_t p=1;p<a.parameter_count;++p)if(a.parameters[p]!=b.parameters[p])return XR_XIR_BAD_TYPE;
     for(uint32_t p=0;p<a.consume_parameter_count;++p)if(a.consume_parameters[p]!=b.consume_parameters[p])return XR_XIR_BAD_TYPE;
+    for(uint32_t p=0;p<a.escaping_parameter_count;++p)if(a.escaping_parameters[p]!=b.escaping_parameters[p])return XR_XIR_BAD_TYPE;
     return XR_XIR_OK;
 }
 XR_FUNC XrXirStatus xir_compile_class_method_select_read(const XirClassMethodRead *input,
@@ -127,7 +128,7 @@ static XrXirStatus class_method_module_header(const void *owner,uint32_t entry,X
     if(!module || !module->functions || entry>=module->function_count || !output)return XR_XIR_BAD_STRUCTURE;
     const XrXirFunction *function=&module->functions[entry];
     *output=(XirClassMethodSignature){function->name,function->name_length,function->parameters,function->parameter_count,
-        function->result,function->error_type,function->consume_parameters,function->consume_parameter_count};return XR_XIR_OK;
+        function->result,function->error_type,function->consume_parameters,function->consume_parameter_count,function->escaping_parameter_count,function->escaping_parameters};return XR_XIR_OK;
 }
 XR_FUNC XrXirStatus xir_compile_class_method_candidates(const XrXirModule *module,
     XrXirType static_receiver,uint32_t slot,XirClassMethodVisitor visit,void *owner,XrCompileRequestControl *control) {
@@ -159,6 +160,7 @@ XR_FUNC XrXirStatus xir_compile_class_method_site(const XrXirModule *module,
         ((signature->flags&XR_XIR_CALLABLE_NO_SUSPEND) && !(domain.declarations->functions[slot].promises&XR_XIR_FUNCTION_NO_SUSPEND)))return XR_XIR_BAD_TYPE;
     for(uint32_t p=0;p<signature->parameter_count;++p)
         if(!xr_xir_callable_parameter_storage_valid(module->types,&signature->parameters[p]) ||
+            signature->parameters[p].escaping!=xr_xir_parameter_escaping(anchor.escaping_parameters,anchor.escaping_parameter_count,p+1) ||
             signature->parameters[p].type!=anchor.parameters[p+1] ||
             signature->parameters[p].mode!=xr_xir_declared_parameter_mode(module->types,anchor.parameters[p+1],
                 anchor.consume_parameters,anchor.consume_parameter_count,p+1))return XR_XIR_BAD_TYPE;
