@@ -15,14 +15,14 @@ static bool effect_outcomes_empty(const EffectFinalOutcomes *outcomes) {
         !outcomes->control_summary &&
         !outcomes->go_safe && !outcomes->task_creation && !outcomes->root &&
         !outcomes->root_witnesses && !outcomes->unresolved_witnesses &&
-        !outcomes->contracts && !outcomes->entry_roots && !outcomes->contexts;
+        !outcomes->contracts;
 }
 
 /* Shape rejects invalid requests. Fresh receiving verification separately
  * compares all current Input fields and every reconstructed result row. */
 static const EffectFinalOutcomes *effect_final_outcomes(const XrXirEffects *effects) {
     if (!effects || !effects->checked_roots ||
-        effects->root_input || effects->outcomes_owner || !effect_outcomes_empty(&effects->outcomes_work)) return NULL;
+        effects->outcomes_owner || !effect_outcomes_empty(&effects->outcomes_work)) return NULL;
     const EffectFinalOutcomes *final=effects->final_outcomes;
     if (!final || final->resources!=effects->resources || final->count!=effects->count ||
         !final->count || !final->functions || !final->witnesses ||
@@ -39,7 +39,7 @@ static XrXirStatus effect_outcomes_publish(const XrXirCompileContext *work,
     const XrXirModule *source,XrXirEffects *effects) {
     if (!xir_effects_context_matches(work,effects,source?source->function_count:0) ||
         !effects->checked_roots || effects->final_outcomes ||
-        !effects->outcomes_owner || effects->root_input) return XR_XIR_BAD_STRUCTURE;
+        !effects->outcomes_owner) return XR_XIR_BAD_STRUCTURE;
     EffectFinalOutcomes *records=&effects->outcomes_work;
     if (records->resources || records->count || !records->functions || !records->witnesses ||
         !records->go_safe || !records->task_creation ||

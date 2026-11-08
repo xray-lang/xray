@@ -13,20 +13,6 @@
  */
 /* This is the final receiving owner. Each term vector is written once and
  * transfers to its public contract only after independent comparison. */
-static void effect_invocation_result_clear(EffectFinalFunctions *result) {
-    if (!result) return;
-    for (uint32_t f=0;f<result->count;++f)
-        xr_compile_resources_free(result->functions[f].storage);
-    xr_compile_resources_free(result->functions);
-    xr_compile_resources_free(result->witnesses);
-}
-
-static bool effect_invocation_frontier(XrXirOp op) {
-    return op==XR_XIR_CALL || op==XR_XIR_INVOKE || op==XR_XIR_CALL_DEFAULT ||
-        op==XR_XIR_INVOKE_DEFAULT || op==XR_XIR_CALL_REQUIREMENT ||
-        op==XR_XIR_CLEANUP_REGISTER || op==XR_XIR_CALL_INDIRECT || op==XR_XIR_INVOKE_INDIRECT ||
-        effect_invocation_iterator_operation(op);
-}
 
 /* Compare the exact union of local contributions and executing children.
  * An inflated OR result is rejected, including an unrooted recursive fact.

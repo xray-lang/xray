@@ -15,10 +15,6 @@
 /* Declaration IDs retain their public function admission. Private ordinary
  * environments and invocation keys share the existing finite equation bound;
  * every descriptor and expansion still consumes the original resource ledger. */
-static uint32_t effect_body_entry_limit(const XrXirCompileContext *work) {
-    uint64_t maximum=(uint64_t)work->limits.functions*work->limits.instructions;
-    return maximum>UINT32_MAX?UINT32_MAX:(uint32_t)maximum;
-}
 
 enum { EFFECT_BODY_WORDS=10, EFFECT_BODY_MASK=1023 };
 /* The sole owned representation is an actual affine record. Inactive delta
@@ -210,27 +206,4 @@ static inline bool effect_body_material_shape(const EffectBodyMaterial *body) {
 static inline bool effect_body_variable_roles(const EffectBodyMaterial *body) {
     return body->ordinary_identities || body->evidence_kind==XR_XIR_EVIDENCE_TEMPLATE ||
         xir_effect_kind_is_closed(body->evidence_kind);
-}
-static XrXirStatus effect_body_initial_roles_match(const XrXirCompileContext *work,
-    const EffectBodyMaterial *body,uint32_t function) {
-    if (!xir_compile_context_valid(work) || !effect_body_material_shape(body) ||
-        body->resources!=work->resources || function>=effect_body_count(body)) return XR_XIR_BAD_STRUCTURE;
-    const EffectBodyFunction *head=&body->functions[function];
-    if (head->parameter_count && (!head->parameters || !head->initial_roles)) return XR_XIR_BAD_STRUCTURE;
-    if (body->ordinary_identities) {
-
-        EffectBodyOrdinaryIdentity id=body->ordinary_identities[function];
-        if (id.declaration>=body->ordinary_source_count ||
-            (id.owner!=UINT32_MAX && id.owner>=effect_body_count(body)) || !body->declarations ||
-            !body->declarations->functions || body->declarations->functions[function].cleanup_owner!=
-            (id.owner==UINT32_MAX?0:id.owner+1)) return XR_XIR_BAD_STRUCTURE;
-    }
-    for (uint32_t p=0;p<head->parameter_count;++p) {
-
-        uint32_t role=effect_body_variable_roles(body) &&
-            xr_xir_callable_signature(body->domain.types,head->parameters[p]) ?
-            XR_XIR_EFFECT_PARAMETER_VARIABLE:XR_XIR_EFFECT_PARAMETER_FIXED;
-        if (head->initial_roles[p]!=role) return XR_XIR_BAD_STRUCTURE;
-    }
-    return XR_XIR_OK;
 }

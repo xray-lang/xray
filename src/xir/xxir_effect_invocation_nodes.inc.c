@@ -16,31 +16,6 @@ typedef struct EffectInvocationSiteRows {
     bool compare;
 } EffectInvocationSiteRows;
 
-static void effect_invocation_final_clear(EffectInvocationFinal *final) {
-    if (!final) return;
-    if (final->outcomes) {
-        effect_outcomes_clear(final->outcomes,final->outcomes->count);xr_compile_resources_free(final->outcomes);
-    }
-    xr_compile_resources_free(final->capture.facts);
-    effect_parameter_summary_clear(&final->parameter_summary);
-    effect_invocation_result_clear(&final->summary);
-    for (uint32_t n=0;n<final->count;++n) {
-        xr_compile_resources_free(final->nodes[n].causes);
-    }
-    for (uint32_t d=0;d<final->deferred_count;++d)
-        xr_compile_resources_free(final->deferred_calls[d].arguments);
-    xr_compile_resources_free(final->deferred_calls);
-    xr_compile_resources_free(final->nodes);xr_compile_resources_free(final->edges);
-    xr_compile_resources_free(final->sites);
-    xr_compile_resources_free(final->roots);xr_compile_resources_free(final->root_spaces);
-    /* Physical rows and Cell proof share the material lifetime. */
-}
-
-static void effect_invocation_final_free(EffectInvocationFinal *final) {
-    if (!final) return;
-    effect_invocation_final_clear(final);xr_compile_resources_free(final);
-}
-
 /* The formula graph's queue is shared by every invocation equation. All
  * live entries retain source order during growth; no second queue solves ROOT. */
 

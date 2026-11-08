@@ -79,29 +79,6 @@ typedef enum EffectInvocationRow {
     EFFECT_INVOCATION_CONTEXTS
 } EffectInvocationRow;
 
-static uint64_t *effect_invocation_node_row(const EffectInvocationNode *node,
-    EffectInvocationRow row,bool local) {
-    uint64_t *base=local?node->local_cells:node->cells;
-    if (!base || node->cause_count<3 || !(node->cause_count&1)) return NULL;
-    uint32_t parameters=(node->cause_count-3)/2;
-    size_t dependencies=(size_t)(((uint64_t)parameters+63)/64);
-    return base+(size_t)row*dependencies;
-}
-
-static EffectInvocationCause *effect_invocation_local_causes(const EffectInvocationNode *node) {
-    return node->causes?node->causes+(size_t)node->cause_count:NULL;
-}
-
-static bool effect_invocation_node_shape(const EffectInvocationNode *node,
-    uint32_t parameters,uint32_t instructions) {
-    uint64_t dependencies=((uint64_t)parameters+63)/64;
-    uint64_t contexts=((uint64_t)instructions+63)/64;
-    uint64_t words=dependencies*2+contexts;
-    return node->instruction_count==instructions &&
-        node->cause_count==(uint64_t)parameters*2+3 && node->causes &&
-        !!node->cells==!!words && !!node->local_cells==!!words;
-}
-
 typedef struct EffectInvocationEdge {
     uint32_t caller,target,instruction,producer,next,consumer_next;
     bool latent;
@@ -217,22 +194,12 @@ typedef struct EffectInvocationEdgeRead {
     uint32_t caller,index;
     XrXirOp *opcode;
 } EffectInvocationEdgeRead;
-static XrXirStatus effect_invocation_edge_read_selected(const XrXirCompileContext *work,
-    const EffectInvocationFinal *equations,const EffectBodyRequest *body,
-    const XrXirTypes *types,const EffectInvocationEdgeRead *selection,EffectInvocationEdgeOperation *decoded);
 
 /* Each request charges the current real context and reads the sole immutable
  * material. There is no construction-time raw instruction fallback. */
 
-static void effect_invocation_result_clear(EffectFinalFunctions *result);
-
-static bool effect_invocation_witness_equal(const XrXirRootEffectWitness *a,
-    const XrXirRootEffectWitness *b);
-
 #include "xxir_effect_invocation_nodes.inc.c"
 #include "xxir_effect_invocation_root_seeds.inc.c"
-#include "xxir_effect_invocation_primitive.inc.c"
-#include "xxir_effect_invocation_causes.inc.c"
 #include "xxir_effect_invocation_flow.inc.c"
 #include "xxir_effect_invocation_class_flow.inc.c"
 #include "xxir_effect_invocation_calls.inc.c"

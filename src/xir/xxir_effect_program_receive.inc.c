@@ -21,13 +21,3 @@
 
 /* The structural checker derives the same Cell proof through the sole owned
  * Input reader. The raw Lowered projection is matched again after callbacks. */
-XR_FUNC XrXirStatus xir_effects_program_cells_match(const XrXirCompileContext *work,
-    const XrXirEffects *effects,XrXirDiagnostic *diagnostic) {
-    const EffectBodyMaterial *body=NULL;
-    XrXirStatus status=effect_program_input_storage(work,effects,&body);
-    EffectCellBodyAdapter adapter={0};XrXirCellProofBodyRead read={0};
-    if (status==XR_XIR_OK) status=effect_cell_body_owned(work,body,&adapter,&read);
-    if (status==XR_XIR_OK)
-        status=xr_xir_compile_cell_provenance_body_matches(work,body->cells,&read,diagnostic);
-    return status;
-}

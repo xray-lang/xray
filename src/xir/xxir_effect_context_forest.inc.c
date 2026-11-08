@@ -38,23 +38,6 @@ typedef struct EffectContextRootValue {
     XrXirRootEffects facts;
     XrXirRootEffectWitness root,unresolved;
 } EffectContextRootValue;
-static XrXirStatus effect_invocation_forest_values(const XrXirCompileContext *work,
-    const EffectContextForest *forest,uint32_t function,EffectContextRootValue *output);
-static XrXirStatus effect_role_range(const XrXirCompileContext *work,
-    const void *memory,uint64_t count,size_t width);
-static XrXirStatus effect_role_material_frame(const XrXirCompileContext *work,
-    const EffectBodyMaterial *material);
-
-static void effect_context_forest_free(EffectContextForest *forest) {
-    if (!forest) return;
-    /* Release all borrowing metadata before its retained type owner. */
-    effect_terms_free(&forest->terms);
-    effect_invocation_certificate_free(forest->invocations);
-    xr_compile_resources_free(forest);
-}
-
-static XrXirStatus effect_invocation_context_edge_mask(const XrXirCompileContext *work,
-    const EffectContextForest *forest,uint32_t caller,uint32_t instruction,uint32_t target,uint32_t *output);
 
 /* Dense ordinals identify public declarations. An executing cause can visit
  * one body in several distinct invocation environments before its terminal. */

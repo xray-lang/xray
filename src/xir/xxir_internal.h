@@ -50,7 +50,7 @@ XR_FUNC XrXirStatus xr_xir_compile_provenance_copy_source_effects(const XrXirCom
 XR_FUNC XrXirStatus xir_effects_source_body_match_input(const XrXirCompileContext *context, XirEffectInput input, const XrXirEffects *effects);
 /* Exact Lowered fields are compared without allocating or running callbacks.
  * This supplies correspondence only; independent semantic proof remains required. */
-XR_FUNC XrXirStatus xir_effects_program_body_match_input(const XrXirCompileContext *context, XirEffectInput input, const XrXirEffects *effects);
+
 /* These borrows are compare-only metadata of the same owned semantic input;
  * current same-ledger payload bounds precede canonical metadata traversal.
  * Bounds grant no effect proof. Callers must compare every current field
@@ -113,8 +113,6 @@ typedef struct XirEffectCaptureRequest {
     XrCompileRequestControl *control;
 } XirEffectCaptureRequest;
 typedef struct XirEffectCaptureBound { uint32_t flags; bool refined; } XirEffectCaptureBound;
-XR_FUNC XrXirStatus xir_effect_capture_bound_input(const XrXirCompileContext *context,
-    const XirEffectCaptureRequest *request, XirEffectCaptureBound *output);
 
 typedef struct XirSourceFacts XirSourceFacts;
 
@@ -193,11 +191,6 @@ XR_FUNC XrXirStatus xir_compile_verify_receiving_effects_input(const XrXirCompil
     XirEffectInput input,const XrXirEffects *source_effects,XrXirEffects **output,XrXirDiagnostic *diagnostic);
 /* These current readers consume genuine canonical Input and Final storage. */
 
-XR_FUNC XrXirStatus xir_effects_program_cells_match(const XrXirCompileContext *context,
-    const XrXirEffects *effects,XrXirDiagnostic *diagnostic);
-XR_FUNC XrXirStatus xir_compile_verify_program_effects(const XrXirCompileContext *context,
-    const XrXirModule *module,const XrXirConstruction *construction,
-    const XrXirEffects *effects,XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xr_xir_compile_verify_effects_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction, const XrXirEffects *effects, XrXirDiagnostic *diagnostic);
 /* This same-call Source borrow is never a verification exemption. Fresh

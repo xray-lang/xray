@@ -32,12 +32,6 @@ struct EffectRefinementBounds {
     XrXirGeneric *generics;
 };
 
-static void effect_refinement_free(EffectRefinementBounds *bounds) {
-    if (!bounds) return;
-    xr_xir_compile_generics_free(bounds->generics,bounds->count);
-    effect_terms_free(&bounds->terms);xr_compile_resources_free(bounds);
-}
-
 /* Retain actual typed propagation copies, excluding real fixed barriers and
  * consuming CALL_BIND declarations. A later normalization must keep this exact
  * producer edge; its current source operand still proves every weakening. */

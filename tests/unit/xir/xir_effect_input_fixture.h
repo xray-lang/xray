@@ -30,10 +30,7 @@ static inline XrXirStatus xir_fixture_effects_body_match(const XrXirCompileConte
     XirFixtureEffectInput input,const XrXirEffects *effects) {
     return xir_effects_source_body_match_input(context,(XirEffectInput){input.module,input.construction,NULL},effects);
 }
-static inline XrXirStatus xir_fixture_effects_program_body(const XrXirCompileContext *context,
-    XirFixtureEffectInput input,const XrXirEffects *effects) {
-    return xir_effects_program_body_match_input(context,(XirEffectInput){input.module,input.construction,NULL},effects);
-}
+
 
 
 static inline XrXirStatus xir_fixture_effects_refine(const XrXirCompileContext *context,

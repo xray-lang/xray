@@ -277,33 +277,6 @@ static XrXirStatus effect_body_request_sequence_binding(const EffectBodyRequest 
  * that immutable row only for this request; no row, permission or selected
  * cause is cached. Other affine rows still use the unique full value decoder, and
  * delegated requests keep their original callback and failure sequence. */
-static XrXirStatus effect_body_operation_ref(const EffectBodyRead *read,
-    const EffectBodyRun *ref,uint32_t i,XrXirInstruction *storage,const XrXirInstruction **output) {
-    if (ref->mask && i!=ref->first) {
-        XrXirStatus status=effect_body_instruction_ref_value(read,ref,i,storage);
-        if (status!=XR_XIR_OK) return status;
-        if (!((read) && ((read)->execution ? effect_body_execution_work((read)->execution, sizeof(*output)) : xir_compile_context_valid((read)->owner)))) return XR_XIR_BUDGET;
-        *output=storage;return XR_XIR_OK;
-    }
-    if (!((read) && ((read)->execution ? effect_body_execution_work((read)->execution, 1+sizeof(ref->base.op)+sizeof(*output)) : xir_compile_context_valid((read)->owner)))) return XR_XIR_BUDGET;
-    if (ref->base.op<=XR_XIR_INVALID || ref->base.op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
-    *output=&ref->base;return XR_XIR_OK;
-}
-
-static XrXirStatus effect_body_request_operation(const EffectBodyRequest *request,
-    uint32_t f,uint32_t i,XrXirInstruction *storage,const XrXirInstruction **output) {
-    if (!request || !request->owner || !request->instruction || !request->domain.types ||
-        !storage || !output || f>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
-    if (!effect_body_request_sequence_owned(request))
-        return effect_body_request_instruction(request,f,i,storage,output);
-    XrXirStatus status=effect_body_request_sequence_binding(request);
-    if (status!=XR_XIR_OK) return status;
-    const EffectBodyMaterial *material=request->owner;
-    const EffectBodyRun *ref=NULL;
-    status=effect_body_record_ref(&request->read,&material->functions[f],i,&ref);
-    if (status!=XR_XIR_OK) return status;
-    return effect_body_operation_ref(&request->read,ref,i,storage,output);
-}
 
 /* Only numeric location survives one ascending pass. Failed scratch is
  * discarded by that pass; no decoded value or permission is retained. The

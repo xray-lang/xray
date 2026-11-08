@@ -201,28 +201,14 @@ static XrXirStatus effect_body_writer_span(void *owner,uint32_t first,uint32_t c
 
 /* Constructor verifies actual TEMPLATE/INSTANCE evidence before any concrete
  * role product. No provenance alias or verified flag survives as admission. */
-static XrXirStatus effect_body_material_generation_input(const XrXirCompileContext *work,
+static XrXirStatus effect_body_material_generation(const XrXirCompileContext *work,
     const XrXirModule *source,EffectRefinementBounds *refinement,
-    const EffectBodyOrdinaryInput *ordinary,EffectInputFacts *input_facts,EffectBodyMaterial **output) {
+    EffectInputFacts *input_facts,EffectBodyMaterial **output) {
     if (!xir_compile_context_valid(work) || !source || !output || *output ||
         !input_facts || input_facts->resources!=work->resources ||
         (!!source->function_count!=!!source->functions)) return XR_XIR_BAD_STRUCTURE;
-    if (!ordinary && source->function_count>work->limits.functions) return XR_XIR_BUDGET;
-    XrXirStatus status=ordinary ? effect_body_ordinary_input_verify(work,source,ordinary) :
-        xir_effect_contract_shape_verify(work,source);
-    if (status!=XR_XIR_OK) return status;
-    /* A refinement may advertise a different real bound inventory. It enters
-     * the original complete writer and match rather than sharing old bounds. */
-    if (ordinary && ordinary->basis && !refinement) {
-        status=effect_body_material_continue(work,source,ordinary,output);
-        if (status!=XR_XIR_OK || *output) return status;
-    }
-    if (ordinary && ordinary->initial && !refinement) {
-        status=effect_body_material_initial(work,source,ordinary,output);
-        if (status!=XR_XIR_OK || *output) return status;
-    }
-    EffectBodyMaterial *record_source=NULL;
-    if (ordinary) status=effect_body_ordinary_record_parent(work,ordinary,&record_source);
+    if (source->function_count>work->limits.functions) return XR_XIR_BUDGET;
+    XrXirStatus status=xir_effect_contract_shape_verify(work,source);
     if (status!=XR_XIR_OK) return status;
     /* Prepay the initial reference write and its unavoidable release. */
 
@@ -238,15 +224,6 @@ static XrXirStatus effect_body_material_generation_input(const XrXirCompileConte
     if (status==XR_XIR_OK) body->evidence_kind=source->provenance?source->provenance->kind:0;
     if (status==XR_XIR_OK) status=effect_body_types_copy(body,source);
     if (status==XR_XIR_OK) status=effect_body_metadata_copy(body,source);
-    if (status==XR_XIR_OK && ordinary) {
-        EffectBodyOrdinaryIdentity *ids=effect_terms_reserve(&body->terms,source->function_count,sizeof(*ids));
-        if (!ids) status=body->terms.status;
-        for (uint32_t f=0;status==XR_XIR_OK && f<source->function_count;++f)
-            status=effect_body_ordinary_identity(work,ordinary,f,&ids[f]);
-        if (status==XR_XIR_OK) {
-            { body->ordinary_identities=ids;body->ordinary_source_count=ordinary->source->function_count; }
-        }
-    }
     if (status==XR_XIR_OK) {
         body->functions=effect_terms_alloc(&body->terms,source->function_count,sizeof(*body->functions));
         if (source->function_count && !body->functions) status=body->terms.status;
@@ -306,41 +283,16 @@ static XrXirStatus effect_body_material_generation_input(const XrXirCompileConte
         }
         EffectBodyWriter writer={work,source,body,cells,advertisements,f};EffectBodyWriteSink sink={&writer,effect_body_writer_row,effect_body_writer_span};
 
-        bool shared=false;
-        if (status==XR_XIR_OK && record_source) {
-            {
-                EffectBodyRecordShareRequest share={f,&source->functions[f],&sink};
-                status=effect_body_records_share(work,ordinary,body,record_source,&share,&shared);
-            }
-        }
-        if (status==XR_XIR_OK && !shared)
+        if (status==XR_XIR_OK)
             status=effect_body_records_write(work,&source->functions[f],function,&sink);
         if (status==XR_XIR_OK) status=xir_cell_proof_builder_function(cells,f);
     }
     if (status==XR_XIR_OK) status=xir_cell_proof_builder_finish(&cells,&body->cells);
     if (status==XR_XIR_OK) status=effect_body_advertisements_finish(&advertisements,&body->declared);
     effect_body_advertisements_free(advertisements);xir_cell_proof_builder_free(cells);
-    if (status==XR_XIR_OK && ordinary) {
-        bool native_source=false;
-        for(uint32_t f=0;f<ordinary->source->function_count;++f) {
-            if(ordinary->source->declarations && ordinary->source->declarations->functions &&
-                (ordinary->source->declarations->functions[f].native_callable==XR_NATIVE_CALLABLE_SYS_ON_SIGNAL ||
-                 (xir_sys_pipe_id(ordinary->source->declarations->functions[f].native_callable) ||
-                  xir_sys_process_id(ordinary->source->declarations->functions[f].native_callable)||
-                  xir_sys_dylib_id(ordinary->source->declarations->functions[f].native_callable))))native_source=true;
-        }
-        if(status==XR_XIR_OK && native_source)
-            status=effect_body_material_generation_input(work,ordinary->source,NULL,NULL,input_facts,&body->canonical_source);
-    }
     if (status!=XR_XIR_OK) { effect_body_material_free(body);return status; }
 
     *output=body;return XR_XIR_OK;
-}
-
-/* Public raw construction preserves the complete original evidence admission. */
-static XrXirStatus effect_body_material_generation(const XrXirCompileContext *work,
-    const XrXirModule *source,EffectRefinementBounds *refinement,EffectInputFacts *input_facts,EffectBodyMaterial **output) {
-    return effect_body_material_generation_input(work,source,refinement,NULL,input_facts,output);
 }
 
 /* Literal construction uses the same writer without a Source refiner. */
@@ -384,8 +336,6 @@ static XrXirStatus effect_body_function_match(const XrXirCompileContext *work,
 }
 
 #include "xxir_effect_snapshot_continuation.inc.c"
-static XrXirStatus effect_body_source_match(const XrXirCompileContext *work,
-    const EffectBodyMaterial *body,const XrXirModule *source);
 
 /* The original seal boundary proves complete type/domain correspondence.
  * Its single writer already consumed every source body field. It does not
@@ -437,36 +387,6 @@ static XrXirStatus effect_body_source_types_match(const XrXirCompileContext *wor
 /* Error/source fresh correspondence retains the complete independent body
  * and metadata traversal. Both lifetime adapters use the same sole reader;
  * no pointer identity substitutes for any source field comparison. */
-static XrXirStatus effect_body_rows_match(const XrXirCompileContext *work,
-    const EffectBodyMaterial *body,const XrXirModule *source) {
-    XrXirStatus status=XR_XIR_OK;
-    uint32_t kind=source->provenance?source->provenance->kind:0;
-
-    if (status==XR_XIR_OK && kind!=body->evidence_kind) status=XR_XIR_BAD_STRUCTURE;
-    bool variables=kind==XR_XIR_EVIDENCE_TEMPLATE || xir_effect_kind_is_closed(kind);
-    for (uint32_t f=0;status==XR_XIR_OK && f<source->function_count;++f) {
-        status=effect_body_function_match(work,&body->functions[f],&source->functions[f]);
-        const EffectBodyFunction *function=&body->functions[f];
-        if (status==XR_XIR_OK && function->parameter_count && !function->initial_roles)
-            status=XR_XIR_BAD_STRUCTURE;
-        for (uint32_t p=0;status==XR_XIR_OK && p<function->parameter_count;++p) {
-
-            uint32_t role=variables && xr_xir_callable_signature(body->domain.types,function->parameters[p]) ?
-                XR_XIR_EFFECT_PARAMETER_VARIABLE:XR_XIR_EFFECT_PARAMETER_FIXED;
-            if (function->initial_roles[p]!=role) status=XR_XIR_BAD_STRUCTURE;
-        }
-    }
-    if (status==XR_XIR_OK) status=effect_body_metadata_match(&body->domain,source);
-    return status;
-}
-
-static XrXirStatus effect_body_source_match(const XrXirCompileContext *work,
-    const EffectBodyMaterial *body,const XrXirModule *source) {
-    if (!effect_body_material_shape(body) || body->ordinary_identities) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_body_source_types_match(work,body,source);
-    if (status==XR_XIR_OK) status=xir_effect_contract_shape_verify(work,source);
-    return status==XR_XIR_OK ? effect_body_rows_match(work,body,source) : status;
-}
 
 /* Built admission checks the original and its Checked copy against one input.
  * Template evidence is preserved by that copy; a closed instance is not this

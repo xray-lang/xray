@@ -21,16 +21,6 @@ struct EffectContextOwner {
 /* Publication removes the ordinary classifier's real allocations and its
  * construction identity. Surviving descriptors belong to this Final owner. */
 
-static void effect_context_owner_free(EffectContextOwner *owner) {
-    if (!owner) return;
-    /* Retire summary views while the forest still owns their Result.
-     * Its retained Material keeps all immutable backbone payloads live. */
-    effect_invocation_bounds_free(owner->declared);
-    effect_ordinary_free(owner->dense);effect_ordinary_free(owner->ordinary);
-    effect_context_forest_free(owner->forest);
-    xr_compile_resources_free(owner);
-}
-
 /* The original COPY is an inferred SSA value, not a declared barrier. Its
  * complete operand/target/type-argument edge must survive normalization;
  * both current operand weakening and all final semantic gates still run. */

@@ -32,10 +32,6 @@
 
 /* Private execution contexts share the existing equation-ID bound. Repeated
  * environments do not add declarations to the admitted source function table. */
-static uint32_t effect_equation_maximum(const XrXirCompileContext *work) {
-    uint64_t maximum=(uint64_t)work->limits.functions*work->limits.instructions;
-    return maximum>UINT32_MAX ? UINT32_MAX : (uint32_t)maximum;
-}
 
 #include "xxir_effect_contract.inc.c"
 
@@ -43,21 +39,9 @@ static uint32_t effect_equation_maximum(const XrXirCompileContext *work) {
 
 static XrXirStatus effect_source_body_current(const XrXirCompileContext *context,
     const XrXirModule *source, const XrXirEffects *effects);
-static XrXirStatus effect_program_body_current(const XrXirCompileContext *context,
-    const XrXirModule *source, const XrXirEffects *effects);
 
 static XrXirStatus effect_source_input_terminal(const XrXirCompileContext *context,
     const XrXirModule *source,const XrXirEffects *effects);
-
-static XrXirStatus effect_context_read_operation(const XrXirCompileContext *context,
-    const struct XrXirEffects *effects,XirEffectInput input,const XrXirTypes *types,
-    XirEffectContextOperation operation,void *data);
-static XrXirStatus effect_context_reference_current(const XrXirCompileContext *context,
-    const struct XrXirEffects *effects, const XrXirModule *module,
-    uint32_t function, uint32_t instruction, uint32_t *output);
-
-static XrXirStatus effect_context_read_select(const XrXirCompileContext *,
-    const XrXirEffects *,const XirEffectContextInput *,XirEffectContextView *,bool);
 
 typedef struct EffectContextOwner EffectContextOwner;
 typedef struct EffectCheckedRoots EffectCheckedRoots;
@@ -73,10 +57,8 @@ typedef struct EffectInvocationCertificate EffectInvocationCertificate;
 typedef struct EffectFinalFunctions EffectFinalFunctions;
 typedef struct EffectInvocationDeclaredBounds EffectInvocationDeclaredBounds;
 typedef struct EffectOrdinaryContexts EffectOrdinaryContexts;
-static void effect_invocation_certificate_free(EffectInvocationCertificate *certificate);
+
 static void effect_invocation_bounds_free(EffectInvocationDeclaredBounds *bounds);
-static void effect_refinement_free(EffectRefinementBounds *bounds);
-static void effect_context_owner_free(EffectContextOwner *owner);
 
 typedef struct EffectFinalOutcomes {
     XrCompileResources *resources;
@@ -90,8 +72,6 @@ typedef struct EffectFinalOutcomes {
     XrXirRootEffects *root;
     XrXirRootEffectWitness *root_witnesses, *unresolved_witnesses;
     XrXirFunctionEffectContract *contracts;
-    XirEffectEntryRootView *entry_roots;
-    EffectContextOwner *contexts;
 } EffectFinalOutcomes;
 
 /* Formula storage belongs to the canonical summary after ROOT publication.
@@ -108,13 +88,7 @@ static void effect_contracts_clear(XrXirFunctionEffectContract *contracts,uint32
 }
 
 static void effect_outcomes_clear(EffectFinalOutcomes *outcomes,uint32_t count) {
-    if (outcomes->entry_roots) {
-        for (uint32_t f=0;f<count;++f)
-            xr_compile_resources_free((void *)outcomes->entry_roots[f].parameters);
-        xr_compile_resources_free(outcomes->entry_roots);
-    }
     xir_effect_control_free(outcomes->control_summary);
-    effect_context_owner_free(outcomes->contexts);
     effect_contracts_clear(outcomes->contracts,count,outcomes->owns_formulas);
     xr_compile_resources_free(outcomes->go_safe);
     xr_compile_resources_free(outcomes->root);xr_compile_resources_free(outcomes->root_witnesses);
@@ -138,20 +112,7 @@ struct XrXirEffects {
     EffectFinalOutcomes *outcomes_owner;
     EffectFinalOutcomes *final_outcomes;
     EffectCheckedRoots *checked_roots;
-    /* Only a private receiving request borrows these actual Final records. */
-    const EffectFinalOutcomes *root_input;
-    /* Symbolic views borrow the unique Result after successful publication. */
-    XrXirRootEffectWitness *formula_terminals;
-    XrXirRootEffectWitness *constant_witnesses;
-    XrXirCellProvenance *cells;
-    EffectRefinementBounds *refinement;
-    /* The invocation Final owns every published public effect record. */
-    EffectInvocationCertificate *invocations;
-    /* Destruction provenance survives transfer of the certificate to a
-     * forest. This borrowed storage identity grants no permission. */
-    const EffectFinalFunctions *result_borrow;
-    /* Construction-only owner; seal transfers this same generation. */
-    struct EffectBodyMaterial *generation;
+
 };
 
 /* Public queries require the complete Final. Private construction and the
@@ -160,7 +121,6 @@ static const EffectFinalOutcomes *effect_roots_read(const XrXirEffects *effects)
     if (!effects) return NULL;
     const EffectFinalOutcomes *final=effect_final_outcomes(effects);
     if (final) return final;
-    if (effects->root_input) return effects->root_input;
     return &effects->outcomes_work;
 }
 
@@ -171,10 +131,6 @@ static const XrXirFunctionEffectContract *effect_contracts_read(const XrXirEffec
 
 /* Published readers borrow the actual Final. Only a live constructor has a
  * mutable context slot; request-only ROOT borrows never own context storage. */
-static const EffectContextOwner *effect_contexts_read(const XrXirEffects *effects) {
-    const EffectFinalOutcomes *records=effect_roots_read(effects);
-    return records?records->contexts:NULL;
-}
 
 /* Ledger identity rejects foreign requests; it is not an admission proof. */
 XR_FUNC bool xir_effects_context_matches(const XrXirCompileContext *context,
@@ -231,8 +187,6 @@ typedef struct EffectGraph {
     EffectBodyMaterial *material;
     EffectInputFacts *input_facts;
     bool physical_owned;
-    /* Only the actual ordinary constructor supplies this operation-local input. */
-    EffectBodyOrdinaryInput ordinary;
 } EffectGraph;
 
 struct XirEffectDefaultAccessScope {
@@ -248,10 +202,7 @@ static XrXirStatus effect_graph_physical_refresh(const XrXirCompileContext *work
     if (!graph || (graph->physical_owned && (!graph->physical || !graph->material)))
         return XR_XIR_BAD_STRUCTURE;
     EffectBodyMaterial *fresh=NULL;
-    if (!!graph->ordinary.contexts!=!!graph->ordinary.source) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=graph->ordinary.contexts ?
-        effect_body_material_generation_input(work,module,refinement,&graph->ordinary,graph->input_facts,&fresh) :
-        effect_body_material_generation(work,module,refinement,graph->input_facts,&fresh);
+    XrXirStatus status=effect_body_material_generation(work,module,refinement,graph->input_facts,&fresh);
     if (status!=XR_XIR_OK) return status;
 
     if (graph->physical_owned) effect_body_material_free(graph->material);
@@ -323,8 +274,6 @@ void xr_xir_compile_effects_free(XrXirEffects *effects) {
         uint_fast64_t previous=atomic_fetch_sub_explicit(&effects->references,1,memory_order_acq_rel);
         XR_CHECK(previous,"A published effect owner must be released exactly once");
         if(previous!=1)return;
-        effect_refinement_free(effects->refinement);
-        effect_parameters_free(effects);
         if (effects->final_outcomes) {
             effect_outcomes_clear(effects->final_outcomes,effects->count);
             xr_compile_resources_free(effects->final_outcomes);
@@ -639,14 +588,13 @@ static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *re
     return XR_XIR_OK;
 }
 
-static XrXirStatus effect_graph_build_material(const XrXirModule *module, XrXirEffects *effects,
+static XrXirStatus effect_graph_build_material(const XrXirModule *module,
     EffectGraph *graph, XrXirCompileContext *remaining) {
     if (!xir_compile_context_valid(remaining) || !module || !graph ||
-        (effects && (effects->resources!=remaining->resources || effects->count!=module->function_count)) ||
         !effect_body_material_shape(graph->material) ||
         graph->material->resources!=remaining->resources || graph->physical!=graph->material->physical ||
         !graph->physical || effect_body_count(graph->material)!=module->function_count ||
-        (!graph->physical_owned && (!effects || graph->material!=effects->generation)) || graph->heads || graph->queue ||
+        !graph->physical_owned || graph->heads || graph->queue ||
         graph->queued || graph->edges || graph->references || graph->reference_heads)
         return XR_XIR_BAD_STRUCTURE;
 
@@ -654,21 +602,16 @@ static XrXirStatus effect_graph_build_material(const XrXirModule *module, XrXirE
     EffectGraphDependencyCounts counts={0};
 
     XrXirStatus status=XR_XIR_OK;
-    bool symbolic=effects && (graph->material->ordinary_identities || graph->material->evidence_kind==XR_XIR_EVIDENCE_TEMPLATE);
-    for (uint32_t t=0;effects && t<graph->material->domain.types->count && !symbolic;++t) {
-
-        if (graph->material->domain.types->nodes[t].kind==XR_XIR_TYPE_CELL) symbolic=true;
-    }
     for (uint32_t f=0;f<module->function_count;++f) {
-        status=effect_graph_dependencies_count(remaining,graph,f,symbolic,&counts);
+        status=effect_graph_dependencies_count(remaining,graph,f,false,&counts);
         if (status!=XR_XIR_OK) return status;
     }
     uint32_t edges=counts.edges,references=counts.references;
     uint64_t bytes = (uint64_t) module->function_count * (2 * sizeof(uint32_t) + sizeof(uint8_t)) +
         (uint64_t) edges * sizeof(EffectEdge);
     if ((bytes > SIZE_MAX) || bytes > SIZE_MAX) return XR_XIR_BUDGET;
-    if (!effects && (bytes>remaining->limits.frame_bytes ||
-        module->function_count>remaining->limits.frame_bytes-bytes)) return XR_XIR_BUDGET;
+    if (bytes>remaining->limits.frame_bytes ||
+        module->function_count>remaining->limits.frame_bytes-bytes) return XR_XIR_BUDGET;
 
     graph->edge_count = edges;
     graph->heads = xir_compile_calloc(remaining, module->function_count, sizeof(*graph->heads), &allocation_status);
@@ -851,7 +794,6 @@ static XrXirStatus effect_default_access_seed(XirEffectDefaultAccessScope *scope
 #include "xxir_effect_context.inc.c"
 #include "xxir_effect_context_parameters.inc.c"
 #include "xxir_effect_snapshot_initial_ordinary.inc.c"
-#include "xxir_effect_context_roots.inc.c"
 #include "xxir_effect_context_forest.inc.c"
 #include "xxir_effect_context_scalar.inc.c"
 #include "xxir_effect_context_dense.inc.c"
@@ -859,7 +801,6 @@ static XrXirStatus effect_default_access_seed(XirEffectDefaultAccessScope *scope
 #include "xxir_effect_invocation_bounds.inc.c"
 #include "xxir_effect_generation_advertisements.inc.c"
 #include "xxir_effect_context_owner.inc.c"
-#include "xxir_effect_context_query.inc.c"
 #include "xxir_effect_invocations.inc.c"
 #include "xxir_effect_invocation_public_trace.inc.c"
 #include "xxir_effect_invocation_publish.inc.c"
@@ -971,7 +912,7 @@ XR_FUNC XrXirStatus xir_effects_default_access_operation_input(const XrXirCompil
     scope.graph.input_facts=input_facts;
     if(status==XR_XIR_OK) status=effect_graph_physical_refresh(&scope.work,module,&scope.graph,NULL);
     if (status==XR_XIR_OK) status=effect_body_current_input_match(&scope.work,module,scope.graph.material);
-    if (status==XR_XIR_OK) status=effect_graph_build_material(module,NULL,&scope.graph,&scope.work);
+    if (status==XR_XIR_OK) status=effect_graph_build_material(module,&scope.graph,&scope.work);
     if (status==XR_XIR_OK) {
         scope.graph.default_access_denied=xir_compile_calloc(&scope.work,module->function_count,
             sizeof(*scope.graph.default_access_denied),&status);
@@ -1074,11 +1015,6 @@ static XrXirStatus effect_source_body_current(const XrXirCompileContext *context
 }
 
 #include "xxir_effect_program_storage.inc.c"
-
-static XrXirStatus effect_program_body_current(const XrXirCompileContext *context,
-    const XrXirModule *source, const XrXirEffects *effects) {
-    return effect_source_body_current(context, source, effects);
-}
 
 #include "xxir_effect_program_receive.inc.c"
 

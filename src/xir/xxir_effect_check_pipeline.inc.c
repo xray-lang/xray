@@ -104,6 +104,22 @@ static XrXirStatus effect_checked_reference_read(const XrXirCompileContext *cont
     return status;
 }
 
+XR_FUNC XrXirStatus xir_effects_construction_reference(const XrXirCompileContext *context,
+    const XrXirEffects *effects,uint32_t function,uint32_t instruction,uint32_t *output) {
+    return effect_checked_reference_read(context,effects,function,instruction,output);
+}
+
+static XrXirStatus effect_checked_reference_current(const XrXirCompileContext *context,
+    const XrXirEffects *effects,const XrXirModule *module,
+    uint32_t function,uint32_t instruction,uint32_t *output) {
+    if (!module || !xir_effects_context_matches(context,effects,module->function_count) ||
+        function>=module->function_count || instruction>=module->functions[function].instruction_count)
+        return XR_XIR_BAD_STRUCTURE;
+    XrXirOp op=module->functions[function].instructions[instruction].op;
+    if (op!=XR_XIR_FUNCTION_REF && op!=XR_XIR_CLASS_METHOD_REF) return XR_XIR_BAD_STRUCTURE;
+    return effect_checked_reference_read(context,effects,function,instruction,output);
+}
+
 static XrXirStatus effect_checked_control_targets(void *owner, XrXirType receiver,
     uint32_t slot, XirClassMethodVisitor visit, void *data) {
     const EffectCheckedRoots *roots = owner;

@@ -44,45 +44,8 @@ static XrXirStatus effect_invocation_bounds_new(const XrXirCompileContext *work,
     bounds->resources=work->resources;*output=bounds;return XR_XIR_OK;
 }
 
-static XrXirStatus effect_invocation_bounds_capacity(const XrXirCompileContext *work,
-    EffectInvocationDeclaredBounds *bounds,uint32_t needed) {
-    if (needed<=bounds->capacity) return XR_XIR_OK;
-    uint32_t maximum=effect_body_entry_limit(work);
-    if (needed>maximum) return XR_XIR_BUDGET;
-    uint32_t capacity=bounds->capacity ? bounds->capacity : 8;
-    if (capacity>maximum) capacity=maximum;
-    while (capacity<needed) {
-
-        capacity=capacity>maximum/2 ? maximum : capacity*2;
-    }
-    if ((capacity && sizeof(*bounds->functions) > SIZE_MAX / (uint64_t) capacity))
-        return XR_XIR_BUDGET;
-    XrXirStatus status=XR_XIR_OK;
-    EffectInvocationFunctionBounds *functions=xir_compile_alloc(work,
-        (size_t)capacity*sizeof(*functions),&status);
-    if (!functions) return status;
-
-    if (bounds->count) memcpy(functions,bounds->functions,(size_t)bounds->count*sizeof(*functions));
-    xr_compile_resources_free(bounds->functions);bounds->functions=functions;
-    bounds->capacity=capacity;return XR_XIR_OK;
-}
-
 /* A sorted record names the original physical SSA, not its compact position.
  * The receiving owner proves completeness against every original value. */
-static const EffectInvocationValueBound *effect_invocation_bound_find(
-    const EffectInvocationFunctionBounds *function,uint32_t value,uint32_t *comparisons) {
-    if (!function || !comparisons || value>=function->values || function->count>function->values ||
-        (!!function->bounds!=!!function->count)) return NULL;
-    uint32_t first=0,last=function->count;
-    while (first<last) {
-        ++*comparisons;
-        uint32_t middle=first+(last-first)/2;
-        if (function->bounds[middle].value<value) first=middle+1;
-        else last=middle;
-    }
-    return first<function->count && function->bounds[first].value==value ?
-        &function->bounds[first] : NULL;
-}
 
 /* This private hook is called exactly once for each newly copied dense body,
  * after its real physical vector is assigned and before FUNCTION_REF bottom.
@@ -91,71 +54,9 @@ static const EffectInvocationValueBound *effect_invocation_bound_find(
 
 /* Ledger equality is an ownership check. Admission comes from the verified
  * construction hook and the final full source/body/domain correspondence. */
-static inline XrXirStatus effect_invocation_bounds_mask(const XrXirCompileContext *work,
-    const EffectInvocationDeclaredBounds *bounds,uint32_t function,uint32_t value,
-    uint32_t *output) {
-    if (!xir_compile_context_valid(work) || !bounds || bounds->resources!=work->resources ||
-        !output || function>=bounds->count || value>=bounds->functions[function].values)
-        return XR_XIR_BAD_STRUCTURE;
-    const EffectInvocationFunctionBounds *body=&bounds->functions[function];
-    if (body->count>body->values || (!!body->bounds!=!!body->count)) return XR_XIR_BAD_STRUCTURE;
-    uint32_t comparisons=0;
-    const EffectInvocationValueBound *record=effect_invocation_bound_find(body,value,&comparisons);
-
-    if (!record || !record->callable || record->mask&~
-        (XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED)) return XR_XIR_BAD_TYPE;
-    *output=record->mask;return XR_XIR_OK;
-}
 
 #include "xxir_effect_invocation_instance_bounds.inc.c"
 
 /* An authentic dense producer can supply a different pre-bottom vector on
  * this exact physical body. Copy and validate it once before any equation
  * consumes it; seal then transfers the same material's bound owner. */
-static XrXirStatus effect_invocation_bounds_copy_physical(const XrXirCompileContext *work,
-    const EffectInvocationDeclaredBounds *source,const EffectPhysicalDomain *physical,
-    EffectInvocationDeclaredBounds **output) {
-    if (!xir_compile_context_valid(work) || !source || !physical || !output || *output ||
-        source->resources!=work->resources || physical->resources!=work->resources ||
-        source->count!=physical->count || source->count>source->capacity ||
-        (source->count && (!source->functions || !physical->functions))) return XR_XIR_BAD_STRUCTURE;
-    EffectInvocationDeclaredBounds *copy=NULL;
-    XrXirStatus status=effect_invocation_bounds_new(work,&copy);
-    if (status==XR_XIR_OK) status=effect_invocation_bounds_capacity(work,copy,source->count);
-    for (uint32_t f=0;status==XR_XIR_OK && f<source->count;++f) {
-
-        const EffectInvocationFunctionBounds *body=&source->functions[f];
-        const EffectPhysicalFunction *domain=&physical->functions[f];
-        if (body->values != domain->values || domain->rows != body->count ||
-            body->count > body->values || domain->count > domain->capacity ||
-            domain->capacity > domain->values || !!domain->records != !!domain->capacity ||
-            !!body->bounds != !!body->count ||
-            (body->count && sizeof(*body->bounds) > SIZE_MAX / (uint64_t) body->count)) {
-            status = XR_XIR_BAD_STRUCTURE;
-            break;
-        }
-        EffectInvocationValueBound *records=body->count?xir_compile_alloc(work,
-            (size_t)body->count*sizeof(*records),&status):NULL;
-        if (status!=XR_XIR_OK) break;
-        uint32_t at=0,previous=0;
-        for (uint32_t i=0;i<domain->count && status==XR_XIR_OK;++i) {
-
-            EffectPhysicalRecord row=domain->records[i];
-            if (!row.mask || row.value>=domain->values || (i && row.value<=previous)) { status=XR_XIR_BAD_STRUCTURE;break; }
-            previous=row.value;
-            if (!(row.mask&EFFECT_PHYSICAL_CALLABLE)) continue;
-            if (at>=body->count || !records) { status=XR_XIR_BAD_STRUCTURE;break; }
-            const EffectInvocationValueBound *bound=&body->bounds[at];
-
-            if (bound->value!=row.value || !bound->callable || bound->mask&~
-                (XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED)) { status=XR_XIR_BAD_STRUCTURE;break; }
-            records[at++]=*bound;
-        }
-        if (status==XR_XIR_OK && at!=body->count) status=XR_XIR_BAD_STRUCTURE;
-
-        if (status!=XR_XIR_OK) { xr_compile_resources_free(records);break; }
-        copy->functions[f]=(EffectInvocationFunctionBounds){body->values,body->count,records};++copy->count;
-    }
-    if (status!=XR_XIR_OK) { effect_invocation_bounds_free(copy);return status; }
-    *output=copy;return XR_XIR_OK;
-}

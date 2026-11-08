@@ -10,7 +10,7 @@
  *   The same current Input rule constructs and verifies a root key. A role is
  *   an operand whose derivation is proved separately; stored advertisements do not qualify it.
  */
-static XrXirStatus effect_role_range(const XrXirCompileContext *work,const void *pointer,uint64_t count,size_t size);
+
 typedef struct EffectInvocationSeedRead {
     const XrXirCompileContext *work;
     const XrXirTypes *types;

@@ -14,6 +14,5 @@
  * retains complete origin, lexical owner and real edge checks; open generics
  * keep their conservative bound path. No scope or result survives the callback.
  * Every new operation repeats full Source admission. Rejection is terminal. */
-XR_FUNC XrXirStatus xir_effects_reference_root_scoped(XirEffectContextScope *scope,
-    uint32_t function,uint32_t instruction,uint32_t *output);
+
 #endif // XXIR_EFFECT_REFERENCE_INTERNAL_H

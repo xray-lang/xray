@@ -595,20 +595,6 @@ static XrXirStatus effect_body_operand_type(const EffectBodyRead *read,
     *output=(XrXirType)type;return XR_XIR_OK;
 }
 
-static XrXirStatus effect_body_instruction_op(const EffectBodyRead *read,
-    const EffectBodyFunction *function,uint32_t instruction,XrXirOp *output) {
-    if (!output) return XR_XIR_BAD_STRUCTURE;
-    const EffectBodyRun *ref;
-    if (!((read) && ((read)->execution ? effect_body_execution_work((read)->execution, sizeof(uint32_t)) : xir_compile_context_valid((read)->owner)))) return XR_XIR_BUDGET;
-    uint32_t opcode=XR_XIR_INVALID;
-    XrXirStatus status=effect_body_record_ref(read,function,instruction,&ref);
-    if (status==XR_XIR_OK) status=effect_body_run_word(read,ref,instruction,0,&opcode);
-    if (status!=XR_XIR_OK) return status;
-    if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
-    if (!((read) && ((read)->execution ? effect_body_execution_work((read)->execution, sizeof(*output)) : xir_compile_context_valid((read)->owner)))) return XR_XIR_BUDGET;
-    *output=(XrXirOp)opcode;return XR_XIR_OK;
-}
-
 /* This projection validates the same canonical run and publishes only the
  * two actual fields requested by a classifier. It never builds a full row. */
 static XrXirStatus effect_body_instruction_shape_words(const EffectBodyRead *read,

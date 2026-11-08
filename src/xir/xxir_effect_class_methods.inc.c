@@ -49,7 +49,3 @@ static XrXirStatus effect_class_method_candidates(const XrXirCompileContext *wor
     return xir_compile_class_method_candidates_read(&input,receiver,(uint32_t)op.immediate,visit,owner,NULL);
 }
 typedef struct EffectClassMethodTargetMatch { uint32_t target,count;XrXirType receiver; } EffectClassMethodTargetMatch;
-
-static uint32_t effect_reference_captures(const XrXirInstruction *op) {
-    return op->op==XR_XIR_CLASS_METHOD_REF?1:op->args[1];
-}

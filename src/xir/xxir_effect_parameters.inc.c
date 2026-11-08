@@ -18,21 +18,6 @@ static const uint8_t effect_parameter_operands[XR_XIR_OP_COUNT] = {
 #undef XR_XIR_OP
 };
 
-static void effect_parameters_free(XrXirEffects *effects) {
-    /* The forest may already own or have released the unique Result.
-     * Retire its views without dereferencing the borrowed storage owner. */
-    bool owned_result=effects->result_borrow!=NULL;
-    effect_invocation_certificate_free(effects->invocations);effects->invocations=NULL;
-    effects->cells=NULL;
-    effect_body_material_free(effects->generation);effects->generation=NULL;
-    if (!owned_result) xr_compile_resources_free(effects->formula_terminals);
-    effects->formula_terminals=NULL;
-    if (!owned_result) xr_compile_resources_free(effects->constant_witnesses);
-    effects->constant_witnesses=NULL;effects->result_borrow=NULL;
-    effect_contracts_clear(effects->outcomes_work.contracts,effects->count,!owned_result);
-    effects->outcomes_work.contracts=NULL;
-}
-
 XR_FUNC const XrXirFunctionEffectContract *xir_effects_contract(
     const XrXirEffects *effects, uint32_t function) {
     const XrXirFunctionEffectContract *contracts=effect_contracts_read(effects);
@@ -42,7 +27,6 @@ XR_FUNC const XrXirFunctionEffectContract *xir_effects_contract(
 /* INSTANCE use roles follow the same actual instruction fixed point.
  * Its complete source/body/domain proof precedes this verified-only
  * analysis hook; a serialized kind or role never admits execution. */
-
 
 enum { EFFECT_PARAMETER_CONDITIONAL = 1, EFFECT_PARAMETER_FIXED = 2 };
 static const uint32_t effect_parameter_forbidden = XR_XIR_EFFECT_USE_FIXED | XR_XIR_EFFECT_USE_STORE |
@@ -381,7 +365,6 @@ static XrXirStatus effect_parameter_graph_finish(EffectParameterGraph *graph,
     }
     return XR_XIR_OK;
 }
-
 
 static XrXirStatus effect_parameters_current(const XrXirCompileContext *work,
     const XrXirModule *module, const XrXirEffects *effects) {

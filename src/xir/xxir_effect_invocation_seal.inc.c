@@ -57,15 +57,6 @@ typedef struct EffectInvocationSealRequest {
     const EffectOrdinaryContexts *dense;
 } EffectInvocationSealRequest;
 
-static void effect_invocation_certificate_free(EffectInvocationCertificate *certificate) {
-    if (!certificate) return;
-    effect_invocation_final_free(certificate->final);
-    /* Original bounds are a child of the sole transferred material. */
-    effect_body_material_free(certificate->body);
-    effect_terms_free(&certificate->terms);
-    xr_compile_resources_free(certificate);
-}
-
 /* This generation already owns every body field. Seal borrows it while
  * all independent proofs run and transfers that same owner only at commit. */
 

@@ -170,10 +170,8 @@ typedef struct XirEffectContextView {
     bool requires_root, unresolved;
 } XirEffectContextView;
 
-XR_FUNC bool xir_effects_context_available(const XrXirCompileContext *context,
-    const struct XrXirEffects *effects);
-XR_FUNC XrXirStatus xir_effects_context_select_input(const XrXirCompileContext *context,
-    const struct XrXirEffects *effects, const XirEffectContextInput *input, XirEffectContextView *output);
+
+
 /* Specialization reads an immutable admitted Artifact and its owned type pool. */
 
 /* This private lexical scope belongs to one read-only correspondence call.
@@ -185,7 +183,7 @@ XR_FUNC XrXirStatus xir_effects_context_select_input(const XrXirCompileContext *
  * error also overrides a callback that ignores it; later requests do no work. */
 typedef struct XirEffectContextScope XirEffectContextScope;
 typedef XrXirStatus (*XirEffectContextOperation)(void *data,XirEffectContextScope *scope);
-XR_FUNC XrXirStatus xir_effects_context_operation_input(const XrXirCompileContext *context, const struct XrXirEffects *effects, XirEffectInput input, const XrXirTypes *types, XirEffectContextOperation operation, void *data);
+
 
 /* The Source producer may advance before this call. Complete current matching
  * and any required rebuild precede one immutable, fully admitted edge read. */

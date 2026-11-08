@@ -16,10 +16,6 @@ static const XrXirTypes effect_empty_types={0};
 
 /* The structural owner retains reusable stack capacity, never a type proof.
  * Its original ledger admits every fresh comparison and owns all blocks. */
-static XrXirTypeMatchScratch *effect_terms_type_scratch(EffectTerms *pool) {
-    if (!pool->match.resources) pool->match.resources=pool->remaining->resources;
-    return &pool->match;
-}
 
 /* Declaration metadata keeps its original source IDs during resolution. Each
  * descriptor and declaration child is copied; executable layout is excluded. */
@@ -67,59 +63,5 @@ static XrXirStatus effect_terms_seed(EffectTerms *pool, const XrXirTypes *source
     return XR_XIR_OK;
 }
 
-static XrXirStatus effect_terms_import_child(
-    const XrXirType *cache, uint32_t before, XrXirType input, XrXirType *output) {
-
-    uint32_t id=(uint32_t)input;
-    if (id>=XR_XIR_CONSTRUCTED_TYPE_BASE && id<XR_XIR_CONSTRUCTED_TYPE_LIMIT) {
-        uint32_t index=id-XR_XIR_CONSTRUCTED_TYPE_BASE;
-        if (index>=before) return XR_XIR_BAD_STRUCTURE;
-        *output=cache[index];
-    } else *output=input;
-    return XR_XIR_OK;
-}
-
 /* Import in verified descriptor order without host recursion. The resulting
  * IDs belong only to this owner, even when the source pool has another order. */
-static XrXirStatus effect_terms_import(EffectTerms *pool,
-    const XrXirTypes *source, const XrXirType **output) {
-    if (!source || !!source->nodes != !!source->count || !output) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus domain=effect_terms_domain_match(pool,source);
-    if (domain!=XR_XIR_OK) return domain;
-    XrXirType *cache=source->count ? effect_terms_alloc(pool,source->count,sizeof(*cache)) : NULL;
-    if (source->count && !cache) return pool->status;
-    for (uint32_t i=0;i<source->count;++i) {
-
-        XrXirTypeNode node=source->nodes[i];
-        XrXirStatus status=XR_XIR_OK;
-        if (node.kind==XR_XIR_TYPE_CALLABLE || node.kind==XR_XIR_TYPE_TUPLE || node.kind==XR_XIR_TYPE_UNION) {
-            XrXirCallableParameter *parameters=node.parameter_count ?
-                effect_terms_alloc(pool,node.parameter_count,sizeof(*parameters)) : NULL;
-            if (node.parameter_count && !parameters) return pool->status;
-            for (uint32_t p=0;p<node.parameter_count && status==XR_XIR_OK;++p) {
-                parameters[p].mode=node.parameters[p].mode;
-                status=effect_terms_import_child(cache,i,node.parameters[p].type,&parameters[p].type);
-            }
-            node.parameters=parameters;
-            if (status==XR_XIR_OK && node.kind==XR_XIR_TYPE_CALLABLE)
-                status=effect_terms_import_child(cache,i,node.result,&node.result);
-            if (status==XR_XIR_OK && node.kind==XR_XIR_TYPE_CALLABLE)
-                status=effect_terms_import_child(cache,i,node.element,&node.element);
-        } else if (node.kind==XR_XIR_TYPE_NOMINAL) {
-            XrXirType *arguments=node.nominal.argument_count ?
-                effect_terms_alloc(pool,node.nominal.argument_count,sizeof(*arguments)) : NULL;
-            if (node.nominal.argument_count && !arguments) return pool->status;
-            for (uint32_t a=0;a<node.nominal.argument_count && status==XR_XIR_OK;++a)
-                status=effect_terms_import_child(cache,i,node.nominal.arguments[a],&arguments[a]);
-            node.nominal.arguments=arguments;
-        } else {
-            status=effect_terms_import_child(cache,i,node.element,&node.element);
-            if (status==XR_XIR_OK && (node.kind==XR_XIR_TYPE_MAP || node.kind==XR_XIR_TYPE_TASK || node.kind==XR_XIR_TYPE_ITERATOR))
-                status=effect_terms_import_child(cache,i,node.result,&node.result);
-        }
-        if (status!=XR_XIR_OK) return status;
-        cache[i]=effect_term_intern(pool,node);
-        if (pool->status!=XR_XIR_OK) return pool->status;
-    }
-    *output=cache;return XR_XIR_OK;
-}
