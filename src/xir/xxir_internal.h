@@ -22,6 +22,7 @@
 #include "xxir_checked.h"
 #include "xxir_effects.h"
 #include "xxir_effect_control_internal.h"
+#include "xxir_execution_internal.h"
 #include "xxir_effect_contract_internal.h"
 #include "xxir_construction_internal.h"
 #include "xxir_effect_input_internal.h"
@@ -164,19 +165,36 @@ XR_FUNC XrXirStatus xir_effects_infer_escape_input(const XrXirCompileContext *co
     XirEffectInput input, const struct XrHirEscapeFacts *lifetimes, XrXirEffects **output);
 XR_FUNC XrXirStatus xir_effects_value_restricted(const XrXirCompileContext *context,
     const XrXirEffects *effects, uint32_t function, uint32_t value, bool *output);
+struct XirStorageFlow;
+struct XirViewNormalization;
 /* Private construction preparation grants no artifact or execution authority. */
 typedef struct XrXirRootRefiner {
     void *context;
     XrXirStatus (*update)(void *, const XrXirEffects *, bool *);
     /* The diagnostic consumer copies its presentation before the owner expires. */
     void (*explain)(void *, const XrXirModule *, const XrXirEffects *, const XrXirDiagnostic *);
-    XrXirStatus (*prepare)(void *, const XrXirEffects *);
+    XrXirStatus (*begin)(void *, const XrXirEffects *);
+    XrXirStatus (*observe)(void *, const XrXirModule *, uint32_t, uint32_t, const XrXirInstruction *);
+    XrXirStatus (*prepare)(void *, const XirExecutionOwner *, struct XirStorageFlow *);
     /* Reads closed numeric equations before refinement and publication.
      * Neither borrowed module nor provisional semantic owner may escape. */
     XrXirStatus (*admit)(void *, const XrXirModule *, const XrXirEffects *, XrXirDiagnostic *);
     /* Reads the HIR-owned restricted-value classification synchronously. */
     XrXirStatus (*restricted)(void *, uint32_t, uint32_t, bool *);
 } XrXirRootRefiner;
+/* Ordinary admission precedes collection. Preparation owns numeric equations
+ * and synchronous observer output, with no public effect facts yet. */
+XR_FUNC XrXirStatus xir_effects_prepare_verified_input(const XrXirCompileContext *,
+    XirEffectInput, const XrXirRootRefiner *, XrXirEffects **);
+/* A finish consumes its private owner on every outcome. All Source callbacks
+ * finish before a successful independent result becomes visible. */
+XR_FUNC XrXirStatus xir_effects_finish_prepared_input(const XrXirCompileContext *,
+    XirEffectInput, const XrXirRootRefiner *, XrXirEffects **, XrXirEffects **);
+XR_FUNC XrXirStatus xir_effects_relocate_prepared(const XrXirCompileContext *,
+    XrXirEffects *, const XrXirModule *, const struct XirViewNormalization *);
+XR_FUNC const XirExecutionOwner *xir_effects_prepared_execution(const XrXirEffects *);
+XR_FUNC struct XirStorageFlow *xir_effects_prepared_storage(const XrXirEffects *);
+
 XR_FUNC XrXirStatus xr_xir_compile_structure_verify_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic);
 /* Request pointers expire with these synchronous complete verifier calls. */

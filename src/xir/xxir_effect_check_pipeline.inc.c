@@ -418,8 +418,8 @@ static XrXirStatus effect_checked_construct(const XrXirCompileContext *memory,
     effects->outcomes_owner = xir_compile_calloc(memory, 1, sizeof(*effects->outcomes_owner), &status);
     if (status == XR_XIR_OK) status = effect_input_facts_new(memory, input, &effects->input_facts);
     if (status == XR_XIR_OK) status = effect_checked_parameters(memory, input, effects);
-    if (status == XR_XIR_OK && refiner && refiner->prepare)
-        status = refiner->prepare(refiner->context, effects);
+    if (status == XR_XIR_OK && refiner && refiner->begin)
+        status = refiner->begin(refiner->context, effects);
     if (status == XR_XIR_OK) status = effect_checked_roots_build(memory, input.module,
         effects->outcomes_work.contracts, input.control, refiner, &effects->checked_roots);
     if (status == XR_XIR_OK && refiner && refiner->admit) {
