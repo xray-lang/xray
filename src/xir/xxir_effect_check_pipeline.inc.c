@@ -20,6 +20,7 @@ static XrXirStatus effect_checked_parameters(const XrXirCompileContext *memory,
     if (!contracts) return status;
     effects->outcomes_work.contracts = contracts;
     effects->outcomes_work.owns_formulas = true;
+    bool variable = module->provenance != NULL;
     for (uint32_t f = 0; f < effects->count; ++f) {
         const XrXirFunction *function = &module->functions[f];
         uint32_t count = function->parameter_count;
@@ -29,7 +30,7 @@ static XrXirStatus effect_checked_parameters(const XrXirCompileContext *memory,
         if (count && !parameters) return status;
         contracts[f].parameters = parameters;
         for (uint32_t p = 0; p < count; ++p)
-            parameters[p].kind = xr_xir_type_is_callable(module->types, function->parameters[p]) &&
+            parameters[p].kind = variable && xr_xir_type_is_callable(module->types, function->parameters[p]) &&
                 !xr_xir_function_parameter_escaping(function, p) ?
                 XR_XIR_EFFECT_PARAMETER_VARIABLE : XR_XIR_EFFECT_PARAMETER_FIXED;
     }
@@ -422,7 +423,7 @@ XR_FUNC XrXirStatus xir_effects_prepare_verified_input(const XrXirCompileContext
     if (status == XR_XIR_OK) status = effect_checked_roots_build(memory, input.module,
         effects->outcomes_work.contracts, input.control, refiner, &effects->checked_roots, false);
     if (status == XR_XIR_OK && refiner && refiner->prepare)
-        status = refiner->prepare(refiner->context, effects->checked_roots, effects->checked_roots->storage);
+        status = refiner->prepare(refiner->context, effects->checked_roots, effects->checked_roots->storage, NULL);
     if (status != XR_XIR_OK) {
         xr_xir_compile_effects_free(effects);
         return status;
@@ -462,7 +463,9 @@ XR_FUNC XrXirStatus xir_effects_finish_prepared_input(const XrXirCompileContext 
         if (status == XR_XIR_OK && calls != effects->checked_roots->calls) status = XR_XIR_UNRESOLVED;
     }
     if (status == XR_XIR_OK) status = effect_input_facts_new(memory, input, &effects->input_facts);
-    EffectCheckBuild build = {.memory = memory, .roots = effects->checked_roots, .control = input.control};
+    EffectCheckBuild build = {.memory = memory, .module = input.module,
+        .roots = effects->checked_roots, .control = input.control};
+    if (status == XR_XIR_OK) status = effect_check_effect_projection(&build);
     if (status == XR_XIR_OK) status = effect_check_cell_roles(&build);
     if (status == XR_XIR_OK) status = effect_check_close(&build);
     if (status == XR_XIR_OK && refiner && refiner->admit) {

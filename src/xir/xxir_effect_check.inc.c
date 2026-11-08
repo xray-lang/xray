@@ -80,7 +80,7 @@ typedef struct EffectCheckCall {
     bool has_environment;
     uint32_t type_first, type_count;
     uint8_t protocol;
-    bool default_result;
+    bool default_result, fixed_effects;
 } EffectCheckCall;
 
 typedef struct EffectCheckCleanupExit {
@@ -1465,15 +1465,9 @@ static bool effect_check_link_requirement(EffectCheckBuild *build, EffectCheckPe
     return pending->linked;
 }
 
-static bool effect_check_link_application(EffectCheckBuild *build,
+static uint32_t effect_check_application_index(const EffectCheckedRoots *roots,
     const EffectCheckPending *pending, EffectCheckCall reference) {
-    EffectCheckedRoots *roots = build->roots;
-    uint32_t target = roots->node[reference.target].function;
     uint64_t count = (uint64_t)reference.count + pending->argument_count;
-    if (count != roots->function[target].parameters) {
-        build->status = XR_XIR_BAD_STRUCTURE;
-        return false;
-    }
     for (uint32_t c = roots->node[pending->node].calls; c != UINT32_MAX; c = roots->call[c].next) {
         EffectCheckCall call = roots->call[c];
         if (call.protocol != 2 || call.instruction != pending->instruction || call.target != reference.target ||
@@ -1486,8 +1480,21 @@ static bool effect_check_link_application(EffectCheckBuild *build,
                 roots->argument[pending->argument_first + p - reference.count];
             same = roots->argument[call.first + p] == source;
         }
-        if (same) return true;
+        if (same) return c;
     }
+    return UINT32_MAX;
+}
+
+static bool effect_check_link_application(EffectCheckBuild *build,
+    const EffectCheckPending *pending, EffectCheckCall reference) {
+    EffectCheckedRoots *roots = build->roots;
+    uint32_t target = roots->node[reference.target].function;
+    uint64_t count = (uint64_t)reference.count + pending->argument_count;
+    if (count != roots->function[target].parameters) {
+        build->status = XR_XIR_BAD_STRUCTURE;
+        return false;
+    }
+    if (effect_check_application_index(roots, pending, reference) != UINT32_MAX) return true;
     uint32_t first = roots->arguments;
     for (uint32_t p = 0; p < reference.count; ++p) {
         uint32_t argument = roots->argument[reference.first + p];
@@ -1573,6 +1580,67 @@ static bool effect_check_link_higher_order(EffectCheckBuild *build, EffectCheckP
     pending->remainder = remainder | (resolve.foreign ? XIR_EXECUTION_REMAINDER_PARAMETER : 0);
     pending->linked = complete && !resolve.foreign;
     return true;
+}
+
+static XrXirStatus effect_check_precise_capture(void *context, const XirExecutionSite *site) {
+    EffectCheckResolve *resolve = context;
+    EffectCheckedRoots *roots = resolve->build->roots;
+    if (site->reference >= roots->calls) return XR_XIR_BAD_STRUCTURE;
+    EffectCheckCall reference = roots->call[site->reference];
+    if (reference.count && roots->node[reference.output].function != resolve->pending->function) {
+        resolve->foreign = true;
+        return XR_XIR_OK;
+    }
+    uint32_t call = effect_check_application_index(roots, resolve->pending, reference);
+    if (call == UINT32_MAX) return XR_XIR_UNRESOLVED;
+    roots->call[call].fixed_effects = false;
+    if (resolve->pending->result != UINT32_MAX && call + 1 < roots->calls &&
+        roots->call[call + 1].output == resolve->pending->result) roots->call[call + 1].fixed_effects = false;
+    return XR_XIR_OK;
+}
+
+static void effect_check_call_precision(EffectCheckedRoots *roots, uint32_t node, uint32_t instruction) {
+    if (node == UINT32_MAX) return;
+    for (uint32_t c = roots->node[node].calls; c != UINT32_MAX; c = roots->call[c].next)
+        if (roots->call[c].protocol == 2 && roots->call[c].instruction == instruction)
+            roots->call[c].fixed_effects = true;
+}
+
+/* Physical candidates were linked before HIR consumed the graph. Precision is
+ * selected only afterward, without changing the actual execution relation. */
+static XrXirStatus effect_check_effect_projection(EffectCheckBuild *build) {
+    EffectCheckedRoots *roots = build->roots;
+    for (uint32_t p = 0; p < roots->pending_count; ++p) {
+        if (!effect_check_poll(build)) return build->status;
+        EffectCheckPending *pending = &roots->pending[p];
+        if (pending->kind != EFFECT_CHECK_HIGHER_ORDER) continue;
+        effect_check_call_precision(roots, pending->node, pending->instruction);
+        effect_check_call_precision(roots, pending->result, pending->instruction);
+        XirExecutionSite site = {0};
+        build->status = xir_execution_site(roots, XIR_EXECUTION_PENDING, p, &site);
+        if (build->status != XR_XIR_OK) return build->status;
+        EffectCheckResolve resolve = {build, pending, false};
+        bool complete = false;
+        uint32_t remainder = 0;
+        build->status = xir_execution_resolve_effect_site(roots, &site,
+            effect_check_precise_capture, &resolve, &complete, &remainder);
+        if (build->status != XR_XIR_OK) return build->status;
+        if (complete || !(remainder & XIR_EXECUTION_REMAINDER_OPAQUE)) continue;
+        if (!pending->root_linked) {
+            if (!effect_check_alias(build, pending->node, pending->receiver)) return build->status;
+            EffectCheckAlias *alias = &roots->alias[roots->node[pending->node].aliases];
+            alias->suspension = false;
+            alias->instruction = pending->instruction;
+            pending->root_linked = true;
+        }
+        const XrXirTypeNode *signature = xr_xir_callable_signature(effect_check_types_read(build), pending->receiver_type);
+        if (!signature) return XR_XIR_BAD_TYPE;
+        if (!effect_check_suspend_arguments(build, pending->node, signature,
+            pending->argument_first, pending->argument_count)) return build->status;
+        if (!(signature->flags & XR_XIR_CALLABLE_NO_SUSPEND))
+            effect_check_suspend_seed(roots, pending->node, 1, pending->instruction);
+    }
+    return XR_XIR_OK;
 }
 
 static bool effect_check_link_tuple(EffectCheckBuild *build, EffectCheckPending *pending,
@@ -1751,6 +1819,7 @@ static bool effect_check_merge(EffectCheckedRoots *roots, uint32_t target, uint3
 }
 
 static bool effect_check_apply(EffectCheckedRoots *roots, uint32_t output, const EffectCheckCall *call) {
+    if (call->fixed_effects) return false;
     const EffectCheckFunction *callee = &roots->function[roots->node[call->target].function];
     uint64_t *to = effect_check_bits(roots, output), *from = effect_check_bits(roots, call->target);
     uint64_t constant = from[0] & 3u;
@@ -1840,6 +1909,11 @@ static bool effect_check_suspend_apply(EffectCheckedRoots *roots, uint32_t outpu
     EffectCheckCall call = roots->call[index];
     const EffectCheckFunction *callee = &roots->function[roots->node[call.target].function];
     if (call.protocol == 8 || (call.target == callee->result && !call.default_result)) return false;
+    if (call.fixed_effects) {
+        bool changed = roots->node[call.target].task_creation && !roots->node[output].task_creation;
+        roots->node[output].task_creation |= roots->node[call.target].task_creation;
+        return changed;
+    }
     bool changed = effect_check_suspend_merge(roots, output, call.target, index, UINT32_MAX, UINT32_MAX, false);
     const uint64_t *from = effect_check_suspend_bits(roots, call.target);
     for (uint32_t w = 0; w < callee->words; ++w) {
@@ -1913,10 +1987,11 @@ static bool effect_check_evaluate(EffectCheckedRoots *roots, uint32_t node) {
         EffectCheckFunction callee = roots->function[roots->node[call.target].function];
         if (node==root && call.target==callee.root && (call.protocol==2 || call.protocol==4))
             access_denied |= roots->node[call.target].access_denied;
+        blocked |= roots->node[call.target].worker_blocked;
+        if (call.fixed_effects) continue;
         const uint64_t *bits = effect_check_bits(roots, call.target);
         mask |= (uint8_t)(bits[0] & 3u);
         if (roots->node[call.target].deferred) mask |= 2;
-        blocked |= roots->node[call.target].worker_blocked;
         for (uint64_t p = 0; p < (uint64_t)callee.parameters * 2; ++p) {
             if (!(bits[(p + 2) / 64] & (UINT64_C(1) << ((p + 2) % 64)))) continue;
             uint32_t parameter = (uint32_t)(p % callee.parameters);
@@ -2101,6 +2176,7 @@ static XrXirStatus effect_checked_roots_link_take(const XrXirCompileContext *mem
             if (pending.result != UINT32_MAX) roots->node[pending.result].deferred = true;
         }
     }
+    if (build.status == XR_XIR_OK && close) build.status = effect_check_effect_projection(&build);
     if (build.status == XR_XIR_OK && close) build.status = effect_check_cell_roles(&build);
     if (build.status == XR_XIR_OK && close) build.status = effect_check_close(&build);
     if (build.status == XR_XIR_OK && roots->terms)

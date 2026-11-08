@@ -173,7 +173,7 @@ typedef struct XrXirRootRefiner {
     void (*explain)(void *, const XrXirModule *, const XrXirEffects *, const XrXirDiagnostic *);
     XrXirStatus (*begin)(void *, const XrXirEffects *);
     XrXirStatus (*observe)(void *, const XrXirModule *, uint32_t, uint32_t, const XrXirInstruction *);
-    XrXirStatus (*prepare)(void *, const XirExecutionOwner *, struct XirStorageFlow *);
+    XrXirStatus (*prepare)(void *, const XirExecutionOwner *, struct XirStorageFlow *, const XirRestrictionReceiver *);
     /* Reads closed numeric equations before refinement and publication.
      * Neither borrowed module nor provisional semantic owner may escape. */
     XrXirStatus (*admit)(void *, const XrXirModule *, const XrXirEffects *, XrXirDiagnostic *);
@@ -190,7 +190,7 @@ XR_FUNC XrXirStatus xir_effects_prepare_verified_input(const XrXirCompileContext
 XR_FUNC XrXirStatus xir_effects_finish_prepared_input(const XrXirCompileContext *,
     XirEffectInput, const XrXirRootRefiner *, XrXirEffects **, XrXirEffects **);
 XR_FUNC XrXirStatus xir_effects_relocate_prepared(const XrXirCompileContext *,
-    XrXirEffects *, const XrXirModule *, const struct XirViewNormalization *);
+    XrXirEffects *, const XrXirModule *, const struct XirViewNormalization *, XrCompileRequestControl *);
 XR_FUNC const XirExecutionOwner *xir_effects_prepared_execution(const XrXirEffects *);
 XR_FUNC struct XirStorageFlow *xir_effects_prepared_storage(const XrXirEffects *);
 

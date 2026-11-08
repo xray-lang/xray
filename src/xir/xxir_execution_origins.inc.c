@@ -159,7 +159,7 @@ static XirExecutionSite execution_resolved_site(const EffectCheckedRoots *roots,
 
 static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
     uint32_t function_id, uint32_t value, uint32_t environment, XirExecutionVisitor visit, void *context,
-    bool *complete, uint32_t *remainder) {
+    bool *complete, uint32_t *remainder, bool effects) {
     if (!roots || !visit || !complete || !remainder || function_id >= roots->functions)
         return XR_XIR_BAD_STRUCTURE;
     XirStorageFlowView storage = {0};
@@ -208,6 +208,10 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
             if (origin.value > function.last - function.first) {walk.status = XR_XIR_BAD_STRUCTURE; break;}
             const EffectCheckNode *node = &roots->node[function.first + origin.value];
             if (node->callable_input) {unresolved |= XIR_EXECUTION_REMAINDER_PARAMETER; continue;}
+            if (effects && node->weaken && !node->restricted && !function.default_callback) {
+                unresolved |= XIR_EXECUTION_REMAINDER_OPAQUE;
+                continue;
+            }
             if (node->callable_opaque) unresolved |= XIR_EXECUTION_REMAINDER_OPAQUE;
             for (uint32_t c = node->calls; c != UINT32_MAX && walk.status == XR_XIR_OK; c = roots->call[c].next) {
                 EffectCheckCall call = roots->call[c];
@@ -273,11 +277,19 @@ XR_FUNC XrXirStatus xir_execution_refresh_storage(XirExecutionOwner *owner) {
 
 XR_FUNC XrXirStatus xir_execution_visit_value_captures_in(const XirExecutionOwner *owner,
     const XirExecutionValue *value, XirExecutionVisitor visit, void *context, bool *complete) {
-    if (!value || !owner || value->function >= owner->templates ||
-        value->value >= owner->function[value->function].values) return XR_XIR_BAD_STRUCTURE;
+    if (!value || !owner || value->function >= owner->templates) return XR_XIR_BAD_STRUCTURE;
+    uint32_t count = owner->function[value->function].values;
+    if (owner->storage) {
+        XirStorageFlowView storage = {0};
+        XrXirStatus status = xir_storage_flow_view(owner->storage, &storage);
+        if (status != XR_XIR_OK) return status;
+        if (value->function >= storage.function_count) return XR_XIR_BAD_STRUCTURE;
+        count = storage.functions[value->function].value_count;
+    }
+    if (value->value >= count) return XR_XIR_BAD_STRUCTURE;
     uint32_t remainder = 0;
     return execution_visit_origins(owner, value->function, value->value, value->environment,
-        visit, context, complete, &remainder);
+        visit, context, complete, &remainder, false);
 }
 
 typedef struct ExecutionResolveContext {
@@ -312,5 +324,21 @@ XR_FUNC XrXirStatus xir_execution_resolve_site(const XirExecutionOwner *owner,
     ExecutionResolveContext resolve = {owner, &request, environment, visit, context};
     return execution_visit_origins(owner, owner->node[pending.receiver].function,
         pending.receiver - receiver->first, environment, execution_resolve_capture, &resolve,
-        complete, remainder);
+        complete, remainder, false);
+}
+
+XR_FUNC XrXirStatus xir_execution_resolve_effect_site(const XirExecutionOwner *owner,
+    const XirExecutionSite *site, XirExecutionVisitor visit, void *context,
+    bool *complete, uint32_t *remainder) {
+    if (!owner || !site || !visit || !complete || !remainder ||
+        site->kind != XIR_EXECUTION_PENDING || site->index >= owner->pending_count)
+        return XR_XIR_BAD_STRUCTURE;
+    EffectCheckPending pending = owner->pending[site->index];
+    if (pending.kind != EFFECT_CHECK_HIGHER_ORDER) return XR_XIR_BAD_STRUCTURE;
+    XirExecutionSite request = *site;
+    const EffectCheckFunction *receiver = &owner->function[owner->node[pending.receiver].function];
+    ExecutionResolveContext resolve = {owner, &request, XIR_EXECUTION_CURRENT_ENVIRONMENT, visit, context};
+    return execution_visit_origins(owner, owner->node[pending.receiver].function,
+        pending.receiver - receiver->first, XIR_EXECUTION_CURRENT_ENVIRONMENT,
+        execution_resolve_capture, &resolve, complete, remainder, true);
 }

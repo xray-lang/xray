@@ -128,6 +128,24 @@ static void bound_false_advertisements(void) {
     CHECK(bound_fixture(&context,2,2,&checked,&diagnostic)==XR_XIR_OK && checked);
     xr_xir_compile_artifact_free(checked);bound_owner_free(&context);
 }
+static XrXirStatus bound_physical_call(void *context,const XirExecutionSite *site) {
+    uint32_t *count=context;
+    if (site->function==11 && site->instruction==2 && site->declaration==2 &&
+        site->protocol==2 && !site->unresolved) ++*count;
+    return XR_XIR_OK;
+}
+static void bound_weak_execution(void) {
+    XrXirCompileContext context=bound_owner(bound_caps());XrXirArtifact *checked=NULL;
+    XrXirDiagnostic diagnostic={0};
+    CHECK(bound_fixture_build(&context,0,3,true,&checked,&diagnostic)==XR_XIR_OK && checked);
+    XrXirEffects *effects=NULL;CHECK(xr_xir_compile_effects_analyze(checked,&effects)==XR_XIR_OK);
+    XrXirEffectFacts facts=xr_xir_effects_read(effects,11);
+    CHECK(facts.status==XR_XIR_OK && !facts.root.requires_root && facts.root.unresolved);
+    CHECK(facts.control.suspend==XR_XIR_EFFECT_UNKNOWN);
+    uint32_t calls=0;
+    CHECK(xir_execution_visit_calls(effects->checked_roots,bound_physical_call,&calls)==XR_XIR_OK && calls==1);
+    xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);bound_owner_free(&context);
+}
 static void bound_resource_gates(void) {
     BoundMark mark=bound_mark();XrXirCompileContext context=bound_owner(bound_caps());
     size_t first=bound_attempts;XrXirArtifact *checked=NULL;XrXirDiagnostic diagnostic={0};
@@ -158,6 +176,7 @@ int main(void) {
     BoundMark mark=bound_mark();bound_matrix();bound_balanced(mark);bound_nested();bound_balanced(mark);
     bound_equal_barrier_cases();bound_balanced(mark);
     bound_facts();bound_balanced(mark);bound_false_advertisements();bound_balanced(mark);
+    bound_weak_execution();bound_balanced(mark);
     bound_interfaces();bound_balanced(mark);bound_packets();bound_balanced(mark);
     bound_resource_gates();bound_balanced(mark);puts("closed callable roots: independent flags, target checks and owned witnesses");return 0;
 }
