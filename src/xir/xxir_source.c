@@ -759,6 +759,20 @@ static bool source_callable_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *
     if (ref->function_rest) qualified.flags |= XR_XIR_CALLABLE_REST;
     return source_intern_type(ctx, qualified, type);
 }
+static bool source_c_callable_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
+    if (ref->nchildren != 1 || !ref->children || !ref->children[0] ||
+        ref->children[0]->kind != XR_TREF_FUNCTION)
+        return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "CFn requires one function type");
+    if (!source_type(ctx, ref->children[0], type)) return false;
+    const XrXirTypeNode *found = xr_xir_callable_signature(&ctx->types, *type);
+    if (!found || found->element != XR_XIR_NEVER)
+        return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "CFn callbacks must not throw business errors");
+    if (found->flags & XR_XIR_CALLABLE_REST)
+        return source_fail_feature(ctx, NULL, XR_XIR_BAD_TYPE, "variadic C callback type");
+    XrXirTypeNode signature = *found;
+    signature.flags |= XR_XIR_CALLABLE_C_ABI | XR_XIR_CALLABLE_NO_SUSPEND;
+    return source_intern_type(ctx, signature, type);
+}
 static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type);
 #include "xxir_source_record_type.inc.c"
 static bool source_tuple_type_ref(SourceContext *ctx,XrTypeRef *ref,XrXirType *type) {
@@ -851,6 +865,8 @@ static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type)
     case XR_TREF_GENERIC:
         if (source_nominal_name(ctx, ref->name))
             return source_nominal_arguments(ctx, ref->name, ref->children, ref->nchildren, type);
+        if (ref->name && source_text_same(ctx, NULL, ref->name, "CFn"))
+            return source_c_callable_type(ctx, ref, type);
         if (ref->name && (source_text_same(ctx,NULL,ref->name,"Ptr") || source_text_same(ctx,NULL,ref->name,"MutPtr")))
             return source_pointer_type_ref(ctx,ref,type);
         if (ref->name && source_text_same(ctx,NULL,ref->name,"Atomic"))
@@ -3028,6 +3044,8 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
     const XrXirTypeNode *context = expected.present ? xr_xir_callable_signature(&ctx->types, expected.type) : NULL;
     if (expected.present && !context)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"expression cannot satisfy its declared type");
+    if (context && (context->flags & XR_XIR_CALLABLE_C_ABI))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "CFn requires a module-level noncapturing function declaration");
     /* The node pool can grow while parameter annotations and the body are built.
      * Callable parameter storage is source-arena owned and does not relocate. */
     XrXirTypeNode context_copy = {0};

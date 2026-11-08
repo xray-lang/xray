@@ -19,7 +19,10 @@
  * become a no-effect proof, even for otherwise well-shaped old descriptors. */
 static inline bool xr_xir_callable_flags_valid(uint32_t flags) {
     uint32_t root = flags & XR_XIR_CALLABLE_ROOT_MASK;
-    return !(flags & ~(XR_XIR_CALLABLE_ROOT_MASK | XR_XIR_CALLABLE_NO_SUSPEND | XR_XIR_CALLABLE_REST)) &&
+    return !(flags & ~(XR_XIR_CALLABLE_ROOT_MASK | XR_XIR_CALLABLE_NO_SUSPEND |
+                      XR_XIR_CALLABLE_REST | XR_XIR_CALLABLE_C_ABI)) &&
+        (!(flags & XR_XIR_CALLABLE_C_ABI) ||
+            ((flags & XR_XIR_CALLABLE_NO_SUSPEND) && !(flags & XR_XIR_CALLABLE_REST))) &&
         (root == XR_XIR_CALLABLE_ROOT_NONE || root == XR_XIR_CALLABLE_ROOT_REQUIRED ||
          root == XR_XIR_CALLABLE_ROOT_UNRESOLVED ||
          root == (XR_XIR_CALLABLE_ROOT_REQUIRED | XR_XIR_CALLABLE_ROOT_UNRESOLVED));
@@ -28,7 +31,7 @@ static inline bool xr_xir_callable_flags_valid(uint32_t flags) {
  * can acquire the missing proof through a conversion. Nested types stay exact. */
 static inline bool xr_xir_callable_flags_compatible(uint32_t source, uint32_t target) {
     if (!xr_xir_callable_flags_valid(source) || !xr_xir_callable_flags_valid(target) ||
-        ((source ^ target) & XR_XIR_CALLABLE_REST) ||
+        ((source ^ target) & (XR_XIR_CALLABLE_REST | XR_XIR_CALLABLE_C_ABI)) ||
         ((target & XR_XIR_CALLABLE_NO_SUSPEND) && !(source & XR_XIR_CALLABLE_NO_SUSPEND))) return false;
     return (target & XR_XIR_CALLABLE_ROOT_UNRESOLVED) ||
         (!(source & XR_XIR_CALLABLE_ROOT_UNRESOLVED) &&
@@ -39,14 +42,16 @@ static inline bool xr_xir_callable_root_accepts(bool requires_root, bool unresol
         (unresolved ? XR_XIR_CALLABLE_ROOT_UNRESOLVED : 0);
     if (!source) source = XR_XIR_CALLABLE_ROOT_NONE;
     return xr_xir_callable_flags_valid(flags) &&
-        xr_xir_callable_flags_compatible(source, flags & ~(XR_XIR_CALLABLE_NO_SUSPEND | XR_XIR_CALLABLE_REST));
+        xr_xir_callable_flags_compatible(source,
+            flags & ~(XR_XIR_CALLABLE_NO_SUSPEND | XR_XIR_CALLABLE_REST | XR_XIR_CALLABLE_C_ABI));
 }
 /* NONE is neutral, rather than an extra fact to bitwise-OR into a join. */
 static inline bool xr_xir_callable_flags_join(uint32_t left, uint32_t right, uint32_t *output) {
     if (!output || !xr_xir_callable_flags_valid(left) || !xr_xir_callable_flags_valid(right) ||
-        ((left ^ right) & XR_XIR_CALLABLE_REST)) return false;
+        ((left ^ right) & (XR_XIR_CALLABLE_REST | XR_XIR_CALLABLE_C_ABI))) return false;
     uint32_t root = (left | right) & (XR_XIR_CALLABLE_ROOT_REQUIRED | XR_XIR_CALLABLE_ROOT_UNRESOLVED);
-    *output = (root ? root : XR_XIR_CALLABLE_ROOT_NONE) | (left & right & (XR_XIR_CALLABLE_NO_SUSPEND | XR_XIR_CALLABLE_REST));
+    *output = (root ? root : XR_XIR_CALLABLE_ROOT_NONE) |
+        (left & right & (XR_XIR_CALLABLE_NO_SUSPEND | XR_XIR_CALLABLE_REST | XR_XIR_CALLABLE_C_ABI));
     return true;
 }
 XR_FUNC const XrXirTypeNode *xr_xir_type_node(const XrXirTypes *types, XrXirType type);
@@ -84,6 +89,7 @@ XR_FUNC XrXirStatus xr_xir_compile_error_substitution_accepts(const XrXirCompile
 /* Ordered tuple fields use mode-zero parameter storage; arity zero is Unit. */
 XR_FUNC const XrXirTypeNode *xr_xir_tuple_signature(const XrXirTypes *types, XrXirType type);
 XR_FUNC bool xr_xir_type_is_callable(const XrXirTypes *types, XrXirType type);
+XR_FUNC bool xr_xir_type_is_c_callable(const XrXirTypes *types, XrXirType type);
 /* The shared walker borrows an explicit work policy in either allocation domain. */
 XR_FUNC XrXirStatus xr_xir_callable_weakening_admit(const XrXirTypes *types,
     XrXirType source, XrXirType target, void *work_owner, bool (*charge)(void *, uint64_t));

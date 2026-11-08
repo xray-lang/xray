@@ -1,0 +1,5 @@
+fn preserve(callback: CFn<fn(i64) -> i64>) -> CFn<fn(i64) -> i64> {
+    return callback
+}
+fn leaf(value: i64) -> i64 { return value + 1 }
+const callback = preserve(leaf)

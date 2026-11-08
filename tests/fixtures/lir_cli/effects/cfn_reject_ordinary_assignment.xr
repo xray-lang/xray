@@ -1,0 +1,3 @@
+fn leaf() -> i64 { return 1 }
+const callback: CFn<fn() -> i64> = leaf
+const ordinary: fn() -> i64 = callback

@@ -82,6 +82,82 @@ static void bound_nested(void) {
         (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+3))==XR_XIR_BAD_TYPE);
     bound_owner_free(&context);
 }
+static void bound_c_callable_types(void) {
+    XrXirCompileContext context = bound_owner(bound_caps());
+    const uint32_t ordinary = XR_XIR_CALLABLE_NO_SUSPEND | XR_XIR_CALLABLE_ROOT_NONE;
+    const uint32_t callback = ordinary | XR_XIR_CALLABLE_C_ABI;
+    XrXirTypeNode nodes[] = {
+        {.kind=XR_XIR_TYPE_CALLABLE, .element=XR_XIR_NEVER, .result=XR_XIR_I64, .flags=ordinary},
+        {.kind=XR_XIR_TYPE_CALLABLE, .element=XR_XIR_NEVER, .result=XR_XIR_I64, .flags=callback}
+    };
+    XrXirTypes types = {nodes, 2, NULL, NULL};
+    CHECK(xr_xir_compile_types_structure_verify(&context, &types) == XR_XIR_OK);
+    CHECK(!xr_xir_type_is_c_callable(&types, XR_XIR_CONSTRUCTED_TYPE_BASE));
+    CHECK(xr_xir_type_is_c_callable(&types, (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + 1)));
+    CHECK(!xr_xir_type_is_c_callable(&types, XR_XIR_I64));
+    CHECK(!xr_xir_callable_flags_compatible(ordinary, callback));
+    CHECK(!xr_xir_callable_flags_compatible(callback, ordinary));
+    CHECK(xr_xir_callable_root_accepts(false, false, callback));
+    CHECK(!xr_xir_callable_root_accepts(true, false, callback));
+    uint32_t joined = 71;
+    CHECK(!xr_xir_callable_flags_join(ordinary, callback, &joined) && joined == 71);
+    CHECK(xr_xir_callable_flags_join(callback, callback, &joined) && joined == callback);
+    nodes[1].element = XR_XIR_ERROR;
+    CHECK(xr_xir_compile_types_structure_verify(&context, &types) == XR_XIR_BAD_TYPE);
+    nodes[1].element = XR_XIR_NEVER;
+    nodes[1].flags = callback & ~XR_XIR_CALLABLE_NO_SUSPEND;
+    CHECK(xr_xir_compile_types_structure_verify(&context, &types) == XR_XIR_BAD_TYPE);
+    CHECK(!xr_xir_callable_flags_valid(callback | XR_XIR_CALLABLE_REST));
+    bound_owner_free(&context);
+}
+static void bound_c_callable_packet(void) {
+    XrXirCompileContext context = bound_owner(bound_caps());
+    XrXirInstruction unit = {.op=XR_XIR_RETURN};
+    XrXirInstruction pure[] = {
+        {.op=XR_XIR_CONST_INT, .type=XR_XIR_I64, .immediate=3},
+        {.op=XR_XIR_RETURN, .args={0, 0}}
+    };
+    XrXirInstruction reference[] = {
+        {.op=XR_XIR_FUNCTION_REF, .type=XR_XIR_CONSTRUCTED_TYPE_BASE, .immediate=2},
+        {.op=XR_XIR_CONST_INT, .type=XR_XIR_I64},
+        {.op=XR_XIR_RETURN, .args={1, 0}}
+    };
+    XrXirBlock one = {.count=1}, two = {.count=2}, three = {.count=3};
+    XrXirFunction functions[] = {
+        {.name="init", .name_length=4, .result=XR_XIR_UNIT, .blocks=&one, .block_count=1,
+         .instructions=&unit, .instruction_count=1, .error_type=XR_XIR_NEVER},
+        {.name="main", .name_length=4, .result=XR_XIR_I64, .blocks=&three, .block_count=1,
+         .instructions=reference, .instruction_count=3, .error_type=XR_XIR_NEVER},
+        {.name="leaf", .name_length=4, .result=XR_XIR_I64, .blocks=&two, .block_count=1,
+         .instructions=pure, .instruction_count=2, .error_type=XR_XIR_NEVER}
+    };
+    XrXirTypeNode node = {.kind=XR_XIR_TYPE_CALLABLE, .element=XR_XIR_NEVER, .result=XR_XIR_I64,
+        .flags=XR_XIR_CALLABLE_C_ABI | XR_XIR_CALLABLE_NO_SUSPEND | XR_XIR_CALLABLE_ROOT_NONE};
+    XrXirTypes types = {&node, 1, NULL, NULL};
+    XrXirFunctionIdentity identities[3] = {{0}};
+    identities[2].promises = XR_XIR_FUNCTION_NO_SUSPEND;
+    XrXirSourceModule source = {.name="cfn", .name_length=3};
+    XrXirDeclarations declarations = {.modules=&source, .module_count=1, .functions=identities,
+        .entry_function=1};
+    XrXirModule built = {XR_XIR_BUILT, functions, 3, &declarations, NULL, &types, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirArtifact *checked = NULL, *decoded = NULL;
+    XrXirDiagnostic diagnostic = {0};
+    XrXirStatus status = xir_fixture_check(&context, &built, &checked, &diagnostic);
+    if (status != XR_XIR_OK)
+        fprintf(stderr, "C callback fixture status%u f%u b%u i%u\n", status,
+            diagnostic.function, diagnostic.block, diagnostic.instruction);
+    CHECK(status == XR_XIR_OK && checked);
+    XrXirCheckedPacket packet = {0};
+    CHECK(xr_xir_compile_checked_write(checked, &packet, &diagnostic) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(&context, packet.bytes, packet.length, &decoded, &diagnostic) == XR_XIR_OK);
+    const XrXirModule *received = xr_xir_compile_artifact_module(decoded);
+    CHECK(received && xr_xir_type_is_c_callable(received->types, XR_XIR_CONSTRUCTED_TYPE_BASE));
+    CHECK(xr_xir_callable_signature(received->types, XR_XIR_CONSTRUCTED_TYPE_BASE)->flags == node.flags);
+    xr_xir_compile_artifact_free(decoded);
+    xr_xir_compile_checked_packet_free(&packet);
+    xr_xir_compile_artifact_free(checked);
+    bound_owner_free(&context);
+}
 static void bound_facts(void) {
     static const bool expected[13][2]={{true,false},{false,false},{true,false},{false,false},
         {false,false},{false,false},{false,false},{true,false},{false,true},{true,true},
@@ -156,6 +232,8 @@ static void bound_resource_gates(void) {
 #include "xir_callable_equal_barrier_cases.h"
 int main(void) {
     BoundMark mark=bound_mark();bound_matrix();bound_balanced(mark);bound_nested();bound_balanced(mark);
+    bound_c_callable_types();bound_balanced(mark);
+    bound_c_callable_packet();bound_balanced(mark);
     bound_equal_barrier_cases();bound_balanced(mark);
     bound_facts();bound_balanced(mark);bound_false_advertisements();bound_balanced(mark);
     bound_interfaces();bound_balanced(mark);bound_packets();bound_balanced(mark);
