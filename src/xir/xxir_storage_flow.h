@@ -43,8 +43,12 @@ typedef struct XirStorageBinding {
 typedef struct XirStorageApplication {
     XirExecutionSiteKind kind;
     /* Function is the caller template. Declaration is the callee template. */
-    uint32_t site, function, instruction, declaration;
+    uint32_t site, function, instruction, block, declaration;
     uint32_t target, caller_instance, environment, order;
+    /* Reference is the execution owner's capture-call ID, or UINT32_MAX.
+     * Block is a caller-template ordinal. Both environments use application
+     * indices or the execution environment sentinels. */
+    uint32_t reference, capture_environment;
     XirExecutionPort port, outcome;
     uint8_t protocol;
     uint32_t first, count;
@@ -74,6 +78,37 @@ typedef struct XirStorageUnknown {
 
 typedef struct XirStorageExposureSeed { uint32_t function, value, application; } XirStorageExposureSeed;
 
+/* A value may be an owned storage identity proxy. Execution's physical actual
+ * namespace remains unchanged. Environment IDs use the execution sentinels. */
+typedef XirExecutionValue XirStorageReference;
+typedef struct XirStorageObservation {
+    uint32_t function, instruction;
+    XirStoragePointKind point;
+    XirStorageReference reference;
+} XirStorageObservation;
+typedef struct XirStorageValuePoint {
+    uint32_t function, instruction;
+    XirStorageReference reference;
+    XirStoragePointKind point;
+} XirStorageValuePoint;
+/* A proxy records the actual observation point even when contents and their
+ * ordinary restriction formula are unchanged across several instructions. */
+typedef struct XirStoragePointValue {
+    uint32_t function, value, instruction;
+    XirStoragePointKind point;
+    XirStorageReference reference;
+} XirStoragePointValue;
+typedef struct XirStorageCapture {
+    XirStorageReference identity;
+    uint32_t function, contents, exposure;
+} XirStorageCapture;
+typedef XrXirStatus (*XirStorageCaptureVisitor)(void *, const XirStorageCapture *);
+enum {
+    XIR_STORAGE_QUERY_CONTENTS = 1u,
+    XIR_STORAGE_QUERY_EXPOSURE = 2u,
+    XIR_STORAGE_QUERY_ALL = 3u
+};
+
 typedef struct XirStorageFlowView {
     const XirStorageFlowFunction *functions;
     uint32_t function_count;
@@ -93,6 +128,8 @@ typedef struct XirStorageFlowView {
     uint32_t unknown_count;
     const XirStorageExposureSeed *exposure_seeds;
     uint32_t exposure_seed_count;
+    const XirStoragePointValue *point_values;
+    uint32_t point_value_count;
 } XirStorageFlowView;
 
 typedef struct XirStorageFlow XirStorageFlow;
@@ -117,11 +154,36 @@ XR_FUNC XrXirStatus xir_storage_flow_contents(XirStorageFlow *, uint32_t functio
 XR_FUNC XrXirStatus xir_storage_flow_contents_at(XirStorageFlow *, uint32_t function,
     uint32_t instruction, uint32_t handle, XirStoragePointKind, uint32_t *value);
 /* HIR supplies publication events. These transport exposure through the same
- * graph and never decide whether a value may escape. Exposure has its own bank. */
+ * graph and never decide whether a value may escape. Exposure has its own bank.
+ * Register every event before the first exposure query freezes the inventory.
+ * Repeating an event during construction is idempotent. */
 XR_FUNC XrXirStatus xir_storage_flow_expose(XirStorageFlow *, uint32_t function,
     uint32_t instruction, uint32_t handle, XirStoragePointKind);
 XR_FUNC XrXirStatus xir_storage_flow_exposure_at(XirStorageFlow *, uint32_t function,
     uint32_t instruction, uint32_t handle, XirStoragePointKind, uint32_t *value);
+/* Qualified observations project R/X values into the observation's function.
+ * Either output may be NULL. A contents-only query leaves exposure events open.
+ * A foreign identity never becomes a fabricated caller-local physical value. */
+XR_FUNC XrXirStatus xir_storage_flow_reference(XirStorageFlow *, const XirStorageObservation *,
+    uint32_t *contents, uint32_t *exposure);
+XR_FUNC XrXirStatus xir_storage_flow_expose_reference(XirStorageFlow *, const XirStorageObservation *);
+/* The returned reference names a storage-owned aux value in the observing
+ * function. New proxies add an ordinary dependency and require a Root round. */
+XR_FUNC XrXirStatus xir_storage_flow_point_value(XirStorageFlow *, const XirStorageValuePoint *,
+    XirStorageReference *);
+/* Recursive carrier/capture relations come from the unique execution owner.
+ * Each callback observes a Cell reference at this use, including older heap
+ * instances retained across a backedge. It never freezes creation contents. */
+XR_FUNC XrXirStatus xir_storage_flow_visit_value_captures(XirStorageFlow *, const XirStorageValuePoint *,
+    uint32_t banks, XirStorageCaptureVisitor, void *);
+XR_FUNC XrXirStatus xir_storage_flow_expose_value(XirStorageFlow *, const XirStorageValuePoint *);
+/* Storing a carrier in exposed storage exposes its reachable environment only
+ * when the store completes. Condition names the destination's prior exposure. */
+XR_FUNC XrXirStatus xir_storage_flow_expose_value_when(XirStorageFlow *, const XirStorageValuePoint *,
+    const XirStorageObservation *condition);
+/* Read immediately after an unresolved qualified query. STORAGE can await the
+ * next shared receiving round. PARAMETER and OPAQUE require a semantic bound. */
+XR_FUNC uint32_t xir_storage_flow_remainder(const XirStorageFlow *);
 /* Every borrow must be rebound after a query or link can grow storage. */
 XR_FUNC XrXirStatus xir_storage_flow_view(const XirStorageFlow *, XirStorageFlowView *);
 /* Sealing retires body borrows. The resulting numeric view stays valid until
