@@ -249,8 +249,8 @@ static void callable_contracts(void) {
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     const uint32_t signature_wire[] = {3,0,0,
-        XR_XIR_TYPE_CALLABLE,0,1,XR_XIR_I64,0,XR_XIR_STRING,XR_XIR_NEVER,XR_XIR_CALLABLE_ROOT_UNRESOLVED,
-        XR_XIR_TYPE_CALLABLE,0,1,256,0,256,XR_XIR_NEVER,XR_XIR_CALLABLE_ROOT_UNRESOLVED,
+        XR_XIR_TYPE_CALLABLE,0,1,XR_XIR_I64,0,0,XR_XIR_STRING,XR_XIR_NEVER,XR_XIR_CALLABLE_ROOT_UNRESOLVED,
+        XR_XIR_TYPE_CALLABLE,0,1,256,0,0,256,XR_XIR_NEVER,XR_XIR_CALLABLE_ROOT_UNRESOLVED,
         XR_XIR_TYPE_CALLABLE,0,0,XR_XIR_UNIT,XR_XIR_NEVER,XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     (void)packet_find_fields(&packet,signature_wire,sizeof(signature_wire)/sizeof(*signature_wire));
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
@@ -370,7 +370,7 @@ static void generic_callable_contracts(void) {
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
-    const uint32_t row[]={XR_XIR_TYPE_CALLABLE,1,1,XR_XIR_TYPE_PARAMETER_BASE,0,
+    const uint32_t row[]={XR_XIR_TYPE_CALLABLE,1,1,XR_XIR_TYPE_PARAMETER_BASE,0,0,
         XR_XIR_TYPE_PARAMETER_BASE,XR_XIR_NEVER,XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     size_t span=packet_find_fields(&packet,row,sizeof(row)/sizeof(*row))+4;
     put32(packet.bytes+span,0);digest_packet(&packet);
@@ -1246,9 +1246,9 @@ static void nominal_callable_components(void) {
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);decoded=NULL; xr_xir_compile_artifact_free(checked); checked = NULL;
-    const uint32_t words[] = {XR_XIR_TYPE_CALLABLE,0,1,256,0,256,XR_XIR_NEVER,XR_XIR_CALLABLE_ROOT_UNRESOLVED};
+    const uint32_t words[] = {XR_XIR_TYPE_CALLABLE,0,1,256,0,0,256,XR_XIR_NEVER,XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     size_t offset=packet_find_fields(&packet,words,sizeof(words)/sizeof(*words));
-    put32(packet.bytes + offset + 20, 257); digest_packet(&packet); rejected(packet.bytes, packet.length);
+    put32(packet.bytes + offset + 24, 257); digest_packet(&packet); rejected(packet.bytes, packet.length);
     xr_xir_compile_checked_packet_free(&packet);
     atomic_pool.nodes[1].result = (XrXirType)257;
     CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
@@ -1432,7 +1432,7 @@ int main(int argc,char **argv) {
     if (argc==2 && !strcmp(argv[1],"--wire-smoke")) {
         consumer_context=consumer_context_default();
         byte_order();generic_method_packet_cases();
-        nonescape_bound_prefix();nonescape_facts_ownership();nonescape_observer_ownership();
+        nonescape_bound_prefix();nonescape_cell_capture_contract();nonescape_facts_ownership();nonescape_observer_ownership();
         nonescape_c_callback_contract();nonescape_capture_calls();
         consumer_contexts_free();
         puts("Current Checked field bytes and semantic packet rejection PASS");
