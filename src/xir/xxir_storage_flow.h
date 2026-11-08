@@ -92,6 +92,11 @@ typedef struct XirStorageCapture {
     uint32_t function, contents, exposure;
 } XirStorageCapture;
 typedef XrXirStatus (*XirStorageCaptureVisitor)(void *, const XirStorageCapture *);
+enum {
+    XIR_STORAGE_QUERY_CONTENTS = 1u,
+    XIR_STORAGE_QUERY_EXPOSURE = 2u,
+    XIR_STORAGE_QUERY_ALL = 3u
+};
 
 typedef struct XirStorageFlowView {
     const XirStorageFlowFunction *functions;
@@ -137,7 +142,8 @@ XR_FUNC XrXirStatus xir_storage_flow_contents_at(XirStorageFlow *, uint32_t func
     uint32_t instruction, uint32_t handle, XirStoragePointKind, uint32_t *value);
 /* HIR supplies publication events. These transport exposure through the same
  * graph and never decide whether a value may escape. Exposure has its own bank.
- * Register every event before the first exposure query freezes the inventory. */
+ * Register every event before the first exposure query freezes the inventory.
+ * Repeating an event during construction is idempotent. */
 XR_FUNC XrXirStatus xir_storage_flow_expose(XirStorageFlow *, uint32_t function,
     uint32_t instruction, uint32_t handle, XirStoragePointKind);
 XR_FUNC XrXirStatus xir_storage_flow_exposure_at(XirStorageFlow *, uint32_t function,
@@ -152,7 +158,7 @@ XR_FUNC XrXirStatus xir_storage_flow_expose_reference(XirStorageFlow *, const Xi
  * Each callback observes a Cell reference at this use, including older heap
  * instances retained across a backedge. It never freezes creation contents. */
 XR_FUNC XrXirStatus xir_storage_flow_visit_value_captures(XirStorageFlow *, const XirStorageValuePoint *,
-    XirStorageCaptureVisitor, void *);
+    uint32_t banks, XirStorageCaptureVisitor, void *);
 XR_FUNC XrXirStatus xir_storage_flow_expose_value(XirStorageFlow *, const XirStorageValuePoint *);
 /* Storing a carrier in exposed storage exposes its reachable environment only
  * when the store completes. Condition names the destination's prior exposure. */
