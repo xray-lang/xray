@@ -571,6 +571,14 @@ static bool storage_observe_values(XirStorageFlow *flow, uint32_t function, uint
     const XrXirInstruction *op) {
     const XrXirFunction *body = flow->rows[function].body;
     uint32_t value = body->parameter_count + i;
+    if (op->op == XR_XIR_CHANNEL_RECV_OR) {
+        uint32_t count = op->type == XR_XIR_UNIT ? 1u : 2u;
+        if (op->args[0] > body->operand_count || op->args[1] != count ||
+            count > body->operand_count - op->args[0]) { flow->status = XR_XIR_BAD_STRUCTURE; return false; }
+        if (count == 1) return true;
+        return storage_request_read(flow, function, (StorageRead){body->operands[op->args[0] + 1], value, i,
+            XIR_STORAGE_BEFORE, false});
+    }
     if (storage_read(op->op) || (storage_copy(op->op) && !storage_is_handle(flow, function, value)))
         return storage_request_read(flow, function, (StorageRead){op->args[0], value, i,
             XIR_STORAGE_BEFORE, storage_read(op->op)});
