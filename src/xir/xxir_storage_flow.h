@@ -14,16 +14,24 @@
 #define XXIR_STORAGE_FLOW_H
 #include "xxir_execution_internal.h"
 
+typedef enum XirStorageFlowBank { XIR_STORAGE_CONTENTS, XIR_STORAGE_EXPOSURE } XirStorageFlowBank;
+typedef enum XirStoragePointKind {
+    XIR_STORAGE_BEFORE, XIR_STORAGE_NORMAL, XIR_STORAGE_ERROR, XIR_STORAGE_PANIC
+} XirStoragePointKind;
+
 typedef struct XirStorageFlowFunction {
-    uint32_t physical_values, value_count;
+    uint32_t physical_values, value_count, parameter_count;
     const XrXirValueFlow *flows;
     uint32_t flow_count;
+    const XrXirValueFlow *exposure_flows;
+    uint32_t exposure_flow_count;
 } XirStorageFlowFunction;
 
 typedef struct XirStorageCrossFlow {
     uint32_t source_function, source, target_function, target;
     /* UINT32_MAX denotes an ordinary relation. Other values index applications. */
     uint32_t application;
+    XirStorageFlowBank bank;
 } XirStorageCrossFlow;
 
 typedef struct XirStorageBinding {
@@ -53,12 +61,18 @@ typedef struct XirStorageAllocation { uint32_t function, value; } XirStorageAllo
 
 /* Every formal Cell has an explicit contents input, including unused bodies.
  * The declaration identity determines whether it is a hidden capture. */
-typedef struct XirStorageInput { uint32_t function, value, handle; } XirStorageInput;
+typedef struct XirStorageInput {
+    uint32_t function, value, handle;
+    XirStorageFlowBank bank;
+} XirStorageInput;
 
 typedef struct XirStorageUnknown {
     uint32_t function, value;
     XrXirType type;
+    uint32_t application;
 } XirStorageUnknown;
+
+typedef struct XirStorageExposureSeed { uint32_t function, value, application; } XirStorageExposureSeed;
 
 typedef struct XirStorageFlowView {
     const XirStorageFlowFunction *functions;
@@ -77,6 +91,8 @@ typedef struct XirStorageFlowView {
     uint32_t input_count;
     const XirStorageUnknown *unknowns;
     uint32_t unknown_count;
+    const XirStorageExposureSeed *exposure_seeds;
+    uint32_t exposure_seed_count;
 } XirStorageFlowView;
 
 typedef struct XirStorageFlow XirStorageFlow;
@@ -85,6 +101,11 @@ typedef struct XirStorageFlow XirStorageFlow;
  * borrows. No instruction or caller-owned array survives sealing. */
 XR_FUNC XrXirStatus xir_storage_flow_new(const XrXirCompileContext *, const XrXirModule *,
     const XirExecutionOwner *, XrCompileRequestControl *, XirStorageFlow **);
+/* The unique instruction inventory calls observe once per physical operation.
+ * New reads only headers and block descriptors. Finish closes local versions. */
+XR_FUNC XrXirStatus xir_storage_flow_observe(XirStorageFlow *, uint32_t function,
+    uint32_t instruction, const XrXirInstruction *);
+XR_FUNC XrXirStatus xir_storage_flow_finish_local(XirStorageFlow *);
 /* New real execution edges extend applications monotonically. Read-origin
  * consumers must use this graph before closing indirect call candidates. */
 XR_FUNC XrXirStatus xir_storage_flow_link(XirStorageFlow *, const XirExecutionOwner *, bool *changed);
@@ -92,10 +113,27 @@ XR_FUNC XrXirStatus xir_storage_flow_link(XirStorageFlow *, const XirExecutionOw
  * identity independently of contents. Queries may append numeric aux values. */
 XR_FUNC XrXirStatus xir_storage_flow_contents(XirStorageFlow *, uint32_t function,
     uint32_t instruction, uint32_t handle, uint32_t *value);
+/* NORMAL after RETURN includes its actual LIFO cleanup effects. */
+XR_FUNC XrXirStatus xir_storage_flow_contents_at(XirStorageFlow *, uint32_t function,
+    uint32_t instruction, uint32_t handle, XirStoragePointKind, uint32_t *value);
+/* HIR supplies publication events. These transport exposure through the same
+ * graph and never decide whether a value may escape. Exposure has its own bank. */
+XR_FUNC XrXirStatus xir_storage_flow_expose(XirStorageFlow *, uint32_t function,
+    uint32_t instruction, uint32_t handle, XirStoragePointKind);
+XR_FUNC XrXirStatus xir_storage_flow_exposure_at(XirStorageFlow *, uint32_t function,
+    uint32_t instruction, uint32_t handle, XirStoragePointKind, uint32_t *value);
 /* Every borrow must be rebound after a query or link can grow storage. */
 XR_FUNC XrXirStatus xir_storage_flow_view(const XirStorageFlow *, XirStorageFlowView *);
 /* Sealing retires body borrows. The resulting numeric view stays valid until
  * free. A sealed owner rejects further construction queries and links. */
 XR_FUNC XrXirStatus xir_storage_flow_seal(XirStorageFlow *, XirStorageFlowView *);
+typedef struct XirStorageRelocation {
+    uint32_t function, physical_values, instruction_count;
+    const uint32_t *values, *instructions;
+} XirStorageRelocation;
+/* A batch remaps physical values and instruction coordinates once. Aux values
+ * keep their offset after the new physical prefix. Failure preserves the owner. */
+XR_FUNC XrXirStatus xir_storage_flow_relocate(XirStorageFlow *, const XirStorageRelocation *,
+    uint32_t count, XrCompileRequestControl *);
 XR_FUNC void xir_storage_flow_free(XirStorageFlow *);
 #endif // XXIR_STORAGE_FLOW_H
