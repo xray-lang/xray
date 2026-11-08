@@ -47,6 +47,10 @@ typedef struct {
 
 typedef struct { size_t pc; uint32_t block; } RbcLirPatch;
 typedef struct {
+    int16_t value;
+    bool known, materialize;
+} RbcLirImmediate;
+typedef struct {
     const XrLirModule *input;
     XrLirFunction function;
     XrLirFunctionView view;
@@ -54,6 +58,7 @@ typedef struct {
     RbcLirOutputValues output;
     RbcLirLiteralPool *literals;
     uint32_t *slots, *spill_home;
+    RbcLirImmediate *immediates;
     uint32_t spill_count, reference_spill_count, temporary_strings, temporary_bits;
     bool typed_spills;
     uint32_t slot_count, scratch_count, register_count, source_id, current_source_id, cell_count;
@@ -194,6 +199,65 @@ static bool rbc_lir_output_values(const XrLirModule *input, XrLirFunction f,
             // The LIR verifier owns the pair's provenance, exact length and
             // unique direct address use. These IDs only select no-code values.
             if (rbc_lir_string_call(input, &i)) output->lengths[i.operands[1]] = true;
+        }
+    }
+    return true;
+}
+
+// Return the operand encoded in the instruction, or operand_count if both
+// operands still require registers. Selection depends only on immutable SSA.
+static uint32_t rbc_lir_immediate_operand(const RbcLirCompiler *c,
+    const XrLirInstructionView *i) {
+    if (i->operand_count != 2) return i->operand_count;
+    bool comparison = i->op == XR_LIR_ICMP || i->op == XR_LIR_CONDBR;
+    if (!comparison && (i->type != XR_LIR_I64 ||
+        (i->op != XR_LIR_ADD && i->op != XR_LIR_SUB))) return i->operand_count;
+    for (uint32_t n = 2; n; --n) {
+        uint32_t a = n - 1;
+        const RbcLirImmediate *value = &c->immediates[i->operands[a]];
+        if (value->known && (comparison ||
+            ((a == 1 || i->op == XR_LIR_ADD) &&
+             value->value >= INT8_MIN && value->value <= INT8_MAX))) return a;
+    }
+    return i->operand_count;
+}
+
+static bool rbc_lir_immediates(RbcLirCompiler *c) {
+    size_t count = (size_t)c->view.value_count + 1;
+    if (count > SIZE_MAX / sizeof(*c->immediates))
+        return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "immediate table exceeds address space");
+    c->immediates = xr_calloc(count, sizeof(*c->immediates));
+    if (!c->immediates)
+        return rbc_lir_fail(c, XR_RBC_COMPILE_OUT_OF_MEMORY, "cannot allocate immediate table");
+    for (uint32_t b = 0; b < c->view.block_count; ++b) {
+        XrLirBlock block;
+        XrLirBlockView view;
+        xr_lir_block_at(c->input, c->function, b, &block);
+        xr_lir_block_view(c->input, block, &view);
+        for (uint32_t n = 0; n < view.instruction_count; ++n) {
+            XrLirInstructionView i;
+            xr_lir_instruction_view(c->input, block, n, &i);
+            if (i.op != XR_LIR_CONST || i.type != XR_LIR_I64 ||
+                (i.bits > INT16_MAX && i.bits < UINT64_MAX - 32767)) continue;
+            c->immediates[i.result].known = true;
+            c->immediates[i.result].value = (int16_t)(i.bits <= INT16_MAX ?
+                (int64_t)i.bits : -1 - (int64_t)~i.bits);
+        }
+    }
+    for (uint32_t b = 0; b < c->view.block_count; ++b) {
+        XrLirBlock block;
+        XrLirBlockView view;
+        xr_lir_block_at(c->input, c->function, b, &block);
+        xr_lir_block_view(c->input, block, &view);
+        for (uint32_t n = 0; n < view.instruction_count; ++n) {
+            XrLirInstructionView i;
+            xr_lir_instruction_view(c->input, block, n, &i);
+            uint32_t selected = rbc_lir_immediate_operand(c, &i);
+            for (uint32_t a = 0; a < i.operand_count; ++a)
+                if (a != selected) c->immediates[i.operands[a]].materialize = true;
+            for (uint32_t e = 0; e < i.edge_count; ++e)
+                for (uint32_t a = 0; a < i.edges[e].argument_count; ++a)
+                    c->immediates[i.edges[e].arguments[a]].materialize = true;
         }
     }
     return true;
@@ -506,6 +570,17 @@ static bool rbc_lir_constant(RbcLirCompiler *c, uint32_t slot, uint64_t bits) {
 
 static bool rbc_lir_predicate(RbcLirCompiler *c, const XrLirInstructionView *i) {
     XR_DCHECK(i->operand_count == 2, "integer predicates have two verified operands");
+    uint32_t selected = rbc_lir_immediate_operand(c, i);
+    if (selected < 2) {
+        XrRbcOp op = XR_RBC_EQI;
+        bool reverse = selected == 0;
+        if (i->predicate == XR_LIR_LT) op = reverse ? XR_RBC_GTI : XR_RBC_LTI;
+        if (i->predicate == XR_LIR_LE) op = reverse ? XR_RBC_GEI : XR_RBC_LEI;
+        if (i->predicate == XR_LIR_GT) op = reverse ? XR_RBC_LTI : XR_RBC_GTI;
+        if (i->predicate == XR_LIR_GE) op = reverse ? XR_RBC_LEI : XR_RBC_GEI;
+        return rbc_lir_emit(c, op, c->slots[i->operands[1u - selected]], 0, 0,
+            c->immediates[i->operands[selected]].value);
+    }
     uint32_t a = c->slots[i->operands[0]], b = c->slots[i->operands[1]];
     XrRbcOp op = XR_RBC_EQ;
     if (i->predicate == XR_LIR_GT || i->predicate == XR_LIR_GE) {
@@ -537,10 +612,7 @@ static bool rbc_lir_conditional(RbcLirCompiler *c, const XrLirInstructionView *i
     if (comparison) {
         if (!rbc_lir_predicate(c, i)) return false;
     } else {
-        uint32_t scratch = c->slot_count +
-            (c->typed_spills ? c->temporary_strings+c->temporary_bits : 0);
-        if (!rbc_lir_emit(c, XR_RBC_LOADI, scratch, 0, 0, 0) ||
-            !rbc_lir_emit(c, XR_RBC_EQ, c->slots[i->operands[0]], scratch, 0, 0))
+        if (!rbc_lir_emit(c, XR_RBC_EQI, c->slots[i->operands[0]], 0, 0, 0))
             return false;
     }
     uint32_t taken = comparison && i->predicate != XR_LIR_NE ? 0u : 1u;
@@ -672,6 +744,11 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
             i->type == XR_LIR_STRING ? XR_RBC_STRING_TAKE : XR_RBC_MOV, result, destination, 0, 0);
     }
     default: {
+        uint32_t selected = rbc_lir_immediate_operand(c, i);
+        if (selected < i->operand_count)
+            return rbc_lir_emit(c, i->op == XR_LIR_ADD ? XR_RBC_ADDI : XR_RBC_SUBI,
+                result, c->slots[i->operands[1u - selected]], 0,
+                c->immediates[i->operands[selected]].value);
         XrRbcOp op;
         switch (i->op) {
         case XR_LIR_ADD: op = XR_RBC_ADD; break;
@@ -694,9 +771,13 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
 }
 
 static bool rbc_lir_spilled_instruction(RbcLirCompiler *c,const XrLirInstructionView *i) {
+    if (i->op == XR_LIR_CONST && c->immediates[i->result].known &&
+        !c->immediates[i->result].materialize) return true;
     if(!c->spill_count)return rbc_lir_instruction(c,i);
     uint32_t staged[XR_RBC_REGISTER_COUNT_MAX],count=0,strings=0,bits=0;
+    uint32_t immediate = rbc_lir_immediate_operand(c, i);
     for(uint32_t a=0;a<i->operand_count;++a) {
+        if (a == immediate) continue;
         uint32_t value=i->operands[a];
         if(c->spill_home[value]==UINT32_MAX || c->slots[value]!=UINT32_MAX)continue;
         bool string=rbc_lir_value_type(c,value)==XR_LIR_STRING;
@@ -793,7 +874,7 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
     if(!c->slots || !c->spill_home)
         return rbc_lir_fail(c,XR_RBC_COMPILE_OUT_OF_MEMORY,"cannot allocate SSA home tables");
     for(uint32_t v=0;v<=c->view.value_count;++v)c->spill_home[v]=UINT32_MAX;
-    if (!rbc_lir_layout(c) || !rbc_lir_kinds(c)) return false;
+    if (!rbc_lir_immediates(c) || !rbc_lir_layout(c) || !rbc_lir_kinds(c)) return false;
     size_t count = (size_t) c->view.block_count + 1;
     if (count > SIZE_MAX / sizeof(*c->blocks))
         return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "block table exceeds address space");
@@ -949,6 +1030,7 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
         xr_free(c.patches);
         rbc_lir_output_free(&c.output);
         xr_free(c.slots);xr_free(c.spill_home);
+        xr_free(c.immediates);
         if (!success) {
             xr_free(c.code);
             xr_free(c.constants);

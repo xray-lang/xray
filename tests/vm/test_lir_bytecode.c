@@ -108,6 +108,15 @@ static void test_recursive_and_loop(void) {
     OK(xr_lir_function_at(m, 1, &root));
     XrRbcProgram *program = compile(m, root);
     xr_lir_module_destroy(m);
+    const XrRbcFunction *fib = &xr_rbc_program_view(program)->functions[0];
+    unsigned subtracts = 0, comparisons = 0;
+    for (size_t pc = 0; pc < fib->code_count; ++pc) {
+        unsigned op = fib->code[pc] & 255;
+        subtracts += op == XR_RBC_SUBI;
+        comparisons += op == XR_RBC_LTI;
+        CHECK(op != XR_RBC_SUB && op != XR_RBC_LT);
+    }
+    CHECK(subtracts == 2 && comparisons == 1);
     uint64_t n = 32;
     CHECK(run(program, &n, 1) == 2178309);
     CHECK(xr_rbc_program_view(program)->function_count == 1);
@@ -119,6 +128,50 @@ static void test_recursive_and_loop(void) {
     n = 1000;
     CHECK(run(program, &n, 1) == 499500);
     xr_rbc_program_destroy(program);
+}
+
+static void test_immediate_selection(void) {
+    static const struct { XrLirOp op; int64_t literal; bool left, encoded; } cases[] = {
+        {XR_LIR_ADD, -128, false, true}, {XR_LIR_ADD, 127, true, true},
+        {XR_LIR_SUB, -1, false, true}, {XR_LIR_SUB, 1, true, false},
+        {XR_LIR_ADD, 128, false, false}, {XR_LIR_SUB, -129, false, false}
+    };
+    const uint64_t inputs[] = {0, 1, INT64_MAX, UINT64_C(0x8000000000000000), UINT64_MAX};
+    for (size_t n = 0; n < sizeof(cases) / sizeof(*cases); ++n) {
+        XrLirModule *m = NULL;
+        OK(xr_lir_module_create(NULL, &m));
+        XrLirType type = XR_LIR_I64;
+        XrLirFunction f = test_function(m, "immediate", &type, 1, type);
+        XrLirBlock block = test_block(m, f, NULL, 0);
+        OK(xr_lir_set_entry(m, f, block));
+        XrLirValue input = parameter(m, f, 0);
+        XrLirValue constant = test_constant(m, block, type, (uint64_t)cases[n].literal);
+        XrLirValue result = test_binary(m, block, cases[n].op,
+            cases[n].left ? constant : input, cases[n].left ? input : constant,
+            XR_LIR_PREDICATE_NONE);
+        // A second use still needs the real constant register when the first
+        // use is encoded in the instruction.
+        result = test_binary(m, block, XR_LIR_MUL, result, constant, XR_LIR_PREDICATE_NONE);
+        test_return(m, block, result);
+        OK(xr_lir_module_finish(m, NULL));
+        XrRbcProgram *program = compile(m, f);
+        xr_lir_module_destroy(m);
+        const XrRbcFunction *bytecode = &xr_rbc_program_view(program)->functions[0];
+        unsigned immediate = 0;
+        for (size_t pc = 0; pc < bytecode->code_count; ++pc) {
+            unsigned op = bytecode->code[pc] & 255;
+            immediate += op == XR_RBC_ADDI || op == XR_RBC_SUBI;
+        }
+        CHECK(immediate == (unsigned)cases[n].encoded);
+        for (size_t a = 0; a < sizeof(inputs) / sizeof(*inputs); ++a) {
+            uint64_t literal = (uint64_t)cases[n].literal;
+            uint64_t lhs = cases[n].left ? literal : inputs[a];
+            uint64_t rhs = cases[n].left ? inputs[a] : literal;
+            uint64_t expected = (cases[n].op == XR_LIR_ADD ? lhs + rhs : lhs - rhs) * literal;
+            CHECK(run(program, &inputs[a], 1) == expected);
+        }
+        xr_rbc_program_destroy(program);
+    }
 }
 
 static void test_location_ownership(void) {
@@ -1272,6 +1325,7 @@ int main(void) {
     test_owned_arithmetic_panics();
     test_i64_identity_cast();
     test_recursive_and_loop();
+    test_immediate_selection();
     test_location_ownership();
     test_comparisons();
     test_arithmetic();

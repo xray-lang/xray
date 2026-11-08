@@ -172,6 +172,12 @@ XR_RBC_CASE(ADD) {
     XR_RBC_BINARY(XR_RBC_REG(b) + XR_RBC_REG(c));
     XR_RBC_NEXT();
 }
+XR_RBC_CASE(ADDI)
+XR_RBC_CASE(SUBI) {
+    uint64_t value = c <= INT8_MAX ? (uint64_t)c : (uint64_t)c - 256;
+    XR_RBC_REG(a) = op == XR_RBC_ADDI ? XR_RBC_REG(b) + value : XR_RBC_REG(b) - value;
+    XR_RBC_NEXT();
+}
 XR_RBC_CASE(SUB) {
     XR_RBC_BINARY(XR_RBC_REG(b) - XR_RBC_REG(c));
     XR_RBC_NEXT();
@@ -278,6 +284,20 @@ XR_RBC_CASE(SHR) {
 }
 XR_RBC_CASE(USHR) {
     XR_RBC_BINARY(XR_RBC_REG(b) >> (XR_RBC_REG(c) & 63));
+    XR_RBC_NEXT();
+}
+XR_RBC_CASE(LTI)
+XR_RBC_CASE(LEI)
+XR_RBC_CASE(GTI)
+XR_RBC_CASE(GEI)
+XR_RBC_CASE(EQI) {
+    uint32_t bits = instruction >> 16;
+    int64_t rhs = bits <= INT16_MAX ? (int64_t)bits : (int64_t)bits - 65536;
+    int64_t lhs = xr_rbc_signed(XR_RBC_REG(a));
+    bool take = op == XR_RBC_LTI ? lhs < rhs : op == XR_RBC_LEI ? lhs <= rhs :
+        op == XR_RBC_GTI ? lhs > rhs : op == XR_RBC_GEI ? lhs >= rhs : lhs == rhs;
+    instruction = function->code[pc++];
+    if (take) goto xr_rbc_jump;
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(LT)
